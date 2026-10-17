@@ -29,6 +29,10 @@ npm install --omit=dev --no-audit --no-fund 2>&1 | tail -1
 APP_HOST_FILE=${COOKIE_APP_HOST_FILE:-/srv/cookie-secrets/app-host}
 ALSO_FILE=${COOKIE_ALSO_HOSTS_FILE:-/srv/cookie-secrets/also-hosts}
 [ -s "$APP_HOST_FILE" ] && APP_HOST=$(tr -d '[:space:]' < "$APP_HOST_FILE")
+ADMIN_HOST_FILE=${COOKIE_ADMIN_HOST_FILE:-/srv/cookie-secrets/admin-host}
+[ -s "$ADMIN_HOST_FILE" ] && ADMIN_HOST=$(tr -d '[:space:]' < "$ADMIN_HOST_FILE")
+# No real domain yet (the built-in names are placeholders): stop here, changing nothing.
+case "$APP_HOST" in *.example.com|"") echo; echo "    No domain is set yet. After you buy one and add its DNS records, run:"; echo "      bash $COOKIE/deploy/set-domain.sh yourdomain.com"; exit 1 ;; esac
 ALSO_HOSTS=""; [ -s "$ALSO_FILE" ] && ALSO_HOSTS=$(tr -d '[:space:]' < "$ALSO_FILE")
 echo "    member app host: $APP_HOST${ALSO_HOSTS:+   also answers on: $ALSO_HOSTS}"
 
@@ -65,11 +69,11 @@ if [ -n "$SKIPPED" ]; then
   echo "       Check the A record in Hostinger, wait a few minutes and run this again. The other addresses are not affected."
 fi
 if [ "${#CERT_ARGS[@]}" -gt 0 ]; then
-  certbot --nginx --cert-name "${COOKIE_CERT_NAME:-app.cookie.example.com}" --expand "${CERT_ARGS[@]}" --non-interactive --agree-tos --register-unsafely-without-email --redirect --reinstall 2>&1 | tail -3
+  certbot --nginx --cert-name "${COOKIE_CERT_NAME:-$APP_HOST}" --expand "${CERT_ARGS[@]}" --non-interactive --agree-tos --register-unsafely-without-email --redirect --reinstall 2>&1 | tail -3
 fi
 # An address that was dropped (deploy/change-app-host.sh drop-old) must also leave the certificate, or the certificate could not be renewed once its
 # DNS record is deleted. Names the certificate has but we no longer serve are removed by re-issuing it for exactly the wanted names.
-CERT_NAME=${COOKIE_CERT_NAME:-app.cookie.example.com}
+CERT_NAME=${COOKIE_CERT_NAME:-$APP_HOST}
 HAVE=$(certbot certificates --cert-name "$CERT_NAME" 2>/dev/null | sed -n 's/^ *Domains: //p' | head -1)
 WANT=" $APP_HOST $ADMIN_HOST ${ALSO_HOSTS//,/ } ${COOKIE_HOOK_HOST:-} "
 EXTRA=""; for H in $HAVE; do case "$WANT" in *" $H "*) ;; *) EXTRA="$EXTRA $H" ;; esac; done

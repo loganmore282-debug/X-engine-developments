@@ -35,10 +35,8 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
    It installs packages, asks (hidden) for the MongoDB connection string and CHECKS it connects, asks for the admin password, writes
    `/srv/cookie-secrets/secrets.local.js`, starts pm2 `cookie-server`, and tests `/health`.
 3. Later, updates until Cookie has its own domain: `bash /srv/cookie-src/cookie/deploy/quick-update.sh` (restarts only Cookie).
-4. With a domain: `deploy/update-vps.sh` (nginx + HTTPS + hardening), `deploy/make-hook-url.sh` (PesaJet webhook), and the GitHub
-   webhook to `https://<app host>/k7x2/deploy/webhook` with `DEPLOY_WEBHOOK_SECRET` from the secrets file. Hosts are placeholders
-   (`app.cookie.example.com`, `admin.cookie.example.com`, `hook.cookie.example.com`) until the owner buys the domain; admin path `Bake7qz3`.
-   Set real hosts via `MINT_APP_HOST` / `MINT_ADMIN_HOST` (see `update-vps.sh`) or `deploy/change-app-host.sh`.
+4. **Domain (not bought yet; names are NOT decided).** The hosts inside the code (`app.cookie.example.com` ...) are placeholders and `update-vps.sh` refuses to run until a real domain is set. When the owner has one:
+   `bash /srv/cookie-src/cookie/deploy/set-domain.sh yourdomain.com` -- it prints the two DNS A records to add (`app` and a random hidden admin label, remembered in `/srv/cookie-secrets/admin-host`), changes NOTHING until they point at the VPS, then writes `/srv/cookie-secrets/app-host`, runs `update-vps.sh` (nginx `cookie.conf`, HTTPS certificate named after the app host, Cookie restart, hardening), sets `PUBLIC_URL`, and prints the app and admin addresses (admin path `Bake7qz3`). Root domain is not served (Soda layout). The admin "allowed domains" setting only matters for cross-origin calls; nginx + certificate (this command) is what makes a domain work. Afterwards: GitHub webhook to `https://<app host>/k7x2/deploy/webhook` with `DEPLOY_WEBHOOK_SECRET`, and PesaJet via `deploy/make-hook-url.sh`.
 
 ## Status
 1. (done) Copied from Soda, renamed to Cookie, ports 3003/8094/8095, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path.
