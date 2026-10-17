@@ -41,7 +41,7 @@ if (WHICH !== 'user' && WHICH !== 'admin') {
 }
 const ROOT = path.join(__dirname, WHICH);
 const PORT = Number(process.env.PORT) || 8080;
-const API_ORIGIN = (process.env.COOKIE_API_ORIGIN || 'https://app.orroe-cookie.com')
+const API_ORIGIN = (process.env.COOKIE_API_ORIGIN || 'https://mycookie.cookie.example.com')
   .trim().replace(/\/+$/, '');
 
 if (!fs.existsSync(path.join(ROOT, 'index.html'))) {

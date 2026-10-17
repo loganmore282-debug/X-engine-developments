@@ -5,7 +5,7 @@
  *
  * Point the whole project at a different backend, in one command.
  *
- *   node set-backend-url.js https://api.orroe-cookie.com
+ *   node set-backend-url.js https://api.cookie-platform.com
  *   node set-backend-url.js --check          (show where it points now)
  *
  * WHY THIS EXISTS. The backend origin is written into THIRTEEN places across
@@ -140,7 +140,7 @@ try {
   origin = u.origin;
 } catch (e) {
   console.error(`not a usable origin: ${arg}\n  ${e.message}`);
-  console.error('example: node set-backend-url.js https://api.orroe-cookie.com');
+  console.error('example: node set-backend-url.js https://api.cookie-platform.com');
   process.exit(1);
 }
 

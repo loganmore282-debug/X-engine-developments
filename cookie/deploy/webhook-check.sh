@@ -4,7 +4,7 @@
 set -u
 SECRETS=${COOKIE_SECRETS_FILE:-/srv/cookie-secrets/secrets.local.js}
 HOOK_FILE=/srv/cookie-secrets/hook-token; HOOK_HOST_FILE=/srv/cookie-secrets/hook-host; APP_FILE=/srv/cookie-secrets/app-host
-APP=$(cat "$APP_FILE" 2>/dev/null | tr -d '[:space:]'); APP=${APP:-app.orroe-cookie.com}
+APP=$(cat "$APP_FILE" 2>/dev/null | tr -d '[:space:]'); APP=${APP:-app.cookie.example.com}
 HH=$(cat "$HOOK_HOST_FILE" 2>/dev/null | tr -d '[:space:]'); TOKEN=$(cat "$HOOK_FILE" 2>/dev/null | tr -d '[:space:]')
 say() { printf '\n==> %s\n' "$*"; }
 has() { grep -Eq "^[[:space:]]*module\.exports\.$1[[:space:]]*=[[:space:]]*['\"][^'\"]+['\"]" "$SECRETS" 2>/dev/null && echo "set" || echo "NOT SET"; }

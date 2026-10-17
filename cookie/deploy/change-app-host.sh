@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Moves the member app to a new address. The OLD address keeps answering as an extra address of the same app, so installed apps, old links and
 # the GitHub / payment webhooks keep working while you switch over. Nothing is changed unless the new name already points at this server.
-# Run as root:  bash /srv/cookie-src/cookie/deploy/change-app-host.sh app        (app -> app.orroe-cookie.com; a full host name also works)
+# Run as root:  bash /srv/cookie-src/cookie/deploy/change-app-host.sh app        (app -> app.cookie.example.com; a full host name also works)
 #               bash /srv/cookie-src/cookie/deploy/change-app-host.sh drop-old    (later: stop answering on the old address)
 set -u
 COOKIE=${COOKIE_DIR:-/srv/cookie-src/cookie}
-BASE=${COOKIE_BASE_DOMAIN:-orroe-cookie.com}
+BASE=${COOKIE_BASE_DOMAIN:-cookie.example.com}
 APP_HOST_FILE=${COOKIE_APP_HOST_FILE:-/srv/cookie-secrets/app-host}
 ALSO_FILE=${COOKIE_ALSO_HOSTS_FILE:-/srv/cookie-secrets/also-hosts}
 [ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }
 ARG=${1:-}
 [ -n "$ARG" ] || { echo "Say the new name, e.g.:  bash $0 app"; exit 1; }
-CUR=${COOKIE_APP_HOST:-app.orroe-cookie.com}; [ -s "$APP_HOST_FILE" ] && CUR=$(tr -d '[:space:]' < "$APP_HOST_FILE")
+CUR=${COOKIE_APP_HOST:-app.cookie.example.com}; [ -s "$APP_HOST_FILE" ] && CUR=$(tr -d '[:space:]' < "$APP_HOST_FILE")
 
 if [ "$ARG" = drop-old ]; then
   OLD=""; [ -s "$ALSO_FILE" ] && OLD=$(tr -d '[:space:]' < "$ALSO_FILE")

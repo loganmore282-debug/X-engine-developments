@@ -15,7 +15,7 @@ var API_BASE = '/k7x2';
 // ── REGION (which country this app is running as) ──
 //
 // Owner: "l wanted other subdomain to fetch other country code and
-// currency, ie fgdr.orroe-cookie.com in ugx, and country code changeable
+// currency, ie fgdr.cookie-platform.com in ugx, and country code changeable
 // to other country or created, and another can be sfhd.cookie-platform in
 // KES shs, or any country created, also make when l can edit prices of each
 // product and all settings as these of ugx."
@@ -1344,7 +1344,7 @@ function phoneToEmail(phone){
 }
 function loginAddressFor(phone, bare){
   const local = localDigits(phone) || String(phone).replace(/\D/g,'').replace(/^0+/, '');
-  return (bare ? local : dial() + local) + '@orroe-cookie.com';
+  return (bare ? local : dial() + local) + '@cookie-platform.com';
 }
 // Every address this number could have been registered under, most likely
 // first. Firebase folds "no such account" into the same
@@ -1459,7 +1459,7 @@ function credManSupported(){
 // this, l only wanted it to be without @". An earlier attempt set only the
 // cosmetic `name` field and kept the email as `id`, but Android's Google
 // Password Manager lists the `id` and ignores `name`, so the
-// "<digits>@orroe-cookie.com" kept showing. The Firebase address is a
+// "<digits>@cookie-platform.com" kept showing. The Firebase address is a
 // pure function of the phone number, so nothing is lost by not storing it:
 // tryAutoSignIn() rebuilds it with loginAddressCandidates().
 async function storeCredentialIfPossible(email, pass, displayPhone){

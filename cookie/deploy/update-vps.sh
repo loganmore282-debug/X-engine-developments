@@ -9,8 +9,8 @@ say() { printf '\n==> %s\n' "$*"; }
 [ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }
 SRC=${COOKIE_SRC:-/srv/cookie-src}
 COOKIE=$SRC/cookie
-APP_HOST=${COOKIE_APP_HOST:-app.orroe-cookie.com}
-ADMIN_HOST=${COOKIE_ADMIN_HOST:-m5ze9b.orroe-cookie.com}
+APP_HOST=${COOKIE_APP_HOST:-app.cookie.example.com}
+ADMIN_HOST=${COOKIE_ADMIN_HOST:-admin.cookie.example.com}
 ADMIN_PATH=${COOKIE_ADMIN_PATH:-Bake7qz3}
 CONF=${COOKIE_NGINX_CONF:-/etc/nginx/conf.d/cookie.conf}
 BAK=/root/cookie.conf.bak
@@ -65,11 +65,11 @@ if [ -n "$SKIPPED" ]; then
   echo "       Check the A record in Hostinger, wait a few minutes and run this again. The other addresses are not affected."
 fi
 if [ "${#CERT_ARGS[@]}" -gt 0 ]; then
-  certbot --nginx --cert-name "${COOKIE_CERT_NAME:-app.orroe-cookie.com}" --expand "${CERT_ARGS[@]}" --non-interactive --agree-tos --register-unsafely-without-email --redirect --reinstall 2>&1 | tail -3
+  certbot --nginx --cert-name "${COOKIE_CERT_NAME:-app.cookie.example.com}" --expand "${CERT_ARGS[@]}" --non-interactive --agree-tos --register-unsafely-without-email --redirect --reinstall 2>&1 | tail -3
 fi
 # An address that was dropped (deploy/change-app-host.sh drop-old) must also leave the certificate, or the certificate could not be renewed once its
 # DNS record is deleted. Names the certificate has but we no longer serve are removed by re-issuing it for exactly the wanted names.
-CERT_NAME=${COOKIE_CERT_NAME:-app.orroe-cookie.com}
+CERT_NAME=${COOKIE_CERT_NAME:-app.cookie.example.com}
 HAVE=$(certbot certificates --cert-name "$CERT_NAME" 2>/dev/null | sed -n 's/^ *Domains: //p' | head -1)
 WANT=" $APP_HOST $ADMIN_HOST ${ALSO_HOSTS//,/ } ${COOKIE_HOOK_HOST:-} "
 EXTRA=""; for H in $HAVE; do case "$WANT" in *" $H "*) ;; *) EXTRA="$EXTRA $H" ;; esac; done

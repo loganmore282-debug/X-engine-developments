@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Makes (once) a secret address for the PesaJet webhook, switches it on in nginx and prints the URL to paste into PesaJet's dashboard.
-# Run as root:  bash /srv/cookie-src/cookie/deploy/make-hook-url.sh                 (secret path on app.orroe-cookie.com)
-#               bash /srv/cookie-src/cookie/deploy/make-hook-url.sh hook           (a webhook-only host p2c8d.orroe-cookie.com: its A record must exist first)
+# Run as root:  bash /srv/cookie-src/cookie/deploy/make-hook-url.sh                 (secret path on app.cookie.example.com)
+#               bash /srv/cookie-src/cookie/deploy/make-hook-url.sh hook           (a webhook-only host hook.cookie.example.com: its A record must exist first)
 #               bash /srv/cookie-src/cookie/deploy/make-hook-url.sh new             (a NEW secret path; the old one stops working at once)
 # Running it again keeps the same address.
 set -u
 COOKIE=${COOKIE_DIR:-/srv/cookie-src/cookie}
 HOOK_FILE=${COOKIE_HOOK_FILE:-/srv/cookie-secrets/hook-token}
 HOOK_HOST_FILE=${COOKIE_HOOK_HOST_FILE:-/srv/cookie-secrets/hook-host}
-BASE=${COOKIE_BASE_DOMAIN:-orroe-cookie.com}
-HOST=${COOKIE_APP_HOST:-app.orroe-cookie.com}
+BASE=${COOKIE_BASE_DOMAIN:-cookie.example.com}
+HOST=${COOKIE_APP_HOST:-app.cookie.example.com}
 [ -s "${COOKIE_APP_HOST_FILE:-/srv/cookie-secrets/app-host}" ] && HOST=$(tr -d "[:space:]" < "${COOKIE_APP_HOST_FILE:-/srv/cookie-secrets/app-host}")
 [ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }
 NEWTOKEN=0
