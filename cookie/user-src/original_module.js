@@ -3355,7 +3355,7 @@ function vProductCardHtml(p){
   return `
   <article class="v-card">
     <div class="v-card-b">
-      <div class="v-card-img${p.image ? ' has-img' : ''}">${img}${limit > 0 ? `<em class="v-badge">Times ${vOwnedCount(p.key)}/${limit}</em>` : ''}<span class="v-pname">${esc(p.name || '')}</span></div>
+      <div class="v-card-img${p.image ? ' has-img' : ''}">${img}${(limit > 0 || p.category === 'wage') ? `<em class="v-badge">Times ${vOwnedCount(p.key)}/${limit}</em>` : ''}<span class="v-pname">${esc(p.name || '')}</span></div>
       <dl class="v-rows">
         ${ckRow('Price', ckMoney(p.price))}
         ${ckRow('Daily profit', ckMoney(daily))}
@@ -6171,7 +6171,11 @@ window.openInvestConfirm = function(tierKey, btn){
   actionBtn.onclick = async () => {
     if (actionBtn.disabled) return;
     actionBtn.disabled = true; actionBtn.textContent = '…';
-    const result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey, expectedPrice: Number(p.price) || 0 }) });
+    // The loading box is the real wait for the server's answer (its own check of the product, the price and the balance).
+    let result;
+    ckLoadBegin();
+    try { result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey, expectedPrice: Number(p.price) || 0 }) }); }
+    finally { ckLoadEnd(); }
     if (result.status === 'error' && result.code === 'PRICE_CHANGED') { try { refreshCatalogNow(); } catch (_) {} }
     if (result.status !== 'success') {
       actionBtn.disabled = false; actionBtn.textContent = 'Confirm';
@@ -6182,6 +6186,8 @@ window.openInvestConfirm = function(tierKey, btn){
         setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1800);
         return;
       }
+      // A task product (Daily wage) is never bought: the server answers sold out, and the dialog closes with that notice.
+      if (result.code === 'SOLD_OUT') closeConfirm();
       notify(result.message || 'Could not complete investment');
       return;
     }

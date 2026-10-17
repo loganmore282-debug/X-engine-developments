@@ -1891,7 +1891,7 @@ async function openUser(uid){
       const sel=$('grantAsset'); if(!sel) return;
       const list=(pr.products||[]).filter(p=>!p.deleted).sort((a,b)=>(a.order||0)-(b.order||0)||(a.price||0)-(b.price||0));
       sel.innerHTML = list.length
-        ? '<option value="">Select a product…</option>' + list.map(p=>`<option value="${esc(p.key)}">${esc(p.name)} · ${ugx(p.price)}</option>`).join('')
+        ? '<option value="">Select a product…</option>' + list.map(p=>`<option value="${esc(p.key)}">${esc(p.name)} · ${p.category==='wage'?'Daily wage task':ugx(p.price)}</option>`).join('')
         : '<option value="">No products available</option>';
       $('grantAssetBtn').disabled = !list.length;
     }).catch(()=>{ const sel=$('grantAsset'); if(sel) sel.innerHTML='<option value="">Could not load products</option>'; });
@@ -2313,14 +2313,15 @@ async function renderProducts(){
   const r = await api('/admin/products');
   if(staleTab('products')) return;
   const list = (r.products||[]).sort((a,b)=>(a.order||0)-(b.order||0)||(a.price||0)-(b.price||0));
+  const incomeList = list.filter(p=>p.category!=='wage'), wageList = list.filter(p=>p.category==='wage');
   $('content').innerHTML = `
     ${ADMIN_REGIONS.length > 1 ? `<p class="muted" style="margin:0 0 12px;font-size:12px">Prices, payouts and the opening schedule are saved for <b>${esc(regionByKeyAdmin(adminOneRegion()).name)}</b> &mdash; the country in the switch at the top. Names, photos and order are shared by every country.</p>` : ''}
     <p class="muted" style="margin:0 0 12px;font-size:12px">Set each product's member-facing name, photo and display position however you want. The stable key is only the internal reference that keeps existing purchases attached to that product.</p>
-    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Products (${list.length})${ADMIN_REGIONS.length > 1 ? ' &middot; ' + esc(regionByKeyAdmin().name) : ''}</h2>
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Products &middot; Daily income (${incomeList.length})${ADMIN_REGIONS.length > 1 ? ' &middot; ' + esc(regionByKeyAdmin().name) : ''}</h2>
       <button class="btn sm ghost" id="addStarters" title="Creates Cookie A to Cookie J if they are missing; never changes a product that already exists">Add Cookie A to J</button>
       <button class="btn sm ghost" id="clearProd">Clear all</button>
       <button class="btn sm" id="newProd">+ New product</button></div>
-    <div class="prod-grid">${list.length?list.map(p=>`
+    <div class="prod-grid">${incomeList.length?incomeList.map(p=>`
       <div class="prod">
         <div class="thumb" style="${p.image?`background-image:url('${esc(p.image)}')`:''}">${p.image?'':tintSwatch()}</div>
         <div class="pb">
@@ -2329,8 +2330,22 @@ async function renderProducts(){
           <div class="pr">Pays ${ugx(resolvedPayout(p))}${(Number(p.multiplier)>0)?` <span class="muted">(&times;${esc(String(p.multiplier))})</span>`:''}</div>
           <div class="pa"><button class="btn sm ghost" data-edit="${esc(p.key)}">Edit</button><button class="btn sm danger" data-del="${esc(p.key)}">Delete</button></div>
         </div>
-      </div>`).join(''):'<div class="empty">No products yet. The app catalogue reverts to defaults until you add one.</div>'}</div>`;
+      </div>`).join(''):'<div class="empty">No products yet. The app catalogue reverts to defaults until you add one.</div>'}</div>
+    <div class="row" style="align-items:center;margin:22px 0 12px"><h2 class="sec" style="flex:1;margin:0">Task products &middot; Daily wage (${wageList.length})</h2>
+      <button class="btn sm" id="newTask">+ New task product</button></div>
+    <p class="muted" style="margin:0 0 12px;font-size:12px">Members cannot buy these (the app answers "The product has been sold out"). They cost 0 and have no VIP. You activate one for a member from Users, for example after they reach a team or deposit target. They show under Daily wage in the app.</p>
+    <div class="prod-grid">${wageList.length?wageList.map(p=>`
+      <div class="prod">
+        <div class="thumb" style="${p.image?`background-image:url('${esc(p.image)}')`:''}">${p.image?'':tintSwatch()}</div>
+        <div class="pb">
+          <div class="pt">${esc(p.name||p.label)} ${p.active===false?'<span class="pill-tag t-mut">Off</span>':''}</div>
+          <div class="pp">Task product &middot; ${p.cycle||0} days</div>
+          <div class="pr">Pays ${ugx(resolvedPayout(p))}</div>
+          <div class="pa"><button class="btn sm ghost" data-edit="${esc(p.key)}">Edit</button><button class="btn sm danger" data-del="${esc(p.key)}">Delete</button></div>
+        </div>
+      </div>`).join(''):'<div class="empty">No task products yet.</div>'}</div>`;
   $('newProd').addEventListener('click',()=>editProduct(null, list.reduce((m,x)=>Math.max(m, Number(x.order)||0), -1)+1));
+  $('newTask').addEventListener('click',()=>editProduct(null, list.reduce((m,x)=>Math.max(m, Number(x.order)||0), -1)+1, 'wage'));
   $('addStarters').addEventListener('click',async()=>{
     if(!confirm('Create the ten products Cookie A to Cookie J that are missing? Products that already exist are not changed. Their prices are placeholders: edit them afterwards.'))return;
     const b=$('addStarters'); b.disabled=true; b.textContent='Adding…';
@@ -2348,17 +2363,19 @@ async function renderProducts(){
   document.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>editProduct(list.find(p=>p.key===b.dataset.edit))));
   document.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Delete this product?'))return; const d=await api('/admin/products/delete',{key:b.dataset.del}); toast(d.status==='success'?'Deleted':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderProducts(); }));
 }
-function editProduct(p, order){
+function editProduct(p, order, cat){
   p = p || {};
+  const task = p.category==='wage' || cat==='wage';
   openModal(`
-    <h3>${p.key?'Edit product':'New product'}</h3>
+    <h3>${p.key?(task?'Edit task product':'Edit product'):(task?'New task product':'New product')}</h3>
     <label>Member-facing product name</label><input id="pLabel" value="${esc(p.name||p.label||'')}" placeholder="e.g. Cookie A">
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Members see this name. It is independent from the stable key below.</p>
     <label>Stable key (internal; preserve for existing products)</label><input id="pKey" value="${esc(p.key||'')}" placeholder="cookie-a">
-    <div class="row">
+    ${task?`<div hidden><input id="pPrice" value="0"><input id="pMult" value=""><input id="pVip" value=""><input type="checkbox" id="pSoon"><input id="pOpenAt"><input id="pOpenFrom"><input id="pOpenTo"></div>
+    <p class="muted" style="margin:0 0 10px;font-size:11.5px">Task product: price 0, cannot be bought, no VIP. You activate it for a member from Users.</p>`:`<div class="row">
       <div><label>Price (${adminCur()})</label><input id="pPrice" type="number" value="${p.price||''}" placeholder="500000"></div>
       <div><label>Multiplier (&times;)</label><input id="pMult" type="number" step="0.1" min="0" value="${p.multiplier!=null?p.multiplier:''}" placeholder="3"></div>
-    </div>
+    </div>`}
     <div class="row">
       <div><label>Total payout (${adminCur()})</label><input id="pRet" type="number" value="${p.expectedReturn||''}" placeholder="1500000"></div>
       <div><label>Cycle (days)</label><input id="pCycle" type="number" value="${p.cycle||180}"></div>
@@ -2366,9 +2383,9 @@ function editProduct(p, order){
     <div class="row">
       <div><label>Daily payout (${adminCur()}) <span class="muted" style="font-weight:400">automatic</span></label><input id="pDaily" type="text" readonly tabindex="-1" value=""></div>
     </div>
-    <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Each product has its OWN multiplier — nothing is fixed globally. Type a multiplier and the total payout fills in automatically (and vice versa). If both are set, the multiplier wins, so repricing a product updates its payout on its own.</p>
+    ${task?'':`<p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Each product has its OWN multiplier — nothing is fixed globally. Type a multiplier and the total payout fills in automatically (and vice versa). If both are set, the multiplier wins, so repricing a product updates its payout on its own.</p>
     <label>VIP level (0 = none)</label><input id="pVip" type="number" min="0" max="100" step="1" value="${p.vip>0?p.vip:''}" placeholder="0">
-    <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">A member's VIP is the highest VIP among the products they own, including products you give them.</p>
+    <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">A member's VIP is the highest VIP among the products they own, including products you give them.</p>`}
     <label>Purchase limit per member (0 = no limit)</label><input id="pLimit" type="number" min="0" step="1" value="${p.buyLimit>0?p.buyLimit:''}" placeholder="0">
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Members see it on the card as owned/limit, for example 0/3.</p>
     <div class="row">
@@ -2386,7 +2403,7 @@ function editProduct(p, order){
     <input id="pImage" value="${esc(p.image&&!/^data:/.test(p.image)?p.image:'')}" placeholder="https://…/product.png">
     <div class="switch-row" style="margin-top:10px"><span><b>Active</b> <span class="muted">(shown in the app)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="pActive" ${p.active!==false?'checked':''} style="width:auto"></label></div>
-    <div class="switch-row"><span><b>Upcoming</b> <span class="muted">(shown, but not buyable — no clock)</span></span>
+    ${task?'':`    <div class="switch-row"><span><b>Upcoming</b> <span class="muted">(shown, but not buyable — no clock)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="pSoon" ${p.comingSoon?'checked':''} style="width:auto"></label></div>
     <div class="muted" style="margin:14px 0 6px"><b>Opening schedule</b> — leave blank for always open.
       Upcoming above overrides both. Times are Uganda time.</div>
@@ -2395,7 +2412,7 @@ function editProduct(p, order){
     <div class="row2">
       <div><label>Open daily from</label><input id="pOpenFrom" type="time" value="${esc(p.openFrom||'')}"></div>
       <div><label>until</label><input id="pOpenTo" type="time" value="${esc(p.openTo||'')}"></div>
-    </div>
+    </div>`}
     <button class="btn block" id="pSave">Save product</button>`);
   let imgData = p.image||'';
   // Custom upload/URL wins; otherwise fall back to the built-in default photo
@@ -2464,6 +2481,7 @@ function editProduct(p, order){
     const key = typedKey || p.key || ($('pLabel').value.toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,24)) || ('item'+Date.now());
     const body = { key, name:$('pLabel').value, price:$('pPrice').value,
       expectedReturn:$('pRet').value, multiplier:_retIsTruth?'':$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, vip:$('pVip').value, order:$('pOrder').value,
+      category: task?'wage':'income',
       image, active:$('pActive').checked, comingSoon:$('pSoon').checked,
       // datetime-local has no zone, so the browser reads it as local time --
       // which for the owner IS Uganda time. Sent as epoch ms so the server
@@ -2483,7 +2501,8 @@ function editProduct(p, order){
       return toast('A daily window needs BOTH a from and an until time','err');
     if (body.openFrom && body.openFrom === body.openTo)
       return toast('A daily window cannot start and end at the same minute','err');
-    if(!parseFloat(body.price)) return toast('Enter a price','err');
+    if(!task && !parseFloat(body.price)) return toast('Enter a price','err');
+    if(task && !(parseFloat(body.expectedReturn)>0)) return toast('Enter the total payout','err');
     if(String(body.order).trim()==='') return toast('Enter a display position (a number; lower shows first)','err');
     const restore=$('pSave').textContent; $('pSave').disabled=true; $('pSave').textContent='Saving…';
     const d=await api('/admin/products/save', { products:[body] });
