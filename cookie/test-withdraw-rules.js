@@ -261,7 +261,7 @@ function fresh(extra = {}) {
   return {
     settings: { minWithdraw: 5000, withdrawFeePct: 15, withdrawMultiple: 5000,
                 requireInvestToWithdraw: false, maxWithdrawalsPerDay: 0,
-                withdrawWindowEnabled: false, weekendWithdrawBlock: false, ...(extra.settings || {}) },
+                withdrawWindowEnabled: false, weekendWithdrawBlock: false, requireTradePassword: true, ...(extra.settings || {}) },
     user: { walletBalance: 100000, totalInvested: 50000, status: 'active' },
     banks: [{ id: 'b1', userId: 'u1', network: 'MTN Mobile Money', phone: '0770000001', holder: 'A B' }],
     wits: extra.wits || [], tx: [], seq: 0, now: Date.now(),
@@ -276,6 +276,10 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   ck(st.wits.length === 1, `and recorded (${st.wits.length})`);
   ck(st.user.walletBalance === 90000, `wallet debited once (${st.user.walletBalance})`);
 
+  // Cookie's default: no Trade Password. With the switch off a request needs no pin at all.
+  st = fresh({ settings: { requireTradePassword: false } });
+  r = await run(st, { ...REQ, pin: undefined });
+  ck(r.code === 200 && st.wits.length === 1, `with the Trade Password switched off a withdrawal needs no pin (${r.code})`);
   // Weekend rule: judged on the real clock, so the expectation follows today's weekday (Saturday or Sunday in Uganda = closed).
   const weekendNow = [0, 6].includes(new Date(Date.now() + 3 * 3600000).getUTCDay());
   st = fresh({ settings: { weekendWithdrawBlock: true } });

@@ -3199,6 +3199,8 @@ async function renderSettings(){
         <label style="width:auto;margin:0"><input type="checkbox" id="sWeekendCash" ${s.weekendCashbackPause!==false?'checked':''} style="width:auto"></label></div>
       <div class="switch-row" style="margin-top:8px"><span><b>No withdrawals on Saturday and Sunday</b> <span class="muted">(members marked unrestricted are not held to this)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sWeekendWit" ${s.weekendWithdrawBlock!==false?'checked':''} style="width:auto"></label></div>
+      <div class="switch-row" style="margin-top:8px"><span><b>Ask for a Trade Password</b> <span class="muted">(at sign-up and at every withdrawal; off = members never see it)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sTradePin" ${s.requireTradePassword===true?'checked':''} style="width:auto"></label></div>
       <!-- Automatic withdrawals: requests still arrive as Pending; only while this is ON does the VPS send each one after its own random wait. -->
       <div class="switch-row" style="margin-top:14px"><span><b>Automatic withdrawals</b> <span class="muted">(the VPS sends them; requests still arrive as Pending)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sAutoWit" ${s.autoApproveWithdrawalsEnabled===true?'checked':''} style="width:auto"></label></div>
@@ -3318,7 +3320,7 @@ async function renderSettings(){
       referencePrefix:$('sRefPrefix').value.trim(),
       requireInvestToWithdraw:$('sReqInvest').checked, requireReferralCode:$('sReqReferral').checked,
       withdrawWindowEnabled:$('sWitWindow').checked,
-      weekendCashbackPause:$('sWeekendCash').checked, weekendWithdrawBlock:$('sWeekendWit').checked,
+      weekendCashbackPause:$('sWeekendCash').checked, weekendWithdrawBlock:$('sWeekendWit').checked, requireTradePassword:$('sTradePin').checked,
       withdrawOpenFrom:$('sWitFrom').value, withdrawOpenTo:$('sWitTo').value,
       // Sent as raw text; the server splits, validates and de-duplicates it,
       // and rejects the whole save naming the bad line rather than silently

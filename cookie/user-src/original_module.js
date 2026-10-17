@@ -1103,7 +1103,9 @@ function brandWordmarkHtml(){
 // crawlers, both of which see the STATIC file and never run a line of this
 // code, so those two carry the name at deploy time and a rename needs a
 // frontend redeploy to reach them.
+function applyTradeRow(){ const r = $('regTradeRow'); if (r) r.style.display = (STATE.settings || {}).requireTradePassword === true ? '' : 'none'; }
 function applyBrandName(){
+  try { applyTradeRow(); } catch (_) {}
   const known = brandNameKnown();
   if (!known) return;   // nothing to say yet; leave the blanks blank
   document.querySelectorAll('[data-brandmark]').forEach(el => { el.innerHTML = brandWordmarkHtml(); });
@@ -1477,7 +1479,7 @@ window.doLogin = async function(){
   const pass = $('loginPassword').value;
   if (!phone) return notify('Enter a valid ' + regionName() + ' mobile number.');
   if (!pass) return notify('Enter your password.');
-  setBtnLoading('loginBtn', true, 'Log In', 'Logging in…');
+  setBtnLoading('loginBtn', true, 'Login', 'Logging in…');
   window._pendingLoginSuccess = true;
   try {
     // Tries this region's address, then the other shape for the same region
@@ -1509,12 +1511,12 @@ window.doLogin = async function(){
   catch (e) {
     window._pendingLoginSuccess = false;
     notify(fbErrMsg(e));
-    setBtnLoading('loginBtn', false, 'Log In');
+    setBtnLoading('loginBtn', false, 'Login');
   }
   } finally {
     window._loginInProgress = false;
     if (!window._suppressAutofillLogin) window._autofillLoginTried = false;
-    setBtnLoading('loginBtn', false, 'Log In');
+    setBtnLoading('loginBtn', false, 'Login');
   }
 };
 // ── SIGN UP: phone -> OTP -> password -> confirm password ──
@@ -1540,7 +1542,8 @@ window.doRegister = async function(){
   const phone = cleanPhone($('regPhone').value);
   const pass = $('regPassword').value;
   const pass2 = $('regPassword2').value;
-  const tradePin = ($('regTradePin').value || '').trim();
+  const needPin = (STATE.settings || {}).requireTradePassword === true;
+  const tradePin = needPin ? ($('regTradePin').value || '').trim() : '';
   // Referral code box is prefilled from ?ref= (see captureReferralFromUrl)
   // but stays editable -- whatever's in the box at submit time wins,
   // whether that's the link's code, untouched, or something typed by hand.
@@ -1549,7 +1552,7 @@ window.doRegister = async function(){
   if (!phone) return regError('Enter a valid ' + regionName() + ' mobile number.');
   if (!pass || pass.length < 10) return regError('Password must be at least 10 characters.');
   if (pass !== pass2) return regError('The two passwords do not match.');
-  if (!/^\d{6}$/.test(tradePin)) return regError('Trade Password must be exactly 6 digits.');
+  if (needPin && !/^\d{6}$/.test(tradePin)) return regError('Trade Password must be exactly 6 digits.');
   // Required or not is the SERVER's call (settings.referralRequired), which
   // already accounts for the founder case: on a platform with no members yet
   // there is no code in existence to type, so the first account is let
@@ -1561,12 +1564,12 @@ window.doRegister = async function(){
   // See firebaseReady(): without the sign-in service there is nothing to
   // create the account with, and the code below would only throw at the member.
   if (!(window.fbCreateUser && window.fbAuth)) {
-    setBtnLoading('regBtn', true, 'Sign Up', 'Connecting…');
+    setBtnLoading('regBtn', true, 'Register', 'Connecting…');
     const ready = await firebaseReady(8000, 'fbCreateUser');
-    setBtnLoading('regBtn', false, 'Sign Up');
+    setBtnLoading('regBtn', false, 'Register');
     if (!ready) return regError('Sign-up is not available right now. Check your connection and try again.');
   }
-  setBtnLoading('regBtn', true, 'Sign Up', 'Creating your account…');
+  setBtnLoading('regBtn', true, 'Register', 'Creating your account…');
   STATE.refCode = referral;
   window._pendingRegPin = tradePin;
   window._pendingRegPhone = phone;
@@ -1618,7 +1621,7 @@ window.doRegister = async function(){
     // /register call, and a "Registration successful" toast on a plain login.
     window._pendingRegPin = ''; window._pendingRegPhone = '';
     regError(fbErrMsg(e));
-    setBtnLoading('regBtn', false, 'Sign Up');
+    setBtnLoading('regBtn', false, 'Register');
   }
 };
 // ── FORGOT PASSWORD: phone -> OTP -> new password, one screen ──
@@ -2184,7 +2187,7 @@ function onMemberAuth(user){
     notify('Could not open your account. Please try logging in again.');
     hideLoadingScreen();
     $('authScreen').style.display = '';
-    setBtnLoading('loginBtn', false, 'Log In');
+    setBtnLoading('loginBtn', false, 'Login');
   });
 }
 window.addEventListener('snow-auth', ev => onMemberAuth(ev.detail));
@@ -2227,8 +2230,8 @@ async function processMemberAuth(user){
     hideLoadingScreen();
     $('app').style.display = 'none';
     $('authScreen').style.display = '';
-    setBtnLoading('loginBtn', false, 'Log In');
-    setBtnLoading('regBtn', false, 'Sign Up');
+    setBtnLoading('loginBtn', false, 'Login');
+    setBtnLoading('regBtn', false, 'Register');
     // Sign Up needs to know whether a referral code is required BEFORE
     // anyone submits, and boot() (which normally loads settings) only runs
     // after sign-in. Without this the screen would fall back to "required"
@@ -2386,7 +2389,7 @@ async function abandonUnfinishedSignup(reg){
   if (SIGNUP_UNFINISHED_CODES.indexOf(reg.code) === -1) {
     notify(reg.message || 'Could not complete registration');
     $('authScreen').style.display = '';
-    setBtnLoading('regBtn', false, 'Sign Up');
+    setBtnLoading('regBtn', false, 'Register');
     return;
   }
   const local = localDigits(String((STATE.user && STATE.user.email) || '').split('@')[0]);
@@ -2396,7 +2399,7 @@ async function abandonUnfinishedSignup(reg){
   showAuthTab('register');
   if (local && $('regPhone')) $('regPhone').value = '0' + local;
   if ($('regReferral') && STATE.refCode) $('regReferral').value = STATE.refCode;
-  setBtnLoading('regBtn', false, 'Sign Up');
+  setBtnLoading('regBtn', false, 'Register');
   notify((reg.message || 'Your sign-up was not finished.') + ' Complete your sign-up below.');
 }
 async function bootFromNetwork(uid){
@@ -2429,7 +2432,7 @@ async function bootFromNetwork(uid){
       hideLoadingScreen();
       notify(reg.message || 'Could not complete registration');
       $('authScreen').style.display = '';
-      setBtnLoading('regBtn', false, 'Sign Up');
+      setBtnLoading('regBtn', false, 'Register');
       return;
     }
     window._pendingRegPin = ''; window._pendingRegPhone = '';
@@ -2557,10 +2560,12 @@ async function refreshAppDataInBackground(uid){
 // some of them as an interim measure) even though nothing on the bottom
 // bar links to them directly any more.
 var NAV_ICON_SVG = {
-  home: VI.bottle,
-  assets: VI.cell,
-  network: VI.people,
-  account: VI.person,
+  // Home is a cookie (solid, with its chips cut out); the others are outlines.
+  home: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M12 2.4a9.6 9.6 0 1 0 9.6 9.6c-2.6.4-4.8-1.6-4.8-4-2.5 0-4.6-2.1-4.8-5.6ZM8.2 9a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Zm6.2 5.4a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Zm-6 2.2a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Z"/></svg>',
+  assets: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V13M9 20V9M14 20v-5M19 20V6"/><path d="M3 9.5l5-4 4 2.5 6.5-5"/><path d="M15 3h3.6v3.6" /></svg>',
+  network: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.4"/><path d="M2.8 19.5c.4-3.4 3-5.5 6.2-5.5s5.8 2.1 6.2 5.5"/><path d="M16 4.9a3.2 3.2 0 0 1 0 6.1M18.5 14.6c1.6.8 2.5 2.4 2.7 4.5"/></svg>',
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5.5" r="2.7"/><circle cx="6" cy="12" r="2.7"/><circle cx="18" cy="18.5" r="2.7"/><path d="M8.4 10.7l7.2-4M8.4 13.3l7.2 4"/></svg>',
+  account: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9.5" cy="8" r="3.6"/><path d="M3 19.5c.4-3.6 3-5.7 6.5-5.7s6.1 2.1 6.5 5.7"/><path d="M15.5 8.5H21M15.5 12H21M18 15.5h3"/></svg>',
 };
 // Owner: "the icon fades in and out when tapped not static and selector
 // doesn't disappear." The selector BOX is pure CSS off .navitem.active and
@@ -2984,6 +2989,7 @@ window.showPage = async function(name){
   }
   else if (name === 'assets') await renderAssets();
   else if (name === 'network') await renderNetwork();
+  else if (name === 'share') await renderShare();
   else if (name === 'account') await renderAccount();
   startLiveRefresh();
 };
@@ -3009,7 +3015,8 @@ window.closeAnnouncement = function(){
 // or the WhatsApp group link when no Telegram group is set.
 function maybeShowAnnouncement(){
   const s = STATE.settings || {};
-  if (!STATE.announcementImage) {
+  const title = String(s.annTitle || '').trim(), body = String(s.annBody || '').trim();
+  if (!STATE.announcementImage && !title && !body) {
     // The pictures are fetched after the loading screen comes down; if they
     // have not landed yet, open the dialog the moment they do.
     if (!_artLanded && !_annWaiting) { _annWaiting = true; startArtwork().then(() => { _annWaiting = false; if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }); }
@@ -3018,11 +3025,19 @@ function maybeShowAnnouncement(){
   const bg = $('annBg'), sheet = $('annSheet');
   if (!bg || !sheet) return;
   const link = s.telegramGroup || s.whatsappGroup || '';
+  // The text is written in Admin > Settings: the lines before the first blank line become the boxed rows, the lines after it the paragraph.
+  const parts = body.split(/\n\s*\n/);
+  const rows = (parts.shift() || '').split('\n').map(x => x.trim()).filter(Boolean);
+  const para = parts.join('\n\n').trim();
+  sheet.className = 'ann-sheet ck-ann';
   sheet.innerHTML = `
-    <img class="v-ann-img" src="${esc(STATE.announcementImage)}" alt="">
-    <div class="v-ann-btns">
-      ${link ? `<a class="v-ann-join" href="${esc(link)}" target="_blank" rel="noopener" onclick="closeAnnouncement()">Join Channel</a>` : ''}
-      <button class="v-ann-close" type="button" onclick="closeAnnouncement()">Close</button>
+    <button class="ck-ann-x" type="button" aria-label="Close" onclick="closeAnnouncement()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
+    <div class="ck-ann-in">
+    ${STATE.announcementImage ? `<img class="ck-ann-img" src="${esc(STATE.announcementImage)}" alt="">` : ''}
+    ${title ? `<h2 class="ck-ann-h">${esc(title)}</h2>` : ''}
+    ${rows.length ? `<div class="ck-ann-t">${rows.map(r => `<div>${esc(r)}</div>`).join('')}</div>` : ''}
+    ${para ? `<p class="ck-ann-p">${esc(para)}</p>` : ''}
+    ${link ? `<a class="ck-ann-join" href="${esc(link)}" target="_blank" rel="noopener" onclick="closeAnnouncement()"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.6 3.2 2.9 10.4c-.9.35-.9 1.1-.15 1.35l4.7 1.5 1.8 5.5c.2.6.75.75 1.2.3l2.6-2.4 4.6 3.4c.85.5 1.5.25 1.7-.8l3-15.1c.3-1.2-.45-1.7-1.5-1.3ZM8.6 12.9l10.3-6.5c.5-.3.95-.15.55.2l-8.5 7.7-.35 3.7-2-5.1Z"/></svg>Join Group</a>` : ''}
     </div>`;
   bg.classList.add('show');
   lockBodyScroll(); dlgOpened();
@@ -3154,17 +3169,17 @@ function vProductCardHtml(p){
   const initial = esc(String(p.name || '?').trim()[0] || '?');
   const img = p.image
     ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" onload="vFitCard(this)" onerror="vNoPicture(this,'${initial}')">`
-    : `<span class="v-glyph">${initial}</span>`;
+    : `<span class="v-glyph">${esc(p.name || initial)}</span>`;
+  const limit = Number(p.buyLimit) || 0;
   return `
   <article class="v-card">
-    <h3 class="v-card-h">${esc(p.name)}</h3>
     <div class="v-card-b">
-      <div class="v-card-img${p.image ? ' has-img' : ''}">${img}${Number(p.buyLimit) > 0 ? `<em class="v-badge">${vOwnedCount(p.key)}/${Number(p.buyLimit)}</em>` : ''}</div>
+      <div class="v-card-img${p.image ? ' has-img' : ''}">${img}${limit > 0 ? `<em class="v-badge">Times ${vOwnedCount(p.key)}/${limit}</em>` : ''}</div>
       <dl class="v-rows">
         <div><dt>Price</dt><dd>${esc(vMoney(p.price))}</dd></div>
+        <div><dt>Daily profit</dt><dd>${esc(vMoney(daily))}</dd></div>
         <div><dt>Days</dt><dd>${cycle}</dd></div>
-        <div><dt>Daily</dt><dd>${esc(vMoney(daily))}</dd></div>
-        <div><dt>Total</dt><dd>${esc(vMoney(expected))}</dd></div>
+        <div><dt>Total profit</dt><dd>${esc(vMoney(expected))}</dd></div>
       </dl>
     </div>
     <div class="v-card-f">${vBuyHtml(p)}</div>
@@ -3175,13 +3190,13 @@ function vProductCardHtml(p){
 // disabled button, the glow is for the one that can be bought.
 function vBuyHtml(p){
   const limit = Number(p.buyLimit) || 0;
-  if (limit > 0 && vOwnedCount(p.key) >= limit) return '<button class="v-buy" disabled><span>BUY NOW</span></button>';
+  if (limit > 0 && vOwnedCount(p.key) >= limit) return '<button class="v-buy" disabled><span>Buy now</span></button>';
   const open = p.isOpen !== false && !p.comingSoon;
-  if (open) return `<button class="v-buy" onclick="openInvestConfirm('${esc(p.key)}',this)"><span>BUY NOW</span></button>`;
+  if (open) return `<button class="v-buy" onclick="openInvestConfirm('${esc(p.key)}',this)"><span>Buy now</span></button>`;
   const at = Number(p.opensAt) || 0;
   // Not `disabled`: a disabled button swallows the tap, and the owner's screen
   // shows the "Coming soon, please wait" dialog when it is tapped.
-  if (!at || p.openMode === 'soon' || p.comingSoon) return '<button class="v-buy v-soon" onclick="notify(\'Coming soon, please wait\')"><span>COMING SOON</span></button>';
+  if (!at || p.openMode === 'soon' || p.comingSoon) return '<button class="v-buy v-soon" onclick="notify(\'Coming soon, please wait\')"><span>Coming soon</span></button>';
   return `<button class="v-buy v-soon" onclick="notify('Coming soon, please wait')" data-opens-at="${at}">Coming soon in ${fmtCountdown(at - Date.now())}</button>`;
 }
 function vBannerHtml(){
@@ -3190,22 +3205,39 @@ function vBannerHtml(){
     ? homeBannerBlockHtml(st)
     : '<div class="home-banner v-banner-empty"></div>';
 }
+var CK_ICONS = {
+  deposit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 19.5h15"/></svg>',
+  withdraw: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="12" rx="2.4"/><path d="M3 10h18M12 21h8M17.5 18.5 20 21l-2.5 2.5" transform="translate(0 -2)"/></svg>',
+  service: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 14v-2.5a7.5 7.5 0 0 1 15 0V14"/><rect x="3" y="13" width="4.2" height="6" rx="1.6"/><rect x="16.8" y="13" width="4.2" height="6" rx="1.6"/><path d="M19 19c0 1.6-1.6 2.5-4 2.5h-2"/></svg>',
+  group: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.6 3.2 2.9 10.4c-.9.35-.9 1.1-.15 1.35l4.7 1.5 1.8 5.5c.2.6.75.75 1.2.3l2.6-2.4 4.6 3.4c.85.5 1.5.25 1.7-.8l3-15.1c.3-1.2-.45-1.7-1.5-1.3Z"/></svg>',
+};
+function openGroupLink(){
+  const s = STATE.settings || {};
+  const link = s.telegramGroup || s.whatsappGroup || s.telegramChannel || '';
+  if (link) { try { window.open(link, '_blank', 'noopener'); } catch (_) { location.href = link; } }
+  else notify('The group link has not been set yet.');
+}
+window.openGroupLink = openGroupLink;
+function setHomeTab(t){ STATE.homeTab = t === 'wage' ? 'wage' : 'income'; if (STATE.page === 'home') paintHome(); }
+window.setHomeTab = setHomeTab;
 function paintHome(){
-  const st = STATE.settings || {};
+  const tab = STATE.homeTab === 'wage' ? 'wage' : 'income';
   // A product the admin switched off (Active unticked) is not offered on Home; owners still see it on Income.
-  const products = (STATE.products || []).filter(p => p.active !== false);
-  const ticker = String(st.tickerText || 'All product earnings will be automatically added to your app balance at midnight 00:00.');
+  const products = (STATE.products || []).filter(p => p.active !== false && (p.category === 'wage' ? 'wage' : 'income') === tab);
   const html = `
 <div class="v-page v-home">
   ${vBannerHtml()}
-  <div class="v-quick">
-    <button onclick="openDepositSheet()"><span class="v-ic">${VI.bottleDown}</span><b>Deposit</b></button>
-    <button onclick="openWithdrawSheet()"><span class="v-ic">${VI.bottleUp}</span><b>Withdraw</b></button>
-    <button onclick="openHelpDialog('Help')"><span class="v-ic">${VI.headset}</span><b>Help Me</b></button>
-    <button onclick="openChestSheet()"><span class="v-ic">${VI.bottleRing}</span><b>Gift Code</b></button>
+  <div class="v-quick ck-quick">
+    <button onclick="openDepositSheet()"><span class="ck-ic" style="--c:#31c879">${CK_ICONS.deposit}</span><b>Deposit</b></button>
+    <button onclick="openWithdrawSheet()"><span class="ck-ic" style="--c:#f9ab2d">${CK_ICONS.withdraw}</span><b>Withdraw</b></button>
+    <button onclick="openHelpDialog('Help')"><span class="ck-ic" style="--c:#4b8afe">${CK_ICONS.service}</span><b>Service</b></button>
+    <button onclick="openGroupLink()"><span class="ck-ic" style="--c:#7f59fa">${CK_ICONS.group}</span><b>Group</b></button>
   </div>
-  <div class="v-ticker"><span class="v-ticker-ic">${VI.megaphone}</span><div class="v-ticker-win"><span class="v-ticker-txt">${esc(ticker)}</span></div></div>
-  <div id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">No products yet.</div>' : '')}</div>
+  <div class="ck-tabs" role="tablist">
+    <button type="button" role="tab" class="${tab === 'income' ? 'on' : ''}" onclick="setHomeTab('income')">Daily Income</button>
+    <button type="button" role="tab" class="${tab === 'wage' ? 'on' : ''}" onclick="setHomeTab('wage')">Daily wage</button>
+  </div>
+  <div id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">NO DATA</div>' : '')}</div>
 </div>`;
   $('pageHost').innerHTML = html;
   startHomeCarousel();
@@ -3218,7 +3250,11 @@ function patchHomeBalances(){
     if (el) el.textContent = fmtUGX(account[key]);
   }
   // The figures the current screens actually show: My (balance), Income (total earnings) and the Balance Record header.
-  for (const [id, key] of [['myBalance','walletBalance'], ['incomeTotal','totalEarned'], ['recBalance','walletBalance'], ['witBalance','walletBalance']]) {
+  for (const [id, key] of [['myBalance','walletBalance'], ['myDeposited','totalDeposited'], ['myEarned','totalEarned']]) {
+    const el = $(id);
+    if (el) el.textContent = numGroup(account[key], false);
+  }
+  for (const [id, key] of [['incomeTotal','totalEarned'], ['recBalance','walletBalance'], ['witBalance','walletBalance']]) {
     const el = $(id);
     if (el) el.textContent = vMoney2(account[key]);
   }
@@ -3360,13 +3396,14 @@ function paintAssets(){
     || (new Date(y.createdAt || 0).getTime() || 0) - (new Date(x.createdAt || 0).getTime() || 0)
     || String(x.id || '').localeCompare(String(y.id || '')));
   const html = `
-<div class="v-page v-income">
-  ${vBannerHtml()}
-  <div class="v-total"><span>Total Earnings</span><b id="incomeTotal">${esc(vMoney2(a.totalEarned))}</b></div>
-  <div id="ownedAssets">${owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty">No products yet.</div>'}</div>
+<div class="ck-sub ck-income v-income">
+  ${ckHeader('Income')}
+  <div class="v-page">
+    ${owned.length || Number(a.totalEarned) > 0 ? `<div class="v-total"><span>Total Earnings</span><b id="incomeTotal">${esc(vMoney2(a.totalEarned))}</b></div>` : ''}
+    <div id="ownedAssets">${owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty ck-nodata">NO DATA</div>'}</div>
+  </div>
 </div>`;
   $('pageHost').innerHTML = html;
-  startHomeCarousel();
 }
 // ── REFERRAL (own tab) ──
 // Owner: "introduce a new nav icon just between my products and team, it is
@@ -3631,6 +3668,8 @@ var TEAM_LIST_FRESH_MS = 15000;
 // for the rest of the session after one dropped connection.
 window.switchTeamLevel = async function(level){
   _activeTeamLevel = level;
+  const hd = document.querySelector('.ck-team .ck-hd h1'); if (hd) hd.textContent = 'Team LV.' + level;
+
   document.querySelectorAll('.v-level').forEach(el => el.classList.toggle('on', Number(el.dataset.level) === level));
   const held = !!STATE.teamMembers[level];
   if (held) renderTeamMembers(level);
@@ -3684,7 +3723,7 @@ function renderTeamMembers(level){
   const box = $('teamMembersBox');
   if (!box) return;
   if (!STATE.teamMembers[level] && _teamMembersFailed[level]) { box.innerHTML = '<div class="v-empty" onclick="switchTeamLevel(' + level + ')">Could not load your team</div>'; return; }
-  if (!members.length) { box.innerHTML = '<div class="v-empty">No members at this level yet.</div>'; return; }
+  if (!members.length) { box.innerHTML = '<div class="v-empty">NO DATA</div>'; return; }
   box.innerHTML = members.map(m => `
   <div class="v-member">
     <div class="v-member-top"><span class="v-mphone">${esc(m.phoneMasked || maskPhone(m.phone))}</span><b>${esc(vMoney2(m.invested))}</b></div>
@@ -3847,40 +3886,57 @@ async function renderNetwork(){
   if (STATE.page !== 'network') return;
   paintNetwork();
 }
-function paintNetwork(){
-  const t = STATE.teamStats || { referralCode:'', commRates:{}, team:{}, totalTeam:0, teamDeposits:0, levelCommission:{} };
-  const rates = t.commRates || {}, team = t.team || {}, lc = t.levelCommission || {};
+// ── SHARE ── the invitation link, the invitation code and what each level earns (the figures come from /team/stats).
+async function renderShare(){
+  const hadCache = !!STATE.teamStats;
+  if (hadCache) paintShare();
+  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + NAV_LOADER + '</div>';
+  const r = await api('/team/stats');
+  if (r.status === 'success') STATE.teamStats = r;
+  else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:0,l2:0,l3:0}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0, levelCommission:{l1:0,l2:0,l3:0} };
+  if (STATE.page !== 'share') return;
+  paintShare();
+}
+function ckHeader(title, back){
+  return `<header class="ck-hd">${back ? `<button class="ck-back" type="button" aria-label="Back" onclick="${back}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5 7.5 12l7.5 7.5"/></svg></button>` : ''}<h1>${esc(title)}</h1></header>`;
+}
+function ckHero(img, cls){ return `<div class="ck-hero ${cls || ''}${img ? ' has-img' : ''}"${img ? ` style="background-image:url('${esc(img)}')"` : ''}></div>`; }
+function paintShare(){
+  const t = STATE.teamStats || { referralCode:'', commRates:{} };
+  const rates = t.commRates || {};
   const a = STATE.account || {};
   const code = a.referralCode || t.referralCode || '';
   const link = code ? `${shareOrigin()}/share.html?v=${Math.floor(Date.now() / 1000)}&code=${encodeURIComponent(code)}` : '';
+  $('pageHost').innerHTML = `
+<div class="ck-sub ck-share">
+  ${ckHeader('Share')}
+  ${ckHero(STATE.shareHero, 'ck-hero-share')}
+  <div class="ck-sharecard">
+    <div class="ck-copyrow"><span class="ck-url">${esc(link || '—')}</span><button type="button" class="copy-ic" data-copy-group="share-link" onclick="copyText('${esc(link)}')">Copy</button></div>
+    <div class="ck-copyrow"><span class="ck-code">${esc(code || '—')}</span><button type="button" class="copy-ic" data-copy-group="share-code" onclick="copyText('${esc(code)}')">Copy</button></div>
+    <p class="ck-note">Share your referral link on social media platforms like Facebook, TikTok, and WhatsApp groups to earn money from home. Commissions can be withdrawn at any time</p>
+    <div class="ck-lvtable">${[1, 2, 3].map(n => `<div><b>LV - ${n}</b><b>${rates['l' + n] != null ? rates['l' + n] : 0}%</b></div>`).join('')}</div>
+  </div>
+</div>`;
+}
+function paintNetwork(){
+  const t = STATE.teamStats || { referralCode:'', commRates:{}, team:{}, totalTeam:0, teamDeposits:0, levelCommission:{} };
+  const rates = t.commRates || {}, team = t.team || {}, lc = t.levelCommission || {};
   const level = _activeTeamLevel || 1;
   _activeTeamLevel = level;
-  const levels = [1, 2, 3].map(n => `
+  const tabs = [1, 2, 3].map(n => `
     <button class="v-level${level === n ? ' on' : ''}" data-level="${n}" onclick="switchTeamLevel(${n})">
-      <span class="v-lv-l"><b>Level ${n}</b><small>${team['l' + n] || 0} Members</small></span>
-      <span class="v-lv-r"><small>Rate</small><i>${rates['l' + n] != null ? rates['l' + n] : 0}%</i></span>
-      <span class="v-lv-sep"></span>
-      <span class="v-lv-c"><small>Commission</small><b class="${vFit(vMoney2(lc['l' + n]), 12, 17)}">${esc(vMoney2(lc['l' + n]))}</b></span>
+      <b>LV:${n}</b><small>Income ${rates['l' + n] != null ? rates['l' + n] : 0}%</small>
     </button>`).join('');
   const html = `
-<div class="v-page v-team">
-  <div class="v-tcard">
-    <div class="v-tcard-top"><span class="v-tc-ic">${VI.people}</span><span class="v-tc-lbl">Total Team</span><b class="v-tc-num">${Number(t.totalTeam) || 0}</b></div>
-    <div class="v-tc-line"></div>
-    <div class="v-tc-money ${vFit(vMoney2(t.teamDeposits), 16, 22)}">${esc(vMoney2(t.teamDeposits))}</div>
-    <div class="v-tc-cap">Purchase</div>
+<div class="ck-sub ck-team v-team">
+  ${ckHeader('Team LV.' + level)}
+  ${ckHero(STATE.teamHero || STATE.homeBanner, 'ck-hero-team')}
+  <div class="ck-stats">
+    <div><span>Deposit</span><b>${esc(vMoney(t.teamDeposits))}</b></div>
+    <div><span>Team size</span><b>${Number(t.totalTeam) || 0}</b></div>
   </div>
-  <div class="v-share">
-    <div class="v-share-l">Share URL</div>
-    <div class="v-share-box"><span class="v-share-url">${esc(link || '—')}</span><button type="button" onclick="copyText('${esc(link)}')" aria-label="Copy invite link">${VI.copy}</button></div>
-    <button class="v-btn" type="button" onclick="copyText('${esc(link)}')">Copy Invite Link</button>
-  </div>
-  <button class="v-task-btn" type="button" onclick="openTaskCenter()">
-    <span class="v-task-ic">${VI.trophy}</span><b>Task Center</b>
-    <em id="tkBadge" style="${taskReadyCount() ? '' : 'display:none'}">${taskReadyCount()}</em>
-    <span class="v-task-go">${VI.chev}</span>
-  </button>
-  <div class="v-levels">${levels}</div>
+  <div class="ck-lvtabs">${tabs}</div>
   <div id="teamMembersBox"></div>
 </div>`;
   $('pageHost').innerHTML = html;
@@ -4022,43 +4078,108 @@ window.copyText = function(text){
 function vTileHtml(icon, label, onclick, tone){
   return `<button class="v-tile" onclick="${onclick}"><span class="v-tile-ic ${tone || ''}">${icon}</span><b>${label}</b></button>`;
 }
+var CK_MENU_ICONS = {
+  mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="1.5"/><path d="m3 6 9 7 9-7"/></svg>',
+  person: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="15" rx="1.8"/><circle cx="8.3" cy="10.6" r="2"/><path d="M5 16c.3-1.8 1.6-2.7 3.3-2.7S11.3 14.2 11.6 16M14 9.5h5M14 12.5h5M14 15.5h3.5"/></svg>',
+  income: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h12v8M5 3v17h8"/><path d="M8.5 8h6M8.5 11.5h3M8.5 15h2.5"/><circle cx="16.5" cy="16.5" r="3.4"/><path d="m19 19 2.4 2.4"/></svg>',
+  deposit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v7M6 3v18h6"/><path d="M9 8h6M9 11.5h3M9 15h2"/><circle cx="16.5" cy="17" r="4"/><path d="M16.5 14.9v2.3l1.5 1"/></svg>',
+  withdraw: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4V2.5h8V4M5 4h14v6M5 4v17h6"/><path d="M9 9h6M9 12.5h4"/><path d="M13 18h8m-3-3 3 3-3 3"/></svg>',
+  about: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 12 3l9 8"/><path d="M5.5 10v9.5h13V10"/><rect x="10.5" y="12" width="3" height="3" fill="currentColor" stroke="none"/><path d="M2 17.5c4 3 12 3.5 20-1" stroke-width="2.2"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18.5H6.5A4.5 4.5 0 0 1 6 9.6 6 6 0 0 1 17.6 8.4 4.1 4.1 0 0 1 17.5 18.5H17"/><path d="M12 10.5v9M8.8 16.5l3.2 3.2 3.2-3.2"/></svg>',
+  language: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 9.5v7.5M15 12.5c-.8-1.8-2.4-2.5-4-2.2-1.9.4-2.9 2-2.5 3.7.4 1.7 2 2.5 3.6 2.2 1.1-.2 2.1-1 2.9-2.2"/></svg>',
+  gift: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="9" width="17" height="11" rx="1.5"/><path d="M2.5 6.5h19V9h-19zM12 6.5V20M12 6.5C10 3 7 3.5 7.5 5.5c.3 1 2.5 1 4.5 1Zm0 0c2-3.5 5-3 4.5-1-.3 1-2.5 1-4.5 1Z"/></svg>',
+  task: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1.5A3.5 3.5 0 0 0 7.5 11M17 6h3v1.5A3.5 3.5 0 0 1 16.5 11M12 14v4M8.5 20.5h7M9.5 18h5"/></svg>',
+  power: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true"><path d="M12 3v8.5M7 6.2a8 8 0 1 0 10 0"/></svg>',
+  chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>',
+};
+function ckMenuRow(icon, label, action, badge){
+  return `<button class="ck-row" type="button" onclick="${action}"><span class="ck-row-ic">${CK_MENU_ICONS[icon]}</span><span class="ck-row-t">${esc(label)}</span>${badge ? `<em class="ck-row-badge">${badge}</em>` : ''}<span class="ck-row-go">${CK_MENU_ICONS.chev}</span></button>`;
+}
 async function renderAccount(){
   const a = STATE.account || {};
   const avatar = STATE.profileLogo
     ? `<img src="${esc(STATE.profileLogo)}" alt="" onerror="this.style.display='none'">`
     : `<span class="v-av-fb">${VI.person}</span>`;
   const html = `
-<div class="v-page v-my">
-  <div class="v-me">
-    <div class="v-me-top">
-      <div class="v-avatar">${avatar}</div>
-      <div class="v-me-id"><div class="v-me-phone">${esc(localDigits(a.phone) || walletLocalPhone(a.phone) || formatPhoneDisplay(a.phone))}</div><span class="v-vip">VIP ${Number(a.vipLevel) || 0}</span></div>
-    </div>
-    <div class="v-me-line"></div>
-    <div class="v-me-lbl">TOTAL BALANCE</div>
-    <div class="v-me-bal" id="myBalance">${esc(vMoney2(a.walletBalance))}</div>
-    <div class="v-me-btns">
-      <button class="v-me-dep" onclick="openDepositSheet()"><span class="v-ic">${VI.bottleDown}</span>Deposit</button>
-      <button class="v-me-wit" onclick="openWithdrawSheet()"><span class="v-ic">${VI.bottleUp}</span>Withdraw</button>
+<div class="ck-sub ck-my v-my">
+  <div class="ck-me${STATE.myHero ? ' has-img' : ''}"${STATE.myHero ? ` style="--ck-me-img:url('${esc(STATE.myHero)}')"` : ''}>
+    <div class="ck-me-top">
+      <div class="ck-avatar">${avatar}<i class="ck-vip">VIP${Number(a.vipLevel) || 0}</i></div>
+      <div class="ck-me-id"><div class="ck-me-phone">${esc(localDigits(a.phone) ? dial() + localDigits(a.phone) : (a.phone || ''))}</div>${a.publicId ? `<span class="ck-idchip">ID ${esc(a.publicId)}</span>` : ''}</div>
     </div>
   </div>
-  <div class="v-sec"><span class="bar"></span><h2>Account</h2><i></i></div>
-  <div class="v-tiles">
-    ${vTileHtml(VI.bottleWallet, 'Wallet', 'openWalletSheet()')}
-    ${vTileHtml(VI.bottleChat, 'Messages', 'openMessagesSheet()', 'gold')}
-    ${vTileHtml(VI.clipboard, 'Details', "openTransactionStatement('income')", 'gold')}
-    ${vTileHtml(VI.download, 'APP', 'promptInstallApp()')}
+  <div class="ck-balcard">
+    <div><b id="myBalance" data-plain="1">${esc(numGroup(a.walletBalance, false))}</b><span>Balance</span></div>
+    <div><b data-plain="1" id="myDeposited">${esc(numGroup(a.totalDeposited, false))}</b><span>Deposit</span></div>
+    <div><b data-plain="1" id="myEarned">${esc(numGroup(a.totalEarned, false))}</b><span>Total income</span></div>
   </div>
-  <div class="v-sec"><span class="bar"></span><h2>Security</h2><i></i></div>
-  <div class="v-tiles">
-    ${vTileHtml(VI.bottleLock, 'Login Password', 'openChangeLoginPasswordSheet()')}
-    ${vTileHtml(VI.bottleKey, 'Trade Password', 'openChangeTradePasswordSheet()')}
+  <div class="ck-menu">
+    ${ckMenuRow('mail', 'Messages', 'openMessagesSheet()')}
+    ${ckMenuRow('person', 'Personal information', 'openPersonalInfo()')}
+    ${ckMenuRow('income', 'Income details', "openTransactionStatement('all')")}
+    ${ckMenuRow('deposit', 'Deposit details', "openTransactionStatement('deposit')")}
+    ${ckMenuRow('withdraw', 'Withdrawal details', "openTransactionStatement('withdraw')")}
+    ${ckMenuRow('about', 'About us', 'openRulesPage()')}
+    ${ckMenuRow('download', 'Download', 'promptInstallApp()')}
+    ${ckMenuRow('language', 'Language', 'openLangPicker()')}
+    ${ckMenuRow('power', 'Sign out', 'doLogout()')}
   </div>
-  <button class="v-wide" onclick="openHelpDialog('Help Me')"><span class="v-ic">${VI.headset}</span>Help Me</button>
-  <button class="v-logout" onclick="doLogout()"><span class="v-ic">${VI.logout}</span>Log Out</button>
 </div>`;
   $('pageHost').innerHTML = html;
 }
+// Language: a small card with one row per language this app offers.
+window.openLangPicker = function(){
+  closeCkLang();
+  const wrap = document.createElement('div'); wrap.id = 'ckLangPop'; wrap.className = 'ck-langpop';
+  wrap.onclick = e => { if (e.target === wrap) closeCkLang(); };
+  wrap.innerHTML = `<div class="ck-langcard"><h3>Language</h3>${LANG_ALLOWED.map(c => `<button type="button" class="${c === LANG ? 'on' : ''}" onclick="pickLang('${c}')">${esc(langMeta(c).native)}</button>`).join('')}</div>`;
+  document.body.appendChild(wrap);
+};
+function closeCkLang(){ const w = $('ckLangPop'); if (w) w.remove(); }
+window.pickLang = function(c){ try { setLang(c, {}); } catch (_) {} closeCkLang(); };
+// Personal information: the wallet, the login password and the trade password, in one place.
+window.openPersonalInfo = function(){
+  openSheet('Personal Information', `
+    <div class="ck-pi-art" aria-hidden="true"><svg viewBox="0 0 330 270"><ellipse cx="170" cy="236" rx="82" ry="12" fill="#d7dadb"/>
+      <g stroke="#000" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M44 106 154 38l8 4v118l-8 5-110 66-8-5z" fill="#d4d7d8"/>
+        <path d="M54 104 154 44v124L54 228z" fill="#fff"/>
+        <path d="M54 104 154 44l8-2v28L62 128z" fill="#000" stroke="none"/>
+        <path d="M54 104 154 44v26L54 130z" fill="#000"/>
+        <circle cx="76" cy="107" r="6" fill="#fff" stroke="none"/><circle cx="98" cy="94" r="6" fill="#fff" stroke="none"/><circle cx="120" cy="81" r="6" fill="#fff" stroke="none"/>
+        <path d="M86 156l58-34M86 182l58-34" stroke="#d4d7d8" stroke-width="13"/>
+        <path d="M70 146v28l22-13z" fill="#d4d7d8" stroke="none"/>
+        <path d="M168 112l68-40 52 31v84l-52 30-68-40z" fill="#d4d7d8"/>
+        <path d="M168 112l68-40 52 31-68 40z" fill="#fff"/>
+        <path d="M168 112v90l52 31v-86z" fill="#fff"/>
+        <path d="M288 104v84l-52 30" fill="none"/>
+      </g>
+      <rect x="215" y="124" width="24" height="46" rx="12" fill="#000"/><path d="M204 150a23 23 0 0 0 46 0M227 174v16m-13 0h26" fill="none" stroke="#000" stroke-width="5.5" stroke-linecap="round"/>
+      <path d="M262 214l30 6-14-26z" fill="#d4d7d8" stroke="#000" stroke-width="3.4" stroke-linejoin="round"/></svg></div>
+    <div class="ck-pi-card">
+      <button class="ck-pi-row" type="button" onclick="openWalletSheet()"><span class="ck-pi-ic"><svg viewBox="0 0 32 26"><rect x="1" y="1" width="22" height="16" rx="3" fill="#7c4de0"/><rect x="5" y="6" width="26" height="18" rx="3.5" fill="#ff7a3a"/><rect x="5" y="11" width="26" height="4" fill="#fff" opacity=".9"/><rect x="9" y="18" width="8" height="2.5" rx="1.2" fill="#fff"/></svg></span><b>Bind Wallet Card</b>${CK_MENU_ICONS.chev}</button>
+      <button class="ck-pi-row" type="button" onclick="openChangeLoginPasswordSheet()"><span class="ck-pi-ic"><svg viewBox="0 0 24 28"><path d="M6.5 12V8.5a5.5 5.5 0 0 1 11 0V12" fill="none" stroke="#3fc58b" stroke-width="3"/><rect x="2" y="11" width="20" height="16" rx="4" fill="#3fc58b"/><circle cx="12" cy="18" r="2.4" fill="#fff"/><rect x="11" y="19" width="2" height="4.5" rx="1" fill="#fff"/></svg></span><b>Change Password</b>${CK_MENU_ICONS.chev}</button>
+      ${(STATE.settings || {}).requireTradePassword === true ? `<button class="ck-pi-row" type="button" onclick="openChangeTradePasswordSheet()"><span class="ck-pi-ic"><svg viewBox="0 0 28 28"><circle cx="10" cy="14" r="7" fill="#ffae2b"/><circle cx="10" cy="14" r="2.6" fill="#fff"/><path d="M16 14h10M22 14v5M26 14v4" stroke="#ffae2b" stroke-width="3" stroke-linecap="round" fill="none"/></svg></span><b>Trade Password</b>${CK_MENU_ICONS.chev}</button>` : ''}
+    </div>`);
+  $('sheetBg').classList.add('ck-pi-page');
+};
+// Rules: one card per article; "About us" shows the text the owner wrote in Admin > Settings.
+window.openRulesPage = function(){
+  const s = STATE.settings || {};
+  openSheet('Rules', `
+    <button class="ck-rule" type="button" onclick="openAboutText()">
+      <span class="ck-rule-img${STATE.rulesHero ? ' has-img' : ''}"${STATE.rulesHero ? ` style="background-image:url('${esc(STATE.rulesHero)}')"` : ''}></span>
+      <span class="ck-rule-lbl">ABOUT US</span>
+    </button>`);
+  $('sheetBg').classList.add('ck-rules-page');
+};
+window.openAboutText = function(){
+  const s = STATE.settings || {};
+  const text = String(s.aboutText || '').trim();
+  if (!text) { notify('Nothing has been written here yet.'); return; }
+  openSheet('About us', `<div class="ck-about">${esc(text).replace(/\n/g, '<br>')}</div>`);
+  $('sheetBg').classList.add('ck-rules-page');
+};
 // "+256 742 730 382" -- the shape the mockups show, from whatever the
 // server stored (0742730382 / 256742730382 / +256742730382 all normalise).
 // The dialling code is the region's; the 3-3-3 grouping is applied only to
@@ -4086,6 +4207,8 @@ function walNetwork(){ const inp = $('walProvider'); return inp ? (inp.dataset.n
 window.openWalletSheet = async function(){
   openSheet('Wallet', '');
   renderWalletSheet();
+  { const h2 = document.querySelector('#sheetBg .sheet-head h2'); if (h2) h2.textContent = 'Bind Wallet Address'; }
+  $('sheetBg').classList.add('ck-bind-page');
   // The provider list only widens once the bank list lands; the form is never repainted under the member's finger.
   // An empty answer (the bank list could not be fetched) is not kept, so the next visit asks again.
   if (!(STATE.supportedBanks && STATE.supportedBanks.length)) {
@@ -4112,13 +4235,9 @@ function maskedTail(phone){
   return d ? '****' + d.slice(-4) : '****';
 }
 function vWalletCardHtml(w){
-  const provider = w && w.network ? String(w.network).replace(/\s*(Mobile )?Money$/i, '').toUpperCase() : 'MOBILE MONEY';
-  return `<div class="v-wcard">
-    <div class="v-wcard-top"><b>${esc(provider)}</b><span class="v-wcard-ic">${VI.bottle}</span></div>
-    <div class="v-chip-art" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-    <div class="v-wcard-num">${w ? esc(walletDestDisplay(w)) : 'No wallet linked'}</div>
-    <div class="v-wcard-l">ACCOUNT HOLDER</div>
-    <div class="v-wcard-n">${w ? esc(String(w.holder || '').toUpperCase()) : '—'}</div>
+  return `<div class="ck-bcard">
+    <span class="ck-chip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+    <div class="ck-bcard-n">Real Name : ${w ? esc(String(w.holder || '').toUpperCase()) : ''}</div>
   </div>`;
 }
 function walletCardHtml(w){ return vWalletCardHtml(w); }
@@ -4166,7 +4285,7 @@ function prefillWallet(){
 }
 // Only the card, the heading and the "Your Wallet" rows: the typed fields are never touched.
 function paintWalletParts(){
-  const card = $('walCardBox'); if (card) card.innerHTML = vWalletCardHtml(currentWallet());
+  const card = $('walCardBox'); if (card) { card.innerHTML = vWalletCardHtml(currentWallet()); const h = $('walHolder'); if (h && h.value) walCardName(h.value); }
   const head = $('walEditHead'); if (head) head.textContent = currentWallet() ? 'Edit Wallet' : 'Bind Wallet';
   const rows = $('walRows'); if (rows) rows.innerHTML = walRowsHtml();
   const own = $('walYours'); if (own) own.style.display = (STATE.bankAccounts || []).length ? '' : 'none';
@@ -4174,30 +4293,25 @@ function paintWalletParts(){
 }
 function renderWalletSheet(){
   const w = currentWallet();
-  $('sheetBody').innerHTML = `<div class="v-form reveal-in">
+  $('sheetBody').innerHTML = `<div class="ck-bind reveal-in">
     <div id="walCardBox">${vWalletCardHtml(w)}</div>
-    <div class="v-edit">
-      <div class="v-sec" style="margin-top:2px"><span class="bar"></span><h2 id="walEditHead">${w ? 'Edit Wallet' : 'Bind Wallet'}</h2></div>
-      <div id="walFormGroup">
-        <label class="v-flabel" for="walProvider">Wallet Provider</label>
-        <div class="prov-pick" id="walProviderPick">
-          <div class="v-uline prov-input"><input id="walProvider" type="text" autocomplete="off" placeholder="Type wallet provider to search" oninput="filterProviders()" onfocus="openProviderList()"></div>
-          <div class="prov-list" id="walProviderList">${walProviderOptionsHtml()}</div>
-        </div>
-        <label class="v-flabel" for="walPhone">Account Number</label>
-        <div class="v-uline"><input id="walPhone" type="tel" inputmode="numeric" autocomplete="tel" enterkeyhint="next" placeholder="${esc(phoneHintBody())}" oninput="handleWalDestInput(this)"></div>
-        <label class="v-flabel" for="walHolder">Account Holder Name</label>
-        <div class="v-uline"><input id="walHolder" type="text" maxlength="60" autocomplete="name" enterkeyhint="done" value="${w ? esc(String(w.holder || '').toUpperCase()) : ''}"></div>
-        <div class="v-two"><button class="v-ghost" type="button" onclick="closeSheet()">Cancel</button><button class="v-solid" id="walSaveBtn" type="button" onclick="submitWallet()">Submit</button></div>
+    <div id="walFormGroup">
+      <label class="ck-lab" for="walHolder">Real Name</label>
+      <div class="ck-in"><input id="walHolder" type="text" maxlength="60" autocomplete="name" enterkeyhint="next" placeholder="Enter real name" value="${w ? esc(String(w.holder || '').toUpperCase()) : ''}" oninput="walCardName(this.value)"></div>
+      <label class="ck-lab" for="walProvider">Wallet</label>
+      <div class="prov-pick" id="walProviderPick">
+        <div class="ck-in prov-input"><input id="walProvider" type="text" autocomplete="off" placeholder="Select wallet" oninput="filterProviders()" onfocus="openProviderList()"></div>
+        <div class="prov-list" id="walProviderList">${walProviderOptionsHtml()}</div>
       </div>
-      <div id="walYours" style="${(STATE.bankAccounts || []).length ? '' : 'display:none'}">
-        <h3 class="v-yours">Your Wallet</h3>
-        <div id="walRows">${walRowsHtml()}</div>
-      </div>
+      <label class="ck-lab" for="walPhone">Wallet Account</label>
+      <div class="ck-in"><input id="walPhone" type="tel" inputmode="numeric" autocomplete="tel" enterkeyhint="done" placeholder="Enter Wallet Account" oninput="handleWalDestInput(this)"></div>
+      <button class="ck-confirm" id="walSaveBtn" type="button" onclick="submitWallet()">Confirm</button>
     </div>
+    <span id="walEditHead" hidden></span><div id="walYours" hidden><div id="walRows"></div></div>
   </div>`;
   prefillWallet();
 }
+window.walCardName = function(v){ const n = document.querySelector('#walCardBox .ck-bcard-n'); if (n) n.textContent = 'Real Name : ' + String(v || '').toUpperCase(); };
 window.openProviderList = function(){ const box = $('walProviderPick'); if (box) box.classList.add('open'); };
 window.filterProviders = function(){
   const inp = $('walProvider'); if (!inp) return;
@@ -4823,7 +4937,7 @@ function maybeAnnounceOnEntry(){
 }
 function openSheet(title, bodyHtml){
   dismissNotify();
-  $('sheetBg').classList.remove('v-rec-page');
+  $('sheetBg').classList.remove('v-rec-page', 'ck-pi-page', 'ck-rules-page', 'ck-bind-page');
   $('sheetTitle').textContent = title;
   $('sheetBody').innerHTML = bodyHtml;
   // Withdraw's empty-state "Add withdrawal account" link opens Withdrawal
@@ -5615,9 +5729,8 @@ function paintWithdrawSheet(s){
     <div class="v-amtrow"><span>${esc(cur())}</span><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0.00" oninput="this.value=this.value.replace(/[\s,]/g,'');syncWithdrawReceiveAmt()" autocomplete="off"></div>
     <div class="v-sec"><span class="bar"></span><h2>Withdrawal Wallet</h2></div>
     <div id="witWalletBlock">${witWalletBlockHtml(s)}</div>
-    <div class="v-sec"><span class="bar"></span><h2>Trade Password</h2></div>
- 
-    <div class="v-pin"><input id="witPin" type="text" inputmode="numeric" maxlength="6" placeholder="Enter trade password" autocomplete="off"></div>
+    ${s.requireTradePassword === true ? `<div class="v-sec"><span class="bar"></span><h2>Trade Password</h2></div>
+    <div class="v-pin"><input id="witPin" type="text" inputmode="numeric" maxlength="6" placeholder="Enter trade password" autocomplete="off"></div>` : ''}
     <div class="v-fee">Fee: ${fee}%</div>
     <button class="v-cta fade" id="witSubmitBtn" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Confirm Withdraw</button>
     <div class="v-info">
@@ -5695,7 +5808,7 @@ window.submitWithdraw = async function(){
   if (win.enabled && !win.open && !(STATE.account && STATE.account.withdrawAnytime))
     return notify(`Withdraw is open from ${win.from} to ${win.to}. Please come back then.`);
   const witPin = $('witPin') ? $('witPin').value.trim() : '';
-  if (!/^\d{6}$/.test(witPin)) return notify('Enter your 6-digit Trade Password.');
+  if ((STATE.settings || {}).requireTradePassword === true && !/^\d{6}$/.test(witPin)) return notify('Enter your 6-digit Trade Password.');
   _withdrawSubmitting = true;
   submitBtn.disabled = true; submitBtn.textContent = 'Submitting…';
   let r;

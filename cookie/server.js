@@ -667,6 +667,8 @@ const DEFAULT_SETTINGS = {
   // either day. Cashback is credited at local midnight for the day that just ended, so Friday's is credited at 00:00 Saturday, and the next
   // credit is at 00:00 Tuesday (for Monday). Both are ON by default and can be switched off in Admin > Settings.
   weekendCashbackPause: true, weekendWithdrawBlock: true,
+  // Cookie's screens have no Trade Password: it is not asked at sign-up or at withdrawal unless this is switched on in Admin > Settings.
+  requireTradePassword: false,
   // What every NEW mobile-money recharge / withdrawal reference starts with (cookie2610111048053568). Admin > Settings; existing references never change.
   referencePrefix: 'S',
   // AUTOMATIC WITHDRAWALS (Admin > Settings > Withdrawals). Off by default. Requests always arrive as 'pending' as usual; only while this is
@@ -3892,7 +3894,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     // Registration saves the six-digit Trade Password as a server-side
     // scrypt hash. It is never returned to the client.
     const tradePin = String(pin || '');
-    if (!/^\d{6}$/.test(tradePin))
+    if ((await getSettings()).requireTradePassword === true && !/^\d{6}$/.test(tradePin))
       return { code: 400, body: { status: 'error', code: 'INVALID_TRADE_PIN', message: 'Trade Password must be exactly 6 digits.' } };
     const code = String(referralCode || '').trim();
     let referrerId = null;
@@ -4011,7 +4013,7 @@ app.post('/register', async (req, res) => {
     const already = await db.collection('users').doc(userId).get();
     if (!already.exists || !already.data().registrationDone) {
       const tradePin = textOf(req.body.pin);
-      if (!/^\d{6}$/.test(tradePin)) return res.status(400).json({ status: 'error', code: 'INVALID_TRADE_PIN', message: 'Trade Password must be exactly 6 digits.' });
+      if ((await getSettings()).requireTradePassword === true && !/^\d{6}$/.test(tradePin)) return res.status(400).json({ status: 'error', code: 'INVALID_TRADE_PIN', message: 'Trade Password must be exactly 6 digits.' });
     }
     const result = await completeRegistrationCore(userId, textOf(req.body.referralCode), textOf(req.body.pin), phone);
     const { referrerId, ...memberBody } = result.body;
@@ -5303,7 +5305,7 @@ app.post('/withdraw/request', async (req, res) => {
     // pinCheck() verifies the scrypt hash and locks the account for 15 minutes
     // after 5 wrong tries (a 6-digit code has only a million values, so the
     // lock is what makes it a real gate). The app's own check is a courtesy.
-    const pinResult = await pinCheck(userId, req.body.pin);
+    const pinResult = sett.requireTradePassword === true ? await pinCheck(userId, req.body.pin) : { ok: true };
     if (!pinResult.ok)
       return res.status(pinResult.code === 'LOCKED' ? 429 : 400).json({ status: 'error', code: pinResult.code, message: pinResult.message });
     const boundSnap = await db.collection('bankAccounts')
@@ -6961,7 +6963,7 @@ const SETTINGS_CRITICAL_RANGES = {
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
   innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'weekendCashbackPause', 'weekendWithdrawBlock', 'blockRootDomain'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'weekendCashbackPause', 'weekendWithdrawBlock', 'requireTradePassword', 'blockRootDomain'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes

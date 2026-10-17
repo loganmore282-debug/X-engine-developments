@@ -27,7 +27,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
     ok(d.getElementById('notifyBg').classList.contains('show') && d.getElementById('notifyMsg').textContent === 'Coming soon, please wait', 'tap shows "Coming soon, please wait"');
     ok(d.getElementById('notifyIc').classList.contains('err'), 'with the cross icon');
   }
-  ok(/BUY NOW/.test(w.vBuyHtml({ key: 'c', price: 1 })) && /openInvestConfirm/.test(w.vBuyHtml({ key: 'c', price: 1 })), 'an open asset still opens the confirm sheet');
+  ok(/Buy now/.test(w.vBuyHtml({ key: 'c', price: 1 })) && /openInvestConfirm/.test(w.vBuyHtml({ key: 'c', price: 1 })), 'an open asset still opens the confirm sheet');
   // Insufficient balance: the wording and the redirect are wired to the server's code.
   ok(/result\.code === 'INSUFFICIENT_BALANCE'/.test(source) && /Insufficient balance, redirecting to deposit\.\.\./.test(source) && /notify\('Insufficient balance, redirecting to deposit\.\.\.', \(\) => openDepositSheet\(\)\)/.test(source), 'insufficient balance dialog then Deposit');
   w.eval('closeNotify()'); let went = 0; w.openDepositSheet = () => { went++; };

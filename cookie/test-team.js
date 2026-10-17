@@ -41,7 +41,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(box() === 'Could not load your team' && !/No members/.test(box()), 'a failed first load says it could not load, not "No members": ' + box());
   mode = 'ok'; people = [];
   await w.switchTeamLevel(2);
-  ok(/No members at this level yet/.test(box()), 'a real empty level still says so');
+  ok(/NO DATA/.test(box()), 'a real empty level still says so');
   // server: the cards read the live team
   ok(/team: \{ l1: n1, l2: n2, l3: n3 \}/.test(server) && /async function wholeTeamStats/.test(server), 'server /team/stats reads live level counts');
   console.log('test-team: ' + n + ' checks passed' + (built ? ' (built)' : ''));

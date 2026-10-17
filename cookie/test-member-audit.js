@@ -21,7 +21,7 @@ for(const s of d.scripts){
 }
 const tick=()=>new Promise(r=>setTimeout(r,5));
 function deferred(){let resolve;const promise=new Promise(r=>{resolve=r});return {promise,resolve}}
-function setState(){w.eval('STATE.page="home"; STATE.account={walletBalance:50000,totalEarned:100,totalDeposited:20000,totalWithdrawn:5000}; STATE.settings={minDeposit:15000,minWithdraw:5000,withdrawFeePct:0,weekendWithdrawBlock:false}; STATE.investments=[]; STATE.bankAccounts=[{id:"wallet",network:"MTN Mobile Money",phone:"256771234567",holder:"Test Member"}];')}
+function setState(){w.eval('STATE.page="home"; STATE.account={walletBalance:50000,totalEarned:100,totalDeposited:20000,totalWithdrawn:5000}; STATE.settings={minDeposit:15000,minWithdraw:5000,withdrawFeePct:0,weekendWithdrawBlock:false,requireTradePassword:true}; STATE.investments=[]; STATE.bankAccounts=[{id:"wallet",network:"MTN Mobile Money",phone:"256771234567",holder:"Test Member"}];')}
 async function main(){
   await tick();setState();
   const request=w.api, originalFetch=w.fetch;
@@ -43,13 +43,13 @@ async function main(){
     :path==='/investments'?{status:'success',investments:[{status:'active',tierLabel:'Test Asset',amount:15000,payoutsTotal:7,dailyPayout:1000}]}
     :{status:'success',messages:[]};
   await w.renderHome();
-  assert.match(d.querySelector('#homeProducts').textContent,/Test Asset|No products yet/,'Home lists the catalogue');
+  assert.match(d.querySelector('#homeProducts').textContent,/Test Asset|NO DATA/,'Home lists the catalogue');
   w.eval('STATE.products=[{key:"a1",name:"Test Asset",price:15000,cycle:30,expectedReturn:45000,dailyPayout:1500,isOpen:true}]');w.paintHome();
-  assert.match(d.querySelector('.v-card-h').textContent,/Test Asset/,'the product name sits in the bar above its card');
+  assert.match(d.querySelector('.v-card-img').textContent,/Test Asset/,'a product with no picture shows its name in the picture frame');
   assert.match(d.querySelector('.v-rows').textContent,/UGX15,000/,'prices read UGX15,000 with no space');
-  assert.equal(d.querySelectorAll('.v-quick button').length,4,'Home has Deposit, Withdraw, Help Me and Gift Code');
-  assert.equal(d.querySelectorAll('.bottom-nav .navitem').length,4,'four tabs: Home, Income, Team, My');
-  assert.deepEqual([...d.querySelectorAll('.bottom-nav .lbl')].map(e=>e.textContent),['Home','Income','Team','My']);
+  assert.equal(d.querySelectorAll('.v-quick button').length,4,'Home has Deposit, Withdraw, Service and Group');
+  assert.equal(d.querySelectorAll('.bottom-nav .navitem').length,5,'five tabs: Home, Income, Team, Share, My');
+  assert.deepEqual([...d.querySelectorAll('.bottom-nav .lbl')].map(e=>e.textContent),['Home','Income','Team','Share','My']);
   const originalBanner=d.querySelector('.home-banner');await w.liveRefreshVisible();
   assert.equal(d.querySelector('.home-banner'),originalBanner,'balance refresh must not rebuild Home');
   w.eval('STATE.page="assets"');w.eval('STATE.investments=[{status:"active",tierKey:"a1",tierLabel:"Test Asset",amount:15000,payoutsTotal:30,payoutsMade:3,dailyPayout:1500,expectedReturn:45000,paidOut:4500,createdAt:new Date().toISOString()},{status:"active",tierKey:"a1",tierLabel:"Gifted",amount:0,payoutsTotal:30,payoutsMade:1,dailyPayout:1500,expectedReturn:45000,paidOut:0,createdAt:new Date().toISOString(),granted:true}]');w.paintAssets();
@@ -58,8 +58,8 @@ async function main(){
   assert(d.querySelector('#ownedAssets .v-gift .v-ribbon'),'a gifted asset carries the GIFT ribbon');
   assert.equal(d.querySelectorAll('#ownedAssets .v-dates').length,2,'each owned card shows Purchase and Expire');
   w.eval('STATE.page="account"');await w.renderAccount();
-  assert.match(d.querySelector('.v-me-bal').textContent,/UGX70,000\.00/);assert.match(d.querySelector('.v-vip').textContent,/VIP 0/);
-  assert.deepEqual([...d.querySelectorAll('.v-tile b')].map(e=>e.textContent),['Wallet','Messages','Details','APP','Login Password','Trade Password']);
+  assert.equal(d.querySelector('#myBalance').textContent,'70,000');assert.match(d.querySelector('.ck-vip').textContent,/VIP0/);
+  assert.deepEqual([...d.querySelectorAll('.ck-row-t')].map(e=>e.textContent),['Messages','Personal information','Income details','Deposit details','Withdrawal details','About us','Download','Language','Sign out']);
   w.eval('STATE.page="home"');
   // The old full-screen "Congratulations!" win card (showChestWin()) was
   // removed -- a redeemed gift code is now just this toast (see

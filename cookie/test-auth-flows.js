@@ -104,13 +104,10 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     const html = fs.readFileSync(htmlPath, 'utf8');
     const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
     const server = fs.readFileSync(__dirname + '/server.js', 'utf8');
-    ok(/rgba\(255,255,255,calc\(var\(--auth-card-opacity,\.78\)/.test(html), 'auth card tint stays adjustable');
-    ok(/backdrop-filter:blur\(var\(--auth-card-blur,18px\)\)/.test(html), 'auth card blur stays adjustable');
     ok(html.includes('id="authHeroBg"') && html.includes('id="loginHeading">Login'), 'login uses the full-screen uploaded image and reference heading');
-    ok(html.includes('id="registerHeading">Sign Up'), 'registration uses the reference heading');
+    ok(html.includes('id="registerHeading">Create Account'), 'registration uses the reference heading');
     ok(html.includes('id="regTradePin"') && !html.includes('id="regOtpRow"') && !html.includes('id="regOtp"'), 'registration matches screenshot fields and has no OTP field');
     ok(!html.includes('id="lsPercent"') && !html.includes('class="ring-loader"'), 'startup loading animation is removed');
-    ok(admin.includes('id="authCardOp"') && admin.includes('id="authCardBlur"'), 'admin exposes card opacity and blur controls');
     ok(!admin.includes('id="sOtpReg"'), 'admin no longer exposes a registration OTP setting');
     const registerRoute = server.slice(server.indexOf("app.post('/register'"), server.indexOf("app.get('/account'", server.indexOf("app.post('/register'")));
     ok(registerRoute && !registerRoute.includes('consumeOtpTicket') && registerRoute.includes('INVALID_TRADE_PIN'), 'server registration accepts no OTP and validates the trade PIN');
@@ -119,10 +116,8 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     w.eval("STATE.settings={authHeroOpacity:60,authHeroBlur:8,authCardOpacity:25,authCardBlur:3};STATE.authHeroImage='data:image/png;base64,AA==';applyAuthBackgrounds()");
     eq(w.document.documentElement.style.getPropertyValue('--auth-hero-op'), '0.6', 'background opacity reaches the screen');
     eq(w.document.documentElement.style.getPropertyValue('--auth-hero-blur'), '8px', 'background blur reaches the screen');
-    eq(w.document.documentElement.style.getPropertyValue('--auth-card-opacity'), '0.25', 'card opacity reaches the glass layer');
-    eq(w.document.documentElement.style.getPropertyValue('--auth-card-blur'), '3px', 'card blur reaches the glass layer');
-    ok(w.document.querySelectorAll('.va-card svg').length >= 4, 'auth card icons remain inline SVGs');
-    ok(!/Forgot Password\?|forgotPane|togglePw|af-eye|doForgot/.test(html), 'no Forgot Password and no password eye (owner screenshots)');
+    ok(w.document.querySelectorAll('.va-card svg').length >= 3, 'auth card icons remain inline SVGs');
+    ok(!/Forgot Password\?|forgotPane|togglePw|af-eye|doForgot/.test(html) && html.includes('ckToggleEye'), 'no Forgot Password; the password fields have the show/hide eye of the screenshots');
     ok(html.includes('id="rememberMe"') && html.includes('Remember me'), 'Remember me checkbox is on the login card');
     ok(!/id="[a-z]+BrandFallback"|>P<\/span>/.test(html), 'no placeholder letter on the auth screens');
     await closeSoon(dom);
@@ -163,12 +158,12 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     t.length = 0; await w.doLogin();
     eq(t.length, 1); ok(/not available right now/.test(t[0]) && !/not a function/.test(t[0]), 'login says so instead of throwing: ' + t[0]);
     eq($(w, 'loginBtn').disabled, false, 'login button usable again');
-    eq($(w, 'loginBtn').textContent, 'Log In');
+    eq($(w, 'loginBtn').textContent, 'Login');
     $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; $(w, 'regReferral').value = 'abc';
-    w._settings = { otpVerificationEnabled: false, referralRequired: false }; w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:false}');
+    w._settings = { otpVerificationEnabled: false, referralRequired: false, requireTradePassword: true }; w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:false,requireTradePassword:true}');
     t.length = 0; await w.doRegister();
     ok(t.length === 1 && /not available right now/.test(t[0]), 'sign-up says so too: ' + t[0]);
-    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Sign Up');
+    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Register');
     await closeSoon(dom);
   }
   {
@@ -205,7 +200,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     $(w, 'loginPhone').value = phone; $(w, 'loginPassword').value = setup.pass || 'secret1secret1';
     await w.doLogin(); await sleep(60);
     eq($(w, 'loginBtn').disabled, false, 'login button usable again');
-    eq($(w, 'loginBtn').textContent, 'Log In');
+    eq($(w, 'loginBtn').textContent, 'Login');
     eq(shown(w, 'loadingScreen'), false, 'no stuck spinner');
     if (expectOpen) { eq(shown(w, 'app'), true, 'app open'); eq(shown(w, 'authScreen'), false); ok(t.some(m => /Login successful/.test(m)), 'says it worked'); }
     else { eq(shown(w, 'app'), false, 'app not open'); eq(shown(w, 'authScreen'), true, 'login screen showing'); ok(t.some(m => expectMsg.test(m)), 'tells the member why: ' + JSON.stringify(t)); }
@@ -276,7 +271,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
   {
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
     const t = toasts(w), log = fakeFirebase(w, {});
-    w.eval('STATE.settings={otpVerificationEnabled:true,referralRequired:false}');
+    w.eval('STATE.settings={otpVerificationEnabled:true,referralRequired:false,requireTradePassword:true}');
     $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '12x';
     await w.doRegister();
     eq(log.creates, 0, 'invalid trade PIN cannot create an account');
@@ -289,13 +284,13 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
   {
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
     const t = toasts(w); fakeFirebase(w, {});
-    w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:false}');
+    w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:false,requireTradePassword:true}');
     $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456';
     w._fbFail = { code: 'auth/network-request-failed', message: 'Firebase: Error (auth/network-request-failed).' };
     await w.doRegister();
     eq(w.eval('window._pendingRegPhone'), '', 'a failed sign-up stages nothing for the next sign-in');
     ok(t.length === 1 && /Check your connection/.test(t[0]) && !/Firebase/.test(t[0]), 'friendly message: ' + t[0]);
-    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Sign Up');
+    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Register');
     await closeSoon(dom);
   }
   {
@@ -305,7 +300,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
     const t = toasts(w); const accounts = {}; const log = fakeFirebase(w, accounts);
     w._settings = { otpVerificationEnabled: false, referralRequired: true };
-    w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:true}');
+    w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:true,requireTradePassword:true}');
     let profile = false, registers = 0;
     fakeServer(w, async (p, b) => {
       if (p === '/register') { registers++; if (b.referralCode !== 'GOODCODE') return { status: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } }; profile = true; return { status: 200, body: { status: 'success' } }; }
@@ -330,7 +325,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     // Plain sign-up success end to end.
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
     const t = toasts(w); const log = fakeFirebase(w, {});
-    w.eval('STATE.settings={otpVerificationEnabled:true,referralRequired:false}');
+    w.eval('STATE.settings={otpVerificationEnabled:true,referralRequired:false,requireTradePassword:true}');
     let profile = false;
     const calls = fakeServer(w, async (p, b) => p === '/register' ? (profile = true, eq(b.pin, '123456', 'trade PIN is sent for registration'), ok(!Object.hasOwn(b, 'otpTicket'), 'registration sends no OTP ticket'), { status: 200, body: { status: 'success' } }) : p === '/account' ? (profile ? { status: 200, body: okAccount } : { status: 404, body: { status: 'error', code: 'NOT_FOUND' } }) : null);
     $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456';

@@ -18,8 +18,7 @@ ok(/body\.sheet-open \.sheet-bg\{bottom:var\(--nav-h\);\}/.test(html), 'secondar
 ok(/'profilelogo', 'loaderbg'\]/.test(server) && /app\.get\('\/public\/loader-image'/.test(server), 'server stores and serves the loader picture');
 ok(/id="loaderBgFile"/.test(admin) && /wireCookieImageSlot\('loaderbg'/.test(admin), 'admin can upload and remove it');
 const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
-ok(!/type="password"/.test(html + mod), 'no masked password field anywhere: what a member types stays visible');
-ok(!/toggleWitPin|toggleStyle|aria-label="Show password"/.test(html + mod), 'no show/hide eye');
+ok(/type="password"/.test(html) && /ckToggleEye/.test(html), 'password fields are masked and have the show/hide eye of the screenshots');
 ok(!/walOtpGroup|confirmWalletOtp|bankOtpRequired/.test(mod), 'saving a wallet has no OTP step');
 ok(!/id="sOtpVerification"|id="sBankOtp"|id="sAnnEnabled"|id="sReturnMult"/.test(admin), 'admin no longer shows the OTP, announcement-switch and return-multiple settings');
 ok(/setTimeout\(startArtwork, 8000\)/.test(mod) && !/_artPromise = Promise\.all\(\[ api\('\/public\/announcement-image'\), api\('\/public\/cookie-images'\) \]\)\n/.test(mod.split('async function boot()')[1].split('async function')[0]), 'pictures are fetched after the loading screen, not beside the account request');
@@ -28,10 +27,10 @@ ok(!/fileToLogoPng|background connected to the image edge/.test(admin) && /wireC
 ok(/var NAV_LOADER = '<span class="nav-loading">Loading\.\.\.<\/span>'/.test(mod) && /\.nav-loading\{[^}]*font-size:15px[^}]*letter-spacing:\.03em/.test(html) && !/MINI_RING_LOADER|mini-ring-loader|ringSweep/.test(html + mod), 'pages show a small "Loading..." word while data arrives, no ring spinner is left');
 ok((mod.match(/NAV_LOADER/g) || []).length >= 6, 'Income, Team, Team members, Balance Record and Messages all use it');
 ok(/showAuthTab\('login'\);\n  stopLiveRefresh\(\);/.test(mod), 'signing out always lands on Login, not on a Sign Up form left open');
-ok(/\.v-ann-img\{[^}]*object-fit:contain[^}]*\}/.test(html) && !/\.v-ann-img\{[^}]*object-fit:cover/.test(html), 'the announcement picture is shown whole (contain), never cropped');
-ok(/function vFitCard\(img\)/.test(mod) && /onload="vFitCard\(this\)"/.test(mod) && /\.v-card-img\.has-img img\{[^}]*height:auto/.test(html) && !/\.v-card-img\.has-img img\{[^}]*object-fit:cover/.test(html), 'asset pictures are shown whole in their own shape (portrait in the column, wide or square across the top)');
+ok(/\.ck-ann-img\{[^}]*width:100%/.test(html), 'the announcement banner fills the width of the dialog');
+ok(/function vFitCard\(img\)/.test(mod) && /onload="vFitCard\(this\)"/.test(mod) && /#pageHost \.v-card-img img\{[^}]*object-fit:cover/.test(html), 'asset pictures fill their square frame on the card');
 ok(!/fileToFramedDataUrl|PRODUCT_IMG_W/.test(admin) && /fileToDataUrl\(f,900,0\.82\)/.test(admin), 'the admin no longer crops asset pictures to 16:9');
-ok(/--img-w/.test(mod) && /grid-template-columns:var\(--img-w,112\.5px\) 1fr/.test(html), 'a portrait picture gets a column of its own shape (a 2:3 photo is 133 px wide at the 200 px card height)');
+ok(/\.v-card-img,#pageHost \.v-card\.v-flat \.v-card-img\{[^}]*flex:0 0 146px/.test(html), 'the picture frame is 146 px square, as in the screenshots');
 ok(/<script data-cookie-loader>/.test(html) && /localStorage\.getItem\(KEY\)/.test(html) && /bg\.style\.backgroundImage = layer\(kept\)/.test(html) && /window\._cookieLoaderStart = Date\.now\(\)/.test(html), 'the kept loading picture is painted inline on the first frame, before any network request');
 ok(/fetch\('\/k7x2\/public\/loader-image', \{ cache: 'no-cache' \}\)/.test(html) && /localStorage\.setItem\(KEY, u\)/.test(html), 'and refreshed in the background for the next visit');
 ok(/var LOADER_MIN_MS = 2500/.test(mod) && /function hideLoadingScreen\(\)/.test(mod) && !/\$\('loadingScreen'\)\.style\.display = 'none'/.test(mod), 'the loading screen stays for 2.5 seconds before the page opens, through one function');
