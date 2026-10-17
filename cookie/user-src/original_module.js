@@ -3241,40 +3241,59 @@ var _homeCarouselIdx = 0;
 // same idiom this file already uses for the check-in countdown and the
 // turntable spin timer, so navigating away never leaves this ticking
 // against a detached node.
+// The banner slides one way, forever. It must also survive the member leaving the app and coming back: a hidden page does not run animation
+// frames and delays timers, so a half-finished slide used to be left stuck. Every slide therefore carries a token; leaving or returning (or
+// starting again) cancels the old one and puts the banner back at rest on the slide it was showing.
+var _hcToken = 0, _hcBusy = false;
+function hcRest(slides){
+  const wrap = document.getElementById('homeCarouselTrack');
+  const stack = wrap && wrap.querySelector('.hb-fade-stack');
+  const cur = stack && stack.querySelector('.hb-fade-current'), nxt = stack && stack.querySelector('.hb-fade-next');
+  if (!stack || !cur || !nxt) return false;
+  _hcToken++; _hcBusy = false;
+  stack.classList.add('hb-fade-reset'); stack.classList.remove('hb-crossfading');
+  cur.src = slides[_homeCarouselIdx]; nxt.src = slides[(_homeCarouselIdx + 1) % slides.length];
+  void stack.offsetWidth;
+  stack.classList.remove('hb-fade-reset');
+  wrap.querySelectorAll('.hb-bars i').forEach((b, i) => b.classList.toggle('on', i === _homeCarouselIdx));
+  return true;
+}
+function hcStep(slides){
+  const wrap = document.getElementById('homeCarouselTrack');
+  const stack = wrap && wrap.querySelector('.hb-fade-stack');
+  const nxt = stack && stack.querySelector('.hb-fade-next');
+  if (!stack || !nxt) { clearInterval(_homeCarouselTimer); _homeCarouselTimer = null; return; }
+  if (document.hidden || _hcBusy) return;
+  const token = ++_hcToken, nextIdx = (_homeCarouselIdx + 1) % slides.length;
+  _hcBusy = true;
+  const go = () => {
+    if (token !== _hcToken) return;
+    if (document.hidden) { _hcBusy = false; return; }
+    nxt.src = slides[nextIdx];
+    wrap.querySelectorAll('.hb-bars i').forEach((b, i) => b.classList.toggle('on', i === nextIdx));
+    void stack.offsetWidth;
+    stack.classList.add('hb-crossfading');
+    setTimeout(() => {
+      if (token !== _hcToken) return;
+      _homeCarouselIdx = nextIdx;
+      hcRest(slides);
+    }, 800);
+  };
+  const pre = new Image(); let started = false;
+  const once = () => { if (started) return; started = true; go(); };
+  pre.onload = once; pre.onerror = once; pre.src = slides[nextIdx];
+  setTimeout(once, 2500);
+}
+document.addEventListener('visibilitychange', () => {
+  const slides = homeCarouselSlides();
+  if (slides && document.getElementById('homeCarouselTrack')) hcRest(slides);
+});
 function startHomeCarousel(){
   if (_homeCarouselTimer) { clearInterval(_homeCarouselTimer); _homeCarouselTimer = null; }
   const slides = homeCarouselSlides();
   if (!slides) return;
-  _homeCarouselIdx = 0;
-  _homeCarouselTimer = setInterval(() => {
-    const wrap = document.getElementById('homeCarouselTrack');
-    const stack = wrap && wrap.querySelector('.hb-fade-stack');
-    const current = stack && stack.querySelector('.hb-fade-current');
-    const next = stack && stack.querySelector('.hb-fade-next');
-    if (!stack || !current || !next) {
-      clearInterval(_homeCarouselTimer); _homeCarouselTimer = null; return;
-    }
-    if (stack.classList.contains('hb-crossfading')) return;
-    const nextIdx = (_homeCarouselIdx + 1) % slides.length;
-    const afterIdx = (nextIdx + 1) % slides.length;
-    const preload = new Image();
-    preload.onload = () => {
-      next.src = slides[nextIdx];
-      { const bars = wrap.querySelectorAll('.hb-bars i'); bars.forEach((b, i) => b.classList.toggle('on', i === nextIdx)); }
-      requestAnimationFrame(() => stack.classList.add('hb-crossfading'));
-      setTimeout(() => {
-        current.src = slides[nextIdx];
-        next.src = slides[afterIdx];
-        _homeCarouselIdx = nextIdx;
-        stack.classList.add('hb-fade-reset');
-        stack.classList.remove('hb-crossfading');
-        void stack.offsetWidth;
-        stack.classList.remove('hb-fade-reset');
-      }, 760);
-    };
-    preload.onerror = () => { _homeCarouselIdx = nextIdx; };
-    preload.src = slides[nextIdx];
-  }, Math.min(60000, Math.max(2000, (Number((STATE.settings || {}).bannerSlideSeconds) || 5) * 1000)));
+  _homeCarouselIdx = 0; _hcToken++; _hcBusy = false;
+  _homeCarouselTimer = setInterval(() => hcStep(slides), Math.min(60000, Math.max(2000, (Number((STATE.settings || {}).bannerSlideSeconds) || 5) * 1000)));
 }
 // An asset picture is shown whole, in its own shape (nothing cropped). A portrait picture sits in
 // the left column; a square or wide one goes across the top of the card with the figures below.
