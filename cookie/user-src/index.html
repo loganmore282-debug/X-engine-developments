@@ -2376,6 +2376,10 @@ body{background-attachment:fixed;}
 #pageHost{padding-bottom:0 !important;min-height:0 !important;}
 #pageHost>*{box-sizing:border-box;min-height:100vh;min-height:100dvh;padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px) !important;}
 html,body{overscroll-behavior-y:none;}
+
+/* The title sits across the whole header; it must never take the tap meant for the back arrow */
+.sheet-head h2,.ck-hd h1{pointer-events:none;}
+.sheet-head .back,.ck-hd .ck-back{z-index:3;}
 </style>
 
 <script data-cookie-idle>
