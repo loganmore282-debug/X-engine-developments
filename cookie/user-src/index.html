@@ -2291,9 +2291,9 @@ body{background-attachment:fixed;}
 #pageHost .v-card-b{gap:10.6px;}
 #pageHost .v-card-img,#pageHost .v-card.v-flat .v-card-img{flex:0 0 145.2px;width:145.2px;height:145.2px;border-radius:7.5px;background:linear-gradient(135deg,#0a56e3,#5b91ee);}
 #pageHost .v-badge{height:24px;line-height:24px;padding:0 10.3px;border-radius:7.5px 0 7.5px 0;background:rgba(21,98,229,.94);font-size:10px;letter-spacing:.01em;}
-#pageHost .v-pname{position:absolute;left:0;right:0;bottom:0;z-index:1;padding:14px 10px 7px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.78));color:#fff;font:400 14.8px/18px Roboto,'Segoe UI',system-ui,sans-serif;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#pageHost .v-pname{position:absolute;left:0;right:0;bottom:0;z-index:1;padding:14px 10px 7px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.78));color:#fff;font:400 14.8px/18px Roboto,'Segoe UI',system-ui,sans-serif;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 #pageHost .v-card-img img+.v-badge+.v-pname,#pageHost .v-card-img .v-pname{pointer-events:none;}
-#pageHost .v-rows{flex:1 1 0;height:145.2px;max-height:145.2px;align-self:flex-start;}
+#pageHost .v-rows{flex:1 1 0;height:145.2px;max-height:145.2px;align-self:flex-start;padding:0;}
 #pageHost .v-rows>div{flex:0 0 28.4px;height:28.4px;min-height:0;padding:0 10.3px;border-radius:5.5px;background:#f4f8fc;}
 #pageHost .v-rows dt{font-size:13.8px;color:#1b1c20;}
 #pageHost .v-rows dd{font-size:14.4px;color:#0a5ae0;}
@@ -2375,7 +2375,7 @@ body{background-attachment:fixed;}
 .ck-oc-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
 .ck-oc-st{position:absolute;left:0;right:0;top:0;z-index:1;height:19.5px;line-height:19.5px;text-align:center;font:400 10.9px/19.5px Roboto,'Segoe UI',system-ui,sans-serif;font-style:normal;color:rgba(255,255,255,.85);background:linear-gradient(90deg,#2ec698,#01a583);}
 .ck-oc-st.done{background:#7d8a96;}
-.ck-oc-name{position:absolute;left:0;right:0;bottom:0;z-index:1;padding:14px 10px 7px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.78));color:#fff;font:400 15.5px/18px Roboto,'Segoe UI',system-ui,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ck-oc-name{position:absolute;left:0;right:0;bottom:0;z-index:1;text-align:center;padding:14px 10px 7px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.78));color:#fff;font:400 15.5px/18px Roboto,'Segoe UI',system-ui,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .ck-oc-cd{display:flex;align-items:center;height:28.2px;margin-top:9.8px;padding:0 9.8px;border-radius:5.4px;background:#f3f7fd;font:400 10.3px Roboto,'Segoe UI',system-ui,sans-serif;color:#2a2b2e;letter-spacing:.02em;}
 .ck-oc-cd span{width:160.4px;flex:none;}
 .ck-oc-cd b{font:700 10.4px Roboto,'Segoe UI',system-ui,sans-serif;color:#0b5bd8;letter-spacing:.02em;}
@@ -2394,7 +2394,8 @@ body{background-attachment:fixed;}
 /* Each figure row is ONE line, label then value. Label and figure share one size and one height on every card, whatever the amount. */
 #pageHost .v-rows dt,#pageHost .v-rows dd,.ck-oc-rows dt,.ck-oc-rows dd,.ck-oc-cd span,.ck-oc-cd b{white-space:nowrap;line-height:1.2;}
 #pageHost .v-rows>div{gap:4px;padding:0 8px;}
-#pageHost .v-rows dt,#pageHost .v-rows dd{font-size:12.6px;}
+#pageHost .v-rows dt,#pageHost .v-rows dd{font-size:14px;}
+#pageHost .v-rows.tight dt,#pageHost .v-rows.tight dd{font-size:12.6px;}
 .ck-oc-rows>div{gap:4px;}
 .ck-oc-rows dt,.ck-oc-rows dd{font-size:10.2px;}
 .ck-oc-cd span,.ck-oc-cd b{font-size:10.2px;}

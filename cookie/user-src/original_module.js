@@ -3118,6 +3118,9 @@ window.showPage = async function(name){
   if (name === 'products') name = 'home';
   else if (name === 'catalog') name = 'assets';
   else if (name === 'team' || name === 'referral') { name = 'network'; }
+  // Daily income is always the first view of Home and of Income: coming from another tab never keeps Daily wage.
+  if (name === 'home' && prevPage !== 'home') STATE.homeTab = 'income';
+  if (name === 'assets' && prevPage !== 'assets') STATE.incomeTab = 'income';
   STATE.page = name;
   window.scrollTo(0, 0);   // every tab opens at its top, not wherever the previous one was scrolled
   updateNavIcons();
@@ -3356,7 +3359,7 @@ function vProductCardHtml(p){
   <article class="v-card">
     <div class="v-card-b">
       <div class="v-card-img${p.image ? ' has-img' : ''}">${img}${(limit > 0 || p.category === 'wage') ? `<em class="v-badge">Times ${vOwnedCount(p.key)}/${limit}</em>` : ''}<span class="v-pname">${esc(p.name || '')}</span></div>
-      <dl class="v-rows">
+      <dl class="v-rows${[ckMoney(p.price), ckMoney(daily), ckMoney(expected)].some(v => v.length > 11) ? ' tight' : ''}">
         ${ckRow('Price', ckMoney(p.price))}
         ${ckRow('Daily profit', ckMoney(daily))}
         ${ckRow('Days', String(cycle))}
@@ -3400,6 +3403,12 @@ function openGroupLink(){
   else notify('The group link has not been set yet.');
 }
 window.openGroupLink = openGroupLink;
+// Leaving the app and coming back lands on Daily income again, never on Daily wage.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  if (STATE.homeTab === 'wage') { STATE.homeTab = 'income'; if (STATE.page === 'home' && $('pageHost') && $('pageHost').querySelector('.v-home')) paintHome(); }
+  if (STATE.incomeTab === 'wage') { STATE.incomeTab = 'income'; if (STATE.page === 'assets' && $('pageHost') && $('pageHost').querySelector('.ck-income')) paintAssets(); }
+});
 function setHomeTab(t){ STATE.homeTab = t === 'wage' ? 'wage' : 'income'; if (STATE.page === 'home') paintHome(); }
 window.setHomeTab = setHomeTab;
 function paintHome(){

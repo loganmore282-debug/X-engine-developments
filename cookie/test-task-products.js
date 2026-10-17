@@ -24,4 +24,5 @@ ok(/p\.category === 'wage'\) \? `<em class="v-badge">Times/.test(cli), 'task pro
 ok(/result\.code === 'SOLD_OUT'\) closeConfirm\(\)/.test(cli) && /ckLoadBegin\(\);\n    try \{ result = await api\('\/invest\/create'/.test(cli), 'the purchase waits behind the loading box and a sold-out answer closes the dialog');
 ok(/activated\$\/i\.test\(String\(t\.description/.test(cli) && /return 'Free \( '/.test(cli), 'an activated task product reads "Free ( Gold )" in Balance Details');
 ok(/amt === 0 && t\.type === 'investment'\)\) \? '-'/.test(cli), 'with "- 0.00", as in the screenshot');
+ok(/if \(name === 'home' && prevPage !== 'home'\) STATE\.homeTab = 'income'/.test(cli) && /STATE\.homeTab === 'wage'\) \{ STATE\.homeTab = 'income'/.test(cli), 'Home always opens on Daily income, also after leaving the app and coming back');
 console.log(`PASS: task products (${n} checks)`);
