@@ -20,8 +20,8 @@ const originFn = eval(`(() => { ${consts}\n return function(origin){ let out; co
 // CORS_ALLOWED_ORIGINS, plus localhost/127.0.0.1 for local dev, checked
 // unconditionally by the real code regardless of the suffix list.
 const cases = [
-  ['https://cookie-platform.com',           true,  'the live app domain'],
-  ['https://www.cookie-platform.com',       true,  'the live app domain, www'],
+  ['https://orroe-cookie.com',           true,  'the live app domain'],
+  ['https://www.orroe-cookie.com',       true,  'the live app domain, www'],
   ['http://179.198.197.114:8094',          true,  'direct VPS frontend, port 8080'],
   ['http://179.198.197.114:3003',          false, 'the VPS backend origin itself is not a frontend'],
   ['http://localhost:3000',                true,  'local dev'],
@@ -29,8 +29,8 @@ const cases = [
   [undefined,                              true,  'same-origin / no Origin header'],
   ['https://chn-snow2beer.com',            false, "Snow's live site (must NOT reach Cookie)"],
   ['https://evil-attacker.com',            false, 'random attacker'],
-  ['https://cookie-platform.com.evil.test', false, 'suffix-spoofing attacker on the real domain'],
-  ['https://notcookie-platform.com',        false, 'lookalike domain'],
+  ['https://orroe-cookie.com.evil.test', false, 'suffix-spoofing attacker on the real domain'],
+  ['https://notorroe-cookie.com',        false, 'lookalike domain'],
   // No PaaS platform suffix should match anything anymore -- these must all
   // be refused now that CORS_ALLOWED_SUFFIXES is empty. If any of these
   // start passing, something re-added a platform suffix that has no

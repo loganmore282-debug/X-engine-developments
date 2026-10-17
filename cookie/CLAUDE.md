@@ -35,10 +35,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
    It installs packages, asks (hidden) for the MongoDB connection string and CHECKS it connects, asks for the admin password, writes
    `/srv/cookie-secrets/secrets.local.js`, starts pm2 `cookie-server`, and tests `/health`.
 3. Later, updates until Cookie has its own domain: `bash /srv/cookie-src/cookie/deploy/quick-update.sh` (restarts only Cookie).
-4. With a domain: `deploy/update-vps.sh` (nginx + HTTPS + hardening), `deploy/make-hook-url.sh` (PesaJet webhook), and the GitHub
-   webhook to `https://<app host>/k7x2/deploy/webhook` with `DEPLOY_WEBHOOK_SECRET` from the secrets file. Hosts are placeholders
-   (`app.cookie.example.com`, `admin.cookie.example.com`, `hook.cookie.example.com`) until the owner buys the domain; admin path `Bake7qz3`.
-   Set real hosts via `MINT_APP_HOST` / `MINT_ADMIN_HOST` (see `update-vps.sh`) or `deploy/change-app-host.sh`.
+4. **Domain `orroe-cookie.com` (bought by the owner).** Same layout as Soda: root domain parked, member app on **`app.orroe-cookie.com`**, hidden admin panel on **`m5ze9b.orroe-cookie.com/Bake7qz3/`**, future PesaJet-only host `p2c8d.orroe-cookie.com` (`deploy/make-hook-url.sh p2c8d`). DNS: A records `app` and `m5ze9b` -> 179.198.197.114 (no apex, no www). Then on the VPS: `bash /srv/cookie-src/cookie/deploy/update-vps.sh` (nginx file `cookie.conf`, certificate named `app.orroe-cookie.com`, restart of Cookie only, hardening). Afterwards: GitHub webhook to `https://app.orroe-cookie.com/k7x2/deploy/webhook` with `DEPLOY_WEBHOOK_SECRET` from `/srv/cookie-secrets/secrets.local.js`; secret `PUBLIC_URL=https://app.orroe-cookie.com/k7x2`.
 
 ## Status
 1. (done) Copied from Soda, renamed to Cookie, ports 3003/8094/8095, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path.

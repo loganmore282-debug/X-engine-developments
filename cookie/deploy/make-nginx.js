@@ -7,11 +7,11 @@
 //   node deploy/make-nginx.js prod <host> <admin-path>      HTTP on :80 for <host>; then `certbot --nginx -d <host>` adds HTTPS
 //   node deploy/make-nginx.js prod <host> <admin-path> <admin-host>
 //        TWO hosts: the member app + API on <host>; the admin panel (and the API it needs) ONLY on
-//        <admin-host>, e.g. admin.cookie.example.com/Bake7qz3 . <host> then answers 404 for the admin
+//        <admin-host>, e.g. m5ze9b.orroe-cookie.com/Bake7qz3 . <host> then answers 404 for the admin
 //        path and for /k7x2/admin/*, and <admin-host> shows nothing except the admin path.
 //        Certbot: `certbot --nginx -d <host> -d <admin-host>`.
 //   ... --also=mycookie,go     (prod only, any of the forms above)
-//        EXTRA addresses of the member app: each word becomes <word>.<host> (mycookie.cookie.example.com),
+//        EXTRA addresses of the member app: each word becomes <word>.<host> (app.orroe-cookie.com),
 //        or give a full host name. They serve exactly the same app as <host>.
 //        Re-run certbot with every name and --expand so ONE certificate covers them all.
 //
@@ -54,7 +54,7 @@ const API = 'k7x2';
 // Node stays the real protection; the secret address only hides the door. The token lives on the VPS (never in git).
 const HOOK_TOKEN = String(process.env.COOKIE_HOOK_TOKEN || '').trim();
 if (HOOK_TOKEN && !/^[a-z0-9]{16,64}$/.test(HOOK_TOKEN)) { console.error('COOKIE_HOOK_TOKEN must be 16-64 lowercase letters or digits'); process.exit(1); }
-// Optional hook-only HOST (COOKIE_HOOK_HOST, e.g. hook.cookie.example.com): with it, PesaJet is told https://<hook host>/h-<token>/pesajet; that host
+// Optional hook-only HOST (COOKIE_HOOK_HOST, e.g. p2c8d.orroe-cookie.com): with it, PesaJet is told https://<hook host>/h-<token>/pesajet; that host
 // serves nothing but the webhook (every other address 404), and the member host no longer carries the secret address at all.
 const HOOK_HOST = String(process.env.COOKIE_HOOK_HOST || '').trim().toLowerCase();
 if (HOOK_HOST && (!HOOK_TOKEN || mode !== 'prod' || !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(HOOK_HOST))) { console.error('COOKIE_HOOK_HOST needs prod mode, COOKIE_HOOK_TOKEN and a full host name'); process.exit(1); }

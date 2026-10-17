@@ -75,8 +75,8 @@ for (const [input, label] of [
 console.log('\n— the admin list can only ADD, never take away —');
 // The lockout guarantee: whatever is in the box, the built-in hosts still work.
 for (const extras of [[], ['chipz-platform.com'], ['totally-unrelated.com']]) {
-  check(isAllowed('https://cookie-platform.com', extras), `app domain reachable with extras=${JSON.stringify(extras)}`);
-  check(isAllowed('https://www.cookie-platform.com', extras), `app domain (www) reachable with extras=${JSON.stringify(extras)}`);
+  check(isAllowed('https://orroe-cookie.com', extras), `app domain reachable with extras=${JSON.stringify(extras)}`);
+  check(isAllowed('https://www.orroe-cookie.com', extras), `app domain (www) reachable with extras=${JSON.stringify(extras)}`);
   check(isAllowed('http://179.198.197.114:8094', extras), `direct VPS frontend reachable with extras=${JSON.stringify(extras)}`);
   check(isAllowed('http://localhost:3000', extras), `local dev reachable with extras=${JSON.stringify(extras)}`);
 }
