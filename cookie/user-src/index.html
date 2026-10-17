@@ -2234,7 +2234,6 @@ body{background-attachment:fixed;}
 .ck-ann-x{top:-12px;right:-12px;width:35px;height:35px;border:2px solid #fff;background:linear-gradient(160deg,#f65858 0%,#dc1717 100%);box-shadow:-3px 5px 12px rgba(235,60,70,.5);}
 .ck-ann-x svg{width:24px;height:24px;color:rgba(255,255,255,.95);}
 /* ── Appearing animations: pages, full pages, dialogs, the language sheet, the tab pill, the app after the loader ── */
-@keyframes ckPageIn{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
 @keyframes ckSheetIn{from{opacity:0;transform:translateX(26px);}to{opacity:1;transform:none;}}
 @keyframes ckFadeIn{from{opacity:0;}to{opacity:1;}}
 @keyframes ckSlideUp{from{transform:translateY(100%);}to{transform:none;}}
@@ -2259,10 +2258,6 @@ body{background-attachment:fixed;}
 .ck-spin::after{content:'';position:absolute;left:6.5px;top:6.5px;width:11px;height:11px;border-radius:50%;background:conic-gradient(from 200deg,#ee4d9b 0 80deg,#7a5198 80deg 145deg,transparent 145deg);animation:ckLdSpin 2.1s linear infinite reverse;}
 /* ── Sheets only fade in; the tab pill grows from a dot; the Team level pill slides ── */
 .sheet-bg.show{animation:ckFadeIn .28s ease-out both;}
-@keyframes ckPillGrow{from{width:28.9px;opacity:.75;}to{width:48.7px;opacity:1;}}
-@keyframes ckBarGrow{from{transform:scaleX(.12);}to{transform:scaleX(1);}}
-.navitem.active .nav-ic{animation:ckPillGrow .3s cubic-bezier(.22,1,.36,1) both;}
-.navitem.active::before{animation:ckBarGrow .3s cubic-bezier(.22,1,.36,1) both;}
 .ck-row:active{background:#e6e6ea;}
 .ck-lvtabs{position:relative;}
 .ck-lvtabs .ck-lvpill{position:absolute;top:6px;bottom:6px;left:6px;width:calc((100% - 12px)/3);border-radius:11px;background:#fff;transform:translateX(calc(var(--i,0)*100%));transition:transform .32s cubic-bezier(.4,0,.2,1);}
@@ -2278,7 +2273,23 @@ body{background-attachment:fixed;}
 .ck-seg button.on{background:var(--ck-blue);color:#fff;font-weight:700;}
 #incBody{margin-top:12px;}
 .ck-inc-empty{margin-top:90px;}
-@media (prefers-reduced-motion:reduce){.navitem.active::before,.ck-spin::before,.ck-spin::after{animation:none !important;}}
+@media (prefers-reduced-motion:reduce){.ck-spin::before,.ck-spin::after{animation:none !important;}}
+/* ── Bottom bar motion, frame by frame from the owner's recording ──
+   tap: a soft ripple on the icon; then the blue pill starts as a small round dot and widens (the icon widens with it),
+   the underline grows from the middle while the old one shrinks to its middle, and the page rises and fades in. */
+@keyframes ckPillGrow{from{width:29px;}to{width:48.7px;}}
+@keyframes ckIconWiden{from{transform:scaleX(.12);}to{transform:scaleX(1);}}
+@keyframes ckRipple{0%{transform:translate(-50%,-50%) scale(.35);opacity:.9;}100%{transform:translate(-50%,-50%) scale(1.25);opacity:0;}}
+.navitem.active .nav-ic{animation:ckPillGrow .22s cubic-bezier(.25,.8,.35,1) both;}
+.navitem.active .nav-ic svg{animation:ckIconWiden .22s cubic-bezier(.25,.8,.35,1) both;}
+.navitem::before{opacity:1 !important;transform:scaleX(0) !important;transform-origin:center;transition:transform .22s cubic-bezier(.25,.8,.35,1) !important;}
+.navitem.active::before{transform:scaleX(1) !important;}
+.navitem .nav-ic::after{content:'';position:absolute;left:50%;top:50%;width:36px;height:36px;border-radius:50%;background:rgba(110,150,235,.28);opacity:0;pointer-events:none;}
+.navitem.nav-tap .nav-ic::after{animation:ckRipple .32s ease-out;}
+.navitem.nav-tap .nav-ic svg{animation:none;}
+@keyframes ckPageIn{from{opacity:0;transform:translateY(22px);}to{opacity:1;transform:none;}}
+#pageHost>.ck-in{animation:ckPageIn .27s cubic-bezier(.2,.8,.3,1) both;}
+@media (prefers-reduced-motion:reduce){.navitem.active .nav-ic,.navitem.active .nav-ic svg,.navitem.nav-tap .nav-ic::after{animation:none !important;}}
 </style>
 
 <script data-cookie-idle>

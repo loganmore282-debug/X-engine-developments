@@ -2725,7 +2725,7 @@ function hookNavTapBox(){
   // Clean the class off once it has played, so the next tap is a fresh run
   // and nothing is left holding a finished animation.
   nav.addEventListener('animationend', e => {
-    if (e.animationName === 'navTapSignal') {
+    if (e.animationName === 'navTapSignal' || e.animationName === 'ckRipple') {
       // The animation is on the <img> INSIDE the item, so the event target
       // is the image -- the class to clear is on its .navitem ancestor.
       const btn = e.target.closest && e.target.closest('.navitem');
