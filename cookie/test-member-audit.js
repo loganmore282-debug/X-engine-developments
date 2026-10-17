@@ -72,10 +72,10 @@ async function main(){
   const bank=deferred();w.api=()=>bank.promise;
   const opened=w.openWithdrawSheet();
   const input=d.querySelector('#witAmount');input.value='15,000';input.focus();w.syncWithdrawReceiveAmt();
-  assert(d.querySelector('#witSubmitBtn').classList.contains('fade')===false,'the button un-fades once an amount is typed');
+  assert.equal(d.querySelector('#witSubmitBtn').textContent,'Withdraw 15,000','the Withdraw button shows the amount typed (what the member receives) live');
   bank.resolve({status:'success',accounts:[{id:'wallet',network:'MTN Mobile Money',phone:'256771234567',holder:'Test Member'}]});await opened;
   assert.equal(d.querySelector('#witAmount'),input);assert.equal(input.value,'15,000');
-  assert.equal(d.querySelectorAll('.v-info li').length,4,'four withdrawal instructions');assert.match(d.querySelector('.v-info').textContent,/Fee: 0%/);assert(d.querySelector('#witPin'),'the Trade Password is asked on the Withdraw screen');
+  assert.match(d.querySelector('.ck-feebox').textContent,/Fee: 0%/);assert.match(d.querySelector('.ck-feebox').textContent,/30 minutes to 24 hours/);assert(d.querySelector('#witPin'),'the Trade Password is asked on the Withdraw screen');
   const stale=deferred();w.api=()=>stale.promise;const previous=w.openWithdrawSheet();
   w.api=async()=>({status:'success',accounts:[{id:'new',network:'Airtel Money',phone:'256751234567',holder:'Current Wallet'}]});
   await w.openWithdrawSheet();
@@ -90,8 +90,8 @@ async function main(){
   w.openChangeLoginPasswordSheet();
   payment.resolve({status:'success',net:5000});await first;
   assert(d.querySelector('#lpOld'),'late withdrawal response must not close another form');
-  w.openDepositSheet();assert.equal(d.querySelectorAll('.v-info li').length,4);
-  assert.match(d.querySelector('.v-info').textContent,/Minimum deposit amount: UGX15,000/);assert.equal(d.querySelectorAll('#depPays button').length,3,'PAY-A, PAY-B and PAY-C');
+  w.openDepositSheet();assert.equal(d.querySelectorAll('.ck-notes p').length,5);
+  assert.match(d.querySelector('.ck-notes').textContent,/The minimum deposit amount is UGX 15000/);assert.equal(d.querySelectorAll('#depPays button').length,4,'four pay labels');
   d.querySelector('#depAmount').value='15000';d.querySelector('#depPhone').value='0771234567';
   const deposit=deferred();posts=0;w.post=()=>{posts++;return deposit.promise};
   const sending=w.submitDeposit();await w.submitDeposit();assert.equal(posts,1);

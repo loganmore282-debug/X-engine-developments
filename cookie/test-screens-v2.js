@@ -42,8 +42,8 @@ function runStats(rows) {
 
   // 2. profile logo slot: stored, served to members and to the admin
   ok(/const COOKIE_IMAGE_SLOTS = \[[^\]]*'profilelogo'/.test(src), 'profilelogo is a known image slot');
-  ok(/publicJson\(req, res, \{ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, teamhero, sharehero, myhero, ruleshero \}/.test(src), 'members get it from /public/cookie-images');
-  ok(/res\.json\(\{ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, loaderbg, teamhero, sharehero, myhero, ruleshero \}\)/.test(src), 'and the admin panel reads it');
+  ok(/publicJson\(req, res, \{ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, teamhero, sharehero, myhero, ruleshero, avatar, recthumb \}/.test(src), 'members get it from /public/cookie-images');
+  ok(/res\.json\(\{ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, loaderbg, teamhero, sharehero, myhero, ruleshero, avatar, recthumb \}\)/.test(src), 'and the admin panel reads it');
   ok(/id="profileLogoFile"/.test(adm) && /wireCookieImageSlot\('profilelogo'/.test(adm), 'the admin panel can upload and remove it');
   ok(!/checkinBannerFile/.test(adm), 'the removed Check-in banner upload is gone from admin');
 

@@ -1797,8 +1797,9 @@ function hideLoadingScreen(){
   const minMs = typeof window._cookieLoaderMinMs === 'number' ? window._cookieLoaderMinMs : LOADER_MIN_MS;
   const wait = began ? Math.max(0, minMs - (Date.now() - began)) : 0;
   if (_ldTimer) { clearTimeout(_ldTimer); _ldTimer = null; }
-  if (!wait) { ls.style.display = 'none'; return; }
-  _ldTimer = setTimeout(() => { _ldTimer = null; ls.style.display = 'none'; }, wait);
+  const done = () => { try { if (typeof window._ckLoaderDone === 'function') window._ckLoaderDone(); } catch (_) {} ls.style.display = 'none'; };
+  if (!wait) { done(); return; }
+  _ldTimer = setTimeout(() => { _ldTimer = null; done(); }, wait);
 }
 function showLoadingScreen(){
   if (_ldTimer) { clearTimeout(_ldTimer); _ldTimer = null; }
@@ -1887,6 +1888,8 @@ function applyBootArtwork(ai, ci){
   STATE.shareHero = (ci.status === 'success' && ci.sharehero) ? ci.sharehero : null;
   STATE.myHero = (ci.status === 'success' && ci.myhero) ? ci.myhero : null;
   STATE.rulesHero = (ci.status === 'success' && ci.ruleshero) ? ci.ruleshero : null;
+  STATE.avatarImg = (ci.status === 'success' && ci.avatar) ? ci.avatar : null;
+  STATE.recThumb = (ci.status === 'success' && ci.recthumb) ? ci.recthumb : null;
   syncBrandLogoImages();
   // Home's banner carousel, slides 2 and 3 (slide 1 is STATE.homeBanner,
   // fetched separately above -- it predates the carousel). Filtered to
@@ -3265,10 +3268,11 @@ function patchHomeBalances(){
     const el = $(id);
     if (el) el.textContent = numGroup(account[key], false);
   }
-  for (const [id, key] of [['incomeTotal','totalEarned'], ['recBalance','walletBalance'], ['witBalance','walletBalance']]) {
+  for (const [id, key] of [['incomeTotal','totalEarned'], ['recBalance','walletBalance']]) {
     const el = $(id);
     if (el) el.textContent = vMoney2(account[key]);
   }
+  { const el = $('witBalance'); if (el) el.textContent = numGroup(account.walletBalance, true); }
 }
 // THE single place this app works out what a product pays. /public/products
 // already sends resolved expectedReturn/cycle/dailyPayout figures computed
@@ -3735,11 +3739,19 @@ function renderTeamMembers(level){
   if (!box) return;
   if (!STATE.teamMembers[level] && _teamMembersFailed[level]) { box.innerHTML = '<div class="v-empty" onclick="switchTeamLevel(' + level + ')">Could not load your team</div>'; return; }
   if (!members.length) { box.innerHTML = '<div class="v-empty">NO DATA</div>'; return; }
-  box.innerHTML = members.map(m => `
-  <div class="v-member">
-    <div class="v-member-top"><span class="v-mphone">${esc(m.phoneMasked || maskPhone(m.phone))}</span><b>${esc(vMoney2(m.invested))}</b></div>
-    <div class="v-member-join">Joined ${esc(joinedStamp(m.createdAt))}</div>
-  </div>`).join('');
+  const pic = STATE.avatarImg ? ` style="background-image:url('${esc(STATE.avatarImg)}')"` : '';
+  box.innerHTML = members.map(m => {
+    const bought = Number(m.invested) > 0;
+    return `
+  <div class="ck-mem">
+    <span class="ck-mem-av${STATE.avatarImg ? ' has-img' : ''}"${pic}></span>
+    <div class="ck-mem-body">
+      <div class="ck-mem-top"><b>Mobile： ${esc(m.phoneRef || m.phoneMasked || maskPhone(m.phone))}</b>${bought ? '<em>Purchased</em>' : ''}</div>
+      <div class="ck-mem-mid"><span class="${bought ? 'g' : ''}">Deposit： ${esc(ckNum(m.deposited))}</span><span>Withdraw： ${esc(ckNum(m.withdrawn))}</span></div>
+      <div class="ck-mem-time">Time : ${esc(ckStamp(m.createdAt))}</div>
+    </div>
+  </div>`;
+  }).join('');
 }
 // ── TASK CENTER (opened from the Team page) ──
 // Two lists the owner sets in the admin panel: Referrals (members of your own Level 1 who have deposited) and
@@ -4044,7 +4056,7 @@ function flashCopied(btn){
 function writeClipboard(text, btn){
   if (!navigator.clipboard) return notify('Could not copy');
   navigator.clipboard.writeText(text)
-    .then(() => flashCopied(btn))
+    .then(() => ckCopyToast())
     // A failure has nothing visible to show for itself, so it still needs
     // saying -- and that is exactly what the alert card is for.
     .catch(() => notify('Could not copy'));
@@ -4052,6 +4064,16 @@ function writeClipboard(text, btn){
 // The button is taken from the event rather than passed in by every call site:
 // the markup already routes through onclick, so `this` is the control that was
 // tapped, and no template needs editing to opt in.
+// A copy shows the grey "Copy successful" box and, lower down, the dark "Copied." pill.
+var _ckCopyTimer = null;
+function ckCopyToast(){
+  notify('Copy successful');
+  let pill = $('ckCopied');
+  if (!pill) { pill = document.createElement('div'); pill.id = 'ckCopied'; pill.className = 'ck-copied'; pill.textContent = 'Copied.'; document.body.appendChild(pill); }
+  pill.classList.add('show');
+  if (_ckCopyTimer) clearTimeout(_ckCopyTimer);
+  _ckCopyTimer = setTimeout(() => { pill.classList.remove('show'); _ckCopyTimer = null; }, 1400);
+}
 window.copyText = function(text){
   if (!text || !rapidTapGuardOk('copy:' + text)) return;
   const btn = (typeof event !== 'undefined' && event && event.currentTarget)
@@ -4127,7 +4149,7 @@ async function renderAccount(){
   <div class="ck-menu">
     ${ckMenuRow('mail', 'Messages', 'openMessagesSheet()')}
     ${ckMenuRow('person', 'Personal information', 'openPersonalInfo()')}
-    ${ckMenuRow('income', 'Income details', "openTransactionStatement('all')")}
+    ${ckMenuRow('income', 'Income details', "openTransactionStatement('income')")}
     ${ckMenuRow('deposit', 'Deposit details', "openTransactionStatement('deposit')")}
     ${ckMenuRow('withdraw', 'Withdrawal details', "openTransactionStatement('withdraw')")}
     ${ckMenuRow('about', 'About us', 'openRulesPage()')}
@@ -4410,6 +4432,7 @@ function dismissNotify(){
 }
 window.notify = function(message, onClose){
   $('notifyMsg').textContent = String(message || '');
+  { const card = $('notifyMsg').parentNode; if (card && card.classList) card.classList.toggle('long', String(message || '').length > 60); }
   // Good news gets the tick, everything else (errors and "please do this first")
   // the circled cross, as in the screens.
   const good = /success|✓|copied|saved|done|now running|redeemed|submitted|sent|changed|processing|updated|claimed|unlocked|bound/i.test(String(message || '')) && !/not |fail|could not|cannot|insufficient|invalid|incorrect|wrong|isn't|already|status changed|bind it|add a payout/i.test(String(message || ''));
@@ -4461,8 +4484,10 @@ var _statementCat = 'all';
 var _statementShown = 10;
 var STATEMENT_TURNTABLE_TYPES = new Set(['turntable','spin','spin_bonus']);
 var STATEMENT_FRUIT_TYPES = new Set(['fruit','fruit_win','fruit_bet']);
+var STATEMENT_NOT_INCOME = new Set(['deposit','admin_credit','withdraw','invest','investment','investment_refund']);
 function statementCategoryMatch(cat, t){
-  if (cat === 'deposit') return t.type === 'deposit';
+  if (cat === 'income' || cat === 'all') return !STATEMENT_NOT_INCOME.has(t.type);
+  if (cat === 'deposit') return t.type === 'deposit' || t.type === 'admin_credit';
   if (cat === 'withdraw') return t.type === 'withdraw';
   if (cat === 'turntable') return STATEMENT_TURNTABLE_TYPES.has(t.type);
   if (cat === 'fruit') return STATEMENT_FRUIT_TYPES.has(t.type);
@@ -4512,28 +4537,32 @@ function statementAmountText(t){
   const amt = recordsRowAmount(t);
   return (amt < 0 ? '-' : '+') + vMoney2(Math.abs(amt));
 }
+// One card per record: a square picture (Admin > Pictures), the title and amount, the date, and the status.
+function statementStatus(t){
+  const chip = statementChip(t);
+  if (!chip) return { text: 'Success', cls: 'ok' };
+  return { text: chip.cls === 'bad' ? 'Failed' : chip.cls === 'wait' ? 'Pending' : 'Success', cls: chip.cls };
+}
 function renderStatement(){
   const body = $('statementBody');
   if (!body) return;
   const all = (STATE.transactions || []).filter(t => statementCategoryMatch(_statementCat, t));
-  if (!all.length) { body.innerHTML = '<div class="v-empty">No records yet.</div>'; return; }
+  if (!all.length) { body.innerHTML = '<div class="v-empty">NO DATA</div>'; return; }
   const rows = all.slice(0, _statementShown);
-  // The Load More button always sits under the list (as on the owner's Balance Record, even with two rows): it shows the next ten, or, when
-  // everything held is already on screen, asks the server again for anything newer or older.
-  const more = true;
+  const thumb = STATE.recThumb ? ` style="background-image:url('${esc(STATE.recThumb)}')"` : '';
   body.innerHTML = rows.map(t => {
-    const title = statementDescription(t);
-    const chip = statementChip(t);
-    const amt = recordsRowAmount(t);
-    const desc = t.type === 'cashback' ? String(t.description || '').replace(/\s*daily cashback$/i, '') : cleanDesc(t.description);
-    const line = chip ? `<span class="v-chip ${chip.cls}">${esc(chip.text)}</span>` : `<span class="v-rdesc">${esc(desc || title)}</span>`;
+    const st = statementStatus(t);
     return `
-      <article class="v-rec">
-        <span class="v-rav ${amt < 0 ? 'out' : ''}">${esc(title.charAt(0).toUpperCase())}</span>
-        <div class="v-rmid"><b>${esc(title)}</b><small>${esc(statementDate(t))}</small>${line}</div>
-        <span class="v-ramt ${amt < 0 ? 'out' : 'in'}">${esc(statementAmountText(t))}</span>
+      <article class="ck-rec">
+        <span class="ck-rec-img${STATE.recThumb ? ' has-img' : ''}"${thumb}></span>
+        <div class="ck-rec-body">
+          <b class="ck-rec-t">${esc(statementDescription(t))}</b>
+          <b class="ck-rec-a">${esc(ckMoney(Math.abs(recordsRowAmount(t))))}</b>
+          <small class="ck-rec-d">${esc(ckStamp(t.createdAt) || statementDate(t))}</small>
+          <small class="ck-rec-s ${st.cls}">${esc(st.text)}</small>
+        </div>
       </article>`;
-  }).join('') + (more ? '<div class="v-more"><button type="button" onclick="statementLoadMore()">Load More</button></div>' : '');
+  }).join('') + (all.length > rows.length ? '<div class="ck-more"><button type="button" onclick="statementLoadMore()">Load More</button></div>' : '');
 }
 var _statementMoreBusy = false;
 window.statementLoadMore = async function(){
@@ -4551,24 +4580,25 @@ window.statementLoadMore = async function(){
   } finally { _statementMoreBusy = false; }
 };
 window.switchStatementCategory = function(cat){
-  if (!['all','deposit','withdraw','turntable','fruit'].includes(cat)) return;
+  if (!['income','deposit','withdraw'].includes(cat)) return;
   _statementCat = cat; _statementShown = 10;
   const tabs = $('statementTabs');
   if (tabs) tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.cat === cat));
+  const ttl = $('sheetTitle'); if (ttl) ttl.textContent = STATEMENT_TITLES[cat];
   renderStatement();
 };
+var STATEMENT_TITLES = { income: 'Income Records', deposit: 'Deposit Records', withdraw: 'Withdrawal Records' };
 window.openTransactionStatement = async function(cat){
-  _statementCat = ['all','deposit','withdraw','turntable','fruit'].includes(cat) ? cat : 'all';
+  _statementCat = ['income','deposit','withdraw'].includes(cat) ? cat : 'income';
   _statementShown = 10;
   const hadCache = Array.isArray(STATE.transactions);
-  const bal = (STATE.account && STATE.account.walletBalance) || 0;
   openSheet('Balance Record', `
-    <div class="v-recbal"><span>CURRENT BALANCE</span><b id="recBalance">${esc(vMoney2(bal))}</b></div>
-    <div class="v-rectabs" id="statementTabs">
-      ${[['all','All'],['deposit','Deposit'],['withdraw','Withdraw'],['turntable','Turntable'],['fruit','Fruit']].map(([k, l]) => `<button data-cat="${k}" class="${_statementCat === k ? 'on' : ''}" onclick="switchStatementCategory('${k}')">${l}</button>`).join('')}
+    <div class="ck-rectabs" id="statementTabs">
+      ${[['income','Income details'],['deposit','Deposit'],['withdraw','Withdraw']].map(([k, l]) => `<button data-cat="${k}" class="${_statementCat === k ? 'on' : ''}" onclick="switchStatementCategory('${k}')">${l}</button>`).join('')}
     </div>
     <div id="statementBody"></div>`);
-  $('sheetBg').classList.add('v-rec-page');
+  $('sheetBg').classList.add('ck-rec-page');
+  { const ttl = $('sheetTitle'); if (ttl) ttl.textContent = STATEMENT_TITLES[_statementCat]; }
   if (hadCache) renderStatement();
   else $('statementBody').innerHTML = '<div class="list-loading">' + NAV_LOADER + '</div>';
   const r = await api('/transactions');
@@ -4582,7 +4612,7 @@ window.openTransactionStatement = async function(cat){
 };
 // Compatibility for post-withdraw flows and any stale call sites.
 window.openBalanceRecordSheet = function(tab){
-  const cat = tab === 'deposit' ? 'deposit' : tab === 'withdraw' ? 'withdraw' : 'all';
+  const cat = tab === 'deposit' ? 'deposit' : tab === 'withdraw' ? 'withdraw' : 'income';
   return openTransactionStatement(cat);
 };
 
@@ -4948,7 +4978,7 @@ function maybeAnnounceOnEntry(){
 }
 function openSheet(title, bodyHtml){
   dismissNotify();
-  $('sheetBg').classList.remove('v-rec-page', 'ck-pi-page', 'ck-rules-page', 'ck-bind-page');
+  $('sheetBg').classList.remove('v-rec-page', 'ck-pi-page', 'ck-rules-page', 'ck-bind-page', 'ck-dep-page', 'ck-wd-page', 'ck-rec-page');
   $('sheetTitle').textContent = title;
   $('sheetBody').innerHTML = bodyHtml;
   // Withdraw's empty-state "Add withdrawal account" link opens Withdrawal
@@ -5123,6 +5153,17 @@ function cleanDesc(d){ return d || ''; }
 // instruction ("remove option for payment methods, remove manual payment
 // in the whole codes... remove them all"). Automatic recharge is now the
 // only deposit path: one screen, no method choice to make.
+// Figures the way the Cookie screens print them: the currency, one space, the plain number (no thousands commas, no trailing zeros).
+function ckNum(n){ const v = Math.round((Number(n) || 0) * 100) / 100; return String(v); }
+function ckMoney(n){ return cur() + ' ' + ckNum(n); }
+// "16-10-2026 07:29:40": day-month-year, then the clock with seconds.
+function ckStamp(ts){
+  if (!ts) return '';
+  const ms = typeof ts === 'object' && ts.seconds ? ts.seconds * 1000 : new Date(ts).getTime();
+  if (!ms || isNaN(ms)) return '';
+  const d = new Date(ms), p = n => String(n).padStart(2, '0');
+  return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
 window.openDepositSheet = function(){
   const s = STATE.settings || {};
   if (s.depositAvailable === false) return notify('Deposits are not available right now.');
@@ -5132,33 +5173,31 @@ var _depChosenAmount = 0;
 function openDepositFormSheet(){
   const s = STATE.settings || {};
   _depChosenAmount = 0;
-  // The payment prompt goes to the number typed here: the member's own registered number is
-  // filled in, and it can be changed to any other mobile money number.
+  // The payment prompt goes to the member's own registered number (the page has no phone box).
   const registered = localDigits((STATE.account || {}).phone) || '';
   const defaultPhone = registered ? '0' + registered : '';
   const min = Number(s.minDeposit) || 0;
-  openSheet('Deposit', `<div class="v-form">
-    <div class="v-sec"><span class="bar"></span><h2>Select Amount</h2></div>
-    <div class="v-chips" id="depChips">${depositChipsHtml(s, 'depAmount')}</div>
-    <input class="v-amount" id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[\s,]/g,'');syncDepositQuickAmt()" autocomplete="off">
-    <input class="v-phone-in" id="depPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="Phone Number" value="${esc(defaultPhone)}" oninput="sanitizePhoneInput(this)">
-    <div class="v-sec"><span class="bar"></span><h2>Select Payment Method</h2></div>
-    <div class="v-pays" id="depPays">
-      <button type="button" class="on" onclick="pickPayLabel(this)">PAY-A</button>
-      <button type="button" onclick="pickPayLabel(this)">PAY-B</button>
-      <button type="button" onclick="pickPayLabel(this)">PAY-C</button>
+  const bal = (STATE.account && STATE.account.walletBalance) || 0;
+  const hot = '<svg class="ck-hot" viewBox="0 0 28 28" aria-hidden="true"><rect x="5" y="5" width="18" height="18" rx="4.5" fill="#fff"/><rect x="5" y="5" width="18" height="18" rx="4.5" fill="#fff" transform="rotate(45 14 14)"/><text x="14" y="16.6" text-anchor="middle" font-size="7.2" font-weight="800" fill="#0759e3" font-family="Roboto,Arial,sans-serif">HOT</text></svg>';
+  openSheet('Deposit', `<div class="ck-dep">
+    <div class="ck-card ck-amtcard">
+      <div class="ck-balrow"><span>Available：</span><b>${esc(cur())}</b><i>${esc(numGroup(bal, true))}</i></div>
+      <label class="ck-amtbox"><b>${esc(cur())}</b><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Please enter the Deposit amount" oninput="this.value=this.value.replace(/[\s,]/g,'');syncDepositQuickAmt()" autocomplete="off"></label>
+      <input id="depPhone" type="hidden" value="${esc(defaultPhone)}">
     </div>
-    <button class="v-cta" id="depSubmitBtn" onclick="submitDeposit()">Confirm Deposit</button>
-    <div class="v-info">
-      <h3>Deposit Instructions</h3>
-      <ol>
-        <li>Recharge time: 7*24 hours.</li>
-        <li>If deposit is not received, please contact TG customer service.</li>
-        <li>Minimum deposit amount: ${esc(cur())}${vGroup(min)}</li>
-        <li>Please do not save old account recharge.</li>
-      </ol>
+    <div class="ck-card ck-pays" id="depPays">
+      ${['C', 'L', 'H', 'K'].map((k, i) => `<button type="button" class="${i === 0 ? 'on' : ''}" onclick="pickPayLabel(this)">${i === 0 ? hot : ''}<span>${esc(brandName())} Pay -${k}</span></button>`).join('')}
+    </div>
+    <button class="ck-pay" id="depSubmitBtn" type="button" onclick="submitDeposit()">Pay 0</button>
+    <div class="ck-notes">
+      <p class="b">The minimum deposit amount is ${esc(cur())} ${esc(ckNum(min))}</p>
+      <p class="b">Recharge time 7 x 24 hours</p>
+      <p class="r">Please do not disclose your app password to anyone</p>
+      <p class="r">Please be sure to complete your deposit within the app; do not transfer funds to anyone who calls you</p>
+      <p class="r">If you encounter any issues during the deposit process, please contact customer service immediately</p>
     </div>
   </div>`);
+  $('sheetBg').classList.add('ck-dep-page');
 }
 // PAY-A / PAY-B / PAY-C are one gateway, three labels: the choice is only
 // the highlight, nothing else reads it.
@@ -5267,6 +5306,8 @@ function syncDepositQuickAmt(){
   // the two "Recharge" screens, and both of those screens are gone.
   const val = parseMoneyInput(($('depAmount') || {}).value);
   _depChosenAmount = val;
+  const payBtn = $('depSubmitBtn');
+  if (payBtn && !payBtn.disabled) payBtn.textContent = 'Pay ' + numGroup(val > 0 ? val : 0, false);
   const chips = $('depChips');
   if (chips) chips.querySelectorAll('.dep-chip').forEach(btn => btn.classList.toggle('sel', Number(btn.dataset.amt) === val));
 }
@@ -5542,7 +5583,7 @@ window.submitDeposit = async function(){
   // cleanPhone() is the SAME rule the server applies, so what is accepted
   // here and what is accepted there cannot drift apart.
   const phone = cleanPhone($('depPhone').value);
-  if (!amount || amount <= 0) return notify('Enter a valid amount');
+  if (!amount || amount <= 0) return notify('Please enter the Deposit amount');
   // Card (doCardDeposit()) and USDT (doUsdtDeposit()) both already check
   // this client-side before ever hitting the network; Mobile Money was the
   // one rail still relying entirely on the server's own rejection, which
@@ -5564,7 +5605,7 @@ window.submitDeposit = async function(){
     // match whatever submitBtn actually reads at rest (see the sheet's own
     // button above), or a member whose recharge failed is left looking at a
     // button that silently renamed itself.
-    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Deposit';
+    submitBtn.disabled = false; submitBtn.textContent = 'Pay ' + numGroup(amount, false);
   }
   if (r && r.stale) return;
   if (!r || r.status !== 'success') return notify((r && r.message) || 'Could not start deposit');
@@ -5656,6 +5697,7 @@ window.openWithdrawSheet = async function(){
   // Paint the actual withdrawal page immediately. Waiting for /bank/list
   // left a transparent-looking empty sheet over Home on a cold open.
   paintWithdrawSheet(s);
+  $('sheetBg').classList.add('ck-wd-page');
   const amountField = $('witAmount');
   const r = await api('/bank/list');
   if (_openSheetTitle !== 'Withdraw' || $('witAmount') !== amountField) return;
@@ -5719,40 +5761,31 @@ function weekendWithdrawShut(s){
 // update can repaint only this block, never #witAmount.
 function witWalletBlockHtml(s){
   const w = witSelectedWallet();
-  return `<div id="witWallet">${walletCardHtml(w)}</div>
-    <button id="witBindBtn" class="v-bind" type="button" onclick="openWalletSheet()">Bind Wallet</button>`;
+  const gear = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
+  return `<div id="witWallet" class="ck-wrows">
+      <div class="ck-wrow"><span>Real Name</span><em>${w ? esc(String(w.holder || '').toUpperCase()) : ''}</em></div>
+      <div class="ck-wrow"><span>Wallet</span><em>${w ? esc(walShort(w.network)) : ''}</em></div>
+      <div class="ck-wrow"><span>Wallet Account</span><em>${w ? esc(maskedTail(w.phone)) : ''}</em></div>
+    </div>
+    <button id="witBindBtn" class="ck-bindbtn" type="button" onclick="openWalletSheet()">${gear}<span>Bind Wallet Card</span></button>`;
 }
-// Withdraw.dc.html. Replaces the form inherited from Snow: a tinted balance
-// card, a UGX-prefixed amount field, the bound wallet shown as the same
-// bank-card tile the Wallet screen uses (not a <select> of several), the
-// trade-password field, the fee line, and the instruction card.
+// The Withdraw page: an amount card (live "Withdraw <amount you receive>" button) and the wallet card.
 function paintWithdrawSheet(s){
   const balance = (STATE.account && STATE.account.walletBalance) || 0;
   const fee = withdrawalFeePct(s);
-  // A member the owner made unrestricted by withdrawal time sees no hours (the server skips them too).
-  const win = (STATE.account && STATE.account.withdrawAnytime) ? { enabled: false, open: true } : withdrawWindow(s);
-  const secs = v => v ? v + ':00' : '';
-  const min = Number(s.minWithdraw) || 0, max = Number(s.maxWithdraw) || 0, mult = Number(s.withdrawMultiple) || 0;
-  // An unrestricted member has no daily number either (the server skips it for them).
-  const perDay = (STATE.account && STATE.account.withdrawAnytime) ? 0 : (Number(s.maxWithdrawalsPerDay) || 0);
-  $('sheetBody').innerHTML = `<div class="v-form">
-    <div class="v-bal"><span>AVAILABLE BALANCE</span><b id="witBalance">${esc(vMoney2(balance))}</b></div>
-    <div class="v-amtrow"><span>${esc(cur())}</span><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0.00" oninput="this.value=this.value.replace(/[\s,]/g,'');syncWithdrawReceiveAmt()" autocomplete="off"></div>
-    <div class="v-sec"><span class="bar"></span><h2>Withdrawal Wallet</h2></div>
-    <div id="witWalletBlock">${witWalletBlockHtml(s)}</div>
-    ${s.requireTradePassword === true ? `<div class="v-sec"><span class="bar"></span><h2>Trade Password</h2></div>
-    <div class="v-pin"><input id="witPin" type="text" inputmode="numeric" maxlength="6" placeholder="Enter trade password" autocomplete="off"></div>` : ''}
-    <div class="v-fee">Fee: ${fee}%</div>
-    <button class="v-cta fade" id="witSubmitBtn" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Confirm Withdraw</button>
-    <div class="v-info">
-      <h3>Withdrawal Instructions</h3>
-      <ol>
-        <li>Fee: ${fee}%</li>
-        <li>Withdrawal amounts should be between ${vGroup(min)}${max ? ' and ' + vGroup(max) : ' and your available balance'}${mult ? ', in multiples of ' + vGroup(mult) : ''}.</li>
-        <li>${perDay ? 'You can make up to ' + perDay + ' withdrawals per day.' : 'One cash-out at a time. Wait for a pending request to finish before the next.'}</li>
-        <li>${win.enabled ? 'Withdrawal time: ' + esc(secs(win.from)) + ' - ' + esc(secs(win.to)) + '.' : 'Withdrawals can be requested at any time of day.'}${(s.weekendWithdrawBlock !== false && !(STATE.account && STATE.account.withdrawAnytime)) ? ' Withdrawals are closed on Saturday and Sunday.' : ''}</li>
-      </ol>
+  $('sheetBody').innerHTML = `<div class="ck-wd">
+    <div class="ck-card ck-wdcard">
+      <div class="ck-wdlab">Amount</div>
+      <label class="ck-amtbox ck-amtbox2"><b>${esc(cur())}</b><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Enter Amount" oninput="this.value=this.value.replace(/[\s,]/g,'');syncWithdrawReceiveAmt()" autocomplete="off"></label>
+      <div class="ck-balrow ck-balrow2"><span>Balance：</span><b>${esc(cur())}</b><i id="witBalance">${esc(numGroup(balance, true))}</i></div>
+      <div class="ck-feebox">
+        <h4>Fee: ${fee}%</h4>
+        <p>Withdrawals are processed within 30 minutes to 24 hours; you will receive <b>${esc(cur())}</b> <span id="witReceive">0</span>.</p>
+      </div>
+      ${s.requireTradePassword === true ? `<label class="ck-amtbox ck-pinbox"><input id="witPin" type="text" inputmode="numeric" maxlength="6" placeholder="Trade password" autocomplete="off"></label>` : ''}
+      <button class="ck-pay" id="witSubmitBtn" type="button" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Withdraw 0</button>
     </div>
+    <div class="ck-card ck-wdcard2" id="witWalletBlock">${witWalletBlockHtml(s)}</div>
   </div>`;
 }
 function withdrawalFeePct(s){
@@ -5761,8 +5794,10 @@ function withdrawalFeePct(s){
 }
 window.syncWithdrawReceiveAmt = function(){
   const amount = parseMoneyInput(($('witAmount') || {}).value);
+  const got = amount > 0 ? amount - Math.round(amount * withdrawalFeePct(STATE.settings || {}) / 100) : 0;
   const btn = $('witSubmitBtn');
-  if (btn) btn.classList.toggle('fade', !(amount > 0));
+  if (btn && !btn.disabled) btn.textContent = 'Withdraw ' + numGroup(got, false);
+  const rc = $('witReceive'); if (rc) rc.textContent = ckNum(got);
 };
 // Transaction Statement (openBalanceRecordSheet()) is cache-first: it paints from
 // whatever STATE.transactions already holds, and per Round 55's own fix,
@@ -5794,7 +5829,7 @@ window.submitWithdraw = async function(){
   // several now that Cookie allows saving more than one (see
   // witSelectedWallet()'s own comment).
   const acct = witSelectedWallet();
-  if (!amount || amount <= 0) return notify('Enter a valid amount.');
+  if (!amount || amount <= 0) return notify('Please enter the Withdraw amount');
   // Mirrors the server's rule so the member is told BEFORE a round trip.
   // The server checks it again -- this is a courtesy, not the enforcement.
   const wMult = Math.max(0, Math.floor(Number((STATE.settings || {}).withdrawMultiple) || 0));
@@ -5827,7 +5862,7 @@ window.submitWithdraw = async function(){
   finally {
     if ($('witPin')) $('witPin').value = '';
     _withdrawSubmitting = false;
-    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Withdraw';
+    submitBtn.disabled = false; submitBtn.textContent = 'Withdraw ' + numGroup(amount - Math.round(amount * withdrawalFeePct(STATE.settings || {}) / 100), false);
     // A background /bank/list landing mid-request can have repainted the
     // wallet block (see openWithdrawSheet()) and left a DIFFERENT button
     // element in the DOM -- disabled state is only ever about an in-flight
@@ -5892,26 +5927,21 @@ window.openInvestConfirm = function(tierKey, btn){
   if (!p || (btn && btn.disabled)) return;
   const fig = planFigures(p);
   $('confirmSheet').innerHTML = `
-    <h3>Confirm Investment</h3>
-    <p class="confirm-sub">Review this product before investing.</p>
-    <div class="confirm-row"><span>Product</span><b class="mono">${esc(p.name || 'Product')}</b></div>
-    <div class="confirm-row"><span>Cost</span><b class="mono">${fmtUGX(Number(p.price) || 0)}</b></div>
-    <div class="confirm-row"><span>Term</span><b>${fig.cycle} Days</b></div>
-    <div class="confirm-row"><span>Daily Yield</span><b class="mono">${fmtUGX(fig.daily)}</b></div>
-    <div class="confirm-row"><span>Expected Return</span><b class="mono">${fmtUGX(fig.expected)}</b></div>
-    <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;">Buy Product</button>
-    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Cancel</button>`;
+    <h3>Prompt</h3>
+    <p class="ck-prompt-msg">Are you sure you want to purchase this product?</p>
+    <div class="ck-prompt-btns"><button type="button" class="ck-prompt-no" onclick="closeConfirm()">Cancel</button><button type="button" class="ck-prompt-ok" id="confirmActionBtn">Confirm</button></div>`;
+  $('confirmSheet').classList.add('ck-prompt');
   const actionBtn = $('confirmActionBtn');
   // A double tap on BUY NOW lands its second tap where this button appears: it is dead for the first 600 ms so nothing is bought unseen.
   actionBtn.disabled = true;
-  setTimeout(() => { if (actionBtn.isConnected && actionBtn.textContent === 'Buy Product') actionBtn.disabled = false; }, 600);
+  setTimeout(() => { if (actionBtn.isConnected && actionBtn.textContent === 'Confirm') actionBtn.disabled = false; }, 600);
   actionBtn.onclick = async () => {
     if (actionBtn.disabled) return;
-    actionBtn.disabled = true; actionBtn.textContent = 'Buying…';
+    actionBtn.disabled = true; actionBtn.textContent = '…';
     const result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey, expectedPrice: Number(p.price) || 0 }) });
     if (result.status === 'error' && result.code === 'PRICE_CHANGED') { try { refreshCatalogNow(); } catch (_) {} }
     if (result.status !== 'success') {
-      actionBtn.disabled = false; actionBtn.textContent = 'Buy Product';
+      actionBtn.disabled = false; actionBtn.textContent = 'Confirm';
       const short = result.code === 'INSUFFICIENT_BALANCE' || /^Need .*, have /.test(String(result.message || ''));
       if (short) {
         closeConfirm();
@@ -5936,6 +5966,7 @@ window.openInvestConfirm = function(tierKey, btn){
 window.closeConfirm = function(){
   $('confirmBg').classList.remove('show'); dlgClosed();
   $('confirmSheet').innerHTML = '';
+  $('confirmSheet').classList.remove('ck-prompt');
   if (!isScrollLockOverlayOpen()) unlockBodyScroll();
 };
 

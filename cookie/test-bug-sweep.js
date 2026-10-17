@@ -41,7 +41,7 @@ ok(/_catalogRefreshedAt/.test(mod) && /30000 - \(Date\.now\(\) - _catalogRefresh
 ok(/r\.code === 'AUTH_UNAVAILABLE' \|\| r\.code === 'SERVER_ERROR'/.test(mod), 'a busy or unavailable server on opening the app does not sign the member out');
 ok(!/signal:\s*AbortSignal\.timeout/.test(mod), 'no AbortSignal.timeout (older phones would skip the server logout)');
 ok(/messages: null, page: 'home'/.test(mod), 'logout also forgets messages and the open tab');
-ok(/function vGroup\(/.test(mod) && /vGroup\(min\)/.test(mod), 'minimums print with thousands separators');
+ok(/function vGroup\(/.test(mod) && /ckNum\(min\)/.test(mod), 'the deposit minimum prints as plain digits, as on the owner screens');
 
 // deploy / infra
 const upd = rd('deploy/update-vps.sh');

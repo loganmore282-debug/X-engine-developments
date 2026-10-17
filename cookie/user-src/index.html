@@ -1853,16 +1853,15 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 :root{--ck-blue:#0759e3;--ck-blue-2:#0a5ae6;--ck-blue-lt:#5a91ec;--ck-grad:linear-gradient(135deg,#0a56e3 0%,#2f72ea 55%,#5b91ee 100%);
   --ck-bg1:#f3f3fd;--ck-bg2:#ececec;--ck-auth:#accfe5;--ck-card:#f0f7fd;--ck-ink:#14161c;--ck-line:#0759e3;
   --ck-serif:'Noto Serif','Droid Serif',Georgia,'DejaVu Serif','Times New Roman',serif;}
-/* ── Loading screen: soft page colour, a small colour spinner near the top ── */
-#loadingScreen{background:linear-gradient(180deg,#f1f1fe 0%,#ececec 100%);align-items:flex-start;}
-#loadingScreen .ld-bg{display:none;}
-#loadingScreen .ld-txt{display:none;}
-#loadingScreen .ld-spin{position:absolute;top:47px;left:50%;width:34px;height:34px;margin-left:-17px;border-radius:50%;
-  background:conic-gradient(from 20deg,#c7a4f2 0deg,#4f93f5 110deg,#f0468f 190deg,rgba(255,255,255,0) 200deg,rgba(255,255,255,0) 360deg);
-  -webkit-mask:radial-gradient(circle,transparent 9px,#000 10px);mask:radial-gradient(circle,transparent 9px,#000 10px);animation:ckSpin .9s linear infinite;}
-#loadingScreen .ld-spin::after{content:'';position:absolute;inset:9px;border-radius:50%;border:2px dotted #9a9aa0;opacity:.7;}
-@keyframes ckSpin{to{transform:rotate(360deg);}}
-@media (prefers-reduced-motion:reduce){#loadingScreen .ld-spin{animation:none;}}
+/* ── Loading screen: round picture, thin progress bar, percent ── */
+#loadingScreen{background:#f6f6f6;align-items:flex-start;justify-content:center;}
+#loadingScreen .ld-txt,#loadingScreen .ld-spin{display:none;}
+#loadingScreen .ld-bg{position:absolute;top:24%;left:50%;width:86px;height:86px;margin-left:-43px;inset:auto;inset-inline:auto;border-radius:50%;
+  background:radial-gradient(circle at 50% 40%,#3a8bff 0%,#0759e3 70%) center/cover no-repeat;opacity:1;filter:none;transform:none;box-shadow:0 0 0 2px #fff,0 4px 14px rgba(7,89,227,.25);overflow:hidden;}
+#loadingScreen .ld-bg{top:24%;left:50%;}
+#loadingScreen .ld-bar{position:absolute;top:41.2%;left:50%;width:203px;height:10px;margin-left:-101px;border-radius:5px;background:#e0e0e0;overflow:hidden;}
+#loadingScreen .ld-bar i{display:block;height:100%;width:0;border-radius:5px;background:#0759e3;transition:width .2s linear;}
+#loadingScreen .ld-pct{position:absolute;top:calc(41.2% + 19px);left:0;right:0;text-align:center;font:400 12px/1 'Roboto',system-ui,sans-serif;color:#777;}
 /* ── Login and Create Account ── */
 .va-screen{background:var(--ck-auth);}
 .va-screen::after{display:none;}
@@ -2005,7 +2004,7 @@ body{background-attachment:fixed;}
 .ck-lvtabs .v-level small{font-size:12.5px;line-height:1;opacity:.95;}
 .ck-lvtabs .v-level.on{background:#fff;color:var(--ck-blue);}
 .ck-lvinfo{margin:10px 15px 0;text-align:center;font-size:12.5px;color:#6c7384;}
-.ck-team #teamMembersBox{margin:12px 15px 0;min-height:30vh;}
+.ck-team #teamMembersBox{margin:14px 14px 0;gap:14px;min-height:30vh;padding-bottom:90px;}
 /* ── My ── */
 .ck-my{padding-bottom:calc(var(--nav-h) + 16px);}
 .ck-me{position:relative;height:248px;padding:30px 15px 0;background:linear-gradient(135deg,#0a56e3 0%,#5b91ee 100%);overflow:hidden;}
@@ -2073,6 +2072,93 @@ body{background-attachment:fixed;}
 .ck-langcard button.on{background:var(--ck-blue);color:#fff;}
 .ck-langbtn{position:absolute;top:13px;right:10px;z-index:3;height:37px;padding:0 20px;border:0;border-radius:12px;background:#fff;color:var(--ck-blue);font:inherit;font-size:16px;cursor:pointer;box-shadow:0 2px 8px rgba(0,30,90,.18);}
 .ck-pi-page .sheet-body,.ck-pi-page #sheetBody,.ck-rules-page #sheetBody{padding:0;}
+/* ── Toasts, Prompt dialog ── */
+.notify-bg{background:none !important;-webkit-backdrop-filter:none !important;backdrop-filter:none !important;padding:0 20px;}
+.notify-card{width:auto;max-width:200px;display:block;background:rgba(82,84,90,.96);color:#fff;border:0;border-radius:6px;padding:10px 20px;font:400 14px/1.45 Roboto,'Segoe UI',system-ui,sans-serif;text-align:center;box-shadow:none;}
+.notify-card.long{max-width:290px;}
+.notify-ic{display:none !important;}
+.notify-msg{color:#fff;}
+.ck-copied{position:fixed;left:50%;bottom:90px;z-index:441;min-width:90px;height:44px;padding:0 26px;border-radius:22px;background:linear-gradient(180deg,#0f3d92,#0a2770);color:#fff;font:400 17px/44px Roboto,'Segoe UI',system-ui,sans-serif;text-align:center;transform:translateX(-50%);opacity:0;visibility:hidden;transition:opacity .15s;pointer-events:none;}
+.ck-copied.show{opacity:1;visibility:visible;}
+.confirm-bg{background:rgba(0,0,0,.5) !important;-webkit-backdrop-filter:none !important;backdrop-filter:none !important;}
+.confirm-sheet.ck-prompt{max-width:304px;padding:0;border-radius:6px;background:#fff;box-shadow:none;text-align:center;overflow:hidden;font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
+.ck-prompt h3{margin:18px 0 0;font-size:18px;line-height:22px;font-weight:400;color:#111;}
+.ck-prompt-msg{margin:28px 26px 20px;font-size:15.5px;line-height:21px;color:#888;word-break:break-all;}
+.ck-prompt-btns{display:flex;height:48px;border-top:1px solid #ebedf0;}
+.ck-prompt-btns button{flex:1;border:0;background:#fff;font:400 18px/48px Roboto,'Segoe UI',system-ui,sans-serif;color:#111;cursor:pointer;}
+.ck-prompt-btns button+button{border-left:1px solid #ebedf0;color:#1a80e6;}
+.ck-prompt-btns button:disabled{opacity:.55;}
+/* ── Deposit and Withdraw pages ── */
+.sheet-bg.ck-dep-page{background:#fff;}
+.sheet-bg.ck-wd-page,.sheet-bg.ck-rec-page{background:linear-gradient(180deg,#f2f2fe 0%,#ececec 100%);}
+.ck-dep-page #sheetBody,.ck-wd-page #sheetBody,.ck-rec-page #sheetBody{padding:0;max-width:none;}
+.ck-card{background:#fff;border-radius:16px;box-shadow:0 2px 10px rgba(30,50,120,.11);}
+.ck-dep{padding:15px 15px 96px;font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
+.ck-wd{padding:15px 15px 96px;font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
+.ck-amtcard{padding:17px 15px 30px;}
+.ck-balrow{display:flex;align-items:baseline;gap:6px;font-size:14.5px;line-height:20px;color:#131313;}
+.ck-balrow b{font-weight:700;font-size:14px;}
+.ck-balrow i{font-style:normal;font-size:16px;color:#5b5b5d;}
+.ck-amtbox{display:flex;align-items:center;gap:9px;height:48px;margin-top:18px;padding:0 11px;border-radius:14px;background:linear-gradient(180deg,#f3f6fd,#edf1fc);border:1.5px solid #e0e6f8;}
+.ck-amtbox>b{color:#1759b9;font-size:16px;font-weight:700;white-space:nowrap;}
+.ck-amtbox input{flex:1;min-width:0;height:44px;padding:0;border:0;outline:0;background:transparent;font:700 19px Roboto,'Segoe UI',system-ui,sans-serif;color:#1759b9;}
+.ck-amtbox input::placeholder{color:#7a7a7c;font-weight:700;}
+.ck-pays{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:15px;padding:15px;}
+.ck-pays button{position:relative;display:flex;align-items:center;justify-content:center;height:45px;padding:0 8px;border:0;border-radius:23px;background:#eef5fd;color:#1253c2;font:700 15px Roboto,'Segoe UI',system-ui,sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;}
+.ck-pays button.on{background:var(--ck-grad);color:#fff;}
+.ck-pays .ck-hot{position:absolute;left:7px;top:9px;width:27px;height:27px;}
+.ck-pay{display:block;width:100%;height:49px;margin-top:15px;border:0;border-radius:25px;background:var(--ck-grad);color:#fff;font:500 18px/49px Roboto,'Segoe UI',system-ui,sans-serif;letter-spacing:.06em;box-shadow:0 9px 16px -8px rgba(7,89,227,.55);cursor:pointer;}
+.ck-pay:disabled{opacity:.7;}
+.ck-notes{margin-top:55px;}
+.ck-notes p{margin:0 0 15px;padding:10px 15px;border-left:3px solid #1759b9;background:#f0f7fd;font-size:14px;line-height:19px;padding-right:2px;}
+.ck-notes p.b{color:#0a6590;}
+.ck-notes p.r{color:#d3161b;}
+.ck-wd .ck-card{border-radius:8px;box-shadow:none;}
+.ck-wdcard{padding:27px 15px 15px;}
+.ck-wdlab{font-size:15px;line-height:20px;color:#131313;}
+.ck-amtbox2{margin-top:19px;height:46px;border:0;border-radius:10px;background:#f3f8fe;}
+.ck-amtbox2 input{font-size:18.5px;font-weight:700;}
+.ck-amtbox2 input::placeholder{font-size:18px;font-weight:700;}
+.ck-balrow2{margin-top:17px;}
+.ck-feebox{margin-top:14px;padding:11px 13px 9px;border:2px solid #0b5bd8;border-radius:9px;background:#f3f8fe;}
+.ck-feebox h4{margin:0 0 12px;padding-bottom:12px;border-bottom:2px dashed #0b5bd8;font-size:17px;line-height:24px;font-weight:700;color:#0b5bd8;}
+.ck-feebox p{margin:0;font-size:13px;line-height:18px;color:#525355;}
+.ck-feebox p b{font-weight:400;}
+.ck-pinbox{margin-top:15px;height:44px;border:1.5px solid #cfe0fb;background:#fff;}
+.ck-wd .ck-pay{margin-top:15px;height:45px;line-height:45px;}
+.ck-wdcard2{margin-top:16px;padding:14px 15px 15px;}
+.ck-wrow{display:flex;align-items:center;justify-content:space-between;height:36px;padding:0 6px;border-bottom:1px solid #efeef3;font-size:13.5px;color:#171717;}
+.ck-wrow em{font-style:normal;font-size:12.5px;color:#80838a;}
+.ck-bindbtn{display:flex;align-items:center;justify-content:center;gap:16px;width:100%;height:46px;margin-top:11px;border:1px solid #ececec;border-radius:14px;background:#f8f8f8;color:#0b5bd8;font:400 18.5px Roboto,'Segoe UI',system-ui,sans-serif;cursor:pointer;}
+.ck-bindbtn svg{width:16px;height:16px;}
+/* ── Records ── */
+.ck-rectabs{display:flex;gap:8px;margin:13px 12px 0;}
+.ck-rectabs button{flex:1;height:29px;border:0;border-radius:4px;background:#fff;color:#1a62ce;font:400 10.5px Roboto,'Segoe UI',system-ui,sans-serif;cursor:pointer;}
+.ck-rectabs button.on{background:var(--ck-blue);color:#fff;}
+#statementBody{padding:9px 12px 96px;}
+.ck-rec{display:flex;gap:4px;height:66px;margin-bottom:12px;padding:3px;border-radius:9px;background:#1259d4;}
+.ck-rec-img{flex:0 0 58px;border-radius:6px;background:radial-gradient(circle at 50% 45%,#3b8fe8 0%,#0b5ad9 60%,#06358f 100%) center/cover no-repeat;}
+.ck-rec-body{position:relative;flex:1;min-width:0;border-radius:5px;background:#eef5ff;padding:0 10px;}
+.ck-rec-body>*{position:absolute;display:block;}
+.ck-rec-t{left:10px;top:8px;font-size:10px;line-height:14px;font-weight:700;color:#1260c9;}
+.ck-rec-a{right:10px;top:8px;font-size:10px;line-height:14px;font-weight:700;color:#14233f;}
+.ck-rec-d{left:10px;bottom:11px;font-size:8.5px;line-height:12px;color:#9b9ca3;}
+.ck-rec-s{right:10px;bottom:11px;font-size:8.5px;line-height:12px;font-weight:700;color:#27a34a;}
+.ck-rec-s.wait{color:#e08a12;}
+.ck-rec-s.bad{color:#d33a3a;}
+.ck-more{text-align:center;padding:6px 0;}
+.ck-more button{height:32px;padding:0 22px;border:0;border-radius:16px;background:var(--ck-blue);color:#fff;font:inherit;font-size:13px;}
+/* ── Team members ── */
+.ck-mem{display:flex;align-items:center;gap:19px;min-height:88px;margin:0;padding:0 10px 0 9px;border:1px solid #ebebf1;border-radius:9px;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.07);font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
+.ck-mem-av{flex:0 0 61px;width:61px;height:61px;border-radius:50%;background:radial-gradient(circle at 50% 45%,#3b8fe8 0%,#0b5ad9 62%,#06358f 100%) center/cover no-repeat;}
+.ck-mem-body{flex:1;min-width:0;padding:6px 0 8px;font-size:11.5px;line-height:20px;color:#8a8a90;}
+.ck-mem-top{display:flex;align-items:center;justify-content:space-between;height:22px;border-bottom:1px solid #ececf0;}
+.ck-mem-top b{font-weight:700;color:#111;}
+.ck-mem-top em{font-style:normal;height:17px;padding:0 9px;border-radius:5px;background:#2fb34a;color:#fff;font-size:10.5px;line-height:17px;}
+.ck-mem-mid{display:flex;margin-top:3px;}
+.ck-mem-mid span{flex:1;}
+.ck-mem-mid span.g{color:#25a844;}
+.ck-mem-time{margin-top:0;}
 </style>
 
 <script data-cookie-idle>
@@ -2147,7 +2233,8 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
 </script>
 <div id="loadingScreen">
   <span class="ld-bg" id="ldBg" aria-hidden="true"></span>
-  <span class="ld-spin" aria-hidden="true"></span>
+  <span class="ld-bar" aria-hidden="true"><i id="ldFill"></i></span>
+  <span class="ld-pct" id="ldPct" aria-hidden="true">0%</span>
   <span class="ld-txt" aria-hidden="true">Loading...</span>
   <span class="sr-only" role="status" aria-live="polite">Loading</span>
 </div>
@@ -2157,9 +2244,22 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
    first launch ever has no copy yet, so it shows the gradient with the Loading... word until the picture arrives. */
 (function(){
   window._cookieLoaderStart = Date.now();
+  /* The bar and its percent: eases toward 96 while the app opens, and jumps to 100 the moment the screen is taken down. */
+  (function(){
+    var fill = document.getElementById('ldFill'), pct = document.getElementById('ldPct'), t0 = Date.now(), cur = 0;
+    function set(n){ n = Math.max(cur, Math.min(100, Math.round(n))); cur = n; if (fill) fill.style.width = n + '%'; if (pct) pct.textContent = n + '%'; }
+    window._ckLoaderDone = function(){ set(100); };
+    var iv = setInterval(function(){
+      var ls = document.getElementById('loadingScreen');
+      if (!ls || ls.style.display === 'none' || cur >= 100) { clearInterval(iv); return; }
+      var e = (Date.now() - t0) / 1000;
+      set(96 * (1 - Math.exp(-e / 1.6)));
+    }, 120);
+    set(2);
+  })();
   try {
     var ls = document.getElementById('loadingScreen'), bg = document.getElementById('ldBg'), KEY = 'cookie_loader_img', FX = 'cookie_loader_fx';
-    var layer = function(u){ return 'linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url("' + u + '")'; };
+    var layer = function(u){ return 'url("' + u + '")'; };
     /* The picture's opacity (0-100) and blur (0-40 px) are remembered the same way, so they also apply on the first frame. */
     var fx = function(op, bl){
       op = Number(op); bl = Number(bl);

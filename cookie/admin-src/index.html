@@ -2899,6 +2899,7 @@ async function renderBanners(){
   const logoImage = cir.logo||'';
   const profileLogoImage = cir.profilelogo||'';
   const loaderBgImage = cir.loaderbg||'';
+  const avatarImage = cir.avatar||'', recThumbImage = cir.recthumb||'';
   const teamHeroImage = cir.teamhero||'', shareHeroImage = cir.sharehero||'', myHeroImage = cir.myhero||'', rulesHeroImage = cir.ruleshero||'';
   const announcementImage = (annr && annr.image) || '';
   const appIconImage = bar.appIcon||'';
@@ -2965,20 +2966,15 @@ async function renderBanners(){
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="profileLogoFile" accept="image/*" hidden></label>
     </div>
 
-    <h2 class="sec" style="display:none">Loading screen background</h2>
-    <div class="panel-card" style="display:none">
-      <p class="muted" style="margin-top:0">The picture behind the word "Loading . . ." when the app starts. Portrait, about 1080&times;1920. Without one, a blue background shows.</p>
+    <h2 class="sec">Loading screen picture</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The round picture above the progress bar when the app starts. Square, about 400&times;400 (it is shown in a circle).</p>
       <div class="banner-row">
         ${loaderBgImage?`<img class="img-thumb" src="${esc(loaderBgImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${loaderBgImage?'Custom image':'<span class="muted">Not set</span>'}</div>
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${loaderBgImage?'Custom image':'<span class="muted">Not set &mdash; a blue circle shows</span>'}</div>
         ${loaderBgImage?`<button class="btn danger sm" id="loaderBgClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="loaderBgFile" accept="image/*" hidden></label>
-      <div class="row" style="margin-top:10px">
-        <div><label>Opacity (0&ndash;100%)</label><input id="loaderBgOp" type="number" min="0" max="100" value="${esc(v('loaderBgOpacity',100))}"></div>
-        <div><label>Blur (0&ndash;40 px)</label><input id="loaderBgBlur" type="number" min="0" max="40" value="${esc(v('loaderBgBlur',0))}"></div>
-      </div>
-      <button class="btn block" id="saveLoaderBg" style="margin-top:14px">Save loading screen appearance</button>
     </div>
 
     <h2 class="sec">Login &amp; Create Account picture</h2>
@@ -3045,6 +3041,28 @@ async function renderBanners(){
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="rulesHeroFile" accept="image/*" hidden></label>
     </div>
 
+    <h2 class="sec">Member picture (round)</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The round picture beside every member in the Team list. Square, about 300&times;300.</p>
+      <div class="banner-row">
+        ${avatarImage?`<img class="img-thumb" src="${esc(avatarImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${avatarImage?'Custom image':'<span class="muted">Not set &mdash; a blue circle shows</span>'}</div>
+        ${avatarImage?`<button class="btn danger sm" id="avatarClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="avatarFile" accept="image/*" hidden></label>
+    </div>
+
+    <h2 class="sec">Records picture (square)</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The square picture on the left of every line in Income, Deposit and Withdrawal records. Square, about 300&times;300.</p>
+      <div class="banner-row">
+        ${recThumbImage?`<img class="img-thumb" src="${esc(recThumbImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${recThumbImage?'Custom image':'<span class="muted">Not set &mdash; a blue square shows</span>'}</div>
+        ${recThumbImage?`<button class="btn danger sm" id="recThumbClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="recThumbFile" accept="image/*" hidden></label>
+    </div>
+
     <h2 class="sec">App icon</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">The member app icon (home screen and browser tab). Square PNG, 1024&times;1024 (transparency kept, corners rounded for you). The admin panel always keeps its own built-in icon.</p>
@@ -3093,7 +3111,7 @@ function wireBannerHandlers(){
           // The auth backdrop fills a large area, so it keeps more
           // resolution than the banners.
           const maxDim = slot==='logo' ? 800
-                       : slot==='loaderbg' ? 1080
+                       : (slot==='loaderbg' || slot==='avatar' || slot==='recthumb') ? 480
                        : slot==='authhero' ? 1600
                        : 1280;
           const image = await fileToDataUrl(f, maxDim, slot==='loaderbg' ? 0.7 : 0.82);
@@ -3164,7 +3182,9 @@ function wireBannerHandlers(){
   wireCookieImageSlot('sharehero', 'shareHeroFile', 'shareHeroClear', 'Share banner saved', 'Share banner removed');
   wireCookieImageSlot('myhero', 'myHeroFile', 'myHeroClear', 'My page background saved', 'My page background removed');
   wireCookieImageSlot('ruleshero', 'rulesHeroFile', 'rulesHeroClear', 'Rules picture saved', 'Rules picture removed');
-  wireCookieImageSlot('loaderbg', 'loaderBgFile', 'loaderBgClear', 'Loading screen background saved', 'Loading screen background removed');
+  wireCookieImageSlot('loaderbg', 'loaderBgFile', 'loaderBgClear', 'Loading screen picture saved', 'Loading screen picture removed');
+  wireCookieImageSlot('avatar', 'avatarFile', 'avatarClear', 'Member picture saved', 'Member picture removed');
+  wireCookieImageSlot('recthumb', 'recThumbFile', 'recThumbClear', 'Records picture saved', 'Records picture removed');
   wireCookieImageSlot('profilelogo', 'profileLogoFile', 'profileLogoClear', 'Profile logo saved, live for every member', 'Profile logo removed');
   wireCookieImageSlot('logo', 'brandLogoFile', 'brandLogoClear', 'Brand logo saved', 'Brand logo removed');
   const saveLoaderBg = $('saveLoaderBg');

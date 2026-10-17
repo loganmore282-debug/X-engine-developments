@@ -20,7 +20,7 @@ ok(admin.indexOf('Each product has its OWN multiplier') < admin.indexOf('<label>
   ok(!!m, 'a field Chrome autofills keeps no pale sheet behind the typed number'); }
 { const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
   ok(!/toLocaleString\('en-UG'/.test(mod) && /function numGroup\(/.test(mod), 'money commas are written by the app itself (numGroup), not left to the phone locale');
-  ok(/const more = true;/.test(mod) && /window\.statementLoadMore = async function/.test(mod), 'Load More always sits under the Balance Record list and asks the server when nothing more is held');
+  ok(/all\.length > rows\.length/.test(mod) && /window\.statementLoadMore = async function/.test(mod), 'Load More sits under the records list when more are held and asks the server when nothing more is held');
   ok(/\.v-me-bal\{[^}]*font-size:28\.5px/.test(fs.readFileSync(__dirname + '/user-src/index.html', 'utf8')), 'the My balance is 28.5 px, as measured from the owner screenshot'); }
 { const idx = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
   const rules = (idx.replace(/\/\*[\s\S]*?\*\//g, '').match(/[^{}]*\.prov-list[^{}]*\{[^}]*\}/g) || []);

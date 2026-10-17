@@ -38,7 +38,7 @@ ok(/var PAY_OK_ART = '/.test(mod) && /var PAY_OK_STATIC = '<svg viewBox="0 0 696
 ok(/var DEPOSIT_POLL_FLOW = /.test(mod) && /innerHTML = DEPOSIT_POLL_FLOW/.test(mod) && !/dep-poll|pspin|DEPOSIT_POLL_SPIN|depPollRotate/.test(html + mod), 'the payment wait is the phone-to-wallet dots; the rotating rings and orbiting chips are gone');
 ok(!/Congratulations! \u{1F389}|🎉/u.test(mod), 'no emoji in the success title');
 ok(/loaderBgOpacity: \[0, 100\], loaderBgBlur: \[0, 40\]/.test(server) && /'X-Loader-Opacity'/.test(server) && /'X-Loader-Blur'/.test(server), 'the server limits the loader opacity 0-100 and blur 0-40 and sends them with the picture');
-ok(/id="loaderBgOp"/.test(admin) && /id="loaderBgBlur"/.test(admin) && /id="saveLoaderBg"/.test(admin) && /loaderBgOpacity:\+\$\('loaderBgOp'\)\.value/.test(admin), 'admin can edit the loader picture opacity and blur');
+ok(/id="loaderBgFile"/.test(admin) && /wireCookieImageSlot\('loaderbg'/.test(admin), 'admin can upload and remove the round loader picture');
 ok(/localStorage\.setItem\(FX/.test(html) && /r\.headers\.get\('X-Loader-Opacity'\)/.test(html) && /function applyLoaderFx\(\)/.test(mod), 'the values are remembered for the first frame and follow the settings');
 ok(/#loadingScreen \.ld-txt\{position:relative;z-index:1;/.test(html), 'the word stays above the picture layer');
 ok(/window\._cookieAuthFired = true;\s*window\.dispatchEvent\(new CustomEvent\('snow-auth'/.test(html), 'the sign-in script records that it has announced who is signed in');

@@ -952,7 +952,7 @@ async function getHelpBanner() {
 // no longer its own screen with a backdrop; Account's new Download App row
 // (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
 // prompt directly, in user-src/original_module.js -- see its own comment.
-const COOKIE_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner', 'profilelogo', 'loaderbg', 'teamhero', 'sharehero', 'myhero', 'ruleshero'];
+const COOKIE_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner', 'profilelogo', 'loaderbg', 'teamhero', 'sharehero', 'myhero', 'ruleshero', 'avatar', 'recthumb'];
 const _cookieImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getCookieImage(slot) {
@@ -3278,7 +3278,7 @@ app.get('/team/members', async (req, res) => {
       snap.forEach(d => {
         const v = d.data();
         nextIds.push(d.id);
-        rows.push({ id: d.id, phoneMasked: maskDownlinePhone(v.phone), createdAt: v.createdAt || null, invested: finiteMoney(v.totalInvested) });
+        rows.push({ id: d.id, phoneMasked: maskDownlinePhone(v.phone), phoneRef: maskTeamPhone(v.phone), createdAt: v.createdAt || null, invested: finiteMoney(v.totalInvested), deposited: finiteMoney(v.totalDeposited), withdrawn: finiteMoney(v.totalWithdrawn) });
       });
       members = rows;
       parentIds = nextIds;
@@ -3792,8 +3792,8 @@ app.get('/public/cookie-images', async (req, res) => {
       getCookieImage('authhero'), getCookieImage('banner2'),
       getCookieImage('banner3'), getCookieImage('checkinbanner'), getCookieImage('profilelogo'),
     ]);
-    const [teamhero, sharehero, myhero, ruleshero] = await Promise.all(['teamhero', 'sharehero', 'myhero', 'ruleshero'].map(k => getCookieImage(k)));
-    publicJson(req, res, { status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, teamhero, sharehero, myhero, ruleshero }, IMAGE_CACHE);
+    const [teamhero, sharehero, myhero, ruleshero, avatar, recthumb] = await Promise.all(['teamhero', 'sharehero', 'myhero', 'ruleshero', 'avatar', 'recthumb'].map(k => getCookieImage(k)));
+    publicJson(req, res, { status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, teamhero, sharehero, myhero, ruleshero, avatar, recthumb }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -7140,8 +7140,8 @@ app.get('/admin/cookie-images', async (req, res) => {
       getCookieImage('authhero'), getCookieImage('banner2'),
       getCookieImage('banner3'), getCookieImage('checkinbanner'), getCookieImage('profilelogo'), getCookieImage('loaderbg'),
     ]);
-    const [teamhero, sharehero, myhero, ruleshero] = await Promise.all(['teamhero', 'sharehero', 'myhero', 'ruleshero'].map(k => getCookieImage(k)));
-    res.json({ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, loaderbg, teamhero, sharehero, myhero, ruleshero });
+    const [teamhero, sharehero, myhero, ruleshero, avatar, recthumb] = await Promise.all(['teamhero', 'sharehero', 'myhero', 'ruleshero', 'avatar', 'recthumb'].map(k => getCookieImage(k)));
+    res.json({ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, loaderbg, teamhero, sharehero, myhero, ruleshero, avatar, recthumb });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/cookie-image/set', async (req, res) => {
@@ -8426,6 +8426,13 @@ function maskDownlinePhone(phone) {
   if (d.startsWith('256')) d = d.slice(3);
   d = d.replace(/^0+/, '');
   return d.length < 7 ? '' : d.slice(0, 3) + '****' + d.slice(-4);
+}
+// The Team list prints a member as "256****884259": the dialling code, four stars, and the last six digits.
+function maskTeamPhone(phone) {
+  let d = String(phone || '').replace(/\D/g, '');
+  if (d.startsWith('256')) d = d.slice(3);
+  d = d.replace(/^0+/, '');
+  return d.length < 7 ? '' : '256****' + d.slice(-6);
 }
 // An admin action aimed at something that does not exist is a "not found", not a server error.
 const adminFailCode = e => /matched no document|not found/i.test(String((e && e.message) || '')) ? 404 : 500;

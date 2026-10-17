@@ -397,7 +397,7 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
      'the hardcoded "Withdrawal time: 06:00:00 - 17:00:00." line is gone');
   ck(!/There is no limit to the number of withdrawals/.test(mod),
      'and so is "There is no limit to the number of withdrawals"');
-  ck(/win\.enabled \? 'Withdrawal time: ' \+ esc\(secs\(win\.from\)\)/.test(mod), 'the hours line is built from the real setting');
+  ck(/Withdraw is open from \$\{win\.from\} to \$\{win\.to\}/.test(mod), 'the hours message is built from the real setting');
   ck(/One cash-out at a time/.test(mod), 'and the one-at-a-time rule is stated to the member');
 
   console.log('\n— admin can set it —');
