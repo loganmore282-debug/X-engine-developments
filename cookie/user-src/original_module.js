@@ -2114,14 +2114,19 @@ function applyAuthBackgrounds(){
     // falls back to the brand gradient (hero) or plain white (card).
     // The quotes matter: a data URL is fine unquoted, but a filename with a
     // bracket or a space would break the declaration silently.
-    root.style.setProperty('--auth-' + prefix + '-img',
+    // Each value is written only when it really changed: re-writing the same custom property restyles the whole page, and the picture
+    // (a large data address) must never be re-resolved when nothing about it changed.
+    const put = (name, val) => { window._authVars = window._authVars || {}; if (window._authVars[name] === val) return; window._authVars[name] = val; root.style.setProperty(name, val); };
+    put('--auth-' + prefix + '-img',
       image ? 'url("' + String(image).replace(/"/g, '\\"') + '")' : 'none');
     const op = Number(opacityPct);
-    root.style.setProperty('--auth-' + prefix + '-op',
+    put('--auth-' + prefix + '-op',
       String(Number.isFinite(op) ? Math.min(100, Math.max(0, op)) / 100 : 1));
     const bl = Number(blurPx);
-    root.style.setProperty('--auth-' + prefix + '-blur',
+    put('--auth-' + prefix + '-blur',
       (Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0) + 'px');
+    // A blur of 0 means no filter at all (a 0px blur still makes the browser keep a filter layer for the picture).
+    if (prefix === 'hero') put('--auth-hero-filter', Number.isFinite(bl) && bl > 0 ? 'blur(' + Math.min(40, bl) + 'px)' : 'none');
   }
   set('hero', STATE.authHeroImage, s.authHeroOpacity, s.authHeroBlur);
   { const mo = Number(s.myHeroOpacity), mb = Number(s.myHeroBlur);

@@ -2434,6 +2434,10 @@ body{background-attachment:fixed;}
 
 /* "Coming soon": the flat grey of the screenshot, white text */
 #pageHost .v-buy.v-soon{background:#bcbcc6;color:#fff;box-shadow:none;}
+
+/* The picture on Login / Create Account is its own steady layer: switching between the two forms must never repaint it or the screen around it */
+#authHeroBg{filter:var(--auth-hero-filter,none);will-change:transform;transform:translateZ(0);backface-visibility:hidden;}
+.ck-authlogo{will-change:transform;transform:translateZ(0);}
 </style>
 
 <script data-cookie-idle>
@@ -2631,6 +2635,13 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
   window.addEventListener('resize', sizeWallpaper, { passive: true });
 })();
 
+(function(){
+  /* The screen fades in once when it first appears; it never replays on its own afterwards (a replay shows the whole page, picture included, blinking). */
+  document.addEventListener('animationend', function(e){
+    var t = e.target;
+    if (t && (t.id === 'authScreen' || t.id === 'app') && e.animationName === 'ckFadeIn') t.style.animation = 'none';
+  }, true);
+})();
 </script>
 
 
