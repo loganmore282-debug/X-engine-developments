@@ -2379,6 +2379,15 @@ body{background-attachment:fixed;}
 /* The title sits across the whole header; it must never take the tap meant for the back arrow */
 .sheet-head h2,.ck-hd h1{pointer-events:none;}
 .sheet-head .back,.ck-hd .ck-back{z-index:3;}
+
+/* Each figure row is ONE line: the label, then the value. A long pair (7-digit amounts) is set a little smaller instead of wrapping. */
+#pageHost .v-rows dt,#pageHost .v-rows dd,.ck-oc-rows dt,.ck-oc-rows dd,.ck-oc-cd span,.ck-oc-cd b{white-space:nowrap;}
+#pageHost .v-rows>div{gap:4px;}
+#pageHost .v-rows.tight dt{font-size:11.9px;}
+#pageHost .v-rows.tight dd{font-size:12.4px;}
+.ck-oc-rows>div{gap:4px;}
+.ck-oc-rows.tight dt{font-size:8.9px;}
+.ck-oc-rows.tight dd{font-size:9.2px;}
 </style>
 
 <script data-cookie-idle>
