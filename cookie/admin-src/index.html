@@ -2850,7 +2850,7 @@ async function renderBanners(){
 
     <h2 class="sec">Balance count-up speed</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">When a member opens Deposit or Withdraw, the Available / Balance figure counts up to the real amount. How many seconds that takes.</p>
+      <p class="muted" style="margin-top:0">When a member opens Deposit or Withdraw, the Available / Balance figure counts up to the real amount, and the Pay / Withdraw button counts up to the amount typed. How many seconds each count takes.</p>
       <label>Seconds (1&ndash;15)</label><input id="balCountSecs" type="number" min="1" max="15" step="1" value="${esc(v('balanceCountSeconds',3))}">
       <button class="btn block" id="saveBalCount" style="margin-top:10px">Save count-up speed</button>
     </div>

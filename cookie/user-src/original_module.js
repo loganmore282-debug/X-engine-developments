@@ -1242,7 +1242,7 @@ function ckTween(el, to, fmt, ms){
   };
   el._raf = requestAnimationFrame(step);
 }
-// How long the Available / Balance figure takes to count up: the admin's setting (seconds), 3 by default.
+// How long the Available / Balance figure, and the Pay / Withdraw buttons as an amount is typed, take to count: the admin's setting (seconds), 3 by default.
 function ckBalanceMs(){ return Math.min(15000, Math.max(1000, (Number((STATE.settings || {}).balanceCountSeconds) || 3) * 1000)); }
 var _apiPending = new Map();
 function api(path, opts){
@@ -5507,7 +5507,7 @@ function syncDepositQuickAmt(){
   const val = parseMoneyInput(($('depAmount') || {}).value);
   _depChosenAmount = val;
   const payBtn = $('depSubmitBtn');
-  if (payBtn && !payBtn.disabled) ckTween(payBtn, val > 0 ? val : 0, v => 'Pay ' + numGroup(Math.round(v), false), 380);
+  if (payBtn && !payBtn.disabled) ckTween(payBtn, val > 0 ? val : 0, v => 'Pay ' + numGroup(Math.round(v), false), ckBalanceMs());
   const chips = $('depChips');
   if (chips) chips.querySelectorAll('.dep-chip').forEach(btn => btn.classList.toggle('sel', Number(btn.dataset.amt) === val));
 }
@@ -6009,7 +6009,7 @@ window.syncWithdrawReceiveAmt = function(){
   const amount = parseMoneyInput(($('witAmount') || {}).value);
   const got = amount > 0 ? amount - Math.round(amount * withdrawalFeePct(STATE.settings || {}) / 100) : 0;
   const btn = $('witSubmitBtn');
-  if (btn && !btn.disabled) ckTween(btn, got, v => 'Withdraw ' + numGroup(Math.round(v), false), 380);
+  if (btn && !btn.disabled) ckTween(btn, got, v => 'Withdraw ' + numGroup(Math.round(v), false), ckBalanceMs());
   const rc = $('witReceive'); if (rc) rc.textContent = ckNum(got);
 };
 // Transaction Statement (openBalanceRecordSheet()) is cache-first: it paints from
