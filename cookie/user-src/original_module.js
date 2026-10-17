@@ -1883,6 +1883,10 @@ function applyBootArtwork(ai, ci){
   STATE.announcementImage = (ai && ai.status === 'success' && ai.image) ? ai.image : null;
   STATE.brandLogo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
   STATE.profileLogo = (ci.status === 'success' && ci.profilelogo) ? ci.profilelogo : null;
+  STATE.teamHero = (ci.status === 'success' && ci.teamhero) ? ci.teamhero : null;
+  STATE.shareHero = (ci.status === 'success' && ci.sharehero) ? ci.sharehero : null;
+  STATE.myHero = (ci.status === 'success' && ci.myhero) ? ci.myhero : null;
+  STATE.rulesHero = (ci.status === 'success' && ci.ruleshero) ? ci.ruleshero : null;
   syncBrandLogoImages();
   // Home's banner carousel, slides 2 and 3 (slide 1 is STATE.homeBanner,
   // fetched separately above -- it predates the carousel). Filtered to
@@ -1900,7 +1904,14 @@ function applyBootArtwork(ai, ci){
   applyAuthBackgrounds();
   // Repaint Home for the banner and animated profile artwork. The brand-logo
   // nodes are patched in place above; other art consumers render on open.
-  try { if (STATE.page === 'home' && $('app') && $('app').style.display !== 'none') paintHome(); } catch (_) {}
+  try {
+    if ($('app') && $('app').style.display !== 'none') {
+      if (STATE.page === 'home') paintHome();
+      else if (STATE.page === 'share') paintShare();
+      else if (STATE.page === 'account') renderAccount();
+      else if (STATE.page === 'network') paintNetwork();
+    }
+  } catch (_) {}
 }
 // The brand logo is fetched with the other large artwork in the background,
 // so Auth, Home, or Account may already be visible when it arrives. Patch the

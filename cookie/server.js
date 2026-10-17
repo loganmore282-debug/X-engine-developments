@@ -952,7 +952,7 @@ async function getHelpBanner() {
 // no longer its own screen with a backdrop; Account's new Download App row
 // (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
 // prompt directly, in user-src/original_module.js -- see its own comment.
-const COOKIE_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner', 'profilelogo', 'loaderbg'];
+const COOKIE_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner', 'profilelogo', 'loaderbg', 'teamhero', 'sharehero', 'myhero', 'ruleshero'];
 const _cookieImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getCookieImage(slot) {
@@ -3792,7 +3792,8 @@ app.get('/public/cookie-images', async (req, res) => {
       getCookieImage('authhero'), getCookieImage('banner2'),
       getCookieImage('banner3'), getCookieImage('checkinbanner'), getCookieImage('profilelogo'),
     ]);
-    publicJson(req, res, { status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo }, IMAGE_CACHE);
+    const [teamhero, sharehero, myhero, ruleshero] = await Promise.all(['teamhero', 'sharehero', 'myhero', 'ruleshero'].map(k => getCookieImage(k)));
+    publicJson(req, res, { status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, teamhero, sharehero, myhero, ruleshero }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -7139,7 +7140,8 @@ app.get('/admin/cookie-images', async (req, res) => {
       getCookieImage('authhero'), getCookieImage('banner2'),
       getCookieImage('banner3'), getCookieImage('checkinbanner'), getCookieImage('profilelogo'), getCookieImage('loaderbg'),
     ]);
-    res.json({ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, loaderbg });
+    const [teamhero, sharehero, myhero, ruleshero] = await Promise.all(['teamhero', 'sharehero', 'myhero', 'ruleshero'].map(k => getCookieImage(k)));
+    res.json({ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, loaderbg, teamhero, sharehero, myhero, ruleshero });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/cookie-image/set', async (req, res) => {

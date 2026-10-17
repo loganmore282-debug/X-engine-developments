@@ -15,7 +15,7 @@ ok(/ld-txt\{[^}]*font-family:'Noto Serif'[^}]*font-size:24px[^}]*letter-spacing:
 ok(/ld-txt\{[^}]*color:#fff/.test(html), 'colour stays white (not specified by the owner)');
 ok(/\.sr-only\{/.test(html), 'the screen-reader word is hidden');
 ok(/body\.sheet-open \.sheet-bg\{bottom:var\(--nav-h\);\}/.test(html), 'secondary pages end above the bottom navigation');
-ok(/'profilelogo', 'loaderbg'\]/.test(server) && /app\.get\('\/public\/loader-image'/.test(server), 'server stores and serves the loader picture');
+ok(/'profilelogo', 'loaderbg'/.test(server) && /app\.get\('\/public\/loader-image'/.test(server), 'server stores and serves the loader picture');
 ok(/id="loaderBgFile"/.test(admin) && /wireCookieImageSlot\('loaderbg'/.test(admin), 'admin can upload and remove it');
 const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
 ok(/type="password"/.test(html) && /ckToggleEye/.test(html), 'password fields are masked and have the show/hide eye of the screenshots');
