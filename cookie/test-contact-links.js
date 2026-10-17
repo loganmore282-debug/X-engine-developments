@@ -19,11 +19,9 @@ let n = 0; const eq2 = (a, b, m) => { n++; assert.equal(a, b, m); }; const ok = 
 (async () => {
   await new Promise(r => setTimeout(r, 30));
   w.eval('STATE.page="home";STATE.announcementImage="data:image/png;base64,AAAA";STATE.settings={annTitle:"Hello",annBody:"Body",whatsappGroup:"https://chat.whatsapp.com/abc",telegramGroup:"https://t.me/grp",supportTelegram:"https://t.me/agent",supportEmail:"help@x.com",supportHours:"8-5"}');
-  w.maybeShowAnnouncement();
-  ok(!d.getElementById('annBg').classList.contains('show'), 'the dialog does not appear at once: it waits for the loading box and then 1.5 seconds');
-  await new Promise(r => setTimeout(r, 1000));
-  ok(!d.getElementById('annBg').classList.contains('show'), 'still waiting 1 second in');
-  await new Promise(r => setTimeout(r, 1100));
+  w.ckExpectLoad(); w.maybeShowAnnouncement();
+  ok(!d.getElementById('annBg').classList.contains('show'), 'the dialog waits for the loading box to finish');
+  await new Promise(r => setTimeout(r, 1300));
   const sheet = d.getElementById('annSheet');
   ok(d.getElementById('annBg').classList.contains('show'), 'dialog opens with an admin picture');
   ok(sheet.querySelector('img.ck-ann-img') && sheet.querySelector('img').getAttribute('src') === 'data:image/png;base64,AAAA', 'the banner is the admin upload');

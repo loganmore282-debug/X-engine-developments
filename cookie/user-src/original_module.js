@@ -3132,14 +3132,14 @@ window.closeAnnouncement = function(){
 // The announcement is one portrait picture (uploaded in the admin panel) with
 // Join Channel and Close under it. Join Channel opens the Telegram group link,
 // or the WhatsApp group link when no Telegram group is set.
-// The announcement waits for the loading box to finish, then appears 1.5 seconds later.
+// The announcement waits for the loading box to finish, then appears straight away.
 var _annPending = false;
 function maybeShowAnnouncement(){
   if (_annPending) return;
   _annPending = true;
   const go = () => {
     if (_ckLoadCount > 0 || _ckLoadHideTimer || Date.now() < _ckLoadUntil) { setTimeout(go, 120); return; }
-    setTimeout(() => { _annPending = false; if (!isAnyOverlayOpen()) showAnnouncementNow(); }, 1500);
+    _annPending = false; if (!isAnyOverlayOpen()) showAnnouncementNow();
   };
   go();
 }
