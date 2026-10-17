@@ -35,10 +35,8 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
    It installs packages, asks (hidden) for the MongoDB connection string and CHECKS it connects, asks for the admin password, writes
    `/srv/mint-secrets/secrets.local.js`, starts pm2 `mint-server`, and tests `/health`.
 3. Later, updates until Mint has its own domain: `bash /srv/mint-src/mint/deploy/quick-update.sh` (restarts only Mint).
-4. With a domain: `deploy/update-vps.sh` (nginx + HTTPS + hardening), `deploy/make-hook-url.sh` (PesaJet webhook), and the GitHub
-   webhook to `https://<app host>/k7x2/deploy/webhook` with `DEPLOY_WEBHOOK_SECRET` from the secrets file. Hosts are placeholders
-   (`app.mint.example.com`, `admin.mint.example.com`, `hook.mint.example.com`) until the owner buys the domain; admin path `Desk4mx9`.
-   Set real hosts via `MINT_APP_HOST` / `MINT_ADMIN_HOST` (see `update-vps.sh`) or `deploy/change-app-host.sh`.
+4. **Domain (not bought yet; names are NOT decided).** The hosts inside the code (`app.mint.example.com` ...) are placeholders and `update-vps.sh` refuses to run until a real domain is set. When the owner has one:
+   `bash /srv/mint-src/mint/deploy/set-domain.sh yourdomain.com` -- it prints the two DNS A records to add (`app` and a random hidden admin label, remembered in `/srv/mint-secrets/admin-host`), changes NOTHING until they point at the VPS, then writes `/srv/mint-secrets/app-host`, runs `update-vps.sh` (nginx `mint.conf`, HTTPS certificate named after the app host, Mint restart, hardening), sets `PUBLIC_URL`, and prints the app and admin addresses (admin path `Desk4mx9`). Root domain is not served (Soda layout). The admin panel's "allowed domains" setting only matters for cross-origin calls; the app and panel call `/k7x2` on their own origin, so nginx + certificate (this command) is what makes a domain work. Afterwards: GitHub webhook to `https://<app host>/k7x2/deploy/webhook` with `DEPLOY_WEBHOOK_SECRET`, and PesaJet via `deploy/make-hook-url.sh`.
 
 ## Status
 1. (done) Copied from Soda, renamed to Mint, ports 3002/8092/8093, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path.
