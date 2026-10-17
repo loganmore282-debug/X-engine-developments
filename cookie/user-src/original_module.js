@@ -1190,7 +1190,7 @@ function ckLoadBegin(){
   _ckLoadCount++;
   // A read that never answers (no signal, server down) must not leave the box on screen: it goes after 12 seconds.
   if (_ckLoadGuard) clearTimeout(_ckLoadGuard);
-  _ckLoadGuard = setTimeout(() => { _ckLoadGuard = null; _ckLoadCount = 0; const b = document.getElementById('ckBox'); if (b && b.classList.contains('ck-box-load')) b.classList.remove('show'); }, 12000);
+  _ckLoadGuard = setTimeout(() => { _ckLoadGuard = null; _ckLoadCount = 0; _ckAuthBox = false; const b = document.getElementById('ckBox'); if (b && b.classList.contains('ck-box-load')) b.classList.remove('show'); }, 12000);
   if (_ckLoadCount !== 1) return;
   if (_ckLoadHideTimer) { clearTimeout(_ckLoadHideTimer); _ckLoadHideTimer = null; }
   if (_ckOkTimer) { clearTimeout(_ckOkTimer); _ckOkTimer = null; }

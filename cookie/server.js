@@ -3289,8 +3289,14 @@ app.get('/team/members', async (req, res) => {
       members = rows;
       parentIds = nextIds;
     }
+    // Newest first (the Team page lists the latest sign-ups at the top), and never more than 2000 rows in one answer: a very large
+    // team would otherwise send every member's row on every open and every 15-second refresh.
+    const when = v => tsMillis(v) || Date.parse(v) || 0;
+    members.sort((x, y) => when(y.createdAt) - when(x.createdAt));
+    const truncated = members.length > 2000;
+    if (truncated) members = members.slice(0, 2000);
     // (The old per-member 'active' flag was dropped: no screen reads it, and it cost a query on every 15-second refresh.)
-    res.json({ status: 'success', level, members });
+    res.json({ status: 'success', level, members, truncated });
   } catch (e) {
     console.error('Team members error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not load your team' });
