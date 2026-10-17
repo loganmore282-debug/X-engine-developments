@@ -3165,7 +3165,7 @@ function showAnnouncementNow(){
   sheet.innerHTML = `
     <button class="ck-ann-x" type="button" aria-label="Close" onclick="closeAnnouncement()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <div class="ck-ann-in">
-    ${STATE.announcementImage ? `<img class="ck-ann-img" src="${esc(STATE.announcementImage)}" alt="">` : ''}
+    ${STATE.announcementImage ? (link ? `<a class="ck-ann-bn" href="${esc(link)}" target="_blank" rel="noopener" onclick="closeAnnouncement()"><img class="ck-ann-img" src="${esc(STATE.announcementImage)}" alt=""></a>` : `<img class="ck-ann-img" src="${esc(STATE.announcementImage)}" alt="">`) : ''}
     <h2 class="ck-ann-h">${esc(title)}</h2>
     <div class="ck-ann-t">${rows.map(r => `<div>${esc(r)}</div>`).join('')}</div>
     <p class="ck-ann-p">${esc(para)}</p>

@@ -32,6 +32,8 @@ let n = 0; const eq2 = (a, b, m) => { n++; assert.equal(a, b, m); }; const ok = 
   eq2(sheet.querySelector('.ck-ann-join').textContent.trim(), 'Join Group', 'the button says Join Group');
   eq2(sheet.querySelector('.ck-ann-join').getAttribute('href'), 'https://t.me/grp', 'Join Group = Telegram group');
   ok(!!sheet.querySelector('.ck-ann-x'), 'the red close cross is there');
+  eq2(sheet.querySelector('a.ck-ann-bn').getAttribute('href'), 'https://t.me/grp', 'tapping the customer service banner opens the Telegram group');
+  ok(!/closeAnnouncement/.test(d.getElementById('annBg').getAttribute('onclick') || ''), 'tapping the empty area around the dialog does not close it');
   ok(!/mailto|Email|WhatsApp/i.test(sheet.innerHTML), 'no email or WhatsApp button');
   w.eval('STATE.settings.telegramGroup=""'); w.showAnnouncementNow();
   eq2(d.querySelector('#annSheet .ck-ann-join').getAttribute('href'), 'https://chat.whatsapp.com/abc', 'no Telegram group -> WhatsApp group');
