@@ -22,9 +22,9 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   // Wallet: one saved row is shown, prefilled, with no delete control anywhere.
   w.eval('STATE.bankAccounts=[{id:"b1",network:"MTN Mobile Money",phone:"256769968158",holder:"Jane Doe"}]');
   w.eval('openSheet("Wallet","");renderWalletSheet()');
-  ok(/Real Name : JANE DOE/.test(d.querySelector('#walCardBox').textContent), 'the black card shows the saved real name');
+  ok(/Real Name : Jane Doe/.test(d.querySelector('#walCardBox').textContent), 'the black card shows the saved real name');
   ok(!/deleteWallet|Delete wallet/.test(d.getElementById('sheetBody').innerHTML), 'no delete / bin control');
-  ok(d.getElementById('walProvider').value === 'MTN' && d.getElementById('walPhone').value === '0769968158' && d.getElementById('walHolder').value === 'JANE DOE', 'the form edits the saved wallet in place');
+  ok(d.getElementById('walProvider').value === 'MTN' && d.getElementById('walPhone').value === '0769968158' && d.getElementById('walHolder').value === 'Jane Doe', 'the form edits the saved wallet in place');
   ok(d.getElementById('walSaveBtn').textContent === 'Confirm', 'the button says Confirm');
   ok([...d.querySelectorAll('.ck-lab')].map(e => e.textContent).join('|') === 'Real Name|Wallet|Wallet Account', 'fields: Real Name, Wallet, Wallet Account');
   ok(typeof w.deleteWallet === 'undefined', 'deleteWallet is gone');

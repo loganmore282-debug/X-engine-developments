@@ -2198,7 +2198,7 @@ body{background-attachment:fixed;}
 .ck-in input{padding:0 11px;}
 .ck-in input::placeholder{color:#7d7d7d;font-weight:500;}
 #walFormGroup .ck-lab:first-child{margin-top:10px;}
-#walHolder{color:#0b57d0;font-weight:700;text-transform:uppercase;}
+#walHolder,#walPhone{color:#1559b8;font-weight:500;text-transform:none;}
 .ck-bind .prov-input.ck-in{height:46px;border:2px solid #1259c8;border-radius:5px;box-shadow:none;}
 .ck-bind .prov-input.ck-in input{height:42px;}
 .ck-bcard{height:auto;min-height:119px;flex-direction:column;justify-content:flex-end;align-items:stretch;padding:22px 20px 24px;}
@@ -2406,6 +2406,22 @@ body{background-attachment:fixed;}
 #authScreen .va-ic.va-gift+input{padding-left:11.4px;}
 
 #pageHost .v-card-img .v-badge{right:auto;width:auto;}
+
+/* Bind page card: the wallet, its number (shown in full, never hidden), then the real name */
+.ck-bcard-a{font-size:17.6px;line-height:26px;color:#fff;letter-spacing:.01em;text-shadow:0 1px 2px rgba(0,0,0,.6);}
+.ck-bcard-a:empty{display:none;}
+.ck-bcard:has(.ck-bcard-a:not(:empty)){min-height:170px;justify-content:flex-start;padding-top:25.5px;}
+.ck-bcard:has(.ck-bcard-a:not(:empty)) .ck-bcard-a{margin-top:3.5px;}
+.ck-bcard:has(.ck-bcard-a:not(:empty)) .ck-bcard-n{margin-top:43.5px;}
+
+/* Withdraw page: the wallet rows show their values in full, left-aligned in one column; the instructions below use the serif of the screenshots */
+.ck-wrow{justify-content:flex-start;}
+.ck-wrow span{flex:0 0 130px;}
+.ck-wrow em{font-size:13.5px;color:#171717;}
+.ck-wnotes{margin-top:16px;}
+.ck-wnotes p{font-family:var(--ck-serif);font-size:13.4px;line-height:19.5px;padding-right:8px;margin-bottom:15px;}
+.ck-wnotes p:not(.r){color:#0a6590;}
+.ck-wnotes p.r{color:#d3161b;font-weight:700;}
 </style>
 
 <script data-cookie-idle>

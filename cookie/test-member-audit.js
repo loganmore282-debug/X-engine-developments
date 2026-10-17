@@ -71,7 +71,7 @@ async function main(){
   setState();
   const bank=deferred();w.api=()=>bank.promise;
   const opened=w.openWithdrawSheet();
-  const input=d.querySelector('#witAmount');input.value='15,000';input.focus();w.syncWithdrawReceiveAmt();
+  const input=d.querySelector('#witAmount');input.value='15,000';input.focus();w.syncWithdrawReceiveAmt();await new Promise(r=>setTimeout(r,600));
   assert.equal(d.querySelector('#witSubmitBtn').textContent,'Withdraw 15,000','the Withdraw button shows the amount typed (what the member receives) live');
   bank.resolve({status:'success',accounts:[{id:'wallet',network:'MTN Mobile Money',phone:'256771234567',holder:'Test Member'}]});await opened;
   assert.equal(d.querySelector('#witAmount'),input);assert.equal(input.value,'15,000');

@@ -1226,6 +1226,22 @@ window.ckSuccessToast = function(text){
   };
   _ckOkPoll = setTimeout(tick, 120);
 };
+// A figure that counts up (or down) to its value instead of jumping: the Available balance when Deposit/Withdraw open, and the Pay / Withdraw
+// buttons as the amount is typed.
+function ckTween(el, to, fmt, ms){
+  if (!el) return;
+  if (el._raf) { cancelAnimationFrame(el._raf); el._raf = 0; }
+  const from = Number.isFinite(el._v) ? el._v : 0;
+  if (from === to || typeof requestAnimationFrame !== 'function') { el.textContent = fmt(to); el._v = to; return; }
+  const t0 = performance.now();
+  const step = now => {
+    const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+    const v = k >= 1 ? to : from + (to - from) * e;
+    el.textContent = fmt(v); el._v = v;
+    if (k < 1) el._raf = requestAnimationFrame(step); else el._raf = 0;
+  };
+  el._raf = requestAnimationFrame(step);
+}
 var _apiPending = new Map();
 function api(path, opts){
   const tracked = Date.now() < _ckLoadUntil && !(opts && (opts.body || opts.signal || (opts.method && opts.method !== 'GET')));
@@ -4418,7 +4434,8 @@ function vWalletCardHtml(w){
   return `<div class="ck-bcard">
     <span class="ck-chip" aria-hidden="true">${CK_CHIP}</span>
     <div class="ck-bcard-w">${w ? esc(walShort(w.network)) : ''}</div>
-    <div class="ck-bcard-n">Real Name : ${w ? esc(String(w.holder || '').toUpperCase()) : ''}</div>
+    <div class="ck-bcard-a">${w ? esc(walletDestDisplay(w)) : ''}</div>
+    <div class="ck-bcard-n">Real Name : ${w ? esc(String(w.holder || '')) : ''}</div>
   </div>`;
 }
 function walletCardHtml(w){ return vWalletCardHtml(w); }
@@ -4462,7 +4479,8 @@ function prefillWallet(){
   if (prov && !prov.value) { prov.value = walShort(w.network); prov.dataset.network = w.network; }
   applyWalDestKind(!isMobileMoneyNetwork(w.network));
   if (ph && !ph.value) ph.value = walletDestDisplay(w);
-  if (holder && !holder.value) holder.value = String(w.holder || '').toUpperCase();
+  if (ph) walCardNum(ph.value);
+  if (holder && !holder.value) holder.value = String(w.holder || '');
 }
 // Only the card, the heading and the "Your Wallet" rows: the typed fields are never touched.
 function paintWalletParts(){
@@ -4478,7 +4496,7 @@ function renderWalletSheet(){
     <div id="walCardBox">${vWalletCardHtml(w)}</div>
     <div id="walFormGroup">
       <label class="ck-lab" for="walHolder">Real Name</label>
-      <div class="ck-in"><input id="walHolder" type="text" maxlength="60" autocomplete="name" enterkeyhint="next" placeholder="Enter real name" value="${w ? esc(String(w.holder || '').toUpperCase()) : ''}" oninput="walCardName(this.value)"></div>
+      <div class="ck-in"><input id="walHolder" type="text" maxlength="60" autocomplete="name" enterkeyhint="next" placeholder="Enter real name" value="${w ? esc(String(w.holder || '')) : ''}" oninput="walCardName(this.value)"></div>
       <label class="ck-lab" for="walProvider">Wallet</label>
       <div class="prov-pick" id="walProviderPick">
         <div class="ck-in prov-input"><input id="walProvider" type="text" autocomplete="off" placeholder="Select wallet" oninput="filterProviders()" onfocus="openProviderList()"></div>
@@ -4493,7 +4511,8 @@ function renderWalletSheet(){
   prefillWallet();
 }
 window.walCardWallet = function(name){ const n = document.querySelector('#walCardBox .ck-bcard-w'); if (n) n.textContent = walShort(name || ''); };
-window.walCardName = function(v){ const n = document.querySelector('#walCardBox .ck-bcard-n'); if (n) n.textContent = 'Real Name : ' + String(v || '').toUpperCase(); };
+window.walCardNum = function(v){ const n = document.querySelector('#walCardBox .ck-bcard-a'); if (n) n.textContent = String(v || ''); };
+window.walCardName = function(v){ const n = document.querySelector('#walCardBox .ck-bcard-n'); if (n) n.textContent = 'Real Name : ' + String(v || ''); };
 window.openProviderList = function(){ const box = $('walProviderPick'); if (box) box.classList.add('open'); };
 window.filterProviders = function(){
   const inp = $('walProvider'); if (!inp) return;
@@ -4522,9 +4541,10 @@ window.pickProvider = function(name){
   }
 };
 window.handleWalDestInput = function(el){
-  if (isMobileMoneyNetwork(walNetwork())) { sanitizePhoneInput(el); return; }
+  if (isMobileMoneyNetwork(walNetwork())) { sanitizePhoneInput(el); walCardNum(el.value); return; }
   // A bank account number is letters and digits only (what the server accepts); anything else typed is dropped as it is typed.
   if (/[^A-Za-z0-9]/.test(el.value)) el.value = el.value.replace(/[^A-Za-z0-9]/g, '');
+  walCardNum(el.value);
 };
 // Tapping anywhere else closes it, the way a real picker behaves. Bound once
 // on the document rather than per-render so repainting the panel cannot leave
@@ -5358,7 +5378,7 @@ function openDepositFormSheet(){
   const hot = '<svg class="ck-hot" viewBox="0 0 64 63" aria-hidden="true"><path fill="#fff" fill-rule="evenodd" d="M31.6 62.0C29.8 61.9 30.2 62.1 26.1 58.1L22.5 54.5L17.5 54.5C12.6 54.5 12.6 54.5 12.2 54.3C12.0 54.1 11.6 54.0 11.3 53.9C10.8 53.7 10.6 53.6 10.1 53.0C9.7 52.6 9.4 52.2 9.4 52.1C9.3 52.0 9.3 51.6 9.2 51.4C9.1 51.1 9.1 48.9 9.1 46.2C9.1 42.2 9.1 41.4 8.9 41.1C8.8 40.9 7.7 39.7 5.6 37.5C2.4 34.3 2.0 33.9 1.3 32.6C1.1 32.2 1.0 30.8 1.2 30.2C1.3 30.0 1.4 29.7 1.6 29.5C1.7 29.3 1.9 28.9 2.0 28.7C2.1 28.4 2.7 27.7 5.5 24.9C8.3 22.1 8.9 21.4 9.0 21.1C9.1 20.9 9.1 18.6 9.1 16.0C9.1 10.0 9.1 9.7 10.1 9.1C10.3 9.0 10.8 8.7 11.1 8.5L11.6 8.2L17.0 8.1C19.9 8.1 22.4 8.0 22.4 8.0C22.4 8.0 23.9 6.5 25.8 4.6C28.2 2.2 29.2 1.2 29.6 1.1C30.0 0.9 30.3 0.6 30.3 0.2C30.3 0.0 30.3 0.0 32.2 0.0C34.1 0.0 34.1 0.0 34.3 0.3C34.7 0.9 41.8 7.8 42.1 7.9C42.4 8.1 43.3 8.1 47.7 8.1C51.9 8.1 52.9 8.1 53.1 8.2C53.5 8.4 54.9 9.9 55.0 10.2C55.1 10.4 55.1 10.8 55.1 11.1C55.1 11.5 55.2 11.8 55.3 12.0C55.4 12.3 55.4 12.7 55.5 16.5C55.5 22.0 55.1 21.1 58.8 24.9C60.4 26.4 61.8 28.0 62.0 28.2C62.1 28.4 62.4 28.8 62.5 28.9C62.8 29.2 63.0 29.7 63.0 30.2C63.0 30.3 63.1 30.7 63.2 30.9C63.5 31.4 63.5 31.4 63.3 31.7C63.1 31.9 63.0 32.3 62.9 32.6C62.7 33.2 62.7 33.3 59.1 36.9L55.5 40.5L55.5 45.6C55.5 50.8 55.5 50.8 55.1 51.4C54.9 51.8 54.6 52.3 54.5 52.5C54.3 52.7 54.0 53.1 53.9 53.3C53.6 53.8 53.2 54.0 52.0 54.1C51.5 54.1 51.0 54.2 50.8 54.3C50.5 54.5 50.1 54.5 46.4 54.5C42.1 54.5 42.1 54.5 41.2 55.0C41.0 55.0 39.4 56.6 37.5 58.4C34.1 61.8 33.8 62.1 33.0 62.1C32.9 62.1 32.3 62.0 31.6 62.0ZM33.7 36.9C34.7 36.9 34.7 36.9 35.1 36.5C35.3 36.4 35.7 36.2 35.9 36.1C36.3 36.0 36.6 35.8 37.2 35.2C37.9 34.5 37.9 34.5 38.0 33.9C38.1 33.5 38.2 33.1 38.4 32.8C38.7 32.3 38.7 30.9 38.4 30.1C38.3 29.8 38.2 29.3 38.2 29.0C38.2 28.3 37.9 27.8 36.9 26.8C36.3 26.3 36.0 26.1 35.7 26.0C35.5 25.9 35.1 25.8 34.9 25.7C34.7 25.5 34.4 25.4 34.0 25.4C33.6 25.4 33.1 25.3 32.9 25.2C32.5 25.1 32.4 25.1 32.1 25.2C32.0 25.2 31.6 25.4 31.4 25.5C31.1 25.6 30.5 25.8 30.1 25.9C29.2 26.2 28.7 26.6 27.9 27.8C27.4 28.5 27.4 28.6 27.4 29.0C27.5 29.3 27.4 29.6 27.3 29.9C27.1 30.4 27.1 30.7 27.1 32.0C27.1 33.6 27.1 33.6 27.6 34.3C27.9 34.7 28.1 35.0 28.2 35.0C28.3 35.0 28.8 35.5 29.1 35.9C29.4 36.3 32.1 37.2 32.5 37.0C32.6 37.0 33.1 37.0 33.7 36.9ZM17.8 36.6C18.0 36.3 18.1 36.1 18.1 34.4C18.2 32.1 18.1 32.2 19.8 32.2C21.7 32.3 21.7 32.4 21.8 34.8C21.9 37.0 21.8 36.9 23.6 36.9C25.2 36.8 25.2 37.0 25.2 34.4C25.3 31.2 25.2 26.0 25.1 25.7C24.9 25.5 24.5 25.4 23.4 25.4C22.5 25.4 22.5 25.4 22.2 25.7C21.9 26.0 21.7 26.7 21.8 27.6C21.9 29.0 21.4 29.4 19.7 29.5C19.1 29.5 18.6 29.5 18.5 29.4C18.2 29.2 18.1 28.7 18.1 27.6C18.1 25.6 18.0 25.4 16.5 25.4C15.3 25.4 14.9 25.6 14.6 26.1C14.4 26.4 14.4 26.8 14.4 31.1C14.5 35.8 14.5 35.8 14.7 36.2C15.1 36.8 15.2 36.9 16.5 36.9C17.6 36.9 17.6 36.8 17.8 36.6ZM46.0 36.6C46.2 36.4 46.2 36.2 46.2 32.9C46.2 30.4 46.2 29.2 46.3 29.0C46.5 28.4 46.8 28.3 48.0 28.2C49.4 28.2 49.6 28.1 49.7 27.8C50.0 27.3 49.9 25.8 49.6 25.5C49.6 25.4 49.4 25.4 49.3 25.4C49.2 25.4 47.1 25.4 44.6 25.4C40.2 25.5 40.2 25.5 39.8 25.7C39.2 26.0 39.1 26.3 39.1 27.0C39.1 27.6 39.3 28.1 39.6 28.1C39.7 28.2 40.3 28.2 41.0 28.2C42.2 28.3 42.3 28.3 42.6 28.7C42.7 28.9 42.8 29.3 42.8 32.7C42.8 34.8 42.9 36.5 42.9 36.6C43.1 36.8 43.5 36.9 44.6 36.9C45.7 36.9 45.8 36.8 46.0 36.6ZM31.9 33.9C31.0 32.9 30.4 31.7 30.5 30.8C30.6 30.1 31.1 29.0 31.5 28.6C31.9 28.2 32.5 28.2 33.1 28.4C33.4 28.5 33.6 28.6 33.9 28.5C34.5 28.5 34.7 28.7 35.0 29.7C35.1 30.3 35.1 30.5 35.0 31.0C35.0 31.3 34.9 31.8 34.9 32.2C34.9 32.8 34.8 33.2 34.4 33.5C34.2 33.8 32.8 34.5 32.6 34.5C32.6 34.5 32.2 34.2 31.9 33.9Z"/></svg>';
   openSheet('Deposit', `<div class="ck-dep">
     <div class="ck-card ck-amtcard">
-      <div class="ck-balrow"><span>Available：</span><b>${esc(cur())}</b><i>${esc(numGroup(bal, true))}</i></div>
+      <div class="ck-balrow"><span>Available：</span><b>${esc(cur())}</b><i id="depBalance">${esc(numGroup(0, true))}</i></div>
       <label class="ck-amtbox"><b>${esc(cur())}</b><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Please enter the Deposit amount" oninput="this.value=this.value.replace(/[\s,]/g,'');syncDepositQuickAmt()" autocomplete="off"></label>
       <input id="depPhone" type="hidden" value="${esc(defaultPhone)}">
     </div>
@@ -5375,6 +5395,7 @@ function openDepositFormSheet(){
     </div>
   </div>`);
   $('sheetBg').classList.add('ck-dep-page');
+  { const b = $('depBalance'); if (b) { b._v = 0; ckTween(b, Number(bal) || 0, v => numGroup(v, true), 900); } }
 }
 // PAY-A / PAY-B / PAY-C are one gateway, three labels: the choice is only
 // the highlight, nothing else reads it.
@@ -5484,7 +5505,7 @@ function syncDepositQuickAmt(){
   const val = parseMoneyInput(($('depAmount') || {}).value);
   _depChosenAmount = val;
   const payBtn = $('depSubmitBtn');
-  if (payBtn && !payBtn.disabled) payBtn.textContent = 'Pay ' + numGroup(val > 0 ? val : 0, false);
+  if (payBtn && !payBtn.disabled) ckTween(payBtn, val > 0 ? val : 0, v => 'Pay ' + numGroup(Math.round(v), false), 380);
   const chips = $('depChips');
   if (chips) chips.querySelectorAll('.dep-chip').forEach(btn => btn.classList.toggle('sel', Number(btn.dataset.amt) === val));
 }
@@ -5875,6 +5896,7 @@ window.openWithdrawSheet = async function(){
   // left a transparent-looking empty sheet over Home on a cold open.
   paintWithdrawSheet(s);
   $('sheetBg').classList.add('ck-wd-page');
+  { const b = $('witBalance'); if (b) { b._v = 0; ckTween(b, Number((STATE.account || {}).walletBalance) || 0, v => numGroup(v, true), 900); } }
   const amountField = $('witAmount');
   const r = await api('/bank/list');
   if (_openSheetTitle !== 'Withdraw' || $('witAmount') !== amountField) return;
@@ -5940,9 +5962,9 @@ function witWalletBlockHtml(s){
   const w = witSelectedWallet();
   const gear = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
   return `<div id="witWallet" class="ck-wrows">
-      <div class="ck-wrow"><span>Real Name</span><em>${w ? esc(String(w.holder || '').toUpperCase()) : ''}</em></div>
+      <div class="ck-wrow"><span>Real Name</span><em>${w ? esc(String(w.holder || '')) : ''}</em></div>
       <div class="ck-wrow"><span>Wallet</span><em>${w ? esc(walShort(w.network)) : ''}</em></div>
-      <div class="ck-wrow"><span>Wallet Account</span><em>${w ? esc(maskedTail(w.phone)) : ''}</em></div>
+      <div class="ck-wrow"><span>Wallet Account</span><em>${w ? esc(walletDestDisplay(w)) : ''}</em></div>
     </div>
     <button id="witBindBtn" class="ck-bindbtn" type="button" onclick="openWalletSheet()">${gear}<span>Bind Wallet Card</span></button>`;
 }
@@ -5954,7 +5976,7 @@ function paintWithdrawSheet(s){
     <div class="ck-card ck-wdcard">
       <div class="ck-wdlab">Amount</div>
       <label class="ck-amtbox ck-amtbox2"><b>${esc(cur())}</b><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Enter Amount" oninput="this.value=this.value.replace(/[\s,]/g,'');syncWithdrawReceiveAmt()" autocomplete="off"></label>
-      <div class="ck-balrow ck-balrow2"><span>Balance：</span><b>${esc(cur())}</b><i id="witBalance">${esc(numGroup(balance, true))}</i></div>
+      <div class="ck-balrow ck-balrow2"><span>Balance：</span><b>${esc(cur())}</b><i id="witBalance">${esc(numGroup(0, true))}</i></div>
       <div class="ck-feebox">
         <h4>Fee: ${fee}%</h4>
         <p>Withdrawals are processed within 30 minutes to 24 hours; you will receive <b>${esc(cur())}</b> <span id="witReceive">0</span>.</p>
@@ -5963,7 +5985,19 @@ function paintWithdrawSheet(s){
       <button class="ck-pay" id="witSubmitBtn" type="button" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Withdraw 0</button>
     </div>
     <div class="ck-card ck-wdcard2" id="witWalletBlock">${witWalletBlockHtml(s)}</div>
+    <div class="ck-notes ck-wnotes">
+      <p>Minimum withdrawal: ${esc(ckMoney(s.minWithdraw || 0))}</p>
+      <p>Withdrawal time: ${esc(withdrawTimeText(s))}</p>
+      <p>Once the withdrawal is complete, please share a screenshot of the successful transaction on your social media</p>
+      <p class="r">Please do not disclose your app password to anyone</p>
+    </div>
   </div>`;
+}
+// "07:00am-17:00pm", from the withdrawal hours the admin set; "24 hours" when no window is set.
+function withdrawTimeText(s){
+  if (!(s && s.withdrawWindowEnabled && s.withdrawOpenFrom && s.withdrawOpenTo)) return '24 hours';
+  const ap = t => t + (Number(String(t).split(':')[0]) >= 12 ? 'pm' : 'am');
+  return ap(s.withdrawOpenFrom) + '-' + ap(s.withdrawOpenTo);
 }
 function withdrawalFeePct(s){
   const value = Number(s && s.withdrawFeePct);
@@ -5973,7 +6007,7 @@ window.syncWithdrawReceiveAmt = function(){
   const amount = parseMoneyInput(($('witAmount') || {}).value);
   const got = amount > 0 ? amount - Math.round(amount * withdrawalFeePct(STATE.settings || {}) / 100) : 0;
   const btn = $('witSubmitBtn');
-  if (btn && !btn.disabled) btn.textContent = 'Withdraw ' + numGroup(got, false);
+  if (btn && !btn.disabled) ckTween(btn, got, v => 'Withdraw ' + numGroup(Math.round(v), false), 380);
   const rc = $('witReceive'); if (rc) rc.textContent = ckNum(got);
 };
 // Transaction Statement (openBalanceRecordSheet()) is cache-first: it paints from
