@@ -199,7 +199,7 @@
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;touch-action:manipulation;}
 *{-webkit-tap-highlight-color:transparent;}
-body{background:var(--snow-canvas);font-weight:400;font-family:'Roboto',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--snow-ink);-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;}
+body{background:var(--snow-canvas);font-weight:400;font-family:'Roboto',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--snow-ink);-webkit-font-smoothing:antialiased;}
 .mono{font-variant-numeric:lining-nums tabular-nums;font-family:var(--number-font,inherit);}
 /* Cookie leads with a serif display face for headings/figures over a
    condensed sans for body copy, matching every approved mockup. */
@@ -1052,7 +1052,7 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    was based on a diagnosis later disproved by the real CSS-token bug; on
    Android a transformed fixed scroller can also make input focus/IME viewport
    changes more expensive. */
-.sheet-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);background:var(--snow-canvas);z-index:200;display:none;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
+.sheet-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);background:var(--snow-canvas);z-index:200;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 /* Owner: "in withdrawal page still when tapped the nav icons still remain
    why? Remove them please, it's not a must that withdrawal page will be
    looking like that." Every sub-page opened via openSheet() (Deposit,
@@ -1205,7 +1205,7 @@ body.deposit-status-open .bottom-nav{display:none;}
    the visible area grows, and a fixed layer sized for the old, shorter area leaves a strip at the bottom where the page underneath shows. While a
    full-page screen is open the document behind it must simply not scroll, and the screen must not pass its own overscroll on. */
 html:has(.pay-page.show),body:has(.pay-page.show),
-html:has(.sheet-bg.show),body:has(.sheet-bg.show){overflow:hidden;overscroll-behavior:none;}
+html:has(.sheet-bg.show),body:has(.sheet-bg.show){overflow:hidden;}
 .pay-page{overscroll-behavior:none;}
 /* Owner: "l told you to remove that stuff bro, l nolonger need that
    header on payment polling page" -- removing the <h2> text (an earlier
@@ -2375,7 +2375,6 @@ body{background-attachment:fixed;}
 .wrap{padding-bottom:0 !important;}
 #pageHost{padding-bottom:0 !important;min-height:0 !important;}
 #pageHost>*{box-sizing:border-box;min-height:100vh;min-height:100dvh;padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px) !important;}
-html,body{overscroll-behavior-y:none;}
 
 /* The title sits across the whole header; it must never take the tap meant for the back arrow */
 .sheet-head h2,.ck-hd h1{pointer-events:none;}
@@ -2577,51 +2576,6 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
   window.addEventListener('resize', sizeWallpaper, { passive: true });
 })();
 
-/* Contain document edge drags on browsers that ignore overscroll-behavior.
- * Use the current movement direction so reversing at an edge works within
- * the same gesture. Lock only vertical gestures after a small movement
- * threshold; sideways swipes, nested scrollers and multi-touch stay native. */
-(function(){
-  function hasOwnScroller(el){
-    while (el && el !== document.body && el !== document.documentElement) {
-      if (el.scrollHeight > el.clientHeight) {
-        var oy = getComputedStyle(el).overflowY;
-        if (oy === 'auto' || oy === 'scroll') return true;
-      }
-      el = el.parentElement;
-    }
-    return false;
-  }
-  var startX = 0, startY = 0, lastY = 0, axis = null, blocking = false;
-  document.addEventListener('touchstart', function(e){
-    if (e.touches.length !== 1) { blocking = false; return; }
-    startX = e.touches[0].clientX;
-    startY = lastY = e.touches[0].clientY;
-    axis = null;
-    blocking = !hasOwnScroller(e.target);
-  }, { passive: true });
-  document.addEventListener('touchmove', function(e){
-    if (e.touches.length !== 1) { blocking = false; return; }
-    if (!blocking) return;
-    var y = e.touches[0].clientY;
-    var dy = y - lastY;
-    lastY = y;
-    if (axis === null) {
-      var dx = Math.abs(e.touches[0].clientX - startX);
-      var travelY = Math.abs(y - startY);
-      if (Math.max(dx, travelY) < 8) return;
-      axis = travelY > dx ? 'vertical' : 'horizontal';
-    }
-    if (axis !== 'vertical') return;
-    var root = document.scrollingElement || document.documentElement;
-    var atTop = root.scrollTop <= 0;
-    var atBottom = root.scrollTop + root.clientHeight >= root.scrollHeight - 1;
-    if (e.cancelable && ((atTop && dy > 0) || (atBottom && dy < 0))) e.preventDefault();
-  }, { passive: false });
-  function reset(){ blocking = false; }
-  document.addEventListener('touchend', reset, { passive: true });
-  document.addEventListener('touchcancel', reset, { passive: true });
-})();
 </script>
 
 
