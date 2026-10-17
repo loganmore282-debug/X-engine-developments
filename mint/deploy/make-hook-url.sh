@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Makes (once) a secret address for the PesaJet webhook, switches it on in nginx and prints the URL to paste into PesaJet's dashboard.
-# Run as root:  bash /srv/mint-src/mint/deploy/make-hook-url.sh                 (secret path on app.mint.example.com)
-#               bash /srv/mint-src/mint/deploy/make-hook-url.sh hook           (a webhook-only host hook.mint.example.com: its A record must exist first)
+# Run as root:  bash /srv/mint-src/mint/deploy/make-hook-url.sh                 (secret path on app.dble-mint.com)
+#               bash /srv/mint-src/mint/deploy/make-hook-url.sh hook           (a webhook-only host h3v9k.dble-mint.com: its A record must exist first)
 #               bash /srv/mint-src/mint/deploy/make-hook-url.sh new             (a NEW secret path; the old one stops working at once)
 # Running it again keeps the same address.
 set -u
 MINT=${MINT_DIR:-/srv/mint-src/mint}
 HOOK_FILE=${MINT_HOOK_FILE:-/srv/mint-secrets/hook-token}
 HOOK_HOST_FILE=${MINT_HOOK_HOST_FILE:-/srv/mint-secrets/hook-host}
-BASE=${MINT_BASE_DOMAIN:-mint.example.com}
-HOST=${MINT_APP_HOST:-app.mint.example.com}
+BASE=${MINT_BASE_DOMAIN:-dble-mint.com}
+HOST=${MINT_APP_HOST:-app.dble-mint.com}
 [ -s "${MINT_APP_HOST_FILE:-/srv/mint-secrets/app-host}" ] && HOST=$(tr -d "[:space:]" < "${MINT_APP_HOST_FILE:-/srv/mint-secrets/app-host}")
 [ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }
 NEWTOKEN=0

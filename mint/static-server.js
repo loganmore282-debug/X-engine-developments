@@ -41,7 +41,7 @@ if (WHICH !== 'user' && WHICH !== 'admin') {
 }
 const ROOT = path.join(__dirname, WHICH);
 const PORT = Number(process.env.PORT) || 8080;
-const API_ORIGIN = (process.env.MINT_API_ORIGIN || 'https://mymint.mint.example.com')
+const API_ORIGIN = (process.env.MINT_API_ORIGIN || 'https://app.dble-mint.com')
   .trim().replace(/\/+$/, '');
 
 if (!fs.existsSync(path.join(ROOT, 'index.html'))) {

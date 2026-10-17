@@ -4,7 +4,7 @@
 set -u
 SECRETS=${MINT_SECRETS_FILE:-/srv/mint-secrets/secrets.local.js}
 HOOK_FILE=/srv/mint-secrets/hook-token; HOOK_HOST_FILE=/srv/mint-secrets/hook-host; APP_FILE=/srv/mint-secrets/app-host
-APP=$(cat "$APP_FILE" 2>/dev/null | tr -d '[:space:]'); APP=${APP:-app.mint.example.com}
+APP=$(cat "$APP_FILE" 2>/dev/null | tr -d '[:space:]'); APP=${APP:-app.dble-mint.com}
 HH=$(cat "$HOOK_HOST_FILE" 2>/dev/null | tr -d '[:space:]'); TOKEN=$(cat "$HOOK_FILE" 2>/dev/null | tr -d '[:space:]')
 say() { printf '\n==> %s\n' "$*"; }
 has() { grep -Eq "^[[:space:]]*module\.exports\.$1[[:space:]]*=[[:space:]]*['\"][^'\"]+['\"]" "$SECRETS" 2>/dev/null && echo "set" || echo "NOT SET"; }

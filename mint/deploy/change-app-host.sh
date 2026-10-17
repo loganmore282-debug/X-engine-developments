@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Moves the member app to a new address. The OLD address keeps answering as an extra address of the same app, so installed apps, old links and
 # the GitHub / payment webhooks keep working while you switch over. Nothing is changed unless the new name already points at this server.
-# Run as root:  bash /srv/mint-src/mint/deploy/change-app-host.sh app        (app -> app.mint.example.com; a full host name also works)
+# Run as root:  bash /srv/mint-src/mint/deploy/change-app-host.sh app        (app -> app.dble-mint.com; a full host name also works)
 #               bash /srv/mint-src/mint/deploy/change-app-host.sh drop-old    (later: stop answering on the old address)
 set -u
 MINT=${MINT_DIR:-/srv/mint-src/mint}
-BASE=${MINT_BASE_DOMAIN:-mint.example.com}
+BASE=${MINT_BASE_DOMAIN:-dble-mint.com}
 APP_HOST_FILE=${MINT_APP_HOST_FILE:-/srv/mint-secrets/app-host}
 ALSO_FILE=${MINT_ALSO_HOSTS_FILE:-/srv/mint-secrets/also-hosts}
 [ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }
 ARG=${1:-}
 [ -n "$ARG" ] || { echo "Say the new name, e.g.:  bash $0 app"; exit 1; }
-CUR=${MINT_APP_HOST:-app.mint.example.com}; [ -s "$APP_HOST_FILE" ] && CUR=$(tr -d '[:space:]' < "$APP_HOST_FILE")
+CUR=${MINT_APP_HOST:-app.dble-mint.com}; [ -s "$APP_HOST_FILE" ] && CUR=$(tr -d '[:space:]' < "$APP_HOST_FILE")
 
 if [ "$ARG" = drop-old ]; then
   OLD=""; [ -s "$ALSO_FILE" ] && OLD=$(tr -d '[:space:]' < "$ALSO_FILE")

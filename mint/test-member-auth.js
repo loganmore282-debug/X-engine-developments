@@ -140,7 +140,7 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
     const rej = async p => { try { await p; return null; } catch (e) { return e.code; } };
     let w = boot();
     eq(w.events.length, 1); eq(w.events[0], null, 'startup with no session announces "signed out" once');
-    const email = '0770000007@mint-platform.com';
+    const email = '0770000007@dble-mint.com';
     const created = await w.fbCreateUser(email, 'abcdef7391xy');
     ok(created.user.uid && w.events.length === 2 && w.events[1].uid === created.user.uid, 'sign-up announces the new user');
     eq(w.fbAuth.currentUser.email, email, 'the user carries the address the app signed in with');
@@ -148,7 +148,7 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
     ok(await E.fn.verifyAuth({ headers: bearer(tok), path: '/account' }), 'and the server accepts it');
     const tr = await w.fbAuth.currentUser.getIdTokenResult(); ok(Math.abs(tr.claims.auth_time - Date.now() / 1000) < 5, 'auth_time claim present (the app starts its idle timer from it)');
     eq(await rej(w.fbCreateUser(email, 'abcdef7391xy')), 'auth/email-already-in-use', 'duplicate sign-up uses the code the app already handles');
-    eq(await rej(w.fbCreateUser('0770000008@mint-platform.com', '123')), 'auth/weak-password');
+    eq(await rej(w.fbCreateUser('0770000008@dble-mint.com', '123')), 'auth/weak-password');
     // restore after a reload in the same tab
     const saved = { mint_auth_session: w.sessionStorage.getItem('mint_auth_session') };
     ok(saved.mint_auth_session, 'session kept in sessionStorage (ends with the tab)');
@@ -163,15 +163,15 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
     const signed = await w.fbSignIn(email, 'abcdef7391xy'); ok(signed.user.uid === created.user.uid, 'sign-in works');
     await w.fbSignOut();
     eq(await rej(w.fbSignIn(email, 'wrong1')), 'auth/invalid-credential');
-    eq(await rej(w.fbSignIn('0770000099@mint-platform.com', 'wrong1')), 'auth/invalid-credential', 'unknown number: same code');
+    eq(await rej(w.fbSignIn('0770000099@dble-mint.com', 'wrong1')), 'auth/invalid-credential', 'unknown number: same code');
     w.netDown = true; eq(await rej(w.fbSignIn(email, 'abcdef7391xy')), 'auth/network-request-failed', 'offline'); w.netDown = false;
     for (let i = 0; i < 6; i++) await rej(w.fbSignIn(email, 'wrong' + i));
     eq(await rej(w.fbSignIn(email, 'abcdef7391xy')), 'auth/too-many-requests', 'locked out: the app shows its "too many attempts" message');
     // change password through the module
-    E = makeEnv(); w = boot(); await w.fbCreateUser('0770000010@mint-platform.com', 'oldpass1234');
+    E = makeEnv(); w = boot(); await w.fbCreateUser('0770000010@dble-mint.com', 'oldpass1234');
     eq(await rej(w.fbChangePassword('x', 'WRONG', 'newpass1234')), 'auth/invalid-credential', 'wrong current password');
     await w.fbChangePassword('x', 'oldpass1234', 'newpass1234'); await w.fbSignOut();
-    eq(await rej(w.fbSignIn('0770000010@mint-platform.com', 'oldpass1234')), 'auth/invalid-credential'); await w.fbSignIn('0770000010@mint-platform.com', 'newpass1234');
+    eq(await rej(w.fbSignIn('0770000010@dble-mint.com', 'oldpass1234')), 'auth/invalid-credential'); await w.fbSignIn('0770000010@dble-mint.com', 'newpass1234');
     await w.fbSignOut(); let thrown = null; try { await w.fbChangePassword('x', 'a', 'bbbbbb'); } catch (e) { thrown = e.message; } eq(thrown, 'not-signed-in', 'changing a password needs a session')
     ok(!/gstatic\.com\/firebasejs|firebase-app\.js|firebaseConfig/.test(html.replace(/<!--[\s\S]*?-->/g, '')), 'the page loads no Firebase script and carries no Firebase config');
   }
@@ -179,7 +179,7 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
   {
     const phoneSrc = cut('const DEFAULT_REGION_KEY', 'function currentRegionKey()') + 'function currentRegionKey(){}\n' + cut('function localDigits(raw, region) {', '// Synthetic login email') + cut('function cleanPhone(raw, region) {', '// The two shapes a number may be typed in');
     const real = new Function(phoneSrc + '\nreturn cleanPhone;')();
-    const forms = ['771234567@mint-platform.com'.split('@')[0], '256771234567', '0771234567', '+256771234567', '07 71 23 45 67'];
+    const forms = ['771234567@dble-mint.com'.split('@')[0], '256771234567', '0771234567', '+256771234567', '07 71 23 45 67'];
     eq(new Set(forms.map(x => real(x))).size, 1, 'the national, international and bare forms are one number: ' + forms.map(x => real(x)).join(' '));
     eq(real('771234567'), '+256771234567'); eq(real('12345'), null, 'junk is not a number'); eq(real(''), null);
     eq(real('0771234567; drop'), null, 'text around a number makes it not a number (it used to be read as 0771234567)');
