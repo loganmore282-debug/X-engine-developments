@@ -2440,6 +2440,33 @@ body{background-attachment:fixed;}
 #authHeroBg{filter:var(--auth-hero-filter,none);}
 /* The picture, logo and Language button are plain paint (no mask, no promoted layer): swapping Login and Create Account only moves the form boxes. */
 
+/* ── Maintenance screen: shown instead of the app while the admin has Maintenance mode on ── */
+#maintScreen{position:fixed;inset:0;z-index:600;display:none;align-items:center;justify-content:center;padding:24px 20px;box-sizing:border-box;overflow-y:auto;background:#fff;}
+#maintScreen .mt-wrap{width:100%;max-width:360px;margin:auto;text-align:center;}
+#maintScreen .mt-title{margin:4px 0 8px;font-size:22px;line-height:28px;font-weight:700;color:#14161c;}
+#maintScreen .mt-msg{margin:0 0 10px;font-size:15px;line-height:22px;color:#4a4f5c;white-space:pre-line;}
+#maintScreen .mt-sub{margin:0;font-size:13px;line-height:19px;color:#8a8f9c;}
+
+.mt-art{display:block;width:100%;height:auto;overflow:visible;}
+.mt-g{transform-box:fill-box;transform-origin:center;}
+.mt-g1{animation:mtSpin 7s linear infinite;}
+.mt-g2{animation:mtSpin 5.2s linear infinite reverse;}
+.mt-g3{animation:mtSpin 2.6s linear infinite;}
+.mt-ring{transform-box:fill-box;transform-origin:center;animation:mtSpin 24s linear infinite reverse;}
+.mt-scan{animation:mtScan 2.6s ease-in-out infinite alternate;}
+.mt-wrench{transform-box:view-box;transform-origin:187px 146px;animation:mtWrench 2.2s ease-in-out infinite alternate;}
+.mt-wet{animation:mtWet 3.4s ease-in-out infinite;}
+.mt-glass{transform-box:fill-box;transform-origin:center;animation:mtPulse 1.6s ease-in-out infinite;}
+.mt-bug{animation:mtBug 6s ease-in-out infinite;}
+.mt-wing{transform-box:fill-box;transform-origin:left bottom;animation:mtWing .16s ease-in-out infinite alternate;}
+.mt-wing2{transform-origin:right bottom;}
+@keyframes mtSpin{to{transform:rotate(360deg);}}
+@keyframes mtScan{from{transform:translateY(0);}to{transform:translateY(124px);}}
+@keyframes mtWrench{from{transform:rotate(-5deg);}to{transform:rotate(7deg);}}
+@keyframes mtWet{0%,100%{opacity:.25;}50%{opacity:1;}}
+@keyframes mtPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.25);}}
+@keyframes mtBug{0%{transform:translate(0,0);}25%{transform:translate(-26px,10px);}50%{transform:translate(-8px,26px);}75%{transform:translate(18px,8px);}100%{transform:translate(0,0);}}
+@keyframes mtWing{from{transform:scaleY(1) rotate(0);}to{transform:scaleY(.45) rotate(6deg);}}
 </style>
 
 <script data-cookie-idle>
@@ -2654,6 +2681,82 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
   <div class="og-sub">We're getting ready. Come back once the countdown ends.</div>
 </div>
 
+<div id="maintScreen" role="alert">
+  <div class="mt-wrap">
+<svg class="mt-art" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="People repairing the site">
+<defs>
+  <clipPath id="mtScr"><rect x="72" y="122" width="248" height="148" rx="4"/></clipPath>
+  <linearGradient id="mtScan" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".55" stop-color="#fff" stop-opacity=".75"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+</defs>
+<circle cx="196" cy="214" r="152" fill="#e9ecfb"/>
+<g class="mt-ring"><circle cx="205" cy="96" r="58" fill="none" stroke="#b9c3f2" stroke-width="1.3" stroke-dasharray="4 5"/></g>
+<!-- laptop -->
+<rect x="62" y="112" width="268" height="170" rx="10" fill="#2b2d8c"/>
+<rect x="72" y="122" width="248" height="148" rx="4" fill="#a6b6f6"/>
+<g clip-path="url(#mtScr)">
+  <rect x="72" y="122" width="248" height="22" fill="#c4cffa"/>
+  <rect x="96" y="128" width="150" height="10" rx="5" fill="#e6ebfd"/>
+  <g class="mt-glass"><circle cx="262" cy="133" r="4.2" fill="none" stroke="#8d9de8" stroke-width="1.6"/><path d="M265.3 136.3l4.2 4.2" stroke="#8d9de8" stroke-width="1.6" stroke-linecap="round"/></g>
+  <rect x="82" y="152" width="82" height="52" rx="3" fill="#bfcbf9"/>
+  <rect x="170" y="152" width="84" height="52" rx="3" fill="#c9d4fb"/>
+  <rect x="82" y="210" width="82" height="52" rx="3" fill="#c9d4fb"/>
+  <rect x="170" y="210" width="84" height="52" rx="3" fill="#bfcbf9"/>
+  <rect x="262" y="152" width="48" height="110" rx="3" fill="#bfcbf9"/>
+  <!-- the bar being rolled -->
+  <rect x="258" y="146" width="12" height="124" fill="#2f35a6"/>
+  <rect class="mt-wet" x="258" y="146" width="12" height="124" fill="#4a54d6"/>
+  <!-- scanner sweep -->
+  <g class="mt-scan"><rect x="72" y="122" width="248" height="26" fill="url(#mtScan)"/><rect x="72" y="146" width="248" height="2" fill="#fff" opacity=".9"/></g>
+</g>
+<rect x="56" y="282" width="280" height="14" rx="4" fill="#23257a"/>
+<rect x="150" y="282" width="92" height="6" rx="3" fill="#3b3fa0"/>
+<!-- browser card, left -->
+<g><rect x="42" y="238" width="68" height="62" rx="4" fill="#8a9cf0"/><rect x="42" y="238" width="68" height="10" rx="4" fill="#6f82e6"/><rect x="50" y="256" width="52" height="4" rx="2" fill="#dfe5fd"/><rect x="50" y="266" width="52" height="22" rx="3" fill="#a6b5f6" stroke="#dfe5fd" stroke-width="1.5"/></g>
+<!-- gears -->
+<g class="mt-g mt-g1"><path class="" fill="#f26f5a" fill-rule="evenodd" d="M195.0,98.0 L194.8,101.0 L201.4,104.4 L198.8,112.5 L191.5,111.3 L189.8,113.9 L187.9,116.2 L191.3,122.8 L184.4,127.8 L179.2,122.6 L176.3,123.7 L173.4,124.5 L172.3,131.7 L163.7,131.7 L162.6,124.5 L159.7,123.7 L156.8,122.6 L151.6,127.8 L144.7,122.8 L148.1,116.2 L146.2,113.9 L144.5,111.3 L137.2,112.5 L134.6,104.4 L141.2,101.0 L141.0,98.0 L141.2,95.0 L134.6,91.6 L137.2,83.5 L144.5,84.7 L146.2,82.1 L148.1,79.8 L144.7,73.2 L151.6,68.2 L156.8,73.4 L159.7,72.3 L162.6,71.5 L163.7,64.3 L172.3,64.3 L173.4,71.5 L176.3,72.3 L179.2,73.4 L184.4,68.2 L191.3,73.2 L187.9,79.8 L189.8,82.1 L191.5,84.7 L198.8,83.5 L201.4,91.6 L194.8,95.0 Z M177.0,98.0 A9,9 0 1 0 159.0,98.0 A9,9 0 1 0 177.0,98.0 Z" /><circle cx="168" cy="98" r="19" fill="none" stroke="#fff" stroke-width="1.4" opacity=".7"/></g>
+<g class="mt-g mt-g2"><path class="" fill="#6c7be6" fill-rule="evenodd" d="M255.0,92.0 L254.9,94.4 L259.5,97.0 L257.2,103.3 L252.0,102.3 L250.6,104.2 L248.9,105.9 L250.8,110.9 L245.0,114.3 L241.6,110.2 L239.3,110.7 L236.9,111.0 L235.2,116.0 L228.6,114.8 L228.6,109.5 L226.5,108.5 L224.5,107.1 L219.9,109.8 L215.6,104.7 L219.1,100.7 L218.1,98.5 L217.5,96.2 L212.2,95.3 L212.2,88.7 L217.5,87.8 L218.1,85.5 L219.1,83.3 L215.6,79.3 L219.9,74.2 L224.5,76.9 L226.5,75.5 L228.6,74.5 L228.6,69.2 L235.2,68.0 L236.9,73.0 L239.3,73.3 L241.6,73.8 L245.0,69.7 L250.8,73.1 L248.9,78.1 L250.6,79.8 L252.0,81.7 L257.2,80.7 L259.5,87.0 L254.9,89.6 Z M243.0,92.0 A7,7 0 1 0 229.0,92.0 A7,7 0 1 0 243.0,92.0 Z" /><circle cx="236" cy="92" r="12" fill="none" stroke="#fff" stroke-width="1.2" opacity=".7"/></g>
+<g class="mt-g mt-g3"><path class="" fill="#f26f5a" fill-rule="evenodd" d="M207.0,138.0 L206.9,139.4 L209.6,141.0 L208.1,144.8 L205.0,144.0 L204.1,145.1 L203.0,146.0 L203.8,149.1 L200.0,150.6 L198.4,147.9 L197.0,148.0 L195.6,147.9 L194.0,150.6 L190.2,149.1 L191.0,146.0 L189.9,145.1 L189.0,144.0 L185.9,144.8 L184.4,141.0 L187.1,139.4 L187.0,138.0 L187.1,136.6 L184.4,135.0 L185.9,131.2 L189.0,132.0 L189.9,130.9 L191.0,130.0 L190.2,126.9 L194.0,125.4 L195.6,128.1 L197.0,128.0 L198.4,128.1 L200.0,125.4 L203.8,126.9 L203.0,130.0 L204.1,130.9 L205.0,132.0 L208.1,131.2 L209.6,135.0 L206.9,136.6 Z M201.0,138.0 A4,4 0 1 0 193.0,138.0 A4,4 0 1 0 201.0,138.0 Z" /></g>
+<!-- bug -->
+<g class="mt-bug"><g class="mt-bugb"><ellipse cx="296" cy="64" rx="6" ry="9" fill="#2b2d8c" transform="rotate(-25 296 64)"/><circle cx="291" cy="55" r="3.4" fill="#2b2d8c"/><path d="M289 52 l-4 -6 M293 52 l3 -6" stroke="#2b2d8c" stroke-width="1.2" stroke-linecap="round"/><g class="mt-wing"><path d="M294 60 q-22 -18 -30 -4 q6 16 26 10z" fill="#f26f5a"/></g><g class="mt-wing mt-wing2"><path d="M298 58 q18 -22 30 -10 q-4 16 -24 16z" fill="#f48a73"/></g></g></g>
+<!-- left worker -->
+<g>
+  <rect x="104" y="178" width="12" height="52" rx="5" fill="#343cb5"/>
+  <rect x="118" y="178" width="12" height="52" rx="5" fill="#2d3498"/>
+  <path d="M100 232 q6 -3 18 0 l0 7 l-20 0z" fill="#23257a"/><path d="M118 232 q6 -3 18 0 l0 7 l-20 0z" fill="#23257a"/>
+  <rect x="103" y="132" width="30" height="52" rx="10" fill="#4c56dc"/>
+  <circle cx="118" cy="120" r="11" fill="#f6d3c0"/>
+  <path d="M107 119 q1 -13 13 -12 q10 1 10 12 q-6 -6 -23 0z" fill="#1d2a79"/>
+</g>
+<g class="mt-wrench">
+  <rect x="46" y="140" width="152" height="12" rx="6" fill="#2b2d8c"/>
+  <path d="M186 136 a15 15 0 1 1 0 28 l0 -8 a7 7 0 1 0 0 -12z" fill="#2b2d8c"/>
+  <path d="M128 146 L112 150" stroke="#4c56dc" stroke-width="9" stroke-linecap="round"/>
+</g>
+<!-- right worker -->
+<g>
+  <rect x="292" y="232" width="12" height="52" rx="5" fill="#3b44c4"/>
+  <rect x="306" y="232" width="12" height="52" rx="5" fill="#2f379f"/>
+  <path d="M288 286 q6 -3 18 0 l0 7 l-20 0z" fill="#23257a"/><path d="M306 286 q6 -3 18 0 l0 7 l-20 0z" fill="#23257a"/>
+  <rect x="290" y="186" width="30" height="52" rx="10" fill="#f4876a"/>
+  <circle cx="305" cy="174" r="11" fill="#f6d3c0"/>
+  <path d="M294 173 q1 -13 13 -12 q10 1 10 12 q-6 -6 -23 0z" fill="#1d2a79"/>
+</g>
+<g class="mt-roll">
+  <line x1="300" y1="204" x2="278" y2="150" stroke="#2b2d8c" stroke-width="3.2" stroke-linecap="round"><animate attributeName="y2" values="150;236;150" keyTimes="0;.5;1" dur="3.4s" repeatCount="indefinite" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1"/><animate attributeName="x2" values="278;283;278" keyTimes="0;.5;1" dur="3.4s" repeatCount="indefinite" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1"/></line>
+  <line x1="304" y1="198" x2="296" y2="206" stroke="#f4876a" stroke-width="8" stroke-linecap="round"/>
+  <g><animateTransform attributeName="transform" type="translate" values="0 0;0 86;0 0" keyTimes="0;.5;1" dur="3.4s" repeatCount="indefinite" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1"/>
+    <rect x="253" y="137" width="30" height="13" rx="6.5" fill="#f26f5a"/><rect x="253" y="137" width="30" height="5" rx="2.5" fill="#f8a090" opacity=".8"/><rect x="262" y="150" width="4" height="9" fill="#2b2d8c"/></g>
+</g>
+<!-- paint can, cone -->
+<g><rect x="316" y="296" width="34" height="34" rx="3" fill="#cfd6f3"/><rect x="316" y="296" width="34" height="8" rx="3" fill="#aab6ea"/><path d="M318 300 q15 5 30 0 l0 6 q-15 6 -30 0z" fill="#5a63d4"/></g>
+<g><path d="M232 340 L248 296 L264 340z" fill="#f26f5a"/><rect x="226" y="338" width="44" height="8" rx="2" fill="#e85d48"/><path d="M240.5 316 h15 l-3 11 h-9z" fill="#fff"/></g>
+</svg>
+    <h1 class="mt-title">Under maintenance</h1>
+    <p class="mt-msg" id="maintMsg"></p>
+    <p class="mt-sub">This page opens by itself when we are back.</p>
+  </div>
+</div>
+
 <!-- ═══════════ AUTH ═══════════ -->
 <div id="authScreen" style="display:none;">
   <!-- Login and Sign Up, built from the owner's two screenshots: the
@@ -2699,10 +2802,6 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
             <span class="va-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/></svg></span>
             <input id="regPassword2" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Please new password again" autocomplete="new-password">
             <button type="button" class="va-eye" aria-label="Show password" onclick="ckToggleEye(this)"><svg class="eye-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78 3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg><svg class="eye-on" viewBox="0 0 24 24" aria-hidden="true" style="display:none"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg></button>
-          </div>
-          <div class="va-f" id="regTradeRow" style="display:none">
-            <span class="va-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/></svg></span>
-            <input id="regTradePin" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="numeric" maxlength="6" placeholder="Trade Password (6 digits)" autocomplete="new-password">
           </div>
           <div class="va-f">
             <span class="va-ic va-gift"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></span>

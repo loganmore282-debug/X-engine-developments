@@ -176,7 +176,7 @@ function run(state, body) {
     verifyAuth: async () => 'u1',
     withLock: (_k, fn) => fn(),
     getSettings: async () => state.settings,
-    // Stands in for the real pinCheck (proved separately in test-trade-pin.js): only
+    // (A stand-in kept for the sandbox's shape: there is no Trade Password any more.) Only
     // '123456' is the member's Trade Password, and 'LOCK!' simulates a locked account.
     pinCheck: async (_u, pin) => pin === 'LOCK!' ? { ok: false, code: 'LOCKED', message: 'Too many wrong Trade Password attempts.' }
       : pin === '123456' ? { ok: true }
@@ -243,7 +243,6 @@ function run(state, body) {
     const tsMillis = n => Number(n) || 0;
     const tzOffMs = () => 180 * 60000;
     const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
-    ${fnSource('eatWeekday')}
     ${fnSource('statementStamp')}
     ${fnSource('newStatementId')}
     ${fnSource('paymentAmount')}
@@ -261,7 +260,7 @@ function fresh(extra = {}) {
   return {
     settings: { minWithdraw: 5000, withdrawFeePct: 15, withdrawMultiple: 5000,
                 requireInvestToWithdraw: false, maxWithdrawalsPerDay: 0,
-                withdrawWindowEnabled: false, weekendWithdrawBlock: false, requireTradePassword: true, ...(extra.settings || {}) },
+                withdrawWindowEnabled: false, ...(extra.settings || {}) },
     user: { walletBalance: 100000, totalInvested: 50000, status: 'active' },
     banks: [{ id: 'b1', userId: 'u1', network: 'MTN Mobile Money', phone: '0770000001', holder: 'A B' }],
     wits: extra.wits || [], tx: [], seq: 0, now: Date.now(),
@@ -276,19 +275,16 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   ck(st.wits.length === 1, `and recorded (${st.wits.length})`);
   ck(st.user.walletBalance === 90000, `wallet debited once (${st.user.walletBalance})`);
 
-  // Cookie's default: no Trade Password. With the switch off a request needs no pin at all.
-  st = fresh({ settings: { requireTradePassword: false } });
+  // No Trade Password and no weekend closing: a request needs no pin, and any day of the week is accepted.
+  st = fresh();
   r = await run(st, { ...REQ, pin: undefined });
-  ck(r.code === 200 && st.wits.length === 1, `with the Trade Password switched off a withdrawal needs no pin (${r.code})`);
-  // Weekend rule: judged on the real clock, so the expectation follows today's weekday (Saturday or Sunday in Uganda = closed).
-  const weekendNow = [0, 6].includes(new Date(Date.now() + 3 * 3600000).getUTCDay());
-  st = fresh({ settings: { weekendWithdrawBlock: true } });
-  r = await run(st, REQ);
-  ck(weekendNow ? (r.code === 400 && r.replied.code === 'WEEKEND_CLOSED' && st.wits.length === 0 && st.user.walletBalance === 100000) : r.code === 200,
-     `weekend rule ${weekendNow ? 'refuses today (a weekend) and charges nothing' : 'lets a weekday request through'} (${r.code} ${r.replied && r.replied.code})`);
-  st = fresh({ settings: { weekendWithdrawBlock: true } }); st.user.withdrawAnytime = true;
-  r = await run(st, REQ);
-  ck(r.code === 200, `an unrestricted member is not held to the weekend rule (${r.code})`);
+  ck(r.code === 200 && st.wits.length === 1, `a withdrawal needs no pin (${r.code})`);
+  const realNow = Date.now;
+  for (const day of ['2026-10-17T10:00:00+03:00', '2026-10-18T10:00:00+03:00']) {   // a Saturday and a Sunday
+    Date.now = () => Date.parse(day);
+    try { st = fresh(); r = await run(st, REQ); } finally { Date.now = realNow; }
+    ck(r.code === 200, `a withdrawal on ${day.slice(0, 10)} (a weekend day) is accepted (${r.code})`);
+  }
   st = fresh(); st.failLedger = true;
   r = await run(st, REQ);
   ck(r.code === 503 && r.replied.code === 'WITHDRAWAL_RECOVERY_PENDING', 'ledger outage returns a recovery notice');
@@ -300,13 +296,6 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   await st.recover(st.wits[0].id);
   ck(st.wits[0].status === 'pending' && st.tx.length === 1 && st.user.walletBalance === 90000,
      'recovery creates one ledger row without a second debit');
-  console.log('\n— the Trade Password gates the withdrawal on the server —');
-  for (const [label, pin, code, http] of [['missing', undefined, 'INVALID_PIN', 400], ['wrong', '654321', 'WRONG_PIN', 400], ['too short', '1234', 'INVALID_PIN', 400], ['locked account', 'LOCK!', 'LOCKED', 429]]) {
-    st = fresh();
-    r = await run(st, { ...REQ, pin });
-    ck(r.code === http && r.replied.code === code, `a ${label} Trade Password is refused (${r.code} ${r.replied && r.replied.code})`);
-    ck(st.wits.length === 0 && st.user.walletBalance === 100000 && st.tx.length === 0, '  and nothing is written or debited');
-  }
   st = fresh();
   r = await run(st, { ...REQ, amount: '10000garbage' });
   ck(r.code === 400 && st.user.walletBalance === 100000, 'malformed amount cannot reach the wallet');

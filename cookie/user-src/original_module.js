@@ -302,18 +302,15 @@ var LANG_ROWS = [
   ['Copy account name', 'Koppa erinnya ly\'akawunti', 'Nakili jina la akaunti', 'Copier le nom du compte', 'Koporora izina rya konti', 'Koppa eiziina rya akaunti'],
   ['Copy Invite Link', 'Koppa Lyanka ly\'Okuyita', 'Nakili Kiungo cha Mwaliko', 'Copier le lien d\'invitation', 'Koporora umurongo wo gutumira', 'Koppa Orunyiriri rw\'Okweta'],
   ['Could not copy', 'Tekikoppeddwa', 'Imeshindwa kunakili', 'Copie impossible', 'Ntibyashobotse gukoporora', 'Tikikoppirwe'],
-  ['Enter trade password', 'Wandiika ekisumuluzo ky\'okusuubula', 'Weka nenosiri la malipo', 'Entrez le mot de passe de transaction', 'Andika ijambobanga ry\'ubucuruzi', 'Handiika ekisumuruzo ky\'okushuubura'],
   ['Enter your password.', 'Wandiika ekisumuluzo kyo.', 'Weka nenosiri lako.', 'Entrez votre mot de passe.', 'Andika ijambobanga ryawe.', 'Handiika ekisumuruzo kyaawe.'],
   ['How it works', 'Engeri gye kikolamu', 'Jinsi inavyofanya kazi', 'Comment \u00e7a marche', 'Uko bikora', 'Oku kirikukora'],
   ['Login password changed', 'Ekisumuluzo ky\'okuyingira kikyusiddwa', 'Nenosiri la kuingia limebadilishwa', 'Mot de passe de connexion modifi\u00e9', 'Ijambobanga ryo kwinjira ryahinduwe', 'Ekisumuruzo ky\'okutaaha kihindwiirwe'],
   ['New Login Password', 'Ekisumuluzo Ekiggya eky\'Okuyingira', 'Nenosiri Jipya la Kuingia', 'Nouveau mot de passe de connexion', 'Ijambobanga rishya ryo kwinjira', 'Ekisumuruzo Ekisya ky\'Okutaaha'],
-  ['New Trade Password', 'Ekisumuluzo Ekiggya eky\'Okusuubula', 'Nenosiri Jipya la Malipo', 'Nouveau mot de passe de transaction', 'Ijambobanga rishya ry\'ubucuruzi', 'Ekisumuruzo Ekisya ky\'Okushuubura'],
   ['No messages yet.', 'Tewali bubaka.', 'Hakuna ujumbe bado.', 'Aucun message pour l\'instant.', 'Nta butumwa buraboneka.', 'Tihariho butumwa.'],
   ['No more data', 'Tewali birala', 'Hakuna data zaidi', 'Plus de donn\u00e9es', 'Nta bindi bihari', 'Tihariho bindi'],
   ['No products yet.', 'Tewali byamaguzi.', 'Hakuna bidhaa bado.', 'Aucun produit pour l\'instant.', 'Nta bicuruzwa biraboneka.', 'Tihariho byamaguzi.'],
   ['Nothing here yet.', 'Tewali kantu wano.', 'Hakuna kitu hapa bado.', 'Rien ici pour l\'instant.', 'Nta kintu kiraboneka hano.', 'Tihariho kintu hanu.'],
   ['Old Login Password', 'Ekisumuluzo Ekikadde eky\'Okuyingira', 'Nenosiri la Zamani la Kuingia', 'Ancien mot de passe de connexion', 'Ijambobanga rya kera ryo kwinjira', 'Ekisumuruzo Ekikuru ky\'Okutaaha'],
-  ['Old Trade Password', 'Ekisumuluzo Ekikadde eky\'Okusuubula', 'Nenosiri la Zamani la Malipo', 'Ancien mot de passe de transaction', 'Ijambobanga rya kera ry\'ubucuruzi', 'Ekisumuruzo Ekikuru ky\'Okushuubura'],
   ['Open treasure chest', 'Ggulawo essanduku ly\'obugagga', 'Fungua sanduku la hazina', 'Ouvrir le coffre au tr\u00e9sor', 'Fungura agasanduku k\'ubutunzi', 'Igura esanduuku y\'obugaiga'],
   ['Processing your deposit', 'Tukola ku ssente zo', 'Tunashughulikia malipo yako', 'Traitement de votre recharge', 'Turimo gutunganya ubwishyu bwawe', 'Nitukora aha sente zaawe'],
   // Owner asked directly why the deposit-status screen "only changes small
@@ -332,11 +329,9 @@ var LANG_ROWS = [
   ['Still waiting for the provider', '', 'Bado tunasubiri jibu', "Toujours en attente d'une r\u00e9ponse", '', ''],
   ['Remaining to Earn', 'Ebisigadde Okufuna', 'Kilichobaki Kupata', 'Reste \u00e0 gagner', 'Bisigaye kubona', 'Ebisigaire Okutunga'],
   ['SAVE LOGIN PASSWORD', 'TEREKA EKISUMULUZO KY\'OKUYINGIRA', 'HIFADHI NENOSIRI LA KUINGIA', 'ENREGISTRER LE MOT DE PASSE', 'BIKA IJAMBOBANGA RYO KWINJIRA', 'BIIKA EKISUMURUZO KY\'OKUTAAHA'],
-  ['SAVE TRADE PASSWORD', 'TEREKA EKISUMULUZO KY\'OKUSUUBULA', 'HIFADHI NENOSIRI LA MALIPO', 'ENREGISTRER LE MOT DE PASSE DE TRANSACTION', 'BIKA IJAMBOBANGA RY\'UBUCURUZI', 'BIIKA EKISUMURUZO KY\'OKUSHUUBURA'],
   ['Select Payment Method', 'Londa Engeri y\'Okusasula', 'Chagua Njia ya Malipo', 'Choisissez le mode de paiement', 'Hitamo uburyo bwo kwishyura', 'Toorana Omuringo gw\'Okushashura'],
   ['Select wallet provider', 'Londa kkampuni y\'ensawo', 'Chagua mtoa huduma wa pochi', 'Choisissez l\'op\u00e9rateur du portefeuille', 'Hitamo utanga serivisi y\'umufuka', 'Toorana kampuni y\'ensaho'],
   ['Tap to retry', 'Nyiga oddemu ogezeeko', 'Gusa ujaribu tena', 'Appuyez pour r\u00e9essayer', 'Kanda wongere ugerageze', 'Kanda ogarukyemu'],
-  ['Trade password changed', 'Ekisumuluzo ky\'okusuubula kikyusiddwa', 'Nenosiri la malipo limebadilishwa', 'Mot de passe de transaction modifi\u00e9', 'Ijambobanga ry\'ubucuruzi ryahinduwe', 'Ekisumuruzo ky\'okushuubura kihindwiirwe'],
   ['Transaction expires later', 'Okusasula kuggwaako oluvannyuma', 'Muamala utaisha baadaye', 'La transaction expire plus tard', 'Ubwishyu buzarangira nyuma', 'Okushashura nikuhwaho bwanyima'],
   ['Your payment account:', 'Akawunti yo ey\'okusasula:', 'Akaunti yako ya malipo:', 'Votre compte de paiement :', 'Konti yawe yo kwishyura:', 'Akaunti yaawe y\'okushashura:'],
   ['account and make payment', 'akawunti osasule', 'akaunti na ulipe', 'compte et effectuez le paiement', 'konti maze wishyure', 'akaunti oshashure'],
@@ -345,16 +340,13 @@ var LANG_ROWS = [
   ['Enter a valid amount.', 'Wandiika omuwendo omutuufu.', 'Weka kiasi sahihi.', 'Entrez un montant valide.', 'Andika ingano nyayo.', 'Handiika omuhendo ogurikwecwera.'],
   ['Enter treasure chest key', 'Wandiika ekisumuluzo ky\'essanduku', 'Weka ufunguo wa sanduku la hazina', 'Entrez la cl\u00e9 du coffre au tr\u00e9sor', 'Andika urufunguzo rw\'agasanduku', 'Handiika ekishumuruzo ky\'esanduuku'],
   ['Recharge time: 7*24 hours.', 'Osobola okuteeka ssente essaawa 24, ennaku 7.', 'Muda wa kuweka pesa: saa 24, siku 7.', 'Recharge disponible 24 h/24, 7 j/7.', 'Ushobora kubitsa amasaha 24 ku munsi, iminsi 7.', 'Nobaasa kuta sente eshaaha 24, ebiro 7.'],
-  ['Referral code is required', 'Koodi y\'okuyita yeetaagisa', 'Msimbo wa mwaliko unahitajika', 'Le code de parrainage est obligatoire', 'Kode yo gutumira irakenewe', 'Koodi y\'okweta neeyetengyesa'],
   ['Select your wallet provider.', 'Londa kkampuni y\'ensawo yo.', 'Chagua mtoa huduma wa pochi yako.', 'Choisissez l\'op\u00e9rateur de votre portefeuille.', 'Hitamo utanga serivisi y\'umufuka wawe.', 'Toorana kampuni y\'ensaho yaawe.'],
-  ['Trade Password (6 digits)', 'Ekisumuluzo ky\'Okusuubula (ennamba 6)', 'Nenosiri la Malipo (tarakimu 6)', 'Mot de passe de transaction (6 chiffres)', 'Ijambobanga ry\'ubucuruzi (imibare 6)', 'Ekisumuruzo ky\'Okushuubura (enamba 6)'],
   ['Bind your wallet before withdrawing.', 'Teekawo ensawo yo nga tonnaggyamu ssente.', 'Sajili pochi yako kabla ya kutoa pesa.', 'Enregistrez votre portefeuille avant de retirer.', 'Andikisha umufuka wawe mbere yo kubikuza.', 'Taho ensaho yaawe otakaihiremu sente.'],
   ['Choose PAY-A or PAY B', 'Londa PAY-A oba PAY B', 'Chagua PAY-A au PAY B', 'Choisissez PAY-A ou PAY B', 'Hitamo PAY-A cyangwa PAY B', 'Toorana PAY-A nari PAY B'],
   ['Click to refresh the results.', 'Nyiga oddemu olabe ebivudde mu.', 'Bonyeza ili kuonyesha matokeo upya.', 'Cliquez pour actualiser les r\u00e9sultats.', 'Kanda kugira ngo uvugurure ibisubizo.', 'Kanda ogarukyemu oreebe ebyarugiremu.'],
   ['Could not load your plans.', 'Tetusobodde kuggya nteekateeka zo.', 'Imeshindwa kupakia mipango yako.', 'Impossible de charger vos plans.', 'Ntibyashobotse gupakira gahunda zawe.', 'Tikibaasiki kureeta enteekateeka zaawe.'],
   ['Daily spin & bonus wins', 'Okuzungusa buli lunaku n\'ebirabo', 'Kuzungusha kila siku na zawadi', 'Tour quotidien et gains bonus', 'Kuzunguza buri munsi n\'ibihembo', 'Okuzengurutsa buri izooba n\'ebirabo'],
   ['Enter the account holder name.', 'Wandiika erinnya lya nnannyini akawunti.', 'Weka jina la mwenye akaunti.', 'Entrez le nom du titulaire du compte.', 'Andika izina rya nyir\'ikonti.', 'Handiika eiziina rya nyiini akaunti.'],
-  ['Enter your 6-digit Trade Password.', 'Wandiika ekisumuluzo kyo eky\'okusuubula ekya nnamba 6.', 'Weka nenosiri lako la malipo la tarakimu 6.', 'Entrez votre mot de passe de transaction \u00e0 6 chiffres.', 'Andika ijambobanga ryawe ry\'ubucuruzi rigizwe n\'imibare 6.', 'Handiika ekisumuruzo kyaawe ky\'okushuubura eky\'enamba 6.'],
   ['Enter your current login password.', 'Wandiika ekisumuluzo kyo eky\'okuyingira ekiriwo kati.', 'Weka nenosiri lako la sasa la kuingia.', 'Entrez votre mot de passe de connexion actuel.', 'Andika ijambobanga ryawe ryo kwinjira urimo gukoresha.', 'Handiika ekisumuruzo kyaawe ky\'okutaaha ekiriho hati.'],
   ['Insufficient balance, redirecting to deposit\u2026', 'Ssente tezimala, tukutwala ku kuteeka ssente\u2026', 'Salio halitoshi, tunakupeleka kuweka pesa\u2026', 'Solde insuffisant, redirection vers le d\u00e9p\u00f4t\u2026', 'Amafaranga ntahagije, turimo kukujyana mu kubitsa\u2026', 'Sente tizihikire, nituukutwara aha kuta sente\u2026'],
   ['Please enter your payment account', 'Wandiika akawunti yo ey\'okusasula', 'Tafadhali weka akaunti yako ya malipo', 'Veuillez saisir votre compte de paiement', 'Nyamuneka andika konti yawe yo kwishyura', 'Handiika akaunti yaawe y\'okushashura'],
@@ -364,7 +356,6 @@ var LANG_ROWS = [
   ['Showing your most recent records', 'Tulaga ebiwandiiko byo ebisembyeyo', 'Tunaonyesha rekodi zako za hivi karibuni', 'Affichage de vos enregistrements les plus r\u00e9cents', 'Twerekana amateka yawe ya vuba', 'Nituyoreka ebihandiiko byaawe ebya hati'],
   ['Buying products earns you extra spins.', 'Okugula ebyamaguzi kukuwa okuzungusa okulala.', 'Kununua bidhaa kunakupa nafasi zaidi za kuzungusha.', 'Acheter des produits vous donne des tours suppl\u00e9mentaires.', 'Kugura ibicuruzwa bikugeza ku mahirwe yo kuzunguza.', 'Okugura ebyamaguzi nikikuha okuzengurutsa okundi.'],
   ['Enter a valid wallet account number.', 'Wandiika ennamba ya akawunti y\'ensawo entuufu.', 'Weka namba sahihi ya akaunti ya pochi.', 'Entrez un num\u00e9ro de compte de portefeuille valide.', 'Andika nimero nyayo ya konti y\'umufuka.', 'Handiika enamba ya akaunti y\'ensaho erikwecwera.'],
-  ['Enter your current 6-digit trade password.', 'Wandiika ekisumuluzo kyo eky\'okusuubula ekiriwo kati eky\'ennamba 6.', 'Weka nenosiri lako la sasa la malipo la tarakimu 6.', 'Entrez votre mot de passe de transaction actuel \u00e0 6 chiffres.', 'Andika ijambobanga ryawe ry\'ubucuruzi urimo gukoresha rigizwe n\'imibare 6.', 'Handiika ekisumuruzo kyaawe ky\'okushuubura ekiriho hati eky\'enamba 6.'],
   ['Login Password (at least 10 characters)', 'Ekisumuluzo ky\'Okuyingira (obutasingako bubonero 6)', 'Nenosiri la Kuingia (angalau herufi 10)', 'Mot de passe de connexion (10 caract\u00e8res minimum)', 'Ijambobanga ryo kwinjira (nibura inyuguti 10)', 'Ekisumuruzo ky\'Okutaaha (obukiri bubonero 6)'],
   ['No channel link is set yet.', 'Tewannabaawo lyanka lya kitundu.', 'Hakuna kiungo cha chaneli kilichowekwa bado.', 'Aucun lien de canal n\'est encore d\u00e9fini.', 'Nta murongo w\'umuyoboro urashyirwaho.', 'Tihariho orunyiriri rw\'ekitundu.'],
   ['Please enter the treasure chest key', 'Wandiika ekisumuluzo ky\'essanduku ly\'obugagga', 'Tafadhali weka ufunguo wa sanduku la hazina', 'Veuillez saisir la cl\u00e9 du coffre au tr\u00e9sor', 'Nyamuneka andika urufunguzo rw\'agasanduku k\'ubutunzi', 'Handiika ekishumuruzo ky\'esanduuku y\'obugaiga'],
@@ -381,25 +372,19 @@ var LANG_ROWS = [
   ['The mobile phone number format is incorrect', 'Ennamba ya ssimu tewandiikiddwa bulungi', 'Muundo wa namba ya simu si sahihi', 'Le format du num\u00e9ro de t\u00e9l\u00e9phone est incorrect', 'Imiterere ya nimero ya telefone si nyayo', 'Enamba ya esimu tehandiikirwe gye'],
   ['The two login passwords do not match.', 'Ebisumuluzo ebibiri eby\'okuyingira tebifaanagana.', 'Manenosiri mawili ya kuingia hayafanani.', 'Les deux mots de passe de connexion ne correspondent pas.', 'Amagambobanga yombi yo kwinjira ntahuye.', 'Ebisumuruzo bibiri by\'okutaaha tibirikushushana.'],
   ['The two new passwords do not match.', 'Ebisumuluzo ebiggya ebibiri tebifaanagana.', 'Manenosiri mawili mapya hayafanani.', 'Les deux nouveaux mots de passe ne correspondent pas.', 'Amagambobanga mashya yombi ntahuye.', 'Ebisumuruzo bibiri ebisya tibirikushushana.'],
-  ['Trade Password must be exactly 6 digits.', 'Ekisumuluzo ky\'okusuubula kiteekwa okuba nnamba 6 zokka.', 'Nenosiri la malipo lazima liwe tarakimu 6 haswa.', 'Le mot de passe de transaction doit comporter exactement 6 chiffres.', 'Ijambobanga ry\'ubucuruzi rigomba kuba rigizwe n\'imibare 6 gusa.', 'Ekisumuruzo ky\'okushuubura kishemereire kuba enamba 6 zoonka.'],
   ['Earn daily wages by inviting members to invest.', 'Funa ssente buli lunaku ng\'oyita abantu okuteekamu ssente.', 'Pata malipo kila siku kwa kualika wengine kuwekeza.', 'Gagnez chaque jour en invitant des membres \u00e0 investir.', 'Injiza amafaranga buri munsi utumira abandi gushora.', 'Tunga sente buri izooba oyeta abantu kuteeramu sente.'],
   ['One free spin every day, resetting at midnight.', 'Okuzungusa kumu kwa bwereere buli lunaku, nga kuddamu ku ttumbi.', 'Nafasi moja ya bure ya kuzungusha kila siku, inarudia usiku wa manane.', 'Un tour gratuit chaque jour, r\u00e9initialis\u00e9 \u00e0 minuit.', 'Kuzunguza rimwe ku buntu buri munsi, bisubirana saa sita z\'ijoro.', 'Okuzengurutsa rumwe okw\'obusa buri izooba, nikugarukamu aha kiro.'],
   ['Paste the payment SMS or transaction ID first', 'Sooka oteeke obubaka bw\'okusasula oba nnamba y\'okusasula', 'Kwanza bandika SMS ya malipo au namba ya muamala', 'Collez d\'abord le SMS de paiement ou l\'identifiant de la transaction', 'Banza ushyiremo SMS y\'ubwishyu cyangwa nimero y\'ubwishyu', 'Banza ota obutumwa bw\'okushashura nari enamba y\'okushashura'],
-  ['The two new trade passwords do not match.', 'Ebisumuluzo ebiggya eby\'okusuubula tebifaanagana.', 'Manenosiri mawili mapya ya malipo hayafanani.', 'Les deux nouveaux mots de passe de transaction ne correspondent pas.', 'Amagambobanga mashya y\'ubucuruzi ntahuye.', 'Ebisumuruzo ebisya by\'okushuubura tibirikushushana.'],
   ['Invite friends. Earn when they buy their first product.', 'Yita mikwano gyo. Ofuna ssente nga bagudde ekyamaguzi kyabwe ekisooka.', 'Alika marafiki. Unapata pesa wanaponunua bidhaa yao ya kwanza.', 'Invitez vos amis. Gagnez lorsqu\'ils ach\u00e8tent leur premier produit.', 'Tumira inshuti. Winjiza amafaranga igihe baguze igicuruzwa cyabo cya mbere.', 'Yeta abanywani baawe. Notunga sente ku barikugura ekyamaguzi kyabo eky\'okubanza.'],
   ['Share your link, create your wealth, improve your life.', 'Gaba lyanka lyo, okole obugagga bwo, otereeze obulamu bwo.', 'Shiriki kiungo chako, jenga utajiri wako, boresha maisha yako.', 'Partagez votre lien, b\u00e2tissez votre richesse, am\u00e9liorez votre vie.', 'Sangiza umurongo wawe, wubake ubutunzi bwawe, unoze ubuzima bwawe.', 'Gabana orunyiriri rwaawe, okore obugaiga bwaawe, otebeekanise amagara gaawe.'],
   ['We\'re getting ready. Come back once the countdown ends.', 'Tukyeteekateeka. Komawo essaawa bwe zinaggwaako.', 'Tunajiandaa. Rudi hesabu ya kurudi nyuma itakapoisha.', 'Nous nous pr\u00e9parons. Revenez \u00e0 la fin du compte \u00e0 rebours.', 'Turimo kwitegura. Garuka igihe kubara kuzarangira.', 'Nitweteekateeka. Garuka obu obwire burihwaho.'],
   ['Your new password must be at least 10 characters.', 'Ekisumuluzo kyo ekiggya kiteekwa okuba n\'obubonero obutasinga mu 10.', 'Nenosiri lako jipya lazima liwe na angalau herufi 10.', 'Votre nouveau mot de passe doit comporter au moins 10 caract\u00e8res.', 'Ijambobanga ryawe rishya rigomba kuba rifite nibura inyuguti 10.', 'Ekisumuruzo kyaawe ekisya kishemereire kugira obubonero obukiri 10.'],
-  ['Your new trade password must be exactly 6 digits.', 'Ekisumuluzo kyo ekiggya eky\'okusuubula kiteekwa okuba nnamba 6 zokka.', 'Nenosiri lako jipya la malipo lazima liwe tarakimu 6 haswa.', 'Votre nouveau mot de passe de transaction doit comporter exactement 6 chiffres.', 'Ijambobanga ryawe rishya ry\'ubucuruzi rigomba kuba rigizwe n\'imibare 6 gusa.', 'Ekisumuruzo kyaawe ekisya ky\'okushuubura kishemereire kuba enamba 6 zoonka.'],
   ['If deposit is not received, please contact TG customer service.', 'Ssente bwe zitatuuka, tuukirira obuyambi ku TG.', 'Ikiwa malipo hayajapokelewa, tafadhali wasiliana na huduma kwa wateja kwenye TG.', 'Si le d\u00e9p\u00f4t n\'est pas re\u00e7u, contactez le service client sur TG.', 'Niba amafaranga atakiriwe, nyamuneka vugana na serivisi z\'abakiriya kuri TG.', 'Sente ku zitarikuhika, otukirire obuhwezi aha TG.'],
   ['The payment is expected to be successful in 2-10 minutes.', 'Okusasula kusuubirwa okuggwa mu ddakiika 2-10.', 'Malipo yanatarajiwa kukamilika ndani ya dakika 2-10.', 'Le paiement devrait aboutir en 2 \u00e0 10 minutes.', 'Ubwishyu buteganyijwe kurangira mu minota 2-10.', 'Okushashura nikwetegyerezibwa kuhwa omu dakiika 2-10.'],
   ['Your new password must be different from the old one.', 'Ekisumuluzo kyo ekiggya kiteekwa okuba ekitali kye kikadde.', 'Nenosiri lako jipya lazima liwe tofauti na la zamani.', 'Votre nouveau mot de passe doit \u00eatre diff\u00e9rent de l\'ancien.', 'Ijambobanga ryawe rishya rigomba gutandukana n\'irya kera.', 'Ekisumuruzo kyaawe ekisya kishemereire kuba ekitari kiri ekikuru.'],
   ['Customer service is not set up yet. Please try again later.', 'Obuyambi eri abaguzi tebunnateekebwawo. Ddamu ogezeeko oluvannyuma.', 'Huduma kwa wateja haijawekwa bado. Tafadhali jaribu tena baadaye.', 'Le service client n\'est pas encore configur\u00e9. R\u00e9essayez plus tard.', 'Serivisi z\'abakiriya ntiziratunganywa. Nyamuneka ongera ugerageze nyuma.', 'Obuhwezi bw\'abaguzi tiburateebwaho. Ogarukyemu bwanyima.'],
   ['Your balance will be updated automatically once the payment is confirmed.', 'Ssente zo zijja kukyusibwa zokka okusasula bwe kunaakakasibwa.', 'Salio lako litasasishwa lenyewe mara malipo yatakapothibitishwa.', 'Votre solde sera mis \u00e0 jour automatiquement d\u00e8s la confirmation du paiement.', 'Amafaranga yawe azavugururwa wenyine ubwishyu bumaze kwemezwa.', 'Sente zaawe nizihindurwa zoonka okushashura ku kurihamibwa.'],
-  ['Your new trade password must be different from the old one.', 'Ekisumuluzo kyo ekiggya eky\'okusuubula kiteekwa okuba ekitali kye kikadde.', 'Nenosiri lako jipya la malipo lazima liwe tofauti na la zamani.', 'Votre nouveau mot de passe de transaction doit \u00eatre diff\u00e9rent de l\'ancien.', 'Ijambobanga ryawe rishya ry\'ubucuruzi rigomba gutandukana n\'irya kera.', 'Ekisumuruzo kyaawe ekisya ky\'okushuubura kishemereire kuba ekitari kiri ekikuru.'],
   ['Not confirmed yet. Approve the payment prompt on your phone, then tap Verify again.', 'Tekunnakakasibwa. Kkiriza obubaka bw\'okusasula ku ssimu yo, oluvannyuma oddemu onyige Kakasa.', 'Bado hayajathibitishwa. Idhinisha ujumbe wa malipo kwenye simu yako, kisha gusa Hakiki tena.', 'Pas encore confirm\u00e9. Approuvez la demande de paiement sur votre t\u00e9l\u00e9phone, puis appuyez de nouveau sur V\u00e9rifier.', 'Ntibiremezwa. Emeza ubutumwa bwo kwishyura kuri telefone yawe, hanyuma wongere ukande Genzura.', 'Tikirahamibwa. Ikiriza obutumwa bw\'okushashura aha simu yaawe, bwanyima ogarukyemu okande Hamya.'],
-  ['Your trade password is your 6-digit PIN used to confirm withdrawals and other sensitive actions.', 'Ekisumuluzo kyo eky\'okusuubula ye nnamba 6 z\'okozesa okukakasa okuggyamu ssente n\'ebirala ebikulu.', 'Nenosiri lako la malipo ni PIN ya tarakimu 6 unayotumia kuthibitisha kutoa pesa na mambo mengine nyeti.', 'Votre mot de passe de transaction est le code \u00e0 6 chiffres qui confirme vos retraits et autres op\u00e9rations sensibles.', 'Ijambobanga ryawe ry\'ubucuruzi ni PIN y\'imibare 6 ukoresha wemeza kubikuza n\'ibindi bikorwa by\'ingenzi.', 'Ekisumuruzo kyaawe ky\'okushuubura n\'enamba 6 ezi orikukozesa okuhamya okwihamu sente n\'ebindi ebikuru.'],
-  ['A referral code is required to sign up. Ask the person who invited you for theirs.', 'Weetaaga koodi y\'okuyita okwewandiisa. Saba oyo eyakuyise akuwe eyiye.', 'Msimbo wa mwaliko unahitajika ili kujisajili. Muulize aliyekualika akupe wake.', 'Un code de parrainage est n\u00e9cessaire pour s\'inscrire. Demandez le sien \u00e0 la personne qui vous a invit\u00e9.', 'Kode yo gutumira irakenewe kugira ngo wiyandikishe. Saba uwagutumiye akuhe iye.', 'Noyetenga koodi y\'okweta kwewandiisa. Shaba ou akweeta akuhe eye.'],
   ['Install it on your phone for faster access, and open it straight from your home screen.', 'Giteeke ku ssimu yo osobole okugituukako mangu, era ogigulewo butereevu okuva ku ntikko ya ssimu yo.', 'Isakinishe kwenye simu yako ili kuifikia haraka, na uifungue moja kwa moja kutoka skrini ya nyumbani.', 'Installez-la sur votre t\u00e9l\u00e9phone pour un acc\u00e8s plus rapide, et ouvrez-la directement depuis votre \u00e9cran d\'accueil.', 'Yishyire kuri telefone yawe kugira ngo uyigereho vuba, unayifungure uhereye ku rupapuro rwawe rw\'ibanze.', 'Giteere aha simu yaawe obaase kugihikaho juba, kandi ogyigure butunu kuruga aha karatasi kaawe ak\'okubanza.'],
   ['Please fill in your payment account accurately, incorrect filling may result in the loss of the transferred funds.', 'Wandiika akawunti yo ey\'okusasula obulungi; bw\'ogiwandiika obubi osobola okufiirwa ssente z\'oweerezza.', 'Tafadhali jaza akaunti yako ya malipo kwa usahihi; ukikosea unaweza kupoteza pesa ulizotuma.', 'Veuillez saisir votre compte de paiement avec exactitude ; une erreur peut entra\u00eener la perte des fonds transf\u00e9r\u00e9s.', 'Nyamuneka andika konti yawe yo kwishyura neza; ukosheje ushobora gutakaza amafaranga wohereje.', 'Handiika akaunti yaawe y\'okushashura gye; ku orikuhandiika kubi noobaasa kufeerwa sente ezi ohereize.'],
   ['Please fill in your payment method and the actual payment account you will use to make the payment.', 'Wandiika engeri y\'okusasula n\'akawunti ey\'amazima gy\'onookozesa okusasula.', 'Tafadhali jaza njia ya malipo na akaunti halisi utakayotumia kulipa.', 'Veuillez indiquer votre mode de paiement et le compte que vous utiliserez r\u00e9ellement pour payer.', 'Nyamuneka andika uburyo bwo kwishyura na konti nyayo uzakoresha wishyura.', 'Handiika omuringo gw\'okushashura n\'akaunti ey\'amazima ei orikwija kukozesa okushashura.'],
@@ -427,13 +412,9 @@ var LANG_ROWS = [
   ['Transaction history', 'Ebyafaayo by\'ensimbi', 'Historia ya miamala', 'Historique des transactions', 'Amateka y\'ibikorwa', 'Ebyafaayo bya sente'],
   ['Notifications & mail', 'Obubaka n\'ebirango', 'Arifa na barua', 'Notifications et messages', 'Amatangazo n\'ubutumwa', 'Obutumwa n\'ebirango'],
   ['Change login password', 'Kyusa ekisumuluzo ky\'okuyingira', 'Badilisha nenosiri la kuingia', 'Changer le mot de passe de connexion', 'Hindura ijambobanga ryo kwinjira', 'Hindura ekisumuruzo ky\'okutaaha'],
-  ['Change trade / withdrawal password', 'Kyusa ekisumuluzo ky\'okusuubula / okuggyamu', 'Badilisha nenosiri la malipo / kutoa pesa', 'Changer le mot de passe de transaction / retrait', 'Hindura ijambobanga ry\'ubucuruzi / ryo kubikuza', 'Hindura ekisumuruzo ky\'okushuubura / okwihamu'],
   ['Enter old password', 'Wandiika ekisumuluzo ekikadde', 'Weka nenosiri la zamani', 'Entrez l\'ancien mot de passe', 'Andika ijambobanga rya kera', 'Handiika ekisumuruzo ekikuru'],
   ['Enter new password', 'Wandiika ekisumuluzo ekiggya', 'Weka nenosiri jipya', 'Entrez le nouveau mot de passe', 'Andika ijambobanga rishya', 'Handiika ekisumuruzo ekisya'],
   ['Re-enter new password', 'Ddamu owandiike ekisumuluzo ekiggya', 'Weka tena nenosiri jipya', 'Saisissez à nouveau le nouveau mot de passe', 'Ongera wandike ijambobanga rishya', 'Garuka ohandiike ekisumuruzo ekisya'],
-  ['Enter old 6-digit PIN', 'Wandiika PIN enkadde ey\'ennamba 6', 'Weka PIN ya zamani ya tarakimu 6', 'Entrez l\'ancien code à 6 chiffres', 'Andika PIN ya kera y\'imibare 6', 'Handiika PIN enkuru y\'enamba 6'],
-  ['Enter new 6-digit PIN', 'Wandiika PIN empya ey\'ennamba 6', 'Weka PIN mpya ya tarakimu 6', 'Entrez le nouveau code à 6 chiffres', 'Andika PIN nshya y\'imibare 6', 'Handiika PIN ensya y\'enamba 6'],
-  ['Re-enter new 6-digit PIN', 'Ddamu owandiike PIN empya ey\'ennamba 6', 'Weka tena PIN mpya ya tarakimu 6', 'Saisissez à nouveau le nouveau code à 6 chiffres', 'Ongera wandike PIN nshya y\'imibare 6', 'Garuka ohandiike PIN ensya y\'enamba 6'],
   ['No spins left. Your next free spin unlocks at midnight.', 'Tewali kuzungusa kusigadde. Okuzungusa okw\'obwereere okuddako kujja mu ttumbi.', 'Hakuna mizungusho iliyobaki. Mzungusho wako wa bure unaofuata unafunguka usiku wa manane.', 'Plus de tours disponibles. Votre prochain tour gratuit s\'ouvre à minuit.', 'Nta kuzunguza gusigaye. Ukuzunguza kwawe k\'ubuntu gukurikira gutangira saa sita z\'ijoro.', 'Tihariho kuzengurutsa kusigaire. Okuzengurutsa kwaawe kw\'obusa nikwija aha kiro.'],
   ['1 spin available', 'Okuzungusa 1 kuliwo', 'Mzungusho 1 unapatikana', '1 tour disponible', 'Kuzunguza 1 gurahari', 'Okuzengurutsa 1 kuriho'],
   ['Contact support for help with your account.', 'Tuukirira abayambi ku bikwata ku akawunti yo.', 'Wasiliana na msaada kwa usaidizi wa akaunti yako.', 'Contactez l\'assistance pour toute question sur votre compte.', 'Vugana na serivisi y\'abakiriya ku bibazo bya konti yawe.', 'Hikirira abahwezi ahabw\'akaunti yaawe.'],
@@ -445,12 +426,6 @@ var LANG_ROWS = [
   // Only the English word around it is translated.
   ['PAY-A', 'SASULA-A', 'LIPA-A', 'PAYER-A', 'ISHYURA-A', 'SHASHURA-A'],
   ['PAY B', 'SASULA B', 'LIPA B', 'PAYER B', 'ISHYURA B', 'SHASHURA B'],
-  // The founder-account wording: what the very FIRST member of a new country
-  // sees on Sign Up, when there is no referral code for them to type yet.
-  // Found only after the coverage sweep was made to render that state -- the
-  // fixture had always sent referralRequired:true, so this pair of sentences
-  // had never once been on screen while anything was measuring.
-  ['Referral code (optional)', "Koodi y'okuyita (teetaagisa)", 'Msimbo wa mwaliko (si lazima)', 'Code de parrainage (facultatif)', 'Kode yo gutumira (ntikenewe)', "Koodi y'okweta (tikyetengyesa)"],
   // ── Popup messages, and the activity ticker's own verbs ──
   // A popup only appears when something goes WRONG, and the coverage
   // sweep walks every screen successfully -- so 58 notify() call sites
@@ -465,7 +440,6 @@ var LANG_ROWS = [
   ['Could not request withdrawal.', 'Tetusobodde kusaba kuggyamu ssente.', 'Imeshindwa kuomba kutoa pesa.', 'Impossible de demander le retrait.', 'Ntibyashobotse gusaba kubikuza.', 'Tikibaasiikire kushaba okwihamu sente.'],
   ['Could not complete purchase', 'Tetusobodde kumaliriza kugula', 'Imeshindwa kukamilisha ununuzi', 'Impossible de finaliser l\'achat', 'Ntibyashobotse kurangiza kugura', 'Tikibaasiikire kumaliriza okugura'],
   ['Could not check in', 'Tetusobodde kukyalira', 'Imeshindwa kuhudhuria', 'Impossible de pointer', 'Ntibyashobotse kwiyandikisha', 'Tikibaasiikire kwoleka'],
-  ['Could not change your trade password.', 'Tetusobodde kukyusa kisumuluzo kyo eky\'okusuubula.', 'Imeshindwa kubadilisha nenosiri lako la malipo.', 'Impossible de changer votre mot de passe de transaction.', 'Ntibyashobotse guhindura ijambobanga ryawe ry\'ubucuruzi.', 'Tikibaasiikire kuhindura ekisumuruzo kyaawe ky\'okushuubura.'],
   ['Could not check right now', 'Tetusobodde kukebera kati', 'Imeshindwa kuangalia kwa sasa', 'Vérification impossible pour le moment', 'Ntibyashobotse kugenzura ubu', 'Tikibaasiikire kureeba hati'],
   ['Could not submit this right now', 'Tetusobodde kusindika kino kati', 'Imeshindwa kuwasilisha hili kwa sasa', 'Envoi impossible pour le moment', 'Ntibyashobotse kohereza ibi ubu', 'Tikibaasiikire kutuma eki hati'],
   ['That is not your current login password.', 'Ekyo si kisumuluzo kyo kya kati eky\'okuyingira.', 'Hilo si nenosiri lako la sasa la kuingia.', 'Ce n\'est pas votre mot de passe de connexion actuel.', 'Iryo si ijambobanga ryawe rigezweho ryo kwinjira.', 'Ekyo tikisumuruzo kyaawe kya hati eky\'okutaaha.'],
@@ -1103,9 +1077,7 @@ function brandWordmarkHtml(){
 // crawlers, both of which see the STATIC file and never run a line of this
 // code, so those two carry the name at deploy time and a rename needs a
 // frontend redeploy to reach them.
-function applyTradeRow(){ const r = $('regTradeRow'); if (r) r.style.display = (STATE.settings || {}).requireTradePassword === true ? '' : 'none'; }
 function applyBrandName(){
-  try { applyTradeRow(); } catch (_) {}
   const known = brandNameKnown();
   if (!known) return;   // nothing to say yet; leave the blanks blank
   document.querySelectorAll('[data-brandmark]').forEach(el => { el.innerHTML = brandWordmarkHtml(); });
@@ -1340,6 +1312,7 @@ async function apiRequest(path, opts){
       _memberSession.expire();
     }
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid response');
+    if (!isPublicCall && data.code === 'MAINTENANCE') { STATE.settings = Object.assign({}, STATE.settings || {}, { maintenanceMode: true, maintenanceMsg: data.message || '' }); showMaintenanceScreen(data.message); }
   } catch (e) {
     if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', stale: true, message: 'Session changed' };
     return { status: 'error', message: controller.signal.aborted
@@ -1673,24 +1646,14 @@ window.doRegister = async function(){
   const phone = cleanPhone($('regPhone').value);
   const pass = $('regPassword').value;
   const pass2 = $('regPassword2').value;
-  const needPin = (STATE.settings || {}).requireTradePassword === true;
-  const tradePin = needPin ? ($('regTradePin').value || '').trim() : '';
   // Referral code box is prefilled from ?ref= (see captureReferralFromUrl)
   // but stays editable -- whatever's in the box at submit time wins,
   // whether that's the link's code, untouched, or something typed by hand.
-  // Cookie makes it REQUIRED (Snow allowed skipping it) -- see CLAUDE.md.
+  // The referral code is optional.
   const referral = $('regReferral').value.trim();
   if (!phone) return regError('Please enter a valid phone number');
   if (!pass || pass.length < 10) return regError('Password must be at least 10 characters.');
   if (pass !== pass2) return regError('The two passwords do not match.');
-  if (needPin && !/^\d{6}$/.test(tradePin)) return regError('Trade Password must be exactly 6 digits.');
-  // Required or not is the SERVER's call (settings.referralRequired), which
-  // already accounts for the founder case: on a platform with no members yet
-  // there is no code in existence to type, so the first account is let
-  // through. Hard-coding "always required" here made the app impossible to
-  // sign up to at all on day one.
-  if (!referral && referralIsRequired())
-    return regError('A referral code is required to sign up. Ask the person who invited you for theirs.');
   regError('');
   // See firebaseReady(): without the sign-in service there is nothing to
   // create the account with, and the code below would only throw at the member.
@@ -1702,7 +1665,6 @@ window.doRegister = async function(){
   }
   setBtnLoading('regBtn', true, 'Register', 'Creating your account…');
   STATE.refCode = referral;
-  window._pendingRegPin = tradePin;
   window._pendingRegPhone = phone;
   try {
     const email = phoneToEmail(phone);
@@ -1730,7 +1692,7 @@ window.doRegister = async function(){
     // was actually already fully registered (registerCurrentUser() below
     // treats server status 'already_done' as success too, so re-registering
     // an already-complete account just lands them in the app instead of
-    // erroring). window._pendingRegPin/_pendingRegPhone are already set
+    // erroring). window._pendingRegPhone is already set
     // above with what was just typed, so the normal snow-auth event fires
     // straight into bootFromNetwork()'s existing "just registered in this
     // tab" branch and finishes the profile with the real PIN -- no separate
@@ -1752,7 +1714,7 @@ window.doRegister = async function(){
     // tab -- possibly a different member logging in -- would be treated by
     // bootFromNetwork() as a registration that just happened: a needless
     // /register call, and a "Registration successful" toast on a plain login.
-    window._pendingRegPin = ''; window._pendingRegPhone = '';
+    window._pendingRegPhone = '';
     regError(fbErrMsg(e));
     setBtnLoading('regBtn', false, 'Register');
   }
@@ -2275,12 +2237,6 @@ function captureReferralFromUrl(){
     showAuthTab('register');
   } catch (_) {}
 }
-// Whether Sign Up demands a referral code. The server decides (it resolves
-// the admin setting AND whether any member exists yet) and publishes the
-// answer as settings.referralRequired; this is only the reader.
-// Default TRUE when settings haven't loaded, so a failed settings fetch can
-// never quietly turn the requirement off -- the server would reject the
-// sign-up anyway, and this way the app says so up front.
 // Pulls the public settings while the member is still on the auth screen,
 // purely so the Sign Up form can tell the truth about the referral field.
 // Failure is silent and simply leaves the field required -- the server is
@@ -2291,10 +2247,6 @@ async function loadAuthSettings(){
     if (s && s.status === 'success') { STATE.settings = s.settings || {}; applyRegion(); applyBrandName(); }
   } catch (_) {}
   updateReferralFieldHint();
-}
-function referralIsRequired(){
-  const st = STATE.settings || {};
-  return st.referralRequired !== false;
 }
 // Registration just drops its OTP step when the toggle is off (a brand-new
 // account has no existing identity to protect) -- see doRegister()'s own
@@ -2358,8 +2310,28 @@ function startOpeningGateCountdown(targetMs){
 // withTimeout() fallback only matters on a genuinely first-ever, slow-
 // network boot, same "don't block the common case for a rare edge case"
 // reasoning Round 63 already established for the announcement dialog.
+// ── MAINTENANCE ──
+// While the admin has Maintenance mode on, a visitor sees the animated maintenance screen instead of the app (also a member who is already inside
+// when it is switched on: the server then answers MAINTENANCE and the screen replaces the app). It looks again every 20 seconds, with a real
+// read of the public settings, and the app opens by itself once maintenance is switched off.
+var _maintTimer = null;
+function ckMaintenanceOn(){ return !!(STATE.settings && STATE.settings.maintenanceMode); }
+function showMaintenanceScreen(msg){
+  const el = $('maintScreen'); if (!el) return;
+  const text = String(msg || (STATE.settings && STATE.settings.maintenanceMsg) || '').trim() || (brandName() + ' is under maintenance. Please check back shortly.');
+  $('maintMsg').textContent = text;
+  try { hideLoadingScreen(); } catch (_) {}
+  ['authScreen', 'app', 'openingGate'].forEach(id => { const x = $(id); if (x) x.style.display = 'none'; });
+  el.style.display = 'flex';
+  if (_maintTimer) return;
+  _maintTimer = setInterval(async () => {
+    let r; try { r = await api('/public/settings'); } catch (_) { return; }
+    if (r && r.status === 'success' && r.settings && !r.settings.maintenanceMode) { clearInterval(_maintTimer); _maintTimer = null; location.reload(); }
+  }, 20000);
+}
 async function maybeShowOpeningGate(){
   if (!STATE.settings) await waitForBootSettings(6000);
+  if (ckMaintenanceOn()) { showMaintenanceScreen(); return true; }
   if (!isOpeningGateActive()) return false;
   hideLoadingScreen();
   $('authScreen').style.display = 'none';
@@ -2556,20 +2528,13 @@ async function enterApp(){
 // ghost-account trap Round-something-earlier already fixed once). Retry
 // once with the referral dropped instead; everything else (PIN, welcome
 // bonus) still goes through.
-async function registerCurrentUser(pin, phone){
-  let reg = await post('/register', { referralCode: STATE.refCode || '', pin: pin || '', phone: phone || '' });
-  // Dropping the code and carrying on is only valid while a code is
-  // OPTIONAL. Once it is required (the normal state, as soon as the platform
-  // has members) retrying with an empty code just earns a REFERRAL_REQUIRED
-  // rejection, so the member is told to correct the code instead. That is
-  // recoverable rather than a dead end: their Firebase account now exists,
-  // and tapping Sign Up again with the same number and password takes
-  // doRegister()'s email-already-in-use branch, which signs them in and
-  // finishes this same registration with the corrected code.
-  if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode && !referralIsRequired()) {
+async function registerCurrentUser(phone){
+  let reg = await post('/register', { referralCode: STATE.refCode || '', phone: phone || '' });
+  // The referral code is optional: a code that does not exist is dropped and sign-up carries on without an upline.
+  if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode) {
     notify(reg.message || t('That referral code is invalid. Continuing without it.'));
     STATE.refCode = '';
-    reg = await post('/register', { referralCode: '', pin: pin || '', phone: phone || '' });
+    reg = await post('/register', { referralCode: '', phone: phone || '' });
   }
   return reg;
 }
@@ -2582,7 +2547,7 @@ async function registerCurrentUser(pin, phone){
 // sign them out cleanly, and open Sign Up with their number already filled in.
 // Re-submitting it takes doRegister()'s existing "email already in use" path,
 // which signs in and finishes this same registration.
-var SIGNUP_UNFINISHED_CODES = ['REFERRAL_REQUIRED', 'BAD_REFERRAL', 'BAD_REFERRAL_REGION'];
+var SIGNUP_UNFINISHED_CODES = ['BAD_REFERRAL', 'BAD_REFERRAL_REGION'];
 async function abandonUnfinishedSignup(reg){
   hideLoadingScreen();
   if (SIGNUP_UNFINISHED_CODES.indexOf(reg.code) === -1) {
@@ -2612,7 +2577,7 @@ async function bootFromNetwork(uid){
   // /register, THEN a second /account -- three sequential network round
   // trips before the real prefetch even started, on every single signup --
   // owner: "the startup loader should load all data, and should be fast...
-  // no taking long." doRegister() sets _pendingRegPin/_pendingRegPhone
+  // no taking long." doRegister() sets _pendingRegPhone
   // right before creating the Firebase account, so their presence here
   // reliably means this boot is for a registration that JUST happened in
   // THIS tab -- skip straight to /register instead of wasting a call
@@ -2620,8 +2585,8 @@ async function bootFromNetwork(uid){
   // a later re-login in the same tab session (no page reload) never
   // wrongly takes this shortcut again.
   if (window._pendingRegPhone) {
-    const pin = window._pendingRegPin, phone = window._pendingRegPhone;
-    const reg = await registerCurrentUser(pin, phone);
+    const phone = window._pendingRegPhone;
+    const reg = await registerCurrentUser(phone);
     // The session changed while /register was in flight (a second sign-in
     // event for the same account, or a logout): whatever replaced it owns the
     // screen now. Treating this as a failure would sign the member out of the
@@ -2634,7 +2599,7 @@ async function bootFromNetwork(uid){
       setBtnLoading('regBtn', false, 'Register');
       return;
     }
-    window._pendingRegPin = ''; window._pendingRegPhone = '';
+    window._pendingRegPhone = '';
     r = await api('/account');
   } else {
     r = await api('/account', { timeoutMs: 10000 });
@@ -2643,7 +2608,7 @@ async function bootFromNetwork(uid){
       // Ghost account (Firebase user exists, our profile never finished in
       // an earlier session -- e.g. a crash/reload between account creation
       // and /register finishing) -- self-heal the same way.
-      const reg = await registerCurrentUser(window._pendingRegPin || '', window._pendingRegPhone || '');
+      const reg = await registerCurrentUser(window._pendingRegPhone || '');
       if (reg.stale || !STATE.user || STATE.user.uid !== uid) return;
       if (reg.status !== 'success' && reg.status !== 'already_done') {
         await abandonUnfinishedSignup(reg);
@@ -4463,7 +4428,6 @@ window.openPersonalInfo = function(){
     <div class="ck-pi-card">
       <button class="ck-pi-row" type="button" onclick="openWalletSheet()"><span class="ck-pi-ic"><svg viewBox="0 0 60 54" width="21.7" height="19.5" aria-hidden="true"><rect x="11" y="11" width="43.5" height="32" rx="4" fill="#8056f8"/><rect x="4" y="17" width="44" height="32" rx="4" fill="#f56b2c"/><rect x="4" y="24" width="44" height="4.6" fill="#fff5e7"/><rect x="8" y="37" width="8.4" height="6" rx=".7" fill="#fff5e7"/></svg></span><b>Bind Wallet Card</b>${CK_MENU_ICONS.chev}</button>
       <button class="ck-pi-row" type="button" onclick="openChangeLoginPasswordSheet()"><span class="ck-pi-ic"><svg viewBox="0 0 60 74" width="21.7" height="26.7" aria-hidden="true"><path fill="#54ba92" fill-rule="evenodd" d="M8.7 66.8C8.2 66.7 8.2 67.5 8.2 51.3C8.2 36.4 8.2 36.4 8.5 36.2C8.7 36.0 8.8 36.0 10.5 35.9C12.5 35.9 12.8 35.9 13.3 35.6C13.9 35.2 13.9 35.1 13.9 29.7C13.9 25.8 13.9 24.6 14.1 24.1C14.1 23.7 14.2 23.3 14.2 23.0C14.2 22.5 14.3 22.3 14.7 21.9C14.9 21.7 14.9 21.5 15.0 21.0C15.0 19.8 15.2 19.3 16.1 18.3C16.6 17.8 17.0 17.3 17.1 17.1C17.4 16.7 19.7 14.4 20.1 14.1C20.3 14.1 20.6 13.8 20.8 13.6C21.0 13.5 21.3 13.2 21.6 13.1C21.8 13.1 22.2 12.8 22.5 12.6C22.9 12.3 23.1 12.3 23.8 12.2C24.6 12.1 24.8 12.1 25.2 11.8C25.7 11.5 25.7 11.5 26.5 11.5C27.1 11.6 27.3 11.6 27.9 11.4C29.0 11.1 30.6 11.1 31.4 11.5C31.9 11.8 32.3 11.9 32.9 11.9C33.9 12.0 34.7 12.3 35.2 12.7C35.4 12.9 35.8 13.1 36.2 13.2C36.5 13.3 37.0 13.5 37.2 13.7C37.5 13.9 38.1 14.3 38.5 14.6C39.4 15.1 40.6 16.2 40.9 16.7C41.0 16.9 41.2 17.2 41.4 17.4C41.5 17.7 41.8 18.0 41.9 18.2C41.9 18.4 42.2 18.7 42.3 18.9C42.5 19.1 42.8 19.5 42.9 20.0C43.0 20.3 43.3 21.0 43.5 21.4C43.8 22.1 43.8 22.4 43.9 23.3C43.9 24.0 44.0 24.5 44.2 24.8C44.4 25.3 44.4 25.5 44.5 30.3C44.5 33.1 44.6 35.4 44.6 35.5C44.8 35.8 45.3 35.9 47.4 35.9C49.7 36.0 49.7 36.0 49.8 36.7C49.9 37.4 49.9 66.0 49.8 66.4C49.7 66.6 49.6 66.7 49.4 66.8C49.1 66.9 9.3 66.9 8.7 66.8ZM33.8 61.7C34.3 61.2 34.2 60.1 33.4 57.9C33.3 57.7 33.2 57.1 33.2 56.4C33.1 55.5 33.1 55.3 32.9 55.0C32.5 54.5 32.5 54.3 32.5 53.9C32.6 53.6 32.5 53.3 32.3 52.9C32.0 52.2 32.1 51.6 32.4 51.2C33.6 49.7 34.1 48.5 34.1 46.7C34.1 46.0 34.1 45.3 34.0 45.2C33.8 44.7 32.2 43.1 31.7 42.9C31.5 42.8 31.1 42.6 31.0 42.4C30.6 42.1 30.3 42.0 29.1 42.1C28.3 42.2 28.0 42.2 27.7 42.4C27.5 42.5 27.1 42.7 26.8 42.8C26.3 43.0 26.1 43.1 25.9 43.5C25.7 43.8 25.2 44.4 24.8 44.7L24.1 45.4L24.1 46.6C24.1 47.7 24.1 47.8 24.4 48.4C24.6 48.8 24.8 49.2 24.8 49.5C24.9 49.7 25.2 50.2 25.4 50.5C26.1 51.5 26.2 51.8 26.0 52.8C25.9 53.2 25.8 53.8 25.8 54.1C25.8 54.4 25.7 54.9 25.5 55.4C25.0 56.5 24.9 57.0 24.8 58.0C24.8 58.6 24.7 59.1 24.5 59.4C24.0 60.4 24.0 60.9 24.6 61.4C25.0 61.9 25.2 61.9 29.4 61.9C33.5 61.9 33.5 61.9 33.8 61.7ZM36.8 35.7C37.2 35.3 37.2 34.7 37.2 29.4C37.1 24.3 37.1 24.1 36.8 23.8C36.5 23.5 36.3 23.1 36.2 22.6C36.1 22.3 35.9 21.9 35.7 21.7C35.5 21.4 35.2 21.0 35.1 20.8C34.7 20.2 34.5 20.1 33.8 19.9C33.4 19.8 33.1 19.6 32.9 19.4C32.4 19.0 31.9 18.8 31.2 18.8C30.8 18.8 30.3 18.7 29.9 18.6C29.2 18.4 28.9 18.3 28.2 18.6C27.9 18.7 27.3 18.8 26.9 18.8C25.8 18.9 25.5 19.0 25.2 19.4C25.1 19.5 24.7 19.7 24.4 19.9C23.6 20.3 23.1 20.8 22.8 21.4C22.6 21.9 22.3 22.2 21.8 22.7C21.0 23.5 21.0 23.3 20.9 29.8C20.9 34.9 20.9 35.2 21.2 35.6C21.4 35.9 21.4 35.9 29.0 35.9C36.4 35.9 36.6 35.9 36.8 35.7Z"/></svg></span><b>Change Password</b>${CK_MENU_ICONS.chev}</button>
-      ${(STATE.settings || {}).requireTradePassword === true ? `<button class="ck-pi-row" type="button" onclick="openChangeTradePasswordSheet()"><span class="ck-pi-ic"><svg viewBox="0 0 28 28"><circle cx="10" cy="14" r="7" fill="#ffae2b"/><circle cx="10" cy="14" r="2.6" fill="#fff"/><path d="M16 14h10M22 14v5M26 14v4" stroke="#ffae2b" stroke-width="3" stroke-linecap="round" fill="none"/></svg></span><b>Trade Password</b>${CK_MENU_ICONS.chev}</button>` : ''}
     </div>`);
   $('sheetBg').classList.add('ck-pi-page');
 };
@@ -5052,35 +5016,6 @@ window.submitLoginPasswordChange = async function(){
 // ── CHANGE TRADE PASSWORD (ChangePassword.dc.html) ──
 // The 6-digit PIN that confirms withdrawals. Cookie uses 6 digits where Snow
 // used 5 -- server.js validates the same length on /account/transaction-pin/change.
-window.openChangeTradePasswordSheet = function(){
-  // An account with no Trade Password yet is asked only for the new one.
-  const first = (STATE.account || {}).hasTradePin === false;
-  openSheet('Change Trade Password', `<div class="v-form reveal-in"><div class="v-edit">
-    ${first ? '' : `<label class="v-flabel" for="tpOld">Old Password</label>${vPwBox('tpOld', 'Enter old password', true)}`}
-    <label class="v-flabel" for="tpNew">New Password</label>${vPwBox('tpNew', 'Enter new password (6 digits)', true)}
-    <label class="v-flabel" for="tpNew2">Confirm New Password</label>${vPwBox('tpNew2', 'Confirm new password', true)}
-    <button class="v-cta" id="tpSaveBtn" onclick="submitTradePasswordChange()">Change Password</button>
-  </div></div>`);
-};
-window.submitTradePasswordChange = async function(){
-  const first = (STATE.account || {}).hasTradePin === false;
-  const oldPin = first ? '' : $('tpOld').value.trim();
-  const newPin = $('tpNew').value.trim();
-  const confirm = $('tpNew2').value.trim();
-  if (!first && !/^\d{6}$/.test(oldPin)) return notify('Enter your current 6-digit trade password.');
-  if (!/^\d{6}$/.test(newPin)) return notify('Your new trade password must be exactly 6 digits.');
-  if (newPin !== confirm) return notify('The two new trade passwords do not match.');
-  if (!first && newPin === oldPin) return notify('Your new trade password must be different from the old one.');
-  const btn = $('tpSaveBtn');
-  btn.disabled = true; btn.textContent = 'Saving…';
-  const r = await post('/account/transaction-pin/change', first ? { newPin } : { oldPin, newPin });
-  btn.disabled = false; btn.textContent = 'Change Password';
-  if (r.status !== 'success') return notify(r.message || 'Could not change your trade password.');
-  if (STATE.account) STATE.account.hasTradePin = true;
-  closeSheet({ fromAction: true });
-  notify(first ? 'Trade password saved' : 'Trade password changed');
-};
-
 // ── TREASURE CHEST (Chest.dc.html / ChestSuccess.dc.html) ──
 // The bouncing chest on Home opens this full screen: glowing ring, bouncing
 // chest artwork, key field, OPEN CHEST. A valid key flashes the green
@@ -6076,13 +6011,6 @@ function withdrawWindow(s){
   const open = from < to ? (now >= from && now < to) : (now >= from || now < to);
   return { enabled: true, open, from: witClock(s.withdrawOpenFrom), to: witClock(s.withdrawOpenTo) };
 }
-// Saturday and Sunday in the region's own clock: no withdrawal requests (the server decides; this only tells the member first).
-function weekendWithdrawShut(s){
-  if (s && s.weekendWithdrawBlock === false) return false;
-  if (STATE.account && STATE.account.withdrawAnytime) return false;
-  const wd = new Date(Date.now() + tzOffMs()).getUTCDay();
-  return wd === 0 || wd === 6;
-}
 // The one wallet card and the Bind Wallet button (one wallet per member; the
 // Wallet page edits it in place). Isolated so openWithdrawSheet()'s post-fetch
 // update can repaint only this block, never #witAmount.
@@ -6109,7 +6037,6 @@ function paintWithdrawSheet(s){
         <h4>Fee: ${fee}%</h4>
         <p>Withdrawals are processed within 30 minutes to 24 hours; you will receive <b>${esc(cur())}</b> <span id="witReceive">0</span>.</p>
       </div>
-      ${s.requireTradePassword === true ? `<label class="ck-amtbox ck-pinbox"><input id="witPin" type="text" inputmode="numeric" maxlength="6" placeholder="Trade password" autocomplete="off"></label>` : ''}
       <button class="ck-pay" id="witSubmitBtn" type="button" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Withdraw 0</button>
     </div>
     <div class="ck-card ck-wdcard2" id="witWalletBlock">${witWalletBlockHtml(s)}</div>
@@ -6188,18 +6115,14 @@ window.submitWithdraw = async function(){
   if (!acct) return notify('Please add a payout wallet before withdrawing.');
   // Same courtesy for the hours: told here so the member is not asked to
   // wait on a request the server will refuse anyway.
-  if (weekendWithdrawShut(STATE.settings || {})) return notify('Withdrawals are closed on Saturday and Sunday. Please come back on Monday.');
   const win = withdrawWindow(STATE.settings || {});
   if (win.enabled && !win.open && !(STATE.account && STATE.account.withdrawAnytime))
     return notify(`Withdraw is open from ${win.from} to ${win.to}. Please come back then.`);
-  const witPin = $('witPin') ? $('witPin').value.trim() : '';
-  if ((STATE.settings || {}).requireTradePassword === true && !/^\d{6}$/.test(witPin)) return notify('Enter your 6-digit Trade Password.');
   _withdrawSubmitting = true;
   submitBtn.disabled = true; submitBtn.textContent = 'Submitting…';
   let r;
-  try { r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone, pin: witPin }); }
+  try { r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone }); }
   finally {
-    if ($('witPin')) $('witPin').value = '';
     _withdrawSubmitting = false;
     submitBtn.disabled = false; submitBtn.textContent = 'Withdraw ' + numGroup(amount - Math.round(amount * withdrawalFeePct(STATE.settings || {}) / 100), false);
     // A background /bank/list landing mid-request can have repainted the

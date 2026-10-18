@@ -21,7 +21,7 @@ for(const s of d.scripts){
 }
 const tick=()=>new Promise(r=>setTimeout(r,5));
 function deferred(){let resolve;const promise=new Promise(r=>{resolve=r});return {promise,resolve}}
-function setState(){w.eval('STATE.page="home"; STATE.account={walletBalance:50000,totalEarned:100,totalDeposited:20000,totalWithdrawn:5000}; STATE.settings={minDeposit:15000,minWithdraw:5000,withdrawFeePct:0,weekendWithdrawBlock:false,requireTradePassword:true}; STATE.investments=[]; STATE.bankAccounts=[{id:"wallet",network:"MTN Mobile Money",phone:"256771234567",holder:"Test Member"}];')}
+function setState(){w.eval('STATE.page="home"; STATE.account={walletBalance:50000,totalEarned:100,totalDeposited:20000,totalWithdrawn:5000}; STATE.settings={minDeposit:15000,minWithdraw:5000,withdrawFeePct:0,}; STATE.investments=[]; STATE.bankAccounts=[{id:"wallet",network:"MTN Mobile Money",phone:"256771234567",holder:"Test Member"}];')}
 async function main(){
   await tick();setState();
   const request=w.api, originalFetch=w.fetch;
@@ -75,7 +75,7 @@ async function main(){
   assert.equal(d.querySelector('#witSubmitBtn').textContent,'Withdraw 15,000','the Withdraw button shows the amount typed (what the member receives) live');
   bank.resolve({status:'success',accounts:[{id:'wallet',network:'MTN Mobile Money',phone:'256771234567',holder:'Test Member'}]});await opened;
   assert.equal(d.querySelector('#witAmount'),input);assert.equal(input.value,'15,000');
-  assert.match(d.querySelector('.ck-feebox').textContent,/Fee: 0%/);assert.match(d.querySelector('.ck-feebox').textContent,/30 minutes to 24 hours/);assert(d.querySelector('#witPin'),'the Trade Password is asked on the Withdraw screen');
+  assert.match(d.querySelector('.ck-feebox').textContent,/Fee: 0%/);assert.match(d.querySelector('.ck-feebox').textContent,/30 minutes to 24 hours/);assert(!d.querySelector('#witPin'),'no Trade Password is asked on the Withdraw screen');
   const stale=deferred();w.api=()=>stale.promise;const previous=w.openWithdrawSheet();
   w.api=async()=>({status:'success',accounts:[{id:'new',network:'Airtel Money',phone:'256751234567',holder:'Current Wallet'}]});
   await w.openWithdrawSheet();
@@ -84,8 +84,6 @@ async function main(){
   const payment=deferred();let posts=0;
   w.post=()=>{posts++;return payment.promise};w.notify=()=>{};w.refreshAfterWithdraw=()=>{};
   d.querySelector('#witAmount').value='5000';
-  d.querySelector('#witPin').value='12345';await w.submitWithdraw();assert.equal(posts,0,'a Trade Password that is not 6 digits must not reach the server');
-  d.querySelector('#witPin').value='123456';
   const first=w.submitWithdraw();await w.submitWithdraw();assert.equal(posts,1,'duplicate tap must not issue a second withdrawal');
   w.openChangeLoginPasswordSheet();
   payment.resolve({status:'success',net:5000});await first;

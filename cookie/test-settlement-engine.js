@@ -73,12 +73,12 @@ function database(seed) {
 const HOUR=3600000, DAY=86400000, eat=s=>Date.parse(s+'+03:00');
 let NOW=0;
 class FakeDate extends Date{ constructor(...a){ if(a.length) super(...a); else super(NOW); } static now(){ return NOW; } static [Symbol.hasInstance](x){ return Object.prototype.toString.call(x)==='[object Date]'; } }
-function setup(rows, weekendPause=true){
+function setup(rows){
   const db=database(rows); let serial=0;
-  const c=vm.createContext({ db, Date:FakeDate, console:{log(){},warn(){},error(){}}, tzOffMs:()=>10800000, _settingsCache:{weekendCashbackPause:weekendPause}, DEFAULT_SETTINGS:{},
+  const c=vm.createContext({ db, Date:FakeDate, console:{log(){},warn(){},error(){}}, tzOffMs:()=>10800000, 
     _creditingPayouts:new Set(), nowStr:()=>({date:'d',time:'t'}), newStatementId:()=>'s-'+ ++serial,
     FieldValue:{ increment:n=>({op:'inc',n}), arrayUnion:(...items)=>({op:'union',items}), delete:()=>({op:'delete'}), serverTimestamp:()=>new FakeDate() } });
-  vm.runInContext('const _lockTails=new Map();\n'+['withLock','tsMillis','eatNextMidnight','weekendCashbackPaused','midnightPays','payoutDueAtMs','payoutsDueCount','settleInvestmentIfDue','_settleDueInvestmentNow'].map(fn).join('\n'),c);
+  vm.runInContext('const _lockTails=new Map();\n'+['withLock','tsMillis','eatNextMidnight','payoutDueAtMs','payoutsDueCount','settleInvestmentIfDue','_settleDueInvestmentNow'].map(fn).join('\n'),c);
   const settle=async id=>c.settleInvestmentIfDue(await db.collection('investments').doc(id).get());
   return {c,db,settle};
 }
@@ -94,10 +94,10 @@ async function runDays(h,inv,id,from,days,parallel=1){
 }
 async function main(){
   {
-    // A daily income product bought Wednesday 15:00 pays exactly 8 times, never on the weekend midnights, and exactly its total in all.
+    // A daily income product bought Wednesday 15:00 pays exactly 8 times, at every midnight (no weekend rest), and exactly its total in all.
     const h=setup({users:{m:member()},investments:{i1:plan()},transactions:{}});
     const days=await runDays(h,null,'i1',eat('2026-10-14T15:00:00'),20);
-    assert.deepEqual(days,['2026-10-15 00:00','2026-10-16 00:00','2026-10-17 00:00','2026-10-20 00:00','2026-10-21 00:00','2026-10-22 00:00','2026-10-23 00:00','2026-10-24 00:00'].map(x=>x),'pays at 00:00 Thu, Fri, Sat then Tue to Sat; Sunday and Monday 00:00 rest');
+    assert.deepEqual(days,['2026-10-15 00:00','2026-10-16 00:00','2026-10-17 00:00','2026-10-18 00:00','2026-10-19 00:00','2026-10-20 00:00','2026-10-21 00:00','2026-10-22 00:00'],'pays at 00:00 every night, Saturday, Sunday and Monday included');
     assert.equal(h.db.rows.users.m.walletBalance,90000,'the wallet got exactly the total payout');
     assert.equal(h.db.rows.users.m.totalEarned,90000);
     assert.equal(h.db.rows.investments.i1.status,'matured');assert.equal(h.db.rows.investments.i1.payoutsMade,8);assert.equal(h.db.rows.investments.i1.paidOut,90000);
@@ -146,24 +146,18 @@ async function main(){
     // A daily wage product (activated by the admin, price 0) pays its daily figure from the same engine and stops at its total.
     const h=setup({users:{m:member()},investments:{w1:plan({tierLabel:'Silver',amount:0,payoutsTotal:360,expectedReturn:360000,granted:true,createdAt:new FakeDate(eat('2026-10-14T15:00:00'))})},transactions:{}});
     NOW=eat('2026-10-25T01:00:00');await Promise.all([h.settle('w1'),h.settle('w1')]);
-    assert.equal(h.db.rows.investments.w1.payoutsMade,8,'eight paying midnights so far (Sunday and Monday rest)');
-    assert.equal(h.db.rows.users.m.walletBalance,8000,'1,000 a day, once each');
+    assert.equal(h.db.rows.investments.w1.payoutsMade,11,'eleven midnights so far (Thursday 00:00 to Sunday 00:00)');
+    assert.equal(h.db.rows.users.m.walletBalance,11000,'1,000 a day, once each');
     assert.equal(h.db.rows.investments.w1.status,'active');
     NOW=eat('2028-06-01T00:00:00');await h.settle('w1');
     assert.equal(h.db.rows.users.m.walletBalance,360000,'the full wage in the end, exactly');assert.equal(h.db.rows.investments.w1.status,'matured');
     await h.settle('w1');assert.equal(h.db.rows.users.m.walletBalance,360000);
   }
   {
-    // Weekend rest off: every midnight pays.
-    const h=setup({users:{m:member()},investments:{i1:plan()},transactions:{}},false);
-    const days=await runDays(h,null,'i1',eat('2026-10-14T15:00:00'),12);
-    assert.equal(days.length,8);assert.equal(days[3],'2026-10-18 00:00');assert.equal(h.db.rows.users.m.walletBalance,90000);
-  }
-  {
     // Amounts that do not divide evenly still end on the exact total.
     const h=setup({users:{m:member()},investments:{i1:plan({payoutsTotal:7,expectedReturn:100000})},transactions:{}});
     NOW=eat('2027-01-01T00:00:00');await h.settle('i1');assert.equal(h.db.rows.users.m.walletBalance,100000);assert.equal(h.db.rows.investments.i1.paidOut,100000);
   }
-  console.log('PASS: settlement engine (exact totals, no double pay: concurrent, crash retry, catch-up, ban, removed; weekend rest; wage products)');
+  console.log('PASS: settlement engine (exact totals, no double pay: concurrent, crash retry, catch-up, ban, removed; every midnight; wage products)');
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

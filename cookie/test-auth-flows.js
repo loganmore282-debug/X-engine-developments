@@ -106,12 +106,12 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); w.ckSucce
     const server = fs.readFileSync(__dirname + '/server.js', 'utf8');
     ok(html.includes('id="authHeroBg"') && html.includes('id="loginHeading">Login'), 'login uses the full-screen uploaded image and reference heading');
     ok(html.includes('id="registerHeading">Create Account'), 'registration uses the reference heading');
-    ok(html.includes('id="regTradePin"') && !html.includes('id="regOtpRow"') && !html.includes('id="regOtp"'), 'registration matches screenshot fields and has no OTP field');
+    ok(!html.includes('id="regTradePin"') && !html.includes('id="regOtpRow"') && !html.includes('id="regOtp"'), 'registration matches screenshot fields and has no OTP field');
     ok(!html.includes('id="lsPercent"') && !html.includes('class="ring-loader"'), 'startup loading animation is removed');
     ok(!admin.includes('id="sOtpReg"'), 'admin no longer exposes a registration OTP setting');
     const registerRoute = server.slice(server.indexOf("app.post('/register'"), server.indexOf("app.get('/account'", server.indexOf("app.post('/register'")));
-    ok(registerRoute && !registerRoute.includes('consumeOtpTicket') && registerRoute.includes('INVALID_TRADE_PIN'), 'server registration accepts no OTP and validates the trade PIN');
-    ok(/update\.transactionPinHash\s*=\s*(await )?scryptHash(Async)?\(tradePin\)/.test(server), 'server saves only a hash of the new trade PIN');
+    ok(registerRoute && !registerRoute.includes('consumeOtpTicket') && !registerRoute.includes('INVALID_TRADE_PIN'), 'server registration accepts no OTP and asks for no trade PIN');
+    ok(!/transactionPinHash\s*=/.test(server), 'the server keeps no trade PIN');
     const dom = load(), w = dom.window;
     w.eval("STATE.settings={authHeroOpacity:60,authHeroBlur:8,authCardOpacity:25,authCardBlur:3};STATE.authHeroImage='data:image/png;base64,AA==';applyAuthBackgrounds()");
     eq(w.document.documentElement.style.getPropertyValue('--auth-hero-op'), '0.6', 'background opacity reaches the screen');
@@ -159,8 +159,8 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); w.ckSucce
     eq(t.length, 1); ok(/not available right now/.test(t[0]) && !/not a function/.test(t[0]), 'login says so instead of throwing: ' + t[0]);
     eq($(w, 'loginBtn').disabled, false, 'login button usable again');
     eq($(w, 'loginBtn').textContent, 'Login');
-    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; $(w, 'regReferral').value = 'abc';
-    w._settings = { otpVerificationEnabled: false, referralRequired: false, requireTradePassword: true }; w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:false,requireTradePassword:true}');
+    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regReferral').value = 'abc';
+    w._settings = { otpVerificationEnabled: false, referralRequired: false }; w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:false}');
     t.length = 0; await w.doRegister();
     ok(t.length === 1 && /not available right now/.test(t[0]), 'sign-up says so too: ' + t[0]);
     eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Register');
@@ -246,7 +246,6 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); w.ckSucce
     }
     await closeSoon(dom);
   }
-  await ghostScenario({ status: 400, body: { status: 'error', code: 'REFERRAL_REQUIRED', message: 'A referral code is required to sign up. Ask the person who invited you for theirs.' } }, /referral code is required.*Complete your sign-up/, true);
   await ghostScenario({ status: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } }, /does not exist.*Complete your sign-up/, true);
   await ghostScenario({ status: 500, body: { status: 'error', message: 'Could not complete your registration right now' } }, /Could not complete your registration/, false);
 
@@ -268,24 +267,13 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); w.ckSucce
     await w.bootFromNetwork('u1'); eq(log.signOuts, 0); eq(t.length, 0);
     await closeSoon(dom);
   }
-  {
-    const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
-    const t = toasts(w), log = fakeFirebase(w, {});
-    w.eval('STATE.settings={otpVerificationEnabled:true,referralRequired:false,requireTradePassword:true}');
-    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '12x';
-    await w.doRegister();
-    eq(log.creates, 0, 'invalid trade PIN cannot create an account');
-    ok(t.some(m => /Trade Password must be exactly 6 digits/.test(m)), 'trade PIN validation is clear');
-    await closeSoon(dom);
-  }
-
   // ─── 6. Sign-up: failures leave nothing behind; the recovery path opens the app once ───
   trace('section 6');
   {
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
     const t = toasts(w); fakeFirebase(w, {});
-    w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:false,requireTradePassword:true}');
-    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456';
+    w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:false}');
+    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1';
     w._fbFail = { code: 'auth/network-request-failed', message: 'Firebase: Error (auth/network-request-failed).' };
     await w.doRegister();
     eq(w.eval('window._pendingRegPhone'), '', 'a failed sign-up stages nothing for the next sign-in');
@@ -300,14 +288,14 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); w.ckSucce
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
     const t = toasts(w); const accounts = {}; const log = fakeFirebase(w, accounts);
     w._settings = { otpVerificationEnabled: false, referralRequired: true };
-    w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:true,requireTradePassword:true}');
+    w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:true}');
     let profile = false, registers = 0;
     fakeServer(w, async (p, b) => {
       if (p === '/register') { registers++; if (b.referralCode !== 'GOODCODE') return { status: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } }; profile = true; return { status: 200, body: { status: 'success' } }; }
       if (p === '/account') return profile ? { status: 200, body: okAccount } : { status: 404, body: { status: 'error', code: 'NOT_FOUND', message: 'User not found' } };
       return null;
     });
-    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; $(w, 'regReferral').value = 'WRONG';
+    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regReferral').value = 'WRONG';
     await w.doRegister(); await sleep(80);
     eq(shown(w, 'app'), false); eq(shown(w, 'authScreen'), true, 'bad code: back on the form');
     ok(t.some(m => /does not exist/.test(m)), 'says the code is wrong');
@@ -325,10 +313,10 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); w.ckSucce
     // Plain sign-up success end to end.
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
     const t = toasts(w); const log = fakeFirebase(w, {});
-    w.eval('STATE.settings={otpVerificationEnabled:true,referralRequired:false,requireTradePassword:true}');
+    w.eval('STATE.settings={otpVerificationEnabled:true,referralRequired:false}');
     let profile = false;
-    const calls = fakeServer(w, async (p, b) => p === '/register' ? (profile = true, eq(b.pin, '123456', 'trade PIN is sent for registration'), ok(!Object.hasOwn(b, 'otpTicket'), 'registration sends no OTP ticket'), { status: 200, body: { status: 'success' } }) : p === '/account' ? (profile ? { status: 200, body: okAccount } : { status: 404, body: { status: 'error', code: 'NOT_FOUND' } }) : null);
-    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456';
+    const calls = fakeServer(w, async (p, b) => p === '/register' ? (profile = true, ok(!Object.hasOwn(b, 'pin'), 'no trade PIN is sent for registration'), ok(!Object.hasOwn(b, 'otpTicket'), 'registration sends no OTP ticket'), { status: 200, body: { status: 'success' } }) : p === '/account' ? (profile ? { status: 200, body: okAccount } : { status: 404, body: { status: 'error', code: 'NOT_FOUND' } }) : null);
+    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1';
     await w.doRegister(); await sleep(120);
     eq(shown(w, 'app'), true); eq(shown(w, 'authScreen'), false); eq(shown(w, 'loadingScreen'), false);
     ok(t.some(m => m === 'BOX:Success') && !t.some(m => /Login successful/.test(m)), 'sign-up Success box, not a login toast: ' + JSON.stringify(t));

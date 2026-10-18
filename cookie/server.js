@@ -165,7 +165,7 @@ app.use('/admin/', async (req, _res, next) => {
 // pays real money on an unauthenticated-body POST, so it gets the strict
 // 60/min per-user cap rather than only the 400/min global one.
 ['/withdraw/request', '/invest/create', '/deposit/marzpay', '/bank/save', '/register',
- '/account/transaction-pin/change', '/redeem', '/turntable/spin']
+ '/redeem', '/turntable/spin']
   .forEach(p => app.use(p, apiLimiter));
 // ── BODY PARSING ──
 // A tight 64kb cap by default; admin routes that carry a base64 product
@@ -616,14 +616,6 @@ const DEFAULT_SETTINGS = {
   // every spin price for each product... also products will have different
   // rates of multipliers so don't fix it in settings." Only the free daily
   // spin's band lives here, because it is not tied to any product.
-  // Owner's rule: the referral code on Sign Up is a MUST, not optional.
-  // Enforced on the server (it used to be a client-side check only, which any
-  // direct POST /register walked straight past). The very first account is
-  // exempt automatically -- see referralRequiredNow(): with no members yet
-  // there is no code in existence to type, so requiring one would make the
-  // platform impossible to launch. Turn this off temporarily if you ever need
-  // to onboard someone with no upline.
-  requireReferralCode: true,
   // Extra frontend domains allowed to call this backend, set from the admin
   // panel (Settings -> Allowed website domains). ADDED to the built-in
   // allowlist, never replacing it -- see _corsExtraHosts.
@@ -669,12 +661,6 @@ const DEFAULT_SETTINGS = {
   // Off by default: a fresh install must not lock withdraw behind hours
   // nobody has set yet.
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
-  // WEEKENDS. Owner: products rest on Saturday and Sunday (no cashback is credited for those two days) and nobody can request a withdrawal on
-  // either day. Cashback is credited at local midnight for the day that just ended, so Friday's is credited at 00:00 Saturday, and the next
-  // credit is at 00:00 Tuesday (for Monday). Both are ON by default and can be switched off in Admin > Settings.
-  weekendCashbackPause: true, weekendWithdrawBlock: true,
-  // Cookie's screens have no Trade Password: it is not asked at sign-up or at withdrawal unless this is switched on in Admin > Settings.
-  requireTradePassword: false,
   // What every NEW mobile-money recharge / withdrawal reference starts with (cookie2610111048053568). Admin > Settings; existing references never change.
   referencePrefix: 'S',
   // AUTOMATIC WITHDRAWALS (Admin > Settings > Withdrawals). Off by default. Requests always arrive as 'pending' as usual; only while this is
@@ -842,7 +828,7 @@ function gatewayServesRegion(gateway, region) {
 // automatic is now the only deposit path, so this is just "does a gateway
 // reach this country" (the PAY A/PAY B enable toggle this used to also
 // check is gone). Served to the app as the RESOLVED answer, the same way
-// payoutManual and referralRequired already are, so the member never
+// payoutManual already is, so the member never
 // meets a payment method that cannot work.
 function payAAvailable(sett, region) {
   return gatewayServesRegion(depositAutomaticProvider(sett), region);
@@ -1255,37 +1241,19 @@ function eatNextMidnight(ts) {
 // The k-th payment (k = 1..total) is due at the first local midnight AFTER the purchase, plus (k-1) days. A product bought
 // at 15:00 therefore pays at 00:00 the next night, then every night at 00:00, `total` payments in all; the last one
 // is the maturity payment. Uganda has no daylight saving, so the day length is a constant 86,400,000 ms.
-// WEEKEND REST. A midnight credits the day that has just ended, so the credit at 00:00 Sunday (for Saturday) and at 00:00 Monday (for
-// Sunday) are skipped while weekendCashbackPause is on: the product pays Tuesday to Saturday at 00:00 (for Monday to Friday) and then waits.
-// A skipped midnight is not lost money: the instalment simply falls on the next working midnight, so the cycle gets longer by the weekend.
-function weekendCashbackPaused() { const st = _settingsCache || DEFAULT_SETTINGS; return st.weekendCashbackPause !== false; }
-function midnightPays(t, paused) {
-  if (!paused) return true;
-  const wd = new Date(t + tzOffMs()).getUTCDay();   // the local weekday that STARTS at this midnight (0 = Sunday)
-  return wd !== 0 && wd !== 1;
-}
-// Local weekday now (0 = Sunday ... 6 = Saturday), in the region's own clock.
-function eatWeekday(ts) { return new Date((ts || Date.now()) + tzOffMs()).getUTCDay(); }
+// Every local midnight pays: there is no weekend rest.
 function payoutDueAtMs(createdMs, k) {
-  const paused = weekendCashbackPaused();
-  let t = eatNextMidnight(createdMs), n = 0;
-  for (let i = 0; i < 5000; i++, t += 86400000) {
-    if (!midnightPays(t, paused)) continue;
-    if (++n >= k) return t;
-  }
-  return t;
+  return eatNextMidnight(createdMs) + (Math.max(1, k) - 1) * 86400000;
 }
 function payoutsDueCount(createdMs, now, total) {
-  const paused = weekendCashbackPaused();
-  let t = eatNextMidnight(createdMs), n = 0;
-  while (t <= now && n < total) { if (midnightPays(t, paused)) n++; t += 86400000; }
-  return n;
+  const first = eatNextMidnight(createdMs);
+  if (now < first) return 0;
+  return Math.min(total, Math.floor((now - first) / 86400000) + 1);
 }
 // The instants of the first `total` payments, in one pass (analytics asks for every contract).
 function payoutInstants(createdMs, total) {
-  const paused = weekendCashbackPaused(), out = [];
-  let t = eatNextMidnight(createdMs);
-  for (let i = 0; i < 5000 && out.length < total; i++, t += 86400000) if (midnightPays(t, paused)) out.push(t);
+  const first = eatNextMidnight(createdMs), out = [];
+  for (let i = 0; i < total; i++) out.push(first + i * 86400000);
   return out;
 }
 function eatParts(ts) {
@@ -3550,11 +3518,6 @@ app.get('/public/settings', async (req, res) => {
       if (/^autoApprove/.test(k) || ['depositMethod', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain'].includes(k)) continue;
       rest[k] = rest0[k];
     }
-    // referralRequired is the RESOLVED answer (setting AND "a member already
-    // exists"), not the raw setting -- same reasoning as the resolved product
-    // figures below. The Sign Up screen shows the field as required or
-    // optional from this one flag, so it can never disagree with what
-    // /register will actually accept.
     // Revalidated every time (no max-age): maintenance mode, the opening
     // countdown and every rate have to take effect on the next launch, not a
     // minute later. The ETag still removes the bytes when nothing changed.
@@ -3572,7 +3535,6 @@ app.get('/public/settings', async (req, res) => {
       // removed outright; renamed since "PAY A" no longer means anything
       // once there is no PAY B to contrast it with.)
       depositAvailable: payAAvailable(s),
-      referralRequired: await referralRequiredNow(),
     // How many countries this platform runs in. The app only uses it to add
     // "if you signed up on another country's site, sign in there" to a
     // failed login -- an account belongs to one region and its synthetic
@@ -3816,12 +3778,6 @@ app.get('/public/about-content', async (_req, res) => {
 // ═══════════════════════════════════════════
 // REGISTRATION / ACCOUNT
 // ═══════════════════════════════════════════
-// A 6-digit trade password, per Cookie's registration spec (Snow used 5) —
-// rejects the weakest shape
-// (all-same-digit) whenever a NEW PIN is being chosen, never when an
-// existing one is being verified.
-function isWeakPin(pin) { return /^(\d)\1{5}$/.test(String(pin || '')); }
-
 // `regionKey` is stamped here, ONCE, from the region that owns the hostname
 // the account was created on, and is never written again. Everything the
 // member ever sees or is charged -- currency, product prices, minimums,
@@ -3842,36 +3798,6 @@ function defaultProfileDoc(phone, regionKey) {
     createdAt: FieldValue.serverTimestamp()
   };
 }
-// Is there at least one fully registered member yet? Only ever asked to
-// decide whether a referral code CAN be required, so it latches: once a
-// member exists the answer can never go back to "no", and the query is never
-// run again. Before that it is a single limit(1) read, so an empty platform
-// pays almost nothing for it either.
-let _anyMemberExists = false;
-async function anyMemberExists() {
-  if (_anyMemberExists) return true;
-  try {
-    const snap = await db.collection('users').where('registrationDone', '==', true).limit(1).get();
-    if (!snap.empty) _anyMemberExists = true;
-  } catch (_) {
-    // A read failure must not hand out an unearned exemption -- assume
-    // members exist and keep the code required.
-    return true;
-  }
-  return _anyMemberExists;
-}
-// The owner's rule is that a referral code is a MUST. That cannot apply to
-// the very first account: with no members there is no code in existence to
-// type, so a hard requirement would make the platform impossible to launch
-// (the owner's own question -- "how to create user account yet no referral
-// code???"). So the requirement switches itself on the moment the first
-// member completes registration, and the admin toggle can lift it again if
-// someone ever needs onboarding with no upline.
-async function referralRequiredNow() {
-  const sett = await getSettings();
-  if (sett.requireReferralCode === false) return false;
-  return await anyMemberExists();
-}
 // Shared by the member's own /register — the ONE place that ever assigns a
 // referral code, links a referrer's team counts, sets the Trade Password,
 // or credits the welcome bonus.
@@ -3883,7 +3809,7 @@ async function referralRequiredNow() {
 // already landed, wiping registrationDone/walletBalance/referralCode back
 // to defaults and letting the second call register -- and pay the welcome
 // bonus -- a second time).
-async function completeRegistrationCore(userId, referralCode, pin, phone) {
+async function completeRegistrationCore(userId, referralCode, phone) {
   return withLock('reg:' + userId, async () => {
     const userRef = db.collection('users').doc(userId);
     const userSnap = await userRef.get();
@@ -3905,16 +3831,9 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
 
     // Registration saves the six-digit Trade Password as a server-side
     // scrypt hash. It is never returned to the client.
-    const tradePin = String(pin || '');
-    if ((await getSettings()).requireTradePassword === true && !/^\d{6}$/.test(tradePin))
-      return { code: 400, body: { status: 'error', code: 'INVALID_TRADE_PIN', message: 'Trade Password must be exactly 6 digits.' } };
     const code = String(referralCode || '').trim();
     let referrerId = null;
-    // The "referral code is a must" rule lives HERE, not only in the app --
-    // the app's own check is a convenience, and a direct POST /register with
-    // an empty code used to sail past it and create an uplineless account.
-    if (!code && await referralRequiredNow())
-      return { code: 400, body: { status: 'error', code: 'REFERRAL_REQUIRED', message: 'A referral code is required to sign up. Ask the person who invited you for theirs.' } };
+    // The referral code is optional: no code, no upline.
     if (code) {
       const refDoc = await findUserByReferralCode(code);
       if (!refDoc)
@@ -3957,7 +3876,6 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
         registrationDone: true, referralCode: myRefCode, publicId: myPublicId,
         walletBalance: FieldValue.increment(WELCOME),
       };
-      if (/^\d{6}$/.test(tradePin)) update.transactionPinHash = await scryptHashAsync(tradePin);
       if (referrerId) update.referredBy = referrerId;
       // The user's own doc is written FIRST, in one atomic single-document
       // update — a crash right after this leaves the member fully and
@@ -3992,10 +3910,6 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     };
     if (referrerId) await withLock('referrer-guard:' + referrerId, commit);
     else await commit();
-    // A member now exists, so the founder exemption above closes from here
-    // on: the next sign-up must carry a code. Latched in memory rather than
-    // re-queried, and anyMemberExists() re-derives it after a restart.
-    _anyMemberExists = true;
     if (WELCOME > 0) {
       const { date, time } = nowStr();
       // A fixed document id (one welcome gift per member, ever) so a repeat can never write a second row, and one
@@ -4022,12 +3936,7 @@ app.post('/register', async (req, res) => {
     // below), and the ticket from the original successful call is already
     // consumed, so requiring it again would fail a registration that in fact
     // already succeeded.
-    const already = await db.collection('users').doc(userId).get();
-    if (!already.exists || !already.data().registrationDone) {
-      const tradePin = textOf(req.body.pin);
-      if ((await getSettings()).requireTradePassword === true && !/^\d{6}$/.test(tradePin)) return res.status(400).json({ status: 'error', code: 'INVALID_TRADE_PIN', message: 'Trade Password must be exactly 6 digits.' });
-    }
-    const result = await completeRegistrationCore(userId, textOf(req.body.referralCode), textOf(req.body.pin), phone);
+    const result = await completeRegistrationCore(userId, textOf(req.body.referralCode), phone);
     const { referrerId, ...memberBody } = result.body;
     res.status(result.code).json(memberBody);
   } catch (e) {
@@ -4096,7 +4005,7 @@ app.get('/account', async (req, res) => {
       totalEarned: round2(u.totalEarned), totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
       checkinStreak: u.checkinStreak || 0, lastCheckinAt: u.lastCheckinAt || null,
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
-      hasTradePin: !!u.transactionPinHash, vipLevel, withdrawAnytime: u.withdrawAnytime === true,
+      vipLevel, withdrawAnytime: u.withdrawAnytime === true,
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
     // The member's OWN region, which the middleware has already put in
     // force for this request. The app re-reads its currency, dialling code
@@ -5195,41 +5104,6 @@ app.post('/deposit/callback', async (req, res) => {
 // ═══════════════════════════════════════════
 const _withdrawInFlight = new Set();
 const _witRequestInFlight = new Set();
-// The Trade Password set at registration is the ONLY PIN in Cookie -- it
-// gates every actual money-moving withdrawal request. It no longer gates
-// binding/removing a withdrawal account (owner, Round 39: "remove pin
-// putting here, only it will be on Withdrawals") -- saving/removing a
-// payout destination doesn't move money by itself, see /bank/save and
-// /bank/delete for that change.
-const PIN_LOCK_MS = 15 * 60 * 1000;
-const PIN_MAX_FAILS = 5;
-async function pinCheck(userId, pin0) {
-  const pin = textOf(pin0);
-  if (!/^\d{6}$/.test(pin))
-    return { ok: false, code: 'INVALID_PIN', message: 'Enter your 6-digit Trade Password.' };
-  return withLock('pin:' + userId, async () => {
-    const uRef = db.collection('users').doc(userId);
-    const snap = await uRef.get();
-    if (!snap.exists) return { ok: false, code: 'NOT_FOUND', message: 'Account not found' };
-    const u = snap.data();
-    const now = Date.now();
-    if (u.pinLockedUntil && tsMillis(u.pinLockedUntil) > now) {
-      const mins = Math.ceil((tsMillis(u.pinLockedUntil) - now) / 60000);
-      return { ok: false, code: 'LOCKED', message: `Too many wrong Trade Password attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` };
-    }
-    if (!u.transactionPinHash) return { ok: false, code: 'NO_PIN', message: 'No Trade Password is set on this account.' };
-    if (!(await scryptVerifyAsync(pin, u.transactionPinHash))) {
-      const fails = (u.pinFailCount || 0) + 1;
-      const update = { pinFailCount: fails };
-      let locked = false;
-      if (fails >= PIN_MAX_FAILS) { update.pinLockedUntil = new Date(now + PIN_LOCK_MS); update.pinFailCount = 0; locked = true; }
-      await uRef.update(update);
-      return { ok: false, code: locked ? 'LOCKED' : 'WRONG_PIN', message: locked ? `Too many wrong Trade Password attempts. Try again in ${PIN_LOCK_MS / 60000} minutes.` : 'Incorrect Trade Password.' };
-    }
-    await uRef.update({ pinFailCount: 0 });
-    return { ok: true };
-  });
-}
 // Caller holds bal:<userId>. A restart can finish a charged request, but
 // must never charge an unconfirmed request on the member's behalf.
 async function finishWithdrawalCreation(witRef, userId) {
@@ -5293,10 +5167,6 @@ app.post('/withdraw/request', async (req, res) => {
     const anyFlagSnap = await db.collection('users').doc(userId).get();
     const unrestricted = anyFlagSnap.exists && anyFlagSnap.data().withdrawAnytime === true;
     const anyTime = win.enabled && !win.open ? unrestricted : false;
-    // Saturday and Sunday (the region's own days): no withdrawal requests, unless the owner marked this member unrestricted.
-    if (sett.weekendWithdrawBlock !== false && !unrestricted && [0, 6].includes(eatWeekday(Date.now())))
-      return res.status(400).json({ status: 'error', code: 'WEEKEND_CLOSED',
-        message: 'Withdrawals are closed on Saturday and Sunday. Please come back on Monday.' });
     if (win.enabled && !win.open && !anyTime)
       return res.status(400).json({ status: 'error', code: 'WINDOW_CLOSED',
         message: `Withdraw is open from ${win.from} to ${win.to}. Please come back then.` });
@@ -5311,14 +5181,6 @@ app.post('/withdraw/request', async (req, res) => {
       return res.status(400).json({ status: 'error',
         message: `Withdraw must be a multiple of ${fmtMoney(wMult)}. Try ${fmtMoney(Math.max(low, sett.minWithdraw))} or ${fmtMoney(high)}.` });
     }
-    // Trade Password gate. The six-digit Trade Password chosen at sign-up is asked
-    // on the Withdraw screen and checked HERE, before anything is charged:
-    // pinCheck() verifies the scrypt hash and locks the account for 15 minutes
-    // after 5 wrong tries (a 6-digit code has only a million values, so the
-    // lock is what makes it a real gate). The app's own check is a courtesy.
-    const pinResult = sett.requireTradePassword === true ? await pinCheck(userId, req.body.pin) : { ok: true };
-    if (!pinResult.ok)
-      return res.status(pinResult.code === 'LOCKED' ? 429 : 400).json({ status: 'error', code: pinResult.code, message: pinResult.message });
     const boundSnap = await db.collection('bankAccounts')
       .where('userId', '==', userId).where('network', '==', rawNetwork).where('phone', '==', destValue).limit(1).get();
     if (boundSnap.empty)
@@ -6331,29 +6193,6 @@ app.get('/bank/list', async (req, res) => {
     res.json({ status: 'success', accounts: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load withdrawal accounts' }); }
 });
-app.post('/account/transaction-pin/change', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const newPin = String(req.body.newPin || '');
-  if (!/^\d{6}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'New trade password must be 6 digits.' });
-  if (isWeakPin(newPin)) return res.status(400).json({ status: 'error', message: 'That PIN is too easy to guess. Choose 6 digits that are not all the same.' });
-  try {
-    // subagent-audit-caught: was missing the banned check every sibling
-    // account-mutating route has.
-    const uSnap = await db.collection('users').doc(userId).get();
-    if (uSnap.exists && uSnap.data().status === 'banned')
-      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    // A member who has no Trade Password yet (an account made before it existed) sets the first one
-    // here without an old one; once one exists, changing it always needs the old one.
-    if (uSnap.exists && uSnap.data().transactionPinHash) {
-      const check = await pinCheck(userId, req.body.oldPin);
-      if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });
-    }
-    await db.collection('users').doc(userId).update({ transactionPinHash: await scryptHashAsync(newPin), pinFailCount: 0, pinLockedUntil: null });
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not change your PIN' }); }
-});
-
 // ═══════════════════════════════════════════
 // GIFT CODES
 // ═══════════════════════════════════════════
@@ -6977,7 +6816,7 @@ const SETTINGS_CRITICAL_RANGES = {
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
   innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'weekendCashbackPause', 'weekendWithdrawBlock', 'requireTradePassword', 'blockRootDomain'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -7796,8 +7635,7 @@ app.post('/admin/user/detail', async (req, res) => {
       db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
     ]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    // transactionPinHash never leaves this server, even to an admin --
-    // hasPayoutPin is the boolean the admin UI actually needs.
+    // A Trade Password hash left on an older account never leaves this server.
     const { transactionPinHash, ...userSafe } = uSnap.data();
     const earnedBreakdown = {};
     EARNING_TX_TYPES.forEach(t => { earnedBreakdown[t] = 0; });
@@ -7806,7 +7644,7 @@ app.post('/admin/user/detail', async (req, res) => {
       if (EARNING_TX_TYPES.includes(t.type)) earnedBreakdown[t.type] += finiteMoney(t.amount);
     });
     res.json({
-      status: 'success', user: { id: uSnap.id, ...userSafe, hasPayoutPin: !!transactionPinHash },
+      status: 'success', user: { id: uSnap.id, ...userSafe },
       investments: invSnap.docs.map(d => ({ id: d.id, ...d.data() })),
       transactions: txSnap.docs.map(d => ({ id: d.id, ...d.data() })),
       withdrawals: witSnap.docs.map(d => ({ id: d.id, ...d.data() })),
@@ -7816,31 +7654,6 @@ app.post('/admin/user/detail', async (req, res) => {
       bankAccounts: bankSnap.docs.map(d => ({ id: d.id, ...d.data() })),
       teamDeposits, earnedBreakdown,
     });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-// Sets a NEW PIN chosen by the admin -- never clears transactionPinHash to
-// null. Codex-caught real bug: Snow has no auto-setup-on-first-use PIN path
-// (see the comment above PIN_LOCK_MS) -- pinCheck() unconditionally rejects
-// a null hash as NO_PIN, and /account/transaction-pin/change always
-// requires the OLD pin to match first. Clearing the hash to null would have
-// permanently locked the member out of ever setting a replacement PIN
-// themselves (can't withdraw, can't add/remove a payout account). Same
-// pattern as /admin/user/reset-password: the admin types the new value,
-// which they then relay to the member.
-app.post('/admin/user/reset-payout-pin', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const userId = String(req.body.userId || '');
-  const newPin = String(req.body.newPin || '');
-  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
-  if (!/^\d{6}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'New trade password must be 6 digits.' });
-  if (isWeakPin(newPin)) return res.status(400).json({ status: 'error', message: 'That PIN is too easy to guess. Choose 6 digits that are not all the same.' });
-  try {
-    const ref = db.collection('users').doc(userId);
-    const snap = await ref.get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    await ref.update({ transactionPinHash: scryptHash(newPin), pinFailCount: 0, pinLockedUntil: null });
-    logAdminAction(req, 'user_pin_reset', { userId });
-    res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Owner: make one member "unrestricted by withdrawal time": they can request a withdrawal at any hour even when the
@@ -8079,7 +7892,6 @@ app.post('/admin/user/repair-wallet', async (req, res) => {
 app.post('/admin/user/complete-registration', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = String(req.body.userId || '');
-  const pin = textOf(req.body.pin);
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
     // Codex-caught real bug: this used to check-then-create the profile doc
@@ -8097,7 +7909,7 @@ app.post('/admin/user/complete-registration', async (req, res) => {
     // completeRegistrationCore does the actual creation safely.
     let phone = '';
     try { const acct = await findAccountByUid(userId); phone = acct ? (cleanPhone(acct.phone) || '') : ''; } catch (_) {}
-    const result = await completeRegistrationCore(userId, req.body.referralCode, pin, phone);
+    const result = await completeRegistrationCore(userId, req.body.referralCode, phone);
     if (result.code === 200) logAdminAction(req, 'user_registration_completed', { userId });
     res.status(result.code).json(result.body);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -9025,7 +8837,7 @@ function analyticsContractDay(inv, start, end, now) {
       !Number.isFinite(expected) || expected < 0 || !Number.isInteger(made) ||
       made < 0 || made > total || !Number.isFinite(paid) || paid < 0) return null;
   const target = n => Math.round(expected * n / total);
-  // t[k-1] is the instant of the k-th payment (weekend midnights are skipped, see midnightPays).
+  // t[k-1] is the instant of the k-th payment (every local midnight).
   const t = payoutInstants(created0, total);
   let first = 1, last = 0, due = 0;
   while (first <= total && t[first - 1] < start) first++;      // first payment at or after `start`
@@ -9277,8 +9089,7 @@ app.post('/admin/analytics', async (req, res) => {
       }
     });
     const canDo = { count: 0, gross: 0, net: 0, runningCount: 0, runningNet: 0 };
-    const blocked = { banned: 0, noProduct: 0, hasRequest: 0, dailyUsed: 0, belowMin: 0, weekend: 0 };
-    const weekendShut = wSett.weekendWithdrawBlock !== false && [0, 6].includes(eatWeekday(nowMs));   // Saturday / Sunday: no requests
+    const blocked = { banned: 0, noProduct: 0, hasRequest: 0, dailyUsed: 0, belowMin: 0 };
     usersSnap.forEach(d => {
       const u = d.data();
       if (!mine({ userId: d.id, regionKey: u.regionKey })) return;
@@ -9287,7 +9098,6 @@ app.post('/admin/analytics', async (req, res) => {
       if (u.registrationDone === false) return;
       if (u.status === 'banned') { blocked.banned++; return; }
       if (wNeedProduct && !(finiteMoney(u.totalInvested) > 0)) { blocked.noProduct++; return; }
-      if (weekendShut && u.withdrawAnytime !== true) { blocked.weekend++; return; }
       if (openUsers.has(d.id)) { blocked.hasRequest++; return; }
       if (wPerDay > 0 && u.withdrawAnytime !== true && (usedToday.get(d.id) || 0) >= wPerDay) { blocked.dailyUsed++; return; }
       let amt = Math.min(bal, wMax > 0 ? wMax : bal);
@@ -9300,7 +9110,7 @@ app.post('/admin/analytics', async (req, res) => {
     const withdrawToday = {
       waiting, canDo, blocked,
       rules: { min: wMin, max: wMax, multiple: wMult, feePct: wFee, perDay: wPerDay, needProduct: wNeedProduct,
-        hours: wSett.withdrawWindowEnabled ? `${wSett.withdrawOpenFrom || ''} to ${wSett.withdrawOpenTo || ''}` : '', weekendShut },
+        hours: wSett.withdrawWindowEnabled ? `${wSett.withdrawOpenFrom || ''} to ${wSett.withdrawOpenTo || ''}` : '' },
     };
     const truncated = depSnap.docs.length >= 10000 || witSnap.docs.length >= 10000 || usersSnap.docs.length >= 10000 || activeInvSnap.docs.length >= 10000 || contractSnap.docs.length >= 10000 || rewardsTruncated;
 
