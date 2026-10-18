@@ -3677,16 +3677,15 @@ function paintAssets(){
 // which is always a working invite.
 function refreshShareHost(){ STATE.shareHost = ''; return Promise.resolve(); }
 // ── THE INVITE LINK'S ADDRESS ──
-// With a wildcard domain set up on the server (deploy/set-wildcard.sh), every invite link is made on a NEW random address of it, such as
-// https://gs6fy.yourdomain.com/h5/#/pages/login/reset?inviteCode=...: every time the Share screen opens and every time Copy is tapped, so a link is never
+// With a wildcard domain set up on the server (deploy/set-wildcard.sh), every invite link is made on a NEW random 4-character address of it, such as
+// https://mt3c.yourdomain.com/h5/#/pages/login/reset?inviteCode=...: every time the Share screen opens and every time Copy is tapped, so a link is never
 // the same twice and no one address carries all the sharing. Every such address serves the very same app. Without that setting, or when the app is open
 // on some other address (the IP preview), the link keeps the address the app is open on, which always works.
-var SHARE_LABEL_RESERVED = ['www', 'app', 'api', 'admin', 'mail', 'ftp', 'hook', 'cpanel'];
+var SHARE_LABEL_RESERVED = ['mail', 'smtp', 'imap', 'pop3', 'ftp1', 'cpan', 'whm1', 'host', 'test', 'demo'];
 function shareLabel(){
   const letters = 'abcdefghijklmnopqrstuvwxyz', all = letters + '0123456789';
-  const n = 4 + shareRand(5);   // 4 to 8 characters, like gsrt or gs6fy
-  let out = letters[shareRand(letters.length)];
-  for (let i = 1; i < n; i++) out += all[shareRand(all.length)];
+  let out = letters[shareRand(letters.length)];   // exactly 4 characters, like mt3c, mcqk or once
+  for (let i = 1; i < 4; i++) out += all[shareRand(all.length)];
   return SHARE_LABEL_RESERVED.indexOf(out) >= 0 ? shareLabel() : out;
 }
 function shareRand(n){
