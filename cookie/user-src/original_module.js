@@ -3668,11 +3668,14 @@ function statementStampMs(ms){
   const p = n => String(n).padStart(2, '0');
   return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+// The Income tab a plan lives in is decided by the plan itself (stamped when it was bought or activated; an older plan is read from what it
+// cost: a task product costs nothing), never by the product's current settings, so it cannot move if the admin edits or removes the product.
+function invCategory(i){ return i && (i.category === 'wage' || i.category === 'income') ? i.category : ((Number(i && i.amount) || 0) === 0 ? 'wage' : 'income'); }
 function paintAssets(){
   const tab = STATE.incomeTab === 'wage' ? 'wage' : 'income';
   // Running products first, newest first inside each group; the id is the last tie-break so the order never shuffles between refreshes.
   const owned = (STATE.investments || []).filter(i => (i.status === 'active' || i.status === 'matured')
-    && (ckIsWage((STATE.products || []).find(x => x.key === i.tierKey)) ? 'wage' : 'income') === tab).sort((x, y) =>
+    && invCategory(i) === tab).sort((x, y) =>
     (x.status === 'active' ? 0 : 1) - (y.status === 'active' ? 0 : 1)
     || (new Date(y.createdAt || 0).getTime() || 0) - (new Date(x.createdAt || 0).getTime() || 0)
     || String(x.id || '').localeCompare(String(y.id || '')));

@@ -4587,7 +4587,7 @@ app.post('/invest/create', async (req, res) => {
         await invRef.set({
           userId, tierKey: liveTier.key, tierLabel: liveTier.name, amount: liveTier.price, cycle, expectedReturn,
           status: 'active', nextPayoutAt: new Date(payoutDueAtMs(Date.now(), 1)), dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
-          isFirstInvestment, commissionBasis: 'investment', commissionPaidLevels: [], commissionPending: isFirstInvestment,
+          isFirstInvestment, commissionBasis: 'investment', commissionPaidLevels: [], commissionPending: isFirstInvestment, category: 'income',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
         await db.collection('transactions').add({
@@ -4642,7 +4642,9 @@ app.get('/investments', async (req, res) => {
     const investments = snap.docs.map(d => {
       const data = d.data();
       const live = byKey.get(data.tierKey);
-      return { id: d.id, ...data, tierLabel: (live && live.name) || data.tierLabel };
+      // Which Income tab it lives in is a fact about THIS plan, fixed when it was bought or activated: a bought product is Daily income, a
+      // task product the admin activated is Daily wage (a plan with no stamp is read from its own price: a task product costs nothing).
+      return { id: d.id, ...data, category: data.category === 'wage' || data.category === 'income' ? data.category : ((Number(data.amount) || 0) === 0 ? 'wage' : 'income'), tierLabel: (live && live.name) || data.tierLabel };
     });
     // serverNow lets the app run its settlement countdown on the server's clock, not on a phone clock that may be minutes out.
     res.json({ status: 'success', investments, serverNow: Date.now() });
@@ -7989,7 +7991,7 @@ app.post('/admin/user/grant-asset', async (req, res) => {
         userId, tierKey: tier.key, tierLabel: tier.name, amount: price, cycle, expectedReturn,
         status: 'active', nextPayoutAt: new Date(payoutDueAtMs(Date.now(), 1)), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
         isFirstInvestment: false, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
-        granted: true, grantedBy: (req.adminUser && req.adminUser.username) || 'owner', requestId,
+        category: isTask ? 'wage' : 'income', granted: true, grantedBy: (req.adminUser && req.adminUser.username) || 'owner', requestId,
         date, time, createdAt: FieldValue.serverTimestamp()
       });
       if (!created) { alreadyGiven = true; return; }
