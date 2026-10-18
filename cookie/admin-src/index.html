@@ -1120,8 +1120,8 @@ async function renderDashboard(){
   if(s.status!=='success'){ $('content').innerHTML='<div class="empty">Could not load stats. '+esc(s.message||'')+'</div>'; return; }
   const stats = s.stats||{};
   const moneyCards = `
-      <div class="stat"><div class="n">${ugx(stats.walletTotal)}</div><div class="l">Wallet balances</div></div>
       <div class="stat"><div class="n">${ugx(stats.depositAmount)}</div><div class="l">Total topped up</div></div>
+      <div class="stat"><div class="n">${ugx(stats.walletTotal)}</div><div class="l">Wallet balances</div></div>
       <div class="stat"><div class="n">${ugx(stats.withdrawAmount)}</div><div class="l">Total cashed out</div></div>
       <div class="stat"><div class="n">${ugx(stats.investedAmount)}</div><div class="l">Total invested</div></div>`;
   // A capped scan must SAY it was capped. Without this the figures look
