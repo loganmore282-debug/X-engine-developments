@@ -6141,8 +6141,8 @@ function ckOpenPendingPayment(){
 //
 // The 60-second budget is unchanged -- 24 ticks at the new spacing is the same
 // wall-clock window, so nothing gives up on a payment any sooner than before.
-var DEP_POLL_FIRST_MS = 1000;
-var DEP_POLL_EVERY_MS = 1500;
+var DEP_POLL_FIRST_MS = 700;
+var DEP_POLL_EVERY_MS = 1000;
 async function pollDepositStatus(depositId){
   _depActiveDepositId = depositId;
   _depPollDone = false;

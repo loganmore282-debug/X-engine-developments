@@ -5,7 +5,7 @@ const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); }; const eq = (a, b, m) => { n++; assert.deepEqual(a, b, m); };
 const a = src.indexOf('const PESAJET_WATCH_EVERY_MS'), b = src.indexOf("// PesaJet's status -> the three words the rest of this file already speaks");
 assert.ok(a > 0 && b > a, 'watcher source found');
-const block = src.slice(a, b).replace('PESAJET_WATCH_EVERY_MS = 700', 'PESAJET_WATCH_EVERY_MS = 5').replace('PESAJET_WATCH_SPREAD_MS = 125', 'PESAJET_WATCH_SPREAD_MS = 0').replace('PESAJET_WATCH_BACKOFF_MS = 1000', 'PESAJET_WATCH_BACKOFF_MS = 20').replace('PESAJET_WATCH_BACKOFF_MAX_MS = 8000', 'PESAJET_WATCH_BACKOFF_MAX_MS = 80').replace('PESAJET_WATCH_BUDGET_MS = 120000', 'PESAJET_WATCH_BUDGET_MS = 300');
+const block = src.slice(a, b).replace('PESAJET_WATCH_EVERY_MS = 500', 'PESAJET_WATCH_EVERY_MS = 5').replace('PESAJET_WATCH_SPREAD_MS = 125', 'PESAJET_WATCH_SPREAD_MS = 0').replace('PESAJET_WATCH_BACKOFF_MS = 1000', 'PESAJET_WATCH_BACKOFF_MS = 20').replace('PESAJET_WATCH_BACKOFF_MAX_MS = 8000', 'PESAJET_WATCH_BACKOFF_MAX_MS = 80').replace('PESAJET_WATCH_BUDGET_MS = 120000', 'PESAJET_WATCH_BUDGET_MS = 300');
 const wait = ms => new Promise(r => setTimeout(r, ms));
 function env(rows) {
   const calls = { pj: 0, credit: [], failed: [], errors: [] };

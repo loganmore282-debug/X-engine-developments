@@ -2759,7 +2759,7 @@ async function pesajetGetTx(transactionId, { attempts = 2 } = {}) {
 // database (one cheap read), so it can ask every second without hitting PesaJet at all. Webhook, watcher, the member's poll and the periodic
 // reconciler all end in the same creditDeposit()/markDepositFailed(), which are single-writer locked, so nothing can credit twice.
 // Capped, and a watcher that stops (cap, restart, 2 minutes) simply hands over to the old poll-driven check, which still works on its own.
-const PESAJET_WATCH_EVERY_MS = 700, PESAJET_WATCH_BUDGET_MS = 120000, PESAJET_WATCH_MAX = 20;
+const PESAJET_WATCH_EVERY_MS = 500, PESAJET_WATCH_BUDGET_MS = 120000, PESAJET_WATCH_MAX = 20;
 // PesaJet publishes no rate limit but says to answer a 429 with "exponential backoff and jitter", and its own SDK polls every 2.5 s. So: with many
 // watchers the cadence stretches (about 8 asks per second in total, however many members are paying), and a gateway that is struggling (5xx, 429,
 // timeout) is asked less and less often instead of being hammered.
@@ -2791,15 +2791,23 @@ function watchPesajetDeposit(depositId) {
     try {
       const began = Date.now();
       let down = 0;                                  // consecutive "gateway unavailable" answers
+      let txId = '', cycleStart = Date.now();
       while (Date.now() - began < PESAJET_WATCH_BUDGET_MS) {
         const backoff = down ? Math.min(PESAJET_WATCH_BACKOFF_MAX_MS, PESAJET_WATCH_BACKOFF_MS * 2 ** (down - 1)) * (0.75 + Math.random() * 0.5) : 0;
-        await _pesajetSleep(Math.max(PESAJET_WATCH_EVERY_MS, _pesajetWatchers.size * PESAJET_WATCH_SPREAD_MS) + backoff);
-        const snap = await db.collection('pendingDeposits').doc(depositId).get();
+        // SPEED: the gap is counted from the START of the previous check (a slow gateway answer no longer adds to it), and PesaJet is asked at the same
+        // moment as the database, once the transaction id is known (the two reads used to follow each other).
+        await _pesajetSleep(Math.max(0, Math.max(PESAJET_WATCH_EVERY_MS, _pesajetWatchers.size * PESAJET_WATCH_SPREAD_MS) - (Date.now() - cycleStart)) + backoff);
+        cycleStart = Date.now();
+        const snapP = db.collection('pendingDeposits').doc(depositId).get();
+        const askP = txId ? pesajetGetTx(txId, { attempts: 1 }) : null;
+        if (askP) askP.catch(() => {});
+        const snap = await snapP;
         if (!snap.exists) return;
         const dep = snap.data();
         if (dep.status !== 'pending' && dep.status !== 'initiating') return;   // a webhook, a poll or the reconciler already settled it
         if (!dep.pesajetTxId) continue;
-        const t = await pesajetGetTx(dep.pesajetTxId, { attempts: 1 });
+        txId = dep.pesajetTxId;
+        const t = await (askP || pesajetGetTx(txId, { attempts: 1 }));
         _pesajetWatchers.set(depositId, Date.now());
         if (t.providerDown) { down++; continue; }
         down = 0;
@@ -5011,6 +5019,7 @@ async function _creditDepositNow(depDoc, source) {
       // TWICE. `walletCredited` makes the increment itself idempotent
       // regardless of which reason triggered the retry, closing that
       // permanently.
+      let markerP = Promise.resolve(null);
       if (!fd.walletCredited) {
         try {
           // Codex-caught real bug: the wallet increment and the
@@ -5025,13 +5034,12 @@ async function _creditDepositNow(depDoc, source) {
           // operation -- there is no window where one half landed without
           // the other. `applied:false` means this exact credit already
           // happened (a safe, idempotent retry), not an error.
+          // (One database round trip fewer than it used to be: this block read the user first and never used what it read.)
           const applied = await withLock('bal:' + depUserId, async () => {
             const userRef = db.collection('users').doc(depUserId);
-            const user = await userRef.get();
-            const referral = {};
             return userRef.updateIf({ creditedDepositIds: { $ne: depDoc.id } }, {
               walletBalance: FieldValue.increment(depAmount), totalDeposited: FieldValue.increment(depAmount),
-              creditedDepositIds: FieldValue.arrayUnion(depDoc.id), ...referral,
+              creditedDepositIds: FieldValue.arrayUnion(depDoc.id),
             });
           });
           if (!applied) {
@@ -5055,7 +5063,7 @@ async function _creditDepositNow(depDoc, source) {
             }
             console.warn(`Deposit ${depDoc.id} wallet credit already applied (idempotent retry) -- skipped re-incrementing.`);
           }
-          await depDoc.ref.update({ walletCredited: true });
+          markerP = depDoc.ref.update({ walletCredited: true }).then(() => null, e => e);   // runs alongside the ledger step below (see the note there)
         } catch (creditErr) {
           await depDoc.ref.update({ needsManualCredit: true }).catch(() => {});
           console.error(`DEPOSIT CREDIT FAILED (needs manual credit) dep=${depDoc.id} user=${depUserId} amount=${depAmount}:`, creditErr.message);
@@ -5072,6 +5080,9 @@ async function _creditDepositNow(depDoc, source) {
       // predates this row existing at all -- can never leave the deposit
       // permanently invisible in Records, which is exactly the bug the
       // owner hit ("deposits are not recorded why").
+      // SPEED: the ledger row and the `walletCredited` marker are independent writes, so they run TOGETHER (one round trip fewer between the gateway saying
+      // "paid" and the member seeing it). Both must succeed; either failing leaves the deposit flagged needsManualCredit exactly as before.
+      const ledgerP = (async () => {
       try {
         const txSnap = await db.collection('transactions').where('depositId', '==', depDoc.id).limit(5).get();
         if (!txSnap.empty) {
@@ -5106,10 +5117,24 @@ async function _creditDepositNow(depDoc, source) {
         // retry the same way a wallet-increment failure does; the
         // status-poll's own self-heal branch (and the periodic
         // reconciler) will retry this exact idempotent update next time.
+        return ledgerErr;
+      }
+      return null;
+      })();
+      const [markerErr, ledgerErr] = await Promise.all([markerP, ledgerP]);
+      if (markerErr) {
+        await depDoc.ref.update({ needsManualCredit: true }).catch(() => {});
+        console.error(`DEPOSIT CREDIT FAILED (needs manual credit) dep=${depDoc.id} user=${depUserId} amount=${depAmount}:`, markerErr.message);
+        throw markerErr;
+      }
+      if (ledgerErr) {
         await depDoc.ref.update({ needsManualCredit: true }).catch(() => {});
         console.error(`DEPOSIT LEDGER ROW UPDATE FAILED (needs manual credit) dep=${depDoc.id} user=${depUserId} amount=${depAmount}:`, ledgerErr.message);
         throw ledgerErr;
       }
+      // The money and its ledger row are both in: wake a held status request NOW. Clearing the needsManualCredit flag below is bookkeeping the member
+      // does not wait for (the status route answers "matched" once the deposit is claimed, and its self-heal skips a credit that is in flight).
+      try { _notifyDeposit(depDoc.id); } catch (_) {}
       await depDoc.ref.update({ needsManualCredit: FieldValue.delete() }).catch(() => {});
       credited = true; justCredited = true; creditedAmount = depAmount;
     });
@@ -6204,7 +6229,14 @@ app.post('/withdraw/callback', async (req, res) => {
 //     unauthenticated automated path. Only a human, via
 //     /admin/withdraw/reject after checking PesaJet's own dashboard, resolves
 //     one. Refunding a payout that actually went out pays the member twice.
-async function pesajetWebhookWork(body) {
+// The final status a webhook claims, in the three words the file speaks ('success' / 'failed' / ''), from its `status`, a nested `data.status`, or the end
+// of its event name ("payment.completed").
+function pesajetWebhookClaim(body) {
+  const raw = body.status || (body.data && body.data.status) || String(body.event || '').split('.').pop();
+  const label = pesajetStatusLabel(raw);
+  return label === 'success' || label === 'failed' ? { label, status: String(raw).toLowerCase() } : null;
+}
+async function pesajetWebhookWork(body, verified) {
   try {
     if (body.event === 'ping') return;                 // a delivery test
     const reference = String(body.reference || '');
@@ -6218,6 +6250,17 @@ async function pesajetWebhookWork(body) {
       if (dep.provider !== 'pesajet') return;
       if (dep.status !== 'pending' && dep.status !== 'initiating') return;
       if (!dep.pesajetTxId) return;
+      // SPEED: a webhook whose signature checked out (HMAC with the secret only PesaJet and this server hold) is authentic, so its final status is acted on
+      // AT ONCE, without the extra trip to PesaJet to read the same thing again. The amount credited is always the one stored on OUR deposit row, never
+      // one from the webhook. A webhook that is unsigned, unverifiable, names a different transaction, or carries no final status takes the old way: ask
+      // PesaJet, and act on its answer.
+      const claim = verified ? pesajetWebhookClaim(body) : null;
+      const sameTx = !body.transactionId || String(body.transactionId) === String(dep.pesajetTxId);
+      if (claim && sameTx) {
+        if (claim.label === 'success') await creditDeposit(doc, 'PesaJet webhook (signed)');
+        else await markDepositFailed(doc.ref, dep.userId, pesajetFailureMsg(claim.status));
+        return;
+      }
       const t = await pesajetGetTx(dep.pesajetTxId);
       if (t.providerDown) return;   // unverifiable -- the reconciler and the member's own poll both retry
       const realStatus = pesajetStatusLabel(t.status);
@@ -6268,9 +6311,9 @@ app.post('/pesajet/webhook', async (req, res) => {
   res.status(200).json({ received: true });
   // Everything past here runs after the ack. Nothing may throw out of it.
   console.log(`PesaJet webhook: ${body.event || body.status || '?'} ${body.reference || '?'}`);
-  await pesajetWebhookWork(body);
+  await pesajetWebhookWork(body, check.verified === true);
   const claimsFinal = /completed|failed|expired/i.test(String(body.event || '')) || ['completed', 'failed', 'expired'].includes(String(body.status || '').toLowerCase());
-  retryCallbackWork('PesaJet webhook', () => pesajetWebhookWork(body), () => pesajetWebhookOpen(body), claimsFinal);
+  retryCallbackWork('PesaJet webhook', () => pesajetWebhookWork(body, check.verified === true), () => pesajetWebhookOpen(body), claimsFinal);
 });
 // ═══════════════════════════════════════════
 // WITHDRAWAL ACCOUNTS (mobile money + bank)

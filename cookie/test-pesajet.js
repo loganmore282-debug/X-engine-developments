@@ -424,7 +424,7 @@ async function finish() {
   // 200 within 30 seconds is PesaJet's own requirement, and the re-read can
   // outlast it (two attempts, 30s timeout each). So the ack goes first.
   const iAck = hook.indexOf('res.status(200).json({ received: true })');
-  const iWork = hook.indexOf('await pesajetWebhookWork(body)');
+  const iWork = hook.indexOf('await pesajetWebhookWork(body, check.verified === true)');
   ck(iAck > 0 && iWork > iAck,
      "  the 200 is sent BEFORE the re-read -- PesaJet requires it within 30 seconds");
   // The raw body has to actually be captured, or the dashboard's own digest
@@ -439,9 +439,9 @@ async function finish() {
   {
     const body = hook;
     ck(!/creditDeposit\([\s\S]{0,80}body\./.test(body) && /realStatus === 'success'[\s\S]{0,40}creditDeposit/.test(body),
-       'the credit is driven by the re-read, never by the webhook body');
-    ck(!/body\.(status|amount)\b[\s\S]{0,200}creditDeposit/.test(body),
-       "and the body's own status/amount never reach the credit");
+       'an unsigned or inconclusive webhook still credits only from the re-read');
+    ck(/const claim = verified \? pesajetWebhookClaim\(body\) : null/.test(body) && !/body\.amount\b/.test(body),
+       "the body's own status counts ONLY when its signature verified, and its amount never counts (the credit is our stored amount)");
     ck(/dep\.pesajetTxId/.test(body) && !/pesajetGetTx\(\s*(txId|body)/.test(body),
        'the id it re-reads is the one WE stored, not one the caller supplied');
   }
