@@ -509,6 +509,28 @@ function dayLabel(iso){
   const d=new Date(iso+'T00:00:00Z');
   return d.getUTCDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
 }
+// A square, centre-cropped picture (the link preview's small square thumbnail).
+function fileToSquareDataUrl(file, side=512, quality=0.85){
+  return new Promise((resolve,reject)=>{
+    if(!file) return reject(new Error('No file'));
+    if(!/^image\//.test(file.type)) return reject(new Error('Please choose an image file'));
+    const fr=new FileReader();
+    fr.onerror=()=>reject(new Error('Could not read the file'));
+    fr.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('That image could not be loaded'));
+      img.onload=()=>{
+        const m=Math.min(img.width,img.height), sx=Math.round((img.width-m)/2), sy=Math.round((img.height-m)/2);
+        const c=document.createElement('canvas'); c.width=side; c.height=side;
+        const ctx=c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,side,side); ctx.drawImage(img,sx,sy,m,m,0,0,side,side);
+        try{ resolve(c.toDataURL('image/jpeg',quality)); }
+        catch(e){ reject(new Error('Could not process the image')); }
+      };
+      img.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
 function fileToDataUrl(file, maxDim=900, quality=0.82){
   return new Promise((resolve,reject)=>{
     if(!file) return reject(new Error('No file'));
@@ -2815,6 +2837,7 @@ async function renderBanners(){
   const logoImage = cir.logo||'';
   const profileLogoImage = cir.profilelogo||'';
   const loaderBgImage = cir.loaderbg||'';
+  const linkPreviewImage = cir.linkpreview||'';
   const avatarImage = cir.avatar||'', recThumbImage = cir.recthumb||'';
   const teamHeroImage = cir.teamhero||'', shareHeroImage = cir.sharehero||'', myHeroImage = cir.myhero||'', rulesHeroImage = cir.ruleshero||'';
   const announcementImage = (annr && annr.image) || '';
@@ -2888,6 +2911,22 @@ async function renderBanners(){
         ${loaderBgImage?`<button class="btn danger sm" id="loaderBgClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="loaderBgFile" accept="image/*" hidden></label>
+    </div>
+
+    <h2 class="sec">Link preview (Telegram)</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">What Telegram shows when someone pastes a link to the app: the title, the text and a small square picture at the right. WhatsApp and other apps show no preview at all. Telegram remembers a link for a while, so a change can take time to appear on a link that was already shared.</p>
+      <label>Title <span class="muted">(up to 70 characters)</span></label>
+      <input id="lpTitle" maxlength="70" value="${esc(v('linkPreviewTitle'))}" placeholder="${esc(v('brandName','Cookie'))}">
+      <label>Text <span class="muted">(up to 220 characters)</span></label>
+      <textarea id="lpText" maxlength="220" rows="4" placeholder="Join the ${esc(v('brandName','Cookie'))} App as a distributor and easily earn money using just your mobile phone. You can withdraw your earnings daily and earn generous commissions by inviting friends">${esc(v('linkPreviewText'))}</textarea>
+      <button class="btn sm" id="saveLinkPreview" style="margin-top:8px">Save title and text</button>
+      <div class="banner-row" style="margin-top:14px">
+        ${linkPreviewImage?`<img class="img-thumb" src="${esc(linkPreviewImage)}" onerror="this.style.opacity=.3" style="aspect-ratio:1/1;object-fit:cover">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${linkPreviewImage?'Custom picture':'<span class="muted">Not set &mdash; the app icon shows</span>'}</div>
+        ${linkPreviewImage?`<button class="btn danger sm" id="linkPreviewClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload square picture<input type="file" id="linkPreviewFile" accept="image/*" hidden></label>
     </div>
 
     <h2 class="sec">Login &amp; Create Account picture</h2>
@@ -3032,7 +3071,7 @@ function wireBannerHandlers(){
                        : (slot==='loaderbg' || slot==='avatar' || slot==='recthumb') ? 480
                        : slot==='authhero' ? 1600
                        : 1280;
-          const image = await fileToDataUrl(f, maxDim, slot==='loaderbg' ? 0.7 : 0.82);
+          const image = slot==='linkpreview' ? await fileToSquareDataUrl(f, 512, 0.85) : await fileToDataUrl(f, maxDim, slot==='loaderbg' ? 0.7 : 0.82);
           const d = await api('/admin/cookie-image/set', { slot, image });
           toast(d.status==='success'?savedMsg:(d.message||'Failed'), d.status==='success'?'ok':'err');
           if (d.status==='success') renderBanners();
@@ -3100,6 +3139,12 @@ function wireBannerHandlers(){
   wireCookieImageSlot('myhero', 'myHeroFile', 'myHeroClear', 'My page background saved', 'My page background removed');
   wireCookieImageSlot('ruleshero', 'rulesHeroFile', 'rulesHeroClear', 'Rules picture saved', 'Rules picture removed');
   wireCookieImageSlot('loaderbg', 'loaderBgFile', 'loaderBgClear', 'Loading screen picture saved', 'Loading screen picture removed');
+  wireCookieImageSlot('linkpreview', 'linkPreviewFile', 'linkPreviewClear', 'Link preview picture saved', 'Link preview picture removed');
+  const saveLinkPreview = $('saveLinkPreview');
+  if (saveLinkPreview) saveLinkPreview.addEventListener('click', async()=>{
+    const d = await api('/admin/settings/update', { settings: { linkPreviewTitle: $('lpTitle').value, linkPreviewText: $('lpText').value } });
+    toast(d.status==='success'?'Link preview words saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
   wireCookieImageSlot('avatar', 'avatarFile', 'avatarClear', 'Member picture saved', 'Member picture removed');
   wireCookieImageSlot('recthumb', 'recThumbFile', 'recThumbClear', 'Records picture saved', 'Records picture removed');
   wireCookieImageSlot('profilelogo', 'profileLogoFile', 'profileLogoClear', 'Profile logo saved, live for every member', 'Profile logo removed');

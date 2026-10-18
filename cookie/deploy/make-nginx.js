@@ -213,18 +213,22 @@ ${hdr(ADMIN_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;', 'add_he
     # Current referral links: <origin>/h5/#/pages/login/reset?inviteCode=<code> -- the app opens at /h5/.
     location = /h5 { return 301 /h5/; }
     location = /h5/ {
+        if ($cookie_tg_bot) { rewrite ^ /${API}/public/link-preview-page last; }
         try_files $cookie_bot_html /index.html =404;
 ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
     }
     location = / {
+        if ($cookie_tg_bot) { rewrite ^ /${API}/public/link-preview-page last; }
         try_files $cookie_bot_html /index.html =404;
 ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
     }
     location = /index.html {
+        if ($cookie_tg_bot) { rewrite ^ /${API}/public/link-preview-page last; }
         try_files $cookie_bot_html /index.html =404;
 ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
     }
     location = /share.html {
+        if ($cookie_tg_bot) { rewrite ^ /${API}/public/link-preview-page last; }
         try_files $cookie_bot_html /share.html =404;
 ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
     }
@@ -267,6 +271,12 @@ map $http_user_agent $cookie_bad_ua {
 
 # Link-preview crawlers (WhatsApp, Telegram, ...) get an empty page, every real
 # browser gets the real one (see no-preview.html and cookie/CLAUDE.md).
+# Telegram's crawler alone is shown a link preview (title, text and a small square picture, all set in Admin > Pictures). It is sent to the app's
+# own server, which builds the page from those settings. WhatsApp and every other crawler stay on the empty page above.
+map $http_user_agent $cookie_tg_bot {
+    default 0;
+    ~*TelegramBot 1;
+}
 map $http_user_agent $cookie_bot_html {
     default '';
     ~*(WhatsApp|facebookexternalhit|Facebot|TelegramBot|Twitterbot|Slackbot|LinkedInBot|Discordbot|SkypeUriPreview|redditbot|Pinterest|vkShare|Viber|line-poker) '/no-preview.html';

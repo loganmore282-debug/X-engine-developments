@@ -693,6 +693,8 @@ const DEFAULT_SETTINGS = {
   // banners: a base64 image doesn't belong bloating the /public/settings
   // payload every client fetches on every boot.
   annEnabled: false, annTitle: '', annBody: '',
+  // What Telegram shows when a link to the app is pasted (title and text; the picture is the 'linkpreview' image). Empty = the app's own defaults.
+  linkPreviewTitle: '', linkPreviewText: '',
   // The line that scrolls across the Home screen under the four buttons. Empty = the built-in sentence.
   tickerText: '',
   // When annTitle/annBody last actually changed -- stamped by
@@ -946,7 +948,7 @@ async function getHelpBanner() {
 // no longer its own screen with a backdrop; Account's new Download App row
 // (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
 // prompt directly, in user-src/original_module.js -- see its own comment.
-const COOKIE_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner', 'profilelogo', 'loaderbg', 'teamhero', 'sharehero', 'myhero', 'ruleshero', 'avatar', 'recthumb'];
+const COOKIE_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner', 'profilelogo', 'loaderbg', 'teamhero', 'sharehero', 'myhero', 'ruleshero', 'avatar', 'recthumb', 'linkpreview'];
 const _cookieImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getCookieImage(slot) {
@@ -3515,7 +3517,7 @@ app.get('/public/settings', async (req, res) => {
     // automatic cap), the payment-rail choice, the reference prefix and the host policy.
     const rest = {};
     for (const k of Object.keys(rest0)) {
-      if (/^autoApprove/.test(k) || ['depositMethod', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain'].includes(k)) continue;
+      if (/^autoApprove/.test(k) || ['depositMethod', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain', 'linkPreviewTitle', 'linkPreviewText'].includes(k)) continue;
       rest[k] = rest0[k];
     }
     // Revalidated every time (no max-age): maintenance mode, the opening
@@ -3755,6 +3757,49 @@ app.get('/public/loader-image', async (req, res) => {
       'X-Loader-Opacity': String(clampNum(sett.loaderBgOpacity, 0, 100, 100)), 'X-Loader-Blur': String(clampNum(sett.loaderBgBlur, 0, 40, 0)) });
     if (req.headers['if-none-match'] === etag) return res.status(304).end();
     res.send(buf);
+  } catch (e) { res.status(500).end(); }
+});
+// The path nginx puts in front of this server's routes (API in deploy/make-nginx.js and COOKIE_AUTH_API in the app): a crawler needs the picture's full address.
+const PUBLIC_API_PREFIX = 'k7x2';
+// ── LINK PREVIEW (Telegram only) ──
+// Pasting a link to the app into Telegram shows a card: the title, a short text and a small square picture at the right. The words and the
+// picture are set in Admin > Pictures. nginx sends ONLY Telegram's crawler here (deploy/make-nginx.js); WhatsApp and every other crawler get an
+// empty page, so they show no preview at all, and people get the app itself.
+function htmlText(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+async function linkPreviewImage() {
+  const image = await getCookieImage('linkpreview');
+  const m = /^data:(image\/(?:png|jpe?g|webp|gif));base64,(.+)$/.exec(image || '');
+  if (m) { const buf = Buffer.from(m[2], 'base64'); return { buf, mime: m[1], custom: true, version: crypto.createHash('sha1').update(buf).digest('hex').slice(0, 12) }; }
+  const icon = await getBrandAsset('app-icon-512');
+  return icon && icon.buf ? { buf: icon.buf, mime: icon.mime, custom: false, version: String(icon.version || 'icon') } : null;
+}
+app.get('/public/link-preview-image', async (req, res) => {
+  try {
+    const img = await linkPreviewImage();
+    if (!img) return res.status(404).end();
+    const etag = '"lp-' + img.version + '"';
+    res.set({ 'Content-Type': img.mime, 'Cache-Control': 'public, max-age=300', ETag: etag, 'Cross-Origin-Resource-Policy': 'cross-origin' });
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.send(img.buf);
+  } catch (e) { res.status(500).end(); }
+});
+app.get('/public/link-preview-page', async (req, res) => {
+  try {
+    const sett = await getSettings();
+    const brand = brandName(sett);
+    const title = String(sett.linkPreviewTitle || '').trim() || brand;
+    const text = String(sett.linkPreviewText || '').trim() || `Join the ${brand} App as a distributor and easily earn money using just your mobile phone. You can withdraw your earnings daily and earn generous commissions by inviting friends`;
+    const img = await linkPreviewImage();
+    const origin = `${req.protocol}://${req.get('host')}`;
+    const imageUrl = img ? `${origin}/${PUBLIC_API_PREFIX}/public/link-preview-image?v=${encodeURIComponent(img.version)}` : '';
+    res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
+    res.send(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>${htmlText(title)}</title>
+<meta name="description" content="${htmlText(text)}">
+<meta property="og:type" content="website"><meta property="og:site_name" content="${htmlText(brand)}">
+<meta property="og:title" content="${htmlText(title)}"><meta property="og:description" content="${htmlText(text)}">
+${imageUrl ? `<meta property="og:image" content="${htmlText(imageUrl)}"><meta property="og:image:width" content="512"><meta property="og:image:height" content="512">\n` : ''}<meta name="twitter:card" content="summary"><meta name="twitter:title" content="${htmlText(title)}"><meta name="twitter:description" content="${htmlText(text)}">
+${imageUrl ? `<meta name="twitter:image" content="${htmlText(imageUrl)}">\n` : ''}</head><body></body></html>`);
   } catch (e) { res.status(500).end(); }
 });
 // Cookie artwork needed by the current member surfaces, fetched together.
@@ -6959,6 +7004,13 @@ app.post('/admin/settings/update', async (req, res) => {
       return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay' or 'pesajet'` });
     if ('withdrawMethod' in updates && !['follow', 'marzpay', 'pesajet', 'manual'].includes(updates.withdrawMethod))
       return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'marzpay', 'pesajet' or 'manual'` });
+    // The link-preview words: plain text only, trimmed and capped (Telegram shows about this much).
+    for (const [key, max] of [['linkPreviewTitle', 70], ['linkPreviewText', 220]]) {
+      if (!(key in updates)) continue;
+      const t = String(updates[key] == null ? '' : updates[key]).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (t.length > max) return res.status(400).json({ status: 'error', message: `The link preview ${key === 'linkPreviewTitle' ? 'title' : 'text'} must be ${max} characters or fewer.` });
+      updates[key] = t;
+    }
     // Stamped whenever the admin saves either announcement field, so the
     // Home screen's inline "Latest Announcement" row can show a real date
     // instead of inventing one. Not conditioned on the text actually being
@@ -6992,8 +7044,8 @@ app.get('/admin/cookie-images', async (req, res) => {
       getCookieImage('authhero'), getCookieImage('banner2'),
       getCookieImage('banner3'), getCookieImage('checkinbanner'), getCookieImage('profilelogo'), getCookieImage('loaderbg'),
     ]);
-    const [teamhero, sharehero, myhero, ruleshero, avatar, recthumb] = await Promise.all(['teamhero', 'sharehero', 'myhero', 'ruleshero', 'avatar', 'recthumb'].map(k => getCookieImage(k)));
-    res.json({ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, loaderbg, teamhero, sharehero, myhero, ruleshero, avatar, recthumb });
+    const [teamhero, sharehero, myhero, ruleshero, avatar, recthumb, linkpreview] = await Promise.all(['teamhero', 'sharehero', 'myhero', 'ruleshero', 'avatar', 'recthumb', 'linkpreview'].map(k => getCookieImage(k)));
+    res.json({ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, loaderbg, teamhero, sharehero, myhero, ruleshero, avatar, recthumb, linkpreview });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/cookie-image/set', async (req, res) => {

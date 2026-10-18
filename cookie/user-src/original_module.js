@@ -3595,7 +3595,7 @@ function vOwnedCardHtml(inv){
         ${ckRow('Days', String(st.total))}
         ${ckRow('Total profit', ckMoney(st.expected))}
       </dl>
-      <div class="ck-oc-img${p.image ? ' has-img' : ''}">${img}<em class="ck-oc-st${st.matured ? ' done' : ''}">${st.matured ? 'Completed' : 'Running'}</em><span class="ck-oc-name">${esc(name)}</span></div>
+      <div class="ck-oc-img${p.image ? ' has-img' : ''}">${img}<em class="ck-oc-st${st.matured ? ' done' : ''}${invCategory(inv) === 'wage' ? ' ck-oc-wst' : ''}">${st.matured ? 'Completed' : 'Running'}${invCategory(inv) === 'wage' ? '<br>Free' : ''}</em><span class="ck-oc-name">${esc(name)}</span></div>
     </div>
     ${st.matured ? '' : `<div class="ck-oc-cd"><span>Settlement countdown</span><b data-pay-mid="1">${fmtCountdown(nextMidnightMs() - ckNow(), true)}</b></div>`}
   </article>`;

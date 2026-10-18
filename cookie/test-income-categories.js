@@ -21,4 +21,8 @@ ok(/invCategory\(i\) === tab/.test(body) && !/ckIsWage|STATE\.products/.test(bod
 ok(/commissionPending: isFirstInvestment, category: 'income'/.test(src), 'a purchase is stamped income');
 ok(/category: isTask \? 'wage' : 'income', granted: true/.test(src), 'an admin activation is stamped by the product kind');
 ok(/category: data\.category === 'wage' \|\| data\.category === 'income' \? data\.category : \(\(Number\(data\.amount\) \|\| 0\) === 0 \? 'wage' : 'income'\)/.test(src), '/investments reports it (older plans from their cost)');
+// the Daily wage badge: taller, green, Running (or Completed) over Free, as in the owner's screenshot
+const html = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
+ok(/invCategory\(inv\) === 'wage' \? ' ck-oc-wst' : ''/.test(mod) && /'<br>Free'/.test(mod), 'a wage plan\'s badge says Free under Running');
+ok(/\.ck-oc-wst\{height:42px;line-height:21px;background:linear-gradient\(90deg,#00964e,#00cf70\);\}/.test(html), 'and is 42 px tall in green (an ordinary plan keeps the thin bar)');
 console.log(`PASS: income categories (${n} checks)`);
