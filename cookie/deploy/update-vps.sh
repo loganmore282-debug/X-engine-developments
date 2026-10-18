@@ -52,9 +52,12 @@ if [ -s "$HOOK_FILE" ] && [ -s "$HOOK_HOST_FILE" ]; then COOKIE_HOOK_HOST=$(tr -
 
 # The temporary IP preview (deploy/preview.sh) defines the same rate-limit names, so it must go before the real file is written.
 rm -f /etc/nginx/conf.d/cookie-preview.conf
+# The random-address file is taken away while certbot runs and put back after it (see make-nginx.js --wild-only for why).
+WILD_CONF=${COOKIE_WILD_CONF:-/etc/nginx/conf.d/cookie.wild.conf}
+rm -f "$WILD_CONF"
 say "3/7  nginx: new walls (the old file is kept at $BAK and put back if the new one is refused)"
 [ -f "$CONF" ] && cp "$CONF" "$BAK"
-if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" ${ALSO_HOSTS:+--also="$ALSO_HOSTS"} ${WILD_DOMAIN:+--wild="$WILD_DOMAIN"} > /tmp/cookie.conf.new) && cp /tmp/cookie.conf.new "$CONF" && nginx -t >/tmp/cookie.nginxtest 2>&1; then
+if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" ${ALSO_HOSTS:+--also="$ALSO_HOSTS"} > /tmp/cookie.conf.new) && cp /tmp/cookie.conf.new "$CONF" && nginx -t >/tmp/cookie.nginxtest 2>&1; then
   echo "    new nginx file accepted"
 else
   echo "    !! nginx refused the new file: putting the old one back"
@@ -108,6 +111,13 @@ fi
 sed -i -E '/^[[:space:]]*listen .*443 ssl/{/http2/!s/443 ssl/443 ssl http2/}' "$CONF"
 if nginx -t >/dev/null 2>&1; then echo "    HTTP/2 on: $(grep -c 'ssl http2' "$CONF") listen line(s)"; else echo "    (HTTP/2 not accepted by this nginx, left as it was)"; cp /tmp/cookie.conf.pre-h2 "$CONF"; fi
 if nginx -t >/dev/null 2>&1; then systemctl reload nginx && echo "    nginx reloaded"; else echo "    !! nginx test failed after certbot, putting the old file back"; cp "$BAK" "$CONF"; nginx -t 2>&1 | tail -1; systemctl reload nginx; exit 1; fi
+if [ -n "$WILD_DOMAIN" ]; then
+  if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" --wild="$WILD_DOMAIN" --wild-only > "$WILD_CONF") && nginx -t >/tmp/cookie.nginxtest 2>&1; then
+    chmod 644 "$WILD_CONF"; systemctl reload nginx && echo "    random addresses (*.$WILD_DOMAIN) on: $WILD_CONF"
+  else
+    echo "    !! nginx refused the random-address file: it is left out, the rest of the site is unchanged"; tail -3 /tmp/cookie.nginxtest; rm -f "$WILD_CONF"; nginx -t >/dev/null 2>&1 && systemctl reload nginx
+  fi
+fi
 
 say "5/7  Restart Cookie (secrets re-read)"
 cd "$COOKIE/deploy" || exit 1

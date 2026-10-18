@@ -28,5 +28,15 @@ for (const [name, args] of Object.entries(variants)) {
   const r = cp.spawnSync(nginx, ['-t', '-c', dir + '/main.conf'], { encoding: 'utf8' });
   assert.equal(r.status, 0, name + ': nginx refused the file:\n' + r.stderr);
 }
+// the random-address file on its own, loaded after the main file (as the VPS does); the main file must carry no wildcard block of its own
+{
+  const main = gen(variants.prod, { COOKIE_WILD_CERT_DIR: cert }).replace(/^\s*listen \[::\][^\n]*\n/gm, '');
+  const wild = gen([...variants.prod, '--wild=example.org', '--wild-only'], { COOKIE_WILD_CERT_DIR: cert }).replace(/^\s*listen \[::\][^\n]*\n/gm, '');
+  assert.ok(!/\*\.example\.org/.test(main) && /server_name \*\.example\.org;/.test(wild) && /cookie-wild|ssl_certificate /.test(wild) && !/upstream cookie_node/.test(wild), 'the wildcard file is separate and has only the random-address blocks');
+  fs.writeFileSync(dir + '/a.conf', main); fs.writeFileSync(dir + '/b.wild.conf', wild);
+  fs.writeFileSync(dir + '/main.conf', `pid ${dir}/n.pid;\nerror_log ${dir}/err.log;\nevents {}\nhttp {\n access_log off;\n include ${dir}/a.conf;\n include ${dir}/b.wild.conf;\n}\n`);
+  const r = cp.spawnSync(nginx, ['-t', '-c', dir + '/main.conf'], { encoding: 'utf8' });
+  assert.equal(r.status, 0, 'main + separate wildcard file: nginx refused:\n' + r.stderr);
+}
 fs.rmSync(dir, { recursive: true, force: true });
-console.log('PASS: nginx accepts every generated file (dev, prod, extra address, wildcard)');
+console.log('PASS: nginx accepts every generated file (dev, prod, extra address, wildcard, separate wildcard file)');

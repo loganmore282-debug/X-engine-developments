@@ -43,10 +43,17 @@ assert.ok(/location ~ "\^\/payment\/\[0-9\]\{8,14\}\/\?\$"/.test(wildBlock) && /
 assert.ok(!/\*\.mydomain/.test(gen(['prod', 'app.mydomain.com', 'Bake7qz3', 'a1b2c3.mydomain.com'])), 'no wildcard unless asked');
 assert.throws(() => gen(['dev', 'Bake7qz3', '--wild=mydomain.com']), 'wildcard is for prod only');
 // the VPS scripts: valid shell, wired together
-for (const f of ['set-wildcard.sh', 'update-vps.sh', 'quick-update.sh']) cp.execFileSync('bash', ['-n', __dirname + '/deploy/' + f]);
+for (const f of ['set-wildcard.sh', 'update-vps.sh', 'quick-update.sh', 'show-links.sh']) cp.execFileSync('bash', ['-n', __dirname + '/deploy/' + f]);
 const upd = fs.readFileSync(__dirname + '/deploy/update-vps.sh', 'utf8'), sw = fs.readFileSync(__dirname + '/deploy/set-wildcard.sh', 'utf8');
+assert.ok(/--wild="\$WILD_DOMAIN" --wild-only/.test(upd) && /rm -f "\$WILD_CONF"/.test(upd), 'the wildcard file is taken away before certbot runs and written after');
 assert.ok(/--wild="\$WILD_DOMAIN"/.test(upd) && /cookie-wild\/fullchain\.pem|WILD_CERT_DIR\/fullchain\.pem/.test(upd), 'update-vps.sh adds the wildcard only when its certificate exists');
 assert.ok(/--cert-name cookie-wild/.test(sw) && /hostinger-dns\.js/.test(sw) && /--manual-auth-hook/.test(sw) && /SHARE_DOMAIN/.test(sw) && /set-domain\.sh/.test(sw) && /\*\.\$DOM/.test(sw), 'set-wildcard.sh: DNS record, wildcard certificate, SHARE_DOMAIN, nginx');
+// show-links.sh prints the four values from a (fake) server directory
+{ const d = fs.mkdtempSync(require('node:os').tmpdir() + '/sl-'); fs.writeFileSync(d + '/app-host', 'app.example.org'); fs.writeFileSync(d + '/admin-host', 'a1b2c3.example.org');
+  fs.writeFileSync(d + '/secrets.local.js', 'module.exports.DEPLOY_WEBHOOK_SECRET = "sec123";'); fs.writeFileSync(d + '/hook-token', 'abcdef0123456789');
+  const out = cp.execFileSync('bash', [__dirname + '/deploy/show-links.sh', 'all'], { encoding: 'utf8', env: { ...process.env, COOKIE_SECRETS_DIR: d } });
+  assert.ok(/https:\/\/app\.example\.org\/\n/.test(out) && /https:\/\/a1b2c3\.example\.org\/Bake7qz3\//.test(out) && /Payload URL : https:\/\/app\.example\.org\/k7x2\/deploy\/webhook/.test(out) && /Secret      : sec123/.test(out) && /\/k7x2\/h-abcdef0123456789\/pesajet/.test(out), 'show-links prints app, admin, GitHub webhook and PesaJet webhook');
+  fs.rmSync(d, { recursive: true, force: true }); }
 // the payment phone box does not trigger the browser's saved-password sheet
 assert.ok(/id="pgPhone" name="pg_msisdn" type="text"[^>]*autocomplete="off"/.test(src) && /function pgLockPasswordBoxes/.test(src), 'no password prompt on the phone box');
 console.log('PASS: random invite addresses (new every time, wildcard nginx + certificate, scripts) and no password prompt on the payment phone box');
