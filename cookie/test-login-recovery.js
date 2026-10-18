@@ -43,7 +43,7 @@ function load(panel){
   await w.doLogin();await tick();
   assert.equal(phone.value,'770000000',mode+' retains phone');assert.equal(btn.disabled,false);
   if(mode==='normal'||mode==='clock-skew'){assert.equal(out,0);assert.equal(w.document.getElementById('app').style.display,'');}
-  else {assert(out>0);assert.equal(pass.value,'');assert(notes.length>0);assert.equal(w.document.getElementById('authScreen').style.display,'');}
+  else {assert(out>0);assert.equal(phone.value,'770000000',mode+' keeps the number');assert.equal(pass.value,'fixture-password',mode+' keeps this device\'s own password in the box');assert(notes.length>0);assert.equal(w.document.getElementById('authScreen').style.display,'');}
   dom.window.close();
  }
  const dom=load('user'),w=dom.window;await tick();
