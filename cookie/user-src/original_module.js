@@ -5255,7 +5255,17 @@ function openSheet(title, bodyHtml){
 // call sites rather than stripped out of several submit-button paths for a
 // purely cosmetic cleanup. opts.keepHistory is the one flag this function
 // still reads.
+// Backing out of Deposit or Withdraw onto Home reloads Home (the loading box, which really reads the account, investments and products),
+// then the announcement dialog opens after the loading box, as it does on a tab change or a login.
+function homeAfterSheet(title){
+  if (title !== 'Deposit' && title !== 'Withdraw') return;
+  if (STATE.page !== 'home' || isAnyOverlayOpen()) return;
+  ckExpectLoad();
+  renderHome();
+  maybeShowAnnouncement();
+}
 window.closeSheet = function(opts){
+  const wasOpen = _openSheetTitle;
   $('sheetBg').classList.remove('show');
   document.body.classList.remove('sheet-open');
   unlockBodyScroll();
@@ -5264,6 +5274,8 @@ window.closeSheet = function(opts){
   // opts.keepHistory: the caller is retiring several overlay entries itself
   // with one history.go(-n) -- see showPage(). Only that caller sets it.
   if (!(opts && opts.keepHistory) && history.state && history.state.sheet) history.back();
+  // Only the member's own Back (arrow): leaving for another tab, or a finished payment/withdrawal, is not a return to Home.
+  if (!(opts && (opts.navigating || opts.fromAction))) homeAfterSheet(wasOpen);
 };
 // ── The Back button and pop-up dialogs ──
 // Sheets and the message popup own a history entry, so Back closes them. The other dialogs (Buy confirm, Help, the
@@ -5341,6 +5353,7 @@ window.addEventListener('popstate', (ev) => {
   }
   // The phone's own Back button, which never goes through closeSheet()
   // directly.
+  const wasOpen = _openSheetTitle;
   $('sheetBg').classList.remove('show');
   document.body.classList.remove('sheet-open');
   unlockBodyScroll();
@@ -5348,6 +5361,7 @@ window.addEventListener('popstate', (ev) => {
   if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
   // Landed on an entry whose dialog is already closed: step over it so one Back is one visible step.
   if (ev && ev.state && ev.state.dlg) { _dlgIgnore(); history.back(); }
+  homeAfterSheet(wasOpen);
 });
 
 // About page: an admin-authored ordered list of text/image blocks (see
