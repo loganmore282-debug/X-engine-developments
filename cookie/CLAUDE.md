@@ -44,3 +44,15 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
 1. (done) Copied from Soda, renamed to Cookie, ports 3003/8094/8095, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path.
    `npm run test:audit` passes. Design is still Soda's look (renamed) until the owner sends screenshots.
 2. (waiting on owner) Atlas user + connection string, VPS first-setup, domain, payment keys (PesaJet/MarzPay), then screenshots.
+
+## Rules the owner has decided (keep these)
+- **Referral reward = the referred member's FIRST PURCHASE** (not the first deposit). Level 1 / 2 / 3 are paid once, as a percentage of that
+  product's price, at the moment of purchase (`/invest/create` -> `creditReferralCommission`; the 30 s reconciler retries a failed one). A deposit
+  pays nothing. A product the admin activates (`granted`) is not a purchase. Test: `test-first-purchase-reward.js` (runs the real route).
+- **Settlement countdown** (Income cards) counts to the next 00:00 of the member's region, on the SERVER clock (`serverNow` in `/investments`,
+  `ckNow()` in the app), ticking on the second. Test: `test-settlement-countdown.js`.
+- **Login boxes keep this device's last member's number and password** after sign-out and after an ended session (`cookie_saved_login`, light
+  encoding in localStorage). Nothing signs in by itself; a wrong password forgets the saved password; typing another number clears it.
+  Test: `test-saved-login.js`.
+- Backing out of Deposit/Withdraw to Home shows the loading box (a real read), then the announcement dialog.
+

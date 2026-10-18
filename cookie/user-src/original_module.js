@@ -1245,10 +1245,21 @@ function ckTween(el, to, fmt, ms){
 // How long the Available / Balance figure, and the Pay / Withdraw buttons as an amount is typed, take to count: the admin's setting (seconds), 3 by default.
 function ckBalanceMs(){ return Math.min(15000, Math.max(1000, (Number((STATE.settings || {}).balanceCountSeconds) || 3) * 1000)); }
 var _apiPending = new Map();
+// The server's clock against this phone's: any answer that carries serverNow (the investments list) refreshes it. The settlement countdown
+// counts to midnight on the SERVER's clock, so a phone set minutes fast or slow still shows the real time left.
+var _clockSkew = 0, _clockRtt = Infinity, _clockAt = 0;
+function ckSyncClock(serverNow, sentAt, gotAt){
+  const rtt = gotAt - sentAt;
+  if (!(Number.isFinite(serverNow) && rtt >= 0 && rtt < 5000)) return;
+  if (rtt <= _clockRtt * 1.5 + 50 || gotAt - _clockAt > 60000) { _clockSkew = serverNow - (sentAt + gotAt) / 2; _clockRtt = rtt; _clockAt = gotAt; }
+}
+function ckNow(){ return Date.now() + _clockSkew; }
 function api(path, opts){
   const tracked = Date.now() < _ckLoadUntil && !(opts && (opts.body || opts.signal || (opts.method && opts.method !== 'GET')));
   if (tracked) ckLoadBegin();
+  const sentAt = Date.now();
   const pr = apiShared(path, opts);
+  pr.then(r => { if (r && typeof r.serverNow === 'number') ckSyncClock(r.serverNow, sentAt, Date.now()); }, () => {});
   if (tracked) pr.then(ckLoadEnd, ckLoadEnd);
   return pr;
 }
@@ -1552,6 +1563,40 @@ async function storeCredentialIfPossible(email, pass, displayPhone){
   const id = local ? '0' + local : email;
   try { await navigator.credentials.store(new PasswordCredential({ id, password: pass, name: id })); } catch (_) {}
 }
+// ── THE LAST SIGNED-IN NUMBER AND PASSWORD, KEPT ON THIS DEVICE ──
+// Owner: after a session ends, or after signing out, the number and password stay in the Login boxes so the member only taps Login.
+// Only the member who last signed in on this device is kept (the next member to sign in replaces it); nothing signs in by itself.
+var SAVED_LOGIN_KEY = 'cookie_saved_login';
+function savedLoginGet(){
+  try {
+    const raw = localStorage.getItem(SAVED_LOGIN_KEY); if (!raw) return null;
+    const o = JSON.parse(decodeURIComponent(escape(atob(raw))));
+    return o && typeof o.phone === 'string' && typeof o.pass === 'string' ? o : null;
+  } catch (_) { return null; }
+}
+function savedLoginSet(phone, pass){
+  try {
+    if (!localDigits(phone) || !pass) return;
+    localStorage.setItem(SAVED_LOGIN_KEY, btoa(unescape(encodeURIComponent(JSON.stringify({ phone: String(phone).trim(), pass: String(pass) })))));
+  } catch (_) {}
+}
+// A password that no longer works (changed elsewhere, or reset by the admin) is forgotten; the number stays.
+function savedLoginDropPass(){
+  const o = savedLoginGet(); if (!o) return;
+  try { localStorage.setItem(SAVED_LOGIN_KEY, btoa(unescape(encodeURIComponent(JSON.stringify({ phone: o.phone, pass: '' }))))); } catch (_) {}
+}
+function savedLoginFill(force){
+  const o = savedLoginGet(), ph = $('loginPhone'), pw = $('loginPassword');
+  if (!o || !ph || !pw) return;
+  if (!force && (ph.value || pw.value)) return;   // never over what someone has typed
+  ph.value = o.phone; pw.value = o.pass;
+}
+document.addEventListener('input', e => {
+  // Typing a different number: the kept password belongs to the other number, so it goes from the box.
+  if (!e.target || e.target.id !== 'loginPhone') return;
+  const o = savedLoginGet(), pw = $('loginPassword');
+  if (o && pw && o.pass && pw.value === o.pass && localDigits(e.target.value) !== localDigits(o.phone)) pw.value = '';
+});
 window.doLogin = async function(){
   if (window._loginInProgress) return;
   window._loginInProgress = true;
@@ -1589,9 +1634,13 @@ window.doLogin = async function(){
     // saved, so the login screen asks again next time.
     const remember = $('rememberMe');
     if (!remember || remember.checked) storeCredentialIfPossible(email, pass, phone);
+    savedLoginSet($('loginPhone').value, pass);
   }
   catch (e) {
     window._pendingLoginSuccess = false;
+    const bad = e && (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password');
+    const kept = savedLoginGet();
+    if (bad && kept && kept.pass === pass && localDigits(kept.phone) === localDigits(phone)) { savedLoginDropPass(); $('loginPassword').value = ''; }
     notify(fbErrMsg(e));
     setBtnLoading('loginBtn', false, 'Login');
   }
@@ -1659,6 +1708,7 @@ window.doRegister = async function(){
     const email = phoneToEmail(phone);
     await window.fbCreateUser(email, pass);
     storeCredentialIfPossible(email, pass, phone);
+    savedLoginSet($('regPhone').value, pass);
   }
   catch (e) {
     // Owner-reported real bug: a Firebase Auth account can exist with no
@@ -1691,6 +1741,7 @@ window.doRegister = async function(){
         const sameUid = STATE.user && STATE.user.email === retryEmail ? STATE.user.uid : null;
         await window.fbSignIn(retryEmail, pass);
         storeCredentialIfPossible(retryEmail, pass, phone);
+        savedLoginSet($('regPhone').value, pass);
         if (sameUid && STATE.user && STATE.user.uid === sameUid)
           await bootFromNetwork(sameUid);
         return;
@@ -1733,9 +1784,7 @@ async function performMemberLogout(opts){
   const auto = !!(opts && opts.auto);
   // Clear before asynchronous sign-out, never after a new autofill selection.
   // Keep the phone on automatic expiry so the member can retry.
-  const phoneInput = $('loginPhone'), passwordInput = $('loginPassword');
-  if (!auto && phoneInput) phoneInput.value = '';
-  if (passwordInput) passwordInput.value = '';
+  // The Login boxes keep this device's own number and password (see savedLoginFill()), after a sign-out as after an expired session.
   // Revoke the captured session without delaying the UI sign-out. The normal
   // api() epoch guard would intentionally cancel this call during logout.
   const leavingUser = window.fbAuth && window.fbAuth.currentUser;
@@ -1752,6 +1801,7 @@ async function performMemberLogout(opts){
   if (!auto) { try { sessionStorage.setItem('cookie_relogin_required', '1'); } catch (_) {} }
   // Signing out always lands on Login, even when this visitor last used Sign Up.
   showAuthTab('login');
+  savedLoginFill(true);
   stopLiveRefresh();
   // Defense in depth alongside the _openSheetTitle fix on the checkin
   // countdown's own tick: a sign-out that happens to land while Daily
@@ -2378,6 +2428,7 @@ async function processMemberAuth(user){
     $('authScreen').style.display = '';
     setBtnLoading('loginBtn', false, 'Login');
     setBtnLoading('regBtn', false, 'Register');
+    savedLoginFill(false);   // this device's last member: the number and password are already in the boxes
     // Sign Up needs to know whether a referral code is required BEFORE
     // anyone submits, and boot() (which normally loads settings) only runs
     // after sign-in. Without this the screen would fall back to "required"
@@ -3498,8 +3549,10 @@ function planFigures(p){
 // HH:MM:SS, and days folded into the hours rather than shown separately -- a
 // product opening in two days reads "48:00:00", which is still a countdown. A
 // finished one reads 00:00:00 rather than going negative.
-function fmtCountdown(ms){
-  let s = Math.max(0, Math.floor(Number(ms) / 1000));
+function fmtCountdown(ms, toMidnight){
+  // Counting to midnight: whole seconds rounded UP (the last second before midnight reads 00:00:01, never a stuck 00:00:00) and never
+  // above 23:59:59 (the instant after midnight is a new day, not "24:00:00").
+  let s = toMidnight ? Math.min(86399, Math.max(0, Math.ceil(Number(ms) / 1000))) : Math.max(0, Math.floor(Number(ms) / 1000));
   const h = Math.floor(s / 3600); s -= h * 3600;
   const m = Math.floor(s / 60); s -= m * 60;
   const pad = n => String(n).padStart(2, '0');
@@ -3558,9 +3611,9 @@ async function renderAssets(){
 // One card per asset the member owns. Expiry is the purchase moment plus the
 // asset's own cycle length (the same planStats() figure every progress bar uses).
 // Cashback is credited at midnight, so the settlement countdown always counts down to the next midnight of the member's own clock.
-function nextMidnightMs(){
-  const off = tzOffMs();
-  return Math.floor((Date.now() + off) / 86400000) * 86400000 + 86400000 - off;
+function nextMidnightMs(now){
+  const off = tzOffMs(), t = now == null ? ckNow() : now;
+  return Math.floor((t + off) / 86400000) * 86400000 + 86400000 - off;
 }
 function vOwnedCardHtml(inv){
   const st = planStats(inv);
@@ -3578,19 +3631,20 @@ function vOwnedCardHtml(inv){
       </dl>
       <div class="ck-oc-img${p.image ? ' has-img' : ''}">${img}<em class="ck-oc-st${st.matured ? ' done' : ''}">${st.matured ? 'Completed' : 'Running'}</em><span class="ck-oc-name">${esc(name)}</span></div>
     </div>
-    ${st.matured ? '' : `<div class="ck-oc-cd"><span>Settlement countdown</span><b data-pay-mid="1">${fmtCountdown(nextMidnightMs() - Date.now())}</b></div>`}
+    ${st.matured ? '' : `<div class="ck-oc-cd"><span>Settlement countdown</span><b data-pay-mid="1">${fmtCountdown(nextMidnightMs() - ckNow(), true)}</b></div>`}
   </article>`;
 }
 // The settlement countdown on each running card ticks every second; when one reaches zero the list is read again (the payout has just landed).
 var _incTimer = null, _incLeft = 0;
 function startIncomeCountdowns(){
-  if (_incTimer) { clearInterval(_incTimer); _incTimer = null; }
+  if (_incTimer) { clearTimeout(_incTimer); _incTimer = null; }
   _incLeft = 0;
   const tick = () => {
+    _incTimer = null;
     const nodes = document.querySelectorAll('[data-pay-mid]');
-    if (!nodes.length || STATE.page !== 'assets') { clearInterval(_incTimer); _incTimer = null; return; }
-    const left = nextMidnightMs() - Date.now();
-    nodes.forEach(el => { el.textContent = fmtCountdown(left); });
+    if (!nodes.length || STATE.page !== 'assets') return;
+    const now = ckNow(), left = nextMidnightMs(now) - now;
+    nodes.forEach(el => { el.textContent = fmtCountdown(left, true); });
     // Midnight just passed (the clock jumped back to a full day): the day's cashback has landed, so read the list again.
     if (_incLeft && left > _incLeft + 1000) {
       setTimeout(async () => {
@@ -3599,9 +3653,13 @@ function startIncomeCountdowns(){
       }, 4000);
     }
     _incLeft = left;
+    // The next tick lands just after the next whole second of the server's clock, so the figure changes exactly when the second does.
+    _incTimer = setTimeout(tick, (left % 1000 || 1000) + 15);
   };
-  _incTimer = setInterval(tick, 1000);
+  tick();
 }
+// Coming back to the app: the timers were frozen while it was away, so the figure is corrected at once.
+document.addEventListener('visibilitychange', () => { if (!document.hidden && _incTimer && STATE.page === 'assets') { clearTimeout(_incTimer); startIncomeCountdowns(); } });
 window.setIncomeTab = function(t){ STATE.incomeTab = t === 'wage' ? 'wage' : 'income'; if (STATE.page === 'assets') paintAssets(); };
 function statementStampMs(ms){
   const d = new Date(ms);
@@ -4971,6 +5029,7 @@ window.submitLoginPasswordChange = async function(){
   btn.disabled = true; btn.textContent = 'Saving…';
   try {
     await window.fbChangePassword(phoneToEmail((STATE.account || {}).phone), oldPass, newPass);
+    { const kept = savedLoginGet(); if (kept && localDigits(kept.phone) === localDigits((STATE.account || {}).phone)) savedLoginSet(kept.phone, newPass); }
     btn.disabled = false; btn.textContent = 'Change Password';
     closeSheet({ fromAction: true });
     notify('Login password changed');

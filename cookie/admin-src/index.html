@@ -1507,7 +1507,8 @@ async function renderUsers(){
 function drawUsers(){
   const raw = ($('userSearch')?.value||'').trim();
   const q = raw.toLowerCase();
-  const qCore = phoneCore(raw);
+  // Digits are matched as a phone number only when what was typed looks like one: a code such as ZX99 must not match every phone containing 99.
+  const qCore = /^[+\d][\d\s()+-]{4,}$/.test(raw) ? phoneCore(raw) : '';
   const qId = q.replace(/^id[:\s]*/,'').trim();
   let list;
   if(q){
@@ -1804,7 +1805,7 @@ async function openUser(uid){
     </div>
     ${SESSION_ROLE==='owner'?`<label style="margin-top:14px">Reset password</label>
     <div class="row">
-      <div style="flex:2"><input id="pwNew" type="text" placeholder="New password (min 6 chars)"></div>
+      <div style="flex:2"><input id="pwNew" type="text" placeholder="New password (at least 10 characters)"></div>
       <button class="btn sky sm" id="pwBtn" title="Set a new login password for this user">Reset password</button>
     </div>
     <label style="margin-top:14px">Correct phone number ${u.phone && !/^\+2567\d{8}$/.test(u.phone)?'<span class="pill-tag t-warn" style="margin-left:6px">Looks malformed</span>':''}</label>
@@ -1821,7 +1822,7 @@ async function openUser(uid){
       <button class="btn sky sm" id="completeRegBtn">Complete</button>
     </div>`:''}
     ${!u.referredBy?`<label style="margin-top:14px">Attach referrer</label>
-    <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">Attach the member's referrer once. Eligible commission from their first confirmed recharge is processed immediately. Existing commission payments are preserved; attaching a referrer does not pay them again.</div>
+    <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">Attach the member's referrer once. If this member has already bought their first product, the Level 1 / 2 / 3 reward on it is paid now. A reward already paid is never paid again; a recharge pays nothing.</div>
     <div class="row">
       <div style="flex:2"><input id="attachRefCode" type="text" placeholder="Referrer's code"></div>
       <button class="btn sky sm" id="attachRefBtn">Attach</button>
@@ -1932,7 +1933,7 @@ async function openUser(uid){
   $('banBtn')?.addEventListener('click', async()=>{ const action=u.status==='banned'?'unban':'ban'; if(action==='ban' && !confirm(`Suspend ${u.phone}? This immediately blocks their deposits, withdrawals, purchases, and cashback.`)) return; const d=await api('/admin/ban',{userId:uid,action}); toast(d.status==='success'?('User '+action+'ned'):(d.message||'Failed'), d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); } });
   $('pwBtn')?.addEventListener('click', async()=>{
     const np=$('pwNew').value.trim();
-    if(np.length<6) return toast('New password must be at least 6 characters','err');
+    if(np.length<10) return toast('New password must be at least 10 characters','err');
     if(!confirm(`Reset password for ${u.phone}? They will need to use the new password to log in.`)) return;
     const b=$('pwBtn'); b.disabled=true; b.textContent='Resetting…';
     const d=await api('/admin/user/reset-password',{userId:uid,newPassword:np});
@@ -1963,7 +1964,7 @@ async function openUser(uid){
   $('attachRefBtn')?.addEventListener('click', async()=>{
     const code=$('attachRefCode').value.trim();
     if(!code) return toast('Enter the referral code','err');
-    if(!confirm(`Attach ${code} as this member's referrer? This updates their team and processes any eligible first-deposit commission.`)) return;
+    if(!confirm(`Attach ${code} as this member's referrer? This updates their team and pays the reward on their first purchase if they have already made one.`)) return;
     const b=$('attachRefBtn'); b.disabled=true; const lbl=b.textContent; b.textContent='Attaching…';
     const d=await api('/admin/user/attach-referrer',{userId:uid,referralCode:code});
     b.disabled=false; b.textContent=lbl;
@@ -3537,7 +3538,7 @@ const ADMIN_LANG_ROWS = [
   ['Looks malformed', 'Kirabika tekituufu', 'Inaonekana si sahihi', 'Semble mal formé', 'Bisa nk\'aho ari bibi', 'Nikireebeka kitahikire'],
   ['Not set yet', 'Tekinnateekebwawo', 'Bado haijawekwa', 'Pas encore défini', 'Ntiryashyizweho', 'Tikirataho'],
   ['New 6-digit trade password', 'Ekisumuluzo eky\'okusuubula ekipya eky\'ennamba 6', 'Nenosiri jipya la malipo la tarakimu 6', 'Nouveau mot de passe de transaction à 6 chiffres', 'Ijambobanga rishya ry\'ubucuruzi ry\'imibare 6', 'Ekisumuruzo kisya eky\'okushuubura eky\'embaro 6'],
-  ['New password (min 6 chars)', 'Ekisumuluzo ekipya (obutono nnukuta 6)', 'Nenosiri jipya (angalau herufi 6)', 'Nouveau mot de passe (6 caractères minimum)', 'Ijambobanga rishya (byibuze inyuguti 6)', 'Ekisumuruzo kisya (buriijo obuhandiiko 6)'],
+  ['New password (at least 10 characters)', 'Ekisumuluzo ekipya (obutono nnukuta 6)', 'Nenosiri jipya (angalau herufi 6)', 'Nouveau mot de passe (6 caractères minimum)', 'Ijambobanga rishya (byibuze inyuguti 6)', 'Ekisumuruzo kisya (buriijo obuhandiiko 6)'],
   ['Note (optional)', 'Obubaka (si bwa buwaze)', 'Dokezo (si lazima)', 'Note (facultatif)', 'Inyandiko (ntabwo ari itegeko)', 'Ekiraburo (tikya buriijo)'],
   ['No plans purchased yet.', 'Tewali nteekateeka egguliddwa.', 'Hakuna mipango iliyonunuliwa bado.', 'Aucun plan acheté pour le moment.', 'Nta gahunda iraguzwa.', 'Tihariho nteekateeka egwiiribwe.'],
   ['Saved cash-out accounts', 'Akawunti z\'okuggyamu ssente eziterekeddwa', 'Akaunti za utoaji zilizohifadhiwa', 'Comptes de retrait enregistrés', 'Konti zo kubikuza zabitswe', 'Akaunti z\'okwihamu sente ezibiikirwe'],

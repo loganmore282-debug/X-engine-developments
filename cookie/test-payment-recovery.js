@@ -72,7 +72,7 @@ function database(seed) {
 function seed() {
   const users = { buyer: { referredBy:'l1', walletBalance:0, totalDeposited:0 },
     l1:{referredBy:'l2',walletBalance:0}, l2:{referredBy:'l3',walletBalance:0}, l3:{walletBalance:0} };
-  return { users, investments:{}, pendingDeposits:{ d1:{ userId:'buyer', amount:15000, status:'pending', commissionBasis:'deposit', commissionPending:true, commissionPaidLevels:[] } }, transactions:{} };
+  return { users, investments:{}, pendingDeposits:{ d1:{ userId:'buyer', amount:15000, status:'pending' } }, transactions:{} };
 }
 function setup(input = seed()) {
   const db = database(input), routes = {};
@@ -88,38 +88,43 @@ function setup(input = seed()) {
     activeL1Count:async()=>5, wholeTeamDeposits:async()=>250000
   });
   vm.runInContext('const _lockTails=new Map(); const _creditingDeposits=new Set();\n' + [
-    'withLock','finiteMoney','depositFullyCredited','creditReferralCommission','creditDepositReferralCommission','_payReferralCommissionNow','creditDeposit','_creditDepositNow'
+    'withLock','finiteMoney','depositFullyCredited','creditReferralCommission','_payReferralCommissionNow','creditDeposit','_creditDepositNow'
   ].map(fn).join('\n'), c);
   return {c, db, routes};
 }
 function response(){return {code:200,status(code){this.code=code;return this},json(body){this.body=body;return this}}}
 async function credit(c,db,id='d1'){return c.creditDeposit(await db.collection('pendingDeposits').doc(id).get())}
+const firstBuy=(extra={})=>({userId:'buyer',amount:15000,isFirstInvestment:true,commissionBasis:'investment',commissionPending:true,commissionPaidLevels:[],...extra});
 async function main(){
   {
+    // A deposit credits the wallet once and pays NO referral reward, however many deposits there are.
     const {c,db}=setup();
     await Promise.all([credit(c,db),credit(c,db)]);
     assert.equal(db.rows.users.buyer.walletBalance,15000);
-    assert.equal(db.rows.users.l1.walletBalance,4500);
-    assert.equal(db.rows.users.l2.walletBalance,450);
-    assert.equal(db.rows.users.l3.walletBalance,300);
+    assert.equal(db.rows.users.l1.walletBalance,0,'a deposit pays no referral reward');
+    assert.equal(db.rows.users.l2.walletBalance,0);
     assert.equal(Object.values(db.rows.transactions).filter(t=>t.depositId==='d1').length,1,'deposit status repair must only match the deposit ledger row');
-    assert.equal(Object.values(db.rows.transactions).filter(t=>t.referralDepositId==='d1').length,3);
-    db.rows.pendingDeposits.d2={...seed().pendingDeposits.d1,amount:25000};
+    assert.equal(Object.values(db.rows.transactions).filter(t=>t.type==='commission').length,0);
+    db.rows.pendingDeposits.d2={userId:'buyer',amount:25000,status:'pending'};
     await credit(c,db,'d2');
     assert.equal(db.rows.users.buyer.walletBalance,40000);
-    assert.equal(db.rows.users.l1.walletBalance,4500,'second deposit must not repay a one-time commission');
-    db.rows.investments.i1={userId:'buyer',isFirstInvestment:true,commissionBasis:'deposit',amount:15000};
-    assert.equal(await c.creditReferralCommission('i1','buyer',15000),false);
-    assert.equal(db.rows.users.l1.walletBalance,4500,'new purchases must not trigger commission');
+    assert.equal(db.rows.users.l1.walletBalance,0,'a second deposit pays nothing either');
+    assert.equal(db.rows.users.buyer.firstReferralDepositId,undefined,'no deposit is marked as the referral deposit any more');
   }
   {
+    // The first purchase pays Level 1 / 2 / 3 once, even when the pay call arrives twice at once; a later purchase pays nothing.
     const {c,db}=setup();
-    db.rows.pendingDeposits.d2={...seed().pendingDeposits.d1,amount:25000};
-    await Promise.all([credit(c,db),credit(c,db,'d2')]);
-    const first=db.rows.users.buyer.firstReferralDepositId;
-    assert(['d1','d2'].includes(first));
-    assert.equal(db.rows.users.buyer.walletBalance,40000);
-    assert.equal(db.rows.users.l1.walletBalance,db.rows.pendingDeposits[first].amount*0.3,'concurrent deposits have one first-deposit entitlement');
+    db.rows.investments.i1=firstBuy();
+    const r=await Promise.all([c.creditReferralCommission('i1','buyer',15000),c.creditReferralCommission('i1','buyer',15000)]);
+    assert.equal(r.filter(Boolean).length>=1,true);
+    assert.equal(db.rows.users.l1.walletBalance,4500,'Level 1 is paid once on the first purchase');
+    assert.equal(db.rows.users.l2.walletBalance,450);
+    assert.equal(db.rows.users.l3.walletBalance,300);
+    assert.equal(Object.values(db.rows.transactions).filter(t=>t.type==='commission').length,3);
+    assert.equal(db.rows.investments.i1.commissionPending,false);
+    db.rows.investments.i2=firstBuy({isFirstInvestment:false,amount:90000,commissionPending:false});
+    assert.equal(await c.creditReferralCommission('i2','buyer',90000),false);
+    assert.equal(db.rows.users.l1.walletBalance,4500,'a second purchase pays nothing');
   }
   {
     const {c,db}=setup();
@@ -131,15 +136,12 @@ async function main(){
   }
   {
     const {c,db}=setup();
-    await c.creditDepositReferralCommission('d1','buyer');
-    assert.equal(db.rows.users.l1.walletBalance,0,'uncredited deposit cannot pay');
     db.faults.push((col,id,patch)=>col==='pendingDeposits' && id==='d1' && patch.walletCredited===true);
     await assert.rejects(credit(c,db));
     assert.equal(db.rows.pendingDeposits.d1.needsManualCredit,true);
     assert.equal(db.rows.users.buyer.walletBalance,15000);
     await credit(c,db);
     assert.equal(db.rows.users.buyer.walletBalance,15000,'retry after marker failure must not re-credit deposit');
-    assert.equal(db.rows.users.l1.walletBalance,4500);
   }
   {
     const {c,db}=setup();
@@ -150,27 +152,34 @@ async function main(){
     assert.equal(db.rows.users.buyer.walletBalance,15000);
   }
   {
+    // The ledger row failing after the wallet landed is repaired without paying twice.
     const {c,db}=setup();
-    db.faults.push((col,id)=>col==='transactions'&&id.startsWith('commission:deposit:d1:0'));
-    await credit(c,db);
+    db.rows.investments.i1=firstBuy();
+    db.faults.push((col,id)=>col==='transactions'&&id.startsWith('commission:i1:0'));
+    await assert.rejects(c.creditReferralCommission('i1','buyer',15000));
     assert.equal(db.rows.users.l1.walletBalance,4500);
-    await c.creditDepositReferralCommission('d1','buyer');
+    db.faults.length=0;
+    await c.creditReferralCommission('i1','buyer',15000);
     assert.equal(db.rows.users.l1.walletBalance,4500,'ledger repair must not repeat commission');
     assert.equal(Object.values(db.rows.transactions).filter(t=>t.type==='commission').length,3);
   }
   {
+    // A banned referrer waits (still pending) and is paid on unban without repeating the other levels.
     const {c,db}=setup();db.rows.users.l1.status='banned';
-    await credit(c,db);assert.equal(db.rows.users.l1.walletBalance,0);
-    assert.equal(db.rows.pendingDeposits.d1.commissionPending,true);
-    db.rows.users.l1.status='active';await c.creditDepositReferralCommission('d1','buyer');
+    db.rows.investments.i1=firstBuy();
+    await c.creditReferralCommission('i1','buyer',15000);assert.equal(db.rows.users.l1.walletBalance,0);
+    assert.equal(db.rows.investments.i1.commissionPending,true);
+    db.rows.users.l1.status='active';await c.creditReferralCommission('i1','buyer',15000);
     assert.equal(db.rows.users.l1.walletBalance,4500);
     assert.equal(db.rows.users.l2.walletBalance,450,'unblocked retry must not repeat other levels');
   }
   {
-    const input=seed();input.investments.old={userId:'buyer',isFirstInvestment:true,commissionPaidLevels:[0],commissionPending:false};
-    const {c,db}=setup(input);await credit(c,db);
-    assert.equal(db.rows.users.l1.walletBalance,0,'existing first-investment credit must not be paid again on deposit');
+    // A product the admin activated is not a purchase: it pays no reward.
+    const {c,db}=setup();
+    db.rows.investments.g1=firstBuy({isFirstInvestment:false,granted:true,commissionPending:false});
+    assert.equal(await c.creditReferralCommission('g1','buyer',15000),false);
+    assert.equal(db.rows.users.l1.walletBalance,0);
   }
-  console.log('PASS: deposits, one-time referral commissions, failed writes, repeated callbacks, bans, and legacy credits');
+  console.log('PASS: deposits pay nothing, the first purchase pays Level 1/2/3 once, failed writes, repeated calls, bans, admin-activated products');
 }
 main().catch(e=>{console.error(e);process.exitCode=1});
