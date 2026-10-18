@@ -1451,6 +1451,8 @@ function cleanPhone(raw){
 function showAuthTab(tab){
   $('loginPane').style.display = tab === 'login' ? '' : 'none';
   $('registerPane').style.display = tab === 'register' ? '' : 'none';
+  // The new form always starts from the top, so a taller form never leaves the page scrolled and the picture jumping into place.
+  try { window.scrollTo(0, 0); const sc = document.querySelector('#authHero .va-scroll'); if (sc) sc.scrollTop = 0; } catch (_) {}
   stopSmsCodeListener();
 }
 // Owner: "on login it should not say please wait, it should say logging

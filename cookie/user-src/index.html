@@ -2240,11 +2240,11 @@ body{background-attachment:fixed;}
 .va-pane .va-card>:nth-child(7){animation-delay:420ms;}
 .va-pane .va-card>:nth-child(8){animation-delay:490ms;}
 .va-pane .va-card>:nth-child(9){animation-delay:560ms;}
-#authScreen,#app{animation:ckFadeIn .4s ease-out both;}
+#app{animation:ckFadeIn .4s ease-out both;}
 .ck-langpop{animation:ckFadeIn .2s ease-out both;}
 .ck-langcard{animation:ckSlideUp .28s cubic-bezier(.22,1,.36,1) both;}
 #loadingScreen.ld-out{opacity:0;transition:opacity .3s ease-out;}
-@media (prefers-reduced-motion:reduce){#pageHost .ck-rise,#sheetBody .ck-rise,.sheet-bg.show,.pay-page.show,.msg-detail-bg.show,.va-pane .va-card>*,#authScreen,#app,.ck-langpop,.ck-langcard,.navitem.active .nav-ic{animation:none !important;}}
+@media (prefers-reduced-motion:reduce){#pageHost .ck-rise,#sheetBody .ck-rise,.sheet-bg.show,.pay-page.show,.msg-detail-bg.show,.va-pane .va-card>*,#app,.ck-langpop,.ck-langcard,.navitem.active .nav-ic{animation:none !important;}}
 /* ── Loading box, "No more data" box (measured from the owner's screen recordings) ── */
 /* ── Sheets only fade in; the tab pill grows from a dot; the Team level pill slides ── */
 .sheet-bg.show{animation:ckFadeIn .12s ease-out both;}
@@ -2438,6 +2438,10 @@ body{background-attachment:fixed;}
 
 /* The picture on Login / Create Account is its own steady layer: switching between the two forms must never repaint it or the screen around it */
 #authHeroBg{filter:var(--auth-hero-filter,none);will-change:transform;transform:translateZ(0);backface-visibility:hidden;}
+/* Only the form boxes move when Login and Create Account swap: the picture, logo and Language button are never part of the moving layer. */
+#authHero{isolation:isolate;}
+.va-scroll{contain:layout style;}
+.ck-langbtn{will-change:transform;transform:translateZ(0);}
 .ck-authlogo{will-change:transform;transform:translateZ(0);}
 </style>
 
