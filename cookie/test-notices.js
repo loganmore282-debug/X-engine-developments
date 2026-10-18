@@ -34,15 +34,10 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   w.eval("notify('Insufficient balance, redirecting to deposit...', () => openDepositSheet())");
   ok(d.getElementById('notifyIc').classList.contains('err'), 'insufficient balance uses the cross icon');
   w.eval('closeNotify()'); ok(went === 1, 'closing it goes to Deposit');
-  // Download: an accepted install shows the Download dialog; Confirm closes it.
+  // Download: accepting the install shows NO dialog afterwards (the owner had the "Download ... check and install it" card removed).
   let prompted = 0; w._installPrompt = { prompt() { prompted++; }, userChoice: Promise.resolve({ outcome: 'accepted' }) };
   await w.promptInstallApp();
-  const dl = d.getElementById('dlBg');
-  ok(prompted === 1 && dl && dl.classList.contains('show'), 'accepted install shows the Download dialog');
-  ok(dl.querySelector('h3').textContent === 'Download' && dl.querySelector('p').textContent === 'The app has been downloaded, please go to the browser to check and install it.' && dl.querySelector('button').textContent === 'Confirm', 'the screenshot words');
-  w.eval(dl.querySelector('button').getAttribute('onclick')); ok(!dl.classList.contains('show'), 'Confirm closes it');
-  w._installPrompt = { prompt() {}, userChoice: Promise.resolve({ outcome: 'dismissed' }) };
-  await w.promptInstallApp(); ok(!dl.classList.contains('show'), 'a dismissed install shows no Download dialog');
+  ok(prompted === 1 && !d.getElementById('dlBg') && !/has been downloaded, please go to the browser/.test(source) && typeof w.openDownloadDialog === 'undefined', 'accepted install shows no Download dialog');
   // The Buy Now confirm popup blurs its backdrop by exactly the notify dialog's amount.
   const css = html.match(/<style[\s\S]*?<\/style>/g).join('\n');
   const bgRule = sel => { const m = [...css.matchAll(new RegExp('(?:^|\\n|\\})\\s*' + sel.replace(/\./g, '\\.') + '\\{([^}]*)\\}', 'g'))].map(x => x[1]).filter(r => /backdrop-filter/.test(r)).pop() || ''; return (r => [(r.match(/rgba\([^)]*\)/) || [''])[0], (r.match(/(?<!-webkit-)backdrop-filter:\s*([^;]*)/) || ['', ''])[1]])(m); };

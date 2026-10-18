@@ -66,6 +66,13 @@ bash "$COOKIE/deploy/set-domain.sh" "$DOM" || { echo "     !! set-domain.sh stop
 echo
 T="$(head -c 2 /dev/urandom | od -An -tx1 | tr -d ' \n')x.$DOM"
 H=$(curl -s -m 15 "https://$T/k7x2/health")
+# The payment page's address must open the app on a reload (nginx has to serve /payment/<number> as the app): tested on the app address and the random one.
+APPH=$(tr -d '[:space:]' < "${COOKIE_APP_HOST_FILE:-$SECRETS/app-host}" 2>/dev/null)
+for HH in "$APPH" "$T"; do
+  [ -n "$HH" ] || continue
+  C=$(curl -s -o /dev/null -m 15 -w '%{http_code}' "https://$HH/payment/12345678901")
+  if [ "$C" = 200 ]; then echo "Payment page address on $HH: opens (HTTP 200)"; else echo "!! Payment page address on $HH answers HTTP $C (should be 200). Send me this line."; fi
+done
 case "$H" in
   *'"status":"ok"'*) echo "Test on a random address ($T):  $H"
      echo "Done. Open Share in the app: every open and every Copy makes a new address like https://mt3c.$DOM/h5/#/pages/login/reset?inviteCode=..." ;;
