@@ -24,6 +24,6 @@ ok(open('https://x.com/share.html?v=1&code=OLD3').code === 'OLD3', 'older share.
 ok(open('https://x.com/refCode=OLD4').code === 'OLD4', 'older /refCode= links still work');
 ok(open('https://x.com/h5/').code === '' && open('https://x.com/h5/').tab === undefined, 'no code, nothing filled');
 const nginx = fs.readFileSync(__dirname + '/deploy/make-nginx.js', 'utf8'), stat = fs.readFileSync(__dirname + '/static-server.js', 'utf8');
-ok(/location = \/h5\/ \{\n\s+try_files \$cookie_bot_html \/index\.html =404;/.test(nginx) && /location = \/h5 \{ return 301 \/h5\/; \}/.test(nginx), 'nginx opens the app at /h5/');
+ok(/location = \/h5\/ \{\n(?:\s+if \(\$cookie_tg_bot\)[^\n]*\n)?\s+try_files \$cookie_bot_html \/index\.html =404;/.test(nginx) && /location = \/h5 \{ return 301 \/h5\/; \}/.test(nginx), 'nginx opens the app at /h5/');
 ok(/pathname === '\/h5' \|\| pathname === '\/h5\/'\) pathname = '\/index\.html'/.test(stat), 'the built-in server opens the app at /h5/');
 console.log(`PASS: referral link (${n} checks)`);
