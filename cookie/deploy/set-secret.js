@@ -15,10 +15,16 @@ const save = value => {
   console.log('Saved ' + name + ' (' + value.length + ' characters). The old file is kept as secrets.local.js.prev until you delete it.');
 };
 if (process.env.COOKIE_SECRET_VALUE) { save(String(process.env.COOKIE_SECRET_VALUE).replace(/[\r\n]/g, '').trim()); process.exit(0); }
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-rl._writeToOutput = s => { if (s.includes('\n') || s.includes(name)) process.stdout.write(s); };
-rl.question('Paste the value for ' + name + ' (it will not be shown), then press Enter: ', answer => {
-  rl.close(); const value = String(answer).replace(/[\r\n]/g, '').trim();
+// The prompt is written by hand and everything readline echoes afterwards is thrown away: with the old "hide only lines without the name" trick a value
+// longer than the terminal width (a phone terminal is narrow) made readline redraw the whole line, and the secret was printed.
+const { Writable } = require('stream');
+let muted = false;
+const quiet = new Writable({ write(chunk, enc, cb) { if (!muted) process.stdout.write(chunk, enc); cb(); } });
+const rl = readline.createInterface({ input: process.stdin, output: quiet, terminal: true });
+process.stdout.write('Paste the value for ' + name + ' (it will not be shown), then press Enter: ');
+muted = true;
+rl.question('', answer => {
+  muted = false; rl.close(); const value = String(answer).replace(/[\r\n]/g, '').trim();
   console.log('');
   if (!value) { console.log('Nothing entered. NOTHING was changed.'); process.exit(2); }
   save(value);

@@ -32,7 +32,7 @@ fi
 case "$ARG" in *.*) NEW=$ARG ;; *) printf '%s' "$ARG" | grep -Eq '^[a-z0-9][a-z0-9-]{1,40}$' || { echo "Not understood: $ARG"; exit 1; }; NEW="$ARG.$BASE" ;; esac
 [ "$NEW" != "$CUR" ] || { echo "The app already uses $NEW."; exit 0; }
 
-MYIP=$(curl -4 -s --max-time 8 https://ifconfig.me || true); NEWIP=$(getent ahostsv4 "$NEW" 2>/dev/null | awk '{print $1; exit}')
+MYIP=$(curl -4 -sf --max-time 8 https://ifconfig.me || true); printf '%s' "$MYIP" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || MYIP=""; NEWIP=$(getent ahostsv4 "$NEW" 2>/dev/null | awk '{print $1; exit}')
 if [ -z "$MYIP" ] || [ "$NEWIP" != "$MYIP" ]; then
   echo "!! $NEW does not point to this server yet (it points to '${NEWIP:-nothing}', this server is '$MYIP')."
   echo "   In Hostinger DNS add an A record: Name = ${NEW%%.*}   Points to = $MYIP   then wait a few minutes and run this again."

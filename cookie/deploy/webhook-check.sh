@@ -30,7 +30,7 @@ printf '    '; curl -s -o /dev/null --max-time 15 -w "http:// (not https) POST r
 say "4/6  What the gateways actually sent in the last hours (nginx log): time, status, sender name, source address"
 LOG=/var/log/nginx/access.log
 if [ -r "$LOG" ]; then
-  grep -a -E '/pesajet|/deposit/callback|/withdraw/callback|/h-' "$LOG" | grep -a -v 'deposit/callback.*curl' | tail -25 | awk '{print "    " $0}' | cut -c1-230
+  grep -a -E '/pesajet|/deposit/callback|/withdraw/callback|/h-' "$LOG" | grep -a -v 'deposit/callback.*curl' | tail -25 | sed -E 's#/h-[A-Za-z0-9]+/#/h-<hidden>/#g' | awk '{print "    " $0}' | cut -c1-230
   echo "    --- status counts for those requests:"
   grep -a -E '"POST [^"]*(/pesajet|/deposit/callback|/withdraw/callback)' "$LOG" | awk '{print $9}' | sort | uniq -c | awk '{print "      HTTP " $2 ": " $1}'
 else echo "    (cannot read $LOG)"; fi

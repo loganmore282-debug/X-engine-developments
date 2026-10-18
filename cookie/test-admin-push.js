@@ -123,9 +123,9 @@ async function serverTests() {
     const app = { post: (p, ...a) => { handlers[p] = a[a.length - 1]; } };
     const safeEqual = (a, b) => { const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || '')); return x.length === y.length && crypto.timingSafeEqual(x, y); };
     const db = fakeDb(dbSeed);
-    new Function('app', 'rateLimit', 'db', 'safeEqual', 'processWithdrawalCore', 'logAdminAction', 'console', 'pushRetiredExpired', qaSrc)(
+    new Function('app', 'rateLimit', 'db', 'safeEqual', 'processWithdrawalCore', 'logAdminAction', 'console', 'pushRetiredExpired', 'getSettings', 'payoutIsManual', qaSrc)(
       app, () => (q, s, n) => n(), db, safeEqual, async (id, by) => { calls.core.push([id, by]); return { code: 200, body: { status: 'success', message: 'Sending UGX 4,000 to 0771' }, meta: { amount: 4000 } }; },
-      (rq, action, meta) => calls.audit.push([rq.adminUser, action, meta]), { error() {} }, t => !!t.retiredAt && Date.now() - new Date(t.retiredAt).getTime() > 48 * 3600 * 1000);
+      (rq, action, meta) => calls.audit.push([rq.adminUser, action, meta]), { error() {} }, t => !!t.retiredAt && Date.now() - new Date(t.retiredAt).getTime() > 48 * 3600 * 1000, async () => ({ manual: !!globalThis.__manualPayout }), s => !!s.manual);
     return { calls, db, call: async body => { const res = { code: 200, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; } }; await handlers['/admin/withdraw/quick-approve']({ body, ip: '1.2.3.4' }, res); return res; } };
   }
   const seed = { adminPushTokens: { good: { role: 'owner', quickApproveSecret: 'S3CRET', username: 'boss' }, key: { role: 'owner', quickApproveSecret: 'KS', username: 'owner-key' }, masterSession: { role: 'owner', quickApproveSecret: 'MS', username: 'owner' },
@@ -137,6 +137,9 @@ async function serverTests() {
   eq([q.calls.audit[0][1], q.calls.audit[0][2].via, q.calls.audit[0][0].username], ['withdrawal_processed', 'push', 'boss'], 'audit-logged as a push approval by that admin');
   q = quickApprove(seed); res = await q.call({ withdrawalId: 'W9', pushToken: 'key', secret: 'KS' }); eq(res.code, 200, 'master-key owner device works without an adminUsers row');
   q = quickApprove(seed); res = await q.call({ withdrawalId: 'W9', pushToken: 'masterSession', secret: 'MS' }); eq(res.code, 200, "the owner signed in with the master key (session name 'owner', no adminUsers row) is accepted");
+  // manual payout mode: Approve from the notification would only RECORD the withdrawal as paid, so it is refused and nothing is processed
+  globalThis.__manualPayout = true; q = quickApprove(seed); res = await q.call({ withdrawalId: 'W9', pushToken: 'good', secret: 'S3CRET' });
+  eq(res.code, 409, 'manual payout mode: the notification Approve is refused'); eq(res.body.code, 'MANUAL_MODE'); eq(q.calls.core.length, 0, 'and nothing was processed'); globalThis.__manualPayout = false;
   const denied = async (body, why) => { const x = quickApprove(seed); const r2 = await x.call(body); eq(r2.code, r2.code === 400 ? 400 : 401, why); eq(x.calls.core.length, 0, why + ': nothing was paid'); return r2; };
   const why = async (body, code, m) => { const r2 = await denied(body, m); eq(r2.body.code, code, m + ' says why'); ok(r2.body.message.length > 40 && !/^Unauthorized$/.test(r2.body.message), m + ': a message the owner can act on'); };
   await why({ withdrawalId: 'W9', pushToken: 'nope', secret: 'S3CRET' }, 'DEVICE_NOT_REGISTERED', 'unknown/rotated device');
@@ -164,7 +167,7 @@ async function serverTests() {
   const bad = quickApprove(seed); bad.db.collection = () => { throw new Error('secret internal detail'); };
   res = await bad.call({ withdrawalId: 'W9', pushToken: 'good', secret: 'S3CRET' }); eq(res.code, 500); ok(!/internal detail/.test(res.body.message), 'no internals in the error');
   // the call site: only a NEW withdrawal asks for the button; deposits do not
-  ok(/sendAdminPush\('New withdrawal request'[^\n]*\{ quickApprove: true \}\)/.test(src), 'new-withdrawal alert requests the Approve button');
+  ok(/sendAdminPush\('New withdrawal request'[^\n]*\{ quickApprove: offerQuickApprove \}\)/.test(src) && /offerQuickApprove = !payoutIsManual\(await getSettings\(\)\)/.test(src), 'new-withdrawal alert requests the Approve button (only when payouts are automatic)');
   ok(!/sendAdminPush\('Deposit completed'[^\n]*quickApprove/.test(src), 'deposit alerts never do');
 }
 

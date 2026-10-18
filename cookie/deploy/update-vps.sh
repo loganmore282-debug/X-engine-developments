@@ -51,10 +51,15 @@ if [ -s "$HOOK_FILE" ]; then COOKIE_HOOK_TOKEN=$(tr -d '[:space:]' < "$HOOK_FILE
 if [ -s "$HOOK_FILE" ] && [ -s "$HOOK_HOST_FILE" ]; then COOKIE_HOOK_HOST=$(tr -d '[:space:]' < "$HOOK_HOST_FILE"); export COOKIE_HOOK_HOST; echo "    (webhook-only host: $COOKIE_HOOK_HOST)"; fi
 
 # The temporary IP preview (deploy/preview.sh) defines the same rate-limit names, so it must go before the real file is written.
-rm -f /etc/nginx/conf.d/cookie-preview.conf
+# Both are kept aside first and put back if this run fails, so "nothing was changed on the live site" is true.
+PRE_CONF=/etc/nginx/conf.d/cookie-preview.conf; PRE_BAK=/tmp/cookie.preview.keep
 # The random-address file is taken away while certbot runs and put back after it (see make-nginx.js --wild-only for why).
-WILD_CONF=${COOKIE_WILD_CONF:-/etc/nginx/conf.d/cookie.wild.conf}
-rm -f "$WILD_CONF"
+WILD_CONF=${COOKIE_WILD_CONF:-/etc/nginx/conf.d/cookie.wild.conf}; WILD_BAK=/tmp/cookie.wild.keep
+rm -f "$PRE_BAK" "$WILD_BAK"
+[ -f "$PRE_CONF" ] && (umask 077; cp -p "$PRE_CONF" "$PRE_BAK")
+[ -f "$WILD_CONF" ] && (umask 077; cp -p "$WILD_CONF" "$WILD_BAK")
+_restore_extras() { [ -f "$PRE_BAK" ] && cp -p "$PRE_BAK" "$PRE_CONF"; [ -f "$WILD_BAK" ] && cp -p "$WILD_BAK" "$WILD_CONF"; return 0; }
+rm -f "$PRE_CONF" "$WILD_CONF"
 say "3/7  nginx: new walls (the old file is kept at $BAK and put back if the new one is refused)"
 [ -f "$CONF" ] && cp "$CONF" "$BAK"
 if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" ${ALSO_HOSTS:+--also="$ALSO_HOSTS"} > /tmp/cookie.conf.new) && cp /tmp/cookie.conf.new "$CONF" && nginx -t >/tmp/cookie.nginxtest 2>&1; then
@@ -62,13 +67,14 @@ if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_
 else
   echo "    !! nginx refused the new file: putting the old one back"
   [ -f "$BAK" ] && cp "$BAK" "$CONF"
+  _restore_extras
   tail -3 /tmp/cookie.nginxtest 2>/dev/null
   echo "    Nothing was changed on the live site. Send me the lines above."
   exit 1
 fi
 
 say "4/7  HTTPS (one certificate for every address; an address whose DNS does not point here yet is skipped, never allowed to break the others)"
-MYIP=$(curl -4 -s --max-time 8 https://ifconfig.me || true)
+MYIP=$(curl -4 -sf --max-time 8 https://ifconfig.me || true); printf '%s' "$MYIP" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || MYIP=""
 [ -n "$MYIP" ] || MYIP=$(curl -4 -s --max-time 8 https://icanhazip.com | tr -d '[:space:]' || true)
 [ -n "$MYIP" ] || MYIP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
 CERT_ARGS=(); SKIPPED=""
@@ -103,14 +109,14 @@ sed -i -E 's#return 301 https://#return 308 https://#' "$CONF"
 # the old file back: reloading port-80-only nginx would lock every browser out (the site sends HSTS).
 if [ -f "$BAK" ] && grep -q ssl_certificate "$BAK" && ! grep -q ssl_certificate "$CONF"; then
   echo "    !! HTTPS sections are missing after the certificate step: putting the previous nginx file back"
-  cp "$BAK" "$CONF"; nginx -t >/dev/null 2>&1 && systemctl reload nginx
+  cp "$BAK" "$CONF"; _restore_extras; nginx -t >/dev/null 2>&1 && systemctl reload nginx
   echo "    Check the DNS records (see above) and run this again."; exit 1
 fi
 # HTTP/2 lets a phone fetch many files over ONE connection (a big gain on long-distance links). Added only if missing, and undone if nginx refuses it.
 (umask 077; cp "$CONF" /tmp/cookie.conf.pre-h2)   # the file holds the secret webhook address: keep the copy private
 sed -i -E '/^[[:space:]]*listen .*443 ssl/{/http2/!s/443 ssl/443 ssl http2/}' "$CONF"
 if nginx -t >/dev/null 2>&1; then echo "    HTTP/2 on: $(grep -c 'ssl http2' "$CONF") listen line(s)"; else echo "    (HTTP/2 not accepted by this nginx, left as it was)"; cp /tmp/cookie.conf.pre-h2 "$CONF"; fi
-if nginx -t >/dev/null 2>&1; then systemctl reload nginx && echo "    nginx reloaded"; else echo "    !! nginx test failed after certbot, putting the old file back"; cp "$BAK" "$CONF"; nginx -t 2>&1 | tail -1; systemctl reload nginx; exit 1; fi
+if nginx -t >/dev/null 2>&1; then systemctl reload nginx && echo "    nginx reloaded"; else echo "    !! nginx test failed after certbot, putting the old file back"; cp "$BAK" "$CONF"; _restore_extras; nginx -t 2>&1 | tail -1; systemctl reload nginx; exit 1; fi
 if [ -n "$WILD_DOMAIN" ]; then
   if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" --wild="$WILD_DOMAIN" --wild-only > "$WILD_CONF") && nginx -t >/tmp/cookie.nginxtest 2>&1; then
     chmod 644 "$WILD_CONF"; systemctl reload nginx && echo "    random addresses (*.$WILD_DOMAIN) on: $WILD_CONF"

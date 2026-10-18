@@ -1438,6 +1438,7 @@ async function renderUsers(){
       ${isOwner?`<button class="btn sm ghost" id="auditBtn" title="Check every user's wallet balance/deposited/earned/invested against the real records, plus duplicate deposit credits, negative balances, and stuck registrations">Integrity audit</button>
       <button class="btn sm ghost" id="recountBtn" title="Rebuild every user's deposit/earning/invested totals AND check-in streaks from the real ledger">Recalculate totals</button>
 `:''}</div>
+    ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first 10,000 members only. The platform has more; the rest cannot be searched here.</div>':''}
     <div class="panel-card"><input id="userSearch" placeholder="Search phone or referral code"></div>
     <div class="panel-card table-scroll"><table><thead><tr><th>Phone</th><th>Referral code</th><th>Balance</th><th>Invested</th><th>Status</th></tr></thead><tbody id="userRows"></tbody></table></div>`;
   $('userSearch').addEventListener('input', drawUsers);
@@ -2060,7 +2061,7 @@ async function renderDeposits(){
 function drawDeps(){
   let list = _deps.filter(d=>depIn(d,_depFilter));
   const raw = ($('depSearch')?.value||'').trim();
-  const q = raw.toLowerCase(), qCore = phoneCore(raw);
+  const q = raw.toLowerCase(), qCore = /^[+\d][\d\s()+-]{4,}$/.test(raw) ? phoneCore(raw) : '';   // digits count as a phone number only when what was typed looks like one (a code such as AB12CD34 must not match every phone containing 1234)
   if(q) list = list.filter(d =>
     (d.referralCode||'').toLowerCase().includes(q) ||
     (qCore.length>=3 && phoneCore(d.accountPhone||d.phone).includes(qCore)) ||
@@ -2223,7 +2224,7 @@ function witStatusPill(w){
 function drawWits(){
   let list = _witFilter==='all' ? _wits : _wits.filter(w=>w.status===_witFilter);
   const raw = ($('witSearch')?.value||'').trim();
-  const q = raw.toLowerCase(), qCore = phoneCore(raw);
+  const q = raw.toLowerCase(), qCore = /^[+\d][\d\s()+-]{4,}$/.test(raw) ? phoneCore(raw) : '';   // digits count as a phone number only when what was typed looks like one (a code such as AB12CD34 must not match every phone containing 1234)
   if(q) list = list.filter(w =>
     (w.referralCode||'').toLowerCase().includes(q) ||
     (qCore.length>=3 && (phoneCore(w.phone).includes(qCore) || phoneCore(w.accountPhone||'').includes(qCore)))
@@ -2784,7 +2785,7 @@ function drawRefs(){
     // (real team member numbers + the aggregate team-deposits figure) --
     // that's literally what this search exists for, so no extra click
     // through a plain profile modal first.
-    const matches = _refAllUsers.filter(u => (phoneCore(raw).length>=3 && phoneCore(u.phone).includes(phoneCore(raw))) || (u.phone||'').toLowerCase().includes(raw) || (u.referralCode||'').toLowerCase().includes(raw));
+    const matches = _refAllUsers.filter(u => (/^[+\d][\d\s()+-]{2,}$/.test(raw) && phoneCore(raw).length>=3 && phoneCore(u.phone).includes(phoneCore(raw))) || (u.phone||'').toLowerCase().includes(raw) || (u.referralCode||'').toLowerCase().includes(raw));
     if (hint) hint.textContent = `${matches.length} match${matches.length===1?'':'es'} -- tap one to see its team's phone numbers and total deposits.`;
     wrap.innerHTML = `<div class="panel-card table-scroll"><table><thead><tr><th>Phone</th><th>Referral code</th><th>Team L1/L2/L3</th><th>Status</th></tr></thead>
       <tbody>${matches.length?matches.map(u=>`<tr class="clickable" data-chain-uid="${esc(u.id)}"><td><b>${esc(u.phone||'')}</b></td><td>${esc(u.referralCode||'Not set')}</td><td>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</td><td><span class="pill-tag ${u.status==='banned'?'t-bad':'t-ok'}">${u.status==='banned'?'Banned':'Active'}</span></td></tr>`).join(''):'<tr><td colspan="4" class="empty">No matching member</td></tr>'}</tbody></table></div>`;

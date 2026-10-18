@@ -112,7 +112,7 @@ ${hookProxy}
 `;
 // On the member host: the secret address (unless a hook-only host carries it) and the plain, guessable one closed.
 const memberHookLocations = `    # secret PesaJet webhook address (see HOOK_TOKEN in the generator); the plain one is closed${HOOK_HOST ? ' (the secret one is served on the hook host only)' : ''}
-${HOOK_HOST ? '' : hookLocation('/' + API + '/h-' + HOOK_TOKEN + '/pesajet')}    location = /${API}/pesajet/webhook { return 404; }
+${HOOK_HOST ? '' : hookLocation('/' + API + '/h-' + HOOK_TOKEN + '/pesajet')}    location ^~ /${API}/pesajet/webhook { return 404; }
 `;
 // A host that exists only for the webhook: one POST address, everything else 404, no app, no admin, no API.
 const hookHostBlock = () => `server {
@@ -193,7 +193,13 @@ ${proxy()}
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${proxy()}
     }
-    location = /health { proxy_pass http://127.0.0.1:${PORT}/health; access_log off; }
+    location = /health {
+        limit_req zone=cookie_api burst=20 nodelay;
+        proxy_pass http://127.0.0.1:${PORT}/health;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        access_log off;
+    }
     # Nothing on this site is a hidden file, a server-side script or a backup/config file. Scanners that look for them get a plain 404 (fail2ban bans
     # an address that keeps asking: see deploy/fail2ban). The admin panel path above and the certificate check path are not touched by these.
     location ~ /\\.(?!well-known/) { return 404; }
@@ -223,7 +229,7 @@ ${hdr(ADMIN_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;', 'add_he
         return 200 "User-agent: *\\nDisallow:\\n";
     }
     # Old-style referral links (<origin>/refCode=<code>) are a real path.
-    location ^~ /refCode= { rewrite ^ /index.html break; }
+    location ^~ /refCode= { rewrite ^ /index.html last; }
     # Current referral links: <origin>/h5/#/pages/login/reset?inviteCode=<code> -- the app opens at /h5/.
     location = /h5 { return 301 /h5/; }
     # The payment page: <origin>/payment/<order number> is the app itself, which then asks the server for that order.

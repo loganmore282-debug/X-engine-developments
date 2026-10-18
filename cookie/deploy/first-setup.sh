@@ -36,8 +36,10 @@ else
     read -r -s -p "    Paste it here (nothing is shown), then press Enter: " URI; echo
     URI=$(printf '%s' "$URI" | tr -d '[:space:]')
     case "$URI" in mongodb://*|mongodb+srv://*) ;; *) echo "    That does not start with mongodb+srv:// or mongodb://. Try again."; continue ;; esac
-    DBN=$(printf '%s' "$URI" | sed -E 's#^[^/]+//[^/]+/([^?]*).*#\1#')
-    [ "$DBN" = cookie ] || { echo "    The database name in it is '${DBN:-(none)}', it must be exactly: cookie   (…mongodb.net/cookie?retryWrites…). Try again."; continue; }
+    case "$URI" in
+      mongodb://*/cookie|mongodb://*/cookie\?*|mongodb+srv://*/cookie|mongodb+srv://*/cookie\?*) ;;
+      *) echo "    The database name in it must be exactly: cookie   (…mongodb.net/cookie?retryWrites…). Try again."; continue ;;   # (the string itself is never printed: it holds the password)
+    esac
     echo "    Testing the connection (up to 20 seconds)..."
     if COOKIE_TEST_URI="$URI" node -e '
       const { MongoClient } = require("mongodb");

@@ -33,12 +33,12 @@ fi
 if ! OUT=$($HDNS check "$DOM" 2>&1); then
   echo "     !! $OUT"
   echo "     The token was refused, or $DOM is not in this Hostinger account. Make the token again (hPanel -> API) and run this command again."
-  rm -f "$TOKEN_FILE"; exit 1
+  case "$OUT" in *"said 401"*|*"said 403"*) rm -f "$TOKEN_FILE" ;; esac; exit 1
 fi
 echo "     $OUT"
 
 echo "2/4  Wildcard DNS record  *.$DOM"
-MYIP=$(curl -4 -s --max-time 8 https://ifconfig.me || true); [ -n "$MYIP" ] || MYIP=$(curl -4 -s --max-time 8 https://icanhazip.com | tr -d '[:space:]' || true)
+MYIP=$(curl -4 -sf --max-time 8 https://ifconfig.me || true); printf '%s' "$MYIP" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || MYIP=$(curl -4 -sf --max-time 8 https://icanhazip.com | tr -d '[:space:]' || true); printf '%s' "$MYIP" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || MYIP=""
 [ -n "$MYIP" ] || { echo "     !! could not find this server's address"; exit 1; }
 OUT=$($HDNS wild-a "$DOM" "$MYIP" 2>&1) || { echo "     !! $OUT"; exit 1; }
 echo "     $OUT"

@@ -23,7 +23,7 @@ case "$CURADMIN" in *".$DOM") ADMIN=$CURADMIN ;; *) ADMIN="$(head -c 4 /dev/uran
 if [ "$ADMIN" != "$CURADMIN" ]; then mkdir -p "$(dirname "$ADMIN_HOST_FILE")"; (umask 077; printf '%s' "$ADMIN" > "$ADMIN_HOST_FILE"); fi
 ADMIN_PATH=$(sed -n 's/^ADMIN_PATH=\${COOKIE_ADMIN_PATH:-\([A-Za-z0-9]*\)}.*/\1/p' "$COOKIE/deploy/update-vps.sh" | head -1)
 
-MYIP=$(curl -4 -s --max-time 8 https://ifconfig.me || true)
+MYIP=$(curl -4 -sf --max-time 8 https://ifconfig.me || true); printf '%s' "$MYIP" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || MYIP=""
 [ -n "$MYIP" ] || MYIP=$(curl -4 -s --max-time 8 https://icanhazip.com | tr -d '[:space:]' || true)
 echo "This server's address: ${MYIP:-unknown}"
 echo; echo "DNS records needed at your domain's DNS page (type A, pointing to ${MYIP:-this server}):"

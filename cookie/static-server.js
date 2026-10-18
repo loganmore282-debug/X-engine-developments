@@ -158,6 +158,7 @@ const server = http.createServer((req, res) => {
   // Traversal. path.join can climb out of ROOT with enough ../ -- resolve
   // first, then require the result to still be inside it. Checking the URL
   // for '..' instead would miss encoded and doubled-up forms.
+  if (pathname.indexOf('\0') !== -1) return send(res, 400, { 'Content-Type': 'text/plain; charset=utf-8' }, 'Bad request', method);   // a NUL byte makes fs.stat throw and ends the process
   const full = path.resolve(ROOT, '.' + pathname);
   if (full !== ROOT && !full.startsWith(ROOT + path.sep)) {
     return send(res, 403, { 'Content-Type': 'text/plain; charset=utf-8' }, 'Forbidden', method);

@@ -1646,14 +1646,19 @@ function stampRef(letter) {
   return letter + d.getUTCFullYear().toString().slice(2) + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate())
     + pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + pad(d.getUTCSeconds()) + pad(crypto.randomInt(10000), 4);
 }
+const _issuedRefs = new Map();   // reference -> time issued: two requests in the same instant can no longer be handed the same one (the check below is check-then-use)
 async function uniqueRef(letter) {
+  const now0 = Date.now(); for (const [r, t] of _issuedRefs) if (now0 - t > 120000) _issuedRefs.delete(r);
   for (let i = 0; i < 10; i++) {
     const ref = stampRef(letter);
+    if (_issuedRefs.has(ref)) continue;
+    _issuedRefs.set(ref, Date.now());   // reserved before the database is asked, so a concurrent call skips it
     const [inDep, inWit] = await Promise.all([
       db.collection('pendingDeposits').where('ref', '==', ref).limit(1).get(),
       db.collection('withdrawals').where('ref', '==', ref).limit(1).get(),
     ]);
     if (inDep.empty && inWit.empty) return ref;
+    _issuedRefs.delete(ref);
   }
   return letter + Date.now() + crypto.randomInt(1000);
 }
@@ -2415,7 +2420,9 @@ async function marzSmsSend(recipients, message) {
 }
 function _marzExtractTx(d) {
   const tx = d?.data?.transaction || d?.transaction || d?.data || d || {};
-  const rawStatus = tx.status || tx.state || tx.transaction_status || tx.payment_status || d?.status || '';
+  // NOT `d.status`: on a status read that is the API envelope's own "success" (the call worked), and falling back to it turned a transaction with no
+  // status field into a completed payment. A flat body (tx === d) already has its status on tx.
+  const rawStatus = tx.status || tx.state || tx.transaction_status || tx.payment_status || '';
   // Speculative, checked against MarzPay's own integration guide afterward
   // (docs/marzpay-integration-guide.pdf) rather than assumed correct:
   // neither the collection-status response (5.5) nor the webhook payloads
@@ -5460,7 +5467,11 @@ app.post('/withdraw/request', async (req, res) => {
       if (!debited) throw new Error('Your balance or account status changed. Please refresh and try again.');
       await finishWithdrawalCreation(witRef, userId);
     });
-    sendAdminPush('New withdrawal request', `${fmtMoney(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }, { quickApprove: true }).catch(() => {});
+    // The lock-screen Approve button is offered only when payouts are automatic (in manual mode it would record a payout that was never sent).
+    // Working that out must never fail a request that is already paid for, so it is guarded on its own.
+    let offerQuickApprove = true;
+    try { offerQuickApprove = !payoutIsManual(await getSettings()); } catch (_) {}
+    sendAdminPush('New withdrawal request', `${fmtMoney(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }, { quickApprove: offerQuickApprove }).catch(() => {});
     res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Withdrawal requested, processing now' });
   } catch (e) {
     if (witId) return res.status(503).json({ status: 'error', code: 'WITHDRAWAL_RECOVERY_PENDING', withdrawalId: witId, message: 'Your withdrawal request is being checked. Check Transaction Statement before submitting again.' });
@@ -5983,6 +5994,10 @@ app.post('/admin/withdraw/quick-approve', quickApproveLimiter, async (req, res) 
       if (!u.exists || u.data().active === false || u.data().role !== 'owner')
         return refuse('NOT_OWNER_ANYMORE', 'The account this device was registered with is no longer an active owner. Sign in to the admin panel to check.');
     }
+    // In MANUAL payout mode "approve" would only record the withdrawal as paid while nothing is sent (the panel's own Process route refuses a stale
+    // mode the same way): the owner has to send the money by hand, then mark it paid in the panel.
+    if (payoutIsManual(await getSettings()))
+      return res.status(409).json({ status: 'error', code: 'MANUAL_MODE', message: 'Payouts are set to manual. Send the money by hand, then mark it as paid in the admin panel.' });
     const result = await processWithdrawalCore(withdrawalId, username + ' (notification)');
     if (result.code === 200)
       logAdminAction({ adminUser: { username, role: 'owner' }, ip: req.ip }, 'withdrawal_processed', { withdrawalId, via: 'push', ...result.meta });
@@ -6244,9 +6259,12 @@ async function pesajetWebhookWork(body, verified) {
     // A deposit's reference is its own human-readable `ref`; a payout's is the
     // withdrawal's doc id. Looked up in that order, and never by anything the
     // caller could have invented.
-    const depQ = await db.collection('pendingDeposits').where('ref', '==', reference).limit(1).get();
+    const depQ = await db.collection('pendingDeposits').where('ref', '==', reference).limit(2).get();
     if (!depQ.empty) {
-      const doc = depQ.docs[0], dep = doc.data();
+      // A reference is meant to be unique; if two rows ever share one, the webhook's transaction id picks the right row, and with no id the signed shortcut
+      // below is not used (PesaJet is asked instead).
+      const ambiguous = depQ.docs.length > 1;
+      const doc = (body.transactionId && depQ.docs.find(d => String(d.data().pesajetTxId) === String(body.transactionId))) || depQ.docs[0], dep = doc.data();
       if (dep.provider !== 'pesajet') return;
       if (dep.status !== 'pending' && dep.status !== 'initiating') return;
       if (!dep.pesajetTxId) return;
@@ -6255,7 +6273,7 @@ async function pesajetWebhookWork(body, verified) {
       // one from the webhook. A webhook that is unsigned, unverifiable, names a different transaction, or carries no final status takes the old way: ask
       // PesaJet, and act on its answer.
       const claim = verified ? pesajetWebhookClaim(body) : null;
-      const sameTx = !body.transactionId || String(body.transactionId) === String(dep.pesajetTxId);
+      const sameTx = body.transactionId ? String(body.transactionId) === String(dep.pesajetTxId) : !ambiguous;
       if (claim && sameTx) {
         if (claim.label === 'success') await creditDeposit(doc, 'PesaJet webhook (signed)');
         else await markDepositFailed(doc.ref, dep.userId, pesajetFailureMsg(claim.status));
@@ -7826,7 +7844,7 @@ app.get('/admin/users', async (req, res) => {
       u.regionKey = String(u.regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY;
       return u;
     }).filter(u => !want || u.regionKey === want);
-    res.json({ status: 'success', users, count: users.length, regionKey: want || 'all' });
+    res.json({ status: 'success', users, count: users.length, regionKey: want || 'all', truncated: snap.docs.length >= 10000 });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/user/detail', async (req, res) => {
@@ -8430,10 +8448,12 @@ app.post('/admin/user/delete', async (req, res) => {
 });
 const _adminCreditDebounce = new Map();
 const _adminDebitDebounce = new Map();
+// An admin amount is a plain number: "5000abc" or an object is refused (parseFloat used to read the 5000 and ignore the rest). NaN when it is not.
+function strictAdminAmount(v) { return (typeof v === 'number' || typeof v === 'string') && /^-?\d+(\.\d+)?$/.test(String(v).trim()) ? Number(String(v).trim()) : NaN; }
 app.post('/admin/deposit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { userId, amount, note } = req.body;
-  const amt = Math.round(parseFloat(amount || 0));
+  const userId = String((req.body && req.body.userId) || '').trim(), { amount, note } = req.body;
+  const amt = Math.round(strictAdminAmount(amount));
   if (!userId || !Number.isFinite(amt) || amt <= 0 || amt > MAX_MONEY_AMOUNT)
     return res.status(400).json({ status: 'error', message: `userId and a valid amount (1 - ${fmtMoney(MAX_MONEY_AMOUNT)}) required` });
   const lastCredit = _adminCreditDebounce.get(userId) || 0;
@@ -8463,8 +8483,8 @@ app.post('/admin/deposit', async (req, res) => {
 });
 app.post('/admin/debit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { userId, amount, note } = req.body;
-  const amt = Math.round(Math.abs(parseFloat(amount || 0)));
+  const userId = String((req.body && req.body.userId) || '').trim(), { amount, note } = req.body;
+  const amt = Math.round(Math.abs(strictAdminAmount(amount)));
   if (!userId || !Number.isFinite(amt) || amt <= 0 || amt > MAX_MONEY_AMOUNT)
     return res.status(400).json({ status: 'error', message: `userId and a valid amount (1 - ${fmtMoney(MAX_MONEY_AMOUNT)}) required` });
   const lastDebit = _adminDebitDebounce.get(userId) || 0;
@@ -8581,7 +8601,7 @@ app.post('/admin/deposits/list', async (req, res) => {
 });
 app.post('/admin/deposit/force-credit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { depositId } = req.body;
+  const depositId = String((req.body && req.body.depositId) || '').trim();
   if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
   try {
     const snap = await db.collection('pendingDeposits').doc(depositId).get();
