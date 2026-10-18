@@ -164,7 +164,7 @@ app.use('/admin/', async (req, _res, next) => {
 // '/turntable/spin' belongs here because it
 // pays real money on an unauthenticated-body POST, so it gets the strict
 // 60/min per-user cap rather than only the 400/min global one.
-['/withdraw/request', '/invest/create', '/deposit/marzpay', '/deposit/order', '/bank/save', '/register',
+['/withdraw/request', '/invest/create', '/deposit/marzpay', '/deposit/order', '/pay/key', '/bank/save', '/register',
  '/redeem', '/turntable/spin']
   .forEach(p => app.use(p, apiLimiter));
 // ── BODY PARSING ──
@@ -4684,6 +4684,14 @@ app.post('/deposit/order/create', async (req, res) => {
     res.json({ status: 'success', orderNo, amount: amt, expiresAt: Date.now() + PAYMENT_ORDER_TTL_MS });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not start the payment. Please try again.' }); }
 });
+// The payment request travels sealed (see pay-seal.js). The app asks for the server's public key first.
+const PAY_SEAL = require('./pay-seal').createPaySeal();
+app.get('/pay/key', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  res.set('Cache-Control', 'no-store');
+  res.json(Object.assign({ status: 'success' }, PAY_SEAL.publicKey()));
+});
 app.get('/deposit/order/:no', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
@@ -4696,6 +4704,17 @@ app.get('/deposit/order/:no', async (req, res) => {
 app.post('/deposit/marzpay', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  // The request arrives sealed (phone, provider and order number encrypted for this server only); the answer goes back sealed too. Over HTTPS a plain
+  // request is refused. Over plain HTTP (the design preview by IP) the browser cannot seal, so a plain one is let through there only.
+  if (req.body && req.body.sealed) {
+    const o = PAY_SEAL.open(req.body.sealed);
+    if (o.error) return res.status(o.error === 'SEAL_KEY' ? 409 : 400).json({ status: 'error', code: o.error, message: o.error === 'SEAL_KEY' ? 'Please try again.' : 'This request could not be verified. Please try again.' });
+    const sealKey = o.key, plainJson = res.json.bind(res);
+    req.body = o.body;
+    res.json = b => (b && b.status === 'success') ? plainJson({ status: 'success', sealed: PAY_SEAL.seal(sealKey, b) }) : plainJson(b);
+  } else if (req.secure) {
+    return res.status(400).json({ status: 'error', code: 'SEAL_REQUIRED', message: 'Please update the app and try again.' });
+  }
   // Paying an order: the amount is the ORDER's, whatever the request says. An order that already started a payment answers with that same payment
   // (a double tap can never start a second one).
   let order = null, orderClaimed = false, orderLinked = false;

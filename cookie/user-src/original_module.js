@@ -5883,14 +5883,13 @@ function pgFrame(inner){
   <p class="pg-foot">Powered by ${pgBrand()} &middot; ${esc(regionName())}</p>`;
 }
 function pgFormHtml(o){
-  const d = localDigits((STATE.account || {}).phone || '');
   return pgFrame(`
     <label class="pg-l" for="pgAmount">Amount (${esc(cur())})</label>
     <input class="pg-in pg-locked" id="pgAmount" type="text" value="${esc(String(o.amount))}" readonly tabindex="-1" aria-readonly="true">
     <label class="pg-l" for="pgPhone">Phone Number</label>
-    <input class="pg-in" id="pgPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="e.g. 0700 000 000" value="${esc(d ? '0' + d : '')}" oninput="this.value=this.value.replace(/[^0-9+ ]/g,'')">
+    <input class="pg-in" id="pgPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="e.g. 0700 000 000" value="" oninput="this.value=this.value.replace(/[^0-9+ ]/g,'')">
     <label class="pg-l" for="pgNet">Mobile Money Provider</label>
-    <div class="pg-sel"><select class="pg-in" id="pgNet"><option>MTN Mobile Money</option><option>Airtel Money</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="pg-sel"><select class="pg-in" id="pgNet"><option value="" selected disabled>Select provider</option><option>MTN Mobile Money</option><option>Airtel Money</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="pg-sum">
       <div><span>Subtotal</span><span>${pgMoney(o.amount)}</span></div>
       <div><span>Processing fee</span><span>+${pgMoney(0)}</span></div>
@@ -5964,17 +5963,45 @@ window.closePaymentPage = function(){
 };
 window.pgHome = function(){ closePaymentPage(); try { navigatePage('home'); } catch (_) {} };
 window.pgAgain = function(){ closePaymentPage(); setTimeout(() => { try { openDepositSheet(); } catch (_) {} }, 450); };
+// The payment request is sealed before it leaves the phone (the server's pay-seal.js opens it): ECDH P-256 with a fresh key for every payment, an
+// AES-256-GCM box around the order number, phone and provider, a time stamp and a one-time random number. The answer comes back sealed with the same
+// key. The browser only offers this on HTTPS; on the plain-HTTP design preview it goes the ordinary way.
+function pgB64u(u8){ let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function pgUnB64u(t){ const s = atob(String(t).replace(/-/g, '+').replace(/_/g, '/')); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+async function pgSealedPost(path, body, again){
+  const w = window, sub = w.crypto && w.crypto.subtle;
+  if (!sub || w.isSecureContext === false) return post(path, body);
+  const k = await api('/pay/key');
+  if (!k || k.status !== 'success' || !k.jwk) return k || { status: 'error', message: 'Could not start the payment. Please try again.' };
+  const enc = new TextEncoder();
+  const server = await sub.importKey('jwk', k.jwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const mine = await sub.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+  const aes = await sub.importKey('raw', await sub.digest('SHA-256', await sub.deriveBits({ name: 'ECDH', public: server }, mine.privateKey, 256)), 'AES-GCM', false, ['encrypt', 'decrypt']);
+  const epk = pgB64u(new Uint8Array(await sub.exportKey('raw', mine.publicKey)));
+  const iv = w.crypto.getRandomValues(new Uint8Array(12)), nonce = pgB64u(w.crypto.getRandomValues(new Uint8Array(18)));
+  const ct = new Uint8Array(await sub.encrypt({ name: 'AES-GCM', iv, additionalData: enc.encode(k.kid + '.' + epk) }, aes, enc.encode(JSON.stringify(Object.assign({ ts: ckNow(), nonce }, body)))));
+  const r = await post(path, { sealed: { kid: k.kid, epk, iv: pgB64u(iv), ct: pgB64u(ct) } });
+  if (r && r.code === 'SEAL_KEY' && !again) return pgSealedPost(path, body, true);   // the server restarted and has a new key
+  if (r && r.sealed) {
+    try {
+      const plain = await sub.decrypt({ name: 'AES-GCM', iv: pgUnB64u(r.sealed.iv), additionalData: enc.encode(k.kid + '.res') }, aes, pgUnB64u(r.sealed.ct));
+      return JSON.parse(new TextDecoder().decode(plain));
+    } catch (_) { return { status: 'error', message: 'Could not read the answer. Check Records before trying again.' }; }
+  }
+  return r;
+}
 window.pgPay = async function(){
   const btn = $('pgPayBtn'); if (!btn || btn.disabled || _pg.view !== 'form') return;
   const err = $('pgErr'); if (err) err.textContent = '';
   const phone = cleanPhone(($('pgPhone') || {}).value);
   if (!phone) { if (err) err.textContent = 'Enter a valid ' + regionName() + ' mobile number.'; return; }
   const network = ($('pgNet') || {}).value || '';
+  if (!network) { if (err) err.textContent = 'Select your mobile money provider.'; return; }
   const token = _pg.token, label = btn.textContent;
   btn.disabled = true; btn.classList.add('pg-busy');
   btn.innerHTML = '<span class="pg-ring"></span>Processing…';
   let r;
-  try { r = await post('/deposit/marzpay', { orderNo: _pg.no, phone, network }); }
+  try { r = await pgSealedPost('/deposit/marzpay', { orderNo: _pg.no, phone, network }); }
   catch (_) { r = null; }
   if (token !== _pg.token || !pgOpen()) return;
   if (!r || r.status !== 'success') {

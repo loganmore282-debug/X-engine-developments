@@ -70,7 +70,7 @@ function database(seed) {
   return { rows, faults, collection: col => query(col) };
 }
 
-const crypto=require('node:crypto');
+const crypto=require('node:crypto'); const PAY_SEAL=require('./pay-seal').createPaySeal();
 function setup(extra={}){
   const rows={ users:{ u1:{registrationDone:true,status:'active',phone:'256771234567'}, u2:{registrationDone:true,status:'active',phone:'256772222222'} }, paymentOrders:{}, pendingDeposits:{}, transactions:{} };
   const db=database(rows); let serial=0, collects=[];
@@ -84,7 +84,7 @@ function setup(extra={}){
     logSecurityEvent(){}, uniqueRef:async()=>'S26'+(++serial), mobileMoneyRefPrefix:async()=>'S', nowStr:()=>({date:'d',time:'t'}), newStatementId:()=>'st'+ ++serial,
     NETWORK_NAMES:new Set(['MTN Mobile Money','Airtel Money']), PUBLIC_URL:'', PROVIDER_BUSY_MSG:'busy', markDepositFailed:async()=>{},
     marzCollect:async a=>{ collects.push(a); return extra.marz||{status:'success',data:{transaction:{uuid:'tx1'}}}; }, marzUserMsg:()=>'x', pesajetCollect:async()=>({ok:true}), watchPesajetDeposit(){},
-    PAYMENT_ORDER_TTL_MS:30*60*1000, DEPOSIT_METHOD_KEYS:['C','L','H','K'], bumpDepositMethod(){},
+    PAY_SEAL, PAYMENT_ORDER_TTL_MS:30*60*1000, DEPOSIT_METHOD_KEYS:['C','L','H','K'], bumpDepositMethod(){},
     app:{ post:(p,h)=>{routes['POST '+p]=h}, get:(p,h)=>{routes['GET '+p]=h} } });
   vm.runInContext([fn('loadPaymentOrder')].join('\n')+'\nconst orderView = o => ({ orderNo: o.orderNo, amount: o.amount, state: o.status, depositId: o.depositId, reference: o.reference, expiresAt: o.expiresAt });\n'+route('/deposit/order/create')+'\n'+route('/deposit/order/:no')+'\n'+route('/deposit/marzpay'),c);
   const call=async(key,uid,body={},params={})=>{ let code=200,out; const res={headersSent:false,status(n){code=n;return res},json(b){out=b;res.headersSent=true;return res}}; await routes[key]({uid,body,params,headers:{}},res); await new Promise(r=>setTimeout(r,20)); return {code,out}; };
@@ -135,5 +135,20 @@ function setup(extra={}){
   f.db.faults.push((col)=>col==='pendingDeposits');
   const bad2=await f.call('POST /deposit/marzpay','u1',{orderNo:no6,phone:'0771234567'});
   assert.notEqual(bad2.code,200); assert.equal(f.db.rows.paymentOrders[no6].status,'created','a failed start frees the order');
+  // a sealed request is opened and the answer is sealed
+  {
+    const h=setup(); const o=(await h.call('POST /deposit/order/create','u1',{amount:70000})).out.orderNo;
+    const ecdh=crypto.createECDH('prime256v1'); ecdh.generateKeys(); const pk=PAY_SEAL.publicKey();
+    const peer=crypto.createPublicKey({key:pk.jwk,format:'jwk'}); const raw=ecdh.getPublicKey(); 
+    const priv=crypto.createPrivateKey({key:{kty:'EC',crv:'P-256',x:raw.subarray(1,33).toString('base64url'),y:raw.subarray(33).toString('base64url'),d:ecdh.getPrivateKey().toString('base64url')},format:'jwk'});
+    const key=crypto.createHash('sha256').update(crypto.diffieHellman({privateKey:priv,publicKey:peer})).digest();
+    const epk=raw.toString('base64url'), iv=crypto.randomBytes(12), ci=crypto.createCipheriv('aes-256-gcm',key,iv); ci.setAAD(Buffer.from(pk.kid+'.'+epk));
+    const ct=Buffer.concat([ci.update(JSON.stringify({ts:Date.now(),nonce:'n'.repeat(20),orderNo:o,phone:'0771234567',network:'MTN Mobile Money'})),ci.final(),ci.getAuthTag()]);
+    const rr=await h.call('POST /deposit/marzpay','u1',{sealed:{kid:pk.kid,epk,iv:iv.toString('base64url'),ct:ct.toString('base64url')}});
+    assert.equal(rr.code,200); assert.equal(rr.out.status,'success'); assert.ok(rr.out.sealed&&!rr.out.depositId,'the answer is sealed');
+    const buf=Buffer.from(rr.out.sealed.ct,'base64url'), de=crypto.createDecipheriv('aes-256-gcm',key,Buffer.from(rr.out.sealed.iv,'base64url')); de.setAAD(Buffer.from(pk.kid+'.res')); de.setAuthTag(buf.subarray(-16));
+    const ans=JSON.parse(Buffer.concat([de.update(buf.subarray(0,-16)),de.final()]).toString()); assert.ok(ans.depositId); assert.equal(h.collects[0].amount,70000);
+    const bad=await h.call('POST /deposit/marzpay','u1',{sealed:{kid:pk.kid,epk,iv:iv.toString('base64url'),ct:ct.toString('base64url')}}); assert.equal(bad.code,400,'the same sealed request twice is refused');
+  }
   console.log('PASS: payment orders (11 digits, owner only, fixed amount, one payment, expiry, newest only)');
 })().catch(e=>{console.error(e);process.exit(1)});
