@@ -210,6 +210,12 @@ ${hdr(ADMIN_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;', 'add_he
     }
     # Old-style referral links (<origin>/refCode=<code>) are a real path.
     location ^~ /refCode= { rewrite ^ /index.html break; }
+    # Current referral links: <origin>/h5/#/pages/login/reset?inviteCode=<code> -- the app opens at /h5/.
+    location = /h5 { return 301 /h5/; }
+    location = /h5/ {
+        try_files $cookie_bot_html /index.html =404;
+${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
+    }
     location = / {
         try_files $cookie_bot_html /index.html =404;
 ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}

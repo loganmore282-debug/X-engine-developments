@@ -112,6 +112,11 @@ function start(which, port) {
        'an old /refCode= link still serves the app');
     ck(invite.body.includes('<!DOCTYPE html') || invite.body.includes('<!doctype html'),
        '  with the real document, not a redirect stub');
+    for (const p of ['/h5/', '/h5']) {
+      const h5 = await get(PORT_USER, p);
+      ck(h5.status === 200 && /text\/html/.test(h5.headers['content-type'] || '') && /<!doctype html/i.test(h5.body),
+         `the current invite link opens the app at ${p} (<origin>/h5/#/pages/login/reset?inviteCode=<code>)`);
+    }
     // Deliberately NOT a blanket /* -> index.html: a service worker or a
     // manifest that ever answers with index.html fails in exactly the way
     // this project's stale-cache problems already look.

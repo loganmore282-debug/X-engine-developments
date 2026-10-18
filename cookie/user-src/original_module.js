@@ -2243,10 +2243,11 @@ function captureReferralFromUrl(){
     // works too, so a link shared before this round keeps working exactly
     // as it always has.
     const search = new URLSearchParams(location.search);
-    let ref = search.get('ref');
+    // The CURRENT shared form: <origin>/h5/#/pages/login/reset?inviteCode=CODE (the code sits after the "#", so it is read from the hash).
+    let ref = search.get('inviteCode') || search.get('ref');
     if (!ref && location.hash) {
       const qIdx = location.hash.indexOf('?');
-      if (qIdx !== -1) ref = new URLSearchParams(location.hash.slice(qIdx + 1)).get('ref');
+      if (qIdx !== -1) { const hp = new URLSearchParams(location.hash.slice(qIdx + 1)); ref = hp.get('inviteCode') || hp.get('ref'); }
     }
     // <origin>/refCode=<code>, read straight off the path. Checked after the
     // two forms above only because they're cheaper to test, not because
@@ -4202,7 +4203,7 @@ function paintShare(){
   const rates = t.commRates || {};
   const a = STATE.account || {};
   const code = a.referralCode || t.referralCode || '';
-  const link = code ? `${shareOrigin()}/share.html?v=${Math.floor(Date.now() / 1000)}&code=${encodeURIComponent(code)}` : '';
+  const link = code ? `${shareOrigin()}/h5/#/pages/login/reset?inviteCode=${encodeURIComponent(code)}` : '';
   $('pageHost').innerHTML = `
 <div class="ck-sub ck-share">
   ${ckHeader('Share')}

@@ -149,6 +149,8 @@ const server = http.createServer((req, res) => {
   // blanket /* -> index.html, which sitting in front of sw.js and the
   // manifest is a real hazard.
   if (pathname.startsWith('/refCode=')) pathname = '/index.html';
+  // Referral links are <origin>/h5/#/pages/login/reset?inviteCode=<code>: the app itself opens at /h5/ (the part after # never reaches the server).
+  if (pathname === '/h5' || pathname === '/h5/') pathname = '/index.html';
   if (pathname === '/' || pathname.endsWith('/')) pathname += 'index.html';
 
   // Traversal. path.join can climb out of ROOT with enough ../ -- resolve
