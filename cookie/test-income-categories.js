@@ -24,5 +24,6 @@ ok(/category: data\.category === 'wage' \|\| data\.category === 'income' \? data
 // the Daily wage badge: taller, green, Running (or Completed) over Free, as in the owner's screenshot
 const html = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
 ok(/invCategory\(inv\) === 'wage' \? ' ck-oc-wst' : ''/.test(mod) && /'<br>Free'/.test(mod), 'a wage plan\'s badge says Free under Running');
-ok(/\.ck-oc-wst\{height:42px;line-height:21px;background:linear-gradient\(90deg,#00964e,#00cf70\);\}/.test(html), 'and is 42 px tall in green (an ordinary plan keeps the thin bar)');
+ok(/\.ck-oc-wst\{z-index:2;height:42px;line-height:21px;background:rgba\(0,225,110,\.55\);\}/.test(html) && /\.ck-oc-wmul\{[^}]*height:42px[^}]*background:#0ff;mix-blend-mode:multiply/.test(html), 'and is 42 px tall in see-through green: the picture shows through the band, as in the screenshot');
+ok(/class="ck-oc-wmul"/.test(mod), 'the picture is tinted under the green (a wage plan that is still running)');
 console.log(`PASS: income categories (${n} checks)`);
