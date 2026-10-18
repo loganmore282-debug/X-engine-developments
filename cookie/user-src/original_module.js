@@ -4766,7 +4766,7 @@ function balTitle(t){
   if (t.type === 'deposit' || t.type === 'admin_credit') return 'Recharge';
   if (t.type === 'withdraw') return balIsFail(t) ? 'Withdrawal Failed' : balIsWait(t) ? 'Withdrawal Processing' : 'Withdrawal Successful';
   if (t.type === 'cashback') return 'Device Profit';
-  if (t.type === 'commission') { const n = Number(t.commissionLevel); return 'Lower ' + ((Number.isFinite(n) ? n : 0) + 1) + ' Buy Rewards'; }
+  if (t.type === 'commission') { const n = Number(t.commissionLevel); return 'Level ' + ((Number.isFinite(n) ? n : 0) + 1) + ' Buy Rewards'; }
   // A product the admin activated for the member: "Free ( Gold )", with nothing taken from the balance.
   if (t.type === 'investment' && /activated$/i.test(String(t.description || ''))) return 'Free ( ' + String(t.description).replace(/\s*activated$/i, '').trim() + ' )';
   return statementDescription(t);
