@@ -5874,10 +5874,10 @@ var _pg = { no: '', order: null, view: '', depositId: '', reference: '', token: 
 function pgOpen(){ const el = $('payScreen'); return !!(el && el.classList.contains('show')); }
 function pgBrand(){ return esc(brandName()); }
 function pgMoney(n){ return esc(cur()) + ' ' + numGroup(Number(n) || 0, false); }
-function pgFrame(inner){
+function pgFrame(inner, timer){
   return `<div class="pg-brand">${pgBrand()}</div>
   <div class="pg-card">
-    <div class="pg-head"><span class="pg-sub">${pgBrand()}</span><h1>Payment</h1></div>
+    <div class="pg-head"><span class="pg-sub">${pgBrand()}</span><h1>Payment</h1>${timer ? `<div class="pg-time" id="pgTimer" aria-label="Time left to pay">${PG_CLOCK}<b id="pgTimerTxt">10:00</b></div>` : ''}</div>
     <div class="pg-body">${inner}</div>
   </div>
   <p class="pg-foot">Powered by ${pgBrand()} &middot; ${esc(regionName())}</p>`;
@@ -5897,7 +5897,7 @@ function pgFormHtml(o){
     </div>
     <p class="pg-err" id="pgErr" role="alert"></p>
     <button class="pg-pay" id="pgPayBtn" type="button" onclick="pgPay()">Pay ${pgMoney(o.amount)}</button>
-    <p class="pg-note">You will receive a mobile money prompt to confirm the payment.<br>Secured by ${pgBrand()}</p>`);
+    <p class="pg-note">You will receive a mobile money prompt to confirm the payment.<br>Secured by ${pgBrand()}</p>`, true);
 }
 function pgCenterHtml(icon, title, text, extra){
   return `<div class="pg-center">${icon}<h2>${esc(title)}</h2><p class="pg-msg">${esc(text)}</p>${extra || ''}</div>`;
@@ -5906,7 +5906,23 @@ var PG_CHECK = '<span class="pg-ico"><svg viewBox="0 0 48 48" aria-hidden="true"
 var PG_CROSS = '<span class="pg-ico pg-bad"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="14.5" fill="none" stroke="#ff5d73" stroke-width="3.4"/><path d="M18.5 18.5l11 11M29.5 18.5l-11 11" fill="none" stroke="#ff5d73" stroke-width="3.4" stroke-linecap="round"/></svg></span>';
 var PG_CLOCK = '<svg class="pg-clk" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 function pgRefLine(){ const r = String(_pg.reference || ''); return r ? `<p class="pg-ref">Ref: ${esc(r.length > 20 ? r.slice(0, 18) + '…' : r)}</p>` : ''; }
+// The 10-minute window to pay, counted on the server's clock down to the order's own end time. Only the form shows it; at 0:00 the page closes the order.
+var _pgTick = 0;
+function pgStopTimer(){ if (_pgTick) { clearInterval(_pgTick); _pgTick = 0; } }
+function pgStartTimer(expiresAt, token){
+  pgStopTimer();
+  const draw = () => {
+    if (token !== _pg.token || _pg.view !== 'form') return pgStopTimer();
+    const left = Math.max(0, Math.ceil((Number(expiresAt) - ckNow()) / 1000));
+    const box = $('pgTimer'), t = $('pgTimerTxt');
+    if (t) t.textContent = String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0');
+    if (box) box.classList.toggle('pg-low', left <= 60);
+    if (left <= 0) { pgStopTimer(); pgShowGone('This payment has expired. Please start again from Deposit.'); }
+  };
+  draw(); _pgTick = setInterval(draw, 1000);
+}
 function pgSet(view, html){
+  pgStopTimer();
   _pg.view = view;
   const body = $('pgBody'); if (body) body.innerHTML = html;
   const el = $('payScreen'); if (el) el.scrollTop = 0;
@@ -5953,10 +5969,11 @@ window.openPaymentPage = async function(orderNo, fromAddress){
   }
   if (o.state !== 'created') return pgShowGone(o.state === 'expired' || o.state === 'replaced' ? 'This payment has expired. Please start again from Deposit.' : 'This payment is not available.');
   pgSet('form', pgFormHtml(o));
+  pgStartTimer(o.expiresAt, token);
 };
 window.closePaymentPage = function(){
   if (!pgOpen()) return;
-  _pg.token++;
+  _pg.token++; pgStopTimer();
   const el = $('payScreen'); el.classList.remove('show'); el.setAttribute('aria-hidden', 'true');
   if (!isScrollLockOverlayOpen()) unlockBodyScroll();
   dlgClosed();

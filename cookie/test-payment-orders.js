@@ -84,7 +84,7 @@ function setup(extra={}){
     logSecurityEvent(){}, uniqueRef:async()=>'S26'+(++serial), mobileMoneyRefPrefix:async()=>'S', nowStr:()=>({date:'d',time:'t'}), newStatementId:()=>'st'+ ++serial,
     NETWORK_NAMES:new Set(['MTN Mobile Money','Airtel Money']), PUBLIC_URL:'', PROVIDER_BUSY_MSG:'busy', markDepositFailed:async()=>{},
     marzCollect:async a=>{ collects.push(a); return extra.marz||{status:'success',data:{transaction:{uuid:'tx1'}}}; }, marzUserMsg:()=>'x', pesajetCollect:async()=>({ok:true}), watchPesajetDeposit(){},
-    PAY_SEAL, PAYMENT_ORDER_TTL_MS:30*60*1000, DEPOSIT_METHOD_KEYS:['C','L','H','K'], bumpDepositMethod(){},
+    PAY_SEAL, PAYMENT_ORDER_TTL_MS:10*60*1000, DEPOSIT_METHOD_KEYS:['C','L','H','K'], bumpDepositMethod(){},
     app:{ post:(p,h)=>{routes['POST '+p]=h}, get:(p,h)=>{routes['GET '+p]=h} } });
   vm.runInContext([fn('loadPaymentOrder')].join('\n')+'\nconst orderView = o => ({ orderNo: o.orderNo, amount: o.amount, state: o.status, depositId: o.depositId, reference: o.reference, expiresAt: o.expiresAt });\n'+route('/deposit/order/create')+'\n'+route('/deposit/order/:no')+'\n'+route('/deposit/marzpay'),c);
   const call=async(key,uid,body={},params={})=>{ let code=200,out; const res={headersSent:false,status(n){code=n;return res},json(b){out=b;res.headersSent=true;return res}}; await routes[key]({uid,body,params,headers:{}},res); await new Promise(r=>setTimeout(r,20)); return {code,out}; };
@@ -95,7 +95,7 @@ function setup(extra={}){
   // an order: 11 random digits, the amount fixed on the server, 30 minutes
   let r=await call('POST /deposit/order/create','u1',{amount:30000,method:'H'});
   assert.equal(r.code,200); const no=r.out.orderNo; assert.match(no,/^\d{11}$/,'11 digits'); assert.equal(r.out.amount,30000);
-  assert.ok(r.out.expiresAt>Date.now()+29*60000 && r.out.expiresAt<=Date.now()+30*60000+1000,'30 minutes');
+  assert.ok(r.out.expiresAt>Date.now()+9*60000 && r.out.expiresAt<=Date.now()+10*60000+1000,'10 minutes');
   assert.equal(db.rows.paymentOrders[no].userId,'u1');
   assert.equal((await call('POST /deposit/order/create','u1',{amount:1000})).code,400,'below the minimum is refused');
   assert.equal((await call('POST /deposit/order/create',null,{amount:30000})).code,401,'not signed in is refused');
@@ -150,5 +150,11 @@ function setup(extra={}){
     const ans=JSON.parse(Buffer.concat([de.update(buf.subarray(0,-16)),de.final()]).toString()); assert.ok(ans.depositId); assert.equal(h.collects[0].amount,70000);
     const bad=await h.call('POST /deposit/marzpay','u1',{sealed:{kid:pk.kid,epk,iv:iv.toString('base64url'),ct:ct.toString('base64url')}}); assert.equal(bad.code,400,'the same sealed request twice is refused');
   }
+  // the link survives a reload: the service worker answers /payment/<number> with the app, and the page counts the 10 minutes
+  { const sw=fs.readFileSync(__dirname+'/user/sw.js','utf8'), mod=fs.readFileSync(__dirname+'/user-src/original_module.js','utf8'), qu=fs.readFileSync(__dirname+'/deploy/quick-update.sh','utf8');
+    assert.ok(/mode === 'navigate' && \/\^\\\/payment\\\/\\d\{8,14\}/.test(sw) && /fetch\('\/index\.html'/.test(sw),'the worker opens the app for a payment link');
+    assert.ok(/PAYMENT_ORDER_TTL_MS = 10 \* 60 \* 1000/.test(fs.readFileSync(__dirname+'/server.js','utf8')),'orders last 10 minutes');
+    assert.ok(/function pgStartTimer/.test(mod) && /id="pgTimer"/.test(mod) && /pgShowGone\('This payment has expired/.test(mod),'a countdown on the form that closes the order at 00:00');
+    assert.ok(/preview\.sh" on/.test(qu),'the update script refreshes the preview nginx file'); }
   console.log('PASS: payment orders (11 digits, owner only, fixed amount, one payment, expiry, newest only)');
 })().catch(e=>{console.error(e);process.exit(1)});

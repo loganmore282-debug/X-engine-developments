@@ -2,7 +2,7 @@
 // installed devices pick up the new build instead of sitting on a cached
 // shell indefinitely (the exact "stale build" failure mode space8/Voltra
 // both hit repeatedly before this pattern was adopted).
-const CACHE = 'cookie-shell-v396';
+const CACHE = 'cookie-shell-v397';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -123,6 +123,14 @@ self.addEventListener('fetch', e => {
   // without this it would always be served as the file that shipped.
   if (reqUrl.pathname === '/manifest.json') {
     e.respondWith(brandedManifest(e.request).catch(() => fetch(e.request)));
+    return;
+  }
+  // The payment link /payment/<order number> is the app itself: this worker answers it with the app shell (fresh from the server, else the saved copy), so a reload works
+  // even where the web server does not know that path. The app then signs in from its saved session and asks the server for the order.
+  if (e.request.mode === 'navigate' && /^\/payment\/\d{8,14}\/?$/.test(reqUrl.pathname)) {
+    e.respondWith(
+      fetch('/index.html', { cache: 'no-cache' }).then(r => r.ok ? r : Promise.reject(r)).catch(() => caches.match('/index.html').then(c => c || fetch(e.request)))
+    );
     return;
   }
   if (e.request.mode === 'navigate') {

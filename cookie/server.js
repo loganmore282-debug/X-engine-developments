@@ -4639,7 +4639,7 @@ async function getHotDepositMethod() {
 // (phone number and provider). The order number is 11 random digits (not a counter, so one cannot be guessed from another), belongs to one member
 // (anyone else gets exactly the answer a number that does not exist gets), lives 30 minutes and can start ONE payment. The amount the payment page
 // shows, and the amount charged, are read from the order and never from the request.
-const PAYMENT_ORDER_TTL_MS = 30 * 60 * 1000;
+const PAYMENT_ORDER_TTL_MS = 10 * 60 * 1000;
 async function loadPaymentOrder(userId, noRaw) {
   const no = String(noRaw == null ? '' : noRaw).trim();
   if (!/^\d{8,14}$/.test(no)) return null;
