@@ -5887,9 +5887,9 @@ function pgFormHtml(o){
     <label class="pg-l" for="pgAmount">Amount (${esc(cur())})</label>
     <input class="pg-in pg-locked" id="pgAmount" type="text" value="${esc(String(o.amount))}" readonly tabindex="-1" aria-readonly="true">
     <label class="pg-l" for="pgPhone">Phone Number</label>
-    <input class="pg-in" id="pgPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="e.g. 0700 000 000" value="" oninput="this.value=this.value.replace(/[^0-9+ ]/g,'')">
+    <input class="pg-in" id="pgPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="e.g. 0700 000 000" value="" required oninput="this.value=this.value.replace(/[^0-9+ ]/g,'')">
     <label class="pg-l" for="pgNet">Mobile Money Provider</label>
-    <div class="pg-sel"><select class="pg-in" id="pgNet"><option value="" selected disabled>Select provider</option><option>MTN Mobile Money</option><option>Airtel Money</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="pg-sel"><select class="pg-in" id="pgNet"><option>MTN Mobile Money</option><option>Airtel Money</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="pg-sum">
       <div><span>Subtotal</span><span>${pgMoney(o.amount)}</span></div>
       <div><span>Processing fee</span><span>+${pgMoney(0)}</span></div>
@@ -5972,7 +5972,7 @@ async function pgSealedPost(path, body, again){
   const w = window, sub = w.crypto && w.crypto.subtle;
   if (!sub || w.isSecureContext === false) return post(path, body);
   const k = await api('/pay/key');
-  if (!k || k.status !== 'success' || !k.jwk) return k || { status: 'error', message: 'Could not start the payment. Please try again.' };
+  if (!k || k.status !== 'success' || !k.jwk) return (k && k.status === 'error') ? k : { status: 'error', message: 'Could not start the payment. Please try again.' };
   const enc = new TextEncoder();
   const server = await sub.importKey('jwk', k.jwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
   const mine = await sub.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
@@ -5993,10 +5993,12 @@ async function pgSealedPost(path, body, again){
 window.pgPay = async function(){
   const btn = $('pgPayBtn'); if (!btn || btn.disabled || _pg.view !== 'form') return;
   const err = $('pgErr'); if (err) err.textContent = '';
-  const phone = cleanPhone(($('pgPhone') || {}).value);
+  const phoneBox = $('pgPhone');
+  // An empty box gets the browser's own "Please fill out this field." bubble, as the design shows.
+  if (phoneBox && !String(phoneBox.value).trim()) { phoneBox.focus(); if (phoneBox.reportValidity) phoneBox.reportValidity(); return; }
+  const phone = cleanPhone((phoneBox || {}).value);
   if (!phone) { if (err) err.textContent = 'Enter a valid ' + regionName() + ' mobile number.'; return; }
   const network = ($('pgNet') || {}).value || '';
-  if (!network) { if (err) err.textContent = 'Select your mobile money provider.'; return; }
   const token = _pg.token, label = btn.textContent;
   btn.disabled = true; btn.classList.add('pg-busy');
   btn.innerHTML = '<span class="pg-ring"></span>Processing…';
