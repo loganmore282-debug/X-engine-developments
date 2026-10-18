@@ -151,6 +151,8 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/refCode=')) pathname = '/index.html';
   // Referral links are <origin>/h5/#/pages/login/reset?inviteCode=<code>: the app itself opens at /h5/ (the part after # never reaches the server).
   if (pathname === '/h5' || pathname === '/h5/') pathname = '/index.html';
+  // A payment page address, <origin>/payment/<order number>: the app opens and shows that order (the member's own session decides whether it is theirs).
+  if (/^\/payment\/\d{8,14}\/?$/.test(pathname)) pathname = '/index.html';
   if (pathname === '/' || pathname.endsWith('/')) pathname += 'index.html';
 
   // Traversal. path.join can climb out of ROOT with enough ../ -- resolve

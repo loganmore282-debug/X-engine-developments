@@ -96,7 +96,7 @@ function setup(rows){
   // the app: the mark follows the setting, the loading state is the screenshot's
   assert.ok(/depositHotMethod: await getHotDepositMethod\(\)/.test(source) && /bumpDepositMethod\(req\.body\.method\)/.test(source),'the server publishes it and counts a started deposit');
   assert.ok(/data-m="\$\{k\}" class="\$\{i === 0 \? 'on' : ''\}\$\{k === hotKey \? ' hot' : ''\}"/.test(mod) && /\? STATE\.settings\.depositHotMethod : 'H'/.test(mod),'the HOT mark sits on the most used pill, not always the first');
-  assert.ok(/ckPayLoading\(submitBtn, true\);\s*ckLoadBegin\(\);/.test(mod) && /post\('\/deposit\/marzpay', \{ amount, phone, method \}\)/.test(mod) && /ckLoadEnd\(\);[\s\S]{0,500}ckPayLoading\(submitBtn, false/.test(mod),'tapping Pay shows the grey Loading button and the loading box until the server answers');
+  assert.ok(/ckPayLoading\(submitBtn, true\);\s*ckLoadBegin\(\);/.test(mod) && /post\('\/deposit\/order\/create', \{ amount, method \}\)/.test(mod) && /ckLoadEnd\(\);[\s\S]{0,500}ckPayLoading\(submitBtn, false/.test(mod),'tapping Pay shows the grey Loading button and the loading box until the server answers');
   assert.ok(/\.ck-pay\.ck-pay-ld,\.ck-pay\.ck-pay-ld:disabled\{background:#a4a4a4;color:#8d8e93;opacity:1;/.test(html) && /\.ck-pay-sp\{[^}]*animation:ckSpoke \.9s steps\(12\) infinite/.test(html),'the grey of the screenshot and a 12-spoke spinner');
   assert.ok(/cancelAnimationFrame\(btn\._raf\)/.test(mod),'a count-up cannot write over the word Loading');
   console.log('PASS: deposit methods (HOT by usage) and the Loading Pay button');

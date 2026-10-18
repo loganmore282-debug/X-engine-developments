@@ -212,6 +212,11 @@ ${hdr(ADMIN_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;', 'add_he
     location ^~ /refCode= { rewrite ^ /index.html break; }
     # Current referral links: <origin>/h5/#/pages/login/reset?inviteCode=<code> -- the app opens at /h5/.
     location = /h5 { return 301 /h5/; }
+    # The payment page: <origin>/payment/<order number> is the app itself, which then asks the server for that order.
+    location ~ ^/payment/[0-9]{8,14}/?$ {
+        rewrite ^ /index.html break;
+${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
+    }
     location = /h5/ {
         if ($cookie_tg_bot) { rewrite ^ /${API}/public/link-preview-page last; }
         try_files $cookie_bot_html /index.html =404;

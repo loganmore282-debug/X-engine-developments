@@ -18,6 +18,7 @@ const required = [
   ['turntableSpins','userId: 1, used: 1, createdAt: 1'],
   ['promoRedemptions','userId: 1, code: 1'],
   ['messageReads','userId: 1'],
+  ['paymentOrders','userId: 1, status: 1'],
 ];
 for (const [collection,keys] of required) {
   const exact = `['${collection}', ${'{'} ${keys} ${'}'}]`;

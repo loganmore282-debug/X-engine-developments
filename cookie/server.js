@@ -164,7 +164,7 @@ app.use('/admin/', async (req, _res, next) => {
 // '/turntable/spin' belongs here because it
 // pays real money on an unauthenticated-body POST, so it gets the strict
 // 60/min per-user cap rather than only the 400/min global one.
-['/withdraw/request', '/invest/create', '/deposit/marzpay', '/bank/save', '/register',
+['/withdraw/request', '/invest/create', '/deposit/marzpay', '/deposit/order', '/bank/save', '/register',
  '/redeem', '/turntable/spin']
   .forEach(p => app.use(p, apiLimiter));
 // ── BODY PARSING ──
@@ -4634,10 +4634,79 @@ async function getHotDepositMethod() {
   _hotDepositMethod = { key, ts: Date.now() };
   return key;
 }
-app.post('/deposit/marzpay', async (req, res) => {
+// ── PAYMENT ORDERS: the /payment/<order number> page ──
+// Tapping Pay on Deposit makes an ORDER: the amount is fixed here, on the server, and the member is sent to /payment/<order number> to finish
+// (phone number and provider). The order number is 11 random digits (not a counter, so one cannot be guessed from another), belongs to one member
+// (anyone else gets exactly the answer a number that does not exist gets), lives 30 minutes and can start ONE payment. The amount the payment page
+// shows, and the amount charged, are read from the order and never from the request.
+const PAYMENT_ORDER_TTL_MS = 30 * 60 * 1000;
+async function loadPaymentOrder(userId, noRaw) {
+  const no = String(noRaw == null ? '' : noRaw).trim();
+  if (!/^\d{8,14}$/.test(no)) return null;
+  const ref = db.collection('paymentOrders').doc(no);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const d = snap.data();
+  if (d.userId !== userId) return null;
+  const expired = d.status === 'created' && !(Number(d.expiresAt) > Date.now());
+  return { ref, orderNo: no, amount: finiteMoney(d.amount), status: expired ? 'expired' : d.status, expired,
+    depositId: d.depositId || null, reference: d.reference || null, expiresAt: Number(d.expiresAt) || 0 };
+}
+const orderView = o => ({ orderNo: o.orderNo, amount: o.amount, state: o.status, depositId: o.depositId, reference: o.reference, expiresAt: o.expiresAt });
+app.post('/deposit/order/create', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const amt = paymentAmount(req.body.amount);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
+  try {
+    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
+    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before topping up.' });
+    if (!gatewayServesRegion(depositAutomaticProvider(sett), currentRegion()))
+      return res.status(400).json({ status: 'error', code: 'GATEWAY_REGION', message: 'Automatic recharge is not available in ' + (currentRegion().name || 'this country') + ' yet.' });
+    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
+    // An older order of this member that was never used is closed: only the newest can be paid.
+    const old = await db.collection('paymentOrders').where('userId', '==', userId).where('status', '==', 'created').limit(20).get();
+    await Promise.all(old.docs.map(d => d.ref.update({ status: 'replaced' }).catch(() => {})));
+    let orderNo = null;
+    for (let i = 0; i < 8 && !orderNo; i++) {
+      const candidate = String(crypto.randomInt(10000000000, 100000000000));
+      const made = await db.collection('paymentOrders').doc(candidate).createIfAbsent({
+        userId, amount: amt, status: 'created', regionKey: currentRegionKey(), expiresAt: Date.now() + PAYMENT_ORDER_TTL_MS, createdAt: FieldValue.serverTimestamp()
+      });
+      if (made) orderNo = candidate;
+    }
+    if (!orderNo) return res.status(503).json({ status: 'error', message: 'Could not start the payment. Please try again.' });
+    bumpDepositMethod(req.body.method);
+    res.json({ status: 'success', orderNo, amount: amt, expiresAt: Date.now() + PAYMENT_ORDER_TTL_MS });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not start the payment. Please try again.' }); }
+});
+app.get('/deposit/order/:no', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const o = await loadPaymentOrder(userId, req.params.no);
+    if (!o) return res.status(404).json({ status: 'error', code: 'ORDER_NOT_FOUND', message: 'This payment is not available.' });
+    res.json({ status: 'success', order: orderView(o) });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load this payment.' }); }
+});
+app.post('/deposit/marzpay', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  // Paying an order: the amount is the ORDER's, whatever the request says. An order that already started a payment answers with that same payment
+  // (a double tap can never start a second one).
+  let order = null, orderClaimed = false, orderLinked = false;
+  if (req.body.orderNo != null && String(req.body.orderNo).trim() !== '') {
+    try { order = await loadPaymentOrder(userId, req.body.orderNo); } catch (_) { return res.status(500).json({ status: 'error', message: 'Could not load this payment.' }); }
+    if (!order) return res.status(404).json({ status: 'error', code: 'ORDER_NOT_FOUND', message: 'This payment is not available.' });
+    if (order.depositId) return res.json({ status: 'success', depositId: order.depositId, reference: order.reference, message: 'Payment initiated. Check your phone.' });
+    if (order.expired || order.status === 'replaced') return res.status(410).json({ status: 'error', code: 'ORDER_EXPIRED', message: 'This payment has expired. Please start again from Deposit.' });
+    if (order.status !== 'created') return res.status(409).json({ status: 'error', code: 'ORDER_BUSY', message: 'This payment is already being processed.' });
+  }
+  const amt = order ? order.amount : paymentAmount(req.body.amount);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
   if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
   try {
@@ -4702,7 +4771,21 @@ app.post('/deposit/marzpay', async (req, res) => {
       return res.status(429).json({ status: 'error', message: 'Too many deposit attempts. Please wait a minute and try again.' });
     }
     _depCreateDebounce.set(userId, Date.now());
-    bumpDepositMethod(req.body.method);
+    if (order) {
+      // One payment per order: claimed atomically, so two taps at once cannot both start one.
+      const claimed = await withLock('order:' + order.orderNo, async () => {
+        const fresh = await order.ref.get();
+        if (!fresh.exists || fresh.data().status !== 'created') return false;
+        await order.ref.update({ status: 'paying', payingAt: Date.now() });
+        return true;
+      });
+      if (!claimed) {
+        const again = await loadPaymentOrder(userId, order.orderNo);
+        if (again && again.depositId) return res.json({ status: 'success', depositId: again.depositId, reference: again.reference, message: 'Payment initiated. Check your phone.' });
+        return res.status(409).json({ status: 'error', code: 'ORDER_BUSY', message: 'This payment is already being processed.' });
+      }
+      orderClaimed = true;
+    }
 
     const ref = await uniqueRef(await mobileMoneyRefPrefix());
     const marzReference = crypto.randomUUID();
@@ -4710,12 +4793,13 @@ app.post('/deposit/marzpay', async (req, res) => {
     const depRef = db.collection('pendingDeposits').doc();
     const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
     await depRef.set({
-      userId, phone, network, amount: amt, ref, marzReference, status: 'initiating', provider,
+      userId, phone, network, amount: amt, ref, marzReference, status: 'initiating', provider, orderNo: order ? order.orderNo : null,
       // Which country's money this is, stamped once so the admin lists can
       // label the figure correctly without a user lookup per row.
       regionKey: currentRegionKey(),
       date, time, createdAt: FieldValue.serverTimestamp()
     });
+    if (order) { await order.ref.update({ depositId: depRef.id, reference: ref }); orderLinked = true; }
     // ANSWER FIRST. Owner: "sometimes a prompt may come when the screen is
     // just redirecting to payment page, so it is slow to redirect."
     //
@@ -4840,6 +4924,8 @@ app.post('/deposit/marzpay', async (req, res) => {
     });
   } catch (e) {
     console.error('Deposit error:', e.message);
+    // The order was claimed but no payment came of it: it can be used again.
+    if (order && orderClaimed && !orderLinked) order.ref.update({ status: 'created' }).catch(() => {});
     if (!res.headersSent) res.status(500).json({ status: 'error', message: PROVIDER_BUSY_MSG });
   }
 });

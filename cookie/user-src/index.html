@@ -100,7 +100,7 @@
      condensed/narrow, which combined with this app's many font-weight:700/
      800 rules is what read as "still Cookie's bold font") with weights wide
      enough that headings/buttons don't need to reach for 800 to stand out. -->
-<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* ── Cookie design tokens ──────────────────────────────────────────────
    Value-only swap of the token names this codebase already uses everywhere
@@ -2340,7 +2340,7 @@ body{background-attachment:fixed;}
 .ck-nodata-bd{padding:0;margin-top:150px;}
 .ck-bd-card .ck-nodata-bd{margin-top:120px;}
 /* ── The dark Loading box and the "No more data" box, measured from the owner's screenshots ── */
-.ck-box{position:fixed;left:50%;top:51%;z-index:445;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:4.3px;background:#525154;color:#fff;opacity:0;pointer-events:none;transform:translate(-50%,-50%);transition:opacity .2s ease;font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
+.ck-box{position:fixed;left:50%;top:51%;z-index:700;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:4.3px;background:#525154;color:#fff;opacity:0;pointer-events:none;transform:translate(-50%,-50%);transition:opacity .2s ease;font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
 .ck-box.show{opacity:1;}
 .ck-box-load{width:130px;height:80.7px;}
 .ck-box-ok{width:130px;height:105px;}
@@ -2478,6 +2478,48 @@ body{background-attachment:fixed;}
 @keyframes mtPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.25);}}
 @keyframes mtBug{0%{transform:translate(0,0);}25%{transform:translate(-26px,10px);}50%{transform:translate(-8px,26px);}75%{transform:translate(18px,8px);}100%{transform:translate(0,0);}}
 @keyframes mtWing{from{transform:scaleY(1) rotate(0);}to{transform:scaleY(.45) rotate(6deg);}}
+
+/* ── The payment page (/payment/<order number>): dark purple, built from the owner's screenshots ── */
+#payScreen{position:fixed;inset:0;z-index:620;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;background:linear-gradient(135deg,#0b0b16 0%,#110a3d 50%,#090913 100%);color:#fff;font-family:'DM Sans','Roboto',system-ui,sans-serif;}
+#payScreen.show{display:block;}
+#payScreen .pg-wrap{min-height:100%;box-sizing:border-box;padding:68px 17px 34px;display:flex;flex-direction:column;align-items:center;}
+#payScreen .pg-brand{margin:0 0 26px;font-size:30px;line-height:36px;font-weight:700;letter-spacing:.01em;color:#fff;text-align:center;}
+#payScreen .pg-card{width:100%;max-width:392px;border:1px solid rgba(255,255,255,.13);border-radius:28px;overflow:hidden;background:linear-gradient(180deg,#1b1832 0%,#12101f 100%);box-shadow:0 20px 60px rgba(0,0,0,.45);}
+#payScreen .pg-head{padding:24px 25px 20px;background:linear-gradient(135deg,#2a1c66 0%,#2f1f6f 55%,#25185a 100%);border-bottom:1px solid rgba(255,255,255,.12);}
+#payScreen .pg-sub{display:block;margin-bottom:12px;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.62);}
+#payScreen .pg-head h1{margin:0;font-size:25px;line-height:30px;font-weight:700;color:#fff;}
+#payScreen .pg-body{padding:25px 25px 24px;}
+#payScreen .pg-l{display:block;margin:0 0 9px;font-size:14.5px;line-height:19px;font-weight:600;color:#a9a6c2;}
+#payScreen .pg-in{display:block;width:100%;height:49px;margin:0 0 22px;padding:0 17px;box-sizing:border-box;border:1px solid #514d70;border-radius:15px;background:linear-gradient(180deg,#38335a 0%,#2e2a4c 100%);color:#fff;font:400 17.5px 'DM Sans','Roboto',sans-serif;outline:0;-webkit-appearance:none;appearance:none;}
+#payScreen .pg-in::placeholder{color:#7b779a;}
+#payScreen .pg-in:focus{border-color:#7a4cf5;box-shadow:0 0 0 3px rgba(122,76,245,.38);}
+#payScreen .pg-locked{color:#e9e7f7;cursor:default;}
+#payScreen .pg-sel{position:relative;}
+#payScreen .pg-sel select{padding-right:44px;}
+#payScreen .pg-sel svg{position:absolute;right:15px;top:13px;width:22px;height:22px;color:#a09cbb;pointer-events:none;}
+#payScreen .pg-sel option{background:#2b2745;color:#fff;}
+#payScreen .pg-sum{margin:2px 0 20px;padding:16px 19px;border:1px solid rgba(255,255,255,.14);border-radius:15px;background:rgba(255,255,255,.035);}
+#payScreen .pg-sum>div{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:15.5px;color:#9f9bb9;}
+#payScreen .pg-sum .pg-tot{margin-top:8px;padding-top:15px;border-top:1px solid rgba(255,255,255,.14);font-size:18px;font-weight:700;color:#fff;}
+#payScreen .pg-sum .pg-tot b{color:#b7f23f;font-weight:700;}
+#payScreen .pg-err{min-height:0;margin:0 0 12px;font-size:14px;line-height:19px;color:#ff7b8d;}
+#payScreen .pg-err:empty{display:none;}
+#payScreen .pg-pay{display:flex;align-items:center;justify-content:center;width:100%;height:51px;border:0;border-radius:17px;background:#6c38f0;color:#fff;font:700 17.5px 'DM Sans','Roboto',sans-serif;cursor:pointer;box-shadow:0 10px 26px -6px rgba(108,56,240,.55);}
+#payScreen .pg-pay.pg-busy,#payScreen .pg-pay:disabled{background:#4a29a5;color:#a99ad8;cursor:default;box-shadow:0 10px 26px -10px rgba(74,41,165,.5);}
+#payScreen .pg-ring{width:20px;height:20px;margin-right:12px;box-sizing:border-box;border:2.6px solid rgba(255,255,255,.35);border-top-color:transparent;border-radius:50%;animation:ckLdSpin .8s linear infinite;}
+#payScreen .pg-note{margin:19px 0 0;font-size:13.5px;line-height:21px;text-align:center;color:#6f6b8a;}
+#payScreen .pg-foot{margin:26px 0 0;font-size:14.5px;text-align:center;color:#524e6d;}
+#payScreen .pg-center{flex:1;width:100%;max-width:392px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding-bottom:70px;}
+#payScreen .pg-ico{display:flex;align-items:center;justify-content:center;width:68px;height:68px;margin-bottom:26px;border-radius:50%;background:#101c36;border:1px solid rgba(30,214,122,.16);}
+#payScreen .pg-ico svg{width:46px;height:46px;}
+#payScreen .pg-ico.pg-bad{background:#2a1424;border-color:rgba(255,93,115,.2);}
+#payScreen .pg-center h2{margin:0 0 14px;font-size:27px;line-height:33px;font-weight:700;color:#fff;}
+#payScreen .pg-msg{margin:0 0 24px;font-size:17.5px;line-height:25px;color:#a6a3bd;}
+#payScreen .pg-ref{margin:0 0 20px;font:400 14.5px/20px ui-monospace,Menlo,Consolas,monospace;letter-spacing:.04em;color:#56526f;}
+#payScreen .pg-wait{display:flex;align-items:center;justify-content:center;gap:9px;margin:0;font-size:15.5px;color:#7a769a;}
+#payScreen .pg-clk{width:21px;height:21px;}
+#payScreen .pg-small{width:auto;min-width:210px;padding:0 28px;margin-top:6px;}
+#payScreen .pg-ghost{margin-top:14px;border:0;background:none;color:#8f8bb0;font:500 15.5px 'DM Sans','Roboto',sans-serif;cursor:pointer;}
 </style>
 
 <script data-cookie-idle>
@@ -2691,6 +2733,8 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
   <div class="og-countdown" id="openingGateCountdown">--:--:--</div>
   <div class="og-sub">We're getting ready. Come back once the countdown ends.</div>
 </div>
+
+<div id="payScreen" aria-hidden="true"><div class="pg-wrap" id="pgBody"></div></div>
 
 <div id="maintScreen" role="alert">
   <div class="mt-wrap">

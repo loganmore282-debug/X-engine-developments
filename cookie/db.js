@@ -191,6 +191,7 @@ async function ensureIndexes() {
     ['turntableSpins',  { userId: 1, used: 1, createdAt: 1 }],
     ['promoRedemptions',{ userId: 1, code: 1 }],
     ['messageReads',    { userId: 1 }],
+    ['paymentOrders',   { userId: 1, status: 1 }],   // a member's unused orders (closed when a newer one is made)
     // OTP verification (registration / password reset / bank-account
     // linking) -- consumeOtpTicket()'s lookup, and otpSendLog's daily
     // rate-limit counter is already keyed by its own deterministic doc id

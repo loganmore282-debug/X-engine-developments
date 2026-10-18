@@ -2195,6 +2195,7 @@ function withTimeout(promise, ms){
   return Promise.race([ promise, new Promise(resolve => setTimeout(resolve, ms)) ]);
 }
 function captureReferralFromUrl(){
+  try { const pm = /^\/payment\/(\d{8,14})\/?$/.exec(location.pathname); if (pm) window._payOrderNo = pm[1]; } catch (_) {}
   try {
     // Referral links are now shared as ".../#pages/register/?ref=CODE"
     // (Round 116) -- everything after "#" is the URL fragment, which
@@ -2513,6 +2514,7 @@ async function enterApp(){
   hideLoadingScreen();
   $('app').style.display = '';
   showPage(STATE.page || 'home');
+  ckOpenPendingPayment();
   maybeAnnounceOnEntry();
   window._pendingLoginSuccess = false;   // signing in says nothing: the Home page simply opens
   ckAuthBoxEnd();
@@ -2660,6 +2662,7 @@ async function bootFromNetwork(uid){
   hideLoadingScreen();
   $('app').style.display = '';
   showPage(STATE.page || 'home');
+  ckOpenPendingPayment();
   maybeAnnounceOnEntry();
   ckAuthBoxEnd();
   if (signupFlow) { window._pendingLoginSuccess = false; ckSuccessToast('Success'); }
@@ -5144,6 +5147,7 @@ var _openSheetTitle = null;
 function vGroup(n){ const x = Number(n); return Number.isFinite(x) ? numGroup(x, false) : String(n); }
 function isAnyOverlayOpen(){
   return !!(_openSheetTitle
+    || ($('payScreen') && $('payScreen').classList.contains('show'))
     || ($('msgDetailBg') && $('msgDetailBg').classList.contains('show'))
     || ($('notifyBg') && $('notifyBg').classList.contains('show'))
     || ($('confirmBg') && $('confirmBg').classList.contains('show'))
@@ -5285,6 +5289,7 @@ window.closeSheet = function(opts){
 var _dlgIgnorePop = false, _dlgFromPop = false, _dlgCleanTimer = null;
 function anyDialogOpen(){
   return !!($('chestWinBg')
+    || ($('payScreen') && $('payScreen').classList.contains('show'))
     || ($('dlBg') && $('dlBg').classList.contains('show'))
     || ($('helpBg') && $('helpBg').classList.contains('show'))
     || ($('confirmBg') && $('confirmBg').classList.contains('show'))
@@ -5297,7 +5302,7 @@ function resetOverlayState(){
   document.body.classList.remove('deposit-status-open', 'sheet-open');
   // A session that ends (or a logout) takes every popup with it: the Buy confirm, Help, announcement, download and the win card used to stay
   // on top of the Login screen (the win card even showed the previous member's New Balance).
-  ['confirmBg', 'helpBg', 'annBg', 'dlBg'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
+  ['confirmBg', 'helpBg', 'annBg', 'dlBg', 'payScreen'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
   const win = $('chestWinBg'); if (win) win.remove();
   _openSheetTitle = null; _depActiveDepositId = null; _withdrawSubmitting = false;
   if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
@@ -5319,6 +5324,7 @@ function closeTopDialog(){
   _dlgFromPop = true;
   try {
     if ($('chestWinBg')) collectChestWin();
+    else if ($('payScreen') && $('payScreen').classList.contains('show')) { if (_pg.view === 'form' || _pg.view === 'initiated' || _pg.view === 'unknown' || _pg.view === 'failed' || _pg.view === 'gone' || _pg.view === 'done') closePaymentPage(); else dlgOpened(); }
     else if ($('dlBg') && $('dlBg').classList.contains('show')) closeDownloadDialog();
     else if ($('helpBg') && $('helpBg').classList.contains('show')) closeHelpDialog();
     else if ($('confirmBg') && $('confirmBg').classList.contains('show')) closeConfirm();
@@ -5433,9 +5439,6 @@ var _depChosenAmount = 0;
 function openDepositFormSheet(){
   const s = STATE.settings || {};
   _depChosenAmount = 0;
-  // The payment prompt goes to the member's own registered number (the page has no phone box).
-  const registered = localDigits((STATE.account || {}).phone) || '';
-  const defaultPhone = registered ? '0' + registered : '';
   const min = Number(s.minDeposit) || 0;
   const bal = (STATE.account && STATE.account.walletBalance) || 0;
   // The HOT mark sits on the method members tap most (the server counts them); all four use the same payment channel.
@@ -5445,7 +5448,6 @@ function openDepositFormSheet(){
     <div class="ck-card ck-amtcard">
       <div class="ck-balrow"><span>Available：</span><b>${esc(cur())}</b><i id="depBalance">${esc(numGroup(0, true))}</i></div>
       <label class="ck-amtbox"><b>${esc(cur())}</b><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Please enter the Deposit amount" oninput="this.value=this.value.replace(/[\s,]/g,'');syncDepositQuickAmt()" autocomplete="off"></label>
-      <input id="depPhone" type="hidden" value="${esc(defaultPhone)}">
     </div>
     <div class="ck-card ck-pays" id="depPays">
       ${['C', 'L', 'H', 'K'].map((k, i) => `<button type="button" data-m="${k}" class="${i === 0 ? 'on' : ''}${k === hotKey ? ' hot' : ''}" onclick="pickPayLabel(this)">${k === hotKey ? hot : ''}<span>${esc(brandName())} Pay -${k}</span></button>`).join('')}
@@ -5841,60 +5843,196 @@ function ckPayLoading(btn, on, label){
 }
 window.submitDeposit = async function(){
   const submitBtn = $('depSubmitBtn');
-  if (!submitBtn || submitBtn.disabled || !$('depAmount') || !$('depPhone')) return;
+  if (!submitBtn || submitBtn.disabled || !$('depAmount')) return;
   const amount = parseMoneyInput($('depAmount').value);
-  // Owner: "why when one didn't put number, it just continues to poll ... l
-  // tried to leave not putting number and clicked confirm deposit but it
-  // didn't reject it just continued to go to poll page."
-  //
-  // The amount was validated here and the phone simply was not, so an empty
-  // field went to the server, which fell back to the account's own registered
-  // number, created a real deposit and answered success -- so the app went
-  // happily on to the poll page for a payment prompt the member never asked
-  // for. It also produced the broken "+256" with no digits on that screen,
-  // because the display fell back to a bare country code.
-  //
-  // cleanPhone() is the SAME rule the server applies, so what is accepted
-  // here and what is accepted there cannot drift apart.
-  const phone = cleanPhone($('depPhone').value);
   if (!amount || amount <= 0) return notify('Please enter the Deposit amount');
-  // Card (doCardDeposit()) and USDT (doUsdtDeposit()) both already check
-  // this client-side before ever hitting the network; Mobile Money was the
-  // one rail still relying entirely on the server's own rejection, which
-  // meant a below-minimum amount round-tripped to the server and back
-  // before the member found out, instead of failing instantly like the
-  // other two.
+  // The minimum is checked here first so a short amount fails at once; the server checks it again.
   const s = STATE.settings || {};
   if (amount < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
-  if (!phone) return notify('Enter a valid ' + regionName() + ' mobile number.');
   const picked = document.querySelector('#depPays button.on'), method = picked ? picked.dataset.m : '';
-  // Going to the payment page: the button turns grey with a spinner and "Loading", and the loading box shows until the server answers.
+  // Pay makes an ORDER on the server (the amount is fixed there) and the member goes on to the payment page, /payment/<order number>. The button
+  // turns grey with "Loading" and the loading box shows until the server has made it.
   ckPayLoading(submitBtn, true);
   ckLoadBegin();
   let r;
   try {
-    // No network field on this form (Round 145) -- the gateway detects it
-    // from the phone number itself; server.js already treats `network` as
-    // optional here.
-    r = await post('/deposit/marzpay', { amount, phone, method });
+    r = await post('/deposit/order/create', { amount, method });
   } finally {
     ckLoadEnd();
-    // Restores the button's resting label after a failed attempt -- must
-    // match whatever submitBtn actually reads at rest (see the sheet's own
-    // button above), or a member whose recharge failed is left looking at a
-    // button that silently renamed itself.
     ckPayLoading(submitBtn, false, 'Pay ' + numGroup(amount, false));
   }
   if (r && r.stale) return;
-  if (!r || r.status !== 'success') return notify((r && r.message) || 'Could not start deposit');
-  // Same stale-Records fix as submitWithdraw() -- /deposit/marzpay already
-  // wrote a "Processing" ledger row server-side by this point, refresh the
-  // cache now so it's actually there the next time Records opens.
-  refreshTransactionsCache().catch(() => {});
+  if (!r || r.status !== 'success' || !r.orderNo) return notify((r && r.message) || 'Could not start the payment');
   if ($('depSubmitBtn') === submitBtn && _openSheetTitle === 'Deposit') closeSheet({ fromAction: true });
-  openDepositStatusModal(amount, phone);
-  pollDepositStatus(r.depositId);
+  openPaymentPage(r.orderNo);
 };
+// ── THE PAYMENT PAGE: /payment/<order number> ──
+// Pay on Deposit makes an order on the server (the amount is fixed there) and lands here. The amount cannot be edited; the member gives the phone
+// number the prompt goes to and the provider, taps Pay, and the page waits (a real status read every 1.5 s) for the provider's answer. On success the
+// "Success" tick box shows and the app goes back to Home by itself.
+var _pg = { no: '', order: null, view: '', depositId: '', reference: '', token: 0 };
+function pgOpen(){ const el = $('payScreen'); return !!(el && el.classList.contains('show')); }
+function pgBrand(){ return esc(brandName()); }
+function pgMoney(n){ return esc(cur()) + ' ' + numGroup(Number(n) || 0, false); }
+function pgFrame(inner){
+  return `<div class="pg-brand">${pgBrand()}</div>
+  <div class="pg-card">
+    <div class="pg-head"><span class="pg-sub">${pgBrand()}</span><h1>Payment</h1></div>
+    <div class="pg-body">${inner}</div>
+  </div>
+  <p class="pg-foot">Powered by ${pgBrand()} &middot; ${esc(regionName())}</p>`;
+}
+function pgFormHtml(o){
+  const d = localDigits((STATE.account || {}).phone || '');
+  return pgFrame(`
+    <label class="pg-l" for="pgAmount">Amount (${esc(cur())})</label>
+    <input class="pg-in pg-locked" id="pgAmount" type="text" value="${esc(String(o.amount))}" readonly tabindex="-1" aria-readonly="true">
+    <label class="pg-l" for="pgPhone">Phone Number</label>
+    <input class="pg-in" id="pgPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="e.g. 0700 000 000" value="${esc(d ? '0' + d : '')}" oninput="this.value=this.value.replace(/[^0-9+ ]/g,'')">
+    <label class="pg-l" for="pgNet">Mobile Money Provider</label>
+    <div class="pg-sel"><select class="pg-in" id="pgNet"><option>MTN Mobile Money</option><option>Airtel Money</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="pg-sum">
+      <div><span>Subtotal</span><span>${pgMoney(o.amount)}</span></div>
+      <div><span>Processing fee</span><span>+${pgMoney(0)}</span></div>
+      <div class="pg-tot"><span>Total to pay</span><b>${pgMoney(o.amount)}</b></div>
+    </div>
+    <p class="pg-err" id="pgErr" role="alert"></p>
+    <button class="pg-pay" id="pgPayBtn" type="button" onclick="pgPay()">Pay ${pgMoney(o.amount)}</button>
+    <p class="pg-note">You will receive a mobile money prompt to confirm the payment.<br>Secured by ${pgBrand()}</p>`);
+}
+function pgCenterHtml(icon, title, text, extra){
+  return `<div class="pg-center">${icon}<h2>${esc(title)}</h2><p class="pg-msg">${esc(text)}</p>${extra || ''}</div>`;
+}
+var PG_CHECK = '<span class="pg-ico"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="14.5" fill="none" stroke="#1ed67a" stroke-width="3.4"/><path d="M17.5 24.5l4.8 4.8 8.7-9.8" fill="none" stroke="#1ed67a" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+var PG_CROSS = '<span class="pg-ico pg-bad"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="14.5" fill="none" stroke="#ff5d73" stroke-width="3.4"/><path d="M18.5 18.5l11 11M29.5 18.5l-11 11" fill="none" stroke="#ff5d73" stroke-width="3.4" stroke-linecap="round"/></svg></span>';
+var PG_CLOCK = '<svg class="pg-clk" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function pgRefLine(){ const r = String(_pg.reference || ''); return r ? `<p class="pg-ref">Ref: ${esc(r.length > 20 ? r.slice(0, 18) + '…' : r)}</p>` : ''; }
+function pgSet(view, html){
+  _pg.view = view;
+  const body = $('pgBody'); if (body) body.innerHTML = html;
+  const el = $('payScreen'); if (el) el.scrollTop = 0;
+}
+function pgShowInitiated(){
+  pgSet('initiated', pgCenterHtml(PG_CHECK, 'Payment Initiated!', 'Check your phone for a prompt from your mobile money provider. Approve it to complete the payment.', pgRefLine() + `<p class="pg-wait">${PG_CLOCK}<span>Awaiting mobile money approval</span></p>`));
+}
+function pgShowUnknown(){
+  pgSet('unknown', pgCenterHtml(PG_CHECK, 'Still waiting', 'The payment has not been confirmed yet and nothing is lost. If you approve it, your balance updates on its own; you can also look in Records later.', pgRefLine() + `<button class="pg-pay pg-small" type="button" onclick="pgHome()">Back to Home</button>`));
+}
+function pgShowFailed(msg){
+  pgSet('failed', pgCenterHtml(PG_CROSS, 'Payment failed', msg || 'The payment did not go through. Nothing was taken from you.', `<button class="pg-pay pg-small" type="button" onclick="pgAgain()">Try again</button><button class="pg-ghost" type="button" onclick="pgHome()">Back to Home</button>`));
+}
+function pgShowGone(msg){
+  pgSet('gone', pgCenterHtml(PG_CROSS, 'Payment not available', msg || 'This payment link is not available.', `<button class="pg-pay pg-small" type="button" onclick="pgHome()">Back to Home</button>`));
+}
+// The page owns one history entry (like the other full-screen dialogs) so Back closes it instead of leaving the app, and the address bar shows
+// /payment/<order number> while it is open.
+function pgSyncUrl(no){
+  const set = () => { try { if (pgOpen() && history.state && history.state.dlg) history.replaceState({ dlg: 1 }, '', '/payment/' + no); } catch (_) {} };
+  [30, 500, 800, 1300].forEach(ms => setTimeout(set, ms));
+}
+window.openPaymentPage = async function(orderNo, fromAddress){
+  const no = String(orderNo || '').trim();
+  if (!/^\d{8,14}$/.test(no)) return;
+  const el = $('payScreen'); if (!el) return;
+  const token = ++_pg.token;
+  _pg = { no, order: null, view: 'loading', depositId: '', reference: '', token };
+  pgSet('loading', '');
+  el.classList.add('show'); el.setAttribute('aria-hidden', 'false');
+  lockBodyScroll();
+  if (fromAddress) { try { history.replaceState({}, '', '/'); } catch (_) {} }
+  if (!(history.state && history.state.sheet)) dlgOpened();
+  setTimeout(() => { if (pgOpen() && !(history.state && history.state.dlg)) dlgOpened(); }, 700);
+  pgSyncUrl(no);
+  ckExpectLoad();
+  const r = await api('/deposit/order/' + encodeURIComponent(no));
+  if (token !== _pg.token || !pgOpen()) return;
+  if (r.status !== 'success' || !r.order) return pgShowGone(r.status === 'error' && r.code === 'ORDER_NOT_FOUND' ? 'This payment link is not available.' : (r.message || 'Could not load this payment. Check your connection and try again.'));
+  const o = r.order; _pg.order = o;
+  if (o.depositId) {            // opened again after Pay was tapped (a refresh): carry on waiting for the same payment
+    _pg.depositId = o.depositId; _pg.reference = o.reference || '';
+    pgShowInitiated(); pgPoll(o.depositId, token); return;
+  }
+  if (o.state !== 'created') return pgShowGone(o.state === 'expired' || o.state === 'replaced' ? 'This payment has expired. Please start again from Deposit.' : 'This payment is not available.');
+  pgSet('form', pgFormHtml(o));
+};
+window.closePaymentPage = function(){
+  if (!pgOpen()) return;
+  _pg.token++;
+  const el = $('payScreen'); el.classList.remove('show'); el.setAttribute('aria-hidden', 'true');
+  if (!isScrollLockOverlayOpen()) unlockBodyScroll();
+  dlgClosed();
+};
+window.pgHome = function(){ closePaymentPage(); try { navigatePage('home'); } catch (_) {} };
+window.pgAgain = function(){ closePaymentPage(); setTimeout(() => { try { openDepositSheet(); } catch (_) {} }, 450); };
+window.pgPay = async function(){
+  const btn = $('pgPayBtn'); if (!btn || btn.disabled || _pg.view !== 'form') return;
+  const err = $('pgErr'); if (err) err.textContent = '';
+  const phone = cleanPhone(($('pgPhone') || {}).value);
+  if (!phone) { if (err) err.textContent = 'Enter a valid ' + regionName() + ' mobile number.'; return; }
+  const network = ($('pgNet') || {}).value || '';
+  const token = _pg.token, label = btn.textContent;
+  btn.disabled = true; btn.classList.add('pg-busy');
+  btn.innerHTML = '<span class="pg-ring"></span>Processing…';
+  let r;
+  try { r = await post('/deposit/marzpay', { orderNo: _pg.no, phone, network }); }
+  catch (_) { r = null; }
+  if (token !== _pg.token || !pgOpen()) return;
+  if (!r || r.status !== 'success') {
+    if (r && (r.code === 'ORDER_EXPIRED' || r.code === 'ORDER_NOT_FOUND')) return pgShowGone(r.message);
+    btn.disabled = false; btn.classList.remove('pg-busy'); btn.textContent = label;
+    if (err) err.textContent = (r && r.message) || 'Could not start the payment. Please try again.';
+    return;
+  }
+  _pg.depositId = r.depositId; _pg.reference = r.reference || '';
+  refreshTransactionsCache().catch(() => {});
+  pgShowInitiated();
+  pgPoll(r.depositId, token);
+};
+// One status read at a time (the same single-flight read the old status page used), a first check at 1 s, then every 1.5 s for 70 s, then every
+// 4 s for 3 more minutes: a payment approved late still turns the page into its result.
+async function pgPoll(depositId, token){
+  const began = Date.now();
+  await new Promise(r => setTimeout(r, DEP_POLL_FIRST_MS));
+  while (Date.now() - began < 70000) {
+    const t0 = Date.now();
+    if (token !== _pg.token || !pgOpen()) return;
+    const r = await depositStatusHold(depositId);
+    if (token !== _pg.token || !pgOpen()) return;
+    if (await pgApply(r, token)) return;
+    const spent = Date.now() - t0;
+    if (spent < DEP_POLL_EVERY_MS) await new Promise(r2 => setTimeout(r2, DEP_POLL_EVERY_MS - spent));
+  }
+  if (token !== _pg.token || !pgOpen()) return;
+  pgShowUnknown();
+  const until = Date.now() + 180000;
+  while (Date.now() < until) {
+    await new Promise(r => setTimeout(r, 4000));
+    if (token !== _pg.token || !pgOpen()) return;
+    const r = await depositStatusHold(depositId);
+    if (token !== _pg.token || !pgOpen()) return;
+    if (await pgApply(r, token)) return;
+  }
+}
+async function pgApply(r, token){
+  if (!r || r.status !== 'success') return false;
+  if (r.state === 'matched') {
+    refreshTransactionsCache().catch(() => {});
+    _pg.token++; _pg.view = 'done';    // the poll loops stop; the page stays up for the moment below
+    ckSuccessToast('Success');
+    setTimeout(() => { if (pgOpen()) pgHome(); }, 2200);
+    return true;
+  }
+  if (r.state === 'failed') { refreshTransactionsCache().catch(() => {}); pgShowFailed(r.message); return true; }
+  return false;
+}
+// A payment page address opened directly (/payment/<order number>, e.g. after a refresh or from a saved link): the app signs the member in first,
+// then shows that order.
+function ckOpenPendingPayment(){
+  const no = window._payOrderNo; if (!no) return false;
+  window._payOrderNo = '';
+  openPaymentPage(no, true);
+  return true;
+}
 // Owner: "callback speed is low, so try to make the system solid and faster
 // validation on payments."
 //

@@ -90,13 +90,12 @@ async function main(){
   assert(d.querySelector('#lpOld'),'late withdrawal response must not close another form');
   w.openDepositSheet();assert.equal(d.querySelectorAll('.ck-notes p').length,5);
   assert.match(d.querySelector('.ck-notes').textContent,/The minimum deposit amount is UGX 15000/);assert.equal(d.querySelectorAll('#depPays button').length,4,'four pay labels');
-  d.querySelector('#depAmount').value='15000';d.querySelector('#depPhone').value='0771234567';
+  d.querySelector('#depAmount').value='15000';
   const deposit=deferred();posts=0;w.post=()=>{posts++;return deposit.promise};
   const sending=w.submitDeposit();await w.submitDeposit();assert.equal(posts,1);
   w.openChangeLoginPasswordSheet();
   deposit.resolve({status:'error',message:'Test request rejected'});await sending;
   assert(d.querySelector('#lpOld'),'deposit cleanup must tolerate the original button being removed');
-  assert.equal(d.querySelector('#depRedirect'),null,'removed redirect overlay stays absent after a rejected deposit');
   console.log('PASS '+(built?'guarded bundle':'source')+': Home refresh, reward dialog, wallet races, zero fees, repeat taps, navigation, and payment guidance');
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>w.close());
