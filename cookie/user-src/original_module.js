@@ -1082,7 +1082,7 @@ function applyBrandName(){
   if (!known) return;   // nothing to say yet; leave the blanks blank
   document.querySelectorAll('[data-brandmark]').forEach(el => { el.innerHTML = brandWordmarkHtml(); });
   document.querySelectorAll('.home-brand-title').forEach(el => { el.textContent = known; });
-  try { document.title = known; } catch (_) {}
+  try { document.title = pgOpen() ? known + ' Pay' : known; } catch (_) {}
   // Remember it for the next launch. This is the whole fix for "on start up
   // loader it was still saying cookie": the loading screen paints long before
   // /public/settings answers, so the only way it can show the right name is
@@ -5872,7 +5872,9 @@ window.submitDeposit = async function(){
 // "Success" tick box shows and the app goes back to Home by itself.
 var _pg = { no: '', order: null, view: '', depositId: '', reference: '', token: 0 };
 function pgOpen(){ const el = $('payScreen'); return !!(el && el.classList.contains('show')); }
-function pgBrand(){ return esc(brandName()); }
+// "Pay" is part of the page's name and is fixed; the brand in front of it is the admin's name for the app, so "Cookie Pay" becomes "<new name> Pay" everywhere here.
+function pgBrand(){ return esc(brandName()) + ' Pay'; }
+function pgTitle(){ return brandName() + ' Pay'; }
 function pgMoney(n){ return esc(cur()) + ' ' + numGroup(Number(n) || 0, false); }
 function pgFrame(inner, timer){
   return `<div class="pg-brand">${pgBrand()}</div>
@@ -5953,6 +5955,7 @@ window.openPaymentPage = async function(orderNo, fromAddress){
   _pg = { no, order: null, view: 'loading', depositId: '', reference: '', token };
   pgSet('loading', '');
   el.classList.add('show'); el.setAttribute('aria-hidden', 'false');
+  try { document.title = pgTitle(); } catch (_) {}
   lockBodyScroll();
   if (fromAddress) { try { history.replaceState({}, '', '/'); } catch (_) {} }
   if (!(history.state && history.state.sheet)) dlgOpened();
@@ -5975,6 +5978,7 @@ window.closePaymentPage = function(){
   if (!pgOpen()) return;
   _pg.token++; pgStopTimer();
   const el = $('payScreen'); el.classList.remove('show'); el.setAttribute('aria-hidden', 'true');
+  try { document.title = brandName(); } catch (_) {}
   if (!isScrollLockOverlayOpen()) unlockBodyScroll();
   dlgClosed();
 };

@@ -154,6 +154,7 @@ function setup(extra={}){
   { const sw=fs.readFileSync(__dirname+'/user/sw.js','utf8'), mod=fs.readFileSync(__dirname+'/user-src/original_module.js','utf8'), qu=fs.readFileSync(__dirname+'/deploy/quick-update.sh','utf8');
     assert.ok(/mode === 'navigate' && \/\^\\\/payment\\\/\\d\{8,14\}/.test(sw) && /fetch\('\/index\.html'/.test(sw),'the worker opens the app for a payment link');
     assert.ok(/PAYMENT_ORDER_TTL_MS = 10 \* 60 \* 1000/.test(fs.readFileSync(__dirname+'/server.js','utf8')),'orders last 10 minutes');
+    assert.ok(/function pgBrand\(\)\{ return esc\(brandName\(\)\) \+ ' Pay'; \}/.test(mod) && /document\.title = pgTitle\(\)/.test(mod) && /' Pay'/.test(fs.readFileSync(__dirname+'/user-src/index.html','utf8')),'the page and the tab are called "<name> Pay" (Pay fixed, the name from the admin)');
     assert.ok(/function pgStartTimer/.test(mod) && /id="pgTimer"/.test(mod) && /pgShowGone\('This payment has expired/.test(mod),'a countdown on the form that closes the order at 00:00');
     assert.ok(/preview\.sh" on/.test(qu),'the update script refreshes the preview nginx file'); }
   console.log('PASS: payment orders (11 digits, owner only, fixed amount, one payment, expiry, newest only)');
