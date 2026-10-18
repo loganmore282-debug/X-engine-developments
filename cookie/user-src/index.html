@@ -1865,8 +1865,8 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 #loadingScreen .ld-pct{position:absolute;top:calc(41.2% + 19px);left:0;right:0;text-align:center;font:400 12px/1 'Roboto',system-ui,sans-serif;color:#777;}
 /* ── Login and Create Account ── */
 .va-screen{background:var(--ck-auth);}
-.va-screen::after{display:none;}
-#authHeroBg{inset:auto;left:0;right:0;top:0;height:262px;-webkit-mask-image:linear-gradient(#000 0%,#000 58%,rgba(0,0,0,0) 100%);mask-image:linear-gradient(#000 0%,#000 58%,rgba(0,0,0,0) 100%);background-position:center top;}
+#authHeroBg{inset:auto;left:0;right:0;top:0;height:262px;background-position:center top;}
+.va-screen::after{display:block;content:'';position:absolute;left:0;right:0;top:0;height:262px;z-index:1;pointer-events:none;background:linear-gradient(to bottom,rgba(172,207,229,0) 58%,#accfe5 100%);}
 .va-scroll{justify-content:flex-start;padding:259px 26px calc(26px + env(safe-area-inset-bottom));}
 .va-pane{max-width:none;}
 #authScreen .va-card{padding:42px 0 0;border:0;border-radius:0;background:none;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;color:#fff;}
@@ -2437,12 +2437,9 @@ body{background-attachment:fixed;}
 #pageHost .v-buy.v-soon{background:#bcbcc6;color:#fff;box-shadow:none;}
 
 /* The picture on Login / Create Account is its own steady layer: switching between the two forms must never repaint it or the screen around it */
-#authHeroBg{filter:var(--auth-hero-filter,none);will-change:transform;transform:translateZ(0);backface-visibility:hidden;}
-/* Only the form boxes move when Login and Create Account swap: the picture, logo and Language button are never part of the moving layer. */
-#authHero{isolation:isolate;}
-.va-scroll{contain:layout style;}
-.ck-langbtn{will-change:transform;transform:translateZ(0);}
-.ck-authlogo{will-change:transform;transform:translateZ(0);}
+#authHeroBg{filter:var(--auth-hero-filter,none);}
+/* The picture, logo and Language button are plain paint (no mask, no promoted layer): swapping Login and Create Account only moves the form boxes. */
+
 </style>
 
 <script data-cookie-idle>
