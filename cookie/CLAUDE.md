@@ -56,3 +56,10 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   Test: `test-saved-login.js`.
 - Backing out of Deposit/Withdraw to Home shows the loading box (a real read), then the announcement dialog.
 
+- **Random invite-link addresses** (`https://gs6fy.yourdomain.com/h5/#/pages/login/reset?inviteCode=...`): a new random address every time Share opens and
+  every time Copy is tapped. VPS: `bash /srv/cookie-src/cookie/deploy/set-wildcard.sh yourdomain.com` (Cloudflare DNS + API token once; makes `*.domain`
+  DNS, ONE wildcard certificate `cookie-wild` that renews itself, `SHARE_DOMAIN` secret, nginx `--wild=` block via `update-vps.sh`). Without `SHARE_DOMAIN`
+  (or on the IP preview) the link keeps the address the app is open on. Each address is its own browser origin, so a member signed in on one address is not
+  signed in on another; invite links are only for new people. Test: `test-wildcard.js`.
+- The payment page's phone box is `type=text`, `autocomplete=off`, and the app's password boxes are switched off while the page is open, so Chrome does not
+  offer "Use saved password?" on it.

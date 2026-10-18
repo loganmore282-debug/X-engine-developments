@@ -3676,7 +3676,36 @@ function paintAssets(){
 // And a failure is silent by design: the link falls back to this origin,
 // which is always a working invite.
 function refreshShareHost(){ STATE.shareHost = ''; return Promise.resolve(); }
-function shareOrigin(){ return location.origin; }
+// ── THE INVITE LINK'S ADDRESS ──
+// With a wildcard domain set up on the server (deploy/set-wildcard.sh), every invite link is made on a NEW random address of it, such as
+// https://gs6fy.yourdomain.com/h5/#/pages/login/reset?inviteCode=...: every time the Share screen opens and every time Copy is tapped, so a link is never
+// the same twice and no one address carries all the sharing. Every such address serves the very same app. Without that setting, or when the app is open
+// on some other address (the IP preview), the link keeps the address the app is open on, which always works.
+var SHARE_LABEL_RESERVED = ['www', 'app', 'api', 'admin', 'mail', 'ftp', 'hook', 'cpanel'];
+function shareLabel(){
+  const letters = 'abcdefghijklmnopqrstuvwxyz', all = letters + '0123456789';
+  const n = 4 + shareRand(5);   // 4 to 8 characters, like gsrt or gs6fy
+  let out = letters[shareRand(letters.length)];
+  for (let i = 1; i < n; i++) out += all[shareRand(all.length)];
+  return SHARE_LABEL_RESERVED.indexOf(out) >= 0 ? shareLabel() : out;
+}
+function shareRand(n){
+  try { const a = new Uint32Array(1); window.crypto.getRandomValues(a); return a[0] % n; } catch (_) { return Math.floor(Math.random() * n); }
+}
+function shareOrigin(){
+  const d = String((STATE.settings || {}).shareDomain || '').toLowerCase();
+  const h = location.hostname.toLowerCase();
+  if (!d || location.protocol !== 'https:' || !(h === d || h.endsWith('.' + d))) return location.origin;
+  return 'https://' + shareLabel() + '.' + d;
+}
+function shareLinkFor(code){ return code ? `${shareOrigin()}/h5/#/pages/login/reset?inviteCode=${encodeURIComponent(code)}` : ''; }
+window.copyShareLink = function(btn){
+  const t = STATE.teamStats || {}, a = STATE.account || {};
+  const link = shareLinkFor(a.referralCode || t.referralCode || '');
+  if (!link) return;
+  const el = document.querySelector('.ck-url'); if (el) el.textContent = link;
+  writeClipboard(link, btn || null);
+};
 // ── MY ASSETS investment helpers ──
 var _investmentsLoadFailed = false;
 var MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -4174,13 +4203,13 @@ function paintShare(){
   const rates = t.commRates || {};
   const a = STATE.account || {};
   const code = a.referralCode || t.referralCode || '';
-  const link = code ? `${shareOrigin()}/h5/#/pages/login/reset?inviteCode=${encodeURIComponent(code)}` : '';
+  const link = shareLinkFor(code);
   $('pageHost').innerHTML = `
 <div class="ck-sub ck-share">
   ${ckHeader('Share')}
   ${ckHero(STATE.shareHero, 'ck-hero-share')}
   <div class="ck-sharecard">
-    <div class="ck-copyrow"><span class="ck-url">${esc(link || '—')}</span><button type="button" class="copy-ic" data-copy-group="share-link" onclick="copyText('${esc(link)}')">Copy</button></div>
+    <div class="ck-copyrow"><span class="ck-url">${esc(link || '—')}</span><button type="button" class="copy-ic" data-copy-group="share-link" onclick="copyShareLink(this)">Copy</button></div>
     <div class="ck-copyrow"><span class="ck-code">${esc(code || '—')}</span><button type="button" class="copy-ic" data-copy-group="share-code" onclick="copyText('${esc(code)}')">Copy</button></div>
     <p class="ck-note">Share your referral link on social media platforms like Facebook, TikTok, and WhatsApp groups to earn money from home. Commissions can be withdrawn at any time</p>
     <div class="ck-lvtable">${[1, 2, 3].map(n => `<div><b>LV - ${n}</b><b>${rates['l' + n] != null ? rates['l' + n] : 0}%</b></div>`).join('')}</div>
@@ -5871,6 +5900,14 @@ window.submitDeposit = async function(){
 // number the prompt goes to and the provider, taps Pay, and the page waits (a real status read every 1.5 s) for the provider's answer. On success the
 // "Success" tick box shows and the app goes back to Home by itself.
 var _pg = { no: '', order: null, view: '', depositId: '', reference: '', token: 0 };
+// Chrome offers "Use saved password?" on any phone-looking box when the page also holds a password box (the sign-in and change-password boxes sit
+// in the same document). While the payment page is open those password boxes are switched off, so there is nothing to pair the phone box with.
+function pgLockPasswordBoxes(on){
+  try {
+    if (on) document.querySelectorAll('input[type=password]').forEach(i => { if (!i.disabled && !$('payScreen').contains(i)) { i.disabled = true; i.setAttribute('data-pg-off', '1'); } });
+    else document.querySelectorAll('input[data-pg-off]').forEach(i => { i.disabled = false; i.removeAttribute('data-pg-off'); });
+  } catch (_) {}
+}
 function pgOpen(){ const el = $('payScreen'); return !!(el && el.classList.contains('show')); }
 // "Pay" is part of the page's name and is fixed; the brand in front of it is the admin's name for the app, so "Cookie Pay" becomes "<new name> Pay" everywhere here.
 function pgBrand(){ return esc(brandName()) + ' Pay'; }
@@ -5889,7 +5926,7 @@ function pgFormHtml(o){
     <label class="pg-l" for="pgAmount">Amount (${esc(cur())})</label>
     <input class="pg-in pg-locked" id="pgAmount" type="text" value="${esc(String(o.amount))}" readonly tabindex="-1" aria-readonly="true">
     <label class="pg-l" for="pgPhone">Phone Number</label>
-    <input class="pg-in" id="pgPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="e.g. 0700 000 000" value="" required oninput="this.value=this.value.replace(/[^0-9+ ]/g,'')">
+    <input class="pg-in" id="pgPhone" name="pg_msisdn" type="text" inputmode="numeric" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-form-type="other" placeholder="e.g. 0700 000 000" value="" required oninput="this.value=this.value.replace(/[^0-9+ ]/g,'')">
     <label class="pg-l" for="pgNet">Mobile Money Provider</label>
     <div class="pg-sel"><select class="pg-in" id="pgNet"><option>MTN Mobile Money</option><option>Airtel Money</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="pg-sum">
@@ -5956,6 +5993,7 @@ window.openPaymentPage = async function(orderNo, fromAddress){
   pgSet('loading', '');
   el.classList.add('show'); el.setAttribute('aria-hidden', 'false');
   try { document.title = pgTitle(); } catch (_) {}
+  pgLockPasswordBoxes(true);
   lockBodyScroll();
   if (fromAddress) { try { history.replaceState({}, '', '/'); } catch (_) {} }
   if (!(history.state && history.state.sheet)) dlgOpened();
@@ -5979,6 +6017,7 @@ window.closePaymentPage = function(){
   _pg.token++; pgStopTimer();
   const el = $('payScreen'); el.classList.remove('show'); el.setAttribute('aria-hidden', 'true');
   try { document.title = brandName(); } catch (_) {}
+  pgLockPasswordBoxes(false);
   if (!isScrollLockOverlayOpen()) unlockBodyScroll();
   dlgClosed();
 };

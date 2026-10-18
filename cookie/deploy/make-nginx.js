@@ -15,6 +15,11 @@
 //        or give a full host name. They serve exactly the same app as <host>.
 //        Re-run certbot with every name and --expand so ONE certificate covers them all.
 //
+//   ... --wild=yourdomain.com  (prod only)
+//        EVERY address of the form <anything>.yourdomain.com serves the member app too (random invite-link addresses, see deploy/set-wildcard.sh). They have
+//        their own HTTPS block using the wildcard certificate in /etc/letsencrypt/live/cookie-wild/ (COOKIE_WILD_CERT_DIR to change). The admin address
+//        and the other named addresses keep answering as before: a named address always wins over the wildcard. The bare domain is not served.
+//
 // <admin-path> is the secret URL segment of the admin panel (letters/digits,
 // 6+ chars), e.g. "k7q2mx9p" -> https://<host>/k7q2mx9p/ . It is NOT written
 // into the app or the panel (both use relative addresses), so it can be changed
@@ -25,6 +30,7 @@
 // location here repeats the full security header set -- written once, below.
 const argv = process.argv.slice(2);
 const alsoArg = argv.find(x => x.startsWith('--also='));
+const wildArg = argv.find(x => x.startsWith('--wild='));
 const [mode, a, b, c] = argv.filter(x => !x.startsWith('--'));
 const usage = () => { console.error('usage: node deploy/make-nginx.js dev <admin-path> | prod <host> <admin-path> [admin-host]'); process.exit(1); };
 if (mode !== 'dev' && mode !== 'prod') usage();
@@ -33,6 +39,9 @@ const adminPath = mode === 'prod' ? b : a;
 const adminHost = mode === 'prod' && c ? c : '';
 if (mode === 'prod' && !/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i.test(host || '')) { console.error('Host must look like mycookie.example.com'); usage(); }
 if (adminHost && (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i.test(adminHost) || adminHost.toLowerCase() === String(host).toLowerCase())) { console.error('Admin host must be a different full host name, e.g. admin.example.com'); usage(); }
+const WILD = wildArg ? wildArg.slice(7).trim().toLowerCase() : '';
+if (WILD && (mode !== 'prod' || !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(WILD))) { console.error('--wild needs prod mode and a domain like yourdomain.com'); usage(); }
+const WILD_CERT_DIR = process.env.COOKIE_WILD_CERT_DIR || '/etc/letsencrypt/live/cookie-wild';
 const extraHosts = [];
 if (alsoArg) {
   if (mode !== 'prod') { console.error('--also only applies to prod'); usage(); }
@@ -124,8 +133,13 @@ ${hookLocation('/h-' + HOOK_TOKEN + '/pesajet')}    location / { return 404; }
 }
 `;
 
-const serverBlock = (name, role) => `server {
-${prod ? '    listen 80;\n    listen [::]:80;' : '    listen 8094;\n    listen [::]:8094;'}
+const serverBlock = (name, role, tls) => `server {
+${tls ? `    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    ssl_certificate ${tls}/fullchain.pem;
+    ssl_certificate_key ${tls}/privkey.pem;
+    ssl_session_cache shared:cookie_wild_tls:10m;
+    ssl_session_timeout 1d;` : prod ? '    listen 80;\n    listen [::]:80;' : '    listen 8094;\n    listen [::]:8094;'}
     server_name ${name};
 
     server_tokens off;   # inside this server only: a top-level copy clashes with other sites' files
@@ -290,4 +304,15 @@ map $http_user_agent $cookie_bot_html {
 # (options-ssl-nginx.conf) inside each server block, and other sites on this box
 # (Petro) already set them at the top level -- a second copy of any of them in this
 # file makes nginx -t fail with "directive is duplicate" (seen live).
-${serverBlock([host].concat(extraHosts).join(' '), adminHost ? 'member' : 'both')}${adminHost ? '\n' + serverBlock(adminHost, 'admin') : ''}${HOOK_HOST ? '\n' + hookHostBlock() : ''}`);
+${serverBlock([host].concat(extraHosts).join(' '), adminHost ? 'member' : 'both')}${adminHost ? '\n' + serverBlock(adminHost, 'admin') : ''}${HOOK_HOST ? '\n' + hookHostBlock() : ''}${WILD ? `
+# Every random address of ${WILD}: http goes to https, https serves the same app with the wildcard certificate.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name *.${WILD};
+    server_tokens off;
+    location /.well-known/acme-challenge/ { root /var/www/certbot; }
+    location / { return 308 https://$host$request_uri; }
+}
+
+` + serverBlock('*.' + WILD, 'member', WILD_CERT_DIR) : ''}`);

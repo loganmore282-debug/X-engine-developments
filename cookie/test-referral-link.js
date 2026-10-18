@@ -3,7 +3,7 @@
 const fs = require('node:fs'), assert = require('node:assert/strict'), vm = require('node:vm');
 const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
-ok(/const link = code \? `\$\{shareOrigin\(\)\}\/h5\/#\/pages\/login\/reset\?inviteCode=\$\{encodeURIComponent\(code\)\}` : ''/.test(mod), 'the Share page builds the new link');
+ok(/return code \? `\$\{shareOrigin\(\)\}\/h5\/#\/pages\/login\/reset\?inviteCode=\$\{encodeURIComponent\(code\)\}` : ''/.test(mod) && /const link = shareLinkFor\(code\)/.test(mod), 'the Share page builds the new link');
 ok(!/share\.html\?v=\$\{/.test(mod), 'and no longer the old share.html form');
 // the real capture function, run against each link form
 const a = mod.indexOf('function captureReferralFromUrl(){'); let d = 0, i = mod.indexOf('{', a); for (; i < mod.length; i++) { if (mod[i] === '{') d++; else if (mod[i] === '}' && --d === 0) break; }

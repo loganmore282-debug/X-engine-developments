@@ -35,6 +35,14 @@ ADMIN_HOST_FILE=${COOKIE_ADMIN_HOST_FILE:-/srv/cookie-secrets/admin-host}
 case "$APP_HOST" in *.example.com|"") echo; echo "    No domain is set yet. After you buy one and add its DNS records, run:"; echo "      bash $COOKIE/deploy/set-domain.sh yourdomain.com"; exit 1 ;; esac
 ALSO_HOSTS=""; [ -s "$ALSO_FILE" ] && ALSO_HOSTS=$(tr -d '[:space:]' < "$ALSO_FILE")
 echo "    member app host: $APP_HOST${ALSO_HOSTS:+   also answers on: $ALSO_HOSTS}"
+# Random invite-link addresses (deploy/set-wildcard.sh): every <anything>.<domain> serves the app, with its own wildcard certificate. Used only when both
+# the domain file and the certificate exist, so a half-finished set-up can never make nginx refuse the file.
+WILD_FILE=${COOKIE_WILD_FILE:-/srv/cookie-secrets/wildcard-domain}
+WILD_CERT_DIR=${COOKIE_WILD_CERT_DIR:-/etc/letsencrypt/live/cookie-wild}
+WILD_DOMAIN=""
+if [ -s "$WILD_FILE" ] && [ -f "$WILD_CERT_DIR/fullchain.pem" ] && [ -f "$WILD_CERT_DIR/privkey.pem" ]; then
+  WILD_DOMAIN=$(tr -d '[:space:]' < "$WILD_FILE"); export COOKIE_WILD_CERT_DIR="$WILD_CERT_DIR"; echo "    random addresses: *.$WILD_DOMAIN"
+fi
 
 # Secret PesaJet webhook address: the token lives only on this server (made by deploy/make-hook-url.sh), never in git.
 HOOK_FILE=${COOKIE_HOOK_FILE:-/srv/cookie-secrets/hook-token}
@@ -46,7 +54,7 @@ if [ -s "$HOOK_FILE" ] && [ -s "$HOOK_HOST_FILE" ]; then COOKIE_HOOK_HOST=$(tr -
 rm -f /etc/nginx/conf.d/cookie-preview.conf
 say "3/7  nginx: new walls (the old file is kept at $BAK and put back if the new one is refused)"
 [ -f "$CONF" ] && cp "$CONF" "$BAK"
-if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" ${ALSO_HOSTS:+--also="$ALSO_HOSTS"} > /tmp/cookie.conf.new) && cp /tmp/cookie.conf.new "$CONF" && nginx -t >/tmp/cookie.nginxtest 2>&1; then
+if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" ${ALSO_HOSTS:+--also="$ALSO_HOSTS"} ${WILD_DOMAIN:+--wild="$WILD_DOMAIN"} > /tmp/cookie.conf.new) && cp /tmp/cookie.conf.new "$CONF" && nginx -t >/tmp/cookie.nginxtest 2>&1; then
   echo "    new nginx file accepted"
 else
   echo "    !! nginx refused the new file: putting the old one back"

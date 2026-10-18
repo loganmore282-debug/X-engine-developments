@@ -425,6 +425,11 @@ const PUBLIC_URL  = (() => {
   if (!u) console.warn('WARNING: PUBLIC_URL is not set, so MarzPay is never told where to send payment callbacks and every MarzPay deposit/payout waits for the 30-second sweep. Set it to https://<app host>/k7x2 in the secrets file.');
   return u;
 })();
+// The domain whose random subdomains carry invite links (deploy/set-wildcard.sh saves it as SHARE_DOMAIN). Empty = invite links keep the address the app is open on.
+const SHARE_DOMAIN = (() => {
+  const d = String(process.env.SHARE_DOMAIN || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^\*\./, '').replace(/\/.*$/, '');
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d) ? d : '';
+})();
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64-encoded credentials
 const MARZ_TIMEOUT = 20000;
@@ -3538,6 +3543,7 @@ app.get('/public/settings', async (req, res) => {
       // once there is no PAY B to contrast it with.)
       depositAvailable: payAAvailable(s),
       depositHotMethod: await getHotDepositMethod(),
+      shareDomain: SHARE_DOMAIN,
     // How many countries this platform runs in. The app only uses it to add
     // "if you signed up on another country's site, sign in there" to a
     // failed login -- an account belongs to one region and its synthetic
