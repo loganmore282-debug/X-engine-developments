@@ -6007,6 +6007,10 @@ window.openPaymentPage = async function(orderNo, fromAddress){
   setTimeout(() => { if (pgOpen() && !(history.state && history.state.dlg)) dlgOpened(); }, 700);
   pgSyncUrl(no);
   ckExpectLoad();
+  await pgLoadOrder(no, token);
+};
+// Reads the order and shows whatever state it is in (the form, "initiated", failed, expired). Shared by opening the page and by pull-down-to-refresh.
+async function pgLoadOrder(no, token){
   const r = await api('/deposit/order/' + encodeURIComponent(no));
   if (token !== _pg.token || !pgOpen()) return;
   if (r.status !== 'success' || !r.order) return pgShowGone(r.status === 'error' && r.code === 'ORDER_NOT_FOUND' ? 'This payment link is not available.' : (r.message || 'Could not load this payment. Check your connection and try again.'));
@@ -6017,8 +6021,53 @@ window.openPaymentPage = async function(orderNo, fromAddress){
   }
   if (o.state !== 'created') return pgShowGone(o.state === 'expired' || o.state === 'replaced' ? 'This payment has expired. Please start again from Deposit.' : 'This payment is not available.');
   pgSet('form', pgFormHtml(o));
+  const d = _pg.draft; _pg.draft = null;      // what was typed before a pull-down refresh comes back
+  if (d) { const ph = $('pgPhone'), nt = $('pgNet'); if (ph && d.phone) ph.value = d.phone; if (nt && d.net) nt.value = d.net; }
   pgStartTimer(o.expiresAt, token);
+}
+// ── PULL DOWN TO REFRESH (the payment page is an address, so it behaves like a page: pull down at the top to read it again) ──
+// The page's state is read again from the server (the form with its fresh countdown, or the payment's progress); nothing typed is lost and no
+// history entry is added. Works only at the very top of the page, past 64 px of pull, on touch phones.
+var _ptr = { y0: 0, on: false, pull: 0, busy: false };
+function ptrPaint(px, spinning){
+  const el = $('pgPtr'); if (!el) return;
+  el.style.transform = 'translate(-50%,' + (px - 46) + 'px) rotate(' + (spinning ? 0 : px * 4) + 'deg)';
+  el.style.opacity = px > 4 || spinning ? '1' : '0';
+  el.classList.toggle('pg-spin', !!spinning);
+}
+window.pgRefresh = async function(){
+  if (!pgOpen() || !_pg.no || _pg.view === 'loading' || _pg.view === 'done') return;
+  const ph = $('pgPhone'), nt = $('pgNet');
+  _pg.draft = (_pg.view === 'form' && ph) ? { phone: ph.value, net: nt ? nt.value : '' } : null;
+  const token = ++_pg.token, began = Date.now();
+  try { await pgLoadOrder(_pg.no, token); } catch (_) {}
+  const left = 600 - (Date.now() - began); if (left > 0) await new Promise(r => setTimeout(r, left));   // the spinner is always seen
 };
+(function(){
+  const scr = () => $('payScreen');
+  document.addEventListener('touchstart', e => {
+    const s = scr(); if (!s || !s.classList.contains('show') || _ptr.busy || !e.touches || e.touches.length !== 1) return;
+    if (!s.contains(e.target) || s.scrollTop > 0) return;
+    _ptr.y0 = e.touches[0].clientY; _ptr.on = true; _ptr.pull = 0;
+  }, { passive: true });
+  document.addEventListener('touchmove', e => {
+    if (!_ptr.on) return;
+    const s = scr(), dy = e.touches[0].clientY - _ptr.y0;
+    if (!s || dy <= 0 || s.scrollTop > 0) { _ptr.on = false; _ptr.pull = 0; ptrPaint(0, false); return; }
+    _ptr.pull = Math.min(96, dy * 0.5); ptrPaint(_ptr.pull, false);
+    if (e.cancelable) e.preventDefault();
+  }, { passive: false });
+  const end = async () => {
+    if (!_ptr.on) return; _ptr.on = false;
+    if (_ptr.pull >= 32 && !_ptr.busy) {                  // 32 px of drawn pull = 64 px of finger travel
+      _ptr.busy = true; ptrPaint(46, true);
+      try { await window.pgRefresh(); } finally { _ptr.busy = false; ptrPaint(0, false); }
+    } else ptrPaint(0, false);
+    _ptr.pull = 0;
+  };
+  document.addEventListener('touchend', end, { passive: true });
+  document.addEventListener('touchcancel', end, { passive: true });
+})();
 window.closePaymentPage = function(){
   if (!pgOpen()) return;
   _pg.token++; pgStopTimer();

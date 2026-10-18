@@ -157,6 +157,7 @@ function setup(extra={}){
     assert.ok(/function pgBrand\(\)\{ return esc\(brandName\(\)\) \+ ' Pay'; \}/.test(mod) && /document\.title = pgTitle\(\)/.test(mod) && /' Pay'/.test(fs.readFileSync(__dirname+'/user-src/index.html','utf8')),'the page and the tab are called "<name> Pay" (Pay fixed, the name from the admin)');
     assert.ok(/var PG_CLOCK = '[^\n]*<animateTransform[^\n]*dur="4s"[^\n]*<animateTransform[^\n]*dur="48s"|var PG_CLOCK = '[^\n]*dur="48s"[^\n]*dur="4s"/.test(mod), 'the clock hands of the countdown and of "awaiting approval" turn by themselves');
     assert.ok(/function resetOverlayState\(\)\{[\s\S]*?pgStopTimer\(\); pgLockPasswordBoxes\(false\);/.test(mod), 'a session that ends while the payment page is open stops its timer and re-enables the password boxes');
+    assert.ok(/window\.pgRefresh = async function/.test(mod) && /async function pgLoadOrder\(no, token\)/.test(mod) && /document\.addEventListener\('touchmove'/.test(mod) && /_ptr\.pull >= 32/.test(mod) && /id="pgPtr"/.test(fs.readFileSync(__dirname+'\/user-src\/index.html','utf8')), 'the payment page has pull-down-to-refresh (reads the order again, keeps what was typed)');
     assert.ok(/function pgStartTimer/.test(mod) && /id="pgTimer"/.test(mod) && /pgShowGone\('This payment has expired/.test(mod),'a countdown on the form that closes the order at 00:00');
     assert.ok(/preview\.sh" on/.test(qu),'the update script refreshes the preview nginx file'); }
   console.log('PASS: payment orders (11 digits, owner only, fixed amount, one payment, expiry, newest only)');
