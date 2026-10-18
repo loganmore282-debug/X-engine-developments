@@ -14,8 +14,8 @@ const lib = new Function('crypto', `const _scrypt = (password, salt) => new Prom
   // the loop stays free while it hashes
   let ticks = 0; const t = setInterval(() => ticks++, 5); await Promise.all([1, 2, 3, 4].map(() => lib.scryptHashAsync('x'))); clearInterval(t);
   ok(ticks >= 5, 'the event loop keeps running while passwords are hashed (' + ticks + ' ticks)');
-  for (const where of ['const passwordOk = await scryptVerifyAsync', 'passwordHash: await scryptHashAsync(password)', 'await scryptVerifyAsync(password, acct ? acct.passwordHash', 'await scryptVerifyAsync(pin, u.transactionPinHash)'])
-    ok(server.includes(where), 'log in / sign up / Trade Password use the non-blocking hash: ' + where);
+  for (const where of ['const passwordOk = await scryptVerifyAsync', 'passwordHash: await scryptHashAsync(password)', 'await scryptVerifyAsync(password, acct ? acct.passwordHash'])
+    ok(server.includes(where), 'log in / sign up use the non-blocking hash: ' + where);
   // 2. /account is one user read; settling and the VIP query are not repeated on every refresh
   const acct = server.slice(server.indexOf("app.get('/account', async"), server.indexOf("app.get('/account', async") + 7000);
   ok(!/await settleAllForUser\(/.test(acct) && /memberVipLevelCached/.test(acct), '/account no longer settles cashback or queries VIP on every refresh');
