@@ -65,5 +65,9 @@ COOKIE_SECRET_VALUE="$DOM" node "$COOKIE/deploy/set-secret.js" SHARE_DOMAIN >/de
 bash "$COOKIE/deploy/set-domain.sh" "$DOM" || { echo "     !! set-domain.sh stopped (lines above). The wildcard DNS and certificate are in place; run this again after fixing that."; exit 1; }
 echo
 T="$(head -c 2 /dev/urandom | od -An -tx1 | tr -d ' \n')x.$DOM"
-echo "Test on a random address ($T):  $(curl -s -m 12 "https://$T/k7x2/health")"
-echo "Done. Open Share in the app: every open and every Copy makes a new address like https://mt3c.$DOM/h5/#/pages/login/reset?inviteCode=..."
+H=$(curl -s -m 15 "https://$T/k7x2/health")
+case "$H" in
+  *'"status":"ok"'*) echo "Test on a random address ($T):  $H"
+     echo "Done. Open Share in the app: every open and every Copy makes a new address like https://mt3c.$DOM/h5/#/pages/login/reset?inviteCode=..." ;;
+  *) echo "!! The random address ($T) did not answer yet (got: ${H:-nothing}). The certificate and DNS are in place; wait a minute and run this same command again."; exit 1 ;;
+esac

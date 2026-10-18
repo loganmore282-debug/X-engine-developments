@@ -39,7 +39,7 @@ assert.ok(/listen 443 ssl http2;[\s\S]*?ssl_certificate \/etc\/letsencrypt\/live
 assert.ok(/server_name app\.mydomain\.com;/.test(w) && /server_name a1b2c3\.mydomain\.com;/.test(w), 'named hosts stay');
 const wildBlock = w.slice(w.lastIndexOf('listen 443 ssl'));
 assert.ok(/location \^~ \/k7x2\/admin\//.test(wildBlock), 'the admin API is not reachable on a random address');
-assert.ok(/location ~ \^\/payment\/\[0-9\]\{8,14\}\/\?\$/.test(wildBlock) && /location = \/h5\//.test(wildBlock), 'payment pages and invite links work on a random address');
+assert.ok(/location ~ "\^\/payment\/\[0-9\]\{8,14\}\/\?\$"/.test(wildBlock) && /location = \/h5\//.test(wildBlock), 'payment pages and invite links work on a random address');
 assert.ok(!/\*\.mydomain/.test(gen(['prod', 'app.mydomain.com', 'Bake7qz3', 'a1b2c3.mydomain.com'])), 'no wildcard unless asked');
 assert.throws(() => gen(['dev', 'Bake7qz3', '--wild=mydomain.com']), 'wildcard is for prod only');
 // the VPS scripts: valid shell, wired together

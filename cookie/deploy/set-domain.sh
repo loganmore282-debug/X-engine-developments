@@ -62,4 +62,5 @@ else
   echo "The update did not finish. Putting the old setting back."
   if [ -n "$PREV_APP" ]; then (umask 077; printf '%s' "$PREV_APP" > "$APP_HOST_FILE"); else rm -f "$APP_HOST_FILE"; fi
   tail -15 /tmp/cookie.domain-update.log
+  exit 1
 fi
