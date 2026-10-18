@@ -2115,7 +2115,12 @@ body{background-attachment:fixed;}
 .ck-pays button{position:relative;display:flex;align-items:center;justify-content:center;height:45px;padding:0 8px;border:0;border-radius:23px;background:#eef5fd;color:#1253c2;font:700 15px Roboto,'Segoe UI',system-ui,sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;}
 .ck-pays button.on{background:var(--ck-grad);color:#fff;}
 .ck-pays .ck-hot{position:absolute;left:19.0px;top:50%;width:23.1px;height:22.7px;margin-top:-11.4px;}
-.ck-pays button.on{padding-left:34px;}
+.ck-pays button.hot{padding-left:34px;}
+.ck-pays .ck-hot path{fill:currentColor;}
+/* The Pay button while the request goes to the payment page: grey, a spinner and "Loading" (the owner's screenshot) */
+.ck-pay.ck-pay-ld,.ck-pay.ck-pay-ld:disabled{background:#a4a4a4;color:#8d8e93;opacity:1;box-shadow:0 9px 16px -8px rgba(0,0,0,.3);}
+.ck-pay-sp{display:inline-block;width:23px;height:23px;margin:-4px 6px 0 0;vertical-align:middle;animation:ckSpoke .9s steps(12) infinite;}
+@keyframes ckSpoke{to{transform:rotate(360deg);}}
 .ck-pay{display:block;width:100%;height:49px;margin-top:15px;border:0;border-radius:25px;background:var(--ck-grad);color:#fff;font:500 18px/49px Roboto,'Segoe UI',system-ui,sans-serif;letter-spacing:.06em;box-shadow:0 9px 16px -8px rgba(7,89,227,.55);cursor:pointer;}
 .ck-pay:disabled{opacity:.7;}
 .ck-notes{margin-top:55px;}

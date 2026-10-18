@@ -3537,6 +3537,7 @@ app.get('/public/settings', async (req, res) => {
       // removed outright; renamed since "PAY A" no longer means anything
       // once there is no PAY B to contrast it with.)
       depositAvailable: payAAvailable(s),
+      depositHotMethod: await getHotDepositMethod(),
     // How many countries this platform runs in. The app only uses it to add
     // "if you signed up on another country's site, sign in there" to a
     // failed login -- an account belongs to one region and its synthetic
@@ -4611,6 +4612,28 @@ app.get('/investments', async (req, res) => {
 // DEPOSIT (MarzPay collect-money)
 // ═══════════════════════════════════════════
 const _depCreateDebounce = new Map();
+// ── DEPOSIT METHODS: which pill members use most ──
+// The Deposit screen shows four pills (C, L, H, K), all paying through the same channel. The one used most gets the HOT mark. Counted when a
+// deposit is started; the answer is remembered for a minute. Before anyone has used one, H carries the mark.
+const DEPOSIT_METHOD_KEYS = ['C', 'L', 'H', 'K'];
+let _hotDepositMethod = { key: 'H', ts: 0 };
+function bumpDepositMethod(raw) {
+  const k = String(raw || '').toUpperCase();
+  if (!DEPOSIT_METHOD_KEYS.includes(k)) return;
+  db.collection('counters').doc('depositMethodTaps').set({ ['taps' + k]: FieldValue.increment(1) }, { merge: true }).catch(() => {});
+}
+async function getHotDepositMethod() {
+  if (Date.now() - _hotDepositMethod.ts < 60000) return _hotDepositMethod.key;
+  let key = 'H';
+  try {
+    const snap = await db.collection('counters').doc('depositMethodTaps').get();
+    const d = snap.exists ? snap.data() : {};
+    let best = 0;
+    for (const k of DEPOSIT_METHOD_KEYS) { const n = Number(d['taps' + k]) || 0; if (n > best) { best = n; key = k; } }
+  } catch (_) { key = _hotDepositMethod.key; }
+  _hotDepositMethod = { key, ts: Date.now() };
+  return key;
+}
 app.post('/deposit/marzpay', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
@@ -4679,6 +4702,7 @@ app.post('/deposit/marzpay', async (req, res) => {
       return res.status(429).json({ status: 'error', message: 'Too many deposit attempts. Please wait a minute and try again.' });
     }
     _depCreateDebounce.set(userId, Date.now());
+    bumpDepositMethod(req.body.method);
 
     const ref = await uniqueRef(await mobileMoneyRefPrefix());
     const marzReference = crypto.randomUUID();
