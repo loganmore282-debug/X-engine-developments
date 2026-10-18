@@ -43,6 +43,8 @@ let n = 0; const eq2 = (a, b, m) => { n++; assert.equal(a, b, m); }; const ok = 
   eq2([...d.querySelectorAll('#annSheet .ck-ann-t div')].slice(2).map(x => x.textContent).join('|'), 'Withdrawal hours: 24 hours|Minimum withdrawal: UGX 30,000|Taxes and fees: 10%', 'changed settings change the lines');
   w.closeAnnouncement();
   ok(!d.getElementById('annBg').classList.contains('show'), 'the cross hides it');
+  { let opened = ''; w.open = u => { opened = u; }; w.openServiceLink(); ok(opened === 'https://t.me/agent', 'Service opens the customer-service link directly');
+    ok(!d.getElementById('helpBg').classList.contains('show'), 'Service shows no Help dialog'); }
   ok(typeof w.openSupportSheet === 'undefined', 'the old Support page is gone (Help dialog replaces it)');
   console.log(`PASS: announcement dialog (${n} checks${built ? ', built bundle' : ''})`); process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

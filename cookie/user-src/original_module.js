@@ -3405,6 +3405,14 @@ function openGroupLink(){
   else notify('The group link has not been set yet.');
 }
 window.openGroupLink = openGroupLink;
+// Service goes straight to the customer-service link the admin set (no dialog in between).
+function openServiceLink(){
+  const s = STATE.settings || {};
+  const link = s.supportTelegram || '';
+  if (link) { try { window.open(link, '_blank', 'noopener'); } catch (_) { location.href = link; } }
+  else notify('The service link has not been set yet.');
+}
+window.openServiceLink = openServiceLink;
 // Leaving the app and coming back lands on Daily income again, never on Daily wage.
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
@@ -3429,7 +3437,7 @@ function paintHome(){
   <div class="v-quick ck-quick">
     <button onclick="openDepositSheet()"><span class="ck-ic" style="--c:#31c879">${CK_ICONS.deposit}</span><b>Deposit</b></button>
     <button onclick="openWithdrawSheet()"><span class="ck-ic" style="--c:#f9ab2d">${CK_ICONS.withdraw}</span><b>Withdraw</b></button>
-    <button onclick="openHelpDialog('Help')"><span class="ck-ic" style="--c:#4b8afe">${CK_ICONS.service}</span><b>Service</b></button>
+    <button onclick="openServiceLink()"><span class="ck-ic" style="--c:#4b8afe">${CK_ICONS.service}</span><b>Service</b></button>
     <button onclick="openGroupLink()"><span class="ck-ic" style="--c:#7f59fa">${CK_ICONS.group}</span><b>Group</b></button>
   </div>
   <div class="ck-tabs" role="tablist">
