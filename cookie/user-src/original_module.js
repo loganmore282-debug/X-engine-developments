@@ -5335,6 +5335,9 @@ function resetOverlayState(){
   // A session that ends (or a logout) takes every popup with it: the Buy confirm, Help, announcement, download and the win card used to stay
   // on top of the Login screen (the win card even showed the previous member's New Balance).
   ['confirmBg', 'helpBg', 'annBg', 'payScreen'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
+  // The payment page goes with them: its countdown stops, its polls stop, and the password boxes it switched off come back (otherwise the Login
+  // screen's password box stayed disabled after a session ended while the payment page was open).
+  try { if (typeof _pg !== 'undefined') { _pg.token++; } pgStopTimer(); pgLockPasswordBoxes(false); document.title = brandName(); } catch (_) {}
   const win = $('chestWinBg'); if (win) win.remove();
   _openSheetTitle = null; _depActiveDepositId = null; _withdrawSubmitting = false;
   if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
