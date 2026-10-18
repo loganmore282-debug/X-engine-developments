@@ -3248,7 +3248,7 @@ async function renderSettings(){
       <p class="muted" id="autoWitNote" style="margin:6px 0 0"></p>
       <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app for users)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
-      <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="We're topping up our stock, back shortly.">
+      <label>Maintenance duration (minutes) &mdash; shown as "Please try again in 30 minutes."</label><input id="sMaintMin" type="number" min="1" max="10080" step="1" value="${v('maintenanceMinutes',30)}">
       <label style="margin-top:14px">Allowed website domains</label>
       <textarea id="sAllowedOrigins" rows="4" placeholder="cookie-platform.com&#10;www.cookie-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Only these domains may reach the backend &mdash; one per line, include www. cookie-platform.com and this VPS's own address are always allowed.</p>
@@ -3349,7 +3349,7 @@ async function renderSettings(){
       // and rejects the whole save naming the bad line rather than silently
       // dropping it.
       allowedOrigins:$('sAllowedOrigins').value, maintenanceMode:$('sMaint').checked,
-      maintenanceMsg:$('sMaintMsg').value.trim(),
+      maintenanceMinutes:Math.max(1,Math.min(10080,Math.round(+$('sMaintMin').value||30))),
     };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });

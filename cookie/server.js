@@ -538,7 +538,8 @@ app.use(async (req, res, next) => {
     const s = await getSettings();
     if (s && s.maintenanceMode) {
       return res.status(503).json({ status: 'error', code: 'MAINTENANCE',
-        message: s.maintenanceMsg || (brandName(s) + ' is under maintenance. Please check back shortly.') });
+        message: s.maintenanceMsg || (brandName(s) + ' is under maintenance. Please check back shortly.'),
+        minutes: Number(s.maintenanceMinutes) || 30 });
     }
     // Owner: "let's establish a timer ie like saying snow opening in
     // 23:59:34... make when l can activate it or disable it, just near
@@ -645,6 +646,8 @@ const DEFAULT_SETTINGS = {
   // an old address being retired, a domain parked for later.
   parkedHosts: [],
   maintenanceMode: false, maintenanceMsg: '',
+  // How long the maintenance screen tells people to wait ("Please try again in 30 minutes."), set in Admin > Settings. Minutes, 1 to 10080 (a week).
+  maintenanceMinutes: 30,
   // Owner: "let's establish a timer ie like saying snow opening in
   // 23:59:34... just near maintenance mode." A pre-launch gate, separate
   // from maintenanceMode -- an admin-set future instant (0 = not scheduled)
@@ -6969,7 +6972,7 @@ app.get('/admin/settings', async (req, res) => {
 const SETTINGS_CRITICAL_RANGES = {
   withdrawFeePct: [0, 100], minWithdraw: [0, MAX_MONEY_AMOUNT], minDeposit: [0, MAX_MONEY_AMOUNT],
   welcomeBonus: [0, MAX_MONEY_AMOUNT], commL1: [0, 100], commL2: [0, 100], commL3: [0, 100],
-  returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerDay: [0, 1000],
+  returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerDay: [0, 1000], maintenanceMinutes: [1, 10080],
   dailyCheckin: [0, MAX_MONEY_AMOUNT],
   turntableDailyMin: [0, MAX_MONEY_AMOUNT], turntableDailyMax: [0, MAX_MONEY_AMOUNT],
   autoApproveMinSec: [0, 86400], autoApproveMaxSec: [0, 86400], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],

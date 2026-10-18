@@ -1312,7 +1312,7 @@ async function apiRequest(path, opts){
       _memberSession.expire();
     }
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid response');
-    if (!isPublicCall && data.code === 'MAINTENANCE') { STATE.settings = Object.assign({}, STATE.settings || {}, { maintenanceMode: true, maintenanceMsg: data.message || '' }); showMaintenanceScreen(data.message); }
+    if (!isPublicCall && data.code === 'MAINTENANCE') { STATE.settings = Object.assign({}, STATE.settings || {}, { maintenanceMode: true, maintenanceMsg: data.message || '', maintenanceMinutes: data.minutes || 30 }); showMaintenanceScreen(); }
   } catch (e) {
     if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', stale: true, message: 'Session changed' };
     return { status: 'error', message: controller.signal.aborted
@@ -2317,10 +2317,15 @@ function startOpeningGateCountdown(targetMs){
 // read of the public settings, and the app opens by itself once maintenance is switched off.
 var _maintTimer = null;
 function ckMaintenanceOn(){ return !!(STATE.settings && STATE.settings.maintenanceMode); }
-function showMaintenanceScreen(msg){
+// "30 minutes", "1 hour", "1 hour 30 minutes": the wait the admin set, in words.
+function maintenanceWait(min){
+  const m = Math.max(1, Math.round(Number(min) || 30)), h = Math.floor(m / 60), r = m % 60;
+  const u = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+  return h ? u(h, 'hour') + (r ? ' ' + u(r, 'minute') : '') : u(m, 'minute');
+}
+function showMaintenanceScreen(){
   const el = $('maintScreen'); if (!el) return;
-  const text = String(msg || (STATE.settings && STATE.settings.maintenanceMsg) || '').trim() || (brandName() + ' is under maintenance. Please check back shortly.');
-  $('maintMsg').textContent = text;
+  $('maintMsg').textContent = 'We are upgrading our system. Please try again in ' + maintenanceWait(STATE.settings && STATE.settings.maintenanceMinutes) + '.';
   try { hideLoadingScreen(); } catch (_) {}
   ['authScreen', 'app', 'openingGate'].forEach(id => { const x = $(id); if (x) x.style.display = 'none'; });
   el.style.display = 'flex';
