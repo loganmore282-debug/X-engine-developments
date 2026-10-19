@@ -34,9 +34,9 @@ function makeEnv() {
   const lim = () => (q, s, n) => n();
   let failStore = false;
   const dbProxy = new Proxy(db, { get: (t, k) => k === 'collection' ? col => { if (failStore && col === 'memberSessions') throw new Error('mongo down'); return t.collection(col); } : t[k] });
-  const fn = new Function('textOf', 'passwordOf', 'weakPasswordReason', 'WEAK_PASSWORD_MESSAGE', 'memberLoginIpGuard', 'app', 'db', 'crypto', 'sessionPolicy', 'FieldValue', 'cleanPhone', 'badPhoneMessage', 'tsMillis', 'rateLimit', 'console', 'ipKey',
+  const fn = new Function('textOf', 'passwordOf', 'memberLoginIpGuard', 'app', 'db', 'crypto', 'sessionPolicy', 'FieldValue', 'cleanPhone', 'badPhoneMessage', 'tsMillis', 'rateLimit', 'console', 'ipKey',
     'const _lockTails = new Map();\n' + helpSrc + '\n' + hashSrc.replace("const _loginFails", "") + '\n' + lockSrc + '\n' + authSrc + '\n' + loginSrc + '\nreturn { _decodeAuth, verifyAuth, verifyAuthWithEmail, setMemberPassword, deleteMemberLogin, findAccountByUid };')
-    (v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''), v => typeof v === 'string' ? v : '', () => '', '', { locked: () => false, fail() {}, clear() {} }, app, dbProxy, crypto, sessionPolicy, { serverTimestamp: () => new Date(), delete: () => DEL }, p => { const d = String(p || '').replace(/\D/g, ''); return d.length === 10 ? d : ''; }, () => 'bad phone',
+    (v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''), v => typeof v === 'string' ? v : '', { locked: () => false, fail() {}, clear() {} }, app, dbProxy, crypto, sessionPolicy, { serverTimestamp: () => new Date(), delete: () => DEL }, p => { const d = String(p || '').replace(/\D/g, ''); return d.length === 10 ? d : ''; }, () => 'bad phone',
       v => v instanceof Date ? v.getTime() : Number(v) || 0, lim, { error() {}, warn: (...m) => warnings.push(m.join(' ')) }, x => x);
   const call = async (path, body, headers = {}) => { const res = { code: 200, body: null, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; } };
     await handlers[path]({ body, headers, path, ip: '1.1.1.1' }, res); return res; };
@@ -107,7 +107,8 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
   E = makeEnv(); const s1 = (await E.call('/auth/signup', { phone: '0770000004', password: 'oldpass1234' })).body;
   const s2 = (await E.call('/auth/login', { phone: '0770000004', password: 'oldpass1234' })).body;
   r = await E.call('/auth/password/change', { oldPassword: 'WRONG', newPassword: 'newpass1234' }, bearer(s1.token)); eq([r.code, r.body.code], [401, 'INVALID_CREDENTIAL']);
-  r = await E.call('/auth/password/change', { oldPassword: 'oldpass1234', newPassword: '12' }, bearer(s1.token)); eq(r.code, 400, 'weak new password');
+  r = await E.call('/auth/password/change', { oldPassword: 'oldpass1234', newPassword: '12' }, bearer(s1.token)); eq(r.code, 400, 'too short a new password is refused');
+  for (const [i, easy] of ['123456', 'password', 'qwerty', '111111', '0770000001'].entries()) { const rr = await E.call('/auth/signup', { phone: '07700001' + String(20 + i), password: easy }); ok(rr.code === 200, 'any password of 6 or more is accepted, even a common one: ' + easy + ' (' + rr.code + ')'); }
   r = await E.call('/auth/password/change', { oldPassword: 'oldpass1234', newPassword: 'newpass1234' }, {}); eq(r.code, 401, 'needs a session');
   r = await E.call('/auth/password/change', { oldPassword: 'oldpass1234', newPassword: 'newpass1234' }, bearer(s1.token)); eq(r.code, 200);
   ok(await E.fn.verifyAuth(req(s1.token)), 'the session that changed it stays signed in');

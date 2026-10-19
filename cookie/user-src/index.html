@@ -2912,7 +2912,7 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
   const wipe = () => { try { keep().removeItem(KEY); } catch (_) {} try { sessionStorage.removeItem(KEY); } catch (_) {} };
   const CODES = {
     INVALID_CREDENTIAL: 'auth/invalid-credential', TOO_MANY_ATTEMPTS: 'auth/too-many-requests', TOO_MANY_REQUESTS: 'auth/too-many-requests',
-    PHONE_IN_USE: 'auth/email-already-in-use', WEAK_PASSWORD: 'auth/weak-password', COMMON_PASSWORD: 'auth/common-password', INVALID_PHONE: 'auth/invalid-email',
+    PHONE_IN_USE: 'auth/email-already-in-use', WEAK_PASSWORD: 'auth/weak-password', INVALID_PHONE: 'auth/invalid-email',
   };
   async function call(path, body, token) {
     let resp, data;

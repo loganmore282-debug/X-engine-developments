@@ -1,7 +1,6 @@
 const sessionPolicy = require('./session-policy');
 const { createFailGuard } = require('./security-guard');
 const totp = require('./totp');
-const { weakPasswordReason, WEAK_PASSWORD_MESSAGE } = require('./weak-passwords');
 const express     = require('express');
 const admin       = require('firebase-admin');
 const cors        = require('cors');
@@ -6877,7 +6876,6 @@ app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
     const password = tidyPassword(passwordOf(req.body.password));
     if (password.length < MEMBER_PASSWORD_MIN || password.length > MEMBER_PASSWORD_MAX)
       return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: passwordLengthMessage(password) });
-    if (weakPasswordReason(password, phone)) return res.status(400).json({ status: 'error', code: 'COMMON_PASSWORD', message: WEAK_PASSWORD_MESSAGE });
     const uid = newMemberUid();
     const created = await db.collection('authAccounts').doc(memberAccountId(phone)).createIfAbsent({
       uid, phone, passwordHash: await scryptHashAsync(password), failCount: 0, createdAt: FieldValue.serverTimestamp()
@@ -6944,7 +6942,6 @@ app.post('/auth/password/change', memberAuthLimiter, async (req, res) => {
       return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: passwordLengthMessage(newPassword) });
     const acct = await findAccountByUid(decoded.uid);
     if (!acct) return res.status(404).json({ status: 'error', message: 'Account not found' });
-    if (weakPasswordReason(newPassword, acct.phone)) return res.status(400).json({ status: 'error', code: 'COMMON_PASSWORD', message: WEAK_PASSWORD_MESSAGE });
     if (acct.lockedUntil && tsMillis(acct.lockedUntil) > Date.now())
       return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', message: 'Too many wrong attempts. Try again in a few minutes.' });
     let oldOk = await scryptVerifyAsync(oldPassword, acct.passwordHash);
@@ -8066,7 +8063,6 @@ app.post('/admin/user/reset-password', async (req, res) => {
   try {
     const target = await db.collection('users').doc(userId).get();
     if (!target.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    if (weakPasswordReason(newPassword, target.data().phone)) return res.status(400).json({ status: 'error', message: WEAK_PASSWORD_MESSAGE });
     await setMemberPassword(userId, newPassword);
     logAdminAction(req, 'user_password_reset', { userId });
     res.json({ status: 'success', message: 'Password reset' });

@@ -1467,7 +1467,6 @@ function fbErrMsg(e){
   if (code === 'auth/user-not-found') return 'No account found for that number.';
   if (code === 'auth/email-already-in-use') return 'An account with that number already exists.';
   if (code === 'auth/weak-password') return 'Password must be at least 6 characters.';
-  if (code === 'auth/common-password') return 'That password is too easy to guess. Choose a different one, for example a few letters and numbers that only you know.';
   if (code === 'auth/too-many-requests') return 'Too many attempts. Try again shortly.';
   // A weak connection is the commonest real failure here, and without these
   // the member was shown Firebase's own developer text, e.g.
@@ -3635,7 +3634,9 @@ function startIncomeCountdowns(){
     nodes.forEach(el => {
       const left = Number(el.getAttribute('data-pay-at')) - now;
       el.textContent = fmtCountdown(left, true);
-      if (left <= 0) { if (!el.dataset.fired) { el.dataset.fired = '1'; due = true; } }
+      // At zero the list is read again after a moment (the payment lands within a second of the due time); if it has not landed yet it is
+      // read again every 3 seconds, up to 8 times, so a card never stays stuck at 00:00:00.
+      if (left <= 0) { const tries = Number(el.dataset.tries) || 0, last = Number(el.dataset.last) || 0; if (tries < 8 && now - last >= (tries ? 3000 : 0)) { el.dataset.tries = String(tries + 1); el.dataset.last = String(now); due = true; } }
       else if (left < soonest) soonest = left;
     });
     // A payment just fell due: it has landed (or lands in a moment), so the list is read again to show it.

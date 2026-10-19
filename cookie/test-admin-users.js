@@ -18,7 +18,7 @@ ok(find('ZX99') === 'u2', 'a referral code such as ZX99 does not match every pho
 ok(find('id 11026') === 'u3' && find('11025') === 'u2', 'a member id is found');
 ok(find('nomatch') === '', 'no match, no rows');
 // the server
-ok(/MEMBER_PASSWORD_MIN \|\| newPassword\.length > MEMBER_PASSWORD_MAX/.test(src) && /weakPasswordReason\(newPassword, target\.data\(\)\.phone\)/.test(src), 'an admin-set member password follows the app\'s own password rule');
+ok(/MEMBER_PASSWORD_MIN \|\| newPassword\.length > MEMBER_PASSWORD_MAX/.test(src) && !/weakPasswordReason/.test(src), 'an admin-set member password follows the app\'s own length rule only, no weak-password list');
 ok(/if \(\/\^credited\/\.test\(k\)\) delete safe\[k\]/.test(src), 'the member list leaves out the long bookkeeping lists');
 ok(/at least 6 characters/.test(adm) && !/at least 10 characters/.test(adm) && /placeholder="New password"/.test(adm), 'the panel asks for the same 6 characters and the box carries no hint');
 ok(/pays the reward on their first purchase/.test(adm) && /A reward already paid is never paid again; a recharge pays nothing/.test(adm) && !/first confirmed recharge|first-deposit commission/.test(adm), 'the attach-referrer copy describes the first-purchase reward');

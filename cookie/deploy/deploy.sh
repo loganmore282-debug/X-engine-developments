@@ -38,7 +38,7 @@ done
 
 echo "==> Syncing backend (server.js, db.js, service-account.js, package files)"
 rsync -az --delete \
-  "$COOKIE_DIR/server.js" "$COOKIE_DIR/db.js" "$COOKIE_DIR/service-account.js" "$COOKIE_DIR/pay-seal.js" "$COOKIE_DIR/security-guard.js" "$COOKIE_DIR/session-policy.js" "$COOKIE_DIR/totp.js" "$COOKIE_DIR/weak-passwords.js" \
+  "$COOKIE_DIR/server.js" "$COOKIE_DIR/db.js" "$COOKIE_DIR/service-account.js" "$COOKIE_DIR/pay-seal.js" "$COOKIE_DIR/security-guard.js" "$COOKIE_DIR/session-policy.js" "$COOKIE_DIR/totp.js" \
   "$COOKIE_DIR/package.json" "$COOKIE_DIR/package-lock.json" \
   "$COOKIE_VPS_HOST:$COOKIE_VPS_PATH/"
 

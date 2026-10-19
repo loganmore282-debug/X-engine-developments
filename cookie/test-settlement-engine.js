@@ -125,6 +125,24 @@ async function main(){
     assert.equal(h.db.rows.users.m.walletBalance,90000);assert.equal(h.db.rows.investments.i1.status,'matured');assert.equal(cashRows(h.db).length,8);
   }
   {
+    // PERFECT TIMING: stepping 50 ms at a time around each due instant, a payment is made at the very first step at or after the due time and never one step before,
+    // and the next payment's due time is exactly 24 hours after the previous one (it starts over by itself), for every one of the 8 payments.
+    const bought=eat('2026-10-14T15:00:07')+123;   // an awkward moment, with seconds and milliseconds
+    for (const firstNow of [false,true]) {
+      const first=firstNow?bought:bought+DAY;
+      const h=setup({users:{m:member()},investments:{i1:plan({createdAt:new FakeDate(bought),payoutFirstAt:new FakeDate(first)})},transactions:{}});
+      for (let k=1;k<=8;k++) {
+        const due=first+(k-1)*DAY;
+        NOW=due-3000; await h.settle('i1'); assert.equal(h.db.rows.investments.i1.payoutsMade,k-1,'payment '+k+' not made 3 s early');
+        let paidAt=null;
+        for (let t=due-200;t<=due+200;t+=50) { NOW=t; await h.settle('i1'); if(h.db.rows.investments.i1.payoutsMade===k&&paidAt===null) paidAt=t; if(t<due) assert.equal(h.db.rows.investments.i1.payoutsMade,k-1,'payment '+k+' never early'); }
+        assert.equal(paidAt,due,'payment '+k+' lands at the first step at or after its due time (firstNow='+firstNow+')');
+        if (k<8) assert.equal(+new Date(h.db.rows.investments.i1.nextPayoutAt),due+DAY,'after payment '+k+' the next one is exactly 24 hours later');
+      }
+      assert.equal(h.db.rows.investments.i1.status,'matured');assert.equal(h.db.rows.users.m.walletBalance,90000);assert.equal(cashRows(h.db).length,8);
+    }
+  }
+  {
     // Five settle calls at the same instant, every hour: still exactly one payment per midnight.
     const h=setup({users:{m:member()},investments:{i1:plan()},transactions:{}});
     await runDays(h,null,'i1',eat('2026-10-14T15:00:00'),20,5);

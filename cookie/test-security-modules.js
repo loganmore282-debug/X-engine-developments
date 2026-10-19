@@ -2,7 +2,6 @@
 const assert = require('node:assert/strict');
 const { createFailGuard } = require('./security-guard');
 const totp = require('./totp');
-const { weakPasswordReason } = require('./weak-passwords');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); }; const eq = (a, b, m) => { n++; assert.deepEqual(a, b, m); };
 
 // ---- failure guard
@@ -31,7 +30,6 @@ for (const bad of ['', '12345', '1234567', 'abcdef', null, undefined, '12 34 5',
 ok(totp.verify(S, code.slice(0, 3) + ' ' + code.slice(3), now + 1).ok, 'a code typed with a space in the middle (123 456) is accepted');
 ok(!totp.verify('!!!notbase32', code, now).ok && !totp.verify('', code, now).ok, 'a bad secret never verifies');
 
-// ---- weak passwords
-for (const w of ['123456', 'Password', 'qwerty123', '111111', 'aaaaaa', 'abcdef', '987654', '1234567890', 'Cookie123', '0700123456']) ok(weakPasswordReason(w, '0700123456') !== '', 'refused: ' + w);
-for (const s of ['Pass12345', 'tr4ctor!', 'maama2024', 'K9mXq2', 'Blue-Goat-71']) eq(weakPasswordReason(s, '0700123456'), '', 'accepted: ' + s);
+// ---- passwords: any password of the allowed length is accepted (no weak-password list any more)
+ok(!require('node:fs').existsSync(__dirname + '/weak-passwords.js') && !/weakPasswordReason|weak-passwords/.test(require('node:fs').readFileSync(__dirname + '/server.js', 'utf8')), 'no weak-password restriction remains');
 console.log(`PASS: security helpers (${n} checks)`);
