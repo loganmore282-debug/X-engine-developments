@@ -1352,7 +1352,7 @@ async function renderAnalytics(silent){
       </div>
     </div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Cashback schedule for ${esc(selected.day||a.today)}</h2>
-      <p class="muted">Saved purchase terms. Cashback is counted every 24 hours but locked until the product's days are over, then released to the wallet in one credit (a member's first purchase pays its first day at once; products bought before this rule are paid every day as before), with the same rounding as settlement. Members decide when to withdraw. Future purchases and deposits are unknown.</p>
+      <p class="muted">Saved purchase terms, paid every 24 hours from the purchase (a member's first purchase pays its first cashback at once; products bought before this rule are paid at midnight 00:00 Uganda time), with the same rounding as settlement. Scheduled cashback is credited to wallets; members decide when to withdraw. Future purchases and deposits are unknown.</p>
       <div class="cards">
         <div class="stat"><div class="n">${ugx(schedule.scheduledAmount)}</div><div class="l">Contract cashback scheduled for this day</div></div>
         <div class="stat"><div class="n">${ugx(schedule.unpaidAmount)}</div><div class="l">This day's cashback still unpaid (eligible accounts)</div></div>
@@ -1978,7 +1978,7 @@ async function openUser(uid){
   $('attachRefBtn')?.addEventListener('click', async()=>{
     const code=$('attachRefCode').value.trim();
     if(!code) return toast('Enter the referral code','err');
-    if(!confirm(`Attach ${code} as this member's referrer? This updates their team and pays the reward on every purchase they have already made.`)) return;
+    if(!confirm(`Attach ${code} as this member's referrer? This updates their team and pays the reward on their first purchase if they have already made one.`)) return;
     const b=$('attachRefBtn'); b.disabled=true; const lbl=b.textContent; b.textContent='Attaching…';
     const d=await api('/admin/user/attach-referrer',{userId:uid,referralCode:code});
     b.disabled=false; b.textContent=lbl;
@@ -3221,7 +3221,7 @@ async function renderSettings(){
         <div><label>Payment reference starts with</label><input id="sRefPrefix" type="text" maxlength="12" autocapitalize="off" autocomplete="off" spellcheck="false" value="${esc(v('referencePrefix','S'))}">
           <div id="sRefPrefixPreview" style="font-size:12px;opacity:.7;margin-top:4px"></div></div>
       </div>
-      <div class="switch-row" style="margin-top:8px"><span><b>First purchase pays its first cashback at once</b> <span class="muted">(a member's first purchase; the rest of it stays locked until its days are over; off = everything locked)</span></span>
+      <div class="switch-row" style="margin-top:8px"><span><b>First purchase pays its first cashback at once</b> <span class="muted">(a member's first purchase; off = 24 hours after buying, like every other purchase)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sFirstCash" ${s.firstPurchaseCashbackNow!==false?'checked':''} style="width:auto"></label></div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only withdrawals)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>

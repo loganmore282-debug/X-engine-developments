@@ -112,7 +112,7 @@ async function main(){
     assert.equal(db.rows.users.buyer.firstReferralDepositId,undefined,'no deposit is marked as the referral deposit any more');
   }
   {
-    // Every purchase pays Level 1 / 2 / 3 once, even when the pay call arrives twice at once; a later purchase pays its own reward, once.
+    // The first purchase pays Level 1 / 2 / 3 once, even when the pay call arrives twice at once; a later purchase pays nothing.
     const {c,db}=setup();
     db.rows.investments.i1=firstBuy();
     const r=await Promise.all([c.creditReferralCommission('i1','buyer',15000),c.creditReferralCommission('i1','buyer',15000)]);
@@ -123,10 +123,8 @@ async function main(){
     assert.equal(Object.values(db.rows.transactions).filter(t=>t.type==='commission').length,3);
     assert.equal(db.rows.investments.i1.commissionPending,false);
     db.rows.investments.i2=firstBuy({isFirstInvestment:false,amount:90000,commissionPending:false});
-    assert.equal(await c.creditReferralCommission('i2','buyer',90000),true,'a second purchase pays its own reward');
-    assert.equal(db.rows.users.l1.walletBalance,4500+27000,'30% of the second purchase');
-    assert.equal(await c.creditReferralCommission('i2','buyer',90000),false,'asking again pays nothing more');
-    assert.equal(db.rows.users.l1.walletBalance,4500+27000);
+    assert.equal(await c.creditReferralCommission('i2','buyer',90000),false);
+    assert.equal(db.rows.users.l1.walletBalance,4500,'a second purchase pays nothing');
   }
   {
     const {c,db}=setup();
@@ -180,6 +178,6 @@ async function main(){
     assert.equal(await c.creditReferralCommission('g1','buyer',15000),false);
     assert.equal(db.rows.users.l1.walletBalance,0);
   }
-  console.log('PASS: deposits pay nothing, every purchase pays Level 1/2/3 once, failed writes, repeated calls, bans, admin-activated products');
+  console.log('PASS: deposits pay nothing, the first purchase pays Level 1/2/3 once, failed writes, repeated calls, bans, admin-activated products');
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

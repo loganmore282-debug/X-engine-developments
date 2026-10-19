@@ -18,8 +18,8 @@ const p = mod.indexOf('function paintAssets(){'), pe = mod.indexOf('\n}\n', p);
 const body = mod.slice(p, pe);
 ok(/invCategory\(i\) === tab/.test(body) && !/ckIsWage|STATE\.products/.test(body), 'Income lists a plan by its own category, not by the current product settings');
 // the server stamps it when the plan is made and reports it
-ok(/commissionPending: true, category: 'income'/.test(src), 'a purchase is stamped income');
-ok(/category: isTask \? 'wage' : 'income', earningsLocked: !isTask, lockedAmount: 0, firstCashbackFree: false, granted: true/.test(src), 'an admin activation is stamped by the product kind');
+ok(/commissionPending: isFirstInvestment, category: 'income'/.test(src), 'a purchase is stamped income');
+ok(/category: isTask \? 'wage' : 'income', granted: true/.test(src), 'an admin activation is stamped by the product kind');
 ok(/category: data\.category === 'wage' \|\| data\.category === 'income' \? data\.category : \(\(Number\(data\.amount\) \|\| 0\) === 0 \? 'wage' : 'income'\)/.test(src), '/investments reports it (older plans from their cost)');
 // the Daily wage badge: taller, green, Running (or Completed) over Free, as in the owner's screenshot
 const html = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
