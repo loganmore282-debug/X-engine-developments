@@ -5667,19 +5667,29 @@ window.submitDeposit = async function(){
   ckPayLoading(submitBtn, true);
   ckLoadBegin();
   const seq = window._sheetSeq;   // which sheet this tap belongs to
-  let r;
+  let r, leaving = false;
   try {
     r = await post('/deposit/order/create', { amount, method });
+    // The member backed out while the order was being made: stay where they are.
+    leaving = !!(r && !r.stale && r.status === 'success' && r.orderNo && $('depSubmitBtn') === submitBtn && _openSheetTitle === 'Deposit' && window._sheetSeq === seq);
   } finally {
-    ckLoadEnd();
-    ckPayLoading(submitBtn, false, 'Pay ' + numGroup(amount, false));
+    // Going to the payment page is a real redirect (the browser loads /payment/<order number>), so the loading box and the grey button stay up
+    // until the browser takes over, as on any redirect link.
+    if (!leaving) { ckLoadEnd(); ckPayLoading(submitBtn, false, 'Pay ' + numGroup(amount, false)); }
   }
   if (r && r.stale) return;
   if (!r || r.status !== 'success' || !r.orderNo) return notify((r && r.message) || 'Could not start the payment');
-  if ($('depSubmitBtn') !== submitBtn || _openSheetTitle !== 'Deposit' || window._sheetSeq !== seq) return;   // the member backed out while the order was being made: stay where they are
-  closeSheet({ fromAction: true });
-  openPaymentPage(r.orderNo);
+  if (!leaving) return;
+  const no = r.orderNo;
+  redirectTo('/payment/' + no, true, () => { ckLoadEnd(); ckPayLoading(submitBtn, false, 'Pay ' + numGroup(amount, false)); closeSheet({ fromAction: true }); openPaymentPage(no); });
 };
+// A real browser navigation (the address bar loads the new page, the tab shows its loading bar) instead of the app swapping screens by itself.
+// `keepBack` true = a new history entry (Back returns to where the member was); false = the current entry is replaced, so Back never returns to the page that redirected. If the browser refuses (it should
+// not), the app opens the page itself.
+function redirectTo(path, keepBack, fallback){
+  try { if (keepBack) location.assign(path); else location.replace(path); }
+  catch (_) { try { if (typeof fallback === 'function') fallback(); } catch (_) {} }
+}
 // ── THE PAYMENT PAGE: /payment/<order number> ──
 // Pay on Deposit makes an order on the server (the amount is fixed there) and lands here. The amount cannot be edited; the member gives the phone
 // number the prompt goes to and the provider, taps Pay, and the page waits (a real status read every 1.5 s) for the provider's answer. On success the
@@ -5757,7 +5767,7 @@ function pgSet(view, html){
   const el = $('payScreen'); if (el) el.scrollTop = 0;
 }
 function pgShowInitiated(){
-  pgSet('initiated', pgCenterHtml(PG_CHECK, 'Payment Initiated!', 'Check your phone for a prompt from your mobile money provider. Approve it to complete the payment.', pgRefLine() + `<p class="pg-wait">${PG_CLOCK}<span>Awaiting mobile money approval</span></p>`));
+  pgSet('initiated', pgCenterHtml(PG_CHECK, 'Payment Initiated!', 'Check your phone for a prompt from your mobile money provider. Approve it to complete the payment.', pgRefLine() + `<p class="pg-wait">${PG_CLOCK}<span>Awaiting mobile money approval</span></p><p class="pg-auto">Your payment is detected automatically. You do not need to refresh or press anything.</p>`));
 }
 function pgShowUnknown(){
   pgSet('unknown', pgCenterHtml(PG_CHECK, 'Still waiting', 'The payment has not been confirmed yet and nothing is lost. If you approve it, your balance updates on its own; you can also look in Records later.', pgRefLine() + `<button class="pg-pay pg-small" type="button" onclick="pgHome()">Back to Home</button>`));
@@ -5863,7 +5873,7 @@ window.closePaymentPage = function(){
   if (!isScrollLockOverlayOpen()) unlockBodyScroll();
   dlgClosed();
 };
-window.pgHome = function(){ closePaymentPage(); try { navigatePage('home'); } catch (_) {} };
+window.pgHome = function(){ redirectTo('/', false, () => { closePaymentPage(); try { navigatePage('home'); } catch (_) {} }); };
 window.pgAgain = function(){ closePaymentPage(); setTimeout(() => { try { openDepositSheet(); } catch (_) {} }, 450); };
 // The payment request is sealed before it leaves the phone (the server's pay-seal.js opens it): ECDH P-256 with a fresh key for every payment, an
 // AES-256-GCM box around the order number, phone and provider, a time stamp and a one-time random number. The answer comes back sealed with the same

@@ -33,7 +33,7 @@ ok(/limit\(2\)\.get\(\);\s*if \(!depQ\.empty\) \{/.test(server) && /const sameTx
   const c2 = vm.createContext({ numGroup: undefined }); vm.runInContext(mfn('numGroup') + '\n' + mfn('ckTile'), c2);
   ok(c2.ckTile(20415.5) === '20,415.50' && c2.ckTile(30000) === '30,000' && c2.ckTile(0.4) === '0.40', 'Account tiles keep cents (20,415.50), whole amounts stay whole');
   ok(/window\.pgRefresh = async function\(\)\{[^}]*#pgPayBtn\.pg-busy/.test(mod.replace(/\n/g, ' ')), 'pulling down does not cancel a Pay that is in flight');
-  ok(/const seq = window\._sheetSeq;/.test(mod) && /window\._sheetSeq !== seq\) return;/.test(mod), 'the payment page does not open if the member backed out of Deposit while the order was being made');
+  ok(/const seq = window\._sheetSeq;/.test(mod) && /window\._sheetSeq === seq\);/.test(mod) && /if \(!leaving\) return;/.test(mod), 'the payment page does not open if the member backed out of Deposit while the order was being made');
   ok(/btn\.textContent = 'Confirm';\n  if \(r\.stale\) return;\n  if \(r\.status !== 'success'\) return notify\(r\.message \|\| 'Could not save your wallet\.'\)/.test(mod) && !/textContent = 'Change Password'/.test(mod) && !/textContent = 'Submit'/.test(mod), 'the Confirm buttons keep their label after a failed save');
   ok(mod.includes("history.replaceState(history.state, '', '/')") && mod.includes('payment\\//.test(location.pathname)'), 'a session that ends on the payment address returns the address bar to /'); }
 // deploy / security
@@ -91,6 +91,10 @@ ok(/function logSafe\(v\)/.test(server) && /logSafe\(body\.reference\)/.test(ser
 ok((server.match(/Public route error:/g) || []).length === 6 && !/app\.get\('\/public[^\n]*\n[^\n]*message: e\.message/.test(server), 'public routes never send a driver message');
 for (const f of ['deploy/update-vps.sh', 'deploy/first-setup.sh', 'deploy/webhook-check.sh', 'deploy/deploy.sh', 'deploy/set-wildcard.sh', 'deploy/set-domain.sh', 'deploy/change-app-host.sh']) cp.execFileSync('bash', ['-n', __dirname + '/' + f]);
 // round 2
+{ const u = R('user-src/original_module.js'), h = R('user-src/index.html');
+  ok(/redirectTo\('\/payment\/' \+ no, true,/.test(u) && /location\.assign\(path\)/.test(u), 'Pay sends the browser to /payment/<order> as a real redirect');
+  ok(/window\.pgHome = function\(\)\{ redirectTo\('\/', false,/.test(u), 'Back to Home (and the success hand-off) is a real redirect to /');
+  ok(/Your payment is detected automatically\. You do not need to refresh or press anything\./.test(u) && /#payScreen \.pg-auto\{/.test(h), 'the Payment Initiated page says it is detected automatically'); }
 ok(/firstPurchaseCashbackNow: true/.test(server) && /'firstPurchaseCashbackNow'/.test(server) && /cashbackNow = isFirstInvestment && sett\.firstPurchaseCashbackNow !== false/.test(server) && /id="sFirstCash"/.test(R('admin-src/index.html')) && /firstPurchaseCashbackNow:\$\('sFirstCash'\)\.checked/.test(R('admin-src/index.html')), 'admin switch: first purchase pays its first cashback at once (default on)');
 { const del = server.slice(server.indexOf("app.post('/admin/user/delete'"), server.indexOf("const _adminCreditDebounce"));
   ok(/String\(req\.body\.confirm\) !== 'DELETE'/.test(del) && /where\('status', 'in', \['creating', 'pending', 'sending', 'processing'\]\)/.test(del) && /walletBalance: walletAtDelete/.test(del), 'deleting an account needs the confirm word, waits for open withdrawals, and logs the wallet it removed');
