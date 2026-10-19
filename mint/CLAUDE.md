@@ -50,5 +50,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
    server captcha `captcha.js`, +256, UGX, password min 6 with no weak-password list). Loader unchanged ("Loading..." + admin background).
 4. (memorised, not built) Batch 2: Treasure Chest, Team, Salary, Balance Record, Home product list, Account icons, Change passwords, Messages, 6-tab bottom bar.
    Pictures in `design-ref/batch2/`, notes in `docs/SCREENS-BATCH2.md`. The owner will send more and wants ONE build.
+   Batch 3 also memorised: Promotion/share, Download page, Wallet (card), Add Wallet, Withdraw, Profile, Deposit (+ redirect overlay), chest artwork.
+   Pictures `design-ref/batch3/`, notes `docs/SCREENS-BATCH3.md`.
 5. (waiting on owner) Mint's screenshots, one batch at a time; the look is changed to match them exactly. Design is still Soda's look (renamed) until then.
    Payment keys (PesaJet/MarzPay) are set later by the owner.
