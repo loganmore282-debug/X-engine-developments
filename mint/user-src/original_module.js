@@ -2011,9 +2011,15 @@ function applyLoaderFx(){
   const s = STATE.settings || {};
   if (typeof window._mintLoaderFx === 'function' && s.loaderBgOpacity != null && s.loaderBgBlur != null) window._mintLoaderFx(s.loaderBgOpacity, s.loaderBgBlur);
 }
+// One opacity for every product picture, set once in the admin panel (read again on every paint, so a change goes live with the next refresh).
+function applyProductImageOpacity(){
+  const po = Number((STATE.settings || {}).productImageOpacity);
+  document.documentElement.style.setProperty('--prod-img-op', String(Number.isFinite(po) ? Math.min(100, Math.max(0, po)) / 100 : 1));
+}
 function applyAuthBackgrounds(){
   const s = STATE.settings || {};
   applyLoaderFx();
+  applyProductImageOpacity();
   const root = document.documentElement;
   function set(prefix, image, opacityPct, blurPx){
     // url() is built here, so an unset slot yields `none` and the section
@@ -3407,6 +3413,7 @@ window.openContactLink = function(kind){
   window.open(url, '_blank', 'noopener');
 };
 function paintHome(){
+  applyProductImageOpacity();
   // A product the admin switched off (Active unticked) is not offered on Home; owners still see it on Orders.
   const products = (STATE.products || []).filter(p => p.active !== false);
   const html = `
@@ -3560,6 +3567,7 @@ function statementStampMs(ms){
   return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 function paintAssets(){
+  applyProductImageOpacity();
   const a = STATE.account || {};
   // Running products first, newest first inside each group; the id is the last tie-break so the order never shuffles between refreshes.
   const owned = (STATE.investments || []).filter(i => i.status === 'active' || i.status === 'matured').sort((x, y) =>

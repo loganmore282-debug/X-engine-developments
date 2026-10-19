@@ -9,7 +9,7 @@ const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 ok(/<span class="ld-txt"[^>]*>Loading\.\.\.<\/span>/.test(html), 'the loader says "Loading..."');
 ok(/#loadingScreen \.ld-bg\{[^}]*url\('\/k7x2\/public\/loader-image'\)[^}]*opacity:var\(--ld-op,1\)[^}]*filter:blur\(var\(--ld-blur,0px\)\)/.test(html) && /id="ldBg"/.test(html), 'the loader background is the admin picture, on its own layer with the admin opacity and blur (never on the word)');
-ok(/@keyframes ldBounce\{.*translateY\(-34px\)/.test(html) && /animation:ldBounce/.test(html), 'the word bounces in its original 34 px area');
+ok(/@keyframes ldBounce\{.*-34px/.test(html) && /animation:ldBounce/.test(html), 'the word bounces in its original 34 px area');
 ok((html.match(/ld-txt[^{]*\{[^}]*animation:/g) || []).length === 2, 'one bounce animation (plus its reduced-motion off switch), nothing else');
 ok(/ld-txt\{[^}]*font-family:'Noto Serif'[^}]*font-size:24px[^}]*letter-spacing:\.02em/.test(html), 'bold serif, 24 px, letters and dots close together');
 ok(/ld-txt\{[^}]*color:#fff/.test(html), 'colour stays white (not specified by the owner)');

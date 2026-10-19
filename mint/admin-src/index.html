@@ -3033,6 +3033,15 @@ async function renderBanners(){
       <button class="btn block" id="saveLoaderBg" style="margin-top:14px">Save loading screen appearance</button>
     </div>
 
+    <h2 class="sec">Product pictures</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">One setting for every product picture in the app (Home and Orders). 100 = as uploaded, lower makes every picture fainter. Change it once here, no need to edit each product.</p>
+      <div class="row" style="margin-top:10px">
+        <div><label>Opacity (0&ndash;100%)</label><input id="prodImgOp" type="number" min="0" max="100" value="${esc(v('productImageOpacity',100))}"></div>
+      </div>
+      <button class="btn block" id="saveProdImg" style="margin-top:14px">Save product picture opacity</button>
+    </div>
+
     <h2 class="sec">Login &amp; Sign Up circle logo</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">The round picture with the yellow ring above the Log In and Sign Up forms. Square, about 400&times;400 (it is cropped to a circle). Without one, the app logo is used.</p>
@@ -3207,6 +3216,13 @@ function wireBannerHandlers(){
     }
     const d = await api('/admin/settings/update', { settings: nums });
     toast(d.status==='success'?'Loading screen appearance saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  const saveProdImg = $('saveProdImg');
+  if (saveProdImg) saveProdImg.addEventListener('click', async()=>{
+    const raw = $('prodImgOp').value.trim(), val = +raw;
+    if (raw==='' || !Number.isFinite(val) || val < 0 || val > 100) return toast('Opacity must be between 0 and 100','err');
+    const d = await api('/admin/settings/update', { settings: { productImageOpacity: val } });
+    toast(d.status==='success'?'Product picture opacity saved, live for every member':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   const saveAuthBg = $('saveAuthBg');
   if (saveAuthBg) saveAuthBg.addEventListener('click', async()=>{

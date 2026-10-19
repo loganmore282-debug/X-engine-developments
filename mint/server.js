@@ -587,6 +587,8 @@ const DEFAULT_SETTINGS = {
   authCardOpacity: 100, authCardBlur: 0,
   // Start-up loading screen picture (Admin > Banners > Loading screen background): 100 = as uploaded, 0 = blur off.
   loaderBgOpacity: 100, loaderBgBlur: 0,
+  // One opacity for EVERY product picture (Admin > Banners > Product pictures): 100 = as uploaded.
+  productImageOpacity: 100,
   // Background treatment for signed-in Home/Assets/Network/Profile and
   // secondary pages. Authentication screens keep their own controls above.
   innerBgOpacity: 100, innerBgBlur: 0,
@@ -6999,6 +7001,7 @@ const SETTINGS_CRITICAL_RANGES = {
   authHeroOpacity: [0, 100], authHeroBlur: [0, 40],
   authCardOpacity: [0, 100], authCardBlur: [0, 40],
   loaderBgOpacity: [0, 100], loaderBgBlur: [0, 40],
+  productImageOpacity: [0, 100],
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
   innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
 };
