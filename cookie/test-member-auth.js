@@ -34,10 +34,10 @@ function makeEnv() {
   const lim = () => (q, s, n) => n();
   let failStore = false;
   const dbProxy = new Proxy(db, { get: (t, k) => k === 'collection' ? col => { if (failStore && col === 'memberSessions') throw new Error('mongo down'); return t.collection(col); } : t[k] });
-  const fn = new Function('textOf', 'passwordOf', 'weakPasswordReason', 'WEAK_PASSWORD_MESSAGE', 'memberLoginIpGuard', 'app', 'db', 'crypto', 'sessionPolicy', 'FieldValue', 'cleanPhone', 'badPhoneMessage', 'tsMillis', 'rateLimit', 'console',
+  const fn = new Function('textOf', 'passwordOf', 'weakPasswordReason', 'WEAK_PASSWORD_MESSAGE', 'memberLoginIpGuard', 'app', 'db', 'crypto', 'sessionPolicy', 'FieldValue', 'cleanPhone', 'badPhoneMessage', 'tsMillis', 'rateLimit', 'console', 'ipKey',
     'const _lockTails = new Map();\n' + helpSrc + '\n' + hashSrc.replace("const _loginFails", "") + '\n' + lockSrc + '\n' + authSrc + '\n' + loginSrc + '\nreturn { _decodeAuth, verifyAuth, verifyAuthWithEmail, setMemberPassword, deleteMemberLogin, findAccountByUid };')
     (v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''), v => typeof v === 'string' ? v : '', () => '', '', { locked: () => false, fail() {}, clear() {} }, app, dbProxy, crypto, sessionPolicy, { serverTimestamp: () => new Date(), delete: () => DEL }, p => { const d = String(p || '').replace(/\D/g, ''); return d.length === 10 ? d : ''; }, () => 'bad phone',
-      v => v instanceof Date ? v.getTime() : Number(v) || 0, lim, { error() {}, warn: (...m) => warnings.push(m.join(' ')) });
+      v => v instanceof Date ? v.getTime() : Number(v) || 0, lim, { error() {}, warn: (...m) => warnings.push(m.join(' ')) }, x => x);
   const call = async (path, body, headers = {}) => { const res = { code: 200, body: null, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; } };
     await handlers[path]({ body, headers, path, ip: '1.1.1.1' }, res); return res; };
   return { store, call, fn, setFail: v => { failStore = v; } };

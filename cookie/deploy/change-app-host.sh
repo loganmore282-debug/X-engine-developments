@@ -6,6 +6,7 @@
 set -u
 COOKIE=${COOKIE_DIR:-/srv/cookie-src/cookie}
 BASE=${COOKIE_BASE_DOMAIN:-cookie.example.com}
+[ -s "${COOKIE_APP_HOST_FILE:-/srv/cookie-secrets/app-host}" ] && [ -z "${COOKIE_BASE_DOMAIN:-}" ] && { CURH=$(tr -d '[:space:]' < "${COOKIE_APP_HOST_FILE:-/srv/cookie-secrets/app-host}"); case "$CURH" in *.example.com|"") ;; *) BASE=${CURH#*.} ;; esac; }
 APP_HOST_FILE=${COOKIE_APP_HOST_FILE:-/srv/cookie-secrets/app-host}
 ALSO_FILE=${COOKIE_ALSO_HOSTS_FILE:-/srv/cookie-secrets/also-hosts}
 [ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }

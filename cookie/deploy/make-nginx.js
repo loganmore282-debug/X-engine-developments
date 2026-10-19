@@ -151,7 +151,7 @@ ${tls ? `    listen 443 ssl http2;
     gzip_proxied any;
     gzip_vary on;
     gzip_types text/plain text/css text/javascript application/javascript application/json application/manifest+json image/svg+xml;
-    client_max_body_size 8m;
+    client_max_body_size ${role === 'member' ? '8m' : '14m'};
 
     # ── walls against scanners and slow-connection attacks ──
     if ($cookie_bad_ua) { return 444; }   # a hacking tool in the User-Agent: close the connection without any answer
@@ -177,7 +177,11 @@ ${proxy()}
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${proxy()}
     }
-${HOOK_TOKEN && role !== 'admin' ? memberHookLocations : ''}${role !== 'admin' ? `    # MarzPay payment callbacks: their own wide rate zone (see hookLocation)
+${role === 'admin' ? `    # the admin host serves the admin panel only: the gateways' callback addresses are closed here (the member host carries them)
+    location ^~ /${API}/pesajet/webhook { return 404; }
+    location ^~ /${API}/deposit/callback { return 404; }
+    location ^~ /${API}/withdraw/callback { return 404; }
+` : ''}${HOOK_TOKEN && role !== 'admin' ? memberHookLocations : ''}${role !== 'admin' ? `    # MarzPay payment callbacks: their own wide rate zone (see hookLocation)
     location = /${API}/deposit/callback {
         limit_req zone=cookie_hook burst=300 nodelay;
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
@@ -300,11 +304,17 @@ upstream cookie_node {
     keepalive 32;
 }
 
-limit_req_zone $binary_remote_addr zone=cookie_api:10m rate=100r/s;
-limit_req_zone $binary_remote_addr zone=cookie_hook:10m rate=50r/s;
-limit_req_zone $binary_remote_addr zone=cookie_admin_login:10m rate=1r/s;
-limit_req_zone $binary_remote_addr zone=cookie_member_login:10m rate=3r/s;
-limit_conn_zone $binary_remote_addr zone=cookie_conn:10m;
+# IPv6 customers own a whole /64: count them per /64 (the first 4 groups), IPv4 per address, so one host cannot spread over billions of addresses.
+map $remote_addr $cookie_ip_key {
+    "~^(?<p>(?:[0-9a-f]{1,4}:){4})" $p;
+    "~^(?<p>(?:[0-9a-f]{1,4}:){1,3}):" $p;
+    default $remote_addr;
+}
+limit_req_zone $cookie_ip_key zone=cookie_api:10m rate=100r/s;
+limit_req_zone $cookie_ip_key zone=cookie_hook:10m rate=50r/s;
+limit_req_zone $cookie_ip_key zone=cookie_admin_login:10m rate=1r/s;
+limit_req_zone $cookie_ip_key zone=cookie_member_login:10m rate=3r/s;
+limit_conn_zone $cookie_ip_key zone=cookie_conn:10m;
 
 # Hacking and scanning tools announce themselves in the User-Agent (the names below are those of the common Kali Linux tools). They get no answer at all:
 # nginx closes the connection (444). Ordinary tools that real services use (curl, node, axios, Go, Postman...) are NOT listed, so payment

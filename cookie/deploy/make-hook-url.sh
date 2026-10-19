@@ -11,6 +11,8 @@ HOOK_HOST_FILE=${COOKIE_HOOK_HOST_FILE:-/srv/cookie-secrets/hook-host}
 BASE=${COOKIE_BASE_DOMAIN:-cookie.example.com}
 HOST=${COOKIE_APP_HOST:-app.cookie.example.com}
 [ -s "${COOKIE_APP_HOST_FILE:-/srv/cookie-secrets/app-host}" ] && HOST=$(tr -d "[:space:]" < "${COOKIE_APP_HOST_FILE:-/srv/cookie-secrets/app-host}")
+# Once a real domain is set the base is that domain (hook.<domain>), not the placeholder.
+case "$HOST" in *.example.com) ;; *) [ -n "${COOKIE_BASE_DOMAIN:-}" ] || BASE=${HOST#*.} ;; esac
 [ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }
 NEWTOKEN=0
 for a in "$@"; do

@@ -145,6 +145,14 @@ async function main(){
     // a note whose purchase DID complete (the delete after it failed) is only cleaned up, nobody is refunded
     db.rows.purchaseIntents={ [Object.keys(db.rows.investments)[0]]:{userId:'buyer',price:30000,status:'debiting',createdMs:Date.now()-5*60000} };
     await c.reconcilePurchaseIntents(); assert.equal(db.rows.users.buyer.walletBalance,before,'a completed purchase is never refunded'); assert.equal(Object.keys(db.rows.purchaseIntents).length,0);
+    // the server died AFTER the investment was written but before its ledger row: the sweep writes the row (once) and clears the note
+    db.rows.investments.invX={userId:'buyer',tierLabel:'Volt Go',amount:30000,date:'2026-10-18',time:'10:00',status:'active'};
+    db.rows.purchaseIntents={ invX:{userId:'buyer',price:30000,status:'debiting',createdMs:Date.now()-5*60000} };
+    await c.reconcilePurchaseIntents();
+    assert.equal(db.rows.users.buyer.walletBalance,before,'nobody is refunded for a purchase that completed');
+    const row=db.rows.transactions['purchase:invX']; assert.ok(row&&row.amount===-30000&&row.investmentId==='invX'&&row.type==='investment','the missing ledger row is written');
+    db.rows.purchaseIntents={ invX:{userId:'buyer',price:30000,status:'debiting',createdMs:Date.now()-5*60000} }; await c.reconcilePurchaseIntents();
+    assert.equal(Object.keys(db.rows.transactions).filter(k=>k==='purchase:invX').length,1,'and never twice');
     // a note written but the debit never happened (the crash was before it): cleaned up, nothing refunded
     db.rows.purchaseIntents={ 'ghost':{userId:'buyer',price:50000,status:'debiting',createdMs:Date.now()-5*60000} };
     await c.reconcilePurchaseIntents(); assert.equal(db.rows.users.buyer.walletBalance,before,'no debit, no refund'); assert.equal(Object.keys(db.rows.purchaseIntents).length,0);

@@ -49,6 +49,18 @@ app.use(helmet({
 // token), not shared IP -- Ugandan carrier-NAT puts many real users behind
 // one IP. The token is random, never decoded; an invalid one just gets its
 // own bucket, and ipOnlyLimiter below caps what a fake-token flood can do.
+// The address a rate limit or lock is counted against. An IPv6 customer owns a whole /64 (billions of addresses), so counting every address separately
+// let one host dodge every per-address limit and lock; IPv6 is counted per /64, IPv4 (and IPv4-mapped IPv6) per address.
+function logSafe(v) { return String(v == null ? '?' : v).replace(/[^\x20-\x7e]/g, '?').slice(0, 64); }   // a callback body is untrusted: no newline may forge a log line
+function ipKey(ip) {
+  ip = String(ip || '').split('%')[0].toLowerCase();
+  const m = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(ip);
+  if (m) return m[1];
+  if (!ip.includes(':')) return ip;
+  const [h, t] = ip.split('::'), a = h ? h.split(':') : [], b = t ? t.split(':') : [];
+  const g = ip.includes('::') ? a.concat(Array(Math.max(0, 8 - a.length - b.length)).fill('0'), b) : a;
+  return g.slice(0, 4).map(x => parseInt(x || '0', 16).toString(16)).join(':') + '::/64';
+}
 function rlKeyByUser(req) {
   const auth = req.headers.authorization || '';
   // Pre-sign-in routes (OTP sms, reset, sign-up) stay keyed by IP: a caller
@@ -57,7 +69,7 @@ function rlKeyByUser(req) {
   if (!open && auth.startsWith('Bearer ') && auth.length > 7) {
     return 'u:' + crypto.createHash('sha256').update(auth.slice(7)).digest('hex').slice(0, 16);
   }
-  return req.ip;
+  return ipKey(req.ip);
 }
 const globalLimiter = rateLimit({ windowMs: 60 * 1000, max: 400, keyGenerator: rlKeyByUser,
   standardHeaders: true, legacyHeaders: false,
@@ -65,7 +77,7 @@ const globalLimiter = rateLimit({ windowMs: 60 * 1000, max: 400, keyGenerator: r
 // A second, IP-only limiter that can't be evaded by claiming a fresh fake
 // uid every request (rlKeyByUser trusts the CLAIMED uid in an unverified
 // token — real verification happens later, inside each handler).
-const ipOnlyLimiter = rateLimit({ windowMs: 60 * 1000, max: 900, standardHeaders: false, legacyHeaders: false,
+const ipOnlyLimiter = rateLimit({ keyGenerator: r => ipKey(r.ip), windowMs: 60 * 1000, max: 900, standardHeaders: false, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests from this network. Slow down.' } });
 // /health is exempted from BOTH limiters above because Render's own platform
 // health checks must never be throttled -- a 429 to the health checker reads
@@ -76,7 +88,7 @@ const ipOnlyLimiter = rateLimit({ windowMs: 60 * 1000, max: 900, standardHeaders
 // Its own limiter is set far above any real health-check cadence (Render
 // polls on the order of once every few seconds, and this allows 5/second
 // sustained) while still putting a ceiling on a flood.
-const healthLimiter = rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: false, legacyHeaders: false,
+const healthLimiter = rateLimit({ keyGenerator: r => ipKey(r.ip), windowMs: 60 * 1000, max: 300, standardHeaders: false, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests.' } });
 // Owner: "let it poll every 1 second, we have a VPS KVM1 and MongoDB flex" --
 // these are exactly the read-only routes user-src/original_module.js's
@@ -104,11 +116,11 @@ const healthLimiter = rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders
 // getSettings()/getProducts()'s own 60s in-process cache (see their own
 // comments), so a flood here costs cheap memory reads, not repeated Mongo
 // hits, regardless of how generous this ceiling is.
-const LIVE_POLL_ROUTES = new Set(['/account', '/public/settings', '/investments', '/public/products', '/team/stats', '/transactions', '/messages']);
+const LIVE_POLL_ROUTES = new Set(['/account', '/public/settings', '/investments', '/public/products', '/team/stats', '/transactions', '/messages', '/deposit/marzpay/status']);   // the payment page asks about once a second: it must not use up the 60/min money bucket
 const livePollLimiter = rateLimit({ windowMs: 60 * 1000, max: 1200, keyGenerator: rlKeyByUser,
   standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests. Slow down.' } });
-const livePollIpLimiter = rateLimit({ windowMs: 60 * 1000, max: 3600, standardHeaders: false, legacyHeaders: false,
+const livePollIpLimiter = rateLimit({ keyGenerator: r => ipKey(r.ip), windowMs: 60 * 1000, max: 3600, standardHeaders: false, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests from this network. Slow down.' } });
 app.use((req, res, next) => (req.path === '/health' ? healthLimiter(req, res, next) : LIVE_POLL_ROUTES.has(req.path) ? livePollIpLimiter(req, res, next) : ipOnlyLimiter(req, res, next)));
 app.use((req, res, next) => (req.path === '/health' ? next() : LIVE_POLL_ROUTES.has(req.path) ? livePollLimiter(req, res, next) : globalLimiter(req, res, next)));
@@ -136,9 +148,9 @@ const ADMIN_TOTP_SECRET = (() => {
   return raw;
 })();
 let _lastTotpStep = -1;
-const adminLoginLimiter = rateLimit({ windowMs: 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false,
+const adminLoginLimiter = rateLimit({ keyGenerator: r => ipKey(r.ip), windowMs: 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
-const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false,
+const adminLimiter = rateLimit({ keyGenerator: r => ipKey(r.ip), windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests. Slow down.' } });
 app.use('/admin/check-key', adminLoginLimiter);
 app.use('/admin/login', adminLoginLimiter);
@@ -151,13 +163,13 @@ app.use('/admin/', adminLimiter);
 // the legacy-key check (which fails closed).
 app.use('/admin/', async (req, _res, next) => {
   const header = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  if (adminBadCredGuard.locked(req.ip)) return _res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in a few minutes.' });
+  if (adminBadCredGuard.locked(ipKey(req.ip))) return _res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in a few minutes.' });
   if (header && !(ADMIN_KEY && !ADMIN_TOTP_SECRET && safeEqual(header, ADMIN_KEY))) {
     try { req.adminUser = await resolveSession(header, req.path === '/session/activity'); }
     catch (e) { console.error('Admin session resolve error:', e.message); return _res.status(503).json({ status:'error', message:'Session service unavailable. Try again.' }); }
     // Not a session and not the key: a guess at the master key. (A stale SESSION token has the exact shape of a session token, 64 hex
     // characters, and is not counted, so an expired tab polling the panel can never lock the owner out.)
-    if (!req.adminUser && !/^[a-f0-9]{64}$/.test(header)) adminBadCredGuard.fail(req.ip);
+    if (!req.adminUser && !/^[a-f0-9]{64}$/.test(header)) adminBadCredGuard.fail(ipKey(req.ip));
   }
   next();
 });
@@ -166,7 +178,9 @@ app.use('/admin/', async (req, _res, next) => {
 // 60/min per-user cap rather than only the 400/min global one.
 ['/withdraw/request', '/invest/create', '/deposit/marzpay', '/deposit/order', '/pay/key', '/bank/save', '/register',
  '/redeem', '/turntable/spin']
-  .forEach(p => app.use(p, apiLimiter));
+  .forEach(p => app.use(p, p === '/deposit/marzpay'
+    ? (req, res, next) => (req.path === '/status' ? next() : apiLimiter(req, res, next))   // the status poll has its own (live poll) limit above
+    : apiLimiter));
 // ── BODY PARSING ──
 // A tight 64kb cap by default; admin routes that carry a base64 product
 // photo get the larger parser instead of loosening the limit for everything.
@@ -1402,11 +1416,21 @@ function passwordOf(v) { return typeof v === 'string' ? v : ''; }
 // A password pasted from WhatsApp or a note often carries a space, a line break or an invisible character at either end, and some
 // keyboards add one after a suggestion. The exact text is always tried first; this gives the same text without those edges (and in
 // the composed Unicode form) as a second try at login, so a correct password is not refused for something nobody can see.
-const _pwEdge = /^[\s\u00a0\u200b-\u200d\u2060\ufeff]+|[\s\u00a0\u200b-\u200d\u2060\ufeff]+$/g;
-function tidyPassword(p) { return String(p || '').replace(_pwEdge, ''); }   // what is stored when a password is created: no stray edge characters
+// Edge characters are trimmed with a LINEAR scan, not a regex: /[\s]+$/ on "a" + 60,000 spaces + "b" took ~1.7 s of the single Node thread per request,
+// and the signup/login bodies are not authenticated. (Anything over 1024 characters is left as it is: it is refused later for its length.)
+const _pwEdgeCh = /[\s\u00a0\u200b-\u200d\u2060\ufeff]/;
+function trimEdge(s) {
+  s = String(s == null ? '' : s);
+  if (s.length > 1024) return s;
+  let a = 0, b = s.length;
+  while (a < b && _pwEdgeCh.test(s[a])) a++;
+  while (b > a && _pwEdgeCh.test(s[b - 1])) b--;
+  return s.slice(a, b);
+}
+function tidyPassword(p) { return trimEdge(p); }   // what is stored when a password is created: no stray edge characters
 function passwordRetries(p) {
   const out = []; const add = x => { if (x && x !== p && !out.includes(x)) out.push(x); };
-  const t = p.replace(_pwEdge, ''); add(t); try { add(t.normalize('NFC')); add(p.normalize('NFC')); } catch (_) {}
+  const t = trimEdge(p); add(t); try { add(t.normalize('NFC')); add(p.normalize('NFC')); } catch (_) {}
   return out;
 }
 // Failed sign-ins are logged with WHY (never the password, and only the last three digits of the number), so the owner can tell a
@@ -2281,13 +2305,20 @@ async function marzValidateBankAccount(bankName, accountNumber) {
   if (transient) result = await attempt();
   return result;
 }
+const _MARZ_ENVELOPE_WORDS = ['success', 'error', 'sandbox', 'ok', 'fail', 'failed_request'];
+function marzInnerObject(d) {
+  return d?.data?.transaction || d?.transaction || (d?.data && typeof d.data === 'object' ? d.data : null)
+    || (d && typeof d === 'object' && !_MARZ_ENVELOPE_WORDS.includes(String(d.status || '').toLowerCase()) ? d : {});
+}
 function _marzExtractBankTransfer(d) {
   // GET /bank-transfer/{reference}'s own response key is
   // bank_transfer_request (named differently from the CREATE response's
   // bank_transfer -- the docs call this out explicitly), so both are
   // tried rather than assuming one.
-  const bt = d?.data?.bank_transfer_request || d?.data?.bank_transfer || d?.data || d || {};
-  return { status: String(bt.status || d?.status || '').toLowerCase() };
+  // The inner object only. NOT d.status: on these reads that is the API envelope's own "success" (the call worked), which turned a reply with no inner
+  // status into a sent payout. A flat body is used only when its status is not an envelope word.
+  const bt = d?.data?.bank_transfer_request || d?.data?.bank_transfer || marzInnerObject(d);
+  return { status: String(bt.status || '').toLowerCase() };
 }
 async function marzGetBankTransferStatus(reference) {
   let lastErr = null;
@@ -2419,7 +2450,7 @@ async function marzSmsSend(recipients, message) {
   }
 }
 function _marzExtractTx(d) {
-  const tx = d?.data?.transaction || d?.transaction || d?.data || d || {};
+  const tx = marzInnerObject(d);
   // NOT `d.status`: on a status read that is the API envelope's own "success" (the call worked), and falling back to it turned a transaction with no
   // status field into a completed payment. A flat body (tx === d) already has its status on tx.
   const rawStatus = tx.status || tx.state || tx.transaction_status || tx.payment_status || '';
@@ -3568,7 +3599,7 @@ app.get('/public/settings', async (req, res) => {
     // login address carries that region's dialling code, so signing in on
     // the wrong subdomain genuinely cannot find it.
     } });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  } catch (e) { { console.error('Public route error:', req.path, e.message); res.status(500).json({ status: 'error', message: 'Could not load this right now. Please try again.' }); }; }
 });
 // Members must never be shown a payout the purchase won't actually honour,
 // so this endpoint publishes RESOLVED figures instead of the raw stored
@@ -3707,13 +3738,13 @@ app.get('/public/products', async (req, res) => {
       _publicProductsBuilt = { key, raw, etag: 'W/"' + crypto.createHash('sha1').update(raw).digest('base64').slice(0, 22) + '"' };
     }
     publicJson(req, res, null, null, _publicProductsBuilt);
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  } catch (e) { { console.error('Public route error:', req.path, e.message); res.status(500).json({ status: 'error', message: 'Could not load this right now. Please try again.' }); }; }
 });
 let _publicProductsBuilt = null;
 
 app.get('/public/banner', async (req, res) => {
   try { publicJson(req, res, { status: 'success', ...(await getHomeBanner()) }, IMAGE_CACHE); }
-  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  catch (e) { { console.error('Public route error:', req.path, e.message); res.status(500).json({ status: 'error', message: 'Could not load this right now. Please try again.' }); }; }
 });
 // The installed-app icon, as a real image file. Nothing in the app fetches
 // this -- Chrome does, out of manifest.json at install time. Its URL is
@@ -3761,7 +3792,7 @@ app.get('/public/app-icon-192.png', serveBrandAsset('app-icon-192'));
 // own timing was already fixed for in an earlier round.
 app.get('/public/announcement-image', async (req, res) => {
   try { publicJson(req, res, { status: 'success', image: await getAnnouncementImage() }, IMAGE_CACHE); }
-  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  catch (e) { { console.error('Public route error:', req.path, e.message); res.status(500).json({ status: 'error', message: 'Could not load this right now. Please try again.' }); }; }
 });
 // The start-up loader's background, served as a real image (not JSON) so the
 // browser can paint it from its own cache in the first frame of the next
@@ -3837,13 +3868,13 @@ app.get('/public/cookie-images', async (req, res) => {
     ]);
     const [teamhero, sharehero, myhero, ruleshero, avatar, recthumb] = await Promise.all(['teamhero', 'sharehero', 'myhero', 'ruleshero', 'avatar', 'recthumb'].map(k => getCookieImage(k)));
     publicJson(req, res, { status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, teamhero, sharehero, myhero, ruleshero, avatar, recthumb }, IMAGE_CACHE);
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  } catch (e) { { console.error('Public route error:', req.path, e.message); res.status(500).json({ status: 'error', message: 'Could not load this right now. Please try again.' }); }; }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
 // of /public/settings, see getAboutContent()'s own comment for why.
 app.get('/public/about-content', async (_req, res) => {
   try { res.json({ status: 'success', blocks: await getAboutContent() }); }
-  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  catch (e) { { console.error('Public route error:', _req.path, e.message); res.status(500).json({ status: 'error', message: 'Could not load this right now. Please try again.' }); }; }
 });
 // ═══════════════════════════════════════════
 // REGISTRATION / ACCOUNT
@@ -4578,7 +4609,8 @@ app.post('/invest/create', async (req, res) => {
           isFirstInvestment, commissionBasis: 'investment', commissionPaidLevels: [], commissionPending: isFirstInvestment, category: 'income',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
-        await db.collection('transactions').add({
+        // A fixed id (purchase:<investment id>), so the sweep below can write the same row if the server died after the investment but before this line.
+        await db.collection('transactions').doc('purchase:' + invRef.id).createIfAbsent({
           userId, statementId: newStatementId(), type: 'investment', description: `Bought ${liveTier.name}`, amount: -liveTier.price,
           status: 'success', date, time, investmentId: invRef.id, createdAt: FieldValue.serverTimestamp()
         });
@@ -5322,7 +5354,7 @@ app.post('/deposit/callback', async (req, res) => {
   res.status(200).json({ status: 'ok' });
   const body = req.body || {};
   const st = marzCallbackRawStatus(body);
-  console.log(`MarzPay deposit callback: ${st || body.event_type || 'no status'} ${body.data?.reference || body.reference || body.transaction?.reference || '?'}`);
+  console.log(`MarzPay deposit callback: ${logSafe(st || body.event_type || 'no status')} ${logSafe(body.data?.reference || body.reference || body.transaction?.reference)}`);
   await marzDepositCallbackWork(body);
   retryCallbackWork('MarzPay deposit callback', () => marzDepositCallbackWork(body), () => marzDepositCallbackOpen(body), SUCCESS_STATUSES.has(st) || FAILED_STATUSES.has(st));
 });
@@ -5972,7 +6004,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
 // subscribed. Everything past the credential check is the same code path as
 // the Send button in the panel (one-at-a-time lock, status must be pending,
 // idempotent), so a double tap or a replay cannot pay twice.
-const quickApproveLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
+const quickApproveLimiter = rateLimit({ keyGenerator: r => ipKey(r.ip), windowMs: 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests. Slow down.' } });
 app.post('/admin/withdraw/quick-approve', quickApproveLimiter, async (req, res) => {
   try {
@@ -6340,7 +6372,7 @@ app.post('/pesajet/webhook', async (req, res) => {
   }
   res.status(200).json({ received: true });
   // Everything past here runs after the ack. Nothing may throw out of it.
-  console.log(`PesaJet webhook: ${body.event || body.status || '?'} ${body.reference || '?'}`);
+  console.log(`PesaJet webhook: ${logSafe(body.event || body.status)} ${logSafe(body.reference)}`);
   await pesajetWebhookWork(body, check.verified === true);
   const claimsFinal = /completed|failed|expired/i.test(String(body.event || '')) || ['completed', 'failed', 'expired'].includes(String(body.status || '').toLowerCase());
   retryCallbackWork('PesaJet webhook', () => pesajetWebhookWork(body, check.verified === true), () => pesajetWebhookOpen(body), claimsFinal);
@@ -6706,17 +6738,17 @@ app.post('/messages/read', async (req, res) => {
 app.post('/admin/check-key', async (req, res) => {
   const { key } = req.body;
   if (!ADMIN_KEY) return res.status(500).json({ status: 'error', message: 'Admin key not configured' });
-  if (ownerKeyGuard.locked(req.ip) || ownerKeyGlobalGuard.locked('all')) return res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in 15 minutes.' });
-  if (!safeEqual(key, ADMIN_KEY)) { ownerKeyGuard.fail(req.ip); ownerKeyGlobalGuard.fail('all'); return res.status(401).json({ status: 'error', message: 'Invalid key' }); }
+  if (ownerKeyGuard.locked(ipKey(req.ip)) || ownerKeyGlobalGuard.locked('all')) return res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in 15 minutes.' });
+  if (!safeEqual(key, ADMIN_KEY)) { ownerKeyGuard.fail(ipKey(req.ip)); ownerKeyGlobalGuard.fail('all'); return res.status(401).json({ status: 'error', message: 'Invalid key' }); }
   // The key is right. With a second factor configured it is still not enough: the 6-digit code from the authenticator app is needed too.
   if (ADMIN_TOTP_SECRET) {
     const given = String(req.body.totp || '').replace(/\s/g, '');
     if (!given) return res.status(401).json({ status: 'error', code: 'TOTP_REQUIRED', message: 'Enter the 6-digit code from your authenticator app.' });
     const v = totp.verify(ADMIN_TOTP_SECRET, given, Date.now(), _lastTotpStep);
-    if (!v.ok) { ownerKeyGuard.fail(req.ip); ownerKeyGlobalGuard.fail('all'); return res.status(401).json({ status: 'error', code: 'TOTP_REQUIRED', message: 'That code is wrong or already used. Wait for the next code and try again.' }); }
+    if (!v.ok) { ownerKeyGuard.fail(ipKey(req.ip)); ownerKeyGlobalGuard.fail('all'); return res.status(401).json({ status: 'error', code: 'TOTP_REQUIRED', message: 'That code is wrong or already used. Wait for the next code and try again.' }); }
     _lastTotpStep = v.step;
   }
-  ownerKeyGuard.clear(req.ip);
+  ownerKeyGuard.clear(ipKey(req.ip));
   // Codex-caught real bug: this used to send only {status, token} -- the
   // admin UI's storeSession(d.token, d.username, d.role) then stored
   // SESSION_ROLE as undefined for the OWNER's own master-key login, so
@@ -6737,14 +6769,14 @@ app.post('/admin/login', async (req, res) => {
   const username = String(req.body.username || '').trim().toLowerCase();
   const password = passwordOf(req.body.password);
   if (!username || !password) return res.status(400).json({ status: 'error', message: 'Username and password required' });
-  if (loginLocked('staff:' + username) || adminBadCredGuard.locked(req.ip)) return res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in 15 minutes.' });
+  if (loginLocked('staff:' + username) || adminBadCredGuard.locked(ipKey(req.ip))) return res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in 15 minutes.' });
   try {
     const snap = await db.collection('adminUsers').doc(username).get();
     const validAccount = snap.exists && snap.data().active !== false;
     const hashToCheck = validAccount ? snap.data().passwordHash : DUMMY_PASSWORD_HASH;
     const passwordOk = await scryptVerifyAsync(password, hashToCheck);
     if (!validAccount || !passwordOk) {
-      recordLoginFail('staff:' + username); adminBadCredGuard.fail(req.ip);
+      recordLoginFail('staff:' + username); adminBadCredGuard.fail(ipKey(req.ip));
       return res.status(401).json({ status: 'error', message: 'Invalid username or password' });
     }
     clearLoginFails('staff:' + username);
@@ -6803,9 +6835,9 @@ async function recordLoginFailure(id) {
 // the document (which survives a restart). Generous because many members share
 // one mobile-carrier address.
 // Only FAILED attempts count: many honest members share one carrier address, and a correct login must never use up the allowance.
-const memberAuthLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true,
+const memberAuthLimiter = rateLimit({ keyGenerator: r => ipKey(r.ip), windowMs: 5 * 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true,
   message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Please wait a few minutes and try again.' } });
-const memberSignupLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 150, standardHeaders: true, legacyHeaders: false,
+const memberSignupLimiter = rateLimit({ keyGenerator: r => ipKey(r.ip), windowMs: 5 * 60 * 1000, max: 150, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Please wait a few minutes and try again.' } });
 const sessionReply = (res, uid, sess) => res.json({ status: 'success', token: sess.token, uid, authTime: sess.authTime, expiresAt: sess.expiresAt });
 app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
@@ -6833,7 +6865,7 @@ app.post('/auth/login', memberAuthLimiter, async (req, res) => {
     const password = passwordOf(req.body.password);
     const bad = () => res.status(401).json({ status: 'error', code: 'INVALID_CREDENTIAL', message: 'Incorrect phone number or password.' });
     if (!phone || !password || password.length > MEMBER_PASSWORD_MAX) { logLoginFailure(!phone ? 'not a valid number' : !password ? 'empty password' : 'password too long', phone || textOf(req.body.phone).slice(-3)); return bad(); }
-    const ipLeft = memberLoginIpGuard.locked(req.ip);
+    const ipLeft = memberLoginIpGuard.locked(ipKey(req.ip));
     if (ipLeft) return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', retryAfterSec: Math.ceil(ipLeft / 1000),
       message: `Too many wrong attempts from this network. Try again in ${Math.ceil(ipLeft / 60000)} minutes.` });
     const id = memberAccountId(phone);
@@ -6855,7 +6887,7 @@ app.post('/auth/login', memberAuthLimiter, async (req, res) => {
       }
       if (retried) console.warn(`Login ok after tidying the password (stray space or invisible character at an end) number ***${phone.slice(-3)}`);
       if (!acct || !ok) {
-        memberLoginIpGuard.fail(req.ip);
+        memberLoginIpGuard.fail(ipKey(req.ip));
         if (acct) await recordLoginFailure(id);
         logLoginFailure(acct ? 'wrong password' : 'no account for this number', phone, acct ? `(attempt ${(Number(acct.failCount) || 0) + 1}, length ${password.length}${/^\s|\s$/.test(password) ? ', space at an end' : ''})` : '');
         return { bad: true };
@@ -8471,6 +8503,7 @@ app.post('/admin/deposit', async (req, res) => {
   const lastCredit = _adminCreditDebounce.get(userId) || 0;
   if (Date.now() - lastCredit < 10000) return res.status(429).json({ status: 'error', message: 'This user was just credited seconds ago. Wait a moment before crediting again.' });
   _adminCreditDebounce.set(userId, Date.now());
+  let walletMoved = false;
   try {
     const { date, time } = nowStr();
     // The default description names the app, so it has to be read rather than
@@ -8482,16 +8515,26 @@ app.post('/admin/deposit', async (req, res) => {
     // whole codebase with no lock at all, meaning a concurrent repair-ledger/
     // recountAllTotals absolute-value rewrite (both bal:-locked) could race
     // this increment and silently drop it. Matches /admin/debit's own locking.
-    await withLock('bal:' + userId, () => db.runTransaction(async t => {
+    // Written step by step (runTransaction here only queued the writes and ran them one after another anyway), so that if the ledger row fails AFTER the
+    // wallet moved we know it and say so, instead of answering "nothing was credited" and inviting a second credit.
+    await withLock('bal:' + userId, async () => {
       const uRef = db.collection('users').doc(userId);
-      const uSnap = await t.get(uRef);
+      const uSnap = await uRef.get();
       if (!uSnap.exists) throw new Error('User not found');
-      t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt) });
-      t.set(db.collection('transactions').doc(), { userId, statementId: newStatementId(), type: 'admin_credit', description: creditDesc, amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
-    }));
+      await uRef.update({ walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt) });
+      walletMoved = true;
+      await db.collection('transactions').doc().set({ userId, statementId: newStatementId(), type: 'admin_credit', description: creditDesc, amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
+    });
     logAdminAction(req, 'manual_credit', { userId, amount: amt, note });
     res.json({ status: 'success', message: `Credited ${fmtMoney(amt)}` });
-  } catch (e) { _adminCreditDebounce.delete(userId); res.status(500).json({ status: 'error', message: e.message }); }   // nothing was credited: the corrected retry may go straight away
+  } catch (e) {
+    if (walletMoved) {   // the wallet WAS credited and only the record failed: do not invite a second credit
+      console.error(`MONEY-SAFETY: admin credit of ${amt} to ${userId} reached the wallet but its ledger row failed:`, e.message);
+      logAdminAction(req, 'manual_credit', { userId, amount: amt, note, ledgerRowFailed: true });
+      return res.status(500).json({ status: 'error', message: `The wallet WAS credited ${fmtMoney(amt)} but its record could not be written. Do not credit again; check the user's balance.` });
+    }
+    _adminCreditDebounce.delete(userId); res.status(500).json({ status: 'error', message: e.message });   // nothing was credited: the corrected retry may go straight away
+  }
 });
 app.post('/admin/debit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -8502,22 +8545,31 @@ app.post('/admin/debit', async (req, res) => {
   const lastDebit = _adminDebitDebounce.get(userId) || 0;
   if (Date.now() - lastDebit < 10000) return res.status(429).json({ status: 'error', message: 'This user was just debited seconds ago. Wait a moment before debiting again.' });
   _adminDebitDebounce.set(userId, Date.now());
+  let walletMoved = false;
   try {
     let newBal = 0;
     const { date, time } = nowStr();
-    await withLock('bal:' + userId, () => db.runTransaction(async t => {
+    await withLock('bal:' + userId, async () => {
       const uRef = db.collection('users').doc(userId);
-      const uSnap = await t.get(uRef);
+      const uSnap = await uRef.get();
       if (!uSnap.exists) throw new Error('User not found');
       const bal = uSnap.data().walletBalance || 0;
       if (amt > bal) throw new Error(`Cannot debit ${fmtMoney(amt)}, this wallet only holds ${fmtMoney(bal)}`);
       newBal = bal - amt;
-      t.update(uRef, { walletBalance: FieldValue.increment(-amt) });
-      t.set(db.collection('transactions').doc(), { userId, statementId: newStatementId(), type: 'admin_debit', description: note || 'Balance adjustment', amount: -amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
-    }));
+      await uRef.update({ walletBalance: FieldValue.increment(-amt) });
+      walletMoved = true;   // from here a failure of the ledger row must not read as "nothing was debited"
+      await db.collection('transactions').doc().set({ userId, statementId: newStatementId(), type: 'admin_debit', description: note || 'Balance adjustment', amount: -amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
+    });
     logAdminAction(req, 'manual_debit', { userId, amount: amt, note });
     res.json({ status: 'success', message: `Removed ${fmtMoney(amt)}. New balance ${fmtMoney(newBal)}`, newBalance: newBal });
-  } catch (e) { _adminDebitDebounce.delete(userId); res.status(/^Cannot debit/.test(e.message) ? 400 : adminFailCode(e)).json({ status: 'error', message: e.message }); }   // nothing was debited: a corrected retry may go straight away
+  } catch (e) {
+    if (walletMoved) {
+      console.error(`MONEY-SAFETY: admin debit of ${amt} from ${userId} reached the wallet but its ledger row failed:`, e.message);
+      logAdminAction(req, 'manual_debit', { userId, amount: amt, note, ledgerRowFailed: true });
+      return res.status(500).json({ status: 'error', message: `The wallet WAS debited ${fmtMoney(amt)} but its record could not be written. Do not debit again; check the user's balance.` });
+    }
+    _adminDebitDebounce.delete(userId); res.status(/^Cannot debit/.test(e.message) ? 400 : adminFailCode(e)).json({ status: 'error', message: e.message });   // nothing was debited: a corrected retry may go straight away
+  }
 });
 // A downline member's number as the member app prints it ("706****1455"): the server does the hiding, so the full
 // number of a level 2 or level 3 stranger is never sent to a phone at all.
@@ -10001,7 +10053,14 @@ async function reconcilePurchaseIntents() {
     try {
       await withLock('bal:' + it.userId, async () => {
         const inv = await db.collection('investments').doc(doc.id).get();
-        if (inv.exists) { await doc.ref.delete(); return; }          // the purchase did complete
+        if (inv.exists) {                                              // the purchase did complete; make sure its ledger row exists too (the server may have died just before it)
+          const d = inv.data();
+          await db.collection('transactions').doc('purchase:' + doc.id).createIfAbsent({
+            userId: d.userId, statementId: newStatementId(), type: 'investment', description: `Bought ${d.tierLabel || 'product'}`, amount: -(Number(d.amount) || 0),
+            status: 'success', date: d.date, time: d.time, investmentId: doc.id, createdAt: FieldValue.serverTimestamp(),
+          });
+          await doc.ref.delete(); return;
+        }
         const uRef = db.collection('users').doc(String(it.userId)), u = await uRef.get();
         const ud = u.exists ? u.data() : {};
         if ((ud.debitedInvestmentIds || []).includes(doc.id) && !(ud.refundedInvestmentIds || []).includes(doc.id)) {

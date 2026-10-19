@@ -5,7 +5,7 @@ set -u
 [ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }
 SRC=${COOKIE_SRC:-/srv/cookie-src}
 cd "$SRC" || { echo "Cannot find $SRC"; exit 1; }
-git pull --ff-only 2>&1 | tail -2
+git pull --ff-only 2>&1 | tail -2; [ "${PIPESTATUS[0]}" = 0 ] || echo "    !! git pull failed (see above): carrying on with the code that is already here"
 git log -1 --format='    now at: %h %s'
 cd "$SRC/cookie" && npm install --omit=dev --no-audit --no-fund 2>&1 | tail -1
 cd "$SRC/cookie/deploy" && pm2 reload ecosystem.config.js --only cookie-server --update-env 2>&1 | tail -2

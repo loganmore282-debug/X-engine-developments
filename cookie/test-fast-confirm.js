@@ -4,6 +4,7 @@ const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:a
 const acorn = require('acorn');
 const source = fs.readFileSync(__dirname + '/server.js', 'utf8'), tree = acorn.parse(source, { ecmaVersion: 'latest' });
 const fn = name => { const n = tree.body.find(x => x.type === 'FunctionDeclaration' && x.id.name === name); assert(n, 'missing ' + name); return source.slice(n.start, n.end); };
+const marzHelper = source.slice(source.indexOf('const _MARZ_ENVELOPE_WORDS'), source.indexOf('function _marzExtractBankTransfer'));
 function env(dep, extra = {}) {
   const calls = { ask: 0, credit: [], failed: [] };
   const list = Array.isArray(dep) ? dep : [dep];
@@ -45,12 +46,17 @@ const live = { provider: 'pesajet', status: 'pending', pesajetTxId: 'tx1', userI
   e = env([live, twin]); await e.c.pesajetWebhookWork({ status: 'COMPLETED', reference: 'R1', transactionId: 'tx2' }, true);
   assert.deepEqual(e.calls.credit, ['PesaJet webhook (signed):d2'], 'the row whose transaction id matches is the one credited'); assert.equal(e.calls.ask, 0);
   // a MarzPay status read with no status of its own is NOT "success" (the API envelope's own "success" only says the call worked)
-  { const c = vm.createContext({}); vm.runInContext(fn('_marzExtractTx'), c);
+  { const c = vm.createContext({}); vm.runInContext(marzHelper + fn('_marzExtractTx'), c);
     assert.equal(c._marzExtractTx({ status: 'success', data: { transaction: { uuid: 'u' } } }).status, '', 'no status -> nothing');
     assert.equal(c._marzExtractTx({ status: 'success', data: { transaction: { uuid: 'u', status: null } } }).status, '');
     assert.equal(c._marzExtractTx({ status: 'success', data: { transaction: { status: 'completed' } } }).status, 'completed');
     assert.equal(c._marzExtractTx({ status: 'completed', reference: 'r' }).status, 'completed', 'a flat body keeps its own status');
-    assert.equal(c._marzExtractTx({ transaction: { state: 'FAILED' } }).status, 'failed'); }
+    assert.equal(c._marzExtractTx({ transaction: { state: 'FAILED' } }).status, 'failed');
+    for (const bad of [{ status: 'success', data: null }, { status: 'success' }, { status: 'success', data: {} }, { status: 'success', data: { collection: { uuid: 'u' } } }]) assert.equal(c._marzExtractTx(bad).status, '', 'no status of its own -> nothing: ' + JSON.stringify(bad));
+    const c3 = vm.createContext({}); vm.runInContext(marzHelper + fn('_marzExtractBankTransfer'), c3);
+    assert.equal(c3._marzExtractBankTransfer({ status: 'success' }).status, '', 'bank transfer: the envelope word is not a status');
+    assert.equal(c3._marzExtractBankTransfer({ status: 'success', data: { bank_transfer_request: { status: 'COMPLETED' } } }).status, 'completed');
+    assert.equal(c3._marzExtractBankTransfer({ status: 'success', data: { bank_transfer: { status: 'failed' } } }).status, 'failed'); }
   // two requests in the same instant are never handed the same payment reference
   { let k = 0; const c = vm.createContext({ stampRef: () => 'S' + (k++ < 2 ? 'SAME' : 'NEW' + k), crypto: { randomInt: () => 1 }, Date, Map,
       db: { collection: () => ({ where: () => ({ limit: () => ({ get: async () => { await new Promise(r => setTimeout(r, 5)); return { empty: true }; } }) }) }) } });

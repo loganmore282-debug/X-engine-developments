@@ -91,7 +91,7 @@ async function buy(limit, owned) {
       updateIf: async (_f, u) => { for (const [k, v] of Object.entries(u)) user[k] = v && v.__inc !== undefined ? (user[k] || 0) + v.__inc : v && v.__union ? (user[k] || []).concat(v.__union) : v; return true; } }) }
     : n === 'purchaseIntents' ? { doc: () => ({ set: async () => {}, delete: async () => {} }) }
     : n === 'investments' ? { ...q(investments), doc: () => ({ id: 'new', set: async d => { investments.push(d); }, delete: async () => {} }) }
-    : { add: async () => ({}) } };
+    : { add: async () => ({}), doc: () => ({ createIfAbsent: async () => true, set: async () => {} }) } };
   new Function('app', 'db', 'verifyAuth', 'getProductByKey', 'productOpenState', 'getSettings', 'withLock', 'productExpectedReturn', 'FieldValue', 'nowStr', 'newStatementId', 'fmtMoney', 'grantTurntableSpins', 'console', 'eatNextMidnight', 'payoutDueAtMs',
     'const _vipCache = new Map(); const round2 = n => Math.round((Number(n) || 0) * 100) / 100;\n' + invRoute)(app, db, async () => 'u1', async () => tier, () => ({ open: true }), async () => ({ cycleDays: 30 }), (_k, fn) => fn(), () => 30000,
     { increment: n => ({ __inc: n }), arrayUnion: (...items) => ({ __union: items }), serverTimestamp: () => 0 }, () => ({ date: 'd', time: 't' }), () => 's', n => String(n), () => {}, console, ts => (Math.floor((ts + 10800000) / 86400000) + 1) * 86400000 - 10800000, ts => (Math.floor((ts + 10800000) / 86400000) + 1) * 86400000 - 10800000);

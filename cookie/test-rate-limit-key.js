@@ -1,7 +1,7 @@
 // Rate-limit bucket per signed-in member + removed payout routes stay removed.
 const fs = require('fs'), assert = require('assert'), crypto = require('crypto');
 const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
-const a = src.indexOf('function rlKeyByUser'), b = src.indexOf('const globalLimiter');
+const a = src.indexOf('function ipKey'), b = src.indexOf('const globalLimiter');
 const rlKeyByUser = new Function('crypto', src.slice(a, b) + '; return rlKeyByUser;')(crypto);
 const req = (token, url, ip = '1.1.1.1') => ({ headers: token ? { authorization: 'Bearer ' + token } : {}, originalUrl: url, ip });
 const k1 = rlKeyByUser(req('a'.repeat(64), '/withdraw/request'));

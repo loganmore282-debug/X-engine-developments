@@ -23,8 +23,10 @@ const quiet = new Writable({ write(chunk, enc, cb) { if (!muted) process.stdout.
 const rl = readline.createInterface({ input: process.stdin, output: quiet, terminal: true });
 process.stdout.write('Paste the value for ' + name + ' (it will not be shown), then press Enter: ');
 muted = true;
+let answered = false;
+rl.on('close', () => { if (!answered) { process.stdout.write('\nCancelled. NOTHING was changed.\n'); process.exit(2); } });   // Ctrl+C or end of input is not "saved"
 rl.question('', answer => {
-  muted = false; rl.close(); const value = String(answer).replace(/[\r\n]/g, '').trim();
+  answered = true; muted = false; rl.close(); const value = String(answer).replace(/[\r\n]/g, '').trim();
   console.log('');
   if (!value) { console.log('Nothing entered. NOTHING was changed.'); process.exit(2); }
   save(value);

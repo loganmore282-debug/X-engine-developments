@@ -114,7 +114,7 @@ function boot(file, scope) {
   { // secret PesaJet webhook address
     const g = (env, ...a) => require('child_process').execFileSync('node', ['deploy/make-nginx.js', ...a], { encoding: 'utf8', env: { ...process.env, ...env } });
     const base = g({ COOKIE_HOOK_TOKEN: '' }, 'prod', 'example.com', 'Bake7qz3', 'adm.example.com');
-    ok(!/h-[a-z0-9]{16}/.test(base) && !/pesajet\/webhook \{ return 404/.test(base), 'no token: no secret webhook address and the plain one is not closed');
+    ok(!/h-[a-z0-9]{16}/.test(base) && !/pesajet\/webhook \{ return 404/.test(base.slice(0, base.indexOf('server_name adm.example.com'))), 'no token: no secret webhook address, and the member host does not close the plain one (the admin host always does)');
     const T = 'abcdef0123456789abcd';
     const tok = g({ COOKIE_HOOK_TOKEN: T }, 'prod', 'example.com', 'Bake7qz3', 'adm.example.com');
     ok(tok.includes('location = /k7x2/h-' + T + '/pesajet {') && tok.includes('rewrite ^ /pesajet/webhook break;'), 'token: the secret address maps to Node /pesajet/webhook');
