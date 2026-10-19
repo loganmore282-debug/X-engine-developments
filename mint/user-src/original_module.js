@@ -2693,6 +2693,12 @@ function hookNavTapBox(){
     btn.classList.remove('nav-tap');
     void btn.offsetWidth;
     btn.classList.add('nav-tap');
+    // A soft ring spreads from the finger, as in the owner's recording.
+    const r = btn.getBoundingClientRect(), rip = document.createElement('i');
+    rip.className = 'mg-ripple';
+    rip.style.left = (e.clientX - r.left) + 'px'; rip.style.top = (e.clientY - r.top) + 'px';
+    btn.appendChild(rip);
+    setTimeout(() => { if (rip.parentNode) rip.parentNode.removeChild(rip); }, 560);
   }, { passive: true });
   // Clean the class off once it has played, so the next tap is a fresh run
   // and nothing is left holding a finished animation.
@@ -3048,6 +3054,7 @@ window.showPage = async function(name){
   else if (name === 'team') name = 'network';
   else if (name === 'referral') name = 'promo';
   STATE.page = name;
+  { const ph = $('pageHost'); if (ph) { ph.classList.remove('mg-enter'); void ph.offsetWidth; ph.classList.add('mg-enter'); } }
   window.scrollTo(0, 0);   // every tab opens at its top, not wherever the previous one was scrolled
   updateNavIcons();
   if (name === 'home') {
