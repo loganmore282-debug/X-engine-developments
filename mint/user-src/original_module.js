@@ -2282,8 +2282,12 @@ async function processMemberAuth(user){
     loadAuthSettings();
     return;
   }
-  $('authScreen').style.display = 'none';
-  showLoadingScreen();
+  // A sign-up in progress stays on the Sign Up page (its button reads "Signing Up...") until the member lands on Login: the startup loader is
+  // only for opening the app, never for registering.
+  if (!window._pendingRegPhone) {
+    $('authScreen').style.display = 'none';
+    showLoadingScreen();
+  }
   await enterApp();
 }
 // Real feature: a returning member used to sit through the loading screen

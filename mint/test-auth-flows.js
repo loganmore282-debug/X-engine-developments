@@ -329,10 +329,14 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     const t = toasts(w); const log = fakeFirebase(w, {});
     w.eval('STATE.settings={otpVerificationEnabled:true,referralRequired:false}');
     let profile = false;
+    // the startup loader must never come up while signing up
+    let loaderSeen = false; const ls = $(w, 'loadingScreen'); ls.style.display = 'none';
+    new w.MutationObserver(() => { if (ls.style.display !== 'none') loaderSeen = true; }).observe(ls, { attributes: true, attributeFilter: ['style'] });
     const calls = fakeServer(w, async (p, b) => p === '/register' ? (profile = true, eq(b.pin, '123456', 'trade PIN is sent for registration'), ok(!Object.hasOwn(b, 'otpTicket'), 'registration sends no OTP ticket'), { status: 200, body: { status: 'success' } }) : p === '/account' ? (profile ? { status: 200, body: okAccount } : { status: 404, body: { status: 'error', code: 'NOT_FOUND' } }) : null);
     $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; $(w, 'regCaptcha').value = '1234'; w.eval("STATE.captchaId='cid'");
     await w.doRegister(); await sleep(120);
     eq(shown(w, 'app'), false, 'a new account does not open the app'); eq(shown(w, 'authScreen'), true, 'it lands on Login'); eq(shown(w, 'loadingScreen'), false);
+    eq(loaderSeen, false, 'the startup loader never appeared during sign-up');
     eq($(w, 'loginPhone').value, '0771234567', 'the number is already on Login'); eq($(w, 'loginPassword').value, '', 'only the password is left to type');
     eq(w.eval("document.getElementById('tabLogin').getAttribute('aria-selected')"), 'true', 'the Login tab is the open one');
     ok(t.some(m => /Registration successful/.test(m)) && !t.some(m => /Login successful/.test(m)), 'sign-up toast, not login toast: ' + JSON.stringify(t));
