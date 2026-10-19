@@ -1805,47 +1805,56 @@ body.deposit-status-open .sheet-bg{bottom:0;}
 .v-chest-go{width:100%;height:47px;border:0;border-radius:12px;background:var(--v-grad);color:#fff;font:inherit;font-size:15px;font-weight:700;letter-spacing:2.4px;box-shadow:0 14px 26px -16px rgba(14,42,142,.9);}
 .v-chest-go:disabled{opacity:.6;}
 
-/* ── Login / Sign Up: measured from the owner's screenshots (360 px phone) ── */
-.va-screen{position:relative;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;background:linear-gradient(145deg,#0b2b58 0%,#1739b8 52%,#103863 100%);}
-@supports (min-height:100dvh){.va-screen{min-height:100dvh;}}
-.va-screen::after{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(to bottom,rgba(9,35,78,0) 40%,rgba(9,35,78,.18) 100%);}
-.va-scroll{position:relative;z-index:2;flex:1;min-height:100vh;min-height:100dvh;box-sizing:border-box;overflow-y:auto;display:flex;flex-direction:column;justify-content:flex-end;padding:0 13px calc(13px + env(safe-area-inset-bottom));}
-.va-pane{width:100%;max-width:480px;margin:0 auto;}
-.va-card{box-sizing:border-box;padding:31px 21.5px 23px;border:1px solid rgba(255,255,255,.6);border-radius:28px;color:#18243a;
-  background:linear-gradient(180deg,rgba(255,255,255,calc(var(--auth-card-opacity,.78) * .3)) 0%,rgba(255,255,255,calc(var(--auth-card-opacity,.78) * .62)) 45%,rgba(255,255,255,.94) 100%);
-  -webkit-backdrop-filter:blur(var(--auth-card-blur,18px)) saturate(1.12);backdrop-filter:blur(var(--auth-card-blur,18px)) saturate(1.12);box-shadow:0 18px 46px rgba(4,20,49,.25);}
-.va-card h1{margin:0 0 21px;font-size:25px;line-height:30px;font-weight:700;color:#111827;}
-#loginPane .va-card h1{margin-bottom:23.4px;}
-#loginPane .va-btn{margin-top:19.8px;}
-#loginPane .va-link{margin-top:21.4px;}
-.va-f{display:flex;align-items:center;height:46px;padding-top:13px;border-bottom:1.5px solid rgba(23,57,184,.4);}
-.va-f:focus-within{border-bottom-color:#1739b8;}
-/* Chrome paints a pale sheet over a field it fills or previews from a saved login. Keep the field see-through: the sheet's colour is held back
-   for effectively ever (the standard transition trick) and the typed text keeps its own colour. */
+/* ── Login / Sign Up: measured from the owner's Mint screenshots (360 px phone, 2x) ── */
+.ma-screen{position:relative;min-height:100vh;min-height:100dvh;background:#fefefc;}
+.ma-scroll{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;display:flex;flex-direction:column;
+  scrollbar-width:thin;scrollbar-color:#02a552 transparent;}
+.ma-scroll::-webkit-scrollbar{width:4px;}
+.ma-scroll::-webkit-scrollbar-track{background:transparent;}
+.ma-scroll::-webkit-scrollbar-thumb{background:#02a552;border-radius:2px;}
+.ma-tabs{flex:0 0 auto;display:flex;align-items:flex-end;gap:15.5px;height:48.5px;padding:0 0 0 11.5px;background:#fefefc;border-bottom:1px solid #d6eadc;box-sizing:border-box;}
+.ma-tabs button{position:relative;height:100%;padding:0 0 12px;border:0;background:transparent;font:700 12px/1 'Noto Serif',Georgia,'DejaVu Serif',serif;letter-spacing:.07em;text-transform:uppercase;color:#9a9ea5;cursor:pointer;}
+.ma-tabs button span{display:inline-block;padding-top:13px;}
+.ma-tabs button.on{color:#0e5d39;}
+.ma-tabs button.on::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px;background:#f8c63f;}
+.ma-hero{position:relative;flex:0 0 auto;height:233px;margin-bottom:-30px;overflow:hidden;background:linear-gradient(145deg,#0a7a43 0%,#0b9a52 55%,#0a6b3b 100%);}
+.ma-hero .auth-bg{position:absolute;inset:0;background-image:var(--auth-hero-img,none);background-size:cover;background-position:center;opacity:var(--auth-hero-op,1);filter:blur(var(--auth-hero-blur,0px));transform:scale(1.04);}
+.ma-hero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:100px;pointer-events:none;background:linear-gradient(to bottom,rgba(254,254,252,0) 0%,rgba(254,254,252,.55) 45%,#fefefc 100%);}
+.ma-card{position:relative;z-index:1;flex:1 0 auto;box-sizing:border-box;padding:28.5px 23px 26px;background:#fefefc;border:1px solid #d9ebe0;border-bottom:0;border-radius:30px 30px 0 0;}
+.ma-logo{width:66px;height:66px;margin:0 auto 20.5px;box-sizing:border-box;border-radius:50%;border:3px solid #fbc926;background:#fff;box-shadow:0 5px 16px rgba(34,160,90,.18);padding:2px;}
+.ma-logo-img{display:block;width:100%;height:100%;border-radius:50%;background-size:cover;background-position:center;background-repeat:no-repeat;background-color:#fff;}
+#registerPane{margin-top:-2px;}
+.ma-f{position:relative;display:flex;align-items:center;height:40px;margin:0 0 15px;box-sizing:border-box;border:1px solid #d3e4da;border-radius:16px;background:#fff;}
+#registerPane .ma-f{margin-bottom:13px;}
+.ma-f:focus-within{border-color:#02a552;box-shadow:0 0 0 2px rgba(2,165,82,.12);}
+.ma-f input{flex:1;min-width:0;height:100%;padding:0;border:0;background:transparent;outline:0;font:400 14px/1 Roboto,'Segoe UI',system-ui,sans-serif;color:#151515;}
+.ma-f input::placeholder{color:#9a9da4;opacity:1;}
+.ma-pre{flex:0 0 auto;margin-left:12px;font:500 13px/1 Roboto,system-ui,sans-serif;color:#59655b;}
+.ma-div{flex:0 0 1px;width:1px;height:13px;margin:0 13px 0 2px;background:#8f9490;}
+.ma-ic{flex:0 0 13px;width:13px;height:13px;margin:0 11px 0 14px;display:flex;}
+.ma-ic svg{width:13px;height:13px;display:block;}
+.ma-eye{flex:0 0 13px;width:13px;height:13px;margin:0 37.5px 0 0;padding:0;border:0;background:transparent;display:flex;cursor:pointer;}
+.ma-eye svg{width:13px;height:13px;display:block;}
+.ma-ref input{color:#f0d44a;}
+.ma-ref input::placeholder{color:#9a9da4;}
+.ma-cap{display:flex;gap:12px;align-items:flex-start;margin:0 0 15px;}
+.ma-capf{flex:1;min-width:0;margin:0!important;}
+.ma-capf input{padding:0 0 0 14px;letter-spacing:1.95px;}
+.ma-capf input::placeholder{letter-spacing:1.95px;}
+.ma-capimg{flex:0 0 113px;width:113px;height:42px;margin:-1px 0 0;padding:0;border:1px solid #cde3d3;border-radius:7px;background:#e9f5ec;overflow:hidden;cursor:pointer;display:block;}
+.ma-capimg img{display:block;width:100%;height:100%;object-fit:fill;}
+.ma-rem{display:flex;align-items:center;gap:6px;margin:0 0 20px;font:400 12.2px/1 Roboto,system-ui,sans-serif;color:#5b635b;cursor:pointer;}
+.ma-rem input{appearance:none;-webkit-appearance:none;width:17px;height:17px;margin:0;border:1.5px solid #9fa1ad;border-radius:4px;background:#fff;display:grid;place-content:center;flex:0 0 17px;}
+.ma-rem input:checked{background:#02a552;border-color:#02a552;}
+.ma-rem input:checked::after{content:'';width:8px;height:4px;border:2px solid #fff;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px);}
+.ma-btn{display:block;width:100%;height:44px;margin:0;border:0;border-radius:12px;background:linear-gradient(125deg,#03a652 0%,#028946 52%,#056b39 100%);color:#fff;font:700 15px/1 Roboto,'Segoe UI',system-ui,sans-serif;}
+.ma-btn:disabled{opacity:.65;}
+.ma-btn:active:not(:disabled){transform:scale(.99);}
+/* Chrome paints a pale sheet over a field it fills or previews from a saved login. Keep the field white and the typed text its own colour. */
 input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus,input:-webkit-autofill:active,input:autofill{
-  -webkit-text-fill-color:#17243a;caret-color:#17243a;-webkit-box-shadow:0 0 0 0 transparent inset;box-shadow:0 0 0 0 transparent inset;
+  -webkit-text-fill-color:#151515;caret-color:#151515;-webkit-box-shadow:0 0 0 0 transparent inset;box-shadow:0 0 0 0 transparent inset;
   transition:background-color 600000s 0s,color 600000s 0s;}
-.va-f input:-webkit-autofill{background-color:transparent!important;background-clip:content-box;}
-.va-f input{flex:1;min-width:0;border:0;background:transparent;outline:0;font:inherit;font-size:14px;color:#17243a;padding:0;height:30px;}
-.va-f input::placeholder{color:#7a8699;opacity:1;}
-#registerPane .va-card h1{margin-bottom:16px;}
-#registerPane .va-btn{margin-top:15px;}
-#loginPane .va-f+.va-f{height:48.5px;}
-#loginPane .va-rem{margin-top:15px;}
-.va-pre{flex:0 0 auto;margin-left:13px;padding-right:2.7px;font-size:12.8px;font-weight:500;color:#526a88;border-right:1.5px solid rgba(23,57,184,.4);height:15px;line-height:15px;margin-right:13.5px;}
-.va-ic{flex:0 0 14px;width:14px;height:16px;margin:0 11px 0 15px;display:flex;align-items:center;justify-content:center;color:#6f87ad;}
-.va-ic svg{height:16px;width:auto;}
-.va-ic.va-gift{color:#e4b72f;}
-.va-ic.va-gift svg{width:14px;height:14px;}
-.va-rem{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:12px;color:#58627a;cursor:pointer;}
-.va-rem input{appearance:none;-webkit-appearance:none;width:17px;height:17px;margin:0;border:1.5px solid #9aa6bd;border-radius:4px;background:rgba(255,255,255,.5);display:grid;place-content:center;flex:0 0 17px;}
-.va-rem input:checked{background:var(--v-blue,#1739b8);border-color:var(--v-blue,#1739b8);}
-.va-rem input:checked::after{content:'';width:8px;height:4px;border:2px solid #fff;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px);}
-.va-btn{display:block;width:100%;height:43.7px;margin-top:21px;border:0;border-radius:10px;background:linear-gradient(135deg,#2448cc 0%,#1739b8 45%,#0e2a8e 100%);color:#fff;font:inherit;font-size:15px;font-weight:700;box-shadow:0 8px 18px rgba(23,57,184,.25);}
-.va-btn:disabled{opacity:.65;}
-.va-btn:active:not(:disabled){transform:scale(.99);}
-.va-link{margin:19px 0 0;text-align:center;font-size:12px;line-height:20px;color:#58627a;}
-.va-link a{color:#1739b8;font-weight:700;text-decoration:none;}
+.ma-f input:-webkit-autofill{background-color:transparent!important;background-clip:content-box;}
 /* V2-END */
 </style>
 <script data-mint-idle>
@@ -2081,57 +2090,62 @@ window.createMintIdleSession = function(key, onExpire, onActivity){
 
 <!-- ═══════════ AUTH ═══════════ -->
 <div id="authScreen" style="display:none;">
-  <!-- Login and Sign Up, built from the owner's two screenshots: the
-       admin-uploaded photo fills the screen (slot "authhero"), one frosted
-       card sits at the bottom with 13px margins, underlined fields, bottle
-       icons, no logo, no password eye, no reset link. -->
-  <div class="va-screen" id="authHero">
-    <span class="auth-bg" id="authHeroBg" aria-hidden="true"></span>
-    <div class="va-scroll">
-      <div id="loginPane" class="va-pane">
-        <section class="va-card" aria-labelledby="loginHeading">
-          <h1 id="loginHeading">Login</h1>
-          <div class="va-f">
-            <span class="va-pre" id="loginDial">+256</span>
+  <!-- Login and Sign Up, built from the owner's Mint screenshots: a tab bar (LOGIN / SIGN UP, serif capitals, yellow underline), the admin-uploaded
+       banner ("authhero") fading into a rounded off-white card, the round logo with a yellow ring ("authlogo", admin-uploaded), rounded white fields
+       with small green icons, a green scroll bar, a four-digit captcha picture and green gradient buttons. +256 and UGX. -->
+  <div class="ma-screen" id="authHero">
+    <div class="ma-scroll" id="authScroll">
+      <nav class="ma-tabs" role="tablist" aria-label="Account">
+        <button type="button" id="tabLogin" class="on" role="tab" onclick="showAuthTab('login')"><span>Login</span></button>
+        <button type="button" id="tabRegister" role="tab" onclick="showAuthTab('register')"><span>Sign Up</span></button>
+      </nav>
+      <div class="ma-hero"><span class="auth-bg" id="authHeroBg" aria-hidden="true"></span></div>
+      <section class="ma-card">
+        <div class="ma-logo" id="authLogo" aria-hidden="true"><span class="ma-logo-img" id="authLogoImg"></span></div>
+        <div id="loginPane" class="va-pane" aria-label="Login">
+          <div class="ma-f">
+            <span class="ma-pre" id="loginDial">+256</span><i class="ma-div" aria-hidden="true"></i>
             <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
           </div>
-          <div class="va-f">
-            <span class="va-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/></svg></span>
-            <input id="loginPassword" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Enter password" autocomplete="current-password">
+          <div class="ma-f">
+            <span class="ma-ic"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#039447"/><path d="M4.9 6.3V4.9a2.1 2.1 0 0 1 4.2 0v1.4" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/><rect x="3.8" y="6.2" width="6.4" height="4.6" rx="1.1" fill="#fff"/><circle cx="7" cy="8.3" r=".8" fill="#039447"/><rect x="6.65" y="8.5" width=".7" height="1.3" rx=".3" fill="#039447"/></svg></span>
+            <input id="loginPassword" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Enter password" autocomplete="current-password">
+            <button class="ma-eye" type="button" aria-label="Show password" onclick="toggleAuthEye(this)"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#039447"/><path d="M2 7c1.3-2.1 3-3.1 5-3.1S10.7 4.9 12 7c-1.3 2.1-3 3.1-5 3.1S3.3 9.1 2 7z" fill="#fff"/><circle cx="7" cy="7" r="2.1" fill="#f5d54a"/><circle cx="7" cy="7" r="1" fill="#8a6a12"/></svg></button>
           </div>
-          <label class="va-rem"><input type="checkbox" id="rememberMe"><span>Remember me</span></label>
-          <button class="va-btn" id="loginBtn" onclick="doLogin()">Log In</button>
-          <p class="va-link"><a href="#" onclick="showAuthTab('register');return false;">Sign Up</a></p>
-        </section>
-      </div>
-
-      <div id="registerPane" class="va-pane" style="display:none;">
-        <section class="va-card" aria-labelledby="registerHeading">
-          <h1 id="registerHeading">Sign Up</h1>
-          <div class="va-f">
-            <span class="va-pre" id="regDial">+256</span>
+          <label class="ma-rem"><input type="checkbox" id="rememberMe"><span>Remember me</span></label>
+          <button class="ma-btn" id="loginBtn" onclick="doLogin()">Log In</button>
+        </div>
+        <div id="registerPane" class="va-pane" style="display:none;" aria-label="Sign Up">
+          <div class="ma-f">
+            <span class="ma-pre" id="regDial">+256</span><i class="ma-div" aria-hidden="true"></i>
             <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
           </div>
-          <div class="va-f">
-            <span class="va-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/></svg></span>
-            <input id="regPassword" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Login Password (at least 10 characters)" autocomplete="new-password">
+          <div class="ma-f">
+            <span class="ma-ic"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#039447"/><path d="M4.9 6.3V4.9a2.1 2.1 0 0 1 4.2 0v1.4" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/><rect x="3.8" y="6.2" width="6.4" height="4.6" rx="1.1" fill="#fff"/><circle cx="7" cy="8.3" r=".8" fill="#039447"/><rect x="6.65" y="8.5" width=".7" height="1.3" rx=".3" fill="#039447"/></svg></span>
+            <input id="regPassword" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Login Password (at least 6 characters)" autocomplete="new-password">
+            <button class="ma-eye" type="button" aria-label="Show password" onclick="toggleAuthEye(this)"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#039447"/><path d="M2 7c1.3-2.1 3-3.1 5-3.1S10.7 4.9 12 7c-1.3 2.1-3 3.1-5 3.1S3.3 9.1 2 7z" fill="#fff"/><circle cx="7" cy="7" r="2.1" fill="#f5d54a"/><circle cx="7" cy="7" r="1" fill="#8a6a12"/></svg></button>
           </div>
-          <div class="va-f">
-            <span class="va-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/></svg></span>
-            <input id="regPassword2" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Confirm Login Password" autocomplete="new-password">
+          <div class="ma-f">
+            <span class="ma-ic"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#039447"/><path d="M4.9 6.3V4.9a2.1 2.1 0 0 1 4.2 0v1.4" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/><rect x="3.8" y="6.2" width="6.4" height="4.6" rx="1.1" fill="#fff"/><circle cx="7" cy="8.3" r=".8" fill="#039447"/><rect x="6.65" y="8.5" width=".7" height="1.3" rx=".3" fill="#039447"/></svg></span>
+            <input id="regPassword2" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Confirm Login Password" autocomplete="new-password">
+            <button class="ma-eye" type="button" aria-label="Show password" onclick="toggleAuthEye(this)"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#039447"/><path d="M2 7c1.3-2.1 3-3.1 5-3.1S10.7 4.9 12 7c-1.3 2.1-3 3.1-5 3.1S3.3 9.1 2 7z" fill="#fff"/><circle cx="7" cy="7" r="2.1" fill="#f5d54a"/><circle cx="7" cy="7" r="1" fill="#8a6a12"/></svg></button>
           </div>
-          <div class="va-f">
-            <span class="va-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/></svg></span>
-            <input id="regTradePin" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="numeric" maxlength="6" placeholder="Trade Password (6 digits)" autocomplete="new-password">
+          <div class="ma-f">
+            <span class="ma-ic"><svg viewBox="0 0 14 14" aria-hidden="true"><defs><linearGradient id="maKeyG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f1c53f"/><stop offset="1" stop-color="#d8a01d"/></linearGradient></defs><rect width="14" height="14" rx="3" fill="url(#maKeyG)"/><circle cx="4.6" cy="6.6" r="1.5" fill="none" stroke="#fff" stroke-width="1"/><path d="M6.1 6.6h4.4M9 6.6v1.4M10.5 6.6v1.2" fill="none" stroke="#fff" stroke-width="1" stroke-linecap="round"/></svg></span>
+            <input id="regTradePin" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="numeric" maxlength="6" placeholder="Trade Password (6 digits)" autocomplete="new-password">
+            <button class="ma-eye" type="button" aria-label="Show password" onclick="toggleAuthEye(this)"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#039447"/><path d="M2 7c1.3-2.1 3-3.1 5-3.1S10.7 4.9 12 7c-1.3 2.1-3 3.1-5 3.1S3.3 9.1 2 7z" fill="#fff"/><circle cx="7" cy="7" r="2.1" fill="#f5d54a"/><circle cx="7" cy="7" r="1" fill="#8a6a12"/></svg></button>
           </div>
-          <div class="va-f">
-            <span class="va-ic va-gift"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="9" width="18" height="12" rx="1.5"/><path d="M2 6h20v3H2zM12 6v15M12 6c-1.3 0-4.5-.2-4.5-2.2 0-2.3 4.5-1.8 4.5 2.2Zm0 0c1.3 0 4.5-.2 4.5-2.2C16.5 1.5 12 2 12 6Z"/></svg></span>
+          <div class="ma-f ma-ref">
+            <span class="ma-ic"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#f5e8c4"/><rect x="3" y="6" width="8" height="5.2" rx=".8" fill="none" stroke="#a9dbc3" stroke-width="1"/><rect x="2.6" y="4.6" width="8.8" height="1.9" rx=".6" fill="none" stroke="#a9dbc3" stroke-width="1"/><path d="M7 4.6v6.6M7 4.6C6 3 4.4 3.1 4.7 4.2 5 5 6.4 4.8 7 4.6c.6.2 2 .4 2.3-.4.3-1.1-1.3-1.2-2.3.4z" fill="none" stroke="#a9dbc3" stroke-width="1" stroke-linejoin="round"/></svg></span>
             <input id="regReferral" type="text" placeholder="Invitation Code" autocomplete="off" maxlength="12">
           </div>
-          <button class="va-btn" id="regBtn" onclick="doRegister()">Sign Up</button>
-          <p class="va-link">Already have an account? <a href="#" onclick="showAuthTab('login');return false;">Log In</a></p>
-        </section>
-      </div>
+          <div class="ma-cap">
+            <div class="ma-f ma-capf"><input id="regCaptcha" type="text" inputmode="numeric" maxlength="4" placeholder="Enter captcha code" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+            <button class="ma-capimg" id="regCaptchaBtn" type="button" aria-label="New captcha picture" onclick="loadAuthCaptcha()"><img id="regCaptchaImg" alt="" width="113" height="42"></button>
+          </div>
+          <button class="ma-btn" id="regBtn" onclick="doRegister()">Sign Up</button>
+        </div>
+      </section>
     </div>
   </div>
 </div>
@@ -2254,7 +2268,7 @@ window.createMintIdleSession = function(key, onExpire, onActivity){
   const wipe = () => { try { keep().removeItem(KEY); } catch (_) {} try { sessionStorage.removeItem(KEY); } catch (_) {} };
   const CODES = {
     INVALID_CREDENTIAL: 'auth/invalid-credential', TOO_MANY_ATTEMPTS: 'auth/too-many-requests', TOO_MANY_REQUESTS: 'auth/too-many-requests',
-    PHONE_IN_USE: 'auth/email-already-in-use', WEAK_PASSWORD: 'auth/weak-password', COMMON_PASSWORD: 'auth/common-password', INVALID_PHONE: 'auth/invalid-email',
+    PHONE_IN_USE: 'auth/email-already-in-use', WEAK_PASSWORD: 'auth/weak-password', BAD_CAPTCHA: 'auth/bad-captcha', CAPTCHA_REQUIRED: 'auth/bad-captcha', INVALID_PHONE: 'auth/invalid-email',
   };
   async function call(path, body, token) {
     let resp, data;
@@ -2286,7 +2300,7 @@ window.createMintIdleSession = function(key, onExpire, onActivity){
     const s = { token: data.token, uid: data.uid, authTime: data.authTime, expiresAt: data.expiresAt, email };
     write(s); const u = makeUser(s); announce(u); return { user: u };
   };
-  window.fbCreateUser = async (email, pass) => open(await call('/auth/signup', { phone: phoneOf(email), password: pass }), email);
+  window.fbCreateUser = async (email, pass, cap) => open(await call('/auth/signup', { phone: phoneOf(email), password: pass, captchaId: cap && cap.id, captchaCode: cap && cap.code }), email);
   window.fbSignIn     = async (email, pass) => open(await call('/auth/login', { phone: phoneOf(email), password: pass }), email);
   window.fbSignOut    = async () => { wipe(); announce(null); };
   window.fbAuth       = auth;

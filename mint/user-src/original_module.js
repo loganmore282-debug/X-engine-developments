@@ -1374,8 +1374,32 @@ function cleanPhone(raw){
 function showAuthTab(tab){
   $('loginPane').style.display = tab === 'login' ? '' : 'none';
   $('registerPane').style.display = tab === 'register' ? '' : 'none';
+  const tl = $('tabLogin'), tr = $('tabRegister');
+  if (tl) { tl.classList.toggle('on', tab === 'login'); tl.setAttribute('aria-selected', tab === 'login' ? 'true' : 'false'); }
+  if (tr) { tr.classList.toggle('on', tab === 'register'); tr.setAttribute('aria-selected', tab === 'register' ? 'true' : 'false'); }
+  const sc = $('authScroll'); if (sc) sc.scrollTop = 0;
+  if (tab === 'register' && !STATE.captchaId) loadAuthCaptcha();
   stopSmsCodeListener();
 }
+// The eye on a password box: shows what was typed, and hides it again.
+window.toggleAuthEye = function(btn){
+  const box = btn && btn.closest('.ma-f'), input = box && box.querySelector('input');
+  if (!input) return;
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+};
+// The sign-up captcha: a four-digit picture made by the server (the answer never reaches the phone). Tapping the picture asks for a new one; a picture
+// is used up by the answer sent with it, so the app asks for a new one after every sign-up attempt.
+window.loadAuthCaptcha = async function(){
+  const img = $('regCaptchaImg'), box = $('regCaptcha');
+  STATE.captchaId = '';
+  if (box) box.value = '';
+  let r = null;
+  try { r = await api('/auth/captcha'); } catch (_) {}
+  if (r && r.status === 'success' && r.id && r.image) { STATE.captchaId = r.id; if (img) img.src = r.image; }
+  else if (img) img.removeAttribute('src');
+};
 // Owner: "on login it should not say please wait, it should say logging
 // in... so everywhere saying please wait... it should be removed."
 //
@@ -1396,8 +1420,8 @@ function fbErrMsg(e){
   if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') return 'Incorrect phone number or password.';
   if (code === 'auth/user-not-found') return 'No account found for that number.';
   if (code === 'auth/email-already-in-use') return 'An account with that number already exists.';
-  if (code === 'auth/weak-password') return 'Password must be at least 10 characters.';
-  if (code === 'auth/common-password') return 'That password is too easy to guess. Choose a different one, for example a few letters and numbers that only you know.';
+  if (code === 'auth/weak-password') return 'Password must be at least 6 characters.';
+  if (code === 'auth/bad-captcha') return (e && e.message) || 'The captcha code is wrong. Please try again.';
   if (code === 'auth/too-many-requests') return 'Too many attempts. Try again shortly.';
   // A weak connection is the commonest real failure here, and without these
   // the member was shown Firebase's own developer text, e.g.
@@ -1547,7 +1571,7 @@ window.doRegister = async function(){
   // Mint makes it REQUIRED (Snow allowed skipping it) -- see CLAUDE.md.
   const referral = $('regReferral').value.trim();
   if (!phone) return regError('Enter a valid ' + regionName() + ' mobile number.');
-  if (!pass || pass.length < 10) return regError('Password must be at least 10 characters.');
+  if (!pass || pass.length < 6) return regError('Password must be at least 6 characters.');
   if (pass !== pass2) return regError('The two passwords do not match.');
   if (!/^\d{6}$/.test(tradePin)) return regError('Trade Password must be exactly 6 digits.');
   // Required or not is the SERVER's call (settings.referralRequired), which
@@ -1557,6 +1581,10 @@ window.doRegister = async function(){
   // sign up to at all on day one.
   if (!referral && referralIsRequired())
     return regError('A referral code is required to sign up. Ask the person who invited you for theirs.');
+  const captchaCode = (($('regCaptcha') || {}).value || '').trim();
+  if (!captchaCode) return regError('Enter the captcha code.');
+  if (!STATE.captchaId) { await loadAuthCaptcha(); return regError('Enter the code shown in the new picture.'); }
+  const captchaAnswer = { id: STATE.captchaId, code: captchaCode };
   regError('');
   // See firebaseReady(): without the sign-in service there is nothing to
   // create the account with, and the code below would only throw at the member.
@@ -1572,7 +1600,8 @@ window.doRegister = async function(){
   window._pendingRegPhone = phone;
   try {
     const email = phoneToEmail(phone);
-    await window.fbCreateUser(email, pass);
+    STATE.captchaId = '';          // the picture is used up by this attempt, whatever the answer
+    await window.fbCreateUser(email, pass, captchaAnswer);
     storeCredentialIfPossible(email, pass, phone);
   }
   catch (e) {
@@ -1619,6 +1648,7 @@ window.doRegister = async function(){
     window._pendingRegPin = ''; window._pendingRegPhone = '';
     regError(fbErrMsg(e));
     setBtnLoading('regBtn', false, 'Sign Up');
+    loadAuthCaptcha();
   }
 };
 // ── FORGOT PASSWORD: phone -> OTP -> new password, one screen ──
@@ -1893,6 +1923,8 @@ function applyBootArtwork(ai, ci){
   // The Login / Sign Up backdrop (single full-bleed photo -- see
   // applyAuthBackgrounds()'s own comment on why there is only one now).
   STATE.authHeroImage = (ci.status === 'success' && ci.authhero) ? ci.authhero : null;
+  STATE.authLogoImage = (ci.status === 'success' && ci.authlogo) ? ci.authlogo : null;
+  applyAuthLogo();
   applyAuthTagline();
   applyAuthBackgrounds();
   // Repaint Home for the banner and animated profile artwork. The brand-logo
@@ -2012,6 +2044,12 @@ function applyInnerBackgroundSettings(){
   const bl = Number(s.innerBgBlur);
   root.style.setProperty('--inner-bg-opacity', String(Number.isFinite(op) ? Math.min(100, Math.max(0, op)) / 100 : 1));
   root.style.setProperty('--inner-bg-blur', (Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0) + 'px');
+}
+// The round picture above the Log In / Sign Up forms: the admin's circle logo, else the app logo, else an empty white circle.
+function applyAuthLogo(){
+  const el = $('authLogoImg'); if (!el) return;
+  const img = STATE.authLogoImage || STATE.brandLogo || '';
+  el.style.backgroundImage = img ? 'url("' + String(img).replace(/"/g, '\\"') + '")' : 'none';
 }
 function applyAuthTagline(){
   const el = $('authTagline');

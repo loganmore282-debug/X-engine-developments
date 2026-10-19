@@ -1,7 +1,7 @@
 const sessionPolicy = require('./session-policy');
 const { createFailGuard } = require('./security-guard');
 const totp = require('./totp');
-const { weakPasswordReason, WEAK_PASSWORD_MESSAGE } = require('./weak-passwords');
+const captcha = require('./captcha');
 const express     = require('express');
 const admin       = require('firebase-admin');
 const cors        = require('cors');
@@ -950,7 +950,7 @@ async function getHelpBanner() {
 // no longer its own screen with a backdrop; Account's new Download App row
 // (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
 // prompt directly, in user-src/original_module.js -- see its own comment.
-const MINT_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner', 'profilelogo', 'loaderbg'];
+const MINT_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'checkinbanner', 'profilelogo', 'loaderbg'];
 const _mintImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getMintImage(slot) {
@@ -3785,12 +3785,12 @@ app.get('/public/loader-image', async (req, res) => {
 // Mint artwork needed by the current member surfaces, fetched together.
 app.get('/public/mint-images', async (req, res) => {
   try {
-    const [logo, authhero, banner2, banner3, checkinbanner, profilelogo] = await Promise.all([
+    const [logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo] = await Promise.all([
       getMintImage('logo'),
-      getMintImage('authhero'), getMintImage('banner2'),
+      getMintImage('authhero'), getMintImage('authlogo'), getMintImage('banner2'),
       getMintImage('banner3'), getMintImage('checkinbanner'), getMintImage('profilelogo'),
     ]);
-    publicJson(req, res, { status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo }, IMAGE_CACHE);
+    publicJson(req, res, { status: 'success', logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -6659,7 +6659,8 @@ app.post('/admin/login', async (req, res) => {
 // stored or logged. Sessions are in `memberSessions` (see session-policy.js).
 const LOGIN_MAX_FAILS = 6;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
-const MEMBER_PASSWORD_MIN = 10, MEMBER_PASSWORD_MAX = 128;
+const MEMBER_PASSWORD_MIN = 6, MEMBER_PASSWORD_MAX = 128;
+function passwordLengthMessage(p) { return String(p).length > MEMBER_PASSWORD_MAX ? `Password must be at most ${MEMBER_PASSWORD_MAX} characters.` : `Password must be at least ${MEMBER_PASSWORD_MIN} characters.`; }
 const DUMMY_MEMBER_HASH = scryptHash(crypto.randomBytes(24).toString('hex'));
 const memberAccountId = phone => 'p' + String(phone).replace(/\D/g, '');
 const newMemberUid = () => crypto.randomBytes(12).toString('hex');
@@ -6700,14 +6701,25 @@ const memberAuthLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 60, standard
 const memberSignupLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 150, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Please wait a few minutes and try again.' } });
 const sessionReply = (res, uid, sess) => res.json({ status: 'success', token: sess.token, uid, authTime: sess.authTime, expiresAt: sess.expiresAt });
+// The sign-up captcha picture (see captcha.js). Cheap to make, so it has its own generous limit; the answer never leaves the server.
+const memberCaptchaLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Please wait a few minutes and try again.' } });
+app.get('/auth/captcha', memberCaptchaLimiter, (req, res) => {
+  const c = captcha.issue();
+  res.set('Cache-Control', 'no-store');
+  res.json({ status: 'success', id: c.id, image: c.image });
+});
 app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
   try {
+    // The captcha is checked first, and its picture is used up by this answer whatever happens next.
+    if (!textOf(req.body.captchaCode).trim()) return res.status(400).json({ status: 'error', code: 'CAPTCHA_REQUIRED', message: 'Enter the captcha code.' });
+    if (!captcha.verify(textOf(req.body.captchaId), textOf(req.body.captchaCode)))
+      return res.status(400).json({ status: 'error', code: 'BAD_CAPTCHA', message: 'The captcha code is wrong. Please try again.' });
     const phone = cleanPhone(textOf(req.body.phone));
     if (!phone) return res.status(400).json({ status: 'error', code: 'INVALID_PHONE', message: badPhoneMessage() });
     const password = tidyPassword(passwordOf(req.body.password));
     if (password.length < MEMBER_PASSWORD_MIN || password.length > MEMBER_PASSWORD_MAX)
-      return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: `Password must be ${MEMBER_PASSWORD_MIN} to ${MEMBER_PASSWORD_MAX} characters.` });
-    if (weakPasswordReason(password, phone)) return res.status(400).json({ status: 'error', code: 'COMMON_PASSWORD', message: WEAK_PASSWORD_MESSAGE });
+      return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: passwordLengthMessage(password) });
     const uid = newMemberUid();
     const created = await db.collection('authAccounts').doc(memberAccountId(phone)).createIfAbsent({
       uid, phone, passwordHash: await scryptHashAsync(password), failCount: 0, createdAt: FieldValue.serverTimestamp()
@@ -6771,10 +6783,9 @@ app.post('/auth/password/change', memberAuthLimiter, async (req, res) => {
     if (!decoded) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
     const oldPassword = passwordOf(req.body.oldPassword), newPassword = tidyPassword(passwordOf(req.body.newPassword));
     if (newPassword.length < MEMBER_PASSWORD_MIN || newPassword.length > MEMBER_PASSWORD_MAX)
-      return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: `Password must be ${MEMBER_PASSWORD_MIN} to ${MEMBER_PASSWORD_MAX} characters.` });
+      return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: passwordLengthMessage(newPassword) });
     const acct = await findAccountByUid(decoded.uid);
     if (!acct) return res.status(404).json({ status: 'error', message: 'Account not found' });
-    if (weakPasswordReason(newPassword, acct.phone)) return res.status(400).json({ status: 'error', code: 'COMMON_PASSWORD', message: WEAK_PASSWORD_MESSAGE });
     if (acct.lockedUntil && tsMillis(acct.lockedUntil) > Date.now())
       return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', message: 'Too many wrong attempts. Try again in a few minutes.' });
     let oldOk = await scryptVerifyAsync(oldPassword, acct.passwordHash);
@@ -7132,12 +7143,12 @@ app.post('/admin/settings/update', async (req, res) => {
 app.get('/admin/mint-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [logo, authhero, banner2, banner3, checkinbanner, profilelogo, loaderbg] = await Promise.all([
+    const [logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo, loaderbg] = await Promise.all([
       getMintImage('logo'),
-      getMintImage('authhero'), getMintImage('banner2'),
+      getMintImage('authhero'), getMintImage('authlogo'), getMintImage('banner2'),
       getMintImage('banner3'), getMintImage('checkinbanner'), getMintImage('profilelogo'), getMintImage('loaderbg'),
     ]);
-    res.json({ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, loaderbg });
+    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo, loaderbg });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/mint-image/set', async (req, res) => {
