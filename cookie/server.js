@@ -2949,25 +2949,34 @@ async function _settleDueInvestmentNow(doc) {
       const willComplete = newMade >= fTotal;
       const fExpected = Number(f.expectedReturn) || 0;
       const fPaidOut = Number(f.paidOut) || 0;
+      // LOCKED EARNINGS: a product bought under the locked rule (earningsLocked) still counts its cashback every 24 hours, but the money stays in
+      // `lockedAmount` and is only released into the wallet on the last day, in one credit. The one exception is a member's first purchase
+      // (firstCashbackFree): its first day is paid at once. `paidOut` is what has really reached the wallet; paidOut + lockedAmount is what has
+      // been earned so far. A product without earningsLocked (bought before this rule) pays every day as it always did.
+      const isLocked = f.earningsLocked === true;
+      const fLocked = isLocked ? Math.max(0, Number(f.lockedAmount) || 0) : 0;
       const target = Math.round(fExpected * newMade / fTotal);
-      const amount = Math.max(0, target - fPaidOut);
+      const amount = Math.max(0, target - fPaidOut - fLocked);
       // (amount can be 0 for a tiny payout: the day still counts, so the cursor moves on below without a credit.)
+      const keep = isLocked && !willComplete && !(f.firstCashbackFree === true && newMade === 1);
+      const credit = keep ? 0 : (isLocked && willComplete ? amount + fLocked : amount);
       // Credit first with a deterministic per-investment payout token in the
       // same atomic user-document update. If the process stops after the
       // wallet write but before the investment cursor advances, the active
       // investment is retried and this token prevents a second credit. The
       // reverse order can permanently lose a maturity payout: the investment
       // becomes `matured` before the wallet write, so the active-only sweep
-      // never sees it after a crash.
+      // never sees it after a crash. (A locked day writes nothing to the
+      // wallet: its single investment update is atomic by itself.)
       const payoutKey = `${doc.id}:${newMade}`;
       let payoutBlocked = false;
       await withLock('bal:' + f.userId, async () => {
-        if (amount > 0) {
+        if (credit > 0) {
           const userRef = db.collection('users').doc(f.userId);
           const applied = await userRef.updateIf(
             { creditedPayoutKeys: { $ne: payoutKey }, status: { $ne: 'banned' } },
             {
-              walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount),
+              walletBalance: FieldValue.increment(credit), totalEarned: FieldValue.increment(credit),
               creditedPayoutKeys: FieldValue.arrayUnion(payoutKey)
             }
           );
@@ -2981,8 +2990,8 @@ async function _settleDueInvestmentNow(doc) {
           }
           const { date, time } = nowStr();
           await db.collection('transactions').doc(`cashback:${payoutKey}`).createIfAbsent({
-            userId: f.userId, statementId: newStatementId(), type: 'cashback', description: `${f.tierLabel} daily cashback`,
-            amount, status: 'success', date, time, investmentId: doc.id, createdAt: FieldValue.serverTimestamp()
+            userId: f.userId, statementId: newStatementId(), type: 'cashback', description: `${f.tierLabel} ${isLocked && willComplete ? 'cashback released' : 'daily cashback'}`,
+            amount: credit, status: 'success', date, time, investmentId: doc.id, createdAt: FieldValue.serverTimestamp()
           });
         }
         // Keep this inside bal:<userId> too: recountAllTotals() re-reads its
@@ -2990,11 +2999,14 @@ async function _settleDueInvestmentNow(doc) {
         // between the wallet increment and this deterministic transaction row.
         // Advancing the cursor comes only after both are durable.
         const createdMs = tsMillis(f.createdAt);
-        await doc.ref.update({
-          payoutsMade: newMade, paidOut: FieldValue.increment(amount),
+        const patch = {
+          payoutsMade: newMade, paidOut: FieldValue.increment(credit),
           status: willComplete ? 'matured' : 'active',
           nextPayoutAt: willComplete || !createdMs ? null : new Date(payoutDueAtMs(createdMs, newMade + 1, fFirstAt)),
-        });
+        };
+        if (keep) patch.lockedAmount = FieldValue.increment(amount);
+        else if (isLocked && willComplete) patch.lockedAmount = 0;
+        await doc.ref.update(patch);
       });
       if (payoutBlocked) return;
       paid = true;
@@ -3022,9 +3034,9 @@ async function settleAllForUser(userId) {
   await Promise.all(snap.docs.map(doc => settleInvestmentIfDue(doc).catch(e => console.error('Settle error:', e.message))));
 }
 
-// ── REFERRAL COMMISSION (L1/L2/L3, first purchase) ──
-// A member's referrers are paid once, when that member buys their FIRST product (a deposit pays nothing, and a product the
-// admin activates is not a purchase). The reward is a percentage of that product's price.
+// ── REFERRAL COMMISSION (L1/L2/L3, every purchase) ──
+// A member's referrers are paid on EVERY product that member buys (a deposit pays nothing, and a product the admin activates is not a
+// purchase). Each purchase pays once, as a percentage of that product's price.
 // Each wallet credit and its idempotency token are written atomically;
 // ledger and source markers are repaired on retry without paying twice.
 // Returns whether this call actually paid a NEW level (false for a no-op
@@ -3056,7 +3068,7 @@ async function _payReferralCommissionNow(investmentId, buyerId, amount, basis = 
       // retroactively paid, and provider success alone is not a wallet credit.
       if (source.commissionBasis !== 'deposit' || !source.walletCredited || !depositFullyCredited(source)) return false;
       amount = finiteMoney(source.amount);
-    } else if (source.commissionBasis === 'deposit' || source.isFirstInvestment !== true) {
+    } else if (source.commissionBasis !== 'investment' || source.granted === true) {
       await invRef.update({ commissionPending: false }); return paidAny;
     }
     const paidLevels = invSnap.data().commissionPaidLevels || [];
@@ -4462,7 +4474,8 @@ app.post('/invest/create', async (req, res) => {
       });
       if (!debited) { await intentRef.delete().catch(() => {}); throw new Error('Could not complete the purchase. Please try again.'); }
       const { date, time } = nowStr();
-      // First cashback: at once on the member's first purchase, otherwise 24 hours from now; then every 24 hours.
+      // Cashback is counted every 24 hours but LOCKED until the product's days are over (see _settleDueInvestmentNow). The one exception is the
+      // member's first purchase: its first cashback is paid at once, and the rest of that product is locked like every other.
       const boughtAtMs = Date.now();
       cashbackNow = isFirstInvestment && sett.firstPurchaseCashbackNow !== false;
       const payoutFirstAt = new Date(cashbackNow ? boughtAtMs : boughtAtMs + 86400000);
@@ -4470,7 +4483,8 @@ app.post('/invest/create', async (req, res) => {
         await invRef.set({
           userId, tierKey: liveTier.key, tierLabel: liveTier.name, amount: liveTier.price, cycle, expectedReturn,
           status: 'active', payoutFirstAt, nextPayoutAt: payoutFirstAt, dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
-          isFirstInvestment, commissionBasis: 'investment', commissionPaidLevels: [], commissionPending: isFirstInvestment, category: 'income',
+          isFirstInvestment, commissionBasis: 'investment', commissionPaidLevels: [], commissionPending: true, category: 'income',
+          earningsLocked: true, lockedAmount: 0, firstCashbackFree: cashbackNow,
           date, time, createdAt: FieldValue.serverTimestamp()
         });
         // A fixed id (purchase:<investment id>), so the sweep below can write the same row if the server died after the investment but before this line.
@@ -4496,9 +4510,9 @@ app.post('/invest/create', async (req, res) => {
       }
       await intentRef.delete().catch(() => {});   // complete: the note is no longer needed (a leftover one is cleaned up by the reconciler)
     });
-    // The referral reward (Level 1 / 2 / 3) is paid now, on the member's first purchase. A failure here must never fail a purchase the
+    // The referral reward (Level 1 / 2 / 3) is paid now, on EVERY purchase the member makes. A failure here must never fail a purchase the
     // member has already paid for: the row stays pending and the 30 second reconciler pays it.
-    if (isFirstInvestment) await creditReferralCommission(invId, userId, liveTier.price).catch(e => console.error('First purchase commission error:', e.message));
+    await creditReferralCommission(invId, userId, liveTier.price).catch(e => console.error('First purchase commission error:', e.message));
     // A spin is a bonus, and failing to grant one must never fail a purchase the member
     // has already paid for.
     grantTurntableSpins(userId, liveTier, invId);
@@ -7677,7 +7691,7 @@ app.post('/admin/user/grant-asset', async (req, res) => {
         userId, tierKey: tier.key, tierLabel: tier.name, amount: price, cycle, expectedReturn,
         status: 'active', payoutFirstAt: new Date(Date.now() + 86400000), nextPayoutAt: new Date(Date.now() + 86400000), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
         isFirstInvestment: false, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
-        category: isTask ? 'wage' : 'income', granted: true, grantedBy: (req.adminUser && req.adminUser.username) || 'owner', requestId,
+        category: isTask ? 'wage' : 'income', earningsLocked: !isTask, lockedAmount: 0, firstCashbackFree: false, granted: true, grantedBy: (req.adminUser && req.adminUser.username) || 'owner', requestId,
         date, time, createdAt: FieldValue.serverTimestamp()
       });
       if (!created) { alreadyGiven = true; return; }
@@ -7916,10 +7930,11 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
     let commissionTriggered = false;
     const commissionUser = await db.collection('users').doc(userId).get();
     {
-      const invSnap = await db.collection('investments').where('userId', '==', userId).where('isFirstInvestment', '==', true).limit(1).get();
-      if (!invSnap.empty && invSnap.docs[0].data().commissionBasis !== 'deposit') {
-        const inv = invSnap.docs[0];
-        commissionTriggered = await creditReferralCommission(inv.id, userId, inv.data().amount);
+      // Every product the member has bought (an admin-given one is not a purchase) pays the new referrer, each once.
+      const invSnap = await db.collection('investments').where('userId', '==', userId).where('commissionBasis', '==', 'investment').get();
+      for (const inv of invSnap.docs) {
+        if (inv.data().granted === true) continue;
+        if (await creditReferralCommission(inv.id, userId, inv.data().amount)) commissionTriggered = true;
       }
     }
     logAdminAction(req, 'referrer_attached', { userId, referralCode: code, referrerId, commissionTriggered });
@@ -8739,6 +8754,21 @@ function analyticsContractDay(inv, start, end, now) {
   const target = n => Math.round(expected * n / total);
   // t[k-1] is the instant of the k-th payment (every local midnight).
   const t = payoutInstants(created0, total, tsMillis(inv.payoutFirstAt) || 0);
+  if (inv.earningsLocked === true) {
+    // Locked earnings: the only wallet payments are the free first day (a member's first purchase) and the release on the last day, which
+    // carries everything that was locked. The days in between move nothing, so they are neither scheduled money nor overdue.
+    const events = [];
+    const free = inv.firstCashbackFree === true && total > 1 ? target(1) : 0;
+    if (free > 0) events.push({ at: t[0], amount: free, paid: made >= 1 });
+    events.push({ at: t[total - 1], amount: expected - free, paid: inv.status !== 'active' });
+    const inRange = e => e.at >= start && e.at < end;
+    return {
+      scheduled: events.filter(inRange).reduce((a, e) => a + e.amount, 0),
+      unpaid: inv.status === 'active' ? events.filter(e => inRange(e) && !e.paid).reduce((a, e) => a + e.amount, 0) : 0,
+      overdue: inv.status === 'active' ? events.filter(e => !e.paid && e.at <= now).reduce((a, e) => a + e.amount, 0) : 0,
+      matures: t[total - 1] >= start && t[total - 1] < end,
+    };
+  }
   let first = 1, last = 0, due = 0;
   while (first <= total && t[first - 1] < start) first++;      // first payment at or after `start`
   last = first - 1;

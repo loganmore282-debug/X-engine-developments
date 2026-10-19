@@ -196,6 +196,64 @@ async function main(){
     const h=setup({users:{m:member()},investments:{i1:plan({payoutsTotal:7,expectedReturn:100000})},transactions:{}});
     NOW=eat('2027-01-01T00:00:00');await h.settle('i1');assert.equal(h.db.rows.users.m.walletBalance,100000);assert.equal(h.db.rows.investments.i1.paidOut,100000);
   }
-  console.log('PASS: settlement engine (exact totals, no double pay: concurrent, crash retry, catch-up, ban, removed; every midnight; wage products)');
+  {
+    // LOCKED EARNINGS: the days are still counted every 24 hours, but nothing reaches the wallet until the last day, which releases the whole total at once.
+    const bought=eat('2026-10-14T15:00:00');
+    const h=setup({users:{m:member()},investments:{i1:plan({earningsLocked:true,lockedAmount:0,firstCashbackFree:false,payoutFirstAt:new FakeDate(bought+DAY)})},transactions:{}});
+    for(let k=1;k<=7;k++){
+      NOW=bought+k*DAY;await Promise.all([h.settle('i1'),h.settle('i1')]);
+      const i=h.db.rows.investments.i1;
+      assert.equal(i.payoutsMade,k,'day '+k+' is counted');assert.equal(i.status,'active');
+      assert.equal(h.db.rows.users.m.walletBalance,0,'day '+k+': nothing reaches the wallet');assert.equal(h.db.rows.users.m.totalEarned,0);
+      assert.equal(i.paidOut,0,'paidOut is only what has really been paid');assert.equal(i.lockedAmount,Math.round(90000*k/8),'the earned amount is held as locked');
+      assert.equal(cashRows(h.db).length,0,'no ledger row for a locked day');
+      assert.equal(+new Date(i.nextPayoutAt),bought+(k+1)*DAY);
+    }
+    NOW=bought+8*DAY-1;await h.settle('i1');assert.equal(h.db.rows.investments.i1.payoutsMade,7,'one millisecond before the last day pays nothing');
+    NOW=bought+8*DAY;await Promise.all([h.settle('i1'),h.settle('i1')]);
+    assert.equal(h.db.rows.users.m.walletBalance,90000,'the last day releases everything, once');assert.equal(h.db.rows.users.m.totalEarned,90000);
+    const i=h.db.rows.investments.i1;assert.equal(i.status,'matured');assert.equal(i.paidOut,90000);assert.equal(i.lockedAmount,0);assert.equal(i.payoutsMade,8);
+    assert.equal(cashRows(h.db).length,1);assert.equal(cashRows(h.db)[0].amount,90000);assert.match(cashRows(h.db)[0].description,/cashback released/);
+    NOW=bought+60*DAY;await h.settle('i1');assert.equal(h.db.rows.users.m.walletBalance,90000,'a matured product never pays again');
+  }
+  {
+    // A member's FIRST purchase: its first day is paid at once, the other seven are locked and released with the last one.
+    const bought=eat('2026-10-14T15:00:00');
+    const h=setup({users:{m:member()},investments:{i1:plan({earningsLocked:true,lockedAmount:0,firstCashbackFree:true,payoutFirstAt:new FakeDate(bought)})},transactions:{}});
+    NOW=bought;await Promise.all([h.settle('i1'),h.settle('i1')]);
+    assert.equal(h.db.rows.users.m.walletBalance,11250,'the first day is paid at the moment of purchase');assert.equal(h.db.rows.investments.i1.paidOut,11250);assert.equal(h.db.rows.investments.i1.lockedAmount,0);
+    for(let k=1;k<=6;k++){NOW=bought+k*DAY;await h.settle('i1');assert.equal(h.db.rows.users.m.walletBalance,11250,'day '+(k+1)+' stays locked');}
+    assert.equal(h.db.rows.investments.i1.lockedAmount,Math.round(90000*7/8)-11250,'six more days are held');
+    NOW=bought+7*DAY;await h.settle('i1');
+    assert.equal(h.db.rows.users.m.walletBalance,90000,'the last day releases the rest: exactly the total');assert.equal(h.db.rows.investments.i1.status,'matured');
+    assert.equal(cashRows(h.db).length,2,'one row for the free first day, one for the release');assert.equal(cashRows(h.db).map(t=>t.amount).sort((a,b)=>a-b).join(),'11250,78750');
+  }
+  {
+    // Down for 20 days: the catch-up counts every locked day and releases once; a crash on the release day does not pay twice.
+    const bought=eat('2026-10-14T15:00:00');
+    const h=setup({users:{m:member()},investments:{i1:plan({earningsLocked:true,lockedAmount:0,firstCashbackFree:true,payoutFirstAt:new FakeDate(bought)})},transactions:{}});
+    NOW=bought+20*DAY;
+    h.db.faults.push((col,id,patch)=>col==='investments'&&id==='i1'&&patch.payoutsMade===8);
+    await assert.rejects(h.settle('i1'));
+    assert.equal(h.db.rows.users.m.walletBalance,90000,'the release reached the wallet once');
+    await h.settle('i1');await h.settle('i1');
+    assert.equal(h.db.rows.users.m.walletBalance,90000,'the retry only finishes the product, no second credit');assert.equal(h.db.rows.investments.i1.status,'matured');assert.equal(h.db.rows.investments.i1.paidOut,90000);assert.equal(h.db.rows.investments.i1.lockedAmount,0);
+    assert.equal(cashRows(h.db).length,2);
+  }
+  {
+    // A banned member's locked earnings stay locked; unbanned, the release happens once.
+    const bought=eat('2026-10-14T15:00:00');
+    const h=setup({users:{m:member({status:'banned'})},investments:{i1:plan({earningsLocked:true,lockedAmount:0,firstCashbackFree:false,payoutFirstAt:new FakeDate(bought+DAY)})},transactions:{}});
+    NOW=bought+30*DAY;await h.settle('i1');assert.equal(h.db.rows.users.m.walletBalance,0);assert.equal(h.db.rows.investments.i1.payoutsMade,0);
+    h.db.rows.users.m.status='active';await h.settle('i1');await h.settle('i1');
+    assert.equal(h.db.rows.users.m.walletBalance,90000);assert.equal(cashRows(h.db).length,1);
+  }
+  {
+    // A one-day product has nothing to lock: it pays on its only day.
+    const bought=eat('2026-10-14T15:00:00');
+    const h=setup({users:{m:member()},investments:{i1:plan({payoutsTotal:1,expectedReturn:5000,earningsLocked:true,lockedAmount:0,firstCashbackFree:true,payoutFirstAt:new FakeDate(bought)})},transactions:{}});
+    NOW=bought;await h.settle('i1');assert.equal(h.db.rows.users.m.walletBalance,5000);assert.equal(h.db.rows.investments.i1.status,'matured');
+  }
+  console.log('PASS: settlement engine (exact totals, no double pay: concurrent, crash retry, catch-up, ban, removed; every midnight; wage products; locked earnings released on the last day)');
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

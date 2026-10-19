@@ -46,15 +46,23 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
 2. (waiting on owner) Atlas user + connection string, VPS first-setup, domain, payment keys (PesaJet/MarzPay), then screenshots.
 
 ## Rules the owner has decided (keep these)
-- **Referral reward = the referred member's FIRST PURCHASE** (not the first deposit). Level 1 / 2 / 3 are paid once, as a percentage of that
-  product's price, at the moment of purchase (`/invest/create` -> `creditReferralCommission`; the 30 s reconciler retries a failed one). A deposit
-  pays nothing. A product the admin activates (`granted`) is not a purchase. Test: `test-first-purchase-reward.js` (runs the real route).
-- **Cashback every 24 hours** (owner changed it from midnight): a product pays its first cashback 24 hours after the purchase and then every 24 hours
-  (`payoutFirstAt` on the investment; same number of payments, same total). A member's FIRST purchase pays its first cashback AT ONCE (at the moment
-  of purchase, `/invest/create` settles it before answering), the rest follow every 24 hours. A product the admin gives (`granted`) pays 24 hours after
-  it was given. Investments without `payoutFirstAt` (bought before this rule) keep the old midnight schedule. The Income card's "Settlement countdown"
-  counts to that product's own next payment (`nextPayoutMs`) on the SERVER clock (`serverNow`, `ckNow()`). Tests: `test-settlement-engine.js`,
-  `test-settlement-countdown.js`, `test-first-purchase-reward.js`.
+- **Referral reward = EVERY PURCHASE** of the referred member (owner changed it from "first purchase only"). Level 1 / 2 / 3 are paid, each purchase once, as a
+  percentage of that product's price, at the moment of purchase (`/invest/create` -> `creditReferralCommission`; the 30 s reconciler retries a failed one).
+  A deposit pays nothing. A product the admin activates (`granted`, `commissionBasis: 'deposit'`) is not a purchase. Purchases bought under the old
+  first-only rule that were never paid stay unpaid (their `commissionPending` is false); attaching a referrer by hand pays every purchase the member already made.
+  Test: `test-first-purchase-reward.js` (runs the real route).
+- **Cashback is counted every 24 hours but LOCKED until the product's days are over** (owner: "daily income products be locked earnings, till the number of days
+  elapses"; the daily cashback is NOT removed, it still counts day by day: `payoutsMade`, progress, `dailyPayout`). New income products carry
+  `earningsLocked: true`: `_settleDueInvestmentNow` adds each day to `lockedAmount` (no wallet change, no ledger row) and on the LAST day credits
+  everything locked plus that day in ONE credit (ledger row "... cashback released", `lockedAmount` back to 0). `paidOut` = what really reached the wallet.
+  **A member's FIRST purchase keeps its automatic first cashback** (`firstCashbackFree`: day 1 is paid at once, as before); its other days are locked until
+  maturity like every other product. Admin-activated income products are locked too; wage (task) products are not. Products bought before this rule
+  (no `earningsLocked`) keep paying every day. The Income card's "Settlement countdown" of a locked product counts to its LAST day
+  (`nextPayoutMs`: first payment + (days - 1) x 24 h), on the SERVER clock. Admin analytics (`analyticsContractDay`) treats the days in between as moving no
+  money. Tests: `test-settlement-engine.js` (locked blocks), `test-settlement-countdown.js`, `test-first-purchase-reward.js`.
+- **Cashback timing (unchanged underneath)**: a product's first day is due 24 hours after the purchase and then every 24 hours (`payoutFirstAt`; a member's
+  FIRST purchase has day 1 due at once and settled before `/invest/create` answers; a product the admin gives starts 24 hours after it was given).
+  Investments without `payoutFirstAt` (bought before this rule) keep the old midnight schedule.
 - **Member passwords: at least 6 characters** (`MEMBER_PASSWORD_MIN`, app, server and admin reset all agree; owner corrected an inherited 10). The word "at least N characters" appears only in the error message when a password is too short, never inside a password box (placeholders stay plain: "New password").
 - **No gift codes (treasure chest) and no Task Center**: they are not in the owner's screenshots, so the app pages, the server routes (`/redeem`, `/team/task/claim`) and the admin screens/routes are removed. Old `promocode` / `team_reward` rows stay in Records with their labels. Do not bring them back unless the owner sends a screenshot.
 - **Login boxes keep this device's last member's number and password** after sign-out and after an ended session (`cookie_saved_login`, light

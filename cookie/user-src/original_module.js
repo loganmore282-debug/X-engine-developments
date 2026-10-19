@@ -3590,8 +3590,8 @@ async function renderAssets(){
 }
 // One card per asset the member owns. Expiry is the purchase moment plus the
 // asset's own cycle length (the same planStats() figure every progress bar uses).
-// Cashback is paid every 24 hours from the purchase (a member's first purchase pays its first one at once), so the settlement countdown runs to
-// this product's next payment: its first payment instant (payoutFirstAt) plus one day for every payment already made. A product bought before
+// Cashback is counted every 24 hours from the purchase but LOCKED until the product's days are over (a member's first purchase pays its first day at
+// once); the settlement countdown of a locked product runs to its last day. For an older product it runs to this product's next payment: its first payment instant (payoutFirstAt) plus one day for every payment already made. A product bought before
 // that rule has no payoutFirstAt and keeps counting to the next midnight of the member's own clock.
 function nextMidnightMs(now){
   const off = tzOffMs(), t = now == null ? ckNow() : now;
@@ -3600,6 +3600,8 @@ function nextMidnightMs(now){
 function nextPayoutMs(inv, now){
   const first = inv && inv.payoutFirstAt ? new Date(inv.payoutFirstAt).getTime() : 0;
   if (!(first > 0)) return nextMidnightMs(now);
+  // A product with locked earnings pays out once, on its last day: the countdown runs to that day, not to the next 24 hours.
+  if (inv.earningsLocked === true) return first + Math.max(0, (Number(inv.payoutsTotal) || 1) - 1) * 86400000;
   return first + Math.max(0, Number(inv.payoutsMade) || 0) * 86400000;
 }
 function vOwnedCardHtml(inv){

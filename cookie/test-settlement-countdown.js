@@ -62,6 +62,10 @@ ok(/left <= 0/.test(mod) && /api\('\/investments'\)/.test(mod), 'when a payment 
   ok(c.nextPayoutMs({ payoutFirstAt: iso, payoutsMade: 1 }, now) === first + DAY, 'one payment made: the next is 24 hours after the first');
   ok(c.nextPayoutMs({ payoutFirstAt: iso, payoutsMade: 3 }, now) === first + 3 * DAY, 'three payments made: first + 3 days');
   ok(c.nextPayoutMs({ payoutsMade: 2 }, now) === c.nextMidnightMs(now), 'a product bought before this rule still counts to midnight');
-  const bought = now; ok(c.fmtCountdown(bought + DAY - now, true) === '23:59:59', 'a product bought this second reads 23:59:59');
+  const bought = now; ok(c.fmtCountdown(bought + DAY - now, true) === '23:59:59', 'a product bought this second reads 23:59:59');  // locked earnings: the countdown runs to the last day, whatever has been counted so far
+  const lk = { earningsLocked: true, payoutFirstAt: new Date(now + DAY).toISOString(), payoutsTotal: 8 };
+  ok(c.nextPayoutMs({ ...lk, payoutsMade: 0 }, now) === now + DAY + 7 * DAY, 'a locked product counts to its last day: first payment + 7 days (8 days in all)');
+  ok(c.nextPayoutMs({ ...lk, payoutsMade: 5 }, now) === now + DAY + 7 * DAY, 'and it does not move as the days are counted');
+  ok(c.nextPayoutMs({ earningsLocked: true, payoutFirstAt: iso, payoutsTotal: 8, payoutsMade: 0 }, now) === first + 7 * DAY, 'a first purchase (first day paid at once) counts to its last day too');
 }
 console.log('PASS: settlement countdown (' + n + ' checks)');

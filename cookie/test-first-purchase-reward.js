@@ -115,8 +115,20 @@ async function main(){
     const inv2=db.rows.investments[r2.body.investmentId];
     assert.ok(Math.abs(+new Date(inv2.payoutFirstAt)-(Date.now()+86400000))<5000,'a later purchase: first cashback 24 hours after the purchase');
     assert.equal(c.settled.length,1,'a later purchase is not paid at once');
-    assert.equal(db.rows.users.l1.walletBalance,6000,'the second purchase pays the referrers nothing');
-    assert.equal(commissions(db).length,3);
+    // EVERY purchase pays the referrers, not only the first
+    assert.equal(db.rows.users.l1.walletBalance,6000+18000,'the second purchase pays Level 1 again (20% of 90,000)');
+    assert.equal(db.rows.users.l2.walletBalance,1500+4500,'and Level 2 (5%)');
+    assert.equal(db.rows.users.l3.walletBalance,300+900,'and Level 3 (1%)');
+    assert.equal(commissions(db).length,6);
+    assert.equal(inv2.isFirstInvestment,false);assert.equal(inv2.commissionPending,false,'paid, so nothing left pending');
+    // LOCKED EARNINGS: every purchase carries the lock; only the first purchase has its first day paid at once
+    assert.equal(inv.earningsLocked,true);assert.equal(inv.firstCashbackFree,true,'the first purchase: first day free');
+    assert.equal(inv2.earningsLocked,true);assert.equal(inv2.firstCashbackFree,false,'a later purchase: nothing free');
+    assert.equal(inv2.lockedAmount,0);
+    // a third purchase pays again
+    const r3=await buy('buyer','p30');assert.equal(r3.body.status,'success');
+    assert.equal(db.rows.users.l1.walletBalance,24000+6000,'the third purchase pays too');
+    assert.equal(commissions(db).length,9);
   }
   {
     // The admin switch "First purchase pays its first cashback at once": off = the first purchase waits 24 hours like any other, and is not settled at once
@@ -130,14 +142,14 @@ async function main(){
     delete rates.firstPurchaseCashbackNow;
   }
   {
-    // two first purchases at the same instant: one reward only
+    // two purchases at the same instant: each pays its own reward once (never twice), and exactly one is the first purchase
     const {db,buy}=setup();
     const [a,b]=await Promise.all([buy('buyer','p30'),buy('buyer','p90')]);
     assert.equal(a.body.status,'success');assert.equal(b.body.status,'success');
-    assert.equal(commissions(db).length,3,'the reward is paid once');
+    assert.equal(commissions(db).length,6,'three levels for each of the two purchases, no more');
     const firsts=Object.values(db.rows.investments).filter(i=>i.isFirstInvestment);
     assert.equal(firsts.length,1,'exactly one purchase is the first');
-    assert.equal(db.rows.users.l1.walletBalance,firsts[0].amount*0.2);
+    assert.equal(db.rows.users.l1.walletBalance,(30000+90000)*0.2);
   }
   {
     // CRASH SAFETY: the server dies after the wallet was debited and before the investment exists (here: the investment write fails AND the instant
