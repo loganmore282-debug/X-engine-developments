@@ -247,7 +247,6 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     }
     await closeSoon(dom);
   }
-  await ghostScenario({ status: 400, body: { status: 'error', code: 'REFERRAL_REQUIRED', message: 'A referral code is required to sign up. Ask the person who invited you for theirs.' } }, /referral code is required.*Complete your sign-up/, true);
   await ghostScenario({ status: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } }, /does not exist.*Complete your sign-up/, true);
   await ghostScenario({ status: 500, body: { status: 'error', message: 'Could not complete your registration right now' } }, /Could not complete your registration/, false);
 
@@ -300,8 +299,8 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     // with the sign-in event arriving a second time for the same account.
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
     const t = toasts(w); const accounts = {}; const log = fakeFirebase(w, accounts);
-    w._settings = { otpVerificationEnabled: false, referralRequired: true };
-    w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:true}');
+    w._settings = { otpVerificationEnabled: false, referralRequired: false };
+    w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:false}');
     let profile = false, registers = 0;
     fakeServer(w, async (p, b) => {
       if (p === '/register') { registers++; if (b.referralCode !== 'GOODCODE') return { status: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } }; profile = true; return { status: 200, body: { status: 'success' } }; }

@@ -448,7 +448,7 @@ var LANG_ROWS = [
   // The founder-account wording: what the very FIRST member of a new country
   // sees on Sign Up, when there is no referral code for them to type yet.
   // Found only after the coverage sweep was made to render that state -- the
-  // fixture had always sent referralRequired:true, so this pair of sentences
+  // fixture had always demanded a code, so this pair of sentences
   // had never once been on screen while anything was measuring.
   ['Referral code (optional)', "Koodi y'okuyita (teetaagisa)", 'Msimbo wa mwaliko (si lazima)', 'Code de parrainage (facultatif)', 'Kode yo gutumira (ntikenewe)', "Koodi y'okweta (tikyetengyesa)"],
   // ── Popup messages, and the activity ticker's own verbs ──
@@ -1577,19 +1577,12 @@ window.doRegister = async function(){
   // Referral code box is prefilled from ?ref= (see captureReferralFromUrl)
   // but stays editable -- whatever's in the box at submit time wins,
   // whether that's the link's code, untouched, or something typed by hand.
-  // Mint makes it REQUIRED (Snow allowed skipping it) -- see CLAUDE.md.
+  // The invitation code is optional.
   const referral = $('regReferral').value.trim();
   if (!phone) return regError('Enter a valid ' + regionName() + ' mobile number.');
   if (!pass || pass.length < 6) return regError('Password must be at least 6 characters.');
   if (pass !== pass2) return regError('The two passwords do not match.');
   if (!/^\d{6}$/.test(tradePin)) return regError('Trade Password must be exactly 6 digits.');
-  // Required or not is the SERVER's call (settings.referralRequired), which
-  // already accounts for the founder case: on a platform with no members yet
-  // there is no code in existence to type, so the first account is let
-  // through. Hard-coding "always required" here made the app impossible to
-  // sign up to at all on day one.
-  if (!referral && referralIsRequired())
-    return regError('A referral code is required to sign up. Ask the person who invited you for theirs.');
   const captchaCode = (($('regCaptcha') || {}).value || '').trim();
   if (!captchaCode) return regError('Enter the captcha code.');
   if (!STATE.captchaId) { await loadAuthCaptcha(); return regError('Enter the code shown in the new picture.'); }
@@ -2127,26 +2120,13 @@ function captureReferralFromUrl(){
     showAuthTab('register');
   } catch (_) {}
 }
-// Whether Sign Up demands a referral code. The server decides (it resolves
-// the admin setting AND whether any member exists yet) and publishes the
-// answer as settings.referralRequired; this is only the reader.
-// Default TRUE when settings haven't loaded, so a failed settings fetch can
-// never quietly turn the requirement off -- the server would reject the
-// sign-up anyway, and this way the app says so up front.
-// Pulls the public settings while the member is still on the auth screen,
-// purely so the Sign Up form can tell the truth about the referral field.
-// Failure is silent and simply leaves the field required -- the server is
-// the real gate either way.
+// Pulls the public settings while the member is still on the auth screen (brand name and region for the Sign Up form). Failure is silent.
 async function loadAuthSettings(){
   try {
     const s = await api('/public/settings');
     if (s && s.status === 'success') { STATE.settings = s.settings || {}; applyRegion(); applyBrandName(); }
   } catch (_) {}
   updateReferralFieldHint();
-}
-function referralIsRequired(){
-  const st = STATE.settings || {};
-  return st.referralRequired !== false;
 }
 // Registration just drops its OTP step when the toggle is off (a brand-new
 // account has no existing identity to protect) -- see doRegister()'s own
@@ -2412,15 +2392,8 @@ async function enterApp(){
 // bonus) still goes through.
 async function registerCurrentUser(pin, phone){
   let reg = await post('/register', { referralCode: STATE.refCode || '', pin: pin || '', phone: phone || '' });
-  // Dropping the code and carrying on is only valid while a code is
-  // OPTIONAL. Once it is required (the normal state, as soon as the platform
-  // has members) retrying with an empty code just earns a REFERRAL_REQUIRED
-  // rejection, so the member is told to correct the code instead. That is
-  // recoverable rather than a dead end: their Firebase account now exists,
-  // and tapping Sign Up again with the same number and password takes
-  // doRegister()'s email-already-in-use branch, which signs them in and
-  // finishes this same registration with the corrected code.
-  if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode && !referralIsRequired()) {
+  // The invitation code is optional: a wrong one is dropped and the registration carries on without an upline.
+  if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode) {
     notify(reg.message || t('That referral code is invalid. Continuing without it.'));
     STATE.refCode = '';
     reg = await post('/register', { referralCode: '', pin: pin || '', phone: phone || '' });
@@ -2436,7 +2409,7 @@ async function registerCurrentUser(pin, phone){
 // sign them out cleanly, and open Sign Up with their number already filled in.
 // Re-submitting it takes doRegister()'s existing "email already in use" path,
 // which signs in and finishes this same registration.
-var SIGNUP_UNFINISHED_CODES = ['REFERRAL_REQUIRED', 'BAD_REFERRAL', 'BAD_REFERRAL_REGION'];
+var SIGNUP_UNFINISHED_CODES = ['BAD_REFERRAL', 'BAD_REFERRAL_REGION'];
 async function abandonUnfinishedSignup(reg){
   hideLoadingScreen();
   if (SIGNUP_UNFINISHED_CODES.indexOf(reg.code) === -1) {
@@ -5778,13 +5751,6 @@ function withdrawWindow(s){
   const open = from < to ? (now >= from && now < to) : (now >= from || now < to);
   return { enabled: true, open, from: witClock(s.withdrawOpenFrom), to: witClock(s.withdrawOpenTo) };
 }
-// Saturday and Sunday in the region's own clock: no withdrawal requests (the server decides; this only tells the member first).
-function weekendWithdrawShut(s){
-  if (s && s.weekendWithdrawBlock === false) return false;
-  if (STATE.account && STATE.account.withdrawAnytime) return false;
-  const wd = new Date(Date.now() + tzOffMs()).getUTCDay();
-  return wd === 0 || wd === 6;
-}
 // The one wallet card and the Bind Wallet button (one wallet per member; the
 // Wallet page edits it in place). Isolated so openWithdrawSheet()'s post-fetch
 // update can repaint only this block, never #witAmount.
@@ -5823,7 +5789,7 @@ function paintWithdrawSheet(s){
         <li>Fee: ${fee}%</li>
         <li>Withdrawal amounts should be between ${vGroup(min)}${max ? ' and ' + vGroup(max) : ' and your available balance'}${mult ? ', in multiples of ' + vGroup(mult) : ''}.</li>
         <li>${perDay ? 'You can make up to ' + perDay + ' withdrawals per day.' : 'One cash-out at a time. Wait for a pending request to finish before the next.'}</li>
-        <li>${win.enabled ? 'Withdrawal time: ' + esc(secs(win.from)) + ' - ' + esc(secs(win.to)) + '.' : 'Withdrawals can be requested at any time of day.'}${(s.weekendWithdrawBlock !== false && !(STATE.account && STATE.account.withdrawAnytime)) ? ' Withdrawals are closed on Saturday and Sunday.' : ''}</li>
+        <li>${win.enabled ? 'Withdrawal time: ' + esc(secs(win.from)) + ' - ' + esc(secs(win.to)) + '.' : 'Withdrawals can be requested at any time of day.'}</li>
       </ol>
     </div>
   </div>`;
@@ -5887,7 +5853,6 @@ window.submitWithdraw = async function(){
   if (!acct) return notify('Please add a payout wallet before withdrawing.');
   // Same courtesy for the hours: told here so the member is not asked to
   // wait on a request the server will refuse anyway.
-  if (weekendWithdrawShut(STATE.settings || {})) return notify('Withdrawals are closed on Saturday and Sunday. Please come back on Monday.');
   const win = withdrawWindow(STATE.settings || {});
   if (win.enabled && !win.open && !(STATE.account && STATE.account.withdrawAnytime))
     return notify(`Withdraw is open from ${win.from} to ${win.to}. Please come back then.`);

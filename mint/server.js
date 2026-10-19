@@ -612,14 +612,6 @@ const DEFAULT_SETTINGS = {
   // every spin price for each product... also products will have different
   // rates of multipliers so don't fix it in settings." Only the free daily
   // spin's band lives here, because it is not tied to any product.
-  // Owner's rule: the referral code on Sign Up is a MUST, not optional.
-  // Enforced on the server (it used to be a client-side check only, which any
-  // direct POST /register walked straight past). The very first account is
-  // exempt automatically -- see referralRequiredNow(): with no members yet
-  // there is no code in existence to type, so requiring one would make the
-  // platform impossible to launch. Turn this off temporarily if you ever need
-  // to onboard someone with no upline.
-  requireReferralCode: true,
   // Extra frontend domains allowed to call this backend, set from the admin
   // panel (Settings -> Allowed website domains). ADDED to the built-in
   // allowlist, never replacing it -- see _corsExtraHosts.
@@ -665,10 +657,6 @@ const DEFAULT_SETTINGS = {
   // Off by default: a fresh install must not lock withdraw behind hours
   // nobody has set yet.
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
-  // WEEKENDS. Owner: products rest on Saturday and Sunday (no cashback is credited for those two days) and nobody can request a withdrawal on
-  // either day. Cashback is credited at local midnight for the day that just ended, so Friday's is credited at 00:00 Saturday, and the next
-  // credit is at 00:00 Tuesday (for Monday). Both are ON by default and can be switched off in Admin > Settings.
-  weekendCashbackPause: true, weekendWithdrawBlock: true,
   // What every NEW mobile-money recharge / withdrawal reference starts with (mint2610111048053568). Admin > Settings; existing references never change.
   referencePrefix: 'S',
   // AUTOMATIC WITHDRAWALS (Admin > Settings > Withdrawals). Off by default. Requests always arrive as 'pending' as usual; only while this is
@@ -836,7 +824,7 @@ function gatewayServesRegion(gateway, region) {
 // automatic is now the only deposit path, so this is just "does a gateway
 // reach this country" (the PAY A/PAY B enable toggle this used to also
 // check is gone). Served to the app as the RESOLVED answer, the same way
-// payoutManual and referralRequired already are, so the member never
+// payoutManual already is, so the member never
 // meets a payment method that cannot work.
 function payAAvailable(sett, region) {
   return gatewayServesRegion(depositAutomaticProvider(sett), region);
@@ -1247,37 +1235,19 @@ function eatNextMidnight(ts) {
 // The k-th payment (k = 1..total) is due at the first local midnight AFTER the purchase, plus (k-1) days. A product bought
 // at 15:00 therefore pays at 00:00 the next night, then every night at 00:00, `total` payments in all; the last one
 // is the maturity payment. Uganda has no daylight saving, so the day length is a constant 86,400,000 ms.
-// WEEKEND REST. A midnight credits the day that has just ended, so the credit at 00:00 Sunday (for Saturday) and at 00:00 Monday (for
-// Sunday) are skipped while weekendCashbackPause is on: the product pays Tuesday to Saturday at 00:00 (for Monday to Friday) and then waits.
-// A skipped midnight is not lost money: the instalment simply falls on the next working midnight, so the cycle gets longer by the weekend.
-function weekendCashbackPaused() { const st = _settingsCache || DEFAULT_SETTINGS; return st.weekendCashbackPause !== false; }
-function midnightPays(t, paused) {
-  if (!paused) return true;
-  const wd = new Date(t + tzOffMs()).getUTCDay();   // the local weekday that STARTS at this midnight (0 = Sunday)
-  return wd !== 0 && wd !== 1;
-}
-// Local weekday now (0 = Sunday ... 6 = Saturday), in the region's own clock.
-function eatWeekday(ts) { return new Date((ts || Date.now()) + tzOffMs()).getUTCDay(); }
+// Every midnight pays: there is no weekend rest.
 function payoutDueAtMs(createdMs, k) {
-  const paused = weekendCashbackPaused();
-  let t = eatNextMidnight(createdMs), n = 0;
-  for (let i = 0; i < 5000; i++, t += 86400000) {
-    if (!midnightPays(t, paused)) continue;
-    if (++n >= k) return t;
-  }
-  return t;
+  return eatNextMidnight(createdMs) + (Math.max(1, k) - 1) * 86400000;
 }
 function payoutsDueCount(createdMs, now, total) {
-  const paused = weekendCashbackPaused();
-  let t = eatNextMidnight(createdMs), n = 0;
-  while (t <= now && n < total) { if (midnightPays(t, paused)) n++; t += 86400000; }
-  return n;
+  const first = eatNextMidnight(createdMs);
+  if (now < first) return 0;
+  return Math.min(total, Math.floor((now - first) / 86400000) + 1);
 }
 // The instants of the first `total` payments, in one pass (analytics asks for every contract).
 function payoutInstants(createdMs, total) {
-  const paused = weekendCashbackPaused(), out = [];
-  let t = eatNextMidnight(createdMs);
-  for (let i = 0; i < 5000 && out.length < total; i++, t += 86400000) if (midnightPays(t, paused)) out.push(t);
+  const first = eatNextMidnight(createdMs), out = [];
+  for (let i = 0; i < total; i++) out.push(first + i * 86400000);
   return out;
 }
 function eatParts(ts) {
@@ -3554,11 +3524,6 @@ app.get('/public/settings', async (req, res) => {
       if (/^autoApprove/.test(k) || ['depositMethod', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain', 'linkPreviewTitle', 'linkPreviewText'].includes(k)) continue;
       rest[k] = rest0[k];
     }
-    // referralRequired is the RESOLVED answer (setting AND "a member already
-    // exists"), not the raw setting -- same reasoning as the resolved product
-    // figures below. The Sign Up screen shows the field as required or
-    // optional from this one flag, so it can never disagree with what
-    // /register will actually accept.
     // Revalidated every time (no max-age): maintenance mode, the opening
     // countdown and every rate have to take effect on the next launch, not a
     // minute later. The ETag still removes the bytes when nothing changed.
@@ -3576,7 +3541,6 @@ app.get('/public/settings', async (req, res) => {
       // removed outright; renamed since "PAY A" no longer means anything
       // once there is no PAY B to contrast it with.)
       depositAvailable: payAAvailable(s),
-      referralRequired: await referralRequiredNow(),
     // How many countries this platform runs in. The app only uses it to add
     // "if you signed up on another country's site, sign in there" to a
     // failed login -- an account belongs to one region and its synthetic
@@ -3916,11 +3880,6 @@ async function anyMemberExists() {
 // code???"). So the requirement switches itself on the moment the first
 // member completes registration, and the admin toggle can lift it again if
 // someone ever needs onboarding with no upline.
-async function referralRequiredNow() {
-  const sett = await getSettings();
-  if (sett.requireReferralCode === false) return false;
-  return await anyMemberExists();
-}
 // Shared by the member's own /register — the ONE place that ever assigns a
 // referral code, links a referrer's team counts, sets the Trade Password,
 // or credits the welcome bonus.
@@ -3959,11 +3918,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
       return { code: 400, body: { status: 'error', code: 'INVALID_TRADE_PIN', message: 'Trade Password must be exactly 6 digits.' } };
     const code = String(referralCode || '').trim();
     let referrerId = null;
-    // The "referral code is a must" rule lives HERE, not only in the app --
-    // the app's own check is a convenience, and a direct POST /register with
-    // an empty code used to sail past it and create an uplineless account.
-    if (!code && await referralRequiredNow())
-      return { code: 400, body: { status: 'error', code: 'REFERRAL_REQUIRED', message: 'A referral code is required to sign up. Ask the person who invited you for theirs.' } };
+    // The referral code is optional: an empty one just means no upline.
     if (code) {
       const refDoc = await findUserByReferralCode(code);
       if (!refDoc)
@@ -5343,10 +5298,6 @@ app.post('/withdraw/request', async (req, res) => {
     const anyFlagSnap = await db.collection('users').doc(userId).get();
     const unrestricted = anyFlagSnap.exists && anyFlagSnap.data().withdrawAnytime === true;
     const anyTime = win.enabled && !win.open ? unrestricted : false;
-    // Saturday and Sunday (the region's own days): no withdrawal requests, unless the owner marked this member unrestricted.
-    if (sett.weekendWithdrawBlock !== false && !unrestricted && [0, 6].includes(eatWeekday(Date.now())))
-      return res.status(400).json({ status: 'error', code: 'WEEKEND_CLOSED',
-        message: 'Withdrawals are closed on Saturday and Sunday. Please come back on Monday.' });
     if (win.enabled && !win.open && !anyTime)
       return res.status(400).json({ status: 'error', code: 'WINDOW_CLOSED',
         message: `Withdraw is open from ${win.from} to ${win.to}. Please come back then.` });
@@ -7065,7 +7016,7 @@ const SETTINGS_CRITICAL_RANGES = {
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
   innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'weekendCashbackPause', 'weekendWithdrawBlock', 'blockRootDomain'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -9105,7 +9056,7 @@ function analyticsContractDay(inv, start, end, now) {
       !Number.isFinite(expected) || expected < 0 || !Number.isInteger(made) ||
       made < 0 || made > total || !Number.isFinite(paid) || paid < 0) return null;
   const target = n => Math.round(expected * n / total);
-  // t[k-1] is the instant of the k-th payment (weekend midnights are skipped, see midnightPays).
+  // t[k-1] is the instant of the k-th payment (every local midnight).
   const t = payoutInstants(created0, total);
   let first = 1, last = 0, due = 0;
   while (first <= total && t[first - 1] < start) first++;      // first payment at or after `start`
@@ -9357,8 +9308,7 @@ app.post('/admin/analytics', async (req, res) => {
       }
     });
     const canDo = { count: 0, gross: 0, net: 0, runningCount: 0, runningNet: 0 };
-    const blocked = { banned: 0, noProduct: 0, hasRequest: 0, dailyUsed: 0, belowMin: 0, weekend: 0 };
-    const weekendShut = wSett.weekendWithdrawBlock !== false && [0, 6].includes(eatWeekday(nowMs));   // Saturday / Sunday: no requests
+    const blocked = { banned: 0, noProduct: 0, hasRequest: 0, dailyUsed: 0, belowMin: 0 };
     usersSnap.forEach(d => {
       const u = d.data();
       if (!mine({ userId: d.id, regionKey: u.regionKey })) return;
@@ -9367,7 +9317,6 @@ app.post('/admin/analytics', async (req, res) => {
       if (u.registrationDone === false) return;
       if (u.status === 'banned') { blocked.banned++; return; }
       if (wNeedProduct && !(finiteMoney(u.totalInvested) > 0)) { blocked.noProduct++; return; }
-      if (weekendShut && u.withdrawAnytime !== true) { blocked.weekend++; return; }
       if (openUsers.has(d.id)) { blocked.hasRequest++; return; }
       if (wPerDay > 0 && u.withdrawAnytime !== true && (usedToday.get(d.id) || 0) >= wPerDay) { blocked.dailyUsed++; return; }
       let amt = Math.min(bal, wMax > 0 ? wMax : bal);
@@ -9380,7 +9329,7 @@ app.post('/admin/analytics', async (req, res) => {
     const withdrawToday = {
       waiting, canDo, blocked,
       rules: { min: wMin, max: wMax, multiple: wMult, feePct: wFee, perDay: wPerDay, needProduct: wNeedProduct,
-        hours: wSett.withdrawWindowEnabled ? `${wSett.withdrawOpenFrom || ''} to ${wSett.withdrawOpenTo || ''}` : '', weekendShut },
+        hours: wSett.withdrawWindowEnabled ? `${wSett.withdrawOpenFrom || ''} to ${wSett.withdrawOpenTo || ''}` : '' },
     };
     const truncated = depSnap.docs.length >= 10000 || witSnap.docs.length >= 10000 || usersSnap.docs.length >= 10000 || activeInvSnap.docs.length >= 10000 || contractSnap.docs.length >= 10000 || rewardsTruncated;
 
