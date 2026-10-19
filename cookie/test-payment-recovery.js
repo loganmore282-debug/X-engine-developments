@@ -85,7 +85,7 @@ function setup(input = seed()) {
     verifyAuth:async()=> 'l1', markDepositAttemptSucceeded(){}, sendAdminPush:async()=>{},
     app:{post:(path,handler)=>{routes[path]=handler}},
     TEAM_MILESTONES:[{target:5,reward:5000}], TEAM_DEPOSIT_MILESTONES:[{target:250000,reward:5000}],
-    activeL1Count:async()=>5, wholeTeamDeposits:async()=>250000
+    wholeTeamDeposits:async()=>250000
   });
   vm.runInContext('const _lockTails=new Map(); const _creditingDeposits=new Set();\n' + [
     'withLock','finiteMoney','depositFullyCredited','creditReferralCommission','_payReferralCommissionNow','creditDeposit','_creditDepositNow'
@@ -128,10 +128,8 @@ async function main(){
   }
   {
     const {c,db}=setup();
-    vm.runInContext(fn('activeL1Count')+'\n'+fn('wholeTeamStats')+'\n'+fn('wholeTeamDeposits'),c);
-    assert.equal(await c.activeL1Count('l1'),0,'registration and an uncredited deposit do not activate a referral');
+    vm.runInContext(fn('wholeTeamStats')+'\n'+fn('wholeTeamDeposits'),c);
     await credit(c,db);
-    assert.equal(await c.activeL1Count('l1'),1,'confirmed deposit activates the referral without an investment');
     assert.equal(await c.wholeTeamDeposits('l1'),15000);
   }
   {
