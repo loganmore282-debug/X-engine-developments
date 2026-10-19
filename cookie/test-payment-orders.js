@@ -86,7 +86,7 @@ function setup(extra={}){
     marzCollect:async a=>{ collects.push(a); return extra.marz||{status:'success',data:{transaction:{uuid:'tx1'}}}; }, marzUserMsg:()=>'x', pesajetCollect:async()=>({ok:true}), watchPesajetDeposit(){},
     PAY_SEAL, PAYMENT_ORDER_TTL_MS:10*60*1000, DEPOSIT_METHOD_KEYS:['C','L','H','K'], bumpDepositMethod(){},
     app:{ post:(p,h)=>{routes['POST '+p]=h}, get:(p,h)=>{routes['GET '+p]=h} } });
-  vm.runInContext([fn('loadPaymentOrder')].join('\n')+'\nconst orderView = o => ({ orderNo: o.orderNo, amount: o.amount, state: o.status, depositId: o.depositId, reference: o.reference, expiresAt: o.expiresAt });\n'+route('/deposit/order/create')+'\n'+route('/deposit/order/:no')+'\n'+route('/deposit/marzpay'),c);
+  vm.runInContext([fn('loadPaymentOrder')].join('\n')+'\nconst orderView = o => ({ orderNo: o.orderNo, amount: o.amount, state: o.status, depositId: o.depositId, reference: o.reference, expiresAt: o.expiresAt, msLeft: Math.max(0, Number(o.expiresAt || 0) - Date.now()) });\n'+route('/deposit/order/create')+'\n'+route('/deposit/order/:no')+'\n'+route('/deposit/marzpay'),c);
   const call=async(key,uid,body={},params={})=>{ let code=200,out; const res={headersSent:false,status(n){code=n;return res},json(b){out=b;res.headersSent=true;return res}}; await routes[key]({uid,body,params,headers:{}},res); await new Promise(r=>setTimeout(r,20)); return {code,out}; };
   return {db,call,collects,debounce};
 }

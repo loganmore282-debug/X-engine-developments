@@ -2274,7 +2274,7 @@ function updateReferralFieldHint(){
 // of the login/app while it's active.
 function isOpeningGateActive(){
   const s = STATE.settings;
-  return !!(s && s.openingCountdownEnabled && Number(s.openingCountdownAt) > Date.now());
+  return !!(s && s.openingCountdownEnabled && Number(s.openingCountdownAt) > ckNow());
 }
 function formatOpeningCountdown(ms){
   const totalSec = Math.max(0, Math.floor(ms / 1000));
@@ -2289,7 +2289,7 @@ var _openingGateTimer = null;
 function startOpeningGateCountdown(targetMs){
   if (_openingGateTimer) clearInterval(_openingGateTimer);
   const tick = () => {
-    const remaining = targetMs - Date.now();
+    const remaining = targetMs - ckNow();
     const el = $('openingGateCountdown');
     if (el) el.textContent = formatOpeningCountdown(remaining);
     if (remaining <= 0) {
@@ -3200,7 +3200,12 @@ function maybeShowAnnouncement(){
   _annPending = true;
   const go = () => {
     if (_ckLoadCount > 0 || _ckLoadHideTimer || Date.now() < _ckLoadUntil) { setTimeout(go, 120); return; }
-    const fire = () => { _annPending = false; if (!isAnyOverlayOpen()) showAnnouncementNow(); };
+    let tries = 0;
+    const fire = () => {
+      // The dialog is built from the settings (minimum withdrawal, fee, hours): wait for them instead of showing "UGX 0 / 0%" after a slow or failed first read.
+      if (!(STATE.settings && STATE.settings.minWithdraw != null)) { if (++tries < 40) { setTimeout(fire, 500); return; } _annPending = false; return; }
+      _annPending = false; if (!isAnyOverlayOpen()) showAnnouncementNow();
+    };
     if (_artLanded) fire(); else startArtwork().then(fire);   // the banner picture is fetched behind the loading screen: wait for it so the dialog opens whole
   };
   go();
@@ -3412,7 +3417,7 @@ function vBuyHtml(p){
   // Not `disabled`: a disabled button swallows the tap, and the owner's screen
   // shows the "Coming soon, please wait" dialog when it is tapped.
   if (!at || p.openMode === 'soon' || p.comingSoon) return '<button class="v-buy v-soon" onclick="notify(\'Coming soon, please wait\')"><span>Coming soon</span></button>';
-  return `<button class="v-buy v-soon" onclick="notify('Coming soon, please wait')" data-opens-at="${at}">Coming soon in ${fmtCountdown(at - Date.now())}</button>`;
+  return `<button class="v-buy v-soon" onclick="notify('Coming soon, please wait')" data-opens-at="${at}">Coming soon in ${fmtCountdown(at - ckNow())}</button>`;
 }
 function vBannerHtml(){
   const st = STATE.settings || {};
@@ -3547,7 +3552,7 @@ function startProductCountdowns(){
     if (!nodes.length) { clearInterval(_openCountdownTimer); _openCountdownTimer = null; return; }
     let due = false;
     nodes.forEach(el => {
-      const left = Number(el.getAttribute('data-opens-at')) - Date.now();
+      const left = Number(el.getAttribute('data-opens-at')) - ckNow();
       if (left <= 0) { due = true; el.textContent = 'Opening…'; return; }
       el.textContent = 'Coming soon in ' + fmtCountdown(left);
     });
@@ -4685,6 +4690,7 @@ window.submitWallet = async function(){
   btn.disabled = true; btn.textContent = 'Saving…';
   const r = await post('/bank/save', { holder, network, phone });
   btn.disabled = false; btn.textContent = 'Confirm';
+  if (r.stale) return;
   if (r.status !== 'success') return notify(r.message || 'Could not save your wallet.');
   return finishWalletSave();
 };
@@ -5484,7 +5490,7 @@ function openDepositFormSheet(){
   openSheet('Deposit', `<div class="ck-dep">
     <div class="ck-card ck-amtcard">
       <div class="ck-balrow"><span>Available：</span><b>${esc(cur())}</b><i id="depBalance">${esc(numGroup(0, true))}</i></div>
-      <label class="ck-amtbox"><b>${esc(cur())}</b><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Please enter the Deposit amount" oninput="this.value=this.value.replace(/[\s,]/g,'');syncDepositQuickAmt()" autocomplete="off"></label>
+      <label class="ck-amtbox"><b>${esc(cur())}</b><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Please enter the Deposit amount" oninput="this.value=this.value.replace(/[\\s,]/g,'');syncDepositQuickAmt()" autocomplete="off"></label>
     </div>
     <div class="ck-card ck-pays" id="depPays">
       ${['C', 'L', 'H', 'K'].map((k, i) => `<button type="button" data-m="${k}" class="${i === 0 ? 'on' : ''}${k === hotKey ? ' hot' : ''}" onclick="pickPayLabel(this)">${k === hotKey ? hot : ''}<span>${esc(brandName())} Pay -${k}</span></button>`).join('')}
@@ -5964,11 +5970,14 @@ function pgStartTimer(expiresAt, token){
   pgStopTimer();
   const draw = () => {
     if (token !== _pg.token || _pg.view !== 'form') return pgStopTimer();
-    const left = Math.max(0, Math.ceil((Number(expiresAt) - ckNow()) / 1000));
+    const left = Math.max(0, Math.ceil((Number(expiresAt) - Date.now()) / 1000));
     const box = $('pgTimer'), t = $('pgTimerTxt');
     if (t) t.textContent = String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0');
     if (box) box.classList.toggle('pg-low', left <= 60);
-    if (left <= 0) { pgStopTimer(); pgShowGone('This payment has expired. Please start again from Deposit.'); }
+    if (left <= 0) {
+      if (document.querySelector('#pgPayBtn.pg-busy')) return;   // Pay is in flight: the payment is being started, do not close the page under it
+      pgStopTimer(); pgShowGone('This payment has expired. Please start again from Deposit.');
+    }
   };
   draw(); _pgTick = setInterval(draw, 1000);
 }
@@ -6020,6 +6029,8 @@ async function pgLoadOrder(no, token){
   if (token !== _pg.token || !pgOpen()) return;
   if (r.status !== 'success' || !r.order) return pgShowGone(r.status === 'error' && r.code === 'ORDER_NOT_FOUND' ? 'This payment link is not available.' : (r.message || 'Could not load this payment. Check your connection and try again.'));
   const o = r.order; _pg.order = o;
+  // The time left comes as a duration from the server and is counted on THIS phone's clock, so a phone whose clock is wrong still counts correctly.
+  o.expiresAtLocal = Date.now() + (Number(o.msLeft) >= 0 ? Number(o.msLeft) : Math.max(0, Number(o.expiresAt || 0) - ckNow()));
   if (o.depositId) {            // opened again after Pay was tapped (a refresh): carry on waiting for the same payment
     _pg.depositId = o.depositId; _pg.reference = o.reference || '';
     pgShowInitiated(); pgPoll(o.depositId, token); return;
@@ -6028,7 +6039,7 @@ async function pgLoadOrder(no, token){
   pgSet('form', pgFormHtml(o));
   const d = _pg.draft; _pg.draft = null;      // what was typed before a pull-down refresh comes back
   if (d) { const ph = $('pgPhone'), nt = $('pgNet'); if (ph && d.phone) ph.value = d.phone; if (nt && d.net) nt.value = d.net; }
-  pgStartTimer(o.expiresAt, token);
+  pgStartTimer(o.expiresAtLocal, token);
 }
 // ── PULL DOWN TO REFRESH (the payment page is an address, so it behaves like a page: pull down at the top to read it again) ──
 // The page's state is read again from the server (the form with its fresh countdown, or the payment's progress); nothing typed is lost and no
@@ -6311,7 +6322,7 @@ function withdrawWindow(s){
   const from = witMinutes(s && s.withdrawOpenFrom), to = witMinutes(s && s.withdrawOpenTo);
   if (!(s && s.withdrawWindowEnabled) || from == null || to == null || from === to)
     return { enabled: false, open: true, from: '', to: '' };
-  const d = new Date(Date.now() + tzOffMs());   // the region's clock, as the server judges it
+  const d = new Date(ckNow() + tzOffMs());   // the region's clock, as the server judges it (the SERVER's time, not the phone's)
   const now = d.getUTCHours() * 60 + d.getUTCMinutes();
   // The window may WRAP past midnight -- 18:00 to 17:00 is his own example.
   const open = from < to ? (now >= from && now < to) : (now >= from || now < to);
@@ -6337,7 +6348,7 @@ function paintWithdrawSheet(s){
   $('sheetBody').innerHTML = `<div class="ck-wd">
     <div class="ck-card ck-wdcard">
       <div class="ck-wdlab">Amount</div>
-      <label class="ck-amtbox ck-amtbox2"><b>${esc(cur())}</b><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Enter Amount" oninput="this.value=this.value.replace(/[\s,]/g,'');syncWithdrawReceiveAmt()" autocomplete="off"></label>
+      <label class="ck-amtbox ck-amtbox2"><b>${esc(cur())}</b><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Enter Amount" oninput="this.value=this.value.replace(/[\\s,]/g,'');syncWithdrawReceiveAmt()" autocomplete="off"></label>
       <div class="ck-balrow ck-balrow2"><span>Balance：</span><b>${esc(cur())}</b><i id="witBalance">${esc(numGroup(0, true))}</i></div>
       <div class="ck-feebox">
         <h4>Fee: ${fee}%</h4>
@@ -6425,6 +6436,7 @@ window.submitWithdraw = async function(){
   if (win.enabled && !win.open && !(STATE.account && STATE.account.withdrawAnytime))
     return notify(`Withdraw is open from ${win.from} to ${win.to}. Please come back then.`);
   _withdrawSubmitting = true;
+  if (submitBtn._raf) { cancelAnimationFrame(submitBtn._raf); submitBtn._raf = 0; }   // a count-up still running would overwrite "Submitting…" with a partial amount
   submitBtn.disabled = true; submitBtn.textContent = 'Submitting…';
   let r;
   try { r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone }); }
@@ -6490,9 +6502,10 @@ async function refreshAfterWithdraw(){
 // The button is disabled while the request is in flight -- with no dialog in
 // the way, a double tap would otherwise fire two purchases, and /invest/create
 // has no client-side retry guard of its own.
+var _buying = false;   // a purchase is with the server: Cancel then Buy again must not send a second one
 window.openInvestConfirm = function(tierKey, btn){
   const p = (STATE.products||[]).find(x => x.key === tierKey);
-  if (!p || (btn && btn.disabled)) return;
+  if (!p || (btn && btn.disabled) || _buying) return;
   const fig = planFigures(p);
   $('confirmSheet').innerHTML = `
     <h3>Prompt</h3>
@@ -6508,9 +6521,10 @@ window.openInvestConfirm = function(tierKey, btn){
     actionBtn.disabled = true; actionBtn.textContent = '…';
     // The loading box is the real wait for the server's answer (its own check of the product, the price and the balance).
     let result;
-    ckLoadBegin();
+    ckLoadBegin(); _buying = true;
     try { result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey, expectedPrice: Number(p.price) || 0 }) }); }
-    finally { ckLoadEnd(); }
+    finally { ckLoadEnd(); _buying = false; }
+    if (result.stale) return;   // the session ended meanwhile: the Login screen is showing, nothing to say
     if (result.status === 'error' && result.code === 'PRICE_CHANGED') { try { refreshCatalogNow(); } catch (_) {} }
     if (result.status !== 'success') {
       actionBtn.disabled = false; actionBtn.textContent = 'Confirm';
@@ -6565,9 +6579,8 @@ window.addEventListener('appinstalled', () => { window._installPrompt = null; })
 // admin upload UI, and this function are gone, not just unlinked.
 window.promptInstallApp = async function(){
   if (!window._installPrompt) { notify('Already installed, or your browser doesn\'t support installing ' + brandName() + '.'); return; }
-  window._installPrompt.prompt();
-  await window._installPrompt.userChoice.catch(() => null);
-  window._installPrompt = null;
+  const ev = window._installPrompt; window._installPrompt = null;   // taken at once: a second tap while the browser's sheet is open must not call prompt() again
+  try { ev.prompt(); await ev.userChoice.catch(() => null); } catch (_) {}
 };
 // (There is no "Download ... go to the browser to check and install it" dialog after the install is accepted: the owner had it removed.)
 // Owner: "remove double loading of startup loader or system it's self it

@@ -11,7 +11,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 { const c = vm.createContext({}); vm.runInContext(fn('strictAdminAmount'), c);
   ok(c.strictAdminAmount('5000') === 5000 && c.strictAdminAmount(5000) === 5000 && c.strictAdminAmount(' 12.5 ') === 12.5 && c.strictAdminAmount('-30') === -30, 'plain numbers are read');
   for (const bad of ['5000abc', '', null, undefined, { $ne: 1 }, [5], '1e3', '0x10', 'NaN', '5,000']) ok(Number.isNaN(c.strictAdminAmount(bad)), 'refused: ' + JSON.stringify(bad)); }
-ok(/const userId = String\(\(req\.body && req\.body\.userId\) \|\| ''\)\.trim\(\), \{ amount, note \} = req\.body;\s*const amt = Math\.round\(strictAdminAmount\(amount\)\)/.test(server) && /Math\.abs\(strictAdminAmount\(amount\)\)/.test(server), 'admin credit and debit read the id as text and the amount strictly');
+ok(/const userId = String\(\(req\.body && req\.body\.userId\) \|\| ''\)\.trim\(\), amount = req\.body && req\.body\.amount, note = textOf\(req\.body && req\.body\.note\)\.slice\(0, 200\);\s*const amt = Math\.round\(strictAdminAmount\(amount\)\)/.test(server) && /Math\.abs\(strictAdminAmount\(amount\)\)/.test(server), 'admin credit and debit read the id as text and the amount strictly');
 ok(/const depositId = String\(\(req\.body && req\.body\.depositId\) \|\| ''\)\.trim\(\)/.test(server), 'force-credit reads the deposit id as text');
 ok(/payoutIsManual\(await getSettings\(\)\)\)\s*return res\.status\(409\)\.json\(\{ status: 'error', code: 'MANUAL_MODE'/.test(server) && /offerQuickApprove = !payoutIsManual\(await getSettings\(\)\)/.test(server) && /quickApprove: offerQuickApprove/.test(server), 'the notification Approve does nothing in manual payout mode, and the alert does not offer it');
 ok(/truncated: snap\.docs\.length >= 10000/.test(server) && /Showing the first 10,000 members only/.test(R('admin-src/index.html')), 'the Users list says when it stopped at 10,000');
@@ -34,7 +34,7 @@ ok(/limit\(2\)\.get\(\);\s*if \(!depQ\.empty\) \{/.test(server) && /const sameTx
   ok(c2.ckTile(20415.5) === '20,415.50' && c2.ckTile(30000) === '30,000' && c2.ckTile(0.4) === '0.40', 'Account tiles keep cents (20,415.50), whole amounts stay whole');
   ok(/window\.pgRefresh = async function\(\)\{[^}]*#pgPayBtn\.pg-busy/.test(mod.replace(/\n/g, ' ')), 'pulling down does not cancel a Pay that is in flight');
   ok(/const seq = window\._sheetSeq;/.test(mod) && /window\._sheetSeq !== seq\) return;/.test(mod), 'the payment page does not open if the member backed out of Deposit while the order was being made');
-  ok(/btn\.textContent = 'Confirm';\n  if \(r\.status !== 'success'\) return notify\(r\.message \|\| 'Could not save your wallet\.'\)/.test(mod) && !/textContent = 'Change Password'/.test(mod) && !/textContent = 'Submit'/.test(mod), 'the Confirm buttons keep their label after a failed save');
+  ok(/btn\.textContent = 'Confirm';\n  if \(r\.stale\) return;\n  if \(r\.status !== 'success'\) return notify\(r\.message \|\| 'Could not save your wallet\.'\)/.test(mod) && !/textContent = 'Change Password'/.test(mod) && !/textContent = 'Submit'/.test(mod), 'the Confirm buttons keep their label after a failed save');
   ok(mod.includes("history.replaceState(history.state, '', '/')") && mod.includes('payment\\//.test(location.pathname)'), 'a session that ends on the payment address returns the address bar to /'); }
 // deploy / security
 const gen = (args, env = {}) => cp.execFileSync('node', [__dirname + '/deploy/make-nginx.js', ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
@@ -90,6 +90,17 @@ for (const f of ['cookie-adminlogin', 'cookie-badua', 'cookie-probe']) ok(!/\\\[
 ok(/function logSafe\(v\)/.test(server) && /logSafe\(body\.reference\)/.test(server), 'untrusted callback fields are cleaned before they reach the log');
 ok((server.match(/Public route error:/g) || []).length === 6 && !/app\.get\('\/public[^\n]*\n[^\n]*message: e\.message/.test(server), 'public routes never send a driver message');
 for (const f of ['deploy/update-vps.sh', 'deploy/first-setup.sh', 'deploy/webhook-check.sh', 'deploy/deploy.sh', 'deploy/set-wildcard.sh', 'deploy/set-domain.sh', 'deploy/change-app-host.sh']) cp.execFileSync('bash', ['-n', __dirname + '/' + f]);
+// round 2
+{ const del = server.slice(server.indexOf("app.post('/admin/user/delete'"), server.indexOf("const _adminCreditDebounce"));
+  ok(/String\(req\.body\.confirm\) !== 'DELETE'/.test(del) && /where\('status', 'in', \['creating', 'pending', 'sending', 'processing'\]\)/.test(del) && /walletBalance: walletAtDelete/.test(del), 'deleting an account needs the confirm word, waits for open withdrawals, and logs the wallet it removed');
+  ok(/async function dropAdminPushTokensOf/.test(server) && (server.match(/await dropAdminPushTokensOf\(username\)/g) || []).length === 2 && /inactive\.has\(d\.data\(\)\.username\)/.test(server), 'deactivated or deleted staff get no more alerts');
+  ok(/together cannot be more than 100 percent/.test(server), 'the three level rewards cannot add up to more than 100 percent');
+  ok(/reason = textOf\(req\.body\.reason\)\.slice\(0, 200\)/.test(server) && /action must be ban or unban/.test(server.slice(server.indexOf("app.post('/admin/ban'"), server.indexOf("app.post('/admin/ban'") + 800)), 'ban needs an explicit action'); }
+{ const u = R('user-src/original_module.js'), h = R('user-src/index.html'), a = R('admin-src/index.html');
+  ok(/expiresAtLocal/.test(u) && /msLeft/.test(server), 'the payment clock counts from this phone\'s own clock plus the seconds left the server sent');
+  ok(/_buying/.test(u) && !/\[\\s,\]/.test(u.replace(/\[\\\\s,\]/g, '')), 'buy is not entered twice');
+  ok(/overflow-wrap:\s*anywhere|overflow-wrap:anywhere/.test(h), 'long words wrap inside messages');
+  ok(/fill/.test(a) && /\+03:00/.test(a), 'admin: white behind transparent logos and Uganda time for product opening'); }
 console.log(`PASS: bug-hunt fixes (${n} checks)`);
 // the admin credit/debit: a failed ledger row AFTER the wallet moved says so (and does not clear the 10 s debounce), a failure before it is a clean error
 (async () => {

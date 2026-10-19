@@ -544,7 +544,7 @@ function fileToDataUrl(file, maxDim=900, quality=0.82){
         let{width:w,height:h}=img;
         if(w>maxDim||h>maxDim){ const s=maxDim/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
         const c=document.createElement('canvas'); c.width=w; c.height=h;
-        const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,w,h);
+        const ctx=c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0,w,h);   // JPEG has no transparency: without the white a transparent PNG came out black
         try{ resolve(c.toDataURL('image/jpeg',quality)); }
         catch(e){ reject(new Error('Could not process the image')); }
       };
@@ -1832,7 +1832,7 @@ async function openUser(uid){
       <button class="btn sky sm" id="pwBtn" title="Set a new login password for this user">Reset password</button>
     </div>
     <label style="margin-top:14px">Correct phone number ${u.phone && !/^\+2567\d{8}$/.test(u.phone)?'<span class="pill-tag t-warn" style="margin-left:6px">Looks malformed</span>':''}</label>
-    <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">Only fixes their profile phone (search/display/referral matching) -- they still log in exactly how they always have.</div>
+    <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">This CHANGES the number they log in with (their old number stops working) and signs them out everywhere. Tell them the new number.</div>
     <div class="row">
       <div style="flex:2"><input id="phoneFix" type="text" placeholder="07XXXXXXXX"></div>
       <button class="btn sky sm" id="phoneFixBtn">Save phone</button>
@@ -1959,6 +1959,7 @@ async function openUser(uid){
   $('phoneFixBtn')?.addEventListener('click', async()=>{
     const np=$('phoneFix').value.trim();
     if(!np) return toast('Enter the real phone number','err');
+    if(!confirm('Change this member\'s login phone number to '+np+'?\nThe old number will stop working and they will be signed out everywhere.')) return;
     const b=$('phoneFixBtn'); b.disabled=true; const lbl=b.textContent; b.textContent='Saving…';
     const d=await api('/admin/user/set-phone',{userId:uid,phone:np});
     b.disabled=false; b.textContent=lbl;
@@ -2414,7 +2415,7 @@ function editProduct(p, order, cat){
     <div class="muted" style="margin:14px 0 6px"><b>Opening schedule</b> — leave blank for always open.
       Upcoming above overrides both. Times are Uganda time.</div>
     <label>Opens at (one-off) — shows a countdown until then, open for good after</label>
-    <input id="pOpenAt" type="datetime-local" value="${p.openAt?new Date(Number(p.openAt)-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16):''}">
+    <input id="pOpenAt" type="datetime-local" value="${p.openAt?new Date(Number(p.openAt)+3*3600000).toISOString().slice(0,16):''}">
     <div class="row2">
       <div><label>Open daily from</label><input id="pOpenFrom" type="time" value="${esc(p.openFrom||'')}"></div>
       <div><label>until</label><input id="pOpenTo" type="time" value="${esc(p.openTo||'')}"></div>
@@ -2492,7 +2493,7 @@ function editProduct(p, order, cat){
       // datetime-local has no zone, so the browser reads it as local time --
       // which for the owner IS Uganda time. Sent as epoch ms so the server
       // never has to guess a zone.
-      openAt: $('pOpenAt').value ? new Date($('pOpenAt').value).getTime() : '',
+      openAt: $('pOpenAt').value ? Date.parse($('pOpenAt').value+':00+03:00') : '',   // the box says Uganda time (UTC+3), whatever this browser's own zone is
       openFrom: $('pOpenFrom').value, openTo: $('pOpenTo').value };
     // A deliberate rename (the admin actually changed the Key box) -- tells
     // the server to move the document, not create a second one alongside
@@ -3195,6 +3196,8 @@ async function renderSettings(){
   // actually render now.
   const [r] = await Promise.all([ api('/admin/settings') ]);
   if(staleTab('settings')) return;
+  // A failed read must NEVER show the built-in defaults: pressing Save would then overwrite the real settings with them.
+  if(!r || r.status!=='success' || !r.settings){ $('content').innerHTML='<div class="panel-card" style="color:var(--danger)">Could not load the settings, so nothing is shown (saving now would overwrite them). Press Refresh to try again.</div>'; return; }
   const s = r.settings||{};
   applyAdminBrandName(s.brandName);
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));

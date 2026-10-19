@@ -2456,6 +2456,8 @@ body{background-attachment:fixed;}
 /* ── The payment page (/payment/<order number>): dark purple, built from the owner's screenshots ── */
 #payScreen{position:fixed;inset:0;z-index:620;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;background:linear-gradient(135deg,#0b0b16 0%,#110a3d 50%,#090913 100%);color:#fff;font-family:'DM Sans','Roboto',system-ui,sans-serif;}
 #payScreen.show{display:block;}
+/* A long unbroken word (a link in a message title or body, the About text) wraps inside its card instead of running off the screen */
+.msg-row .t1,.msg-detail h2,.msg-detail .content,.ck-about,.ck-msgbody{overflow-wrap:anywhere;min-width:0;}
 #payScreen{overscroll-behavior-y:contain;}
 #payScreen .pg-ptr{position:fixed;left:50%;top:0;z-index:5;width:38px;height:38px;margin:0;border-radius:50%;background:#2a2150;border:1px solid rgba(255,255,255,.18);color:#e9e7f7;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transform:translate(-50%,-46px);box-shadow:0 6px 18px rgba(0,0,0,.4);}
 #payScreen .pg-ptr svg{width:22px;height:22px;}

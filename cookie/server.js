@@ -1894,6 +1894,13 @@ const ADMIN_PUSH_HEADERS = { Urgency: 'high', TTL: '7200' };
 // push token rotated keeps working (the secret is tied to the retired token).
 const PUSH_RETIRED_GRACE_MS = 48 * 60 * 60 * 1000;
 function pushRetiredExpired(t) { return !!t.retiredAt && Date.now() - tsMillis(t.retiredAt) > PUSH_RETIRED_GRACE_MS; }
+// A staff member who is deactivated or deleted stops getting alerts at once.
+async function dropAdminPushTokensOf(username) {
+  try {
+    const snap = await db.collection('adminPushTokens').where('username', '==', username).get();
+    await Promise.all(snap.docs.map(d => db.collection('adminPushTokens').doc(d.id).delete().catch(() => {})));
+  } catch (e) { console.warn('dropAdminPushTokensOf failed (non-critical):', e.message); }
+}
 async function sendAdminPush(title, body, data = {}, opts = {}) {
   if (typeof pushAdminReady !== 'undefined' && !pushAdminReady) return; // admin push needs its own setup (see the FIREBASE note near the top)
   try {
@@ -1902,7 +1909,12 @@ async function sendAdminPush(title, body, data = {}, opts = {}) {
     // A token the browser replaced is "retired", not deleted: alerts already on
     // the phone keep working for a while (see PUSH_RETIRED_GRACE_MS) but nothing
     // new is sent to it, and it is purged once the grace is over.
-    const snap = { docs: all.docs.filter(d => !d.data().retiredAt) };
+    const staffNames = [...new Set(all.docs.map(d => d.data()).filter(t => t.role === 'staff' && t.username).map(t => t.username))];
+    const inactive = new Set();
+    await Promise.all(staffNames.map(async n => {
+      try { const u = await db.collection('adminUsers').doc(n).get(); if (!u.exists || u.data().active === false) inactive.add(n); } catch (_) {}
+    }));
+    const snap = { docs: all.docs.filter(d => !d.data().retiredAt && !(d.data().role === 'staff' && inactive.has(d.data().username))) };
     const purge = all.docs.filter(d => d.data().retiredAt && pushRetiredExpired(d.data()));
     if (purge.length) Promise.all(purge.map(d => db.collection('adminPushTokens').doc(d.id).delete().catch(() => {}))).catch(() => {});
     if (!snap.docs.length) return;
@@ -4720,7 +4732,8 @@ async function loadPaymentOrder(userId, noRaw) {
   return { ref, orderNo: no, amount: finiteMoney(d.amount), status: expired ? 'expired' : d.status, expired,
     depositId: d.depositId || null, reference: d.reference || null, expiresAt: Number(d.expiresAt) || 0 };
 }
-const orderView = o => ({ orderNo: o.orderNo, amount: o.amount, state: o.status, depositId: o.depositId, reference: o.reference, expiresAt: o.expiresAt });
+// msLeft: the time left as a duration, so the app counts it on its own clock (a phone with a wrong clock would otherwise show a fresh order as expired)
+const orderView = o => ({ orderNo: o.orderNo, amount: o.amount, state: o.status, depositId: o.depositId, reference: o.reference, expiresAt: o.expiresAt, msLeft: Math.max(0, Number(o.expiresAt || 0) - Date.now()) });
 app.post('/deposit/order/create', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
@@ -4749,7 +4762,7 @@ app.post('/deposit/order/create', async (req, res) => {
     }
     if (!orderNo) return res.status(503).json({ status: 'error', message: 'Could not start the payment. Please try again.' });
     bumpDepositMethod(req.body.method);
-    res.json({ status: 'success', orderNo, amount: amt, expiresAt: Date.now() + PAYMENT_ORDER_TTL_MS });
+    res.json({ status: 'success', orderNo, amount: amt, expiresAt: Date.now() + PAYMENT_ORDER_TTL_MS, msLeft: PAYMENT_ORDER_TTL_MS });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not start the payment. Please try again.' }); }
 });
 // The payment request travels sealed (see pay-seal.js). The app asks for the server's public key first.
@@ -6983,6 +6996,7 @@ app.post('/admin/admins/deactivate', async (req, res) => {
   try {
     await db.collection('adminUsers').doc(username).update({ active: false });
     await invalidateSessionsFor(username);
+    await dropAdminPushTokensOf(username);
     logAdminAction(req, 'admin_deactivated', { username });
     res.json({ status: 'success' });
   } catch (e) { res.status(adminFailCode(e)).json({ status: 'error', message: e.message }); }
@@ -7014,6 +7028,7 @@ app.post('/admin/admins/delete', async (req, res) => {
   try {
     await db.collection('adminUsers').doc(username).delete();
     await invalidateSessionsFor(username);
+    await dropAdminPushTokensOf(username);
     logAdminAction(req, 'admin_deleted', { username });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -7144,6 +7159,11 @@ app.post('/admin/settings/update', async (req, res) => {
       if (!Number.isFinite(n) || n < min || n > max)
         return res.status(400).json({ status: 'error', message: `${key} must be a number between ${min} and ${max}` });
       updates[key] = Math.round(n);
+    }
+    if (['commL1', 'commL2', 'commL3'].some(k => k in updates)) {
+      const prevC = await getSettings();
+      const sum = ['commL1', 'commL2', 'commL3'].reduce((a, k) => a + (k in updates ? updates[k] : Number(prevC[k]) || 0), 0);
+      if (sum > 100) return res.status(400).json({ status: 'error', message: 'Level 1, 2 and 3 rewards together cannot be more than 100 percent.' });
     }
     for (const key of SETTINGS_BOOLEAN_FIELDS) {
       if (key in updates) updates[key] = updates[key] === true || updates[key] === 'true';
@@ -8381,6 +8401,7 @@ app.post('/admin/user/delete', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = String(req.body.userId || '');
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  if (String(req.body.confirm) !== 'DELETE') return res.status(400).json({ status: 'error', message: 'Deleting an account must be confirmed.' });
   if (_userBeingDeleted.has(userId)) return res.status(409).json({ status: 'error', message: 'Already deleting this account.' });
   _userBeingDeleted.add(userId);
   try {
@@ -8429,7 +8450,10 @@ app.post('/admin/user/delete', async (req, res) => {
     // then THIS reparent query -- which runs fresh, after that commit --
     // correctly sweeps the new member up too), or entirely after (its own
     // refCheck sees the now-deleted doc and correctly declines to attach).
+    const openWitSnap = await db.collection('withdrawals').where('userId', '==', userId).where('status', 'in', ['creating', 'pending', 'sending', 'processing']).limit(1).get();
+    if (!openWitSnap.empty) return res.status(409).json({ status: 'error', message: 'This account has a withdrawal still waiting. Finish or reject it first, then delete the account.' });
     const parentId = uSnap.data().referredBy || null;
+    const walletAtDelete = Number(uSnap.data().balance) || 0;
     await withLock('referrer-guard:' + userId, async () => {
       const childSnap = await db.collection('users').where('referredBy', '==', userId).get();
       await Promise.all(childSnap.docs.map(d => d.ref.update({ referredBy: parentId })));
@@ -8485,7 +8509,7 @@ app.post('/admin/user/delete', async (req, res) => {
       }
       for (const t of ancestorTargets) await recomputeTeamCounts(t).catch(e => console.warn('recomputeTeamCounts warning:', e.message));
     }
-    logAdminAction(req, 'user_deleted', { userId, reparentedTo: parentId });
+    logAdminAction(req, 'user_deleted', { userId, phone: uSnap.data().phone || null, walletBalance: walletAtDelete, reparentedTo: parentId });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
   finally { _userBeingDeleted.delete(userId); }
@@ -8496,7 +8520,7 @@ const _adminDebitDebounce = new Map();
 function strictAdminAmount(v) { return (typeof v === 'number' || typeof v === 'string') && /^-?\d+(\.\d+)?$/.test(String(v).trim()) ? Number(String(v).trim()) : NaN; }
 app.post('/admin/deposit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const userId = String((req.body && req.body.userId) || '').trim(), { amount, note } = req.body;
+  const userId = String((req.body && req.body.userId) || '').trim(), amount = req.body && req.body.amount, note = textOf(req.body && req.body.note).slice(0, 200);
   const amt = Math.round(strictAdminAmount(amount));
   if (!userId || !Number.isFinite(amt) || amt <= 0 || amt > MAX_MONEY_AMOUNT)
     return res.status(400).json({ status: 'error', message: `userId and a valid amount (1 - ${fmtMoney(MAX_MONEY_AMOUNT)}) required` });
@@ -8538,7 +8562,7 @@ app.post('/admin/deposit', async (req, res) => {
 });
 app.post('/admin/debit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const userId = String((req.body && req.body.userId) || '').trim(), { amount, note } = req.body;
+  const userId = String((req.body && req.body.userId) || '').trim(), amount = req.body && req.body.amount, note = textOf(req.body && req.body.note).slice(0, 200);
   const amt = Math.round(Math.abs(strictAdminAmount(amount)));
   if (!userId || !Number.isFinite(amt) || amt <= 0 || amt > MAX_MONEY_AMOUNT)
     return res.status(400).json({ status: 'error', message: `userId and a valid amount (1 - ${fmtMoney(MAX_MONEY_AMOUNT)}) required` });
@@ -8590,8 +8614,9 @@ function maskTeamPhone(phone) {
 const adminFailCode = e => /matched no document|not found/i.test(String((e && e.message) || '')) ? 404 : 500;
 app.post('/admin/ban', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { userId, action, reason } = req.body;
+  const { userId, action } = req.body, reason = textOf(req.body.reason).slice(0, 200);
   if (!userId || typeof userId !== 'string') return res.status(400).json({ status: 'error', message: 'userId required' });
+  if (action !== 'ban' && action !== 'unban') return res.status(400).json({ status: 'error', message: 'action must be ban or unban' });   // a missing action used to UNBAN
   try {
     const isBan = action === 'ban';
     await db.collection('users').doc(userId).update({
