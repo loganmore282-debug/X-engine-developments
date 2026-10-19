@@ -72,4 +72,5 @@ ok(/async function inChunks\(/.test(server) && /Promise\.allSettled\(\[\s*reconc
   ok(!/mint_bad_ua/.test(hostBlock.slice(0, hostBlock.indexOf('location / { return 404; }'))), 'the webhook-only host has no user-agent wall'); }
 ok(/return 308 https:/.test(rd('deploy/update-vps.sh')), 'update-vps.sh turns certbot\'s 301 into 308 so a POST callback keeps its body when it is redirected');
 ok(/maxretry = 3/.test(rd('deploy/fail2ban/mint.local').slice(rd('deploy/fail2ban/mint.local').indexOf('[mint-badua]'), rd('deploy/fail2ban/mint.local').indexOf('[mint-adminlogin]'))), 'one odd sender name no longer bans an address for a day');
+ok(/async function finishSignupToLogin\(typedPhone\)/.test(mod) && /if \(signupFlow\) \{ await finishSignupToLogin\(regTypedPhone\); return; \}/.test(mod) && /if \(ph\) ph\.value = typedPhone;/.test(mod), 'after signing up the member lands on Login with the number already filled in (only the password is typed)');
 console.log(`PASS: bug sweep fixes (${n} checks)`);

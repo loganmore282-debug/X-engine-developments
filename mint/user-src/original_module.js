@@ -2432,10 +2432,25 @@ async function abandonUnfinishedSignup(reg){
   setBtnLoading('regBtn', false, 'Sign Up');
   notify((reg.message || 'Your sign-up was not finished.') + ' Complete your sign-up below.');
 }
+async function finishSignupToLogin(typedPhone){
+  window._pendingLoginSuccess = false;
+  window._pendingRegPin = ''; window._pendingRegPhone = '';
+  await window.doLogout();
+  hideLoadingScreen();
+  $('authScreen').style.display = '';
+  ['regPhone', 'regPassword', 'regPassword2', 'regTradePin', 'regCaptcha'].forEach(id => { const el = $(id); if (el) el.value = ''; });
+  setBtnLoading('regBtn', false, 'Sign Up');
+  showAuthTab('login');
+  const ph = $('loginPhone'), pw = $('loginPassword');
+  if (ph) ph.value = typedPhone;
+  if (pw) pw.value = '';
+  notify(t('Registration successful ✓'), () => { const el = $('loginPassword'); if (el) { try { el.focus(); } catch (_) {} } });
+}
 async function bootFromNetwork(uid){
   // _pendingRegPhone identifies a signup started in this tab; it works
   // without an OTP ticket.
   const signupFlow = !!window._pendingRegPhone;
+  const regTypedPhone = signupFlow ? (($('regPhone') || {}).value || '') : '';
   let r;
   // subagent-audit-caught: a brand-new registration always paid for a
   // GUARANTEED-to-fail /account call first (the profile doc genuinely
@@ -2501,6 +2516,9 @@ async function bootFromNetwork(uid){
     await window.fbSignOut();
     return;
   }
+  // A brand-new account does not go straight into the app: the member lands on Login with the number
+  // already filled in, so only the password has to be typed.
+  if (signupFlow) { await finishSignupToLogin(regTypedPhone); return; }
   STATE.account = r.account;
   // The member's OWN region wins over the hostname's: somebody who signed
   // up on the Kenyan site and then opens the Ugandan one still sees Kenyan

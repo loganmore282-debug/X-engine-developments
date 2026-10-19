@@ -315,8 +315,9 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     eq($(w, 'regBtn').disabled, false, 'Register usable again');
     t.length = 0; $(w, 'regReferral').value = 'GOODCODE'; $(w, 'regCaptcha').value = '1234'; w.eval("STATE.captchaId='cid2'");   // the first picture was used up by the first attempt
     await w.doRegister(); await sleep(150);
-    eq(shown(w, 'app'), true, 'corrected code: app open'); eq(shown(w, 'authScreen'), false); eq(shown(w, 'loadingScreen'), false);
-    eq(log.signOuts, 0, 'the recovery never signs the member out');
+    eq(shown(w, 'app'), false, 'corrected code: a new account lands on Login, not in the app'); eq(shown(w, 'authScreen'), true); eq(shown(w, 'loadingScreen'), false);
+    eq($(w, 'loginPhone').value, '0771234567', 'the number is already filled in on Login'); eq($(w, 'loginPassword').value, '', 'only the password is left to type');
+    eq(profile, true, 'the profile was finished on the server');
     ok(!t.some(m => /Session changed|went wrong|not a function/.test(m)), 'no stray errors: ' + JSON.stringify(t));
     ok(t.some(m => /Registration successful/.test(m)), 'says it worked');
     eq(w.eval('window._pendingRegPhone'), '', 'staged state cleared after success');
@@ -331,9 +332,11 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     const calls = fakeServer(w, async (p, b) => p === '/register' ? (profile = true, eq(b.pin, '123456', 'trade PIN is sent for registration'), ok(!Object.hasOwn(b, 'otpTicket'), 'registration sends no OTP ticket'), { status: 200, body: { status: 'success' } }) : p === '/account' ? (profile ? { status: 200, body: okAccount } : { status: 404, body: { status: 'error', code: 'NOT_FOUND' } }) : null);
     $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; $(w, 'regCaptcha').value = '1234'; w.eval("STATE.captchaId='cid'");
     await w.doRegister(); await sleep(120);
-    eq(shown(w, 'app'), true); eq(shown(w, 'authScreen'), false); eq(shown(w, 'loadingScreen'), false);
+    eq(shown(w, 'app'), false, 'a new account does not open the app'); eq(shown(w, 'authScreen'), true, 'it lands on Login'); eq(shown(w, 'loadingScreen'), false);
+    eq($(w, 'loginPhone').value, '0771234567', 'the number is already on Login'); eq($(w, 'loginPassword').value, '', 'only the password is left to type');
+    eq(w.eval("document.getElementById('tabLogin').getAttribute('aria-selected')"), 'true', 'the Login tab is the open one');
     ok(t.some(m => /Registration successful/.test(m)) && !t.some(m => /Login successful/.test(m)), 'sign-up toast, not login toast: ' + JSON.stringify(t));
-    eq(log.signOuts, 0);
+    eq(log.signOuts, 1, 'the member is signed out once, so they log in themselves');
     ok(!calls.some(p => p.startsWith('/auth/otp/')), 'registration sends no OTP requests even when the setting is enabled');
     await closeSoon(dom);
   }
