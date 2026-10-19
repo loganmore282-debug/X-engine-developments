@@ -48,9 +48,8 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
    Chosen domain: `dble-mint.com` (not wired in; run `deploy/set-domain.sh dble-mint.com` when the owner has pointed DNS).
 3. (done) Login + Sign Up built from the owner's batch-1 screenshots (tab bar, admin banner `authhero`, circle logo `authlogo`, green fields/icons/scrollbar,
    server captcha `captcha.js`, +256, UGX, password min 6 with no weak-password list). Loader unchanged ("Loading..." + admin background).
-4. (memorised, not built) Batch 2: Treasure Chest, Team, Salary, Balance Record, Home product list, Account icons, Change passwords, Messages, 6-tab bottom bar.
-   Pictures in `design-ref/batch2/`, notes in `docs/SCREENS-BATCH2.md`. The owner will send more and wants ONE build.
-   Batch 3 also memorised: Promotion/share, Download page, Wallet (card), Add Wallet, Withdraw, Profile, Deposit (+ redirect overlay), chest artwork.
-   Pictures `design-ref/batch3/`, notes `docs/SCREENS-BATCH3.md`.
-5. (waiting on owner) Mint's screenshots, one batch at a time; the look is changed to match them exactly. Design is still Soda's look (renamed) until then.
+4. (done) All of the owner's screens (batches 2-4: `docs/SCREENS-BATCH2.md`, `SCREENS-BATCH3.md`, `SCREENS-BATCH4.md`, pictures in `design-ref/`) are built: green/cream design (`/* MG-START */ ... /* MG-END */` block of
+   `user-src/index.html`), six tabs (Home, Orders, Promotion, Team, Salary, Profile), Home with message icon + site name + bouncing chest, Treasure Chest page and win card, Wallet, Withdraw, Deposit (+ redirect overlay),
+   Balance Record, Messages (with pictures), password pages, Download page, welcome dialog, red-OK notice dialog. Salary is new (see SCREENS-BATCH4.md); Task Center is removed.
+5. (next) Anything the owner sends after this is a change to these screens; compare against `design-ref/` with side-by-side renders (Playwright, 360x701 at 2x) before saying it matches.
    Payment keys (PesaJet/MarzPay) are set later by the owner.

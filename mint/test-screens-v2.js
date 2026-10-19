@@ -8,7 +8,7 @@ let n = 0; const ok = (c, m) => { assert(c, m); n++; };
 
 // 1. /team/stats adds what each level has paid, from the ledger's own commissionLevel (0 = Level 1)
 const grab = (a, b) => { const i = src.indexOf(a), j = src.indexOf(b, i); if (i < 0 || j < 0) throw new Error('slice ' + a); return src.slice(i, j); };
-const route = grab("app.get('/team/stats'", "// Claiming a Task Center reward.");
+const route = grab("app.get('/team/stats'", "// DAILY SALARY (the Salary tab)");
 const finiteMoney = v => Number.isFinite(Number(v)) ? Number(v) : 0;
 function runStats(rows) {
   let handler;
@@ -20,7 +20,7 @@ function runStats(rows) {
       return { forEach: cb => list.forEach(r => cb({ data: () => r })), docs: list.map(r => ({ data: () => r })) }; } }; return q; },
   }) };
   new Function('app', 'db', 'verifyAuth', 'getSettings', 'wholeTeamStats', 'activeL1Count', 'taskRows', 'finiteMoney', 'console', route)(
-    app, db, async () => 'u1', async () => ({ commL1: 26, commL2: 2, commL3: 1 }), async () => ({ deposits: 5000, counts: [3, 1, 0] }), async () => 0, () => [], finiteMoney, console);
+    app, db, async () => 'u1', async () => ({ commL1: 26, commL2: 2, commL3: 1 }), async () => ({ deposits: 5000, counts: [3, 1, 0], levelDeposits: [3000, 2000, 0] }), async () => 0, () => [], finiteMoney, console);
   let body; const res = { json: b => { body = b; }, status() { return res; } };
   return handler({ headers: {} }, res).then(() => body);
 }
@@ -37,26 +37,26 @@ function runStats(rows) {
   ok(r.status === 'success', 'stats still answer');
   assert.deepStrictEqual(r.levelCommission, { l1: 1500, l2: 200, l3: 50 }); n++;
   ok(r.totalTeam === 4 && r.teamDeposits === 5000 && r.team.l1 === 3 && r.team.l2 === 1 && r.team.l3 === 0, 'the level counts come from the live team read, not the stored counters (which here say 3/1/0 by coincidence only)');
+  assert.deepStrictEqual(r.levelPurchase, { l1: 3000, l2: 2000, l3: 0 }); n++;
   const empty = await runStats([]);
   assert.deepStrictEqual(empty.levelCommission, { l1: 0, l2: 0, l3: 0 }); n++;
 
   // 2. profile logo slot: stored, served to members and to the admin
   ok(/const MINT_IMAGE_SLOTS = \[[^\]]*'profilelogo'/.test(src), 'profilelogo is a known image slot');
-  ok(/publicJson\(req, res, \{ status: 'success', logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo \}/.test(src), 'members get it from /public/mint-images');
-  ok(/res\.json\(\{ status: 'success', logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo, loaderbg \}\)/.test(src), 'and the admin panel reads it');
+  ok(/publicJson\(req, res, \{ status: 'success', logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo, downloadbg \}/.test(src), 'members get it from /public/mint-images');
+  ok(/res\.json\(\{ status: 'success', logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo, loaderbg, downloadbg \}\)/.test(src), 'and the admin panel reads it');
   ok(/id="profileLogoFile"/.test(adm) && /wireMintImageSlot\('profilelogo'/.test(adm), 'the admin panel can upload and remove it');
   ok(!/checkinBannerFile/.test(adm), 'the removed Check-in banner upload is gone from admin');
 
-  // 3. the Home ticker line is an admin setting that members receive
-  ok(/tickerText: ''/.test(src), 'tickerText is a real setting (empty = built-in sentence)');
-  ok(/id="sTickerText"/.test(adm) && /tickerText:\$\('sTickerText'\)\.value\.trim\(\)/.test(adm), 'the admin saves it');
+  // 3. the Download App background is an admin image slot too
+  ok(/const MINT_IMAGE_SLOTS = \[[^\]]*'downloadbg'/.test(src) && /id="downloadBgFile"/.test(adm), 'the Download App background can be uploaded in admin');
   // 5. production hygiene
   ok(/const DEFAULT_PRODUCTS = \[\];/.test(src), 'no built-in placeholder assets: members only see what the admin created');
   const cli = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
   ok(!/Mint Mini|Mint Classic|Product-1\b/.test(cli), 'no sample asset is written into the app code');
-  ok(!/after 24 hours/.test(cli) && /All product earnings will be automatically added to your app balance at midnight 00:00\./.test(cli), 'the Home line says earnings are added at midnight 00:00 (cashback is paid at Uganda midnight)');
+  ok(!/v-ticker/.test(cli), 'Home has no scrolling line any more');
   const css = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
-  ok(/--v-blue:#1739b8/.test(css) && !/#e30613|#1457e8/i.test(css), 'the app uses the royal blue and no red is left');
+  ok(/--mg-green:#02a652/.test(css) && /--mg-bg:#f8f4e9/.test(css), 'the app uses the green and cream design tokens');
   console.log(`PASS: screen data (${n} checks)`);
 })().catch(e => { console.error(e); process.exit(1); });
 

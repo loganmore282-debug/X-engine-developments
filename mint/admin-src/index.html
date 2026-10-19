@@ -486,7 +486,7 @@ function msToDatetimeLocal(ms){
 }
 function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
 const TX_LABELS = {
-  deposit: 'Recharge', withdraw: 'Withdraw', commission: 'Commission', team_reward: 'Task Center reward',
+  deposit: 'Recharge', withdraw: 'Withdraw', commission: 'Commission', team_reward: 'Team reward',
   checkin: 'Daily reward', cashback: 'Product cashback', investment: 'Product purchase',
   promocode: 'Promo code redeemed', admin_credit: 'Credit', admin_debit: 'Adjustment',
   welcome_bonus: 'Welcome bonus', mission_salary: 'Mission Center salary',
@@ -1374,7 +1374,7 @@ async function renderAnalytics(silent){
       <div class="stat"><div class="n">${k.activeInvestors||0}</div><div class="l">Active investors</div></div>
       <div class="stat"><div class="n">${ugx(k.investedAmount)}</div><div class="l">Invested (all time)</div></div>
       <div class="stat"><div class="n">${ugx(k.commissionsPaid)}</div><div class="l">Commissions paid (all time)</div></div>
-      <div class="stat"><div class="n">${a.rewardsUnavailable?'Unavailable':ugx(k.teamRewardsPaid)}</div><div class="l">Task Center rewards paid (all time)</div></div>
+      <div class="stat"><div class="n">${a.rewardsUnavailable?'Unavailable':ugx(k.teamRewardsPaid)}</div><div class="l">Team rewards paid (all time)</div></div>
     </div>
     <div class="panel-card">
       <h2 class="sec" style="margin-top:0">When people transact, by hour of day</h2>
@@ -1794,7 +1794,7 @@ async function openUser(uid){
     <div class="kv"><span class="k">Invested</span><span>${ugx(u.totalInvested)}</span></div>
     <div class="kv"><span class="k">Cashed out</span><span>${ugx(u.totalWithdrawn)}</span></div>
     <div class="kv"><span class="k">Total earned (all sources)</span><span>${ugx(u.totalEarned)}</span></div>
-    <div class="muted" style="font-size:11px;margin:-4px 0 8px;line-height:1.6">Investment cashback ${ugx(eb.cashback)} &middot; Referral commission ${ugx(eb.commission)} &middot; Check-in ${ugx(eb.checkin)} &middot; Gift codes ${ugx(eb.promocode)} &middot; Task Center ${ugx(eb.team_reward)} &middot; Mission Center ${ugx(mission)} &middot; Turntable ${ugx(eb.turntable)}</div>
+    <div class="muted" style="font-size:11px;margin:-4px 0 8px;line-height:1.6">Investment cashback ${ugx(eb.cashback)} &middot; Referral commission ${ugx(eb.commission)} &middot; Check-in ${ugx(eb.checkin)} &middot; Gift codes ${ugx(eb.promocode)} &middot; Team rewards ${ugx(eb.team_reward)} &middot; Daily salary ${ugx(mission)} &middot; Turntable ${ugx(eb.turntable)}</div>
     <div class="kv"><span class="k">Team commission <span class="muted" style="font-size:10.5px">(already included above)</span></span><span>${ugx(u.teamCommission)}</span></div>
     <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'Not set')}</span></div>
     <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
@@ -2520,6 +2520,9 @@ async function renderMessages(){
         <div><label>ID (blank = new)</label><input id="mId" type="text" placeholder="new"></div>
       </div>
       <div style="margin-top:6px"><label>Message</label><textarea id="mBody" rows="5" maxlength="4000" placeholder="Write the message members will read..."></textarea></div>
+      <div style="margin-top:10px"><label>Picture (optional, shown under the message)</label>
+        <div class="banner-row"><img class="img-thumb" id="mImgThumb" style="display:none" alt=""><div id="mImgNote" class="muted" style="flex:1;font-size:12px">No picture</div><button class="btn danger sm" id="mImgClear" type="button" style="display:none">Remove</button></div>
+        <label class="btn block file-btn" style="margin-top:8px">Choose picture<input type="file" id="mImgFile" accept="image/*" hidden></label></div>
       <button class="btn" id="mSave" style="margin-top:10px">Post message</button>
     </div>
     <h3 class="sec" style="margin-top:18px">Posted messages</h3>
@@ -2530,23 +2533,35 @@ async function renderMessages(){
           ? ' &middot; ' + (!m.regionKey || m.regionKey==='all' ? 'every country' : esc('Uganda'))
           : ''}</div>
         <div style="font-size:13px;white-space:pre-line">${esc(m.body||'')}</div>
+        ${m.image?`<img class="img-thumb" src="${esc(m.image)}" style="margin-top:8px;max-width:160px" alt="">`:''}
         <div style="margin-top:10px;display:flex;gap:8px">
           <button class="btn sm" data-medit="${esc(m.id)}">Edit</button>
           <button class="btn sm danger" data-mdel="${esc(m.id)}">Delete</button>
         </div>
       </div>`).join('') : '<div class="muted">No messages posted yet.</div>'}`;
+  // null = leave the stored picture alone, '' = remove it, otherwise the new picture (a data URL)
+  let mImage = null;
+  const paintMImg = (src, note)=>{ const t=$('mImgThumb'); t.style.display = src ? '' : 'none'; if (src) t.src = src; $('mImgNote').textContent = note; $('mImgClear').style.display = src ? '' : 'none'; };
+  $('mImgFile').addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    try { mImage = await fileToDataUrl(f, 1000, 0.82); paintMImg(mImage, 'New picture'); } catch(err){ toast(err.message||'Could not read image','err'); }
+  });
+  $('mImgClear').addEventListener('click', ()=>{ mImage = ''; paintMImg('', 'Picture will be removed'); });
   $('mSave').addEventListener('click', async ()=>{
     const title = $('mTitle').value.trim();
     const body = $('mBody').value.trim();
     if(!title) return toast('Enter a title','err');
     if(!body) return toast('Enter the message','err');
-    const d = await api('/admin/messages/save', { id: $('mId').value.trim(), title, body });
+    const payload = { id: $('mId').value.trim(), title, body };
+    if (mImage !== null) payload.image = mImage;
+    const d = await api('/admin/messages/save', payload);
     toast(d.status==='success'?'Message posted':(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success') renderMessages();
   });
   document.querySelectorAll('[data-medit]').forEach(b=>b.addEventListener('click',()=>{
     const m = list.find(x=>x.id===b.dataset.medit); if(!m) return;
     $('mId').value = m.id; $('mTitle').value = m.title||''; $('mBody').value = m.body||'';
+    mImage = null; paintMImg(m.image||'', m.image ? 'Current picture' : 'No picture');
     window.scrollTo({ top:0, behavior:'smooth' });
   }));
   document.querySelectorAll('[data-mdel]').forEach(b=>b.addEventListener('click',async()=>{
@@ -2895,6 +2910,7 @@ async function renderBanners(){
   const bannerImage = br.image||'';
   const authHeroImage = cir.authhero||'';
   const authLogoImage = cir.authlogo||'';
+  const downloadBgImage = cir.downloadbg||'';
   const homeSlide2Image = cir.banner2||'';
   const homeSlide3Image = cir.banner3||'';
   const logoImage = cir.logo||'';
@@ -2943,9 +2959,15 @@ async function renderBanners(){
       <label class="btn block file-btn" style="margin-top:10px">Upload slide 3 image<input type="file" id="homeSlide3File" accept="image/*" hidden></label>
     </div>
 
-    <h2 class="sec">Announcement picture</h2>
+    <h2 class="sec">Welcome announcement</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The portrait picture members see when they open the app (with Join Channel and Close under it). Tall portrait (for example 1080&times;2200); it is shown as tall as the screen allows. It shows to every member on opening the app while a picture is uploaded; remove the picture to turn it off.</p>
+      <p class="muted" style="margin-top:0">The dialog members see when they open the app: a title, a picture, lines of text and a Join Channel button (the Telegram group link, set under Support). It shows while a picture is uploaded or while the title and lines below are saved with the box ticked; remove the picture and clear the lines to turn it off.</p>
+      <label>Title</label><input id="annTitleInput" maxlength="60" value="${esc(v('annTitle',''))}" placeholder="Welcome">
+      <label style="margin-top:10px">Lines of text (one per line; start a line with &#10004; for a tick)</label>
+      <textarea id="annBodyInput" rows="6" maxlength="1200" style="width:100%" placeholder="&#10004; Welcome bonus...">${esc(v('annBody',''))}</textarea>
+      <label style="margin-top:10px;display:flex;gap:8px;align-items:center"><input type="checkbox" id="annEnabledInput" style="width:auto;margin:0" ${v('annEnabled',false)?'checked':''}> Show the text even without a picture</label>
+      <button class="btn block" id="saveAnnText" style="margin-top:10px">Save announcement text</button>
+      <p class="muted" style="margin:14px 0 6px">Picture: tall portrait or wide banner; it sits under the title.</p>
       <div class="banner-row">
         ${announcementImage?`<img class="img-thumb" src="${esc(announcementImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${announcementImage?'Custom image':'<span class="muted">Not set</span>'}</div>
@@ -2990,6 +3012,17 @@ async function renderBanners(){
         ${authLogoImage?`<button class="btn danger sm" id="authLogoClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload circle logo<input type="file" id="authLogoFile" accept="image/*" hidden></label>
+    </div>
+
+    <h2 class="sec">Download App background</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The picture behind the Download App page (Profile &rarr; Download APP). Tall, about 1080&times;1920. Without one, a soft green background is used.</p>
+      <div class="banner-row">
+        ${downloadBgImage?`<img class="img-thumb" src="${esc(downloadBgImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${downloadBgImage?'Custom image':'<span class="muted">Soft green</span>'}</div>
+        ${downloadBgImage?`<button class="btn danger sm" id="downloadBgClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload background<input type="file" id="downloadBgFile" accept="image/*" hidden></label>
     </div>
 
     <h2 class="sec">Login &amp; Sign Up banner</h2>
@@ -3059,6 +3092,7 @@ function wireBannerHandlers(){
                        : slot==='loaderbg' ? 1080
                        : slot==='authhero' ? 1600
                        : slot==='authlogo' ? 480
+                       : slot==='downloadbg' ? 1080
                        : 1280;
           const image = await fileToDataUrl(f, maxDim, slot==='loaderbg' ? 0.7 : 0.82);
           const d = await api('/admin/mint-image/set', { slot, image });
@@ -3102,6 +3136,7 @@ function wireBannerHandlers(){
   });
   wireMintImageSlot('authhero', 'authHeroFile', 'authHeroClear', 'Banner saved, live on Log In and Sign Up', 'Banner removed');
   wireMintImageSlot('authlogo', 'authLogoFile', 'authLogoClear', 'Circle logo saved, live on Log In and Sign Up', 'Circle logo removed');
+  wireMintImageSlot('downloadbg', 'downloadBgFile', 'downloadBgClear', 'Download page background saved', 'Download page background removed');
   wireMintImageSlot('banner2', 'homeSlide2File', 'homeSlide2Clear', 'Slide 2 saved, live on Home', 'Slide 2 removed');
   wireMintImageSlot('banner3', 'homeSlide3File', 'homeSlide3Clear', 'Slide 3 saved, live on Home', 'Slide 3 removed');
   const annImageFile = $('annImageFile');
@@ -3251,17 +3286,11 @@ async function renderSettings(){
       <button class="btn block" id="saveSupport">Save support contacts</button>
     </div>
 
-    <h2 class="sec">Scrolling line on Home</h2>
-    <div class="panel-card">
-      <label>Text</label><input id="sTickerText" maxlength="200" value="${esc(v('tickerText',''))}" placeholder="Leave empty for the built-in sentence">
-      <button class="btn block" id="saveAnn" style="margin-top:10px">Save</button>
-    </div>
-
-    <h2 class="sec">Task Center</h2>
+    <h2 class="sec">Daily Salary</h2>
     <div class="panel-card" id="taskCard">
-      <p class="muted" style="margin-top:0">Rewards on the Team page. Referrals count a member's own Level 1 members who have deposited. Deposits count what their whole team (levels 1 to 3) has deposited. A task a member has already claimed stays claimed when you change its numbers.</p>
+      <p class="muted" style="margin-top:0">The Salary tab. A member's team total (everything levels 1 to 3 have deposited) puts them on the highest tier it reaches; every calendar day on a reached tier is one day of wages worth that tier's reward, and wages the member does not claim keep adding up. A day already paid stays paid when you change the numbers.</p>
       <div id="taskEditor" class="muted">Loading&hellip;</div>
-      <button class="btn block" id="saveTasks" style="margin-top:12px" disabled>Save Task Center</button>
+      <button class="btn block" id="saveTasks" style="margin-top:12px" disabled>Save Daily Salary</button>
     </div>
 
     <h2 class="sec">App name</h2>
@@ -3340,43 +3369,41 @@ async function renderSettings(){
     const upd = { supportTelegram:$('spTg').value.trim(), telegramGroup:$('spTgGroup').value.trim() };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
-  $('saveAnn').addEventListener('click', async()=>{
-    const upd = { tickerText:$('sTickerText').value.trim() };
-    const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  $('saveAnnText').addEventListener('click', async()=>{
+    const upd = { annTitle:$('annTitleInput').value.trim(), annBody:$('annBodyInput').value, annEnabled:$('annEnabledInput').checked };
+    const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Announcement text saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
-  // ── Task Center editor: two tables of target / reward, each row keeps its id so edits never re-open a claimed task ──
+  // ── Daily Salary editor: one table of team total / reward per day, each row keeps its id so edits never re-pay a claimed day ──
   const taskRowHtml=(r)=>`<div class="task-row" data-id="${esc(r.id||'')}" style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-      <input type="number" min="1" step="1" class="tk-target" value="${r.target||''}" placeholder="Target" style="flex:1;margin:0">
-      <input type="number" min="1" step="1" class="tk-reward" value="${r.reward||''}" placeholder="Reward" style="flex:1;margin:0">
+      <input type="number" min="1" step="1" class="tk-target" value="${r.target||''}" placeholder="Team total" style="flex:1;margin:0">
+      <input type="number" min="1" step="1" class="tk-reward" value="${r.reward||''}" placeholder="Reward per day" style="flex:1;margin:0">
       <button class="btn sm danger tk-del" type="button" aria-label="Remove" style="flex:0 0 auto">&times;</button></div>`;
-  const taskTableHtml=(kind,title,hint,rows)=>`<div class="task-table" data-kind="${kind}" style="margin-bottom:16px">
-      <div style="font-weight:700;margin-bottom:2px">${title}</div>
-      <div class="muted" style="font-size:11.5px;margin-bottom:8px">${hint}</div>
-      <div style="display:flex;gap:8px;margin-bottom:4px"><span class="muted" style="flex:1;font-size:11.5px">Target</span><span class="muted" style="flex:1;font-size:11.5px">Reward (${adminCur()})</span><span style="width:44px"></span></div>
+  const taskTableHtml=(rows)=>`<div class="task-table" style="margin-bottom:16px">
+      <div style="display:flex;gap:8px;margin-bottom:4px"><span class="muted" style="flex:1;font-size:11.5px">Team total (${adminCur()})</span><span class="muted" style="flex:1;font-size:11.5px">Reward per day (${adminCur()})</span><span style="width:44px"></span></div>
       <div class="task-rows">${rows.map(taskRowHtml).join('')}</div>
-      <button class="btn sm ghost tk-add" type="button">+ Add task</button></div>`;
+      <button class="btn sm ghost tk-add" type="button">+ Add tier</button></div>`;
   const wireTaskTable=(box)=>{
     box.querySelectorAll('.tk-del').forEach(b=>b.onclick=()=>b.closest('.task-row').remove());
     box.querySelector('.tk-add').onclick=()=>{ const w=document.createElement('div'); w.innerHTML=taskRowHtml({}); const row=w.firstElementChild; box.querySelector('.task-rows').appendChild(row); row.querySelector('.tk-del').onclick=()=>row.remove(); row.querySelector('.tk-target').focus(); };
   };
-  const readTaskTable=(kind)=>[...document.querySelectorAll(`.task-table[data-kind="${kind}"] .task-row`)]
+  const readTaskTable=()=>[...document.querySelectorAll('.task-table .task-row')]
     .map(r=>({ id:r.dataset.id||'', target:r.querySelector('.tk-target').value.trim(), reward:r.querySelector('.tk-reward').value.trim() }))
     .filter(r=>r.target!==''||r.reward!=='')
     .map(r=>({ id:r.id, target:Number(r.target), reward:Number(r.reward) }));
-  api('/admin/tasks').then(d=>{
+  api('/admin/salary').then(d=>{
     const box=$('taskEditor'); if(!box) return;
-    if(d.status!=='success'){ box.textContent=d.message||'Could not load the tasks'; return; }
+    if(d.status!=='success'){ box.textContent=d.message||'Could not load the salary tiers'; return; }
     box.classList.remove('muted');
-    box.innerHTML=taskTableHtml('referrals','Referrals','Level 1 members who have deposited',d.referrals||[])+taskTableHtml('deposits','Deposits','Team deposits, levels 1 to 3',d.deposits||[]);
+    box.innerHTML=taskTableHtml(d.tiers||[]);
     box.querySelectorAll('.task-table').forEach(wireTaskTable);
     $('saveTasks').disabled=false;
   });
   $('saveTasks').addEventListener('click', async()=>{
     const b=$('saveTasks'); if(b.disabled) return; b.disabled=true;
-    const d=await api('/admin/tasks/save',{ referrals:readTaskTable('referrals'), deposits:readTaskTable('deposits') });
+    const d=await api('/admin/salary/save',{ tiers:readTaskTable() });
     b.disabled=false;
-    toast(d.status==='success'?'Task Center saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
-    if(d.status==='success'){ const box=$('taskEditor'); box.innerHTML=taskTableHtml('referrals','Referrals','Level 1 members who have deposited',d.referrals)+taskTableHtml('deposits','Deposits','Team deposits, levels 1 to 3',d.deposits); box.querySelectorAll('.task-table').forEach(wireTaskTable); }
+    toast(d.status==='success'?'Daily Salary saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'){ const box=$('taskEditor'); box.innerHTML=taskTableHtml(d.tiers); box.querySelectorAll('.task-table').forEach(wireTaskTable); }
   });
   $('saveBrandName').addEventListener('click', async()=>{
     const name = $('brandNameInput').value.trim();
@@ -3825,7 +3852,7 @@ const ADMIN_LANG_PATTERNS = [
   ['Newest first, {0} total.', 'Ebipya bisooka, omugatte {0}.', 'Vipya kwanza, jumla {0}.', 'Les plus récents d\'abord, {0} au total.', 'Bishya mbere, byose {0}.', 'Ebisya bikatandika, omugatte {0}.'],
   ['Pays {0}', 'Esasula {0}', 'Inalipa {0}', 'Rapporte {0}', 'Itanga {0}', 'Neeshashura {0}'],
   ['Amount ({0})', 'Omuwendo ({0})', 'Kiasi ({0})', 'Montant ({0})', 'Umubare ({0})', 'Omubaro ({0})'],
-  ['Investment cashback {0} · Referral commission {1} · Check-in {2} · Gift codes {3} · Task Center {4} · Mission Center {5}', 'Ssente z\'ebyamaguzi {0} · Ssente z\'okuyita {1} · Okukyalira {2} · Koodi z\'ebirabo {3} · Ekifo ky\'emirimu {4} · Ekifo ky\'obulambuzi {5}', 'Marejesho ya uwekezaji {0} · Kamisheni ya mialiko {1} · Kuhudhuria {2} · Misimbo ya zawadi {3} · Kituo cha kazi {4} · Kituo cha misheni {5}', 'Remise d\'investissement {0} · Commission de parrainage {1} · Pointage {2} · Codes cadeaux {3} · Centre de tâches {4} · Centre de missions {5}', 'Inyungu z\'ishoramari {0} · Komisiyo yo gutumira {1} · Kwiyandikisha {2} · Kode z\'impano {3} · Ikigo cy\'imirimo {4} · Ikigo cy\'ubutumwa {5}', 'Sente z\'ebyamaguzi {0} · Sente z\'okweta {1} · Okwoleka {2} · Koodi z\'ebiconco {3} · Ekicweka ky\'emirimo {4} · Ekicweka ky\'obutumwa {5}'],
+  ['Investment cashback {0} · Referral commission {1} · Check-in {2} · Gift codes {3} · Team rewards {4} · Daily salary {5}', 'Ssente z\'ebyamaguzi {0} · Ssente z\'okuyita {1} · Okukyalira {2} · Koodi z\'ebirabo {3} · Ekifo ky\'emirimu {4} · Ekifo ky\'obulambuzi {5}', 'Marejesho ya uwekezaji {0} · Kamisheni ya mialiko {1} · Kuhudhuria {2} · Misimbo ya zawadi {3} · Kituo cha kazi {4} · Kituo cha misheni {5}', 'Remise d\'investissement {0} · Commission de parrainage {1} · Pointage {2} · Codes cadeaux {3} · Centre de tâches {4} · Centre de missions {5}', 'Inyungu z\'ishoramari {0} · Komisiyo yo gutumira {1} · Kwiyandikisha {2} · Kode z\'impano {3} · Ikigo cy\'imirimo {4} · Ikigo cy\'ubutumwa {5}', 'Sente z\'ebyamaguzi {0} · Sente z\'okweta {1} · Okwoleka {2} · Koodi z\'ebiconco {3} · Ekicweka ky\'emirimo {4} · Ekicweka ky\'obutumwa {5}'],
   ['All ({0})', 'Byonna ({0})', 'Zote ({0})', 'Tout ({0})', 'Byose ({0})', 'Byona ({0})'],
   ['Pending ({0})', 'Ebirindiridde ({0})', 'Yanayosubiri ({0})', 'En attente ({0})', 'Bitegereje ({0})', 'Ebirikutegyereza ({0})'],
   ['Needs Review ({0})', 'Ebyetaaga okukeberwa ({0})', 'Inahitaji Ukaguzi ({0})', 'À vérifier ({0})', 'Bikeneye Igenzura ({0})', 'Ebirikwetenga Okureebwa ({0})'],

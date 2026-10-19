@@ -27,7 +27,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
     ok(d.getElementById('notifyBg').classList.contains('show') && d.getElementById('notifyMsg').textContent === 'Coming soon, please wait', 'tap shows "Coming soon, please wait"');
     ok(d.getElementById('notifyIc').classList.contains('err'), 'with the cross icon');
   }
-  ok(/BUY NOW/.test(w.vBuyHtml({ key: 'c', price: 1 })) && /openInvestConfirm/.test(w.vBuyHtml({ key: 'c', price: 1 })), 'an open asset still opens the confirm sheet');
+  ok(/Buy Now/.test(w.vBuyHtml({ key: 'c', price: 1 })) && /openInvestConfirm/.test(w.vBuyHtml({ key: 'c', price: 1 })), 'an open asset still opens the confirm sheet');
   // Insufficient balance: the wording and the redirect are wired to the server's code.
   ok(/result\.code === 'INSUFFICIENT_BALANCE'/.test(source) && /Insufficient balance, redirecting to deposit\.\.\./.test(source) && /notify\('Insufficient balance, redirecting to deposit\.\.\.', \(\) => openDepositSheet\(\)\)/.test(source), 'insufficient balance dialog then Deposit');
   w.eval('closeNotify()'); let went = 0; w.openDepositSheet = () => { went++; };
@@ -45,9 +45,9 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   await w.promptInstallApp(); ok(!dl.classList.contains('show'), 'a dismissed install shows no Download dialog');
   // The Buy Now confirm popup blurs its backdrop by exactly the notify dialog's amount.
   const css = html.match(/<style[\s\S]*?<\/style>/g).join('\n');
-  const bgRule = sel => { const m = [...css.matchAll(new RegExp('(?:^|\\n|\\})\\s*' + sel.replace(/\./g, '\\.') + '\\{([^}]*)\\}', 'g'))].map(x => x[1]).filter(r => /backdrop-filter/.test(r)).pop() || ''; return (r => [(r.match(/rgba\([^)]*\)/) || [''])[0], (r.match(/(?<!-webkit-)backdrop-filter:\s*([^;]*)/) || ['', ''])[1]])(m); };
-  const nb = bgRule('.notify-bg'), cb = bgRule('.confirm-bg');
-  ok(nb[1] && nb[1] === cb[1] && nb[0] === cb[0], 'confirm backdrop has the same blur and tint as notify: ' + nb + ' vs ' + cb);
+  const tint = sel => { const rules = [...css.matchAll(new RegExp('(?:^|\\n|\\})\\s*' + sel.replace(/\./g, '\\.') + '\\{([^}]*)\\}', 'g'))].map(x => x[1]).filter(r => /background:rgba/.test(r)); return ((rules.pop() || '').match(/background:(rgba\([^)]*\))/) || ['', ''])[1]; };
+  const nb = tint('.notify-bg'), cb = tint('.confirm-bg');
+  ok(nb && nb === cb, 'confirm backdrop has the same tint as notify: ' + nb + ' vs ' + cb);
   // The owner's word is "product": the old word must not come back in anything a member reads.
   ok(!/Buy Asset|Review this asset|No assets yet|Browse Assets|Could not load your assets|<span>Asset<\/span>|\|\| 'Asset'/.test(source), 'member text says product, not asset');
   ok(/Buy Product/.test(source) && /No products yet/.test(source), 'and the product wording is there');

@@ -15,7 +15,7 @@ ok(/ld-txt\{[^}]*font-family:'Noto Serif'[^}]*font-size:24px[^}]*letter-spacing:
 ok(/ld-txt\{[^}]*color:#fff/.test(html), 'colour stays white (not specified by the owner)');
 ok(/\.sr-only\{/.test(html), 'the screen-reader word is hidden');
 ok(/body\.sheet-open \.sheet-bg\{bottom:var\(--nav-h\);\}/.test(html), 'secondary pages end above the bottom navigation');
-ok(/'profilelogo', 'loaderbg'\]/.test(server) && /app\.get\('\/public\/loader-image'/.test(server), 'server stores and serves the loader picture');
+ok(/'profilelogo', 'loaderbg', 'downloadbg'\]/.test(server) && /app\.get\('\/public\/loader-image'/.test(server), 'server stores and serves the loader picture');
 ok(/id="loaderBgFile"/.test(admin) && /wireMintImageSlot\('loaderbg'/.test(admin), 'admin can upload and remove it');
 const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
 ok(/id="loginPassword" type="password"/.test(html) && /toggleAuthEye/.test(html) && /window\.toggleAuthEye/.test(mod), 'password boxes are masked and every one has the eye from the owner\'s screenshots');
@@ -28,10 +28,9 @@ ok(!/fileToLogoPng|background connected to the image edge/.test(admin) && /wireM
 ok(/var NAV_LOADER = '<span class="nav-loading">Loading\.\.\.<\/span>'/.test(mod) && /\.nav-loading\{[^}]*font-size:15px[^}]*letter-spacing:\.03em/.test(html) && !/MINI_RING_LOADER|mini-ring-loader|ringSweep/.test(html + mod), 'pages show a small "Loading..." word while data arrives, no ring spinner is left');
 ok((mod.match(/NAV_LOADER/g) || []).length >= 6, 'Income, Team, Team members, Balance Record and Messages all use it');
 ok(/showAuthTab\('login'\);\n  stopLiveRefresh\(\);/.test(mod), 'signing out always lands on Login, not on a Sign Up form left open');
-ok(/\.v-ann-img\{[^}]*object-fit:contain[^}]*\}/.test(html) && !/\.v-ann-img\{[^}]*object-fit:cover/.test(html), 'the announcement picture is shown whole (contain), never cropped');
-ok(/function vFitCard\(img\)/.test(mod) && /onload="vFitCard\(this\)"/.test(mod) && /\.v-card-img\.has-img img\{[^}]*height:auto/.test(html) && !/\.v-card-img\.has-img img\{[^}]*object-fit:cover/.test(html), 'asset pictures are shown whole in their own shape (portrait in the column, wide or square across the top)');
+ok(/\.mg-ann-img\{[^}]*height:auto/.test(html) && !/\.mg-ann-img\{[^}]*object-fit:cover/.test(html), 'the announcement picture is shown whole, never cropped');
+ok(/\.mg-img>img\{[^}]*object-fit:cover/.test(html) && /grid-template-columns:130\.5px/.test(html), 'a product picture fills its own column of the card');
 ok(!/fileToFramedDataUrl|PRODUCT_IMG_W/.test(admin) && /fileToDataUrl\(f,900,0\.82\)/.test(admin), 'the admin no longer crops asset pictures to 16:9');
-ok(/--img-w/.test(mod) && /grid-template-columns:var\(--img-w,112\.5px\) 1fr/.test(html), 'a portrait picture gets a column of its own shape (a 2:3 photo is 133 px wide at the 200 px card height)');
 ok(/<script data-mint-loader>/.test(html) && /localStorage\.getItem\(KEY\)/.test(html) && /bg\.style\.backgroundImage = layer\(kept\)/.test(html) && /window\._mintLoaderStart = Date\.now\(\)/.test(html), 'the kept loading picture is painted inline on the first frame, before any network request');
 ok(/fetch\('\/k7x2\/public\/loader-image', \{ cache: 'no-cache' \}\)/.test(html) && /localStorage\.setItem\(KEY, u\)/.test(html), 'and refreshed in the background for the next visit');
 ok(/var LOADER_MIN_MS = 2500/.test(mod) && /function hideLoadingScreen\(\)/.test(mod) && !/\$\('loadingScreen'\)\.style\.display = 'none'/.test(mod), 'the loading screen stays for 2.5 seconds before the page opens, through one function');

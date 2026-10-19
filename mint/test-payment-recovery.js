@@ -123,10 +123,9 @@ async function main(){
   }
   {
     const {c,db}=setup();
-    vm.runInContext(fn('activeL1Count')+'\n'+fn('wholeTeamStats')+'\n'+fn('wholeTeamDeposits'),c);
-    assert.equal(await c.activeL1Count('l1'),0,'registration and an uncredited deposit do not activate a referral');
+    vm.runInContext(fn('wholeTeamStats')+'\n'+fn('wholeTeamDeposits'),c);
+    assert.equal(await c.wholeTeamDeposits('l1'),0,'an uncredited deposit does not count towards the team total');
     await credit(c,db);
-    assert.equal(await c.activeL1Count('l1'),1,'confirmed deposit activates the referral without an investment');
     assert.equal(await c.wholeTeamDeposits('l1'),15000);
   }
   {

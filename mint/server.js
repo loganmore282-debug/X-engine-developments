@@ -185,7 +185,7 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // route once, before that route was added here too.
 // /admin/app-icon/set carries TWO PNGs (512 and 192) in one body, so it
 // needs the image parser even though each one on its own is small.
-const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/mint-image/set', '/admin/app-icon/set']);
+const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/mint-image/set', '/admin/app-icon/set', '/admin/messages/save']);
 const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set', '/admin/rules-content/set']);
 // PesaJet signs the RAW REQUEST PAYLOAD -- their dashboard says so in as many
 // words ("computing an HMAC-SHA256 digest of the raw request payload using
@@ -559,15 +559,13 @@ app.use(async (req, res, next) => {
 const DEFAULT_SETTINGS = {
   withdrawFeePct: 15, minWithdraw: 8000, minDeposit: 30000,
   welcomeBonus: 5000, commL1: 25, commL2: 2, commL3: 1,
-  // Task Center (Team page): what a member earns for team progress, edited in the admin panel under Settings > Task Center.
-  // `id` stays with a row when its numbers are edited, so an edit can never let a member claim the same task twice.
-  taskReferrals: [
-    { id: 'r1', target: 5, reward: 10000 }, { id: 'r2', target: 10, reward: 20000 }, { id: 'r3', target: 20, reward: 40000 },
-    { id: 'r4', target: 35, reward: 80000 }, { id: 'r5', target: 50, reward: 160000 }, { id: 'r6', target: 100, reward: 320000 },
-  ],
-  taskDeposits: [
-    { id: 'd1', target: 250000, reward: 10000 }, { id: 'd2', target: 500000, reward: 25000 }, { id: 'd3', target: 1000000, reward: 25000 },
-    { id: 'd4', target: 1500000, reward: 50000 }, { id: 'd5', target: 2000000, reward: 50000 }, { id: 'd6', target: 5000000, reward: 100000 },
+  // Daily Salary (Salary tab): the team's total purchases decide the tier; each calendar day at a reached tier is one day of wages.
+  // Edited in the admin panel under Settings > Daily Salary. `id` stays with a row when its numbers are edited, so an edit can never
+  // let a member claim the same day twice.
+  salaryTiers: [
+    { id: 's1', target: 500000, reward: 2000 }, { id: 's2', target: 1000000, reward: 4000 }, { id: 's3', target: 3000000, reward: 6000 },
+    { id: 's4', target: 5000000, reward: 8000 }, { id: 's5', target: 10000000, reward: 10000 }, { id: 's6', target: 30000000, reward: 12000 },
+    { id: 's7', target: 50000000, reward: 14000 },
   ],
   returnMultiple: 30, cycleDays: 150,
   // Not yet confirmed by the owner — a reasonable Snow-scaled default,
@@ -950,7 +948,7 @@ async function getHelpBanner() {
 // no longer its own screen with a backdrop; Account's new Download App row
 // (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
 // prompt directly, in user-src/original_module.js -- see its own comment.
-const MINT_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'checkinbanner', 'profilelogo', 'loaderbg'];
+const MINT_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'checkinbanner', 'profilelogo', 'loaderbg', 'downloadbg'];
 const _mintImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getMintImage(slot) {
@@ -1677,16 +1675,15 @@ function sanitizeRefPrefix(v) {
 async function mobileMoneyRefPrefix() {
   try { return sanitizeRefPrefix((await getSettings()).referencePrefix) || 'S'; } catch (_) { return 'S'; }
 }
-// TASK CENTER -- rewards for team progress, on top of the ordinary L1/L2/L3 commission. The two lists live in
-// the settings (defaults above, edited in Admin > Settings > Task Center). A "referral" task counts the member's
-// own Level 1 members who have deposited; a "deposit" task counts what the whole team (levels 1-3) has deposited.
+// DAILY SALARY tiers: a list of (target team total, reward per day) rows, kept in the settings (defaults above, edited in
+// Admin > Settings > Daily Salary). Same row rules the old Task Center lists had: whole numbers, one row per target, a stable id.
 const TASK_MAX_ROWS = 30, TASK_MAX_REFERRALS = 100000;
 // Validates what the admin sends. Whole numbers only, one row per target, a stable id per row (new rows get one).
 function sanitizeTaskRows(rows, kind, history) {
-  const label = kind === 'deposit' ? 'Deposits' : 'Referrals';
+  const label = kind === 'salary' ? 'Salary tiers' : kind === 'deposit' ? 'Deposits' : 'Referrals';
   if (!Array.isArray(rows)) return { error: `${label}: send a list of tasks.` };
   if (rows.length > TASK_MAX_ROWS) return { error: `${label}: at most ${TASK_MAX_ROWS} tasks.` };
-  const maxTarget = kind === 'deposit' ? MAX_MONEY_AMOUNT : TASK_MAX_REFERRALS;
+  const maxTarget = kind === 'count' ? TASK_MAX_REFERRALS : MAX_MONEY_AMOUNT;
   const out = [], targets = new Set();
   for (const r of rows) {
     const target = Number(r && r.target), reward = Number(r && r.reward);
@@ -1717,21 +1714,6 @@ function taskRows(rows, kind) {
   const r = sanitizeTaskRows(ok, kind);
   return r.rows || [];
 }
-async function activeL1Count(userId) {
-  const snap = await db.collection('users').where('referredBy', '==', userId).get();
-  let n = 0;
-  snap.forEach(d => {
-    const v = d.data();
-    if (v.status !== 'banned' && finiteMoney(v.totalDeposited) > 0) n += 1;
-  });
-  return n;
-}
-
-// MISSION CENTER's constants lived here and are gone with the feature
-// (owner: "remove mission center"). activeL1Count() above and
-// wholeTeamDeposits() below STAY -- they are shared with the Task Center,
-// which is a different feature and is not being removed.
-
 // The WHOLE team (L1+L2+L3): how many members sit at each level and what they have deposited --
 // powers Team's level cards and "Team deposits". The counts are read live from the same
 // `referredBy` links the member lists use, so a card can never disagree with its list (the
@@ -1740,6 +1722,7 @@ async function wholeTeamStats(userId) {
   let parentIds = [userId];
   let deposits = 0;
   const counts = [0, 0, 0];
+  const levelDeposits = [0, 0, 0];
   const seen = new Set([userId]);
   for (let level = 0; level < 3; level++) {
     if (!parentIds.length) break;
@@ -1751,11 +1734,11 @@ async function wholeTeamStats(userId) {
       const v = d.data();
       nextIds.push(d.id);
       counts[level] += 1;
-      if (v.status !== 'banned') deposits += finiteMoney(v.totalDeposited);
+      if (v.status !== 'banned') { deposits += finiteMoney(v.totalDeposited); levelDeposits[level] += finiteMoney(v.totalDeposited); }
     });
     parentIds = nextIds;
   }
-  return { deposits, counts };
+  return { deposits, counts, levelDeposits };
 }
 async function wholeTeamDeposits(userId) { return (await wholeTeamStats(userId)).deposits; }
 
@@ -3293,9 +3276,8 @@ app.get('/team/stats', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     // All the reads this screen needs go out together (they used to run one after another).
-    const [uSnap, sett, teamNow, l1ActiveCount, rewardTxSnap, commSnap] = await Promise.all([
-      db.collection('users').doc(userId).get(), getSettings(), wholeTeamStats(userId), activeL1Count(userId),
-      db.collection('transactions').where('userId', '==', userId).where('type', '==', 'team_reward').get(),
+    const [uSnap, sett, teamNow, commSnap] = await Promise.all([
+      db.collection('users').doc(userId).get(), getSettings(), wholeTeamStats(userId),
       db.collection('transactions').where('userId', '==', userId).where('type', '==', 'commission').get().catch(() => null),
     ]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
@@ -3303,16 +3285,8 @@ app.get('/team/stats', async (req, res) => {
     if (u.status === 'banned')
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     const deposits = teamNow.deposits, [n1, n2, n3] = teamNow.counts;
-    const claimedKeys = new Set(u.creditedTaskKeys || []);
-    const refRows = taskRows(sett.taskReferrals, 'count'), depRows = taskRows(sett.taskDeposits, 'deposit');
-    const milestones = [
-      ...refRows.map(m => ({ type: 'count', id: m.id, target: m.target, reward: m.reward,
-        current: l1ActiveCount, achieved: l1ActiveCount >= m.target, claimed: claimedKeys.has('count:' + m.id) })),
-      ...depRows.map(m => ({ type: 'deposit', id: m.id, target: m.target, reward: m.reward,
-        current: deposits, achieved: deposits >= m.target, claimed: claimedKeys.has('deposit:' + m.id) })),
-    ];
-    let teamRewards = 0;
-    rewardTxSnap.forEach(d => { teamRewards += finiteMoney(d.data().amount); });
+    // What the whole team has purchased, and what it has paid this member, per level (the Team page's three level cards).
+    const levelPurchase = { l1: teamNow.levelDeposits[0], l2: teamNow.levelDeposits[1], l3: teamNow.levelDeposits[2] };
     const levelCommission = { l1: 0, l2: 0, l3: 0 };
     if (commSnap) commSnap.forEach(d => {
       const v = d.data(), n = Number(v.commissionLevel);
@@ -3325,86 +3299,125 @@ app.get('/team/stats', async (req, res) => {
       team: { l1: n1, l2: n2, l3: n3 },
       totalTeam: n1 + n2 + n3,
       teamCommission: finiteMoney(u.teamCommission),
-      teamDeposits: deposits, l1ActiveCount, milestones, teamRewards, levelCommission,
+      teamDeposits: deposits, levelCommission, levelPurchase,
     });
   } catch (e) {
     console.error('Team stats error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not load team stats' });
   }
 });
-// Claiming a Task Center reward. Money-safe the same way a deposit credit is: one claim at a time per member,
-// the live progress is re-read here (the app's own figure is never trusted), and the credit, the member's
-// "already claimed" token and the totals land in ONE atomic user update, so a double tap, two phones or a retry
-// after a crash can never pay the same task twice. The ledger row is written (or repaired) afterwards.
-app.post('/team/task/claim', async (req, res) => {
+// ═══════════════════════════════════════════
+// DAILY SALARY (the Salary tab)
+// ═══════════════════════════════════════════
+// The team's total purchases (levels 1-3, the same figure Team shows) put a member on a tier. Every calendar day (the region's
+// clock) spent on a reached tier is one day of wages. Days nobody claims keep accruing; each claim pays the EARLIEST unclaimed
+// day at the reward that day was worth. Money-safe the way a deposit credit is: one claim at a time per member, the live figure is
+// re-read here (the app's own is never trusted), and the credit, the day's "already paid" token and the totals land in ONE atomic
+// user update, so a double tap, two phones or a retry can never pay the same day twice. The ledger row is written (or repaired)
+// afterwards under a key built from the day.
+const SALARY_BACKFILL_DAYS = 60;
+function salaryDayNumber(ms) { return Math.floor(((ms == null ? Date.now() : ms) + tzOffMs()) / 86400000); }
+function salaryTierFor(tiers, total) { let t = null; for (const x of tiers) if (total >= x.target) t = x; return t; }
+// Pure: what the member's wage book looks like today. Days between two looks are paid at the reward recorded at the last look
+// (never at a tier reached only today); today itself is paid at today's tier. Nothing before the first reached day accrues.
+function salaryAccrue(u, tier, today) {
+  const paid = new Set(Array.isArray(u.creditedSalaryDays) ? u.creditedSalaryDays : []);
+  const accrued = (Array.isArray(u.salaryAccrued) ? u.salaryAccrued : [])
+    .filter(e => e && Number.isInteger(e.d) && Number(e.r) > 0 && !paid.has(e.d))
+    .map(e => ({ d: e.d, r: Number(e.r) }));
+  const have = new Set(accrued.map(e => e.d));
+  const last = Number.isInteger(u.salaryLastDay) ? u.salaryLastDay : null;
+  let tierReward = Number(u.salaryTierReward) || 0;
+  let newLast = last;
+  if (tier) {
+    const from = last == null ? today : Math.max(last + 1, today - SALARY_BACKFILL_DAYS + 1);
+    for (let d = from; d <= today; d++) {
+      if (have.has(d) || paid.has(d)) continue;
+      accrued.push({ d, r: (d < today && tierReward > 0) ? tierReward : tier.reward });
+      have.add(d);
+    }
+    tierReward = tier.reward;
+    newLast = Math.max(last == null ? today : last, today);
+  } else if (last != null) newLast = Math.max(last, today);
+  accrued.sort((x, y) => x.d - y.d);
+  return { accrued, last: newLast, tierReward };
+}
+async function salaryView(userId) {
+  const [sett, teamNow] = await Promise.all([getSettings(), wholeTeamStats(userId)]);
+  const tiers = taskRows(sett.salaryTiers, 'salary');
+  return { tiers, total: teamNow.deposits, tier: salaryTierFor(tiers, teamNow.deposits) };
+}
+app.get('/salary/status', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const out = await withLock('salary:' + userId, async () => {
+      const uRef = db.collection('users').doc(userId);
+      const uSnap = await uRef.get();
+      if (!uSnap.exists) return { code: 404, body: { status: 'error', message: 'User not found' } };
+      const u = uSnap.data();
+      if (u.status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
+      const view = await salaryView(userId);
+      const book = salaryAccrue(u, view.tier, salaryDayNumber());
+      const changed = book.last !== (Number.isInteger(u.salaryLastDay) ? u.salaryLastDay : null)
+        || book.tierReward !== (Number(u.salaryTierReward) || 0)
+        || book.accrued.length !== (Array.isArray(u.salaryAccrued) ? u.salaryAccrued.length : 0);
+      if (changed) await uRef.update({ salaryAccrued: book.accrued, salaryLastDay: book.last, salaryTierReward: book.tierReward });
+      return { code: 200, body: {
+        status: 'success', total: view.total, accruedDays: book.accrued.length,
+        nextReward: book.accrued.length ? book.accrued[0].r : (view.tier ? view.tier.reward : 0),
+        tierId: view.tier ? view.tier.id : null,
+        tiers: view.tiers.map(t => ({ id: t.id, target: t.target, reward: t.reward, reached: view.total >= t.target })),
+      } };
+    });
+    res.status(out.code).json(out.body);
+  } catch (e) { console.error('Salary status error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the salary' }); }
+});
+app.post('/salary/claim', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  const type = req.body.type === 'deposit' ? 'deposit' : req.body.type === 'count' ? 'count' : '';
-  const id = String(req.body.id || '').slice(0, 40);
-  if (!type || !id) return res.status(400).json({ status: 'error', message: 'Unknown task' });
   try {
-    const sett = await getSettings();
-    const row = taskRows(type === 'deposit' ? sett.taskDeposits : sett.taskReferrals, type).find(r => r.id === id);
-    if (!row) return res.status(400).json({ status: 'error', code: 'TASK_GONE', message: 'This task is no longer available.' });
-    const key = type + ':' + row.id;
-    const out = await withLock('taskclaim:' + userId, async () => {
+    const out = await withLock('salary:' + userId, async () => {
       const uRef = db.collection('users').doc(userId);
       const first = await uRef.get();
       if (!first.exists) return { code: 404, body: { status: 'error', message: 'User not found' } };
-      if (first.data().status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
+      const u = first.data();
+      if (u.status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
+      const view = await salaryView(userId);
+      if (!view.tier) {
+        const lowest = view.tiers[0];
+        return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: lowest ? `Need ${fmtMoney(Math.max(0, lowest.target - view.total))} more to claim` : 'Salary is not available yet.' } };
+      }
+      const book = salaryAccrue(u, view.tier, salaryDayNumber());
+      if (!book.accrued.length) return { code: 400, body: { status: 'error', code: 'NOTHING_TO_CLAIM', message: 'No wages to claim yet. Come back tomorrow.' } };
+      const entry = book.accrued[0], rest = book.accrued.slice(1);
       const { date, time } = nowStr();
-      const ledger = () => db.collection('transactions').doc(`team-reward:${userId}:${key}`).createIfAbsent({
-        userId, statementId: newStatementId(), type: 'team_reward',
-        description: type === 'deposit' ? `Task Center: whole team deposits ${fmtMoney(row.target)}` : `Task Center: ${row.target} active referrals`,
-        amount: row.reward, taskKey: key, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      const ledger = () => db.collection('transactions').doc(`salary:${userId}:${entry.d}`).createIfAbsent({
+        userId, statementId: newStatementId(), type: 'mission_salary', description: 'Daily salary',
+        amount: entry.r, salaryDay: entry.d, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
-      if ((first.data().creditedTaskKeys || []).includes(key)) {
-        await ledger();   // repairs a ledger row a crash left behind; never pays again
-        return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'Already claimed' } };
-      }
-      const progress = type === 'deposit' ? (await wholeTeamStats(userId)).deposits : await activeL1Count(userId);
-      if (progress < row.target) {
-        const need = type === 'deposit' ? fmtMoney(row.target) : row.target, have = type === 'deposit' ? fmtMoney(progress) : progress;
-        return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: `You need ${need} to claim this, you have ${have}.` } };
-      }
       let balance = 0, applied = false;
       await withLock('bal:' + userId, async () => {
-        applied = await uRef.updateIf({ creditedTaskKeys: { $ne: key }, status: { $ne: 'banned' } }, {
-          walletBalance: FieldValue.increment(row.reward), totalEarned: FieldValue.increment(row.reward),
-          creditedTaskKeys: FieldValue.arrayUnion(key)
+        applied = await uRef.updateIf({ creditedSalaryDays: { $ne: entry.d }, status: { $ne: 'banned' } }, {
+          walletBalance: FieldValue.increment(entry.r), totalEarned: FieldValue.increment(entry.r),
+          creditedSalaryDays: FieldValue.arrayUnion(entry.d),
+          salaryAccrued: rest, salaryLastDay: book.last, salaryTierReward: book.tierReward
         });
         const after = await uRef.get();
         balance = round2(Number(after.exists && after.data().walletBalance) || 0);
       });
       if (!applied) return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'Already claimed' } };
-      // The money is already in the wallet. If only the history row fails to write, say success (a retry repairs the row)
-      // instead of telling the member it failed.
+      // The money is already in the wallet. If only the history row fails to write, say success (a later claim repairs nothing
+      // twice: the row key is the day) instead of telling the member it failed.
       try { await ledger(); }
-      catch (e1) {
-        // The app shows 'Claimed' and never asks again, so repair the history row here, once, rather than waiting for a retry.
-        try { await ledger(); } catch (e2) { console.error('Task reward ledger row failed (credit is applied, a retry repairs it):', e2.message); }
-      }
-      return { code: 200, body: { status: 'success', amount: row.reward, walletBalance: balance, message: `${fmtMoney(row.reward)} added to your wallet` } };
+      catch (e1) { try { await ledger(); } catch (e2) { console.error('Salary ledger row failed (credit is applied):', e2.message); } }
+      return { code: 200, body: { status: 'success', amount: entry.r, walletBalance: balance, accruedDays: rest.length, message: `${fmtMoney(entry.r)} added to your wallet` } };
     });
     res.status(out.code).json(out.body);
-  } catch (e) { console.error('Task claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
+  } catch (e) { console.error('Salary claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim the salary right now' }); }
 });
-
-// ── MISSION CENTER — REMOVED ──
-// Owner: "remove mission center". The three routes that lived here
-// (/mission/status, /mission/salary/claim, /mission/deposit/claim) are gone,
-// not merely unlinked from the app. Two of them CREDITED MONEY, so leaving
-// them reachable after the screen was taken out of the UI would have meant a
-// removed feature that still pays out to anyone who knows the URL -- the
-// client is not the access control.
-//
-// Deliberately KEPT: the mission_salary / mission_deposit_reward transaction
-// rows already in the database, and the labels that render them. Members who
-// claimed these really were paid, and their Records must keep reading
-// correctly; deleting the labels would turn old rows into raw type keys.
-// The MISSION_* constants are gone too (see where they were declared).
-// activeL1Count()/wholeTeamDeposits() stay: the Task Center, a different
-// feature that is NOT being removed, uses both.
+// The old Task Center and Mission Center claim routes are gone from Mint (they are not on its screens). Rows they already paid
+// stay in the ledger, and the labels that render them stay too (team_reward, mission_salary, mission_deposit_reward).
 
 // ═══════════════════════════════════════════
 // PUBLIC
@@ -3785,12 +3798,12 @@ app.get('/public/loader-image', async (req, res) => {
 // Mint artwork needed by the current member surfaces, fetched together.
 app.get('/public/mint-images', async (req, res) => {
   try {
-    const [logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo] = await Promise.all([
+    const [logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo, downloadbg] = await Promise.all([
       getMintImage('logo'),
       getMintImage('authhero'), getMintImage('authlogo'), getMintImage('banner2'),
-      getMintImage('banner3'), getMintImage('checkinbanner'), getMintImage('profilelogo'),
+      getMintImage('banner3'), getMintImage('checkinbanner'), getMintImage('profilelogo'), getMintImage('downloadbg'),
     ]);
-    publicJson(req, res, { status: 'success', logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo }, IMAGE_CACHE);
+    publicJson(req, res, { status: 'success', logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo, downloadbg }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -6574,9 +6587,25 @@ app.get('/messages', async (req, res) => {
     res.json({ status: 'success', messages: rows.map(m => ({
       id: m.id, title: m.title || '', body: m.body || '',
       date: m.date || '', time: m.time || '', createdAt: m.createdAt || 0,
+      // The picture itself is fetched on its own (/public/message-image/<id>) so a poll never carries image bytes.
+      hasImage: !!m.image,
       read: readIds.has(m.id),
     })) });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load your messages' }); }
+});
+app.get('/public/message-image/:id', async (req, res) => {
+  try {
+    const id = String(req.params.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 120);
+    const snap = id ? await db.collection('messages').doc(id).get() : null;
+    const d = snap && snap.exists ? snap.data() : null;
+    const m = d && !d.deleted && /^data:(image\/(?:png|jpe?g|webp|gif));base64,(.+)$/.exec(d.image || '');
+    if (!m) return res.status(404).end();
+    const buf = Buffer.from(m[2], 'base64');
+    const etag = '"' + crypto.createHash('sha1').update(buf).digest('hex') + '"';
+    res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=3600', ETag: etag });
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.send(buf);
+  } catch (e) { res.status(500).end(); }
 });
 app.post('/messages/read', async (req, res) => {
   const uid = await verifyAuth(req);
@@ -7053,6 +7082,9 @@ app.post('/admin/settings/update', async (req, res) => {
     // refuse angle brackets outright. The client escapes it at every render
     // anyway -- this is the second lock, so a name that somehow reaches an
     // unescaped sink later cannot carry markup with it.
+    // The welcome dialog's title and its lines of text: plain text, capped.
+    if ('annTitle' in updates) updates.annTitle = String(updates.annTitle == null ? '' : updates.annTitle).trim().slice(0, 60);
+    if ('annBody' in updates) updates.annBody = String(updates.annBody == null ? '' : updates.annBody).replace(/\r/g, '').trim().slice(0, 1200);
     if ('brandName' in updates) {
       const name = String(updates.brandName == null ? '' : updates.brandName).trim();
       if (!name) return res.status(400).json({ status: 'error', message: 'App name cannot be blank.' });
@@ -7143,12 +7175,12 @@ app.post('/admin/settings/update', async (req, res) => {
 app.get('/admin/mint-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo, loaderbg] = await Promise.all([
+    const [logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo, loaderbg, downloadbg] = await Promise.all([
       getMintImage('logo'),
       getMintImage('authhero'), getMintImage('authlogo'), getMintImage('banner2'),
-      getMintImage('banner3'), getMintImage('checkinbanner'), getMintImage('profilelogo'), getMintImage('loaderbg'),
+      getMintImage('banner3'), getMintImage('checkinbanner'), getMintImage('profilelogo'), getMintImage('loaderbg'), getMintImage('downloadbg'),
     ]);
-    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo, loaderbg });
+    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, checkinbanner, profilelogo, loaderbg, downloadbg });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/mint-image/set', async (req, res) => {
@@ -7590,6 +7622,14 @@ app.post('/admin/messages/save', async (req, res) => {
   const body = stripHtml(req.body.body).slice(0, 4000);
   if (!title) return res.status(400).json({ status: 'error', message: 'A title is required' });
   if (!body) return res.status(400).json({ status: 'error', message: 'A message body is required' });
+  // An optional picture shown under the message: undefined = leave as it is, '' = remove it, a data URL = set it.
+  let imageField;
+  if ('image' in req.body) {
+    const img = String(req.body.image || '');
+    if (img === '') imageField = '';
+    else if (/^data:image\/(?:png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(img) && img.length <= 3 * 1024 * 1024) imageField = img;
+    else return res.status(400).json({ status: 'error', message: 'The picture must be a PNG, JPG, WebP or GIF under 2 MB.' });
+  }
   // An explicit id edits that message in place; no id writes a new one.
   const explicitId = String(req.body.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 120);
   const id = explicitId || 'msg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -7597,6 +7637,7 @@ app.post('/admin/messages/save', async (req, res) => {
     const stamp = nowStr();
     await db.collection('messages').doc(id).set({
       title, body, date: stamp.date, time: stamp.time, createdAt: Date.now(), deleted: false,
+      ...(imageField !== undefined ? { image: imageField } : {}),
     }, { merge: true });
     logAdminAction(req, 'message_saved', { id, title });
     res.json({ status: 'success', id });
@@ -7614,42 +7655,32 @@ app.post('/admin/messages/delete', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not delete this message' }); }
 });
 
-// ── ADMIN: Task Center rewards (what members earn on the Team page) ──
-app.get('/admin/tasks', async (req, res) => {
+// ── ADMIN: Daily Salary tiers (what members earn on the Salary tab) ──
+app.get('/admin/salary', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const sett = await getSettings();
-    res.json({ status: 'success', referrals: taskRows(sett.taskReferrals, 'count'), deposits: taskRows(sett.taskDeposits, 'deposit') });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the tasks' }); }
+    res.json({ status: 'success', tiers: taskRows(sett.salaryTiers, 'salary') });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the salary tiers' }); }
 });
-app.post('/admin/tasks/save', async (req, res) => {
+app.post('/admin/salary/save', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const mainSnap = await db.collection('settings').doc('main').get();
     const stored = Object.assign({}, DEFAULT_SETTINGS, mainSnap.exists ? mainSnap.data() : {});
-    // The ids members can be holding claims for: everything remembered so far, plus the lists that are live right now
-    // (so a task removed in this very save is still on record).
-    const seed = (old, rows, kind) => { const m = Object.assign({}, old); for (const r of taskRows(rows, kind)) m[String(r.target)] = r.id; return m; };
-    const hist = { count: seed(stored.taskIdByTarget && stored.taskIdByTarget.count, stored.taskReferrals, 'count'),
-                   deposit: seed(stored.taskIdByTarget && stored.taskIdByTarget.deposit, stored.taskDeposits, 'deposit') };
-    const ref = sanitizeTaskRows(req.body.referrals, 'count', hist.count), dep = sanitizeTaskRows(req.body.deposits, 'deposit', hist.deposit);
-    if (ref.error || dep.error) return res.status(400).json({ status: 'error', message: ref.error || dep.error });
-    // Remember every target's id for good (a removed task keeps its id on record), so a task typed again later is the same task.
-    const remember = (old, rows) => {
-      const m = Object.assign({}, old);
-      // A row moved to a new target keeps its id, so the old target must stop pointing at it: otherwise a task typed
-      // again later for the old target would inherit an id members already claimed under another target.
-      for (const r of rows) { for (const k of Object.keys(m)) if (m[k] === r.id && k !== String(r.target)) delete m[k]; m[String(r.target)] = r.id; }
-      return m;
-    };
-    await db.collection('settings').doc('main').set({
-      taskReferrals: ref.rows, taskDeposits: dep.rows,
-      taskIdByTarget: { count: remember(hist.count, ref.rows), deposit: remember(hist.deposit, dep.rows) },
-    }, { merge: true });
+    // Every target's id is remembered for good, so deleting a tier and typing it again later is the same tier.
+    const seed = Object.assign({}, stored.salaryIdByTarget);
+    for (const r of taskRows(stored.salaryTiers, 'salary')) seed[String(r.target)] = r.id;
+    const out = sanitizeTaskRows(req.body.tiers, 'salary', seed);
+    if (out.error) return res.status(400).json({ status: 'error', message: out.error });
+    const ids = Object.assign({}, seed);
+    // A row moved to a new target keeps its id, so the old target must stop pointing at it.
+    for (const r of out.rows) { for (const k of Object.keys(ids)) if (ids[k] === r.id && k !== String(r.target)) delete ids[k]; ids[String(r.target)] = r.id; }
+    await db.collection('settings').doc('main').set({ salaryTiers: out.rows, salaryIdByTarget: ids }, { merge: true });
     _settingsCacheTs = 0;
-    logAdminAction(req, 'tasks_saved', { referrals: ref.rows.length, deposits: dep.rows.length });
-    res.json({ status: 'success', referrals: ref.rows, deposits: dep.rows });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the tasks' }); }
+    logAdminAction(req, 'salary_saved', { tiers: out.rows.length });
+    res.json({ status: 'success', tiers: out.rows });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the salary tiers' }); }
 });
 
 // ═══════════════════════════════════════════

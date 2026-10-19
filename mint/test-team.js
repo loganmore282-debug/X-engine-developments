@@ -24,24 +24,24 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   w.api = async () => { calls++; return mode === 'ok' ? { status: 'success', members: people } : { status: 'error', message: 'Could not load your team' }; };
   w.eval('paintNetwork()'); await new Promise(r => setTimeout(r, 20));
   const box = () => d.getElementById('teamMembersBox').textContent.replace(/\s+/g, ' ').trim();
-  ok(d.querySelectorAll('.v-member').length === 1 && calls === 1, 'first open fetches and shows the member');
+  ok(d.querySelectorAll('.mg-member').length === 1 && calls === 1, 'first open fetches and shows the member');
   // a second member joins: reopening after the list is stale refetches it
   people = [...people, { id: 'b', phone: '0779999999', invested: 0, createdAt: null }];
   w.eval('_teamMembersAt = {}'); w.eval('paintNetwork()'); await new Promise(r => setTimeout(r, 20));
-  ok(d.querySelectorAll('.v-member').length === 2 && calls === 2, 'a stale list is refetched and the new member appears');
+  ok(d.querySelectorAll('.mg-member').length === 2 && calls === 2, 'a stale list is refetched and the new member appears');
   // a fresh list is shown at once without another fetch
   w.eval('paintNetwork()'); await new Promise(r => setTimeout(r, 20));
-  ok(calls === 2 && d.querySelectorAll('.v-member').length === 2, 'a fresh list is not refetched');
+  ok(calls === 2 && d.querySelectorAll('.mg-member').length === 2, 'a fresh list is not refetched');
   // a failed fetch keeps the held list, never turning it into "no members"
   mode = 'fail'; w.eval('_teamMembersAt = {}'); w.eval('paintNetwork()'); await new Promise(r => setTimeout(r, 20));
-  ok(d.querySelectorAll('.v-member').length === 2 && !/No members/.test(box()), 'a failed refresh keeps the list on screen');
+  ok(d.querySelectorAll('.mg-member').length === 2 && !/No Members/.test(box()), 'a failed refresh keeps the list on screen');
   // a level never loaded and failing shows the retry line, not "No members at this level yet"
   w.eval('STATE.teamMembers={1:null,2:null,3:null}; _teamMembersAt = {}; _teamMembersFailed = {}');
   await w.switchTeamLevel(2);
-  ok(box() === 'Could not load your team' && !/No members/.test(box()), 'a failed first load says it could not load, not "No members": ' + box());
+  ok(box() === 'Could not load your team' && !/No Members/.test(box()), 'a failed first load says it could not load, not "No Members": ' + box());
   mode = 'ok'; people = [];
   await w.switchTeamLevel(2);
-  ok(/No members at this level yet/.test(box()), 'a real empty level still says so');
+  ok(/No Members/.test(box()), 'a real empty level says No Members');
   // server: the cards read the live team
   ok(/team: \{ l1: n1, l2: n2, l3: n3 \}/.test(server) && /async function wholeTeamStats/.test(server), 'server /team/stats reads live level counts');
   console.log('test-team: ' + n + ' checks passed' + (built ? ' (built)' : ''));

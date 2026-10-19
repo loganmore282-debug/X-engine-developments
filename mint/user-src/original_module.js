@@ -987,11 +987,11 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&am
 function vMoney(n){
   const v = Number(n) || 0;
   const hasCents = Math.round(v * 100) % 100 !== 0;
-  return cur() + numGroup(v, hasCents);
+  return cur() + ' ' + numGroup(v, hasCents);
 }
 // Long money figures (nine digits and more) step the font down in two sizes so they stay on one line inside their box.
 function vFit(text, a, b){ var n = String(text).length; return n > b ? 'v-fit2' : n > a ? 'v-fit1' : ''; }
-function vMoney2(n){ return cur() + numGroup(n, true); }
+function vMoney2(n){ return cur() + ' ' + numGroup(n, true); }
 // Icons traced from the owner's screenshots live in a square box 288 units wide drawn 1:1 with a 22 px picture (13.1 units = 1 px); the stroke sits on the <g> so a bigger/smaller box keeps the same proportions.
 function vSvgT(cx, cy, sw, body, size){ size = size || 288; var h = size / 2; return '<svg viewBox="' + (cx - h) + ' ' + (cy - h) + ' ' + size + ' ' + size + '" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g stroke-width="' + sw + '">' + body + '</g></svg>'; }
 function vSvg(body, extra){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + (extra || '') + '>' + body + '</svg>'; }
@@ -1699,7 +1699,7 @@ async function performMemberLogout(opts){
   // session either.
   if (_checkinCountdownTimer) { clearInterval(_checkinCountdownTimer); _checkinCountdownTimer = null; }
   STATE.authEpoch++;
-  Object.assign(STATE, { account: null, investments: null, teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null, messages: null, page: 'home' }); _teamMembersAt = {}; _teamMembersFailed = {};
+  Object.assign(STATE, { account: null, investments: null, teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null, messages: null, salary: null, page: 'home' }); _teamMembersAt = {}; _teamMembersFailed = {};
   clearCachedState();
   // Without this, an explicit logout would immediately silently sign the
   // member right back in on the next boot via tryAutoSignIn() -- Chrome
@@ -1924,6 +1924,7 @@ function applyBootArtwork(ai, ci){
   // applyAuthBackgrounds()'s own comment on why there is only one now).
   STATE.authHeroImage = (ci.status === 'success' && ci.authhero) ? ci.authhero : null;
   STATE.authLogoImage = (ci.status === 'success' && ci.authlogo) ? ci.authlogo : null;
+  STATE.downloadBg = (ci.status === 'success' && ci.downloadbg) ? ci.downloadbg : null;
   applyAuthLogo();
   applyAuthTagline();
   applyAuthBackgrounds();
@@ -2588,11 +2589,44 @@ async function refreshAppDataInBackground(uid){
 // still-dispatchable STATE.page values (Account's own rows still route to
 // some of them as an interim measure) even though nothing on the bottom
 // bar links to them directly any more.
+var MGI = {
+  mail: '<svg viewBox="0 0 24 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.4" y="3" width="19.2" height="14.4" rx="3"/><path d="M3.6 6.2l8.4 6 8.4-6"/></svg>',
+  nHome: '<svg viewBox="0 0 34 34" aria-hidden="true"><defs><linearGradient id="mgNg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0aa152"/><stop offset="1" stop-color="#067a40"/></linearGradient></defs><rect width="34" height="34" rx="7" fill="url(#mgNg)"/><path d="M17 8.4 7.6 17h2.7v8.6h13.4V17h2.7z" fill="#fff"/><path d="M17 5.6 5.4 16.2l1.7 1.8L17 8.9l9.9 9.1 1.7-1.8z" fill="#ffc72c"/><rect x="14.2" y="19.4" width="5.6" height="6.2" rx="1.1" fill="#067a40"/></svg>',
+  nOrders: '<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="7" fill="url(#mgNg)"/><rect x="9.4" y="7.6" width="15.2" height="20" rx="2.4" fill="#fff"/><rect x="13" y="5.6" width="8" height="4.6" rx="1.4" fill="#ffc72c"/><path d="M12.8 15h8.4M12.8 18.4h8.4M12.8 21.8h8.4" stroke="#067a40" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  nPromo: '<svg viewBox="0 0 34 34" aria-hidden="true"><defs><linearGradient id="mgNy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6c52e"/><stop offset="1" stop-color="#dc9d16"/></linearGradient></defs><rect width="34" height="34" rx="7" fill="url(#mgNy)"/><rect x="7.4" y="13.6" width="6.4" height="6.8" rx="1.2" fill="#1a1a1a"/><path d="M13.8 13.6 22 9.2v15.6l-8.2-4.4z" fill="#fff"/><path d="M13.8 13.6 22 9.2v3.2l-8.2 3.2z" fill="#1a1a1a"/><path d="M25 13.4l3.6-1.6M25 17l4 0M25 20.6l3.6 1.6" stroke="#0a8a4a" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  nTeam: '<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="7" fill="url(#mgNg)"/><circle cx="10.4" cy="12.4" r="2.5" fill="#ffc72c"/><circle cx="17" cy="11.2" r="2.7" fill="#ffc72c"/><circle cx="23.6" cy="12.4" r="2.5" fill="#ffc72c"/><path d="M6 24.6c0-3.4 2.4-5.4 5.2-5.4 1.2 0 2.2.4 3 1 .9-.6 1.8-1 2.8-1s1.9.4 2.8 1c.8-.6 1.8-1 3-1 2.8 0 5.2 2 5.2 5.4v.8H6z" fill="#fff"/></svg>',
+  nSalary: '<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="7" fill="url(#mgNy)"/><path d="M14 8.2c0-1.4 1-2.2 3-2.2s3 .8 3 2.2l-1.2 2.4h-3.6z" fill="#1c3b2a"/><path d="M13.2 11h7.6C24.6 14 26.4 17.6 26.4 21.4c0 4-2.6 6.6-9.4 6.6s-9.4-2.6-9.4-6.6C7.6 17.6 9.4 14 13.2 11z" fill="#0c7a46"/><text x="17" y="24.6" text-anchor="middle" font-family="Roboto,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#fff">$</text></svg>',
+  nProfile: '<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="7" fill="url(#mgNg)"/><circle cx="17" cy="12.6" r="5" fill="#fff"/><path d="M7.4 27.4c0-5.6 4.2-8.8 9.6-8.8s9.6 3.2 9.6 8.8z" fill="#fff"/></svg>',
+  // Profile list tiles (the small picture inside each coloured tile)
+  tDownload: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5" fill="#0a8f4b"/><path d="M10.6 6.6v6.4l3.8-3.2z" fill="#fff"/><rect x="7.6" y="15.2" width="8.8" height="3.2" rx=".8" fill="#ffc72c"/></svg>',
+  tCard: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="3" width="21" height="18" rx="5" fill="#0a8f4b"/><rect x="5" y="7.6" width="14" height="8.8" rx="1.8" fill="#fff"/><rect x="5" y="9.6" width="14" height="2" fill="#2c2c2c"/><rect x="6.6" y="13.6" width="5" height="1.5" rx=".7" fill="#ffc72c"/></svg>',
+  tWallet: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="18" rx="5" fill="#f2b542"/><rect x="4.4" y="7.4" width="15.2" height="9" rx="1.6" fill="#0a8f4b"/><rect x="4.4" y="9.4" width="15.2" height="1.6" fill="#ffc72c"/><rect x="15.4" y="12.4" width="4.2" height="2.4" rx=".8" fill="#fff"/></svg>',
+  tChat: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5.5" fill="#0a8f4b"/><path d="M6.6 7.4h10.8c.8 0 1.4.6 1.4 1.4v5c0 .8-.6 1.4-1.4 1.4H11l-3 2.4v-2.4H6.6c-.8 0-1.4-.6-1.4-1.4v-5c0-.8.6-1.4 1.4-1.4z" fill="#fff"/><circle cx="9.2" cy="11.3" r="1" fill="#ffc72c"/><circle cx="12" cy="11.3" r="1" fill="#ffc72c"/><circle cx="14.8" cy="11.3" r="1" fill="#ffc72c"/></svg>',
+  tLock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5.5" fill="#0a8f4b"/><path d="M9 10.6V9a3 3 0 016 0v1.6" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><rect x="7.4" y="10.4" width="9.2" height="7.4" rx="1.8" fill="#fff"/><circle cx="12" cy="13.6" r="1.1" fill="#ffc72c"/><rect x="11.4" y="14" width="1.2" height="2.2" rx=".5" fill="#ffc72c"/></svg>',
+  tKey: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5.5" fill="#f9c824"/><circle cx="9.4" cy="12" r="3" fill="none" stroke="#fff" stroke-width="2"/><path d="M12.4 12h7M16.6 12v2.6M19.4 12v2" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
+  door: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="5.5" fill="#f6c22a"/><path d="M7.4 6.6h5.2v10.8H7.4z" fill="#fff"/><path d="M12.6 12h5.4M15.8 9.6 18.2 12l-2.4 2.4" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  cardMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6" fill="#3a9f62"/><rect x="5" y="6.8" width="14" height="10.4" rx="2" fill="#fff"/><rect x="5" y="9.2" width="14" height="2.2" fill="#3a7a54"/><rect x="6.8" y="13.4" width="4.8" height="1.6" rx=".8" fill="#f3b92f"/></svg>',
+  copyMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="#0c8a4a"/><rect x="8" y="6.6" width="8" height="10.8" rx="1.6" fill="#ffc72c"/><rect x="10" y="5.6" width="4" height="2.4" rx=".8" fill="#fff"/></svg>',
+  plane: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 3 10.4l6.4 2.4L12 20l2.6-5.4L21 3z"/><path d="M9.4 12.8 21 3"/></svg>',
+  whatsapp: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.4 20.6l1.3-4.4A8.6 8.6 0 1 1 8 19.5z"/><path d="M9 8.6c0 3.2 2.6 5.8 5.8 5.8l1-1.4-2-1-.8.8c-.8-.4-1.6-1.2-2-2l.8-.8-1-2z" fill="#fff" stroke="none"/></svg>',
+  facebook: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.6 21v-7.6h2.6l.4-3h-3V8.5c0-.9.3-1.5 1.5-1.5h1.6V4.3c-.3 0-1.2-.1-2.3-.1-2.3 0-3.8 1.4-3.8 3.9v2.3H8v3h2.6V21z" fill="#fff"/></svg>',
+  xmark: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.8 3h3l-6.6 7.6L22 21h-6.1l-4.8-6.3L5.6 21h-3l7-8.1L2 3h6.2l4.3 5.8zm-1 16.2h1.7L7.3 4.7H5.5z" fill="#fff"/></svg>',
+  tiktok: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.6 3c.3 2.3 1.7 3.8 4 4v3c-1.5 0-2.9-.5-4-1.3v6.2a5.6 5.6 0 1 1-5.6-5.6c.4 0 .7 0 1 .1v3.1a2.6 2.6 0 1 0 1.6 2.4V3z" fill="#fff"/></svg>',
+  warn: '<svg viewBox="0 0 41 38" aria-hidden="true"><defs><linearGradient id="mgWy" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe266"/><stop offset="1" stop-color="#fbc21f"/></linearGradient></defs><path d="M20.5 2.4 39 34.8H2z" fill="url(#mgWy)" stroke="#e9a21b" stroke-width="2.4" stroke-linejoin="round"/><rect x="18.6" y="12.6" width="3.8" height="13" rx="1.8" fill="#1c1c1c"/><circle cx="20.5" cy="30" r="2.2" fill="#1c1c1c"/></svg>',
+  okc: '<svg viewBox="0 0 41 38" aria-hidden="true"><circle cx="20.5" cy="19" r="16.5" fill="#0ea659"/><path d="M12.6 19.6l5.6 5.6 10.8-11.6" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
+  back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.6 6.4 8.6 12l6 5.6" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+};
+// The open treasure chest with gold coins (transparent background), used on Home and on the Treasure Chest page.
+var CHEST_ART = 'data:image/webp;base64,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';
 var NAV_ICON_SVG = {
-  home: VI.bottle,
-  assets: VI.cell,
-  network: VI.people,
-  account: VI.person,
+  home: MGI.nHome,
+  assets: MGI.nOrders,
+  promo: MGI.nPromo,
+  network: MGI.nTeam,
+  salary: MGI.nSalary,
+  account: MGI.nProfile,
 };
 // Owner: "the icon fades in and out when tapped not static and selector
 // doesn't disappear." The selector BOX is pure CSS off .navitem.active and
@@ -2628,7 +2662,7 @@ function hookProductCardTap(){
     // A tap on Buy Now is a purchase, not a card acknowledgement -- let it
     // through untouched rather than animating the whole card under it.
     if (e.target.closest('button, a, input, select, textarea')) return;
-    const card = e.target.closest('.p-card');
+    const card = e.target.closest('.mg-card');
     if (!card) return;
     // Re-adding a class already present does not restart a CSS animation
     // (same reason hookNavTapBox() forces a reflow).
@@ -2903,6 +2937,20 @@ async function liveRefreshVisible(){
       const changedInvestments = ir.status === 'success' && liveChanged('investments', ir.investments);
       if (changedProducts || changedInvestments) paintAssets();
     }
+  } else if (STATE.page === 'salary') {
+    if (!liveDue('salary', LIVE_TEAM_MS, _liveAccountMoved)) return ok;
+    const r = await api('/salary/status');
+    if (r.status === 'success') {
+      STATE.salary = r;
+      if (STATE.page === 'salary' && !_openSheetTitle && liveChanged('salary', r)) paintSalary();
+    } else ok = false;
+  } else if (STATE.page === 'promo') {
+    if (Date.now() - _liveTeamAt >= LIVE_TEAM_MS) {
+      _liveTeamAt = Date.now();
+      const r = await api('/team/stats');
+      if (r.status === 'success') { STATE.teamStats = r; if (STATE.page === 'promo' && !_openSheetTitle && liveChanged('team', r)) paintPromo(); }
+      else { _liveTeamAt = 0; ok = false; }
+    }
   } else if (STATE.page === 'network') {
     if (Date.now() - _liveTeamAt >= LIVE_TEAM_MS) {
       _liveTeamAt = Date.now();
@@ -2997,7 +3045,8 @@ window.showPage = async function(name){
   if (spent) history.go(-spent);
   if (name === 'products') name = 'home';
   else if (name === 'catalog') name = 'assets';
-  else if (name === 'team' || name === 'referral') { name = 'network'; }
+  else if (name === 'team') name = 'network';
+  else if (name === 'referral') name = 'promo';
   STATE.page = name;
   window.scrollTo(0, 0);   // every tab opens at its top, not wherever the previous one was scrolled
   updateNavIcons();
@@ -3016,6 +3065,8 @@ window.showPage = async function(name){
   }
   else if (name === 'assets') await renderAssets();
   else if (name === 'network') await renderNetwork();
+  else if (name === 'promo') await renderPromo();
+  else if (name === 'salary') await renderSalary();
   else if (name === 'account') await renderAccount();
   startLiveRefresh();
 };
@@ -3041,7 +3092,8 @@ window.closeAnnouncement = function(){
 // or the WhatsApp group link when no Telegram group is set.
 function maybeShowAnnouncement(){
   const s = STATE.settings || {};
-  if (!STATE.announcementImage) {
+  const lines = String(s.annBody || '').split('\n').map(x => x.trim()).filter(Boolean);
+  if (!STATE.announcementImage && !(s.annEnabled && lines.length)) {
     // The pictures are fetched after the loading screen comes down; if they
     // have not landed yet, open the dialog the moment they do.
     if (!_artLanded && !_annWaiting) { _annWaiting = true; startArtwork().then(() => { _annWaiting = false; if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }); }
@@ -3051,11 +3103,13 @@ function maybeShowAnnouncement(){
   if (!bg || !sheet) return;
   const link = s.telegramGroup || s.whatsappGroup || '';
   sheet.innerHTML = `
-    <img class="v-ann-img" src="${esc(STATE.announcementImage)}" alt="">
-    <div class="v-ann-btns">
-      ${link ? `<a class="v-ann-join" href="${esc(link)}" target="_blank" rel="noopener" onclick="closeAnnouncement()">Join Channel</a>` : ''}
-      <button class="v-ann-close" type="button" onclick="closeAnnouncement()">Close</button>
-    </div>`;
+    <button class="mg-ann-x" type="button" onclick="closeAnnouncement()" aria-label="Close">${MGI.x}</button>
+    <h2>${esc(s.annTitle || 'Welcome')}</h2>
+    <div class="mg-ann-body">
+      ${STATE.announcementImage ? `<img class="mg-ann-img" src="${esc(STATE.announcementImage)}" alt="">` : ''}
+      ${lines.length ? `<div class="mg-ann-lines">${lines.map(l => `<p>${esc(l)}</p>`).join('')}</div>` : ''}
+    </div>
+    ${link ? `<a class="mg-ann-join" href="${esc(link)}" target="_blank" rel="noopener" onclick="closeAnnouncement()">Join Channel</a>` : ''}`;
   bg.classList.add('show');
   lockBodyScroll(); dlgOpened();
 }
@@ -3112,13 +3166,22 @@ function homeCarouselSlides(){
   const slides = [STATE.homeBanner].concat(STATE.homeSlides2n3 || []).filter(Boolean);
   return slides.length > 1 ? slides : null;
 }
+function mgDotsHtml(n, idx){
+  let h = '';
+  for (let i = 0; i < n; i++) h += '<i' + (i === idx ? ' class="on"' : '') + '></i>';
+  return '<div class="mg-dots" id="mgDots">' + h + '</div>';
+}
+function mgSetDots(idx){
+  const box = $('mgDots'); if (!box) return;
+  box.querySelectorAll('i').forEach((el, i) => el.classList.toggle('on', i === idx));
+}
 function homeBannerBlockHtml(st){
   const slides = homeCarouselSlides();
-  if (!slides) return `<div class="home-banner">${homeBannerInnerHtml(st)}</div>`;
+  if (!slides) return `<div class="home-banner">${homeBannerInnerHtml(st)}${mgDotsHtml(1, 0)}</div>`;
   return `<div class="home-banner" id="homeCarouselTrack"><div class="hb-fade-stack">
     <img class="hb-fade-current" src="${esc(slides[0])}" alt="">
     <img class="hb-fade-next" src="${esc(slides[1])}" alt="">
-  </div></div>`;
+  </div>${mgDotsHtml(slides.length, 0)}</div>`;
 }
 var _homeCarouselTimer = null;
 var _homeCarouselIdx = 0;
@@ -3150,6 +3213,7 @@ function startHomeCarousel(){
         current.src = slides[nextIdx];
         next.src = slides[afterIdx];
         _homeCarouselIdx = nextIdx;
+        mgSetDots(nextIdx);
         stack.classList.add('hb-fade-reset');
         stack.classList.remove('hb-crossfading');
         void stack.offsetWidth;
@@ -3181,63 +3245,84 @@ function vNoPicture(img, initial){
 window.vFitCard = vFitCard; window.vNoPicture = vNoPicture;
 function vOwnedCount(key){ return (STATE.investments || []).filter(i => i.tierKey === key).length; }
 function homeSignature(){ return JSON.stringify(STATE.products || []) + '|' + (STATE.investments || []).map(i => i.tierKey).join(','); }
+// The picture sits in a fixed column on the left. A grey band across its top says "Coming Soon" while the product cannot be bought yet,
+// and a green band across its bottom says how many of the purchase limit the member already holds (owned/limit).
+function mgPicture(p){
+  const initial = esc(String(p.name || '?').trim()[0] || '?');
+  return p.image
+    ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" onerror="vNoPicture(this,'${initial}')">`
+    : `<span class="v-glyph">${initial}</span>`;
+}
+function mgFit(text){ const n = String(text).length; return n > 16 ? ' f2' : n > 13 ? ' f1' : ''; }
+function mgProductOpen(p){ return p.isOpen !== false && !p.comingSoon; }
 function vProductCardHtml(p){
   const { cycle, daily, expected } = planFigures(p);
-  const initial = esc(String(p.name || '?').trim()[0] || '?');
-  const img = p.image
-    ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" onload="vFitCard(this)" onerror="vNoPicture(this,'${initial}')">`
-    : `<span class="v-glyph">${initial}</span>`;
+  const limit = Number(p.buyLimit) || 0;
+  const owned = vOwnedCount(p.key);
+  const pct = limit > 0 ? Math.min(100, Math.round(owned / limit * 100)) : 0;
+  const price = vMoney2(p.price), dayly = vMoney2(daily), total = vMoney2(expected);
   return `
-  <article class="v-card">
-    <h3 class="v-card-h">${esc(p.name)}</h3>
-    <div class="v-card-b">
-      <div class="v-card-img${p.image ? ' has-img' : ''}">${img}${Number(p.buyLimit) > 0 ? `<em class="v-badge">${vOwnedCount(p.key)}/${Number(p.buyLimit)}</em>` : ''}</div>
-      <dl class="v-rows">
-        <div><dt>Price</dt><dd>${esc(vMoney(p.price))}</dd></div>
-        <div><dt>Days</dt><dd>${cycle}</dd></div>
-        <div><dt>Daily</dt><dd>${esc(vMoney(daily))}</dd></div>
-        <div><dt>Total</dt><dd>${esc(vMoney(expected))}</dd></div>
-      </dl>
+  <article class="mg-card" data-key="${esc(p.key)}">
+    <div class="mg-card-top">
+      <div class="mg-img">${mgPicture(p)}${mgProductOpen(p) ? '' : '<div class="mg-band top">Coming Soon</div>'}${limit > 0 ? `<div class="mg-band bot">${owned}/${limit}</div>` : ''}</div>
+      <div class="mg-info">
+        <h3>${esc(p.name)}</h3>
+        <dl class="mg-rows">
+          <div><dt>Price</dt><dd class="${mgFit(price).trim()}">${esc(price)}</dd></div>
+          <div><dt>Days</dt><dd>${cycle}</dd></div>
+          <div><dt>Daily</dt><dd class="g${mgFit(dayly)}">${esc(dayly)}</dd></div>
+          <div class="tot"><dt>Total</dt><dd class="${mgFit(total).trim()}">${esc(total)}</dd></div>
+        </dl>
+        ${limit > 0 ? `<div class="mg-limit"><span><i style="width:${pct}%"></i></span><b>${pct}%</b></div>` : ''}
+      </div>
     </div>
-    <div class="v-card-f">${vBuyHtml(p)}</div>
+    <div class="mg-card-f">${vBuyHtml(p)}</div>
   </article>`;
 }
 // The Buy button keeps every state productCtaHtml() had (open, coming soon,
-// ticking countdown); only the markup is new. A closed product is a plain
-// disabled button, the glow is for the one that can be bought.
+// ticking countdown). A product at its purchase limit is a plain disabled button.
 function vBuyHtml(p){
   const limit = Number(p.buyLimit) || 0;
-  if (limit > 0 && vOwnedCount(p.key) >= limit) return '<button class="v-buy" disabled><span>BUY NOW</span></button>';
-  const open = p.isOpen !== false && !p.comingSoon;
-  if (open) return `<button class="v-buy" onclick="openInvestConfirm('${esc(p.key)}',this)"><span>BUY NOW</span></button>`;
+  if (limit > 0 && vOwnedCount(p.key) >= limit) return '<button class="mg-buy" disabled>Buy Now</button>';
+  if (mgProductOpen(p)) return `<button class="mg-buy" onclick="openInvestConfirm('${esc(p.key)}',this)">Buy Now</button>`;
   const at = Number(p.opensAt) || 0;
-  // Not `disabled`: a disabled button swallows the tap, and the owner's screen
-  // shows the "Coming soon, please wait" dialog when it is tapped.
-  if (!at || p.openMode === 'soon' || p.comingSoon) return '<button class="v-buy v-soon" onclick="notify(\'Coming soon, please wait\')"><span>COMING SOON</span></button>';
-  return `<button class="v-buy v-soon" onclick="notify('Coming soon, please wait')" data-opens-at="${at}">Coming soon in ${fmtCountdown(at - Date.now())}</button>`;
+  // Not `disabled`: a disabled button swallows the tap, and the screen shows the "Coming soon, please wait" dialog when it is tapped.
+  if (!at || p.openMode === 'soon' || p.comingSoon) return '<button class="mg-buy soon" onclick="notify(\'Coming soon, please wait\')">Coming Soon</button>';
+  return `<button class="mg-buy soon" onclick="notify('Coming soon, please wait')" data-opens-at="${at}">Coming soon in ${fmtCountdown(at - Date.now())}</button>`;
 }
 function vBannerHtml(){
   const st = STATE.settings || {};
   return STATE.homeBanner || homeCarouselSlides()
     ? homeBannerBlockHtml(st)
-    : '<div class="home-banner v-banner-empty"></div>';
+    : `<div class="home-banner v-banner-empty">${mgDotsHtml(1, 0)}</div>`;
 }
+function mgUnread(){ return (STATE.messages || []).filter(m => !m.read).length; }
+function mgTopHtml(){
+  const n = mgUnread();
+  return `<div class="mg-top"><button class="mg-msg" type="button" onclick="openMessagesSheet()" aria-label="Messages">${MGI.mail}<em class="mg-dot" id="msgDot"${n ? '' : ' style="display:none"'}>${n > 99 ? '99+' : n}</em></button><div class="mg-name home-brand-title">${esc(brandName())}</div></div>`;
+}
+// Channel = the Telegram group (or the WhatsApp group when there is none); Service = customer service.
+window.openContactLink = function(kind){
+  const s = STATE.settings || {};
+  const url = kind === 'channel' ? (s.telegramGroup || s.telegramChannel || s.whatsappGroup || '') : (s.supportTelegram || s.supportWhatsapp || '');
+  if (!/^https?:\/\//i.test(String(url))) return notify('No ' + (kind === 'channel' ? 'channel' : 'service') + ' link is set yet.');
+  window.open(url, '_blank', 'noopener');
+};
 function paintHome(){
-  const st = STATE.settings || {};
-  // A product the admin switched off (Active unticked) is not offered on Home; owners still see it on Income.
+  // A product the admin switched off (Active unticked) is not offered on Home; owners still see it on Orders.
   const products = (STATE.products || []).filter(p => p.active !== false);
-  const ticker = String(st.tickerText || 'All product earnings will be automatically added to your app balance at midnight 00:00.');
   const html = `
-<div class="v-page v-home">
+<div class="v-page mg-home">
+  ${mgTopHtml()}
   ${vBannerHtml()}
-  <div class="v-quick">
-    <button onclick="openDepositSheet()"><span class="v-ic">${VI.bottleDown}</span><b>Deposit</b></button>
-    <button onclick="openWithdrawSheet()"><span class="v-ic">${VI.bottleUp}</span><b>Withdraw</b></button>
-    <button onclick="openHelpDialog('Help')"><span class="v-ic">${VI.headset}</span><b>Help Me</b></button>
-    <button onclick="openChestSheet()"><span class="v-ic">${VI.bottleRing}</span><b>Gift Code</b></button>
+  <div class="mg-quick">
+    <button type="button" onclick="openDepositSheet()">Deposit</button>
+    <button type="button" onclick="openWithdrawSheet()">Withdraw</button>
+    <button type="button" onclick="openContactLink('channel')">Channel</button>
+    <button type="button" onclick="openContactLink('service')">Service</button>
   </div>
-  <div class="v-ticker"><span class="v-ticker-ic">${VI.megaphone}</span><div class="v-ticker-win"><span class="v-ticker-txt">${esc(ticker)}</span></div></div>
-  <div id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">No products yet.</div>' : '')}</div>
+  <div class="mg-list" id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">No products yet.</div>' : '')}</div>
+  <button class="mg-chest" type="button" onclick="openChestSheet()" aria-label="Treasure chest"><img src="${CHEST_ART}" alt=""></button>
 </div>`;
   $('pageHost').innerHTML = html;
   startHomeCarousel();
@@ -3348,34 +3433,26 @@ function vOwnedCardHtml(inv){
   const st = planStats(inv);
   const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
   const name = inv.tierLabel || p.name || 'Product';
-  const initial = esc(String(name || '?').trim()[0] || '?');
-  // Fenced: the picture lives in a fixed-size frame (see .v-owned .v-card-img) and is scaled to fit
-  // inside it, so its shape or load time can never move the figures or spill over the card.
-  const img = p.image
-    ? `<img src="${esc(p.image)}" alt="" onerror="vNoPicture(this,'${initial}')">`
-    : `<span class="v-glyph">${initial}</span>`;
   const startMs = st.createdMs;
   const endMs = startMs + st.total * 86400000;
   const two = ms => { const t = statementStampMs(ms).split(' '); return esc(t[0] || '') + '<br>' + esc(t[1] || ''); };
+  const price = vMoney2(st.amount), dayly = vMoney2(st.daily), total = vMoney2(st.expected);
   return `
-  <article class="v-card v-owned${inv.granted ? ' v-gift' : ''}">
-    <h3 class="v-card-h">${esc(name)}</h3>
-    ${inv.granted ? '<i class="v-ribbon"><b>GIFT</b></i>' : ''}
-    <div class="v-card-b">
-      <div class="v-card-img${p.image ? ' v-fence' : ''}">${img}<em class="v-badge">${st.matured ? 'Completed' : 'Earning'}</em></div>
-      <div class="v-side">
-        <dl class="v-rows">
-          <div><dt>Price</dt><dd>${esc(vMoney(st.amount))}</dd></div>
+  <article class="mg-card mg-owned${inv.granted ? ' v-gift' : ''}">
+    ${inv.granted ? '<i class="mg-gift">GIFT</i>' : ''}
+    <div class="mg-card-top">
+      <div class="mg-img">${mgPicture(Object.assign({}, p, { name }))}<div class="mg-band bot">${st.matured ? 'Completed' : 'Earning'}</div></div>
+      <div class="mg-info">
+        <h3>${esc(name)}</h3>
+        <dl class="mg-rows">
+          <div><dt>Price</dt><dd class="${mgFit(price).trim()}">${esc(price)}</dd></div>
           <div><dt>Days</dt><dd>${st.total}</dd></div>
-          <div><dt>Daily</dt><dd>${esc(vMoney(st.daily))}</dd></div>
-          <div><dt>Total</dt><dd>${esc(vMoney(st.expected))}</dd></div>
+          <div><dt>Daily</dt><dd class="g${mgFit(dayly)}">${esc(dayly)}</dd></div>
+          <div class="tot"><dt>Total</dt><dd class="${mgFit(total).trim()}">${esc(total)}</dd></div>
         </dl>
-        <div class="v-dates">
-          <div><span>Purchase</span><b>${two(startMs)}</b></div>
-          <div><span>Expire</span><b>${two(endMs)}</b></div>
-        </div>
       </div>
     </div>
+    <div class="mg-dates"><div><span>Purchase</span><b>${two(startMs)}</b></div><div><span>Expire</span><b>${two(endMs)}</b></div></div>
   </article>`;
 }
 function statementStampMs(ms){
@@ -3392,13 +3469,11 @@ function paintAssets(){
     || (new Date(y.createdAt || 0).getTime() || 0) - (new Date(x.createdAt || 0).getTime() || 0)
     || String(x.id || '').localeCompare(String(y.id || '')));
   const html = `
-<div class="v-page v-income">
-  ${vBannerHtml()}
-  <div class="v-total"><span>Total Earnings</span><b id="incomeTotal">${esc(vMoney2(a.totalEarned))}</b></div>
-  <div id="ownedAssets">${owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty">No products yet.</div>'}</div>
+<div class="v-page mg-orders-page">
+  <div class="mg-total"><span>Total Earnings</span><b id="incomeTotal">${esc(vMoney2(a.totalEarned))}</b></div>
+  <div class="mg-orders" id="ownedAssets">${owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty mg-none">No Orders</div>'}</div>
 </div>`;
   $('pageHost').innerHTML = html;
-  startHomeCarousel();
 }
 // ── REFERRAL (own tab) ──
 // Owner: "introduce a new nav icon just between my products and team, it is
@@ -3663,7 +3738,7 @@ var TEAM_LIST_FRESH_MS = 15000;
 // for the rest of the session after one dropped connection.
 window.switchTeamLevel = async function(level){
   _activeTeamLevel = level;
-  document.querySelectorAll('.v-level').forEach(el => el.classList.toggle('on', Number(el.dataset.level) === level));
+  document.querySelectorAll('.mg-lv').forEach(el => el.classList.toggle('on', Number(el.dataset.level) === level));
   const held = !!STATE.teamMembers[level];
   if (held) renderTeamMembers(level);
   else { const box = $('teamMembersBox'); if (box) box.innerHTML = teamLoadingHtml(); }
@@ -3715,160 +3790,16 @@ function renderTeamMembers(level){
   const members = STATE.teamMembers[level] || [];
   const box = $('teamMembersBox');
   if (!box) return;
-  if (!STATE.teamMembers[level] && _teamMembersFailed[level]) { box.innerHTML = '<div class="v-empty" onclick="switchTeamLevel(' + level + ')">Could not load your team</div>'; return; }
-  if (!members.length) { box.innerHTML = '<div class="v-empty">No members at this level yet.</div>'; return; }
+  const cnt = $('mgLvCount'); if (cnt) cnt.textContent = String(members.length || (((STATE.teamStats || {}).team || {})['l' + level]) || 0);
+  const ttl = $('mgLvTitle'); if (ttl) ttl.textContent = 'Level ' + level;
+  if (!STATE.teamMembers[level] && _teamMembersFailed[level]) { box.innerHTML = '<div class="mg-nomem" onclick="switchTeamLevel(' + level + ')">Could not load your team</div>'; return; }
+  if (!members.length) { box.innerHTML = '<div class="mg-nomem">No Members</div>'; return; }
   box.innerHTML = members.map(m => `
-  <div class="v-member">
-    <div class="v-member-top"><span class="v-mphone">${esc(m.phoneMasked || maskPhone(m.phone))}</span><b>${esc(vMoney2(m.invested))}</b></div>
-    <div class="v-member-join">Joined ${esc(joinedStamp(m.createdAt))}</div>
+  <div class="mg-member">
+    <div class="mg-member-top"><span>${esc(m.phoneMasked || maskPhone(m.phone))}</span><b>${esc(vMoney2(m.invested))}</b></div>
+    <div class="mg-member-join">Joined ${esc(joinedStamp(m.createdAt))}</div>
   </div>`).join('');
 }
-// ── TASK CENTER (opened from the Team page) ──
-// Two lists the owner sets in the admin panel: Referrals (members of your own Level 1 who have deposited) and
-// Deposits (what your whole team has deposited). Progress and the claim itself are decided by the server.
-var _taskTab = 'count', _taskBusy = false;
-function taskLists(){
-  const ms = (STATE.teamStats && STATE.teamStats.milestones) || [];
-  return { count: ms.filter(m => m.id && m.type === 'count'), deposit: ms.filter(m => m.id && m.type === 'deposit') };
-}
-function taskReadyCount(){ return ((STATE.teamStats && STATE.teamStats.milestones) || []).filter(m => m.achieved && !m.claimed).length; }
-function taskCardHtml(m, isNext){
-  const isDep = m.type === 'deposit';
-  const cur = Number(m.current) || 0, tgt = Number(m.target) || 1;
-  const state = m.claimed ? 'done' : m.achieved ? 'ready' : isNext ? 'next' : 'locked';
-  const pct = Math.max(0, Math.min(100, Math.round(cur / tgt * 100)));
-  const shown = Math.min(cur, tgt);
-  const target = isDep ? vMoney(tgt) : String(tgt);
-  const progress = isDep ? vMoney(shown) + ' / ' + vMoney(tgt) : shown + ' / ' + tgt;
-  const btn = m.claimed
-    ? `<button type="button" class="v-tk-btn done" disabled>${VI.tick}<span>Claimed</span></button>`
-    : m.achieved
-      ? `<button type="button" class="v-tk-btn go" onclick="claimTask('${esc(m.type)}','${esc(m.id)}',this)"><span>Claim</span></button>`
-      : `<button type="button" class="v-tk-btn" onclick="taskNotReached('${esc(m.type)}')"><span>Claim</span></button>`;
-  return `<article class="v-tk-card ${state}">
-    <div class="v-tk-top">
-      <span class="v-tk-medal">${m.claimed ? VI.tick : VI.gift}</span>
-      <div class="v-tk-tgt"><b class="${vFit(target, 10, 13)}">${esc(target)}</b><span>${isDep ? 'Team deposits' : 'Level 1 active referrals'}</span></div>
-      <span class="v-tk-reward ${vFit(vMoney(m.reward), 11, 13)}">${esc(vMoney(m.reward))}</span>
-    </div>
-    <div class="v-tk-bar"><i style="width:${pct}%"></i></div>
-    <div class="v-tk-foot"><span>Progress: ${esc(progress)}</span>${btn}</div>
-  </article>`;
-}
-// The cards of the open tab (the page and the tab switch both use it).
-function taskListInnerHtml(){
-  const list = taskLists()[_taskTab];
-  const nextIdx = list.findIndex(m => !m.claimed && !m.achieved);
-  return list.length ? list.map((m, i) => taskCardHtml(m, i === nextIdx)).join('') : '<div class="v-empty">No tasks yet.</div>';
-}
-function taskCenterHtml(){
-  const t = STATE.teamStats || {};
-  const L = taskLists(), tab = _taskTab;
-  const ready = k => L[k].filter(m => m.achieved && !m.claimed).length;
-  const tabBtn = (k, label) => `<button type="button" class="${tab === k ? 'on' : ''}" onclick="switchTaskTab('${k}')">${label}${ready(k) ? `<em>${ready(k)}</em>` : ''}</button>`;
-  return `<div class="v-tk reveal-in">
-    <div class="v-tk-hero">
-      <span class="v-tk-trophy">${VI.trophy}</span>
-      <div class="v-tk-stat"><b>${Number(t.l1ActiveCount) || 0}</b><span>Level 1 active referrals</span></div>
-      <i></i>
-      <div class="v-tk-stat"><b class="${vFit(vMoney(t.teamDeposits), 10, 13)}">${esc(vMoney(t.teamDeposits))}</b><span>Team deposits</span></div>
-    </div>
-    <div class="v-tk-tabs" data-tab="${tab}"><i class="v-tk-pill" aria-hidden="true"></i>${tabBtn('count', 'Referrals')}${tabBtn('deposit', 'Deposits')}</div>
-    <div class="v-tk-list" id="tkList">${taskListInnerHtml()}</div>
-  </div>`;
-}
-function paintTaskCenter(){
-  const b = $('tkBody'); if (!b) return;
-  if (_taskFailed && !(STATE.teamStats && STATE.teamStats.milestones)) { _taskShowsFailure = true; b.innerHTML = '<div class="v-empty" onclick="refreshTaskCenter()">Could not load your team</div>'; return; }
-  _taskShowsFailure = false;
-  b.innerHTML = taskCenterHtml();
-}
-window.refreshTaskCenter = refreshTaskCenter;
-function updateTaskBadge(){
-  const e = $('tkBadge'); if (!e) return;
-  const n = taskReadyCount(); e.textContent = n; e.style.display = n ? '' : 'none';
-}
-// Switching tabs: the white pill glides to the other tab and the cards slide out and the new ones slide in from the
-// side the member is heading to (nothing jumps). With reduced motion, or no page to animate, it swaps at once.
-var _tkSwapTimer = null;
-window.switchTaskTab = function(k){
-  const next = k === 'deposit' ? 'deposit' : 'count';
-  if (next === _taskTab) { paintTaskCenter(); return; }
-  _taskTab = next;
-  const tabs = document.querySelector('.v-tk-tabs'), list = $('tkList');
-  const calm = typeof matchMedia !== 'function' || matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (!tabs || !list || calm) { paintTaskCenter(); return; }
-  tabs.dataset.tab = next;
-  tabs.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', (i === 1) === (next === 'deposit')));
-  const dir = next === 'deposit' ? 1 : -1;
-  clearTimeout(_tkSwapTimer);
-  list.style.transition = 'opacity .13s ease, transform .13s ease';
-  list.style.opacity = '0';
-  list.style.transform = 'translateX(' + (-dir * 22) + 'px)';
-  _tkSwapTimer = setTimeout(() => {
-    const cur = $('tkList'); if (!cur) return;
-    cur.innerHTML = taskListInnerHtml();
-    cur.style.transition = 'none';
-    cur.style.transform = 'translateX(' + (dir * 22) + 'px)';
-    void cur.offsetWidth;
-    cur.style.transition = 'opacity .28s ease, transform .34s cubic-bezier(.2,.85,.25,1)';
-    cur.style.opacity = '1';
-    cur.style.transform = 'none';
-  }, 130);
-};
-var _taskFailed = false, _taskTimer = null, _taskShowsFailure = false;
-// Fetches the true progress. A failed fetch keeps whatever the page already shows; with nothing to show it says so
-// (tap to retry) instead of printing "No tasks yet." as if the owner had none.
-async function refreshTaskCenter(){
-  const had = !!(STATE.teamStats && STATE.teamStats.milestones);
-  const before = had ? JSON.stringify([STATE.teamStats.milestones, STATE.teamStats.l1ActiveCount, STATE.teamStats.teamDeposits]) : '';
-  const r = await api('/team/stats');
-  if (r.status === 'success') { STATE.teamStats = r; _taskFailed = false; }
-  else _taskFailed = !had;
-  const now = STATE.teamStats && STATE.teamStats.milestones ? JSON.stringify([STATE.teamStats.milestones, STATE.teamStats.l1ActiveCount, STATE.teamStats.teamDeposits]) : '';
-  if (_openSheetTitle === 'Task Center' && (before !== now || _taskFailed || !had || _taskShowsFailure)) paintTaskCenter();
-  updateTaskBadge();
-}
-window.openTaskCenter = async function(){
-  openSheet('Task Center', '<div id="tkBody"></div>');
-  if (STATE.teamStats && STATE.teamStats.milestones) paintTaskCenter();
-  else { const b = $('tkBody'); if (b) b.innerHTML = '<div class="v-tk-wait">' + NAV_LOADER + '</div>'; }
-  // While the page is open, progress is re-read every 15 seconds so a referral that just deposited shows up by itself.
-  if (_taskTimer) clearInterval(_taskTimer);
-  _taskTimer = setInterval(() => {
-    if (_openSheetTitle !== 'Task Center') { clearInterval(_taskTimer); _taskTimer = null; return; }
-    if (!_taskBusy && !document.hidden) refreshTaskCenter();
-  }, 15000);
-  await refreshTaskCenter();
-};
-// Tapping Claim on a task that is not reached yet says so (a disabled button would swallow the tap), with a nudge on what to do.
-window.taskNotReached = function(type){
-  notify(type === 'deposit'
-    ? 'Deposit target not reached. Keep growing your team and encourage them to deposit.'
-    : 'Referral target not reached. Share your invite link to bring in more members.');
-};
-window.claimTask = async function(type, id, btn){
-  if (_taskBusy) return;
-  _taskBusy = true; if (btn) { btn.disabled = true; btn.textContent = 'Claiming…'; }
-  let r;
-  try { r = await post('/team/task/claim', { type, id }); } finally { _taskBusy = false; }
-  if (r.status === 'success') {
-    const m = ((STATE.teamStats && STATE.teamStats.milestones) || []).find(x => x.type === type && x.id === id);
-    if (m) m.claimed = true;
-    const before = Number((STATE.account || {}).walletBalance) || 0;
-    const reward = Number(r.amount) || 0;
-    const after = Number.isFinite(Number(r.walletBalance)) && r.walletBalance !== null ? Number(r.walletBalance) : before + reward;
-    if (STATE.account) STATE.account.walletBalance = after;
-    paintTaskCenter(); updateTaskBadge();
-    showChestWin(reward, after, () => {});
-    refreshAfterWin();
-    return;
-  }
-  // Not claimable after all (already taken, progress changed, task removed): say so and show the true state.
-  notify(r.message || 'Could not claim that reward');
-  await refreshTaskCenter();
-  if (_openSheetTitle === 'Task Center') paintTaskCenter();
-};
 async function renderNetwork(){
   const hadCache = !!STATE.teamStats;
   if (hadCache) paintNetwork();
@@ -3879,46 +3810,161 @@ async function renderNetwork(){
   if (STATE.page !== 'network') return;
   paintNetwork();
 }
+function mgNum(v){ const n = Number(v) || 0; return numGroup(n, Math.round(n * 100) % 100 !== 0); }
 function paintNetwork(){
-  const t = STATE.teamStats || { referralCode:'', commRates:{}, team:{}, totalTeam:0, teamDeposits:0, levelCommission:{} };
-  const rates = t.commRates || {}, team = t.team || {}, lc = t.levelCommission || {};
-  const a = STATE.account || {};
-  const code = a.referralCode || t.referralCode || '';
-  const link = code ? `${shareOrigin()}/share.html?v=${Math.floor(Date.now() / 1000)}&code=${encodeURIComponent(code)}` : '';
+  const t = STATE.teamStats || { referralCode:'', commRates:{}, team:{}, totalTeam:0, teamDeposits:0, levelCommission:{}, levelPurchase:{} };
+  const rates = t.commRates || {}, team = t.team || {}, lc = t.levelCommission || {}, lp = t.levelPurchase || {};
   const level = _activeTeamLevel || 1;
   _activeTeamLevel = level;
-  const levels = [1, 2, 3].map(n => `
-    <button class="v-level${level === n ? ' on' : ''}" data-level="${n}" onclick="switchTeamLevel(${n})">
-      <span class="v-lv-l"><b>Level ${n}</b><small>${team['l' + n] || 0} Members</small></span>
-      <span class="v-lv-r"><small>Rate</small><i>${rates['l' + n] != null ? rates['l' + n] : 0}%</i></span>
-      <span class="v-lv-sep"></span>
-      <span class="v-lv-c"><small>Commission</small><b class="${vFit(vMoney2(lc['l' + n]), 12, 17)}">${esc(vMoney2(lc['l' + n]))}</b></span>
+  const cards = [1, 2, 3].map(n => `
+    <button type="button" class="mg-lv${level === n ? ' on' : ''}" data-level="${n}" onclick="switchTeamLevel(${n})">
+      <span class="mg-lv-h"><em>LV:${n}</em><b>${rates['l' + n] != null ? rates['l' + n] : 0}%</b></span>
+      <span class="mg-lv-b">
+        <span class="c1"><b>${esc(mgNum(lc['l' + n]))}</b><small>Commission</small></span>
+        <span class="c2"><b>${esc(mgNum(lp['l' + n]))}</b><small>Purchase</small></span>
+        <span class="c3"><b>${Number(team['l' + n]) || 0}</b><small>Members</small></span>
+      </span>
     </button>`).join('');
   const html = `
-<div class="v-page v-team">
-  <div class="v-tcard">
-    <div class="v-tcard-top"><span class="v-tc-ic">${VI.people}</span><span class="v-tc-lbl">Total Team</span><b class="v-tc-num">${Number(t.totalTeam) || 0}</b></div>
-    <div class="v-tc-line"></div>
-    <div class="v-tc-money ${vFit(vMoney2(t.teamDeposits), 16, 22)}">${esc(vMoney2(t.teamDeposits))}</div>
-    <div class="v-tc-cap">Purchase</div>
+<div class="v-page mg-team">
+  <div class="mg-tcard">
+    <i class="mg-ring r1"></i><i class="mg-ring r2"></i>
+    <div class="mg-tcard-top"><span class="mg-tic">${MGI.nTeam}</span><span class="mg-tlbl">Total Team</span><b class="mg-tnum">${Number(t.totalTeam) || 0}</b></div>
+    <div class="mg-tline"></div>
+    <div class="mg-tmoney">${esc(vMoney2(t.teamDeposits))}</div>
+    <div class="mg-tcap">Purchase</div>
   </div>
-  <div class="v-share">
-    <div class="v-share-l">Share URL</div>
-    <div class="v-share-box"><span class="v-share-url">${esc(link || '—')}</span><button type="button" onclick="copyText('${esc(link)}')" aria-label="Copy invite link">${VI.copy}</button></div>
-    <button class="v-btn" type="button" onclick="copyText('${esc(link)}')">Copy Invite Link</button>
-  </div>
-  <button class="v-task-btn" type="button" onclick="openTaskCenter()">
-    <span class="v-task-ic">${VI.trophy}</span><b>Task Center</b>
-    <em id="tkBadge" style="${taskReadyCount() ? '' : 'display:none'}">${taskReadyCount()}</em>
-    <span class="v-task-go">${VI.chev}</span>
-  </button>
-  <div class="v-levels">${levels}</div>
+  <div class="mg-h2"><h2>Commission Rate</h2><span>${esc(cur())}</span></div>
+  <div class="mg-lvs">${cards}</div>
+  <div class="mg-h3"><h3 id="mgLvTitle">Level ${level}</h3><span><b id="mgLvCount">${Number(team['l' + level]) || 0}</b> Members</span></div>
   <div id="teamMembersBox"></div>
 </div>`;
   $('pageHost').innerHTML = html;
   switchTeamLevel(level); // shows a held list at once and refreshes it if it is old
 }
 
+// ── PROMOTION (own tab): banner, share link, share buttons, invitation reward ──
+async function renderPromo(){
+  const hadCache = !!STATE.teamStats;
+  if (hadCache) paintPromo();
+  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + NAV_LOADER + '</div>';
+  const r = await api('/team/stats');
+  if (r.status === 'success') STATE.teamStats = r;
+  else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:0,l2:0,l3:0}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamDeposits:0, levelCommission:{}, levelPurchase:{} };
+  if (STATE.page !== 'promo') return;
+  paintPromo();
+}
+function promoLink(){
+  const t = STATE.teamStats || {};
+  const code = (STATE.account || {}).referralCode || t.referralCode || '';
+  return code ? `${shareOrigin()}/share.html?v=${Math.floor(Date.now() / 1000)}&code=${encodeURIComponent(code)}` : '';
+}
+var _promoLink = '';
+function paintPromo(){
+  const t = STATE.teamStats || {};
+  const rates = t.commRates || {};
+  _promoLink = promoLink();
+  const share = (cls, name, icon, key) => `<button type="button" class="mg-sh ${cls}" onclick="shareTo('${key}')"><span>${icon}</span><small>${name}</small></button>`;
+  const html = `
+<div class="v-page mg-promo">
+  <div class="mg-pbanner">${STATE.homeBanner ? `<img src="${esc(STATE.homeBanner)}" alt="" onerror="this.style.display='none'">` : ''}</div>
+  <div class="mg-pcard">
+    <div class="mg-plabel">Share URL</div>
+    <div class="mg-pbox"><span class="mg-purl">${esc(_promoLink || '—')}</span><button type="button" class="mg-pcopy" data-copy-group="promo" onclick="copyText(_promoLink)"><i>${MGI.copyMini}</i><b>Copy</b></button></div>
+    <div class="mg-shares">
+      ${share('tg', 'Telegram', MGI.plane, 'telegram')}${share('wa', 'WhatsApp', MGI.whatsapp, 'whatsapp')}${share('fb', 'Facebook', MGI.facebook, 'facebook')}${share('xx', 'X', MGI.xmark, 'x')}${share('tt', 'TikTok', MGI.tiktok, 'tiktok')}
+    </div>
+  </div>
+  <div class="mg-pcard mg-reward">
+    <h3><i></i>Invitation Reward</h3>
+    <p>Strive to grow your team so you can earn commissions and daily salary rewards as soon as possible.<br>Level 1 = ${rates.l1 != null ? rates.l1 : 0}%<br>Level 2 = ${rates.l2 != null ? rates.l2 : 0}%<br>Level 3 = ${rates.l3 != null ? rates.l3 : 0}%</p>
+  </div>
+</div>`;
+  $('pageHost').innerHTML = html;
+}
+window.shareTo = function(where){
+  if (!_promoLink) return notify('Your invite link is not ready yet.');
+  if (!rapidTapGuardOk('share:' + where)) return;
+  const msg = 'Join me on ' + brandName() + ': ' + _promoLink;
+  const u = encodeURIComponent(_promoLink), m = encodeURIComponent(msg);
+  const urls = {
+    telegram: 'https://t.me/share/url?url=' + u + '&text=' + encodeURIComponent('Join me on ' + brandName()),
+    whatsapp: 'https://wa.me/?text=' + m,
+    facebook: 'https://www.facebook.com/sharer/sharer.php?u=' + u,
+    x: 'https://twitter.com/intent/tweet?text=' + m,
+    tiktok: 'https://www.tiktok.com/',
+  };
+  // TikTok has no way to hand it a link, so the link is copied first and TikTok opens for the member to paste it.
+  if (where === 'tiktok' && navigator.clipboard) navigator.clipboard.writeText(_promoLink).catch(() => {});
+  window.open(urls[where], '_blank', 'noopener');
+};
+
+// ── SALARY (own tab) ──
+var _salaryBusy = false;
+var MG_SALARY_COLORS = ['#ffc72a', '#00a650', '#e30711', '#046a38', '#ffd60a', '#ffc72a', '#00a650'];
+async function renderSalary(){
+  const had = !!STATE.salary;
+  if (had) paintSalary();
+  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + NAV_LOADER + '</div>';
+  const r = await api('/salary/status');
+  if (r.status === 'success') STATE.salary = r;
+  if (STATE.page !== 'salary') return;
+  paintSalary();
+}
+function paintSalary(){
+  const S = STATE.salary;
+  if (!S) { $('pageHost').innerHTML = '<div class="v-page"><div class="v-empty" onclick="renderSalary()">Could not load. Tap to try again.</div></div>'; return; }
+  const tiers = S.tiers || [];
+  const total = Number(S.total) || 0;
+  const days = Number(S.accruedDays) || 0;
+  const money = n => cur() + ' ' + numGroup(n, false);
+  const lowest = tiers[0];
+  const topLine = days > 0 ? 'Next claim: ' + money(S.nextReward)
+    : lowest && total < lowest.target ? 'Need ' + money(lowest.target - total) + ' more to claim'
+    : 'Come back tomorrow for your next day of wages';
+  const cards = tiers.map((tier, i) => {
+    const need = Math.max(0, tier.target - total);
+    const pct = tier.target > 0 ? Math.min(100, Math.floor(total / tier.target * 100)) : 0;
+    const open = tier.reached;
+    const btn = !open ? `<button type="button" class="mg-sbtn" onclick="notify('Need ${money(need)} more to claim')">Locked</button>`
+      : days > 0 ? '<button type="button" class="mg-sbtn go" onclick="claimSalary(this)">Claim</button>'
+      : '<button type="button" class="mg-sbtn" onclick="notify(\'No wages to claim yet. Come back tomorrow.\')">Claimed</button>';
+    return `
+    <div class="mg-stier" style="--strip:${MG_SALARY_COLORS[i % MG_SALARY_COLORS.length]}">
+      <div class="mg-sl">
+        <div class="mg-s1"><b>Reach ${money(tier.target)}</b><span>claimable reward within</span><em>Reward ${money(tier.reward)}</em></div>
+        <div class="mg-sbar"><i style="width:${pct}%"></i></div>
+        <div class="mg-sneed">${open ? 'Reached' : 'Need ' + money(need) + ' more to claim'}</div>
+      </div>
+      ${btn}
+    </div>`;
+  }).join('');
+  $('pageHost').innerHTML = `
+<div class="v-page mg-salary">
+  <div class="mg-shead"><h1>Daily Salary Standard</h1><p>Invite Friends · Grow Your Team · Claim Daily Rewards</p><div class="mg-spill">Team Total Consumption: ${esc(money(total))}</div></div>
+  <div class="mg-sacc"><div>Accrued wages: <b>${days}</b> day(s)</div><small>${esc(topLine)}</small></div>
+  ${cards || '<div class="v-empty">Salary is not available yet.</div>'}
+  <div class="mg-rules"><b>Daily wage rules:</b>
+    <ol><li>Each calendar day after reaching the lowest tier accrues one share of salary. Unclaimed days keep accruing; each claim pays the earliest unclaimed day.</li>
+    <li>Each accrued day is paid at the tier reached on that day. Tap a claimable tier to collect your wages day by day.</li></ol></div>
+</div>`;
+}
+window.claimSalary = async function(btn){
+  if (_salaryBusy) return;
+  _salaryBusy = true; if (btn) btn.disabled = true;
+  const r = await post('/salary/claim', {});
+  _salaryBusy = false;
+  if (r && r.stale) return;
+  const fresh = await api('/salary/status');
+  if (fresh.status === 'success') STATE.salary = fresh;
+  if (STATE.page === 'salary') paintSalary();
+  if (r && r.status === 'success') {
+    if (STATE.account) STATE.account.walletBalance = r.walletBalance;
+    refreshTransactionsCache().catch(() => {});
+    return notify(fmtUGX(r.amount) + ' added to your wallet');
+  }
+  notify((r && r.message) || 'Could not claim the salary right now');
+};
 // ── MISSION CENTER — REMOVED ──
 // Owner: "remove mission center". The screen, both claim flows and the
 // /mission/status fetch that used to run on every boot are gone, and so are
@@ -4051,45 +4097,47 @@ window.copyText = function(text){
 // mockup's "Membership Level / VIP 1" card -- there is no tier system
 // anywhere in this codebase (thresholds, benefits, what "View Benefits"
 // would even show), so it is not invented here; flagged in CLAUDE.md.
-function vTileHtml(icon, label, onclick, tone){
-  return `<button class="v-tile" onclick="${onclick}"><span class="v-tile-ic ${tone || ''}">${icon}</span><b>${label}</b></button>`;
+function mgSetRow(tile, icon, title, sub, onclick, badge){
+  return `<button type="button" class="mg-row" onclick="${onclick}">
+    <span class="mg-tile ${tile}">${icon}${badge ? `<em id="msgBadge"${mgUnread() ? '' : ' style="display:none"'}>${mgUnread()}</em>` : ''}</span>
+    <span class="mg-row-t"><b>${title}</b><small>${sub}</small></span>
+    <span class="mg-row-c">${MGI.chev}</span>
+  </button>`;
 }
 async function renderAccount(){
   const a = STATE.account || {};
   const avatar = STATE.profileLogo
     ? `<img src="${esc(STATE.profileLogo)}" alt="" onerror="this.style.display='none'">`
-    : `<span class="v-av-fb">${VI.person}</span>`;
+    : `<span class="mg-av-fb">${MGI.nProfile}</span>`;
+  const phone = localDigits(a.phone) ? '0' + localDigits(a.phone).replace(/^0+/, '') : (walletLocalPhone(a.phone) || formatPhoneDisplay(a.phone));
   const html = `
-<div class="v-page v-my">
-  <div class="v-me">
-    <div class="v-me-top">
-      <div class="v-avatar">${avatar}</div>
-      <div class="v-me-id"><div class="v-me-phone">${esc(localDigits(a.phone) || walletLocalPhone(a.phone) || formatPhoneDisplay(a.phone))}</div><span class="v-vip">VIP ${Number(a.vipLevel) || 0}</span></div>
+<div class="v-page mg-my">
+  <div class="mg-me">
+    <div class="mg-me-top">
+      <div class="mg-av">${avatar}</div>
+      <div class="mg-me-id"><b>ID: ${esc(a.publicId != null ? a.publicId : '')}</b><span>${esc(phone)}</span></div>
     </div>
-    <div class="v-me-line"></div>
-    <div class="v-me-lbl">TOTAL BALANCE</div>
-    <div class="v-me-bal" id="myBalance">${esc(vMoney2(a.walletBalance))}</div>
-    <div class="v-me-btns">
-      <button class="v-me-dep" onclick="openDepositSheet()"><span class="v-ic">${VI.bottleDown}</span>Deposit</button>
-      <button class="v-me-wit" onclick="openWithdrawSheet()"><span class="v-ic">${VI.bottleUp}</span>Withdraw</button>
-    </div>
+    <div class="mg-me-line"></div>
+    <div class="mg-me-bal" id="myBalance">${esc(vMoney2(a.walletBalance))}</div>
   </div>
-  <div class="v-sec"><span class="bar"></span><h2>Account</h2><i></i></div>
-  <div class="v-tiles">
-    ${vTileHtml(VI.bottleWallet, 'Wallet', 'openWalletSheet()')}
-    ${vTileHtml(VI.bottleChat, 'Messages', 'openMessagesSheet()', 'gold')}
-    ${vTileHtml(VI.clipboard, 'Details', "openTransactionStatement('income')", 'gold')}
-    ${vTileHtml(VI.download, 'APP', 'promptInstallApp()')}
+  <div class="mg-me-btns">
+    <button type="button" class="dep" onclick="openDepositSheet()">Deposit</button>
+    <button type="button" class="wit" onclick="openWithdrawSheet()">Withdraw</button>
   </div>
-  <div class="v-sec"><span class="bar"></span><h2>Security</h2><i></i></div>
-  <div class="v-tiles">
-    ${vTileHtml(VI.bottleLock, 'Login Password', 'openChangeLoginPasswordSheet()')}
-    ${vTileHtml(VI.bottleKey, 'Trade Password', 'openChangeTradePasswordSheet()')}
+  <div class="mg-sec"><span class="bar"></span><h2>Settings</h2><i></i></div>
+  <div class="mg-set">
+    ${mgSetRow('t1', MGI.tDownload, 'Download APP', 'Get the mobile app', 'openDownloadPage()')}
+    ${mgSetRow('t2', MGI.tCard, 'Wallet', 'Manage your wallet', 'openWalletSheet()')}
+    ${mgSetRow('t3', MGI.tWallet, 'Balance Record', 'Transaction history', "openTransactionStatement('all')")}
+    ${mgSetRow('t4', MGI.tChat, 'Messages', 'Notifications &amp; mail', 'openMessagesSheet()', true)}
+    ${mgSetRow('t5', MGI.tLock, 'Login Password', 'Change login PIN', 'openChangeLoginPasswordSheet()')}
+    ${mgSetRow('t6', MGI.tKey, 'Trade Password', 'Change trade PIN', 'openChangeTradePasswordSheet()')}
   </div>
-  <button class="v-wide" onclick="openHelpDialog('Help Me')"><span class="v-ic">${VI.headset}</span>Help Me</button>
-  <button class="v-logout" onclick="doLogout()"><span class="v-ic">${VI.logout}</span>Log Out</button>
+  <button type="button" class="mg-logout" onclick="doLogout()"><span>${MGI.door}</span>Log Out</button>
 </div>`;
   $('pageHost').innerHTML = html;
+  // The unread count on the Messages tile comes from the inbox; ask for it once per visit (never blocks the paint).
+  api('/messages').then(r => { if (r.status === 'success') { STATE.messages = r.messages; updateMessageBadge(); } }).catch(() => {});
 }
 // "+256 742 730 382" -- the shape the mockups show, from whatever the
 // server stored (0742730382 / 256742730382 / +256742730382 all normalise).
@@ -4144,11 +4192,11 @@ function maskedTail(phone){
   return d ? '****' + d.slice(-4) : '****';
 }
 function vWalletCardHtml(w){
-  const provider = w && w.network ? String(w.network).replace(/\s*(Mobile )?Money$/i, '').toUpperCase() : 'MOBILE MONEY';
-  return `<div class="v-wcard">
-    <div class="v-wcard-top"><b>${esc(provider)}</b><span class="v-wcard-ic">${VI.bottle}</span></div>
+  const provider = w && w.network ? String(w.network).toUpperCase() : '';
+  return `<div class="v-wcard${w ? '' : ' empty'}">
+    <div class="v-wcard-top"><b>${provider ? esc(provider) : 'Wallet'}</b><span class="v-wcard-ic">${MGI.cardMini}</span></div>
     <div class="v-chip-art" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-    <div class="v-wcard-num">${w ? esc(walletDestDisplay(w)) : 'No wallet linked'}</div>
+    <div class="v-wcard-num">${w ? esc(walletDestDisplay(w)) : '**** **** **** ****'}</div>
     <div class="v-wcard-l">ACCOUNT HOLDER</div>
     <div class="v-wcard-n">${w ? esc(String(w.holder || '').toUpperCase()) : '—'}</div>
   </div>`;
@@ -4174,10 +4222,6 @@ function walletDestDisplay(w){
 function walProviderOptionsHtml(){
   return walProviders().map(p => `<button type="button" class="prov-opt" onclick="pickProvider('${esc(p)}')">${esc(walShort(p))}</button>`).join('');
 }
-function walRowsHtml(){
-  return (STATE.bankAccounts || []).slice(0, 1).map(a => `
-    <div class="v-wal-row"><b>${esc(walShort(a.network))}</b><span>${esc(maskedTail(a.phone))}</span><em>${esc(String(a.holder || '').toUpperCase())}</em></div>`).join('');
-}
 // The one saved wallet is edited in place: its provider, number and holder
 // fill the form (only into empty fields, so nothing the member typed is lost).
 // The Account Number box is a phone box for mobile money and a plain text box for a bank (letters allowed).
@@ -4186,7 +4230,7 @@ function applyWalDestKind(nowBank){
   dest.type = nowBank ? 'text' : 'tel';
   dest.inputMode = nowBank ? 'text' : 'numeric';
   dest.autocomplete = nowBank ? 'off' : 'tel';
-  dest.placeholder = nowBank ? 'Account number' : phoneHintBody();
+  dest.placeholder = 'Enter wallet account number';
 }
 function prefillWallet(){
   const w = currentWallet(); if (!w) return;
@@ -4199,32 +4243,34 @@ function prefillWallet(){
 // Only the card, the heading and the "Your Wallet" rows: the typed fields are never touched.
 function paintWalletParts(){
   const card = $('walCardBox'); if (card) card.innerHTML = vWalletCardHtml(currentWallet());
-  const head = $('walEditHead'); if (head) head.textContent = currentWallet() ? 'Edit Wallet' : 'Bind Wallet';
-  const rows = $('walRows'); if (rows) rows.innerHTML = walRowsHtml();
-  const own = $('walYours'); if (own) own.style.display = (STATE.bankAccounts || []).length ? '' : 'none';
+  const head = $('walEditHead'); if (head) head.textContent = currentWallet() ? 'Edit Wallet' : 'Add Wallet';
+  const tog = $('walToggleBtn'); if (tog) tog.textContent = currentWallet() ? 'Edit Wallet' : 'Add Wallet';
   prefillWallet();
 }
+window.walShowForm = function(show){
+  const form = $('walFormWrap'), tog = $('walToggleBtn');
+  if (form) form.style.display = show ? '' : 'none';
+  if (tog) tog.style.display = show ? 'none' : '';
+  if (show) { prefillWallet(); const el = $('walProvider'); if (el && !el.value) { try { el.focus(); } catch (_) {} } }
+};
 function renderWalletSheet(){
   const w = currentWallet();
   $('sheetBody').innerHTML = `<div class="v-form reveal-in">
     <div id="walCardBox">${vWalletCardHtml(w)}</div>
-    <div class="v-edit">
-      <div class="v-sec" style="margin-top:2px"><span class="bar"></span><h2 id="walEditHead">${w ? 'Edit Wallet' : 'Bind Wallet'}</h2></div>
+    <button class="v-cta" id="walToggleBtn" type="button" onclick="walShowForm(true)">${w ? 'Edit Wallet' : 'Add Wallet'}</button>
+    <div class="v-edit" id="walFormWrap" style="display:none">
+      <div class="v-sec" style="margin-top:2px"><span class="bar"></span><h2 id="walEditHead">${w ? 'Edit Wallet' : 'Add Wallet'}</h2></div>
       <div id="walFormGroup">
         <label class="v-flabel" for="walProvider">Wallet Provider</label>
         <div class="prov-pick" id="walProviderPick">
           <div class="v-uline prov-input"><input id="walProvider" type="text" autocomplete="off" placeholder="Type wallet provider to search" oninput="filterProviders()" onfocus="openProviderList()"></div>
           <div class="prov-list" id="walProviderList">${walProviderOptionsHtml()}</div>
         </div>
-        <label class="v-flabel" for="walPhone">Account Number</label>
-        <div class="v-uline"><input id="walPhone" type="tel" inputmode="numeric" autocomplete="tel" enterkeyhint="next" placeholder="${esc(phoneHintBody())}" oninput="handleWalDestInput(this)"></div>
+        <label class="v-flabel" for="walPhone">Wallet Account</label>
+        <div class="v-uline"><input id="walPhone" type="tel" inputmode="numeric" autocomplete="tel" enterkeyhint="next" placeholder="Enter wallet account number" oninput="handleWalDestInput(this)"></div>
         <label class="v-flabel" for="walHolder">Account Holder Name</label>
-        <div class="v-uline"><input id="walHolder" type="text" maxlength="60" autocomplete="name" enterkeyhint="done" value="${w ? esc(String(w.holder || '').toUpperCase()) : ''}"></div>
-        <div class="v-two"><button class="v-ghost" type="button" onclick="closeSheet()">Cancel</button><button class="v-solid" id="walSaveBtn" type="button" onclick="submitWallet()">Submit</button></div>
-      </div>
-      <div id="walYours" style="${(STATE.bankAccounts || []).length ? '' : 'display:none'}">
-        <h3 class="v-yours">Your Wallet</h3>
-        <div id="walRows">${walRowsHtml()}</div>
+        <div class="v-uline"><input id="walHolder" type="text" maxlength="60" autocomplete="name" enterkeyhint="done" placeholder="Enter account holder name" value="${w ? esc(String(w.holder || '').toUpperCase()) : ''}"></div>
+        <div class="v-two"><button class="v-ghost" type="button" onclick="walShowForm(false)">Cancel</button><button class="v-solid" id="walSaveBtn" type="button" onclick="submitWallet()">Submit</button></div>
       </div>
     </div>
   </div>`;
@@ -4317,19 +4363,13 @@ function dismissNotify(){
 }
 window.notify = function(message, onClose){
   $('notifyMsg').textContent = String(message || '');
-  // Good news gets the tick, everything else (errors and "please do this first")
-  // the circled cross, as in the screens.
-  const good = /success|✓|copied|saved|done|now running|redeemed|submitted|sent|changed|processing|updated|claimed|unlocked|bound/i.test(String(message || '')) && !/not |fail|could not|cannot|insufficient|invalid|incorrect|wrong|isn't|already|status changed|bind it|add a payout/i.test(String(message || ''));
+  // Good news gets the green tick, everything else the yellow warning triangle, as in the screens.
+  const good = /success|✓|copied|saved|done|now running|redeemed|submitted|sent|changed|processing|updated|claimed|unlocked|bound|added to your wallet/i.test(String(message || '')) && !/not |fail|could not|cannot|insufficient|invalid|incorrect|wrong|isn't|already|status changed|bind it|add a payout|need /i.test(String(message || ''));
   const ic = $('notifyIc');
-  if (ic) { ic.innerHTML = good ? VI.okCircle : VI.errCircle; ic.className = 'notify-ic ' + (good ? 'ok' : 'err'); }
+  if (ic) { ic.innerHTML = good ? MGI.okc : MGI.warn; ic.className = 'notify-ic ' + (good ? 'ok' : 'err'); }
   _notifyOnClose = typeof onClose === 'function' ? onClose : null;
+  if (_notifyTimer) { clearTimeout(_notifyTimer); _notifyTimer = null; }
   $('notifyBg').classList.add('show');
-  // Auto-dismisses on its own (a toast, not a dialog the member must
-  // acknowledge) -- tapping it early still works via closeNotify() on the
-  // card's own onclick, which clears this same timer first.
-  if (_notifyTimer) clearTimeout(_notifyTimer);
-  // A longer message (two lines) stays a little longer so it can be read.
-  _notifyTimer = setTimeout(closeNotify, String(message || '').length > 80 ? 4800 : String(message || '').length > 45 ? 2600 : 1400);   // a long message (the withdrawal summary) needs time to be read
 };
 window.closeNotify = function(){
   if (_notifyTimer) { clearTimeout(_notifyTimer); _notifyTimer = null; }
@@ -4372,19 +4412,19 @@ function statementCategoryMatch(cat, t){
   if (cat === 'deposit') return t.type === 'deposit';
   if (cat === 'withdraw') return t.type === 'withdraw';
   if (cat === 'turntable') return STATEMENT_TURNTABLE_TYPES.has(t.type);
-  if (cat === 'fruit') return STATEMENT_FRUIT_TYPES.has(t.type);
+  if (cat === 'salary') return t.type === 'mission_salary';
   return true;
 }
 function statementDescription(t){
   if (t.type === 'deposit') return 'Deposit';
   if (t.type === 'withdraw') return 'Withdraw';
   if (t.type === 'cashback') return 'Daily Earnings';
-  if (t.type === 'commission') return 'Referral Commission';
+  if (t.type === 'commission') return 'Commission';
   if (t.type === 'promocode') return 'Gift Code';
   if (t.type === 'checkin') return 'Check-in Reward';
   if (t.type === 'welcome_bonus') return 'Welcome Bonus';
   if (t.type === 'team_reward') return 'Team Reward';
-  if (t.type === 'mission_salary') return 'Mission Salary';
+  if (t.type === 'mission_salary') return 'Daily Salary';
   if (t.type === 'mission_deposit_reward') return 'Mission Reward';
   if (STATEMENT_TURNTABLE_TYPES.has(t.type)) return 'Turntable';
   if (t.type === 'admin_credit') return 'Deposit';
@@ -4423,7 +4463,7 @@ function renderStatement(){
   const body = $('statementBody');
   if (!body) return;
   const all = (STATE.transactions || []).filter(t => statementCategoryMatch(_statementCat, t));
-  if (!all.length) { body.innerHTML = '<div class="v-empty">No records yet.</div>'; return; }
+  if (!all.length) { body.innerHTML = '<div class="v-empty">No Records</div>'; return; }
   const rows = all.slice(0, _statementShown);
   // The Load More button always sits under the list (as on the owner's Balance Record, even with two rows): it shows the next ten, or, when
   // everything held is already on screen, asks the server again for anything newer or older.
@@ -4458,21 +4498,21 @@ window.statementLoadMore = async function(){
   } finally { _statementMoreBusy = false; }
 };
 window.switchStatementCategory = function(cat){
-  if (!['all','deposit','withdraw','turntable','fruit'].includes(cat)) return;
+  if (!['all','deposit','withdraw','turntable','salary'].includes(cat)) return;
   _statementCat = cat; _statementShown = 10;
   const tabs = $('statementTabs');
   if (tabs) tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.cat === cat));
   renderStatement();
 };
 window.openTransactionStatement = async function(cat){
-  _statementCat = ['all','deposit','withdraw','turntable','fruit'].includes(cat) ? cat : 'all';
+  _statementCat = ['all','deposit','withdraw','turntable','salary'].includes(cat) ? cat : 'all';
   _statementShown = 10;
   const hadCache = Array.isArray(STATE.transactions);
   const bal = (STATE.account && STATE.account.walletBalance) || 0;
   openSheet('Balance Record', `
     <div class="v-recbal"><span>CURRENT BALANCE</span><b id="recBalance">${esc(vMoney2(bal))}</b></div>
     <div class="v-rectabs" id="statementTabs">
-      ${[['all','All'],['deposit','Deposit'],['withdraw','Withdraw'],['turntable','Turntable'],['fruit','Fruit']].map(([k, l]) => `<button data-cat="${k}" class="${_statementCat === k ? 'on' : ''}" onclick="switchStatementCategory('${k}')">${l}</button>`).join('')}
+      ${[['all','All'],['deposit','Deposit'],['withdraw','Withdraw'],['turntable','Turntable'],['salary','Daily Salary']].map(([k, l]) => `<button data-cat="${k}" class="${_statementCat === k ? 'on' : ''}" onclick="switchStatementCategory('${k}')">${l}</button>`).join('')}
     </div>
     <div id="statementBody"></div>`);
   $('sheetBg').classList.add('v-rec-page');
@@ -4515,33 +4555,30 @@ function renderMessagesList(){
   const box = $('msgBody');
   if (!box) return;
   const list = STATE.messages || [];
-  if (!list.length) { box.innerHTML = `<div class="v-nomsg"><span>${VI.bottle}</span><p>No messages</p></div>`; return; }
+  if (!list.length) { box.innerHTML = '<div class="v-empty">No Messages</div>'; return; }
   box.innerHTML = '<div class="reveal-in">' + list.map((m, i) => `
-    <button class="msg-row${m.read ? ' read' : ''}" onclick="openMessageDetail(${i})">
-      <span class="av">${VI.bottle}</span>
-      <span class="txt">
-        <span class="top">
-          <span class="t1">${esc(m.title || '')}</span>
-          <span class="date">${esc(m.date || '')}<br>${esc(m.time || '')}</span>
-        </span>
-        <span class="t2">${esc(messagePreview(m.body))}</span>
-      </span>
+    <button class="mg-mrow${m.read ? ' read' : ''}" onclick="openMessageDetail(${i})">
+      <span class="av"></span>
+      <span class="t">${esc(m.title || '')}</span>
+      <span class="d">${esc(m.date || '')}<br>${esc(m.time || '')}</span>
+      ${m.read ? '' : '<i class="dot"></i>'}
     </button>`).join('') + '</div>';
 }
 window.openMessageDetail = async function(index){
   const m = (STATE.messages || [])[index];
   if (!m) return;
   $('msgDetail').innerHTML = `
-    <button class="xbtn" onclick="closeMessageDetail()" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+    <button class="xbtn" onclick="closeMessageDetail()" aria-label="Close">${MGI.x}</button>
     <div class="head">
-      <div class="av">${VI.bottle}</div>
+      <span class="av"></span>
       <div>
         <h2>${esc(m.title || '')}</h2>
         <div class="date">${esc(m.date || '')} ${esc(m.time || '')}</div>
       </div>
     </div>
     <div class="ln"></div>
-    <div class="content">${esc(m.body || '')}</div>`;
+    ${m.body ? `<div class="content">${esc(m.body)}</div>` : ''}
+    ${m.hasImage ? `<img class="mimg" src="${esc(API_BASE + '/public/message-image/' + encodeURIComponent(m.id))}" alt="" onerror="this.style.display='none'">` : ''}`;
   // Its own history entry, mirroring openSheet(). Without one, the phone Back
   // button consumed the Messages SHEET's entry instead and tore the list down
   // while leaving this popup floating over nothing -- the same "it won't go
@@ -4577,15 +4614,21 @@ window.closeMessageDetail = function(){
 // site (5+ spots across deposit/withdraw completion, page renders) would
 // otherwise need its own guard -- same precedent as maybeShowAnnouncement()
 // elsewhere in this file after its own feature was removed.
-function updateMessageBadge(){}
+function updateMessageBadge(){
+  const n = mgUnread();
+  const dot = $('msgDot');
+  if (dot) { dot.textContent = n > 99 ? '99+' : String(n); dot.style.display = n ? '' : 'none'; }
+  const tile = $('msgBadge');
+  if (tile) { tile.textContent = n > 99 ? '99+' : String(n); tile.style.display = n ? '' : 'none'; }
+}
 
 function vPwBox(id, placeholder, pin){
   return `<div class="v-pbox"><input id="${id}" type="text" placeholder="${esc(placeholder)}"${pin ? ' inputmode="numeric" maxlength="6" autocomplete="one-time-code"' : ' autocomplete="off"'}></div>`;
 }
 window.openChangeLoginPasswordSheet = function(){
-  openSheet('Change Login Password', `<div class="v-form reveal-in"><div class="v-edit">
+  openSheet('Change Login Password', `<div class="v-form reveal-in"><div class="v-edit mg-pw">
     <label class="v-flabel" for="lpOld">Old Password</label>${vPwBox('lpOld', 'Enter old password')}
-    <label class="v-flabel" for="lpNew">New Password</label>${vPwBox('lpNew', 'Enter new password (at least 10 characters)')}
+    <label class="v-flabel" for="lpNew">New Password</label>${vPwBox('lpNew', 'Enter new password (at least 6 characters)')}
     <label class="v-flabel" for="lpNew2">Confirm New Password</label>${vPwBox('lpNew2', 'Confirm new password')}
     <button class="v-cta" id="lpSaveBtn" onclick="submitLoginPasswordChange()">Change Password</button>
   </div></div>`);
@@ -4595,7 +4638,7 @@ window.submitLoginPasswordChange = async function(){
   const newPass = $('lpNew').value;
   const confirm = $('lpNew2').value;
   if (!oldPass) return notify('Enter your current login password.');
-  if (!newPass || newPass.length < 10) return notify('Your new password must be at least 10 characters.');
+  if (!newPass || newPass.length < 6) return notify('Your new password must be at least 6 characters.');
   if (newPass !== confirm) return notify('The two new passwords do not match.');
   if (newPass === oldPass) return notify('Your new password must be different from the old one.');
   const btn = $('lpSaveBtn');
@@ -4623,7 +4666,7 @@ window.submitLoginPasswordChange = async function(){
 window.openChangeTradePasswordSheet = function(){
   // An account with no Trade Password yet is asked only for the new one.
   const first = (STATE.account || {}).hasTradePin === false;
-  openSheet('Change Trade Password', `<div class="v-form reveal-in"><div class="v-edit">
+  openSheet('Change Trade Password', `<div class="v-form reveal-in"><div class="v-edit mg-pw">
     ${first ? '' : `<label class="v-flabel" for="tpOld">Old Password</label>${vPwBox('tpOld', 'Enter old password', true)}`}
     <label class="v-flabel" for="tpNew">New Password</label>${vPwBox('tpNew', 'Enter new password (6 digits)', true)}
     <label class="v-flabel" for="tpNew2">Confirm New Password</label>${vPwBox('tpNew2', 'Confirm new password', true)}
@@ -4654,16 +4697,16 @@ window.submitTradePasswordChange = async function(){
 // chest artwork, key field, OPEN CHEST. A valid key flashes the green
 // full-screen win state with the amount won and the new balance.
 window.openChestSheet = function(){
-  const pic = STATE.brandLogo
-    ? `<img src="${esc(STATE.brandLogo)}" alt="">`
-    : `<span class="v-chest-ic">${VI.bottle}</span>`;
-  openSheet('TREASURE CHEST', `<div class="v-chest reveal-in">
-    <div class="v-chest-ring"><div class="v-chest-disc">${pic}</div></div>
-    <h2>MYSTERY TREASURE</h2>
+  openSheet('TREASURE CHEST', `<div class="mg-chestpg reveal-in">
+    <i class="mg-fade t"></i>
+    <div class="mg-chest-ring"><span class="glow"></span><img src="${CHEST_ART}" alt=""></div>
+    <h2>Mystery Treasure</h2>
     <p>Enter your key to unlock the reward</p>
-    <div class="v-chest-key"><span class="v-chest-keyic">${VI.key}</span><input id="chestKey" type="text" placeholder="Enter treasure chest key" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
-    <button class="v-chest-go" id="chestOpenBtn" type="button" onclick="submitChestKey()">UNLOCK TREASURE</button>
+    <input class="mg-chest-key" id="chestKey" type="text" placeholder="Enter treasure chest key" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()">
+    <button class="mg-chest-go" id="chestOpenBtn" type="button" onclick="submitChestKey()">OPEN CHEST</button>
+    <i class="mg-fade b"></i>
   </div>`);
+  $('sheetBg').classList.add('mg-chest-page');
 };
 window.submitChestKey = async function(){
   // No case-forcing here -- /redeem matches case-insensitively via
@@ -4674,9 +4717,9 @@ window.submitChestKey = async function(){
   // key', 'wrong treasure chest password'."
   if (!raw) return notify('Please enter the treasure chest key');
   const btn = $('chestOpenBtn');
-  btn.disabled = true; btn.textContent = 'UNLOCKING…';
+  btn.disabled = true; btn.textContent = 'OPENING…';
   const r = await post('/redeem', { code: raw });
-  btn.disabled = false; btn.textContent = 'UNLOCK TREASURE';
+  btn.disabled = false; btn.textContent = 'OPEN CHEST';
   if (r.status !== 'success') return notify(r.message || 'Wrong treasure chest password');
   // Owner: "why does the congratulations card delay to appear when one has
   // claimed treasure code." Because it used to wait on TWO more round trips
@@ -4708,7 +4751,6 @@ function showChestWin(reward, balance, after){
   bg.id = 'chestWinBg'; bg.className = 'v-win-bg'; bg._after = typeof after === 'function' ? after : null;
   bg.innerHTML = `
     <div class="v-win-card" role="dialog" aria-modal="true">
-      <span class="v-win-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="9" width="17" height="11.5" rx="2"/><path d="M2.5 9h19v-3.2h-19z"/><path d="M12 5.8v14.7"/><path d="M12 5.8C10.2 5.8 8.4 5 8.4 3.6 8.4 2.5 9.4 2 10.4 2.4c1.1.5 1.6 1.9 1.6 3.4zM12 5.8c1.8 0 3.6-.8 3.6-2.2 0-1.1-1-1.6-2-1.2-1.1.5-1.6 1.9-1.6 3.4z"/></svg></span>
       <h2>Congratulations!</h2>
       <p class="v-win-sub">You won</p>
       <div class="v-win-amt">${esc(vMoney2(reward))}</div>
@@ -4836,7 +4878,7 @@ function isScrollLockOverlayOpen(){
 // part of this rule to begin with once the old sheet-based mechanism was
 // removed -- nothing extra needed excluding them.
 function maybeAnnounceAfterHomeNav(prevPage){
-  if (['assets', 'network', 'account'].indexOf(prevPage) === -1) return;
+  if (['assets', 'promo', 'network', 'salary', 'account'].indexOf(prevPage) === -1) return;
   if (isAnyOverlayOpen()) return;         // something else is already in front
   maybeShowAnnouncement();
 }
@@ -4855,7 +4897,7 @@ function maybeAnnounceOnEntry(){
 }
 function openSheet(title, bodyHtml){
   dismissNotify();
-  $('sheetBg').classList.remove('v-rec-page');
+  $('sheetBg').classList.remove('v-rec-page', 'mg-nohead', 'mg-chest-page');
   $('sheetTitle').textContent = title;
   $('sheetBody').innerHTML = bodyHtml;
   // Withdraw's empty-state "Add withdrawal account" link opens Withdrawal
@@ -4869,6 +4911,8 @@ function openSheet(title, bodyHtml){
   // keeps stack depth at 1 regardless of how many sheets got chained, so
   // one Back/X tap always does exactly one consistent thing: close.
   const alreadyOpen = $('sheetBg').classList.contains('show');
+  // A page opens at its top, not wherever the previous page was scrolled to (they share this one overlay).
+  if (!alreadyOpen) $('sheetBg').scrollTop = 0;
   $('sheetBg').classList.add('show');
   document.body.classList.add('sheet-open');
   _openSheetTitle = title;
@@ -5039,21 +5083,14 @@ var _depChosenAmount = 0;
 function openDepositFormSheet(){
   const s = STATE.settings || {};
   _depChosenAmount = 0;
-  // The payment prompt goes to the number typed here: the member's own registered number is
-  // filled in, and it can be changed to any other mobile money number.
-  const registered = localDigits((STATE.account || {}).phone) || '';
-  const defaultPhone = registered ? '0' + registered : '';
   const min = Number(s.minDeposit) || 0;
-  openSheet('Deposit', `<div class="v-form">
+  openSheet('Deposit', `<div class="v-form mg-dep">
     <div class="v-sec"><span class="bar"></span><h2>Select Amount</h2></div>
     <div class="v-chips" id="depChips">${depositChipsHtml(s, 'depAmount')}</div>
-    <input class="v-amount" id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[\s,]/g,'');syncDepositQuickAmt()" autocomplete="off">
-    <input class="v-phone-in" id="depPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="Phone Number" value="${esc(defaultPhone)}" oninput="sanitizePhoneInput(this)">
+    <input class="v-amount" id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[\\s,]/g,'');syncDepositQuickAmt()" autocomplete="off">
     <div class="v-sec"><span class="bar"></span><h2>Select Payment Method</h2></div>
     <div class="v-pays" id="depPays">
-      <button type="button" class="on" onclick="pickPayLabel(this)">PAY-A</button>
-      <button type="button" onclick="pickPayLabel(this)">PAY-B</button>
-      <button type="button" onclick="pickPayLabel(this)">PAY-C</button>
+      ${['PAY-A', 'PAY-E', 'PAY-B', 'PAY-C', 'PAY-G'].map((n, i) => `<button type="button" class="${i === 0 ? 'on' : ''}" onclick="pickPayLabel(this)"><b>${n}</b><i></i></button>`).join('')}
     </div>
     <button class="v-cta" id="depSubmitBtn" onclick="submitDeposit()">Confirm Deposit</button>
     <div class="v-info">
@@ -5061,10 +5098,11 @@ function openDepositFormSheet(){
       <ol>
         <li>Recharge time: 7*24 hours.</li>
         <li>If deposit is not received, please contact TG customer service.</li>
-        <li>Minimum deposit amount: ${esc(cur())}${vGroup(min)}</li>
+        <li>Minimum deposit amount: ${esc(cur())} ${vGroup(min)}</li>
         <li>Please do not save old account recharge.</li>
       </ol>
     </div>
+    <div class="mg-redirect" id="depRedirect"><span class="spin"></span><p>Redirecting to payment...</p></div>
   </div>`);
 }
 // PAY-A / PAY-B / PAY-C are one gateway, three labels: the choice is only
@@ -5153,7 +5191,7 @@ function depositChipsHtml(s, inputId){
     .map(p => Number(p.price) || 0)
     .filter(p => p >= (Number(s.minDeposit) || 0))))
     .sort((a, b) => a - b)
-    .slice(0, 6);
+    .slice(0, 3);
   const chosen = _chosenAmountFor(inputId);
   return amounts.map(a =>
     `<button type="button" class="dep-chip${a === chosen ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a},'${inputId}')">${numGroup(a, false)}</button>`
@@ -5433,7 +5471,7 @@ function setDepositStatusUnknown(){
 }
 window.submitDeposit = async function(){
   const submitBtn = $('depSubmitBtn');
-  if (!submitBtn || submitBtn.disabled || !$('depAmount') || !$('depPhone')) return;
+  if (!submitBtn || submitBtn.disabled || !$('depAmount')) return;
   const amount = parseMoneyInput($('depAmount').value);
   // Owner: "why when one didn't put number, it just continues to poll ... l
   // tried to leave not putting number and clicked confirm deposit but it
@@ -5448,7 +5486,8 @@ window.submitDeposit = async function(){
   //
   // cleanPhone() is the SAME rule the server applies, so what is accepted
   // here and what is accepted there cannot drift apart.
-  const phone = cleanPhone($('depPhone').value);
+  // The payment prompt goes to the member's own registered number (the server uses it when none is sent).
+  const phone = cleanPhone((STATE.account || {}).phone || '');
   if (!amount || amount <= 0) return notify('Enter a valid amount');
   // Card (doCardDeposit()) and USDT (doUsdtDeposit()) both already check
   // this client-side before ever hitting the network; Mobile Money was the
@@ -5458,20 +5497,21 @@ window.submitDeposit = async function(){
   // other two.
   const s = STATE.settings || {};
   if (amount < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
-  if (!phone) return notify('Enter a valid ' + regionName() + ' mobile number.');
-  submitBtn.disabled = true; submitBtn.textContent = 'Sending request…';
+  submitBtn.disabled = true; submitBtn.textContent = 'Processing...';
+  const redirect = $('depRedirect'); if (redirect) redirect.classList.add('show');
   let r;
   try {
     // No network field on this form (Round 145) -- the gateway detects it
     // from the phone number itself; server.js already treats `network` as
     // optional here.
-    r = await post('/deposit/marzpay', { amount, phone });
+    r = await post('/deposit/marzpay', { amount });
   } finally {
     // Restores the button's resting label after a failed attempt -- must
     // match whatever submitBtn actually reads at rest (see the sheet's own
     // button above), or a member whose recharge failed is left looking at a
     // button that silently renamed itself.
     submitBtn.disabled = false; submitBtn.textContent = 'Confirm Deposit';
+    if (redirect) redirect.classList.remove('show');
   }
   if (r && r.stale) return;
   if (!r || r.status !== 'success') return notify((r && r.message) || 'Could not start deposit');
@@ -5480,7 +5520,7 @@ window.submitDeposit = async function(){
   // cache now so it's actually there the next time Records opens.
   refreshTransactionsCache().catch(() => {});
   if ($('depSubmitBtn') === submitBtn && _openSheetTitle === 'Deposit') closeSheet({ fromAction: true });
-  openDepositStatusModal(amount, phone);
+  openDepositStatusModal(amount, phone || localDigits((STATE.account || {}).phone || ''));
   pollDepositStatus(r.depositId);
 };
 // Owner: "callback speed is low, so try to make the system solid and faster
@@ -5626,6 +5666,7 @@ function weekendWithdrawShut(s){
 // update can repaint only this block, never #witAmount.
 function witWalletBlockHtml(s){
   const w = witSelectedWallet();
+  if (!w) return `<button id="witBindBtn" class="v-bind none" type="button" onclick="openWalletSheet()">Add Wallet</button>`;
   return `<div id="witWallet">${walletCardHtml(w)}</div>
     <button id="witBindBtn" class="v-bind" type="button" onclick="openWalletSheet()">Bind Wallet</button>`;
 }
@@ -5871,6 +5912,16 @@ window.promptInstallApp = async function(){
 };
 // The owner's screen after the download starts: a blue card, "Download", the
 // sentence, and one Confirm button that closes it.
+window.openDownloadPage = function(){
+  const bg = STATE.downloadBg ? ' style="background-image:url(' + esc(JSON.stringify(STATE.downloadBg).slice(1, -1)) + ')"' : '';
+  openSheet('Download App', `<div class="mg-dl"${bg}>
+    <h1>Install ${esc(brandName())}</h1>
+    <p class="sub">Fast, simple and always with you</p>
+    <button type="button" class="mg-dl-btn" onclick="promptInstallApp()">Download Now</button>
+    <p class="note">Tap Download Now, then follow your browser to add the app to your home screen.</p>
+  </div>`);
+  $('sheetBg').classList.add('mg-nohead');
+};
 window.openDownloadDialog = function(){
   let bg = $('dlBg');
   if (!bg) {
