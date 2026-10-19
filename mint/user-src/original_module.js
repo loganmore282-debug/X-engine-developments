@@ -1914,10 +1914,9 @@ function applyBootArtwork(ai, ci){
   // Home's banner carousel, slides 2 and 3 (slide 1 is STATE.homeBanner,
   // fetched separately above -- it predates the carousel). Filtered to
   // whichever are actually set, so 1 or 2 slides render fine too, not only 3.
-  STATE.homeSlides2n3 = [
-    (ci.status === 'success' && ci.banner2) ? ci.banner2 : null,
-    (ci.status === 'success' && ci.banner3) ? ci.banner3 : null,
-  ].filter(Boolean);
+  STATE.homeSlides2n3 = (ci.status === 'success' ? [ci.banner2, ci.banner3, ci.banner4, ci.banner5] : []).filter(Boolean);
+  STATE.promoBanner = (ci.status === 'success' && ci.promobanner) ? ci.promobanner : null;
+  STATE.chestArt = (ci.status === 'success' && ci.chestart) ? ci.chestart : null;
   // Optional admin-managed artwork behind the Daily Check-in sheet.
   STATE.checkinBanner = (ci.status === 'success' && ci.checkinbanner) ? ci.checkinbanner : null;
   // The Login / Sign Up backdrop (single full-bleed photo -- see
@@ -3203,50 +3202,39 @@ function mgSetDots(idx){
 function homeBannerBlockHtml(st){
   const slides = homeCarouselSlides();
   if (!slides) return `<div class="home-banner">${homeBannerInnerHtml(st)}${mgDotsHtml(1, 0)}</div>`;
-  return `<div class="home-banner" id="homeCarouselTrack"><div class="hb-fade-stack">
-    <img class="hb-fade-current" src="${esc(slides[0])}" alt="">
-    <img class="hb-fade-next" src="${esc(slides[1])}" alt="">
-  </div>${mgDotsHtml(slides.length, 0)}</div>`;
+  return `<div class="home-banner" id="homeCarouselTrack"><div class="mg-track" id="mgTrack">${slides.map(u => `<img src="${esc(u)}" alt="" draggable="false">`).join('')}</div>${mgDotsHtml(slides.length, 0)}</div>`;
 }
 var _homeCarouselTimer = null;
 var _homeCarouselIdx = 0;
-// Self-terminating on the next tick once Home's own DOM nodes are gone --
-// same idiom this file already uses for the check-in countdown and the
-// turntable spin timer, so navigating away never leaves this ticking
-// against a detached node.
-function startHomeCarousel(){
+// The banner slides sideways: it moves on by itself every 4.5 seconds, and the member can swipe it (or tap a dot).
+// Self-terminating on the next tick once Home's own nodes are gone, so navigating away never leaves it ticking.
+function mgGoSlide(i, noTimerReset){
+  const track = $('mgTrack'), slides = homeCarouselSlides();
+  if (!track || !slides) return;
+  _homeCarouselIdx = ((i % slides.length) + slides.length) % slides.length;
+  track.style.transition = 'transform .5s cubic-bezier(.22,1,.36,1)';
+  track.style.transform = 'translateX(' + (-100 * _homeCarouselIdx) + '%)';
+  mgSetDots(_homeCarouselIdx);
+  if (!noTimerReset) startHomeCarousel(true);
+}
+function startHomeCarousel(keepIdx){
   if (_homeCarouselTimer) { clearInterval(_homeCarouselTimer); _homeCarouselTimer = null; }
   const slides = homeCarouselSlides();
   if (!slides) return;
-  _homeCarouselIdx = 0;
+  if (!keepIdx) _homeCarouselIdx = 0;
+  const wrap = $('homeCarouselTrack');
+  if (wrap && !wrap._mgSwipe) {
+    wrap._mgSwipe = true;
+    let x0 = null, dx = 0, w = 1;
+    const track = () => $('mgTrack');
+    wrap.addEventListener('pointerdown', e => { x0 = e.clientX; dx = 0; w = wrap.offsetWidth || 1; if (_homeCarouselTimer) { clearInterval(_homeCarouselTimer); _homeCarouselTimer = null; } const t = track(); if (t) t.style.transition = 'none'; });
+    wrap.addEventListener('pointermove', e => { if (x0 == null) return; dx = e.clientX - x0; const t = track(); if (t) t.style.transform = 'translateX(calc(' + (-100 * _homeCarouselIdx) + '% + ' + dx + 'px))'; });
+    const end = () => { if (x0 == null) return; const moved = dx; x0 = null; mgGoSlide(Math.abs(moved) > Math.min(50, w / 5) ? _homeCarouselIdx + (moved < 0 ? 1 : -1) : _homeCarouselIdx); };
+    wrap.addEventListener('pointerup', end); wrap.addEventListener('pointercancel', end); wrap.addEventListener('pointerleave', end);
+  }
   _homeCarouselTimer = setInterval(() => {
-    const wrap = document.getElementById('homeCarouselTrack');
-    const stack = wrap && wrap.querySelector('.hb-fade-stack');
-    const current = stack && stack.querySelector('.hb-fade-current');
-    const next = stack && stack.querySelector('.hb-fade-next');
-    if (!stack || !current || !next) {
-      clearInterval(_homeCarouselTimer); _homeCarouselTimer = null; return;
-    }
-    if (stack.classList.contains('hb-crossfading')) return;
-    const nextIdx = (_homeCarouselIdx + 1) % slides.length;
-    const afterIdx = (nextIdx + 1) % slides.length;
-    const preload = new Image();
-    preload.onload = () => {
-      next.src = slides[nextIdx];
-      requestAnimationFrame(() => stack.classList.add('hb-crossfading'));
-      setTimeout(() => {
-        current.src = slides[nextIdx];
-        next.src = slides[afterIdx];
-        _homeCarouselIdx = nextIdx;
-        mgSetDots(nextIdx);
-        stack.classList.add('hb-fade-reset');
-        stack.classList.remove('hb-crossfading');
-        void stack.offsetWidth;
-        stack.classList.remove('hb-fade-reset');
-      }, 760);
-    };
-    preload.onerror = () => { _homeCarouselIdx = nextIdx; };
-    preload.src = slides[nextIdx];
+    if (!$('mgTrack')) { clearInterval(_homeCarouselTimer); _homeCarouselTimer = null; return; }
+    mgGoSlide(_homeCarouselIdx + 1, true);
   }, 4500);
 }
 // An asset picture is shown whole, in its own shape (nothing cropped). A portrait picture sits in
@@ -3347,7 +3335,7 @@ function paintHome(){
     <button type="button" onclick="openContactLink('service')">Service</button>
   </div>
   <div class="mg-list" id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">No products yet.</div>' : '')}</div>
-  <button class="mg-chest" type="button" onclick="openChestSheet()" aria-label="Treasure chest"><img src="${CHEST_ART}" alt=""></button>
+  <button class="mg-chest" type="button" onclick="openChestSheet()" aria-label="Treasure chest"><img src="${esc(STATE.chestArt || CHEST_ART)}" alt=""></button>
 </div>`;
   $('pageHost').innerHTML = html;
   startHomeCarousel();
@@ -3892,7 +3880,7 @@ function paintPromo(){
   const share = (cls, name, icon, key) => `<button type="button" class="mg-sh ${cls}" onclick="shareTo('${key}')"><span>${icon}</span><small>${name}</small></button>`;
   const html = `
 <div class="v-page mg-promo">
-  <div class="mg-pbanner">${STATE.homeBanner ? `<img src="${esc(STATE.homeBanner)}" alt="" onerror="this.style.display='none'">` : ''}</div>
+  <div class="mg-pbanner">${(STATE.promoBanner || STATE.homeBanner) ? `<img src="${esc(STATE.promoBanner || STATE.homeBanner)}" alt="" onerror="this.style.display='none'">` : ''}</div>
   <div class="mg-pcard">
     <div class="mg-plabel">Share URL</div>
     <div class="mg-pbox"><span class="mg-purl">${esc(_promoLink || '—')}</span><button type="button" class="mg-pcopy" data-copy-group="promo" onclick="copyText(_promoLink)"><i>${MGI.copyMini}</i><b>Copy</b></button></div>
@@ -4724,7 +4712,7 @@ window.submitTradePasswordChange = async function(){
 window.openChestSheet = function(){
   openSheet('TREASURE CHEST', `<div class="mg-chestpg reveal-in">
     <i class="mg-fade t"></i>
-    <div class="mg-chest-ring"><span class="glow"></span><img src="${CHEST_ART}" alt=""></div>
+    <div class="mg-chest-ring"><span class="glow"></span><img src="${esc(STATE.chestArt || CHEST_ART)}" alt=""></div>
     <h2>Mystery Treasure</h2>
     <p>Enter your key to unlock the reward</p>
     <input class="mg-chest-key" id="chestKey" type="text" placeholder="Enter treasure chest key" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()">

@@ -1405,6 +1405,9 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 #homeCarouselTrack .hb-fade-stack.hb-crossfading .hb-fade-next{opacity:1;}
 #homeCarouselTrack .hb-fade-stack.hb-fade-reset .hb-fade-current,
 #homeCarouselTrack .hb-fade-stack.hb-fade-reset .hb-fade-next{transition:none!important;}
+#homeCarouselTrack{touch-action:pan-y;user-select:none;-webkit-user-select:none;}
+.mg-track{display:flex;width:100%;height:100%;will-change:transform;}
+.mg-track img{flex:0 0 100%;width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;-webkit-user-drag:none;}
 .mg-dots{position:absolute;right:11.5px;bottom:10px;z-index:3;display:flex;gap:5px;align-items:center;pointer-events:none;}
 .mg-dots i{display:block;width:5px;height:5px;border-radius:3px;background:rgba(255,255,255,.75);transition:width .3s,background .3s;}
 .mg-dots i.on{width:15px;background:#00a752;}

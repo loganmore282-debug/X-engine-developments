@@ -510,7 +510,7 @@ function dayLabel(iso){
   const d=new Date(iso+'T00:00:00Z');
   return d.getUTCDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
 }
-function fileToDataUrl(file, maxDim=900, quality=0.82){
+function fileToDataUrl(file, maxDim=900, quality=0.82, keepAlpha=false){
   return new Promise((resolve,reject)=>{
     if(!file) return reject(new Error('No file'));
     if(!/^image\//.test(file.type)) return reject(new Error('Please choose an image file'));
@@ -523,8 +523,8 @@ function fileToDataUrl(file, maxDim=900, quality=0.82){
         let{width:w,height:h}=img;
         if(w>maxDim||h>maxDim){ const s=maxDim/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
         const c=document.createElement('canvas'); c.width=w; c.height=h;
-        const ctx=c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0,w,h);
-        try{ resolve(c.toDataURL('image/jpeg',quality)); }
+        const ctx=c.getContext('2d'); if(!keepAlpha){ ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h); } ctx.drawImage(img,0,0,w,h);
+        try{ resolve(keepAlpha ? c.toDataURL('image/webp',quality) : c.toDataURL('image/jpeg',quality)); }
         catch(e){ reject(new Error('Could not process the image')); }
       };
       img.src=fr.result;
@@ -2913,6 +2913,10 @@ async function renderBanners(){
   const downloadBgImage = cir.downloadbg||'';
   const homeSlide2Image = cir.banner2||'';
   const homeSlide3Image = cir.banner3||'';
+  const homeSlide4Image = cir.banner4||'';
+  const homeSlide5Image = cir.banner5||'';
+  const promoBannerImage = cir.promobanner||'';
+  const chestArtImage = cir.chestart||'';
   const logoImage = cir.logo||'';
   const profileLogoImage = cir.profilelogo||'';
   const loaderBgImage = cir.loaderbg||'';
@@ -2922,7 +2926,7 @@ async function renderBanners(){
   $('content').innerHTML = `
     <h2 class="sec">Brand logo</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The round picture on the Treasure Chest page. Square, about 800&times;800. It is saved exactly as you upload it (nothing is removed or changed).</p>
+      <p class="muted" style="margin-top:0">The app's own logo picture (used as the Login circle logo when no circle logo is uploaded). Square, about 800&times;800. It is saved exactly as you upload it.</p>
       <div class="banner-row">
         ${logoImage?`<img class="img-thumb" src="${esc(logoImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px">${logoImage?'Custom image':'<span class="muted">Not set</span>'}</div>
@@ -2933,7 +2937,7 @@ async function renderBanners(){
 
     <h2 class="sec">Home banner</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Home tab's top banner &mdash; a 3-slide carousel with dots.</p>
+      <p class="muted" style="margin-top:0">Home tab's top banner &mdash; slide 1 of up to 5 (the other slides are below). Wide, about 1200&times;600.</p>
       <div class="banner-row">
         ${bannerImage?`<img class="img-thumb" src="${esc(bannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${bannerImage?'Custom image':'<span class="muted">Default artwork</span>'}</div>
@@ -2942,21 +2946,59 @@ async function renderBanners(){
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="homeBannerFile" accept="image/*" hidden></label>
     </div>
 
-    <h2 class="sec">Home banner &middot; slides 2 &amp; 3</h2>
+    <h2 class="sec">Home banner &middot; slides 2 to 5</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Optional extra carousel slides &mdash; image only, same size as the main banner.</p>
+      <p class="muted" style="margin-top:0">More slides for the Home banner. Members swipe through them (and they change by themselves every few seconds); the dots at the bottom right show how many there are. Same size as slide 1 (wide, about 1200&times;600). A slide with no picture is skipped.</p>
+      <div style="font-weight:700;margin:0px 0 6px">Slide 2</div>
       <div class="banner-row">
         ${homeSlide2Image?`<img class="img-thumb" src="${esc(homeSlide2Image)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${homeSlide2Image?'Custom image':'<span class="muted">Not set &mdash; slide skipped</span>'}</div>
         ${homeSlide2Image?`<button class="btn danger sm" id="homeSlide2Clear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload slide 2 image<input type="file" id="homeSlide2File" accept="image/*" hidden></label>
-      <div class="banner-row" style="margin-top:16px">
+      <div style="font-weight:700;margin:14px 0 6px">Slide 3</div>
+      <div class="banner-row">
         ${homeSlide3Image?`<img class="img-thumb" src="${esc(homeSlide3Image)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${homeSlide3Image?'Custom image':'<span class="muted">Not set &mdash; slide skipped</span>'}</div>
         ${homeSlide3Image?`<button class="btn danger sm" id="homeSlide3Clear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload slide 3 image<input type="file" id="homeSlide3File" accept="image/*" hidden></label>
+      <div style="font-weight:700;margin:14px 0 6px">Slide 4</div>
+      <div class="banner-row">
+        ${homeSlide4Image?`<img class="img-thumb" src="${esc(homeSlide4Image)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${homeSlide4Image?'Custom image':'<span class="muted">Not set &mdash; slide skipped</span>'}</div>
+        ${homeSlide4Image?`<button class="btn danger sm" id="homeSlide4Clear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload slide 4 image<input type="file" id="homeSlide4File" accept="image/*" hidden></label>
+      <div style="font-weight:700;margin:14px 0 6px">Slide 5</div>
+      <div class="banner-row">
+        ${homeSlide5Image?`<img class="img-thumb" src="${esc(homeSlide5Image)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${homeSlide5Image?'Custom image':'<span class="muted">Not set &mdash; slide skipped</span>'}</div>
+        ${homeSlide5Image?`<button class="btn danger sm" id="homeSlide5Clear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload slide 5 image<input type="file" id="homeSlide5File" accept="image/*" hidden></label>
+    </div>
+
+    <h2 class="sec">Promotion page banner</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The picture at the top of the Promotion tab (above Share URL). Wide, about 1200&times;600. Without one, Home slide 1 is used.</p>
+      <div class="banner-row">
+        ${promoBannerImage?`<img class="img-thumb" src="${esc(promoBannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${promoBannerImage?'Custom image':'<span class="muted">Not set &mdash; uses Home slide 1</span>'}</div>
+        ${promoBannerImage?`<button class="btn danger sm" id="promoBannerClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="promoBannerFile" accept="image/*" hidden></label>
+    </div>
+
+    <h2 class="sec">Treasure chest picture</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The chest that bounces on Home and sits on the Treasure Chest page. A PNG with a see-through background works best (about 600&times;600). Without one, the built-in chest is used.</p>
+      <div class="banner-row">
+        ${chestArtImage?`<img class="img-thumb" src="${esc(chestArtImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${chestArtImage?'Custom image':'<span class="muted">Not set &mdash; built-in chest</span>'}</div>
+        ${chestArtImage?`<button class="btn danger sm" id="chestArtClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="chestArtFile" accept="image/*" hidden></label>
     </div>
 
     <h2 class="sec">Welcome announcement</h2>
@@ -3093,8 +3135,9 @@ function wireBannerHandlers(){
                        : slot==='authhero' ? 1600
                        : slot==='authlogo' ? 480
                        : slot==='downloadbg' ? 1080
+                       : slot==='chestart' ? 700
                        : 1280;
-          const image = await fileToDataUrl(f, maxDim, slot==='loaderbg' ? 0.7 : 0.82);
+          const image = await fileToDataUrl(f, maxDim, slot==='loaderbg' ? 0.7 : 0.82, slot==='chestart');
           const d = await api('/admin/mint-image/set', { slot, image });
           toast(d.status==='success'?savedMsg:(d.message||'Failed'), d.status==='success'?'ok':'err');
           if (d.status==='success') renderBanners();
@@ -3139,6 +3182,10 @@ function wireBannerHandlers(){
   wireMintImageSlot('downloadbg', 'downloadBgFile', 'downloadBgClear', 'Download page background saved', 'Download page background removed');
   wireMintImageSlot('banner2', 'homeSlide2File', 'homeSlide2Clear', 'Slide 2 saved, live on Home', 'Slide 2 removed');
   wireMintImageSlot('banner3', 'homeSlide3File', 'homeSlide3Clear', 'Slide 3 saved, live on Home', 'Slide 3 removed');
+  wireMintImageSlot('banner4', 'homeSlide4File', 'homeSlide4Clear', 'Slide 4 saved, live on Home', 'Slide 4 removed');
+  wireMintImageSlot('banner5', 'homeSlide5File', 'homeSlide5Clear', 'Slide 5 saved, live on Home', 'Slide 5 removed');
+  wireMintImageSlot('promobanner', 'promoBannerFile', 'promoBannerClear', 'Promotion banner saved', 'Promotion banner removed');
+  wireMintImageSlot('chestart', 'chestArtFile', 'chestArtClear', 'Chest picture saved, live on Home', 'Chest picture removed');
   const annImageFile = $('annImageFile');
   if (annImageFile) annImageFile.addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
