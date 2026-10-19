@@ -89,7 +89,7 @@ function setup(input=seed()){
     app:{post:(p,h)=>{ctxRoutes[p]=h}}
   });
   const ctxRoutes={}; c.ctxRoutes=ctxRoutes;
-  vm.runInContext('const _lockTails=new Map();\n'+['withLock','finiteMoney','creditReferralCommission','_payReferralCommissionNow'].map(fn).join('\n')+'\n'+route('/invest/create'),c);
+  vm.runInContext('const _lockTails=new Map();\n'+['withLock','finiteMoney','creditReferralCommission','_payReferralCommissionNow','reconcilePurchaseIntents'].map(fn).join('\n')+'\n'+route('/invest/create'),c);
   return {c,db,buy:(uid,tierKey)=>{const res=response();return ctxRoutes['/invest/create']({uid,body:{tierKey}},res).then(()=>res)}};
 }
 function response(){return {code:200,status(code){this.code=code;return this},json(body){this.body=body;return this}}}
@@ -120,6 +120,34 @@ async function main(){
     const firsts=Object.values(db.rows.investments).filter(i=>i.isFirstInvestment);
     assert.equal(firsts.length,1,'exactly one purchase is the first');
     assert.equal(db.rows.users.l1.walletBalance,firsts[0].amount*0.2);
+  }
+  {
+    // CRASH SAFETY: the server dies after the wallet was debited and before the investment exists (here: the investment write fails AND the instant
+    // compensating refund fails too). The note left behind lets the sweep give the money back, exactly once; a completed purchase leaves no note.
+    const {c,db,buy}=setup();
+    const ok1=await buy('buyer','p30'); assert.equal(ok1.body.status,'success');
+    assert.equal(Object.keys(db.rows.purchaseIntents||{}).length,0,'a completed purchase leaves no note behind');
+    assert.ok(db.rows.users.buyer.debitedInvestmentIds.length===1,'the debit carries a token');
+    db.faults.push((col)=>col==='investments');
+    db.faults.push((col,id,patch)=>col==='users'&&id==='buyer'&&patch.refundedInvestmentIds);
+    const before=db.rows.users.buyer.walletBalance;
+    const bad=await buy('buyer','p90'); assert.equal(bad.code,400,'the purchase is reported as failed');
+    assert.equal(db.rows.users.buyer.walletBalance,before-90000,'(the instant refund failed too, so the wallet is short)');
+    const left=Object.entries(db.rows.purchaseIntents); assert.equal(left.length,1,'the note is still there'); const [invId,note]=left[0];
+    assert.equal(db.rows.investments[invId],undefined,'and there is no investment');
+    await c.reconcilePurchaseIntents(); assert.equal(db.rows.users.buyer.walletBalance,before-90000,'a purchase still in progress (note under 2 minutes old) is left alone');
+    note.createdMs=Date.now()-3*60000;
+    await c.reconcilePurchaseIntents();
+    assert.equal(db.rows.users.buyer.walletBalance,before,'the sweep gave the 90,000 back');
+    assert.equal(db.rows.users.buyer.totalInvested,30000,'totalInvested is back too');
+    assert.equal(Object.keys(db.rows.purchaseIntents).length,0,'and the note is gone');
+    await c.reconcilePurchaseIntents(); assert.equal(db.rows.users.buyer.walletBalance,before,'a second sweep refunds nothing more');
+    // a note whose purchase DID complete (the delete after it failed) is only cleaned up, nobody is refunded
+    db.rows.purchaseIntents={ [Object.keys(db.rows.investments)[0]]:{userId:'buyer',price:30000,status:'debiting',createdMs:Date.now()-5*60000} };
+    await c.reconcilePurchaseIntents(); assert.equal(db.rows.users.buyer.walletBalance,before,'a completed purchase is never refunded'); assert.equal(Object.keys(db.rows.purchaseIntents).length,0);
+    // a note written but the debit never happened (the crash was before it): cleaned up, nothing refunded
+    db.rows.purchaseIntents={ 'ghost':{userId:'buyer',price:50000,status:'debiting',createdMs:Date.now()-5*60000} };
+    await c.reconcilePurchaseIntents(); assert.equal(db.rows.users.buyer.walletBalance,before,'no debit, no refund'); assert.equal(Object.keys(db.rows.purchaseIntents).length,0);
   }
   {
     // a product the admin activated first is not the first purchase

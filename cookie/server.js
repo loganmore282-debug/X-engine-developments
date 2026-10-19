@@ -4557,10 +4557,19 @@ app.post('/invest/create', async (req, res) => {
       isFirstInvestment = !fresh.data().firstReferralDepositId && !priorPlans.docs.some(d => d.data().granted !== true);
       const invRef = db.collection('investments').doc();
       invId = invRef.id;
+      // CRASH SAFETY: a note of the purchase is written BEFORE the wallet is touched, and the debit carries a token (debitedInvestmentIds). If the
+      // server dies between the debit and the investment being written, reconcilePurchaseIntents() finds the note with no investment and gives the
+      // money back (once: refundedInvestmentIds). The note is removed again as soon as the purchase is complete.
+      const intentRef = db.collection('purchaseIntents').doc(invRef.id);
+      await intentRef.set({ userId, price: liveTier.price, status: 'debiting', createdMs: Date.now(), createdAt: FieldValue.serverTimestamp() });
       // Debited via increment(), not an absolute newBalance write, so a
       // concurrent credit from a different lock key (deposit, commission)
       // landing mid-transaction can never be silently overwritten.
-      await uRef.update({ walletBalance: FieldValue.increment(-liveTier.price), totalInvested: FieldValue.increment(liveTier.price), firstInvestmentDone: true });
+      const debited = await uRef.updateIf({ debitedInvestmentIds: { $ne: invRef.id } }, {
+        walletBalance: FieldValue.increment(-liveTier.price), totalInvested: FieldValue.increment(liveTier.price), firstInvestmentDone: true,
+        debitedInvestmentIds: FieldValue.arrayUnion(invRef.id),
+      });
+      if (!debited) { await intentRef.delete().catch(() => {}); throw new Error('Could not complete the purchase. Please try again.'); }
       const { date, time } = nowStr();
       try {
         await invRef.set({
@@ -4582,11 +4591,14 @@ app.post('/invest/create', async (req, res) => {
         await invRef.delete().catch(delErr => {
           console.error(`MONEY-SAFETY: investment ${invRef.id} ledger-row write failed AND the investment doc itself could not be deleted -- a free undebited active investment may be left behind for user ${userId}. Manual fix required.`, delErr.message);
         });
-        await uRef.update({ walletBalance: FieldValue.increment(liveTier.price), totalInvested: FieldValue.increment(-liveTier.price), firstInvestmentDone: wasFirstInvestmentDone }).catch(compErr => {
+        const refunded = await uRef.update({ walletBalance: FieldValue.increment(liveTier.price), totalInvested: FieldValue.increment(-liveTier.price), firstInvestmentDone: wasFirstInvestmentDone, refundedInvestmentIds: FieldValue.arrayUnion(invRef.id) }).then(() => true, compErr => {
           console.error(`MONEY-SAFETY: investment ${invRef.id} creation failed AFTER debiting user ${userId} ${liveTier.price}, and the compensating refund ALSO failed -- wallet is short by ${liveTier.price}. Manual fix required.`, compErr.message);
+          return false;
         });
+        if (refunded) await intentRef.delete().catch(() => {});   // refunded: nothing left for the reconciler. If the refund failed the note STAYS, and the sweep gives the money back.
         throw createErr;
       }
+      await intentRef.delete().catch(() => {});   // complete: the note is no longer needed (a leftover one is cleaned up by the reconciler)
     });
     // The referral reward (Level 1 / 2 / 3) is paid now, on the member's first purchase. A failure here must never fail a purchase the
     // member has already paid for: the row stays pending and the 30 second reconciler pays it.
@@ -9979,10 +9991,37 @@ async function resolveSendingPesajetPayouts() {
     finally { _withdrawInFlight.delete(doc.id); }
   }
 }
+// A purchase whose server died between the wallet debit and the investment being written: the note (purchaseIntents) is still there, the investment is
+// not. Gives the debit back exactly once. Runs on the 30 second sweep; notes younger than 2 minutes are a purchase still in progress and are left alone.
+async function reconcilePurchaseIntents() {
+  const snap = await db.collection('purchaseIntents').where('status', '==', 'debiting').limit(50).get();
+  for (const doc of snap.docs) {
+    const it = doc.data();
+    if (Date.now() - (Number(it.createdMs) || 0) < 120000) continue;
+    try {
+      await withLock('bal:' + it.userId, async () => {
+        const inv = await db.collection('investments').doc(doc.id).get();
+        if (inv.exists) { await doc.ref.delete(); return; }          // the purchase did complete
+        const uRef = db.collection('users').doc(String(it.userId)), u = await uRef.get();
+        const ud = u.exists ? u.data() : {};
+        if ((ud.debitedInvestmentIds || []).includes(doc.id) && !(ud.refundedInvestmentIds || []).includes(doc.id)) {
+          const price = Number(it.price) || 0;
+          const back = await uRef.updateIf({ refundedInvestmentIds: { $ne: doc.id } }, {
+            walletBalance: FieldValue.increment(price), totalInvested: FieldValue.increment(-price), refundedInvestmentIds: FieldValue.arrayUnion(doc.id),
+          });
+          console.error(`MONEY-SAFETY: purchase ${doc.id} was debited ${price} for user ${it.userId} but never created: ${back ? 'refunded' : 'refund NOT applied'}`);
+          if (!back) return;
+        }
+        await doc.ref.delete();
+      });
+    } catch (e) { console.error('Purchase recovery error:', doc.id, e.message); }
+  }
+}
 async function reconcilePendingWithdrawals() {
   let settled = 0;
   try {
     await reconcileWithdrawalCreations();
+    await reconcilePurchaseIntents().catch(e => console.error('Purchase recovery sweep error:', e.message));
     await resolveSendingPesajetPayouts();
     // Codex-caught real bug (2nd money-flow audit): same starvation risk as
     // reconcilePendingDeposits() above -- see its own comment for the full

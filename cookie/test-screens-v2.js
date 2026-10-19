@@ -87,12 +87,14 @@ async function buy(limit, owned) {
     .concat([{ userId: 'u1', tierKey: 'other' }, { userId: 'u2', tierKey: 'a1' }]);
   const tier = { key: 'a1', name: 'A', price: 10000, cycle: 30, buyLimit: limit, active: true };
   const q = coll => { const c = []; const o = { where(f, _op, v) { c.push([f, v]); return o; }, get: async () => { const rows = coll.filter(r => c.every(([f, v]) => r[f] === v)); return { size: rows.length, docs: rows.map(r => ({ data: () => r })) }; } }; return o; };
-  const db = { collection: n => n === 'users' ? { doc: () => ({ get: async () => ({ exists: true, data: () => user }), update: async u => { for (const [k, v] of Object.entries(u)) user[k] = v && v.__inc !== undefined ? (user[k] || 0) + v.__inc : v; } }) }
+  const db = { collection: n => n === 'users' ? { doc: () => ({ get: async () => ({ exists: true, data: () => user }), update: async u => { for (const [k, v] of Object.entries(u)) user[k] = v && v.__inc !== undefined ? (user[k] || 0) + v.__inc : v; },
+      updateIf: async (_f, u) => { for (const [k, v] of Object.entries(u)) user[k] = v && v.__inc !== undefined ? (user[k] || 0) + v.__inc : v && v.__union ? (user[k] || []).concat(v.__union) : v; return true; } }) }
+    : n === 'purchaseIntents' ? { doc: () => ({ set: async () => {}, delete: async () => {} }) }
     : n === 'investments' ? { ...q(investments), doc: () => ({ id: 'new', set: async d => { investments.push(d); }, delete: async () => {} }) }
     : { add: async () => ({}) } };
   new Function('app', 'db', 'verifyAuth', 'getProductByKey', 'productOpenState', 'getSettings', 'withLock', 'productExpectedReturn', 'FieldValue', 'nowStr', 'newStatementId', 'fmtMoney', 'grantTurntableSpins', 'console', 'eatNextMidnight', 'payoutDueAtMs',
     'const _vipCache = new Map(); const round2 = n => Math.round((Number(n) || 0) * 100) / 100;\n' + invRoute)(app, db, async () => 'u1', async () => tier, () => ({ open: true }), async () => ({ cycleDays: 30 }), (_k, fn) => fn(), () => 30000,
-    { increment: n => ({ __inc: n }), serverTimestamp: () => 0 }, () => ({ date: 'd', time: 't' }), () => 's', n => String(n), () => {}, console, ts => (Math.floor((ts + 10800000) / 86400000) + 1) * 86400000 - 10800000, ts => (Math.floor((ts + 10800000) / 86400000) + 1) * 86400000 - 10800000);
+    { increment: n => ({ __inc: n }), arrayUnion: (...items) => ({ __union: items }), serverTimestamp: () => 0 }, () => ({ date: 'd', time: 't' }), () => 's', n => String(n), () => {}, console, ts => (Math.floor((ts + 10800000) / 86400000) + 1) * 86400000 - 10800000, ts => (Math.floor((ts + 10800000) / 86400000) + 1) * 86400000 - 10800000);
   let code = 200, body; const res = { status: c => { code = c; return res; }, json: b => { body = b; } };
   await handler({ headers: {}, body: { tierKey: 'a1' } }, res);
   return { code, body, user, count: investments.filter(i => i.userId === 'u1' && i.tierKey === 'a1').length };

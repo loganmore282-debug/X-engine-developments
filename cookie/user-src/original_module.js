@@ -935,6 +935,8 @@ function numGroup(n, cents){
   const parts = fixed.split('.');
   return (neg ? '-' : '') + parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (parts[1] ? '.' + parts[1] : '');
 }
+// The Account tiles show cents when there are some (gift-code rewards can carry them), exactly like Deposit, Withdraw and Records, instead of rounding up.
+function ckTile(n){ const v = Number(n) || 0; return numGroup(v, Math.round(v * 100) % 100 !== 0); }
 function fmtUGX(n){
   const v = Number(n)||0;
   const hasCents = Math.round(v*100)%100 !== 0;
@@ -4428,9 +4430,9 @@ function paintAccount(){
     </div>
   </div>
   <div class="ck-balcard">
-    <div><b id="myBalance" data-plain="1">${esc(numGroup(a.walletBalance, false))}</b><span>Balance</span></div>
-    <div><b data-plain="1" id="myDeposited">${esc(numGroup(a.totalDeposited, false))}</b><span>Deposit</span></div>
-    <div><b data-plain="1" id="myEarned">${esc(numGroup(a.totalEarned, false))}</b><span>Total income</span></div>
+    <div><b id="myBalance" data-plain="1">${esc(ckTile(a.walletBalance))}</b><span>Balance</span></div>
+    <div><b data-plain="1" id="myDeposited">${esc(ckTile(a.totalDeposited))}</b><span>Deposit</span></div>
+    <div><b data-plain="1" id="myEarned">${esc(ckTile(a.totalEarned))}</b><span>Total income</span></div>
   </div>
   <div class="ck-menu">
     ${ckMenuRow('mail', 'Messages', 'openMessagesSheet()')}
@@ -4682,7 +4684,7 @@ window.submitWallet = async function(){
   const btn = $('walSaveBtn');
   btn.disabled = true; btn.textContent = 'Saving…';
   const r = await post('/bank/save', { holder, network, phone });
-  btn.disabled = false; btn.textContent = 'Submit';
+  btn.disabled = false; btn.textContent = 'Confirm';
   if (r.status !== 'success') return notify(r.message || 'Could not save your wallet.');
   return finishWalletSave();
 };
@@ -4839,7 +4841,8 @@ function balLedger(){
   const out = [];
   for (const t of (STATE.transactions || [])) {
     out.push({ t, after: run });
-    run = Math.round((run - (Number(t.amount) || 0)) * 100) / 100;
+    // A deposit still waiting for payment has NOT reached the wallet, so it must not be taken off the running balance of the rows below it.
+    if (!(t.type === 'deposit' && t.status === 'pending')) run = Math.round((run - (Number(t.amount) || 0)) * 100) / 100;
   }
   return out;
 }
@@ -5034,11 +5037,11 @@ window.submitLoginPasswordChange = async function(){
   try {
     await window.fbChangePassword(phoneToEmail((STATE.account || {}).phone), oldPass, newPass);
     { const kept = savedLoginGet(); if (kept && localDigits(kept.phone) === localDigits((STATE.account || {}).phone)) savedLoginSet(kept.phone, newPass); }
-    btn.disabled = false; btn.textContent = 'Change Password';
+    btn.disabled = false; btn.textContent = 'Confirm';
     closeSheet({ fromAction: true });
     notify('Login password changed');
   } catch (e) {
-    btn.disabled = false; btn.textContent = 'Change Password';
+    btn.disabled = false; btn.textContent = 'Confirm';
     // fbErrMsg's wrong-credential copy names the phone number, which only
     // makes sense on the login screen -- here the only thing that can be
     // wrong is the old password itself.
@@ -5337,7 +5340,7 @@ function resetOverlayState(){
   ['confirmBg', 'helpBg', 'annBg', 'payScreen'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
   // The payment page goes with them: its countdown stops, its polls stop, and the password boxes it switched off come back (otherwise the Login
   // screen's password box stayed disabled after a session ended while the payment page was open).
-  try { if (typeof _pg !== 'undefined') { _pg.token++; } pgStopTimer(); pgLockPasswordBoxes(false); document.title = brandName(); } catch (_) {}
+  try { if (typeof _pg !== 'undefined') { _pg.token++; } pgStopTimer(); pgLockPasswordBoxes(false); document.title = brandName(); if (/^\/payment\//.test(location.pathname)) history.replaceState(history.state, '', '/'); } catch (_) {}
   const win = $('chestWinBg'); if (win) win.remove();
   _openSheetTitle = null; _depActiveDepositId = null; _withdrawSubmitting = false;
   if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
@@ -5888,6 +5891,7 @@ window.submitDeposit = async function(){
   // turns grey with "Loading" and the loading box shows until the server has made it.
   ckPayLoading(submitBtn, true);
   ckLoadBegin();
+  const seq = window._sheetSeq;   // which sheet this tap belongs to
   let r;
   try {
     r = await post('/deposit/order/create', { amount, method });
@@ -5897,7 +5901,8 @@ window.submitDeposit = async function(){
   }
   if (r && r.stale) return;
   if (!r || r.status !== 'success' || !r.orderNo) return notify((r && r.message) || 'Could not start the payment');
-  if ($('depSubmitBtn') === submitBtn && _openSheetTitle === 'Deposit') closeSheet({ fromAction: true });
+  if ($('depSubmitBtn') !== submitBtn || _openSheetTitle !== 'Deposit' || window._sheetSeq !== seq) return;   // the member backed out while the order was being made: stay where they are
+  closeSheet({ fromAction: true });
   openPaymentPage(r.orderNo);
 };
 // ── THE PAYMENT PAGE: /payment/<order number> ──
@@ -6037,6 +6042,7 @@ function ptrPaint(px, spinning){
 }
 window.pgRefresh = async function(){
   if (!pgOpen() || !_pg.no || _pg.view === 'loading' || _pg.view === 'done') return;
+  if (document.querySelector('#pgPayBtn.pg-busy')) return;   // a Pay is in flight: reloading now would drop its answer and re-enable the button
   const ph = $('pgPhone'), nt = $('pgNet');
   _pg.draft = (_pg.view === 'form' && ph) ? { phone: ph.value, net: nt ? nt.value : '' } : null;
   const token = ++_pg.token, began = Date.now();

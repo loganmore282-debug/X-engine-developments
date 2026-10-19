@@ -131,6 +131,7 @@ async function ensureIndexes() {
     ['transactions',    { marzReference: 1 }],
     ['transactions',    { ref: 1 }],
     ['transactions',    { userId: 1, createdAt: -1 }],
+    ['purchaseIntents', { status: 1 }],
     ['withdrawals',     { userId: 1 }],
     ['withdrawals',     { status: 1 }],
     ['withdrawals',     { marzReference: 1 }],

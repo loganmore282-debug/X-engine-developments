@@ -70,3 +70,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   before it. Reason (reproduced with certbot 2.9): certbot's nginx installer treats a wildcard server block that already has HTTPS as the home of any name it
   matches and overwrites its wildcard certificate with the app's, so every random address failed the certificate check.
 - `deploy/show-links.sh [app|admin|github|pesajet|all]` prints the app/admin addresses and the GitHub and PesaJet webhook values from the server.
+- **Purchase crash safety:** `/invest/create` writes a note (`purchaseIntents/<investmentId>`) BEFORE debiting the wallet; the debit carries the token
+  `debitedInvestmentIds`. If the server dies between the debit and the investment, `reconcilePurchaseIntents()` (30 s sweep) refunds once
+  (`refundedInvestmentIds`). A failed instant refund leaves the note in place. Test: `test-first-purchase-reward.js`.
+- Withdraw-request push: the lock-screen Approve button is offered only when payouts are automatic; `/admin/withdraw/quick-approve` answers 409 in manual mode.

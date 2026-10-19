@@ -22,6 +22,19 @@ ok(/truncated: snap\.docs\.length >= 10000/.test(server) && /Showing the first 1
   ok(c._marzExtractTx({ status: 'success', data: { transaction: { uuid: 'u' } } }).status === '', 'the API envelope\'s "success" is not a payment status'); }
 ok(/const _issuedRefs = new Map\(\)/.test(server) && /if \(_issuedRefs\.has\(ref\)\) continue;/.test(server), 'concurrent payment references are never the same');
 ok(/limit\(2\)\.get\(\);\s*if \(!depQ\.empty\) \{/.test(server) && /const sameTx = body\.transactionId \? String\(body\.transactionId\) === String\(dep\.pesajetTxId\) : !ambiguous;/.test(server), 'a reference shared by two rows never takes the signed shortcut without a transaction id');
+// member app
+{ const mod = R('user-src/original_module.js'), tr = acorn.parse(mod, { ecmaVersion: 'latest', allowReturnOutsideFunction: true });
+  const mfn = name => { const x = tr.body.find(y => y.type === 'FunctionDeclaration' && y.id.name === name); assert(x, 'missing ' + name); return mod.slice(x.start, x.end); };
+  const c = vm.createContext({ STATE: { account: { walletBalance: 20415.5 }, transactions: [
+    { type: 'deposit', status: 'pending', amount: 30000 }, { type: 'cashback', status: 'success', amount: 4000 }, { type: 'deposit', status: 'success', amount: 70000 }] } });
+  vm.runInContext(mfn('balLedger'), c); const l = c.balLedger();
+  ok(l[0].after === 20415.5 && l[1].after === 20415.5 && l[2].after === 16415.5, 'a deposit still waiting for payment is not taken off the balances of the rows below it (' + l.map(x => x.after) + ')');
+  const c2 = vm.createContext({ numGroup: undefined }); vm.runInContext(mfn('numGroup') + '\n' + mfn('ckTile'), c2);
+  ok(c2.ckTile(20415.5) === '20,415.50' && c2.ckTile(30000) === '30,000' && c2.ckTile(0.4) === '0.40', 'Account tiles keep cents (20,415.50), whole amounts stay whole');
+  ok(/window\.pgRefresh = async function\(\)\{[^}]*#pgPayBtn\.pg-busy/.test(mod.replace(/\n/g, ' ')), 'pulling down does not cancel a Pay that is in flight');
+  ok(/const seq = window\._sheetSeq;/.test(mod) && /window\._sheetSeq !== seq\) return;/.test(mod), 'the payment page does not open if the member backed out of Deposit while the order was being made');
+  ok(/btn\.textContent = 'Confirm';\n  if \(r\.status !== 'success'\) return notify\(r\.message \|\| 'Could not save your wallet\.'\)/.test(mod) && !/textContent = 'Change Password'/.test(mod) && !/textContent = 'Submit'/.test(mod), 'the Confirm buttons keep their label after a failed save');
+  ok(mod.includes("history.replaceState(history.state, '', '/')") && mod.includes('payment\\//.test(location.pathname)'), 'a session that ends on the payment address returns the address bar to /'); }
 // deploy / security
 const gen = (args, env = {}) => cp.execFileSync('node', [__dirname + '/deploy/make-nginx.js', ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
 const prod = gen(['prod', 'app.example.org', 'Bake7qz3', 'a1b2c3.example.org'], { COOKIE_HOOK_TOKEN: 'abcdef0123456789abcdef' });
