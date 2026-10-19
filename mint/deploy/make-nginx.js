@@ -211,14 +211,17 @@ ${hdr(ADMIN_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;', 'add_he
     # Old-style referral links (<origin>/refCode=<code>) are a real path.
     location ^~ /refCode= { rewrite ^ /index.html break; }
     location = / {
+        if ($mint_tg_bot) { rewrite ^ /${API}/public/link-preview-page last; }
         try_files $mint_bot_html /index.html =404;
 ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
     }
     location = /index.html {
+        if ($mint_tg_bot) { rewrite ^ /${API}/public/link-preview-page last; }
         try_files $mint_bot_html /index.html =404;
 ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
     }
     location = /share.html {
+        if ($mint_tg_bot) { rewrite ^ /${API}/public/link-preview-page last; }
         try_files $mint_bot_html /share.html =404;
 ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
     }
@@ -261,6 +264,12 @@ map $http_user_agent $mint_bad_ua {
 
 # Link-preview crawlers (WhatsApp, Telegram, ...) get an empty page, every real
 # browser gets the real one (see no-preview.html and mint/CLAUDE.md).
+# Telegram's crawler alone is shown a link preview (site name, text and a wide picture, all set in Admin > Banners > Link preview). It is sent to the
+# app's own server, which builds the page from those settings. WhatsApp and every other crawler stay on the empty page below.
+map $http_user_agent $mint_tg_bot {
+    default 0;
+    ~*TelegramBot 1;
+}
 map $http_user_agent $mint_bot_html {
     default '';
     ~*(WhatsApp|facebookexternalhit|Facebot|TelegramBot|Twitterbot|Slackbot|LinkedInBot|Discordbot|SkypeUriPreview|redditbot|Pinterest|vkShare|Viber|line-poker) '/no-preview.html';

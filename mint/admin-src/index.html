@@ -510,6 +510,30 @@ function dayLabel(iso){
   const d=new Date(iso+'T00:00:00Z');
   return d.getUTCDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
 }
+// A wide, centre-cropped picture (the link preview's large card picture, 1200 x 630).
+function fileToWideDataUrl(file, w=1200, h=630, quality=0.85){
+  return new Promise((resolve,reject)=>{
+    if(!file) return reject(new Error('No file'));
+    if(!/^image\//.test(file.type)) return reject(new Error('Please choose an image file'));
+    const fr=new FileReader();
+    fr.onerror=()=>reject(new Error('Could not read the file'));
+    fr.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('That image could not be loaded'));
+      img.onload=()=>{
+        const r=w/h; let sw=img.width, sh=Math.round(img.width/r);
+        if(sh>img.height){ sh=img.height; sw=Math.round(img.height*r); }
+        const sx=Math.round((img.width-sw)/2), sy=Math.round((img.height-sh)/2);
+        const c=document.createElement('canvas'); c.width=w; c.height=h;
+        const ctx=c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h); ctx.drawImage(img,sx,sy,sw,sh,0,0,w,h);
+        try{ resolve(c.toDataURL('image/jpeg',quality)); }
+        catch(e){ reject(new Error('Could not process the image')); }
+      };
+      img.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
 function fileToDataUrl(file, maxDim=900, quality=0.82, keepAlpha=false){
   return new Promise((resolve,reject)=>{
     if(!file) return reject(new Error('No file'));
@@ -2911,6 +2935,7 @@ async function renderBanners(){
   const authHeroImage = cir.authhero||'';
   const authLogoImage = cir.authlogo||'';
   const downloadBgImage = cir.downloadbg||'';
+  const linkPreviewImage = cir.linkpreview||'';
   const homeSlide2Image = cir.banner2||'';
   const homeSlide3Image = cir.banner3||'';
   const homeSlide4Image = cir.banner4||'';
@@ -3033,6 +3058,22 @@ async function renderBanners(){
       <button class="btn block" id="saveLoaderBg" style="margin-top:14px">Save loading screen appearance</button>
     </div>
 
+    <h2 class="sec">Link preview (Telegram)</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">What Telegram shows when someone pastes a link to the app: the app name, your text, and a wide picture underneath. WhatsApp and other apps show no preview at all. Telegram remembers a link for a while, so a change may take some time to show on a link that was already shared.</p>
+      <label>Title <span class="muted">(up to 70 characters; empty = the app name)</span></label>
+      <input id="lpTitle" maxlength="70" value="${esc(v('linkPreviewTitle'))}" placeholder="${esc(v('brandName','Mint'))}">
+      <label>Text <span class="muted">(up to 260 characters)</span></label>
+      <textarea id="lpText" maxlength="260" rows="4" placeholder="Join the ${esc(v('brandName','Mint'))} App and earn a steady income with daily earnings. Invite friends and earn commissions.">${esc(v('linkPreviewText'))}</textarea>
+      <button class="btn sm" id="saveLinkPreview" style="margin-top:8px">Save title and text</button>
+      <div class="banner-row" style="margin-top:14px">
+        ${linkPreviewImage?`<img class="img-thumb" src="${esc(linkPreviewImage)}" onerror="this.style.opacity=.3" style="aspect-ratio:1200/630;object-fit:cover">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${linkPreviewImage?'Custom picture':'<span class="muted">Not set &mdash; the app icon shows</span>'}</div>
+        ${linkPreviewImage?`<button class="btn danger sm" id="linkPreviewClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload wide picture (about 1200&times;630)<input type="file" id="linkPreviewFile" accept="image/*" hidden></label>
+    </div>
+
     <h2 class="sec">Product pictures</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">One setting for every product picture in the app (Home and Orders). 100 = as uploaded, lower makes every picture fainter. Change it once here, no need to edit each product.</p>
@@ -3133,7 +3174,7 @@ function wireBannerHandlers(){
                        : slot==='authlogo' ? 480
                        : slot==='downloadbg' ? 1080
                        : 1280;
-          const image = await fileToDataUrl(f, maxDim, slot==='loaderbg' ? 0.7 : 0.82);
+          const image = slot==='linkpreview' ? await fileToWideDataUrl(f, 1200, 630, 0.85) : await fileToDataUrl(f, maxDim, slot==='loaderbg' ? 0.7 : 0.82);
           const d = await api('/admin/mint-image/set', { slot, image });
           toast(d.status==='success'?savedMsg:(d.message||'Failed'), d.status==='success'?'ok':'err');
           if (d.status==='success') renderBanners();
@@ -3176,6 +3217,12 @@ function wireBannerHandlers(){
   wireMintImageSlot('authhero', 'authHeroFile', 'authHeroClear', 'Banner saved, live on Log In and Sign Up', 'Banner removed');
   wireMintImageSlot('authlogo', 'authLogoFile', 'authLogoClear', 'Circle logo saved, live on Log In and Sign Up', 'Circle logo removed');
   wireMintImageSlot('downloadbg', 'downloadBgFile', 'downloadBgClear', 'Download page background saved', 'Download page background removed');
+  wireMintImageSlot('linkpreview', 'linkPreviewFile', 'linkPreviewClear', 'Link preview picture saved', 'Link preview picture removed');
+  const saveLinkPreview = $('saveLinkPreview');
+  if (saveLinkPreview) saveLinkPreview.addEventListener('click', async()=>{
+    const d = await api('/admin/settings/update', { settings: { linkPreviewTitle: $('lpTitle').value, linkPreviewText: $('lpText').value } });
+    toast(d.status==='success'?'Link preview words saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
   wireMintImageSlot('banner2', 'homeSlide2File', 'homeSlide2Clear', 'Slide 2 saved, live on Home', 'Slide 2 removed');
   wireMintImageSlot('banner3', 'homeSlide3File', 'homeSlide3Clear', 'Slide 3 saved, live on Home', 'Slide 3 removed');
   wireMintImageSlot('banner4', 'homeSlide4File', 'homeSlide4Clear', 'Slide 4 saved, live on Home', 'Slide 4 removed');

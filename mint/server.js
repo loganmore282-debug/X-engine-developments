@@ -587,6 +587,8 @@ const DEFAULT_SETTINGS = {
   authCardOpacity: 100, authCardBlur: 0,
   // Start-up loading screen picture (Admin > Banners > Loading screen background): 100 = as uploaded, 0 = blur off.
   loaderBgOpacity: 100, loaderBgBlur: 0,
+  // What Telegram shows when a link to the app is pasted (title and text; the picture is the 'linkpreview' image). Empty = the app's own defaults.
+  linkPreviewTitle: '', linkPreviewText: '',
   // One opacity for EVERY product picture (Admin > Banners > Product pictures): 100 = as uploaded.
   productImageOpacity: 100,
   // Background treatment for signed-in Home/Assets/Network/Profile and
@@ -950,7 +952,7 @@ async function getHelpBanner() {
 // no longer its own screen with a backdrop; Account's new Download App row
 // (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
 // prompt directly, in user-src/original_module.js -- see its own comment.
-const MINT_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'banner4', 'banner5', 'promobanner', 'checkinbanner', 'profilelogo', 'loaderbg', 'downloadbg'];
+const MINT_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'banner4', 'banner5', 'promobanner', 'checkinbanner', 'profilelogo', 'loaderbg', 'downloadbg', 'linkpreview'];
 const _mintImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getMintImage(slot) {
@@ -3549,7 +3551,7 @@ app.get('/public/settings', async (req, res) => {
     // automatic cap), the payment-rail choice, the reference prefix and the host policy.
     const rest = {};
     for (const k of Object.keys(rest0)) {
-      if (/^autoApprove/.test(k) || ['depositMethod', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain'].includes(k)) continue;
+      if (/^autoApprove/.test(k) || ['depositMethod', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain', 'linkPreviewTitle', 'linkPreviewText'].includes(k)) continue;
       rest[k] = rest0[k];
     }
     // referralRequired is the RESOLVED answer (setting AND "a member already
@@ -3798,6 +3800,51 @@ app.get('/public/loader-image', async (req, res) => {
   } catch (e) { res.status(500).end(); }
 });
 // Mint artwork needed by the current member surfaces, fetched together.
+// The path nginx puts in front of this server's routes (API in deploy/make-nginx.js and the app's own API base): a crawler needs the picture's full address.
+const PUBLIC_API_PREFIX = 'k7x2';
+// ── LINK PREVIEW (Telegram only) ──
+// Pasting a link to the app into Telegram shows a card: the site name, the text and a wide picture underneath. The words and the picture are set in
+// Admin > Banners > Link preview. nginx sends ONLY Telegram's crawler here (deploy/make-nginx.js); WhatsApp and every other crawler get an empty page,
+// so they show no preview at all, and people get the app itself.
+function htmlText(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+async function linkPreviewImage() {
+  const image = await getMintImage('linkpreview');
+  const m = /^data:(image\/(?:png|jpe?g|webp|gif));base64,(.+)$/.exec(image || '');
+  if (m) { const buf = Buffer.from(m[2], 'base64'); return { buf, mime: m[1], custom: true, version: crypto.createHash('sha1').update(buf).digest('hex').slice(0, 12) }; }
+  const icon = await getBrandAsset('app-icon-512');
+  return icon && icon.buf ? { buf: icon.buf, mime: icon.mime, custom: false, version: String(icon.version || 'icon') } : null;
+}
+app.get('/public/link-preview-image', async (req, res) => {
+  try {
+    const img = await linkPreviewImage();
+    if (!img) return res.status(404).end();
+    const etag = '"lp-' + img.version + '"';
+    res.set({ 'Content-Type': img.mime, 'Cache-Control': 'public, max-age=300', ETag: etag, 'Cross-Origin-Resource-Policy': 'cross-origin' });
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.send(img.buf);
+  } catch (e) { res.status(500).end(); }
+});
+app.get('/public/link-preview-page', async (req, res) => {
+  try {
+    const sett = await getSettings();
+    const brand = brandName(sett);
+    const title = String(sett.linkPreviewTitle || '').trim() || brand;
+    const text = String(sett.linkPreviewText || '').trim() || `Join the ${brand} App and earn a steady income with daily earnings. Invite friends and earn commissions.`;
+    const img = await linkPreviewImage();
+    const origin = `${req.protocol}://${req.get('host')}`;
+    const imageUrl = img ? `${origin}/${PUBLIC_API_PREFIX}/public/link-preview-image?v=${encodeURIComponent(img.version)}` : '';
+    // A picture the admin uploaded is a wide one (1200 x 630) and is shown large under the text; the app icon fallback is square, so it stays small.
+    const wide = !!(img && img.custom);
+    res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
+    res.send(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>${htmlText(title)}</title>
+<meta name="description" content="${htmlText(text)}">
+<meta property="og:type" content="website"><meta property="og:site_name" content="${htmlText(brand)}">
+<meta property="og:title" content="${htmlText(title)}"><meta property="og:description" content="${htmlText(text)}">
+${imageUrl ? `<meta property="og:image" content="${htmlText(imageUrl)}"><meta property="og:image:width" content="${wide ? 1200 : 512}"><meta property="og:image:height" content="${wide ? 630 : 512}">\n` : ''}<meta name="twitter:card" content="${wide ? 'summary_large_image' : 'summary'}"><meta name="twitter:title" content="${htmlText(title)}"><meta name="twitter:description" content="${htmlText(text)}">
+${imageUrl ? `<meta name="twitter:image" content="${htmlText(imageUrl)}">\n` : ''}</head><body></body></html>`);
+  } catch (e) { res.status(500).end(); }
+});
 app.get('/public/mint-images', async (req, res) => {
   try {
     const [logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, downloadbg] = await Promise.all([
@@ -7164,6 +7211,13 @@ app.post('/admin/settings/update', async (req, res) => {
       return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay' or 'pesajet'` });
     if ('withdrawMethod' in updates && !['follow', 'marzpay', 'pesajet', 'manual'].includes(updates.withdrawMethod))
       return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'marzpay', 'pesajet' or 'manual'` });
+    // The link-preview words: plain text only, trimmed and capped (Telegram shows about this much).
+    for (const [key, max] of [['linkPreviewTitle', 70], ['linkPreviewText', 260]]) {
+      if (!(key in updates)) continue;
+      const t = String(updates[key] == null ? '' : updates[key]).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (t.length > max) return res.status(400).json({ status: 'error', message: `The link preview ${key === 'linkPreviewTitle' ? 'title' : 'text'} must be ${max} characters or fewer.` });
+      updates[key] = t;
+    }
     // Stamped whenever the admin saves either announcement field, so the
     // Home screen's inline "Latest Announcement" row can show a real date
     // instead of inventing one. Not conditioned on the text actually being
@@ -7192,13 +7246,13 @@ app.post('/admin/settings/update', async (req, res) => {
 app.get('/admin/mint-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg] = await Promise.all([
+    const [logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg, linkpreview] = await Promise.all([
       getMintImage('logo'),
       getMintImage('authhero'), getMintImage('authlogo'), getMintImage('banner2'),
       getMintImage('banner3'), getMintImage('banner4'), getMintImage('banner5'), getMintImage('promobanner'),
-      getMintImage('checkinbanner'), getMintImage('profilelogo'), getMintImage('loaderbg'), getMintImage('downloadbg'),
+      getMintImage('checkinbanner'), getMintImage('profilelogo'), getMintImage('loaderbg'), getMintImage('downloadbg'), getMintImage('linkpreview'),
     ]);
-    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg });
+    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg, linkpreview });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/mint-image/set', async (req, res) => {
