@@ -30,8 +30,8 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
 
   // 2. one payout wallet per member: saving edits it in place
   ok(/const MAX_SAVED_PAYOUT_ACCOUNTS = 1;/.test(src), 'one wallet per member');
-  async function save(existing, phone) {
-    const rows = existing.map((p, i) => ({ id: 'b' + i, userId: 'u1', phone: p, holder: 'OLD', network: 'MTN Mobile Money' }));
+  async function save(existing, phone, others = []) {
+    const rows = existing.map((p, i) => ({ id: 'b' + i, userId: 'u1', phone: p, holder: 'OLD', network: 'MTN Mobile Money' })).concat(others.map((p, i) => ({ id: 'o' + i, userId: 'u2', phone: p, holder: 'OTHER', network: 'MTN Mobile Money' })));
     const log = { added: 0, updated: [], deleted: [] }; let code = 200, body;
     const mkDoc = r => ({ id: r.id, data: () => r, ref: { update: async u => { log.updated.push([r.id, u]); }, delete: async () => { log.deleted.push(r.id); } } });
     const chain = (list, f = []) => ({ where: (k, o, v) => chain(list, [...f, [k, v]]), limit: () => chain(list, f),
@@ -54,6 +54,15 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
   eq([r.added, r.updated.length, r.deleted.length], [0, 1, 2], 'any older extra wallets are removed');
   r = await save(['0770000099'], '0770000099');
   eq([r.code, r.added, r.updated.length], [200, 0, 1], 'saving the same number again just updates the holder');
+
+  // one payout number, one member: a number another member already holds is refused, and nothing is written
+  r = await save([], '0770000099', ['0770000099']);
+  eq([r.code, r.added, r.updated.length], [409, 0, 0], 'a wallet number another member already uses is refused');
+  ok(r.body.code === 'WALLET_TAKEN' && /already used by another member/.test(r.body.message), 'with a clear message');
+  r = await save(['0700000010'], '0770000099', ['0770000099']);
+  eq([r.code, r.updated.length], [409, 0], 'editing to a number another member holds is refused too');
+  r = await save([], '0770000099', ['0770000011']);
+  eq([r.code, r.added], [200, 1], 'a number nobody else holds is accepted');
 
   // 3. sweep
   const sweep = fn('sweepEphemeralState');

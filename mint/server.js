@@ -6306,16 +6306,29 @@ app.post('/bank/save', async (req, res) => {
     // Saving/removing a payout destination here doesn't move any money by
     // itself -- see /withdraw/request for the actual money-moving path.
     // One payout wallet per member: saving EDITS it in place (any older extra rows are dropped), it never adds a second.
-    await withLock('bank-save:' + userId, async () => {
-      const mine = await db.collection('bankAccounts').where('userId', '==', userId).get();
-      const rows = mine.docs || [];
-      if (rows.length) {
-        await rows[0].ref.update({ holder: verifiedHolder, network: rawNetwork, phone: destValue, updatedAt: FieldValue.serverTimestamp() });
-        for (const extra of rows.slice(1)) await extra.ref.delete();
-        return;
-      }
-      await db.collection('bankAccounts').add({ userId, holder: verifiedHolder, network: rawNetwork, phone: destValue, createdAt: FieldValue.serverTimestamp() });
+    // ONE PAYOUT ACCOUNT, ONE MEMBER: a wallet number (or bank account) that another member already holds cannot be bound again; the member
+    // is asked to use a different one. Checked under a lock keyed by the number itself, so two members saving the same number at the same
+    // moment cannot both succeed. A member re-saving their OWN number is fine.
+    const taken = await withLock('bank-dest:' + (isMobileMoney ? 'mm' : rawNetwork) + ':' + destValue, async () => {
+      const same = await db.collection('bankAccounts').where('phone', '==', destValue).get();
+      const other = (same.docs || []).some(d => {
+        const r = d.data();
+        return r.userId !== userId && (isMobileMoney ? NETWORK_NAMES.has(r.network) : r.network === rawNetwork);
+      });
+      if (other) return true;
+      await withLock('bank-save:' + userId, async () => {
+        const mine = await db.collection('bankAccounts').where('userId', '==', userId).get();
+        const rows = mine.docs || [];
+        if (rows.length) {
+          await rows[0].ref.update({ holder: verifiedHolder, network: rawNetwork, phone: destValue, updatedAt: FieldValue.serverTimestamp() });
+          for (const extra of rows.slice(1)) await extra.ref.delete();
+          return;
+        }
+        await db.collection('bankAccounts').add({ userId, holder: verifiedHolder, network: rawNetwork, phone: destValue, createdAt: FieldValue.serverTimestamp() });
+      });
+      return false;
     });
+    if (taken) return res.status(409).json({ status: 'error', code: 'WALLET_TAKEN', message: 'This wallet account is already used by another member. Please use a different account.' });
     res.json({ status: 'success' });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not save the withdrawal account' });

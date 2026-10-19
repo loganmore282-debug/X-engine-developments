@@ -2395,7 +2395,7 @@ async function enterApp(){
   // own appearance, not this instant paint.
   hideLoadingScreen();
   $('app').style.display = '';
-  showPage(STATE.page || 'home');
+  showPage(STATE.page || 'home'); prefetchSupportedBanks();
   maybeAnnounceOnEntry();
   if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Login successful ✓')); }
   refreshAppDataInBackground(uid);
@@ -2566,7 +2566,7 @@ async function bootFromNetwork(uid){
   await waitForBootSettings(6000);
   hideLoadingScreen();
   $('app').style.display = '';
-  showPage(STATE.page || 'home');
+  showPage(STATE.page || 'home'); prefetchSupportedBanks();
   maybeAnnounceOnEntry();
   if (signupFlow) { window._pendingLoginSuccess = false; notify(t('Registration successful ✓')); }
   else if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Login successful ✓')); }
@@ -4269,6 +4269,15 @@ function walFull(label){
   return walProviders().find(p => p.toLowerCase() === t || walShort(p).toLowerCase() === t) || '';
 }
 function walNetwork(){ const inp = $('walProvider'); return inp ? (inp.dataset.network || walFull(inp.value)) : ''; }
+// The bank list is fetched once in the background after the app opens, so the Wallet provider list is complete the first time it is opened.
+var _banksPrefetched = false;
+function prefetchSupportedBanks(){
+  if (_banksPrefetched || (STATE.supportedBanks && STATE.supportedBanks.length)) return;
+  _banksPrefetched = true;
+  api('/bank/supported-banks').then(br => {
+    if (br.status === 'success' && Array.isArray(br.banks) && br.banks.length) STATE.supportedBanks = br.banks; else _banksPrefetched = false;
+  }).catch(() => { _banksPrefetched = false; });
+}
 window.openWalletSheet = async function(){
   openSheet('Wallet', '');
   renderWalletSheet();
@@ -4357,7 +4366,12 @@ window.walShowForm = function(show){
   const form = $('walFormWrap'), tog = $('walToggleBtn');
   if (form) form.style.display = show ? '' : 'none';
   if (tog) tog.style.display = show ? 'none' : '';
-  if (show) { prefillWallet(); const el = $('walProvider'); if (el && !el.value) { try { el.focus(); } catch (_) {} } }
+  if (show) {
+    prefillWallet(); const el = $('walProvider');
+    // A new wallet starts with the provider list open. It is opened AFTER this tap has finished: the tap itself bubbles up to the
+    // "tap anywhere else closes the list" handler, which used to shut it again at once (so the list never appeared the first time).
+    if (el && !el.value) { try { el.focus(); } catch (_) {} setTimeout(openProviderList, 0); }
+  }
 };
 function renderWalletSheet(){
   const w = currentWallet();
@@ -4369,7 +4383,7 @@ function renderWalletSheet(){
       <div id="walFormGroup">
         <label class="v-flabel" for="walProvider">Wallet Provider</label>
         <div class="prov-pick" id="walProviderPick">
-          <div class="v-uline prov-input"><input id="walProvider" type="text" autocomplete="off" placeholder="Type wallet provider to search" oninput="filterProviders()" onfocus="openProviderList()"></div>
+          <div class="v-uline prov-input"><input id="walProvider" type="text" autocomplete="off" placeholder="Type wallet provider to search" oninput="filterProviders()" onfocus="openProviderList()" onclick="openProviderList()"></div>
           <div class="prov-list" id="walProviderList">${walProviderOptionsHtml()}</div>
         </div>
         <label class="v-flabel" for="walPhone">Wallet Account</label>
