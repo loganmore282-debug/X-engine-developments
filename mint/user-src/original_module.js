@@ -2640,7 +2640,7 @@ var MGI = {
   copyMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="#0c8a4a"/><rect x="8" y="6.6" width="8" height="10.8" rx="1.6" fill="#ffc72c"/><rect x="10" y="5.6" width="4" height="2.4" rx=".8" fill="#fff"/></svg>',
   plane: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 3 10.4l6.4 2.4L12 20l2.6-5.4L21 3z"/><path d="M9.4 12.8 21 3"/></svg>',
   whatsapp: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.4 20.6l1.3-4.4A8.6 8.6 0 1 1 8 19.5z"/><path d="M9 8.6c0 3.2 2.6 5.8 5.8 5.8l1-1.4-2-1-.8.8c-.8-.4-1.6-1.2-2-2l.8-.8-1-2z" fill="#fff" stroke="none"/></svg>',
-  facebook: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.6 21v-7.6h2.6l.4-3h-3V8.5c0-.9.3-1.5 1.5-1.5h1.6V4.3c-.3 0-1.2-.1-2.3-.1-2.3 0-3.8 1.4-3.8 3.9v2.3H8v3h2.6V21z" fill="#fff"/></svg>',
+  facebook: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#fff"/><path d="M13.3 22.4v-8h2.6l.5-3.2h-3.1V9.2c0-.9.3-1.5 1.6-1.5h1.6V4.9c-.3 0-1.2-.1-2.3-.1-2.3 0-3.9 1.4-3.9 4v2.4H7.7v3.2h2.6v8z" fill="#0866ff"/></svg>',
   xmark: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.8 3h3l-6.6 7.6L22 21h-6.1l-4.8-6.3L5.6 21h-3l7-8.1L2 3h6.2l4.3 5.8zm-1 16.2h1.7L7.3 4.7H5.5z" fill="#fff"/></svg>',
   tiktok: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.6 3c.3 2.3 1.7 3.8 4 4v3c-1.5 0-2.9-.5-4-1.3v6.2a5.6 5.6 0 1 1-5.6-5.6c.4 0 .7 0 1 .1v3.1a2.6 2.6 0 1 0 1.6 2.4V3z" fill="#fff"/></svg>',
   warn: '<svg viewBox="0 0 41 38" aria-hidden="true"><defs><linearGradient id="mgWy" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe266"/><stop offset="1" stop-color="#fbc21f"/></linearGradient></defs><path d="M20.5 2.4 39 34.8H2z" fill="url(#mgWy)" stroke="#e9a21b" stroke-width="2.4" stroke-linejoin="round"/><rect x="18.6" y="12.6" width="3.8" height="13" rx="1.8" fill="#1c1c1c"/><circle cx="20.5" cy="30" r="2.2" fill="#1c1c1c"/></svg>',
@@ -3131,6 +3131,11 @@ window.closeAnnouncement = function(){
 function maybeShowAnnouncement(){
   const s = STATE.settings || {};
   const lines = String(s.annBody || '').split('\n').map(x => x.trim()).filter(Boolean);
+  // The picture is fetched behind the loading screen: wait for it, so the dialog opens once, complete.
+  if (!_artLanded && !STATE.announcementImage) {
+    if (!_annWaiting) { _annWaiting = true; startArtwork().then(() => { _annWaiting = false; if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }); }
+    return;
+  }
   if (!STATE.announcementImage && !(s.annEnabled && lines.length)) {
     // The pictures are fetched after the loading screen comes down; if they
     // have not landed yet, open the dialog the moment they do.
