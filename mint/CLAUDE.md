@@ -42,5 +42,9 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
 
 ## Status
 1. (done) Copied from Soda, renamed to Mint, ports 3002/8092/8093, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path.
-   `npm run test:audit` passes. Design is still Soda's look (renamed) until the owner sends screenshots.
-2. (waiting on owner) Atlas user + connection string, VPS first-setup, domain, payment keys (PesaJet/MarzPay), then screenshots.
+   `npm run test:audit` passes.
+2. (done, owner confirmed) Atlas user `mintapp` (readWrite on `mint` only) and its connection string; VPS first-setup ran, pm2 `mint-server` is online and
+   `/health` answers `{"status":"ok","db":true}`; temporary IP preview on port 8092 (admin `/Desk4mx9/`); GitHub deploy webhook added through the preview port.
+   Chosen domain: `dble-mint.com` (not wired in; run `deploy/set-domain.sh dble-mint.com` when the owner has pointed DNS).
+3. (waiting on owner) Mint's screenshots, one batch at a time; the look is changed to match them exactly. Design is still Soda's look (renamed) until then.
+   Payment keys (PesaJet/MarzPay) are set later by the owner.
