@@ -4469,6 +4469,9 @@ window.notify = function(message, onClose){
   _notifyOnClose = typeof onClose === 'function' ? onClose : null;
   if (_notifyTimer) { clearTimeout(_notifyTimer); _notifyTimer = null; }
   $('notifyBg').classList.add('show');
+  // The notice goes away by itself (it fades and shrinks out); OK, or a tap outside the card, closes it sooner. Longer messages stay a little longer.
+  const stay = Math.min(5500, 2600 + String(message || '').length * 40);
+  _notifyTimer = setTimeout(() => { _notifyTimer = null; dismissNotify(); }, stay);
 };
 window.closeNotify = function(){
   if (_notifyTimer) { clearTimeout(_notifyTimer); _notifyTimer = null; }
