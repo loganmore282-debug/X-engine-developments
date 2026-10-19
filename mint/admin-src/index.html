@@ -372,7 +372,7 @@ window.createMintIdleSession = function(key, onExpire, onActivity){
         <button class="tab" data-tab="deposits">Deposits</button>
         <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
         <button class="tab" data-tab="products" id="productsTab">Products</button>
-        <button class="tab" data-tab="promocodes" id="promocodesTab">Gift Codes</button>
+        <button class="tab" data-tab="promocodes" id="promocodesTab">Treasure Codes</button>
         <button class="tab" data-tab="messages" id="messagesTab">Messages</button>
         <button class="tab" data-tab="transactions">Transactions</button>
         <button class="tab" data-tab="referrals">Referrals</button>
@@ -452,7 +452,7 @@ async function copyText(str, btn){
 function spinnerHtml(){ return '<div class="cm-spin-wrap"><svg class="cm-spinner" viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2"></circle></svg></div>'; }
 function btnBusyHtml(text){ return '<span class="verify-spin" style="margin-right:7px;vertical-align:-3px"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>'+esc(text); }
 // Every money amount elsewhere is always a whole shilling -- only a
-// gift-code reward can ever carry cents (Round 137's randomized rewards),
+// treasure-code reward can ever carry cents (Round 137's randomized rewards),
 // so this only shows decimals on a value that actually has them, and
 // everything else keeps its old, clean whole-number look with no changes
 // needed at any individual call site. Mirrors server.js's own fmtUGX().
@@ -488,7 +488,7 @@ function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',
 const TX_LABELS = {
   deposit: 'Recharge', withdraw: 'Withdraw', commission: 'Commission', team_reward: 'Team reward',
   checkin: 'Daily reward', cashback: 'Product cashback', investment: 'Product purchase',
-  promocode: 'Promo code redeemed', admin_credit: 'Credit', admin_debit: 'Adjustment',
+  promocode: 'Treasure code redeemed', admin_credit: 'Credit', admin_debit: 'Adjustment',
   welcome_bonus: 'Welcome bonus', mission_salary: 'Mission Center salary',
   mission_deposit_reward: 'Mission Center recharge reward',
   deposit_reversal: 'Recharge reversed (fraud)',
@@ -1030,7 +1030,7 @@ async function refreshBadges(){
 // Refresh (or worse, reload the page) to see current data -- but it must
 // never look or feel like a reload while doing it. Two guards keep this
 // from ever clobbering something the admin is mid-typing: modalOpen()
-// (edit dialogs live in the modal, e.g. products/gift codes) and
+// (edit dialogs live in the modal, e.g. products/treasure codes) and
 // contentHasFocus() (a plain input sitting right on the tab itself, e.g.
 // Settings' rate fields or the Admins tab's "create admin" form) -- a tick
 // that would touch either just skips silently and tries again next cycle.
@@ -1076,7 +1076,7 @@ function withTabBusy(promise) {
   const safety = setTimeout(finish, 45000);
   return Promise.resolve(promise).finally(() => { clearTimeout(safety); finish(); });
 }
-// Settings, Gift Codes and Admins are forms: a refresh every 30 s wiped what the owner was typing (once the keyboard closed and no field had focus), so they are not live tabs.
+// Settings, Treasure Codes and Admins are forms: a refresh every 30 s wiped what the owner was typing (once the keyboard closed and no field had focus), so they are not live tabs.
 const LIVE_TABS=new Set(['dashboard','analytics','users','deposits','withdrawals','products','transactions','referrals','auditlog']);
 // The list-style tabs (Users, Deposits, Withdrawals, Transactions,
 // Referrals) get their OWN quiet*() function here instead of the full
@@ -1291,7 +1291,7 @@ async function renderAnalytics(silent){
       'No accounts repeatedly trying to withdraw more than their balance.');
     const giftcodeRows = rowsOr(ab.giftcodeGuessing,
       r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td><td>${(r.samples||[]).map(esc).join(', ')}</td>${lastCol(r)}</tr>`,
-      'No accounts trying gift/promo codes that don\'t exist.');
+      'No accounts trying treasure codes that don\'t exist.');
     return `
     <div class="row" style="align-items:center;margin:18px 0 6px"><h2 class="sec" style="flex:1;margin:0">Suspicious activity (${ab.period}-day, ${ab.minCount}+ to appear)</h2></div>
     <p class="muted" style="margin:0 0 10px">Owner-only. Patterns worth a look, not automatic accusations -- a slow connection or a genuine mistake can also produce a repeat or two.</p>
@@ -1299,7 +1299,7 @@ async function renderAnalytics(silent){
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Failures</th><th>Recent amounts</th><th>Last seen</th></tr></thead><tbody>${failedDepRows}</tbody></table></div></div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated insufficient-funds withdraw attempts</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Recent tries</th><th>Last seen</th></tr></thead><tbody>${insufficientRows}</tbody></table></div></div>
-    <div class="panel-card"><h2 class="sec" style="margin-top:0">Gift/promo code guessing</h2>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Treasure code guessing</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Codes tried</th><th>Last seen</th></tr></thead><tbody>${giftcodeRows}</tbody></table></div></div>`;
   })() : '';
   const staffTable = sa.byStaff.length ? `<div class="panel-card"><h2 class="sec" style="margin-top:0">Staff withdrawal approvals (${a.period}-day)</h2>
@@ -1797,7 +1797,7 @@ async function openUser(uid){
   // Owner: "money/unknown money is continuing to pile up... a very bad
   // bug bro." Root cause traced to a genuinely misleading label, not a
   // money bug: "Cashback earned" (totalEarned) is actually cashback PLUS
-  // referral commission PLUS checkin/gift-code/Task-Center/Mission-Center
+  // referral commission PLUS checkin/treasure-code/Task-Center/Mission-Center
   // bonuses all folded into one number, shown directly above a SEPARATE
   // "Team commission" line that looks like an independent pool of money
   // stacking on top of it -- it's actually already counted INSIDE it. A
@@ -1818,7 +1818,7 @@ async function openUser(uid){
     <div class="kv"><span class="k">Invested</span><span>${ugx(u.totalInvested)}</span></div>
     <div class="kv"><span class="k">Cashed out</span><span>${ugx(u.totalWithdrawn)}</span></div>
     <div class="kv"><span class="k">Total earned (all sources)</span><span>${ugx(u.totalEarned)}</span></div>
-    <div class="muted" style="font-size:11px;margin:-4px 0 8px;line-height:1.6">Investment cashback ${ugx(eb.cashback)} &middot; Referral commission ${ugx(eb.commission)} &middot; Check-in ${ugx(eb.checkin)} &middot; Gift codes ${ugx(eb.promocode)} &middot; Team rewards ${ugx(eb.team_reward)} &middot; Daily salary ${ugx(mission)} &middot; Turntable ${ugx(eb.turntable)}</div>
+    <div class="muted" style="font-size:11px;margin:-4px 0 8px;line-height:1.6">Investment cashback ${ugx(eb.cashback)} &middot; Referral commission ${ugx(eb.commission)} &middot; Check-in ${ugx(eb.checkin)} &middot; Treasure codes ${ugx(eb.promocode)} &middot; Team rewards ${ugx(eb.team_reward)} &middot; Daily salary ${ugx(mission)} &middot; Turntable ${ugx(eb.turntable)}</div>
     <div class="kv"><span class="k">Team commission <span class="muted" style="font-size:10.5px">(already included above)</span></span><span>${ugx(u.teamCommission)}</span></div>
     <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'Not set')}</span></div>
     <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
@@ -2020,7 +2020,7 @@ async function openUser(uid){
     if(d.status==='success'){ closeModal(); } else { b.disabled=false; b.textContent=lbl; }
   });
   $('delBtn')?.addEventListener('click', async()=>{
-    const typed = prompt(`This PERMANENTLY deletes ${u.phone}'s login and personal data (bound withdrawal accounts, gift-code history, security log, any unmatched pending deposit). Their investments, transactions and withdrawals are KEPT as financial records, orphaned from any login. This cannot be undone.\n\nType DELETE to confirm:`);
+    const typed = prompt(`This PERMANENTLY deletes ${u.phone}'s login and personal data (bound withdrawal accounts, treasure-code history, security log, any unmatched pending deposit). Their investments, transactions and withdrawals are KEPT as financial records, orphaned from any login. This cannot be undone.\n\nType DELETE to confirm:`);
     if (typed === null) return;
     if (typed.trim() !== 'DELETE') return toast('Not deleted, you must type DELETE exactly','err');
     const b=$('delBtn'); b.disabled=true; b.textContent='Deleting…';
@@ -2602,7 +2602,7 @@ async function renderPromoCodes(){
   if(staleTab('promocodes')) return;
   const list = r.codes||[];
   $('content').innerHTML = `
-    <h2 class="sec">Gift codes</h2>
+    <h2 class="sec">Treasure codes</h2>
     <div class="panel-card">
       <div class="row">
         <div><label>Min reward (${adminCur()})</label><input id="cMinReward" type="number" step="0.01" min="0.01" placeholder="100.50"></div>
@@ -2666,7 +2666,7 @@ async function renderPromoCodes(){
     }
     if(failMsg) toast(failMsg,'err');
   });
-  document.querySelectorAll('[data-off]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Deactivate this gift code? It can no longer be redeemed once deactivated.')) return; const d=await api('/admin/promocodes/deactivate',{id:b.dataset.off}); toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderPromoCodes(); }));
+  document.querySelectorAll('[data-off]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Deactivate this treasure code? It can no longer be redeemed once deactivated.')) return; const d=await api('/admin/promocodes/deactivate',{id:b.dataset.off}); toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderPromoCodes(); }));
   wireCopyButtons();
   function wireCopyButtons(){
     document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>copyText(b.dataset.copy,b));
@@ -2760,7 +2760,7 @@ const AUDIT_LABELS = {
   manual_pay_image_set:'Manual-pay screen image changed',
   products_saved:'Products saved',
   product_deleted:'Product deleted', products_cleared:'All products cleared', products_synced:'Product pricing synced to defaults',
-  deposit_force_credited:'Recharge force-credited', giftcode_generated:'Gift codes generated', giftcode_deactivated:'Gift code deactivated',
+  deposit_force_credited:'Recharge force-credited', giftcode_generated:'Treasure codes generated', giftcode_deactivated:'Treasure code deactivated',
   totals_recounted:'Totals recalculated',
 };
 async function renderAuditLog(){
@@ -3561,8 +3561,8 @@ const ADMIN_LANG_ROWS = [
   ['Withdrawals', 'Okuggyamu ssente', 'Utoaji', 'Retraits', 'Kubikuza', 'Okwihamu sente'],
   ['Transactions', 'Emirimu gy\'ssente', 'Miamala', '=', 'Ibikorwa by\'amafaranga', 'Emirimo ya sente'],
   ['Referrals', 'Okuyita', 'Mialiko', 'Parrainages', 'Gutumira', 'Okweta'],
-  ['Gift Codes', 'Koodi z\'ebirabo', 'Misimbo ya Zawadi', 'Codes cadeaux', 'Kode z\'impano', 'Koodi z\'ebiconco'],
-  ['Gift codes', 'Koodi z\'ebirabo', 'Misimbo ya zawadi', 'Codes cadeaux', 'Kode z\'impano', 'Koodi z\'ebiconco'],
+  ['Treasure Codes', 'Koodi z\'ebirabo', 'Misimbo ya Zawadi', 'Codes cadeaux', 'Kode z\'impano', 'Koodi z\'ebiconco'],
+  ['Treasure codes', 'Koodi z\'ebirabo', 'Misimbo ya zawadi', 'Codes cadeaux', 'Kode z\'impano', 'Koodi z\'ebiconco'],
   ['Countries', 'Amawanga', 'Nchi', 'Pays', 'Ibihugu', 'Amahanga'],
   ['Admins', 'Abaduumizi', 'Wasimamizi', 'Administrateurs', 'Abayobozi', 'Abebembezi'],
   ['Activity Log', 'Ekitabo ky\'ebikolwa', 'Kumbukumbu ya shughuli', 'Journal d\'activité', 'Igitabo cy\'ibikorwa', 'Ekitabo ky\'ebikorwa'],
@@ -3938,7 +3938,7 @@ const ADMIN_LANG_PATTERNS = [
   ['Newest first, {0} total.', 'Ebipya bisooka, omugatte {0}.', 'Vipya kwanza, jumla {0}.', 'Les plus récents d\'abord, {0} au total.', 'Bishya mbere, byose {0}.', 'Ebisya bikatandika, omugatte {0}.'],
   ['Pays {0}', 'Esasula {0}', 'Inalipa {0}', 'Rapporte {0}', 'Itanga {0}', 'Neeshashura {0}'],
   ['Amount ({0})', 'Omuwendo ({0})', 'Kiasi ({0})', 'Montant ({0})', 'Umubare ({0})', 'Omubaro ({0})'],
-  ['Investment cashback {0} · Referral commission {1} · Check-in {2} · Gift codes {3} · Team rewards {4} · Daily salary {5}', 'Ssente z\'ebyamaguzi {0} · Ssente z\'okuyita {1} · Okukyalira {2} · Koodi z\'ebirabo {3} · Ekifo ky\'emirimu {4} · Ekifo ky\'obulambuzi {5}', 'Marejesho ya uwekezaji {0} · Kamisheni ya mialiko {1} · Kuhudhuria {2} · Misimbo ya zawadi {3} · Kituo cha kazi {4} · Kituo cha misheni {5}', 'Remise d\'investissement {0} · Commission de parrainage {1} · Pointage {2} · Codes cadeaux {3} · Centre de tâches {4} · Centre de missions {5}', 'Inyungu z\'ishoramari {0} · Komisiyo yo gutumira {1} · Kwiyandikisha {2} · Kode z\'impano {3} · Ikigo cy\'imirimo {4} · Ikigo cy\'ubutumwa {5}', 'Sente z\'ebyamaguzi {0} · Sente z\'okweta {1} · Okwoleka {2} · Koodi z\'ebiconco {3} · Ekicweka ky\'emirimo {4} · Ekicweka ky\'obutumwa {5}'],
+  ['Investment cashback {0} · Referral commission {1} · Check-in {2} · Treasure codes {3} · Team rewards {4} · Daily salary {5}', 'Ssente z\'ebyamaguzi {0} · Ssente z\'okuyita {1} · Okukyalira {2} · Koodi z\'ebirabo {3} · Ekifo ky\'emirimu {4} · Ekifo ky\'obulambuzi {5}', 'Marejesho ya uwekezaji {0} · Kamisheni ya mialiko {1} · Kuhudhuria {2} · Misimbo ya zawadi {3} · Kituo cha kazi {4} · Kituo cha misheni {5}', 'Remise d\'investissement {0} · Commission de parrainage {1} · Pointage {2} · Codes cadeaux {3} · Centre de tâches {4} · Centre de missions {5}', 'Inyungu z\'ishoramari {0} · Komisiyo yo gutumira {1} · Kwiyandikisha {2} · Kode z\'impano {3} · Ikigo cy\'imirimo {4} · Ikigo cy\'ubutumwa {5}', 'Sente z\'ebyamaguzi {0} · Sente z\'okweta {1} · Okwoleka {2} · Koodi z\'ebiconco {3} · Ekicweka ky\'emirimo {4} · Ekicweka ky\'obutumwa {5}'],
   ['All ({0})', 'Byonna ({0})', 'Zote ({0})', 'Tout ({0})', 'Byose ({0})', 'Byona ({0})'],
   ['Pending ({0})', 'Ebirindiridde ({0})', 'Yanayosubiri ({0})', 'En attente ({0})', 'Bitegereje ({0})', 'Ebirikutegyereza ({0})'],
   ['Needs Review ({0})', 'Ebyetaaga okukeberwa ({0})', 'Inahitaji Ukaguzi ({0})', 'À vérifier ({0})', 'Bikeneye Igenzura ({0})', 'Ebirikwetenga Okureebwa ({0})'],

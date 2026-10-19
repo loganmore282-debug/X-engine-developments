@@ -2733,7 +2733,7 @@ function hookNavTapBox(){
 function mgScrollbarInit(){
   if (window.__mgSb) return; window.__mgSb = true;
   if (!document.body) { document.addEventListener('DOMContentLoaded', () => { window.__mgSb = false; mgScrollbarInit(); }); return; }
-  const mk = id => { const b = document.createElement('div'); b.id = id; b.className = 'mg-sb'; b.setAttribute('aria-hidden', 'true'); b.innerHTML = '<i></i>'; document.body.appendChild(b); return { bar: b, thumb: b.firstChild, last: '' }; };
+  const mk = id => { const b = document.createElement('div'); b.id = id; b.className = 'mg-sb'; b.setAttribute('aria-hidden', 'true'); b.innerHTML = '<i></i>'; document.body.appendChild(b); return { bar: b, thumb: b.firstChild, cur: null }; };
   const main = mk('mgSb'), list = mk('mgSbList');
   const shown = el => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
   function target(){
@@ -2743,49 +2743,72 @@ function mgScrollbarInit(){
     if (auth && auth.style.display !== 'none' && shown(auth)) { const a = auth.querySelector('.ma-scroll'); if (a && shown(a)) return a; }
     return document.scrollingElement || document.documentElement;
   }
-  // Draws one thumb: the track is [top, bottom] on screen, ch/st/sh = visible height, scroll offset, content height of the scroller.
-  // Returns whether the scroller overflows at all (then the caller reserves the bar's 4px, like a classic scrollbar does).
-  function draw(o, top, bottom, ch, st, sh, right){
-    const track = bottom - top, over = sh - ch;
-    if (over < 1 || track < 30) { if (o.last !== 'x') { o.bar.style.display = 'none'; o.last = 'x'; } return false; }
-    const th = Math.max(30, Math.round(track * ch / sh)), ty = Math.round((track - th) * Math.min(1, Math.max(0, st / over)));
-    const key = top + '|' + track + '|' + th + '|' + ty + '|' + right;
-    if (key === o.last) return true; o.last = key;
-    o.bar.style.cssText = 'display:block;top:' + top + 'px;height:' + track + 'px;right:' + right + 'px';
-    o.thumb.style.cssText = 'height:' + th + 'px;transform:translateY(' + ty + 'px)';
-    return true;
-  }
-  // The scrollbar takes 4px of the page's width while it is there (as in the owner's screens, where every page with a bar is 4px narrower on the
-  // right). `mg-gut` on the scroller (the page, a sheet, or the Login scroller) makes the room.
+  // Two speeds. layout() is the slow one (sizes the bar and the thumb, decides which scroller it follows); it runs only when something on screen
+  // changed. position() is the fast one: while the member scrolls it only moves the thumb with a transform, once per frame, so it follows the
+  // finger without lag (it used to redo everything every 40 ms, which made the thumb jump in steps).
   const gut = (el, on) => { if (el.classList.contains('mg-gut') !== on) el.classList.toggle('mg-gut', on); };
-  function update(){
+  const scrollTopOf = c => c.isDoc ? window.pageYOffset : c.el.scrollTop;
+  function place(o, c){
+    const over = c.el.scrollHeight - c.ch;
+    const ty = over > 0 ? (c.track - c.th) * Math.min(1, Math.max(0, scrollTopOf(c) / over)) : 0;
+    o.thumb.style.transform = 'translate3d(0,' + ty.toFixed(2) + 'px,0)';
+  }
+  function setBar(o, c){
+    if (!c) { if (o.cur !== null || o.bar.style.display !== 'none') { o.bar.style.display = 'none'; } o.cur = null; return; }
+    const same = o.cur && o.cur.el === c.el && o.cur.top === c.top && o.cur.track === c.track && o.cur.th === c.th && o.cur.right === c.right;
+    o.cur = c;
+    if (!same) { o.bar.style.cssText = 'display:block;top:' + c.top + 'px;height:' + c.track + 'px;right:' + c.right + 'px'; o.thumb.style.height = c.th + 'px'; }
+    place(o, c);
+  }
+  function measure(el, isDoc, top, bottom, ch, right){
+    const sh = el.scrollHeight, track = bottom - top;
+    if (sh - ch < 8 || track < 30) return null;
+    return { el, isDoc, top, track, ch, right, th: Math.max(30, Math.round(track * ch / sh)) };
+  }
+  let lastGut = null;
+  function layout(){
     const el = target(), isDoc = el === document.scrollingElement || el === document.documentElement;
-    let on;
+    let c;
     if (isDoc) {
       let bottom = window.innerHeight;
       const nav = document.querySelector('.bottom-nav'), app = document.getElementById('app');
       if (nav && shown(nav) && app && app.style.display !== 'none') bottom = nav.getBoundingClientRect().top;
-      on = draw(main, 0, bottom, window.innerHeight, window.pageYOffset, el.scrollHeight, 0);
-      gut(document.documentElement, on);
+      c = measure(el, true, 0, bottom, window.innerHeight, 0);
     } else {
       const r = el.getBoundingClientRect();
-      on = draw(main, Math.max(0, r.top), Math.min(window.innerHeight, r.bottom), el.clientHeight, el.scrollTop, el.scrollHeight, 0);
-      gut(el, on);
+      c = measure(el, false, Math.max(0, r.top), Math.min(window.innerHeight, r.bottom), el.clientHeight, 0);
     }
-    // the bank list that drops down in Add Wallet scrolls on its own
-    const pl = document.querySelector('.prov-list');
-    if (pl && shown(pl)) { const r = pl.getBoundingClientRect(); draw(list, r.top + 4, r.bottom - 4, pl.clientHeight, pl.scrollTop, pl.scrollHeight, Math.max(0, Math.round(window.innerWidth - r.right)) + 2); }
-    else draw(list, 0, 0, 0, 0, 0, 0);
+    // The scrollbar takes 4px of the page's width while it is there (as in the owner's screens, where every page with a bar is 4px narrower on the
+    // right). `mg-gut` on the scroller (the page, a sheet, or the Login scroller) makes the room.
+    const gutEl = isDoc ? document.documentElement : el;
+    if (lastGut && lastGut !== gutEl) gut(lastGut, false);
+    gut(gutEl, !!c); lastGut = gutEl;
+    setBar(main, c);
+    layoutList();
   }
-  // Redrawn on scroll, resize, pictures landing, transitions ending and any change to what is on screen. (No polling timer: a timer that never
-  // ends would also keep the test processes alive.)
-  let pending = 0;
-  const tick = () => { if (pending) return; pending = setTimeout(() => { pending = 0; update(); }, 40); };
-  window.addEventListener('scroll', tick, true); window.addEventListener('resize', tick); window.addEventListener('orientationchange', tick);
-  window.addEventListener('load', tick, true); window.addEventListener('transitionend', tick, true); window.addEventListener('animationend', tick, true);
-  if (typeof MutationObserver === 'function') new MutationObserver(recs => { if (recs.some(r => !(r.target.closest && r.target.closest('.mg-sb')) && !(r.target.id === 'mgSb' || r.target.id === 'mgSbList'))) tick(); })
+  // the bank list that drops down in Add Wallet scrolls on its own
+  function layoutList(){
+    const pl = document.querySelector('.prov-list');
+    if (pl && shown(pl)) {
+      const r = pl.getBoundingClientRect();
+      setBar(list, measure(pl, false, r.top + 4, r.bottom - 4, pl.clientHeight, Math.max(0, Math.round(window.innerWidth - r.right)) + 2));
+    } else setBar(list, null);
+  }
+  let slow = 0, fast = 0;
+  const layoutSoon = () => { if (slow) return; slow = setTimeout(() => { slow = 0; layout(); }, 50); };
+  window.addEventListener('scroll', e => {
+    if (fast) return;
+    fast = requestAnimationFrame(() => {
+      fast = 0;
+      if (main.cur) place(main, main.cur); else layoutSoon();
+      if (list.cur) { place(list, list.cur); }
+    });
+  }, { capture: true, passive: true });
+  window.addEventListener('resize', layoutSoon); window.addEventListener('orientationchange', layoutSoon);
+  window.addEventListener('load', layoutSoon, true); window.addEventListener('transitionend', layoutSoon, true); window.addEventListener('animationend', layoutSoon, true);
+  if (typeof MutationObserver === 'function') new MutationObserver(recs => { if (recs.some(r => !(r.target.closest && r.target.closest('.mg-sb')) && !(r.target.id === 'mgSb' || r.target.id === 'mgSbList'))) layoutSoon(); })
     .observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
-  update();
+  layout();
 }
 mgScrollbarInit();
 function updateNavIcons(){
