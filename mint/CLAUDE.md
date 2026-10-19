@@ -46,5 +46,9 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
 2. (done, owner confirmed) Atlas user `mintapp` (readWrite on `mint` only) and its connection string; VPS first-setup ran, pm2 `mint-server` is online and
    `/health` answers `{"status":"ok","db":true}`; temporary IP preview on port 8092 (admin `/Desk4mx9/`); GitHub deploy webhook added through the preview port.
    Chosen domain: `dble-mint.com` (not wired in; run `deploy/set-domain.sh dble-mint.com` when the owner has pointed DNS).
-3. (waiting on owner) Mint's screenshots, one batch at a time; the look is changed to match them exactly. Design is still Soda's look (renamed) until then.
+3. (done) Login + Sign Up built from the owner's batch-1 screenshots (tab bar, admin banner `authhero`, circle logo `authlogo`, green fields/icons/scrollbar,
+   server captcha `captcha.js`, +256, UGX, password min 6 with no weak-password list). Loader unchanged ("Loading..." + admin background).
+4. (memorised, not built) Batch 2: Treasure Chest, Team, Salary, Balance Record, Home product list, Account icons, Change passwords, Messages, 6-tab bottom bar.
+   Pictures in `design-ref/batch2/`, notes in `docs/SCREENS-BATCH2.md`. The owner will send more and wants ONE build.
+5. (waiting on owner) Mint's screenshots, one batch at a time; the look is changed to match them exactly. Design is still Soda's look (renamed) until then.
    Payment keys (PesaJet/MarzPay) are set later by the owner.
