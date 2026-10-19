@@ -670,6 +670,8 @@ const DEFAULT_SETTINGS = {
   // for the actual server-side enforcement.
   openingCountdownEnabled: false, openingCountdownAt: 0,
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
+  // The first cashback of a member's FIRST purchase is paid at the moment of purchase (admin switch); off = like every other purchase, 24 hours later.
+  firstPurchaseCashbackNow: true,
   // The hours withdraw is open. Owner: "one withdrawal time should be
   // SETTABLE IN ADMIN, such that when one tries to withdrawal he sees, that
   // withdrawals start from this time to this time, nothing much ie 6pm to
@@ -4552,7 +4554,7 @@ app.post('/invest/create', async (req, res) => {
     return res.status(400).json({ status: 'error', message: 'This product is not open right now.' });
   try {
     const sett = await getSettings();
-    let invId, liveTier, cycle, expectedReturn, dailyPayout, isFirstInvestment = false;
+    let invId, liveTier, cycle, expectedReturn, dailyPayout, isFirstInvestment = false, cashbackNow = false;
     // NOT db.runTransaction -- that helper just runs queued ops sequentially
     // with no rollback (M0 has no real multi-document transactions), so it
     // gave no real protection here anyway. Awaiting the debit directly lets
@@ -4622,7 +4624,9 @@ app.post('/invest/create', async (req, res) => {
       if (!debited) { await intentRef.delete().catch(() => {}); throw new Error('Could not complete the purchase. Please try again.'); }
       const { date, time } = nowStr();
       // First cashback: at once on the member's first purchase, otherwise 24 hours from now; then every 24 hours.
-      const boughtAtMs = Date.now(), payoutFirstAt = new Date(isFirstInvestment ? boughtAtMs : boughtAtMs + 86400000);
+      const boughtAtMs = Date.now();
+      cashbackNow = isFirstInvestment && sett.firstPurchaseCashbackNow !== false;
+      const payoutFirstAt = new Date(cashbackNow ? boughtAtMs : boughtAtMs + 86400000);
       try {
         await invRef.set({
           userId, tierKey: liveTier.key, tierLabel: liveTier.name, amount: liveTier.price, cycle, expectedReturn,
@@ -4662,7 +4666,7 @@ app.post('/invest/create', async (req, res) => {
     _vipCache.delete(userId);
     // A first purchase's first cashback is due at this very moment: pay it now instead of waiting for the next sweep tick (a failure here is
     // harmless, the 0.5 s sweep pays it a moment later).
-    if (isFirstInvestment) await db.collection('investments').doc(invId).get().then(d => d.exists ? settleInvestmentIfDue(d) : null).catch(e => console.error('First cashback error:', e.message));
+    if (cashbackNow) await db.collection('investments').doc(invId).get().then(d => d.exists ? settleInvestmentIfDue(d) : null).catch(e => console.error('First cashback error:', e.message));
     res.json({ status: 'success', investmentId: invId, message: `Bought ${liveTier.name} for ${fmtMoney(liveTier.price)}` });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
@@ -7131,7 +7135,7 @@ const SETTINGS_CRITICAL_RANGES = {
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
   innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'firstPurchaseCashbackNow', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes

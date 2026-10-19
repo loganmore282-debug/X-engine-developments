@@ -119,6 +119,17 @@ async function main(){
     assert.equal(commissions(db).length,3);
   }
   {
+    // The admin switch "First purchase pays its first cashback at once": off = the first purchase waits 24 hours like any other, and is not settled at once
+    const {c,db,buy}=setup(); rates.firstPurchaseCashbackNow=false;
+    const r=await buy('buyer','p30'); assert.equal(r.body.status,'success');
+    const inv=db.rows.investments[r.body.investmentId];
+    assert.ok(Math.abs(+new Date(inv.payoutFirstAt)-(Date.now()+86400000))<5000,'switch off: first cashback 24 hours later');
+    assert.equal(c.settled.length,0,'switch off: nothing paid at once');
+    assert.equal(inv.isFirstInvestment,true,'it is still the first purchase for the referral reward');
+    assert.equal(db.rows.users.l1.walletBalance,6000,'the referral reward does not depend on the switch');
+    delete rates.firstPurchaseCashbackNow;
+  }
+  {
     // two first purchases at the same instant: one reward only
     const {db,buy}=setup();
     const [a,b]=await Promise.all([buy('buyer','p30'),buy('buyer','p90')]);
