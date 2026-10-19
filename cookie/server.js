@@ -6828,7 +6828,8 @@ app.post('/admin/login', async (req, res) => {
 // stored or logged. Sessions are in `memberSessions` (see session-policy.js).
 const LOGIN_MAX_FAILS = 6;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
-const MEMBER_PASSWORD_MIN = 10, MEMBER_PASSWORD_MAX = 128;
+const MEMBER_PASSWORD_MIN = 6, MEMBER_PASSWORD_MAX = 128;
+function passwordLengthMessage(p) { return String(p).length > MEMBER_PASSWORD_MAX ? `Password must be at most ${MEMBER_PASSWORD_MAX} characters.` : `Password must be at least ${MEMBER_PASSWORD_MIN} characters.`; }
 const DUMMY_MEMBER_HASH = scryptHash(crypto.randomBytes(24).toString('hex'));
 const memberAccountId = phone => 'p' + String(phone).replace(/\D/g, '');
 const newMemberUid = () => crypto.randomBytes(12).toString('hex');
@@ -6875,7 +6876,7 @@ app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
     if (!phone) return res.status(400).json({ status: 'error', code: 'INVALID_PHONE', message: badPhoneMessage() });
     const password = tidyPassword(passwordOf(req.body.password));
     if (password.length < MEMBER_PASSWORD_MIN || password.length > MEMBER_PASSWORD_MAX)
-      return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: `Password must be ${MEMBER_PASSWORD_MIN} to ${MEMBER_PASSWORD_MAX} characters.` });
+      return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: passwordLengthMessage(password) });
     if (weakPasswordReason(password, phone)) return res.status(400).json({ status: 'error', code: 'COMMON_PASSWORD', message: WEAK_PASSWORD_MESSAGE });
     const uid = newMemberUid();
     const created = await db.collection('authAccounts').doc(memberAccountId(phone)).createIfAbsent({
@@ -6940,7 +6941,7 @@ app.post('/auth/password/change', memberAuthLimiter, async (req, res) => {
     if (!decoded) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
     const oldPassword = passwordOf(req.body.oldPassword), newPassword = tidyPassword(passwordOf(req.body.newPassword));
     if (newPassword.length < MEMBER_PASSWORD_MIN || newPassword.length > MEMBER_PASSWORD_MAX)
-      return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: `Password must be ${MEMBER_PASSWORD_MIN} to ${MEMBER_PASSWORD_MAX} characters.` });
+      return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: passwordLengthMessage(newPassword) });
     const acct = await findAccountByUid(decoded.uid);
     if (!acct) return res.status(404).json({ status: 'error', message: 'Account not found' });
     if (weakPasswordReason(newPassword, acct.phone)) return res.status(400).json({ status: 'error', code: 'COMMON_PASSWORD', message: WEAK_PASSWORD_MESSAGE });
@@ -8061,7 +8062,7 @@ app.post('/admin/user/reset-password', async (req, res) => {
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   // The same password rule the app applies to a member's own password.
   if (newPassword.length < MEMBER_PASSWORD_MIN || newPassword.length > MEMBER_PASSWORD_MAX)
-    return res.status(400).json({ status: 'error', message: `Password must be ${MEMBER_PASSWORD_MIN} to ${MEMBER_PASSWORD_MAX} characters.` });
+    return res.status(400).json({ status: 'error', message: passwordLengthMessage(newPassword) });
   try {
     const target = await db.collection('users').doc(userId).get();
     if (!target.exists) return res.status(404).json({ status: 'error', message: 'User not found' });

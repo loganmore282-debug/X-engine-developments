@@ -55,6 +55,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   it was given. Investments without `payoutFirstAt` (bought before this rule) keep the old midnight schedule. The Income card's "Settlement countdown"
   counts to that product's own next payment (`nextPayoutMs`) on the SERVER clock (`serverNow`, `ckNow()`). Tests: `test-settlement-engine.js`,
   `test-settlement-countdown.js`, `test-first-purchase-reward.js`.
+- **Member passwords: at least 6 characters** (`MEMBER_PASSWORD_MIN`, app, server and admin reset all agree; owner corrected an inherited 10). The word "at least N characters" appears only in the error message when a password is too short, never inside a password box (placeholders stay plain: "New password").
 - **Login boxes keep this device's last member's number and password** after sign-out and after an ended session (`cookie_saved_login`, light
   encoding in localStorage). Nothing signs in by itself; a wrong password forgets the saved password; typing another number clears it.
   Test: `test-saved-login.js`.

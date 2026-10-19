@@ -20,6 +20,6 @@ ok(find('nomatch') === '', 'no match, no rows');
 // the server
 ok(/MEMBER_PASSWORD_MIN \|\| newPassword\.length > MEMBER_PASSWORD_MAX/.test(src) && /weakPasswordReason\(newPassword, target\.data\(\)\.phone\)/.test(src), 'an admin-set member password follows the app\'s own password rule');
 ok(/if \(\/\^credited\/\.test\(k\)\) delete safe\[k\]/.test(src), 'the member list leaves out the long bookkeeping lists');
-ok(/at least 10 characters/.test(adm) && !/at least 6 characters/.test(adm), 'the panel asks for the same 10 characters');
+ok(/at least 6 characters/.test(adm) && !/at least 10 characters/.test(adm) && /placeholder="New password"/.test(adm), 'the panel asks for the same 6 characters and the box carries no hint');
 ok(/pays the reward on their first purchase/.test(adm) && /A reward already paid is never paid again; a recharge pays nothing/.test(adm) && !/first confirmed recharge|first-deposit commission/.test(adm), 'the attach-referrer copy describes the first-purchase reward');
 console.log(`PASS: admin users (${n} checks)`);

@@ -1828,7 +1828,7 @@ async function openUser(uid){
     </div>
     ${SESSION_ROLE==='owner'?`<label style="margin-top:14px">Reset password</label>
     <div class="row">
-      <div style="flex:2"><input id="pwNew" type="text" placeholder="New password (at least 10 characters)"></div>
+      <div style="flex:2"><input id="pwNew" type="text" placeholder="New password"></div>
       <button class="btn sky sm" id="pwBtn" title="Set a new login password for this user">Reset password</button>
     </div>
     <label style="margin-top:14px">Correct phone number ${u.phone && !/^\+2567\d{8}$/.test(u.phone)?'<span class="pill-tag t-warn" style="margin-left:6px">Looks malformed</span>':''}</label>
@@ -1948,7 +1948,7 @@ async function openUser(uid){
   $('banBtn')?.addEventListener('click', async()=>{ const action=u.status==='banned'?'unban':'ban'; if(action==='ban' && !confirm(`Suspend ${u.phone}? This immediately blocks their deposits, withdrawals, purchases, and cashback.`)) return; const d=await api('/admin/ban',{userId:uid,action}); toast(d.status==='success'?('User '+action+'ned'):(d.message||'Failed'), d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); } });
   $('pwBtn')?.addEventListener('click', async()=>{
     const np=$('pwNew').value.trim();
-    if(np.length<10) return toast('New password must be at least 10 characters','err');
+    if(np.length<6) return toast('New password must be at least 6 characters','err');
     if(!confirm(`Reset password for ${u.phone}? They will need to use the new password to log in.`)) return;
     const b=$('pwBtn'); b.disabled=true; b.textContent='Resetting…';
     const d=await api('/admin/user/reset-password',{userId:uid,newPassword:np});
@@ -3555,7 +3555,7 @@ const ADMIN_LANG_ROWS = [
   ['Save phone', 'Tereka essimu', 'Hifadhi simu', 'Enregistrer le téléphone', 'Bika telefone', 'Biika esimu'],
   ['Looks malformed', 'Kirabika tekituufu', 'Inaonekana si sahihi', 'Semble mal formé', 'Bisa nk\'aho ari bibi', 'Nikireebeka kitahikire'],
   ['Not set yet', 'Tekinnateekebwawo', 'Bado haijawekwa', 'Pas encore défini', 'Ntiryashyizweho', 'Tikirataho'],
-  ['New password (at least 10 characters)', 'Ekisumuluzo ekipya (obutono nnukuta 6)', 'Nenosiri jipya (angalau herufi 6)', 'Nouveau mot de passe (6 caractères minimum)', 'Ijambobanga rishya (byibuze inyuguti 6)', 'Ekisumuruzo kisya (buriijo obuhandiiko 6)'],
+  ['New password (at least 6 characters)', 'Ekisumuluzo ekipya (obutono nnukuta 6)', 'Nenosiri jipya (angalau herufi 6)', 'Nouveau mot de passe (6 caractères minimum)', 'Ijambobanga rishya (byibuze inyuguti 6)', 'Ekisumuruzo kisya (buriijo obuhandiiko 6)'],
   ['Note (optional)', 'Obubaka (si bwa buwaze)', 'Dokezo (si lazima)', 'Note (facultatif)', 'Inyandiko (ntabwo ari itegeko)', 'Ekiraburo (tikya buriijo)'],
   ['No plans purchased yet.', 'Tewali nteekateeka egguliddwa.', 'Hakuna mipango iliyonunuliwa bado.', 'Aucun plan acheté pour le moment.', 'Nta gahunda iraguzwa.', 'Tihariho nteekateeka egwiiribwe.'],
   ['Saved cash-out accounts', 'Akawunti z\'okuggyamu ssente eziterekeddwa', 'Akaunti za utoaji zilizohifadhiwa', 'Comptes de retrait enregistrés', 'Konti zo kubikuza zabitswe', 'Akaunti z\'okwihamu sente ezibiikirwe'],

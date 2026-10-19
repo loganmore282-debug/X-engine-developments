@@ -54,7 +54,8 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
   ok(!JSON.stringify([...E.store.memberSessions]).includes(r.body.token), 'the token is not stored, only its hash');
   r = await E.call('/auth/signup', { phone: '0770000001', password: 'other1other1' }); ok(r.code === 409 && r.body.code === 'PHONE_IN_USE', 'second signup for the same phone is refused');
   r = await E.call('/auth/signup', { phone: '0770000009', password: '123' }); eq([r.code, r.body.code], [400, 'WEAK_PASSWORD']);
-  r = await E.call('/auth/signup', { phone: '0770000009', password: 'nine12345' }); eq([r.code, r.body.code], [400, 'WEAK_PASSWORD'], 'nine characters are refused (minimum is 10)');
+  r = await E.call('/auth/signup', { phone: '0770000009', password: 'five5' }); eq([r.code, r.body.code], [400, 'WEAK_PASSWORD'], 'five characters are refused (minimum is 6)'); eq(r.body.message, 'Password must be at least 6 characters.', 'and the message says 6');
+  r = await E.call('/auth/signup', { phone: '0770000019', password: 'six6xy' }); ok(r.code === 200, 'six characters are accepted');
   r = await E.call('/auth/signup', { phone: '0770000009', password: 'ten1234567' }); eq(r.code, 200, 'ten characters are accepted');
   r = await E.call('/auth/signup', { phone: '0770000009', password: 'x'.repeat(129) }); eq(r.code, 400, 'over-long password');
   for (const odd of [{ $gt: '' }, ['abcdefghijk1'], 1234567890123, true]) { r = await E.call('/auth/signup', { phone: '0770000009', password: odd }); eq(r.code, 400, 'a password that is not text is refused: ' + JSON.stringify(odd)); }

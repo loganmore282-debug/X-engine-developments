@@ -1,6 +1,6 @@
 'use strict';
-// Refuses passwords that password-guessing tools try first. The rule is deliberately light (the member app promises "at least 10
-// characters"): only the most common passwords, one repeated character, simple runs like 123456 / 654321 / abcdef, and a
+// Refuses passwords that password-guessing tools try first. The rule is deliberately light (the member app asks for at least 6
+// characters): only the most common passwords, one repeated character, simple runs like 123456 / 654321 / abcdef, and a
 // password that is the member's own phone number.
 const COMMON = new Set(('123456 1234567 12345678 123456789 1234567890 12345 123123 123321 111111 222222 333333 444444 555555 666666 777777 ' +
   '888888 999999 000000 121212 112233 654321 987654 987654321 159753 147258 258369 102030 101010 696969 789456 123654 ' +

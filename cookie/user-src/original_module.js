@@ -356,7 +356,7 @@ var LANG_ROWS = [
   ['Showing your most recent records', 'Tulaga ebiwandiiko byo ebisembyeyo', 'Tunaonyesha rekodi zako za hivi karibuni', 'Affichage de vos enregistrements les plus r\u00e9cents', 'Twerekana amateka yawe ya vuba', 'Nituyoreka ebihandiiko byaawe ebya hati'],
   ['Buying products earns you extra spins.', 'Okugula ebyamaguzi kukuwa okuzungusa okulala.', 'Kununua bidhaa kunakupa nafasi zaidi za kuzungusha.', 'Acheter des produits vous donne des tours suppl\u00e9mentaires.', 'Kugura ibicuruzwa bikugeza ku mahirwe yo kuzunguza.', 'Okugura ebyamaguzi nikikuha okuzengurutsa okundi.'],
   ['Enter a valid wallet account number.', 'Wandiika ennamba ya akawunti y\'ensawo entuufu.', 'Weka namba sahihi ya akaunti ya pochi.', 'Entrez un num\u00e9ro de compte de portefeuille valide.', 'Andika nimero nyayo ya konti y\'umufuka.', 'Handiika enamba ya akaunti y\'ensaho erikwecwera.'],
-  ['Login Password (at least 10 characters)', 'Ekisumuluzo ky\'Okuyingira (obutasingako bubonero 6)', 'Nenosiri la Kuingia (angalau herufi 10)', 'Mot de passe de connexion (10 caract\u00e8res minimum)', 'Ijambobanga ryo kwinjira (nibura inyuguti 10)', 'Ekisumuruzo ky\'Okutaaha (obukiri bubonero 6)'],
+  ['Login Password (at least 6 characters)', 'Ekisumuluzo ky\'Okuyingira (obutasingako bubonero 6)', 'Nenosiri la Kuingia (angalau herufi 6)', 'Mot de passe de connexion (6 caract\u00e8res minimum)', 'Ijambobanga ryo kwinjira (nibura inyuguti 6)', 'Ekisumuruzo ky\'Okutaaha (obukiri bubonero 6)'],
   ['No channel link is set yet.', 'Tewannabaawo lyanka lya kitundu.', 'Hakuna kiungo cha chaneli kilichowekwa bado.', 'Aucun lien de canal n\'est encore d\u00e9fini.', 'Nta murongo w\'umuyoboro urashyirwaho.', 'Tihariho orunyiriri rw\'ekitundu.'],
   ['Please enter the treasure chest key', 'Wandiika ekisumuluzo ky\'essanduku ly\'obugagga', 'Tafadhali weka ufunguo wa sanduku la hazina', 'Veuillez saisir la cl\u00e9 du coffre au tr\u00e9sor', 'Nyamuneka andika urufunguzo rw\'agasanduku k\'ubutunzi', 'Handiika ekishumuruzo ky\'esanduuku y\'obugaiga'],
   ['Please enter your actual payment account', 'Wandiika akawunti yo ey\'okusasula ey\'amazima', 'Tafadhali weka akaunti halisi utakayotumia kulipa', 'Veuillez saisir le compte de paiement que vous utiliserez r\u00e9ellement', 'Nyamuneka andika konti nyayo uzakoresha wishyura', 'Handiika akaunti yaawe y\'okushashura ey\'amazima'],
@@ -367,7 +367,7 @@ var LANG_ROWS = [
   ['Check your phone for the payment prompt.', 'Kebera essimu yo olabe obubaka bw\'okusasula.', 'Angalia simu yako kwa ujumbe wa malipo.', 'V\u00e9rifiez votre t\u00e9l\u00e9phone pour la demande de paiement.', 'Reba kuri telefone yawe ubutumwa bwo kwishyura.', 'Reeba esimu yaawe oreebe obutumwa bw\'okushashura.'],
   ['Enter the mobile money number to charge.', 'Wandiika ennamba ya mobile money gy\'oggyako ssente.', 'Weka namba ya mobile money itakayotozwa.', 'Entrez le num\u00e9ro mobile money \u00e0 d\u00e9biter.', 'Andika nimero ya mobile money izakurwaho amafaranga.', 'Handiika enamba ya mobile money ei orikwihaho sente.'],
   ['Enter your key to unlock the reward', 'Wandiika ekisumuluzo kyo oggulewo empeera', 'Weka ufunguo wako ili kufungua zawadi', 'Entrez votre cl\u00e9 pour d\u00e9bloquer la r\u00e9compense', 'Andika urufunguzo rwawe ufungure igihembo', 'Handiika ekishumuruzo kyaawe oshumuurure empeera'],
-  ['Password must be at least 10 characters.', 'Ekisumuluzo kiteekwa okuba n\'obubonero obutasinga mu 10.', 'Nenosiri lazima liwe na angalau herufi 10.', 'Le mot de passe doit comporter au moins 10 caract\u00e8res.', 'Ijambobanga rigomba kuba rifite nibura inyuguti 10.', 'Ekisumuruzo kishemereire kugira obubonero obukiri 10.'],
+  ['Password must be at least 6 characters.', 'Ekisumuluzo kiteekwa okuba n\'obubonero obutasinga mu 6.', 'Nenosiri lazima liwe na angalau herufi 6.', 'Le mot de passe doit comporter au moins 6 caract\u00e8res.', 'Ijambobanga rigomba kuba rifite nibura inyuguti 6.', 'Ekisumuruzo kishemereire kugira obubonero obukiri 6.'],
   ['Please do not save old account recharge.', 'Tokozesa kawunti ya dda okuteeka ssente.', 'Tafadhali usitumie akaunti ya zamani kuweka pesa.', 'N\'utilisez pas un ancien compte pour la recharge.', 'Nyamuneka ntugakoreshe konti ya kera wishyura.', 'Otakozesa akaunti ya ira okuta sente.'],
   ['The mobile phone number format is incorrect', 'Ennamba ya ssimu tewandiikiddwa bulungi', 'Muundo wa namba ya simu si sahihi', 'Le format du num\u00e9ro de t\u00e9l\u00e9phone est incorrect', 'Imiterere ya nimero ya telefone si nyayo', 'Enamba ya esimu tehandiikirwe gye'],
   ['The two login passwords do not match.', 'Ebisumuluzo ebibiri eby\'okuyingira tebifaanagana.', 'Manenosiri mawili ya kuingia hayafanani.', 'Les deux mots de passe de connexion ne correspondent pas.', 'Amagambobanga yombi yo kwinjira ntahuye.', 'Ebisumuruzo bibiri by\'okutaaha tibirikushushana.'],
@@ -378,7 +378,7 @@ var LANG_ROWS = [
   ['Invite friends. Earn when they buy their first product.', 'Yita mikwano gyo. Ofuna ssente nga bagudde ekyamaguzi kyabwe ekisooka.', 'Alika marafiki. Unapata pesa wanaponunua bidhaa yao ya kwanza.', 'Invitez vos amis. Gagnez lorsqu\'ils ach\u00e8tent leur premier produit.', 'Tumira inshuti. Winjiza amafaranga igihe baguze igicuruzwa cyabo cya mbere.', 'Yeta abanywani baawe. Notunga sente ku barikugura ekyamaguzi kyabo eky\'okubanza.'],
   ['Share your link, create your wealth, improve your life.', 'Gaba lyanka lyo, okole obugagga bwo, otereeze obulamu bwo.', 'Shiriki kiungo chako, jenga utajiri wako, boresha maisha yako.', 'Partagez votre lien, b\u00e2tissez votre richesse, am\u00e9liorez votre vie.', 'Sangiza umurongo wawe, wubake ubutunzi bwawe, unoze ubuzima bwawe.', 'Gabana orunyiriri rwaawe, okore obugaiga bwaawe, otebeekanise amagara gaawe.'],
   ['We\'re getting ready. Come back once the countdown ends.', 'Tukyeteekateeka. Komawo essaawa bwe zinaggwaako.', 'Tunajiandaa. Rudi hesabu ya kurudi nyuma itakapoisha.', 'Nous nous pr\u00e9parons. Revenez \u00e0 la fin du compte \u00e0 rebours.', 'Turimo kwitegura. Garuka igihe kubara kuzarangira.', 'Nitweteekateeka. Garuka obu obwire burihwaho.'],
-  ['Your new password must be at least 10 characters.', 'Ekisumuluzo kyo ekiggya kiteekwa okuba n\'obubonero obutasinga mu 10.', 'Nenosiri lako jipya lazima liwe na angalau herufi 10.', 'Votre nouveau mot de passe doit comporter au moins 10 caract\u00e8res.', 'Ijambobanga ryawe rishya rigomba kuba rifite nibura inyuguti 10.', 'Ekisumuruzo kyaawe ekisya kishemereire kugira obubonero obukiri 10.'],
+  ['Your new password must be at least 6 characters.', 'Ekisumuluzo kyo ekiggya kiteekwa okuba n\'obubonero obutasinga mu 6.', 'Nenosiri lako jipya lazima liwe na angalau herufi 6.', 'Votre nouveau mot de passe doit comporter au moins 6 caract\u00e8res.', 'Ijambobanga ryawe rishya rigomba kuba rifite nibura inyuguti 6.', 'Ekisumuruzo kyaawe ekisya kishemereire kugira obubonero obukiri 6.'],
   ['If deposit is not received, please contact TG customer service.', 'Ssente bwe zitatuuka, tuukirira obuyambi ku TG.', 'Ikiwa malipo hayajapokelewa, tafadhali wasiliana na huduma kwa wateja kwenye TG.', 'Si le d\u00e9p\u00f4t n\'est pas re\u00e7u, contactez le service client sur TG.', 'Niba amafaranga atakiriwe, nyamuneka vugana na serivisi z\'abakiriya kuri TG.', 'Sente ku zitarikuhika, otukirire obuhwezi aha TG.'],
   ['The payment is expected to be successful in 2-10 minutes.', 'Okusasula kusuubirwa okuggwa mu ddakiika 2-10.', 'Malipo yanatarajiwa kukamilika ndani ya dakika 2-10.', 'Le paiement devrait aboutir en 2 \u00e0 10 minutes.', 'Ubwishyu buteganyijwe kurangira mu minota 2-10.', 'Okushashura nikwetegyerezibwa kuhwa omu dakiika 2-10.'],
   ['Your new password must be different from the old one.', 'Ekisumuluzo kyo ekiggya kiteekwa okuba ekitali kye kikadde.', 'Nenosiri lako jipya lazima liwe tofauti na la zamani.', 'Votre nouveau mot de passe doit \u00eatre diff\u00e9rent de l\'ancien.', 'Ijambobanga ryawe rishya rigomba gutandukana n\'irya kera.', 'Ekisumuruzo kyaawe ekisya kishemereire kuba ekitari kiri ekikuru.'],
@@ -1466,7 +1466,7 @@ function fbErrMsg(e){
   if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') return 'Incorrect phone number or password.';
   if (code === 'auth/user-not-found') return 'No account found for that number.';
   if (code === 'auth/email-already-in-use') return 'An account with that number already exists.';
-  if (code === 'auth/weak-password') return 'Password must be at least 10 characters.';
+  if (code === 'auth/weak-password') return 'Password must be at least 6 characters.';
   if (code === 'auth/common-password') return 'That password is too easy to guess. Choose a different one, for example a few letters and numbers that only you know.';
   if (code === 'auth/too-many-requests') return 'Too many attempts. Try again shortly.';
   // A weak connection is the commonest real failure here, and without these
@@ -1654,7 +1654,7 @@ window.doRegister = async function(){
   // The referral code is optional.
   const referral = $('regReferral').value.trim();
   if (!phone) return regError('Please enter a valid phone number');
-  if (!pass || pass.length < 10) return regError('Password must be at least 10 characters.');
+  if (!pass || pass.length < 6) return regError('Password must be at least 6 characters.');
   if (pass !== pass2) return regError('The two passwords do not match.');
   regError('');
   // See firebaseReady(): without the sign-in service there is nothing to
@@ -5046,7 +5046,7 @@ window.submitLoginPasswordChange = async function(){
   const newPass = $('lpNew').value;
   const confirm = $('lpNew2').value;
   if (!oldPass) return notify('Old password must be entered');
-  if (!newPass || newPass.length < 10) return notify('Your new password must be at least 10 characters.');
+  if (!newPass || newPass.length < 6) return notify('Your new password must be at least 6 characters.');
   if (newPass !== confirm) return notify('The two new passwords do not match.');
   if (newPass === oldPass) return notify('Your new password must be different from the old one.');
   const btn = $('lpSaveBtn');
