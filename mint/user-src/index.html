@@ -1364,6 +1364,9 @@ body{color:var(--mg-ink);font-family:var(--mg-sans);}
 #pageHost.mg-enter{animation:mgPageIn .3s ease-out;}
 @keyframes mgPageIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
 @media (prefers-reduced-motion:reduce){#pageHost.mg-enter,.navitem.nav-tap .lbl{animation:none;}}
+#authScreen > .ma-screen,.va-pane{animation:mgPageIn .3s ease-out;}
+.sheet-bg.show,.pay-page.show,#msgDetailBg.show,#depStatusBg.show{animation:mgPageIn .3s ease-out;}
+@media (prefers-reduced-motion:reduce){#authScreen > .ma-screen,.va-pane,.sheet-bg.show,.pay-page.show,#msgDetailBg.show,#depStatusBg.show{animation:none;}}
 body.sheet-open .bottom-nav{display:flex;}
 
 /* ── sheet header: pink serif bar, green back square ── */

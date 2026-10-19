@@ -1378,7 +1378,7 @@ function showAuthTab(tab){
   if (tl) { tl.classList.toggle('on', tab === 'login'); tl.setAttribute('aria-selected', tab === 'login' ? 'true' : 'false'); }
   if (tr) { tr.classList.toggle('on', tab === 'register'); tr.setAttribute('aria-selected', tab === 'register' ? 'true' : 'false'); }
   const sc = $('authScroll'); if (sc) sc.scrollTop = 0;
-  if (tab === 'register' && !STATE.captchaId) loadAuthCaptcha();
+  if (tab === 'register') loadAuthCaptcha();   // a fresh picture every time Sign Up is opened
   stopSmsCodeListener();
 }
 // The eye on a password box: shows what was typed, and hides it again.

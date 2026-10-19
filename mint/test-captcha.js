@@ -10,11 +10,11 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(/^\d{4}$/.test(c.code) && /^[0-9a-f]{32}$/.test(c.id), 'four digits and a random id');
   const svg = Buffer.from(c.image.split(',')[1], 'base64').toString();
   ok(c.image.startsWith('data:image/svg+xml;base64,') && svg.startsWith('<svg') && svg.endsWith('</svg>'), 'a data: svg picture');
-  const shown = [...svg.matchAll(/<text[^>]*>(\d)<\/text>/g)].map(m => m[1]).join('');
-  ok(shown === c.code, 'the picture shows exactly the code');
+  ok(!/<text/i.test(svg) && !svg.includes(c.code) && (svg.match(/<path /g) || []).length === 4, 'the digits are outlined shapes (no readable text), four of them');
+  ok(!Object.values(require('./captcha')._live.get(c.id)).includes(c.code) && !JSON.stringify([...require('./captcha')._live.values()]).includes('"code"'), 'the server keeps a keyed hash, not the plain code');
   ok(!svg.includes(c.id), 'the id is not in the picture');
   for (const col of ['#0b6a3b', '#10a95a', '#e1212c', '#f7c41a']) { let seen = false; for (let i = 0; i < 40 && !seen; i++) seen = Buffer.from(captcha.issue().image.split(',')[1], 'base64').toString().includes('fill="' + col + '"'); ok(seen, 'digit colour ' + col + ' is used'); }
-  for (let i = 0; i < 30; i++) { const x = Buffer.from(captcha.issue().image.split(',')[1], 'base64').toString(); const cols = new Set([...x.matchAll(/<text[^>]*fill="(#[0-9a-f]{6})"/g)].map(m => m[1])); ok(cols.size >= 3, 'at least three colours in one picture'); }
+  for (let i = 0; i < 30; i++) { const x = Buffer.from(captcha.issue().image.split(',')[1], 'base64').toString(); const cols = new Set([...x.matchAll(/<path [^>]*fill="(#[0-9a-f]{6})"/g)].map(m => m[1])); ok(cols.size >= 3, 'at least three colours in one picture'); }
 }
 // answers: right once, never again; wrong uses the picture up; expired never; unknown never
 {
