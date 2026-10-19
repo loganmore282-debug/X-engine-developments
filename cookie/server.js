@@ -1261,22 +1261,27 @@ function eatNextMidnight(ts) {
   const dayStart = Math.floor((ts + tzOffMs()) / 86400000) * 86400000;
   return dayStart + 86400000 - tzOffMs();
 }
-// ── Cashback timing: Uganda MIDNIGHT (00:00), not 24 hours after purchase ──
-// The k-th payment (k = 1..total) is due at the first local midnight AFTER the purchase, plus (k-1) days. A product bought
-// at 15:00 therefore pays at 00:00 the next night, then every night at 00:00, `total` payments in all; the last one
-// is the maturity payment. Uganda has no daylight saving, so the day length is a constant 86,400,000 ms.
-// Every local midnight pays: there is no weekend rest.
-function payoutDueAtMs(createdMs, k) {
-  return eatNextMidnight(createdMs) + (Math.max(1, k) - 1) * 86400000;
+// ── Cashback timing: every 24 hours from the purchase ──
+// A product bought now pays its first cashback exactly 24 hours later and then every 24 hours, `total` payments in all; the
+// last one is the maturity payment. A member's FIRST purchase is the exception: its first cashback is paid at once, at the
+// moment of purchase, and the rest follow every 24 hours from then. The instant of the first payment is stored on the
+// investment as `payoutFirstAt`. An investment without it (bought before this rule) keeps the older schedule: every Uganda
+// midnight (00:00), the first at the first midnight after the purchase.
+// Every payment is 86,400,000 ms after the one before (Uganda has no daylight saving). There is no weekend rest.
+function payoutFirstMs(createdMs, firstAtMs) {
+  return Number(firstAtMs) > 0 ? Number(firstAtMs) : eatNextMidnight(createdMs);
 }
-function payoutsDueCount(createdMs, now, total) {
-  const first = eatNextMidnight(createdMs);
+function payoutDueAtMs(createdMs, k, firstAtMs) {
+  return payoutFirstMs(createdMs, firstAtMs) + (Math.max(1, k) - 1) * 86400000;
+}
+function payoutsDueCount(createdMs, now, total, firstAtMs) {
+  const first = payoutFirstMs(createdMs, firstAtMs);
   if (now < first) return 0;
   return Math.min(total, Math.floor((now - first) / 86400000) + 1);
 }
 // The instants of the first `total` payments, in one pass (analytics asks for every contract).
-function payoutInstants(createdMs, total) {
-  const first = eatNextMidnight(createdMs), out = [];
+function payoutInstants(createdMs, total, firstAtMs) {
+  const first = payoutFirstMs(createdMs, firstAtMs), out = [];
   for (let i = 0; i < total; i++) out.push(first + i * 86400000);
   return out;
 }
@@ -2993,12 +2998,13 @@ async function _settleDueInvestmentNow(doc) {
   const made  = Number(inv.payoutsMade) || 0;
   if (!total || made >= total) return false;
   const createdMs = tsMillis(inv.createdAt) || Date.now();
-  const dueCount = payoutsDueCount(createdMs, Date.now(), total) - made;
+  const firstAtMs = tsMillis(inv.payoutFirstAt) || 0;
+  const dueCount = payoutsDueCount(createdMs, Date.now(), total, firstAtMs) - made;
   if (dueCount <= 0) {
     // Nothing is due, yet the sweep's hint says it is (a purchase a few milliseconds either side of 00:00, or a row
     // with no hint): put the hint at the real due time, or this product is re-read every 0.5 s until then.
     if (tsMillis(inv.createdAt) && !(tsMillis(inv.nextPayoutAt) > Date.now())) {
-      doc.ref.update({ nextPayoutAt: new Date(payoutDueAtMs(createdMs, made + 1)) }).catch(() => {});
+      doc.ref.update({ nextPayoutAt: new Date(payoutDueAtMs(createdMs, made + 1, firstAtMs)) }).catch(() => {});
     }
     return false;
   }
@@ -3030,7 +3036,8 @@ async function _settleDueInvestmentNow(doc) {
       }
       const fMade = Number(f.payoutsMade) || 0;
       const fTotal = Number(f.payoutsTotal) || 0;
-      const fDue = payoutsDueCount(tsMillis(f.createdAt) || Date.now(), Date.now(), fTotal) - fMade;
+      const fFirstAt = tsMillis(f.payoutFirstAt) || 0;
+      const fDue = payoutsDueCount(tsMillis(f.createdAt) || Date.now(), Date.now(), fTotal, fFirstAt) - fMade;
       if (fDue <= 0) return;
       const newMade = fMade + 1;
       const willComplete = newMade >= fTotal;
@@ -3080,7 +3087,7 @@ async function _settleDueInvestmentNow(doc) {
         await doc.ref.update({
           payoutsMade: newMade, paidOut: FieldValue.increment(amount),
           status: willComplete ? 'matured' : 'active',
-          nextPayoutAt: willComplete || !createdMs ? null : new Date(payoutDueAtMs(createdMs, newMade + 1)),
+          nextPayoutAt: willComplete || !createdMs ? null : new Date(payoutDueAtMs(createdMs, newMade + 1, fFirstAt)),
         });
       });
       if (payoutBlocked) return;
@@ -4614,10 +4621,12 @@ app.post('/invest/create', async (req, res) => {
       });
       if (!debited) { await intentRef.delete().catch(() => {}); throw new Error('Could not complete the purchase. Please try again.'); }
       const { date, time } = nowStr();
+      // First cashback: at once on the member's first purchase, otherwise 24 hours from now; then every 24 hours.
+      const boughtAtMs = Date.now(), payoutFirstAt = new Date(isFirstInvestment ? boughtAtMs : boughtAtMs + 86400000);
       try {
         await invRef.set({
           userId, tierKey: liveTier.key, tierLabel: liveTier.name, amount: liveTier.price, cycle, expectedReturn,
-          status: 'active', nextPayoutAt: new Date(payoutDueAtMs(Date.now(), 1)), dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+          status: 'active', payoutFirstAt, nextPayoutAt: payoutFirstAt, dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
           isFirstInvestment, commissionBasis: 'investment', commissionPaidLevels: [], commissionPending: isFirstInvestment, category: 'income',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -4651,6 +4660,9 @@ app.post('/invest/create', async (req, res) => {
     // has already paid for.
     grantTurntableSpins(userId, liveTier, invId);
     _vipCache.delete(userId);
+    // A first purchase's first cashback is due at this very moment: pay it now instead of waiting for the next sweep tick (a failure here is
+    // harmless, the 0.5 s sweep pays it a moment later).
+    if (isFirstInvestment) await db.collection('investments').doc(invId).get().then(d => d.exists ? settleInvestmentIfDue(d) : null).catch(e => console.error('First cashback error:', e.message));
     res.json({ status: 'success', investmentId: invId, message: `Bought ${liveTier.name} for ${fmtMoney(liveTier.price)}` });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
@@ -8117,7 +8129,7 @@ app.post('/admin/user/grant-asset', async (req, res) => {
       const { date, time } = nowStr();
       const created = await invRef.createIfAbsent({
         userId, tierKey: tier.key, tierLabel: tier.name, amount: price, cycle, expectedReturn,
-        status: 'active', nextPayoutAt: new Date(payoutDueAtMs(Date.now(), 1)), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+        status: 'active', payoutFirstAt: new Date(Date.now() + 86400000), nextPayoutAt: new Date(Date.now() + 86400000), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
         isFirstInvestment: false, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
         category: isTask ? 'wage' : 'income', granted: true, grantedBy: (req.adminUser && req.adminUser.username) || 'owner', requestId,
         date, time, createdAt: FieldValue.serverTimestamp()
@@ -9166,8 +9178,8 @@ function bandOf(h) {
   if (h >= 17 && h < 21) return 'evening';
   return 'night';
 }
-// Read-only schedule math mirrors settlement's cumulative rounding. Each instalment falls at Uganda midnight (00:00),
-// the first one at the first midnight after purchase (see payoutDueAtMs). `created` below is the anchor that makes
+// Read-only schedule math mirrors settlement's cumulative rounding. Each instalment falls 24 hours after the one before,
+// the first one at `payoutFirstAt` (see payoutDueAtMs). `created` below is the anchor that makes
 // "created + k days" equal the k-th payment's instant, so the rest of the maths reads the same as before.
 function analyticsContractDay(inv, start, end, now) {
   const created0 = tsMillis(inv.createdAt);
@@ -9180,7 +9192,7 @@ function analyticsContractDay(inv, start, end, now) {
       made < 0 || made > total || !Number.isFinite(paid) || paid < 0) return null;
   const target = n => Math.round(expected * n / total);
   // t[k-1] is the instant of the k-th payment (every local midnight).
-  const t = payoutInstants(created0, total);
+  const t = payoutInstants(created0, total, tsMillis(inv.payoutFirstAt) || 0);
   let first = 1, last = 0, due = 0;
   while (first <= total && t[first - 1] < start) first++;      // first payment at or after `start`
   last = first - 1;
@@ -10313,7 +10325,7 @@ async function backfillNextPayoutAt() {
   for (const d of snap.docs) {
     const x = d.data(), createdMs = tsMillis(x.createdAt);
     if (!createdMs) continue;
-    await d.ref.update({ nextPayoutAt: new Date(payoutDueAtMs(createdMs, (Number(x.payoutsMade) || 0) + 1)) }); n++;
+    await d.ref.update({ nextPayoutAt: new Date(payoutDueAtMs(createdMs, (Number(x.payoutsMade) || 0) + 1, tsMillis(x.payoutFirstAt) || 0)) }); n++;
   }
   return n;
 }
@@ -10327,7 +10339,7 @@ async function migratePayoutsToMidnightOnce() {
   let n = 0;
   for (const d of snap.docs) {
     const x = d.data(), createdMs = tsMillis(x.createdAt), made = Number(x.payoutsMade) || 0, total = Number(x.payoutsTotal) || 0;
-    if (!createdMs || !total || made >= total) continue;
+    if (!createdMs || !total || made >= total || tsMillis(x.payoutFirstAt)) continue;
     await d.ref.update({ nextPayoutAt: new Date(payoutDueAtMs(createdMs, made + 1)) }); n++;
   }
   await marker.set({ at: new Date(), moved: n });

@@ -83,7 +83,7 @@ function setup(input=seed()){
   const c=vm.createContext({ db, console:{log(){},warn(){},error(){}},
     FieldValue:{ increment:n=>({op:'inc',n}), arrayUnion:(...items)=>({op:'union',items}), delete:()=>({op:'delete'}), serverTimestamp:()=>new Date() },
     getSettings:async()=>rates, getProductByKey:async k=>products[k]?{...products[k]}:null,
-    productOpenState:()=>({open:true}), productExpectedReturn:(t)=>t.price*3, payoutDueAtMs:()=>Date.now()+86400000,
+    productOpenState:()=>({open:true}), productExpectedReturn:(t)=>t.price*3, settled:[], settleInvestmentIfDue:async d=>{ c.settled.push(d.id); },
     round2:n=>Math.round(n*100)/100, fmtMoney:n=>'UGX '+n, nowStr:()=>({date:'2026-10-18',time:'10:00'}),
     newStatementId:()=>'s-'+ ++serial, verifyAuth:async req=>req.uid, grantTurntableSpins(){}, _vipCache:new Map(),
     app:{post:(p,h)=>{ctxRoutes[p]=h}}
@@ -96,7 +96,7 @@ function response(){return {code:200,status(code){this.code=code;return this},js
 const commissions=db=>Object.values(db.rows.transactions).filter(t=>t.type==='commission');
 async function main(){
   {
-    const {db,buy}=setup();
+    const {c,db,buy}=setup();
     const r=await buy('buyer','p30');
     assert.equal(r.body.status,'success',JSON.stringify(r.body));
     assert.equal(db.rows.users.buyer.walletBalance,470000);
@@ -106,8 +106,15 @@ async function main(){
     assert.deepEqual(commissions(db).map(t=>[t.userId,t.commissionLevel,t.description]).sort(),[['l1',0,'Level 1 reward'],['l2',1,'Level 2 reward'],['l3',2,'Level 3 reward']]);
     const inv=Object.values(db.rows.investments)[0];
     assert.equal(inv.isFirstInvestment,true);assert.equal(inv.commissionPending,false,'paid, so nothing left pending');
+    // CASHBACK: the first purchase's first cashback is due at the moment of purchase (and is paid at once); every later purchase pays its first one 24 hours later
+    assert.ok(Math.abs(+new Date(inv.payoutFirstAt)-Date.now())<5000,'first purchase: first cashback due now');
+    assert.equal(+new Date(inv.nextPayoutAt),+new Date(inv.payoutFirstAt));
+    assert.deepEqual(c.settled,[r.body.investmentId],'the first cashback is settled before the answer goes back');
     const r2=await buy('buyer','p90');
     assert.equal(r2.body.status,'success');
+    const inv2=db.rows.investments[r2.body.investmentId];
+    assert.ok(Math.abs(+new Date(inv2.payoutFirstAt)-(Date.now()+86400000))<5000,'a later purchase: first cashback 24 hours after the purchase');
+    assert.equal(c.settled.length,1,'a later purchase is not paid at once');
     assert.equal(db.rows.users.l1.walletBalance,6000,'the second purchase pays the referrers nothing');
     assert.equal(commissions(db).length,3);
   }

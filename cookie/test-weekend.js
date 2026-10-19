@@ -8,7 +8,7 @@ const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
 const ast = acorn.parse(src, { ecmaVersion: 'latest' });
 const pick = names => names.map(n => { const f = ast.body.find(x => x.type === 'FunctionDeclaration' && x.id.name === n); assert.ok(f, n); return src.slice(f.start, f.end); }).join('\n');
 const sched = new Function(`const tzOffMs = () => 10800000;
-${pick(['eatNextMidnight', 'payoutDueAtMs', 'payoutsDueCount', 'payoutInstants'])}
+${pick(['eatNextMidnight', 'payoutFirstMs', 'payoutDueAtMs', 'payoutsDueCount', 'payoutInstants'])}
 return { payoutDueAtMs, payoutsDueCount, payoutInstants };`)();
 const eat = s => Date.parse(s + '+03:00');
 const iso = ms => new Date(ms + 10800000).toISOString().slice(0, 16).replace('T', ' ');

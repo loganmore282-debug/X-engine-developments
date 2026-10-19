@@ -1,5 +1,5 @@
 'use strict';
-// The settlement countdown: always the time left to the next midnight of the member's own region, on the SERVER's clock.
+// The settlement countdown: the time left to the product's next cashback (24 hours after the one before; older products: the next midnight), on the SERVER's clock.
 const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
 const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8'), server = fs.readFileSync(__dirname + '/server.js', 'utf8');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
@@ -9,7 +9,7 @@ const DAY = 86400000;
 function load(offMin) {
   const c = { REGION: { utcOffsetMin: offMin }, Date, Math, Number, String };
   vm.createContext(c);
-  vm.runInContext([grab('tzOffMs'), sync, grab('nextMidnightMs'), grab('fmtCountdown')].join('\n'), c);
+  vm.runInContext([grab('tzOffMs'), sync, grab('nextMidnightMs'), grab('nextPayoutMs'), grab('fmtCountdown')].join('\n'), c);
   return c;
 }
 // 1. every region offset, hundreds of instants: the target is a real local midnight, never more than a day away, never in the past
@@ -50,8 +50,18 @@ for (const off of [180, 0, -300, 330, 545, -210, 60, 720]) {
 // 4. wiring
 ok(/serverNow: Date\.now\(\)/.test(server), 'the investments list carries the server clock');
 ok(/r\.serverNow === 'number'\) ckSyncClock/.test(mod), 'every investments answer re-syncs the phone against the server');
-ok(/nextMidnightMs\(now\) - now/.test(mod) && !/nextMidnightMs\(\) - Date\.now\(\)/.test(mod), 'the countdown never reads the phone clock directly');
-ok(/setTimeout\(tick, \(left % 1000 \|\| 1000\) \+ 15\)/.test(mod), 'it ticks on the second boundary');
-ok(/fmtCountdown\(nextMidnightMs\(\) - ckNow\(\), true\)/.test(mod), 'the first figure on a card uses the same rule as the ticks');
-ok(/left > _incLeft \+ 1000/.test(mod) && /api\('\/investments'\)/.test(mod), 'after midnight the list is read again so the cashback shows');
+ok(/const left = Number\(el\.getAttribute\('data-pay-at'\)\) - now/.test(mod) && !/Date\.now\(\)\s*-\s*Number\(el/.test(mod), 'the countdown never reads the phone clock directly');
+ok(/setTimeout\(tick, \(\(isFinite\(soonest\) \? soonest % 1000 : 0\) \|\| 1000\) \+ 15\)/.test(mod), 'it ticks on the second boundary');
+ok(/fmtCountdown\(nextPayoutMs\(inv\) - ckNow\(\), true\)/.test(mod), 'the first figure on a card uses the same rule as the ticks');
+ok(/left <= 0/.test(mod) && /api\('\/investments'\)/.test(mod), 'when a payment falls due the list is read again so the cashback shows');
+// 5. cashback every 24 hours: the countdown runs to this product's next payment
+{
+  const c = load(180), now = Date.UTC(2026, 9, 18, 12, 0, 0), first = now - 5 * 3600000;
+  const iso = new Date(first).toISOString();
+  ok(c.nextPayoutMs({ payoutFirstAt: iso, payoutsMade: 0 }, now) === first, 'a product whose first payment is still ahead counts to it');
+  ok(c.nextPayoutMs({ payoutFirstAt: iso, payoutsMade: 1 }, now) === first + DAY, 'one payment made: the next is 24 hours after the first');
+  ok(c.nextPayoutMs({ payoutFirstAt: iso, payoutsMade: 3 }, now) === first + 3 * DAY, 'three payments made: first + 3 days');
+  ok(c.nextPayoutMs({ payoutsMade: 2 }, now) === c.nextMidnightMs(now), 'a product bought before this rule still counts to midnight');
+  const bought = now; ok(c.fmtCountdown(bought + DAY - now, true) === '23:59:59', 'a product bought this second reads 23:59:59');
+}
 console.log('PASS: settlement countdown (' + n + ' checks)');

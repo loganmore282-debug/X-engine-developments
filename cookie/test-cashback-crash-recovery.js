@@ -83,7 +83,7 @@ function harness() {
     nowStr: () => ({ date: '2026-10-06', time: '13:00' }), newStatementId: () => 'statement',
     tzOffMs: () => 10800000, _settingsCache: null, DEFAULT_SETTINGS: {}, CASHBACK_PARALLEL: 8, setImmediate, withLock: async (_key, work) => work(), _creditingPayouts: new Set(), _sweepingCashback: false, _lastFullCashbackSweep: 0,
   });
-  vm.runInContext([fn('eatNextMidnight'), fn('payoutDueAtMs'), fn('payoutsDueCount'), fn('settleInvestmentIfDue'), fn('_settleDueInvestmentNow'), fn('settleMany'), fn('reconcileCashback')].join('\n'), c);
+  vm.runInContext([fn('eatNextMidnight'), fn('payoutFirstMs'), fn('payoutDueAtMs'), fn('payoutsDueCount'), fn('settleInvestmentIfDue'), fn('_settleDueInvestmentNow'), fn('settleMany'), fn('reconcileCashback')].join('\n'), c);
   return { state, c };
 }
 

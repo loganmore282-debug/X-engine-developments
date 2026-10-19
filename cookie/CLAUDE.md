@@ -49,8 +49,12 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
 - **Referral reward = the referred member's FIRST PURCHASE** (not the first deposit). Level 1 / 2 / 3 are paid once, as a percentage of that
   product's price, at the moment of purchase (`/invest/create` -> `creditReferralCommission`; the 30 s reconciler retries a failed one). A deposit
   pays nothing. A product the admin activates (`granted`) is not a purchase. Test: `test-first-purchase-reward.js` (runs the real route).
-- **Settlement countdown** (Income cards) counts to the next 00:00 of the member's region, on the SERVER clock (`serverNow` in `/investments`,
-  `ckNow()` in the app), ticking on the second. Test: `test-settlement-countdown.js`.
+- **Cashback every 24 hours** (owner changed it from midnight): a product pays its first cashback 24 hours after the purchase and then every 24 hours
+  (`payoutFirstAt` on the investment; same number of payments, same total). A member's FIRST purchase pays its first cashback AT ONCE (at the moment
+  of purchase, `/invest/create` settles it before answering), the rest follow every 24 hours. A product the admin gives (`granted`) pays 24 hours after
+  it was given. Investments without `payoutFirstAt` (bought before this rule) keep the old midnight schedule. The Income card's "Settlement countdown"
+  counts to that product's own next payment (`nextPayoutMs`) on the SERVER clock (`serverNow`, `ckNow()`). Tests: `test-settlement-engine.js`,
+  `test-settlement-countdown.js`, `test-first-purchase-reward.js`.
 - **Login boxes keep this device's last member's number and password** after sign-out and after an ended session (`cookie_saved_login`, light
   encoding in localStorage). Nothing signs in by itself; a wrong password forgets the saved password; typing another number clears it.
   Test: `test-saved-login.js`.

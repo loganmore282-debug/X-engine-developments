@@ -27,7 +27,7 @@ let n = 0; const eq2 = (a, b, m) => { n++; assert.equal(a, b, m); }; const ok = 
   ok(sheet.querySelector('img.ck-ann-img') && sheet.querySelector('img').getAttribute('src') === 'data:image/png;base64,AAAA', 'the banner is the admin upload');
   ok(/^Welcome to the .+ App$/.test(sheet.querySelector('.ck-ann-h').textContent), 'the title welcomes to the app by its name');
   const rowsTxt = [...sheet.querySelectorAll('.ck-ann-t div')].map(x => x.textContent);
-  eq2(rowsTxt.join('|'), 'Daily income, daily withdrawal|Earnings at 00:00 AM|Withdrawal hours: 07:00\u201317:00|Minimum withdrawal: UGX 20,000|Taxes and fees: 15%', 'the lines come from the settings (hours, minimum, one fee)');
+  eq2(rowsTxt.join('|'), 'Daily income, daily withdrawal|Earnings every 24 hours|Withdrawal hours: 07:00\u201317:00|Minimum withdrawal: UGX 20,000|Taxes and fees: 15%', 'the lines come from the settings (hours, minimum, one fee)');
   ok(/never proactively ask for your password/.test(sheet.querySelector('.ck-ann-p').textContent), 'the closing sentence is there');
   eq2(sheet.querySelector('.ck-ann-join').textContent.trim(), 'Join Group', 'the button says Join Group');
   eq2(sheet.querySelector('.ck-ann-join').getAttribute('href'), 'https://t.me/grp', 'Join Group = Telegram group');

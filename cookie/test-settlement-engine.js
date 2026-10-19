@@ -78,7 +78,7 @@ function setup(rows){
   const c=vm.createContext({ db, Date:FakeDate, console:{log(){},warn(){},error(){}}, tzOffMs:()=>10800000, 
     _creditingPayouts:new Set(), nowStr:()=>({date:'d',time:'t'}), newStatementId:()=>'s-'+ ++serial,
     FieldValue:{ increment:n=>({op:'inc',n}), arrayUnion:(...items)=>({op:'union',items}), delete:()=>({op:'delete'}), serverTimestamp:()=>new FakeDate() } });
-  vm.runInContext('const _lockTails=new Map();\n'+['withLock','tsMillis','eatNextMidnight','payoutDueAtMs','payoutsDueCount','settleInvestmentIfDue','_settleDueInvestmentNow'].map(fn).join('\n'),c);
+  vm.runInContext('const _lockTails=new Map();\n'+['withLock','tsMillis','eatNextMidnight','payoutFirstMs','payoutDueAtMs','payoutsDueCount','settleInvestmentIfDue','_settleDueInvestmentNow'].map(fn).join('\n'),c);
   const settle=async id=>c.settleInvestmentIfDue(await db.collection('investments').doc(id).get());
   return {c,db,settle};
 }
@@ -103,6 +103,26 @@ async function main(){
     assert.equal(h.db.rows.investments.i1.status,'matured');assert.equal(h.db.rows.investments.i1.payoutsMade,8);assert.equal(h.db.rows.investments.i1.paidOut,90000);
     assert.equal(cashRows(h.db).length,8,'one ledger row per payout');
     await h.settle('i1');assert.equal(h.db.rows.users.m.walletBalance,90000,'a matured product never pays again');
+  }
+  {
+    // Every 24 hours from the purchase: bought Wednesday 15:00 -> pays at 15:00 each day (not at midnight), 8 times, exactly the total.
+    const bought=eat('2026-10-14T15:00:00');
+    const h=setup({users:{m:member()},investments:{i1:plan({payoutFirstAt:new FakeDate(bought+DAY)})},transactions:{}});
+    const days=await runDays(h,null,'i1',bought,20);
+    assert.deepEqual(days,[...Array(8)].map((_,i)=>new Date(bought+(i+1)*DAY+10800000).toISOString().slice(0,16).replace('T',' ')),'one payment 24 hours after the purchase and every 24 hours after');
+    assert.equal(h.db.rows.users.m.walletBalance,90000);assert.equal(h.db.rows.investments.i1.status,'matured');assert.equal(cashRows(h.db).length,8);
+  }
+  {
+    // A first purchase: the first cashback is due at once (paid at the moment of purchase), then every 24 hours; still exactly 8 payments and the full total.
+    const bought=eat('2026-10-14T15:00:00');
+    const h=setup({users:{m:member()},investments:{i1:plan({payoutFirstAt:new FakeDate(bought)})},transactions:{}});
+    NOW=bought;await Promise.all([h.settle('i1'),h.settle('i1')]);
+    assert.equal(h.db.rows.investments.i1.payoutsMade,1,'paid at the moment of purchase, once');assert.equal(h.db.rows.users.m.walletBalance,11250);
+    assert.equal(+new Date(h.db.rows.investments.i1.nextPayoutAt),bought+DAY,'the next payment is 24 hours later');
+    NOW=bought+DAY-1;await h.settle('i1');assert.equal(h.db.rows.investments.i1.payoutsMade,1,'one millisecond early pays nothing');
+    NOW=bought+DAY;await h.settle('i1');assert.equal(h.db.rows.investments.i1.payoutsMade,2);
+    NOW=bought+30*DAY;await h.settle('i1');
+    assert.equal(h.db.rows.users.m.walletBalance,90000);assert.equal(h.db.rows.investments.i1.status,'matured');assert.equal(cashRows(h.db).length,8);
   }
   {
     // Five settle calls at the same instant, every hour: still exactly one payment per midnight.

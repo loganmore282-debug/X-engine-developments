@@ -3220,7 +3220,7 @@ function showAnnouncementNow(){
   const hours = s.withdrawWindowEnabled && s.withdrawOpenFrom && s.withdrawOpenTo ? s.withdrawOpenFrom + '\u2013' + s.withdrawOpenTo : '24 hours';
   const rows = [
     'Daily income, daily withdrawal',
-    'Earnings at 00:00 AM',
+    'Earnings every 24 hours',
     'Withdrawal hours: ' + hours,
     'Minimum withdrawal: ' + money(s.minWithdraw),
     'Taxes and fees: ' + (Number(s.withdrawFeePct) || 0) + '%'
@@ -3591,10 +3591,17 @@ async function renderAssets(){
 }
 // One card per asset the member owns. Expiry is the purchase moment plus the
 // asset's own cycle length (the same planStats() figure every progress bar uses).
-// Cashback is credited at midnight, so the settlement countdown always counts down to the next midnight of the member's own clock.
+// Cashback is paid every 24 hours from the purchase (a member's first purchase pays its first one at once), so the settlement countdown runs to
+// this product's next payment: its first payment instant (payoutFirstAt) plus one day for every payment already made. A product bought before
+// that rule has no payoutFirstAt and keeps counting to the next midnight of the member's own clock.
 function nextMidnightMs(now){
   const off = tzOffMs(), t = now == null ? ckNow() : now;
   return Math.floor((t + off) / 86400000) * 86400000 + 86400000 - off;
+}
+function nextPayoutMs(inv, now){
+  const first = inv && inv.payoutFirstAt ? new Date(inv.payoutFirstAt).getTime() : 0;
+  if (!(first > 0)) return nextMidnightMs(now);
+  return first + Math.max(0, Number(inv.payoutsMade) || 0) * 86400000;
 }
 function vOwnedCardHtml(inv){
   const st = planStats(inv);
@@ -3612,30 +3619,34 @@ function vOwnedCardHtml(inv){
       </dl>
       <div class="ck-oc-img${p.image ? ' has-img' : ''}">${img}${invCategory(inv) === 'wage' && !st.matured ? '<i class="ck-oc-wmul"></i>' : ''}<em class="ck-oc-st${st.matured ? ' done' : ''}${invCategory(inv) === 'wage' ? ' ck-oc-wst' : ''}">${st.matured ? 'Completed' : 'Running'}${invCategory(inv) === 'wage' ? '<br>Free' : ''}</em><span class="ck-oc-name">${esc(name)}</span></div>
     </div>
-    ${st.matured ? '' : `<div class="ck-oc-cd"><span>Settlement countdown</span><b data-pay-mid="1">${fmtCountdown(nextMidnightMs() - ckNow(), true)}</b></div>`}
+    ${st.matured ? '' : `<div class="ck-oc-cd"><span>Settlement countdown</span><b data-pay-at="${nextPayoutMs(inv)}">${fmtCountdown(nextPayoutMs(inv) - ckNow(), true)}</b></div>`}
   </article>`;
 }
 // The settlement countdown on each running card ticks every second; when one reaches zero the list is read again (the payout has just landed).
-var _incTimer = null, _incLeft = 0;
+var _incTimer = null;
 function startIncomeCountdowns(){
   if (_incTimer) { clearTimeout(_incTimer); _incTimer = null; }
-  _incLeft = 0;
   const tick = () => {
     _incTimer = null;
-    const nodes = document.querySelectorAll('[data-pay-mid]');
+    const nodes = document.querySelectorAll('[data-pay-at]');
     if (!nodes.length || STATE.page !== 'assets') return;
-    const now = ckNow(), left = nextMidnightMs(now) - now;
-    nodes.forEach(el => { el.textContent = fmtCountdown(left, true); });
-    // Midnight just passed (the clock jumped back to a full day): the day's cashback has landed, so read the list again.
-    if (_incLeft && left > _incLeft + 1000) {
+    const now = ckNow();
+    let due = false, soonest = Infinity;
+    nodes.forEach(el => {
+      const left = Number(el.getAttribute('data-pay-at')) - now;
+      el.textContent = fmtCountdown(left, true);
+      if (left <= 0) { if (!el.dataset.fired) { el.dataset.fired = '1'; due = true; } }
+      else if (left < soonest) soonest = left;
+    });
+    // A payment just fell due: it has landed (or lands in a moment), so the list is read again to show it.
+    if (due) {
       setTimeout(async () => {
         const r = await api('/investments');
         if (r.status === 'success' && Array.isArray(r.investments)) { STATE.investments = r.investments; if (STATE.page === 'assets') paintAssets(); }
-      }, 4000);
+      }, 2500);
     }
-    _incLeft = left;
     // The next tick lands just after the next whole second of the server's clock, so the figure changes exactly when the second does.
-    _incTimer = setTimeout(tick, (left % 1000 || 1000) + 15);
+    _incTimer = setTimeout(tick, ((isFinite(soonest) ? soonest % 1000 : 0) || 1000) + 15);
   };
   tick();
 }
