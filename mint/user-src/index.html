@@ -51,7 +51,7 @@
      status icons for a light theme colour, so the clock stays readable.
      NOTE: manifest.json's theme_color must match, and an ALREADY-INSTALLED
      app keeps the colour it was installed with until it is reinstalled. -->
-<meta name="theme-color" content="#f2f4fd">
+<meta name="theme-color" content="#f8f4e9">
 <link rel="manifest" href="/manifest.json">
 <!-- The app icon and the share card are both admin-uploadable, which is why
      these point at mint-server rather than at the files sitting next to
@@ -112,7 +112,7 @@
    accent. */
 :root{
   /* ── Re-themed to Mint's own "Premium Industrial Energy" identity ──
-     Owner-specified, not invented: Corporate Red #1739b8 (primary --
+     Owner-specified, not invented: Corporate Red #02964c (primary --
      headers, buttons, active nav, cards), Clean White #FFFFFF (dashboard
      background), Golden Orange #F5A000-#FFB000 (secondary accent, off the
      logo and refinery/sunset lighting), Charcoal #25262B (auth glass
@@ -124,17 +124,17 @@
      --gold comment): every one of the hundreds of rules in this file already
      reads these tokens, so nothing downstream needed touching to pick up
      the new palette. */
-  --snow-canvas:#f2f4fd;
+  --snow-canvas:#f8f4e9;
   --snow-surface:#ffffff;
   --snow-ink:#25262b;
   --snow-muted:#6b6d76;
-  --snow-wine:#1739b8;
-  --snow-wine-deep:#0e2a8e;
+  --snow-wine:#02964c;
+  --snow-wine-deep:#056b39;
   --snow-green:#1a7a3e;
-  --snow-border:#d4dcf7;
-  --snow-wave-on-wine:#d0d8f6;
+  --snow-border:#d3e8dc;
+  --snow-wave-on-wine:#d3e8dc;
   --snow-green-deep:#146030;
-  --snow-wine-soft:#dde3fa;
+  --snow-wine-soft:#dcebe1;
   --snow-green-soft:#dff2e2;
   --snow-neutral-soft:#f5f5f6;
   --snow-radius-card:22px;
@@ -150,21 +150,21 @@
      corporate red, not Mint's old red-to-orange blend. Still a CSS custom
      property assignable straight into `background:`, so every one of the
      ~40 rules that read --mint-grad needed no change at all. */
-  --mint-grad:linear-gradient(135deg,#2448cc 0%,#1739b8 45%,#0e2a8e 100%);
+  --mint-grad:linear-gradient(135deg,#0ba653 0%,#02964c 45%,#056b39 100%);
   /* .auth-hero's fallback ONLY -- shown behind the Login/Sign Up glass
      panel until the owner uploads the real sunset-refinery photo to the
      'authhero' image slot (already-built admin upload, see
      /admin/mint-image/set + MINT_IMAGE_SLOTS in server.js). Charcoal to
      deep red to gold, echoing that same warm dusk-over-a-refinery mood as a
      photo-free placeholder rather than a random gradient. */
-  --mint-hero:linear-gradient(160deg,#0a1f5c 0%,#0b2278 55%,#4a70e6 100%);
+  --mint-hero:linear-gradient(160deg,#03442a 0%,#04582f 55%,#2fbf71 100%);
   --mint-gold:#ffb000;
-  --mint-neg:#0b2278;
+  --mint-neg:#04582f;
   /* Not blue -- the owner was explicit this should not read as "the typical
      blue/green fintech look." Deep red carries the same "this is a link"
      legibility a blue would, without introducing a fifth brand color. */
-  --mint-link:#0e2a8e;
-  --mint-shelf:#0e2a8e;
+  --mint-link:#056b39;
+  --mint-shelf:#056b39;
   /* ── Surfaces ──
      Owner, holding a mockup next to the live app: "the mock up has very
      clean CSS, well ultra definition and quality cards and colour ... clean
@@ -347,7 +347,7 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 
 /* ── App chrome not in the mockups: auth, sheets, forms, toast, loading ── */
 .wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
-#loadingScreen{position:fixed;inset:0;overflow:hidden;background:linear-gradient(145deg,#0b2b58 0%,#1739b8 52%,#103863 100%);display:flex;align-items:center;justify-content:center;z-index:500;}
+#loadingScreen{position:fixed;inset:0;overflow:hidden;background:linear-gradient(145deg,#044d2a 0%,#02964c 52%,#0a6b3b 100%);display:flex;align-items:center;justify-content:center;z-index:500;}
 /* The admin's picture sits on its own layer so its opacity and blur (Admin > Banners > Loading screen background) never touch the word. The layer is pushed past the edges by twice the blur so a blurred picture has no pale rim. */
 #loadingScreen .ld-bg{position:absolute;inset:calc(var(--ld-blur,0px) * -2);background:linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url('/k7x2/public/loader-image') center/cover no-repeat;opacity:var(--ld-op,1);filter:blur(var(--ld-blur,0px));transform:translateZ(0);pointer-events:none;}
 #loadingScreen .ld-txt{position:relative;z-index:1;display:inline-block;color:#fff;font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:24px;font-weight:700;letter-spacing:.02em;text-shadow:0 2px 10px rgba(0,0,0,.45);animation:ldBounce .9s cubic-bezier(.28,.84,.42,1) infinite;}
@@ -416,7 +416,7 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    Support tiles. Real SVG (see ICONS.cardPlus etc.) replacing the old
    Mint raster PNGs, which is why this now paints its own background
    instead of leaving it to the image. */
-.home-action .badge{width:56px;height:56px;border-radius:50%;background:var(--mint-grad);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 16px -10px rgba(23,57,184,.55);}
+.home-action .badge{width:56px;height:56px;border-radius:50%;background:var(--mint-grad);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 16px -10px rgba(2,150,76,.55);}
 .home-action .badge svg{width:22px;height:22px;}
 .home-action .badge img{width:48px;height:48px;object-fit:contain;filter:drop-shadow(0 6px 8px rgba(30,10,5,.28));}
 .home-action .lbl{font-size:12px;font-weight:600;}
@@ -460,7 +460,7 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .mar-values span{display:block;font-size:9.5px;color:var(--snow-muted);margin-bottom:3px;}
 .mar-values b{display:block;font-size:11.5px;color:var(--snow-ink);font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .mar-progress{height:9px;background:var(--snow-border);margin-top:16px;overflow:hidden;border-radius:var(--r-pill);box-shadow:inset 0 1px 2px rgba(0,0,0,.10);}
-.mar-progress i{display:block;height:100%;background:linear-gradient(90deg,#1739b8 0%,#ff8a3d 45%,#ffd166 70%,#1739b8 100%);background-size:220% 100%;border-radius:inherit;animation:fuelFill .9s ease-out both,fuelFlow 1.8s linear .9s infinite;}
+.mar-progress i{display:block;height:100%;background:linear-gradient(90deg,#02964c 0%,#ff8a3d 45%,#ffd166 70%,#02964c 100%);background-size:220% 100%;border-radius:inherit;animation:fuelFill .9s ease-out both,fuelFlow 1.8s linear .9s infinite;}
 .my-asset-row.done .mar-progress i{background:var(--snow-green);}
 @keyframes fuelFill{from{transform:scaleX(0);transform-origin:left center;}to{transform:scaleX(1);transform-origin:left center;}}
 @keyframes fuelFlow{from{background-position:0 0;}to{background-position:220% 0;}}
@@ -674,11 +674,11 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    the same redeem flow but presents it as a clean code/voucher utility. */
 /* Gift-code win card (owner's screenshot): blurred page behind, white card with the
    gift mark, Congratulations!, You won, the amount, the new balance and COLLECT. */
-.v-win-bg{position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;padding:7.6px 18px 0;background:rgba(23,57,184,.5);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);opacity:0;transition:opacity .25s ease;}
+.v-win-bg{position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;padding:7.6px 18px 0;background:rgba(2,150,76,.5);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);opacity:0;transition:opacity .25s ease;}
 .v-win-bg.show{opacity:1;}
-.v-win-card{width:100%;max-width:323px;box-sizing:border-box;background:#fcfcfe;border-radius:24px;padding:34px 24px 34px;text-align:center;box-shadow:0 18px 44px -14px rgba(10,22,70,.5);transform:scale(.94);transition:transform .3s cubic-bezier(.22,1,.36,1);}
+.v-win-card{width:100%;max-width:323px;box-sizing:border-box;background:#fcfcfe;border-radius:24px;padding:34px 24px 34px;text-align:center;box-shadow:0 18px 44px -14px rgba(4,60,34,.5);transform:scale(.94);transition:transform .3s cubic-bezier(.22,1,.36,1);}
 .v-win-bg.show .v-win-card{transform:scale(1);}
-.v-win-mark{width:60px;height:60px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:var(--v-grad);color:#fff;box-shadow:0 10px 22px -8px rgba(23,57,184,.65);}
+.v-win-mark{width:60px;height:60px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:var(--v-grad);color:#fff;box-shadow:0 10px 22px -8px rgba(2,150,76,.65);}
 .v-win-mark svg{width:25px;height:25px;}
 .v-win-card h2{margin:18.6px 0 0;font-size:22px;font-weight:800;letter-spacing:.066em;color:#111;}
 .v-win-sub{margin:14px 0 0;font-size:11px;font-style:italic;color:#9aa0b4;}
@@ -967,10 +967,10 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    existing "authhero" slot) with a centered brand mark and short welcome
    message above the existing glass fields. */
 .auth-screen-v2{position:relative;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;
-  background:linear-gradient(145deg,#0b2b58 0%,#1739b8 52%,#103863 100%);}
+  background:linear-gradient(145deg,#044d2a 0%,#02964c 52%,#0a6b3b 100%);}
 @supports (min-height:100dvh){.auth-screen-v2{min-height:100dvh;}}
 .auth-screen-v2::after{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;
-  background:linear-gradient(to bottom, rgba(9,35,78,.08) 0%, rgba(9,35,78,.14) 55%, rgba(9,35,78,.24) 100%);}
+  background:linear-gradient(to bottom, rgba(4,77,42,.08) 0%, rgba(4,77,42,.14) 55%, rgba(4,77,42,.24) 100%);}
 /* Owner: "my tabs are boxed and these are round ... login is raised up" --
    fields/buttons were a full 999px pill; the mockup's are a boxed
    (rounded-RECTANGLE, --r-ctl) shape, same radius family every other
@@ -988,18 +988,18 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .auth-card{width:100%;box-sizing:border-box;padding:28px 30px 25px;border:1px solid rgba(255,255,255,.58);
   border-radius:28px;background:rgba(255,255,255,var(--auth-card-opacity,.78));
   -webkit-backdrop-filter:blur(var(--auth-card-blur,18px)) saturate(1.12);backdrop-filter:blur(var(--auth-card-blur,18px)) saturate(1.12);
-  box-shadow:0 18px 46px rgba(4,20,49,.22);color:#18243a;}
+  box-shadow:0 18px 46px rgba(3,45,25,.22);color:#18243a;}
 .auth-card h1{margin:0 0 24px;color:#111827;text-align:left;font-size:26px;line-height:1.2;font-weight:700;letter-spacing:-.02em;}
 .auth-card .auth-intro{margin:0 auto 18px;}
 .auth-card .auth-intro h1{text-align:left;}
 .auth-card .auth-subtitle{margin:-16px 0 22px;color:#64748b;font-size:14px;}
 .auth-card .auth-signup-link{display:block;margin:18px 0 0;text-align:center;color:#5d6b7f;font-size:14px;}
-.auth-card .auth-signup-link a{color:#1232a1;font-weight:700;text-decoration:none;}
+.auth-card .auth-signup-link a{color:#047a3e;font-weight:700;text-decoration:none;}
 .auth-intro{text-align:center;color:#fff;margin:0 auto 24px;max-width:320px;}
 .auth-brand-mark{width:82px;height:82px;margin:0 auto 13px;display:flex;align-items:center;justify-content:center;}
 .auth-brand-logo{display:block;max-width:122px;max-height:78px;width:auto;height:auto;object-fit:contain;filter:drop-shadow(0 4px 12px rgba(0,0,0,.28));}
 .auth-brand-fallback{width:66px;height:66px;border-radius:20px;display:flex;align-items:center;justify-content:center;
-  background:linear-gradient(145deg,#3a5fd9,#1232a1);color:#fff;font-size:31px;font-weight:800;
+  background:linear-gradient(145deg,#1fae62,#047a3e);color:#fff;font-size:31px;font-weight:800;
   box-shadow:0 7px 22px rgba(0,0,0,.28);}
 .auth-intro h1{margin:0 0 6px;color:#fff;font-size:25px;line-height:1.2;font-weight:800;letter-spacing:-.02em;}
 .auth-intro p{margin:0;color:rgba(255,255,255,.8);font-size:13.5px;line-height:1.5;font-weight:500;}
@@ -1134,7 +1134,7 @@ body.sheet-open .sheet-bg{bottom:0;}
 .chest-modal p{margin:0 0 18px;font-size:13px;color:rgba(255,255,255,.65);}
 /* Announcement: one tall portrait picture (admin upload) from the top of the
    screen down to the buttons, Join Channel + Close at the bottom. */
-.ann-bg{position:fixed;inset:0;background:rgba(190,201,240,.62);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);z-index:320;display:none;align-items:center;justify-content:center;padding:20px 15px;}
+.ann-bg{position:fixed;inset:0;background:rgba(190,230,208,.62);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);z-index:320;display:none;align-items:center;justify-content:center;padding:20px 15px;}
 .ann-bg.show{display:flex;}
 .ann-sheet{width:auto;max-width:min(440px,100%);display:flex;flex-direction:column;gap:12px;transform:scale(.96);opacity:0;transition:transform .45s cubic-bezier(.22,1,.36,1),opacity .45s cubic-bezier(.22,1,.36,1);}
 .ann-bg.show .ann-sheet{transform:scale(1);opacity:1;}
@@ -1273,7 +1273,7 @@ html:has(.sheet-bg.show),body:has(.sheet-bg.show){overflow:hidden;overscroll-beh
 @media (prefers-reduced-motion:reduce){.dep-flow-track i{animation:none;opacity:.55;}.dep-flow-track i:nth-child(1){left:0;}.dep-flow-track i:nth-child(2){left:33%;}.dep-flow-track i:nth-child(3){left:66%;}.dep-flow-track i:nth-child(4){left:calc(100% - 12px);}}
 
 .list-loading{padding:34px 4px;display:flex;justify-content:center;align-items:center;}
-.nav-loading{display:inline-block;color:var(--v-blue,#1739b8);font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:15px;font-weight:700;letter-spacing:.03em;animation:navBounce .9s cubic-bezier(.28,.84,.42,1) infinite;}
+.nav-loading{display:inline-block;color:var(--v-blue,#02964c);font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:15px;font-weight:700;letter-spacing:.03em;animation:navBounce .9s cubic-bezier(.28,.84,.42,1) infinite;}
 @keyframes navBounce{0%,100%{transform:translateY(0);animation-timing-function:cubic-bezier(.55,.06,.68,.19);}50%{transform:translateY(-8px);animation-timing-function:cubic-bezier(.22,.61,.36,1);}}
 @media (prefers-reduced-motion:reduce){.nav-loading{animation:none;}}
 @media(prefers-reduced-motion:reduce){}
