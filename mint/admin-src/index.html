@@ -3005,12 +3005,7 @@ async function renderBanners(){
         <div><label>Opacity (0&ndash;100%)</label><input id="authHeroOp" type="number" min="0" max="100" value="${esc(v('authHeroOpacity',100))}"></div>
         <div><label>Blur (0&ndash;40 px)</label><input id="authHeroBlur" type="number" min="0" max="40" value="${esc(v('authHeroBlur',0))}"></div>
       </div>
-      <p class="muted" style="margin:14px 0 6px">Frosted authentication card</p>
-      <div class="row">
-        <div><label>Card opacity (0&ndash;100%)</label><input id="authCardOp" type="number" min="0" max="100" value="${esc(v('authCardOpacity',78))}"></div>
-        <div><label>Card blur (0&ndash;40 px)</label><input id="authCardBlur" type="number" min="0" max="40" value="${esc(v('authCardBlur',18))}"></div>
-      </div>
-      <button class="btn block" id="saveAuthBg" style="margin-top:14px">Save background and card appearance</button>
+      <button class="btn block" id="saveAuthBg" style="margin-top:14px">Save banner appearance</button>
     </div>
 
     <h2 class="sec">App icon</h2>
@@ -3147,9 +3142,8 @@ function wireBannerHandlers(){
   });
   const saveAuthBg = $('saveAuthBg');
   if (saveAuthBg) saveAuthBg.addEventListener('click', async()=>{
-    if (['authHeroOp','authHeroBlur','authCardOp','authCardBlur'].some(id => $(id).value.trim()==='')) return toast('Fill in every Opacity and Blur box','err');
-    const nums = { authHeroOpacity:+$('authHeroOp').value, authHeroBlur:+$('authHeroBlur').value,
-      authCardOpacity:+$('authCardOp').value, authCardBlur:+$('authCardBlur').value };
+    if (['authHeroOp','authHeroBlur'].some(id => $(id).value.trim()==='')) return toast('Fill in every Opacity and Blur box','err');
+    const nums = { authHeroOpacity:+$('authHeroOp').value, authHeroBlur:+$('authHeroBlur').value };
     for (const [k,val] of Object.entries(nums)) {
       const max = k.endsWith('Blur') ? 40 : 100;
       if (!Number.isFinite(val) || val < 0 || val > max)

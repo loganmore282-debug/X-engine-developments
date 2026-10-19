@@ -2022,12 +2022,6 @@ function applyAuthBackgrounds(){
       (Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0) + 'px');
   }
   set('hero', STATE.authHeroImage, s.authHeroOpacity, s.authHeroBlur);
-  const cardOpacity = Number(s.authCardOpacity);
-  const cardBlur = Number(s.authCardBlur);
-  root.style.setProperty('--auth-card-opacity',
-    String(Number.isFinite(cardOpacity) ? Math.min(100, Math.max(0, cardOpacity)) / 100 : .78));
-  root.style.setProperty('--auth-card-blur',
-    (Number.isFinite(cardBlur) ? Math.min(40, Math.max(0, cardBlur)) : 18) + 'px');
   // The bottom-of-the-banner fade (.auth-hero::after) is switched on only
   // when there is a banner to fade. Owner: "there should be like whites or
   // color bleeding into the image of banner uploaded from admin panel." With

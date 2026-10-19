@@ -18,8 +18,8 @@ ok(/body\.sheet-open \.sheet-bg\{bottom:var\(--nav-h\);\}/.test(html), 'secondar
 ok(/'profilelogo', 'loaderbg'\]/.test(server) && /app\.get\('\/public\/loader-image'/.test(server), 'server stores and serves the loader picture');
 ok(/id="loaderBgFile"/.test(admin) && /wireMintImageSlot\('loaderbg'/.test(admin), 'admin can upload and remove it');
 const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
-ok(!/type="password"/.test(html + mod), 'no masked password field anywhere: what a member types stays visible');
-ok(!/toggleWitPin|toggleStyle|aria-label="Show password"/.test(html + mod), 'no show/hide eye');
+ok(/id="loginPassword" type="password"/.test(html) && /toggleAuthEye/.test(html) && /window\.toggleAuthEye/.test(mod), 'password boxes are masked and every one has the eye from the owner\'s screenshots');
+ok(!/toggleWitPin|toggleStyle/.test(html + mod), 'no show/hide eye on the withdraw PIN (the Login and Sign Up eyes are the owner\'s screenshots)');
 ok(!/walOtpGroup|confirmWalletOtp|bankOtpRequired/.test(mod), 'saving a wallet has no OTP step');
 ok(!/id="sOtpVerification"|id="sBankOtp"|id="sAnnEnabled"|id="sReturnMult"/.test(admin), 'admin no longer shows the OTP, announcement-switch and return-multiple settings');
 ok(/setTimeout\(startArtwork, 8000\)/.test(mod) && !/_artPromise = Promise\.all\(\[ api\('\/public\/announcement-image'\), api\('\/public\/mint-images'\) \]\)\n/.test(mod.split('async function boot()')[1].split('async function')[0]), 'pictures are fetched after the loading screen, not beside the account request');
