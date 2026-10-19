@@ -2647,6 +2647,7 @@ var MGI = {
   tKey: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5.5" fill="#f9c824"/><circle cx="9.4" cy="12" r="3" fill="none" stroke="#fff" stroke-width="2"/><path d="M12.4 12h7M16.6 12v2.6M19.4 12v2" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
   door: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="5.5" fill="#f6c22a"/><path d="M7.4 6.6h5.2v10.8H7.4z" fill="#fff"/><path d="M12.6 12h5.4M15.8 9.6 18.2 12l-2.4 2.4" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   cardMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6" fill="#3a9f62"/><rect x="5" y="6.8" width="14" height="10.4" rx="2" fill="#fff"/><rect x="5" y="9.2" width="14" height="2.2" fill="#3a7a54"/><rect x="6.8" y="13.4" width="4.8" height="1.6" rx=".8" fill="#f3b92f"/></svg>',
+  tickMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="5.5" fill="#0c8a4a"/><path d="M6.4 12.6l3.9 3.9 7.4-8" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   copyMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="#0c8a4a"/><rect x="8" y="6.6" width="8" height="10.8" rx="1.6" fill="#ffc72c"/><rect x="10" y="5.6" width="4" height="2.4" rx=".8" fill="#fff"/></svg>',
   plane: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 3 10.4l6.4 2.4L12 20l2.6-5.4L21 3z"/><path d="M9.4 12.8 21 3"/></svg>',
   whatsapp: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.4 20.6l1.3-4.4A8.6 8.6 0 1 1 8 19.5z"/><path d="M9 8.6c0 3.2 2.6 5.8 5.8 5.8l1-1.4-2-1-.8.8c-.8-.4-1.6-1.2-2-2l.8-.8-1-2z" fill="#fff" stroke="none"/></svg>',
@@ -3523,7 +3524,7 @@ async function refreshCatalogNow(){
 async function renderAssets(){
   const hadCache = Array.isArray(STATE.investments);
   if (hadCache) paintAssets();
-  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + NAV_LOADER + '</div>';
+  else paintAssets(true);   // the Total Earnings card at once, "Loading..." where the list will be
   const [pr, ir, ar] = await Promise.all([api('/public/products'), api('/investments'), api('/account')]);
   if (pr.status === 'success' && Array.isArray(pr.products)) STATE.products = pr.products;
   if (ir.status === 'success' && Array.isArray(ir.investments)) STATE.investments = ir.investments;
@@ -3566,7 +3567,7 @@ function statementStampMs(ms){
   const p = n => String(n).padStart(2, '0');
   return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
-function paintAssets(){
+function paintAssets(loading){
   applyProductImageOpacity();
   const a = STATE.account || {};
   // Running products first, newest first inside each group; the id is the last tie-break so the order never shuffles between refreshes.
@@ -3577,7 +3578,7 @@ function paintAssets(){
   const html = `
 <div class="v-page mg-orders-page">
   <div class="mg-total"><span>Total Earnings</span><b id="incomeTotal">${esc(vMoney2(a.totalEarned))}</b></div>
-  <div class="mg-orders" id="ownedAssets">${owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty mg-none">No Orders</div>'}</div>
+  <div class="mg-orders" id="ownedAssets">${loading ? '<div class="v-empty mg-none">' + NAV_LOADER + '</div>' : owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty mg-none">No Orders</div>'}</div>
 </div>`;
   $('pageHost').innerHTML = html;
 }
@@ -3856,9 +3857,8 @@ window.switchTeamLevel = async function(level){
 };
 // The "Loading . . ." word, centred, while a list is in flight.
 function teamLoadingHtml(){ return '<div class="list-loading">' + NAV_LOADER + '</div>'; }
-// The small "Loading..." word shown inside a page while its data arrives (same word and
-// font as the start-up loader, bouncing a little).
-var NAV_LOADER = '<span class="nav-loading">Loading...</span>';
+// The small "Loading..." word shown inside a page while its data arrives: plain grey text, standing still, as on the owner's screens.
+var NAV_LOADER = '<span class="mg-loadtxt">Loading...</span>';
 function maskPhone(phone){
   // "706****1455": the first three and last four digits of the local number
   // (country code and leading zero dropped), enough to recognise your own
@@ -3909,7 +3909,7 @@ function renderTeamMembers(level){
 async function renderNetwork(){
   const hadCache = !!STATE.teamStats;
   if (hadCache) paintNetwork();
-  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + NAV_LOADER + '</div>';
+  else paintNetwork(true);   // the page at once with "..." in the figures and "Loading..." in the list
   const r = await api('/team/stats');
   if (r.status === 'success') STATE.teamStats = r;
   else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:0,l2:0,l3:0}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0, levelCommission:{l1:0,l2:0,l3:0} };
@@ -3917,8 +3917,8 @@ async function renderNetwork(){
   paintNetwork();
 }
 function mgNum(v){ const n = Number(v) || 0; return numGroup(n, Math.round(n * 100) % 100 !== 0); }
-function paintNetwork(){
-  const t = STATE.teamStats || { referralCode:'', commRates:{}, team:{}, totalTeam:0, teamDeposits:0, levelCommission:{}, levelPurchase:{} };
+function paintNetwork(loading){
+  const t = (loading ? null : STATE.teamStats) || { referralCode:'', commRates:{}, team:{}, totalTeam:0, teamDeposits:0, levelCommission:{}, levelPurchase:{} };
   const rates = t.commRates || {}, team = t.team || {}, lc = t.levelCommission || {}, lp = t.levelPurchase || {};
   const level = _activeTeamLevel || 1;
   _activeTeamLevel = level;
@@ -3926,9 +3926,9 @@ function paintNetwork(){
     <button type="button" class="mg-lv${level === n ? ' on' : ''}" data-level="${n}" onclick="switchTeamLevel(${n})">
       <span class="mg-lv-h"><em>LV:${n}</em><b>${rates['l' + n] != null ? rates['l' + n] : 0}%</b></span>
       <span class="mg-lv-b">
-        <span class="c1"><b>${esc(mgNum(lc['l' + n]))}</b><small>Commission</small></span>
-        <span class="c2"><b>${esc(mgNum(lp['l' + n]))}</b><small>Purchase</small></span>
-        <span class="c3"><b>${Number(team['l' + n]) || 0}</b><small>Members</small></span>
+        <span class="c1"><b>${loading ? '...' : esc(mgNum(lc['l' + n]))}</b><small>Commission</small></span>
+        <span class="c2"><b>${loading ? '...' : esc(mgNum(lp['l' + n]))}</b><small>Purchase</small></span>
+        <span class="c3"><b>${loading ? '...' : Number(team['l' + n]) || 0}</b><small>Members</small></span>
       </span>
     </button>`).join('');
   const html = `
@@ -3943,10 +3943,10 @@ function paintNetwork(){
   <div class="mg-h2"><h2>Commission Rate</h2><span>${esc(cur())}</span></div>
   <div class="mg-lvs">${cards}</div>
   <div class="mg-h3"><h3 id="mgLvTitle">Level ${level}</h3><span><b id="mgLvCount">${Number(team['l' + level]) || 0}</b> Members</span></div>
-  <div id="teamMembersBox"></div>
+  <div id="teamMembersBox">${loading ? '<div class="mg-nomem">' + NAV_LOADER + '</div>' : ''}</div>
 </div>`;
   $('pageHost').innerHTML = html;
-  switchTeamLevel(level); // shows a held list at once and refreshes it if it is old
+  if (!loading) switchTeamLevel(level); // shows a held list at once and refreshes it if it is old
 }
 
 // ── PROMOTION (own tab): banner, share link, share buttons, invitation reward ──
@@ -4131,7 +4131,7 @@ function flashCopiedOne(btn){
   // and leave the control permanently stuck on it.
   if (btn._copyRevert) clearTimeout(btn._copyRevert);
   else btn._copyBefore = btn.innerHTML;
-  btn.innerHTML = isIconBtn ? COPY_TICK : 'Copied';
+  btn.innerHTML = isIconBtn ? COPY_TICK : btn.classList.contains('mg-pcopy') ? '<i>' + MGI.tickMini + '</i><b>Copied</b>' : 'Copied';
   btn.classList.add('copied');
   btn._copyRevert = setTimeout(() => {
     btn.innerHTML = btn._copyBefore;
@@ -4574,10 +4574,10 @@ function renderStatement(){
   if (!body) return;
   const all = (STATE.transactions || []).filter(t => statementCategoryMatch(_statementCat, t));
   if (!all.length) { body.innerHTML = '<div class="v-empty">No Records</div>'; return; }
-  const rows = all.slice(0, _statementShown);
+  const rows = all;   // every held record, no Load More button
   // The Load More button always sits under the list (as on the owner's Balance Record, even with two rows): it shows the next ten, or, when
   // everything held is already on screen, asks the server again for anything newer or older.
-  const more = true;
+  const more = false;
   body.innerHTML = rows.map(t => {
     const title = statementDescription(t);
     const chip = statementChip(t);
@@ -4590,7 +4590,7 @@ function renderStatement(){
         <div class="v-rmid"><b>${esc(title)}</b><small>${esc(statementDate(t))}</small>${line}</div>
         <span class="v-ramt ${amt < 0 ? 'out' : 'in'}">${esc(statementAmountText(t))}</span>
       </article>`;
-  }).join('') + (more ? '<div class="v-more"><button type="button" onclick="statementLoadMore()">Load More</button></div>' : '');
+  }).join('');
 }
 var _statementMoreBusy = false;
 window.statementLoadMore = async function(){
