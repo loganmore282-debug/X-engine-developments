@@ -5723,7 +5723,7 @@ function pgFormHtml(o){
     <label class="pg-l" for="pgPhone">Phone Number</label>
     <input class="pg-in" id="pgPhone" name="pg_msisdn" type="text" inputmode="numeric" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-form-type="other" placeholder="e.g. 0700 000 000" value="" required oninput="this.value=this.value.replace(/[^0-9+ ]/g,'')">
     <label class="pg-l" for="pgNet">Mobile Money Provider</label>
-    <div class="pg-sel"><select class="pg-in" id="pgNet"><option>MTN Mobile Money</option><option>Airtel Money</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="pg-sel"><select class="pg-in" id="pgNet" required><option value="" selected disabled hidden>Select provider</option><option value="MTN Mobile Money">MTN Mobile Money</option><option value="Airtel Money">Airtel Money</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="pg-sum">
       <div><span>Subtotal</span><span>${pgMoney(o.amount)}</span></div>
       <div><span>Processing fee</span><span>+${pgMoney(0)}</span></div>
@@ -5910,7 +5910,10 @@ window.pgPay = async function(){
   if (phoneBox && !String(phoneBox.value).trim()) { phoneBox.focus(); if (phoneBox.reportValidity) phoneBox.reportValidity(); return; }
   const phone = cleanPhone((phoneBox || {}).value);
   if (!phone) { if (err) err.textContent = 'Enter a valid ' + regionName() + ' mobile number.'; return; }
-  const network = ($('pgNet') || {}).value || '';
+  // No provider is picked for the member: an untouched box gets the browser's own "Please select an item in the list." bubble.
+  const netBox = $('pgNet');
+  if (netBox && !netBox.value) { netBox.focus(); if (netBox.reportValidity) netBox.reportValidity(); return; }
+  const network = (netBox || {}).value || '';
   const token = _pg.token, label = btn.textContent;
   btn.disabled = true; btn.classList.add('pg-busy');
   btn.innerHTML = '<span class="pg-ring"></span>Processing…';

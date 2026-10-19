@@ -91,6 +91,7 @@ ok(/function logSafe\(v\)/.test(server) && /logSafe\(body\.reference\)/.test(ser
 ok((server.match(/Public route error:/g) || []).length === 6 && !/app\.get\('\/public[^\n]*\n[^\n]*message: e\.message/.test(server), 'public routes never send a driver message');
 for (const f of ['deploy/update-vps.sh', 'deploy/first-setup.sh', 'deploy/webhook-check.sh', 'deploy/deploy.sh', 'deploy/set-wildcard.sh', 'deploy/set-domain.sh', 'deploy/change-app-host.sh']) cp.execFileSync('bash', ['-n', __dirname + '/' + f]);
 // round 2
+ok(/<select class="pg-in" id="pgNet" required><option value="" selected disabled hidden>Select provider<\/option><option value="MTN Mobile Money">/.test(R('user-src/original_module.js')) && /if \(netBox && !netBox\.value\) \{ netBox\.focus\(\); if \(netBox\.reportValidity\)/.test(R('user-src/original_module.js')), 'the payment page picks no provider by default and asks for one');
 { const u = R('user-src/original_module.js'), h = R('user-src/index.html');
   ok(/redirectTo\('\/payment\/' \+ no, true,/.test(u) && /location\.assign\(path\)/.test(u), 'Pay sends the browser to /payment/<order> as a real redirect');
   ok(/window\.pgHome = function\(\)\{ redirectTo\('\/', false,/.test(u), 'Back to Home (and the success hand-off) is a real redirect to /');
