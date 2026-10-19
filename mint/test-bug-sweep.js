@@ -40,7 +40,7 @@ ok(/\.notify-bg\{[^}]*z-index:440/.test(html), 'notices sit above the Help and D
 ok(/_catalogRefreshedAt/.test(mod) && /30000 - \(Date\.now\(\) - _catalogRefreshedAt\)/.test(mod), 'a phone clock ahead of the server cannot make the catalogue refetch in a loop');
 ok(/r\.code === 'AUTH_UNAVAILABLE' \|\| r\.code === 'SERVER_ERROR'/.test(mod), 'a busy or unavailable server on opening the app does not sign the member out');
 ok(!/signal:\s*AbortSignal\.timeout/.test(mod), 'no AbortSignal.timeout (older phones would skip the server logout)');
-ok(/messages: null, page: 'home'/.test(mod), 'logout also forgets messages and the open tab');
+ok(/messages: null, salary: null, page: 'home'/.test(mod), 'logout also forgets messages and the open tab');
 ok(/function vGroup\(/.test(mod) && /vGroup\(min\)/.test(mod), 'minimums print with thousands separators');
 
 // deploy / infra
