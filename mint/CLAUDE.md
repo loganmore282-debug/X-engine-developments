@@ -51,5 +51,6 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
 4. (done) All of the owner's screens (batches 2-4: `docs/SCREENS-BATCH2.md`, `SCREENS-BATCH3.md`, `SCREENS-BATCH4.md`, pictures in `design-ref/`) are built: green/cream design (`/* MG-START */ ... /* MG-END */` block of
    `user-src/index.html`), six tabs (Home, Orders, Promotion, Team, Salary, Profile), Home with message icon + site name + bouncing chest, Treasure Chest page and win card, Wallet, Withdraw, Deposit (+ redirect overlay),
    Balance Record, Messages (with pictures), password pages, Download page, welcome dialog, red-OK notice dialog. Salary is new (see SCREENS-BATCH4.md); Task Center is removed.
+4b. (done) Scrollbar: phone browsers hide the page-level scrollbar, so `mgScrollbarInit()` in `original_module.js` draws a green 4px bar (`#mgSb`, plus `#mgSbList` for the bank list) that follows the open sheet, the Login/Sign Up scroller or the document; the native bars on those scrollers are hidden in the MG block. Pages that overflow by under 24px show no bar.
 5. (next) Anything the owner sends after this is a change to these screens; compare against `design-ref/` with side-by-side renders (Playwright, 360x701 at 2x) before saying it matches.
    Payment keys (PesaJet/MarzPay) are set later by the owner.

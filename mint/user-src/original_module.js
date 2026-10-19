@@ -2742,6 +2742,60 @@ function hookNavTapBox(){
     }
   });
 }
+
+// A drawn green scrollbar. The phone browsers hide the page's own scrollbar (the whole page scrolls, not an inner box), but the owner's screens
+// show a thin green bar at the right edge whenever a page or sheet is longer than the screen. It follows whatever is scrolling right now:
+// the open sheet / page, else the Login/Sign Up scroller, else the document, and sits between the top and the bottom bar.
+function mgScrollbarInit(){
+  if (window.__mgSb) return; window.__mgSb = true;
+  if (!document.body) { document.addEventListener('DOMContentLoaded', () => { window.__mgSb = false; mgScrollbarInit(); }); return; }
+  const mk = id => { const b = document.createElement('div'); b.id = id; b.className = 'mg-sb'; b.setAttribute('aria-hidden', 'true'); b.innerHTML = '<i></i>'; document.body.appendChild(b); return { bar: b, thumb: b.firstChild, last: '' }; };
+  const main = mk('mgSb'), list = mk('mgSbList');
+  const shown = el => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+  function target(){
+    const sheets = [...document.querySelectorAll('.sheet-bg.show,#msgDetailBg.show,#depStatusBg.show,.pay-page.show')].filter(shown);
+    if (sheets.length) return sheets[sheets.length - 1];
+    const auth = document.getElementById('authScreen');
+    if (auth && auth.style.display !== 'none' && shown(auth)) { const a = auth.querySelector('.ma-scroll'); if (a && shown(a)) return a; }
+    return document.scrollingElement || document.documentElement;
+  }
+  // Draws one thumb: the track is [top, bottom] on screen, ch/st/sh = visible height, scroll offset, content height of the scroller.
+  function draw(o, top, bottom, ch, st, sh, right){
+    const track = bottom - top, over = sh - ch;
+    if (over < 24 || track < 30) { if (o.last !== 'x') { o.bar.style.display = 'none'; o.last = 'x'; } return; }
+    const th = Math.max(30, Math.round(track * ch / sh)), ty = Math.round((track - th) * Math.min(1, Math.max(0, st / over)));
+    const key = top + '|' + track + '|' + th + '|' + ty + '|' + right;
+    if (key === o.last) return; o.last = key;
+    o.bar.style.cssText = 'display:block;top:' + top + 'px;height:' + track + 'px;right:' + right + 'px';
+    o.thumb.style.cssText = 'height:' + th + 'px;transform:translateY(' + ty + 'px)';
+  }
+  function update(){
+    const el = target(), isDoc = el === document.scrollingElement || el === document.documentElement;
+    if (isDoc) {
+      let bottom = window.innerHeight;
+      const nav = document.querySelector('.bottom-nav'), app = document.getElementById('app');
+      if (nav && shown(nav) && app && app.style.display !== 'none') bottom = nav.getBoundingClientRect().top;
+      draw(main, 0, bottom, window.innerHeight, window.pageYOffset, el.scrollHeight, 0);
+    } else {
+      const r = el.getBoundingClientRect();
+      draw(main, Math.max(0, r.top), Math.min(window.innerHeight, r.bottom), el.clientHeight, el.scrollTop, el.scrollHeight, 0);
+    }
+    // the bank list that drops down in Add Wallet scrolls on its own
+    const pl = document.querySelector('.prov-list');
+    if (pl && shown(pl)) { const r = pl.getBoundingClientRect(); draw(list, r.top + 4, r.bottom - 4, pl.clientHeight, pl.scrollTop, pl.scrollHeight, Math.max(0, Math.round(window.innerWidth - r.right)) + 2); }
+    else draw(list, 0, 0, 0, 0, 0, 0);
+  }
+  // Redrawn on scroll, resize, pictures landing, transitions ending and any change to what is on screen. (No polling timer: a timer that never
+  // ends would also keep the test processes alive.)
+  let pending = 0;
+  const tick = () => { if (pending) return; pending = setTimeout(() => { pending = 0; update(); }, 40); };
+  window.addEventListener('scroll', tick, true); window.addEventListener('resize', tick); window.addEventListener('orientationchange', tick);
+  window.addEventListener('load', tick, true); window.addEventListener('transitionend', tick, true); window.addEventListener('animationend', tick, true);
+  if (typeof MutationObserver === 'function') new MutationObserver(recs => { if (recs.some(r => !(r.target.closest && r.target.closest('.mg-sb')) && !(r.target.id === 'mgSb' || r.target.id === 'mgSbList'))) tick(); })
+    .observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+  update();
+}
+mgScrollbarInit();
 function updateNavIcons(){
   // Installed from here because this runs on every showPage() -- by the
   // first one the bar is definitely in the DOM, and the guard above makes
