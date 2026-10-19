@@ -669,23 +669,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .notify-bg.show .notify-card{pointer-events:auto;transform:scale(1);opacity:1;}
 .notify-msg{white-space:pre-line;}
 
-/* ── Treasure chest (Chest.dc.html / ChestSuccess.dc.html) ── */
-/* ── Gift Codes: Cookie energy-voucher treatment ──
-   The old treasure-chest scene was Cookie artwork and metaphor. Cookie keeps
-   the same redeem flow but presents it as a clean code/voucher utility. */
-/* Gift-code win card (owner's screenshot): blurred page behind, white card with the
-   gift mark, Congratulations!, You won, the amount, the new balance and COLLECT. */
-.v-win-bg{position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;padding:7.6px 18px 0;background:rgba(23,57,184,.5);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);opacity:0;transition:opacity .25s ease;}
-.v-win-bg.show{opacity:1;}
-.v-win-card{width:100%;max-width:323px;box-sizing:border-box;background:#fcfcfe;border-radius:24px;padding:34px 24px 34px;text-align:center;box-shadow:0 18px 44px -14px rgba(10,22,70,.5);transform:scale(.94);transition:transform .3s cubic-bezier(.22,1,.36,1);}
-.v-win-bg.show .v-win-card{transform:scale(1);}
-.v-win-mark{width:60px;height:60px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:var(--v-grad);color:#fff;box-shadow:0 10px 22px -8px rgba(23,57,184,.65);}
-.v-win-mark svg{width:25px;height:25px;}
-.v-win-card h2{margin:18.6px 0 0;font-size:22px;font-weight:800;letter-spacing:.066em;color:#111;}
-.v-win-sub{margin:14px 0 0;font-size:11px;font-style:italic;color:#9aa0b4;}
-.v-win-amt{margin:20.2px 0 0;font-size:37.4px;font-weight:700;color:var(--v-blue);line-height:1.1;}
-.v-win-bal{margin:23.2px 0 0;font-size:11.5px;color:#9aa0b4;}
-.v-win-btn{display:block;width:100%;height:43px;margin:29.6px 0 0;border:0;border-radius:14px;background:var(--v-grad);color:#fff;font:inherit;font-size:13px;font-weight:700;letter-spacing:.16em;cursor:pointer;}
 
 /* ── Transaction Statement ──
    Professional ledger presentation: categories are one horizontal tab row at
@@ -1465,71 +1448,10 @@ body.sheet-open .bottom-nav{display:flex;}
 .v-share-box button svg{width:16px;height:16px;}
 .v-btn{margin-top:9.5px;width:100%;height:41px;border:0;border-radius:12px;background:var(--v-grad);color:#fff;font:inherit;font-size:13.6px;font-weight:700;letter-spacing:.7px;}
 .v-levels{display:flex;flex-direction:column;gap:9.2px;margin-top:16px;}
-/* ── Task Center: the Team page button and the page it opens ── */
-.v-task-btn{width:100%;margin-top:14px;display:flex;align-items:center;gap:12px;padding:11px 12px 11px 11px;background:#fff;border:1.5px solid var(--v-card-line);border-radius:16px;font:inherit;color:var(--v-ink);cursor:pointer;text-align:left;box-shadow:0 12px 24px -20px rgba(14,42,142,.7);}
-.v-task-btn:active{transform:scale(.99);}
-.v-task-ic{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#ffc61a,#ff7a1a);color:#fff;box-shadow:0 8px 16px -10px rgba(255,140,0,.85);flex:0 0 40px;}
-.v-task-ic svg{width:21px;height:21px;}
-.v-task-btn b{flex:1;font-size:16px;font-weight:700;letter-spacing:.02em;}
-.v-task-btn em{min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:linear-gradient(135deg,#ffc61a,#ff7a1a);color:#fff;font-style:normal;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 12px -6px rgba(255,140,0,.9);}
-.v-task-go{width:24px;height:24px;color:var(--v-blue);display:flex;align-items:center;justify-content:center;}
-.v-task-go svg{width:20px;height:20px;}
-.v-tk{padding:4px 0 24px;}
-.v-tk-wait{min-height:50vh;display:flex;align-items:center;justify-content:center;}
-.v-tk-hero{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:space-around;gap:6px;background:var(--v-grad);color:#fff;border-radius:20px;padding:22px 12px 20px 56px;box-shadow:0 18px 32px -22px rgba(14,42,142,.9);}
-.v-tk-hero::before,.v-tk-hero::after{content:'';position:absolute;border:1.5px solid rgba(255,255,255,.16);border-radius:50%;pointer-events:none;}
-.v-tk-hero::before{width:150px;height:150px;right:-40px;top:-72px;}
-.v-tk-hero::after{width:100px;height:100px;right:-14px;top:-46px;}
-.v-tk-trophy{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:34px;height:34px;color:#ffd75e;display:flex;align-items:center;justify-content:center;}
-.v-tk-trophy svg{width:34px;height:34px;stroke-width:1.5;}
-.v-tk-hero i{width:1px;align-self:stretch;background:rgba(255,255,255,.25);}
-.v-tk-stat{position:relative;z-index:1;flex:1;min-width:0;text-align:center;}
-.v-tk-stat b{display:block;font-size:21px;font-weight:700;line-height:1.15;word-break:break-word;}
-.v-tk-stat b.v-fit1{font-size:16px;white-space:nowrap;}
-.v-tk-stat b.v-fit2{font-size:13px;white-space:nowrap;}
-.v-tk-tgt b.v-fit1{font-size:17px;white-space:nowrap;}
-.v-tk-tgt b.v-fit2{font-size:13.5px;white-space:nowrap;}
-.v-tk-reward.v-fit1{font-size:12px;padding:6px 8px;}
-.v-tk-reward.v-fit2{font-size:10.5px;padding:6px 6px;}
 .v-lv-c b.v-fit1{font-size:12px;}
 .v-lv-c b.v-fit2{font-size:10px;}
 .v-tc-money.v-fit1{font-size:13px;}
 .v-tc-money.v-fit2{font-size:11px;}
-.v-tk-stat span{display:block;margin-top:5px;font-size:11px;font-weight:500;opacity:.85;line-height:1.25;}
-.v-tk-tabs{position:relative;display:flex;gap:6px;margin:16px 0 4px;padding:4px;background:var(--v-tint);border-radius:14px;}
-.v-tk-pill{position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 7px);border-radius:11px;background:#fff;box-shadow:0 6px 14px -8px rgba(14,42,142,.6);transition:transform .4s cubic-bezier(.3,.85,.3,1);will-change:transform;pointer-events:none;}
-.v-tk-tabs[data-tab="deposit"] .v-tk-pill{transform:translateX(calc(100% + 6px));}
-.v-tk-tabs button{position:relative;z-index:1;flex:1;height:40px;border:0;border-radius:11px;background:transparent;color:var(--v-label);font:inherit;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer;transition:color .3s ease;-webkit-tap-highlight-color:transparent;}
-.v-tk-tabs button.on{color:var(--v-blue-2);}
-.v-tk-tabs button:active{transform:scale(.97);}
-@media (prefers-reduced-motion:reduce){.v-tk-pill,.v-tk-tabs button{transition:none;}}
-.v-tk-tabs em{min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:linear-gradient(135deg,#ffc61a,#ff7a1a);color:#fff;font-style:normal;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;}
-.v-tk-list{will-change:transform,opacity;display:flex;flex-direction:column;gap:12px;margin-top:12px;}
-.v-tk-card{background:#fff;border:1.5px solid #d4dcf7;border-radius:16px;padding:14px 14px 13px;box-shadow:0 12px 24px -22px rgba(14,42,142,.7);position:relative;overflow:hidden;}
-.v-tk-card.next{border-color:var(--v-blue);}
-.v-tk-card.ready{border-color:#ffb21f;background:linear-gradient(180deg,#fffaf0,#fff 60%);box-shadow:0 14px 26px -18px rgba(255,140,0,.65);}
-.v-tk-card.done{background:#f7faf8;border-color:#cfe6d8;}
-.v-tk-top{display:flex;align-items:center;gap:11px;}
-.v-tk-medal{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--v-tint);color:var(--v-blue);flex:0 0 38px;}
-.v-tk-medal svg{width:20px;height:20px;}
-.v-tk-card.ready .v-tk-medal{background:linear-gradient(135deg,#ffc61a,#ff7a1a);color:#fff;}
-.v-tk-card.done .v-tk-medal{background:#dcf5e3;color:#1f9a49;}
-.v-tk-tgt{flex:1;min-width:0;}
-.v-tk-tgt b{display:block;font-size:20px;font-weight:700;line-height:1.1;color:var(--v-ink);}
-.v-tk-tgt span{display:block;margin-top:3px;font-size:11.5px;font-weight:500;color:var(--v-muted);}
-.v-tk-reward{padding:6px 10px;border-radius:10px;background:#fff4dc;color:#b45f00;font-size:14px;font-weight:700;white-space:nowrap;}
-.v-tk-card.done .v-tk-reward{background:#e8f4ec;color:#2f7a4a;}
-.v-tk-bar{height:8px;border-radius:4px;background:var(--v-tint);margin:13px 0 10px;overflow:hidden;}
-.v-tk-bar i{display:block;height:100%;border-radius:4px;background:var(--v-grad);min-width:0;transition:width .5s ease;}
-.v-tk-card.ready .v-tk-bar i{background:linear-gradient(90deg,#ffc61a,#ff7a1a);}
-.v-tk-card.done .v-tk-bar i{background:#34b968;}
-.v-tk-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;}
-.v-tk-foot>span{font-size:12.5px;font-weight:500;color:var(--v-label);min-width:0;}
-.v-tk-btn{min-width:92px;height:38px;padding:0 14px;border:0;border-radius:11px;background:var(--v-tint);color:#97a3c2;font:inherit;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:5px;cursor:default;}
-.v-tk-btn svg{width:16px;height:16px;}
-.v-tk-btn.go{background:var(--v-grad);color:#fff;cursor:pointer;box-shadow:0 10px 18px -12px rgba(14,42,142,.9);}
-.v-tk-btn.go:active{transform:scale(.97);}
-.v-tk-btn.done{background:#dcf5e3;color:#1f9a49;}
 .v-level{display:flex;align-items:center;gap:8px;width:100%;height:64px;text-align:left;font:inherit;background:#fff;color:var(--v-ink);border:1.5px solid var(--v-card-line);border-radius:14px;padding:0 17px;cursor:pointer;box-shadow:0 2px 16px rgba(23,57,184,.12);}
 .v-level.on{background:var(--v-grad);color:#fff;border-color:transparent;box-shadow:0 14px 26px -20px rgba(14,42,142,.9);}
 .v-lv-l{flex:1;min-width:0;}
@@ -1784,22 +1706,6 @@ body.deposit-status-open .sheet-bg{bottom:0;}
 .v-nomsg span svg{width:22px;height:22px;}
 .v-nomsg p{margin:0;font-size:14px;letter-spacing:1.2px;line-height:17px;color:var(--v-blue-2);}
 
-/* ── Treasure Chest ── */
-.v-chest{display:flex;flex-direction:column;align-items:center;padding:53.5px 7.5px 6px;}
-.v-chest-ring{width:168px;height:168px;border-radius:50%;padding:8px;border:1.5px solid var(--v-blue);}
-.v-chest-disc{width:100%;height:100%;border-radius:50%;background:var(--v-grad);border:6px solid #0b0f1a;box-sizing:border-box;display:flex;align-items:center;justify-content:center;overflow:hidden;}
-.v-chest-disc img{width:100%;height:100%;object-fit:cover;}
-.v-chest-ic{display:flex;width:70px;height:70px;color:#fff;}
-.v-chest-ic svg{width:100%;height:100%;}
-.v-chest h2{margin:41px 0 0;font-size:21px;line-height:26px;font-weight:700;letter-spacing:3px;color:var(--v-ink);text-align:center;}
-.v-chest p{margin:9.5px 0 28.5px;font-style:italic;font-size:12.5px;line-height:16px;letter-spacing:.3px;color:#9aa3b8;text-align:center;}
-.v-chest-key{width:100%;height:49.5px;display:flex;align-items:stretch;background:#fff;border:1px solid #cdd6f4;border-radius:12px;margin-bottom:15.5px;overflow:hidden;}
-.v-chest-key:focus-within{box-shadow:0 0 0 3px rgba(23,57,184,.12);}
-.v-chest-keyic{display:flex;align-items:center;justify-content:center;width:45px;border-right:1px solid #cdd6f4;color:var(--v-blue);flex:0 0 auto;}
-.v-chest-keyic svg{width:22px;height:22px;}
-.v-chest-key input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:14.5px;letter-spacing:1px;color:var(--v-ink);padding:0 14px;}
-.v-chest-go{width:100%;height:47px;border:0;border-radius:12px;background:var(--v-grad);color:#fff;font:inherit;font-size:15px;font-weight:700;letter-spacing:2.4px;box-shadow:0 14px 26px -16px rgba(14,42,142,.9);}
-.v-chest-go:disabled{opacity:.6;}
 
 /* ── Login / Sign Up: measured from the owner's screenshots (360 px phone) ── */
 .va-screen{position:relative;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;background:linear-gradient(145deg,#0b2b58 0%,#1739b8 52%,#103863 100%);}

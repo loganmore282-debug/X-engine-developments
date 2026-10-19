@@ -578,16 +578,6 @@ app.use(async (req, res, next) => {
 const DEFAULT_SETTINGS = {
   withdrawFeePct: 15, minWithdraw: 8000, minDeposit: 30000,
   welcomeBonus: 5000, commL1: 25, commL2: 2, commL3: 1,
-  // Task Center (Team page): what a member earns for team progress, edited in the admin panel under Settings > Task Center.
-  // `id` stays with a row when its numbers are edited, so an edit can never let a member claim the same task twice.
-  taskReferrals: [
-    { id: 'r1', target: 5, reward: 10000 }, { id: 'r2', target: 10, reward: 20000 }, { id: 'r3', target: 20, reward: 40000 },
-    { id: 'r4', target: 35, reward: 80000 }, { id: 'r5', target: 50, reward: 160000 }, { id: 'r6', target: 100, reward: 320000 },
-  ],
-  taskDeposits: [
-    { id: 'd1', target: 250000, reward: 10000 }, { id: 'd2', target: 500000, reward: 25000 }, { id: 'd3', target: 1000000, reward: 25000 },
-    { id: 'd4', target: 1500000, reward: 50000 }, { id: 'd5', target: 2000000, reward: 50000 }, { id: 'd6', target: 5000000, reward: 100000 },
-  ],
   returnMultiple: 30, cycleDays: 150,
   // Not yet confirmed by the owner — a reasonable Snow-scaled default,
   // admin-editable like every other rate here.
@@ -1562,30 +1552,11 @@ function finiteMoney(v) {
 // no longer needed at all -- length is now a guarantee, not a starting
 // point that can grow.
 //
-// /redeem already accepted dashes in its input regex before this round
-// (`[A-Za-z0-9-]+`), and tolerates a member typing a gift code WITHOUT
-// the dashes too -- see /redeem's own fallback below, now rewritten to
-// match case-insensitively via codeLower regardless of which case a
-// given code happens to be stored in (old uppercase ones and new
-// lowercase ones alike).
-const GIFTCODE_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
-const GIFTCODE_GROUP_LEN = 4;
-const GIFTCODE_GROUPS = 3;
-const GIFTCODE_LENGTH = GIFTCODE_GROUP_LEN * GIFTCODE_GROUPS; // 12 meaningful characters, unchanged
-// Gift codes are written in CAPITAL letters (owner: "make gift codes be capital letters"). The alphabet constant above stays lowercase because
-// referral codes share it; matching a code when it is redeemed is case-insensitive (codeLower), so older lowercase codes still work.
-const GIFTCODE_UPPER = GIFTCODE_CHARS.toUpperCase();
-function genGiftCode() {
-  const raw = randFromAlphabet(GIFTCODE_UPPER, GIFTCODE_LENGTH);
-  const groups = [];
-  for (let i = 0; i < GIFTCODE_LENGTH; i += GIFTCODE_GROUP_LEN) groups.push(raw.slice(i, i + GIFTCODE_GROUP_LEN));
-  return groups.join('-');
-}
 // One flat block, no dashes -- the previous round's own reasoning for
 // referral codes (spoken aloud more often than typed) still holds; a
 // dash in a code someone is reading out over a phone call is one more
 // thing to mishear ("dash" vs "hyphen" vs a pause). 8 characters, always.
-const REFERRAL_CHARS = GIFTCODE_CHARS; // same unambiguous alphabet, now lowercase, not a new one
+const REFERRAL_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789'; // unambiguous lowercase letters and digits (no i, l, o, 0, 1)
 const REFERRAL_LENGTH = 8;
 function randFromAlphabet(alphabet, n) {
   let s = '';
@@ -1608,17 +1579,6 @@ async function findUserByReferralCode(code) {
   const lower = raw.toLowerCase();
   const byLower = await db.collection('users').where('referralCodeLower', '==', lower).limit(1).get();
   return byLower.empty ? null : byLower.docs[0];
-}
-async function generateUniqueGiftCode() {
-  return withLock('giftcode-gen', async () => {
-    for (let attempt = 0; attempt < 30; attempt++) {
-      const code = genGiftCode();
-      const codeLower = code.toLowerCase();
-      const dup = await db.collection('promoCodes').where('codeLower', '==', codeLower).limit(1).get();
-      if (dup.empty) return code;
-    }
-    throw new Error('Could not generate a unique gift code');
-  });
 }
 // Check-and-claim as one atomic step, under a process-local lock — this
 // app runs as a single Node process, so that's a real guarantee.
@@ -1700,61 +1660,6 @@ function sanitizeRefPrefix(v) {
 async function mobileMoneyRefPrefix() {
   try { return sanitizeRefPrefix((await getSettings()).referencePrefix) || 'S'; } catch (_) { return 'S'; }
 }
-// TASK CENTER -- rewards for team progress, on top of the ordinary L1/L2/L3 commission. The two lists live in
-// the settings (defaults above, edited in Admin > Settings > Task Center). A "referral" task counts the member's
-// own Level 1 members who have deposited; a "deposit" task counts what the whole team (levels 1-3) has deposited.
-const TASK_MAX_ROWS = 30, TASK_MAX_REFERRALS = 100000;
-// Validates what the admin sends. Whole numbers only, one row per target, a stable id per row (new rows get one).
-function sanitizeTaskRows(rows, kind, history) {
-  const label = kind === 'deposit' ? 'Deposits' : 'Referrals';
-  if (!Array.isArray(rows)) return { error: `${label}: send a list of tasks.` };
-  if (rows.length > TASK_MAX_ROWS) return { error: `${label}: at most ${TASK_MAX_ROWS} tasks.` };
-  const maxTarget = kind === 'deposit' ? MAX_MONEY_AMOUNT : TASK_MAX_REFERRALS;
-  const out = [], targets = new Set();
-  for (const r of rows) {
-    const target = Number(r && r.target), reward = Number(r && r.reward);
-    if (!Number.isInteger(target) || target < 1 || target > maxTarget) return { error: `${label}: every target must be a whole number from 1 to ${maxTarget}.` };
-    if (!Number.isInteger(reward) || reward < 1 || reward > MAX_MONEY_AMOUNT) return { error: `${label}: every reward must be a whole number from 1 to ${MAX_MONEY_AMOUNT}.` };
-    if (targets.has(target)) return { error: `${label}: two tasks have the same target (${target}).` };
-    targets.add(target);
-    out.push({ id: String((r && r.id) || ''), target, reward });
-  }
-  // Ids the admin's rows already carry are kept. A row with no usable id first gets back the id this target ever had
-  // (`history`, target -> id), so deleting a task and typing it again can never turn it into a new, claimable one;
-  // only a target that has never existed gets a fresh id.
-  const used = new Set();
-  for (const r of out) { if (/^[a-z0-9]{1,16}$/.test(r.id) && !used.has(r.id)) used.add(r.id); else r.id = ''; }
-  for (const r of out) {
-    if (r.id) continue;
-    const old = history && history[String(r.target)];
-    if (typeof old === 'string' && /^[a-z0-9]{1,16}$/.test(old) && !used.has(old)) r.id = old;
-    else { do { r.id = 't' + crypto.randomBytes(4).toString('hex'); } while (used.has(r.id)); }
-    used.add(r.id);
-  }
-  out.sort((x, y) => x.target - y.target);
-  return { rows: out };
-}
-// What the app and the claim route read: the stored list, with anything malformed quietly left out.
-function taskRows(rows, kind) {
-  const ok = (Array.isArray(rows) ? rows : []).filter(r => r && typeof r.id === 'string' && Number(r.target) > 0 && Number(r.reward) > 0);
-  const r = sanitizeTaskRows(ok, kind);
-  return r.rows || [];
-}
-async function activeL1Count(userId) {
-  const snap = await db.collection('users').where('referredBy', '==', userId).get();
-  let n = 0;
-  snap.forEach(d => {
-    const v = d.data();
-    if (v.status !== 'banned' && finiteMoney(v.totalDeposited) > 0) n += 1;
-  });
-  return n;
-}
-
-// MISSION CENTER's constants lived here and are gone with the feature
-// (owner: "remove mission center"). activeL1Count() above and
-// wholeTeamDeposits() below STAY -- they are shared with the Task Center,
-// which is a different feature and is not being removed.
-
 // The WHOLE team (L1+L2+L3): how many members sit at each level and what they have deposited --
 // powers Team's level cards and "Team deposits". The counts are read live from the same
 // `referredBy` links the member lists use, so a card can never disagree with its list (the
@@ -3350,9 +3255,8 @@ app.get('/team/stats', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     // All the reads this screen needs go out together (they used to run one after another).
-    const [uSnap, sett, teamNow, l1ActiveCount, rewardTxSnap, commSnap] = await Promise.all([
-      db.collection('users').doc(userId).get(), getSettings(), wholeTeamStats(userId), activeL1Count(userId),
-      db.collection('transactions').where('userId', '==', userId).where('type', '==', 'team_reward').get(),
+    const [uSnap, sett, teamNow, commSnap] = await Promise.all([
+      db.collection('users').doc(userId).get(), getSettings(), wholeTeamStats(userId),
       db.collection('transactions').where('userId', '==', userId).where('type', '==', 'commission').get().catch(() => null),
     ]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
@@ -3360,16 +3264,6 @@ app.get('/team/stats', async (req, res) => {
     if (u.status === 'banned')
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     const deposits = teamNow.deposits, [n1, n2, n3] = teamNow.counts;
-    const claimedKeys = new Set(u.creditedTaskKeys || []);
-    const refRows = taskRows(sett.taskReferrals, 'count'), depRows = taskRows(sett.taskDeposits, 'deposit');
-    const milestones = [
-      ...refRows.map(m => ({ type: 'count', id: m.id, target: m.target, reward: m.reward,
-        current: l1ActiveCount, achieved: l1ActiveCount >= m.target, claimed: claimedKeys.has('count:' + m.id) })),
-      ...depRows.map(m => ({ type: 'deposit', id: m.id, target: m.target, reward: m.reward,
-        current: deposits, achieved: deposits >= m.target, claimed: claimedKeys.has('deposit:' + m.id) })),
-    ];
-    let teamRewards = 0;
-    rewardTxSnap.forEach(d => { teamRewards += finiteMoney(d.data().amount); });
     const levelCommission = { l1: 0, l2: 0, l3: 0 };
     if (commSnap) commSnap.forEach(d => {
       const v = d.data(), n = Number(v.commissionLevel);
@@ -3382,71 +3276,17 @@ app.get('/team/stats', async (req, res) => {
       team: { l1: n1, l2: n2, l3: n3 },
       totalTeam: n1 + n2 + n3,
       teamCommission: finiteMoney(u.teamCommission),
-      teamDeposits: deposits, l1ActiveCount, milestones, teamRewards, levelCommission,
+      teamDeposits: deposits, levelCommission,
     });
   } catch (e) {
     console.error('Team stats error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not load team stats' });
   }
 });
-// Claiming a Task Center reward. Money-safe the same way a deposit credit is: one claim at a time per member,
-// the live progress is re-read here (the app's own figure is never trusted), and the credit, the member's
-// "already claimed" token and the totals land in ONE atomic user update, so a double tap, two phones or a retry
-// after a crash can never pay the same task twice. The ledger row is written (or repaired) afterwards.
-app.post('/team/task/claim', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  const type = req.body.type === 'deposit' ? 'deposit' : req.body.type === 'count' ? 'count' : '';
-  const id = String(req.body.id || '').slice(0, 40);
-  if (!type || !id) return res.status(400).json({ status: 'error', message: 'Unknown task' });
-  try {
-    const sett = await getSettings();
-    const row = taskRows(type === 'deposit' ? sett.taskDeposits : sett.taskReferrals, type).find(r => r.id === id);
-    if (!row) return res.status(400).json({ status: 'error', code: 'TASK_GONE', message: 'This task is no longer available.' });
-    const key = type + ':' + row.id;
-    const out = await withLock('taskclaim:' + userId, async () => {
-      const uRef = db.collection('users').doc(userId);
-      const first = await uRef.get();
-      if (!first.exists) return { code: 404, body: { status: 'error', message: 'User not found' } };
-      if (first.data().status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
-      const { date, time } = nowStr();
-      const ledger = () => db.collection('transactions').doc(`team-reward:${userId}:${key}`).createIfAbsent({
-        userId, statementId: newStatementId(), type: 'team_reward',
-        description: type === 'deposit' ? `Task Center: whole team deposits ${fmtMoney(row.target)}` : `Task Center: ${row.target} active referrals`,
-        amount: row.reward, taskKey: key, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
-      });
-      if ((first.data().creditedTaskKeys || []).includes(key)) {
-        await ledger();   // repairs a ledger row a crash left behind; never pays again
-        return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'Already claimed' } };
-      }
-      const progress = type === 'deposit' ? (await wholeTeamStats(userId)).deposits : await activeL1Count(userId);
-      if (progress < row.target) {
-        const need = type === 'deposit' ? fmtMoney(row.target) : row.target, have = type === 'deposit' ? fmtMoney(progress) : progress;
-        return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: `You need ${need} to claim this, you have ${have}.` } };
-      }
-      let balance = 0, applied = false;
-      await withLock('bal:' + userId, async () => {
-        applied = await uRef.updateIf({ creditedTaskKeys: { $ne: key }, status: { $ne: 'banned' } }, {
-          walletBalance: FieldValue.increment(row.reward), totalEarned: FieldValue.increment(row.reward),
-          creditedTaskKeys: FieldValue.arrayUnion(key)
-        });
-        const after = await uRef.get();
-        balance = round2(Number(after.exists && after.data().walletBalance) || 0);
-      });
-      if (!applied) return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'Already claimed' } };
-      // The money is already in the wallet. If only the history row fails to write, say success (a retry repairs the row)
-      // instead of telling the member it failed.
-      try { await ledger(); }
-      catch (e1) {
-        // The app shows 'Claimed' and never asks again, so repair the history row here, once, rather than waiting for a retry.
-        try { await ledger(); } catch (e2) { console.error('Task reward ledger row failed (credit is applied, a retry repairs it):', e2.message); }
-      }
-      return { code: 200, body: { status: 'success', amount: row.reward, walletBalance: balance, message: `${fmtMoney(row.reward)} added to your wallet` } };
-    });
-    res.status(out.code).json(out.body);
-  } catch (e) { console.error('Task claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
-});
-
+// ── GIFT CODES (/redeem), TASK CENTER (/team/task/claim) AND ITS ADMIN SCREENS — REMOVED ──
+// Owner: "these are not in my screenshots, they have to be removed". Both paid money, so the routes are gone, not merely hidden (the client is not
+// the access control). The 'promocode' / 'team_reward' transaction rows already in the database stay and keep their labels in Records.
+//
 // ── MISSION CENTER — REMOVED ──
 // Owner: "remove mission center". The three routes that lived here
 // (/mission/status, /mission/salary/claim, /mission/deposit/claim) are gone,
@@ -6512,191 +6352,6 @@ app.get('/bank/list', async (req, res) => {
 // ═══════════════════════════════════════════
 // GIFT CODES
 // ═══════════════════════════════════════════
-app.post('/redeem', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  const raw = String(req.body.code || '').trim().slice(0, 32);
-  if (!raw) return res.status(400).json({ status: 'error', message: 'Please enter the treasure chest key' });
-  if (!/^[A-Za-z0-9-]+$/.test(raw)) return res.status(400).json({ status: 'error', message: 'Wrong treasure chest password' });
-  try {
-    let result = null;
-    // Lock on the lowercased code, not the raw input: two members submitting
-    // the same code in different casing must serialise against each other.
-    await withLock('redeem:' + raw.toLowerCase().replace(/[^a-z0-9]/g, ''), async () => {   // same lock for every spelling of one code (with or without dashes)
-      const userSnap = await db.collection('users').doc(userId).get();
-      if (!userSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
-      if (userSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
-      if (userSnap.data().registrationDone === false) { result = { code: 403, body: { status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up first.' } }; return; }
-      // Matched via codeLower (case-insensitive by construction, and
-      // already the field the promoCodes uniqueness index enforces on) --
-      // this reads correctly regardless of which case a given code
-      // happens to be STORED in, so a code issued under the old uppercase
-      // alphabet and one issued under the new lowercase alphabet are both
-      // found the same way, with no case-guessing needed.
-      const lower = raw.toLowerCase();
-      let codeSnap = await db.collection('promoCodes').where('codeLower', '==', lower).limit(1).get();
-      // A member who reads a code off a screenshot and types it by hand may
-      // reasonably leave the dashes out, or put them somewhere else -- the
-      // code itself, read as characters, is still exactly right. If
-      // stripping non-alphanumerics leaves precisely GIFTCODE_LENGTH
-      // characters, re-segment them into the canonical shape and try that
-      // too, rather than telling a member holding a genuine code that it
-      // is invalid over punctuation alone.
-      if (codeSnap.empty) {
-        const stripped = lower.replace(/[^a-z0-9]/g, '');
-        if (stripped.length === GIFTCODE_LENGTH) {
-          const groups = [];
-          for (let i = 0; i < GIFTCODE_LENGTH; i += GIFTCODE_GROUP_LEN) groups.push(stripped.slice(i, i + GIFTCODE_GROUP_LEN));
-          const resegmented = groups.join('-');
-          if (resegmented !== lower) {
-            codeSnap = await db.collection('promoCodes').where('codeLower', '==', resegmented).limit(1).get();
-          }
-        }
-      }
-      if (codeSnap.empty) {
-        // A code that doesn't exist at all is the actual "guessing" signal --
-        // an already-used or usage-capped code below is a REAL code, not a
-        // guess, so those aren't logged here.
-        logSecurityEvent(userId, 'giftcode_invalid_attempt', { code: raw });
-        // Owner's own wording. This is the "the key you typed is not a key"
-        // case; the branches below (inactive / expired / already used) are
-        // real codes in a wrong STATE and keep saying so, because telling
-        // someone their correct code is "wrong" would send them hunting for
-        // a typo that isn't there.
-        result = { code: 400, body: { status: 'error', message: 'Wrong treasure chest password' } };
-        return;
-      }
-      const codeDoc = codeSnap.docs[0];
-      const cd = codeDoc.data();
-      const code = cd.code;
-      if (cd.active === false) { result = { code: 400, body: { status: 'error', message: 'This code is no longer active' } }; return; }
-      if (cd.expiresAt && tsMillis(cd.expiresAt) < Date.now()) { result = { code: 400, body: { status: 'error', message: 'This code has expired' } }; return; }
-      const usedBy = cd.usedBy || [];
-      const alreadyClaimed = usedBy.indexOf(userId) !== -1;
-      if (alreadyClaimed) {
-        // subagent-audit-caught HIGH bug (Codex Finding #5): a bare
-        // usedBy-membership check treated "claimed" as permanently final --
-        // but CLAIM-BEFORE-CREDIT means a genuinely-FINISHED redemption
-        // always has a matching promoRedemptions row, written right after
-        // the credit lands. If this user is in usedBy with no such row,
-        // their own earlier attempt claimed the code but crashed/failed
-        // before the credit ever landed -- resume and complete it instead
-        // of permanently stranding them with the code burned and no
-        // reward. A genuinely already-completed redemption still correctly
-        // rejects below (real row found).
-        const priorSnap = await db.collection('promoRedemptions').where('userId', '==', userId).where('code', '==', code).limit(1).get();
-        if (!priorSnap.empty) { result = { code: 400, body: { status: 'error', message: "You've already used this code" } }; return; }
-      } else if (cd.maxUses && usedBy.length >= cd.maxUses) {
-        result = { code: 400, body: { status: 'error', message: 'This code has reached its usage limit' } }; return;
-      }
-      // Legacy fallback: a code generated before random rewards only has
-      // the old single `reward` field -- treat it as a zero-width range so
-      // it still pays exactly that fixed amount, unchanged.
-      const minReward = round2(Number(cd.minReward ?? cd.reward) || 0);
-      const maxReward = round2(Number(cd.maxReward ?? cd.reward) || 0);
-      let reward;
-      // CLAIM-BEFORE-CREDIT — a retried redeem after a mid-request failure
-      // must never credit twice off the same code. A resumed (already-
-      // claimed-by-this-user) call skips the redundant arrayUnion write --
-      // it's already there — and goes straight to completing the credit,
-      // reusing the amount already rolled and persisted on the FIRST
-      // attempt (below), never re-rolling — a retry must always pay
-      // exactly what was already promised, not a fresh random draw.
-      if (!alreadyClaimed) {
-        // Rolled ONCE per claim, in whole cents, so a payout can be e.g. 647.72.
-        // crypto.randomInt's upper bound is exclusive, hence +1; min===max (a
-        // code with no real range) always returns that one value.
-        reward = crypto.randomInt(Math.round(minReward * 100), Math.round(maxReward * 100) + 1) / 100;
-        // Claiming the code AND persisting the rolled amount happen in one
-        // atomic write, so a crash right after this line can never lose
-        // track of what was promised -- the resume path above reads it
-        // straight back off `cd.claimedRewards[userId]` on retry.
-        await codeDoc.ref.update({ usedBy: FieldValue.arrayUnion(userId), ['claimedRewards.' + userId]: reward });
-        const claimSnap = await codeDoc.ref.get();
-        const claimedBy = (claimSnap.exists && claimSnap.data().usedBy) || [];
-        if (claimedBy.indexOf(userId) === -1) { result = { code: 500, body: { status: 'error', message: 'Could not redeem this code' } }; return; }
-        if (cd.maxUses && claimedBy.length > cd.maxUses) {
-          await codeDoc.ref.update({ usedBy: FieldValue.arrayRemove(userId), ['claimedRewards.' + userId]: FieldValue.delete() }).catch(() => {});
-          result = { code: 400, body: { status: 'error', message: 'This code has reached its usage limit' } }; return;
-        }
-      } else {
-        // A genuinely lost roll (deploy-time race, never observed in
-        // testing) falls back to minReward rather than re-rolling -- never
-        // credit MORE than what could have been promised. Reads with a
-        // real Number.isFinite() presence check, not `||` -- a `||`
-        // fallback would wrongly treat a legitimately-rolled reward of
-        // exactly 0 as "missing" and substitute minReward instead (0 is
-        // falsy in JS). Can't happen via normal generation (minReward must
-        // be > 0), but this makes the fallback correct on its own terms
-        // rather than relying on that invariant holding elsewhere.
-        const persisted = cd.claimedRewards && cd.claimedRewards[userId];
-        reward = round2(Number.isFinite(persisted) ? persisted : minReward);
-      }
-      // Codex-caught real bug (2nd money-flow audit): claiming the code in
-      // usedBy above is NOT the same as the credit having actually landed --
-      // a crash right after the (unconditional, before this fix) wallet
-      // increment but before the promoRedemptions proof row was written left
-      // a resumed retry with no way to tell "credited, proof row missing"
-      // apart from "never credited at all", so it just credited again.
-      // updateIf() closes this the same way creditDeposit()/
-      // completeWithdrawalRefund() already do: the wallet increment and a
-      // durable per-user "this exact code is credited" token land in ONE
-      // atomic write, so ANY retry -- after a crash here, or after a later
-      // ledger-write failure below -- is a safe no-op for the wallet itself,
-      // regardless of which write actually failed last time.
-      const applied = await withLock('bal:' + userId, () => db.collection('users').doc(userId).updateIf(
-        { redeemedGiftCodeIds: { $ne: codeDoc.id } },
-        {
-          walletBalance: FieldValue.increment(reward), totalEarned: FieldValue.increment(reward),
-          redeemedGiftCodeIds: FieldValue.arrayUnion(codeDoc.id),
-        }
-      ));
-      if (!applied) console.warn(`Gift code ${code} for user ${userId} already credited (idempotent retry) -- skipped re-incrementing.`);
-      // Find-or-create, same shape as creditDeposit()'s own ledger step --
-      // a retry after a ledger-write failure must never duplicate these
-      // rows (a duplicate 'promocode' row would inflate totalEarned the
-      // next time "Recalculate totals" runs, since that sum includes this
-      // type).
-      const priorRedemption = await db.collection('promoRedemptions').where('userId', '==', userId).where('code', '==', code).limit(1).get();
-      if (priorRedemption.empty) {
-        await db.collection('promoRedemptions').add({ userId, code, reward, createdAt: FieldValue.serverTimestamp() });
-      }
-      const priorTx = await db.collection('transactions').where('userId', '==', userId).where('type', '==', 'promocode').where('giftCode', '==', code).limit(1).get();
-      if (priorTx.empty) {
-        const { date, time } = nowStr();
-        await db.collection('transactions').add({
-          userId, statementId: newStatementId(), type: 'promocode', description: `Gift code redeemed: ${code}`, giftCode: code,
-          amount: reward, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
-        });
-      }
-      // The win card prints "New Balance" the instant it opens, so hand the
-      // post-credit figure back with the reward. Without it the client had to
-      // come back for /account before it could show anything -- a whole extra
-      // round trip between a successful claim and any sign that it worked,
-      // which is the delay the owner reported. One local read here replaces a
-      // network round trip on a phone. /turntable/spin already does this.
-      //
-      // Read AFTER the increment, not computed from the pre-credit snapshot:
-      // this is the real stored balance, so it is also right on the
-      // idempotent-retry path above where no increment was applied at all.
-      const body = { status: 'success', reward };
-      try {
-        const fresh = await db.collection('users').doc(userId).get();
-        const bal = fresh.exists ? Number(fresh.data().walletBalance) : NaN;
-        // Omitted rather than sent as null when unreadable -- the client
-        // falls back to its own arithmetic, and a null would have to be
-        // special-cased there to avoid reading as a balance of zero.
-        if (Number.isFinite(bal)) body.walletBalance = round2(bal);
-      } catch (_) { /* the reward is credited; the figure is a convenience */ }
-      result = { code: 200, body };
-    });
-    res.status(result.code).json(result.body);
-  } catch (e) {
-    console.error('Redeem error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not redeem this code' });
-  }
-});
-
 // ═══════════════════════════════════════════
 // TRANSACTIONS / HISTORY
 // ═══════════════════════════════════════════
@@ -7792,116 +7447,6 @@ app.post('/admin/messages/delete', async (req, res) => {
     logAdminAction(req, 'message_deleted', { id });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not delete this message' }); }
-});
-
-// ── ADMIN: Task Center rewards (what members earn on the Team page) ──
-app.get('/admin/tasks', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const sett = await getSettings();
-    res.json({ status: 'success', referrals: taskRows(sett.taskReferrals, 'count'), deposits: taskRows(sett.taskDeposits, 'deposit') });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the tasks' }); }
-});
-app.post('/admin/tasks/save', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const mainSnap = await db.collection('settings').doc('main').get();
-    const stored = Object.assign({}, DEFAULT_SETTINGS, mainSnap.exists ? mainSnap.data() : {});
-    // The ids members can be holding claims for: everything remembered so far, plus the lists that are live right now
-    // (so a task removed in this very save is still on record).
-    const seed = (old, rows, kind) => { const m = Object.assign({}, old); for (const r of taskRows(rows, kind)) m[String(r.target)] = r.id; return m; };
-    const hist = { count: seed(stored.taskIdByTarget && stored.taskIdByTarget.count, stored.taskReferrals, 'count'),
-                   deposit: seed(stored.taskIdByTarget && stored.taskIdByTarget.deposit, stored.taskDeposits, 'deposit') };
-    const ref = sanitizeTaskRows(req.body.referrals, 'count', hist.count), dep = sanitizeTaskRows(req.body.deposits, 'deposit', hist.deposit);
-    if (ref.error || dep.error) return res.status(400).json({ status: 'error', message: ref.error || dep.error });
-    // Remember every target's id for good (a removed task keeps its id on record), so a task typed again later is the same task.
-    const remember = (old, rows) => {
-      const m = Object.assign({}, old);
-      // A row moved to a new target keeps its id, so the old target must stop pointing at it: otherwise a task typed
-      // again later for the old target would inherit an id members already claimed under another target.
-      for (const r of rows) { for (const k of Object.keys(m)) if (m[k] === r.id && k !== String(r.target)) delete m[k]; m[String(r.target)] = r.id; }
-      return m;
-    };
-    await db.collection('settings').doc('main').set({
-      taskReferrals: ref.rows, taskDeposits: dep.rows,
-      taskIdByTarget: { count: remember(hist.count, ref.rows), deposit: remember(hist.deposit, dep.rows) },
-    }, { merge: true });
-    _settingsCacheTs = 0;
-    logAdminAction(req, 'tasks_saved', { referrals: ref.rows.length, deposits: dep.rows.length });
-    res.json({ status: 'success', referrals: ref.rows, deposits: dep.rows });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the tasks' }); }
-});
-
-// ═══════════════════════════════════════════
-// ADMIN — GIFT CODES
-// ═══════════════════════════════════════════
-// Owner: "make when gift codes are randomly claimed no fixed claiming so
-// user randomly gets rewards, also this is governed by setting of minimum
-// reward and maximum reward, so no more fixed rewards... also make when I
-// can set treasure code to expire in given seconds." A code no longer
-// carries one fixed `reward` -- it carries a `minReward`/`maxReward` range,
-// and /redeem below rolls a real random amount (in cents, e.g. 647.72) for
-// each claim, independently. Setting minReward===maxReward
-// still works and behaves exactly like the old fixed-reward code, so
-// nothing is lost for an admin who wants that. Expiry switched from
-// whole minutes to whole seconds for finer-grained flash-code control.
-app.post('/admin/promocodes/generate', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const minReward = round2(Number(req.body.minReward));
-  const maxReward = round2(Number(req.body.maxReward));
-  const maxUses = req.body.maxUses ? Math.round(Number(req.body.maxUses)) : null;
-  const durationSeconds = req.body.durationSeconds ? Number(req.body.durationSeconds) : null;
-  if (!Number.isFinite(minReward) || minReward <= 0 || minReward > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: 'Enter a valid minimum reward amount' });
-  if (!Number.isFinite(maxReward) || maxReward < minReward || maxReward > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: 'Maximum reward must be a valid amount, at least the minimum' });
-  if (maxUses !== null && (!Number.isFinite(maxUses) || maxUses <= 0)) return res.status(400).json({ status: 'error', message: 'Max uses must be a positive number' });
-  if (durationSeconds !== null && (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 315360000)) return res.status(400).json({ status: 'error', message: 'Duration must be a positive number of seconds, at most 10 years' });
-  try {
-    const code = await generateUniqueGiftCode();
-    const doc = {
-      code, codeLower: code.toLowerCase(), minReward, maxReward, maxUses: maxUses || null, usedBy: [], active: true,
-      createdBy: req.adminUser?.username || 'owner', createdAt: FieldValue.serverTimestamp(),
-    };
-    if (durationSeconds) doc.expiresAt = new Date(Date.now() + durationSeconds * 1000);
-    await db.collection('promoCodes').add(doc);
-    logAdminAction(req, 'giftcode_generated', { code, minReward, maxReward, maxUses, durationSeconds });
-    res.json({ status: 'success', code, minReward, maxReward });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-app.get('/admin/promocodes/list', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const snap = await db.collection('promoCodes').orderBy('createdAt', 'desc').limit(300).get();
-    res.json({ status: 'success', codes: snap.docs.map(d => {
-      const c = d.data();
-      // A code generated before this round only ever has the old, single
-      // `reward` field -- read as a degenerate range (min===max) so the
-      // admin UI needs no legacy-shape branch at all.
-      const uses = (c.usedBy || []).length;
-      // Owner: "showing total reward claimed on each treasure." Real
-      // per-claim rolled amounts, summed -- `claimedRewards` is written
-      // atomically alongside `usedBy` at claim time (see /redeem), so it
-      // always has exactly one entry per real claim, in sync with `uses`.
-      // A code from before random rewards has no `claimedRewards` map at
-      // all -- every one of its claims paid the exact same fixed `reward`,
-      // so `reward * uses` is exactly right, not an approximation.
-      const totalClaimed = c.claimedRewards
-        ? round2(Object.values(c.claimedRewards).reduce((s, r) => s + (Number(r) || 0), 0))
-        : round2((Number(c.reward) || 0) * uses);
-      return { id: d.id, code: c.code, minReward: c.minReward ?? c.reward, maxReward: c.maxReward ?? c.reward,
-        maxUses: c.maxUses || null, uses, totalClaimed,
-        active: c.active !== false, expiresAt: c.expiresAt || null, createdAt: c.createdAt || null };
-    }) });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-app.post('/admin/promocodes/deactivate', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const id = String(req.body.id || '');
-  if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
-  try {
-    await db.collection('promoCodes').doc(id).update({ active: false });
-    logAdminAction(req, 'giftcode_deactivated', { id });
-    res.json({ status: 'success' });
-  } catch (e) { res.status(adminFailCode(e)).json({ status: 'error', message: e.message }); }
 });
 
 // Legacy rows may carry a currency tag, but all new Cookie activity is UGX.

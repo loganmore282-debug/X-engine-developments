@@ -1,5 +1,5 @@
 'use strict';
-// No double crediting: the real registration, gift-code and Task Center routes run with many requests at once (and with a crash in the middle) on an in-memory database.
+// No double crediting: the real registration code runs with many requests at once (and with a crash in the middle) on an in-memory database.
 const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
@@ -85,8 +85,8 @@ function make(seed, settings = ZERO) {
     tsMillis: v => v instanceof Date ? v.getTime() : Number(v) || 0, round2: n => Math.round((Number(n) || 0) * 100) / 100, nowStr: () => ({ date: 'd', time: 't' }), newStatementId: () => 's' + ++serial,
     verifyAuth: async req => req.uid, logSecurityEvent() {}, fmtMoney: n => 'UGX ' + n, getSettings: async () => settings, textOf: v => typeof v === 'string' ? v : '',
     currentRegionKey: () => 'ug', verifyAuthWithEmail: async req => ({ uid: req.uid, phone: req.phone }), badPhoneMessage: () => 'bad', app: { post: (p, h) => { routes[p] = h; }, get() {} } });
-  vm.runInContext('const _lockTails = new Map(); const DEFAULT_REGION_KEY = "ug"; const REFERRAL_CHARS = "abcdefghjkmnpqrstuvwxyz23456789"; const REFERRAL_LENGTH = 8; const PUBLIC_ID_DIGITS = 5; const GIFTCODE_LENGTH = 12, GIFTCODE_GROUP_LEN = 4; const TASK_MAX_ROWS = 30, TASK_MAX_REFERRALS = 100000; const MAX_MONEY_AMOUNT = 999999999;\n' +
-    ['withLock', 'finiteMoney', 'randFromAlphabet', 'randCode', 'findUserByReferralCode', 'generateUniqueReferralCode', 'nextSequentialPublicId', 'defaultProfileDoc', 'completeRegistrationCore', 'sanitizeTaskRows', 'taskRows', 'activeL1Count', 'wholeTeamStats'].map(fn).join('\n') + '\n' + route('/redeem') + '\n' + route('/team/task/claim'), ctx);
+  vm.runInContext('const _lockTails = new Map(); const DEFAULT_REGION_KEY = "ug"; const REFERRAL_CHARS = "abcdefghjkmnpqrstuvwxyz23456789"; const REFERRAL_LENGTH = 8; const PUBLIC_ID_DIGITS = 5; const GIFTCODE_LENGTH = 12, GIFTCODE_GROUP_LEN = 4;\n' +
+    ['withLock', 'finiteMoney', 'randFromAlphabet', 'randCode', 'findUserByReferralCode', 'generateUniqueReferralCode', 'nextSequentialPublicId', 'defaultProfileDoc', 'completeRegistrationCore'].map(fn).join('\n'), ctx);
   const call = (path, uid, body = {}) => { const res = response(); return routes[path]({ uid, body, headers: {} }, res).then(() => res); };
   return { db, ctx, call, reg: (uid, phone, code) => ctx.completeRegistrationCore(uid, code, phone) };
 }
@@ -123,38 +123,8 @@ async function main() {
     assert.equal(both.db.rows.users.r.teamL1Count, 4, 'four members, counted four times, however many times each request arrived');
     assert.equal(new Set(['p1', 'p2', 'p3', 'p4'].map(u => both.db.rows.users[u].publicId)).size, 4);
   }
-  // 2. GIFT CODES: one claim per member, however many taps; the usage limit holds when many members claim at once; a crash in the middle pays once on retry
-  {
-    const code = { code: 'abcd-efgh-jkmn', codeLower: 'abcd-efgh-jkmn', active: true, minReward: 1000, maxReward: 1000, usedBy: [] };
-    const seed = () => ({ users: { u1: { walletBalance: 0, status: 'active', registrationDone: true }, u2: { walletBalance: 0, status: 'active', registrationDone: true }, u3: { walletBalance: 0, status: 'active', registrationDone: true }, u4: { walletBalance: 0, status: 'active', registrationDone: true }, u5: { walletBalance: 0, status: 'active', registrationDone: true } }, promoCodes: { c1: structuredClone(code) } });
-    { const { db, call } = make(seed());
-      const rs = await Promise.all(Array.from({ length: 8 }, () => call('/redeem', 'u1', { code: 'ABCD-EFGH-JKMN' })));
-      assert.equal(rs.filter(r => r.code === 200).length, 1, 'only one tap pays'); assert.equal(db.rows.users.u1.walletBalance, 1000, 'paid once'); assert.equal(tx(db, 'promocode').length, 1);
-      const again = await call('/redeem', 'u1', { code: 'abcdefghjkmn' }); assert.equal(again.code, 400); assert.equal(db.rows.users.u1.walletBalance, 1000, 'typing it again (no dashes) pays nothing'); }
-    { const s = seed(); s.promoCodes.c1.maxUses = 2; const { db, call } = make(s);
-      const rs = await Promise.all(['u1', 'u2', 'u3', 'u4', 'u5'].flatMap(u => [call('/redeem', u, { code: 'abcd-efgh-jkmn' }), call('/redeem', u, { code: 'abcd-efgh-jkmn' })]));
-      const paid = ['u1', 'u2', 'u3', 'u4', 'u5'].filter(u => db.rows.users[u].walletBalance > 0);
-      assert.equal(paid.length, 2, 'the usage limit of 2 holds when five members claim at once'); assert.ok(paid.every(u => db.rows.users[u].walletBalance === 1000)); assert.equal(tx(db, 'promocode').length, 2); }
-    { const { db, call } = make(seed());
-      db.faults.push((col, id, patch) => col === 'users' && id === 'u1' && patch.redeemedGiftCodeIds);   // dies right before the wallet credit
-      const bad = await call('/redeem', 'u1', { code: 'abcd-efgh-jkmn' }); assert.equal(bad.code, 500); assert.equal(db.rows.users.u1.walletBalance, 0, 'nothing was credited by the failed attempt');
-      const retry = await Promise.all([call('/redeem', 'u1', { code: 'abcd-efgh-jkmn' }), call('/redeem', 'u1', { code: 'abcd-efgh-jkmn' })]);
-      assert.equal(db.rows.users.u1.walletBalance, 1000, 'the retry pays exactly once'); assert.equal(tx(db, 'promocode').length, 1);
-      assert.equal(retry.filter(r => r.code === 200).length, 1); }
-  }
-  // 3. TASK CENTER: a task reward is paid once however many taps, and the ledger has one row
-  {
-    const seed = { users: { m: { walletBalance: 0, totalEarned: 0, status: 'active' }, k1: { referredBy: 'm', status: 'active', totalDeposited: 30000 }, k2: { referredBy: 'm', status: 'active', totalDeposited: 5000 }, k3: { referredBy: 'm', status: 'banned', totalDeposited: 9000 } } };
-    const { db, call } = make(seed);
-    const rs = await Promise.all(Array.from({ length: 7 }, () => call('/team/task/claim', 'm', { type: 'count', id: 'r1' })));
-    assert.equal(rs.filter(r => r.code === 200).length, 1, 'one claim pays ' + JSON.stringify(rs.map(r => [r.code, r.body && r.body.message]))); assert.equal(db.rows.users.m.walletBalance, 10000); assert.equal(tx(db, 'team_reward').length, 1);
-    const dep = await call('/team/task/claim', 'm', { type: 'deposit', id: 'd1' }); assert.equal(dep.code, 400, 'not reached yet: 35,000 of 100,000 (a banned member does not count)');
-    db.rows.users.k1.totalDeposited = 100000; const d2 = await Promise.all([call('/team/task/claim', 'm', { type: 'deposit', id: 'd1' }), call('/team/task/claim', 'm', { type: 'deposit', id: 'd1' })]);
-    assert.equal(d2.filter(r => r.code === 200).length, 1); assert.equal(db.rows.users.m.walletBalance, 15000); assert.equal(tx(db, 'team_reward').length, 2);
-    const fail = make(seed); fail.db.faults.push((col, id) => col === 'transactions');   // the history row fails once: money paid once, row repaired
-    const f1 = await fail.call('/team/task/claim', 'm', { type: 'count', id: 'r1' }); assert.equal(f1.code, 200); assert.equal(fail.db.rows.users.m.walletBalance, 10000); assert.equal(tx(fail.db, 'team_reward').length, 1, 'the row is repaired at once');
-    const f2 = await fail.call('/team/task/claim', 'm', { type: 'count', id: 'r1' }); assert.equal(f2.code, 409); assert.equal(fail.db.rows.users.m.walletBalance, 10000);
-  }
-  console.log('PASS: no double crediting (registration, referral counts and codes, gift codes, Task Center rewards)');
+  // 2. gift codes and the Task Center are gone: nothing can be claimed by calling their old addresses
+  { const src = fs.readFileSync(__dirname + '/server.js', 'utf8'); assert.ok(!/app\.post\('\/redeem'/.test(src) && !/app\.post\('\/team\/task\/claim'/.test(src) && !/\/admin\/promocodes|\/admin\/tasks/.test(src), 'no gift code / Task Center route'); }
+  console.log('PASS: no double crediting (registration, referral counts and codes; no gift code or Task Center route)');
 }
 main().catch(e => { console.error(e); process.exitCode = 1; });

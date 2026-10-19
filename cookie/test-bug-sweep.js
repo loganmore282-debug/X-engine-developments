@@ -12,7 +12,7 @@ const server = rd('server.js'), admin = rd('admin-src/index.html'), mod = rd('us
 ok(/app\.set\('case sensitive routing', true\)/.test(server), 'routes are case-sensitive (/Withdraw/request must not skip the maintenance gate)');
 ok(/if \(!mpData\.providerDown\) await markDepositFailed/.test(server), 'a busy MarzPay does not mark a possibly-live payment as failed');
 ok(!/firstReferralDepositId = depDoc\.id|creditDepositReferralCommission/.test(server) && /creditReferralCommission\(invId, userId, liveTier\.price\)/.test(server), 'the referral reward is paid on the first purchase, never on a deposit')
-ok(/withLock\('redeem:' \+ raw\.toLowerCase\(\)\.replace\(\/\[\^a-z0-9\]\/g, ''\)/.test(server), 'one gift code has one lock whatever spelling is typed');
+ok(!/app\.post\('\/redeem'/.test(server), 'gift codes are gone: no redeem route');
 ok(/round2\(bal\) < liveTier\.price/.test(server) && /round2\(bal\) < amt/.test(server) && /\$gte: amt - 0\.005/.test(server), 'a wallet a hair under a whole amount (cents) is not refused');
 { const g = server.indexOf('async function payoutRejectGuard'), i = server.indexOf("app.post('/admin/withdraw/reject'"), j = server.indexOf("declineWithdrawalAndRefund(ref, w.userId", i);
   const guard = server.slice(g, i); ok(g > 0 && /pesajetGetTx\(w\.pesajetTxId\)/.test(guard) && /pesajetFindByReference\(w\.pesajetRef/.test(guard) && /marzGetSendStatus\(w\.marzTxUuid\)/.test(guard) && /marzGetBankTransferStatus\(w\.marzReference\)/.test(guard), 'rejecting a payout the gateway may already have asks the gateway first (PesaJet by id or reference, MarzPay by uuid or bank reference)');

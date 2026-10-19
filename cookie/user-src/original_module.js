@@ -4047,152 +4047,6 @@ function renderTeamMembers(level){
   </div>`;
   }).join('');
 }
-// ── TASK CENTER (opened from the Team page) ──
-// Two lists the owner sets in the admin panel: Referrals (members of your own Level 1 who have deposited) and
-// Deposits (what your whole team has deposited). Progress and the claim itself are decided by the server.
-var _taskTab = 'count', _taskBusy = false;
-function taskLists(){
-  const ms = (STATE.teamStats && STATE.teamStats.milestones) || [];
-  return { count: ms.filter(m => m.id && m.type === 'count'), deposit: ms.filter(m => m.id && m.type === 'deposit') };
-}
-function taskReadyCount(){ return ((STATE.teamStats && STATE.teamStats.milestones) || []).filter(m => m.achieved && !m.claimed).length; }
-function taskCardHtml(m, isNext){
-  const isDep = m.type === 'deposit';
-  const cur = Number(m.current) || 0, tgt = Number(m.target) || 1;
-  const state = m.claimed ? 'done' : m.achieved ? 'ready' : isNext ? 'next' : 'locked';
-  const pct = Math.max(0, Math.min(100, Math.round(cur / tgt * 100)));
-  const shown = Math.min(cur, tgt);
-  const target = isDep ? vMoney(tgt) : String(tgt);
-  const progress = isDep ? vMoney(shown) + ' / ' + vMoney(tgt) : shown + ' / ' + tgt;
-  const btn = m.claimed
-    ? `<button type="button" class="v-tk-btn done" disabled>${VI.tick}<span>Claimed</span></button>`
-    : m.achieved
-      ? `<button type="button" class="v-tk-btn go" onclick="claimTask('${esc(m.type)}','${esc(m.id)}',this)"><span>Claim</span></button>`
-      : `<button type="button" class="v-tk-btn" onclick="taskNotReached('${esc(m.type)}')"><span>Claim</span></button>`;
-  return `<article class="v-tk-card ${state}">
-    <div class="v-tk-top">
-      <span class="v-tk-medal">${m.claimed ? VI.tick : VI.gift}</span>
-      <div class="v-tk-tgt"><b class="${vFit(target, 10, 13)}">${esc(target)}</b><span>${isDep ? 'Team deposits' : 'Level 1 active referrals'}</span></div>
-      <span class="v-tk-reward ${vFit(vMoney(m.reward), 11, 13)}">${esc(vMoney(m.reward))}</span>
-    </div>
-    <div class="v-tk-bar"><i style="width:${pct}%"></i></div>
-    <div class="v-tk-foot"><span>Progress: ${esc(progress)}</span>${btn}</div>
-  </article>`;
-}
-// The cards of the open tab (the page and the tab switch both use it).
-function taskListInnerHtml(){
-  const list = taskLists()[_taskTab];
-  const nextIdx = list.findIndex(m => !m.claimed && !m.achieved);
-  return list.length ? list.map((m, i) => taskCardHtml(m, i === nextIdx)).join('') : '<div class="v-empty">No tasks yet.</div>';
-}
-function taskCenterHtml(){
-  const t = STATE.teamStats || {};
-  const L = taskLists(), tab = _taskTab;
-  const ready = k => L[k].filter(m => m.achieved && !m.claimed).length;
-  const tabBtn = (k, label) => `<button type="button" class="${tab === k ? 'on' : ''}" onclick="switchTaskTab('${k}')">${label}${ready(k) ? `<em>${ready(k)}</em>` : ''}</button>`;
-  return `<div class="v-tk reveal-in">
-    <div class="v-tk-hero">
-      <span class="v-tk-trophy">${VI.trophy}</span>
-      <div class="v-tk-stat"><b>${Number(t.l1ActiveCount) || 0}</b><span>Level 1 active referrals</span></div>
-      <i></i>
-      <div class="v-tk-stat"><b class="${vFit(vMoney(t.teamDeposits), 10, 13)}">${esc(vMoney(t.teamDeposits))}</b><span>Team deposits</span></div>
-    </div>
-    <div class="v-tk-tabs" data-tab="${tab}"><i class="v-tk-pill" aria-hidden="true"></i>${tabBtn('count', 'Referrals')}${tabBtn('deposit', 'Deposits')}</div>
-    <div class="v-tk-list" id="tkList">${taskListInnerHtml()}</div>
-  </div>`;
-}
-function paintTaskCenter(){
-  const b = $('tkBody'); if (!b) return;
-  if (_taskFailed && !(STATE.teamStats && STATE.teamStats.milestones)) { _taskShowsFailure = true; b.innerHTML = '<div class="v-empty" onclick="refreshTaskCenter()">Could not load your team</div>'; return; }
-  _taskShowsFailure = false;
-  b.innerHTML = taskCenterHtml();
-}
-window.refreshTaskCenter = refreshTaskCenter;
-function updateTaskBadge(){
-  const e = $('tkBadge'); if (!e) return;
-  const n = taskReadyCount(); e.textContent = n; e.style.display = n ? '' : 'none';
-}
-// Switching tabs: the white pill glides to the other tab and the cards slide out and the new ones slide in from the
-// side the member is heading to (nothing jumps). With reduced motion, or no page to animate, it swaps at once.
-var _tkSwapTimer = null;
-window.switchTaskTab = function(k){
-  const next = k === 'deposit' ? 'deposit' : 'count';
-  if (next === _taskTab) { paintTaskCenter(); return; }
-  _taskTab = next;
-  const tabs = document.querySelector('.v-tk-tabs'), list = $('tkList');
-  const calm = typeof matchMedia !== 'function' || matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (!tabs || !list || calm) { paintTaskCenter(); return; }
-  tabs.dataset.tab = next;
-  tabs.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', (i === 1) === (next === 'deposit')));
-  const dir = next === 'deposit' ? 1 : -1;
-  clearTimeout(_tkSwapTimer);
-  list.style.transition = 'opacity .13s ease, transform .13s ease';
-  list.style.opacity = '0';
-  list.style.transform = 'translateX(' + (-dir * 22) + 'px)';
-  _tkSwapTimer = setTimeout(() => {
-    const cur = $('tkList'); if (!cur) return;
-    cur.innerHTML = taskListInnerHtml();
-    cur.style.transition = 'none';
-    cur.style.transform = 'translateX(' + (dir * 22) + 'px)';
-    void cur.offsetWidth;
-    cur.style.transition = 'opacity .28s ease, transform .34s cubic-bezier(.2,.85,.25,1)';
-    cur.style.opacity = '1';
-    cur.style.transform = 'none';
-  }, 130);
-};
-var _taskFailed = false, _taskTimer = null, _taskShowsFailure = false;
-// Fetches the true progress. A failed fetch keeps whatever the page already shows; with nothing to show it says so
-// (tap to retry) instead of printing "No tasks yet." as if the owner had none.
-async function refreshTaskCenter(){
-  const had = !!(STATE.teamStats && STATE.teamStats.milestones);
-  const before = had ? JSON.stringify([STATE.teamStats.milestones, STATE.teamStats.l1ActiveCount, STATE.teamStats.teamDeposits]) : '';
-  const r = await api('/team/stats');
-  if (r.status === 'success') { STATE.teamStats = r; _taskFailed = false; }
-  else _taskFailed = !had;
-  const now = STATE.teamStats && STATE.teamStats.milestones ? JSON.stringify([STATE.teamStats.milestones, STATE.teamStats.l1ActiveCount, STATE.teamStats.teamDeposits]) : '';
-  if (_openSheetTitle === 'Task Center' && (before !== now || _taskFailed || !had || _taskShowsFailure)) paintTaskCenter();
-  updateTaskBadge();
-}
-window.openTaskCenter = async function(){
-  openSheet('Task Center', '<div id="tkBody"></div>');
-  if (STATE.teamStats && STATE.teamStats.milestones) paintTaskCenter();
-  else { const b = $('tkBody'); if (b) b.innerHTML = '<div class="v-tk-wait">' + NAV_LOADER + '</div>'; }
-  // While the page is open, progress is re-read every 15 seconds so a referral that just deposited shows up by itself.
-  if (_taskTimer) clearInterval(_taskTimer);
-  _taskTimer = setInterval(() => {
-    if (_openSheetTitle !== 'Task Center') { clearInterval(_taskTimer); _taskTimer = null; return; }
-    if (!_taskBusy && !document.hidden) refreshTaskCenter();
-  }, 15000);
-  await refreshTaskCenter();
-};
-// Tapping Claim on a task that is not reached yet says so (a disabled button would swallow the tap), with a nudge on what to do.
-window.taskNotReached = function(type){
-  notify(type === 'deposit'
-    ? 'Deposit target not reached. Keep growing your team and encourage them to deposit.'
-    : 'Referral target not reached. Share your invite link to bring in more members.');
-};
-window.claimTask = async function(type, id, btn){
-  if (_taskBusy) return;
-  _taskBusy = true; if (btn) { btn.disabled = true; btn.textContent = 'Claiming…'; }
-  let r;
-  try { r = await post('/team/task/claim', { type, id }); } finally { _taskBusy = false; }
-  if (r.status === 'success') {
-    const m = ((STATE.teamStats && STATE.teamStats.milestones) || []).find(x => x.type === type && x.id === id);
-    if (m) m.claimed = true;
-    const before = Number((STATE.account || {}).walletBalance) || 0;
-    const reward = Number(r.amount) || 0;
-    const after = Number.isFinite(Number(r.walletBalance)) && r.walletBalance !== null ? Number(r.walletBalance) : before + reward;
-    if (STATE.account) STATE.account.walletBalance = after;
-    paintTaskCenter(); updateTaskBadge();
-    showChestWin(reward, after, () => {});
-    refreshAfterWin();
-    return;
-  }
-  // Not claimable after all (already taken, progress changed, task removed): say so and show the true state.
-  notify(r.message || 'Could not claim that reward');
-  await refreshTaskCenter();
-  if (_openSheetTitle === 'Task Center') paintTaskCenter();
-};
 async function renderNetwork(){
   // One load: the header shows while the member's own figures and list are read, then the whole page appears once.
   const hadCache = !!STATE.teamStats;
@@ -5073,100 +4927,6 @@ window.submitLoginPasswordChange = async function(){
 // ── CHANGE TRADE PASSWORD (ChangePassword.dc.html) ──
 // The 6-digit PIN that confirms withdrawals. Cookie uses 6 digits where Snow
 // used 5 -- server.js validates the same length on /account/transaction-pin/change.
-// ── TREASURE CHEST (Chest.dc.html / ChestSuccess.dc.html) ──
-// The bouncing chest on Home opens this full screen: glowing ring, bouncing
-// chest artwork, key field, OPEN CHEST. A valid key flashes the green
-// full-screen win state with the amount won and the new balance.
-window.openChestSheet = function(){
-  const pic = STATE.brandLogo
-    ? `<img src="${esc(STATE.brandLogo)}" alt="">`
-    : `<span class="v-chest-ic">${VI.bottle}</span>`;
-  openSheet('TREASURE CHEST', `<div class="v-chest reveal-in">
-    <div class="v-chest-ring"><div class="v-chest-disc">${pic}</div></div>
-    <h2>MYSTERY TREASURE</h2>
-    <p>Enter your key to unlock the reward</p>
-    <div class="v-chest-key"><span class="v-chest-keyic">${VI.key}</span><input id="chestKey" type="text" placeholder="Enter treasure chest key" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
-    <button class="v-chest-go" id="chestOpenBtn" type="button" onclick="submitChestKey()">UNLOCK TREASURE</button>
-  </div>`);
-};
-window.submitChestKey = async function(){
-  // No case-forcing here -- /redeem matches case-insensitively via
-  // codeLower now, so whatever case the member typed or pasted reaches
-  // the server unchanged and still resolves to the same code.
-  const raw = ($('chestKey').value || '').trim();
-  // Owner named these two exactly: "so on 'please enter the treasure chest
-  // key', 'wrong treasure chest password'."
-  if (!raw) return notify('Please enter the treasure chest key');
-  const btn = $('chestOpenBtn');
-  btn.disabled = true; btn.textContent = 'UNLOCKING…';
-  const r = await post('/redeem', { code: raw });
-  btn.disabled = false; btn.textContent = 'UNLOCK TREASURE';
-  if (r.status !== 'success') return notify(r.message || 'Wrong treasure chest password');
-  // Owner: "why does the congratulations card delay to appear when one has
-  // claimed treasure code." Because it used to wait on TWO more round trips
-  // after the redeem itself -- /account and the transactions cache -- purely
-  // to print "New Balance". On a phone on mobile data with the backend cold,
-  // that is seconds of nothing happening after a successful claim, which
-  // reads as a failure.
-  //
-  // The credit is already confirmed by the time we are here, and the new
-  // balance is simple arithmetic on a figure the app already holds, so the
-  // card can open NOW. `walletBalance` comes back from /redeem itself where
-  // the deployed backend sends it; the sum is the fallback for a backend
-  // that has not been redeployed yet.
-  const before = Number((STATE.account || {}).walletBalance) || 0;
-  const reward = Number(r.reward) || 0;
-  const after = Number.isFinite(Number(r.walletBalance)) && r.walletBalance !== null
-    ? Number(r.walletBalance) : before + reward;
-  if (STATE.account) STATE.account.walletBalance = after;
-  // The win card from the owner's screenshot: Congratulations!, You won, the
-  // amount, the new balance and COLLECT, over the blurred Treasure Chest page.
-  showChestWin(reward, after);
-  // Now catch the app up in the background.
-  refreshAfterWin();
-};
-function showChestWin(reward, balance, after){
-  let bg = $('chestWinBg');
-  if (bg) bg.remove();
-  bg = document.createElement('div');
-  bg.id = 'chestWinBg'; bg.className = 'v-win-bg'; bg._after = typeof after === 'function' ? after : null;
-  bg.innerHTML = `
-    <div class="v-win-card" role="dialog" aria-modal="true">
-      <span class="v-win-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="9" width="17" height="11.5" rx="2"/><path d="M2.5 9h19v-3.2h-19z"/><path d="M12 5.8v14.7"/><path d="M12 5.8C10.2 5.8 8.4 5 8.4 3.6 8.4 2.5 9.4 2 10.4 2.4c1.1.5 1.6 1.9 1.6 3.4zM12 5.8c1.8 0 3.6-.8 3.6-2.2 0-1.1-1-1.6-2-1.2-1.1.5-1.6 1.9-1.6 3.4z"/></svg></span>
-      <h2>Congratulations!</h2>
-      <p class="v-win-sub">You won</p>
-      <div class="v-win-amt">${esc(vMoney2(reward))}</div>
-      <p class="v-win-bal">New Balance: ${esc(vMoney2(balance))}</p>
-      <button type="button" class="v-win-btn" onclick="collectChestWin()">COLLECT</button>
-    </div>`;
-  document.body.appendChild(bg);
-  requestAnimationFrame(() => bg.classList.add('show'));
-  dlgOpened();
-}
-window.collectChestWin = function(){
-  const bg = $('chestWinBg');
-  const after = bg && bg._after;
-  if (bg) bg.remove();
-  // A win that came from somewhere other than the Treasure Chest page (a Task Center reward) hands control back to
-  // its own page instead of closing the sheet underneath.
-  if (after) { after(); dlgClosed(); return; }
-  // The chest page and the win card each own a history entry: close both with ONE history call.
-  if (!_dlgFromPop && history.state && history.state.dlg) { closeSheet({ fromAction: true, keepHistory: true }); _dlgIgnore(); history.go(-2); }
-  else closeSheet({ fromAction: true });
-};
-// The two network refreshes a win needs. Deliberately not awaited by its
-// caller -- the toast above already told the member it worked, so nothing
-// on screen is waiting on either result.
-async function refreshAfterWin(){
-  try {
-    const acc = await api('/account');
-    if (acc.status === 'success') STATE.account = acc.account;
-    await refreshTransactionsCache();
-    if (STATE.page === 'home') renderHome();
-    if (STATE.page === 'account') paintAccount();
-  } catch (_) { /* STATE.account is already correct from the redeem response */ }
-}
-
 // Shared by every full-screen overlay (sheets, the announcement dialog, the
 // gift-code modal, confirm dialogs) that needs to stop the page behind it
 // from moving while it's open. Locking body.style.overflow alone isn't
@@ -5342,8 +5102,7 @@ window.closeSheet = function(opts){
 // dialog is skipped over by the popstate handler below, so Back never "does nothing".
 var _dlgIgnorePop = false, _dlgFromPop = false, _dlgCleanTimer = null;
 function anyDialogOpen(){
-  return !!($('chestWinBg')
-    || ($('payScreen') && $('payScreen').classList.contains('show'))
+  return !!(($('payScreen') && $('payScreen').classList.contains('show'))
     || ($('helpBg') && $('helpBg').classList.contains('show'))
     || ($('confirmBg') && $('confirmBg').classList.contains('show'))
     || ($('annBg') && $('annBg').classList.contains('show'))
@@ -5359,7 +5118,6 @@ function resetOverlayState(){
   // The payment page goes with them: its countdown stops, its polls stop, and the password boxes it switched off come back (otherwise the Login
   // screen's password box stayed disabled after a session ended while the payment page was open).
   try { if (typeof _pg !== 'undefined') { _pg.token++; } pgStopTimer(); pgLockPasswordBoxes(false); document.title = brandName(); if (/^\/payment\//.test(location.pathname)) history.replaceState(history.state, '', '/'); } catch (_) {}
-  const win = $('chestWinBg'); if (win) win.remove();
   _openSheetTitle = null; _depActiveDepositId = null; _withdrawSubmitting = false;
   if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
 }
@@ -5379,8 +5137,7 @@ function dlgClosed(){
 function closeTopDialog(){
   _dlgFromPop = true;
   try {
-    if ($('chestWinBg')) collectChestWin();
-    else if ($('payScreen') && $('payScreen').classList.contains('show')) { if (_pg.view === 'form' || _pg.view === 'initiated' || _pg.view === 'unknown' || _pg.view === 'failed' || _pg.view === 'gone' || _pg.view === 'done') closePaymentPage(); else dlgOpened(); }
+    if ($('payScreen') && $('payScreen').classList.contains('show')) { if (_pg.view === 'form' || _pg.view === 'initiated' || _pg.view === 'unknown' || _pg.view === 'failed' || _pg.view === 'gone' || _pg.view === 'done') closePaymentPage(); else dlgOpened(); }
     else if ($('helpBg') && $('helpBg').classList.contains('show')) closeHelpDialog();
     else if ($('confirmBg') && $('confirmBg').classList.contains('show')) closeConfirm();
     else if ($('annBg') && $('annBg').classList.contains('show')) closeAnnouncement();

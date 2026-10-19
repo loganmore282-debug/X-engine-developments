@@ -30,19 +30,11 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(typeof w.deleteWallet === 'undefined', 'deleteWallet is gone');
   w.eval('STATE.bankAccounts=[];openSheet("Wallet","");renderWalletSheet()');
   ok(/Real Name :\s*$/.test(d.querySelector('#walCardBox').textContent.trim()) && d.getElementById('walHolder').value === '', 'no wallet yet: an empty card and empty fields');
-  // Treasure Chest: the owner's words only.
-  w.openChestSheet();
-  const t = d.getElementById('sheetBody').textContent.replace(/\s+/g, ' ').trim();
-  ok(d.getElementById('sheetTitle').textContent === 'TREASURE CHEST', 'title');
-  ok(t === 'MYSTERY TREASURE Enter your key to unlock the reward UNLOCK TREASURE', 'only the screenshot words: ' + t);
-  ok(d.getElementById('chestKey').placeholder === 'Enter treasure chest key', 'key placeholder');
-  ok(d.querySelector('.v-chest-keyic svg'), 'key icon');
-  w.submitChestKey();
-  ok(/Please enter the treasure chest key/.test(d.getElementById('notifyMsg').textContent), 'empty key message');
+  // Treasure chest and gift codes are not in the owner's screenshots: the page, its code and the server route are gone.
+  ok(typeof w.openChestSheet === 'undefined' && typeof w.submitChestKey === 'undefined' && typeof w.openTaskCenter === 'undefined' && typeof w.claimTask === 'undefined', 'no chest or Task Center page in the app');
   // Server: one wallet, edited in place; chest messages.
   ok(/MAX_SAVED_PAYOUT_ACCOUNTS = 1/.test(server), 'server keeps one wallet');
-  ok(/Wrong treasure chest password/.test(server) && /Please enter the treasure chest key/.test(server), 'server chest messages');
-  ok(/function showChestWin\(reward, balance(, after)?\)/.test(source) && /Congratulations!/.test(source) && /You won/.test(source) && /New Balance: /.test(source) && />COLLECT</.test(source), 'claiming a gift code opens the Congratulations card (You won, amount, New Balance, COLLECT)');
+  ok(!/app\.post\('\/redeem'/.test(server) && !/app\.post\('\/team\/task\/claim'/.test(server) && !/promocodes/.test(server), 'no gift-code or Task Center route on the server');
 ok(!/notify\('Giftcode redeemed successfully'\)/.test(source), 'the plain toast no longer replaces the card');
 ok(!/id="depPhone"/.test(source) && /Please enter the Deposit amount/.test(source) && /post\('\/deposit\/order\/create'/.test(source), 'the Deposit page has no phone box (the phone is asked on the payment page) and asks for the amount');
 ok(/for="walPhone">Wallet Account<\/label>/.test(source) && !/for="walPhone">Phone Number/.test(source), 'the wallet number field is labelled Wallet Account');
