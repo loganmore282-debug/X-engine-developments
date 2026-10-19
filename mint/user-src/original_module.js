@@ -2760,25 +2760,33 @@ function mgScrollbarInit(){
     return document.scrollingElement || document.documentElement;
   }
   // Draws one thumb: the track is [top, bottom] on screen, ch/st/sh = visible height, scroll offset, content height of the scroller.
+  // Returns whether the scroller overflows at all (then the caller reserves the bar's 4px, like a classic scrollbar does).
   function draw(o, top, bottom, ch, st, sh, right){
     const track = bottom - top, over = sh - ch;
-    if (over < 24 || track < 30) { if (o.last !== 'x') { o.bar.style.display = 'none'; o.last = 'x'; } return; }
+    if (over < 1 || track < 30) { if (o.last !== 'x') { o.bar.style.display = 'none'; o.last = 'x'; } return false; }
     const th = Math.max(30, Math.round(track * ch / sh)), ty = Math.round((track - th) * Math.min(1, Math.max(0, st / over)));
     const key = top + '|' + track + '|' + th + '|' + ty + '|' + right;
-    if (key === o.last) return; o.last = key;
+    if (key === o.last) return true; o.last = key;
     o.bar.style.cssText = 'display:block;top:' + top + 'px;height:' + track + 'px;right:' + right + 'px';
     o.thumb.style.cssText = 'height:' + th + 'px;transform:translateY(' + ty + 'px)';
+    return true;
   }
+  // The scrollbar takes 4px of the page's width while it is there (as in the owner's screens, where every page with a bar is 4px narrower on the
+  // right). `mg-gut` on the scroller (the page, a sheet, or the Login scroller) makes the room.
+  const gut = (el, on) => { if (el.classList.contains('mg-gut') !== on) el.classList.toggle('mg-gut', on); };
   function update(){
     const el = target(), isDoc = el === document.scrollingElement || el === document.documentElement;
+    let on;
     if (isDoc) {
       let bottom = window.innerHeight;
       const nav = document.querySelector('.bottom-nav'), app = document.getElementById('app');
       if (nav && shown(nav) && app && app.style.display !== 'none') bottom = nav.getBoundingClientRect().top;
-      draw(main, 0, bottom, window.innerHeight, window.pageYOffset, el.scrollHeight, 0);
+      on = draw(main, 0, bottom, window.innerHeight, window.pageYOffset, el.scrollHeight, 0);
+      gut(document.documentElement, on);
     } else {
       const r = el.getBoundingClientRect();
-      draw(main, Math.max(0, r.top), Math.min(window.innerHeight, r.bottom), el.clientHeight, el.scrollTop, el.scrollHeight, 0);
+      on = draw(main, Math.max(0, r.top), Math.min(window.innerHeight, r.bottom), el.clientHeight, el.scrollTop, el.scrollHeight, 0);
+      gut(el, on);
     }
     // the bank list that drops down in Add Wallet scrolls on its own
     const pl = document.querySelector('.prov-list');
