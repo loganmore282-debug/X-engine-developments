@@ -2916,7 +2916,6 @@ async function renderBanners(){
   const homeSlide4Image = cir.banner4||'';
   const homeSlide5Image = cir.banner5||'';
   const promoBannerImage = cir.promobanner||'';
-  const chestArtImage = cir.chestart||'';
   const logoImage = cir.logo||'';
   const profileLogoImage = cir.profilelogo||'';
   const loaderBgImage = cir.loaderbg||'';
@@ -2988,17 +2987,6 @@ async function renderBanners(){
         ${promoBannerImage?`<button class="btn danger sm" id="promoBannerClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="promoBannerFile" accept="image/*" hidden></label>
-    </div>
-
-    <h2 class="sec">Treasure chest picture</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">The chest that bounces on Home and sits on the Treasure Chest page. A PNG with a see-through background works best (about 600&times;600). Without one, the built-in chest is used.</p>
-      <div class="banner-row">
-        ${chestArtImage?`<img class="img-thumb" src="${esc(chestArtImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${chestArtImage?'Custom image':'<span class="muted">Not set &mdash; built-in chest</span>'}</div>
-        ${chestArtImage?`<button class="btn danger sm" id="chestArtClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="chestArtFile" accept="image/*" hidden></label>
     </div>
 
     <h2 class="sec">Welcome announcement</h2>
@@ -3135,9 +3123,8 @@ function wireBannerHandlers(){
                        : slot==='authhero' ? 1600
                        : slot==='authlogo' ? 480
                        : slot==='downloadbg' ? 1080
-                       : slot==='chestart' ? 700
                        : 1280;
-          const image = await fileToDataUrl(f, maxDim, slot==='loaderbg' ? 0.7 : 0.82, slot==='chestart');
+          const image = await fileToDataUrl(f, maxDim, slot==='loaderbg' ? 0.7 : 0.82);
           const d = await api('/admin/mint-image/set', { slot, image });
           toast(d.status==='success'?savedMsg:(d.message||'Failed'), d.status==='success'?'ok':'err');
           if (d.status==='success') renderBanners();
@@ -3185,7 +3172,6 @@ function wireBannerHandlers(){
   wireMintImageSlot('banner4', 'homeSlide4File', 'homeSlide4Clear', 'Slide 4 saved, live on Home', 'Slide 4 removed');
   wireMintImageSlot('banner5', 'homeSlide5File', 'homeSlide5Clear', 'Slide 5 saved, live on Home', 'Slide 5 removed');
   wireMintImageSlot('promobanner', 'promoBannerFile', 'promoBannerClear', 'Promotion banner saved', 'Promotion banner removed');
-  wireMintImageSlot('chestart', 'chestArtFile', 'chestArtClear', 'Chest picture saved, live on Home', 'Chest picture removed');
   const annImageFile = $('annImageFile');
   if (annImageFile) annImageFile.addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;

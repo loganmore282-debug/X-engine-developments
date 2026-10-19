@@ -948,7 +948,7 @@ async function getHelpBanner() {
 // no longer its own screen with a backdrop; Account's new Download App row
 // (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
 // prompt directly, in user-src/original_module.js -- see its own comment.
-const MINT_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'banner4', 'banner5', 'promobanner', 'chestart', 'checkinbanner', 'profilelogo', 'loaderbg', 'downloadbg'];
+const MINT_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'banner4', 'banner5', 'promobanner', 'checkinbanner', 'profilelogo', 'loaderbg', 'downloadbg'];
 const _mintImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getMintImage(slot) {
@@ -3798,13 +3798,13 @@ app.get('/public/loader-image', async (req, res) => {
 // Mint artwork needed by the current member surfaces, fetched together.
 app.get('/public/mint-images', async (req, res) => {
   try {
-    const [logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, chestart, checkinbanner, profilelogo, downloadbg] = await Promise.all([
+    const [logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, downloadbg] = await Promise.all([
       getMintImage('logo'),
       getMintImage('authhero'), getMintImage('authlogo'), getMintImage('banner2'),
-      getMintImage('banner3'), getMintImage('banner4'), getMintImage('banner5'), getMintImage('promobanner'), getMintImage('chestart'),
+      getMintImage('banner3'), getMintImage('banner4'), getMintImage('banner5'), getMintImage('promobanner'),
       getMintImage('checkinbanner'), getMintImage('profilelogo'), getMintImage('downloadbg'),
     ]);
-    publicJson(req, res, { status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, chestart, checkinbanner, profilelogo, downloadbg }, IMAGE_CACHE);
+    publicJson(req, res, { status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, downloadbg }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -7176,13 +7176,13 @@ app.post('/admin/settings/update', async (req, res) => {
 app.get('/admin/mint-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, chestart, checkinbanner, profilelogo, loaderbg, downloadbg] = await Promise.all([
+    const [logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg] = await Promise.all([
       getMintImage('logo'),
       getMintImage('authhero'), getMintImage('authlogo'), getMintImage('banner2'),
-      getMintImage('banner3'), getMintImage('banner4'), getMintImage('banner5'), getMintImage('promobanner'), getMintImage('chestart'),
+      getMintImage('banner3'), getMintImage('banner4'), getMintImage('banner5'), getMintImage('promobanner'),
       getMintImage('checkinbanner'), getMintImage('profilelogo'), getMintImage('loaderbg'), getMintImage('downloadbg'),
     ]);
-    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, chestart, checkinbanner, profilelogo, loaderbg, downloadbg });
+    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/mint-image/set', async (req, res) => {

@@ -43,10 +43,10 @@ function runStats(rows) {
 
   // 2. profile logo slot: stored, served to members and to the admin
   ok(/const MINT_IMAGE_SLOTS = \[[^\]]*'profilelogo'/.test(src), 'profilelogo is a known image slot');
-  ok(/publicJson\(req, res, \{ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, chestart, checkinbanner, profilelogo, downloadbg \}/.test(src), 'members get it from /public/mint-images');
-  ok(/res\.json\(\{ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, chestart, checkinbanner, profilelogo, loaderbg, downloadbg \}\)/.test(src), 'and the admin panel reads it');
+  ok(/publicJson\(req, res, \{ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, downloadbg \}/.test(src), 'members get it from /public/mint-images');
+  ok(/res\.json\(\{ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg \}\)/.test(src), 'and the admin panel reads it');
   ok(/id="profileLogoFile"/.test(adm) && /wireMintImageSlot\('profilelogo'/.test(adm), 'the admin panel can upload and remove it');
-  ok(['banner4', 'banner5', 'promobanner', 'chestart'].every(k => new RegExp("wireMintImageSlot\\('" + k + "'").test(adm) && src.includes("'" + k + "'")), 'the admin can upload Home slides 2 to 5, the Promotion banner and the chest picture');
+  ok(['banner4', 'banner5', 'promobanner'].every(k => new RegExp("wireMintImageSlot\\('" + k + "'").test(adm) && src.includes("'" + k + "'")), 'the admin can upload Home slides 2 to 5, and the Promotion banner');
   ok(!/checkinBannerFile/.test(adm), 'the removed Check-in banner upload is gone from admin');
 
   // 3. the Download App background is an admin image slot too
