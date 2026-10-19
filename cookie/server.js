@@ -6996,7 +6996,7 @@ app.post('/admin/admins/create', async (req, res) => {
   const password = passwordOf(req.body.password);
   if (!/^[a-z0-9._-]{3,32}$/.test(username)) return res.status(400).json({ status: 'error', message: 'Username must be 3-32 characters (letters, digits, . _ -).' });
   if (username === 'owner' || username === 'owner-key') return res.status(400).json({ status: 'error', message: 'That username is reserved.' });
-  if (password.length < 8) return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters.' });
+  if (password.length < MEMBER_PASSWORD_MIN) return res.status(400).json({ status: 'error', message: passwordLengthMessage(password) });
   try {
     const existing = await db.collection('adminUsers').doc(username).get();
     if (existing.exists) return res.status(400).json({ status: 'error', message: 'That username already exists.' });
@@ -7031,7 +7031,7 @@ app.post('/admin/admins/reset-password', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const username = String(req.body.username || '').trim().toLowerCase();
   const password = passwordOf(req.body.password);
-  if (password.length < 8) return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters.' });
+  if (password.length < MEMBER_PASSWORD_MIN) return res.status(400).json({ status: 'error', message: passwordLengthMessage(password) });
   try {
     await db.collection('adminUsers').doc(username).update({ passwordHash: scryptHash(password) });
     await invalidateSessionsFor(username);

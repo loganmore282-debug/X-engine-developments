@@ -2600,7 +2600,7 @@ async function renderAdmins(){
       <p class="muted" style="margin-top:0">You (the owner) always sign in with the master admin key. It's never given to anyone below. Create a separate username + password for each other person who needs access.</p>
       <div class="row">
         <div><label>Username</label><input id="aaUser" placeholder="e.g. mary" autocomplete="off"></div>
-        <div><label>Password</label><input id="aaPass" type="password" placeholder="At least 8 characters" autocomplete="new-password"></div>
+        <div><label>Password</label><input id="aaPass" type="password" placeholder="Password" autocomplete="new-password"></div>
       </div>
       <button class="btn block" id="aaCreate">Create admin account</button>
     </div>
@@ -2634,7 +2634,7 @@ async function renderAdmins(){
     toast(d.status==='success'?'Reactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderAdmins();
   }));
   document.querySelectorAll('[data-reset]').forEach(b=>b.addEventListener('click', async()=>{
-    const password = prompt(`New password for "${b.dataset.reset}" (at least 8 characters):`);
+    const password = prompt(`New password for "${b.dataset.reset}":`);
     if(!password) return;
     const d=await api('/admin/admins/reset-password',{username:b.dataset.reset,password});
     toast(d.status==='success'?'Password reset, they are signed out everywhere and must log in again':(d.message||'Failed'),d.status==='success'?'ok':'err');
