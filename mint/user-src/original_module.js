@@ -3371,7 +3371,7 @@ function vProductCardHtml(p){
           <div><dt>Daily</dt><dd class="g${mgFit(dayly)}">${esc(dayly)}</dd></div>
           <div class="tot"><dt>Total</dt><dd class="${mgFit(total).trim()}">${esc(total)}</dd></div>
         </dl>
-        ${limit > 0 ? `<div class="mg-limit"><span><i style="width:${pct}%"></i></span><b>${pct}%</b></div>` : ''}
+        <div class="mg-limit"><span><i style="width:${pct}%"></i></span><b>${pct}%</b></div>
       </div>
     </div>
     <div class="mg-card-f">${vBuyHtml(p)}</div>
