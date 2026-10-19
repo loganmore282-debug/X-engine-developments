@@ -157,7 +157,8 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     ok(/Could not load the sign-in service/.test($(w, 'notifyMsg').textContent) || t.some(m => /Could not load the sign-in service/.test(m)), 'watchdog says what is wrong');
     $(w, 'loginPhone').value = '0771234567'; $(w, 'loginPassword').value = 'secret1secret1';
     t.length = 0; await w.doLogin();
-    eq(t.length, 1); ok(/not available right now/.test(t[0]) && !/not a function/.test(t[0]), 'login says so instead of throwing: ' + t[0]);
+    const le = $(w, 'loginErr').textContent;   // login reasons are the red line under the password box
+    eq(t.length, 0); ok(/not available right now/.test(le) && !/not a function/.test(le), 'login says so instead of throwing: ' + le);
     eq($(w, 'loginBtn').disabled, false, 'login button usable again');
     eq($(w, 'loginBtn').textContent, 'Log In');
     $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; $(w, 'regCaptcha').value = '1234'; w.eval("STATE.captchaId='cid'"); $(w, 'regReferral').value = 'abc';
@@ -204,13 +205,13 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     eq($(w, 'loginBtn').textContent, 'Log In');
     eq(shown(w, 'loadingScreen'), false, 'no stuck spinner');
     if (expectOpen) { eq(shown(w, 'app'), true, 'app open'); eq(shown(w, 'authScreen'), false); ok(t.some(m => /Login successful/.test(m)), 'says it worked'); }
-    else { eq(shown(w, 'app'), false, 'app not open'); eq(shown(w, 'authScreen'), true, 'login screen showing'); ok(t.some(m => expectMsg.test(m)), 'tells the member why: ' + JSON.stringify(t)); }
+    else { eq(shown(w, 'app'), false, 'app not open'); eq(shown(w, 'authScreen'), true, 'login screen showing'); ok(t.concat([$(w, 'loginErr').textContent, $(w, 'loginPhoneErr').textContent]).some(m => expectMsg.test(m)), 'tells the member why (pop-up or the red line under the box): ' + JSON.stringify(t)); }
     ok(!t.some(m => /Firebase|not a function|undefined|Session changed/.test(m)), 'no developer text: ' + JSON.stringify(t));
     if (expectSignOut !== null) eq(log.signOuts > 0, expectSignOut, 'signed-out state');
     await closeSoon(dom);
   }
   await loginScenario({}, { expectOpen: true });
-  await loginScenario({ pass: 'wrong' }, { expectOpen: false, expectMsg: /Incorrect phone number or password/ });
+  await loginScenario({ pass: 'wrongpass' }, { expectOpen: false, expectMsg: /^Incorrect password$/ });
   await loginScenario({ fb: { code: 'auth/network-request-failed' } }, { expectOpen: false, expectMsg: /Check your connection/ });
   await loginScenario({ fb: { code: 'auth/user-disabled' } }, { expectOpen: false, expectMsg: /disabled/ });
   await loginScenario({ fb: { code: 'auth/too-many-requests' } }, { expectOpen: false, expectMsg: /Too many attempts/ });

@@ -1493,6 +1493,13 @@ async function storeCredentialIfPossible(email, pass, displayPhone){
   const id = local ? '0' + local : email;
   try { await navigator.credentials.store(new PasswordCredential({ id, password: pass, name: id })); } catch (_) {}
 }
+// The red line under the phone box ('phone') or the password box ('pass'); an empty message clears both.
+function loginError(where, msg){
+  const a = $('loginPhoneErr'), b = $('loginErr');
+  if (a) a.textContent = where === 'phone' ? msg : '';
+  if (b) b.textContent = where === 'pass' ? msg : '';
+}
+window.loginError = loginError;
 window.doLogin = async function(){
   if (window._loginInProgress) return;
   window._loginInProgress = true;
@@ -1500,8 +1507,10 @@ window.doLogin = async function(){
   if (window._logoutPromise) await window._logoutPromise;
   const phone = cleanPhone($('loginPhone').value);
   const pass = $('loginPassword').value;
-  if (!phone) return notify('Enter a valid ' + regionName() + ' mobile number.');
-  if (!pass) return notify('Enter your password.');
+  loginError('', '');
+  if (!phone) return loginError('phone', 'Enter a valid ' + regionName() + ' mobile number.');
+  if (!pass) return loginError('pass', 'Enter your password.');
+  if (pass.length < 6) return loginError('pass', 'Password must be at least 6 characters');
   setBtnLoading('loginBtn', true, 'Log In', 'Logging in...');
   window._pendingLoginSuccess = true;
   try {
@@ -1533,7 +1542,9 @@ window.doLogin = async function(){
   }
   catch (e) {
     window._pendingLoginSuccess = false;
-    notify(fbErrMsg(e));
+    // Like the owner's screen: the reason is the red line under the box it belongs to, not a pop-up.
+    const code = (e && e.code) || '';
+    loginError(code === 'auth/user-not-found' || code === 'auth/invalid-email' ? 'phone' : 'pass', code === 'auth/invalid-credential' || code === 'auth/wrong-password' ? 'Incorrect password' : fbErrMsg(e));
     setBtnLoading('loginBtn', false, 'Log In');
   }
   } finally {
@@ -2270,7 +2281,8 @@ async function processMemberAuth(user){
   }
   // A sign-up in progress stays on the Sign Up page (its button reads "Signing Up...") until the member lands on Login: the startup loader is
   // only for opening the app, never for registering.
-  if (!window._pendingRegPhone) {
+  // A login the member just typed does not show it either: Login stays (button "Logging in...") until the app is ready, then Home opens.
+  if (!window._pendingRegPhone && !window._pendingLoginSuccess) {
     $('authScreen').style.display = 'none';
     showLoadingScreen();
   }
@@ -2374,6 +2386,7 @@ async function enterApp(){
   // just before maybeShowAnnouncement() -- gates only the announcement's
   // own appearance, not this instant paint.
   hideLoadingScreen();
+  $('authScreen').style.display = 'none';
   $('app').style.display = '';
   showPage(STATE.page || 'home'); prefetchSupportedBanks();
   maybeAnnounceOnEntry();
@@ -2538,6 +2551,7 @@ async function bootFromNetwork(uid){
   // on any screen.
   await waitForBootSettings(6000);
   hideLoadingScreen();
+  $('authScreen').style.display = 'none';
   $('app').style.display = '';
   showPage(STATE.page || 'home'); prefetchSupportedBanks();
   maybeAnnounceOnEntry();
