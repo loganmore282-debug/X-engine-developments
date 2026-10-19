@@ -109,7 +109,7 @@ console.log(`PASS: bug-hunt fixes (${n} checks)`);
     const rows = { users: { u1: { walletBalance: 100000 } } }, ledger = []; let failLedger = true; const handlers = {}, debounce = new Map();
     const db = { collection: n => n === 'users' ? { doc: () => ({ get: async () => ({ exists: true, data: () => rows.users.u1 }), update: async u => { for (const [k, v] of Object.entries(u)) if (v && v.__inc !== undefined) rows.users.u1[k] = (rows.users.u1[k] || 0) + v.__inc; } }) }
       : { doc: () => ({ set: async d => { if (failLedger) throw new Error('ledger down'); ledger.push(d); } }) } };
-    const logs = []; const c = vm.createContext({ app: { post: (p, h) => { handlers[p] = h; } }, db, verifyOwner: () => true, strictAdminAmount: v => Number(v), MAX_MONEY_AMOUNT: 1e9, fmtMoney: n => 'UGX ' + n,
+    const logs = []; const c = vm.createContext({ textOf: v => typeof v === 'string' ? v : '', app: { post: (p, h) => { handlers[p] = h; } }, db, verifyOwner: () => true, strictAdminAmount: v => Number(v), MAX_MONEY_AMOUNT: 1e9, fmtMoney: n => 'UGX ' + n,
       _adminCreditDebounce: debounce, _adminDebitDebounce: debounce, nowStr: () => ({ date: 'd', time: 't' }), brandName: () => 'Cookie', getSettings: async () => ({}), withLock: (_k, fn) => fn(),
       FieldValue: { increment: n => ({ __inc: n }), serverTimestamp: () => 0 }, newStatementId: () => 's', logAdminAction: (_r, a, m) => logs.push([a, m]), console: { error() {}, log() {} }, adminFailCode: () => 500 });
     vm.runInContext(route('/admin/' + kind), c);

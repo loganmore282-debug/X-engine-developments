@@ -40,7 +40,8 @@ async function serverTests() {
   // ── how alerts are sent ──
   const sendSrc = slice('const ADMIN_PUSH_HEADERS', 'function scryptHash(password) {');
   async function send(tokens, title, body, data, opts) {
-    const db = fakeDb({ adminPushTokens: tokens }); const sent = []; const failWith = {};
+    const staffNow = Object.fromEntries(Object.values(tokens).filter(x => x.role === 'staff' && x.username).map(x => [x.username, { active: true }]));
+    const db = fakeDb({ adminPushTokens: tokens, adminUsers: Object.assign(staffNow, opts && opts.staffRecords) }); const sent = []; const failWith = {};
     const admin = { messaging: () => ({ sendEach: async msgs => { sent.push(msgs);
       return { responses: msgs.map(m => failWith[m.token] ? { success: false, error: { code: failWith[m.token] } } : { success: true }) }; } }) };
     const fn = new Function('db', 'admin', 'console', 'tsMillis', sendSrc + '\nreturn sendAdminPush;')(db, admin, { warn() {} }, v => new Date(v).getTime());
@@ -54,6 +55,13 @@ async function serverTests() {
   await t.run();
   const byTok = Object.fromEntries(t.sent.flat().map(m => [m.token, m]));
   eq(Object.keys(byTok).sort(), ['legacy', 'ownerA', 'ownerNoSecret', 'staff1', 'staffLeak'], 'every device is addressed');
+  { // a staff member who was deactivated or deleted gets nothing any more
+    const t2 = await send({ ownerA: { role: 'owner', username: 'boss' }, s1: { role: 'staff', username: 'clerk' }, s2: { role: 'staff', username: 'gone' }, s3: { role: 'staff', username: 'off' } },
+      'x', 'y', { type: 'withdrawal' }, { staffRecords: { off: { active: false }, gone: undefined } });
+    t2.db.store.get('adminUsers').delete('gone');
+    await t2.run();
+    eq(t2.sent.flat().map(m => m.token).sort(), ['ownerA', 's1'], 'deactivated and deleted staff are not alerted');
+  }
   for (const m of Object.values(byTok)) {
     ok(!('notification' in m), 'data-only: no notification block, so the SDK cannot show a second copy');
     eq(m.data.title, 'New withdrawal request'); eq(m.data.body, 'UGX 5,000 requested via MTN');

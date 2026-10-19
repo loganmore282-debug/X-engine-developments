@@ -21,7 +21,7 @@ ok(/if \(!isTask\) await uRef\.update\(\{ totalInvested/.test(src), 'a free task
 const adm = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8'), cli = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
 ok(/id="newTask"/.test(adm) && /category: task\?'wage':'income'/.test(adm), 'the admin has a separate Task products section');
 ok(/ckIsWage\(p\)\) \? `<em class="v-badge">Times/.test(cli), 'task products always show Times 0/0');
-ok(/result\.code === 'SOLD_OUT'\) closeConfirm\(\)/.test(cli) && /ckLoadBegin\(\);\n    try \{ result = await api\('\/invest\/create'/.test(cli), 'the purchase waits behind the loading box and a sold-out answer closes the dialog');
+ok(/result\.code === 'SOLD_OUT'\) closeConfirm\(\)/.test(cli) && /ckLoadBegin\(\); _buying = true;\n    try \{ result = await api\('\/invest\/create'/.test(cli), 'the purchase waits behind the loading box and a sold-out answer closes the dialog');
 ok(/activated\$\/i\.test\(String\(t\.description/.test(cli) && /return 'Free \( '/.test(cli), 'an activated task product reads "Free ( Gold )" in Balance Details');
 ok(/amt === 0 && t\.type === 'investment'\)\) \? '-'/.test(cli), 'with "- 0.00", as in the screenshot');
 ok(/if \(name === 'home' && prevPage !== 'home'\) STATE\.homeTab = 'income'/.test(cli) && /STATE\.homeTab === 'wage'\) \{ STATE\.homeTab = 'income'/.test(cli), 'Home always opens on Daily income, also after leaving the app and coming back');
