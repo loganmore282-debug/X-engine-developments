@@ -1387,11 +1387,11 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 
 
 /* ── Home ── */
-.mg-top{display:flex;align-items:center;height:55.5px;padding:0 20px;background:#fefefc;border-bottom:1px solid #eceee9;margin:0 -15px 0;}
+.mg-top{position:relative;display:flex;align-items:center;height:55.5px;padding:0 20px;background:#fefefc;border-bottom:1px solid #eceee9;margin:0 -15px 0;}
 .mg-msg{position:relative;flex:0 0 19px;width:19px;height:16px;padding:0;margin:-5px -6px 0 0;border:0;background:transparent;color:#4a6d5b;display:block;}
 .mg-msg>svg{display:block;width:19px;height:15.5px;margin-top:0;}
 .mg-msg .mg-dot{position:absolute;left:6px;top:-3px;min-width:12.5px;width:12.5px;height:12.5px;padding:0;border-radius:50%;background:#02a652;color:#fff;font:700 8.5px/12.5px var(--mg-sans);font-style:normal;text-align:center;}
-.mg-name{flex:1;min-width:0;font:700 18.5px/1.1 'Courier New',Courier,'Nimbus Mono PS',monospace;letter-spacing:.22em;color:#161616;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mg-name{position:absolute;left:56px;right:56px;top:0;bottom:0;display:flex;align-items:center;justify-content:center;margin:0;padding:0 0 0 .22em;box-sizing:border-box;text-align:center;pointer-events:none;min-width:0;font:700 18.5px/1.1 'Courier New',Courier,'Nimbus Mono PS',monospace;letter-spacing:.22em;color:#161616;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .home-banner{position:relative;margin:0;height:150.5px;aspect-ratio:auto;border-radius:20px;overflow:hidden;background:linear-gradient(135deg,#0a7a43,#0b9a52 55%,#0a6b3b);box-shadow:0 10px 24px -14px rgba(2,120,60,.55);}
 .mg-home .home-banner{margin-top:0;}
 .home-banner>img{display:block;width:100%;height:100%;object-fit:cover;}
