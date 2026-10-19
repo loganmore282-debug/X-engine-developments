@@ -9,6 +9,8 @@ ok(/overflow-x:\s*hidden/.test(last('.sheet-bg')), 'a full-screen page can never
 ok(/overflow:\s*hidden/.test(last('.v-recbal')), 'the soft blobs behind the balance are clipped, so they cannot widen the page');
 ok(/position:\s*relative/.test(last('.sheet-head')), 'the title bar scrolls away with the page, as in the owner\'s screenshots');
 ok(/margin:0 -15px/.test(last('.v-recbal')) && /margin:0 -15px/.test(last('.v-rectabs')), 'the balance banner and the filter tabs run edge to edge');
+ok(/visibility:\s*hidden/.test(last('.notify-bg')) && !/pointer-events:\s*auto/.test(last('.notify-card')), 'a hidden notice dialog (and its OK button) never covers the page: the phone boxes and buttons under it stay tappable');
+ok(/position:\s*fixed/.test(last('.v-dl-bg,.v-help-bg')) && /display:\s*none/.test(last('.v-dl-bg,.v-help-bg')), 'the Help and Download dialogs are real overlays (hidden until opened)');
 const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
 ok(admin.indexOf('Each product has its OWN multiplier') < admin.indexOf('<label>VIP level'), 'the product editor explains price / multiplier / payout right under those fields');
 { const m = /input:-webkit-autofill,[^{]*\{[^}]*transition:background-color 600000s 0s/.exec(fs.readFileSync(__dirname + '/user-src/index.html', 'utf8'));
