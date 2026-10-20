@@ -9286,6 +9286,34 @@ app.post('/admin/analytics', async (req, res) => {
       else schedule.overdueNowAmount += day.overdue;
     });
     activeInvestors = activeMemberIds.size;
+    // PLANS: active plans, when they close, and which products are bought most. Active plans come from the active scan, "most purchased" from every
+    // active or finished purchase held (the newest 10,000). A plan closes `payoutsTotal` x 24 h after it was bought (locked cashback).
+    const plans = { active: { count: 0, invested: 0, expected: 0, remaining: 0, dueNow: 0 }, mostPurchased: [], maturities: [], nextMaturing: [] };
+    {
+      const byProduct = Object.create(null), byDay = new Map(), upcoming = [];
+      contractSnap.forEach(d => {
+        const inv = d.data(); if (!mine(inv)) return;
+        const key = String(inv.tierKey || inv.tierLabel || 'Unknown product');
+        const row = byProduct[key] || (byProduct[key] = { key, name: inv.tierLabel || key, purchases: 0, active: 0, invested: 0 });
+        row.purchases++; row.invested += finiteMoney(inv.amount); if (inv.status === 'active') row.active++;
+      });
+      activeInvSnap.forEach(d => {
+        const inv = d.data(); if (!mine(inv)) return;
+        const created = tsMillis(inv.createdAt), total = Number(inv.payoutsTotal);
+        const amount = finiteMoney(inv.amount), expected = finiteMoney(inv.expectedReturn), remaining = Math.max(0, expected - finiteMoney(inv.paidOut));
+        plans.active.count++; plans.active.invested += amount; plans.active.expected += expected; plans.active.remaining += remaining;
+        if (!created || !Number.isInteger(total) || total <= 0) return;
+        const at = investmentMaturityMs(created, total);
+        if (at <= nowMs) plans.active.dueNow++;
+        const day = eatDayKey(new Date(Math.max(at, nowMs)));
+        const g = byDay.get(day) || { day, count: 0, invested: 0, cashback: 0 };
+        g.count++; g.invested += amount; g.cashback += remaining; byDay.set(day, g);
+        upcoming.push({ userId: inv.userId, product: inv.tierLabel || inv.tierKey || '', amount, cashback: remaining, at });
+      });
+      plans.mostPurchased = Object.values(byProduct).sort((a, b) => b.purchases - a.purchases || b.invested - a.invested).slice(0, 20);
+      plans.maturities = [...byDay.values()].sort((a, b) => a.day < b.day ? -1 : 1).slice(0, 90);
+      plans._upcoming = upcoming.sort((a, b) => a.at - b.at).slice(0, 25);
+    }
     // Withdrawals that can be processed today, worked out with the live withdrawal rules (Admin > Settings): the requests already waiting,
     // and the most members could still request today. A member counts only if they pass the same checks /withdraw/request makes:
     // not banned, a product bought when that is required, no unpaid request already open, today's number of withdrawals not used up
@@ -9332,6 +9360,7 @@ app.post('/admin/analytics', async (req, res) => {
       rules: { min: wMin, max: wMax, multiple: wMult, feePct: wFee, perDay: wPerDay, needProduct: wNeedProduct,
         hours: wSett.withdrawWindowEnabled ? `${wSett.withdrawOpenFrom || ''} to ${wSett.withdrawOpenTo || ''}` : '' },
     };
+    plans.nextMaturing = plans._upcoming.map(u => ({ phone: (accounts.get(u.userId) || {}).phone || '', product: u.product, amount: u.amount, cashback: u.cashback, at: u.at })); delete plans._upcoming;
     const truncated = depSnap.docs.length >= 10000 || witSnap.docs.length >= 10000 || usersSnap.docs.length >= 10000 || activeInvSnap.docs.length >= 10000 || contractSnap.docs.length >= 10000 || rewardsTruncated;
 
     res.json({
@@ -9343,7 +9372,7 @@ app.post('/admin/analytics', async (req, res) => {
         investedAmount, commissionsPaid, teamRewardsPaid
       },
       byHour, bands, byDay, peakDepositHour, peakWithdrawHour, busiestBand,
-      today, selectedDay: dayTotals, schedule, openRequests, withdrawToday, runningProducts: Object.values(runningProducts).sort((a, b) => b.invested - a.invested), truncated, rewardsUnavailable, staffApprovals,
+      today, selectedDay: dayTotals, schedule, openRequests, withdrawToday, plans, runningProducts: Object.values(runningProducts).sort((a, b) => b.invested - a.invested), truncated, rewardsUnavailable, staffApprovals,
       topReferrers: referrers.slice(0, 10), topDepositors: depositors.slice(0, 10), biggestWithdrawals: bigWits.slice(0, 10)
     });
   } catch (e) { console.error('Analytics error:', e.message); res.status(500).json({ status: 'error', message: e.message }); }

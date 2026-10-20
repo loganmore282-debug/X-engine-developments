@@ -132,6 +132,12 @@ async function read(body = {}, authorized = true) {
   assert.equal(future.schedule.scheduledAmount, 400);
   assert.equal(future.schedule.unpaidAmount, 100);
   assert.equal(future.schedule.pausedUnpaidAmount, 200);
+  // Plans: active plans, when they close, and what is bought most.
+  const plansRes = (await read({ day: '2026-10-04' })).plans;
+  assert.equal(plansRes.active.count, 4); assert.equal(plansRes.active.expected, 400); assert.equal(plansRes.active.dueNow, 0);
+  assert.deepEqual(plansRes.mostPurchased.map(p => [p.key, p.purchases, p.active]), [['p1', 5, 4]], 'most purchased: how many times, and how many are still active');
+  assert.deepEqual(plansRes.maturities.map(m => [m.day, m.count, m.cashback]), [['2026-10-06', 3, 300]], 'three active plans close on 6 October with 300 of cashback to credit');
+  assert.equal(plansRes.nextMaturing.length, 3); assert.equal(plansRes.nextMaturing[0].at, Date.parse('2026-10-05T21:00:00Z'));
   rows.pendingDeposits.push(dep(11, '2026-09-01T10:00:00Z', { status: 'pending' }));
   rows.withdrawals.push(wit(12, '2026-09-01T10:00:00Z', { status: 'pending' }));
   const queues = await read({ day: '2026-10-04' });
