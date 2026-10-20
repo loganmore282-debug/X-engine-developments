@@ -51,7 +51,7 @@ ok(!/\.notify-ic svg (circle|path)\{[^}]*animation/.test(html), 'the notice card
 ok(/It plays even when the phone asks for reduced motion/.test(mod) && !/prefers-reduced-motion[^{]*\{[^}]*dep-status-icon/.test(html), 'the draw plays on phones that ask for reduced motion too (the owner wants it everywhere)');
 { // failed deposit: the cross shakes and the phone buzzes once it is drawn; success never does
   const vm = require('vm');
-  const a = mod.indexOf('var _drToken = 0;'), b = mod.indexOf('// Waiting for the payment: a dot travels');
+  const a = mod.indexOf('var _drToken = 0;'), b = mod.indexOf('// Waiting for the payment: a green phone badge');
   const buzz = [];
   const mkBox = () => { const cl = new Set(); return { firstChild: null, offsetWidth: 1, classList: { add: c => cl.add(c), remove: c => cl.delete(c), has: c => cl.has(c) }, set innerHTML(v) { this._h = v; }, get innerHTML() { return this._h || ''; } }; };
   const ctx = { PAY_OK_STATIC: '<svg ok/>', PAY_FAIL_STATIC: '<svg fail/>', navigator: { vibrate: p => { buzz.push(p); return true; } }, setTimeout: () => 0 };
