@@ -3255,6 +3255,22 @@ function maybeShowAnnouncement(){
     ${link ? `<a class="mg-ann-join" href="${esc(link)}" target="_blank" rel="noopener" onclick="closeAnnouncement()">Join Channel</a>` : ''}`;
   bg.classList.add('show');
   lockBodyScroll(); dlgOpened();
+  annGrowIn(sheet);
+}
+// Opens as a thin blank card, grows to the height of its content, the picture fades in during the growth and the words right after
+// (about 1 s in all). Needs the picture's size first, so a picture that is not decoded yet is waited for (the card stays invisible).
+function annGrowIn(sheet){
+  if (!sheet.animate || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+  const img = sheet.querySelector('.mg-ann-img');
+  const run = () => {
+    if (!$('annBg').classList.contains('show')) return;
+    sheet.classList.remove('mg-ann-wait');
+    const H = sheet.offsetHeight; if (H < 90) return;
+    sheet.classList.add('mg-ann-grow');
+    const a = sheet.animate([{ height: '56px' }, { height: H + 'px' }], { duration: 420, delay: 150, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'backwards' });
+    setTimeout(() => sheet.classList.remove('mg-ann-grow'), 1000);
+  };
+  if (img && !img.complete) { sheet.classList.add('mg-ann-wait'); img.decode().then(run, run); } else run();
 }
 
 // ── HOME ──
@@ -5068,10 +5084,16 @@ function isScrollLockOverlayOpen(){
 // (STATE.page stays 'home' the whole time one is open), so they were never
 // part of this rule to begin with once the old sheet-based mechanism was
 // removed -- nothing extra needed excluding them.
+// Back on Home it waits for the page to appear first (as Cookie's does while its page loads), so the dialog never jumps in on top of a half-drawn page.
+var _annNavTimer = null;
 function maybeAnnounceAfterHomeNav(prevPage){
   if (['assets', 'promo', 'network', 'salary', 'account'].indexOf(prevPage) === -1) return;
   if (isAnyOverlayOpen()) return;         // something else is already in front
-  maybeShowAnnouncement();
+  clearTimeout(_annNavTimer);
+  _annNavTimer = setTimeout(() => {
+    if (STATE.page !== 'home' || isAnyOverlayOpen()) return;   // left Home again, or something opened meanwhile
+    maybeShowAnnouncement();
+  }, 900);
 }
 // Owner: "l also wanted the dialog to show when on every visit ie logging in
 // again, registration like that." A second, independent trigger alongside
