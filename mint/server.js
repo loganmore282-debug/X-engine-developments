@@ -6433,6 +6433,11 @@ app.post('/redeem', async (req, res) => {
       const code = cd.code;
       if (cd.active === false) { result = { code: 400, body: { status: 'error', message: 'This code is no longer active' } }; return; }
       if (cd.expiresAt && tsMillis(cd.expiresAt) < Date.now()) { result = { code: 400, body: { status: 'error', message: 'This code has expired' } }; return; }
+      // A buyers-only code is for members who have bought a product (a real purchase; a product the admin gave does not count). Refused BEFORE
+      // anything is claimed, so a member who has not bought yet can still use the same code after their first purchase.
+      if (cd.buyersOnly === true && !(Number(userSnap.data().totalInvested) > 0)) {
+        result = { code: 403, body: { status: 'error', code: 'BUYERS_ONLY', message: 'This code is only for members who have bought a product.' } }; return;
+      }
       const usedBy = cd.usedBy || [];
       const alreadyClaimed = usedBy.indexOf(userId) !== -1;
       if (alreadyClaimed) {
@@ -7728,6 +7733,7 @@ app.post('/admin/promocodes/generate', async (req, res) => {
   const maxReward = round2(Number(req.body.maxReward));
   const maxUses = req.body.maxUses ? Math.round(Number(req.body.maxUses)) : null;
   const durationSeconds = req.body.durationSeconds ? Number(req.body.durationSeconds) : null;
+  const buyersOnly = req.body.buyersOnly === true;   // owner: another kind of treasure code that only members who have bought a product can claim
   if (!Number.isFinite(minReward) || minReward <= 0 || minReward > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: 'Enter a valid minimum reward amount' });
   if (!Number.isFinite(maxReward) || maxReward < minReward || maxReward > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: 'Maximum reward must be a valid amount, at least the minimum' });
   if (maxUses !== null && (!Number.isFinite(maxUses) || maxUses <= 0)) return res.status(400).json({ status: 'error', message: 'Max uses must be a positive number' });
@@ -7735,13 +7741,13 @@ app.post('/admin/promocodes/generate', async (req, res) => {
   try {
     const code = await generateUniqueGiftCode();
     const doc = {
-      code, codeLower: code.toLowerCase(), minReward, maxReward, maxUses: maxUses || null, usedBy: [], active: true,
+      code, codeLower: code.toLowerCase(), minReward, maxReward, maxUses: maxUses || null, usedBy: [], active: true, buyersOnly,
       createdBy: req.adminUser?.username || 'owner', createdAt: FieldValue.serverTimestamp(),
     };
     if (durationSeconds) doc.expiresAt = new Date(Date.now() + durationSeconds * 1000);
     await db.collection('promoCodes').add(doc);
-    logAdminAction(req, 'giftcode_generated', { code, minReward, maxReward, maxUses, durationSeconds });
-    res.json({ status: 'success', code, minReward, maxReward });
+    logAdminAction(req, 'giftcode_generated', { code, minReward, maxReward, maxUses, durationSeconds, buyersOnly });
+    res.json({ status: 'success', code, minReward, maxReward, buyersOnly });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.get('/admin/promocodes/list', async (req, res) => {
@@ -7765,7 +7771,7 @@ app.get('/admin/promocodes/list', async (req, res) => {
         ? round2(Object.values(c.claimedRewards).reduce((s, r) => s + (Number(r) || 0), 0))
         : round2((Number(c.reward) || 0) * uses);
       return { id: d.id, code: c.code, minReward: c.minReward ?? c.reward, maxReward: c.maxReward ?? c.reward,
-        maxUses: c.maxUses || null, uses, totalClaimed,
+        maxUses: c.maxUses || null, uses, totalClaimed, buyersOnly: c.buyersOnly === true,
         active: c.active !== false, expiresAt: c.expiresAt || null, createdAt: c.createdAt || null };
     }) });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
