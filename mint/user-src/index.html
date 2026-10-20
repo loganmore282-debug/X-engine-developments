@@ -1894,6 +1894,18 @@ html.mg-gut .mg-top{margin-right:-19px;}
 #pageHost:has(.mg-team){min-height:calc(100vh + 12px);}
 @supports (min-height:100dvh){#pageHost:has(.mg-team){min-height:calc(100dvh + 12px);}}
 
+/* Team member cards (measured from the owner's screen at 1.572 px per css px): 121px tall cards, 12px apart. */
+.mg-mem{position:relative;height:122px;box-sizing:border-box;margin-top:10.5px;border:1px solid #cfe6d6;border-radius:17px;background:#fefefc;box-shadow:0 8px 18px -16px rgba(2,120,60,.35);}
+.mg-mav{position:absolute;left:14px;top:16px;width:46px;height:46px;border-radius:50%;overflow:hidden;background:radial-gradient(circle at 38% 34%,#a8d878 0%,#86c455 62%,#74b843 100%);box-shadow:0 0 0 4px rgba(190,230,160,.28);}
+.mg-mav img{display:block;width:100%;height:100%;object-fit:cover;}
+.mg-mem-name{position:absolute;left:69px;top:16px;display:flex;align-items:center;gap:6px;font:700 13.5px/18px var(--mg-sans);color:#111;}
+.mg-mem-name i{font:500 9px/13px var(--mg-sans);font-style:normal;color:#1d9a52;background:#e5f6ec;border-radius:8px;padding:0 6px;}
+.mg-mem-ph{position:absolute;left:69px;top:38px;font:400 9.8px/16px var(--mg-sans);color:#9aa0ab;letter-spacing:.01em;}
+.mg-mem-amt{position:absolute;right:16px;top:23px;font:700 15px/22px var(--mg-sans);color:#fcc52b;}
+.mg-mem-join{position:absolute;left:15px;top:64px;font:400 10.2px/16px var(--mg-sans);color:#a2a8b2;}
+.mg-mem-line{position:absolute;left:15px;right:15px;top:86px;border-top:1px solid #d5eadc;}
+.mg-mem-tp{position:absolute;left:15px;top:92px;font:400 10.1px/16px var(--mg-serif);color:#a4a8b0;}
+
 /* MG-END */
 /* ── Login / Sign Up: measured from the owner's Mint screenshots (360 px phone, 2x) ── */
 .ma-screen{position:relative;min-height:100vh;min-height:100dvh;background:#fefefc;}
