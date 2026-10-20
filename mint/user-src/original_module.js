@@ -3108,6 +3108,9 @@ function startLiveRefresh(){
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && _liveTimer) { _liveDelay = livePollMs(); scheduleLive(_liveGen, 0); }
 });
+// The page's appearing animation (see .mg-enter in the MG styles): on every tab change, and again when a sheet is closed (the back arrow, the phone's
+// Back button) so the page underneath comes back the same way.
+function replayPageIn(){ const ph = $('pageHost'); if (ph) { ph.classList.remove('mg-enter'); void ph.offsetWidth; ph.classList.add('mg-enter'); } }
 window.navigatePage = function(name){
   dismissNotify();
   if (STATE.page === name && !document.querySelector('.sheet-bg.show,#msgDetailBg.show,#depStatusBg.show')) return;
@@ -3182,7 +3185,7 @@ window.showPage = async function(name){
   else if (name === 'team') name = 'network';
   else if (name === 'referral') name = 'promo';
   STATE.page = name;
-  { const ph = $('pageHost'); if (ph) { ph.classList.remove('mg-enter'); void ph.offsetWidth; ph.classList.add('mg-enter'); } }
+  replayPageIn();
   window.scrollTo(0, 0);   // every tab opens at its top, not wherever the previous one was scrolled
   updateNavIcons();
   if (name === 'home') {
@@ -5090,6 +5093,7 @@ function openSheet(title, bodyHtml){
 // purely cosmetic cleanup. opts.keepHistory is the one flag this function
 // still reads.
 window.closeSheet = function(opts){
+  const wasOpen = $('sheetBg').classList.contains('show');
   $('sheetBg').classList.remove('show');
   document.body.classList.remove('sheet-open');
   unlockBodyScroll();
@@ -5098,6 +5102,7 @@ window.closeSheet = function(opts){
   // opts.keepHistory: the caller is retiring several overlay entries itself
   // with one history.go(-n) -- see showPage(). Only that caller sets it.
   if (!(opts && opts.keepHistory) && history.state && history.state.sheet) history.back();
+  if (wasOpen && !(opts && opts.navigating)) replayPageIn();   // coming back to the page underneath: it appears again, like a tab change
 };
 // ── The Back button and pop-up dialogs ──
 // Sheets and the message popup own a history entry, so Back closes them. The other dialogs (Buy confirm, Help, the
@@ -6071,10 +6076,7 @@ window.promptInstallApp = async function(){
 window.openDownloadPage = function(){
   const bg = STATE.downloadBg ? ' style="background-image:url(' + esc(JSON.stringify(STATE.downloadBg).slice(1, -1)) + ')"' : '';
   openSheet('Download App', `<div class="mg-dl"${bg}>
-    <h1>Install ${esc(brandName())}</h1>
-    <p class="sub">Fast, simple and always with you</p>
     <button type="button" class="mg-dl-btn" onclick="promptInstallApp()">Download Now</button>
-    <p class="note">Tap Download Now, then follow your browser to add the app to your home screen.</p>
   </div>`);
   $('sheetBg').classList.add('mg-nohead');
 };
