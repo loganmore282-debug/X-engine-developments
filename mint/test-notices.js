@@ -27,7 +27,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
     ok(d.getElementById('notifyBg').classList.contains('show') && d.getElementById('notifyMsg').textContent === 'Coming soon, please wait', 'tap shows "Coming soon, please wait"');
     ok(d.getElementById('notifyIc').classList.contains('err'), 'with the cross icon');
   }
-  ok(/Buy Now/.test(w.vBuyHtml({ key: 'c', price: 1 })) && /openInvestConfirm/.test(w.vBuyHtml({ key: 'c', price: 1 })), 'an open asset still opens the confirm sheet');
+  ok(/Buy Now/.test(w.vBuyHtml({ key: 'c', price: 1 })) && /openInvestConfirm/.test(w.vBuyHtml({ key: 'c', price: 1 })), 'an open asset buys straight from the Buy Now button (no confirm sheet)');
   // Insufficient balance: the wording and the redirect are wired to the server's code.
   ok(/result\.code === 'INSUFFICIENT_BALANCE'/.test(source) && /Insufficient balance, redirecting to deposit\.\.\./.test(source) && /notify\('Insufficient balance, redirecting to deposit\.\.\.', \(\) => openDepositSheet\(\)\)/.test(source), 'insufficient balance dialog then Deposit');
   w.eval('closeNotify()'); let went = 0; w.openDepositSheet = () => { went++; };
@@ -50,7 +50,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(nb && nb === cb, 'confirm backdrop has the same tint as notify: ' + nb + ' vs ' + cb);
   // The owner's word is "product": the old word must not come back in anything a member reads.
   ok(!/Buy Asset|Review this asset|No assets yet|Browse Assets|Could not load your assets|<span>Asset<\/span>|\|\| 'Asset'/.test(source), 'member text says product, not asset');
-  ok(/Buy Product/.test(source) && /No products yet/.test(source), 'and the product wording is there');
+  ok(/No products yet/.test(source) && /Buy Now/.test(source), 'and the product wording is there');
   ok(/const stay = 2500;/.test(source) && !/2600|5500/.test(source.slice(source.indexOf('var _notifyTimer'), source.indexOf('var _notifyTimer') + 1500)), 'every notice closes by itself after exactly 2.5 seconds');
   console.log('test-notices: ' + n + ' checks passed' + (built ? ' (built)' : ''));
 })().catch(e => { console.error(e); process.exit(1); });

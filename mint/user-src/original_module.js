@@ -5994,50 +5994,32 @@ async function refreshAfterWithdraw(){
 // The button is disabled while the request is in flight -- with no dialog in
 // the way, a double tap would otherwise fire two purchases, and /invest/create
 // has no client-side retry guard of its own.
-window.openInvestConfirm = function(tierKey, btn){
+// Buy Now buys at once -- there is no confirmation pop-up (owner). A second tap while the purchase is on its way does nothing, so a double tap can never buy twice
+// (the server also holds the per-member limit and the price the member was shown).
+var _buyBusy = false;
+window.openInvestConfirm = async function(tierKey, btn){
   const p = (STATE.products||[]).find(x => x.key === tierKey);
-  if (!p || (btn && btn.disabled)) return;
-  const fig = planFigures(p);
-  $('confirmSheet').innerHTML = `
-    <h3>Confirm Investment</h3>
-    <p class="confirm-sub">Review this product before investing.</p>
-    <div class="confirm-row"><span>Product</span><b class="mono">${esc(p.name || 'Product')}</b></div>
-    <div class="confirm-row"><span>Cost</span><b class="mono">${fmtUGX(Number(p.price) || 0)}</b></div>
-    <div class="confirm-row"><span>Term</span><b>${fig.cycle} Days</b></div>
-    <div class="confirm-row"><span>Daily Yield</span><b class="mono">${fmtUGX(fig.daily)}</b></div>
-    <div class="confirm-row"><span>Expected Return</span><b class="mono">${fmtUGX(fig.expected)}</b></div>
-    <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;">Buy Product</button>
-    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Cancel</button>`;
-  const actionBtn = $('confirmActionBtn');
-  // A double tap on BUY NOW lands its second tap where this button appears: it is dead for the first 600 ms so nothing is bought unseen.
-  actionBtn.disabled = true;
-  setTimeout(() => { if (actionBtn.isConnected && actionBtn.textContent === 'Buy Product') actionBtn.disabled = false; }, 600);
-  actionBtn.onclick = async () => {
-    if (actionBtn.disabled) return;
-    actionBtn.disabled = true; actionBtn.textContent = 'Buying…';
-    const result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey, expectedPrice: Number(p.price) || 0 }) });
-    if (result.status === 'error' && result.code === 'PRICE_CHANGED') { try { refreshCatalogNow(); } catch (_) {} }
-    if (result.status !== 'success') {
-      actionBtn.disabled = false; actionBtn.textContent = 'Buy Product';
-      const short = result.code === 'INSUFFICIENT_BALANCE' || /^Need .*, have /.test(String(result.message || ''));
-      if (short) {
-        closeConfirm();
-        notify('Insufficient balance, redirecting to deposit...', () => openDepositSheet());
-        setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1800);
-        return;
-      }
-      // Answers that a second tap cannot change (limit reached, price changed, product closed, banned) close the dialog, so the notice is not
-      // left on top of a Buy button that will only say the same thing again.
-      if (/^(PURCHASE_LIMIT|PRICE_CHANGED|BANNED|REGISTRATION_REQUIRED)$/.test(String(result.code || '')) || /not open right now/i.test(String(result.message || ''))) closeConfirm();
-      notify(result.message || 'Could not complete investment');
+  if (!p || (btn && btn.disabled) || _buyBusy) return;
+  _buyBusy = true;
+  const label = btn ? btn.textContent : '';
+  if (btn) btn.textContent = 'Buying…';
+  let result;
+  try { result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey, expectedPrice: Number(p.price) || 0 }) }); }
+  finally { _buyBusy = false; if (btn && btn.isConnected) btn.textContent = label || 'Buy Now'; }
+  if (result.stale) return;
+  if (result.status === 'error' && result.code === 'PRICE_CHANGED') { try { refreshCatalogNow(); } catch (_) {} }
+  if (result.status !== 'success') {
+    const short = result.code === 'INSUFFICIENT_BALANCE' || /^Need .*, have /.test(String(result.message || ''));
+    if (short) {
+      notify('Insufficient balance, redirecting to deposit...', () => openDepositSheet());
+      setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1800);
       return;
     }
-    closeConfirm();
-    showPage('home');
-    notify(`${p.name} is now running. See it under Orders.`);
-  };
-  $('confirmBg').classList.add('show');
-  lockBodyScroll(); dlgOpened();
+    notify(result.message || 'Could not complete investment');
+    return;
+  }
+  showPage('home');
+  notify(`${p.name} is now running. See it under Orders.`);
 };
 
 // The Cancel button and backdrop both call this by name from inline markup.
