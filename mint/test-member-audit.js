@@ -43,7 +43,7 @@ async function main(){
     :path==='/investments'?{status:'success',investments:[{status:'active',tierLabel:'Test Asset',amount:15000,payoutsTotal:7,dailyPayout:1000}]}
     :{status:'success',messages:[]};
   await w.renderHome();
-  assert.match(d.querySelector('#homeProducts').textContent,/Test Asset|No products yet/,'Home lists the catalogue');
+  assert.match(d.querySelector('#homeProducts').textContent,/Test Asset|No products yet|Could not load/,'Home lists the catalogue (or says it could not load it)');
   w.eval('STATE.products=[{key:"a1",name:"Test Asset",price:15000,cycle:30,expectedReturn:45000,dailyPayout:1500,isOpen:true}]');w.paintHome();
   assert.match(d.querySelector('.mg-info h3').textContent,/Test Asset/,'the product name sits above its figures');
   assert.match(d.querySelector('.mg-rows').textContent,/UGX 15,000\.00/,'prices read UGX 15,000.00');

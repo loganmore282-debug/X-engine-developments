@@ -6744,8 +6744,8 @@ const memberAuthLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 60, standard
 const memberSignupLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 150, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Please wait a few minutes and try again.' } });
 const sessionReply = (res, uid, sess) => res.json({ status: 'success', token: sess.token, uid, authTime: sess.authTime, expiresAt: sess.expiresAt });
-// The sign-up captcha picture (see captcha.js). Cheap to make, so it has its own generous limit; the answer never leaves the server.
-const memberCaptchaLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false,
+// The sign-up captcha picture (see captcha.js). Cheap to make, and a new one is asked for every time Sign Up is opened, so it has its own generous limit (many members share one carrier address); the answer never leaves the server.
+const memberCaptchaLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 600, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Please wait a few minutes and try again.' } });
 app.get('/auth/captcha', memberCaptchaLimiter, (req, res) => {
   const c = captcha.issue();

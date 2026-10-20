@@ -1876,7 +1876,8 @@ async function boot(){
   // the pages that show them.
   const s = await pSettings;
   pProducts.then(p => {
-    STATE.products = p.status === 'success' ? p.products : (STATE.products || []);
+    if (p.status === 'success') { STATE.products = p.products; _productsLoadFailed = false; }
+    else if (!STATE.products) _productsLoadFailed = true;   // Home then says it could not load, not "no products"
     repaintAfterBootData();
   }).catch(() => {});
   pBanner.then(b => {
@@ -3260,6 +3261,16 @@ function maybeShowAnnouncement(){
 // 3 money figures in place afterward (and on a standing timer via
 // startLiveRefresh()) without rebuilding the page -- rebuilding would tear
 // down and restart the ticker/chest-swing animations every few seconds.
+// A list that could not be fetched says so (and a tap tries again) instead of passing itself off as an empty one: "No Orders" after a failed
+// load would tell a member their purchases are gone.
+var _productsLoadFailed = false, _recordsLoadFailed = false, _messagesLoadFailed = false;
+function loadFailHtml(what, cls){ return '<div class="v-empty ' + (cls || '') + '" role="button" onclick="retryLoad(\'' + what + '\')">Could not load. Tap to try again.</div>'; }
+window.retryLoad = function(what){
+  if (what === 'home') return renderHome();
+  if (what === 'assets') return renderAssets();
+  if (what === 'records') return openTransactionStatement(_statementCat);
+  if (what === 'messages') return openMessagesSheet();
+};
 async function renderHome(){
   const hadInvestments = Array.isArray(STATE.investments);
   const shownProducts = homeSignature();
@@ -3267,8 +3278,8 @@ async function renderHome(){
   paintHome();
   const [accR, invR, prR] = await Promise.all([ api('/account'), api('/investments'), api('/public/products') ]);
   if (accR.status === 'success') STATE.account = accR.account;
-  if (prR.status === 'success' && Array.isArray(prR.products)) STATE.products = prR.products;
-  else if (!STATE.products) STATE.products = [];
+  if (prR.status === 'success' && Array.isArray(prR.products)) { STATE.products = prR.products; _productsLoadFailed = false; }
+  else if (!STATE.products) _productsLoadFailed = true;   // stays unset so Home says "could not load", not "no products"
   if (invR.status === 'success' && Array.isArray(invR.investments)) {
     STATE.investments = invR.investments;
     _investmentsLoadFailed = false;
@@ -3450,7 +3461,7 @@ function paintHome(){
     <button type="button" onclick="openContactLink('channel')">Channel</button>
     <button type="button" onclick="openContactLink('service')">Service</button>
   </div>
-  <div class="mg-list" id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">No products yet.</div>' : '')}</div>
+  <div class="mg-list" id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">No products yet.</div>' : _productsLoadFailed ? loadFailHtml('home') : '')}</div>
   <button class="mg-chest" type="button" onclick="openChestSheet()" aria-label="Treasure chest"><img src="${CHEST_ART}" alt=""></button>
 </div>`;
   $('pageHost').innerHTML = html;
@@ -3550,8 +3561,8 @@ async function renderAssets(){
   else paintAssets(true);   // the Total Earnings card at once, "Loading..." where the list will be
   const [pr, ir, ar] = await Promise.all([api('/public/products'), api('/investments'), api('/account')]);
   if (pr.status === 'success' && Array.isArray(pr.products)) STATE.products = pr.products;
-  if (ir.status === 'success' && Array.isArray(ir.investments)) STATE.investments = ir.investments;
-  else if (!hadCache) STATE.investments = [];
+  if (ir.status === 'success' && Array.isArray(ir.investments)) { STATE.investments = ir.investments; _investmentsLoadFailed = false; }
+  else if (!hadCache) { STATE.investments = []; _investmentsLoadFailed = true; }
   if (ar.status === 'success') STATE.account = ar.account;
   if (STATE.page !== 'assets') return; // navigated away while awaiting
   paintAssets();
@@ -3601,7 +3612,7 @@ function paintAssets(loading){
   const html = `
 <div class="v-page mg-orders-page">
   <div class="mg-total"><span>Total Earnings</span><b id="incomeTotal">${esc(vMoney2(a.totalEarned))}</b></div>
-  <div class="mg-orders" id="ownedAssets">${loading ? '<div class="v-empty mg-none">' + NAV_LOADER + '</div>' : owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty mg-none">No Orders</div>'}</div>
+  <div class="mg-orders" id="ownedAssets">${loading ? '<div class="v-empty mg-none">' + NAV_LOADER + '</div>' : owned.length ? owned.map(vOwnedCardHtml).join('') : _investmentsLoadFailed ? loadFailHtml('assets', 'mg-none') : '<div class="v-empty mg-none">No Orders</div>'}</div>
 </div>`;
   $('pageHost').innerHTML = html;
 }
@@ -4610,7 +4621,7 @@ function renderStatement(){
   const body = $('statementBody');
   if (!body) return;
   const all = (STATE.transactions || []).filter(t => statementCategoryMatch(_statementCat, t));
-  if (!all.length) { body.innerHTML = '<div class="v-empty">No Records</div>'; return; }
+  if (!all.length) { body.innerHTML = _recordsLoadFailed && !(STATE.transactions || []).length ? loadFailHtml('records') : '<div class="v-empty">No Records</div>'; return; }
   const rows = all;   // every held record, no Load More button
   // The Load More button always sits under the list (as on the owner's Balance Record, even with two rows): it shows the next ten, or, when
   // everything held is already on screen, asks the server again for anything newer or older.
@@ -4669,8 +4680,10 @@ window.openTransactionStatement = async function(cat){
   if (r.status === 'success') {
     STATE.transactions = r.transactions;
     STATE.transactionsTruncated = !!r.truncated;
+    _recordsLoadFailed = false;
   } else if (!hadCache) {
     STATE.transactions = [];
+    _recordsLoadFailed = true;
   }
   if (_openSheetTitle === 'Balance Record') renderStatement();
 };
@@ -4689,8 +4702,8 @@ window.openMessagesSheet = async function(){
   if (hadCache) renderMessagesList();
   else $('msgBody').innerHTML = '<div class="list-loading">' + NAV_LOADER + '</div>';
   const r = await api('/messages');
-  if (r.status === 'success') STATE.messages = r.messages;
-  else if (!hadCache) STATE.messages = [];
+  if (r.status === 'success') { STATE.messages = r.messages; _messagesLoadFailed = false; }
+  else if (!hadCache) { STATE.messages = []; _messagesLoadFailed = true; }
   if (_openSheetTitle === 'Messages') renderMessagesList();
   updateMessageBadge();
 };
@@ -4702,7 +4715,7 @@ function renderMessagesList(){
   const box = $('msgBody');
   if (!box) return;
   const list = STATE.messages || [];
-  if (!list.length) { box.innerHTML = '<div class="v-empty">No Messages</div>'; return; }
+  if (!list.length) { box.innerHTML = _messagesLoadFailed ? loadFailHtml('messages') : '<div class="v-empty">No Messages</div>'; return; }
   box.innerHTML = '<div class="reveal-in">' + list.map((m, i) => `
     <button class="mg-mrow${m.read ? ' read' : ''}" onclick="openMessageDetail(${i})">
       <span class="av"></span>
@@ -5873,7 +5886,7 @@ window.syncWithdrawReceiveAmt = function(){
 // STATE.account.
 async function refreshTransactionsCache(){
   const r = await api('/transactions');
-  if (r.status === 'success') { STATE.transactions = r.transactions; STATE.transactionsTruncated = !!r.truncated; }
+  if (r.status === 'success') { STATE.transactions = r.transactions; STATE.transactionsTruncated = !!r.truncated; _recordsLoadFailed = false; }
 }
 var _withdrawSubmitting = false;
 window.submitWithdraw = async function(){
@@ -6008,12 +6021,15 @@ window.openInvestConfirm = function(tierKey, btn){
         setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1800);
         return;
       }
+      // Answers that a second tap cannot change (limit reached, price changed, product closed, banned) close the dialog, so the notice is not
+      // left on top of a Buy button that will only say the same thing again.
+      if (/^(PURCHASE_LIMIT|PRICE_CHANGED|BANNED|REGISTRATION_REQUIRED)$/.test(String(result.code || '')) || /not open right now/i.test(String(result.message || ''))) closeConfirm();
       notify(result.message || 'Could not complete investment');
       return;
     }
     closeConfirm();
     showPage('home');
-    notify(`${p.name} is now running. See it under Income.`);
+    notify(`${p.name} is now running. See it under Orders.`);
   };
   $('confirmBg').classList.add('show');
   lockBodyScroll(); dlgOpened();
