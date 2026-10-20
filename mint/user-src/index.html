@@ -1905,6 +1905,12 @@ html.mg-gut .mg-top{margin-right:-19px;}
 .mg-mem-join{position:absolute;left:15px;top:64px;font:400 10.2px/16px var(--mg-sans);color:#a2a8b2;}
 .mg-mem-line{position:absolute;left:15px;right:15px;top:86px;border-top:1px solid #d5eadc;}
 .mg-mem-tp{position:absolute;left:15px;top:92px;font:400 10.1px/16px var(--mg-serif);color:#a4a8b0;}
+/* Announcement dialog: the same pop-in as Cookie's dialogs (overshoot spring, quick fade, slower fade out), but growing from the middle of the dialog */
+.ann-bg{display:flex !important;visibility:hidden;opacity:0;pointer-events:none;transition:opacity .45s ease,visibility 0s linear .47s;}
+.ann-bg.show{visibility:visible;opacity:1;pointer-events:auto;transition:opacity .22s ease,visibility 0s;}
+.ann-sheet{transform-origin:50% 50%;transform:scale(.5);opacity:0;transition:transform .46s cubic-bezier(.4,0,.7,.4),opacity .42s ease-in;}
+.ann-bg.show .ann-sheet{transform:none;opacity:1;transition:transform .55s cubic-bezier(.18,1.2,.34,1),opacity .24s ease;}
+@media (prefers-reduced-motion:reduce){.ann-bg,.ann-sheet{transition:none !important;}}
 
 /* MG-END */
 /* ── Login / Sign Up: measured from the owner's Mint screenshots (360 px phone, 2x) ── */
