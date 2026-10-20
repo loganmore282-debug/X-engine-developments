@@ -1360,7 +1360,7 @@ async function renderAnalytics(silent){
       </div>
     </div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Cashback schedule for ${esc(selected.day||a.today)}</h2>
-      <p class="muted">Locked cashback: a product pays nothing while it runs, and its whole cashback is credited at 00:00 Uganda time on its last day (maturity). Scheduled cashback is credited to wallets; members decide when to withdraw. Future purchases and deposits are unknown.</p>
+      <p class="muted">Locked cashback: a product pays nothing while it runs, and its whole cashback is credited at its closing time (the time of day it was bought, after the cycle's days). Scheduled cashback is credited to wallets; members decide when to withdraw. Future purchases and deposits are unknown.</p>
       <div class="cards">
         <div class="stat"><div class="n">${ugx(schedule.scheduledAmount)}</div><div class="l">Contract cashback scheduled for this day</div></div>
         <div class="stat"><div class="n">${ugx(schedule.unpaidAmount)}</div><div class="l">This day's cashback still unpaid (eligible accounts)</div></div>

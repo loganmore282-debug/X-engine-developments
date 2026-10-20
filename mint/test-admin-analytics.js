@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const acorn = require('acorn');
 const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
 const ast = acorn.parse(src, { ecmaVersion: 'latest' });
-const names = ['tsMillis', 'eatDayKey', 'eatNextMidnight', 'payoutInstants', 'eatParts', 'bandOf', 'finiteMoney', 'round2', 'analyticsContractDay'];
+const names = ['tsMillis', 'eatDayKey', 'eatNextMidnight', 'payoutInstants', 'investmentMaturityMs', 'eatParts', 'bandOf', 'finiteMoney', 'round2', 'analyticsContractDay'];
 const helpers = names.map(name => {
   const n = ast.body.find(n => n.type === 'FunctionDeclaration' && n.id.name === name);
   assert.ok(n, name); return src.slice(n.start, n.end);

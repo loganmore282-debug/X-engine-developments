@@ -83,7 +83,7 @@ function harness() {
     nowStr: () => ({ date: '2026-10-06', time: '13:00' }), newStatementId: () => 'statement',
     tzOffMs: () => 10800000, CASHBACK_PARALLEL: 8, setImmediate, withLock: async (_key, work) => work(), _creditingPayouts: new Set(), _sweepingCashback: false, _lastFullCashbackSweep: 0,
   });
-  vm.runInContext([fn('eatNextMidnight'), fn('payoutDueAtMs'), fn('payoutsDueCount'), fn('settleInvestmentIfDue'), fn('_settleDueInvestmentNow'), fn('settleMany'), fn('reconcileCashback')].join('\n'), c);
+  vm.runInContext([fn('eatNextMidnight'), fn('payoutDueAtMs'), fn('payoutsDueCount'), fn('investmentMaturityMs'), fn('settleInvestmentIfDue'), fn('_settleDueInvestmentNow'), fn('settleMany'), fn('reconcileCashback')].join('\n'), c);
   return { state, c };
 }
 
@@ -112,6 +112,15 @@ async function main() {
   await h3.c.settleInvestmentIfDue(await h3.c.db.collection('investments').doc('inv1').get());
   assert.equal(h3.state.users.member.walletBalance, 2000, 'the carried-over product receives expectedReturn minus what was already paid');
   assert.equal(h3.state.investments.inv1.status, 'matured');
+  // The closing time is the purchase time plus the cycle's days, NOT midnight: a product bought 2 days minus 1 minute ago (5-day product bought
+  // at 14:35, now 2 d 13 h later...) -- here a 2-day product bought 47 h 59 min ago is not paid, one bought 48 h 1 min ago is.
+  const h4 = harness(); h4.state.crashAfterWalletWrite = false;
+  h4.state.investments.inv1.createdAt = new Date(Date.now() - (2 * 86400000 - 60000));
+  await h4.c.settleInvestmentIfDue(await h4.c.db.collection('investments').doc('inv1').get());
+  assert.equal(h4.state.users.member.walletBalance, 0, '1 minute before its closing time nothing is paid, even if a midnight has passed');
+  h4.state.investments.inv1.createdAt = new Date(Date.now() - (2 * 86400000 + 60000));
+  await h4.c.settleInvestmentIfDue(await h4.c.db.collection('investments').doc('inv1').get());
+  assert.equal(h4.state.users.member.walletBalance, 2000, '1 minute after its closing time the whole cashback is paid');
   console.log('PASS: locked cashback is paid once at maturity, never before; crash retry does not double-credit; carried-over daily products get the remainder');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
