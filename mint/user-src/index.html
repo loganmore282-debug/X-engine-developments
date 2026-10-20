@@ -1646,7 +1646,7 @@ body.sheet-open .mg-chest,body.dlg-open .mg-chest{visibility:hidden;}
 .v-pays button.on{background:#fdf3f1;border-color:#0b5d3a;}
 .v-pays button.on i{border-color:#0b5d3a;background:radial-gradient(circle,#fff 0 3.5px,#0b5d3a 4px);width:19px;height:19px;border-width:3px;margin-top:-12px;}
 .v-cta{display:block;width:100%;height:43.5px;margin:21px 0 0;border:0;border-radius:12px;background:linear-gradient(125deg,#07a856 0%,#02924a 50%,#056b39 100%);color:#fff;font:700 15px/1 var(--mg-sans);cursor:pointer;box-shadow:0 8px 16px -10px rgba(2,120,60,.7);}
-.v-cta:disabled{opacity:.62;}   /* the owner's Withdraw screen shows Confirm Withdraw solid even with no amount typed yet */
+.v-cta:disabled{opacity:.62;}
 .v-cta:active:not(:disabled){transform:scale(.99);}
 .v-info{margin-top:22px;padding:17px 17px 12px;border:1px solid #cfe6d6;border-radius:16px;background:linear-gradient(135deg,#fdf3f1,#f6f3e6);}
 .v-info h3{margin:0;padding:0 0 7px;border-bottom:1px solid #cfe0d4;font:700 12px/1.2 var(--mg-serif);letter-spacing:.05em;color:#1c1c1c;}
@@ -1875,6 +1875,19 @@ html.mg-gut .mg-top{margin-right:-19px;}
 .sheet-bg.mg-gut .v-recbal,.sheet-bg.mg-gut .v-rectabs{margin-right:-19px;}
 .sheet-bg.mg-gut .v-rectabs{padding-right:19px;}
 .ma-scroll.mg-gut{padding-right:4px;}
+
+/* Glow sweep (measured from the owner's screen recording of the Sign Up button, 60 fps): a soft white band, 65% of the button wide, peak white 11.4%,
+   leaning 5 degrees, runs right to left. Every 2 s: the first band creeps in from the right edge, speeds up (ease-in, 1.1 s) and leaves;
+   half a second after it a second, steady band crosses (0.5 s); then 0.33 s of rest. Only the Buy Now, Log In, Sign Up and Profile Deposit buttons carry it. */
+.mg-buy:not(.soon):not(:disabled),#loginBtn:not(:disabled),#regBtn:not(:disabled),.mg-me-btns .dep{position:relative;overflow:hidden;isolation:isolate;}
+.mg-buy:not(.soon):not(:disabled)::before,.mg-buy:not(.soon):not(:disabled)::after,#loginBtn:not(:disabled)::before,#loginBtn:not(:disabled)::after,#regBtn:not(:disabled)::before,#regBtn:not(:disabled)::after,.mg-me-btns .dep::before,.mg-me-btns .dep::after{
+  content:'';position:absolute;left:0;top:0;width:65%;height:100%;pointer-events:none;z-index:-1;will-change:transform;transform:translateX(157.7%) skewX(5deg);
+  background:linear-gradient(90deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.009) 8.3%,rgba(255,255,255,.026) 16.7%,rgba(255,255,255,.048) 25%,rgba(255,255,255,.065) 33.3%,rgba(255,255,255,.084) 41.7%,rgba(255,255,255,.114) 50%,rgba(255,255,255,.097) 58.3%,rgba(255,255,255,.079) 66.7%,rgba(255,255,255,.063) 75%,rgba(255,255,255,.043) 83.3%,rgba(255,255,255,.022) 91.7%,rgba(255,255,255,0) 100%);}
+.mg-buy:not(.soon):not(:disabled)::before,#loginBtn:not(:disabled)::before,#regBtn:not(:disabled)::before,.mg-me-btns .dep::before{animation:mgGlowA 2s linear infinite;}
+.mg-buy:not(.soon):not(:disabled)::after,#loginBtn:not(:disabled)::after,#regBtn:not(:disabled)::after,.mg-me-btns .dep::after{animation:mgGlowB 2s linear infinite;}
+@keyframes mgGlowA{0.0%{transform:translateX(151.5%) skewX(5deg);}5.0%{transform:translateX(142.3%) skewX(5deg);}11.67%{transform:translateX(126.9%) skewX(5deg);}20.0%{transform:translateX(113.1%) skewX(5deg);}28.33%{transform:translateX(103.8%) skewX(5deg);}31.67%{transform:translateX(100.8%) skewX(5deg);}33.33%{transform:translateX(93.1%) skewX(5deg);}35.0%{transform:translateX(88.5%) skewX(5deg);}36.67%{transform:translateX(79.2%) skewX(5deg);}38.33%{transform:translateX(66.9%) skewX(5deg);}41.67%{transform:translateX(37.7%) skewX(5deg);}45.0%{transform:translateX(3.8%) skewX(5deg);}48.33%{transform:translateX(-37.7%) skewX(5deg);}50.0%{transform:translateX(-59.2%) skewX(5deg);}51.67%{transform:translateX(-80.8%) skewX(5deg);}53.33%{transform:translateX(-100.8%) skewX(5deg);}64%,100%{transform:translateX(-100%) skewX(5deg);}}
+@keyframes mgGlowB{0%,56.67%{transform:translateX(157.7%) skewX(5deg);}58.33%{transform:translateX(122.3%) skewX(5deg);}63.33%{transform:translateX(65.4%) skewX(5deg);}66.67%{transform:translateX(33.1%) skewX(5deg);}73.33%{transform:translateX(-23.1%) skewX(5deg);}78.33%{transform:translateX(-53.1%) skewX(5deg);}83.33%{transform:translateX(-80.8%) skewX(5deg);}86.67%{transform:translateX(-100.8%) skewX(5deg);}100%{transform:translateX(-100%) skewX(5deg);}}
+@media (prefers-reduced-motion:reduce){.mg-buy::before,.mg-buy::after,#loginBtn::before,#loginBtn::after,#regBtn::before,#regBtn::after,.mg-me-btns .dep::before,.mg-me-btns .dep::after{animation:none !important;}}
 
 /* MG-END */
 /* ── Login / Sign Up: measured from the owner's Mint screenshots (360 px phone, 2x) ── */
