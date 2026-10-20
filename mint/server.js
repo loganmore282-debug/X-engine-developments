@@ -1531,11 +1531,34 @@ const GIFTCODE_LENGTH = GIFTCODE_GROUP_LEN * GIFTCODE_GROUPS; // 12 meaningful c
 // Gift codes are written in CAPITAL letters (owner: "make gift codes be capital letters"). The alphabet constant above stays lowercase because
 // referral codes share it; matching a code when it is redeemed is case-insensitive (codeLower), so older lowercase codes still work.
 const GIFTCODE_UPPER = GIFTCODE_CHARS.toUpperCase();
+// TREASURE CODES (owner): 10 characters, capital letters and digits, no dashes, e.g. HPDABM8C5L. Every character comes from the operating
+// system's secure random generator (crypto.randomInt, no modulo bias), so a code is 36^10 (about 3.6 x 10^15, 51 bits) -- not derivable from
+// any other code and not guessable; /redeem also locks a member out after a few wrong keys. At rest a new code is never written in clear:
+// it is looked up by its SHA-256 (`codeLower` holds the hash, so the unique index still guarantees one code, one document) and kept only as an
+// AES-256-GCM copy (`codeEnc`) for the admin list. The key comes from TREASURE_CODE_KEY, else the admin key; if that ever changes the admin
+// list cannot show OLD codes any more, but redeeming does not depend on it. Codes made before this rule (12 characters with dashes) still work.
+const TREASURE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+const TREASURE_CODE_LENGTH = 10;
+const TC_KEY = crypto.createHash('sha256').update('mint-treasure-codes-v1|' + (process.env.TREASURE_CODE_KEY || process.env.ADMIN_KEY || 'mint-dev')).digest();
+function tcHash(codeUpper) { return crypto.createHash('sha256').update('mint-tc|' + String(codeUpper)).digest('hex'); }
+function tcEncrypt(code) {
+  const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', TC_KEY, iv);
+  const enc = Buffer.concat([c.update(String(code), 'utf8'), c.final()]);
+  return 'v1.' + [iv, c.getAuthTag(), enc].map(b => b.toString('base64url')).join('.');
+}
+function tcDecrypt(blob) {
+  try {
+    const [v, iv, tag, enc] = String(blob || '').split('.');
+    if (v !== 'v1') return '';
+    const d = crypto.createDecipheriv('aes-256-gcm', TC_KEY, Buffer.from(iv, 'base64url'));
+    d.setAuthTag(Buffer.from(tag, 'base64url'));
+    return Buffer.concat([d.update(Buffer.from(enc, 'base64url')), d.final()]).toString('utf8');
+  } catch (_) { return ''; }
+}
 function genGiftCode() {
-  const raw = randFromAlphabet(GIFTCODE_UPPER, GIFTCODE_LENGTH);
-  const groups = [];
-  for (let i = 0; i < GIFTCODE_LENGTH; i += GIFTCODE_GROUP_LEN) groups.push(raw.slice(i, i + GIFTCODE_GROUP_LEN));
-  return groups.join('-');
+  let s = '';
+  for (let i = 0; i < TREASURE_CODE_LENGTH; i++) s += TREASURE_ALPHABET[crypto.randomInt(TREASURE_ALPHABET.length)];
+  return s;
 }
 // One flat block, no dashes -- the previous round's own reasoning for
 // referral codes (spoken aloud more often than typed) still holds; a
@@ -1569,8 +1592,7 @@ async function generateUniqueGiftCode() {
   return withLock('giftcode-gen', async () => {
     for (let attempt = 0; attempt < 30; attempt++) {
       const code = genGiftCode();
-      const codeLower = code.toLowerCase();
-      const dup = await db.collection('promoCodes').where('codeLower', '==', codeLower).limit(1).get();
+      const dup = await db.collection('promoCodes').where('codeLower', '==', tcHash(code)).limit(1).get();
       if (dup.empty) return code;
     }
     throw new Error('Could not generate a unique gift code');
@@ -6374,12 +6396,24 @@ app.post('/account/transaction-pin/change', async (req, res) => {
 // ═══════════════════════════════════════════
 // GIFT CODES
 // ═══════════════════════════════════════════
+// Guessing a key is slowed to a crawl: 8 wrong keys inside 10 minutes lock that member's treasure chest for the rest of the 10 minutes.
+const _wrongKeys = new Map();
+function noteWrongTreasureKey(userId) {
+  const now = Date.now(), rec = (_wrongKeys.get(userId) || []).filter(t => now - t < 600000);
+  rec.push(now); _wrongKeys.set(userId, rec);
+  if (_wrongKeys.size > 20000) for (const [k, v] of _wrongKeys) { if (!v.length || now - v[v.length - 1] > 600000) _wrongKeys.delete(k); }
+}
+function treasureKeyLockedOut(userId) {
+  const now = Date.now(), rec = (_wrongKeys.get(userId) || []).filter(t => now - t < 600000);
+  return rec.length >= 8;
+}
 app.post('/redeem', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const raw = String(req.body.code || '').trim().slice(0, 32);
   if (!raw) return res.status(400).json({ status: 'error', message: 'Please enter the treasure chest key' });
-  if (!/^[A-Za-z0-9-]+$/.test(raw)) return res.status(400).json({ status: 'error', message: 'Wrong treasure chest password' });
+  if (!/^[A-Za-z0-9-]+$/.test(raw)) { noteWrongTreasureKey(userId); return res.status(400).json({ status: 'error', message: 'Wrong treasure chest password' }); }
+  if (treasureKeyLockedOut(userId)) return res.status(429).json({ status: 'error', code: 'TOO_MANY_WRONG_KEYS', message: 'Too many wrong keys. Please wait a few minutes and try again.' });
   try {
     let result = null;
     // Lock on the lowercased code, not the raw input: two members submitting
@@ -6396,7 +6430,13 @@ app.post('/redeem', async (req, res) => {
       // alphabet and one issued under the new lowercase alphabet are both
       // found the same way, with no case-guessing needed.
       const lower = raw.toLowerCase();
-      let codeSnap = await db.collection('promoCodes').where('codeLower', '==', lower).limit(1).get();
+      // A current code: 10 letters/digits (dashes or spaces typed by mistake are ignored), found by its hash.
+      const typed10 = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      let codeSnap = typed10.length === TREASURE_CODE_LENGTH
+        ? await db.collection('promoCodes').where('codeLower', '==', tcHash(typed10)).limit(1).get()
+        : { empty: true, docs: [] };
+      // A code made before the 10-character rule (12 characters, usually with dashes).
+      if (codeSnap.empty) codeSnap = await db.collection('promoCodes').where('codeLower', '==', lower).limit(1).get();
       // A member who reads a code off a screenshot and types it by hand may
       // reasonably leave the dashes out, or put them somewhere else -- the
       // code itself, read as characters, is still exactly right. If
@@ -6420,6 +6460,7 @@ app.post('/redeem', async (req, res) => {
         // an already-used or usage-capped code below is a REAL code, not a
         // guess, so those aren't logged here.
         logSecurityEvent(userId, 'giftcode_invalid_attempt', { code: raw });
+        noteWrongTreasureKey(userId);
         // Owner's own wording. This is the "the key you typed is not a key"
         // case; the branches below (inactive / expired / already used) are
         // real codes in a wrong STATE and keep saying so, because telling
@@ -6532,7 +6573,7 @@ app.post('/redeem', async (req, res) => {
       if (priorTx.empty) {
         const { date, time } = nowStr();
         await db.collection('transactions').add({
-          userId, statementId: newStatementId(), type: 'promocode', description: `Gift code redeemed: ${code}`, giftCode: code,
+          userId, statementId: newStatementId(), type: 'promocode', description: cd.codeEnc ? 'Treasure code redeemed' : `Gift code redeemed: ${code}`, giftCode: code,
           amount: reward, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
         });
       }
@@ -7740,13 +7781,14 @@ app.post('/admin/promocodes/generate', async (req, res) => {
   if (durationSeconds !== null && (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 315360000)) return res.status(400).json({ status: 'error', message: 'Duration must be a positive number of seconds, at most 10 years' });
   try {
     const code = await generateUniqueGiftCode();
+    const hash = tcHash(code);
     const doc = {
-      code, codeLower: code.toLowerCase(), minReward, maxReward, maxUses: maxUses || null, usedBy: [], active: true, buyersOnly,
+      code: 'tc_' + hash.slice(0, 20), codeLower: hash, codeEnc: tcEncrypt(code), minReward, maxReward, maxUses: maxUses || null, usedBy: [], active: true, buyersOnly,
       createdBy: req.adminUser?.username || 'owner', createdAt: FieldValue.serverTimestamp(),
     };
     if (durationSeconds) doc.expiresAt = new Date(Date.now() + durationSeconds * 1000);
     await db.collection('promoCodes').add(doc);
-    logAdminAction(req, 'giftcode_generated', { code, minReward, maxReward, maxUses, durationSeconds, buyersOnly });
+    logAdminAction(req, 'giftcode_generated', { code: code.slice(0, 3) + '*******', minReward, maxReward, maxUses, durationSeconds, buyersOnly });
     res.json({ status: 'success', code, minReward, maxReward, buyersOnly });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -7770,7 +7812,7 @@ app.get('/admin/promocodes/list', async (req, res) => {
       const totalClaimed = c.claimedRewards
         ? round2(Object.values(c.claimedRewards).reduce((s, r) => s + (Number(r) || 0), 0))
         : round2((Number(c.reward) || 0) * uses);
-      return { id: d.id, code: c.code, minReward: c.minReward ?? c.reward, maxReward: c.maxReward ?? c.reward,
+      return { id: d.id, code: tcDecrypt(c.codeEnc) || c.code, minReward: c.minReward ?? c.reward, maxReward: c.maxReward ?? c.reward,
         maxUses: c.maxUses || null, uses, totalClaimed, buyersOnly: c.buyersOnly === true,
         active: c.active !== false, expiresAt: c.expiresAt || null, createdAt: c.createdAt || null };
     }) });

@@ -1,57 +1,45 @@
 #!/usr/bin/env node
 /**
- * Gift (treasure chest) code format, exercised against the REAL generator
- * pulled out of server.js.
+ * Treasure code format and storage, exercised against the REAL generator and helpers pulled out of server.js.
  *
- * Owner: "treasure chest codes are 12 character alphanumeric random letters
- * and numbers ie HDG27RHRFT64, NO PUTTING SMALL LETTERS."
+ * Owner: treasure codes are 10 characters, capital letters and digits, no dashes (HPDABM8C5L, XEZT5ODBNA, 0QXN9JO2G4 are examples),
+ * random, encrypted/secured and unguessable.
  */
 const fs = require('fs');
 const crypto = require('crypto');
 const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
 const cut = (a, b) => src.slice(src.indexOf(a), src.indexOf(b));
-const { genGiftCode, GIFTCODE_CHARS, GIFTCODE_LENGTH } = new Function('crypto',
-  cut('const GIFTCODE_CHARS', 'async function generateUniqueGiftCode') +
-  '\nreturn { genGiftCode, GIFTCODE_CHARS, GIFTCODE_LENGTH };')(crypto);
+const { genGiftCode, TREASURE_ALPHABET, TREASURE_CODE_LENGTH, tcHash, tcEncrypt, tcDecrypt } = new Function('crypto', 'process',
+  cut('const TREASURE_ALPHABET', '// One flat block, no dashes').replace(/^\s*\/\/.*$/gm, '') +
+  '\nreturn { genGiftCode, TREASURE_ALPHABET, TREASURE_CODE_LENGTH, tcHash, tcEncrypt, tcDecrypt };')(crypto, { env: { ADMIN_KEY: 'k1' } });
 
 let failed = 0;
 const check = (ok, label) => { if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`); };
-
 const N = 20000;
 const codes = Array.from({ length: N }, genGiftCode);
 
-check(GIFTCODE_LENGTH === 12, `length is 12 (got ${GIFTCODE_LENGTH})`);
-check(codes.every(c => /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(c)), 'every generated code is 12 characters in three groups of four joined by dashes (XXXX-XXXX-XXXX)');
-check(codes.every(c => /^[A-Z0-9-]+$/.test(c)), 'capital letters and digits only -- no small letters');
-check(!codes.some(c => /[a-z]/.test(c)), 'not one lowercase character in 20,000 codes');
-check(codes.every(c => !/[IOL01]/.test(c)), 'no I, O, L, 0 or 1 -- unambiguous when read off a screen');
-check(GIFTCODE_CHARS === GIFTCODE_CHARS.toLowerCase() && /REFERRAL_CHARS = GIFTCODE_CHARS/.test(src), 'referral codes keep their own (lowercase) alphabet: only gift codes became capitals');
-
-const EX = 'HDG27RHRFT64';
-check(EX.length === 12 && [...EX].every(ch => GIFTCODE_CHARS.toUpperCase().includes(ch)),
-  `the owner's example ${EX} is a valid code for this alphabet`);
-
-check(codes.some(c => /[A-Z]/.test(c)) && codes.some(c => /[0-9]/.test(c)), 'letters and digits both occur');
-// How often a code contains BOTH a letter and a digit is fixed by the
-// alphabet, not a choice: with 23 letters and 8 digits over 12 draws,
-// P(no digit) = (23/31)^12 = 2.68%, so ~97.3% is exactly right. Asserting
-// ">99%" here was my arithmetic being wrong, not the generator. An all-letter
-// code is still a valid code -- the owner asked for alphanumeric characters,
-// not for every code to contain one of each.
-const mixed = codes.filter(c => /[A-Z]/.test(c) && /[0-9]/.test(c)).length;
-const expectedMix = 1 - Math.pow(23 / 31, 12) - Math.pow(8 / 31, 12);
-check(Math.abs(mixed / N - expectedMix) < 0.01,
-  `share mixing letters and digits matches the alphabet: ${(mixed / N * 100).toFixed(2)}% vs ${(expectedMix * 100).toFixed(2)}% expected`);
-
+check(TREASURE_CODE_LENGTH === 10, `length is 10 (got ${TREASURE_CODE_LENGTH})`);
+check(codes.every(c => /^[A-Z0-9]{10}$/.test(c)), 'every code is exactly 10 capital letters/digits, no dashes, no small letters');
 check(new Set(codes).size === N, `no duplicates in ${N.toLocaleString()} codes`);
-
-const used = new Set(codes.join('').replace(/-/g, ''));
-check(used.size === GIFTCODE_CHARS.length,
-  `all ${GIFTCODE_CHARS.length} alphabet characters appear (saw ${used.size})`);
-
-const refLen = (src.match(/function randCode\(n = (\d+)\)/) || [])[1];
-check(Number(refLen) !== GIFTCODE_LENGTH, `cannot be confused with a referral code (${refLen} vs ${GIFTCODE_LENGTH} chars)`);
-
-console.log('\nsample:', codes.slice(0, 5).join('  '));
-console.log(failed ? `\n${failed} FAILED` : '\nall gift-code format cases pass');
+check(codes.some(c => /[A-Z]/.test(c)) && codes.some(c => /[0-9]/.test(c)), 'letters and digits both occur');
+check(new Set(codes.join('')).size === 36 && TREASURE_ALPHABET.length === 36, 'all 36 characters (A-Z, 0-9) are used');
+// uniform: each character about 1/36 of the draws (no modulo bias, no favourite)
+const counts = {}; for (const ch of codes.join('')) counts[ch] = (counts[ch] || 0) + 1;
+const exp = N * 10 / 36, worst = Math.max(...Object.values(counts).map(v => Math.abs(v - exp) / exp));
+check(worst < 0.08, `characters are evenly spread (worst deviation ${(worst * 100).toFixed(1)}%)`);
+check(/crypto\.randomInt\(TREASURE_ALPHABET\.length\)/.test(src) && !/Math\.random/.test(cut('function genGiftCode', '// One flat block, no dashes')), 'drawn with the secure random generator, never Math.random');
+check(/^[A-Z0-9]{10}$/.test('HPDABM8C5L') && /^[A-Z0-9]{10}$/.test('0QXN9JO2G4'), "the owner's examples fit the format");
+check(/^[a-z0-9]+$/.test(src.match(/const GIFTCODE_CHARS = '([^']+)'/)[1]) && /REFERRAL_CHARS = GIFTCODE_CHARS/.test(src), 'referral codes keep their own alphabet');
+// storage
+const c = 'HPDABM8C5L';
+check(tcHash(c) === tcHash('HPDABM8C5L') && tcHash(c) !== tcHash('HPDABM8C5M') && /^[0-9a-f]{64}$/.test(tcHash(c)), 'a code is looked up by its SHA-256, one code one hash');
+const blob = tcEncrypt(c);
+check(tcDecrypt(blob) === c && !blob.includes(c) && tcEncrypt(c) !== blob, 'the stored copy is AES-GCM encrypted (different every time, the code is not in it) and reads back');
+check(tcDecrypt(blob.slice(0, -2) + 'AA') === '' && tcDecrypt('garbage') === '' && tcDecrypt('') === '', 'a tampered or broken copy reads as empty, never as a wrong code');
+check(/codeLower: hash, codeEnc: tcEncrypt\(code\)/.test(src) && /code: 'tc_' \+ hash\.slice\(0, 20\)/.test(src), 'a new code is saved by hash with an encrypted copy, never in clear');
+check(/code: tcDecrypt\(c\.codeEnc\) \|\| c\.code/.test(src), 'the admin list decrypts it (older codes show as before)');
+check(/function treasureKeyLockedOut/.test(src) && /rec\.length >= 8/.test(src) && /TOO_MANY_WRONG_KEYS/.test(src), 'eight wrong keys in 10 minutes lock a member out of the chest for the rest of the 10 minutes');
+check(/where\('codeLower', '==', tcHash\(typed10\)\)/.test(src) && /where\('codeLower', '==', lower\)/.test(src), 'redeeming finds the new code by hash and still finds older dashed codes');
+console.log('\nsample:', codes.slice(0, 3).join('  '));
+console.log(failed ? `\n${failed} FAILED` : '\nall treasure-code cases pass');
 process.exit(failed ? 1 : 0);
