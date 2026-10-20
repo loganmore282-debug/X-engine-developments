@@ -1915,6 +1915,40 @@ html.mg-gut .mg-top{margin-right:-19px;}
 .ann-sheet.mg-ann-grow .mg-ann-x,.ann-sheet.mg-ann-grow h2,.ann-sheet.mg-ann-grow .mg-ann-lines,.ann-sheet.mg-ann-grow .mg-ann-join{animation:mgAnnFade .2s ease-out .36s backwards;}
 @keyframes mgAnnFade{from{opacity:0;}to{opacity:1;}}
 @media (prefers-reduced-motion:reduce){.ann-bg,.ann-sheet,.ann-sheet .mg-ann-img,.ann-sheet .mg-ann-x,.ann-sheet h2,.ann-sheet .mg-ann-lines,.ann-sheet .mg-ann-join{transition:none !important;animation:none !important;}}
+/* Deposit waiting page (polling): no box. A green phone badge with rings spreading from it, the amount, a three-step timeline (sent, approve, balance updated)
+   and a "checking automatically" line. The tick and cross results keep the card. */
+.pay-card.pl{background:none;border:0;box-shadow:none;padding:6px 0 0;max-width:330px;}
+.pay-card.pl .dep-status-icon{min-height:0;margin:2px auto 10px;}
+.pl-radar{position:relative;width:150px;height:150px;display:flex;align-items:center;justify-content:center;}
+.pl-radar i{position:absolute;left:35px;top:35px;width:80px;height:80px;border-radius:50%;border:2px solid #02a652;opacity:0;animation:plRing 2.4s ease-out infinite;}
+.pl-radar i:nth-child(2){animation-delay:.8s;}
+.pl-radar i:nth-child(3){animation-delay:1.6s;}
+.pl-radar b{position:relative;display:flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#07a856,#02924a 50%,#056b39);box-shadow:0 12px 24px -12px rgba(2,120,60,.7);}
+.pl-radar b svg{width:36px;height:36px;fill:none;stroke:#fff;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+@keyframes plRing{0%{transform:scale(1);opacity:.5;}100%{transform:scale(1.85);opacity:0;}}
+.pay-card.pl h3{font-size:19px;margin:0 0 4px;}
+.pl-amt{margin:0 0 18px;font:700 31px/1.15 var(--mg-serif);color:#02924a;letter-spacing:.01em;}
+.pay-card.pl .pl-steps{list-style:none;margin:0;padding:18px 16px 18px 18px;text-align:left;background:#fefefc;border:1px solid #d6e9dd;border-radius:20px;box-shadow:0 14px 30px -24px rgba(2,120,60,.5);}
+.pl-steps li{position:relative;margin:0;padding:0 0 20px 36px;}
+.pl-steps li:last-child{padding-bottom:0;}
+.pl-steps li::before{content:'';position:absolute;left:0;top:0;width:22px;height:22px;box-sizing:border-box;border-radius:50%;background:#fff;border:2px solid #c9dccf;}
+.pl-steps li::after{content:'';position:absolute;left:10px;top:25px;bottom:3px;width:2px;background:#cfe6d8;}
+.pl-steps li:last-child::after{display:none;}
+.pl-steps li.done::before{background:#02a652 url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 12.5l4.2 4.2L18.5 8'/%3E%3C/svg%3E") center/13px no-repeat;border-color:#02a652;}
+.pl-steps li.done::after{background:#02a652;}
+.pl-steps li.now::before{border-color:#02a652;animation:plNow 1.6s ease-out infinite;}
+.pl-steps li.now::after{background:linear-gradient(#02a652,#cfe6d8);}
+@keyframes plNow{0%{box-shadow:0 0 0 0 rgba(2,166,82,.45);}100%{box-shadow:0 0 0 9px rgba(2,166,82,0);}}
+.pl-steps b{display:block;font:700 14px/22px var(--mg-sans);color:#161616;}
+.pl-steps li.todo b{color:#8c9b91;}
+.pl-steps span{display:block;margin-top:1px;font:500 12.5px/1.5 var(--mg-sans);color:#5f6f63;}
+.pl-steps li.todo span{color:#a5b1a9;}
+.pay-card.pl .pay-note{margin:14px 0 0;padding:11px 14px;border-radius:14px;background:#e6f4ec;color:#3b6a50;font:500 12.5px/1.55 var(--mg-sans);text-align:left;}
+.pl-check{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:20px;font:500 12px/1 var(--mg-sans);color:#8a9a90;}
+.pl-check i{position:relative;display:block;width:54px;height:3px;border-radius:2px;background:#d6e9dd;overflow:hidden;}
+.pl-check i::after{content:'';position:absolute;left:0;top:0;height:100%;width:40%;border-radius:2px;background:#02a652;animation:plShim 1.3s ease-in-out infinite;}
+@keyframes plShim{0%{transform:translateX(-100%);}100%{transform:translateX(250%);}}
+@media (prefers-reduced-motion:reduce){.pl-radar i{animation:none;opacity:.25;}.pl-steps li.now::before,.pl-check i::after{animation:none;}}
 
 /* MG-END */
 /* ── Login / Sign Up: measured from the owner's Mint screenshots (360 px phone, 2x) ── */

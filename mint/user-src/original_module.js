@@ -3796,12 +3796,11 @@ function playStatusIcon(box, kind){
     setTimeout(finish, END + 1500);
   } catch (e) { box.innerHTML = still; drawn(); }
 }
-// Waiting for the payment: a dot travels from the phone to the wallet (nothing rotates).
-var DEPOSIT_POLL_FLOW = '<div class="dep-flow" role="img" aria-label="Processing payment">'
-  + '<span class="dep-flow-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.5 18.5h3"/></svg></span>'
-  + '<span class="dep-flow-track"><i></i><i></i><i></i><i></i></span>'
-  + '<span class="dep-flow-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6.8A2.3 2.3 0 0 1 6.3 4.5H17v3.5"/><rect x="3" y="7.5" width="18" height="12.5" rx="2.6"/><path d="M16 13.8h5"/></svg></span>'
-  + '</div>';
+// Waiting for the payment: a green phone badge with rings spreading from it (the page around it is the timeline, see setDepositStatusPending).
+var DEPOSIT_POLL_FLOW = '<div class="pl-radar" role="img" aria-label="Waiting for your approval"><i></i><i></i><i></i>'
+  + '<b><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.5 18.5h3"/></svg></b></div>';
+// Only the waiting states use the open (card-less) layout; the tick and the cross keep the card.
+function setPayLive(on){ const c = $('depStatusIcon') && $('depStatusIcon').closest('.pay-card'); if (c) c.classList.toggle('pl', !!on); }
 // Every figure this screen shows about one plan, worked out in one place so
 // the summary band and the row can never disagree.
 function planStats(inv){
@@ -5560,7 +5559,6 @@ function setDepositStatusPending(amount, phone, network){
   if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }   // an old success countdown must not close this new page
   $('depStatusIcon').className = 'dep-status-icon';
   $('depStatusIcon').innerHTML = DEPOSIT_POLL_FLOW;
-  $('depStatusTitle').textContent = 'Processing your deposit';
   // Owner asked for the specifics shown here, not a generic message --
   // the actual number the prompt was sent to and the actual amount.
   const displayPhone = cleanPhone(phone) || (dialPlus() + String(phone || '').replace(/\D/g, ''));
@@ -5586,22 +5584,18 @@ function setDepositStatusPending(amount, phone, network){
   //
   // esc() on both interpolations: the amount is ours, but the phone number is
   // whatever was typed into the form, and this is innerHTML now.
+  setPayLive(true);
+  $('depStatusTitle').textContent = 'Waiting for your approval';
   $('depStatusBody').innerHTML =
-    '<ol class="pay-steps">'
-    + '<li>A payment request for ' + esc(fmtUGX(amount)) + ' has been sent to ' + esc(displayPhone) + '.</li>'
-    + '<li>Check your phone for the payment prompt.</li>'
-    + '<li>Approve the payment to complete your deposit.</li>'
-    + '<li>Your balance will be updated automatically once the payment is confirmed.</li>'
+    '<div class="pl-amt">' + esc(fmtUGX(amount)) + '</div>'
+    + '<ol class="pay-steps pl-steps">'
+    + '<li class="done"><b>Request sent</b><span>A payment request for ' + esc(fmtUGX(amount)) + ' has been sent to ' + esc(displayPhone) + '.</span></li>'
+    + '<li class="now"><b>Approve on your phone</b><span>Check your phone for the payment prompt and approve it.</span></li>'
+    + '<li class="todo"><b>Balance updated</b><span>Your balance is updated automatically once the payment is confirmed.</span></li>'
     + '</ol>'
-    // Kept from the earlier round, and deliberately NOT dropped when the four
-    // steps replaced the old paragraph. Owner, when it was added: "put another
-    // statement, that dial *165# to approve, this is just a fallback bro
-    // because a payment prompt can come or it may fail and one may dial *165#
-    // so he see pending approval." The push prompt genuinely does fail to
-    // arrive sometimes -- a real MoMo gap, not something this app causes --
-    // and without this a member is left staring at step 2 with nothing to do.
-    + '<p class="pay-note">If the prompt does not come up, dial ' + esc(ussd)
-    + ' on that phone to find and approve the pending payment yourself.</p>';
+    // The push prompt genuinely does fail to arrive sometimes (a real MoMo gap), and without this a member is left at step 2 with nothing to do.
+    + '<p class="pay-note">No prompt? Dial ' + esc(ussd) + ' on that phone to find and approve the pending payment yourself.</p>'
+    + '<div class="pl-check"><i></i>Checking automatically</div>';
   // Owner: "remove verify button, so this is automatic verification" -- the
   // autopoll (pollDepositStatus() below) already checks on its own; a manual
   // Verify tap next to it was a second way to do the same thing, not a
@@ -5612,6 +5606,7 @@ function setDepositStatusPending(amount, phone, network){
 // (Confetti and sparkles were removed on the owner's request: success is shown by the tick drawing itself, see playStatusIcon.)
 var _depSuccessRedirectTimer = null;
 function setDepositStatusSuccess(){
+  setPayLive(false);
   $('depStatusIcon').className = 'dep-status-icon success';
   // The owner's own artwork, cut out of the images he supplied.
   playStatusIcon($('depStatusIcon'), 'ok');
@@ -5652,6 +5647,7 @@ function setDepositStatusSuccess(){
   _depSuccessRedirectTimer = setInterval(() => { if (!document.hidden) tick(); }, 1000);   // the countdown waits while the app is in the background
 }
 function setDepositStatusFailed(msg){
+  setPayLive(false);
   $('depStatusIcon').className = 'dep-status-icon failed';
   // Owner sent two reference icon styles for this state and said "pick any
   // of the 2, I said signs not words" -- an exclamation mark, not the X this
@@ -5681,6 +5677,7 @@ function setDepositStatusFailed(msg){
   setDepButtons(false, true);
 }
 function setDepositStatusUnknown(){
+  setPayLive(true);
   $('depStatusIcon').className = 'dep-status-icon';
   $('depStatusIcon').innerHTML = DEPOSIT_POLL_FLOW;
   $('depStatusTitle').textContent = 'Still waiting for the provider';
