@@ -1361,15 +1361,16 @@ body{color:var(--mg-ink);font-family:var(--mg-sans);}
 .mg-ripple{position:absolute;left:0;top:0;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;border:1px solid rgba(140,196,232,.75);background:rgba(190,225,245,.38);pointer-events:none;z-index:3;animation:mgRip .5s ease-out forwards;}
 @keyframes mgRip{from{transform:scale(.3);opacity:1;}to{transform:scale(1.6);opacity:0;}}
 /* every tab opens with a soft fade-in */
-/* The rise is on the page's CONTENT, not on #pageHost itself: a transform on #pageHost makes the fixed Treasure Chest sit at the end of the page (below the
-   screen) for the length of the animation, so it vanished on every tab change and popped in afterwards. The chest only fades. */
-#pageHost.mg-enter > .v-page > :not(.mg-chest),#pageHost.mg-enter > :not(.v-page){animation:mgPageIn .3s ease-out;}
-#pageHost.mg-enter .mg-chest{animation:mgPageFade .3s ease-out;}
-@keyframes mgPageIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+/* The page appears once per tab change / sheet close: the fade and the 6px rise run on #pageHost itself, so repainting the page's content while it is
+   showing (skeleton -> real list, live refresh) never restarts it. The rise is the offset `top` of a relatively positioned box, NOT a transform: a transform
+   on #pageHost would make it the containing block of the fixed Treasure Chest and the chest would sit at the end of the page, below the screen, for 0.3 s. */
+#pageHost.mg-enter{position:relative;animation:mgPageIn .3s ease-out;}
+@keyframes mgPageIn{from{opacity:0;top:6px;}to{opacity:1;top:0;}}
 @keyframes mgPageFade{from{opacity:0;}to{opacity:1;}}
-@media (prefers-reduced-motion:reduce){#pageHost.mg-enter > .v-page > :not(.mg-chest),#pageHost.mg-enter > :not(.v-page),#pageHost.mg-enter .mg-chest,.navitem.nav-tap .lbl{animation:none;}}
-#authScreen > .ma-screen,.va-pane{animation:mgPageIn .3s ease-out;}
-.sheet-bg.show,.pay-page.show,#msgDetailBg.show,#depStatusBg.show{animation:mgPageIn .3s ease-out;}
+@media (prefers-reduced-motion:reduce){#pageHost.mg-enter,.navitem.nav-tap .lbl{animation:none;}}
+@keyframes mgSheetIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+#authScreen > .ma-screen,.va-pane{animation:mgSheetIn .3s ease-out;}
+.sheet-bg.show,.pay-page.show,#msgDetailBg.show,#depStatusBg.show{animation:mgSheetIn .3s ease-out;}
 @media (prefers-reduced-motion:reduce){#authScreen > .ma-screen,.va-pane,.sheet-bg.show,.pay-page.show,#msgDetailBg.show,#depStatusBg.show{animation:none;}}
 body.sheet-open .bottom-nav{display:flex;}
 
