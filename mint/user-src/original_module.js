@@ -4579,7 +4579,7 @@ function statementCategoryMatch(cat, t){
 function statementDescription(t){
   if (t.type === 'deposit') return 'Deposit';
   if (t.type === 'withdraw') return 'Withdraw';
-  if (t.type === 'cashback') return 'Daily Earnings';
+  if (t.type === 'cashback') return 'Cashback';
   if (t.type === 'commission') return 'Commission';
   if (t.type === 'promocode') return 'Gift Code';
   if (t.type === 'checkin') return 'Check-in Reward';
@@ -4633,7 +4633,7 @@ function renderStatement(){
     const title = statementDescription(t);
     const chip = statementChip(t);
     const amt = recordsRowAmount(t);
-    const desc = t.type === 'cashback' ? String(t.description || '').replace(/\s*daily cashback$/i, '') : cleanDesc(t.description);
+    const desc = t.type === 'cashback' ? String(t.description || '').replace(/\s*(daily )?cashback$/i, '') : cleanDesc(t.description);
     const line = chip ? `<span class="v-chip ${chip.cls}">${esc(chip.text)}</span>` : `<span class="v-rdesc">${esc(desc || title)}</span>`;
     return `
       <article class="v-rec">

@@ -2873,11 +2873,12 @@ function pesajetVerifyWebhook(body, headerSig, rawBody) {
   return { verified: false, reason: 'mismatch' };
 }
 
-// ── DAILY CASHBACK (settle-on-read + a 1s background sweep) ──
-// Each tier pays expectedReturn/cycleDays per elapsed day, using cumulative-
-// target allocation (round(expectedReturn * daysDue / total)) so the running
-// total always telescopes to EXACTLY expectedReturn at completion, for any
-// ratio — not just ones that divide evenly.
+// ── LOCKED CASHBACK (settle-on-read + a 1s background sweep) ──
+// Owner: "let it be locked cashback so cashback is credited at maturity". A product pays NOTHING while it runs; when its last day
+// arrives (the cycle's last local midnight) the whole cashback, expectedReturn minus anything an older (daily-paying) version of
+// the app already paid out, is credited in ONE payment under the deterministic token `<investmentId>:<payoutsTotal>`, and the
+// product becomes `matured`. Products that were already running when this rule began are carried over: they simply stop paying
+// daily and receive the remainder at maturity. The sweep is aimed at the maturity instant (`nextPayoutAt`), not at every midnight.
 const _creditingPayouts = new Set();
 // Maturity payouts run from the reconciler, outside any request, so they
 // have no region of their own -- and the description they stamp on the
@@ -2904,12 +2905,13 @@ async function _settleDueInvestmentNow(doc) {
   const made  = Number(inv.payoutsMade) || 0;
   if (!total || made >= total) return false;
   const createdMs = tsMillis(inv.createdAt) || Date.now();
-  const dueCount = payoutsDueCount(createdMs, Date.now(), total) - made;
-  if (dueCount <= 0) {
-    // Nothing is due, yet the sweep's hint says it is (a purchase a few milliseconds either side of 00:00, or a row
-    // with no hint): put the hint at the real due time, or this product is re-read every 0.5 s until then.
-    if (tsMillis(inv.createdAt) && !(tsMillis(inv.nextPayoutAt) > Date.now())) {
-      doc.ref.update({ nextPayoutAt: new Date(payoutDueAtMs(createdMs, made + 1)) }).catch(() => {});
+  // Locked cashback: nothing is due until the LAST day has arrived.
+  if (payoutsDueCount(createdMs, Date.now(), total) < total) {
+    // Put the sweep's hint at the maturity instant (a row bought before this rule, or one with no hint, still points at a daily payment):
+    // otherwise it is re-read every 0.5 s until then.
+    const matures = payoutDueAtMs(createdMs, total);
+    if (tsMillis(inv.createdAt) && !(tsMillis(inv.nextPayoutAt) >= matures)) {
+      doc.ref.update({ nextPayoutAt: new Date(matures) }).catch(() => {});
     }
     return false;
   }
@@ -2941,15 +2943,13 @@ async function _settleDueInvestmentNow(doc) {
       }
       const fMade = Number(f.payoutsMade) || 0;
       const fTotal = Number(f.payoutsTotal) || 0;
-      const fDue = payoutsDueCount(tsMillis(f.createdAt) || Date.now(), Date.now(), fTotal) - fMade;
-      if (fDue <= 0) return;
-      const newMade = fMade + 1;
-      const willComplete = newMade >= fTotal;
+      if (payoutsDueCount(tsMillis(f.createdAt) || Date.now(), Date.now(), fTotal) < fTotal || fMade >= fTotal) return;   // not matured yet
+      const newMade = fTotal;                       // locked cashback: the one payment is the last one
+      const willComplete = true;
       const fExpected = Number(f.expectedReturn) || 0;
       const fPaidOut = Number(f.paidOut) || 0;
-      const target = Math.round(fExpected * newMade / fTotal);
-      const amount = Math.max(0, target - fPaidOut);
-      // (amount can be 0 for a tiny payout: the day still counts, so the cursor moves on below without a credit.)
+      const amount = Math.max(0, Math.round((fExpected - fPaidOut) * 100) / 100);
+      // (amount can be 0 if an older daily-paying version already paid everything: the product still becomes matured below.)
       // Credit first with a deterministic per-investment payout token in the
       // same atomic user-document update. If the process stops after the
       // wallet write but before the investment cursor advances, the active
@@ -2979,7 +2979,7 @@ async function _settleDueInvestmentNow(doc) {
           }
           const { date, time } = nowStr();
           await db.collection('transactions').doc(`cashback:${payoutKey}`).createIfAbsent({
-            userId: f.userId, statementId: newStatementId(), type: 'cashback', description: `${f.tierLabel} daily cashback`,
+            userId: f.userId, statementId: newStatementId(), type: 'cashback', description: `${f.tierLabel} cashback`,
             amount, status: 'success', date, time, investmentId: doc.id, createdAt: FieldValue.serverTimestamp()
           });
         }
@@ -4584,7 +4584,7 @@ app.post('/invest/create', async (req, res) => {
       try {
         await invRef.set({
           userId, tierKey: liveTier.key, tierLabel: liveTier.name, amount: liveTier.price, cycle, expectedReturn,
-          status: 'active', nextPayoutAt: new Date(payoutDueAtMs(Date.now(), 1)), dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+          status: 'active', nextPayoutAt: new Date(payoutDueAtMs(Date.now(), cycle)), dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
           isFirstInvestment, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -8023,7 +8023,7 @@ app.post('/admin/user/grant-asset', async (req, res) => {
       const { date, time } = nowStr();
       const created = await invRef.createIfAbsent({
         userId, tierKey: tier.key, tierLabel: tier.name, amount: price, cycle, expectedReturn,
-        status: 'active', nextPayoutAt: new Date(payoutDueAtMs(Date.now(), 1)), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+        status: 'active', nextPayoutAt: new Date(payoutDueAtMs(Date.now(), cycle)), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
         isFirstInvestment: false, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
         granted: true, grantedBy: (req.adminUser && req.adminUser.username) || 'owner', requestId,
         date, time, createdAt: FieldValue.serverTimestamp()
@@ -9055,8 +9055,8 @@ function analyticsContractDay(inv, start, end, now) {
   if (!created0 || !Number.isInteger(total) || total <= 0 ||
       !Number.isFinite(expected) || expected < 0 || !Number.isInteger(made) ||
       made < 0 || made > total || !Number.isFinite(paid) || paid < 0) return null;
-  const target = n => Math.round(expected * n / total);
-  // t[k-1] is the instant of the k-th payment (every local midnight).
+  const target = n => n >= total ? expected : 0;   // locked cashback: nothing is scheduled before the last day, then everything
+  // t[k-1] is the k-th local midnight after the purchase (the last one is the maturity).
   const t = payoutInstants(created0, total);
   let first = 1, last = 0, due = 0;
   while (first <= total && t[first - 1] < start) first++;      // first payment at or after `start`

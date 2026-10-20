@@ -88,14 +88,30 @@ function harness() {
 }
 
 async function main() {
+  // Locked cashback: the whole cashback is ONE payment at maturity (here: both days have passed). A crash right after the wallet write is retried
+  // under the same token and never pays twice.
   const { state, c } = harness();
   await assert.rejects(c.settleInvestmentIfDue(await c.db.collection('investments').doc('inv1').get()), /SIMULATED_PROCESS_CRASH_AFTER_WALLET_WRITE/);
-  assert.equal(state.investments.inv1.status, 'active', 'the payout cursor is still retryable');
-  assert.equal(state.users.member.walletBalance, 1000, 'the atomic credit of the first day landed before the process stopped');
+  assert.equal(state.investments.inv1.status, 'active', 'the investment is still retryable after the crash');
+  assert.equal(state.users.member.walletBalance, 2000, 'the atomic credit of the WHOLE cashback landed before the process stopped');
   await c.reconcileCashback();
-  assert.equal(state.investments.inv1.status, 'matured', 'the reconciler advances the cursor on retry');
-  assert.equal(state.users.member.walletBalance, 2000, 'the retry does not double-credit day 1 and the second day is paid once');
-  assert.equal(Object.keys(state.transactions).length, 2, 'one durable cashback ledger row per day paid');
-  console.log('PASS: crash after wallet credit is retried once; maturity and ledger recover without a duplicate credit');
+  assert.equal(state.investments.inv1.status, 'matured', 'the reconciler finishes the product on retry');
+  assert.equal(state.users.member.walletBalance, 2000, 'the retry does not double-credit');
+  assert.equal(Object.keys(state.transactions).length, 1, 'one durable cashback ledger row, at maturity');
+  assert.equal(state.investments.inv1.paidOut, 2000, 'the product records the full payout');
+  // Before maturity nothing is paid, however many days have passed.
+  const h2 = harness(); h2.state.crashAfterWalletWrite = false;
+  h2.state.investments.inv1.payoutsTotal = 5; h2.state.investments.inv1.createdAt = new Date(Date.now() - 2 * 86400000);   // 5-day product, 2 days in
+  await h2.c.reconcileCashback(); await h2.c.settleInvestmentIfDue(await h2.c.db.collection('investments').doc('inv1').get());
+  assert.equal(h2.state.users.member.walletBalance, 0, 'a running product pays nothing before its last day');
+  assert.equal(h2.state.investments.inv1.status, 'active');
+  assert.equal(Object.keys(h2.state.transactions).length, 0, 'and writes no cashback row');
+  // A product that an older daily-paying version had already paid 750 of gets only the remainder at maturity.
+  const h3 = harness(); h3.state.crashAfterWalletWrite = false;
+  h3.state.investments.inv1.paidOut = 750; h3.state.investments.inv1.payoutsMade = 1; h3.state.users.member.walletBalance = 750;
+  await h3.c.settleInvestmentIfDue(await h3.c.db.collection('investments').doc('inv1').get());
+  assert.equal(h3.state.users.member.walletBalance, 2000, 'the carried-over product receives expectedReturn minus what was already paid');
+  assert.equal(h3.state.investments.inv1.status, 'matured');
+  console.log('PASS: locked cashback is paid once at maturity, never before; crash retry does not double-credit; carried-over daily products get the remainder');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

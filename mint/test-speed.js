@@ -24,7 +24,7 @@ const lib = new Function('crypto', `const _scrypt = (password, salt) => new Prom
   ok(/Promise\.all\(\[\s*db\.collection\('users'\)\.doc\(userId\)\.get\(\), getSettings\(\), wholeTeamStats\(userId\),/.test(server), '/team/stats reads everything together');
   // 3. payout sweep
   ok(/where\('nextPayoutAt', '<=', new Date\(\)\)/.test(server) && /_lastFullCashbackSweep > 5 \* 60 \* 1000/.test(server) && /status: 1, nextPayoutAt: 1/.test(db), 'the 0.5 s sweep reads only due investments, with a full pass every 5 minutes as a safety net');
-  ok(/nextPayoutAt: willComplete \|\| !createdMs \? null/.test(server) && (server.match(/nextPayoutAt: new Date\(payoutDueAtMs\(Date\.now\(\), 1\)\)/g) || []).length === 2, 'new and given investments get their first payout time; each payout sets the next');
+  ok(/nextPayoutAt: willComplete \|\| !createdMs \? null/.test(server) && (server.match(/nextPayoutAt: new Date\(payoutDueAtMs\(Date\.now\(\), cycle\)\)/g) || []).length === 2, 'new and given investments get their maturity time as the payout time (locked cashback)');
   // 4. nginx + node
   ok(/gzip on;/.test(nginx) && /application\/json/.test(nginx) && /upstream mint_node/.test(nginx) && /keepalive 32;/.test(nginx) && /proxy_set_header Connection ""/.test(nginx), 'nginx compresses and keeps connections to Node open');
   ok(/keepAliveTimeout = 65 \* 1000/.test(server), 'Node keeps those connections longer than nginx does');
@@ -34,6 +34,6 @@ const lib = new Function('crypto', `const _scrypt = (password, salt) => new Prom
   // 00:00: every running product falls due in the same second -- they are paid a few at a time, a full page carries on at once, and a timer is aimed at the exact midnight
   ok(/const CASHBACK_PARALLEL = 12;/.test(server) && /await settleMany\(snap\.docs\);/.test(server) && /if \(!full && snap\.docs\.length >= 1000\) setImmediate\(reconcileCashback\);/.test(server), 'the payout sweep pays due products a few at a time and drains a full page at once');
   ok(/function armMidnightSweep\(\)/.test(server) && /eatNextMidnight\(Date\.now\(\)\) - Date\.now\(\) \+ 50/.test(server) && /armMidnightSweep\(\); \}\);/.test(server), 'a timer starts a sweep at the exact Uganda midnight');
-  ok(/Nothing is due, yet the sweep's hint says it is/.test(server) && /nextPayoutAt: new Date\(payoutDueAtMs\(createdMs, made \+ 1\)\)/.test(server), 'a product whose hint is in the past but is not yet due gets its hint put at the real due time (not re-read every 0.5 s)');
+  ok(/Locked cashback: nothing is due until the LAST day has arrived/.test(server) && /nextPayoutAt: new Date\(matures\)/.test(server), 'a product whose hint is in the past but is not yet due gets its hint put at the maturity time (not re-read every 0.5 s)');
   console.log(`PASS: speed (${n} checks)`);
 })().catch(e => { console.error(e); process.exit(1); });
