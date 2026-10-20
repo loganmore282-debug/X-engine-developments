@@ -3257,18 +3257,16 @@ function maybeShowAnnouncement(){
   lockBodyScroll(); dlgOpened();
   annGrowIn(sheet);
 }
-// Opens as a thin blank card, grows to the height of its content, the picture fades in during the growth and the words right after
-// (about 1 s in all). Needs the picture's size first, so a picture that is not decoded yet is waited for (the card stays invisible).
+// The card appears whole and blank (a short fade and settle), then the picture fades in and then the words (about 0.6 s in all); nothing
+// changes size or position while it opens. A picture not yet decoded is waited for (the card stays invisible) so it never lays out late.
 function annGrowIn(sheet){
-  if (!sheet.animate || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const img = sheet.querySelector('.mg-ann-img');
   const run = () => {
-    if (!$('annBg').classList.contains('show')) return;
     sheet.classList.remove('mg-ann-wait');
-    const H = sheet.offsetHeight; if (H < 90) return;
+    if (!$('annBg').classList.contains('show')) return;
     sheet.classList.add('mg-ann-grow');
-    const a = sheet.animate([{ height: '56px' }, { height: H + 'px' }], { duration: 340, delay: 40, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'backwards' });
-    setTimeout(() => sheet.classList.remove('mg-ann-grow'), 800);
+    setTimeout(() => sheet.classList.remove('mg-ann-grow'), 700);
   };
   if (img && !img.complete) { sheet.classList.add('mg-ann-wait'); img.decode().then(run, run); } else run();
 }

@@ -1905,15 +1905,14 @@ html.mg-gut .mg-top{margin-right:-19px;}
 .mg-mem-join{position:absolute;left:15px;top:64px;font:400 10.2px/16px var(--mg-sans);color:#a2a8b2;}
 .mg-mem-line{position:absolute;left:15px;right:15px;top:86px;border-top:1px solid #d5eadc;}
 .mg-mem-tp{position:absolute;left:15px;top:92px;font:400 10.1px/16px var(--mg-serif);color:#a4a8b0;}
-/* Announcement dialog: opens fast as a thin blank card, then grows to its content while the picture and then the words fade in (about 1 s in all) */
+/* Announcement dialog: the card appears whole and blank (short fade and settle), then the picture fades in, then the words (about 0.6 s in all) */
 .ann-bg{display:flex !important;visibility:hidden;opacity:0;pointer-events:none;transition:opacity .18s ease,visibility 0s linear .2s;}
 .ann-bg.show{visibility:visible;opacity:1;pointer-events:auto;transition:opacity .16s ease,visibility 0s;}
-.ann-sheet{transform-origin:50% 0;transform:scale(.94);opacity:0;transition:transform .16s ease-in,opacity .16s ease-in;}
-.ann-bg.show .ann-sheet{transform:none;opacity:1;transition:transform .2s cubic-bezier(.22,1,.36,1),opacity .16s ease-out;}
+.ann-sheet{transform:scale(.96);opacity:0;transition:transform .16s ease-in,opacity .16s ease-in;}
+.ann-bg.show .ann-sheet{transform:none;opacity:1;transition:transform .2s ease-out,opacity .16s ease-out;}
 .ann-bg.show .ann-sheet.mg-ann-wait{opacity:0;}
-.ann-sheet.mg-ann-grow{overflow:hidden;}
-.ann-sheet.mg-ann-grow .mg-ann-img{animation:mgAnnFade .22s ease-out .2s backwards;}
-.ann-sheet.mg-ann-grow .mg-ann-x,.ann-sheet.mg-ann-grow h2,.ann-sheet.mg-ann-grow .mg-ann-lines,.ann-sheet.mg-ann-grow .mg-ann-join{animation:mgAnnFade .22s ease-out .42s backwards;}
+.ann-sheet.mg-ann-grow .mg-ann-img{animation:mgAnnFade .2s ease-out .16s backwards;}
+.ann-sheet.mg-ann-grow .mg-ann-x,.ann-sheet.mg-ann-grow h2,.ann-sheet.mg-ann-grow .mg-ann-lines,.ann-sheet.mg-ann-grow .mg-ann-join{animation:mgAnnFade .2s ease-out .36s backwards;}
 @keyframes mgAnnFade{from{opacity:0;}to{opacity:1;}}
 @media (prefers-reduced-motion:reduce){.ann-bg,.ann-sheet,.ann-sheet .mg-ann-img,.ann-sheet .mg-ann-x,.ann-sheet h2,.ann-sheet .mg-ann-lines,.ann-sheet .mg-ann-join{transition:none !important;animation:none !important;}}
 
