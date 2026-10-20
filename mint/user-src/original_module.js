@@ -5093,6 +5093,13 @@ function maybeAnnounceAfterHomeNav(prevPage){
     maybeShowAnnouncement();
   }, 350);
 }
+// Owner: the dialog also comes when Back is pressed on Deposit or Withdraw (the arrow in the page's header or the phone's Back button), like Cookie's.
+// Only a plain Back: a sheet that closes itself after a submitted deposit/withdrawal, or because a tab was tapped, does not call this.
+function maybeAnnounceAfterSheetBack(title){
+  if (title !== 'Deposit' && title !== 'Withdraw') return;
+  clearTimeout(_annNavTimer);
+  _annNavTimer = setTimeout(() => { if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }, 350);
+}
 // Owner: "l also wanted the dialog to show when on every visit ie logging in
 // again, registration like that." A second, independent trigger alongside
 // the bottom-nav one above -- fires once, right after the loading screen
@@ -5142,6 +5149,7 @@ function openSheet(title, bodyHtml){
 // still reads.
 window.closeSheet = function(opts){
   const wasOpen = $('sheetBg').classList.contains('show');
+  const wasTitle = _openSheetTitle;
   $('sheetBg').classList.remove('show');
   document.body.classList.remove('sheet-open');
   unlockBodyScroll();
@@ -5151,6 +5159,7 @@ window.closeSheet = function(opts){
   // with one history.go(-n) -- see showPage(). Only that caller sets it.
   if (!(opts && opts.keepHistory) && history.state && history.state.sheet) history.back();
   if (wasOpen && !(opts && opts.navigating)) replayPageIn();   // coming back to the page underneath: it appears again, like a tab change
+  if (wasOpen && !opts) maybeAnnounceAfterSheetBack(wasTitle);
 };
 // ── The Back button and pop-up dialogs ──
 // Sheets and the message popup own a history entry, so Back closes them. The other dialogs (Buy confirm, Help, the
@@ -5228,10 +5237,12 @@ window.addEventListener('popstate', (ev) => {
   }
   // The phone's own Back button, which never goes through closeSheet()
   // directly.
+  const _backTitle = $('sheetBg').classList.contains('show') ? _openSheetTitle : null;
   $('sheetBg').classList.remove('show');
   document.body.classList.remove('sheet-open');
   unlockBodyScroll();
   _openSheetTitle = null;
+  maybeAnnounceAfterSheetBack(_backTitle);
   if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
   // Landed on an entry whose dialog is already closed: step over it so one Back is one visible step.
   if (ev && ev.state && ev.state.dlg) { _dlgIgnore(); history.back(); }
