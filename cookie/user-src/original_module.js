@@ -5762,12 +5762,23 @@ function pgStartTimer(expiresAt, token){
 }
 function pgSet(view, html){
   pgStopTimer();
+  if (_pgSwapTimer) { clearTimeout(_pgSwapTimer); _pgSwapTimer = 0; }
   _pg.view = view;
   const body = $('pgBody'); if (body) body.innerHTML = html;
   const el = $('payScreen'); if (el) el.scrollTop = 0;
 }
+// The loader that takes the tick's place two seconds after "Payment Initiated!": twelve blades, the newest one dark and the rest fading out behind it, turning in 12 steps.
+var PG_SPINNER = '<span class="pg-ico pg-spinner"><svg viewBox="-24 -24 48 48" aria-hidden="true"><g class="pg-sp"><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(0)" fill="#fff" fill-opacity="1.00" stroke="#fff" stroke-opacity="1.00" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(30)" fill="#fff" fill-opacity="0.12" stroke="#fff" stroke-opacity="0.12" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(60)" fill="#fff" fill-opacity="0.20" stroke="#fff" stroke-opacity="0.20" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(90)" fill="#fff" fill-opacity="0.28" stroke="#fff" stroke-opacity="0.28" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(120)" fill="#fff" fill-opacity="0.36" stroke="#fff" stroke-opacity="0.36" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(150)" fill="#fff" fill-opacity="0.44" stroke="#fff" stroke-opacity="0.44" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(180)" fill="#fff" fill-opacity="0.52" stroke="#fff" stroke-opacity="0.52" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(210)" fill="#fff" fill-opacity="0.60" stroke="#fff" stroke-opacity="0.60" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(240)" fill="#fff" fill-opacity="0.68" stroke="#fff" stroke-opacity="0.68" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(270)" fill="#fff" fill-opacity="0.76" stroke="#fff" stroke-opacity="0.76" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(300)" fill="#fff" fill-opacity="0.84" stroke="#fff" stroke-opacity="0.84" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(330)" fill="#fff" fill-opacity="0.92" stroke="#fff" stroke-opacity="0.92" stroke-width="1.6" stroke-linejoin="round"/></g></svg></span>';
+var _pgSwapTimer = 0;
 function pgShowInitiated(){
   pgSet('initiated', pgCenterHtml(PG_CHECK, 'Payment Initiated!', 'Check your phone for a prompt from your mobile money provider. Approve it to complete the payment.', pgRefLine() + `<p class="pg-wait">${PG_CLOCK}<span>Awaiting mobile money approval</span></p><p class="pg-auto">Your payment is detected automatically. You do not need to refresh or press anything.</p>`));
+  const tok = _pg.token;
+  _pgSwapTimer = setTimeout(() => {
+    _pgSwapTimer = 0;
+    if (tok !== _pg.token || _pg.view !== 'initiated') return;
+    const ico = document.querySelector('#pgBody .pg-center > .pg-ico'); if (!ico) return;
+    ico.outerHTML = PG_SPINNER;
+  }, 2000);
 }
 function pgShowUnknown(){
   pgSet('unknown', pgCenterHtml(PG_CHECK, 'Still waiting', 'The payment has not been confirmed yet and nothing is lost. If you approve it, your balance updates on its own; you can also look in Records later.', pgRefLine() + `<button class="pg-pay pg-small" type="button" onclick="pgHome()">Back to Home</button>`));

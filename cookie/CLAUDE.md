@@ -80,3 +80,4 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `debitedInvestmentIds`. If the server dies between the debit and the investment, `reconcilePurchaseIntents()` (30 s sweep) refunds once
   (`refundedInvestmentIds`). A failed instant refund leaves the note in place. Test: `test-first-purchase-reward.js`.
 - Withdraw-request push: the lock-screen Approve button is offered only when payouts are automatic; `/admin/withdraw/quick-approve` answers 409 in manual mode.
+- **Payment Initiated page:** the green tick stays 2 seconds, then the twelve-blade loader (`PG_SPINNER`, dark newest blade, 12 steps) replaces it. Polling starts straight away (`pgPoll`), the swap is only visual; a result or another view cancels the swap (`_pgSwapTimer`). Test: `test-bug-hunt-fixes.js`.
