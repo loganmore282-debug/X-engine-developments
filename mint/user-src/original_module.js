@@ -4870,7 +4870,24 @@ window.openChestSheet = function(){
     <i class="mg-fade b"></i>
   </div>`);
   $('sheetBg').classList.add('mg-chest-page');
+  fitChestPage();
 };
+// The Treasure Chest page is always longer than the screen by the same small amount, whatever the phone's height (measured on the owner's screens: it
+// scrolls 110 px, with 138 px left under the last line), so its green scrollbar and the 4px room beside it are always there.
+var CHEST_SCROLL_PX = 110;
+function fitChestPage(){
+  const sb = $('sheetBg'), pg = sb && sb.querySelector('.mg-chestpg');
+  if (!pg || _openSheetTitle !== 'TREASURE CHEST') return;
+  pg.style.paddingBottom = '';
+  // where the page's own content ends inside the scroller (the sheet may have a minimum height of its own, so scrollHeight is not used)
+  const end = pg.getBoundingClientRect().bottom - sb.getBoundingClientRect().top + sb.scrollTop;
+  const want = sb.clientHeight + CHEST_SCROLL_PX - end;
+  let pad = 27 + Math.max(0, want);
+  pg.style.paddingBottom = pad + 'px';
+  const real = sb.scrollHeight - sb.clientHeight;   // trim or add the few pixels the sheet's own padding makes
+  if (real !== CHEST_SCROLL_PX) { pad = Math.max(27, pad + CHEST_SCROLL_PX - real); pg.style.paddingBottom = pad + 'px'; }
+}
+window.addEventListener('resize', fitChestPage);
 window.submitChestKey = async function(){
   // No case-forcing here -- /redeem matches case-insensitively via
   // codeLower now, so whatever case the member typed or pasted reaches

@@ -1615,8 +1615,8 @@ body.sheet-open .mg-chest,body.dlg-open .mg-chest{visibility:hidden;}
 /* ── Download App ── */
 .sheet-bg.mg-nohead .sheet-head{display:none;}
 .sheet-bg.mg-nohead .sheet-body{padding:0;max-width:none;}
-.mg-dl{position:relative;min-height:calc(100vh - var(--nav-h));display:flex;flex-direction:column;align-items:center;padding:318px 22px 40px;text-align:center;background:linear-gradient(180deg,#a9e0c0 0%,#c9ecd8 45%,#e3f5ea 100%) center/cover no-repeat;}
-@supports (min-height:100dvh){.mg-dl{min-height:calc(100dvh - var(--nav-h));}}
+.mg-dl{position:relative;min-height:calc(100vh - var(--nav-h) + 62px);display:flex;flex-direction:column;align-items:center;padding:318px 22px 40px;text-align:center;background:linear-gradient(180deg,#a9e0c0 0%,#c9ecd8 45%,#e3f5ea 100%) center/cover no-repeat;}
+@supports (min-height:100dvh){.mg-dl{min-height:calc(100dvh - var(--nav-h) + 62px);}}   /* longer than the screen by 62px, as on the owner's Download page, so its scrollbar shows */
 .mg-dl-btn{margin-top:0;width:208px;height:49px;border:0;border-radius:9px;background:linear-gradient(125deg,#03a652 0%,#028a46 55%,#056b39 100%);color:#fff;font:700 15px/1 var(--mg-sans);letter-spacing:.08em;box-shadow:none;}
 
 
@@ -1890,6 +1890,9 @@ html.mg-gut .mg-top{margin-right:-19px;}
 @keyframes mgGlowA{0.0%{transform:translateX(151.5%) skewX(5deg);}5.0%{transform:translateX(142.3%) skewX(5deg);}11.67%{transform:translateX(126.9%) skewX(5deg);}20.0%{transform:translateX(113.1%) skewX(5deg);}28.33%{transform:translateX(103.8%) skewX(5deg);}31.67%{transform:translateX(100.8%) skewX(5deg);}33.33%{transform:translateX(93.1%) skewX(5deg);}35.0%{transform:translateX(88.5%) skewX(5deg);}36.67%{transform:translateX(79.2%) skewX(5deg);}38.33%{transform:translateX(66.9%) skewX(5deg);}41.67%{transform:translateX(37.7%) skewX(5deg);}45.0%{transform:translateX(3.8%) skewX(5deg);}48.33%{transform:translateX(-37.7%) skewX(5deg);}50.0%{transform:translateX(-59.2%) skewX(5deg);}51.67%{transform:translateX(-80.8%) skewX(5deg);}53.33%{transform:translateX(-100.8%) skewX(5deg);}64%,100%{transform:translateX(-100%) skewX(5deg);}}
 @keyframes mgGlowB{0%,56.67%{transform:translateX(157.7%) skewX(5deg);}58.33%{transform:translateX(122.3%) skewX(5deg);}63.33%{transform:translateX(65.4%) skewX(5deg);}66.67%{transform:translateX(33.1%) skewX(5deg);}73.33%{transform:translateX(-23.1%) skewX(5deg);}78.33%{transform:translateX(-53.1%) skewX(5deg);}83.33%{transform:translateX(-80.8%) skewX(5deg);}86.67%{transform:translateX(-100.8%) skewX(5deg);}100%{transform:translateX(-100%) skewX(5deg);}}
 @media (prefers-reduced-motion:reduce){.mg-buy::before,.mg-buy::after,#loginBtn::before,#loginBtn::after,#regBtn::before,#regBtn::after,.mg-me-btns .dep::before,.mg-me-btns .dep::after{animation:none !important;}}
+/* The owner's Team page always shows the scrollbar (thumb about the full height): the page is a few pixels longer than the screen, on any phone height. */
+#pageHost:has(.mg-team){min-height:calc(100vh + 12px);}
+@supports (min-height:100dvh){#pageHost:has(.mg-team){min-height:calc(100dvh + 12px);}}
 
 /* MG-END */
 /* ── Login / Sign Up: measured from the owner's Mint screenshots (360 px phone, 2x) ── */
