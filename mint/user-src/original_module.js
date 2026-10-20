@@ -2779,7 +2779,19 @@ function mgScrollbarInit(){
     if (sh - ch < 8 || track < 30) return null;
     return { el, isDoc, top, track, ch, right, th: Math.max(30, Math.round(track * ch / sh)) };
   }
-  let lastGut = null;
+  // The scrollbar takes 4px of a page's width while that page has one (as in the owner's screens, where every page with a bar is 4px narrower on
+  // the right). `mg-gut` on the scroller (the page, a sheet, or the Login scroller) makes the room. Each scroller's room depends only on ITS OWN
+  // length, never on which scroller is on top, and the pass runs in the frame of the change (before it is painted): the page behind an opening
+  // sheet keeps its width, and a page you come back to is already its right width instead of jumping 4px a moment later.
+  const overflows = (el, ch) => el.scrollHeight - ch >= 8;
+  function gutters(){
+    try {
+      const app = document.getElementById('app'), de = document.documentElement;
+      gut(de, !!(app && app.style.display !== 'none' && overflows(document.scrollingElement || de, window.innerHeight)));
+      document.querySelectorAll('.sheet-bg, .ma-scroll').forEach(el => gut(el, shown(el) && overflows(el, el.clientHeight)));
+    } catch (_) {}   // a page that is being torn down has nothing to measure
+  }
+  window.mgGutters = gutters;
   function layout(){
     const el = target(), isDoc = el === document.scrollingElement || el === document.documentElement;
     let c;
@@ -2792,11 +2804,7 @@ function mgScrollbarInit(){
       const r = el.getBoundingClientRect();
       c = measure(el, false, Math.max(0, r.top), Math.min(window.innerHeight, r.bottom), el.clientHeight, 0);
     }
-    // The scrollbar takes 4px of the page's width while it is there (as in the owner's screens, where every page with a bar is 4px narrower on the
-    // right). `mg-gut` on the scroller (the page, a sheet, or the Login scroller) makes the room.
-    const gutEl = isDoc ? document.documentElement : el;
-    if (lastGut && lastGut !== gutEl) gut(lastGut, false);
-    gut(gutEl, !!c); lastGut = gutEl;
+    gutters();
     setBar(main, c);
     layoutList();
   }
@@ -2820,7 +2828,12 @@ function mgScrollbarInit(){
   }, { capture: true, passive: true });
   window.addEventListener('resize', layoutSoon); window.addEventListener('orientationchange', layoutSoon);
   window.addEventListener('load', layoutSoon, true); window.addEventListener('transitionend', layoutSoon, true); window.addEventListener('animationend', layoutSoon, true);
-  if (typeof MutationObserver === 'function') new MutationObserver(recs => { if (recs.some(r => !(r.target.closest && r.target.closest('.mg-sb')) && !(r.target.id === 'mgSb' || r.target.id === 'mgSbList'))) layoutSoon(); })
+  if (typeof MutationObserver === 'function') new MutationObserver(recs => { if (recs.some(r => !(r.target.closest && r.target.closest('.mg-sb')) && !(r.target.id === 'mgSb' || r.target.id === 'mgSbList'))) {
+    // Content or a class changed: set the rooms in this same microtask, i.e. before the browser paints the change. (Style-only changes such as
+    // animation frames do not need it, and a forced measure on each would cost.)
+    if (recs.some(r => r.type === 'childList' || r.attributeName === 'class')) gutters();
+    layoutSoon();
+  } })
     .observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
   layout();
 }
@@ -5053,6 +5066,7 @@ function openSheet(title, bodyHtml){
   if (alreadyOpen) history.replaceState({ sheet: title }, '', '');
   else history.pushState({ sheet: title }, '', '');
   lockBodyScroll();
+  if (window.mgGutters) window.mgGutters();   // the 4px scrollbar room is made now, before the first paint of the page
 }
 // opts.fromAction/opts.navigating used to gate whether closing a sheet could
 // trigger the announcement dialog (a submitted withdrawal, a recharge
