@@ -20,6 +20,7 @@ ok(/String\(code\)\.toUpperCase\(\)/.test(mod), 'the invite link carries the cod
 // deposit page
 const form = mod.slice(mod.indexOf('function openDepositFormSheet'), mod.indexOf('window.pickPayLabel'));
 ok(form.indexOf('id="depAmount"') > 0 && form.indexOf('id="depPhone"') > form.indexOf('id="depAmount"') && form.indexOf('id="depPhone"') < form.indexOf('Select Payment Method'), 'the phone box comes right after the amount box, before the payment methods');
+ok(/<h2>Input Payment Number<\/h2><\/div>\s*<input class="v-amount" id="depPhone"/.test(form), 'the phone box sits under its own heading "Input Payment Number", between Select Amount and Select Payment Method');
 ok(/class="v-amount" id="depPhone"/.test(form), 'the phone box has the amount box\'s own class (same size)');
 const sub = mod.slice(mod.indexOf('window.submitDeposit'), mod.indexOf('window.submitDeposit') + 4000);
 ok(/cleanPhone\(\(\$\('depPhone'\)/.test(sub) && /if \(!phone\) return notify\(/.test(sub), 'the typed number is required and checked with cleanPhone');

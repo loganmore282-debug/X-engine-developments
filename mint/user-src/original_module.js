@@ -5319,7 +5319,8 @@ function openDepositFormSheet(){
     <div class="v-sec"><span class="bar"></span><h2>Select Amount</h2></div>
     <div class="v-chips" id="depChips">${depositChipsHtml(s, 'depAmount')}</div>
     <input class="v-amount" id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[\\s,]/g,'');syncDepositQuickAmt()" autocomplete="off">
-    <input class="v-amount" id="depPhone" type="text" inputmode="numeric" maxlength="15" placeholder="Phone number to pay from" oninput="this.value=this.value.replace(/[^\\d+\\s]/g,'')" autocomplete="off" aria-label="Phone number to pay from">
+    <div class="v-sec"><span class="bar"></span><h2>Input Payment Number</h2></div>
+    <input class="v-amount" id="depPhone" type="text" inputmode="numeric" maxlength="15" placeholder="Enter phone number" oninput="this.value=this.value.replace(/[^\\d+\\s]/g,'')" autocomplete="off" aria-label="Phone number to pay from">
     <div class="v-sec"><span class="bar"></span><h2>Select Payment Method</h2></div>
     <div class="v-pays" id="depPays">
       ${['PAY-A', 'PAY-E', 'PAY-B', 'PAY-C', 'PAY-G'].map((n, i) => `<button type="button" class="${i === 0 ? 'on' : ''}" onclick="pickPayLabel(this)"><b>${n}</b><i></i></button>`).join('')}
