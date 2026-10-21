@@ -43,5 +43,8 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(/placeholder="Login Password \(at least 6 characters\)"/.test(html) && /placeholder="Trade Password \(6 digits\)"/.test(html) && /placeholder="Enter captcha code"/.test(html) && /placeholder="Confirm Login Password"/.test(html), 'the words are the screenshot\'s');
   ok(/id="regDial">\+256</.test(html) && /id="loginDial">\+256</.test(html), '+256, not another country');
   ok(/MINT_IMAGE_SLOTS = \['logo', 'authhero', 'authlogo',/.test(server) && /id="authLogoFile"/.test(R('admin-src/index.html')) && /applyAuthLogo/.test(mod), 'the circle logo is an admin-uploaded slot');
+  // A referral link opens Sign Up at once: the captcha asked for then must not be thrown away as "stale" by the app's first sign-in event.
+  ok(/const isPublicCall = path\.indexOf\('\/public\/'\) === 0 \|\| path === '\/auth\/captcha';/.test(mod), 'the captcha request is not discarded as stale when the app\'s first sign-in event fires (referral link)');
+  ok(/for \(let i = 0; i < 2 && !\(r && r\.status === 'success'/.test(mod), 'and a missed first answer is asked for once more');
 }
 console.log(`PASS: captcha and Mint sign-up wiring (${n} checks)`);

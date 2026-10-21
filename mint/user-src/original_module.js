@@ -1199,7 +1199,9 @@ async function apiRequest(path, opts){
   // first snow-auth firing (which bumps the epoch unconditionally, see
   // below), so gating them here would discard that legitimate boot data
   // every single page load.
-  const isPublicCall = path.indexOf('/public/') === 0;
+  // The sign-up captcha is not per-member either (nobody is signed in when it is asked for). A referral link opens Sign Up straight away, and its
+  // picture is asked for while the app's first sign-in event is still bumping the epoch: that answer used to be thrown away as "stale", leaving an empty box.
+  const isPublicCall = path.indexOf('/public/') === 0 || path === '/auth/captcha';
   if (!isPublicCall && STATE.user && path !== '/auth/session/logout' && !_memberSession.check()) return { status:'error', message:'Session expired. Log in again.' };
   const startEpoch = STATE.authEpoch;
   // ── Content-Type ONLY WHEN THERE IS A BODY ──
@@ -1397,7 +1399,11 @@ window.loadAuthCaptcha = async function(){
   STATE.captchaId = '';
   if (box) box.value = '';
   let r = null;
-  try { r = await api('/auth/captcha'); } catch (_) {}
+  // One more try a moment later if the first answer did not come (a slow first moment on a referral link, a dropped connection).
+  for (let i = 0; i < 2 && !(r && r.status === 'success' && r.id && r.image); i++) {
+    if (i) await new Promise(res => setTimeout(res, 700));
+    try { r = await api('/auth/captcha'); } catch (_) { r = null; }
+  }
   if (r && r.status === 'success' && r.id && r.image) { STATE.captchaId = r.id; if (img) img.src = r.image; }
   else if (img) img.removeAttribute('src');
 };
