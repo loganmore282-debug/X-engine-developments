@@ -1,3 +1,6 @@
+// Password hashing (scrypt) and other helper work runs on Node's helper threads (4 by default). Set before anything uses them, so the auto-deploy's
+// plain `pm2 reload` picks it up too: twice the CPU count, between 4 and 16 (an environment value, if one is set, wins).
+if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = String(Math.min(16, Math.max(4, require('os').cpus().length * 2)));
 const sessionPolicy = require('./session-policy');
 const { createFailGuard } = require('./security-guard');
 const totp = require('./totp');
