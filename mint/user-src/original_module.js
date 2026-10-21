@@ -1387,8 +1387,11 @@ function showAuthTab(tab){
 window.toggleAuthEye = function(btn){
   const box = btn && btn.closest('.ma-f'), input = box && box.querySelector('input');
   if (!input) return;
-  const show = input.type === 'password';
-  input.type = show ? 'text' : 'password';
+  // The Trade Password box is a plain text box drawn as dots (.ma-mask), so Chrome's password manager does not offer to fill a long suggested
+  // password into a 6-digit box; the eye then switches the dots off and on instead of the box's type.
+  const masked = input.classList.contains('ma-mask');
+  const show = masked ? !input.classList.contains('ma-clear') : input.type === 'password';
+  if (masked) input.classList.toggle('ma-clear', show); else input.type = show ? 'text' : 'password';
   btn.classList.toggle('shown', show);   // the eye shows a slash while the password is visible
   btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
 };
