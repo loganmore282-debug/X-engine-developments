@@ -92,7 +92,7 @@ async function main(){
   payment.resolve({status:'success',net:5000});await first;
   assert(d.querySelector('#lpOld'),'late withdrawal response must not close another form');
   w.openDepositSheet();assert.equal(d.querySelectorAll('.v-info li').length,4);
-  assert.match(d.querySelector('.v-info').textContent,/Minimum deposit amount: UGX 15,000/);assert.equal(d.querySelectorAll('#depPays button').length,5,'PAY-A, PAY-E, PAY-B, PAY-C and PAY-G');
+  assert.match(d.querySelector('.v-info').textContent,/Minimum deposit amount: UGX 15,000/);assert.equal(d.querySelectorAll('#depPays button').length,4,'PAY-A, PAY-E, PAY-B and PAY-C');
   d.querySelector('#depAmount').value='15000';assert(d.querySelector('#depPhone'),'Deposit has a phone box: the number the member pays from');d.querySelector('#depPhone').value='0769968158';
   const deposit=deferred();posts=0;w.post=()=>{posts++;return deposit.promise};
   const sending=w.submitDeposit();await w.submitDeposit();assert.equal(posts,1);
