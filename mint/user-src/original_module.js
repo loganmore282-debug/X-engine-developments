@@ -3801,6 +3801,13 @@ var DEPOSIT_POLL_FLOW = '<div class="pl-radar" role="img" aria-label="Waiting fo
   + '<b><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.5 18.5h3"/></svg></b></div>';
 // Only the waiting states use the open (card-less) layout; the tick and the cross keep the card.
 function setPayLive(on){ const c = $('depStatusIcon') && $('depStatusIcon').closest('.pay-card'); if (c) c.classList.toggle('pl', !!on); }
+// The result pages use the same open layout as the waiting page: only the badge and the timeline change (green ticks; or the last circle red).
+var PL_BADGE_OK = '<div class="pl-radar ok" role="img" aria-label="Payment received"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5l4.2 4.2L18.5 8"/></svg></b></div>';
+var PL_BADGE_BAD = '<div class="pl-radar bad" role="img" aria-label="Payment not completed"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5v7.2"/><path d="M12 17.3v.2"/></svg></b></div>';
+var _depPendingPhone = '';
+function plStep(cls, head, text){ return '<li class="' + cls + '"><b>' + esc(head) + '</b><span>' + esc(text) + '</span></li>'; }
+function plAmount(bad){ return _depPendingAmount ? '<div class="pl-amt' + (bad ? ' bad' : '') + '">' + esc(fmtUGX(_depPendingAmount)) + '</div>' : ''; }
+function plSent(){ return plStep('done', 'Request sent', _depPendingAmount && _depPendingPhone ? 'A payment request for ' + fmtUGX(_depPendingAmount) + ' was sent to ' + _depPendingPhone + '.' : 'A payment request was sent to your phone.'); }
 // Every figure this screen shows about one plan, worked out in one place so
 // the summary band and the row can never disagree.
 function planStats(inv){
@@ -5577,6 +5584,7 @@ function setDepositStatusPending(amount, phone, network){
   // codes rather than guessing.
   const ussd = network === 'Airtel Money' ? '*185#' : (network === 'MTN Mobile Money' ? '*165#' : '*165# (MTN) or *185# (Airtel)');
   _depPendingAmount = Number(amount) || 0;
+  _depPendingPhone = displayPhone;
   // Owner's own four steps, verbatim. Numbered because they are a sequence
   // with one thing for the member to DO in the middle of it -- the previous
   // single paragraph buried "approve it on your phone" mid-sentence between
@@ -5606,23 +5614,22 @@ function setDepositStatusPending(amount, phone, network){
 // (Confetti and sparkles were removed on the owner's request: success is shown by the tick drawing itself, see playStatusIcon.)
 var _depSuccessRedirectTimer = null;
 function setDepositStatusSuccess(){
-  setPayLive(false);
+  setPayLive(true);
   $('depStatusIcon').className = 'dep-status-icon success';
-  // The owner's own artwork, cut out of the images he supplied.
-  playStatusIcon($('depStatusIcon'), 'ok');
-  // Owner: "let me think that on payment success it says congratulations
-  // payment has been received {added to your wallet} redirecting back home
-  // in 5 seconds or you can say so back the button should be available."
+  $('depStatusIcon').innerHTML = PL_BADGE_OK;
+  // Owner: "on payment success it says congratulations, payment has been received {added to your wallet}, redirecting back home in 5 seconds
+  // or you can say so back the button should be available."
   $('depStatusTitle').textContent = 'Congratulations!';
-  // Names the actual figure when it is known (it always is on the automatic
-  // path, since the pending state set it moments earlier) and falls back to
-  // wording that reads properly without one -- the manual-deposit path lands
-  // here from handleManualDepositStatusResult() without ever showing pending.
-  // brandName(), not the literal: the app's name is admin-settable.
-  const amountLine = _depPendingAmount
-    ? 'Payment received — ' + esc(fmtUGX(_depPendingAmount)) + ' has been added to your wallet.'
-    : 'Payment received — your deposit has been added to your ' + esc(brandName()) + ' wallet.';
-  $('depStatusBody').innerHTML = '<p>' + amountLine + '</p><p class="pay-note" id="depRedirectCountdown"></p>';
+  // Names the actual figure when it is known (it always is on the automatic path); the manual-deposit path lands here without ever showing
+  // the waiting page, so every line also reads properly without one. brandName(), not a literal: the app's name is admin-settable.
+  const added = _depPendingAmount
+    ? 'Payment received — ' + fmtUGX(_depPendingAmount) + ' has been added to your wallet.'
+    : 'Payment received — your deposit has been added to your ' + brandName() + ' wallet.';
+  $('depStatusBody').innerHTML = plAmount(false)
+    + '<ol class="pay-steps pl-steps">' + plSent()
+    + plStep('done', 'Approved on your phone', 'The payment was approved.')
+    + plStep('done', 'Balance updated', added) + '</ol>'
+    + '<p class="pay-note" id="depRedirectCountdown"></p>';
   // Close doubles as "Back to Home" here -- available immediately so a
   // member who does not want to wait the 5 seconds out can leave right
   // away, exactly as asked ("or you can say so back the button should be
@@ -5647,29 +5654,20 @@ function setDepositStatusSuccess(){
   _depSuccessRedirectTimer = setInterval(() => { if (!document.hidden) tick(); }, 1000);   // the countdown waits while the app is in the background
 }
 function setDepositStatusFailed(msg){
-  setPayLive(false);
+  setPayLive(true);
   $('depStatusIcon').className = 'dep-status-icon failed';
-  // Owner sent two reference icon styles for this state and said "pick any
-  // of the 2, I said signs not words" -- an exclamation mark, not the X this
-  // used to draw. Kept the same soft-fill-circle-plus-stroke treatment
-  // setDepositStatusSuccess()'s own checkmark right above already uses
-  // (same --snow-wine-soft/--snow-wine tokens this circle already had) --
-  // only the mark inside changed, matching image 2's outlined style over
-  // image 3's solid-filled one, for visual consistency with that sibling.
-  playStatusIcon($('depStatusIcon'), 'fail');
+  $('depStatusIcon').innerHTML = PL_BADGE_BAD;
+  failShake($('depStatusIcon'), _drToken);   // the badge shakes and the phone buzzes once
   $('depStatusTitle').textContent = 'Payment not completed';
-  // Owner asked for "due to insufficient funds" here -- checked against
-  // MarzPay's own integration guide first rather than guessing at a field
-  // name: a collection that fails after being accepted carries no reason at
-  // all in MarzPay's documented response/webhook shapes, only a terminal
-  // status (see server.js's DEPOSIT_FAILED_MSG, and its own long comment,
-  // for the full citation). Naming ONE specific cause here would be a
-  // fabricated claim this app has no way to know is true -- this instead
-  // lists the real, plausible causes without asserting which one it was.
-  // `msg` is server-supplied on the normal path; this fallback only fires
-  // for a purely client-side failure that never reached the server at all.
-  $('depStatusBody').innerHTML = '<p>' + esc(msg
-    || 'This deposit did not go through. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Your ' + brandName() + ' balance has not changed.') + '</p>';
+  // Naming ONE specific cause here would be a fabricated claim: the provider's failed-collection reply carries no reason (see server.js's
+  // DEPOSIT_FAILED_MSG), so the note lists the plausible causes without asserting which one it was. `msg` is server-supplied on the normal
+  // path; the fallback only fires for a purely client-side failure that never reached the server.
+  $('depStatusBody').innerHTML = plAmount(true)
+    + '<ol class="pay-steps pl-steps">' + plSent()
+    + plStep('todo', 'Approve on your phone', 'Not completed.')
+    + plStep('bad', 'Balance not updated', 'Nothing was added to your wallet.') + '</ol>'
+    + '<p class="pay-note bad">' + esc(msg
+      || 'This deposit did not go through. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Your ' + brandName() + ' balance has not changed.') + '</p>';
   // Undoes setDepositStatusSuccess()'s own "Back to Home" relabel -- this
   // button means plain Close here, on a modal a later deposit attempt can
   // reuse without a fresh page load in between.

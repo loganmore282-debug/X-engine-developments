@@ -1949,6 +1949,22 @@ html.mg-gut .mg-top{margin-right:-19px;}
 .pl-check i::after{content:'';position:absolute;left:0;top:0;height:100%;width:40%;border-radius:2px;background:#02a652;animation:plShim 1.3s ease-in-out infinite;}
 @keyframes plShim{0%{transform:translateX(-100%);}100%{transform:translateX(250%);}}
 @media (prefers-reduced-motion:reduce){.pl-radar i{animation:none;opacity:.25;}.pl-steps li.now::before,.pl-check i::after{animation:none;}}
+/* Result pages use the same layout: green badge with a tick and all green steps, or a red badge with the last circle red */
+.pl-radar.ok,.pl-radar.bad{height:116px;}
+.pl-radar.ok b,.pl-radar.bad b{animation:plPop .45s cubic-bezier(.34,1.56,.64,1);}
+.pl-radar.bad b{background:linear-gradient(135deg,#ee5a5a,#d33a3a 50%,#b62a2a);box-shadow:0 12px 24px -12px rgba(190,40,40,.7);}
+.pl-radar.ok b svg{stroke-width:2.6;}
+.pl-radar.bad b svg{stroke-width:3.2;}
+@keyframes plPop{0%{transform:scale(.6);opacity:0;}100%{transform:scale(1);opacity:1;}}
+.pl-amt.bad{color:#c93636;}
+.pl-steps li.bad::before{background:#d33a3a url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.4' stroke-linecap='round'%3E%3Cpath d='M7 7l10 10M17 7L7 17'/%3E%3C/svg%3E") center/12px no-repeat;border-color:#d33a3a;}
+.pl-steps li.bad b{color:#c93636;}
+.pl-steps li.bad span{color:#8a5a5a;}
+.pl-steps li.done+li.todo::before{border-color:#c9dccf;}
+.pl-steps li.todo+li.bad::after{display:none;}
+.pay-card.pl .pay-note.bad{background:#fbeaea;color:#9a3a3a;}
+.pay-card.pl .pay-note:empty{display:none;}
+@media (prefers-reduced-motion:reduce){.pl-radar.ok b,.pl-radar.bad b{animation:none;}}
 
 /* MG-END */
 /* ── Login / Sign Up: measured from the owner's Mint screenshots (360 px phone, 2x) ── */
