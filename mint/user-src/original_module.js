@@ -5338,7 +5338,7 @@ function openDepositFormSheet(){
     <div class="mg-redirect" id="depRedirect"><span class="spin"></span><p>Redirecting to payment...</p></div>
   </div>`);
 }
-// PAY-A / PAY-E / PAY-B / PAY-C are one gateway, three labels: the choice is only
+// PAY-A / PAY-B / PAY-C are one gateway, three labels: the choice is only
 // the highlight, nothing else reads it.
 window.pickPayLabel = function(btn){
   const box = $('depPays');
