@@ -2391,7 +2391,7 @@ async function enterApp(){
   $('app').style.display = '';
   showPage(STATE.page || 'home'); prefetchSupportedBanks();
   maybeAnnounceOnEntry();
-  if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Login successful ✓')); }
+  if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; }   // a typed login opens Home with no "Login successful" notice (owner)
   refreshAppDataInBackground(uid);
 }
 // Shared by both bootFromNetwork() branches below -- retries /register,
@@ -2557,7 +2557,7 @@ async function bootFromNetwork(uid){
   showPage(STATE.page || 'home'); prefetchSupportedBanks();
   maybeAnnounceOnEntry();
   if (signupFlow) { window._pendingLoginSuccess = false; notify(t('Registration successful ✓')); }
-  else if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Login successful ✓')); }
+  else if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; }   // no "Login successful" notice (owner)
   // The invite-address pool, fetched behind the app rather than in front of
   // it, so even the FIRST open of the Referral screen has an address ready
   // and costs no round trip. Tiny (a few hostnames), un-awaited, and a

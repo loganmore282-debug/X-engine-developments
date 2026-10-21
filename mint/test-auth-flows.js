@@ -204,7 +204,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     eq($(w, 'loginBtn').disabled, false, 'login button usable again');
     eq($(w, 'loginBtn').textContent, 'Log In');
     eq(shown(w, 'loadingScreen'), false, 'no stuck spinner');
-    if (expectOpen) { eq(shown(w, 'app'), true, 'app open'); eq(shown(w, 'authScreen'), false); ok(t.some(m => /Login successful/.test(m)), 'says it worked'); }
+    if (expectOpen) { eq(shown(w, 'app'), true, 'app open'); eq(shown(w, 'authScreen'), false); ok(!t.some(m => /Login successful/.test(m)), 'a login shows no "Login successful" notice'); }
     else { eq(shown(w, 'app'), false, 'app not open'); eq(shown(w, 'authScreen'), true, 'login screen showing'); ok(t.concat([$(w, 'loginErr').textContent, $(w, 'loginPhoneErr').textContent]).some(m => expectMsg.test(m)), 'tells the member why (pop-up or the red line under the box): ' + JSON.stringify(t)); }
     ok(!t.some(m => /Firebase|not a function|undefined|Session changed/.test(m)), 'no developer text: ' + JSON.stringify(t));
     if (expectSignOut !== null) eq(log.signOuts > 0, expectSignOut, 'signed-out state');
