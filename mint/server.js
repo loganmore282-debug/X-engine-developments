@@ -3952,7 +3952,14 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     const idsPromise = Promise.all([generateUniqueReferralCode(userId), nextRandomPublicId()]); idsPromise.catch(() => {});
     const refLookup = code ? findUserByReferralCode(code) : null; if (refLookup) refLookup.catch(() => {});
     // A sign-up that stops here must not use up the account number it just claimed: give it back (best effort).
-    const refuse = answer => { idsPromise.then(ids => db.collection('publicIds').doc(ids[1]).delete()).catch(() => {}); return answer; };
+    // The referral code written onto the unfinished profile is taken back too: an unregistered account must not answer to a referral code.
+    const refuse = answer => {
+      idsPromise.then(ids => Promise.all([
+        db.collection('publicIds').doc(ids[1]).delete(),
+        db.collection('users').doc(userId).update({ referralCode: FieldValue.delete(), referralCodeLower: FieldValue.delete() }),
+      ])).catch(() => {});
+      return answer;
+    };
     // The referral code is optional: an empty one just means no upline.
     if (code) {
       const refDoc = await refLookup;
@@ -4917,7 +4924,9 @@ async function creditDeposit(depDoc, source) {
   const userId = depDoc && depDoc.data() && depDoc.data().userId;
   const credited = await _creditDepositNow(depDoc, source);
   if (typeof _notifyDeposit === 'function') _notifyDeposit(depDoc.id);   // wake a held status request (see waitDepositSettled)
-  if (credited) await creditDepositReferralCommission(depDoc.id, userId).catch(e => console.error('Deposit commission error:', e.message));
+  // Only a deposit made under the old rule (first-deposit reward, `commissionBasis: 'deposit'`) can still owe a commission; every newer deposit
+  // pays nothing, so the extra database read is skipped.
+  if (credited && depDoc && depDoc.data() && depDoc.data().commissionBasis === 'deposit') await creditDepositReferralCommission(depDoc.id, userId).catch(e => console.error('Deposit commission error:', e.message));
   return credited;
 }
 async function _creditDepositNow(depDoc, source) {
