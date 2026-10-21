@@ -3045,9 +3045,10 @@ async function settleAllForUser(userId) {
   await Promise.all(snap.docs.map(doc => settleInvestmentIfDue(doc).catch(e => console.error('Settle error:', e.message))));
 }
 
-// ── REFERRAL COMMISSION (L1/L2/L3, first confirmed deposit) ──
-// New accounts qualify on their first credited deposit. Legacy pending
-// investment commissions retain their original entitlement at changeover.
+// ── REFERRAL COMMISSION (L1/L2/L3, first product purchase) ──
+// A member's referrers are paid once, when that member buys their FIRST product (a deposit pays nothing any more, and a product the admin
+// gives is not a purchase). The reward is a percentage of that product's price. Rewards that were already earned on a first deposit before
+// this rule changed (commissionBasis 'deposit', still pending) are still paid by the same code, so nobody loses what they had earned.
 // Each wallet credit and its idempotency token are written atomically;
 // ledger and source markers are repaired on retry without paying twice.
 // Returns whether this call actually paid a NEW level (false for a no-op
@@ -4550,7 +4551,7 @@ app.post('/invest/create', async (req, res) => {
     return res.status(400).json({ status: 'error', message: 'This product is not open right now.' });
   try {
     const sett = await getSettings();
-    let invId, liveTier, cycle, expectedReturn, dailyPayout;
+    let invId, liveTier, cycle, expectedReturn, dailyPayout, isFirstInvestment = false;
     // NOT db.runTransaction -- that helper just runs queued ops sequentially
     // with no rollback (M0 has no real multi-document transactions), so it
     // gave no real protection here anyway. Awaiting the debit directly lets
@@ -4598,7 +4599,11 @@ app.post('/invest/create', async (req, res) => {
         throw shortErr;
       }
       const wasFirstInvestmentDone = fresh.data().firstInvestmentDone === true;
-      const isFirstInvestment = !(wasFirstInvestmentDone || (fresh.data().totalInvested || 0) > 0);
+      // The referral reward belongs to the member's FIRST PURCHASE. A product the admin gave is not a purchase, and a member who already got
+      // the older first-deposit reward does not earn a second one. Read inside the balance lock, so two purchases made at once can never both
+      // count as the first.
+      const priorPlans = await db.collection('investments').where('userId', '==', userId).get();
+      isFirstInvestment = !fresh.data().firstReferralDepositId && !priorPlans.docs.some(d => d.data().granted !== true);
       const invRef = db.collection('investments').doc();
       invId = invRef.id;
       // Debited via increment(), not an absolute newBalance write, so a
@@ -4610,7 +4615,7 @@ app.post('/invest/create', async (req, res) => {
         await invRef.set({
           userId, tierKey: liveTier.key, tierLabel: liveTier.name, amount: liveTier.price, cycle, expectedReturn,
           status: 'active', nextPayoutAt: new Date(investmentMaturityMs(Date.now(), cycle)), dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
-          isFirstInvestment, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
+          isFirstInvestment, commissionBasis: 'investment', commissionPaidLevels: [], commissionPending: isFirstInvestment,
           date, time, createdAt: FieldValue.serverTimestamp()
         });
         await db.collection('transactions').add({
@@ -4632,8 +4637,10 @@ app.post('/invest/create', async (req, res) => {
         throw createErr;
       }
     });
-    // Referral commission belongs to the first confirmed deposit. A spin is
-    // a bonus, and failing to grant one must never fail a purchase the member
+    // The referral reward (Level 1 / 2 / 3) is paid now, on the member's first purchase. A failure here must never fail a purchase the
+    // member has already paid for: the row stays pending and the 30 second reconciler pays it.
+    if (isFirstInvestment) await creditReferralCommission(invId, userId, liveTier.price).catch(e => console.error('First purchase commission error:', e.message));
+    // A spin is a bonus, and failing to grant one must never fail a purchase the member
     // has already paid for.
     grantTurntableSpins(userId, liveTier, invId);
     _vipCache.delete(userId);
@@ -4751,7 +4758,6 @@ app.post('/deposit/marzpay', async (req, res) => {
     const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
     await depRef.set({
       userId, phone, network, amount: amt, ref, marzReference, status: 'initiating', provider,
-      commissionBasis: 'deposit', commissionPending: true, commissionPaidLevels: [],
       // Which country's money this is, stamped once so the admin lists can
       // label the figure correctly without a user lookup per row.
       regionKey: currentRegionKey(),

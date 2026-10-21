@@ -1873,7 +1873,7 @@ async function openUser(uid){
       <button class="btn sky sm" id="completeRegBtn">Complete</button>
     </div>`:''}
     ${!u.referredBy?`<label style="margin-top:14px">Attach referrer</label>
-    <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">Attach the member's referrer once. Eligible commission from their first confirmed recharge is processed immediately. Existing commission payments are preserved; attaching a referrer does not pay them again.</div>
+    <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">Attach the member's referrer once. Commission on their first product purchase, if they already made one, is processed immediately. Existing commission payments are preserved; attaching a referrer does not pay them again.</div>
     <div class="row">
       <div style="flex:2"><input id="attachRefCode" type="text" placeholder="Referrer's code"></div>
       <button class="btn sky sm" id="attachRefBtn">Attach</button>
@@ -2015,7 +2015,7 @@ async function openUser(uid){
   $('attachRefBtn')?.addEventListener('click', async()=>{
     const code=$('attachRefCode').value.trim();
     if(!code) return toast('Enter the referral code','err');
-    if(!confirm(`Attach ${code} as this member's referrer? This updates their team and processes any eligible first-deposit commission.`)) return;
+    if(!confirm(`Attach ${code} as this member's referrer? This updates their team and processes any eligible first-purchase commission.`)) return;
     const b=$('attachRefBtn'); b.disabled=true; const lbl=b.textContent; b.textContent='Attaching…';
     const d=await api('/admin/user/attach-referrer',{userId:uid,referralCode:code});
     b.disabled=false; b.textContent=lbl;
