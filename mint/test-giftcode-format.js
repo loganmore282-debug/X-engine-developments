@@ -29,7 +29,7 @@ const exp = N * 10 / 36, worst = Math.max(...Object.values(counts).map(v => Math
 check(worst < 0.08, `characters are evenly spread (worst deviation ${(worst * 100).toFixed(1)}%)`);
 check(/crypto\.randomInt\(TREASURE_ALPHABET\.length\)/.test(src) && !/Math\.random/.test(cut('function genGiftCode', '// One flat block, no dashes')), 'drawn with the secure random generator, never Math.random');
 check(/^[A-Z0-9]{10}$/.test('HPDABM8C5L') && /^[A-Z0-9]{10}$/.test('0QXN9JO2G4'), "the owner's examples fit the format");
-check(/^[a-z0-9]+$/.test(src.match(/const GIFTCODE_CHARS = '([^']+)'/)[1]) && /REFERRAL_CHARS = GIFTCODE_CHARS/.test(src), 'referral codes keep their own alphabet');
+check(/^[a-z0-9]+$/.test(src.match(/const GIFTCODE_CHARS = '([^']+)'/)[1]) && /REFERRAL_CHARS = GIFTCODE_UPPER/.test(src) && /REFERRAL_LENGTH = 5/.test(src), 'referral codes keep their own alphabet (capitals and numbers, 5 characters)');
 // storage
 const c = 'HPDABM8C5L';
 check(tcHash(c) === tcHash('HPDABM8C5L') && tcHash(c) !== tcHash('HPDABM8C5M') && /^[0-9a-f]{64}$/.test(tcHash(c)), 'a code is looked up by its SHA-256, one code one hash');

@@ -45,7 +45,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(/Wrong treasure chest password/.test(server) && /Please enter the treasure chest key/.test(server), 'server chest messages');
   ok(/function showChestWin\(reward, balance(, after)?\)/.test(source) && /Congratulations!/.test(source) && /You won/.test(source) && /New Balance: /.test(source) && />COLLECT</.test(source), 'claiming a gift code opens the Congratulations card (You won, amount, New Balance, COLLECT)');
 ok(!/notify\('Giftcode redeemed successfully'\)/.test(source), 'the plain toast no longer replaces the card');
-ok(!/id="depPhone"/.test(source) && /post\('\/deposit\/marzpay', \{ amount \}\)/.test(source), 'the Deposit page has no phone box: the server uses the registered number');
+ok(/id="depPhone"/.test(source) && /post\('\/deposit\/marzpay', \{ amount, phone \}\)/.test(source), 'the Deposit page has an "Input Payment Number" box and sends the typed number');
 ok(/for="walPhone">Wallet Account<\/label>/.test(source) && !/for="walPhone">Phone Number/.test(source), 'the wallet number field is labelled Wallet Account');
 ok(/\{4,64\}/.test(server) && !/\{4,34\}/.test(server), 'bank account numbers are not capped at 34 characters');
 ok(/STATE\.supportedBanks && STATE\.supportedBanks\.length/.test(source), 'an empty bank list is not kept, so the wallet asks again next time');
