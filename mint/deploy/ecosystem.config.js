@@ -42,6 +42,9 @@ module.exports = {
       // Redis lock) first.
       env: {
         NODE_ENV: 'production',
+        // Password hashing (scrypt) runs on Node's helper threads, 4 by default: a burst of log-ins and sign-ups queued behind each other.
+        // This VPS has room for more (a secrets file can still override it).
+        UV_THREADPOOL_SIZE: '16',
         ...secrets,
       },
       // A database outage at start-up must not make pm2 give up after a couple of minutes: keep trying, a little slower each time (up to ~15 s apart).

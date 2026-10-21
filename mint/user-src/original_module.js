@@ -2491,6 +2491,8 @@ async function bootFromNetwork(uid){
       return;
     }
     window._pendingRegPin = ''; window._pendingRegPhone = '';
+    // A new account goes back to Login (below), so its account is not fetched: that was one more round trip for nothing.
+    if (signupFlow) { await finishSignupToLogin(regTypedPhone); return; }
     r = await api('/account');
   } else {
     r = await api('/account', { timeoutMs: 10000 });

@@ -3943,15 +3943,22 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
       return { code: 400, body: { status: 'error', code: 'INVALID_TRADE_PIN', message: 'Trade Password must be exactly 6 digits.' } };
     const code = String(referralCode || '').trim();
     let referrerId = null;
+    // Speed: the slow pieces start TOGETHER instead of one after another -- the Trade Password hash (CPU), this member's own referral code and
+    // account number (database), and the look-up of the referrer's code (database). Only what the answer needs is awaited, where it is needed.
+    const pinHash = scryptHashAsync(tradePin); pinHash.catch(() => {});
+    const idsPromise = Promise.all([generateUniqueReferralCode(userId), nextRandomPublicId()]); idsPromise.catch(() => {});
+    const refLookup = code ? findUserByReferralCode(code) : null; if (refLookup) refLookup.catch(() => {});
+    // A sign-up that stops here must not use up the account number it just claimed: give it back (best effort).
+    const refuse = answer => { idsPromise.then(ids => db.collection('publicIds').doc(ids[1]).delete()).catch(() => {}); return answer; };
     // The referral code is optional: an empty one just means no upline.
     if (code) {
-      const refDoc = await findUserByReferralCode(code);
+      const refDoc = await refLookup;
       if (!refDoc)
-        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } };
+        return refuse({ code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } });
       if (refDoc.id === userId)
-        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'You cannot use your own referral code.' } };
+        return refuse({ code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'You cannot use your own referral code.' } });
       if (refDoc.data().status === 'banned')
-        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code is no longer active.' } };
+        return refuse({ code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code is no longer active.' } });
       // A code from a country on a DIFFERENT CURRENCY is refused. Commission
       // is a percentage of what the new member spends, paid into the
       // referrer's wallet: pay 27% of a 30,000 KES purchase into a Ugandan
@@ -3968,11 +3975,11 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
       // working". Two regions sharing a currency have no arithmetic problem,
       // which is the only thing this rule was ever protecting.
       if (String(refDoc.data().regionKey || DEFAULT_REGION_KEY) !== DEFAULT_REGION_KEY)
-        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'This referral code is unavailable. Ask for a Uganda referral code.' } };
+        return refuse({ code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'This referral code is unavailable. Ask for a Uganda referral code.' } });
       referrerId = refDoc.id;
     }
 
-    const [myRefCode, myPublicId] = await Promise.all([generateUniqueReferralCode(userId), nextRandomPublicId()]);
+    const [myRefCode, myPublicId] = await idsPromise;
     const sett = await getSettings();
     const WELCOME = Number(sett.welcomeBonus) || 0;
     const commit = async () => {
@@ -3986,7 +3993,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
         registrationDone: true, referralCode: myRefCode, publicId: myPublicId,
         walletBalance: FieldValue.increment(WELCOME),
       };
-      if (/^\d{6}$/.test(tradePin)) update.transactionPinHash = await scryptHashAsync(tradePin);
+      if (/^\d{6}$/.test(tradePin)) update.transactionPinHash = await pinHash;
       if (referrerId) update.referredBy = referrerId;
       // The user's own doc is written FIRST, in one atomic single-document
       // update — a crash right after this leaves the member fully and
@@ -6805,6 +6812,13 @@ app.get('/auth/captcha', memberCaptchaLimiter, (req, res) => {
   const c = captcha.issue();
   res.set('Cache-Control', 'no-store');
   res.json({ status: 'success', id: c.id, image: c.image });
+});
+// Log in, sign up and finishing a sign-up are the three requests a new member waits on: any that takes over 0.6 s is written to the log
+// ("SLOW /auth/login 840 ms"), so a slow moment can be seen later with  pm2 logs mint-server | grep SLOW
+app.use(['/auth/login', '/auth/signup', '/register'], (req, res, next) => {
+  const t0 = Date.now();
+  res.on('finish', () => { const ms = Date.now() - t0; if (ms > 600) console.warn(`SLOW ${req.path} ${ms} ms (status ${res.statusCode})`); });
+  next();
 });
 app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
   try {
