@@ -1624,26 +1624,25 @@ async function generateUniqueReferralCode(userId) {
     throw new Error('Could not generate a unique referral code');
   });
 }
-// Sequential, server-issued account number ("ID:00001"). Single counter
-// doc, read-increment-write serialized through withLock.
-//
-// FIVE digits, not six. Owner: "let the user id be having 5 characters, so so
-// far now the current account is 000001, so remove first 0 so it will be
-// 00001." padStart is a MINIMUM, so account 100,000 simply becomes six digits
-// rather than wrapping or colliding -- the same way this behaved at six.
-// Accounts issued before this change keep their stored six-digit id; the
-// one-time repair route for those was removed (Mint starts at five digits).
+// Random, server-issued account number ("ID: 57356"). Owner: random ids, server-side, global, never repeated for any account.
+//   - Drawn on the server only, by the operating system's secure random generator (crypto.randomInt), never from anything the phone sends.
+//   - Five digits, 10000-99999 (no leading zero, like 57356). If the five-digit pool were ever (nearly) used up, the next ids are six digits
+//     (100000-999999) instead of failing a sign-up.
+//   - Never repeated: the id is CLAIMED first, as the _id of a document in `publicIds` (creating a document that already exists fails, so two
+//     sign-ups at the same instant can never get the same number, even before the member's own record is written), and it must also not be held
+//     by any existing member (accounts numbered before this rule, 00001 and up, keep their number). The database's unique index on
+//     users.publicId is the last wall. A claimed number whose sign-up then fails is simply never used again.
+// An id is a label that members read out to support, not a secret or a login: nothing authenticates with it.
 const PUBLIC_ID_DIGITS = 5;
-async function nextSequentialPublicId() {
-  return withLock('publicid-counter', async () => {
-    const counterRef = db.collection('counters').doc('publicId');
-    const snap = await counterRef.get();
-    let n = (snap.exists ? Number(snap.data().value) : 0) || 0;
-    for (let i = 0; i < 50; i++) {
-      n += 1;
-      const id = String(n).padStart(PUBLIC_ID_DIGITS, '0');
-      const dup = await db.collection('users').where('publicId', '==', id).limit(1).get();
-      if (dup.empty) { await counterRef.set({ value: n }, { merge: true }); return id; }
+async function nextRandomPublicId() {
+  return withLock('publicid-gen', async () => {
+    const draw = wide => String(wide ? crypto.randomInt(100000, 1000000) : crypto.randomInt(10000, 100000));
+    for (let i = 0; i < 120; i++) {
+      const id = draw(i >= 60);
+      const held = await db.collection('users').where('publicId', '==', id).limit(1).get();
+      if (!held.empty) continue;
+      const claimed = await db.collection('publicIds').doc(id).createIfAbsent({ createdAt: FieldValue.serverTimestamp() });
+      if (claimed) return id;
     }
     throw new Error('Could not assign a public id');
   });
@@ -3973,7 +3972,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
       referrerId = refDoc.id;
     }
 
-    const [myRefCode, myPublicId] = await Promise.all([generateUniqueReferralCode(userId), nextSequentialPublicId()]);
+    const [myRefCode, myPublicId] = await Promise.all([generateUniqueReferralCode(userId), nextRandomPublicId()]);
     const sett = await getSettings();
     const WELCOME = Number(sett.welcomeBonus) || 0;
     const commit = async () => {

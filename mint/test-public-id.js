@@ -1,74 +1,55 @@
-/**
- * Account ids are five digits, and the repair that shortens the old ones.
- *
- * Owner: "let the user id be having 5 characters, so so far now the current
- * account is 000001, so remove first 0 so it will be 00001."
- *
- * Two halves, and they fail differently:
- *   - the ALLOCATOR decides what new accounts get;
- *   - the REPAIR rewrites what is already stored, which is the only part that
- *     can damage anything, because a publicId is an identifier a member may
- *     already have been given.
- *
- * The repair's rules are lifted out of server.js rather than restated, so a
- * change there that this file does not know about shows up as a failure.
- */
-const fs = require('fs');
+'use strict';
+// Account ids are random, server-issued, five digits like 57356 (six only if the five-digit pool is used up), and never repeat.
+const fs = require('fs'), vm = require('vm'), crypto = require('crypto'), assert = require('assert');
+const acorn = require('acorn');
 const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
+const tree = acorn.parse(src, { ecmaVersion: 'latest' });
+const fn = name => { const n = tree.body.find(x => x.type === 'FunctionDeclaration' && x.id.name === name); assert(n, 'missing ' + name); return src.slice(n.start, n.end); };
+let k = 0; const ok = (c, m) => { k++; if (!c) { console.error('FAIL: ' + m); process.exit(1); } };
 
-let failed = 0;
-const check = (ok, label) => { if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`); };
+// source rules
+ok(/const PUBLIC_ID_DIGITS = 5;/.test(src), 'five digits');
+ok(!/nextSequentialPublicId/.test(src), 'the sequential counter is gone');
+ok(/crypto\.randomInt\(10000, 100000\)/.test(src) && !/Math\.random/.test(fn('nextRandomPublicId')), 'ids come from the secure random generator, never Math.random');
+ok(/nextRandomPublicId\(\)\]\)/.test(src), 'registration asks the server allocator for the id (nothing from the phone)');
+ok(!/publicId:\s*(req|body)/.test(src) && !/req\.body\.publicId/.test(src), 'no route lets a client choose its id');
 
-console.log('— the allocator —');
-const digits = /const PUBLIC_ID_DIGITS = (\d+);/.exec(src);
-check(!!digits && digits[1] === '5', `PUBLIC_ID_DIGITS is 5 (${digits && digits[1]})`);
-// It must be the constant that drives the padding, not a second literal that
-// can drift away from it.
-check(/padStart\(PUBLIC_ID_DIGITS, '0'\)/.test(src),
-  'the id is padded with that constant, not a separate hardcoded width');
-check(!/String\(n\)\.padStart\(6/.test(src), 'no six-digit padding left behind');
-
-const PUBLIC_ID_DIGITS = 5;
-const pad = n => String(n).padStart(PUBLIC_ID_DIGITS, '0');
-check(pad(1) === '00001', `account 1 is 00001 (${pad(1)})`);
-check(pad(42) === '00042', `account 42 is 00042 (${pad(42)})`);
-check(pad(99999) === '99999', `account 99999 still fits in five (${pad(99999)})`);
-// padStart is a MINIMUM. Past 99,999 the id simply grows rather than wrapping
-// round and colliding with an id someone already has.
-check(pad(100000) === '100000', `account 100000 grows to six rather than wrapping (${pad(100000)})`);
-
-console.log('\n— the repair, using server.js\'s own rules —');
-// (The one-time admin repair route that applied these rules has been removed from Mint: ids are five digits from the first account. The
-// rules themselves are kept below as the specification of what shortening means.)
-const shorten = id => {
-  if (!/^0\d+$/.test(id) || id.length <= PUBLIC_ID_DIGITS) return null;
-  const short = String(Number(id)).padStart(PUBLIC_ID_DIGITS, '0');
-  return short.length >= id.length ? null : short;
-};
-for (const [from, to, why] of [
-  ['000001', '00001', "the owner's own account"],
-  ['000042', '00042', 'padding stripped, value kept'],
-  ['099999', '99999', 'the largest that still fits'],
-  ['00001', null, 'already five digits — left alone'],
-  ['100000', null, 'genuinely needs six digits — NOT shortened'],
-  ['123456', null, 'a six-digit value that is not padding'],
-  ['0000001', '00001', 'seven digits of padding collapse too'],
-]) check(shorten(from) === to, `${from} -> ${to === null ? '(unchanged)' : to}: ${why}`);
-
-// The property that actually protects members: shortening never changes which
-// account an id names, and never collides.
-console.log('\n— shortening preserves the number and stays unique —');
-let bad = 0, collisions = 0;
-const seen = new Set();
-for (let n = 1; n <= 200000; n++) {
-  const six = String(n).padStart(6, '0');
-  const out = shorten(six) || six;
-  if (Number(out) !== n) bad++;
-  if (seen.has(out)) collisions++;
-  seen.add(out);
+// behaviour, with a mock database
+function setup(usersHolding) {
+  const claimed = new Set(), users = new Set(usersHolding || []);
+  const db = { collection: name => ({
+    where: (f, op, v) => ({ limit: () => ({ get: async () => ({ empty: !(name === 'users' && users.has(v)) }) }) }),
+    doc: id => ({ createIfAbsent: async () => { if (name !== 'publicIds') throw new Error('wrong collection'); if (claimed.has(id)) return false; claimed.add(id); return true; } }),
+  }) };
+  const tails = new Map();
+  const withLock = (key, f) => { const prev = tails.get(key) || Promise.resolve(); const next = prev.then(f, f); tails.set(key, next.catch(() => {})); return next; };
+  const c = vm.createContext({ crypto, db, FieldValue: { serverTimestamp: () => new Date() }, withLock, Set });
+  vm.runInContext('const PUBLIC_ID_DIGITS = 5;\n' + fn('nextRandomPublicId'), c);
+  return { c, claimed, users };
 }
-check(bad === 0, `200,000 ids: every shortened id still reads as the same number (${bad} wrong)`);
-check(collisions === 0, `and none collide with another (${collisions} collisions)`);
-
-console.log(failed ? `\n${failed} FAILED` : '\npublic id: all cases pass');
-process.exit(failed ? 1 : 0);
+(async () => {
+  {
+    const { c, claimed } = setup();
+    const ids = await Promise.all(Array.from({ length: 3000 }, () => c.nextRandomPublicId()));
+    ok(ids.every(i => /^[1-9]\d{4}$/.test(i)), 'every id is five digits with no leading zero (like 57356)');
+    ok(new Set(ids).size === ids.length && claimed.size === ids.length, '3,000 sign-ups at the same instant: no two ids are the same');
+    ok(new Set(ids.map(i => i[0])).size >= 8 && new Set(ids.map(i => i[4])).size >= 8, 'the ids are spread out, not counting up');
+    const sorted = [...ids].map(Number); let ascending = 0; for (let i = 1; i < sorted.length; i++) if (sorted[i] > sorted[i - 1]) ascending++;
+    ok(ascending > 1200 && ascending < 1800, 'and in no order (' + ascending + ' of ' + (ids.length - 1) + ' steps go up)');
+  }
+  {
+    // an id an existing member already holds (an account numbered under the old rule) is never issued again
+    const held = Array.from({ length: 5000 }, (_, i) => String(10000 + i));
+    const { c } = setup(held);
+    const ids = await Promise.all(Array.from({ length: 800 }, () => c.nextRandomPublicId()));
+    ok(ids.every(i => !held.includes(i)), 'no id an existing member holds is issued');
+  }
+  {
+    // the five-digit pool used up: sign-ups still work, with six digits
+    const all = Array.from({ length: 90000 }, (_, i) => String(10000 + i));
+    const { c } = setup(all);
+    const id = await c.nextRandomPublicId();
+    ok(/^[1-9]\d{5}$/.test(id), 'when every five-digit id is taken the next id has six digits (' + id + ')');
+  }
+  console.log('PASS: random account ids, unique, server-side (' + k + ' checks)');
+})().catch(e => { console.error(e); process.exit(1); });
