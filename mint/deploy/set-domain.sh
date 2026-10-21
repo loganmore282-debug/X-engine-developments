@@ -11,14 +11,21 @@ MINT=${MINT_DIR:-$(dirname "$HERE")}
 APP_HOST_FILE=${MINT_APP_HOST_FILE:-/srv/mint-secrets/app-host}
 ADMIN_HOST_FILE=${MINT_ADMIN_HOST_FILE:-/srv/mint-secrets/admin-host}
 RAW=${1:-}
-[ -n "$RAW" ] || { echo "Say the domain you bought, e.g.:  bash $0 yourdomain.com"; exit 1; }
+if [ -z "$RAW" ]; then
+  # No domain on the command line: ask for it. A run that already chose the hidden admin address remembers the domain, so the second run only needs Enter.
+  SAVED=""; [ -s "$ADMIN_HOST_FILE" ] && SAVED=$(tr -d '[:space:]' < "$ADMIN_HOST_FILE" | sed -E 's/^[^.]+\.//')
+  if [ -n "$SAVED" ]; then printf 'Your domain [%s] (press Enter to keep it): ' "$SAVED"; else printf 'Type the domain you bought (like yourdomain.com): '; fi
+  read -r RAW || RAW=""
+  [ -n "$RAW" ] || RAW=$SAVED
+  [ -n "$RAW" ] || { echo "No domain entered. NOTHING was changed."; exit 1; }
+fi
 DOM=$(printf '%s' "$RAW" | tr 'A-Z' 'a-z' | sed -E 's#^https?://##; s#/.*$##; s#^www\.##')
 printf '%s' "$DOM" | grep -Eq '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$' || { echo "Not understood: $RAW   (write it like  yourdomain.com)"; exit 1; }
 LABEL=${2:-app}
 printf '%s' "$LABEL" | grep -Eq '^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$' || { echo "The first word must be letters/digits, e.g.  app"; exit 1; }
 APP="$LABEL.$DOM"
 CURADMIN=""; [ -s "$ADMIN_HOST_FILE" ] && CURADMIN=$(tr -d '[:space:]' < "$ADMIN_HOST_FILE")
-case "$CURADMIN" in *".$DOM") ADMIN=$CURADMIN ;; *) ADMIN="$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-6).$DOM" ;; esac
+case "$CURADMIN" in *".$DOM") ADMIN=$CURADMIN ;; *) ADMIN="${MINT_ADMIN_LABEL:-$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-6)}.$DOM" ;; esac
 # The admin address is chosen once and remembered, so the DNS record you add is the one the next run expects.
 if [ "$ADMIN" != "$CURADMIN" ]; then mkdir -p "$(dirname "$ADMIN_HOST_FILE")"; (umask 077; printf '%s' "$ADMIN" > "$ADMIN_HOST_FILE"); fi
 ADMIN_PATH=$(sed -n 's/^ADMIN_PATH=\${MINT_ADMIN_PATH:-\([A-Za-z0-9]*\)}.*/\1/p' "$MINT/deploy/update-vps.sh" | head -1)
