@@ -4031,7 +4031,7 @@ async function renderPromo(){
 function promoLink(){
   const t = STATE.teamStats || {};
   const code = (STATE.account || {}).referralCode || t.referralCode || '';
-  return code ? `${shareOrigin()}/share.html?v=${Math.floor(Date.now() / 1000)}&code=${encodeURIComponent(code)}` : '';
+  return code ? `${shareOrigin()}/share.html?v=${Math.floor(Date.now() / 1000)}&code=${encodeURIComponent(String(code).toUpperCase())}` : '';
 }
 var _promoLink = '';
 function paintPromo(){
@@ -5319,6 +5319,7 @@ function openDepositFormSheet(){
     <div class="v-sec"><span class="bar"></span><h2>Select Amount</h2></div>
     <div class="v-chips" id="depChips">${depositChipsHtml(s, 'depAmount')}</div>
     <input class="v-amount" id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[\\s,]/g,'');syncDepositQuickAmt()" autocomplete="off">
+    <input class="v-amount" id="depPhone" type="text" inputmode="numeric" maxlength="15" placeholder="Phone number to pay from" oninput="this.value=this.value.replace(/[^\\d+\\s]/g,'')" autocomplete="off" aria-label="Phone number to pay from">
     <div class="v-sec"><span class="bar"></span><h2>Select Payment Method</h2></div>
     <div class="v-pays" id="depPays">
       ${['PAY-A', 'PAY-E', 'PAY-B', 'PAY-C', 'PAY-G'].map((n, i) => `<button type="button" class="${i === 0 ? 'on' : ''}" onclick="pickPayLabel(this)"><b>${n}</b><i></i></button>`).join('')}
@@ -5707,8 +5708,10 @@ window.submitDeposit = async function(){
   // cleanPhone() is the SAME rule the server applies, so what is accepted
   // here and what is accepted there cannot drift apart.
   // The payment prompt goes to the member's own registered number (the server uses it when none is sent).
-  const phone = cleanPhone((STATE.account || {}).phone || '');
+  // The member types the number he pays from (the prompt is sent to it); it is checked with the same rule the server applies.
+  const phone = cleanPhone(($('depPhone') && $('depPhone').value) || '');
   if (!amount || amount <= 0) return notify('Enter a valid amount');
+  if (!phone) return notify('Enter the phone number you will pay from');
   // Card (doCardDeposit()) and USDT (doUsdtDeposit()) both already check
   // this client-side before ever hitting the network; Mobile Money was the
   // one rail still relying entirely on the server's own rejection, which
@@ -5724,7 +5727,7 @@ window.submitDeposit = async function(){
     // No network field on this form (Round 145) -- the gateway detects it
     // from the phone number itself; server.js already treats `network` as
     // optional here.
-    r = await post('/deposit/marzpay', { amount });
+    r = await post('/deposit/marzpay', { amount, phone });
   } finally {
     // Restores the button's resting label after a failed attempt -- must
     // match whatever submitBtn actually reads at rest (see the sheet's own

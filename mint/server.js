@@ -1563,9 +1563,11 @@ function genGiftCode() {
 // One flat block, no dashes -- the previous round's own reasoning for
 // referral codes (spoken aloud more often than typed) still holds; a
 // dash in a code someone is reading out over a phone call is one more
-// thing to mishear ("dash" vs "hyphen" vs a pause). 8 characters, always.
-const REFERRAL_CHARS = GIFTCODE_CHARS; // same unambiguous alphabet, now lowercase, not a new one
-const REFERRAL_LENGTH = 8;
+// thing to mishear ("dash" vs "hyphen" vs a pause). Owner: capital letters and numbers, 5 characters, e.g. S62BV, GST3V. The unambiguous alphabet (no
+// I, L, O, 0, 1) in capitals: 31^5 = 28.6 million codes. A code typed in any case still finds its owner (referralCodeLower), and members who already
+// have an older (longer, lowercase) code keep it: it still works as a link and as a typed code.
+const REFERRAL_CHARS = GIFTCODE_UPPER;
+const REFERRAL_LENGTH = 5;
 function randFromAlphabet(alphabet, n) {
   let s = '';
   for (let i = 0; i < n; i++) s += alphabet[crypto.randomInt(alphabet.length)];
@@ -1612,10 +1614,8 @@ async function generateUniqueReferralCode(userId) {
       await db.collection('users').doc(userId).update({ referralCode: code, referralCodeLower: codeLower });
       return code;
     };
-    // No length-escalation fallback -- "make sure fixed character" means
-    // every referral code is 8 characters, always. The space is wide
-    // enough (31^8, ~852 billion) that 50 collisions in a row would mean
-    // something is actually broken, not that the space is crowded; that
+    // No length-escalation fallback: every new referral code is 5 characters, always. The space (31^5, about 28.6 million) is crowded only
+    // after millions of members, so a few collisions are simply drawn again; 50 in a row would mean something is actually broken, and that
     // case throws rather than silently handing out a longer code.
     for (let attempt = 0; attempt < 50; attempt++) {
       const claimed = await tryClaim(randCode(REFERRAL_LENGTH));
