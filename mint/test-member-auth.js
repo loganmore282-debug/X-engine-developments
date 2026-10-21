@@ -30,7 +30,7 @@ function makeEnv() {
   const db = { collection: col => ({ doc: id => docRef(col, id),
     where: (f, o, v) => ({ limit() { return this; }, get: async () => { const rows = [...store[col]].filter(([, r]) => r[f] === v);
       return { empty: !rows.length, docs: rows.map(([id, r]) => ({ id, data: () => clone(r), ref: docRef(col, id) })) }; } }) }) };
-  const handlers = {}; const app = { post: (p, ...a) => { handlers[p] = a[a.length - 1]; }, get: (p, ...a) => { handlers[p] = a[a.length - 1]; } };
+  const handlers = {}; const app = { use() {}, post: (p, ...a) => { handlers[p] = a[a.length - 1]; }, get: (p, ...a) => { handlers[p] = a[a.length - 1]; } };
   const captcha = { verify: (id, code) => id === 'cid' && code === '1234', issue: () => ({ id: 'cid', image: 'data:image/svg+xml;base64,AA==', code: '1234' }) };
   const lim = () => (q, s, n) => n();
   let failStore = false;
