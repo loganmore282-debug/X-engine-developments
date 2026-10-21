@@ -34,15 +34,11 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   w.eval("notify('Insufficient balance, redirecting to deposit...', () => openDepositSheet())");
   ok(d.getElementById('notifyIc').classList.contains('err'), 'insufficient balance uses the cross icon');
   w.eval('closeNotify()'); ok(went === 1, 'closing it goes to Deposit');
-  // Download: an accepted install shows the Download dialog; Confirm closes it.
+  // Download: starting the install shows no pop-up of ours (owner: the "The app has been downloaded..." dialog is removed).
   let prompted = 0; w._installPrompt = { prompt() { prompted++; }, userChoice: Promise.resolve({ outcome: 'accepted' }) };
   await w.promptInstallApp();
-  const dl = d.getElementById('dlBg');
-  ok(prompted === 1 && dl && dl.classList.contains('show'), 'accepted install shows the Download dialog');
-  ok(dl.querySelector('h3').textContent === 'Download' && dl.querySelector('p').textContent === 'The app has been downloaded, please go to the browser to check and install it.' && dl.querySelector('button').textContent === 'Confirm', 'the screenshot words');
-  w.eval(dl.querySelector('button').getAttribute('onclick')); ok(!dl.classList.contains('show'), 'Confirm closes it');
-  w._installPrompt = { prompt() {}, userChoice: Promise.resolve({ outcome: 'dismissed' }) };
-  await w.promptInstallApp(); ok(!dl.classList.contains('show'), 'a dismissed install shows no Download dialog');
+  ok(prompted === 1 && !d.getElementById('dlBg') && !/has been downloaded/.test(d.body.innerHTML), 'an accepted install shows no Download dialog');
+  ok(typeof w.openDownloadDialog === 'undefined', 'the Download dialog no longer exists');
   // The Buy Now confirm popup blurs its backdrop by exactly the notify dialog's amount.
   const css = html.match(/<style[\s\S]*?<\/style>/g).join('\n');
   const tint = sel => { const rules = [...css.matchAll(new RegExp('(?:^|\\n|\\})\\s*' + sel.replace(/\./g, '\\.') + '\\{([^}]*)\\}', 'g'))].map(x => x[1]).filter(r => /background:rgba/.test(r)); return ((rules.pop() || '').match(/background:(rgba\([^)]*\))/) || ['', ''])[1]; };

@@ -5177,7 +5177,6 @@ window.closeSheet = function(opts){
 var _dlgIgnorePop = false, _dlgFromPop = false, _dlgCleanTimer = null;
 function anyDialogOpen(){
   return !!($('chestWinBg')
-    || ($('dlBg') && $('dlBg').classList.contains('show'))
     || ($('helpBg') && $('helpBg').classList.contains('show'))
     || ($('confirmBg') && $('confirmBg').classList.contains('show'))
     || ($('annBg') && $('annBg').classList.contains('show'))
@@ -5189,7 +5188,7 @@ function resetOverlayState(){
   document.body.classList.remove('deposit-status-open', 'sheet-open');
   // A session that ends (or a logout) takes every popup with it: the Buy confirm, Help, announcement, download and the win card used to stay
   // on top of the Login screen (the win card even showed the previous member's New Balance).
-  ['confirmBg', 'helpBg', 'annBg', 'dlBg'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
+  ['confirmBg', 'helpBg', 'annBg'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
   const win = $('chestWinBg'); if (win) win.remove();
   _openSheetTitle = null; _depActiveDepositId = null; _withdrawSubmitting = false;
   if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
@@ -5211,7 +5210,6 @@ function closeTopDialog(){
   _dlgFromPop = true;
   try {
     if ($('chestWinBg')) collectChestWin();
-    else if ($('dlBg') && $('dlBg').classList.contains('show')) closeDownloadDialog();
     else if ($('helpBg') && $('helpBg').classList.contains('show')) closeHelpDialog();
     else if ($('confirmBg') && $('confirmBg').classList.contains('show')) closeConfirm();
     else if ($('annBg') && $('annBg').classList.contains('show')) closeAnnouncement();
@@ -6107,12 +6105,10 @@ window.addEventListener('appinstalled', () => { window._installPrompt = null; })
 window.promptInstallApp = async function(){
   if (!window._installPrompt) { notify('Already installed, or your browser doesn\'t support installing ' + brandName() + '.'); return; }
   window._installPrompt.prompt();
-  const choice = await window._installPrompt.userChoice.catch(() => null);
+  await window._installPrompt.userChoice.catch(() => null);
   window._installPrompt = null;
-  if (choice && choice.outcome === 'accepted') openDownloadDialog();
 };
-// The owner's screen after the download starts: a blue card, "Download", the
-// sentence, and one Confirm button that closes it.
+// The Download App page: the admin's picture with one Download Now button. Starting the install shows no pop-up of ours (owner: removed).
 window.openDownloadPage = function(){
   const bg = STATE.downloadBg ? ' style="background-image:url(' + esc(JSON.stringify(STATE.downloadBg).slice(1, -1)) + ')"' : '';
   openSheet('Download App', `<div class="mg-dl"${bg}>
@@ -6120,17 +6116,6 @@ window.openDownloadPage = function(){
   </div>`);
   $('sheetBg').classList.add('mg-nohead');
 };
-window.openDownloadDialog = function(){
-  let bg = $('dlBg');
-  if (!bg) {
-    bg = document.createElement('div');
-    bg.id = 'dlBg'; bg.className = 'v-dl-bg';
-    bg.innerHTML = '<div class="v-dl-card"><h3>Download</h3><p>The app has been downloaded, please go to the browser to check and install it.</p><button type="button" onclick="closeDownloadDialog()">Confirm</button></div>';
-    document.body.appendChild(bg);
-  }
-  bg.classList.add('show'); dlgOpened();
-};
-window.closeDownloadDialog = function(){ const bg = $('dlBg'); if (bg) { if (bg.classList.contains('show')) dlgClosed(); bg.classList.remove('show'); } };
 // Owner: "remove double loading of startup loader or system it's self it
 // can loading the again it reloads automatically without touching it so
 // remove it, the system should launch once per user's request." This app
