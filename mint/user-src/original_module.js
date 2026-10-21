@@ -1624,7 +1624,7 @@ window.doRegister = async function(){
     const email = phoneToEmail(phone);
     STATE.captchaId = '';          // the picture is used up by this attempt, whatever the answer
     await window.fbCreateUser(email, pass, captchaAnswer);
-    storeCredentialIfPossible(email, pass, phone);
+    // The browser is asked to save the password only once the sign-up has really finished (finishSignupToLogin), not at this half-way point.
   }
   catch (e) {
     // Owner-reported real bug: a Firebase Auth account can exist with no
@@ -2454,12 +2454,17 @@ async function abandonUnfinishedSignup(reg){
 async function finishSignupToLogin(typedPhone){
   window._pendingLoginSuccess = false;
   window._pendingRegPin = ''; window._pendingRegPhone = '';
+  // What was typed is taken BEFORE the boxes are emptied: the browser is offered the new number and password to save (Google Password Manager), so
+  // the next Login is one tap on the saved entry.
+  const savedPass = ($('regPassword') || {}).value || '';
   await window.doLogout();
   hideLoadingScreen();
   $('authScreen').style.display = '';
-  ['regPhone', 'regPassword', 'regPassword2', 'regTradePin', 'regCaptcha'].forEach(id => { const el = $(id); if (el) el.value = ''; });
   setBtnLoading('regBtn', false, 'Sign Up');
   showAuthTab('login');
+  if (savedPass) storeCredentialIfPossible(null, savedPass, typedPhone);
+  // The Sign Up boxes are emptied a moment AFTER that pane is hidden, so the browser sees the form leave with its values filled in.
+  setTimeout(() => { ['regPhone', 'regPassword', 'regPassword2', 'regTradePin', 'regCaptcha'].forEach(id => { const el = $(id); if (el) el.value = ''; }); }, 1500);
   const ph = $('loginPhone'), pw = $('loginPassword');
   if (ph) ph.value = typedPhone;
   if (pw) pw.value = '';

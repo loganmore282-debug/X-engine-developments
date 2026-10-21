@@ -112,6 +112,11 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     ok(!admin.includes('id="sOtpReg"'), 'admin no longer exposes a registration OTP setting');
     const registerRoute = server.slice(server.indexOf("app.post('/register'"), server.indexOf("app.get('/account'", server.indexOf("app.post('/register'")));
     ok(registerRoute && !registerRoute.includes('consumeOtpTicket') && registerRoute.includes('INVALID_TRADE_PIN'), 'server registration accepts no OTP and validates the trade PIN');
+    { // after a finished sign-up the browser is offered the new number + password to save, taken BEFORE the Sign Up boxes are emptied (and those are emptied after the pane is hidden)
+      const finAll = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8'); const finSrc = finAll.slice(finAll.indexOf('async function finishSignupToLogin'), finAll.indexOf('async function bootFromNetwork'));
+      ok(/const savedPass = \(\$\('regPassword'\) \|\| \{\}\)\.value/.test(finSrc) && /storeCredentialIfPossible\(null, savedPass, typedPhone\)/.test(finSrc), 'a finished sign-up offers the new number and password to the browser (Google Password Manager)');
+      ok(finSrc.indexOf("showAuthTab('login')") < finSrc.indexOf('setTimeout(() => {') && finSrc.indexOf('storeCredentialIfPossible') < finSrc.indexOf("el.value = ''"), 'the Sign Up boxes are emptied after the pane is hidden and after the save is offered');
+    }
     ok(/const pinHash = scryptHashAsync\(tradePin\)/.test(server) && /update\.transactionPinHash\s*=\s*await pinHash/.test(server), 'server saves only a hash of the new trade PIN (hashed while the other sign-up lookups run)');
     const dom = load(), w = dom.window;
     w.eval("STATE.settings={authHeroOpacity:60,authHeroBlur:8};STATE.authHeroImage='data:image/png;base64,AA==';applyAuthBackgrounds()");
