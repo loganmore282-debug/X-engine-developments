@@ -5633,8 +5633,7 @@ function setDepositStatusSuccess(){
   setPayLive(true);
   $('depStatusIcon').className = 'dep-status-icon success';
   $('depStatusIcon').innerHTML = PL_BADGE_OK;
-  // Owner: "on payment success it says congratulations, payment has been received {added to your wallet}, redirecting back home in 5 seconds
-  // or you can say so back the button should be available."
+  // Owner: on success it says Congratulations and that the payment has been received and added to the wallet; the member leaves with the Back to Home button.
   $('depStatusTitle').textContent = 'Congratulations!';
   // Names the actual figure when it is known (it always is on the automatic path); the manual-deposit path lands here without ever showing
   // the waiting page, so every line also reads properly without one. brandName(), not a literal: the app's name is admin-settable.
@@ -5644,30 +5643,11 @@ function setDepositStatusSuccess(){
   $('depStatusBody').innerHTML = plAmount(false)
     + '<ol class="pay-steps pl-steps">' + plSent()
     + plStep('done', 'Approved on your phone', 'The payment was approved.')
-    + plStep('done', 'Balance updated', added) + '</ol>'
-    + '<p class="pay-note" id="depRedirectCountdown"></p>';
-  // Close doubles as "Back to Home" here -- available immediately so a
-  // member who does not want to wait the 5 seconds out can leave right
-  // away, exactly as asked ("or you can say so back the button should be
-  // available"). The countdown auto-fires the identical action if they
-  // don't tap it first.
+    + plStep('done', 'Balance updated', added) + '</ol>';
+  // Owner: no "Returning to Home in N seconds" and no automatic redirect: the page stays until the member taps Back to Home (or the back arrow).
   const c = $('depStatusCloseBtn');
   if (c) c.textContent = 'Back to Home';
   setDepButtons(false, true);
-  let secondsLeft = 5;
-  const tick = () => {
-    const el = $('depRedirectCountdown');
-    if (el) el.textContent = 'Returning to Home in ' + secondsLeft + '…';
-    if (secondsLeft <= 0) {
-      if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
-      closeDepositStatusModal(true);
-      return;
-    }
-    secondsLeft--;
-  };
-  if (_depSuccessRedirectTimer) clearInterval(_depSuccessRedirectTimer);
-  tick();
-  _depSuccessRedirectTimer = setInterval(() => { if (!document.hidden) tick(); }, 1000);   // the countdown waits while the app is in the background
 }
 function setDepositStatusFailed(msg){
   setPayLive(true);
