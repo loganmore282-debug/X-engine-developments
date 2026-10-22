@@ -1974,6 +1974,18 @@ html.mg-gut .mg-top{margin-right:-19px;}
 /* the two panes are real forms now (so the browser keeps Login and Sign Up apart); a form adds no space of its own */
 form.va-pane{margin:0;padding:0;}
 
+/* Home category tabs: Products | New Products. The chosen one is the green button; the other is a pale outline. The New Products button carries the
+   glow sweep (the same two bands and timing as Buy Now): white on its green face, a soft green band while it is the pale button. */
+.mg-tabs{display:grid;grid-template-columns:1fr 1fr;gap:9.5px;margin-top:14.5px;}
+.mg-tabs button{position:relative;overflow:hidden;isolation:isolate;height:42.5px;border:1px solid #bfe0cf;border-radius:12px;background:#fefefc;color:#0b5d3a;font:700 14px/1 var(--mg-sans);letter-spacing:.035em;cursor:pointer;transition:background .2s,color .2s,border-color .2s;}
+.mg-tabs button.on{border-color:transparent;background:linear-gradient(125deg,#00a54e 0%,#008a44 52%,#00693a 100%);color:#fff;}
+.mg-tabs button:active{transform:scale(.98);}
+.mg-tabs button.new::before,.mg-tabs button.new::after{content:'';position:absolute;left:0;top:0;width:65%;height:100%;pointer-events:none;z-index:-1;will-change:transform;transform:translateX(157.7%) skewX(5deg);background:linear-gradient(90deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.009) 8.3%,rgba(255,255,255,.026) 16.7%,rgba(255,255,255,.048) 25%,rgba(255,255,255,.065) 33.3%,rgba(255,255,255,.084) 41.7%,rgba(255,255,255,.114) 50%,rgba(255,255,255,.097) 58.3%,rgba(255,255,255,.079) 66.7%,rgba(255,255,255,.063) 75%,rgba(255,255,255,.043) 83.3%,rgba(255,255,255,.022) 91.7%,rgba(255,255,255,0) 100%);}
+.mg-tabs button.new:not(.on)::before,.mg-tabs button.new:not(.on)::after{background:linear-gradient(90deg,rgba(0,165,78,0) 0%,rgba(0,165,78,.009) 8.3%,rgba(0,165,78,.026) 16.7%,rgba(0,165,78,.048) 25%,rgba(0,165,78,.065) 33.3%,rgba(0,165,78,.15) 41.7%,rgba(0,165,78,.2) 50%,rgba(0,165,78,.17) 58.3%,rgba(0,165,78,.13) 66.7%,rgba(0,165,78,.063) 75%,rgba(0,165,78,.043) 83.3%,rgba(0,165,78,.022) 91.7%,rgba(0,165,78,0) 100%);}
+.mg-tabs button.new::before{animation:mgGlowA 2s linear infinite;}
+.mg-tabs button.new::after{animation:mgGlowB 2s linear infinite;}
+.mg-tabs+.mg-list{margin-top:14px;}
+
 /* MG-END */
 /* ── Login / Sign Up: measured from the owner's Mint screenshots (360 px phone, 2x) ── */
 .ma-screen{position:relative;min-height:100vh;min-height:100dvh;background:#fefefc;}

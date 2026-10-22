@@ -7551,7 +7551,7 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     vip = Number(p.vip);
     if (!Number.isInteger(vip) || vip < 0 || vip > 100) return refuse('VIP level', 'must be a whole number from 0 to 100');
   }
-  return { key, name, price, cycle, expectedReturn, multiplier, buyLimit, vip, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
+  return { key, name, category: p?.category === 'new' ? 'new' : 'main', price, cycle, expectedReturn, multiplier, buyLimit, vip, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
 }
 // `?region=ke` hands the editor that region's view of every product -- its
 // own price where it has one, Uganda's where it has not -- plus `overrides`,

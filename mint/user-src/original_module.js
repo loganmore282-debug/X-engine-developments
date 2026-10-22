@@ -3069,8 +3069,8 @@ async function liveRefreshVisible(){
     if (pr.status === 'success') {
       STATE.products = pr.products;
       if (!_openSheetTitle && STATE.page === 'home' && liveChanged('products', pr.products) && $('homeProducts')) {
-        const list = (STATE.products || []).filter(p => p.active !== false);
-        $('homeProducts').innerHTML = list.length ? list.map(vProductCardHtml).join('') : '<div class="v-empty">No products yet.</div>';
+        const list = homeTabProducts();
+        $('homeProducts').innerHTML = list.length ? list.map(vProductCardHtml).join('') : homeEmptyHtml();
         startProductCountdowns();
       }
     } else ok = false;
@@ -3480,10 +3480,25 @@ window.openContactLink = function(kind){
   if (!/^https?:\/\//i.test(String(url))) return notify('No ' + (kind === 'channel' ? 'channel' : 'service') + ' link is set yet.');
   window.open(url, '_blank', 'noopener');
 };
+// Home has two lists that never mix: Products and New Products. Each product carries the category the admin saved it with.
+function homeTabNow(){ return STATE.homeTab === 'new' ? 'new' : 'main'; }
+function mgIsNew(p){ return !!p && p.category === 'new'; }
+function homeTabProducts(){
+  const tab = homeTabNow();
+  return (STATE.products || []).filter(p => p.active !== false && (mgIsNew(p) ? 'new' : 'main') === tab);
+}
+function homeEmptyHtml(){ return '<div class="v-empty">' + (homeTabNow() === 'new' ? 'No new products yet.' : 'No products yet.') + '</div>'; }
+window.setHomeTab = function(t){
+  const next = t === 'new' ? 'new' : 'main';
+  if (next === homeTabNow()) return;
+  STATE.homeTab = next;
+  if (STATE.page === 'home') paintHome();
+};
 function paintHome(){
   applyProductImageOpacity();
   // A product the admin switched off (Active unticked) is not offered on Home; owners still see it on Orders.
-  const products = (STATE.products || []).filter(p => p.active !== false);
+  const tab = homeTabNow();
+  const products = homeTabProducts();
   const html = `
 <div class="v-page mg-home">
   ${mgTopHtml()}
@@ -3494,7 +3509,11 @@ function paintHome(){
     <button type="button" onclick="openContactLink('channel')">Channel</button>
     <button type="button" onclick="openContactLink('service')">Service</button>
   </div>
-  <div class="mg-list" id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">No products yet.</div>' : _productsLoadFailed ? loadFailHtml('home') : '')}</div>
+  <div class="mg-tabs" role="tablist">
+    <button type="button" role="tab" class="${tab === 'main' ? 'on' : ''}" onclick="setHomeTab('main')">Products</button>
+    <button type="button" role="tab" class="new${tab === 'new' ? ' on' : ''}" onclick="setHomeTab('new')">New Products</button>
+  </div>
+  <div class="mg-list" id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? homeEmptyHtml() : _productsLoadFailed ? loadFailHtml('home') : '')}</div>
   <button class="mg-chest" type="button" onclick="openChestSheet()" aria-label="Treasure chest"><img src="${CHEST_ART}" alt=""></button>
 </div>`;
   $('pageHost').innerHTML = html;
