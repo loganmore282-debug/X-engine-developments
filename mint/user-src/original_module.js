@@ -5337,7 +5337,7 @@ function openDepositFormSheet(){
     <input class="v-amount" id="depPhone" type="text" inputmode="numeric" maxlength="15" placeholder="Enter phone number" oninput="this.value=this.value.replace(/[^\\d+\\s]/g,'')" autocomplete="off" aria-label="Phone number to pay from">
     <div class="v-sec"><span class="bar"></span><h2>Select Payment Method</h2></div>
     <div class="v-pays" id="depPays">
-      ${['PAY-A', 'PAY-B', 'PAY-C'].map((n, i) => `<button type="button" class="${i === 0 ? 'on' : ''}" onclick="pickPayLabel(this)"><b>${n}</b><i></i></button>`).join('')}
+      ${['PAY-A'].map((n, i) => `<button type="button" class="${i === 0 ? 'on' : ''}" onclick="pickPayLabel(this)"><b>${n}</b><i></i></button>`).join('')}
     </div>
     <button class="v-cta" id="depSubmitBtn" onclick="submitDeposit()">Confirm Deposit</button>
     <div class="v-info">
@@ -5352,8 +5352,8 @@ function openDepositFormSheet(){
     <div class="mg-redirect" id="depRedirect"><span class="spin"></span><p>Redirecting to payment...</p></div>
   </div>`);
 }
-// PAY-A / PAY-B / PAY-C are one gateway, three labels: the choice is only
-// the highlight, nothing else reads it.
+// Owner: Mint offers ONE method, PAY-A (the single button is always on).
+// pickPayLabel stays so the button's onclick still has a handler.
 window.pickPayLabel = function(btn){
   const box = $('depPays');
   if (box) box.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
