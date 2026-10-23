@@ -8033,6 +8033,30 @@ app.post('/admin/user/remove-product', async (req, res) => {
     res.json({ status: 'success', refunded: out.refunded, message: out.refunded > 0 ? `${out.name} removed and ${fmtMoney(out.refunded)} refunded to the wallet` : `${out.name} removed` });
   } catch (e) { res.status(e.http || 400).json({ status: 'error', message: e.message }); }
 });
+// ── ADMIN: remove a member's saved withdrawal account (owner only) ──────────────────────────────────────────
+// The saved payout account (mobile-money number or bank account) is deleted, so the member has none until they bind a new one
+// on their Wallet page, and the number is free for any member to bind again. Withdrawals already requested keep the account
+// they were sent to (each withdrawal row carries its own copy), so nothing in flight changes. Takes the same lock as /bank/save,
+// so a save and a removal at the same moment cannot interleave.
+app.post('/admin/user/remove-bank-account', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || ''), accountId = String(req.body.accountId || '');
+  if (!userId || !accountId || accountId.length > 80) return res.status(400).json({ status: 'error', message: 'userId and accountId are required' });
+  try {
+    let removed = null;
+    await withLock('bank-save:' + userId, async () => {
+      const ref = db.collection('bankAccounts').doc(accountId);
+      const snap = await ref.get();
+      if (!snap.exists || snap.data().userId !== userId) {
+        const nf = new Error('That withdrawal account was not found on this member. It may already have been removed.'); nf.http = 404; throw nf;
+      }
+      removed = snap.data();
+      await ref.delete();
+    });
+    logAdminAction(req, 'bank_account_removed', { userId, accountId, network: removed.network || '', phone: removed.phone || '' });
+    res.json({ status: 'success', message: 'Withdrawal account removed' });
+  } catch (e) { res.status(e.http || 400).json({ status: 'error', message: e.message }); }
+});
 app.post('/admin/user/reset-password', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = String(req.body.userId || '');

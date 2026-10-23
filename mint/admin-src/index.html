@@ -1891,7 +1891,7 @@ async function openUser(uid){
     </div>
     <div class="muted" style="font-size:11.5px;margin-top:4px">Free for the member: nothing is taken from their wallet. It runs like a bought product and pays its full return.</div>`:''}
     <h4 style="margin:18px 0 8px;font-size:14px">Saved withdrawal accounts</h4>
-    ${(r.bankAccounts||[]).length?(r.bankAccounts).map(a=>`<div class="kv"><span class="k">${esc(a.holder||'Account')}</span><span>${esc(a.network||'')} · ${esc(a.phone||'')}</span></div>`).join(''):'<p class="muted" style="margin:0">None saved.</p>'}
+    ${(r.bankAccounts||[]).length?(r.bankAccounts).map(a=>`<div class="kv"><span class="k">${esc(a.holder||'Account')}</span><span>${esc(a.network||'')} · ${esc(a.phone||'')}${SESSION_ROLE==='owner'?` <button class="btn danger sm" data-rmbank="${esc(a.id)}" style="margin-left:8px">Remove</button>`:''}</span></div>`).join(''):'<p class="muted" style="margin:0">None saved.</p>'}
     ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Trade Password</h4>
     <div class="kv"><span class="k">Status</span><span>${u.hasPayoutPin?'Set':'Not set yet'}</span></div>
     <p class="muted" style="margin:2px 0 8px;font-size:12px">The PIN is one-way hashed -- it can never be viewed, only replaced. Sets the 6-digit trade password below directly; give it to the member so they can withdraw. They can also change it themselves in the app (Account -&gt; Trade Password).</p>
@@ -1924,6 +1924,14 @@ async function openUser(uid){
   const tx=(r.transactions||[]).slice(0,25);
   $('userTx').innerHTML = tx.length?tx.map(t=>`<tr><td style="white-space:nowrap">${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td>
     <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap;text-align:right">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join(''):'<tr><td class="empty">No transactions</td></tr>';
+  document.querySelectorAll('[data-rmbank]').forEach(btn=>btn.addEventListener('click', async()=>{
+    const a=(r.bankAccounts||[]).find(x=>x.id===btn.dataset.rmbank); if(!a) return;
+    if(!confirm(`Remove ${a.network||'this'} account ${a.phone||''} (${a.holder||'no name'}) from ${u.phone}?\n\nThey will have no withdrawal account until they add a new one on their Wallet page. Withdrawals already requested are not changed.`)) return;
+    if(btn.disabled) return; btn.disabled=true; const lbl=btn.textContent; btn.innerHTML=btnBusyHtml('Removing…');
+    const d=await api('/admin/user/remove-bank-account',{userId:uid,accountId:a.id});
+    toast(d.message||d.status, d.status==='success'?'ok':'err');
+    if(d.status==='success'){ closeModal(); openUser(uid); } else { btn.disabled=false; btn.textContent=lbl; }
+  }));
   document.querySelectorAll('[data-rmprod]').forEach(btn=>btn.addEventListener('click', async()=>{
     const iv=(r.investments||[]).find(x=>x.id===btn.dataset.rmprod); if(!iv) return;
     const nm=iv.tierLabel||'this product';
