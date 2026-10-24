@@ -85,7 +85,7 @@ const proxy = (extra = '') => `        rewrite ^/${API}/(.*)$ /$1 break;
         proxy_set_header X-Forwarded-Proto $scheme;${extra}`;
 
 // The webhook proxy lines: Node only ever sees /pesajet/webhook, body untouched (the signature is checked over the raw body).
-const hookProxy = `        rewrite ^ /pesajet/webhook break;
+const hookProxy = target => `        rewrite ^ ${target} break;
         proxy_pass http://mint_node;
         proxy_http_version 1.1;
         proxy_set_header Connection "";
@@ -95,15 +95,17 @@ const hookProxy = `        rewrite ^ /pesajet/webhook break;
         proxy_set_header X-Forwarded-Proto $scheme;`;
 // A gateway delivers from ONE address and retries in bursts (PesaJet: 1 min, 5, 15 ...): the shared 20 requests/s zone with burst 40 answered 429 to the
 // 42nd request of a burst and the retry came a minute later. Callbacks have their own, much wider, zone (the signature / live re-check protects them).
-const hookLocation = path => `    location = ${path} {
+const hookLocation = (path, target = '/pesajet/webhook') => `    location = ${path} {
         limit_req zone=mint_hook burst=300 nodelay;
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
-${hookProxy}
+${hookProxy(target)}
     }
 `;
 // On the member host: the secret address (unless a hook-only host carries it) and the plain, guessable one closed.
 const memberHookLocations = `    # secret PesaJet webhook address (see HOOK_TOKEN in the generator); the plain one is closed${HOOK_HOST ? ' (the secret one is served on the hook host only)' : ''}
 ${HOOK_HOST ? '' : hookLocation('/' + API + '/h-' + HOOK_TOKEN + '/pesajet')}    location = /${API}/pesajet/webhook { return 404; }
+    # TavuPay's secret webhook address, the same way (Node only sees /tavupay/webhook, body untouched: its signature is over the raw body)
+${HOOK_HOST ? '' : hookLocation('/' + API + '/h-' + HOOK_TOKEN + '/tavupay', '/tavupay/webhook')}    location = /${API}/tavupay/webhook { return 404; }
 `;
 // A host that exists only for the webhook: one POST address, everything else 404, no app, no admin, no API.
 const hookHostBlock = () => `server {
@@ -120,7 +122,7 @@ const hookHostBlock = () => `server {
     client_header_timeout 15s;
     client_body_timeout 20s;
     send_timeout 30s;
-${hookLocation('/h-' + HOOK_TOKEN + '/pesajet')}    location / { return 404; }
+${hookLocation('/h-' + HOOK_TOKEN + '/pesajet')}${hookLocation('/h-' + HOOK_TOKEN + '/tavupay', '/tavupay/webhook')}    location / { return 404; }
 }
 `;
 

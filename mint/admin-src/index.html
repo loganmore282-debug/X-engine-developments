@@ -469,8 +469,8 @@ function ugx(n, regionKey){
 // legacy literal a value could still be if this database predates the
 // PAY A/PAY B split; treated as a permanent alias for 'marzpay' everywhere a
 // depositMethod/payoutMode string is compared or labelled in this panel.
-function normalizeProv(v){ return (v==='pesajet'||v==='manual') ? v : 'marzpay'; }
-const PROVIDER_LABEL = { marzpay:'MarzPay', pesajet:'PesaJet', manual:'by hand' };
+function normalizeProv(v){ return (v==='pesajet'||v==='tavupay'||v==='manual') ? v : 'marzpay'; }
+const PROVIDER_LABEL = { marzpay:'MarzPay', pesajet:'PesaJet', tavupay:'TavuPay', manual:'by hand' };
 function tsMs(v){ if(!v) return 0; if(v.seconds!=null) return v.seconds*1000; const t=new Date(v).getTime(); return isNaN(t)?0:t; }
 // Round-trips openingCountdownAt (a plain epoch-ms number, same shape as
 // every other timestamp this file reads) into/out of a <input
@@ -1914,7 +1914,7 @@ async function openUser(uid){
         // member's own phone into the payment gateway -- so that's
         // labelled honestly instead of showing a blank or a made-up value.
         const paidTo = d.method==='manual' ? esc(d.assignedNumber||'Not set')
-          : `Automatic (${d.provider==='pesajet'?'PesaJet':'MarzPay'})`;
+          : `Automatic (${d.provider==='pesajet'?'PesaJet':d.provider==='tavupay'?'TavuPay':'MarzPay'})`;
         const paidFrom = esc(d.senderPhone||d.phone||'Not set');
         return `<tr><td style="white-space:nowrap">${fdate(d.createdAt)}</td><td><b>${ugx(d.amount, d.regionKey)}</b></td><td>${paidTo}</td><td>${paidFrom}</td><td>${statusPill(d.status)}</td></tr>`;
       }).join('')}
@@ -2140,7 +2140,7 @@ function drawDeps(){
       // provider is only set on deposits created since Round 102 -- an
       // older row with none falls back to the same plain "Automatic" label
       // it always had (it can only ever have gone through MarzPay).
-      : (d.provider==='pesajet'?'PesaJet':d.provider==='marzpay'?'MarzPay':'Automatic');
+      : (d.provider==='pesajet'?'PesaJet':d.provider==='tavupay'?'TavuPay':d.provider==='marzpay'?'MarzPay':'Automatic');
     const reviewNote = d.status==='review' && d.reviewReason ? `<br><span class="muted" style="font-size:11px">${esc(d.reviewReason)}</span>` : '';
     // Owner: "only the sent message from after refresh on manual payment page
     // should appear to admin panel in its full details so as admin verifies
@@ -3397,6 +3397,7 @@ async function renderSettings(){
       <div style="margin:0 0 12px">
         <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:4px;"><input type="radio" name="depGateway" id="depGatewayMarz" value="marzpay" ${normalizeProv(v('depositMethod','marzpay'))==='marzpay'?'checked':''} style="width:auto"> MarzPay</label>
         <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="depGateway" id="depGatewayPesa" value="pesajet" ${normalizeProv(v('depositMethod','marzpay'))==='pesajet'?'checked':''} style="width:auto"> PesaJet</label>
+        <label style="width:auto;display:flex;align-items:center;gap:10px;margin:4px 0 2px;"><input type="radio" name="depGateway" id="depGatewayTavu" value="tavupay" ${normalizeProv(v('depositMethod','marzpay'))==='tavupay'?'checked':''} style="width:auto"> TavuPay <span class="muted" style="font-weight:400;font-size:11.5px">(recharges only; withdrawals are still sent by MarzPay)</span></label>
       </div>
       <h2 class="sec" style="margin:16px 0 4px">Withdrawals</h2>
       <p class="muted" style="margin:0 0 8px">Follows the recharge gateway above by default &mdash; pin a different method only if recharges and withdrawals should differ.</p>
@@ -3433,7 +3434,7 @@ async function renderSettings(){
     const d = await api('/admin/settings/update', { settings: {
       depositMethod: gateway, withdrawMethod: witMethod,
     } });
-    const payoutProv = witMethod==='follow' ? gateway : witMethod;
+    const payoutProv = witMethod==='follow' ? (gateway==='tavupay'?'marzpay':gateway) : witMethod;
     toast(d.status==='success'
       ? `Saved. Recharges: ${PROVIDER_LABEL[normalizeProv(gateway)]}. Payouts: ${PROVIDER_LABEL[normalizeProv(payoutProv)]}.`
       : (d.message||'Failed'), d.status==='success'?'ok':'err');

@@ -32,7 +32,8 @@ const w = dom.window, $ = id => w.document.getElementById(id), sleep = ms => new
   $('brandNameInput').value = 'Mint Gum'; $('saveBrandName').click(); await sleep(150);
   assert.equal(settings.brandName, 'Mint Gum', '"Save app name" saves a new name');
   for (const gone of ['sWeekendCash', 'sWeekendWit', 'sReqReferral']) assert.equal($(gone), null, gone + ' (a removed setting) is not on the page');
-  assert.ok(!/Saturday|weekend|referral code to sign up/i.test($('content').textContent), 'no weekend or require-referral wording on the Settings page');
+  // the withdrawal-hours line prints today's weekday from the live clock ("Right now it is Saturday 17:44 ..."), which is not weekend wording
+  assert.ok(!/Saturday|weekend|referral code to sign up/i.test($('content').textContent.replace(/Right now it is \w+day \d\d:\d\d/g, '')), 'no weekend or require-referral wording on the Settings page');
   // the Banners tab buttons are wired too
   w.document.querySelector('[data-tab="banners"]').click(); await sleep(400);
   $('annTitleInput').value = 'Welcome'; $('saveAnnText').click(); await sleep(150);

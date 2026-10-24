@@ -378,7 +378,7 @@ async function finish() {
      'but a Kenyan payout falls back to manual rather than reaching PesaJet');
 
   // The enums, or the admin can never save the choice.
-  ck(/'depositMethod' in updates && !\['marzpay', 'pesajet'\]/.test(S),
+  ck(/'depositMethod' in updates && !\['marzpay', 'pesajet', 'tavupay'\]/.test(S),
      'depositMethod accepts pesajet at /admin/settings/update');
   ck(/'withdrawMethod' in updates && !\['follow', 'marzpay', 'pesajet', 'manual'\]/.test(S),
      'and so does withdrawMethod');
@@ -885,7 +885,7 @@ async function finish() {
 
   // ── the admin panel can actually pick it ────────────────────────────────
   console.log('\n— the admin panel —');
-  ck(/function normalizeProv\(v\)\{ return \(v==='pesajet'\|\|v==='manual'\)/.test(adminSrc),
+  ck(/function normalizeProv\(v\)\{ return \(v==='pesajet'\|\|v==='tavupay'\|\|v==='manual'\)/.test(adminSrc),
      "the panel's own normalizeProv knows 'pesajet' (it mirrors the server's)");
   ck(/pesajet:'PesaJet'/.test(adminSrc), 'and labels it PesaJet');
   ck(/name="depGateway"[^>]*value="pesajet"/.test(adminSrc), 'PAY A can be set to PesaJet');

@@ -120,7 +120,7 @@ function boot(file, scope) {
     ok(tok.includes('location = /k7x2/h-' + T + '/pesajet {') && tok.includes('rewrite ^ /pesajet/webhook break;'), 'token: the secret address maps to Node /pesajet/webhook');
     ok(tok.includes('location = /k7x2/pesajet/webhook { return 404; }'), 'token: the plain webhook address answers 404');
     eq(tok.split('/h-' + T + '/pesajet').length - 1, 1, 'token: the secret address is in the member block only, not on the admin host');
-    eq(tok.replace(/    # secret PesaJet webhook address[\s\S]*?location = \/k7x2\/pesajet\/webhook \{ return 404; \}\n/, ''), base, 'token: nothing else in the file changes');
+    eq(tok.replace(/    # secret PesaJet webhook address[\s\S]*?location = \/k7x2\/tavupay\/webhook \{ return 404; \}\n/, ''), base, 'token: nothing else in the file changes');
     const hh = g({ MINT_HOOK_TOKEN: T, MINT_HOOK_HOST: 'hook.example.com' }, 'prod', 'example.com', 'Desk4mx9', 'adm.example.com');
     ok(/server_name hook\.example\.com;/.test(hh) && hh.includes('location = /h-' + T + '/pesajet {') && hh.includes('location / { return 404; }'), 'hook host: its own block serves only the secret address, everything else 404');
     ok(!hh.includes('/k7x2/h-' + T), 'hook host: the member host no longer carries the secret address');
