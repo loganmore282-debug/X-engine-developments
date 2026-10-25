@@ -709,7 +709,7 @@ function potatoCutout(src, w, h){
   return { data:out, w:cw, h:ch, empty:false };
 }
 // The icon slots (same names as POTATO_ICON_SLOTS in server.js). Add a name here AND in server.js to get a new upload box.
-const POTATO_ICON_LABELS = { ordergift:'Order gift picture', downloadapp:'Download app picture' };
+const POTATO_ICON_LABELS = { navhome:'Home tab icon', navincome:'Income tab icon', navteam:'Myteam tab icon', navshare:'Share tab icon', navmy:'My tab icon', recharge:'Recharge button icon (Home)', withdraw:'Withdraw button icon (Home)', service:'Service button icon (Home)', channel:'Channel button icon (Home)', ordergift:'Order gifts picture (floating chest)', downloadapp:'Download app picture (floating)', giftbox:'Gift Code page gift picture' };
 // An uploaded file -> a transparent, tightly cropped PNG data URL (longest side at most `maxDim`).
 function fileToCutoutPng(file, maxDim){
   return new Promise((resolve,reject)=>{
@@ -2572,6 +2572,8 @@ function editProduct(p, order){
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Each product has its OWN multiplier — nothing is fixed globally. Type a multiplier and the total payout fills in automatically (and vice versa). If both are set, the multiplier wins, so repricing a product updates its payout on its own.</p>
     <label>VIP level (0 = none)</label><input id="pVip" type="number" min="0" max="100" step="1" value="${p.vip>0?p.vip:''}" placeholder="0">
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">A member's VIP is the highest VIP among the products they own, including products you give them.</p>
+    <label>Order gift (0 = none)</label><input id="pGift" type="number" min="0" step="1" value="${p.orderGift>0?p.orderGift:''}" placeholder="0">
+    <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">The gift a member can receive once on the Order Gifts page after buying this product.</p>
     <label>Purchase limit per member (0 = no limit)</label><input id="pLimit" type="number" min="0" step="1" value="${p.buyLimit>0?p.buyLimit:''}" placeholder="0">
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Members see it on the card as owned/limit, for example 0/3.</p>
     <div class="row">
@@ -2666,7 +2668,7 @@ function editProduct(p, order){
     const typedKey = $('pKey').value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'').slice(0,24);
     const key = typedKey || p.key || ($('pLabel').value.toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,24)) || ('item'+Date.now());
     const body = { key, name:$('pLabel').value, category:$('pCat').value, price:$('pPrice').value,
-      expectedReturn:$('pRet').value, multiplier:_retIsTruth?'':$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, vip:$('pVip').value, order:$('pOrder').value,
+      expectedReturn:$('pRet').value, multiplier:_retIsTruth?'':$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, vip:$('pVip').value, orderGift:$('pGift').value, order:$('pOrder').value,
       image, active:$('pActive').checked, comingSoon:$('pSoon').checked,
       // datetime-local has no zone, so the browser reads it as local time --
       // which for the owner IS Uganda time. Sent as epoch ms so the server
@@ -3118,6 +3120,8 @@ async function renderBanners(){
   const logoImage = cir.logo||'';
   const profileLogoImage = cir.profilelogo||'';
   const loaderBgImage = cir.loaderbg||'';
+  const teamBannerImage = cir.teambanner||'', myBannerImage = cir.mybanner||'', aboutBannerImage = cir.aboutbanner||'', aboutLogoImage = cir.aboutlogo||'';
+  const aboutHtmlRes = await api('/admin/about-html'); const aboutHtmlText = aboutHtmlRes.status==='success' ? (aboutHtmlRes.html||'') : '';
   const announcementImage = (annr && annr.image) || '';
   const appIconImage = bar.appIcon||'';
   const appIconCustom = !!bar.appIconCustom;
@@ -3227,6 +3231,55 @@ async function renderBanners(){
         ${profileLogoImage?`<button class="btn danger sm" id="profileLogoClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="profileLogoFile" accept="image/*" hidden></label>
+    </div>
+
+    <h2 class="sec">Myteam page banner</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The picture at the top of the Myteam tab, behind the Team Count and Total Commission card. About 1000&times;560.</p>
+      <div class="banner-row">
+        ${teamBannerImage?`<img class="img-thumb" src="${esc(teamBannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${teamBannerImage?'Custom image':'<span class="muted">Not set</span>'}</div>
+        ${teamBannerImage?`<button class="btn danger sm" id="teamBannerClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="teamBannerFile" accept="image/*" hidden></label>
+    </div>
+
+    <h2 class="sec">My page banner</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The picture behind the phone number and the Balance card on the My tab. About 1000&times;560. The two numbers below fade and blur it.</p>
+      <div class="banner-row">
+        ${myBannerImage?`<img class="img-thumb" src="${esc(myBannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${myBannerImage?'Custom image':'<span class="muted">Not set</span>'}</div>
+        ${myBannerImage?`<button class="btn danger sm" id="myBannerClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="myBannerFile" accept="image/*" hidden></label>
+      <div class="row" style="margin-top:10px">
+        <div><label>Opacity (0&ndash;100%)</label><input id="myBannerOp" type="number" min="0" max="100" value="${esc(v('myBannerOpacity',100))}"></div>
+        <div><label>Blur (0&ndash;40 px)</label><input id="myBannerBlur" type="number" min="0" max="40" value="${esc(v('myBannerBlur',0))}"></div>
+      </div>
+      <button class="btn block" id="saveMyBanner" style="margin-top:14px">Save My page banner look</button>
+    </div>
+
+    <h2 class="sec">About page</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">Banner at the top and the round picture over its bottom edge. Everything under them is the HTML you paste below (scripts and frames are removed when it is saved).</p>
+      <div style="font-weight:700;margin:6px 0">Banner</div>
+      <div class="banner-row">
+        ${aboutBannerImage?`<img class="img-thumb" src="${esc(aboutBannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${aboutBannerImage?'Custom image':'<span class="muted">Not set</span>'}</div>
+        ${aboutBannerImage?`<button class="btn danger sm" id="aboutBannerClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="aboutBannerFile" accept="image/*" hidden></label>
+      <div style="font-weight:700;margin:14px 0 6px">Round picture</div>
+      <div class="banner-row">
+        ${aboutLogoImage?`<img class="img-thumb" src="${esc(aboutLogoImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${aboutLogoImage?'Custom image':'<span class="muted">Not set</span>'}</div>
+        ${aboutLogoImage?`<button class="btn danger sm" id="aboutLogoClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="aboutLogoFile" accept="image/*" hidden></label>
+      <label style="margin-top:14px">Page content (HTML)</label>
+      <textarea id="aboutHtmlInput" rows="12" style="width:100%;font-family:monospace;font-size:12px" placeholder="&lt;div&gt;...&lt;/div&gt;">${esc(aboutHtmlText)}</textarea>
+      <button class="btn block" id="saveAboutHtml" style="margin-top:10px">Save About page content</button>
     </div>
 
     <h2 class="sec">Loading screen box picture</h2>
@@ -3460,6 +3513,24 @@ function wireBannerHandlers(){
       if (d.status==='success') renderBanners();
     })());
   });
+  wirePotatoImageSlot('teambanner', 'teamBannerFile', 'teamBannerClear', 'Myteam banner saved', 'Myteam banner removed');
+  wirePotatoImageSlot('mybanner', 'myBannerFile', 'myBannerClear', 'My page banner saved', 'My page banner removed');
+  wirePotatoImageSlot('aboutbanner', 'aboutBannerFile', 'aboutBannerClear', 'About banner saved', 'About banner removed');
+  wirePotatoImageSlot('aboutlogo', 'aboutLogoFile', 'aboutLogoClear', 'About round picture saved', 'About round picture removed');
+  const saveMyBanner = $('saveMyBanner');
+  if (saveMyBanner) saveMyBanner.addEventListener('click', async()=>{
+    const op = +$('myBannerOp').value, bl = +$('myBannerBlur').value;
+    if (!Number.isFinite(op) || op<0 || op>100) return toast('Opacity must be between 0 and 100','err');
+    if (!Number.isFinite(bl) || bl<0 || bl>40) return toast('Blur must be between 0 and 40','err');
+    const d = await api('/admin/settings/update', { settings:{ myBannerOpacity:op, myBannerBlur:bl } });
+    toast(d.status==='success'?'My page banner look saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  const saveAboutHtml = $('saveAboutHtml');
+  if (saveAboutHtml) saveAboutHtml.addEventListener('click', async()=>{
+    const d = await api('/admin/about-html/set', { html: $('aboutHtmlInput').value });
+    toast(d.status==='success'?'About page content saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if (d.status==='success') $('aboutHtmlInput').value = d.html;
+  });
   wirePotatoImageSlot('loaderbg', 'loaderBgFile', 'loaderBgClear', 'Loading screen picture saved', 'Loading screen picture removed');
   wirePotatoImageSlot('profilelogo', 'profileLogoFile', 'profileLogoClear', 'Profile logo saved, live for every member', 'Profile logo removed');
   wirePotatoImageSlot('logo', 'brandLogoFile', 'brandLogoClear', 'Brand logo saved', 'Brand logo removed');
@@ -3565,6 +3636,12 @@ async function renderSettings(){
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodMarz" value="marzpay" ${v('withdrawMethod','follow')==='marzpay'||v('withdrawMethod','follow')==='automatic'?'checked':''} style="width:auto"> Always automatic (MarzPay sends payouts)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodPesa" value="pesajet" ${v('withdrawMethod','follow')==='pesajet'?'checked':''} style="width:auto"> Always automatic (PesaJet sends payouts)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="witMethod" id="witMethodManual" value="manual" ${v('withdrawMethod','follow')==='manual'?'checked':''} style="width:auto"> Always manual (you send payouts by hand)</label>
+      <h2 class="sec" style="margin:16px 0 4px">Deposit page buttons</h2>
+      <p class="muted" style="margin:0 0 8px">The names under the amount on the Deposit page, separated by commas; each shows after the app name (for example Potato Pay-A). The first one is chosen first. Up to 6.</p>
+      <input id="depNamesInput" maxlength="100" value="${esc(v('depositMethodNames','Pay-A'))}" placeholder="Pay-A">
+      <h2 class="sec" style="margin:16px 0 4px">Download App claim</h2>
+      <p class="muted" style="margin:0 0 8px">The amount the Claim button on the Download App page pays, once per member. 0 hides the button.</p>
+      <input id="appClaimInput" type="number" min="0" step="1" value="${esc(v('appClaimAmount',0))}" placeholder="0">
       <button class="btn block" id="saveDepMethod" style="margin-top:10px">Save payment method</button>
     </div>
 
@@ -3593,6 +3670,7 @@ async function renderSettings(){
     const witMethod = (document.querySelector('input[name="witMethod"]:checked')||{}).value || 'follow';
     const d = await api('/admin/settings/update', { settings: {
       depositMethod: gateway, withdrawMethod: witMethod,
+      depositMethodNames: $('depNamesInput').value, appClaimAmount: Math.max(0, Math.round(+$('appClaimInput').value || 0)),
     } });
     const payoutProv = witMethod==='follow' ? (gateway==='tavupay'?'marzpay':gateway) : witMethod;
     toast(d.status==='success'

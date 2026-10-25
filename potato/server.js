@@ -189,7 +189,7 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // /admin/app-icon/set carries TWO PNGs (512 and 192) in one body, so it
 // needs the image parser even though each one on its own is small.
 const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/potato-image/set', '/admin/app-icon/set', '/admin/messages/save']);
-const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set', '/admin/rules-content/set']);
+const HUGE_JSON_ROUTES = new Set(['/admin/about-html/set']);
 // PesaJet signs the RAW REQUEST PAYLOAD -- their dashboard says so in as many
 // words ("computing an HMAC-SHA256 digest of the raw request payload using
 // this secret"). A digest over a re-serialised object is NOT the same bytes,
@@ -592,6 +592,12 @@ const DEFAULT_SETTINGS = {
   // back. With no image set these do nothing at all.
   authHeroOpacity: 100, authHeroBlur: 0,
   authCardOpacity: 100, authCardBlur: 0,
+  // The My page banner (Admin > Banners > My page banner): 100 = as uploaded, 0 blur = sharp.
+  myBannerOpacity: 100, myBannerBlur: 0,
+  // The names under the Deposit page's method buttons, comma separated; each shows after the app name ("Potato Pay-A"). The first one is chosen at first.
+  depositMethodNames: 'Pay-A',
+  // What "Claim" on the Download App page pays (once per member); 0 hides the button.
+  appClaimAmount: 0,
   // The sign-up captcha picture is off: the owner's Create Account screen has none. Sign-up is guarded by the rate limits instead.
   signupCaptcha: false,
   // What Telegram shows when a link to the app is pasted (title and text; the picture is the 'linkpreview' image). Empty = the app's own defaults.
@@ -953,8 +959,8 @@ async function getHelpBanner() {
 // prompt directly, in user-src/original_module.js -- see its own comment.
 // Transparent cut-out ICONS the owner uploads in the admin panel (Banners > Icons); the panel removes each picture's background and crops it
 // tight before saving, so these are always PNGs. To add an icon, add its name here AND its label in admin-src (POTATO_ICON_LABELS).
-const POTATO_ICON_SLOTS = ['ordergift', 'downloadapp'];
-const POTATO_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'banner4', 'banner5', 'promobanner', 'checkinbanner', 'profilelogo', 'loaderbg', 'downloadbg', 'linkpreview', ...POTATO_ICON_SLOTS];
+const POTATO_ICON_SLOTS = ['navhome', 'navincome', 'navteam', 'navshare', 'navmy', 'recharge', 'withdraw', 'service', 'channel', 'ordergift', 'downloadapp', 'giftbox'];
+const POTATO_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'banner4', 'banner5', 'promobanner', 'checkinbanner', 'profilelogo', 'loaderbg', 'downloadbg', 'linkpreview', 'teambanner', 'mybanner', 'aboutbanner', 'aboutlogo', ...POTATO_ICON_SLOTS];
 const _potatoImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getPotatoImage(slot) {
@@ -1112,12 +1118,22 @@ async function getAnnouncementImage() {
 // embedded images -- folding that into /public/settings would bloat EVERY
 // settings fetch on EVERY page load, not just the rare visit to this page.
 let _aboutCache = null, _aboutCacheTs = 0;
-async function getAboutContent() {
+// The About page under its banners is ONE piece of HTML the owner pastes in Admin > Banners > About page. It is cleaned here when it is
+// saved (no scripts, frames, event handlers or javascript: links) and cleaned again by the app before it is shown.
+function cleanAboutHtml(raw) {
+  let h = String(raw == null ? '' : raw).slice(0, 200000);
+  h = h.replace(/<\s*(script|iframe|object|embed|link|meta|base|form|noscript)\b[\s\S]*?(<\s*\/\s*\1\s*>|$)/gi, '');
+  h = h.replace(/<\s*(script|iframe|object|embed|link|meta|base|form|noscript)\b[^>]*>/gi, '');
+  h = h.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  h = h.replace(/(href|src|xlink:href|action|formaction)\s*=\s*("\s*(javascript|vbscript|data:text)[^"]*"|'\s*(javascript|vbscript|data:text)[^']*')/gi, '$1="#"');
+  return h;
+}
+async function getAboutHtml() {
   if (Date.now() - _aboutCacheTs < 60 * 1000 && _aboutCache !== null) return _aboutCache;
   try {
     const snap = await db.collection('content').doc('about').get();
-    _aboutCache = (snap.exists && Array.isArray(snap.data().blocks)) ? snap.data().blocks : null;
-  } catch (_) { _aboutCache = _aboutCache || null; }
+    _aboutCache = snap.exists && typeof snap.data().html === 'string' ? cleanAboutHtml(snap.data().html) : '';
+  } catch (_) { _aboutCache = _aboutCache || ''; }
   _aboutCacheTs = Date.now();
   return _aboutCache;
 }
@@ -4095,21 +4111,22 @@ ${imageUrl ? `<meta name="twitter:image" content="${htmlText(imageUrl)}">\n` : '
 });
 app.get('/public/potato-images', async (req, res) => {
   try {
-    const [logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, downloadbg] = await Promise.all([
+    const [logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, downloadbg, teambanner, mybanner, aboutbanner, aboutlogo] = await Promise.all([
       getPotatoImage('logo'),
       getPotatoImage('authhero'), getPotatoImage('authlogo'), getPotatoImage('banner2'),
       getPotatoImage('banner3'), getPotatoImage('banner4'), getPotatoImage('banner5'), getPotatoImage('promobanner'),
       getPotatoImage('checkinbanner'), getPotatoImage('profilelogo'), getPotatoImage('downloadbg'),
+      getPotatoImage('teambanner'), getPotatoImage('mybanner'), getPotatoImage('aboutbanner'), getPotatoImage('aboutlogo'),
     ]);
     const iconList = await Promise.all(POTATO_ICON_SLOTS.map(getPotatoImage));
     const icons = {}; POTATO_ICON_SLOTS.forEach((k, n) => { icons[k] = iconList[n] || null; });
-    publicJson(req, res, { status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, downloadbg, icons }, IMAGE_CACHE);
+    publicJson(req, res, { status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, downloadbg, teambanner, mybanner, aboutbanner, aboutlogo, icons }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
 // of /public/settings, see getAboutContent()'s own comment for why.
 app.get('/public/about-content', async (_req, res) => {
-  try { res.json({ status: 'success', blocks: await getAboutContent() }); }
+  try { res.json({ status: 'success', html: await getAboutHtml() }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // ═══════════════════════════════════════════
@@ -6620,6 +6637,7 @@ app.get('/bank/supported-banks', async (req, res) => {
   res.json({ status: 'success', banks: banks.map(b => b.name) });
 });
 const MAX_SAVED_PAYOUT_ACCOUNTS = 1; // one wallet per member; /bank/save edits it in place
+const BANK_CARD_LIMIT = 5;
 app.post('/bank/save', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -6679,10 +6697,11 @@ app.post('/bank/save', async (req, res) => {
     }
     // Saving/removing a payout destination here doesn't move any money by
     // itself -- see /withdraw/request for the actual money-moving path.
-    // One payout wallet per member: saving EDITS it in place (any older extra rows are dropped), it never adds a second.
+    // A member may keep up to BANK_CARD_LIMIT cards; the first one saved is the active one (the one a withdrawal goes to), and /bank/select
+    // changes it. Saving a number the member already holds is refused (it is already there).
     // ONE PAYOUT ACCOUNT, ONE MEMBER: a wallet number (or bank account) that another member already holds cannot be bound again; the member
     // is asked to use a different one. Checked under a lock keyed by the number itself, so two members saving the same number at the same
-    // moment cannot both succeed. A member re-saving their OWN number is fine.
+    // moment cannot both succeed.
     const taken = await withLock('bank-dest:' + (isMobileMoney ? 'mm' : rawNetwork) + ':' + destValue, async () => {
       const same = await db.collection('bankAccounts').where('phone', '==', destValue).get();
       const other = (same.docs || []).some(d => {
@@ -6690,23 +6709,42 @@ app.post('/bank/save', async (req, res) => {
         return r.userId !== userId && (isMobileMoney ? NETWORK_NAMES.has(r.network) : r.network === rawNetwork);
       });
       if (other) return true;
+      let verdict = false;
       await withLock('bank-save:' + userId, async () => {
         const mine = await db.collection('bankAccounts').where('userId', '==', userId).get();
         const rows = mine.docs || [];
-        if (rows.length) {
-          await rows[0].ref.update({ holder: verifiedHolder, network: rawNetwork, phone: destValue, updatedAt: FieldValue.serverTimestamp() });
-          for (const extra of rows.slice(1)) await extra.ref.delete();
-          return;
-        }
-        await db.collection('bankAccounts').add({ userId, holder: verifiedHolder, network: rawNetwork, phone: destValue, createdAt: FieldValue.serverTimestamp() });
+        if (rows.some(d => d.data().phone === destValue && (isMobileMoney ? NETWORK_NAMES.has(d.data().network) : d.data().network === rawNetwork))) { verdict = 'exists'; return; }
+        if (rows.length >= BANK_CARD_LIMIT) { verdict = 'limit'; return; }
+        await db.collection('bankAccounts').add({ userId, holder: verifiedHolder, network: rawNetwork, phone: destValue, isDefault: rows.length === 0, createdAt: FieldValue.serverTimestamp() });
       });
-      return false;
+      return verdict;
     });
+    if (taken === 'exists') return res.status(409).json({ status: 'error', code: 'CARD_EXISTS', message: 'This card is already saved.' });
+    if (taken === 'limit') return res.status(400).json({ status: 'error', code: 'CARD_LIMIT', message: `You can save up to ${BANK_CARD_LIMIT} bank cards.` });
     if (taken) return res.status(409).json({ status: 'error', code: 'WALLET_TAKEN', message: 'This wallet account is already used by another member. Please use a different account.' });
     res.json({ status: 'success' });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not save the withdrawal account' });
   }
+});
+// Makes one of the member's own saved cards the active one (the card a withdrawal goes to).
+app.post('/bank/select', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const id = textOf(req.body.id);
+    if (!id) return res.status(400).json({ status: 'error', message: 'Choose a card.' });
+    let found = false;
+    await withLock('bank-save:' + userId, async () => {
+      const mine = await db.collection('bankAccounts').where('userId', '==', userId).get();
+      const rows = mine.docs || [];
+      if (!rows.some(d => d.id === id)) return;
+      found = true;
+      for (const d of rows) { const want = d.id === id; if ((d.data().isDefault === true) !== want) await d.ref.update({ isDefault: want }); }
+    });
+    if (!found) return res.status(404).json({ status: 'error', message: 'That card is not yours.' });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not change the card' }); }
 });
 app.get('/bank/list', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -6758,6 +6796,80 @@ function treasureKeyLockedOut(userId) {
   const now = Date.now(), rec = (_wrongKeys.get(userId) || []).filter(t => now - t < 600000);
   return rec.length >= 8;
 }
+// The one-time "Claim" on the Download App page (Admin > Settings > App claim amount; 0 = off). Claimed once per member by an atomic token.
+app.post('/app/claim', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const amount = Math.round(Number((await getSettings()).appClaimAmount) || 0);
+    if (amount <= 0) return res.status(400).json({ status: 'error', message: 'There is nothing to claim right now.' });
+    let result = null;
+    await withLock('appclaim:' + uid, async () => {
+      const uSnap = await db.collection('users').doc(uid).get();
+      if (!uSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
+      if (uSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
+      const applied = await withLock('bal:' + uid, () => db.collection('users').doc(uid).updateIf(
+        { appClaimed: { $ne: true } },
+        { walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount), appClaimed: true }
+      ));
+      if (!applied) { result = { code: 400, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'You have already claimed this.' } }; return; }
+      const { date, time } = nowStr();
+      await db.collection('transactions').add({ userId: uid, statementId: newStatementId(), type: 'app_claim', description: 'App download reward', amount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
+      const body = { status: 'success', amount };
+      try { const fresh = await db.collection('users').doc(uid).get(); const bal = fresh.exists ? Number(fresh.data().walletBalance) : NaN; if (Number.isFinite(bal)) body.walletBalance = round2(bal); } catch (_) {}
+      result = { code: 200, body };
+    });
+    res.status(result.code).json(result.body);
+  } catch (e) { console.error('App claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim right now' }); }
+});
+// ── ORDER GIFTS ──
+// Each product can carry a gift (Admin > Products > Order gift). A member who has BOUGHT that product (a product the admin gave does not count)
+// may receive its gift once. The claim is made once for ever by an atomic token on the member's own record, so a double tap, a retry after a
+// crash or two phones at once can never pay twice.
+app.get('/gifts/list', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const [products, invSnap, uSnap] = await Promise.all([getProducts(), db.collection('investments').where('userId', '==', uid).get(), db.collection('users').doc(uid).get()]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
+    const bought = new Set(); invSnap.forEach(d => { const r = d.data(); if (r.granted !== true && r.tierKey) bought.add(r.tierKey); });
+    const claimed = new Set(Array.isArray(uSnap.data().orderGiftsClaimed) ? uSnap.data().orderGiftsClaimed : []);
+    const gifts = products.filter(p => p.active !== false && Number(p.orderGift) > 0).sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+      .map(p => ({ key: p.key, name: p.name, amount: Number(p.orderGift), owned: bought.has(p.key), claimed: claimed.has(p.key) }));
+    res.json({ status: 'success', gifts });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the order gifts' }); }
+});
+app.post('/gifts/claim', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const key = textOf(req.body.key).trim();
+    if (!key) return res.status(400).json({ status: 'error', message: 'Choose a gift.' });
+    let result = null;
+    await withLock('gift:' + uid + ':' + key, async () => {
+      const [products, invSnap, uSnap] = await Promise.all([getProducts(), db.collection('investments').where('userId', '==', uid).get(), db.collection('users').doc(uid).get()]);
+      if (!uSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
+      if (uSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
+      const product = products.find(p => p.key === key);
+      const amount = product ? Math.round(Number(product.orderGift) || 0) : 0;
+      if (!product || amount <= 0) { result = { code: 404, body: { status: 'error', message: 'This product has no gift.' } }; return; }
+      let owned = false; invSnap.forEach(d => { const r = d.data(); if (r.tierKey === key && r.granted !== true) owned = true; });
+      if (!owned) { result = { code: 400, body: { status: 'error', code: 'NOT_OWNED', message: 'Buy this product first to receive its gift.' } }; return; }
+      const applied = await withLock('bal:' + uid, () => db.collection('users').doc(uid).updateIf(
+        { orderGiftsClaimed: { $ne: key } },
+        { walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount), orderGiftsClaimed: FieldValue.arrayUnion(key) }
+      ));
+      if (!applied) { result = { code: 400, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'You have already received this gift.' } }; return; }
+      const { date, time } = nowStr();
+      await db.collection('transactions').add({ userId: uid, statementId: newStatementId(), type: 'order_gift', description: `${product.name} order gift`, giftKey: key,
+        amount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
+      const body = { status: 'success', amount };
+      try { const fresh = await db.collection('users').doc(uid).get(); const bal = fresh.exists ? Number(fresh.data().walletBalance) : NaN; if (Number.isFinite(bal)) body.walletBalance = round2(bal); } catch (_) {}
+      result = { code: 200, body };
+    });
+    res.status(result.code).json(result.body);
+  } catch (e) { console.error('Gift claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not receive this gift' }); }
+});
 app.post('/redeem', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
@@ -7422,6 +7534,7 @@ const SETTINGS_CRITICAL_RANGES = {
   authHeroOpacity: [0, 100], authHeroBlur: [0, 40],
   authCardOpacity: [0, 100], authCardBlur: [0, 40],
   productImageOpacity: [0, 100],
+  myBannerOpacity: [0, 100], myBannerBlur: [0, 40], appClaimAmount: [0, MAX_MONEY_AMOUNT],
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
   innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
 };
@@ -7507,6 +7620,10 @@ app.post('/admin/settings/update', async (req, res) => {
     // anyway -- this is the second lock, so a name that somehow reaches an
     // unescaped sink later cannot carry markup with it.
     // The welcome dialog's title and its lines of text: plain text, capped.
+    if ('depositMethodNames' in updates) {
+      const names = String(updates.depositMethodNames == null ? '' : updates.depositMethodNames).split(',').map(x => x.replace(/[<>]/g, '').trim().slice(0, 20)).filter(Boolean).slice(0, 6);
+      updates.depositMethodNames = names.length ? names.join(', ') : 'Pay-A';
+    }
     if ('annTitle' in updates) updates.annTitle = String(updates.annTitle == null ? '' : updates.annTitle).trim().slice(0, 60);
     if ('annBody' in updates) updates.annBody = String(updates.annBody == null ? '' : updates.annBody).replace(/\r/g, '').trim().slice(0, 1200);
     if ('brandName' in updates) {
@@ -7603,18 +7720,34 @@ app.post('/admin/settings/update', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save settings' }); }
 });
+app.get('/admin/about-html', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { const snap = await db.collection('content').doc('about').get(); res.json({ status: 'success', html: snap.exists && typeof snap.data().html === 'string' ? snap.data().html : '' }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the About page' }); }
+});
+app.post('/admin/about-html/set', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const html = cleanAboutHtml(req.body.html);
+    await db.collection('content').doc('about').set({ html });
+    _aboutCacheTs = 0; _aboutCache = null;
+    logAdminAction(req, 'about_html_set', { length: html.length });
+    res.json({ status: 'success', html });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the About page' }); }
+});
 app.get('/admin/potato-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg, linkpreview] = await Promise.all([
+    const [logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg, linkpreview, teambanner, mybanner, aboutbanner, aboutlogo] = await Promise.all([
       getPotatoImage('logo'),
       getPotatoImage('authhero'), getPotatoImage('authlogo'), getPotatoImage('banner2'),
       getPotatoImage('banner3'), getPotatoImage('banner4'), getPotatoImage('banner5'), getPotatoImage('promobanner'),
       getPotatoImage('checkinbanner'), getPotatoImage('profilelogo'), getPotatoImage('loaderbg'), getPotatoImage('downloadbg'), getPotatoImage('linkpreview'),
+      getPotatoImage('teambanner'), getPotatoImage('mybanner'), getPotatoImage('aboutbanner'), getPotatoImage('aboutlogo'),
     ]);
     const iconList = await Promise.all(POTATO_ICON_SLOTS.map(getPotatoImage));
     const icons = {}; POTATO_ICON_SLOTS.forEach((k, n) => { icons[k] = iconList[n] || null; });
-    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg, linkpreview, icons });
+    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg, linkpreview, teambanner, mybanner, aboutbanner, aboutlogo, icons });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/potato-image/set', async (req, res) => {
@@ -7885,7 +8018,13 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     vip = Number(p.vip);
     if (!Number.isInteger(vip) || vip < 0 || vip > 100) return refuse('VIP level', 'must be a whole number from 0 to 100');
   }
-  return { key, name, category: p?.category === 'new' ? 'new' : 'main', price, cycle, expectedReturn, multiplier, buyLimit, vip, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
+  // The gift a member may receive once on the Order Gifts page after buying this product (0 = no gift for it).
+  let orderGift = 0;
+  if (p?.orderGift != null && p.orderGift !== '') {
+    orderGift = Math.round(Number(p.orderGift));
+    if (!Number.isFinite(orderGift) || orderGift < 0 || orderGift > MAX_MONEY_AMOUNT) return refuse('Order gift', `must be a number between 0 and ${MAX_MONEY_AMOUNT} (0 = no gift)`);
+  }
+  return { key, name, category: p?.category === 'new' ? 'new' : 'main', price, cycle, expectedReturn, multiplier, buyLimit, vip, orderGift, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
 }
 // `?region=ke` hands the editor that region's view of every product -- its
 // own price where it has one, Uganda's where it has not -- plus `overrides`,
@@ -10020,7 +10159,7 @@ app.get('/admin/integrity', async (req, res) => {
 // earned" label is a real misnomer -- this field is cashback PLUS
 // referral commission PLUS checkin/gift-code/Task-Center/Mission-Center
 // bonuses, all folded into one number.
-const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward', 'turntable'];
+const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward', 'turntable', 'order_gift', 'app_claim'];
 async function computeUserRealTotals(userId) {
   const [txSnap, invSnap, witSnap] = await Promise.all([
     db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
