@@ -104,8 +104,8 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     const html = fs.readFileSync(htmlPath, 'utf8');
     const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
     const server = fs.readFileSync(__dirname + '/server.js', 'utf8');
-    ok(html.includes('class="ma-tabs"') && html.includes('id="tabLogin"') && html.includes('id="tabRegister"') && html.includes('id="authLogoImg"'), 'Login and Sign Up have the tab bar, the banner and the circle logo (owner screenshots)');
-    ok(html.includes('id="authHeroBg"') && html.includes('aria-label="Login"') && html.includes('aria-label="Sign Up"'), 'the banner slot and both panes are there');
+    ok(html.includes('id="authTitle"') && html.includes('class="pa-hero"') && html.includes('id="authLogoImg"') && !html.includes('class="ma-tabs"'), 'Login and Create Account have the banner, the circle logo and a title, no tab bar (owner screenshots)');
+    ok(html.includes('id="authHeroBg"') && html.includes('aria-label="Login"') && html.includes('aria-label="Create Account"'), 'the banner slot and both panes are there');
     ok(html.includes('id="regTradePin"') && !html.includes('id="regOtpRow"') && !html.includes('id="regOtp"'), 'registration matches screenshot fields and has no OTP field');
     ok(!html.includes('id="lsPercent"') && !html.includes('class="ring-loader"'), 'startup loading animation is removed');
     ok(!admin.includes('id="authCardOp"') && admin.includes('id="authLogoFile"') && admin.includes('id="authHeroOp"'), 'admin: banner opacity and blur, circle logo upload; the frosted-card controls are gone');
@@ -122,7 +122,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     w.eval("STATE.settings={authHeroOpacity:60,authHeroBlur:8};STATE.authHeroImage='data:image/png;base64,AA==';applyAuthBackgrounds()");
     eq(w.document.documentElement.style.getPropertyValue('--auth-hero-op'), '0.6', 'background opacity reaches the screen');
     eq(w.document.documentElement.style.getPropertyValue('--auth-hero-blur'), '8px', 'background blur reaches the screen');
-    ok(w.document.querySelectorAll('.ma-card svg').length >= 4, 'auth card icons remain inline SVGs');
+    ok(w.document.querySelectorAll('.pa-f svg').length >= 4, 'auth box icons remain inline SVGs');
     ok(!/Forgot Password\?|forgotPane|doForgot/.test(html) && html.includes('toggleAuthEye'), 'no Forgot Password; the password eye is there (owner screenshots)');
     ok(html.includes('id="rememberMe"') && html.includes('Remember me'), 'Remember me checkbox is on the login card');
     ok(!/id="[a-z]+BrandFallback"|>P<\/span>/.test(html), 'no placeholder letter on the auth screens');
@@ -162,15 +162,15 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     ok(/Could not load the sign-in service/.test($(w, 'notifyMsg').textContent) || t.some(m => /Could not load the sign-in service/.test(m)), 'watchdog says what is wrong');
     $(w, 'loginPhone').value = '0771234567'; $(w, 'loginPassword').value = 'secret1secret1';
     t.length = 0; await w.doLogin();
-    const le = $(w, 'loginErr').textContent;   // login reasons are the red line under the password box
-    eq(t.length, 0); ok(/not available right now/.test(le) && !/not a function/.test(le), 'login says so instead of throwing: ' + le);
+    const le = t[0] || '';   // every login refusal except a wrong phone number is the centred notice
+    ok(/not available right now/.test(le) && !/not a function/.test(le), 'login says so instead of throwing: ' + le);
     eq($(w, 'loginBtn').disabled, false, 'login button usable again');
-    eq($(w, 'loginBtn').textContent, 'Log In');
-    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; $(w, 'regCaptcha').value = '1234'; w.eval("STATE.captchaId='cid'"); $(w, 'regReferral').value = 'abc';
+    eq($(w, 'loginBtn').textContent, 'Login');
+    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; $(w, 'regReferral').value = 'abc';
     w._settings = { otpVerificationEnabled: false, referralRequired: false }; w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:false}');
     t.length = 0; await w.doRegister();
     ok(t.length === 1 && /not available right now/.test(t[0]), 'sign-up says so too: ' + t[0]);
-    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Sign Up');
+    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Register');
     await closeSoon(dom);
   }
   {
@@ -207,16 +207,16 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     $(w, 'loginPhone').value = phone; $(w, 'loginPassword').value = setup.pass || 'secret1secret1';
     await w.doLogin(); await sleep(60);
     eq($(w, 'loginBtn').disabled, false, 'login button usable again');
-    eq($(w, 'loginBtn').textContent, 'Log In');
+    eq($(w, 'loginBtn').textContent, 'Login');
     eq(shown(w, 'loadingScreen'), false, 'no stuck spinner');
     if (expectOpen) { eq(shown(w, 'app'), true, 'app open'); eq(shown(w, 'authScreen'), false); ok(!t.some(m => /Login successful/.test(m)), 'a login shows no "Login successful" notice'); }
-    else { eq(shown(w, 'app'), false, 'app not open'); eq(shown(w, 'authScreen'), true, 'login screen showing'); ok(t.concat([$(w, 'loginErr').textContent, $(w, 'loginPhoneErr').textContent]).some(m => expectMsg.test(m)), 'tells the member why (pop-up or the red line under the box): ' + JSON.stringify(t)); }
+    else { eq(shown(w, 'app'), false, 'app not open'); eq(shown(w, 'authScreen'), true, 'login screen showing'); ok(t.concat(['', $(w, 'loginPhoneErr').textContent]).some(m => expectMsg.test(m)), 'tells the member why (pop-up or the red line under the box): ' + JSON.stringify(t)); }
     ok(!t.some(m => /Firebase|not a function|undefined|Session changed/.test(m)), 'no developer text: ' + JSON.stringify(t));
     if (expectSignOut !== null) eq(log.signOuts > 0, expectSignOut, 'signed-out state');
     await closeSoon(dom);
   }
   await loginScenario({}, { expectOpen: true });
-  await loginScenario({ pass: 'wrongpass' }, { expectOpen: false, expectMsg: /^Incorrect password$/ });
+  await loginScenario({ pass: 'wrongpass' }, { expectOpen: false, expectMsg: /^Incorrect phone number or password$/ });
   await loginScenario({ fb: { code: 'auth/network-request-failed' } }, { expectOpen: false, expectMsg: /Check your connection/ });
   await loginScenario({ fb: { code: 'auth/user-disabled' } }, { expectOpen: false, expectMsg: /disabled/ });
   await loginScenario({ fb: { code: 'auth/too-many-requests' } }, { expectOpen: false, expectMsg: /Too many attempts/ });
@@ -278,8 +278,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
     const t = toasts(w), log = fakeFirebase(w, {});
     w.eval('STATE.settings={otpVerificationEnabled:true,referralRequired:false}');
-    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '12x'; $(w, 'regCaptcha').value = '1234'; w.eval("STATE.captchaId='cid'");
-    await w.doRegister();
+    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '12x'; await w.doRegister();
     eq(log.creates, 0, 'invalid trade PIN cannot create an account');
     ok(t.some(m => /Trade Password must be exactly 6 digits/.test(m)), 'trade PIN validation is clear');
     await closeSoon(dom);
@@ -291,12 +290,11 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
     const t = toasts(w); fakeFirebase(w, {});
     w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:false}');
-    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; $(w, 'regCaptcha').value = '1234'; w.eval("STATE.captchaId='cid'");
-    w._fbFail = { code: 'auth/network-request-failed', message: 'Firebase: Error (auth/network-request-failed).' };
+    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; w._fbFail = { code: 'auth/network-request-failed', message: 'Firebase: Error (auth/network-request-failed).' };
     await w.doRegister();
     eq(w.eval('window._pendingRegPhone'), '', 'a failed sign-up stages nothing for the next sign-in');
     ok(t.length === 1 && /Check your connection/.test(t[0]) && !/Firebase/.test(t[0]), 'friendly message: ' + t[0]);
-    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Sign Up');
+    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Register');
     await closeSoon(dom);
   }
   {
@@ -313,12 +311,12 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
       if (p === '/account') return profile ? { status: 200, body: okAccount } : { status: 404, body: { status: 'error', code: 'NOT_FOUND', message: 'User not found' } };
       return null;
     });
-    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; $(w, 'regCaptcha').value = '1234'; w.eval("STATE.captchaId='cid'"); $(w, 'regReferral').value = 'WRONG';
+    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; $(w, 'regReferral').value = 'WRONG';
     await w.doRegister(); await sleep(80);
     eq(shown(w, 'app'), false); eq(shown(w, 'authScreen'), true, 'bad code: back on the form');
     ok(t.some(m => /does not exist/.test(m)), 'says the code is wrong');
     eq($(w, 'regBtn').disabled, false, 'Register usable again');
-    t.length = 0; $(w, 'regReferral').value = 'GOODCODE'; $(w, 'regCaptcha').value = '1234'; w.eval("STATE.captchaId='cid2'");   // the first picture was used up by the first attempt
+    t.length = 0; $(w, 'regReferral').value = 'GOODCODE'; // the first picture was used up by the first attempt
     await w.doRegister(); await sleep(150);
     eq(shown(w, 'app'), false, 'corrected code: a new account lands on Login, not in the app'); eq(shown(w, 'authScreen'), true); eq(shown(w, 'loadingScreen'), false);
     eq($(w, 'loginPhone').value, '0771234567', 'the number is already filled in on Login'); eq($(w, 'loginPassword').value, '', 'only the password is left to type');
@@ -338,12 +336,11 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     let loaderSeen = false; const ls = $(w, 'loadingScreen'); ls.style.display = 'none';
     new w.MutationObserver(() => { if (ls.style.display !== 'none') loaderSeen = true; }).observe(ls, { attributes: true, attributeFilter: ['style'] });
     const calls = fakeServer(w, async (p, b) => p === '/register' ? (profile = true, eq(b.pin, '123456', 'trade PIN is sent for registration'), ok(!Object.hasOwn(b, 'otpTicket'), 'registration sends no OTP ticket'), { status: 200, body: { status: 'success' } }) : p === '/account' ? (profile ? { status: 200, body: okAccount } : { status: 404, body: { status: 'error', code: 'NOT_FOUND' } }) : null);
-    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; $(w, 'regCaptcha').value = '1234'; w.eval("STATE.captchaId='cid'");
-    await w.doRegister(); await sleep(120);
+    $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; await w.doRegister(); await sleep(120);
     eq(shown(w, 'app'), false, 'a new account does not open the app'); eq(shown(w, 'authScreen'), true, 'it lands on Login'); eq(shown(w, 'loadingScreen'), false);
     eq(loaderSeen, false, 'the startup loader never appeared during sign-up');
     eq($(w, 'loginPhone').value, '0771234567', 'the number is already on Login'); eq($(w, 'loginPassword').value, '', 'only the password is left to type');
-    eq(w.eval("document.getElementById('tabLogin').getAttribute('aria-selected')"), 'true', 'the Login tab is the open one');
+    eq($(w, 'authTitle').textContent, 'Login', 'the Login form is the open one');
     ok(t.some(m => /Registration successful/.test(m)) && !t.some(m => /Login successful/.test(m)), 'sign-up toast, not login toast: ' + JSON.stringify(t));
     eq(log.signOuts, 1, 'the member is signed out once, so they log in themselves');
     ok(!calls.some(p => p.startsWith('/auth/otp/')), 'registration sends no OTP requests even when the setting is enabled');

@@ -760,6 +760,7 @@ async function finish() {
       adminUserRegions: async () => ({ u1: 'ug', u2: 'ug' }),
       rowRegionKey: (row, map) => row.regionKey || map[row.userId] || 'ug',
       regionByKey: () => ({ currency: 'UGX' }),
+      DEFAULT_REGION_KEY: 'ug', DEFAULT_REGION: { currency: 'UGX' },
       // The real one: status alone is not enough, because claim-before-credit
       // can leave 'matched' with the wallet write unfinished.
       depositFullyCredited: r => r.status === 'success' && !!r.creditedAt,

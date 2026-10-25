@@ -36,7 +36,7 @@ function makeEnv() {
   let failStore = false;
   const dbProxy = new Proxy(db, { get: (t, k) => k === 'collection' ? col => { if (failStore && col === 'memberSessions') throw new Error('mongo down'); return t.collection(col); } : t[k] });
   const fn = new Function('textOf', 'passwordOf', 'memberLoginIpGuard', 'app', 'db', 'crypto', 'sessionPolicy', 'FieldValue', 'cleanPhone', 'badPhoneMessage', 'tsMillis', 'rateLimit', 'console', 'captcha',
-    'const _lockTails = new Map();\n' + helpSrc + '\n' + hashSrc.replace("const _loginFails", "") + '\n' + lockSrc + '\n' + authSrc + '\n' + loginSrc + '\nreturn { _decodeAuth, verifyAuth, verifyAuthWithEmail, setMemberPassword, deleteMemberLogin, findAccountByUid };')
+    'const _lockTails = new Map();\nconst getSettings = async () => ({ signupCaptcha: globalThis.__capOn === true });\n' + helpSrc + '\n' + hashSrc.replace("const _loginFails", "") + '\n' + lockSrc + '\n' + authSrc + '\n' + loginSrc + '\nreturn { _decodeAuth, verifyAuth, verifyAuthWithEmail, setMemberPassword, deleteMemberLogin, findAccountByUid };')
     (v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''), v => typeof v === 'string' ? v : '', { locked: () => false, fail() {}, clear() {} }, app, dbProxy, crypto, sessionPolicy, { serverTimestamp: () => new Date(), delete: () => DEL }, p => { const d = String(p || '').replace(/\D/g, ''); return d.length === 10 ? d : ''; }, () => 'bad phone',
       v => v instanceof Date ? v.getTime() : Number(v) || 0, lim, { error() {}, warn: (...m) => warnings.push(m.join(' ')) }, captcha);
   const call = async (path, body, headers = {}) => { if (path === '/auth/signup' && body && !('captchaId' in body)) body = Object.assign({ captchaId: 'cid', captchaCode: '1234' }, body);
@@ -59,12 +59,15 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
   r = await E.call('/auth/signup', { phone: '0770000009', password: 'five5' }); eq([r.code, r.body.code], [400, 'WEAK_PASSWORD'], 'five characters are refused (minimum is 6)'); eq(r.body.message, 'Password must be at least 6 characters.');
   r = await E.call('/auth/signup', { phone: '0770000019', password: 'six6xy' }); eq(r.code, 200, 'six characters are accepted');
   for (const [i, easy] of ['123456', 'password', 'qwerty', '111111', '0770000001'].entries()) { const rr = await E.call('/auth/signup', { phone: '07700001' + String(20 + i), password: easy }); ok(rr.code === 200, 'any password of 6 or more is accepted, even a common one: ' + easy); }
-  // the captcha: asked first, wrong or missing answers are refused and never create an account
+  // the captcha (only when the setting `signupCaptcha` is on; Potato's Create Account has none): asked first, wrong or missing answers are refused and never create an account
+  globalThis.__capOn = true;
   r = await E.call('/auth/signup', { phone: '0770000031', password: 'secret1secret1', captchaId: 'cid', captchaCode: '' }); eq([r.code, r.body.code], [400, 'CAPTCHA_REQUIRED']);
   r = await E.call('/auth/signup', { phone: '0770000031', password: 'secret1secret1', captchaId: 'cid', captchaCode: '9999' }); eq([r.code, r.body.code], [400, 'BAD_CAPTCHA']);
   r = await E.call('/auth/signup', { phone: '0770000031', password: 'secret1secret1', captchaId: 'zzz', captchaCode: '1234' }); eq([r.code, r.body.code], [400, 'BAD_CAPTCHA']);
   r = await E.call('/auth/signup', { phone: '0770000031', password: 'secret1secret1', captchaId: { $ne: 1 }, captchaCode: { $ne: 1 } }); eq([r.code, r.body.code], [400, 'CAPTCHA_REQUIRED']);
   ok(![...E.store.authAccounts].some(([, a]) => a.phone && String(a.phone).endsWith('770000031')), 'a failed captcha creates no account');
+  globalThis.__capOn = false;
+  { const plain = await E.call('/auth/signup', { phone: '0770000041', password: 'secret1secret1', captchaId: 'zzz', captchaCode: '' }); eq(plain.code, 200, 'with the setting off, no captcha is asked for'); }
   r = await E.call('/auth/captcha', {}); ok(r.body.status === 'success' && r.body.id && /^data:image\/svg\+xml/.test(r.body.image), 'GET /auth/captcha hands out a picture');
   r = await E.call('/auth/signup', { phone: '0770000009', password: 'ten1234567' }); eq(r.code, 200, 'ten characters are accepted');
   r = await E.call('/auth/signup', { phone: '0770000009', password: 'x'.repeat(129) }); eq(r.code, 400, 'over-long password');
@@ -188,13 +191,20 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
   }
   // ── the REAL cleanPhone: every way the app can spell one number is one account ──
   {
-    const phoneSrc = cut('const DEFAULT_REGION_KEY', 'function currentRegionKey()') + 'function currentRegionKey(){}\n' + cut('function localDigits(raw, region) {', '// Synthetic login email') + cut('function cleanPhone(raw, region) {', '// The two shapes a number may be typed in');
-    const real = new Function(phoneSrc + '\nreturn cleanPhone;')();
+    const phoneSrc = cut('const POTATO_REGIONS = {', 'function currentRegionKey()') + 'function currentRegionKey(){}\n' + cut('function localDigits(raw, region) {', '// Synthetic login email') + cut('function cleanPhone(raw, region) {', '// The two shapes a number may be typed in');
+    const was = process.env.POTATO_REGION;
+    process.env.POTATO_REGION = 'ng';
+    { const ng = new Function('process', phoneSrc + '\nreturn cleanPhone;')(process);   // Potato's own country: Nigeria, 9 or 10 digits
+      eq(ng('0769968158'), '+234769968158', 'Nigeria: a leading 0 and 9 digits'); eq(ng('8012345678'), '+2348012345678', 'Nigeria: 10 digits'); eq(ng('+234 801 234 5678'), '+2348012345678', 'Nigeria: international form');
+      eq(ng('12345'), null, 'junk is not a number'); eq(ng('080123456789'), null, 'too long is not a number'); }
+    process.env.POTATO_REGION = 'ug';
+    const real = new Function('process', phoneSrc + '\nreturn cleanPhone;')(process);
     const forms = ['771234567@potato-platform.com'.split('@')[0], '256771234567', '0771234567', '+256771234567', '07 71 23 45 67'];
     eq(new Set(forms.map(x => real(x))).size, 1, 'the national, international and bare forms are one number: ' + forms.map(x => real(x)).join(' '));
     eq(real('771234567'), '+256771234567'); eq(real('12345'), null, 'junk is not a number'); eq(real(''), null);
     eq(real('0771234567; drop'), null, 'text around a number makes it not a number (it used to be read as 0771234567)');
     eq(real('(+256) 771-234.567'), '+256771234567', 'spaces, dashes, dots, brackets and a leading + are still fine');
+    if (was === undefined) delete process.env.POTATO_REGION; else process.env.POTATO_REGION = was;
   }
   // wiring
   ok(!/admin\.auth\(\)/.test(src), 'no Firebase Auth call is left in the server');

@@ -20,7 +20,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 (async () => {
   await new Promise(r => setTimeout(r, 30));
   // Wallet: one saved row is shown, prefilled, with no delete control anywhere.
-  w.eval('STATE.bankAccounts=[{id:"b1",network:"MTN Mobile Money",phone:"256769968158",holder:"Jane Doe"}]');
+  w.eval('STATE.bankAccounts=[{id:"b1",network:"MTN Mobile Money",phone:"234769968158",holder:"Jane Doe"}]');
   w.eval('openSheet("Wallet","");renderWalletSheet()');
   ok(d.querySelectorAll('#walCardBox .v-wcard').length === 1 && /MTN MOBILE MONEY/.test(d.querySelector('.v-wcard').textContent) && /JANE DOE/.test(d.querySelector('.v-wcard').textContent), 'exactly one wallet card, with the provider and holder');
   ok(!/deleteWallet|Delete wallet/.test(d.getElementById('sheetBody').innerHTML), 'no delete / bin control');

@@ -1547,7 +1547,7 @@ window.doLogin = async function(){
   }
   catch (e) {
     window._pendingLoginSuccess = false;
-    // Like the owner's screen: the reason is the red line under the box it belongs to, not a pop-up.
+    // Only a wrong phone number has a red line (the owner's screen); every other refusal is the centred notice.
     const code = (e && e.code) || '';
     notify(code === 'auth/invalid-credential' || code === 'auth/wrong-password' ? 'Incorrect phone number or password' : fbErrMsg(e));
     setBtnLoading('loginBtn', false, 'Login');

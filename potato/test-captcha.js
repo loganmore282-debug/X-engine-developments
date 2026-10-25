@@ -36,15 +36,11 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(/captcha\.verify\(textOf\(req\.body\.captchaId\), textOf\(req\.body\.captchaCode\)\)/.test(server) && /code: 'BAD_CAPTCHA'/.test(server) && /code: 'CAPTCHA_REQUIRED'/.test(server), 'sign-up checks the captcha first');
   ok(server.indexOf('captcha.verify(') < server.indexOf("cleanPhone(textOf(req.body.phone))", server.indexOf("app.post('/auth/signup'")), 'the captcha is checked before anything else in sign-up');
   ok(/const MEMBER_PASSWORD_MIN = 6,/.test(server) && !/weakPasswordReason/.test(server) && !fs.existsSync(__dirname + '/weak-passwords.js'), 'passwords: at least 6, no weak-password list');
-  ok(/window\.fbCreateUser = async \(email, pass, cap\)/.test(html) && /captchaId: cap && cap\.id/.test(html) && /BAD_CAPTCHA: 'auth\/bad-captcha'/.test(html), 'the app sends the captcha with sign-up');
-  ok(/window\.loadAuthCaptcha = async function/.test(mod) && /Enter the captcha code\./.test(mod) && /loadAuthCaptcha\(\);\n  }\n\};/.test(mod), 'the app loads a picture, asks for the code, and gets a new picture after a failed attempt');
-  ok(/pass\.length < 6\) return regError\('Password must be at least 6 characters\.'\)/.test(mod), 'the app asks for 6 characters');
-  for (const id of ['tabLogin', 'tabRegister', 'authLogo', 'authLogoImg', 'authHeroBg', 'loginPhone', 'loginPassword', 'rememberMe', 'loginBtn', 'regPhone', 'regPassword', 'regPassword2', 'regTradePin', 'regReferral', 'regCaptcha', 'regCaptchaImg', 'regBtn']) ok(html.includes('id="' + id + '"'), 'markup has #' + id);
-  ok(/placeholder="Login Password \(at least 6 characters\)"/.test(html) && /placeholder="Trade Password \(6 digits\)"/.test(html) && /placeholder="Enter captcha code"/.test(html) && /placeholder="Confirm Login Password"/.test(html), 'the words are the screenshot\'s');
-  ok(/id="regDial">\+256</.test(html) && /id="loginDial">\+256</.test(html), '+256, not another country');
+  ok(/window\.fbCreateUser = async \(email, pass\) =>/.test(html) && !/captchaId/.test(html) && !/loadAuthCaptcha|capError/.test(mod), 'the app no longer sends or asks for a captcha (the owner\'s Create Account has none)');
+  ok(/pass\.length < 6\) return regError\('Password must be at least 6 characters'\)/.test(mod), 'the app asks for 6 characters');
+  for (const id of ['authLogo', 'authLogoImg', 'authHeroBg', 'loginPhone', 'loginPassword', 'rememberMe', 'loginBtn', 'regPhone', 'regPassword', 'regPassword2', 'regTradePin', 'regReferral', 'regBtn']) ok(html.includes('id="' + id + '"'), 'markup has ' + id);
+  ok(/placeholder="Enter password"/.test(html) && /placeholder="Re-enter password"/.test(html) && /placeholder="6-digit trade password"/.test(html) && /placeholder="Enter Username Number"/.test(html), 'the words are the screenshot\'s');
+  ok(/id="loginDial">\+234</.test(html) && /id="regDial">\+234</.test(html), '+234 on both forms');
   ok(/POTATO_IMAGE_SLOTS = \['logo', 'authhero', 'authlogo',/.test(server) && /id="authLogoFile"/.test(R('admin-src/index.html')) && /applyAuthLogo/.test(mod), 'the circle logo is an admin-uploaded slot');
-  // A referral link opens Sign Up at once: the captcha asked for then must not be thrown away as "stale" by the app's first sign-in event.
-  ok(/const isPublicCall = path\.indexOf\('\/public\/'\) === 0 \|\| path === '\/auth\/captcha';/.test(mod), 'the captcha request is not discarded as stale when the app\'s first sign-in event fires (referral link)');
-  ok(/for \(let i = 0; i < 2 && !\(r && r\.status === 'success'/.test(mod), 'and a missed first answer is asked for once more');
 }
 console.log(`PASS: captcha and Potato sign-up wiring (${n} checks)`);
