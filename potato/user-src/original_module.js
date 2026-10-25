@@ -192,7 +192,6 @@ var LANG_ROWS = [
   ['Login Password', 'Ekisumuluzo ky\'Okuyingira', 'Nenosiri la Kuingia', 'Mot de passe de connexion', 'Ijambobanga ryo kwinjira', 'Ekisumuruzo ky\'Okutaaha'],
   ['Trade Password', 'Ekisumuluzo ky\'Okusuubula', 'Nenosiri la Malipo', 'Mot de passe de transaction', 'Ijambobanga ry\'ubucuruzi', 'Ekisumuruzo ky\'Okushuubura'],
   ['Download APP', 'Tikka APP', 'Pakua APP', 'T\u00e9l\u00e9charger l\'application', 'Kuramo APP', 'Tikka APP'],
-  ['Turntable', 'Enkyukakyuka', 'Gurudumu', 'La Roue', 'Uruziga', 'Ekizengurutsi'],
   ['Language', 'Olulimi', 'Lugha', 'Langue', 'Ururimi', 'Orurimi'],
   ['SETTINGS', 'ENTEEKATEEKA', 'MIPANGILIO', 'PARAM\u00c8TRES', 'IGENAMITERERE', 'ENTEEKATEEKA'],
   ['Cancel', 'Sazaamu', 'Ghairi', 'Annuler', 'Hagarika', 'Sazamu'],
@@ -243,9 +242,7 @@ var LANG_ROWS = [
   ['Click "Refresh" to check if it is successful', 'Nyiga "Ddamu ogezeeko" okukebera oba kiwedde bulungi', 'Bonyeza "Onyesha upya" ili kuangalia kama imefanikiwa', 'Cliquez sur "Actualiser" pour vérifier si le paiement a abouti', 'Kanda "Vugurura" kugira ngo urebe ko byagenze neza', 'Kanda "Garukamu" kureeba yaaba ehikire gurungi'],
   ['*Filling in the wrong payment SMS/transaction ID will result in payment loss.', '*Okuwandiika obubaka oba nnamba y\u2019entambula ekyamu kirireetera ssente okubula.', '*Kujaza SMS au kitambulisho cha muamala kisicho sahihi kutasababisha upotevu wa fedha.', '*Saisir un SMS ou un identifiant de transaction incorrect entra\u00eenera la perte du paiement.', '*Kwandika SMS cyangwa indangamuntu y\u2019ubwishyu itari yo bizatuma amafaranga abura.', '*Okuhandiika obutumwa nari namba y\u2019okworeka ebitari byo nikireetera sente kuburaho.'],
   ['Service', 'Obuyambi', 'Huduma', '=', 'Serivisi', 'Obuhwezi'],
-  ['SPIN', 'ZUNGUSA', 'ZUNGUSHA', 'TOURNER', 'ZUNGUZA', 'ZENGURUTSA'],
   ['Total', 'Omugatte', 'Jumla', '=', 'Igiteranyo', 'Byona hamwe'],
-  ['TURNTABLE', 'ENKYUKAKYUKA', 'GURUDUMU', 'LA ROUE', 'URUZIGA', 'EKIZENGURUTSI'],
   ['User', 'Omukozesa', 'Mtumiaji', 'Utilisateur', 'Ukoresha', 'Omukozesa'],
   ['Verify', 'Kakasa', 'Hakiki', 'V\u00e9rifier', 'Genzura', 'Hamya'],
   ['Welcome', 'Tukwaniriza', 'Karibu', 'Bienvenue', 'Murakaza neza', 'Mukaaze gye'],
@@ -266,7 +263,6 @@ var LANG_ROWS = [
   ['Deposit Instructions', 'Ebiragiro by\'Okuteeka Ssente', 'Maelekezo ya Kuweka Pesa', 'Instructions de d\u00e9p\u00f4t', 'Amabwiriza yo kubitsa', 'Ebiragiro by\'Okuta Sente'],
   ['Edit Wallet', 'Kyusa Ensawo', 'Hariri Pochi', 'Modifier le portefeuille', 'Hindura umufuka', 'Hindura Ensaho'],
   ['Full name', 'Amannya gonna', 'Jina kamili', 'Nom complet', 'Amazina yose', 'Amaziina goona'],
-  ['Go spin', 'Genda ozunguse', 'Nenda uzungushe', 'Aller tourner', 'Genda uzunguze', 'Genda ozengurutse'],
   ['Help Centre', 'Ekifo ky\'Obuyambi', 'Kituo cha Msaada', 'Centre d\'aide', 'Ikigo cy\'ubufasha', 'Ekicweka ky\'Obuhwezi'],
   ['Invitation Reward', 'Empeera y\'Okuyita', 'Zawadi ya Mwaliko', 'R\u00e9compense de parrainage', 'Igihembo cyo gutumira', 'Empeera y\'Okweta'],
   ['Join Channel', 'Yingira mu Kitundu', 'Jiunge na Chaneli', 'Rejoindre le canal', 'Injira mu muyoboro', 'Taaha omu Kitundu'],
@@ -353,7 +349,6 @@ var LANG_ROWS = [
   ['Choose PAY-A or PAY B', 'Londa PAY-A oba PAY B', 'Chagua PAY-A au PAY B', 'Choisissez PAY-A ou PAY B', 'Hitamo PAY-A cyangwa PAY B', 'Toorana PAY-A nari PAY B'],
   ['Click to refresh the results.', 'Nyiga oddemu olabe ebivudde mu.', 'Bonyeza ili kuonyesha matokeo upya.', 'Cliquez pour actualiser les r\u00e9sultats.', 'Kanda kugira ngo uvugurure ibisubizo.', 'Kanda ogarukyemu oreebe ebyarugiremu.'],
   ['Could not load your plans.', 'Tetusobodde kuggya nteekateeka zo.', 'Imeshindwa kupakia mipango yako.', 'Impossible de charger vos plans.', 'Ntibyashobotse gupakira gahunda zawe.', 'Tikibaasiki kureeta enteekateeka zaawe.'],
-  ['Daily spin & bonus wins', 'Okuzungusa buli lunaku n\'ebirabo', 'Kuzungusha kila siku na zawadi', 'Tour quotidien et gains bonus', 'Kuzunguza buri munsi n\'ibihembo', 'Okuzengurutsa buri izooba n\'ebirabo'],
   ['Enter the account holder name.', 'Wandiika erinnya lya nnannyini akawunti.', 'Weka jina la mwenye akaunti.', 'Entrez le nom du titulaire du compte.', 'Andika izina rya nyir\'ikonti.', 'Handiika eiziina rya nyiini akaunti.'],
   ['Enter your 6-digit Trade Password.', 'Wandiika ekisumuluzo kyo eky\'okusuubula ekya nnamba 6.', 'Weka nenosiri lako la malipo la tarakimu 6.', 'Entrez votre mot de passe de transaction \u00e0 6 chiffres.', 'Andika ijambobanga ryawe ry\'ubucuruzi rigizwe n\'imibare 6.', 'Handiika ekisumuruzo kyaawe ky\'okushuubura eky\'enamba 6.'],
   ['Enter your current login password.', 'Wandiika ekisumuluzo kyo eky\'okuyingira ekiriwo kati.', 'Weka nenosiri lako la sasa la kuingia.', 'Entrez votre mot de passe de connexion actuel.', 'Andika ijambobanga ryawe ryo kwinjira urimo gukoresha.', 'Handiika ekisumuruzo kyaawe ky\'okutaaha ekiriho hati.'],
@@ -363,7 +358,6 @@ var LANG_ROWS = [
   ['Please select the operator first', 'Sooka olonde kkampuni', 'Tafadhali chagua mtoa huduma kwanza', 'Veuillez d\'abord choisir l\'op\u00e9rateur', 'Nyamuneka banza uhitemo utanga serivisi', 'Banza otoorane kampuni'],
   ['Send us your payment message', 'Tuweereze obubaka bw\'okusasula', 'Tutumie ujumbe wa malipo yako', 'Envoyez-nous votre message de paiement', 'Twoherereze ubutumwa bw\'ubwishyu bwawe', 'Otwohereze obutumwa bw\'okushashura'],
   ['Showing your most recent records', 'Tulaga ebiwandiiko byo ebisembyeyo', 'Tunaonyesha rekodi zako za hivi karibuni', 'Affichage de vos enregistrements les plus r\u00e9cents', 'Twerekana amateka yawe ya vuba', 'Nituyoreka ebihandiiko byaawe ebya hati'],
-  ['Buying products earns you extra spins.', 'Okugula ebyamaguzi kukuwa okuzungusa okulala.', 'Kununua bidhaa kunakupa nafasi zaidi za kuzungusha.', 'Acheter des produits vous donne des tours suppl\u00e9mentaires.', 'Kugura ibicuruzwa bikugeza ku mahirwe yo kuzunguza.', 'Okugura ebyamaguzi nikikuha okuzengurutsa okundi.'],
   ['Enter a valid wallet account number.', 'Wandiika ennamba ya akawunti y\'ensawo entuufu.', 'Weka namba sahihi ya akaunti ya pochi.', 'Entrez un num\u00e9ro de compte de portefeuille valide.', 'Andika nimero nyayo ya konti y\'umufuka.', 'Handiika enamba ya akaunti y\'ensaho erikwecwera.'],
   ['Enter your current 6-digit trade password.', 'Wandiika ekisumuluzo kyo eky\'okusuubula ekiriwo kati eky\'ennamba 6.', 'Weka nenosiri lako la sasa la malipo la tarakimu 6.', 'Entrez votre mot de passe de transaction actuel \u00e0 6 chiffres.', 'Andika ijambobanga ryawe ry\'ubucuruzi urimo gukoresha rigizwe n\'imibare 6.', 'Handiika ekisumuruzo kyaawe ky\'okushuubura ekiriho hati eky\'enamba 6.'],
   ['Login Password (at least 10 characters)', 'Ekisumuluzo ky\'Okuyingira (obutasingako bubonero 6)', 'Nenosiri la Kuingia (angalau herufi 10)', 'Mot de passe de connexion (10 caract\u00e8res minimum)', 'Ijambobanga ryo kwinjira (nibura inyuguti 10)', 'Ekisumuruzo ky\'Okutaaha (obukiri bubonero 6)'],
@@ -384,7 +378,6 @@ var LANG_ROWS = [
   ['The two new passwords do not match.', 'Ebisumuluzo ebiggya ebibiri tebifaanagana.', 'Manenosiri mawili mapya hayafanani.', 'Les deux nouveaux mots de passe ne correspondent pas.', 'Amagambobanga mashya yombi ntahuye.', 'Ebisumuruzo bibiri ebisya tibirikushushana.'],
   ['Trade Password must be exactly 6 digits.', 'Ekisumuluzo ky\'okusuubula kiteekwa okuba nnamba 6 zokka.', 'Nenosiri la malipo lazima liwe tarakimu 6 haswa.', 'Le mot de passe de transaction doit comporter exactement 6 chiffres.', 'Ijambobanga ry\'ubucuruzi rigomba kuba rigizwe n\'imibare 6 gusa.', 'Ekisumuruzo ky\'okushuubura kishemereire kuba enamba 6 zoonka.'],
   ['Earn daily wages by inviting members to invest.', 'Funa ssente buli lunaku ng\'oyita abantu okuteekamu ssente.', 'Pata malipo kila siku kwa kualika wengine kuwekeza.', 'Gagnez chaque jour en invitant des membres \u00e0 investir.', 'Injiza amafaranga buri munsi utumira abandi gushora.', 'Tunga sente buri izooba oyeta abantu kuteeramu sente.'],
-  ['One free spin every day, resetting at midnight.', 'Okuzungusa kumu kwa bwereere buli lunaku, nga kuddamu ku ttumbi.', 'Nafasi moja ya bure ya kuzungusha kila siku, inarudia usiku wa manane.', 'Un tour gratuit chaque jour, r\u00e9initialis\u00e9 \u00e0 minuit.', 'Kuzunguza rimwe ku buntu buri munsi, bisubirana saa sita z\'ijoro.', 'Okuzengurutsa rumwe okw\'obusa buri izooba, nikugarukamu aha kiro.'],
   ['Paste the payment SMS or transaction ID first', 'Sooka oteeke obubaka bw\'okusasula oba nnamba y\'okusasula', 'Kwanza bandika SMS ya malipo au namba ya muamala', 'Collez d\'abord le SMS de paiement ou l\'identifiant de la transaction', 'Banza ushyiremo SMS y\'ubwishyu cyangwa nimero y\'ubwishyu', 'Banza ota obutumwa bw\'okushashura nari enamba y\'okushashura'],
   ['The two new trade passwords do not match.', 'Ebisumuluzo ebiggya eby\'okusuubula tebifaanagana.', 'Manenosiri mawili mapya ya malipo hayafanani.', 'Les deux nouveaux mots de passe de transaction ne correspondent pas.', 'Amagambobanga mashya y\'ubucuruzi ntahuye.', 'Ebisumuruzo ebisya by\'okushuubura tibirikushushana.'],
   ['Invite friends. Earn when they buy their first product.', 'Yita mikwano gyo. Ofuna ssente nga bagudde ekyamaguzi kyabwe ekisooka.', 'Alika marafiki. Unapata pesa wanaponunua bidhaa yao ya kwanza.', 'Invitez vos amis. Gagnez lorsqu\'ils ach\u00e8tent leur premier produit.', 'Tumira inshuti. Winjiza amafaranga igihe baguze igicuruzwa cyabo cya mbere.', 'Yeta abanywani baawe. Notunga sente ku barikugura ekyamaguzi kyabo eky\'okubanza.'],
@@ -435,8 +428,6 @@ var LANG_ROWS = [
   ['Enter old 6-digit PIN', 'Wandiika PIN enkadde ey\'ennamba 6', 'Weka PIN ya zamani ya tarakimu 6', 'Entrez l\'ancien code à 6 chiffres', 'Andika PIN ya kera y\'imibare 6', 'Handiika PIN enkuru y\'enamba 6'],
   ['Enter new 6-digit PIN', 'Wandiika PIN empya ey\'ennamba 6', 'Weka PIN mpya ya tarakimu 6', 'Entrez le nouveau code à 6 chiffres', 'Andika PIN nshya y\'imibare 6', 'Handiika PIN ensya y\'enamba 6'],
   ['Re-enter new 6-digit PIN', 'Ddamu owandiike PIN empya ey\'ennamba 6', 'Weka tena PIN mpya ya tarakimu 6', 'Saisissez à nouveau le nouveau code à 6 chiffres', 'Ongera wandike PIN nshya y\'imibare 6', 'Garuka ohandiike PIN ensya y\'enamba 6'],
-  ['No spins left. Your next free spin unlocks at midnight.', 'Tewali kuzungusa kusigadde. Okuzungusa okw\'obwereere okuddako kujja mu ttumbi.', 'Hakuna mizungusho iliyobaki. Mzungusho wako wa bure unaofuata unafunguka usiku wa manane.', 'Plus de tours disponibles. Votre prochain tour gratuit s\'ouvre à minuit.', 'Nta kuzunguza gusigaye. Ukuzunguza kwawe k\'ubuntu gukurikira gutangira saa sita z\'ijoro.', 'Tihariho kuzengurutsa kusigaire. Okuzengurutsa kwaawe kw\'obusa nikwija aha kiro.'],
-  ['1 spin available', 'Okuzungusa 1 kuliwo', 'Mzungusho 1 unapatikana', '1 tour disponible', 'Kuzunguza 1 gurahari', 'Okuzengurutsa 1 kuriho'],
   ['Contact support for help with your account.', 'Tuukirira abayambi ku bikwata ku akawunti yo.', 'Wasiliana na msaada kwa usaidizi wa akaunti yako.', 'Contactez l\'assistance pour toute question sur votre compte.', 'Vugana na serivisi y\'abakiriya ku bibazo bya konti yawe.', 'Hikirira abahwezi ahabw\'akaunti yaawe.'],
   ['Uganda\'s boldest way to grow your money', 'Engeri esinga obuvumu mu Uganda okukuza ssente zo', 'Njia jasiri zaidi Uganda ya kukuza pesa zako', 'La façon la plus audacieuse d\'Ouganda de faire fructifier votre argent', 'Inzira ishize amanga cyane mu Uganda yo kwungura amafaranga yawe', 'Omuringo ogurikukira obumanzi muri Uganda kukuza sente zaawe'],
   ['If nothing happens, the app is already installed — open it from your home screen. On iPhone, use Share then "Add to Home Screen".', 'Bwe watabaawo kantu, pulogulaamu eteekeddwawo dda — gigguleko ku ssemasomero lyo. Ku iPhone, kozesa Share olyoke oyongere "Add to Home Screen".', 'Kama hakuna kinachotokea, programu imesakinishwa tayari — ifungue kutoka skrini yako ya kwanza. Kwenye iPhone, tumia Share kisha "Add to Home Screen".', "Si rien ne se passe, l'application est déjà installée — ouvrez-la depuis votre écran d'accueil. Sur iPhone, utilisez Partager puis « Sur l'écran d'accueil ».", 'Niba nta kibaye, porogaramu yamaze gushyirwaho — ifungure ku rupapuro rwawe rw’ibanze. Kuri iPhone, koresha Share hanyuma "Add to Home Screen".', 'Ku kutaribaho kintu, porogaraamu yaateirweho — gyigyure aha ndabiro yaawe. Aha iPhone, kozesa Share reero “Add to Home Screen”.'],
@@ -471,7 +462,6 @@ var LANG_ROWS = [
   ['Could not submit this right now', 'Tetusobodde kusindika kino kati', 'Imeshindwa kuwasilisha hili kwa sasa', 'Envoi impossible pour le moment', 'Ntibyashobotse kohereza ibi ubu', 'Tikibaasiikire kutuma eki hati'],
   ['That is not your current login password.', 'Ekyo si kisumuluzo kyo kya kati eky\'okuyingira.', 'Hilo si nenosiri lako la sasa la kuingia.', 'Ce n\'est pas votre mot de passe de connexion actuel.', 'Iryo si ijambobanga ryawe rigezweho ryo kwinjira.', 'Ekyo tikisumuruzo kyaawe kya hati eky\'okutaaha.'],
   ['That key did not open the chest.', 'Ekisumuluzo ekyo tekiggudde ssanduku.', 'Ufunguo huo haukufungua sanduku.', 'Cette clé n\'a pas ouvert le coffre.', 'Urwo rufunguzo ntirwafunguye agasanduku.', 'Ekishumuruzo ekyo tikyigwire esanduuku.'],
-  ['The spin could not be completed.', 'Okuzungusa tekusobose kuggwa.', 'Mzungusho haukukamilika.', 'Le tour n\'a pas pu être terminé.', 'Ukuzunguza ntikwashoboye kurangira.', 'Okuzengurutsa tikibaasiikire kuhika.'],
   ['That referral code is invalid. Continuing without it.', 'Koodi y\'okuyita eyo si ntuufu. Tugenda mu maaso nga tetugikozesa.', 'Msimbo huo wa mwaliko si sahihi. Tunaendelea bila huo.', 'Ce code de parrainage est invalide. Nous continuons sans lui.', 'Iyo kode yo gutumira ntiyemewe. Turakomeza tutayikoresheje.', 'Koodi y\'okweta egyo tehikire. Nitugyenda omu maisho tutarikugikozesa.'],
   ['Not confirmed yet. Paste the payment message below and submit it.', 'Tekinnakakasibwa. Teeka obubaka bw\'okusasula wammanga obusindike.', 'Bado haijathibitishwa. Bandika ujumbe wa malipo hapa chini na uwasilishe.', 'Pas encore confirmé. Collez le message de paiement ci-dessous et envoyez-le.', 'Ntibirasuzumwa. Shyiramo ubutumwa bwo kwishyura hasi maze ubwohereze.', 'Tikirahamibwa. Ota obutumwa bw\'okushashura ahansi kandi obutume.'],
   ['Submitted', 'Kisindikiddwa', 'Imewasilishwa', 'Envoyé', 'Byoherejwe', 'Kitumirwe'],
@@ -517,7 +507,6 @@ var LANG_PATTERNS = [
   ['Amounts must be a multiple of {0} — for example {1}.', 'Omuwendo gulina kuba gwa {0} — okugeza {1}.', 'Kiasi kinapaswa kuwa kizidishi cha {0} — kwa mfano {1}.', 'Les montants doivent être un multiple de {0} — par exemple {1}.', 'Ingano igomba kuba umubare ushobora kugabanywa na {0} — urugero {1}.', 'Omuhendo gushemereire kuba gwa {0} — nk’oku {1}.'],
   ['Withdrawal amounts should be between {0} and {1}.', 'Ssente z’okuggyamu zirina kuba wakati wa {0} ne {1}.', 'Kiasi cha kutoa kinapaswa kuwa kati ya {0} na {1}.', 'Les montants de retrait doivent être compris entre {0} et {1}.', 'Ingano yo kubikuza igomba kuba iri hagati ya {0} na {1}.', 'Sente z’okwihamu zishemereire kuba hagati ya {0} na {1}.'],
   ['One cash-out at a time — once it is paid you can request the next. Up to {0} per day.', 'Okuggyamu kumu kkumu — nga kusasuddwa osobola okusaba okuddako. Okutuuka ku {0} olunaku.', 'Kutoa pesa moja kwa wakati — baada ya kulipwa unaweza kuomba kingine. Hadi {0} kwa siku.', 'Un retrait à la fois — une fois payé, vous pouvez demander le suivant. Jusqu’à {0} par jour.', 'Kubikuza rimwe gusa — iyo bimaze kwishyurwa ushobora gusaba ibikurikira. Kugeza kuri {0} ku munsi.', 'Okwihamu rumwe — ku kushashwirwe nobaasa kushaba okundi. Kuhika aha {0} aha izooba.'],
-  ['{0} spins available', 'Okuzungusa {0} kuliwo', 'Mizungusho {0} inapatikana', '{0} tours disponibles', 'Kuzunguza {0} gurahari', 'Okuzengurutsa {0} kuriho'],
   ['Phone number must start with 0 and be {0} digits', 'Ennamba ya ssimu erina kutandika ne 0 n’eba ya nnamba {0}', 'Namba ya simu inapaswa kuanza na 0 na kuwa tarakimu {0}', 'Le numéro de téléphone doit commencer par 0 et compter {0} chiffres', 'Nimero ya telefone igomba gutangira na 0 kandi ibe imibare {0}', 'Enamba ya esimu ishemereire kutandika na 0 kandi kuba ya namba {0}'],
   ['Your payment number ({0})', 'Ennamba yo ey’okusasula ({0})', 'Namba yako ya malipo ({0})', 'Votre numéro de paiement ({0})', 'Nimero yawe yo kwishyura ({0})', 'Enamba yaawe y’okushashura ({0})'],
   ['Support hours: {0}', 'Ebiseera by’obuyambi: {0}', 'Saa za msaada: {0}', "Heures d'assistance : {0}", 'Amasaha ya serivisi: {0}', 'Obwire bw’obuhwezi: {0}'],
@@ -1910,20 +1899,17 @@ function applyBootArtwork(ai, ci){
   // Home's banner carousel, slides 2 and 3 (slide 1 is STATE.homeBanner,
   // fetched separately above -- it predates the carousel). Filtered to
   // whichever are actually set, so 1 or 2 slides render fine too, not only 3.
-  STATE.homeSlides2n3 = (ci.status === 'success' ? [ci.banner2, ci.banner3, ci.banner4, ci.banner5] : []).filter(Boolean);
+  STATE.homeSlides2n3 = (ci.status === 'success' ? [ci.banner2, ci.banner3] : []).filter(Boolean);
   STATE.promoBanner = (ci.status === 'success' && ci.promobanner) ? ci.promobanner : null;
   STATE.logo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
   STATE.teamBanner = (ci.status === 'success' && ci.teambanner) ? ci.teambanner : null;
   STATE.myBanner = (ci.status === 'success' && ci.mybanner) ? ci.mybanner : null;
   STATE.aboutBanner = (ci.status === 'success' && ci.aboutbanner) ? ci.aboutbanner : null;
   STATE.aboutLogo = (ci.status === 'success' && ci.aboutlogo) ? ci.aboutlogo : null;
-  // Optional admin-managed artwork behind the Daily Check-in sheet.
-  STATE.checkinBanner = (ci.status === 'success' && ci.checkinbanner) ? ci.checkinbanner : null;
   // The Login / Sign Up backdrop (single full-bleed photo -- see
   // applyAuthBackgrounds()'s own comment on why there is only one now).
   STATE.authHeroImage = (ci.status === 'success' && ci.authhero) ? ci.authhero : null;
   STATE.authLogoImage = (ci.status === 'success' && ci.authlogo) ? ci.authlogo : null;
-  STATE.downloadBg = (ci.status === 'success' && ci.downloadbg) ? ci.downloadbg : null;
   // Transparent cut-out icons uploaded in the admin panel (Banners > Icons): { ordergift, downloadapp, ... }, each a PNG data URL or null.
   STATE.icons = (ci.status === 'success' && ci.icons && typeof ci.icons === 'object') ? ci.icons : {};
   applyAuthLogo();
@@ -2009,21 +1995,8 @@ function applyAuthBackgrounds(){
   const s = STATE.settings || {};
   applyProductImageOpacity();
   const root = document.documentElement;
-  function set(prefix, image, opacityPct, blurPx){
-    // url() is built here, so an unset slot yields `none` and the section
-    // falls back to the brand gradient (hero) or plain white (card).
-    // The quotes matter: a data URL is fine unquoted, but a filename with a
-    // bracket or a space would break the declaration silently.
-    root.style.setProperty('--auth-' + prefix + '-img',
-      image ? 'url("' + String(image).replace(/"/g, '\\"') + '")' : 'none');
-    const op = Number(opacityPct);
-    root.style.setProperty('--auth-' + prefix + '-op',
-      String(Number.isFinite(op) ? Math.min(100, Math.max(0, op)) / 100 : 1));
-    const bl = Number(blurPx);
-    root.style.setProperty('--auth-' + prefix + '-blur',
-      (Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0) + 'px');
-  }
-  set('hero', STATE.authHeroImage, s.authHeroOpacity, s.authHeroBlur);
+  // An unset slot yields `none`, so the banner falls back to the brand gradient. The quotes matter for a data URL with odd characters.
+  root.style.setProperty('--auth-hero-img', STATE.authHeroImage ? 'url("' + String(STATE.authHeroImage).replace(/"/g, '\\"') + '")' : 'none');
   // The banner is shown whole, in its own shape (nothing cropped): the box takes the picture's own proportions.
   if (STATE.authHeroImage) {
     const probe = new Image();
@@ -2339,10 +2312,6 @@ async function enterApp(){
   // session's SPA-level logout left stuck (the exact "freezes, no
   // scrolling" report this round root-caused).
   unlockBodyScroll();
-  // Fire-and-forget, both branches below: a card deposit the member never
-  // returned to the app to see resolved (they closed the tab, lost signal,
-  // whatever) picks back up here on the NEXT open, however long that is.
-  resumePendingCardDeposit();
   const uid = STATE.user && STATE.user.uid;
   const cached = loadCachedState(uid);
   if (!cached) return bootFromNetwork(uid);
@@ -2372,7 +2341,7 @@ async function enterApp(){
   hideLoadingScreen();
   $('authScreen').style.display = 'none';
   $('app').style.display = '';
-  showPage(STATE.page || 'home'); prefetchSupportedBanks();
+  showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
   if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; }   // a typed login opens Home with no "Login successful" notice (owner)
   refreshAppDataInBackground(uid);
@@ -2544,7 +2513,7 @@ async function bootFromNetwork(uid){
   hideLoadingScreen();
   $('authScreen').style.display = 'none';
   $('app').style.display = '';
-  showPage(STATE.page || 'home'); prefetchSupportedBanks();
+  showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
   if (signupFlow) { window._pendingLoginSuccess = false; notify(t('Registration successful ✓')); }
   else if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; }   // no "Login successful" notice (owner)
@@ -4300,46 +4269,22 @@ function formatPhoneDisplay(phone){
 
 // Short names the Wallet page shows ("MTN", "Airtel"); the server still gets the full provider name.
 function walShort(n){ n = String(n || ''); return n === 'MTN Mobile Money' ? 'MTN' : n === 'Airtel Money' ? 'Airtel' : n; }
-function walProviders(){ return ['MTN Mobile Money', 'Airtel Money'].concat(STATE.supportedBanks || []).sort((x, y) => walShort(x).localeCompare(walShort(y))); }
+function walProviders(){ return ['MTN Mobile Money', 'Airtel Money']; }
 function walFull(label){
   const t = String(label || '').trim().toLowerCase();
   if (!t) return '';
   return walProviders().find(p => p.toLowerCase() === t || walShort(p).toLowerCase() === t) || '';
 }
 function walNetwork(){ const inp = $('walProvider'); return inp ? (inp.dataset.network || walFull(inp.value)) : ''; }
-// The bank list is fetched once in the background after the app opens, so the Wallet provider list is complete the first time it is opened.
-var _banksPrefetched = false;
-function prefetchSupportedBanks(){
-  if (_banksPrefetched || (STATE.supportedBanks && STATE.supportedBanks.length)) return;
-  _banksPrefetched = true;
-  api('/bank/supported-banks').then(br => {
-    if (br.status === 'success' && Array.isArray(br.banks) && br.banks.length) STATE.supportedBanks = br.banks; else _banksPrefetched = false;
-  }).catch(() => { _banksPrefetched = false; });
-}
 window.openWalletSheet = async function(){
   openSheet('Bank Cards', '');
   renderWalletSheet();
-  // The bank list only widens the dropdown once it lands; the form is never repainted under the member's finger.
-  // An empty answer (the bank list could not be fetched) is not kept, so the next visit asks again.
-  if (!(STATE.supportedBanks && STATE.supportedBanks.length)) {
-    api('/bank/supported-banks').then(br => {
-      if (br.status === 'success' && Array.isArray(br.banks) && br.banks.length) STATE.supportedBanks = br.banks;
-      const list = $('walProviderList');
-      if (_openSheetTitle === 'Bank Cards' && list) list.innerHTML = walProviderOptionsHtml();
-    }).catch(() => {});
-  }
   const r = await api('/bank/list');
   if (r.status === 'success') STATE.bankAccounts = r.accounts;
   else if (!Array.isArray(STATE.bankAccounts)) STATE.bankAccounts = [];
   if (_openSheetTitle === 'Bank Cards') paintWalletParts();
 };
 var BANK_CARD_MAX = 5;
-// The only two mobile-money names this app has ever offered -- anything
-// else in a `network` field is a bank name, validated as real (against
-// MarzPay's own live list) at the moment it was bound. No client-side list
-// membership check needed to tell the two apart; this one distinction is
-// definitional, not a lookup.
-function isMobileMoneyNetwork(network){ return network === 'MTN Mobile Money' || network === 'Airtel Money'; }
 // The dark card shows the active card, or the empty message while there is none.
 function vWalletCardHtml(w){
   if (!w) return '<div class="pt-bcard empty"><b>No bank cards yet</b><span>Fill the form below to add one</span></div>';
@@ -4368,28 +4313,10 @@ function walletLocalPhone(phone){
   d = d.replace(/^0+/, '');
   return d ? '0' + d : '';
 }
-// walletLocalPhone() strips everything but digits and forces a leading
-// national-trunk zero back on -- correct for a mobile money number, but it
-// would mangle a genuine bank account number (which is not read as "a
-// phone number missing its leading 0"). A bound bank account's `phone`
-// field already holds exactly what the member entered and MarzPay
-// validated, unaltered -- shown as-is.
-function walletDestDisplay(w){
-  if (!w) return '';
-  return isMobileMoneyNetwork(w.network) ? walletLocalPhone(w.phone) : String(w.phone || '');
-}
+// A saved card's number is always an MTN / Airtel phone number, shown with its leading zero.
+function walletDestDisplay(w){ return w ? walletLocalPhone(w.phone) : ''; }
 function walProviderOptionsHtml(){
   return walProviders().map(p => `<button type="button" class="prov-opt" onclick="pickProvider('${esc(p)}')">${esc(walShort(p))}</button>`).join('');
-}
-// The one saved wallet is edited in place: its provider, number and holder
-// fill the form (only into empty fields, so nothing the member typed is lost).
-// The Account Number box is a phone box for mobile money and a plain text box for a bank (letters allowed).
-function applyWalDestKind(nowBank){
-  const dest = $('walPhone'); if (!dest) return;
-  dest.type = nowBank ? 'text' : 'tel';
-  dest.inputMode = nowBank ? 'text' : 'numeric';
-  dest.autocomplete = nowBank ? 'off' : 'tel';
-  dest.placeholder = 'Enter wallet account number';
 }
 // Only the cards and the counter: the typed fields are never touched.
 function paintWalletParts(){
@@ -4426,26 +4353,12 @@ window.filterProviders = function(){
 };
 window.pickProvider = function(name){
   const inp = $('walProvider');
-  const prev = inp ? (inp.dataset.network || inp.dataset.lastNetwork || walFull(inp.value)) : '';
   if (inp) { inp.value = walShort(name); inp.dataset.network = name; inp.dataset.lastNetwork = name; }
   const box = $('walProviderPick');
   if (box) box.classList.remove('open');
   document.querySelectorAll('#walProviderList .prov-opt').forEach(b => { b.style.display = ''; });
-  const nowBank = !isMobileMoneyNetwork(name);
-  const dest = $('walPhone');
-  if (dest) {
-    applyWalDestKind(nowBank);
-    // Crossing the mobile-money/bank boundary clears what was typed: a phone number is never a bank account number. With no provider
-    // chosen yet nothing says what the box held, so a number that looks like a phone number is cleared when a bank is picked.
-    const wasBank = prev ? !isMobileMoneyNetwork(prev) : false;
-    if (prev ? wasBank !== nowBank : (nowBank && /^0?7\d{8}$/.test(String(dest.value).replace(/\D/g, '')))) dest.value = '';
-  }
 };
-window.handleWalDestInput = function(el){
-  if (isMobileMoneyNetwork(walNetwork())) { sanitizePhoneInput(el); return; }
-  // A bank account number is letters and digits only (what the server accepts); anything else typed is dropped as it is typed.
-  if (/[^A-Za-z0-9]/.test(el.value)) el.value = el.value.replace(/[^A-Za-z0-9]/g, '');
-};
+window.handleWalDestInput = function(el){ sanitizePhoneInput(el); };
 // Tapping anywhere else closes it, the way a real picker behaves. Bound once
 // on the document rather than per-render so repainting the panel cannot leave
 // duplicate listeners behind.
@@ -4459,10 +4372,7 @@ window.submitWallet = async function(){
   const holder = $('walHolder').value.trim();
   if (!network || !String(phone).trim() || !holder) return notify('Please fill in all fields');
   if ((STATE.bankAccounts || []).length >= BANK_CARD_MAX) return notify('You can save up to ' + BANK_CARD_MAX + ' bank cards.');
-  // Mobile money keeps its own digit-count check; a bank account number only needs to be a plausible length (the server validates it
-  // against the payment provider before it is ever saved).
-  if (isMobileMoneyNetwork(network) && String(phone).replace(/\D/g, '').length < 9) return notify('Enter a valid wallet account number.');
-  if (!isMobileMoneyNetwork(network) && String(phone).trim().length < 4) return notify('Enter a valid bank account number.');
+  if (String(phone).replace(/\D/g, '').length < 9) return notify('Enter a valid wallet account number.');
   const btn = $('walSaveBtn');
   btn.disabled = true;
   const r = await post('/bank/save', { holder, network, phone });
@@ -4547,7 +4457,6 @@ window.closeHelpDialog = function(){
 // earnings screens.
 var _statementCat = 'all';
 var _statementShown = 10;
-var STATEMENT_TURNTABLE_TYPES = new Set(['turntable','spin','spin_bonus']);
 function statementCategoryMatch(cat, t){
   if (cat === 'withdraw') return t.type === 'withdraw';
   if (cat === 'income') return t.type !== 'withdraw' && recordsRowAmount(t) > 0;
@@ -4561,12 +4470,10 @@ function statementDescription(t){
   if (t.type === 'commission') return 'Commission';
   if (t.type === 'promocode') return 'Gift Code';
   if (t.type === 'order_gift') return 'Order Gift';
-  if (t.type === 'checkin') return 'Check-in Reward';
   if (t.type === 'welcome_bonus') return 'Welcome Bonus';
   if (t.type === 'team_reward') return 'Team Reward';
   if (t.type === 'mission_salary') return 'Daily Salary';
   if (t.type === 'mission_deposit_reward') return 'Mission Reward';
-  if (STATEMENT_TURNTABLE_TYPES.has(t.type)) return 'Turntable';
   if (t.type === 'admin_credit') return 'Deposit';
   if (t.type === 'invest' || t.type === 'investment') return 'Purchase';
   if (t.type === 'investment_refund') return 'Refund';
@@ -5210,7 +5117,7 @@ function openDepositFormSheet(){
   const names = String(s.depositMethodNames || 'Pay-A').split(',').map(x => x.trim()).filter(Boolean);
   const note = t => `<div class="pt-note">${t}</div>`;
   openSheet('Deposit', `<div class="pt-dep">
-    <div class="pt-chips" id="depChips">${chipAmts.map(a => `<button type="button" class="dep-chip pt-chip${a === _depChosenAmount ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a},'depAmount')">${a}</button>`).join('')}</div>
+    <div class="pt-chips" id="depChips">${chipAmts.map(a => `<button type="button" class="dep-chip pt-chip${a === _depChosenAmount ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a})">${a}</button>`).join('')}</div>
     <div class="pt-avail">Available\uff1a <b>${esc(vMoney2((STATE.account || {}).walletBalance))}</b></div>
     <div class="pt-amt"><span>${esc(cur())}</span><input id="depAmount" type="text" inputmode="numeric" maxlength="9" value="${_depChosenAmount || ''}" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');syncDepositQuickAmt()" autocomplete="off"></div>
     <div class="pt-meths" id="depPays">${names.map((n, i) => `<button type="button" class="${i === 0 ? 'on' : ''}" onclick="pickPayLabel(this)">${esc(brandName())} ${esc(n)}</button>`).join('')}</div>
@@ -5230,100 +5137,10 @@ window.pickPayLabel = function(btn){
   const box = $('depPays');
   if (box) box.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
 };
-var _cardChosenAmount = 0;
-window.syncCardQuickAmt = function(){
-  const val = parseMoneyInput(($('cardAmount') || {}).value);
-  _cardChosenAmount = val;
-  const chips = $('cardChips');
-  if (chips) chips.querySelectorAll('.dep-chip').forEach(btn => btn.classList.toggle('sel', Number(btn.dataset.amt) === val));
-};
-// Owner: cards go through MarzPay's own hosted gateway, so this leaves the
-// app entirely (window.location.href, a full navigation -- there is no
-// modal/iframe checkout to stay inside). Unlike Mobile Money, the app
-// itself is gone from memory the instant that navigation happens, so
-// _depActiveDepositId-style in-memory tracking (the pattern the Mobile
-// Money status modal uses) cannot survive it -- the pending deposit id has
-// to be written somewhere that outlives a full page reload. localStorage
-// is that place; resumePendingCardDeposit() (called from enterApp() on
-// every app open) is what picks it back up once the member returns from
-// MarzPay's page, however many minutes or app-relaunches later that is.
-var CARD_DEPOSIT_STORAGE_KEY = 'potato_pending_card_deposit';
-// Called once per app open (see enterApp()). Fire-and-forget: nothing else
-// on screen depends on this resolving, and a member with no pending card
-// payment (the overwhelming common case) pays for one harmless, near-instant
-// localStorage read and nothing more.
-async function resumePendingCardDeposit(){
-  let depositId;
-  try { depositId = localStorage.getItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) { return; }
-  if (!depositId) return;
-  // Used to be a single check-and-forget: if the webhook had not landed in
-  // the exact instant the member reopened the app, they saw nothing until
-  // the NEXT full app open. Poll for a short window instead, same shape and
-  // cadence as pollUsdtDepositStatus() -- a webhook landing a few seconds
-  // late (the common case; it is a real network round trip on MarzPay's
-  // side) now still surfaces here instead of silently waiting for a restart.
-  var attempts = 0;
-  var timer = setInterval(async function(){
-    attempts++;
-    try {
-      // Same status route Mobile Money already polls -- it resolves purely
-      // off dep.marzTxUuid/dep.status, never anything MoMo-specific, so a
-      // card deposit's own row is invisible to it by nothing more than
-      // coincidence of shape, not a special case that had to be added.
-      const r = await post('/deposit/marzpay/status', { depositId: depositId });
-      if (r.status === 'success' && r.state === 'matched') {
-        clearInterval(timer);
-        try { localStorage.removeItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) {}
-              notify('Card payment completed! Credited to your balance.');
-        await refreshTransactionsCache();
-        if (STATE.page === 'home') renderHome();
-        return;
-      }
-      if (r.status === 'success' && r.state === 'failed') {
-        clearInterval(timer);
-        try { localStorage.removeItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) {}
-        notify(r.message || 'The card payment did not complete.');
-        return;
-      }
-    } catch (e) {}
-    // Still pending after 6 tries (~30s): leave the key in place. The next
-    // full app open re-runs this same check, and the server-side
-    // reconcilePendingDeposits() sweep keeps retrying independently of
-    // whether the member is even looking at the app -- never declared
-    // failed just because it has not resolved within this one window.
-    if (attempts >= 6) clearInterval(timer);
-  }, 5000);
-}
-// The chip values still come from the live product prices (owner: "juck put
-// quick amounts basing on products prices"), so they stay correct when
-// products are repriced, only the chip's LOOK follows the mockup now.
-//
-// inputId picks which panel these chips belong to: Mobile Money's #depChips
-// feeds #depAmount, Card's #cardChips feeds #cardAmount. A tap used to
-// always write into #depAmount regardless of which panel was actually
-// open, so tapping a quick amount on the Card tab silently updated the
-// OTHER, hidden field and did nothing visible on screen. Each chip now
-// carries its own target, and _chosenAmountFor()/pickDepositAmount() below
-// route to the right field/chip-group instead of assuming Mobile Money.
-function depositChipsHtml(s, inputId){
-  const amounts = Array.from(new Set((STATE.products || [])
-    .map(p => Number(p.price) || 0)
-    .filter(p => p >= (Number(s.minDeposit) || 0))))
-    .sort((a, b) => a - b)
-    .slice(0, 3);
-  const chosen = _chosenAmountFor(inputId);
-  return amounts.map(a =>
-    `<button type="button" class="dep-chip${a === chosen ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a},'${inputId}')">${numGroup(a, false)}</button>`
-  ).join('');
-}
-function _chosenAmountFor(inputId){
-  return inputId === 'cardAmount' ? _cardChosenAmount : _depChosenAmount;
-}
-window.pickDepositAmount = function(amt, inputId){
-  const el = $(inputId || 'depAmount');
+window.pickDepositAmount = function(amt){
+  const el = $('depAmount');
   if (el) el.value = amt;
-  if (inputId === 'cardAmount') syncCardQuickAmt();
-  else syncDepositQuickAmt();
+  syncDepositQuickAmt();
 };
 function syncDepositQuickAmt(){
   // Deposit.dc.html's own chip grid (#depChips/.dep-chip) is the only chip
@@ -5578,12 +5395,7 @@ window.submitDeposit = async function(){
   // The payment prompt goes to the member's own registered number (the server uses it when none is sent).
   // The member types the number he pays from (the prompt is sent to it); it is checked with the same rule the server applies.
   if (!amount || amount <= 0) return notify('Enter a valid amount');
-  // Card (doCardDeposit()) and USDT (doUsdtDeposit()) both already check
-  // this client-side before ever hitting the network; Mobile Money was the
-  // one rail still relying entirely on the server's own rejection, which
-  // meant a below-minimum amount round-tripped to the server and back
-  // before the member found out, instead of failing instantly like the
-  // other two.
+  // A below-minimum amount is refused here, before any round trip.
   const s = STATE.settings || {};
   if (amount < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
   submitBtn.disabled = true; submitBtn.textContent = 'Processing...';

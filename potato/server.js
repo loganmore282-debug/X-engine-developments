@@ -164,11 +164,9 @@ app.use('/admin/', async (req, _res, next) => {
   }
   next();
 });
-// '/turntable/spin' belongs here because it
-// pays real money on an unauthenticated-body POST, so it gets the strict
-// 60/min per-user cap rather than only the 400/min global one.
+// These routes move or pay real money, so they get the strict 60/min per-user cap rather than only the 400/min global one.
 ['/withdraw/request', '/invest/create', '/deposit/marzpay', '/bank/save', '/register',
- '/account/transaction-pin/change', '/redeem', '/turntable/spin']
+ '/account/transaction-pin/change', '/redeem']
   .forEach(p => app.use(p, apiLimiter));
 // ── BODY PARSING ──
 // A tight 64kb cap by default; admin routes that carry a base64 product
@@ -522,7 +520,7 @@ app.use((req, res, next) => {
 });
 
 // ── MAINTENANCE GATE ──
-const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/redeem', '/turntable'];
+const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/redeem'];
 const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/pesajet/webhook', '/tavupay/webhook']);
 // The platform's name, as the owner last set it in Admin -> Settings. Every
 // server-side string that names the app goes through here rather than
@@ -590,8 +588,6 @@ const DEFAULT_SETTINGS = {
   // Login / Sign Up backdrops: fully opaque and unblurred, so an
   // uploaded image shows exactly as supplied until the owner dials it
   // back. With no image set these do nothing at all.
-  authHeroOpacity: 100, authHeroBlur: 0,
-  authCardOpacity: 100, authCardBlur: 0,
   // The My page banner (Admin > Banners > My page banner): 100 = as uploaded, 0 blur = sharp.
   myBannerOpacity: 100, myBannerBlur: 0,
   // The names under the Deposit page's method buttons, comma separated; each shows after the app name ("Potato Pay-A"). The first one is chosen at first.
@@ -607,24 +603,6 @@ const DEFAULT_SETTINGS = {
   // Background treatment for signed-in Home/Assets/Network/Profile and
   // secondary pages. Authentication screens keep their own controls above.
   innerBgOpacity: 100, innerBgBlur: 0,
-  // ── Turntable (daily spin wheel) ──
-  // Owner's spec: "spin wheel bonus, so everyday one spins just like daily
-  // check-in and earns the set amount in admin panel, also spin can also be
-  // available from buying products like any vip product like product
-  // 2,3,4,5,6,7,8... one earns the set percentage in admin panel of product
-  // amount bought."
-  // So there are TWO kinds of spin, with different payout rules:
-  //   * the free daily one, paying a random amount in [Min, Max] (set both
-  //     equal for a fixed amount), and
-  //   * spins earned by buying a product, paying from THAT product's own
-  //     spinMin/spinMax band -- configured per product, not here.
-  turntableEnabled: false,
-  turntableDailyMin: 200, turntableDailyMax: 1000,
-  // Spins earned from purchases are configured PER PRODUCT (spinCount,
-  // spinMin, spinMax on each product) -- owner: "make when l can configure
-  // every spin price for each product... also products will have different
-  // rates of multipliers so don't fix it in settings." Only the free daily
-  // spin's band lives here, because it is not tied to any product.
   // Extra frontend domains allowed to call this backend, set from the admin
   // panel (Settings -> Allowed website domains). ADDED to the built-in
   // allowlist, never replacing it -- see _corsExtraHosts.
@@ -960,7 +938,7 @@ async function getHelpBanner() {
 // Transparent cut-out ICONS the owner uploads in the admin panel (Banners > Icons); the panel removes each picture's background and crops it
 // tight before saving, so these are always PNGs. To add an icon, add its name here AND its label in admin-src (POTATO_ICON_LABELS).
 const POTATO_ICON_SLOTS = ['navhome', 'navincome', 'navteam', 'navshare', 'navmy', 'recharge', 'withdraw', 'service', 'channel', 'ordergift', 'downloadapp', 'giftbox'];
-const POTATO_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'banner4', 'banner5', 'promobanner', 'checkinbanner', 'profilelogo', 'loaderbg', 'downloadbg', 'linkpreview', 'teambanner', 'mybanner', 'aboutbanner', 'aboutlogo', ...POTATO_ICON_SLOTS];
+const POTATO_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'promobanner', 'profilelogo', 'loaderbg', 'linkpreview', 'teambanner', 'mybanner', 'aboutbanner', 'aboutlogo', ...POTATO_ICON_SLOTS];
 const _potatoImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getPotatoImage(slot) {
@@ -1158,8 +1136,7 @@ function fmtMoney(n, currency) {
   // the label in front of it is what changes.
   return cur + ' ' + v.toLocaleString('en-UG', hasCents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});
 }
-// Rounds to the nearest UGX cent (2 decimal places). Used by gift codes, the spin
-// wheel/turntable and reporting math.
+// Rounds to the nearest UGX cent (2 decimal places). Used by gift codes and reporting math.
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 // Cut the text first: the tag-stripping pattern is quadratic on a long run of '<' with no '>', so an unbounded string could freeze the one-process server.
 function stripHtml(s) { return String(s || '').slice(0, 5000).replace(/<[^>]*>/g, '').trim(); }
@@ -1502,29 +1479,6 @@ function depositSenderPhone(body, accountPhone, keys) {
 }
 const NETWORK_NAMES = new Set(['MTN Mobile Money', 'Airtel Money']);
 const MAX_MONEY_AMOUNT = 999_999_999;
-// The most spins one purchase can ever grant. Used in TWO places that must
-// agree: sanitizeProductInput() refuses a bigger number at save time, and
-// grantTurntableSpins() clamps its loop to it at grant time. The second is
-// not redundant -- it is the LOOP BOUND, and it reads a value out of the
-// database. Not every write to products/ goes through the validator (the
-// legacy-key migration re-writes stored docs directly), so the loop must
-// not depend on the validator having been the only writer.
-//
-// It was 20, and 20 was an invented number -- owner: "stop limiting
-// everything bro, they are above 25 even." It is 200 now. What this figure
-// actually bounds is the WRITE LOOP in writeTurntableSpinDocs(): one Mongo
-// document per spin, written one await at a time, so the cost of a purchase's
-// grant is linear in it. That is why it is not simply removed -- a typed
-// 100000 would try to write a hundred thousand money documents -- but 200
-// leaves the owner far more room than he asked for and costs at most a couple
-// of seconds of work that runs AFTER the purchase has already answered
-// (grantTurntableSpins is fire-and-forget from /invest/create) and inside
-// that investment's own lock, so nothing a member is waiting on is slowed.
-// The sequential await is also what makes the resume-after-failure logic
-// correct: surviving rows are a contiguous prefix, which is what
-// `existingCount` assumes. Do not make this loop concurrent without making
-// that resume fill MISSING ordinals instead of counting rows.
-const MAX_SPINS_PER_PURCHASE = 200;
 function finiteMoney(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -2238,126 +2192,6 @@ async function marzSendMoney({ amount, phone, reference, description, callbackUr
   });
   return _marzParse(resp);
 }
-// ── BANK TRANSFER (MarzPay) ── a payout rail alongside mobile-money
-// send-money, always via MarzPay regardless of withdrawProvider() (the
-// same "always this one gateway" reasoning as card deposits, which stay
-// on MarzPay even when depositMethod is 'pesajet' -- bank transfer is a
-// MarzPay-only product). Unlike marzMoneyBody() above, there is no
-// `country`/`currency` field at all -- the docs show none for this
-// endpoint (Uganda-primary today) -- and no client-supplied `reference`
-// either: MarzPay generates its own and hands it back in the response, so
-// (unlike collect/send, where OUR pre-generated reference is what lets a
-// network-error retry be matched up later) there is nothing to pre-write
-// before calling out. A network error here is exactly as ambiguous as the
-// send-money one and handled the same way by the caller: never assume
-// nothing was sent.
-async function marzBankTransfer({ amount, bankName, accountNumber, accountName, description }) {
-  const payload = { amount: Number(amount), description: description || 'Withdrawal', bank_name: bankName, bank_account_number: accountNumber };
-  if (accountName) payload.bank_account_name = accountName;
-  const resp = await fetch(`${MARZPAY_BASE}/bank-transfer`, {
-    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
-    headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  return _marzParse(resp);
-}
-// Validates a recipient account BEFORE it is saved as a withdrawal
-// destination -- MarzPay's own docs recommend this ("avoids failed
-// transfers and refunds... returns the account holder name"). Called from
-// /bank/save, not at withdrawal time -- catching a typo'd account number
-// the moment it is entered is far better than finding out only once real
-// money is already being sent.
-//
-// Owner: "make sure bro there is supernatural validation" -- found while
-// testing: a real submit came back "UNABLE TO COMPLETE COMMUNICATION",
-// reading exactly like a bank switch's own transient "could not reach
-// that bank's systems just now" response, not a clean rejection. One
-// retry, but ONLY for a failure that actually looks transient (a network
-// exception, or anything _marzParse/the bank switch itself already
-// signals as provider trouble rather than a real answer about the
-// account) -- a clean, definitive rejection (VALIDATION_FAILED,
-// BANK_NOT_SUPPORTED, a genuinely nonexistent account) would fail the
-// exact same way again, so retrying it only adds latency to an answer
-// that was already correct. No retry at all on the common path (success,
-// or a clean rejection) -- the "callback speed very fast" half of the
-// same ask.
-async function marzValidateBankAccount(bankName, accountNumber) {
-  const attempt = async () => {
-    try {
-      const resp = await fetch(`${MARZPAY_BASE}/bank-transfer/validate`, {
-        method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
-        headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bank_name: bankName, account_number: accountNumber })
-      });
-      return await _marzParse(resp);
-    } catch (netErr) {
-      return { status: 'error', providerDown: true, message: netErr.message };
-    }
-  };
-  let result = await attempt();
-  const transient = result.providerDown || /communicat/i.test(String(result.message || ''));
-  if (transient) result = await attempt();
-  return result;
-}
-function _marzExtractBankTransfer(d) {
-  // GET /bank-transfer/{reference}'s own response key is
-  // bank_transfer_request (named differently from the CREATE response's
-  // bank_transfer -- the docs call this out explicitly), so both are
-  // tried rather than assuming one.
-  const bt = d?.data?.bank_transfer_request || d?.data?.bank_transfer || d?.data || d || {};
-  return { status: String(bt.status || d?.status || '').toLowerCase() };
-}
-async function marzGetBankTransferStatus(reference) {
-  let lastErr = null;
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      const resp = await fetch(`${MARZPAY_BASE}/bank-transfer/${reference}`, {
-        signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
-      });
-      const d = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        console.error(`marzGetBankTransferStatus(${reference}) attempt ${attempt}: HTTP ${resp.status}`, JSON.stringify(d).slice(0, 300));
-        lastErr = new Error(`HTTP ${resp.status}`);
-      } else {
-        return _marzExtractBankTransfer(d).status;
-      }
-    } catch (e) { lastErr = e; console.error(`marzGetBankTransferStatus(${reference}) attempt ${attempt} failed:`, e.message); }
-    if (attempt < 2) await new Promise(r => setTimeout(r, 350));
-  }
-  console.error(`marzGetBankTransferStatus(${reference}): gave up after 2 attempts, last error:`, lastErr && lastErr.message);
-  return '';
-}
-// Cached (10 min -- this changes rarely, no reason to hit MarzPay on every
-// wallet-bind screen open), populated from MarzPay's own live list rather
-// than hardcoded here: bank codes "must match exactly for the provider to
-// accept the transfer" per their own docs, and this project has no
-// reliable source for all ~25 of them, only the 6 shown as examples on the
-// docs page. A stale/incomplete hardcoded list would silently reject real
-// banks or, worse, send a transfer under the wrong code.
-let _bankListCache = null, _bankListCacheTs = 0;
-const BANK_LIST_CACHE_MS = 10 * 60 * 1000;
-async function getSupportedBanks() {
-  if (_bankListCache && Date.now() - _bankListCacheTs < BANK_LIST_CACHE_MS) return _bankListCache;
-  try {
-    const resp = await fetch(`${MARZPAY_BASE}/bank-transfer/banks`, {
-      signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
-    });
-    const d = await resp.json().catch(() => ({}));
-    if (resp.ok && d.status === 'success' && Array.isArray(d.data?.banks)) {
-      _bankListCache = d.data.banks.map(b => ({ code: String(b.code || ''), name: String(b.name || '') })).filter(b => b.code && b.name);
-      _bankListCacheTs = Date.now();
-    }
-  } catch (e) { console.error('getSupportedBanks failed:', e.message); }
-  return _bankListCache || [];
-}
-// A withdrawal account's `network` is only ever one of NETWORK_NAMES
-// (mobile money, checked at /bank/save time) or a bank name that
-// getSupportedBanks() had ALREADY confirmed real at that same save time --
-// so classifying a bound account at withdrawal time needs no live MarzPay
-// call at all, only this. Keeps the payout-processing path from taking on
-// a MarzPay dependency just to decide which of its own two endpoints to
-// call.
-function isBankNetwork(network) { return !NETWORK_NAMES.has(String(network || '')); }
 // Owner: "let us put on dashboard so as it checks marzpy available
 // balance." GET /balance -- confirmed against MarzPay's own official
 // JS SDK (marzpay-js on npm, published by MarzPay's own maintainer),
@@ -4111,16 +3945,16 @@ ${imageUrl ? `<meta name="twitter:image" content="${htmlText(imageUrl)}">\n` : '
 });
 app.get('/public/potato-images', async (req, res) => {
   try {
-    const [logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, downloadbg, teambanner, mybanner, aboutbanner, aboutlogo] = await Promise.all([
+    const [logo, authhero, authlogo, banner2, banner3, promobanner, profilelogo, teambanner, mybanner, aboutbanner, aboutlogo] = await Promise.all([
       getPotatoImage('logo'),
       getPotatoImage('authhero'), getPotatoImage('authlogo'), getPotatoImage('banner2'),
-      getPotatoImage('banner3'), getPotatoImage('banner4'), getPotatoImage('banner5'), getPotatoImage('promobanner'),
-      getPotatoImage('checkinbanner'), getPotatoImage('profilelogo'), getPotatoImage('downloadbg'),
+      getPotatoImage('banner3'), getPotatoImage('promobanner'),
+      getPotatoImage('profilelogo'),
       getPotatoImage('teambanner'), getPotatoImage('mybanner'), getPotatoImage('aboutbanner'), getPotatoImage('aboutlogo'),
     ]);
     const iconList = await Promise.all(POTATO_ICON_SLOTS.map(getPotatoImage));
     const icons = {}; POTATO_ICON_SLOTS.forEach((k, n) => { icons[k] = iconList[n] || null; });
-    publicJson(req, res, { status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, downloadbg, teambanner, mybanner, aboutbanner, aboutlogo, icons }, IMAGE_CACHE);
+    publicJson(req, res, { status: 'success', logo, authhero, authlogo, banner2, banner3, promobanner, profilelogo, teambanner, mybanner, aboutbanner, aboutlogo, icons }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -4432,405 +4266,6 @@ app.get('/account', async (req, res) => {
 // The daily check-in claim (/checkin) is removed: no screen calls it and it paid money.
 
 // ═══════════════════════════════════════════
-// TURNTABLE (daily spin wheel)
-// ═══════════════════════════════════════════
-// A Potato-only feature -- Snow has no equivalent, so none of this is a port.
-//
-// Two spin sources, deliberately kept as separate concepts because they pay
-// differently and must not be able to subsidise each other:
-//   1. One FREE spin per EAT calendar day, paying a random amount inside the
-//      admin's [turntableDailyMin, turntableDailyMax] band.
-//   2. Spins EARNED by buying a product, each paying a random amount from
-//      that product's own spinMin/spinMax band. Configured per product
-//      (spinCount/spinMin/spinMax) because the owner wants every product to
-//      be able to pay differently.
-//
-// Earned spins are stored as individual `turntableSpins` documents rather
-// than a counter, because each one carries its own payout basis (the price
-// of the product that granted it). A counter would lose that, and a member
-// who bought a cheap tier then an expensive one would be paid the wrong
-// amount on one of them.
-async function grantTurntableSpins(userId, product, investmentId) {
-  try {
-    const sett = await getSettings();
-    if (!sett.turntableEnabled) return;
-    // Idempotent per purchase. This is fire-and-forget from /invest/create,
-    // so nothing today calls it twice -- but a bonus that pays out again on
-    // a retry is the kind of thing a later caller adds by accident, and one
-    // query is cheap next to silently double-granting.
-    //
-    // The check and the writes it guards run INSIDE one lock, because on its
-    // own it is a read-then-write: two calls for the same investmentId could
-    // both find nothing and both grant, which is the double-grant the query
-    // exists to stop. Keyed on the investment so two different purchases
-    // still run concurrently. Owner's question -- "what if a product spin and
-    // a daily spin combine together, can't it override??" -- is about the
-    // SPENDING side, which was already safe; this is the granting side, where
-    // the only hole actually was.
-    // AWAITED, not returned: this is called fire-and-forget from
-    // /invest/create with no .catch(), so a returned promise would carry any
-    // rejection straight past the handler below and out as an unhandled
-    // rejection.
-    if (!investmentId) { await writeTurntableSpinDocs(userId, product, null, 0); return; }
-    await withLock('spingrant:' + investmentId, async () => {
-      const already = await db.collection('turntableSpins')
-        .where('investmentId', '==', investmentId).get();
-      // A previous attempt may have died halfway through the loop. The old
-      // existence-only guard treated one surviving row as "all spins were
-      // granted" forever. Count the durable rows and fill only the missing
-      // tail while this investment lock excludes concurrent grant attempts.
-      await writeTurntableSpinDocs(userId, product, investmentId, already.size);
-    });
-  } catch (e) {
-    // Never let this break a purchase that has already been paid for. The
-    // member keeps their product; the spin is simply not granted, and the
-    // failure is loud in the logs rather than silently swallowed.
-    console.error(`Turntable: failed to grant spins to ${userId} for ${product && product.key}:`, e.message);
-  }
-}
-// The writes themselves. Split out only so the idempotency query above and
-// these can share one lock; it has no try/catch of its own because its single
-// caller already wraps it, and swallowing an error here would let that caller
-// report a grant it did not make.
-async function writeTurntableSpinDocs(userId, product, investmentId, existingCount) {
-    // Per-product config: how many spins this purchase grants, and the band
-    // each of those spins pays from. A product with no spinCount grants
-    // none, which is how "the cheapest product earns nothing" is expressed --
-    // there is no global tier threshold any more.
-    // Every one of these is re-clamped from the STORED product rather than
-    // trusted: this loop writes a document per iteration and each document
-    // is money, so the bound and the band are validated where they are used,
-    // not only where they were saved.
-    const count = Math.min(MAX_SPINS_PER_PURCHASE,
-      Math.max(0, Math.floor(Number(product && product.spinCount) || 0)));
-    if (!count) return;
-    const lo = Math.min(MAX_MONEY_AMOUNT, Math.max(0, Number(product.spinMin) || 0));
-    const hi = Math.min(MAX_MONEY_AMOUNT, Math.max(lo, Number(product.spinMax) || 0));
-    if (hi <= 0) return;
-    const { date, time } = nowStr();
-    const start = Math.min(count, Math.max(0, Math.floor(Number(existingCount) || 0)));
-    for (let i = start; i < count; i++) {
-      // The band is SNAPSHOT onto the spin, not looked up when it is spun.
-      // A member who earned a spin under one configuration keeps that deal
-      // even if the admin retunes the product afterwards -- and an admin
-      // lowering a payout cannot retroactively shrink spins already earned.
-      const spinData = {
-        // investmentId ties the spin to the purchase that paid for it: it is
-        // what makes the guard above work, and it is the only way to answer
-        // "where did this spin come from" when auditing a member's account.
-        userId, investmentId: investmentId || null, grantOrdinal: i,
-        spinMin: lo, spinMax: hi, source: 'product',
-        productKey: product.key, productName: product.name,
-        used: false, date, time, createdAt: FieldValue.serverTimestamp(),
-      };
-      if (investmentId) {
-        await db.collection('turntableSpins')
-          .doc(`grant:${investmentId}:${i}`).createIfAbsent(spinData);
-      } else {
-        await db.collection('turntableSpins').add(spinData);
-      }
-    }
-}
-// One shared roll for both spin kinds -- the daily band from settings, or a
-// product spin's own snapshot band.
-// This decides how much money a member is paid, so it does NOT use
-// Math.random(). V8's Math.random is a seeded xorshift128+ whose internal
-// state can be recovered from a modest run of outputs -- and a member sees
-// every one of their own spin results, which is exactly such a run. The
-// exposure was bounded (nobody can win past spinMax either way), but a
-// predictable generator has no business deciding payouts when the fix is
-// one line. crypto.randomInt is a CSPRNG and draws from a uniform range
-// with no modulo bias.
-//
-// Resolution is 1/100 of a shilling, matching round2()'s own precision, so
-// nothing is lost by working in integer cents here.
-// ── THE WHEEL'S OWN SLICES ──
-// Owner: "why the spin wheel has no amounts?" -- because there were none to
-// show. The payout used to be any figure at all between the admin's minimum
-// and maximum, so no slice could be labelled with anything.
-//
-// The eight amounts a member sees on the wheel and the eight the payout is
-// drawn from MUST be the same list, or the wheel lands on 600 while the
-// wallet gets 587 -- a money screen telling a lie. So they are computed HERE,
-// used by the roll, and handed to the client to render. One source of truth,
-// with no second copy in the app to keep in step (this project already keeps
-// one such pair by hand -- phoneToEmail -- and needs a dedicated test to
-// prove the two still agree; that is not a pattern worth repeating).
-//
-// The band is still the owner's: turntableDailyMin/Max for the free daily
-// spin, and each product's own spinMin/spinMax snapshotted onto the spins it
-// earned. Nothing new to configure, which is what he asked for -- "basing on
-// the set spin ranges on products amount ranges and that amount of daily
-// spin".
-var SPIN_SLICES = 8;
-function spinWheelSlices(lo, hi) {
-  lo = Math.max(0, finiteMoney(lo));
-  hi = Math.max(lo, finiteMoney(hi));
-  // A zero-width band is not a broken one: an admin who sets min == max means
-  // every spin pays exactly that, and the honest wheel shows it on all eight.
-  if (hi <= lo) return new Array(SPIN_SLICES).fill(round2(lo));
-  // Evenly spaced from lo to hi inclusive, then rounded to a step that suits
-  // the band's own width so the figures read as money rather than as
-  // arithmetic: 200 / 310 / 430 ... rather than 200 / 314.29 / 428.57. The
-  // two ENDS stay exactly lo and hi, because those are the numbers the copy
-  // under the wheel promises and the admin typed.
-  const span = hi - lo;
-  const step = span >= 8000 ? 500 : span >= 800 ? 50 : span >= 80 ? 5 : 1;
-  const out = [];
-  for (let i = 0; i < SPIN_SLICES; i++) {
-    if (i === 0) { out.push(round2(lo)); continue; }
-    if (i === SPIN_SLICES - 1) { out.push(round2(hi)); continue; }
-    const raw = lo + (span * i) / (SPIN_SLICES - 1);
-    out.push(round2(Math.min(hi, Math.max(lo, Math.round(raw / step) * step))));
-  }
-  return out;
-}
-// The roll IS the wheel: pick a slice, pay what that slice says. crypto, not
-// Math.random -- V8's Math.random is a seeded xorshift128+ whose state is
-// recoverable from a run of outputs, and a member sees every one of their own
-// results.
-function rollSpinSlice(lo, hi) {
-  const slices = spinWheelSlices(lo, hi);
-  const index = crypto.randomInt(0, slices.length);
-  return { slices, index, amount: slices[index] };
-}
-function rollSpinReward(lo, hi) {
-  return rollSpinSlice(lo, hi).amount;
-}
-function turntableDailyReward(sett) {
-  return rollSpinReward(sett.turntableDailyMin, sett.turntableDailyMax);
-}
-// The band the NEXT spin will be paid from, which is not always the daily
-// one: the spin route takes the free daily spin first if it is available and
-// otherwise the OLDEST unused earned spin, each of which carries the band its
-// product had at the moment it was granted. The wheel has to be labelled with
-// whichever of those is actually about to be used, or it shows one product's
-// prizes and pays another's.
-function spinBandOf(doc) {
-  const d = doc && doc.data ? doc.data() : doc;
-  if (!d) return null;
-  if (d.spinMin != null || d.spinMax != null) return { lo: d.spinMin, hi: d.spinMax };
-  // Spins granted before per-product bands carry a flat `reward`. Honour it:
-  // every slice reads the same, which is exactly what such a spin pays.
-  const flat = round2(Number(d.reward) || 0);
-  return { lo: flat, hi: flat };
-}
-app.get('/turntable/status', async (req, res) => {
-  const uid = await verifyAuth(req);
-  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const sett = await getSettings();
-    const snap = await db.collection('users').doc(uid).get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
-    const u = snap.data();
-    if (u.status === 'banned')
-      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    const now = Date.now();
-    const lastKey = u.lastTurntableAt ? eatDayKey(new Date(u.lastTurntableAt)) : null;
-    const dailyAvailable = lastKey !== eatDayKey(new Date(now));
-    // A real count, not the size of a capped fetch. This used to be
-    // .limit(200).get() and report snap.size, so a member holding more than
-    // 200 unused spins was told they had 200 -- the spins existed and were
-    // spendable, but the number on screen was wrong, and totalSpins (which
-    // enables the SPIN button) was wrong with it.
-    const earnedCount = await db.collection('turntableSpins')
-      .where('userId', '==', uid).where('used', '==', false).count();
-    // The wheel is labelled with the band of the spin that is actually next,
-    // resolved exactly the way /turntable/spin resolves it: the free daily
-    // spin if it is available, otherwise the oldest unused earned one. The
-    // extra read only happens when there IS an earned spin to describe.
-    let band = { lo: sett.turntableDailyMin, hi: sett.turntableDailyMax };
-    let nextSource = 'daily';
-    if (!dailyAvailable && earnedCount > 0) {
-      const earned = await db.collection('turntableSpins')
-        .where('userId', '==', uid).where('used', '==', false)
-        .orderBy('createdAt', 'asc').limit(1).get();
-      if (!earned.empty) {
-        band = spinBandOf(earned.docs[0]) || band;
-        nextSource = 'product';
-      }
-    }
-    res.json({
-      status: 'success',
-      enabled: !!sett.turntableEnabled,
-      dailyAvailable,
-      earnedSpins: earnedCount,
-      totalSpins: (dailyAvailable ? 1 : 0) + earnedCount,
-      nextDailyAt: eatNextMidnight(now),
-      dailyMin: Number(sett.turntableDailyMin) || 0,
-      dailyMax: Number(sett.turntableDailyMax) || 0,
-      nextSource,
-      nextMin: round2(Math.max(0, finiteMoney(band.lo))),
-      nextMax: round2(Math.max(0, finiteMoney(band.hi))),
-      slices: spinWheelSlices(band.lo, band.hi),
-    });
-  } catch (e) {
-    console.error('Turntable status error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not load the turntable' });
-  }
-});
-app.post('/turntable/spin', async (req, res) => {
-  const uid = await verifyAuth(req);
-  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  try {
-    let result = null;
-    // Same lock discipline as /checkin: one spin at a time per member, with
-    // the balance write nested under bal:<uid>. Without this, two taps
-    // landing together would each see the same unused spin and pay it twice.
-    await withLock('turntable:' + uid, async () => {
-      const sett = await getSettings();
-      if (!sett.turntableEnabled) { result = { code: 400, body: { status: 'error', message: 'The turntable is not available right now.' } }; return; }
-      const ref = db.collection('users').doc(uid);
-      const snap = await ref.get();
-      if (!snap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
-      const u = snap.data();
-      if (u.status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
-      if (u.registrationDone === false) { result = { code: 403, body: { status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up first.' } }; return; }
-
-      const now = Date.now();
-      const todayKey = eatDayKey(new Date(now));
-      const lastKey = u.lastTurntableAt ? eatDayKey(new Date(u.lastTurntableAt)) : null;
-      const dailyAvailable = lastKey !== todayKey;
-
-      // `roll` carries the eight slices the wheel must land on and which of
-      // them won, so the animation can stop on the exact figure being paid.
-      let reward, source, label, spinDoc = null, roll = null;
-      if (dailyAvailable) {
-        // The day is CLAIMED here, atomically, before anything is paid.
-        // withLock() is an in-process promise chain -- it serialises taps
-        // inside ONE server process and nothing more, so if this app is ever
-        // run on more than one instance two simultaneous taps could each
-        // read lastTurntableAt, each see the day as free, and each pay a
-        // daily spin. updateIf() is a single conditional Mongo write: only
-        // the request whose read matched the stored value wins, whichever
-        // process it came from.
-        const claimed = await ref.updateIf(
-          { lastTurntableAt: u.lastTurntableAt == null ? null : u.lastTurntableAt },
-          { lastTurntableAt: now });
-        if (!claimed) {
-          result = { code: 400, body: { status: 'error', message: 'That spin was already used. Come back after midnight for your free daily spin.', nextDailyAt: eatNextMidnight(now) } };
-          return;
-        }
-        roll = rollSpinSlice(sett.turntableDailyMin, sett.turntableDailyMax);
-        reward = roll.amount;
-        source = 'daily';
-        label = 'Turntable daily spin';
-      } else {
-        // Oldest unused earned spin first, so a member cannot hold back a
-        // high-value spin and burn cheap ones on other days.
-        const earned = await db.collection('turntableSpins')
-          .where('userId', '==', uid).where('used', '==', false)
-          .orderBy('createdAt', 'asc').limit(1).get();
-        if (earned.empty) {
-          result = { code: 400, body: { status: 'error', message: 'No spins left. Come back after midnight for your free daily spin.', nextDailyAt: eatNextMidnight(now) } };
-          return;
-        }
-        spinDoc = earned.docs[0];
-        // spinBandOf() also covers the older spins, granted before
-        // per-product bands, which carry a flat `reward` instead of one --
-        // honoured as a zero-width band rather than paid as 0.
-        const band = spinBandOf(spinDoc);
-        roll = rollSpinSlice(band.lo, band.hi);
-        reward = roll.amount;
-        source = 'product';
-        label = `Turntable spin from ${spinDoc.data().productName || 'a purchase'}`;
-      }
-
-      // Burn the spin BEFORE crediting. If the credit then fails, the member
-      // has lost a spin -- annoying but recoverable, and visible in the
-      // logs. Crediting first and burning second would mean a failure paid
-      // real money out and left the spin re-usable, which is unrecoverable.
-      // The daily spin was already claimed atomically above; only an earned
-      // spin still needs burning. Same order as before -- burn, then credit --
-      // because a failed credit that left the spin re-usable would pay real
-      // money out twice, while a burnt spin with no credit is recoverable.
-      if (spinDoc) {
-        const burnt = await spinDoc.ref.updateIf({ used: false }, { used: true, usedAt: now });
-        if (!burnt) {
-          result = { code: 400, body: { status: 'error', message: 'That spin was already used.' } };
-          return;
-        }
-      }
-      try {
-        await withLock('bal:' + uid, () => ref.update({
-          walletBalance: FieldValue.increment(reward),
-          totalEarned: FieldValue.increment(reward),
-        }));
-      } catch (creditErr) {
-        // The wallet did NOT move, so hand the entitlement back. This catch
-        // deliberately covers only the wallet update: if the money already
-        // landed and a later history write fails, re-arming the spin would
-        // let the same entitlement pay a second time on retry.
-        if (spinDoc) await spinDoc.ref.update({ used: false, usedAt: null }).catch(() => {});
-        else await ref.update({ lastTurntableAt: u.lastTurntableAt || null }).catch(() => {});
-        throw creditErr;
-      }
-      const { date, time } = nowStr();
-      try {
-        await db.collection('transactions').add({
-          userId: uid, statementId: newStatementId(), type: 'turntable', description: label, amount: reward,
-          status: 'success', date, time, createdAt: FieldValue.serverTimestamp(),
-        });
-      } catch (ledgerErr) {
-        // MONEY-SAFETY: the spendable balance is already correct. Never
-        // restore the spin here; doing so is a direct double-credit path.
-        // Surface the missing history row loudly for the integrity tools /
-        // operator instead of turning a bookkeeping failure into free money.
-        console.error(`MONEY-SAFETY: turntable reward ${reward} credited to ${uid} but its transaction row failed; entitlement remains consumed to prevent a double credit.`, ledgerErr.message);
-      }
-
-      const earnedLeft = await db.collection('turntableSpins')
-        .where('userId', '==', uid).where('used', '==', false).count();
-      // RE-READ the balance rather than adding the reward to the snapshot
-      // taken at the top of this lock.
-      //
-      // `u` was read before the increment, and withLock('bal:' + uid) only
-      // serialises the WRITES -- that read sits outside it. Anything else
-      // crediting this member in between (a referral commission from a
-      // downline purchase, a manual deposit being approved, an investment
-      // maturing on the sweep) lands after the read, so
-      // `u.walletBalance + reward` is short by exactly that amount. The
-      // client trusts this number: it writes it into STATE.account and the
-      // win popup counts up to it, so a member would watch their balance
-      // animate to a figure LOWER than the money they actually have and keep
-      // seeing it until the next /account fetch.
-      //
-      // /checkin, which shares this endpoint's lock discipline, sidesteps the
-      // problem by returning only the bonus and letting the client refetch.
-      // This endpoint promises a balance, so it has to be the real one. On a
-      // failed re-read, omit it -- the client already falls back to
-      // before + reward, and a null is honest where a guess is not.
-      let newBalance = null;
-      try {
-        const after = await ref.get();
-        if (after.exists) newBalance = round2(Number(after.data().walletBalance) || 0);
-      } catch (_) { newBalance = null; }
-      result = { code: 200, body: {
-        status: 'success', reward, source,
-        walletBalance: newBalance,
-        earnedSpins: earnedLeft,
-        dailyAvailable: false,
-        totalSpins: earnedLeft,
-        nextDailyAt: eatNextMidnight(now),
-        // The eight amounts this spin was drawn from, and which one won, so
-        // the wheel can stop on the exact figure being credited. Sent even
-        // though the client already has a set from /turntable/status: the
-        // spin that was actually taken may not be the one that status
-        // described (another device may have used the daily spin in
-        // between), and the wheel must be relabelled rather than land on a
-        // stale prize.
-        slices: roll ? roll.slices : null,
-        sliceIndex: roll ? roll.index : null,
-      } };
-    });
-    res.status(result.code).json(result.body);
-  } catch (e) {
-    console.error('Turntable spin error:', e.message);
-    res.status(500).json({ status: 'error', message: 'The spin could not be completed. Your balance is unchanged.' });
-  }
-});
-
-// ═══════════════════════════════════════════
 // INVESTMENTS
 // ═══════════════════════════════════════════
 app.post('/invest/create', async (req, res) => {
@@ -4931,9 +4366,6 @@ app.post('/invest/create', async (req, res) => {
     // The referral reward (Level 1 / 2 / 3) is paid now, on the member's first purchase. A failure here must never fail a purchase the
     // member has already paid for: the row stays pending and the 30 second reconciler pays it.
     if (isFirstInvestment) await creditReferralCommission(invId, userId, liveTier.price).catch(e => console.error('First purchase commission error:', e.message));
-    // A spin is a bonus, and failing to grant one must never fail a purchase the member
-    // has already paid for.
-    grantTurntableSpins(userId, liveTier, invId);
     _vipCache.delete(userId);
     res.json({ status: 'success', investmentId: invId, message: `Bought ${liveTier.name} for ${fmtMoney(liveTier.price)}` });
   } catch (e) {
@@ -5658,12 +5090,8 @@ app.post('/withdraw/request', async (req, res) => {
     if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
     const rawNetwork = String(req.body.network || '').trim();
     if (!rawNetwork) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
-    // cleanPhone() only applies to mobile money -- it enforces this
-    // region's phone SHAPE, which a bank account number is not. The bound-
-    // account lookup right below (boundSnap) is the real gate either way:
-    // a value that doesn't match a real saved bankAccounts doc is refused
-    // there regardless of which branch validated its shape here.
-    const destValue = NETWORK_NAMES.has(rawNetwork) ? cleanPhone(textOf(req.body.phone)) : textOf(req.body.phone).replace(/\s+/g, '').trim();
+    // Only MTN / Airtel numbers exist; the bound-account lookup below is the real gate (the number must be one of the member's saved cards).
+    const destValue = NETWORK_NAMES.has(rawNetwork) ? cleanPhone(textOf(req.body.phone)) : '';
     if (!destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
     const sett = await getSettings();
     // The withdraw window, enforced HERE and not only shown in the app.
@@ -6025,74 +5453,6 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
     if (owner.exists && owner.data().status === 'banned')
       return { code: 409, body: { status: 'error', message: 'This member is suspended, so the payout was not sent. Reject it to refund them, or unban the account first.' } };
 
-    if (isBankNetwork(wit.network)) {
-      // Bank transfer payout -- always MarzPay, never PesaJet (bank
-      // transfer is not a PesaJet product), so this branch runs regardless
-      // of withdrawProvider()'s own setting. Same "write the marker before
-      // ever calling out, a network error is ambiguous, acceptance is not
-      // completion" shape as the MarzPay send-money branch below, with one
-      // real difference: /bank-transfer takes no client-supplied reference
-      // at all (unlike collect/send-money), so unlike those two there is
-      // nothing of our own to pre-write as the lookup key for a later
-      // webhook or reconciler tick -- only whatever reference MarzPay
-      // itself hands back in the response, captured the instant it exists.
-      const sendingMarker = crypto.randomUUID();
-      const sendingClaimed = await witRef.updateIf({ status: 'pending' }, { status: 'sending', sendingReference: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
-      if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Withdrawal status changed. Refresh the list.' } };
-
-      let mpData, ambiguous = false;
-      try {
-        mpData = await marzBankTransfer({ amount: wit.net, bankName: wit.network, accountNumber: wit.phone, accountName: wit.holder, description: 'Withdrawal' });
-      } catch (netErr) {
-        // Ambiguous, exactly like the MarzPay send-money branch's own
-        // comment on this: never revert to 'pending' here, that would
-        // invite a retry that could double-pay. Leave it at 'sending' for
-        // the admin to check on MarzPay's own dashboard.
-        console.error('MarzPay bank transfer network error (ambiguous, NOT reverting to pending):', netErr.message);
-        ambiguous = true;
-        mpData = { status: 'error', providerDown: true, message: netErr.message };
-      }
-      if (ambiguous || mpData.providerDown) {
-        return { code: 500, body: { status: 'error', message: 'Lost contact with MarzPay mid-request. We cannot confirm whether this bank transfer was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly.', sendingReference: sendingMarker } };
-      }
-      if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
-        await witRef.updateIf({ status: 'sending', sendingReference: sendingMarker }, { status: 'pending', sendingReference: null, sendingBy: null, sendingAt: null }).catch(() => {});
-        return { code: 400, body: { status: 'error', message: marzUserMsg(mpData, 'MarzPay could not send this bank transfer right now. The withdrawal stays pending and untouched. Try again in a moment.') } };
-      }
-      const sandbox = mpData.status === 'sandbox';
-      // MarzPay's own reference (the create response's data.bank_transfer.
-      // reference/transaction_uuid, same value under both keys per the
-      // docs) is what GET /bank-transfer/{reference} and the reconciler
-      // both need -- stored into the SAME marzReference field the other
-      // two payout rails already use, so every downstream reader
-      // (/admin/withdraw/verify, reconcilePendingWithdrawals) needs no
-      // bank-specific field to look for.
-      const bankRef = mpData.data?.bank_transfer?.reference || mpData.data?.bank_transfer?.transaction_uuid || null;
-      const updateFields = { status: sandbox ? 'processed' : 'processing', processedBy, processedAt: FieldValue.serverTimestamp(), marzReference: bankRef || sendingMarker, isBankTransfer: true };
-      await withLock('bal:' + wit.userId, async () => {
-        await witRef.update({ marzReference: bankRef || sendingMarker, isBankTransfer: true });
-        const claimed = await witRef.updateIf({ status: 'sending' }, updateFields);
-        if (!claimed) return;
-        try {
-          await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
-        } catch (twErr) {
-          console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER bank withdrawal ${withdrawalId} was marked sent — user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
-        }
-      });
-      if (sandbox) await finalizeWithdrawalTransactionRecord(withdrawalId, 'processed');
-      else {
-        try {
-          const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
-          if (!txSnap.empty) await txSnap.docs[0].ref.updateIf({ status: 'pending' }, { status: 'processing' });
-        } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
-      }
-      return {
-        code: 200,
-        body: { status: 'success', sandbox, message: sandbox ? `Sandbox: withdrawal marked complete, ${fmtMoney(wit.net)} to ${wit.network} ${wit.phone}` : `Sending ${fmtMoney(wit.net)} to ${wit.network} ${wit.phone}` },
-        meta: { amount: wit.net, dest: wit.phone, userId: wit.userId }
-      };
-    }
-
     if (withdrawProvider(settNow) === 'pesajet') {
       // PesaJet payout. The three rules that matter are:
       //   * the outbound identifier is written BEFORE the provider is ever
@@ -6353,26 +5713,6 @@ app.post('/admin/withdraw/verify', async (req, res) => {
       else pjMessage = `PesaJet reports status: ${t.status || 'unknown'}.`;
       return res.json({ status: 'success', ourStatus: w.status, marzStatus: t.status || 'unknown', message: pjMessage });
     }
-    // Bank transfer -- neither marzTxUuid nor a PesaJet reference is ever
-    // set on this rail (see the branch in _processWithdrawalNow); it has
-    // its own reference, stored in the SAME marzReference field the other
-    // two rails use, checked against MarzPay's own bank-transfer status
-    // endpoint rather than the send-money one below.
-    if (w.isBankTransfer) {
-      if (!w.marzReference) {
-        return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'no_reference', message: 'This bank transfer never reached MarzPay (no gateway reference). Nothing was sent.' });
-      }
-      const btStatus = await marzGetBankTransferStatus(w.marzReference);
-      const sent = SUCCESS_STATUSES.has(btStatus);
-      const failed = FAILED_STATUSES.has(btStatus);
-      let btMessage;
-      if (!btStatus) btMessage = `A send attempt WAS made (reference: ${w.marzReference}) but MarzPay did not respond just now -- this does NOT mean nothing was sent. Try Verify again in a moment.`;
-      else if (sent && w.status !== 'processed') btMessage = `MarzPay says this bank transfer was SENT, but our record is "${w.status}". Check the recipient bank account before doing anything else.`;
-      else if (sent) btMessage = 'MarzPay confirms the bank transfer was SENT and our record already shows it processed.';
-      else if (failed) btMessage = `MarzPay says this bank transfer FAILED (status: ${btStatus}).`;
-      else btMessage = `MarzPay reports status: ${btStatus || 'unknown'}. Not finished, not failed.`;
-      return res.json({ status: 'success', ourStatus: w.status, marzStatus: btStatus || 'unknown', message: btMessage });
-    }
     if (!w.marzTxUuid) {
       // Codex-caught real bug (2nd money-flow audit): this used to claim
       // "nothing was sent" from a bare missing marzTxUuid alone -- but
@@ -6624,18 +5964,7 @@ app.post('/tavupay/webhook', async (req, res) => {
 // ═══════════════════════════════════════════
 // WITHDRAWAL ACCOUNTS (mobile money + bank)
 // ═══════════════════════════════════════════
-// Public bank list for the wallet-bind picker (owner: "add all supported
-// banks so withdrawals will also be processed through banks... where there
-// is select network, it should be select bank, so mtn and airtel will also
-// be there"). Requires auth (same as every other /bank/* route) even
-// though the list itself isn't secret -- no reason to expose a MarzPay
-// proxy to an unauthenticated caller.
-app.get('/bank/supported-banks', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const banks = await getSupportedBanks();
-  res.json({ status: 'success', banks: banks.map(b => b.name) });
-});
+// WITHDRAWAL ACCOUNTS: MTN Mobile Money or Airtel Money numbers only, up to five per member, the first saved is the active one.
 const BANK_CARD_LIMIT = 5;
 app.post('/bank/save', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -6645,76 +5974,35 @@ app.post('/bank/save', async (req, res) => {
   if (!holder || !rawNetwork) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
   // A holder name is a name: at most 60 characters and at least one letter (a 300-character or all-digit holder broke the Wallet card).
   if (holder.length > 60 || !/\p{L}/u.test(holder)) return res.status(400).json({ status: 'error', message: 'Enter the account holder name (letters, up to 60 characters).' });
-  const isMobileMoney = NETWORK_NAMES.has(rawNetwork);
-  // Owner: "so some bank account exceed character limit so no capping of
-  // characters please" -- cleanPhone() enforces this region's phone SHAPE
-  // (exact digit count, dial code), which is correct for MTN/Airtel but
-  // would reject or truncate a genuine bank account number. Banks get their
-  // own, deliberately loose check instead: present, plausible length,
-  // digits/letters only (some banks' account numbers aren't purely
-  // numeric) -- no upper cap tighter than what a real account number could
-  // need.
-  let destValue;
-  if (isMobileMoney) {
-    destValue = cleanPhone(textOf(req.body.phone));
-    if (!destValue) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
-  } else {
-    destValue = String(req.body.phone || req.body.accountNumber || '').replace(/\s+/g, '').trim();
-    if (!/^[A-Za-z0-9]{4,64}$/.test(destValue)) return res.status(400).json({ status: 'error', message: 'Enter a valid bank account number' });
-    // Validated against the SAME live/cached list #bank/supported-banks
-    // serves -- a bank name the picker never offered has no business
-    // reaching MarzPay's own bank-transfer create call, where an unknown
-    // code is what its docs describe as UNSUPPORTED/UNKNOWN BANK.
-    const banks = await getSupportedBanks();
-    if (!banks.some(b => b.name === rawNetwork)) return res.status(400).json({ status: 'error', message: 'That bank is not currently supported. Pick one from the list.' });
-  }
+  // Bank Name is MTN Mobile Money or Airtel Money, nothing else: any other name is refused.
+  if (!NETWORK_NAMES.has(rawNetwork)) return res.status(400).json({ status: 'error', message: 'Choose MTN or Airtel.' });
+  const destValue = cleanPhone(textOf(req.body.phone));
+  if (!destValue) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
   try {
     const uSnap = await db.collection('users').doc(userId).get();
     if (uSnap.exists && uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    // No OTP step when saving a payout wallet (owner decision): the member is
-    // already signed in, and withdrawals still need the Trade Password.
-    // MarzPay's own recommended step, done here rather than only at
-    // withdrawal time: catches a mistyped account number the moment it is
-    // entered, with the member still looking at the form, instead of only
-    // once a real payout is being sent. Also cross-checks/fills the
-    // account holder name the same way -- if MarzPay's own validation
-    // returns one and the member left the name field close to it, prefer
-    // the verified name; a real mismatch is left to the member's own
-    // entry rather than silently overwritten, since a shared/company
-    // account can legitimately have a different registered name.
-    let verifiedHolder = holder;
-    if (!isMobileMoney) {
-      // marzValidateBankAccount() now handles its own network errors and
-      // one transient-failure retry internally (never throws) -- providerDown
-      // is the one signal to check for either case.
-      const v = await marzValidateBankAccount(rawNetwork, destValue);
-      if (v.providerDown) return res.status(500).json({ status: 'error', message: 'Could not verify this account right now. Please try again in a moment.' });
-      if (v.status !== 'success' || !v.data?.valid) {
-        return res.status(400).json({ status: 'error', message: marzUserMsg(v, 'Account could not be validated. Please check the account number and bank.') });
-      }
-      if (v.data?.account_name) verifiedHolder = String(v.data.account_name).trim() || holder;
-    }
+    // No OTP step when saving a payout wallet (owner decision): the member is already signed in, and withdrawals still need the Trade Password.
     // Saving/removing a payout destination here doesn't move any money by
     // itself -- see /withdraw/request for the actual money-moving path.
     // A member may keep up to BANK_CARD_LIMIT cards; the first one saved is the active one (the one a withdrawal goes to), and /bank/select
     // changes it. Saving a number the member already holds is refused (it is already there).
-    // ONE PAYOUT ACCOUNT, ONE MEMBER: a wallet number (or bank account) that another member already holds cannot be bound again; the member
+    // ONE PAYOUT ACCOUNT, ONE MEMBER: a wallet number that another member already holds cannot be bound again; the member
     // is asked to use a different one. Checked under a lock keyed by the number itself, so two members saving the same number at the same
     // moment cannot both succeed.
-    const taken = await withLock('bank-dest:' + (isMobileMoney ? 'mm' : rawNetwork) + ':' + destValue, async () => {
+    const taken = await withLock('bank-dest:mm:' + destValue, async () => {
       const same = await db.collection('bankAccounts').where('phone', '==', destValue).get();
       const other = (same.docs || []).some(d => {
         const r = d.data();
-        return r.userId !== userId && (isMobileMoney ? NETWORK_NAMES.has(r.network) : r.network === rawNetwork);
+        return r.userId !== userId && NETWORK_NAMES.has(r.network);
       });
       if (other) return true;
       let verdict = false;
       await withLock('bank-save:' + userId, async () => {
         const mine = await db.collection('bankAccounts').where('userId', '==', userId).get();
         const rows = mine.docs || [];
-        if (rows.some(d => d.data().phone === destValue && (isMobileMoney ? NETWORK_NAMES.has(d.data().network) : d.data().network === rawNetwork))) { verdict = 'exists'; return; }
+        if (rows.some(d => d.data().phone === destValue && NETWORK_NAMES.has(d.data().network))) { verdict = 'exists'; return; }
         if (rows.length >= BANK_CARD_LIMIT) { verdict = 'limit'; return; }
-        await db.collection('bankAccounts').add({ userId, holder: verifiedHolder, network: rawNetwork, phone: destValue, isDefault: rows.length === 0, createdAt: FieldValue.serverTimestamp() });
+        await db.collection('bankAccounts').add({ userId, holder, network: rawNetwork, phone: destValue, isDefault: rows.length === 0, createdAt: FieldValue.serverTimestamp() });
       });
       return verdict;
     });
@@ -7044,7 +6332,7 @@ app.post('/redeem', async (req, res) => {
       // come back for /account before it could show anything -- a whole extra
       // round trip between a successful claim and any sign that it worked,
       // which is the delay the owner reported. One local read here replaces a
-      // network round trip on a phone. /turntable/spin already does this.
+      // network round trip on a phone.
       //
       // Read AFTER the increment, not computed from the pre-credit snapshot:
       // this is the real stored balance, so it is also right on the
@@ -7514,7 +6802,6 @@ const SETTINGS_CRITICAL_RANGES = {
   welcomeBonus: [0, MAX_MONEY_AMOUNT], commL1: [0, 100], commL2: [0, 100], commL3: [0, 100],
   returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerDay: [0, 1000],
   dailyCheckin: [0, MAX_MONEY_AMOUNT],
-  turntableDailyMin: [0, MAX_MONEY_AMOUNT], turntableDailyMax: [0, MAX_MONEY_AMOUNT],
   autoApproveMinSec: [0, 86400], autoApproveMaxSec: [0, 86400], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
   // 0 = not scheduled; upper bound is a plain sanity cap (year 2100), not a
   // real business constraint -- an admin fat-fingering a date shouldn't be
@@ -7530,14 +6817,12 @@ const SETTINGS_CRITICAL_RANGES = {
   // one -- a multiple larger than the maximum withdrawal would make every
   // amount invalid, which the admin panel warns about rather than forbids.
   withdrawMultiple: [0, MAX_MONEY_AMOUNT],
-  authHeroOpacity: [0, 100], authHeroBlur: [0, 40],
-  authCardOpacity: [0, 100], authCardBlur: [0, 40],
   productImageOpacity: [0, 100],
   myBannerOpacity: [0, 100], myBannerBlur: [0, 40], appClaimAmount: [0, MAX_MONEY_AMOUNT],
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
   innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -7737,16 +7022,16 @@ app.post('/admin/about-html/set', async (req, res) => {
 app.get('/admin/potato-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg, linkpreview, teambanner, mybanner, aboutbanner, aboutlogo] = await Promise.all([
+    const [logo, authhero, authlogo, banner2, banner3, promobanner, profilelogo, loaderbg, linkpreview, teambanner, mybanner, aboutbanner, aboutlogo] = await Promise.all([
       getPotatoImage('logo'),
       getPotatoImage('authhero'), getPotatoImage('authlogo'), getPotatoImage('banner2'),
-      getPotatoImage('banner3'), getPotatoImage('banner4'), getPotatoImage('banner5'), getPotatoImage('promobanner'),
-      getPotatoImage('checkinbanner'), getPotatoImage('profilelogo'), getPotatoImage('loaderbg'), getPotatoImage('downloadbg'), getPotatoImage('linkpreview'),
+      getPotatoImage('banner3'), getPotatoImage('promobanner'),
+      getPotatoImage('profilelogo'), getPotatoImage('loaderbg'), getPotatoImage('linkpreview'),
       getPotatoImage('teambanner'), getPotatoImage('mybanner'), getPotatoImage('aboutbanner'), getPotatoImage('aboutlogo'),
     ]);
     const iconList = await Promise.all(POTATO_ICON_SLOTS.map(getPotatoImage));
     const icons = {}; POTATO_ICON_SLOTS.forEach((k, n) => { icons[k] = iconList[n] || null; });
-    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg, linkpreview, teambanner, mybanner, aboutbanner, aboutlogo, icons });
+    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, promobanner, profilelogo, loaderbg, linkpreview, teambanner, mybanner, aboutbanner, aboutlogo, icons });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/potato-image/set', async (req, res) => {
@@ -7893,7 +7178,7 @@ function productExpectedReturn(p, sett) {
 // separate ways to be refused in here and they all used to arrive as ONE
 // sentence naming four fields ("key, name, price, or cycle/return"), which
 // made a refused save pure guesswork -- the report that prompted this was
-// "product 12 failed to save spins", and spins were not among the four things
+// "product 12 failed to save", and the product's real problem was not among the four things
 // the message listed. The `null` return is unchanged: it is the contract
 // test-product-config.js drives, and every caller still reads truthiness.
 // Named `refuse`, not `bad`: several harnesses lift this function into their
@@ -7936,31 +7221,6 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     multiplier = Number(p.multiplier);
     if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > 1000)
       return refuse('Multiplier (×)', 'must be a number greater than 0 and no more than 1000');
-  }
-  // Owner: "make when l can configure every spin price for each product like
-  // product 2 buying, amount 200 to 1000 number of spins like that." Each
-  // product carries its own turntable band and spin count -- there is no
-  // global percentage or tier threshold any more.
-  let spinMin = null, spinMax = null;
-  if (p?.spinMin != null && p.spinMin !== '') {
-    spinMin = Math.round(Number(p.spinMin));
-    if (!Number.isFinite(spinMin) || spinMin < 0 || spinMin > MAX_MONEY_AMOUNT)
-      return refuse('Win from', `must be a number between 0 and ${MAX_MONEY_AMOUNT}`);
-  }
-  if (p?.spinMax != null && p.spinMax !== '') {
-    spinMax = Math.round(Number(p.spinMax));
-    if (!Number.isFinite(spinMax) || spinMax < 0 || spinMax > MAX_MONEY_AMOUNT)
-      return refuse('Win to', `must be a number between 0 and ${MAX_MONEY_AMOUNT}`);
-  }
-  // A band that runs backwards would silently pay the wrong amount, so it is
-  // rejected at save time rather than clamped quietly at spin time.
-  if (spinMin != null && spinMax != null && spinMax < spinMin)
-    return refuse('Win to', 'cannot be less than "Win from"');
-  let spinCount = 0;
-  if (p?.spinCount != null && p.spinCount !== '') {
-    spinCount = Math.round(Number(p.spinCount));
-    if (!Number.isFinite(spinCount) || spinCount < 0 || spinCount > MAX_SPINS_PER_PURCHASE)
-      return refuse('Spins per purchase', `must be a whole number between 0 and ${MAX_SPINS_PER_PURCHASE}`);
   }
   // Opening schedule -- see productOpenState() for what each field means and
   // why the two shapes (a one-off moment, and a daily window) coexist.
@@ -8023,7 +7283,7 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     orderGift = Math.round(Number(p.orderGift));
     if (!Number.isFinite(orderGift) || orderGift < 0 || orderGift > MAX_MONEY_AMOUNT) return refuse('Order gift', `must be a number between 0 and ${MAX_MONEY_AMOUNT} (0 = no gift)`);
   }
-  return { key, name, price, cycle, expectedReturn, multiplier, buyLimit, vip, orderGift, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
+  return { key, name, price, cycle, expectedReturn, multiplier, buyLimit, vip, orderGift, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
 }
 // `?region=ke` hands the editor that region's view of every product -- its
 // own price where it has one, Uganda's where it has not -- plus `overrides`,
@@ -9211,11 +8471,6 @@ async function payoutRejectGuard(witId, w) {
     if (f.found && !FINAL_FAIL.includes(f.status)) return live('PesaJet', f.status);
     return null;
   }
-  if (w.isBankTransfer && w.marzReference) {
-    const st = await marzGetBankTransferStatus(w.marzReference);
-    if (!st) return busy('MarzPay');
-    return FAILED_STATUSES.has(st) ? null : live('MarzPay', st);
-  }
   if (w.marzTxUuid) {
     const st = await marzGetSendStatus(w.marzTxUuid);
     if (!st) return busy('MarzPay');
@@ -10158,7 +9413,7 @@ app.get('/admin/integrity', async (req, res) => {
 // earned" label is a real misnomer -- this field is cashback PLUS
 // referral commission PLUS checkin/gift-code/Task-Center/Mission-Center
 // bonuses, all folded into one number.
-const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward', 'turntable', 'order_gift', 'app_claim'];
+const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward', 'order_gift', 'app_claim'];
 async function computeUserRealTotals(userId) {
   const [txSnap, invSnap, witSnap] = await Promise.all([
     db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
@@ -10603,34 +9858,6 @@ async function reconcilePendingWithdrawals() {
         if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
         settled++;
       }
-    }
-    // Bank transfers -- polled rather than webhook-driven. MarzPay's own
-    // docs describe this product's result as "poll GET /bank-transfer/
-    // {reference} OR use webhooks", not webhook-only like collections/
-    // disbursements, and this codebase has no confirmed documentation of
-    // the webhook payload SHAPE for this specific product (unlike
-    // collection.completed/disbursement.completed, both fully documented).
-    // Guessing at an unverified webhook shape risks silently never firing
-    // on a real payload; polling the same status endpoint the create
-    // response's own reference points at is simple and independently
-    // correct regardless of whether a webhook is even configured for it.
-    // isBankTransfer:true narrows this to exactly the rows the branch in
-    // _processWithdrawalNow above actually created.
-    const btSnap = await db.collection('withdrawals').where('status', '==', 'processing').where('isBankTransfer', '==', true).where('marzReference', '>', '').orderBy('createdAt', 'asc').limit(50).get();
-    for (const doc of btSnap.docs) {
-      const wit = doc.data();
-      if (!wit.marzReference) continue;
-      const btStatus = await marzGetBankTransferStatus(wit.marzReference);
-      if (SUCCESS_STATUSES.has(btStatus)) {
-        if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
-        settled++;
-      } else if (FAILED_STATUSES.has(btStatus)) {
-        const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the bank', ['processing']);
-        if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
-        settled++;
-      }
-      // '' (providerDown/inconclusive), 'pending', 'processing' -- genuinely
-      // not finished yet or the live check itself failed; next tick retries.
     }
   } catch (e) { console.error('Reconcile withdrawals error:', e.message); }
   return settled;

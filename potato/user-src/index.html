@@ -822,12 +822,10 @@ a{color:inherit;}
    transparent rim all the way round once blurred. Pulling it out by twice the
    blur radius puts that rim outside the clip, which is why both sections need
    overflow:hidden. */
-.auth-bg{position:absolute;inset:calc(-2 * var(--auth-bg-blur, 0px));
+.auth-bg{position:absolute;inset:0;
   background-size:cover;background-position:center;background-repeat:no-repeat;
-  opacity:var(--auth-bg-op, 1);filter:blur(var(--auth-bg-blur, 0px));
   pointer-events:none;z-index:0;}
-#authHeroBg{--auth-bg-blur:var(--auth-hero-blur, 0px);--auth-bg-op:var(--auth-hero-op, 1);
-  background-image:var(--auth-hero-img, none);}
+#authHeroBg{background-image:var(--auth-hero-img, none);}
 /* ── The banner bleeds into the card instead of stopping dead ──
    Owner: "on login and register pages there should be like whites or color
    bleeding into the image of banner uploaded from admin panel, just like you
@@ -1977,7 +1975,7 @@ html.mg-gut #pageHost{padding-right:4px;}
 .pa-scroll::-webkit-scrollbar{display:none;width:0;height:0;}
 .pa-hero{position:relative;height:178.7px;overflow:hidden;background:linear-gradient(135deg,#c4121e,#e8453b);transition:height .28s ease;}
 .pa-hero.tall{height:245.3px;}
-#authHeroBg{position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;background-image:var(--auth-hero-img,none);opacity:var(--auth-hero-op,1);}
+#authHeroBg{position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;background-image:var(--auth-hero-img,none);}
 .pa-hero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:26px;pointer-events:none;background:linear-gradient(180deg,rgba(244,245,250,0) 0,rgba(244,245,250,.55) 55%,#f4f5fa 100%);}
 .pa-logo{position:absolute;left:50%;bottom:23px;width:80px;height:80px;margin-left:-40px;border-radius:50%;z-index:2;}
 .pa-logo-img{display:block;width:100%;height:100%;border-radius:50%;background-size:cover;background-position:center;background-repeat:no-repeat;}
