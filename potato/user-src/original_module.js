@@ -31,9 +31,9 @@ var API_BASE = '/k7x2';
 // The values below are Uganda's, and they are also what an offline first
 // paint uses -- so a cold start with no network still formats money and
 // validates a phone number the way it always did.
-var REGION = { key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256', localLength: 9, prefixes: ['7'], utcOffsetMin: 180, isDefault: true, languages: ['en','lg','sw','fr','rw','nyn'], defaultLang: 'en' };
-function cur(){ return (REGION && REGION.currency) || 'UGX'; }
-function regionName(){ return (REGION && REGION.name) || 'Uganda'; }
+var REGION = { key: 'ng', name: 'Nigeria', currency: 'NGN', currencySymbol: '\u20a6', dialCode: '234', localLength: 10, localLengths: [9, 10], prefixes: [], utcOffsetMin: 60, isDefault: true, languages: ['en'], defaultLang: 'en' };
+function cur(){ return (REGION && REGION.currency) || 'NGN'; }
+function regionName(){ return (REGION && REGION.name) || 'Nigeria'; }
 // "7XXXXXXXX" for Uganda -- the region's first allowed prefix padded out to
 // its local length, used in the placeholders that show the shape to type.
 function phoneHintBody(){
@@ -41,9 +41,16 @@ function phoneHintBody(){
   const lead = pfx.length ? pfx[0] : '';
   return lead + 'X'.repeat(Math.max(0, localLen() - lead.length));
 }
-function dial(){ return (REGION && REGION.dialCode) || '256'; }
+function dial(){ return (REGION && REGION.dialCode) || '234'; }
 function dialPlus(){ return '+' + dial(); }
 function localLen(){ return Number(REGION && REGION.localLength) || 9; }
+// Every length a number may have in this region ([9, 10] for Nigeria), longest last.
+function localLens(){
+  const l = REGION && Array.isArray(REGION.localLengths) && REGION.localLengths.length ? REGION.localLengths : [localLen()];
+  return l.map(Number).filter(n => n > 0).sort((a, b) => a - b);
+}
+// "9 or 10", "9": what the red line under the phone box says a number must have.
+function phoneLenWords(){ const l = localLens(); return l.length > 1 ? l.slice(0, -1).join(', ') + ' or ' + l[l.length - 1] : String(l[0]); }
 function regionPrefixes(){ return (REGION && Array.isArray(REGION.prefixes) ? REGION.prefixes.filter(Boolean) : []); }
 // Applied from whichever response carried a region block. Only the fields
 // the server actually sent are taken, so a server that is one deploy behind
@@ -1107,6 +1114,7 @@ function applyBrandName(){
   const known = brandNameKnown();
   if (!known) return;   // nothing to say yet; leave the blanks blank
   document.querySelectorAll('[data-brandmark]').forEach(el => { el.innerHTML = brandWordmarkHtml(); });
+  document.querySelectorAll('[data-brandname]').forEach(el => { el.textContent = known; });
   document.querySelectorAll('.home-brand-title').forEach(el => { el.textContent = known; });
   try { document.title = known; } catch (_) {}
   // Remember it for the next launch. This is the whole fix for "on start up
@@ -1124,7 +1132,7 @@ function applyBrandName(){
 }
 function sanitizePhoneInput(el){
   let digits = el.value.replace(/\D/g, '');
-  const len = localLen(), d = dial();
+  const len = localLens()[localLens().length - 1], d = dial();
   if (digits.startsWith(d) && digits.length > len) digits = digits.slice(d.length);
   const maxDigits = digits.startsWith('0') ? len + 1 : len;
   if (digits.length > maxDigits) digits = digits.slice(0, maxDigits);
@@ -1199,9 +1207,7 @@ async function apiRequest(path, opts){
   // first snow-auth firing (which bumps the epoch unconditionally, see
   // below), so gating them here would discard that legitimate boot data
   // every single page load.
-  // The sign-up captcha is not per-member either (nobody is signed in when it is asked for). A referral link opens Sign Up straight away, and its
-  // picture is asked for while the app's first sign-in event is still bumping the epoch: that answer used to be thrown away as "stale", leaving an empty box.
-  const isPublicCall = path.indexOf('/public/') === 0 || path === '/auth/captcha';
+  const isPublicCall = path.indexOf('/public/') === 0;
   if (!isPublicCall && STATE.user && path !== '/auth/session/logout' && !_memberSession.check()) return { status:'error', message:'Session expired. Log in again.' };
   const startEpoch = STATE.authEpoch;
   // ── Content-Type ONLY WHEN THERE IS A BODY ──
@@ -1317,11 +1323,11 @@ function post(path, body){ return api(path, { method: 'POST', body: JSON.stringi
 // leading 0 taken off, and the right length or nothing. Mirrors
 // localDigits() in server.js.
 function localDigits(raw){
-  const d = dial(), len = localLen();
+  const d = dial(), lens = localLens();
   const s = String(raw||'').replace(/\D/g,'');
-  if (s.startsWith(d) && s.length === d.length + len) return s.slice(d.length);
-  if (s.startsWith('0') && s.length === len + 1) return s.slice(1);
-  if (s.length === len) return s;
+  if (s.startsWith(d) && lens.some(l => s.length === d.length + l)) return s.slice(d.length);
+  if (s.startsWith('0') && lens.some(l => s.length === l + 1)) return s.slice(1);
+  if (lens.includes(s.length)) return s;
   return null;
 }
 // The synthetic address this account signs in to Firebase with. It MUST
@@ -1373,42 +1379,30 @@ function cleanPhone(raw){
   if (pfx.length && !pfx.some(p => local.startsWith(p))) return null;
   return dialPlus() + local;
 }
+// Login and Create Account are two states of one screen: the title, the banner height (Create Account's is taller) and which form is shown.
 function showAuthTab(tab){
-  $('loginPane').style.display = tab === 'login' ? '' : 'none';
-  $('registerPane').style.display = tab === 'register' ? '' : 'none';
-  const tl = $('tabLogin'), tr = $('tabRegister');
-  if (tl) { tl.classList.toggle('on', tab === 'login'); tl.setAttribute('aria-selected', tab === 'login' ? 'true' : 'false'); }
-  if (tr) { tr.classList.toggle('on', tab === 'register'); tr.setAttribute('aria-selected', tab === 'register' ? 'true' : 'false'); }
+  const reg = tab === 'register';
+  $('loginPane').style.display = reg ? 'none' : '';
+  $('registerPane').style.display = reg ? '' : 'none';
+  const title = $('authTitle'); if (title) title.textContent = reg ? 'Create Account' : 'Login';
+  const hero = $('authHeroBox'); if (hero) hero.classList.toggle('tall', reg);
   const sc = $('authScroll'); if (sc) sc.scrollTop = 0;
-  if (tab === 'register') loadAuthCaptcha();   // a fresh picture every time Sign Up is opened
+  phoneError('login', ''); phoneError('reg', '');
+  // The invitation box is there only when the member arrived through an invitation link (it carries the code).
+  const ref = $('regReferral'); if (ref) { const has = !!(ref.value || '').trim(); const box = ref.closest('.pa-f'); if (box) box.style.display = has ? '' : 'none'; }
   stopSmsCodeListener();
 }
 // The eye on a password box: shows what was typed, and hides it again.
 window.toggleAuthEye = function(btn){
-  const box = btn && btn.closest('.ma-f'), input = box && box.querySelector('input');
+  const box = btn && btn.closest('.pa-f'), input = box && box.querySelector('input');
   if (!input) return;
-  // The Trade Password box is a plain text box drawn as dots (.ma-mask), so Chrome's password manager does not offer to fill a long suggested
+  // The Trade Password box is a plain text box drawn as dots (.pa-mask), so Chrome's password manager does not offer to fill a long suggested
   // password into a 6-digit box; the eye then switches the dots off and on instead of the box's type.
-  const masked = input.classList.contains('ma-mask');
-  const show = masked ? !input.classList.contains('ma-clear') : input.type === 'password';
-  if (masked) input.classList.toggle('ma-clear', show); else input.type = show ? 'text' : 'password';
-  btn.classList.toggle('shown', show);   // the eye shows a slash while the password is visible
+  const masked = input.classList.contains('pa-mask');
+  const show = masked ? !input.classList.contains('pa-clear') : input.type === 'password';
+  if (masked) input.classList.toggle('pa-clear', show); else input.type = show ? 'text' : 'password';
+  btn.classList.toggle('shown', show);   // the eye is struck through while the password is hidden, open while it is shown
   btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
-};
-// The sign-up captcha: a four-digit picture made by the server (the answer never reaches the phone). Tapping the picture asks for a new one; a picture
-// is used up by the answer sent with it, so the app asks for a new one after every sign-up attempt.
-window.loadAuthCaptcha = async function(){
-  const img = $('regCaptchaImg'), box = $('regCaptcha');
-  STATE.captchaId = '';
-  if (box) box.value = '';
-  let r = null;
-  // One more try a moment later if the first answer did not come (a slow first moment on a referral link, a dropped connection).
-  for (let i = 0; i < 2 && !(r && r.status === 'success' && r.id && r.image); i++) {
-    if (i) await new Promise(res => setTimeout(res, 700));
-    try { r = await api('/auth/captcha'); } catch (_) { r = null; }
-  }
-  if (r && r.status === 'success' && r.id && r.image) { STATE.captchaId = r.id; if (img) img.src = r.image; }
-  else if (img) img.removeAttribute('src');
 };
 // Owner: "on login it should not say please wait, it should say logging
 // in... so everywhere saying please wait... it should be removed."
@@ -1431,7 +1425,6 @@ function fbErrMsg(e){
   if (code === 'auth/user-not-found') return 'No account found for that number.';
   if (code === 'auth/email-already-in-use') return 'An account with that number already exists.';
   if (code === 'auth/weak-password') return 'Password must be at least 6 characters.';
-  if (code === 'auth/bad-captcha') return (e && e.message) || 'The captcha code is wrong. Please try again.';
   if (code === 'auth/too-many-requests') return 'Too many attempts. Try again shortly.';
   // A weak connection is the commonest real failure here, and without these
   // the member was shown Firebase's own developer text, e.g.
@@ -1502,11 +1495,14 @@ async function storeCredentialIfPossible(email, pass, displayPhone){
   const id = local ? '0' + local : email;
   try { await navigator.credentials.store(new PasswordCredential({ id, password: pass, name: id })); } catch (_) {}
 }
-// The red line under the phone box ('phone') or the password box ('pass'); an empty message clears both.
+// The red line under the phone box ('login' or 'reg' screen). Only the phone number gets a line (as on the owner's screen); every other
+// refusal is the notice in the middle of the screen.
+function phoneError(which, msg){ const el = $(which === 'reg' ? 'regPhoneErr' : 'loginPhoneErr'); if (el) el.textContent = msg || ''; }
+function phoneErrorText(){ return 'Please enter a ' + phoneLenWords() + ' digit phone number'; }
 function loginError(where, msg){
-  const a = $('loginPhoneErr'), b = $('loginErr');
-  if (a) a.textContent = where === 'phone' ? msg : '';
-  if (b) b.textContent = where === 'pass' ? msg : '';
+  if (!msg) return phoneError('login', '');
+  if (where === 'phone') return phoneError('login', msg);
+  notify(msg);
 }
 window.loginError = loginError;
 window.doLogin = async function(){
@@ -1517,10 +1513,10 @@ window.doLogin = async function(){
   const phone = cleanPhone($('loginPhone').value);
   const pass = $('loginPassword').value;
   loginError('', '');
-  if (!phone) return loginError('phone', 'Enter a valid ' + regionName() + ' mobile number.');
-  if (!pass) return loginError('pass', 'Enter your password.');
-  if (pass.length < 6) return loginError('pass', 'Password must be at least 6 characters');
-  setBtnLoading('loginBtn', true, 'Log In', 'Logging in...');
+  if (!phone) return phoneError('login', phoneErrorText());
+  if (!pass) return notify('Missing required parameter');
+  if (pass.length < 6) return notify('Password must be at least 6 characters');
+  setBtnLoading('loginBtn', true, 'Login', 'Logging in...');
   window._pendingLoginSuccess = true;
   try {
     // Tries this region's address, then the other shape for the same region
@@ -1553,13 +1549,13 @@ window.doLogin = async function(){
     window._pendingLoginSuccess = false;
     // Like the owner's screen: the reason is the red line under the box it belongs to, not a pop-up.
     const code = (e && e.code) || '';
-    loginError(code === 'auth/user-not-found' || code === 'auth/invalid-email' ? 'phone' : 'pass', code === 'auth/invalid-credential' || code === 'auth/wrong-password' ? 'Incorrect password' : fbErrMsg(e));
-    setBtnLoading('loginBtn', false, 'Log In');
+    notify(code === 'auth/invalid-credential' || code === 'auth/wrong-password' ? 'Incorrect phone number or password' : fbErrMsg(e));
+    setBtnLoading('loginBtn', false, 'Login');
   }
   } finally {
     window._loginInProgress = false;
     if (!window._suppressAutofillLogin) window._autofillLoginTried = false;
-    setBtnLoading('loginBtn', false, 'Log In');
+    setBtnLoading('loginBtn', false, 'Login');
   }
 };
 // ── SIGN UP: phone -> OTP -> password -> confirm password ──
@@ -1573,8 +1569,6 @@ window.doLogin = async function(){
 // replacing every call site with notify() directly) purely so nothing
 // else about doRegSendOtp()/doRegister() has to change.
 function regError(msg){ if (msg) notify(msg); }
-function capError(msg){ const el = $('regCapErr'); if (el) el.textContent = msg || ''; }
-window.capError = capError;
 // Android Chrome can hand the code straight to the page when the SMS ends
 // with the "@host #code" line the server adds (see otpSmsText() in
 // server.js): one tap on the system prompt fills the box. Anywhere else the
@@ -1584,12 +1578,7 @@ function stopSmsCodeListener(){
   if (_webOtpAbort) { try { _webOtpAbort.abort(); } catch (_) {} _webOtpAbort = null; }
 }
 window.doRegister = async function(){
-  // Like the owner's screens: the captcha is looked at first, and a missing or wrong one is the red line under it.
-  capError('');
-  if (!((($('regCaptcha') || {}).value || '').trim()) || !STATE.captchaId) {
-    if (!STATE.captchaId) loadAuthCaptcha();
-    return capError('Incorrect captcha code');
-  }
+  phoneError('reg', '');
   const phone = cleanPhone($('regPhone').value);
   const pass = $('regPassword').value;
   const pass2 = $('regPassword2').value;
@@ -1599,31 +1588,26 @@ window.doRegister = async function(){
   // whether that's the link's code, untouched, or something typed by hand.
   // The invitation code is optional.
   const referral = $('regReferral').value.trim();
-  if (!phone) return regError('Enter a valid ' + regionName() + ' mobile number.');
-  if (!pass || pass.length < 6) return regError('Password must be at least 6 characters.');
-  if (pass !== pass2) return regError('The two passwords do not match.');
-  if (!/^\d{6}$/.test(tradePin)) return regError('Trade Password must be exactly 6 digits.');
-  const captchaCode = (($('regCaptcha') || {}).value || '').trim();
-  if (!captchaCode) return regError('Enter the captcha code.');
-  if (!STATE.captchaId) { await loadAuthCaptcha(); return regError('Enter the code shown in the new picture.'); }
-  const captchaAnswer = { id: STATE.captchaId, code: captchaCode };
-  regError('');
+  if (!phone) return phoneError('reg', phoneErrorText());
+  if (!pass || !pass2 || !tradePin) return regError('Missing required parameter');
+  if (pass.length < 6) return regError('Password must be at least 6 characters');
+  if (pass !== pass2) return regError('The two passwords do not match');
+  if (!/^\d{6}$/.test(tradePin)) return regError('Trade Password must be exactly 6 digits');
   // See firebaseReady(): without the sign-in service there is nothing to
   // create the account with, and the code below would only throw at the member.
   if (!(window.fbCreateUser && window.fbAuth)) {
-    setBtnLoading('regBtn', true, 'Sign Up', 'Signing Up...');
+    setBtnLoading('regBtn', true, 'Register', 'Processing...');
     const ready = await firebaseReady(8000, 'fbCreateUser');
-    setBtnLoading('regBtn', false, 'Sign Up');
+    setBtnLoading('regBtn', false, 'Register');
     if (!ready) return regError('Sign-up is not available right now. Check your connection and try again.');
   }
-  setBtnLoading('regBtn', true, 'Sign Up', 'Signing Up...');
+  setBtnLoading('regBtn', true, 'Register', 'Processing...');
   STATE.refCode = referral;
   window._pendingRegPin = tradePin;
   window._pendingRegPhone = phone;
   try {
     const email = phoneToEmail(phone);
-    STATE.captchaId = '';          // the picture is used up by this attempt, whatever the answer
-    await window.fbCreateUser(email, pass, captchaAnswer);
+    await window.fbCreateUser(email, pass);
     // The browser is asked to save the password only once the sign-up has really finished (finishSignupToLogin), not at this half-way point.
   }
   catch (e) {
@@ -1668,9 +1652,8 @@ window.doRegister = async function(){
     // bootFromNetwork() as a registration that just happened: a needless
     // /register call, and a "Registration successful" toast on a plain login.
     window._pendingRegPin = ''; window._pendingRegPhone = '';
-    if (e && e.code === 'auth/bad-captcha') capError('Incorrect captcha code'); else regError(fbErrMsg(e));
-    setBtnLoading('regBtn', false, 'Sign Up');
-    loadAuthCaptcha();
+    regError(fbErrMsg(e));
+    setBtnLoading('regBtn', false, 'Register');
   }
 };
 // ── FORGOT PASSWORD: phone -> OTP -> new password, one screen ──
@@ -1846,12 +1829,14 @@ function hideLoadingScreen(){
   const minMs = typeof window._potatoLoaderMinMs === 'number' ? window._potatoLoaderMinMs : LOADER_MIN_MS;
   const wait = began ? Math.max(0, minMs - (Date.now() - began)) : 0;
   if (_ldTimer) { clearTimeout(_ldTimer); _ldTimer = null; }
-  if (!wait) { ls.style.display = 'none'; return; }
-  _ldTimer = setTimeout(() => { _ldTimer = null; ls.style.display = 'none'; }, wait);
+  const finish = () => { if (window._potatoLoaderProgress) window._potatoLoaderProgress(100); ls.style.display = 'none'; };
+  if (!wait) { finish(); return; }
+  _ldTimer = setTimeout(() => { _ldTimer = null; finish(); }, wait);
 }
 function showLoadingScreen(){
   if (_ldTimer) { clearTimeout(_ldTimer); _ldTimer = null; }
   $('loadingScreen').style.display = 'flex';
+  if (window._potatoLoaderRestart) window._potatoLoaderRestart();
 }
 var _artPromise = null, _artLanded = false, _annWaiting = false;
 function startArtwork(){
@@ -2022,11 +2007,6 @@ function applyNumberFont(){
 //
 // Opacity is stored as a percent (0-100) so the admin panel takes a whole
 // number like every other field; it is divided here, once.
-// The start-up loading screen picture's opacity and blur follow the settings too (and are remembered for the next launch's first frame).
-function applyLoaderFx(){
-  const s = STATE.settings || {};
-  if (typeof window._potatoLoaderFx === 'function' && s.loaderBgOpacity != null && s.loaderBgBlur != null) window._potatoLoaderFx(s.loaderBgOpacity, s.loaderBgBlur);
-}
 // One opacity for every product picture, set once in the admin panel (read again on every paint, so a change goes live with the next refresh).
 function applyProductImageOpacity(){
   const po = Number((STATE.settings || {}).productImageOpacity);
@@ -2034,7 +2014,6 @@ function applyProductImageOpacity(){
 }
 function applyAuthBackgrounds(){
   const s = STATE.settings || {};
-  applyLoaderFx();
   applyProductImageOpacity();
   const root = document.documentElement;
   function set(prefix, image, opacityPct, blurPx){
@@ -2239,7 +2218,7 @@ function onMemberAuth(user){
     notify('Could not open your account. Please try logging in again.');
     hideLoadingScreen();
     $('authScreen').style.display = '';
-    setBtnLoading('loginBtn', false, 'Log In');
+    setBtnLoading('loginBtn', false, 'Login');
   });
 }
 window.addEventListener('snow-auth', ev => onMemberAuth(ev.detail));
@@ -2282,8 +2261,8 @@ async function processMemberAuth(user){
     hideLoadingScreen();
     $('app').style.display = 'none';
     $('authScreen').style.display = '';
-    setBtnLoading('loginBtn', false, 'Log In');
-    setBtnLoading('regBtn', false, 'Sign Up');
+    setBtnLoading('loginBtn', false, 'Login');
+    setBtnLoading('regBtn', false, 'Register');
     // Sign Up needs to know whether a referral code is required BEFORE
     // anyone submits, and boot() (which normally loads settings) only runs
     // after sign-in. Without this the screen would fall back to "required"
@@ -2440,7 +2419,7 @@ async function abandonUnfinishedSignup(reg){
   if (SIGNUP_UNFINISHED_CODES.indexOf(reg.code) === -1) {
     notify(reg.message || 'Could not complete registration');
     $('authScreen').style.display = '';
-    setBtnLoading('regBtn', false, 'Sign Up');
+    setBtnLoading('regBtn', false, 'Register');
     return;
   }
   const local = localDigits(String((STATE.user && STATE.user.email) || '').split('@')[0]);
@@ -2450,7 +2429,7 @@ async function abandonUnfinishedSignup(reg){
   showAuthTab('register');
   if (local && $('regPhone')) $('regPhone').value = '0' + local;
   if ($('regReferral') && STATE.refCode) $('regReferral').value = STATE.refCode;
-  setBtnLoading('regBtn', false, 'Sign Up');
+  setBtnLoading('regBtn', false, 'Register');
   notify((reg.message || 'Your sign-up was not finished.') + ' Complete your sign-up below.');
 }
 async function finishSignupToLogin(typedPhone){
@@ -2462,11 +2441,11 @@ async function finishSignupToLogin(typedPhone){
   await window.doLogout();
   hideLoadingScreen();
   $('authScreen').style.display = '';
-  setBtnLoading('regBtn', false, 'Sign Up');
+  setBtnLoading('regBtn', false, 'Register');
   showAuthTab('login');
   if (savedPass) storeCredentialIfPossible(null, savedPass, typedPhone);
   // The Sign Up boxes are emptied a moment AFTER that pane is hidden, so the browser sees the form leave with its values filled in.
-  setTimeout(() => { ['regPhone', 'regPassword', 'regPassword2', 'regTradePin', 'regCaptcha'].forEach(id => { const el = $(id); if (el) el.value = ''; }); }, 1500);
+  setTimeout(() => { ['regPhone', 'regPassword', 'regPassword2', 'regTradePin'].forEach(id => { const el = $(id); if (el) el.value = ''; }); }, 1500);
   const ph = $('loginPhone'), pw = $('loginPassword');
   if (ph) ph.value = typedPhone;
   if (pw) pw.value = '';
@@ -2503,7 +2482,7 @@ async function bootFromNetwork(uid){
       hideLoadingScreen();
       notify(reg.message || 'Could not complete registration');
       $('authScreen').style.display = '';
-      setBtnLoading('regBtn', false, 'Sign Up');
+      setBtnLoading('regBtn', false, 'Register');
       return;
     }
     window._pendingRegPin = ''; window._pendingRegPhone = '';
@@ -2773,7 +2752,7 @@ function mgScrollbarInit(){
     const sheets = [...document.querySelectorAll('.sheet-bg.show,#msgDetailBg.show,#depStatusBg.show,.pay-page.show')].filter(shown);
     if (sheets.length) return sheets[sheets.length - 1];
     const auth = document.getElementById('authScreen');
-    if (auth && auth.style.display !== 'none' && shown(auth)) { const a = auth.querySelector('.ma-scroll'); if (a && shown(a)) return a; }
+    if (auth && auth.style.display !== 'none' && shown(auth)) return null;   // Login and Create Account draw no scrollbar
     return document.scrollingElement || document.documentElement;
   }
   // Two speeds. layout() is the slow one (sizes the bar and the thumb, decides which scroller it follows); it runs only when something on screen
@@ -2807,12 +2786,14 @@ function mgScrollbarInit(){
     try {
       const app = document.getElementById('app'), de = document.documentElement;
       gut(de, !!(app && app.style.display !== 'none' && overflows(document.scrollingElement || de, window.innerHeight)));
-      document.querySelectorAll('.sheet-bg, .ma-scroll').forEach(el => gut(el, shown(el) && overflows(el, el.clientHeight)));
+      document.querySelectorAll('.sheet-bg').forEach(el => gut(el, shown(el) && overflows(el, el.clientHeight)));
     } catch (_) {}   // a page that is being torn down has nothing to measure
   }
   window.mgGutters = gutters;
   function layout(){
-    const el = target(), isDoc = el === document.scrollingElement || el === document.documentElement;
+    const el = target();
+    if (!el) { setBar(main, null); setBar(list, null); return; }
+    const isDoc = el === document.scrollingElement || el === document.documentElement;
     let c;
     if (isDoc) {
       let bottom = window.innerHeight;
@@ -4615,6 +4596,8 @@ async function finishWalletSave(){
 // dialog -- used by the insufficient-balance path to send them to Deposit.
 // It is one-shot and cleared on close, so a later plain notify() can never
 // inherit a stale callback.
+var PT_NOTICE_BAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10.2"/><path d="M8.7 8.7l6.6 6.6M15.3 8.7l-6.6 6.6"/></svg>';
+var PT_NOTICE_OK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10.2"/><path d="M7.9 12.4l2.9 2.9 5.4-5.8"/></svg>';
 var _notifyOnClose = null;
 var _notifyTimer = null;
 function dismissNotify(){
@@ -4624,11 +4607,10 @@ function dismissNotify(){
 }
 window.notify = function(message, onClose){
   $('notifyMsg').textContent = String(message || '');
-  // Good news gets the green tick, everything else the yellow warning triangle, as in the screens.
+  // Good news gets the circled tick, everything else the circled cross (the owner's refusal notice).
   const good = /success|✓|copied|saved|done|now running|redeemed|submitted|sent|changed|processing|updated|claimed|unlocked|bound|added to your wallet/i.test(String(message || '')) && !/not |fail|could not|cannot|insufficient|invalid|incorrect|wrong|isn't|already|status changed|bind it|add a payout|need /i.test(String(message || ''));
   const ic = $('notifyIc');
-  if (ic) { ic.innerHTML = good ? MGI.okc : MGI.warn; ic.className = 'notify-ic ' + (good ? 'ok' : 'err'); }
-  const okb = document.querySelector('#notifyBg .notify-ok'); if (okb) okb.classList.toggle('good', good);
+  if (ic) { ic.innerHTML = good ? PT_NOTICE_OK : PT_NOTICE_BAD; ic.className = 'notify-ic ' + (good ? 'ok' : 'err'); }
   _notifyOnClose = typeof onClose === 'function' ? onClose : null;
   if (_notifyTimer) { clearTimeout(_notifyTimer); _notifyTimer = null; }
   $('notifyBg').classList.add('show');

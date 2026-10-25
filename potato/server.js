@@ -439,14 +439,17 @@ const MARZ_TIMEOUT = 20000;
 const MARZSMS_BASE = 'https://sms.wearemarz.com/api/v1';
 const MARZSMS_KEY  = process.env.MARZSMS_KEY || '';
 
-// Uganda is the only supported currency and phone market. Historical accounts
-// with another currency remain in storage for review, but cannot transact.
-const DEFAULT_REGION_KEY = 'ug';
-const DEFAULT_REGION = Object.freeze({
-  key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256',
-  localLength: 9, prefixes: ['7'], utcOffsetMin: 180,
-  active: true, isDefault: true, languages: ['en'], defaultLang: 'en',
-});
+// Potato runs for ONE country: Nigeria (+234, naira; a number is 9 or 10 digits after the dialling code or a leading 0). POTATO_REGION=ug
+// switches the same code to Uganda (the tests that were written for Uganda run that way, see package.json). Historical accounts with
+// another currency remain in storage for review, but cannot transact.
+const POTATO_REGIONS = {
+  ng: { key: 'ng', name: 'Nigeria', currency: 'NGN', currencySymbol: '\u20a6', dialCode: '234', localLength: 10, localLengths: [9, 10], prefixes: [], utcOffsetMin: 60,
+        active: true, isDefault: true, languages: ['en'], defaultLang: 'en' },
+  ug: { key: 'ug', name: 'Uganda', currency: 'UGX', currencySymbol: 'UGX', dialCode: '256', localLength: 9, localLengths: [9], prefixes: ['7'], utcOffsetMin: 180,
+        active: true, isDefault: true, languages: ['en'], defaultLang: 'en' },
+};
+const DEFAULT_REGION_KEY = POTATO_REGIONS[String(process.env.POTATO_REGION || '').toLowerCase()] ? String(process.env.POTATO_REGION).toLowerCase() : 'ng';
+const DEFAULT_REGION = Object.freeze(POTATO_REGIONS[DEFAULT_REGION_KEY]);
 let _mainAllowedHosts = [];
 let _baseDomain = 'potato-platform.com';
 let _blockRootDomain = true;
@@ -589,8 +592,8 @@ const DEFAULT_SETTINGS = {
   // back. With no image set these do nothing at all.
   authHeroOpacity: 100, authHeroBlur: 0,
   authCardOpacity: 100, authCardBlur: 0,
-  // Start-up loading screen picture (Admin > Banners > Loading screen background): 100 = as uploaded, 0 = blur off.
-  loaderBgOpacity: 100, loaderBgBlur: 0,
+  // The sign-up captcha picture is off: the owner's Create Account screen has none. Sign-up is guarded by the rate limits instead.
+  signupCaptcha: false,
   // What Telegram shows when a link to the app is pasted (title and text; the picture is the 'linkpreview' image). Empty = the app's own defaults.
   linkPreviewTitle: '', linkPreviewText: '',
   // One opacity for EVERY product picture (Admin > Banners > Product pictures): 100 = as uploaded.
@@ -1338,11 +1341,12 @@ function withdrawWindowState(sett, ts) {
 function localDigits(raw, region) {
   const r = region || currentRegion();
   const dial = String(r.dialCode || '256');
-  const len = Number(r.localLength) || 9;
+  // A region may allow more than one length (Nigeria: 9 or 10 digits); `localLength` alone is the one-length case.
+  const lens = (Array.isArray(r.localLengths) && r.localLengths.length ? r.localLengths : [r.localLength || 9]).map(Number).filter(n => n > 0);
   const s = String(raw || '').replace(/\D/g, '');
-  if (s.startsWith(dial) && s.length === dial.length + len) return s.slice(dial.length);
-  if (s.startsWith('0') && s.length === len + 1) return s.slice(1);
-  if (s.length === len) return s;
+  if (s.startsWith(dial) && lens.some(l => s.length === dial.length + l)) return s.slice(dial.length);
+  if (s.startsWith('0') && lens.some(l => s.length === l + 1)) return s.slice(1);
+  if (lens.includes(s.length)) return s;
   return null;
 }
 // Synthetic login email — same convention as space8's phoneToEmail, using
@@ -3777,8 +3781,8 @@ app.post('/deploy/webhook', (req, res) => {
 function publicRegionView(r) {
   const reg = r || currentRegion();
   return {
-    key: reg.key, name: reg.name, currency: reg.currency, dialCode: reg.dialCode,
-    localLength: reg.localLength, prefixes: (reg.prefixes || []).slice(),
+    key: reg.key, name: reg.name, currency: reg.currency, currencySymbol: reg.currencySymbol || reg.currency, dialCode: reg.dialCode,
+    localLength: reg.localLength, localLengths: (reg.localLengths && reg.localLengths.length ? reg.localLengths : [reg.localLength]).slice(), prefixes: (reg.prefixes || []).slice(),
     utcOffsetMin: reg.utcOffsetMin, isDefault: !!reg.isDefault,
     // Which languages this country's sign-in screen may offer, and which one
     // a device with no choice stored opens in. Published rather than compiled
@@ -4038,11 +4042,7 @@ app.get('/public/loader-image', async (req, res) => {
     if (!m) return res.status(404).end();
     const buf = Buffer.from(m[2], 'base64');
     const etag = '"' + crypto.createHash('sha1').update(buf).digest('hex') + '"';
-    // The picture's opacity and blur ride along as headers, so the phone can apply them on the very first frame of its next launch.
-    const sett = await getSettings();
-    const clampNum = (v, lo, hi, d) => { const x = Number(v); return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d; };
-    res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=0, stale-while-revalidate=604800', ETag: etag,
-      'X-Loader-Opacity': String(clampNum(sett.loaderBgOpacity, 0, 100, 100)), 'X-Loader-Blur': String(clampNum(sett.loaderBgBlur, 0, 40, 0)) });
+    res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=0, stale-while-revalidate=604800', ETag: etag });
     if (req.headers['if-none-match'] === etag) return res.status(304).end();
     res.send(buf);
   } catch (e) { res.status(500).end(); }
@@ -7161,10 +7161,13 @@ app.use(['/auth/login', '/auth/signup', '/register'], (req, res, next) => {
 });
 app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
   try {
-    // The captcha is checked first, and its picture is used up by this answer whatever happens next.
-    if (!textOf(req.body.captchaCode).trim()) return res.status(400).json({ status: 'error', code: 'CAPTCHA_REQUIRED', message: 'Enter the captcha code.' });
-    if (!captcha.verify(textOf(req.body.captchaId), textOf(req.body.captchaCode)))
-      return res.status(400).json({ status: 'error', code: 'BAD_CAPTCHA', message: 'The captcha code is wrong. Please try again.' });
+    // Potato's Create Account screen has no captcha (owner's screenshots), so it is only demanded when the setting `signupCaptcha` is switched on.
+    // When on, it is checked first, and its picture is used up by this answer whatever happens next.
+    if ((await getSettings()).signupCaptcha === true) {
+      if (!textOf(req.body.captchaCode).trim()) return res.status(400).json({ status: 'error', code: 'CAPTCHA_REQUIRED', message: 'Enter the captcha code.' });
+      if (!captcha.verify(textOf(req.body.captchaId), textOf(req.body.captchaCode)))
+        return res.status(400).json({ status: 'error', code: 'BAD_CAPTCHA', message: 'The captcha code is wrong. Please try again.' });
+    }
     const phone = cleanPhone(textOf(req.body.phone));
     if (!phone) return res.status(400).json({ status: 'error', code: 'INVALID_PHONE', message: badPhoneMessage() });
     const password = tidyPassword(passwordOf(req.body.password));
@@ -7418,7 +7421,6 @@ const SETTINGS_CRITICAL_RANGES = {
   withdrawMultiple: [0, MAX_MONEY_AMOUNT],
   authHeroOpacity: [0, 100], authHeroBlur: [0, 40],
   authCardOpacity: [0, 100], authCardBlur: [0, 40],
-  loaderBgOpacity: [0, 100], loaderBgBlur: [0, 40],
   productImageOpacity: [0, 100],
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
   innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
@@ -9241,7 +9243,7 @@ app.get('/admin/pesajet/summary', async (req, res) => {
     const truncated = depSnap.size >= PESAJET_SUMMARY_SCAN || witSnap.size >= PESAJET_SUMMARY_SCAN;
     const zero = () => ({ collected: 0, collectedCount: 0, paidOut: 0, paidOutCount: 0,
                           pendingIn: 0, pendingInCount: 0, pendingOut: 0, pendingOutCount: 0 });
-    const summary = Object.assign({ regionKey: 'ug', currency: 'UGX' }, zero());
+    const summary = Object.assign({ regionKey: DEFAULT_REGION_KEY, currency: DEFAULT_REGION.currency }, zero());
     for (const d of depSnap.docs) {
       const row = d.data();
       const amt = finiteMoney(row.displayAmount != null ? row.displayAmount : row.amount);

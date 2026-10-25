@@ -1,5 +1,5 @@
 // Bump this on every deploy that changes index.html/manifest.json/icons.
-const CACHE = 'potato-admin-shell-v145';
+const CACHE = 'potato-admin-shell-v146';
 // The panel lives under a secret path on the SAME host as the member app, so
 // everything it owns is addressed relative to this worker (never from '/'),
 // and its cache name has its own prefix so neither worker ever clears the

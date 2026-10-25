@@ -346,13 +346,13 @@ a{color:inherit;}
 
 /* ── App chrome not in the mockups: auth, sheets, forms, toast, loading ── */
 .wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
-#loadingScreen{position:fixed;inset:0;overflow:hidden;background:linear-gradient(145deg,#044d2a 0%,#02964c 52%,#0a6b3b 100%);display:flex;align-items:center;justify-content:center;z-index:500;}
-/* The admin's picture sits on its own layer so its opacity and blur (Admin > Banners > Loading screen background) never touch the word. The layer is pushed past the edges by twice the blur so a blurred picture has no pale rim. */
-#loadingScreen .ld-bg{position:absolute;inset:calc(var(--ld-blur,0px) * -2);background:linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url('/k7x2/public/loader-image') center/cover no-repeat;opacity:var(--ld-op,1);filter:blur(var(--ld-blur,0px));transform:translateZ(0);will-change:transform;contain:strict;pointer-events:none;}
-#loadingScreen .ld-txt{position:relative;z-index:1;display:inline-block;color:#fff;font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:19px;font-weight:700;letter-spacing:.02em;text-shadow:0 2px 10px rgba(0,0,0,.45);transform:translate3d(0,0,0);will-change:transform;backface-visibility:hidden;animation:ldBounce 1.7s infinite;}
-/* Only transform moves, on its own layer, so the bounce keeps running smoothly on the graphics chip even while the app is being built behind it (the page is busy for a moment on a phone). One continuous curve up and down, no hard stop. */
-@keyframes ldBounce{0%{transform:translate3d(0,0,0);animation-timing-function:cubic-bezier(.33,.0,.2,1);}50%{transform:translate3d(0,-12px,0);animation-timing-function:cubic-bezier(.8,0,.67,1);}100%{transform:translate3d(0,0,0);}}
-@media (prefers-reduced-motion:reduce){#loadingScreen .ld-txt{animation:none;}}
+#loadingScreen{position:fixed;inset:0;overflow:hidden;background:#c4121e;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:65px;box-sizing:border-box;z-index:500;}
+/* The box picture is the admin's (Banners > Loading screen box picture); the corners are rounded here, whatever the picture is. */
+#loadingScreen .ld-box{width:150px;height:150px;border-radius:14px;background:center/cover no-repeat;flex:none;}
+#loadingScreen .ld-name{margin-top:15px;color:#fff;font:700 22px/26px 'Roboto',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;letter-spacing:.3px;text-align:center;min-height:26px;}
+#loadingScreen .ld-bar{margin-top:26px;width:187.7px;height:5px;border-radius:3px;background:rgba(255,255,255,.21);overflow:hidden;flex:none;}
+#loadingScreen .ld-bar i{display:block;height:100%;width:0;border-radius:3px;background:#fff;}
+#loadingScreen .ld-pct{margin-top:9px;color:rgba(255,255,255,.68);font:700 11.8px/14px 'Roboto',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;text-align:center;}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
 #openingGate .og-mark{font-weight:800;font-size:36px;letter-spacing:.03em;color:#fff;}
 /* Download APP screen (openDownloadSheet(), its 'downloadbg' admin backdrop,
@@ -542,8 +542,7 @@ a{color:inherit;}
    background-clip is an INVISIBLE balance -- the flat orange above stays as
    the fallback, and only browsers that can actually clip to text get the
    gradient. -webkit-text-fill-color is the one WebKit honours. */
-@supports ((-webkit-background-clip:text) or (background-clip:text)){
-  }
+
 /* Every number below is measured off the owner's own mockup, not chosen.
    His screenshot and ours are both 1080 device px wide on the same phone, so
    device pixels compare directly; 1080/390 = 2.769 device px per CSS px.
@@ -663,10 +662,6 @@ a{color:inherit;}
    underneath. Scoping pointer-events to .show fixes the whole class of it
    regardless of the card's leftover size, rather than also having to
    remember to clear notifyMsg on every close path. */
-.notify-bg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:0 28px;z-index:440;pointer-events:none;}
-.notify-card{pointer-events:none;max-width:360px;background:rgba(37,38,43,.96);color:#fff;padding:14px 20px;border-radius:14px;font-size:13.5px;font-weight:600;line-height:1.4;text-align:center;box-shadow:0 18px 40px -14px rgba(0,0,0,.55);transform:scale(.9);opacity:0;transition:transform .22s cubic-bezier(.34,1.35,.64,1),opacity .18s;}
-.notify-bg.show .notify-card{pointer-events:auto;transform:scale(1);opacity:1;}
-.notify-msg{white-space:pre-line;}
 
 /* ── Treasure chest (Chest.dc.html / ChestSuccess.dc.html) ── */
 /* ── Gift Codes: Potato energy-voucher treatment ──
@@ -815,7 +810,7 @@ a{color:inherit;}
    are deliberately real emoji glyphs (owner: "even see those emoji or
    symbols of padlock, key... l need that same key") -- the only place in
    this app that uses emoji instead of SVG. */
-.auth-hero{position:relative;overflow:hidden;height:280px;background:var(--potato-grad);background-size:cover;background-position:center;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;}
+
 /* ── Admin-set backdrops for the Login / Sign Up screen ──
    Owner: "make when l can put background image on those screens of login tab
    and registration tab ... 2 different images so one image will appear on
@@ -864,14 +859,8 @@ a{color:inherit;}
    Only when a banner is actually set: with no image the hero is the plain
    brand gradient, and washing THAT out at the bottom would quietly restyle a
    screen he has already approved. .has-bg is toggled in applyAuthBackgrounds(). */
-.auth-hero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:55%;
-  pointer-events:none;z-index:1;opacity:0;transition:opacity .2s ease;
-  background:linear-gradient(to bottom,
-    rgba(255,255,255,0) 0%,
-    rgba(255,255,255,.55) 55%,
-    var(--snow-surface) 88%,
-    var(--snow-surface) 100%);}
-.auth-hero.has-bg::after{opacity:1;}
+
+
 /* Angular triangle motifs, straight off Main.dc.html -- Potato's brand
    language is angular, NOT the soft wave this screen inherited from Snow
    (owner: "l no longer need to see this wavy curvy design"). */
@@ -880,7 +869,7 @@ a{color:inherit;}
 .auth-tri.t2{width:0;height:0;border-left:70px solid transparent;border-right:70px solid transparent;border-bottom:120px solid rgba(255,255,255,.14);bottom:-50px;right:-30px;transform:rotate(-12deg);}
 .auth-wordmark{position:relative;font-size:36px;letter-spacing:.02em;transform:skewX(-7deg);color:#fff;}
 .auth-wordmark b{color:#14100d;font-weight:400;}
-.auth-card{background:var(--snow-surface);margin-top:-28px;border-radius:var(--r-card);position:relative;z-index:3;padding:32px 22px 30px;box-shadow:0 22px 44px -26px rgba(40,10,4,.5);overflow:hidden;}
+
 /* Owner: "there is a white space down the login screen, why is it there?"
    The hero is a fixed 280px and the card was only as tall as its own fields,
    so on any screen taller than the two of them together the page canvas
@@ -890,10 +879,10 @@ a{color:inherit;}
    dvh, not vh, where it is supported: 100vh on a phone is the viewport WITH
    the address bar hidden, so on first paint (bar visible) it overshoots and
    trades the gap for a scrollbar. dvh tracks what is actually on screen. */
-#authScreen > .wrap{display:flex;flex-direction:column;min-height:100vh;}
-@supports (min-height:100dvh){#authScreen > .wrap{min-height:100dvh;}}
-#authScreen .auth-hero{flex:0 0 auto;}
-#authScreen .auth-card{flex:1 0 auto;}
+
+
+
+
 /* Everything in the card sits above its backdrop.
    The second rule has to restore `position:absolute`, not just drop the
    z-index: `.auth-card > *` and `.auth-bg` have the SAME specificity, and
@@ -945,8 +934,8 @@ a{color:inherit;}
 @media (prefers-reduced-motion:reduce){
   .lang-sheet{transition:none;}
 }
-.auth-card > *{position:relative;z-index:1;}
-.auth-card h1{margin:0 0 6px;font-size:26px;text-align:center;letter-spacing:.08em;font-weight:400;}
+
+
 .auth-field{display:flex;align-items:center;gap:10px;background:var(--snow-neutral-soft);border:1.5px solid var(--snow-border);border-radius:var(--r-ctl);padding:0 16px;height:54px;margin-bottom:14px;}
 .auth-field input{border:0;background:transparent;outline:0;font-family:inherit;font-size:15px;flex:1;min-width:0;color:var(--snow-ink);text-overflow:ellipsis;}
 .auth-field input::placeholder{color:var(--snow-muted);}
@@ -985,16 +974,13 @@ a{color:inherit;}
   padding:24px 22px calc(22px + env(safe-area-inset-bottom));}
 .auth-pane{width:100%;max-width:660px;min-height:calc(100vh - 46px - env(safe-area-inset-bottom));min-height:calc(100dvh - 46px - env(safe-area-inset-bottom));margin:0 auto;display:flex;flex-direction:column;}
 .auth-pane .auth-intro{flex:1 0 230px;max-width:none;display:flex;flex-direction:column;justify-content:center;margin:0 auto 18px;}
-.auth-card{width:100%;box-sizing:border-box;padding:28px 30px 25px;border:1px solid rgba(255,255,255,.58);
-  border-radius:28px;background:rgba(255,255,255,var(--auth-card-opacity,.78));
-  -webkit-backdrop-filter:blur(var(--auth-card-blur,18px)) saturate(1.12);backdrop-filter:blur(var(--auth-card-blur,18px)) saturate(1.12);
-  box-shadow:0 18px 46px rgba(3,45,25,.22);color:#18243a;}
-.auth-card h1{margin:0 0 24px;color:#111827;text-align:left;font-size:26px;line-height:1.2;font-weight:700;letter-spacing:-.02em;}
-.auth-card .auth-intro{margin:0 auto 18px;}
-.auth-card .auth-intro h1{text-align:left;}
-.auth-card .auth-subtitle{margin:-16px 0 22px;color:#64748b;font-size:14px;}
-.auth-card .auth-signup-link{display:block;margin:18px 0 0;text-align:center;color:#5d6b7f;font-size:14px;}
-.auth-card .auth-signup-link a{color:#047a3e;font-weight:700;text-decoration:none;}
+
+
+
+
+
+
+
 .auth-intro{text-align:center;color:#fff;margin:0 auto 24px;max-width:320px;}
 .auth-brand-mark{width:82px;height:82px;margin:0 auto 13px;display:flex;align-items:center;justify-content:center;}
 .auth-brand-logo{display:block;max-width:122px;max-height:78px;width:auto;height:auto;object-fit:contain;filter:drop-shadow(0 4px 12px rgba(0,0,0,.28));}
@@ -1276,7 +1262,7 @@ html:has(.sheet-bg.show),body:has(.sheet-bg.show){overflow:hidden;overscroll-beh
 .nav-loading{display:inline-block;color:var(--v-blue,#02964c);font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:15px;font-weight:700;letter-spacing:.03em;animation:navBounce .9s cubic-bezier(.28,.84,.42,1) infinite;}
 @keyframes navBounce{0%,100%{transform:translateY(0);animation-timing-function:cubic-bezier(.55,.06,.68,.19);}50%{transform:translateY(-8px);animation-timing-function:cubic-bezier(.22,.61,.36,1);}}
 @media (prefers-reduced-motion:reduce){.nav-loading{animation:none;}}
-@media(prefers-reduced-motion:reduce){}
+
 .list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:15px;}
 
 /* Real content fades/lifts into place once it's ready -- no shimmer
@@ -1369,9 +1355,9 @@ body{color:var(--mg-ink);font-family:var(--mg-sans);}
 @keyframes mgPageFade{from{opacity:0;}to{opacity:1;}}
 @media (prefers-reduced-motion:reduce){#pageHost.mg-enter,.navitem.nav-tap .lbl{animation:none;}}
 @keyframes mgSheetIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
-#authScreen > .ma-screen,.va-pane{animation:mgSheetIn .3s ease-out;}
+
 .sheet-bg.show,.pay-page.show,#msgDetailBg.show,#depStatusBg.show{animation:mgSheetIn .3s ease-out;}
-@media (prefers-reduced-motion:reduce){#authScreen > .ma-screen,.va-pane,.sheet-bg.show,.pay-page.show,#msgDetailBg.show,#depStatusBg.show{animation:none;}}
+@media (prefers-reduced-motion:reduce){.sheet-bg.show,.pay-page.show,#msgDetailBg.show,#depStatusBg.show{animation:none;}}
 body.sheet-open .bottom-nav{display:flex;}
 
 /* ── sheet header: pink serif bar, green back square ── */
@@ -1385,16 +1371,14 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 .sheet-head.pay-head{background:transparent;box-shadow:none;}
 
 /* ── the notice dialog: white card, yellow warning triangle, red OK ── */
-.notify-bg{position:fixed;inset:0;z-index:440;display:flex;align-items:center;justify-content:center;padding:0 24px;background:rgba(40,50,45,.34);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .18s,visibility 0s .18s;}
+.notify-bg{position:fixed;inset:0;z-index:440;display:flex;align-items:center;justify-content:center;padding:0 22.7px;background:rgba(0,0,0,.45);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .18s,visibility 0s .18s;}
 .notify-bg.show{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .18s,visibility 0s;}
-.notify-card{width:fit-content;min-width:225px;max-width:280px;border:1px solid #d3e8dc;box-sizing:border-box;padding:36px 24px 22px;border-radius:24px;background:rgba(246,246,246,.97);color:#111;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.22);transform:scale(.92);opacity:0;transition:transform .22s cubic-bezier(.2,.9,.3,1.1),opacity .18s;display:flex;flex-direction:column;align-items:center;}
+.notify-card{width:100%;max-width:315px;box-sizing:border-box;padding:25.8px 20px 26.5px;border-radius:16px;background:#fff;color:#49535f;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.22);transform:scale(.94);opacity:0;transition:transform .22s cubic-bezier(.2,.9,.3,1.1),opacity .18s;display:flex;flex-direction:column;align-items:center;}
 .notify-bg.show .notify-card{transform:scale(1);opacity:1;}
-.notify-ic{display:block;width:41px;height:38px;margin:0 0 21px;}
-.notify-ic svg{width:100%;height:100%;display:block;}
-.notify-msg{font:700 14.3px/1.38 var(--mg-sans);color:#111;white-space:pre-line;margin-bottom:16px;}
-.notify-ok{min-width:70px;height:40px;padding:0 20px;border:0;border-radius:13px;background:#e40613;color:#fff;font:700 13.5px/1 var(--mg-sans);cursor:pointer;}
-.notify-ok.good{background:linear-gradient(125deg,#0aa656,#056b39);}
-.notify-ok:active{transform:scale(.97);}
+.notify-ic{display:flex;align-items:center;justify-content:center;width:45px;height:45px;margin:0 0 15.5px;border-radius:50%;background:#fff;box-shadow:0 5px 14px rgba(201,36,74,.17);color:#c9244a;}
+.notify-ic.ok{color:#1f9d55;box-shadow:0 5px 14px rgba(31,157,85,.17);}
+.notify-ic svg{width:24px;height:24px;display:block;}
+.notify-msg{font:400 13px/17.3px 'Roboto',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;letter-spacing:.25px;color:#49535f;white-space:pre-line;}
 
 
 /* ── Home ── */
@@ -1867,8 +1851,8 @@ body.deposit-status-open .sheet-bg{bottom:0;}
 #mgSbList{z-index:310;width:3px;}
 .mg-sb i{display:block;width:100%;border-radius:2px;background:#02a552;will-change:transform;}
 .prov-list::-webkit-scrollbar{width:0 !important;}
-html::-webkit-scrollbar,body::-webkit-scrollbar,.sheet-bg::-webkit-scrollbar,#msgDetailBg::-webkit-scrollbar,.ma-scroll::-webkit-scrollbar{width:0 !important;height:0 !important;display:none !important;}
-html,body,.sheet-bg,#msgDetailBg,.ma-scroll{scrollbar-width:none !important;}
+html::-webkit-scrollbar,body::-webkit-scrollbar,.sheet-bg::-webkit-scrollbar,#msgDetailBg::-webkit-scrollbar{width:0 !important;height:0 !important;display:none !important;}
+html,body,.sheet-bg,#msgDetailBg{scrollbar-width:none !important;}
 /* The bar's 4px of room while it is on (class set by mgScrollbarInit); header strips that bleed to the edge keep reaching it. */
 html.mg-gut #pageHost{padding-right:4px;}
 html.mg-gut .mg-top{margin-right:-19px;}
@@ -1876,7 +1860,7 @@ html.mg-gut .mg-top{margin-right:-19px;}
 .sheet-bg.mg-gut .sheet-head{margin-right:-4px;}
 .sheet-bg.mg-gut .v-recbal,.sheet-bg.mg-gut .v-rectabs{margin-right:-19px;}
 .sheet-bg.mg-gut .v-rectabs{padding-right:19px;}
-.ma-scroll.mg-gut{padding-right:4px;}
+
 
 /* Glow sweep (measured from the owner's screen recording of the Sign Up button, 60 fps): a soft white band, 65% of the button wide, peak white 11.4%,
    leaning 5 degrees, runs right to left. Every 2 s: the first band creeps in from the right edge, speeds up (ease-in, 1.1 s) and leaves;
@@ -1969,10 +1953,10 @@ html.mg-gut .mg-top{margin-right:-19px;}
 #regReferral:not(:placeholder-shown){text-transform:uppercase;}
 .mg-dep .v-sec+.v-amount{margin-top:9px;}
 /* Sign Up: the Trade Password is dots drawn over a plain text box (see toggleAuthEye), so the browser never treats it as a password to suggest or save */
-.ma-mask{-webkit-text-security:disc;text-security:disc;}
-.ma-mask.ma-clear{-webkit-text-security:none;text-security:none;}
+
+
 /* the two panes are real forms now (so the browser keeps Login and Sign Up apart); a form adds no space of its own */
-form.va-pane{margin:0;padding:0;}
+
 
 /* Home category tabs: Products | New Products. The chosen one is the green button; the other is a pale outline. The New Products button carries the
    glow sweep (the same two bands and timing as Buy Now): white on its green face, a soft green band while it is the pale button. */
@@ -2029,61 +2013,115 @@ form.va-pane{margin:0;padding:0;}
 @keyframes ptUnfoldBot{from{transform:perspective(340px) rotateX(90deg);}to{transform:perspective(340px) rotateX(0deg);}}
 @keyframes ptHideBot{0%,57.5%{visibility:visible;}57.6%,99.9%{visibility:hidden;}100%{visibility:visible;}}
 /* PT-ANIM-END */
+
+/* PA-START
+   Potato Login and Create Account, measured from the owner's screenshots (1080 px = 360 css px). The page has no scroll bar. */
+#authScreen{position:fixed;inset:0;z-index:300;overflow:hidden;font-family:Roboto,'Segoe UI',system-ui,sans-serif;background:#f4f5fa;}
+/* The pink wash runs over the WHOLE page (a taller Create Account page spreads the same colours over its length), measured on both pages. */
+.pa-page{min-height:100%;background:linear-gradient(180deg,#f4f5fa 0,#f4f5fa 29.4%,#f3f1f6 38.2%,#f2ecf0 49.9%,#efe6e9 61.7%,#eadee0 73.4%,#ead7d9 85.2%,#e4cccc 100%);}
+.pa-screen{position:absolute;inset:0;}
+.pa-scroll{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior:contain;}
+.pa-scroll::-webkit-scrollbar{display:none;width:0;height:0;}
+.pa-hero{position:relative;height:178.7px;overflow:hidden;background:linear-gradient(135deg,#c4121e,#e8453b);transition:height .28s ease;}
+.pa-hero.tall{height:245.3px;}
+#authHeroBg{position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;background-image:var(--auth-hero-img,none);opacity:var(--auth-hero-op,1);}
+.pa-hero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:26px;pointer-events:none;background:linear-gradient(180deg,rgba(244,245,250,0) 0,rgba(244,245,250,.55) 55%,#f4f5fa 100%);}
+.pa-logo{position:absolute;left:50%;bottom:23px;width:80px;height:80px;margin-left:-40px;border-radius:50%;z-index:2;}
+.pa-logo-img{display:block;width:100%;height:100%;border-radius:50%;background-size:cover;background-position:center;background-repeat:no-repeat;}
+.pa-card{position:relative;z-index:1;padding:0 23.5px 36px 23.3px;}
+.pa-title{margin:30px 0 0;font:700 19.3px/22px Roboto,'Segoe UI',system-ui,sans-serif;color:#e0241f;letter-spacing:0;}
+.pa-pane{margin:21.3px 0 0;padding:0;}
+form.pa-pane[hidden]{display:none;}
+.pa-f{position:relative;display:flex;align-items:center;height:54.7px;margin:0 0 19.3px;box-sizing:border-box;border:.67px solid #e3b4bd;border-radius:9px;background:transparent;transition:box-shadow .15s,border-color .15s;}
+.pa-f.pa-pw,.pa-f.pa-ref{height:60.7px;}
+.pa-f:focus-within{border-color:#dba6b0;box-shadow:0 0 0 2px rgba(229,125,148,.26);}
+.pa-f input{flex:0 0 auto;box-sizing:border-box;height:35.3px;margin:0;padding:0 0 0 13px;border:0;border-radius:9px;background:transparent;color:#263048;font:700 14px/35px Roboto,'Segoe UI',system-ui,sans-serif;outline:0;min-width:0;-webkit-appearance:none;appearance:none;}
+.pa-f input:focus{outline:3px solid rgba(229,125,148,.26);outline-offset:0;}
+.pa-f input::placeholder{color:#6c6c8b;opacity:1;font-weight:700;}
+.pa-f > .pa-pre ~ input{width:213.7px;margin-left:0;}
+.pa-pre{flex:0 0 auto;margin-left:21.4px;width:37.6px;font:700 14px/1 Roboto,'Segoe UI',system-ui,sans-serif;color:#e0241f;white-space:nowrap;}
+.pa-ic{flex:0 0 auto;display:block;width:12px;height:13.3px;margin:0 24.6px 0 22.4px;}
+.pa-ic svg{display:block;width:12px;height:13.3px;fill:none;stroke:#d92b26;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
+.pa-pw input{width:194.4px;}
+.pa-ref input{width:213.7px;margin-left:60px;}
+.pa-eye{position:absolute;right:44.6px;top:50%;width:14.3px;height:14px;margin:-7px 0 0;padding:0;border:0;background:none;cursor:pointer;}
+.pa-eye svg{position:absolute;inset:0;width:14.3px;height:14px;fill:none;stroke:#d92b26;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round;}
+.pa-eye .on{display:none;}
+.pa-eye.shown .on{display:block;}
+.pa-eye.shown .off{display:none;}
+.pa-err{margin:-15px 0 3.6px 4.4px;min-height:0;font:700 11px/12px Roboto,'Segoe UI',system-ui,sans-serif;color:#e0241f;}
+.pa-err:empty{display:none;}
+.pa-err:not(:empty){margin-bottom:7.3px;}
+.pa-mask{-webkit-text-security:disc;text-security:disc;}
+.pa-mask.pa-clear{-webkit-text-security:none;text-security:none;}
+.pa-rem{display:flex;align-items:center;margin:21px 0 12px;font:700 11.7px/14px Roboto,'Segoe UI',system-ui,sans-serif;color:#5e5e6c;cursor:pointer;}
+.pa-rem input{position:absolute;opacity:0;pointer-events:none;width:0;height:0;}
+.pa-rem i{flex:0 0 auto;display:block;width:14.3px;height:14px;margin:0 6.3px 0 0;box-sizing:border-box;border:1.7px solid #aca7ae;border-radius:3.6px;}
+.pa-rem input:checked + i{background:#e0241f;border-color:#e0241f;}
+.pa-rem input:checked + i::after{content:'';display:block;width:3.4px;height:6.4px;margin:1.2px 0 0 3.9px;border:solid #fff;border-width:0 1.8px 1.8px 0;transform:rotate(45deg);}
+.pa-btn{display:block;width:100%;height:41.7px;margin:0;padding:0;border:0;border-radius:21px;color:#fff;font:700 13px/41.7px Roboto,'Segoe UI',system-ui,sans-serif;letter-spacing:1.1px;text-transform:uppercase;cursor:pointer;
+  background:linear-gradient(105deg,#e5231f 0%,#e73e37 25%,#ef625c 67%,#f27c77 100%);box-shadow:0 6px 12px rgba(100,80,125,.32);}
+.pa-btn:active:not(:disabled){transform:scale(.99);}
+.pa-btn:disabled{background:#f0ebee;color:#a8aab8;box-shadow:0 0 0 1px #e4d9de inset;}
+.pa-alt{margin:20px 0 0;text-align:center;font:700 14px/16px Roboto,'Segoe UI',system-ui,sans-serif;color:#74748a;}
+.pa-alt a{color:#e0241f;text-decoration:none;}
+.pa-alt-one a{font-size:14.6px;}
+/* The account-id / password boxes of a saved login: the browser's own light-blue fill is kept (as on the owner's phone). */
+/* PA-END */
 /* MG-END */
 /* ── Login / Sign Up: measured from the owner's Potato screenshots (360 px phone, 2x) ── */
-.ma-screen{position:relative;min-height:100vh;min-height:100dvh;background:#fefefc;}
-.ma-scroll{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;display:flex;flex-direction:column;
-  }
-.ma-scroll::-webkit-scrollbar{width:4px;}
-.ma-scroll::-webkit-scrollbar-track{background:transparent;}
-.ma-scroll::-webkit-scrollbar-thumb{background:#02a552;border-radius:2px;}
-.ma-tabs{flex:0 0 auto;display:flex;align-items:flex-end;gap:15.5px;height:48.5px;padding:0 0 0 11.5px;background:#fefefc;border-bottom:1px solid #d6eadc;box-sizing:border-box;}
-.ma-tabs button{position:relative;height:100%;padding:0 0 12px;border:0;background:transparent;font:700 12px/1 'Noto Serif',Georgia,'DejaVu Serif',serif;letter-spacing:.07em;text-transform:uppercase;color:#9a9ea5;cursor:pointer;}
-.ma-tabs button span{display:inline-block;padding-top:13px;}
-.ma-tabs button.on{color:#0e5d39;}
-.ma-tabs button.on::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px;background:#f8c63f;}
-.ma-hero{position:relative;flex:0 0 auto;height:auto;aspect-ratio:var(--auth-hero-ar,360/204);margin-bottom:-30px;overflow:hidden;background:linear-gradient(145deg,#0a7a43 0%,#0b9a52 55%,#0a6b3b 100%);}
-.ma-hero .auth-bg{position:absolute;inset:0;background-image:var(--auth-hero-img,none);background-size:100% 100%;background-position:center;opacity:var(--auth-hero-op,1);filter:blur(var(--auth-hero-blur,0px));}
-.ma-hero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:100px;pointer-events:none;background:linear-gradient(to bottom,rgba(254,254,252,0) 0%,rgba(254,254,252,.55) 45%,#fefefc 100%);}
-.ma-card{position:relative;z-index:1;flex:1 0 auto;box-sizing:border-box;padding:28.5px 23px 26px;background:#fefefc;border:1px solid #d9ebe0;border-bottom:0;border-radius:30px 30px 0 0;}
-.ma-logo{width:66px;height:66px;margin:0 auto 20.5px;box-sizing:border-box;border-radius:50%;border:3px solid #fbc926;background:#fff;box-shadow:0 5px 16px rgba(34,160,90,.18);padding:2px;}
-.ma-logo-img{display:block;width:100%;height:100%;border-radius:50%;background-size:cover;background-position:center;background-repeat:no-repeat;background-color:#fff;}
-#registerPane{margin-top:-2px;}
-.ma-f{position:relative;display:flex;align-items:center;height:40px;margin:0 0 15px;box-sizing:border-box;border:1px solid #d3e4da;border-radius:16px;background:#fff;}
-#registerPane .ma-f{margin-bottom:13px;}
-.ma-f:focus-within{border-color:#02a552;box-shadow:0 0 0 2px rgba(2,165,82,.12);}
-.ma-f input{flex:1;min-width:0;height:100%;padding:0;border:0;background:transparent;outline:0;font:400 14px/1 Roboto,'Segoe UI',system-ui,sans-serif;color:#151515;}
-.ma-f input::placeholder{color:#9a9da4;opacity:1;}
-.ma-pre{flex:0 0 auto;margin-left:12px;font:500 13px/1 Roboto,system-ui,sans-serif;color:#59655b;}
-.ma-div{flex:0 0 1px;width:1px;height:13px;margin:0 13px 0 2px;background:#8f9490;}
-.ma-ic{flex:0 0 13px;width:13px;height:13px;margin:0 11px 0 14px;display:flex;}
-.ma-ic svg{width:13px;height:13px;display:block;}
-.ma-eye{flex:0 0 13px;width:13px;height:13px;margin:0 37.5px 0 0;padding:0;border:0;background:transparent;display:flex;cursor:pointer;}
-.ma-eye svg{width:13px;height:13px;display:block;}
-.ma-eye .sl{display:none;}
-.ma-eye.shown .sl{display:inline;}
-.ma-err{min-height:0;margin:-6px 0 12px 4px;font:400 14px/1.3 Roboto,'Segoe UI',system-ui,sans-serif;color:#c8141e;}
-.ma-err:empty{display:none;}
-.ma-ref input{color:#f0d44a;}
-.ma-ref input::placeholder{color:#9a9da4;}
-.ma-cap{display:flex;gap:12px;align-items:flex-start;margin:0 0 15px;}
-.ma-capf{flex:1;min-width:0;margin:0!important;}
-.ma-capf input{padding:0 0 0 14px;letter-spacing:1.95px;}
-.ma-capf input::placeholder{letter-spacing:1.95px;}
-.ma-capimg{flex:0 0 113px;width:113px;height:42px;margin:-1px 0 0;padding:0;border:1px solid #cde3d3;border-radius:7px;background:#e9f5ec;overflow:hidden;cursor:pointer;display:block;}
-.ma-capimg img{display:block;width:100%;height:100%;object-fit:fill;}
-.ma-rem{display:flex;align-items:center;gap:6px;margin:0 0 20px;font:400 12.2px/1 Roboto,system-ui,sans-serif;color:#5b635b;cursor:pointer;}
-.ma-rem input{appearance:none;-webkit-appearance:none;width:17px;height:17px;margin:0;border:1.5px solid #9fa1ad;border-radius:4px;background:#fff;display:grid;place-content:center;flex:0 0 17px;}
-.ma-rem input:checked{background:#02a552;border-color:#02a552;}
-.ma-rem input:checked::after{content:'';width:8px;height:4px;border:2px solid #fff;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px);}
-.ma-btn{display:block;width:100%;height:44px;margin:0;border:0;border-radius:12px;background:linear-gradient(125deg,#03a652 0%,#028946 52%,#056b39 100%);color:#fff;font:700 15px/1 Roboto,'Segoe UI',system-ui,sans-serif;}
-.ma-btn:disabled{opacity:1;background:linear-gradient(125deg,#6cc896 0%,#6fb28f 55%,#70a98a 100%);box-shadow:0 8px 22px -4px rgba(76,184,128,.38);}
-.ma-btn:active:not(:disabled){transform:scale(.99);}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* Chrome paints a pale sheet over a field it fills or previews from a saved login. Keep the field white and the typed text its own colour. */
 input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus,input:-webkit-autofill:active,input:autofill{
   -webkit-text-fill-color:#151515;caret-color:#151515;-webkit-box-shadow:0 0 0 0 transparent inset;box-shadow:0 0 0 0 transparent inset;
   transition:background-color 600000s 0s,color 600000s 0s;}
-.ma-f input:-webkit-autofill{background-color:transparent!important;background-clip:content-box;}
+
 /* V2-END */
 </style>
 <script data-potato-idle>
@@ -2154,40 +2192,40 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
 <body>
 
 <div id="loadingScreen">
-  <span class="ld-bg" id="ldBg" aria-hidden="true"></span>
-  <span class="ld-txt" aria-hidden="true">Loading...</span>
+  <span class="ld-box" id="ldBox" aria-hidden="true"></span>
+  <span class="ld-name" data-brandname aria-hidden="true"></span>
+  <span class="ld-bar" aria-hidden="true"><i id="ldFill"></i></span>
+  <span class="ld-pct" id="ldPct" aria-hidden="true">Loading... 0%</span>
   <span class="sr-only" role="status" aria-live="polite">Loading</span>
 </div>
 <script data-potato-loader>
-/* Paint the owner's loading picture on the very first frame: the copy kept from the last visit is set
-   inline (no network wait), then the stored copy is refreshed in the background for next time. The very
-   first launch ever has no copy yet, so it shows the gradient with the Loading... word until the picture arrives. */
+/* Paint the owner's box picture on the very first frame: the copy kept from the last visit is set inline (no network
+   wait), then the stored copy is refreshed in the background for next time. The percentage runs from the moment the page began. */
 (function(){
   window._potatoLoaderStart = Date.now();
   try {
-    var ls = document.getElementById('loadingScreen'), bg = document.getElementById('ldBg'), KEY = 'potato_loader_img', FX = 'potato_loader_fx';
-    var layer = function(u){ return 'linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url("' + u + '")'; };
-    /* The picture's opacity (0-100) and blur (0-40 px) are remembered the same way, so they also apply on the first frame. */
-    var fx = function(op, bl){
-      op = Number(op); bl = Number(bl);
-      if (!ls || !isFinite(op) || !isFinite(bl)) return;
-      ls.style.setProperty('--ld-op', String(Math.min(100, Math.max(0, op)) / 100));
-      ls.style.setProperty('--ld-blur', Math.min(40, Math.max(0, bl)) + 'px');
-      try { localStorage.setItem(FX, Math.round(op) + ',' + Math.round(bl)); } catch (e) {}
+    var box = document.getElementById('ldBox'), fill = document.getElementById('ldFill'), pct = document.getElementById('ldPct'), KEY = 'potato_loader_img';
+    var ls = document.getElementById('loadingScreen'), MIN = 2500, done = false;
+    window._potatoLoaderProgress = function(n){ if (n >= 100) done = true; n = Math.min(100, Math.max(0, Math.floor(n))); if (fill) fill.style.width = n + '%'; if (pct) pct.textContent = 'Loading... ' + n + '%'; };
+    var tick = function(){
+      if (done || !ls || ls.style.display === 'none') return;
+      var t = (Date.now() - window._potatoLoaderStart) / (typeof window._potatoLoaderMinMs === 'number' ? window._potatoLoaderMinMs : MIN);
+      window._potatoLoaderProgress(Math.min(99, t * 100));
+      setTimeout(tick, 60);
     };
-    window._potatoLoaderFx = fx;
-    try { var kfx = (localStorage.getItem(FX) || '').split(','); if (kfx.length === 2) fx(kfx[0], kfx[1]); } catch (e) {}
+    tick();
+    window._potatoLoaderRestart = function(){ window._potatoLoaderStart = Date.now(); done = false; window._potatoLoaderProgress(0); done = false; tick(); };
     var kept = null; try { kept = localStorage.getItem(KEY); } catch (e) {}
-    if (kept && bg) bg.style.backgroundImage = layer(kept);
+    if (kept && box) box.style.backgroundImage = 'url("' + kept + '")';
     if (!window.fetch || !window.FileReader) return;
-    fetch('/k7x2/public/loader-image', { cache: 'no-cache' }).then(function(r){ if (r.status === 404) { try { localStorage.removeItem(KEY); } catch (e) {} if (bg && kept) bg.style.backgroundImage = 'none'; return null; } if (r.ok) fx(r.headers.get('X-Loader-Opacity'), r.headers.get('X-Loader-Blur')); return r.ok ? r.blob() : null; }).then(function(b){
+    fetch('/k7x2/public/loader-image', { cache: 'no-cache' }).then(function(r){ if (r.status === 404) { try { localStorage.removeItem(KEY); } catch (e) {} if (box && kept) box.style.backgroundImage = 'none'; return null; } return r.ok ? r.blob() : null; }).then(function(b){
       if (!b || b.size > 1500000) return;
       var fr = new FileReader();
       fr.onload = function(){
         var u = String(fr.result || '');
         if (u.indexOf('data:image/') !== 0 || u === kept) return;
         try { localStorage.setItem(KEY, u); } catch (e) {}
-        if (!kept && bg) bg.style.backgroundImage = layer(u);
+        if (!kept && box) box.style.backgroundImage = 'url("' + u + '")';
       };
       fr.readAsDataURL(b);
     }).catch(function(){});
@@ -2242,6 +2280,8 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
   window.__paintBrandMarks = function(){
     var els = document.querySelectorAll('[data-brandmark]');
     for (var i = 0; i < els.length; i++) els[i].textContent = up;
+    var raw = document.querySelectorAll('[data-brandname]');
+    for (var j = 0; j < raw.length; j++) raw[j].textContent = name;
   };
   window.__paintBrandMarks();
   document.addEventListener('DOMContentLoaded', window.__paintBrandMarks);
@@ -2319,66 +2359,37 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
 
 <!-- ═══════════ AUTH ═══════════ -->
 <div id="authScreen" style="display:none;">
-  <!-- Login and Sign Up, built from the owner's Potato screenshots: a tab bar (LOGIN / SIGN UP, serif capitals, yellow underline), the admin-uploaded
-       banner ("authhero") fading into a rounded off-white card, the round logo with a yellow ring ("authlogo", admin-uploaded), rounded white fields
-       with small green icons, a green scroll bar, a four-digit captcha picture and green gradient buttons. +256 and UGX. -->
-  <div class="ma-screen" id="authHero">
-    <div class="ma-scroll" id="authScroll">
-      <nav class="ma-tabs" role="tablist" aria-label="Account">
-        <button type="button" id="tabLogin" class="on" role="tab" onclick="showAuthTab('login')"><span>Login</span></button>
-        <button type="button" id="tabRegister" role="tab" onclick="showAuthTab('register')"><span>Sign Up</span></button>
-      </nav>
-      <div class="ma-hero"><span class="auth-bg" id="authHeroBg" aria-hidden="true"></span></div>
-      <section class="ma-card">
-        <div class="ma-logo" id="authLogo" aria-hidden="true"><span class="ma-logo-img" id="authLogoImg"></span></div>
-        <form id="loginPane" class="va-pane" aria-label="Login" onsubmit="return false" novalidate>
-          <div class="ma-f">
-            <span class="ma-pre" id="loginDial">+256</span><i class="ma-div" aria-hidden="true"></i>
-            <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this);loginError('','')">
-          </div>
-          <div class="ma-err" id="loginPhoneErr" role="alert"></div>
-          <div class="ma-f">
-            <span class="ma-ic"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#039447"/><path d="M4.9 6.3V4.9a2.1 2.1 0 0 1 4.2 0v1.4" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/><rect x="3.8" y="6.2" width="6.4" height="4.6" rx="1.1" fill="#fff"/><circle cx="7" cy="8.3" r=".8" fill="#039447"/><rect x="6.65" y="8.5" width=".7" height="1.3" rx=".3" fill="#039447"/></svg></span>
-            <input id="loginPassword" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Enter password" autocomplete="current-password" oninput="loginError('','')">
-            <button class="ma-eye" type="button" aria-label="Show password" onclick="toggleAuthEye(this)"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#039447"/><path d="M2 7c1.3-2.1 3-3.1 5-3.1S10.7 4.9 12 7c-1.3 2.1-3 3.1-5 3.1S3.3 9.1 2 7z" fill="#fff"/><circle cx="7" cy="7" r="2.1" fill="#f5d54a"/><circle cx="7" cy="7" r="1" fill="#8a6a12"/><path class="sl" d="M3 11.2 11 2.8" stroke="#039447" stroke-width="3" stroke-linecap="round"/><path class="sl" d="M3 11.2 11 2.8" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/></svg></button>
-          </div>
-          <div class="ma-err" id="loginErr" role="alert"></div>
-          <label class="ma-rem"><input type="checkbox" id="rememberMe"><span>Remember me</span></label>
-          <button class="ma-btn" id="loginBtn" type="button" onclick="doLogin()">Log In</button>
+  <!-- Login and Create Account, built from the owner's Potato screenshots: the admin-uploaded banner (authhero) with the circle picture (authlogo) over
+       its lower part and a white mist bleeding up into it, a red title, rounded pink-bordered fields (the +234 / lock + eye icons), a red gradient pill
+       button, no scroll bar, errors for the phone line under the box and everything else in the blurred-background notice. -->
+  <div class="pa-screen" id="authHero">
+    <div class="pa-scroll" id="authScroll"><div class="pa-page">
+      <div class="pa-hero" id="authHeroBox">
+        <span class="auth-bg" id="authHeroBg" aria-hidden="true"></span>
+        <span class="pa-logo" id="authLogo" aria-hidden="true"><span class="pa-logo-img" id="authLogoImg"></span></span>
+      </div>
+      <section class="pa-card">
+        <h1 class="pa-title" id="authTitle">Login</h1>
+        <form id="loginPane" class="pa-pane" aria-label="Login" onsubmit="return false" novalidate>
+          <div class="pa-f"><span class="pa-pre" id="loginDial">+234</span><input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter Username Number" autocomplete="tel" oninput="sanitizePhoneInput(this)"></div>
+          <div class="pa-err" id="loginPhoneErr" role="alert"></div>
+          <div class="pa-f pa-pw"><span class="pa-ic"><svg viewBox="2.4 2.2 19.2 20.6" preserveAspectRatio="none" aria-hidden="true"><rect x="3.5" y="10.5" width="17" height="11" rx="2.6"/><path d="M7.5 10.5V7.4a4.5 4.5 0 0 1 9 0v3.1"/></svg></span><input id="loginPassword" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Enter password" autocomplete="current-password"><button class="pa-eye" type="button" aria-label="Show password" onclick="toggleAuthEye(this)"><svg class="off" viewBox="1.2 1.4 21.6 21.4" aria-hidden="true"><path d="M9.9 9.9a3 3 0 1 0 4.2 4.2"/><path d="M10.7 5.1A10.4 10.4 0 0 1 12 5c7 0 10 7 10 7a13.2 13.2 0 0 1-1.7 2.7"/><path d="M6.6 6.6A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="m2 2 20 20"/></svg><svg class="on" viewBox="1.2 1.4 21.6 21.4" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+          <label class="pa-rem"><input type="checkbox" id="rememberMe"><i aria-hidden="true"></i><span>Remember me</span></label>
+          <button class="pa-btn" id="loginBtn" type="button" onclick="doLogin()">Login</button>
+          <p class="pa-alt pa-alt-one"><a href="#" onclick="showAuthTab('register');return false;">New here? Create Account</a></p>
         </form>
-        <form id="registerPane" class="va-pane" style="display:none;" aria-label="Sign Up" onsubmit="return false" novalidate>
-          <div class="ma-f">
-            <span class="ma-pre" id="regDial">+256</span><i class="ma-div" aria-hidden="true"></i>
-            <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
-          </div>
-          <div class="ma-f">
-            <span class="ma-ic"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#039447"/><path d="M4.9 6.3V4.9a2.1 2.1 0 0 1 4.2 0v1.4" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/><rect x="3.8" y="6.2" width="6.4" height="4.6" rx="1.1" fill="#fff"/><circle cx="7" cy="8.3" r=".8" fill="#039447"/><rect x="6.65" y="8.5" width=".7" height="1.3" rx=".3" fill="#039447"/></svg></span>
-            <input id="regPassword" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Login Password (at least 6 characters)" autocomplete="new-password">
-            <button class="ma-eye" type="button" aria-label="Show password" onclick="toggleAuthEye(this)"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#039447"/><path d="M2 7c1.3-2.1 3-3.1 5-3.1S10.7 4.9 12 7c-1.3 2.1-3 3.1-5 3.1S3.3 9.1 2 7z" fill="#fff"/><circle cx="7" cy="7" r="2.1" fill="#f5d54a"/><circle cx="7" cy="7" r="1" fill="#8a6a12"/><path class="sl" d="M3 11.2 11 2.8" stroke="#039447" stroke-width="3" stroke-linecap="round"/><path class="sl" d="M3 11.2 11 2.8" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/></svg></button>
-          </div>
-          <div class="ma-f">
-            <span class="ma-ic"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#039447"/><path d="M4.9 6.3V4.9a2.1 2.1 0 0 1 4.2 0v1.4" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/><rect x="3.8" y="6.2" width="6.4" height="4.6" rx="1.1" fill="#fff"/><circle cx="7" cy="8.3" r=".8" fill="#039447"/><rect x="6.65" y="8.5" width=".7" height="1.3" rx=".3" fill="#039447"/></svg></span>
-            <input id="regPassword2" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Confirm Login Password" autocomplete="new-password">
-            <button class="ma-eye" type="button" aria-label="Show password" onclick="toggleAuthEye(this)"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#039447"/><path d="M2 7c1.3-2.1 3-3.1 5-3.1S10.7 4.9 12 7c-1.3 2.1-3 3.1-5 3.1S3.3 9.1 2 7z" fill="#fff"/><circle cx="7" cy="7" r="2.1" fill="#f5d54a"/><circle cx="7" cy="7" r="1" fill="#8a6a12"/><path class="sl" d="M3 11.2 11 2.8" stroke="#039447" stroke-width="3" stroke-linecap="round"/><path class="sl" d="M3 11.2 11 2.8" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/></svg></button>
-          </div>
-          <div class="ma-f">
-            <span class="ma-ic"><svg viewBox="0 0 14 14" aria-hidden="true"><defs><linearGradient id="maKeyG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f1c53f"/><stop offset="1" stop-color="#d8a01d"/></linearGradient></defs><rect width="14" height="14" rx="3" fill="url(#maKeyG)"/><circle cx="4.6" cy="6.6" r="1.5" fill="none" stroke="#fff" stroke-width="1"/><path d="M6.1 6.6h4.4M9 6.6v1.4M10.5 6.6v1.2" fill="none" stroke="#fff" stroke-width="1" stroke-linecap="round"/></svg></span>
-            <input id="regTradePin" class="ma-mask" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="numeric" maxlength="6" placeholder="Trade Password (6 digits)" autocomplete="off">
-            <button class="ma-eye" type="button" aria-label="Show password" onclick="toggleAuthEye(this)"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#039447"/><path d="M2 7c1.3-2.1 3-3.1 5-3.1S10.7 4.9 12 7c-1.3 2.1-3 3.1-5 3.1S3.3 9.1 2 7z" fill="#fff"/><circle cx="7" cy="7" r="2.1" fill="#f5d54a"/><circle cx="7" cy="7" r="1" fill="#8a6a12"/><path class="sl" d="M3 11.2 11 2.8" stroke="#039447" stroke-width="3" stroke-linecap="round"/><path class="sl" d="M3 11.2 11 2.8" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/></svg></button>
-          </div>
-          <div class="ma-f ma-ref">
-            <span class="ma-ic"><svg viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#f5e8c4"/><rect x="3" y="6" width="8" height="5.2" rx=".8" fill="none" stroke="#a9dbc3" stroke-width="1"/><rect x="2.6" y="4.6" width="8.8" height="1.9" rx=".6" fill="none" stroke="#a9dbc3" stroke-width="1"/><path d="M7 4.6v6.6M7 4.6C6 3 4.4 3.1 4.7 4.2 5 5 6.4 4.8 7 4.6c.6.2 2 .4 2.3-.4.3-1.1-1.3-1.2-2.3.4z" fill="none" stroke="#a9dbc3" stroke-width="1" stroke-linejoin="round"/></svg></span>
-            <input id="regReferral" type="text" placeholder="Invitation Code" autocomplete="off" maxlength="12">
-          </div>
-          <div class="ma-cap">
-            <div class="ma-f ma-capf"><input id="regCaptcha" oninput="capError('')" type="text" inputmode="numeric" maxlength="4" placeholder="Enter captcha code" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
-            <button class="ma-capimg" id="regCaptchaBtn" type="button" aria-label="New captcha picture" onclick="loadAuthCaptcha()"><img id="regCaptchaImg" alt="" width="113" height="42"></button>
-          </div>
-          <div class="ma-err" id="regCapErr" role="alert"></div>
-          <button class="ma-btn" id="regBtn" type="button" onclick="doRegister()">Sign Up</button>
+        <form id="registerPane" class="pa-pane" style="display:none;" aria-label="Create Account" onsubmit="return false" novalidate>
+          <div class="pa-f"><span class="pa-pre" id="regDial">+234</span><input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter Username Number" autocomplete="tel" oninput="sanitizePhoneInput(this)"></div>
+          <div class="pa-err" id="regPhoneErr" role="alert"></div>
+          <div class="pa-f pa-pw"><span class="pa-ic"><svg viewBox="2.4 2.2 19.2 20.6" preserveAspectRatio="none" aria-hidden="true"><rect x="3.5" y="10.5" width="17" height="11" rx="2.6"/><path d="M7.5 10.5V7.4a4.5 4.5 0 0 1 9 0v3.1"/></svg></span><input id="regPassword" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Enter password" autocomplete="new-password"><button class="pa-eye" type="button" aria-label="Show password" onclick="toggleAuthEye(this)"><svg class="off" viewBox="1.2 1.4 21.6 21.4" aria-hidden="true"><path d="M9.9 9.9a3 3 0 1 0 4.2 4.2"/><path d="M10.7 5.1A10.4 10.4 0 0 1 12 5c7 0 10 7 10 7a13.2 13.2 0 0 1-1.7 2.7"/><path d="M6.6 6.6A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="m2 2 20 20"/></svg><svg class="on" viewBox="1.2 1.4 21.6 21.4" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+          <div class="pa-f pa-pw"><span class="pa-ic"><svg viewBox="2.4 2.2 19.2 20.6" preserveAspectRatio="none" aria-hidden="true"><rect x="3.5" y="10.5" width="17" height="11" rx="2.6"/><path d="M7.5 10.5V7.4a4.5 4.5 0 0 1 9 0v3.1"/></svg></span><input id="regPassword2" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Re-enter password" autocomplete="new-password"><button class="pa-eye" type="button" aria-label="Show password" onclick="toggleAuthEye(this)"><svg class="off" viewBox="1.2 1.4 21.6 21.4" aria-hidden="true"><path d="M9.9 9.9a3 3 0 1 0 4.2 4.2"/><path d="M10.7 5.1A10.4 10.4 0 0 1 12 5c7 0 10 7 10 7a13.2 13.2 0 0 1-1.7 2.7"/><path d="M6.6 6.6A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="m2 2 20 20"/></svg><svg class="on" viewBox="1.2 1.4 21.6 21.4" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+          <div class="pa-f pa-pw"><span class="pa-ic"><svg viewBox="2.4 2.2 19.2 20.6" preserveAspectRatio="none" aria-hidden="true"><rect x="3.5" y="10.5" width="17" height="11" rx="2.6"/><path d="M7.5 10.5V7.4a4.5 4.5 0 0 1 9 0v3.1"/></svg></span><input id="regTradePin" class="pa-mask" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="numeric" maxlength="6" placeholder="6-digit trade password" autocomplete="off"><button class="pa-eye" type="button" aria-label="Show password" onclick="toggleAuthEye(this)"><svg class="off" viewBox="1.2 1.4 21.6 21.4" aria-hidden="true"><path d="M9.9 9.9a3 3 0 1 0 4.2 4.2"/><path d="M10.7 5.1A10.4 10.4 0 0 1 12 5c7 0 10 7 10 7a13.2 13.2 0 0 1-1.7 2.7"/><path d="M6.6 6.6A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="m2 2 20 20"/></svg><svg class="on" viewBox="1.2 1.4 21.6 21.4" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+          <div class="pa-f pa-ref"><input id="regReferral" type="text" placeholder="Invitation code" autocomplete="off" autocapitalize="characters" maxlength="12"></div>
+          <button class="pa-btn" id="regBtn" type="button" onclick="doRegister()">Register</button>
+          <p class="pa-alt"><span>Already have an account?</span> <a href="#" onclick="showAuthTab('login');return false;">Log In</a></p>
         </form>
       </section>
-    </div>
+    </div></div>
   </div>
 </div>
 
@@ -2447,7 +2458,6 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
   <div class="notify-card">
     <span class="notify-ic err" id="notifyIc"></span>
     <div class="notify-msg" id="notifyMsg"></div>
-    <button class="notify-ok" type="button" onclick="closeNotify()">OK</button>
   </div>
 </div>
 
@@ -2531,7 +2541,7 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
     const s = { token: data.token, uid: data.uid, authTime: data.authTime, expiresAt: data.expiresAt, email };
     write(s); const u = makeUser(s); announce(u); return { user: u };
   };
-  window.fbCreateUser = async (email, pass, cap) => open(await call('/auth/signup', { phone: phoneOf(email), password: pass, captchaId: cap && cap.id, captchaCode: cap && cap.code }), email);
+  window.fbCreateUser = async (email, pass) => open(await call('/auth/signup', { phone: phoneOf(email), password: pass }), email);
   window.fbSignIn     = async (email, pass) => open(await call('/auth/login', { phone: phoneOf(email), password: pass }), email);
   window.fbSignOut    = async () => { wipe(); announce(null); };
   window.fbAuth       = auth;

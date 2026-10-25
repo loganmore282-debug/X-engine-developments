@@ -3229,20 +3229,15 @@ async function renderBanners(){
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="profileLogoFile" accept="image/*" hidden></label>
     </div>
 
-    <h2 class="sec">Loading screen background</h2>
+    <h2 class="sec">Loading screen box picture</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The picture behind the word "Loading . . ." when the app starts. Portrait, about 1080&times;1920. Without one, a blue background shows.</p>
+      <p class="muted" style="margin-top:0">The square picture in the middle of the red start-up screen, above the app name and the loading bar. The app rounds its corners by itself. Square, about 600&times;600. Without one, the box is left empty.</p>
       <div class="banner-row">
         ${loaderBgImage?`<img class="img-thumb" src="${esc(loaderBgImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${loaderBgImage?'Custom image':'<span class="muted">Not set</span>'}</div>
         ${loaderBgImage?`<button class="btn danger sm" id="loaderBgClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="loaderBgFile" accept="image/*" hidden></label>
-      <div class="row" style="margin-top:10px">
-        <div><label>Opacity (0&ndash;100%)</label><input id="loaderBgOp" type="number" min="0" max="100" value="${esc(v('loaderBgOpacity',100))}"></div>
-        <div><label>Blur (0&ndash;40 px)</label><input id="loaderBgBlur" type="number" min="0" max="40" value="${esc(v('loaderBgBlur',0))}"></div>
-      </div>
-      <button class="btn block" id="saveLoaderBg" style="margin-top:14px">Save loading screen appearance</button>
     </div>
 
     <h2 class="sec">Link preview (Telegram)</h2>
@@ -3465,21 +3460,9 @@ function wireBannerHandlers(){
       if (d.status==='success') renderBanners();
     })());
   });
-  wirePotatoImageSlot('loaderbg', 'loaderBgFile', 'loaderBgClear', 'Loading screen background saved', 'Loading screen background removed');
+  wirePotatoImageSlot('loaderbg', 'loaderBgFile', 'loaderBgClear', 'Loading screen picture saved', 'Loading screen picture removed');
   wirePotatoImageSlot('profilelogo', 'profileLogoFile', 'profileLogoClear', 'Profile logo saved, live for every member', 'Profile logo removed');
   wirePotatoImageSlot('logo', 'brandLogoFile', 'brandLogoClear', 'Brand logo saved', 'Brand logo removed');
-  const saveLoaderBg = $('saveLoaderBg');
-  if (saveLoaderBg) saveLoaderBg.addEventListener('click', async()=>{
-    if ($('loaderBgOp').value.trim()==='' || $('loaderBgBlur').value.trim()==='') return toast('Fill in both Opacity and Blur','err');
-    const nums = { loaderBgOpacity:+$('loaderBgOp').value, loaderBgBlur:+$('loaderBgBlur').value };
-    for (const [k,val] of Object.entries(nums)) {
-      const max = k.endsWith('Blur') ? 40 : 100;
-      if (!Number.isFinite(val) || val < 0 || val > max)
-        return toast(`${k.endsWith('Blur')?'Blur':'Opacity'} must be between 0 and ${max}`,'err');
-    }
-    const d = await api('/admin/settings/update', { settings: nums });
-    toast(d.status==='success'?'Loading screen appearance saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
   const saveProdImg = $('saveProdImg');
   if (saveProdImg) saveProdImg.addEventListener('click', async()=>{
     const raw = $('prodImgOp').value.trim(), val = +raw;
