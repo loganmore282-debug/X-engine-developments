@@ -948,7 +948,10 @@ async function getHelpBanner() {
 // no longer its own screen with a backdrop; Account's new Download App row
 // (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
 // prompt directly, in user-src/original_module.js -- see its own comment.
-const POTATO_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'banner4', 'banner5', 'promobanner', 'checkinbanner', 'profilelogo', 'loaderbg', 'downloadbg', 'linkpreview'];
+// Transparent cut-out ICONS the owner uploads in the admin panel (Banners > Icons); the panel removes each picture's background and crops it
+// tight before saving, so these are always PNGs. To add an icon, add its name here AND its label in admin-src (POTATO_ICON_LABELS).
+const POTATO_ICON_SLOTS = ['ordergift', 'downloadapp'];
+const POTATO_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'banner4', 'banner5', 'promobanner', 'checkinbanner', 'profilelogo', 'loaderbg', 'downloadbg', 'linkpreview', ...POTATO_ICON_SLOTS];
 const _potatoImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getPotatoImage(slot) {
@@ -4098,7 +4101,9 @@ app.get('/public/potato-images', async (req, res) => {
       getPotatoImage('banner3'), getPotatoImage('banner4'), getPotatoImage('banner5'), getPotatoImage('promobanner'),
       getPotatoImage('checkinbanner'), getPotatoImage('profilelogo'), getPotatoImage('downloadbg'),
     ]);
-    publicJson(req, res, { status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, downloadbg }, IMAGE_CACHE);
+    const iconList = await Promise.all(POTATO_ICON_SLOTS.map(getPotatoImage));
+    const icons = {}; POTATO_ICON_SLOTS.forEach((k, n) => { icons[k] = iconList[n] || null; });
+    publicJson(req, res, { status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, downloadbg, icons }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -7605,7 +7610,9 @@ app.get('/admin/potato-images', async (req, res) => {
       getPotatoImage('banner3'), getPotatoImage('banner4'), getPotatoImage('banner5'), getPotatoImage('promobanner'),
       getPotatoImage('checkinbanner'), getPotatoImage('profilelogo'), getPotatoImage('loaderbg'), getPotatoImage('downloadbg'), getPotatoImage('linkpreview'),
     ]);
-    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg, linkpreview });
+    const iconList = await Promise.all(POTATO_ICON_SLOTS.map(getPotatoImage));
+    const icons = {}; POTATO_ICON_SLOTS.forEach((k, n) => { icons[k] = iconList[n] || null; });
+    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg, linkpreview, icons });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/potato-image/set', async (req, res) => {
@@ -7615,6 +7622,9 @@ app.post('/admin/potato-image/set', async (req, res) => {
   const image = String(req.body.image || '');
   if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
     return res.status(400).json({ status: 'error', message: 'Invalid image' });
+  // An icon is a transparent cut-out: anything but a PNG (a JPEG cannot hold transparency) means the background removal did not run.
+  if (POTATO_ICON_SLOTS.includes(slot) && !image.startsWith('data:image/png;base64,'))
+    return res.status(400).json({ status: 'error', message: 'Icons must be PNG pictures with a transparent background.' });
   try {
     await db.collection('banners').doc('potato-' + slot).set({ image });
     delete _potatoImageCache[slot];

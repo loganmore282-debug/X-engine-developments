@@ -1946,6 +1946,8 @@ function applyBootArtwork(ai, ci){
   STATE.authHeroImage = (ci.status === 'success' && ci.authhero) ? ci.authhero : null;
   STATE.authLogoImage = (ci.status === 'success' && ci.authlogo) ? ci.authlogo : null;
   STATE.downloadBg = (ci.status === 'success' && ci.downloadbg) ? ci.downloadbg : null;
+  // Transparent cut-out icons uploaded in the admin panel (Banners > Icons): { ordergift, downloadapp, ... }, each a PNG data URL or null.
+  STATE.icons = (ci.status === 'success' && ci.icons && typeof ci.icons === 'object') ? ci.icons : {};
   applyAuthLogo();
   applyAuthTagline();
   applyAuthBackgrounds();
@@ -3480,6 +3482,42 @@ window.openContactLink = function(kind){
   if (!/^https?:\/\//i.test(String(url))) return notify('No ' + (kind === 'channel' ? 'channel' : 'service') + ' link is set yet.');
   window.open(url, '_blank', 'noopener');
 };
+// ── Admin-uploaded cut-out icons and the flip clock (motion and look measured from the owner's screen recordings; CSS in index.html, PT-ANIM block) ──
+// An icon slot's picture as an <img>, or '' when none has been uploaded (the screen then simply has no picture there). `motion` is 'gift'
+// (order gift bounce) or 'appfloat' (download-app float) or '' for a still picture.
+function ptIconHtml(key, motion, extraClass){
+  const src = STATE.icons && STATE.icons[key];
+  if (!src) return '';
+  return '<img class="pt-icon' + (motion ? ' pt-' + motion : '') + (extraClass ? ' ' + extraClass : '') + '" src="' + esc(src) + '" alt="" draggable="false">';
+}
+// "08:47:15" -> the flip clock markup. Every digit is a tile; the colons are red dot pairs.
+function ptFlipDigitHtml(ch){ return '<span class="pt-fd" data-v="' + ch + '"><span class="pt-ft"><i>' + ch + '</i></span><span class="pt-fb"><i>' + ch + '</i></span><span class="pt-fl pt-fl-t"><i>' + ch + '</i></span><span class="pt-fl pt-fl-b"><i>' + ch + '</i></span></span>'; }
+function ptFlipClockHtml(str){
+  const parts = String(str).split(':');
+  return '<div class="pt-fc" data-t="' + esc(String(str)) + '">' + parts.map(p => '<span class="pt-fp">' + p.split('').map(ptFlipDigitHtml).join('') + '</span>').join('<span class="pt-fcol"></span>') + '</div>';
+}
+// Show a new time on an existing clock: only the digits that changed flip (0.55 s each).
+function ptFlipClockSet(root, str){
+  if (!root) return;
+  const digits = root.querySelectorAll('.pt-fd'), chars = String(str).replace(/:/g, '').split('');
+  if (digits.length !== chars.length) return;
+  digits.forEach((d, i) => {
+    const next = chars[i], prev = d.getAttribute('data-v');
+    if (next === prev) return;
+    if (d._ptT) { clearTimeout(d._ptT); d._ptT = null; ptFlipSettle(d); }
+    const q = sel => d.querySelector(sel + ' i');
+    q('.pt-fl-t').textContent = prev;      // the old upper half folds away
+    q('.pt-ft').textContent = next;        // the new upper half is under it
+    q('.pt-fb').textContent = next;        // the lower half shows the new digit at once
+    q('.pt-fl-b').textContent = next;      // the new lower half unfolds over it
+    d.setAttribute('data-v', next);
+    d.classList.remove('pt-go'); void d.offsetWidth; d.classList.add('pt-go');
+    d._ptT = setTimeout(() => { d._ptT = null; ptFlipSettle(d); }, 560);
+  });
+  root.setAttribute('data-t', String(str));
+}
+function ptFlipSettle(d){ d.classList.remove('pt-go'); const v = d.getAttribute('data-v'); d.querySelectorAll('i').forEach(i => { i.textContent = v; }); }
+
 // Home has two lists that never mix: Products and New Products. Each product carries the category the admin saved it with.
 function homeTabNow(){ return STATE.homeTab === 'new' ? 'new' : 'main'; }
 function mgIsNew(p){ return !!p && p.category === 'new'; }

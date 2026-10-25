@@ -599,6 +599,146 @@ function roundIconCorners(ctx, size){
   ctx.fill();
   ctx.globalCompositeOperation = 'source-over';
 }
+// ── ICON CUT-OUT ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// The owner uploads an icon on whatever background it came with (flat colour, a soft gradient, a photo-style backdrop) and the panel takes
+// the background away and crops the picture tight to what is left, so the app can place and animate it with no box around it.
+//   1. A picture that already has real transparency is only cropped.
+//   2. Otherwise the background is found from the picture's own border: a flood fill starts at every border pixel that looks like the border's
+//      typical colour and spreads to a neighbour only while that neighbour stays close to the pixel it came from (a gradient is followed, an
+//      icon edge stops it) and not too far from the colour it started with.
+//   3. The edge is softened: each pixel next to the removed area gets an alpha from how far it is from the background colour, and its colour is
+//      pulled away from the background (so no white halo is left around the icon).
+//   4. The result is cropped to the pixels that remain, exactly (no margin), because the app's motion is measured against this box.
+// Pure function over RGBA bytes (no canvas), so it is tested directly in test-icon-cutout.js.
+function potatoCutout(src, w, h){
+  const N=w*h, data=new Uint8ClampedArray(src);
+  let clear=0; for(let i=3;i<data.length;i+=4) if(data[i]<250) clear++;
+  const hasAlpha = clear > N*0.02;
+  const A=new Uint8ClampedArray(N);               // final alpha
+  if(hasAlpha){
+    for(let i=0;i<N;i++) A[i]=data[i*4+3];
+  } else {
+    // border colour = per-channel median of the outer ring (2 px)
+    const ring=[]; const ringW=Math.min(2,Math.floor(Math.min(w,h)/4)||1);
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){ if(x<ringW||y<ringW||x>=w-ringW||y>=h-ringW) ring.push((y*w+x)*4); }
+    const med=c=>{ const v=ring.map(o=>data[o+c]).sort((a,b)=>a-b); return v[v.length>>1]; };
+    const bg=[med(0),med(1),med(2)];
+    const dist=(o,r,g,b)=>Math.sqrt((data[o]-r)**2+(data[o+1]-g)**2+(data[o+2]-b)**2);
+    // how mixed the border is decides how forgiving the fill is
+    let sum=0; for(const o of ring) sum+=dist(o,bg[0],bg[1],bg[2]);
+    const spread=sum/ring.length;
+    const STEP=10+Math.min(14,spread*0.6);          // largest jump between neighbours the fill follows
+    const FAR=34+Math.min(60,spread*2.2);           // largest distance from the border colour the fill goes to
+    const removed=new Uint8Array(N); const queue=new Int32Array(N); let qh=0, qt=0;
+    const push=(idx)=>{ if(!removed[idx]){ removed[idx]=1; queue[qt++]=idx; } };
+    for(const o of ring){ const idx=o/4; if(dist(o,bg[0],bg[1],bg[2])<=FAR*0.8) push(idx); }
+    while(qh<qt){
+      const idx=queue[qh++], x=idx%w, y=(idx/w)|0, o=idx*4;
+      const nb=[x>0?idx-1:-1, x<w-1?idx+1:-1, y>0?idx-w:-1, y<h-1?idx+w:-1];
+      for(const n of nb){
+        if(n<0||removed[n]) continue; const no=n*4;
+        const step=Math.sqrt((data[no]-data[o])**2+(data[no+1]-data[o+1])**2+(data[no+2]-data[o+2])**2);
+        if(step<=STEP && dist(no,bg[0],bg[1],bg[2])<=FAR) push(n);
+      }
+    }
+    // alpha: kept pixels 255, removed 0. Kept pixels within 2 px of the removed area are the antialiased rim: each is a mix of the icon's colour
+    // and the background, so its alpha is how much of the way it is from the background colour to the nearby solid icon colour, and its colour
+    // becomes that solid colour (this is what leaves no white halo).
+    for(let i=0;i<N;i++) A[i]=removed[i]?0:255;
+    const soft=new Uint8ClampedArray(A);
+    const near=new Uint8Array(N);                     // 1 = kept pixel within 2 px of the removed area
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const idx=y*w+x; if(removed[idx]) continue;
+      let t=false;
+      for(let dy=-2;dy<=2&&!t;dy++) for(let dx=-2;dx<=2;dx++){ const xx=x+dx, yy=y+dy; if(xx<0||yy<0||xx>=w||yy>=h) continue; if(removed[yy*w+xx]){ t=true; break; } }
+      if(t) near[idx]=1;
+    }
+    const fgOf=(x,y)=>{                               // mean colour of the solid (not rim) kept pixels around (x,y)
+      for(let rad=3;rad<=6;rad+=3){
+        let r=0,g=0,b=0,c=0;
+        for(let dy=-rad;dy<=rad;dy++) for(let dx=-rad;dx<=rad;dx++){ const xx=x+dx, yy=y+dy; if(xx<0||yy<0||xx>=w||yy>=h) continue; const k=yy*w+xx; if(removed[k]||near[k]) continue; r+=data[k*4]; g+=data[k*4+1]; b+=data[k*4+2]; c++; }
+        if(c) return [r/c,g/c,b/c];
+      }
+      return null;
+    };
+    const snap=new Uint8ClampedArray(data);           // read the untouched colours while writing the cleaned ones
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const idx=y*w+x; if(!near[idx]) continue;
+      const o=idx*4, fg=fgOf(x,y);
+      if(!fg){ continue; }
+      const vx=fg[0]-bg[0], vy=fg[1]-bg[1], vz=fg[2]-bg[2], len2=vx*vx+vy*vy+vz*vz;
+      if(len2<64) continue;                           // icon colour too close to the background to tell a rim from the icon
+      let a=((snap[o]-bg[0])*vx+(snap[o+1]-bg[1])*vy+(snap[o+2]-bg[2])*vz)/len2;
+      a=Math.max(0,Math.min(1,a));
+      if(a<0.04){ soft[idx]=0; continue; }
+      soft[idx]=Math.round(a*255);
+      data[o]=Math.round(fg[0]); data[o+1]=Math.round(fg[1]); data[o+2]=Math.round(fg[2]);
+    }
+    A.set(soft);
+    // any stray specks left behind (a few pixels that are neither background nor part of the icon) are dropped: keep only the largest piece
+    const seen=new Uint8Array(N); let bestSize=0, bestIdx=-1;
+    const stack=new Int32Array(N);
+    for(let i=0;i<N;i++){
+      if(A[i]<=8||seen[i]) continue; let sp=0, size=0; stack[sp++]=i; seen[i]=1;
+      while(sp){ const idx=stack[--sp]; size++; const x=idx%w, y=(idx/w)|0;
+        for(const n of [x>0?idx-1:-1, x<w-1?idx+1:-1, y>0?idx-w:-1, y<h-1?idx+w:-1]){ if(n>=0&&!seen[n]&&A[n]>8){ seen[n]=1; stack[sp++]=n; } } }
+      if(size>bestSize){ bestSize=size; bestIdx=i; }
+    }
+    if(bestIdx>=0){
+      // pieces are kept when they are a real part of the picture (at least 2% of the biggest piece), so an icon made of several parts survives
+      const keep=new Uint8Array(N); const sizes=[]; const seen2=new Uint8Array(N);
+      for(let i=0;i<N;i++){
+        if(A[i]<=8||seen2[i]) continue; const members=[]; let sp=0; stack[sp++]=i; seen2[i]=1;
+        while(sp){ const idx=stack[--sp]; members.push(idx); const x=idx%w, y=(idx/w)|0;
+          for(const n of [x>0?idx-1:-1, x<w-1?idx+1:-1, y>0?idx-w:-1, y<h-1?idx+w:-1]){ if(n>=0&&!seen2[n]&&A[n]>8){ seen2[n]=1; stack[sp++]=n; } } }
+        sizes.push(members);
+      }
+      for(const m of sizes) if(m.length>=bestSize*0.02) for(const idx of m) keep[idx]=1;
+      for(let i=0;i<N;i++) if(!keep[i]) A[i]=0;
+    }
+  }
+  // crop exactly to what is visible
+  let x0=w, y0=h, x1=-1, y1=-1;
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ if(A[y*w+x]>8){ if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; } }
+  if(x1<0) return { data:new Uint8ClampedArray(4), w:1, h:1, empty:true };
+  const cw=x1-x0+1, ch=y1-y0+1, out=new Uint8ClampedArray(cw*ch*4);
+  for(let y=0;y<ch;y++) for(let x=0;x<cw;x++){
+    const si=(y+y0)*w+(x+x0), di=(y*cw+x)*4;
+    out[di]=data[si*4]; out[di+1]=data[si*4+1]; out[di+2]=data[si*4+2]; out[di+3]=A[si];
+  }
+  return { data:out, w:cw, h:ch, empty:false };
+}
+// The icon slots (same names as POTATO_ICON_SLOTS in server.js). Add a name here AND in server.js to get a new upload box.
+const POTATO_ICON_LABELS = { ordergift:'Order gift picture', downloadapp:'Download app picture' };
+// An uploaded file -> a transparent, tightly cropped PNG data URL (longest side at most `maxDim`).
+function fileToCutoutPng(file, maxDim){
+  return new Promise((resolve,reject)=>{
+    if(!file) return reject(new Error('No file'));
+    if(!/^image\//.test(file.type||guessMimeFromName(file.name))) return reject(new Error('Please choose an image file'));
+    const fr=new FileReader();
+    fr.onerror=()=>reject(new Error('Could not read the file'));
+    fr.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('That image could not be loaded'));
+      img.onload=()=>{
+        const iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height;
+        if(!iw||!ih) return reject(new Error('That image could not be loaded'));
+        const s=Math.min(1, maxDim/Math.max(iw,ih));
+        const w=Math.max(1,Math.round(iw*s)), h=Math.max(1,Math.round(ih*s));
+        const c=document.createElement('canvas'); c.width=w; c.height=h;
+        const ctx=c.getContext('2d'); ctx.imageSmoothingQuality='high'; ctx.drawImage(img,0,0,w,h);
+        let id; try{ id=ctx.getImageData(0,0,w,h); }catch(e){ return reject(new Error('Could not process the image')); }
+        const r=potatoCutout(id.data,w,h);
+        if(r.empty) return reject(new Error('Nothing was left after removing the background. Try a picture whose background differs from the icon.'));
+        const o=document.createElement('canvas'); o.width=r.w; o.height=r.h;
+        o.getContext('2d').putImageData(new ImageData(r.data,r.w,r.h),0,0);
+        try{ resolve(o.toDataURL('image/png')); }catch(e){ reject(new Error('Could not process the image')); }
+      };
+      img.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
 // The app icon, rendered to one exact square size as a PNG.
 //
 // Three things make this its own function rather than a call to one of the
@@ -3037,6 +3177,19 @@ async function renderBanners(){
       <label class="btn block file-btn" style="margin-top:10px">Upload slide 5 image<input type="file" id="homeSlide5File" accept="image/*" hidden></label>
     </div>
 
+    <h2 class="sec">Icons &middot; background removed automatically</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">Upload a picture on any background. The panel takes the background away, trims the picture to its edges and saves it as a transparent PNG; the app then places it with no box around it. The pictures below move in the app exactly as in your screen recordings. Best results: the icon on a plain or softly shaded background, at least 256&times;256.</p>
+      ${Object.keys(POTATO_ICON_LABELS).map(k=>`
+      <div style="font-weight:700;margin:14px 0 6px">${esc(POTATO_ICON_LABELS[k])}</div>
+      <div class="banner-row">
+        ${(cir.icons&&cir.icons[k])?`<img class="img-thumb alpha" style="width:64px;height:64px" src="${esc(cir.icons[k])}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;width:64px;height:64px"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px">${(cir.icons&&cir.icons[k])?'Custom picture':'<span class="muted">Not set</span>'}</div>
+        ${(cir.icons&&cir.icons[k])?`<button class="btn danger sm" id="iconClear_${k}">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload ${esc(POTATO_ICON_LABELS[k].toLowerCase())}<input type="file" id="iconFile_${k}" accept="image/*" hidden></label>`).join('')}
+    </div>
+
     <h2 class="sec">Promotion page banner</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">The picture at the top of the Promotion tab (above Share URL). Wide, about 1200&times;600. Without one, Home slide 1 is used.</p>
@@ -3252,6 +3405,30 @@ function wireBannerHandlers(){
   wirePotatoImageSlot('authlogo', 'authLogoFile', 'authLogoClear', 'Circle logo saved, live on Log In and Sign Up', 'Circle logo removed');
   wirePotatoImageSlot('downloadbg', 'downloadBgFile', 'downloadBgClear', 'Download page background saved', 'Download page background removed');
   wirePotatoImageSlot('linkpreview', 'linkPreviewFile', 'linkPreviewClear', 'Link preview picture saved', 'Link preview picture removed');
+  // Icons: the picture is cut out and cropped in this browser, then saved as a PNG through the same endpoint as the other pictures.
+  Object.keys(POTATO_ICON_LABELS).forEach(k=>{
+    const file=$('iconFile_'+k);
+    if(file) file.addEventListener('change', async e=>{
+      const f=e.target.files[0]; if(!f) return;
+      await withTabBusy((async()=>{
+        try{
+          toast('Removing the background…','ok');
+          const image=await fileToCutoutPng(f, 640);
+          const d=await api('/admin/potato-image/set',{ slot:k, image });
+          toast(d.status==='success'?(POTATO_ICON_LABELS[k]+' saved'):(d.message||'Failed'), d.status==='success'?'ok':'err');
+          if(d.status==='success') renderBanners();
+        }catch(err){ toast(err.message||'Could not read image','err'); }
+      })());
+    });
+    const clear=$('iconClear_'+k);
+    if(clear) clear.addEventListener('click', async()=>{
+      await withTabBusy((async()=>{
+        const d=await api('/admin/potato-image/clear',{ slot:k });
+        toast(d.status==='success'?(POTATO_ICON_LABELS[k]+' removed'):(d.message||'Failed'), d.status==='success'?'ok':'err');
+        if(d.status==='success') renderBanners();
+      })());
+    });
+  });
   const saveAnnText = $('saveAnnText');
   if (saveAnnText) saveAnnText.addEventListener('click', async()=>{
     const upd = { annTitle:$('annTitleInput').value.trim(), annBody:$('annBodyInput').value, annEnabled:$('annEnabledInput').checked };

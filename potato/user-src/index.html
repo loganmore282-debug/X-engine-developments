@@ -1986,6 +1986,49 @@ form.va-pane{margin:0;padding:0;}
 .mg-tabs button.new::after{animation:mgGlowB 2s linear infinite;}
 .mg-tabs+.mg-list{margin-top:14px;}
 
+
+/* PT-ANIM-START
+   Motion and the flip clock, measured frame by frame (60 fps) from the owner's two screen recordings. Percentages are of the picture's own height:
+   the admin panel crops every icon tight to its visible edges, so the same percentage moves every picture by the same share of itself. */
+/* Order gift: a rigid vertical bounce, 1.2 s. At rest, drops 13.9% in 0.24 s, rises halfway (to 6.9%) by 0.54 s, drops again by 0.84 s, rises home by 1.13 s. */
+@keyframes ptGiftBounce{
+  0%{transform:translateY(0);animation-timing-function:cubic-bezier(0,0,.58,1);}
+  20%{transform:translateY(13.9%);animation-timing-function:cubic-bezier(.45,0,.55,1);}
+  44.7%{transform:translateY(6.9%);animation-timing-function:cubic-bezier(.65,0,.35,1);}
+  70.1%{transform:translateY(13.9%);animation-timing-function:cubic-bezier(.42,0,.58,1);}
+  94%,100%{transform:translateY(0);}
+}
+/* Download app: floats up 9% and back, 1.6 s, straight lines: up over 0.4 s, hold 0.35 s, down over 0.46 s, rest 0.38 s. */
+@keyframes ptAppFloat{0%{transform:translateY(0);}25%{transform:translateY(-9%);}47%{transform:translateY(-9%);}76%{transform:translateY(0);}100%{transform:translateY(0);}}
+.pt-icon{display:block;height:auto;max-width:100%;pointer-events:none;-webkit-user-select:none;user-select:none;}
+.pt-icon.pt-gift{animation:ptGiftBounce 1.2s infinite;will-change:transform;}
+.pt-icon.pt-appfloat{animation:ptAppFloat 1.6s linear infinite;will-change:transform;}
+/* Flip clock (HH:MM:SS): dark tiles 28 x 39, white bold digits 25 px, a hairline across the middle, red colon dots. A changed digit flips in 0.55 s:
+   the lower half shows the new digit at once; the old upper half folds down evenly from 0.06 s to 0.33 s; the new lower half unfolds from 0.32 s to 0.55 s. */
+.pt-fc{display:flex;align-items:center;justify-content:center;direction:ltr;}
+.pt-fp{display:flex;gap:2.3px;}
+.pt-fcol{position:relative;width:19.4px;height:39px;flex:none;}
+.pt-fcol::before,.pt-fcol::after{content:'';position:absolute;left:50%;width:3.3px;height:3.3px;margin-left:-1.65px;border-radius:50%;background:#e0211f;}
+.pt-fcol::before{top:14.9px;}
+.pt-fcol::after{top:24.6px;}
+.pt-fd{position:relative;width:27.7px;height:39px;flex:none;font:700 25px/39px Roboto,'Segoe UI',system-ui,sans-serif;color:#fff;font-variant-numeric:tabular-nums;}
+.pt-fd::before{content:'';position:absolute;left:0;top:0;width:100%;height:100%;border-radius:7px;background:#191919;}
+.pt-fd::after{content:'';position:absolute;left:0;right:0;top:calc(50% - .5px);height:1px;background:rgba(0,0,0,.55);z-index:6;pointer-events:none;}
+.pt-fd .pt-ft,.pt-fd .pt-fb,.pt-fd .pt-fl{position:absolute;left:0;width:100%;height:50%;overflow:hidden;background:#191919;backface-visibility:hidden;-webkit-backface-visibility:hidden;}
+.pt-fd .pt-ft,.pt-fd .pt-fl-t{top:0;border-radius:7px 7px 0 0;}
+.pt-fd .pt-fb,.pt-fd .pt-fl-b{bottom:0;border-radius:0 0 7px 7px;}
+.pt-fd i{position:absolute;left:0;width:100%;height:39px;line-height:39px;text-align:center;font-style:normal;}
+.pt-fd .pt-ft i,.pt-fd .pt-fl-t i{top:0;}
+.pt-fd .pt-fb i,.pt-fd .pt-fl-b i{top:-19.5px;}
+.pt-fd .pt-fl{display:none;z-index:4;}
+.pt-fd.pt-go .pt-fl{display:block;}
+.pt-fd.pt-go .pt-fl-t{transform-origin:50% 100%;animation:ptFoldTop 267ms 58ms linear both;}
+.pt-fd.pt-go .pt-fl-b{transform-origin:50% 0;animation:ptUnfoldBot 233ms 317ms cubic-bezier(.3,.5,.7,.8) both;}
+.pt-fd.pt-go .pt-fb{animation:ptHideBot 550ms linear both;}
+@keyframes ptFoldTop{from{transform:perspective(340px) rotateX(0deg);visibility:visible;}99%{visibility:visible;}to{transform:perspective(340px) rotateX(-90deg);visibility:hidden;}}
+@keyframes ptUnfoldBot{from{transform:perspective(340px) rotateX(90deg);}to{transform:perspective(340px) rotateX(0deg);}}
+@keyframes ptHideBot{0%,57.5%{visibility:visible;}57.6%,99.9%{visibility:hidden;}100%{visibility:visible;}}
+/* PT-ANIM-END */
 /* MG-END */
 /* ── Login / Sign Up: measured from the owner's Potato screenshots (360 px phone, 2x) ── */
 .ma-screen{position:relative;min-height:100vh;min-height:100dvh;background:#fefefc;}
