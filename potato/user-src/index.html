@@ -51,7 +51,7 @@
      status icons for a light theme colour, so the clock stays readable.
      NOTE: manifest.json's theme_color must match, and an ALREADY-INSTALLED
      app keeps the colour it was installed with until it is reinstalled. -->
-<meta name="theme-color" content="#f8f4e9">
+<meta name="theme-color" content="#f4f5fb">
 <link rel="manifest" href="/manifest.json">
 <!-- The app icon and the share card are both admin-uploadable, which is why
      these point at potato-server rather than at the files sitting next to
@@ -112,7 +112,7 @@
    accent. */
 :root{
   /* ── Re-themed to Potato's own "Premium Industrial Energy" identity ──
-     Owner-specified, not invented: Corporate Red #02964c (primary --
+     Owner-specified, not invented: Corporate Red #e5231d (primary --
      headers, buttons, active nav, cards), Clean White #FFFFFF (dashboard
      background), Golden Orange #F5A000-#FFB000 (secondary accent, off the
      logo and refinery/sunset lighting), Charcoal #25262B (auth glass
@@ -124,12 +124,12 @@
      --gold comment): every one of the hundreds of rules in this file already
      reads these tokens, so nothing downstream needed touching to pick up
      the new palette. */
-  --snow-canvas:#f8f4e9;
+  --snow-canvas:#f4f5fb;
   --snow-surface:#ffffff;
   --snow-ink:#25262b;
   --snow-muted:#6b6d76;
-  --snow-wine:#02964c;
-  --snow-wine-deep:#056b39;
+  --snow-wine:#e5231d;
+  --snow-wine-deep:#c9161d;
   --snow-green:#1a7a3e;
   --snow-border:#d3e8dc;
   --snow-wave-on-wine:#d3e8dc;
@@ -150,7 +150,7 @@
      corporate red, not Potato's old red-to-orange blend. Still a CSS custom
      property assignable straight into `background:`, so every one of the
      ~40 rules that read --potato-grad needed no change at all. */
-  --potato-grad:linear-gradient(135deg,#0ba653 0%,#02964c 45%,#056b39 100%);
+  --potato-grad:linear-gradient(135deg,#e5231d 0%,#e5231d 45%,#c9161d 100%);
   /* .auth-hero's fallback ONLY -- shown behind the Login/Sign Up glass
      panel until the owner uploads the real sunset-refinery photo to the
      'authhero' image slot (already-built admin upload, see
@@ -163,8 +163,8 @@
   /* Not blue -- the owner was explicit this should not read as "the typical
      blue/green fintech look." Deep red carries the same "this is a link"
      legibility a blue would, without introducing a fifth brand color. */
-  --potato-link:#056b39;
-  --potato-shelf:#056b39;
+  --potato-link:#c9161d;
+  --potato-shelf:#c9161d;
   /* ── Surfaces ──
      Owner, holding a mockup next to the live app: "the mock up has very
      clean CSS, well ultra definition and quality cards and colour ... clean
@@ -454,7 +454,7 @@ a{color:inherit;}
 .mar-values span{display:block;font-size:9.5px;color:var(--snow-muted);margin-bottom:3px;}
 .mar-values b{display:block;font-size:11.5px;color:var(--snow-ink);font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .mar-progress{height:9px;background:var(--snow-border);margin-top:16px;overflow:hidden;border-radius:var(--r-pill);box-shadow:inset 0 1px 2px rgba(0,0,0,.10);}
-.mar-progress i{display:block;height:100%;background:linear-gradient(90deg,#02964c 0%,#ff8a3d 45%,#ffd166 70%,#02964c 100%);background-size:220% 100%;border-radius:inherit;animation:fuelFill .9s ease-out both,fuelFlow 1.8s linear .9s infinite;}
+.mar-progress i{display:block;height:100%;background:linear-gradient(90deg,#e5231d 0%,#ff8a3d 45%,#ffd166 70%,#e5231d 100%);background-size:220% 100%;border-radius:inherit;animation:fuelFill .9s ease-out both,fuelFlow 1.8s linear .9s infinite;}
 .my-asset-row.done .mar-progress i{background:var(--snow-green);}
 @keyframes fuelFill{from{transform:scaleX(0);transform-origin:left center;}to{transform:scaleX(1);transform-origin:left center;}}
 @keyframes fuelFlow{from{background-position:0 0;}to{background-position:220% 0;}}
@@ -1276,17 +1276,17 @@ html:has(.pay-page.show),body:has(.pay-page.show),html:has(.sheet-bg.show),body:
 /* V2-BEGIN */
 /* MG-START */
 /* ═══ Potato green: the signed-in app, built from the owner's Potato screenshots (360 px phone, 2x) ═══
-   Cream page #f8f4e9, off-white cards with a thin green edge, pink serif headers with a green back square, six coloured-square tabs with a potato pill,
-   Noto Serif for titles, Roboto for figures, green gradient buttons (#02a652 -> #056b39), gold #ffc72c for prices. */
+   Cream page #f4f5fb, off-white cards with a thin green edge, pink serif headers with a green back square, six coloured-square tabs with a potato pill,
+   Noto Serif for titles, Roboto for figures, green gradient buttons (#e5231d -> #c9161d), gold #ffc72c for prices. */
 :root{
-  --mg-bg:#f8f4e9; --mg-card:#fefefc; --mg-line:#d6e9dd; --mg-ink:#1a1a1a; --mg-muted:#9aa0ad; --mg-label:#8e97a0;
-  --mg-green:#02a652; --mg-green-2:#056b39; --mg-grad:linear-gradient(125deg,#03a652 0%,#028946 52%,#056b39 100%);
-  --mg-gold:#ffc72c; --mg-potato:#e9f5ee; --mg-serif:'Noto Serif',Georgia,'DejaVu Serif',serif; --mg-sans:Roboto,'Segoe UI',system-ui,sans-serif;
+  --mg-bg:#f4f5fb; --mg-card:#fffefe; --mg-line:#f3d4d3; --mg-ink:#1a1a1a; --mg-muted:#9aa0ad; --mg-label:#8e97a0;
+  --mg-green:#e5231d; --mg-green-2:#c9161d; --mg-grad:linear-gradient(125deg,#e5231d 0%,#d11d18 52%,#c9161d 100%);
+  --mg-gold:#ffc72c; --mg-potato:#fdecec; --mg-serif:'Noto Serif',Georgia,'DejaVu Serif',serif; --mg-sans:Roboto,'Segoe UI',system-ui,sans-serif;
   --nav-h:68px;
   /* the blue names older rules still use now mean green */
-  --v-blue:#02a652; --v-blue-2:#056b39; --v-blue-3:#03a652; --v-grad:var(--mg-grad); --v-ink:#1a1a1a; --v-label:#8e97a0; --v-muted:#9aa0ad;
-  --v-bg:#f8f4e9; --v-tint:#e9f5ee; --v-line:#d6e9dd; --v-card-line:#d6e9dd; --v-gold:#ffc72c; --v-ok:#02a652; --v-wait:#ff9500; --v-bad:#e40613;
-  --snow-canvas:#f8f4e9; --snow-surface:#fefefc; --snow-ink:#1a1a1a; --snow-muted:#9aa0ad; --snow-border:#d6e9dd; --snow-wine:#02a652;
+  --v-blue:#e5231d; --v-blue-2:#c9161d; --v-blue-3:#e5231d; --v-grad:var(--mg-grad); --v-ink:#1a1a1a; --v-label:#8e97a0; --v-muted:#9aa0ad;
+  --v-bg:#f4f5fb; --v-tint:#fdecec; --v-line:#f3d4d3; --v-card-line:#f3d4d3; --v-gold:#ffc72c; --v-ok:#e5231d; --v-wait:#ff9500; --v-bad:#e40613;
+  --snow-canvas:#f4f5fb; --snow-surface:#fffefe; --snow-ink:#1a1a1a; --snow-muted:#9aa0ad; --snow-border:#f3d4d3; --snow-wine:#e5231d;
 }
 html,body{background:var(--mg-bg);}
 body{color:var(--mg-ink);font-family:var(--mg-sans);}
@@ -1570,8 +1570,8 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 
 
 
-.dep-chip{flex:1;min-width:0;height:45px;padding:0;border:1px solid #d9ebe1;border-radius:11.5px;background:#fefefc;color:#5f7a6a;font:700 14.5px/1 var(--mg-serif);letter-spacing:.03em;}
-.dep-chip.sel{border-color:transparent;background:linear-gradient(125deg,#07a856,#02924a 50%,#056b39);color:#fff;}
+.dep-chip{flex:1;min-width:0;height:45px;padding:0;border:1px solid #f3d4d3;border-radius:11.5px;background:#fffefe;color:#8a4f4d;font:700 14.5px/1 var(--mg-serif);letter-spacing:.03em;}
+.dep-chip.sel{border-color:transparent;background:linear-gradient(125deg,#e5231d,#d71e1a 50%,#c9161d);color:#fff;}
 
 
 
@@ -1598,7 +1598,7 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 
 
 
-.v-amtrow{display:flex;align-items:center;gap:9px;height:50.5px;margin-top:23px;padding:0 15px;border:1px solid #cfe6d6;border-radius:10px;background:#fefefc;}
+.v-amtrow{display:flex;align-items:center;gap:9px;height:50.5px;margin-top:23px;padding:0 15px;border:1px solid #f3d4d3;border-radius:10px;background:#fffefe;}
 .v-amtrow span{font:700 17.5px/1 var(--mg-sans);color:#a0a5ae;}
 .v-amtrow input{flex:1;min-width:0;height:100%;padding:0;border:0;outline:0;background:transparent;color:#6b6b6b;font:700 20px/1 var(--mg-sans);}
 .v-amtrow input::placeholder{color:#7b7b7b;}
@@ -1625,9 +1625,9 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 
 
 .v-pin{margin-top:0;}
-.v-pin input,.v-pbox input,.v-uline input{display:block;width:100%;box-sizing:border-box;height:39px;padding:0 15px;border:1px solid #cfe6d6;border-radius:12px;background:#fefefc;color:#1a1a1a;font:400 14px/1 var(--mg-sans);outline:0;}
+.v-pin input,.v-pbox input,.v-uline input{display:block;width:100%;box-sizing:border-box;height:39px;padding:0 15px;border:1px solid #f3d4d3;border-radius:12px;background:#fffefe;color:#1a1a1a;font:400 14px/1 var(--mg-sans);outline:0;}
 .v-pin input::placeholder,.v-pbox input::placeholder,.v-uline input::placeholder{color:#8b8e96;}
-.v-pin input:focus,.v-pbox input:focus,.v-uline input:focus{border-color:#02a652;}
+.v-pin input:focus,.v-pbox input:focus,.v-uline input:focus{border-color:#e5231d;}
 
 
 
@@ -1656,7 +1656,7 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 
 .mg-redirect{display:none;position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);z-index:260;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:160px;box-sizing:border-box;background:rgba(120,70,84,.5);}
 .mg-redirect.show{display:flex;}
-.mg-redirect .spin{display:block;width:40px;height:40px;border-radius:50%;border:3px solid rgba(255,255,255,.28);border-top-color:#0a8a4a;animation:mgSpin 1s linear infinite;}
+.mg-redirect .spin{display:block;width:40px;height:40px;border-radius:50%;border:3px solid rgba(255,255,255,.28);border-top-color:#c9161d;animation:mgSpin 1s linear infinite;}
 .mg-redirect p{margin:18.5px 0 0;font:400 12.5px/1.2 var(--mg-serif);letter-spacing:.1em;color:#fff;}
 @keyframes mgSpin{to{transform:rotate(360deg);}}
 
@@ -1683,7 +1683,7 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 
 
 /* Messages */
-.mg-mrow{position:relative;display:flex;align-items:flex-start;gap:12px;width:100%;margin-top:14px;padding:12px 30px 14px 12px;border:1px solid #d4e8d9;border-left:0;border-radius:16px;background:linear-gradient(135deg,#fefefc,#fdf3f1);text-align:left;box-shadow:0 10px 22px -18px rgba(2,120,60,.5);overflow:hidden;}
+.mg-mrow{position:relative;display:flex;align-items:flex-start;gap:12px;width:100%;margin-top:14px;padding:12px 30px 14px 12px;border:1px solid #d4e8d9;border-left:0;border-radius:16px;background:linear-gradient(135deg,#fffefe,#fdf3f1);text-align:left;box-shadow:0 10px 22px -18px rgba(2,120,60,.5);overflow:hidden;}
 .mg-mrow::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:#0b5d3a;}
 .mg-mrow .av,.msg-detail .av{flex:0 0 38px;width:38px;height:38px;border-radius:50%;background:linear-gradient(145deg,#cfe9b0,#0ea659);margin-left:4px;}
 .mg-mrow .t{flex:0 1 164px;max-width:164px;min-width:0;font:700 14.4px/21px var(--mg-serif);color:#111;word-break:break-word;}
@@ -1738,7 +1738,7 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 .mg-ann-img{display:block;width:100%;height:auto;border-radius:12px;}
 .mg-ann-lines{margin:9px 0 6px;text-align:center;}
 .mg-ann-lines p{margin:0;font:700 12.5px/22px var(--mg-sans);color:#586a5e;}
-.mg-ann-join{display:flex;align-items:center;justify-content:center;height:41.5px;margin-top:15px;border-radius:14px;background:linear-gradient(125deg,#07a856,#02924a 50%,#056b39);color:#fff;font:700 13.5px/1 var(--mg-sans);text-decoration:none;}
+.mg-ann-join{display:flex;align-items:center;justify-content:center;height:41.5px;margin-top:15px;border-radius:14px;background:linear-gradient(125deg,#e5231d,#d71e1a 50%,#c9161d);color:#fff;font:700 13.5px/1 var(--mg-sans);text-decoration:none;}
 
 /* Passwords */
 
@@ -1760,13 +1760,13 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 
 .v-help-wrap{width:100%;max-width:294px;display:flex;flex-direction:column;align-items:center;gap:20px;}
 .v-help-card{width:100%;box-sizing:border-box;padding:27px 23px 26px;border:0;border-radius:24px;background:#f6f6f6;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.22);}
-.v-help-ic{width:45px;height:45px;border-radius:50%;background:#e3f3e9;color:#0a8a4a;display:inline-flex;align-items:center;justify-content:center;}
+.v-help-ic{width:45px;height:45px;border-radius:50%;background:#fde8e7;color:#c9161d;display:inline-flex;align-items:center;justify-content:center;}
 .v-help-ic svg{width:27px;height:27px;}
 .v-help-card h3{margin:14px 0 21px;font:700 18px/1.2 var(--mg-serif);color:#111;}
 .v-help-btns{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-.v-help-b{height:69.5px;border:1px solid #cfe6d6;border-radius:13px;background:#fff;color:#1a1a1a;font:700 15px/1 var(--mg-sans);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-decoration:none;cursor:pointer;}
-.v-help-b svg{width:22px;height:22px;color:#0a8a4a;stroke:#0a8a4a;}
-.v-help-close{margin-top:19px;width:100%;height:41px;border:0;border-radius:13px;background:linear-gradient(125deg,#07a856,#056b39);color:#fff;font:700 17px/1 var(--mg-sans);}
+.v-help-b{height:69.5px;border:1px solid #f3d4d3;border-radius:13px;background:#fff;color:#1a1a1a;font:700 15px/1 var(--mg-sans);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-decoration:none;cursor:pointer;}
+.v-help-b svg{width:22px;height:22px;color:#c9161d;stroke:#c9161d;}
+.v-help-close{margin-top:19px;width:100%;height:41px;border:0;border-radius:13px;background:linear-gradient(125deg,#e5231d,#c9161d);color:#fff;font:700 17px/1 var(--mg-sans);}
 .v-help-x{width:41px;height:41px;border-radius:50%;border:1.5px solid rgba(255,255,255,.7);background:rgba(40,70,55,.6);color:#fff;display:flex;align-items:center;justify-content:center;}
 .v-help-x svg{width:18.5px;height:18.5px;}
 
@@ -1774,18 +1774,18 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 .confirm-bg{background:rgba(0,0,0,.45);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
 .confirm-sheet{border-radius:24px;background:#f9f9f6;color:#161616;box-shadow:0 18px 50px rgba(0,0,0,.22);}
 .confirm-sheet h3{font-family:var(--mg-serif);color:#0c6a3a;}
-.confirm-sheet .secondary-button{background:#e8f3ea;border:1px solid #cfe6d6;color:#4a6b59;border-radius:14px;}
-.primary-button{background:linear-gradient(125deg,#07a856,#02924a 50%,#056b39);color:#fff;border:0;border-radius:14px;font-weight:700;box-shadow:0 8px 16px -10px rgba(2,120,60,.8);}
-.secondary-button{background:#e8f3ea;color:#4a6b59;border:1px solid #cfe6d6;border-radius:14px;font-weight:700;}
+.confirm-sheet .secondary-button{background:#fdecec;border:1px solid #f3d4d3;color:#7a4a49;border-radius:14px;}
+.primary-button{background:linear-gradient(125deg,#e5231d,#d71e1a 50%,#c9161d);color:#fff;border:0;border-radius:14px;font-weight:700;box-shadow:0 8px 16px -10px rgba(2,120,60,.8);}
+.secondary-button{background:#fdecec;color:#7a4a49;border:1px solid #f3d4d3;border-radius:14px;font-weight:700;}
 
 /* payment status page (opens after Confirm Deposit) */
 .pay-page{background:var(--mg-bg);}
 .pay-page::before{display:none;}
-.pay-card{background:#fefefc;border:1px solid #d6e9dd;box-shadow:0 14px 30px -22px rgba(2,120,60,.5);-webkit-backdrop-filter:none;backdrop-filter:none;border-radius:24px;}
+.pay-card{background:#fffefe;border:1px solid #f3d4d3;box-shadow:0 14px 30px -22px rgba(2,120,60,.5);-webkit-backdrop-filter:none;backdrop-filter:none;border-radius:24px;}
 .pay-card h3{color:#161616;font-family:var(--mg-serif);}
 .pay-card p,.pay-steps{color:#5f6f63;}
 .pay-note{color:#9aa0ad;}
-.pay-steps li::marker{color:#02964c;}
+.pay-steps li::marker{color:#e5231d;}
 .sheet-head.pay-head{height:65px;box-sizing:border-box;padding:0 21px;background:transparent;}
 body.deposit-status-open .sheet-bg{bottom:0;}
 
@@ -1830,7 +1830,7 @@ html.mg-gut #pageHost{padding-right:4px;}
 
 
 /* Team member cards (measured from the owner's screen at 1.572 px per css px): 121px tall cards, 12px apart. */
-.mg-mem{position:relative;height:122px;box-sizing:border-box;margin-top:10.5px;border:1px solid #cfe6d6;border-radius:17px;background:#fefefc;box-shadow:0 8px 18px -16px rgba(2,120,60,.35);}
+.mg-mem{position:relative;height:122px;box-sizing:border-box;margin-top:10.5px;border:1px solid #f3d4d3;border-radius:17px;background:#fffefe;box-shadow:0 8px 18px -16px rgba(2,120,60,.35);}
 .mg-mav{position:absolute;left:14px;top:16px;width:46px;height:46px;border-radius:50%;overflow:hidden;background:radial-gradient(circle at 38% 34%,#a8d878 0%,#86c455 62%,#74b843 100%);box-shadow:0 0 0 4px rgba(190,230,160,.28);}
 .mg-mav img{display:block;width:100%;height:100%;object-fit:cover;}
 .mg-mem-name{position:absolute;left:69px;top:16px;display:flex;align-items:center;gap:6px;font:700 13.5px/18px var(--mg-sans);color:#111;}
@@ -1855,24 +1855,24 @@ html.mg-gut #pageHost{padding-right:4px;}
 .pay-card.pl{background:none;border:0;box-shadow:none;padding:6px 0 0;max-width:330px;}
 .pay-card.pl .dep-status-icon{min-height:0;margin:2px auto 10px;}
 .pl-radar{position:relative;width:150px;height:150px;display:flex;align-items:center;justify-content:center;}
-.pl-radar i{position:absolute;left:35px;top:35px;width:80px;height:80px;border-radius:50%;border:2px solid #02a652;opacity:0;animation:plRing 2.4s ease-out infinite;}
+.pl-radar i{position:absolute;left:35px;top:35px;width:80px;height:80px;border-radius:50%;border:2px solid #e5231d;opacity:0;animation:plRing 2.4s ease-out infinite;}
 .pl-radar i:nth-child(2){animation-delay:.8s;}
 .pl-radar i:nth-child(3){animation-delay:1.6s;}
-.pl-radar b{position:relative;display:flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#07a856,#02924a 50%,#056b39);box-shadow:0 12px 24px -12px rgba(2,120,60,.7);}
+.pl-radar b{position:relative;display:flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#e5231d,#d71e1a 50%,#c9161d);box-shadow:0 12px 24px -12px rgba(2,120,60,.7);}
 .pl-radar b svg{width:36px;height:36px;fill:none;stroke:#fff;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
 @keyframes plRing{0%{transform:scale(1);opacity:.5;}100%{transform:scale(1.85);opacity:0;}}
 .pay-card.pl h3{font-size:19px;margin:0 0 4px;}
-.pl-amt{margin:0 0 18px;font:700 31px/1.15 var(--mg-serif);color:#02924a;letter-spacing:.01em;}
-.pay-card.pl .pl-steps{list-style:none;margin:0;padding:18px 16px 18px 18px;text-align:left;background:#fefefc;border:1px solid #d6e9dd;border-radius:20px;box-shadow:0 14px 30px -24px rgba(2,120,60,.5);}
+.pl-amt{margin:0 0 18px;font:700 31px/1.15 var(--mg-serif);color:#d71e1a;letter-spacing:.01em;}
+.pay-card.pl .pl-steps{list-style:none;margin:0;padding:18px 16px 18px 18px;text-align:left;background:#fffefe;border:1px solid #f3d4d3;border-radius:20px;box-shadow:0 14px 30px -24px rgba(2,120,60,.5);}
 .pl-steps li{position:relative;margin:0;padding:0 0 20px 36px;}
 .pl-steps li:last-child{padding-bottom:0;}
 .pl-steps li::before{content:'';position:absolute;left:0;top:0;width:22px;height:22px;box-sizing:border-box;border-radius:50%;background:#fff;border:2px solid #c9dccf;}
 .pl-steps li::after{content:'';position:absolute;left:10px;top:25px;bottom:3px;width:2px;background:#cfe6d8;}
 .pl-steps li:last-child::after{display:none;}
-.pl-steps li.done::before{background:#02a652 url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 12.5l4.2 4.2L18.5 8'/%3E%3C/svg%3E") center/13px no-repeat;border-color:#02a652;}
-.pl-steps li.done::after{background:#02a652;}
-.pl-steps li.now::before{border-color:#02a652;animation:plNow 1.6s ease-out infinite;}
-.pl-steps li.now::after{background:linear-gradient(#02a652,#cfe6d8);}
+.pl-steps li.done::before{background:#e5231d url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 12.5l4.2 4.2L18.5 8'/%3E%3C/svg%3E") center/13px no-repeat;border-color:#e5231d;}
+.pl-steps li.done::after{background:#e5231d;}
+.pl-steps li.now::before{border-color:#e5231d;animation:plNow 1.6s ease-out infinite;}
+.pl-steps li.now::after{background:linear-gradient(#e5231d,#cfe6d8);}
 @keyframes plNow{0%{box-shadow:0 0 0 0 rgba(2,166,82,.45);}100%{box-shadow:0 0 0 9px rgba(2,166,82,0);}}
 .pl-steps b{display:block;font:700 14px/22px var(--mg-sans);color:#161616;}
 .pl-steps li.todo b{color:#8c9b91;}
@@ -1880,8 +1880,8 @@ html.mg-gut #pageHost{padding-right:4px;}
 .pl-steps li.todo span{color:#a5b1a9;}
 .pay-card.pl .pay-note{margin:14px 0 0;padding:11px 14px;border-radius:14px;background:#e6f4ec;color:#3b6a50;font:500 12.5px/1.55 var(--mg-sans);text-align:left;}
 .pl-check{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:20px;font:500 12px/1 var(--mg-sans);color:#8a9a90;}
-.pl-check i{position:relative;display:block;width:54px;height:3px;border-radius:2px;background:#d6e9dd;overflow:hidden;}
-.pl-check i::after{content:'';position:absolute;left:0;top:0;height:100%;width:40%;border-radius:2px;background:#02a652;animation:plShim 1.3s ease-in-out infinite;}
+.pl-check i{position:relative;display:block;width:54px;height:3px;border-radius:2px;background:#f3d4d3;overflow:hidden;}
+.pl-check i::after{content:'';position:absolute;left:0;top:0;height:100%;width:40%;border-radius:2px;background:#e5231d;animation:plShim 1.3s ease-in-out infinite;}
 @keyframes plShim{0%{transform:translateX(-100%);}100%{transform:translateX(250%);}}
 @media (prefers-reduced-motion:reduce){.pl-radar i{animation:none;opacity:.25;}.pl-steps li.now::before,.pl-check i::after{animation:none;}}
 /* Result pages use the same layout: green badge with a tick and all green steps, or a red badge with the last circle red */
@@ -2808,7 +2808,7 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
      the browser, which drops the list out of the card entirely. -->
 <div class="pay-page" id="depStatusBg">
   <div class="sheet-head pay-head">
-    <button class="back" onclick="closeDepositStatusModal()" aria-label="Back"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.7 3.6 5.3 8l4.4 4.4L8.6 8z" fill="#f4fbf6" stroke="#f4fbf6" stroke-width=".7" stroke-linejoin="round"/></svg></button>
+    <button class="back" onclick="closeDepositStatusModal()" aria-label="Back"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.7 3.6 5.3 8l4.4 4.4L8.6 8z" fill="#fffafa" stroke="#fffafa" stroke-width=".7" stroke-linejoin="round"/></svg></button>
   </div>
   <div class="pay-body">
     <div class="pay-card">
