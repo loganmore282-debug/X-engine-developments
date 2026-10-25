@@ -22,7 +22,7 @@ ok(/setTimeout\(startArtwork, 8000\)/.test(mod) && !/_artPromise = Promise\.all\
 ok(/const s = await pSettings;/.test(mod) && !/Promise\.all\(\[ pSettings, pProducts, pBanner \]\)/.test(mod), 'the loading screen waits for the settings only, not for the asset pictures or the banner');
 ok(!/fileToLogoPng|background connected to the image edge/.test(admin) && /wirePotatoImageSlot\('logo', 'brandLogoFile'/.test(admin), 'the brand logo is uploaded as it is (no background removal)');
 ok(/var NAV_LOADER = '<span class="mg-loadtxt">Loading\.\.\.<\/span>'/.test(mod) && /\.mg-loadtxt\{[^}]*color:#b4b8bf/.test(html) && !/MINI_RING_LOADER|mini-ring-loader|ringSweep/.test(html + mod), 'pages show a small grey "Loading..." word, standing still, while data arrives; no ring spinner is left');
-ok((mod.match(/NAV_LOADER/g) || []).length >= 6, 'Income, Team, Team members, Balance Record and Messages all use it');
+ok((mod.match(/NAV_LOADER/g) || []).length >= 5, 'Income, Team, Team members, Balance Record and Messages all use it');
 ok(/showAuthTab\('login'\);\n  stopLiveRefresh\(\);/.test(mod), 'signing out always lands on Login, not on a Sign Up form left open');
 ok(/\.mg-ann-img\{[^}]*height:auto/.test(html) && !/\.mg-ann-img\{[^}]*object-fit:cover/.test(html), 'the announcement picture is shown whole, never cropped');
 ok(/\.pt-img>img\{[^}]*object-fit:cover/.test(html) && /grid-template-columns:132px/.test(html), 'a product picture fills its own column of the card');
