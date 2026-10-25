@@ -439,8 +439,8 @@ const MARZ_TIMEOUT = 20000;
 const MARZSMS_BASE = 'https://sms.wearemarz.com/api/v1';
 const MARZSMS_KEY  = process.env.MARZSMS_KEY || '';
 
-// Potato runs for ONE country: Nigeria (+234, naira; a number is 9 or 10 digits after the dialling code or a leading 0). POTATO_REGION=ug
-// switches the same code to Uganda (the tests that were written for Uganda run that way, see package.json). Historical accounts with
+// Potato runs for ONE country: Uganda (+256, UGX; owner's decision after the first screenshots, which carried a +234 look). POTATO_REGION=ng
+// switches the same code to Nigeria (+234, naira, 9 or 10 digits); kept only because it is built and tested. Historical accounts with
 // another currency remain in storage for review, but cannot transact.
 const POTATO_REGIONS = {
   ng: { key: 'ng', name: 'Nigeria', currency: 'NGN', currencySymbol: '\u20a6', dialCode: '234', localLength: 10, localLengths: [9, 10], prefixes: [], utcOffsetMin: 60,
@@ -448,7 +448,7 @@ const POTATO_REGIONS = {
   ug: { key: 'ug', name: 'Uganda', currency: 'UGX', currencySymbol: 'UGX', dialCode: '256', localLength: 9, localLengths: [9], prefixes: ['7'], utcOffsetMin: 180,
         active: true, isDefault: true, languages: ['en'], defaultLang: 'en' },
 };
-const DEFAULT_REGION_KEY = POTATO_REGIONS[String(process.env.POTATO_REGION || '').toLowerCase()] ? String(process.env.POTATO_REGION).toLowerCase() : 'ng';
+const DEFAULT_REGION_KEY = POTATO_REGIONS[String(process.env.POTATO_REGION || '').toLowerCase()] ? String(process.env.POTATO_REGION).toLowerCase() : 'ug';
 const DEFAULT_REGION = Object.freeze(POTATO_REGIONS[DEFAULT_REGION_KEY]);
 let _mainAllowedHosts = [];
 let _baseDomain = 'potato-platform.com';

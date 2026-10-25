@@ -46,7 +46,7 @@ async function main(){
   assert.match(d.querySelector('#homeProducts').textContent,/Test Asset|No products yet|Could not load/,'Home lists the catalogue (or says it could not load it)');
   w.eval('STATE.products=[{key:"a1",name:"Test Asset",price:15000,cycle:30,expectedReturn:45000,dailyPayout:1500,isOpen:true}]');w.paintHome();
   assert.match(d.querySelector('.mg-info h3').textContent,/Test Asset/,'the product name sits above its figures');
-  assert.match(d.querySelector('.mg-rows').textContent,/NGN 15,000\.00/,'prices read NGN 15,000.00');
+  assert.match(d.querySelector('.mg-rows').textContent,/UGX 15,000\.00/,'prices read UGX 15,000.00');
   assert.deepEqual([...d.querySelectorAll('.mg-quick button')].map(e=>e.textContent),['Deposit','Withdraw','Channel','Service'],'Home has Deposit, Withdraw, Channel and Service');
   assert(d.querySelector('.mg-chest'),'the bouncing treasure chest is on Home');assert(d.querySelector('.mg-top .mg-msg'),'the message icon is in Home\'s header');
   assert.equal(d.querySelectorAll('.bottom-nav .navitem').length,6,'six tabs');
@@ -54,12 +54,12 @@ async function main(){
   const originalBanner=d.querySelector('.home-banner');await w.liveRefreshVisible();
   assert.equal(d.querySelector('.home-banner'),originalBanner,'balance refresh must not rebuild Home');
   w.eval('STATE.page="assets"');w.eval('STATE.investments=[{status:"active",tierKey:"a1",tierLabel:"Test Asset",amount:15000,payoutsTotal:30,payoutsMade:3,dailyPayout:1500,expectedReturn:45000,paidOut:4500,createdAt:new Date().toISOString()},{status:"active",tierKey:"a1",tierLabel:"Gifted",amount:0,payoutsTotal:30,payoutsMade:1,dailyPayout:1500,expectedReturn:45000,paidOut:0,createdAt:new Date().toISOString(),granted:true}]');w.paintAssets();
-  assert.match(d.querySelector('.mg-total').textContent,/Total Earnings/);assert.match(d.querySelector('#incomeTotal').textContent,/NGN 700\.00/);
+  assert.match(d.querySelector('.mg-total').textContent,/Total Earnings/);assert.match(d.querySelector('#incomeTotal').textContent,/UGX 700\.00/);
   assert.equal(d.querySelectorAll('#ownedAssets .mg-card').length,2,'Orders lists every owned asset');
   assert(d.querySelector('#ownedAssets .v-gift .mg-gift'),'a gifted asset carries the GIFT ribbon');
   assert.equal(d.querySelectorAll('#ownedAssets .mg-dates').length,2,'each owned card shows Purchase and Expire');
   w.eval('STATE.page="account"');await w.renderAccount();
-  assert.match(d.querySelector('.mg-me-bal').textContent,/NGN 70,000\.00/);
+  assert.match(d.querySelector('.mg-me-bal').textContent,/UGX 70,000\.00/);
   assert.deepEqual([...d.querySelectorAll('.mg-row-t b')].map(e=>e.textContent),['Download APP','Wallet','Balance Record','Messages','Login Password','Trade Password']);
   w.eval('STATE.page="home"');
   // The old full-screen "Congratulations!" win card (showChestWin()) was
@@ -92,7 +92,7 @@ async function main(){
   payment.resolve({status:'success',net:5000});await first;
   assert(d.querySelector('#lpOld'),'late withdrawal response must not close another form');
   w.openDepositSheet();assert.equal(d.querySelectorAll('.v-info li').length,4);
-  assert.match(d.querySelector('.v-info').textContent,/Minimum deposit amount: NGN 15,000/);assert.equal(d.querySelectorAll('#depPays button').length,1,'only PAY-A');assert.equal(d.querySelector('#depPays button').textContent.trim(),'PAY-A');
+  assert.match(d.querySelector('.v-info').textContent,/Minimum deposit amount: UGX 15,000/);assert.equal(d.querySelectorAll('#depPays button').length,1,'only PAY-A');assert.equal(d.querySelector('#depPays button').textContent.trim(),'PAY-A');
   d.querySelector('#depAmount').value='15000';assert(d.querySelector('#depPhone'),'Deposit has a phone box: the number the member pays from');d.querySelector('#depPhone').value='0769968158';
   const deposit=deferred();posts=0;w.post=()=>{posts++;return deposit.promise};
   const sending=w.submitDeposit();await w.submitDeposit();assert.equal(posts,1);

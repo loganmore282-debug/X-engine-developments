@@ -31,9 +31,9 @@ var API_BASE = '/k7x2';
 // The values below are Uganda's, and they are also what an offline first
 // paint uses -- so a cold start with no network still formats money and
 // validates a phone number the way it always did.
-var REGION = { key: 'ng', name: 'Nigeria', currency: 'NGN', currencySymbol: '\u20a6', dialCode: '234', localLength: 10, localLengths: [9, 10], prefixes: [], utcOffsetMin: 60, isDefault: true, languages: ['en'], defaultLang: 'en' };
-function cur(){ return (REGION && REGION.currency) || 'NGN'; }
-function regionName(){ return (REGION && REGION.name) || 'Nigeria'; }
+var REGION = { key: 'ug', name: 'Uganda', currency: 'UGX', currencySymbol: 'UGX', dialCode: '256', localLength: 9, localLengths: [9], prefixes: ['7'], utcOffsetMin: 180, isDefault: true, languages: ['en'], defaultLang: 'en' };
+function cur(){ return (REGION && REGION.currency) || 'UGX'; }
+function regionName(){ return (REGION && REGION.name) || 'Uganda'; }
 // "7XXXXXXXX" for Uganda -- the region's first allowed prefix padded out to
 // its local length, used in the placeholders that show the shape to type.
 function phoneHintBody(){
@@ -41,10 +41,10 @@ function phoneHintBody(){
   const lead = pfx.length ? pfx[0] : '';
   return lead + 'X'.repeat(Math.max(0, localLen() - lead.length));
 }
-function dial(){ return (REGION && REGION.dialCode) || '234'; }
+function dial(){ return (REGION && REGION.dialCode) || '256'; }
 function dialPlus(){ return '+' + dial(); }
 function localLen(){ return Number(REGION && REGION.localLength) || 9; }
-// Every length a number may have in this region ([9, 10] for Nigeria), longest last.
+// Every length a number may have in this region (9 for Uganda, 9 or 10 for Nigeria), longest last.
 function localLens(){
   const l = REGION && Array.isArray(REGION.localLengths) && REGION.localLengths.length ? REGION.localLengths : [localLen()];
   return l.map(Number).filter(n => n > 0).sort((a, b) => a - b);

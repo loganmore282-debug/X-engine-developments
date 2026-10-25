@@ -40,7 +40,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(/pass\.length < 6\) return regError\('Password must be at least 6 characters'\)/.test(mod), 'the app asks for 6 characters');
   for (const id of ['authLogo', 'authLogoImg', 'authHeroBg', 'loginPhone', 'loginPassword', 'rememberMe', 'loginBtn', 'regPhone', 'regPassword', 'regPassword2', 'regTradePin', 'regReferral', 'regBtn']) ok(html.includes('id="' + id + '"'), 'markup has ' + id);
   ok(/placeholder="Enter password"/.test(html) && /placeholder="Re-enter password"/.test(html) && /placeholder="6-digit trade password"/.test(html) && /placeholder="Enter Username Number"/.test(html), 'the words are the screenshot\'s');
-  ok(/id="loginDial">\+234</.test(html) && /id="regDial">\+234</.test(html), '+234 on both forms');
+  ok(/id="loginDial">\+256</.test(html) && /id="regDial">\+256</.test(html), '+256 on both forms');
   ok(/POTATO_IMAGE_SLOTS = \['logo', 'authhero', 'authlogo',/.test(server) && /id="authLogoFile"/.test(R('admin-src/index.html')) && /applyAuthLogo/.test(mod), 'the circle logo is an admin-uploaded slot');
 }
 console.log(`PASS: captcha and Potato sign-up wiring (${n} checks)`);
