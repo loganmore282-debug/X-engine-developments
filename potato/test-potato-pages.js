@@ -73,6 +73,8 @@ async function member() {
   const C = await member();
   const save = (phone, net = 'MTN Mobile Money') => J('POST', '/bank/save', { holder: 'Test Holder', network: net, phone }, C.tok);
   const p1 = ph(), p2 = ph(), p3 = ph(), p4 = ph(), p5 = ph(), p6 = ph();
+  r = await save(p1, 'Stanbic Bank'); ok(r.s === 400, 'a bank name is refused: Bank Name is MTN or Airtel only', r.j);
+  r = await J('POST', '/bank/supported-banks', {}, C.tok); ok(r.s === 404, 'there is no bank list route any more', r.s);
   r = await save(p1); ok(r.j.status === 'success', 'first card saved', r.j);
   r = await save(p1); ok(r.s === 409 && r.j.code === 'CARD_EXISTS', 'the same card again is refused', r.j);
   r = await save(p2, 'Airtel Money'); ok(r.j.status === 'success', 'second card saved', r.j);

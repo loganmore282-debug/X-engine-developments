@@ -11,7 +11,7 @@ ok(/id="ldBox"/.test(html) && /class="ld-name" data-brandname/.test(html) && /<i
 ok(/#loadingScreen\{[^}]*background:#c4121e/.test(html) && /\.ld-box\{width:150px;height:150px;border-radius:14px/.test(html), 'the start-up page is red and the box picture is 150 px with rounded corners done by the app');
 ok(/\.sr-only\{/.test(html), 'the screen-reader word is hidden');
 ok(/body\.sheet-open \.sheet-bg\{bottom:var\(--nav-h\);\}/.test(html), 'secondary pages end above the bottom navigation');
-ok(/'profilelogo', 'loaderbg', 'downloadbg'/.test(server) && /app\.get\('\/public\/loader-image'/.test(server), 'server stores and serves the loader picture');
+ok(/'profilelogo', 'loaderbg'/.test(server) && /app\.get\('\/public\/loader-image'/.test(server), 'server stores and serves the loader picture');
 ok(/id="loaderBgFile"/.test(admin) && /wirePotatoImageSlot\('loaderbg'/.test(admin), 'admin can upload and remove it');
 const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
 ok(/id="loginPassword" type="password"/.test(html) && /toggleAuthEye/.test(html) && /window\.toggleAuthEye/.test(mod), 'password boxes are masked and every one has the eye from the owner\'s screenshots');

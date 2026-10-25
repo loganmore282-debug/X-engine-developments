@@ -891,50 +891,10 @@ async function getHelpBanner() {
   _helpBannerCacheTs = Date.now();
   return _helpBannerCache;
 }
-// Two Potato-only image slots -- the Referral page banner and the brand logo
-// shown on the Account profile card. Same 'banners' collection and same
-// 60s cache shape as getHomeBanner()/getHelpBanner() above, but written
-// once generically rather than copy-pasted per slot: `potato-<slot>` doc ids
-// keep them from colliding with Snow's inherited 'home'/'help' docs.
-// 'authhero' and 'authcard' back the two halves of the Login / Sign Up
-// screen (owner: "2 different images so one image will appear on login and
-// registration tabs, and 1 will appear on space where orange color is
-// shared"). ONE pair covers BOTH tabs, not one pair per tab: the two
-// screens share the same hero band and the same white card, so per-tab
-// images would make the background jump as a member switches between
-// Log In and Sign Up.
-// banner2/banner3 back the Home screen's multi-slide carousel (owner:
-// "those slide images will be uploaded from admin panel") -- slide 1 is the
-// already-existing 'home' banner (banners/home doc, /admin/banner/set,
-// which also accepts video), not duplicated here. Both reuse this exact
-// already-built upload mechanism rather than adding a new one; see
-// CLAUDE.md's "Design system" section.
-//
-// 'homefooter' (the "Clean Energy Stronger Communities"-style image at the
-// bottom of Home) and 'profilecard' (the Account screen's refinery-photo
-// header background) REMOVED (owner, circling both upload rows directly:
-// "the headers l meant were those ones, and account screen header photos
-// those were what l meant") -- along with their admin upload rows and every
-// client render site (Home's footer image, the Account profile card's
-// background image).
-//
-// 'profilegif' and 'authcard' REMOVED (owner: "every idle code which has no
-// function it is really doing should be removed") -- both were confirmed
-// genuinely dead, not just unused-for-now: neither has had an admin upload
-// row for several rounds (grep of admin-src/index.html: zero hits for
-// either), 'profilegif's own consumers (homeGifHtml()/fitHomeGif()) were
-// already deleted entirely in an earlier round, leaving only a pointless
-// STATE.profileGif assignment nothing ever read, and 'authcard's own target
-// element (#authCardBg) was removed from the markup when the auth screen
-// went single-photo -- its own CSS comment already said so. Removing the
-// slots here means an admin can no longer even try to set them, not just
-// that nothing currently reads the result.
-//
-// 'downloadbg' REMOVED too (owner: "remove that stuff of download app
-// background... remove download app back image input") -- Download App is
-// no longer its own screen with a backdrop; Account's new Download App row
-// (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
-// prompt directly, in user-src/original_module.js -- see its own comment.
+// The admin-uploaded pictures (Admin > Banners): Login banner (authhero) and circle logo (authlogo), Home slides 2 and 3 (banner2, banner3;
+// slide 1 is the Home banner), Share banner (promobanner), brand logo (logo), My page avatar (profilelogo), loading-screen box picture
+// (loaderbg), link preview picture (linkpreview), Myteam / My / About banners (teambanner, mybanner, aboutbanner) and the About circle logo
+// (aboutlogo). Stored in the 'banners' collection as `potato-<slot>`, cached for 60 s. Only the pictures the owner's screenshots show exist.
 // Transparent cut-out ICONS the owner uploads in the admin panel (Banners > Icons); the panel removes each picture's background and crops it
 // tight before saving, so these are always PNGs. To add an icon, add its name here AND its label in admin-src (POTATO_ICON_LABELS).
 const POTATO_ICON_SLOTS = ['navhome', 'navincome', 'navteam', 'navshare', 'navmy', 'recharge', 'withdraw', 'service', 'channel', 'ordergift', 'downloadapp', 'giftbox'];
@@ -8452,7 +8412,7 @@ app.post('/admin/withdrawals/list', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Reject refunds the member, so it must never run on a payout that may be live at the gateway. Pending rows were never sent. For every other row the
-// gateway is asked first (PesaJet by transaction id, or by our reference when the id was never recorded; MarzPay by uuid or bank-transfer reference).
+// gateway is asked first (PesaJet by transaction id, or by our reference when the id was never recorded; MarzPay by uuid).
 // Only a final failed/expired answer, or PesaJet reporting that it has no such payment at all, allows the refund.
 async function payoutRejectGuard(witId, w) {
   if (w.status === 'pending') return null;
