@@ -81,42 +81,6 @@ for (const need of ['async function enablePush(){', 'const withTimeout = (promis
 
 log('main script source:', code.length, 'bytes');
 
-// Lift the member app's single source of truth for i18n into the admin build.
-const APP_JS = path.join(ROOT, 'user-src', 'original_module.js');
-const appSrc = fs.readFileSync(APP_JS, 'utf8');
-function lift(name) {
-  const b = `// ==== I18N ${name}: SHARED WITH THE ADMIN PANEL - BEGIN ====\n`;
-  const e = `// ==== I18N ${name}: SHARED WITH THE ADMIN PANEL - END ====\n`;
-  const i = appSrc.indexOf(b), j = appSrc.indexOf(e);
-  if (i < 0 || j < 0 || j < i) {
-    console.error(`Cannot lift the i18n ${name} from user-src/original_module.js.`);
-    process.exit(1);
-  }
-  return appSrc.slice(i + b.length, j);
-}
-function injectShared(src, name, text) {
-  const b = `// ==== SHARED I18N ${name}: REPLACED BY build-admin.js - BEGIN ====\n`;
-  const e = `// ==== SHARED I18N ${name}: REPLACED BY build-admin.js - END ====\n`;
-  const i = src.indexOf(b), j = src.indexOf(e);
-  if (i < 0 || j < 0 || j < i) {
-    console.error(`Cannot inject the i18n ${name} into admin-src/index.html.`);
-    process.exit(1);
-  }
-  return src.slice(0, i + b.length) + text + src.slice(j);
-}
-const sharedTable = lift('TABLE'), sharedEngine = lift('ENGINE');
-code = injectShared(code, 'TABLE', sharedTable);
-code = injectShared(code, 'ENGINE', sharedEngine);
-for (const need of ['var LANG_ROWS = [', 'var LANG_PATTERNS = [', 'var DICT',
-                    'function t(', 'function tPattern', 'function translateTree',
-                    'function startI18nObserver']) {
-  if (!code.includes(need)) {
-    console.error(`i18n injection produced a script with no ${need.trim()}.`);
-    process.exit(1);
-  }
-}
-log('i18n shared      :', sharedTable.length, 'bytes of table +', sharedEngine.length, 'bytes of engine lifted from the app');
-
 // Syntax-check the exact source that will be obfuscated.
 fs.writeFileSync('/tmp/_snow_admin_src_check.js', code);
 execSync('node --check /tmp/_snow_admin_src_check.js');

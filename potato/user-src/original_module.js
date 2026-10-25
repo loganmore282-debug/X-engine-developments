@@ -31,7 +31,7 @@ var API_BASE = '/k7x2';
 // The values below are Uganda's, and they are also what an offline first
 // paint uses -- so a cold start with no network still formats money and
 // validates a phone number the way it always did.
-var REGION = { key: 'ug', name: 'Uganda', currency: 'UGX', currencySymbol: 'UGX', dialCode: '256', localLength: 9, localLengths: [9], prefixes: ['7'], utcOffsetMin: 180, isDefault: true, languages: ['en'], defaultLang: 'en' };
+var REGION = { key: 'ug', name: 'Uganda', currency: 'UGX', currencySymbol: 'UGX', dialCode: '256', localLength: 9, localLengths: [9], prefixes: ['7'], utcOffsetMin: 180, isDefault: true };
 function cur(){ return (REGION && REGION.currency) || 'UGX'; }
 // "7XXXXXXXX" for Uganda -- the region's first allowed prefix padded out to
 // its local length, used in the placeholders that show the shape to type.
@@ -52,7 +52,6 @@ function regionPrefixes(){ return (REGION && Array.isArray(REGION.prefixes) ? RE
 // instead of blanking the currency.
 function applyRegion(r){
   paintRegionChrome();
-  applyRegionLanguages();
 }
 // The bits of the SIGN-IN screen that name a country. Repainted from here,
 // because the region arrives from the network AFTER that screen is already
@@ -88,860 +87,6 @@ function paintRegionChrome(){
 // returning member never sees Uganda's currency flash on a Kenyan phone
 // while /public/settings is still in flight.
 
-// ══════════════════════════════════════════════════════════════════════════
-// LANGUAGES
-// ══════════════════════════════════════════════════════════════════════════
-// Owner: "add when can select languages of a country, so on login page of
-// every subdomain of any country, at top right there is a button of language,
-// it can change that very word depending on selected language ... Luganda,
-// English, swahili, French ... make when l can select allowed languages of
-// any specific country."
-//
-// WHICH SIX, AND WHY THESE TWO EXTRA. He named four. The other two are picked
-// for the markets this platform can actually reach next, not for coverage
-// counts:
-//   - Kinyarwanda (rw) -- Rwanda, and close enough to Kirundi that Burundi
-//     reads it. Two countries for one dictionary.
-//   - Runyankole (nyn) -- western Uganda. Luganda is central Uganda's
-//     language, not a national one; a Mbarara member reads it as a foreign
-//     language, so "Uganda is covered" is only true with a second one.
-// Deliberately NOT added: Amharic and Arabic. Both need a font this build does
-// not ship (and Arabic needs a right-to-left layout pass across every screen),
-// so either would arrive as boxes or a broken layout rather than as a
-// language. Say the word and they become a project of their own.
-//
-// HOW IT WORKS, and why it is keyed on the ENGLISH SENTENCE rather than on
-// codes like `login.button`:
-//   - a string with no entry falls back to its own English, automatically.
-//     There is no such thing as a missing-key placeholder reaching a member.
-//   - adding a string to a screen costs nothing; it simply reads English
-//     until somebody puts a row in the table below.
-//   - and it makes the DOM sweep below possible, which is what gives this
-//     real coverage without rewriting several hundred template literals.
-var LANGS = [
-  { code: 'en',  name: 'English',     native: 'English' },
-  { code: 'lg',  name: 'Luganda',     native: 'Luganda' },
-  { code: 'sw',  name: 'Swahili',     native: 'Kiswahili' },
-  { code: 'fr',  name: 'French',      native: 'Français' },
-  { code: 'rw',  name: 'Kinyarwanda', native: 'Ikinyarwanda' },
-  { code: 'nyn', name: 'Runyankole',  native: 'Runyankore' },
-];
-var LANG_CODES = LANGS.map(l => l.code);
-var LANG = 'en';
-// What this country allows, from the region. Until the region lands it is
-// English alone -- one option is not a choice, so the button stays hidden
-// rather than flashing a list that is about to change.
-var LANG_ALLOWED = ['en'];
-var LANG_STORE_KEY = 'potato_lang';
-// ── THE TABLE ──
-// One row per English string: [english, lg, sw, fr, rw, nyn].
-//
-// AN EMPTY CELL MEANS "NOT TRANSLATED YET" AND FALLS BACK TO ENGLISH, AND
-// THAT IS USED ON PURPOSE. A wrong word on a money screen is worse than an
-// English one -- a member who reads "Withdraw" in English still withdraws,
-// while a member who reads a mistranslation may do something else entirely.
-// So where the right word was not certain the cell is left empty rather than
-// filled with a guess. Swahili and French are complete; the three Bantu
-// columns cover the words a member meets on every screen and should be read
-// over by a native speaker before launch -- every correction is one cell in
-// this table, nothing else moves.
-//
-// A cell that simply repeats its English is treated as empty by DICT, and
-// test-languages.js FAILS one, so it must be left blank instead. French for
-// "Messages" is "Messages" -- that cell is blank, because a filled cell is a
-// claim somebody chose the word, and the two behave identically at runtime.
-//
-// Regenerated by apply-translations.py, which merges a translation answer in
-// without ever letting a blank overwrite a filled cell -- so hand edits here
-// survive a re-run, and this header is the only thing that has to be kept.
-// ==== I18N TABLE: SHARED WITH THE ADMIN PANEL - BEGIN ====
-// build-admin.js lifts these two tables into the admin bundle as well, and the
-// panel then CONCATENATES its own rows onto them. That is not tidiness: the
-// panel and the app say "Deposit", "Withdraw", "Save", "Cancel", "Settings",
-// "Pending", "Failed" and a couple of hundred more words in common, and two
-// hand-kept copies of those would drift word by word until the same button
-// read differently on the two screens.
-var LANG_ROWS = [
-  // [english, lg, sw, fr, rw, nyn] -- an EMPTY cell means "not translated yet" and
-  // falls back to English at runtime. Regenerated by apply-translations.py;
-  // hand edits are kept, since a blank in an answer never overwrites a filled cell.
-  ['Home', 'Awaka', 'Nyumbani', 'Accueil', 'Ahabanza', 'Omuka'],
-  ['Products', 'Ebyamaguzi', 'Bidhaa', 'Produits', 'Ibicuruzwa', 'Ebyamaguzi'],
-  ['My Products', 'Ebyange', 'Bidhaa Zangu', 'Mes Produits', 'Ibyanjye', 'Ebyangye'],
-  ['Referral', 'Okuyita', 'Mwaliko', 'Parrainage', 'Gutumira', 'Okweta'],
-  ['Team', 'Ekibiina', 'Timu', '\u00c9quipe', 'Itsinda', 'Ekibiina'],
-  ['Account', 'Akawunti', 'Akaunti', 'Compte', 'Konti', 'Akaunti'],
-  ['Deposit', 'Teeka Ssente', 'Weka Pesa', 'D\u00e9p\u00f4t', 'Kubitsa', 'Ta Sente'],
-  ['Withdraw', 'Ggyamu Ssente', 'Toa Pesa', 'Retrait', 'Kubikuza', 'Ihamu Sente'],
-  ['LOGIN', 'YINGIRA', 'INGIA', 'CONNEXION', 'INJIRA', 'TAAHA'],
-  ['SIGN UP', 'WEEWANDIISE', 'JISAJILI', 'S\'INSCRIRE', 'IYANDIKISHE', 'YEEWANDIISE'],
-  ['Log In', 'Yingira', 'Ingia', 'Connexion', 'Injira', 'Taaha'],
-  ['Sign Up', 'Weewandiise', 'Jisajili', 'S\'inscrire', 'Iyandikishe', 'Yeewandiise'],
-  ['Log Out', 'Fuluma', 'Toka', 'D\u00e9connexion', 'Sohoka', 'Shohoka'],
-  ['Enter phone number', 'Wandiika ennamba ya ssimu', 'Weka namba ya simu', 'Entrez le num\u00e9ro de t\u00e9l\u00e9phone', 'Andika nimero ya telefone', 'Handiika enamba ya esimu'],
-  ['Enter password', 'Wandiika ekisumuluzo', 'Weka nenosiri', 'Entrez le mot de passe', 'Andika ijambobanga', 'Handiika ekisumuruzo'],
-  ['Remember me', 'Onjjukire', 'Nikumbuke', 'Se souvenir de moi', 'Unyibuke', 'Onyijuke'],
-  ['Referral code', 'Koodi y\'Okuyita', 'Msimbo wa mwaliko', 'Code de parrainage', 'Kode yo gutumira', 'Koodi y\'Okweta'],
-  ['Logging in\u2026', 'Oyingira\u2026', 'Inaingia\u2026', 'Connexion en cours\u2026', 'Urimo kwinjira\u2026', 'Nootaaha\u2026'],
-  ['Creating your account\u2026', 'Tukolawo akawunti yo\u2026', 'Inatengeneza akaunti yako\u2026', 'Cr\u00e9ation de votre compte\u2026', 'Turimo gushyiraho konti yawe\u2026', 'Nitukora akaunti yaawe\u2026'],
-  ['Wallet', 'Ensawo', 'Pochi', 'Portefeuille', 'Umufuka', 'Ensaho'],
-  ['Messages', 'Obubaka', 'Ujumbe', '=', 'Ubutumwa', 'Obutumwa'],
-  ['Transaction Statement', 'Ebiwandiiko bya Ssente', 'Rekodi ya Salio', 'Historique du solde', 'Amateka y\'amafaranga', 'Ebihandiiko bya Sente'],
-  ['Rules and Regulations', '', '', '', '', ''],
-  ['Login successful ✓', '', '', '', '', ''],
-  ['Login Password', 'Ekisumuluzo ky\'Okuyingira', 'Nenosiri la Kuingia', 'Mot de passe de connexion', 'Ijambobanga ryo kwinjira', 'Ekisumuruzo ky\'Okutaaha'],
-  ['Trade Password', 'Ekisumuluzo ky\'Okusuubula', 'Nenosiri la Malipo', 'Mot de passe de transaction', 'Ijambobanga ry\'ubucuruzi', 'Ekisumuruzo ky\'Okushuubura'],
-  ['Download APP', 'Tikka APP', 'Pakua APP', 'T\u00e9l\u00e9charger l\'application', 'Kuramo APP', 'Tikka APP'],
-  ['Language', 'Olulimi', 'Lugha', 'Langue', 'Ururimi', 'Orurimi'],
-  ['SETTINGS', 'ENTEEKATEEKA', 'MIPANGILIO', 'PARAM\u00c8TRES', 'IGENAMITERERE', 'ENTEEKATEEKA'],
-  ['Cancel', 'Sazaamu', 'Ghairi', 'Annuler', 'Hagarika', 'Sazamu'],
-  ['Confirm', 'Kakasa', 'Thibitisha', 'Confirmer', 'Emeza', 'Hamya'],
-  ['Submit', 'Weereza', 'Wasilisha', 'Envoyer', 'Ohereza', 'Oherereza'],
-  ['Save', 'Tereka', 'Hifadhi', 'Enregistrer', 'Bika', 'Bika'],
-  ['Copy', 'Koppa', 'Nakili', 'Copier', 'Koporora', 'Koppa'],
-  ['Copied', 'Kikoppeddwa', 'Imenakiliwa', 'Copi\u00e9', 'Byakoporowe', 'Kikoppirwe'],
-  ['Amount', 'Omuwendo', 'Kiasi', 'Montant', 'Ingano', 'Omuhendo'],
-  ['Balance', 'Ebisigaddewo', 'Salio', 'Solde', 'Amafaranga asigaye', 'Esigaireho'],
-  ['Buy Now', 'Gula Kati', 'Nunua Sasa', 'Acheter', 'Gura Ubu', 'Gura Hati'],
-  ['Total Team', 'Ekibiina Kyonna', 'Timu Yote', '\u00c9quipe totale', 'Itsinda ryose', 'Ekibiina Kyona'],
-  ['Commission Rate', 'Omuwendo gwa Kamisoni', 'Kiwango cha Kamisheni', 'Taux de commission', 'Igipimo cya komisiyo', 'Omuhendo gwa Kamisoni'],
-  ['Level 1', 'Omutendera 1', 'Ngazi 1', 'Niveau 1', 'Urwego 1', 'Omurengo 1'],
-  ['Level 2', 'Omutendera 2', 'Ngazi 2', 'Niveau 2', 'Urwego 2', 'Omurengo 2'],
-  ['Level 3', 'Omutendera 3', 'Ngazi 3', 'Niveau 3', 'Urwego 3', 'Omurengo 3'],
-  ['Purchase', 'Okugula', 'Manunuzi', 'Achat', 'Kugura', 'Okugura'],
-  ['Total Purchase', 'Byonna By\'ogudde', 'Jumla ya Manunuzi', 'Achat total', 'Byose waguze', 'Byona Ebi Ogwire'],
-  ['No members at this level yet.', 'Tewali bantu ku mutendera guno.', 'Bado hakuna wanachama katika ngazi hii.', 'Aucun membre \u00e0 ce niveau pour l\'instant.', 'Nta banyamuryango bari kuri uru rwego.', 'Tihariho bantu aha murengo ogu.'],
-  ['Ongoing', 'Kigenda mu maaso', 'Inaendelea', 'En cours', 'Birakomeza', 'Nikigyenda omu maisho'],
-  ['Matured', 'Kituukiridde', 'Imekamilika', 'Arriv\u00e9 \u00e0 terme', 'Byarangiye', 'Kihikire'],
-  ['All', 'Byonna', 'Zote', 'Tout', 'Byose', 'Byona'],
-  ['Select Amount', 'Londa Omuwendo', 'Chagua Kiasi', 'Choisissez le montant', 'Hitamo ingano', 'Toorana Omuhendo'],
-  ['Payment Phone', 'Essimu y\'Okusasula', 'Simu ya Malipo', 'T\u00e9l\u00e9phone de paiement', 'Telefone yo kwishyura', 'Esimu y\'Okushashura'],
-  ['Confirm Deposit', 'Kakasa Okuteeka Ssente', 'Thibitisha Kuweka Pesa', 'Confirmer le d\u00e9p\u00f4t', 'Emeza kubitsa', 'Hamya Okuta Sente'],
-  ['Network error. Try again.', 'Yintaneeti erina ekizibu. Ddamu ogezeeko.', 'Hitilafu ya mtandao. Jaribu tena.', 'Erreur de r\u00e9seau. R\u00e9essayez.', 'Ikibazo cy\'umurongo. Ongera ugerageze.', 'Enetiweki eine ekizibu. Ogarukyemu.'],
-  ['About', 'Ebikwata ku', 'Kuhusu', '\u00c0 propos', 'Ibyerekeye', 'Ebirikukwata aha'],
-  ['Account:', 'Akawunti:', 'Akaunti:', 'Compte :', 'Konti:', 'Akaunti:'],
-  ['Back', 'Ddayo', 'Rudi', 'Retour', 'Subira inyuma', 'Garuka'],
-  ['Channel', 'Ekitundu', 'Chaneli', 'Canal', 'Umuyoboro', 'Ekitundu'],
-  ['Click', 'Nyiga', 'Bonyeza', 'Cliquez', 'Kanda', 'Kanda'],
-  ['Close', 'Ggalawo', 'Funga', 'Fermer', 'Funga', 'Kinga'],
-  ['COLLECT', 'TWALA', 'CHUKUA', 'R\u00c9CUP\u00c9RER', 'FATA', 'TWARA'],
-  ['Congratulations!', 'Tukusanyukidde!', 'Hongera!', 'F\u00e9licitations !', 'Turagushimira!', 'Tukushemereirwe!'],
-  ['Daily', 'Buli lunaku', 'Kila siku', 'Quotidien', 'Buri munsi', 'Buri izooba'],
-  ['Days', 'Ennaku', 'Siku', 'Jours', 'Iminsi', 'Ebiro'],
-  ['Download', 'Tikka', 'Pakua', 'T\u00e9l\u00e9charger', 'Kuramo', 'Tikka'],
-  ['Earned', 'Ofunye', 'Umepata', 'Gagn\u00e9', 'Wabonye', 'Otungire'],
-  ['Loading', 'Kitegekebwa', 'Inapakia', 'Chargement', 'Birimo gupakirwa', 'Nikitegyekwa'],
-  ['Loading...', 'Kitegekebwa...', 'Inapakia...', 'Chargement...', 'Birimo gupakirwa...', 'Nikitegyekwa...'],
-  ['Loading\u2026', 'Kitegekebwa\u2026', 'Inapakia\u2026', 'Chargement\u2026', 'Birimo gupakirwa\u2026', 'Nikitegyekwa\u2026'],
-  ['Price', 'Omuwendo', 'Bei', 'Prix', 'Igiciro', 'Omuhendo'],
-  ['Recharge', 'Teeka Ssente', 'Weka Pesa', '=', 'Kubitsa', 'Ta Sente'],
-  ['Refresh', 'Ddamu ogezeeko', 'Onyesha upya', 'Actualiser', 'Vugurura', 'Garukamu'],
-  // Whole sentences that inline markup used to break into pieces. The block
-  // pass keys on the flattened text, so these are written exactly as they
-  // read on screen with the <b> taken out.
-  ['Click "Refresh" to check if it is successful', 'Nyiga "Ddamu ogezeeko" okukebera oba kiwedde bulungi', 'Bonyeza "Onyesha upya" ili kuangalia kama imefanikiwa', 'Cliquez sur "Actualiser" pour vérifier si le paiement a abouti', 'Kanda "Vugurura" kugira ngo urebe ko byagenze neza', 'Kanda "Garukamu" kureeba yaaba ehikire gurungi'],
-  ['*Filling in the wrong payment SMS/transaction ID will result in payment loss.', '*Okuwandiika obubaka oba nnamba y\u2019entambula ekyamu kirireetera ssente okubula.', '*Kujaza SMS au kitambulisho cha muamala kisicho sahihi kutasababisha upotevu wa fedha.', '*Saisir un SMS ou un identifiant de transaction incorrect entra\u00eenera la perte du paiement.', '*Kwandika SMS cyangwa indangamuntu y\u2019ubwishyu itari yo bizatuma amafaranga abura.', '*Okuhandiika obutumwa nari namba y\u2019okworeka ebitari byo nikireetera sente kuburaho.'],
-  ['Service', 'Obuyambi', 'Huduma', '=', 'Serivisi', 'Obuhwezi'],
-  ['Total', 'Omugatte', 'Jumla', '=', 'Igiteranyo', 'Byona hamwe'],
-  ['User', 'Omukozesa', 'Mtumiaji', 'Utilisateur', 'Ukoresha', 'Omukozesa'],
-  ['Verify', 'Kakasa', 'Hakiki', 'V\u00e9rifier', 'Genzura', 'Hamya'],
-  ['Welcome', 'Tukwaniriza', 'Karibu', 'Bienvenue', 'Murakaza neza', 'Mukaaze gye'],
-  ['Account Holder', 'Nnannyini Akawunti', 'Mwenye Akaunti', 'Titulaire du compte', 'Nyir\'ikonti', 'Nyiini Akaunti'],
-  ['Account Name:', 'Erinnya ku Akawunti:', 'Jina la Akaunti:', 'Nom du compte :', 'Izina rya konti:', 'Eiziina rya Akaunti:'],
-  ['Amount paid:', 'Ssente ezisasuddwa:', 'Kiasi kilicholipwa:', 'Montant pay\u00e9 :', 'Amafaranga yishyuwe:', 'Sente ezishashuurwe:'],
-  ['Available Balance', 'Ssente Eziriwo', 'Salio Lililopo', 'Solde disponible', 'Amafaranga ahari', 'Sente Eziriho'],
-  ['Change language', 'Kyusa olulimi', 'Badilisha lugha', 'Changer de langue', 'Hindura ururimi', 'Hindura orurimi'],
-  ['Coming Soon', 'Kijja mangu', 'Inakuja Hivi Karibuni', 'Bient\u00f4t disponible', 'Biraza vuba', 'Nibiija juba'],
-  ['Confirm Withdraw', 'Kakasa Okuggyamu', 'Thibitisha Kutoa Pesa', 'Confirmer le retrait', 'Emeza kubikuza', 'Hamya Okwihamu'],
-  ['Copy account', 'Koppa akawunti', 'Nakili akaunti', 'Copier le compte', 'Koporora konti', 'Koppa akaunti'],
-  ['Copy link', 'Koppa lyanka', 'Nakili kiungo', 'Copier le lien', 'Koporora umurongo', 'Koppa orunyiriri'],
-  ['Copy this', 'Koppa kino', 'Nakili hii', 'Copier ceci', 'Koporora ibi', 'Koppa eki'],
-  ['Current Balance', 'Ssente Eziriwo Kati', 'Salio la Sasa', 'Solde actuel', 'Amafaranga ariho ubu', 'Sente Eziriho Hati'],
-  ['Current streak', 'Ennaku z\'obutasalako', 'Mfululizo wa sasa', 'S\u00e9rie en cours', 'Umubare w\'iminsi ikurikiranye', 'Orukurato hati'],
-  ['Customer Service', 'Obuyambi eri Abaguzi', 'Huduma kwa Wateja', 'Service client', 'Serivisi z\'abakiriya', 'Obuhwezi bw\'Abaguzi'],
-  ['Daily Check-in', 'Okukyalira Buli Lunaku', 'Kuhudhuria Kila Siku', 'Pointage quotidien', 'Kwiyandikisha buri munsi', 'Okwoleka Buri Izooba'],
-  ['Deposit Instructions', 'Ebiragiro by\'Okuteeka Ssente', 'Maelekezo ya Kuweka Pesa', 'Instructions de d\u00e9p\u00f4t', 'Amabwiriza yo kubitsa', 'Ebiragiro by\'Okuta Sente'],
-  ['Edit Wallet', 'Kyusa Ensawo', 'Hariri Pochi', 'Modifier le portefeuille', 'Hindura umufuka', 'Hindura Ensaho'],
-  ['Full name', 'Amannya gonna', 'Jina kamili', 'Nom complet', 'Amazina yose', 'Amaziina goona'],
-  ['Help Centre', 'Ekifo ky\'Obuyambi', 'Kituo cha Msaada', 'Centre d\'aide', 'Ikigo cy\'ubufasha', 'Ekicweka ky\'Obuhwezi'],
-  ['Invitation Reward', 'Empeera y\'Okuyita', 'Zawadi ya Mwaliko', 'R\u00e9compense de parrainage', 'Igihembo cyo gutumira', 'Empeera y\'Okweta'],
-  ['Join Channel', 'Yingira mu Kitundu', 'Jiunge na Chaneli', 'Rejoindre le canal', 'Injira mu muyoboro', 'Taaha omu Kitundu'],
-  ['Loading activity\u2026', 'Tuleeta ebipya\u2026', 'Inapakia shughuli\u2026', 'Chargement de l\'activit\u00e9\u2026', 'Birimo gupakirwa\u2026', 'Nituleeta ebisya\u2026'],
-  ['Mystery Treasure', 'Eky\'obugagga Ekyekusifu', 'Hazina ya Siri', 'Tr\u00e9sor myst\u00e8re', 'Ubutunzi bw\'ibanga', 'Obugaiga Obw\'ekyama'],
-  ['OPEN CHEST', 'GGULAWO ESSANDUKU', 'FUNGUA SANDUKU', 'OUVRIR LE COFFRE', 'FUNGURA AGASANDUKU', 'IGURA ESANDUUKU'],
-  ['Opening in', 'Kigguka mu', 'Inafunguka baada ya', 'Ouverture dans', 'Bifungura mu', 'Nikyiguka omu'],
-  ['Payment Amount:', 'Omuwendo gw\'Okusasula:', 'Kiasi cha Malipo:', 'Montant du paiement :', 'Amafaranga yo kwishyura:', 'Omuhendo gw\'Okushashura:'],
-  ['Payment completed?', 'Osasudde?', 'Malipo yamekamilika?', 'Paiement effectu\u00e9 ?', 'Wishyuye?', 'Oshashwire?'],
-  ['Payment reminder', 'Ekijjukizo ky\'okusasula', 'Kikumbusho cha malipo', 'Rappel de paiement', 'Kwibutsa kwishyura', 'Ekijwekyezo ky\'okushashura'],
-  ['Share URL', 'Gaba Lyanka', 'Shiriki Kiungo', 'Partager le lien', 'Sangiza umurongo', 'Gabana Orunyiriri'],
-  ['Show password', 'Laga ekisumuluzo', 'Onyesha nenosiri', 'Afficher le mot de passe', 'Erekana ijambobanga', 'Yoreka ekisumuruzo'],
-  ['Telegram Group', 'Ekibiina kya Telegram', 'Kikundi cha Telegram', 'Groupe Telegram', 'Itsinda rya Telegram', 'Ekibiina kya Telegram'],
-  ['Total Amount:', 'Omugatte:', 'Jumla ya Kiasi:', 'Montant total :', 'Igiteranyo:', 'Byona hamwe:'],
-  ['Total Earned', 'Byonna By\'ofunye', 'Jumla Uliyopata', 'Total gagn\u00e9', 'Byose wabonye', 'Byona Ebi Otungire'],
-  ['Total Invested', 'Byonna By\'oteeseemu', 'Jumla Uliyowekeza', 'Total investi', 'Byose washoye', 'Byona Ebi Oteiremu'],
-  ['TREASURE CHEST', 'ESSANDUKU LY\'OBUGAGGA', 'SANDUKU LA HAZINA', 'COFFRE AU TR\u00c9SOR', 'AGASANDUKU K\'UBUTUNZI', 'ESANDUUKU Y\'OBUGAIGA'],
-  ['Wallet Account', 'Akawunti y\'Ensawo', 'Akaunti ya Pochi', 'Compte du portefeuille', 'Konti y\'umufuka', 'Akaunti y\'Ensaho'],
-  ['Wallet Balance', 'Ssente mu Nsawo', 'Salio la Pochi', 'Solde du portefeuille', 'Amafaranga mu mufuka', 'Sente omu Nsaho'],
-  ['Wallet Provider', 'Kkampuni y\'Ensawo', 'Mtoa Huduma wa Pochi', 'Op\u00e9rateur du portefeuille', 'Utanga serivisi y\'umufuka', 'Kampuni y\'Ensaho'],
-  ['Wallet saved', 'Ensawo etereddwa', 'Pochi imehifadhiwa', 'Portefeuille enregistr\u00e9', 'Umufuka wabitswe', 'Ensaho ebiikirwe'],
-  ['WhatsApp Group', 'Ekibiina kya WhatsApp', 'Kikundi cha WhatsApp', 'Groupe WhatsApp', 'Itsinda rya WhatsApp', 'Ekibiina kya WhatsApp'],
-  ['WhatsApp Support', 'Obuyambi ku WhatsApp', 'Msaada wa WhatsApp', 'Assistance WhatsApp', 'Ubufasha kuri WhatsApp', 'Obuhwezi aha WhatsApp'],
-  ['Withdrawal Instructions', 'Ebiragiro by\'Okuggyamu Ssente', 'Maelekezo ya Kutoa Pesa', 'Instructions de retrait', 'Amabwiriza yo kubikuza', 'Ebiragiro by\'Okwihamu Sente'],
-  ['Withdrawal Wallet', 'Ensawo y\'Okuggyamu', 'Pochi ya Kutoa Pesa', 'Portefeuille de retrait', 'Umufuka wo kubikuza', 'Ensaho y\'Okwihamu'],
-  ['You opened', 'Oggudde', 'Umefungua', 'Vous avez ouvert', 'Wafunguye', 'Oigwire'],
-  ['You won', 'Owanguddemu', 'Umeshinda', 'Vous avez gagn\u00e9', 'Watsinze', 'Osingwire'],
-  ['You\'ll receive:', 'Ojja kufuna:', 'Utapokea:', 'Vous recevrez :', 'Uzabona:', 'Noija kutunga:'],
-  ['Your Wallet', 'Ensawo Yo', 'Pochi Yako', 'Votre portefeuille', 'Umufuka wawe', 'Ensaho Yaawe'],
-  ['Account Holder Name', 'Erinnya lya Nnannyini Akawunti', 'Jina la Mwenye Akaunti', 'Nom du titulaire du compte', 'Izina rya nyir\'ikonti', 'Eiziina rya Nyiini Akaunti'],
-  ['Confirm Login Password', 'Kakasa Ekisumuluzo ky\'Okuyingira', 'Thibitisha Nenosiri la Kuingia', 'Confirmez le mot de passe de connexion', 'Emeza ijambobanga ryo kwinjira', 'Hamya Ekisumuruzo ky\'Okutaaha'],
-  ['Confirm New Password', 'Kakasa Ekisumuluzo Ekiggya', 'Thibitisha Nenosiri Jipya', 'Confirmez le nouveau mot de passe', 'Emeza ijambobanga rishya', 'Hamya Ekisumuruzo Ekisya'],
-  ['COPY & PAY', 'KOPPA OSASULE', 'NAKILI NA LIPA', 'COPIER ET PAYER', 'KOPORORA WISHYURE', 'KOPPA OSHASHURE'],
-  ['Copy account name', 'Koppa erinnya ly\'akawunti', 'Nakili jina la akaunti', 'Copier le nom du compte', 'Koporora izina rya konti', 'Koppa eiziina rya akaunti'],
-  ['Copy Invite Link', 'Koppa Lyanka ly\'Okuyita', 'Nakili Kiungo cha Mwaliko', 'Copier le lien d\'invitation', 'Koporora umurongo wo gutumira', 'Koppa Orunyiriri rw\'Okweta'],
-  ['Could not copy', 'Tekikoppeddwa', 'Imeshindwa kunakili', 'Copie impossible', 'Ntibyashobotse gukoporora', 'Tikikoppirwe'],
-  ['Enter trade password', 'Wandiika ekisumuluzo ky\'okusuubula', 'Weka nenosiri la malipo', 'Entrez le mot de passe de transaction', 'Andika ijambobanga ry\'ubucuruzi', 'Handiika ekisumuruzo ky\'okushuubura'],
-  ['Enter your password.', 'Wandiika ekisumuluzo kyo.', 'Weka nenosiri lako.', 'Entrez votre mot de passe.', 'Andika ijambobanga ryawe.', 'Handiika ekisumuruzo kyaawe.'],
-  ['How it works', 'Engeri gye kikolamu', 'Jinsi inavyofanya kazi', 'Comment \u00e7a marche', 'Uko bikora', 'Oku kirikukora'],
-  ['Login password changed', 'Ekisumuluzo ky\'okuyingira kikyusiddwa', 'Nenosiri la kuingia limebadilishwa', 'Mot de passe de connexion modifi\u00e9', 'Ijambobanga ryo kwinjira ryahinduwe', 'Ekisumuruzo ky\'okutaaha kihindwiirwe'],
-  ['New Login Password', 'Ekisumuluzo Ekiggya eky\'Okuyingira', 'Nenosiri Jipya la Kuingia', 'Nouveau mot de passe de connexion', 'Ijambobanga rishya ryo kwinjira', 'Ekisumuruzo Ekisya ky\'Okutaaha'],
-  ['New Trade Password', 'Ekisumuluzo Ekiggya eky\'Okusuubula', 'Nenosiri Jipya la Malipo', 'Nouveau mot de passe de transaction', 'Ijambobanga rishya ry\'ubucuruzi', 'Ekisumuruzo Ekisya ky\'Okushuubura'],
-  ['No messages yet.', 'Tewali bubaka.', 'Hakuna ujumbe bado.', 'Aucun message pour l\'instant.', 'Nta butumwa buraboneka.', 'Tihariho butumwa.'],
-  ['No more data', 'Tewali birala', 'Hakuna data zaidi', 'Plus de donn\u00e9es', 'Nta bindi bihari', 'Tihariho bindi'],
-  ['No products yet.', 'Tewali byamaguzi.', 'Hakuna bidhaa bado.', 'Aucun produit pour l\'instant.', 'Nta bicuruzwa biraboneka.', 'Tihariho byamaguzi.'],
-  ['Nothing here yet.', 'Tewali kantu wano.', 'Hakuna kitu hapa bado.', 'Rien ici pour l\'instant.', 'Nta kintu kiraboneka hano.', 'Tihariho kintu hanu.'],
-  ['Old Login Password', 'Ekisumuluzo Ekikadde eky\'Okuyingira', 'Nenosiri la Zamani la Kuingia', 'Ancien mot de passe de connexion', 'Ijambobanga rya kera ryo kwinjira', 'Ekisumuruzo Ekikuru ky\'Okutaaha'],
-  ['Old Trade Password', 'Ekisumuluzo Ekikadde eky\'Okusuubula', 'Nenosiri la Zamani la Malipo', 'Ancien mot de passe de transaction', 'Ijambobanga rya kera ry\'ubucuruzi', 'Ekisumuruzo Ekikuru ky\'Okushuubura'],
-  ['Open treasure chest', 'Ggulawo essanduku ly\'obugagga', 'Fungua sanduku la hazina', 'Ouvrir le coffre au tr\u00e9sor', 'Fungura agasanduku k\'ubutunzi', 'Igura esanduuku y\'obugaiga'],
-  ['Processing your deposit', 'Tukola ku ssente zo', 'Tunashughulikia malipo yako', 'Traitement de votre recharge', 'Turimo gutunganya ubwishyu bwawe', 'Nitukora aha sente zaawe'],
-  // Owner asked directly why the deposit-status screen "only changes small
-  // things" under a non-English language -- these three status titles are
-  // the reason: the screen was rewritten (numbered steps, new copy) without
-  // these ever being added here, so every status past the first one has
-  // been silently falling back to English regardless of language. Luganda/
-  // Kinyarwanda/Runyankole left blank on the two rows below where the
-  // nuance was not certain enough to commit, same policy this table
-  // already states at its own top -- built from vocabulary already vetted
-  // elsewhere in this table ('Confirmed'/'kakasibwa' family, 'Failed'/
-  // 'not confirmed yet'), not guessed fresh, but still needs a native read
-  // before launch like the rest of this table's Bantu columns do.
-  ['Payment confirmed', 'Okusasula Kukakasiddwa', 'Malipo Yamethibitishwa', 'Paiement confirm\u00e9', 'Kwishyura Byemejwe', 'Okushashura Kwahamiziibwe'],
-  ['Payment not completed', 'Okusasula Tekuwedde', 'Malipo Hayajakamilika', 'Paiement non termin\u00e9', 'Kwishyura Ntibyarangiye', 'Okushashura Tikwahikire'],
-  ['Still waiting for the provider', '', 'Bado tunasubiri jibu', "Toujours en attente d'une r\u00e9ponse", '', ''],
-  ['Remaining to Earn', 'Ebisigadde Okufuna', 'Kilichobaki Kupata', 'Reste \u00e0 gagner', 'Bisigaye kubona', 'Ebisigaire Okutunga'],
-  ['SAVE LOGIN PASSWORD', 'TEREKA EKISUMULUZO KY\'OKUYINGIRA', 'HIFADHI NENOSIRI LA KUINGIA', 'ENREGISTRER LE MOT DE PASSE', 'BIKA IJAMBOBANGA RYO KWINJIRA', 'BIIKA EKISUMURUZO KY\'OKUTAAHA'],
-  ['SAVE TRADE PASSWORD', 'TEREKA EKISUMULUZO KY\'OKUSUUBULA', 'HIFADHI NENOSIRI LA MALIPO', 'ENREGISTRER LE MOT DE PASSE DE TRANSACTION', 'BIKA IJAMBOBANGA RY\'UBUCURUZI', 'BIIKA EKISUMURUZO KY\'OKUSHUUBURA'],
-  ['Select Payment Method', 'Londa Engeri y\'Okusasula', 'Chagua Njia ya Malipo', 'Choisissez le mode de paiement', 'Hitamo uburyo bwo kwishyura', 'Toorana Omuringo gw\'Okushashura'],
-  ['Select wallet provider', 'Londa kkampuni y\'ensawo', 'Chagua mtoa huduma wa pochi', 'Choisissez l\'op\u00e9rateur du portefeuille', 'Hitamo utanga serivisi y\'umufuka', 'Toorana kampuni y\'ensaho'],
-  ['Tap to retry', 'Nyiga oddemu ogezeeko', 'Gusa ujaribu tena', 'Appuyez pour r\u00e9essayer', 'Kanda wongere ugerageze', 'Kanda ogarukyemu'],
-  ['Trade password changed', 'Ekisumuluzo ky\'okusuubula kikyusiddwa', 'Nenosiri la malipo limebadilishwa', 'Mot de passe de transaction modifi\u00e9', 'Ijambobanga ry\'ubucuruzi ryahinduwe', 'Ekisumuruzo ky\'okushuubura kihindwiirwe'],
-  ['Transaction expires later', 'Okusasula kuggwaako oluvannyuma', 'Muamala utaisha baadaye', 'La transaction expire plus tard', 'Ubwishyu buzarangira nyuma', 'Okushashura nikuhwaho bwanyima'],
-  ['Your payment account:', 'Akawunti yo ey\'okusasula:', 'Akaunti yako ya malipo:', 'Votre compte de paiement :', 'Konti yawe yo kwishyura:', 'Akaunti yaawe y\'okushashura:'],
-  ['account and make payment', 'akawunti osasule', 'akaunti na ulipe', 'compte et effectuez le paiement', 'konti maze wishyure', 'akaunti oshashure'],
-  ['Already have an account?', 'Olina dda akawunti?', 'Tayari una akaunti?', 'Vous avez d\u00e9j\u00e0 un compte ?', 'Usanzwe ufite konti?', 'Oine akaunti?'],
-  ['Enter a valid amount', 'Wandiika omuwendo omutuufu', 'Weka kiasi sahihi', 'Entrez un montant valide', 'Andika ingano nyayo', 'Handiika omuhendo ogurikwecwera'],
-  ['Enter a valid amount.', 'Wandiika omuwendo omutuufu.', 'Weka kiasi sahihi.', 'Entrez un montant valide.', 'Andika ingano nyayo.', 'Handiika omuhendo ogurikwecwera.'],
-  ['Enter treasure chest key', 'Wandiika ekisumuluzo ky\'essanduku', 'Weka ufunguo wa sanduku la hazina', 'Entrez la cl\u00e9 du coffre au tr\u00e9sor', 'Andika urufunguzo rw\'agasanduku', 'Handiika ekishumuruzo ky\'esanduuku'],
-  ['Recharge time: 7*24 hours.', 'Osobola okuteeka ssente essaawa 24, ennaku 7.', 'Muda wa kuweka pesa: saa 24, siku 7.', 'Recharge disponible 24 h/24, 7 j/7.', 'Ushobora kubitsa amasaha 24 ku munsi, iminsi 7.', 'Nobaasa kuta sente eshaaha 24, ebiro 7.'],
-  ['Referral code is required', 'Koodi y\'okuyita yeetaagisa', 'Msimbo wa mwaliko unahitajika', 'Le code de parrainage est obligatoire', 'Kode yo gutumira irakenewe', 'Koodi y\'okweta neeyetengyesa'],
-  ['Select your wallet provider.', 'Londa kkampuni y\'ensawo yo.', 'Chagua mtoa huduma wa pochi yako.', 'Choisissez l\'op\u00e9rateur de votre portefeuille.', 'Hitamo utanga serivisi y\'umufuka wawe.', 'Toorana kampuni y\'ensaho yaawe.'],
-  ['Trade Password (6 digits)', 'Ekisumuluzo ky\'Okusuubula (ennamba 6)', 'Nenosiri la Malipo (tarakimu 6)', 'Mot de passe de transaction (6 chiffres)', 'Ijambobanga ry\'ubucuruzi (imibare 6)', 'Ekisumuruzo ky\'Okushuubura (enamba 6)'],
-  ['Bind your wallet before withdrawing.', 'Teekawo ensawo yo nga tonnaggyamu ssente.', 'Sajili pochi yako kabla ya kutoa pesa.', 'Enregistrez votre portefeuille avant de retirer.', 'Andikisha umufuka wawe mbere yo kubikuza.', 'Taho ensaho yaawe otakaihiremu sente.'],
-  ['Choose PAY-A or PAY B', 'Londa PAY-A oba PAY B', 'Chagua PAY-A au PAY B', 'Choisissez PAY-A ou PAY B', 'Hitamo PAY-A cyangwa PAY B', 'Toorana PAY-A nari PAY B'],
-  ['Click to refresh the results.', 'Nyiga oddemu olabe ebivudde mu.', 'Bonyeza ili kuonyesha matokeo upya.', 'Cliquez pour actualiser les r\u00e9sultats.', 'Kanda kugira ngo uvugurure ibisubizo.', 'Kanda ogarukyemu oreebe ebyarugiremu.'],
-  ['Could not load your plans.', 'Tetusobodde kuggya nteekateeka zo.', 'Imeshindwa kupakia mipango yako.', 'Impossible de charger vos plans.', 'Ntibyashobotse gupakira gahunda zawe.', 'Tikibaasiki kureeta enteekateeka zaawe.'],
-  ['Enter the account holder name.', 'Wandiika erinnya lya nnannyini akawunti.', 'Weka jina la mwenye akaunti.', 'Entrez le nom du titulaire du compte.', 'Andika izina rya nyir\'ikonti.', 'Handiika eiziina rya nyiini akaunti.'],
-  ['Enter your 6-digit Trade Password.', 'Wandiika ekisumuluzo kyo eky\'okusuubula ekya nnamba 6.', 'Weka nenosiri lako la malipo la tarakimu 6.', 'Entrez votre mot de passe de transaction \u00e0 6 chiffres.', 'Andika ijambobanga ryawe ry\'ubucuruzi rigizwe n\'imibare 6.', 'Handiika ekisumuruzo kyaawe ky\'okushuubura eky\'enamba 6.'],
-  ['Enter your current login password.', 'Wandiika ekisumuluzo kyo eky\'okuyingira ekiriwo kati.', 'Weka nenosiri lako la sasa la kuingia.', 'Entrez votre mot de passe de connexion actuel.', 'Andika ijambobanga ryawe ryo kwinjira urimo gukoresha.', 'Handiika ekisumuruzo kyaawe ky\'okutaaha ekiriho hati.'],
-  ['Insufficient balance, redirecting to deposit\u2026', 'Ssente tezimala, tukutwala ku kuteeka ssente\u2026', 'Salio halitoshi, tunakupeleka kuweka pesa\u2026', 'Solde insuffisant, redirection vers le d\u00e9p\u00f4t\u2026', 'Amafaranga ntahagije, turimo kukujyana mu kubitsa\u2026', 'Sente tizihikire, nituukutwara aha kuta sente\u2026'],
-  ['Please enter your payment account', 'Wandiika akawunti yo ey\'okusasula', 'Tafadhali weka akaunti yako ya malipo', 'Veuillez saisir votre compte de paiement', 'Nyamuneka andika konti yawe yo kwishyura', 'Handiika akaunti yaawe y\'okushashura'],
-  ['Please select a payment method', 'Londa engeri y\'okusasula', 'Tafadhali chagua njia ya malipo', 'Veuillez choisir un mode de paiement', 'Nyamuneka hitamo uburyo bwo kwishyura', 'Toorana omuringo gw\'okushashura'],
-  ['Please select the operator first', 'Sooka olonde kkampuni', 'Tafadhali chagua mtoa huduma kwanza', 'Veuillez d\'abord choisir l\'op\u00e9rateur', 'Nyamuneka banza uhitemo utanga serivisi', 'Banza otoorane kampuni'],
-  ['Send us your payment message', 'Tuweereze obubaka bw\'okusasula', 'Tutumie ujumbe wa malipo yako', 'Envoyez-nous votre message de paiement', 'Twoherereze ubutumwa bw\'ubwishyu bwawe', 'Otwohereze obutumwa bw\'okushashura'],
-  ['Showing your most recent records', 'Tulaga ebiwandiiko byo ebisembyeyo', 'Tunaonyesha rekodi zako za hivi karibuni', 'Affichage de vos enregistrements les plus r\u00e9cents', 'Twerekana amateka yawe ya vuba', 'Nituyoreka ebihandiiko byaawe ebya hati'],
-  ['Enter a valid wallet account number.', 'Wandiika ennamba ya akawunti y\'ensawo entuufu.', 'Weka namba sahihi ya akaunti ya pochi.', 'Entrez un num\u00e9ro de compte de portefeuille valide.', 'Andika nimero nyayo ya konti y\'umufuka.', 'Handiika enamba ya akaunti y\'ensaho erikwecwera.'],
-  ['Enter your current 6-digit trade password.', 'Wandiika ekisumuluzo kyo eky\'okusuubula ekiriwo kati eky\'ennamba 6.', 'Weka nenosiri lako la sasa la malipo la tarakimu 6.', 'Entrez votre mot de passe de transaction actuel \u00e0 6 chiffres.', 'Andika ijambobanga ryawe ry\'ubucuruzi urimo gukoresha rigizwe n\'imibare 6.', 'Handiika ekisumuruzo kyaawe ky\'okushuubura ekiriho hati eky\'enamba 6.'],
-  ['Login Password (at least 10 characters)', 'Ekisumuluzo ky\'Okuyingira (obutasingako bubonero 6)', 'Nenosiri la Kuingia (angalau herufi 10)', 'Mot de passe de connexion (10 caract\u00e8res minimum)', 'Ijambobanga ryo kwinjira (nibura inyuguti 10)', 'Ekisumuruzo ky\'Okutaaha (obukiri bubonero 6)'],
-  ['No channel link is set yet.', 'Tewannabaawo lyanka lya kitundu.', 'Hakuna kiungo cha chaneli kilichowekwa bado.', 'Aucun lien de canal n\'est encore d\u00e9fini.', 'Nta murongo w\'umuyoboro urashyirwaho.', 'Tihariho orunyiriri rw\'ekitundu.'],
-  ['Please enter the treasure chest key', 'Wandiika ekisumuluzo ky\'essanduku ly\'obugagga', 'Tafadhali weka ufunguo wa sanduku la hazina', 'Veuillez saisir la cl\u00e9 du coffre au tr\u00e9sor', 'Nyamuneka andika urufunguzo rw\'agasanduku k\'ubutunzi', 'Handiika ekishumuruzo ky\'esanduuku y\'obugaiga'],
-  ['Please enter your actual payment account', 'Wandiika akawunti yo ey\'okusasula ey\'amazima', 'Tafadhali weka akaunti halisi utakayotumia kulipa', 'Veuillez saisir le compte de paiement que vous utiliserez r\u00e9ellement', 'Nyamuneka andika konti nyayo uzakoresha wishyura', 'Handiika akaunti yaawe y\'okushashura ey\'amazima'],
-  ['Recharges are not available right now.', 'Okuteeka ssente tekusoboka kati.', 'Kuweka pesa hakupatikani kwa sasa.', 'Les recharges ne sont pas disponibles pour le moment.', 'Kubitsa ntibishoboka muri iki gihe.', 'Okuta sente tikirikubaasika hati.'],
-  ['to check if it is successful', 'okukebera oba kigenze bulungi', 'ili kuangalia kama imefanikiwa', 'pour v\u00e9rifier si le paiement a r\u00e9ussi', 'kugira ngo urebe niba byagenze neza', 'kureeba yaaba kigyenzire gye'],
-  ['Winnings go straight into your wallet.', 'Ebiwangulwa bigenda butereevu mu nsawo yo.', 'Ushindi huingia moja kwa moja kwenye pochi yako.', 'Les gains vont directement dans votre portefeuille.', 'Ibyo watsindiye bijya ako kanya mu mufuka wawe.', 'Ebi osiingwire nibigyenda butunu omu nsaho yaawe.'],
-  ['Approve the payment to complete your deposit.', 'Kkiriza okusasula omalirize okuteeka ssente.', 'Idhinisha malipo ili kukamilisha kuweka pesa.', 'Approuvez le paiement pour terminer votre recharge.', 'Emeza ubwishyu kugira ngo urangize kubitsa.', 'Ikiriza okushashura omarizeho okuta sente.'],
-  ['Check your phone for the payment prompt.', 'Kebera essimu yo olabe obubaka bw\'okusasula.', 'Angalia simu yako kwa ujumbe wa malipo.', 'V\u00e9rifiez votre t\u00e9l\u00e9phone pour la demande de paiement.', 'Reba kuri telefone yawe ubutumwa bwo kwishyura.', 'Reeba esimu yaawe oreebe obutumwa bw\'okushashura.'],
-  ['Enter the mobile money number to charge.', 'Wandiika ennamba ya mobile money gy\'oggyako ssente.', 'Weka namba ya mobile money itakayotozwa.', 'Entrez le num\u00e9ro mobile money \u00e0 d\u00e9biter.', 'Andika nimero ya mobile money izakurwaho amafaranga.', 'Handiika enamba ya mobile money ei orikwihaho sente.'],
-  ['Enter your key to unlock the reward', 'Wandiika ekisumuluzo kyo oggulewo empeera', 'Weka ufunguo wako ili kufungua zawadi', 'Entrez votre cl\u00e9 pour d\u00e9bloquer la r\u00e9compense', 'Andika urufunguzo rwawe ufungure igihembo', 'Handiika ekishumuruzo kyaawe oshumuurure empeera'],
-  ['Password must be at least 10 characters.', 'Ekisumuluzo kiteekwa okuba n\'obubonero obutasinga mu 10.', 'Nenosiri lazima liwe na angalau herufi 10.', 'Le mot de passe doit comporter au moins 10 caract\u00e8res.', 'Ijambobanga rigomba kuba rifite nibura inyuguti 10.', 'Ekisumuruzo kishemereire kugira obubonero obukiri 10.'],
-  ['Please do not save old account recharge.', 'Tokozesa kawunti ya dda okuteeka ssente.', 'Tafadhali usitumie akaunti ya zamani kuweka pesa.', 'N\'utilisez pas un ancien compte pour la recharge.', 'Nyamuneka ntugakoreshe konti ya kera wishyura.', 'Otakozesa akaunti ya ira okuta sente.'],
-  ['The mobile phone number format is incorrect', 'Ennamba ya ssimu tewandiikiddwa bulungi', 'Muundo wa namba ya simu si sahihi', 'Le format du num\u00e9ro de t\u00e9l\u00e9phone est incorrect', 'Imiterere ya nimero ya telefone si nyayo', 'Enamba ya esimu tehandiikirwe gye'],
-  ['The two login passwords do not match.', 'Ebisumuluzo ebibiri eby\'okuyingira tebifaanagana.', 'Manenosiri mawili ya kuingia hayafanani.', 'Les deux mots de passe de connexion ne correspondent pas.', 'Amagambobanga yombi yo kwinjira ntahuye.', 'Ebisumuruzo bibiri by\'okutaaha tibirikushushana.'],
-  ['The two new passwords do not match.', 'Ebisumuluzo ebiggya ebibiri tebifaanagana.', 'Manenosiri mawili mapya hayafanani.', 'Les deux nouveaux mots de passe ne correspondent pas.', 'Amagambobanga mashya yombi ntahuye.', 'Ebisumuruzo bibiri ebisya tibirikushushana.'],
-  ['Trade Password must be exactly 6 digits.', 'Ekisumuluzo ky\'okusuubula kiteekwa okuba nnamba 6 zokka.', 'Nenosiri la malipo lazima liwe tarakimu 6 haswa.', 'Le mot de passe de transaction doit comporter exactement 6 chiffres.', 'Ijambobanga ry\'ubucuruzi rigomba kuba rigizwe n\'imibare 6 gusa.', 'Ekisumuruzo ky\'okushuubura kishemereire kuba enamba 6 zoonka.'],
-  ['Earn daily wages by inviting members to invest.', 'Funa ssente buli lunaku ng\'oyita abantu okuteekamu ssente.', 'Pata malipo kila siku kwa kualika wengine kuwekeza.', 'Gagnez chaque jour en invitant des membres \u00e0 investir.', 'Injiza amafaranga buri munsi utumira abandi gushora.', 'Tunga sente buri izooba oyeta abantu kuteeramu sente.'],
-  ['Paste the payment SMS or transaction ID first', 'Sooka oteeke obubaka bw\'okusasula oba nnamba y\'okusasula', 'Kwanza bandika SMS ya malipo au namba ya muamala', 'Collez d\'abord le SMS de paiement ou l\'identifiant de la transaction', 'Banza ushyiremo SMS y\'ubwishyu cyangwa nimero y\'ubwishyu', 'Banza ota obutumwa bw\'okushashura nari enamba y\'okushashura'],
-  ['The two new trade passwords do not match.', 'Ebisumuluzo ebiggya eby\'okusuubula tebifaanagana.', 'Manenosiri mawili mapya ya malipo hayafanani.', 'Les deux nouveaux mots de passe de transaction ne correspondent pas.', 'Amagambobanga mashya y\'ubucuruzi ntahuye.', 'Ebisumuruzo ebisya by\'okushuubura tibirikushushana.'],
-  ['Invite friends. Earn when they buy their first product.', 'Yita mikwano gyo. Ofuna ssente nga bagudde ekyamaguzi kyabwe ekisooka.', 'Alika marafiki. Unapata pesa wanaponunua bidhaa yao ya kwanza.', 'Invitez vos amis. Gagnez lorsqu\'ils ach\u00e8tent leur premier produit.', 'Tumira inshuti. Winjiza amafaranga igihe baguze igicuruzwa cyabo cya mbere.', 'Yeta abanywani baawe. Notunga sente ku barikugura ekyamaguzi kyabo eky\'okubanza.'],
-  ['Share your link, create your wealth, improve your life.', 'Gaba lyanka lyo, okole obugagga bwo, otereeze obulamu bwo.', 'Shiriki kiungo chako, jenga utajiri wako, boresha maisha yako.', 'Partagez votre lien, b\u00e2tissez votre richesse, am\u00e9liorez votre vie.', 'Sangiza umurongo wawe, wubake ubutunzi bwawe, unoze ubuzima bwawe.', 'Gabana orunyiriri rwaawe, okore obugaiga bwaawe, otebeekanise amagara gaawe.'],
-  ['We\'re getting ready. Come back once the countdown ends.', 'Tukyeteekateeka. Komawo essaawa bwe zinaggwaako.', 'Tunajiandaa. Rudi hesabu ya kurudi nyuma itakapoisha.', 'Nous nous pr\u00e9parons. Revenez \u00e0 la fin du compte \u00e0 rebours.', 'Turimo kwitegura. Garuka igihe kubara kuzarangira.', 'Nitweteekateeka. Garuka obu obwire burihwaho.'],
-  ['Your new password must be at least 10 characters.', 'Ekisumuluzo kyo ekiggya kiteekwa okuba n\'obubonero obutasinga mu 10.', 'Nenosiri lako jipya lazima liwe na angalau herufi 10.', 'Votre nouveau mot de passe doit comporter au moins 10 caract\u00e8res.', 'Ijambobanga ryawe rishya rigomba kuba rifite nibura inyuguti 10.', 'Ekisumuruzo kyaawe ekisya kishemereire kugira obubonero obukiri 10.'],
-  ['Your new trade password must be exactly 6 digits.', 'Ekisumuluzo kyo ekiggya eky\'okusuubula kiteekwa okuba nnamba 6 zokka.', 'Nenosiri lako jipya la malipo lazima liwe tarakimu 6 haswa.', 'Votre nouveau mot de passe de transaction doit comporter exactement 6 chiffres.', 'Ijambobanga ryawe rishya ry\'ubucuruzi rigomba kuba rigizwe n\'imibare 6 gusa.', 'Ekisumuruzo kyaawe ekisya ky\'okushuubura kishemereire kuba enamba 6 zoonka.'],
-  ['If deposit is not received, please contact TG customer service.', 'Ssente bwe zitatuuka, tuukirira obuyambi ku TG.', 'Ikiwa malipo hayajapokelewa, tafadhali wasiliana na huduma kwa wateja kwenye TG.', 'Si le d\u00e9p\u00f4t n\'est pas re\u00e7u, contactez le service client sur TG.', 'Niba amafaranga atakiriwe, nyamuneka vugana na serivisi z\'abakiriya kuri TG.', 'Sente ku zitarikuhika, otukirire obuhwezi aha TG.'],
-  ['The payment is expected to be successful in 2-10 minutes.', 'Okusasula kusuubirwa okuggwa mu ddakiika 2-10.', 'Malipo yanatarajiwa kukamilika ndani ya dakika 2-10.', 'Le paiement devrait aboutir en 2 \u00e0 10 minutes.', 'Ubwishyu buteganyijwe kurangira mu minota 2-10.', 'Okushashura nikwetegyerezibwa kuhwa omu dakiika 2-10.'],
-  ['Your new password must be different from the old one.', 'Ekisumuluzo kyo ekiggya kiteekwa okuba ekitali kye kikadde.', 'Nenosiri lako jipya lazima liwe tofauti na la zamani.', 'Votre nouveau mot de passe doit \u00eatre diff\u00e9rent de l\'ancien.', 'Ijambobanga ryawe rishya rigomba gutandukana n\'irya kera.', 'Ekisumuruzo kyaawe ekisya kishemereire kuba ekitari kiri ekikuru.'],
-  ['Customer service is not set up yet. Please try again later.', 'Obuyambi eri abaguzi tebunnateekebwawo. Ddamu ogezeeko oluvannyuma.', 'Huduma kwa wateja haijawekwa bado. Tafadhali jaribu tena baadaye.', 'Le service client n\'est pas encore configur\u00e9. R\u00e9essayez plus tard.', 'Serivisi z\'abakiriya ntiziratunganywa. Nyamuneka ongera ugerageze nyuma.', 'Obuhwezi bw\'abaguzi tiburateebwaho. Ogarukyemu bwanyima.'],
-  ['Your balance will be updated automatically once the payment is confirmed.', 'Ssente zo zijja kukyusibwa zokka okusasula bwe kunaakakasibwa.', 'Salio lako litasasishwa lenyewe mara malipo yatakapothibitishwa.', 'Votre solde sera mis \u00e0 jour automatiquement d\u00e8s la confirmation du paiement.', 'Amafaranga yawe azavugururwa wenyine ubwishyu bumaze kwemezwa.', 'Sente zaawe nizihindurwa zoonka okushashura ku kurihamibwa.'],
-  ['Your new trade password must be different from the old one.', 'Ekisumuluzo kyo ekiggya eky\'okusuubula kiteekwa okuba ekitali kye kikadde.', 'Nenosiri lako jipya la malipo lazima liwe tofauti na la zamani.', 'Votre nouveau mot de passe de transaction doit \u00eatre diff\u00e9rent de l\'ancien.', 'Ijambobanga ryawe rishya ry\'ubucuruzi rigomba gutandukana n\'irya kera.', 'Ekisumuruzo kyaawe ekisya ky\'okushuubura kishemereire kuba ekitari kiri ekikuru.'],
-  ['Not confirmed yet. Approve the payment prompt on your phone, then tap Verify again.', 'Tekunnakakasibwa. Kkiriza obubaka bw\'okusasula ku ssimu yo, oluvannyuma oddemu onyige Kakasa.', 'Bado hayajathibitishwa. Idhinisha ujumbe wa malipo kwenye simu yako, kisha gusa Hakiki tena.', 'Pas encore confirm\u00e9. Approuvez la demande de paiement sur votre t\u00e9l\u00e9phone, puis appuyez de nouveau sur V\u00e9rifier.', 'Ntibiremezwa. Emeza ubutumwa bwo kwishyura kuri telefone yawe, hanyuma wongere ukande Genzura.', 'Tikirahamibwa. Ikiriza obutumwa bw\'okushashura aha simu yaawe, bwanyima ogarukyemu okande Hamya.'],
-  ['Your trade password is your 6-digit PIN used to confirm withdrawals and other sensitive actions.', 'Ekisumuluzo kyo eky\'okusuubula ye nnamba 6 z\'okozesa okukakasa okuggyamu ssente n\'ebirala ebikulu.', 'Nenosiri lako la malipo ni PIN ya tarakimu 6 unayotumia kuthibitisha kutoa pesa na mambo mengine nyeti.', 'Votre mot de passe de transaction est le code \u00e0 6 chiffres qui confirme vos retraits et autres op\u00e9rations sensibles.', 'Ijambobanga ryawe ry\'ubucuruzi ni PIN y\'imibare 6 ukoresha wemeza kubikuza n\'ibindi bikorwa by\'ingenzi.', 'Ekisumuruzo kyaawe ky\'okushuubura n\'enamba 6 ezi orikukozesa okuhamya okwihamu sente n\'ebindi ebikuru.'],
-  ['A referral code is required to sign up. Ask the person who invited you for theirs.', 'Weetaaga koodi y\'okuyita okwewandiisa. Saba oyo eyakuyise akuwe eyiye.', 'Msimbo wa mwaliko unahitajika ili kujisajili. Muulize aliyekualika akupe wake.', 'Un code de parrainage est n\u00e9cessaire pour s\'inscrire. Demandez le sien \u00e0 la personne qui vous a invit\u00e9.', 'Kode yo gutumira irakenewe kugira ngo wiyandikishe. Saba uwagutumiye akuhe iye.', 'Noyetenga koodi y\'okweta kwewandiisa. Shaba ou akweeta akuhe eye.'],
-  ['Install it on your phone for faster access, and open it straight from your home screen.', 'Giteeke ku ssimu yo osobole okugituukako mangu, era ogigulewo butereevu okuva ku ntikko ya ssimu yo.', 'Isakinishe kwenye simu yako ili kuifikia haraka, na uifungue moja kwa moja kutoka skrini ya nyumbani.', 'Installez-la sur votre t\u00e9l\u00e9phone pour un acc\u00e8s plus rapide, et ouvrez-la directement depuis votre \u00e9cran d\'accueil.', 'Yishyire kuri telefone yawe kugira ngo uyigereho vuba, unayifungure uhereye ku rupapuro rwawe rw\'ibanze.', 'Giteere aha simu yaawe obaase kugihikaho juba, kandi ogyigure butunu kuruga aha karatasi kaawe ak\'okubanza.'],
-  ['Please fill in your payment account accurately, incorrect filling may result in the loss of the transferred funds.', 'Wandiika akawunti yo ey\'okusasula obulungi; bw\'ogiwandiika obubi osobola okufiirwa ssente z\'oweerezza.', 'Tafadhali jaza akaunti yako ya malipo kwa usahihi; ukikosea unaweza kupoteza pesa ulizotuma.', 'Veuillez saisir votre compte de paiement avec exactitude ; une erreur peut entra\u00eener la perte des fonds transf\u00e9r\u00e9s.', 'Nyamuneka andika konti yawe yo kwishyura neza; ukosheje ushobora gutakaza amafaranga wohereje.', 'Handiika akaunti yaawe y\'okushashura gye; ku orikuhandiika kubi noobaasa kufeerwa sente ezi ohereize.'],
-  ['Please fill in your payment method and the actual payment account you will use to make the payment.', 'Wandiika engeri y\'okusasula n\'akawunti ey\'amazima gy\'onookozesa okusasula.', 'Tafadhali jaza njia ya malipo na akaunti halisi utakayotumia kulipa.', 'Veuillez indiquer votre mode de paiement et le compte que vous utiliserez r\u00e9ellement pour payer.', 'Nyamuneka andika uburyo bwo kwishyura na konti nyayo uzakoresha wishyura.', 'Handiika omuringo gw\'okushashura n\'akaunti ey\'amazima ei orikwija kukozesa okushashura.'],
-  ['Paste the whole confirmation message your phone received after you sent the money. Our team checks it and credits your balance.', 'Teeka obubaka bwonna obwakakasa obwatuuse ku ssimu yo nga omaze okusindika ssente. Ekibiina kyaffe kibukebera ne bakuteekera ssente.', 'Bandika ujumbe wote wa uthibitisho uliopokelewa kwenye simu yako baada ya kutuma pesa. Timu yetu itauangalia na kuongeza salio lako.', 'Collez l\'int\u00e9gralit\u00e9 du message de confirmation re\u00e7u sur votre t\u00e9l\u00e9phone apr\u00e8s l\'envoi de l\'argent. Notre \u00e9quipe le v\u00e9rifie et cr\u00e9dite votre solde.', 'Shyiramo ubutumwa bwose bwo kwemeza telefone yawe yakiriye nyuma yo kohereza amafaranga. Ikipe yacu irabusuzuma maze ikongera amafaranga yawe.', 'Ota obutumwa bwona obw\'okuhamya obu esimu yaawe eyakiire bwanyima y\'okutuma sente. Ekibiina kyaitu nikibureeba kandi bakakwongyeza sente.'],
-  // ── Added by add-i18n-coverage.py after measuring the real screens ──
-  // Everything below was found by find-untranslated.py driving the built
-  // app in Swahili and reading back every visible text node -- not by a
-  // regex over the sources, which is how they were missed in the first
-  // place. 'Failed' and 'Paid' are the two the owner named himself.
-  ['Paid', 'Kisasuddwa', 'Imelipwa', 'Payé', 'Byishyuwe', 'Kishashwirwe'],
-  ['Failed', 'Kigaanye', 'Imeshindwa', 'Échoué', 'Byanze', 'Kyaremeire'],
-  ['Pending', 'Kilindirira', 'Inasubiri', 'En attente', 'Birategerejwe', 'Nikitegyereza'],
-  ['Active', 'Kikola', 'Inaendelea', 'En cours', 'Birakomeza', 'Nikikora'],
-  ['Completed', 'Kiwedde', 'Imekamilika', 'Terminé', 'Byarangiye', 'Kihikire'],
-  ['No active plans right now', 'Tewali nteekateeka ekola kati', 'Hakuna mipango inayoendelea sasa', 'Aucun plan actif pour le moment', 'Nta gahunda irakora ubu', 'Tihariho nteekateeka erikukora hati'],
-  ['No active plans. Check Completed to see the ones that finished.', 'Tewali nteekateeka ekola. Nyiga Kiwedde okulaba ezo ezaggwa.', 'Hakuna mipango inayoendelea. Gusa Imekamilika kuona iliyokwisha.', 'Aucun plan actif. Ouvrez Terminé pour voir ceux qui sont arrivés à terme.', 'Nta gahunda irakora. Kanda Byarangiye urebe izarangiye.', 'Tihariho nteekateeka erikukora. Kanda Kihikire kureeba ezo ezahwire.'],
-  ['Transaction', 'Okukyusa ssente', 'Muamala', '=', 'Igikorwa', 'Okuhingura sente'],
-  ['OK', 'Kale', 'Sawa', '=', 'Yego', 'Kale'],
-  ['days', 'ennaku', 'siku', 'jours', 'iminsi', 'ebiro'],
-  ['Bind Wallet', 'Teeka Ensawo', 'Sajili Pochi', 'Associer le portefeuille', 'Andika umufuka', 'Teeka Ensaho'],
-  ['Change Wallet', 'Kyusa Ensawo', 'Badilisha Pochi', 'Changer de portefeuille', 'Hindura umufuka', 'Hindura Ensaho'],
-  ['NO WALLET BOUND', 'TEWALI NSAWO ETEEKEDDWA', 'HAKUNA POCHI ILIYOSAJILIWA', 'AUCUN PORTEFEUILLE ASSOCIÉ', 'NTA MUFUKA WANDITSWE', 'TIHARIHO NSAHO ETEIREHO'],
-  ['Get the mobile app', 'Funa pulogulaamu ya ssimu', 'Pata programu ya simu', 'Obtenez l\'application mobile', 'Kura porogaramu ya telefone', 'Tunga porogaraamu ya esimu'],
-  ['Manage your withdrawal wallet', 'Ddukanya ensawo yo ey\'okuggyamu ssente', 'Dhibiti pochi yako ya kutoa pesa', 'Gérez votre portefeuille de retrait', 'Genzura umufuka wawe wo kubikuza', 'Jwara ensaho yaawe y\'okwihamu sente'],
-  ['Transaction history', 'Ebyafaayo by\'ensimbi', 'Historia ya miamala', 'Historique des transactions', 'Amateka y\'ibikorwa', 'Ebyafaayo bya sente'],
-  ['Notifications & mail', 'Obubaka n\'ebirango', 'Arifa na barua', 'Notifications et messages', 'Amatangazo n\'ubutumwa', 'Obutumwa n\'ebirango'],
-  ['Change login password', 'Kyusa ekisumuluzo ky\'okuyingira', 'Badilisha nenosiri la kuingia', 'Changer le mot de passe de connexion', 'Hindura ijambobanga ryo kwinjira', 'Hindura ekisumuruzo ky\'okutaaha'],
-  ['Change trade / withdrawal password', 'Kyusa ekisumuluzo ky\'okusuubula / okuggyamu', 'Badilisha nenosiri la malipo / kutoa pesa', 'Changer le mot de passe de transaction / retrait', 'Hindura ijambobanga ry\'ubucuruzi / ryo kubikuza', 'Hindura ekisumuruzo ky\'okushuubura / okwihamu'],
-  ['Enter old password', 'Wandiika ekisumuluzo ekikadde', 'Weka nenosiri la zamani', 'Entrez l\'ancien mot de passe', 'Andika ijambobanga rya kera', 'Handiika ekisumuruzo ekikuru'],
-  ['Enter new password', 'Wandiika ekisumuluzo ekiggya', 'Weka nenosiri jipya', 'Entrez le nouveau mot de passe', 'Andika ijambobanga rishya', 'Handiika ekisumuruzo ekisya'],
-  ['Re-enter new password', 'Ddamu owandiike ekisumuluzo ekiggya', 'Weka tena nenosiri jipya', 'Saisissez à nouveau le nouveau mot de passe', 'Ongera wandike ijambobanga rishya', 'Garuka ohandiike ekisumuruzo ekisya'],
-  ['Enter old 6-digit PIN', 'Wandiika PIN enkadde ey\'ennamba 6', 'Weka PIN ya zamani ya tarakimu 6', 'Entrez l\'ancien code à 6 chiffres', 'Andika PIN ya kera y\'imibare 6', 'Handiika PIN enkuru y\'enamba 6'],
-  ['Enter new 6-digit PIN', 'Wandiika PIN empya ey\'ennamba 6', 'Weka PIN mpya ya tarakimu 6', 'Entrez le nouveau code à 6 chiffres', 'Andika PIN nshya y\'imibare 6', 'Handiika PIN ensya y\'enamba 6'],
-  ['Re-enter new 6-digit PIN', 'Ddamu owandiike PIN empya ey\'ennamba 6', 'Weka tena PIN mpya ya tarakimu 6', 'Saisissez à nouveau le nouveau code à 6 chiffres', 'Ongera wandike PIN nshya y\'imibare 6', 'Garuka ohandiike PIN ensya y\'enamba 6'],
-  ['Contact support for help with your account.', 'Tuukirira abayambi ku bikwata ku akawunti yo.', 'Wasiliana na msaada kwa usaidizi wa akaunti yako.', 'Contactez l\'assistance pour toute question sur votre compte.', 'Vugana na serivisi y\'abakiriya ku bibazo bya konti yawe.', 'Hikirira abahwezi ahabw\'akaunti yaawe.'],
-  ['Uganda\'s boldest way to grow your money', 'Engeri esinga obuvumu mu Uganda okukuza ssente zo', 'Njia jasiri zaidi Uganda ya kukuza pesa zako', 'La façon la plus audacieuse d\'Ouganda de faire fructifier votre argent', 'Inzira ishize amanga cyane mu Uganda yo kwungura amafaranga yawe', 'Omuringo ogurikukira obumanzi muri Uganda kukuza sente zaawe'],
-  ['If nothing happens, the app is already installed — open it from your home screen. On iPhone, use Share then "Add to Home Screen".', 'Bwe watabaawo kantu, pulogulaamu eteekeddwawo dda — gigguleko ku ssemasomero lyo. Ku iPhone, kozesa Share olyoke oyongere "Add to Home Screen".', 'Kama hakuna kinachotokea, programu imesakinishwa tayari — ifungue kutoka skrini yako ya kwanza. Kwenye iPhone, tumia Share kisha "Add to Home Screen".', "Si rien ne se passe, l'application est déjà installée — ouvrez-la depuis votre écran d'accueil. Sur iPhone, utilisez Partager puis « Sur l'écran d'accueil ».", 'Niba nta kibaye, porogaramu yamaze gushyirwaho — ifungure ku rupapuro rwawe rw’ibanze. Kuri iPhone, koresha Share hanyuma "Add to Home Screen".', 'Ku kutaribaho kintu, porogaraamu yaateirweho — gyigyure aha ndabiro yaawe. Aha iPhone, kozesa Share reero “Add to Home Screen”.'],
-  // The LETTER is what identifies a payment method, and it is deliberately
-  // kept: the admin panel where he configures these still says PAY-A / PAY B,
-  // so a member naming one is still unambiguous whichever language he reads.
-  // Only the English word around it is translated.
-  ['PAY-A', 'SASULA-A', 'LIPA-A', 'PAYER-A', 'ISHYURA-A', 'SHASHURA-A'],
-  ['PAY B', 'SASULA B', 'LIPA B', 'PAYER B', 'ISHYURA B', 'SHASHURA B'],
-  // The founder-account wording: what the very FIRST member of a new country
-  // sees on Sign Up, when there is no referral code for them to type yet.
-  // Found only after the coverage sweep was made to render that state -- the
-  // fixture had always demanded a code, so this pair of sentences
-  // had never once been on screen while anything was measuring.
-  ['Referral code (optional)', "Koodi y'okuyita (teetaagisa)", 'Msimbo wa mwaliko (si lazima)', 'Code de parrainage (facultatif)', 'Kode yo gutumira (ntikenewe)', "Koodi y'okweta (tikyetengyesa)"],
-  // ── Popup messages, and the activity ticker's own verbs ──
-  // A popup only appears when something goes WRONG, and the coverage
-  // sweep walks every screen successfully -- so 58 notify() call sites
-  // existed and exactly one had ever been on screen while anything was
-  // measuring. Found by extracting the arguments of every call site
-  // instead. The ticker verbs had never rendered either: its fixture
-  // fed it an empty feed.
-  ['Could not load your account', 'Tetusobodde kuzuula akawunti yo', 'Imeshindwa kupakia akaunti yako', 'Impossible de charger votre compte', 'Ntibyashobotse gupakira konti yawe', 'Tikibaasiikire kureeta akaunti yaawe'],
-  ['Could not complete registration', 'Tetusobodde kumaliriza kwewandiisa', 'Imeshindwa kukamilisha usajili', 'Impossible de finaliser l\'inscription', 'Ntibyashobotse kurangiza kwiyandikisha', 'Tikibaasiikire kumaliriza okwehandiisa'],
-  ['Could not save your wallet.', 'Tetusobodde kutereka nsawo yo.', 'Imeshindwa kuhifadhi pochi yako.', 'Impossible d\'enregistrer votre portefeuille.', 'Ntibyashobotse kubika umufuka wawe.', 'Tikibaasiikire kubiika ensaho yaawe.'],
-  ['Could not start deposit', 'Tetusobodde kutandika kuteeka ssente', 'Imeshindwa kuanza kuweka pesa', 'Impossible de démarrer la recharge', 'Ntibyashobotse gutangira kubitsa', 'Tikibaasiikire kutandika kuta sente'],
-  ['Could not request withdrawal.', 'Tetusobodde kusaba kuggyamu ssente.', 'Imeshindwa kuomba kutoa pesa.', 'Impossible de demander le retrait.', 'Ntibyashobotse gusaba kubikuza.', 'Tikibaasiikire kushaba okwihamu sente.'],
-  ['Could not complete purchase', 'Tetusobodde kumaliriza kugula', 'Imeshindwa kukamilisha ununuzi', 'Impossible de finaliser l\'achat', 'Ntibyashobotse kurangiza kugura', 'Tikibaasiikire kumaliriza okugura'],
-  ['Could not check in', 'Tetusobodde kukyalira', 'Imeshindwa kuhudhuria', 'Impossible de pointer', 'Ntibyashobotse kwiyandikisha', 'Tikibaasiikire kwoleka'],
-  ['Could not change your trade password.', 'Tetusobodde kukyusa kisumuluzo kyo eky\'okusuubula.', 'Imeshindwa kubadilisha nenosiri lako la malipo.', 'Impossible de changer votre mot de passe de transaction.', 'Ntibyashobotse guhindura ijambobanga ryawe ry\'ubucuruzi.', 'Tikibaasiikire kuhindura ekisumuruzo kyaawe ky\'okushuubura.'],
-  ['Could not check right now', 'Tetusobodde kukebera kati', 'Imeshindwa kuangalia kwa sasa', 'Vérification impossible pour le moment', 'Ntibyashobotse kugenzura ubu', 'Tikibaasiikire kureeba hati'],
-  ['Could not submit this right now', 'Tetusobodde kusindika kino kati', 'Imeshindwa kuwasilisha hili kwa sasa', 'Envoi impossible pour le moment', 'Ntibyashobotse kohereza ibi ubu', 'Tikibaasiikire kutuma eki hati'],
-  ['That is not your current login password.', 'Ekyo si kisumuluzo kyo kya kati eky\'okuyingira.', 'Hilo si nenosiri lako la sasa la kuingia.', 'Ce n\'est pas votre mot de passe de connexion actuel.', 'Iryo si ijambobanga ryawe rigezweho ryo kwinjira.', 'Ekyo tikisumuruzo kyaawe kya hati eky\'okutaaha.'],
-  ['That key did not open the chest.', 'Ekisumuluzo ekyo tekiggudde ssanduku.', 'Ufunguo huo haukufungua sanduku.', 'Cette clé n\'a pas ouvert le coffre.', 'Urwo rufunguzo ntirwafunguye agasanduku.', 'Ekishumuruzo ekyo tikyigwire esanduuku.'],
-  ['That referral code is invalid. Continuing without it.', 'Koodi y\'okuyita eyo si ntuufu. Tugenda mu maaso nga tetugikozesa.', 'Msimbo huo wa mwaliko si sahihi. Tunaendelea bila huo.', 'Ce code de parrainage est invalide. Nous continuons sans lui.', 'Iyo kode yo gutumira ntiyemewe. Turakomeza tutayikoresheje.', 'Koodi y\'okweta egyo tehikire. Nitugyenda omu maisho tutarikugikozesa.'],
-  ['Not confirmed yet. Paste the payment message below and submit it.', 'Tekinnakakasibwa. Teeka obubaka bw\'okusasula wammanga obusindike.', 'Bado haijathibitishwa. Bandika ujumbe wa malipo hapa chini na uwasilishe.', 'Pas encore confirmé. Collez le message de paiement ci-dessous et envoyez-le.', 'Ntibirasuzumwa. Shyiramo ubutumwa bwo kwishyura hasi maze ubwohereze.', 'Tikirahamibwa. Ota obutumwa bw\'okushashura ahansi kandi obutume.'],
-  ['Submitted', 'Kisindikiddwa', 'Imewasilishwa', 'Envoyé', 'Byoherejwe', 'Kitumirwe'],
-  ['The payment request timed out before it was approved on the phone. Nothing was taken. Start a new recharge to try again.', 'Okusaba okusasula kwaggwaako nga tekukkirizibbwa ku ssimu. Tewali ssente eziggiddwa. Tandika okuteekamu ssente okuppya.', 'Ombi la malipo limeisha muda kabla ya kuidhinishwa kwenye simu. Hakuna pesa iliyochukuliwa. Anza kuweka pesa tena.', "La demande de paiement a expiré avant d'être approuvée sur le téléphone. Rien n'a été prélevé. Lancez une nouvelle recharge.", 'Icyifuzo cyo kwishyura cyarangiye mbere yuko cyemezwa kuri telefone. Nta mafaranga yafashwe. Tangira kubitsa bushya.', 'Okushaba okushashura kukahwa kitakaikirizibwa aha simu. Tihariho sente ezihiirwe. Tandika kuteeramu sente burundi.'],
-  ['topped up', 'yateekamu ssente', 'ameweka pesa', 'a rechargé', 'yabitsa', 'yaateeramu sente'],
-  ['cashed out', 'yaggyamu ssente', 'ametoa pesa', 'a retiré', 'yabikuje', 'yaayihamu sente'],
-  ['just deposited', 'yaakateekamu ssente', 'ameweka pesa hivi punde', 'vient de recharger', 'aherutse kubitsa', 'yaahingwire kuteeramu sente'],
-  ['just withdrew', 'yaakaggyamu ssente', 'ametoa pesa hivi punde', 'vient de retirer', 'aherutse kubikuza', 'yaahingwire kwihamu sente'],
-];
-// ── SENTENCES WITH A FIGURE SPLICED INTO THEM ──
-// The table above matches a WHOLE string, which by construction can never
-// match a sentence built at render time: "Fee: 15%" is a different string for
-// every fee, so it would need a row per value. This is the second lookup --
-// each row is a TEMPLATE with {0}/{1} where the figure goes, matched against
-// the rendered text, and the captured figures are dropped into the
-// translation untouched.
-//
-// Two rules make this safe on a money screen:
-//   * only the LITERAL words are translated. Whatever {0} captured is copied
-//     across verbatim, so an amount, a date, a percentage or an account id
-//     can never be rewritten, reordered or re-formatted by a translation.
-//   * a template is only tried when the whole string matches end to end, so
-//     a pattern cannot rewrite part of a sentence it does not own.
-// Placeholders are NUMBERED, not positional, because a translation is allowed
-// to put them in a different order than English does.
-var LANG_PATTERNS = [
-  // [english template, lg, sw, fr, rw, nyn]
-  ['About {0}', 'Ku {0}', 'Kuhusu {0}', 'À propos de {0}', 'Ibyerekeye {0}', 'Ahabwa {0}'],
-  ['Get the {0} app', 'Funa pulogulaamu ya {0}', 'Pata programu ya {0}', "Obtenez l'application {0}", 'Kura porogaramu ya {0}', 'Tunga porogaraamu ya {0}'],
-  ['Your login password is used to sign in to your {0} account.', "Ekisumuluzo kyo eky'okuyingira kikozesebwa okuyingira mu akawunti yo ya {0}.", 'Nenosiri lako la kuingia hutumika kuingia katika akaunti yako ya {0}.', 'Votre mot de passe de connexion sert à vous connecter à votre compte {0}.', 'Ijambobanga ryawe ryo kwinjira rikoreshwa kwinjira mu konti yawe ya {0}.', "Ekisumuruzo kyaawe ky'okutaaha nikikozesibwa kutaaha omu akaunti yaawe ya {0}."],
-  ['{0} lets you invest in a range of products with daily income and a 3-level referral program.', '{0} kikusobozesa okuteeka ssente mu byamaguzi bya ngeri nnyingi n’ssente za buli lunaku n’enteekateeka y’okuyita ey’emitendera 3.', '{0} inakuwezesha kuwekeza katika bidhaa mbalimbali na mapato ya kila siku na mpango wa mialiko wa ngazi 3.', '{0} vous permet d’investir dans une gamme de produits avec un revenu quotidien et un programme de parrainage à 3 niveaux.', '{0} ituma ushobora gushora mu bicuruzwa bitandukanye ufite inyungu za buri munsi na gahunda yo gutumira y’inzego 3.', '{0} nikikureetera okuteeramu sente omu byamaguzi bya miringo mingi n’esente za buri izooba n’enteekateeka y’okweta ey’emirengo 3.'],
-  ['Fee: {0}%.', "Ssente z'obuweereza: {0}%.", 'Ada: {0}%.', 'Frais : {0} %.', 'Amafaranga ya serivisi: {0}%.', "Sente z'obuheereza: {0}%."],
-  ['Fee: {0}%', "Ssente z'obuweereza: {0}%", 'Ada: {0}%', 'Frais : {0} %', 'Amafaranga ya serivisi: {0}%', "Sente z'obuheereza: {0}%"],
-  ['LV{0} = {1}%', 'Omutendera {0} = {1}%', 'Ngazi {0} = {1}%', 'Niveau {0} = {1} %', 'Urwego {0} = {1}%', 'Omurengo {0} = {1}%'],
-  ['{0} Members', 'Abantu {0}', 'Wanachama {0}', '{0} membres', 'Abanyamuryango {0}', 'Abantu {0}'],
-  ['Joined {0}', 'Yeegatta {0}', 'Alijiunga {0}', 'Inscrit le {0}', 'Yinjiye {0}', 'Yaayegaitaho {0}'],
-  ['New Balance: {0}', 'Ssente Empya: {0}', 'Salio Jipya: {0}', 'Nouveau solde : {0}', 'Amafaranga mashya: {0}', 'Sente Ensya: {0}'],
-  ['ID: {0}', 'Nnamba: {0}', 'Kitambulisho: {0}', 'Identifiant : {0}', 'Nimero: {0}', 'Enamba: {0}'],
-  ['Minimum deposit amount: {0}', 'Ssente ezisembayo obutono okuteeka: {0}', 'Kiasi cha chini cha kuweka: {0}', 'Montant minimum de recharge : {0}', 'Ingano ntoya yo kubitsa: {0}', 'Sente ezirikukira obukye okuta: {0}'],
-  ['Check In · {0}', 'Okukyalira · {0}', 'Kuhudhuria · {0}', 'Pointage · {0}', 'Kwiyandikisha · {0}', 'Okwoleka · {0}'],
-  ['Check in once every day (resets at midnight) to keep your streak and earn {0} each time.', 'Kyalira omulundi gumu buli lunaku (kuddamu ku ttumbi) okukuuma olukalala lwo n’ofune {0} buli mulundi.', 'Hudhuria mara moja kila siku (inarudia usiku wa manane) ili kuendeleza mfululizo wako na kupata {0} kila mara.', 'Pointez une fois par jour (réinitialisé à minuit) pour conserver votre série et gagner {0} à chaque fois.', 'Iyandikishe rimwe ku munsi (bisubirana saa sita z’ijoro) kugira ngo ukomeze urukurikirane rwawe kandi wunguke {0} igihe cyose.', 'Yoleka omurundi gumwe buri izooba (nikugarukamu aha kiro) kurindira orukurato rwaawe kandi otunge {0} buri murundi.'],
-  ['Withdraw time: {0} to {1}.', 'Ebiseera by’okuggyamu ssente: {0} okutuuka {1}.', 'Muda wa kutoa pesa: {0} hadi {1}.', 'Heures de retrait : de {0} à {1}.', 'Igihe cyo kubikuza: {0} kugeza {1}.', 'Obwire bw’okwihamu sente: {0} kuhika {1}.'],
-  ['Amounts must be a multiple of {0} — for example {1}.', 'Omuwendo gulina kuba gwa {0} — okugeza {1}.', 'Kiasi kinapaswa kuwa kizidishi cha {0} — kwa mfano {1}.', 'Les montants doivent être un multiple de {0} — par exemple {1}.', 'Ingano igomba kuba umubare ushobora kugabanywa na {0} — urugero {1}.', 'Omuhendo gushemereire kuba gwa {0} — nk’oku {1}.'],
-  ['Withdrawal amounts should be between {0} and {1}.', 'Ssente z’okuggyamu zirina kuba wakati wa {0} ne {1}.', 'Kiasi cha kutoa kinapaswa kuwa kati ya {0} na {1}.', 'Les montants de retrait doivent être compris entre {0} et {1}.', 'Ingano yo kubikuza igomba kuba iri hagati ya {0} na {1}.', 'Sente z’okwihamu zishemereire kuba hagati ya {0} na {1}.'],
-  ['One cash-out at a time — once it is paid you can request the next. Up to {0} per day.', 'Okuggyamu kumu kkumu — nga kusasuddwa osobola okusaba okuddako. Okutuuka ku {0} olunaku.', 'Kutoa pesa moja kwa wakati — baada ya kulipwa unaweza kuomba kingine. Hadi {0} kwa siku.', 'Un retrait à la fois — une fois payé, vous pouvez demander le suivant. Jusqu’à {0} par jour.', 'Kubikuza rimwe gusa — iyo bimaze kwishyurwa ushobora gusaba ibikurikira. Kugeza kuri {0} ku munsi.', 'Okwihamu rumwe — ku kushashwirwe nobaasa kushaba okundi. Kuhika aha {0} aha izooba.'],
-  ['Phone number must start with 0 and be {0} digits', 'Ennamba ya ssimu erina kutandika ne 0 n’eba ya nnamba {0}', 'Namba ya simu inapaswa kuanza na 0 na kuwa tarakimu {0}', 'Le numéro de téléphone doit commencer par 0 et compter {0} chiffres', 'Nimero ya telefone igomba gutangira na 0 kandi ibe imibare {0}', 'Enamba ya esimu ishemereire kutandika na 0 kandi kuba ya namba {0}'],
-  ['Your payment number ({0})', 'Ennamba yo ey’okusasula ({0})', 'Namba yako ya malipo ({0})', 'Votre numéro de paiement ({0})', 'Nimero yawe yo kwishyura ({0})', 'Enamba yaawe y’okushashura ({0})'],
-  ['Support hours: {0}', 'Ebiseera by’obuyambi: {0}', 'Saa za msaada: {0}', "Heures d'assistance : {0}", 'Amasaha ya serivisi: {0}', 'Obwire bw’obuhwezi: {0}'],
-  // The deposit-status screen's own step 1 (a live amount + phone number in
-  // one sentence) -- same "translate the words, copy {0}/{1} verbatim" rule
-  // as every other template here. French/Swahili only for now; see the
-  // LANG_ROWS comment above this same screen's status titles for why the
-  // three Bantu columns are left blank rather than guessed on this one.
-  ['A payment request for {0} has been sent to {1}.', '', 'Ombi la malipo la {0} limetumwa kwa {1}.', 'Une demande de paiement de {0} a été envoyée à {1}.', '', ''],
-  // Popup messages carrying a figure. Same rule as every template
-  // here: only the words translate, and whatever {0} captured -- an
-  // amount, a percentage, a time, a product name -- is copied across
-  // verbatim.
-  ['Check-in successful ✓', 'Okukyalira kugenze bulungi ✓', 'Kuhudhuria kumefanikiwa ✓', 'Pointage réussi ✓', 'Kwiyandikisha byagenze neza ✓', 'Okwoleka kugyenzire gye ✓'],
-  ['Registration successful ✓', 'Okwewandiisa kugenze bulungi ✓', 'Usajili umefanikiwa ✓', 'Inscription réussie ✓', 'Kwiyandikisha byagenze neza ✓', 'Okuhandiikwa kwagenze gye ✓'],
-  ['Withdraw must be a multiple of {0}. Try {1} or {2}.', 'Okuggyamu kulina kuba kwa {0}. Gezaako {1} oba {2}.', 'Kutoa pesa lazima kiwe kizidishi cha {0}. Jaribu {1} au {2}.', 'Le retrait doit être un multiple de {0}. Essayez {1} ou {2}.', 'Kubikuza bigomba kuba umubare ushobora kugabanywa na {0}. Gerageza {1} cyangwa {2}.', 'Okwihamu kushemereire kuba kwa {0}. Gyezaho {1} nari {2}.'],
-  ['Withdraw is open from {0} to {1}. Please come back then.', 'Okuggyamu ssente kuggulwa okuva ku {0} okutuuka {1}. Ddamu okomewo mu budde obwo.', 'Kutoa pesa kunapatikana kuanzia {0} hadi {1}. Tafadhali rudi wakati huo.', 'Le retrait est ouvert de {0} à {1}. Merci de revenir à ce moment-là.', 'Kubikuza bifungura kuva {0} kugeza {1}. Ongera ugaruke icyo gihe.', 'Okwihamu sente nikwigurwa kuruga aha {0} kuhika {1}. Ogaruke omu bwire obu.'],
-  ['Withdraw of {0} is processing. You will receive {1} after the {2}% charge.', 'Okuggyamu {0} kukolebwako. Ojja kufuna {1} oluvannyuma lw\'ossente z\'obuweereza eza {2}%.', 'Kutoa {0} kunashughulikiwa. Utapokea {1} baada ya ada ya {2}%.', 'Le retrait de {0} est en cours. Vous recevrez {1} après les frais de {2} %.', 'Kubikuza {0} birimo gutunganywa. Uzabona {1} nyuma y\'amafaranga ya serivisi ya {2}%.', 'Okwihamu {0} nikukorwaho. Noija kutunga {1} bwanyima ya sente z\'obuheereza eza {2}%.'],
-  ['{0} is now running. You will find it under My Products.', '{0} kitandise. Ojja kukisanga mu Byamaguzi Byange.', '{0} sasa inaendelea. Utaipata chini ya Bidhaa Zangu.', '{0} est maintenant actif. Vous le trouverez dans Mes produits.', '{0} ubu birakora. Uzabisanga muri Ibicuruzwa Byanjye.', '{0} kitandikire. Noija kukishanga omu Byamaguzi Byangye.'],
-  ['Already installed, or your browser doesn\'t support installing {0}.', 'Eteekeddwawo dda, oba browser yo teteeka {0}.', 'Tayari imesakinishwa, au kivinjari chako hakiruhusu kusakinisha {0}.', 'Déjà installée, ou votre navigateur ne permet pas d\'installer {0}.', 'Yamaze gushyirwaho, cyangwa mushakisha wawe ntiyemera gushyiraho {0}.', 'Eteirweho, nari browser yaawe teine bushoboorozi bw\'okuteeraho {0}.'],
-];
-// ==== I18N TABLE: SHARED WITH THE ADMIN PANEL - END ====
-// ==== I18N ENGINE: SHARED WITH THE ADMIN PANEL - BEGIN ====
-// build-admin.js lifts everything between these two markers straight into
-// the admin bundle, so the panel runs THIS translator rather than a second
-// one written to match it. Nothing in here may reference anything the member
-// app owns and the admin does not: it depends only on LANG, LANGS,
-// LANG_CODES, LANG_ROWS and LANG_PATTERNS, each of which the HOST defines
-// above it. Adding a dependency on something app-specific breaks the admin
-// panel at build time, which test-admin-i18n.js is there to catch.
-// code -> { english: translated }. Built once; an empty cell is simply not
-// stored, so a lookup miss and "deliberately English" are the same thing.
-var DICT = (function(){
-  const out = {};
-  for (let i = 1; i < LANG_CODES.length; i++) out[LANG_CODES[i]] = {};
-  for (const row of LANG_ROWS) {
-    const en = row[0];
-    for (let i = 1; i < LANG_CODES.length; i++) {
-      const v = row[i];
-      // '=' means "the right word in this language IS the English word", set
-      // deliberately (French for "Messages" is "Messages"). It stores NO
-      // entry, exactly like a blank, so t() returns the English either way --
-      // the difference is only that find-untranslated.py can tell a chosen
-      // match apart from a cell nobody has filled in yet, instead of
-      // reporting the same four French words as gaps on every single run.
-      if (v === '=') continue;
-      if (typeof v === 'string' && v && v !== en) out[LANG_CODES[i]][en] = v;
-    }
-  }
-  return out;
-})();
-function langMeta(code){ return LANGS.find(l => l.code === code) || LANGS[0]; }
-// The one translator. Everything else in this block is plumbing around it.
-function t(s){
-  if (LANG === 'en' || typeof s !== 'string' || !s) return s;
-  const d = DICT[LANG];
-  if (!d) return s;
-  const hit = d[s];
-  if (typeof hit === 'string' && hit) return hit;
-  // Not a whole-string row. Try the templates -- see LANG_PATTERNS.
-  return tPattern(s);
-}
-
-// Compiled once. Sorted by how much LITERAL text a template carries, longest
-// first, so a specific pattern always wins over a loose one no matter what
-// order the table is written in -- ordering a table by hand is exactly the
-// kind of thing that rots.
-var LANG_PATTERN_RE = LANG_PATTERNS.map(row => {
-  const parts = String(row[0]).split(/\{(\d+)\}/);
-  let src = '^', order = [], literal = 0;
-  for (let i = 0; i < parts.length; i++) {
-    if (i % 2) { order.push(Number(parts[i])); src += '([\\s\\S]+?)'; }
-    else { literal += parts[i].length; src += parts[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-  }
-  return { re: new RegExp(src + '$'), order, row, literal };
-}).sort((a, b) => b.literal - a.literal);
-function tPattern(s){
-  const idx = LANG_CODES.indexOf(LANG);
-  if (idx < 1) return s;
-  for (const p of LANG_PATTERN_RE) {
-    const tpl = p.row[idx];
-    // '=' means the same here as it does in LANG_ROWS: the right wording in
-    // this language IS the English one, chosen deliberately (French for
-    // "Transactions ({0})" is "Transactions ({0})"). Skipped, so the English
-    // reaches the screen -- without this it would be taken as the template
-    // and the sentence would render as a bare "=".
-    if (typeof tpl !== 'string' || !tpl || tpl === '=' || tpl === p.row[0]) continue;
-    const m = p.re.exec(s);
-    if (!m) continue;
-    return tpl.replace(/\{(\d+)\}/g, (_, n) => {
-      const at = p.order.indexOf(Number(n));
-      return at >= 0 ? m[at + 1] : '';
-    });
-  }
-  return s;
-}
-// ── TRANSLATING WHAT IS ALREADY ON SCREEN ──
-// This app draws nearly every screen by assigning a template literal to
-// innerHTML, so wrapping each visible string in t() would mean editing
-// several hundred sites and would still miss whichever one the next round
-// adds. Instead the ORIGINAL English is kept per node and the translation is
-// applied to the rendered DOM.
-//
-// Keeping the original is what makes switching Luganda -> French work: a
-// second pass reads the stored English, never the Luganda already on screen,
-// so nothing is translated twice and switching back to English restores
-// exactly what was rendered.
-//
-// Only a WHOLE trimmed text node that matches a table row is replaced -- never
-// a substring. A member's own data (a name, an amount, a product title)
-// therefore cannot be rewritten by accident unless it is character-for-
-// character one of the rows above, and anything inside [data-no-i18n] is
-// skipped outright.
-var _i18nText = new WeakMap();
-var _i18nAttr = new WeakMap();
-var I18N_ATTRS = ['placeholder', 'aria-label', 'title'];
-// The longest text node the translator will look at. It exists so this can
-// never be dragged through a wall of member-written content, and 160 is right
-// for the member app. THE ADMIN PANEL RAISES IT (see build-admin.js): its long
-// strings are the operator documentation the owner asked to have translated
-// ("whether instructions, settings, sentences"), it renders no member content
-// except the pasted SMS -- which carries data-no-i18n and translate="no" for
-// its own reasons -- and a row longer than the cap can never apply however
-// carefully it is written.
-var I18N_MAX_LEN = (typeof I18N_MAX_LEN_OVERRIDE === 'number' && I18N_MAX_LEN_OVERRIDE > 0)
-  ? I18N_MAX_LEN_OVERRIDE : 160;
-function i18nTextNode(node){
-  // A node inside a block this pass already translated as ONE sentence is not
-  // ours to touch: re-translating its pieces would undo the whole point.
-  // `closest` is guarded because this runs against DOMs that do not implement
-  // all of it, and a throw here would stop the screen being translated.
-  try {
-    if (node.parentElement && node.parentElement.closest &&
-        node.parentElement.closest('[data-i18n-b]')) return;
-  } catch(_){}
-  let src;
-  if (_i18nText.has(node)) src = _i18nText.get(node);
-  else { src = node.nodeValue; _i18nText.set(node, src); }
-  const raw = String(src == null ? '' : src);
-  // WHITESPACE IS NORMALISED BEFORE THE LOOKUP, and `&nbsp;` is why. A
-  // paragraph written with "400&nbsp;KB" gives a text node holding U+00A0,
-  // which is not the ordinary space in the row -- so a perfectly good
-  // translation simply never applied, and nothing at runtime said so. (The
-  // sweep DID collapse it, so its report showed an ordinary space and the two
-  // looked identical; this file already records the same trap biting French.)
-  // Line breaks and indentation inside a paragraph are the same story.
-  const key = raw.trim().replace(/\s+/g, ' ');
-  if (!key || key.length > I18N_MAX_LEN) return;
-  const hit = t(key);
-  // Untranslated: leave the node exactly as authored, so nothing is reflowed
-  // for no reason. Translated: keep the node's own leading/trailing space --
-  // it is what separates this node from its neighbours in a sentence.
-  const want = hit === key
-    ? raw
-    : raw.slice(0, raw.length - raw.replace(/^\s+/, '').length) + hit +
-      raw.slice(raw.replace(/\s+$/, '').length);
-  if (node.nodeValue !== want) node.nodeValue = want;
-}
-// ── SENTENCES THAT INLINE MARKUP BROKE INTO PIECES ────────────────────────
-//
-// `Click <b>"Refresh"</b> to check if it is successful` is THREE text nodes,
-// none of which is a sentence, so no row could ever apply to it and the line
-// stayed English in every language. The admin panel had 164 more of the same
-// shape -- nearly all of its instructions and settings copy, which is exactly
-// what the owner meant by "even in admin panel, whether instructions,
-// settings, sentences".
-//
-// So a block whose only element children are inline formatting is translated
-// AS ONE SENTENCE, keyed on its flattened text.
-//
-// What disqualifies a block, and why each rule is load-bearing:
-//   * any child that is not inline formatting -- a button, an input, a table
-//     row: rewriting those destroys real structure;
-//   * any descendant carrying an `id`: an id is the hook app code writes
-//     into (`$('manPayTotal').textContent = ...`), so replacing the block
-//     would throw that element away and the next write would land nowhere;
-//   * data-no-i18n anywhere inside, which is how a screen says "this is
-//     content, not copy".
-var I18N_INLINE_TAGS = { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, SMALL: 1, CODE: 1, SPAN: 1, BR: 1 };
-var _i18nBlock = new WeakMap();
-function i18nBlockOk(el){
-  if (!el || el.nodeType !== 1 || el.hasAttribute('data-no-i18n')) return false;
-  const kids = el.children;
-  if (!kids || !kids.length) return false;      // no markup: the text path has it
-  // A SENTENCE HAS TEXT OF ITS OWN, outside the emphasis inside it. A box
-  // holding only elements is a layout container, not a sentence:
-  //     <div><span>Wallet balance</span><span>UGX 128,500</span></div>
-  // flattens to "Wallet balanceUGX 128,500", which is not a phrase in any
-  // language and carries a member's money in it. Requiring at least one
-  // direct non-blank text child separates the two exactly.
-  let ownText = false;
-  for (let n = el.firstChild; n; n = n.nextSibling)
-    if (n.nodeType === 3 && String(n.nodeValue || '').trim()) { ownText = true; break; }
-  if (!ownText) return false;
-  for (let i = 0; i < kids.length; i++) {
-    const c = kids[i];
-    if (!I18N_INLINE_TAGS[c.tagName]) return false;
-    if (c.id || c.hasAttribute('data-no-i18n')) return false;
-    for (let j = 0; j < c.children.length; j++) {
-      const g = c.children[j];
-      if (!I18N_INLINE_TAGS[g.tagName] || g.id || g.children.length) return false;
-    }
-  }
-  return true;
-}
-// The translated sentence may carry inline emphasis of its own, so that
-// `<code>*</code>` in an instruction survives being translated. Everything is
-// escaped first and only the inline tags are allowed back: the table ships
-// inside this bundle so this is not guarding against an attacker, it is
-// guarding against a typo in one translation injecting structure into a page.
-function i18nSetBlockHtml(el, text){
-  const box = document.createElement('div');
-  box.textContent = text;
-  el.innerHTML = box.innerHTML.replace(
-    /&lt;(\/?)(b|strong|i|em|u|small|code|br)&gt;/gi, '<$1$2>');
-}
-function i18nBlock(el){
-  if (!i18nBlockOk(el)) return false;
-  const rec = _i18nBlock.get(el);
-  // If app code has rewritten this block since we wrote it, what we remember
-  // is stale -- translating the OLD sentence back over the new one would be
-  // the wrong sentence in the right language, which no sweep looking for
-  // English could ever see.
-  const srcHtml = (rec && el.innerHTML === rec.written) ? rec.src : el.innerHTML;
-  const box = document.createElement('div');
-  box.innerHTML = srcHtml;
-  const key = String(box.textContent || '').replace(/\s+/g, ' ').trim();
-  if (!key || key.length > I18N_MAX_LEN) return false;
-  const hit = t(key);
-  // English, or nothing in the table: leave the block exactly as authored --
-  // which is what keeps the English copy's own bold and code formatting.
-  if (hit === key) { _i18nBlock.delete(el); el.removeAttribute('data-i18n-b'); return false; }
-  i18nSetBlockHtml(el, hit);
-  _i18nBlock.set(el, { src: srcHtml, written: el.innerHTML });
-  // The marker is what stops the per-node pass below pulling this sentence
-  // apart again, and it is an attribute the observer does not watch.
-  el.setAttribute('data-i18n-b', '1');
-  return true;
-}
-// Per element+attr this remembers BOTH the English it was given and the exact
-// string it last wrote. Two things depend on keeping the second:
-//
-//   * the observer below watches attributes, so this function's own writes
-//     come straight back to it. Recognising its own output is what stops that
-//     being an infinite loop -- a plain flag cannot do it, because observer
-//     records are delivered a microtask later, by which time the flag is
-//     already clear.
-//   * app code is allowed to REPLACE a placeholder with different English
-//     (updateReferralFieldHint swaps "Referral code" for "Referral code
-//     (optional)"). Remembering only the first English ever seen would
-//     translate the OLD sentence back over the new one, which is worse than
-//     not translating at all. A value that is not our own output is taken as
-//     a new original.
-function i18nElementAttrs(el){
-  let store = _i18nAttr.get(el);
-  for (const a of I18N_ATTRS) {
-    if (!el.hasAttribute(a)) continue;
-    const cur = el.getAttribute(a);
-    let rec = store && store[a];
-    if (!rec || (cur !== rec.out && cur !== rec.en)) {
-      rec = { en: cur, out: null };
-      if (!store) { store = {}; _i18nAttr.set(el, store); }
-      store[a] = rec;
-    }
-    const key = String(rec.en == null ? '' : rec.en).trim();
-    if (!key) continue;
-    const hit = t(key);
-    const want = hit === key ? rec.en : String(rec.en).replace(key, hit);
-    rec.out = want;
-    if (cur !== want) el.setAttribute(a, want);
-  }
-}
-function translateTree(root){
-  if (!root) return;
-  try {
-    if (root.nodeType === 3) { i18nTextNode(root); return; }
-    if (root.nodeType !== 1 && root.nodeType !== 9 && root.nodeType !== 11) return;
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-      acceptNode(n){
-        const p = n.parentElement;
-        if (!p) return NodeFilter.FILTER_REJECT;
-        const tag = p.tagName;
-        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA') return NodeFilter.FILTER_REJECT;
-        if (p.closest('[data-no-i18n]')) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-      }
-    });
-    // BLOCKS FIRST, then the leftover text nodes. The order is load-bearing:
-    // the per-node pass mutates text in place, so running it first would
-    // leave a half-translated block and the whole-sentence key would no
-    // longer match anything.
-    //
-    // In its OWN try/catch on purpose. This pass touches a wider slice of the
-    // DOM API than the per-node one (children, firstChild, innerHTML,
-    // setAttribute), and on anything that does not implement all of it the
-    // shared catch below would swallow the throw and leave the WHOLE screen
-    // untranslated -- a new feature taking the old, working one down with it.
-    // Degrading to per-node translation is the right failure here.
-    try {
-      if (root.nodeType === 1 && i18nBlock(root)) { /* handled whole */ }
-      const blocks = root.querySelectorAll ? root.querySelectorAll('p,li,div,span,td,th,label,h1,h2,h3,h4,small') : [];
-      for (const el of blocks) { if (!el.closest || !el.closest('[data-no-i18n]')) i18nBlock(el); }
-    } catch(_){}
-    const jobs = [];
-    let n;
-    while ((n = walker.nextNode())) jobs.push(n);
-    for (const node of jobs) i18nTextNode(node);
-    if (root.nodeType === 1 && root.matches && root.matches('[placeholder],[aria-label],[title]')) i18nElementAttrs(root);
-    const els = root.querySelectorAll ? root.querySelectorAll('[placeholder],[aria-label],[title]') : [];
-    for (const el of els) { if (!el.closest('[data-no-i18n]')) i18nElementAttrs(el); }
-  } catch(_){}
-}
-// Newly rendered HTML is translated as it lands.
-//
-// childList for new nodes, plus attributeFilter for exactly the three
-// attributes that carry words. characterData is still deliberately NOT
-// observed -- that IS this function's own text output, and there is no way to
-// tell it apart from app code writing the same string, so observing it would
-// feed the translator its own result forever. Attributes are different only
-// because i18nElementAttrs remembers what it wrote and skips it (see above).
-//
-// The attribute half was missing, and it was a real gap rather than a
-// theoretical one: updateReferralFieldHint() sets #regReferral's placeholder
-// AFTER the auth screen has been swept, so the Sign Up form's referral field
-// stayed in English in every language. Found by find-untranslated.py reading
-// the rendered placeholders -- no static check could see it, because the
-// string is in the table and the sweep does handle placeholders; what was
-// wrong was only WHEN.
-var _i18nObserving = false;
-function startI18nObserver(){
-  if (_i18nObserving || typeof MutationObserver === 'undefined' || !document.body) return;
-  _i18nObserving = true;
-  try {
-    new MutationObserver(muts => {
-      if (LANG === 'en') return; // the overwhelmingly common case, one branch
-      for (const m of muts) {
-        if (m.type === 'attributes') {
-          if (m.target && m.target.nodeType === 1 && !m.target.closest('[data-no-i18n]'))
-            i18nElementAttrs(m.target);
-          continue;
-        }
-        for (const node of m.addedNodes) translateTree(node);
-      }
-    }).observe(document.body, {
-      childList: true, subtree: true,
-      attributes: true, attributeFilter: I18N_ATTRS,
-    });
-  } catch(_){ _i18nObserving = false; }
-}
-// Exposed for the coverage sweeps, deliberately. find-untranslated.py and
-// find-admin-untranslated.py have to know which blocks the engine treats as
-// ONE sentence, so they report the flattened sentence as the missing key
-// rather than its three fragments. A Python copy of the rule would be a
-// second source of truth that drifts, and the row it made you write would be
-// keyed on a sentence the engine never forms. This is a pure predicate plus a
-// key builder -- it reads the DOM and changes nothing.
-try {
-  window.__i18nBlockOk = i18nBlockOk;
-  window.__i18nMaxLen = function(){ return I18N_MAX_LEN; };
-} catch(_){}
-// ==== I18N ENGINE: SHARED WITH THE ADMIN PANEL - END ====
-// A full pass over the document. Run when the language changes -- including
-// changing back TO English, where t() returns each stored original and this
-// restores the page word for word.
-// The loading screen used to show a translated "Loading..." word (with its
-// own localStorage-cached, pre-core-painted translation fix, since the
-// screen is on-screen precisely while the core is still inflating and
-// there is no translator yet to ask). Removed along with the rest of that
-// Potato-specific loader treatment -- the replacement loader shows a plain
-// numeric percentage only, which needs no translation at all.
-function applyLanguage(){
-  try {
-    translateTree(document.body);
-    const btn = $('langBtnLabel');
-    if (btn) btn.textContent = langMeta(LANG).native;
-    document.documentElement.setAttribute('lang', LANG);
-    paintLangButton();
-  } catch(_){}
-}
-function setLang(code, opts){
-  const c = String(code || '').trim().toLowerCase();
-  if (!LANG_CODES.includes(c)) return;
-  if (c !== LANG) {
-    LANG = c;
-    try { localStorage.setItem(LANG_STORE_KEY, c); } catch(_){}
-  }
-  applyLanguage();
-  if (!opts || !opts.silent) closeLangPicker();
-}
-// Which language this device should open in: the one chosen here before, if
-// the country still allows it, else the country's own default, else English.
-//
-// The allowed-list check is not decoration. A country's languages can be
-// changed from the panel, and a member left holding a language it no longer
-// offers would be reading a UI his own country has withdrawn -- with no way
-// to get back to one it does offer, because the button would not list the
-// language he is currently in.
-function resolveLang(){
-  let stored = '';
-  try { stored = String(localStorage.getItem(LANG_STORE_KEY) || '').toLowerCase(); } catch(_){}
-  const allowed = LANG_ALLOWED.length ? LANG_ALLOWED : ['en'];
-  if (stored && allowed.includes(stored) && LANG_CODES.includes(stored)) return stored;
-  const def = String(REGION && REGION.defaultLang || '').toLowerCase();
-  if (def && allowed.includes(def) && LANG_CODES.includes(def)) return def;
-  return allowed[0] || 'en';
-}
-function applyRegionLanguages(){
-  const list = (REGION && Array.isArray(REGION.languages) ? REGION.languages : [])
-    .map(c => String(c || '').toLowerCase()).filter(c => LANG_CODES.includes(c));
-  LANG_ALLOWED = list.length ? list.filter((c, i) => list.indexOf(c) === i) : ['en'];
-  const want = resolveLang();
-  if (want !== LANG) setLang(want, { silent: true });
-  else { paintLangButton(); applyLanguage(); }
-}
-// ── THE BUTTON, AND THE PICKER ──
-// Hidden while the country allows exactly one language: one option is not a
-// choice, and a single-language country should gain no furniture. Same rule
-// the admin panel's country switch follows.
-function paintLangButton(){
-  try {
-    const many = LANG_ALLOWED.length > 1;
-    for (const id of ['langBtn', 'langRow']) {
-      const el = $(id);
-      if (el) el.style.display = many ? '' : 'none';
-    }
-    const lbl = $('langBtnLabel');
-    if (lbl) lbl.textContent = langMeta(LANG).native;
-    const row = $('langRowValue');
-    if (row) row.textContent = langMeta(LANG).native;
-  } catch(_){}
-}
-function closeLangPicker(){
-  const bg = $('langSheetBg');
-  if (bg) bg.classList.remove('show');
-}
 // Thousands commas and the decimal point are written here, never left to the phone's own locale (an older phone browser without full
 // language data prints 970130.00 or 970 130,00 for the same number). cents=true always shows two decimals.
 function numGroup(n, cents){
@@ -977,51 +122,11 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&am
 // Long money figures (nine digits and more) step the font down in two sizes so they stay on one line inside their box.
 function vMoney2(n){ return cur() + ' ' + numGroup(n, true); }
 // Icons traced from the owner's screenshots live in a square box 288 units wide drawn 1:1 with a 22 px picture (13.1 units = 1 px); the stroke sits on the <g> so a bigger/smaller box keeps the same proportions.
-function vSvgT(cx, cy, sw, body, size){ size = size || 288; var h = size / 2; return '<svg viewBox="' + (cx - h) + ' ' + (cy - h) + ' ' + size + ' ' + size + '" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g stroke-width="' + sw + '">' + body + '</g></svg>'; }
-function vSvg(body, extra){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + (extra || '') + '>' + body + '</svg>'; }
-var VI = {
-  bottle: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/>'),
-  bottleDown: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/><g stroke-width="12"><path d="M191 168V238M173 222L191 242L209 222"/></g>'),
-  bottleUp: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/><g stroke-width="12"><path d="M191 238V158M173 176L191 156L209 176"/></g>'),
-  bottleRing: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/><g stroke-width="12"><circle cx="191" cy="212" r="22" stroke-width="13"/></g>'),
-  bottleWallet: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/><g stroke-width="12"><rect x="163" y="168" width="56" height="44" rx="9"/><path d="M178 168Q191 142 204 168"/></g>'),
-  bottleChat: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/><g stroke-width="12"><ellipse cx="191" cy="168" rx="19" ry="32"/></g>'),
-  bottleLock: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/><g stroke-width="12"><rect x="169" y="172" width="44" height="40" rx="7"/><path d="M178 172V160Q191 136 204 160V172"/></g>'),
-  bottleKey: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/><g stroke-width="12"><circle cx="178" cy="164" r="15"/><path d="M189 175L214 206M203 192L212 184"/></g>'),
-  cell: vSvgT(590, 215, 11, '<rect x="546" y="108" width="88" height="214" rx="9"/><path d="M548 128H632M548 166H632M548 205H632M548 244H632" stroke-opacity=".6"/>'),
-  people: vSvgT(990, 205, 17, '<circle cx="953" cy="143" r="50"/><path d="M1040 95A55 55 0 0 1 1045 190"/><path d="M866 318V292C866 256 895 238 950 238C1005 238 1032 256 1032 292V318"/><path d="M1070 246C1100 252 1112 272 1112 300V318"/>'),
-  person: vSvgT(1388, 206, 11, '<circle cx="1388" cy="145" r="54"/><path d="M1296 322V292C1296 262 1325 246 1388 246C1451 246 1480 262 1480 292V322"/>'),
-  headset: vSvgT(1467, 228, 22, '<path d="M1332 268C1332 150 1390 90 1467 90C1545 90 1603 150 1603 268"/><path d="M1332 258H1385Q1418 258 1418 288V335Q1418 366 1385 366H1355Q1332 366 1332 335Z"/><path d="M1603 258H1550Q1518 258 1518 288V335Q1518 366 1550 366H1580Q1603 366 1603 335Z"/>', 336),
-  megaphone: vSvgT(192, 166, 17, '<path d="M110 100H148V182H110Q92 182 92 164V118Q92 100 110 100Z"/><path d="M148 100L270 62Q296 56 296 82V200Q296 222 272 212L148 178"/><path d="M135 186Q140 215 160 250Q172 272 188 262Q198 252 190 232L178 196"/>'),
-  plane: vSvg('<path d="M21 3 3 10.2l7.2 2.8 2.8 7.2z"/><path d="M21 3 10.2 13"/>'),
-  gift: vSvg('<rect x="3.5" y="9" width="17" height="11.5" rx="2"/><path d="M2.5 9h19v-3.2h-19z"/><path d="M12 5.8v14.7"/><path d="M12 5.8C10.2 5.8 8.4 5 8.4 3.6 8.4 2.5 9.4 2 10.4 2.4c1.1.5 1.6 1.9 1.6 3.4zM12 5.8c1.8 0 3.6-.8 3.6-2.2 0-1.1-1-1.6-2-1.2-1.1.5-1.6 1.9-1.6 3.4z"/>'),
-  tick: vSvg('<path d="m5 12.6 4.3 4.3L19 7.2"/>'),
-  chev: vSvg('<path d="m9 5.5 6.5 6.5L9 18.5"/>'),
-  trophy: vSvg('<path d="M8 4h8v5.2a4 4 0 0 1-8 0z"/><path d="M8 6.2H4.6a3.2 3.2 0 0 0 3.7 4M16 6.2h3.4a3.2 3.2 0 0 1-3.7 4"/><path d="M12 13.2V17M8.6 20h6.8M10 17h4"/>'),
-  clipboard: vSvg('<rect x="5" y="4.5" width="14" height="16.5" rx="2.6"/><path d="M9 4.5V3.3h6v1.2"/><path d="M9 10h.01M12 10h3M9 14h.01M12 14h3M9 18h.01M12 18h3"/>'),
-  download: vSvg('<path d="M12 3.8v11"/><path d="m7.6 10.6 4.4 4.4 4.4-4.4"/><path d="M4.2 15.5v2.7a2 2 0 0 0 2 2h11.6a2 2 0 0 0 2-2v-2.7"/>'),
-  logout: vSvg('<path d="M9.5 4H6.2A2.2 2.2 0 0 0 4 6.2v11.6A2.2 2.2 0 0 0 6.2 20h3.3"/><path d="m16 8 4 4-4 4"/><path d="M20 12H9.5"/>'),
-  copy: vSvg('<rect x="9" y="9" width="11" height="11" rx="2.4"/><path d="M15 9V6.4A2.4 2.4 0 0 0 12.6 4H6.4A2.4 2.4 0 0 0 4 6.4v6.2A2.4 2.4 0 0 0 6.4 15H9"/>'),
-  errCircle: vSvg('<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>'),
-  key: vSvg('<circle cx="8" cy="15" r="4"/><path d="m11 12 8.5-8.5M16.5 6.5l2.5 2.5M14 9l2 2"/>'),
-  okCircle: vSvg('<circle cx="12" cy="12" r="9"/><path d="m8 12.4 2.9 2.9 5.2-5.6"/>'),
-  back: vSvg('<path d="m15 5-7 7 7 7"/>', ' stroke-width="2.4"'),
-  x: vSvg('<path d="M6 6l12 12M18 6 6 18"/>', ' stroke-width="2.2"'),
-  eye: vSvg('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>'),
-  eyeOff: vSvg('<path d="M3 3l18 18"/><path d="M10.6 5.7A9.7 9.7 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-2.6 3.4M6.3 7.3A16 16 0 0 0 2.5 12S6 18.5 12 18.5a9.6 9.6 0 0 0 4-.9"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>'),
-};
 
 
-var NUMBER_FONT_STACKS = {
-  'Bodoni Moda': "'Bodoni Moda',Didot,'Playfair Display',Georgia,serif",
-  'Playfair Display': "'Playfair Display',Didot,Georgia,serif",
-  'DM Serif Display': "'DM Serif Display',Georgia,serif",
-  'Georgia': "Georgia,'Times New Roman',serif",
-  'Roboto Mono': "'Roboto Mono',ui-monospace,'SFMono-Regular',monospace",
-  'JetBrains Mono': "'JetBrains Mono',ui-monospace,'SFMono-Regular',monospace",
-  'Orbitron': "'Orbitron',ui-sans-serif,sans-serif",
-  'System default': "'Roboto',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif",
-};
+
+
+
 // ── THE APP'S NAME ──
 // Owner: "l would like to also to edit the app name potato, so make it when it
 // can be editable everywhere." It is one admin setting (Settings -> App name)
@@ -1875,8 +980,6 @@ async function boot(){
   // cached instant-boot path -- because each is a way STATE.settings gets
   // filled, and whichever one wins the race has to be the one that applies it.
   applyBrandName();
-  applyInnerBackgroundSettings();
-  applyNumberFont();
 }
 // Home and Income show the asset list and the banner; repaint whichever is
 // on screen when either lands after the app has opened.
@@ -1960,40 +1063,8 @@ function syncBrandLogoImages(){
     }
   });
 }
-function applyNumberFont(){
-  // Defaults to the app's own face, not the old serif. This line was the
-  // real reason the calligraphy numbers survived the CSS change: the CSS
-  // fallback never gets a chance because --number-font is always set from
-  // here, and it hard-coded 'Bodoni Moda' whenever the setting was absent.
-  const name = (STATE.settings && STATE.settings.numberFont) || 'System default';
-  // Falls back to the app's own body face, not the old serif -- owner asked
-  // for the calligraphy numbers gone, so an unset or unrecognised setting
-  // must not quietly bring them back.
-  const stack = NUMBER_FONT_STACKS[name] || NUMBER_FONT_STACKS['System default'];
-  document.documentElement.style.setProperty('--number-font', stack);
-}
-// Admin's "App tagline (shown under the logo)" Settings field has existed
-// since before this app had a frontend to read it -- #authTagline is only
-// ever visible on the pre-login auth screen, so this only needs a call from
-// boot() itself (which runs once at module load, independent of auth state).
-// Owner: "make when l can put background image on those screens of login tab
-// and registration tab, make when l can set their opusity and blur."
-//
-// Written as CSS custom properties on :root rather than inline styles on the
-// two elements, because the auth screen is static markup in index.html that
-// this module never re-renders -- so there is nothing to re-apply them to
-// after a repaint, and the values survive whatever the screen does.
-//
-// Opacity is stored as a percent (0-100) so the admin panel takes a whole
-// number like every other field; it is divided here, once.
-// One opacity for every product picture, set once in the admin panel (read again on every paint, so a change goes live with the next refresh).
-function applyProductImageOpacity(){
-  const po = Number((STATE.settings || {}).productImageOpacity);
-  document.documentElement.style.setProperty('--prod-img-op', String(Number.isFinite(po) ? Math.min(100, Math.max(0, po)) / 100 : 1));
-}
 function applyAuthBackgrounds(){
   const s = STATE.settings || {};
-  applyProductImageOpacity();
   const root = document.documentElement;
   // An unset slot yields `none`, so the banner falls back to the brand gradient. The quotes matter for a data URL with odd characters.
   root.style.setProperty('--auth-hero-img', STATE.authHeroImage ? 'url("' + String(STATE.authHeroImage).replace(/"/g, '\\"') + '")' : 'none');
@@ -2011,14 +1082,6 @@ function applyAuthBackgrounds(){
   // the CSS -- is what decides.
   const hero = $('authHero');
   if (hero) hero.classList.toggle('has-bg', !!STATE.authHeroImage);
-}
-function applyInnerBackgroundSettings(){
-  const s = STATE.settings || {};
-  const root = document.documentElement;
-  const op = Number(s.innerBgOpacity);
-  const bl = Number(s.innerBgBlur);
-  root.style.setProperty('--inner-bg-opacity', String(Number.isFinite(op) ? Math.min(100, Math.max(0, op)) / 100 : 1));
-  root.style.setProperty('--inner-bg-blur', (Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0) + 'px');
 }
 // The round picture above the Log In / Sign Up forms: the admin's circle logo, else the app logo, else an empty white circle.
 function applyAuthLogo(){
@@ -2109,65 +1172,7 @@ function updateReferralFieldHint(){
   if (input) input.placeholder = 'Invitation Code';
 }
 
-// Owner: "let's establish a timer ie like saying snow opening in
-// 23:59:34... so it will be after the start up loader, make when l can
-// activate it or disable it, just near maintenance mode." A pre-launch
-// gate, admin-toggleable in Settings right next to Maintenance mode --
-// server.js's own MAINTENANCE GATE middleware enforces the same block on
-// the actual money/account routes so this can't be routed around by hitting
-// the API directly; this is the client-side countdown screen shown instead
-// of the login/app while it's active.
-function isOpeningGateActive(){
-  const s = STATE.settings;
-  return !!(s && s.openingCountdownEnabled && Number(s.openingCountdownAt) > Date.now());
-}
-function formatOpeningCountdown(ms){
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  const days = Math.floor(totalSec / 86400);
-  const h = Math.floor((totalSec % 86400) / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const sec = totalSec % 60;
-  const pad = n => String(n).padStart(2, '0');
-  return (days > 0 ? days + 'd ' : '') + `${pad(h)}:${pad(m)}:${pad(sec)}`;
-}
-var _openingGateTimer = null;
-function startOpeningGateCountdown(targetMs){
-  if (_openingGateTimer) clearInterval(_openingGateTimer);
-  const tick = () => {
-    const remaining = targetMs - Date.now();
-    const el = $('openingGateCountdown');
-    if (el) el.textContent = formatOpeningCountdown(remaining);
-    if (remaining <= 0) {
-      clearInterval(_openingGateTimer); _openingGateTimer = null;
-      // Target reached -- reload into a genuinely fresh boot rather than
-      // trying to splice this handler into the normal auto-sign-in/login/
-      // enter-app flow inline; every ordinary path (including a
-      // still-active gate if the admin pushed the time back out in the
-      // meantime) then runs exactly as it would on any real visit.
-      location.reload();
-    }
-  };
-  tick();
-  _openingGateTimer = setInterval(tick, 1000);
-}
-// Checked at the very top of the snow-auth handler, before auto sign-in,
-// the login screen, or entering the app -- STATE.settings is normally
-// already populated by the time snow-auth first fires (boot()'s own
-// /public/settings call started at module load, independent of auth
-// state), so this resolves instantly in the ordinary case; the
-// withTimeout() fallback only matters on a genuinely first-ever, slow-
-// network boot, same "don't block the common case for a rare edge case"
-// reasoning Round 63 already established for the announcement dialog.
-async function maybeShowOpeningGate(){
-  if (!STATE.settings) await waitForBootSettings(6000);
-  if (!isOpeningGateActive()) return false;
-  hideLoadingScreen();
-  $('authScreen').style.display = 'none';
-  $('app').style.display = 'none';
-  $('openingGate').style.display = 'flex';
-  startOpeningGateCountdown(Number(STATE.settings.openingCountdownAt));
-  return true;
-}
+
 
 // ── AUTH STATE HANDLER ──
 var _memberAuthTask = null, _memberAuthTaskUser = null;
@@ -2214,7 +1219,6 @@ async function processMemberAuth(user){
       await window.doLogout({ auto: true }); return;
     }
   } else { _memberSession.clear(); clearCachedState(); }
-  if (await maybeShowOpeningGate()) return;
   if (STATE.user !== user) return;
   if (!user) {
     window._pendingLoginSuccess = false;
@@ -2360,7 +1364,7 @@ async function registerCurrentUser(pin, phone){
   let reg = await post('/register', { referralCode: STATE.refCode || '', pin: pin || '', phone: phone || '' });
   // The invitation code is optional: a wrong one is dropped and the registration carries on without an upline.
   if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode) {
-    notify(reg.message || t('That referral code is invalid. Continuing without it.'));
+    notify(reg.message || 'That referral code is invalid. Continuing without it.');
     STATE.refCode = '';
     reg = await post('/register', { referralCode: '', pin: pin || '', phone: phone || '' });
   }
@@ -2411,7 +1415,7 @@ async function finishSignupToLogin(typedPhone){
   const ph = $('loginPhone'), pw = $('loginPassword');
   if (ph) ph.value = typedPhone;
   if (pw) pw.value = '';
-  notify(t('Registration successful!'), () => { const el = $('loginPassword'); if (el) { try { el.focus(); } catch (_) {} } });
+  notify('Registration successful!', () => { const el = $('loginPassword'); if (el) { try { el.focus(); } catch (_) {} } });
 }
 async function bootFromNetwork(uid){
   // _pendingRegPhone identifies a signup started in this tab; it works
@@ -2515,7 +1519,7 @@ async function bootFromNetwork(uid){
   $('app').style.display = '';
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
-  if (signupFlow) { window._pendingLoginSuccess = false; notify(t('Registration successful ✓')); }
+  if (signupFlow) { window._pendingLoginSuccess = false; notify('Registration successful ✓'); }
   else if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; }   // no "Login successful" notice (owner)
   // The invite-address pool, fetched behind the app rather than in front of
   // it, so even the FIRST open of the Referral screen has an address ready
@@ -2578,33 +1582,8 @@ async function refreshAppDataInBackground(uid){
 // some of them as an interim measure) even though nothing on the bottom
 // bar links to them directly any more.
 var MGI = {
-  mail: '<svg viewBox="0 0 24 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.4" y="3" width="19.2" height="14.4" rx="3"/><path d="M3.6 6.2l8.4 6 8.4-6"/></svg>',
-  nHome: '<svg viewBox="0 0 34 34" aria-hidden="true"><defs><linearGradient id="mgNg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0aa152"/><stop offset="1" stop-color="#067a40"/></linearGradient></defs><rect width="34" height="34" rx="7" fill="url(#mgNg)"/><path d="M17 8.4 7.6 17h2.7v8.6h13.4V17h2.7z" fill="#fff"/><path d="M17 5.6 5.4 16.2l1.7 1.8L17 8.9l9.9 9.1 1.7-1.8z" fill="#ffc72c"/><rect x="14.2" y="19.4" width="5.6" height="6.2" rx="1.1" fill="#067a40"/></svg>',
-  nOrders: '<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="7" fill="url(#mgNg)"/><rect x="9.4" y="7.6" width="15.2" height="20" rx="2.4" fill="#fff"/><rect x="13" y="5.6" width="8" height="4.6" rx="1.4" fill="#ffc72c"/><path d="M12.8 15h8.4M12.8 18.4h8.4M12.8 21.8h8.4" stroke="#067a40" stroke-width="1.5" stroke-linecap="round"/></svg>',
-  nPromo: '<svg viewBox="0 0 34 34" aria-hidden="true"><defs><linearGradient id="mgNy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6c52e"/><stop offset="1" stop-color="#dc9d16"/></linearGradient></defs><rect width="34" height="34" rx="7" fill="url(#mgNy)"/><rect x="7.4" y="13.6" width="6.4" height="6.8" rx="1.2" fill="#1a1a1a"/><path d="M13.8 13.6 22 9.2v15.6l-8.2-4.4z" fill="#fff"/><path d="M13.8 13.6 22 9.2v3.2l-8.2 3.2z" fill="#1a1a1a"/><path d="M25 13.4l3.6-1.6M25 17l4 0M25 20.6l3.6 1.6" stroke="#c9161d" stroke-width="1.8" stroke-linecap="round"/></svg>',
-  nTeam: '<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="7" fill="url(#mgNg)"/><circle cx="10.4" cy="12.4" r="2.5" fill="#ffc72c"/><circle cx="17" cy="11.2" r="2.7" fill="#ffc72c"/><circle cx="23.6" cy="12.4" r="2.5" fill="#ffc72c"/><path d="M6 24.6c0-3.4 2.4-5.4 5.2-5.4 1.2 0 2.2.4 3 1 .9-.6 1.8-1 2.8-1s1.9.4 2.8 1c.8-.6 1.8-1 3-1 2.8 0 5.2 2 5.2 5.4v.8H6z" fill="#fff"/></svg>',
-  nSalary: '<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="7" fill="url(#mgNy)"/><path d="M14 8.2c0-1.4 1-2.2 3-2.2s3 .8 3 2.2l-1.2 2.4h-3.6z" fill="#1c3b2a"/><path d="M13.2 11h7.6C24.6 14 26.4 17.6 26.4 21.4c0 4-2.6 6.6-9.4 6.6s-9.4-2.6-9.4-6.6C7.6 17.6 9.4 14 13.2 11z" fill="#0c7a46"/><text x="17" y="24.6" text-anchor="middle" font-family="Roboto,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#fff">$</text></svg>',
-  nProfile: '<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="7" fill="url(#mgNg)"/><circle cx="17" cy="12.6" r="5" fill="#fff"/><path d="M7.4 27.4c0-5.6 4.2-8.8 9.6-8.8s9.6 3.2 9.6 8.8z" fill="#fff"/></svg>',
-  // Profile list tiles (the small picture inside each coloured tile)
-  tDownload: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5" fill="#0a8f4b"/><path d="M10.6 6.6v6.4l3.8-3.2z" fill="#fff"/><rect x="7.6" y="15.2" width="8.8" height="3.2" rx=".8" fill="#ffc72c"/></svg>',
-  tCard: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="3" width="21" height="18" rx="5" fill="#0a8f4b"/><rect x="5" y="7.6" width="14" height="8.8" rx="1.8" fill="#fff"/><rect x="5" y="9.6" width="14" height="2" fill="#2c2c2c"/><rect x="6.6" y="13.6" width="5" height="1.5" rx=".7" fill="#ffc72c"/></svg>',
-  tWallet: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="18" rx="5" fill="#f2b542"/><rect x="4.4" y="7.4" width="15.2" height="9" rx="1.6" fill="#0a8f4b"/><rect x="4.4" y="9.4" width="15.2" height="1.6" fill="#ffc72c"/><rect x="15.4" y="12.4" width="4.2" height="2.4" rx=".8" fill="#fff"/></svg>',
-  tChat: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5.5" fill="#0a8f4b"/><path d="M6.6 7.4h10.8c.8 0 1.4.6 1.4 1.4v5c0 .8-.6 1.4-1.4 1.4H11l-3 2.4v-2.4H6.6c-.8 0-1.4-.6-1.4-1.4v-5c0-.8.6-1.4 1.4-1.4z" fill="#fff"/><circle cx="9.2" cy="11.3" r="1" fill="#ffc72c"/><circle cx="12" cy="11.3" r="1" fill="#ffc72c"/><circle cx="14.8" cy="11.3" r="1" fill="#ffc72c"/></svg>',
-  tLock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5.5" fill="#0a8f4b"/><path d="M9 10.6V9a3 3 0 016 0v1.6" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><rect x="7.4" y="10.4" width="9.2" height="7.4" rx="1.8" fill="#fff"/><circle cx="12" cy="13.6" r="1.1" fill="#ffc72c"/><rect x="11.4" y="14" width="1.2" height="2.2" rx=".5" fill="#ffc72c"/></svg>',
-  tKey: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5.5" fill="#f9c824"/><circle cx="9.4" cy="12" r="3" fill="none" stroke="#fff" stroke-width="2"/><path d="M12.4 12h7M16.6 12v2.6M19.4 12v2" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
-  door: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="5.5" fill="#f6c22a"/><path d="M7.4 6.6h5.2v10.8H7.4z" fill="#fff"/><path d="M12.6 12h5.4M15.8 9.6 18.2 12l-2.4 2.4" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  cardMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6" fill="#3a9f62"/><rect x="5" y="6.8" width="14" height="10.4" rx="2" fill="#fff"/><rect x="5" y="9.2" width="14" height="2.2" fill="#3a7a54"/><rect x="6.8" y="13.4" width="4.8" height="1.6" rx=".8" fill="#f3b92f"/></svg>',
-  tickMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="5.5" fill="#0c8a4a"/><path d="M6.4 12.6l3.9 3.9 7.4-8" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  copyMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="#0c8a4a"/><rect x="8" y="6.6" width="8" height="10.8" rx="1.6" fill="#ffc72c"/><rect x="10" y="5.6" width="4" height="2.4" rx=".8" fill="#fff"/></svg>',
   plane: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 3 10.4l6.4 2.4L12 20l2.6-5.4L21 3z"/><path d="M9.4 12.8 21 3"/></svg>',
   whatsapp: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.4 20.6l1.3-4.4A8.6 8.6 0 1 1 8 19.5z"/><path d="M9 8.6c0 3.2 2.6 5.8 5.8 5.8l1-1.4-2-1-.8.8c-.8-.4-1.6-1.2-2-2l.8-.8-1-2z" fill="#fff" stroke="none"/></svg>',
-  facebook: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#fff"/><path d="M13.3 22.4v-8h2.6l.5-3.2h-3.1V9.2c0-.9.3-1.5 1.6-1.5h1.6V4.9c-.3 0-1.2-.1-2.3-.1-2.3 0-3.9 1.4-3.9 4v2.4H7.7v3.2h2.6v8z" fill="#0866ff"/></svg>',
-  xmark: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.8 3h3l-6.6 7.6L22 21h-6.1l-4.8-6.3L5.6 21h-3l7-8.1L2 3h6.2l4.3 5.8zm-1 16.2h1.7L7.3 4.7H5.5z" fill="#fff"/></svg>',
-  tiktok: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.6 3c.3 2.3 1.7 3.8 4 4v3c-1.5 0-2.9-.5-4-1.3v6.2a5.6 5.6 0 1 1-5.6-5.6c.4 0 .7 0 1 .1v3.1a2.6 2.6 0 1 0 1.6 2.4V3z" fill="#fff"/></svg>',
-  warn: '<svg viewBox="0 0 41 38" aria-hidden="true"><defs><linearGradient id="mgWy" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe266"/><stop offset="1" stop-color="#fbc21f"/></linearGradient></defs><path d="M20.5 2.4 39 34.8H2z" fill="url(#mgWy)" stroke="#e9a21b" stroke-width="2.4" stroke-linejoin="round"/><rect x="18.6" y="12.6" width="3.8" height="13" rx="1.8" fill="#1c1c1c"/><circle cx="20.5" cy="30" r="2.2" fill="#1c1c1c"/></svg>',
-  okc: '<svg viewBox="0 0 41 38" aria-hidden="true"><defs><linearGradient id="mgOk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1ed48a"/><stop offset="1" stop-color="#05a867"/></linearGradient></defs><rect x="1" y="0" width="39" height="38" rx="5" fill="url(#mgOk)"/><path d="M9.6 19.6l7.6 7.6 14.4-15.6" fill="none" stroke="#fff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
-  back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.6 6.4 8.6 12l6 5.6" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
 };
 // The open treasure chest with gold coins (transparent background), used on Home and on the Treasure Chest page.
@@ -3121,18 +2100,7 @@ window.showPage = async function(name){
   else if (name === 'account') await renderAccount();
   startLiveRefresh();
 };
-// Announcement dialog, reintroduced (owner: "we are going to introduce
-// announcement dialog, so it will have channel and email buttons shaking
-// and glowing, the cancel X sign will be top right... it opens from middle
-// as usual and also just like mechanism of previous chipz clicking back to
-// home stimulates it"). Was removed entirely in an earlier round (see
-// potato/CLAUDE.md's "Design system" section) -- maybeShowAnnouncement() was
-// deliberately kept as a no-op rather than deleted specifically so
-// maybeAnnounceAfterSheet()'s five call sites never needed touching either
-// time; this round just gives it a real body again. Content (annTitle/
-// annBody) and the WhatsApp/email CTAs (whatsappGroup/supportEmail) reuse
-// the exact same admin settings and rendering pattern openSupportSheet()
-// already established -- one set of contact fields, two places they show.
+// The announcement dialog: one picture (admin) with Join Channel under it and a round X.
 window.closeAnnouncement = function(){
   const bg = $('annBg');
   if (bg) { if (bg.classList.contains('show')) dlgClosed(); bg.classList.remove('show'); }
@@ -3143,13 +2111,12 @@ window.closeAnnouncement = function(){
 // or the WhatsApp group link when no Telegram group is set.
 function maybeShowAnnouncement(){
   const s = STATE.settings || {};
-  const lines = String(s.annBody || '').split('\n').map(x => x.trim()).filter(Boolean);
   // The picture is fetched behind the loading screen: wait for it, so the dialog opens once, complete.
   if (!_artLanded && !STATE.announcementImage) {
     if (!_annWaiting) { _annWaiting = true; startArtwork().then(() => { _annWaiting = false; if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }); }
     return;
   }
-  if (!STATE.announcementImage && !(s.annEnabled && lines.length)) {
+  if (!STATE.announcementImage) {
     // The pictures are fetched after the loading screen comes down; if they
     // have not landed yet, open the dialog the moment they do.
     if (!_artLanded && !_annWaiting) { _annWaiting = true; startArtwork().then(() => { _annWaiting = false; if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }); }
@@ -3157,13 +2124,11 @@ function maybeShowAnnouncement(){
   }
   const bg = $('annBg'), sheet = $('annSheet');
   if (!bg || !sheet) return;
-  const link = s.telegramGroup || s.whatsappGroup || '';
+  const link = s.telegramGroup || '';
   sheet.innerHTML = `
     <button class="mg-ann-x" type="button" onclick="closeAnnouncement()" aria-label="Close">${MGI.x}</button>
-    <h2>${esc(s.annTitle || 'Welcome')}</h2>
     <div class="mg-ann-body">
       ${STATE.announcementImage ? `<img class="mg-ann-img" src="${esc(STATE.announcementImage)}" alt="">` : ''}
-      ${lines.length ? `<div class="mg-ann-lines">${lines.map(l => `<p>${esc(l)}</p>`).join('')}</div>` : ''}
     </div>
     ${link ? `<a class="mg-ann-join" href="${esc(link)}" target="_blank" rel="noopener" onclick="closeAnnouncement()"><svg viewBox="0 0 24 24" aria-hidden="true" width="20" height="20"><path fill="#fff" d="M21.5 3.2 2.7 10.5c-.9.4-.9 1.1 0 1.4l4.8 1.5 1.8 5.6c.2.6.8.7 1.2.3l2.6-2.2 4.9 3.6c.9.5 1.6.2 1.8-.9L22.9 4.4c.3-1.3-.5-1.8-1.4-1.2zM9 13.1l9.6-6-7.4 7.2-.3 3.4z"/></svg><span>Join Channel</span></a>` : ''}`;
   bg.classList.add('show');
@@ -3355,7 +2320,7 @@ function mgUnread(){ return (STATE.messages || []).filter(m => !m.read).length; 
 // Channel = the Telegram group (or the WhatsApp group when there is none); Service = customer service.
 window.openContactLink = function(kind){
   const s = STATE.settings || {};
-  const url = kind === 'channel' ? (s.telegramGroup || s.telegramChannel || s.whatsappGroup || '') : (s.supportTelegram || s.supportWhatsapp || '');
+  const url = kind === 'channel' ? (s.telegramGroup || '') : (s.supportTelegram || '');
   if (!/^https?:\/\//i.test(String(url))) return notify('No ' + (kind === 'channel' ? 'channel' : 'service') + ' link is set yet.');
   window.open(url, '_blank', 'noopener');
 };
@@ -3398,7 +2363,6 @@ function ptFlipSettle(d){ d.classList.remove('pt-go'); const v = d.getAttribute(
 function homeTabProducts(){ return (STATE.products || []).filter(p => p.active !== false); }
 function homeEmptyHtml(){ return '<div class="v-empty">No products yet.</div>'; }
 function paintHome(){
-  applyProductImageOpacity();
   // A product the admin switched off (Active unticked) is not offered on Home; owners still see it on Income.
   const products = (STATE.products || []).filter(p => p.active !== false);
   const quick = (slot, label, fn) => `<button type="button" onclick="${fn}">${ptIconHtml(slot, '', 'pt-qi') || '<span class="pt-qi pt-qi-empty"></span>'}<span>${label}</span></button>`;
@@ -3579,7 +2543,6 @@ function ptStartIncomeClock(){
   }, 1000);
 }
 function paintAssets(loading){
-  applyProductImageOpacity();
   // Running products first, newest first inside each group; the id is the last tie-break so the order never shuffles between refreshes.
   const owned = (STATE.investments || []).filter(i => i.status === 'active' || i.status === 'matured').sort((x, y) =>
     (x.status === 'active' ? 0 : 1) - (y.status === 'active' ? 0 : 1)
@@ -3634,9 +2597,9 @@ function fmtDay(value){
   return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' at ' + t;
 }
 // Deposit result marks, traced from the owner's two pictures (green tick badge, red cross badge).
-var PAY_OK_ART = 'M316.5 694.5C292.9 692.3 268.0 687.5 246.5 680.9C233.9 677.0 210.0 668.0 210.0 667.1C210.0 666.7 209.1 666.4 207.9 666.3C204.1 666.0 170.5 647.8 156.5 638.4C-27.6 515.5 -53.7 256.8 102.4 101.7C239.3 -34.4 458.9 -33.7 595.3 103.3C601.7 109.8 607.0 115.4 607.0 115.8C607.0 116.2 603.0 118.9 598.1 121.7L589.2 126.8L578.3 116.1C417.3 -42.0 151.0 3.9 53.4 206.5C-40.2 400.9 78.7 632.9 291.0 669.9C317.8 674.6 360.4 676.1 383.5 673.2C488.4 659.9 575.7 603.8 628.7 515.5C647.9 483.6 665.7 436.2 669.6 406.9C670.0 404.2 670.7 402.0 671.2 402.0C671.7 402.0 671.8 401.5 671.5 401.0C671.2 400.4 671.7 394.2 672.6 387.2C674.8 371.7 675.1 327.9 673.2 312.5C667.0 263.5 652.8 220.9 628.9 180.8L622.9 170.6L630.3 163.2L637.8 155.9L640.3 159.2C648.7 170.3 665.9 204.8 673.9 226.1C683.0 250.6 691.8 286.1 692.3 300.2C692.4 303.4 692.8 306.0 693.1 306.0C693.4 306.0 694.2 312.9 694.8 321.2C711.2 535.8 530.6 714.0 316.5 694.5ZM334.0 645.3C299.1 642.8 272.5 637.4 244.5 627.0C113.2 578.2 33.9 444.8 53.5 305.7C71.8 175.7 174.8 72.5 305.0 53.6C394.8 40.5 489.0 70.3 551.9 131.6L563.5 142.9L550.0 152.2C481.4 199.6 411.8 266.8 340.6 354.0C334.1 362.0 328.4 368.9 328.0 369.3C327.6 369.8 302.7 357.8 272.6 342.8L217.9 315.5L208.7 315.5C194.1 315.5 183.9 321.6 177.3 334.2C174.8 338.9 174.5 340.6 174.5 349.0C174.5 363.3 175.4 364.8 203.0 395.0C267.6 465.8 311.7 506.8 335.4 518.1C354.3 527.1 376.0 523.7 390.3 509.7C398.6 501.6 396.2 505.5 444.8 418.5C484.5 347.4 528.4 280.5 565.5 234.5C579.5 217.1 600.1 194.0 601.6 194.0C604.3 194.0 619.1 223.3 626.9 244.4C667.7 353.9 641.1 475.0 558.1 558.1C518.1 598.1 471.5 624.4 417.7 637.5C393.3 643.4 356.0 646.9 334.0 645.3ZM350.0 501.6C330.0 495.8 285.8 455.4 218.1 381.1C198.2 359.3 194.0 353.7 194.0 349.3C194.0 346.0 198.2 338.9 201.1 337.5C208.4 333.7 208.5 333.8 273.0 366.0L332.9 396.0L343.2 383.2C432.1 272.6 514.0 196.0 596.0 146.8C615.1 135.3 618.5 133.7 620.8 134.9C625.9 137.6 624.8 139.5 607.2 157.5C534.7 231.3 488.3 297.9 404.5 448.5C384.6 484.2 383.1 486.8 378.4 492.6C371.7 500.8 360.0 504.5 350.0 501.6Z';
-var PAY_OK_STATIC = '<svg viewBox="0 0 696 696" aria-hidden="true"><circle cx="348" cy="348" r="348" fill="#fff"/><path fill="#42af3c" fill-rule="evenodd" d="' + PAY_OK_ART + '"/></svg>';
-var PAY_FAIL_STATIC = '<svg viewBox="0 0 313 313" aria-hidden="true"><circle cx="156.5" cy="156.5" r="156.5" fill="#ea2c2c"/><g fill="#fff"><rect x="81.5" y="141.5" width="150" height="30" rx="7" transform="rotate(45 156.5 156.5)"/><rect x="81.5" y="141.5" width="150" height="30" rx="7" transform="rotate(-45 156.5 156.5)"/></g></svg>';
+
+
+
 // The owner's tick and cross DRAW THEMSELVES on the deposit result page (ring runs round clockwise, the disc pops in, the tick is written
 // from its left end to its tip; the cross: the disc pops in, then one bar after the other). They are drawn on a <canvas> with plain
 // compositing, NOT with CSS-animated SVG masks: animated masks are not repainted reliably by every phone's browser (iPhones, older Android
@@ -3646,7 +2609,7 @@ var PAY_FAIL_STATIC = '<svg viewBox="0 0 313 313" aria-hidden="true"><circle cx=
 // which has no masks and no animation, so the final picture is always correct. It plays even when the phone asks for reduced motion:
 // it is a 1.5 second status mark, and the owner wants it everywhere.
 var DR_GREEN = '#42af3c', DR_RED = '#ea2c2c';
-var DR_TICK_LEN = Math.sqrt(150 * 150 + 134 * 134) + Math.sqrt(263 * 263 + 338 * 338);
+
 function drBezier(x1, y1, x2, y2) {            // CSS cubic-bezier(x1,y1,x2,y2) as a function of time 0..1
   var cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx, cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
   return function (t) {
@@ -3658,77 +2621,15 @@ function drBezier(x1, y1, x2, y2) {            // CSS cubic-bezier(x1,y1,x2,y2) 
   };
 }
 var DR_E_RING = drBezier(.5, 0, .25, 1), DR_E_TICK = drBezier(.4, 0, .2, 1), DR_E_POP = drBezier(.2, .9, .3, 1.15), DR_E_OUT = drBezier(0, 0, .58, 1);
-function drClamp(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
-function drTickPath(c) { c.beginPath(); c.moveTo(212, 352); c.lineTo(362, 486); c.lineTo(625, 148); }
-function drCanvasKit(size) {
-  function mk() { var c = document.createElement('canvas'); c.width = c.height = size; return c; }
-  return { size: size, S: size / 696, L: mk(), M: mk(), G: mk() };
-}
-function drClear(c, size, S) { c.setTransform(1, 0, 0, 1, 0, 0); c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1; c.setLineDash([]); c.clearRect(0, 0, size, size); c.setTransform(S, 0, 0, S, 0, 0); }
+
+
+
+
 // the artwork, seen only through a mask drawn by `maskFn` (white = shown, destination-out = hidden)
-function drMasked(kit, art, maskFn) {
-  var L = kit.L.getContext('2d'), M = kit.M.getContext('2d');
-  drClear(L, kit.size, kit.S); L.fillStyle = DR_GREEN; L.fill(art, 'evenodd');
-  drClear(M, kit.size, kit.S); maskFn(M);
-  L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'destination-in'; L.drawImage(kit.M, 0, 0); L.globalCompositeOperation = 'source-over';
-  return kit.L;
-}
-function drOkFrame(kit, art, main, t) {
-  var S = kit.S, size = kit.size, G = kit.G.getContext('2d'), L = kit.L.getContext('2d'), M = kit.M.getContext('2d');
-  drClear(main, size, S); main.fillStyle = '#fff'; main.beginPath(); main.arc(348, 348, 348, 0, 6.2831853); main.fill();
-  var p1 = DR_E_RING(drClamp(t / 600)), p2 = DR_E_TICK(drClamp((t - 1000) / 500)), q = DR_E_POP(drClamp((t - 550) / 400));
-  // 1. the ring, clockwise from the top, with the tick's place left out
-  if (p1 > 0) {
-    var C = 6.2831853 * 345;
-    main.setTransform(1, 0, 0, 1, 0, 0);
-    main.drawImage(drMasked(kit, art, function (m) {
-      m.lineWidth = 110; m.strokeStyle = '#fff'; m.setLineDash([p1 * C, C * 3]); m.beginPath(); m.arc(348, 348, 345, -1.5707963, 4.712389, false); m.stroke(); m.setLineDash([]);
-      m.globalCompositeOperation = 'destination-out'; m.lineWidth = 200; m.lineCap = 'round'; m.lineJoin = 'round'; drTickPath(m); m.stroke();
-    }), 0, 0);
-  }
-  // 2. the disc pops in, its tick still hidden under a green cover that is wiped away along the tick
-  if (t >= 550) {
-    drClear(G, size, S);
-    G.setTransform(1, 0, 0, 1, 0, 0);
-    G.drawImage(drMasked(kit, art, function (m) { m.fillStyle = '#fff'; m.beginPath(); m.arc(348, 348, 300, 0, 6.2831853); m.fill(); }), 0, 0);
-    drClear(L, size, S); L.save(); L.beginPath(); L.arc(348, 348, 296, 0, 6.2831853); L.clip();
-    L.strokeStyle = DR_GREEN; L.lineWidth = 200; L.lineCap = 'round'; L.lineJoin = 'round'; drTickPath(L); L.stroke(); L.restore();
-    drClear(M, size, S); M.fillStyle = '#fff'; M.fillRect(0, 0, 696, 696);
-    if (p2 > 0) { M.globalCompositeOperation = 'destination-out'; M.lineWidth = 210; M.lineCap = 'round'; M.lineJoin = 'round'; M.setLineDash([p2 * DR_TICK_LEN, DR_TICK_LEN * 3]); drTickPath(M); M.stroke(); M.setLineDash([]); }
-    L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'destination-in'; L.drawImage(kit.M, 0, 0); L.globalCompositeOperation = 'source-over';
-    G.setTransform(1, 0, 0, 1, 0, 0); G.drawImage(kit.L, 0, 0);
-    main.setTransform(S, 0, 0, S, 0, 0); main.save(); main.globalAlpha = drClamp(q); main.translate(348, 348); main.scale(.6 + .4 * q, .6 + .4 * q); main.translate(-348, -348);
-    main.drawImage(kit.G, 0, 0, 696, 696); main.restore();
-  }
-  // 3. the tip of the tick that leaves the disc
-  if (p2 > 0) {
-    main.setTransform(1, 0, 0, 1, 0, 0);
-    main.drawImage(drMasked(kit, art, function (m) {
-      m.strokeStyle = '#fff'; m.lineWidth = 210; m.lineCap = 'round'; m.lineJoin = 'round'; m.setLineDash([p2 * DR_TICK_LEN, DR_TICK_LEN * 3]); drTickPath(m); m.stroke(); m.setLineDash([]);
-      m.globalCompositeOperation = 'destination-out'; m.beginPath(); m.arc(348, 348, 297, 0, 6.2831853); m.fill();
-    }), 0, 0);
-  }
-}
-function drBar(c, deg) {                         // the owner's white bar: 150 x 30, corner radius 7, turned about the disc's centre
-  c.save(); c.translate(156.5, 156.5); c.rotate(deg * Math.PI / 180); c.translate(-156.5, -156.5);
-  var x = 81.5, y = 141.5, w = 150, h = 30, r = 7; c.beginPath(); c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.arcTo(x + w, y, x + w, y + r, r); c.lineTo(x + w, y + h - r); c.arcTo(x + w, y + h, x + w - r, y + h, r);
-  c.lineTo(x + r, y + h); c.arcTo(x, y + h, x, y + h - r, r); c.lineTo(x, y + r); c.arcTo(x, y, x + r, y, r); c.closePath(); c.fillStyle = '#fff'; c.fill(); c.restore();
-}
-function drFailFrame(kit, main, t) {
-  var size = kit.size, S = kit.S, L = kit.L.getContext('2d'), M = kit.M.getContext('2d');
-  drClear(main, size, S);
-  var q = DR_E_POP(drClamp(t / 400));
-  main.save(); main.globalAlpha = drClamp(q); main.translate(156.5, 156.5); main.scale(.6 + .4 * q, .6 + .4 * q); main.translate(-156.5, -156.5);
-  main.fillStyle = DR_RED; main.beginPath(); main.arc(156.5, 156.5, 156.5, 0, 6.2831853); main.fill(); main.restore();
-  var bars = [[45, 95, 95, 218, 218, drClamp((t - 450) / 260)], [-45, 95, 218, 218, 95, drClamp((t - 720) / 260)]];
-  for (var i = 0; i < 2; i++) {
-    var b = bars[i], p = DR_E_OUT(b[5]); if (p <= 0) continue;
-    drClear(L, size, S); drBar(L, b[0]);
-    drClear(M, size, S); M.strokeStyle = '#fff'; M.lineWidth = 46; var Ln = Math.sqrt((b[3] - b[1]) * (b[3] - b[1]) + (b[4] - b[2]) * (b[4] - b[2])); M.setLineDash([p * Ln, Ln * 3]); M.beginPath(); M.moveTo(b[1], b[2]); M.lineTo(b[3], b[4]); M.stroke(); M.setLineDash([]);
-    L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'destination-in'; L.drawImage(kit.M, 0, 0); L.globalCompositeOperation = 'source-over';
-    main.setTransform(1, 0, 0, 1, 0, 0); main.drawImage(kit.L, 0, 0);
-  }
-}
+
+
+
+
 var _drToken = 0;
 // A failed payment: once the cross has been drawn it shakes and the phone buzzes (once per drawing).
 function failShake(box, tok){
@@ -3736,32 +2637,7 @@ function failShake(box, tok){
   box.classList.remove('dep-shake'); void box.offsetWidth; box.classList.add('dep-shake');
   try { if (navigator.vibrate) navigator.vibrate([90, 50, 90, 50, 160]); } catch (e) {}
 }
-function playStatusIcon(box, kind){
-  var tok = ++_drToken, ok = kind === 'ok', still = ok ? PAY_OK_STATIC : PAY_FAIL_STATIC, END = ok ? 1560 : 1000, shook = false;
-  box.classList.remove('dep-shake');
-  function drawn(){ if (!ok && !shook) { shook = true; failShake(box, tok); } }
-  function finish(){ if (tok === _drToken && box.firstChild && box.firstChild.tagName === 'CANVAS') box.innerHTML = still; drawn(); }
-  try {
-    if (typeof Path2D !== 'function') { box.innerHTML = still; drawn(); return; }
-    var dpr = Math.min(window.devicePixelRatio || 1, 3), size = Math.round(120 * dpr);   // the mark is 120 CSS pixels (see .dep-status-icon>canvas)
-    var cv = document.createElement('canvas'); cv.width = cv.height = size; cv.className = 'dr-canvas'; cv.setAttribute('aria-hidden', 'true');
-    var main = cv.getContext('2d'), kit = drCanvasKit(size), art = ok ? new Path2D(PAY_OK_ART) : null;
-    if (!ok) kit.S = size / 313;
-    if (ok) drOkFrame(kit, art, main, 0); else drFailFrame(kit, main, 0);
-    box.innerHTML = ''; box.appendChild(cv);
-    var t0 = null;
-    var step = function(now){
-      if (tok !== _drToken || cv.parentNode !== box) return;
-      if (t0 === null) t0 = now;
-      var t = now - t0;
-      if (t >= END) { finish(); return; }
-      try { if (ok) drOkFrame(kit, art, main, t); else drFailFrame(kit, main, t); } catch (e) { finish(); return; }
-      requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-    setTimeout(finish, END + 1500);
-  } catch (e) { box.innerHTML = still; drawn(); }
-}
+
 // Waiting for the payment: a green phone badge with rings spreading from it (the page around it is the timeline, see setDepositStatusPending).
 var DEPOSIT_POLL_FLOW = '<div class="pl-radar" role="img" aria-label="Waiting for your approval"><i></i><i></i><i></i>'
   + '<b><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.5 18.5h3"/></svg></b></div>';
@@ -3788,7 +2664,6 @@ function planStats(inv){
   const prod = (STATE.products || []).find(p => p.key === inv.tierKey);
   const total = Number(inv.payoutsTotal)
     || (prod && Number(prod.cycle))
-    || Number((STATE.settings || {}).cycleDays)
     || 150;
   const made = Math.min(Number(inv.payoutsMade) || 0, total);
   const expected = Number(inv.expectedReturn) || 0;
@@ -4073,7 +2948,7 @@ window.claimSalary = async function(btn){
     refreshTransactionsCache().catch(() => {});
     return notify(fmtUGX(r.amount) + ' added to your wallet');
   }
-  notify((r && r.message) || 'Could not claim the salary right now');
+  notify((r && r.message) || 'Could not claim the reward right now');
 };
 // ── MISSION CENTER — REMOVED ──
 // Owner: "remove mission center". The screen, both claim flows and the
@@ -4433,23 +3308,7 @@ window.closeNotify = function(){
 // The Help dialog (Home "Help Me", My "Help Me"): the two contact links the
 // admin already sets -- Channel = the Telegram group, Service = Telegram
 // customer service -- in a centred dialog.
-window.openHelpDialog = function(title){
-  const s = STATE.settings || {};
-  const btn = (url, label) => url
-    ? `<a class="v-help-b" href="${esc(url)}" target="_blank" rel="noopener">${VI.plane}<span>${label}</span></a>`
-    : `<button class="v-help-b" type="button" onclick="notify('No ${label.toLowerCase()} link is set yet.')">${VI.plane}<span>${label}</span></button>`;
-  $('helpCard').innerHTML = `
-    <span class="v-help-ic">${VI.headset}</span>
-    <h3>${esc(title || 'Help')}</h3>
-    <div class="v-help-btns">${btn(s.telegramGroup || s.telegramChannel, 'Channel')}${btn(s.supportTelegram, 'Service')}</div>
-    <button class="v-help-close" type="button" onclick="closeHelpDialog()">Close</button>`;
-  $('helpBg').classList.add('show');
-  lockBodyScroll(); dlgOpened();
-};
-window.closeHelpDialog = function(){
-  $('helpBg').classList.remove('show'); dlgClosed();
-  if (!isScrollLockOverlayOpen()) unlockBodyScroll();
-};
+
 
 // ── TRANSACTION STATEMENT ──
 // One professional statement surface. Categories stay horizontal at the top;
@@ -4472,7 +3331,7 @@ function statementDescription(t){
   if (t.type === 'order_gift') return 'Order Gift';
   if (t.type === 'welcome_bonus') return 'Welcome Bonus';
   if (t.type === 'team_reward') return 'Team Reward';
-  if (t.type === 'mission_salary') return 'Daily Salary';
+  if (t.type === 'mission_salary') return 'Team Reward';
   if (t.type === 'mission_deposit_reward') return 'Mission Reward';
   if (t.type === 'admin_credit') return 'Deposit';
   if (t.type === 'invest' || t.type === 'investment') return 'Purchase';
@@ -4980,8 +3839,7 @@ window.closeSheet = function(opts){
 // dialog is skipped over by the popstate handler below, so Back never "does nothing".
 var _dlgIgnorePop = false, _dlgFromPop = false, _dlgCleanTimer = null;
 function anyDialogOpen(){
-  return !!(($('helpBg') && $('helpBg').classList.contains('show'))
-    || ($('confirmBg') && $('confirmBg').classList.contains('show'))
+  return !!(($('confirmBg') && $('confirmBg').classList.contains('show'))
     || ($('annBg') && $('annBg').classList.contains('show'))
     // The payment status page owns a history entry too: without it here, one Back left the page showing and the next left the app mid-payment.
     || ($('depStatusBg') && $('depStatusBg').classList.contains('show')));
@@ -4991,7 +3849,7 @@ function resetOverlayState(){
   document.body.classList.remove('deposit-status-open', 'sheet-open');
   // A session that ends (or a logout) takes every popup with it: the Buy confirm, Help, announcement, download and the win card used to stay
   // on top of the Login screen (the win card even showed the previous member's New Balance).
-  ['confirmBg', 'helpBg', 'annBg'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
+  ['confirmBg', 'annBg'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
   const win = $('ptClaimBg'); if (win) win.remove();
   _openSheetTitle = null; _depActiveDepositId = null; _withdrawSubmitting = false;
   if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
@@ -5012,8 +3870,7 @@ function dlgClosed(){
 function closeTopDialog(){
   _dlgFromPop = true;
   try {
-    if ($('helpBg') && $('helpBg').classList.contains('show')) closeHelpDialog();
-    else if ($('confirmBg') && $('confirmBg').classList.contains('show')) closeConfirm();
+    if ($('confirmBg') && $('confirmBg').classList.contains('show')) closeConfirm();
     else if ($('annBg') && $('annBg').classList.contains('show')) closeAnnouncement();
     else if ($('depStatusBg') && $('depStatusBg').classList.contains('show')) {
       // The payment status page: Back closes it once it has an answer (its Close button is showing). While the payment is still being
@@ -5072,7 +3929,7 @@ let _aboutScrollObserver = null;
 // counts down to that real midnight instant instead of a moving +24h target.
 // The region's own clock offset, not Kampala's -- "resets at midnight" has
 // to mean midnight where the member lives. Mirrors tzOffMs() in server.js.
-function tzOffMs(){ const m = REGION && REGION.utcOffsetMin; return (m == null ? 180 : Number(m)) * 60000; }
+
 // Self-terminating, same idiom as startPlanCountdowns(): the tick just stops
 // itself once #checkinBtn's countdown attribute is gone (sheet closed or
 // re-rendered), no separate close-hook needed. Once the cooldown genuinely
@@ -5529,33 +4386,7 @@ window.openWithdrawSheet = async function(){
 // 06:00:00 - 17:00:00." that no code enforced, so the app quietly promised
 // hours it did not keep. If the window is off, the line now says withdraw is
 // open any time, because that is the truth.
-var _WIT_HHMM = /^(\d{1,2}):(\d{2})$/;
-function witMinutes(v){
-  const m = _WIT_HHMM.exec(String(v == null ? '' : v).trim());
-  if (!m) return null;
-  const h = Number(m[1]), mi = Number(m[2]);
-  return (h > 23 || mi > 59) ? null : h * 60 + mi;
-}
-// 24-hour, matching server.js's hhmmLabel() and every other clock in this
-// app. It was 12-hour AM/PM, which disagreed with the ledger and the plan
-// countdown, did not look like the 18:00 the owner typed into the admin
-// panel, and spliced two untranslatable English words into a sentence the
-// translator had already translated.
-function witClock(v){
-  const t = witMinutes(v);
-  if (t == null) return '';
-  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
-}
-function withdrawWindow(s){
-  const from = witMinutes(s && s.withdrawOpenFrom), to = witMinutes(s && s.withdrawOpenTo);
-  if (!(s && s.withdrawWindowEnabled) || from == null || to == null || from === to)
-    return { enabled: false, open: true, from: '', to: '' };
-  const d = new Date(Date.now() + tzOffMs());   // the region's clock, as the server judges it
-  const now = d.getUTCHours() * 60 + d.getUTCMinutes();
-  // The window may WRAP past midnight -- 18:00 to 17:00 is his own example.
-  const open = from < to ? (now >= from && now < to) : (now >= from || now < to);
-  return { enabled: true, open, from: witClock(s.withdrawOpenFrom), to: witClock(s.withdrawOpenTo) };
-}
+
 // The one wallet card and the Bind Wallet button (one wallet per member; the
 // Wallet page edits it in place). Isolated so openWithdrawSheet()'s post-fetch
 // update can repaint only this block, never #witAmount.
@@ -5655,11 +4486,6 @@ window.submitWithdraw = async function(){
   // all. It's tappable unconditionally now (see paintWithdrawSheet()); this
   // check is what actually tells them why nothing happened.
   if (!acct) return notify('Please add a payout wallet before withdrawing.');
-  // Same courtesy for the hours: told here so the member is not asked to
-  // wait on a request the server will refuse anyway.
-  const win = withdrawWindow(STATE.settings || {});
-  if (win.enabled && !win.open && !(STATE.account && STATE.account.withdrawAnytime))
-    return notify(`Withdraw is open from ${win.from} to ${win.to}. Please come back then.`);
   // The Trade Password is asked in a small dialog, right when the member taps Withdraw (the owner's Withdraw page has no box for it).
   if ($('pinBg') && $('pinBg').classList.contains('show')) return;   // a second tap while the dialog is open does nothing
   const witPin = await askTradePin();
@@ -5960,6 +4786,4 @@ paintRegionChrome();
 // into the language it was left in instead of showing English until
 // /public/settings lands. The observer is started first so anything the boot
 // path renders is translated as it appears, not after a visible flash.
-startI18nObserver();
-applyRegionLanguages();
 var _bootPromise = boot();

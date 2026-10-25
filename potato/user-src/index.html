@@ -83,23 +83,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Warm the existing login/API connections while the sign-in screen loads. -->
-<!-- All admin-selectable number/digit fonts (see NUMBER_FONT_STACKS in
-     original_module.js) loaded in one request -- Georgia and "System
-     default" need no webfont, so they aren't listed here. Loading every
-     option up front (not just whichever is currently selected) means
-     switching the admin setting never needs a fresh network request or a
-     page reload to take visible effect. -->
-<!-- Barlow Condensed/Playfair Display/Bodoni Moda/DM Serif Display/Roboto
-     Mono/JetBrains Mono/Orbitron were Potato's own font auditioning, carried
-     into this fork unmodified -- Barlow Condensed was the one actually in
-     use (body{font-family} below, the single source every other rule's
-     font-family:inherit reads from); the other six were dead imports,
-     referenced nowhere else in this file, just extra network weight on
-     every load. Inter replaces Barlow Condensed as this app's own body/
-     number font: a plain, normal-width sans (Barlow Condensed is
-     condensed/narrow, which combined with this app's many font-weight:700/
-     800 rules is what read as "still Potato's bold font") with weights wide
-     enough that headings/buttons don't need to reach for 800 to stand out. -->
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 /* ── Potato design tokens ──────────────────────────────────────────────
@@ -200,7 +183,7 @@
 html,body{margin:0;padding:0;touch-action:manipulation;}
 *{-webkit-tap-highlight-color:transparent;}
 body{background:var(--snow-canvas);font-weight:400;font-family:'Roboto',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--snow-ink);-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;}
-.mono{font-variant-numeric:lining-nums tabular-nums;font-family:var(--number-font,inherit);}
+.mono{font-variant-numeric:lining-nums tabular-nums;}
 /* Potato leads with a serif display face for headings/figures over a
    condensed sans for body copy, matching every approved mockup. */
 h1,h2,h3{}
@@ -350,7 +333,6 @@ a{color:inherit;}
 #loadingScreen .ld-bar i{display:block;height:100%;width:0;border-radius:3px;background:#fff;}
 #loadingScreen .ld-pct{margin-top:9px;color:rgba(255,255,255,.68);font:700 11.8px/14px 'Roboto',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;text-align:center;}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
-#openingGate .og-mark{font-weight:800;font-size:36px;letter-spacing:.03em;color:#fff;}
 /* Download APP screen (openDownloadSheet(), its 'downloadbg' admin backdrop,
    and this CSS) removed -- see original_module.js's own comment above
    promptInstallApp() for the owner's reversal. Account's Download App row
@@ -369,10 +351,6 @@ a{color:inherit;}
    the login/app once the loading screen would otherwise hand off, admin-
    toggleable next to Maintenance mode in Settings. Same wine-gradient hero
    background as the auth screen for visual consistency, not a new palette. */
-#openingGate{position:fixed;inset:0;z-index:501;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:var(--potato-hero);color:#fff;}
-#openingGate .og-label{font-size:13px;letter-spacing:.5px;text-transform:uppercase;color:rgba(255,255,255,.7);margin-top:18px;}
-#openingGate .og-countdown{font-size:40px;font-weight:700;margin-top:10px;font-variant-numeric:lining-nums tabular-nums;font-family:var(--number-font,inherit);}
-#openingGate .og-sub{font-size:13px;color:rgba(255,255,255,.65);margin-top:14px;max-width:320px;line-height:1.5;}
 
 /* ── Home / Products / Referral (Potato mockups) ───────────────────── */
 /* Potato's own rule here was edge-to-edge, no rounding, no side gutters
@@ -574,12 +552,6 @@ a{color:inherit;}
    Turntable has no counterpart in his mockup (that row does not exist there),
    so it takes a warm coral that sits between the gold above it and the green
    below rather than inventing a seventh hue out of sequence. */
-/* Language has no counterpart in the owner's mockup (that row does not exist
-   there), so like Turntable it takes a tone that sits inside the sequence
-   already measured off it rather than introducing a hue of its own -- a
-   deeper burnt orange, one step darker than Download APP's so the two do not
-   read as the same tile. Its glyph is stroked white, hence the light end
-   stays dark enough to keep it legible. */
 /* The owner's own door artwork, at the size his mockup draws it: his
    glyph measures 31x47 device px, which is 17 CSS px tall. Width is left
    auto so the door keeps its own proportions instead of being squashed
@@ -880,55 +852,6 @@ a{color:inherit;}
    this one comes later in the sheet, so it was winning and collapsing the
    backdrop to a 0x0 relatively-positioned span. It rendered as nothing at
    all, and every computed-style check still passed. */
-/* ── THE LANGUAGE PICKER SHEET ──
-   Owner: "language changing should stimulate google language translator, or
-   else remove it" -- the curated translation table only ever covers a
-   fraction of the app's text by design (see original_module.js's own long
-   comment above LANG_ROWS for why -- a wrong word on a money screen is worse
-   than an English one, so unreviewed strings deliberately fall back to
-   English rather than guess), which read as "changing language only changes
-   small things." Given the choice between a real translation API (cost +
-   new dependency), Google's free but unreliable page-translate widget, or
-   removing the switcher, the owner chose removal. The entry point -- the
-   `.lang-btn` pill that used to sit top-right on the auth hero -- is gone
-   from the markup above, and its CSS is gone with it (no element uses this
-   class any more, so keeping the rule would just be dead weight, not a
-   feature preserved for later). The picker SHEET below stays as dormant,
-   unreachable code (openLangPicker() has no caller left) -- same "leave the
-   machinery, remove the entry point" precedent as Turntable/subdomains/Trade
-   Password elsewhere in this file's history, in case real translation is
-   revisited later with an actual API. DEFAULT_REGION.languages is already
-   ['en']-only in server.js (see the Uganda-only retirement round above),
-   which is what made the button invisible everywhere paintLangButton() already
-   ran -- removing the markup on top of that makes it gone unconditionally,
-   not dependent on a region config staying correctly set. */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* Everything above (.auth-hero/.auth-card/.auth-wordmark/.mark-row/.auth-tri/
    .dot-divider/.auth-field/.row-check/.auth-switch) belonged to the old
    hero-band + white-card layout the auth screen no longer uses -- superseded
@@ -1736,8 +1659,8 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 .mg-ann-x svg{width:19px;height:19px;}
 .ann-sheet h2{margin:12px 0 0;text-align:center;font:700 17px/1.2 var(--mg-serif);letter-spacing:.02em;color:#161616;padding:0 0 23px;}
 .mg-ann-img{display:block;width:100%;height:auto;border-radius:12px;}
-.mg-ann-lines{margin:9px 0 6px;text-align:center;}
-.mg-ann-lines p{margin:0;font:700 12.5px/22px var(--mg-sans);color:#586a5e;}
+
+
 .mg-ann-join{display:flex;align-items:center;justify-content:center;height:41.5px;margin-top:15px;border-radius:14px;background:linear-gradient(125deg,#e5231d,#d71e1a 50%,#c9161d);color:#fff;font:700 13.5px/1 var(--mg-sans);text-decoration:none;}
 
 /* Passwords */
@@ -1752,23 +1675,23 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 
 
 /* small dialogs: Help, Download */
-.v-help-bg{position:fixed;inset:0;z-index:430;display:none;align-items:center;justify-content:center;padding:0 24px;background:rgba(40,50,45,.34);}
-.v-help-bg.show{display:flex;}
 
 
 
 
-.v-help-wrap{width:100%;max-width:294px;display:flex;flex-direction:column;align-items:center;gap:20px;}
-.v-help-card{width:100%;box-sizing:border-box;padding:27px 23px 26px;border:0;border-radius:24px;background:#f6f6f6;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.22);}
-.v-help-ic{width:45px;height:45px;border-radius:50%;background:#fde8e7;color:#c9161d;display:inline-flex;align-items:center;justify-content:center;}
-.v-help-ic svg{width:27px;height:27px;}
-.v-help-card h3{margin:14px 0 21px;font:700 18px/1.2 var(--mg-serif);color:#111;}
-.v-help-btns{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-.v-help-b{height:69.5px;border:1px solid #f3d4d3;border-radius:13px;background:#fff;color:#1a1a1a;font:700 15px/1 var(--mg-sans);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-decoration:none;cursor:pointer;}
-.v-help-b svg{width:22px;height:22px;color:#c9161d;stroke:#c9161d;}
-.v-help-close{margin-top:19px;width:100%;height:41px;border:0;border-radius:13px;background:linear-gradient(125deg,#e5231d,#c9161d);color:#fff;font:700 17px/1 var(--mg-sans);}
-.v-help-x{width:41px;height:41px;border-radius:50%;border:1.5px solid rgba(255,255,255,.7);background:rgba(40,70,55,.6);color:#fff;display:flex;align-items:center;justify-content:center;}
-.v-help-x svg{width:18.5px;height:18.5px;}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* confirm (Buy) dialog */
 .confirm-bg{background:rgba(0,0,0,.45);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
@@ -1847,9 +1770,9 @@ html.mg-gut #pageHost{padding-right:4px;}
 .ann-bg.show .ann-sheet{transform:none;opacity:1;transition:transform .2s ease-out,opacity .16s ease-out;}
 .ann-bg.show .ann-sheet.mg-ann-wait{opacity:0;}
 .ann-sheet.mg-ann-grow .mg-ann-img{animation:mgAnnFade .2s ease-out .16s backwards;}
-.ann-sheet.mg-ann-grow .mg-ann-x,.ann-sheet.mg-ann-grow h2,.ann-sheet.mg-ann-grow .mg-ann-lines,.ann-sheet.mg-ann-grow .mg-ann-join{animation:mgAnnFade .2s ease-out .36s backwards;}
+.ann-sheet.mg-ann-grow .mg-ann-x,.ann-sheet.mg-ann-grow h2,.ann-sheet.mg-ann-grow .mg-ann-join{animation:mgAnnFade .2s ease-out .36s backwards;}
 @keyframes mgAnnFade{from{opacity:0;}to{opacity:1;}}
-@media (prefers-reduced-motion:reduce){.ann-bg,.ann-sheet,.ann-sheet .mg-ann-img,.ann-sheet .mg-ann-x,.ann-sheet h2,.ann-sheet .mg-ann-lines,.ann-sheet .mg-ann-join{transition:none !important;animation:none !important;}}
+@media (prefers-reduced-motion:reduce){.ann-bg,.ann-sheet,.ann-sheet .mg-ann-img,.ann-sheet .mg-ann-x,.ann-sheet h2,.ann-sheet .mg-ann-join{transition:none !important;animation:none !important;}}
 /* Deposit waiting page (polling): no box. A green phone badge with rings spreading from it, the amount, a three-step timeline (sent, approve, balance updated)
    and a "checking automatically" line. The tick and cross results keep the card. */
 .pay-card.pl{background:none;border:0;box-shadow:none;padding:6px 0 0;max-width:330px;}
@@ -2055,7 +1978,7 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .pt-list{margin-top:15px;}
 .pt-card{display:grid;grid-template-columns:132px minmax(0,1fr);height:206px;margin:0 0 15px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 6px 18px -10px rgba(70,80,140,.2);}
 .pt-img{position:relative;overflow:hidden;border-right:1px solid #eef0f5;background:#fff;}
-.pt-img>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:var(--prod-img-op,1);}
+.pt-img>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
 .pt-img .v-glyph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 34px/1 Roboto,sans-serif;color:#e5231d;}
 .pt-tag{position:absolute;top:0;right:0;min-width:32px;height:22.7px;padding:0 6px;box-sizing:border-box;border-radius:0 0 0 7px;background:linear-gradient(90deg,#ec6a86,#f4944f);color:#fff;font:700 11.5px/22.7px Roboto,sans-serif;text-align:center;}
 .pt-main{position:relative;min-width:0;padding:0 9px 5px;box-sizing:border-box;}
@@ -2397,7 +2320,7 @@ body[data-sheet="deposit"] .sheet-head .back,body[data-sheet="withdraw"] .sheet-
 .ann-sheet .mg-ann-x{position:absolute;right:11px;top:11px;z-index:3;width:41px;height:41px;border:0;border-radius:50%;background:rgba(90,95,100,.85);color:#fff;display:flex;align-items:center;justify-content:center;}
 .ann-sheet .mg-ann-x svg{width:20px;height:20px;}
 .ann-sheet .mg-ann-join{display:flex;align-items:center;justify-content:center;gap:9px;height:47.6px;margin-top:11px;border-radius:24px;background:linear-gradient(100deg,#f03028,#c9161d);color:#fff;font:700 15.5px/1 Roboto,sans-serif;text-decoration:none;box-shadow:0 10px 18px -10px rgba(150,20,20,.6);}
-.ann-sheet .mg-ann-lines p{margin:0;padding:6px 14px;font:400 12.5px/18px Roboto,sans-serif;color:#33425a;}
+
 /* PT-APP-END */
 /* ── Login / Sign Up: measured from the owner's Potato screenshots (360 px phone, 2x) ── */
 
@@ -2680,12 +2603,6 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
 </script>
 
 
-<div id="openingGate">
-  <div class="og-mark" data-brandmark></div>
-  <div class="og-label">Opening in</div>
-  <div class="og-countdown" id="openingGateCountdown">--:--:--</div>
-  <div class="og-sub">We're getting ready. Come back once the countdown ends.</div>
-</div>
 
 <!-- ═══════════ AUTH ═══════════ -->
 <div id="authScreen" style="display:none;">
@@ -2745,14 +2662,6 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
     <span class="sheet-count" id="sheetCount"></span>
   </div>
   <div class="sheet-body" id="sheetBody"></div>
-</div>
-
-<!-- Help dialog: centred card, filled by openHelpDialog() -->
-<div class="v-help-bg" id="helpBg" onclick="if(event.target===this)closeHelpDialog()">
-  <div class="v-help-wrap">
-    <div class="v-help-card" id="helpCard"></div>
-    <button class="v-help-x" type="button" onclick="closeHelpDialog()" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-  </div>
 </div>
 
 <div class="pin-bg" id="pinBg">

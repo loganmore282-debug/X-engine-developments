@@ -442,9 +442,9 @@ const MARZSMS_KEY  = process.env.MARZSMS_KEY || '';
 // another currency remain in storage for review, but cannot transact.
 const POTATO_REGIONS = {
   ng: { key: 'ng', name: 'Nigeria', currency: 'NGN', currencySymbol: '\u20a6', dialCode: '234', localLength: 10, localLengths: [9, 10], prefixes: [], utcOffsetMin: 60,
-        active: true, isDefault: true, languages: ['en'], defaultLang: 'en' },
+        active: true, isDefault: true },
   ug: { key: 'ug', name: 'Uganda', currency: 'UGX', currencySymbol: 'UGX', dialCode: '256', localLength: 9, localLengths: [9], prefixes: ['7'], utcOffsetMin: 180,
-        active: true, isDefault: true, languages: ['en'], defaultLang: 'en' },
+        active: true, isDefault: true },
 };
 const DEFAULT_REGION_KEY = POTATO_REGIONS[String(process.env.POTATO_REGION || '').toLowerCase()] ? String(process.env.POTATO_REGION).toLowerCase() : 'ug';
 const DEFAULT_REGION = Object.freeze(POTATO_REGIONS[DEFAULT_REGION_KEY]);
@@ -540,19 +540,6 @@ app.use(async (req, res, next) => {
       return res.status(503).json({ status: 'error', code: 'MAINTENANCE',
         message: s.maintenanceMsg || (brandName(s) + ' is under maintenance. Please check back shortly.') });
     }
-    // Owner: "let's establish a timer ie like saying snow opening in
-    // 23:59:34... make when l can activate it or disable it, just near
-    // maintenance mode." Same route list as the maintenance block just
-    // above, so the client-side countdown gate can't be routed around by
-    // hitting a money/account endpoint directly. Self-clearing: once real
-    // time passes openingCountdownAt this stops blocking on its own with no
-    // separate step needed -- the admin toggle exists for turning it off
-    // early (opening sooner than originally scheduled), not for turning it
-    // back off again once the target time has actually passed.
-    if (s && s.openingCountdownEnabled && Number(s.openingCountdownAt) > Date.now()) {
-      return res.status(503).json({ status: 'error', code: 'OPENING_COUNTDOWN',
-        message: brandName(s) + ' has not opened yet.', openingAt: Number(s.openingCountdownAt) });
-    }
   } catch (_) {}
   next();
 });
@@ -564,18 +551,16 @@ app.use(async (req, res, next) => {
 const DEFAULT_SETTINGS = {
   withdrawFeePct: 15, minWithdraw: 8000, minDeposit: 30000,
   welcomeBonus: 5000, commL1: 25, commL2: 2, commL3: 1,
-  // Daily Salary (Salary tab): the team's total purchases decide the tier; each calendar day at a reached tier is one day of wages.
-  // Edited in the admin panel under Settings > Daily Salary. `id` stays with a row when its numbers are edited, so an edit can never
+  // Reward tiers (Myteam > Reward tab): the team's total purchases decide the tier; each calendar day at a reached tier earns its reward.
+  // Edited in the admin panel under Settings > Reward tiers. `id` stays with a row when its numbers are edited, so an edit can never
   // let a member claim the same day twice.
   salaryTiers: [
     { id: 's1', target: 500000, reward: 2000 }, { id: 's2', target: 1000000, reward: 4000 }, { id: 's3', target: 3000000, reward: 6000 },
     { id: 's4', target: 5000000, reward: 8000 }, { id: 's5', target: 10000000, reward: 10000 }, { id: 's6', target: 30000000, reward: 12000 },
     { id: 's7', target: 50000000, reward: 14000 },
   ],
-  returnMultiple: 30, cycleDays: 150,
   // Not yet confirmed by the owner — a reasonable Snow-scaled default,
   // admin-editable like every other rate here.
-  dailyCheckin: 500,
   // Owner: "let the withdrawal multiple be set from admin, so default
   // multiple should be 5000, ie one withdrawals 5000,10000,25000,30000,
   // 35000 like that." Set to 0 to turn the rule off entirely and allow any
@@ -599,10 +584,8 @@ const DEFAULT_SETTINGS = {
   // What Telegram shows when a link to the app is pasted (title and text; the picture is the 'linkpreview' image). Empty = the app's own defaults.
   linkPreviewTitle: '', linkPreviewText: '',
   // One opacity for EVERY product picture (Admin > Banners > Product pictures): 100 = as uploaded.
-  productImageOpacity: 100,
   // Background treatment for signed-in Home/Assets/Network/Profile and
   // secondary pages. Authentication screens keep their own controls above.
-  innerBgOpacity: 100, innerBgBlur: 0,
   // Extra frontend domains allowed to call this backend, set from the admin
   // panel (Settings -> Allowed website domains). ADDED to the built-in
   // allowlist, never replacing it -- see _corsExtraHosts.
@@ -633,7 +616,6 @@ const DEFAULT_SETTINGS = {
   // nobody can use the app before, shown to the member as a live countdown
   // right after the loading screen. See the MAINTENANCE GATE section below
   // for the actual server-side enforcement.
-  openingCountdownEnabled: false, openingCountdownAt: 0,
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
   // The hours withdraw is open. Owner: "one withdrawal time should be
   // SETTABLE IN ADMIN, such that when one tries to withdrawal he sees, that
@@ -647,7 +629,6 @@ const DEFAULT_SETTINGS = {
   //
   // Off by default: a fresh install must not lock withdraw behind hours
   // nobody has set yet.
-  withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   // What every NEW mobile-money recharge / withdrawal reference starts with (potato2610111048053568). Admin > Settings; existing references never change.
   referencePrefix: 'S',
   // AUTOMATIC WITHDRAWALS (Admin > Settings > Withdrawals). Off by default. Requests always arrive as 'pending' as usual; only while this is
@@ -655,8 +636,7 @@ const DEFAULT_SETTINGS = {
   // leave in one burst or on a fixed rhythm). It uses exactly the same processWithdrawalCore as the manual Send button. autoApproveMaxAmount:
   // 0 = no limit; a nonzero value leaves anything above it for manual review. autoApproveEnabledAt is stamped by the server when the switch is turned on.
   autoApproveWithdrawalsEnabled: false, autoApproveMinSec: 10, autoApproveMaxSec: 60, autoApproveMaxAmount: 0, autoApproveEnabledAt: 0,
-  supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', supportEmail: '',
-  rulesText: '', aboutText: '',
+  supportTelegram: '', telegramGroup: '',
   // Owner: "l would like to also to edit the app name potato, so make it when
   // it can be editable everywhere." The platform's own name, previously
   // written into about a dozen strings across the client by hand. It has a
@@ -679,35 +659,6 @@ const DEFAULT_SETTINGS = {
   // rather than a settings field, same reasoning as the Home/Help Centre
   // banners: a base64 image doesn't belong bloating the /public/settings
   // payload every client fetches on every boot.
-  annEnabled: false, annTitle: '', annBody: '',
-  // The line that scrolls across the Home screen under the four buttons. Empty = the built-in sentence.
-  tickerText: '',
-  // When annTitle/annBody last actually changed -- stamped by
-  // /admin/settings/update below, never set directly by an admin. Backs the
-  // Home screen's inline "Latest Announcement" row (its own preview of this
-  // same announcement, distinct from the full announceBg dialog), which
-  // shows a real date rather than inventing one.
-  annUpdatedAt: null,
-  // Owner: "make when l can change figure/digit fonts in admin panel" --
-  // the `.mono` class every UGX figure/numeric stat in the user app already
-  // uses (Round 24 picked Bodoni Moda as the original fixed default) is now
-  // admin-selectable from a curated list (see NUMBER_FONT_OPTIONS below),
-  // not a free-text field -- a font *name* here ends up interpolated into a
-  // Google Fonts URL and a CSS font-family value client-side, so an
-  // allowlist closes off any injection surface the way SETTINGS_URL_FIELDS'
-  // http(s)-only check already does for link fields.
-  // Owner: "remove that number font that of calligraphy letters". The app's
-  // own body face is now the default for money figures; the serif options
-  // below are still selectable here, they are just no longer forced on.
-  numberFont: 'System default',
-  // Which automatic gateway a DEPOSIT uses. 'marzpay' | 'pesajet'
-  // ('manual' and the legacy 'automatic' alias are still accepted by
-  // normalizeProviderValue() for an already-deployed database, but manual
-  // DEPOSIT collection itself -- the admin-number/SMS-matched PAY B flow --
-  // was removed outright per owner instruction: "remove manual payment in
-  // the whole codes... remove them all." Automatic is now the only deposit
-  // path; there is no PAY A/PAY B choice left for a member to make. Never
-  // read this field raw -- always go through depositProvider().
   depositMethod: 'marzpay',
   // Owner, after the first version tied payouts to depositMethod: "yeah it
   // can also work and vice versa" -- so the two directions are separable.
@@ -721,11 +672,6 @@ const DEFAULT_SETTINGS = {
   // payoutIsManual() -- never read this field raw.
   withdrawMethod: 'follow',
 };
-// Keep this exact list of keys in sync with NUMBER_FONT_STACKS in
-// user-src/original_module.js (the client-side fallback-stack lookup) and
-// the <select> options in admin-src/index.html -- all three must agree on
-// the same set of names for a saved value to actually render correctly.
-const NUMBER_FONT_OPTIONS = ['Bodoni Moda', 'Playfair Display', 'DM Serif Display', 'Georgia', 'Roboto Mono', 'JetBrains Mono', 'Orbitron', 'System default'];
 // Daily Cashback × 150 = Total Return = Investment × 30, per tier — every
 // figure below is stamped explicitly rather than derived, matching the
 // owner-supplied table exactly.
@@ -1168,31 +1114,6 @@ function eatDayKey(ts) {
   const d = new Date(tsMillis(ts) + tzOffMs());
   return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
 }
-// Owner: "make daily checkin to reset at 00:00 not 24hrs" -- reverts Round
-// 87's rolling-24h cooldown back to a calendar-midnight (EAT) daily reset.
-// lastCheckinAt stays a real epoch-ms timestamp (Round 87's own field --
-// still read as-is by /admin/user/reconcile-checkin, recountAllTotals's own
-// freshness re-check, and the client's countdown) -- only the comparison
-// logic changes, from "was the gap >=24h/<48h" to "was it the same/previous
-// EAT calendar day," matching this app's original pre-Round-87 semantics.
-// Recomputed from real check-in history on every call -- a stale/corrupted
-// stored streak/timestamp can never keep silently breaking a real one.
-// Accepts a Set or Array of timestamps in any order; sorts internally.
-function computeCheckinStreak(timestampsMs) {
-  const sorted = [...timestampsMs].sort((a, b) => a - b);
-  if (!sorted.length) return { streak: 0, lastCheckinAt: null };
-  // Collapse same-EAT-day timestamps into one day-key each (a Set, exactly
-  // this app's own pre-Round-87 design) -- a stray legacy duplicate within
-  // one calendar day can never double-count or break the streak.
-  const dayKeys = [...new Set(sorted.map(ts => eatDayKey(new Date(ts))))].sort();
-  let streak = 1;
-  for (let i = dayKeys.length - 1; i > 0; i--) {
-    const cur = Date.parse(dayKeys[i] + 'T00:00:00Z');
-    const prev = Date.parse(dayKeys[i - 1] + 'T00:00:00Z');
-    if (cur - prev === 86400000) streak++; else break;
-  }
-  return { streak, lastCheckinAt: sorted[sorted.length - 1] };
-}
 // UTC ms instant of the next EAT (UTC+3) midnight strictly after `ts`.
 function eatNextMidnight(ts) {
   const dayStart = Math.floor((ts + tzOffMs()) / 86400000) * 86400000;
@@ -1224,67 +1145,6 @@ function eatParts(ts) {
   const d = new Date(ms + tzOffMs());
   const pad = n => String(n).padStart(2, '0');
   return { day: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`, hour: d.getUTCHours() };
-}
-// ── The withdraw window ──────────────────────────────────────────────────
-// Parsing is hhmmToMin()'s job -- it already existed for the product-schedule
-// helpers and does exactly this, returning null rather than 0 for anything
-// that is not a real time (a bad string coerced to 0 would silently become
-// midnight and move everyone's window). A second near-identical
-// `hhmmToMinutes` was written here first and had to go: beyond being a
-// duplicate for a reader, its NAME is a prefix-superset of the existing one,
-// and test-product-config.js slices server.js by searching for that helper's
-// declaration -- so the new function silently stole the anchor and the slice
-// swallowed 1300 lines, redeclaring finiteMoney.
-//
-// The anchor text is described here rather than quoted, and that is the
-// second half of the same lesson: the first version of this comment spelled
-// it out literally, which made THIS COMMENT the earliest match and broke the
-// slice all over again in a new way. Never write a scanner's anchor verbatim
-// in the file it scans.
-//
-// 18:00 -> "18:00". TWENTY-FOUR HOUR, and it was 12-hour AM/PM before.
-//
-// Owner: "withdrawal time has problems, is it in 24hrs or". Three things were
-// wrong with the 12-hour form and each is enough on its own:
-//   * this app has ONE clock everywhere else -- the ledger's 23:21, the plan
-//     countdown's HH:MM:SS, "Joined 07/09/2026 01:21" -- and this was the
-//     single screen disagreeing with it;
-//   * the owner TYPES 18:00 into an <input type="time"> in the admin panel
-//     and the app then said "6:00 PM", so the rule on screen did not look
-//     like the rule he set;
-//   * "AM"/"PM" are English words spliced into a sentence the translator had
-//     already translated, so a French member read "18:00 à 5:00 PM".
-// The earlier note here reasoned from his phrase "6pm to 5pm" that members
-// want a 12-hour clock. That was reading a casual description as a spec.
-function hhmmLabel(v) {
-  const t = hhmmToMin(v);
-  if (t == null) return '';
-  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
-}
-// Whether withdraw is open right now, plus the labels the client shows.
-//
-// The window MAY WRAP past midnight, and that is not an edge case: the
-// owner's own example is 18:00 to 17:00, which wraps and is open for 23 of
-// the 24 hours. A naive `from <= now && now < to` reads that as never open.
-//
-// Judged in THE REGION'S OWN LOCAL TIME -- tzOffMs() reads
-// currentRegion().utcOffsetMin, and `sett` is that country's own settings
-// overlay, so a country on a different offset gets its own hours and its own
-// "is it open now" rather than Uganda's. The client uses the same offset from
-// the same published region, so the screen and this check cannot disagree.
-function withdrawWindowState(sett, ts) {
-  const from = hhmmToMin(sett && sett.withdrawOpenFrom);
-  const to = hhmmToMin(sett && sett.withdrawOpenTo);
-  const enabled = !!(sett && sett.withdrawWindowEnabled) && from != null && to != null && from !== to;
-  const label = { from: hhmmLabel(sett && sett.withdrawOpenFrom), to: hhmmLabel(sett && sett.withdrawOpenTo) };
-  if (!enabled) return { enabled: false, open: true, from: label.from, to: label.to };
-  // `ts` is an epoch NUMBER (Date.now()): tsMillis() only understands Dates and Firestore timestamps and answers 0 for a number, which made
-  // every request be judged at 00:00 UTC = 03:00 local, so a window such as 06:00-16:00 was ALWAYS closed and a member was refused all day.
-  const at = typeof ts === 'number' && Number.isFinite(ts) && ts > 0 ? ts : (tsMillis(ts) || Date.now());
-  const d = new Date(at + tzOffMs());
-  const now = d.getUTCHours() * 60 + d.getUTCMinutes();
-  const open = from < to ? (now >= from && now < to) : (now >= from || now < to);
-  return { enabled: true, open, from: label.from, to: label.to };
 }
 // The local (national) part of a number, for whatever region is in force --
 // the digits with the dialling code or the leading 0 taken off, and nothing
@@ -1622,7 +1482,7 @@ async function mobileMoneyRefPrefix() {
 const TASK_MAX_ROWS = 30, TASK_MAX_REFERRALS = 100000;
 // Validates what the admin sends. Whole numbers only, one row per target, a stable id per row (new rows get one).
 function sanitizeTaskRows(rows, kind, history) {
-  const label = kind === 'salary' ? 'Salary tiers' : kind === 'deposit' ? 'Deposits' : 'Referrals';
+  const label = kind === 'salary' ? 'Reward tiers' : kind === 'deposit' ? 'Deposits' : 'Referrals';
   if (!Array.isArray(rows)) return { error: `${label}: send a list of tasks.` };
   if (rows.length > TASK_MAX_ROWS) return { error: `${label}: at most ${TASK_MAX_ROWS} tasks.` };
   const maxTarget = kind === 'count' ? TASK_MAX_REFERRALS : MAX_MONEY_AMOUNT;
@@ -1965,7 +1825,7 @@ async function banUserAutomatically(userId, reason) {
 }
 // Lightweight, fire-and-forget log of a suspicious/rejected action -- feeds
 // the owner-only "Suspicious activity" analytics (repeated insufficient-
-// funds withdrawal attempts, repeated already-claimed check-ins, gift/promo
+// funds withdrawal attempts, gift/promo
 // code guessing). This collection already existed (read by /admin/analytics/
 // abuse and purged on account deletion) but nothing ever wrote to it --
 // ported from the sibling Space8 project's own equivalent, which this
@@ -3443,7 +3303,7 @@ app.get('/salary/status', async (req, res) => {
       } };
     });
     res.status(out.code).json(out.body);
-  } catch (e) { console.error('Salary status error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the salary' }); }
+  } catch (e) { console.error('Salary status error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the rewards' }); }
 });
 app.post('/salary/claim', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -3458,14 +3318,14 @@ app.post('/salary/claim', async (req, res) => {
       const view = await salaryView(userId);
       if (!view.tier) {
         const lowest = view.tiers[0];
-        return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: lowest ? `Need ${fmtMoney(Math.max(0, lowest.target - view.total))} more to claim` : 'Salary is not available yet.' } };
+        return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: lowest ? `Need ${fmtMoney(Math.max(0, lowest.target - view.total))} more to claim` : 'Rewards are not available yet.' } };
       }
       const book = salaryAccrue(u, view.tier, salaryDayNumber());
-      if (!book.accrued.length) return { code: 400, body: { status: 'error', code: 'NOTHING_TO_CLAIM', message: 'No wages to claim yet. Come back tomorrow.' } };
+      if (!book.accrued.length) return { code: 400, body: { status: 'error', code: 'NOTHING_TO_CLAIM', message: 'Nothing to claim yet. Come back tomorrow.' } };
       const entry = book.accrued[0], rest = book.accrued.slice(1);
       const { date, time } = nowStr();
       const ledger = () => db.collection('transactions').doc(`salary:${userId}:${entry.d}`).createIfAbsent({
-        userId, statementId: newStatementId(), type: 'mission_salary', description: 'Daily salary',
+        userId, statementId: newStatementId(), type: 'mission_salary', description: 'Team reward',
         amount: entry.r, salaryDay: entry.d, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
       let balance = 0, applied = false;
@@ -3486,7 +3346,7 @@ app.post('/salary/claim', async (req, res) => {
       return { code: 200, body: { status: 'success', amount: entry.r, walletBalance: balance, accruedDays: rest.length, message: `${fmtMoney(entry.r)} added to your wallet` } };
     });
     res.status(out.code).json(out.body);
-  } catch (e) { console.error('Salary claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim the salary right now' }); }
+  } catch (e) { console.error('Salary claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim the reward right now' }); }
 });
 // The old Task Center and Mission Center claim routes are gone from Potato (they are not on its screens). Rows they already paid
 // stay in the ledger, and the labels that render them stay too (team_reward, mission_salary, mission_deposit_reward).
@@ -3594,12 +3454,6 @@ function publicRegionView(r) {
     key: reg.key, name: reg.name, currency: reg.currency, currencySymbol: reg.currencySymbol || reg.currency, dialCode: reg.dialCode,
     localLength: reg.localLength, localLengths: (reg.localLengths && reg.localLengths.length ? reg.localLengths : [reg.localLength]).slice(), prefixes: (reg.prefixes || []).slice(),
     utcOffsetMin: reg.utcOffsetMin, isDefault: !!reg.isDefault,
-    // Which languages this country's sign-in screen may offer, and which one
-    // a device with no choice stored opens in. Published rather than compiled
-    // into the app so a country's list can change from the panel without a
-    // frontend redeploy.
-    languages: (reg.languages && reg.languages.length ? reg.languages : ['en']).slice(),
-    defaultLang: reg.defaultLang || 'en',
     // Which login-address shape this region's accounts use. Sent rather than
     // worked out in the app: it depends on the FOUNDING region's dialling
     // code, which the app has no way of knowing, and the two must agree
@@ -3650,8 +3504,7 @@ app.get('/public/settings', async (req, res) => {
 // Members must never be shown a payout the purchase won't actually honour,
 // so this endpoint publishes RESOLVED figures instead of the raw stored
 // fields. It resolves them with exactly the rules /invest/create uses:
-// productExpectedReturn() (multiplier beats expectedReturn beats the global
-// returnMultiple), then `cycle || sett.cycleDays`, then the same
+// productExpectedReturn() (multiplier beats expectedReturn beats price x 3), then the product's cycle, then the same
 // round(expectedReturn / cycle) daily figure that is stamped onto the
 // investment doc. Before this, every client re-derived the payout with its
 // own slightly different formula -- the product card preferred a stored
@@ -3717,7 +3570,7 @@ function productOpenState(p, nowMs) {
   return { open: false, mode: 'window', opensAt };
 }
 function publicProductView(p, sett) {
-  const cycle = Number(p.cycle) || Number(sett && sett.cycleDays) || 150;
+  const cycle = Number(p.cycle) || 150;
   const expectedReturn = productExpectedReturn(p, sett);
   const st = productOpenState(p, Date.now());
   return { ...p, cycle, expectedReturn, dailyPayout: Math.round(expectedReturn / cycle),
@@ -3942,11 +3795,6 @@ function defaultProfileDoc(phone, regionKey) {
   return {
     regionKey: String(regionKey || currentRegionKey() || DEFAULT_REGION_KEY),
     phone: phone || '', walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0,
-    // lastCheckinClaimDay is the durable "this EAT day is already claimed"
-    // marker, written atomically with the check-in credit. Kept separate from
-    // lastCheckinAt because reconcilers recompute that one from the ledger --
-    // see the /checkin handler's own comment.
-    checkinStreak: 0, lastCheckinAt: null, lastCheckinClaimDay: null,
     teamL1Count: 0, teamL2Count: 0, teamL3Count: 0, teamCommission: 0,
     referredBy: null, referralCode: null, registrationDone: false, status: 'active',
     createdAt: FieldValue.serverTimestamp()
@@ -4209,9 +4057,8 @@ app.get('/account', async (req, res) => {
     res.json({ status: 'success', account: {
       phone: u.phone, walletBalance: round2(u.walletBalance), totalDeposited: u.totalDeposited || 0,
       totalEarned: round2(u.totalEarned), totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
-      checkinStreak: u.checkinStreak || 0, lastCheckinAt: u.lastCheckinAt || null,
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
-      hasTradePin: !!u.transactionPinHash, vipLevel, withdrawAnytime: u.withdrawAnytime === true,
+      hasTradePin: !!u.transactionPinHash, vipLevel,
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
     // The member's OWN region, which the middleware has already put in
     // force for this request. The app re-reads its currency, dialling code
@@ -4223,7 +4070,6 @@ app.get('/account', async (req, res) => {
     res.status(500).json({ status: 'error', code: 'SERVER_ERROR', message: 'Could not load your account' });
   }
 });
-// The daily check-in claim (/checkin) is removed: no screen calls it and it paid money.
 
 // ═══════════════════════════════════════════
 // INVESTMENTS
@@ -4251,7 +4097,7 @@ app.post('/invest/create', async (req, res) => {
       // closes must not slip a purchase through on a stale card.
       if (!liveTier || liveTier.active === false || !productOpenState(liveTier, Date.now()).open)
         throw new Error('This product is not open right now.');
-      cycle = Number(liveTier.cycle) || sett.cycleDays;
+      cycle = Number(liveTier.cycle) || 150;
       expectedReturn = productExpectedReturn(liveTier, sett);
       dailyPayout = Math.round(expectedReturn / cycle);
       const uRef = db.collection('users').doc(userId);
@@ -5054,22 +4900,6 @@ app.post('/withdraw/request', async (req, res) => {
     const destValue = NETWORK_NAMES.has(rawNetwork) ? cleanPhone(textOf(req.body.phone)) : '';
     if (!destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
     const sett = await getSettings();
-    // The withdraw window, enforced HERE and not only shown in the app.
-    // Owner: "one withdrawal time should be SETTABLE IN ADMIN, such that when
-    // one tries to withdrawal he sees, that withdrawals start from this time
-    // to this time." The app draws the hours on the screen, but this route is
-    // a plain authenticated POST -- a rule that lives only in the client is
-    // not a rule.
-    const win = withdrawWindowState(sett, Date.now());
-    // A member the owner has marked "withdraw any time" (Admin > Users > the member) is not held to the hours. Read only
-    // when the window is actually closed, so ordinary requests cost no extra read.
-    // The same mark also lifts the daily number of withdrawals (the owner's "unrestricted" member), so it is read for every request.
-    const anyFlagSnap = await db.collection('users').doc(userId).get();
-    const unrestricted = anyFlagSnap.exists && anyFlagSnap.data().withdrawAnytime === true;
-    const anyTime = win.enabled && !win.open ? unrestricted : false;
-    if (win.enabled && !win.open && !anyTime)
-      return res.status(400).json({ status: 'error', code: 'WINDOW_CLOSED',
-        message: `Withdraw is open from ${win.from} to ${win.to}. Please come back then.` });
     if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum withdraw is ${fmtMoney(sett.minWithdraw)}` });
     // Checked HERE, not only in the app: the client's own check is a
     // courtesy so a member sees the rule before submitting, but /withdraw/
@@ -6760,14 +6590,12 @@ app.get('/admin/settings', async (req, res) => {
 const SETTINGS_CRITICAL_RANGES = {
   withdrawFeePct: [0, 100], minWithdraw: [0, MAX_MONEY_AMOUNT], minDeposit: [0, MAX_MONEY_AMOUNT],
   welcomeBonus: [0, MAX_MONEY_AMOUNT], commL1: [0, 100], commL2: [0, 100], commL3: [0, 100],
-  returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerDay: [0, 1000],
-  dailyCheckin: [0, MAX_MONEY_AMOUNT],
+  maxWithdrawalsPerDay: [0, 1000],
   autoApproveMinSec: [0, 86400], autoApproveMaxSec: [0, 86400], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
   // 0 = not scheduled; upper bound is a plain sanity cap (year 2100), not a
   // real business constraint -- an admin fat-fingering a date shouldn't be
   // able to silently store something outside "any date anyone would ever
   // actually pick here."
-  openingCountdownAt: [0, 4102444800000],
   // Login / Sign Up backdrops. Opacity is stored as a PERCENT (0-100)
   // rather than a 0-1 fraction: every other number an admin types in
   // this panel is a whole number, and Math.round() below would flatten
@@ -6777,12 +6605,10 @@ const SETTINGS_CRITICAL_RANGES = {
   // one -- a multiple larger than the maximum withdrawal would make every
   // amount invalid, which the admin panel warns about rather than forbids.
   withdrawMultiple: [0, MAX_MONEY_AMOUNT],
-  productImageOpacity: [0, 100],
   myBannerOpacity: [0, 100], myBannerBlur: [0, 40], appClaimAmount: [0, MAX_MONEY_AMOUNT],
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
-  innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'blockRootDomain'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -6792,21 +6618,11 @@ const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', '
 // scope) the instant any member taps it. Rejecting anything but a genuine
 // http(s) link at save time closes this for every place these fields are
 // ever rendered, in one spot, rather than patching each render site.
-const SETTINGS_URL_FIELDS = ['telegramGroup', 'telegramChannel', 'supportTelegram', 'whatsappGroup', 'whatsappContact'];
+const SETTINGS_URL_FIELDS = ['telegramGroup', 'supportTelegram'];
 function isSafeExternalUrl(v) {
   if (!v) return true; // blank clears the field -- always allowed
   try { const u = new URL(String(v)); return u.protocol === 'http:' || u.protocol === 'https:'; }
   catch (_) { return false; }
-}
-// Same XSS class as SETTINGS_URL_FIELDS above: supportEmail is rendered
-// into href="mailto:${esc(...)}" (openSupportSheet() and the Home Support
-// tile in user-src/original_module.js), and esc() does not touch the URI
-// scheme. A plain "looks like an email" check keeps a "javascript:..."
-// value from ever being savable here in the first place.
-const SETTINGS_EMAIL_FIELDS = ['supportEmail'];
-function isSafeEmail(v) {
-  if (!v) return true; // blank clears the field -- always allowed
-  return /^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+$/.test(String(v)) && String(v).length <= 120;
 }
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -6829,10 +6645,6 @@ app.post('/admin/settings/update', async (req, res) => {
     for (const key of SETTINGS_URL_FIELDS) {
       if (key in updates && !isSafeExternalUrl(updates[key]))
         return res.status(400).json({ status: 'error', message: `${key} must be a valid http(s) link, or left blank.` });
-    }
-    for (const key of SETTINGS_EMAIL_FIELDS) {
-      if (key in updates && !isSafeEmail(updates[key]))
-        return res.status(400).json({ status: 'error', message: `${key} must be a valid email address, or left blank.` });
     }
     if ('allowedOrigins' in updates) {
       const r = sanitizeAllowedOrigins(updates.allowedOrigins);
@@ -6868,8 +6680,6 @@ app.post('/admin/settings/update', async (req, res) => {
       const names = String(updates.depositMethodNames == null ? '' : updates.depositMethodNames).split(',').map(x => x.replace(/[<>]/g, '').trim().slice(0, 20)).filter(Boolean).slice(0, 6);
       updates.depositMethodNames = names.length ? names.join(', ') : 'Pay-A';
     }
-    if ('annTitle' in updates) updates.annTitle = String(updates.annTitle == null ? '' : updates.annTitle).trim().slice(0, 60);
-    if ('annBody' in updates) updates.annBody = String(updates.annBody == null ? '' : updates.annBody).replace(/\r/g, '').trim().slice(0, 1200);
     if ('brandName' in updates) {
       const name = String(updates.brandName == null ? '' : updates.brandName).trim();
       if (!name) return res.status(400).json({ status: 'error', message: 'App name cannot be blank.' });
@@ -6893,32 +6703,6 @@ app.post('/admin/settings/update', async (req, res) => {
       if (!px) return res.status(400).json({ status: 'error', message: 'The reference start must be 1 to 12 letters or digits and begin with a letter, e.g. potato' });
       updates.referencePrefix = px;
     }
-    // The two withdraw times. Refused rather than coerced: a silently
-    // repaired time is a window the owner did not choose, on a screen whose
-    // whole job is telling members exactly when they can withdraw.
-    for (const key of ['withdrawOpenFrom', 'withdrawOpenTo']) {
-      if (!(key in updates)) continue;
-      // Padded BEFORE parsing, not after: hhmmToMin() requires a two-digit
-      // hour, and a hand-typed "9:00" is a perfectly clear time to refuse on
-      // a technicality.
-      let raw = String(updates[key] == null ? '' : updates[key]).trim();
-      if (/^\d:\d{2}$/.test(raw)) raw = '0' + raw;
-      if (hhmmToMin(raw) == null)
-        return res.status(400).json({ status: 'error', message: `${key} must be a 24-hour time like 18:00` });
-      updates[key] = raw;
-    }
-    // Equal times are refused too. from === to is not "open all day" and not
-    // "closed all day" -- it is ambiguous, and withdrawWindowState() treats
-    // it as unset, so saving it would show the member hours that are not
-    // being enforced.
-    {
-      const f = 'withdrawOpenFrom' in updates ? updates.withdrawOpenFrom : null;
-      const t = 'withdrawOpenTo' in updates ? updates.withdrawOpenTo : null;
-      if (f != null && t != null && f === t)
-        return res.status(400).json({ status: 'error', message: 'Withdraw opening and closing times cannot be the same.' });
-    }
-    if ('numberFont' in updates && !NUMBER_FONT_OPTIONS.includes(updates.numberFont))
-      return res.status(400).json({ status: 'error', message: `numberFont must be one of: ${NUMBER_FONT_OPTIONS.join(', ')}` });
     // 'automatic' is deliberately NOT accepted here anymore (Round 102) --
     // it's still recognized when READING an already-stored legacy value
     // (normalizeProviderValue()), but nothing should ever WRITE it again
@@ -6945,7 +6729,6 @@ app.post('/admin/settings/update', async (req, res) => {
     // different from what's stored -- "the admin just touched this" is a
     // fine enough definition of "updated" here, and checking for a real
     // diff would cost an extra read for a purely cosmetic date.
-    if ('annTitle' in updates || 'annBody' in updates) updates.annUpdatedAt = FieldValue.serverTimestamp();
     await db.collection('settings').doc('main').set(updates, { merge: true });
     _settingsCacheTs = 0;
     // Apply a domain change NOW rather than up to 60s later: the owner saves
@@ -7121,8 +6904,7 @@ app.post('/admin/announcement-image/clear', async (req, res) => {
 //   1. its own multiplier (price x multiplier) -- the owner's preferred
 //      control, since repricing then updates the payout automatically;
 //   2. an explicit expectedReturn typed in for that product;
-//   3. the global returnMultiple, kept only as a fallback for products that
-//      predate per-product multipliers.
+//   3. otherwise price x 3.
 // Everything that needs a payout figure must go through this, so the app,
 // the admin panel and the actual credit can never disagree about it.
 function productExpectedReturn(p, sett) {
@@ -7131,7 +6913,7 @@ function productExpectedReturn(p, sett) {
   if (Number.isFinite(mult) && mult > 0) return Math.round(price * mult);
   const explicit = Number(p && p.expectedReturn);
   if (Number.isFinite(explicit) && explicit > 0) return Math.round(explicit);
-  return Math.round(price * ((sett && sett.returnMultiple) || 30));
+  return Math.round(price * 3);
 }
 // `out`, when given, is written with WHICH field refused and why, so the save
 // route can name the box the owner has to go and fix. There are fifteen
@@ -7456,7 +7238,7 @@ app.get('/admin/salary', async (req, res) => {
   try {
     const sett = await getSettings();
     res.json({ status: 'success', tiers: taskRows(sett.salaryTiers, 'salary') });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the salary tiers' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the reward tiers' }); }
 });
 app.post('/admin/salary/save', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -7475,7 +7257,7 @@ app.post('/admin/salary/save', async (req, res) => {
     _settingsCacheTs = 0;
     logAdminAction(req, 'salary_saved', { tiers: out.rows.length });
     res.json({ status: 'success', tiers: out.rows });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the salary tiers' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the reward tiers' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -7595,7 +7377,7 @@ app.post('/admin/user/detail', async (req, res) => {
       // Owner: "money/unknown money is continuing to pile up... a very bad
       // bug bro" -- traced to the admin panel's "Cashback earned" field
       // (totalEarned) being a genuinely misleading label: it's cashback
-      // PLUS referral commission PLUS checkin/gift-code/Task-Center/
+      // PLUS referral commission PLUS gift-code/
       // Mission-Center bonuses, all folded into one number, shown right
       // above a SEPARATE "Team commission" figure that looks like an
       // independent pool but is actually already counted INSIDE it -- a
@@ -7658,22 +7440,6 @@ app.post('/admin/user/reset-payout-pin', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-// Owner: make one member "unrestricted by withdrawal time": they can request a withdrawal at any hour even when the
-// withdrawal hours are switched on in Settings. Everything else (minimum, multiple, fee, Trade Password, one at a time) still applies.
-app.post('/admin/user/withdraw-anytime', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const userId = String(req.body.userId || '');
-  if (!userId || typeof req.body.enabled !== 'boolean') return res.status(400).json({ status: 'error', message: 'userId and enabled (true or false) required' });
-  try {
-    const ref = db.collection('users').doc(userId);
-    const snap = await ref.get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    await ref.update({ withdrawAnytime: req.body.enabled });
-    logAdminAction(req, 'user_withdraw_anytime', { userId, enabled: req.body.enabled });
-    res.json({ status: 'success', enabled: req.body.enabled });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-
 // ── ADMIN: remove a product from a member (owner only) ───────────────────────────────────────────────────────────
 // The product is deleted, so it stops earning at once and leaves the member's Income and product count (the purchase
 // limit frees up too). What stays: cashback already paid (it is in their wallet and their Balance Record) and the
@@ -7816,7 +7582,7 @@ app.post('/admin/user/grant-asset', async (req, res) => {
       if (u.data().status === 'banned') throw new Error('This account is suspended. Unban it before giving a product.');
       const price = Number(tier.price) || 0;
       if (!(price > 0)) throw new Error('This product has no price set');
-      const cycle = Number(tier.cycle) || sett.cycleDays;
+      const cycle = Number(tier.cycle) || 150;
       const expectedReturn = productExpectedReturn(tier, sett);
       const { date, time } = nowStr();
       const created = await invRef.createIfAbsent({
@@ -9131,7 +8897,7 @@ app.post('/admin/analytics', async (req, res) => {
       if (u.status === 'banned') { blocked.banned++; return; }
       if (wNeedProduct && !(finiteMoney(u.totalInvested) > 0)) { blocked.noProduct++; return; }
       if (openUsers.has(d.id)) { blocked.hasRequest++; return; }
-      if (wPerDay > 0 && u.withdrawAnytime !== true && (usedToday.get(d.id) || 0) >= wPerDay) { blocked.dailyUsed++; return; }
+      if (wPerDay > 0 && (usedToday.get(d.id) || 0) >= wPerDay) { blocked.dailyUsed++; return; }
       let amt = Math.min(bal, wMax > 0 ? wMax : bal);
       amt = wMult > 0 ? Math.floor(amt / wMult) * wMult : Math.floor(amt);
       if (amt < wMin || amt <= 0) { blocked.belowMin++; return; }
@@ -9142,7 +8908,7 @@ app.post('/admin/analytics', async (req, res) => {
     const withdrawToday = {
       waiting, canDo, blocked,
       rules: { min: wMin, max: wMax, multiple: wMult, feePct: wFee, perDay: wPerDay, needProduct: wNeedProduct,
-        hours: wSett.withdrawWindowEnabled ? `${wSett.withdrawOpenFrom || ''} to ${wSett.withdrawOpenTo || ''}` : '' },
+      },
     };
     plans.nextMaturing = plans._upcoming.map(u => ({ phone: (accounts.get(u.userId) || {}).phone || '', product: u.product, amount: u.amount, cashback: u.cashback, at: u.at })); delete plans._upcoming;
     const truncated = depSnap.docs.length >= 10000 || witSnap.docs.length >= 10000 || usersSnap.docs.length >= 10000 || activeInvSnap.docs.length >= 10000 || contractSnap.docs.length >= 10000 || rewardsTruncated;
@@ -9170,7 +8936,7 @@ app.post('/admin/analytics', async (req, res) => {
 // with many FAILED deposits (reads the same pendingDeposits records
 // /admin/integrity already trusts, no new logging needed), accounts
 // repeatedly trying to withdraw more than their balance, accounts repeatedly
-// tapping check-in after already claiming today, and accounts trying gift/
+// and accounts trying gift/
 // promo codes that don't exist (guessing) -- the last three are logged to
 // securityEvents at the exact point each one is rejected (see
 // logSecurityEvent call sites above). Only ever a READ over events that
@@ -9193,7 +8959,7 @@ app.post('/admin/analytics/abuse', async (req, res) => {
     // period, keeping up to 5 sample details per user for the admin to
     // actually see WHAT was attempted (amounts, codes tried), not just a
     // bare number. Only users at/above minCount show up at all -- a single
-    // failed deposit or one mistimed check-in tap is normal life, not abuse.
+    // a failed deposit is normal life, not abuse.
     function topOffenders(snap, filterFn, sampleFn) {
       const byUser = {};
       snap.forEach(d => {
@@ -9212,12 +8978,11 @@ app.post('/admin/analytics/abuse', async (req, res) => {
     const repeatedFailedDeposits = topOffenders(depSnap, () => true, x => ({ amount: x.amount || 0, reason: x.failureReason || null }));
     const repeatedInsufficientWithdrawals = topOffenders(evSnap, x => x.type === 'withdraw_insufficient_funds',
       x => ({ attempted: (x.meta && x.meta.attempted) || 0, balance: (x.meta && x.meta.balance) || 0 }));
-    const repeatedCheckinAlreadyClaimed = topOffenders(evSnap, x => x.type === 'checkin_already_claimed', null);
     const giftcodeGuessing = topOffenders(evSnap, x => x.type === 'giftcode_invalid_attempt', x => (x.meta && x.meta.code) || '');
 
     res.json({
       status: 'success', period: days, minCount,
-      repeatedFailedDeposits, repeatedInsufficientWithdrawals, repeatedCheckinAlreadyClaimed, giftcodeGuessing
+      repeatedFailedDeposits, repeatedInsufficientWithdrawals, giftcodeGuessing
     });
   } catch (e) { console.error('Abuse analytics error:', e.message); res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -9371,9 +9136,9 @@ app.get('/admin/integrity', async (req, res) => {
 // sitting right above it. Named for what it actually is (every earning
 // source, not just investment cashback) since the admin UI's "Cashback
 // earned" label is a real misnomer -- this field is cashback PLUS
-// referral commission PLUS checkin/gift-code/Task-Center/Mission-Center
+// referral commission PLUS gift-code/team-reward
 // bonuses, all folded into one number.
-const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward', 'order_gift', 'app_claim'];
+const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'mission_salary', 'mission_deposit_reward', 'order_gift', 'app_claim'];
 async function computeUserRealTotals(userId) {
   const [txSnap, invSnap, witSnap] = await Promise.all([
     db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
@@ -9413,7 +9178,6 @@ async function computeRealTotals() {
     db.collection('withdrawals').where('status', 'in', ['processing', 'processed']).limit(200000).get(),
   ]);
   const totals = {};
-  const checkinTimestamps = {};
   txSnap.forEach(d => {
     const t = d.data();
     if (!t.userId) return;
@@ -9424,9 +9188,8 @@ async function computeRealTotals() {
     // Every income source that credits totalEarned live must be summed
     // here too, or a "Recalculate totals" run silently wipes it back to
     // zero — cashback/commission/team_reward (Task Center)/promocode
-    // (gift codes)/checkin.
+    // (gift codes).
     if (EARNING_TX_TYPES.includes(t.type)) row.earned += finiteMoney(t.amount);
-    if (t.type === 'checkin') (checkinTimestamps[t.userId] || (checkinTimestamps[t.userId] = new Set())).add(tsMillis(t.createdAt));
   });
   const invested = {};
   invSnap.forEach(d => {
@@ -9440,17 +9203,16 @@ async function computeRealTotals() {
     if (!w.userId) return;
     withdrawn[w.userId] = (withdrawn[w.userId] || 0) + finiteMoney(w.net);
   });
-  return { totals, invested, checkinTimestamps, withdrawn };
+  return { totals, invested, withdrawn };
 }
-// Rebuilds totalDeposited/totalEarned/totalInvested and each user's
-// check-in streak from the real ledger/investments/check-in history --
+// Rebuilds totalDeposited/totalEarned/totalInvested/totalWithdrawn from the real ledger/investments --
 // the source of truth -- rather than trusting drifted incremental counters.
 // The admin UI's "Recalculate totals" button has always claimed all four;
 // this used to only actually rebuild the first two (Codex-caught, round 19).
 async function recountAllTotals() {
   return withLock('totals-recount', async () => {
-    const { totals, invested, checkinTimestamps, withdrawn } = await computeRealTotals();
-    let updated = 0, investedFixed = 0, streaksFixed = 0, teamCountsFixed = 0;
+    const { totals, invested, withdrawn } = await computeRealTotals();
+    let updated = 0, investedFixed = 0, teamCountsFixed = 0;
     const usersSnap = await db.collection('users').limit(10000).get();
 
     // Cheap in-memory pre-filter for teamL1/L2/L3Count, reusing usersSnap's
@@ -9458,7 +9220,7 @@ async function recountAllTotals() {
     // referrerId -> [childId,...] straight from every doc's own referredBy
     // field, so L1/L2/L3 for any user in THIS snapshot can be derived by
     // walking the map instead of re-querying -- same snapshot-then-
-    // live-reverify pattern as moneyLooksStale/streakLooksStale above: this
+    // live-reverify pattern as moneyLooksStale below: this
     // is only ever used to decide WHETHER a user might be stale, never
     // trusted as the value to write. A genuinely stale user gets its counts
     // rebuilt fresh from the live referredBy chain via the already-existing
@@ -9490,7 +9252,6 @@ async function recountAllTotals() {
       const row = totals[doc.id] || { deposited: 0, earned: 0 };
       const realInvestedSnapshot = invested[doc.id] || 0;
       const realWithdrawnSnapshot = withdrawn[doc.id] || 0;
-      const snapshotStreak = computeCheckinStreak(checkinTimestamps[doc.id] || new Set());
       const u = doc.data();
 
       // subagent-audit-caught HIGH bug (Finding #4): this used to write the
@@ -9501,8 +9262,7 @@ async function recountAllTotals() {
       // snapshot and this specific user's turn in a loop spanning up to
       // 10,000 users. A live cashback/commission/deposit/withdrawal/
       // mission/gift-code credit in that window got silently baked over by
-      // the stale value. Mirrors the exact fix already applied to
-      // checkinStreak/lastCheckinAt below (Round 35): use the snapshot only
+      // the stale value. So: use the snapshot only
       // as a cheap pre-filter for whether this user might need touching,
       // then re-derive the real figures fresh via computeUserRealTotals()
       // and re-read the doc fresh, both INSIDE the bal:<userId> lock,
@@ -9536,43 +9296,11 @@ async function recountAllTotals() {
         });
       }
 
-      // subagent-audit-caught HIGH bug: this used to write the SNAPSHOT-
-      // computed checkinStreak/lastCheckinAt straight into the user doc,
-      // guarded only by the bal:<userId> lock -- not checkin:<userId>, the
-      // lock /checkin's own claim-before-credit write holds. A live
-      // /checkin landing anywhere between computeRealTotals()'s upfront
-      // snapshot and THIS user's turn in a loop that can span up to 10,000
-      // users would get its lastCheckinAt overwritten back to the previous
-      // one by this stale snapshot, letting the member /checkin again
-      // inside their still-active cooldown for a second bonus. Mirrors
-      // /admin/user/reconcile-checkin's own fix for the identical race
-      // (Round 35): re-read the ledger fresh, inside the checkin: lock,
-      // immediately before writing, instead of trusting a snapshot taken
-      // before this whole run began.
-      const streakLooksStale = (u.checkinStreak || 0) !== snapshotStreak.streak || (u.lastCheckinAt || null) !== snapshotStreak.lastCheckinAt;
-      let wroteStreak = false;
-      if (streakLooksStale) {
-        await withLock('checkin:' + doc.id, async () => {
-          // Same limit bump as /checkin's own copy of this query -- see its comment.
-          const ledgerSnap = await db.collection('transactions')
-            .where('userId', '==', doc.id).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(5000).get();
-          const stamps = ledgerSnap.docs.map(d => tsMillis(d.data().createdAt)).filter(Boolean);
-          const fresh = computeCheckinStreak(stamps);
-          const freshDoc = await doc.ref.get();
-          const fd = freshDoc.exists ? freshDoc.data() : {};
-          const stillStale = (fd.checkinStreak || 0) !== fresh.streak || (fd.lastCheckinAt || null) !== fresh.lastCheckinAt;
-          if (stillStale) {
-            await withLock('bal:' + doc.id, () => doc.ref.update({ checkinStreak: fresh.streak, lastCheckinAt: fresh.lastCheckinAt }));
-            wroteStreak = true;
-          }
-        });
-      }
-
       // Team counts -- see snapshotTeamCounts()'s own comment above for why
       // this is a pre-filter, not the write itself. u (this user's doc data,
       // read at the top of this loop iteration) is stale by the time we get
-      // here in exactly the same sense moneyLooksStale/streakLooksStale
-      // already tolerate -- recomputeTeamCounts() re-derives from the live
+      // here in exactly the same sense moneyLooksStale
+      // already tolerates -- recomputeTeamCounts() re-derives from the live
       // referredBy chain, not from usersSnap, so a live signup/deletion
       // landing mid-run can only ever be caught fresh, never baked over.
       const [snapL1, snapL2, snapL3] = snapshotTeamCounts(doc.id);
@@ -9584,14 +9312,13 @@ async function recountAllTotals() {
         wroteTeamCounts = true;
       }
 
-      if (moneyWrote || wroteStreak || wroteTeamCounts) {
+      if (moneyWrote || wroteTeamCounts) {
         updated++;
         if (investedChanged) investedFixed++;
-        if (wroteStreak) streaksFixed++;
         if (wroteTeamCounts) teamCountsFixed++;
       }
     }
-    return { ok: true, updated, investedFixed, streaksFixed, teamCountsFixed };
+    return { ok: true, updated, investedFixed, teamCountsFixed };
   });
 }
 app.get('/admin/users/recount', async (req, res) => {
