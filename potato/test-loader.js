@@ -25,7 +25,7 @@ ok(/var NAV_LOADER = '<span class="mg-loadtxt">Loading\.\.\.<\/span>'/.test(mod)
 ok((mod.match(/NAV_LOADER/g) || []).length >= 6, 'Income, Team, Team members, Balance Record and Messages all use it');
 ok(/showAuthTab\('login'\);\n  stopLiveRefresh\(\);/.test(mod), 'signing out always lands on Login, not on a Sign Up form left open');
 ok(/\.mg-ann-img\{[^}]*height:auto/.test(html) && !/\.mg-ann-img\{[^}]*object-fit:cover/.test(html), 'the announcement picture is shown whole, never cropped');
-ok(/\.mg-img>img\{[^}]*object-fit:cover/.test(html) && /grid-template-columns:130\.5px/.test(html), 'a product picture fills its own column of the card');
+ok(/\.pt-img>img\{[^}]*object-fit:cover/.test(html) && /grid-template-columns:132px/.test(html), 'a product picture fills its own column of the card');
 ok(!/fileToFramedDataUrl|PRODUCT_IMG_W/.test(admin) && /fileToDataUrl\(f,900,0\.82\)/.test(admin), 'the admin no longer crops asset pictures to 16:9');
 ok(/<script data-potato-loader>/.test(html) && /localStorage\.getItem\(KEY\)/.test(html) && /box\.style\.backgroundImage = 'url\("' \+ kept/.test(html) && /window\._potatoLoaderStart = Date\.now\(\)/.test(html), 'the kept loading picture is painted inline on the first frame, before any network request');
 ok(/fetch\('\/k7x2\/public\/loader-image', \{ cache: 'no-cache' \}\)/.test(html) && /localStorage\.setItem\(KEY, u\)/.test(html), 'and refreshed in the background for the next visit');

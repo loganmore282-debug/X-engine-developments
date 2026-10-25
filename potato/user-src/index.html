@@ -1953,12 +1953,18 @@ html.mg-gut #pageHost{padding-right:4px;}
    Motion and the flip clock, measured frame by frame (60 fps) from the owner's two screen recordings. Percentages are of the picture's own height:
    the admin panel crops every icon tight to its visible edges, so the same percentage moves every picture by the same share of itself. */
 /* Order gift: a rigid vertical bounce, 1.2 s. At rest, drops 13.9% in 0.24 s, rises halfway (to 6.9%) by 0.54 s, drops again by 0.84 s, rises home by 1.13 s. */
-
+@keyframes ptGiftBounce{
+  0%{transform:translateY(0);animation-timing-function:cubic-bezier(0,0,.58,1);}
+  20%{transform:translateY(13.9%);animation-timing-function:cubic-bezier(.45,0,.55,1);}
+  44.7%{transform:translateY(6.9%);animation-timing-function:cubic-bezier(.65,0,.35,1);}
+  70.1%{transform:translateY(13.9%);animation-timing-function:cubic-bezier(.42,0,.58,1);}
+  94%,100%{transform:translateY(0);}
+}
 /* Download app: floats up 9% and back, 1.6 s, straight lines: up over 0.4 s, hold 0.35 s, down over 0.46 s, rest 0.38 s. */
-
+@keyframes ptAppFloat{0%{transform:translateY(0);}25%{transform:translateY(-9%);}47%{transform:translateY(-9%);}76%{transform:translateY(0);}100%{transform:translateY(0);}}
 .pt-icon{display:block;height:auto;max-width:100%;pointer-events:none;-webkit-user-select:none;user-select:none;}
-
-
+.pt-icon.pt-gift{animation:ptGiftBounce 1.2s infinite;will-change:transform;}
+.pt-icon.pt-appfloat{animation:ptAppFloat 1.6s linear infinite;will-change:transform;}
 /* Flip clock (HH:MM:SS): dark tiles 28 x 39, white bold digits 25 px, a hairline across the middle, red colon dots. A changed digit flips in 0.55 s:
    the lower half shows the new digit at once; the old upper half folds down evenly from 0.06 s to 0.33 s; the new lower half unfolds from 0.32 s to 0.55 s. */
 .pt-fc{display:flex;align-items:center;justify-content:center;direction:ltr;}
@@ -2092,6 +2098,12 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .pt-buy svg{width:13.5px;height:13.5px;}
 .pt-buy.soon,.pt-buy.off{background:linear-gradient(95deg,#cfd0d4,#bfc0c5);color:#fff;box-shadow:0 6px 12px -4px rgba(120,120,140,.3);cursor:default;}
 .pt-buy.soon{font-size:11.5px;}
+.pt-owned{margin-bottom:12px;}
+.pt-od{position:absolute;left:9px;right:9px;bottom:7px;}
+.pt-odb{height:6px;border-radius:3px;background:#ececf2;overflow:hidden;}
+.pt-odb i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#ef2d27,#c9161d);}
+.pt-od span{display:block;margin-top:5px;font:500 9px/12px Roboto,sans-serif;color:#8795a8;text-align:center;}
+.mg-orders{margin-top:14px;}
 /* red page header (the Orders tab and every sheet page): 51.3 px, bottom corners 15 px, white bold title */
 .pt-head,.sheet-head{position:relative;display:block;height:51.3px;margin:0;padding:0;background:#e4231c;color:#fff;border-radius:0 0 15px 15px;box-shadow:none;border:0;text-align:center;font:700 17px/51.3px Roboto,'Segoe UI',system-ui,sans-serif;z-index:3;}
 .sheet-head h2{margin:0;padding:0;position:static;font:700 17px/51.3px Roboto,'Segoe UI',system-ui,sans-serif;letter-spacing:0;color:#fff;}

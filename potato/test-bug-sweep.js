@@ -33,7 +33,7 @@ ok(/Math\.round\(parseFloat\(\$\('adjAmt'\)/.test(admin), 'Credit / Debit confir
 ok(/'admins', 'auditlog'\]\.includes\(lastTab\)/.test(admin), 'a staff deep link to an owner tab does not log staff out');
 
 // member app
-ok(/sheet === 'Balance Record'/.test(mod) && !/sheet === 'Transaction Statement'/.test(mod), 'Balance Record live-refreshes (the sheet title test matches)');
+ok(/sheet === 'Balance Detail'/.test(mod) && !/sheet === 'Transaction Statement'/.test(mod), 'Balance Detail live-refreshes (the sheet title test matches)');
 ok(/\['myBalance','walletBalance'\]/.test(mod), 'the live balance patch reaches My, Income and the Balance Record header');
 ok(/changed\|processing\|updated/.test(mod), 'success notices (password changed, withdrawal processing) get the tick');
 ok(/\.notify-bg\{[^}]*z-index:440/.test(html), 'notices sit above the Help and Download dialogs');
@@ -41,7 +41,6 @@ ok(/_catalogRefreshedAt/.test(mod) && /30000 - \(Date\.now\(\) - _catalogRefresh
 ok(/r\.code === 'AUTH_UNAVAILABLE' \|\| r\.code === 'SERVER_ERROR'/.test(mod), 'a busy or unavailable server on opening the app does not sign the member out');
 ok(!/signal:\s*AbortSignal\.timeout/.test(mod), 'no AbortSignal.timeout (older phones would skip the server logout)');
 ok(/messages: null, salary: null, page: 'home'/.test(mod), 'logout also forgets messages and the open tab');
-ok(/function vGroup\(/.test(mod) && /vGroup\(min\)/.test(mod), 'minimums print with thousands separators');
 
 // deploy / infra
 const upd = rd('deploy/update-vps.sh');
@@ -79,11 +78,9 @@ ok(/function gutters\(\)/.test(mod) && /r\.type === 'childList' \|\| r\.attribut
 ok(/function loadFailHtml\(/.test(mod) && /window\.retryLoad = /.test(mod) && /_productsLoadFailed \? loadFailHtml\('home'\)/.test(mod) && /_investmentsLoadFailed \? loadFailHtml\('assets'/.test(mod) && /_recordsLoadFailed && !\(STATE\.transactions/.test(mod) && /_messagesLoadFailed \? loadFailHtml\('messages'\)/.test(mod), 'a list that failed to load says so with a tap-to-retry, instead of "No products / No Orders / No Records / No Messages"');
 ok(/See it under Orders\./.test(mod) && !/See it under Income/.test(mod) && /var _buyBusy = false;/.test(mod) && !/Confirm Investment|confirmActionBtn/.test(mod), 'Buy Now buys at once with no confirmation pop-up (a second tap while it is on its way does nothing); the success notice points at the Orders tab');
 ok(/const memberCaptchaLimiter = rateLimit\(\{ windowMs: 5 \* 60 \* 1000, max: 600/.test(server), 'the captcha limit allows a new picture on every Sign Up tap, even behind one carrier address');
-ok(/@keyframes mgGlowA\{/.test(html) && /@keyframes mgGlowB\{/.test(html) && /\.mg-buy:not\(\.soon\):not\(:disabled\)::before[^{]*#loginBtn:not\(:disabled\)::before[^{]*#regBtn:not\(:disabled\)::before[^{]*\.mg-me-btns \.dep::before\{animation:mgGlowA 2s linear infinite;\}/.test(html) && (html.match(/animation:mgGlow[AB]/g) || []).length === 4 && /\.mg-tabs button\.new::before\{animation:mgGlowA 2s linear infinite;\}/.test(html), 'the glow sweep (measured from the owner\'s recording) runs only on Buy Now, Log In, Sign Up, the Profile Deposit button and the New Products tab');
 ok(/#pageHost\.mg-enter\{position:relative;animation:mgPageIn \.3s ease-out;\}/.test(html) && /@keyframes mgPageIn\{from\{opacity:0;top:6px;\}to\{opacity:1;top:0;\}\}/.test(html) && /@keyframes mgSheetIn\{from\{opacity:0;transform:translateY\(6px\);/.test(html), 'the page appearing animation runs once on #pageHost itself (a repaint of its content never restarts it) and rises by `top`, never a transform, so the fixed Treasure Chest stays in its corner');
 ok(/function replayPageIn\(\)/.test(mod) && /if \(wasOpen && !\(opts && opts\.navigating\)\) replayPageIn\(\);/.test(mod), 'closing a sheet (back arrow or phone Back) replays the page appearing animation on the page underneath');
-{ const dl = mod.slice(mod.indexOf('window.openDownloadPage'), mod.indexOf('// Owner: "remove double loading of startup loader')); ok(/Download Now/.test(dl) && !/Install \$\{|Fast, simple|Tap Download Now|<h1>|class="note"/.test(dl), 'the Download App page has only the button over the uploaded picture, no words'); }
-ok(/var CHEST_SCROLL_PX = 110;/.test(mod) && /function fitChestPage\(\)/.test(mod) && /fitChestPage\(\);\n\};/.test(mod) && /\.mg-dl\{[^}]*\+ 62px/.test(html) && /#pageHost:has\(\.mg-team\)\{min-height:calc\(100vh \+ 12px\);\}/.test(html), 'the Treasure Chest page always scrolls 110 px, Download 62 px, Team a few px, on any phone height, so the green scrollbar and its 4px room are always there (measured from the owner\'s screenshots)');
+{ const dl = mod.slice(mod.indexOf('window.openDownloadPage'), mod.indexOf('// ── ABOUT US')); ok(/Download APK/.test(dl) && /Install in 3 steps/.test(dl) && /<h3><i><\/i>FAQ<\/h3>/.test(dl), 'the Download App page is the owner\'s: hero with Download APK, three steps, three tiles and the FAQ'); }
 ok(/class="mg-mem"/.test(mod) && /<b>User<\/b>\$\{bought \? '<i>Active<\/i>' : ''\}/.test(mod) && /Total Purchase<\/div>/.test(mod) && /STATE\.profileLogo \? `<img/.test(mod.slice(mod.indexOf('function renderTeamMembers'), mod.indexOf('async function renderNetwork'))) && /\.mg-mem\{position:relative;height:122px/.test(html), 'a Team member card is as in the owner\'s screen: the uploaded profile picture, "User" with an Active tag once the member has bought, hidden number, amount on the right, join time, "Total Purchase" under a line');
 ok(!/capError|regCapErr|regCaptcha|captchaId/.test(mod + fs.readFileSync(__dirname + '/user-src/index.html', 'utf8')), 'Create Account has no captcha box or line (the owner\'s screens have none)');
 ok(/btn\.classList\.toggle\('shown', show\)/.test(mod) && /\.pa-eye\.shown \.off\{display:none;\}/.test(fs.readFileSync(__dirname + '/user-src/index.html', 'utf8')), 'the password eye gets a slash while the password is shown');

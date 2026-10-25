@@ -3568,6 +3568,33 @@ async function renderAssets(){
   if (STATE.page !== 'assets') return; // navigated away while awaiting
   paintAssets();
 }
+// One card per product the member owns, in the same shape as Home's card. The running-product screen of the owner's own app is not seen yet:
+// until it is, the card shows the same four figures, a bar for the days gone, and when it was bought and when it ends.
+function ptStamp(ms){
+  const d = new Date(ms), pad = n => String(n).padStart(2, '0');
+  return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+function vOwnedCardHtml(inv){
+  const st = planStats(inv);
+  const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
+  const name = inv.tierLabel || p.name || 'Product';
+  const startMs = st.createdMs, endMs = startMs + st.total * 86400000;
+  const pct = st.matured ? 100 : Math.max(0, Math.min(100, Math.round((Date.now() - startMs) / (endMs - startMs) * 100)));
+  return `
+  <article class="pt-card pt-owned">
+    <div class="pt-img">${mgPicture(Object.assign({}, p, { name }))}<span class="pt-tag">${st.matured ? 'Done' : 'Running'}</span></div>
+    <div class="pt-main">
+      <h3>${esc(name)}</h3>
+      <div class="pt-grid">
+        <div><b>Price</b><i class="pt-fit">${esc(ptMoneyInt(st.amount))}</i></div>
+        <div><b>Daily</b><i class="pt-fit">${esc(ptMoneyInt(st.daily))}</i></div>
+        <div><b>Days</b><i>${st.total}</i></div>
+        <div><b>Total</b><i class="pt-fit">${esc(ptMoneyInt(st.expected))}</i></div>
+      </div>
+      <div class="pt-od"><div class="pt-odb"><i style="width:${pct}%"></i></div><span>${esc(ptStamp(startMs))} \u2192 ${esc(ptStamp(endMs))}</span></div>
+    </div>
+  </article>`;
+}
 // "Today's Income": what was paid into the wallet as earnings since 00:00 of the region's own day (Uganda: UTC+3).
 var PT_EARN_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'mission_salary', 'mission_deposit_reward'];
 function ptRegionOffsetMs(){ return (Number(REGION && REGION.utcOffsetMin) || 0) * 60000; }
@@ -4914,17 +4941,6 @@ window.submitChestKey = async function(){
   // Now catch the app up in the background.
   refreshAfterWin().then(() => { if (_openSheetTitle === 'Gift Code') ptGiftCodeRecords(); });
 };
-window.collectChestWin = function(){
-  const bg = $('chestWinBg');
-  const after = bg && bg._after;
-  if (bg) bg.remove();
-  // A win that came from somewhere other than the Treasure Chest page (a Task Center reward) hands control back to
-  // its own page instead of closing the sheet underneath.
-  if (after) { after(); dlgClosed(); return; }
-  // The chest page and the win card each own a history entry: close both with ONE history call.
-  if (!_dlgFromPop && history.state && history.state.dlg) { closeSheet({ fromAction: true, keepHistory: true }); _dlgIgnore(); history.go(-2); }
-  else closeSheet({ fromAction: true });
-};
 // The two network refreshes a win needs. Deliberately not awaited by its
 // caller -- the toast above already told the member it worked, so nothing
 // on screen is waiting on either result.
@@ -5119,8 +5135,7 @@ window.closeSheet = function(opts){
 // dialog is skipped over by the popstate handler below, so Back never "does nothing".
 var _dlgIgnorePop = false, _dlgFromPop = false, _dlgCleanTimer = null;
 function anyDialogOpen(){
-  return !!($('chestWinBg')
-    || ($('helpBg') && $('helpBg').classList.contains('show'))
+  return !!(($('helpBg') && $('helpBg').classList.contains('show'))
     || ($('confirmBg') && $('confirmBg').classList.contains('show'))
     || ($('annBg') && $('annBg').classList.contains('show'))
     // The payment status page owns a history entry too: without it here, one Back left the page showing and the next left the app mid-payment.
@@ -5132,7 +5147,7 @@ function resetOverlayState(){
   // A session that ends (or a logout) takes every popup with it: the Buy confirm, Help, announcement, download and the win card used to stay
   // on top of the Login screen (the win card even showed the previous member's New Balance).
   ['confirmBg', 'helpBg', 'annBg'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
-  const win = $('chestWinBg'); if (win) win.remove();
+  const win = $('ptClaimBg'); if (win) win.remove();
   _openSheetTitle = null; _depActiveDepositId = null; _withdrawSubmitting = false;
   if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
 }
@@ -5152,8 +5167,7 @@ function dlgClosed(){
 function closeTopDialog(){
   _dlgFromPop = true;
   try {
-    if ($('chestWinBg')) collectChestWin();
-    else if ($('helpBg') && $('helpBg').classList.contains('show')) closeHelpDialog();
+    if ($('helpBg') && $('helpBg').classList.contains('show')) closeHelpDialog();
     else if ($('confirmBg') && $('confirmBg').classList.contains('show')) closeConfirm();
     else if ($('annBg') && $('annBg').classList.contains('show')) closeAnnouncement();
     else if ($('depStatusBg') && $('depStatusBg').classList.contains('show')) {

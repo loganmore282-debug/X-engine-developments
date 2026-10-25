@@ -19,10 +19,8 @@ ok(/referralCodeLower: codeLower/.test(src) && /where\('referralCodeLower', '=='
 ok(/String\(code\)\.toUpperCase\(\)/.test(mod), 'the invite link carries the code in capitals');
 // deposit page
 const form = mod.slice(mod.indexOf('function openDepositFormSheet'), mod.indexOf('window.pickPayLabel'));
-ok(form.indexOf('id="depAmount"') > 0 && form.indexOf('id="depPhone"') > form.indexOf('id="depAmount"') && form.indexOf('id="depPhone"') < form.indexOf('Select Payment Method'), 'the phone box comes right after the amount box, before the payment methods');
-ok(/<h2>Input Payment Number<\/h2><\/div>\s*<input class="v-amount" id="depPhone"/.test(form), 'the phone box sits under its own heading "Input Payment Number", between Select Amount and Select Payment Method');
-ok(/class="v-amount" id="depPhone"/.test(form), 'the phone box has the amount box\'s own class (same size)');
+ok(form.indexOf('id="depAmount"') > 0 && !/depPhone/.test(form), 'the Deposit page has the amount box and no phone box (the owner\'s screens have none)');
 const sub = mod.slice(mod.indexOf('window.submitDeposit'), mod.indexOf('window.submitDeposit') + 4000);
-ok(/cleanPhone\(\(\$\('depPhone'\)/.test(sub) && /if \(!phone\) return notify\(/.test(sub), 'the typed number is required and checked with cleanPhone');
-ok(/post\('\/deposit\/marzpay', \{ amount, phone \}\)/.test(sub), 'the typed number is sent with the deposit');
+ok(!/depPhone/.test(sub) && !/if \(!phone\)/.test(sub), 'no typed number is required: the payment request goes to the member\'s own number');
+ok(/post\('\/deposit\/marzpay', \{ amount \}\)/.test(sub), 'only the amount is sent with the deposit');
 console.log('PASS: referral code format and deposit phone box (' + n + ' checks)');
