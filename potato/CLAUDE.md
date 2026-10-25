@@ -46,5 +46,8 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all`: use the names
 
 ## Status
 1. (done) Copied from Mint, renamed to Potato, ports 3004/8096/8097, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path.
-2. (next) VPS first setup, GitHub webhook, then the owner's Potato screenshots: compare against renders (Playwright, 360x701 at 2x) before saying it matches.
+2. (rule, owner) **Potato contains ONLY what is in the owner's screenshots.** Anything not shown (screen, tab, button, field, wording, admin option, setting) is removed COMPLETELY: its code, its admin setting and its tests, never just hidden. Kept without a screen: whatever keeps money and accounts safe (payment confirmation and locks, duplicate-payment protection, login security, captcha). Borderline items are listed for the owner to decide before removal.
+3. (rule, owner) **Icons are uploaded in the admin panel** (home / orders / promotion / team / salary / profile nav icons, deposit, withdraw, download app, customer service, channel, and the rest as the screenshots show), and the system removes the background and cuts each icon out cleanly (server or browser side, PNG with transparent background).
+4. (done) VPS first setup, port 3004, pm2 `potato-server`, preview on 8096, GitHub webhook added (owner).
+5. (next) VPS first setup, GitHub webhook, then the owner's Potato screenshots: compare against renders (Playwright, 360x701 at 2x) before saying it matches.
    Until then the app still looks like Mint (green/cream design, products "Potato A" to "Potato J" placeholders).
