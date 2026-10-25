@@ -55,7 +55,7 @@ function runStats(rows) {
   ok(!/Potato Mini|Potato Classic|Product-1\b/.test(cli), 'no sample asset is written into the app code');
   ok(!/v-ticker/.test(cli), 'Home has no scrolling line any more');
   const css = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
-  ok(/--mg-green:#02a652/.test(css) && /--mg-bg:#f8f4e9/.test(css), 'the app uses the green and cream design tokens');
+  ok(/--mg-green:#e5231d/.test(css) && /--mg-bg:#f4f5fb/.test(css) && !/#02a652|#02964c|#056b39/i.test(css), 'the app uses the Potato red and lavender design tokens, no green theme is left');
   console.log(`PASS: screen data (${n} checks)`);
 })().catch(e => { console.error(e); process.exit(1); });
 
