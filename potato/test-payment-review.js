@@ -3,7 +3,7 @@
 // server.js source with stubs:
 //  1. an automatic payout is never sent for a suspended member (manual "mark as
 //     paid" bookkeeping is unaffected)
-//  2. a member can save at most MAX_SAVED_PAYOUT_ACCOUNTS withdrawal accounts
+//  2. a member can save at most BANK_CARD_LIMIT (5) bank cards, the first one is the active card
 //  3. the per-user debounce maps are swept (no slow memory growth)
 // (the daily-limit fix is covered in test-withdraw-rules.js)
 const fs = require('node:fs'), assert = require('node:assert/strict');
@@ -28,17 +28,17 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
   eq(t.r.code, 200, 'manual mark-as-paid for an already-made payment still records'); eq(t.calls[0][1], 'processed');
   // (an active member in automatic mode proceeds past the guard to the gateway code, covered by the existing payout tests)
 
-  // 2. one payout wallet per member: saving edits it in place
-  ok(/const MAX_SAVED_PAYOUT_ACCOUNTS = 1;/.test(src), 'one wallet per member');
+  // 2. up to five cards per member: the first saved is the active one, a repeat is refused
+  ok(/const BANK_CARD_LIMIT = 5;/.test(src), 'five cards per member');
   async function save(existing, phone, others = []) {
     const rows = existing.map((p, i) => ({ id: 'b' + i, userId: 'u1', phone: p, holder: 'OLD', network: 'MTN Mobile Money' })).concat(others.map((p, i) => ({ id: 'o' + i, userId: 'u2', phone: p, holder: 'OTHER', network: 'MTN Mobile Money' })));
-    const log = { added: 0, updated: [], deleted: [] }; let code = 200, body;
+    const log = { added: 0, addedRows: [], updated: [], deleted: [] }; let code = 200, body;
     const mkDoc = r => ({ id: r.id, data: () => r, ref: { update: async u => { log.updated.push([r.id, u]); }, delete: async () => { log.deleted.push(r.id); } } });
     const chain = (list, f = []) => ({ where: (k, o, v) => chain(list, [...f, [k, v]]), limit: () => chain(list, f),
       get: async () => { const got = list.filter(r => f.every(([k, v]) => r[k] === v)); return { empty: !got.length, size: got.length, docs: got.map(mkDoc) }; } });
-    const db = { collection: n => n === 'bankAccounts' ? { ...chain(rows), add: async () => { log.added++; } } : { doc: () => ({ get: async () => ({ exists: true, data: () => ({ phone: '0700000000', status: 'active' }) }) }) } };
+    const db = { collection: n => n === 'bankAccounts' ? { ...chain(rows), add: async row => { log.added++; log.addedRows.push(row); } } : { doc: () => ({ get: async () => ({ exists: true, data: () => ({ phone: '0700000000', status: 'active' }) }) }) } };
     let handler; const app = { post: (p, h) => { if (p === '/bank/save') handler = h; } };
-    const i = src.indexOf('const MAX_SAVED_PAYOUT_ACCOUNTS'), j = src.indexOf("app.get('/bank/list'");
+    const i = src.indexOf('const BANK_CARD_LIMIT'), j = src.indexOf("app.get('/bank/list'");
     new Function('textOf', 'app', 'db', 'verifyAuth', 'stripHtml', 'NETWORK_NAMES', 'cleanPhone', 'badPhoneMessage', 'getSettings', 'getSupportedBanks', 'consumeOtpTicket', 'marzValidateBankAccount', 'marzUserMsg', 'withLock', 'FieldValue', 'console',
       src.slice(i, j))(v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''), app, db, async () => 'u1', s => String(s || '').trim(), new Set(['MTN Mobile Money']), p => String(p).replace(/\D/g, ''), () => 'bad phone',
       async () => ({ otpVerificationEnabled: false }), async () => [], async () => true, async () => ({}), () => '', (k, g) => g(), { serverTimestamp: () => 1 }, console);
@@ -46,21 +46,24 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
     await handler({ body: { holder: 'A B', network: 'MTN Mobile Money', phone } }, res); return { code, body, ...log };
   }
   let r = await save([], '0770000099');
-  eq([r.code, r.added, r.updated.length], [200, 1, 0], 'the first wallet is added');
+  eq([r.code, r.added, r.updated.length], [200, 1, 0], 'the first card is added');
+  ok(r.addedRows[0].isDefault === true, 'the first card is the active one');
   r = await save(['0700000010'], '0770000099');
-  eq([r.code, r.added, r.updated.length, r.deleted.length], [200, 0, 1, 0], 'saving again edits the one wallet in place, no second row');
-  ok(r.updated[0][1].phone === '0770000099' && r.updated[0][1].holder === 'A B', 'with the new number and holder');
-  r = await save(['0700000010', '0700000011', '0700000012'], '0770000099');
-  eq([r.added, r.updated.length, r.deleted.length], [0, 1, 2], 'any older extra wallets are removed');
+  eq([r.code, r.added, r.updated.length, r.deleted.length], [200, 1, 0, 0], 'a second card is a second row, nothing is overwritten or deleted');
+  ok(r.addedRows[0].isDefault === false, 'and the first card stays the active one');
   r = await save(['0770000099'], '0770000099');
-  eq([r.code, r.added, r.updated.length], [200, 0, 1], 'saving the same number again just updates the holder');
+  eq([r.code, r.added, r.updated.length], [409, 0, 0], 'saving a number the member already holds is refused');
+  ok(r.body.code === 'CARD_EXISTS', 'with its own code');
+  r = await save(['0700000010', '0700000011', '0700000012', '0700000013', '0700000014'], '0770000099');
+  eq([r.code, r.added], [400, 0], 'a sixth card is refused');
+  ok(r.body.code === 'CARD_LIMIT', 'with its own code');
 
   // one payout number, one member: a number another member already holds is refused, and nothing is written
   r = await save([], '0770000099', ['0770000099']);
   eq([r.code, r.added, r.updated.length], [409, 0, 0], 'a wallet number another member already uses is refused');
   ok(r.body.code === 'WALLET_TAKEN' && /already used by another member/.test(r.body.message), 'with a clear message');
   r = await save(['0700000010'], '0770000099', ['0770000099']);
-  eq([r.code, r.updated.length], [409, 0], 'editing to a number another member holds is refused too');
+  eq([r.code, r.added], [409, 0], 'adding a number another member holds is refused too');
   r = await save([], '0770000099', ['0770000011']);
   eq([r.code, r.added], [200, 1], 'a number nobody else holds is accepted');
 

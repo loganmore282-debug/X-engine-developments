@@ -18,7 +18,7 @@ ok(/\.pt-fd\{[^}]*width:27\.7px;height:39px;[^}]*font:700 25px\/39px Roboto/.tes
 ok(/animation:ptFoldTop 267ms 58ms linear both/.test(css) && /animation:ptUnfoldBot 233ms 317ms cubic-bezier\(\.3,\.5,\.7,\.8\) both/.test(css) && /ptHideBot 550ms/.test(css), 'fold 0.06-0.33 s, unfold 0.32-0.55 s');
 
 // behaviour of the clock (jsdom, no layout)
-const a = mod.indexOf('// ── Admin-uploaded cut-out icons'), b = mod.indexOf('// Home has two lists that never mix');
+const a = mod.indexOf('// ── Admin-uploaded cut-out icons'), b = mod.indexOf('function homeTabProducts(){');
 const dom = new JSDOM('<body><div id="h"></div></body>', { runScripts: 'outside-only' });
 const w = dom.window;
 w.eval('var STATE={icons:{ordergift:"data:image/png;base64,AAAA"}};var esc=function(s){return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");};' + mod.slice(a, b));

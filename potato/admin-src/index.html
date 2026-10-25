@@ -2524,7 +2524,7 @@ async function renderProducts(){
       <div class="prod">
         <div class="thumb" style="${p.image?`background-image:url('${esc(p.image)}')`:''}">${p.image?'':tintSwatch()}</div>
         <div class="pb">
-          <div class="pt">${esc(p.name||p.label)} ${p.category==='new'?'<span class="pill-tag t-ok">New Products</span>':''}${p.active===false?'<span class="pill-tag t-mut">Off</span>':''}${p.comingSoon?'<span class="pill-tag t-warn">Upcoming</span>':''}${(!p.comingSoon&&p.openFrom&&p.openTo)?`<span class="pill-tag t-warn">${esc(p.openFrom)}–${esc(p.openTo)}</span>`:''}${(!p.comingSoon&&p.openAt&&Number(p.openAt)>Date.now())?'<span class="pill-tag t-warn">Scheduled</span>':''}</div>
+          <div class="pt">${esc(p.name||p.label)}${p.active===false?'<span class="pill-tag t-mut">Off</span>':''}${p.comingSoon?'<span class="pill-tag t-warn">Upcoming</span>':''}${(!p.comingSoon&&p.openFrom&&p.openTo)?`<span class="pill-tag t-warn">${esc(p.openFrom)}–${esc(p.openTo)}</span>`:''}${(!p.comingSoon&&p.openAt&&Number(p.openAt)>Date.now())?'<span class="pill-tag t-warn">Scheduled</span>':''}</div>
           <div class="pp">${ugx(p.price)} · ${p.cycle||0} days · VIP ${p.vip||0}</div>
           <div class="pr">Pays ${ugx(resolvedPayout(p))}${(Number(p.multiplier)>0)?` <span class="muted">(&times;${esc(String(p.multiplier))})</span>`:''}</div>
           <div class="pa"><button class="btn sm ghost" data-edit="${esc(p.key)}">Edit</button><button class="btn sm danger" data-del="${esc(p.key)}">Delete</button></div>
@@ -2555,9 +2555,6 @@ function editProduct(p, order){
     <label>Member-facing product name</label><input id="pLabel" value="${esc(p.name||p.label||'')}" placeholder="e.g. Potato A">
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Members see this name. It is independent from the stable key below.</p>
     <label>Stable key (internal; preserve for existing products)</label><input id="pKey" value="${esc(p.key||'')}" placeholder="potato-a">
-    <label>Category</label>
-    <select id="pCat"><option value="main"${p.category==='new'?'':' selected'}>Products</option><option value="new"${p.category==='new'?' selected':''}>New Products</option></select>
-    <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Members see two lists on Home: Products and New Products. A product appears in only the one you pick here; everything else about it works the same.</p>
     <div class="row">
       <div><label>Price (${adminCur()})</label><input id="pPrice" type="number" value="${p.price||''}" placeholder="500000"></div>
       <div><label>Multiplier (&times;)</label><input id="pMult" type="number" step="0.1" min="0" value="${p.multiplier!=null?p.multiplier:''}" placeholder="3"></div>
@@ -2667,7 +2664,7 @@ function editProduct(p, order){
     // slugifying the Name -- that's what caused the original bug.
     const typedKey = $('pKey').value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'').slice(0,24);
     const key = typedKey || p.key || ($('pLabel').value.toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,24)) || ('item'+Date.now());
-    const body = { key, name:$('pLabel').value, category:$('pCat').value, price:$('pPrice').value,
+    const body = { key, name:$('pLabel').value, price:$('pPrice').value,
       expectedReturn:$('pRet').value, multiplier:_retIsTruth?'':$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, vip:$('pVip').value, orderGift:$('pGift').value, order:$('pOrder').value,
       image, active:$('pActive').checked, comingSoon:$('pSoon').checked,
       // datetime-local has no zone, so the browser reads it as local time --

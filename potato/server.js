@@ -6636,7 +6636,6 @@ app.get('/bank/supported-banks', async (req, res) => {
   const banks = await getSupportedBanks();
   res.json({ status: 'success', banks: banks.map(b => b.name) });
 });
-const MAX_SAVED_PAYOUT_ACCOUNTS = 1; // one wallet per member; /bank/save edits it in place
 const BANK_CARD_LIMIT = 5;
 app.post('/bank/save', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -8024,7 +8023,7 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     orderGift = Math.round(Number(p.orderGift));
     if (!Number.isFinite(orderGift) || orderGift < 0 || orderGift > MAX_MONEY_AMOUNT) return refuse('Order gift', `must be a number between 0 and ${MAX_MONEY_AMOUNT} (0 = no gift)`);
   }
-  return { key, name, category: p?.category === 'new' ? 'new' : 'main', price, cycle, expectedReturn, multiplier, buyLimit, vip, orderGift, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
+  return { key, name, price, cycle, expectedReturn, multiplier, buyLimit, vip, orderGift, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
 }
 // `?region=ke` hands the editor that region's view of every product -- its
 // own price where it has one, Uganda's where it has not -- plus `overrides`,

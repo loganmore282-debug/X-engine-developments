@@ -3023,13 +3023,6 @@ async function liveRefreshVisible(){
       const changedInvestments = ir.status === 'success' && liveChanged('investments', ir.investments);
       if (changedProducts || changedInvestments) paintAssets();
     }
-  } else if (STATE.page === 'salary') {
-    if (!liveDue('salary', LIVE_TEAM_MS, _liveAccountMoved)) return ok;
-    const r = await api('/salary/status');
-    if (r.status === 'success') {
-      STATE.salary = r;
-      if (STATE.page === 'salary' && !_openSheetTitle && liveChanged('salary', r)) paintSalary();
-    } else ok = false;
   } else if (STATE.page === 'promo') {
     if (Date.now() - _liveTeamAt >= LIVE_TEAM_MS) {
       _liveTeamAt = Date.now();
@@ -3156,7 +3149,6 @@ window.showPage = async function(name){
   else if (name === 'assets') await renderAssets();
   else if (name === 'network') await renderNetwork();
   else if (name === 'promo') await renderPromo();
-  else if (name === 'salary') await renderSalary();
   else if (name === 'account') await renderAccount();
   startLiveRefresh();
 };
@@ -3434,14 +3426,8 @@ function ptFlipClockSet(root, str){
 }
 function ptFlipSettle(d){ d.classList.remove('pt-go'); const v = d.getAttribute('data-v'); d.querySelectorAll('i').forEach(i => { i.textContent = v; }); }
 
-// Home has two lists that never mix: Products and New Products. Each product carries the category the admin saved it with.
-function homeTabNow(){ return STATE.homeTab === 'new' ? 'new' : 'main'; }
-function mgIsNew(p){ return !!p && p.category === 'new'; }
-function homeTabProducts(){
-  const tab = homeTabNow();
-  return (STATE.products || []).filter(p => p.active !== false && (mgIsNew(p) ? 'new' : 'main') === tab);
-}
-function homeEmptyHtml(){ return '<div class="v-empty">' + (homeTabNow() === 'new' ? 'No new products yet.' : 'No products yet.') + '</div>'; }
+function homeTabProducts(){ return (STATE.products || []).filter(p => p.active !== false); }
+function homeEmptyHtml(){ return '<div class="v-empty">No products yet.</div>'; }
 function paintHome(){
   applyProductImageOpacity();
   // A product the admin switched off (Active unticked) is not offered on Home; owners still see it on Income.
@@ -4102,56 +4088,8 @@ window.shareTo = function(where){
   window.open(urls[where], '_blank', 'noopener');
 };
 
-// ── SALARY (own tab) ──
+// ── SALARY (the Reward tab of Myteam) ──
 var _salaryBusy = false;
-var MG_SALARY_COLORS = ['#ffc72a', '#00a650', '#e30711', '#046a38', '#ffd60a', '#ffc72a', '#00a650'];
-async function renderSalary(){
-  const had = !!STATE.salary;
-  if (had) paintSalary();
-  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + NAV_LOADER + '</div>';
-  const r = await api('/salary/status');
-  if (r.status === 'success') STATE.salary = r;
-  if (STATE.page !== 'salary') return;
-  paintSalary();
-}
-function paintSalary(){
-  const S = STATE.salary;
-  if (!S) { $('pageHost').innerHTML = '<div class="v-page"><div class="v-empty" onclick="renderSalary()">Could not load. Tap to try again.</div></div>'; return; }
-  const tiers = S.tiers || [];
-  const total = Number(S.total) || 0;
-  const days = Number(S.accruedDays) || 0;
-  const money = n => cur() + ' ' + numGroup(n, false);
-  const lowest = tiers[0];
-  const topLine = days > 0 ? 'Next claim: ' + money(S.nextReward)
-    : lowest && total < lowest.target ? 'Need ' + money(lowest.target - total) + ' more to claim'
-    : 'Come back tomorrow for your next day of wages';
-  const cards = tiers.map((tier, i) => {
-    const need = Math.max(0, tier.target - total);
-    const pct = tier.target > 0 ? Math.min(100, Math.floor(total / tier.target * 100)) : 0;
-    const open = tier.reached;
-    const btn = !open ? `<button type="button" class="mg-sbtn" onclick="notify('Need ${money(need)} more to claim')">Locked</button>`
-      : days > 0 ? '<button type="button" class="mg-sbtn go" onclick="claimSalary(this)">Claim</button>'
-      : '<button type="button" class="mg-sbtn" onclick="notify(\'No wages to claim yet. Come back tomorrow.\')">Claimed</button>';
-    return `
-    <div class="mg-stier" style="--strip:${MG_SALARY_COLORS[i % MG_SALARY_COLORS.length]}">
-      <div class="mg-sl">
-        <div class="mg-s1"><b>Reach ${money(tier.target)}</b><span>claimable reward within</span><em>Reward ${money(tier.reward)}</em></div>
-        <div class="mg-sbar"><i style="width:${pct}%"></i></div>
-        <div class="mg-sneed">${open ? 'Reached' : 'Need ' + money(need) + ' more to claim'}</div>
-      </div>
-      ${btn}
-    </div>`;
-  }).join('');
-  $('pageHost').innerHTML = `
-<div class="v-page mg-salary">
-  <div class="mg-shead"><h1>Daily Salary Standard</h1><p>Invite Friends · Grow Your Team · Claim Daily Rewards</p><div class="mg-spill">Team Total Consumption: ${esc(money(total))}</div></div>
-  <div class="mg-sacc"><div>Accrued wages: <b>${days}</b> day(s)</div><small>${esc(topLine)}</small></div>
-  ${cards || '<div class="v-empty">Salary is not available yet.</div>'}
-  <div class="mg-rules"><b>Daily wage rules:</b>
-    <ol><li>Each calendar day after reaching the lowest tier accrues one share of salary. Unclaimed days keep accruing; each claim pays the earliest unclaimed day.</li>
-    <li>Each accrued day is paid at the tier reached on that day. Tap a claimable tier to collect your wages day by day.</li></ol></div>
-</div>`;
-}
 window.claimSalary = async function(btn){
   if (_salaryBusy) return;
   _salaryBusy = true; if (btn) btn.disabled = true;
@@ -5911,6 +5849,7 @@ window.submitWithdraw = async function(){
   if (win.enabled && !win.open && !(STATE.account && STATE.account.withdrawAnytime))
     return notify(`Withdraw is open from ${win.from} to ${win.to}. Please come back then.`);
   // The Trade Password is asked in a small dialog, right when the member taps Withdraw (the owner's Withdraw page has no box for it).
+  if ($('pinBg') && $('pinBg').classList.contains('show')) return;   // a second tap while the dialog is open does nothing
   const witPin = await askTradePin();
   if (witPin === null) return;
   if (!/^\d{6}$/.test(witPin)) return notify('Enter your 6-digit Trade Password.');

@@ -1,6 +1,6 @@
 'use strict';
-// One payout wallet (edited in place, no bin icon, no second row) and the Treasure Chest page words.
-// Server: /bank/save replaces the single wallet. Drives source (and --built) in JSDOM.
+// Bank Cards (up to five, the first is active, no bin icon) and the Gift Code page words.
+// Server: /bank/save adds a card. Drives source (and --built) in JSDOM.
 const fs = require('node:fs'), zlib = require('node:zlib'), assert = require('node:assert/strict');
 const { JSDOM } = require('jsdom');
 const built = process.argv.includes('--built');
@@ -19,35 +19,40 @@ for (const s of d.scripts) {
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 (async () => {
   await new Promise(r => setTimeout(r, 30));
-  // Wallet: one saved row is shown, prefilled, with no delete control anywhere.
-  w.eval('STATE.bankAccounts=[{id:"b1",network:"MTN Mobile Money",phone:"256769968158",holder:"Jane Doe"}]');
-  w.eval('openSheet("Wallet","");renderWalletSheet()');
-  ok(d.querySelectorAll('#walCardBox .v-wcard').length === 1 && /MTN MOBILE MONEY/.test(d.querySelector('.v-wcard').textContent) && /JANE DOE/.test(d.querySelector('.v-wcard').textContent), 'exactly one wallet card, with the provider and holder');
-  ok(!/deleteWallet|Delete wallet/.test(d.getElementById('sheetBody').innerHTML), 'no delete / bin control');
-  ok(d.getElementById('walToggleBtn').textContent === 'Edit Wallet' && d.getElementById('walFormWrap').style.display === 'none', 'the card has an Edit Wallet button; the form opens on tap');
-  w.walShowForm(true);
-  ok(d.getElementById('walProvider').value === 'MTN' && d.getElementById('walPhone').value === '0769968158' && d.getElementById('walHolder').value === 'JANE DOE', 'the form edits the saved wallet in place');
-  ok(d.getElementById('walEditHead').textContent === 'Edit Wallet', 'heading is Edit Wallet');
-  ok(typeof w.deleteWallet === 'undefined', 'deleteWallet is gone');
-  w.eval('STATE.bankAccounts=[];openSheet("Wallet","");renderWalletSheet()');
-  ok(d.getElementById('walEditHead').textContent === 'Add Wallet' && d.getElementById('walToggleBtn').textContent === 'Add Wallet' && /\*\*\*\* \*\*\*\* \*\*\*\* \*\*\*\*/.test(d.querySelector('.v-wcard').textContent), 'no wallet yet: Add Wallet and an empty card');
-  // Treasure Chest: the owner's words only.
+  // Bank Cards: the dark card shows the active card, the others are listed under "Other Cards", and there is no delete control anywhere.
+  w.eval('STATE.bankAccounts=[{id:"b1",network:"MTN Mobile Money",phone:"256769968158",holder:"Jane Doe",isDefault:true}]');
+  w.eval('openSheet("Bank Cards","");renderWalletSheet()');
+  ok(d.querySelectorAll('#walCardBox .pt-bcard').length === 1 && /MTN Mobile Money/.test(d.querySelector('.pt-bcard').textContent) && /JANE DOE/.test(d.querySelector('.pt-bcard').textContent), 'the active card shows the provider and holder');
+  ok(/0769 9681 58/.test(d.querySelector('.pt-bcard').textContent), 'the number is shown in groups of four');
+  ok(!/deleteWallet|Delete wallet/.test(d.getElementById('sheetBody').innerHTML) && typeof w.deleteWallet === 'undefined', 'no delete / bin control');
+  ok(!d.querySelector('.pt-ocard') && d.getElementById('walCount').textContent === '1/5', 'one card: no other cards, the counter says 1/5');
+  w.eval('STATE.bankAccounts.push({id:"b2",network:"Airtel Money",phone:"256759968158",holder:"Bogere Med"});paintWalletParts()');
+  ok(d.querySelectorAll('.pt-ocard').length === 1 && /0759 \*\*\*\* 8158/.test(d.querySelector('.pt-ocard').textContent) && /BOGERE MED/.test(d.querySelector('.pt-ocard').textContent) && d.getElementById('walCount').textContent === '2/5', 'a second card is listed under Other Cards and the counter says 2/5');
+  w.eval('STATE.bankAccounts=[];openSheet("Bank Cards","");renderWalletSheet()');
+  ok(/No bank cards yet/.test(d.querySelector('.pt-bcard').textContent) && /Fill the form below to add one/.test(d.querySelector('.pt-bcard').textContent), 'no card yet: the empty message');
+  ok(d.getElementById('walProvider').placeholder === 'Type to search bank' && d.getElementById('walPhone').placeholder === 'Enter card number' && d.getElementById('walHolder').placeholder === 'Cardholder name' && d.getElementById('walSaveBtn').textContent === 'Save Card', 'the form words come from the screenshots');
+  await w.submitWallet();
+  ok(/Please fill in all fields/.test(d.getElementById('notifyMsg').textContent), 'an empty form is refused with the screenshot words');
+  w.closeNotify();
+  // Gift Code page: the owner's words only.
   w.openChestSheet();
   const t = d.getElementById('sheetBody').textContent.replace(/\s+/g, ' ').trim();
-  ok(d.getElementById('sheetTitle').textContent === 'TREASURE CHEST', 'title');
-  ok(t === 'Mystery Treasure Enter your key to unlock the reward OPEN CHEST', 'only the screenshot words: ' + t);
-  ok(d.getElementById('chestKey').placeholder === 'Enter treasure chest key', 'key placeholder');
-  ok(d.querySelector('.mg-chest-ring img'), 'chest artwork');
+  ok(d.getElementById('sheetTitle').textContent === 'Gift Code', 'title');
+  ok(/^Mystery Gift Code\s*One free redeem per day Gift Code Key/.test(t) && /Redeem Gift Code/.test(t) && /Reward Records/.test(t) && /No more records/.test(t), 'only the screenshot words: ' + t);
+  ok(d.getElementById('chestKey').placeholder === 'Enter gift code', 'key placeholder');
+  ok(d.querySelector('.pt-gcbox') || d.querySelector('.pt-gchero'), 'gift picture hero');
   w.submitChestKey();
-  ok(/Please enter the treasure chest key/.test(d.getElementById('notifyMsg').textContent), 'empty key message');
-  // Server: one wallet, edited in place; chest messages.
-  ok(/MAX_SAVED_PAYOUT_ACCOUNTS = 1/.test(server), 'server keeps one wallet');
+  ok(/Please enter the gift code/.test(d.getElementById('notifyMsg').textContent), 'empty key message');
+  // About page: the admin's HTML is cleaned again before it is shown.
+  const cleaned = w.ptCleanHtml('<h2 onclick="x()">Hi</h2><script>alert(1)</script><a href=" JaVa\nScript:alert(1)" target="_self">go</a><img src="x" onerror="y()"><iframe src="//x"></iframe><p style="background:url(javascript:alert(1))">ok</p><p>Fine <b>text</b></p>');
+  ok(!/<script|onclick|onerror|javascript|iframe/i.test(cleaned) && /<h2>Hi<\/h2>/.test(cleaned) && /<p>Fine <b>text<\/b><\/p>/.test(cleaned) && /rel="noopener noreferrer"/.test(cleaned), 'the About page HTML loses scripts, frames, handlers and javascript: links but keeps normal markup: ' + cleaned);
+  // Server and source wiring.
+  ok(/const BANK_CARD_LIMIT = 5;/.test(server) && /app\.post\('\/bank\/select'/.test(server), 'server keeps up to five cards and can change the active one');
   ok(/Wrong treasure chest password/.test(server) && /Please enter the treasure chest key/.test(server), 'server chest messages');
-  ok(/function showChestWin\(reward, balance(, after)?\)/.test(source) && /Congratulations!/.test(source) && /You won/.test(source) && /New Balance: /.test(source) && />COLLECT</.test(source), 'claiming a gift code opens the Congratulations card (You won, amount, New Balance, COLLECT)');
-ok(!/notify\('Giftcode redeemed successfully'\)/.test(source), 'the plain toast no longer replaces the card');
-ok(/id="depPhone"/.test(source) && /post\('\/deposit\/marzpay', \{ amount, phone \}\)/.test(source), 'the Deposit page has an "Input Payment Number" box and sends the typed number');
-ok(/for="walPhone">Wallet Account<\/label>/.test(source) && !/for="walPhone">Phone Number/.test(source), 'the wallet number field is labelled Wallet Account');
-ok(/\{4,64\}/.test(server) && !/\{4,34\}/.test(server), 'bank account numbers are not capped at 34 characters');
-ok(/STATE\.supportedBanks && STATE\.supportedBanks\.length/.test(source), 'an empty bank list is not kept, so the wallet asks again next time');
-console.log(`PASS: one wallet and treasure chest (${n} checks${built ? ', built bundle' : ''})`); process.exit(0);
+  ok(/window\.ptClaimDialog = /.test(source) && /Claim successful/.test(source) && !/function showChestWin/.test(source), 'claiming a gift code opens the Claim successful card');
+  ok(!/notify\('Giftcode redeemed successfully'\)/.test(source), 'the plain toast no longer replaces the card');
+  ok(!/id="depPhone"/.test(source), 'the Deposit page has no payment number box (the request goes to the member\'s own number)');
+  ok(/\{4,64\}/.test(server) && !/\{4,34\}/.test(server), 'bank account numbers are not capped at 34 characters');
+  ok(/STATE\.supportedBanks && STATE\.supportedBanks\.length/.test(source), 'an empty bank list is not kept, so the page asks again next time');
+console.log(`PASS: bank cards and gift code (${n} checks${built ? ', built bundle' : ''})`); process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });
