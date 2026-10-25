@@ -4965,7 +4965,7 @@ app.post('/withdraw/request', async (req, res) => {
         e.code = 'WITHDRAW_PENDING';
         throw e;
       }
-      const maxPerDay = unrestricted ? 0 : (Number(sett.maxWithdrawalsPerDay) || 0);   // an unrestricted member has no daily number
+      const maxPerDay = Number(sett.maxWithdrawalsPerDay) || 0;
       if (maxPerDay > 0) {
         const today = nowStr().date;
         const todaySnap = await db.collection('withdrawals').where('userId', '==', userId).where('date', '==', today).get();
@@ -8867,7 +8867,7 @@ app.post('/admin/analytics', async (req, res) => {
     // Withdrawals that can be processed today, worked out with the live withdrawal rules (Admin > Settings): the requests already waiting,
     // and the most members could still request today. A member counts only if they pass the same checks /withdraw/request makes:
     // not banned, a product bought when that is required, no unpaid request already open, today's number of withdrawals not used up
-    // (unless marked unrestricted), and a balance that reaches the minimum once cut down to the allowed multiple and the maximum.
+    // and a balance that reaches the minimum once cut down to the allowed multiple and the maximum.
     const wSett = await getSettings();
     const wMin = Number(wSett.minWithdraw) || 0, wMax = Number(wSett.maxWithdraw) || 0, wMult = Math.max(0, Math.floor(Number(wSett.withdrawMultiple) || 0));
     const wFee = Number(wSett.withdrawFeePct) || 0, wPerDay = Number(wSett.maxWithdrawalsPerDay) || 0, wNeedProduct = wSett.requireInvestToWithdraw !== false;

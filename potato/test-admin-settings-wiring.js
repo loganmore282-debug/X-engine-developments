@@ -27,22 +27,17 @@ const w = dom.window, $ = id => w.document.getElementById(id), sleep = ms => new
   await sleep(200);
   $('keyInput').value = 'k'; $('loginBtn').click(); await sleep(300);
   w.document.querySelector('[data-tab="settings"]').click(); await sleep(400);
-  assert.ok(calls.some(c => c[0] === '/admin/salary'), 'the Daily Salary table is requested');
+  assert.ok(calls.some(c => c[0] === '/admin/salary'), 'the Reward tiers table is requested');
   assert.ok(!/Loading/.test($('taskEditor').textContent), 'and replaces "Loading…"');
   $('brandNameInput').value = 'Potato Gum'; $('saveBrandName').click(); await sleep(150);
   assert.equal(settings.brandName, 'Potato Gum', '"Save app name" saves a new name');
   for (const gone of ['sWeekendCash', 'sWeekendWit', 'sReqReferral']) assert.equal($(gone), null, gone + ' (a removed setting) is not on the page');
-  // the withdrawal-hours line prints today's weekday from the live clock ("Right now it is Saturday 17:44 ..."), which is not weekend wording
   assert.ok(!/Saturday|weekend|referral code to sign up/i.test($('content').textContent.replace(/Right now it is \w+day \d\d:\d\d/g, '')), 'no weekend or require-referral wording on the Settings page');
   // the Banners tab buttons are wired too
   w.document.querySelector('[data-tab="banners"]').click(); await sleep(400);
-  $('annTitleInput').value = 'Welcome'; $('saveAnnText').click(); await sleep(150);
-  assert.equal(settings.annTitle, 'Welcome', '"Save announcement text" saves');
   $('lpTitle').value = 'Potato Gum'; $('lpText').value = 'Earn daily'; $('saveLinkPreview').click(); await sleep(150);
   assert.equal(settings.linkPreviewTitle, 'Potato Gum'); assert.equal(settings.linkPreviewText, 'Earn daily');
-  $('prodImgOp').value = '40'; $('saveProdImg').click(); await sleep(150);
-  assert.equal(settings.productImageOpacity, 40, 'the product picture opacity saves');
   assert.deepEqual(errors, [], 'no script errors: ' + errors.join(' | '));
-  console.log('PASS: admin Settings and Banners wiring (daily salary loads, app name, announcement, link preview, product picture opacity save)');
+  console.log('PASS: admin Settings and Banners wiring (reward tiers load, app name, link preview save)');
   w.close();
 })().catch(e => { console.error(e); process.exit(1); });

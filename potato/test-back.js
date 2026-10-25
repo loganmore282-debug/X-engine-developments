@@ -17,12 +17,14 @@ for (const s of d.scripts) {
 }
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const helpOpen = () => d.getElementById('helpBg').classList.contains('show');
+const helpOpen = () => d.getElementById('annBg').classList.contains('show');
+w.eval('STATE.page="home";STATE.announcementImage="data:image/png;base64,AAAA";STATE.settings={telegramGroup:"https://t.me/grp"}');
+const openDlg = () => w.maybeShowAnnouncement();
 (async () => {
   await wait(50);
   // a dialog owns one history entry while it is open
   const len0 = w.history.length;
-  w.openHelpDialog('Help');
+  openDlg();
   ok(helpOpen() && w.history.state && w.history.state.dlg, 'opening a dialog pushes one history entry');
   ok(w.history.length === len0 + 1, 'exactly one entry');
   // Back closes it (the popstate the browser fires) and does not go further
@@ -30,12 +32,12 @@ const helpOpen = () => d.getElementById('helpBg').classList.contains('show');
   ok(!helpOpen(), 'Back closes the dialog');
   ok(!(w.history.state && w.history.state.dlg), 'and the history is back where it began');
   // closing with its own button removes the leftover entry a moment later
-  w.openHelpDialog('Help'); w.closeHelpDialog(); ok(!helpOpen(), 'the Close button closes it at once');
+  openDlg(); w.closeAnnouncement(); ok(!helpOpen(), 'the Close button closes it at once');
   ok(w.history.state && w.history.state.dlg, '(its entry is still there for a moment, so a page opened right after cannot lose its own entry)');
   await wait(520);
   ok(!(w.history.state && w.history.state.dlg), 'after a moment the leftover entry is gone');
   // an entry left under a page is stepped over: open dialog, close it, open a sheet at once, close the sheet with Back
-  w.openHelpDialog('Help'); w.closeHelpDialog(); w.openSheet('Wallet', '<p>x</p>');
+  openDlg(); w.closeAnnouncement(); w.openSheet('Wallet', '<p>x</p>');
   ok(d.getElementById('sheetBg').classList.contains('show'), 'a page opened right after a dialog closes opens normally');
   await wait(520);
   ok(w.history.state && w.history.state.sheet, 'the page keeps its own entry on top');

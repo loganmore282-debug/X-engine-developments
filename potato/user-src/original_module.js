@@ -4174,7 +4174,6 @@ function setDepositStatusPending(amount, phone, network){
   // nothing for the member to do but wait.
   setDepButtons(false, false);
 }
-// (Confetti and sparkles were removed on the owner's request: success is shown by the tick drawing itself, see playStatusIcon.)
 var _depSuccessRedirectTimer = null;
 function setDepositStatusSuccess(){
   setPayLive(true);
@@ -4377,16 +4376,6 @@ window.openWithdrawSheet = async function(){
     if (submitBtn) submitBtn.disabled = _withdrawSubmitting;
   }
 };
-// ── The withdraw window, client side ────────────────────────────────────
-// Mirrors server.js's withdrawWindowState()/hhmmLabel(). The SERVER decides;
-// this only tells the member what the rule is before they type an amount, and
-// saves them a round trip when it is plainly shut.
-//
-// What was here before was worse than nothing: a hardcoded "Withdrawal time:
-// 06:00:00 - 17:00:00." that no code enforced, so the app quietly promised
-// hours it did not keep. If the window is off, the line now says withdraw is
-// open any time, because that is the truth.
-
 // The one wallet card and the Bind Wallet button (one wallet per member; the
 // Wallet page edits it in place). Isolated so openWithdrawSheet()'s post-fetch
 // update can repaint only this block, never #witAmount.

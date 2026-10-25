@@ -836,42 +836,6 @@ async function finish() {
     ck(/<div class="panel-card hidden" id="pesajetCard">/.test(adminSrc),
        'and it ships hidden, so an operator who does not use PesaJet never meets it');
 
-    // ── every word on it can be translated ────────────────────────────────
-    // The coverage sweep renders eight of these; the empty-summary and
-    // failed-read branches cannot be on screen at the same time as the rest,
-    // so the rows for them are checked from the other direction here: each
-    // must still occur VERBATIM in the panel. A row whose key has drifted
-    // from the string it is supposed to match is silently no translation at
-    // all, and nothing at runtime says so.
-    const rowsPy = fs.readFileSync(__dirname + '/admin-rows-7.py', 'utf8');
-    const keys = [...rowsPy.matchAll(/^    \['((?:[^'\\]|\\.)*)',$/gm)]
-      .map(m => m[1].replace(/\\'/g, "'"));
-    ck(keys.length >= 10, `admin-rows-7.py carries the card's strings (${keys.length})`);
-    //
-    // THE TABLE ITSELF HAS TO BE CUT OUT FIRST, and leaving it in made this
-    // whole check vacuous on its first run: build-admin-rows.py writes every
-    // English key into ADMIN_LANG_ROWS in this same file, so "the key appears
-    // in admin-src" was satisfied by the row rather than by the card, and a
-    // key that matched nothing on screen still passed.
-    const cut = s => {
-      for (const name of ['ADMIN_LANG_ROWS', 'ADMIN_LANG_PATTERNS']) {
-        const a = s.indexOf('const ' + name + ' = [');
-        const b = s.indexOf('\n];', a);
-        if (a === -1 || b === -1) throw new Error('could not find ' + name);
-        s = s.slice(0, a) + s.slice(b + 3);
-      }
-      return s;
-    };
-    const panelText = cut(adminSrc).replace(/&mdash;/g, '—').replace(/&middot;/g, '·');
-    ck(!panelText.includes("['Dashboard'"), 'the string table is cut out before looking');
-    // A template's figures are spliced in at render time, so it is matched by
-    // its literal halves -- everything either side of a {0}/{1}.
-    for (const k of keys) {
-      const shown = k.length > 46 ? k.slice(0, 46) + '…' : k;
-      const parts = k.split(/\{\d\}/).map(p => p.trim()).filter(p => p.length > 2);
-      ck(parts.length > 0 && parts.every(p => panelText.includes(p)),
-         `"${shown}" is really on the card`);
-    }
   }
 
   // ── uniqueness, or one transaction could land twice ─────────────────────

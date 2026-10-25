@@ -24,7 +24,7 @@ const dom = new JSDOM(html, {
 setTimeout(async () => {
   try {
     assert.deepEqual(errors, []);
-    assert.equal(dom.window.document.querySelectorAll('#langLogin option').length, 6);
+    assert.equal(dom.window.document.getElementById('langLogin'), null);
     assert.equal(dom.window.document.getElementById('regionSwitch'), null);
     dom.window.document.getElementById('keyInput').value = 'test-key';
     dom.window.document.getElementById('loginBtn').click();
