@@ -1,0 +1,106 @@
+// The server and admin pieces behind the new Team / My / Home screens:
+// per-level commission totals, the profile-logo image slot, and the ticker text setting.
+'use strict';
+const fs = require('fs'), assert = require('assert');
+const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
+const adm = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
+let n = 0; const ok = (c, m) => { assert(c, m); n++; };
+
+// 1. /team/stats adds what each level has paid, from the ledger's own commissionLevel (0 = Level 1)
+const grab = (a, b) => { const i = src.indexOf(a), j = src.indexOf(b, i); if (i < 0 || j < 0) throw new Error('slice ' + a); return src.slice(i, j); };
+const route = grab("app.get('/team/stats'", "// DAILY SALARY (the Salary tab)");
+const finiteMoney = v => Number.isFinite(Number(v)) ? Number(v) : 0;
+function runStats(rows) {
+  let handler;
+  const app = { get: (p, h) => { if (p === '/team/stats') handler = h; } };
+  const db = { collection: name => ({
+    doc: () => ({ get: async () => ({ exists: true, data: () => ({ referralCode: 'ABC', teamL1Count: 99, teamL2Count: 99, teamL3Count: 99, teamCommission: 0 }) }) }),
+    where: (f, _o, v) => { const f1 = { f, v }; const q = { conds: [f1], where(ff, _oo, vv) { q.conds.push({ f: ff, v: vv }); return q; }, get: async () => {
+      const list = name === 'transactions' ? rows.filter(r => q.conds.every(c => r[c.f] === c.v)) : [];
+      return { forEach: cb => list.forEach(r => cb({ data: () => r })), docs: list.map(r => ({ data: () => r })) }; } }; return q; },
+  }) };
+  new Function('app', 'db', 'verifyAuth', 'getSettings', 'wholeTeamStats', 'activeL1Count', 'taskRows', 'finiteMoney', 'console', route)(
+    app, db, async () => 'u1', async () => ({ commL1: 26, commL2: 2, commL3: 1 }), async () => ({ deposits: 5000, counts: [3, 1, 0], levelDeposits: [3000, 2000, 0] }), async () => 0, () => [], finiteMoney, console);
+  let body; const res = { json: b => { body = b; }, status() { return res; } };
+  return handler({ headers: {} }, res).then(() => body);
+}
+(async () => {
+  const rows = [
+    { userId: 'u1', type: 'commission', commissionLevel: 0, amount: 1000 },
+    { userId: 'u1', type: 'commission', commissionLevel: 0, amount: 500 },
+    { userId: 'u1', type: 'commission', commissionLevel: 1, amount: 200 },
+    { userId: 'u1', type: 'commission', commissionLevel: 2, amount: 50 },
+    { userId: 'u2', type: 'commission', commissionLevel: 0, amount: 9999 },   // someone else's
+    { userId: 'u1', type: 'deposit', amount: 77777 },                           // not a commission
+  ];
+  const r = await runStats(rows);
+  ok(r.status === 'success', 'stats still answer');
+  assert.deepStrictEqual(r.levelCommission, { l1: 1500, l2: 200, l3: 50 }); n++;
+  ok(r.totalTeam === 4 && r.teamDeposits === 5000 && r.team.l1 === 3 && r.team.l2 === 1 && r.team.l3 === 0, 'the level counts come from the live team read, not the stored counters (which here say 3/1/0 by coincidence only)');
+  assert.deepStrictEqual(r.levelPurchase, { l1: 3000, l2: 2000, l3: 0 }); n++;
+  const empty = await runStats([]);
+  assert.deepStrictEqual(empty.levelCommission, { l1: 0, l2: 0, l3: 0 }); n++;
+
+  // 2. profile logo slot: stored, served to members and to the admin
+  ok(/const POTATO_IMAGE_SLOTS = \[[^\]]*'profilelogo'/.test(src), 'profilelogo is a known image slot');
+  ok(/publicJson\(req, res, \{ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, downloadbg \}/.test(src), 'members get it from /public/potato-images');
+  ok(/res\.json\(\{ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg, linkpreview \}\)/.test(src), 'and the admin panel reads it');
+  ok(/id="profileLogoFile"/.test(adm) && /wirePotatoImageSlot\('profilelogo'/.test(adm), 'the admin panel can upload and remove it');
+  ok(['banner4', 'banner5', 'promobanner'].every(k => new RegExp("wirePotatoImageSlot\\('" + k + "'").test(adm) && src.includes("'" + k + "'")), 'the admin can upload Home slides 2 to 5, and the Promotion banner');
+  ok(!/checkinBannerFile/.test(adm), 'the removed Check-in banner upload is gone from admin');
+
+  // 3. the Download App background is an admin image slot too
+  ok(/const POTATO_IMAGE_SLOTS = \[[^\]]*'downloadbg'/.test(src) && /id="downloadBgFile"/.test(adm), 'the Download App background can be uploaded in admin');
+  // 5. production hygiene
+  ok(/const DEFAULT_PRODUCTS = \[\];/.test(src), 'no built-in placeholder assets: members only see what the admin created');
+  const cli = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
+  ok(!/Potato Mini|Potato Classic|Product-1\b/.test(cli), 'no sample asset is written into the app code');
+  ok(!/v-ticker/.test(cli), 'Home has no scrolling line any more');
+  const css = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
+  ok(/--mg-green:#02a652/.test(css) && /--mg-bg:#f8f4e9/.test(css), 'the app uses the green and cream design tokens');
+  console.log(`PASS: screen data (${n} checks)`);
+})().catch(e => { console.error(e); process.exit(1); });
+
+// 4. purchase limit per member ("0/3" on the card): real /invest/create + real sanitizer
+const sanSrc = (() => { let st = src.indexOf('function sanitizeProductInput('), d = 0; for (let k = src.indexOf('{', st); ; k++) { if (src[k] === '{') d++; else if (src[k] === '}' && --d === 0) return src.slice(st, k + 1); } })();
+const sanitize = new Function('MAX_MONEY_AMOUNT', 'hhmmToMin', sanSrc + '; return sanitizeProductInput;')(1e9, () => 0);
+const out0 = {};
+const base = { key: 'a1', name: 'A', price: 1000, cycle: 8, multiplier: 3 };
+ok(sanitize({ key: 'a1', name: 'A', price: 1000, multiplier: 3 }, 0, {}) === null, 'an asset without a cycle is refused, not given a hidden 150 days');
+ok(sanitize({ key: 'a1', name: 'A', price: 1000, cycle: 8 }, 0, {}) === null, 'an asset with no multiplier or total payout is refused, not given a hidden x30');
+ok(sanitize({ key: 'a1', name: 'A', price: 1000, cycle: 8, expectedReturn: 3000 }, 0, {}) !== null, 'a total payout alone is enough');
+ok(sanitize(base, 0, out0).buyLimit === 0, 'no limit by default');
+ok(/const STARTER_ASSETS = \['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'\]\.map/.test(src) && /name: 'Potato ' \+ letter/.test(src), 'ten starter assets named Potato A to Potato J exist');
+ok(/seedStarterAssetsOnce\(\)\.then/.test(src) && /createIfAbsent\(\{ at: new Date\(\) \}\)/.test(src), 'they are created once, on the first start only (never again after the owner edits or deletes them)');
+ok(/\/admin\/products\/add-starters/.test(src) && /id="addStarters"/.test(adm), 'the admin has an Add Potato A to J button for any that are missing');
+ok(sanitize({ ...base, vip: '3' }, 0, {}).vip === 3 && sanitize(base, 0, {}).vip === 0 && sanitize({ ...base, vip: '' }, 0, {}).vip === 0, 'an asset has a VIP number, 0 by default');
+ok(sanitize({ ...base, vip: '-1' }, 0, {}) === null && sanitize({ ...base, vip: '1.5' }, 0, {}) === null && sanitize({ ...base, vip: '101' }, 0, {}) === null, 'a VIP number must be a whole number from 0 to 100');
+ok(sanitize({ ...base, buyLimit: '3' }, 0, {}).buyLimit === 3, 'the admin can set 3');
+ok(sanitize({ ...base, buyLimit: '0' }, 0, {}).buyLimit === 0 && sanitize({ ...base, buyLimit: '' }, 0, {}).buyLimit === 0, '0 or blank = no limit');
+for (const bad of ['-1', '2.5', 'abc', '5000']) ok(sanitize({ ...base, buyLimit: bad }, 0, {}) === null, 'refuses ' + bad);
+
+const invRoute = grab("app.post('/invest/create'", "app.get('/investments'");
+async function buy(limit, owned) {
+  let handler; const app = { post: (p, h) => { if (p === '/invest/create') handler = h; }, get() {} };
+  const user = { walletBalance: 100000, totalInvested: 0, status: 'active' };
+  const investments = Array.from({ length: owned }, (_, i) => ({ userId: 'u1', tierKey: 'a1', id: 'i' + i }))
+    .concat([{ userId: 'u1', tierKey: 'other' }, { userId: 'u2', tierKey: 'a1' }]);
+  const tier = { key: 'a1', name: 'A', price: 10000, cycle: 30, buyLimit: limit, active: true };
+  const q = coll => { const c = []; const o = { where(f, _op, v) { c.push([f, v]); return o; }, get: async () => { const rows = coll.filter(r => c.every(([f, v]) => r[f] === v)); return { size: rows.length, docs: rows.map(r => ({ data: () => r })) }; } }; return o; };
+  const db = { collection: n => n === 'users' ? { doc: () => ({ get: async () => ({ exists: true, data: () => user }), update: async u => { for (const [k, v] of Object.entries(u)) user[k] = v && v.__inc !== undefined ? (user[k] || 0) + v.__inc : v; } }) }
+    : n === 'investments' ? { ...q(investments), doc: () => ({ id: 'new', set: async d => { investments.push(d); }, delete: async () => {} }) }
+    : { add: async () => ({}) } };
+  new Function('app', 'db', 'verifyAuth', 'getProductByKey', 'productOpenState', 'getSettings', 'withLock', 'productExpectedReturn', 'FieldValue', 'nowStr', 'newStatementId', 'fmtMoney', 'grantTurntableSpins', 'console', 'eatNextMidnight', 'payoutDueAtMs', 'investmentMaturityMs',
+    'const _vipCache = new Map(); const round2 = n => Math.round((Number(n) || 0) * 100) / 100;\n' + invRoute)(app, db, async () => 'u1', async () => tier, () => ({ open: true }), async () => ({ cycleDays: 30 }), (_k, fn) => fn(), () => 30000,
+    { increment: n => ({ __inc: n }), serverTimestamp: () => 0 }, () => ({ date: 'd', time: 't' }), () => 's', n => String(n), () => {}, console, ts => (Math.floor((ts + 10800000) / 86400000) + 1) * 86400000 - 10800000, ts => (Math.floor((ts + 10800000) / 86400000) + 1) * 86400000 - 10800000, (createdMs, total) => createdMs + total * 86400000);
+  let code = 200, body; const res = { status: c => { code = c; return res; }, json: b => { body = b; } };
+  await handler({ headers: {}, body: { tierKey: 'a1' } }, res);
+  return { code, body, user, count: investments.filter(i => i.userId === 'u1' && i.tierKey === 'a1').length };
+}
+(async () => {
+  let r = await buy(2, 1); ok(r.body.status === 'success' && r.count === 2 && r.user.walletBalance === 90000, 'under the limit: bought and charged once');
+  r = await buy(2, 2); ok(r.code === 400 && r.body.code === 'PURCHASE_LIMIT' && r.user.walletBalance === 100000 && r.count === 2, 'at the limit: refused, nothing charged, nothing created');
+  r = await buy(0, 9); ok(r.body.status === 'success', 'no limit means no restriction');
+  r = await buy(1, 0); ok(r.body.status === 'success', 'the first one of a limit-1 asset is fine');
+  console.log(`PASS: purchase limit (${n} checks so far)`);
+})().catch(e => { console.error(e); process.exit(1); });

@@ -1,0 +1,58 @@
+// pm2 process definition for the Potato backend on the Hostinger VPS (shared with Potato).
+//
+// Chosen over a raw systemd unit because this VPS deploys by SSH + rsync,
+// not a package manager: pm2 gives `pm2 reload` (zero-downtime, the process
+// re-execs itself and only drops the listening socket for the handoff),
+// log rotation via `pm2-logrotate`, and `pm2 startup` to survive a reboot
+// without hand-writing a unit file. A systemd unit remains a reasonable
+// alternative if the owner prefers it; nothing else in this pipeline
+// depends on pm2 specifically.
+//
+// Run from potato/deploy/ on the VPS: `pm2 start ecosystem.config.js`.
+// The working directory is set explicitly so pm2 can be started from any
+// cwd (a cron entry, a fresh SSH session) and still find server.js.
+// Secrets live in secrets.local.js, next to this file, on the VPS ONLY --
+// it is never committed (not tracked by the sparse git checkout this repo
+// deploys with, since nothing ever runs `git add` on it there). A fresh
+// clone has no such file, so this require is wrapped in try/catch rather
+// than assumed to exist -- pm2 still starts (server.js's own env validation,
+// e.g. service-account.js's loadServiceAccount, is what reports a missing
+// secret loudly, not a crash here).
+// Potato's secrets live OUTSIDE the git checkout, in /srv/potato-secrets/, so a
+// pull can never overwrite them and Potato's own secrets file is never read.
+let secrets = {};
+try { secrets = require('/srv/potato-secrets/secrets.local.js'); }
+catch (e) { try { secrets = require('./secrets.local.js'); } catch (e2) { secrets = {}; } }
+
+module.exports = {
+  apps: [
+    {
+      name: 'potato-server',
+      script: '../server.js',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      // The whole point of runTransaction being a fake, non-locking shim
+      // (see potato/CLAUDE.md, "Money-safety invariants") is that money
+      // credits are guarded by IN-PROCESS locks (withLock()). Cluster mode
+      // or more than one instance would put two Node processes each holding
+      // their own lock table, and the very race those locks exist to close
+      // reopens. Never raise `instances` above 1 without redesigning that
+      // locking to be cross-process (e.g. a real Mongo transaction, or a
+      // Redis lock) first.
+      env: {
+        NODE_ENV: 'production',
+        ...secrets,
+      },
+      // A database outage at start-up must not make pm2 give up after a couple of minutes: keep trying, a little slower each time (up to ~15 s apart).
+      max_restarts: 200,
+      min_uptime: '15s',
+      exp_backoff_restart_delay: 1000,
+      // Room for the graceful stop in server.js (requests in flight finish, up to 10 s) before pm2 forces the process down.
+      kill_timeout: 12000,
+      out_file: '/root/.pm2/logs/potato-server-out.log',
+      error_file: '/root/.pm2/logs/potato-server-error.log',
+      time: true,
+    },
+  ],
+};

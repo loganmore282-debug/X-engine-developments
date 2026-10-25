@@ -1,0 +1,53 @@
+'use strict';
+// One payout wallet (edited in place, no bin icon, no second row) and the Treasure Chest page words.
+// Server: /bank/save replaces the single wallet. Drives source (and --built) in JSDOM.
+const fs = require('node:fs'), zlib = require('node:zlib'), assert = require('node:assert/strict');
+const { JSDOM } = require('jsdom');
+const built = process.argv.includes('--built');
+const html = fs.readFileSync(__dirname + (built ? '/user/index.html' : '/user-src/index.html'), 'utf8');
+const source = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
+const server = fs.readFileSync(__dirname + '/server.js', 'utf8');
+const dom = new JSDOM(html, { url: 'https://mypotato.potato.example.com/', runScripts: 'outside-only', pretendToBeVisual: true });
+const w = dom.window, d = w.document;
+w.scrollTo = () => {}; w.HTMLElement.prototype.scrollIntoView = () => {}; w.matchMedia = () => ({ matches: true, addListener() {}, removeListener() {} });
+w.fetch = async () => ({ json: async () => ({ status: 'success', settings: {}, products: [], messages: [], accounts: [] }) }); w.open = () => null;
+for (const s of d.scripts) {
+  if (s.type === 'module' || s.src) continue;
+  if (s.hasAttribute('data-nx-core')) w.eval(built ? zlib.inflateSync(Buffer.from(s.textContent.match(/atob\("([A-Za-z0-9+/=]+)"\)/)[1], 'base64')).toString() : source);
+  else if (s.textContent.trim()) w.eval(s.textContent);
+}
+let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
+(async () => {
+  await new Promise(r => setTimeout(r, 30));
+  // Wallet: one saved row is shown, prefilled, with no delete control anywhere.
+  w.eval('STATE.bankAccounts=[{id:"b1",network:"MTN Mobile Money",phone:"256769968158",holder:"Jane Doe"}]');
+  w.eval('openSheet("Wallet","");renderWalletSheet()');
+  ok(d.querySelectorAll('#walCardBox .v-wcard').length === 1 && /MTN MOBILE MONEY/.test(d.querySelector('.v-wcard').textContent) && /JANE DOE/.test(d.querySelector('.v-wcard').textContent), 'exactly one wallet card, with the provider and holder');
+  ok(!/deleteWallet|Delete wallet/.test(d.getElementById('sheetBody').innerHTML), 'no delete / bin control');
+  ok(d.getElementById('walToggleBtn').textContent === 'Edit Wallet' && d.getElementById('walFormWrap').style.display === 'none', 'the card has an Edit Wallet button; the form opens on tap');
+  w.walShowForm(true);
+  ok(d.getElementById('walProvider').value === 'MTN' && d.getElementById('walPhone').value === '0769968158' && d.getElementById('walHolder').value === 'JANE DOE', 'the form edits the saved wallet in place');
+  ok(d.getElementById('walEditHead').textContent === 'Edit Wallet', 'heading is Edit Wallet');
+  ok(typeof w.deleteWallet === 'undefined', 'deleteWallet is gone');
+  w.eval('STATE.bankAccounts=[];openSheet("Wallet","");renderWalletSheet()');
+  ok(d.getElementById('walEditHead').textContent === 'Add Wallet' && d.getElementById('walToggleBtn').textContent === 'Add Wallet' && /\*\*\*\* \*\*\*\* \*\*\*\* \*\*\*\*/.test(d.querySelector('.v-wcard').textContent), 'no wallet yet: Add Wallet and an empty card');
+  // Treasure Chest: the owner's words only.
+  w.openChestSheet();
+  const t = d.getElementById('sheetBody').textContent.replace(/\s+/g, ' ').trim();
+  ok(d.getElementById('sheetTitle').textContent === 'TREASURE CHEST', 'title');
+  ok(t === 'Mystery Treasure Enter your key to unlock the reward OPEN CHEST', 'only the screenshot words: ' + t);
+  ok(d.getElementById('chestKey').placeholder === 'Enter treasure chest key', 'key placeholder');
+  ok(d.querySelector('.mg-chest-ring img'), 'chest artwork');
+  w.submitChestKey();
+  ok(/Please enter the treasure chest key/.test(d.getElementById('notifyMsg').textContent), 'empty key message');
+  // Server: one wallet, edited in place; chest messages.
+  ok(/MAX_SAVED_PAYOUT_ACCOUNTS = 1/.test(server), 'server keeps one wallet');
+  ok(/Wrong treasure chest password/.test(server) && /Please enter the treasure chest key/.test(server), 'server chest messages');
+  ok(/function showChestWin\(reward, balance(, after)?\)/.test(source) && /Congratulations!/.test(source) && /You won/.test(source) && /New Balance: /.test(source) && />COLLECT</.test(source), 'claiming a gift code opens the Congratulations card (You won, amount, New Balance, COLLECT)');
+ok(!/notify\('Giftcode redeemed successfully'\)/.test(source), 'the plain toast no longer replaces the card');
+ok(/id="depPhone"/.test(source) && /post\('\/deposit\/marzpay', \{ amount, phone \}\)/.test(source), 'the Deposit page has an "Input Payment Number" box and sends the typed number');
+ok(/for="walPhone">Wallet Account<\/label>/.test(source) && !/for="walPhone">Phone Number/.test(source), 'the wallet number field is labelled Wallet Account');
+ok(/\{4,64\}/.test(server) && !/\{4,34\}/.test(server), 'bank account numbers are not capped at 34 characters');
+ok(/STATE\.supportedBanks && STATE\.supportedBanks\.length/.test(source), 'an empty bank list is not kept, so the wallet asks again next time');
+console.log(`PASS: one wallet and treasure chest (${n} checks${built ? ', built bundle' : ''})`); process.exit(0);
+})().catch(e => { console.error(e); process.exit(1); });
