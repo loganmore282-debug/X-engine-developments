@@ -2887,7 +2887,7 @@ function paintPromo(){
   const img = STATE.promoBanner || STATE.homeBanner;
   const html = `
 <div class="pt-share">
-  <div class="pt-shero">${img ? `<img src="${esc(img)}" alt="" onerror="this.style.display='none'">` : ''}</div>
+  <div class="pt-shero${img ? '' : ' pt-shero-empty'}">${img ? `<img src="${esc(img)}" alt="" onerror="this.style.display='none'">` : ''}</div>
   <section class="pt-scard">
     <div class="pt-srow"><b>Commission Rates</b><span>Lv1 ${r1}% · Lv2 ${r2}% · Lv3 ${r3}%</span></div>
     <div class="pt-surl"><p><b>Share URL:</b> <span class="pt-purl">${esc(_promoLink || '—')}</span></p><button type="button" class="pt-copy" data-copy-group="promo" onclick="copyPromoLink(this)">Copy</button></div>
