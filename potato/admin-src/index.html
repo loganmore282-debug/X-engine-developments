@@ -3462,13 +3462,17 @@ async function renderSettings(){
       </div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only withdrawals)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
-      <div class="switch-row" style="margin-top:8px"><span><b>Only allow withdraw between set hours</b> <span class="muted">(a member who asks at another time is told the hours)</span></span>
+      <!-- Owner: "one withdrawal time should be SETTABLE IN ADMIN, such that
+           when one tries to withdrawal he sees, that withdrawals start from
+           this time to this time, nothing much ie 6pm to 5pm." -->
+      <div class="switch-row" style="margin-top:8px"><span><b>Only allow withdraw between set hours</b> <span class="muted">(members see the hours on the Withdraw screen)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sWitWindow" ${s.withdrawWindowEnabled===true?'checked':''} style="width:auto"></label></div>
       <div class="row" style="margin-top:6px">
         <div><label>Withdraw opens at</label><input id="sWitFrom" type="time" value="${esc(v('withdrawOpenFrom','09:00'))}"></div>
         <div><label>Withdraw closes at</label><input id="sWitTo" type="time" value="${esc(v('withdrawOpenTo','17:00'))}"></div>
       </div>
-      <p class="muted" style="margin:6px 0 0">24-hour times in the selected country's own time. The hours may run past midnight (for example 18:00 to 17:00). One withdrawal at a time per member, always.</p>
+      <p class="muted" style="margin:6px 0 0">${esc(s.regionName||'Local')} time. Members can withdraw only between these two times, for example 6:00 AM to 4:00 PM. One withdrawal at a time per member, always.</p>
+      <p class="muted" id="witNow" style="margin:6px 0 0;font-weight:600"></p>
       <!-- Automatic withdrawals: requests still arrive as Pending; only while this is ON does the VPS send each one after its own random wait. -->
       <div class="switch-row" style="margin-top:14px"><span><b>Automatic withdrawals</b> <span class="muted">(the VPS sends them; requests still arrive as Pending)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sAutoWit" ${s.autoApproveWithdrawalsEnabled===true?'checked':''} style="width:auto"></label></div>
@@ -3549,6 +3553,20 @@ async function renderSettings(){
       ? `Saved. Recharges: ${PROVIDER_LABEL[normalizeProv(gateway)]}. Payouts: ${PROVIDER_LABEL[normalizeProv(payoutProv)]}.`
       : (d.message||'Failed'), d.status==='success'?'ok':'err');
   });
+  // Says plainly, from the two times typed above, whether withdrawing is open at this moment (the country's own clock, the same one the server uses).
+  function refreshWitNow(){
+    const el=$('witNow'); if(!el) return;
+    const on=$('sWitWindow')&&$('sWitWindow').checked, f=$('sWitFrom').value, t=$('sWitTo').value;
+    const m=x=>{const r=/^(\d{1,2}):(\d{2})/.exec(x||'');return r?(+r[1])*60+(+r[2]):null;};
+    const off=s.regionOffsetMin==null?180:Number(s.regionOffsetMin), place=s.regionName||'local';
+    const d=new Date(Date.now()+off*60000), now=d.getUTCHours()*60+d.getUTCMinutes(), a=m(f), b=m(t);
+    const clock=String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');
+    const dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getUTCDay()];
+    if(!on){ el.textContent='Right now it is '+dayName+' '+clock+' '+place+' time. The hours switch is off: members can withdraw at any hour.'; return; }
+    if(a==null||b==null||a===b){ el.textContent='Pick two different times.'; return; }
+    const open=a<b?(now>=a&&now<b):(now>=a||now<b);
+    el.textContent='Right now it is '+dayName+' '+clock+' '+place+' time: withdrawing is '+(open?'OPEN.':'CLOSED.');
+  }
   const refreshAutoNote=()=>{
     const on=$('sAutoWit').checked, lo=$('sAutoMin').value.trim(), hi=$('sAutoMax').value.trim(), cap=+$('sAutoCap').value||0, n=$('autoWitNote');
     n.textContent = on
@@ -3558,6 +3576,8 @@ async function renderSettings(){
   };
   ['sAutoWit','sAutoMin','sAutoMax','sAutoCap'].forEach(id=>{ $(id).addEventListener('input',refreshAutoNote); $(id).addEventListener('change',refreshAutoNote); });
   refreshAutoNote();
+  ['sWitWindow','sWitFrom','sWitTo'].forEach(id=>{ const e=$(id); if(e){ e.addEventListener('change',refreshWitNow); e.addEventListener('input',refreshWitNow); } });
+  refreshWitNow();
   { const px=$('sRefPrefix'), pv=$('sRefPrefixPreview');
     const showRef=()=>{ const t=px.value.trim(); const ok=/^[A-Za-z][A-Za-z0-9]{0,11}$/.test(t); pv.textContent = ok ? 'New payments will look like: '+t+'2610111048053568' : 'Use 1 to 12 letters or digits, starting with a letter (for example potato)'; pv.style.color = ok ? '' : '#c0392b'; };
     px.addEventListener('input',showRef); showRef(); }

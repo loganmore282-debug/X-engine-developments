@@ -6617,7 +6617,7 @@ app.post('/admin/push/unregister', async (req, res) => {
 // rather than letting the admin think they have already set it.
 app.get('/admin/settings', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try { res.json({ status: 'success', settings: await getSettings() }); }
+  try { res.json({ status: 'success', settings: Object.assign({}, await getSettings(), { regionName: currentRegion().name, regionOffsetMin: currentRegion().utcOffsetMin != null ? currentRegion().utcOffsetMin : 180 }) }); }
   catch (e) { res.status(500).json({ status: 'error', message: 'Could not load settings' }); }
 });
 const SETTINGS_CRITICAL_RANGES = {
