@@ -461,17 +461,37 @@ function cleanPhone(raw){
   if (pfx.length && !pfx.some(p => local.startsWith(p))) return null;
   return dialPlus() + local;
 }
-// Login and Create Account are two states of one screen: the title, the banner height (Create Account's is taller) and which form is shown.
+// Login and Create Account are two states of one screen: the title, which form is shown and (for an invitation link) the banner height.
+// The invitation box is there only when the member arrived through an invitation link (it carries the code), and only then is the banner the tall
+// one (measured on the owner's recording: Create Account without an invitation has the same banner as Login, with one it is 66 px taller). The
+// banner never animates its height.
+function paSyncInvite(){
+  const ref = $('regReferral'); if (!ref) return;
+  const has = !!(ref.value || '').trim();
+  const box = ref.closest('.pa-f'); if (box) box.style.display = has ? '' : 'none';
+  const hero = $('authHeroBox'); if (hero) hero.classList.toggle('tall', has && $('registerPane').style.display !== 'none');
+}
+// Switching between the two pages, as on the owner's recording (60 fps): the page goes blank at once, the banner fades in over 0.25 s, then the title and
+// every box / button / link rise ~28 px into place while fading in, one after the other (the title after 0.17 s, then every 0.06 s, 0.3 s each).
+var _paEnterTimer = 0;
+function paEnter(){
+  const root = $('authScroll'); if (!root) return;
+  const pane = $('registerPane').style.display !== 'none' ? $('registerPane') : $('loginPane');
+  const items = [$('authTitle')].concat(Array.prototype.filter.call(pane.children, el => el.offsetParent !== null && /(^| )(pa-f|pa-rem|pa-btn|pa-alt)( |$)/.test(el.className)));
+  items.forEach((el, i) => { el.setAttribute('data-pa-i', i); el.style.setProperty('--pa-d', (0.17 + 0.06 * i).toFixed(2) + 's'); });
+  root.classList.remove('pa-entering'); void root.offsetWidth; root.classList.add('pa-entering');
+  clearTimeout(_paEnterTimer); _paEnterTimer = setTimeout(() => root.classList.remove('pa-entering'), 1100);
+}
 function showAuthTab(tab){
   const reg = tab === 'register';
+  const changed = ($('registerPane').style.display !== 'none') !== reg;
   $('loginPane').style.display = reg ? 'none' : '';
   $('registerPane').style.display = reg ? '' : 'none';
   const title = $('authTitle'); if (title) title.textContent = reg ? 'Create Account' : 'Login';
-  const hero = $('authHeroBox'); if (hero) hero.classList.toggle('tall', reg);
   const sc = $('authScroll'); if (sc) sc.scrollTop = 0;
   phoneError('login', ''); phoneError('reg', '');
-  // The invitation box is there only when the member arrived through an invitation link (it carries the code).
-  const ref = $('regReferral'); if (ref) { const has = !!(ref.value || '').trim(); const box = ref.closest('.pa-f'); if (box) box.style.display = has ? '' : 'none'; }
+  paSyncInvite();
+  if (changed && $('authScreen').style.display !== 'none') paEnter();
   stopSmsCodeListener();
 }
 // The eye on a password box: shows what was typed, and hides it again.
@@ -1401,7 +1421,7 @@ async function abandonUnfinishedSignup(reg){
   $('authScreen').style.display = '';
   showAuthTab('register');
   if (local && $('regPhone')) $('regPhone').value = '0' + local;
-  if ($('regReferral') && STATE.refCode) $('regReferral').value = STATE.refCode;
+  if ($('regReferral') && STATE.refCode) { $('regReferral').value = STATE.refCode; paSyncInvite(); }
   setBtnLoading('regBtn', false, 'Register');
   notify((reg.message || 'Your sign-up was not finished.') + ' Complete your sign-up below.');
 }
@@ -3657,7 +3677,7 @@ window.submitChestKey = async function(){
   // The win card from the owner's screenshot: Congratulations!, You won, the
   // amount, the new balance and COLLECT, over the blurred Treasure Chest page.
   $('chestKey').value = '';
-  ptClaimDialog(reward);
+  ptWinDialog(reward, after);
   // Now catch the app up in the background.
   refreshAfterWin().then(() => { if (_openSheetTitle === 'Gift Code') ptGiftCodeRecords(); });
 };
@@ -4663,6 +4683,24 @@ window.ptClaimDialog = function(amount){
   document.body.appendChild(bg);
   requestAnimationFrame(() => bg.classList.add('show'));
 };
+// ── GIFT CODE WIN CARD (owner's recording): gift picture, "Congratulations!", "You won", the amount big in red, "New Balance: ..." and Collect, over the page
+// dimmed red and blurred with soft red bubbles. Only the Gift Code uses it; Order Gifts and the app reward keep the "Claim successful" card above.
+window.ptWinDialog = function(amount, balance){
+  const old = $('ptWinBg'); if (old) old.remove();
+  const bg = document.createElement('div');
+  bg.id = 'ptWinBg'; bg.className = 'pt-win-bg';
+  let bubbles = '';
+  for (let i = 0; i < 12; i++) {
+    const size = 16 + shareRand(18), left = 4 + shareRand(92), top = 69 + shareRand(8), delay = shareRand(40) / 100;
+    bubbles += `<i style="width:${size}px;height:${size}px;left:${left}%;top:${top}%;animation-delay:${delay}s"></i>`;
+  }
+  bg.innerHTML = `<div class="pt-win-fx" aria-hidden="true">${bubbles}</div><div class="pt-win" role="dialog" aria-modal="true"><span class="e" aria-hidden="true">\ud83c\udf81</span><h3>Congratulations!</h3><p class="w">You won</p><b class="amt" id="ptWinAmt"><span>${esc(vMoney2(amount))}</span></b><p class="nb">New Balance: ${esc(vMoney2(balance))}</p><button type="button" onclick="closeWinDialog()">Collect</button></div>`;
+  bg.onclick = e => { if (e.target === bg) closeWinDialog(); };
+  document.body.appendChild(bg);
+  const a = $('ptWinAmt'); if (a) { const t = a.firstChild, box = a.parentNode.clientWidth - 56; let fs = 38; while (t.getBoundingClientRect().width > box && fs > 22) { fs -= 1; a.style.fontSize = fs + 'px'; } }
+  requestAnimationFrame(() => bg.classList.add('show'));
+};
+window.closeWinDialog = function(){ const bg = $('ptWinBg'); if (bg) { bg.classList.remove('show'); setTimeout(() => bg.remove(), 200); } };
 window.closeClaimDialog = function(){ const bg = $('ptClaimBg'); if (bg) { bg.classList.remove('show'); setTimeout(() => bg.remove(), 200); } };
 
 // ── ORDER GIFTS: one card per product that carries a gift; "receive" is live once the member has bought it ──

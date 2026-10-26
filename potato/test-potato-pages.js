@@ -141,7 +141,11 @@ async function member() {
       ok(/\.pt-home \.mg-dots\{[^}]*left:50%/.test(c) && /\.mg-dots i\.on\{[^}]*width:12\.7px/.test(c.replace(/\.pt-home /g, '')) || /12\.7px/.test(c), 'the banner dots are bubbles: small translucent circles and a white pill for the current one');
       ok(/function ptProcessing/.test(m) && /Processing payment\.\.\./.test(m) && /\.mg-redirect\{[^}]*position:fixed;inset:0[^}]*backdrop-filter:blur/.test(c) && /submitBtn\.textContent = 'Loading\.\.\.'/.test(m), 'a deposit dims and blurs the whole screen with a red ring and "Processing payment..." while the Pay button reads Loading...');
       ok(/promocode: '\\ud83c\\udf8f'/.test(m) && /deposit: '\\ud83d\\udce5'/.test(m) && /withdraw: '\\ud83d\\udce4'/.test(m) && /promocode'\) return 'Treasure Chest'/.test(m) && /text: t\.type === 'deposit' \? 'Pending Deposit'/.test(m) && /\.pt-rec \.m em\.wait\{color:#ab7b34/.test(c) && /\.pt-rec \.a\.out\{color:#d0605f/.test(c), 'Balance Detail records use the icons, words and colours of the screenshots (Deposit, Treasure Chest, Withdraw; Pending Deposit / Other / Paid)'); }
-    ok(/ptIconHtml\('payicon'/.test(rd('user-src/original_module.js')), 'every deposit pay button shows that one icon'); }
+    ok(/ptIconHtml\('payicon'/.test(rd('user-src/original_module.js')), 'every deposit pay button shows that one icon');
+    { const m = rd('user-src/original_module.js'), c = rd('user-src/index.html');
+      ok(!/\.pa-hero\{[^}]*transition/.test(c) && /classList\.toggle\('tall', has && \$\('registerPane'\)\.style\.display !== 'none'\)/.test(m), 'the banner never animates its height and is the tall one only for an invitation link');
+      ok(/\.pa-entering \.pa-hero\{animation:paHeroIn \.25s/.test(c) && /\.pa-entering \[data-pa-i\]\{animation:paRise \.3s ease-out both/.test(c) && /@keyframes paRise\{from\{opacity:0;transform:translateY\(28px\)/.test(c) && /if \(changed && \$\('authScreen'\)\.style\.display !== 'none'\) paEnter\(\)/.test(m), 'switching between Login and Create Account blanks the page, fades the banner in and lifts each item into place in turn');
+      ok(/\.pt-win\{[^}]*height:338\.6px[^}]*border-radius:22px[^}]*background:#fbece9/.test(c) && /\.pt-win-bg\{[^}]*background:rgba\(189,41,47,\.52\)/.test(c), 'the Gift Code win card has the measured size, colour and red-dimmed blurred page'); } }
 
   realLog(fails ? fails + ' FAILED of ' + checks : 'PASS: Potato pages server routes (' + checks + ' checks)');
   process.exit(fails ? 1 : 0);

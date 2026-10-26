@@ -50,7 +50,8 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   // Server and source wiring.
   ok(/const BANK_CARD_LIMIT = 5;/.test(server) && /app\.post\('\/bank\/select'/.test(server), 'server keeps up to five cards and can change the active one');
   ok(/Wrong treasure chest password/.test(server) && /Please enter the treasure chest key/.test(server), 'server chest messages');
-  ok(/window\.ptClaimDialog = /.test(source) && /Claim successful/.test(source) && !/function showChestWin/.test(source), 'claiming a gift code opens the Claim successful card');
+  ok(/window\.ptWinDialog = /.test(source) && /Congratulations!/.test(source) && /New Balance: /.test(source) && /ptWinDialog\(reward, after\)/.test(source) && !/function showChestWin/.test(source), 'claiming a gift code opens the Congratulations card (You won, amount, New Balance, Collect)');
+  ok(/window\.ptClaimDialog = /.test(source) && /Claim successful/.test(source), 'order gifts keep the Claim successful card');
   ok(!/notify\('Giftcode redeemed successfully'\)/.test(source), 'the plain toast no longer replaces the card');
   ok(!/id="depPhone"/.test(source), 'the Deposit page has no payment number box (the request goes to the member\'s own number)');
   ok(!/bank-transfer|getSupportedBanks|marzValidateBankAccount/.test(server) && !/supportedBanks/.test(source), 'the bank-transfer rail is gone: Bank Name is MTN or Airtel only');

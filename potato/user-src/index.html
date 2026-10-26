@@ -1884,8 +1884,13 @@ html,body,.sheet-bg,#msgDetailBg{scrollbar-width:none !important;}
 .pa-screen{position:absolute;inset:0;}
 .pa-scroll{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior:contain;}
 .pa-scroll::-webkit-scrollbar{display:none;width:0;height:0;}
-.pa-hero{position:relative;height:178.7px;overflow:hidden;background:linear-gradient(135deg,#c4121e,#e8453b);transition:height .28s ease;}
+.pa-hero{position:relative;height:178.7px;overflow:hidden;background:linear-gradient(135deg,#c4121e,#e8453b);}
 .pa-hero.tall{height:245.3px;}
+/* Page switch (Login <-> Create Account), timed on the owner's recording: banner fades in, then each item rises into place. Set by paEnter(). */
+@keyframes paHeroIn{from{opacity:0;}to{opacity:1;}}
+@keyframes paRise{from{opacity:0;transform:translateY(28px);}to{opacity:1;transform:none;}}
+.pa-entering .pa-hero{animation:paHeroIn .25s ease-out both;}
+.pa-entering [data-pa-i]{animation:paRise .3s ease-out both;animation-delay:var(--pa-d,0s);}
 /* The picture is laid out once, at the tall (Create Account) size, and pinned to the bottom of the box: Login only shows less of its top. Switching pages then never rescales or moves the picture, and the circle picture stays put on it. */
 #authHeroBg{position:absolute;left:0;right:0;bottom:0;top:auto;height:245.3px;background-size:cover;background-position:center bottom;background-repeat:no-repeat;background-image:var(--auth-hero-img,none);}
 .pa-hero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:26px;pointer-events:none;background:linear-gradient(180deg,rgba(244,245,250,0) 0,rgba(244,245,250,.55) 55%,#f4f5fa 100%);}
@@ -2282,6 +2287,23 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 /* the claim dialog */
 .pt-claim-bg{position:fixed;inset:0;z-index:450;display:flex;align-items:center;justify-content:center;padding:0 22.7px;background:rgba(0,0,0,.45);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);opacity:0;transition:opacity .18s;}
 .pt-claim-bg.show{opacity:1;}
+/* Gift Code win card, measured on the owner's recording (css px = picture px / 1.639): card 316 x 339, radius 22, #fbece9; gift 46 px; title 21 px navy; you won 11.5 px;
+   amount 40 px red; balance 12 px; Collect 262 x 41.5, radius 12, with a soft pink ring. Page behind: rgba(189,41,47,.52) + blur. */
+.pt-win-bg{position:fixed;inset:0;z-index:450;display:flex;align-items:center;justify-content:center;padding:0 22px;background:rgba(189,41,47,.52);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);opacity:0;transition:opacity .2s ease;}
+.pt-win-bg.show{opacity:1;}
+.pt-win{position:relative;z-index:1;width:100%;max-width:340px;box-sizing:border-box;height:338.6px;padding:0 28px;border-radius:22px;background:#fbece9;text-align:center;animation:ptWinPop .3s ease-out both;}
+.pt-win-bg:not(.show) .pt-win{animation:none;}
+@keyframes ptWinPop{from{transform:scale(.92);}to{transform:scale(1);}}
+.pt-win>*{position:absolute;left:28px;right:28px;margin:0;padding:0;}
+.pt-win .e{left:0;right:0;top:27.9px;font-size:52px;line-height:58px;height:58px;}
+.pt-win h3{top:97.5px;font:700 21px/24px Roboto,sans-serif;color:#0a2038;}
+.pt-win .w{top:132.2px;font:400 12.5px/14px Roboto,sans-serif;color:#5e585a;}
+.pt-win .amt{top:164px;left:0;right:0;font:700 38px/46px Roboto,sans-serif;color:#df1a11;white-space:nowrap;}
+.pt-win .nb{top:225.6px;font:400 12px/14px Roboto,sans-serif;color:#514b4d;}
+.pt-win button{display:block;top:266.6px;height:41px;border:0;border-radius:12px;background:#e0241b;color:#fff;font:700 14px/41px Roboto,sans-serif;cursor:pointer;box-shadow:0 0 0 3px rgba(224,36,27,.2),0 0 5px 3px rgba(224,36,27,.1);}
+.pt-win-fx{position:absolute;inset:0;overflow:hidden;pointer-events:none;}
+.pt-win-fx i{position:absolute;display:block;border-radius:50%;background:rgba(214,45,52,.34);filter:blur(1.5px);animation:ptWinBub 1.4s ease-out both;}
+@keyframes ptWinBub{from{opacity:0;transform:translateY(40px) scale(.4);}to{opacity:1;transform:none;}}
 .pt-claim{width:100%;max-width:320px;box-sizing:border-box;padding:24px 24px 28px;border-radius:26px;background:#fff;text-align:center;}
 .pt-claim .tick{display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:#e5231d;}
 .pt-claim .tick svg{width:30px;height:30px;}
