@@ -115,6 +115,7 @@ async function member() {
   { const fs = require('fs'), rd = f => fs.readFileSync(path.join(root, f), 'utf8');
     ok(/POTATO_ICON_SLOTS = \[[^\]]*'payicon'/.test(rd('server.js')) && /payicon:'Deposit pay button icon/.test(rd('admin-src/index.html')), 'the admin can upload one deposit pay button icon (slot payicon)');
     ok(/ptCountMyBalances\(\);\s*\/\/ The unread count/.test(rd('user-src/original_module.js')) && /ptCountMyBalances\(\);   \/\/ back on My/.test(rd('user-src/original_module.js')), 'the My balances count up when the page is shown and when a page opened from it is closed');
+    ok(/ptSetMoney\(el, account\[key\]\)/.test(rd('user-src/original_module.js')) && /ptCountUp\(\$\('incomeTotal'\)/.test(rd('user-src/original_module.js')) && /ptCountUp\(\$\('myIncome'\)/.test(rd('user-src/original_module.js')), 'Total Income runs up together with the balance, and a figure that changes while the page is open runs up to the new amount');
     ok(/ptIconHtml\('payicon'/.test(rd('user-src/original_module.js')), 'every deposit pay button shows that one icon'); }
 
   realLog(fails ? fails + ' FAILED of ' + checks : 'PASS: Potato pages server routes (' + checks + ' checks)');

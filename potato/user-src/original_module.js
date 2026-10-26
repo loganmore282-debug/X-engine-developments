@@ -2300,7 +2300,9 @@ function patchHomeBalances(){
   // The figures the current screens actually show: My (balance), Income (total earnings) and the Balance Record header.
   for (const [id, key] of [['myBalance','walletBalance'], ['myIncome','totalEarned'], ['incomeTotal','totalEarned'], ['recBalance','walletBalance'], ['witBalance','walletBalance']]) {
     const el = $(id);
-    if (el && !el.dataset.counting) el.textContent = vMoney2(account[key]);
+    if (!el) continue;
+    if (id === 'myBalance' || id === 'myIncome' || id === 'incomeTotal') ptSetMoney(el, account[key]);
+    else el.textContent = vMoney2(account[key]);
   }
 }
 // THE single place this app works out what a product pays. /public/products
@@ -2466,6 +2468,8 @@ function paintAssets(loading){
 </div>`;
   $('pageHost').innerHTML = html;
   ptStartIncomeClock();
+  ptCountUp($('ptToday'), ptTodayIncome(), 1100);
+  ptCountUp($('incomeTotal'), (STATE.account || {}).totalEarned, 1100);
 }
 // ── REFERRAL (own tab) ──
 // Owner: "introduce a new nav icon just between my products and team, it is
@@ -3002,22 +3006,31 @@ function ptMenuRow(icon, label, fn, badge){
   return `<button type="button" class="pt-mrow" onclick="${fn}"><span class="ic">${PT_MENU_IC[icon]}</span><b>${label}</b>${badge ? `<em id="msgBadge"${mgUnread() ? '' : ' style="display:none"'}>${mgUnread()}</em>` : ''}<span class="ch">${PT_MENU_IC.chev}</span></button>`;
 }
 // The My page balances count up from zero to their figure each time the page is shown (a visit, or coming back from Balance Detail, Messages ...).
-function ptCountUp(el, target, ms){
+function ptCountUp(el, target, ms, from){
   if (!el) return;
-  const to = Number(target) || 0, token = (el._cu = (el._cu || 0) + 1);
+  const to = Number(target) || 0, f = Number(from) || 0, token = (el._cu = (el._cu || 0) + 1);
+  el.dataset.val = String(to);
   const done = () => { el.textContent = vMoney2(to); delete el.dataset.counting; ptFitValues(); };
-  if (!to || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { done(); return; }
+  if (to === f || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { done(); return; }
   el.dataset.counting = '1';
   const t0 = performance.now();
   const step = now => {
     if (el._cu !== token || !el.isConnected) return;
     const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
     if (k >= 1) { done(); return; }
-    el.textContent = vMoney2(Math.round(to * e * 100) / 100);
+    el.textContent = vMoney2(Math.round((f + (to - f) * e) * 100) / 100);
     requestAnimationFrame(step);
   };
-  el.textContent = vMoney2(0);
+  el.textContent = vMoney2(f);
   requestAnimationFrame(step);
+}
+// A figure that changes while its page is open (a deposit lands, an earning is paid) runs up from what it showed to the new amount.
+function ptSetMoney(el, target){
+  if (!el) return;
+  const to = Number(target) || 0;
+  if (el.dataset.counting) return;
+  if (el.dataset.val === undefined) { el.textContent = vMoney2(to); el.dataset.val = String(to); return; }
+  if (Number(el.dataset.val) !== to) ptCountUp(el, to, 900, Number(el.dataset.val));
 }
 function ptCountMyBalances(){
   if (STATE.page !== 'account') return;
