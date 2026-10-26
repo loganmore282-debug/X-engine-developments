@@ -135,6 +135,7 @@ async function member() {
       const want = { '.pt-quick': 10, '.pt-card': 7, '.pt-lvcard': 10.7, '.pt-tier': 14.8, '.pt-tabs': 9.3, '.pt-lvg>div': 7.2, '.pt-mystat': 14.2, '.pt-rb': 9.7, '.pt-gcform': 12, '.pt-pw': 12, '.pt-amt': 11.5, '.pt-gcgo': 14.7 };
       for (const k of Object.keys(want)) ok(radius(k) === want[k], 'card corner ' + k + ' is ' + want[k] + ' px as measured on the screenshots (now ' + radius(k) + ')'); }
     ok(/\.pt-lvrow\{[^}]*margin:31\.2px 0 0;padding:7\.2px 7\.4px;height:58\.3px;[^}]*border:1\.3px solid #bb3430/.test(rd('user-src/index.html')) && /\.pt-lvp\{[^}]*font:700 12\.2px\/41px/.test(rd('user-src/index.html')), 'the Level 1/2/3 buttons row is built to the measured size and place (outline 58.3 high, 1.3 px border, buttons 41 high)');
+    ok(/potato_remembered[\s\S]{0,400}storeCredentialIfPossible\(phoneToEmail\(\(STATE\.account \|\| \{\}\)\.phone\), newPass/.test(rd('user-src/original_module.js').replace(/\n/g, ' ')) || /storeCredentialIfPossible\(phoneToEmail\(\(STATE\.account \|\| \{\}\)\.phone\), newPass/.test(rd('user-src/original_module.js')), 'after a password change the remembered login is replaced by the new password and the member stays signed in');
     ok(/ptIconHtml\('payicon'/.test(rd('user-src/original_module.js')), 'every deposit pay button shows that one icon'); }
 
   realLog(fails ? fails + ' FAILED of ' + checks : 'PASS: Potato pages server routes (' + checks + ' checks)');

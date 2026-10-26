@@ -625,7 +625,8 @@ window.doLogin = async function(){
     // drives tryAutoSignIn() on the next visit. Unchecked -> nothing is
     // saved, so the login screen asks again next time.
     const remember = $('rememberMe');
-    if (!remember || remember.checked) storeCredentialIfPossible(email, pass, phone);
+    if (!remember || remember.checked) { storeCredentialIfPossible(email, pass, phone); try { localStorage.setItem('potato_remembered', '1'); } catch (_) {} }
+    else { try { localStorage.removeItem('potato_remembered'); } catch (_) {} }
   }
   catch (e) {
     window._pendingLoginSuccess = false;
@@ -3519,6 +3520,9 @@ window.submitLoginPasswordChange = async function(){
   btn.disabled = true;
   try {
     await window.fbChangePassword(phoneToEmail((STATE.account || {}).phone), oldPass, newPass);
+    // The member stays signed in (the server keeps this session). If the phone was told to remember the login, the remembered password is
+    // replaced by the new one, so the next sign-in fills the right password instead of the old one.
+    try { if (localStorage.getItem('potato_remembered') === '1') storeCredentialIfPossible(phoneToEmail((STATE.account || {}).phone), newPass, (STATE.account || {}).phone); } catch (_) {}
     btn.disabled = false;
     closeSheet({ fromAction: true });
     notify('Login password changed');
