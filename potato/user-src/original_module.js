@@ -2781,22 +2781,14 @@ function renderTeamMembers(level){
   const ttl = $('mgLvTitle'); if (ttl) ttl.textContent = 'Level ' + level;
   if (!STATE.teamMembers[level] && _teamMembersFailed[level]) { box.innerHTML = '<div class="mg-nomem" onclick="switchTeamLevel(' + level + ')">Could not load your team</div>'; return; }
   if (!members.length) { box.innerHTML = '<div class="mg-nomem">No Members</div>'; return; }
-  // One card per member, as in the owner's Team screen: the profile picture the admin uploaded (round, with a soft green halo), "User" with a green
-  // "Active" tag once the member has bought a product, the hidden number, the amount bought on the right, the join time, and "Total Purchase" under a line.
-  const pic = STATE.profileLogo ? `<img src="${esc(STATE.profileLogo)}" alt="" onerror="this.style.display='none'">` : '';
-  box.innerHTML = members.map(m => {
-    const bought = Number(m.invested) > 0;
-    return `
+  // The owner's Team list (his screenshot, design-ref/c27): one white card holding a pale row per member -- the hidden number on the left, "Joined <date time>"
+  // in the middle and the amount that member has bought on the right (₦0.00 until a product is purchased) -- and "No More" under it.
+  box.innerHTML = '<div class="pt-mlist">' + members.map(m => `
   <article class="mg-mem">
-    <span class="mg-mav">${pic}</span>
-    <div class="mg-mem-name"><b>User</b>${bought ? '<i>Active</i>' : ''}</div>
-    <div class="mg-mem-ph">${esc(m.phoneMasked || maskPhone(m.phone))}</div>
+    <b class="mg-mem-ph">${esc(m.phoneMasked || maskPhone(m.phone))}</b>
+    <span class="mg-mem-join">Joined ${esc(joinedStamp(m.createdAt))}</span>
     <b class="mg-mem-amt">${esc(vMoney2(m.invested))}</b>
-    <div class="mg-mem-join">Joined ${esc(joinedStamp(m.createdAt))}</div>
-    <i class="mg-mem-line"></i>
-    <div class="mg-mem-tp">Total Purchase</div>
-  </article>`;
-  }).join('');
+  </article>`).join('') + '</div><div class="pt-nomore">No More</div>';
 }
 async function renderNetwork(){
   const hadCache = !!STATE.teamStats;
