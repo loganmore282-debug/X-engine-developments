@@ -461,16 +461,27 @@ function cleanPhone(raw){
   if (pfx.length && !pfx.some(p => local.startsWith(p))) return null;
   return dialPlus() + local;
 }
-// Login and Create Account are two states of one screen: the title, which form is shown and (for an invitation link) the banner height.
-// The invitation box is there only when the member arrived through an invitation link (it carries the code), and only then is the banner the tall
-// one (measured on the owner's recording: Create Account without an invitation has the same banner as Login, with one it is 66 px taller). The
-// banner never animates its height.
+// Login and Create Account are two states of one screen: the title and which form is shown.
+// The banner is ALWAYS the whole picture (245.3 px tall) at the top of a page that scrolls as one piece. On the owner's recording the pages rest
+// scrolled down 66.6 px (the top of the picture is above the screen, scrolling up reveals it) except Create Account for an invitation link, which
+// rests at the very top. The banner never changes height and never animates.
+var PA_REST = 66.6;
+function paRestScroll(){
+  const sc = $('authScroll'); if (!sc) return;
+  const ref = $('regReferral'), invited = !!(ref && (ref.value || '').trim()) && $('registerPane').style.display !== 'none';
+  sc.scrollTop = invited ? 0 : PA_REST;
+}
+// The invitation box is there only when the member arrived through an invitation link (it carries the code).
 function paSyncInvite(){
   const ref = $('regReferral'); if (!ref) return;
-  const has = !!(ref.value || '').trim();
-  const box = ref.closest('.pa-f'); if (box) box.style.display = has ? '' : 'none';
-  const hero = $('authHeroBox'); if (hero) hero.classList.toggle('tall', has && $('registerPane').style.display !== 'none');
+  const box = ref.closest('.pa-f'); if (box) box.style.display = (ref.value || '').trim() ? '' : 'none';
+  paRestScroll();
 }
+(function(){
+  const as = $('authScreen'); if (!as || !window.MutationObserver) return;
+  let hidden = as.style.display === 'none';
+  new MutationObserver(() => { const now = as.style.display === 'none'; if (hidden && !now) paRestScroll(); hidden = now; }).observe(as, { attributes: true, attributeFilter: ['style'] });
+})();
 // Switching between the two pages, as on the owner's recording (60 fps): the page goes blank at once, the banner fades in over 0.25 s, then the title and
 // every box / button / link rise ~28 px into place while fading in, one after the other (the title after 0.17 s, then every 0.06 s, 0.3 s each).
 var _paEnterTimer = 0;
@@ -488,7 +499,6 @@ function showAuthTab(tab){
   $('loginPane').style.display = reg ? 'none' : '';
   $('registerPane').style.display = reg ? '' : 'none';
   const title = $('authTitle'); if (title) title.textContent = reg ? 'Create Account' : 'Login';
-  const sc = $('authScroll'); if (sc) sc.scrollTop = 0;
   phoneError('login', ''); phoneError('reg', '');
   paSyncInvite();
   if (changed && $('authScreen').style.display !== 'none') paEnter();

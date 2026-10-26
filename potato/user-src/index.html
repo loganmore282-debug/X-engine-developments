@@ -331,7 +331,7 @@ a{color:inherit;}
 #loadingScreen .ld-name{margin-top:15px;color:#fff;font:700 22px/26px 'Roboto',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;letter-spacing:.3px;text-align:center;min-height:26px;}
 #loadingScreen .ld-bar{margin-top:26px;width:187.7px;height:5px;border-radius:3px;background:rgba(255,255,255,.21);overflow:hidden;flex:none;}
 #loadingScreen .ld-bar i{display:block;height:100%;width:0;border-radius:3px;background:#fff;}
-#loadingScreen .ld-pct{margin-top:9px;color:rgba(255,255,255,.68);font:700 11.8px/14px 'Roboto',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;text-align:center;}
+#loadingScreen .ld-pct{margin-top:9px;color:#ffb2b8;font:700 11.8px/14px 'Noto Serif',serif;text-align:center;}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
 /* Download APP screen (openDownloadSheet(), its 'downloadbg' admin backdrop,
    and this CSS) removed -- see original_module.js's own comment above
@@ -1880,12 +1880,11 @@ html,body,.sheet-bg,#msgDetailBg{scrollbar-width:none !important;}
    Potato Login and Create Account, measured from the owner's screenshots (1080 px = 360 css px). The page has no scroll bar. */
 #authScreen{position:fixed;inset:0;z-index:300;overflow:hidden;font-family:Roboto,'Segoe UI',system-ui,sans-serif;background:#f4f5fa;}
 /* The pink wash runs over the WHOLE page (a taller Create Account page spreads the same colours over its length), measured on both pages. */
-.pa-page{min-height:100%;background:linear-gradient(180deg,#f4f5fa 0,#f4f5fa 29.4%,#f3f1f6 38.2%,#f2ecf0 49.9%,#efe6e9 61.7%,#eadee0 73.4%,#ead7d9 85.2%,#e4cccc 100%);}
+.pa-page{min-height:calc(100% + 66.6px);background:linear-gradient(180deg,#f4f5fa 0,#f4f5fa 29.4%,#f3f1f6 38.2%,#f2ecf0 49.9%,#efe6e9 61.7%,#eadee0 73.4%,#ead7d9 85.2%,#e4cccc 100%);}
 .pa-screen{position:absolute;inset:0;}
 .pa-scroll{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior:contain;}
 .pa-scroll::-webkit-scrollbar{display:none;width:0;height:0;}
-.pa-hero{position:relative;height:178.7px;overflow:hidden;background:linear-gradient(135deg,#c4121e,#e8453b);}
-.pa-hero.tall{height:245.3px;}
+.pa-hero{position:relative;height:245.3px;overflow:hidden;background:linear-gradient(135deg,#c4121e,#e8453b);}
 /* Page switch (Login <-> Create Account), timed on the owner's recording: banner fades in, then each item rises into place. Set by paEnter(). */
 @keyframes paHeroIn{from{opacity:0;}to{opacity:1;}}
 @keyframes paRise{from{opacity:0;transform:translateY(28px);}to{opacity:1;transform:none;}}
