@@ -2300,7 +2300,7 @@ function patchHomeBalances(){
   // The figures the current screens actually show: My (balance), Income (total earnings) and the Balance Record header.
   for (const [id, key] of [['myBalance','walletBalance'], ['myIncome','totalEarned'], ['incomeTotal','totalEarned'], ['recBalance','walletBalance'], ['witBalance','walletBalance']]) {
     const el = $(id);
-    if (el) el.textContent = vMoney2(account[key]);
+    if (el && !el.dataset.counting) el.textContent = vMoney2(account[key]);
   }
 }
 // THE single place this app works out what a product pays. /public/products
@@ -3001,6 +3001,30 @@ var PT_MENU_IC = {
 function ptMenuRow(icon, label, fn, badge){
   return `<button type="button" class="pt-mrow" onclick="${fn}"><span class="ic">${PT_MENU_IC[icon]}</span><b>${label}</b>${badge ? `<em id="msgBadge"${mgUnread() ? '' : ' style="display:none"'}>${mgUnread()}</em>` : ''}<span class="ch">${PT_MENU_IC.chev}</span></button>`;
 }
+// The My page balances count up from zero to their figure each time the page is shown (a visit, or coming back from Balance Detail, Messages ...).
+function ptCountUp(el, target, ms){
+  if (!el) return;
+  const to = Number(target) || 0, token = (el._cu = (el._cu || 0) + 1);
+  const done = () => { el.textContent = vMoney2(to); delete el.dataset.counting; ptFitValues(); };
+  if (!to || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { done(); return; }
+  el.dataset.counting = '1';
+  const t0 = performance.now();
+  const step = now => {
+    if (el._cu !== token || !el.isConnected) return;
+    const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+    if (k >= 1) { done(); return; }
+    el.textContent = vMoney2(Math.round(to * e * 100) / 100);
+    requestAnimationFrame(step);
+  };
+  el.textContent = vMoney2(0);
+  requestAnimationFrame(step);
+}
+function ptCountMyBalances(){
+  if (STATE.page !== 'account') return;
+  const a = STATE.account || {};
+  ptCountUp($('myBalance'), a.walletBalance, 1100);
+  ptCountUp($('myIncome'), a.totalEarned, 1100);
+}
 async function renderAccount(){
   const a = STATE.account || {};
   const st = STATE.settings || {};
@@ -3029,6 +3053,7 @@ async function renderAccount(){
 </div>`;
   $('pageHost').innerHTML = html;
   ptFitValues();
+  ptCountMyBalances();
   // The unread count on the Messages row comes from the inbox; ask for it once per visit (never blocks the paint).
   api('/messages').then(r => { if (r.status === 'success') { STATE.messages = r.messages; updateMessageBadge(); } }).catch(() => {});
 }
@@ -3732,6 +3757,7 @@ window.closeSheet = function(opts){
   // with one history.go(-n) -- see showPage(). Only that caller sets it.
   if (!(opts && opts.keepHistory) && history.state && history.state.sheet) history.back();
   if (wasOpen && !(opts && opts.navigating)) replayPageIn();   // coming back to the page underneath: it appears again, like a tab change
+  if (wasOpen && !(opts && opts.navigating)) ptCountMyBalances();   // back on My: the balances count up again
   if (wasOpen && !opts) maybeAnnounceAfterSheetBack(wasTitle);
 };
 // ── The Back button and pop-up dialogs ──
