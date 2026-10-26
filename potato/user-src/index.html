@@ -2091,10 +2091,10 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .pt-tl b{font-size:15.4px;white-space:nowrap;overflow:hidden;max-width:60%;}
 /* Share */
 .pt-share{padding:0 0 8px;}
-.pt-shero{position:relative;z-index:1;height:262px;overflow:hidden;border-radius:0 0 50px 50px/0 0 26.5px 26.5px;background:#e4231c;}
+.pt-shero{position:relative;z-index:1;height:262px;overflow:hidden;border-radius:0 0 60px 60px/0 0 26.7px 26.7px;background:#e4231c;}
 .pt-shero>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
-.pt-shero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:86px;background:linear-gradient(180deg,rgba(228,35,28,0) 0,rgba(228,35,28,.6) 30%,rgba(228,35,28,.9) 41%,#e4231c 50%,#e4231c 100%);pointer-events:none;}
-.pt-scard{position:relative;margin:-28.4px 9.4px 0;padding:29.2px 9.7px 28px;background:#f5f8fc;border-radius:10.5px;box-shadow:0 6px 18px -12px rgba(70,80,140,.2);z-index:-0;}
+.pt-shero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:86px;background:linear-gradient(180deg,rgba(150,28,24,0) 0,rgba(158,32,28,.98) 14%,#e4231c 66%,#e4231c 100%);pointer-events:none;}
+.pt-scard{position:relative;margin:-28.4px 9.4px 0;padding:29.2px 9.7px 28px;background:linear-gradient(180deg,#f5f9fc 0,#f5f9fc 45%,#f2f3f5 85%,#f1f2f4 100%);border-radius:10.5px;box-shadow:0 6px 18px -12px rgba(70,80,140,.2);z-index:-0;}
 .pt-scard>*{border-radius:9px;}
 .pt-srow,.pt-surl,.pt-sdesc{background:#f3f3f3;}
 .pt-srow{display:flex;align-items:center;justify-content:space-between;height:39.2px;padding:0 9px;}
@@ -2104,11 +2104,11 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .pt-surl p{margin:0;min-width:0;font:700 11.7px/16.5px Roboto,sans-serif;color:#b0332f;word-break:break-all;}
 .pt-surl .pt-purl{font-size:9.6px;}
 .pt-copy{flex:0 0 auto;min-width:42.3px;padding:0 8.3px;box-sizing:border-box;white-space:nowrap;height:25px;margin-top:-4.6px;border:0;border-radius:7px;background:linear-gradient(135deg,#ee2c27,#c9161d);color:#fff;font:500 10.4px/23.6px Roboto,sans-serif;box-shadow:0 4px 8px -3px rgba(150,20,20,.45);cursor:pointer;}
-.pt-sdesc{margin-top:9.7px;min-height:85.9px;padding:11px 9px 4.8px;box-sizing:border-box;}
+.pt-sdesc{margin-top:9.7px;min-height:85.9px;padding:12.4px 9px 4.8px;box-sizing:border-box;}
 .pt-sdesc b{display:block;font:700 11.6px/16px Roboto,sans-serif;color:#b0332f;}
-.pt-sdesc p{margin:17px 4px 0;text-align:center;font:400 10.8px/18.5px Roboto,sans-serif;color:#6b6b6b;letter-spacing:.2px;}
-.pt-sbtns{display:grid;grid-template-columns:1fr 1fr;gap:9.4px;margin-top:18.9px;background:none;}
-.pt-sbtns button{display:flex;align-items:center;justify-content:center;gap:6px;height:35.8px;border:0;border-radius:18px;background:linear-gradient(110deg,#ee2c27,#c9161d);color:#fff;font:700 11.95px/1 Roboto,sans-serif;box-shadow:0 6px 12px -4px rgba(150,20,20,.4);cursor:pointer;}
+.pt-sdesc p{margin:17.9px 4px 0;text-align:center;font:400 10.8px/18.5px Roboto,sans-serif;color:#6b6b6b;letter-spacing:.2px;}
+.pt-sbtns{display:grid;grid-template-columns:1fr 1fr;gap:9.4px;margin:17.6px 5.3px 0;background:none;}
+.pt-sbtns button{display:flex;align-items:center;justify-content:center;gap:6px;height:34.3px;border:0;border-radius:17px;background:linear-gradient(110deg,#ee2c27,#c9161d);color:#fff;font:700 11.95px/1 Roboto,sans-serif;box-shadow:0 6px 12px -4px rgba(150,20,20,.4);cursor:pointer;}
 .pt-sbtns svg{width:14px;height:14px;}
 /* My */
 .pt-my{padding:8.8px 11.2px 24.3px;}
@@ -2242,6 +2242,7 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .pt-rtabs button{height:41px;border:0;border-radius:4.5px;background:#fff;color:#b0332f;font:700 11.4px/41px Roboto,sans-serif;box-shadow:0 4px 10px -8px rgba(70,80,140,.3);cursor:pointer;padding:0;}
 .pt-rtabs button.on{background:#e5231d;color:#fff;box-shadow:0 8px 14px -8px rgba(229,35,29,.6);}
 .pt-day{display:flex;align-items:center;margin:22.2px 14px 8px;}
+.pt-rec+.pt-day{margin-top:11.4px;}   /* the second date's header sits 22.3 px under the card above (owner's two-day picture) */
 .pt-day i{width:4.8px;height:14px;border-radius:3px;background:#e5231d;margin-right:8px;}
 .pt-day b{flex:1;font:700 15px/20px Roboto,sans-serif;color:#b0332f;}
 .pt-day span{font:700 9px/14px Roboto,sans-serif;color:#8795a8;}

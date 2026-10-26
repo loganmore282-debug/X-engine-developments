@@ -3847,7 +3847,7 @@ function maybeAnnounceAfterHomeNav(prevPage, prevSheet){
   _annNavTimer = setTimeout(() => {
     if (STATE.page !== 'home' || isAnyOverlayOpen()) return;   // left Home again, or something opened meanwhile
     maybeShowAnnouncement();
-  }, fromSheet ? 750 : 350);   // after Deposit / Withdraw the Home icons pop first, then the dialog opens over them
+  }, 750);   // the Home icons pop first, then the dialog opens over them (a visit from another tab as much as a return from Deposit / Withdraw)
 }
 // Owner: the dialog also comes when Back is pressed on Deposit or Withdraw (the arrow in the page's header or the phone's Back button), like Cookie's.
 // Only a plain Back: a sheet that closes itself after a submitted deposit/withdrawal, or because a tab was tapped, does not call this.
@@ -3868,7 +3868,9 @@ function maybeAnnounceAfterSheetBack(title){
 // this needed its own call rather than trying to make the nav-check pass.
 function maybeAnnounceOnEntry(){
   if (isAnyOverlayOpen()) return;
-  maybeShowAnnouncement();
+  // Opening the app: the Home icons pop in first, then the dialog opens over them.
+  clearTimeout(_annNavTimer);
+  _annNavTimer = setTimeout(() => { if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }, 750);
 }
 function openSheet(title, bodyHtml){
   dismissNotify();
