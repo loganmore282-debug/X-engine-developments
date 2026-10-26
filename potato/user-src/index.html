@@ -328,7 +328,7 @@ a{color:inherit;}
 #loadingScreen{position:fixed;inset:0;overflow:hidden;background:#c4121e;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:65px;box-sizing:border-box;z-index:500;}
 /* The box picture is the admin's (Banners > Loading screen box picture); the corners are rounded here, whatever the picture is. */
 #loadingScreen .ld-box{width:150px;height:150px;border-radius:14px;background:center/contain no-repeat;flex:none;}
-#loadingScreen .ld-name{margin-top:15px;color:#fff;font:700 22px/26px 'Roboto',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;letter-spacing:.3px;text-align:center;min-height:26px;}
+#loadingScreen .ld-name{margin-top:15px;color:#fff;font:700 22px/26px 'Noto Serif',serif;letter-spacing:.3px;text-align:center;min-height:26px;}
 #loadingScreen .ld-bar{margin-top:26px;width:187.7px;height:5px;border-radius:3px;background:rgba(255,255,255,.21);overflow:hidden;flex:none;}
 #loadingScreen .ld-bar i{display:block;height:100%;width:0;border-radius:3px;background:#fff;}
 #loadingScreen .ld-pct{margin-top:9px;color:#ffb2b8;font:700 11.8px/14px 'Noto Serif',serif;text-align:center;}
@@ -1889,6 +1889,9 @@ html,body,.sheet-bg,#msgDetailBg{scrollbar-width:none !important;}
 @keyframes paHeroIn{from{opacity:0;}to{opacity:1;}}
 @keyframes paRise{from{opacity:0;transform:translateY(28px);}to{opacity:1;transform:none;}}
 .pa-entering .pa-hero{animation:paHeroIn .25s ease-out both;}
+/* The round picture rises from below, growing and fading in (owner's recording): paLogoPlay() / paEnter() */
+@keyframes paLogoIn{0%{opacity:0;transform:translateY(34px) scale(.5);}45%{opacity:.6;transform:translateY(5px) scale(.96);}100%{opacity:1;transform:none;}}
+.pa-logo-in .pa-logo,.pa-entering .pa-logo{animation:paLogoIn .5s cubic-bezier(.2,.8,.3,1) .15s both;}
 .pa-entering [data-pa-i]{animation:paRise .3s ease-out both;animation-delay:var(--pa-d,0s);}
 /* The picture is laid out once, at the tall (Create Account) size, and pinned to the bottom of the box: Login only shows less of its top. Switching pages then never rescales or moves the picture, and the circle picture stays put on it. */
 #authHeroBg{position:absolute;left:0;right:0;bottom:0;top:auto;height:245.3px;background-size:cover;background-position:center bottom;background-repeat:no-repeat;background-image:var(--auth-hero-img,none);}
@@ -2094,6 +2097,13 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 /* My */
 .pt-my{padding:8.8px 11.2px 24.3px;}
 .pt-mybanner{position:relative;height:180.5px;border-radius:14px;overflow:hidden;background:linear-gradient(135deg,#e5231d,#f27c77);}
+.pt-noprod{text-align:center;padding:46px 10px;font:400 13px/18px Roboto,sans-serif;letter-spacing:.2px;color:#8795a8;}
+.pt-noprod.bad{color:#c62648;cursor:pointer;}
+.pt-mybanner.pt-mybad{height:192.7px !important;}
+.pt-mybad .pt-mysize{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+.pt-myerr{position:absolute;left:0;right:0;top:112px;text-align:center;}
+.pt-myerr p{margin:0;font:700 12px/18px Roboto,sans-serif;letter-spacing:.3px;color:#fff;}
+.pt-myerr button{display:block;width:73px;height:40.3px;margin:8.3px auto 0;padding:0;border:1.5px solid #fff;border-radius:20px;background:transparent;color:#fff;font:700 12px/37px Roboto,sans-serif;letter-spacing:.3px;cursor:pointer;}
 .pt-mid{position:absolute;left:16px;top:40.7px;right:12px;display:flex;align-items:center;gap:11px;}
 .pt-av{flex:0 0 51.6px;width:51.6px;height:51.6px;box-sizing:border-box;border:3px solid #fff;border-radius:14px;background:#e5231d;overflow:hidden;display:block;}
 .pt-av img{width:100%;height:100%;object-fit:cover;display:block;}
@@ -2424,7 +2434,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
   -webkit-text-fill-color:#151515;caret-color:#151515;-webkit-box-shadow:0 0 0 0 transparent inset;box-shadow:0 0 0 0 transparent inset;
   transition:background-color 600000s 0s,color 600000s 0s;}
 
-.pt-abban .pt-dlback{background:rgba(40,40,48,.3);border-color:rgba(255,255,255,.3);box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;}
+.pt-abban .pt-dlback{width:40.7px;height:40.7px;border:0;background:rgba(90,95,100,.85);box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;}  /* the very look of the X on the announcement dialog */
 .pt-abban .pt-dlback svg{shape-rendering:geometricPrecision;}
 /* Pictures are shown WHOLE, as uploaded: a banner takes the height its picture needs, never taller than the frame in the owner's screenshots (the picture always fills the full width; one taller than the frame loses only its bottom, so the page below stays visible). */
 .pt-tb-banner:has(>img){height:auto;min-height:92px;}

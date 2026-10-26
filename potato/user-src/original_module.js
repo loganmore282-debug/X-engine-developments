@@ -480,11 +480,17 @@ function paSyncInvite(){
 (function(){
   const as = $('authScreen'); if (!as || !window.MutationObserver) return;
   let hidden = as.style.display === 'none';
-  new MutationObserver(() => { const now = as.style.display === 'none'; if (hidden && !now) paRestScroll(); hidden = now; }).observe(as, { attributes: true, attributeFilter: ['style'] });
+  new MutationObserver(() => { const now = as.style.display === 'none'; if (hidden && !now) { paRestScroll(); paLogoPlay(); } hidden = now; }).observe(as, { attributes: true, attributeFilter: ['style'] });
 })();
 // Switching between the two pages, as on the owner's recording (60 fps): the page goes blank at once, the banner fades in over 0.25 s, then the title and
 // every box / button / link rise ~28 px into place while fading in, one after the other (the title after 0.17 s, then every 0.06 s, 0.3 s each).
-var _paEnterTimer = 0;
+var _paEnterTimer = 0, _paLogoTimer = 0;
+// The round picture rises into place from below, growing and fading in (the owner's recording); on the first showing of the sign-in screen too.
+function paLogoPlay(){
+  const root = $('authScroll'); if (!root) return;
+  root.classList.remove('pa-logo-in'); void root.offsetWidth; root.classList.add('pa-logo-in');
+  clearTimeout(_paLogoTimer); _paLogoTimer = setTimeout(() => root.classList.remove('pa-logo-in'), 1000);
+}
 function paEnter(){
   const root = $('authScroll'); if (!root) return;
   const pane = $('registerPane').style.display !== 'none' ? $('registerPane') : $('loginPane');
@@ -2113,7 +2119,8 @@ function annGrowIn(sheet){
 // load would tell a member their purchases are gone.
 var _productsLoadFailed = false, _recordsLoadFailed = false, _messagesLoadFailed = false;
 function loadFailHtml(what, cls){ return '<div class="v-empty ' + (cls || '') + '" role="button" onclick="retryLoad(\'' + what + '\')">Could not load. Tap to try again.</div>'; }
-window.retryLoad = function(what){
+window.retryLoad = async function(what){
+  if (what === 'account') { const r = await api('/account'); if (r.status === 'success') STATE.account = r.account; return renderAccount(); }
   if (what === 'home') return renderHome();
   if (what === 'assets') return renderAssets();
   if (what === 'records') return openTransactionStatement(_statementCat);
@@ -2314,7 +2321,7 @@ function paintHome(){
   <div class="pt-quick">
     ${quick('recharge', 'Recharge', 'openDepositSheet()')}${quick('withdraw', 'Withdraw', 'openWithdrawSheet()')}${quick('service', 'Service', "openContactLink('service')")}${quick('channel', 'Channel', "openContactLink('channel')")}
   </div>
-  <div class="pt-list" id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">No products yet.</div>' : _productsLoadFailed ? loadFailHtml('home') : '')}</div>
+  <div class="pt-list" id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="pt-noprod">No products available</div>' : _productsLoadFailed ? '<div class="pt-noprod bad" role="button" onclick="retryLoad(\'home\')">Failed to load products</div>' : '')}</div>
 </div>`;
   $('pageHost').innerHTML = html;
   startHomeCarousel();
@@ -3135,6 +3142,7 @@ function ptCountMyBalances(){
   ptCountUp($('myIncome'), a.totalEarned, 1100);
 }
 async function renderAccount(){
+  if (!STATE.account) return paintAccountFailed();
   const a = STATE.account || {};
   const st = STATE.settings || {};
   const op = Number(st.myBannerOpacity), bl = Number(st.myBannerBlur);
@@ -3165,6 +3173,20 @@ async function renderAccount(){
   else { const b1 = $('myBalance'), b2 = $('myIncome'); if (b1) b1.dataset.val = String(Number(a.walletBalance) || 0); if (b2) b2.dataset.val = String(Number(a.totalEarned) || 0); }
   // The unread count on the Messages row comes from the inbox; ask for it once per visit (never blocks the paint).
   api('/messages').then(r => { if (r.status === 'success') { STATE.messages = r.messages; updateMessageBadge(); } }).catch(() => {});
+}
+// The My page when the profile could not be read: the banner with its avatar, a dash and VIP0, "Failed to load profile" and a Retry pill (the owner's picture).
+function paintAccountFailed(){
+  const op = Number((STATE.settings || {}).myBannerOpacity), bl = Number((STATE.settings || {}).myBannerBlur);
+  const avatar = STATE.profileLogo ? `<img src="${esc(STATE.profileLogo)}" alt="" onerror="this.style.display='none'">` : '';
+  $('pageHost').innerHTML = `
+<div class="v-page pt-my">
+  <section class="pt-mybanner pt-mybad">
+    ${STATE.myBanner ? `<img class="pt-mysize" src="${esc(STATE.myBanner)}" alt="" style="opacity:${Number.isFinite(op) ? Math.min(100, Math.max(0, op)) / 100 : 1};filter:blur(${Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0}px);transform:scale(${1 + (Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0) / 160})">` : ''}
+    <div class="pt-mid"><span class="pt-av">${avatar}</span><b>\u2013</b><i>VIP0</i></div>
+    <div class="pt-myerr"><p>Failed to load profile</p><button type="button" onclick="retryLoad('account')">Retry</button></div>
+  </section>
+  <button type="button" class="pt-logout" onclick="doLogout()">Log Out</button>
+</div>`;
 }
 // "+256 742 730 382" -- the shape the mockups show, from whatever the
 // server stored (0742730382 / 256742730382 / +256742730382 all normalise).
@@ -3952,6 +3974,7 @@ window.addEventListener('popstate', (ev) => {
   unlockBodyScroll();
   _openSheetTitle = null;
   maybeAnnounceAfterSheetBack(_backTitle);
+  if (_backTitle) { replayPageIn(); ptCountMyBalances(); }   // the phone's Back button brings the page back the same way the arrow does
   if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
   // Landed on an entry whose dialog is already closed: step over it so one Back is one visible step.
   if (ev && ev.state && ev.state.dlg) { _dlgIgnore(); history.back(); }
@@ -4035,6 +4058,22 @@ function openDepositFormSheet(){
       ${note('Please do not transfer to any account not designated by the platform')}
     </div>
   </div>`);
+  ptCountPay();
+}
+// Opening Deposit: the amount chosen for the member (the first one) runs up on the Pay button from 0, like Cookie's. Typing or picking another amount ends it.
+function ptCountPay(){
+  const el = $('depPayAmt'), to = Number(_depChosenAmount) || 0;
+  if (!el || !to || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+  const token = (el._cp = (el._cp || 0) + 1), t0 = performance.now(), ms = 1000;
+  el.textContent = numGroup(0, true);
+  const step = now => {
+    if (el._cp !== token || !el.isConnected) return;
+    const k = Math.min(1, (now - t0) / ms);
+    if (k >= 1) { el.textContent = numGroup(to, true); return; }
+    el.textContent = numGroup(Math.round(to * (1 - Math.pow(1 - k, 3))), true);
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 // The Deposit page shows the admin's pay buttons (up to six); tapping one selects it (only one is on at a time), and the page opens with the one marked * (the first if none).
 window.pickPayLabel = function(btn){
@@ -4052,7 +4091,7 @@ function syncDepositQuickAmt(){
   // the two "Recharge" screens, and both of those screens are gone.
   const val = parseMoneyInput(($('depAmount') || {}).value);
   _depChosenAmount = val;
-  const pa = $('depPayAmt'); if (pa) pa.textContent = numGroup(val || 0, true);
+  const pa = $('depPayAmt'); if (pa) { pa._cp = (pa._cp || 0) + 1; pa.textContent = numGroup(val || 0, true); }
   const chips = $('depChips');
   if (chips) chips.querySelectorAll('.dep-chip').forEach(btn => btn.classList.toggle('sel', Number(btn.dataset.amt) === val));
 }
