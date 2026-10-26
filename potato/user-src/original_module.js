@@ -1982,6 +1982,7 @@ window.showPage = async function(name){
   else if (name === 'team') name = 'network';
   else if (name === 'referral') name = 'promo';
   STATE.page = name;
+  _ptCountOnPaint = (name === 'account' || name === 'assets') ? name : '';
   replayPageIn();
   window.scrollTo(0, 0);   // every tab opens at its top, not wherever the previous one was scrolled
   updateNavIcons();
@@ -2295,9 +2296,15 @@ function ptFitValues(){
 // Every page is painted by replacing its markup, so the figures are fitted after each paint (and after a figure's text changes), never by hand per page.
 (function(){
   let q = 0;
+  const relevant = recs => recs.some(r => {
+    if (r.type === 'characterData') return false;
+    for (const n of r.addedNodes) { if (n.nodeType === 1 && (n.matches(PT_FIT_SEL) || n.querySelector(PT_FIT_SEL))) return true; }
+    const t = r.target && r.target.nodeType === 1 ? r.target : null;
+    return !!(t && r.addedNodes.length && t.matches(PT_FIT_SEL) && !t.dataset.counting);
+  });
   const start = () => {
     const h = document.getElementById('pageHost'); if (!h) return false;
-    new MutationObserver(() => { if (q) return; q = requestAnimationFrame(() => { q = 0; try { ptFitValues(); } catch (_) {} }); }).observe(h, { childList: true, subtree: true, characterData: true });
+    new MutationObserver(recs => { if (q || !relevant(recs)) return; q = requestAnimationFrame(() => { q = 0; try { ptFitValues(); } catch (_) {} }); }).observe(h, { childList: true, subtree: true });
     return true;
   };
   if (!start()) document.addEventListener('DOMContentLoaded', start);
@@ -2479,8 +2486,11 @@ function paintAssets(loading){
 </div>`;
   $('pageHost').innerHTML = html;
   ptStartIncomeClock();
-  ptCountUp($('ptToday'), ptTodayIncome(), 1100);
-  ptCountUp($('incomeTotal'), (STATE.account || {}).totalEarned, 1100);
+  if (_ptCountOnPaint === 'assets') {
+    _ptCountOnPaint = '';
+    ptCountUp($('ptToday'), ptTodayIncome(), 1100);
+    ptCountUp($('incomeTotal'), (STATE.account || {}).totalEarned, 1100);
+  } else { const t = $('incomeTotal'); if (t) t.dataset.val = String(Number((STATE.account || {}).totalEarned) || 0); }
 }
 // ── REFERRAL (own tab) ──
 // Owner: "introduce a new nav icon just between my products and team, it is
@@ -3019,30 +3029,33 @@ function ptMenuRow(icon, label, fn, badge){
 // The My page balances count up from zero to their figure each time the page is shown (a visit, or coming back from Balance Detail, Messages ...).
 function ptCountUp(el, target, ms, from){
   if (!el) return;
-  const to = Number(target) || 0, f = Number(from) || 0, token = (el._cu = (el._cu || 0) + 1);
-  el.dataset.val = String(to);
-  const done = () => { el.textContent = vMoney2(to); delete el.dataset.counting; ptFitValues(); };
-  if (to === f || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { done(); return; }
+  const f = Number(from) || 0, token = (el._cu = (el._cu || 0) + 1);
+  el._to = Number(target) || 0; el.dataset.val = String(el._to);
+  const done = () => { el.textContent = vMoney2(el._to); delete el.dataset.counting; ptFitValues(); };
+  if (el._to === f || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { done(); return; }
   el.dataset.counting = '1';
   const t0 = performance.now();
   const step = now => {
     if (el._cu !== token || !el.isConnected) return;
     const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
     if (k >= 1) { done(); return; }
-    el.textContent = vMoney2(Math.round((f + (to - f) * e) * 100) / 100);
+    el.textContent = vMoney2(Math.round((f + (el._to - f) * e) * 100) / 100);
     requestAnimationFrame(step);
   };
   el.textContent = vMoney2(f);
   requestAnimationFrame(step);
 }
 // A figure that changes while its page is open (a deposit lands, an earning is paid) runs up from what it showed to the new amount.
+// A figure that is still counting just takes the new amount as its end point.
 function ptSetMoney(el, target){
   if (!el) return;
   const to = Number(target) || 0;
-  if (el.dataset.counting) return;
+  if (el.dataset.counting) { el._to = to; el.dataset.val = String(to); return; }
   if (el.dataset.val === undefined) { el.textContent = vMoney2(to); el.dataset.val = String(to); return; }
   if (Number(el.dataset.val) !== to) ptCountUp(el, to, 900, Number(el.dataset.val));
 }
+// The run-up from zero belongs to arriving on a page (a tab tap, or coming back from a page opened from it), not to every repaint of it.
+var _ptCountOnPaint = '';
 function ptCountMyBalances(){
   if (STATE.page !== 'account') return;
   const a = STATE.account || {};
@@ -3058,8 +3071,7 @@ async function renderAccount(){
   const html = `
 <div class="v-page pt-my">
   <section class="pt-mybanner">
-    ${STATE.myBanner ? `<img class="pt-mysize" src="${esc(STATE.myBanner)}" alt="">` : ''}
-    <div class="pt-mybg" style="${STATE.myBanner ? `background-image:url(${esc(JSON.stringify(STATE.myBanner).slice(1, -1))});` : ''}opacity:${Number.isFinite(op) ? Math.min(100, Math.max(0, op)) / 100 : 1};filter:blur(${Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0}px)"></div>
+    ${STATE.myBanner ? `<img class="pt-mysize" src="${esc(STATE.myBanner)}" alt="" style="opacity:${Number.isFinite(op) ? Math.min(100, Math.max(0, op)) / 100 : 1};filter:blur(${Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0}px);transform:scale(${1 + (Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0) / 160})">` : ''}
     <div class="pt-mid"><span class="pt-av">${avatar}</span><b>${esc(phone)}</b><i>VIP ${Number(a.vipLevel) || 0}</i></div>
     <div class="pt-mystat"><div><span>Balance</span><b id="myBalance" class="pt-fit">${esc(vMoney2(a.walletBalance))}</b></div><div><span>Total Income</span><b id="myIncome" class="pt-fit">${esc(vMoney2(a.totalEarned))}</b></div></div>
   </section>
@@ -3077,7 +3089,8 @@ async function renderAccount(){
 </div>`;
   $('pageHost').innerHTML = html;
   ptFitValues();
-  ptCountMyBalances();
+  if (_ptCountOnPaint === 'account') { _ptCountOnPaint = ''; ptCountMyBalances(); }
+  else { const b1 = $('myBalance'), b2 = $('myIncome'); if (b1) b1.dataset.val = String(Number(a.walletBalance) || 0); if (b2) b2.dataset.val = String(Number(a.totalEarned) || 0); }
   // The unread count on the Messages row comes from the inbox; ask for it once per visit (never blocks the paint).
   api('/messages').then(r => { if (r.status === 'success') { STATE.messages = r.messages; updateMessageBadge(); } }).catch(() => {});
 }
@@ -3548,7 +3561,7 @@ window.openChestSheet = function(){
   openSheet('Gift Code', `<div class="pt-gc">
     <section class="pt-gchero">${ptIconHtml('giftbox', 'gift', 'pt-gcbox')}<h2>Mystery Gift Code</h2><p>One free redeem per day</p></section>
     <section class="pt-gcform"><label for="chestKey">Gift Code Key</label>
-      <div class="pt-gcin"><span>\ud83d\udddd\ufe0f</span><input id="chestKey" type="text" placeholder="Enter gift code (T-XXXX)" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"></div>
+      <div class="pt-gcin"><span>\ud83d\udddd\ufe0f</span><input id="chestKey" type="text" placeholder="${esc(((STATE.settings || {}).giftCodeHint) || 'Enter gift code (T-XXXX)')}" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"></div>
       <button class="pt-gcgo" id="chestOpenBtn" type="button" onclick="submitChestKey()">Redeem Gift Code</button>
       <p class="pt-gchint">Result celebration shows after redeeming</p></section>
     <div class="pt-gcrec"><i></i><h3>Reward Records</h3></div>
@@ -3945,8 +3958,7 @@ function openDepositFormSheet(){
     <div class="mg-redirect" id="depRedirect"><span class="spin"></span><p>Redirecting to payment...</p></div>
   </div>`);
 }
-// Owner: Potato offers ONE method, PAY-A (the single button is always on).
-// pickPayLabel stays so the button's onclick still has a handler.
+// The Deposit page shows the admin's pay buttons (up to six); tapping one selects it (only one is on at a time), and the page opens with the one marked * (the first if none).
 window.pickPayLabel = function(btn){
   const box = $('depPays');
   if (box) box.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));

@@ -577,6 +577,7 @@ const DEFAULT_SETTINGS = {
   myBannerOpacity: 100, myBannerBlur: 0,
   // The names under the Deposit page's method buttons, comma separated; each shows after the app name ("Potato Pay-A"). The first one is chosen at first.
   depositMethodNames: 'Pay-B, Pay-A*, Pay-D, Pay-C',
+  giftCodeHint: 'Enter gift code (T-XXXX)',
   // What "Claim" on the Download App page pays (once per member); 0 hides the button.
   appClaimAmount: 0,
   // The sign-up captcha picture is off: the owner's Create Account screen has none. Sign-up is guarded by the rate limits instead.
@@ -691,6 +692,8 @@ async function getSettings() {
     const snap = await db.collection('settings').doc('main').get();
     const stored = snap.exists ? snap.data() : {};
     _settingsCache = Object.assign({}, DEFAULT_SETTINGS, stored);
+    // The very first default was one button, "Pay-A"; an install that still holds exactly that was never changed by the admin, so it gets the four buttons.
+    if (String(_settingsCache.depositMethodNames).trim() === 'Pay-A') _settingsCache.depositMethodNames = DEFAULT_SETTINGS.depositMethodNames;
     _mainAllowedHosts = sanitizeAllowedOrigins(stored.allowedOrigins).hosts || [];
     refreshHostPolicy(_settingsCache);
     _settingsCacheTs = Date.now();
@@ -6676,6 +6679,10 @@ app.post('/admin/settings/update', async (req, res) => {
     // anyway -- this is the second lock, so a name that somehow reaches an
     // unescaped sink later cannot carry markup with it.
     // The welcome dialog's title and its lines of text: plain text, capped.
+    if ('giftCodeHint' in updates) {
+      const hint = String(updates.giftCodeHint == null ? '' : updates.giftCodeHint).replace(/[<>]/g, '').trim().slice(0, 40);
+      updates.giftCodeHint = hint || DEFAULT_SETTINGS.giftCodeHint;
+    }
     if ('depositMethodNames' in updates) {
       const names = String(updates.depositMethodNames == null ? '' : updates.depositMethodNames).split(',').map(x => x.replace(/[<>]/g, '').trim().slice(0, 20)).filter(Boolean).slice(0, 6);
       updates.depositMethodNames = names.length ? names.join(', ') : DEFAULT_SETTINGS.depositMethodNames;

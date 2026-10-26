@@ -3487,6 +3487,9 @@ async function renderSettings(){
       <h2 class="sec" style="margin:16px 0 4px">Deposit page buttons</h2>
       <p class="muted" style="margin:0 0 8px">The names under the amount on the Deposit page, separated by commas; each shows after the app name (for example Potato Pay-A). Put a * after the one that is chosen when the page opens (the first one if none has it). Up to 6.</p>
       <input id="depNamesInput" maxlength="100" value="${esc(v('depositMethodNames','Pay-B, Pay-A*, Pay-D, Pay-C'))}" placeholder="Pay-B, Pay-A*, Pay-D, Pay-C">
+      <h2 class="sec" style="margin:16px 0 4px">Gift Code page hint</h2>
+      <p class="muted" style="margin:0 0 8px">The grey words inside the code box on the Gift Code page.</p>
+      <input id="giftHintInput" maxlength="40" value="${esc(v('giftCodeHint','Enter gift code (T-XXXX)'))}" placeholder="Enter gift code (T-XXXX)">
       <h2 class="sec" style="margin:16px 0 4px">Download App claim</h2>
       <p class="muted" style="margin:0 0 8px">The amount the Claim button on the Download App page pays, once per member. 0 hides the button.</p>
       <input id="appClaimInput" type="number" min="0" step="1" value="${esc(v('appClaimAmount',0))}" placeholder="0">
@@ -3518,7 +3521,7 @@ async function renderSettings(){
     const witMethod = (document.querySelector('input[name="witMethod"]:checked')||{}).value || 'follow';
     const d = await api('/admin/settings/update', { settings: {
       depositMethod: gateway, withdrawMethod: witMethod,
-      depositMethodNames: $('depNamesInput').value, appClaimAmount: Math.max(0, Math.round(+$('appClaimInput').value || 0)),
+      depositMethodNames: $('depNamesInput').value, giftCodeHint: $('giftHintInput').value, appClaimAmount: Math.max(0, Math.round(+$('appClaimInput').value || 0)),
     } });
     const payoutProv = witMethod==='follow' ? (gateway==='tavupay'?'marzpay':gateway) : witMethod;
     toast(d.status==='success'

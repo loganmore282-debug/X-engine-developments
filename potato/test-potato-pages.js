@@ -111,10 +111,14 @@ async function member() {
   ok(st.myBannerOpacity === 60 && st.myBannerBlur === 12, 'My banner opacity and blur are saved and public', [st.myBannerOpacity, st.myBannerBlur]);
   r = await J('POST', '/admin/settings/update', { settings: { depositMethodNames: ' , ' } }, null, true);
   ok(((await J('GET', '/public/settings')).j.settings || {}).depositMethodNames === 'Pay-B, Pay-A*, Pay-D, Pay-C', 'an empty list falls back to the default four buttons');
+  await J('POST', '/admin/settings/update', { settings: { giftCodeHint: '  Type the <b>code</b> ' } }, null, true);
+  ok(((await J('GET', '/public/settings')).j.settings || {}).giftCodeHint === 'Type the bcode/b', 'the Gift Code hint is saved from the admin, without tags');
+  await J('POST', '/admin/settings/update', { settings: { giftCodeHint: '' } }, null, true);
+  ok(((await J('GET', '/public/settings')).j.settings || {}).giftCodeHint === 'Enter gift code (T-XXXX)', 'an empty hint falls back to the default');
 
   { const fs = require('fs'), rd = f => fs.readFileSync(path.join(root, f), 'utf8');
     ok(/POTATO_ICON_SLOTS = \[[^\]]*'payicon'/.test(rd('server.js')) && /payicon:'Deposit pay button icon/.test(rd('admin-src/index.html')), 'the admin can upload one deposit pay button icon (slot payicon)');
-    ok(/ptCountMyBalances\(\);\s*\/\/ The unread count/.test(rd('user-src/original_module.js')) && /ptCountMyBalances\(\);   \/\/ back on My/.test(rd('user-src/original_module.js')), 'the My balances count up when the page is shown and when a page opened from it is closed');
+    ok(/_ptCountOnPaint === 'account'[^\n]*ptCountMyBalances\(\)/.test(rd('user-src/original_module.js')) && /ptCountMyBalances\(\);   \/\/ back on My/.test(rd('user-src/original_module.js')) && /_ptCountOnPaint = \(name === 'account'/.test(rd('user-src/original_module.js')), 'the My balances count up on arriving at the page and on coming back from a page opened from it, not on every repaint');
     ok(/ptSetMoney\(el, account\[key\]\)/.test(rd('user-src/original_module.js')) && /ptCountUp\(\$\('incomeTotal'\)/.test(rd('user-src/original_module.js')) && /ptCountUp\(\$\('myIncome'\)/.test(rd('user-src/original_module.js')), 'Total Income runs up together with the balance, and a figure that changes while the page is open runs up to the new amount');
     ok(/ptIconHtml\('payicon'/.test(rd('user-src/original_module.js')), 'every deposit pay button shows that one icon'); }
 
