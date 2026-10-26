@@ -1126,7 +1126,11 @@ function captureReferralFromUrl(){
     let ref = search.get('ref');
     if (!ref && location.hash) {
       const qIdx = location.hash.indexOf('?');
-      if (qIdx !== -1) ref = new URLSearchParams(location.hash.slice(qIdx + 1)).get('ref');
+      if (qIdx !== -1) {
+        const hp = new URLSearchParams(location.hash.slice(qIdx + 1));
+        // The CURRENT shared form: <random address>/#/inviteRegister?invitecode=<code> (any capital letters in the name are accepted).
+        ref = hp.get('invitecode') || hp.get('inviteCode') || hp.get('ref');
+      }
     }
     // <origin>/refCode=<code>, read straight off the path. Checked after the
     // two forms above only because they're cheaper to test, not because
@@ -2512,7 +2516,26 @@ function paintAssets(loading){
 // And a failure is silent by design: the link falls back to this origin,
 // which is always a working invite.
 function refreshShareHost(){ STATE.shareHost = ''; return Promise.resolve(); }
-function shareOrigin(){ return location.origin; }
+// With a wildcard domain set up on the server (deploy/set-wildcard.sh), every invite link is made on a NEW random 4-character address of it, such as
+// https://tg9s.yourdomain.com/#/inviteRegister?invitecode=2K3CT : every time the Share page paints and every time Copy is tapped, so a link is never the
+// same twice and no one address carries all the sharing. Every such address serves the very same app. Without that setting, or when the app is open on
+// some other address (the IP preview), the link keeps the address the app is open on, which always works.
+var SHARE_LABEL_RESERVED = ['mail', 'smtp', 'imap', 'pop3', 'ftp1', 'cpan', 'whm1', 'host', 'test', 'demo'];
+function shareRand(n){
+  try { const a = new Uint32Array(1); window.crypto.getRandomValues(a); return a[0] % n; } catch (_) { return Math.floor(Math.random() * n); }
+}
+function shareLabel(){
+  const letters = 'abcdefghijklmnopqrstuvwxyz', all = letters + '0123456789';
+  let out = letters[shareRand(letters.length)];   // exactly 4 characters, like tg9s, mcqk or once
+  for (let i = 1; i < 4; i++) out += all[shareRand(all.length)];
+  return SHARE_LABEL_RESERVED.indexOf(out) >= 0 ? shareLabel() : out;
+}
+function shareOrigin(){
+  const d = String((STATE.settings || {}).shareDomain || '').toLowerCase();
+  const h = location.hostname.toLowerCase();
+  if (!d || location.protocol !== 'https:' || !(h === d || h.endsWith('.' + d))) return location.origin;
+  return 'https://' + shareLabel() + '.' + d;
+}
 // ── MY ASSETS investment helpers ──
 var _investmentsLoadFailed = false;
 var MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -2826,7 +2849,7 @@ async function renderPromo(){
 function promoLink(){
   const t = STATE.teamStats || {};
   const code = (STATE.account || {}).referralCode || t.referralCode || '';
-  return code ? `${shareOrigin()}/share.html?v=${Math.floor(Date.now() / 1000)}&code=${encodeURIComponent(String(code).toUpperCase())}` : '';
+  return code ? `${shareOrigin()}/#/inviteRegister?invitecode=${encodeURIComponent(String(code).toUpperCase())}` : '';
 }
 var _promoLink = '';
 function paintPromo(){
@@ -2840,16 +2863,30 @@ function paintPromo(){
   <div class="pt-shero">${img ? `<img src="${esc(img)}" alt="" onerror="this.style.display='none'">` : ''}</div>
   <section class="pt-scard">
     <div class="pt-srow"><b>Commission Rates</b><span>Lv1 ${r1}% · Lv2 ${r2}% · Lv3 ${r3}%</span></div>
-    <div class="pt-surl"><p><b>Share URL:</b> <span class="pt-purl">${esc(_promoLink || '—')}</span></p><button type="button" class="pt-copy" data-copy-group="promo" onclick="copyText(_promoLink)">Copy</button></div>
+    <div class="pt-surl"><p><b>Share URL:</b> <span class="pt-purl">${esc(_promoLink || '—')}</span></p><button type="button" class="pt-copy" data-copy-group="promo" onclick="copyPromoLink(this)">Copy</button></div>
     <div class="pt-sdesc"><b>Reward Description</b><p>You can earn more revenue by sharing the link: LV1=${r1}% LV2=${r2}% LV3=${r3}% Hurry and invite your friends to join us!</p></div>
     <div class="pt-sbtns"><button type="button" class="wa" onclick="shareTo('whatsapp')">${MGI.whatsapp}<span>WhatsApp</span></button><button type="button" class="tg" onclick="shareTo('telegram')">${MGI.telegram}<span>Telegram</span></button></div>
   </section>
 </div>`;
   $('pageHost').innerHTML = html;
 }
+// Every Copy and every share makes a NEW random address and shows it, so the link on the page is the one that was copied or sent.
+function refreshPromoLink(){
+  const fresh = promoLink();
+  if (!fresh) return;
+  _promoLink = fresh;
+  const el = document.querySelector('.pt-purl'); if (el) el.textContent = fresh;
+}
+window.copyPromoLink = function(btn){
+  if (!_promoLink) return notify('Your invite link is not ready yet.');
+  if (!rapidTapGuardOk('copy:promo')) return;
+  refreshPromoLink();
+  writeClipboard(_promoLink, btn || null);
+};
 window.shareTo = function(where){
   if (!_promoLink) return notify('Your invite link is not ready yet.');
   if (!rapidTapGuardOk('share:' + where)) return;
+  refreshPromoLink();
   // The words that go with the link are the admin's (Settings > Share message); {app} stands for the app's name.
   const words = String(((STATE.settings || {}).shareMessage) || 'Join me on {app}').replace(/\{app\}/gi, brandName());
   const msg = words + ': ' + _promoLink;

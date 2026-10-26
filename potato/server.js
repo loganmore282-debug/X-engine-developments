@@ -420,6 +420,12 @@ const ADMIN_KEY   = process.env.ADMIN_KEY   || '';
 // still reach the phone, but nothing would ever call back -- the reconciler
 // and the member's own poll would cover for it, so the only symptom is money
 // taking minutes instead of seconds to appear.
+// The domain whose random subdomains carry invite links (deploy/set-wildcard.sh saves it as SHARE_DOMAIN): https://tg9s.<domain>/#/inviteRegister?invitecode=CODE.
+// Empty = invite links keep the address the app is open on.
+const SHARE_DOMAIN = (() => {
+  const d = String(process.env.SHARE_DOMAIN || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^\*\./, '').replace(/\/.*$/, '');
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d) ? d : '';
+})();
 const PUBLIC_URL  = (() => {
   let u = (process.env.PUBLIC_URL || '').trim().replace(/\/$/, '');
   if (u && !u.startsWith('http')) u = 'https://' + u;
@@ -453,7 +459,7 @@ let _baseDomain = 'potato-platform.com';
 let _blockRootDomain = true;
 let _parkedHosts = [];
 function refreshCorsSnapshot() {
-  const all = _mainAllowedHosts.concat(_parkedHosts, _baseDomain ? [_baseDomain, 'www.' + _baseDomain] : []);
+  const all = _mainAllowedHosts.concat(_parkedHosts, _baseDomain ? [_baseDomain, 'www.' + _baseDomain] : [], SHARE_DOMAIN ? [SHARE_DOMAIN] : []);
   _corsExtraHosts = all.filter((h, i) => h && all.indexOf(h) === i);
 }
 function refreshHostPolicy(sett) {
@@ -3487,6 +3493,7 @@ app.get('/public/settings', async (req, res) => {
     publicJson(req, res, { status: 'success', settings: {
       ...rest,
       maintenanceMsg: s.maintenanceMode ? maintenanceMsg : '',
+      shareDomain: SHARE_DOMAIN,
       payoutManual: payoutIsManual(s),
       // RESOLVED, not a raw setting: deposits are only real if a gateway can
       // actually reach this country's phone numbers. Sending an unresolved
