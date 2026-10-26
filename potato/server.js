@@ -438,13 +438,6 @@ const PUBLIC_URL  = (() => {
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64-encoded credentials
 const MARZ_TIMEOUT = 20000;
-// MarzSms -- a SEPARATE MarzPay product (its own dashboard/API keys at
-// sms.wearemarz.com, distinct from the wallet product MARZPAY_KEY above).
-// Used for the admin's SMS alerts (see marzSmsSend below). Same "base64(api_key:api_secret)" Basic-auth
-// convention as the wallet API. MARZSMS_KEY is unset until the owner supplies it (a VPS
-// secret, never committed); every send refuses cleanly until then.
-const MARZSMS_BASE = 'https://sms.wearemarz.com/api/v1';
-const MARZSMS_KEY  = process.env.MARZSMS_KEY || '';
 
 // Potato runs for ONE country: Uganda (+256, UGX; owner's decision after the first screenshots, which carried a +234 look). POTATO_REGION=ng
 // switches the same code to Nigeria (+234, naira, 9 or 10 digits); kept only because it is built and tested. Historical accounts with
@@ -837,19 +830,6 @@ async function getHomeBanner() {
   } catch (_) { _bannerCache = _bannerCache || { image: null }; }
   _bannerCacheTs = Date.now();
   return _bannerCache;
-}
-// Separate admin-configurable banner for the Help Centre page -- its own
-// doc ('banners'/'help' vs 'banners'/'home') and its own cache, kept fully
-// independent of the Home banner above so neither can step on the other.
-let _helpBannerCache = null, _helpBannerCacheTs = 0;
-async function getHelpBanner() {
-  if (Date.now() - _helpBannerCacheTs < 60 * 1000 && _helpBannerCache !== null) return _helpBannerCache;
-  try {
-    const snap = await db.collection('banners').doc('help').get();
-    _helpBannerCache = (snap.exists && snap.data().image) || null;
-  } catch (_) { _helpBannerCache = _helpBannerCache || null; }
-  _helpBannerCacheTs = Date.now();
-  return _helpBannerCache;
 }
 // The admin-uploaded pictures (Admin > Banners): Login banner (authhero) and circle logo (authlogo), Home slides 2 and 3 (banner2, banner3;
 // slide 1 is the Home banner), Share banner (promobanner), brand logo (logo), My page avatar (profilelogo), loading-screen box picture
@@ -1832,12 +1812,6 @@ function depositSucceededRecently(userId) {
   const at = _depAttemptsSucceededAt.get(userId);
   return !!at && (Date.now() - at < 60000);
 }
-async function banUserAutomatically(userId, reason) {
-  try {
-    await db.collection('users').doc(userId).update({ status: 'banned', banReason: reason, bannedAt: FieldValue.serverTimestamp() });
-    console.warn(`Auto-banned ${userId}: ${reason}`);
-  } catch (e) { console.error('Auto-ban failed:', e.message); }
-}
 // Lightweight, fire-and-forget log of a suspicious/rejected action -- feeds
 // the owner-only "Suspicious activity" analytics (repeated insufficient-
 // funds withdrawal attempts, gift/promo
@@ -2067,43 +2041,6 @@ async function marzGetBalance(region) {
   const d = await _marzParse(resp);
   if (d.status === 'error') return d;
   return { status: 'success', currency: market.currency, ..._marzExtractBalance(d) };
-}
-// ── MARZSMS (a SEPARATE MarzPay product, sms.wearemarz.com -- alerts
-// staff by text, never moves money) ──
-// A code that never arrives is worse than a slow one, so one transient
-// failure (a network error, a timeout, or a 5xx from the provider) is retried
-// once before giving up. A 4xx is a definite answer (bad key, bad number,
-// out of credit) and is never retried. Both attempts carry the same message,
-// so a timeout that actually delivered still leaves the member holding a
-// valid code; the worst case is one extra 30 UGX text.
-const MARZSMS_TIMEOUT = 10000;
-async function marzSmsSend(recipients, message) {
-  const attempt = async () => {
-    let resp;
-    try {
-      resp = await fetch(`${MARZSMS_BASE}/sms/send`, {
-        method: 'POST', signal: AbortSignal.timeout(MARZSMS_TIMEOUT),
-        headers: { 'Authorization': `Basic ${MARZSMS_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipient: recipients, message }),
-      });
-    } catch (e) { e.transient = true; throw e; }
-    const data = await resp.json().catch(() => ({}));
-    // MarzSms's own documented error shape is {success:false,message,error}
-    // (no `status` field, unlike the wallet API) -- resp.ok is the reliable
-    // signal here; an explicit success:false on a 200 is also a refusal.
-    if (!resp.ok || data.success === false) {
-      const err = new Error(data.message || data.error || `MarzSms HTTP ${resp.status}`);
-      err.transient = resp.status >= 500;
-      throw err;
-    }
-    return data;
-  };
-  try { return await attempt(); }
-  catch (e) {
-    if (!e.transient) throw e;
-    await new Promise(r => setTimeout(r, 400));
-    return attempt();
-  }
 }
 function _marzExtractTx(d) {
   const tx = d?.data?.transaction || d?.transaction || d?.data || d || {};
@@ -2972,25 +2909,6 @@ async function _settleDueInvestmentNow(doc) {
     return paid;
   } finally { _creditingPayouts.delete(doc.id); }
 }
-async function settleAllForUser(userId) {
-  const snap = await db.collection('investments').where('userId', '==', userId).where('status', '==', 'active').get();
-  // Was a sequential for-await loop -- harmless in the common case (nothing
-  // due yet is pure math on the already-fetched doc, no I/O at all), but a
-  // real, measurable slowdown for a member with several investments that all
-  // became due the same day (e.g. a few assets bought around the same time,
-  // all paying their daily figure together): each one paid its own ~4-round-
-  // trip settlement one after another instead of together. Found while
-  // investigating "statement download takes long on a powerful VPS" -- this
-  // runs at the top of /account, so every load
-  // was paying that serial cost for exactly that member shape. Safe to run
-  // in parallel: each investment settles under its OWN 'payout:<id>' lock
-  // (see settleInvestmentIfDue()), and the actual wallet credit inside it is
-  // separately, correctly serialized per-user via 'bal:<userId>' regardless
-  // of how many callers reach it concurrently -- withLock() is a proper
-  // promise-chain mutex per key, not a per-call one, so parallel investments
-  // for the same user still queue safely at that one critical section.
-  await Promise.all(snap.docs.map(doc => settleInvestmentIfDue(doc).catch(e => console.error('Settle error:', e.message))));
-}
 
 // ── REFERRAL COMMISSION (L1/L2/L3, first product purchase) ──
 // A member's referrers are paid once, when that member buys their FIRST product (a deposit pays nothing any more, and a product the admin
@@ -3456,7 +3374,7 @@ app.post('/deploy/webhook', (req, res) => {
   // within 10 seconds, and git pull + npm install can easily run past that
   // -- respond immediately, run the actual deploy in the background exactly
   // like every other fire-and-forget side effect in this file
-  // (sendAdminPush, marzSmsSend's own callers).
+  // (sendAdminPush's own callers).
   res.json({ status: 'success', message: 'Deploy started' });
   runAutoDeploy();
 });
@@ -3837,24 +3755,6 @@ function defaultProfileDoc(phone, regionKey) {
     createdAt: FieldValue.serverTimestamp()
   };
 }
-// Is there at least one fully registered member yet? Only ever asked to
-// decide whether a referral code CAN be required, so it latches: once a
-// member exists the answer can never go back to "no", and the query is never
-// run again. Before that it is a single limit(1) read, so an empty platform
-// pays almost nothing for it either.
-let _anyMemberExists = false;
-async function anyMemberExists() {
-  if (_anyMemberExists) return true;
-  try {
-    const snap = await db.collection('users').where('registrationDone', '==', true).limit(1).get();
-    if (!snap.empty) _anyMemberExists = true;
-  } catch (_) {
-    // A read failure must not hand out an unearned exemption -- assume
-    // members exist and keep the code required.
-    return true;
-  }
-  return _anyMemberExists;
-}
 // The owner's rule is that a referral code is a MUST. That cannot apply to
 // the very first account: with no members there is no code in existence to
 // type, so a hard requirement would make the platform impossible to launch
@@ -3992,10 +3892,6 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     };
     if (referrerId) await withLock('referrer-guard:' + referrerId, commit);
     else await commit();
-    // A member now exists, so the founder exemption above closes from here
-    // on: the next sign-up must carry a code. Latched in memory rather than
-    // re-queried, and anyMemberExists() re-derives it after a restart.
-    _anyMemberExists = true;
     if (WELCOME > 0) {
       const { date, time } = nowStr();
       // A fixed document id (one welcome gift per member, ever) so a repeat can never write a second row, and one

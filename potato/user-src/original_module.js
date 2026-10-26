@@ -1131,7 +1131,6 @@ function syncBrandLogoImages(){
   });
 }
 function applyAuthBackgrounds(){
-  const s = STATE.settings || {};
   const root = document.documentElement;
   // An unset slot yields `none`, so the banner falls back to the brand gradient. The quotes matter for a data URL with odd characters.
   root.style.setProperty('--auth-hero-img', STATE.authHeroImage ? 'url("' + String(STATE.authHeroImage).replace(/"/g, '\\"') + '")' : 'none');
@@ -2459,12 +2458,6 @@ async function renderAssets(){
   if (STATE.page !== 'assets') return; // navigated away while awaiting
   paintAssets();
 }
-// One card per product the member owns, in the same shape as Home's card. The running-product screen of the owner's own app is not seen yet:
-// until it is, the card shows the same four figures, a bar for the days gone, and when it was bought and when it ends.
-function ptStamp(ms){
-  const d = new Date(ms), pad = n => String(n).padStart(2, '0');
-  return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-}
 // A product the member owns, as on the owner's Orders picture: the product picture with a green "Earning" label and its name over a dark fade, the name in red,
 // four pale lines (Daily, Reward, Amount, Start) and a "Maturity N%" bar with the length of the plan. Amounts are shown as the picture shows them, no thousands commas.
 function ptMoneyPlain(n){ return cur() + (/[A-Za-z]$/.test(cur()) ? ' ' : '') + (Number(n) || 0).toFixed(2); }
@@ -2614,40 +2607,6 @@ function fmtDay(value){
   const t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
   return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' at ' + t;
 }
-// Deposit result marks, traced from the owner's two pictures (green tick badge, red cross badge).
-
-
-
-// The owner's tick and cross DRAW THEMSELVES on the deposit result page (ring runs round clockwise, the disc pops in, the tick is written
-// from its left end to its tip; the cross: the disc pops in, then one bar after the other). They are drawn on a <canvas> with plain
-// compositing, NOT with CSS-animated SVG masks: animated masks are not repainted reliably by every phone's browser (iPhones, older Android
-// browsers) and the mark simply did not appear there. A canvas works the same on every phone. Checked frame by frame against the SVG-mask
-// version it replaced: 32 moments each, at most 0.011 % of the pixels differ (edge smoothing). The artwork is the owner's, untouched.
-// When the animation ends (or can never run: no canvas, a hidden tab, an error) the mark is replaced by the plain finished SVG above,
-// which has no masks and no animation, so the final picture is always correct. It plays even when the phone asks for reduced motion:
-// it is a 1.5 second status mark, and the owner wants it everywhere.
-var DR_GREEN = '#42af3c', DR_RED = '#ea2c2c';
-
-function drBezier(x1, y1, x2, y2) {            // CSS cubic-bezier(x1,y1,x2,y2) as a function of time 0..1
-  var cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx, cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
-  return function (t) {
-    if (t <= 0) return 0; if (t >= 1) return 1;
-    var s = t, i, x, d;
-    for (i = 0; i < 8; i++) { x = ((ax * s + bx) * s + cx) * s - t; d = (3 * ax * s + 2 * bx) * s + cx; if (Math.abs(x) < 1e-6 || Math.abs(d) < 1e-6) break; s -= x / d; }
-    if (s < 0 || s > 1) { var lo = 0, hi = 1; s = t; for (i = 0; i < 24; i++) { x = ((ax * s + bx) * s + cx) * s; if (x < t) lo = s; else hi = s; s = (lo + hi) / 2; } }
-    return ((ay * s + by) * s + cy) * s;
-  };
-}
-var DR_E_RING = drBezier(.5, 0, .25, 1), DR_E_TICK = drBezier(.4, 0, .2, 1), DR_E_POP = drBezier(.2, .9, .3, 1.15), DR_E_OUT = drBezier(0, 0, .58, 1);
-
-
-
-
-// the artwork, seen only through a mask drawn by `maskFn` (white = shown, destination-out = hidden)
-
-
-
-
 var _drToken = 0;
 // A failed payment: once the cross has been drawn it shakes and the phone buzzes (once per drawing).
 function failShake(box, tok){

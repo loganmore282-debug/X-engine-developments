@@ -401,15 +401,6 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;'
 // number to canonical +256XXXXXXXXX before storing. This is DISPLAY-ONLY,
 // applied wherever the admin panel shows a saved number back, so a number
 // typed as "07XXXXXXXX" doesn't visibly "change" after saving.
-// The stored number is always canonical "+<dial><local>"; this is a
-// display-only conversion to the local "07..." shape. The dialling code
-// comes from whichever country is being edited, so a Kenyan collection
-// number is not left with a +254 stuck on the front of it.
-function toLocalPhoneDisplay(num, regionKey){
-  const s = String(num || '').trim();
-  const p = '+' + '256';
-  return s.indexOf(p) === 0 ? '0' + s.slice(p.length) : s;
-}
 async function copyText(str, btn){
   try {
     if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(str); }
@@ -441,18 +432,6 @@ function ugx(n, regionKey){
 function normalizeProv(v){ return (v==='pesajet'||v==='tavupay'||v==='manual') ? v : 'marzpay'; }
 const PROVIDER_LABEL = { marzpay:'MarzPay', pesajet:'PesaJet', tavupay:'TavuPay', manual:'by hand' };
 function tsMs(v){ if(!v) return 0; if(v.seconds!=null) return v.seconds*1000; const t=new Date(v).getTime(); return isNaN(t)?0:t; }
-// Round-trips openingCountdownAt (a plain epoch-ms number, same shape as
-// every other timestamp this file reads) into/out of a <input
-// type="datetime-local">'s own value format ("YYYY-MM-DDTHH:mm", always
-// LOCAL to whoever's looking at the admin panel) -- new Date(thatString)
-// parses it back as local time too, so the round trip lands on the exact
-// same real instant regardless of which admin's timezone picks it.
-function msToDatetimeLocal(ms){
-  if (!ms) return '';
-  const d = new Date(Number(ms));
-  const pad = n => String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
 const TX_LABELS = {
   deposit: 'Recharge', withdraw: 'Withdraw', commission: 'Commission', team_reward: 'Team reward',
@@ -463,12 +442,6 @@ const TX_LABELS = {
   investment_refund: 'Product refund',
 };
 function txLabel(type){ return TX_LABELS[type] || (type ? type.replace(/_/g,' ') : ''); }
-// Keep this exact list in sync with NUMBER_FONT_OPTIONS in server.js (the
-// save-time allowlist) and NUMBER_FONT_STACKS in the user app's
-// original_module.js (the client-side render lookup) -- a name here that
-// doesn't exist in both would save successfully but silently render with
-// no distinct font in the user app.
-const NUMBER_FONT_OPTIONS = ['Bodoni Moda', 'Playfair Display', 'DM Serif Display', 'Georgia', 'Roboto Mono', 'JetBrains Mono', 'Orbitron', 'System default'];
 function dayLabel(iso){
   const now=new Date(Date.now()+3*3600000);
   const today=now.toISOString().slice(0,10);
@@ -2803,19 +2776,6 @@ async function renderPromoCodes(){
 }
 
 // ── ADMINS (owner only) ──
-// ── COUNTRIES (REGIONS) ──
-//
-// Owner: "l wanted other subdomain to fetch other country code and
-// currency, ie fgdr.potato-platform.com in ugx, and country code changeable
-// to other country or created, and another can be sfhd.potato-platform in
-// KES shs, or any country created."
-//
-// One row per country. A country owns the subdomain(s) it is served from,
-// the currency label printed in front of every amount, the dialling code
-// and number shape its members type, and the clock its withdraw hours and
-// product windows are judged against. Its RATES and its PRODUCT PRICES are
-// edited on the Settings and Products tabs, with this country picked there.
-var ADMIN_BASE_DOMAIN = 'potato-platform.com';
 async function renderAdmins(){
   const r = await api('/admin/admins/list');
   if(staleTab('admins')) return;
