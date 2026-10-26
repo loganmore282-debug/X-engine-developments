@@ -4753,8 +4753,10 @@ window.ptWinDialog = function(amount, balance){
   bg.id = 'ptWinBg'; bg.className = 'pt-win-bg';
   let bubbles = '';
   for (let i = 0; i < 12; i++) {
-    const size = 16 + shareRand(18), left = 4 + shareRand(92), top = 69 + shareRand(8), delay = shareRand(40) / 100;
-    bubbles += `<i style="width:${size}px;height:${size}px;left:${left}%;top:${top}%;animation-delay:${delay}s"></i>`;
+    // Bubbles hang at the top of the screen when the card appears, then FALL (behind the card) to rest in a loose row under it (owner's recording).
+    const size = 16 + shareRand(11), left = 4 + shareRand(92), top = 69 + shareRand(8), delay = 0.35 + shareRand(40) / 100;
+    const fall = Math.round(14 - (top / 100) * (window.innerHeight || 700));
+    bubbles += `<i style="width:${size}px;height:${size}px;left:${left}%;top:${top}%;--fall:${fall}px;animation-delay:${delay}s"></i>`;
   }
   bg.innerHTML = `<div class="pt-win-fx" aria-hidden="true">${bubbles}</div><div class="pt-win" role="dialog" aria-modal="true"><span class="e" aria-hidden="true">\ud83c\udf81</span><h3>Congratulations!</h3><p class="w">You won</p><b class="amt" id="ptWinAmt"><span>${esc(vMoney2(amount))}</span></b><p class="nb">New Balance: ${esc(vMoney2(balance))}</p><button type="button" onclick="closeWinDialog()">Collect</button></div>`;
   bg.onclick = e => { if (e.target === bg) closeWinDialog(); };

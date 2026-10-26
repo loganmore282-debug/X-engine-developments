@@ -2315,8 +2315,8 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .pt-win .nb{top:225.6px;font:400 12px/14px Roboto,sans-serif;color:#514b4d;}
 .pt-win button{display:block;top:266.6px;height:41px;border:0;border-radius:12px;background:#e0241b;color:#fff;font:700 14px/41px Roboto,sans-serif;cursor:pointer;box-shadow:0 0 0 3px rgba(224,36,27,.2),0 0 5px 3px rgba(224,36,27,.1);}
 .pt-win-fx{position:absolute;inset:0;overflow:hidden;pointer-events:none;}
-.pt-win-fx i{position:absolute;display:block;border-radius:50%;background:rgba(214,45,52,.34);filter:blur(1.5px);animation:ptWinBub 1.4s ease-out both;}
-@keyframes ptWinBub{from{opacity:0;transform:translateY(40px) scale(.4);}to{opacity:1;transform:none;}}
+.pt-win-fx i{position:absolute;display:block;border-radius:50%;background:rgba(175,45,52,.45);filter:blur(1px);animation:ptWinBub 1.25s cubic-bezier(.5,.05,.75,1) both;}
+@keyframes ptWinBub{from{transform:translateY(var(--fall,-300px));}to{transform:none;}}
 .pt-claim{width:100%;max-width:320px;box-sizing:border-box;padding:24px 24px 28px;border-radius:26px;background:#fff;text-align:center;}
 .pt-claim .tick{display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:#e5231d;}
 .pt-claim .tick svg{width:30px;height:30px;}
