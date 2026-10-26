@@ -1888,7 +1888,7 @@ html,body,.sheet-bg,#msgDetailBg{scrollbar-width:none !important;}
 .pa-pane{margin:21.3px 0 0;padding:0;}
 form.pa-pane[hidden]{display:none;}
 .pa-f{position:relative;display:flex;align-items:center;height:54.7px;margin:0 0 19.3px;box-sizing:border-box;border:.67px solid #e3b4bd;border-radius:9px;background:transparent;transition:box-shadow .15s,border-color .15s;}
-.pa-f.pa-pw,.pa-f.pa-ref{height:60.7px;}
+.pa-f.pa-pw{height:60.7px;}   /* the Invitation code box is as tall as the phone box (54.7), measured on the owner's picture */
 .pa-f:focus-within{border-color:#dba6b0;box-shadow:0 0 0 2px rgba(229,125,148,.26);}
 .pa-f input{flex:0 0 auto;box-sizing:border-box;height:35.3px;margin:0;padding:0 0 0 13px;border:0;border-radius:9px;background:transparent;color:#263048;font:700 14px/35px Roboto,'Segoe UI',system-ui,sans-serif;outline:0;min-width:0;-webkit-appearance:none;appearance:none;}
 .pa-f input:focus{outline:3px solid rgba(229,125,148,.26);outline-offset:0;}
@@ -1916,6 +1916,7 @@ form.pa-pane[hidden]{display:none;}
 .pa-rem input:checked + i::after{content:'';display:block;width:3.4px;height:6.4px;margin:1.2px 0 0 3.9px;border:solid #fff;border-width:0 1.8px 1.8px 0;transform:rotate(45deg);}
 .pa-btn{display:block;width:100%;height:41.7px;margin:0;padding:0;border:0;border-radius:21px;color:#fff;font:700 13px/41.7px Roboto,'Segoe UI',system-ui,sans-serif;letter-spacing:1.1px;text-transform:uppercase;cursor:pointer;
   background:linear-gradient(105deg,#e5231f 0%,#e73e37 25%,#ef625c 67%,#f27c77 100%);box-shadow:0 6px 12px rgba(100,80,125,.32);}
+#regBtn{margin-top:23px;}   /* the owner's picture: the Register button sits 23 px under the Invitation code box (the boxes are 19.3 apart) */
 .pa-btn:active:not(:disabled){transform:scale(.99);}
 .pa-btn:disabled{background:#f0ebee;color:#a8aab8;box-shadow:0 0 0 1px #e4d9de inset;}
 .pa-alt{margin:20px 0 0;text-align:center;font:700 14px/16px Roboto,'Segoe UI',system-ui,sans-serif;color:#74748a;}

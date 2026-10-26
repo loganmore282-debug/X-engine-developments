@@ -471,10 +471,11 @@ function paRestScroll(){
   const ref = $('regReferral'), invited = !!(ref && (ref.value || '').trim()) && $('registerPane').style.display !== 'none';
   sc.scrollTop = invited ? 0 : PA_REST;
 }
-// The invitation box is there only when the member arrived through an invitation link (it carries the code).
+// The invitation box is ALWAYS on Create Account (owner): an invitation link fills it with the code, otherwise the member can type one. Only the scroll rest
+// differs: with a code the page rests at the very top (banner showing), without one it rests scrolled down.
 function paSyncInvite(){
   const ref = $('regReferral'); if (!ref) return;
-  const box = ref.closest('.pa-f'); if (box) box.style.display = (ref.value || '').trim() ? '' : 'none';
+  const box = ref.closest('.pa-f'); if (box) box.style.display = '';
   paRestScroll();
 }
 // The sign-in password boxes are switched off whenever the sign-in screen is hidden: with a password box anywhere in the page Chrome offers "Use saved
