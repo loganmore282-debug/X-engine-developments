@@ -1018,6 +1018,8 @@ function applyBootArtwork(ai, ci){
   applyAuthLogo();
   applyAuthTagline();
   applyAuthBackgrounds();
+  // The tab pictures and the two floating pictures arrive here, usually after the app is already showing: paint them now, not on the next tab tap.
+  try { updateNavIcons(); } catch (_) {}
   // Repaint Home for the banner and animated profile artwork. The brand-logo
   // nodes are patched in place above; other art consumers render on open.
   try { if (STATE.page === 'home' && $('app') && $('app').style.display !== 'none') paintHome(); } catch (_) {}
