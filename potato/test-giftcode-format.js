@@ -35,7 +35,7 @@ const c = 'HPDABM8C5L';
 check(tcHash(c) === tcHash('HPDABM8C5L') && tcHash(c) !== tcHash('HPDABM8C5M') && /^[0-9a-f]{64}$/.test(tcHash(c)), 'a code is looked up by its SHA-256, one code one hash');
 const blob = tcEncrypt(c);
 check(tcDecrypt(blob) === c && !blob.includes(c) && tcEncrypt(c) !== blob, 'the stored copy is AES-GCM encrypted (different every time, the code is not in it) and reads back');
-check(tcDecrypt(blob.slice(0, -2) + 'AA') === '' && tcDecrypt('garbage') === '' && tcDecrypt('') === '', 'a tampered or broken copy reads as empty, never as a wrong code');
+check(tcDecrypt(blob.slice(0, 20) + (blob[20] === 'A' ? 'B' : 'A') + blob.slice(21)) === '' && tcDecrypt('garbage') === '' && tcDecrypt('') === '', 'a tampered or broken copy reads as empty, never as a wrong code');
 check(/codeLower: hash, codeEnc: tcEncrypt\(code\)/.test(src) && /code: 'tc_' \+ hash\.slice\(0, 20\)/.test(src), 'a new code is saved by hash with an encrypted copy, never in clear');
 check(/code: tcDecrypt\(c\.codeEnc\) \|\| c\.code/.test(src), 'the admin list decrypts it (older codes show as before)');
 check(/function treasureKeyLockedOut/.test(src) && /rec\.length >= 8/.test(src) && /TOO_MANY_WRONG_KEYS/.test(src), 'eight wrong keys in 10 minutes lock a member out of the chest for the rest of the 10 minutes');
