@@ -477,10 +477,16 @@ function paSyncInvite(){
   const box = ref.closest('.pa-f'); if (box) box.style.display = (ref.value || '').trim() ? '' : 'none';
   paRestScroll();
 }
+// The sign-in password boxes are switched off whenever the sign-in screen is hidden: with a password box anywhere in the page Chrome offers "Use saved
+// password?" over every other box (the Deposit amount, for one). They are switched on again when the sign-in screen shows.
+function paLockPasswordBoxes(lock){
+  document.querySelectorAll('#authScreen input[type=password]').forEach(i => { i.disabled = !!lock; });
+}
 (function(){
   const as = $('authScreen'); if (!as || !window.MutationObserver) return;
   let hidden = as.style.display === 'none';
-  new MutationObserver(() => { const now = as.style.display === 'none'; if (hidden && !now) { paRestScroll(); paLogoPlay(); } hidden = now; }).observe(as, { attributes: true, attributeFilter: ['style'] });
+  paLockPasswordBoxes(hidden);
+  new MutationObserver(() => { const now = as.style.display === 'none'; if (hidden && !now) { paLockPasswordBoxes(false); paRestScroll(); paLogoPlay(); } if (now) paLockPasswordBoxes(true); hidden = now; }).observe(as, { attributes: true, attributeFilter: ['style'] });
 })();
 // Switching between the two pages, as on the owner's recording (60 fps): the page goes blank at once, the banner fades in over 0.25 s, then the title and
 // every box / button / link rise ~28 px into place while fading in, one after the other (the title after 0.17 s, then every 0.06 s, 0.3 s each).
@@ -4062,7 +4068,7 @@ function openDepositFormSheet(){
   openSheet('Deposit', `<div class="pt-dep">
     <div class="pt-chips" id="depChips">${chipAmts.map(a => `<button type="button" class="dep-chip pt-chip${a === _depChosenAmount ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a})">${a}</button>`).join('')}</div>
     <div class="pt-avail">Available:<b>${esc(vMoney2((STATE.account || {}).walletBalance))}</b></div>
-    <div class="pt-amt"><span>${esc(cur())}</span><input id="depAmount" type="text" inputmode="numeric" maxlength="9" value="${_depChosenAmount || ''}" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');syncDepositQuickAmt()" autocomplete="off"></div>
+    <div class="pt-amt"><span>${esc(cur())}</span><input id="depAmount" type="text" inputmode="numeric" maxlength="9" value="${_depChosenAmount || ''}" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');syncDepositQuickAmt()" name="pt_amount" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore></div>
     <div class="pt-meths" id="depPays">${names.map((n, i) => `<button type="button" class="${i === startOn ? 'on' : ''}" onclick="pickPayLabel(this)">${ptIconHtml('payicon', '', 'pt-payic')}<span>${esc(brandName())} ${esc(n)}</span></button>`).join('')}</div>
     <button class="pt-pay" id="depSubmitBtn" type="button" onclick="submitDeposit()">Pay <b id="depPayAmt">${esc(numGroup(_depChosenAmount, true))}</b></button>
     <div class="pt-notes">
