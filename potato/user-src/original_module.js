@@ -1978,6 +1978,7 @@ window.showPage = async function(name){
   // maybeAnnounceAfterHomeNav() needs to know what tab a member is arriving
   // at Home FROM (Assets/Network/Account), not just that they landed on it.
   const prevPage = STATE.page;
+  const prevSheet = _openSheetTitle;   // Deposit / Withdraw open when a tab is tapped: Home then shows its dialog like a Back does
   // The bottom bar now stays visible over sheets (Deposit, Withdraw, Wallet
   // and the rest), so a tab can be tapped while one is open. Close it first,
   // otherwise the new tab paints underneath a sheet that is still covering
@@ -2057,7 +2058,7 @@ window.showPage = async function(name){
     // Home's paint ordering is unaffected -- only the announcement's own
     // timing depends on this not being awaited.
     renderHome();
-    maybeAnnounceAfterHomeNav(prevPage);
+    maybeAnnounceAfterHomeNav(prevPage, prevSheet);
   }
   else if (name === 'assets') await renderAssets();
   else if (name === 'network') await renderNetwork();
@@ -3838,14 +3839,15 @@ function isScrollLockOverlayOpen(){
 // removed -- nothing extra needed excluding them.
 // Back on Home it waits for the page to appear first, briefly (as Cookie's does while its page loads), so the dialog never jumps in on top of a half-drawn page.
 var _annNavTimer = null;
-function maybeAnnounceAfterHomeNav(prevPage){
-  if (['assets', 'promo', 'network', 'salary', 'account'].indexOf(prevPage) === -1) return;
+function maybeAnnounceAfterHomeNav(prevPage, prevSheet){
+  const fromSheet = prevSheet === 'Deposit' || prevSheet === 'Withdraw';   // the Home icon tapped while Deposit / Withdraw is open
+  if (!fromSheet && ['assets', 'promo', 'network', 'salary', 'account'].indexOf(prevPage) === -1) return;
   if (isAnyOverlayOpen()) return;         // something else is already in front
   clearTimeout(_annNavTimer);
   _annNavTimer = setTimeout(() => {
     if (STATE.page !== 'home' || isAnyOverlayOpen()) return;   // left Home again, or something opened meanwhile
     maybeShowAnnouncement();
-  }, 350);
+  }, fromSheet ? 750 : 350);   // after Deposit / Withdraw the Home icons pop first, then the dialog opens over them
 }
 // Owner: the dialog also comes when Back is pressed on Deposit or Withdraw (the arrow in the page's header or the phone's Back button), like Cookie's.
 // Only a plain Back: a sheet that closes itself after a submitted deposit/withdrawal, or because a tab was tapped, does not call this.
