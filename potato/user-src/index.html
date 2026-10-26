@@ -327,7 +327,7 @@ a{color:inherit;}
 .wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
 #loadingScreen{position:fixed;inset:0;overflow:hidden;background:#c4121e;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:65px;box-sizing:border-box;z-index:500;}
 /* The box picture is the admin's (Banners > Loading screen box picture); the corners are rounded here, whatever the picture is. */
-#loadingScreen .ld-box{width:150px;height:150px;border-radius:14px;background:center/cover no-repeat;flex:none;}
+#loadingScreen .ld-box{width:150px;height:150px;border-radius:14px;background:center/contain no-repeat;flex:none;}
 #loadingScreen .ld-name{margin-top:15px;color:#fff;font:700 22px/26px 'Roboto',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;letter-spacing:.3px;text-align:center;min-height:26px;}
 #loadingScreen .ld-bar{margin-top:26px;width:187.7px;height:5px;border-radius:3px;background:rgba(255,255,255,.21);overflow:hidden;flex:none;}
 #loadingScreen .ld-bar i{display:block;height:100%;width:0;border-radius:3px;background:#fff;}
@@ -2384,6 +2384,21 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
   -webkit-text-fill-color:#151515;caret-color:#151515;-webkit-box-shadow:0 0 0 0 transparent inset;box-shadow:0 0 0 0 transparent inset;
   transition:background-color 600000s 0s,color 600000s 0s;}
 
+/* Pictures are shown WHOLE, as uploaded: a banner takes the height its picture needs instead of cropping it into a fixed frame. */
+.pt-home .home-banner:has(img){height:auto;}
+.pt-home .home-banner>img{height:auto;object-fit:fill;}
+.pt-home .mg-track{height:auto;align-items:flex-start;}
+.pt-home .mg-track img{height:auto;object-fit:fill;}
+.pt-tb-banner:has(>img){height:auto;min-height:92px;}
+.pt-tb-banner>img{position:relative;inset:auto;display:block;width:100%;height:auto;object-fit:fill;}
+.pt-shero:has(>img){height:auto;min-height:120px;}
+.pt-shero>img{position:relative;inset:auto;display:block;width:100%;height:auto;object-fit:fill;}
+.pt-abban:has(>img){height:auto;min-height:60px;}
+.pt-abban>img{position:relative;inset:auto;display:block;width:100%;height:auto;object-fit:fill;}
+.pt-mybanner:has(.pt-mysize){height:auto;min-height:150px;}
+.pt-mysize{display:block;width:100%;height:auto;visibility:hidden;}
+.pt-mybg{background-size:calc(100% - 28px) calc(100% - 28px);background-position:center;}
+.pt-img>img{object-fit:contain;}
 /* V2-END */
 </style>
 <script data-potato-idle>

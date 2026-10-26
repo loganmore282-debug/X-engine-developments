@@ -3010,6 +3010,7 @@ async function renderAccount(){
   const html = `
 <div class="v-page pt-my">
   <section class="pt-mybanner">
+    ${STATE.myBanner ? `<img class="pt-mysize" src="${esc(STATE.myBanner)}" alt="">` : ''}
     <div class="pt-mybg" style="${STATE.myBanner ? `background-image:url(${esc(JSON.stringify(STATE.myBanner).slice(1, -1))});` : ''}opacity:${Number.isFinite(op) ? Math.min(100, Math.max(0, op)) / 100 : 1};filter:blur(${Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0}px)"></div>
     <div class="pt-mid"><span class="pt-av">${avatar}</span><b>${esc(phone)}</b><i>VIP ${Number(a.vipLevel) || 0}</i></div>
     <div class="pt-mystat"><div><span>Balance</span><b id="myBalance" class="pt-fit">${esc(vMoney2(a.walletBalance))}</b></div><div><span>Total Income</span><b id="myIncome" class="pt-fit">${esc(vMoney2(a.totalEarned))}</b></div></div>
