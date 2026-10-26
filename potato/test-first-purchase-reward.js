@@ -81,7 +81,7 @@ function setup(input=seed()){
   const c=vm.createContext({ db, console:{log(){},warn(){},error(){}},
     FieldValue:{ increment:n=>({op:'inc',n}), arrayUnion:(...items)=>({op:'union',items}), delete:()=>({op:'delete'}), serverTimestamp:()=>new Date() },
     getSettings:async()=>rates, getProductByKey:async k=>products[k]?{...products[k]}:null,
-    productOpenState:()=>({open:true}), productExpectedReturn:(t)=>t.price*3, investmentMaturityMs:(m,d)=>m+d*86400000,
+    productOpenState:()=>({open:true}), productExpectedReturn:(t)=>t.price*3, payoutDueAtMs:(m,k)=>m+k*86400000,
     round2:n=>Math.round(n*100)/100, fmtMoney:n=>'UGX '+n, nowStr:()=>({date:'2026-10-21',time:'10:00'}),
     newStatementId:()=>'s-'+ ++serial, verifyAuth:async req=>req.uid, grantTurntableSpins(){}, _vipCache:new Map(),
     app:{post:(p,h)=>{ctxRoutes[p]=h}}

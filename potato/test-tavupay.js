@@ -6,7 +6,7 @@ const fs = require('node:fs'), vm = require('node:vm'), crypto = require('node:c
 const cp = require('node:child_process');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); }; const eq = (a, b, m) => { n++; assert.deepEqual(JSON.parse(JSON.stringify(a === undefined ? null : a)), JSON.parse(JSON.stringify(b)), m); };
 const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
-const a = src.indexOf('// TAVUPAY (recharges only)'), b = src.indexOf('// ── LOCKED CASHBACK');
+const a = src.indexOf('// TAVUPAY (recharges only)'), b = src.indexOf('// ── DAILY CASHBACK AT 00:00');
 ok(a > 0 && b > a, 'the TavuPay block exists');
 const block = src.slice(a, b);
 

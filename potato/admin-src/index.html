@@ -1460,7 +1460,7 @@ async function renderAnalytics(silent){
       </div>
     </div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Cashback schedule for ${esc(selected.day||a.today)}</h2>
-      <p class="muted">Locked cashback: a product pays nothing while it runs, and its whole cashback is credited at its closing time (the time of day it was bought, after the cycle's days). Scheduled cashback is credited to wallets; members decide when to withdraw. Future purchases and deposits are unknown.</p>
+      <p class="muted">Daily cashback: each product pays one payment at every midnight (00:00, the first one at the first midnight after purchase) until its last day. Scheduled cashback is credited to wallets; members decide when to withdraw. Future purchases and deposits are unknown.</p>
       <div class="cards">
         <div class="stat"><div class="n">${ugx(schedule.scheduledAmount)}</div><div class="l">Contract cashback scheduled for this day</div></div>
         <div class="stat"><div class="n">${ugx(schedule.unpaidAmount)}</div><div class="l">This day's cashback still unpaid (eligible accounts)</div></div>
@@ -1517,7 +1517,7 @@ async function renderAnalytics(silent){
       <div class="cards">
         <div class="stat"><div class="n">${plAct.count||0}</div><div class="l">Active plans</div></div>
         <div class="stat"><div class="n">${ugx(plAct.invested||0)}</div><div class="l">Invested in active plans</div></div>
-        <div class="stat"><div class="n">${ugx(plAct.remaining||0)}</div><div class="l">Cashback still to credit at maturity</div></div>
+        <div class="stat"><div class="n">${ugx(plAct.remaining||0)}</div><div class="l">Cashback still to credit (the remaining midnights)</div></div>
         <div class="stat"><div class="n">${plAct.dueNow||0}</div><div class="l">Plans past their closing time, awaiting payment</div></div>
       </div>
       <h3 style="margin:16px 0 6px">Most purchased products</h3>

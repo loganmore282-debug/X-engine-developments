@@ -265,6 +265,17 @@ var _memberSession = window.createPotatoIdleSession('potato_member_session', fun
   window._sessionFailureMessage = '';
 }, () => post('/auth/session/activity', {}));
 var _apiPending = new Map();
+// The server's own clock (X-Server-Time on every reply): the offset from this phone's clock, from the quickest round trip seen, so the Orders countdown to
+// the 00:00 settlement and "Today's Income" follow the SERVER's time even when the phone's clock is wrong. Half the round trip is taken as the delay.
+var _ptSkewMs = 0, _ptSkewRtt = Infinity;
+function ptNoteServerClock(resp, sentAt){
+  try {
+    const sv = Number(resp.headers.get('X-Server-Time')); if (!sv) return;
+    const now = Date.now(), rtt = now - sentAt;
+    if (rtt <= _ptSkewRtt + 150 || _ptSkewRtt === Infinity) { _ptSkewRtt = Math.min(_ptSkewRtt, rtt); _ptSkewMs = sv - (sentAt + rtt / 2); }
+  } catch (_) {}
+}
+function ptServerNow(){ return Date.now() + _ptSkewMs; }
 function api(path, opts){
   opts = opts || {};
   // Share only concurrent reads. Payments and all other writes always run once
@@ -335,7 +346,9 @@ async function apiRequest(path, opts){
       finally { if (tokenAbort) controller.signal.removeEventListener('abort', tokenAbort); }
     }
     if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', stale: true, message: 'Session changed' };
+    const sentAt = Date.now();
     const resp = await fetch(API_BASE + path, Object.assign({}, opts, { headers, signal: controller.signal }));
+    ptNoteServerClock(resp, sentAt);
     data = await resp.json();
     if (resp.status === 401 && !isPublicCall && STATE.authEpoch === startEpoch && STATE.user) {
       window._sessionFailureMessage = 'Your login session was rejected. Please log in again. If this continues, contact support.';
@@ -2484,7 +2497,7 @@ function vOwnedCardHtml(inv){
 var PT_EARN_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'mission_salary', 'mission_deposit_reward'];
 function ptRegionOffsetMs(){ return (Number(REGION && REGION.utcOffsetMin) || 0) * 60000; }
 function ptTodayIncome(){
-  const off = ptRegionOffsetMs(), day = Math.floor((Date.now() + off) / 86400000);
+  const off = ptRegionOffsetMs(), day = Math.floor((ptServerNow() + off) / 86400000);
   let sum = 0;
   (STATE.transactions || []).forEach(t => {
     if (PT_EARN_TYPES.indexOf(t.type) < 0) return;
@@ -2494,20 +2507,31 @@ function ptTodayIncome(){
   return sum;
 }
 // Time left until the next 00:00 of the region's day, as "HH:MM:SS".
+function ptSecondsToMidnight(){ return 86400 - Math.floor(((ptServerNow() + ptRegionOffsetMs()) / 1000) % 86400); }
 function ptTimeToMidnight(){
-  const s = 86400 - Math.floor(((Date.now() + ptRegionOffsetMs()) / 1000) % 86400);
+  const s = ptSecondsToMidnight();
   const pad = n => String(n).padStart(2, '0');
   return pad(Math.floor(s / 3600) % 24) + ':' + pad(Math.floor(s / 60) % 60) + ':' + pad(s % 60);
 }
-var _ptClockTimer = null;
+var _ptClockTimer = null, _ptLastLeft = 0;
+// The flip clock ticks on the SERVER's whole seconds (each tick is aimed at the next second boundary, so it never drifts a second behind), and the moment it
+// passes 00:00:00 the Orders page is read again -- twice, 2 s and 7 s later, because every member's payment is made in the first seconds after midnight.
 function ptStartIncomeClock(){
-  if (_ptClockTimer) { clearInterval(_ptClockTimer); _ptClockTimer = null; }
-  _ptClockTimer = setInterval(() => {
+  if (_ptClockTimer) { clearTimeout(_ptClockTimer); _ptClockTimer = null; }
+  _ptLastLeft = 0;
+  const tick = () => {
+    _ptClockTimer = null;
     const root = document.querySelector('.pt-cd .pt-fc');
-    if (!root || STATE.page !== 'assets') { clearInterval(_ptClockTimer); _ptClockTimer = null; return; }
+    if (!root || STATE.page !== 'assets') return;
     ptFlipClockSet(root, ptTimeToMidnight());
-  }, 1000);
+    const left = ptSecondsToMidnight();
+    if (_ptLastLeft && left > _ptLastLeft + 3600) { setTimeout(ptRefreshAfterMidnight, 2000); setTimeout(ptRefreshAfterMidnight, 7000); }
+    _ptLastLeft = left;
+    _ptClockTimer = setTimeout(tick, 1000 - (ptServerNow() % 1000) + 8);
+  };
+  _ptClockTimer = setTimeout(tick, 1000 - (ptServerNow() % 1000) + 8);
 }
+function ptRefreshAfterMidnight(){ if (STATE.page === 'assets' && !_openSheetTitle) renderAssets(); }
 function paintAssets(loading){
   // Running products first, newest first inside each group; the id is the last tie-break so the order never shuffles between refreshes.
   const owned = (STATE.investments || []).filter(i => i.status === 'active' || i.status === 'matured').sort((x, y) =>
