@@ -1907,7 +1907,20 @@ document.addEventListener('visibilitychange', () => {
 });
 // The page's appearing animation (see .mg-enter in the MG styles): on every tab change, and again when a sheet is closed (the back arrow, the phone's
 // Back button) so the page underneath comes back the same way.
-function replayPageIn(){ const ph = $('pageHost'); if (ph) { ph.classList.remove('mg-enter'); void ph.offsetWidth; ph.classList.add('mg-enter'); } }
+var _popInTimer = null;
+function replayPageIn(){
+  const ph = $('pageHost');
+  if (ph) { ph.classList.remove('mg-enter'); void ph.offsetWidth; ph.classList.add('mg-enter'); }
+  // Home: its four buttons pop in again, for a moment only (a repaint of Home a little later must not pop them again).
+  if (ph) {
+    ph.classList.remove('pt-popin');
+    if (STATE.page === 'home') {
+      void ph.offsetWidth; ph.classList.add('pt-popin');
+      if (_popInTimer) clearTimeout(_popInTimer);
+      _popInTimer = setTimeout(() => { _popInTimer = null; ph.classList.remove('pt-popin'); }, 900);
+    }
+  }
+}
 window.navigatePage = function(name){
   dismissNotify();
   if (STATE.page === name && !document.querySelector('.sheet-bg.show,#msgDetailBg.show,#depStatusBg.show')) return;

@@ -1764,7 +1764,8 @@ html,body,.sheet-bg,#msgDetailBg{scrollbar-width:none !important;}
 .ann-sheet.mg-ann-grow .mg-ann-img{animation:mgAnnFade .2s ease-out .16s backwards;}
 .ann-sheet.mg-ann-grow .mg-ann-x,.ann-sheet.mg-ann-grow h2,.ann-sheet.mg-ann-grow .mg-ann-join{animation:mgAnnFade .2s ease-out .36s backwards;}
 @keyframes mgAnnFade{from{opacity:0;}to{opacity:1;}}
-@media (prefers-reduced-motion:reduce){.ann-bg,.ann-sheet,.ann-sheet .mg-ann-img,.ann-sheet .mg-ann-x,.ann-sheet h2,.ann-sheet .mg-ann-join{transition:none !important;animation:none !important;}}
+@media (prefers-reduced-motion:reduce){.ann-bg,.ann-sheet,.ann-sheet .mg-ann-img,.ann-sheet .mg-ann-x,.ann-sheet h2,.ann-sheet .mg-ann-join{transition:none !important;animation:none !important;}
+}
 /* Deposit waiting page (polling): no box. A green phone badge with rings spreading from it, the amount, a three-step timeline (sent, approve, balance updated)
    and a "checking automatically" line. The tick and cross results keep the card. */
 .pay-card.pl{background:none;border:0;box-shadow:none;padding:6px 0 0;max-width:330px;}
@@ -1961,6 +1962,13 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .pt-quick button{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:13.4px 0 0;border:0;background:none;cursor:pointer;color:#1a1a1a;font:500 11.4px/16px Roboto,'Segoe UI',system-ui,sans-serif;-webkit-tap-highlight-color:transparent;}
 .pt-quick .pt-qi{display:block;width:40.5px;height:40.5px;object-fit:contain;margin-bottom:1.7px;}
 .pt-quick .pt-qi-empty{width:40.5px;}
+/* Arriving at Home (a tab tap, or back from a page opened on it): the four buttons pop in one after another, traced from the owner's screen recording
+   (60 fps): each grows from about half size and see-through to 1.2 times, then settles at full size in about 0.36 s; the next one starts about 0.065 s later. */
+@keyframes ptQuickPop{0%{transform:scale(.55);opacity:0;}45%{transform:scale(1.2);opacity:1;animation-timing-function:cubic-bezier(.3,.1,.4,1);}100%{transform:scale(1);opacity:1;}}
+.pt-popin .pt-quick button{animation:ptQuickPop .36s cubic-bezier(.2,.7,.3,1) both;transform-origin:50% 55%;}
+.pt-popin .pt-quick button:nth-child(2){animation-delay:.065s;}
+.pt-popin .pt-quick button:nth-child(3){animation-delay:.13s;}
+.pt-popin .pt-quick button:nth-child(4){animation-delay:.195s;}
 .pt-list{margin-top:15px;}
 .pt-card{display:grid;grid-template-columns:132px minmax(0,1fr);height:206px;margin:0 0 15px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 6px 18px -10px rgba(70,80,140,.2);}
 .pt-img{position:relative;overflow:hidden;border-right:1px solid #eef0f5;background:#fff;}
@@ -2309,7 +2317,6 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .pt-ab{padding:0 0 24px;}
 .pt-abban{position:relative;height:205px;overflow:hidden;border-radius:0 0 20px 20px;background:linear-gradient(135deg,#e5231d,#f27c77);}
 .pt-abban>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
-.pt-abban .pt-dlback{display:none;}
 .pt-ablogo{display:block;position:relative;z-index:3;width:61.5px;height:61.5px;margin:-30px auto 0;box-sizing:border-box;border:3px solid #fff;border-radius:50%;background:#e5231d;overflow:hidden;box-shadow:0 6px 14px -6px rgba(0,0,0,.4);}
 .pt-ablogo img{width:100%;height:100%;object-fit:cover;display:block;}
 .pt-abhtml{padding:12px 14px 0;font:400 13px/20px Roboto,sans-serif;color:#33425a;}
@@ -2396,6 +2403,10 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 .pt-home .home-banner:has(img){min-height:120px;}
 .pt-mysize{display:block;width:100%;height:auto;max-height:180.5px;object-fit:cover;object-position:center top;}
 .pt-img>img{object-fit:contain;}
+/* The glossy band that crosses Join Channel: 0.2 s from the left edge to the right edge, then a rest, every 1.4 s (traced from the owner's recording). */
+.ann-sheet .mg-ann-join{position:relative;overflow:hidden;}
+.ann-sheet .mg-ann-join::after{content:'';position:absolute;top:-8%;bottom:-8%;left:-32%;width:24%;transform:skewX(-26.6deg);background:linear-gradient(90deg,rgba(255,255,255,0) 0,rgba(255,255,255,.22) 30%,rgba(255,255,255,.46) 62%,rgba(255,255,255,.12) 88%,rgba(255,255,255,0) 100%);animation:ptJoinSweep 1.4s linear .35s infinite;pointer-events:none;}
+@keyframes ptJoinSweep{0%{left:-32%;}14.3%{left:108%;}100%{left:108%;}}
 /* V2-END */
 </style>
 <script data-potato-idle>

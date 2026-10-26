@@ -127,6 +127,9 @@ async function member() {
     ok(/Reward claimed/.test(rd('user-src/original_module.js')) && /appClaimed: u\.appClaimed === true/.test(rd('server.js')) && /\.pt-dlbtn\.claim\.claimed\{background:#f5f9fc/.test(rd('user-src/index.html')), 'a member who has taken the app reward sees the pale "Reward claimed" button');
     ok(/class="pt-gcbox"[^>]*>\\ud83c\\udf81/.test(rd('user-src/original_module.js')) && /@keyframes ptGiftFloat/.test(rd('user-src/index.html')) && !/giftbox/.test(rd('server.js')), 'the Gift Code gift box is built in (no upload) and floats');
     ok(/\.pt-og-card\{[^}]*border-radius:10\.5px/.test(rd('user-src/index.html')), 'order gift cards have the corner radius of the screenshot');
+    ok(/@keyframes ptQuickPop\{0%\{transform:scale\(\.55\)[^}]*\}45%\{transform:scale\(1\.2\)/.test(rd('user-src/index.html')) && /\.pt-popin \.pt-quick button:nth-child\(4\)\{animation-delay:\.195s/.test(rd('user-src/index.html')) && /classList\.add\('pt-popin'\)/.test(rd('user-src/original_module.js')), 'arriving at Home, the four buttons pop in one after another');
+    ok(/@keyframes ptJoinSweep\{0%\{left:-32%;\}14\.3%\{left:108%;\}/.test(rd('user-src/index.html')) && /animation:ptJoinSweep 1\.4s linear/.test(rd('user-src/index.html')), 'Join Channel has the glow sweep: 0.2 s across, every 1.4 s');
+    ok(!/\.pt-abban \.pt-dlback\{display:none/.test(rd('user-src/index.html')), 'the About page keeps its back arrow');
     ok(/ptIconHtml\('payicon'/.test(rd('user-src/original_module.js')), 'every deposit pay button shows that one icon'); }
 
   realLog(fails ? fails + ' FAILED of ' + checks : 'PASS: Potato pages server routes (' + checks + ' checks)');
