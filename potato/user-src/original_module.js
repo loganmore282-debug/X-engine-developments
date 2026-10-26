@@ -3561,7 +3561,7 @@ window.submitTradePasswordChange = async function(){
 // full-screen win state with the amount won and the new balance.
 window.openChestSheet = function(){
   openSheet('Gift Code', `<div class="pt-gc">
-    <section class="pt-gchero">${ptIconHtml('giftbox', 'gift', 'pt-gcbox')}<h2>Mystery Gift Code</h2><p>One free redeem per day</p></section>
+    <section class="pt-gchero"><span class="pt-gcbox" aria-hidden="true">\ud83c\udf81</span><h2>Mystery Gift Code</h2><p>One free redeem per day</p></section>
     <section class="pt-gcform"><label for="chestKey">Gift Code Key</label>
       <div class="pt-gcin"><span>\ud83d\udddd\ufe0f</span><input id="chestKey" type="text" placeholder="${esc(((STATE.settings || {}).giftCodeHint) || 'Enter gift code (T-XXXX)')}" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"></div>
       <button class="pt-gcgo" id="chestOpenBtn" type="button" onclick="submitChestKey()">Redeem Gift Code</button>
@@ -4645,6 +4645,12 @@ window.claimOrderGift = async function(key, btn){
 // ── DOWNLOAD APP ──
 var PT_DL_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>';
 var PT_DL_GIFT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M5 12v8h14v-8M12 8H8a2.5 2.5 0 1 1 0-5c2.5 0 4 3 4 5zm0 0h4a2.5 2.5 0 1 0 0-5c-2.5 0-4 3-4 5z"/></svg>';
+var PT_DL_TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.6l4.4 4.4L19 7.4"/></svg>';
+// The Claim button, or "Reward claimed" (pale, not tappable) once this member has taken it.
+function ptClaimButtonHtml(claim){
+  if (STATE.account && STATE.account.appClaimed === true) return `<button type="button" class="pt-dlbtn claim claimed" id="ptAppClaimBtn" disabled>${PT_DL_TICK}<span>Reward claimed</span></button>`;
+  return claim > 0 ? `<button type="button" class="pt-dlbtn claim" id="ptAppClaimBtn" onclick="claimAppReward(this)">${PT_DL_GIFT}<span>Claim ${esc(numGroup(claim, true))}</span></button>` : '';
+}
 window.openDownloadPage = function(){
   const claim = Number((STATE.settings || {}).appClaimAmount) || 0;
   const faq = [['Installation is blocked by my phone', 'Open Settings, find "Special app access" or "Install unknown apps", and allow your browser to install apps. Then run the APK file again from your browser\'s downloads.'],
@@ -4659,7 +4665,7 @@ window.openDownloadPage = function(){
       <p class="sub">Official App \u00b7 Fast &amp; Secure</p>
       <div class="chips"><span>Android 7.0+</span><span>3.4 MB</span><span>Official</span></div>
       <button type="button" class="pt-dlbtn" onclick="promptInstallApp()">${PT_DL_DOWN}<span>Download APK</span></button>
-      ${claim > 0 ? `<button type="button" class="pt-dlbtn claim" onclick="claimAppReward(this)">${PT_DL_GIFT}<span>Claim ${esc(numGroup(claim, true))}</span></button>` : ''}
+      ${ptClaimButtonHtml(claim)}
       <p class="cap">Free download \u00b7 Tap the button above to install</p>
     </section>
     <section class="pt-dlcard"><h3><i></i>Install in 3 steps</h3>
@@ -4680,8 +4686,11 @@ window.claimAppReward = async function(btn){
   const r = await post('/app/claim', {});
   if (r.stale) return;
   if (btn) btn.disabled = false;
+  if (r.code === 'ALREADY_CLAIMED') { if (STATE.account) STATE.account.appClaimed = true; const cb0 = $('ptAppClaimBtn'); if (cb0) cb0.outerHTML = ptClaimButtonHtml(0); return notify(r.message || 'You have already claimed this.'); }
   if (r.status !== 'success') return notify(r.message || 'Could not claim right now');
   if (STATE.account && r.walletBalance != null) STATE.account.walletBalance = r.walletBalance;
+  if (STATE.account) STATE.account.appClaimed = true;
+  const cb = $('ptAppClaimBtn'); if (cb) cb.outerHTML = ptClaimButtonHtml(0);
   ptClaimDialog(r.amount);
   refreshTransactionsCache().catch(() => {});
 };

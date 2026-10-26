@@ -2227,9 +2227,11 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 /* Gift Code */
 .pt-gc{padding:3.3px 14.9px 24px;}
 .pt-gchero{position:relative;height:146.4px;border-radius:24px;background:#e5231d;box-shadow:0 14px 22px -14px rgba(229,35,29,.55);text-align:center;color:#fff;}
-.pt-gchero .pt-gcbox{position:absolute;left:50%;top:14px;width:56px;height:auto;max-height:62px;margin-left:-28px;object-fit:contain;}
+.pt-gchero .pt-gcbox{position:absolute;left:50%;top:15px;width:70px;margin-left:-35px;font:400 55px/62px 'Noto Color Emoji','Apple Color Emoji','Segoe UI Emoji',sans-serif;text-align:center;filter:drop-shadow(0 9px 9px rgba(90,0,0,.5));animation:ptGiftFloat 3s infinite;will-change:transform;}
+/* The gift box floats up and down, 3 s a round, a smooth sine-like ease (traced from the owner's screen recording: 28 of 3 pixels = 9.3 css px travel). */
+@keyframes ptGiftFloat{0%,100%{transform:translateY(3px);animation-timing-function:cubic-bezier(.37,0,.63,1);}50%{transform:translateY(-6.3px);animation-timing-function:cubic-bezier(.37,0,.63,1);}}
 .pt-gchero h2{position:absolute;left:0;right:0;top:84px;margin:0;font:700 16.8px/22px Roboto,sans-serif;}
-.pt-gchero p{position:absolute;left:0;right:0;top:108px;margin:0;font:400 10.6px/16px Roboto,sans-serif;letter-spacing:.1px;}
+.pt-gchero p{position:absolute;left:0;right:0;top:108px;margin:0;font:400 10.6px/16px Roboto,sans-serif;letter-spacing:.1px;color:#ffd6d1;}
 .pt-gcform{margin-top:13.2px;padding:12.7px 14px 13px;border-radius:24px;background:#f4f6fd;box-shadow:0 8px 18px -12px rgba(70,80,140,.25);}
 .pt-gcform label{display:block;font:700 11px/18px Roboto,sans-serif;color:#33425a;}
 .pt-gcin{display:flex;align-items:center;height:51.3px;margin-top:4.7px;padding:0 13px 0 7.7px;border-radius:20px;background:#fde9e9;}
@@ -2247,8 +2249,8 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .pt-gcl b{color:#22b14c;}
 /* Order Gifts */
 .pt-og{padding:14px 28.4px 24px;}
-.pt-ogload{display:flex;align-items:center;justify-content:center;height:87px;border:1.4px solid #bd3330;border-radius:17px;background:#fff;box-shadow:0 8px 16px -12px rgba(70,80,140,.3);font:400 13px/18px Roboto,sans-serif;color:#8795a8;letter-spacing:.5px;}
-.pt-og-card{display:flex;align-items:center;justify-content:space-between;height:69px;margin-bottom:10.4px;padding:0 15.3px 0 14px;border:1.4px solid #bd3330;border-radius:17px;background:#fff;box-shadow:0 8px 16px -12px rgba(70,80,140,.3);}
+.pt-ogload{display:flex;align-items:center;justify-content:center;height:87px;border:1.4px solid #bd3330;border-radius:10.5px;background:#fff;box-shadow:0 8px 16px -12px rgba(70,80,140,.3);font:400 13px/18px Roboto,sans-serif;color:#8795a8;letter-spacing:.5px;}
+.pt-og-card{display:flex;align-items:center;justify-content:space-between;height:69px;margin-bottom:10.4px;padding:0 15.3px 0 14px;border:1.4px solid #bd3330;border-radius:10.5px;background:#fff;box-shadow:0 8px 16px -12px rgba(70,80,140,.3);}
 .pt-og-card .t b{display:block;font:700 14px/20px Roboto,sans-serif;color:#14304f;}
 .pt-og-card .t span{display:block;margin-top:3.3px;font:500 11.4px/16px Roboto,sans-serif;color:#8795a8;}
 .pt-og-card .t i{font-style:normal;font:700 12px/16px Roboto,sans-serif;color:#b0332f;}
@@ -2277,8 +2279,10 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .pt-dlbtn{display:flex;align-items:center;justify-content:center;gap:9px;width:calc(100% - 31.2px);height:43.7px;margin:15.6px auto 0;border:0;border-radius:21px;background:linear-gradient(180deg,#f9cf4a,#f0b92e);color:#5a2a05;font:700 13.7px/1 Roboto,sans-serif;box-shadow:0 8px 16px -8px rgba(80,20,0,.5);cursor:pointer;}
 .pt-dlbtn svg{width:18px;height:18px;}
 .pt-dlbtn.claim svg{width:13.5px;height:13.5px;}
+.pt-dlbtn.claim.claimed{background:#f5f9fc;color:#8b97a3;box-shadow:none;cursor:default;}
+.pt-dlbtn.claim.claimed svg{color:#fbfcfe;}
 .pt-dlbtn.claim{margin-top:7px;height:42.3px;font-size:11.9px;background:linear-gradient(180deg,#fff0b0,#fbe28a);}
-.pt-dlhero .cap{margin:8px 0 0;font:400 9.1px/16px Roboto,sans-serif;color:#ffd5d8;letter-spacing:.25px;}
+.pt-dlhero .cap{margin:8px 0 0;font:500 9px/16px Roboto,sans-serif;color:#f69ea0;letter-spacing:.2px;}
 .pt-dlcard{margin-top:10.7px;padding:10.9px 12.3px 2.8px;border:1px solid #f1e4e4;border-radius:24px;background:#fff;box-shadow:0 8px 18px -14px rgba(70,80,140,.25);}
 .pt-dlcard h3{display:flex;align-items:center;margin:0 0 10px;font:700 13.2px/22px Roboto,sans-serif;color:#2a1a1a;}
 .pt-dlcard h3 i{width:5.2px;height:15px;border-radius:3px;background:#d9202a;margin-right:9px;}

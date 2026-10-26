@@ -124,6 +124,9 @@ async function member() {
     ok(/POTATO_ICON_SLOTS = \[[^\]]*'payicon'/.test(rd('server.js')) && /payicon:'Deposit pay button icon/.test(rd('admin-src/index.html')), 'the admin can upload one deposit pay button icon (slot payicon)');
     ok(/_ptCountOnPaint === 'account'[^\n]*ptCountMyBalances\(\)/.test(rd('user-src/original_module.js')) && /ptCountMyBalances\(\);   \/\/ back on My/.test(rd('user-src/original_module.js')) && /_ptCountOnPaint = \(name === 'account'/.test(rd('user-src/original_module.js')), 'the My balances count up on arriving at the page and on coming back from a page opened from it, not on every repaint');
     ok(/ptSetMoney\(el, account\[key\]\)/.test(rd('user-src/original_module.js')) && /ptCountUp\(\$\('incomeTotal'\)/.test(rd('user-src/original_module.js')) && /ptCountUp\(\$\('myIncome'\)/.test(rd('user-src/original_module.js')), 'Total Income runs up together with the balance, and a figure that changes while the page is open runs up to the new amount');
+    ok(/Reward claimed/.test(rd('user-src/original_module.js')) && /appClaimed: u\.appClaimed === true/.test(rd('server.js')) && /\.pt-dlbtn\.claim\.claimed\{background:#f5f9fc/.test(rd('user-src/index.html')), 'a member who has taken the app reward sees the pale "Reward claimed" button');
+    ok(/class="pt-gcbox"[^>]*>\\ud83c\\udf81/.test(rd('user-src/original_module.js')) && /@keyframes ptGiftFloat/.test(rd('user-src/index.html')) && !/giftbox/.test(rd('server.js')), 'the Gift Code gift box is built in (no upload) and floats');
+    ok(/\.pt-og-card\{[^}]*border-radius:10\.5px/.test(rd('user-src/index.html')), 'order gift cards have the corner radius of the screenshot');
     ok(/ptIconHtml\('payicon'/.test(rd('user-src/original_module.js')), 'every deposit pay button shows that one icon'); }
 
   realLog(fails ? fails + ' FAILED of ' + checks : 'PASS: Potato pages server routes (' + checks + ' checks)');

@@ -848,7 +848,7 @@ async function getHelpBanner() {
 // (aboutlogo). Stored in the 'banners' collection as `potato-<slot>`, cached for 60 s. Only the pictures the owner's screenshots show exist.
 // Transparent cut-out ICONS the owner uploads in the admin panel (Banners > Icons); the panel removes each picture's background and crops it
 // tight before saving, so these are always PNGs. To add an icon, add its name here AND its label in admin-src (POTATO_ICON_LABELS).
-const POTATO_ICON_SLOTS = ['navhome', 'navincome', 'navteam', 'navshare', 'navmy', 'recharge', 'withdraw', 'service', 'channel', 'ordergift', 'downloadapp', 'giftbox', 'payicon'];
+const POTATO_ICON_SLOTS = ['navhome', 'navincome', 'navteam', 'navshare', 'navmy', 'recharge', 'withdraw', 'service', 'channel', 'ordergift', 'downloadapp', 'payicon'];
 const POTATO_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'promobanner', 'profilelogo', 'loaderbg', 'linkpreview', 'teambanner', 'mybanner', 'aboutbanner', 'aboutlogo', ...POTATO_ICON_SLOTS];
 const _potatoImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
@@ -4083,7 +4083,7 @@ app.get('/account', async (req, res) => {
       phone: u.phone, walletBalance: round2(u.walletBalance), totalDeposited: u.totalDeposited || 0,
       totalEarned: round2(u.totalEarned), totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
-      hasTradePin: !!u.transactionPinHash, vipLevel, withdrawAnytime: u.withdrawAnytime === true,
+      hasTradePin: !!u.transactionPinHash, vipLevel, withdrawAnytime: u.withdrawAnytime === true, appClaimed: u.appClaimed === true,
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
     // The member's OWN region, which the middleware has already put in
     // force for this request. The app re-reads its currency, dialling code
