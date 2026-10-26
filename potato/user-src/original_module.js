@@ -494,6 +494,7 @@ var _paEnterTimer = 0, _paLogoTimer = 0;
 // The round picture rises into place from below, growing and fading in (the owner's recording); on the first showing of the sign-in screen too.
 function paLogoPlay(){
   const root = $('authScroll'); if (!root) return;
+  // The rise is two-stop and runs on the compositor (translate3d + will-change in the CSS), so no frame is drawn half-way / broken.
   root.classList.remove('pa-logo-in'); void root.offsetWidth; root.classList.add('pa-logo-in');
   clearTimeout(_paLogoTimer); _paLogoTimer = setTimeout(() => root.classList.remove('pa-logo-in'), 1000);
 }
@@ -1665,32 +1666,7 @@ function hookNavTapBox(){
   const nav = document.querySelector('.bottom-nav');
   if (!nav) return;
   _navTapHooked = true;
-  nav.addEventListener('pointerdown', e => {
-    const btn = e.target.closest && e.target.closest('.navitem');
-    if (!btn) return;
-    // Re-adding a class that is ALREADY on the element does not restart a
-    // CSS animation, so tapping the same tab twice in a row would do
-    // nothing the second time. Take it off and force a reflow to replay it.
-    btn.classList.remove('nav-tap');
-    void btn.offsetWidth;
-    btn.classList.add('nav-tap');
-    // A soft ring spreads from the finger, as in the owner's recording.
-    const r = btn.getBoundingClientRect(), rip = document.createElement('i');
-    rip.className = 'mg-ripple';
-    rip.style.left = (e.clientX - r.left) + 'px'; rip.style.top = (e.clientY - r.top) + 'px';
-    btn.appendChild(rip);
-    setTimeout(() => { if (rip.parentNode) rip.parentNode.removeChild(rip); }, 560);
-  }, { passive: true });
-  // Clean the class off once it has played, so the next tap is a fresh run
-  // and nothing is left holding a finished animation.
-  nav.addEventListener('animationend', e => {
-    if (e.animationName === 'navTapSignal') {
-      // The animation is on the <img> INSIDE the item, so the event target
-      // is the image -- the class to clear is on its .navitem ancestor.
-      const btn = e.target.closest && e.target.closest('.navitem');
-      if (btn) btn.classList.remove('nav-tap');
-    }
-  });
+  // No tap pulse or ripple on the tab icons (owner's request): they just switch to the active look.
 }
 
 // The five tab pictures are the admin's cut-out icons (Banners > Icons); a tab whose picture is not uploaded yet shows just its label.
@@ -3839,6 +3815,8 @@ function isScrollLockOverlayOpen(){
 // removed -- nothing extra needed excluding them.
 // Back on Home it waits for the page to appear first, briefly (as Cookie's does while its page loads), so the dialog never jumps in on top of a half-drawn page.
 var _annNavTimer = null;
+// The last Home icon finishes popping at 0.195 s delay + 0.36 s = 0.555 s; the dialog opens right then, never before.
+var PT_ANN_AFTER_ICONS = 560;
 function maybeAnnounceAfterHomeNav(prevPage, prevSheet){
   const fromSheet = prevSheet === 'Deposit' || prevSheet === 'Withdraw';   // the Home icon tapped while Deposit / Withdraw is open
   if (!fromSheet && ['assets', 'promo', 'network', 'salary', 'account'].indexOf(prevPage) === -1) return;
@@ -3847,7 +3825,7 @@ function maybeAnnounceAfterHomeNav(prevPage, prevSheet){
   _annNavTimer = setTimeout(() => {
     if (STATE.page !== 'home' || isAnyOverlayOpen()) return;   // left Home again, or something opened meanwhile
     maybeShowAnnouncement();
-  }, 750);   // the Home icons pop first, then the dialog opens over them (a visit from another tab as much as a return from Deposit / Withdraw)
+  }, PT_ANN_AFTER_ICONS);   // the Home icons pop first, then the dialog opens over them (a visit from another tab as much as a return from Deposit / Withdraw)
 }
 // Owner: the dialog also comes when Back is pressed on Deposit or Withdraw (the arrow in the page's header or the phone's Back button), like Cookie's.
 // Only a plain Back: a sheet that closes itself after a submitted deposit/withdrawal, or because a tab was tapped, does not call this.
@@ -3855,7 +3833,7 @@ function maybeAnnounceAfterSheetBack(title){
   if (title !== 'Deposit' && title !== 'Withdraw') return;
   clearTimeout(_annNavTimer);
   // The Home icons pop in first (about 0.6 s), then the dialog opens over them.
-  _annNavTimer = setTimeout(() => { if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }, 750);
+  _annNavTimer = setTimeout(() => { if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }, PT_ANN_AFTER_ICONS);
 }
 // Owner: "l also wanted the dialog to show when on every visit ie logging in
 // again, registration like that." A second, independent trigger alongside
@@ -3870,7 +3848,7 @@ function maybeAnnounceOnEntry(){
   if (isAnyOverlayOpen()) return;
   // Opening the app: the Home icons pop in first, then the dialog opens over them.
   clearTimeout(_annNavTimer);
-  _annNavTimer = setTimeout(() => { if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }, 750);
+  _annNavTimer = setTimeout(() => { if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }, PT_ANN_AFTER_ICONS);
 }
 function openSheet(title, bodyHtml){
   dismissNotify();

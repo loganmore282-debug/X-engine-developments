@@ -14,8 +14,10 @@ ok(/body\.sheet-open \.sheet-bg\{bottom:var\(--nav-h\);\}/.test(html), 'secondar
 ok(/'profilelogo', 'loaderbg'/.test(server) && /app\.get\('\/public\/loader-image'/.test(server), 'server stores and serves the loader picture');
 ok(/id="loaderBgFile"/.test(admin) && /wirePotatoImageSlot\('loaderbg'/.test(admin), 'admin can upload and remove it');
 const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
+const htmlText = html.replace(/<script data-nx-core>[\s\S]*?<\/script>/, '');   // the built bundle's base64 blob can contain any short word by chance
+
 ok(/id="loginPassword" type="password"/.test(html) && /toggleAuthEye/.test(html) && /window\.toggleAuthEye/.test(mod), 'password boxes are masked and every one has the eye from the owner\'s screenshots');
-ok(!/toggleWitPin|toggleStyle/.test(html + mod), 'no show/hide eye on the withdraw PIN (the Login and Sign Up eyes are the owner\'s screenshots)');
+ok(!/toggleWitPin|toggleStyle/.test(htmlText + mod), 'no show/hide eye on the withdraw PIN (the Login and Sign Up eyes are the owner\'s screenshots)');
 ok(!/walOtpGroup|confirmWalletOtp|bankOtpRequired/.test(mod), 'saving a wallet has no OTP step');
 ok(!/id="sOtpVerification"|id="sBankOtp"|id="sAnnEnabled"|id="sReturnMult"/.test(admin), 'admin no longer shows the OTP, announcement-switch and return-multiple settings');
 ok(/setTimeout\(startArtwork, 8000\)/.test(mod) && !/_artPromise = Promise\.all\(\[ api\('\/public\/announcement-image'\), api\('\/public\/potato-images'\) \]\)\n/.test(mod.split('async function boot()')[1].split('async function')[0]), 'pictures are fetched after the loading screen, not beside the account request');
@@ -31,10 +33,10 @@ ok(/<script data-potato-loader>/.test(html) && /localStorage\.getItem\(KEY\)/.te
 ok(/fetch\('\/k7x2\/public\/loader-image', \{ cache: 'no-cache' \}\)/.test(html) && /localStorage\.setItem\(KEY, u\)/.test(html), 'and refreshed in the background for the next visit');
 ok(/var LOADER_MIN_MS = 2500/.test(mod) && /function hideLoadingScreen\(\)/.test(mod) && !/\$\('loadingScreen'\)\.style\.display = 'none'/.test(mod), 'the loading screen stays for 2.5 seconds before the page opens, through one function');
 ok(/innerHTML = PL_BADGE_OK/.test(mod) && /innerHTML = PL_BADGE_BAD/.test(mod) && !/playStatusIcon\(\$\('depStatusIcon'\)/.test(mod) && !/PAY_OK_SVG|PAY_FAIL_SVG/.test(mod + html), 'deposit success and failure use the waiting page layout with Potato\'s own plain tick / exclamation badge (the owner\'s traced artwork is no longer drawn there)');
-ok(/var DEPOSIT_POLL_FLOW = /.test(mod) && /innerHTML = DEPOSIT_POLL_FLOW/.test(mod) && !/dep-poll|pspin|DEPOSIT_POLL_SPIN|depPollRotate/.test(html + mod), 'the payment wait is the phone-to-wallet dots; the rotating rings and orbiting chips are gone');
+ok(/var DEPOSIT_POLL_FLOW = /.test(mod) && /innerHTML = DEPOSIT_POLL_FLOW/.test(mod) && !/dep-poll|pspin|DEPOSIT_POLL_SPIN|depPollRotate/.test(htmlText + mod), 'the payment wait is the phone-to-wallet dots; the rotating rings and orbiting chips are gone');
 ok(!/Congratulations! \u{1F389}|🎉/u.test(mod), 'no emoji in the success title');
 ok(/window\._potatoLoaderProgress = function/.test(html) && /'Loading\.\.\. ' \+ n \+ '%'/.test(html) && /window\._potatoLoaderProgress\(100\)/.test(mod), 'the percentage counts up from the start of the page and reads 100 when the page opens');
-ok(!/loaderBgOpacity|loaderBgBlur|X-Loader-Opacity|ld-bg/.test(html + mod + server + admin), 'the loader has no opacity or blur setting any more');
+ok(!/loaderBgOpacity|loaderBgBlur|X-Loader-Opacity|ld-bg/.test(htmlText + mod + server + admin), 'the loader has no opacity or blur setting any more');
 ok(/window\._potatoAuthFired = true;\s*window\.dispatchEvent\(new CustomEvent\('snow-auth'/.test(html), 'the sign-in script records that it has announced who is signed in');
 ok(/window\.addEventListener\('snow-auth', ev => onMemberAuth\(ev\.detail\)\);[\s\S]{0,700}if \(window\._potatoAuthFired && window\.fbAuth\) onMemberAuth\(window\.fbAuth\.currentUser\);/.test(mod), 'and the app picks that announcement up itself when its own code unpacks later (otherwise the loading screen stays for ever)');
 ok(/function waitForBootSettings\(ms\)/.test(mod) && !/withTimeout\(_bootPromise, 6000\)/.test(mod), 'the settings are waited for once in total (6 s from page start), not once per start-up step');
