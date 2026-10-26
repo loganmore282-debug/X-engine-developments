@@ -947,7 +947,7 @@ async function performMemberLogout(opts){
 // The loading screen stays for at least LOADER_MIN_MS from the moment the page began (owner: "let it take
 // about 3 seconds, then open the page"). Everything that used to hide it immediately goes through here; the
 // app is built underneath while it waits, and the pictures start loading straight away.
-var LOADER_MIN_MS = 2500, _ldTimer = null;
+var LOADER_MIN_MS = 2500, _ldTimer = null, _annAfterLoader = false;
 function hideLoadingScreen(){
   const ls = $('loadingScreen'); if (!ls) return;
   try { startArtwork(); } catch (_) {}
@@ -955,11 +955,18 @@ function hideLoadingScreen(){
   const minMs = typeof window._potatoLoaderMinMs === 'number' ? window._potatoLoaderMinMs : LOADER_MIN_MS;
   const wait = began ? Math.max(0, minMs - (Date.now() - began)) : 0;
   if (_ldTimer) { clearTimeout(_ldTimer); _ldTimer = null; }
-  const finish = () => { if (window._potatoLoaderProgress) window._potatoLoaderProgress(100); ls.style.display = 'none'; };
+  const finish = () => {
+    if (window._potatoLoaderProgress) window._potatoLoaderProgress(100);
+    ls.style.display = 'none';
+    // Opening the app: Home was built underneath the loader, so its icons popped where nobody could see them. Now that the loader is gone the
+    // icons pop in front of the member, and the welcome dialog follows right after them (maybeAnnounceOnEntry).
+    if (_annAfterLoader) { _annAfterLoader = false; if (STATE.page === 'home') replayPageIn(); maybeAnnounceOnEntry(); }
+  };
   if (!wait) { finish(); return; }
   _ldTimer = setTimeout(() => { _ldTimer = null; finish(); }, wait);
 }
 function showLoadingScreen(){
+  _annAfterLoader = false;
   if (_ldTimer) { clearTimeout(_ldTimer); _ldTimer = null; }
   $('loadingScreen').style.display = 'flex';
   if (window._potatoLoaderRestart) window._potatoLoaderRestart();
@@ -3838,6 +3845,10 @@ function maybeAnnounceAfterSheetBack(title){
 // this needed its own call rather than trying to make the nav-check pass.
 function maybeAnnounceOnEntry(){
   if (isAnyOverlayOpen()) return;
+  // The loader is still up (it stays 2.5 s): do nothing yet -- when it comes down, hideLoadingScreen() replays the Home icons and calls this again, so the
+  // icons animate first and the dialog opens right after them, never under the loader.
+  const ls = $('loadingScreen');
+  if (ls && ls.style.display !== 'none') { _annAfterLoader = true; clearTimeout(_annNavTimer); return; }
   // Opening the app: the Home icons pop in first, then the dialog opens over them.
   clearTimeout(_annNavTimer);
   _annNavTimer = setTimeout(() => { if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }, PT_ANN_AFTER_ICONS);
