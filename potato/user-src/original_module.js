@@ -2284,13 +2284,24 @@ function paintHome(){
   ptFitValues();
 }
 // A money figure that is too wide for its cell is made smaller until it fits (UGX amounts of millions are long).
+var PT_FIT_SEL = '.pt-fit, .pt-grid i, .pt-lvg b, .pt-tstat b, .pt-inc i, .pt-mystat b, .pt-tl b, .pt-rb b, .pt-tier header b';
 function ptFitValues(){
-  document.querySelectorAll('.pt-fit').forEach(el => {
+  document.querySelectorAll(PT_FIT_SEL).forEach(el => {
     el.style.fontSize = '';
     let fs = parseFloat(getComputedStyle(el).fontSize) || 14, n = 0;
-    while (el.scrollWidth > el.clientWidth + 0.5 && fs > 8 && n++ < 12) { fs -= .5; el.style.fontSize = fs + 'px'; }
+    while (el.scrollWidth > el.clientWidth + 0.5 && fs > 7 && n++ < 16) { fs -= .5; el.style.fontSize = fs + 'px'; }
   });
 }
+// Every page is painted by replacing its markup, so the figures are fitted after each paint (and after a figure's text changes), never by hand per page.
+(function(){
+  let q = 0;
+  const start = () => {
+    const h = document.getElementById('pageHost'); if (!h) return false;
+    new MutationObserver(() => { if (q) return; q = requestAnimationFrame(() => { q = 0; try { ptFitValues(); } catch (_) {} }); }).observe(h, { childList: true, subtree: true, characterData: true });
+    return true;
+  };
+  if (!start()) document.addEventListener('DOMContentLoaded', start);
+})();
 function patchHomeBalances(){
   const account = STATE.account || {};
   for (const [id, key] of [['homeWalletBalance','walletBalance'], ['homeTotalEarned','totalEarned'], ['homeTotalDeposited','totalDeposited'], ['homeTotalWithdrawn','totalWithdrawn']]) {
