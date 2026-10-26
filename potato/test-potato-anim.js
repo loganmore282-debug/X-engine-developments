@@ -9,9 +9,14 @@ const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
 const css = html.slice(html.indexOf('/* PT-ANIM-START'), html.indexOf('/* PT-ANIM-END */'));
 ok(css.length > 500, 'the PT-ANIM block exists');
 // the measured motion
-ok(/@keyframes ptGiftBounce\{[\s\S]*20%\{transform:translateY\(13\.9%\)[\s\S]*44\.7%\{transform:translateY\(6\.9%\)[\s\S]*70\.1%\{transform:translateY\(13\.9%\)[\s\S]*94%,100%\{transform:translateY\(0\)/.test(css), 'order gift: drops 13.9%, back to 6.9%, 13.9% again, home');
-ok(/\.pt-icon\.pt-gift\{animation:ptGiftBounce 1\.2s infinite/.test(css), 'order gift cycle is 1.2 s');
-ok(/@keyframes ptAppFloat\{0%\{transform:translateY\(0\);\}25%\{transform:translateY\(-9%\);\}47%\{transform:translateY\(-9%\);\}76%\{transform:translateY\(0\);\}100%/.test(css), 'download app: up 9%, hold, down');
+{ const g = (css.match(/@keyframes ptGiftBounce\{([^@]*?)\}\}/) || css.match(/@keyframes ptGiftBounce\{(.*?)\}\s*\n/) || [])[1] || '';
+  const stops = (g.match(/[\d.]+%\{transform:translateY\(([\d.]+)%\) rotate\((-?[\d.]+)deg\)/g) || []);
+  const ys = stops.map(s => parseFloat(s.match(/translateY\(([\d.]+)%/)[1]));
+  ok(stops.length === 37 && Math.max(...ys) === 13.9 && ys[0] < 0.2 && ys[ys.length - 1] < 0.2 && Math.max(...stops.map(s => parseFloat(s.match(/rotate\((-?[\d.]+)deg/)[1]))) > 3, 'order gift: traced bounce, 37 stops, drops 13.9% of itself with a few degrees of sway, back home'); }
+ok(/\.pt-icon\.pt-gift\{animation:ptGiftBounce 1\.2s linear infinite/.test(css), 'order gift cycle is 1.2 s');
+{ const a = (css.match(/@keyframes ptAppFloat\{(.*?)\}\}/) || [])[1] || '';
+  const ys = (a.match(/translateY\(-?[\d.]+%\)/g) || []).map(s => parseFloat(s.match(/-?[\d.]+/)[0]));
+  ok(ys.length === 33 && Math.min(...ys) === -9 && ys[0] > -1 && ys[ys.length - 1] > -1, 'download app: traced float, 33 stops, up 9% and back'); }
 ok(/\.pt-icon\.pt-appfloat\{animation:ptAppFloat 1\.6s linear infinite/.test(css), 'download app cycle is 1.6 s, straight lines');
 // the flip clock look
 ok(/\.pt-fd\{[^}]*width:27\.7px;height:39px;[^}]*font:700 25px\/39px Roboto/.test(css) && /background:#191919/.test(css) && /background:#e0211f/.test(css), 'tiles 27.7 x 39, bold 25 px digits, dark tile, red dots');
