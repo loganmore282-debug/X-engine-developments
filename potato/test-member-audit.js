@@ -92,7 +92,7 @@ async function main(){
   payment.resolve({status:'success',net:5000});await first;
   assert(d.querySelector('#lpOld'),'late withdrawal response must not close another form');
   w.openDepositSheet();assert.equal(d.querySelectorAll('.pt-note').length,4,'four deposit notes');
-  assert.match(d.querySelector('.pt-notes').textContent,/Minimum deposit amount: UGX 15,000/);assert.equal(d.querySelectorAll('#depPays button').length,1,'only one method');assert.match(d.querySelector('#depPays button').textContent.trim(),/Pay-A$/);
+  assert.match(d.querySelector('.pt-notes').textContent,/Minimum deposit amount: UGX 15,000/);assert.equal(d.querySelectorAll('#depPays button').length,4,'four default methods');assert.match(d.querySelector('#depPays button.on').textContent.trim(),/Pay-A$/,'Pay-A is selected first');
   d.querySelector('#depAmount').value='15000';assert(!d.querySelector('#depPhone'),'Deposit has no phone box: the request goes to the member\'s own number');
   const deposit=deferred();posts=0;w.post=()=>{posts++;return deposit.promise};
   const sending=w.submitDeposit();await w.submitDeposit();assert.equal(posts,1);

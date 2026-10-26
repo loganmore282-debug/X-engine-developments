@@ -3708,7 +3708,6 @@ function openSheet(title, bodyHtml){
   if (alreadyOpen) history.replaceState({ sheet: title }, '', '');
   else history.pushState({ sheet: title }, '', '');
   lockBodyScroll();
-  if (window.mgGutters) window.mgGutters();   // the 4px scrollbar room is made now, before the first paint of the page
 }
 // opts.fromAction/opts.navigating used to gate whether closing a sheet could
 // trigger the announcement dialog (a submitted withdrawal, a recharge
