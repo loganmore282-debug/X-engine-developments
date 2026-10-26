@@ -2261,7 +2261,7 @@ function vBuyHtml(p){
   const at = Number(p.opensAt) || 0;
   // Not `disabled`: a disabled button swallows the tap, and the screen shows the "Coming soon, please wait" dialog when it is tapped.
   if (!at || p.openMode === 'soon' || p.comingSoon) return '<button class="pt-buy soon" type="button" onclick="notify(\'Coming soon, please wait\')"><span>Coming Soon</span></button>';
-  return `<button class="pt-buy soon" type="button" onclick="notify('Coming soon, please wait')" data-opens-at="${at}"><span>Coming soon in ${fmtCountdown(at - Date.now())}</span></button>`;
+  return `<button class="pt-buy soon" type="button" onclick="notify('Coming soon, please wait')" data-opens-at="${at}"><span>Coming soon in ${fmtCountdown(at - ptServerNow())}</span></button>`;
 }
 function vBannerHtml(){
   const st = STATE.settings || {};
@@ -2420,7 +2420,7 @@ function startProductCountdowns(){
     if (!nodes.length) { clearInterval(_openCountdownTimer); _openCountdownTimer = null; return; }
     let due = false;
     nodes.forEach(el => {
-      const left = Number(el.getAttribute('data-opens-at')) - Date.now();
+      const left = Number(el.getAttribute('data-opens-at')) - ptServerNow();   // the SERVER's clock, so a wrong phone clock cannot open or hold a product early
       if (left <= 0) { due = true; el.textContent = 'Opening…'; return; }
       el.textContent = 'Coming soon in ' + fmtCountdown(left);
     });
@@ -2476,8 +2476,9 @@ function vOwnedCardHtml(inv){
   const st = planStats(inv);
   const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
   const name = inv.tierLabel || p.name || 'Product';
-  const startMs = st.createdMs, endMs = startMs + st.total * 86400000;
-  const pct = st.matured ? 100 : Math.max(0, Math.min(100, Math.round((Date.now() - startMs) / (endMs - startMs) * 100)));
+  // The last payment falls at the total-th midnight after the purchase (the first is the first midnight after it), so that is where the bar reaches 100.
+  const startMs = st.createdMs, off = ptRegionOffsetMs(), endMs = (Math.floor((startMs + off) / 86400000) + st.total) * 86400000 - off;
+  const pct = st.matured ? 100 : Math.max(0, Math.min(100, Math.floor((ptServerNow() - startMs) / Math.max(1, endMs - startMs) * 100)));
   return `
   <article class="pt-run">
     <div class="pt-run-top">
@@ -2494,7 +2495,7 @@ function vOwnedCardHtml(inv){
   </article>`;
 }
 // "Today's Income": what was paid into the wallet as earnings since 00:00 of the region's own day (Uganda: UTC+3).
-var PT_EARN_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'mission_salary', 'mission_deposit_reward'];
+var PT_EARN_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'mission_salary', 'mission_deposit_reward', 'order_gift', 'app_claim'];   // every source that adds to Total Income (server EARNING_TX_TYPES)
 function ptRegionOffsetMs(){ return (Number(REGION && REGION.utcOffsetMin) || 0) * 60000; }
 function ptTodayIncome(){
   const off = ptRegionOffsetMs(), day = Math.floor((ptServerNow() + off) / 86400000);
@@ -2525,7 +2526,10 @@ function ptStartIncomeClock(){
     if (!root || STATE.page !== 'assets') return;
     ptFlipClockSet(root, ptTimeToMidnight());
     const left = ptSecondsToMidnight();
-    if (_ptLastLeft && left > _ptLastLeft + 3600) { setTimeout(ptRefreshAfterMidnight, 2000); setTimeout(ptRefreshAfterMidnight, 7000); }
+    if (_ptLastLeft && left > _ptLastLeft + 3600) {
+      const td = $('ptToday'); if (td) td.textContent = vMoney2(ptTodayIncome());   // a new day: Today's Income starts again from 0 at once
+      setTimeout(ptRefreshAfterMidnight, 2000); setTimeout(ptRefreshAfterMidnight, 7000);
+    }
     _ptLastLeft = left;
     _ptClockTimer = setTimeout(tick, 1000 - (ptServerNow() % 1000) + 8);
   };
@@ -2773,7 +2777,7 @@ function teamLoadingHtml(){ return '<div class="list-loading">' + NAV_LOADER + '
 // The small "Loading..." word shown inside a page while its data arrives: plain grey text, standing still, as on the owner's screens.
 var NAV_LOADER = '<span class="mg-loadtxt">Loading...</span>';
 function maskPhone(phone){
-  // "706****1455": the first three and last four digits of the local number
+  // "769****67": the first three digits, four hidden, the rest, of the local number
   // (country code and leading zero dropped), enough to recognise your own
   // referral and not a usable number.
   let d = String(phone||'').replace(/\D/g,'');
@@ -2781,7 +2785,7 @@ function maskPhone(phone){
   if (d.slice(0, dc.length) === dc) d = d.slice(dc.length);
   d = d.replace(/^0+/, '');
   if (d.length < 7) return phone || '';
-  return d.slice(0, 3) + '****' + d.slice(-4);
+  return d.slice(0, 3) + '****' + d.slice(7);   // 769****67: the four digits after the first three are hidden
 }
 // The exact date and time a member joined, as his mockup prints it:
 // "07/09/2026 01:21" -- day/month/year and a 24-hour clock.
@@ -3404,6 +3408,7 @@ function statementDescription(t){
   if (t.type === 'commission') return 'Commission';
   if (t.type === 'promocode') return 'Treasure Chest';
   if (t.type === 'order_gift') return 'Order Gift';
+  if (t.type === 'app_claim') return 'App Reward';
   if (t.type === 'welcome_bonus') return 'Welcome Bonus';
   if (t.type === 'team_reward') return 'Team Reward';
   if (t.type === 'mission_salary') return 'Team Reward';
@@ -3435,7 +3440,7 @@ function statementAmountText(t){
   return (amt < 0 ? '-' : '+') + vMoney2(Math.abs(amt));
 }
 // The small emoji in front of a record (the owner's Balance Detail shows one for the Treasure Chest row) and the word after the time.
-var PT_REC_ICON = { promocode: '\ud83c\udf8f', order_gift: '\ud83c\udf81', deposit: '\ud83d\udce5', admin_credit: '\ud83d\udce5', withdraw: '\ud83d\udce4', cashback: '\ud83d\udcc8', commission: '\ud83e\udd1d', team_reward: '\ud83c\udfc6', mission_salary: '\ud83c\udfc6', invest: '\ud83d\uded2', investment: '\ud83d\uded2' };
+var PT_REC_ICON = { promocode: '\ud83c\udf8f', order_gift: '\ud83c\udf81', app_claim: '\ud83c\udf81', deposit: '\ud83d\udce5', admin_credit: '\ud83d\udce5', withdraw: '\ud83d\udce4', cashback: '\ud83d\udcc8', commission: '\ud83e\udd1d', team_reward: '\ud83c\udfc6', mission_salary: '\ud83c\udfc6', invest: '\ud83d\uded2', investment: '\ud83d\uded2' };
 var PT_REC_NOKIND = ['invest', 'investment', 'investment_refund'];
 var PT_REC_KIND = { deposit: 'Deposit', admin_credit: 'Deposit', withdraw: 'Withdraw', cashback: 'Income', commission: 'Team', team_reward: 'Team', mission_salary: 'Team' };
 function statementDayKey(t){
@@ -4521,7 +4526,7 @@ function withdrawWindow(s){
   const from = witMinutes(s && s.withdrawOpenFrom), to = witMinutes(s && s.withdrawOpenTo);
   if (!(s && s.withdrawWindowEnabled) || from == null || to == null || from === to)
     return { enabled: false, open: true, from: '', to: '' };
-  const d = new Date(Date.now() + tzOffMs());   // the region's clock, as the server judges it
+  const d = new Date(ptServerNow() + tzOffMs());   // the region's clock, as the server judges it
   const now = d.getUTCHours() * 60 + d.getUTCMinutes();
   const open = from < to ? (now >= from && now < to) : (now >= from || now < to);
   return { enabled: true, open, from: witClock(s.withdrawOpenFrom), to: witClock(s.withdrawOpenTo) };

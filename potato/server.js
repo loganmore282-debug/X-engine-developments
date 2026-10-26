@@ -1534,9 +1534,9 @@ function taskRows(rows, kind) {
 // stored teamL1/L2/L3Count counters drift after a crash window or an admin re-attach).
 async function wholeTeamStats(userId) {
   let parentIds = [userId];
-  let deposits = 0;
+  let deposits = 0, purchases = 0;
   const counts = [0, 0, 0];
-  const levelDeposits = [0, 0, 0];
+  const levelDeposits = [0, 0, 0], levelPurchases = [0, 0, 0];
   const seen = new Set([userId]);
   for (let level = 0; level < 3; level++) {
     if (!parentIds.length) break;
@@ -1548,11 +1548,14 @@ async function wholeTeamStats(userId) {
       const v = d.data();
       nextIds.push(d.id);
       counts[level] += 1;
-      if (v.status !== 'banned') { deposits += finiteMoney(v.totalDeposited); levelDeposits[level] += finiteMoney(v.totalDeposited); }
+      if (v.status !== 'banned') {
+        deposits += finiteMoney(v.totalDeposited); levelDeposits[level] += finiteMoney(v.totalDeposited);
+        purchases += finiteMoney(v.totalInvested); levelPurchases[level] += finiteMoney(v.totalInvested);   // what the member BOUGHT (products), not what they recharged
+      }
     });
     parentIds = nextIds;
   }
-  return { deposits, counts, levelDeposits };
+  return { deposits, purchases, counts, levelDeposits, levelPurchases };
 }
 async function wholeTeamDeposits(userId) { return (await wholeTeamStats(userId)).deposits; }
 
@@ -3230,7 +3233,7 @@ app.get('/team/stats', async (req, res) => {
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     const deposits = teamNow.deposits, [n1, n2, n3] = teamNow.counts;
     // What the whole team has purchased, and what it has paid this member, per level (the Team page's three level cards).
-    const levelPurchase = { l1: teamNow.levelDeposits[0], l2: teamNow.levelDeposits[1], l3: teamNow.levelDeposits[2] };
+    const levelPurchase = { l1: teamNow.levelPurchases[0], l2: teamNow.levelPurchases[1], l3: teamNow.levelPurchases[2] };
     const levelCommission = { l1: 0, l2: 0, l3: 0 };
     if (commSnap) commSnap.forEach(d => {
       const v = d.data(), n = Number(v.commissionLevel);
@@ -3289,7 +3292,8 @@ function salaryAccrue(u, tier, today) {
 async function salaryView(userId) {
   const [sett, teamNow] = await Promise.all([getSettings(), wholeTeamStats(userId)]);
   const tiers = taskRows(sett.salaryTiers, 'salary');
-  return { tiers, total: teamNow.deposits, tier: salaryTierFor(tiers, teamNow.deposits) };
+  // "Consumption Threshold": what the team has BOUGHT (the same figure as the Team page's Purchase tiles), not what it recharged.
+  return { tiers, total: teamNow.purchases, tier: salaryTierFor(tiers, teamNow.purchases) };
 }
 app.get('/salary/status', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -8131,7 +8135,7 @@ function maskDownlinePhone(phone) {
   let d = String(phone || '').replace(/\D/g, '');
   if (d.startsWith('256')) d = d.slice(3);
   d = d.replace(/^0+/, '');
-  return d.length < 7 ? '' : d.slice(0, 3) + '****' + d.slice(-4);
+  return d.length < 7 ? '' : d.slice(0, 3) + '****' + d.slice(7);   // as the owner's Team list: 769****67 (9 digits), 078****699 (10 digits): the 4 digits after the first three are hidden
 }
 // An admin action aimed at something that does not exist is a "not found", not a server error.
 const adminFailCode = e => /matched no document|not found/i.test(String((e && e.message) || '')) ? 404 : 500;

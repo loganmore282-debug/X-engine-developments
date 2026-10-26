@@ -20,7 +20,7 @@ function runStats(rows) {
       return { forEach: cb => list.forEach(r => cb({ data: () => r })), docs: list.map(r => ({ data: () => r })) }; } }; return q; },
   }) };
   new Function('app', 'db', 'verifyAuth', 'getSettings', 'wholeTeamStats', 'activeL1Count', 'taskRows', 'finiteMoney', 'console', route)(
-    app, db, async () => 'u1', async () => ({ commL1: 26, commL2: 2, commL3: 1 }), async () => ({ deposits: 5000, counts: [3, 1, 0], levelDeposits: [3000, 2000, 0] }), async () => 0, () => [], finiteMoney, console);
+    app, db, async () => 'u1', async () => ({ commL1: 26, commL2: 2, commL3: 1 }), async () => ({ deposits: 5000, counts: [3, 1, 0], levelDeposits: [111, 222, 0], levelPurchases: [3000, 2000, 0] }), async () => 0, () => [], finiteMoney, console);
   let body; const res = { json: b => { body = b; }, status() { return res; } };
   return handler({ headers: {} }, res).then(() => body);
 }

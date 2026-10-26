@@ -28,6 +28,11 @@ async function member(pass, pin, ref) { const cap = await J('GET', '/auth/captch
   // ---- daily cashback at 00:00
   const buy = await J('POST', '/invest/create', { tierKey: p1.key }, B.tok); ok(buy.j.status === 'success', 'B buys ' + p1.name + ' (' + p1.price + ', ' + p1.cycle + ' days)', buy.j);
   const acct = async tok => (await J('GET', '/account', null, tok)).j.account;
+  { // the Team page's Purchase tile is what the level BOUGHT (not what it recharged), the member row shows the same, and numbers are hidden as 769****67
+    const ts = (await J('GET', '/team/stats', null, A.tok)).j, tm = (await J('GET', '/team/members?level=1', null, A.tok)).j;
+    ok(ts.levelPurchase && ts.levelPurchase.l1 === p1.price, 'Level 1 Purchase = ' + p1.price + ' after B bought a product', ts);
+    ok(tm.members && tm.members[0] && tm.members[0].invested === p1.price && /^\d{3}\*{4}\d{2,3}$/.test(tm.members[0].phoneMasked), 'the member row shows the amount bought and a number like 769****67', tm);
+  }
   const w0 = (await acct(B.tok)).walletBalance;
   await sleep(2500); ok((await acct(B.tok)).walletBalance === w0, 'nothing is paid before the first 00:00');
   const inv = [...fm.__stores.investments.values()].find(i => i.userId === B.uid); ok(inv && inv.status === 'active', 'investment is active');
