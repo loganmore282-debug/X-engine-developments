@@ -1577,10 +1577,11 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 
 /* Deposit redirect overlay */
 
-.mg-redirect{display:none;position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);z-index:260;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:160px;box-sizing:border-box;background:rgba(120,70,84,.5);}
+.mg-redirect{display:none;position:fixed;inset:0;z-index:900;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:302px;box-sizing:border-box;background:rgba(0,0,0,.44);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);}
 .mg-redirect.show{display:flex;}
-.mg-redirect .spin{display:block;width:40px;height:40px;border-radius:50%;border:3px solid rgba(255,255,255,.28);border-top-color:#c9161d;animation:mgSpin 1s linear infinite;}
-.mg-redirect p{margin:18.5px 0 0;font:400 12.5px/1.2 var(--mg-serif);letter-spacing:.1em;color:#fff;}
+/* The whole screen, bar included, dims and blurs; a red-edged ring turns above the words (measured on the owner's screenshot: ring 42 px at 302 px down, words 14 px below it). */
+.mg-redirect .spin{display:block;width:42px;height:42px;box-sizing:border-box;border-radius:50%;border:3.4px solid rgba(255,255,255,.2);border-left-color:#e5231d;animation:mgSpin 1s linear infinite;}
+.mg-redirect p{margin:14px 0 0;font:700 14.1px/17px Roboto,sans-serif;letter-spacing:.2px;color:#fff;}
 @keyframes mgSpin{to{transform:rotate(360deg);}}
 
 /* Balance Record */
@@ -1957,8 +1958,17 @@ body,#app{background:linear-gradient(180deg,#f4f5fd 0,#f1f2f6 100%) fixed;color:
 .pt-fl-app .pt-icon{width:56.3px;height:auto;}
 body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{display:none;}
 /* Home */
-.pt-home .home-banner{margin:7px 0 0;height:188.7px;border-radius:14px;box-shadow:none;background:linear-gradient(135deg,#e5231d,#f27c77);}
-.pt-home .mg-dots{display:none;}
+.pt-home .home-banner{margin:7px 0 0;height:188.7px;border-radius:14px;box-shadow:none;background:#eceef5;}
+.pt-home .home-banner>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+/* The slides sit on top of each other and cross-fade: the one leaving fades out while the next fades in, at the same moment (no slide-over, no wait). The banner is not swipeable. */
+.pt-home .mg-track{position:absolute;inset:0;display:block;width:100%;height:100%;}
+.pt-home .mg-track img{position:absolute;inset:0;flex:none;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .5s ease;}
+.pt-home .mg-track img.on{opacity:1;}
+/* The bubbles, centred along the bottom: the current one is a white pill, the others small see-through circles (traced from the owner's picture). */
+.pt-home .mg-dots{right:auto;left:50%;transform:translateX(-50%);bottom:9px;gap:5px;}
+.pt-home .mg-dots i{width:4.7px;height:4.7px;border-radius:50%;background:rgba(255,255,255,.55);transition:width .4s ease,background .4s ease;}
+.pt-home .mg-dots i.on{width:12.7px;border-radius:3px;background:#fff;}
+#homeCarouselTrack{touch-action:auto;}
 .pt-quick{display:grid;grid-template-columns:repeat(4,80px);justify-content:center;margin-top:9.5px;height:84px;background:#fff;border-radius:10px;box-shadow:0 6px 18px -10px rgba(70,80,140,.18);}
 .pt-quick button{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:13.4px 0 0;border:0;background:none;cursor:pointer;color:#1a1a1a;font:500 11.4px/16px Roboto,'Segoe UI',system-ui,sans-serif;-webkit-tap-highlight-color:transparent;}
 .pt-quick .pt-qi{display:block;width:40.5px;height:40.5px;object-fit:contain;margin-bottom:1.7px;}
@@ -2126,7 +2136,7 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .pt-meths button.on{background:#e5231d;border-color:#e5231d;color:#fff;}
 .pt-pay{display:block;width:100%;height:41px;margin-top:14.3px;border:0;border-radius:21px;background:linear-gradient(105deg,#e5231d 0,#ef7a78 62%,#fbd9d9 100%);color:#fff;font:500 17.4px/41px Roboto,sans-serif;letter-spacing:.5px;box-shadow:0 10px 16px -8px rgba(110,90,150,.45);cursor:pointer;}
 .pt-pay b{font-weight:500;}
-.pt-pay:disabled{opacity:.7;}
+.pt-pay:disabled{opacity:1;background:#eef0f6;color:#fff;box-shadow:0 8px 14px -8px rgba(110,110,150,.45);}
 .pt-notes{margin-top:14px;}
 .pt-note{margin:0 0 14.3px;padding:9.4px 14px;border-left:1.7px solid #be342f;background:linear-gradient(90deg,#f7eef4,#f6f6fc 35%);font:700 12.75px/21.8px Roboto,sans-serif;color:#c4332f;}
 /* Withdraw */
@@ -2210,11 +2220,14 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .pt-rec-in::after{content:'';position:absolute;left:14.4px;right:14.4px;bottom:9px;height:1px;background:#e3e3e3;}
 .pt-rec .ic{flex:0 0 17px;margin-right:8.6px;font-size:17px;line-height:22px;}
 .pt-rec .m{flex:1;min-width:0;}
-.pt-rec .m b{display:block;font:700 13.5px/18px Roboto,sans-serif;color:#b0332f;}
-.pt-rec .m small{display:block;margin-top:3px;font:400 11px/15px Roboto,sans-serif;color:#8795a8;}
-.pt-rec .m em{font-style:normal;font-weight:700;color:#8795a8;}
+.pt-rec .m b{display:block;font:700 13.5px/18px Roboto,sans-serif;color:#b03833;}
+.pt-rec .m small{display:block;margin-top:3px;font:400 11px/15px Roboto,sans-serif;color:#8e96a0;}
+.pt-rec .m em{font-style:normal;font-weight:700;color:#8d97a1;}
+.pt-rec .m em.wait{color:#ab7b34;}
+.pt-rec .m em.ok{color:#2fb85e;}
+.pt-rec .m em.bad{color:#d33a35;}
 .pt-rec .a{font:700 14.5px/20px Roboto,sans-serif;white-space:nowrap;}
-.pt-rec .a.in{color:#22b14c;}.pt-rec .a.out{color:#b0332f;}
+.pt-rec .a.in{color:#25b440;}.pt-rec .a.out{color:#d0605f;}
 .pt-norec{margin:40px 0;text-align:center;font:400 12.5px/20px Roboto,sans-serif;color:#8795a8;}
 /* Messages */
 .pt-emp{margin:0 14px;height:156px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:12px;background:#f4f6fd;box-shadow:0 8px 18px -12px rgba(70,80,140,.25);}
@@ -2392,10 +2405,6 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 
 .pt-abban .pt-dlback{background:rgba(40,40,48,.52);border-color:rgba(255,255,255,.55);box-shadow:0 2px 8px rgba(0,0,0,.28);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);}
 /* Pictures are shown WHOLE, as uploaded: a banner takes the height its picture needs, never taller than the frame in the owner's screenshots (the picture always fills the full width; one taller than the frame loses only its bottom, so the page below stays visible). */
-.pt-home .home-banner:has(img){height:auto;}
-.pt-home .home-banner>img{height:auto;max-height:188.7px;object-fit:cover;object-position:center top;}
-.pt-home .mg-track{height:auto;align-items:flex-start;}
-.pt-home .mg-track img{height:auto;max-height:188.7px;object-fit:cover;object-position:center top;}
 .pt-tb-banner:has(>img){height:auto;min-height:92px;}
 .pt-tb-banner>img{position:relative;inset:auto;display:block;width:100%;height:auto;max-height:180.5px;object-fit:cover;object-position:center top;}
 .pt-shero:has(>img){height:auto;min-height:120px;padding-bottom:47px;box-sizing:border-box;}
@@ -2403,7 +2412,6 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 .pt-abban:has(>img){height:auto;min-height:60px;}
 .pt-abban>img{position:relative;inset:auto;display:block;width:100%;height:auto;max-height:205px;object-fit:cover;object-position:center top;}
 .pt-mybanner:has(.pt-mysize){height:auto;min-height:150px;}
-.pt-home .home-banner:has(img){min-height:120px;}
 .pt-mysize{display:block;width:100%;height:auto;max-height:180.5px;object-fit:cover;object-position:center top;}
 .pt-img>img{object-fit:contain;}
 /* The glossy band that crosses Join Channel: 0.2 s from the left edge to the right edge, then a rest, every 1.4 s (traced from the owner's recording). */

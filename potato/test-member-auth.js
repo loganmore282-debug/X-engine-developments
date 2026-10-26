@@ -123,8 +123,8 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
   r = await E.call('/auth/password/change', { oldPassword: 'oldpass1234', newPassword: '12' }, bearer(s1.token)); eq(r.code, 400, 'weak new password');
   r = await E.call('/auth/password/change', { oldPassword: 'oldpass1234', newPassword: 'newpass1234' }, {}); eq(r.code, 401, 'needs a session');
   r = await E.call('/auth/password/change', { oldPassword: 'oldpass1234', newPassword: 'newpass1234' }, bearer(s1.token)); eq(r.code, 200);
-  ok(await E.fn.verifyAuth(req(s1.token)), 'the session that changed it stays signed in');
-  eq(await E.fn.verifyAuth(req(s2.token)), null, 'every OTHER session of the member is ended');
+  eq(await E.fn.verifyAuth(req(s1.token)), null, 'the session that changed it ends too: the member signs in again with the new password');
+  eq(await E.fn.verifyAuth(req(s2.token)), null, 'every other session of the member is ended');
   eq((await E.call('/auth/login', { phone: '0770000004', password: 'oldpass1234' })).code, 401, 'the old password no longer works');
   eq((await E.call('/auth/login', { phone: '0770000004', password: 'newpass1234' })).code, 200, 'the new one does');
   // ── reset / owner reset / delete ──

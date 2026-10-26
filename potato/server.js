@@ -6469,7 +6469,8 @@ app.post('/auth/password/change', memberAuthLimiter, async (req, res) => {
       await recordLoginFailure(acct.id);
       return res.status(401).json({ status: 'error', code: 'INVALID_CREDENTIAL', message: 'Your current password is incorrect.' });
     }
-    await setMemberPassword(decoded.uid, newPassword, decoded.key);
+    // Every session ends, this one too: the member signs in again with the new password.
+    await setMemberPassword(decoded.uid, newPassword);
     res.json({ status: 'success', message: 'Password changed.' });
   } catch (e) {
     console.error('Password change error:', e.message);

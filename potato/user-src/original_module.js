@@ -2141,19 +2141,18 @@ function mgSetDots(idx){
 }
 function homeBannerBlockHtml(st){
   const slides = homeCarouselSlides();
-  if (!slides) return `<div class="home-banner">${homeBannerInnerHtml(st)}${mgDotsHtml(1, 0)}</div>`;
-  return `<div class="home-banner" id="homeCarouselTrack"><div class="mg-track" id="mgTrack">${slides.map(u => `<img src="${esc(u)}" alt="" draggable="false">`).join('')}</div>${mgDotsHtml(slides.length, 0)}</div>`;
+  if (!slides) return `<div class="home-banner">${homeBannerInnerHtml(st)}</div>`;
+  return `<div class="home-banner" id="homeCarouselTrack"><div class="mg-track" id="mgTrack">${slides.map((u, i) => `<img src="${esc(u)}" alt="" draggable="false"${i === 0 ? ' class="on"' : ''}>`).join('')}</div>${mgDotsHtml(slides.length, 0)}</div>`;
 }
 var _homeCarouselTimer = null;
 var _homeCarouselIdx = 0;
-// The banner slides sideways: it moves on by itself every 4.5 seconds, and the member can swipe it (or tap a dot).
+// The banner changes by itself every 4.5 seconds: the picture leaving fades out while the next one fades in, together. It cannot be swiped.
 // Self-terminating on the next tick once Home's own nodes are gone, so navigating away never leaves it ticking.
 function mgGoSlide(i, noTimerReset){
   const track = $('mgTrack'), slides = homeCarouselSlides();
   if (!track || !slides) return;
   _homeCarouselIdx = ((i % slides.length) + slides.length) % slides.length;
-  track.style.transition = 'transform .5s cubic-bezier(.22,1,.36,1)';
-  track.style.transform = 'translateX(' + (-100 * _homeCarouselIdx) + '%)';
+  track.querySelectorAll('img').forEach((im, k) => im.classList.toggle('on', k === _homeCarouselIdx));
   mgSetDots(_homeCarouselIdx);
   if (!noTimerReset) startHomeCarousel(true);
 }
@@ -2162,16 +2161,6 @@ function startHomeCarousel(keepIdx){
   const slides = homeCarouselSlides();
   if (!slides) return;
   if (!keepIdx) _homeCarouselIdx = 0;
-  const wrap = $('homeCarouselTrack');
-  if (wrap && !wrap._mgSwipe) {
-    wrap._mgSwipe = true;
-    let x0 = null, dx = 0, w = 1;
-    const track = () => $('mgTrack');
-    wrap.addEventListener('pointerdown', e => { x0 = e.clientX; dx = 0; w = wrap.offsetWidth || 1; if (_homeCarouselTimer) { clearInterval(_homeCarouselTimer); _homeCarouselTimer = null; } const t = track(); if (t) t.style.transition = 'none'; });
-    wrap.addEventListener('pointermove', e => { if (x0 == null) return; dx = e.clientX - x0; const t = track(); if (t) t.style.transform = 'translateX(calc(' + (-100 * _homeCarouselIdx) + '% + ' + dx + 'px))'; });
-    const end = () => { if (x0 == null) return; const moved = dx; x0 = null; mgGoSlide(Math.abs(moved) > Math.min(50, w / 5) ? _homeCarouselIdx + (moved < 0 ? 1 : -1) : _homeCarouselIdx); };
-    wrap.addEventListener('pointerup', end); wrap.addEventListener('pointercancel', end); wrap.addEventListener('pointerleave', end);
-  }
   _homeCarouselTimer = setInterval(() => {
     if (!$('mgTrack')) { clearInterval(_homeCarouselTimer); _homeCarouselTimer = null; return; }
     mgGoSlide(_homeCarouselIdx + 1, true);
@@ -2233,7 +2222,7 @@ function vBannerHtml(){
   const st = STATE.settings || {};
   return STATE.homeBanner || homeCarouselSlides()
     ? homeBannerBlockHtml(st)
-    : `<div class="home-banner v-banner-empty">${mgDotsHtml(1, 0)}</div>`;
+    : `<div class="home-banner v-banner-empty"></div>`;
 }
 function mgUnread(){ return (STATE.messages || []).filter(m => !m.read).length; }
 // Channel = the Telegram group (or the WhatsApp group when there is none); Service = customer service.
@@ -3310,7 +3299,7 @@ function statementDescription(t){
   if (t.type === 'withdraw') return 'Withdraw';
   if (t.type === 'cashback') return 'Cashback';
   if (t.type === 'commission') return 'Commission';
-  if (t.type === 'promocode') return 'Gift Code';
+  if (t.type === 'promocode') return 'Treasure Chest';
   if (t.type === 'order_gift') return 'Order Gift';
   if (t.type === 'welcome_bonus') return 'Welcome Bonus';
   if (t.type === 'team_reward') return 'Team Reward';
@@ -3338,7 +3327,7 @@ function statementAmountText(t){
   return (amt < 0 ? '-' : '+') + vMoney2(Math.abs(amt));
 }
 // The small emoji in front of a record (the owner's Balance Detail shows one for the Treasure Chest row) and the word after the time.
-var PT_REC_ICON = { promocode: '\ud83c\udf8f', order_gift: '\ud83c\udf81', deposit: '\ud83d\udcb0', admin_credit: '\ud83d\udcb0', withdraw: '\ud83c\udfe7', cashback: '\ud83d\udcc8', commission: '\ud83e\udd1d', team_reward: '\ud83c\udfc6', mission_salary: '\ud83c\udfc6', invest: '\ud83d\uded2', investment: '\ud83d\uded2' };
+var PT_REC_ICON = { promocode: '\ud83c\udf8f', order_gift: '\ud83c\udf81', deposit: '\ud83d\udce5', admin_credit: '\ud83d\udce5', withdraw: '\ud83d\udce4', cashback: '\ud83d\udcc8', commission: '\ud83e\udd1d', team_reward: '\ud83c\udfc6', mission_salary: '\ud83c\udfc6', invest: '\ud83d\uded2', investment: '\ud83d\uded2' };
 var PT_REC_KIND = { deposit: 'Deposit', admin_credit: 'Deposit', withdraw: 'Withdraw', cashback: 'Income', commission: 'Team', team_reward: 'Team', mission_salary: 'Team', invest: 'Purchase', investment: 'Purchase' };
 function statementDayKey(t){
   const pad = n => String(n).padStart(2, '0');
@@ -3367,7 +3356,7 @@ function renderStatement(){
       const chip = statementChip(t);
       const kind = chip ? chip.text : (PT_REC_KIND[t.type] || 'Other');
       return `<article class="pt-rec"><div class="pt-rec-in"><span class="ic">${PT_REC_ICON[t.type] || '\ud83e\uddfe'}</span>
-        <div class="m"><b>${esc(statementDescription(t))}</b><small>${esc(statementClock(t))} \u00b7 <em>${esc(kind)}</em></small></div>
+        <div class="m"><b>${esc(statementDescription(t))}</b><small>${esc(statementClock(t))} \u00b7 <em class="${chip ? chip.cls : ''}">${esc(kind)}</em></small></div>
         <span class="a ${amt < 0 ? 'out' : 'in'}">${esc(statementAmountText(t))}</span></div></article>`;
     }).join('')}`).join('');
 }
@@ -3524,8 +3513,12 @@ window.submitLoginPasswordChange = async function(){
     // replaced by the new one, so the next sign-in fills the right password instead of the old one.
     try { if (localStorage.getItem('potato_remembered') === '1') storeCredentialIfPossible(phoneToEmail((STATE.account || {}).phone), newPass, (STATE.account || {}).phone); } catch (_) {}
     btn.disabled = false;
+    // Changing the password signs the member out (every session ends): they sign in again with the new password, their number already filled in.
+    const phoneKept = (STATE.account || {}).phone;
     closeSheet({ fromAction: true });
-    notify('Login password changed');
+    await window.doLogout();
+    try { const pi = $('loginPhone'); const local = localDigits(phoneKept); if (pi && local) pi.value = '0' + local.replace(/^0+/, ''); } catch (_) {}
+    notify('Login password changed. Please log in with your new password.');
   } catch (e) {
     btn.disabled = false;
     // fbErrMsg's wrong-credential copy names the phone number, which only
@@ -3974,7 +3967,6 @@ function openDepositFormSheet(){
       ${note('Please complete your payment in time to avoid order expiration')}
       ${note('Please do not transfer to any account not designated by the platform')}
     </div>
-    <div class="mg-redirect" id="depRedirect"><span class="spin"></span><p>Redirecting to payment...</p></div>
   </div>`);
 }
 // The Deposit page shows the admin's pay buttons (up to six); tapping one selects it (only one is on at a time), and the page opens with the one marked * (the first if none).
@@ -4219,6 +4211,12 @@ function setDepositStatusUnknown(){
   // ask again by hand.
   setDepButtons(false, true);
 }
+// The "Processing payment..." cover: the whole screen (bottom bar and floating pictures too) dims and blurs, a ring turns above the words.
+function ptProcessing(on){
+  let el = $('ptProcBg');
+  if (on && !el) { el = document.createElement('div'); el.id = 'ptProcBg'; el.className = 'mg-redirect'; el.innerHTML = '<span class="spin"></span><p>Processing payment...</p>'; document.body.appendChild(el); }
+  if (el) el.classList.toggle('show', !!on);
+}
 window.submitDeposit = async function(){
   const submitBtn = $('depSubmitBtn');
   if (!submitBtn || submitBtn.disabled || !$('depAmount')) return;
@@ -4242,8 +4240,8 @@ window.submitDeposit = async function(){
   // A below-minimum amount is refused here, before any round trip.
   const s = STATE.settings || {};
   if (amount < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
-  submitBtn.disabled = true; submitBtn.textContent = 'Processing...';
-  const redirect = $('depRedirect'); if (redirect) redirect.classList.add('show');
+  submitBtn.disabled = true; submitBtn.textContent = 'Loading...';
+  ptProcessing(true);
   let r;
   try {
     // No network field on this form (Round 145) -- the gateway detects it
@@ -4255,8 +4253,8 @@ window.submitDeposit = async function(){
     // match whatever submitBtn actually reads at rest (see the sheet's own
     // button above), or a member whose recharge failed is left looking at a
     // button that silently renamed itself.
-    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Deposit';
-    if (redirect) redirect.classList.remove('show');
+    submitBtn.disabled = false; submitBtn.innerHTML = 'Pay <b id="depPayAmt">' + esc(numGroup(amount, true)) + '</b>';
+    ptProcessing(false);
   }
   if (r && r.stale) return;
   if (!r || r.status !== 'success') return notify((r && r.message) || 'Could not start deposit');
