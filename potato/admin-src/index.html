@@ -672,7 +672,7 @@ function potatoCutout(src, w, h){
   return { data:out, w:cw, h:ch, empty:false };
 }
 // The icon slots (same names as POTATO_ICON_SLOTS in server.js). Add a name here AND in server.js to get a new upload box.
-const POTATO_ICON_LABELS = { navhome:'Home tab icon', navincome:'Income tab icon', navteam:'Myteam tab icon', navshare:'Share tab icon', navmy:'My tab icon', recharge:'Recharge button icon (Home)', withdraw:'Withdraw button icon (Home)', service:'Service button icon (Home)', channel:'Channel button icon (Home)', ordergift:'Order gifts picture (floating chest)', downloadapp:'Download app picture (floating)', giftbox:'Gift Code page gift picture' };
+const POTATO_ICON_LABELS = { navhome:'Home tab icon', navincome:'Income tab icon', navteam:'Myteam tab icon', navshare:'Share tab icon', navmy:'My tab icon', recharge:'Recharge button icon (Home)', withdraw:'Withdraw button icon (Home)', service:'Service button icon (Home)', channel:'Channel button icon (Home)', ordergift:'Order gifts picture (floating chest)', downloadapp:'Download app picture (floating)', giftbox:'Gift Code page gift picture', payicon:'Deposit pay button icon (one small round picture shown on all four pay buttons)' };
 // An uploaded file -> a transparent, tightly cropped PNG data URL (longest side at most `maxDim`).
 function fileToCutoutPng(file, maxDim){
   return new Promise((resolve,reject)=>{

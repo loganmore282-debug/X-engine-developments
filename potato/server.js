@@ -843,7 +843,7 @@ async function getHelpBanner() {
 // (aboutlogo). Stored in the 'banners' collection as `potato-<slot>`, cached for 60 s. Only the pictures the owner's screenshots show exist.
 // Transparent cut-out ICONS the owner uploads in the admin panel (Banners > Icons); the panel removes each picture's background and crops it
 // tight before saving, so these are always PNGs. To add an icon, add its name here AND its label in admin-src (POTATO_ICON_LABELS).
-const POTATO_ICON_SLOTS = ['navhome', 'navincome', 'navteam', 'navshare', 'navmy', 'recharge', 'withdraw', 'service', 'channel', 'ordergift', 'downloadapp', 'giftbox'];
+const POTATO_ICON_SLOTS = ['navhome', 'navincome', 'navteam', 'navshare', 'navmy', 'recharge', 'withdraw', 'service', 'channel', 'ordergift', 'downloadapp', 'giftbox', 'payicon'];
 const POTATO_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'promobanner', 'profilelogo', 'loaderbg', 'linkpreview', 'teambanner', 'mybanner', 'aboutbanner', 'aboutlogo', ...POTATO_ICON_SLOTS];
 const _potatoImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');

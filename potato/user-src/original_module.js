@@ -3883,7 +3883,7 @@ function openDepositFormSheet(){
     <div class="pt-chips" id="depChips">${chipAmts.map(a => `<button type="button" class="dep-chip pt-chip${a === _depChosenAmount ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a})">${a}</button>`).join('')}</div>
     <div class="pt-avail">Available:<b>${esc(vMoney2((STATE.account || {}).walletBalance))}</b></div>
     <div class="pt-amt"><span>${esc(cur())}</span><input id="depAmount" type="text" inputmode="numeric" maxlength="9" value="${_depChosenAmount || ''}" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');syncDepositQuickAmt()" autocomplete="off"></div>
-    <div class="pt-meths" id="depPays">${names.map((n, i) => `<button type="button" class="${i === startOn ? 'on' : ''}" onclick="pickPayLabel(this)">${esc(brandName())} ${esc(n)}</button>`).join('')}</div>
+    <div class="pt-meths" id="depPays">${names.map((n, i) => `<button type="button" class="${i === startOn ? 'on' : ''}" onclick="pickPayLabel(this)">${ptIconHtml('payicon', '', 'pt-payic')}<span>${esc(brandName())} ${esc(n)}</span></button>`).join('')}</div>
     <button class="pt-pay" id="depSubmitBtn" type="button" onclick="submitDeposit()">Pay <b id="depPayAmt">${esc(numGroup(_depChosenAmount, true))}</b></button>
     <div class="pt-notes">
       ${note('Minimum deposit amount: ' + esc(cur()) + ' ' + esc(numGroup(min, false)))}

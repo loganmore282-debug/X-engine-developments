@@ -112,6 +112,10 @@ async function member() {
   r = await J('POST', '/admin/settings/update', { settings: { depositMethodNames: ' , ' } }, null, true);
   ok(((await J('GET', '/public/settings')).j.settings || {}).depositMethodNames === 'Pay-B, Pay-A*, Pay-D, Pay-C', 'an empty list falls back to the default four buttons');
 
+  { const fs = require('fs'), rd = f => fs.readFileSync(path.join(root, f), 'utf8');
+    ok(/POTATO_ICON_SLOTS = \[[^\]]*'payicon'/.test(rd('server.js')) && /payicon:'Deposit pay button icon/.test(rd('admin-src/index.html')), 'the admin can upload one deposit pay button icon (slot payicon)');
+    ok(/ptIconHtml\('payicon'/.test(rd('user-src/original_module.js')), 'every deposit pay button shows that one icon'); }
+
   realLog(fails ? fails + ' FAILED of ' + checks : 'PASS: Potato pages server routes (' + checks + ' checks)');
   process.exit(fails ? 1 : 0);
 })().catch(e => { realLog('FATAL', e); process.exit(1); });
