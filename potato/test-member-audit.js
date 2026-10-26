@@ -56,8 +56,8 @@ async function main(){
   assert.equal(d.querySelector('.home-banner'),originalBanner,'balance refresh must not rebuild Home');
   w.eval('STATE.page="assets"');w.eval('STATE.investments=[{status:"active",tierKey:"a1",tierLabel:"Test Asset",amount:15000,payoutsTotal:30,payoutsMade:3,dailyPayout:1500,expectedReturn:45000,paidOut:4500,createdAt:new Date().toISOString()},{status:"active",tierKey:"a1",tierLabel:"Gifted",amount:0,payoutsTotal:30,payoutsMade:1,dailyPayout:1500,expectedReturn:45000,paidOut:0,createdAt:new Date().toISOString(),granted:true}]');w.paintAssets();
   assert.match(d.querySelector('.pt-cd h2').textContent,/Earnings Countdown/);assert.match(d.querySelector('#incomeTotal').textContent,/700\.00/);
-  assert.equal(d.querySelectorAll('#ownedAssets .pt-card').length,2,'Income lists every owned product');
-  assert.equal(d.querySelectorAll('#ownedAssets .pt-od').length,2,'each owned card shows its progress and dates');
+  assert.equal(d.querySelectorAll('#ownedAssets .pt-run').length,2,'Income lists every owned product');
+  assert.equal(d.querySelectorAll('#ownedAssets .pt-run-mat').length,2,'each owned card shows its maturity bar');
   w.eval('STATE.page="account"');await w.renderAccount();
   assert.match(d.querySelector('.pt-mystat').textContent,/70,000\.00/);
   assert.deepEqual([...d.querySelectorAll('.pt-menu b, .pt-menu span')].map(e=>e.textContent.trim()).filter(Boolean).slice(0,8),['Balance Detail','Messages','Login Password','Trade Password','Bank Card','Gift Code','APP Download','About Us']);

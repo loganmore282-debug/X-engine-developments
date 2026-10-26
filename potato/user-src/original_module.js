@@ -2461,6 +2461,13 @@ function ptStamp(ms){
   const d = new Date(ms), pad = n => String(n).padStart(2, '0');
   return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
 }
+// A product the member owns, as on the owner's Orders picture: the product picture with a green "Earning" label and its name over a dark fade, the name in red,
+// four pale lines (Daily, Reward, Amount, Start) and a "Maturity N%" bar with the length of the plan. Amounts are shown as the picture shows them, no thousands commas.
+function ptMoneyPlain(n){ return cur() + (/[A-Za-z]$/.test(cur()) ? ' ' : '') + (Number(n) || 0).toFixed(2); }
+function ptStartLines(ms){
+  const d = new Date(ms), pad = n => String(n).padStart(2, '0');
+  return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + '<br>' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
 function vOwnedCardHtml(inv){
   const st = planStats(inv);
   const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
@@ -2468,18 +2475,18 @@ function vOwnedCardHtml(inv){
   const startMs = st.createdMs, endMs = startMs + st.total * 86400000;
   const pct = st.matured ? 100 : Math.max(0, Math.min(100, Math.round((Date.now() - startMs) / (endMs - startMs) * 100)));
   return `
-  <article class="pt-card pt-owned">
-    <div class="pt-img">${mgPicture(Object.assign({}, p, { name }))}<span class="pt-tag">${st.matured ? 'Done' : 'Running'}</span></div>
-    <div class="pt-main">
-      <h3>${esc(name)}</h3>
-      <div class="pt-grid">
-        <div><b>Price</b><i class="pt-fit">${esc(ptMoneyInt(st.amount))}</i></div>
-        <div><b>Daily</b><i class="pt-fit">${esc(ptMoneyInt(st.daily))}</i></div>
-        <div><b>Days</b><i>${st.total}</i></div>
-        <div><b>Total</b><i class="pt-fit">${esc(ptMoneyInt(st.expected))}</i></div>
+  <article class="pt-run">
+    <div class="pt-run-top">
+      <div class="pt-run-img">${mgPicture(Object.assign({}, p, { name }))}<span class="pt-run-st${st.matured ? ' done' : ''}">${st.matured ? 'Completed' : 'Earning'}</span><span class="pt-run-cap">${esc(name)}</span></div>
+      <div class="pt-run-info">
+        <h3>${esc(name)}</h3>
+        <div class="pt-run-row"><span>Daily</span><b>+${esc(ptMoneyPlain(st.daily))}</b></div>
+        <div class="pt-run-row"><span>Reward</span><b>${esc(ptMoneyPlain(st.earned))}</b></div>
+        <div class="pt-run-row"><span>Amount</span><b>${esc(ptMoneyPlain(st.amount))}</b></div>
+        <div class="pt-run-row two"><span>Start</span><b>${ptStartLines(startMs)}</b></div>
       </div>
-      <div class="pt-od"><div class="pt-odb"><i style="width:${pct}%"></i></div><span>${esc(ptStamp(startMs))} \u2192 ${esc(ptStamp(endMs))}</span></div>
     </div>
+    <div class="pt-run-mat"><span>Maturity ${pct}%</span><b>${st.total} days</b></div>
   </article>`;
 }
 // "Today's Income": what was paid into the wallet as earnings since 00:00 of the region's own day (Uganda: UTC+3).
@@ -3403,6 +3410,11 @@ function statementDescription(t){
 // red when it failed. A finished credit shows a plain blue description line
 // instead (the screens do the same for "Daily Earnings").
 function statementChip(t){
+  // A deposit is "Online Deposit" once it is paid and stays "Pending Deposit" in every other case, a failed or abandoned payment included (owner: never "Failed").
+  if (t.type === 'deposit') {
+    const dep = String(t.status || '').toLowerCase();
+    return /pend|process|await|initiating|creating|sending|fail|declin|reject|cancel|error|expire|timeout|unpaid/.test(dep) || !dep ? { text: 'Pending Deposit', cls: 'wait' } : { text: 'Online Deposit', cls: '' };
+  }
   // The words in a free-text description only describe a deposit or a withdrawal; on a credit or a gift they are the admin's note.
   const describes = t.type === 'deposit' || t.type === 'withdraw';
   const raw = String(t.status || '').toLowerCase() + (describes ? ' ' + String(t.description || '').toLowerCase() : '');
@@ -3417,7 +3429,8 @@ function statementAmountText(t){
 }
 // The small emoji in front of a record (the owner's Balance Detail shows one for the Treasure Chest row) and the word after the time.
 var PT_REC_ICON = { promocode: '\ud83c\udf8f', order_gift: '\ud83c\udf81', deposit: '\ud83d\udce5', admin_credit: '\ud83d\udce5', withdraw: '\ud83d\udce4', cashback: '\ud83d\udcc8', commission: '\ud83e\udd1d', team_reward: '\ud83c\udfc6', mission_salary: '\ud83c\udfc6', invest: '\ud83d\uded2', investment: '\ud83d\uded2' };
-var PT_REC_KIND = { deposit: 'Deposit', admin_credit: 'Deposit', withdraw: 'Withdraw', cashback: 'Income', commission: 'Team', team_reward: 'Team', mission_salary: 'Team', invest: 'Purchase', investment: 'Purchase' };
+var PT_REC_NOKIND = ['invest', 'investment', 'investment_refund'];
+var PT_REC_KIND = { deposit: 'Deposit', admin_credit: 'Deposit', withdraw: 'Withdraw', cashback: 'Income', commission: 'Team', team_reward: 'Team', mission_salary: 'Team' };
 function statementDayKey(t){
   const pad = n => String(n).padStart(2, '0');
   const ms = t.createdAt ? new Date(t.createdAt).getTime() : NaN;
@@ -3440,14 +3453,14 @@ function renderStatement(){
   all.forEach(t => { const k = statementDayKey(t); if (!(k in idx)) { idx[k] = groups.length; groups.push({ k, rows: [] }); } groups[idx[k]].rows.push(t); });
   body.innerHTML = groups.map(g => `
     <div class="pt-day"><i></i><b>${esc(g.k)}</b><span>${g.rows.length} rows</span></div>
-    ${g.rows.map(t => {
+    <article class="pt-rec"><div class="pt-rec-in">${g.rows.map(t => {
       const amt = recordsRowAmount(t);
       const chip = statementChip(t);
-      const kind = chip ? chip.text : (PT_REC_KIND[t.type] || 'Other');
-      return `<article class="pt-rec"><div class="pt-rec-in"><span class="ic">${PT_REC_ICON[t.type] || '\ud83e\uddfe'}</span>
-        <div class="m"><b>${esc(statementDescription(t))}</b><small>${esc(statementClock(t))} \u00b7 <em class="${chip ? chip.cls : ''}">${esc(kind)}</em></small></div>
-        <span class="a ${amt < 0 ? 'out' : 'in'}">${esc(statementAmountText(t))}</span></div></article>`;
-    }).join('')}`).join('');
+      const kind = chip ? chip.text : (PT_REC_KIND[t.type] || (PT_REC_NOKIND.indexOf(t.type) >= 0 ? '' : 'Other'));   // a purchase shows only its time
+      return `<div class="pt-rec-row"><span class="ic">${PT_REC_ICON[t.type] || '\ud83e\uddfe'}</span>
+        <div class="m"><b>${esc(statementDescription(t))}</b><small>${esc(statementClock(t))}${kind ? ` \u00b7 <em class="${chip ? chip.cls : ''}">${esc(kind)}</em>` : ''}</small></div>
+        <span class="a ${amt < 0 ? 'out' : 'in'}">${esc(statementAmountText(t))}</span></div>`;
+    }).join('')}</div></article>`).join('');
 }
 window.switchStatementCategory = function(cat){
   if (!['all','income','expense','withdraw'].includes(cat)) return;
@@ -3833,7 +3846,8 @@ function maybeAnnounceAfterHomeNav(prevPage){
 function maybeAnnounceAfterSheetBack(title){
   if (title !== 'Deposit' && title !== 'Withdraw') return;
   clearTimeout(_annNavTimer);
-  _annNavTimer = setTimeout(() => { if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }, 350);
+  // The Home icons pop in first (about 0.6 s), then the dialog opens over them.
+  _annNavTimer = setTimeout(() => { if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }, 750);
 }
 // Owner: "l also wanted the dialog to show when on every visit ie logging in
 // again, registration like that." A second, independent trigger alongside
@@ -4060,20 +4074,26 @@ function openDepositFormSheet(){
   </div>`);
   ptCountPay();
 }
-// Opening Deposit: the amount chosen for the member (the first one) runs up on the Pay button from 0, like Cookie's. Typing or picking another amount ends it.
-function ptCountPay(){
-  const el = $('depPayAmt'), to = Number(_depChosenAmount) || 0;
-  if (!el || !to || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
-  const token = (el._cp = (el._cp || 0) + 1), t0 = performance.now(), ms = 1000;
-  el.textContent = numGroup(0, true);
+// The Pay button's amount always RUNS to its new figure (live, like Cookie's): from 0 when Deposit opens, and from what it shows to the new amount whenever one is
+// typed or picked. A new amount while it is still running continues from the figure on screen.
+function ptPayTo(to, ms){
+  const el = $('depPayAmt'); if (!el) return;
+  to = Number(to) || 0;
+  const shown = Number.isFinite(el._cv) ? el._cv : (parseMoneyInput(el.textContent) || 0), token = (el._cp = (el._cp || 0) + 1);
+  if (shown === to || !ms || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { el._cv = to; el.textContent = numGroup(to, true); return; }
+  const t0 = performance.now();
   const step = now => {
     if (el._cp !== token || !el.isConnected) return;
-    const k = Math.min(1, (now - t0) / ms);
-    if (k >= 1) { el.textContent = numGroup(to, true); return; }
-    el.textContent = numGroup(Math.round(to * (1 - Math.pow(1 - k, 3))), true);
-    requestAnimationFrame(step);
+    const k = Math.min(1, (now - t0) / ms), v = k >= 1 ? to : Math.round(shown + (to - shown) * (1 - Math.pow(1 - k, 3)));
+    el._cv = v; el.textContent = numGroup(v, true);
+    if (k < 1) requestAnimationFrame(step);
   };
   requestAnimationFrame(step);
+}
+function ptCountPay(){
+  const el = $('depPayAmt'); if (!el) return;
+  el._cv = 0; el.textContent = numGroup(0, true);
+  ptPayTo(_depChosenAmount, 1000);
 }
 // The Deposit page shows the admin's pay buttons (up to six); tapping one selects it (only one is on at a time), and the page opens with the one marked * (the first if none).
 window.pickPayLabel = function(btn){
@@ -4091,7 +4111,7 @@ function syncDepositQuickAmt(){
   // the two "Recharge" screens, and both of those screens are gone.
   const val = parseMoneyInput(($('depAmount') || {}).value);
   _depChosenAmount = val;
-  const pa = $('depPayAmt'); if (pa) { pa._cp = (pa._cp || 0) + 1; pa.textContent = numGroup(val || 0, true); }
+  ptPayTo(val || 0, 450);
   const chips = $('depChips');
   if (chips) chips.querySelectorAll('.dep-chip').forEach(btn => btn.classList.toggle('sel', Number(btn.dataset.amt) === val));
 }
