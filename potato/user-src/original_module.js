@@ -4700,8 +4700,9 @@ window.openInvestConfirm = async function(tierKey, btn){
     notify(result.message || 'Could not complete investment');
     return;
   }
-  showPage('home');
-  notify(`${p.name} is now running. See it under Orders.`);
+  // A bought product: the notice "Purchase successful", then the member is taken to the Income page (where the running product shows) by itself (owner).
+  notify('Purchase successful', () => showPage('assets'));
+  setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1500);
 };
 
 // The Cancel button and backdrop both call this by name from inline markup.
