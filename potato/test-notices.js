@@ -46,7 +46,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(nb && nb === cb, 'confirm backdrop has the same tint as notify: ' + nb + ' vs ' + cb);
   // The owner's word is "product": the old word must not come back in anything a member reads.
   ok(!/Buy Asset|Review this asset|No assets yet|Browse Assets|Could not load your assets|<span>Asset<\/span>|\|\| 'Asset'/.test(source), 'member text says product, not asset');
-  ok(/No products yet/.test(source) && /Buy Now/.test(source), 'and the product wording is there');
+  ok(/No products available/.test(source) && /Buy Now/.test(source), 'and the product wording is there');
   ok(/const stay = 2500;/.test(source) && !/2600|5500/.test(source.slice(source.indexOf('var _notifyTimer'), source.indexOf('var _notifyTimer') + 1500)), 'every notice closes by itself after exactly 2.5 seconds');
   console.log('test-notices: ' + n + ' checks passed' + (built ? ' (built)' : ''));
 })().catch(e => { console.error(e); process.exit(1); });

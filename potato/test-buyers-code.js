@@ -12,7 +12,7 @@ function run(user, code, opts = {}) {
   const snap = (id, data) => ({ id, exists: !!data, data: () => data, ref: { update: async p => writes.push(['update', id, p]), id } });
   const db = { collection: col => ({
     doc: id => ({ get: async () => snap(id, col === 'users' ? user : null), update: async p => writes.push([col, id, p]), set: async p => writes.push([col, id, p]) }),
-    where: (k, op, v) => ({ where: () => ({ limit: () => ({ get: async () => ({ empty: true, docs: [] }) }) }), limit: () => ({ get: async () => { if (col === 'promoCodes') looked.push(v); return col === 'promoCodes' && (!opts.only || v === opts.only) ? { empty: false, docs: [snap('c1', code)] } : { empty: true, docs: [] }; } }) }),
+    where: (k, op, v) => ({ get: async () => ({ docs: col === 'investments' ? (opts.investments || []).map(i => ({ data: () => i })) : [] }), where: () => ({ limit: () => ({ get: async () => ({ empty: true, docs: [] }) }) }), limit: () => ({ get: async () => { if (col === 'promoCodes') looked.push(v); return col === 'promoCodes' && (!opts.only || v === opts.only) ? { empty: false, docs: [snap('c1', code)] } : { empty: true, docs: [] }; } }) }),
   }) };
   new Function('app', 'verifyAuth', 'db', 'withLock', 'round2', 'logSecurityEvent', 'GIFTCODE_LENGTH', 'GIFTCODE_GROUP_LEN', 'tsMillis', 'crypto', 'FieldValue', 'console', 'treasureKeyLockedOut', 'noteWrongTreasureKey', 'TREASURE_CODE_LENGTH', 'tcHash', routeSrc)(
     app, async () => 'u1', db, (_k, fn) => fn(), n => Math.round(n * 100) / 100, () => {}, 12, 4, v => v instanceof Date ? v.getTime() : Date.parse(v), crypto, { increment: x => x, arrayUnion: (...a) => a, serverTimestamp: () => 0 }, { error() {}, warn() {}, log() {} }, () => !!opts.locked, () => {}, 10, v => crypto.createHash('sha256').update('potato-tc|' + v).digest('hex'));
@@ -25,8 +25,10 @@ function run(user, code, opts = {}) {
   let r = await run(member(), Object.assign({}, base, { buyersOnly: true }))();
   ok(r.status === 403 && r.body.code === 'BUYERS_ONLY' && /bought a product/.test(r.body.message), 'a member who has not bought a product is refused a buyers-only code');
   ok(r.writes.length === 0, 'and nothing is claimed or written, so the code is still free after their first purchase');
-  r = await run(member({ totalInvested: 37700 }), Object.assign({}, base, { buyersOnly: true }))();
+  r = await run(member({ totalInvested: 37700 }), Object.assign({}, base, { buyersOnly: true }), { investments: [{ amount: 37700 }] })();
   ok(!(r.body && r.body.code === 'BUYERS_ONLY'), 'a member who has bought a product is not stopped by the buyers-only rule');
+  r = await run(member({ totalInvested: 37700 }), Object.assign({}, base, { buyersOnly: true }), { investments: [{ amount: 37700, granted: true }] })();
+  ok(r.status === 403 && r.body.code === 'BUYERS_ONLY', 'a product the admin GAVE does not make a buyer');
   r = await run(member(), base)();
   ok(!(r.body && r.body.code === 'BUYERS_ONLY'), 'an ordinary code is still claimable by anyone');
   // The 10-character code: typed in any case, with stray dashes or spaces, it is found by its hash (never by the plain text).

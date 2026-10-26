@@ -522,7 +522,7 @@ app.use((req, res, next) => {
 });
 
 // ── MAINTENANCE GATE ──
-const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/redeem'];
+const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/redeem', '/salary', '/gifts', '/app'];
 const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/pesajet/webhook', '/tavupay/webhook']);
 // The platform's name, as the owner last set it in Admin -> Settings. Every
 // server-side string that names the app goes through here rather than
@@ -1002,8 +1002,8 @@ function cleanAboutHtml(raw) {
   let h = String(raw == null ? '' : raw).slice(0, 200000);
   h = h.replace(/<\s*(script|iframe|object|embed|link|meta|base|form|noscript)\b[\s\S]*?(<\s*\/\s*\1\s*>|$)/gi, '');
   h = h.replace(/<\s*(script|iframe|object|embed|link|meta|base|form|noscript)\b[^>]*>/gi, '');
-  h = h.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-  h = h.replace(/(href|src|xlink:href|action|formaction)\s*=\s*("\s*(javascript|vbscript|data:text)[^"]*"|'\s*(javascript|vbscript|data:text)[^']*')/gi, '$1="#"');
+  h = h.replace(/[\s/]on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  h = h.replace(/(href|src|xlink:href|action|formaction)\s*=\s*("[\s&#;a-z0-9]*(javascript|vbscript|data:text)[^"]*"|'[\s&#;a-z0-9]*(javascript|vbscript|data:text)[^']*'|(javascript|vbscript|data:text)[^\s>]*)/gi, '$1="#"');
   return h;
 }
 async function getAboutHtml() {
@@ -1855,7 +1855,7 @@ async function _markDepositFailedNow(depRef, userId, reason) {
   let alreadyCredited = false;
   await withLock('dep:' + depRef.id, async () => {
     const fresh = await depRef.get();
-    if (fresh.exists && depositFullyCredited(fresh.data())) { alreadyCredited = true; return; }
+    if (fresh.exists && (depositFullyCredited(fresh.data()) || (fresh.data().status === 'matched' && fresh.data().walletCredited === true))) { alreadyCredited = true; return; }
     await depRef.update({ status: 'failed', failureReason: reason }).catch(() => {});
     // Codex-caught real bug (2nd money-flow audit): this ledger-row update
     // used to run AFTER the dep:<id> lock above was released -- a
@@ -2044,7 +2044,7 @@ async function marzGetBalance(region) {
 }
 function _marzExtractTx(d) {
   const tx = d?.data?.transaction || d?.transaction || d?.data || d || {};
-  const rawStatus = tx.status || tx.state || tx.transaction_status || tx.payment_status || d?.status || '';
+  const rawStatus = tx.status || tx.state || tx.transaction_status || tx.payment_status || (tx === d ? d?.status : '') || '';   // the reply envelope's own "success" is not the payment's status
   // Speculative, checked against MarzPay's own integration guide afterward
   // (docs/marzpay-integration-guide.pdf) rather than assumed correct:
   // neither the collection-status response (5.5) nor the webhook payloads
@@ -2737,7 +2737,7 @@ function tavupayWebhookFields(body) {
   }
   const event = String(b.event || '').toLowerCase();
   let label = '';
-  if (/success/.test(event)) label = 'success'; else if (/fail/.test(event)) label = 'failed';
+  if (/(^|[._-])(not[._-]?|un)(success|succeeded|completed|paid)/.test(event) || /fail/.test(event)) label = 'failed'; else if (/(success|succeeded|completed|paid)($|[._-])/.test(event)) label = 'success';
   else label = tavupayStatusLabel({ status: d.transactionStatus || d.status || b.status, success: d.success !== undefined ? d.success : b.success });
   const type = String(b.type || d.type || '').toLowerCase();
   const isPayout = event.startsWith('transfer') || /disburs|transfer|withdraw/.test(type) || /DEBIT/i.test(String(d.transactionEntryGeneralType || ''));
@@ -4068,13 +4068,14 @@ app.post('/invest/create', async (req, res) => {
       // the older first-deposit reward does not earn a second one. Read inside the balance lock, so two purchases made at once can never both
       // count as the first.
       const priorPlans = await db.collection('investments').where('userId', '==', userId).get();
-      isFirstInvestment = !fresh.data().firstReferralDepositId && !priorPlans.docs.some(d => d.data().granted !== true);
+      // `firstPurchaseDone` is the permanent mark: an admin removing the member's only product later must not make the next purchase a "first" one again.
+      isFirstInvestment = !fresh.data().firstReferralDepositId && fresh.data().firstPurchaseDone !== true && !priorPlans.docs.some(d => d.data().granted !== true);
       const invRef = db.collection('investments').doc();
       invId = invRef.id;
       // Debited via increment(), not an absolute newBalance write, so a
       // concurrent credit from a different lock key (deposit, commission)
       // landing mid-transaction can never be silently overwritten.
-      await uRef.update({ walletBalance: FieldValue.increment(-liveTier.price), totalInvested: FieldValue.increment(liveTier.price), firstInvestmentDone: true });
+      await uRef.update({ walletBalance: FieldValue.increment(-liveTier.price), totalInvested: FieldValue.increment(liveTier.price), firstInvestmentDone: true, ...(isFirstInvestment ? { firstPurchaseDone: true } : {}) });
       const { date, time } = nowStr();
       try {
         await invRef.set({
@@ -4096,7 +4097,7 @@ app.post('/invest/create', async (req, res) => {
         await invRef.delete().catch(delErr => {
           console.error(`MONEY-SAFETY: investment ${invRef.id} ledger-row write failed AND the investment doc itself could not be deleted -- a free undebited active investment may be left behind for user ${userId}. Manual fix required.`, delErr.message);
         });
-        await uRef.update({ walletBalance: FieldValue.increment(liveTier.price), totalInvested: FieldValue.increment(-liveTier.price), firstInvestmentDone: wasFirstInvestmentDone }).catch(compErr => {
+        await uRef.update({ walletBalance: FieldValue.increment(liveTier.price), totalInvested: FieldValue.increment(-liveTier.price), firstInvestmentDone: wasFirstInvestmentDone, ...(isFirstInvestment ? { firstPurchaseDone: false } : {}) }).catch(compErr => {
           console.error(`MONEY-SAFETY: investment ${invRef.id} creation failed AFTER debiting user ${userId} ${liveTier.price}, and the compensating refund ALSO failed -- wallet is short by ${liveTier.price}. Manual fix required.`, compErr.message);
         });
         throw createErr;
@@ -4132,7 +4133,9 @@ app.get('/investments', async (req, res) => {
     const investments = snap.docs.map(d => {
       const data = d.data();
       const live = byKey.get(data.tierKey);
-      return { id: d.id, ...data, tierLabel: (live && live.name) || data.tierLabel };
+      // The commission bookkeeping holds the UPLINE's account ids and amounts: it never goes to the member's phone.
+      const { commissionPlan, commissionPaidLevels, commissionPending, commissionBanBlocked, isFirstInvestment, ...shown } = data;
+      return { id: d.id, ...shown, tierLabel: (live && live.name) || data.tierLabel };
     });
     res.json({ status: 'success', investments });
   } catch (e) {
@@ -5957,7 +5960,7 @@ app.post('/redeem', async (req, res) => {
       if (cd.expiresAt && tsMillis(cd.expiresAt) < Date.now()) { result = { code: 400, body: { status: 'error', message: 'This code has expired' } }; return; }
       // A buyers-only code is for members who have bought a product (a real purchase; a product the admin gave does not count). Refused BEFORE
       // anything is claimed, so a member who has not bought yet can still use the same code after their first purchase.
-      if (cd.buyersOnly === true && !(Number(userSnap.data().totalInvested) > 0)) {
+      if (cd.buyersOnly === true && !(await db.collection('investments').where('userId', '==', userId).get()).docs.some(d => d.data().granted !== true)) {
         result = { code: 403, body: { status: 'error', code: 'BUYERS_ONLY', message: 'This code is only for members who have bought a product.' } }; return;
       }
       const usedBy = cd.usedBy || [];
@@ -7104,6 +7107,12 @@ app.post('/admin/products/save', async (req, res) => {
       try {
         const owned = await db.collection('investments').where('tierKey', '==', oldKey).get();
         for (const d of owned.docs) await d.ref.update({ tierKey: newKey });
+        // The Order Gift a member already received is remembered by the product KEY: carry that mark along, or the renamed product pays its gift again.
+        const claimed = await db.collection('users').where('orderGiftsClaimed', 'array-contains', oldKey).get();
+        for (const d of claimed.docs) {
+          await d.ref.update({ orderGiftsClaimed: FieldValue.arrayRemove(oldKey) });
+          await d.ref.update({ orderGiftsClaimed: FieldValue.arrayUnion(newKey) });
+        }
       } catch (e) { console.error('Product rename: could not move investments from ' + oldKey + ' to ' + newKey + ':', e.message); }
     }
     _productsCacheTs = 0; _vipCache.clear();
@@ -7997,7 +8006,7 @@ app.post('/admin/deposit', async (req, res) => {
     }));
     logAdminAction(req, 'manual_credit', { userId, amount: amt, note });
     res.json({ status: 'success', message: `Credited ${fmtMoney(amt)}` });
-  } catch (e) { _adminCreditDebounce.delete(userId); res.status(500).json({ status: 'error', message: e.message }); }   // nothing was credited: the corrected retry may go straight away
+  } catch (e) { _adminCreditDebounce.delete(userId); res.status(adminFailCode(e)).json({ status: 'error', message: e.message }); }   // nothing was credited: the corrected retry may go straight away
 });
 app.post('/admin/debit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -8040,6 +8049,7 @@ app.post('/admin/ban', async (req, res) => {
   const { userId, action, reason } = req.body;
   if (!userId || typeof userId !== 'string') return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
+    if (action !== 'ban' && action !== 'unban') return res.status(400).json({ status: 'error', message: 'action must be ban or unban' });
     const isBan = action === 'ban';
     await db.collection('users').doc(userId).update({
       status: isBan ? 'banned' : 'active', banReason: isBan ? (reason || 'Policy violation') : null, bannedAt: isBan ? FieldValue.serverTimestamp() : null
@@ -8097,7 +8107,7 @@ app.post('/admin/deposits/list', async (req, res) => {
     const scoped = scopeRowsToRegion(rows, want, userRegions);
     rows.length = 0; rows.push(...scoped);
     rows.forEach(r => { r.accountPhone = phones[r.userId] || ''; r.referralCode = refCodes[r.userId] || ''; counts[r.status || 'unknown'] = (counts[r.status || 'unknown'] || 0) + 1; });
-    const { processedByDay, processedAmount } = groupProcessedByDay(rows.filter(r => r.status === 'matched'), 'creditedAt');
+    const { processedByDay, processedAmount } = groupProcessedByDay(rows.filter(r => depositFullyCredited(r)), 'creditedAt');
     // Subagent-audit-caught: this had a real 5000-row cap on each underlying
     // query with no truncated flag, unlike /admin/referrals/list and
     // /admin/transactions/list, which this file already fixed the same way
@@ -8253,7 +8263,7 @@ app.get('/admin/stats', async (req, res) => {
       walletTotal += finiteMoney(u.walletBalance);
     });
     let depositAmount = 0;
-    depSnap.forEach(d => { depositAmount += finiteMoney(d.data().amount); });
+    depSnap.forEach(d => { if (depositFullyCredited(d.data())) depositAmount += finiteMoney(d.data().amount); });   // a matched row whose wallet credit is still stuck is not topped up yet
     let withdrawAmount = 0;
     witSnap.forEach(d => { withdrawAmount += finiteMoney(d.data().net); });
     let investedAmount = 0, activeInvestments = 0;
@@ -8536,7 +8546,7 @@ app.post('/admin/user/referral-chain', async (req, res) => {
       cs.forEach(d => {
         const t = d.data(), amt = finiteMoney(t.amount), lv = Number(t.commissionLevel);
         commission.total += amt; commission.count++;
-        if (lv === 1) commission.l1 += amt; else if (lv === 2) commission.l2 += amt; else if (lv === 3) commission.l3 += amt;
+        if (lv === 0) commission.l1 += amt; else if (lv === 1) commission.l2 += amt; else if (lv === 2) commission.l3 += amt;   // commissionLevel is stored 0-based (0 = Level 1)
       });
     } catch (_) { /* the report still prints without it */ }
     const upPhone = upline.length ? upline[0].phone : '';

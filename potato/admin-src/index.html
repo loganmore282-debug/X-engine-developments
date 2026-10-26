@@ -1578,7 +1578,7 @@ async function renderUsers(){
       const mismatches = d.mismatches||[];
       const alerts = d.alerts||[];
       const total = mismatches.length + alerts.length;
-      const FIELD_LABEL = { walletBalance:'Wallet balance', totalDeposited:'Total topped up', totalEarned:'Total earned', totalInvested:'Total invested' };
+      const FIELD_LABEL = { walletBalance:'Wallet balance', totalDeposited:'Total topped up', totalEarned:'Total earned', totalInvested:'Total invested', totalWithdrawn:'Total withdrawn' };
       const ALERT_LABEL = { duplicate_credit:'Duplicate recharge credit', negative_balance:'Negative balance', registration_incomplete:'Registration never completed' };
       // Codex-caught real bug (round 2, still true for walletBalance only):
       // "Recalculate totals" rewrites totalDeposited/totalEarned/
@@ -1618,7 +1618,7 @@ async function renderUsers(){
         b.disabled=true; b.textContent='Repairing…';
         const rd=await api('/admin/user/repair-wallet',{userId:b.dataset.repairwallet});
         toast(rd.message||rd.status, rd.status==='success'?'ok':'err');
-        if(rd.status==='success'){ $('auditBtn').click(); } else { b.disabled=false; b.textContent='Repair wallet'; }
+        if(rd.status==='success'){ $('auditBtn')?.click(); } else { b.disabled=false; b.textContent='Repair wallet'; }
       }));
     });
   }
@@ -1907,7 +1907,7 @@ async function openUser(uid){
     <div class="kv"><span class="k">Invested</span><span>${ugx(u.totalInvested)}</span></div>
     <div class="kv"><span class="k">Cashed out</span><span>${ugx(u.totalWithdrawn)}</span></div>
     <div class="kv"><span class="k">Total earned (all sources)</span><span>${ugx(u.totalEarned)}</span></div>
-    <div class="muted" style="font-size:11px;margin:-4px 0 8px;line-height:1.6">Investment cashback ${ugx(eb.cashback)} &middot; Referral commission ${ugx(eb.commission)} &middot; Gift codes ${ugx(eb.promocode)} &middot; Team rewards ${ugx(eb.team_reward)} &middot; Team rewards ${ugx(mission)}</div>
+    <div class="muted" style="font-size:11px;margin:-4px 0 8px;line-height:1.6">Investment cashback ${ugx(eb.cashback)} &middot; Referral commission ${ugx(eb.commission)} &middot; Gift codes ${ugx(eb.promocode)} &middot; Team rewards ${ugx((Number(eb.team_reward)||0)+(Number(mission)||0))} &middot; Order gifts ${ugx(eb.order_gift)} &middot; Download App reward ${ugx(eb.app_claim)}</div>
     <div class="kv"><span class="k">Team commission <span class="muted" style="font-size:10.5px">(already included above)</span></span><span>${ugx(u.teamCommission)}</span></div>
     <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'Not set')}</span></div>
     <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
@@ -2354,7 +2354,7 @@ function drawWits(){
   );
   $('witRows').innerHTML = list.length?list.map(w=>{
     const code = w.referralCode;
-    const who = esc(w.holder||'');
+    const who = esc(w.accountPhone||'') + (w.holder ? `<br><span class="muted" style="font-size:11px">${esc(w.holder)}</span>` : '');   // the MEMBER's number first, then the payee's name
     const dest = `${esc(w.network||'Not set')}<br><span class="muted" style="font-size:11px">${esc(w.phone||'')}</span>`;
     return `<tr class="clickable" data-uid="${esc(w.userId)}"><td>${fdate(w.createdAt)}</td><td>${who}${code?`<br><span class="muted">${esc(code)}</span>`:''}</td>
     <td>${ugx(w.amount, w.regionKey)}</td><td><b>${ugx(w.net, w.regionKey)}</b></td><td>${dest}</td>
@@ -2521,7 +2521,7 @@ function editProduct(p, order){
     <div class="muted" style="margin:14px 0 6px"><b>Opening schedule</b> — leave blank for always open.
       Upcoming above overrides both. Times are Uganda time.</div>
     <label>Opens at (one-off) — shows a countdown until then, open for good after</label>
-    <input id="pOpenAt" type="datetime-local" value="${p.openAt?new Date(Number(p.openAt)-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16):''}">
+    <input id="pOpenAt" type="datetime-local" value="${p.openAt?openAtToField(p.openAt):''}">
     <div class="row2">
       <div><label>Open daily from</label><input id="pOpenFrom" type="time" value="${esc(p.openFrom||'')}"></div>
       <div><label>until</label><input id="pOpenTo" type="time" value="${esc(p.openTo||'')}"></div>
@@ -2598,7 +2598,7 @@ function editProduct(p, order){
       // datetime-local has no zone, so the browser reads it as local time --
       // which for the owner IS Uganda time. Sent as epoch ms so the server
       // never has to guess a zone.
-      openAt: $('pOpenAt').value ? new Date($('pOpenAt').value).getTime() : '',
+      openAt: $('pOpenAt').value ? fieldToOpenAt($('pOpenAt').value) : '',
       openFrom: $('pOpenFrom').value, openTo: $('pOpenTo').value };
     // A deliberate rename (the admin actually changed the Key box) -- tells
     // the server to move the document, not create a second one alongside
@@ -2671,15 +2671,17 @@ async function renderMessages(){
   });
   $('mImgClear').addEventListener('click', ()=>{ mImage = ''; paintMImg('', 'Picture will be removed'); });
   $('mSave').addEventListener('click', async ()=>{
+    if($('mSave').disabled) return;
     const title = $('mTitle').value.trim();
     const body = $('mBody').value.trim();
     if(!title) return toast('Enter a title','err');
     if(!body) return toast('Enter the message','err');
     const payload = { id: $('mId').value.trim(), title, body };
     if (mImage !== null) payload.image = mImage;
+    $('mSave').disabled = true;   // a second tap while it is on its way would post the message twice
     const d = await api('/admin/messages/save', payload);
     toast(d.status==='success'?'Message posted':(d.message||'Failed'), d.status==='success'?'ok':'err');
-    if(d.status==='success') renderMessages();
+    if(d.status==='success') renderMessages(); else $('mSave').disabled = false;
   });
   document.querySelectorAll('[data-medit]').forEach(b=>b.addEventListener('click',()=>{
     const m = list.find(x=>x.id===b.dataset.medit); if(!m) return;
@@ -3017,6 +3019,7 @@ async function renderBanners(){
     api('/admin/settings'), api('/admin/banner'), api('/admin/potato-images'), api('/admin/brand-assets'), api('/admin/announcement-image')
   ]);
   if (staleTab('banners')) return;
+  if (r.status!=='success'){ loadFailed(r,'the banners'); return; }   // never show default boxes: saving them would overwrite the real settings
   const s = r.settings||{};
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
   const bannerImage = br.image||'';
@@ -3030,7 +3033,8 @@ async function renderBanners(){
   const profileLogoImage = cir.profilelogo||'';
   const loaderBgImage = cir.loaderbg||'';
   const teamBannerImage = cir.teambanner||'', myBannerImage = cir.mybanner||'', aboutBannerImage = cir.aboutbanner||'', aboutLogoImage = cir.aboutlogo||'';
-  const aboutHtmlRes = await api('/admin/about-html'); const aboutHtmlText = aboutHtmlRes.status==='success' ? (aboutHtmlRes.html||'') : '';
+  const aboutHtmlRes = await api('/admin/about-html'); if (aboutHtmlRes.status!=='success'){ loadFailed(aboutHtmlRes,'the About page'); return; }   // an empty box here would blank the page on Save
+  const aboutHtmlText = aboutHtmlRes.html||'';
   const announcementImage = (annr && annr.image) || '';
   const appIconImage = bar.appIcon||'';
   const appIconCustom = !!bar.appIconCustom;
@@ -3391,13 +3395,20 @@ function wireBannerHandlers(){
   wirePotatoImageSlot('profilelogo', 'profileLogoFile', 'profileLogoClear', 'Profile logo saved, live for every member', 'Profile logo removed');
   wirePotatoImageSlot('logo', 'brandLogoFile', 'brandLogoClear', 'Brand logo saved', 'Brand logo removed');
 }
+// "Opens at" is typed in the REGION's time (Uganda by default), whatever time zone the admin's own browser is in; the server judges it the same way.
+var REGION_OFF_MIN = 180;
+function openAtToField(ms){ return new Date(Number(ms) + REGION_OFF_MIN * 60000).toISOString().slice(0, 16); }
+function fieldToOpenAt(v){ const t = Date.parse(v + ':00Z'); return Number.isFinite(t) ? t - REGION_OFF_MIN * 60000 : ''; }
 async function renderSettings(){
   // Image/banner uploads all moved to their own tab, see renderBanners() --
   // this fetch only needs what Rates/Payments/Support/App name/About
   // actually render now.
   const [r] = await Promise.all([ api('/admin/settings') ]);
   if(staleTab('settings')) return;
+  // A failed read must NOT show default boxes: Save would then overwrite the real settings (maintenance, allowed domains, rates) with them.
+  if(r.status!=='success'){ loadFailed(r,'settings'); return; }
   const s = r.settings||{};
+  if(s.regionOffsetMin!=null) REGION_OFF_MIN = Number(s.regionOffsetMin) || 0;
   applyAdminBrandName(s.brandName);
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
   $('content').innerHTML = `

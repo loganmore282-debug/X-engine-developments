@@ -986,10 +986,15 @@ function showLoadingScreen(){
   if (window._potatoLoaderRestart) window._potatoLoaderRestart();
 }
 var _artPromise = null, _artLanded = false, _annWaiting = false;
+var _artTries = 0;
 function startArtwork(){
   if (_artPromise) return _artPromise;
   _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/potato-images') ])
-    .then(([ai, ci]) => { applyBootArtwork(ai, ci); })
+    .then(([ai, ci]) => {
+      applyBootArtwork(ai, ci);
+      // A request that failed (a weak connection) would leave every icon and banner missing until the member reloaded: ask again, a few times.
+      if ((ci.status !== 'success' || ai.status !== 'success') && _artTries++ < 4) setTimeout(() => { _artPromise = null; startArtwork(); }, 4000);
+    })
     .catch(() => {})
     .then(() => { _artLanded = true; });
   return _artPromise;
@@ -1899,7 +1904,9 @@ async function liveRefreshVisible(){
     // The product list on Home follows the admin's changes (price, order, switched off) without the member reloading.
     if (pr.status === 'success') {
       STATE.products = pr.products;
-      if (!_openSheetTitle && STATE.page === 'home' && liveChanged('products', pr.products) && $('homeProducts')) {
+      const ownedChanged = r.status === 'success' && liveChanged('investments', r.investments);   // bought / given / removed elsewhere: the 0/limit tags and BUY follow
+      const productsChanged = liveChanged('products', pr.products);
+      if (!_openSheetTitle && STATE.page === 'home' && (productsChanged || ownedChanged) && $('homeProducts')) {
         const list = homeTabProducts();
         $('homeProducts').innerHTML = list.length ? list.map(vProductCardHtml).join('') : homeEmptyHtml();
         startProductCountdowns();
@@ -1907,12 +1914,17 @@ async function liveRefreshVisible(){
     } else ok = false;
   } else if (STATE.page === 'assets') {
     if (!liveDue('inv', LIVE_LIST_MS, _liveAccountMoved)) return ok;
-    const [pr, ir] = await Promise.all([api('/public/products'), api('/investments')]);
+    const [pr, ir, tr] = await Promise.all([api('/public/products'), api('/investments'), api('/transactions')]);
     if (pr.status === 'success') STATE.products = pr.products; else ok = false;
     if (ir.status === 'success') {
       STATE.investments = ir.investments;
       _investmentsLoadFailed = false;
     } else ok = false;
+    // Today's Income is made of the transactions: a payment that lands while the member sits on Orders shows at once.
+    if (tr.status === 'success' && Array.isArray(tr.transactions)) {
+      STATE.transactions = tr.transactions;
+      if (STATE.page === 'assets' && liveChanged('txToday', tr.transactions)) { const td = $('ptToday'); if (td) td.textContent = vMoney2(ptTodayIncome()); }
+    }
     if (!_openSheetTitle && STATE.page === 'assets') {
       const changedProducts = pr.status === 'success' && liveChanged('products', pr.products);
       const changedInvestments = ir.status === 'success' && liveChanged('investments', ir.investments);
@@ -2313,7 +2325,7 @@ function ptFlipClockSet(root, str){
 function ptFlipSettle(d){ d.classList.remove('pt-go'); const v = d.getAttribute('data-v'); d.querySelectorAll('i').forEach(i => { i.textContent = v; }); }
 
 function homeTabProducts(){ return (STATE.products || []).filter(p => p.active !== false); }
-function homeEmptyHtml(){ return '<div class="v-empty">No products yet.</div>'; }
+function homeEmptyHtml(){ return '<div class="pt-noprod">No products available</div>'; }
 function paintHome(){
   // A product the admin switched off (Active unticked) is not offered on Home; owners still see it on Income.
   const products = (STATE.products || []).filter(p => p.active !== false);
@@ -2791,7 +2803,7 @@ async function renderNetwork(){
   else paintNetwork(true);   // the page at once with "..." in the figures and "Loading..." in the list
   const [r, sr] = await Promise.all([api('/team/stats'), api('/salary/status')]);
   if (sr.status === 'success') STATE.salary = sr;
-  if (r.status === 'success') STATE.teamStats = r;
+  if (r.status === 'success') { STATE.teamStats = r; liveChanged('team', r); }   // the live loop must not see this same data as "changed" and repaint a second time
   else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:0,l2:0,l3:0}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0, levelCommission:{l1:0,l2:0,l3:0} };
   if (STATE.page !== 'network') return;
   paintNetwork();
@@ -2805,15 +2817,16 @@ function ptLevelCardHtml(level, loading){
     <div class="pt-lvg">${tile(loading ? '...' : (Number(team['l' + level]) || 0), 'Members')}${tile((rates['l' + level] != null ? rates['l' + level] : 0) + '%', 'Rate')}${tile(loading ? '...' : esc(vMoney2(lc['l' + level])), 'Commission')}${tile(loading ? '...' : esc(vMoney2(lp['l' + level])), 'Purchase')}</div>`;
 }
 function ptTeamBodyHtml(loading){
-  if (STATE.teamTab === 'reward') return ptRewardHtml();
+  if (STATE.teamTab === 'reward') return ptRewardHtml(loading);
   const level = _activeTeamLevel || 1;
   _activeTeamLevel = level;
   return `<section class="pt-lvcard" id="ptLvCard">${ptLevelCardHtml(level, loading)}</section>
   <div class="pt-lvrow">${[1, 2, 3].map(n => `<button type="button" class="pt-lvp${level === n ? ' on' : ''}" data-level="${n}" onclick="switchTeamLevel(${n})">Level ${n}</button>`).join('')}</div>
   <div id="teamMembersBox">${loading ? '<div class="mg-nomem">Loading...</div>' : ''}</div>`;
 }
-function ptRewardHtml(){
+function ptRewardHtml(loading){
   const S = STATE.salary;
+  if (!S && loading) return '<div class="mg-nomem">Loading...</div>';   // still on its way: not a failure
   if (!S) return '<div class="v-empty" onclick="renderNetwork()">Could not load. Tap to try again.</div>';
   const tiers = S.tiers || [], total = Number(S.total) || 0, days = Number(S.accruedDays) || 0;
   const money = n => cur() + ' ' + numGroup(n, false);
@@ -2855,7 +2868,7 @@ async function renderPromo(){
   else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + NAV_LOADER + '</div>';
   const [r, sr] = await Promise.all([api('/team/stats'), api('/salary/status')]);
   if (sr.status === 'success') STATE.salary = sr;
-  if (r.status === 'success') STATE.teamStats = r;
+  if (r.status === 'success') { STATE.teamStats = r; liveChanged('team', r); }
   else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:0,l2:0,l3:0}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamDeposits:0, levelCommission:{}, levelPurchase:{} };
   if (STATE.page !== 'promo') return;
   paintPromo();
@@ -3660,7 +3673,8 @@ function ptGiftCodeRecords(){
   const rows = (STATE.transactions || []).filter(t => t.type === 'promocode');
   const box = $('gcRecords'); if (!box) return;
   if (!rows.length) return;
-  box.outerHTML = '<div class="pt-gcl">' + rows.slice(0, 20).map(t => `<div><span>${esc(statementDayKey(t))} ${esc(statementClock(t))}</span><b>+${esc(vMoney2(t.amount))}</b></div>`).join('') + '</div>';
+  box.className = 'pt-gcl';   // the same box (it keeps its id), so the next win can fill it again
+  box.innerHTML = rows.slice(0, 20).map(t => `<div><span>${esc(statementDayKey(t))} ${esc(statementClock(t))}</span><b>+${esc(vMoney2(t.amount))}</b></div>`).join('');
 }
 window.submitChestKey = async function(){
   // No case-forcing here -- /redeem matches case-insensitively via
@@ -3913,6 +3927,8 @@ function resetOverlayState(){
   // on top of the Login screen (the win card even showed the previous member's New Balance).
   ['confirmBg', 'annBg'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
   const win = $('ptClaimBg'); if (win) win.remove();
+  const gw = $('ptWinBg'); if (gw) gw.remove();            // the Gift Code win card (it shows the New Balance)
+  const pin = $('pinBg'); if (pin) pin.classList.remove('show');   // the Trade Password dialog
   _openSheetTitle = null; _depActiveDepositId = null; _withdrawSubmitting = false;
   if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
 }
@@ -4671,11 +4687,11 @@ window.openInvestConfirm = async function(tierKey, btn){
   const p = (STATE.products||[]).find(x => x.key === tierKey);
   if (!p || (btn && btn.disabled) || _buyBusy) return;
   _buyBusy = true;
-  const label = btn ? btn.textContent : '';
+  const label = btn ? btn.innerHTML : '';   // the whole button (cart icon + word), put back as it was
   if (btn) btn.textContent = 'Buying…';
   let result;
   try { result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey, expectedPrice: Number(p.price) || 0 }) }); }
-  finally { _buyBusy = false; if (btn && btn.isConnected) btn.textContent = label || 'Buy Now'; }
+  finally { _buyBusy = false; if (btn && btn.isConnected) btn.innerHTML = label || 'Buy Now'; }
   if (result.stale) return;
   if (result.status === 'error' && result.code === 'PRICE_CHANGED') { try { refreshCatalogNow(); } catch (_) {} }
   if (result.status !== 'success') {
@@ -4776,7 +4792,11 @@ window.claimOrderGift = async function(key, btn){
   if (btn) btn.disabled = true;
   const r = await post('/gifts/claim', { key });
   if (r.stale) return;
-  if (r.status !== 'success') { if (btn) btn.disabled = false; return notify(r.message || 'Could not receive this gift'); }
+  if (r.status !== 'success') {
+    if (r.code === 'ALREADY_CLAIMED') { const done = (STATE.gifts || []).find(x => x.key === key); if (done) { done.claimed = true; paintOrderGifts(true); } }   // received on another phone: the card must say so
+    else if (btn) btn.disabled = false;
+    return notify(r.message || 'Could not receive this gift');
+  }
   const g = (STATE.gifts || []).find(x => x.key === key); if (g) g.claimed = true;
   if (STATE.account && r.walletBalance != null) STATE.account.walletBalance = r.walletBalance;
   paintOrderGifts(true);

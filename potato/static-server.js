@@ -140,6 +140,7 @@ const server = http.createServer((req, res) => {
   } catch (_) {
     return send(res, 400, { 'Content-Type': 'text/plain; charset=utf-8' }, 'Bad Request', method);
   }
+  if (pathname.indexOf('\0') !== -1) return send(res, 400, { 'Content-Type': 'text/plain; charset=utf-8' }, 'Bad Request', method);   // a NUL byte would make fs.stat throw and stop the whole process
 
   // Invite links. Referral links used to be shared as <origin>/refCode=<code>,
   // which is a real URL PATH, so without this every invite already sent to a
