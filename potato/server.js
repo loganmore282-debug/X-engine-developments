@@ -578,6 +578,7 @@ const DEFAULT_SETTINGS = {
   // The names under the Deposit page's method buttons, comma separated; each shows after the app name ("Potato Pay-A"). The first one is chosen at first.
   depositMethodNames: 'Pay-B, Pay-A*, Pay-D, Pay-C',
   giftCodeHint: 'Enter gift code (T-XXXX)',
+  withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   shareMessage: 'Join me on {app}',
   // What "Claim" on the Download App page pays (once per member); 0 hides the button.
   appClaimAmount: 0,
@@ -3545,6 +3546,26 @@ function hhmmToMin(v) {
   const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(v || '').trim());
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 }
+// 18:00 -> "18:00" (24-hour, like every clock in the app).
+function hhmmLabel(v) {
+  const t = hhmmToMin(v);
+  if (t == null) return '';
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+}
+// Whether withdrawing is open right now (Settings > Withdrawal hours). The window may wrap midnight (18:00 to 17:00), and it is judged in the
+// region's own local time: tzOffMs() is that region's offset.
+function withdrawWindowState(sett, ts) {
+  const from = hhmmToMin(sett && sett.withdrawOpenFrom);
+  const to = hhmmToMin(sett && sett.withdrawOpenTo);
+  const enabled = !!(sett && sett.withdrawWindowEnabled) && from != null && to != null && from !== to;
+  const label = { from: hhmmLabel(sett && sett.withdrawOpenFrom), to: hhmmLabel(sett && sett.withdrawOpenTo) };
+  if (!enabled) return { enabled: false, open: true, from: label.from, to: label.to };
+  const at = typeof ts === 'number' && Number.isFinite(ts) && ts > 0 ? ts : Date.now();
+  const d = new Date(at + tzOffMs());
+  const now = d.getUTCHours() * 60 + d.getUTCMinutes();
+  const open = from < to ? (now >= from && now < to) : (now >= from || now < to);
+  return { enabled: true, open, from: label.from, to: label.to };
+}
 function productOpenState(p, nowMs) {
   const now = Number(nowMs) || Date.now();
   if (p && p.comingSoon === true) return { open: false, mode: 'soon', opensAt: null };
@@ -4062,7 +4083,7 @@ app.get('/account', async (req, res) => {
       phone: u.phone, walletBalance: round2(u.walletBalance), totalDeposited: u.totalDeposited || 0,
       totalEarned: round2(u.totalEarned), totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
-      hasTradePin: !!u.transactionPinHash, vipLevel,
+      hasTradePin: !!u.transactionPinHash, vipLevel, withdrawAnytime: u.withdrawAnytime === true,
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
     // The member's OWN region, which the middleware has already put in
     // force for this request. The app re-reads its currency, dialling code
@@ -4904,6 +4925,14 @@ app.post('/withdraw/request', async (req, res) => {
     const destValue = NETWORK_NAMES.has(rawNetwork) ? cleanPhone(textOf(req.body.phone)) : '';
     if (!destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
     const sett = await getSettings();
+    // The withdrawal hours, enforced here and not only shown in the app. A member the owner marked "withdraw any time" (Admin > Users) is not held
+    // to the hours or to the daily number of withdrawals; every other rule still applies to them.
+    const win = withdrawWindowState(sett, Date.now());
+    const anyFlagSnap = await db.collection('users').doc(userId).get();
+    const unrestricted = anyFlagSnap.exists && anyFlagSnap.data().withdrawAnytime === true;
+    if (win.enabled && !win.open && !unrestricted)
+      return res.status(400).json({ status: 'error', code: 'WINDOW_CLOSED',
+        message: `Withdraw is open from ${win.from} to ${win.to}. Please come back then.` });
     if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum withdraw is ${fmtMoney(sett.minWithdraw)}` });
     // Checked HERE, not only in the app: the client's own check is a
     // courtesy so a member sees the rule before submitting, but /withdraw/
@@ -4970,7 +4999,7 @@ app.post('/withdraw/request', async (req, res) => {
         throw e;
       }
       const maxPerDay = Number(sett.maxWithdrawalsPerDay) || 0;
-      if (maxPerDay > 0) {
+      if (maxPerDay > 0 && !unrestricted) {
         const today = nowStr().date;
         const todaySnap = await db.collection('withdrawals').where('userId', '==', userId).where('date', '==', today).get();
         // A declined request was refunded in full and paid nothing, so it must not
@@ -6612,7 +6641,7 @@ const SETTINGS_CRITICAL_RANGES = {
   myBannerOpacity: [0, 100], myBannerBlur: [0, 40], appClaimAmount: [0, MAX_MONEY_AMOUNT],
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'blockRootDomain'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -6680,6 +6709,21 @@ app.post('/admin/settings/update', async (req, res) => {
     // anyway -- this is the second lock, so a name that somehow reaches an
     // unescaped sink later cannot carry markup with it.
     // The welcome dialog's title and its lines of text: plain text, capped.
+    // The two withdrawal times are refused rather than repaired: a silently changed time is a window the owner did not choose.
+    for (const key of ['withdrawOpenFrom', 'withdrawOpenTo']) {
+      if (!(key in updates)) continue;
+      let raw = String(updates[key] == null ? '' : updates[key]).trim();
+      if (/^\d:\d{2}$/.test(raw)) raw = '0' + raw;
+      if (hhmmToMin(raw) == null)
+        return res.status(400).json({ status: 'error', message: `${key} must be a 24-hour time like 18:00` });
+      updates[key] = raw;
+    }
+    {
+      const f = 'withdrawOpenFrom' in updates ? updates.withdrawOpenFrom : null;
+      const t = 'withdrawOpenTo' in updates ? updates.withdrawOpenTo : null;
+      if (f != null && t != null && f === t)
+        return res.status(400).json({ status: 'error', message: 'Withdraw opening and closing times cannot be the same.' });
+    }
     if ('shareMessage' in updates) {
       const words = String(updates.shareMessage == null ? '' : updates.shareMessage).replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 200);
       updates.shareMessage = words || DEFAULT_SETTINGS.shareMessage;
@@ -7452,6 +7496,22 @@ app.post('/admin/user/reset-payout-pin', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Owner: make one member "unrestricted by withdrawal time": they can request a withdrawal at any hour even when the withdrawal hours are
+// switched on in Settings, and the daily number of withdrawals does not stop them. Everything else (minimum, multiple, fee, Trade Password, one at a time) still applies.
+app.post('/admin/user/withdraw-anytime', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || '');
+  if (!userId || typeof req.body.enabled !== 'boolean') return res.status(400).json({ status: 'error', message: 'userId and enabled (true or false) required' });
+  try {
+    const ref = db.collection('users').doc(userId);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    await ref.update({ withdrawAnytime: req.body.enabled });
+    logAdminAction(req, 'user_withdraw_anytime', { userId, enabled: req.body.enabled });
+    res.json({ status: 'success', enabled: req.body.enabled });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 // ── ADMIN: remove a product from a member (owner only) ───────────────────────────────────────────────────────────
 // The product is deleted, so it stops earning at once and leaves the member's Income and product count (the purchase
 // limit frees up too). What stays: cashback already paid (it is in their wallet and their Balance Record) and the
@@ -8909,7 +8969,7 @@ app.post('/admin/analytics', async (req, res) => {
       if (u.status === 'banned') { blocked.banned++; return; }
       if (wNeedProduct && !(finiteMoney(u.totalInvested) > 0)) { blocked.noProduct++; return; }
       if (openUsers.has(d.id)) { blocked.hasRequest++; return; }
-      if (wPerDay > 0 && (usedToday.get(d.id) || 0) >= wPerDay) { blocked.dailyUsed++; return; }
+      if (wPerDay > 0 && u.withdrawAnytime !== true && (usedToday.get(d.id) || 0) >= wPerDay) { blocked.dailyUsed++; return; }
       let amt = Math.min(bal, wMax > 0 ? wMax : bal);
       amt = wMult > 0 ? Math.floor(amt / wMult) * wMult : Math.floor(amt);
       if (amt < wMin || amt <= 0) { blocked.belowMin++; return; }
@@ -8920,7 +8980,7 @@ app.post('/admin/analytics', async (req, res) => {
     const withdrawToday = {
       waiting, canDo, blocked,
       rules: { min: wMin, max: wMax, multiple: wMult, feePct: wFee, perDay: wPerDay, needProduct: wNeedProduct,
-      },
+        hours: wSett.withdrawWindowEnabled ? `${wSett.withdrawOpenFrom || ''} to ${wSett.withdrawOpenTo || ''}` : '' },
     };
     plans.nextMaturing = plans._upcoming.map(u => ({ phone: (accounts.get(u.userId) || {}).phone || '', product: u.product, amount: u.amount, cashback: u.cashback, at: u.at })); delete plans._upcoming;
     const truncated = depSnap.docs.length >= 10000 || witSnap.docs.length >= 10000 || usersSnap.docs.length >= 10000 || activeInvSnap.docs.length >= 10000 || contractSnap.docs.length >= 10000 || rewardsTruncated;

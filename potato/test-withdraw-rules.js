@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * One cash-out at a time.
+ * One cash-out at a time, and only inside the hours the admin sets.
  *
  * Owner: "no requesting another withdrawal yet another one is on pending, so
  * one should have got his processing one to be paid then requests another,
@@ -40,6 +40,107 @@ const grab = (a, b) => {
   if (i === -1 || j === -1 || j <= i) throw new Error(`bad slice: ${a} .. ${b}`);
   return src.slice(i, j);
 };
+
+// ── the window, as a pure function ───────────────────────────────────────
+// The offset is a parameter here, not a constant, because a WRONG offset is
+// the way this feature actually broke in production: a country saved with its
+// clock-offset box left empty stored 0, and 0 is a legal UTC offset that no
+// validator can tell from a deliberate one. Uganda then ran three hours
+// behind itself and a member was refused at 07:00 on a 06:00-17:00 window.
+const winFor = off => new Function(`
+  ${fnSource('tsMillis')}
+  const tzOffMs = () => (${off}) * 60000;
+  ${fnSource('hhmmToMin')}
+  ${fnSource('hhmmLabel')}
+  ${fnSource('withdrawWindowState')}
+  return { hhmmToMin, hhmmLabel, withdrawWindowState };
+`)();
+const winApi = winFor(180);
+
+// An EAT wall-clock time as an epoch, so "is 3pm inside the window" is asked
+// in the zone the server judges in and not in whatever the test box is set to.
+const eatAt = (h, m = 0) => Date.UTC(2026, 0, 15, h - 3, m);
+
+console.log('— times are parsed, not guessed —');
+ck(winApi.hhmmToMin('18:00') === 1080, '18:00 is 1080 minutes');
+ck(winApi.hhmmToMin('09:05') === 545, '09:05 is 545');
+// '9:00' is in this list because hhmmToMin requires a two-digit hour -- the
+// save endpoint pads a single-digit one BEFORE parsing, so a hand-typed 9:00
+// is still accepted there. Here the parser's own contract is what is checked.
+for (const junk of ['', 'abc', '25:00', '12:60', '1200', null, undefined, '12', '9:00']) {
+  ck(winApi.hhmmToMin(junk) === null, `${JSON.stringify(junk)} is refused, not coerced to midnight`);
+}
+// REWRITTEN, and the previous version was defending the bug. It required
+// 12-hour AM/PM -- "6:00 PM" -- which is what the owner was asking about:
+// "withdrawal time has problems, is it in 24hrs or". Three things were wrong
+// with it: this app is 24-hour everywhere else (the ledger, the plan
+// countdown, the join stamp), the owner TYPES 18:00 into the panel and was
+// then shown "6:00 PM", and "AM"/"PM" are English words spliced into a
+// sentence the translator had already translated. The old assertion was
+// written from his casual phrase "6pm to 5pm", which was a description, not
+// a spec. This is the fourth harness in this project found pinning the shape
+// of a defect rather than the property behind it.
+console.log('\n— labelled 24-hour, the one clock this app uses —');
+ck(winApi.hhmmLabel('18:00') === '18:00', `18:00 reads "${winApi.hhmmLabel('18:00')}"`);
+ck(winApi.hhmmLabel('17:00') === '17:00', `17:00 reads "${winApi.hhmmLabel('17:00')}"`);
+ck(winApi.hhmmLabel('00:30') === '00:30', `00:30 reads "${winApi.hhmmLabel('00:30')}"`);
+ck(winApi.hhmmLabel('12:00') === '12:00', `12:00 reads "${winApi.hhmmLabel('12:00')}"`);
+ck(!/AM|PM/i.test(winApi.hhmmLabel('18:00') + winApi.hhmmLabel('00:30')),
+   'and carries no AM/PM -- two English words no translation can reach');
+
+console.log('\n— a normal window, 09:00 to 17:00 —');
+const normal = { withdrawWindowEnabled: true, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00' };
+for (const [h, want] of [[8, false], [9, true], [12, true], [16, true], [17, false], [23, false], [3, false]]) {
+  const st = winApi.withdrawWindowState(normal, eatAt(h));
+  ck(st.open === want, `${String(h).padStart(2, '0')}:00 EAT -> ${st.open ? 'open' : 'shut'} (wanted ${want ? 'open' : 'shut'})`);
+}
+
+console.log('\n— HIS example, 18:00 to 17:00, which wraps past midnight —');
+const wrap = { withdrawWindowEnabled: true, withdrawOpenFrom: '18:00', withdrawOpenTo: '17:00' };
+for (const [h, want] of [[18, true], [21, true], [0, true], [3, true], [12, true], [16, true], [17, false], [17.5, false]]) {
+  const st = winApi.withdrawWindowState(wrap, eatAt(Math.floor(h), (h % 1) * 60));
+  const lbl = `${String(Math.floor(h)).padStart(2, '0')}:${String((h % 1) * 60).padStart(2, '0')}`;
+  ck(st.open === want, `${lbl} EAT -> ${st.open ? 'open' : 'shut'} (wanted ${want ? 'open' : 'shut'})`);
+}
+const wl = winApi.withdrawWindowState(wrap, eatAt(20));
+ck(wl.from === '18:00' && wl.to === '17:00',
+   `and the member is told "${wl.from} to ${wl.to}" -- the same figures the owner typed`);
+
+// ── the offset is what decides "is it 7am" ───────────────────────────────
+console.log('\n— the country\'s clock offset decides whether 07:00 is 07:00 —');
+{
+  const win = { withdrawWindowEnabled: true, withdrawOpenFrom: '06:00', withdrawOpenTo: '17:00' };
+  // 07:00 in Kampala. eatAt() already subtracts Uganda's three hours, so this
+  // is the same instant however the offset is then read.
+  const sevenAm = eatAt(7);
+  ck(winFor(180).withdrawWindowState(win, sevenAm).open === true,
+     'on Uganda\'s +180, 07:00 is inside a 06:00-17:00 window');
+  // The reported bug, reproduced: the same instant, the same window, a
+  // country whose offset was saved as 0.
+  ck(winFor(0).withdrawWindowState(win, sevenAm).open === false,
+     'and on a clock offset of 0 the SAME instant reads 04:00 and is refused ' +
+     '-- which is the production bug, not a rule anybody chose');
+  // Somebody typing hours instead of minutes lands in the same place.
+  ck(winFor(3).withdrawWindowState(win, sevenAm).open === false,
+     'as does 3, i.e. hours typed where minutes were asked for');
+  // The hours SHOWN are the admin's own figures either way, which is what
+  // made this so hard to see: the dialog said 06:00 to 17:00 in every case.
+  for (const off of [180, 0, 3]) {
+    const st = winFor(off).withdrawWindowState(win, sevenAm);
+    ck(st.from === '06:00' && st.to === '17:00',
+       `  offset ${off} still SHOWS "06:00 to 17:00" -- the message cannot reveal a wrong clock`);
+  }
+}
+
+console.log('\n— off, or set to nonsense, means always open —');
+ck(winApi.withdrawWindowState({ withdrawWindowEnabled: false, withdrawOpenFrom: '18:00', withdrawOpenTo: '17:00' }, eatAt(17)).open,
+   'the toggle off leaves cash-out open at 17:00');
+ck(winApi.withdrawWindowState({ withdrawWindowEnabled: true, withdrawOpenFrom: 'x', withdrawOpenTo: '17:00' }, eatAt(3)).open,
+   'an unparseable start time does not lock everyone out');
+ck(winApi.withdrawWindowState({ withdrawWindowEnabled: true, withdrawOpenFrom: '09:00', withdrawOpenTo: '09:00' }, eatAt(3)).open,
+   'equal times are treated as unset, not as closed-all-day');
+ck(!winApi.withdrawWindowState({ withdrawWindowEnabled: true, withdrawOpenFrom: 'x', withdrawOpenTo: '17:00' }, eatAt(3)).enabled,
+   'and report themselves as not enabled, so the app shows no hours');
 
 // ── the real route, on a stub database ───────────────────────────────────
 console.log('\n— the route itself: one unresolved cash-out at a time —');
@@ -221,6 +322,56 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   r = await run(st, REQ);
   ck(r.code === 200, `another member's pending cash-out is irrelevant (${r.code})`);
 
+  console.log('\n— the hours are enforced on the server, not just drawn in the app —');
+  st = fresh({ settings: { withdrawWindowEnabled: true, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00' } });
+  st.now = eatAt(21);
+  r = await run(st, REQ);
+  ck(r.code === 400 && r.replied.code === 'WINDOW_CLOSED',
+     `21:00 EAT is refused (${r.code} ${r.replied && r.replied.code})`);
+  ck(/09:00 to 17:00/.test((r.replied || {}).message || ''),
+     `  naming the hours, 24-hour: ${(r.replied || {}).message}`);
+  ck(st.user.walletBalance === 100000, '  and nothing is debited');
+
+  st = fresh({ settings: { withdrawWindowEnabled: true, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00' } });
+  st.now = eatAt(12);
+  r = await run(st, REQ);
+  ck(r.code === 200, `12:00 EAT goes through (${r.code})`);
+
+  // His own wrap window, through the real route.
+  st = fresh({ settings: { withdrawWindowEnabled: true, withdrawOpenFrom: '18:00', withdrawOpenTo: '17:00' } });
+  st.now = eatAt(2);
+  r = await run(st, REQ);
+  ck(r.code === 200, `02:00 EAT goes through on an 18:00-to-17:00 window (${r.code})`);
+  st = fresh({ settings: { withdrawWindowEnabled: true, withdrawOpenFrom: '18:00', withdrawOpenTo: '17:00' } });
+  st.now = eatAt(17, 30);
+  r = await run(st, REQ);
+  ck(r.code === 400 && r.replied.code === 'WINDOW_CLOSED',
+     `and 17:30, the one shut hour, is refused (${r.code})`);
+
+  // Owner: a member marked "unrestricted by withdrawal time" is not held to the hours (everything else still applies).
+  st = fresh({ settings: { withdrawWindowEnabled: true, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00' } });
+  st.user.withdrawAnytime = true; st.now = eatAt(21);
+  r = await run(st, REQ);
+  ck(r.code === 200, `an unrestricted member goes through at 21:00 EAT, outside the hours (${r.code} ${r.replied && r.replied.code})`);
+  st = fresh({ settings: { withdrawWindowEnabled: true, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00' } });
+  st.user.withdrawAnytime = false; st.now = eatAt(21);
+  r = await run(st, REQ);
+  ck(r.code === 400 && r.replied.code === 'WINDOW_CLOSED', `the flag switched off is held to the hours again (${r.code})`);
+  st = fresh({ settings: { withdrawWindowEnabled: true, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00' } });
+  st.user.withdrawAnytime = true; st.now = eatAt(21);
+  r = await run(st, { ...REQ, amount: 1000 });
+  ck(r.code === 400 && r.replied.code !== 'WINDOW_CLOSED', `an unrestricted member still meets the minimum (${r.code} ${r.replied && r.replied.code})`);
+
+  // The same mark lifts the daily number of withdrawals.
+  st = fresh({ settings: { maxWithdrawalsPerDay: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: '15/01/2026' }] });
+  st.user.withdrawAnytime = true;
+  r = await run(st, REQ);
+  ck(r.code === 200, `an unrestricted member is not held to the daily number (${r.code} ${r.replied && r.replied.message})`);
+  st = fresh({ settings: { maxWithdrawalsPerDay: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: '15/01/2026' }] });
+  st.user.withdrawAnytime = false;
+  r = await run(st, REQ);
+  ck(r.code === 400, `without the mark the same request meets the daily number (${r.code})`);
+
   console.log('\n— the daily limit counts payouts, not refunded failures —');
   st = fresh({ settings: { maxWithdrawalsPerDay: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'declined', amount: 20000, date: '15/01/2026' }] });
   r = await run(st, REQ);
@@ -229,12 +380,29 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   r = await run(st, REQ);
   ck(r.code === 400 && /limit of 1/.test((r.replied || {}).message || ''), `a paid one today still does (${r.code})`);
 
-  console.log('\n— the app no longer promises hours nobody keeps —');
+  console.log('\n— the app tells the member the hours when it is shut —');
   const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
-  ck(!/Withdrawal time:|withdrawWindow|withdrawOpenFrom/.test(mod) && !/withdrawWindow|withdrawOpenFrom|withdrawAnytime/.test(src),
-     'there are no withdrawal hours and no per-member exemption any more');
-  ck(!/There is no limit to the number of withdrawals/.test(mod),
-     'and so is "There is no limit to the number of withdrawals"');
+  ck(/const win = withdrawWindow\(STATE\.settings \|\| \{\}\);\s*if \(win\.enabled && !win\.open && !\(STATE\.account && STATE\.account\.withdrawAnytime\)\)\s*return notify\(`Withdraw is open from/.test(mod),
+     'tapping Withdraw outside the hours says "Withdraw is open from ... to ..."');
+  ck(!/Withdrawal time: 06:00:00 - 17:00:00/.test(mod), 'and no hardcoded hours are promised');
+
+  console.log('\n— admin can set it —');
+  const adm = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
+  ck(/id="sWitWindow"/.test(adm), 'there is a toggle');
+  ck(/id="sWitFrom"[^>]*type="time"/.test(adm), 'an opening time input');
+  ck(/id="sWitTo"[^>]*type="time"/.test(adm), 'a closing time input');
+  ck(/withdrawOpenFrom:\$\('sWitFrom'\)\.value/.test(adm.replace(/\s+/g, '')) ||
+     /withdrawOpenFrom:\$\('sWitFrom'\)\.value/.test(adm),
+     'and all three are sent on save');
+  const boolLine = (/const SETTINGS_BOOLEAN_FIELDS[^\n]*/.exec(src) || [''])[0];
+  ck(/withdrawWindowEnabled/.test(boolLine),
+     'the toggle is coerced to a real boolean server-side');
+  // 400 chars, not 200: the real gap between the loop header and its refusal
+  // message is 264, and the first attempt's window was too small to reach it.
+  ck(/\['withdrawOpenFrom', 'withdrawOpenTo'\][\s\S]{0,700}must be a 24-hour time/.test(src),
+     'and a bad time string is refused rather than quietly repaired');
+  ck(/opening and closing times cannot be the same/.test(src),
+     'as are two identical times, which would show hours nobody enforces');
 
   console.log(bad ? `\n${bad} FAILED` : '\nwithdraw rules: all cases pass');
   process.exit(bad ? 1 : 0);

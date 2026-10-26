@@ -1994,6 +1994,9 @@ async function openUser(uid){
       <div style="flex:2"><input id="pinNew" type="text" inputmode="numeric" maxlength="6" placeholder="New 6-digit trade password"></div>
       <button class="btn ghost sm" id="resetPinBtn">Set PIN</button>
     </div>`:''}
+    ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Withdrawal limits</h4>
+    <div class="kv"><span class="k">This member</span><span id="anyTimeState">${u.withdrawAnytime===true?'Unrestricted: any hour and any number of withdrawals a day':'Follows the withdrawal hours and the daily number'}</span></div>
+    <button class="btn ${u.withdrawAnytime===true?'ghost':'sky'} sm" id="anyTimeBtn" style="margin-top:6px">${u.withdrawAnytime===true?'Follow the withdrawal limits':'Make unrestricted (hours and daily number)'}</button>`:''}
     <h4 style="margin:18px 0 8px;font-size:14px">Recharges (${(r.deposits||[]).length})</h4>
     ${(r.deposits||[]).length?`<div class="table-scroll" style="max-height:230px"><table><thead><tr><th>When</th><th>Amount</th><th>Paid to</th><th>Paid from</th><th>Status</th></tr></thead><tbody>
       ${r.deposits.map(d=>{
@@ -2123,6 +2126,14 @@ async function openUser(uid){
     if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); }
   });
   $('viewChainBtn')?.addEventListener('click', ()=>openReferralChain(uid));
+  $('anyTimeBtn')?.addEventListener('click', async()=>{
+    const on=u.withdrawAnytime!==true;
+    if(!confirm(on?`Make ${u.phone} unrestricted: any hour, and any number of withdrawals a day?`:`Make ${u.phone} follow the withdrawal hours and the daily number again?`)) return;
+    const b=$('anyTimeBtn'); b.disabled=true;
+    const d=await api('/admin/user/withdraw-anytime',{userId:uid,enabled:on});
+    toast(d.status==='success'?(on?'Unrestricted: any hour, any number a day':'Follows the withdrawal limits again'):(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'){ u.withdrawAnytime=on; closeModal(); (RENDERERS[_tab]||renderUsers)(); } else b.disabled=false;
+  });
   $('resetPinBtn')?.addEventListener('click', async()=>{
     const np=($('pinNew').value||'').trim();
     if(!/^\d{6}$/.test(np)) return toast('Enter a new 6-digit trade password','err');
@@ -3451,6 +3462,13 @@ async function renderSettings(){
       </div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only withdrawals)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
+      <div class="switch-row" style="margin-top:8px"><span><b>Only allow withdraw between set hours</b> <span class="muted">(a member who asks at another time is told the hours)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sWitWindow" ${s.withdrawWindowEnabled===true?'checked':''} style="width:auto"></label></div>
+      <div class="row" style="margin-top:6px">
+        <div><label>Withdraw opens at</label><input id="sWitFrom" type="time" value="${esc(v('withdrawOpenFrom','09:00'))}"></div>
+        <div><label>Withdraw closes at</label><input id="sWitTo" type="time" value="${esc(v('withdrawOpenTo','17:00'))}"></div>
+      </div>
+      <p class="muted" style="margin:6px 0 0">24-hour times in the selected country's own time. The hours may run past midnight (for example 18:00 to 17:00). One withdrawal at a time per member, always.</p>
       <!-- Automatic withdrawals: requests still arrive as Pending; only while this is ON does the VPS send each one after its own random wait. -->
       <div class="switch-row" style="margin-top:14px"><span><b>Automatic withdrawals</b> <span class="muted">(the VPS sends them; requests still arrive as Pending)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sAutoWit" ${s.autoApproveWithdrawalsEnabled===true?'checked':''} style="width:auto"></label></div>
@@ -3558,6 +3576,7 @@ async function renderSettings(){
       autoApproveWithdrawalsEnabled:$('sAutoWit').checked, autoApproveMinSec:+$('sAutoMin').value, autoApproveMaxSec:+$('sAutoMax').value, autoApproveMaxAmount:+$('sAutoCap').value,
       referencePrefix:$('sRefPrefix').value.trim(),
       requireInvestToWithdraw:$('sReqInvest').checked,
+      withdrawWindowEnabled:$('sWitWindow').checked, withdrawOpenFrom:$('sWitFrom').value, withdrawOpenTo:$('sWitTo').value,
       // Sent as raw text; the server splits, validates and de-duplicates it,
       // and rejects the whole save naming the bad line rather than silently
       // dropping it.

@@ -4347,6 +4347,28 @@ window.openWithdrawSheet = async function(){
     if (submitBtn) submitBtn.disabled = _withdrawSubmitting;
   }
 };
+function tzOffMs(){ const m = REGION && REGION.utcOffsetMin; return (m == null ? 180 : Number(m)) * 60000; }
+// The withdrawal hours (admin Settings): 24-hour, in the region's own clock, and the window may run past midnight (18:00 to 17:00).
+function witMinutes(v){
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v == null ? '' : v).trim());
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2]);
+  return (h > 23 || mi > 59) ? null : h * 60 + mi;
+}
+function witClock(v){
+  const t = witMinutes(v);
+  if (t == null) return '';
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+}
+function withdrawWindow(s){
+  const from = witMinutes(s && s.withdrawOpenFrom), to = witMinutes(s && s.withdrawOpenTo);
+  if (!(s && s.withdrawWindowEnabled) || from == null || to == null || from === to)
+    return { enabled: false, open: true, from: '', to: '' };
+  const d = new Date(Date.now() + tzOffMs());   // the region's clock, as the server judges it
+  const now = d.getUTCHours() * 60 + d.getUTCMinutes();
+  const open = from < to ? (now >= from && now < to) : (now >= from || now < to);
+  return { enabled: true, open, from: witClock(s.withdrawOpenFrom), to: witClock(s.withdrawOpenTo) };
+}
 // The one wallet card and the Bind Wallet button (one wallet per member; the
 // Wallet page edits it in place). Isolated so openWithdrawSheet()'s post-fetch
 // update can repaint only this block, never #witAmount.
@@ -4446,6 +4468,10 @@ window.submitWithdraw = async function(){
   // all. It's tappable unconditionally now (see paintWithdrawSheet()); this
   // check is what actually tells them why nothing happened.
   if (!acct) return notify('Please add a payout wallet before withdrawing.');
+  // Told here so the member is not asked to wait on a request the server will refuse anyway.
+  const win = withdrawWindow(STATE.settings || {});
+  if (win.enabled && !win.open && !(STATE.account && STATE.account.withdrawAnytime))
+    return notify(`Withdraw is open from ${win.from} to ${win.to}. Please come back then.`);
   // The Trade Password is asked in a small dialog, right when the member taps Withdraw (the owner's Withdraw page has no box for it).
   if ($('pinBg') && $('pinBg').classList.contains('show')) return;   // a second tap while the dialog is open does nothing
   const witPin = await askTradePin();
