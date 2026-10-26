@@ -2378,20 +2378,20 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
   -webkit-text-fill-color:#151515;caret-color:#151515;-webkit-box-shadow:0 0 0 0 transparent inset;box-shadow:0 0 0 0 transparent inset;
   transition:background-color 600000s 0s,color 600000s 0s;}
 
-/* Pictures are shown WHOLE, as uploaded: a banner takes the height its picture needs, never taller than the frame in the owner's screenshots (a taller picture is scaled down, whole, so the page below stays visible). */
+/* Pictures are shown WHOLE, as uploaded: a banner takes the height its picture needs, never taller than the frame in the owner's screenshots (the picture always fills the full width; one taller than the frame loses only its bottom, so the page below stays visible). */
 .pt-home .home-banner:has(img){height:auto;}
-.pt-home .home-banner>img{height:auto;max-height:188.7px;object-fit:contain;}
+.pt-home .home-banner>img{height:auto;max-height:188.7px;object-fit:cover;object-position:center top;}
 .pt-home .mg-track{height:auto;align-items:flex-start;}
-.pt-home .mg-track img{height:auto;max-height:188.7px;object-fit:contain;}
+.pt-home .mg-track img{height:auto;max-height:188.7px;object-fit:cover;object-position:center top;}
 .pt-tb-banner:has(>img){height:auto;min-height:92px;}
-.pt-tb-banner>img{position:relative;inset:auto;display:block;width:100%;height:auto;max-height:180.5px;object-fit:contain;}
+.pt-tb-banner>img{position:relative;inset:auto;display:block;width:100%;height:auto;max-height:180.5px;object-fit:cover;object-position:center top;}
 .pt-shero:has(>img){height:auto;min-height:120px;padding-bottom:47px;box-sizing:border-box;}
-.pt-shero>img{position:relative;inset:auto;display:block;width:100%;height:auto;max-height:215px;object-fit:contain;}
+.pt-shero>img{position:relative;inset:auto;display:block;width:100%;height:auto;max-height:215px;object-fit:cover;object-position:center top;}
 .pt-abban:has(>img){height:auto;min-height:60px;}
-.pt-abban>img{position:relative;inset:auto;display:block;width:100%;height:auto;max-height:205px;object-fit:contain;}
+.pt-abban>img{position:relative;inset:auto;display:block;width:100%;height:auto;max-height:205px;object-fit:cover;object-position:center top;}
 .pt-mybanner:has(.pt-mysize){height:auto;min-height:150px;}
-.pt-mysize{display:block;width:100%;height:auto;max-height:180.5px;object-fit:contain;visibility:hidden;}
-.pt-mybg{background-size:contain;background-repeat:no-repeat;background-position:center;}
+.pt-mysize{display:block;width:100%;height:auto;max-height:180.5px;object-fit:cover;object-position:center top;visibility:hidden;}
+.pt-mybg{background-size:cover;background-repeat:no-repeat;background-position:center top;}
 .pt-img>img{object-fit:contain;}
 /* V2-END */
 </style>
