@@ -1884,7 +1884,7 @@ html,body,.sheet-bg,#msgDetailBg{scrollbar-width:none !important;}
 .pa-screen{position:absolute;inset:0;}
 .pa-scroll{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior:contain;}
 .pa-scroll::-webkit-scrollbar{display:none;width:0;height:0;}
-.pa-hero{position:relative;height:245.3px;overflow:hidden;background:linear-gradient(135deg,#c4121e,#e8453b);}
+.pa-hero{position:relative;height:245.3px;overflow:hidden;background:#f4f5fa;}   /* page colour, so a part-covered last pixel row never shows red as a line under the banner */
 /* Page switch (Login <-> Create Account), timed on the owner's recording: banner fades in, then each item rises into place. Set by paEnter(). */
 @keyframes paHeroIn{from{opacity:0;}to{opacity:1;}}
 @keyframes paRise{from{opacity:0;transform:translateY(28px);}to{opacity:1;transform:none;}}
@@ -1894,11 +1894,12 @@ html,body,.sheet-bg,#msgDetailBg{scrollbar-width:none !important;}
 .pa-logo-in .pa-logo,.pa-entering .pa-logo{animation:paLogoIn .5s cubic-bezier(.2,.8,.3,1) .15s both;}
 .pa-entering [data-pa-i]{animation:paRise .3s ease-out both;animation-delay:var(--pa-d,0s);}
 /* The picture is laid out once, at the tall (Create Account) size, and pinned to the bottom of the box: Login only shows less of its top. Switching pages then never rescales or moves the picture, and the circle picture stays put on it. */
-#authHeroBg{position:absolute;left:0;right:0;bottom:0;top:auto;height:245.3px;background-size:cover;background-position:center bottom;background-repeat:no-repeat;background-image:var(--auth-hero-img,none);}
+#authHeroBg{position:absolute;left:0;right:0;bottom:0;top:auto;height:245.3px;background-size:cover;background-position:center bottom;background-repeat:no-repeat;background-image:var(--auth-hero-img,none),linear-gradient(135deg,#c4121e,#e8453b);}
 .pa-hero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:26px;pointer-events:none;background:linear-gradient(180deg,rgba(244,245,250,0) 0,rgba(244,245,250,.55) 55%,#f4f5fa 100%);}
 .pa-logo{position:absolute;left:50%;bottom:23px;width:80px;height:80px;margin-left:-40px;border-radius:50%;z-index:2;}
 .pa-logo-img{display:block;width:100%;height:100%;border-radius:50%;background-size:cover;background-position:center;background-repeat:no-repeat;}
 .pa-card{position:relative;z-index:1;padding:0 23.5px 36px 23.3px;}
+.pa-card::before{content:'';position:absolute;left:0;right:0;top:-2px;height:3px;background:#f4f5fa;pointer-events:none;}   /* covers the seam under the banner: a part-covered pixel row there must never show as a line */
 .pa-title{margin:30px 0 0;font:700 19.3px/22px Roboto,'Segoe UI',system-ui,sans-serif;color:#e0241f;letter-spacing:0;}
 .pa-pane{margin:21.3px 0 0;padding:0;}
 form.pa-pane[hidden]{display:none;}
@@ -2092,8 +2093,8 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 /* Share */
 .pt-share{padding:0 0 8px;}
 .pt-shero{position:relative;z-index:1;height:262px;overflow:hidden;border-radius:0 0 60px 60px/0 0 26.7px 26.7px;background:#e4231c;}
-.pt-shero>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
-.pt-shero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:86px;background:linear-gradient(180deg,rgba(150,28,24,0) 0,rgba(158,32,28,.98) 14%,#e4231c 66%,#e4231c 100%);pointer-events:none;}
+.pt-shero>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top;}
+.pt-shero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:86px;background:linear-gradient(180deg,rgba(150,28,24,0) 0,rgba(168,32,28,.9) 14%,rgba(208,34,29,.94) 40%,#e4231c 58%,#e4231c 100%);pointer-events:none;}
 .pt-scard{position:relative;margin:-28.4px 9.4px 0;padding:29.2px 9.7px 28px;background:linear-gradient(180deg,#f5f9fc 0,#f5f9fc 45%,#f2f3f5 85%,#f1f2f4 100%);border-radius:10.5px;box-shadow:0 6px 18px -12px rgba(70,80,140,.2);z-index:-0;}
 .pt-scard>*{border-radius:9px;}
 .pt-srow,.pt-surl,.pt-sdesc{background:#f3f3f3;}
@@ -2457,8 +2458,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 /* Pictures are shown WHOLE, as uploaded: a banner takes the height its picture needs, never taller than the frame in the owner's screenshots (the picture always fills the full width; one taller than the frame loses only its bottom, so the page below stays visible). */
 .pt-tb-banner:has(>img){height:auto;min-height:92px;}
 .pt-tb-banner>img{position:relative;inset:auto;display:block;width:100%;height:auto;max-height:180.5px;object-fit:cover;object-position:center top;}
-.pt-shero:has(>img){height:auto;min-height:120px;padding-bottom:47px;box-sizing:border-box;}
-.pt-shero>img{position:relative;inset:auto;display:block;width:100%;height:auto;max-height:215px;object-fit:cover;object-position:center top;}
+/* Share: the picture FILLS the 262 px red hero (cover), and runs on under the red (see ::after), as in the owner's picture -- not a short picture with a flat red below it. */
 .pt-abban:has(>img){height:auto;min-height:60px;}
 .pt-abban>img{position:relative;inset:auto;display:block;width:100%;height:auto;max-height:205px;object-fit:cover;object-position:center top;}
 .pt-mybanner:has(.pt-mysize){height:auto;min-height:150px;}
