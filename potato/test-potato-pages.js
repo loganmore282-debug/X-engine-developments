@@ -113,6 +113,10 @@ async function member() {
   ok(((await J('GET', '/public/settings')).j.settings || {}).depositMethodNames === 'Pay-B, Pay-A*, Pay-D, Pay-C', 'an empty list falls back to the default four buttons');
   await J('POST', '/admin/settings/update', { settings: { giftCodeHint: '  Type the <b>code</b> ' } }, null, true);
   ok(((await J('GET', '/public/settings')).j.settings || {}).giftCodeHint === 'Type the bcode/b', 'the Gift Code hint is saved from the admin, without tags');
+  await J('POST', '/admin/settings/update', { settings: { shareMessage: '  Invest with {app} <now>  ' } }, null, true);
+  ok(((await J('GET', '/public/settings')).j.settings || {}).shareMessage === 'Invest with {app} now', 'the share message is saved from the admin (tags removed)');
+  await J('POST', '/admin/settings/update', { settings: { shareMessage: '' } }, null, true);
+  ok(((await J('GET', '/public/settings')).j.settings || {}).shareMessage === 'Join me on {app}', 'an empty share message falls back to the default');
   await J('POST', '/admin/settings/update', { settings: { giftCodeHint: '' } }, null, true);
   ok(((await J('GET', '/public/settings')).j.settings || {}).giftCodeHint === 'Enter gift code (T-XXXX)', 'an empty hint falls back to the default');
 

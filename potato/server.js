@@ -578,6 +578,7 @@ const DEFAULT_SETTINGS = {
   // The names under the Deposit page's method buttons, comma separated; each shows after the app name ("Potato Pay-A"). The first one is chosen at first.
   depositMethodNames: 'Pay-B, Pay-A*, Pay-D, Pay-C',
   giftCodeHint: 'Enter gift code (T-XXXX)',
+  shareMessage: 'Join me on {app}',
   // What "Claim" on the Download App page pays (once per member); 0 hides the button.
   appClaimAmount: 0,
   // The sign-up captcha picture is off: the owner's Create Account screen has none. Sign-up is guarded by the rate limits instead.
@@ -6679,6 +6680,10 @@ app.post('/admin/settings/update', async (req, res) => {
     // anyway -- this is the second lock, so a name that somehow reaches an
     // unescaped sink later cannot carry markup with it.
     // The welcome dialog's title and its lines of text: plain text, capped.
+    if ('shareMessage' in updates) {
+      const words = String(updates.shareMessage == null ? '' : updates.shareMessage).replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 200);
+      updates.shareMessage = words || DEFAULT_SETTINGS.shareMessage;
+    }
     if ('giftCodeHint' in updates) {
       const hint = String(updates.giftCodeHint == null ? '' : updates.giftCodeHint).replace(/[<>]/g, '').trim().slice(0, 40);
       updates.giftCodeHint = hint || DEFAULT_SETTINGS.giftCodeHint;

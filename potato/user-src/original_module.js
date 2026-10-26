@@ -2847,10 +2847,12 @@ function paintPromo(){
 window.shareTo = function(where){
   if (!_promoLink) return notify('Your invite link is not ready yet.');
   if (!rapidTapGuardOk('share:' + where)) return;
-  const msg = 'Join me on ' + brandName() + ': ' + _promoLink;
+  // The words that go with the link are the admin's (Settings > Share message); {app} stands for the app's name.
+  const words = String(((STATE.settings || {}).shareMessage) || 'Join me on {app}').replace(/\{app\}/gi, brandName());
+  const msg = words + ': ' + _promoLink;
   const u = encodeURIComponent(_promoLink), m = encodeURIComponent(msg);
   const urls = {
-    telegram: 'https://t.me/share/url?url=' + u + '&text=' + encodeURIComponent('Join me on ' + brandName()),
+    telegram: 'https://t.me/share/url?url=' + u + '&text=' + encodeURIComponent(words),
     whatsapp: 'https://wa.me/?text=' + m,
     facebook: 'https://www.facebook.com/sharer/sharer.php?u=' + u,
     x: 'https://twitter.com/intent/tweet?text=' + m,
