@@ -39,7 +39,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   w.openChestSheet();
   const t = d.getElementById('sheetBody').textContent.replace(/\s+/g, ' ').trim();
   ok(d.getElementById('sheetTitle').textContent === 'Gift Code', 'title');
-  ok(/^Mystery Gift Code\s*One free redeem per day Gift Code Key/.test(t) && /Redeem Gift Code/.test(t) && /Reward Records/.test(t) && /No more records/.test(t), 'only the screenshot words: ' + t);
+  ok(/^\u{1F381}?Mystery Gift Code\s*One free redeem per day Gift Code Key/u.test(t) && /Redeem Gift Code/.test(t) && /Reward Records/.test(t) && /No more records/.test(t), 'only the screenshot words: ' + t);
   ok(d.getElementById('chestKey').placeholder === 'Enter gift code (T-XXXX)', 'key placeholder');
   ok(d.querySelector('.pt-gcbox') || d.querySelector('.pt-gchero'), 'gift picture hero');
   w.submitChestKey();
