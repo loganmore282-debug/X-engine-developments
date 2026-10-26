@@ -1582,6 +1582,7 @@ async function refreshAppDataInBackground(uid){
 // some of them as an interim measure) even though nothing on the bottom
 // bar links to them directly any more.
 var MGI = {
+  telegram: '<svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>',
   plane: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 3 10.4l6.4 2.4L12 20l2.6-5.4L21 3z"/><path d="M9.4 12.8 21 3"/></svg>',
   whatsapp: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.4 20.6l1.3-4.4A8.6 8.6 0 1 1 8 19.5z"/><path d="M9 8.6c0 3.2 2.6 5.8 5.8 5.8l1-1.4-2-1-.8.8c-.8-.4-1.6-1.2-2-2l.8-.8-1-2z" fill="#fff" stroke="none"/></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
@@ -1643,105 +1644,6 @@ function hookNavTapBox(){
   });
 }
 
-// A drawn green scrollbar. The phone browsers hide the page's own scrollbar (the whole page scrolls, not an inner box), but the owner's screens
-// show a thin green bar at the right edge whenever a page or sheet is longer than the screen. It follows whatever is scrolling right now:
-// the open sheet / page, else the Login/Sign Up scroller, else the document, and sits between the top and the bottom bar.
-function mgScrollbarInit(){
-  if (window.__mgSb) return; window.__mgSb = true;
-  if (!document.body) { document.addEventListener('DOMContentLoaded', () => { window.__mgSb = false; mgScrollbarInit(); }); return; }
-  const mk = id => { const b = document.createElement('div'); b.id = id; b.className = 'mg-sb'; b.setAttribute('aria-hidden', 'true'); b.innerHTML = '<i></i>'; document.body.appendChild(b); return { bar: b, thumb: b.firstChild, cur: null }; };
-  const main = mk('mgSb'), list = mk('mgSbList');
-  const shown = el => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
-  function target(){
-    const sheets = [...document.querySelectorAll('.sheet-bg.show,#msgDetailBg.show,#depStatusBg.show,.pay-page.show')].filter(shown);
-    if (sheets.length) return sheets[sheets.length - 1];
-    const auth = document.getElementById('authScreen');
-    if (auth && auth.style.display !== 'none' && shown(auth)) return null;   // Login and Create Account draw no scrollbar
-    return document.scrollingElement || document.documentElement;
-  }
-  // Two speeds. layout() is the slow one (sizes the bar and the thumb, decides which scroller it follows); it runs only when something on screen
-  // changed. position() is the fast one: while the member scrolls it only moves the thumb with a transform, once per frame, so it follows the
-  // finger without lag (it used to redo everything every 40 ms, which made the thumb jump in steps).
-  const gut = (el, on) => { if (el.classList.contains('mg-gut') !== on) el.classList.toggle('mg-gut', on); };
-  const scrollTopOf = c => c.isDoc ? window.pageYOffset : c.el.scrollTop;
-  function place(o, c){
-    const over = c.el.scrollHeight - c.ch;
-    const ty = over > 0 ? (c.track - c.th) * Math.min(1, Math.max(0, scrollTopOf(c) / over)) : 0;
-    o.thumb.style.transform = 'translate3d(0,' + ty.toFixed(2) + 'px,0)';
-  }
-  function setBar(o, c){
-    if (!c) { if (o.cur !== null || o.bar.style.display !== 'none') { o.bar.style.display = 'none'; } o.cur = null; return; }
-    const same = o.cur && o.cur.el === c.el && o.cur.top === c.top && o.cur.track === c.track && o.cur.th === c.th && o.cur.right === c.right;
-    o.cur = c;
-    if (!same) { o.bar.style.cssText = 'display:block;top:' + c.top + 'px;height:' + c.track + 'px;right:' + c.right + 'px'; o.thumb.style.height = c.th + 'px'; }
-    place(o, c);
-  }
-  function measure(el, isDoc, top, bottom, ch, right){
-    const sh = el.scrollHeight, track = bottom - top;
-    if (sh - ch < 8 || track < 30) return null;
-    return { el, isDoc, top, track, ch, right, th: Math.max(30, Math.round(track * ch / sh)) };
-  }
-  // The scrollbar takes 4px of a page's width while that page has one (as in the owner's screens, where every page with a bar is 4px narrower on
-  // the right). `mg-gut` on the scroller (the page, a sheet, or the Login scroller) makes the room. Each scroller's room depends only on ITS OWN
-  // length, never on which scroller is on top, and the pass runs in the frame of the change (before it is painted): the page behind an opening
-  // sheet keeps its width, and a page you come back to is already its right width instead of jumping 4px a moment later.
-  const overflows = (el, ch) => el.scrollHeight - ch >= 8;
-  function gutters(){
-    try {
-      const app = document.getElementById('app'), de = document.documentElement;
-      gut(de, !!(app && app.style.display !== 'none' && overflows(document.scrollingElement || de, window.innerHeight)));
-      document.querySelectorAll('.sheet-bg').forEach(el => gut(el, shown(el) && overflows(el, el.clientHeight)));
-    } catch (_) {}   // a page that is being torn down has nothing to measure
-  }
-  window.mgGutters = gutters;
-  function layout(){
-    const el = target();
-    if (!el) { setBar(main, null); setBar(list, null); return; }
-    const isDoc = el === document.scrollingElement || el === document.documentElement;
-    let c;
-    if (isDoc) {
-      let bottom = window.innerHeight;
-      const nav = document.querySelector('.bottom-nav'), app = document.getElementById('app');
-      if (nav && shown(nav) && app && app.style.display !== 'none') bottom = nav.getBoundingClientRect().top;
-      c = measure(el, true, 0, bottom, window.innerHeight, 0);
-    } else {
-      const r = el.getBoundingClientRect();
-      c = measure(el, false, Math.max(0, r.top), Math.min(window.innerHeight, r.bottom), el.clientHeight, 0);
-    }
-    gutters();
-    setBar(main, c);
-    layoutList();
-  }
-  // the bank list that drops down in Add Wallet scrolls on its own
-  function layoutList(){
-    const pl = document.querySelector('.prov-list');
-    if (pl && shown(pl)) {
-      const r = pl.getBoundingClientRect();
-      setBar(list, measure(pl, false, r.top + 4, r.bottom - 4, pl.clientHeight, Math.max(0, Math.round(window.innerWidth - r.right)) + 2));
-    } else setBar(list, null);
-  }
-  let slow = 0, fast = 0;
-  const layoutSoon = () => { if (slow) return; slow = setTimeout(() => { slow = 0; layout(); }, 50); };
-  window.addEventListener('scroll', e => {
-    if (fast) return;
-    fast = requestAnimationFrame(() => {
-      fast = 0;
-      if (main.cur) place(main, main.cur); else layoutSoon();
-      if (list.cur) { place(list, list.cur); }
-    });
-  }, { capture: true, passive: true });
-  window.addEventListener('resize', layoutSoon); window.addEventListener('orientationchange', layoutSoon);
-  window.addEventListener('load', layoutSoon, true); window.addEventListener('transitionend', layoutSoon, true); window.addEventListener('animationend', layoutSoon, true);
-  if (typeof MutationObserver === 'function') new MutationObserver(recs => { if (recs.some(r => !(r.target.closest && r.target.closest('.mg-sb')) && !(r.target.id === 'mgSb' || r.target.id === 'mgSbList'))) {
-    // Content or a class changed: set the rooms in this same microtask, i.e. before the browser paints the change. (Style-only changes such as
-    // animation frames do not need it, and a forced measure on each would cost.)
-    if (recs.some(r => r.type === 'childList' || r.attributeName === 'class')) gutters();
-    layoutSoon();
-  } })
-    .observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
-  layout();
-}
-mgScrollbarInit();
 // The five tab pictures are the admin's cut-out icons (Banners > Icons); a tab whose picture is not uploaded yet shows just its label.
 var NAV_ICON_SLOT = { home: 'navhome', assets: 'navincome', network: 'navteam', promo: 'navshare', account: 'navmy' };
 function updateNavIcons(){
@@ -2910,7 +2812,7 @@ function paintPromo(){
     <div class="pt-srow"><b>Commission Rates</b><span>Lv1 ${r1}% · Lv2 ${r2}% · Lv3 ${r3}%</span></div>
     <div class="pt-surl"><p><b>Share URL:</b> <span class="pt-purl">${esc(_promoLink || '—')}</span></p><button type="button" class="pt-copy" data-copy-group="promo" onclick="copyText(_promoLink)">Copy</button></div>
     <div class="pt-sdesc"><b>Reward Description</b><p>You can earn more revenue by sharing the link: LV1=${r1}% LV2=${r2}% LV3=${r3}% Hurry and invite your friends to join us!</p></div>
-    <div class="pt-sbtns"><button type="button" class="wa" onclick="shareTo('whatsapp')">${MGI.whatsapp}<span>WhatsApp</span></button><button type="button" class="tg" onclick="shareTo('telegram')">${MGI.plane}<span>Telegram</span></button></div>
+    <div class="pt-sbtns"><button type="button" class="wa" onclick="shareTo('whatsapp')">${MGI.whatsapp}<span>WhatsApp</span></button><button type="button" class="tg" onclick="shareTo('telegram')">${MGI.telegram}<span>Telegram</span></button></div>
   </section>
 </div>`;
   $('pageHost').innerHTML = html;
@@ -3084,11 +2986,11 @@ window.copyText = function(text){
 // would even show), so it is not invented here; flagged in CLAUDE.md.
 // The red list icons of the My page, drawn as SVG.
 var PT_MENU_IC = {
-  bars: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 21V9h4.2v12zm6.9 0V3h4.2v18zm6.9 0v-7.5H21V21z"/></svg>',
+  bars: '<svg viewBox="-3 -3 30 30" aria-hidden="true"><path fill="currentColor" d="M3 21V9h4.2v12zm6.9 0V3h4.2v18zm6.9 0v-7.5H21V21z"/></svg>',
   mail: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M2.5 5.5A1.5 1.5 0 0 1 4 4h16a1.5 1.5 0 0 1 1.5 1.5v.7L12 12.4 2.5 6.2z"/><path fill="currentColor" d="M2.5 8.3 12 14.5l9.5-6.2V18.5A1.5 1.5 0 0 1 20 20H4a1.5 1.5 0 0 1-1.5-1.5z"/></svg>',
   lock: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 10V7a5 5 0 0 1 10 0v3h1.2c.9 0 1.8.8 1.8 1.8v8.4c0 1-.9 1.8-1.8 1.8H5.8C4.9 22 4 21.2 4 20.2v-8.4C4 10.8 4.9 10 5.8 10zm2.2 0h5.6V7a2.8 2.8 0 0 0-5.6 0zM12 14.2a1.6 1.6 0 0 0-.8 3v1.6h1.6v-1.6a1.6 1.6 0 0 0-.8-3z"/></svg>',
-  shield: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/><path fill="#fff" d="M12 4.6 6 7v4c0 3.9 2.5 7.4 6 8.9z"/></svg>',
-  card: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3.5 4.5h17A1.5 1.5 0 0 1 22 6v12a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 18V6a1.5 1.5 0 0 1 1.5-1.5zM4 9.2v8.3h16V9.2zM4 6.4v1.3h16V6.4z"/></svg>',
+  shield: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 1.8 3.6 5v6c0 5.4 3.6 9.7 8.4 11.2 4.8-1.5 8.4-5.8 8.4-11.2V5z"/><path fill="#fff" d="M12 4.7 6.1 7v4H12zM12 11h5.9c-.3 3.6-2.5 6.7-5.9 8.2z"/></svg>',
+  card: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.2" y="5.2" width="17.6" height="13.6" rx="2" fill="none" stroke="currentColor" stroke-width="2.2"/><rect x="3.2" y="9.6" width="17.6" height="3.3" fill="currentColor"/></svg>',
   bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5a1.5 1.5 0 0 1 1.5 1.5v.6c3 .7 4.8 3.2 4.8 6.2v3.6l1.9 2.7v.9H3.8v-.9l1.9-2.7v-3.6c0-3 1.8-5.5 4.8-6.2V4A1.5 1.5 0 0 1 12 2.5zM9.6 19.2h4.8a2.4 2.4 0 0 1-4.8 0z"/></svg>',
   down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10.5 3h3v8.3l3-3 2.1 2.1L12 16.9 5.4 10.4l2.1-2.1 3 3z"/><path fill="currentColor" d="M4 19h16v2.4H4z"/></svg>',
   info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="7.6" r="1.4" fill="currentColor"/><path d="M12 10.8v6.6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
@@ -3444,7 +3346,7 @@ function renderMessagesList(){
   const box = $('msgBody');
   if (!box) return;
   const list = STATE.messages || [];
-  if (!list.length) { box.innerHTML = _messagesLoadFailed ? loadFailHtml('messages') : '<div class="pt-emp"><span>\ud83d\udcea</span><b>No messages</b></div>'; return; }
+  if (!list.length) { box.innerHTML = _messagesLoadFailed ? loadFailHtml('messages') : '<div class="pt-emp"><span>\ud83d\udced</span><b>No messages</b></div>'; return; }
   box.innerHTML = '<div class="reveal-in">' + list.map((m, i) => `
     <button class="mg-mrow${m.read ? ' read' : ''}" onclick="openMessageDetail(${i})">
       <span class="av"></span>
@@ -3594,7 +3496,7 @@ window.openChestSheet = function(){
   openSheet('Gift Code', `<div class="pt-gc">
     <section class="pt-gchero">${ptIconHtml('giftbox', 'gift', 'pt-gcbox')}<h2>Mystery Gift Code</h2><p>One free redeem per day</p></section>
     <section class="pt-gcform"><label for="chestKey">Gift Code Key</label>
-      <div class="pt-gcin"><span>\ud83d\udddd\ufe0f</span><input id="chestKey" type="text" placeholder="Enter gift code" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"></div>
+      <div class="pt-gcin"><span>\ud83d\udddd\ufe0f</span><input id="chestKey" type="text" placeholder="Enter gift code (T-XXXX)" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"></div>
       <button class="pt-gcgo" id="chestOpenBtn" type="button" onclick="submitChestKey()">Redeem Gift Code</button>
       <p class="pt-gchint">Result celebration shows after redeeming</p></section>
     <div class="pt-gcrec"><i></i><h3>Reward Records</h3></div>
@@ -3971,13 +3873,16 @@ function openDepositFormSheet(){
   const min = Number(s.minDeposit) || 0;
   const chipAmts = Array.from(new Set((STATE.products || []).map(p => Number(p.price) || 0).filter(p => p >= min && p > 0))).sort((a, b) => a - b).slice(0, 6);
   _depChosenAmount = chipAmts.length ? chipAmts[0] : 0;
-  const names = String(s.depositMethodNames || 'Pay-A').split(',').map(x => x.trim()).filter(Boolean);
+  // The admin's list: "Pay-B, Pay-A*, Pay-D, Pay-C" -- the name that ends with * is the one chosen when the page opens (the first, when none is marked).
+  const rawNames = String(s.depositMethodNames || 'Pay-B, Pay-A*, Pay-D, Pay-C').split(',').map(x => x.trim()).filter(Boolean);
+  const names = rawNames.map(x => x.replace(/\*+$/, '').trim());
+  const startOn = Math.max(0, rawNames.findIndex(x => /\*$/.test(x)));
   const note = t => `<div class="pt-note">${t}</div>`;
   openSheet('Deposit', `<div class="pt-dep">
     <div class="pt-chips" id="depChips">${chipAmts.map(a => `<button type="button" class="dep-chip pt-chip${a === _depChosenAmount ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a})">${a}</button>`).join('')}</div>
-    <div class="pt-avail">Available\uff1a <b>${esc(vMoney2((STATE.account || {}).walletBalance))}</b></div>
+    <div class="pt-avail">Available:<b>${esc(vMoney2((STATE.account || {}).walletBalance))}</b></div>
     <div class="pt-amt"><span>${esc(cur())}</span><input id="depAmount" type="text" inputmode="numeric" maxlength="9" value="${_depChosenAmount || ''}" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');syncDepositQuickAmt()" autocomplete="off"></div>
-    <div class="pt-meths" id="depPays">${names.map((n, i) => `<button type="button" class="${i === 0 ? 'on' : ''}" onclick="pickPayLabel(this)">${esc(brandName())} ${esc(n)}</button>`).join('')}</div>
+    <div class="pt-meths" id="depPays">${names.map((n, i) => `<button type="button" class="${i === startOn ? 'on' : ''}" onclick="pickPayLabel(this)">${esc(brandName())} ${esc(n)}</button>`).join('')}</div>
     <button class="pt-pay" id="depSubmitBtn" type="button" onclick="submitDeposit()">Pay <b id="depPayAmt">${esc(numGroup(_depChosenAmount, true))}</b></button>
     <div class="pt-notes">
       ${note('Minimum deposit amount: ' + esc(cur()) + ' ' + esc(numGroup(min, false)))}
@@ -4395,7 +4300,7 @@ function paintWithdrawSheet(s){
   $('sheetBody').innerHTML = `<div class="pt-wit">
     <section class="pt-wcard"><h3>Amount</h3>
       <div class="pt-wamt"><span>${esc(cur())}</span><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Enter Amount" oninput="this.value=this.value.replace(/[^0-9]/g,'');syncWithdrawReceiveAmt()" autocomplete="off"></div>
-      <p class="pt-wbal">Balance\uff1a <span id="witBalance">${esc(vMoney2(balance))}</span></p>
+      <p class="pt-wbal">Balance:<span id="witBalance">${esc(vMoney2(balance))}</span></p>
     </section>
     <section class="pt-wfee"><h3>Fee: ${fee}%</h3><p>Withdrawals are processed within 30 minutes to 24 hours; you will receive <span id="witReceive">${esc(vMoney2(0))}</span>.</p></section>
     <button class="pt-wgo" id="witSubmitBtn" type="button" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Withdraw <b id="witGoAmt">0.00</b></button>
@@ -4629,7 +4534,7 @@ function paintOrderGifts(ok){
   if (!ok) { box.innerHTML = '<div class="pt-ogload" onclick="openOrderGiftsPage()">Could not load. Tap to try again.</div>'; return; }
   const list = STATE.gifts || [];
   if (!list.length) { box.innerHTML = '<div class="pt-ogload">No gifts yet</div>'; return; }
-  box.innerHTML = list.map(g => `<div class="pt-og-card"><div class="t"><b>${esc(g.name)}</b><span>Gift: <i>${esc(vMoney2(g.amount))}</i></span></div>
+  box.innerHTML = list.map(g => `<div class="pt-og-card"><div class="t"><b>${esc(g.name)}</b><span>Gift: <i>${esc(cur() + ' ' + (Number(g.amount) || 0).toFixed(2))}</i></span></div>
     <button type="button" class="${g.owned && !g.claimed ? 'on' : ''}" ${g.owned && !g.claimed ? `onclick="claimOrderGift('${esc(g.key)}',this)"` : 'disabled'}>${g.claimed ? 'received' : 'receive'}</button></div>`).join('');
 }
 window.claimOrderGift = async function(key, btn){

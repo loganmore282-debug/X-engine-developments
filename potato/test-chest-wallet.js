@@ -40,7 +40,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   const t = d.getElementById('sheetBody').textContent.replace(/\s+/g, ' ').trim();
   ok(d.getElementById('sheetTitle').textContent === 'Gift Code', 'title');
   ok(/^Mystery Gift Code\s*One free redeem per day Gift Code Key/.test(t) && /Redeem Gift Code/.test(t) && /Reward Records/.test(t) && /No more records/.test(t), 'only the screenshot words: ' + t);
-  ok(d.getElementById('chestKey').placeholder === 'Enter gift code', 'key placeholder');
+  ok(d.getElementById('chestKey').placeholder === 'Enter gift code (T-XXXX)', 'key placeholder');
   ok(d.querySelector('.pt-gcbox') || d.querySelector('.pt-gchero'), 'gift picture hero');
   w.submitChestKey();
   ok(/Please enter the gift code/.test(d.getElementById('notifyMsg').textContent), 'empty key message');

@@ -576,7 +576,7 @@ const DEFAULT_SETTINGS = {
   // The My page banner (Admin > Banners > My page banner): 100 = as uploaded, 0 blur = sharp.
   myBannerOpacity: 100, myBannerBlur: 0,
   // The names under the Deposit page's method buttons, comma separated; each shows after the app name ("Potato Pay-A"). The first one is chosen at first.
-  depositMethodNames: 'Pay-A',
+  depositMethodNames: 'Pay-B, Pay-A*, Pay-D, Pay-C',
   // What "Claim" on the Download App page pays (once per member); 0 hides the button.
   appClaimAmount: 0,
   // The sign-up captcha picture is off: the owner's Create Account screen has none. Sign-up is guarded by the rate limits instead.
@@ -6678,7 +6678,7 @@ app.post('/admin/settings/update', async (req, res) => {
     // The welcome dialog's title and its lines of text: plain text, capped.
     if ('depositMethodNames' in updates) {
       const names = String(updates.depositMethodNames == null ? '' : updates.depositMethodNames).split(',').map(x => x.replace(/[<>]/g, '').trim().slice(0, 20)).filter(Boolean).slice(0, 6);
-      updates.depositMethodNames = names.length ? names.join(', ') : 'Pay-A';
+      updates.depositMethodNames = names.length ? names.join(', ') : DEFAULT_SETTINGS.depositMethodNames;
     }
     if ('brandName' in updates) {
       const name = String(updates.brandName == null ? '' : updates.brandName).trim();

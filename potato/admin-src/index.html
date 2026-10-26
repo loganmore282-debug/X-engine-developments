@@ -3485,8 +3485,8 @@ async function renderSettings(){
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodPesa" value="pesajet" ${v('withdrawMethod','follow')==='pesajet'?'checked':''} style="width:auto"> Always automatic (PesaJet sends payouts)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="witMethod" id="witMethodManual" value="manual" ${v('withdrawMethod','follow')==='manual'?'checked':''} style="width:auto"> Always manual (you send payouts by hand)</label>
       <h2 class="sec" style="margin:16px 0 4px">Deposit page buttons</h2>
-      <p class="muted" style="margin:0 0 8px">The names under the amount on the Deposit page, separated by commas; each shows after the app name (for example Potato Pay-A). The first one is chosen first. Up to 6.</p>
-      <input id="depNamesInput" maxlength="100" value="${esc(v('depositMethodNames','Pay-A'))}" placeholder="Pay-A">
+      <p class="muted" style="margin:0 0 8px">The names under the amount on the Deposit page, separated by commas; each shows after the app name (for example Potato Pay-A). Put a * after the one that is chosen when the page opens (the first one if none has it). Up to 6.</p>
+      <input id="depNamesInput" maxlength="100" value="${esc(v('depositMethodNames','Pay-B, Pay-A*, Pay-D, Pay-C'))}" placeholder="Pay-B, Pay-A*, Pay-D, Pay-C">
       <h2 class="sec" style="margin:16px 0 4px">Download App claim</h2>
       <p class="muted" style="margin:0 0 8px">The amount the Claim button on the Download App page pays, once per member. 0 hides the button.</p>
       <input id="appClaimInput" type="number" min="0" step="1" value="${esc(v('appClaimAmount',0))}" placeholder="0">

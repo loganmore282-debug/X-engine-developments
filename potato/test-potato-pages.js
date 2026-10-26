@@ -110,7 +110,7 @@ async function member() {
   ok(typeof st.depositMethodNames === 'string' && st.depositMethodNames.split(', ').length === 6 && !/[<>]/.test(st.depositMethodNames), 'deposit buttons: at most six names, no markup', st.depositMethodNames);
   ok(st.myBannerOpacity === 60 && st.myBannerBlur === 12, 'My banner opacity and blur are saved and public', [st.myBannerOpacity, st.myBannerBlur]);
   r = await J('POST', '/admin/settings/update', { settings: { depositMethodNames: ' , ' } }, null, true);
-  ok(((await J('GET', '/public/settings')).j.settings || {}).depositMethodNames === 'Pay-A', 'an empty list falls back to Pay-A');
+  ok(((await J('GET', '/public/settings')).j.settings || {}).depositMethodNames === 'Pay-B, Pay-A*, Pay-D, Pay-C', 'an empty list falls back to the default four buttons');
 
   realLog(fails ? fails + ' FAILED of ' + checks : 'PASS: Potato pages server routes (' + checks + ' checks)');
   process.exit(fails ? 1 : 0);
