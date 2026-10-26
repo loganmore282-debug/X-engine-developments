@@ -130,6 +130,10 @@ async function member() {
     ok(/@keyframes ptQuickPop\{0%\{transform:scale\(\.55\)[^}]*\}45%\{transform:scale\(1\.2\)/.test(rd('user-src/index.html')) && /\.pt-popin \.pt-quick button:nth-child\(4\)\{animation-delay:\.195s/.test(rd('user-src/index.html')) && /classList\.add\('pt-popin'\)/.test(rd('user-src/original_module.js')), 'arriving at Home, the four buttons pop in one after another');
     ok(/@keyframes ptJoinSweep\{0%\{left:-32%;\}14\.3%\{left:108%;\}/.test(rd('user-src/index.html')) && /animation:ptJoinSweep 1\.4s linear/.test(rd('user-src/index.html')), 'Join Channel has the glow sweep: 0.2 s across, every 1.4 s');
     ok(!/\.pt-abban \.pt-dlback\{display:none/.test(rd('user-src/index.html')), 'the About page keeps its back arrow');
+    ok(/#authHeroBg\{position:absolute;left:0;right:0;bottom:0;top:auto;height:245\.3px;[^}]*background-position:center bottom/.test(rd('user-src/index.html')), 'the Login / Create Account banner picture is laid out once at the tall size and pinned to the bottom, so switching pages never moves it');
+    { const css = rd('user-src/index.html'); const radius = sel => { const m = css.match(new RegExp('\\n' + sel.replace(/[.>*]/g, '\\$&') + '\\{[^}]*border-radius:([\\d.]+)px')); return m ? Number(m[1]) : null; };
+      const want = { '.pt-quick': 10, '.pt-card': 7, '.pt-lvcard': 10.7, '.pt-tier': 14.8, '.pt-tabs': 9.3, '.pt-lvg>div': 7.2, '.pt-mystat': 14.2, '.pt-rb': 9.7, '.pt-gcform': 12, '.pt-pw': 12, '.pt-amt': 11.5, '.pt-gcgo': 14.7 };
+      for (const k of Object.keys(want)) ok(radius(k) === want[k], 'card corner ' + k + ' is ' + want[k] + ' px as measured on the screenshots (now ' + radius(k) + ')'); }
     ok(/ptIconHtml\('payicon'/.test(rd('user-src/original_module.js')), 'every deposit pay button shows that one icon'); }
 
   realLog(fails ? fails + ' FAILED of ' + checks : 'PASS: Potato pages server routes (' + checks + ' checks)');
