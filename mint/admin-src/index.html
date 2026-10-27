@@ -2329,7 +2329,9 @@ function drawWits(){
     const reason=prompt(b.dataset.rejSending
       ? 'Only reject this if you have CONFIRMED on the payment provider\'s own dashboard that this payout did NOT actually go out. If it shows as sent, do nothing here -- rejecting now would refund the member on top of a real payout.\n\nReason for rejection?'
       : 'Reason for rejection? (funds are refunded to the user)', 'Rejected by admin');
-    if(reason===null)return; const d=await api('/admin/withdraw/reject',{withdrawalId:b.dataset.rej,reason}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
+    if(reason===null)return; let d=await api('/admin/withdraw/reject',{withdrawalId:b.dataset.rej,reason});
+    // TavuPay may be unable to tell us whether a payout went out: the owner can still reject after looking in the TavuPay dashboard.
+    if(d.status!=='success' && d.needsConfirm && confirm(d.message+'\n\nI have checked the TavuPay dashboard and this payout did NOT go out. Reject it and refund the member?')) d=await api('/admin/withdraw/reject',{withdrawalId:b.dataset.rej,reason,confirmedNotSent:true}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
   document.querySelectorAll('[data-vrf]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); const t=b.textContent; b.disabled=true;b.textContent='Checking…'; const d=await api('/admin/withdraw/verify',{withdrawalId:b.dataset.vrf}); b.disabled=false;b.textContent=t; if(d.status==='success'){ alert(`Payout verify\n\nOur record: ${d.ourStatus}\nProvider says: ${d.marzStatus}\n\n${d.message}`); } else { toast(d.message||'Verify failed','err'); } }));
 }
 // Live-refresh counterpart to renderWithdrawals() -- see quietRefreshUsers().
@@ -3404,6 +3406,7 @@ async function renderSettings(){
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodFollow" value="follow" ${v('withdrawMethod','follow')==='follow'?'checked':''} style="width:auto"> Follow the recharge gateway above</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodMarz" value="marzpay" ${v('withdrawMethod','follow')==='marzpay'||v('withdrawMethod','follow')==='automatic'?'checked':''} style="width:auto"> Always automatic (MarzPay sends payouts)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodPesa" value="pesajet" ${v('withdrawMethod','follow')==='pesajet'?'checked':''} style="width:auto"> Always automatic (PesaJet sends payouts)</label>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodTavu" value="tavupay" ${v('withdrawMethod','follow')==='tavupay'?'checked':''} style="width:auto"> Always automatic (TavuPay sends payouts)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="witMethod" id="witMethodManual" value="manual" ${v('withdrawMethod','follow')==='manual'?'checked':''} style="width:auto"> Always manual (you send payouts by hand)</label>
       <button class="btn block" id="saveDepMethod" style="margin-top:10px">Save payment method</button>
     </div>

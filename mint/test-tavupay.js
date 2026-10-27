@@ -6,7 +6,7 @@ const fs = require('node:fs'), vm = require('node:vm'), crypto = require('node:c
 const cp = require('node:child_process');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); }; const eq = (a, b, m) => { n++; assert.deepEqual(JSON.parse(JSON.stringify(a === undefined ? null : a)), JSON.parse(JSON.stringify(b)), m); };
 const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
-const a = src.indexOf('// TAVUPAY (recharges only)'), b = src.indexOf('// ── LOCKED CASHBACK');
+const a = src.indexOf('// TAVUPAY (recharges, and payouts when the owner picks them)'), b = src.indexOf('// ── LOCKED CASHBACK');
 ok(a > 0 && b > a, 'the TavuPay block exists');
 const block = src.slice(a, b);
 
@@ -121,7 +121,7 @@ const ENV = { TAVUPAY_API_KEY: 'ep_live_key', TAVUPAY_API_SECRET: 'the-secret' }
   const run = e => vm.runInContext(e, pc);
   eq(run("depositAutomaticProvider({depositMethod:'tavupay'})"), 'tavupay'); eq(run("depositAutomaticProvider({depositMethod:'pesajet'})"), 'pesajet'); eq(run("depositAutomaticProvider({depositMethod:'zzz'})"), 'marzpay');
   eq(run("withdrawProvider({depositMethod:'tavupay',withdrawMethod:'follow'})"), 'marzpay', 'payouts never follow a TavuPay recharge');
-  eq(run("withdrawProvider({depositMethod:'tavupay'})"), 'marzpay'); eq(run("withdrawProvider({depositMethod:'tavupay',withdrawMethod:'manual'})"), 'manual');
+  eq(run("withdrawProvider({depositMethod:'tavupay'})"), 'marzpay'); eq(run("withdrawProvider({depositMethod:'marzpay',withdrawMethod:'tavupay'})"), 'tavupay', 'pinned TavuPay payouts are used'); eq(run("withdrawProvider({depositMethod:'pesajet',withdrawMethod:'tavupay'})"), 'tavupay'); eq(run("withdrawProvider({depositMethod:'tavupay',withdrawMethod:'manual'})"), 'manual');
   eq(run("withdrawProvider({depositMethod:'pesajet',withdrawMethod:'follow'})"), 'pesajet', 'PesaJet behaviour unchanged');
 
   // ── wiring in the server, admin and nginx

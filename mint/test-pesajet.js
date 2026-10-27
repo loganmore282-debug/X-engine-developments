@@ -380,7 +380,7 @@ async function finish() {
   // The enums, or the admin can never save the choice.
   ck(/'depositMethod' in updates && !\['marzpay', 'pesajet', 'tavupay'\]/.test(S),
      'depositMethod accepts pesajet at /admin/settings/update');
-  ck(/'withdrawMethod' in updates && !\['follow', 'marzpay', 'pesajet', 'manual'\]/.test(S),
+  ck(/'withdrawMethod' in updates && !\['follow', 'marzpay', 'pesajet', 'tavupay', 'manual'\]/.test(S),
      'and so does withdrawMethod');
 
   // Webhooks arrive with no Origin. Without the exemption the host guard
