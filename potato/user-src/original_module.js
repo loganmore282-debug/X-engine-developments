@@ -961,7 +961,7 @@ async function performMemberLogout(opts){
 // The loading screen stays for at least LOADER_MIN_MS from the moment the page began (owner: "let it take
 // about 3 seconds, then open the page"). Everything that used to hide it immediately goes through here; the
 // app is built underneath while it waits, and the pictures start loading straight away.
-var LOADER_MIN_MS = 2500, _ldTimer = null, _annAfterLoader = false;
+var LOADER_MIN_MS = 2500, _ldTimer = null, _annAfterLoader = false, PT_LOADED_MS = 150, PT_READY_MS = 350;
 function hideLoadingScreen(){
   const ls = $('loadingScreen'); if (!ls) return;
   try { startArtwork(); } catch (_) {}
@@ -971,10 +971,16 @@ function hideLoadingScreen(){
   if (_ldTimer) { clearTimeout(_ldTimer); _ldTimer = null; }
   const finish = () => {
     if (window._potatoLoaderProgress) window._potatoLoaderProgress(100);
-    ls.style.display = 'none';
-    // Opening the app: Home was built underneath the loader, so its icons popped where nobody could see them. Now that the loader is gone the
-    // icons pop in front of the member, and the welcome dialog follows right after them (maybeAnnounceOnEntry).
-    if (_annAfterLoader) { _annAfterLoader = false; if (STATE.page === 'home') replayPageIn(); maybeAnnounceOnEntry(); }
+    const go = () => {
+      _ldTimer = null;
+      ls.style.display = 'none';
+      // Opening the app: Home was built underneath the loader, so its icons popped where nobody could see them. Now that the loader is gone the
+      // icons pop in front of the member, and the welcome dialog follows right after them (maybeAnnounceOnEntry).
+      if (_annAfterLoader) { _annAfterLoader = false; if (STATE.page === 'home') replayPageIn(); maybeAnnounceOnEntry(); }
+    };
+    // "Loading... 100%" shows for a moment, turns to "Ready" for a few hundred milliseconds, and then the page opens.
+    if (!window._potatoLoaderReady || window._potatoLoaderReadyMs === 0) { go(); return; }   // (the tests set _potatoLoaderReadyMs = 0, like _potatoLoaderMinMs)
+    _ldTimer = setTimeout(() => { window._potatoLoaderReady(); _ldTimer = setTimeout(go, PT_READY_MS); }, PT_LOADED_MS);
   };
   if (!wait) { finish(); return; }
   _ldTimer = setTimeout(() => { _ldTimer = null; finish(); }, wait);
@@ -2147,6 +2153,7 @@ async function renderHome(){
   const shownProducts = homeSignature();
   const hadProductList = !!STATE.products;
   paintHome();
+  if (_depStartNext === null) ptPrefetchDepositStart();
   const [accR, invR, prR] = await Promise.all([ api('/account'), api('/investments'), api('/public/products') ]);
   if (accR.status === 'success') STATE.account = accR.account;
   if (prR.status === 'success' && Array.isArray(prR.products)) { STATE.products = prR.products; _productsLoadFailed = false; }
@@ -3686,9 +3693,9 @@ window.submitChestKey = async function(){
   const raw = ($('chestKey').value || '').trim();
   if (!raw) return notify('Please enter the gift code');
   const btn = $('chestOpenBtn');
-  btn.disabled = true;
+  btn.disabled = true; btn.textContent = 'Opening...';
   const r = await post('/redeem', { code: raw });
-  btn.disabled = false;
+  btn.disabled = false; btn.textContent = 'Redeem Gift Code';
   if (r.status !== 'success') return notify(r.message || 'Wrong gift code');
   // Owner: "why does the congratulations card delay to appear when one has
   // claimed treasure code." Because it used to wait on TWO more round trips
@@ -4042,21 +4049,30 @@ function recordsRowAmount(t){
 // instruction ("remove option for payment methods, remove manual payment
 // in the whole codes... remove them all"). Automatic recharge is now the
 // only deposit path: one screen, no method choice to make.
+// The pay button that is selected when the page opens comes from the SERVER, which hands the buttons out in turn so every method is used equally.
+// The answer is fetched ahead of time and kept for the next visit (opening never waits for the network); with none yet, a random button.
+var _depStartNext = null, _depStartBusy = false;
+function ptPrefetchDepositStart(){
+  if (_depStartBusy) return;
+  _depStartBusy = true;
+  api('/deposit/start').then(r => { if (r && r.status === 'success' && Number.isInteger(r.start)) _depStartNext = r.start; }).catch(() => {}).then(() => { _depStartBusy = false; });
+}
 window.openDepositSheet = function(){
   const s = STATE.settings || {};
   if (s.depositAvailable === false) return notify('Deposits are not available right now.');
-  openDepositFormSheet();
+  const start = _depStartNext; _depStartNext = null;
+  openDepositFormSheet(start);
+  ptPrefetchDepositStart();
 };
 var _depChosenAmount = 0;
-function openDepositFormSheet(){
+function openDepositFormSheet(start){
   const s = STATE.settings || {};
   const min = Number(s.minDeposit) || 0;
   const chipAmts = Array.from(new Set((STATE.products || []).map(p => Number(p.price) || 0).filter(p => p >= min && p > 0))).sort((a, b) => a - b).slice(0, 6);
   _depChosenAmount = chipAmts.length ? chipAmts[0] : 0;
-  // The admin's list: "Pay-B, Pay-A*, Pay-D, Pay-C" -- the name that ends with * is the one chosen when the page opens (the first, when none is marked).
-  const rawNames = String(s.depositMethodNames || 'Pay-B, Pay-A*, Pay-D, Pay-C').split(',').map(x => x.trim()).filter(Boolean);
-  const names = rawNames.map(x => x.replace(/\*+$/, '').trim());
-  const startOn = Math.max(0, rawNames.findIndex(x => /\*$/.test(x)));
+  // The admin's list: "Pay-B, Pay-A, Pay-D, Pay-C". Which one is on when the page opens is the server's turn-taking pick (a * the admin may still have typed is ignored).
+  const names = String(s.depositMethodNames || 'Pay-B, Pay-A, Pay-D, Pay-C').split(',').map(x => x.replace(/\*+$/, '').trim()).filter(Boolean);
+  const startOn = Number.isInteger(start) && start >= 0 ? start % names.length : Math.floor(Math.random() * names.length);
   const note = t => `<div class="pt-note">${t}</div>`;
   openSheet('Deposit', `<div class="pt-dep">
     <div class="pt-chips" id="depChips">${chipAmts.map(a => `<button type="button" class="dep-chip pt-chip${a === _depChosenAmount ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a})">${a}</button>`).join('')}</div>

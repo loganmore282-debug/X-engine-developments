@@ -25,6 +25,7 @@ function load(pre) {
   w.matchMedia = () => ({ matches: false, addListener() {}, removeListener() {} });
   w.Notification = { permission: 'denied' };
   w._potatoLoaderMinMs = 0; // the real 3-second hold is not what these tests are about
+  w._potatoLoaderReadyMs = 0; // nor is the half-second "Ready"
   w.fetch = async () => ({ status: 200, json: async () => ({ status: 'success', settings: {}, products: [] }) });
   if (pre) pre(w);
   for (const tag of w.document.scripts) {

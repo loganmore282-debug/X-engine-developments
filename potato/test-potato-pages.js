@@ -110,7 +110,7 @@ async function member() {
   ok(typeof st.depositMethodNames === 'string' && st.depositMethodNames.split(', ').length === 6 && !/[<>]/.test(st.depositMethodNames), 'deposit buttons: at most six names, no markup', st.depositMethodNames);
   ok(st.myBannerOpacity === 60 && st.myBannerBlur === 12, 'My banner opacity and blur are saved and public', [st.myBannerOpacity, st.myBannerBlur]);
   r = await J('POST', '/admin/settings/update', { settings: { depositMethodNames: ' , ' } }, null, true);
-  ok(((await J('GET', '/public/settings')).j.settings || {}).depositMethodNames === 'Pay-B, Pay-A*, Pay-D, Pay-C', 'an empty list falls back to the default four buttons');
+  ok(((await J('GET', '/public/settings')).j.settings || {}).depositMethodNames === 'Pay-B, Pay-A, Pay-D, Pay-C', 'an empty list falls back to the default four buttons');
   await J('POST', '/admin/settings/update', { settings: { giftCodeHint: '  Type the <b>code</b> ' } }, null, true);
   ok(((await J('GET', '/public/settings')).j.settings || {}).giftCodeHint === 'Type the bcode/b', 'the Gift Code hint is saved from the admin, without tags');
   await J('POST', '/admin/settings/update', { settings: { shareMessage: '  Invest with {app} <now>  ' } }, null, true);

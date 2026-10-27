@@ -578,7 +578,7 @@ const DEFAULT_SETTINGS = {
   // The My page banner (Admin > Banners > My page banner): 100 = as uploaded, 0 blur = sharp.
   myBannerOpacity: 100, myBannerBlur: 0,
   // The names under the Deposit page's method buttons, comma separated; each shows after the app name ("Potato Pay-A"). The first one is chosen at first.
-  depositMethodNames: 'Pay-B, Pay-A*, Pay-D, Pay-C',
+  depositMethodNames: 'Pay-B, Pay-A, Pay-D, Pay-C',
   // The gateway behind each of those buttons, in the SAME order (Pay-B = TavuPay, Pay-A = PesaJet, Pay-D = LworxPay, Pay-C = OBPay). The admin can
   // change or rotate them; a member only ever sends the button's position. Never sent to the app.
   depositGateways: 'tavupay, pesajet, lworxpay, obpay',
@@ -4472,6 +4472,18 @@ app.get('/investments', async (req, res) => {
 // ═══════════════════════════════════════════
 // DEPOSIT (MarzPay collect-money)
 // ═══════════════════════════════════════════
+// Which pay button is selected when a member opens the Deposit page: NOT fixed, the server hands the buttons out in turn (one counter for every
+// member and every visit), so over time every method is offered, and so used, equally. The app asks ahead of time (one call per visit, the answer is
+// kept for the NEXT visit), so opening the page never waits for it. The member can still tap any button.
+let _depositRotation = Math.floor(Math.random() * 6);
+app.get('/deposit/start', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const sett = await getSettings();
+  const count = String(sett.depositMethodNames || '').split(',').map(x => x.trim()).filter(Boolean).length || 1;
+  _depositRotation = (_depositRotation + 1) % 1000000;
+  res.json({ status: 'success', start: _depositRotation % count });
+});
 const _depCreateDebounce = new Map();
 app.post('/deposit/marzpay', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -6281,22 +6293,18 @@ app.post('/redeem', async (req, res) => {
     // Lock on the lowercased code, not the raw input: two members submitting
     // the same code in different casing must serialise against each other.
     await withLock('redeem:' + raw.toLowerCase().replace(/[^a-z0-9]/g, ''), async () => {   // same lock for every spelling of one code (with or without dashes)
-      const userSnap = await db.collection('users').doc(userId).get();
-      if (!userSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
-      if (userSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
-      if (userSnap.data().registrationDone === false) { result = { code: 403, body: { status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up first.' } }; return; }
-      // Matched via codeLower (case-insensitive by construction, and
-      // already the field the promoCodes uniqueness index enforces on) --
-      // this reads correctly regardless of which case a given code
-      // happens to be STORED in, so a code issued under the old uppercase
-      // alphabet and one issued under the new lowercase alphabet are both
-      // found the same way, with no case-guessing needed.
+      // The member and the code are looked up TOGETHER (every round trip to the database costs the member real time).
       const lower = raw.toLowerCase();
       // A current code: 10 letters/digits (dashes or spaces typed by mistake are ignored), found by its hash.
       const typed10 = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
-      let codeSnap = typed10.length === TREASURE_CODE_LENGTH
-        ? await db.collection('promoCodes').where('codeLower', '==', tcHash(typed10)).limit(1).get()
-        : { empty: true, docs: [] };
+      const [userSnap, firstCodeSnap] = await Promise.all([
+        db.collection('users').doc(userId).get(),
+        typed10.length === TREASURE_CODE_LENGTH ? db.collection('promoCodes').where('codeLower', '==', tcHash(typed10)).limit(1).get() : Promise.resolve({ empty: true, docs: [] }),
+      ]);
+      if (!userSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
+      if (userSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
+      if (userSnap.data().registrationDone === false) { result = { code: 403, body: { status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up first.' } }; return; }
+      let codeSnap = firstCodeSnap;
       // A code made before the 10-character rule (12 characters, usually with dashes).
       if (codeSnap.empty) codeSnap = await db.collection('promoCodes').where('codeLower', '==', lower).limit(1).get();
       // A member who reads a code off a screenshot and types it by hand may
@@ -6357,7 +6365,7 @@ app.post('/redeem', async (req, res) => {
         const priorSnap = await db.collection('promoRedemptions').where('userId', '==', userId).where('code', '==', code).limit(1).get();
         if (!priorSnap.empty) { result = { code: 400, body: { status: 'error', message: "You've already used this code" } }; return; }
       } else if (cd.maxUses && usedBy.length >= cd.maxUses) {
-        result = { code: 400, body: { status: 'error', message: 'This code has reached its usage limit' } }; return;
+        result = { code: 400, body: { status: 'error', message: 'All treasure chests have been claimed.' } }; return;
       }
       // Legacy fallback: a code generated before random rewards only has
       // the old single `reward` field -- treat it as a zero-width range so
@@ -6387,7 +6395,7 @@ app.post('/redeem', async (req, res) => {
         if (claimedBy.indexOf(userId) === -1) { result = { code: 500, body: { status: 'error', message: 'Could not redeem this code' } }; return; }
         if (cd.maxUses && claimedBy.length > cd.maxUses) {
           await codeDoc.ref.update({ usedBy: FieldValue.arrayRemove(userId), ['claimedRewards.' + userId]: FieldValue.delete() }).catch(() => {});
-          result = { code: 400, body: { status: 'error', message: 'This code has reached its usage limit' } }; return;
+          result = { code: 400, body: { status: 'error', message: 'All treasure chests have been claimed.' } }; return;
         }
       } else {
         // A genuinely lost roll (deploy-time race, never observed in
@@ -6427,37 +6435,31 @@ app.post('/redeem', async (req, res) => {
       // rows (a duplicate 'promocode' row would inflate totalEarned the
       // next time "Recalculate totals" runs, since that sum includes this
       // type).
-      const priorRedemption = await db.collection('promoRedemptions').where('userId', '==', userId).where('code', '==', code).limit(1).get();
-      if (priorRedemption.empty) {
+      // A code claimed for the first time cannot have rows from an earlier attempt, so only a RESUMED claim looks for them first. The two ledger
+      // rows and the balance read are independent of each other and run together.
+      const writeRedemption = async () => {
+        if (alreadyClaimed && !(await db.collection('promoRedemptions').where('userId', '==', userId).where('code', '==', code).limit(1).get()).empty) return;
         await db.collection('promoRedemptions').add({ userId, code, reward, createdAt: FieldValue.serverTimestamp() });
-      }
-      const priorTx = await db.collection('transactions').where('userId', '==', userId).where('type', '==', 'promocode').where('giftCode', '==', code).limit(1).get();
-      if (priorTx.empty) {
+      };
+      const writeLedger = async () => {
+        if (alreadyClaimed && !(await db.collection('transactions').where('userId', '==', userId).where('type', '==', 'promocode').where('giftCode', '==', code).limit(1).get()).empty) return;
         const { date, time } = nowStr();
         await db.collection('transactions').add({
           userId, statementId: newStatementId(), type: 'promocode', description: cd.codeEnc ? 'Treasure code redeemed' : `Gift code redeemed: ${code}`, giftCode: code,
           amount: reward, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
         });
-      }
-      // The win card prints "New Balance" the instant it opens, so hand the
-      // post-credit figure back with the reward. Without it the client had to
-      // come back for /account before it could show anything -- a whole extra
-      // round trip between a successful claim and any sign that it worked,
-      // which is the delay the owner reported. One local read here replaces a
-      // network round trip on a phone.
-      //
-      // Read AFTER the increment, not computed from the pre-credit snapshot:
-      // this is the real stored balance, so it is also right on the
-      // idempotent-retry path above where no increment was applied at all.
+      };
+      // The win card prints "New Balance" the instant it opens, so the post-credit figure goes back with the reward. Read AFTER the increment (the real
+      // stored balance, also right on the idempotent-retry path where no increment was applied). Omitted when unreadable; the client does the sum itself.
       const body = { status: 'success', reward };
-      try {
-        const fresh = await db.collection('users').doc(userId).get();
-        const bal = fresh.exists ? Number(fresh.data().walletBalance) : NaN;
-        // Omitted rather than sent as null when unreadable -- the client
-        // falls back to its own arithmetic, and a null would have to be
-        // special-cased there to avoid reading as a balance of zero.
-        if (Number.isFinite(bal)) body.walletBalance = round2(bal);
-      } catch (_) { /* the reward is credited; the figure is a convenience */ }
+      const readBalance = async () => {
+        try {
+          const fresh = await db.collection('users').doc(userId).get();
+          const bal = fresh.exists ? Number(fresh.data().walletBalance) : NaN;
+          if (Number.isFinite(bal)) body.walletBalance = round2(bal);
+        } catch (_) { /* the reward is credited; the figure is a convenience */ }
+      };
+      await Promise.all([writeRedemption(), writeLedger(), readBalance()]);
       result = { code: 200, body };
     });
     res.status(result.code).json(result.body);
@@ -7023,7 +7025,7 @@ app.post('/admin/settings/update', async (req, res) => {
       updates.giftCodeHint = hint || DEFAULT_SETTINGS.giftCodeHint;
     }
     if ('depositMethodNames' in updates) {
-      const names = String(updates.depositMethodNames == null ? '' : updates.depositMethodNames).split(',').map(x => x.replace(/[<>]/g, '').trim().slice(0, 20)).filter(Boolean).slice(0, 6);
+      const names = String(updates.depositMethodNames == null ? '' : updates.depositMethodNames).split(',').map(x => x.replace(/[<>*]/g, '').trim().slice(0, 20)).filter(Boolean).slice(0, 6);
       updates.depositMethodNames = names.length ? names.join(', ') : DEFAULT_SETTINGS.depositMethodNames;
     }
     if ('lworxCollect' in updates && !['standard', 'stanbic'].includes(updates.lworxCollect))

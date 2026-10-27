@@ -24,7 +24,7 @@ const deps = () => [...fm.__stores.pendingDeposits.values()];
   for (let i = 0; i < 60; i++) { try { const h = await fetch(base + '/health'); if (h.ok) break; } catch (_) {} await sleep(250); }
   const pub = (await J('GET', '/public/settings')).j;
   ok(!JSON.stringify(pub).includes('depositGateways') && !/lworxpay|obpay/.test(JSON.stringify(pub)), 'the gateway list never reaches the app');
-  ok((pub.settings || pub).depositMethodNames === 'Pay-B, Pay-A*, Pay-D, Pay-C', 'the buttons are Pay-B, Pay-A, Pay-D, Pay-C');
+  ok((pub.settings || pub).depositMethodNames === 'Pay-B, Pay-A, Pay-D, Pay-C', 'the buttons are Pay-B, Pay-A, Pay-D, Pay-C');
   const dep = async (m, slot) => { await sleep(7100); const r = await J('POST', '/deposit/marzpay', slot === undefined ? { amount: 30000 } : { amount: 30000, slot }, m.tok); await sleep(150); return r; };
   const m = await member();
   let r = await dep(m, 0); ok(r.j.status === 'success' && deps().at(-1).provider === 'tavupay', 'button 1 (Pay-B) is TavuPay', r.j);
@@ -33,6 +33,18 @@ const deps = () => [...fm.__stores.pendingDeposits.values()];
   r = await dep(m, 3); ok(r.j.status === 'success' && deps().at(-1).provider === 'obpay', 'button 4 (Pay-C) is ObPay', r.j);
   r = await dep(m); ok(r.j.status === 'success' && deps().at(-1).provider === 'marzpay', 'no slot falls back to the single recharge gateway', r.j);
   r = await dep(m, 9); ok(r.j.status === 'success' && deps().at(-1).provider === 'marzpay', 'a slot with no entry falls back too', r.j);
+  // the server hands out the pre-selected button in turn: every method gets the same share
+  ok((await J('GET', '/deposit/start')).s === 401, '/deposit/start needs a signed-in member');
+  { const seen = []; for (let i = 0; i < 8; i++) seen.push((await J('GET', '/deposit/start', null, m.tok)).j.start);
+    ok(seen.every(x => Number.isInteger(x) && x >= 0 && x < 4), 'every answer is one of the four buttons', seen);
+    const cnt = [0, 0, 0, 0]; seen.forEach(x => cnt[x]++); ok(cnt.every(c => c === 2), 'eight visits give every button exactly two turns: ' + cnt, seen);
+    ok(seen.every((x, i) => i === 0 || x === (seen[i - 1] + 1) % 4), 'in strict turn', seen); }
+  { const g = await J('POST', '/admin/promocodes/generate', { minReward: 1000, maxReward: 1000, maxUses: 1 }, null, true);
+    const a = await member(), b = await member();
+    const first = await J('POST', '/redeem', { code: g.j.code }, a.tok); ok(first.j.status === 'success' && first.j.reward === 1000 && Number.isFinite(first.j.walletBalance), 'a code is redeemed with its reward and the new balance', first.j);
+    ok([...fm.__stores.promoRedemptions.values()].length >= 1 && [...fm.__stores.transactions.values()].some(t => t.userId === a.uid && t.type === 'promocode' && t.amount === 1000), 'and its two ledger rows are written');
+    const second = await J('POST', '/redeem', { code: g.j.code }, b.tok); ok(second.j.message === 'All treasure chests have been claimed.', 'a used-up code says all the chests have been claimed', second.j);
+    const again = await J('POST', '/redeem', { code: g.j.code }, a.tok); ok(/already used/.test(again.j.message), 'the same member twice is told so', again.j); }
   // admin: validation and rotation
   const bad = await J('POST', '/admin/settings/update', { settings: { depositGateways: 'tavupay, nonsense' } }, null, true); ok(bad.s === 400, 'an unknown gateway is refused', bad.j);
   const seven = await J('POST', '/admin/settings/update', { settings: { depositGateways: 'pesajet,pesajet,pesajet,pesajet,pesajet,pesajet,pesajet' } }, null, true); ok(seven.s === 400, 'more than six is refused');
@@ -46,6 +58,8 @@ const deps = () => [...fm.__stores.pendingDeposits.values()];
   const admin = fs.readFileSync(path.join(root, 'admin-src/index.html'), 'utf8'), app = fs.readFileSync(path.join(root, 'user-src/original_module.js'), 'utf8');
   ok(/id="depGwRotate"/.test(admin) && /depositGateways: _depGws\.join/.test(admin) && /'lworxpay','LworxPay'/.test(admin) && /'obpay','ObPay'/.test(admin), 'the admin has a gateway picker per button and a Rotate button');
   ok(/post\('\/deposit\/marzpay', \{ amount, slot \}\)/.test(app), 'the app sends the position of the chosen button');
+  ok(/api\('\/deposit\/start'\)/.test(app) && /Math\.floor\(Math\.random\(\) \* names\.length\)/.test(app) && !/findIndex\(x => \/\\\*\$\/\.test\(x\)\)/.test(app), 'the app uses the server\'s pick, with a random one as the fallback, and no fixed default');
+  ok(/btn\.textContent = 'Opening\.\.\.'/.test(app) && /\.pt-gcgo:disabled/.test(fs.readFileSync(path.join(root, 'user-src/index.html'), 'utf8')), 'the Redeem button says Opening... while it works');
   realLog(fails ? fails + ' FAILED' : 'PASS: deposit buttons -> gateways (' + n + ' checks)');
   process.exit(fails ? 1 : 0);
 })().catch(e => { realErr(e); process.exit(2); });
