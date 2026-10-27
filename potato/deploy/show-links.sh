@@ -6,6 +6,8 @@
 #   bash /srv/potato-src/potato/deploy/show-links.sh github     GitHub webhook: Payload URL, content type and Secret
 #   bash /srv/potato-src/potato/deploy/show-links.sh pesajet    PesaJet webhook URL
 #   bash /srv/potato-src/potato/deploy/show-links.sh tavupay    TavuPay webhook URL
+#   bash /srv/potato-src/potato/deploy/show-links.sh lworxpay   LworxPay callback URL
+#   bash /srv/potato-src/potato/deploy/show-links.sh obpay      ObPay callback URL
 # The secret and the PesaJet address are private: do not post or screenshot them.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -54,8 +56,20 @@ tavupay() {
     echo "No secret webhook address yet. Run:  bash $POTATO/deploy/make-hook-url.sh   then ask for this again."
   fi
 }
+hookurl() {   # hookurl <label> <name> <where to put it>
+  local T HH
+  T=$(rd "${POTATO_HOOK_FILE:-$SECRETS/hook-token}"); HH=$(rd "${POTATO_HOOK_HOST_FILE:-$SECRETS/hook-host}")
+  if [ -n "$T" ]; then
+    if [ -n "$HH" ]; then echo "$1 callback URL: https://$HH/h-$T/$2"; else echo "$1 callback URL: https://$APP/k7x2/h-$T/$2"; fi
+    echo "  $3"
+  else
+    echo "No secret webhook address yet. Run:  bash $POTATO/deploy/make-hook-url.sh   then ask for this again."
+  fi
+}
+lworxpay() { hookurl LworxPay lworxpay "Put it in LWORXPAY_CALLBACK_URL (set-secret.sh LWORXPAY_CALLBACK_URL): it is sent with every payment, signed with a secret the server makes itself."; }
+obpay() { hookurl ObPay obpay "Put it in OBPAY_CALLBACK_URL (set-secret.sh OBPAY_CALLBACK_URL); the signing secret (whsec_...) from Dashboard > API Keys goes in OBPAY_WEBHOOK_SECRET."; }
 case "$want" in
-  app) app ;; admin) admin ;; github) github ;; pesajet) pesajet ;; tavupay) tavupay ;;
-  all) app; admin; echo; github; echo; pesajet; echo; tavupay ;;
-  *) echo "usage: show-links.sh [app|admin|github|pesajet|tavupay|all]"; exit 1 ;;
+  app) app ;; admin) admin ;; github) github ;; pesajet) pesajet ;; tavupay) tavupay ;; lworxpay) lworxpay ;; obpay) obpay ;;
+  all) app; admin; echo; github; echo; pesajet; echo; tavupay; echo; lworxpay; echo; obpay ;;
+  *) echo "usage: show-links.sh [app|admin|github|pesajet|tavupay|lworxpay|obpay|all]"; exit 1 ;;
 esac

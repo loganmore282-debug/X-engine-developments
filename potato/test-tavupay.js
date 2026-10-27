@@ -125,7 +125,7 @@ const ENV = { TAVUPAY_API_KEY: 'ep_live_key', TAVUPAY_API_SECRET: 'the-secret' }
   eq(run("withdrawProvider({depositMethod:'pesajet',withdrawMethod:'follow'})"), 'pesajet', 'PesaJet behaviour unchanged');
 
   // ── wiring in the server, admin and nginx
-  ok(/app\.post\('\/tavupay\/webhook'/.test(src) && /RAW_BODY_ROUTES = new Set\(\['\/pesajet\/webhook', '\/tavupay\/webhook'/.test(src) && /GUARD_EXEMPT = new Set\([^)]*'\/tavupay\/webhook'/.test(src) && /req\.path === '\/tavupay\/webhook'\) return next\(\)/.test(src), 'route, raw body, maintenance and settings-read exemptions');
+  ok(/app\.post\('\/tavupay\/webhook'/.test(src) && /RAW_BODY_ROUTES = new Set\(\['\/pesajet\/webhook', '\/tavupay\/webhook'/.test(src) && /GUARD_EXEMPT = new Set\([^)]*'\/tavupay\/webhook'/.test(src) && /req\.path === '\/tavupay\/webhook'( \|\| req\.path === '\/\w+\/webhook')*\) return next\(\)/.test(src), 'route, raw body, maintenance and settings-read exemptions');
   ok(/if \(provider === 'tavupay'\) \{/.test(src) && /dep\.provider === 'tavupay'/.test(src) && /where\('provider', '==', 'tavupay'\)/.test(src), 'deposit branch, status poll and reconciler');
   ok(/\['marzpay', 'pesajet', 'tavupay'\]\.includes\(updates\.depositMethod\)/.test(src), 'the admin may choose TavuPay');
   const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');

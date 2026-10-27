@@ -1988,7 +1988,7 @@ async function openUser(uid){
         // member's own phone into the payment gateway -- so that's
         // labelled honestly instead of showing a blank or a made-up value.
         const paidTo = d.method==='manual' ? esc(d.assignedNumber||'Not set')
-          : `Automatic (${d.provider==='pesajet'?'PesaJet':d.provider==='tavupay'?'TavuPay':'MarzPay'})`;
+          : `Automatic (${({pesajet:'PesaJet',tavupay:'TavuPay',lworxpay:'LworxPay',obpay:'ObPay'})[d.provider]||'MarzPay'})`;
         const paidFrom = esc(d.senderPhone||d.phone||'Not set');
         return `<tr><td style="white-space:nowrap">${fdate(d.createdAt)}</td><td><b>${ugx(d.amount, d.regionKey)}</b></td><td>${paidTo}</td><td>${paidFrom}</td><td>${statusPill(d.status)}</td></tr>`;
       }).join('')}
@@ -2214,7 +2214,7 @@ function drawDeps(){
       // provider is only set on deposits created since Round 102 -- an
       // older row with none falls back to the same plain "Automatic" label
       // it always had (it can only ever have gone through MarzPay).
-      : (d.provider==='pesajet'?'PesaJet':d.provider==='tavupay'?'TavuPay':d.provider==='marzpay'?'MarzPay':'Automatic');
+      : (({pesajet:'PesaJet',tavupay:'TavuPay',lworxpay:'LworxPay',obpay:'ObPay',marzpay:'MarzPay'})[d.provider]||'Automatic');
     const reviewNote = d.status==='review' && d.reviewReason ? `<br><span class="muted" style="font-size:11px">${esc(d.reviewReason)}</span>` : '';
     // Owner: "only the sent message from after refresh on manual payment page
     // should appear to admin panel in its full details so as admin verifies
@@ -3487,7 +3487,7 @@ async function renderSettings(){
       <p class="muted" style="margin:0 0 8px">The names under the amount on the Deposit page, separated by commas; each shows after the app name (for example Potato Pay-A). Put a * after the one that is chosen when the page opens (the first one if none has it). Up to 6.</p>
       <input id="depNamesInput" maxlength="100" value="${esc(v('depositMethodNames','Pay-B, Pay-A*, Pay-D, Pay-C'))}" placeholder="Pay-B, Pay-A*, Pay-D, Pay-C">
       <h2 class="sec" style="margin:16px 0 4px">Gateway behind each button</h2>
-      <p class="muted" style="margin:0 0 8px">Pick which payment gateway each button above uses. <b>Rotate</b> moves every button's gateway to the next button (the last one wraps to the first); nothing is saved until you press Save payment method. LworxPay and OBPay can be assigned now, but a member who taps them is told the method is not available until their integration is added.</p>
+      <p class="muted" style="margin:0 0 8px">Pick which payment gateway each button above uses. <b>Rotate</b> moves every button's gateway to the next button (the last one wraps to the first); nothing is saved until you press Save payment method.</p>
       <div id="depGwRows"></div>
       <button class="btn sm" id="depGwRotate" type="button" style="margin-top:6px">Rotate gateways</button>
       <h2 class="sec" style="margin:16px 0 4px">Share message</h2>
@@ -3523,7 +3523,7 @@ async function renderSettings(){
       <button class="btn block" id="saveBrandName" style="margin-top:6px">Save app name</button>
     </div>`;
   // The gateway behind each Deposit-page button, in the same order as the names above. Kept in _depGws so a rename or a rotate does not lose the picks.
-  const GW_CHOICES = [['pesajet','PesaJet'],['tavupay','TavuPay'],['lworxpay','LworxPay (not connected yet)'],['obpay','OBPay (not connected yet)'],['marzpay','MarzPay']];
+  const GW_CHOICES = [['pesajet','PesaJet'],['tavupay','TavuPay'],['lworxpay','LworxPay'],['obpay','ObPay'],['marzpay','MarzPay']];
   const depNames = () => ($('depNamesInput').value||'').split(',').map(x=>x.replace(/\*+$/,'').trim()).filter(Boolean).slice(0,6);
   let _depGws = String(v('depositGateways','tavupay, pesajet, lworxpay, obpay')).split(',').map(x=>x.trim().toLowerCase());
   function drawDepGw(){

@@ -115,6 +115,9 @@ const memberHookLocations = `    # secret PesaJet webhook address (see HOOK_TOKE
 ${HOOK_HOST ? '' : hookLocation('/' + API + '/h-' + HOOK_TOKEN + '/pesajet')}    location = /${API}/pesajet/webhook { return 404; }
     # TavuPay's secret webhook address, the same way (Node only sees /tavupay/webhook, body untouched: its signature is over the raw body)
 ${HOOK_HOST ? '' : hookLocation('/' + API + '/h-' + HOOK_TOKEN + '/tavupay', '/tavupay/webhook')}    location = /${API}/tavupay/webhook { return 404; }
+    # LworxPay and ObPay, the same way (their signatures are over the raw body too)
+${HOOK_HOST ? '' : hookLocation('/' + API + '/h-' + HOOK_TOKEN + '/lworxpay', '/lworxpay/webhook')}    location = /${API}/lworxpay/webhook { return 404; }
+${HOOK_HOST ? '' : hookLocation('/' + API + '/h-' + HOOK_TOKEN + '/obpay', '/obpay/webhook')}    location = /${API}/obpay/webhook { return 404; }
 `;
 // A host that exists only for the webhook: one POST address, everything else 404, no app, no admin, no API.
 const hookHostBlock = () => `server {
@@ -131,7 +134,7 @@ const hookHostBlock = () => `server {
     client_header_timeout 15s;
     client_body_timeout 20s;
     send_timeout 30s;
-${hookLocation('/h-' + HOOK_TOKEN + '/pesajet')}${hookLocation('/h-' + HOOK_TOKEN + '/tavupay', '/tavupay/webhook')}    location / { return 404; }
+${hookLocation('/h-' + HOOK_TOKEN + '/pesajet')}${hookLocation('/h-' + HOOK_TOKEN + '/tavupay', '/tavupay/webhook')}${hookLocation('/h-' + HOOK_TOKEN + '/lworxpay', '/lworxpay/webhook')}${hookLocation('/h-' + HOOK_TOKEN + '/obpay', '/obpay/webhook')}    location / { return 404; }
 }
 `;
 

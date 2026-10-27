@@ -196,7 +196,7 @@ const HUGE_JSON_ROUTES = new Set(['/admin/about-html/set']);
 // Scoped to the one webhook path rather than set on the shared parser: this
 // holds a copy of every body it sees, and there is no reason to do that for
 // every request in the app.
-const RAW_BODY_ROUTES = new Set(['/pesajet/webhook', '/tavupay/webhook', '/deploy/webhook']);
+const RAW_BODY_ROUTES = new Set(['/pesajet/webhook', '/tavupay/webhook', '/lworxpay/webhook', '/obpay/webhook', '/deploy/webhook']);
 const keepRawBody = (req, res, buf) => { if (RAW_BODY_ROUTES.has(req.path)) req.rawBody = buf; };
 const rawJsonParser = express.json({ limit: '1mb', verify: keepRawBody });   // GitHub's push payload (up to 20 commits with file lists) is larger than 64 kB
 app.use((req, res, next) => (RAW_BODY_ROUTES.has(req.path) ? rawJsonParser : HUGE_JSON_ROUTES.has(req.path) ? hugeJsonParser : IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
@@ -487,7 +487,7 @@ function currentRegion() { return DEFAULT_REGION; }
 function currentRegionKey() { return DEFAULT_REGION_KEY; }
 app.use(async (req, res, next) => {
   // A payment callback is answered at once: it must never wait behind a settings read (a slow database would push its answer past the gateway's timeout).
-  if (req.path === '/tavupay/webhook') return next();
+  if (req.path === '/tavupay/webhook' || req.path === '/lworxpay/webhook' || req.path === '/obpay/webhook') return next();
   if (req.path === '/deposit/callback' || req.path === '/withdraw/callback' || req.path === '/pesajet/webhook') return next();
   await getSettings();
   next();
@@ -523,7 +523,7 @@ app.use((req, res, next) => {
 
 // ── MAINTENANCE GATE ──
 const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/redeem', '/salary', '/gifts', '/app'];
-const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/pesajet/webhook', '/tavupay/webhook']);
+const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/pesajet/webhook', '/tavupay/webhook', '/lworxpay/webhook', '/obpay/webhook']);
 // The platform's name, as the owner last set it in Admin -> Settings. Every
 // server-side string that names the app goes through here rather than
 // spelling it out, so renaming the app is one field and not a code change.
@@ -756,6 +756,8 @@ const GATEWAY_DIAL_CODES = Object.freeze({
   marzpay: Object.keys(MARZPAY_MARKETS),
   pesajet: ['256'],
   tavupay: ['256'],
+  lworxpay: ['256'],
+  obpay: ['256'],
 });
 function gatewayServesDial(gateway, dial) {
   const allowed = GATEWAY_DIAL_CODES[gateway];
@@ -776,9 +778,9 @@ function gatewayServesRegion(gateway, region) {
 // meets a payment method that cannot work.
 // The gateway a Deposit-page BUTTON uses: the button's position (the app sends it as `slot`) picks an entry from the admin's depositGateways list.
 // No slot (an older app), or a button with no entry, falls back to the single recharge gateway. LworxPay and OBPay are listed so the admin can
-// assign them, but they cannot take a payment until their integration exists (DEPOSIT_GATEWAYS_READY).
+// assign them; a gateway that is not in DEPOSIT_GATEWAYS_READY cannot take a payment (none is left out now).
 const DEPOSIT_GATEWAYS = Object.freeze(['pesajet', 'tavupay', 'lworxpay', 'obpay', 'marzpay']);
-const DEPOSIT_GATEWAYS_READY = new Set(['pesajet', 'tavupay', 'marzpay']);
+const DEPOSIT_GATEWAYS_READY = new Set(['pesajet', 'tavupay', 'lworxpay', 'obpay', 'marzpay']);
 function depositGatewayList(sett) {
   return String((sett && sett.depositGateways) || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean).map(x => DEPOSIT_GATEWAYS.includes(x) ? x : '');
 }
@@ -2817,6 +2819,281 @@ async function tavupayWebhookOpen(body) {
   return !!doc && ['pending', 'initiating'].includes(doc.data().status);
 }
 
+// ═══════════════════════════════════════════
+// LWORXPAY and OBPAY (recharges; the Pay-D and Pay-C buttons)
+// ═══════════════════════════════════════════
+// Contracts: "LWORX API" (https://www.lworx-pay.com/api/v1) and the "ObPay API" (https://obpay.online/api/public/v1), both read from the owner's saved
+// copy of their documents (October 2026). This environment cannot reach either host, so nothing here has run against a live gateway. What each
+// document says, and what this code does about it:
+//   LworxPay  * `Authorization: Bearer <key>`; the server's IP may have to be on their whitelist (IP_NOT_ALLOWED), so calls go out over IPv4.
+//             * POST /collect-stanbic {amount, phone, reference, callback_url, webhook_secret}: the customer pays EXACTLY the amount (the plain
+//               /collect adds 4 % for the customer, which would not match the "Pay X" button). `reference` = our deposit id (unique per attempt).
+//             * Answers success:true + data.transaction_id + status "pending": acceptance is NOT payment. 504 GATEWAY_TIMEOUT means the prompt may
+//               have been sent (we keep the row pending); 503 GATEWAY_UNAVAILABLE is documented as safe to retry (the row is failed, no prompt).
+//             * GET /status?reference= -> data.status pending | completed | failed | cancelled | refunded | pending_approval.
+//             * Webhook payment.success / payment.failed, header X-LworxPay-Signature = HMAC-SHA256 hex of the RAW body with the secret we sent as
+//               `webhook_secret` (LWORXPAY_WEBHOOK_SECRET, or derived from the API key when none is set). A signed call settles by itself; an
+//               unsigned one is a hint and the payment is re-read. 60 calls a minute per key: every status read goes through one pacer.
+//   ObPay     * `Authorization: Bearer sk_live_...`; no IP whitelist.
+//             * POST /collect {amount, currency, phone_number, customer_name, customer_email, reference <= 40 chars, callback_url}. Every refusal
+//               is HTTP 200 with success:false, so `success` is checked, never the status code alone. customer_name and customer_email are required
+//               by ObPay and members have neither: a fixed placeholder name and an address on the reserved .invalid domain are sent.
+//             * prompt_sent:false means the customer must finish on a web page (checkout_url); the app has no such step, so it is failed at once.
+//             * GET /transactions/{reference} re-checks the network live -> status pending | success | failed. Their document says to ALWAYS call it
+//               before delivering goods, even after a callback: so a webhook (header X-ObPay-Signature, HMAC-SHA256 hex of the raw body with the
+//               whsec_ secret) only triggers that read, and the wallet is credited from the READ, never from the webhook alone. 90 calls a minute.
+//   Both      * The wallet is always paid OUR stored amount, and only when the gateway's figure agrees (a different figure parks the row in Needs
+//               Review); a read that cannot be answered is "cannot tell", never a verdict.
+const GW_TIMEOUT = 20000, GW_READ_TIMEOUT = 7000;
+function makePacer(gapMs) { let next = 0; return async () => { const now = Date.now(), at = Math.max(now, next); next = at + gapMs; if (at > now) await new Promise(r => setTimeout(r, at - now)); }; }
+const LWORX_BASE = (process.env.LWORXPAY_BASE_URL || 'https://www.lworx-pay.com/api/v1').replace(/\/+$/, '');
+const LWORX_KEY = (process.env.LWORXPAY_API_KEY || '').trim();
+const LWORX_HOOK_SECRET = (process.env.LWORXPAY_WEBHOOK_SECRET || '').trim() || (LWORX_KEY ? crypto.createHmac('sha256', LWORX_KEY).update('potato-lworxpay-callback').digest('hex') : '');
+const OBPAY_BASE = (process.env.OBPAY_BASE_URL || 'https://obpay.online/api/public/v1').replace(/\/+$/, '');
+const OBPAY_KEY = (process.env.OBPAY_SECRET_KEY || '').trim();
+const OBPAY_HOOK_SECRET = (process.env.OBPAY_WEBHOOK_SECRET || '').trim();
+const _lworxPace = makePacer(Number(process.env.LWORXPAY_READ_GAP_MS) >= 0 && process.env.LWORXPAY_READ_GAP_MS !== undefined ? Number(process.env.LWORXPAY_READ_GAP_MS) : 1300);   // <= 46 reads a minute
+const _obpayPace = makePacer(Number(process.env.OBPAY_READ_GAP_MS) >= 0 && process.env.OBPAY_READ_GAP_MS !== undefined ? Number(process.env.OBPAY_READ_GAP_MS) : 800);      // <= 75 reads a minute
+const GATEWAY_DEFS = {
+  lworxpay: { name: 'LworxPay', base: LWORX_BASE, configured: () => !!LWORX_KEY, headers: () => ({ Authorization: 'Bearer ' + LWORX_KEY }), pace: _lworxPace, callback: () => String(process.env.LWORXPAY_CALLBACK_URL || '').trim(), watchEvery: Number(process.env.GATEWAY_WATCH_MS) || 5000, watchMax: 5 },
+  obpay: { name: 'ObPay', base: OBPAY_BASE, configured: () => !!OBPAY_KEY, headers: () => ({ Authorization: 'Bearer ' + OBPAY_KEY }), pace: _obpayPace, callback: () => String(process.env.OBPAY_CALLBACK_URL || '').trim(), watchEvery: Number(process.env.GATEWAY_WATCH_MS) || 4000, watchMax: 6 },
+};
+const GATEWAY_WATCH_BUDGET_MS = 120000;
+// The error of a reply: LworxPay nests {error:{code,message}}, ObPay sends a plain string.
+function gwError(data) {
+  const e = data && data.error;
+  if (e && typeof e === 'object') return { code: String(e.code || ''), message: typeof e.message === 'string' ? e.message : '' };
+  return { code: '', message: typeof e === 'string' ? e : (typeof (data && data.message) === 'string' ? data.message : '') };
+}
+async function _gwRequest(provider, path, { method = 'GET', body, timeoutMs, paced } = {}) {
+  const g = GATEWAY_DEFS[provider];
+  if (!g.configured()) return { ok: false, providerDown: false, notConfigured: true, httpStatus: 0, data: { message: g.name + ' is not set up on the server yet.' } };
+  if (paced) await g.pace();
+  const headers = Object.assign({ Accept: 'application/json' }, g.headers());
+  let bodyStr;
+  if (body) { bodyStr = JSON.stringify(body); headers['Content-Type'] = 'application/json'; headers['Content-Length'] = Buffer.byteLength(bodyStr); }
+  let r;
+  try { r = await _tavupayHttp(method, g.base + path, headers, bodyStr, timeoutMs || GW_TIMEOUT); }
+  catch (e) { return { ok: false, providerDown: true, httpStatus: 0, data: { message: e.message } }; }
+  let data;
+  try { data = r.text ? JSON.parse(r.text) : {}; } catch (_) { data = { message: String(r.text || '').slice(0, 300) }; }
+  if (!data || typeof data !== 'object') data = { message: String(data) };
+  const good = r.status >= 200 && r.status < 300;
+  const down = !good && (r.status >= 500 || r.status === 408 || r.status === 429);
+  // Both gateways wrap every answer in {success: true|false}; a 2xx with success:false is a refusal, not an acceptance.
+  if (good && data.success === false) return { ok: false, providerDown: false, httpStatus: r.status, data };
+  return { ok: good, providerDown: down, httpStatus: r.status, data };
+}
+// The gateways' words -> the three this file speaks ('success' | 'failed' | 'processing', '' = no word at all).
+const GW_STATUS_WORDS = {
+  lworxpay: { success: ['completed'], failed: ['failed', 'cancelled', 'canceled', 'refunded'], processing: ['pending', 'pending_approval'] },
+  obpay: { success: ['success'], failed: ['failed'], processing: ['pending'] },
+};
+function gwStatusLabel(provider, raw) {
+  const s = String(raw == null ? '' : raw).trim().toLowerCase(), w = GW_STATUS_WORDS[provider];
+  if (!s) return '';
+  if (w.failed.includes(s)) return 'failed';
+  if (w.success.includes(s)) return 'success';
+  return 'processing';
+}
+function lworxPhone(raw) { return pesajetPhone(raw).replace(/^\+/, ''); }
+async function lworxCollect({ amount, phone, reference, callback }) {
+  const payload = { amount: Math.round(Number(amount)), phone: lworxPhone(phone), reference: String(reference) };
+  if (callback && /^https:\/\//i.test(callback)) { payload.callback_url = callback; if (LWORX_HOOK_SECRET) payload.webhook_secret = LWORX_HOOK_SECRET; }
+  return _gwRequest('lworxpay', '/collect-stanbic', { method: 'POST', body: payload });
+}
+async function obpayCollect({ amount, phone, reference, callback, description, name }) {
+  const payload = { amount: Math.round(Number(amount)), currency: 'UGX', phone_number: lworxPhone(phone), customer_name: String(name || 'Member').slice(0, 60), customer_email: 'customer@member.invalid', reference: String(reference).slice(0, 40) };
+  if (callback && /^https:\/\//i.test(callback)) payload.callback_url = callback;
+  if (description) payload.description = String(description).slice(0, 100);
+  return _gwRequest('obpay', '/collect', { method: 'POST', body: payload });
+}
+// Re-read one recharge by OUR reference (the deposit id). `unavailable` = the gateway would not answer this question (so nothing may be
+// concluded); `providerDown` = it is struggling right now.
+async function gatewayGetTx(provider, reference, { attempts = 2 } = {}) {
+  const none = { status: '', rawStatus: '', amount: NaN, fee: 0, providerDown: false, unavailable: false, reference: reference || null };
+  if (!reference) return { ...none, unavailable: true };
+  const path = provider === 'lworxpay' ? '/status?reference=' + encodeURIComponent(reference) : '/transactions/' + encodeURIComponent(reference);
+  let last = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const r = await _gwRequest(provider, path, { timeoutMs: GW_READ_TIMEOUT, paced: true });
+    if (r.ok) {
+      const t = (r.data && typeof r.data.data === 'object' && r.data.data) || {};
+      const raw = String(t.status || '');
+      return { ...none, status: gwStatusLabel(provider, raw), rawStatus: raw, amount: Number(t.amount), fee: Number(provider === 'obpay' ? t.fee_amount : t.fee) || 0 };
+    }
+    if (!r.providerDown) {
+      if (r.httpStatus === 401 || r.httpStatus === 403) console.error(`${GATEWAY_DEFS[provider].name} read refused (HTTP ${r.httpStatus}): ${JSON.stringify(r.data).slice(0, 200)} -- check the key${provider === 'lworxpay' ? ' and that this server\'s IP is on the LworxPay whitelist' : ''}`);
+      return { ...none, unavailable: true, httpStatus: r.httpStatus };
+    }
+    last = r;
+    if (attempt < attempts) await new Promise(r2 => setTimeout(r2, 350));
+  }
+  return { ...none, providerDown: true, httpStatus: last && last.httpStatus };
+}
+// What a MEMBER is told when a gateway refuses to start a payment. Key / whitelist / account problems are the owner's to fix: logged, never shown.
+const GW_OWNER_CODES = new Set(['AUTHENTICATION_FAILED', 'IP_NOT_ALLOWED', 'ACCOUNT_SUSPENDED', 'DEPOSIT_DISABLED', 'DEPOSITS_BLOCKED', 'KYC_REQUIRED', 'RATE_LIMITED']);
+function gatewayUserMsg(provider, r, fallback) {
+  const name = GATEWAY_DEFS[provider].name, e = gwError(r && r.data);
+  if (!r || r.providerDown) return PROVIDER_BUSY_MSG;
+  if (r.notConfigured || r.httpStatus === 401 || r.httpStatus === 403 || r.httpStatus === 429 || GW_OWNER_CODES.has(e.code)) {
+    console.error(`${name} refused the payment request (HTTP ${r.httpStatus || 0}${e.code ? ' ' + e.code : ''}): ${JSON.stringify(r.data || {}).slice(0, 300)} -- check the key, the account and the IP whitelist`);
+    return PROVIDER_BUSY_MSG;
+  }
+  if (e.code === 'INVALID_PHONE') return 'Enter a valid MTN or Airtel number.';
+  if (e.code === 'INVALID_AMOUNT') return 'This amount is below the minimum for this payment method.';
+  const raw = e.message;
+  if (/internal|server error|unavailable|timeout|timed out|try again|temporarily|gateway|api key|secret|whitelist|token/i.test(raw)) return PROVIDER_BUSY_MSG;
+  return (raw && raw.length <= 140 ? raw : '') || fallback || PROVIDER_BUSY_MSG;
+}
+// Settle one recharge from a result {status, amount}. The wallet is paid OUR stored amount, and only when the gateway's figure agrees.
+function gatewayAmountOk(dep, reported) {
+  const got = Number(reported);
+  if (!Number.isFinite(got) || got <= 0) return true;
+  return Math.abs(got - (Number(dep && dep.amount) || 0)) < 0.5;
+}
+async function gatewayApply(provider, doc, t, source) {
+  const name = GATEWAY_DEFS[provider].name, dep = doc.data();
+  if (t.status === 'success') {
+    if (!gatewayAmountOk(dep, t.amount)) {
+      console.error(`${name.toUpperCase()} AMOUNT MISMATCH dep=${doc.id} asked=${dep.amount} reported=${t.amount} -- parked for review, NOT credited`);
+      await withLock('dep:' + doc.id, async () => {
+        const fresh = await doc.ref.get();
+        if (fresh.exists && ['pending', 'initiating'].includes(fresh.data().status))
+          await doc.ref.update({ status: 'review', reviewReason: `${name} reports ${t.amount} for a recharge of ${dep.amount}. Check ${name}; Force-credit only if the right amount was paid.` });
+      }).catch(() => {});
+      return 'review';
+    }
+    await creditDeposit(doc, source);
+    return 'success';
+  }
+  if (t.status === 'failed') { await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG); return 'failed'; }
+  return 'pending';
+}
+// The server watches each of these recharges itself from the moment it is accepted (same settle path as every other gateway: single-writer locked, so
+// a webhook, this watcher, the member's poll and the reconciler can never credit twice). Slow on purpose: both gateways have a per-minute limit.
+const _gatewayWatchers = { lworxpay: new Map(), obpay: new Map() };
+function gatewayWatcherFresh(provider, depositId, maxAgeMs) {
+  const m = _gatewayWatchers[provider]; if (!m) return false;
+  const last = m.get(depositId);
+  return last !== undefined && Date.now() - last < (maxAgeMs || GATEWAY_DEFS[provider].watchEvery * 2 + 2000);
+}
+function watchGatewayDeposit(provider, depositId) {
+  const m = _gatewayWatchers[provider], g = GATEWAY_DEFS[provider];
+  if (!depositId || !m || m.has(depositId) || m.size >= g.watchMax) return;
+  m.set(depositId, Date.now());
+  (async () => {
+    try {
+      const began = Date.now();
+      let down = 0;
+      while (Date.now() - began < GATEWAY_WATCH_BUDGET_MS) {
+        const backoff = down ? Math.min(10000, 1000 * 2 ** (down - 1)) * (0.75 + Math.random() * 0.5) : 0;
+        await new Promise(r => setTimeout(r, g.watchEvery + backoff));
+        const snap = await db.collection('pendingDeposits').doc(depositId).get();
+        if (!snap.exists) return;
+        const dep = snap.data();
+        if (dep.status !== 'pending' && dep.status !== 'initiating') return;
+        if (!dep[provider + 'Ref']) continue;
+        const t = await gatewayGetTx(provider, dep[provider + 'Ref'], { attempts: 1 });
+        m.set(depositId, Date.now());
+        if (t.unavailable) return;
+        if (t.providerDown) { down++; continue; }
+        down = 0;
+        if (t.status === 'success' || t.status === 'failed') { await gatewayApply(provider, snap, t, 'server watcher'); return; }
+      }
+    } catch (e) { console.error(g.name + ' watcher (' + depositId + '):', e.message); }
+    finally { m.delete(depositId); }
+  })();
+}
+// Start one recharge at LworxPay / ObPay. Runs AFTER the member has been answered (the row is already 'initiating').
+async function gatewayCollectStart(provider, { depRef, userId, amt, phone }) {
+  const g = GATEWAY_DEFS[provider];
+  let r;
+  try {
+    r = provider === 'lworxpay'
+      ? await lworxCollect({ amount: amt, phone, reference: depRef.id, callback: g.callback() })
+      : await obpayCollect({ amount: amt, phone, reference: depRef.id, callback: g.callback(), description: 'Deposit', name: brandName(await getSettings()) + ' member' });
+  } catch (netErr) { console.error(g.name + ' collect network error (dep ' + depRef.id + '):', netErr.message); return; }
+  if (!r.ok) {
+    console.error(g.name + ' collect rejected:', r.httpStatus, JSON.stringify(r.data).slice(0, 300));
+    // A gateway that is merely BUSY (5xx, a lost reply) has not refused this payment: it may be live on the phone, so the row stays pending.
+    // LworxPay's 503 GATEWAY_UNAVAILABLE is documented as "safe to retry": nothing was sent, so that one is failed.
+    const clean = !r.providerDown || gwError(r.data).code === 'GATEWAY_UNAVAILABLE';
+    if (clean) await markDepositFailed(depRef, userId, gatewayUserMsg(provider, r.providerDown ? { ...r, providerDown: false, notConfigured: false } : r, 'Could not start the payment'));
+    return;
+  }
+  const d = (r.data && typeof r.data.data === 'object' && r.data.data) || {};
+  if (provider === 'obpay' && d.prompt_sent === false) {
+    await markDepositFailed(depRef, userId, 'We could not send the payment prompt to your phone. Please try again or choose another payment method.');
+    return;
+  }
+  const txId = String((provider === 'lworxpay' ? d.transaction_id : d.reference) || '').trim() || null;
+  const fields = { [provider + 'Ref']: depRef.id, [provider + 'TxId']: txId, [provider + 'AcceptedAtMs']: Date.now() };
+  await withLock('dep:' + depRef.id, async () => {
+    const fresh = await depRef.get();
+    if (fresh.exists && fresh.data().status === 'initiating') await depRef.update({ status: 'pending', ...fields });
+    else await depRef.update(fields).catch(() => {});
+  });
+  watchGatewayDeposit(provider, depRef.id);
+}
+function gatewayVerifyWebhook(provider, headerSig, rawBody) {
+  const secret = provider === 'lworxpay' ? LWORX_HOOK_SECRET : OBPAY_HOOK_SECRET;
+  if (!secret) return { verified: false, reason: 'no-secret' };
+  const sig = String(headerSig || '').trim().replace(/^sha256=/i, '').toLowerCase();
+  if (!sig) return { verified: false, reason: 'no-signature' };
+  if (!rawBody || !rawBody.length) return { verified: false, reason: 'no-body' };
+  const a = Buffer.from(crypto.createHmac('sha256', secret).update(rawBody).digest('hex'), 'utf8'), b = Buffer.from(sig, 'utf8');
+  return a.length === b.length && crypto.timingSafeEqual(a, b) ? { verified: true, reason: 'ok' } : { verified: false, reason: 'mismatch' };
+}
+// Both gateways send {event, data:{reference, ...}}. Only COLLECTION events are about recharges (payout.* / bill.* are ignored).
+function gatewayWebhookFields(provider, body) {
+  const b = (body && typeof body === 'object') ? body : {}, d = (b.data && typeof b.data === 'object') ? b.data : {};
+  const event = String(b.event || '').toLowerCase();
+  const prefix = provider === 'lworxpay' ? 'payment.' : 'collection.';
+  const isCollection = event.startsWith(prefix);
+  let label = '';
+  if (/success$/.test(event)) label = 'success'; else if (/failed$/.test(event)) label = 'failed';
+  const refs = [];
+  for (const v of [d.reference, d.merchant_reference, b.reference]) { const x = String(v == null ? '' : v).trim(); if (x && x.length <= 80 && !refs.includes(x)) refs.push(x); }
+  return { event, isCollection, label, refs, txId: String(d.transaction_id || '').trim(), amount: Number(d.amount) };
+}
+async function gatewayFindDeposit(provider, wh) {
+  for (const c of wh.refs) {
+    if (/^[A-Za-z0-9_-]{8,64}$/.test(c)) {
+      const byId = await db.collection('pendingDeposits').doc(c).get();
+      if (byId.exists && byId.data().provider === provider) return byId;
+    }
+  }
+  if (wh.txId) {
+    const q = await db.collection('pendingDeposits').where(provider + 'TxId', '==', wh.txId).limit(1).get();
+    if (!q.empty && q.docs[0].data().provider === provider) return q.docs[0];
+  }
+  return null;
+}
+async function gatewayWebhookWork(provider, body, verified) {
+  try {
+    const wh = gatewayWebhookFields(provider, body);
+    if (!wh.isCollection) return;
+    const doc = await gatewayFindDeposit(provider, wh);
+    if (!doc) return;
+    const dep = doc.data();
+    if (dep.status !== 'pending' && dep.status !== 'initiating') return;
+    // LworxPay: a SIGNED call settles by itself. ObPay: its own document says to read the transaction before delivering anything, even after a
+    // callback, so for ObPay the webhook only triggers that read. An unsigned LworxPay call is a hint and is re-read too.
+    if (provider === 'lworxpay' && verified && (wh.label === 'success' || wh.label === 'failed')) {
+      await gatewayApply(provider, doc, { status: wh.label, amount: wh.amount }, 'LworxPay webhook');
+      return;
+    }
+    const t = await gatewayGetTx(provider, doc.id);
+    if (t.providerDown || t.unavailable) return;       // unverifiable: the watcher, the member's poll and the reconciler retry
+    await gatewayApply(provider, doc, t, GATEWAY_DEFS[provider].name + ' webhook');
+  } catch (e) { console.error(GATEWAY_DEFS[provider].name + ' webhook error (already acked):', e.message); }
+}
+async function gatewayWebhookOpen(provider, body) {
+  const doc = await gatewayFindDeposit(provider, gatewayWebhookFields(provider, body));
+  return !!doc && ['pending', 'initiating'].includes(doc.data().status);
+}
+
 // ── DAILY CASHBACK AT 00:00 (settle-on-read + a 1s background sweep) ──
 // Owner: "all daily cashback settled at midnight, 00:00 exactly". Each product pays expectedReturn / cycle days, one payment at every
 // local midnight (the region's own 00:00; the first one at the first midnight AFTER the purchase), using cumulative-target allocation
@@ -4396,6 +4673,13 @@ app.post('/deposit/marzpay', async (req, res) => {
       return;
     }
 
+    if (provider === 'lworxpay' || provider === 'obpay') {
+      // LworxPay / ObPay -- same claim-as-pending shape as TavuPay: the deposit id is the reference, nothing is credited here, the signed webhook,
+      // the watcher, the member's poll or the reconciler settle it. See the module note above gatewayCollectStart.
+      await gatewayCollectStart(provider, { depRef, userId, amt, phone });
+      return;
+    }
+
     let mpData;
     try {
       mpData = await marzCollect({
@@ -4651,6 +4935,13 @@ app.post('/deposit/marzpay/status', async (req, res) => {
       if (!depSnap.exists) return res.status(404).json({ status: 'error', message: 'Recharge not found' });
       dep = depSnap.data();
     }
+    // The same hold for a LworxPay / ObPay recharge that the server's own watcher is on.
+    if (holdMs > 0 && GATEWAY_DEFS[dep.provider] && (dep.status === 'pending' || dep.status === 'initiating') && gatewayWatcherFresh(dep.provider, depSnap.id)) {
+      await waitDepositSettled(depSnap.id, holdMs);
+      depSnap = await db.collection('pendingDeposits').doc(depSnap.id).get();
+      if (!depSnap.exists) return res.status(404).json({ status: 'error', message: 'Recharge not found' });
+      dep = depSnap.data();
+    }
     if (dep.status === 'matched') {
       // Best-effort self-heal: if a prior credit attempt got the status to
       // 'matched' but failed to actually pay the wallet (needsManualCredit),
@@ -4676,6 +4967,23 @@ app.post('/deposit/marzpay/status', async (req, res) => {
       if (t.providerDown || t.unavailable) return res.json({ status: 'success', state: 'pending' });
       if (t.status === 'success' || t.status === 'failed') {
         const out = await tavupayApply(depSnap, t, "member's poll");
+        if (out === 'success') return res.json({ status: 'success', state: 'matched' });
+        if (out === 'failed') {
+          const again = await db.collection('pendingDeposits').doc(depSnap.id).get();
+          if (again.exists && again.data().status === 'matched') return res.json({ status: 'success', state: 'matched' });
+          return res.json({ status: 'success', state: 'failed', message: DEPOSIT_FAILED_MSG });
+        }
+      }
+      return res.json({ status: 'success', state: 'pending' });
+    }
+    if (GATEWAY_DEFS[dep.provider]) {
+      const gp = dep.provider;
+      if (!dep[gp + 'Ref']) return res.json({ status: 'success', state: 'pending' });
+      if (gatewayWatcherFresh(gp, depSnap.id)) return res.json({ status: 'success', state: 'pending' });
+      const t = await gatewayGetTx(gp, dep[gp + 'Ref'], { attempts: 1 });
+      if (t.providerDown || t.unavailable) return res.json({ status: 'success', state: 'pending' });
+      if (t.status === 'success' || t.status === 'failed') {
+        const out = await gatewayApply(gp, depSnap, t, "member's poll");
         if (out === 'success') return res.json({ status: 'success', state: 'matched' });
         if (out === 'failed') {
           const again = await db.collection('pendingDeposits').doc(depSnap.id).get();
@@ -5748,6 +6056,20 @@ app.post('/tavupay/webhook', async (req, res) => {
   await tavupayWebhookWork(body, check.verified);
   retryCallbackWork('TavuPay webhook', () => tavupayWebhookWork(body, check.verified), () => tavupayWebhookOpen(body), wh.label === 'success' || wh.label === 'failed');
 });
+// LworxPay / ObPay webhooks (recharges). Answered 200 at once, before any work (ObPay wants a reply within 8 seconds and retries three times).
+// A signature that does not verify is not refused: the call is only a hint and the payment is re-read before anything is credited.
+for (const [gwKey, hdr] of [['lworxpay', 'x-lworxpay-signature'], ['obpay', 'x-obpay-signature']]) {
+  app.post('/' + gwKey + '/webhook', async (req, res) => {
+    const body = req.body || {};
+    const check = gatewayVerifyWebhook(gwKey, req.get(hdr), req.rawBody);
+    if (check.reason === 'mismatch') console.error(GATEWAY_DEFS[gwKey].name + ' webhook: signature did not verify, treated as a hint only.');
+    res.status(200).json({ received: true });
+    const wh = gatewayWebhookFields(gwKey, body);
+    console.log(`${GATEWAY_DEFS[gwKey].name} webhook: ${wh.event || '?'} ${wh.refs[0] || '?'}${check.verified ? ' (signed)' : ''}`);
+    await gatewayWebhookWork(gwKey, body, check.verified);
+    retryCallbackWork(GATEWAY_DEFS[gwKey].name + ' webhook', () => gatewayWebhookWork(gwKey, body, check.verified), () => gatewayWebhookOpen(gwKey, body), wh.isCollection && (wh.label === 'success' || wh.label === 'failed'));
+  });
+}
 // ═══════════════════════════════════════════
 // WITHDRAWAL ACCOUNTS (mobile money + bank)
 // ═══════════════════════════════════════════
@@ -9505,6 +9827,16 @@ async function reconcilePendingDeposits() {
       const out = await tavupayApply(doc, t, 'reconciler');
       if (out === 'success') settled++;
     });
+    // LworxPay / ObPay pending deposits: re-read each by our reference. A gateway that will not answer the question leaves the row alone.
+    for (const gp of Object.keys(GATEWAY_DEFS)) {
+      const gSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', gp).orderBy('createdAt', 'asc').limit(30).get();
+      await inChunks(gSnap.docs.filter(d => d.data()[gp + 'Ref']), 3, async (doc) => {
+        const t = await gatewayGetTx(gp, doc.data()[gp + 'Ref']);
+        if (t.providerDown || t.unavailable) return;
+        const out = await gatewayApply(gp, doc, t, 'reconciler');
+        if (out === 'success') settled++;
+      });
+    }
     // Deposits stuck 'matched' with needsManualCredit:true (the wallet write
     // itself failed after status already claimed the credit) never show up
     // in the 'pending' scan above -- retry them here every tick regardless
@@ -9774,6 +10106,7 @@ async function parkLostMarzDeposits() {
     if (d.marzTxUuid || d.pesajetTxId || d.method === 'manual') continue;
     // A TavuPay row that has its reference is still being settled by the webhook / reconciler; it is parked only after 6 hours.
     if (d.provider === 'tavupay' && d.tavupayRef && Date.now() - tsMillis(d.createdAt) < 6 * 3600 * 1000) continue;
+    if (GATEWAY_DEFS[d.provider] && d[d.provider + 'Ref'] && Date.now() - tsMillis(d.createdAt) < 6 * 3600 * 1000) continue;
     // PesaJet rows are looked up by the reconciler for 6 hours; after that no lookup can see them any more, so they are parked too.
     if (d.provider === 'pesajet' && Date.now() - tsMillis(d.createdAt) < PESAJET_LOST_WINDOW_MS + 10 * 60 * 1000) continue;
     await withLock('dep:' + doc.id, async () => {
