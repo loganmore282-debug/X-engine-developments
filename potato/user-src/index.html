@@ -2021,7 +2021,7 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .sheet-bg{background:transparent;}
 .sheet-body{max-width:none;padding:0 0 24px;}
 /* Orders (Income tab) */
-.pt-orders{padding:13.3px 12px 8px;}
+.pt-orders{padding:13.3px 12px 8px;box-sizing:border-box;min-height:calc(100vh - 42px - var(--nav-h) - env(safe-area-inset-bottom));}   /* the Orders page is 28 px longer than the screen, as on the owner's phone: it scrolls a little, so the last line of a card ("39 days left") can be moved out from under the floating pictures */
 .pt-cd{position:relative;height:210px;box-sizing:border-box;border:1.7px solid #d9251d;border-radius:14.8px;background:#f6f8fe;box-shadow:0 8px 20px -12px rgba(70,80,140,.25);text-align:center;}
 .pt-cd h2{margin:0;padding-top:18.7px;font:700 14.4px/18px Roboto,sans-serif;color:#b0332f;}
 .pt-cd p{margin:9px 0 0;font:400 10.8px/16px Roboto,sans-serif;letter-spacing:.05px;color:#8c9ab0;}

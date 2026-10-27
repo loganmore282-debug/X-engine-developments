@@ -2497,7 +2497,7 @@ function vOwnedCardHtml(inv){
         <div class="pt-run-row two"><span>Start</span><b>${ptStartLines(startMs)}</b></div>
       </div>
     </div>
-    <div class="pt-run-mat"><span>Maturity ${pct}%</span><b>${st.total} days</b></div>
+    <div class="pt-run-mat"><span>Maturity ${pct}%</span><b>${st.daysLeft} days left</b></div>
   </article>`;
 }
 // "Today's Income": what was paid into the wallet as earnings since 00:00 of the region's own day (Uganda: UTC+3).
