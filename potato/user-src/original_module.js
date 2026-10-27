@@ -1919,11 +1919,12 @@ async function liveRefreshVisible(){
     if (ir.status === 'success') {
       STATE.investments = ir.investments;
       _investmentsLoadFailed = false;
+      const it = $('incomeTotal'); if (it && !it.dataset.counting) it.textContent = ptMoneyPlain(ptProductIncome());   // Total Income = what the products have paid
     } else ok = false;
     // Today's Income is made of the transactions: a payment that lands while the member sits on Orders shows at once.
     if (tr.status === 'success' && Array.isArray(tr.transactions)) {
       STATE.transactions = tr.transactions;
-      if (STATE.page === 'assets' && liveChanged('txToday', tr.transactions)) { const td = $('ptToday'); if (td) td.textContent = vMoney2(ptTodayIncome()); }
+      if (STATE.page === 'assets' && liveChanged('txToday', tr.transactions)) { const td = $('ptToday'); if (td) td.textContent = ptMoneyPlain(ptTodayIncome()); }
     }
     if (!_openSheetTitle && STATE.page === 'assets') {
       const changedProducts = pr.status === 'success' && liveChanged('products', pr.products);
@@ -2375,10 +2376,10 @@ function patchHomeBalances(){
     if (el) el.textContent = fmtUGX(account[key]);
   }
   // The figures the current screens actually show: My (balance), Income (total earnings) and the Balance Record header.
-  for (const [id, key] of [['myBalance','walletBalance'], ['myIncome','totalEarned'], ['incomeTotal','totalEarned'], ['recBalance','walletBalance'], ['witBalance','walletBalance']]) {
+  for (const [id, key] of [['myBalance','walletBalance'], ['myIncome','totalEarned'], ['recBalance','walletBalance'], ['witBalance','walletBalance']]) {
     const el = $(id);
     if (!el) continue;
-    if (id === 'myBalance' || id === 'myIncome' || id === 'incomeTotal') ptSetMoney(el, account[key]);
+    if (id === 'myBalance' || id === 'myIncome') ptSetMoney(el, account[key]);
     else el.textContent = vMoney2(account[key]);
   }
 }
@@ -2500,8 +2501,10 @@ function vOwnedCardHtml(inv){
   </article>`;
 }
 // "Today's Income": what was paid into the wallet as earnings since 00:00 of the region's own day (Uganda: UTC+3).
-var PT_EARN_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'mission_salary', 'mission_deposit_reward', 'order_gift', 'app_claim'];   // every source that adds to Total Income (server EARNING_TX_TYPES)
+var PT_EARN_TYPES = ['cashback'];   // Orders' Today's / Total Income count ONLY what the products paid (daily earnings), never gift codes, commission, rewards   // every source that adds to Total Income (server EARNING_TX_TYPES)
 function ptRegionOffsetMs(){ return (Number(REGION && REGION.utcOffsetMin) || 0) * 60000; }
+// Total Income on Orders: what the products have paid so far (the Reward of every product the member owns), not the wallet's all-sources total.
+function ptProductIncome(){ return (STATE.investments || []).reduce((n, i) => n + (Number(i.paidOut) || 0), 0); }
 function ptTodayIncome(){
   const off = ptRegionOffsetMs(), day = Math.floor((ptServerNow() + off) / 86400000);
   let sum = 0;
@@ -2532,7 +2535,7 @@ function ptStartIncomeClock(){
     ptFlipClockSet(root, ptTimeToMidnight());
     const left = ptSecondsToMidnight();
     if (_ptLastLeft && left > _ptLastLeft + 3600) {
-      const td = $('ptToday'); if (td) td.textContent = vMoney2(ptTodayIncome());   // a new day: Today's Income starts again from 0 at once
+      const td = $('ptToday'); if (td) td.textContent = ptMoneyPlain(ptTodayIncome());   // a new day: Today's Income starts again from 0 at once
       setTimeout(ptRefreshAfterMidnight, 2000); setTimeout(ptRefreshAfterMidnight, 7000);
     }
     _ptLastLeft = left;
@@ -2555,7 +2558,7 @@ function paintAssets(loading){
     <h2>Earnings Countdown</h2>
     <p>Daily settlement at 00:00</p>
     ${ptFlipClockHtml(ptTimeToMidnight())}
-    <div class="pt-inc"><div><b>Today's Income</b><i id="ptToday">${esc(vMoney2(ptTodayIncome()))}</i></div><div><b>Total Income</b><i id="incomeTotal">${esc(vMoney2(a.totalEarned))}</i></div></div>
+    <div class="pt-inc"><div><b>Today's Income</b><i id="ptToday" data-plain="1">${esc(ptMoneyPlain(ptTodayIncome()))}</i></div><div><b>Total Income</b><i id="incomeTotal" data-plain="1">${esc(ptMoneyPlain(ptProductIncome()))}</i></div></div>
   </section>
   <div class="mg-orders" id="ownedAssets">${loading ? '<div class="pt-none"><b>Loading...</b></div>' : owned.length ? owned.map(vOwnedCardHtml).join('') : _investmentsLoadFailed ? loadFailHtml('assets') : '<div class="pt-none"><b>No records</b><span>Buy your first product to start earning</span></div>'}</div>
 </div>`;
@@ -2564,8 +2567,8 @@ function paintAssets(loading){
   if (_ptCountOnPaint === 'assets') {
     _ptCountOnPaint = '';
     ptCountUp($('ptToday'), ptTodayIncome(), 1100);
-    ptCountUp($('incomeTotal'), (STATE.account || {}).totalEarned, 1100);
-  } else { const t = $('incomeTotal'); if (t) t.dataset.val = String(Number((STATE.account || {}).totalEarned) || 0); }
+    ptCountUp($('incomeTotal'), ptProductIncome(), 1100);
+  } else { const t = $('incomeTotal'); if (t) t.dataset.val = String(ptProductIncome()); }
 }
 // ── REFERRAL (own tab) ──
 // Owner: "introduce a new nav icon just between my products and team, it is
@@ -3100,7 +3103,8 @@ function ptCountUp(el, target, ms, from){
   if (!el) return;
   const f = Number(from) || 0, token = (el._cu = (el._cu || 0) + 1);
   el._to = Number(target) || 0; el.dataset.val = String(el._to);
-  const done = () => { el.textContent = vMoney2(el._to); delete el.dataset.counting; ptFitValues(); };
+  const fmt = el.dataset.plain ? ptMoneyPlain : vMoney2;   // Orders shows its figures without thousands commas
+  const done = () => { el.textContent = fmt(el._to); delete el.dataset.counting; ptFitValues(); };
   if (el._to === f || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { done(); return; }
   el.dataset.counting = '1';
   const t0 = performance.now();
@@ -3108,7 +3112,7 @@ function ptCountUp(el, target, ms, from){
     if (el._cu !== token || !el.isConnected) return;
     const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
     if (k >= 1) { done(); return; }
-    el.textContent = vMoney2(Math.round((f + (el._to - f) * e) * 100) / 100);
+    el.textContent = fmt(Math.round((f + (el._to - f) * e) * 100) / 100);
     requestAnimationFrame(step);
   };
   el.textContent = vMoney2(f);
@@ -3376,11 +3380,10 @@ function statementCategoryMatch(cat, t){
 function statementDescription(t){
   if (t.type === 'deposit') return 'Deposit';
   if (t.type === 'withdraw') return 'Withdraw';
-  if (t.type === 'cashback') return 'Cashback';
+  if (t.type === 'cashback') return 'Daily Earnings';
   if (t.type === 'commission') return 'Commission';
   if (t.type === 'promocode') return 'Treasure Chest';
-  if (t.type === 'order_gift') return 'Order Gift';
-  if (t.type === 'app_claim') return 'App Reward';
+  if (t.type === 'order_gift' || t.type === 'app_claim') return 'Treasure Chest';   // the owner: a received gift is the same record as a Gift Code win
   if (t.type === 'welcome_bonus') return 'Welcome Bonus';
   if (t.type === 'team_reward') return 'Team Reward';
   if (t.type === 'mission_salary') return 'Team Reward';
@@ -3412,9 +3415,9 @@ function statementAmountText(t){
   return (amt < 0 ? '-' : '+') + vMoney2(Math.abs(amt));
 }
 // The small emoji in front of a record (the owner's Balance Detail shows one for the Treasure Chest row) and the word after the time.
-var PT_REC_ICON = { promocode: '\ud83c\udf8f', order_gift: '\ud83c\udf81', app_claim: '\ud83c\udf81', deposit: '\ud83d\udce5', admin_credit: '\ud83d\udce5', withdraw: '\ud83d\udce4', cashback: '\ud83d\udcc8', commission: '\ud83e\udd1d', team_reward: '\ud83c\udfc6', mission_salary: '\ud83c\udfc6', invest: '\ud83d\uded2', investment: '\ud83d\uded2' };
-var PT_REC_NOKIND = ['invest', 'investment', 'investment_refund'];
-var PT_REC_KIND = { deposit: 'Deposit', admin_credit: 'Deposit', withdraw: 'Withdraw', cashback: 'Income', commission: 'Team', team_reward: 'Team', mission_salary: 'Team' };
+var PT_REC_ICON = { promocode: '\ud83c\udf8f', order_gift: '\ud83c\udf8f', app_claim: '\ud83c\udf8f', deposit: '\ud83d\udce5', admin_credit: '\ud83d\udce5', withdraw: '\ud83d\udce4', cashback: '\ud83d\udcb0', commission: '\ud83e\udd1d', team_reward: '\ud83c\udfc6', mission_salary: '\ud83c\udfc6', invest: '\ud83d\uded2', investment: '\ud83d\uded2' };
+var PT_REC_NOKIND = ['invest', 'investment', 'investment_refund', 'cashback'];
+var PT_REC_KIND = { deposit: 'Deposit', admin_credit: 'Deposit', withdraw: 'Withdraw', commission: 'Team', team_reward: 'Team', mission_salary: 'Team' };
 function statementDayKey(t){
   const pad = n => String(n).padStart(2, '0');
   const ms = t.createdAt ? new Date(t.createdAt).getTime() : NaN;

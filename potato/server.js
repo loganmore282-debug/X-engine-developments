@@ -1002,12 +1002,23 @@ function cleanAboutHtml(raw) {
   let h = String(raw == null ? '' : raw).slice(0, 13000000);   // as large as the upload allows (embedded pictures); never cut mid-tag
   h = h.replace(/<\s*(script|iframe|object|embed|link|meta|base|form|noscript)\b[\s\S]*?(<\s*\/\s*\1\s*>|$)/gi, '');
   h = h.replace(/<\s*(script|iframe|object|embed|link|meta|base|form|noscript)\b[^>]*>/gi, '');
-  h = h.replace(/[\s/]on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-  h = h.replace(/(?<=["'])on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');   // a handler written straight after a quoted value: <img src="x"onerror=...>
-  h = h.replace(/(href|src|xlink:href|action|formaction)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, (m, attr, val) => {
-    // The scheme is judged AFTER the browser's own decoding: numeric entities (&#106;, &#x6a;) are decoded and spaces / tabs / control characters dropped.
-    const plain = val.replace(/^["']|["']$/g, '').replace(/&#x([0-9a-f]+);?/gi, (_, x) => String.fromCharCode(parseInt(x, 16))).replace(/&#(\d+);?/g, (_, n) => String.fromCharCode(Number(n))).replace(/[\s\u0000-\u001f]+/g, '');
-    return /^(javascript|vbscript|data:text)/i.test(plain) ? attr + '="#"' : m;
+  // Attributes are judged TAG BY TAG (never by a pattern over the whole text, which also hit picture data and words in the article):
+  // every on... handler is dropped, and a link / picture whose address is a script scheme (after the browser's own decoding: numeric entities,
+  // tabs, spaces) becomes "#". Everything else is kept exactly as written.
+  const SCHEME_ATTR = /^(href|src|xlink:href|action|formaction|background|poster|data)$/i;
+  h = h.replace(/<([a-zA-Z][\w:-]*)((?:"[^"]*"|'[^']*'|[^'">])*)>/g, (whole, tag, attrs) => {
+    const self = /\/\s*$/.test(attrs);
+    const kept = [];
+    attrs.replace(/([^\s"'<>\/=]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>]+))?/g, (m, name, val) => {
+      if (/^on/i.test(name)) return m;
+      if (val && SCHEME_ATTR.test(name)) {
+        const plain = val.replace(/^["']|["']$/g, '').replace(/&#x([0-9a-f]+);?/gi, (_, x) => String.fromCharCode(parseInt(x, 16))).replace(/&#(\d+);?/g, (_, n) => String.fromCharCode(Number(n))).replace(/[\s\u0000-\u001f]+/g, '');
+        if (/^(javascript|vbscript|data:text)/i.test(plain)) { kept.push(name + '="#"'); return m; }
+      }
+      kept.push(m);
+      return m;
+    });
+    return '<' + tag + (kept.length ? ' ' + kept.join(' ') : '') + (self ? ' /' : '') + '>';
   });
   return h;
 }

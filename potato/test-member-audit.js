@@ -55,7 +55,7 @@ async function main(){
   const originalBanner=d.querySelector('.home-banner');await w.liveRefreshVisible();
   assert.equal(d.querySelector('.home-banner'),originalBanner,'balance refresh must not rebuild Home');
   w.eval('STATE.page="assets"');w.eval('STATE.investments=[{status:"active",tierKey:"a1",tierLabel:"Test Asset",amount:15000,payoutsTotal:30,payoutsMade:3,dailyPayout:1500,expectedReturn:45000,paidOut:4500,createdAt:new Date().toISOString()},{status:"active",tierKey:"a1",tierLabel:"Gifted",amount:0,payoutsTotal:30,payoutsMade:1,dailyPayout:1500,expectedReturn:45000,paidOut:0,createdAt:new Date().toISOString(),granted:true}]');w.paintAssets();
-  assert.match(d.querySelector('.pt-cd h2').textContent,/Earnings Countdown/);assert.match(d.querySelector('#incomeTotal').textContent,/700\.00/);
+  assert.match(d.querySelector('.pt-cd h2').textContent,/Earnings Countdown/);assert.equal(d.querySelector('#incomeTotal').textContent,w.eval('ptMoneyPlain(ptProductIncome())'),'Total Income is what the products paid');assert.match(d.querySelector('#incomeTotal').textContent,/^UGX \d+\.\d\d$/,'without thousands commas');
   assert.equal(d.querySelectorAll('#ownedAssets .pt-run').length,2,'Income lists every owned product');
   assert.equal(d.querySelectorAll('#ownedAssets .pt-run-mat').length,2,'each owned card shows its maturity bar');
   w.eval('STATE.page="account"');await w.renderAccount();
