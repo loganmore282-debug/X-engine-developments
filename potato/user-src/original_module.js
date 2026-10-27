@@ -4372,7 +4372,9 @@ window.submitDeposit = async function(){
     // No network field on this form (Round 145) -- the gateway detects it
     // from the phone number itself; server.js already treats `network` as
     // optional here.
-    r = await post('/deposit/marzpay', { amount });
+    // Which pay button is on: its position tells the server which gateway the admin put behind it.
+    const onBtn = document.querySelector('#depPays button.on'), slot = onBtn ? Array.prototype.indexOf.call(onBtn.parentNode.children, onBtn) : 0;
+    r = await post('/deposit/marzpay', { amount, slot });
   } finally {
     // Restores the button's resting label after a failed attempt -- must
     // match whatever submitBtn actually reads at rest (see the sheet's own

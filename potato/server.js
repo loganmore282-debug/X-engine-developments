@@ -579,6 +579,9 @@ const DEFAULT_SETTINGS = {
   myBannerOpacity: 100, myBannerBlur: 0,
   // The names under the Deposit page's method buttons, comma separated; each shows after the app name ("Potato Pay-A"). The first one is chosen at first.
   depositMethodNames: 'Pay-B, Pay-A*, Pay-D, Pay-C',
+  // The gateway behind each of those buttons, in the SAME order (Pay-B = TavuPay, Pay-A = PesaJet, Pay-D = LworxPay, Pay-C = OBPay). The admin can
+  // change or rotate them; a member only ever sends the button's position. Never sent to the app.
+  depositGateways: 'tavupay, pesajet, lworxpay, obpay',
   giftCodeHint: 'Enter gift code (T-XXXX)',
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   shareMessage: 'Join me on {app}',
@@ -771,6 +774,20 @@ function gatewayServesRegion(gateway, region) {
 // check is gone). Served to the app as the RESOLVED answer, the same way
 // payoutManual already is, so the member never
 // meets a payment method that cannot work.
+// The gateway a Deposit-page BUTTON uses: the button's position (the app sends it as `slot`) picks an entry from the admin's depositGateways list.
+// No slot (an older app), or a button with no entry, falls back to the single recharge gateway. LworxPay and OBPay are listed so the admin can
+// assign them, but they cannot take a payment until their integration exists (DEPOSIT_GATEWAYS_READY).
+const DEPOSIT_GATEWAYS = Object.freeze(['pesajet', 'tavupay', 'lworxpay', 'obpay', 'marzpay']);
+const DEPOSIT_GATEWAYS_READY = new Set(['pesajet', 'tavupay', 'marzpay']);
+function depositGatewayList(sett) {
+  return String((sett && sett.depositGateways) || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean).map(x => DEPOSIT_GATEWAYS.includes(x) ? x : '');
+}
+function depositProviderForSlot(sett, slot) {
+  const n = typeof slot === 'number' ? slot : (typeof slot === 'string' && /^\d{1,2}$/.test(slot) ? Number(slot) : NaN);
+  const list = depositGatewayList(sett);
+  if (Number.isInteger(n) && n >= 0 && n < list.length && list[n]) return list[n];
+  return depositAutomaticProvider(sett);
+}
 function payAAvailable(sett, region) {
   return gatewayServesRegion(depositAutomaticProvider(sett), region);
 }
@@ -3430,7 +3447,7 @@ app.get('/public/settings', async (req, res) => {
     // automatic cap), the payment-rail choice, the reference prefix and the host policy.
     const rest = {};
     for (const k of Object.keys(rest0)) {
-      if (/^autoApprove/.test(k) || ['depositMethod', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain', 'linkPreviewTitle', 'linkPreviewText'].includes(k)) continue;
+      if (/^autoApprove/.test(k) || ['depositMethod', 'depositGateways', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain', 'linkPreviewTitle', 'linkPreviewText'].includes(k)) continue;
       rest[k] = rest0[k];
     }
     // Revalidated every time (no max-age): maintenance mode, the opening
@@ -4188,7 +4205,9 @@ app.post('/deposit/marzpay', async (req, res) => {
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
     if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before topping up.' });
-    const provider = depositAutomaticProvider(sett);
+    const provider = depositProviderForSlot(sett, req.body.slot);
+    if (!DEPOSIT_GATEWAYS_READY.has(provider))
+      return res.status(400).json({ status: 'error', code: 'GATEWAY_SOON', message: 'This payment method is not available right now. Please choose another one.' });
     // The gateway has to be able to reach THIS country's phone numbers. Every
     // automatic gateway here is Uganda-only (see GATEWAY_DIAL_CODES), and a
     // new region inherits Uganda's settings, so without this a Kenyan deposit
@@ -6681,6 +6700,12 @@ app.post('/admin/settings/update', async (req, res) => {
     if ('depositMethodNames' in updates) {
       const names = String(updates.depositMethodNames == null ? '' : updates.depositMethodNames).split(',').map(x => x.replace(/[<>]/g, '').trim().slice(0, 20)).filter(Boolean).slice(0, 6);
       updates.depositMethodNames = names.length ? names.join(', ') : DEFAULT_SETTINGS.depositMethodNames;
+    }
+    if ('depositGateways' in updates) {
+      const list = String(updates.depositGateways == null ? '' : updates.depositGateways).split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+      if (list.length > 6 || list.some(x => !DEPOSIT_GATEWAYS.includes(x)))
+        return res.status(400).json({ status: 'error', message: `depositGateways must list up to 6 of ${DEPOSIT_GATEWAYS.join(', ')}` });
+      updates.depositGateways = list.length ? list.join(', ') : DEFAULT_SETTINGS.depositGateways;
     }
     if ('brandName' in updates) {
       const name = String(updates.brandName == null ? '' : updates.brandName).trim();

@@ -3486,6 +3486,10 @@ async function renderSettings(){
       <h2 class="sec" style="margin:16px 0 4px">Deposit page buttons</h2>
       <p class="muted" style="margin:0 0 8px">The names under the amount on the Deposit page, separated by commas; each shows after the app name (for example Potato Pay-A). Put a * after the one that is chosen when the page opens (the first one if none has it). Up to 6.</p>
       <input id="depNamesInput" maxlength="100" value="${esc(v('depositMethodNames','Pay-B, Pay-A*, Pay-D, Pay-C'))}" placeholder="Pay-B, Pay-A*, Pay-D, Pay-C">
+      <h2 class="sec" style="margin:16px 0 4px">Gateway behind each button</h2>
+      <p class="muted" style="margin:0 0 8px">Pick which payment gateway each button above uses. <b>Rotate</b> moves every button's gateway to the next button (the last one wraps to the first); nothing is saved until you press Save payment method. LworxPay and OBPay can be assigned now, but a member who taps them is told the method is not available until their integration is added.</p>
+      <div id="depGwRows"></div>
+      <button class="btn sm" id="depGwRotate" type="button" style="margin-top:6px">Rotate gateways</button>
       <h2 class="sec" style="margin:16px 0 4px">Share message</h2>
       <p class="muted" style="margin:0 0 8px">The words that go with the invite link when a member taps WhatsApp or Telegram on the Share page. Write {app} where the app's name should appear. The link is added after your words.</p>
       <input id="shareMsgInput" maxlength="200" value="${esc(v('shareMessage','Join me on {app}'))}" placeholder="Join me on {app}">
@@ -3518,12 +3522,26 @@ async function renderSettings(){
       <label>App name</label><input id="brandNameInput" maxlength="24" value="${esc(v('brandName','Potato'))}" placeholder="Potato">
       <button class="btn block" id="saveBrandName" style="margin-top:6px">Save app name</button>
     </div>`;
+  // The gateway behind each Deposit-page button, in the same order as the names above. Kept in _depGws so a rename or a rotate does not lose the picks.
+  const GW_CHOICES = [['pesajet','PesaJet'],['tavupay','TavuPay'],['lworxpay','LworxPay (not connected yet)'],['obpay','OBPay (not connected yet)'],['marzpay','MarzPay']];
+  const depNames = () => ($('depNamesInput').value||'').split(',').map(x=>x.replace(/\*+$/,'').trim()).filter(Boolean).slice(0,6);
+  let _depGws = String(v('depositGateways','tavupay, pesajet, lworxpay, obpay')).split(',').map(x=>x.trim().toLowerCase());
+  function drawDepGw(){
+    const names = depNames();
+    while(_depGws.length < names.length) _depGws.push('pesajet');
+    _depGws.length = names.length;
+    $('depGwRows').innerHTML = names.map((n,i)=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span style="min-width:90px">${esc(n)}</span><select data-gw="${i}" style="flex:1">${GW_CHOICES.map(([k,l])=>`<option value="${k}"${_depGws[i]===k?' selected':''}>${l}</option>`).join('')}</select></div>`).join('');
+    document.querySelectorAll('#depGwRows select').forEach(sel=>sel.addEventListener('change',()=>{ _depGws[+sel.dataset.gw] = sel.value; }));
+  }
+  drawDepGw();
+  $('depNamesInput').addEventListener('input', drawDepGw);
+  $('depGwRotate').addEventListener('click', ()=>{ if(_depGws.length > 1) _depGws.unshift(_depGws.pop()); drawDepGw(); });
   $('saveDepMethod').addEventListener('click', async()=>{
     const gateway = document.querySelector('input[name="depGateway"]:checked').value;
     const witMethod = (document.querySelector('input[name="witMethod"]:checked')||{}).value || 'follow';
     const d = await api('/admin/settings/update', { settings: {
       depositMethod: gateway, withdrawMethod: witMethod,
-      depositMethodNames: $('depNamesInput').value, giftCodeHint: $('giftHintInput').value, shareMessage: $('shareMsgInput').value, appClaimAmount: Math.max(0, Math.round(+$('appClaimInput').value || 0)),
+      depositMethodNames: $('depNamesInput').value, depositGateways: _depGws.join(', '), giftCodeHint: $('giftHintInput').value, shareMessage: $('shareMsgInput').value, appClaimAmount: Math.max(0, Math.round(+$('appClaimInput').value || 0)),
     } });
     const payoutProv = witMethod==='follow' ? (gateway==='tavupay'?'marzpay':gateway) : witMethod;
     toast(d.status==='success'

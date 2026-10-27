@@ -22,5 +22,5 @@ const form = mod.slice(mod.indexOf('function openDepositFormSheet'), mod.indexOf
 ok(form.indexOf('id="depAmount"') > 0 && !/depPhone/.test(form), 'the Deposit page has the amount box and no phone box (the owner\'s screens have none)');
 const sub = mod.slice(mod.indexOf('window.submitDeposit'), mod.indexOf('window.submitDeposit') + 4000);
 ok(!/depPhone/.test(sub) && !/if \(!phone\)/.test(sub), 'no typed number is required: the payment request goes to the member\'s own number');
-ok(/post\('\/deposit\/marzpay', \{ amount \}\)/.test(sub), 'only the amount is sent with the deposit');
+ok(/post\('\/deposit\/marzpay', \{ amount, slot \}\)/.test(sub), 'only the amount and the pay button position are sent with the deposit');
 console.log('PASS: referral code format and deposit phone box (' + n + ' checks)');
