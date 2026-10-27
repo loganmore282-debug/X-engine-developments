@@ -582,6 +582,8 @@ const DEFAULT_SETTINGS = {
   // The gateway behind each of those buttons, in the SAME order (Pay-B = TavuPay, Pay-A = PesaJet, Pay-D = LworxPay, Pay-C = OBPay). The admin can
   // change or rotate them; a member only ever sends the button's position. Never sent to the app.
   depositGateways: 'tavupay, pesajet, lworxpay, obpay',
+  // LworxPay's collection endpoint: 'standard' = POST /collect (the customer pays 4 % on top of the amount) | 'stanbic' = POST /collect-stanbic (free for the customer).
+  lworxCollect: 'standard',
   giftCodeHint: 'Enter gift code (T-XXXX)',
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   shareMessage: 'Join me on {app}',
@@ -2826,8 +2828,9 @@ async function tavupayWebhookOpen(body) {
 // copy of their documents (October 2026). This environment cannot reach either host, so nothing here has run against a live gateway. What each
 // document says, and what this code does about it:
 //   LworxPay  * `Authorization: Bearer <key>`; the server's IP may have to be on their whitelist (IP_NOT_ALLOWED), so calls go out over IPv4.
-//             * POST /collect-stanbic {amount, phone, reference, callback_url, webhook_secret}: the customer pays EXACTLY the amount (the plain
-//               /collect adds 4 % for the customer, which would not match the "Pay X" button). `reference` = our deposit id (unique per attempt).
+//             * POST /collect (the default, setting lworxCollect 'standard': the customer pays the amount + 4 %, the wallet gets the full amount) or
+//               POST /collect-stanbic ('stanbic': free, the customer pays exactly the amount; admin toggle) {amount, phone, reference, callback_url,
+//               webhook_secret}. `reference` = our deposit id (unique per attempt).
 //             * Answers success:true + data.transaction_id + status "pending": acceptance is NOT payment. 504 GATEWAY_TIMEOUT means the prompt may
 //               have been sent (we keep the row pending); 503 GATEWAY_UNAVAILABLE is documented as safe to retry (the row is failed, no prompt).
 //             * GET /status?reference= -> data.status pending | completed | failed | cancelled | refunded | pending_approval.
@@ -2897,10 +2900,10 @@ function gwStatusLabel(provider, raw) {
   return 'processing';
 }
 function lworxPhone(raw) { return pesajetPhone(raw).replace(/^\+/, ''); }
-async function lworxCollect({ amount, phone, reference, callback }) {
+async function lworxCollect({ amount, phone, reference, callback, mode }) {
   const payload = { amount: Math.round(Number(amount)), phone: lworxPhone(phone), reference: String(reference) };
   if (callback && /^https:\/\//i.test(callback)) { payload.callback_url = callback; if (LWORX_HOOK_SECRET) payload.webhook_secret = LWORX_HOOK_SECRET; }
-  return _gwRequest('lworxpay', '/collect-stanbic', { method: 'POST', body: payload });
+  return _gwRequest('lworxpay', mode === 'stanbic' ? '/collect-stanbic' : '/collect', { method: 'POST', body: payload });
 }
 async function obpayCollect({ amount, phone, reference, callback, description, name }) {
   const payload = { amount: Math.round(Number(amount)), currency: 'UGX', phone_number: lworxPhone(phone), customer_name: String(name || 'Member').slice(0, 60), customer_email: 'customer@member.invalid', reference: String(reference).slice(0, 40) };
@@ -3011,7 +3014,7 @@ async function gatewayCollectStart(provider, { depRef, userId, amt, phone }) {
   let r;
   try {
     r = provider === 'lworxpay'
-      ? await lworxCollect({ amount: amt, phone, reference: depRef.id, callback: g.callback() })
+      ? await lworxCollect({ amount: amt, phone, reference: depRef.id, callback: g.callback(), mode: (await getSettings()).lworxCollect })
       : await obpayCollect({ amount: amt, phone, reference: depRef.id, callback: g.callback(), description: 'Deposit', name: brandName(await getSettings()) + ' member' });
   } catch (netErr) { console.error(g.name + ' collect network error (dep ' + depRef.id + '):', netErr.message); return; }
   if (!r.ok) {
@@ -3724,7 +3727,7 @@ app.get('/public/settings', async (req, res) => {
     // automatic cap), the payment-rail choice, the reference prefix and the host policy.
     const rest = {};
     for (const k of Object.keys(rest0)) {
-      if (/^autoApprove/.test(k) || ['depositMethod', 'depositGateways', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain', 'linkPreviewTitle', 'linkPreviewText'].includes(k)) continue;
+      if (/^autoApprove/.test(k) || ['depositMethod', 'depositGateways', 'lworxCollect', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain', 'linkPreviewTitle', 'linkPreviewText'].includes(k)) continue;
       rest[k] = rest0[k];
     }
     // Revalidated every time (no max-age): maintenance mode, the opening
@@ -7023,6 +7026,8 @@ app.post('/admin/settings/update', async (req, res) => {
       const names = String(updates.depositMethodNames == null ? '' : updates.depositMethodNames).split(',').map(x => x.replace(/[<>]/g, '').trim().slice(0, 20)).filter(Boolean).slice(0, 6);
       updates.depositMethodNames = names.length ? names.join(', ') : DEFAULT_SETTINGS.depositMethodNames;
     }
+    if ('lworxCollect' in updates && !['standard', 'stanbic'].includes(updates.lworxCollect))
+      return res.status(400).json({ status: 'error', message: `lworxCollect must be 'standard' or 'stanbic'` });
     if ('depositGateways' in updates) {
       const list = String(updates.depositGateways == null ? '' : updates.depositGateways).split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
       if (list.length > 6 || list.some(x => !DEPOSIT_GATEWAYS.includes(x)))

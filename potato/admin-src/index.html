@@ -3490,6 +3490,10 @@ async function renderSettings(){
       <p class="muted" style="margin:0 0 8px">Pick which payment gateway each button above uses. <b>Rotate</b> moves every button's gateway to the next button (the last one wraps to the first); nothing is saved until you press Save payment method.</p>
       <div id="depGwRows"></div>
       <button class="btn sm" id="depGwRotate" type="button" style="margin-top:6px">Rotate gateways</button>
+      <h2 class="sec" style="margin:16px 0 4px">LworxPay collection</h2>
+      <p class="muted" style="margin:0 0 8px">Which LworxPay endpoint takes the recharge. <b>Standard</b> (POST /collect): the member pays 4% on top of the amount and you receive the full amount. <b>Stanbic</b> (POST /collect-stanbic): free for the member, who pays exactly the amount.</p>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:4px;"><input type="radio" name="lworxMode" value="standard" ${v('lworxCollect','standard')!=='stanbic'?'checked':''} style="width:auto"> Standard (/collect, member pays 4% extra)</label>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="lworxMode" value="stanbic" ${v('lworxCollect','standard')==='stanbic'?'checked':''} style="width:auto"> Stanbic (/collect-stanbic, free for the member)</label>
       <h2 class="sec" style="margin:16px 0 4px">Share message</h2>
       <p class="muted" style="margin:0 0 8px">The words that go with the invite link when a member taps WhatsApp or Telegram on the Share page. Write {app} where the app's name should appear. The link is added after your words.</p>
       <input id="shareMsgInput" maxlength="200" value="${esc(v('shareMessage','Join me on {app}'))}" placeholder="Join me on {app}">
@@ -3541,7 +3545,7 @@ async function renderSettings(){
     const witMethod = (document.querySelector('input[name="witMethod"]:checked')||{}).value || 'follow';
     const d = await api('/admin/settings/update', { settings: {
       depositMethod: gateway, withdrawMethod: witMethod,
-      depositMethodNames: $('depNamesInput').value, depositGateways: _depGws.join(', '), giftCodeHint: $('giftHintInput').value, shareMessage: $('shareMsgInput').value, appClaimAmount: Math.max(0, Math.round(+$('appClaimInput').value || 0)),
+      depositMethodNames: $('depNamesInput').value, depositGateways: _depGws.join(', '), lworxCollect: (document.querySelector('input[name="lworxMode"]:checked')||{}).value||'standard', giftCodeHint: $('giftHintInput').value, shareMessage: $('shareMsgInput').value, appClaimAmount: Math.max(0, Math.round(+$('appClaimInput').value || 0)),
     } });
     const payoutProv = witMethod==='follow' ? (gateway==='tavupay'?'marzpay':gateway) : witMethod;
     toast(d.status==='success'

@@ -60,10 +60,20 @@ const lwAccept = tx => call => call.method === 'POST' ? { status: 200, body: { s
   let m = await member(); script = lwAccept('LWSK1'); const w0 = wallet(m.uid);
   let r = await deposit(m, 2); ok(r.j.status === 'success', 'LworxPay deposit accepted', r.j);
   let d = depOf(m.uid); const c = calls.find(x => x.host === 'www.lworx-pay.com' && x.method === 'POST');
-  ok(c && c.path === '/api/v1/collect-stanbic' && c.family === 4, 'POST /api/v1/collect-stanbic over IPv4 (the free collection)', c);
+  ok(c && c.path === '/api/v1/collect' && c.family === 4, 'POST /api/v1/collect over IPv4 (the default)', c);
   ok(c.headers.Authorization === 'Bearer lw_key_123', 'Bearer key');
   ok(c.body.amount === 30000 && /^256\d{9}$/.test(c.body.phone) && c.body.reference === d.id && c.body.callback_url === 'https://hook.example/h-abc/lworxpay' && c.body.webhook_secret === LW_SECRET, 'body: amount, 256 phone, reference = deposit id, callback_url and the signing secret', c.body);
   ok(d.provider === 'lworxpay' && d.status === 'pending' && d.lworxpayTxId === 'LWSK1' && d.lworxpayRef === d.id && wallet(m.uid) === w0, 'accepted = pending with their id saved, wallet untouched', d);
+  // the admin toggle: Stanbic, then back
+  const badMode = await J('POST', '/admin/settings/update', { settings: { lworxCollect: 'nonsense' } }, null, true); ok(badMode.s === 400, 'an unknown collection mode is refused');
+  ok(!JSON.stringify((await J('GET', '/public/settings')).j).includes('lworxCollect'), 'the mode never reaches the app');
+  await J('POST', '/admin/settings/update', { settings: { lworxCollect: 'stanbic' } }, null, true);
+  { const mm = await member(); script = lwAccept('LWSKX'); await deposit(mm, 2); const cs = calls.filter(x => x.host === 'www.lworx-pay.com' && x.method === 'POST').pop();
+    ok(cs.path === '/api/v1/collect-stanbic', 'switched to Stanbic: POST /api/v1/collect-stanbic', cs.path); }
+  await J('POST', '/admin/settings/update', { settings: { lworxCollect: 'standard' } }, null, true);
+  { const mm = await member(); script = lwAccept('LWSKY'); await deposit(mm, 2); const cs = calls.filter(x => x.host === 'www.lworx-pay.com' && x.method === 'POST').pop();
+    ok(cs.path === '/api/v1/collect', 'and back to Standard: POST /api/v1/collect', cs.path); }
+  script = lwAccept('LWSK1');
   // unsigned success, gateway still says pending -> nothing
   script = call => call.method === 'GET' ? { status: 200, body: { success: true, data: { status: 'pending', amount: 30000 } } } : null;
   await hook('/lworxpay/webhook', lwEv('payment.success', d), LW, null);
@@ -73,7 +83,7 @@ const lwAccept = tx => call => call.method === 'POST' ? { status: 200, body: { s
   const callsBefore = calls.length;
   await hook('/lworxpay/webhook', lwEv('payment.success', d), LW, LW_SECRET);
   ok(depOf(m.uid).status === 'matched' && wallet(m.uid) === w0 + 30000, 'a signed payment.success credits the wallet once: +' + (wallet(m.uid) - w0), depOf(m.uid));
-  ok(calls.length === callsBefore, 'and needed no second call');
+  ok(!calls.slice(callsBefore).some(x => x.path.includes(d.id)), 'and needed no second call about it');
   await hook('/lworxpay/webhook', lwEv('payment.success', d), LW, LW_SECRET);
   await hook('/lworxpay/webhook', lwEv('payment.failed', d), LW, LW_SECRET);
   ok(wallet(m.uid) === w0 + 30000 && depOf(m.uid).status === 'matched', 'a replay and a late failure change nothing');
