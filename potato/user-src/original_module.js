@@ -4690,7 +4690,7 @@ window.openInvestConfirm = async function(tierKey, btn){
   const label = btn ? btn.innerHTML : '';   // the whole button (cart icon + word), put back as it was
   if (btn) btn.textContent = 'Buying…';
   let result;
-  try { result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey, expectedPrice: Number(p.price) || 0 }) }); }
+  try { result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey, expectedPrice: Number(p.price) || 0, expectedReturn: Number(p.expectedReturn) || undefined, cycle: Number(p.cycle) || undefined }) }); }   // the price, payout and length the card showed
   finally { _buyBusy = false; if (btn && btn.isConnected) btn.innerHTML = label || 'Buy Now'; }
   if (result.stale) return;
   if (result.status === 'error' && result.code === 'PRICE_CHANGED') { try { refreshCatalogNow(); } catch (_) {} }

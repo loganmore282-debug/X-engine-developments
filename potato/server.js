@@ -198,7 +198,7 @@ const HUGE_JSON_ROUTES = new Set(['/admin/about-html/set']);
 // every request in the app.
 const RAW_BODY_ROUTES = new Set(['/pesajet/webhook', '/tavupay/webhook', '/deploy/webhook']);
 const keepRawBody = (req, res, buf) => { if (RAW_BODY_ROUTES.has(req.path)) req.rawBody = buf; };
-const rawJsonParser = express.json({ limit: '64kb', verify: keepRawBody });
+const rawJsonParser = express.json({ limit: '1mb', verify: keepRawBody });   // GitHub's push payload (up to 20 commits with file lists) is larger than 64 kB
 app.use((req, res, next) => (RAW_BODY_ROUTES.has(req.path) ? rawJsonParser : HUGE_JSON_ROUTES.has(req.path) ? hugeJsonParser : IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 
@@ -999,11 +999,16 @@ let _aboutCache = null, _aboutCacheTs = 0;
 // The About page under its banners is ONE piece of HTML the owner pastes in Admin > Banners > About page. It is cleaned here when it is
 // saved (no scripts, frames, event handlers or javascript: links) and cleaned again by the app before it is shown.
 function cleanAboutHtml(raw) {
-  let h = String(raw == null ? '' : raw).slice(0, 200000);
+  let h = String(raw == null ? '' : raw).slice(0, 13000000);   // as large as the upload allows (embedded pictures); never cut mid-tag
   h = h.replace(/<\s*(script|iframe|object|embed|link|meta|base|form|noscript)\b[\s\S]*?(<\s*\/\s*\1\s*>|$)/gi, '');
   h = h.replace(/<\s*(script|iframe|object|embed|link|meta|base|form|noscript)\b[^>]*>/gi, '');
   h = h.replace(/[\s/]on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-  h = h.replace(/(href|src|xlink:href|action|formaction)\s*=\s*("[\s&#;a-z0-9]*(javascript|vbscript|data:text)[^"]*"|'[\s&#;a-z0-9]*(javascript|vbscript|data:text)[^']*'|(javascript|vbscript|data:text)[^\s>]*)/gi, '$1="#"');
+  h = h.replace(/(?<=["'])on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');   // a handler written straight after a quoted value: <img src="x"onerror=...>
+  h = h.replace(/(href|src|xlink:href|action|formaction)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, (m, attr, val) => {
+    // The scheme is judged AFTER the browser's own decoding: numeric entities (&#106;, &#x6a;) are decoded and spaces / tabs / control characters dropped.
+    const plain = val.replace(/^["']|["']$/g, '').replace(/&#x([0-9a-f]+);?/gi, (_, x) => String.fromCharCode(parseInt(x, 16))).replace(/&#(\d+);?/g, (_, n) => String.fromCharCode(Number(n))).replace(/[\s\u0000-\u001f]+/g, '');
+    return /^(javascript|vbscript|data:text)/i.test(plain) ? attr + '="#"' : m;
+  });
   return h;
 }
 async function getAboutHtml() {
@@ -1888,6 +1893,7 @@ async function _markDepositFailedNow(depRef, userId, reason) {
     try {
       const txSnap = await db.collection('transactions').where('depositId', '==', depRef.id).limit(5).get();
       await Promise.all(txSnap.docs.map(txDoc => {
+        if (txDoc.data().status === 'failed') return null;   // a repeated FAILED verdict must not rewrite "Failed (UGX 30,000)" as "Failed (UGX 0)"
         const amt = Math.abs(Number(txDoc.data().amount) || 0);
         return txDoc.ref.update({ status: 'failed', description: `Deposit: Failed (${fmtMoney(amt)})`, amount: 0 });
       }));
@@ -1927,7 +1933,7 @@ const PROVIDER_BUSY_MSG = 'The payment provider is busy right now. Please try ag
 // possibilities instead of asserting one.
 const DEPOSIT_FAILED_MSG = 'This payment was not completed. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Please try again.';
 function marzUserMsg(mp, fallback) {
-  const raw = mp && (mp.message || mp.data?.message || mp.error || mp.data?.error);
+  const raw = mp && [mp.message, mp.data?.message, mp.error, mp.data?.error].find(v => typeof v === 'string' && v.trim());   // only ever a string reaches a member
   if ((mp && (mp.providerDown || mp.error_code === 'DATABASE_ERROR')) ||
       /database error|internal server|server error|unexpected error|try again|temporarily|timeout|timed out|gateway|unavailable|bad gateway/i.test(String(raw || '')))
     return PROVIDER_BUSY_MSG;
@@ -2044,7 +2050,7 @@ async function marzGetBalance(region) {
 }
 function _marzExtractTx(d) {
   const tx = d?.data?.transaction || d?.transaction || d?.data || d || {};
-  const rawStatus = tx.status || tx.state || tx.transaction_status || tx.payment_status || (tx === d ? d?.status : '') || '';   // the reply envelope's own "success" is not the payment's status
+  const rawStatus = tx.status || tx.state || tx.transaction_status || tx.payment_status || (tx === d && !SUCCESS_STATUSES.has(String(d?.status || '').toLowerCase()) ? d?.status : '') || '';   // the reply envelope's own "success" is not the payment's status
   // Speculative, checked against MarzPay's own integration guide afterward
   // (docs/marzpay-integration-guide.pdf) rather than assumed correct:
   // neither the collection-status response (5.5) nor the webhook payloads
@@ -2469,7 +2475,9 @@ function pesajetUserMsg(r, fallback) {
   // Only ever a STRING reaches a member. The documented error body nests an
   // object under `error`, and handing that straight back printed
   // "[object Object]" in front of somebody whose recharge had just failed.
-  const raw = [d.message, d.error].find(v => typeof v === 'string' && v.trim()) || '';
+  let raw = [d.message, d.error].find(v => typeof v === 'string' && v.trim()) || '';
+  // A provider's own wording about keys / auth, or a whole error page, never reaches a member.
+  if (raw.length > 200 || /api[ _-]?key|secret|unauthori[sz]ed|forbidden|whitelist|<html|<!doctype/i.test(raw)) { console.warn('PesaJet message hidden from the member:', raw.slice(0, 300)); return PROVIDER_BUSY_MSG; }
   if (/internal|server error|unavailable|timeout|timed out|try again|temporarily|gateway/i.test(raw))
     return PROVIDER_BUSY_MSG;
   return raw || fallback || PROVIDER_BUSY_MSG;
@@ -3337,9 +3345,10 @@ function runDeployCmd(cmd, args, cwd) {
 // Only one at a time -- a second webhook firing mid-deploy (a rapid string
 // of pushes) would otherwise overlap `npm install` with `pm2 reload`
 // against a half-updated node_modules.
-let _autoDeployRunning = false;
+let _autoDeployRunning = false, _autoDeployAgain = false;
 async function runAutoDeploy() {
-  if (_autoDeployRunning) { console.warn('Auto-deploy: already running, this trigger skipped'); return; }
+  // A push that arrives while a deploy runs is NOT dropped: it is deployed right after (the first deploy may already have pulled before it).
+  if (_autoDeployRunning) { _autoDeployAgain = true; console.warn('Auto-deploy: already running, will run once more afterwards'); return; }
   _autoDeployRunning = true;
   try {
     console.log('Auto-deploy: pulling', DEPLOY_BRANCH);
@@ -3356,7 +3365,10 @@ async function runAutoDeploy() {
     console.log('Auto-deploy: pulled + reloaded successfully');
   } catch (e) {
     console.error('Auto-deploy failed:', e.message, e.stderr || e.stdout || '');
-  } finally { _autoDeployRunning = false; }
+  } finally {
+    _autoDeployRunning = false;
+    if (_autoDeployAgain) { _autoDeployAgain = false; setTimeout(() => runAutoDeploy().catch(() => {}), 1000); }
+  }
 }
 app.post('/deploy/webhook', (req, res) => {
   if (!verifyGithubWebhookSignature(req.rawBody, req.get('x-hub-signature-256')))
@@ -4056,6 +4068,12 @@ app.post('/invest/create', async (req, res) => {
         priceErr.code = 'PRICE_CHANGED';
         throw priceErr;
       }
+      // The payout and the length they saw must be the ones bought, too (an admin may change the multiplier or the days with the price unchanged).
+      if ((req.body.expectedReturn != null && Math.abs(Number(req.body.expectedReturn) - Number(expectedReturn)) > 0.5) || (req.body.cycle != null && Number(req.body.cycle) !== Number(cycle))) {
+        const retErr = new Error('The payout of this product has changed. Nothing was charged; please check and try again.');
+        retErr.code = 'PRICE_CHANGED';
+        throw retErr;
+      }
       // Carries a code so the app can react to this specific failure (send
       // the member to Deposit) instead of string-matching the message.
       if (round2(bal) < liveTier.price) {   // cents from gift codes can leave a wallet a hair under a whole amount
@@ -4134,7 +4152,7 @@ app.get('/investments', async (req, res) => {
       const data = d.data();
       const live = byKey.get(data.tierKey);
       // The commission bookkeeping holds the UPLINE's account ids and amounts: it never goes to the member's phone.
-      const { commissionPlan, commissionPaidLevels, commissionPending, commissionBanBlocked, isFirstInvestment, ...shown } = data;
+      const { commissionPlan, commissionPaidLevels, commissionPending, commissionBanBlocked, isFirstInvestment, grantedBy, requestId, ...shown } = data;
       return { id: d.id, ...shown, tierLabel: (live && live.name) || data.tierLabel };
     });
     res.json({ status: 'success', investments });
@@ -4931,7 +4949,12 @@ app.post('/withdraw/request', async (req, res) => {
       const debited = await uRef.updateIf({ walletBalance: { $gte: amt - 0.005 }, status: { $ne: 'banned' }, debitedWithdrawalIds: { $ne: witId } }, {
         walletBalance: FieldValue.increment(-amt), debitedWithdrawalIds: FieldValue.arrayUnion(witId)
       });
-      if (!debited) throw new Error('Your balance or account status changed. Please refresh and try again.');
+      if (!debited) {
+        // Nothing was charged: close the row at once (it would block the next request until the reconciler declines it) and give the real reason.
+        await witRef.updateIf({ status: 'creating' }, { status: 'declined', failureReason: 'Not charged: balance or account changed' }).catch(() => {});
+        witId = undefined;
+        throw new Error('Your balance or account status changed. Please refresh and try again.');
+      }
       await finishWithdrawalCreation(witRef, userId);
     });
     sendAdminPush('New withdrawal request', `${fmtMoney(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }, { quickApprove: true }).catch(() => {});
@@ -5703,7 +5726,7 @@ const BANK_CARD_LIMIT = 5;
 app.post('/bank/save', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const holder = stripHtml(req.body.holder).trim();
+  const holder = stripHtml(textOf(req.body.holder)).trim();
   const rawNetwork = String(req.body.network || '').trim();
   if (!holder || !rawNetwork) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
   // A holder name is a name: at most 60 characters and at least one letter (a 300-character or all-digit holder broke the Wallet card).
@@ -5894,7 +5917,7 @@ app.post('/gifts/claim', async (req, res) => {
 app.post('/redeem', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  const raw = String(req.body.code || '').trim().slice(0, 32);
+  const raw = String(req.body.code || '').replace(/\s+/g, '').slice(0, 32);   // spaces are ignored (a pasted "ABCDE FGHIJ" is the same code)
   if (!raw) return res.status(400).json({ status: 'error', message: 'Please enter the treasure chest key' });
   if (!/^[A-Za-z0-9-]+$/.test(raw)) { noteWrongTreasureKey(userId); return res.status(400).json({ status: 'error', message: 'Wrong treasure chest password' }); }
   if (treasureKeyLockedOut(userId)) return res.status(429).json({ status: 'error', code: 'TOO_MANY_WRONG_KEYS', message: 'Too many wrong keys. Please wait a few minutes and try again.' });
@@ -7086,7 +7109,7 @@ app.post('/admin/products/save', async (req, res) => {
     // failure mode this whole mechanism exists to prevent, just backwards.
     for (const { oldKey, newKey } of renames) {
       const collision = await db.collection('products').doc(newKey).get();
-      if (collision.exists) return res.status(400).json({ status: 'error', message: `"${newKey}" is already another product's key. Choose a different one.` });
+      if (collision.exists && !(collision.data() || {}).deleted) return res.status(400).json({ status: 'error', message: `"${newKey}" is already another product's key. Choose a different one.` });
       const old = await db.collection('products').doc(oldKey).get();
       if (!old.exists) return res.status(400).json({ status: 'error', message: `"${oldKey}" is not a real existing key.` });
     }
@@ -7105,14 +7128,13 @@ app.post('/admin/products/save', async (req, res) => {
     // number, the purchase-limit count, the picture and the name.
     for (const { oldKey, newKey } of renames) {
       try {
+        // The Order Gift a member already received is remembered by the product KEY: the new key is added FIRST (so there is never a moment when
+        // the member owns the renamed product without the mark), then the investments move, then the old key is dropped.
+        const claimed = await db.collection('users').where('orderGiftsClaimed', 'array-contains', oldKey).get();
+        for (const d of claimed.docs) await d.ref.update({ orderGiftsClaimed: FieldValue.arrayUnion(newKey) });
         const owned = await db.collection('investments').where('tierKey', '==', oldKey).get();
         for (const d of owned.docs) await d.ref.update({ tierKey: newKey });
-        // The Order Gift a member already received is remembered by the product KEY: carry that mark along, or the renamed product pays its gift again.
-        const claimed = await db.collection('users').where('orderGiftsClaimed', 'array-contains', oldKey).get();
-        for (const d of claimed.docs) {
-          await d.ref.update({ orderGiftsClaimed: FieldValue.arrayRemove(oldKey) });
-          await d.ref.update({ orderGiftsClaimed: FieldValue.arrayUnion(newKey) });
-        }
+        for (const d of claimed.docs) await d.ref.update({ orderGiftsClaimed: FieldValue.arrayRemove(oldKey) });
       } catch (e) { console.error('Product rename: could not move investments from ' + oldKey + ' to ' + newKey + ':', e.message); }
     }
     _productsCacheTs = 0; _vipCache.clear();
