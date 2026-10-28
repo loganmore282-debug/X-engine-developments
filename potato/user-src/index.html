@@ -1864,7 +1864,8 @@ html,body,.sheet-bg,#msgDetailBg{scrollbar-width:none !important;}
    Potato Login and Create Account, measured from the owner's screenshots (1080 px = 360 css px). The page has no scroll bar. */
 #authScreen{position:fixed;inset:0;z-index:300;overflow:hidden;font-family:Roboto,'Segoe UI',system-ui,sans-serif;background:#f4f5fa;}
 /* The pink wash runs over the WHOLE page (a taller Create Account page spreads the same colours over its length), measured on both pages. */
-.pa-page{min-height:calc(100% + 66.6px);background:linear-gradient(180deg,#f4f5fa 0,#f4f5fa 29.4%,#f3f1f6 38.2%,#f2ecf0 49.9%,#efe6e9 61.7%,#eadee0 73.4%,#ead7d9 85.2%,#e4cccc 100%);}
+.pa-page{--pa-solid:max(29.4%,248px);min-height:calc(100% + 66.6px);background:linear-gradient(180deg,#f4f5fa 0,#f4f5fa var(--pa-solid),#f3f1f6 calc(var(--pa-solid) + 8.8%),#f2ecf0 calc(var(--pa-solid) + 20.5%),#efe6e9 calc(var(--pa-solid) + 32.3%),#eadee0 calc(var(--pa-solid) + 44%),#ead7d9 calc(var(--pa-solid) + 55.8%),#e4cccc 100%);}
+/* --pa-solid: the plain page colour runs at least to just under the banner's end (248 px), so on a SHORT phone (where 29.4 % of the page is less than the banner) the pink wash cannot start inside the banner's fade and leave a visible step right under the picture; on a tall phone it is the owner's 29.4 % exactly. */
 .pa-screen{position:absolute;inset:0;}
 .pa-scroll{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior:contain;}
 .pa-scroll::-webkit-scrollbar{display:none;width:0;height:0;}
@@ -1878,12 +1879,11 @@ html,body,.sheet-bg,#msgDetailBg{scrollbar-width:none !important;}
 .pa-logo-in .pa-logo,.pa-entering .pa-logo{animation:paLogoIn .5s cubic-bezier(.22,.8,.3,1) .15s both;will-change:transform,opacity;backface-visibility:hidden;}
 .pa-entering [data-pa-i]{animation:paRise .3s ease-out both;animation-delay:var(--pa-d,0s);}
 /* The picture is laid out once, at the tall (Create Account) size, and pinned to the bottom of the box: Login only shows less of its top. Switching pages then never rescales or moves the picture, and the circle picture stays put on it. */
-#authHeroBg{position:absolute;left:0;right:0;bottom:0;top:auto;height:245.3px;background-size:cover;background-position:center bottom;background-repeat:no-repeat;background-image:var(--auth-hero-img,none),linear-gradient(135deg,#c4121e,#e8453b);}
-.pa-hero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:26px;pointer-events:none;background:linear-gradient(180deg,rgba(244,245,250,0) 0,rgba(244,245,250,.55) 55%,#f4f5fa 100%);}
+#authHeroBg{position:absolute;left:0;right:0;bottom:0;top:auto;height:245.3px;background-size:cover;background-position:center bottom;background-repeat:no-repeat;background-image:var(--auth-hero-img,none),linear-gradient(135deg,#c4121e,#e8453b);clip-path:inset(0 0 3px 0);}   /* the last 3 px never draw: on a phone whose pixels do not divide the banner's height evenly the picture and the fade used to be cut on different pixel rows and a line of the picture showed under it */
+.pa-hero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:26px;pointer-events:none;background:linear-gradient(180deg,rgba(244,245,250,0) 0,rgba(244,245,250,.55) 52%,#f4f5fa 86%);}   /* fully solid over its last 3-4 px, which the picture never reaches (see #authHeroBg) */
 .pa-logo{position:absolute;left:50%;bottom:23px;width:80px;height:80px;margin-left:-40px;border-radius:50%;z-index:2;}
 .pa-logo-img{display:block;transform:translateZ(0);width:100%;height:100%;border-radius:50%;background-size:cover;background-position:center;background-repeat:no-repeat;}
 .pa-card{position:relative;z-index:1;padding:0 23.5px 36px 23.3px;}
-.pa-card::before{content:'';position:absolute;left:0;right:0;top:-2px;height:3px;background:#f4f5fa;pointer-events:none;}   /* covers the seam under the banner: a part-covered pixel row there must never show as a line */
 .pa-title{margin:30px 0 0;font:700 19.3px/22px Roboto,'Segoe UI',system-ui,sans-serif;color:#e0241f;letter-spacing:0;}
 .pa-pane{margin:21.3px 0 0;padding:0;}
 form.pa-pane[hidden]{display:none;}
