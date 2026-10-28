@@ -1097,48 +1097,6 @@ html:has(.pay-page.show),body:has(.pay-page.show),html:has(.sheet-bg.show),body:
    (inherited from .sheet-head) so it stays reachable if the card's own
    content ever needs to scroll. */
 .sheet-head.pay-head{background:transparent;border-bottom:0;box-shadow:none;padding:14px 16px 0;-webkit-backdrop-filter:none;backdrop-filter:none;}
-/* "The card should be raised up" -- .pay-body used to CENTER the card in
-   whatever height was left under the header bar; removing that bar's
-   own padding/height above freed up room, but centering in a now-taller
-   box does not by itself read as "raised" the way flex-start does.
-   Pushed toward the top instead, with just enough top padding that it
-   does not sit flush under the floating back button. */
-.pay-body{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:8px 26px 26px;}
-.pay-card{width:100%;max-width:340px;text-align:center;
-  padding:28px 22px 26px;border-radius:var(--r-card);
-  border:1px solid rgba(255,255,255,.14);
-  background:rgba(20,12,8,.46);
-  box-shadow:0 16px 34px -20px rgba(0,0,0,.72);
-  -webkit-backdrop-filter:blur(9px);
-  backdrop-filter:blur(9px);}
-.pay-card h3{font-size:23px;font-weight:800;color:#fff;margin:0 0 10px;}
-.pay-card p{font-size:15px;line-height:1.6;color:rgba(255,255,255,.62);font-weight:500;margin:0;}
-/* The pending state is a numbered list of what is happening and what the
-   member has to do, so it is LEFT-aligned inside an otherwise centred card --
-   centred list items with numbers hanging off them are hard to scan, and the
-   numbers stop lining up with each other entirely. */
-.pay-steps{margin:0;padding:0 0 0 24px;text-align:left;font-size:15px;
-  line-height:1.6;color:rgba(255,255,255,.62);font-weight:500;}
-.pay-steps li{margin:0 0 11px;padding-left:3px;}
-.pay-steps li:last-child{margin-bottom:0;}
-.pay-steps li::marker{color:var(--snow-wine);font-weight:700;}
-/* The USSD fallback. Deliberately NOT a fifth numbered step: the four steps
-   are what happens normally, and this is the way out of the one common
-   failure (the mobile-money prompt never arriving). Quieter and smaller so
-   it reads as a footnote rather than another instruction to follow. */
-.pay-note{margin:16px 0 0;font-size:13.5px;line-height:1.55;
-  color:rgba(255,255,255,.5);text-align:left;}
-.pay-actions{margin-top:22px;display:flex;flex-direction:column;gap:11px;}
-.pay-actions button{width:100%;padding:15px 0;font-size:16px;}
-/* No disc behind it any more -- the mark IS the artwork. Sized here so the
-   orbiting chips and the two result marks share one footprint and the page
-   does not jump as the poll resolves. */
-.dep-status-icon{width:auto;min-height:120px;margin:0 auto 24px;display:flex;align-items:center;justify-content:center;}
-.dep-status-icon>svg{width:120px;height:120px;display:block;}
-/* The owner's own green tick and red cross (deposit result page only) draw themselves on a canvas (see playStatusIcon in the app code). */
-.dep-status-icon>canvas{width:120px;height:120px;display:block;}
-.dep-status-icon.dep-shake{animation:depShake .62s cubic-bezier(.36,.07,.19,.97) both;}
-@keyframes depShake{10%,90%{transform:translateX(-3px) rotate(-1deg)}20%,80%{transform:translateX(6px) rotate(2deg)}30%,50%,70%{transform:translateX(-10px) rotate(-3deg)}40%,60%{transform:translateX(10px) rotate(3deg)}}
 
 /* Waiting for the payment: a coin-dot travels from the phone to the wallet (nothing rotates). */
 
@@ -1692,11 +1650,6 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 /* payment status page (opens after Confirm Deposit) */
 .pay-page{background:var(--mg-bg);}
 .pay-page::before{display:none;}
-.pay-card{background:#fffefe;border:1px solid #f3d4d3;box-shadow:0 14px 30px -22px rgba(2,120,60,.5);-webkit-backdrop-filter:none;backdrop-filter:none;border-radius:24px;}
-.pay-card h3{color:#161616;font-family:var(--mg-serif);}
-.pay-card p,.pay-steps{color:#5f6f63;}
-.pay-note{color:#9aa0ad;}
-.pay-steps li::marker{color:#e5231d;}
 .sheet-head.pay-head{height:65px;box-sizing:border-box;padding:0 21px;background:transparent;}
 body.deposit-status-open .sheet-bg{bottom:0;}
 
@@ -1751,56 +1704,40 @@ html,body,.sheet-bg,#msgDetailBg{scrollbar-width:none !important;}
 @keyframes mgAnnFade{from{opacity:0;}to{opacity:1;}}
 @media (prefers-reduced-motion:reduce){.ann-bg,.ann-sheet,.ann-sheet .mg-ann-img,.ann-sheet .mg-ann-x,.ann-sheet h2,.ann-sheet .mg-ann-join{transition:none !important;animation:none !important;}
 }
-/* Deposit waiting page (polling): no box. A green phone badge with rings spreading from it, the amount, a three-step timeline (sent, approve, balance updated)
-   and a "checking automatically" line. The tick and cross results keep the card. */
-.pay-card.pl{background:none;border:0;box-shadow:none;padding:6px 0 0;max-width:330px;}
-.pay-card.pl .dep-status-icon{min-height:0;margin:2px auto 10px;}
-.pl-radar{position:relative;width:150px;height:150px;display:flex;align-items:center;justify-content:center;}
-.pl-radar i{position:absolute;left:35px;top:35px;width:80px;height:80px;border-radius:50%;border:2px solid #e5231d;opacity:0;animation:plRing 2.4s ease-out infinite;}
-.pl-radar i:nth-child(2){animation-delay:.8s;}
-.pl-radar i:nth-child(3){animation-delay:1.6s;}
-.pl-radar b{position:relative;display:flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#e5231d,#d71e1a 50%,#c9161d);box-shadow:0 12px 24px -12px rgba(2,120,60,.7);}
-.pl-radar b svg{width:36px;height:36px;fill:none;stroke:#fff;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
-@keyframes plRing{0%{transform:scale(1);opacity:.5;}100%{transform:scale(1.85);opacity:0;}}
-.pay-card.pl h3{font-size:19px;margin:0 0 4px;}
-.pl-amt{margin:0 0 18px;font:700 31px/1.15 var(--mg-serif);color:#d71e1a;letter-spacing:.01em;}
-.pay-card.pl .pl-steps{list-style:none;margin:0;padding:18px 16px 18px 18px;text-align:left;background:#fffefe;border:1px solid #f3d4d3;border-radius:20px;box-shadow:0 14px 30px -24px rgba(2,120,60,.5);}
-.pl-steps li{position:relative;margin:0;padding:0 0 20px 36px;}
-.pl-steps li:last-child{padding-bottom:0;}
-.pl-steps li::before{content:'';position:absolute;left:0;top:0;width:22px;height:22px;box-sizing:border-box;border-radius:50%;background:#fff;border:2px solid #c9dccf;}
-.pl-steps li::after{content:'';position:absolute;left:10px;top:25px;bottom:3px;width:2px;background:#cfe6d8;}
-.pl-steps li:last-child::after{display:none;}
-.pl-steps li.done::before{background:#e5231d url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 12.5l4.2 4.2L18.5 8'/%3E%3C/svg%3E") center/13px no-repeat;border-color:#e5231d;}
-.pl-steps li.done::after{background:#e5231d;}
-.pl-steps li.now::before{border-color:#e5231d;animation:plNow 1.6s ease-out infinite;}
-.pl-steps li.now::after{background:linear-gradient(#e5231d,#cfe6d8);}
-@keyframes plNow{0%{box-shadow:0 0 0 0 rgba(2,166,82,.45);}100%{box-shadow:0 0 0 9px rgba(2,166,82,0);}}
-.pl-steps b{display:block;font:700 14px/22px var(--mg-sans);color:#161616;}
-.pl-steps li.todo b{color:#8c9b91;}
-.pl-steps span{display:block;margin-top:1px;font:500 12.5px/1.5 var(--mg-sans);color:#5f6f63;}
-.pl-steps li.todo span{color:#a5b1a9;}
-.pay-card.pl .pay-note{margin:14px 0 0;padding:11px 14px;border-radius:14px;background:#e6f4ec;color:#3b6a50;font:500 12.5px/1.55 var(--mg-sans);text-align:left;}
-.pl-check{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:20px;font:500 12px/1 var(--mg-sans);color:#8a9a90;}
-.pl-check i{position:relative;display:block;width:54px;height:3px;border-radius:2px;background:#f3d4d3;overflow:hidden;}
-.pl-check i::after{content:'';position:absolute;left:0;top:0;height:100%;width:40%;border-radius:2px;background:#e5231d;animation:plShim 1.3s ease-in-out infinite;}
-@keyframes plShim{0%{transform:translateX(-100%);}100%{transform:translateX(250%);}}
-@media (prefers-reduced-motion:reduce){.pl-radar i{animation:none;opacity:.25;}.pl-steps li.now::before,.pl-check i::after{animation:none;}}
-/* Result pages use the same layout: green badge with a tick and all green steps, or a red badge with the last circle red */
-.pl-radar.ok,.pl-radar.bad{height:116px;}
-.pl-radar.ok b,.pl-radar.bad b{animation:plPop .45s cubic-bezier(.34,1.56,.64,1);}
-.pl-radar.bad b{background:linear-gradient(135deg,#ee5a5a,#d33a3a 50%,#b62a2a);box-shadow:0 12px 24px -12px rgba(190,40,40,.7);}
-.pl-radar.ok b svg{stroke-width:2.6;}
-.pl-radar.bad b svg{stroke-width:3.2;}
+/* Deposit waiting page, laid out like ChocoMCC's (card with icon / title / steps, reference + Copy, message line, Verify Payment, Cancel, attempt counter). */
+#depStatusBg .cp-body{flex:1;overflow-y:auto;padding:14px 16px 34px;-webkit-overflow-scrolling:touch;}
+.cp-card{background:#fffefe;border:1px solid #f3d4d3;border-radius:20px;box-shadow:0 14px 30px -24px rgba(200,30,30,.4);padding:24px 20px 20px;text-align:center;}
+.cp-ic{width:52px;height:52px;border-radius:16px;background:#e5231d;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
+.cp-ic svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.cp-ic.ok{background:#24cf83;}
+.cp-ic.ok svg{width:28px;height:28px;stroke-width:2.6;}
+.cp-ic.bad{background:#d33a3a;}
+.cp-ic.pop{animation:plPop .45s cubic-bezier(.34,1.56,.64,1);}
 @keyframes plPop{0%{transform:scale(.6);opacity:0;}100%{transform:scale(1);opacity:1;}}
-.pl-amt.bad{color:#c93636;}
-.pl-steps li.bad::before{background:#d33a3a url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.4' stroke-linecap='round'%3E%3Cpath d='M7 7l10 10M17 7L7 17'/%3E%3C/svg%3E") center/12px no-repeat;border-color:#d33a3a;}
-.pl-steps li.bad b{color:#c93636;}
-.pl-steps li.bad span{color:#8a5a5a;}
-.pl-steps li.done+li.todo::before{border-color:#c9dccf;}
-.pl-steps li.todo+li.bad::after{display:none;}
-.pay-card.pl .pay-note.bad{background:#fbeaea;color:#9a3a3a;}
-.pay-card.pl .pay-note:empty{display:none;}
-@media (prefers-reduced-motion:reduce){.pl-radar.ok b,.pl-radar.bad b{animation:none;}}
+.cp-card h3{margin:0;font:700 19px/1.3 Roboto,sans-serif;color:#14304f;}
+.cp-sub{margin:6px 0 0;font:400 13.5px/1.5 Roboto,sans-serif;color:#8795a8;}
+.cp-steps{list-style:none;margin:16px 0 0;padding:0;text-align:left;}
+.cp-steps li{position:relative;padding:6px 0 6px 22px;font:600 12.5px/1.5 Roboto,sans-serif;color:#5b6b80;}
+.cp-steps li::before{content:'';position:absolute;left:2px;top:13px;width:6px;height:6px;border-radius:50%;background:#e5231d;}
+.cp-tip{margin:12px 0 0;padding:10px 12px;border-radius:12px;background:#fdf3f3;color:#8a5a5a;font:500 12px/1.5 Roboto,sans-serif;text-align:left;}
+.cp-tip:empty{display:none;}
+.cp-ref{margin:14px 0 0;background:#fffefe;border:1px solid #f3d4d3;border-radius:16px;padding:14px 16px;}
+.cp-k{margin-bottom:6px;font:700 11px/1.2 Roboto,sans-serif;letter-spacing:.04em;color:#8795a8;}
+.cp-row{display:flex;align-items:center;gap:10px;}
+.cp-row span{flex:1;font:700 12.5px/1.4 Roboto,sans-serif;color:#14304f;word-break:break-all;}
+.cp-row button{flex:0 0 auto;border:0;border-radius:10px;background:#14304f;color:#fff;padding:8px 14px;font:700 12px/1 Roboto,sans-serif;}
+.cp-msg{margin:14px 0 0;border-radius:16px;padding:14px 16px;font:600 12.5px/1.5 Roboto,sans-serif;background:#fdf0e1;color:#a85f12;}
+.cp-msg.ok{background:#e3f7ee;color:#0c8a55;}
+.cp-msg.bad{background:#fde8ea;color:#c62648;}
+.cp-verify{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:50px;margin-top:16px;border:0;border-radius:14px;background:#e5231d;color:#fff;font:700 16px/1 Roboto,sans-serif;letter-spacing:.2px;}
+.cp-verify:disabled{opacity:.65;}
+.cp-spin{display:none;animation:cpSpin .9s linear infinite;}
+.cp-spin svg{display:block;}
+@keyframes cpSpin{to{transform:rotate(360deg);}}
+.cp-cancel{text-align:center;margin-top:14px;}
+.cp-cancel span{font:400 13.5px/1.2 Roboto,sans-serif;color:#8795a8;text-decoration:underline;cursor:pointer;}
+.cp-attempt{text-align:center;margin-top:8px;font:400 11.5px/1.4 Roboto,sans-serif;color:#8795a8;}
+@media (prefers-reduced-motion:reduce){.cp-spin,.cp-ic.pop{animation:none;}}
 /* Sign Up: a typed invitation code shows in capitals (the placeholder keeps its own case) */
 #regReferral:not(:placeholder-shown){text-transform:uppercase;}
 
@@ -2796,19 +2733,32 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
      of steps, and an <ol> inside a <p> is invalid and gets reparented by
      the browser, which drops the list out of the card entirely. -->
 <div class="pay-page" id="depStatusBg">
-  <div class="sheet-head pay-head">
-    <button class="back" onclick="closeDepositStatusModal()" aria-label="Back"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.7 3.6 5.3 8l4.4 4.4L8.6 8z" fill="#fffafa" stroke="#fffafa" stroke-width=".7" stroke-linejoin="round"/></svg></button>
+  <div class="sheet-head">
+    <button class="back" onclick="cancelDepositStatus()" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <h2>Deposit</h2>
   </div>
-  <div class="pay-body">
-    <div class="pay-card">
-      <div class="dep-status-icon" id="depStatusIcon"></div>
-      <h3 id="depStatusTitle">Processing your deposit</h3>
-      <div id="depStatusBody"></div>
-      <div class="pay-actions">
-        <button class="secondary-button" id="depVerifyBtn" style="display:none;" onclick="verifyDepositNow()">Verify</button>
-        <button class="primary-button" id="depStatusCloseBtn" style="display:none;" onclick="closeDepositStatusModal()">Close</button>
-      </div>
+  <!-- The payment waiting page, laid out like ChocoMCC's: a card (icon, title, where the prompt went, three steps), the transaction reference with Copy, a coloured
+       message line, Verify Payment, Cancel and the attempt counter. -->
+  <div class="cp-body">
+    <div class="cp-card">
+      <div class="cp-ic" id="depStatusIcon"></div>
+      <h3 id="depStatusTitle">Payment Initiated Successfully!</h3>
+      <p class="cp-sub" id="depStatusPhone"></p>
+      <ul class="cp-steps" id="depStatusSteps">
+        <li>Check your phone for the payment request</li>
+        <li>Enter your mobile-money PIN to confirm</li>
+        <li>We'll verify the payment automatically</li>
+      </ul>
+      <p class="cp-tip" id="depStatusTip"></p>
     </div>
+    <div class="cp-ref">
+      <div class="cp-k">TRANSACTION REFERENCE</div>
+      <div class="cp-row"><span id="depStatusRef"></span><button type="button" onclick="copyDepositRef()">Copy</button></div>
+    </div>
+    <div class="cp-msg" id="depStatusMsg">Payment initiated. Check your phone.</div>
+    <button class="cp-verify" id="depVerifyBtn" type="button" onclick="verifyDepositNow()"><span class="cp-spin" id="depVerifySpin"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span><span id="depVerifyLabel">Verify Payment</span></button>
+    <div class="cp-cancel" id="depCancelRow"><span onclick="cancelDepositStatus()">Cancel</span></div>
+    <div class="cp-attempt" id="depStatusAttempt"></div>
   </div>
 </div>
 

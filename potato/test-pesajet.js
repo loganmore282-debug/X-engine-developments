@@ -577,8 +577,8 @@ async function finish() {
     const every = num(app, /var DEP_POLL_EVERY_MS = (\d+);/, 'DEP_POLL_EVERY_MS');
     ck(first <= 1500, `the first status check is ${first}ms after the screen opens`);
     ck(every <= 2500, `and later ones every ${every}ms, PesaJet's own SDK cadence`);
-    const loop = app.slice(app.indexOf('async function pollDepositStatus'));
-    const budget = num(loop, /Date\.now\(\) - began < (\d+)/, 'poll wall-clock budget');
+    // The loop gives up after DEP_POLL_MAX attempts (the page shows "attempt N/120"), each at least `every` ms apart.
+    const budget = num(app, /var DEP_POLL_MAX = (\d+);/, 'DEP_POLL_MAX') * every;
     ck(budget >= 55000,
        `and the giving-up budget is still about a minute (${Math.round(budget / 1000)}s) -- ` +
        'faster polling must not mean giving up on a payment sooner');

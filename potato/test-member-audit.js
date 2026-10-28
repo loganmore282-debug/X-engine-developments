@@ -100,6 +100,26 @@ async function main(){
   deposit.resolve({status:'error',message:'Test request rejected'});await sending;
   assert(d.querySelector('#lpOld'),'deposit cleanup must tolerate the original button being removed');
   assert.equal(d.querySelector('#depRedirect'),null,'removed redirect overlay stays absent after a rejected deposit');
+  { // the payment waiting page (ChocoMCC's layout): initiated -> attempts counted -> paid
+    let statusCalls=0;
+    w.post=(path)=>{ if(path==='/deposit/marzpay') return Promise.resolve({status:'success',depositId:'d1',reference:'REF123'});
+      if(path==='/deposit/marzpay/status'){statusCalls++;return Promise.resolve(statusCalls<3?{status:'success',state:'pending'}:{status:'success',state:'matched'});}
+      return Promise.resolve({status:'success'}); };
+    w.refreshTransactionsCache=async()=>{};w.DEP_POLL_FIRST_MS=5;w.DEP_POLL_EVERY_MS=10;
+    w.closeSheet&&w.closeSheet();w.openDepositSheet();d.querySelector('#depAmount').value='15000';
+    await w.submitDeposit();
+    assert.match(d.querySelector('#depStatusTitle').textContent,/Payment Initiated Successfully!/,'the page opens as "Payment Initiated Successfully!"');
+    assert.equal(d.querySelector('#depStatusRef').textContent,'REF123','the transaction reference is shown');
+    assert.equal(d.querySelector('#depVerifyLabel').textContent,'Verify Payment','the big button is Verify Payment');
+    assert(d.querySelector('#depCancelRow').style.display!=='none','Cancel is offered while waiting');
+    await new Promise(r=>setTimeout(r,120));
+    assert.match(d.querySelector('#depStatusTitle').textContent,/Payment Successful!/,'a matched payment turns the page into "Payment Successful!"');
+    assert.equal(d.querySelector('#depVerifyLabel').textContent,'Back to Home','and the button becomes Back to Home');
+    assert.equal(d.querySelector('#depStatusAttempt').textContent,'','the attempt counter is cleared once paid');
+    assert.equal(statusCalls,3,'it asked three times (two pending, one paid)');
+    w.cancelDepositStatus();
+    assert(!d.querySelector('#depStatusBg').classList.contains('show'),'Cancel / Back leaves the page');
+  }
   console.log('PASS '+(built?'guarded bundle':'source')+': Home refresh, reward dialog, wallet races, zero fees, repeat taps, navigation, and payment guidance');
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>w.close());

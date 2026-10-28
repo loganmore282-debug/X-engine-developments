@@ -2629,26 +2629,7 @@ function fmtDay(value){
   const t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
   return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' at ' + t;
 }
-var _drToken = 0;
-// A failed payment: once the cross has been drawn it shakes and the phone buzzes (once per drawing).
-function failShake(box, tok){
-  if (tok !== _drToken || !box.classList) return;
-  box.classList.remove('dep-shake'); void box.offsetWidth; box.classList.add('dep-shake');
-  try { if (navigator.vibrate) navigator.vibrate([90, 50, 90, 50, 160]); } catch (e) {}
-}
-
-// Waiting for the payment: a green phone badge with rings spreading from it (the page around it is the timeline, see setDepositStatusPending).
-var DEPOSIT_POLL_FLOW = '<div class="pl-radar" role="img" aria-label="Waiting for your approval"><i></i><i></i><i></i>'
-  + '<b><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.5 18.5h3"/></svg></b></div>';
-// Only the waiting states use the open (card-less) layout; the tick and the cross keep the card.
-function setPayLive(on){ const c = $('depStatusIcon') && $('depStatusIcon').closest('.pay-card'); if (c) c.classList.toggle('pl', !!on); }
-// The result pages use the same open layout as the waiting page: only the badge and the timeline change (green ticks; or the last circle red).
-var PL_BADGE_OK = '<div class="pl-radar ok" role="img" aria-label="Payment received"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5l4.2 4.2L18.5 8"/></svg></b></div>';
-var PL_BADGE_BAD = '<div class="pl-radar bad" role="img" aria-label="Payment not completed"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5v7.2"/><path d="M12 17.3v.2"/></svg></b></div>';
 var _depPendingPhone = '';
-function plStep(cls, head, text){ return '<li class="' + cls + '"><b>' + esc(head) + '</b><span>' + esc(text) + '</span></li>'; }
-function plAmount(bad){ return _depPendingAmount ? '<div class="pl-amt' + (bad ? ' bad' : '') + '">' + esc(fmtUGX(_depPendingAmount)) + '</div>' : ''; }
-function plSent(){ return plStep('done', 'Request sent', _depPendingAmount && _depPendingPhone ? 'A payment request for ' + fmtUGX(_depPendingAmount) + ' was sent to ' + _depPendingPhone + '.' : 'A payment request was sent to your phone.'); }
 // Every figure this screen shows about one plan, worked out in one place so
 // the summary band and the row can never disagree.
 function planStats(inv){
@@ -3961,10 +3942,10 @@ function closeTopDialog(){
     if ($('confirmBg') && $('confirmBg').classList.contains('show')) closeConfirm();
     else if ($('annBg') && $('annBg').classList.contains('show')) closeAnnouncement();
     else if ($('depStatusBg') && $('depStatusBg').classList.contains('show')) {
-      // The payment status page: Back closes it once it has an answer (its Close button is showing). While the payment is still being
-      // checked Back stays on the page (a real operation is in flight, as the page's own comment says), instead of walking out of the app.
-      const cb = $('depStatusCloseBtn');
-      if (cb && cb.style.display === 'block') closeDepositStatusModal(); else dlgOpened();
+      // The payment status page: Back is Cancel (the payment itself carries on at the provider; the member can still be credited later). The first
+      // moments are different: the Deposit sheet that was just closed takes its own history entry away with a popstate that lands HERE, and that one must
+      // not cancel the page that has only just opened, so it only puts the page's own entry back.
+      if (Date.now() - _depOpenedAt < 1500) dlgOpened(); else cancelDepositStatus();
     }
   } finally { _dlgFromPop = false; }
 }
@@ -4137,8 +4118,10 @@ function syncDepositQuickAmt(){
 // (a real operation is in flight); the Close button only appears once
 // resolved (or once the poll gives up), matching the app's own established
 // pattern of only offering Close on a settled dialog state.
-window.openDepositStatusModal = function(amount, phone, network){
-  setDepositStatusPending(amount, phone, network);
+var _depOpenedAt = 0;
+window.openDepositStatusModal = function(amount, phone, reference){
+  _depOpenedAt = Date.now();
+  setDepositStatusPending(amount, phone, reference);
   $('depStatusBg').classList.add('show');
   document.body.classList.add('deposit-status-open');
   lockBodyScroll();
@@ -4147,6 +4130,18 @@ window.openDepositStatusModal = function(amount, phone, network){
   // would be popped by that same back() and leave a stale sheet entry behind. A timer makes sure an entry exists either way.
   if (!(history.state && history.state.sheet)) dlgOpened();
   setTimeout(() => { if ($('depStatusBg') && $('depStatusBg').classList.contains('show') && !(history.state && history.state.dlg)) dlgOpened(); }, 700);
+};
+// Cancel (or Back): stop watching and leave. The payment itself is NOT cancelled: if the member approves it later the server still credits it, and
+// Transaction Statement shows it as Processing until then.
+window.cancelDepositStatus = function(){
+  _depPollDone = true; _depActiveDepositId = null;
+  closeDepositStatusModal();
+  refreshTransactionsCache().catch(() => {});
+};
+window.copyDepositRef = function(){
+  const ref = ($('depStatusRef') || {}).textContent || '', btn = document.querySelector('.cp-row button');
+  try { if (navigator.clipboard) navigator.clipboard.writeText(ref).catch(() => {}); } catch (_) {}
+  if (btn) { btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); }
 };
 window.closeDepositStatusModal = function(goHome){
   // Cancels the success screen's own auto-redirect countdown if the member
@@ -4221,136 +4216,98 @@ async function applyDepositStatusResult(r){
   }
   return false;
 }
-// Which of the two buttons the current state offers. Verify stays available
-// in the "still processing" state as well as while pending -- that state is
-// the autopoll giving up on its 60s budget, NOT the payment being over, so
-// taking the one control that can still resolve it away at exactly that
-// moment would be backwards.
-function setDepButtons(showVerify, showClose){
-  const v = $('depVerifyBtn'), c = $('depStatusCloseBtn');
-  if (v) { v.style.display = showVerify ? 'block' : 'none'; v.disabled = false; v.textContent = 'Verify'; }
-  if (c) { c.style.display = showClose ? 'block' : 'none'; c.setAttribute('onclick', 'closeDepositStatusModal(' + (c.textContent === 'Back to Home') + ')'); }
+// The waiting page, laid out like ChocoMCC's. One icon, one title, one coloured message line and one big button whose job changes with the state:
+// Verify Payment while waiting, Back to Home once paid. Cancel (or Close, once it has failed) leaves the page.
+var _depAttempt = 0;
+var DEP_ICON = {
+  wait: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.4"/><path d="M11 18h2"/></svg>',
+  ok: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
+  bad: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5v7.2"/><path d="M12 17.3v.2"/></svg>',
+};
+function setDepIcon(kind){
+  const ic = $('depStatusIcon'); if (!ic) return;
+  ic.className = 'cp-ic' + (kind === 'ok' ? ' ok pop' : kind === 'bad' ? ' bad pop' : '');
+  ic.innerHTML = DEP_ICON[kind] || DEP_ICON.wait;
 }
+function setDepMsg(kind, text){
+  const el = $('depStatusMsg'); if (!el) return;
+  el.className = 'cp-msg' + (kind === 'matched' ? ' ok' : kind === 'failed' ? ' bad' : '');
+  el.textContent = text;
+}
+function setDepAttempt(){ const el = $('depStatusAttempt'); if (el) el.textContent = _depAttempt ? 'Auto-verifying… (attempt ' + _depAttempt + '/' + DEP_POLL_MAX + ')' : ''; }
+// The big button: spinning "Verifying…" while a check is out, "Verify Payment" otherwise.
+function setDepVerifying(on){
+  const b = $('depVerifyBtn'), spin = $('depVerifySpin'), label = $('depVerifyLabel');
+  if (b) b.disabled = !!on;
+  if (spin) spin.style.display = on ? 'inline-flex' : 'none';
+  if (label && !_depPollDone) label.textContent = on ? 'Verifying…' : 'Verify Payment';
+}
+function setDepMainButton(label, onclick){
+  const b = $('depVerifyBtn'); if (!b) return;
+  b.style.display = onclick ? '' : 'none'; b.disabled = false; b.onclick = onclick || null;
+  if ($('depVerifySpin')) $('depVerifySpin').style.display = 'none';
+  if ($('depVerifyLabel')) $('depVerifyLabel').textContent = label;
+}
+function setDepCancel(text){ const row = $('depCancelRow'); if (row) { row.style.display = text ? '' : 'none'; if (text && row.firstChild) row.firstChild.textContent = text; } }
 window.verifyDepositNow = async function(){
   const btn = $('depVerifyBtn');
   if (!_depActiveDepositId || _depPollDone || !btn || btn.disabled) return;
-  btn.disabled = true; btn.textContent = 'Checking…';
+  setDepVerifying(true);
   const settled = await applyDepositStatusResult(await depositStatusCheck(_depActiveDepositId));
-  if (settled) return;                       // setDep* already reset the buttons
-  notify('Not confirmed yet. Approve the payment prompt on your phone, then tap Verify again.');
-  // The cooldown runs from the ANSWER, not the tap, so a slow provider does
-  // not let taps queue up behind it.
-  setTimeout(() => {
-    if (_depPollDone) return;
-    const b = $('depVerifyBtn');
-    if (b) { b.disabled = false; b.textContent = 'Verify'; }
-  }, DEP_VERIFY_COOLDOWN_MS);
+  if (settled) return;                       // setDepositStatus* already reset the button
+  // The cooldown runs from the ANSWER, not the tap, so a slow provider does not let taps queue up behind it.
+  setTimeout(() => { if (!_depPollDone) setDepVerifying(false); }, DEP_VERIFY_COOLDOWN_MS);
+  notify('Still pending. Approve the payment prompt on your phone, then tap Verify Payment again.');
 };
-function setDepositStatusPending(amount, phone, network){
+function setDepositStatusPending(amount, phone, reference){
   if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }   // an old success countdown must not close this new page
-  $('depStatusIcon').className = 'dep-status-icon';
-  $('depStatusIcon').innerHTML = DEPOSIT_POLL_FLOW;
-  // Owner asked for the specifics shown here, not a generic message --
-  // the actual number the prompt was sent to and the actual amount.
   const displayPhone = cleanPhone(phone) || (dialPlus() + String(phone || '').replace(/\D/g, ''));
-  // Owner: "put another statement, that dial *165# to approve, this is
-  // just a fallback bro because a payment prompt can come or it may fail
-  // and one may dial *165# so he see pending approval" -- the USSD push
-  // prompt itself can fail to arrive (a real, common MoMo gap, not
-  // specific to this app), so a member staring at a prompt that never
-  // shows up needs a way out other than waiting. Dialling the network's
-  // own money menu surfaces the same pending collection request for
-  // manual approval there instead. Network-specific -- *165# is MTN
-  // Mobile Money's own menu, *185# is Airtel Money's; showing the wrong
-  // one would send a member down a dead end. Round 145 dropped the
-  // network selector from PAY A's own form (the gateway detects it
-  // instead), so `network` is no longer reliably known here -- show both
-  // codes rather than guessing.
-  const ussd = network === 'Airtel Money' ? '*185#' : (network === 'MTN Mobile Money' ? '*165#' : '*165# (MTN) or *185# (Airtel)');
   _depPendingAmount = Number(amount) || 0;
   _depPendingPhone = displayPhone;
-  // Owner's own four steps, verbatim. Numbered because they are a sequence
-  // with one thing for the member to DO in the middle of it -- the previous
-  // single paragraph buried "approve it on your phone" mid-sentence between
-  // two facts, which is the one line that actually needed to be found.
-  //
-  // esc() on both interpolations: the amount is ours, but the phone number is
-  // whatever was typed into the form, and this is innerHTML now.
-  setPayLive(true);
-  $('depStatusTitle').textContent = 'Waiting for your approval';
-  $('depStatusBody').innerHTML =
-    '<div class="pl-amt">' + esc(fmtUGX(amount)) + '</div>'
-    + '<ol class="pay-steps pl-steps">'
-    + '<li class="done"><b>Request sent</b><span>A payment request for ' + esc(fmtUGX(amount)) + ' has been sent to ' + esc(displayPhone) + '.</span></li>'
-    + '<li class="now"><b>Approve on your phone</b><span>Check your phone for the payment prompt and approve it.</span></li>'
-    + '<li class="todo"><b>Balance updated</b><span>Your balance is updated automatically once the payment is confirmed.</span></li>'
-    + '</ol>'
-    // The push prompt genuinely does fail to arrive sometimes (a real MoMo gap), and without this a member is left at step 2 with nothing to do.
-    + '<p class="pay-note">No prompt? Dial ' + esc(ussd) + ' on that phone to find and approve the pending payment yourself.</p>'
-    + '<div class="pl-check"><i></i>Checking automatically</div>';
-  // Owner: "remove verify button, so this is automatic verification" -- the
-  // autopoll (pollDepositStatus() below) already checks on its own; a manual
-  // Verify tap next to it was a second way to do the same thing, not a
-  // needed one. Neither button shows while pending now -- purely automatic,
-  // nothing for the member to do but wait.
-  setDepButtons(false, false);
+  _depAttempt = 0;
+  setDepIcon('wait');
+  $('depStatusTitle').textContent = 'Payment Initiated Successfully!';
+  $('depStatusPhone').textContent = 'You will receive a payment prompt for ' + fmtUGX(amount) + ' on ' + displayPhone + ' shortly.';
+  $('depStatusSteps').style.display = '';
+  // The push prompt genuinely does fail to arrive sometimes (a real mobile-money gap), so the way out is spelled out: dialling the network's own menu shows the
+  // same pending request. *165# is MTN's, *185# is Airtel's; the gateway detects the network itself, so both are given.
+  $('depStatusTip').textContent = 'No prompt? Dial *165# (MTN) or *185# (Airtel) on that phone to find and approve the pending payment yourself.';
+  $('depStatusRef').textContent = reference || '';
+  setDepMsg('pending', 'Payment initiated. Check your phone.');
+  setDepAttempt();
+  setDepMainButton('Verify Payment', window.verifyDepositNow);
+  setDepCancel('Cancel');
 }
 var _depSuccessRedirectTimer = null;
 function setDepositStatusSuccess(){
-  setPayLive(true);
-  $('depStatusIcon').className = 'dep-status-icon success';
-  $('depStatusIcon').innerHTML = PL_BADGE_OK;
-  // Owner: on success it says Congratulations and that the payment has been received and added to the wallet; the member leaves with the Back to Home button.
-  $('depStatusTitle').textContent = 'Congratulations!';
-  // Names the actual figure when it is known (it always is on the automatic path); the manual-deposit path lands here without ever showing
-  // the waiting page, so every line also reads properly without one. brandName(), not a literal: the app's name is admin-settable.
-  const added = _depPendingAmount
-    ? 'Payment received — ' + fmtUGX(_depPendingAmount) + ' has been added to your wallet.'
-    : 'Payment received — your deposit has been added to your ' + brandName() + ' wallet.';
-  $('depStatusBody').innerHTML = plAmount(false)
-    + '<ol class="pay-steps pl-steps">' + plSent()
-    + plStep('done', 'Approved on your phone', 'The payment was approved.')
-    + plStep('done', 'Balance updated', added) + '</ol>';
-  // Owner: no "Returning to Home in N seconds" and no automatic redirect: the page stays until the member taps Back to Home (or the back arrow).
-  const c = $('depStatusCloseBtn');
-  if (c) c.textContent = 'Back to Home';
-  setDepButtons(false, true);
+  setDepIcon('ok');
+  $('depStatusTitle').textContent = 'Payment Successful!';
+  $('depStatusPhone').textContent = _depPendingAmount ? fmtUGX(_depPendingAmount) + ' has been added to your wallet.' : 'Your wallet has been credited.';
+  $('depStatusSteps').style.display = 'none';
+  $('depStatusTip').textContent = '';
+  setDepMsg('matched', 'Payment confirmed. Funds added to your wallet.');
+  _depAttempt = 0; setDepAttempt();
+  // No countdown and no automatic redirect: the page stays until the member taps Back to Home (or the back arrow).
+  setDepMainButton('Back to Home', function(){ closeDepositStatusModal(true); });
+  setDepCancel('');
 }
 function setDepositStatusFailed(msg){
-  setPayLive(true);
-  $('depStatusIcon').className = 'dep-status-icon failed';
-  $('depStatusIcon').innerHTML = PL_BADGE_BAD;
-  failShake($('depStatusIcon'), _drToken);   // the badge shakes and the phone buzzes once
-  $('depStatusTitle').textContent = 'Payment not completed';
-  // Naming ONE specific cause here would be a fabricated claim: the provider's failed-collection reply carries no reason (see server.js's
-  // DEPOSIT_FAILED_MSG), so the note lists the plausible causes without asserting which one it was. `msg` is server-supplied on the normal
-  // path; the fallback only fires for a purely client-side failure that never reached the server.
-  $('depStatusBody').innerHTML = plAmount(true)
-    + '<ol class="pay-steps pl-steps">' + plSent()
-    + plStep('todo', 'Approve on your phone', 'Not completed.')
-    + plStep('bad', 'Balance not updated', 'Nothing was added to your wallet.') + '</ol>'
-    + '<p class="pay-note bad">' + esc(msg
-      || 'This deposit did not go through. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Your ' + brandName() + ' balance has not changed.') + '</p>';
-  // Undoes setDepositStatusSuccess()'s own "Back to Home" relabel -- this
-  // button means plain Close here, on a modal a later deposit attempt can
-  // reuse without a fresh page load in between.
-  const cf = $('depStatusCloseBtn'); if (cf) cf.textContent = 'Close';
-  setDepButtons(false, true);
+  setDepIcon('bad');
+  $('depStatusTitle').textContent = 'Payment Not Completed';
+  $('depStatusPhone').textContent = 'Nothing was added to your wallet.';
+  $('depStatusSteps').style.display = 'none';
+  $('depStatusTip').textContent = '';
+  // Naming ONE specific cause would be a fabricated claim: the provider's failed-collection reply carries no reason, so the server's own wording is shown
+  // (it lists the plausible causes without asserting which one it was); the fallback only fires for a failure that never reached the server.
+  setDepMsg('failed', msg || 'This deposit did not go through. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds.');
+  _depAttempt = 0; setDepAttempt();
+  setDepMainButton('Try Again', function(){ closeDepositStatusModal(); openDepositSheet(); });
+  setDepCancel('Close');
 }
 function setDepositStatusUnknown(){
-  setPayLive(true);
-  $('depStatusIcon').className = 'dep-status-icon';
-  $('depStatusIcon').innerHTML = DEPOSIT_POLL_FLOW;
-  $('depStatusTitle').textContent = 'Still waiting for the provider';
-  $('depStatusBody').innerHTML = '<p>The payment has not been confirmed yet, and nothing is lost. '
-    + 'If it goes through, your balance updates on its own automatically, '
-    + 'or look under Transaction Statement later to check.</p>';
-  const cu = $('depStatusCloseBtn'); if (cu) cu.textContent = 'Close';
-  // Verify removed here too (see setDepositStatusPending's own comment) --
-  // this is the same automatic wait, just past the autopoll's own 60s
-  // budget. Close is the only control: a way off the screen, not a way to
-  // ask again by hand.
-  setDepButtons(false, true);
+  setDepMsg('failed', "We couldn't confirm this payment automatically. Tap Verify Payment or contact support. If it goes through, your balance still updates on its own.");
+  _depAttempt = 0; setDepAttempt();
+  setDepVerifying(false);
 }
 // The "Processing payment..." cover: the whole screen (bottom bar and floating pictures too) dims and blurs, a ring turns above the words.
 function ptProcessing(on){
@@ -4406,7 +4363,7 @@ window.submitDeposit = async function(){
   // cache now so it's actually there the next time Records opens.
   refreshTransactionsCache().catch(() => {});
   if ($('depSubmitBtn') === submitBtn && _openSheetTitle === 'Deposit') closeSheet({ fromAction: true });
-  openDepositStatusModal(amount, localDigits((STATE.account || {}).phone || ''));
+  openDepositStatusModal(amount, localDigits((STATE.account || {}).phone || ''), r.reference);
   pollDepositStatus(r.depositId);
 };
 // Owner: "callback speed is low, so try to make the system solid and faster
@@ -4425,26 +4382,20 @@ window.submitDeposit = async function(){
 // The 60-second budget is unchanged -- 24 ticks at the new spacing is the same
 // wall-clock window, so nothing gives up on a payment any sooner than before.
 var DEP_POLL_FIRST_MS = 1000;
-var DEP_POLL_EVERY_MS = 1500;
+var DEP_POLL_EVERY_MS = 1500;     // faster than ChocoMCC's 3 s on purpose (owner: validation must be fast); a payment the server is watching answers the moment it settles (the request is held)
+var DEP_POLL_MAX = 120;           // attempts shown as "attempt N/120"
 async function pollDepositStatus(depositId){
   _depActiveDepositId = depositId;
   _depPollDone = false;
-  // Ticks are 1.5 s apart MEASURED FROM THE START OF EACH TICK (a slow answer no longer pushes the next check further away), and the
-  // budget is 70 s of the wall clock, not 24 ticks however long each took.
-  const began = Date.now();
+  _depAttempt = 0;
   await new Promise(r => setTimeout(r, DEP_POLL_FIRST_MS));
-  while (Date.now() - began < 70000) {
+  while (_depAttempt < DEP_POLL_MAX) {
     const tickStart = Date.now();
-    // A Verify tap may have settled it between ticks -- stop rather than
-    // firing another provider call for an answer already in hand.
+    // A Verify tap or Cancel may have settled it between ticks -- stop rather than firing another provider call for an answer already in hand.
     if (_depPollDone) return;
-    // Superseded: the member backed out of this recharge and started another
-    // one, so a newer poll owns the screen now. Without this, THIS loop would
-    // keep running for its full 60s and write deposit A's result over deposit
-    // B's page -- and, worse than the old code, would set the shared
-    // _depPollDone and stop B's loop as well. Same shape as the bug already
-    // documented on the manual-pay poll.
+    // Superseded: the member backed out of this recharge and started another one, so a newer poll owns the screen now.
     if (_depActiveDepositId !== depositId) return;
+    _depAttempt++; setDepAttempt();
     const r = await depositStatusHold(depositId);
     if (_depPollDone) return;
     if (_depActiveDepositId !== depositId) return;
@@ -4453,9 +4404,7 @@ async function pollDepositStatus(depositId){
     const spent = Date.now() - tickStart;
     if (spent < DEP_POLL_EVERY_MS) await new Promise(r2 => setTimeout(r2, DEP_POLL_EVERY_MS - spent));
   }
-  // Ending the loop is the autopoll giving up on its own ~60s budget, not the
-  // payment being over -- _depPollDone stays false on purpose so Verify keeps
-  // working on this deposit afterwards.
+  // Giving up is the autopoll ending its own budget, not the payment being over -- _depPollDone stays false on purpose so Verify Payment keeps working.
   if (!_depPollDone) { setDepositStatusUnknown(); slowDepositWatch(depositId); }
 }
 // The fast poll gives up after 70 s but the server keeps watching a payment for 2 minutes and the reconciler for longer: keep asking every few
