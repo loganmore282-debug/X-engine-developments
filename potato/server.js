@@ -9883,7 +9883,10 @@ async function reconcilePendingDeposits() {
     // LworxPay / ObPay pending deposits: re-read each by our reference. A gateway that will not answer the question leaves the row alone.
     for (const gp of Object.keys(GATEWAY_DEFS)) {
       const gSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', gp).orderBy('createdAt', 'asc').limit(30).get();
-      await inChunks(gSnap.docs.filter(d => d.data()[gp + 'Ref']), 3, async (doc) => {
+      // Only rows the fast paths are NOT already on (no watcher is on them), a few per pass. All status reads of a gateway share ONE
+      // pacer (its per-minute limit), so a long list here would otherwise make a member's own check wait behind it.
+      const dueRows = gSnap.docs.filter(d => d.data()[gp + 'Ref'] && !gatewayWatcherFresh(gp, d.id)).slice(0, 10);
+      await inChunks(dueRows, 3, async (doc) => {
         const t = await gatewayGetTx(gp, doc.data()[gp + 'Ref']);
         if (t.providerDown || t.unavailable) return;
         const out = await gatewayApply(gp, doc, t, 'reconciler');

@@ -2629,7 +2629,6 @@ function fmtDay(value){
   const t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
   return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' at ' + t;
 }
-var _depPendingPhone = '';
 // Every figure this screen shows about one plan, worked out in one place so
 // the summary band and the row can never disagree.
 function planStats(inv){
@@ -4287,7 +4286,6 @@ function setDepositStatusPending(amount, phone, reference){
   if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }   // an old success countdown must not close this new page
   const displayPhone = cleanPhone(phone) || (dialPlus() + String(phone || '').replace(/\D/g, ''));
   _depPendingAmount = Number(amount) || 0;
-  _depPendingPhone = displayPhone;
   _depAttempt = 0;
   setDepIcon('wait');
   $('depStatusTitle').textContent = 'Payment Initiated Successfully!';
