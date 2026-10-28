@@ -8774,6 +8774,52 @@ app.get('/admin/pesajet/summary', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Could not read the PesaJet summary' });
   }
 });
+// The same "money moved" card for the OTHER recharge gateways (TavuPay, LworxPay, ObPay): Potato's own record of what came in through each (they only
+// take recharges here), plus the gateway's own balance where it has a balance call (LworxPay /balance, ObPay /balance; TavuPay has none documented).
+// One read of each gateway's recharges, then the live balances in parallel with a short wait and a 30 s memory, so the dashboard's 30 s refresh never
+// hammers a gateway's per-minute limit.
+const _gwBalanceCache = {};
+async function gatewayBalance(provider) {
+  const hit = _gwBalanceCache[provider];
+  if (hit && Date.now() - hit.at < 30000) return hit.value;
+  let value = null;
+  if (provider === 'lworxpay' || provider === 'obpay') {
+    const r = await _gwRequest(provider, '/balance', { timeoutMs: GW_READ_TIMEOUT, paced: true });
+    const d = (r.ok && r.data && typeof r.data.data === 'object' && r.data.data) || null;
+    const amount = d ? Number(provider === 'lworxpay' ? d.balance : d.net) : NaN;
+    value = Number.isFinite(amount) ? { amount: round2(amount) } : { error: r.notConfigured ? 'No key is set on the server yet.' : 'Could not read their balance right now.' };
+  }
+  _gwBalanceCache[provider] = { at: Date.now(), value };
+  return value;
+}
+app.get('/admin/gateways/summary', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const sett = await getSettings();
+    const keys = ['tavupay', 'lworxpay', 'obpay'];
+    const snaps = await Promise.all(keys.map(k => db.collection('pendingDeposits').where('provider', '==', k).limit(PESAJET_SUMMARY_SCAN).get()));
+    const balances = await Promise.all(keys.map(k => Promise.race([gatewayBalance(k), new Promise(r => setTimeout(() => r({ error: 'Could not read their balance right now.' }), 8000))]).catch(() => ({ error: 'Could not read their balance right now.' }))));
+    const chosen = depositGatewayList(sett);
+    let truncated = false;
+    const gateways = keys.map((k, i) => {
+      const g = { key: k, name: k === 'tavupay' ? 'TavuPay' : GATEWAY_DEFS[k].name, collected: 0, collectedCount: 0, pendingIn: 0, pendingInCount: 0, failedCount: 0,
+        configured: k === 'tavupay' ? tavupayConfigured() : GATEWAY_DEFS[k].configured(), selected: chosen.includes(k) || depositProvider(sett) === k, balance: balances[i] || null, regionKey: DEFAULT_REGION_KEY };
+      if (snaps[i].size >= PESAJET_SUMMARY_SCAN) truncated = true;
+      for (const d of snaps[i].docs) {
+        const row = d.data(), amt = finiteMoney(row.displayAmount != null ? row.displayAmount : row.amount);
+        if (depositFullyCredited(row)) { g.collected += amt; g.collectedCount++; }
+        else if (row.status === 'pending' || row.status === 'initiating') { g.pendingIn += amt; g.pendingInCount++; }
+        else if (row.status === 'failed') g.failedCount++;
+      }
+      g.collected = round2(g.collected); g.pendingIn = round2(g.pendingIn);
+      return g;
+    });
+    res.json({ status: 'success', truncated, gateways });
+  } catch (e) {
+    console.error('Gateway summary error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not read the gateway summaries' });
+  }
+});
 app.post('/admin/transactions/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {

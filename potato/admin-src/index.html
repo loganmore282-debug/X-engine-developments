@@ -1241,14 +1241,16 @@ async function renderDashboard(){
       <p class="muted" style="margin:4px 0 0">It cannot see PesaJet's fees, or anything settled out to a bank.</p>
       <div id="pesajetSummary">${spinnerHtml()}</div>
     </div>
+    <div id="gwCards"></div>
     <div class="panel-card">
       <h2 class="sec" style="margin-top:0">Recent transactions</h2>
       <div class="table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Amount</th></tr></thead><tbody id="dashTx"><tr><td colspan="3">${spinnerHtml()}</td></tr></tbody></table></div>
     </div>`;
-  const [r, mb, pj] = await Promise.all([
+  const [r, mb, pj, gws] = await Promise.all([
     api('/admin/transactions/list', { limit: 12 }),
     api('/admin/marzpay/balance'),
     api('/admin/pesajet/summary'),
+    api('/admin/gateways/summary'),
   ]);
   if(staleTab('dashboard')) return;
   // A recharge that was started but not paid (pending / failed) is not money received: it stays out of the money list.
@@ -1260,6 +1262,28 @@ async function renderDashboard(){
     ? `<div class="n" style="font-size:26px">${ugx(mb.amount)}</div>${mb.accountStatus?`<p class="muted" style="margin:4px 0 0">Account status: ${esc(mb.accountStatus)}</p>`:''}`
     : `<p class="muted" style="margin:0">${esc(mb.message||'Could not check MarzPay balance right now.')}</p>`;
   paintPesajetSummary(pj);
+  paintGatewaySummaries(gws);
+}
+// TavuPay, LworxPay and ObPay: one card each, like PesaJet's. They only take recharges here. LworxPay and ObPay also show the balance in THEIR own account
+// (read live); TavuPay publishes none. A gateway that no Deposit button uses and has no history stays hidden.
+function paintGatewaySummaries(g){
+  const box = $('gwCards'); if (!box) return;
+  if (!g || g.status !== 'success') { box.innerHTML = ''; return; }
+  box.innerHTML = (g.gateways||[]).filter(x => x.selected || x.collectedCount || x.pendingInCount || x.failedCount).map(x => {
+    const bal = x.key === 'tavupay' ? '' : (x.balance && x.balance.amount != null
+      ? `<div class="stat"><div class="n">${ugx(x.balance.amount, x.regionKey)}</div><div class="l">Balance in ${esc(x.name)}</div></div>`
+      : `<p class="muted" style="margin:8px 0 0">${esc((x.balance && x.balance.error) || 'Their balance is not available.')}</p>`);
+    return `<div class="panel-card"><h2 class="sec" style="margin-top:0">${esc(x.name)} money moved</h2>
+      <p class="muted" style="margin-top:0">Our own record of the recharges that came in through ${esc(x.name)}. Withdrawals do not go through it.</p>
+      <div class="cards">
+        <div class="stat"><div class="n">${ugx(x.collected, x.regionKey)}</div><div class="l">Collected (${x.collectedCount||0})</div></div>
+        <div class="stat"><div class="n">${ugx(x.pendingIn, x.regionKey)}</div><div class="l">Still arriving (${x.pendingInCount||0})</div></div>
+        ${x.key !== 'tavupay' && x.balance && x.balance.amount != null ? bal : ''}
+      </div>
+      <p class="muted" style="margin:8px 0 0">${x.failedCount||0} recharge(s) did not go through.</p>
+      ${x.key !== 'tavupay' && !(x.balance && x.balance.amount != null) ? bal : ''}
+      ${x.configured ? '' : `<p class="muted" style="margin:8px 0 0">No ${esc(x.name)} key is set on the server yet.</p>`}
+    </div>`; }).join('') + (g.truncated ? '<p class="muted" style="color:var(--danger)">These totals are incomplete &mdash; there is more history than this read can scan.</p>' : '');
 }
 // Hidden unless PesaJet is actually selected as a gateway or has moved money
 // before -- an operator on MarzPay alone should not be shown a card of zeroes.

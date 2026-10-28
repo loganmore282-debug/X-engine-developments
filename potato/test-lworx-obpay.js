@@ -175,6 +175,14 @@ const lwAccept = tx => call => call.method === 'POST' ? { status: 200, body: { s
   await J('GET', '/admin/payments/sync', null, null, true); await J('POST', '/deposit/marzpay/status', { depositId: d.id }, m.tok);
   ok(wallet(m.uid) === o4 + 30000, 'and never twice');
 
+  // the dashboard cards: collected money from our own records and the gateway's own balance, read live
+  script = call => call.path === '/api/v1/balance' ? { status: 200, body: { success: true, data: { balance: 125000, currency: 'UGX', merchant_id: 'LWORX1' } } }
+    : call.path === '/api/public/v1/balance' ? { status: 200, body: { success: true, data: { currency: 'UGX', collected: 150000, paid_out: 40000, net: 110000 } } } : null;
+  { const sm = (await J('GET', '/admin/gateways/summary', null, null, true)).j, by = k => (sm.gateways || []).find(x => x.key === k) || {};
+    ok(by('lworxpay').balance && by('lworxpay').balance.amount === 125000, 'LworxPay: its own balance is read live', by('lworxpay'));
+    ok(by('obpay').balance && by('obpay').balance.amount === 110000, 'ObPay: its own balance (net) is read live', by('obpay'));
+    ok(by('lworxpay').collectedCount >= 1 && by('lworxpay').collected >= 30000 && by('obpay').collectedCount >= 3, 'collected comes from our own records of the credited recharges', [by('lworxpay').collected, by('obpay').collectedCount]);
+    ok(by('tavupay').balance === null, 'TavuPay has no documented balance call, so none is shown'); }
   const src = require('fs').readFileSync(path.join(root, 'server.js'), 'utf8'), ng = require('child_process').execFileSync('node', ['deploy/make-nginx.js', 'prod', 'a.example.com', 'Tq5m8zr'], { encoding: 'utf8', cwd: root, env: { ...process.env, POTATO_HOOK_TOKEN: '0123456789abcdef0123456789abcdef' } });
   ok(/RAW_BODY_ROUTES = new Set\([^)]*'\/lworxpay\/webhook', '\/obpay\/webhook'/.test(src) && /GUARD_EXEMPT = new Set\([^)]*'\/lworxpay\/webhook', '\/obpay\/webhook'/.test(src), 'raw body and maintenance exemptions for both webhooks');
   ok(/location = \/k7x2\/h-0123456789abcdef0123456789abcdef\/lworxpay \{[\s\S]*?rewrite \^ \/lworxpay\/webhook break;/.test(ng) && /location = \/k7x2\/h-0123456789abcdef0123456789abcdef\/obpay \{[\s\S]*?rewrite \^ \/obpay\/webhook break;/.test(ng), 'secret nginx addresses reach both webhooks');

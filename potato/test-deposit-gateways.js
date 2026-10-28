@@ -45,6 +45,12 @@ const deps = () => [...fm.__stores.pendingDeposits.values()];
     ok([...fm.__stores.promoRedemptions.values()].length >= 1 && [...fm.__stores.transactions.values()].some(t => t.userId === a.uid && t.type === 'promocode' && t.amount === 1000), 'and its two ledger rows are written');
     const second = await J('POST', '/redeem', { code: g.j.code }, b.tok); ok(second.j.message === 'All treasure chests have been claimed.', 'a used-up code says all the chests have been claimed', second.j);
     const again = await J('POST', '/redeem', { code: g.j.code }, a.tok); ok(/already used/.test(again.j.message), 'the same member twice is told so', again.j); }
+  // the dashboard's "money moved" cards for the other gateways
+  { const sm = await J('GET', '/admin/gateways/summary', null, null, true);
+    ok(sm.s === 200 && sm.j.gateways.length === 3 && sm.j.gateways.map(x => x.key).join() === 'tavupay,lworxpay,obpay', 'the dashboard summary lists TavuPay, LworxPay and ObPay', sm.j);
+    const by = k => sm.j.gateways.find(x => x.key === k);
+    ok(by('tavupay').pendingInCount + by('tavupay').failedCount + by('tavupay').collectedCount >= 1 && by('tavupay').selected === true, 'each shows the recharges made through it', by('tavupay'));
+    ok((await J('GET', '/admin/gateways/summary')).s === 401, 'and needs the admin'); }
   // admin: validation and rotation
   const bad = await J('POST', '/admin/settings/update', { settings: { depositGateways: 'tavupay, nonsense' } }, null, true); ok(bad.s === 400, 'an unknown gateway is refused', bad.j);
   const seven = await J('POST', '/admin/settings/update', { settings: { depositGateways: 'pesajet,pesajet,pesajet,pesajet,pesajet,pesajet,pesajet' } }, null, true); ok(seven.s === 400, 'more than six is refused');
