@@ -4118,7 +4118,30 @@ function syncDepositQuickAmt(){
 // (a real operation is in flight); the Close button only appears once
 // resolved (or once the poll gives up), matching the app's own established
 // pattern of only offering Close on a settled dialog state.
-var _depOpenedAt = 0;
+var _depOpenedAt = 0, _depPendingSlot = 0;
+// "Change Number" on the waiting page: pay from another number. A NEW request for the same amount (through the same pay button) goes to that number and
+// the page follows it; the first request is not cancelled (a prompt already on the first phone can still be approved, and would credit as well).
+window.openDepositChangeNumber = function(){
+  $('depChgRow').style.display = 'none'; $('depChgBox').style.display = '';
+  $('depChgDial').textContent = dialPlus(); $('depChgErr').textContent = '';
+  const i = $('depChgPhone'); i.value = ''; setTimeout(() => { try { i.focus(); } catch (_) {} }, 60);
+};
+window.closeDepositChangeNumber = function(){ if ($('depChgBox')) $('depChgBox').style.display = 'none'; if ($('depChgRow')) $('depChgRow').style.display = ''; };
+window.submitDepositNewNumber = async function(){
+  const btn = $('depChgGo'), err = $('depChgErr');
+  if (!btn || btn.disabled) return;
+  const phone = cleanPhone($('depChgPhone').value);
+  if (!phone) { err.textContent = 'Enter a valid ' + phoneLenWords() + ' digit phone number'; return; }
+  if (!_depPendingAmount) return;
+  btn.disabled = true; btn.textContent = 'Sending...'; err.textContent = '';
+  const r = await post('/deposit/marzpay', { amount: _depPendingAmount, slot: _depPendingSlot, phone });
+  btn.disabled = false; btn.textContent = 'Send prompt';
+  if (r && r.stale) return;
+  if (!r || r.status !== 'success') { err.textContent = (r && r.message) || 'Could not send the prompt. Try again.'; return; }
+  refreshTransactionsCache().catch(() => {});
+  setDepositStatusPending(_depPendingAmount, phone, r.reference);   // the page follows the new request; its poll replaces the old one
+  pollDepositStatus(r.depositId);
+};
 window.openDepositStatusModal = function(amount, phone, reference){
   _depOpenedAt = Date.now();
   setDepositStatusPending(amount, phone, reference);
@@ -4248,6 +4271,7 @@ function setDepMainButton(label, onclick){
   if ($('depVerifySpin')) $('depVerifySpin').style.display = 'none';
   if ($('depVerifyLabel')) $('depVerifyLabel').textContent = label;
 }
+function hideDepChange(){ if ($('depChgRow')) $('depChgRow').style.display = 'none'; if ($('depChgBox')) $('depChgBox').style.display = 'none'; }
 function setDepCancel(text){ const row = $('depCancelRow'); if (row) { row.style.display = text ? '' : 'none'; if (text && row.firstChild) row.firstChild.textContent = text; } }
 window.verifyDepositNow = async function(){
   const btn = $('depVerifyBtn');
@@ -4277,6 +4301,7 @@ function setDepositStatusPending(amount, phone, reference){
   setDepAttempt();
   setDepMainButton('Verify Payment', window.verifyDepositNow);
   setDepCancel('Cancel');
+  closeDepositChangeNumber();
 }
 var _depSuccessRedirectTimer = null;
 function setDepositStatusSuccess(){
@@ -4290,6 +4315,7 @@ function setDepositStatusSuccess(){
   // No countdown and no automatic redirect: the page stays until the member taps Back to Home (or the back arrow).
   setDepMainButton('Back to Home', function(){ closeDepositStatusModal(true); });
   setDepCancel('');
+  hideDepChange();
 }
 function setDepositStatusFailed(msg){
   setDepIcon('bad');
@@ -4303,6 +4329,7 @@ function setDepositStatusFailed(msg){
   _depAttempt = 0; setDepAttempt();
   setDepMainButton('Try Again', function(){ closeDepositStatusModal(); openDepositSheet(); });
   setDepCancel('Close');
+  hideDepChange();
 }
 function setDepositStatusUnknown(){
   setDepMsg('failed', "We couldn't confirm this payment automatically. Tap Verify Payment or contact support. If it goes through, your balance still updates on its own.");
@@ -4340,13 +4367,15 @@ window.submitDeposit = async function(){
   if (amount < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
   submitBtn.disabled = true; submitBtn.textContent = 'Loading...';
   ptProcessing(true);
+  // Which pay button is on: its position tells the server which gateway the admin put behind it (kept for "Change Number" on the waiting page).
+  const onBtn = document.querySelector('#depPays button.on'), slot = onBtn ? Array.prototype.indexOf.call(onBtn.parentNode.children, onBtn) : 0;
+  _depPendingSlot = slot;
   let r;
   try {
     // No network field on this form (Round 145) -- the gateway detects it
     // from the phone number itself; server.js already treats `network` as
     // optional here.
     // Which pay button is on: its position tells the server which gateway the admin put behind it.
-    const onBtn = document.querySelector('#depPays button.on'), slot = onBtn ? Array.prototype.indexOf.call(onBtn.parentNode.children, onBtn) : 0;
     r = await post('/deposit/marzpay', { amount, slot });
   } finally {
     // Restores the button's resting label after a failed attempt -- must

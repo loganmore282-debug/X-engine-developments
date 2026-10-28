@@ -1721,6 +1721,20 @@ html,body,.sheet-bg,#msgDetailBg{scrollbar-width:none !important;}
 .cp-steps li::before{content:'';position:absolute;left:2px;top:13px;width:6px;height:6px;border-radius:50%;background:#e5231d;}
 .cp-tip{margin:12px 0 0;padding:10px 12px;border-radius:12px;background:#fdf3f3;color:#8a5a5a;font:500 12px/1.5 Roboto,sans-serif;text-align:left;}
 .cp-tip:empty{display:none;}
+.cp-chg{margin:10px 2px 0 0;text-align:right;}
+.cp-chg span{font:500 13px/1.2 Roboto,sans-serif;color:#c4121e;text-decoration:underline;cursor:pointer;}
+.cp-chgbox{margin:12px 0 0;padding:12px 12px 14px;border:1px solid #f3d4d3;border-radius:14px;background:#fffefe;text-align:left;}
+.cp-phone{display:flex;align-items:center;gap:8px;height:46px;box-sizing:border-box;padding:0 12px;border:.7px solid #e3b4bd;border-radius:10px;}
+.cp-phone:focus-within{border-color:#dba6b0;box-shadow:0 0 0 2px rgba(229,125,148,.26);}
+.cp-phone b{flex:0 0 auto;font:700 14px/1 Roboto,sans-serif;color:#e0241f;}
+.cp-phone input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:700 15px/1 Roboto,sans-serif;color:#263048;-webkit-appearance:none;appearance:none;}
+.cp-chgerr{margin-top:8px;font:500 12px/1.4 Roboto,sans-serif;color:#c62648;}
+.cp-chgerr:empty{display:none;}
+.cp-chgbtns{display:flex;gap:10px;margin-top:12px;}
+.cp-chgbtns button{height:42px;border-radius:12px;font:700 14px/1 Roboto,sans-serif;}
+.cp-chgbtns .go{flex:1;border:0;background:#e5231d;color:#fff;}
+.cp-chgbtns .go:disabled{opacity:.65;}
+.cp-chgbtns .back{flex:0 0 84px;border:1px solid #f3d4d3;background:#fdecec;color:#7a4a49;}
 .cp-ref{margin:14px 0 0;background:#fffefe;border:1px solid #f3d4d3;border-radius:16px;padding:14px 16px;}
 .cp-k{margin-bottom:6px;font:700 11px/1.2 Roboto,sans-serif;letter-spacing:.04em;color:#8795a8;}
 .cp-row{display:flex;align-items:center;gap:10px;}
@@ -2750,6 +2764,13 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
         <li>We'll verify the payment automatically</li>
       </ul>
       <p class="cp-tip" id="depStatusTip"></p>
+      <div class="cp-chg" id="depChgRow"><span onclick="openDepositChangeNumber()">Change Number</span></div>
+      <div class="cp-chgbox" id="depChgBox" style="display:none;">
+        <div class="cp-k">PAY FROM ANOTHER NUMBER</div>
+        <div class="cp-phone"><b id="depChgDial">+256</b><input id="depChgPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="off" maxlength="14" oninput="sanitizePhoneInput(this)"></div>
+        <div class="cp-chgerr" id="depChgErr" role="alert"></div>
+        <div class="cp-chgbtns"><button type="button" class="go" id="depChgGo" onclick="submitDepositNewNumber()">Send prompt</button><button type="button" class="back" onclick="closeDepositChangeNumber()">Back</button></div>
+      </div>
     </div>
     <div class="cp-ref">
       <div class="cp-k">TRANSACTION REFERENCE</div>

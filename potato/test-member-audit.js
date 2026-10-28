@@ -102,7 +102,8 @@ async function main(){
   assert.equal(d.querySelector('#depRedirect'),null,'removed redirect overlay stays absent after a rejected deposit');
   { // the payment waiting page (ChocoMCC's layout): initiated -> attempts counted -> paid
     let statusCalls=0;
-    w.post=(path)=>{ if(path==='/deposit/marzpay') return Promise.resolve({status:'success',depositId:'d1',reference:'REF123'});
+    let depBodies=[];
+    w.post=(path,body)=>{ if(path==='/deposit/marzpay'){depBodies.push(body);return Promise.resolve({status:'success',depositId:'d'+depBodies.length,reference:depBodies.length===1?'REF123':'REF456'});}
       if(path==='/deposit/marzpay/status'){statusCalls++;return Promise.resolve(statusCalls<3?{status:'success',state:'pending'}:{status:'success',state:'matched'});}
       return Promise.resolve({status:'success'}); };
     w.refreshTransactionsCache=async()=>{};w.DEP_POLL_FIRST_MS=5;w.DEP_POLL_EVERY_MS=10;
@@ -112,11 +113,19 @@ async function main(){
     assert.equal(d.querySelector('#depStatusRef').textContent,'REF123','the transaction reference is shown');
     assert.equal(d.querySelector('#depVerifyLabel').textContent,'Verify Payment','the big button is Verify Payment');
     assert(d.querySelector('#depCancelRow').style.display!=='none','Cancel is offered while waiting');
+    // Change Number: pay from another number (a NEW request for the same amount through the same button)
+    assert(d.querySelector('#depChgRow').textContent.trim()==='Change Number','an underlined Change Number link sits under the tip');
+    w.openDepositChangeNumber();assert.equal(d.querySelector('#depChgBox').style.display,'','tapping it opens the number box');
+    d.querySelector('#depChgPhone').value='12';await w.submitDepositNewNumber();
+    assert.match(d.querySelector('#depChgErr').textContent,/valid/,'a short number is refused on the spot');assert.equal(depBodies.length,1,'and nothing is sent');
+    d.querySelector('#depChgPhone').value='0770123456';await w.submitDepositNewNumber();
+    assert.equal(depBodies.length,2,'a valid number sends a second request');assert.equal(depBodies[1].phone,'+256770123456','to that number');assert.equal(depBodies[1].amount,depBodies[0].amount,'for the same amount');assert.equal(depBodies[1].slot,depBodies[0].slot,'through the same pay button');
+    assert.equal(d.querySelector('#depStatusRef').textContent,'REF456','the page follows the new request');assert.match(d.querySelector('#depStatusPhone').textContent,/\+256770123456/,'and shows the new number');assert.equal(d.querySelector('#depChgBox').style.display,'none','the number box closes');
     await new Promise(r=>setTimeout(r,120));
     assert.match(d.querySelector('#depStatusTitle').textContent,/Payment Successful!/,'a matched payment turns the page into "Payment Successful!"');
     assert.equal(d.querySelector('#depVerifyLabel').textContent,'Back to Home','and the button becomes Back to Home');
     assert.equal(d.querySelector('#depStatusAttempt').textContent,'','the attempt counter is cleared once paid');
-    assert.equal(statusCalls,3,'it asked three times (two pending, one paid)');
+    assert(statusCalls>=3,'it kept asking until paid');assert.equal(d.querySelector('#depChgRow').style.display,'none','Change Number is gone once paid');
     w.cancelDepositStatus();
     assert(!d.querySelector('#depStatusBg').classList.contains('show'),'Cancel / Back leaves the page');
   }
