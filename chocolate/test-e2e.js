@@ -1,7 +1,7 @@
 'use strict';
 // END-TO-END: runs the REAL server.js (in this process, against an in-memory stand-in for MongoDB) and drives it over HTTP like the app does:
 // sign-up with the captcha, registration with a referral code typed in lower case, an unknown referral code, login, first-purchase commission,
-// locked cashback paid once at the closing time, the admin Plans analytics, a
+// daily cashback paid at 00:00, the admin Plans analytics, a
 // withdrawal request and its refusals, and 40 simultaneous registrations (every account id and referral code different).
 const path = require('path'), Module = require('module');
 const root = __dirname;
@@ -25,17 +25,23 @@ async function member(pass, pin, ref) { const cap = await J('GET', '/auth/captch
   await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 500000 } }, null, true);
   const A = await member('secret12', '123456', ''); const B = await member('secret34', '123456', A.reg.referralCode);
   const prods = (await J('GET', '/public/products')).j.products.filter(p => p.price > 0).sort((a, b) => a.price - b.price); const p1 = prods[0];
-  // ---- locked cashback
+  // ---- daily cashback at 00:00
   const buy = await J('POST', '/invest/create', { tierKey: p1.key }, B.tok); ok(buy.j.status === 'success', 'B buys ' + p1.name + ' (' + p1.price + ', ' + p1.cycle + ' days)', buy.j);
   const acct = async tok => (await J('GET', '/account', null, tok)).j.account;
   const w0 = (await acct(B.tok)).walletBalance;
-  await sleep(2500); ok((await acct(B.tok)).walletBalance === w0, 'nothing is paid while the product runs');
+  await sleep(2500); ok((await acct(B.tok)).walletBalance === w0, 'nothing is paid before the first 00:00');
   const inv = [...fm.__stores.investments.values()].find(i => i.userId === B.uid); ok(inv && inv.status === 'active', 'investment is active');
+  const off = 180 * 60000, lastMidnight = Math.floor((Date.now() + off) / 86400000) * 86400000 - off;   // the most recent local 00:00 (Uganda)
+  inv.createdAt = new Date(lastMidnight - 3600000); inv.nextPayoutAt = new Date(lastMidnight);   // bought an hour before that midnight: exactly ONE payment is due
+  await sleep(3500);
+  const w1 = (await acct(B.tok)).walletBalance; const one = Math.round(inv.expectedReturn / inv.payoutsTotal);
+  ok(Math.round(w1 - w0) === one && inv.payoutsMade === 1, 'one payment (a ' + inv.payoutsTotal + 'th of the return) lands at the midnight: +' + (w1 - w0) + ' expected ' + one);
+  await sleep(2500); ok((await acct(B.tok)).walletBalance === w1, 'and not again until the next midnight');
   inv.createdAt = new Date(Date.now() - (inv.payoutsTotal * 86400000 + 5000)); inv.nextPayoutAt = new Date(Date.now() - 1000);
   await sleep(3500);
-  const w1 = (await acct(B.tok)).walletBalance; ok(Math.round(w1 - w0) === Math.round(inv.expectedReturn), 'the whole cashback is paid once at the closing time: +' + (w1 - w0) + ' expected ' + inv.expectedReturn);
-  await sleep(2500); const w2 = (await acct(B.tok)).walletBalance; ok(w2 === w1, 'and never paid twice');
-  ok([...fm.__stores.investments.values()].find(i => i.userId === B.uid).status === 'matured', 'the product becomes matured');
+  const w2 = (await acct(B.tok)).walletBalance; ok(Math.round(w2 - w0) === Math.round(inv.expectedReturn), 'the days that were missed are paid at once and the payments add up to the whole return: +' + (w2 - w0) + ' expected ' + inv.expectedReturn);
+  await sleep(2500); const w3 = (await acct(B.tok)).walletBalance; ok(w3 === w2, 'and never paid twice');
+  ok([...fm.__stores.investments.values()].find(i => i.userId === B.uid).status === 'matured', 'the product becomes matured after its last payment');
   const N = await member('secret56', '123456', A.reg.referralCode);   // never bought
   // ---- analytics with plans
   const an = await J('POST', '/admin/analytics', {}, null, true); ok(an.s === 200 && an.j.plans && Array.isArray(an.j.plans.mostPurchased), 'analytics answers with the Plans card', Object.keys(an.j));
@@ -60,5 +66,5 @@ async function member(pass, pin, ref) { const cap = await J('GET', '/auth/captch
     ok(ids.every(i => /^[1-9]\d{4}$/.test(String(i))), 'ids are five digits');
     const ua = [...fm.__stores.users.values()].find(u => u.referralCode === A2.reg.referralCode); ok(ua.teamL1Count === N2, "the referrer's Level 1 count is exactly 40: " + ua.teamL1Count);
   }
-  realLog(fails ? fails + ' FAILED' : 'PASS: end-to-end on the real server (sign-up, referral, login, first-purchase commission, locked cashback, analytics, withdrawal, concurrent sign-ups)'); process.exit(fails ? 1 : 0);
+  realLog(fails ? fails + ' FAILED' : 'PASS: end-to-end on the real server (sign-up, referral, login, first-purchase commission, daily cashback at 00:00, analytics, withdrawal, concurrent sign-ups)'); process.exit(fails ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

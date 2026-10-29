@@ -1359,7 +1359,7 @@ async function renderAnalytics(silent){
       </div>
     </div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Cashback schedule for ${esc(selected.day||a.today)}</h2>
-      <p class="muted">Locked cashback: a product pays nothing while it runs, and its whole cashback is credited at its closing time (the time of day it was bought, after the cycle's days). Scheduled cashback is credited to wallets; members decide when to withdraw. Future purchases and deposits are unknown.</p>
+      <p class="muted">Daily cashback: each product pays one payment at every midnight (00:00, the first one at the first midnight after purchase) until its last day. Scheduled cashback is credited to wallets; members decide when to withdraw. Future purchases and deposits are unknown.</p>
       <div class="cards">
         <div class="stat"><div class="n">${ugx(schedule.scheduledAmount)}</div><div class="l">Contract cashback scheduled for this day</div></div>
         <div class="stat"><div class="n">${ugx(schedule.unpaidAmount)}</div><div class="l">This day's cashback still unpaid (eligible accounts)</div></div>
@@ -1416,14 +1416,14 @@ async function renderAnalytics(silent){
       <div class="cards">
         <div class="stat"><div class="n">${plAct.count||0}</div><div class="l">Active plans</div></div>
         <div class="stat"><div class="n">${ugx(plAct.invested||0)}</div><div class="l">Invested in active plans</div></div>
-        <div class="stat"><div class="n">${ugx(plAct.remaining||0)}</div><div class="l">Cashback still to credit at maturity</div></div>
+        <div class="stat"><div class="n">${ugx(plAct.remaining||0)}</div><div class="l">Cashback still to credit (the remaining midnights)</div></div>
         <div class="stat"><div class="n">${plAct.dueNow||0}</div><div class="l">Plans past their closing time, awaiting payment</div></div>
       </div>
       <h3 style="margin:16px 0 6px">Most purchased products</h3>
       <p class="muted" style="margin-top:0">Every active or finished purchase held (the newest 10,000), most purchased first.</p>
       <div class="table-scroll"><table><thead><tr><th>#</th><th>Product</th><th>Times purchased</th><th>Active now</th><th>Total invested</th></tr></thead><tbody>${mostRows}</tbody></table></div>
       <h3 style="margin:16px 0 6px">Maturity dates</h3>
-      <p class="muted" style="margin-top:0">When the active plans close and their whole cashback is credited (the time of day each was bought, after its days). Overdue plans are counted on today.</p>
+      <p class="muted" style="margin-top:0">The day each active plan makes its last payment (every plan pays at each midnight until then). Overdue plans are counted on today.</p>
       <div class="table-scroll"><table><thead><tr><th>Date</th><th>Plans maturing</th><th>Invested</th><th>Cashback to credit</th></tr></thead><tbody>${matRows}</tbody></table></div>
       <h3 style="margin:16px 0 6px">Next plans to mature</h3>
       <div class="table-scroll"><table><thead><tr><th>Member</th><th>Product</th><th>Invested</th><th>Cashback to credit</th><th>Matures</th></tr></thead><tbody>${nextRows}</tbody></table></div>
@@ -3274,7 +3274,9 @@ async function renderSettings(){
         <div><label>L1 commission (%)</label><input id="sC1" type="number" step="1" value="${v('commL1',25)}"></div>
         <div><label>L2 commission (%)</label><input id="sC2" type="number" step="1" value="${v('commL2',2)}"></div>
         <div><label>L3 commission (%)</label><input id="sC3" type="number" step="1" value="${v('commL3',1)}"></div>
+        <div><label>Referral reward (fixed amount)</label><input id="sRefBonus" type="number" step="1" value="${v('referralBonus',500)}"></div>
       </div>
+      <p class="muted" style="margin:4px 0 0">The referral reward is NOT a percentage: when a member's invited friend completes his first purchase, the inviter gets the Level 1 percentage plus this fixed amount (default 500).</p>
       <div class="row" style="margin-top:6px">
         <div><label>Max withdrawals per user per day (0 = no limit)</label><input id="sMaxWitDay" type="number" min="0" value="${v('maxWithdrawalsPerDay',2)}"></div>
         <div><label>Payment reference starts with</label><input id="sRefPrefix" type="text" maxlength="12" autocapitalize="off" autocomplete="off" spellcheck="false" value="${esc(v('referencePrefix','S'))}">
@@ -3390,15 +3392,15 @@ async function renderSettings(){
     px.addEventListener('input',showRef); showRef(); }
   $('saveRates').addEventListener('click', async()=>{
     // A blank number box would be read as 0 (a 0% commission or a 0 minimum would be saved silently): refuse it instead.
-    for(const id of ['sMinDep','sMinWit','sWelcome','sFee','sC1','sC2','sC3','sMaxWitDay','sAutoMin','sAutoMax','sAutoCap']){ if($(id)&&$(id).value.trim()!==''&&!/^\d+$/.test($(id).value.trim())){ toast('Use whole numbers only (no decimals or minus sign).','err'); $(id).focus(); return; } }
-    for(const [id,label] of [['sMinDep','Minimum deposit'],['sMinWit','Minimum withdrawal'],['sWelcome','Welcome bonus'],['sFee','Withdrawal fee'],['sC1','Level 1 commission'],['sC2','Level 2 commission'],['sC3','Level 3 commission'],['sMaxWitDay','Withdrawals per day'],['sAutoMin','Shortest wait'],['sAutoMax','Longest wait'],['sAutoCap','Automatic limit']]){
+    for(const id of ['sMinDep','sMinWit','sWelcome','sFee','sC1','sC2','sC3','sRefBonus','sMaxWitDay','sAutoMin','sAutoMax','sAutoCap']){ if($(id)&&$(id).value.trim()!==''&&!/^\d+$/.test($(id).value.trim())){ toast('Use whole numbers only (no decimals or minus sign).','err'); $(id).focus(); return; } }
+    for(const [id,label] of [['sMinDep','Minimum deposit'],['sMinWit','Minimum withdrawal'],['sWelcome','Welcome bonus'],['sFee','Withdrawal fee'],['sC1','Level 1 commission'],['sC2','Level 2 commission'],['sC3','Level 3 commission'],['sRefBonus','Referral reward'],['sMaxWitDay','Withdrawals per day'],['sAutoMin','Shortest wait'],['sAutoMax','Longest wait'],['sAutoCap','Automatic limit']]){
       if($(id) && $(id).value.trim()===''){ toast(label+' cannot be blank. Type a number (0 is allowed).','err'); $(id).focus(); return; }
     }
     if(+$('sAutoMax').value < +$('sAutoMin').value){ toast('The longest wait cannot be shorter than the shortest wait.','err'); $('sAutoMax').focus(); return; }
     const upd = {
       minDeposit:+$('sMinDep').value, minWithdraw:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
       withdrawFeePct:+$('sFee').value,
-      commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
+      commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value, referralBonus:+$('sRefBonus').value,
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
       autoApproveWithdrawalsEnabled:$('sAutoWit').checked, autoApproveMinSec:+$('sAutoMin').value, autoApproveMaxSec:+$('sAutoMax').value, autoApproveMaxAmount:+$('sAutoCap').value,
       referencePrefix:$('sRefPrefix').value.trim(),

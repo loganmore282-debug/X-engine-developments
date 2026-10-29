@@ -70,7 +70,7 @@ function database(seed) {
   return { rows, faults, collection: col => query(col) };
 }
 
-const rates={commL1:20,commL2:5,commL3:1,cycleDays:8};
+const rates={commL1:20,commL2:5,commL3:1,referralBonus:500,cycleDays:8};
 const products={ p30:{key:'p30',name:'Volt Go',price:30000,cycle:8,active:true}, p90:{key:'p90',name:'Home Cell',price:90000,cycle:8,active:true} };
 function seed(){
   return { users:{ buyer:{referredBy:'l1',walletBalance:500000,totalInvested:0,registrationDone:true,status:'active'},
@@ -81,7 +81,7 @@ function setup(input=seed()){
   const c=vm.createContext({ db, console:{log(){},warn(){},error(){}},
     FieldValue:{ increment:n=>({op:'inc',n}), arrayUnion:(...items)=>({op:'union',items}), delete:()=>({op:'delete'}), serverTimestamp:()=>new Date() },
     getSettings:async()=>rates, getProductByKey:async k=>products[k]?{...products[k]}:null,
-    productOpenState:()=>({open:true}), productExpectedReturn:(t)=>t.price*3, investmentMaturityMs:(m,d)=>m+d*86400000,
+    productOpenState:()=>({open:true}), productExpectedReturn:(t)=>t.price*3, payoutDueAtMs:(m,k)=>m+k*86400000,
     round2:n=>Math.round(n*100)/100, fmtMoney:n=>'UGX '+n, nowStr:()=>({date:'2026-10-21',time:'10:00'}),
     newStatementId:()=>'s-'+ ++serial, verifyAuth:async req=>req.uid, grantTurntableSpins(){}, _vipCache:new Map(),
     app:{post:(p,h)=>{ctxRoutes[p]=h}}
@@ -98,7 +98,7 @@ async function main(){
     const r=await buy('buyer','p30');
     assert.equal(r.body.status,'success',JSON.stringify(r.body));
     assert.equal(db.rows.users.buyer.walletBalance,470000);
-    assert.equal(db.rows.users.l1.walletBalance,6000,'Level 1 gets 20% of the first product');
+    assert.equal(db.rows.users.l1.walletBalance,6500,'Level 1 gets 20% of the first product PLUS the fixed referral reward (500)');
     assert.equal(db.rows.users.l2.walletBalance,1500,'Level 2 gets 5%');
     assert.equal(db.rows.users.l3.walletBalance,300,'Level 3 gets 1%');
     assert.deepEqual(commissions(db).map(t=>[t.userId,t.commissionLevel,t.description]).sort(),[['l1',0,'Level 1 reward'],['l2',1,'Level 2 reward'],['l3',2,'Level 3 reward']]);
@@ -106,15 +106,29 @@ async function main(){
     assert.equal(inv.isFirstInvestment,true);assert.equal(inv.commissionBasis,'investment');assert.equal(inv.commissionPending,false,'paid, so nothing left pending');
     const r2=await buy('buyer','p90');
     assert.equal(r2.body.status,'success');
-    assert.equal(db.rows.users.l1.walletBalance,6000,'the second purchase pays the referrers nothing');
+    assert.equal(db.rows.users.l1.walletBalance,6500,'the second purchase pays the referrers nothing');
     assert.equal(commissions(db).length,3);
+  }
+  {
+    // The fixed referral reward is set in the admin; 0 means percentages only, and only Level 1 ever gets it.
+    rates.referralBonus=0;
+    const {db,buy}=setup();
+    await buy('buyer','p30');
+    assert.equal(db.rows.users.l1.walletBalance,6000,'with the reward set to 0, Level 1 gets the percentage only');
+    rates.referralBonus=750;
+    const o=setup();
+    await o.buy('buyer','p30');
+    assert.equal(o.db.rows.users.l1.walletBalance,6750,'a reward of 750 is added to Level 1');
+    assert.equal(o.db.rows.users.l2.walletBalance,1500,'Level 2 gets the percentage only');
+    assert.equal(o.db.rows.users.l3.walletBalance,300,'Level 3 gets the percentage only');
+    rates.referralBonus=500;
   }
   {
     // a product the admin gave is not a purchase: the first REAL purchase still pays
     const input=seed(); input.investments.g1={userId:'buyer',tierKey:'p30',amount:30000,granted:true,status:'active'};
     const {db,buy}=setup(input);
     const r=await buy('buyer','p90'); assert.equal(r.body.status,'success');
-    assert.equal(db.rows.users.l1.walletBalance,18000,'20% of 90,000 after a gifted product');
+    assert.equal(db.rows.users.l1.walletBalance,18500,'20% of 90,000 (+500 reward) after a gifted product');
   }
   {
     // a member who bought before this rule (a real purchase already on record) earns the referrers nothing new
@@ -145,7 +159,7 @@ async function main(){
     assert.equal(commissions(db).length,3,'the reward is paid once');
     const firsts=Object.values(db.rows.investments).filter(i=>i.isFirstInvestment);
     assert.equal(firsts.length,1,'exactly one purchase is the first');
-    assert.equal(db.rows.users.l1.walletBalance,firsts[0].amount*0.2);
+    assert.equal(db.rows.users.l1.walletBalance,firsts[0].amount*0.2+500);
   }
   // A deposit no longer creates any commission entitlement.
   const dep=route('/deposit/marzpay');
