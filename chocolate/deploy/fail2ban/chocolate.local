@@ -1,0 +1,38 @@
+# fail2ban jails for the Chocolate server (installed by deploy/harden-vps.sh into /etc/fail2ban/jail.d/chocolate.local).
+# ignoreip: add YOUR OWN address here (space separated) if you never want to be banned yourself, e.g. ignoreip = 127.0.0.1/8 ::1 41.210.155.42
+[DEFAULT]
+ignoreip = 127.0.0.1/8 ::1
+backend = auto
+
+[sshd]
+enabled  = true
+maxretry = 5
+findtime = 10m
+bantime  = 1h
+
+[chocolate-probe]
+enabled  = true
+filter   = chocolate-probe
+port     = http,https
+logpath  = /var/log/nginx/access.log
+maxretry = 3
+findtime = 10m
+bantime  = 24h
+
+[chocolate-badua]
+enabled  = true
+filter   = chocolate-badua
+port     = http,https
+logpath  = /var/log/nginx/access.log
+maxretry = 3
+findtime = 10m
+bantime  = 24h
+
+[chocolate-adminlogin]
+enabled  = true
+filter   = chocolate-adminlogin
+port     = http,https
+logpath  = /var/log/nginx/access.log
+maxretry = 8
+findtime = 10m
+bantime  = 6h

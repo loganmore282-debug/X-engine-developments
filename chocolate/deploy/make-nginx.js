@@ -1,0 +1,283 @@
+#!/usr/bin/env node
+'use strict';
+// Generates Chocolate's nginx site: ONE host serving the member app, the API under
+// /k7x2 and the admin panel under a secret path.
+//
+//   node deploy/make-nginx.js dev  <admin-path>             plain HTTP on :8098, any host/IP (testing, no domain yet)
+//   node deploy/make-nginx.js prod <host> <admin-path>      HTTP on :80 for <host>; then `certbot --nginx -d <host>` adds HTTPS
+//   node deploy/make-nginx.js prod <host> <admin-path> <admin-host>
+//        TWO hosts: the member app + API on <host>; the admin panel (and the API it needs) ONLY on
+//        <admin-host>, e.g. admin.chocolate.example.com/Pw3k9zt6 . <host> then answers 404 for the admin
+//        path and for /k7x2/admin/*, and <admin-host> shows nothing except the admin path.
+//        Certbot: `certbot --nginx -d <host> -d <admin-host>`.
+//   ... --also=mychocolate,go     (prod only, any of the forms above)
+//        EXTRA addresses of the member app: each word becomes <word>.<host> (mychocolate.chocolate.example.com),
+//        or give a full host name. They serve exactly the same app as <host>.
+//        Re-run certbot with every name and --expand so ONE certificate covers them all.
+//
+// <admin-path> is the secret URL segment of the admin panel (letters/digits,
+// 6+ chars), e.g. "k7q2mx9p" -> https://<host>/k7q2mx9p/ . It is NOT written
+// into the app or the panel (both use relative addresses), so it can be changed
+// by regenerating this file; it is deliberately not listed in robots.txt.
+//
+// Why a generator and not a template with placeholders: nginx's add_header
+// does not inherit into a location that sets its own add_header, so every
+// location here repeats the full security header set -- written once, below.
+const argv = process.argv.slice(2);
+const alsoArg = argv.find(x => x.startsWith('--also='));
+const [mode, a, b, c] = argv.filter(x => !x.startsWith('--'));
+const usage = () => { console.error('usage: node deploy/make-nginx.js dev <admin-path> | prod <host> <admin-path> [admin-host]'); process.exit(1); };
+if (mode !== 'dev' && mode !== 'prod') usage();
+const host = mode === 'prod' ? a : '_';
+const adminPath = mode === 'prod' ? b : a;
+const adminHost = mode === 'prod' && c ? c : '';
+if (mode === 'prod' && !/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i.test(host || '')) { console.error('Host must look like mychocolate.example.com'); usage(); }
+if (adminHost && (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i.test(adminHost) || adminHost.toLowerCase() === String(host).toLowerCase())) { console.error('Admin host must be a different full host name, e.g. admin.example.com'); usage(); }
+const extraHosts = [];
+if (alsoArg) {
+  if (mode !== 'prod') { console.error('--also only applies to prod'); usage(); }
+  for (const raw of alsoArg.slice(7).split(',').map(x => x.trim().toLowerCase()).filter(Boolean)) {
+    const h = raw.includes('.') ? raw : raw + '.' + String(host).toLowerCase();
+    if (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/.test(h) || h.includes('..')) { console.error('Not a usable address: ' + raw); usage(); }
+    if (h === String(host).toLowerCase() || h === adminHost.toLowerCase()) { console.error('"' + raw + '" is already the main or the admin address'); usage(); }
+    if (!extraHosts.includes(h)) extraHosts.push(h);
+  }
+  if (extraHosts.length > 10) { console.error('At most 10 extra addresses'); usage(); }
+}
+if (!/^[A-Za-z0-9]{6,32}$/.test(adminPath || '')) { console.error('Admin path must be 6-32 letters/digits'); usage(); }
+const PORT = process.env.CHOCOLATE_API_PORT || '3005';
+// The API's URL prefix. It must equal API_BASE / CHOCOLATE_AUTH_API / SERVER / the service workers' API_ORIGIN / the icon links
+// in the sources (test-single-host.js checks they all agree). Not /api: that is the first thing a scanner tries.
+const API = 'k7x2';
+// Optional SECRET address for the PesaJet webhook: set CHOCOLATE_HOOK_TOKEN (16-64 lowercase letters/digits) and PesaJet is told
+// https://<host>/k7x2/h-<token>/pesajet instead of the guessable /k7x2/pesajet/webhook, which then answers 404. The signature check in
+// Node stays the real protection; the secret address only hides the door. The token lives on the VPS (never in git).
+const HOOK_TOKEN = String(process.env.CHOCOLATE_HOOK_TOKEN || '').trim();
+if (HOOK_TOKEN && !/^[a-z0-9]{16,64}$/.test(HOOK_TOKEN)) { console.error('CHOCOLATE_HOOK_TOKEN must be 16-64 lowercase letters or digits'); process.exit(1); }
+// Optional hook-only HOST (CHOCOLATE_HOOK_HOST, e.g. hook.chocolate.example.com): with it, PesaJet is told https://<hook host>/h-<token>/pesajet; that host
+// serves nothing but the webhook (every other address 404), and the member host no longer carries the secret address at all.
+const HOOK_HOST = String(process.env.CHOCOLATE_HOOK_HOST || '').trim().toLowerCase();
+if (HOOK_HOST && (!HOOK_TOKEN || mode !== 'prod' || !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(HOOK_HOST))) { console.error('CHOCOLATE_HOOK_HOST needs prod mode, CHOCOLATE_HOOK_TOKEN and a full host name'); process.exit(1); }
+const ROOT = process.env.CHOCOLATE_ROOT || '/srv/chocolate-src/chocolate';
+const prod = mode === 'prod';
+
+const MEMBER_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'";
+// The panel's push (Firebase Cloud Messaging, until Web Push replaces it) talks to Google.
+const ADMIN_CSP = MEMBER_CSP.replace("connect-src 'self'", "connect-src 'self' https://*.googleapis.com");
+const PERMS = 'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()';
+const hdr = (csp, extra = []) => [
+  'add_header X-Frame-Options "DENY" always;',
+  'add_header X-Content-Type-Options "nosniff" always;',
+  'add_header Referrer-Policy "no-referrer" always;',
+  `add_header Content-Security-Policy "${csp}" always;`,
+  `add_header Permissions-Policy "${PERMS}" always;`,
+  'add_header Cross-Origin-Resource-Policy "same-site" always;',
+  ...(prod ? ['add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;'] : []),
+  ...extra,
+].map(l => '        ' + l).join('\n');
+const proxy = (extra = '') => `        rewrite ^/${API}/(.*)$ /$1 break;
+        proxy_pass http://chocolate_node;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;${extra}`;
+
+// The webhook proxy lines: Node only ever sees /pesajet/webhook, body untouched (the signature is checked over the raw body).
+const hookProxy = target => `        rewrite ^ ${target} break;
+        proxy_pass http://chocolate_node;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;`;
+// A gateway delivers from ONE address and retries in bursts (PesaJet: 1 min, 5, 15 ...): the shared 20 requests/s zone with burst 40 answered 429 to the
+// 42nd request of a burst and the retry came a minute later. Callbacks have their own, much wider, zone (the signature / live re-check protects them).
+const hookLocation = (path, target = '/pesajet/webhook') => `    location = ${path} {
+        limit_req zone=chocolate_hook burst=300 nodelay;
+${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
+${hookProxy(target)}
+    }
+`;
+// On the member host: the secret address (unless a hook-only host carries it) and the plain, guessable one closed.
+const memberHookLocations = `    # secret PesaJet webhook address (see HOOK_TOKEN in the generator); the plain one is closed${HOOK_HOST ? ' (the secret one is served on the hook host only)' : ''}
+${HOOK_HOST ? '' : hookLocation('/' + API + '/h-' + HOOK_TOKEN + '/pesajet')}    location = /${API}/pesajet/webhook { return 404; }
+    # TavuPay's secret webhook address, the same way (Node only sees /tavupay/webhook, body untouched: its signature is over the raw body)
+${HOOK_HOST ? '' : hookLocation('/' + API + '/h-' + HOOK_TOKEN + '/tavupay', '/tavupay/webhook')}    location = /${API}/tavupay/webhook { return 404; }
+`;
+// A host that exists only for the webhook: one POST address, everything else 404, no app, no admin, no API.
+const hookHostBlock = () => `server {
+    listen 80;
+    listen [::]:80;
+    server_name ${HOOK_HOST};
+    server_tokens off;
+    # no user-agent wall here: this host serves one secret POST address only, a gateway's own User-Agent must never be shut out of it
+    if ($request_method !~ ^(GET|HEAD|POST|OPTIONS)$) { return 405; }
+    limit_conn chocolate_conn 150;
+    limit_conn_status 429;
+    limit_req_status 429;
+    client_max_body_size 1m;
+    client_header_timeout 15s;
+    client_body_timeout 20s;
+    send_timeout 30s;
+${hookLocation('/h-' + HOOK_TOKEN + '/pesajet')}${hookLocation('/h-' + HOOK_TOKEN + '/tavupay', '/tavupay/webhook')}    location / { return 404; }
+}
+`;
+
+const serverBlock = (name, role) => `server {
+${prod ? '    listen 80;\n    listen [::]:80;' : '    listen 8098;\n    listen [::]:8098;'}
+    server_name ${name};
+
+    server_tokens off;   # inside this server only: a top-level copy clashes with other sites' files
+    # Compress what compresses (the app page is ~350 KB of script; JSON replies shrink a lot too).
+    # Inside this server only, so it never clashes with a gzip line in the main nginx.conf.
+    gzip on;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_vary on;
+    gzip_types text/plain text/css text/javascript application/javascript application/json application/manifest+json image/svg+xml;
+    client_max_body_size 8m;
+
+    # ── walls against scanners and slow-connection attacks ──
+    if ($chocolate_bad_ua) { return 444; }   # a hacking tool in the User-Agent: close the connection without any answer
+    if ($request_method !~ ^(GET|HEAD|POST|OPTIONS)$) { return 405; }   # PUT, DELETE, TRACE, CONNECT... are never used here
+    limit_conn chocolate_conn 150;           # at most 150 simultaneous connections from one address
+    limit_conn_status 429;
+    limit_req_status 429;
+    client_header_timeout 15s;          # slow-connection attacks (slowloris) are cut off
+    client_body_timeout 20s;
+    send_timeout 30s;
+    large_client_header_buffers 4 8k;
+${prod ? `
+    location /.well-known/acme-challenge/ { root /var/www/certbot; }
+` : ''}
+    # ── API: /${API}/x -> Node /x ────────────────────────────────────────
+${role === 'member' ? `    # two-host setup: the admin API is reachable only on the admin host\n    location ^~ /${API}/admin/ { return 404; }\n` : ''}    location ~ ^/${API}/admin/(login|check-key)/?$ {
+        limit_req zone=chocolate_admin_login burst=5 nodelay;
+${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
+${proxy()}
+    }
+    location ~ ^/${API}/auth/(login|signup|password/change)/?$ {
+        limit_req zone=chocolate_member_login burst=10 nodelay;
+${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
+${proxy()}
+    }
+${HOOK_TOKEN && role !== 'admin' ? memberHookLocations : ''}${role !== 'admin' ? `    # MarzPay payment callbacks: their own wide rate zone (see hookLocation)
+    location = /${API}/deposit/callback {
+        limit_req zone=chocolate_hook burst=300 nodelay;
+${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
+${proxy()}
+    }
+    location = /${API}/withdraw/callback {
+        limit_req zone=chocolate_hook burst=300 nodelay;
+${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
+${proxy()}
+    }
+` : ''}    location /${API}/ {
+        limit_req zone=chocolate_api burst=200 nodelay;
+${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
+${proxy()}
+    }
+    location = /health { proxy_pass http://127.0.0.1:${PORT}/health; access_log off; }
+    # Nothing on this site is a hidden file, a server-side script or a backup/config file. Scanners that look for them get a plain 404 (fail2ban bans
+    # an address that keeps asking: see deploy/fail2ban). The admin panel path above and the certificate check path are not touched by these.
+    location ~ /\\.(?!well-known/) { return 404; }
+    location ~* \\.(php|phtml|asp|aspx|jsp|jspx|cgi|pl|sh|bash|py|rb|bak|old|orig|save|swp|sql|sqlite|db|env|ini|log|conf|cfg|yml|yaml|toml|git|svn|htaccess|htpasswd)$ { return 404; }
+
+${role !== 'member' ? `    # ── admin panel: a secret path, same files as always ──────────────
+    location = /${adminPath} { return 301 /${adminPath}/; }
+    location ^~ /${adminPath}/ {
+        alias ${ROOT}/admin/;
+        index index.html;
+        try_files $uri $uri/ =404;
+${hdr(ADMIN_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;', 'add_header Cache-Control "no-cache" always;'])}
+    }
+
+` : ''}${role === 'admin' ? `    # ── admin host: nothing here except the secret path and the API behind it ──
+    location = /robots.txt {
+        default_type text/plain;
+        return 200 "User-agent: *\\nDisallow: /\\n";
+    }
+    location / { return 404; }
+}
+` : `    # ── member app ────────────────────────────────────────────────────
+    root ${ROOT}/user;
+    index index.html;
+    location = /robots.txt {
+        default_type text/plain;
+        return 200 "User-agent: *\\nDisallow:\\n";
+    }
+    # Old-style referral links (<origin>/refCode=<code>) are a real path.
+    location ^~ /refCode= { rewrite ^ /index.html break; }
+    location = / {
+        if ($chocolate_tg_bot) { rewrite ^ /${API}/public/link-preview-page last; }
+        try_files $chocolate_bot_html /index.html =404;
+${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
+    }
+    location = /index.html {
+        if ($chocolate_tg_bot) { rewrite ^ /${API}/public/link-preview-page last; }
+        try_files $chocolate_bot_html /index.html =404;
+${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
+    }
+    location = /share.html {
+        if ($chocolate_tg_bot) { rewrite ^ /${API}/public/link-preview-page last; }
+        try_files $chocolate_bot_html /share.html =404;
+${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
+    }
+    location = /sw.js {
+${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
+    }
+    location = /manifest.json {
+${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
+    }
+    location / {
+        try_files $uri $uri/ =404;
+${hdr(MEMBER_CSP)}
+    }
+}
+`}`;
+
+process.stdout.write(`# Generated by deploy/make-nginx.js (${mode}) -- do not edit by hand; regenerate.
+# One host: member app at /, API at /${API}/ (prefix stripped before it reaches
+# Node on 127.0.0.1:${PORT}), admin panel at /${adminPath}/ .
+
+# Node stays reachable over a few kept-open connections (no new TCP handshake per API call).
+upstream chocolate_node {
+    server 127.0.0.1:${PORT};
+    keepalive 32;
+}
+
+limit_req_zone $binary_remote_addr zone=chocolate_api:10m rate=100r/s;
+limit_req_zone $binary_remote_addr zone=chocolate_hook:10m rate=50r/s;
+limit_req_zone $binary_remote_addr zone=chocolate_admin_login:10m rate=1r/s;
+limit_req_zone $binary_remote_addr zone=chocolate_member_login:10m rate=3r/s;
+limit_conn_zone $binary_remote_addr zone=chocolate_conn:10m;
+
+# Hacking and scanning tools announce themselves in the User-Agent (the names below are those of the common Kali Linux tools). They get no answer at all:
+# nginx closes the connection (444). Ordinary tools that real services use (curl, node, axios, Go, Postman...) are NOT listed, so payment
+# and GitHub webhooks are never affected.
+map $http_user_agent $chocolate_bad_ua {
+    default 0;
+    ~*(sqlmap|nikto|nmap|masscan|zgrab|zmap|hydra|medusa|ncrack|patator|gobuster|dirbuster|dirb/|wfuzz|ffuf|feroxbuster|nuclei|acunetix|nessus|openvas|netsparker|havij|w3af|wpscan|joomscan|whatweb|metasploit|msfconsole|appscan|skipfish|arachni|paros|grabber|httprint|webshag|nessus|burpcollaborator|zaproxy|owasp) 1;
+}
+
+# Link-preview crawlers (WhatsApp, Telegram, ...) get an empty page, every real
+# browser gets the real one (see no-preview.html and chocolate/CLAUDE.md).
+# Telegram's crawler alone is shown a link preview (site name, text and a wide picture, all set in Admin > Banners > Link preview). It is sent to the
+# app's own server, which builds the page from those settings. WhatsApp and every other crawler stay on the empty page below.
+map $http_user_agent $chocolate_tg_bot {
+    default 0;
+    ~*TelegramBot 1;
+}
+map $http_user_agent $chocolate_bot_html {
+    default '';
+    ~*(WhatsApp|facebookexternalhit|Facebot|TelegramBot|Twitterbot|Slackbot|LinkedInBot|Discordbot|SkypeUriPreview|redditbot|Pinterest|vkShare|Viber|line-poker) '/no-preview.html';
+}
+# TLS protocols/ciphers/session settings are NOT written here: certbot adds its own
+# (options-ssl-nginx.conf) inside each server block, and other sites on this box
+# (Petro) already set them at the top level -- a second copy of any of them in this
+# file makes nginx -t fail with "directive is duplicate" (seen live).
+${serverBlock([host].concat(extraHosts).join(' '), adminHost ? 'member' : 'both')}${adminHost ? '\n' + serverBlock(adminHost, 'admin') : ''}${HOOK_HOST ? '\n' + hookHostBlock() : ''}`);
