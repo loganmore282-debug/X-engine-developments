@@ -2342,7 +2342,7 @@ body{color:var(--ch-ink);font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
 .pay-card.pl .pay-note.bad{background:#fbeaea;color:#9a3a3a;}
 /* other green leftovers */
 .mg-dots i.on{background:#d8a42e;}
-.mg-dl{background:linear-gradient(180deg,#e8dcc7 0%,#f1e8d8 45%,#f8f2e6 100%) center/cover no-repeat;}
+.mg-dl{background:linear-gradient(180deg,#e8dcc7 0%,#f1e8d8 45%,#f8f2e6 100%) center top/contain no-repeat #f6efe2;}   /* the uploaded picture is shown whole (contain), not cropped */
 .mg-dl-btn{background:var(--ch-btn);border-radius:12px;}
 .mg-loadtxt{color:#a39683;}
 .mg-nomem .mg-loadtxt{color:#a39683;}
@@ -2425,6 +2425,8 @@ html.mg-gut .mg-top{margin-right:-15px;}
 /* Tapping a product card (not its button): the press is a small, quick dip, not the big spring it had (it shrank 2.8% and sprang to 100.8%). */
 .mg-card.card-tap,.p-card.card-tap{animation:cardTapBounce .22s ease-out;}
 @keyframes cardTapBounce{0%{transform:scale(1);}40%{transform:scale(.993);}100%{transform:scale(1);}}
+/* The start-up loader's background picture is shown whole, the way it was uploaded (not cropped to fill the screen); black shows around it. */
+#loadingScreen .ld-bg{background-size:contain;background-position:center;}
 /* CH-END */
 /* V2-END */
 </style>
