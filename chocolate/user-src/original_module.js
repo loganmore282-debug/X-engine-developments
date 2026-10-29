@@ -2043,12 +2043,8 @@ function applyAuthBackgrounds(){
       (Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0) + 'px');
   }
   set('hero', STATE.authHeroImage, s.authHeroOpacity, s.authHeroBlur);
-  // The banner is shown whole, in its own shape (nothing cropped): the box takes the picture's own proportions.
-  if (STATE.authHeroImage) {
-    const probe = new Image();
-    probe.onload = () => { if (probe.naturalWidth && probe.naturalHeight) root.style.setProperty('--auth-hero-ar', probe.naturalWidth + ' / ' + probe.naturalHeight); };
-    probe.src = STATE.authHeroImage;
-  } else root.style.removeProperty('--auth-hero-ar');
+  // Chocolate's banner box has one fixed size (360 x 232, as in the owner's screens); the picture fills it.
+  root.style.removeProperty('--auth-hero-ar');
   // The bottom-of-the-banner fade (.auth-hero::after) is switched on only
   // when there is a banner to fade. Owner: "there should be like whites or
   // color bleeding into the image of banner uploaded from admin panel." With
@@ -2629,9 +2625,9 @@ async function refreshAppDataInBackground(uid){
 // bar links to them directly any more.
 var MGI = {
   mail: '<svg viewBox="0 0 24 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.4" y="3" width="19.2" height="14.4" rx="3"/><path d="M3.6 6.2l8.4 6 8.4-6"/></svg>',
-  nHome: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 10.6 12 3.4l8.6 7.2V19.6a1.4 1.4 0 0 1-1.4 1.4H4.8a1.4 1.4 0 0 1-1.4-1.4z"/><path d="M9.6 21v-5.6a1 1 0 0 1 1-1h2.8a1 1 0 0 1 1 1V21"/></svg>',
+  nHome: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.6 11.6 12 3.2l9.4 8.4"/><path d="M5 10v10.2a.8.8 0 0 0 .8.8h12.4a.8.8 0 0 0 .8-.8V10"/><path d="M9.6 21v-5.4h4.8V21"/></svg>',
   nOrders: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.2 3h11.6a1.2 1.2 0 0 1 1.2 1.2V21l-2.5-1.7-2.1 1.7-2.4-1.7-2.4 1.7-2.1-1.7L5 21V4.2A1.2 1.2 0 0 1 6.2 3z"/><path d="M9 8h6M9 12h6"/></svg>',
-  nPromo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.2 10.2v3.6a1 1 0 0 0 1 1H7l8.6 4.3V4.9L7 9.2H4.2a1 1 0 0 0-1 1z"/><path d="M18.6 9.2a4.2 4.2 0 0 1 0 5.6"/><path d="M7.2 15.2l1 4.6h2.6l-.9-4.2"/></svg>',
+  nPromo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.6 9.8 19.4 4.4v15.2L5.6 14.2z"/><path d="M2.8 10.2v3.6"/><path d="M21.4 9.6a3 3 0 0 1 0 4.8"/></svg>',
   nTeam: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.4"/><path d="M2.6 20.4v-1.2a5.2 5.2 0 0 1 5.2-5.2h2.4a5.2 5.2 0 0 1 5.2 5.2v1.2"/><path d="M15.6 4.8a3.4 3.4 0 0 1 0 6.4"/><path d="M18.6 14.4a5.2 5.2 0 0 1 2.8 4.6v1.4"/></svg>',
   nProfile: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7.8" r="4.2"/><path d="M4.4 21v-1.2a6.2 6.2 0 0 1 6.2-6.2h2.8a6.2 6.2 0 0 1 6.2 6.2V21"/></svg>',
   // Home quick buttons (white outline, 24 box)
@@ -2640,13 +2636,13 @@ var MGI = {
   qChannel: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8 3 7.8l9 5 9-5-9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 16.2l9 5 9-5"/></svg>',
   qService: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.2 13.5v-1.6a7.8 7.8 0 0 1 15.6 0v1.6"/><rect x="3" y="12.6" width="4.2" height="6.4" rx="2"/><rect x="16.8" y="12.6" width="4.2" height="6.4" rx="2"/><path d="M19 19c0 1.9-1.7 3-4 3h-2.2"/></svg>',
   // Profile list tiles (the small picture inside each coloured tile)
-  tDownload: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.8v11M7.4 10.9l4.6 4.6 4.6-4.6M5 20h14"/></svg>',
-  tCard: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.2" width="18" height="13.6" rx="2.8"/><path d="M3 9.8h18M7 14.3h4.2"/></svg>',
+  tDownload: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.2v10.8M7.5 10.9l4.5 4.5 4.5-4.5M4.4 20h15.2"/></svg>',
+  tCard: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.2" width="18" height="13.8" rx="2.8"/><path d="M3 8.4h18M6.2 14h4.2"/></svg>',
   tWallet: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.3v9.4M7.9 9.65l8.2 4.7M16.1 9.65l-8.2 4.7"/></svg>',
-  tChat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4C7.3 4 3.7 7 3.7 10.9c0 1.9.9 3.6 2.4 4.8-.1 1.2-.6 2.2-1.6 3 2-.1 3.6-.8 4.6-1.7.9.2 1.9.3 2.9.3 4.700 0 8.300-3 8.300-6.900S16.700 4 12 4z"/></svg>',
-  tLock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.8" y="10.4" width="14.4" height="10.2" rx="2.4"/><path d="M8.2 10.4V7.9a3.8 3.8 0 0 1 7.6 0v2.5"/><circle cx="12" cy="15.5" r=".9" fill="currentColor" stroke="none"/></svg>',
+  tChat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2.6 21.4z"/></svg>',
+  tLock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.8" y="10" width="14.4" height="10.8" rx="2.4"/><path d="M8.2 10V7.8a3.8 3.8 0 0 1 7.6 0V10"/><path d="M12 13.8v3.2"/></svg>',
   tKey: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8 4.6 5.6v5.6c0 4.8 3.1 8.1 7.4 10 4.3-1.9 7.4-5.2 7.4-10V5.6z"/><rect x="9.3" y="10.6" width="5.4" height="4.4" rx="1.1"/><path d="M10.4 10.6V9.4a1.6 1.6 0 0 1 3.2 0v1.2"/></svg>',
-  door: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 4.5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h3.5"/><path d="M14.5 8l4.5 4-4.5 4M19 12H9.5"/></svg>',
+  door: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.4 3.8H6.2A2.2 2.2 0 0 0 4 6v12a2.2 2.2 0 0 0 2.2 2.2h3.2"/><path d="M10.6 12H20.4M16.4 8l4 4-4 4"/></svg>',
   cardMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.6" y="5" width="18.8" height="14" rx="3"/><path d="M2.6 9.6h18.8M6.8 14.4h4"/></svg>',
   tickMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="5.5" fill="#0c8a4a"/><path d="M6.4 12.6l3.9 3.9 7.4-8" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   copyMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2.4"/><path d="M15.5 8.5V6.9a2.4 2.4 0 0 0-2.4-2.4H6.9a2.4 2.4 0 0 0-2.4 2.4v6.2a2.4 2.4 0 0 0 2.4 2.4h1.6"/></svg>',
@@ -2733,12 +2729,6 @@ function hookNavTapBox(){
     btn.classList.remove('nav-tap');
     void btn.offsetWidth;
     btn.classList.add('nav-tap');
-    // A soft ring spreads from the finger, as in the owner's recording.
-    const r = btn.getBoundingClientRect(), rip = document.createElement('i');
-    rip.className = 'mg-ripple';
-    rip.style.left = (e.clientX - r.left) + 'px'; rip.style.top = (e.clientY - r.top) + 'px';
-    btn.appendChild(rip);
-    setTimeout(() => { if (rip.parentNode) rip.parentNode.removeChild(rip); }, 560);
   }, { passive: true });
   // Clean the class off once it has played, so the next tap is a fresh run
   // and nothing is left holding a finished animation.

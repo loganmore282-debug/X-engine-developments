@@ -2003,8 +2003,8 @@ body{color:var(--ch-ink);font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
 .bottom-nav::before{display:none;}
 .navitem{color:#8a7762;}
 .navitem::before{top:7px;width:61px;height:52px;margin-left:-30.5px;border-radius:22px;background:linear-gradient(135deg,#ded7cf,#e9e4dc);}
-.navitem .nav-ic{top:16px;width:18px;height:18px;margin-left:-9px;color:#7a6650;}
-.navitem.active .nav-ic{top:12px;transform:none;color:#2a1709;}
+.navitem .nav-ic{top:13px;width:22px;height:22px;margin-left:-11px;color:#7a6650;}
+.navitem.active .nav-ic{top:9.5px;transform:none;color:#2a1709;}
 .navitem .lbl{top:38.5px;font:700 10.8px/16px Roboto,system-ui,sans-serif;letter-spacing:0;color:#8a7762;}
 .navitem.active .lbl{color:#2a1709;}
 .navitem .nav-ic svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
@@ -2166,8 +2166,8 @@ body{color:var(--ch-ink);font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
 .mg-set{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px;border:1px solid #d8d0c4;border-radius:20px;background:#fffefc;}
 .mg-row.ch-tile{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:16px 6px 14px;height:106.5px;box-sizing:border-box;border:1px solid #ece5dc;border-bottom:1px solid #ece5dc;border-radius:16px;background:#faf6f5;text-align:center;}
 .mg-row.ch-tile:last-child{border-bottom:1px solid #ece5dc;}
-.mg-tile{flex:0 0 38px;width:38px;height:38px;border-radius:12px;background:#f6eddc;box-shadow:none;color:#4e3016;}
-.mg-tile svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.mg-tile{flex:0 0 38px;width:38px;height:38px;border-radius:12px;background:#f6eddc;box-shadow:0 4px 9px -3px rgba(94,58,27,.2);color:#4e3016;}
+.mg-tile svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
 .mg-tile.t1,.mg-tile.t2,.mg-tile.t3,.mg-tile.t4,.mg-tile.t5,.mg-tile.t6{background:#f6eddc;}
 .mg-tile em{background:#c0392b;}
 .mg-row.ch-tile b{display:block;margin-top:9px;font:700 13px/1.2 Roboto,system-ui,sans-serif;letter-spacing:.02em;color:#2a1709;}
@@ -2402,6 +2402,18 @@ html.mg-gut .mg-top{margin-right:-15px;}
 .mg-pcopy i{width:15px;height:15px;}
 .ch-copylink{height:40px;gap:2px;}
 .ch-copylink svg{width:19px;height:19px;}
+/* Glow sweep on the brown buttons (Buy Now, Log In, Sign Up, Deposit, Copy link): the green app's band was only 11% white, which is lost on dark brown, so the band is stronger here. */
+.ch-copylink:not(:disabled){position:relative;overflow:hidden;isolation:isolate;}
+.mg-buy:not(.soon):not(:disabled)::before,#loginBtn:not(:disabled)::before,#regBtn:not(:disabled)::before,.mg-me-btns .dep::before,.ch-copylink:not(:disabled)::before,.mg-buy:not(.soon):not(:disabled)::after,#loginBtn:not(:disabled)::after,#regBtn:not(:disabled)::after,.mg-me-btns .dep::after,.ch-copylink:not(:disabled)::after{content:'';position:absolute;left:0;top:0;width:65%;height:100%;pointer-events:none;z-index:-1;will-change:transform;transform:translateX(157.7%) skewX(5deg);
+  background:linear-gradient(90deg,rgba(255,236,200,0) 0%,rgba(255,236,200,.05) 12%,rgba(255,236,200,.14) 30%,rgba(255,236,200,.28) 50%,rgba(255,236,200,.2) 66%,rgba(255,236,200,.1) 82%,rgba(255,236,200,0) 100%);}
+.mg-buy:not(.soon):not(:disabled)::before,#loginBtn:not(:disabled)::before,#regBtn:not(:disabled)::before,.mg-me-btns .dep::before,.ch-copylink:not(:disabled)::before{animation:mgGlowA 2s linear infinite;}
+.mg-buy:not(.soon):not(:disabled)::after,#loginBtn:not(:disabled)::after,#regBtn:not(:disabled)::after,.mg-me-btns .dep::after,.ch-copylink:not(:disabled)::after{animation:mgGlowB 2s linear infinite;}
+@media (prefers-reduced-motion:reduce){.ch-copylink::before,.ch-copylink::after{animation:none !important;}}
+/* The tapped navigation icon only dips; no ring spreads from the finger. */
+.mg-ripple{display:none !important;}
+.ma-hero .auth-bg{background-size:cover;}
+.mg-logout{gap:6px;}
+.mg-logout span{width:22px;height:22px;}
 /* CH-END */
 /* V2-END */
 </style>
