@@ -1366,13 +1366,39 @@ function cleanPhone(raw){
   if (pfx.length && !pfx.some(p => local.startsWith(p))) return null;
   return dialPlus() + local;
 }
+// The whole auth screen (banner, round logo, tabs, form) appears in ONE batch: it is held hidden until its two pictures have loaded (at most 450 ms),
+// then fades up once. Used for Login <-> Sign Up and for the first showing of the screen.
+var _authAppearSeq = 0;
+function authAppear(){
+  const el = document.querySelector('#authScreen > .ma-screen'); if (!el) return;
+  const seq = ++_authAppearSeq;
+  el.classList.remove('ch-auth-in'); el.style.opacity = '0';
+  const urls = [STATE.authHeroImage, STATE.authLogoImage || STATE.brandLogo].filter(u => u && /^(data:|https?:|\/)/.test(u));
+  let done = false;
+  const go = () => {
+    if (done || seq !== _authAppearSeq) return; done = true;
+    el.style.opacity = ''; void el.offsetWidth; el.classList.add('ch-auth-in');
+    setTimeout(() => { if (seq === _authAppearSeq) el.classList.remove('ch-auth-in'); }, 450);
+  };
+  let left = urls.length;
+  if (!left) return go();
+  urls.forEach(u => { const im = new Image(); im.onload = im.onerror = () => { if (--left <= 0) go(); }; im.src = u; });
+  setTimeout(go, 450);
+}
+(function watchAuthScreen(){
+  const a = document.getElementById('authScreen'); if (!a || typeof MutationObserver === 'undefined') return;
+  let shown = a.style.display !== 'none';
+  new MutationObserver(() => { const now = a.style.display !== 'none'; if (now && !shown) authAppear(); shown = now; }).observe(a, { attributes: true, attributeFilter: ['style'] });
+})();
 function showAuthTab(tab){
+  const wasReg = $('registerPane').style.display !== 'none', isReg = tab === 'register';
   $('loginPane').style.display = tab === 'login' ? '' : 'none';
   $('registerPane').style.display = tab === 'register' ? '' : 'none';
   const tl = $('tabLogin'), tr = $('tabRegister');
   if (tl) { tl.classList.toggle('on', tab === 'login'); tl.setAttribute('aria-selected', tab === 'login' ? 'true' : 'false'); }
   if (tr) { tr.classList.toggle('on', tab === 'register'); tr.setAttribute('aria-selected', tab === 'register' ? 'true' : 'false'); }
   const sc = $('authScroll'); if (sc) sc.scrollTop = 0;
+  if (wasReg !== isReg && $('authScreen').style.display !== 'none') authAppear();
   if (tab === 'register') loadAuthCaptcha();   // a fresh picture every time Sign Up is opened
   stopSmsCodeListener();
 }

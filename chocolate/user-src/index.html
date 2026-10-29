@@ -2414,6 +2414,11 @@ html.mg-gut .mg-top{margin-right:-15px;}
 .ma-hero .auth-bg{background-size:cover;}
 .mg-logout{gap:6px;}
 .mg-logout span{width:22px;height:22px;}
+/* Login <-> Sign Up (and the first showing of the auth screen): the banner, round logo, tabs and the form appear TOGETHER as one piece, not card by card.
+   authAppear() in the module replays this once per navigation, after the pictures are ready. */
+#authScreen > .ma-screen,.va-pane{animation:none;}
+#authScreen > .ma-screen.ch-auth-in{animation:mgSheetIn .3s ease-out both;}
+@media (prefers-reduced-motion:reduce){#authScreen > .ma-screen.ch-auth-in{animation:none;}}
 /* CH-END */
 /* V2-END */
 </style>
