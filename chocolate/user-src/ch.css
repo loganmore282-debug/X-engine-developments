@@ -442,4 +442,7 @@ html.mg-gut .mg-top{margin-right:-15px;}
 #authScreen > .ma-screen,.va-pane{animation:none;}
 #authScreen > .ma-screen.ch-auth-in{animation:mgSheetIn .3s ease-out both;}
 @media (prefers-reduced-motion:reduce){#authScreen > .ma-screen.ch-auth-in{animation:none;}}
+/* Tapping a product card (not its button): the press is a small, quick dip, not the big spring it had (it shrank 2.8% and sprang to 100.8%). */
+.mg-card.card-tap,.p-card.card-tap{animation:cardTapBounce .22s ease-out;}
+@keyframes cardTapBounce{0%{transform:scale(1);}40%{transform:scale(.993);}100%{transform:scale(1);}}
 /* CH-END */

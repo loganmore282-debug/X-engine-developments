@@ -7,12 +7,12 @@ const html = fs.readFileSync(__dirname + (built ? '/user/index.html' : '/user-sr
 const server = fs.readFileSync(__dirname + '/server.js', 'utf8');
 const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
-ok(/<span class="ld-txt"[^>]*>Loading\.\.\.<\/span>/.test(html), 'the loader says "Loading..."');
+ok(/<span class="ld-txt"[^>]*>(<i style="--i:\d">[^<]<\/i>){10}<\/span>/.test(html) && html.match(/<span class="ld-txt"[^>]*>(.*?)<\/span>/)[1].replace(/<[^>]+>/g, '') === 'Loading...' && /@keyframes ldWave/.test(html), 'the loader says "Loading..." as ten letters and dots that wave one after another');
 ok(/#loadingScreen \.ld-bg\{[^}]*opacity:var\(--ld-op,1\)[^}]*filter:blur\(var\(--ld-blur,0px\)\)/.test(html) && /id="ldBg"/.test(html), 'the loader background is the admin picture, on its own layer with the admin opacity and blur (never on the word)');
 ok(/#loadingScreen\{[^}]*background:#000/.test(html), 'the loader page is plain black unless the admin sets a picture');
 ok(/\.ld-ring\{[^}]*width:92px;height:92px/.test(html) && /\.ld-track\{[^}]*stroke:#2e2e2e;stroke-width:3\.7/.test(html) && /\.ld-arc\{[^}]*stroke:#8d8d8d;stroke-width:2\.6;stroke-linecap:round[^}]*animation:ldSpin 1\.1s linear infinite/.test(html), 'a dark ring with a lighter turning arc, measured from the owner\'s screenshot');
-ok(/\.ld-logo\{[^}]*left:12px;top:12px;width:68px;height:68px[^}]*border:2\.5px solid #fff/.test(html) && /id="ldLogo"/.test(html), 'the round admin picture sits inside the ring with a white edge');
-ok(!/ldBounce/.test(html), 'the word no longer bounces (the ring is the motion)');
+ok(/\.ld-logo\{[^}]*left:9\.5px;top:9\.5px;width:73px;height:73px[^}]*border:2\.5px solid #fff/.test(html) && /id="ldLogo"/.test(html), 'the round admin picture sits inside the ring with a white edge');
+ok(!/ldBounce/.test(html), 'the old whole-word bounce is gone (the letters wave instead)');
 ok(/ld-txt\{[^}]*font-family:'Noto Serif'[^}]*font-size:18px[^}]*font-weight:700;letter-spacing:\.175em/.test(html), 'bold serif, 18 px, spaced .175em like the owner\'s screenshot');
 ok(/ld-txt\{[^}]*color:#fff/.test(html), 'colour stays white (not specified by the owner)');
 ok(/\.sr-only\{/.test(html), 'the screen-reader word is hidden');
