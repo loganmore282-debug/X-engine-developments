@@ -71,8 +71,8 @@ for (const s of d.scripts) {
   w.post = async (p, b) => { calls.push(p + ' ' + JSON.stringify(b)); status = Object.assign({}, status, { accruedDays: 1 }); return { status: 'success', amount: 2000, walletBalance: 9000, accruedDays: 1 }; };
   w.eval('STATE.account={walletBalance:5000}; STATE.page="salary"');
   await w.renderSalary(); await new Promise(r => setTimeout(r, 20));
-  ok(d.querySelectorAll('.bottom-nav .navitem').length === 6, 'six tabs');
-  ok([...d.querySelectorAll('.bottom-nav .lbl')].map(e => e.textContent).join() === 'Home,Orders,Promotion,Team,Salary,Profile', 'tab names: Home, Orders, Promotion, Team, Salary, Profile');
+  ok(d.querySelectorAll('.bottom-nav .navitem').length === 5, 'five tabs (the owner\'s bar has no Salary tab; the page itself still works)');
+  ok([...d.querySelectorAll('.bottom-nav .lbl')].map(e => e.textContent).join() === 'Home,Orders,Promotion,Team,Profile', 'tab names: Home, Orders, Promotion, Team, Profile');
   ok(/Daily Salary Standard/.test(d.querySelector('.mg-shead').textContent) && /Team Total Consumption: UGX 700,000/.test(d.querySelector('.mg-spill').textContent), 'title and the team total');
   ok(/Accrued wages: 2 day\(s\)/.test(d.querySelector('.mg-sacc').textContent), 'accrued days');
   const cards = [...d.querySelectorAll('.mg-stier')];

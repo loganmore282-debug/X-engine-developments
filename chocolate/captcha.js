@@ -6,8 +6,8 @@
 // be tried again and again. A new picture is asked for every time Sign Up is opened.
 const crypto = require('node:crypto');
 const TTL_MS = 5 * 60 * 1000, MAX_LIVE = 20000;
-const COLORS = ['#0b6a3b', '#10a95a', '#e1212c', '#f7c41a'];       // dark green, green, red, yellow
-const LINE_COLORS = ['#a97d98', '#8fa394', '#b08aa6'];
+const COLORS = ['#c98f12', '#d9a21b', '#e5b436', '#b8860b'];       // golds, like the owner's picture
+const LINE_COLORS = ['#9db08a', '#b9a37a', '#a6b894'];
 const SECRET = crypto.randomBytes(32);                               // lives in memory only, new at every start
 const mac = (id, code) => crypto.createHmac('sha256', SECRET).update(id + ':' + code).digest();
 // Noto Serif Bold digit outlines, 1000 units to the em: digit -> [svg path, advance width]
@@ -21,9 +21,9 @@ function newCode() { let s = ''; for (let i = 0; i < 4; i++) s += String(rnd(10)
 
 function renderSvg(code) {
   const W = 226, H = 84, out = [];
-  out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="#e9f5ec"/>`);
-  for (let i = 0; i < 3; i++) out.push(`<circle cx="${f1(between(20, W - 20))}" cy="${f1(between(10, H - 10))}" r="${f1(between(22, 44))}" fill="none" stroke="#cfe6d6" stroke-width="1.6"/>`);
-  for (let i = 0; i < 26; i++) out.push(`<circle cx="${f1(between(4, W - 4))}" cy="${f1(between(4, H - 4))}" r="${f1(between(1, 2.6))}" fill="${rnd(3) ? '#b7a3b8' : '#c9d9cd'}"/>`);
+  out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="#f6ecda"/>`);
+  for (let i = 0; i < 3; i++) out.push(`<circle cx="${f1(between(20, W - 20))}" cy="${f1(between(10, H - 10))}" r="${f1(between(22, 44))}" fill="none" stroke="#e4d6b8" stroke-width="1.6"/>`);
+  for (let i = 0; i < 26; i++) out.push(`<circle cx="${f1(between(4, W - 4))}" cy="${f1(between(4, H - 4))}" r="${f1(between(1, 2.6))}" fill="${rnd(3) ? '#b7a98f' : '#cfd9c0'}"/>`);
   // the digits: a different colour and a small tilt each, never all one colour
   const pick = []; while (pick.length < 4) pick.push(COLORS[rnd(COLORS.length)]);
   if (new Set(pick).size < 3) { pick[0] = COLORS[0]; pick[1] = COLORS[1]; pick[2] = COLORS[2]; pick[3] = COLORS[rnd(4)]; }

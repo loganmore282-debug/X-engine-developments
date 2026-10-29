@@ -183,7 +183,7 @@ var LANG_ROWS = [
   ['Referral code', 'Koodi y\'Okuyita', 'Msimbo wa mwaliko', 'Code de parrainage', 'Kode yo gutumira', 'Koodi y\'Okweta'],
   ['Logging in\u2026', 'Oyingira\u2026', 'Inaingia\u2026', 'Connexion en cours\u2026', 'Urimo kwinjira\u2026', 'Nootaaha\u2026'],
   ['Creating your account\u2026', 'Tukolawo akawunti yo\u2026', 'Inatengeneza akaunti yako\u2026', 'Cr\u00e9ation de votre compte\u2026', 'Turimo gushyiraho konti yawe\u2026', 'Nitukora akaunti yaawe\u2026'],
-  ['Wallet', 'Ensawo', 'Pochi', 'Portefeuille', 'Umufuka', 'Ensaho'],
+  ['Bank Account', 'Ensawo', 'Pochi', 'Portefeuille', 'Umufuka', 'Ensaho'],
   ['Messages', 'Obubaka', 'Ujumbe', '=', 'Ubutumwa', 'Obutumwa'],
   ['Transaction Statement', 'Ebiwandiiko bya Ssente', 'Rekodi ya Salio', 'Historique du solde', 'Amateka y\'amafaranga', 'Ebihandiiko bya Sente'],
   ['Rules and Regulations', '', '', '', '', ''],
@@ -263,7 +263,7 @@ var LANG_ROWS = [
   ['Customer Service', 'Obuyambi eri Abaguzi', 'Huduma kwa Wateja', 'Service client', 'Serivisi z\'abakiriya', 'Obuhwezi bw\'Abaguzi'],
   ['Daily Check-in', 'Okukyalira Buli Lunaku', 'Kuhudhuria Kila Siku', 'Pointage quotidien', 'Kwiyandikisha buri munsi', 'Okwoleka Buri Izooba'],
   ['Deposit Instructions', 'Ebiragiro by\'Okuteeka Ssente', 'Maelekezo ya Kuweka Pesa', 'Instructions de d\u00e9p\u00f4t', 'Amabwiriza yo kubitsa', 'Ebiragiro by\'Okuta Sente'],
-  ['Edit Wallet', 'Kyusa Ensawo', 'Hariri Pochi', 'Modifier le portefeuille', 'Hindura umufuka', 'Hindura Ensaho'],
+  ['Edit Bank Account', 'Kyusa Ensawo', 'Hariri Pochi', 'Modifier le portefeuille', 'Hindura umufuka', 'Hindura Ensaho'],
   ['Full name', 'Amannya gonna', 'Jina kamili', 'Nom complet', 'Amazina yose', 'Amaziina goona'],
   ['Go spin', 'Genda ozunguse', 'Nenda uzungushe', 'Aller tourner', 'Genda uzunguze', 'Genda ozengurutse'],
   ['Help Centre', 'Ekifo ky\'Obuyambi', 'Kituo cha Msaada', 'Centre d\'aide', 'Ikigo cy\'ubufasha', 'Ekicweka ky\'Obuhwezi'],
@@ -283,14 +283,13 @@ var LANG_ROWS = [
   ['Total Earned', 'Byonna By\'ofunye', 'Jumla Uliyopata', 'Total gagn\u00e9', 'Byose wabonye', 'Byona Ebi Otungire'],
   ['Total Invested', 'Byonna By\'oteeseemu', 'Jumla Uliyowekeza', 'Total investi', 'Byose washoye', 'Byona Ebi Oteiremu'],
   ['TREASURE CHEST', 'ESSANDUKU LY\'OBUGAGGA', 'SANDUKU LA HAZINA', 'COFFRE AU TR\u00c9SOR', 'AGASANDUKU K\'UBUTUNZI', 'ESANDUUKU Y\'OBUGAIGA'],
-  ['Wallet Account', 'Akawunti y\'Ensawo', 'Akaunti ya Pochi', 'Compte du portefeuille', 'Konti y\'umufuka', 'Akaunti y\'Ensaho'],
   ['Wallet Balance', 'Ssente mu Nsawo', 'Salio la Pochi', 'Solde du portefeuille', 'Amafaranga mu mufuka', 'Sente omu Nsaho'],
-  ['Wallet Provider', 'Kkampuni y\'Ensawo', 'Mtoa Huduma wa Pochi', 'Op\u00e9rateur du portefeuille', 'Utanga serivisi y\'umufuka', 'Kampuni y\'Ensaho'],
-  ['Wallet saved', 'Ensawo etereddwa', 'Pochi imehifadhiwa', 'Portefeuille enregistr\u00e9', 'Umufuka wabitswe', 'Ensaho ebiikirwe'],
+  ['Bank Name', 'Kkampuni y\'Ensawo', 'Mtoa Huduma wa Pochi', 'Op\u00e9rateur du portefeuille', 'Utanga serivisi y\'umufuka', 'Kampuni y\'Ensaho'],
+  ['Bank account saved', 'Ensawo etereddwa', 'Pochi imehifadhiwa', 'Portefeuille enregistr\u00e9', 'Umufuka wabitswe', 'Ensaho ebiikirwe'],
   ['WhatsApp Group', 'Ekibiina kya WhatsApp', 'Kikundi cha WhatsApp', 'Groupe WhatsApp', 'Itsinda rya WhatsApp', 'Ekibiina kya WhatsApp'],
   ['WhatsApp Support', 'Obuyambi ku WhatsApp', 'Msaada wa WhatsApp', 'Assistance WhatsApp', 'Ubufasha kuri WhatsApp', 'Obuhwezi aha WhatsApp'],
   ['Withdrawal Instructions', 'Ebiragiro by\'Okuggyamu Ssente', 'Maelekezo ya Kutoa Pesa', 'Instructions de retrait', 'Amabwiriza yo kubikuza', 'Ebiragiro by\'Okwihamu Sente'],
-  ['Withdrawal Wallet', 'Ensawo y\'Okuggyamu', 'Pochi ya Kutoa Pesa', 'Portefeuille de retrait', 'Umufuka wo kubikuza', 'Ensaho y\'Okwihamu'],
+  ['Withdrawal Bank Account', 'Ensawo y\'Okuggyamu', 'Pochi ya Kutoa Pesa', 'Portefeuille de retrait', 'Umufuka wo kubikuza', 'Ensaho y\'Okwihamu'],
   ['You opened', 'Oggudde', 'Umefungua', 'Vous avez ouvert', 'Wafunguye', 'Oigwire'],
   ['You won', 'Owanguddemu', 'Umeshinda', 'Vous avez gagn\u00e9', 'Watsinze', 'Osingwire'],
   ['You\'ll receive:', 'Ojja kufuna:', 'Utapokea:', 'Vous recevrez :', 'Uzabona:', 'Noija kutunga:'],
@@ -348,6 +347,7 @@ var LANG_ROWS = [
   ['Referral code is required', 'Koodi y\'okuyita yeetaagisa', 'Msimbo wa mwaliko unahitajika', 'Le code de parrainage est obligatoire', 'Kode yo gutumira irakenewe', 'Koodi y\'okweta neeyetengyesa'],
   ['Select your wallet provider.', 'Londa kkampuni y\'ensawo yo.', 'Chagua mtoa huduma wa pochi yako.', 'Choisissez l\'op\u00e9rateur de votre portefeuille.', 'Hitamo utanga serivisi y\'umufuka wawe.', 'Toorana kampuni y\'ensaho yaawe.'],
   ['Trade Password (6 digits)', 'Ekisumuluzo ky\'Okusuubula (ennamba 6)', 'Nenosiri la Malipo (tarakimu 6)', 'Mot de passe de transaction (6 chiffres)', 'Ijambobanga ry\'ubucuruzi (imibare 6)', 'Ekisumuruzo ky\'Okushuubura (enamba 6)'],
+  ['Withdrawal Password (6 digits)', 'Ekisumuluzo ky\'Okuggyamu (ennamba 6)', 'Nenosiri la Kutoa Pesa (tarakimu 6)', 'Mot de passe de retrait (6 chiffres)', 'Ijambobanga ryo kubikuza (imibare 6)', 'Ekisumuruzo ky\'Okuggyamu (enamba 6)'],
   ['Bind your wallet before withdrawing.', 'Teekawo ensawo yo nga tonnaggyamu ssente.', 'Sajili pochi yako kabla ya kutoa pesa.', 'Enregistrez votre portefeuille avant de retirer.', 'Andikisha umufuka wawe mbere yo kubikuza.', 'Taho ensaho yaawe otakaihiremu sente.'],
   ['Choose PAY-A or PAY B', 'Londa PAY-A oba PAY B', 'Chagua PAY-A au PAY B', 'Choisissez PAY-A ou PAY B', 'Hitamo PAY-A cyangwa PAY B', 'Toorana PAY-A nari PAY B'],
   ['Click to refresh the results.', 'Nyiga oddemu olabe ebivudde mu.', 'Bonyeza ili kuonyesha matokeo upya.', 'Cliquez pour actualiser les r\u00e9sultats.', 'Kanda kugira ngo uvugurure ibisubizo.', 'Kanda ogarukyemu oreebe ebyarugiremu.'],
@@ -419,8 +419,8 @@ var LANG_ROWS = [
   ['Transaction', 'Okukyusa ssente', 'Muamala', '=', 'Igikorwa', 'Okuhingura sente'],
   ['OK', 'Kale', 'Sawa', '=', 'Yego', 'Kale'],
   ['days', 'ennaku', 'siku', 'jours', 'iminsi', 'ebiro'],
-  ['Bind Wallet', 'Teeka Ensawo', 'Sajili Pochi', 'Associer le portefeuille', 'Andika umufuka', 'Teeka Ensaho'],
-  ['Change Wallet', 'Kyusa Ensawo', 'Badilisha Pochi', 'Changer de portefeuille', 'Hindura umufuka', 'Hindura Ensaho'],
+  ['Bind Bank Account', 'Teeka Ensawo', 'Sajili Pochi', 'Associer le portefeuille', 'Andika umufuka', 'Teeka Ensaho'],
+  ['Change Bank Account', 'Kyusa Ensawo', 'Badilisha Pochi', 'Changer de portefeuille', 'Hindura umufuka', 'Hindura Ensaho'],
   ['NO WALLET BOUND', 'TEWALI NSAWO ETEEKEDDWA', 'HAKUNA POCHI ILIYOSAJILIWA', 'AUCUN PORTEFEUILLE ASSOCIÉ', 'NTA MUFUKA WANDITSWE', 'TIHARIHO NSAHO ETEIREHO'],
   ['Get the mobile app', 'Funa pulogulaamu ya ssimu', 'Pata programu ya simu', 'Obtenez l\'application mobile', 'Kura porogaramu ya telefone', 'Tunga porogaraamu ya esimu'],
   ['Manage your withdrawal wallet', 'Ddukanya ensawo yo ey\'okuggyamu ssente', 'Dhibiti pochi yako ya kutoa pesa', 'Gérez votre portefeuille de retrait', 'Genzura umufuka wawe wo kubikuza', 'Jwara ensaho yaawe y\'okwihamu sente'],
@@ -2636,23 +2636,27 @@ async function refreshAppDataInBackground(uid){
 // bar links to them directly any more.
 var MGI = {
   mail: '<svg viewBox="0 0 24 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.4" y="3" width="19.2" height="14.4" rx="3"/><path d="M3.6 6.2l8.4 6 8.4-6"/></svg>',
-  nHome: '<svg viewBox="0 0 34 34" aria-hidden="true"><defs><linearGradient id="mgNg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0aa152"/><stop offset="1" stop-color="#067a40"/></linearGradient></defs><rect width="34" height="34" rx="7" fill="url(#mgNg)"/><path d="M17 8.4 7.6 17h2.7v8.6h13.4V17h2.7z" fill="#fff"/><path d="M17 5.6 5.4 16.2l1.7 1.8L17 8.9l9.9 9.1 1.7-1.8z" fill="#ffc72c"/><rect x="14.2" y="19.4" width="5.6" height="6.2" rx="1.1" fill="#067a40"/></svg>',
-  nOrders: '<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="7" fill="url(#mgNg)"/><rect x="9.4" y="7.6" width="15.2" height="20" rx="2.4" fill="#fff"/><rect x="13" y="5.6" width="8" height="4.6" rx="1.4" fill="#ffc72c"/><path d="M12.8 15h8.4M12.8 18.4h8.4M12.8 21.8h8.4" stroke="#067a40" stroke-width="1.5" stroke-linecap="round"/></svg>',
-  nPromo: '<svg viewBox="0 0 34 34" aria-hidden="true"><defs><linearGradient id="mgNy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6c52e"/><stop offset="1" stop-color="#dc9d16"/></linearGradient></defs><rect width="34" height="34" rx="7" fill="url(#mgNy)"/><rect x="7.4" y="13.6" width="6.4" height="6.8" rx="1.2" fill="#1a1a1a"/><path d="M13.8 13.6 22 9.2v15.6l-8.2-4.4z" fill="#fff"/><path d="M13.8 13.6 22 9.2v3.2l-8.2 3.2z" fill="#1a1a1a"/><path d="M25 13.4l3.6-1.6M25 17l4 0M25 20.6l3.6 1.6" stroke="#0a8a4a" stroke-width="1.8" stroke-linecap="round"/></svg>',
-  nTeam: '<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="7" fill="url(#mgNg)"/><circle cx="10.4" cy="12.4" r="2.5" fill="#ffc72c"/><circle cx="17" cy="11.2" r="2.7" fill="#ffc72c"/><circle cx="23.6" cy="12.4" r="2.5" fill="#ffc72c"/><path d="M6 24.6c0-3.4 2.4-5.4 5.2-5.4 1.2 0 2.2.4 3 1 .9-.6 1.8-1 2.8-1s1.9.4 2.8 1c.8-.6 1.8-1 3-1 2.8 0 5.2 2 5.2 5.4v.8H6z" fill="#fff"/></svg>',
-  nSalary: '<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="7" fill="url(#mgNy)"/><path d="M14 8.2c0-1.4 1-2.2 3-2.2s3 .8 3 2.2l-1.2 2.4h-3.6z" fill="#1c3b2a"/><path d="M13.2 11h7.6C24.6 14 26.4 17.6 26.4 21.4c0 4-2.6 6.6-9.4 6.6s-9.4-2.6-9.4-6.6C7.6 17.6 9.4 14 13.2 11z" fill="#0c7a46"/><text x="17" y="24.6" text-anchor="middle" font-family="Roboto,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#fff">$</text></svg>',
-  nProfile: '<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="7" fill="url(#mgNg)"/><circle cx="17" cy="12.6" r="5" fill="#fff"/><path d="M7.4 27.4c0-5.6 4.2-8.8 9.6-8.8s9.6 3.2 9.6 8.8z" fill="#fff"/></svg>',
+  nHome: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 10.6 12 3.4l8.6 7.2V19.6a1.4 1.4 0 0 1-1.4 1.4H4.8a1.4 1.4 0 0 1-1.4-1.4z"/><path d="M9.6 21v-5.6a1 1 0 0 1 1-1h2.8a1 1 0 0 1 1 1V21"/></svg>',
+  nOrders: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.2 3h11.6a1.2 1.2 0 0 1 1.2 1.2V21l-2.5-1.7-2.1 1.7-2.4-1.7-2.4 1.7-2.1-1.7L5 21V4.2A1.2 1.2 0 0 1 6.2 3z"/><path d="M9 8h6M9 12h6"/></svg>',
+  nPromo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.2 10.2v3.6a1 1 0 0 0 1 1H7l8.6 4.3V4.9L7 9.2H4.2a1 1 0 0 0-1 1z"/><path d="M18.6 9.2a4.2 4.2 0 0 1 0 5.6"/><path d="M7.2 15.2l1 4.6h2.6l-.9-4.2"/></svg>',
+  nTeam: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.4"/><path d="M2.6 20.4v-1.2a5.2 5.2 0 0 1 5.2-5.2h2.4a5.2 5.2 0 0 1 5.2 5.2v1.2"/><path d="M15.6 4.8a3.4 3.4 0 0 1 0 6.4"/><path d="M18.6 14.4a5.2 5.2 0 0 1 2.8 4.6v1.4"/></svg>',
+  nProfile: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7.8" r="4.2"/><path d="M4.4 21v-1.2a6.2 6.2 0 0 1 6.2-6.2h2.8a6.2 6.2 0 0 1 6.2 6.2V21"/></svg>',
+  // Home quick buttons (white outline, 24 box)
+  qDeposit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10M8 9.2l4 4 4-4"/><rect x="3.5" y="14.8" width="17" height="6" rx="2.2"/><circle cx="16.4" cy="17.8" r=".9" fill="currentColor" stroke="none"/></svg>',
+  qWithdraw: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 13V3M8 6.8l4-4 4 4"/><rect x="3.5" y="14.8" width="17" height="6" rx="2.2"/><circle cx="16.4" cy="17.8" r=".9" fill="currentColor" stroke="none"/></svg>',
+  qChannel: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8 3 7.8l9 5 9-5-9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 16.2l9 5 9-5"/></svg>',
+  qService: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.2 13.5v-1.6a7.8 7.8 0 0 1 15.6 0v1.6"/><rect x="3" y="12.6" width="4.2" height="6.4" rx="2"/><rect x="16.8" y="12.6" width="4.2" height="6.4" rx="2"/><path d="M19 19c0 1.9-1.7 3-4 3h-2.2"/></svg>',
   // Profile list tiles (the small picture inside each coloured tile)
-  tDownload: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5" fill="#0a8f4b"/><path d="M10.6 6.6v6.4l3.8-3.2z" fill="#fff"/><rect x="7.6" y="15.2" width="8.8" height="3.2" rx=".8" fill="#ffc72c"/></svg>',
-  tCard: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="3" width="21" height="18" rx="5" fill="#0a8f4b"/><rect x="5" y="7.6" width="14" height="8.8" rx="1.8" fill="#fff"/><rect x="5" y="9.6" width="14" height="2" fill="#2c2c2c"/><rect x="6.6" y="13.6" width="5" height="1.5" rx=".7" fill="#ffc72c"/></svg>',
-  tWallet: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="18" rx="5" fill="#f2b542"/><rect x="4.4" y="7.4" width="15.2" height="9" rx="1.6" fill="#0a8f4b"/><rect x="4.4" y="9.4" width="15.2" height="1.6" fill="#ffc72c"/><rect x="15.4" y="12.4" width="4.2" height="2.4" rx=".8" fill="#fff"/></svg>',
-  tChat: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5.5" fill="#0a8f4b"/><path d="M6.6 7.4h10.8c.8 0 1.4.6 1.4 1.4v5c0 .8-.6 1.4-1.4 1.4H11l-3 2.4v-2.4H6.6c-.8 0-1.4-.6-1.4-1.4v-5c0-.8.6-1.4 1.4-1.4z" fill="#fff"/><circle cx="9.2" cy="11.3" r="1" fill="#ffc72c"/><circle cx="12" cy="11.3" r="1" fill="#ffc72c"/><circle cx="14.8" cy="11.3" r="1" fill="#ffc72c"/></svg>',
-  tLock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5.5" fill="#0a8f4b"/><path d="M9 10.6V9a3 3 0 016 0v1.6" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><rect x="7.4" y="10.4" width="9.2" height="7.4" rx="1.8" fill="#fff"/><circle cx="12" cy="13.6" r="1.1" fill="#ffc72c"/><rect x="11.4" y="14" width="1.2" height="2.2" rx=".5" fill="#ffc72c"/></svg>',
-  tKey: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5.5" fill="#f9c824"/><circle cx="9.4" cy="12" r="3" fill="none" stroke="#fff" stroke-width="2"/><path d="M12.4 12h7M16.6 12v2.6M19.4 12v2" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
-  door: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="5.5" fill="#f6c22a"/><path d="M7.4 6.6h5.2v10.8H7.4z" fill="#fff"/><path d="M12.6 12h5.4M15.8 9.6 18.2 12l-2.4 2.4" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  cardMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6" fill="#3a9f62"/><rect x="5" y="6.8" width="14" height="10.4" rx="2" fill="#fff"/><rect x="5" y="9.2" width="14" height="2.2" fill="#3a7a54"/><rect x="6.8" y="13.4" width="4.8" height="1.6" rx=".8" fill="#f3b92f"/></svg>',
+  tDownload: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.8v11M7.4 10.9l4.6 4.6 4.6-4.6M5 20h14"/></svg>',
+  tCard: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.2" width="18" height="13.6" rx="2.8"/><path d="M3 9.8h18M7 14.3h4.2"/></svg>',
+  tWallet: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.3v9.4M7.9 9.65l8.2 4.7M16.1 9.65l-8.2 4.7"/></svg>',
+  tChat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4C7.3 4 3.7 7 3.7 10.9c0 1.9.9 3.6 2.4 4.8-.1 1.2-.6 2.2-1.6 3 2-.1 3.6-.8 4.6-1.7.9.2 1.9.3 2.9.3 4.700 0 8.300-3 8.300-6.900S16.700 4 12 4z"/></svg>',
+  tLock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.8" y="10.4" width="14.4" height="10.2" rx="2.4"/><path d="M8.2 10.4V7.9a3.8 3.8 0 0 1 7.6 0v2.5"/><circle cx="12" cy="15.5" r=".9" fill="currentColor" stroke="none"/></svg>',
+  tKey: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8 4.6 5.6v5.6c0 4.8 3.1 8.1 7.4 10 4.3-1.9 7.4-5.2 7.4-10V5.6z"/><rect x="9.3" y="10.6" width="5.4" height="4.4" rx="1.1"/><path d="M10.4 10.6V9.4a1.6 1.6 0 0 1 3.2 0v1.2"/></svg>',
+  door: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 4.5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h3.5"/><path d="M14.5 8l4.5 4-4.5 4M19 12H9.5"/></svg>',
+  cardMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.6" y="5" width="18.8" height="14" rx="3"/><path d="M2.6 9.6h18.8M6.8 14.4h4"/></svg>',
   tickMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="5.5" fill="#0c8a4a"/><path d="M6.4 12.6l3.9 3.9 7.4-8" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  copyMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="#0c8a4a"/><rect x="8" y="6.6" width="8" height="10.8" rx="1.6" fill="#ffc72c"/><rect x="10" y="5.6" width="4" height="2.4" rx=".8" fill="#fff"/></svg>',
+  copyMini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2.4"/><path d="M15.5 8.5V6.9a2.4 2.4 0 0 0-2.4-2.4H6.9a2.4 2.4 0 0 0-2.4 2.4v6.2a2.4 2.4 0 0 0 2.4 2.4h1.6"/></svg>',
   plane: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 3 10.4l6.4 2.4L12 20l2.6-5.4L21 3z"/><path d="M9.4 12.8 21 3"/></svg>',
   whatsapp: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.4 20.6l1.3-4.4A8.6 8.6 0 1 1 8 19.5z"/><path d="M9 8.6c0 3.2 2.6 5.8 5.8 5.8l1-1.4-2-1-.8.8c-.8-.4-1.6-1.2-2-2l.8-.8-1-2z" fill="#fff" stroke="none"/></svg>',
   facebook: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#fff"/><path d="M13.3 22.4v-8h2.6l.5-3.2h-3.1V9.2c0-.9.3-1.5 1.6-1.5h1.6V4.9c-.3 0-1.2-.1-2.3-.1-2.3 0-3.9 1.4-3.9 4v2.4H7.7v3.2h2.6v8z" fill="#0866ff"/></svg>',
@@ -2671,7 +2675,7 @@ var NAV_ICON_SVG = {
   assets: MGI.nOrders,
   promo: MGI.nPromo,
   network: MGI.nTeam,
-  salary: MGI.nSalary,
+  salary: MGI.nProfile,
   account: MGI.nProfile,
 };
 // Owner: "the icon fades in and out when tapped not static and selector
@@ -3431,23 +3435,17 @@ function vProductCardHtml(p){
   const { cycle, daily, expected } = planFigures(p);
   const limit = Number(p.buyLimit) || 0;
   const owned = vOwnedCount(p.key);
-  const pct = limit > 0 ? Math.min(100, Math.round(owned / limit * 100)) : 0;
   const price = vMoney2(p.price), dayly = vMoney2(daily), total = vMoney2(expected);
   return `
-  <article class="mg-card" data-key="${esc(p.key)}">
-    <div class="mg-card-top">
-      <div class="mg-img">${mgPicture(p)}${mgProductOpen(p) ? '' : '<div class="mg-band top">Coming Soon</div>'}${limit > 0 ? `<div class="mg-band bot">${owned}/${limit}</div>` : ''}</div>
-      <div class="mg-info">
-        <h3>${esc(p.name)}</h3>
-        <dl class="mg-rows">
-          <div><dt>Price</dt><dd class="${mgFit(price).trim()}">${esc(price)}</dd></div>
-          <div><dt>Days</dt><dd>${cycle}</dd></div>
-          <div><dt>Daily</dt><dd class="g${mgFit(dayly)}">${esc(dayly)}</dd></div>
-          <div class="tot"><dt>Total</dt><dd class="${mgFit(total).trim()}">${esc(total)}</dd></div>
-        </dl>
-        <div class="mg-limit"><span><i style="width:${pct}%"></i></span><b>${pct}%</b></div>
-      </div>
-    </div>
+  <article class="mg-card ch-card" data-key="${esc(p.key)}">
+    <h3 class="ch-title">${esc(p.name)}</h3>
+    <div class="ch-pic">${mgPicture(p)}${mgProductOpen(p) ? '' : '<div class="ch-badge l">Coming Soon</div>'}${limit > 0 ? `<div class="ch-badge r">${owned}/${limit}</div>` : ''}</div>
+    <dl class="ch-tiles">
+      <div><dt>Price</dt><dd class="${mgFit(price).trim()}">${esc(price)}</dd></div>
+      <div><dt>Days</dt><dd>${cycle}</dd></div>
+      <div><dt>Daily</dt><dd class="g${mgFit(dayly)}">${esc(dayly)}</dd></div>
+      <div class="tot"><dt>Total</dt><dd class="${mgFit(total).trim()}">${esc(total)}</dd></div>
+    </dl>
     <div class="mg-card-f">${vBuyHtml(p)}</div>
   </article>`;
 }
@@ -3484,8 +3482,7 @@ window.openContactLink = function(kind){
 function homeTabNow(){ return STATE.homeTab === 'new' ? 'new' : 'main'; }
 function mgIsNew(p){ return !!p && p.category === 'new'; }
 function homeTabProducts(){
-  const tab = homeTabNow();
-  return (STATE.products || []).filter(p => p.active !== false && (mgIsNew(p) ? 'new' : 'main') === tab);
+  return (STATE.products || []).filter(p => p.active !== false);
 }
 function homeEmptyHtml(){ return '<div class="v-empty">' + (homeTabNow() === 'new' ? 'No new products yet.' : 'No products yet.') + '</div>'; }
 window.setHomeTab = function(t){
@@ -3504,17 +3501,12 @@ function paintHome(){
   ${mgTopHtml()}
   ${vBannerHtml()}
   <div class="mg-quick">
-    <button type="button" onclick="openDepositSheet()">Deposit</button>
-    <button type="button" onclick="openWithdrawSheet()">Withdraw</button>
-    <button type="button" onclick="openContactLink('channel')">Channel</button>
-    <button type="button" onclick="openContactLink('service')">Service</button>
-  </div>
-  <div class="mg-tabs" role="tablist">
-    <button type="button" role="tab" class="${tab === 'main' ? 'on' : ''}" onclick="setHomeTab('main')">Products</button>
-    <button type="button" role="tab" class="new${tab === 'new' ? ' on' : ''}" onclick="setHomeTab('new')">New Products</button>
+    <button type="button" onclick="openDepositSheet()">${MGI.qDeposit}<span>Deposit</span></button>
+    <button type="button" onclick="openWithdrawSheet()">${MGI.qWithdraw}<span>Withdraw</span></button>
+    <button type="button" onclick="openContactLink('channel')">${MGI.qChannel}<span>Channel</span></button>
+    <button type="button" onclick="openContactLink('service')">${MGI.qService}<span>Service</span></button>
   </div>
   <div class="mg-list" id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? homeEmptyHtml() : _productsLoadFailed ? loadFailHtml('home') : '')}</div>
-  <button class="mg-chest" type="button" onclick="openChestSheet()" aria-label="Treasure chest"><img src="${CHEST_ART}" alt=""></button>
 </div>`;
   $('pageHost').innerHTML = html;
   startHomeCarousel();
@@ -3630,21 +3622,17 @@ function vOwnedCardHtml(inv){
   const two = ms => { const t = statementStampMs(ms).split(' '); return esc(t[0] || '') + '<br>' + esc(t[1] || ''); };
   const price = vMoney2(st.amount), dayly = vMoney2(st.daily), total = vMoney2(st.expected);
   return `
-  <article class="mg-card mg-owned${inv.granted ? ' v-gift' : ''}">
+  <article class="mg-card ch-card mg-owned${inv.granted ? ' v-gift' : ''}">
     ${inv.granted ? '<i class="mg-gift">GIFT</i>' : ''}
-    <div class="mg-card-top">
-      <div class="mg-img">${mgPicture(Object.assign({}, p, { name }))}<div class="mg-band bot">${st.matured ? 'Completed' : 'Earning'}</div></div>
-      <div class="mg-info">
-        <h3>${esc(name)}</h3>
-        <dl class="mg-rows">
-          <div><dt>Price</dt><dd class="${mgFit(price).trim()}">${esc(price)}</dd></div>
-          <div><dt>Days</dt><dd>${st.total}</dd></div>
-          <div><dt>Daily</dt><dd class="g${mgFit(dayly)}">${esc(dayly)}</dd></div>
-          <div class="tot"><dt>Total</dt><dd class="${mgFit(total).trim()}">${esc(total)}</dd></div>
-        </dl>
-      </div>
-    </div>
-    <div class="mg-dates"><div><span>Purchase</span><b>${two(startMs)}</b></div><div><span>Expire</span><b>${two(endMs)}</b></div></div>
+    <h3 class="ch-title">${esc(name)}</h3>
+    <div class="ch-pic">${mgPicture(Object.assign({}, p, { name }))}<div class="ch-badge l">${st.matured ? 'Completed' : 'Earning'}</div></div>
+    <dl class="ch-tiles">
+      <div><dt>Price</dt><dd class="${mgFit(price).trim()}">${esc(price)}</dd></div>
+      <div><dt>Days</dt><dd>${st.total}</dd></div>
+      <div><dt>Daily</dt><dd class="g${mgFit(dayly)}">${esc(dayly)}</dd></div>
+      <div class="tot"><dt>Total</dt><dd class="${mgFit(total).trim()}">${esc(total)}</dd></div>
+    </dl>
+    <div class="mg-dates ch-dates"><div><span>Purchase</span><b>${two(startMs)}</b></div><div><span>Expire</span><b>${two(endMs)}</b></div></div>
   </article>`;
 }
 function statementStampMs(ms){
@@ -3938,6 +3926,7 @@ var TEAM_LIST_FRESH_MS = 15000;
 window.switchTeamLevel = async function(level){
   _activeTeamLevel = level;
   document.querySelectorAll('.mg-lv').forEach(el => el.classList.toggle('on', Number(el.dataset.level) === level));
+  const lvCard = $('chLvCard'); if (lvCard) lvCard.innerHTML = chLevelCardHtml(level, false);
   const held = !!STATE.teamMembers[level];
   if (held) renderTeamMembers(level);
   else { const box = $('teamMembersBox'); if (box) box.innerHTML = teamLoadingHtml(); }
@@ -4019,21 +4008,24 @@ async function renderNetwork(){
   if (STATE.page !== 'network') return;
   paintNetwork();
 }
-function mgNum(v){ const n = Number(v) || 0; return numGroup(n, Math.round(n * 100) % 100 !== 0); }
+function mgNum(v){ const n = Number(v) || 0; return numGroup(n, true); }
+// The brown card for the level picked in the LV:1 / LV:2 / LV:3 pill: its rate, the commission and purchase figures and the member count.
+function chLevelCardHtml(n, loading){
+  const t = (loading ? null : STATE.teamStats) || {};
+  const rates = t.commRates || {}, team = t.team || {}, lc = t.levelCommission || {}, lp = t.levelPurchase || {};
+  return `<span class="ch-lv-h"><em>LV:${n}</em><b>${rates['l' + n] != null ? rates['l' + n] : 0}%</b></span>
+    <span class="ch-lv-b">
+      <span class="c1"><b>${loading ? '...' : esc(mgNum(lc['l' + n]))}</b><small>Commission</small></span>
+      <span class="c2"><b>${loading ? '...' : esc(mgNum(lp['l' + n]))}</b><small>Purchase</small></span>
+      <span class="c3"><b>${loading ? '...' : Number(team['l' + n]) || 0}</b><small>Members</small></span>
+    </span>`;
+}
 function paintNetwork(loading){
   const t = (loading ? null : STATE.teamStats) || { referralCode:'', commRates:{}, team:{}, totalTeam:0, teamDeposits:0, levelCommission:{}, levelPurchase:{} };
   const rates = t.commRates || {}, team = t.team || {}, lc = t.levelCommission || {}, lp = t.levelPurchase || {};
   const level = _activeTeamLevel || 1;
   _activeTeamLevel = level;
-  const cards = [1, 2, 3].map(n => `
-    <button type="button" class="mg-lv${level === n ? ' on' : ''}" data-level="${n}" onclick="switchTeamLevel(${n})">
-      <span class="mg-lv-h"><em>LV:${n}</em><b>${rates['l' + n] != null ? rates['l' + n] : 0}%</b></span>
-      <span class="mg-lv-b">
-        <span class="c1"><b>${loading ? '...' : esc(mgNum(lc['l' + n]))}</b><small>Commission</small></span>
-        <span class="c2"><b>${loading ? '...' : esc(mgNum(lp['l' + n]))}</b><small>Purchase</small></span>
-        <span class="c3"><b>${loading ? '...' : Number(team['l' + n]) || 0}</b><small>Members</small></span>
-      </span>
-    </button>`).join('');
+  const cards = [1, 2, 3].map(n => `<button type="button" class="mg-lv${level === n ? ' on' : ''}" data-level="${n}" onclick="switchTeamLevel(${n})"><span class="mg-lv-h"><em>LV:${n}</em></span></button>`).join('');
   const html = `
 <div class="v-page mg-team">
   <div class="mg-tcard">
@@ -4045,6 +4037,7 @@ function paintNetwork(loading){
   </div>
   <div class="mg-h2"><h2>Commission Rate</h2><span>${esc(cur())}</span></div>
   <div class="mg-lvs">${cards}</div>
+  <div class="ch-lvcard" id="chLvCard">${chLevelCardHtml(level, loading)}</div>
   <div class="mg-h3"><h3 id="mgLvTitle">Level ${level}</h3><span><b id="mgLvCount">${Number(team['l' + level]) || 0}</b> Members</span></div>
   <div id="teamMembersBox">${loading ? '<div class="mg-nomem">' + NAV_LOADER + '</div>' : ''}</div>
 </div>`;
@@ -4080,13 +4073,14 @@ function paintPromo(){
   <div class="mg-pcard">
     <div class="mg-plabel">Share URL</div>
     <div class="mg-pbox"><span class="mg-purl">${esc(_promoLink || '—')}</span><button type="button" class="mg-pcopy" data-copy-group="promo" onclick="copyText(_promoLink)"><i>${MGI.copyMini}</i><b>Copy</b></button></div>
+    <button type="button" class="ch-copylink" onclick="copyText(_promoLink)">${MGI.copyMini}<span>Copy Link</span></button>
     <div class="mg-shares">
       ${share('tg', 'Telegram', MGI.plane, 'telegram')}${share('wa', 'WhatsApp', MGI.whatsapp, 'whatsapp')}${share('fb', 'Facebook', MGI.facebook, 'facebook')}${share('xx', 'X', MGI.xmark, 'x')}${share('tt', 'TikTok', MGI.tiktok, 'tiktok')}
     </div>
   </div>
   <div class="mg-pcard mg-reward">
     <h3><i></i>Invitation Reward</h3>
-    <p>Strive to grow your team so you can earn commissions and daily salary rewards as soon as possible.<br>Level 1 = ${rates.l1 != null ? rates.l1 : 0}%<br>Level 2 = ${rates.l2 != null ? rates.l2 : 0}%<br>Level 3 = ${rates.l3 != null ? rates.l3 : 0}%</p>
+    <p>Share your invitation link to build your team and earn commissions as well as team top-up rewards:<br>Level 1 = ${rates.l1 != null ? rates.l1 : 0}%<br>Level 2 = ${rates.l2 != null ? rates.l2 : 0}%<br>Level 3 = ${rates.l3 != null ? rates.l3 : 0}%<br>Once your team reaches a size of 300,000, please contact online customer service to claim your team top-up rewards.</p>
   </div>
 </div>`;
   $('pageHost').innerHTML = html;
@@ -4307,10 +4301,9 @@ window.copyText = function(text){
 // anywhere in this codebase (thresholds, benefits, what "View Benefits"
 // would even show), so it is not invented here; flagged in CLAUDE.md.
 function mgSetRow(tile, icon, title, sub, onclick, badge){
-  return `<button type="button" class="mg-row" onclick="${onclick}">
+  return `<button type="button" class="mg-row ch-tile" onclick="${onclick}">
     <span class="mg-tile ${tile}">${icon}${badge ? `<em id="msgBadge"${mgUnread() ? '' : ' style="display:none"'}>${mgUnread()}</em>` : ''}</span>
-    <span class="mg-row-t"><b>${title}</b><small>${sub}</small></span>
-    <span class="mg-row-c">${MGI.chev}</span>
+    <b>${title}</b><small>${sub}</small>
   </button>`;
 }
 async function renderAccount(){
@@ -4336,7 +4329,7 @@ async function renderAccount(){
   <div class="mg-sec"><span class="bar"></span><h2>Settings</h2><i></i></div>
   <div class="mg-set">
     ${mgSetRow('t1', MGI.tDownload, 'Download APP', 'Get the mobile app', 'openDownloadPage()')}
-    ${mgSetRow('t2', MGI.tCard, 'Wallet', 'Manage your wallet', 'openWalletSheet()')}
+    ${mgSetRow('t2', MGI.tCard, 'Bank Account', 'Manage your bank account', 'openWalletSheet()')}
     ${mgSetRow('t3', MGI.tWallet, 'Balance Record', 'Transaction history', "openTransactionStatement('all')")}
     ${mgSetRow('t4', MGI.tChat, 'Messages', 'Notifications &amp; mail', 'openMessagesSheet()', true)}
     ${mgSetRow('t5', MGI.tLock, 'Login Password', 'Change login PIN', 'openChangeLoginPasswordSheet()')}
@@ -4382,7 +4375,7 @@ function prefetchSupportedBanks(){
   }).catch(() => { _banksPrefetched = false; });
 }
 window.openWalletSheet = async function(){
-  openSheet('Wallet', '');
+  openSheet('Bank Account', '');
   renderWalletSheet();
   // The provider list only widens once the bank list lands; the form is never repainted under the member's finger.
   // An empty answer (the bank list could not be fetched) is not kept, so the next visit asks again.
@@ -4390,13 +4383,13 @@ window.openWalletSheet = async function(){
     api('/bank/supported-banks').then(br => {
       if (br.status === 'success' && Array.isArray(br.banks) && br.banks.length) STATE.supportedBanks = br.banks;
       const list = $('walProviderList');
-      if (_openSheetTitle === 'Wallet' && list) list.innerHTML = walProviderOptionsHtml();
+      if (_openSheetTitle === 'Bank Account' && list) list.innerHTML = walProviderOptionsHtml();
     }).catch(() => {});
   }
   const r = await api('/bank/list');
   if (r.status === 'success') STATE.bankAccounts = r.accounts;
   else if (!Array.isArray(STATE.bankAccounts)) STATE.bankAccounts = [];
-  if (_openSheetTitle === 'Wallet') paintWalletParts();
+  if (_openSheetTitle === 'Bank Account') paintWalletParts();
 };
 function currentWallet(){ return (STATE.bankAccounts || [])[0] || null; }
 // The only two mobile-money names this app has ever offered -- anything
@@ -4412,7 +4405,7 @@ function maskedTail(phone){
 function vWalletCardHtml(w){
   const provider = w && w.network ? String(w.network).toUpperCase() : '';
   return `<div class="v-wcard${w ? '' : ' empty'}">
-    <div class="v-wcard-top"><b>${provider ? esc(provider) : 'Wallet'}</b><span class="v-wcard-ic">${MGI.cardMini}</span></div>
+    <div class="v-wcard-top"><b>${provider ? esc(provider) : 'Bank Account'}</b><span class="v-wcard-ic">${MGI.cardMini}</span></div>
     <div class="v-chip-art" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
     <div class="v-wcard-num">${w ? esc(walletDestDisplay(w)) : '**** **** **** ****'}</div>
     <div class="v-wcard-l">ACCOUNT HOLDER</div>
@@ -4448,7 +4441,7 @@ function applyWalDestKind(nowBank){
   dest.type = nowBank ? 'text' : 'tel';
   dest.inputMode = nowBank ? 'text' : 'numeric';
   dest.autocomplete = nowBank ? 'off' : 'tel';
-  dest.placeholder = 'Enter wallet account number';
+  dest.placeholder = 'Enter bank account number';
 }
 function prefillWallet(){
   const w = currentWallet(); if (!w) return;
@@ -4461,8 +4454,8 @@ function prefillWallet(){
 // Only the card, the heading and the "Your Wallet" rows: the typed fields are never touched.
 function paintWalletParts(){
   const card = $('walCardBox'); if (card) card.innerHTML = vWalletCardHtml(currentWallet());
-  const head = $('walEditHead'); if (head) head.textContent = currentWallet() ? 'Edit Wallet' : 'Add Wallet';
-  const tog = $('walToggleBtn'); if (tog) tog.textContent = currentWallet() ? 'Edit Wallet' : 'Add Wallet';
+  const head = $('walEditHead'); if (head) head.textContent = currentWallet() ? 'Edit Bank Account' : 'Add Bank Account';
+  const tog = $('walToggleBtn'); if (tog) tog.textContent = currentWallet() ? 'Edit Bank Account' : 'Add Bank Account';
   prefillWallet();
 }
 window.walShowForm = function(show){
@@ -4473,24 +4466,25 @@ window.walShowForm = function(show){
     prefillWallet(); const el = $('walProvider');
     // A new wallet starts with the provider list open. It is opened AFTER this tap has finished: the tap itself bubbles up to the
     // "tap anywhere else closes the list" handler, which used to shut it again at once (so the list never appeared the first time).
-    if (el && !el.value) { try { el.focus(); } catch (_) {} setTimeout(openProviderList, 0); }
+    // (The owner's Bank Account form opens with the list closed: the list drops down when the Bank Name box is tapped.)
+    void el;
   }
 };
 function renderWalletSheet(){
   const w = currentWallet();
   $('sheetBody').innerHTML = `<div class="v-form reveal-in">
     <div id="walCardBox">${vWalletCardHtml(w)}</div>
-    <button class="v-cta" id="walToggleBtn" type="button" onclick="walShowForm(true)">${w ? 'Edit Wallet' : 'Add Wallet'}</button>
+    <button class="v-cta" id="walToggleBtn" type="button" onclick="walShowForm(true)">${w ? 'Edit Bank Account' : 'Add Bank Account'}</button>
     <div class="v-edit" id="walFormWrap" style="display:none">
-      <div class="v-sec" style="margin-top:2px"><span class="bar"></span><h2 id="walEditHead">${w ? 'Edit Wallet' : 'Add Wallet'}</h2></div>
+      <div class="v-sec" style="margin-top:2px"><span class="bar"></span><h2 id="walEditHead">${w ? 'Edit Bank Account' : 'Add Bank Account'}</h2></div>
       <div id="walFormGroup">
-        <label class="v-flabel" for="walProvider">Wallet Provider</label>
+        <label class="v-flabel" for="walProvider">Bank Name</label>
         <div class="prov-pick" id="walProviderPick">
-          <div class="v-uline prov-input"><input id="walProvider" type="text" autocomplete="off" placeholder="Type wallet provider to search" oninput="filterProviders()" onfocus="openProviderList()" onclick="openProviderList()"></div>
+          <div class="v-uline prov-input"><input id="walProvider" type="text" autocomplete="off" placeholder="Type bank name to search" oninput="filterProviders()" onfocus="openProviderList()" onclick="openProviderList()"></div>
           <div class="prov-list" id="walProviderList">${walProviderOptionsHtml()}</div>
         </div>
-        <label class="v-flabel" for="walPhone">Wallet Account</label>
-        <div class="v-uline"><input id="walPhone" type="tel" inputmode="numeric" autocomplete="tel" enterkeyhint="next" placeholder="Enter wallet account number" oninput="handleWalDestInput(this)"></div>
+        <label class="v-flabel" for="walPhone">Bank Account</label>
+        <div class="v-uline"><input id="walPhone" type="tel" inputmode="numeric" autocomplete="tel" enterkeyhint="next" placeholder="Enter bank account number" oninput="handleWalDestInput(this)"></div>
         <label class="v-flabel" for="walHolder">Account Holder Name</label>
         <div class="v-uline"><input id="walHolder" type="text" maxlength="60" autocomplete="name" enterkeyhint="done" placeholder="Enter account holder name" value="${w ? esc(String(w.holder || '').toUpperCase()) : ''}"></div>
         <div class="v-two"><button class="v-ghost" type="button" onclick="walShowForm(false)">Cancel</button><button class="v-solid" id="walSaveBtn" type="button" onclick="submitWallet()">Submit</button></div>
@@ -4541,14 +4535,14 @@ window.submitWallet = async function(){
   const network = walNetwork();
   const phone = $('walPhone').value;
   const holder = $('walHolder').value.trim();
-  if (!network) return notify('Select your wallet provider.');
+  if (!network) return notify('Select your bank.');
   // Mobile money keeps its own digit-count check; a bank account number is
   // never phone-shaped, so it only needs to be present and a plausible
   // length -- never capped tighter than that (see handleWalDestInput()'s
   // own comment for why), the server does the real validation against
   // MarzPay before this is ever saved.
   if (isMobileMoneyNetwork(network)) {
-    if (String(phone).replace(/\D/g, '').length < 9) return notify('Enter a valid wallet account number.');
+    if (String(phone).replace(/\D/g, '').length < 9) return notify('Enter a valid bank account number.');
   } else if (String(phone).trim().length < 4) {
     return notify('Enter a valid bank account number.');
   }
@@ -4565,8 +4559,8 @@ async function finishWalletSave(){
   // One wallet only: /bank/save edits it in place, so just re-read and show it.
   const fresh = await api('/bank/list');
   STATE.bankAccounts = fresh.status === 'success' ? fresh.accounts : (STATE.bankAccounts || []);
-  notify('Wallet saved');
-  if (_openSheetTitle === 'Wallet') renderWalletSheet();
+  notify('Bank account saved');
+  if (_openSheetTitle === 'Bank Account') renderWalletSheet();
 }
 // ── NOTIFY DIALOG (Notify.dc.html) ──
 // The app-wide validation alert: dimmed backdrop, amber warning triangle,
@@ -4666,7 +4660,8 @@ function statementChip(t){
   // The words in a free-text description only describe a deposit or a withdrawal; on a credit or a gift they are the admin's note.
   const describes = t.type === 'deposit' || t.type === 'withdraw';
   const raw = String(t.status || '').toLowerCase() + (describes ? ' ' + String(t.description || '').toLowerCase() : '');
-  if (/fail|declin|reject|cancel|error/.test(raw)) return { text: 'Failed', cls: 'bad' };
+  // Owner: a deposit that did not go through is shown as "Pending Deposit", never as Failed.
+  if (/fail|declin|reject|cancel|error/.test(raw)) return t.type === 'deposit' ? { text: 'Pending Deposit', cls: 'wait' } : { text: 'Failed', cls: 'bad' };
   if (/pend|process|await|initiating|creating|sending/.test(raw)) return { text: t.type === 'deposit' ? 'Pending Deposit' : t.type === 'withdraw' ? 'Processing Payment' : 'Pending', cls: 'wait' };
   if (t.type === 'withdraw') return { text: 'Paid', cls: 'ok' };
   return null;
@@ -4797,13 +4792,13 @@ window.openMessageDetail = async function(index){
   const m = (STATE.messages || [])[index];
   if (!m) return;
   $('msgDetail').innerHTML = `
-    <button class="xbtn" onclick="closeMessageDetail()" aria-label="Close">${MGI.x}</button>
     <div class="head">
       <span class="av"></span>
-      <div>
+      <div class="tx">
         <h2>${esc(m.title || '')}</h2>
         <div class="date">${esc(m.date || '')} ${esc(m.time || '')}</div>
       </div>
+      <button class="xbtn" onclick="closeMessageDetail()" aria-label="Close">${MGI.x}</button>
     </div>
     <div class="ln"></div>
     ${m.body ? `<div class="content">${esc(m.body)}</div>` : ''}
@@ -5457,7 +5452,7 @@ function depositChipsHtml(s, inputId){
     .map(p => Number(p.price) || 0)
     .filter(p => p >= (Number(s.minDeposit) || 0))))
     .sort((a, b) => a - b)
-    .slice(0, 3);
+    .slice(0, 6);
   const chosen = _chosenAmountFor(inputId);
   return amounts.map(a =>
     `<button type="button" class="dep-chip${a === chosen ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a},'${inputId}')">${numGroup(a, false)}</button>`
@@ -5896,9 +5891,9 @@ function withdrawWindow(s){
 // update can repaint only this block, never #witAmount.
 function witWalletBlockHtml(s){
   const w = witSelectedWallet();
-  if (!w) return `<button id="witBindBtn" class="v-bind none" type="button" onclick="openWalletSheet()">Add Wallet</button>`;
+  if (!w) return `<button id="witBindBtn" class="v-bind none" type="button" onclick="openWalletSheet()">Add Bank Account</button>`;
   return `<div id="witWallet">${walletCardHtml(w)}</div>
-    <button id="witBindBtn" class="v-bind" type="button" onclick="openWalletSheet()">Bind Wallet</button>`;
+    <button id="witBindBtn" class="v-bind" type="button" onclick="openWalletSheet()">Bind Bank Account</button>`;
 }
 // Withdraw.dc.html. Replaces the form inherited from Snow: a tinted balance
 // card, a UGX-prefixed amount field, the bound wallet shown as the same
@@ -5916,7 +5911,7 @@ function paintWithdrawSheet(s){
   $('sheetBody').innerHTML = `<div class="v-form">
     <div class="v-bal"><span>AVAILABLE BALANCE</span><b id="witBalance">${esc(vMoney2(balance))}</b></div>
     <div class="v-amtrow"><span>${esc(cur())}</span><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0.00" oninput="this.value=this.value.replace(/[\s,]/g,'');syncWithdrawReceiveAmt()" autocomplete="off"></div>
-    <div class="v-sec"><span class="bar"></span><h2>Withdrawal Wallet</h2></div>
+    <div class="v-sec"><span class="bar"></span><h2>Withdrawal Bank Account</h2></div>
     <div id="witWalletBlock">${witWalletBlockHtml(s)}</div>
     <div class="v-sec"><span class="bar"></span><h2>Trade Password</h2></div>
  

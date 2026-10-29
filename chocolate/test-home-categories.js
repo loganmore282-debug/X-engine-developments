@@ -25,13 +25,9 @@ const app = { STATE: { products: [
 vm.createContext(app);
 vm.runInContext(grab('homeTabNow') + grab('mgIsNew') + grab('homeTabProducts'), app);
 const names = () => vm.runInContext('homeTabProducts().map(p => p.name).join()', app);
-assert.equal(names(), 'Product-1,Product-2', 'Products list has no New Products');
-app.STATE.homeTab = 'new';
-assert.equal(names(), 'Product-11', 'New Products list has only new, active products');
-assert.match(mod, /onclick="setHomeTab\('new'\)">New Products</, 'the New Products button exists');
-const css = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
-assert.match(css, /\.mg-tabs button\.new::before\{animation:mgGlowA 2s linear infinite;\}/, 'New Products carries the glow sweep');
+assert.equal(names(), 'Product-1,Product-2,Product-11', 'the owner\'s Home is one list: every active product, whichever category the admin saved it in');
+assert.doesNotMatch(mod, /onclick="setHomeTab\('new'\)">New Products</, 'Home has no Products / New Products buttons any more');
 const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
 assert.match(admin, /id="pCat"/);
-assert.match(admin, /category:\$\('pCat'\)\.value/, 'the admin sends the category');
-console.log('PASS: Home categories (Products / New Products)');
+assert.match(admin, /category:\$\('pCat'\)\.value/, 'the admin still sends the category');
+console.log('PASS: Home products (one list; category still saved)');

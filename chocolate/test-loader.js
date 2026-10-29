@@ -13,7 +13,7 @@ ok(/#loadingScreen\{[^}]*background:#000/.test(html), 'the loader page is plain 
 ok(/\.ld-ring\{[^}]*width:92px;height:92px/.test(html) && /\.ld-track\{[^}]*stroke:#2e2e2e;stroke-width:3\.7/.test(html) && /\.ld-arc\{[^}]*stroke:#8d8d8d;stroke-width:2\.6;stroke-linecap:round[^}]*animation:ldSpin 1\.1s linear infinite/.test(html), 'a dark ring with a lighter turning arc, measured from the owner\'s screenshot');
 ok(/\.ld-logo\{[^}]*left:12px;top:12px;width:68px;height:68px[^}]*border:2\.5px solid #fff/.test(html) && /id="ldLogo"/.test(html), 'the round admin picture sits inside the ring with a white edge');
 ok(!/ldBounce/.test(html), 'the word no longer bounces (the ring is the motion)');
-ok(/ld-txt\{[^}]*font-family:'Noto Serif'[^}]*font-size:20px[^}]*font-weight:700;letter-spacing:\.08em/.test(html), 'bold serif, 20 px, spaced .08em like the owner\'s screenshot');
+ok(/ld-txt\{[^}]*font-family:'Noto Serif'[^}]*font-size:18px[^}]*font-weight:700;letter-spacing:\.175em/.test(html), 'bold serif, 18 px, spaced .175em like the owner\'s screenshot');
 ok(/ld-txt\{[^}]*color:#fff/.test(html), 'colour stays white (not specified by the owner)');
 ok(/\.sr-only\{/.test(html), 'the screen-reader word is hidden');
 ok(/body\.sheet-open \.sheet-bg\{bottom:var\(--nav-h\);\}/.test(html), 'secondary pages end above the bottom navigation');

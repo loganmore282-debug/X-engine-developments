@@ -1,4 +1,4 @@
-# Chocolate — owner's reference screenshots (memorised, not built yet)
+# Chocolate — owner's reference screenshots (batch 1 + 2: BUILT, see "What was built" at the end)
 
 Pictures are in `design-ref/` (`b0-loader.jpg` = the loader, already built; `b1-01 ... b1-19` = batch 1, below). All were taken on the owner's
 phone (1080 px wide capture = about 384 css px, ratio about 2.8). The owner said: *"Memorise first, I will send the remaining screenshots."*
@@ -27,5 +27,22 @@ Outline icons in brown (lock, shield, eye, gift, envelope, home, receipt, megaph
 ## Shared chrome (all signed-in pages)
 **Bottom navigation**, 5 items: Home, Orders, Promotion, Team, Profile. Outline icons with small bold labels; the **active item sits in a rounded tan-grey pill** (icon + label darker, bold). White bar with a thin top border, safe-area gap under it. Phone's gesture bar visible under it.
 
-## Still to come
-The owner will send the remaining screens (Deposit, Withdraw, Balance Record, Messages, password pages, Download, etc.). Add them here as batch 2, 3, ... and build everything in one go afterwards.
+
+## Batch 2 (`design-ref/b2-01 ... b2-15`)
+- `b2-01` Bank Account with a saved account: bronze card shows the BANK NAME in bold capitals, the number spaced, ACCOUNT HOLDER and the name; button **Edit Bank Account**.
+- `b2-02/03` Balance Record: taupe-gold banner "CURRENT BALANCE", tabs All | Deposit | Withdraw | Turntable | Daily Salary (dark underline), white rows with a round pale-green letter avatar, title, date, pill (**Pending Deposit** gold, **Paid** green), amount green `+` for money in, dark brown `-` for out. **A failed deposit is shown as Pending Deposit** (owner), never "Failed".
+- `b2-04/05` Messages list (left tan edge, bronze round avatar, bold text, date right) and the detail card (avatar + title + date + X on one row, a line, then text/picture).
+- `b2-06/07` Change Login / Trade Password: one cream card, three labelled boxes, brown button.
+- `b2-08` the bottom bar close-up (five outline tabs, tan pill behind the open one; the bar is about 80 px tall on his phone, 68 + the phone's bottom inset).
+- `b2-09/10` Deposit: Select Amount (six quick amounts in a 3x2 grid + amount box), Select Payment Method (white rows, open one has a dark border and a dark dot), Confirm Deposit, Deposit Instructions box.
+- `b2-11/12` Withdraw: taupe "AVAILABLE BALANCE" card, amount box, Withdrawal Bank Account (the bronze card + **Bind Bank Account**), Trade Password, Fee line, Confirm Withdraw, Withdrawal Instructions.
+- `b2-13` the notice dialog ("Insufficient balance, redirecting to deposit...", red OK).
+- `b2-14` Team with four members (member cards: round picture, "User", masked number, gold amount, Joined date, line, "Total Purchase").
+- `b2-15` Withdraw rows: round bronze "W" avatar, **Paid** green pill, `-` amount in dark brown.
+
+## What was built (Chocolate = Mint's code with the owner's own design on top)
+- **Where**: `user-src/ch.css` (the whole brown theme, applied into `user-src/index.html` between `/* CH-START */` and `/* CH-END */` by `node apply-ch.js`, then `node build-core.js`). Edit `ch.css`, never the block in index.html by hand. Mint's green block (`MG-START..END`) is still above it and is overridden.
+- **Sizes**: the app's layout is 360 css px wide (meta viewport width=360), so one css px = 3 device pixels on his 1080 px screenshots. The start-up loader is the exception: its page is 384 wide (2.8125 px per css px).
+- **Harness** (used to compare): real server on an in-memory MongoDB + Chromium at 384x740 @2.8125, fixtures for bank/records/messages/team; Roboto and Noto Serif installed locally so text widths match his phone.
+- **Changed on purpose to match his screens**: five tabs (Home, Orders, Promotion, Team, Profile -- the Salary tab is gone, the Salary page code is still there); Home is ONE list (no Products / New Products buttons; the admin's category setting is still saved); Home has no floating treasure chest; Home quick buttons are four icon buttons; product cards = title, wide picture with `0/3` / `Coming Soon` badges, four tiles, Buy Now; Profile = two-column tiles; Team = LV:1 | LV:2 | LV:3 pill + one brown card; the page has no scroll bar; Sign Up asks for "Withdrawal Password (6 digits)"; "Wallet" is now "Bank Account" everywhere the member sees it; the bank form opens with the list closed; captcha digits are gold.
+- **Kept from Mint** (not in his screens, needed to work): the "Input Payment Number" box on Deposit, PAY-A as the only payment button (his picture has five), +256 / UGX (his pictures show another country; never copied), all money rules.

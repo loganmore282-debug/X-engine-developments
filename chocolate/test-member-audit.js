@@ -45,12 +45,12 @@ async function main(){
   await w.renderHome();
   assert.match(d.querySelector('#homeProducts').textContent,/Test Asset|No products yet|Could not load/,'Home lists the catalogue (or says it could not load it)');
   w.eval('STATE.products=[{key:"a1",name:"Test Asset",price:15000,cycle:30,expectedReturn:45000,dailyPayout:1500,isOpen:true}]');w.paintHome();
-  assert.match(d.querySelector('.mg-info h3').textContent,/Test Asset/,'the product name sits above its figures');
-  assert.match(d.querySelector('.mg-rows').textContent,/UGX 15,000\.00/,'prices read UGX 15,000.00');
+  assert.match(d.querySelector('.ch-title').textContent,/Test Asset/,'the product name sits above its figures');
+  assert.match(d.querySelector('.ch-tiles').textContent,/UGX 15,000\.00/,'prices read UGX 15,000.00');
   assert.deepEqual([...d.querySelectorAll('.mg-quick button')].map(e=>e.textContent),['Deposit','Withdraw','Channel','Service'],'Home has Deposit, Withdraw, Channel and Service');
-  assert(d.querySelector('.mg-chest'),'the bouncing treasure chest is on Home');assert(d.querySelector('.mg-top .mg-msg'),'the message icon is in Home\'s header');
-  assert.equal(d.querySelectorAll('.bottom-nav .navitem').length,6,'six tabs');
-  assert.deepEqual([...d.querySelectorAll('.bottom-nav .lbl')].map(e=>e.textContent),['Home','Orders','Promotion','Team','Salary','Profile']);
+  assert(!d.querySelector('.mg-chest'),'the owner\'s Home has no floating chest');assert(d.querySelector('.mg-top .mg-msg'),'the message icon is in Home\'s header');
+  assert.equal(d.querySelectorAll('.bottom-nav .navitem').length,5,'five tabs');
+  assert.deepEqual([...d.querySelectorAll('.bottom-nav .lbl')].map(e=>e.textContent),['Home','Orders','Promotion','Team','Profile']);
   const originalBanner=d.querySelector('.home-banner');await w.liveRefreshVisible();
   assert.equal(d.querySelector('.home-banner'),originalBanner,'balance refresh must not rebuild Home');
   w.eval('STATE.page="assets"');w.eval('STATE.investments=[{status:"active",tierKey:"a1",tierLabel:"Test Asset",amount:15000,payoutsTotal:30,payoutsMade:3,dailyPayout:1500,expectedReturn:45000,paidOut:4500,createdAt:new Date().toISOString()},{status:"active",tierKey:"a1",tierLabel:"Gifted",amount:0,payoutsTotal:30,payoutsMade:1,dailyPayout:1500,expectedReturn:45000,paidOut:0,createdAt:new Date().toISOString(),granted:true}]');w.paintAssets();
@@ -60,7 +60,7 @@ async function main(){
   assert.equal(d.querySelectorAll('#ownedAssets .mg-dates').length,2,'each owned card shows Purchase and Expire');
   w.eval('STATE.page="account"');await w.renderAccount();
   assert.match(d.querySelector('.mg-me-bal').textContent,/UGX 70,000\.00/);
-  assert.deepEqual([...d.querySelectorAll('.mg-row-t b')].map(e=>e.textContent),['Download APP','Wallet','Balance Record','Messages','Login Password','Trade Password']);
+  assert.deepEqual([...d.querySelectorAll('.mg-row.ch-tile b')].map(e=>e.textContent),['Download APP','Bank Account','Balance Record','Messages','Login Password','Trade Password']);
   w.eval('STATE.page="home"');
   // The old full-screen "Congratulations!" win card (showChestWin()) was
   // removed -- a redeemed gift code is now just this toast (see

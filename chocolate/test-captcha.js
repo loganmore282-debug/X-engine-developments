@@ -13,7 +13,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(!/<text/i.test(svg) && !svg.includes(c.code) && (svg.match(/<path /g) || []).length === 4, 'the digits are outlined shapes (no readable text), four of them');
   ok(!Object.values(require('./captcha')._live.get(c.id)).includes(c.code) && !JSON.stringify([...require('./captcha')._live.values()]).includes('"code"'), 'the server keeps a keyed hash, not the plain code');
   ok(!svg.includes(c.id), 'the id is not in the picture');
-  for (const col of ['#0b6a3b', '#10a95a', '#e1212c', '#f7c41a']) { let seen = false; for (let i = 0; i < 40 && !seen; i++) seen = Buffer.from(captcha.issue().image.split(',')[1], 'base64').toString().includes('fill="' + col + '"'); ok(seen, 'digit colour ' + col + ' is used'); }
+  for (const col of ['#c98f12', '#d9a21b', '#e5b436', '#b8860b']) { let seen = false; for (let i = 0; i < 40 && !seen; i++) seen = Buffer.from(captcha.issue().image.split(',')[1], 'base64').toString().includes('fill="' + col + '"'); ok(seen, 'digit colour ' + col + ' is used'); }
   for (let i = 0; i < 30; i++) { const x = Buffer.from(captcha.issue().image.split(',')[1], 'base64').toString(); const cols = new Set([...x.matchAll(/<path [^>]*fill="(#[0-9a-f]{6})"/g)].map(m => m[1])); ok(cols.size >= 3, 'at least three colours in one picture'); }
 }
 // answers: right once, never again; wrong uses the picture up; expired never; unknown never
@@ -40,7 +40,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(/window\.loadAuthCaptcha = async function/.test(mod) && /Enter the captcha code\./.test(mod) && /loadAuthCaptcha\(\);\n  }\n\};/.test(mod), 'the app loads a picture, asks for the code, and gets a new picture after a failed attempt');
   ok(/pass\.length < 6\) return regError\('Password must be at least 6 characters\.'\)/.test(mod), 'the app asks for 6 characters');
   for (const id of ['tabLogin', 'tabRegister', 'authLogo', 'authLogoImg', 'authHeroBg', 'loginPhone', 'loginPassword', 'rememberMe', 'loginBtn', 'regPhone', 'regPassword', 'regPassword2', 'regTradePin', 'regReferral', 'regCaptcha', 'regCaptchaImg', 'regBtn']) ok(html.includes('id="' + id + '"'), 'markup has #' + id);
-  ok(/placeholder="Login Password \(at least 6 characters\)"/.test(html) && /placeholder="Trade Password \(6 digits\)"/.test(html) && /placeholder="Enter captcha code"/.test(html) && /placeholder="Confirm Login Password"/.test(html), 'the words are the screenshot\'s');
+  ok(/placeholder="Login Password \(at least 6 characters\)"/.test(html) && /placeholder="Withdrawal Password \(6 digits\)"/.test(html) && /placeholder="Enter captcha code"/.test(html) && /placeholder="Confirm Login Password"/.test(html), 'the words are the screenshot\'s');
   ok(/id="regDial">\+256</.test(html) && /id="loginDial">\+256</.test(html), '+256, not another country');
   ok(/CHOCOLATE_IMAGE_SLOTS = \['logo', 'authhero', 'authlogo',/.test(server) && /id="authLogoFile"/.test(R('admin-src/index.html')) && /applyAuthLogo/.test(mod), 'the circle logo is an admin-uploaded slot');
   // A referral link opens Sign Up at once: the captcha asked for then must not be thrown away as "stale" by the app's first sign-in event.
