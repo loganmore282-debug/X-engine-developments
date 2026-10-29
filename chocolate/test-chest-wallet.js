@@ -1,5 +1,5 @@
 'use strict';
-// One payout wallet (edited in place, no bin icon, no second row) and the Treasure Chest page words.
+// One payout wallet (edited in place, no bin icon, no second row).
 // Server: /bank/save replaces the single wallet. Drives source (and --built) in JSDOM.
 const fs = require('node:fs'), zlib = require('node:zlib'), assert = require('node:assert/strict');
 const { JSDOM } = require('jsdom');
@@ -31,23 +31,11 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(typeof w.deleteWallet === 'undefined', 'deleteWallet is gone');
   w.eval('STATE.bankAccounts=[];openSheet("Bank Account","");renderWalletSheet()');
   ok(d.getElementById('walEditHead').textContent === 'Add Bank Account' && d.getElementById('walToggleBtn').textContent === 'Add Bank Account' && /\*\*\*\* \*\*\*\* \*\*\*\* \*\*\*\*/.test(d.querySelector('.v-wcard').textContent), 'no wallet yet: Add Bank Account and an empty card');
-  // Treasure Chest: the owner's words only.
-  w.openChestSheet();
-  const t = d.getElementById('sheetBody').textContent.replace(/\s+/g, ' ').trim();
-  ok(d.getElementById('sheetTitle').textContent === 'TREASURE CHEST', 'title');
-  ok(t === 'Mystery Treasure Enter your key to unlock the reward OPEN CHEST', 'only the screenshot words: ' + t);
-  ok(d.getElementById('chestKey').placeholder === 'Enter treasure chest key', 'key placeholder');
-  ok(d.querySelector('.mg-chest-ring img'), 'chest artwork');
-  w.submitChestKey();
-  ok(/Please enter the treasure chest key/.test(d.getElementById('notifyMsg').textContent), 'empty key message');
-  // Server: one wallet, edited in place; chest messages.
+  // Server: one wallet, edited in place.
   ok(/MAX_SAVED_PAYOUT_ACCOUNTS = 1/.test(server), 'server keeps one wallet');
-  ok(/Wrong treasure chest password/.test(server) && /Please enter the treasure chest key/.test(server), 'server chest messages');
-  ok(/function showChestWin\(reward, balance(, after)?\)/.test(source) && /Congratulations!/.test(source) && /You won/.test(source) && /New Balance: /.test(source) && />COLLECT</.test(source), 'claiming a gift code opens the Congratulations card (You won, amount, New Balance, COLLECT)');
-ok(!/notify\('Giftcode redeemed successfully'\)/.test(source), 'the plain toast no longer replaces the card');
 ok(/id="depPhone"/.test(source) && /post\('\/deposit\/marzpay', \{ amount, phone \}\)/.test(source), 'the Deposit page has an "Input Payment Number" box and sends the typed number');
 ok(/for="walPhone">Bank Account<\/label>/.test(source) && !/for="walPhone">Phone Number/.test(source), 'the account number field is labelled Bank Account');
 ok(/\{4,64\}/.test(server) && !/\{4,34\}/.test(server), 'bank account numbers are not capped at 34 characters');
 ok(/STATE\.supportedBanks && STATE\.supportedBanks\.length/.test(source), 'an empty bank list is not kept, so the wallet asks again next time');
-console.log(`PASS: one wallet and treasure chest (${n} checks${built ? ', built bundle' : ''})`); process.exit(0);
+console.log(`PASS: one wallet (${n} checks${built ? ', built bundle' : ''})`); process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

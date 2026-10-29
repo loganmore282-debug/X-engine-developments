@@ -1,7 +1,7 @@
 'use strict';
 // END-TO-END: runs the REAL server.js (in this process, against an in-memory stand-in for MongoDB) and drives it over HTTP like the app does:
 // sign-up with the captcha, registration with a referral code typed in lower case, an unknown referral code, login, first-purchase commission,
-// locked cashback paid once at the closing time, buyers-only and open treasure codes and the wrong-key lock, the admin Plans analytics, a
+// locked cashback paid once at the closing time, the admin Plans analytics, a
 // withdrawal request and its refusals, and 40 simultaneous registrations (every account id and referral code different).
 const path = require('path'), Module = require('module');
 const root = __dirname;
@@ -36,15 +36,7 @@ async function member(pass, pin, ref) { const cap = await J('GET', '/auth/captch
   const w1 = (await acct(B.tok)).walletBalance; ok(Math.round(w1 - w0) === Math.round(inv.expectedReturn), 'the whole cashback is paid once at the closing time: +' + (w1 - w0) + ' expected ' + inv.expectedReturn);
   await sleep(2500); const w2 = (await acct(B.tok)).walletBalance; ok(w2 === w1, 'and never paid twice');
   ok([...fm.__stores.investments.values()].find(i => i.userId === B.uid).status === 'matured', 'the product becomes matured');
-  // ---- treasure codes
-  const g1 = await J('POST', '/admin/promocodes/generate', { minReward: 1000, maxReward: 1000, buyersOnly: true }, null, true); ok(g1.j.status === 'success' && /^[A-Z0-9]{10}$/.test(g1.j.code), 'buyers-only code generated: ' + g1.j.code, g1.j);
-  const g2 = await J('POST', '/admin/promocodes/generate', { minReward: 500, maxReward: 500 }, null, true);
   const N = await member('secret56', '123456', A.reg.referralCode);   // never bought
-  const r1 = await J('POST', '/redeem', { code: g1.j.code }, N.tok); ok(r1.s === 403 && r1.j.code === 'BUYERS_ONLY', 'a member who never bought cannot claim the buyers-only code', r1.j);
-  const r2 = await J('POST', '/redeem', { code: g1.j.code.toLowerCase() }, B.tok); ok(r2.j.status === 'success', 'a buyer claims it (typed in lower case)', r2.j);
-  const r3 = await J('POST', '/redeem', { code: g2.j.code.slice(0, 5) + '-' + g2.j.code.slice(5) }, N.tok); ok(r3.j.status === 'success', 'an open code works for anyone, even with a dash typed', r3.j);
-  const lst = await J('GET', '/admin/promocodes/list', null, null, true); ok((lst.j.codes || lst.j.promoCodes || []).some(c => c.code === g1.j.code && c.buyersOnly), 'admin list shows the decrypted code with Buyers only', Object.keys(lst.j));
-  let last; for (let i = 0; i < 9; i++) last = await J('POST', '/redeem', { code: 'WRONGKEY' + i + 'AB' }, N.tok); ok(last.s === 429 && last.j.code === 'TOO_MANY_WRONG_KEYS', 'repeated wrong keys lock the chest', last.j);
   // ---- analytics with plans
   const an = await J('POST', '/admin/analytics', {}, null, true); ok(an.s === 200 && an.j.plans && Array.isArray(an.j.plans.mostPurchased), 'analytics answers with the Plans card', Object.keys(an.j));
   // ---- statement / team / transactions as the buyer
@@ -68,5 +60,5 @@ async function member(pass, pin, ref) { const cap = await J('GET', '/auth/captch
     ok(ids.every(i => /^[1-9]\d{4}$/.test(String(i))), 'ids are five digits');
     const ua = [...fm.__stores.users.values()].find(u => u.referralCode === A2.reg.referralCode); ok(ua.teamL1Count === N2, "the referrer's Level 1 count is exactly 40: " + ua.teamL1Count);
   }
-  realLog(fails ? fails + ' FAILED' : 'PASS: end-to-end on the real server (sign-up, referral, login, first-purchase commission, locked cashback, treasure codes, analytics, withdrawal, concurrent sign-ups)'); process.exit(fails ? 1 : 0);
+  realLog(fails ? fails + ' FAILED' : 'PASS: end-to-end on the real server (sign-up, referral, login, first-purchase commission, locked cashback, analytics, withdrawal, concurrent sign-ups)'); process.exit(fails ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

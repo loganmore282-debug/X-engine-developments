@@ -675,24 +675,6 @@ a{color:inherit;}
 .notify-bg.show .notify-card{pointer-events:auto;transform:scale(1);opacity:1;}
 .notify-msg{white-space:pre-line;}
 
-/* ── Treasure chest (Chest.dc.html / ChestSuccess.dc.html) ── */
-/* ── Gift Codes: Chocolate energy-voucher treatment ──
-   The old treasure-chest scene was Chocolate artwork and metaphor. Chocolate keeps
-   the same redeem flow but presents it as a clean code/voucher utility. */
-/* Gift-code win card (owner's screenshot): blurred page behind, white card with the
-   gift mark, Congratulations!, You won, the amount, the new balance and COLLECT. */
-.v-win-bg{position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;padding:7.6px 18px 0;background:rgba(2,150,76,.5);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);opacity:0;transition:opacity .25s ease;}
-.v-win-bg.show{opacity:1;}
-.v-win-card{width:100%;max-width:323px;box-sizing:border-box;background:#fcfcfe;border-radius:24px;padding:34px 24px 34px;text-align:center;box-shadow:0 18px 44px -14px rgba(4,60,34,.5);transform:scale(.94);transition:transform .3s cubic-bezier(.22,1,.36,1);}
-.v-win-bg.show .v-win-card{transform:scale(1);}
-.v-win-mark{width:60px;height:60px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:var(--v-grad);color:#fff;box-shadow:0 10px 22px -8px rgba(2,150,76,.65);}
-.v-win-mark svg{width:25px;height:25px;}
-.v-win-card h2{margin:18.6px 0 0;font-size:22px;font-weight:800;letter-spacing:.066em;color:#111;}
-.v-win-sub{margin:14px 0 0;font-size:11px;font-style:italic;color:#9aa0b4;}
-.v-win-amt{margin:20.2px 0 0;font-size:37.4px;font-weight:700;color:var(--v-blue);line-height:1.1;}
-.v-win-bal{margin:23.2px 0 0;font-size:11.5px;color:#9aa0b4;}
-.v-win-btn{display:block;width:100%;height:43px;margin:29.6px 0 0;border:0;border-radius:14px;background:var(--v-grad);color:#fff;font:inherit;font-size:13px;font-weight:700;letter-spacing:.16em;cursor:pointer;}
-
 /* ── Transaction Statement ──
    Professional ledger presentation: categories are one horizontal tab row at
    the top, and transactions read like a statement rather than a stack of
@@ -1458,11 +1440,6 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 .mg-buy:active:not(:disabled){transform:scale(.99);}
 .mg-buy:disabled,.mg-buy.soon{background:#eaf5ee;border:1px solid #d3e7da;color:#b3bdb7;cursor:default;box-sizing:border-box;}
 .mg-buy.soon{font-size:13px;}
-.mg-chest{position:fixed;right:24px;bottom:calc(var(--nav-h) + 23.5px + env(safe-area-inset-bottom));z-index:150;width:58px;height:52px;padding:0;border:0;background:transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;}
-.mg-chest img{display:block;width:100%;height:auto;animation:mgBounce 2.9s ease-in-out infinite;filter:drop-shadow(0 6px 8px rgba(80,40,0,.28));}
-@keyframes mgBounce{0%,100%{transform:translateY(-3px);}50%{transform:translateY(3px);}}
-body.sheet-open .mg-chest,body.dlg-open .mg-chest{visibility:hidden;}
-@media (prefers-reduced-motion:reduce){.mg-chest img{animation:none;}}
 
 /* ── Orders ── */
 .mg-total{margin-top:14px;background:#fefefc;border-radius:15px;text-align:center;padding:17.5px 10px 19.5px;box-shadow:0 2px 20px rgba(140,160,70,.16);}
@@ -1550,32 +1527,6 @@ body.sheet-open .mg-chest,body.dlg-open .mg-chest{visibility:hidden;}
 .mg-reward h3 i{display:block;width:3.5px;height:16px;margin-right:9px;border-radius:2px;background:#ffd60a;}
 .mg-reward p{margin:0;font:400 12px/22px var(--mg-serif);color:#5f6f63;}
 
-/* ── Salary ── */
-.mg-salary{padding:0 12px 8px;background:linear-gradient(180deg,#e7f3ea 0,rgba(231,243,234,0) 130px);}
-.mg-shead{text-align:center;padding-top:26px;}
-.mg-shead h1{margin:0;font:700 21px/1.2 var(--mg-sans);letter-spacing:.04em;color:#00a650;}
-.mg-shead p{margin:8px 0 0;font:400 11.5px/1.3 var(--mg-sans);color:#9aa0ad;}
-.mg-spill{display:inline-block;margin:12px 0 0;padding:0 15px;height:30px;line-height:30px;border-radius:15px;background:#e3f3e9;color:#00a650;font:700 12px/30px var(--mg-sans);}
-.mg-sacc{margin-top:15px;padding:18px 10px 15px;text-align:center;border:1px solid #d8ecde;border-radius:14px;background:#fefefc;}
-.mg-sacc div{font:400 12.5px/1.3 var(--mg-sans);color:#7b8089;}
-.mg-sacc div b{font-weight:700;font-size:14px;color:#111;}
-.mg-sacc small{display:block;margin-top:8px;font:400 11.5px/1.3 var(--mg-sans);color:#9aa0ad;}
-.mg-stier{position:relative;display:flex;align-items:center;gap:8px;margin-top:8.5px;padding:12px 15.5px 12px 20px;border:1px solid #d8ecde;border-radius:13px;background:#fefefc;overflow:hidden;}
-.mg-stier::before{content:'';position:absolute;left:0;top:0;bottom:0;width:7px;background:var(--strip);}
-.mg-sl{flex:1;min-width:0;padding-right:14px;}
-.mg-s1{display:flex;flex-wrap:wrap;align-items:center;gap:3px 4px;}
-.mg-s1 b{font:700 13px/1.3 var(--mg-sans);color:#1a1a1a;}
-.mg-s1 span{font:400 10.5px/1.3 var(--mg-sans);color:#9aa0ad;}
-.mg-s1 em{font:700 10.5px/1 var(--mg-sans);font-style:normal;color:#fff;background:#00a650;border-radius:6px;padding:3px 5px 3.5px;}
-.mg-sbar{height:6.5px;margin-top:7px;border-radius:4px;background:#e6e7eb;overflow:hidden;}
-.mg-sbar i{display:block;height:100%;border-radius:4px;background:#00a650;}
-.mg-sneed{margin-top:4px;text-align:center;font:400 11px/1.3 var(--mg-sans);color:#9aa0ad;}
-.mg-sbtn{flex:0 0 52px;width:52px;height:41px;padding:0;border:0;border-radius:10px;background:linear-gradient(135deg,#e9eaee,#dcdee4);color:#9a9ea8;font:700 11.5px/1 var(--mg-sans);}
-.mg-sbtn.go{background:linear-gradient(125deg,#03a652,#056b39);color:#fff;}
-.mg-rules{padding:20px 6px 14px;font:400 12px/1.55 var(--mg-sans);color:#1a1a1a;}
-.mg-rules>b{display:block;text-align:center;font-weight:700;font-size:13px;margin-bottom:10px;}
-.mg-rules ol{margin:0;padding-left:17px;}
-.mg-rules li{margin-bottom:6px;}
 
 /* ── Profile ── */
 .mg-my{padding-top:26px;}
@@ -1774,32 +1725,8 @@ body.sheet-open .mg-chest,body.dlg-open .mg-chest{visibility:hidden;}
 .msg-detail .content{margin-bottom:13px;font:400 11.5px/1.6 var(--mg-sans);color:#3a4a40;white-space:pre-line;}
 .msg-detail .mimg{display:block;width:100%;height:auto;border-radius:14px;}
 
-/* Treasure Chest */
-.mg-chestpg{position:relative;padding:146.5px 8px 27px;text-align:center;}
-.mg-fade{display:block;position:absolute;left:12%;right:12%;height:1px;background:linear-gradient(90deg,rgba(2,166,82,0),rgba(2,166,82,.32),rgba(2,166,82,0));}
-.mg-fade.t{top:146.5px;}.mg-fade.b{position:relative;left:auto;right:auto;margin:35px 12% 0;}
-.mg-chest-ring{position:relative;width:188px;height:188px;margin:0 auto;border-radius:50%;border:1px dotted rgba(70,150,110,.25);display:flex;align-items:center;justify-content:center;}
-.mg-chest-ring::before{content:'';position:absolute;inset:8px;border-radius:50%;border:1px solid rgba(214,177,74,.22);}
-.mg-chest-ring .glow{position:absolute;left:-30px;right:-30px;top:-10px;bottom:-30px;background:radial-gradient(ellipse 34% 30% at 50% 56%,rgba(120,215,165,.62),rgba(120,215,165,0) 100%),radial-gradient(ellipse 46% 44% at 40% 70%,rgba(240,215,170,.35),rgba(240,215,170,0) 100%);}
-.mg-chest-ring img{position:relative;display:block;width:105px;height:auto;margin-top:-2px;filter:drop-shadow(0 2px 3px rgba(80,40,0,.12));animation:mgFloat 2.2s ease-in-out infinite;}
 @keyframes mgFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-6px);}}
-.mg-chestpg h2{margin:1px 0 0;font:700 19px/1.2 var(--mg-serif);letter-spacing:.1em;color:#145a35;}
-.mg-chestpg p{margin:9px 0 0;font:italic 400 11.5px/1.2 var(--mg-serif);letter-spacing:.04em;color:#9aa0ad;}
-.mg-chest-key{display:block;width:100%;box-sizing:border-box;height:44.5px;margin:24px 0 0;padding:0 14px;border:1px solid #b9e0cb;border-radius:14px;background:#fdfcf7;color:#4a4a4a;text-align:center;font:400 14px/1 var(--mg-serif);letter-spacing:.07em;outline:0;}
-.mg-chest-key::placeholder{color:#7d7d80;}
-.mg-chest-key:focus{border-color:#02a652;}
-.mg-chest-go{display:block;width:100%;height:45px;margin:17px 0 0;border:0;border-radius:14px;background:linear-gradient(125deg,#07a856 0%,#02924a 50%,#056b39 100%);color:#fff;font:700 14px/1 var(--mg-serif);letter-spacing:.2em;cursor:pointer;}
-.mg-chest-go:disabled{opacity:.65;}
-.sheet-bg.mg-chest-page .sheet-head h2{color:#1a5a38;}
 
-/* Congratulations card */
-.v-win-bg{padding:0 18px 42px;background:rgba(40,180,110,.73);-webkit-backdrop-filter:blur(9px);backdrop-filter:blur(9px);}
-.v-win-card{position:relative;max-width:314px;min-height:313px;box-sizing:border-box;padding:36px 22px 33px;border:2px solid transparent;border-radius:25px;background:linear-gradient(135deg,#fdf8f4,#f0eae6) padding-box,linear-gradient(135deg,#1f9a55,#ecc84a 55%,#1f9a55) border-box;box-shadow:0 20px 50px -18px rgba(2,90,50,.5);}
-.v-win-card h2{margin:0;font:700 26px/1.2 var(--mg-serif);letter-spacing:.08em;background:linear-gradient(90deg,#1d7a3f,#e6c54a);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;}
-.v-win-sub{margin:16.5px 0 0;font:italic 400 14px/1.2 var(--mg-serif);letter-spacing:.04em;color:#7d7d75;}
-.v-win-amt{margin:14.5px 0 0;font:700 44px/1.15 var(--mg-serif);background:linear-gradient(90deg,#3f8a3c,#c6b53a);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;}
-.v-win-bal{margin:24.5px 0 0;font:400 13px/1.2 var(--mg-serif);letter-spacing:.02em;color:#9a9aa5;}
-.v-win-btn{width:auto;min-width:182px;height:45.5px;margin:28.5px auto 0;padding:0 28px;border-radius:14px;background:linear-gradient(125deg,#07a856,#02924a 50%,#056b39);font:700 14px/1 var(--mg-serif);letter-spacing:.2em;}
 
 /* Welcome dialog */
 .ann-bg{background:rgba(2,166,82,.43);-webkit-backdrop-filter:none;backdrop-filter:none;align-items:flex-start;padding:66px 15px 0;box-sizing:border-box;}
@@ -2356,7 +2283,6 @@ body{color:var(--ch-ink);font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
 .confirm-sheet h3{font-family:Roboto,system-ui,sans-serif;color:#2a1709;}
 .confirm-sheet .secondary-button,.secondary-button{background:#f6eddc;border:1px solid #ddd3c5;color:#5a4636;}
 .primary-button{background:var(--ch-btn);box-shadow:0 8px 16px -10px rgba(60,30,8,.7);}
-.v-win-bg{background:rgba(110,80,40,.6);}
 .v-help-ic{background:#f6eddc;color:#4e3016;}
 .v-help-b{border:1px solid #ddd3c5;}
 .v-help-b svg{color:#4e3016;stroke:#4e3016;}
@@ -2415,16 +2341,6 @@ body{color:var(--ch-ink);font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
 .mg-dots i.on{background:#d8a42e;}
 .mg-dl{background:linear-gradient(180deg,#e8dcc7 0%,#f1e8d8 45%,#f8f2e6 100%) center/cover no-repeat;}
 .mg-dl-btn{background:var(--ch-btn);border-radius:12px;}
-.mg-chestpg h2,.sheet-bg.mg-chest-page .sheet-head h2{color:#4e3016;}
-.mg-fade{background:linear-gradient(90deg,rgba(94,58,27,0),rgba(94,58,27,.3),rgba(94,58,27,0));}
-.mg-chest-ring .glow{background:radial-gradient(ellipse 34% 30% at 50% 56%,rgba(216,164,46,.5),rgba(216,164,46,0) 100%),radial-gradient(ellipse 46% 44% at 40% 70%,rgba(240,215,170,.35),rgba(240,215,170,0) 100%);}
-.mg-chest-key{border:1px solid #ddd3c5;background:#fffdf9;color:#2a1709;}
-.mg-chest-key:focus{border-color:#5e3a1b;}
-.mg-chest-go{background:var(--ch-btn);}
-.v-win-card{background:linear-gradient(135deg,#fdf8f0,#f4ece0) padding-box,linear-gradient(135deg,#5e3a1b,#d8a42e 55%,#5e3a1b) border-box;}
-.v-win-card h2{background:linear-gradient(90deg,#5e3a1b,#d8a42e);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
-.v-win-amt{background:linear-gradient(90deg,#5e3a1b,#d8a42e);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
-.v-win-btn{background:var(--ch-btn);}
 .mg-loadtxt{color:#a39683;}
 .mg-nomem .mg-loadtxt{color:#a39683;}
 .ma-capimg{box-shadow:none;}
@@ -2823,8 +2739,8 @@ window.createChocolateIdleSession = function(key, onExpire, onActivity){
 <!-- ═══════════ APP ═══════════ -->
 <div id="app" style="display:none;">
   <div class="wrap" id="pageHost"></div>
-  <!-- Six tabs, as in the owner's screens: Home, Orders, Promotion, Team, Salary, Profile. The STATE.page names stay assets (Orders),
-       network (Team) and account (Profile); promo and salary are the two new ones. -->
+  <!-- Five tabs, as in the owner's screens: Home, Orders, Promotion, Team, Profile. The STATE.page names stay assets (Orders),
+       network (Team) and account (Profile); promo is the new one. -->
   <div class="bottom-nav">
     <button class="navitem" data-nav="home" onclick="navigatePage('home')"><span class="nav-ic"></span><div class="lbl">Home</div></button>
     <button class="navitem" data-nav="assets" onclick="navigatePage('assets')"><span class="nav-ic"></span><div class="lbl">Orders</div></button>

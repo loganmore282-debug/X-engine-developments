@@ -8,7 +8,7 @@ let n = 0; const ok = (c, m) => { assert(c, m); n++; };
 
 // 1. /team/stats adds what each level has paid, from the ledger's own commissionLevel (0 = Level 1)
 const grab = (a, b) => { const i = src.indexOf(a), j = src.indexOf(b, i); if (i < 0 || j < 0) throw new Error('slice ' + a); return src.slice(i, j); };
-const route = grab("app.get('/team/stats'", "// DAILY SALARY (the Salary tab)");
+const route = grab("app.get('/team/stats'", "// The Task Center, Mission Center, Daily Salary");
 const finiteMoney = v => Number.isFinite(Number(v)) ? Number(v) : 0;
 function runStats(rows) {
   let handler;

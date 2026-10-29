@@ -372,7 +372,6 @@ window.createChocolateIdleSession = function(key, onExpire, onActivity){
         <button class="tab" data-tab="deposits">Deposits</button>
         <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
         <button class="tab" data-tab="products" id="productsTab">Products</button>
-        <button class="tab" data-tab="promocodes" id="promocodesTab">Treasure Codes</button>
         <button class="tab" data-tab="messages" id="messagesTab">Messages</button>
         <button class="tab" data-tab="transactions">Transactions</button>
         <button class="tab" data-tab="referrals">Referrals</button>
@@ -729,9 +728,9 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
     if (wanted && VALID_TABS.has(wanted)) { lastTab = wanted; history.replaceState(null, '', location.pathname); }
   } catch (_) {}
   const isOwner = SESSION_ROLE === 'owner';
-  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'bannersTab', 'promocodesTab']
+  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'bannersTab']
     .forEach(id => $(id).classList.toggle('hidden', !isOwner));
-  if (!isOwner && ['products', 'settings', 'banners', 'promocodes', 'admins', 'auditlog'].includes(lastTab)) lastTab = 'dashboard';
+  if (!isOwner && ['products', 'settings', 'banners', 'admins', 'auditlog'].includes(lastTab)) lastTab = 'dashboard';
   // The country list is needed before anything renders: every money figure
   // in this panel is labelled from it (see ugx()/curOf()), and the region
   // picker on Settings and Products is built from it. Failure is silent and
@@ -991,7 +990,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('mess
 });
 
 // ── TABS ──
-const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','messages','transactions','referrals','settings','banners','admins','auditlog']);
+const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','messages','transactions','referrals','settings','banners','admins','auditlog']);
 let _tab='dashboard', _tabSequence=0;
 function staleTab(name){ return _tab !== name; }
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{ if (_tab !== t.dataset.tab) switchTab(t.dataset.tab); }));
@@ -1004,7 +1003,7 @@ function switchTab(name){
   c.inert = true; c.setAttribute('aria-busy','true');
   const spinnerTimer = setTimeout(() => { if (sequence === _tabSequence) c.innerHTML=spinnerHtml(); }, 120);
   const fn = ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
-     products:renderProducts, promocodes:renderPromoCodes, messages:renderMessages, transactions:renderTransactions,
+     products:renderProducts, messages:renderMessages, transactions:renderTransactions,
      referrals:renderReferrals, settings:renderSettings, banners:renderBanners, admins:renderAdmins, auditlog:renderAuditLog }[name]);
   // The switch lives in the topbar, OUTSIDE #content, so a tab render can
   // never take it with it -- which is why this no longer waits for the tab
@@ -1090,7 +1089,7 @@ const LIVE_TABS=new Set(['dashboard','analytics','users','deposits','withdrawals
 // state to lose there beyond scroll position, which is restored below).
 const RENDERERS={ dashboard:()=>renderDashboard(), analytics:()=>renderAnalytics(true), users:()=>quietRefreshUsers(), deposits:()=>quietRefreshDeposits(),
   withdrawals:()=>quietRefreshWithdrawals(), products:()=>renderProducts(),
-  promocodes:()=>renderPromoCodes(), transactions:()=>quietRefreshTransactions(), referrals:()=>quietRefreshReferrals(),
+  transactions:()=>quietRefreshTransactions(), referrals:()=>quietRefreshReferrals(),
   settings:()=>renderSettings(), admins:()=>renderAdmins(), auditlog:()=>renderAuditLog() };
 function modalOpen(){ const m=$('modalRoot'); return m && !m.classList.contains('hidden'); }
 function contentHasFocus(){
@@ -1294,18 +1293,13 @@ async function renderAnalytics(silent){
     const insufficientRows = rowsOr(ab.repeatedInsufficientWithdrawals,
       r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td><td>${(r.samples||[]).map(s=>`tried ${ugx(s.attempted)} with ${ugx(s.balance)}`).join('; ')}</td>${lastCol(r)}</tr>`,
       'No accounts repeatedly trying to withdraw more than their balance.');
-    const giftcodeRows = rowsOr(ab.giftcodeGuessing,
-      r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td><td>${(r.samples||[]).map(esc).join(', ')}</td>${lastCol(r)}</tr>`,
-      'No accounts trying treasure codes that don\'t exist.');
     return `
     <div class="row" style="align-items:center;margin:18px 0 6px"><h2 class="sec" style="flex:1;margin:0">Suspicious activity (${ab.period}-day, ${ab.minCount}+ to appear)</h2></div>
     <p class="muted" style="margin:0 0 10px">Owner-only. Patterns worth a look, not automatic accusations -- a slow connection or a genuine mistake can also produce a repeat or two.</p>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated failed recharges</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Failures</th><th>Recent amounts</th><th>Last seen</th></tr></thead><tbody>${failedDepRows}</tbody></table></div></div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated insufficient-funds withdraw attempts</h2>
-      <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Recent tries</th><th>Last seen</th></tr></thead><tbody>${insufficientRows}</tbody></table></div></div>
-    <div class="panel-card"><h2 class="sec" style="margin-top:0">Treasure code guessing</h2>
-      <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Codes tried</th><th>Last seen</th></tr></thead><tbody>${giftcodeRows}</tbody></table></div></div>`;
+      <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Recent tries</th><th>Last seen</th></tr></thead><tbody>${insufficientRows}</tbody></table></div></div>`;
   })() : '';
   const staffTable = sa.byStaff.length ? `<div class="panel-card"><h2 class="sec" style="margin-top:0">Staff withdrawal approvals (${a.period}-day)</h2>
     <p class="muted" style="margin-top:0">Who's actually approving/declining payouts, and how much of the workload each person carries.</p>
@@ -1830,7 +1824,6 @@ async function openUser(uid){
   // shilling in the total is traceable to a named source, not one opaque
   // number.
   const eb = r.earnedBreakdown || {};
-  const mission = (eb.mission_salary||0) + (eb.mission_deposit_reward||0);
   openModal(`
     <h3>${esc(u.phone||'')}</h3>
     <div class="muted" style="margin-bottom:10px">Referral code: ${esc(u.referralCode||'Not set')}</div>
@@ -1839,7 +1832,7 @@ async function openUser(uid){
     <div class="kv"><span class="k">Invested</span><span>${ugx(u.totalInvested)}</span></div>
     <div class="kv"><span class="k">Cashed out</span><span>${ugx(u.totalWithdrawn)}</span></div>
     <div class="kv"><span class="k">Total earned (all sources)</span><span>${ugx(u.totalEarned)}</span></div>
-    <div class="muted" style="font-size:11px;margin:-4px 0 8px;line-height:1.6">Investment cashback ${ugx(eb.cashback)} &middot; Referral commission ${ugx(eb.commission)} &middot; Check-in ${ugx(eb.checkin)} &middot; Treasure codes ${ugx(eb.promocode)} &middot; Team rewards ${ugx(eb.team_reward)} &middot; Daily salary ${ugx(mission)} &middot; Turntable ${ugx(eb.turntable)}</div>
+    <div class="muted" style="font-size:11px;margin:-4px 0 8px;line-height:1.6">Investment cashback ${ugx(eb.cashback)} &middot; Referral commission ${ugx(eb.commission)} &middot; Check-in ${ugx(eb.checkin)} &middot; Team rewards ${ugx(eb.team_reward)} &middot; Turntable ${ugx(eb.turntable)}</div>
     <div class="kv"><span class="k">Team commission <span class="muted" style="font-size:10.5px">(already included above)</span></span><span>${ugx(u.teamCommission)}</span></div>
     <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'Not set')}</span></div>
     <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
@@ -2630,86 +2623,6 @@ async function renderMessages(){
   }));
 }
 
-// ── GIFT CODES ──
-async function renderPromoCodes(){
-  const r = await api('/admin/promocodes/list');
-  if(staleTab('promocodes')) return;
-  const list = r.codes||[];
-  $('content').innerHTML = `
-    <h2 class="sec">Treasure codes</h2>
-    <div class="panel-card">
-      <div class="row">
-        <div><label>Min reward (${adminCur()})</label><input id="cMinReward" type="number" step="0.01" min="0.01" placeholder="100.50"></div>
-        <div><label>Max reward (${adminCur()})</label><input id="cMaxReward" type="number" step="0.01" min="0.01" placeholder="500.75"></div>
-        <div><label>How many</label><input id="cCount" type="number" value="1" min="1" max="50"></div>
-      </div>
-      <div class="row" style="margin-top:6px">
-        <div><label>Max uses per code (optional)</label><input id="cMax" type="number" placeholder="1"></div>
-        <div><label>Expires after (seconds, optional)</label><input id="cDuration" type="number" min="1" step="1" placeholder="e.g. 30 for a flash code"></div>
-        <div><label>Who can claim</label><select id="cWho"><option value="all">Everyone</option><option value="buyers">Only members who have bought a product</option></select></div>
-      </div>
-      <div class="muted" style="margin:4px 0 10px">Each claim rolls its own random reward between min and max (down to the cent) -- one person might get 123.39, another 234.89. Set min and max the same for a fixed reward instead. Leave expiry blank for a code that never expires.</div>
-      ${ADMIN_REGIONS.length>1?`<div class="muted" style="margin:0 0 10px;font-size:12px">${ADMIN_REGION==='all'
-        ? 'These codes will be claimable in <b>every country</b>, each paying the amount above in the claimer\'s own currency.'
-        : `These codes are for <b>${esc(regionByKeyAdmin().name)}</b> and pay in ${esc(adminCur())}. Members of other countries cannot claim them. Pick <b>All countries</b> above to cut a code anybody can claim.`}</div>`:''}
-      <button class="btn block" id="genBtn">Generate codes</button>
-      <div id="genOut"></div>
-    </div>
-    <div class="panel-card table-scroll"><table><thead><tr><th>Code</th><th>Reward range</th>${ADMIN_REGIONS.length>1?'<th>Country</th>':''}<th>Used</th><th>Total claimed</th><th>Status</th><th>Expires</th><th>Created</th><th></th></tr></thead>
-    <tbody>${list.length?list.map(c=>{
-      const expiredNow = c.expiresAt && tsMs(c.expiresAt) < Date.now();
-      const statusLabel = expiredNow ? 'Expired' : (c.active!==false?'Active':'Off');
-      const statusClass = expiredNow ? 't-bad' : (c.active!==false?'t-ok':'t-mut');
-      // Labelled in the CODE's own currency. With All countries picked the
-      // rows come from several, and adminCur() would print one country's
-      // label over another country's money. A code marked 'all' really is
-      // claimable anywhere, so it is shown in the panel's current currency
-      // and the Country column says which codes those are.
-      const cCur = c.regionKey && c.regionKey !== 'all' ? c.regionKey : undefined;
-      const rewardCol = c.minReward===c.maxReward ? ugx(c.minReward, cCur) : `${ugx(c.minReward, cCur)} – ${ugx(c.maxReward, cCur)}`;
-      const claimedCol = c.uses ? `<b>${ugx(c.totalClaimed, cCur)}</b>` : '<span class="muted">Not claimed yet</span>';
-      return `<tr><td><b class="mono">${esc(String(c.code||'').toUpperCase())}</b> <button class="btn sm ghost" data-copy="${esc(String(c.code||'').toUpperCase())}" title="Copy code">Copy</button>${c.buyersOnly?' <span class="pill-tag t-ok" title="Only members who have bought a product can claim this code">Buyers only</span>':''}</td><td>${rewardCol}</td>${ADMIN_REGIONS.length>1?`<td>${c.regionKey==='all'?'<span class="muted">All countries</span>':esc('Uganda')}</td>`:''}<td>${c.uses||0} / ${c.maxUses||'∞'}</td>
-      <td>${claimedCol}</td>
-      <td><span class="pill-tag ${statusClass}">${statusLabel}</span></td>
-      <td>${c.expiresAt?fdate(c.expiresAt):'<span class="muted">Never</span>'}</td>
-      <td>${fdate(c.createdAt)}</td>
-      <td>${(c.active!==false&&!expiredNow)?`<button class="btn danger sm" data-off="${esc(c.id)}">Deactivate</button>`:''}</td></tr>`;
-    }).join(''):`<tr><td colspan="${ADMIN_REGIONS.length>1?9:8}" class="empty">No codes yet</td></tr>`}
-    </tbody></table></div>`;
-  $('genBtn').addEventListener('click', async()=>{
-    const minReward=Math.round(parseFloat($('cMinReward').value||0)*100)/100, maxReward=Math.round(parseFloat($('cMaxReward').value||0)*100)/100;
-    if(!minReward)return toast('Enter a minimum reward amount','err');
-    if(!maxReward||maxReward<minReward)return toast('Max reward must be at least the minimum','err');
-    const count=parseInt($('cCount').value||1), maxUses=parseInt($('cMax').value)||undefined;
-    const durationSeconds=$('cDuration').value?parseInt($('cDuration').value,10):undefined;
-    const buyersOnly=$('cWho').value==='buyers';
-    const b=$('genBtn'); b.disabled=true;b.textContent='Generating…';
-    const codes=[];
-    let failMsg='';
-    for(let i=0;i<count;i++){
-      const d=await api('/admin/promocodes/generate',{ minReward, maxReward, maxUses, durationSeconds, buyersOnly });
-      if(d.status==='success') codes.push(d.code); else { failMsg=d.message||'Failed'; break; }
-    }
-    b.disabled=false;b.textContent='Generate codes';
-    if(codes.length){
-      const rangeLabel = minReward===maxReward ? ugx(minReward) : `a random amount between ${ugx(minReward)} and ${ugx(maxReward)}`;
-      $('genOut').innerHTML=`<div class="codebox">${codes.map(code=>`<span class="code-chip"><b class="mono">${esc(code)}</b><button class="btn sm ghost" data-copy="${esc(code)}" title="Copy code">Copy</button></span>`).join('')}</div>
-        <button class="btn sm ghost" id="copyAllBtn" data-copyall="${esc(codes.join('\n'))}" style="margin-top:6px">Copy all</button>
-        <div class="muted" style="margin-top:6px">${codes.length} code(s) generated, each claim paying ${rangeLabel}${durationSeconds?`, expiring in ${durationSeconds} second${durationSeconds===1?'':'s'}`:''}${buyersOnly?'; only members who have bought a product can claim':''}</div>`;
-      wireCopyButtons();
-      // refresh the list underneath, but keep the codes just generated on screen (re-rendering the tab used to wipe them after 1.2 s)
-      setTimeout(async()=>{ const keep=$('genOut')?$('genOut').innerHTML:''; await renderPromoCodes(); if(keep&&$('genOut')){ $('genOut').innerHTML=keep; wireCopyButtons(); } },1200);
-    }
-    if(failMsg) toast(failMsg,'err');
-  });
-  document.querySelectorAll('[data-off]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Deactivate this treasure code? It can no longer be redeemed once deactivated.')) return; const d=await api('/admin/promocodes/deactivate',{id:b.dataset.off}); toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderPromoCodes(); }));
-  wireCopyButtons();
-  function wireCopyButtons(){
-    document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>copyText(b.dataset.copy,b));
-    document.querySelectorAll('[data-copyall]').forEach(b=>b.onclick=()=>copyText(b.dataset.copyall,b));
-  }
-}
-
 // ── ADMINS (owner only) ──
 // ── COUNTRIES (REGIONS) ──
 //
@@ -2796,7 +2709,7 @@ const AUDIT_LABELS = {
   manual_pay_image_set:'Manual-pay screen image changed',
   products_saved:'Products saved',
   product_deleted:'Product deleted', products_cleared:'All products cleared', products_synced:'Product pricing synced to defaults',
-  deposit_force_credited:'Recharge force-credited', giftcode_generated:'Treasure codes generated', giftcode_deactivated:'Treasure code deactivated',
+  deposit_force_credited:'Recharge force-credited',
   totals_recounted:'Totals recalculated',
 };
 async function renderAuditLog(){
@@ -2834,7 +2747,7 @@ async function renderTransactions(){
   if(staleTab('transactions')) return;
   if(failed){ loadFailed({status:'error'},'transactions'); return; }
   _txns = merged;
-  const subs=[['all','All'],['deposit','Deposits'],['withdraw','Withdrawals'],['commission','Commissions'],['investment','Products'],['promocode','Codes']];
+  const subs=[['all','All'],['deposit','Deposits'],['withdraw','Withdrawals'],['commission','Commissions'],['investment','Products']];
   $('content').innerHTML = `
     <h2 class="sec">Transactions</h2>
     <div class="panel-card"><input id="txSearch" placeholder="Search description, type, user id, or a reference"></div>
@@ -3431,13 +3344,6 @@ async function renderSettings(){
       <button class="btn block" id="saveSupport">Save support contacts</button>
     </div>
 
-    <h2 class="sec">Daily Salary</h2>
-    <div class="panel-card" id="taskCard">
-      <p class="muted" style="margin-top:0">The Salary tab. A member's team total (everything levels 1 to 3 have deposited) puts them on the highest tier it reaches; every calendar day on a reached tier is one day of wages worth that tier's reward, and wages the member does not claim keep adding up. A day already paid stays paid when you change the numbers.</p>
-      <div id="taskEditor" class="muted">Loading&hellip;</div>
-      <button class="btn block" id="saveTasks" style="margin-top:12px" disabled>Save Daily Salary</button>
-    </div>
-
     <h2 class="sec">App name</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">Renames the app everywhere inside it &mdash; the browser tab and the app name. Up to 24 characters.</p>
@@ -3511,38 +3417,6 @@ async function renderSettings(){
     const upd = { supportTelegram:$('spTg').value.trim(), telegramGroup:$('spTgGroup').value.trim() };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
-  // ── Daily Salary editor: one table of team total / reward per day, each row keeps its id so edits never re-pay a claimed day ──
-  const taskRowHtml=(r)=>`<div class="task-row" data-id="${esc(r.id||'')}" style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-      <input type="number" min="1" step="1" class="tk-target" value="${r.target||''}" placeholder="Team total" style="flex:1;margin:0">
-      <input type="number" min="1" step="1" class="tk-reward" value="${r.reward||''}" placeholder="Reward per day" style="flex:1;margin:0">
-      <button class="btn sm danger tk-del" type="button" aria-label="Remove" style="flex:0 0 auto">&times;</button></div>`;
-  const taskTableHtml=(rows)=>`<div class="task-table" style="margin-bottom:16px">
-      <div style="display:flex;gap:8px;margin-bottom:4px"><span class="muted" style="flex:1;font-size:11.5px">Team total (${adminCur()})</span><span class="muted" style="flex:1;font-size:11.5px">Reward per day (${adminCur()})</span><span style="width:44px"></span></div>
-      <div class="task-rows">${rows.map(taskRowHtml).join('')}</div>
-      <button class="btn sm ghost tk-add" type="button">+ Add tier</button></div>`;
-  const wireTaskTable=(box)=>{
-    box.querySelectorAll('.tk-del').forEach(b=>b.onclick=()=>b.closest('.task-row').remove());
-    box.querySelector('.tk-add').onclick=()=>{ const w=document.createElement('div'); w.innerHTML=taskRowHtml({}); const row=w.firstElementChild; box.querySelector('.task-rows').appendChild(row); row.querySelector('.tk-del').onclick=()=>row.remove(); row.querySelector('.tk-target').focus(); };
-  };
-  const readTaskTable=()=>[...document.querySelectorAll('.task-table .task-row')]
-    .map(r=>({ id:r.dataset.id||'', target:r.querySelector('.tk-target').value.trim(), reward:r.querySelector('.tk-reward').value.trim() }))
-    .filter(r=>r.target!==''||r.reward!=='')
-    .map(r=>({ id:r.id, target:Number(r.target), reward:Number(r.reward) }));
-  api('/admin/salary').then(d=>{
-    const box=$('taskEditor'); if(!box) return;
-    if(d.status!=='success'){ box.textContent=d.message||'Could not load the salary tiers'; return; }
-    box.classList.remove('muted');
-    box.innerHTML=taskTableHtml(d.tiers||[]);
-    box.querySelectorAll('.task-table').forEach(wireTaskTable);
-    $('saveTasks').disabled=false;
-  });
-  $('saveTasks').addEventListener('click', async()=>{
-    const b=$('saveTasks'); if(b.disabled) return; b.disabled=true;
-    const d=await api('/admin/salary/save',{ tiers:readTaskTable() });
-    b.disabled=false;
-    toast(d.status==='success'?'Daily Salary saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
-    if(d.status==='success'){ const box=$('taskEditor'); box.innerHTML=taskTableHtml(d.tiers); box.querySelectorAll('.task-table').forEach(wireTaskTable); }
-  });
   $('saveBrandName').addEventListener('click', async()=>{
     const name = $('brandNameInput').value.trim();
     // Checked here as well as on the server so the admin gets the answer
@@ -3612,8 +3486,6 @@ const ADMIN_LANG_ROWS = [
   ['Withdrawals', 'Okuggyamu ssente', 'Utoaji', 'Retraits', 'Kubikuza', 'Okwihamu sente'],
   ['Transactions', 'Emirimu gy\'ssente', 'Miamala', '=', 'Ibikorwa by\'amafaranga', 'Emirimo ya sente'],
   ['Referrals', 'Okuyita', 'Mialiko', 'Parrainages', 'Gutumira', 'Okweta'],
-  ['Treasure Codes', 'Koodi z\'ebirabo', 'Misimbo ya Zawadi', 'Codes cadeaux', 'Kode z\'impano', 'Koodi z\'ebiconco'],
-  ['Treasure codes', 'Koodi z\'ebirabo', 'Misimbo ya zawadi', 'Codes cadeaux', 'Kode z\'impano', 'Koodi z\'ebiconco'],
   ['Countries', 'Amawanga', 'Nchi', 'Pays', 'Ibihugu', 'Amahanga'],
   ['Admins', 'Abaduumizi', 'Wasimamizi', 'Administrateurs', 'Abayobozi', 'Abebembezi'],
   ['Activity Log', 'Ekitabo ky\'ebikolwa', 'Kumbukumbu ya shughuli', 'Journal d\'activité', 'Igitabo cy\'ibikorwa', 'Ekitabo ky\'ebikorwa'],
@@ -3989,7 +3861,7 @@ const ADMIN_LANG_PATTERNS = [
   ['Newest first, {0} total.', 'Ebipya bisooka, omugatte {0}.', 'Vipya kwanza, jumla {0}.', 'Les plus récents d\'abord, {0} au total.', 'Bishya mbere, byose {0}.', 'Ebisya bikatandika, omugatte {0}.'],
   ['Pays {0}', 'Esasula {0}', 'Inalipa {0}', 'Rapporte {0}', 'Itanga {0}', 'Neeshashura {0}'],
   ['Amount ({0})', 'Omuwendo ({0})', 'Kiasi ({0})', 'Montant ({0})', 'Umubare ({0})', 'Omubaro ({0})'],
-  ['Investment cashback {0} · Referral commission {1} · Check-in {2} · Treasure codes {3} · Team rewards {4} · Daily salary {5}', 'Ssente z\'ebyamaguzi {0} · Ssente z\'okuyita {1} · Okukyalira {2} · Koodi z\'ebirabo {3} · Ekifo ky\'emirimu {4} · Ekifo ky\'obulambuzi {5}', 'Marejesho ya uwekezaji {0} · Kamisheni ya mialiko {1} · Kuhudhuria {2} · Misimbo ya zawadi {3} · Kituo cha kazi {4} · Kituo cha misheni {5}', 'Remise d\'investissement {0} · Commission de parrainage {1} · Pointage {2} · Codes cadeaux {3} · Centre de tâches {4} · Centre de missions {5}', 'Inyungu z\'ishoramari {0} · Komisiyo yo gutumira {1} · Kwiyandikisha {2} · Kode z\'impano {3} · Ikigo cy\'imirimo {4} · Ikigo cy\'ubutumwa {5}', 'Sente z\'ebyamaguzi {0} · Sente z\'okweta {1} · Okwoleka {2} · Koodi z\'ebiconco {3} · Ekicweka ky\'emirimo {4} · Ekicweka ky\'obutumwa {5}'],
+  ['Investment cashback {0} · Referral commission {1} · Check-in {2} · Team rewards {3}', 'Ssente z\'ebyamaguzi {0} · Ssente z\'okuyita {1} · Okukyalira {2} · Ekifo ky\'emirimu {3}', 'Marejesho ya uwekezaji {0} · Kamisheni ya mialiko {1} · Kuhudhuria {2} · Kituo cha kazi {3}', 'Remise d\'investissement {0} · Commission de parrainage {1} · Pointage {2} · Centre de tâches {3}', 'Inyungu z\'ishoramari {0} · Komisiyo yo gutumira {1} · Kwiyandikisha {2} · Ikigo cy\'imirimo {3}', 'Sente z\'ebyamaguzi {0} · Sente z\'okweta {1} · Okwoleka {2} · Ekicweka ky\'emirimo {3}'],
   ['All ({0})', 'Byonna ({0})', 'Zote ({0})', 'Tout ({0})', 'Byose ({0})', 'Byona ({0})'],
   ['Pending ({0})', 'Ebirindiridde ({0})', 'Yanayosubiri ({0})', 'En attente ({0})', 'Bitegereje ({0})', 'Ebirikutegyereza ({0})'],
   ['Needs Review ({0})', 'Ebyetaaga okukeberwa ({0})', 'Inahitaji Ukaguzi ({0})', 'À vérifier ({0})', 'Bikeneye Igenzura ({0})', 'Ebirikwetenga Okureebwa ({0})'],

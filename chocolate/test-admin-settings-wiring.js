@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The Settings and Banners tabs must wire every button: one missing element in the wiring code used to stop everything after it
-// (the Daily Salary table stayed on "Loading…" and "Save app name" did nothing).
+// ("Save app name" did nothing).
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
 const { JSDOM, VirtualConsole } = require('jsdom');
@@ -27,8 +27,7 @@ const w = dom.window, $ = id => w.document.getElementById(id), sleep = ms => new
   await sleep(200);
   $('keyInput').value = 'k'; $('loginBtn').click(); await sleep(300);
   w.document.querySelector('[data-tab="settings"]').click(); await sleep(400);
-  assert.ok(calls.some(c => c[0] === '/admin/salary'), 'the Daily Salary table is requested');
-  assert.ok(!/Loading/.test($('taskEditor').textContent), 'and replaces "Loading…"');
+  assert.ok(!calls.some(c => c[0] === '/admin/salary') && $('taskEditor') === null, 'the Daily Salary table is gone from Settings');
   $('brandNameInput').value = 'Chocolate Gum'; $('saveBrandName').click(); await sleep(150);
   assert.equal(settings.brandName, 'Chocolate Gum', '"Save app name" saves a new name');
   for (const gone of ['sWeekendCash', 'sWeekendWit', 'sReqReferral']) assert.equal($(gone), null, gone + ' (a removed setting) is not on the page');
@@ -43,6 +42,6 @@ const w = dom.window, $ = id => w.document.getElementById(id), sleep = ms => new
   $('prodImgOp').value = '40'; $('saveProdImg').click(); await sleep(150);
   assert.equal(settings.productImageOpacity, 40, 'the product picture opacity saves');
   assert.deepEqual(errors, [], 'no script errors: ' + errors.join(' | '));
-  console.log('PASS: admin Settings and Banners wiring (daily salary loads, app name, announcement, link preview, product picture opacity save)');
+  console.log('PASS: admin Settings and Banners wiring (app name, announcement, link preview, product picture opacity save)');
   w.close();
 })().catch(e => { console.error(e); process.exit(1); });

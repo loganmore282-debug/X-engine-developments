@@ -49,7 +49,7 @@ const build = db => new Function('crypto', 'db', 'withLock', 'tsMillis', 'textOf
 
 // first-time Trade Password for an account that has none (made before it existed), and the route's guards
 (async () => {
-  const route = src.slice(src.indexOf("app.post('/account/transaction-pin/change'"), src.indexOf('// GIFT CODES'));
+  const route = src.slice(src.indexOf("app.post('/account/transaction-pin/change'"), src.indexOf('\napp.', src.indexOf("app.post('/account/transaction-pin/change'") + 10));
   const run = async (doc, body) => {
     let handler; const app = { post: (p, h) => { if (p === '/account/transaction-pin/change') handler = h; } };
     const db = { collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => doc }), update: async u => { Object.assign(doc, u); } }) }) };

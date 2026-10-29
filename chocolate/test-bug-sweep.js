@@ -12,7 +12,6 @@ const server = rd('server.js'), admin = rd('admin-src/index.html'), mod = rd('us
 ok(/app\.set\('case sensitive routing', true\)/.test(server), 'routes are case-sensitive (/Withdraw/request must not skip the maintenance gate)');
 ok(/if \(!mpData\.providerDown\) await markDepositFailed/.test(server), 'a busy MarzPay does not mark a possibly-live payment as failed');
 ok(/!\(user\.data\(\)\.creditedDepositIds \|\| \[\]\)\.length && !user\.data\(\)\.firstReferralDepositId/.test(server) && !/finiteMoney\(user\.data\(\)\.totalDeposited\) === 0/.test(server), 'the referrer\'s first-deposit commission is not used up by an admin credit');
-ok(/withLock\('redeem:' \+ raw\.toLowerCase\(\)\.replace\(\/\[\^a-z0-9\]\/g, ''\)/.test(server), 'one gift code has one lock whatever spelling is typed');
 ok(/round2\(bal\) < liveTier\.price/.test(server) && /round2\(bal\) < amt/.test(server) && /\$gte: amt - 0\.005/.test(server), 'a wallet a hair under a whole amount (cents) is not refused');
 { const g = server.indexOf('async function payoutRejectGuard'), i = server.indexOf("app.post('/admin/withdraw/reject'"), j = server.indexOf("declineWithdrawalAndRefund(ref, w.userId", i);
   const guard = server.slice(g, i); ok(g > 0 && /pesajetGetTx\(w\.pesajetTxId\)/.test(guard) && /pesajetFindByReference\(w\.pesajetRef/.test(guard) && /marzGetSendStatus\(w\.marzTxUuid\)/.test(guard) && /marzGetBankTransferStatus\(w\.marzReference\)/.test(guard), 'rejecting a payout the gateway may already have asks the gateway first (PesaJet by id or reference, MarzPay by uuid or bank reference)');
@@ -24,7 +23,6 @@ ok(/provider_reference/.test(server), 'the MarzPay payout webhook also matches o
 ok(/_retIsTruth/.test(admin) && /multiplier:_retIsTruth\?'':\$\('pMult'\)\.value/.test(admin), 'a typed total payout is saved as typed (not rounded through the 2-decimal multiplier)');
 ok(/m\.field==='walletBalance'&&m\.diff<0/.test(admin), 'Repair wallet is offered where the server will repair (stored below real)');
 ok(/function loadFailed\(/.test(admin) && (admin.match(/loadFailed\(/g) || []).length >= 6, 'a failed fetch is never drawn as an empty list');
-ok(/codes\.join\('\\n'\)/.test(admin) && !/codes\.join\('\\\\n'\)/.test(admin), 'Copy all puts one gift code per line');
 ok(/cannot be blank/.test(admin), 'a blank number in Settings is refused instead of saved as 0');
 ok(/phoneCore\(w\.accountPhone/.test(admin), 'withdrawal search also matches the login phone');
 ok(/x\.classList\.toggle\('active',x\.dataset\.df===_depFilter\)/.test(admin) && /x\.classList\.toggle\('active',x\.dataset\.wf===_witFilter\)/.test(admin), 'Deposits / Withdrawals subtab highlight follows the click');
@@ -40,7 +38,7 @@ ok(/\.notify-bg\{[^}]*z-index:440/.test(html), 'notices sit above the Help and D
 ok(/_catalogRefreshedAt/.test(mod) && /30000 - \(Date\.now\(\) - _catalogRefreshedAt\)/.test(mod), 'a phone clock ahead of the server cannot make the catalogue refetch in a loop');
 ok(/r\.code === 'AUTH_UNAVAILABLE' \|\| r\.code === 'SERVER_ERROR'/.test(mod), 'a busy or unavailable server on opening the app does not sign the member out');
 ok(!/signal:\s*AbortSignal\.timeout/.test(mod), 'no AbortSignal.timeout (older phones would skip the server logout)');
-ok(/messages: null, salary: null, page: 'home'/.test(mod), 'logout also forgets messages and the open tab');
+ok(/messages: null, page: 'home'/.test(mod), 'logout also forgets messages and the open tab');
 ok(/function vGroup\(/.test(mod) && /vGroup\(min\)/.test(mod), 'minimums print with thousands separators');
 
 // deploy / infra
@@ -83,7 +81,7 @@ ok(/@keyframes mgGlowA\{/.test(html) && /@keyframes mgGlowB\{/.test(html) && /\.
 ok(/#pageHost\.mg-enter\{position:relative;animation:mgPageIn \.3s ease-out;\}/.test(html) && /@keyframes mgPageIn\{from\{opacity:0;top:6px;\}to\{opacity:1;top:0;\}\}/.test(html) && /@keyframes mgSheetIn\{from\{opacity:0;transform:translateY\(6px\);/.test(html), 'the page appearing animation runs once on #pageHost itself (a repaint of its content never restarts it) and rises by `top`, never a transform, so the fixed Treasure Chest stays in its corner');
 ok(/function replayPageIn\(\)/.test(mod) && /if \(wasOpen && !\(opts && opts\.navigating\)\) replayPageIn\(\);/.test(mod), 'closing a sheet (back arrow or phone Back) replays the page appearing animation on the page underneath');
 { const dl = mod.slice(mod.indexOf('window.openDownloadPage'), mod.indexOf('// Owner: "remove double loading of startup loader')); ok(/Download Now/.test(dl) && !/Install \$\{|Fast, simple|Tap Download Now|<h1>|class="note"/.test(dl), 'the Download App page has only the button over the uploaded picture, no words'); }
-ok(/var CHEST_SCROLL_PX = 110;/.test(mod) && /function fitChestPage\(\)/.test(mod) && /fitChestPage\(\);\n\};/.test(mod) && /\.mg-dl\{[^}]*\+ 62px/.test(html) && /#pageHost:has\(\.mg-team\)\{min-height:calc\(100vh \+ 12px\);\}/.test(html), 'the Treasure Chest page always scrolls 110 px, Download 62 px, Team a few px, on any phone height, so the green scrollbar and its 4px room are always there (measured from the owner\'s screenshots)');
+ok(/\.mg-dl\{[^}]*\+ 62px/.test(html) && /#pageHost:has\(\.mg-team\)\{min-height:calc\(100vh \+ 12px\);\}/.test(html), 'Download 62 px, Team a few px, on any phone height, so the green scrollbar and its 4px room are always there (measured from the owner\'s screenshots)');
 ok(/class="mg-mem"/.test(mod) && /<b>User<\/b>\$\{bought \? '<i>Active<\/i>' : ''\}/.test(mod) && /Total Purchase<\/div>/.test(mod) && /STATE\.profileLogo \? `<img/.test(mod.slice(mod.indexOf('function renderTeamMembers'), mod.indexOf('async function renderNetwork'))) && /\.mg-mem\{position:relative;height:122px/.test(html), 'a Team member card is as in the owner\'s screen: the uploaded profile picture, "User" with an Active tag once the member has bought, hidden number, amount on the right, join time, "Total Purchase" under a line');
 ok(/capError\('Incorrect captcha code'\)/.test(mod) && /id="regCapErr"/.test(fs.readFileSync(__dirname + '/user-src/index.html', 'utf8')), 'an empty or wrong captcha shows the red "Incorrect captcha code" line under the captcha, checked before the other fields');
 ok(/btn\.classList\.toggle\('shown', show\)/.test(mod) && /\.ma-eye\.shown \.sl\{display:inline;\}/.test(fs.readFileSync(__dirname + '/user-src/index.html', 'utf8')), 'the password eye gets a slash while the password is shown');
