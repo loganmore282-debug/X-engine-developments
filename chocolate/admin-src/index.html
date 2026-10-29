@@ -42,7 +42,7 @@
      ignores it), which is exactly why render.yaml keeps sending the header
      version too. The two are not redundant. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
-<meta name="theme-color" content="#02964c">
+<meta name="theme-color" content="#5e3a1b">
 <link rel="manifest" href="manifest.json">
 <!-- The admin panel always uses its OWN built-in icon (the files next to this
      page). The icon uploaded in Admin -> Brand is for the members' app only. -->
@@ -68,8 +68,8 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
        for three re-themes running; renaming it here would mean re-reading
        every rule that touches it to confirm nothing assumes the old value,
        for a cosmetic variable name no one but this file's own source reads). */
-    --bg:#f8f4e9; --card:#ffffff; --ink:#25262b; --sub:#6b6d76; --line:#ececee; --line2:#f5f5f6;
-    --gold:#02964c; --gold-deep:#056b39; --gold-ink:#ffffff; --ok:#0f9d58; --ok-bg:rgba(15,157,88,.12);
+    --bg:#f9f5ec; --card:#ffffff; --ink:#25262b; --sub:#6b6d76; --line:#ececee; --line2:#f5f5f6;
+    --gold:#5e3a1b; --gold-deep:#432812; --gold-ink:#ffffff; --ok:#0f9d58; --ok-bg:rgba(15,157,88,.12);
     --danger:#d1293e; --danger-bg:rgba(209,41,62,.1); --warn:#b45309; --warn-bg:rgba(180,83,9,.12); --sky:#f5a000;
   }
   /* Neutral, unobtrusive scrollbar. Two properties because they cover
@@ -3147,7 +3147,7 @@ async function renderBanners(){
       <p class="muted" style="margin-top:0">The picture behind the Download App page (Profile &rarr; Download APP). Tall, about 1080&times;1920. Without one, a soft green background is used.</p>
       <div class="banner-row">
         ${downloadBgImage?`<img class="img-thumb" src="${esc(downloadBgImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${downloadBgImage?'Custom image':'<span class="muted">Soft green</span>'}</div>
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${downloadBgImage?'Custom image':'<span class="muted">Soft cream</span>'}</div>
         ${downloadBgImage?`<button class="btn danger sm" id="downloadBgClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload background<input type="file" id="downloadBgFile" accept="image/*" hidden></label>

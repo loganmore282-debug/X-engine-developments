@@ -6,8 +6,8 @@
 // be tried again and again. A new picture is asked for every time Sign Up is opened.
 const crypto = require('node:crypto');
 const TTL_MS = 5 * 60 * 1000, MAX_LIVE = 20000;
-const COLORS = ['#c98f12', '#d9a21b', '#e5b436', '#b8860b'];       // golds, like the owner's picture
-const LINE_COLORS = ['#9db08a', '#b9a37a', '#a6b894'];
+const COLORS = ['#4a2c14', '#d9a21b', '#c0392b', '#2a1709'];       // dark brown, gold, red, near-black: the owner's picture
+const LINE_COLORS = ['#c9958a', '#8fa27a', '#a69784'];
 const SECRET = crypto.randomBytes(32);                               // lives in memory only, new at every start
 const mac = (id, code) => crypto.createHmac('sha256', SECRET).update(id + ':' + code).digest();
 // Noto Serif Bold digit outlines, 1000 units to the em: digit -> [svg path, advance width]
