@@ -346,13 +346,20 @@ a{color:inherit;}
 
 /* ── App chrome not in the mockups: auth, sheets, forms, toast, loading ── */
 .wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
-#loadingScreen{position:fixed;inset:0;overflow:hidden;background:linear-gradient(145deg,#044d2a 0%,#02964c 52%,#0a6b3b 100%);display:flex;align-items:center;justify-content:center;z-index:500;}
+#loadingScreen{position:fixed;inset:0;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center;z-index:500;}
 /* The admin's picture sits on its own layer so its opacity and blur (Admin > Banners > Loading screen background) never touch the word. The layer is pushed past the edges by twice the blur so a blurred picture has no pale rim. */
-#loadingScreen .ld-bg{position:absolute;inset:calc(var(--ld-blur,0px) * -2);background:linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url('/k7x2/public/loader-image') center/cover no-repeat;opacity:var(--ld-op,1);filter:blur(var(--ld-blur,0px));transform:translateZ(0);will-change:transform;contain:strict;pointer-events:none;}
-#loadingScreen .ld-txt{position:relative;z-index:1;display:inline-block;color:#fff;font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:19px;font-weight:700;letter-spacing:.02em;text-shadow:0 2px 10px rgba(0,0,0,.45);transform:translate3d(0,0,0);will-change:transform;backface-visibility:hidden;animation:ldBounce 1.7s infinite;}
-/* Only transform moves, on its own layer, so the bounce keeps running smoothly on the graphics chip even while the app is being built behind it (the page is busy for a moment on a phone). One continuous curve up and down, no hard stop. */
-@keyframes ldBounce{0%{transform:translate3d(0,0,0);animation-timing-function:cubic-bezier(.33,.0,.2,1);}50%{transform:translate3d(0,-12px,0);animation-timing-function:cubic-bezier(.8,0,.67,1);}100%{transform:translate3d(0,0,0);}}
-@media (prefers-reduced-motion:reduce){#loadingScreen .ld-txt{animation:none;}}
+#loadingScreen .ld-bg{position:absolute;inset:calc(var(--ld-blur,0px) * -2);background:center/cover no-repeat;opacity:var(--ld-op,1);filter:blur(var(--ld-blur,0px));transform:translateZ(0);will-change:transform;contain:strict;pointer-events:none;}
+/* Owner's start-up loader (measured from his screenshot, 1080 px wide = 384 css px): a round picture from the admin with a white edge, a dark ring around it with a lighter arc that turns, and the word "Loading..." under it in bold serif. Ring 92 css px across (track 3.7 px, #2e2e2e), picture 68 px with a 2.5 px white edge, arc 77 degrees (#8d8d8d, round ends), word 20 px Noto Serif bold with .08em spacing, ring centre at 45.4% of the height, word's capital letters 20 px under the ring. */
+#loadingScreen .ld-box{position:absolute;left:0;right:0;top:calc(45.4% - 46px);z-index:1;display:flex;flex-direction:column;align-items:center;}
+#loadingScreen .ld-ring{position:relative;width:92px;height:92px;flex:none;}
+#loadingScreen .ld-svg{position:absolute;inset:0;width:92px;height:92px;overflow:visible;}
+#loadingScreen .ld-track{fill:none;stroke:#2e2e2e;stroke-width:3.7;}
+#loadingScreen .ld-arc{fill:none;stroke:#8d8d8d;stroke-width:2.6;stroke-linecap:round;stroke-dasharray:56.7 220.7;transform-origin:46px 46px;transform:rotate(-68deg);will-change:transform;animation:ldSpin 1.1s linear infinite;}
+@keyframes ldSpin{from{transform:rotate(-68deg);}to{transform:rotate(292deg);}}
+#loadingScreen .ld-logo{position:absolute;left:12px;top:12px;width:68px;height:68px;box-sizing:border-box;border-radius:50%;border:2.5px solid #fff;background:#000 center/cover no-repeat;display:none;}
+#loadingScreen .ld-logo.has{display:block;}
+#loadingScreen .ld-txt{display:block;margin-top:20px;color:#fff;font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:20px;line-height:normal;font-weight:700;letter-spacing:.08em;text-shadow:0 2px 10px rgba(0,0,0,.45);white-space:nowrap;}
+@media (prefers-reduced-motion:reduce){#loadingScreen .ld-arc{animation-duration:3s;}}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
 #openingGate .og-mark{font-weight:800;font-size:36px;letter-spacing:.03em;color:#fff;}
 /* Download APP screen (openDownloadSheet(), its 'downloadbg' admin backdrop,
@@ -2112,7 +2119,13 @@ window.createChocolateIdleSession = function(key, onExpire, onActivity){
 
 <div id="loadingScreen">
   <span class="ld-bg" id="ldBg" aria-hidden="true"></span>
-  <span class="ld-txt" aria-hidden="true">Loading...</span>
+  <div class="ld-box" aria-hidden="true">
+    <div class="ld-ring">
+      <svg class="ld-svg" viewBox="0 0 92 92"><circle class="ld-track" cx="46" cy="46" r="44.15"/><circle class="ld-arc" cx="46" cy="46" r="44.15"/></svg>
+      <span class="ld-logo" id="ldLogo"></span>
+    </div>
+    <span class="ld-txt">Loading...</span>
+  </div>
   <span class="sr-only" role="status" aria-live="polite">Loading</span>
 </div>
 <script data-chocolate-loader>
@@ -2145,6 +2158,35 @@ window.createChocolateIdleSession = function(key, onExpire, onActivity){
         if (u.indexOf('data:image/') !== 0 || u === kept) return;
         try { localStorage.setItem(KEY, u); } catch (e) {}
         if (!kept && bg) bg.style.backgroundImage = layer(u);
+      };
+      fr.readAsDataURL(b);
+    }).catch(function(){});
+  } catch (e) {}
+})();
+</script>
+
+<script data-chocolate-loader-logo>
+/* The round picture inside the ring (Admin > Banners > Loading screen circle logo): the copy kept from the last visit is painted on the first frame,
+   then refreshed in the background for next time. No picture set = only the ring and the word show. */
+(function(){
+  try {
+    var el = document.getElementById('ldLogo'), KEY = 'chocolate_loader_logo';
+    if (!el) return;
+    var put = function(u){ el.style.backgroundImage = 'url("' + u + '")'; el.className = 'ld-logo has'; };
+    var kept = null; try { kept = localStorage.getItem(KEY); } catch (e) {}
+    if (kept) put(kept);
+    if (!window.fetch || !window.FileReader) return;
+    fetch('/k7x2/public/loader-logo', { cache: 'no-cache' }).then(function(r){
+      if (r.status === 404) { try { localStorage.removeItem(KEY); } catch (e) {} if (kept) { el.className = 'ld-logo'; el.style.backgroundImage = 'none'; } return null; }
+      return r.ok ? r.blob() : null;
+    }).then(function(b){
+      if (!b || b.size > 700000) return;
+      var fr = new FileReader();
+      fr.onload = function(){
+        var u = String(fr.result || '');
+        if (u.indexOf('data:image/') !== 0 || u === kept) return;
+        try { localStorage.setItem(KEY, u); } catch (e) {}
+        if (!kept) put(u);
       };
       fr.readAsDataURL(b);
     }).catch(function(){});

@@ -948,7 +948,7 @@ async function getHelpBanner() {
 // no longer its own screen with a backdrop; Account's new Download App row
 // (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
 // prompt directly, in user-src/original_module.js -- see its own comment.
-const CHOCOLATE_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'banner4', 'banner5', 'promobanner', 'checkinbanner', 'profilelogo', 'loaderbg', 'downloadbg', 'linkpreview'];
+const CHOCOLATE_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'banner4', 'banner5', 'promobanner', 'checkinbanner', 'profilelogo', 'loaderbg', 'loaderlogo', 'downloadbg', 'linkpreview'];
 const _chocolateImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getChocolateImage(slot) {
@@ -4121,6 +4121,19 @@ app.get('/public/loader-image', async (req, res) => {
     const clampNum = (v, lo, hi, d) => { const x = Number(v); return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d; };
     res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=0, stale-while-revalidate=604800', ETag: etag,
       'X-Loader-Opacity': String(clampNum(sett.loaderBgOpacity, 0, 100, 100)), 'X-Loader-Blur': String(clampNum(sett.loaderBgBlur, 0, 40, 0)) });
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.send(buf);
+  } catch (e) { res.status(500).end(); }
+});
+// The round picture inside the start-up loader's ring, served the same way as the background (a real image, painted from the phone's own copy on the first frame).
+app.get('/public/loader-logo', async (req, res) => {
+  try {
+    const image = await getChocolateImage('loaderlogo');
+    const m = /^data:(image\/(?:png|jpe?g|webp|gif));base64,(.+)$/.exec(image || '');
+    if (!m) return res.status(404).end();
+    const buf = Buffer.from(m[2], 'base64');
+    const etag = '"' + crypto.createHash('sha1').update(buf).digest('hex') + '"';
+    res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=0, stale-while-revalidate=604800', ETag: etag });
     if (req.headers['if-none-match'] === etag) return res.status(304).end();
     res.send(buf);
   } catch (e) { res.status(500).end(); }
@@ -7747,13 +7760,13 @@ app.post('/admin/settings/update', async (req, res) => {
 app.get('/admin/chocolate-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg, linkpreview] = await Promise.all([
+    const [logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, loaderlogo, downloadbg, linkpreview] = await Promise.all([
       getChocolateImage('logo'),
       getChocolateImage('authhero'), getChocolateImage('authlogo'), getChocolateImage('banner2'),
       getChocolateImage('banner3'), getChocolateImage('banner4'), getChocolateImage('banner5'), getChocolateImage('promobanner'),
-      getChocolateImage('checkinbanner'), getChocolateImage('profilelogo'), getChocolateImage('loaderbg'), getChocolateImage('downloadbg'), getChocolateImage('linkpreview'),
+      getChocolateImage('checkinbanner'), getChocolateImage('profilelogo'), getChocolateImage('loaderbg'), getChocolateImage('loaderlogo'), getChocolateImage('downloadbg'), getChocolateImage('linkpreview'),
     ]);
-    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg, linkpreview });
+    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, loaderlogo, downloadbg, linkpreview });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/chocolate-image/set', async (req, res) => {

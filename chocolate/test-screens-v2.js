@@ -44,7 +44,7 @@ function runStats(rows) {
   // 2. profile logo slot: stored, served to members and to the admin
   ok(/const CHOCOLATE_IMAGE_SLOTS = \[[^\]]*'profilelogo'/.test(src), 'profilelogo is a known image slot');
   ok(/publicJson\(req, res, \{ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, downloadbg \}/.test(src), 'members get it from /public/chocolate-images');
-  ok(/res\.json\(\{ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, downloadbg, linkpreview \}\)/.test(src), 'and the admin panel reads it');
+  ok(/res\.json\(\{ status: 'success', logo, authhero, authlogo, banner2, banner3, banner4, banner5, promobanner, checkinbanner, profilelogo, loaderbg, loaderlogo, downloadbg, linkpreview \}\)/.test(src), 'and the admin panel reads it');
   ok(/id="profileLogoFile"/.test(adm) && /wireChocolateImageSlot\('profilelogo'/.test(adm), 'the admin panel can upload and remove it');
   ok(['banner4', 'banner5', 'promobanner'].every(k => new RegExp("wireChocolateImageSlot\\('" + k + "'").test(adm) && src.includes("'" + k + "'")), 'the admin can upload Home slides 2 to 5, and the Promotion banner');
   ok(!/checkinBannerFile/.test(adm), 'the removed Check-in banner upload is gone from admin');

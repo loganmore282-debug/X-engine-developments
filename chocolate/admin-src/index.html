@@ -2980,6 +2980,7 @@ async function renderBanners(){
   const logoImage = cir.logo||'';
   const profileLogoImage = cir.profilelogo||'';
   const loaderBgImage = cir.loaderbg||'';
+  const loaderLogoImage = cir.loaderlogo||'';
   const announcementImage = (annr && annr.image) || '';
   const appIconImage = bar.appIcon||'';
   const appIconCustom = !!bar.appIconCustom;
@@ -3080,7 +3081,7 @@ async function renderBanners(){
 
     <h2 class="sec">Loading screen background</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The picture behind the word "Loading . . ." when the app starts. Portrait, about 1080&times;1920. Without one, a blue background shows.</p>
+      <p class="muted" style="margin-top:0">The picture behind the word "Loading . . ." when the app starts. Portrait, about 1080&times;1920. Without one, a plain black background shows.</p>
       <div class="banner-row">
         ${loaderBgImage?`<img class="img-thumb" src="${esc(loaderBgImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${loaderBgImage?'Custom image':'<span class="muted">Not set</span>'}</div>
@@ -3092,6 +3093,17 @@ async function renderBanners(){
         <div><label>Blur (0&ndash;40 px)</label><input id="loaderBgBlur" type="number" min="0" max="40" value="${esc(v('loaderBgBlur',0))}"></div>
       </div>
       <button class="btn block" id="saveLoaderBg" style="margin-top:14px">Save loading screen appearance</button>
+    </div>
+
+    <h2 class="sec">Loading screen circle logo</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The round picture inside the turning ring on the loading screen, above the word "Loading . . .". Square, about 400&times;400 (it is cut to a circle). Without one, only the ring and the word show.</p>
+      <div class="banner-row">
+        ${loaderLogoImage?`<img class="img-thumb" src="${esc(loaderLogoImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${loaderLogoImage?'Custom image':'<span class="muted">Not set</span>'}</div>
+        ${loaderLogoImage?`<button class="btn danger sm" id="loaderLogoClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="loaderLogoFile" accept="image/*" hidden></label>
     </div>
 
     <h2 class="sec">Link preview (Telegram)</h2>
@@ -3207,7 +3219,7 @@ function wireBannerHandlers(){
           const maxDim = slot==='logo' ? 800
                        : slot==='loaderbg' ? 1080
                        : slot==='authhero' ? 1600
-                       : slot==='authlogo' ? 480
+                       : slot==='authlogo' || slot==='loaderlogo' ? 480
                        : slot==='downloadbg' ? 1080
                        : 1280;
           const image = slot==='linkpreview' ? await fileToWideDataUrl(f, 1200, 630, 0.85) : await fileToDataUrl(f, maxDim, slot==='loaderbg' ? 0.7 : 0.82);
@@ -3290,6 +3302,7 @@ function wireBannerHandlers(){
       if (d.status==='success') renderBanners();
     })());
   });
+  wireChocolateImageSlot('loaderlogo', 'loaderLogoFile', 'loaderLogoClear', 'Loading screen circle logo saved', 'Loading screen circle logo removed');
   wireChocolateImageSlot('loaderbg', 'loaderBgFile', 'loaderBgClear', 'Loading screen background saved', 'Loading screen background removed');
   wireChocolateImageSlot('profilelogo', 'profileLogoFile', 'profileLogoClear', 'Profile logo saved, live for every member', 'Profile logo removed');
   wireChocolateImageSlot('logo', 'brandLogoFile', 'brandLogoClear', 'Brand logo saved', 'Brand logo removed');
