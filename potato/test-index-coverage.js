@@ -23,4 +23,6 @@ for (const [collection,keys] of required) {
   const exact = `['${collection}', ${'{'} ${keys} ${'}'}]`;
   assert(src.includes(exact), `missing Mongo index: ${collection} { ${keys} }`);
 }
-console.log(`PASS: ${required.length} high-traffic Mongo query shapes have supporting indexes`);
+// Webhook look-ups by a gateway's own id (partial indexes, so only rows that carry the field are indexed): TavuPay's reference, LworxPay's and ObPay's transaction id.
+for (const f of ['tavupayRef', 'lworxpayTxId', 'obpayTxId']) assert(src.includes(`['pendingDeposits', { ${f}: 1 }, { name: '${f}_idx', partialFilterExpression: { ${f}: { $type: 'string' } } }]`), `missing Mongo index: pendingDeposits { ${f}: 1 } (every webhook that looks a deposit up by it would scan the collection)`);
+console.log(`PASS: ${required.length + 3} high-traffic Mongo query shapes have supporting indexes`);

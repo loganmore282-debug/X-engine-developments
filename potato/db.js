@@ -249,6 +249,11 @@ async function ensureIndexes() {
     // optional: without it a unique index treats every document MISSING the
     // field as sharing one null and rejects the second, which would block
     // manual deposits and MarzPay payouts outright.
+    // The gateways' own ids, looked up on EVERY webhook from TavuPay (by its reference), LworxPay and ObPay (by their transaction id, when the deposit
+    // id is not what they sent back). Without these each such webhook was a scan of the whole deposits collection. Partial, so only rows that have the field are indexed.
+    ['pendingDeposits', { tavupayRef: 1 }, { name: 'tavupayRef_idx', partialFilterExpression: { tavupayRef: { $type: 'string' } } }],
+    ['pendingDeposits', { lworxpayTxId: 1 }, { name: 'lworxpayTxId_idx', partialFilterExpression: { lworxpayTxId: { $type: 'string' } } }],
+    ['pendingDeposits', { obpayTxId: 1 }, { name: 'obpayTxId_idx', partialFilterExpression: { obpayTxId: { $type: 'string' } } }],
     ['pendingDeposits', { pesajetTxId: 1 }, { unique: true, name: 'pesajetTxId_unique',
       partialFilterExpression: { pesajetTxId: { $type: 'string' } } }],
     ['withdrawals', { pesajetTxId: 1 }, { unique: true, name: 'pesajetTxId_unique',

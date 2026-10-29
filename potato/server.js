@@ -4809,9 +4809,10 @@ async function _creditDepositNow(depDoc, source) {
           // happened (a safe, idempotent retry), not an error.
           const applied = await withLock('bal:' + depUserId, async () => {
             const userRef = db.collection('users').doc(depUserId);
-            const user = await userRef.get();
+            // The member's record is read ONLY for the old first-deposit reward (a deposit made under that rule); every newer deposit skips this database trip.
+            const user = fd.commissionBasis === 'deposit' ? await userRef.get() : null;
             const referral = {};
-            if (fd.commissionBasis === 'deposit' && user.exists && !(user.data().creditedDepositIds || []).length && !user.data().firstReferralDepositId) {   // first REAL deposit: an admin credit also raises totalDeposited and must not use up the referrer's commission
+            if (fd.commissionBasis === 'deposit' && user && user.exists && !(user.data().creditedDepositIds || []).length && !user.data().firstReferralDepositId) {   // first REAL deposit: an admin credit also raises totalDeposited and must not use up the referrer's commission
               // Preserve existing first-investment commissions across the
               // changeover. Buying a new asset never creates a second bonus.
               const legacy = await db.collection('investments').where('userId', '==', depUserId).where('isFirstInvestment', '==', true).get();
