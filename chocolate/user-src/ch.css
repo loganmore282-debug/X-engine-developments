@@ -442,9 +442,9 @@ html.mg-gut .mg-top{margin-right:-15px;}
 #authScreen > .ma-screen,.va-pane{animation:none;}
 #authScreen > .ma-screen.ch-auth-in{animation:mgSheetIn .3s ease-out both;}
 @media (prefers-reduced-motion:reduce){#authScreen > .ma-screen.ch-auth-in{animation:none;}}
-/* Tapping a product card (not its button): the press is a small, quick dip, not the big spring it had (it shrank 2.8% and sprang to 100.8%). */
-.mg-card.card-tap,.p-card.card-tap{animation:cardTapBounce .22s ease-out;}
-@keyframes cardTapBounce{0%{transform:scale(1);}40%{transform:scale(.993);}100%{transform:scale(1);}}
+/* Tapping a product card (not its button): the press is a medium dip and a tiny spring back (98.2% then 100.3%, .28 s); the first version shrank 2.8% and sprang to 100.8%, which was too big, and .993 was too small. */
+.mg-card.card-tap,.p-card.card-tap{animation:cardTapBounce .28s ease-out;}
+@keyframes cardTapBounce{0%{transform:scale(1);}38%{transform:scale(.982);}72%{transform:scale(1.003);}100%{transform:scale(1);}}
 /* The start-up loader's background picture takes the whole screen, edge to edge, nothing cropped and no black frame. */
 #loadingScreen .ld-bg{background-size:100% 100%;background-position:center;}
 /* CH-END */
