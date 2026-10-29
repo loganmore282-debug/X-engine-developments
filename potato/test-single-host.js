@@ -114,13 +114,15 @@ function boot(file, scope) {
   { // secret PesaJet webhook address
     const g = (env, ...a) => require('child_process').execFileSync('node', ['deploy/make-nginx.js', ...a], { encoding: 'utf8', env: { ...process.env, ...env } });
     const base = g({ POTATO_HOOK_TOKEN: '' }, 'prod', 'example.com', 'Tq5m8zr', 'adm.example.com');
-    ok(!/h-[a-z0-9]{16}/.test(base) && !/pesajet\/webhook \{ return 404/.test(base), 'no token: no secret webhook address and the plain one is not closed');
+    ok(!/h-[a-z0-9]{16}/.test(base) && ['pesajet', 'tavupay', 'lworxpay', 'obpay'].every(g => base.includes('location = /k7x2/' + g + '/webhook { return 404; }')), 'no token: there is no secret webhook address, and every gateway webhook address is shut (404) from outside, so none can be reached');
+    ok(!/location = \/k7x2\/pesajet\/webhook \{ return 404; \}/.test(g({ POTATO_HOOK_TOKEN: '' }, 'prod', 'example.com', 'Tq5m8zr', 'adm.example.com').split('server {').filter(b => /server_name adm\.example\.com/.test(b)).join('')), 'and the admin host carries none of it');
     const T = 'abcdef0123456789abcd';
     const tok = g({ POTATO_HOOK_TOKEN: T }, 'prod', 'example.com', 'Tq5m8zr', 'adm.example.com');
     ok(tok.includes('location = /k7x2/h-' + T + '/pesajet {') && tok.includes('rewrite ^ /pesajet/webhook break;'), 'token: the secret address maps to Node /pesajet/webhook');
     ok(tok.includes('location = /k7x2/pesajet/webhook { return 404; }'), 'token: the plain webhook address answers 404');
     eq(tok.split('/h-' + T + '/pesajet').length - 1, 1, 'token: the secret address is in the member block only, not on the admin host');
-    eq(tok.replace(/    # secret PesaJet webhook address[\s\S]*?location = \/k7x2\/obpay\/webhook \{ return 404; \}\n/, ''), base, 'token: nothing else in the file changes');
+    const closedBlock = base.match(/    # no secret webhook address exists yet[\s\S]*?location = \/k7x2\/obpay\/webhook \{ return 404; \}\n/)[0];
+    eq(tok.replace(/    # secret PesaJet webhook address[\s\S]*?location = \/k7x2\/obpay\/webhook \{ return 404; \}\n/, () => closedBlock), base, 'token: nothing else in the file changes (the secret addresses take the place of the "all shut" block)');
     const hh = g({ POTATO_HOOK_TOKEN: T, POTATO_HOOK_HOST: 'hook.example.com' }, 'prod', 'example.com', 'Tq5m8zr', 'adm.example.com');
     ok(/server_name hook\.example\.com;/.test(hh) && hh.includes('location = /h-' + T + '/pesajet {') && hh.includes('location / { return 404; }'), 'hook host: its own block serves only the secret address, everything else 404');
     ok(!hh.includes('/k7x2/h-' + T), 'hook host: the member host no longer carries the secret address');

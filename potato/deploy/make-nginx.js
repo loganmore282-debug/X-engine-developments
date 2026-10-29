@@ -119,6 +119,14 @@ ${HOOK_HOST ? '' : hookLocation('/' + API + '/h-' + HOOK_TOKEN + '/tavupay', '/t
 ${HOOK_HOST ? '' : hookLocation('/' + API + '/h-' + HOOK_TOKEN + '/lworxpay', '/lworxpay/webhook')}    location = /${API}/lworxpay/webhook { return 404; }
 ${HOOK_HOST ? '' : hookLocation('/' + API + '/h-' + HOOK_TOKEN + '/obpay', '/obpay/webhook')}    location = /${API}/obpay/webhook { return 404; }
 `;
+// Until a secret webhook address has been made (make-hook-url.sh) NO gateway sends anything here, so the guessable addresses are shut as well: nobody outside can
+// reach a webhook route at all. (The payment companies are checked by the server itself, every few seconds, so nothing is lost.)
+const closedHookLocations = `    # no secret webhook address exists yet: every gateway webhook address answers 404 from outside
+    location = /${API}/pesajet/webhook { return 404; }
+    location = /${API}/tavupay/webhook { return 404; }
+    location = /${API}/lworxpay/webhook { return 404; }
+    location = /${API}/obpay/webhook { return 404; }
+`;
 // A host that exists only for the webhook: one POST address, everything else 404, no app, no admin, no API.
 const hookHostBlock = () => `server {
     listen 80;
@@ -182,7 +190,7 @@ ${proxy()}
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${proxy()}
     }
-${HOOK_TOKEN && role !== 'admin' ? memberHookLocations : ''}${role !== 'admin' ? `    # MarzPay payment callbacks: their own wide rate zone (see hookLocation)
+${role !== 'admin' ? (HOOK_TOKEN ? memberHookLocations : closedHookLocations) : ''}${role !== 'admin' ? `    # MarzPay payment callbacks: their own wide rate zone (see hookLocation)
     location = /${API}/deposit/callback {
         limit_req zone=potato_hook burst=300 nodelay;
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
