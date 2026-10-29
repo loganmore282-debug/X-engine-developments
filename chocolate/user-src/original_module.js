@@ -5924,11 +5924,9 @@ window.openInvestConfirm = async function(tierKey, btn){
   const p = (STATE.products||[]).find(x => x.key === tierKey);
   if (!p || (btn && btn.disabled) || _buyBusy) return;
   _buyBusy = true;
-  const label = btn ? btn.textContent : '';
-  if (btn) btn.textContent = 'Buying…';
   let result;
   try { result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey, expectedPrice: Number(p.price) || 0 }) }); }
-  finally { _buyBusy = false; if (btn && btn.isConnected) btn.textContent = label || 'Buy Now'; }
+  finally { _buyBusy = false; }
   if (result.stale) return;
   if (result.status === 'error' && result.code === 'PRICE_CHANGED') { try { refreshCatalogNow(); } catch (_) {} }
   if (result.status !== 'success') {
