@@ -3306,7 +3306,14 @@ window.retryLoad = function(what){
   if (what === 'records') return openTransactionStatement(_statementCat);
   if (what === 'messages') return openMessagesSheet();
 };
+// The welcome announcement waits for this: it resolves once Home's list has been painted from loaded data (or Home was left).
+var _homePaintedRes = null, _homePainted = Promise.resolve();
 async function renderHome(){
+  _homePainted = new Promise(r => { _homePaintedRes = r; });
+  const donePaint = _homePaintedRes;
+  try { await renderHomeInner(); } finally { donePaint(); }
+}
+async function renderHomeInner(){
   const hadInvestments = Array.isArray(STATE.investments);
   const shownProducts = homeSignature();
   const hadProductList = !!STATE.products;
@@ -3325,6 +3332,7 @@ async function renderHome(){
   // Repaint only when the catalog really changed: a rebuild restarts the
   // banner carousel, the ticker and the Buy glow and throws away the scroll position.
   if (homeSignature() !== shownProducts || !hadProductList) paintHome();
+  if (_homePaintedRes) _homePaintedRes();   // Home's content is on screen now: the announcement may open
   // The envelope button's unread dot. Fetched once per Home entry, AFTER
   // the paint (never blocking it) and patched in place via
   // updateMessageBadge() so it can't tear down the ticker/chest animation.
@@ -4946,9 +4954,15 @@ function maybeAnnounceAfterHomeNav(prevPage){
   if (['assets', 'promo', 'network', 'account'].indexOf(prevPage) === -1) return;
   if (isAnyOverlayOpen()) return;         // something else is already in front
   clearTimeout(_annNavTimer);
+  // Owner: it must come when Home's content has loaded, not while the page is still filling in. Wait (at most 4 s) for the list to be painted
+  // from loaded data, then a beat, then open.
   _annNavTimer = setTimeout(() => {
-    if (STATE.page !== 'home' || isAnyOverlayOpen()) return;   // left Home again, or something opened meanwhile
-    maybeShowAnnouncement();
+    Promise.race([_homePainted, new Promise(r => setTimeout(r, 4000))]).then(() => {
+      _annNavTimer = setTimeout(() => {
+        if (STATE.page !== 'home' || isAnyOverlayOpen()) return;   // left Home again, or something opened meanwhile
+        maybeShowAnnouncement();
+      }, 150);
+    });
   }, 350);
 }
 // Owner: the dialog also comes when Back is pressed on Deposit or Withdraw (the arrow in the page's header or the phone's Back button), like Cookie's.
