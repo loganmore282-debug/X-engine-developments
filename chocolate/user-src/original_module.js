@@ -3217,7 +3217,7 @@ window.showPage = async function(name){
     // before its own first `await` executes before control returns here), so
     // Home's paint ordering is unaffected -- only the announcement's own
     // timing depends on this not being awaited.
-    renderHome();
+    renderHome(!!prevPage && prevPage !== 'home');   // a tab change shows the skeleton first
     maybeAnnounceAfterHomeNav(prevPage);
   }
   else if (name === 'assets') await renderAssets();
@@ -3308,16 +3308,34 @@ window.retryLoad = function(what){
 };
 // The welcome announcement waits for this: it resolves once Home's list has been painted from loaded data (or Home was left).
 var _homePaintedRes = null, _homePainted = Promise.resolve();
-async function renderHome(){
+// Coming back to Home from another tab shows Home's own shape in skeleton bars (same classes and sizes as the real page, so nothing jumps),
+// for at least HOME_SKELETON_MS, then the real content replaces it. The announcement opens right after that, when the content is on screen.
+var HOME_SKELETON_MS = 1200;
+function homeSkeletonHtml(){
+  const card = `<article class="mg-card ch-card ch-skc" aria-hidden="true">
+    <div class="ch-title"><i class="sk ch-sk-t"></i></div>
+    <div class="ch-pic sk"></div>
+    <dl class="ch-tiles"><div class="sk"></div><div class="sk"></div><div class="sk"></div><div class="sk"></div></dl>
+    <div class="mg-card-f"><span class="mg-buy sk"></span></div>
+  </article>`;
+  return `<div class="v-page mg-home ch-skhome" aria-busy="true">
+  ${mgTopHtml()}
+  <div class="home-banner sk"></div>
+  <div class="mg-quick ch-skq"><span class="sk"></span><span class="sk"></span><span class="sk"></span><span class="sk"></span></div>
+  <div class="mg-list">${card}${card}</div>
+</div>`;
+}
+async function renderHome(withSkeleton){
   _homePainted = new Promise(r => { _homePaintedRes = r; });
   const donePaint = _homePaintedRes;
-  try { await renderHomeInner(); } finally { donePaint(); }
+  try { await renderHomeInner(!!withSkeleton); } finally { donePaint(); }
 }
-async function renderHomeInner(){
+async function renderHomeInner(skeleton){
   const hadInvestments = Array.isArray(STATE.investments);
   const shownProducts = homeSignature();
   const hadProductList = !!STATE.products;
-  paintHome();
+  const t0 = Date.now();
+  if (skeleton) { $('pageHost').innerHTML = homeSkeletonHtml(); } else paintHome();
   const [accR, invR, prR] = await Promise.all([ api('/account'), api('/investments'), api('/public/products') ]);
   if (accR.status === 'success') STATE.account = accR.account;
   if (prR.status === 'success' && Array.isArray(prR.products)) { STATE.products = prR.products; _productsLoadFailed = false; }
@@ -3331,7 +3349,12 @@ async function renderHomeInner(){
   if (STATE.page !== 'home') return; // navigated away while awaiting
   // Repaint only when the catalog really changed: a rebuild restarts the
   // banner carousel, the ticker and the Buy glow and throws away the scroll position.
-  if (homeSignature() !== shownProducts || !hadProductList) paintHome();
+  if (skeleton) {
+    const left = HOME_SKELETON_MS - (Date.now() - t0);
+    if (left > 0) await new Promise(r => setTimeout(r, left));
+    if (STATE.page !== 'home') return;
+    paintHome();
+  } else if (homeSignature() !== shownProducts || !hadProductList) paintHome();
   if (_homePaintedRes) _homePaintedRes();   // Home's content is on screen now: the announcement may open
   // The envelope button's unread dot. Fetched once per Home entry, AFTER
   // the paint (never blocking it) and patched in place via

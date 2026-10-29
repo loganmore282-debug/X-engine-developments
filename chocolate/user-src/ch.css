@@ -450,4 +450,15 @@ html.mg-gut .mg-top{margin-right:-15px;}
 /* The tapped icon itself dips and springs (navTapSignal) on its own graphics layer, so it keeps moving smoothly while the new page is built; the tan box behind it is not the only thing that moves. */
 .navitem .nav-ic svg{will-change:transform;backface-visibility:hidden;}
 .navitem.nav-tap .nav-ic svg{animation:navTapSignal .42s cubic-bezier(.34,1.56,.64,1);transform-origin:50% 55%;}
+/* Home skeleton (shown for about a second when returning to Home): the real classes and sizes with pale bones that shimmer. */
+.ch-skhome .sk{background:#efe9e0;border-radius:12px;}
+.ch-skhome .sk::after{background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent);}
+.ch-skhome .home-banner.sk{border-radius:20px;box-shadow:none;}
+.ch-skq{display:grid;grid-template-columns:repeat(4,1fr);gap:9.5px;margin-top:14px;}
+.ch-skq .sk{display:block;height:63px;border-radius:15px;background:#fff;}
+.ch-skc .ch-title{justify-content:center;}
+.ch-skc .ch-sk-t{display:block;width:44%;height:18px;border-radius:9px;}
+.ch-skc .ch-pic.sk{border-radius:0;background:#f1ece4;}
+.ch-skc .ch-tiles>div.sk{border-radius:12px;background:#f3eee7;}
+.ch-skc .mg-buy.sk{display:block;width:100%;height:41px;border-radius:12px;background:#f1ece4;}
 /* CH-END */
