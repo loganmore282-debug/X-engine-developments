@@ -4607,6 +4607,7 @@ function statementDescription(t){
   if (t.type === 'promocode') return 'Gift Code';
   if (t.type === 'checkin') return 'Check-in Reward';
   if (t.type === 'welcome_bonus') return 'Welcome Bonus';
+  if (t.type === 'purchase_bonus') return 'Purchase Bonus';
   if (t.type === 'team_reward') return 'Team Reward';
   if (t.type === 'mission_salary') return 'Daily Salary';
   if (t.type === 'mission_deposit_reward') return 'Mission Reward';
@@ -5941,7 +5942,7 @@ window.openInvestConfirm = async function(tierKey, btn){
     return;
   }
   showPage('home');
-  notify(`${p.name} is now running. See it under Orders.`);
+  notify(result.purchaseBonus > 0 ? `${p.name} is now running. Purchase bonus ${fmtUGX(result.purchaseBonus)} added to your wallet.` : `${p.name} is now running. See it under Orders.`);
 };
 
 // The Cancel button and backdrop both call this by name from inline markup.

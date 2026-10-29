@@ -43,6 +43,13 @@ async function member(pass, pin, ref) { const cap = await J('GET', '/auth/captch
   await sleep(2500); const w3 = (await acct(B.tok)).walletBalance; ok(w3 === w2, 'and never paid twice');
   ok([...fm.__stores.investments.values()].find(i => i.userId === B.uid).status === 'matured', 'the product becomes matured after its last payment');
   const N = await member('secret56', '123456', A.reg.referralCode);   // never bought
+  // ---- purchase bonus: the member's 2nd purchase of a product whose bonus is set to "2 purchases = 700" pays 700 at once, only once
+  const sv = await J('POST', '/admin/products/save', { products: [Object.assign({}, p1, { bonusCount: 2, bonusReward: 700 })] }, null, true); ok(sv.j.status === 'success', 'admin saves the purchase bonus on the product', sv.j);
+  const pb0 = (await acct(B.tok)).walletBalance;
+  const b2 = await J('POST', '/invest/create', { tierKey: p1.key }, B.tok); ok(b2.j.status === 'success' && b2.j.purchaseBonus === 700, 'the 2nd purchase reports the bonus', b2.j);
+  ok(Math.round((await acct(B.tok)).walletBalance - pb0) === -p1.price + 700, 'the price is paid and the 700 bonus lands at once');
+  const b3 = await J('POST', '/invest/create', { tierKey: p1.key }, B.tok); ok(b3.j.status === 'success' && !b3.j.purchaseBonus, 'the 3rd purchase pays no second bonus', b3.j);
+  ok([...fm.__stores.transactions.values()].filter(t => t.userId === B.uid && t.type === 'purchase_bonus').length === 1, 'exactly one purchase-bonus row in the ledger');
   // ---- analytics with plans
   const an = await J('POST', '/admin/analytics', {}, null, true); ok(an.s === 200 && an.j.plans && Array.isArray(an.j.plans.mostPurchased), 'analytics answers with the Plans card', Object.keys(an.j));
   // ---- statement / team / transactions as the buyer

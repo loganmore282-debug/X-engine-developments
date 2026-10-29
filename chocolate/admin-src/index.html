@@ -488,7 +488,7 @@ const TX_LABELS = {
   deposit: 'Recharge', withdraw: 'Withdraw', commission: 'Commission', team_reward: 'Team reward',
   checkin: 'Daily reward', cashback: 'Product cashback', investment: 'Product purchase',
   promocode: 'Treasure code redeemed', admin_credit: 'Credit', admin_debit: 'Adjustment',
-  welcome_bonus: 'Welcome bonus', mission_salary: 'Mission Center salary',
+  welcome_bonus: 'Welcome bonus', purchase_bonus: 'Purchase bonus', mission_salary: 'Mission Center salary',
   mission_deposit_reward: 'Mission Center recharge reward',
   deposit_reversal: 'Recharge reversed (fraud)',
   investment_refund: 'Product refund',
@@ -2430,6 +2430,11 @@ function editProduct(p, order){
     <label>Purchase limit per member (0 = no limit)</label><input id="pLimit" type="number" min="0" step="1" value="${p.buyLimit>0?p.buyLimit:''}" placeholder="0">
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Members see it on the card as owned/limit, for example 0/3.</p>
     <div class="row">
+      <div><label>Purchase bonus: purchases needed</label><input id="pBonusN" type="number" min="1" step="1" value="${p.bonusCount>0?p.bonusCount:3}" placeholder="3"></div>
+      <div><label>Purchase bonus: reward amount</label><input id="pBonusAmt" type="number" min="0" step="1" value="${p.bonusReward>0?p.bonusReward:''}" placeholder="0 = no bonus"></div>
+    </div>
+    <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">When a member buys THIS product that many times (default 3), the reward is added to their wallet at once, once per member. Leave the reward empty or 0 for no bonus.</p>
+    <div class="row">
       <div><label>Display position (lower appears first)</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order!=null?order:0)}"></div>
     </div>
     <label>Product image <span class="muted" style="font-weight:400">— shown whole, in its own shape (up to 900 px)</span></label>
@@ -2521,7 +2526,7 @@ function editProduct(p, order){
     const typedKey = $('pKey').value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'').slice(0,24);
     const key = typedKey || p.key || ($('pLabel').value.toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,24)) || ('item'+Date.now());
     const body = { key, name:$('pLabel').value, category:$('pCat').value, price:$('pPrice').value,
-      expectedReturn:$('pRet').value, multiplier:_retIsTruth?'':$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, vip:$('pVip').value, order:$('pOrder').value,
+      expectedReturn:$('pRet').value, multiplier:_retIsTruth?'':$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, bonusCount:$('pBonusN').value, bonusReward:$('pBonusAmt').value, vip:$('pVip').value, order:$('pOrder').value,
       image, active:$('pActive').checked, comingSoon:$('pSoon').checked,
       // datetime-local has no zone, so the browser reads it as local time --
       // which for the owner IS Uganda time. Sent as epoch ms so the server

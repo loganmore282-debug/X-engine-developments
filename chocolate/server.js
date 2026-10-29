@@ -4722,6 +4722,7 @@ app.post('/invest/create', async (req, res) => {
   try {
     const sett = await getSettings();
     let invId, liveTier, cycle, expectedReturn, dailyPayout, isFirstInvestment = false;
+    let purchaseBonus = 0;
     // NOT db.runTransaction -- that helper just runs queued ops sequentially
     // with no rollback (M0 has no real multi-document transactions), so it
     // gave no real protection here anyway. Awaiting the debit directly lets
@@ -4806,6 +4807,29 @@ app.post('/invest/create', async (req, res) => {
         });
         throw createErr;
       }
+      // Purchase bonus (set on each product in the admin): the member's Nth purchase of THIS product (N = the product's bonusCount, default 3)
+      // pays the product's bonusReward at once. Once per member per product (a token on the member's own record); a gifted product does not count.
+      // A failure here is logged and never fails a purchase the member has already paid for.
+      try {
+        const bonusN = Math.round(Number(liveTier.bonusCount) || 3), bonusAmt = Math.round(Number(liveTier.bonusReward) || 0);
+        if (bonusAmt > 0 && bonusN > 0) {
+          const boughtNow = priorPlans.docs.filter(d => d.data().tierKey === liveTier.key && d.data().granted !== true).length + 1;
+          if (boughtNow === bonusN) {
+            const bonusKey = 'buybonus:' + liveTier.key;
+            const done = await uRef.updateIf(
+              { creditedBonusKeys: { $ne: bonusKey }, status: { $ne: 'banned' } },
+              { walletBalance: FieldValue.increment(bonusAmt), totalEarned: FieldValue.increment(bonusAmt), creditedBonusKeys: FieldValue.arrayUnion(bonusKey) }
+            );
+            if (done) {
+              purchaseBonus = bonusAmt;
+              await db.collection('transactions').doc(`purchasebonus:${userId}:${liveTier.key}`).createIfAbsent({
+                userId, statementId: newStatementId(), type: 'purchase_bonus', description: `${liveTier.name} purchase bonus (${bonusN} purchases)`,
+                amount: bonusAmt, status: 'success', date, time, investmentId: invRef.id, createdAt: FieldValue.serverTimestamp()
+              });
+            }
+          }
+        }
+      } catch (bonusErr) { console.error('Purchase bonus error:', bonusErr.message); }
     });
     // The referral reward (Level 1 / 2 / 3) is paid now, on the member's first purchase. A failure here must never fail a purchase the
     // member has already paid for: the row stays pending and the 30 second reconciler pays it.
@@ -4814,7 +4838,7 @@ app.post('/invest/create', async (req, res) => {
     // has already paid for.
     grantTurntableSpins(userId, liveTier, invId);
     _vipCache.delete(userId);
-    res.json({ status: 'success', investmentId: invId, message: `Bought ${liveTier.name} for ${fmtMoney(liveTier.price)}` });
+    res.json({ status: 'success', investmentId: invId, purchaseBonus, message: `Bought ${liveTier.name} for ${fmtMoney(liveTier.price)}` + (purchaseBonus ? ` and earned a purchase bonus of ${fmtMoney(purchaseBonus)}` : '') });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
   }
@@ -7629,7 +7653,17 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     vip = Number(p.vip);
     if (!Number.isInteger(vip) || vip < 0 || vip > 100) return refuse('VIP level', 'must be a whole number from 0 to 100');
   }
-  return { key, name, category: p?.category === 'new' ? 'new' : 'main', price, cycle, expectedReturn, multiplier, buyLimit, vip, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
+  // Purchase bonus: a member who buys THIS product `bonusCount` times (default 3) gets `bonusReward` at once (0 = no bonus).
+  let bonusCount = 3, bonusReward = 0;
+  if (p?.bonusCount != null && p.bonusCount !== '') {
+    bonusCount = Number(p.bonusCount);
+    if (!Number.isInteger(bonusCount) || bonusCount < 1 || bonusCount > 1000) return refuse('Purchases needed for the bonus', 'must be a whole number from 1 to 1000');
+  }
+  if (p?.bonusReward != null && p.bonusReward !== '') {
+    bonusReward = Math.round(Number(p.bonusReward));
+    if (!Number.isFinite(bonusReward) || bonusReward < 0 || bonusReward > MAX_MONEY_AMOUNT) return refuse('Purchase bonus', `must be a number between 0 and ${MAX_MONEY_AMOUNT}`);
+  }
+  return { key, name, category: p?.category === 'new' ? 'new' : 'main', price, cycle, expectedReturn, multiplier, buyLimit, bonusCount, bonusReward, vip, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
 }
 // `?region=ke` hands the editor that region's view of every product -- its
 // own price where it has one, Uganda's where it has not -- plus `overrides`,
@@ -9678,7 +9712,7 @@ app.get('/admin/integrity', async (req, res) => {
 // earned" label is a real misnomer -- this field is cashback PLUS
 // referral commission PLUS checkin/gift-code/Task-Center/Mission-Center
 // bonuses, all folded into one number.
-const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward', 'turntable'];
+const EARNING_TX_TYPES = ['cashback', 'commission', 'purchase_bonus', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward', 'turntable'];
 async function computeUserRealTotals(userId) {
   const [txSnap, invSnap, witSnap] = await Promise.all([
     db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
