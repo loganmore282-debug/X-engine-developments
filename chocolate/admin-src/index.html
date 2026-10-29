@@ -2433,7 +2433,7 @@ function editProduct(p, order){
       <div><label>Purchase bonus: purchases needed</label><input id="pBonusN" type="number" min="1" step="1" value="${p.bonusCount>0?p.bonusCount:3}" placeholder="3"></div>
       <div><label>Purchase bonus: reward amount</label><input id="pBonusAmt" type="number" min="0" step="1" value="${p.bonusReward>0?p.bonusReward:''}" placeholder="0 = no bonus"></div>
     </div>
-    <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">When a member buys THIS product that many times (default 3), the reward is added to their wallet at once, once per member. Leave the reward empty or 0 for no bonus.</p>
+    <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">When a member buys THIS product that many times (default 3), the reward is added to their wallet at once, and again at every multiple (the 3rd, 6th, 9th purchase ...). Other products do not count toward it. Leave the reward empty or 0 for no bonus.</p>
     <div class="row">
       <div><label>Display position (lower appears first)</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order!=null?order:0)}"></div>
     </div>

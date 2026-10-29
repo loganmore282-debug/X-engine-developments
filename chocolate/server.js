@@ -4807,23 +4807,23 @@ app.post('/invest/create', async (req, res) => {
         });
         throw createErr;
       }
-      // Purchase bonus (set on each product in the admin): the member's Nth purchase of THIS product (N = the product's bonusCount, default 3)
-      // pays the product's bonusReward at once. Once per member per product (a token on the member's own record); a gifted product does not count.
+      // Purchase bonus (set on each product in the admin): the member's Nth purchase of THIS product (N = the product's bonusCount, default 3, repeating)
+      // pays the product's bonusReward at once, and again at every multiple (3rd, 6th, 9th ...). Each milestone has its own once-only token on the member's record; a gifted product does not count.
       // A failure here is logged and never fails a purchase the member has already paid for.
       try {
         const bonusN = Math.round(Number(liveTier.bonusCount) || 3), bonusAmt = Math.round(Number(liveTier.bonusReward) || 0);
         if (bonusAmt > 0 && bonusN > 0) {
           const boughtNow = priorPlans.docs.filter(d => d.data().tierKey === liveTier.key && d.data().granted !== true).length + 1;
-          if (boughtNow === bonusN) {
-            const bonusKey = 'buybonus:' + liveTier.key;
+          if (boughtNow % bonusN === 0) {
+            const bonusKey = 'buybonus:' + liveTier.key + ':' + boughtNow;
             const done = await uRef.updateIf(
               { creditedBonusKeys: { $ne: bonusKey }, status: { $ne: 'banned' } },
               { walletBalance: FieldValue.increment(bonusAmt), totalEarned: FieldValue.increment(bonusAmt), creditedBonusKeys: FieldValue.arrayUnion(bonusKey) }
             );
             if (done) {
               purchaseBonus = bonusAmt;
-              await db.collection('transactions').doc(`purchasebonus:${userId}:${liveTier.key}`).createIfAbsent({
-                userId, statementId: newStatementId(), type: 'purchase_bonus', description: `${liveTier.name} purchase bonus (${bonusN} purchases)`,
+              await db.collection('transactions').doc(`purchasebonus:${userId}:${liveTier.key}:${boughtNow}`).createIfAbsent({
+                userId, statementId: newStatementId(), type: 'purchase_bonus', description: `${liveTier.name} purchase bonus (${boughtNow} purchases)`,
                 amount: bonusAmt, status: 'success', date, time, investmentId: invRef.id, createdAt: FieldValue.serverTimestamp()
               });
             }
@@ -7653,7 +7653,7 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     vip = Number(p.vip);
     if (!Number.isInteger(vip) || vip < 0 || vip > 100) return refuse('VIP level', 'must be a whole number from 0 to 100');
   }
-  // Purchase bonus: a member who buys THIS product `bonusCount` times (default 3) gets `bonusReward` at once (0 = no bonus).
+  // Purchase bonus: a member who buys THIS product `bonusCount` times (default 3) gets `bonusReward` at once, again at every multiple (0 = no bonus).
   let bonusCount = 3, bonusReward = 0;
   if (p?.bonusCount != null && p.bonusCount !== '') {
     bonusCount = Number(p.bonusCount);
