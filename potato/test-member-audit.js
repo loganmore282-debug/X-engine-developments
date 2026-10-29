@@ -129,6 +129,33 @@ async function main(){
     w.cancelDepositStatus();
     assert(!d.querySelector('#depStatusBg').classList.contains('show'),'Cancel / Back leaves the page');
   }
+  { // Verify Payment by hand (the automatic check held back so only the button asks)
+    let calls=0, answer='pending'; const gate=deferred(); const notes=[];
+    w.notify=(m)=>{notes.push(m);};
+    w.post=(path)=>{ if(path==='/deposit/marzpay') return Promise.resolve({status:'success',depositId:'v1',reference:'REFV'});
+      if(path==='/deposit/marzpay/status'){calls++;return gate.promise.then(()=>({status:'success',state:answer}));}
+      return Promise.resolve({status:'success'}); };
+    w.DEP_POLL_FIRST_MS=60000;w.DEP_VERIFY_COOLDOWN_MS=30;
+    w.closeDepositStatusModal();w.openDepositSheet();d.querySelector('#depAmount').value='15000';await w.submitDeposit();
+    const btn=d.querySelector('#depVerifyBtn');
+    assert.equal(d.querySelector('#depVerifyLabel').textContent,'Verify Payment');
+    const t1=w.verifyDepositNow();const t2=w.verifyDepositNow();           // a second tap while the first is out
+    assert.equal(d.querySelector('#depVerifyLabel').textContent,'Verifying…','the button says Verifying… while the check is out');assert(btn.disabled,'and cannot be tapped again');
+    assert.equal(d.querySelector('#depVerifySpin').style.display,'inline-flex','with its spinner');
+    gate.resolve();await t1;await t2;
+    assert.equal(calls,1,'two quick taps are ONE request to the server');
+    assert(notes.some(m=>/Still pending/.test(m)),'a payment not yet confirmed says Still pending');
+    await new Promise(r=>setTimeout(r,60));
+    assert.equal(d.querySelector('#depVerifyLabel').textContent,'Verify Payment','the button comes back after its short pause');assert(!btn.disabled);
+    answer='matched';await w.verifyDepositNow();
+    assert.match(d.querySelector('#depStatusTitle').textContent,/Payment Successful!/,'Verify Payment on a paid payment shows Payment Successful!');
+    assert.equal(d.querySelector('#depVerifyLabel').textContent,'Back to Home');
+    // and a failed one
+    w.closeDepositStatusModal();w.openDepositSheet();d.querySelector('#depAmount').value='15000';await w.submitDeposit();
+    answer='failed';await w.verifyDepositNow();
+    assert.match(d.querySelector('#depStatusTitle').textContent,/Payment Not Completed/,'Verify Payment on a failed payment shows Payment Not Completed');
+    w.cancelDepositStatus();
+  }
   console.log('PASS '+(built?'guarded bundle':'source')+': Home refresh, reward dialog, wallet races, zero fees, repeat taps, navigation, and payment guidance');
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>w.close());
