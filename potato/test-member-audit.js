@@ -156,6 +156,16 @@ async function main(){
     assert.match(d.querySelector('#depStatusTitle').textContent,/Payment Not Completed/,'Verify Payment on a failed payment shows Payment Not Completed');
     w.cancelDepositStatus();
   }
+  { // Home does not redraw itself when nothing changed (a redraw restarts the icon pop, the banner and the Buy glow)
+    w.showPage&&0;w.STATE.page='home';w.paintHome();const first=d.querySelector('.pt-quick button');assert(first,'Home is painted');
+    w.paintHome();assert.equal(d.querySelector('.pt-quick button'),first,'painting the same Home again leaves the very same buttons on screen (no restart)');
+    w.STATE.products=(w.STATE.products||[]).concat([{key:'zz-new',name:'Zz',price:1000,cycle:8,active:true}]);w.paintHome();
+    assert.notEqual(d.querySelector('.pt-quick button'),first,'a real change (a new product) still redraws it');
+    // a redraw while the icons are popping carries the pop on (negative delay), it does not start it over
+    const ph=d.getElementById('pageHost');ph.classList.add('pt-popin');w._popStart=w.performance.now()-300;w.STATE.products=w.STATE.products.concat([{key:'zz-new2',name:'Zz2',price:2000,cycle:8,active:true}]);w.paintHome();
+    assert.match(ph.style.getPropertyValue('--pop-skip'),/^0\.[23]\d\ds$/,'the repaint hands the new buttons the time already spent: '+ph.style.getPropertyValue('--pop-skip'));ph.classList.remove('pt-popin');
+    const src2=source;assert(/earlyInvestments = api\('\/investments'/.test(src2)&&/await withTimeout\(earlyInvestments, 4000\)/.test(src2),'the member\'s purchases are fetched with the account and awaited before Home opens (no clickable-then-limit flash)');
+  }
   console.log('PASS '+(built?'guarded bundle':'source')+': Home refresh, reward dialog, wallet races, zero fees, repeat taps, navigation, and payment guidance');
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>w.close());

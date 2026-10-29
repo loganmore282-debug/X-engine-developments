@@ -1919,10 +1919,10 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 /* Arriving at Home (a tab tap, or back from a page opened on it): the four buttons pop in one after another, traced from the owner's screen recording
    (60 fps): each grows from about half size and see-through to 1.2 times, then settles at full size in about 0.36 s; the next one starts about 0.065 s later. */
 @keyframes ptQuickPop{0%{transform:scale(.55);opacity:0;}45%{transform:scale(1.2);opacity:1;animation-timing-function:cubic-bezier(.3,.1,.4,1);}100%{transform:scale(1);opacity:1;}}
-.pt-popin .pt-quick button{animation:ptQuickPop .36s cubic-bezier(.2,.7,.3,1) both;transform-origin:50% 55%;}
-.pt-popin .pt-quick button:nth-child(2){animation-delay:.065s;}
-.pt-popin .pt-quick button:nth-child(3){animation-delay:.13s;}
-.pt-popin .pt-quick button:nth-child(4){animation-delay:.195s;}
+.pt-popin .pt-quick button{animation:ptQuickPop .36s cubic-bezier(.2,.7,.3,1) both;animation-delay:calc(0s - var(--pop-skip,0s));transform-origin:50% 55%;}
+.pt-popin .pt-quick button:nth-child(2){animation-delay:calc(.065s - var(--pop-skip,0s));}
+.pt-popin .pt-quick button:nth-child(3){animation-delay:calc(.13s - var(--pop-skip,0s));}
+.pt-popin .pt-quick button:nth-child(4){animation-delay:calc(.195s - var(--pop-skip,0s));}
 .pt-list{margin-top:15px;}
 .pt-card{display:grid;grid-template-columns:132px minmax(0,1fr);height:206px;margin:0 0 15px;background:#fff;border-radius:7px;overflow:hidden;box-shadow:0 6px 18px -10px rgba(70,80,140,.2);}
 .pt-img{position:relative;overflow:hidden;border-right:1px solid #eef0f5;background:#fff;}

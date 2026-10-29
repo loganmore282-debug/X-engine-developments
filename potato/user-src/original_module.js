@@ -1503,7 +1503,7 @@ async function bootFromNetwork(uid){
   // without an OTP ticket.
   const signupFlow = !!window._pendingRegPhone;
   const regTypedPhone = signupFlow ? (($('regPhone') || {}).value || '') : '';
-  let r;
+  let r, earlyInvestments = null;
   // subagent-audit-caught: a brand-new registration always paid for a
   // GUARANTEED-to-fail /account call first (the profile doc genuinely
   // doesn't exist yet the instant after Firebase account creation), THEN
@@ -1537,6 +1537,9 @@ async function bootFromNetwork(uid){
     if (signupFlow) { await finishSignupToLogin(regTypedPhone); return; }
     r = await api('/account');
   } else {
+    // The member's purchases are asked for TOGETHER with the account and awaited before Home comes up: Home's BUY buttons (purchase limit reached)
+    // and the "owned/limit" bands depend on them, so painting Home first showed every BUY clickable and then turned some off a moment later.
+    earlyInvestments = api('/investments', { timeoutMs: 10000 });
     r = await api('/account', { timeoutMs: 10000 });
     if (r.stale || !STATE.user || STATE.user.uid !== uid) return;
     if (r.status === 'error' && (r.code === 'NOT_FOUND' || r.code === 'REGISTRATION_REQUIRED' || r.message === 'User not found')) {
@@ -1595,6 +1598,11 @@ async function bootFromNetwork(uid){
   // was already in memory, so the "nothing cached yet" branch could not fire
   // on any screen.
   await waitForBootSettings(6000);
+  if (earlyInvestments) {
+    const ir = await withTimeout(earlyInvestments, 4000);
+    if (!STATE.user || STATE.user.uid !== uid) return;
+    if (ir && ir.status === 'success' && Array.isArray(ir.investments)) STATE.investments = ir.investments;
+  }
   hideLoadingScreen();
   $('authScreen').style.display = 'none';
   $('app').style.display = '';
@@ -1631,6 +1639,7 @@ async function bootFromNetwork(uid){
 // try again on the next open, never a forced sign-out.
 async function refreshAppDataInBackground(uid){
   try {
+    const shownBefore = homeSignature();
     const [accR, invR, teamR, bankR, txR] = await Promise.all([
       api('/account'), api('/investments'), api('/team/stats'), api('/bank/list'), api('/transactions')
     ]);
@@ -1646,7 +1655,10 @@ async function refreshAppDataInBackground(uid){
     if (bankR.status === 'success') STATE.bankAccounts = bankR.accounts;
     if (txR.status === 'success') { STATE.transactions = txR.transactions; STATE.transactionsTruncated = !!txR.truncated; }
     saveCachedState(uid);
-    if (STATE.page === 'home') { patchHomeBalances(); paintMyAssetsInner(); }
+    if (STATE.page === 'home') {
+      patchHomeBalances(); paintMyAssetsInner();
+      if (homeSignature() !== shownBefore) paintHome();   // a purchase made elsewhere (limit reached) shows at once
+    }
   } catch (_) {}
 }
 
@@ -1970,16 +1982,18 @@ document.addEventListener('visibilitychange', () => {
 // The page's appearing animation (see .mg-enter in the MG styles): on every tab change, and again when a sheet is closed (the back arrow, the phone's
 // Back button) so the page underneath comes back the same way.
 var _popInTimer = null;
+var _popStart = 0, _lastHomeHtml = '';
 function replayPageIn(){
   const ph = $('pageHost');
   if (ph) { ph.classList.remove('mg-enter'); void ph.offsetWidth; ph.classList.add('mg-enter'); }
-  // Home: its four buttons pop in again, for a moment only (a repaint of Home a little later must not pop them again).
+  // Home: its four buttons pop in again, for a moment only (a repaint of Home a little later must not pop them again: paintHome() hands the new
+  // buttons the time already spent, --pop-skip, so the pop CONTINUES where it was instead of starting over).
   if (ph) {
-    ph.classList.remove('pt-popin');
+    ph.classList.remove('pt-popin'); ph.style.removeProperty('--pop-skip');
     if (STATE.page === 'home') {
-      void ph.offsetWidth; ph.classList.add('pt-popin');
+      void ph.offsetWidth; ph.classList.add('pt-popin'); _popStart = performance.now();
       if (_popInTimer) clearTimeout(_popInTimer);
-      _popInTimer = setTimeout(() => { _popInTimer = null; ph.classList.remove('pt-popin'); }, 900);
+      _popInTimer = setTimeout(() => { _popInTimer = null; ph.classList.remove('pt-popin'); ph.style.removeProperty('--pop-skip'); }, 900);
     }
   }
 }
@@ -2346,7 +2360,13 @@ function paintHome(){
   </div>
   <div class="pt-list" id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="pt-noprod">No products available</div>' : _productsLoadFailed ? '<div class="pt-noprod bad" role="button" onclick="retryLoad(\'home\')">Failed to load products</div>' : '')}</div>
 </div>`;
-  $('pageHost').innerHTML = html;
+  const host = $('pageHost');
+  // The same markup as what is already on screen: nothing to redraw (a redraw restarts the pop, the banner carousel and the Buy glow).
+  if (html === _lastHomeHtml && host.firstElementChild && host.firstElementChild.classList.contains('pt-home')) return;
+  _lastHomeHtml = html;
+  host.innerHTML = html;
+  // A repaint while the icons are still popping in carries on from where the pop was (negative animation delay), it does not start it over.
+  if (host.classList.contains('pt-popin')) host.style.setProperty('--pop-skip', ((performance.now() - _popStart) / 1000).toFixed(3) + 's');
   startHomeCarousel();
   startProductCountdowns();
   ptFitValues();
