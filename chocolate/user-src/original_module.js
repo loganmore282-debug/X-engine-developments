@@ -177,6 +177,7 @@ var LANG_ROWS = [
   ['Log In', 'Yingira', 'Ingia', 'Connexion', 'Injira', 'Taaha'],
   ['Sign Up', 'Weewandiise', 'Jisajili', 'S\'inscrire', 'Iyandikishe', 'Yeewandiise'],
   ['Log Out', 'Fuluma', 'Toka', 'D\u00e9connexion', 'Sohoka', 'Shohoka'],
+  ['Enter Payment Number', 'Wandiika ennamba y\'okusasulirako', 'Weka namba ya malipo', 'Entrez le num\u00e9ro de paiement', 'Andika nimero yo kwishyura', 'Handiika enamba y\'okusasura'],
   ['Enter phone number', 'Wandiika ennamba ya ssimu', 'Weka namba ya simu', 'Entrez le num\u00e9ro de t\u00e9l\u00e9phone', 'Andika nimero ya telefone', 'Handiika enamba ya esimu'],
   ['Enter password', 'Wandiika ekisumuluzo', 'Weka nenosiri', 'Entrez le mot de passe', 'Andika ijambobanga', 'Handiika ekisumuruzo'],
   ['Remember me', 'Onjjukire', 'Nikumbuke', 'Se souvenir de moi', 'Unyibuke', 'Onyijuke'],
@@ -5190,6 +5191,11 @@ function cleanDesc(d){ return d || ''; }
 // instruction ("remove option for payment methods, remove manual payment
 // in the whole codes... remove them all"). Automatic recharge is now the
 // only deposit path: one screen, no method choice to make.
+// The Deposit page starts with the member's registered number as the payment number (in the local form, like 0707844278); it can be changed.
+function depositDefaultPhone(){
+  const local = localDigits((STATE.account && STATE.account.phone) || '');
+  return local ? '0' + local : '';
+}
 window.openDepositSheet = function(){
   const s = STATE.settings || {};
   if (s.depositAvailable === false) return notify('Deposits are not available right now.');
@@ -5204,8 +5210,8 @@ function openDepositFormSheet(){
     <div class="v-sec"><span class="bar"></span><h2>Select Amount</h2></div>
     <div class="v-chips" id="depChips">${depositChipsHtml(s, 'depAmount')}</div>
     <input class="v-amount" id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[\\s,]/g,'');syncDepositQuickAmt()" autocomplete="off">
-    <div class="v-sec"><span class="bar"></span><h2>Input Payment Number</h2></div>
-    <input class="v-amount" id="depPhone" type="text" inputmode="numeric" maxlength="15" placeholder="Enter phone number" oninput="this.value=this.value.replace(/[^\\d+\\s]/g,'')" autocomplete="off" aria-label="Phone number to pay from">
+    <div class="v-sec"><span class="bar"></span><h2>Enter Payment Number</h2></div>
+    <input class="v-amount" id="depPhone" type="text" inputmode="numeric" maxlength="15" placeholder="Enter Payment Number" value="${esc(depositDefaultPhone())}" oninput="this.value=this.value.replace(/[^\\d+\\s]/g,'')" autocomplete="off" aria-label="Phone number to pay from">
     <div class="v-sec"><span class="bar"></span><h2>Select Payment Method</h2></div>
     <div class="v-pays" id="depPays">
       ${['PAY-A'].map((n, i) => `<button type="button" class="${i === 0 ? 'on' : ''}" onclick="pickPayLabel(this)"><b>${n}</b><i></i></button>`).join('')}

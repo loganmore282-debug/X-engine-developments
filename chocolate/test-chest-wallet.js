@@ -33,7 +33,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(d.getElementById('walEditHead').textContent === 'Add Bank Account' && d.getElementById('walToggleBtn').textContent === 'Add Bank Account' && /\*\*\*\* \*\*\*\* \*\*\*\* \*\*\*\*/.test(d.querySelector('.v-wcard').textContent), 'no wallet yet: Add Bank Account and an empty card');
   // Server: one wallet, edited in place.
   ok(/MAX_SAVED_PAYOUT_ACCOUNTS = 1/.test(server), 'server keeps one wallet');
-ok(/id="depPhone"/.test(source) && /post\('\/deposit\/marzpay', \{ amount, phone \}\)/.test(source), 'the Deposit page has an "Input Payment Number" box and sends the typed number');
+ok(/id="depPhone"/.test(source) && /post\('\/deposit\/marzpay', \{ amount, phone \}\)/.test(source), 'the Deposit page has an "Enter Payment Number" box and sends the typed number');
 ok(/for="walPhone">Bank Account<\/label>/.test(source) && !/for="walPhone">Phone Number/.test(source), 'the account number field is labelled Bank Account');
 ok(/\{4,64\}/.test(server) && !/\{4,34\}/.test(server), 'bank account numbers are not capped at 34 characters');
 ok(/STATE\.supportedBanks && STATE\.supportedBanks\.length/.test(source), 'an empty bank list is not kept, so the wallet asks again next time');
