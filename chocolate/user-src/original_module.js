@@ -5070,6 +5070,7 @@ function anyDialogOpen(){
   return !!(($('helpBg') && $('helpBg').classList.contains('show'))
     || ($('confirmBg') && $('confirmBg').classList.contains('show'))
     || ($('annBg') && $('annBg').classList.contains('show'))
+    || depWaitOpen()
     // The payment status page owns a history entry too: without it here, one Back left the page showing and the next left the app mid-payment.
     || ($('depStatusBg') && $('depStatusBg').classList.contains('show')));
 }
@@ -5078,7 +5079,7 @@ function resetOverlayState(){
   document.body.classList.remove('deposit-status-open', 'sheet-open');
   // A session that ends (or a logout) takes every popup with it: the Buy confirm, Help, announcement, download and the win card used to stay
   // on top of the Login screen (the win card even showed the previous member's New Balance).
-  ['confirmBg', 'helpBg', 'annBg'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
+  ['confirmBg', 'helpBg', 'annBg', 'depWaitBg'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
   _openSheetTitle = null; _depActiveDepositId = null; _withdrawSubmitting = false;
   if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
 }
@@ -5101,6 +5102,7 @@ function closeTopDialog(){
     if ($('helpBg') && $('helpBg').classList.contains('show')) closeHelpDialog();
     else if ($('confirmBg') && $('confirmBg').classList.contains('show')) closeConfirm();
     else if ($('annBg') && $('annBg').classList.contains('show')) closeAnnouncement();
+    else if (depWaitOpen()) dlgOpened();   // the payment is being checked: Back stays here
     else if ($('depStatusBg') && $('depStatusBg').classList.contains('show')) {
       // The payment status page: Back closes it once it has an answer (its Close button is showing). While the payment is still being
       // checked Back stays on the page (a real operation is in flight, as the page's own comment says), instead of walking out of the app.
@@ -5346,29 +5348,41 @@ function syncDepositQuickAmt(){
 // (a real operation is in flight); the Close button only appears once
 // resolved (or once the poll gives up), matching the app's own established
 // pattern of only offering Close on a settled dialog state.
-window.openDepositStatusModal = function(amount, phone, network){
-  setDepositStatusPending(amount, phone, network);
-  $('depStatusBg').classList.add('show');
-  document.body.classList.add('deposit-status-open');
-  lockBodyScroll();
-  // Back closes this page (see closeTopDialog) instead of leaving the app. When the deposit sheet's own history entry is still being
-  // taken away (closeSheet called history.back() a moment ago), the popstate for that does the push (closeTopDialog); pushing here too
-  // would be popped by that same back() and leave a stale sheet entry behind. A timer makes sure an entry exists either way.
-  if (!(history.state && history.state.sheet)) dlgOpened();
-  setTimeout(() => { if ($('depStatusBg') && $('depStatusBg').classList.contains('show') && !(history.state && history.state.dlg)) dlgOpened(); }, 700);
-};
-window.closeDepositStatusModal = function(goHome){
-  // Cancels the success screen's own auto-redirect countdown if the member
-  // taps Close/Back before it fires on its own -- otherwise the timer would
-  // still be alive and try to close (or navigate) a modal that is already
-  // closed, moments later.
-  if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
-  $('depStatusBg').classList.remove('show');
-  document.body.classList.remove('deposit-status-open');
+// Owner: the waiting is a POP-UP over the Deposit screen (not a separate payment page): a turning ring and "Approve payment on your phone". It stays until the
+// payment has an answer; the result then comes as a normal notice, and the Deposit screen is still there underneath.
+function depWaitEl(){
+  let el = $('depWaitBg');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'depWaitBg'; el.className = 'dep-wait-bg';
+  el.innerHTML = '<div class="dep-wait-card" role="alertdialog" aria-live="polite" aria-label="Approve payment on your phone">'
+    + '<svg class="dep-wait-ring" viewBox="0 0 50 50" aria-hidden="true"><circle class="t" cx="25" cy="25" r="20"/><circle class="a" cx="25" cy="25" r="20"/></svg>'
+    + '<div class="dep-wait-msg">Approve payment on your phone</div>'
+    + '<div class="dep-wait-sub" id="depWaitSub"></div></div>';
+  document.body.appendChild(el);
+  return el;
+}
+function depWaitOpen(){ return !!($('depWaitBg') && $('depWaitBg').classList.contains('show')); }
+function showDepWait(amount, phone){
+  const el = depWaitEl();
+  const sub = $('depWaitSub'); if (sub) sub.textContent = fmtUGX(amount) + ' to ' + phone;
+  if (!depWaitOpen()) { el.classList.add('show'); lockBodyScroll(); dlgOpened(); }
+}
+function hideDepWait(){
+  const el = $('depWaitBg');
+  if (!el || !el.classList.contains('show')) return;
+  el.classList.remove('show');
   unlockBodyScroll();
   dlgClosed();
-  if (goHome === true && STATE.page !== 'home') { try { navigatePage('home'); } catch (_) {} }
+}
+window.openDepositStatusModal = function(amount, phone){
+  if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
+  const shown = cleanPhone(phone) || (dialPlus() + String(phone || '').replace(/\D/g, ''));
+  _depPendingAmount = Number(amount) || 0;
+  _depPendingPhone = shown;
+  showDepWait(amount, shown);
 };
+window.closeDepositStatusModal = function(){ hideDepWait(); };
 // ── ONE STATUS REQUEST AT A TIME ──
 // Owner: "add a button saying verify, so one can tap it but it should not
 // stop autopolling, also they should not call at the same time to strike api
@@ -5455,112 +5469,21 @@ window.verifyDepositNow = async function(){
     if (b) { b.disabled = false; b.textContent = 'Verify'; }
   }, DEP_VERIFY_COOLDOWN_MS);
 };
-function setDepositStatusPending(amount, phone, network){
-  if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }   // an old success countdown must not close this new page
-  $('depStatusIcon').className = 'dep-status-icon';
-  $('depStatusIcon').innerHTML = DEPOSIT_POLL_FLOW;
-  // Owner asked for the specifics shown here, not a generic message --
-  // the actual number the prompt was sent to and the actual amount.
-  const displayPhone = cleanPhone(phone) || (dialPlus() + String(phone || '').replace(/\D/g, ''));
-  // Owner: "put another statement, that dial *165# to approve, this is
-  // just a fallback bro because a payment prompt can come or it may fail
-  // and one may dial *165# so he see pending approval" -- the USSD push
-  // prompt itself can fail to arrive (a real, common MoMo gap, not
-  // specific to this app), so a member staring at a prompt that never
-  // shows up needs a way out other than waiting. Dialling the network's
-  // own money menu surfaces the same pending collection request for
-  // manual approval there instead. Network-specific -- *165# is MTN
-  // Mobile Money's own menu, *185# is Airtel Money's; showing the wrong
-  // one would send a member down a dead end. Round 145 dropped the
-  // network selector from PAY A's own form (the gateway detects it
-  // instead), so `network` is no longer reliably known here -- show both
-  // codes rather than guessing.
-  const ussd = network === 'Airtel Money' ? '*185#' : (network === 'MTN Mobile Money' ? '*165#' : '*165# (MTN) or *185# (Airtel)');
-  _depPendingAmount = Number(amount) || 0;
-  _depPendingPhone = displayPhone;
-  // Owner's own four steps, verbatim. Numbered because they are a sequence
-  // with one thing for the member to DO in the middle of it -- the previous
-  // single paragraph buried "approve it on your phone" mid-sentence between
-  // two facts, which is the one line that actually needed to be found.
-  //
-  // esc() on both interpolations: the amount is ours, but the phone number is
-  // whatever was typed into the form, and this is innerHTML now.
-  setPayLive(true);
-  $('depStatusTitle').textContent = 'Waiting for your approval';
-  $('depStatusBody').innerHTML =
-    '<div class="pl-amt">' + esc(fmtUGX(amount)) + '</div>'
-    + '<ol class="pay-steps pl-steps">'
-    + '<li class="done"><b>Request sent</b><span>A payment request for ' + esc(fmtUGX(amount)) + ' has been sent to ' + esc(displayPhone) + '.</span></li>'
-    + '<li class="now"><b>Approve on your phone</b><span>Check your phone for the payment prompt and approve it.</span></li>'
-    + '<li class="todo"><b>Balance updated</b><span>Your balance is updated automatically once the payment is confirmed.</span></li>'
-    + '</ol>'
-    // The push prompt genuinely does fail to arrive sometimes (a real MoMo gap), and without this a member is left at step 2 with nothing to do.
-    + '<p class="pay-note">No prompt? Dial ' + esc(ussd) + ' on that phone to find and approve the pending payment yourself.</p>'
-    + '<div class="pl-check"><i></i>Checking automatically</div>';
-  // Owner: "remove verify button, so this is automatic verification" -- the
-  // autopoll (pollDepositStatus() below) already checks on its own; a manual
-  // Verify tap next to it was a second way to do the same thing, not a
-  // needed one. Neither button shows while pending now -- purely automatic,
-  // nothing for the member to do but wait.
-  setDepButtons(false, false);
-}
-// (Confetti and sparkles were removed on the owner's request: success is shown by the tick drawing itself, see playStatusIcon.)
+function setDepositStatusPending(amount, phone){ openDepositStatusModal(amount, phone); }
 var _depSuccessRedirectTimer = null;
+// The answers come as notices over the Deposit screen, which stays open underneath.
 function setDepositStatusSuccess(){
-  setPayLive(true);
-  $('depStatusIcon').className = 'dep-status-icon success';
-  $('depStatusIcon').innerHTML = PL_BADGE_OK;
-  // Owner: on success it says Congratulations and that the payment has been received and added to the wallet; the member leaves with the Back to Home button.
-  $('depStatusTitle').textContent = 'Congratulations!';
-  // Names the actual figure when it is known (it always is on the automatic path); the manual-deposit path lands here without ever showing
-  // the waiting page, so every line also reads properly without one. brandName(), not a literal: the app's name is admin-settable.
-  const added = _depPendingAmount
-    ? 'Payment received — ' + fmtUGX(_depPendingAmount) + ' has been added to your wallet.'
-    : 'Payment received — your deposit has been added to your ' + brandName() + ' wallet.';
-  $('depStatusBody').innerHTML = plAmount(false)
-    + '<ol class="pay-steps pl-steps">' + plSent()
-    + plStep('done', 'Approved on your phone', 'The payment was approved.')
-    + plStep('done', 'Balance updated', added) + '</ol>';
-  // Owner: no "Returning to Home in N seconds" and no automatic redirect: the page stays until the member taps Back to Home (or the back arrow).
-  const c = $('depStatusCloseBtn');
-  if (c) c.textContent = 'Back to Home';
-  setDepButtons(false, true);
+  hideDepWait();
+  const clear = $('depAmount'); if (clear) { clear.value = ''; try { syncDepositQuickAmt(); } catch (_) {} }
+  notify(_depPendingAmount ? 'Deposit successful. ' + fmtUGX(_depPendingAmount) + ' has been added to your wallet.' : 'Deposit successful. Your wallet has been updated.');
 }
 function setDepositStatusFailed(msg){
-  setPayLive(true);
-  $('depStatusIcon').className = 'dep-status-icon failed';
-  $('depStatusIcon').innerHTML = PL_BADGE_BAD;
-  failShake($('depStatusIcon'), _drToken);   // the badge shakes and the phone buzzes once
-  $('depStatusTitle').textContent = 'Payment not completed';
-  // Naming ONE specific cause here would be a fabricated claim: the provider's failed-collection reply carries no reason (see server.js's
-  // DEPOSIT_FAILED_MSG), so the note lists the plausible causes without asserting which one it was. `msg` is server-supplied on the normal
-  // path; the fallback only fires for a purely client-side failure that never reached the server.
-  $('depStatusBody').innerHTML = plAmount(true)
-    + '<ol class="pay-steps pl-steps">' + plSent()
-    + plStep('todo', 'Approve on your phone', 'Not completed.')
-    + plStep('bad', 'Balance not updated', 'Nothing was added to your wallet.') + '</ol>'
-    + '<p class="pay-note bad">' + esc(msg
-      || 'This deposit did not go through. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Your ' + brandName() + ' balance has not changed.') + '</p>';
-  // Undoes setDepositStatusSuccess()'s own "Back to Home" relabel -- this
-  // button means plain Close here, on a modal a later deposit attempt can
-  // reuse without a fresh page load in between.
-  const cf = $('depStatusCloseBtn'); if (cf) cf.textContent = 'Close';
-  setDepButtons(false, true);
+  hideDepWait();
+  notify(msg || 'Payment not completed. Your balance has not changed.');
 }
 function setDepositStatusUnknown(){
-  setPayLive(true);
-  $('depStatusIcon').className = 'dep-status-icon';
-  $('depStatusIcon').innerHTML = DEPOSIT_POLL_FLOW;
-  $('depStatusTitle').textContent = 'Still waiting for the provider';
-  $('depStatusBody').innerHTML = '<p>The payment has not been confirmed yet, and nothing is lost. '
-    + 'If it goes through, your balance updates on its own automatically, '
-    + 'or look under Transaction Statement later to check.</p>';
-  const cu = $('depStatusCloseBtn'); if (cu) cu.textContent = 'Close';
-  // Verify removed here too (see setDepositStatusPending's own comment) --
-  // this is the same automatic wait, just past the autopoll's own 60s
-  // budget. Close is the only control: a way off the screen, not a way to
-  // ask again by hand.
-  setDepButtons(false, true);
+  hideDepWait();
+  notify('Payment not confirmed yet. If it goes through, your balance updates by itself.');
 }
 window.submitDeposit = async function(){
   const submitBtn = $('depSubmitBtn');
@@ -5614,7 +5537,6 @@ window.submitDeposit = async function(){
   // wrote a "Processing" ledger row server-side by this point, refresh the
   // cache now so it's actually there the next time Records opens.
   refreshTransactionsCache().catch(() => {});
-  if ($('depSubmitBtn') === submitBtn && _openSheetTitle === 'Deposit') closeSheet({ fromAction: true });
   openDepositStatusModal(amount, phone || localDigits((STATE.account || {}).phone || ''));
   pollDepositStatus(r.depositId);
 };
@@ -5674,7 +5596,6 @@ async function slowDepositWatch(depositId){
   while (Date.now() < until) {
     await new Promise(r => setTimeout(r, 4000));
     if (_depPollDone || _depActiveDepositId !== depositId) return;
-    if (!$('depStatusBg') || !$('depStatusBg').classList.contains('show')) continue;
     const r = await depositStatusHold(depositId);
     if (_depPollDone || _depActiveDepositId !== depositId) return;
     if (await applyDepositStatusResult(r)) return;
