@@ -475,17 +475,14 @@ html.mg-gut .mg-top{margin-right:-15px;}
 .mg-ann-lines{margin:7.5px 0 0;}
 .mg-ann-lines p{font:500 13.5px/22px Roboto,system-ui,sans-serif;color:#6b5844;}
 .mg-ann-join{flex:0 0 auto;margin-top:17px;height:41.5px;border-radius:9.3px;font:700 15px/1 Roboto,system-ui,sans-serif;}
-/* Deposit waiting pop-up: a turning ring and "Approve payment on your phone", over the Deposit screen until the payment has an answer. */
-.dep-wait-bg{position:fixed;inset:0;z-index:445;display:flex;align-items:center;justify-content:center;padding:0 24px;background:rgba(48,40,32,.42);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .18s,visibility 0s .18s;}
-.dep-wait-bg.show{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .18s,visibility 0s;}
-.dep-wait-card{width:fit-content;min-width:240px;max-width:290px;box-sizing:border-box;padding:30px 24px 24px;border-radius:24px;background:#fffefc;border:1px solid #e6dccd;box-shadow:0 18px 50px -18px rgba(70,45,20,.55);text-align:center;transform:scale(.96);transition:transform .2s ease-out;}
-.dep-wait-bg.show .dep-wait-card{transform:none;}
-.dep-wait-ring{display:block;width:54px;height:54px;margin:0 auto 16px;overflow:visible;}
+/* Deposit waiting pop-up: the notice dialog's own look (.notify-card / .notify-msg / .notify-ok), with a turning ring where the warning sign is, and a Verify button. */
+.dep-wait-bg{z-index:445;}
+.dep-wait-bg .notify-ic{display:flex;align-items:center;justify-content:center;width:auto;height:44px;margin:0 0 18px;}
+.dep-wait-ring{display:block;width:44px;height:44px;overflow:visible;}
 .dep-wait-ring circle{fill:none;stroke-width:4;}
-.dep-wait-ring .t{stroke:#e9ded0;}
+.dep-wait-ring .t{stroke:#e2d8ca;}
 .dep-wait-ring .a{stroke:#5e3a1b;stroke-linecap:round;stroke-dasharray:34 92;transform-origin:25px 25px;animation:depWaitSpin .9s linear infinite;will-change:transform;}
 @keyframes depWaitSpin{to{transform:rotate(360deg);}}
-.dep-wait-msg{font:700 15px/1.35 Roboto,system-ui,sans-serif;color:#2a1709;}
-.dep-wait-sub{margin-top:6px;font:400 12px/1.4 Roboto,system-ui,sans-serif;color:#8a7762;}
+.dep-wait-bg .notify-ok:disabled{opacity:.7;}
 @media (prefers-reduced-motion:reduce){.dep-wait-ring .a{animation-duration:2.4s;}}
 /* CH-END */

@@ -5350,22 +5350,23 @@ function syncDepositQuickAmt(){
 // pattern of only offering Close on a settled dialog state.
 // Owner: the waiting is a POP-UP over the Deposit screen (not a separate payment page): a turning ring and "Approve payment on your phone". It stays until the
 // payment has an answer; the result then comes as a normal notice, and the Deposit screen is still there underneath.
+var DEP_WAIT_TEXT = 'Approve payment on your phone';
 function depWaitEl(){
   let el = $('depWaitBg');
   if (el) return el;
   el = document.createElement('div');
-  el.id = 'depWaitBg'; el.className = 'dep-wait-bg';
-  el.innerHTML = '<div class="dep-wait-card" role="alertdialog" aria-live="polite" aria-label="Approve payment on your phone">'
-    + '<svg class="dep-wait-ring" viewBox="0 0 50 50" aria-hidden="true"><circle class="t" cx="25" cy="25" r="20"/><circle class="a" cx="25" cy="25" r="20"/></svg>'
-    + '<div class="dep-wait-msg">Approve payment on your phone</div>'
-    + '<div class="dep-wait-sub" id="depWaitSub"></div></div>';
+  el.id = 'depWaitBg'; el.className = 'notify-bg dep-wait-bg';
+  el.innerHTML = '<div class="notify-card" role="alertdialog" aria-live="polite" aria-label="Approve payment on your phone">'
+    + '<span class="notify-ic"><svg class="dep-wait-ring" viewBox="0 0 50 50" aria-hidden="true"><circle class="t" cx="25" cy="25" r="20"/><circle class="a" cx="25" cy="25" r="20"/></svg></span>'
+    + '<div class="notify-msg" id="depWaitMsg">' + DEP_WAIT_TEXT + '</div>'
+    + '<button class="notify-ok" id="depWaitVerify" type="button" onclick="verifyDepositNow()">Verify</button></div>';
   document.body.appendChild(el);
   return el;
 }
 function depWaitOpen(){ return !!($('depWaitBg') && $('depWaitBg').classList.contains('show')); }
 function showDepWait(amount, phone){
   const el = depWaitEl();
-  const sub = $('depWaitSub'); if (sub) sub.textContent = fmtUGX(amount) + ' to ' + phone;
+  const m = $('depWaitMsg'); if (m) m.textContent = DEP_WAIT_TEXT; const vb = $('depWaitVerify'); if (vb) vb.disabled = false;
   if (!depWaitOpen()) { el.classList.add('show'); lockBodyScroll(); dlgOpened(); }
 }
 function hideDepWait(){
@@ -5455,19 +5456,18 @@ function setDepButtons(showVerify, showClose){
   if (c) { c.style.display = showClose ? 'block' : 'none'; c.setAttribute('onclick', 'closeDepositStatusModal(' + (c.textContent === 'Back to Home') + ')'); }
 }
 window.verifyDepositNow = async function(){
-  const btn = $('depVerifyBtn');
+  const btn = $('depWaitVerify');
   if (!_depActiveDepositId || _depPollDone || !btn || btn.disabled) return;
-  btn.disabled = true; btn.textContent = 'Checking…';
+  btn.disabled = true;
   const settled = await applyDepositStatusResult(await depositStatusCheck(_depActiveDepositId));
-  if (settled) return;                       // setDep* already reset the buttons
-  notify('Not confirmed yet. Approve the payment prompt on your phone, then tap Verify again.');
-  // The cooldown runs from the ANSWER, not the tap, so a slow provider does
-  // not let taps queue up behind it.
+  if (settled) return;
+  // Not paid yet: say so inside the pop-up for a moment, then offer Verify again. The cooldown runs from the ANSWER, so taps cannot queue up behind a slow provider.
+  const m = $('depWaitMsg'); if (m) m.textContent = 'Not confirmed yet. Approve the prompt on your phone, then tap Verify again.';
   setTimeout(() => {
     if (_depPollDone) return;
-    const b = $('depVerifyBtn');
-    if (b) { b.disabled = false; b.textContent = 'Verify'; }
-  }, DEP_VERIFY_COOLDOWN_MS);
+    const mm = $('depWaitMsg'); if (mm) mm.textContent = DEP_WAIT_TEXT;
+    const b = $('depWaitVerify'); if (b) b.disabled = false;
+  }, DEP_VERIFY_COOLDOWN_MS + 1500);
 };
 function setDepositStatusPending(amount, phone){ openDepositStatusModal(amount, phone); }
 var _depSuccessRedirectTimer = null;
