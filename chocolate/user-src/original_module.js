@@ -5359,6 +5359,7 @@ function depWaitEl(){
   el.innerHTML = '<div class="notify-card" role="alertdialog" aria-live="polite" aria-label="Approve payment on your phone">'
     + '<span class="notify-ic"><svg class="dep-wait-ring" viewBox="0 0 50 50" aria-hidden="true"><circle class="t" cx="25" cy="25" r="20"/><circle class="a" cx="25" cy="25" r="20"/></svg></span>'
     + '<div class="notify-msg" id="depWaitMsg">' + DEP_WAIT_TEXT + '</div>'
+    + '<div class="dep-wait-more" id="depWaitMore">More people are paying, please wait<span class="dep-wait-dots" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span></div>'
     + '<button class="notify-ok" id="depWaitVerify" type="button" onclick="verifyDepositNow()">Verify</button></div>';
   document.body.appendChild(el);
   return el;
