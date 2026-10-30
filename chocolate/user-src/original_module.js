@@ -5359,14 +5359,23 @@ function depWaitEl(){
   el.innerHTML = '<div class="notify-card" role="alertdialog" aria-live="polite" aria-label="Approve payment on your phone">'
     + '<span class="notify-ic"><svg class="dep-wait-ring" viewBox="0 0 50 50" aria-hidden="true"><circle class="t" cx="25" cy="25" r="20"/><circle class="a" cx="25" cy="25" r="20"/></svg></span>'
     + '<div class="notify-msg" id="depWaitMsg">' + DEP_WAIT_TEXT + '</div>'
-    + '<div class="dep-wait-more" id="depWaitMore">More people are paying, please wait<span class="dep-wait-dots" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span></div>'
+    + '<div class="dep-wait-more" id="depWaitMore">More people are paying, please wait</div>'
+    + '<div class="dep-wait-loader" id="depWaitLoader" aria-hidden="true"><i></i><i></i><i></i></div>'
     + '<button class="notify-ok" id="depWaitVerify" type="button" onclick="verifyDepositNow()">Verify</button></div>';
   document.body.appendChild(el);
   return el;
 }
 function depWaitOpen(){ return !!($('depWaitBg') && $('depWaitBg').classList.contains('show')); }
+// Four three-dot animations (a wave, a swap, a growing pulse, a tumbling triangle). Each time the waiting pop-up opens it shows a different one than last time, chosen at random.
+function pickDepDots(){
+  let last = -1; try { last = Number(localStorage.getItem('chocolate_dep_dots')); } catch (_) {}
+  let n; do { n = Math.floor(Math.random() * 4); } while (n === last);
+  try { localStorage.setItem('chocolate_dep_dots', String(n)); } catch (_) {}
+  return n + 1;
+}
 function showDepWait(amount, phone){
   const el = depWaitEl();
+  const ld = $('depWaitLoader'); if (ld) ld.className = 'dep-wait-loader v' + pickDepDots();
   const m = $('depWaitMsg'); if (m) m.textContent = DEP_WAIT_TEXT; const vb = $('depWaitVerify'); if (vb) vb.disabled = false;
   if (!depWaitOpen()) { el.classList.add('show'); lockBodyScroll(); dlgOpened(); }
 }
