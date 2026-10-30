@@ -5370,9 +5370,12 @@ function depWaitOpen(){ return !!($('depWaitBg') && $('depWaitBg').classList.con
 // Five ring / dot-spinner shapes for the top of the pop-up (two spinning arcs, two floating ovals, a ring of three arcs, twelve fading dots, one breathing dot).
 // One is chosen at random each time the pop-up opens, never the same as last time -- on its own, apart from the choice of the three-dot animation below.
 var DEP_RINGS = [
-  '<svg class="dwr r1" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" pathLength="100" stroke-dasharray="36 14"/></svg>',
-  '<svg class="dwr r2" viewBox="0 0 60 60"><ellipse class="b" cx="30" cy="17" rx="24" ry="11"/><ellipse class="s" cx="30" cy="46" rx="12" ry="5.5"/></svg>',
-  '<svg class="dwr r3" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" pathLength="100" stroke-dasharray="17 7 30 7 30 9"/></svg>',
+  // 1: three arcs turning evenly (owner's recording: 120 degrees a second)
+  '<svg class="dwr r1" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20.5" stroke-dasharray="20.2 21.65"/></svg>',
+  // 2: a big oval and a small oval that come together, nest, and part again (recording: 0.73 s a round)
+  '<svg class="dwr r2" viewBox="120 60 330 290"><ellipse class="b" cx="286.5" cy="141" rx="122" ry="61.4"/><ellipse class="s" cx="287" cy="285.5" rx="61.4" ry="31"/></svg>',
+  // 3: a gradient ring of two long arcs that opens, swings round and closes again (recording: 0.87 s a round)
+  '<svg class="dwr r3" viewBox="0 0 50 50"><defs><linearGradient id="dwg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d8a42e"/><stop offset="1" stop-color="#5e3a1b"/></linearGradient></defs><circle cx="25" cy="25" r="22.4" pathLength="360" stroke="url(#dwg)"/></svg>',
   '<svg class="dwr r4" viewBox="0 0 50 50">' + Array.from({ length: 12 }, (_, i) => '<circle cx="25" cy="5.5" r="3" transform="rotate(' + (i * 30) + ' 25 25)" style="opacity:' + (0.12 + 0.88 * i / 11).toFixed(2) + '"/>').join('') + '</svg>',
   '<svg class="dwr r5" viewBox="0 0 50 50"><circle cx="25" cy="25" r="13"/></svg>'
 ];
