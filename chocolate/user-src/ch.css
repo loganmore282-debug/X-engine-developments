@@ -478,12 +478,29 @@ html.mg-gut .mg-top{margin-right:-15px;}
 /* Deposit waiting pop-up: the notice dialog's own look (.notify-card / .notify-msg / .notify-ok), with a turning ring where the warning sign is, and a Verify button. */
 .dep-wait-bg{z-index:445;}
 .dep-wait-bg .notify-ic{display:flex;align-items:center;justify-content:center;width:auto;height:44px;margin:0 0 18px;}
-.dep-wait-ring{display:block;width:44px;height:44px;overflow:visible;}
-.dep-wait-ring circle{fill:none;stroke-width:4;}
-.dep-wait-ring .t{stroke:#e2d8ca;}
-.dep-wait-ring .a{stroke:#5e3a1b;stroke-linecap:round;stroke-dasharray:34 92;transform-origin:25px 25px;animation:depWaitSpin .9s linear infinite;will-change:transform;}
-@keyframes depWaitSpin{to{transform:rotate(360deg);}}
-.dep-wait-bg .notify-ok:disabled{opacity:.7;}
+.dep-wait-ringbox{display:flex;align-items:center;justify-content:center;width:46px;height:46px;}
+.dwr{display:block;width:46px;height:46px;overflow:visible;will-change:transform;}
+.dwr circle,.dwr ellipse{fill:none;stroke:#5e3a1b;stroke-width:5;stroke-linecap:round;}
+/* 1: two thick arcs spinning */
+.dwr.r1{animation:dwrSpin 1s linear infinite;}
+.dwr.r1 circle{stroke:#6b4a30;stroke-dashoffset:0;}
+/* 2: a big oval and a small oval, floating and breathing out of step */
+.dwr.r2 .b{stroke:#5e3a1b;transform-origin:30px 17px;animation:dwrOvalB 1.4s ease-in-out infinite;}
+.dwr.r2 .s{stroke:#d8a42e;stroke-width:4;transform-origin:30px 46px;animation:dwrOvalS 1.4s ease-in-out infinite;}
+@keyframes dwrOvalB{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(.8,.75) translateY(3px);opacity:.55;}}
+@keyframes dwrOvalS{0%,100%{transform:scale(.8,.75);opacity:.55;}50%{transform:scale(1.15,1.1) translateY(-2px);opacity:1;}}
+/* 3: a ring of three arcs, the short one leading, turning with a little surge */
+.dwr.r3{animation:dwrSpinEase 1.5s cubic-bezier(.45,.05,.55,.95) infinite;}
+.dwr.r3 circle{stroke:#d8a42e;}
+/* 4: twelve dots, the trail fading behind the leader */
+.dwr.r4{animation:dwrSpin12 1s steps(12) infinite;}
+.dwr.r4 circle{fill:#2a1709;stroke:none;}
+/* 5: one dot breathing */
+.dwr.r5 circle{fill:#2a1709;stroke:none;transform-origin:25px 25px;animation:dwrBreath 1.2s ease-in-out infinite;}
+@keyframes dwrSpin{to{transform:rotate(360deg);}}
+@keyframes dwrSpinEase{to{transform:rotate(360deg);}}
+@keyframes dwrSpin12{to{transform:rotate(360deg);}}
+@keyframes dwrBreath{0%,100%{transform:scale(.45);}50%{transform:scale(1.35);}}
 /* A grey line under the words, then three dots in one of four animations (chosen at random each time the pop-up opens, class v1..v4):
    v1 a wave (dark to light), v2 the first two swap places, v3 the dots grow and shrink one after another, v4 the dots tumble between a line and a triangle. */
 .dep-wait-more{margin:-6px 0 14px;font:400 12px/1.4 Roboto,system-ui,sans-serif;color:#8a7762;}
@@ -508,5 +525,5 @@ html.mg-gut .mg-top{margin-right:-15px;}
 @keyframes dwTriL{0%,100%{transform:translate3d(0,0,0);}50%{transform:translate3d(9px,6px,0);}}
 @keyframes dwTriM{0%,100%{transform:translate3d(0,0,0);}50%{transform:translate3d(0,-10px,0);}}
 @keyframes dwTriR{0%,100%{transform:translate3d(0,0,0);}50%{transform:translate3d(-9px,6px,0);}}
-@media (prefers-reduced-motion:reduce){.dep-wait-ring .a{animation-duration:2.4s;}.dep-wait-loader i{animation:none !important;}}
+@media (prefers-reduced-motion:reduce){.dwr,.dwr *,.dep-wait-loader i{animation:none !important;}}
 /* CH-END */

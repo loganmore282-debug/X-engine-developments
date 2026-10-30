@@ -5357,7 +5357,7 @@ function depWaitEl(){
   el = document.createElement('div');
   el.id = 'depWaitBg'; el.className = 'notify-bg dep-wait-bg';
   el.innerHTML = '<div class="notify-card" role="alertdialog" aria-live="polite" aria-label="Approve payment on your phone">'
-    + '<span class="notify-ic"><svg class="dep-wait-ring" viewBox="0 0 50 50" aria-hidden="true"><circle class="t" cx="25" cy="25" r="20"/><circle class="a" cx="25" cy="25" r="20"/></svg></span>'
+    + '<span class="notify-ic"><span class="dep-wait-ringbox" id="depWaitRing" aria-hidden="true"></span></span>'
     + '<div class="notify-msg" id="depWaitMsg">' + DEP_WAIT_TEXT + '</div>'
     + '<div class="dep-wait-more" id="depWaitMore">More people are paying, please wait</div>'
     + '<div class="dep-wait-loader" id="depWaitLoader" aria-hidden="true"><i></i><i></i><i></i></div>'
@@ -5367,6 +5367,21 @@ function depWaitEl(){
 }
 function depWaitOpen(){ return !!($('depWaitBg') && $('depWaitBg').classList.contains('show')); }
 // Four three-dot animations (a wave, a swap, a growing pulse, a tumbling triangle). Each time the waiting pop-up opens it shows a different one than last time, chosen at random.
+// Five ring / dot-spinner shapes for the top of the pop-up (two spinning arcs, two floating ovals, a ring of three arcs, twelve fading dots, one breathing dot).
+// One is chosen at random each time the pop-up opens, never the same as last time -- on its own, apart from the choice of the three-dot animation below.
+var DEP_RINGS = [
+  '<svg class="dwr r1" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" pathLength="100" stroke-dasharray="36 14"/></svg>',
+  '<svg class="dwr r2" viewBox="0 0 60 60"><ellipse class="b" cx="30" cy="17" rx="24" ry="11"/><ellipse class="s" cx="30" cy="46" rx="12" ry="5.5"/></svg>',
+  '<svg class="dwr r3" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" pathLength="100" stroke-dasharray="17 7 30 7 30 9"/></svg>',
+  '<svg class="dwr r4" viewBox="0 0 50 50">' + Array.from({ length: 12 }, (_, i) => '<circle cx="25" cy="5.5" r="3" transform="rotate(' + (i * 30) + ' 25 25)" style="opacity:' + (0.12 + 0.88 * i / 11).toFixed(2) + '"/>').join('') + '</svg>',
+  '<svg class="dwr r5" viewBox="0 0 50 50"><circle cx="25" cy="25" r="13"/></svg>'
+];
+function pickDepRing(){
+  let last = -1; try { last = Number(localStorage.getItem('chocolate_dep_ring')); } catch (_) {}
+  let n; do { n = Math.floor(Math.random() * DEP_RINGS.length); } while (n === last);
+  try { localStorage.setItem('chocolate_dep_ring', String(n)); } catch (_) {}
+  return n;
+}
 function pickDepDots(){
   let last = -1; try { last = Number(localStorage.getItem('chocolate_dep_dots')); } catch (_) {}
   let n; do { n = Math.floor(Math.random() * 4); } while (n === last);
@@ -5376,6 +5391,7 @@ function pickDepDots(){
 function showDepWait(amount, phone){
   const el = depWaitEl();
   const ld = $('depWaitLoader'); if (ld) ld.className = 'dep-wait-loader v' + pickDepDots();
+  const rg = $('depWaitRing'); if (rg) rg.innerHTML = DEP_RINGS[pickDepRing()];
   const m = $('depWaitMsg'); if (m) m.textContent = DEP_WAIT_TEXT; const vb = $('depWaitVerify'); if (vb) vb.disabled = false;
   if (!depWaitOpen()) { el.classList.add('show'); lockBodyScroll(); dlgOpened(); }
 }
