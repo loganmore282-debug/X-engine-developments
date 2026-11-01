@@ -1,9 +1,12 @@
 'use strict';
 const crypto = require('crypto');
-const IDLE_MS = 4 * 60 * 60 * 1000;
+// Owner: a member's login has NO time limit (no idle logout, no maximum age): it ends only when the member logs out, changes the password, or is banned or deleted.
+// The stored times are therefore ten years, not infinity, so the date arithmetic below stays valid.
+const NO_LIMIT_MS = 3650 * 24 * 60 * 60 * 1000;
+const IDLE_MS = NO_LIMIT_MS;
 const ADMIN_IDLE_MS = 2 * 60 * 60 * 1000;
 const MAX_MS = 8 * 60 * 60 * 1000; // admin sessions
-const MEMBER_MAX_MS = 4 * 60 * 60 * 1000;
+const MEMBER_MAX_MS = NO_LIMIT_MS;
 const millis = value => value instanceof Date ? value.getTime() : Number(value) || Date.parse(value) || 0;
 function validSession(session, now = Date.now(), idleMs = IDLE_MS) {
   return !!session && !session.revoked && millis(session.expiresAt) > now &&

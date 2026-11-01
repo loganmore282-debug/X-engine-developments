@@ -2510,12 +2510,13 @@ html.mg-gut .mg-top{margin-right:-15px;}
 /* V2-END */
 </style>
 <script data-chocolate-idle>
-// Where a login is kept. localStorage, so it survives closing the app or the browser (the server still ends it after its own idle/maximum time);
+// Where a login is kept. localStorage, so it survives closing the app or the browser (it has no time limit: it ends only on log out or when the server ends it);
 // sessionStorage when the browser does not allow localStorage. (sessionStorage alone ended every login the moment the tab or the app was closed.)
 window.chocolateKeep = (function(){ try { var k = '__chocolate_probe'; localStorage.setItem(k, '1'); localStorage.removeItem(k); return localStorage; } catch (_) { try { return sessionStorage; } catch (__) { return null; } } })();
 // Real interaction renews activity; polling, focus, and visibility never do.
 window.createChocolateIdleSession = function(key, onExpire, onActivity){
-  var IDLE = 4 * 60 * 60 * 1000, MAX = 4 * 60 * 60 * 1000;
+  // Owner: a member's login has NO time limit. It stays until the member logs out (or the server ends it: password change, ban, delete).
+  var IDLE = Infinity, MAX = Infinity;
   var state = null, lastPulse = 0, lastSave = 0, timer = null;
   function save(force){
     if (!state || (!force && Date.now() - lastSave < 1000)) return;
@@ -2538,7 +2539,7 @@ window.createChocolateIdleSession = function(key, onExpire, onActivity){
     if (!Number.isFinite(state.started) || !Number.isFinite(state.last)) return expire();
     if (state.last > now && state.last <= now + SKEW) state.last = now;
     if (state.started > now && state.started <= now + SKEW) state.started = now;
-    if (state.last > now || now < state.started || now - state.last >= IDLE || now - state.started >= MAX) return expire();
+    // No idle or age limit, and a phone clock that is wrong or was corrected never ends a login.
     return true;
   }
   function pulse(){

@@ -393,10 +393,10 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
       offset = 0;
     }
     ok(begin(), 'restarted'); offset = -61 * 1000;
-    eq(w.eval('_memberSession.check()'), false, 'a backward jump beyond the 60 second limit still ends the session');
-    ok(t.some(m => /session ended/i.test(m)), 'and says so');
+    ok(w.eval('_memberSession.check()'), 'a backward jump of the phone clock no longer ends the session (no time limit)');
     offset = 0; ok(begin(), 'restarted');
-    offset = 4 * 60 * 60 * 1000 + 60000; eq(w.eval('_memberSession.check()'), false, 'four hours of genuine inactivity still ends it');
+    offset = 4 * 60 * 60 * 1000 + 60000; ok(w.eval('_memberSession.check()'), 'four hours of inactivity no longer end it (no time limit)');
+    offset = 400 * 24 * 60 * 60 * 1000; ok(w.eval('_memberSession.check()'), 'even a year of inactivity does not end it');
     await closeSoon(dom);
   }
   console.log('PASS: login and sign-up wiring (' + checks + ' checks' + (built ? ', built bundle' : ', source') + ')');
