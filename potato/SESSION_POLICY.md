@@ -20,7 +20,7 @@ opaque expiring token, like staff login. Existing non-browser master-key API
 integration remains supported. No payment transaction is cancelled by logout;
 provider callbacks and reconciliation still run server-side.
 
-`session-policy.js` exports `IDLE_MS` (1 hour) for members and `ADMIN_IDLE_MS`
+`session-policy.js` exports `IDLE_MS` (ten years, which stands for no limit) for members and `ADMIN_IDLE_MS`
 (15 minutes) for admins. Admin validation and activity updates explicitly use
 the admin limit; `MAX_MS` remains 8 hours for both. Each panel's inline idle
 controller matches its server limit. Changing the member limit does not reset
@@ -61,3 +61,5 @@ Automatic sign-out retains the phone, clears the password before asynchronous
 cleanup, and explains session rejection. A manual login waits for pending
 logout and account initialization; failed initialization remains retryable.
 Autofill waits for a valid complete phone and password before submitting.
+
+**Update:** member logins now have no time limit (no idle logout, no maximum age); only an explicit logout, password change, ban or deletion ends a member session. Admin limits are unchanged.

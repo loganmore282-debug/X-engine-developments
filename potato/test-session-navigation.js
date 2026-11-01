@@ -42,13 +42,10 @@ function load(panel){
   assert(w.localStorage.getItem('potato_member_session'));
   now+=(4*60-16)*60*1000-1;w.dispatchEvent(new w.Event('pageshow'));await tick();
   assert.equal(signedOut,0,'member remains signed in immediately before four hours');
-  now++;w.dispatchEvent(new w.Event('pageshow'));await tick();
-  assert.equal(signedOut,1);assert.equal(w.localStorage.getItem('potato_member_session'),null);
-  assert.equal(w._suppressAutofillLogin,false,'idle expiry preserves existing picker-assisted login');
-  assert.equal(w.sessionStorage.getItem('potato_relogin_required'),null);
-  assert.equal(w._triedAutoSignIn,true,'silent stored-password login stays disabled');
-  assert.equal(w.document.querySelector('#app').style.display,'none');
-  assert.equal(w.document.querySelector('#authScreen').style.display,'');
+  now+=2;w.dispatchEvent(new w.Event('pageshow'));await tick();
+  assert.equal(signedOut,0,'and just after four hours: a member login has no time limit');
+  now+=30*24*60*60*1000;w.dispatchEvent(new w.Event('pageshow'));await tick();
+  assert.equal(signedOut,0,'and a month later');assert(w.localStorage.getItem('potato_member_session'));
   await w.doLogout();
   assert.equal(w._suppressAutofillLogin,true,'deliberate logout still suppresses autofill auto-submit');
   assert.equal(w.sessionStorage.getItem('potato_relogin_required'),'1');

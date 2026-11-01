@@ -3,10 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { IDLE_MS, ADMIN_IDLE_MS, MAX_MS, MEMBER_MAX_MS, createMemberSession, checkMemberSession, revokeMemberSession, revokeAllMemberSessions, tokenKey, validSession } = require('./session-policy');
-assert.equal(IDLE_MS, 4 * 60 * 60 * 1000, 'member inactivity limit is exactly four hours');
+assert.equal(IDLE_MS, 3650 * 24 * 60 * 60 * 1000, 'a member has no inactivity limit (ten years stands for none)');
 assert.equal(ADMIN_IDLE_MS, 2 * 60 * 60 * 1000, 'admin inactivity is two hours');
 assert.equal(MAX_MS, 8 * 60 * 60 * 1000, 'admin absolute lifetime remains eight hours');
-assert.equal(MEMBER_MAX_MS, 4 * 60 * 60 * 1000, 'member sessions end after four hours');
+assert.equal(MEMBER_MAX_MS, 3650 * 24 * 60 * 60 * 1000, 'a member session has no maximum age (ten years stands for none)');
 function fakeDb(){
   const rows = new Map();
   const mk = key => ({ id: key, data: () => rows.get(key), ref: { update: async v => { Object.assign(rows.get(key), v); } } });
@@ -35,18 +35,12 @@ async function serverChecks(){
   const ok = await checkMemberSession(db, token, false, now);
   assert.deepEqual([ok.uid, ok.phone, ok.auth_time], ['member-a', '0770000001', now / 1000]);
   assert(await checkMemberSession(db, token, false, now + 16 * 60 * 1000), 'member remains signed in past the old 15-minute limit');
-  assert(await checkMemberSession(db, token, false, now + IDLE_MS - 1));
-  assert.equal(+db.rows.get(tokenKey(token)).lastActiveAt, now, 'polling cannot extend idle time');
-  assert.equal(await checkMemberSession(db, token, true, now + IDLE_MS), null, 'expired session cannot be revived by a late heartbeat');
-  assert.equal(await checkMemberSession(db, token, false, now + IDLE_MS), null);
-  // activity renews the idle window, never the absolute lifetime
-  db = fakeDb(); const a = await createMemberSession(db, 'active-member', '0770000002', now), touch = now + 45 * 60 * 1000;
-  assert(await checkMemberSession(db, a.token, true, touch), 'interaction after 45 minutes renews a member session');
-  assert(await checkMemberSession(db, a.token, false, now + MEMBER_MAX_MS - 1));
-  assert.equal(await checkMemberSession(db, a.token, true, now + MEMBER_MAX_MS), null, 'late activity cannot revive an ended session');
+  // no time limit: a month of silence, a year, even five years, and the member is still signed in; only revocation ends a session
+  const DAY = 24 * 60 * 60 * 1000;
+  for (const d of [1 / 6, 1, 30, 365, 5 * 365]) assert(await checkMemberSession(db, token, false, now + d * DAY), 'still signed in after ' + d + ' days without activity');
+  assert(await checkMemberSession(db, token, true, now + 400 * DAY), 'a heartbeat after 400 days is accepted');
   db = fakeDb(); const b = await createMemberSession(db, 'long', '0770000003', now);
-  for (let t = now + 60000; t < now + MEMBER_MAX_MS; t += 60000) assert(await checkMemberSession(db, b.token, true, t));
-  assert.equal(await checkMemberSession(db, b.token, true, now + MEMBER_MAX_MS), null, 'activity never extends the 4-hour maximum');
+  for (let t = now + 60000; t < now + 12 * 60 * 60 * 1000; t += 3600000) assert(await checkMemberSession(db, b.token, true, t), 'activity keeps working past the old four-hour end');
   // revocation
   db = fakeDb(); const r = await createMemberSession(db, 'member-b', '0770000004', now), r2 = await createMemberSession(db, 'member-b', '0770000004', now), other = await createMemberSession(db, 'member-c', '0770000005', now);
   await revokeMemberSession(db, r.token);
@@ -62,13 +56,35 @@ async function serverChecks(){
     assert.equal(await checkMemberSession(db, bad, false, now), null, 'unknown or malformed token is refused: ' + String(bad).slice(0, 10));
   assert.equal(validSession({expiresAt:new Date(now+MAX_MS)},now),false,'old admin sessions without activity metadata expire');
 }
+function clientChecksUser(){
+  const built = process.argv.includes('--built');
+  const html = fs.readFileSync(__dirname+(built?'/user/index.html':'/user-src/index.html'),'utf8');
+  if (built) assert.equal(html,fs.readFileSync(__dirname+'/user/share.html','utf8'),'referral entry ships the same member policy');
+  const user = html.match(/<script data-potato-idle>([\s\S]*?)<\/script>/)[1];
+  assert(user.includes('IDLE = Infinity, MAX = Infinity'), 'the member app has no idle or maximum time');
+  let now=1800000000000, expired=0, pulses=0;
+  const listeners={},store=new Map();
+  const document={hidden:false,addEventListener:(name,fn)=>listeners[name]=fn};
+  const window={addEventListener:(name,fn)=>listeners[name]=fn};
+  const context={window,document,Date:{now:()=>now},Number,JSON,Promise,setInterval:()=>1,clearInterval:()=>{},sessionStorage:{getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)}};
+  vm.runInNewContext(user,context);
+  const session=window.createPotatoIdleSession('test',()=>expired++,()=>pulses++);
+  assert(session.begin('alice',now,true));
+  const DAY=86400000;
+  for (const d of [0.2,1,30,400]) { now+=d*DAY; assert(session.check(), 'still signed in after more days of silence: '+d); }
+  listeners.pointerdown({isTrusted:true}); assert.equal(expired,0,'a tap after a year of silence does not sign the member out');
+  now-=3*DAY; assert(session.check(),'a phone clock set back by days never signs the member out'); assert.equal(expired,0);
+  assert(session.begin('alice',now,false),'reopening the app keeps the saved login'); assert.equal(expired,0);
+  assert.equal(session.begin('nan',NaN,true),false,'a login with no usable start time is refused');
+  store.set('test',JSON.stringify({identity:'corrupt',started:now}));assert.equal(session.begin('corrupt',now,false),false);
+}
 function clientChecks(panel, idleMs, maxMs){
   const built = process.argv.includes('--built');
   const html = fs.readFileSync(__dirname+(built?'/user/index.html':'/user-src/index.html'),'utf8');
   if (built) assert.equal(html,fs.readFileSync(__dirname+'/user/share.html','utf8'),'referral entry ships the same member policy');
   const user = html.match(/<script data-potato-idle>([\s\S]*?)<\/script>/)[1];
   const admin = fs.readFileSync(__dirname+'/admin-src/index.html','utf8').match(/<script data-potato-idle>([\s\S]*?)<\/script>/)[1];
-  assert(user.includes('IDLE = 4 * 60 * 60 * 1000, MAX = 4 * 60 * 60 * 1000'));
+  assert(user.includes('IDLE = Infinity, MAX = Infinity'), 'the member app has no idle or maximum time');
   assert(admin.includes('IDLE = 2 * 60 * 60 * 1000'));
   let now=1800000000000, expired=0, pulses=0;
   const listeners={},store=new Map();
@@ -101,7 +117,7 @@ function clientChecks(panel, idleMs, maxMs){
   assert.equal(session.begin('legacy',0,false),false);
   store.set('test',JSON.stringify({identity:'corrupt',started:now}));assert.equal(session.begin('corrupt',now,false),false);
 }
-(async()=>{await serverChecks();clientChecks('user',4*60*60*1000,4*60*60*1000);clientChecks('admin',2*60*60*1000,8*60*60*1000);console.log('PASS: member 4-hour idle and maximum / admin 15-minute idle, 8-hour maximum, activity-only renewal, refresh/hidden tabs, revocation, migration and account isolation');})().catch(e=>{console.error(e);process.exitCode=1;});
+(async()=>{await serverChecks();clientChecksUser();clientChecks('admin',2*60*60*1000,8*60*60*1000);console.log('PASS: member sessions have no time limit / admin 15-minute idle, 8-hour maximum, activity-only renewal, refresh/hidden tabs, revocation, migration and account isolation');})().catch(e=>{console.error(e);process.exitCode=1;});
 // ── remembered sessions (speed): one read serves many requests, but revocation and expiry still bite at once ──
 (async () => {
   const rows = new Map(); let reads = 0;

@@ -2413,7 +2413,8 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 window.potatoKeep = (function(){ try { var k = '__potato_probe'; localStorage.setItem(k, '1'); localStorage.removeItem(k); return localStorage; } catch (_) { try { return sessionStorage; } catch (__) { return null; } } })();
 // Real interaction renews activity; polling, focus, and visibility never do.
 window.createPotatoIdleSession = function(key, onExpire, onActivity){
-  var IDLE = 4 * 60 * 60 * 1000, MAX = 4 * 60 * 60 * 1000;
+  // Owner: a member's login has NO time limit. It stays until the member logs out (or the server ends it: password change, ban, delete).
+  var IDLE = Infinity, MAX = Infinity;
   var state = null, lastPulse = 0, lastSave = 0, timer = null;
   function save(force){
     if (!state || (!force && Date.now() - lastSave < 1000)) return;
@@ -2436,7 +2437,7 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
     if (!Number.isFinite(state.started) || !Number.isFinite(state.last)) return expire();
     if (state.last > now && state.last <= now + SKEW) state.last = now;
     if (state.started > now && state.started <= now + SKEW) state.started = now;
-    if (state.last > now || now < state.started || now - state.last >= IDLE || now - state.started >= MAX) return expire();
+    // No idle or age limit, and a phone clock that is wrong or was corrected never ends a login.
     return true;
   }
   function pulse(){
