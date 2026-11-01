@@ -5370,15 +5370,64 @@ function depWaitOpen(){ return !!($('depWaitBg') && $('depWaitBg').classList.con
 // Five ring / dot-spinner shapes for the top of the pop-up (two spinning arcs, two floating ovals, a ring of three arcs, twelve fading dots, one breathing dot).
 // One is chosen at random each time the pop-up opens, never the same as last time -- on its own, apart from the choice of the three-dot animation below.
 var DEP_RINGS = [
-  // 1: three arcs turning evenly (owner's recording: 120 degrees a second)
-  '<svg class="dwr r1" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20.5" stroke-dasharray="20.2 21.65"/></svg>',
-  // 2: a big oval and a small oval that come together, nest, and part again (recording: 0.73 s a round)
-  '<svg class="dwr r2" viewBox="120 60 330 290"><ellipse class="b" cx="286.5" cy="141" rx="122" ry="61.4"/><ellipse class="s" cx="287" cy="285.5" rx="61.4" ry="31"/></svg>',
-  // 3: a gradient ring of two long arcs that opens, swings round and closes again (recording: 0.87 s a round)
-  '<svg class="dwr r3" viewBox="0 0 50 50"><defs><linearGradient id="dwg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d8a42e"/><stop offset="1" stop-color="#5e3a1b"/></linearGradient></defs><circle cx="25" cy="25" r="22.4" pathLength="360" stroke="url(#dwg)"/></svg>',
+  // 1: three arcs turning evenly (owner's recording, measured at 60 fps: 2 degrees a frame = 120 degrees a second; each arc 72 degrees with its round ends, 48 degrees between)
+  '<svg class="dwr r1" viewBox="0 0 50 50"><circle cx="25" cy="25" r="22.74" stroke-dasharray="24.2 23.5"/></svg>',
+  // 2: two rings that swap places: the small one rises and grows into the big one while the big one sinks and shrinks (recording: 42 frames at 60 fps = 0.7 s a swap). Drawn by depRingLoop().
+  '<svg class="dwr r2" viewBox="120 55 330 290"><defs><linearGradient id="dwg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d8a42e"/><stop offset="1" stop-color="#5e3a1b"/></linearGradient></defs><ellipse class="e1" cx="286.5" cy="141" rx="115.9" ry="56" stroke-width="29"/><ellipse class="e2" cx="286.5" cy="285.5" rx="59" ry="28.5" stroke-width="22"/></svg>',
+  // 3: a gradient ring of two arcs; one of its two gaps stays, the other races once round the ring and takes its place (recording: 52 frames = 0.867 s). Drawn by depRingLoop().
+  '<svg class="dwr r3" viewBox="0 0 50 50"><defs><linearGradient id="dwg3" gradientUnits="userSpaceOnUse" x1="6" y1="6" x2="44" y2="44"><stop offset="0" stop-color="#d8a42e"/><stop offset="1" stop-color="#5e3a1b"/></linearGradient></defs><path class="a1" stroke="url(#dwg3)"/><path class="a2" stroke="url(#dwg3)"/></svg>',
   '<svg class="dwr r4" viewBox="0 0 50 50">' + Array.from({ length: 12 }, (_, i) => '<circle cx="25" cy="5.5" r="3" transform="rotate(' + (i * 30) + ' 25 25)" style="opacity:' + (0.12 + 0.88 * i / 11).toFixed(2) + '"/>').join('') + '</svg>',
   '<svg class="dwr r5" viewBox="0 0 50 50"><circle cx="25" cy="25" r="13"/></svg>'
 ];
+// Frame tables read off the owner's recordings (60 fps). Ring 2: [frame, centre y, half height, stroke] of the ring that starts on top (T) and the one that starts below (B); a period is frames 24 to 66.
+var DEP_R2_T = [[24,141,56,29],[33,141,56,29],[34,144.7,56.7,28.6],[36,150.3,57.7,28.2],[38,157.8,59.6,29],[40,166.5,61.3,28.8],[42,176.8,63,28.2],[44,187.1,65,27],[46,197.9,61.3,27.2],[48,217.1,54.4,24.8],[52,248.2,42.6,23.3],[54,258.6,38.7,23.6],[56,266.6,35.7,23.5],[58,272.5,33.5,22.4],[62,277,31.7,22.9],[64,282,29.8,22.3],[66,285.5,28.5,22]];
+var DEP_R2_B = [[24,285.5,28.5,22],[33,285.5,28.5,22],[34,283.6,28.4,22.5],[36,279.8,29.4,23.2],[38,272.9,30,22],[40,263.8,32.7,23.5],[42,249.3,35.4,24.8],[44,229.4,39.1,26.6],[46,208.1,43.4,26.3],[48,191,46.7,28.2],[52,167.8,51.2,28.4],[54,160.4,52.5,29.3],[56,154.6,53.6,28.9],[58,150.3,54.5,29.1],[62,147,55.2,29.5],[64,143.5,55.7,29.2],[66,141,56,29]];
+// Ring 3: [frame, angle in degrees clockwise from the top] of the gap that races round (F) and of the one that settles (G); a period is 52 frames.
+var DEP_R3_F = [[0,20.5],[31,20.5],[32,33.7],[35,50.75],[36,75.5],[38,108],[40,147],[42,191.75],[44,238.5],[46,283.25],[48,320.5],[50,344.75],[52,353.5]];
+var DEP_R3_G = [[0,353.5],[2,350],[4,350],[5,342.7],[6,335.2],[8,331.7],[10,333],[14,336.2],[16,340.7],[20,340],[22,338.7],[31,338.7],[32,340.75],[35,342.75],[36,346],[38,350],[40,354.75],[42,360.2],[44,366.2],[46,371.7],[48,376.2],[50,379],[52,380.5]];
+function depLerp(tab, f){
+  if (f <= tab[0][0]) return tab[0].slice(1);
+  for (let i = 1; i < tab.length; i++) {
+    if (f <= tab[i][0]) {
+      const a = tab[i - 1], b = tab[i], k = (f - a[0]) / (b[0] - a[0] || 1);
+      return a.slice(1).map((v, n) => v + (b[n + 1] - v) * k);
+    }
+  }
+  return tab[tab.length - 1].slice(1);
+}
+function depPolar(r, deg){ const a = deg * Math.PI / 180; return [(25 + r * Math.sin(a)).toFixed(2), (25 - r * Math.cos(a)).toFixed(2)]; }
+function depArc(r, from, to){
+  const len = to - from; if (len <= 0.3) return '';
+  const p0 = depPolar(r, from), p1 = depPolar(r, to);
+  return 'M' + p0[0] + ' ' + p0[1] + 'A' + r + ' ' + r + ' 0 ' + (len > 180 ? 1 : 0) + ' 1 ' + p1[0] + ' ' + p1[1];
+}
+var _depRingRaf = 0;
+function depRingLoop(){
+  cancelAnimationFrame(_depRingRaf); _depRingRaf = 0;
+  const svg = document.querySelector('#depWaitRing .dwr');
+  if (!svg || !(svg.classList.contains('r2') || svg.classList.contains('r3'))) return;
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const t0 = performance.now();
+  const tick = now => {
+    if (!svg.isConnected || !depWaitOpen()) { _depRingRaf = 0; return; }
+    const ms = reduce ? 0 : now - t0;
+    if (svg.classList.contains('r2')) {
+      // one swap = 42 frames at 60 per second = 700 ms; the two rings change roles each time, which looks the same as starting over
+      const f = 24 + (ms % 700) * 0.06;
+      const T = depLerp(DEP_R2_T, f), B = depLerp(DEP_R2_B, f);
+      [[svg.querySelector('.e1'), T], [svg.querySelector('.e2'), B]].forEach(([el, v]) => {
+        el.setAttribute('cy', v[0].toFixed(1)); el.setAttribute('ry', v[1].toFixed(1)); el.setAttribute('rx', (v[1] * 2.07).toFixed(1)); el.setAttribute('stroke-width', v[2].toFixed(1));
+      });
+    } else {
+      // gap widths: 6.2 degrees seen between the round ends, 16.6 between the arcs' own bodies
+      const f = (ms % 866.7) * 0.06, F = depLerp(DEP_R3_F, f)[0], G = depLerp(DEP_R3_G, f)[0], half = 8.3, r = 22.9;
+      svg.querySelector('.a1').setAttribute('d', depArc(r, F + half, G - half));
+      svg.querySelector('.a2').setAttribute('d', depArc(r, G + half, F + 360 - half));
+    }
+    _depRingRaf = requestAnimationFrame(tick);
+  };
+  _depRingRaf = requestAnimationFrame(tick);
+}
 function pickDepRing(){
   let last = -1; try { last = Number(localStorage.getItem('chocolate_dep_ring')); } catch (_) {}
   let n; do { n = Math.floor(Math.random() * DEP_RINGS.length); } while (n === last);
@@ -5395,6 +5444,7 @@ function showDepWait(amount, phone){
   const el = depWaitEl();
   const ld = $('depWaitLoader'); if (ld) ld.className = 'dep-wait-loader v' + pickDepDots();
   const rg = $('depWaitRing'); if (rg) rg.innerHTML = DEP_RINGS[pickDepRing()];
+  depRingLoop();
   const m = $('depWaitMsg'); if (m) m.textContent = DEP_WAIT_TEXT; const vb = $('depWaitVerify'); if (vb) vb.disabled = false;
   if (!depWaitOpen()) { el.classList.add('show'); lockBodyScroll(); dlgOpened(); }
 }
