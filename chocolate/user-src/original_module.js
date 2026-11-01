@@ -5472,17 +5472,44 @@ function pickDepRing(){
   try { localStorage.setItem('chocolate_dep_ring', String(n)); } catch (_) {}
   return n;
 }
+// The fifth dot animation, from the owner's video (368 px square, 82 frames at 33.3 per second = 2.46 s a round): ONE dark dot splits into three that fly apart, turn together,
+// and melt back into one (a "gooey" blur-and-threshold: blur 32.8, cut at 0.306, fitted on the video). Per frame, in the video's own pixels: how far the three dots are
+// from their middle (R), the size of each dot (r), how far the middle drifts (X, Y) and the angle they have turned (T, radians). Drawn by depGooLoop().
+var DEP_GOO = { R: [13.9, 21.8, 22.9, 25.9, 28.2, 33.0, 33.6, 37.2, 41.1, 43.9, 48.3, 53.7, 59.2, 65.9, 70.8, 77.3, 81.8, 84.1, 91.5, 98.0, 102.5, 107.4, 111.1, 114.5, 117.1, 119.5, 120.9, 122.4, 123.4, 123.1, 124.3, 124.1, 123.2, 121.8, 123.3, 124.5, 124.9, 125.4, 124.8, 124.9, 124.8, 125.0, 124.5, 125.3, 124.5, 122.8, 122.5, 122.0, 120.9, 119.9, 117.9, 115.2, 112.6, 109.0, 105.4, 100.3, 94.0, 88.0, 82.3, 78.9, 72.6, 65.5, 58.8, 53.7, 47.2, 45.1, 39.2, 37.2, 33.7, 31.3, 28.3, 26.7, 26.3, 21.9, 14.0, 14.4, 14.5, 6.8, 7.0, 7.2, 7.4, 7.4], r: [41.1, 41.1, 41.2, 41.6, 41.9, 42.5, 43.0, 43.8, 44.6, 45.4, 46.1, 46.5, 46.8, 47.1, 47.2, 47.4, 47.8, 47.6, 46.9, 45.5, 44.3, 43.5, 42.7, 42.2, 41.8, 41.6, 41.4, 41.2, 40.9, 40.7, 40.5, 40.4, 40.0, 40.0, 40.1, 40.5, 40.6, 40.7, 40.8, 40.9, 40.9, 40.7, 40.5, 40.3, 40.1, 40.0, 40.0, 40.1, 40.3, 40.6, 40.8, 41.0, 41.4, 41.8, 42.4, 43.1, 44.1, 45.0, 45.5, 45.6, 45.6, 45.8, 45.9, 45.9, 45.2, 44.7, 43.7, 43.2, 42.4, 41.8, 41.3, 40.7, 40.4, 40.4, 40.5, 40.4, 40.3, 40.4, 40.5, 40.5, 40.6, 40.6], X: [-0.3, 0.1, 1.0, 2.1, 3.5, 5.0, 6.6, 8.2, 9.3, 10.0, 10.2, 9.8, 8.8, 7.4, 5.9, 4.5, 3.5, 2.5, 2.0, 1.6, 1.5, 1.5, 1.3, 1.1, 0.9, 0.5, -0.2, -1.1, -1.8, -2.6, -3.3, -4.3, -5.0, -5.9, -7.0, -8.1, -9.0, -9.7, -10.1, -10.5, -10.5, -10.2, -9.2, -7.6, -5.7, -3.9, -2.3, -0.9, 0.0, 0.4, 0.3, 0.0, -0.1, -0.4, -0.8, -1.0, -0.7, 0.1, 1.3, 2.8, 4.9, 7.2, 9.9, 12.5, 14.8, 16.4, 17.3, 17.7, 17.4, 16.5, 15.3, 13.6, 11.7, 9.6, 7.4, 5.3, 3.4, 1.6, 0.2, -0.9, -1.5, -1.8], Y: [-2.9, -3.8, -5.5, -6.9, -7.9, -8.5, -8.5, -8.1, -7.2, -5.9, -4.4, -2.8, -1.5, -0.5, 0.0, 0.3, 0.4, 0.5, 0.7, 1.1, 1.9, 2.9, 4.0, 5.2, 6.8, 8.7, 10.0, 10.3, 9.7, 9.0, 8.2, 7.1, 5.6, 4.3, 3.6, 3.2, 2.6, 1.7, 0.8, -0.1, -0.9, -1.5, -2.0, -2.4, -2.3, -2.1, -1.6, -1.5, -1.0, -0.4, 0.2, 0.7, 1.0, 1.4, 1.5, 1.2, 0.5, -0.7, -2.2, -3.6, -4.8, -5.3, -5.3, -4.8, -3.7, -1.9, 0.1, 2.3, 4.4, 6.4, 8.2, 9.6, 10.6, 11.3, 11.6, 11.4, 10.7, 9.6, 8.2, 6.5, 4.7, 3.7], T: [-4.995, -4.595, -4.492, -4.351, -4.238, -4.099, -4.009, -3.879, -3.751, -3.64, -3.526, -3.408, -3.292, -3.167, -3.051, -2.929, -2.809, -2.685, -2.564, -2.446, -2.329, -2.211, -2.094, -1.974, -1.851, -1.736, -1.613, -1.496, -1.377, -1.26, -1.14, -1.021, -0.905, -0.784, -0.659, -0.541, -0.423, -0.303, -0.185, -0.065, 0.053, 0.174, 0.284, 0.407, 0.53, 0.648, 0.769, 0.889, 1.007, 1.13, 1.244, 1.364, 1.484, 1.602, 1.723, 1.841, 1.958, 2.081, 2.202, 2.318, 2.443, 2.558, 2.683, 2.796, 2.899, 3.048, 3.146, 3.26, 3.383, 3.505, 3.621, 3.793, 3.928, 3.984, 4.189, 4.264, 4.475, 4.51, 4.658, 4.614, 4.747, 4.942] };
+var DEP_GOO_SVG = '<svg class="dep-goo" viewBox="0 0 368 368" aria-hidden="true"><defs><filter id="depGooF" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceGraphic" stdDeviation="32.8"/><feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -6.844"/></filter></defs><g filter="url(#depGooF)" fill="#2a1709"><circle r="41"/><circle r="41"/><circle r="41"/></g></svg>';
+var _depGooRaf = 0;
+function depGooLoop(){
+  cancelAnimationFrame(_depGooRaf); _depGooRaf = 0;
+  const svg = document.querySelector('#depWaitLoader .dep-goo');
+  if (!svg) return;
+  const circles = svg.querySelectorAll('circle'), reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches, t0 = performance.now(), N = DEP_GOO.R.length;
+  const at = (tab, f) => { const i = Math.floor(f) % N, j = (i + 1) % N, k = f - Math.floor(f); return tab[i] + (tab[j] - tab[i]) * k; };
+  const tick = now => {
+    if (!svg.isConnected || !depWaitOpen()) { _depGooRaf = 0; return; }
+    const f = reduce ? 0 : ((now - t0) / 30) % N;   // 30 ms a frame
+    const R = at(DEP_GOO.R, f), r = at(DEP_GOO.r, f), cx = 184 + at(DEP_GOO.X, f), cy = 184 + at(DEP_GOO.Y, f), th = at(DEP_GOO.T, f);
+    circles.forEach((c, k) => { const a = th + k * 2 * Math.PI / 3; c.setAttribute('cx', (cx + R * Math.cos(a)).toFixed(1)); c.setAttribute('cy', (cy + R * Math.sin(a)).toFixed(1)); c.setAttribute('r', r.toFixed(1)); });
+    _depGooRaf = requestAnimationFrame(tick);
+  };
+  _depGooRaf = requestAnimationFrame(tick);
+}
 function pickDepDots(){
   let last = -1; try { last = Number(localStorage.getItem('chocolate_dep_dots')); } catch (_) {}
-  let n; do { n = Math.floor(Math.random() * 4); } while (n === last);
+  let n; do { n = Math.floor(Math.random() * 5); } while (n === last);
   try { localStorage.setItem('chocolate_dep_dots', String(n)); } catch (_) {}
   return n + 1;
 }
 function showDepWait(amount, phone){
   const el = depWaitEl();
-  const ld = $('depWaitLoader'); if (ld) ld.className = 'dep-wait-loader v' + pickDepDots();
+  const ld = $('depWaitLoader');
+  if (ld) {
+    const v = pickDepDots();
+    ld.className = 'dep-wait-loader v' + v;
+    ld.innerHTML = v === 5 ? DEP_GOO_SVG : '<i></i><i></i><i></i>';
+  }
   const rg = $('depWaitRing'); if (rg) rg.innerHTML = DEP_RINGS[pickDepRing()];
   depRingLoop();
+  if (ld && ld.querySelector('.dep-goo')) depGooLoop();
   const m = $('depWaitMsg'); if (m) m.textContent = DEP_WAIT_TEXT; const vb = $('depWaitVerify'); if (vb) vb.disabled = false;
   if (!depWaitOpen()) { el.classList.add('show'); lockBodyScroll(); dlgOpened(); }
 }
