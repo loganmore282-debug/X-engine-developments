@@ -2040,6 +2040,24 @@ function showAuthTab(tab){
   if (tab === 'forgot') window._forgotOtp = { otpId: null, ticket: null, phone: '' };
   stopSmsCodeListener();
 }
+// Owner: "there is a bug which shows 2 pages after registration, ie registration page combines with other
+// pages". Once a member is inside the app, the sign-in screen must be put back to a clean Log In page:
+// before this the Sign Up pane (with the phone, the password and the referral code still typed in) stayed
+// the pane that was "on", so it was the page that came back, with those typed values, the next time the
+// sign-in screen showed (after Log Out, an expired session, or a Back press).
+function resetAuthScreen(){
+  try {
+    showAuthTab('login');
+    for (const id of ['regPhone', 'regOtp', 'regPassword', 'regPassword2', 'regReferral',
+                      'forgotPhone', 'forgotOtp', 'forgotPassword', 'forgotPassword2', 'loginPassword']) {
+      const el = $(id); if (el) el.value = '';
+    }
+    window._regOtp = { otpId: null, ticket: null, phone: '' };
+    window._forgotOtp = { otpId: null, ticket: null, phone: '' };
+    setBtnLoading('regBtn', false, 'Register');
+    setBtnLoading('loginBtn', false, 'Log In');
+  } catch (_) {}
+}
 // ── OTP RESEND COOLDOWN ──
 // Shared by every OTP step (registration, forgot-password, add-wallet) so
 // "Resend code" cannot be mashed into a second/third paid SMS the instant
@@ -3160,6 +3178,7 @@ async function enterApp(){
   // own appearance, not this instant paint.
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
+  resetAuthScreen();
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
   if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Login successful ✓')); }
@@ -3310,6 +3329,7 @@ async function bootFromNetwork(uid){
   await withTimeout(_bootPromise, 6000);
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
+  resetAuthScreen();
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
   if (signupFlow) { window._pendingLoginSuccess = false; notify(t('Registration successful ✓')); }
