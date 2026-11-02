@@ -162,6 +162,6 @@ const LOGO = 'data:image/png;base64,iVBORw0KGgo=';
   r = await call(H['POST /admin/pay-channels/delete'], { id: c3 }); eq(r.code, 200, 'owner can delete'); api.dropPayChannelsCache();
   r = await call(H['POST /admin/pay-channels/list'], {}); eq(r.body.channels.length, 2, 'it is gone');
   // wiring
-  ok(/manualPay: manualPayOn,\s+depositAvailable: payAAvailable\(s\) \|\| manualPayOn/.test(src), 'public settings publish manualPay and open Recharge when numbers exist');
+  ok(/manualPay: manualPayOn,\s+depositAvailable: manualPayOn \|\| s\.usdtEnabled === true/.test(src), 'public settings publish manualPay and open Recharge when numbers (or USDT) exist');
   console.log('PASS: manual bank / wallet recharge (' + checks + ' checks)');
 })().catch(e => { console.error(e); process.exitCode = 1; });

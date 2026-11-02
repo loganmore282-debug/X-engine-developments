@@ -792,12 +792,16 @@ const DEFAULT_PRODUCTS = [
 
 // The active settings document is settings/main.
 let _settingsCache = null, _settingsCacheTs = 0;
+// Owner: "remove PesaJet, MarzPay, cards, OTPs -- we are using USDT and manual." Whatever an old database
+// still holds, these can never be switched on again: no SMS codes (registration, payout accounts, password
+// reset), no card payments. Recharges are Bank / Wallet (manual, approved by the admin) and USDT.
+const FORCED_SETTINGS = Object.freeze({ otpVerificationEnabled: false, bankOtpRequired: false, cardDepositEnabled: false });
 async function getSettings() {
   if (_settingsCache && Date.now() - _settingsCacheTs < 60 * 1000) return _settingsCache;
   try {
     const snap = await db.collection('settings').doc('main').get();
     const stored = snap.exists ? snap.data() : {};
-    _settingsCache = Object.assign({}, DEFAULT_SETTINGS, stored);
+    _settingsCache = Object.assign({}, DEFAULT_SETTINGS, stored, FORCED_SETTINGS);
     _mainAllowedHosts = sanitizeAllowedOrigins(stored.allowedOrigins).hosts || [];
     refreshHostPolicy(_settingsCache);
     _settingsCacheTs = Date.now();
@@ -3573,7 +3577,7 @@ app.get('/public/settings', async (req, res) => {
       // removed outright; renamed since "PAY A" no longer means anything
       // once there is no PAY B to contrast it with.)
       manualPay: manualPayOn,
-      depositAvailable: payAAvailable(s) || manualPayOn,
+      depositAvailable: manualPayOn || s.usdtEnabled === true,
       referralRequired: await referralRequiredNow(),
     // How many countries this platform runs in. The app only uses it to add
     // "if you signed up on another country's site, sign in there" to a
@@ -4022,7 +4026,9 @@ app.post('/auth/otp/send', async (req, res) => {
     // flow that keeps asking for a code regardless -- it hands an existing
     // account to whoever asks, and the code is the only proof it is them.
     const sett = await getSettings();
-    if (sett.otpVerificationEnabled === false && purpose !== 'reset') {
+    if (purpose === 'reset')
+      return res.status(503).json({ status: 'error', code: 'OTP_DISABLED', message: 'Please contact Support to reset your password.' });
+    if (sett.otpVerificationEnabled === false) {
       return res.status(503).json({ status: 'error', code: 'OTP_DISABLED', message: 'Verification codes are turned off right now.' });
     }
     let phone;
@@ -9959,7 +9965,8 @@ app.get('/admin/stats', async (req, res) => {
       db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).limit(STATS_SCAN_LIMIT).get(),
       db.collection('withdrawals').where('status', '==', 'pending').limit(STATS_SCAN_LIMIT).get(),
     ]);
-    const pendingDepCount = pendDepSnap.docs.length;
+    // An unpaid Bank / Wallet order (no payment message yet) is not work for the admin, so it is not counted.
+    const pendingDepCount = pendDepSnap.docs.filter(d => { const x = d.data(); return !(x.method === 'manual' && x.status === 'pending' && !x.pastedSms); }).length;
     const pendingWitCount = pendWitSnap.docs.length;
     // In a one-country view the scalar fields stay backward-compatible. In
     // All countries they are null on purpose: UGX + KES is not money. The

@@ -3029,30 +3029,12 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
             <img class="auth-brand-logo" id="forgotBrandLogo" data-auth-brand-logo data-auth-fallback="forgotBrandFallback" alt="" aria-hidden="true" style="display:none;" onerror="this.style.display='none';var f=document.getElementById('forgotBrandFallback');if(f)f.style.display='flex'">
             <span class="auth-brand-fallback" id="forgotBrandFallback" aria-hidden="true">P</span>
           </div>
-          <h1>Reset your password</h1>
-          <p>Follow the steps below to regain access to your account.</p>
+          <h1>Forgot your password?</h1>
+          <p>We will help you get back in.</p>
         </div>
         <div id="forgotFormGroup">
-          <div class="af-v2">
-            <span class="af-prefix" id="forgotDial">+251</span>
-            <input id="forgotPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
-          </div>
-          <div class="af-v2 with-btn">
-            <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 6v5.5c0 4.6 3 7.8 7 9 4-1.2 7-4.4 7-9V6l-7-2.5Z"/><path d="M12 8.5v5M9.5 11h5"/></svg></span>
-            <input id="forgotOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="Enter verification code" autocomplete="one-time-code">
-            <button class="af-inline-btn" id="forgotSendOtpBtn" onclick="doForgotSendOtp()">Send Code</button>
-          </div>
-          <div class="af-v2">
-            <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-            <input id="forgotPassword" type="password" placeholder="New password" autocomplete="new-password">
-            <button class="af-eye" onclick="togglePw('forgotPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
-          </div>
-          <div class="af-v2">
-            <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-            <input id="forgotPassword2" type="password" placeholder="Confirm new password" autocomplete="new-password">
-            <button class="af-eye" onclick="togglePw('forgotPassword2',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
-          </div>
-          <button class="af-btn-v2" id="forgotSubmitBtn" onclick="doForgotSubmit()">Reset Password</button>
+          <p class="af-switch" style="text-align:center;margin:0 0 14px;">To reset your password, please contact Support. They will set a new one for you.</p>
+          <div id="forgotSupportLinks" style="display:flex;flex-direction:column;gap:10px;"></div>
         </div>
         <p class="af-forgot after-btn"><a href="#" onclick="showAuthTab('login');return false;">Back to Log In</a></p>
       </div>

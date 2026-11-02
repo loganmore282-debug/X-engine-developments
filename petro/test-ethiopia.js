@@ -32,7 +32,7 @@ assert.equal(S.fmtMoney(5, 'ETB'), 'Br 5');
 assert.match(member, /var REGION = \{ key: 'et', name: 'Ethiopia', currency: 'ETB', dialCode: '251'/);
 assert.match(member, /languages: \['en','am'\]/);
 assert.match(member, /code: 'am',\s+name: 'Amharic'/);
-assert.equal((shell.match(/id="(login|reg|forgot)Dial">\+251</g) || []).length, 3, 'all three dial chips say +251');
+assert.equal((shell.match(/id="(login|reg|forgot)Dial">\+251</g) || []).length, 2, 'both dial chips (Log In, Sign Up) say +251');
 assert.doesNotMatch(shell, /Dial">\+256</);
 assert.match(shell, /id="langBtn"/, 'language button is back on the sign-in screen');
 assert.match(shell, /Noto\+Sans\+Ethiopic/, 'Ethiopic font is loaded');

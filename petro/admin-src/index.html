@@ -1217,77 +1217,15 @@ async function renderDashboard(){
       <div class="stat"><div class="n">${stats.pendingWitCount||0}</div><div class="l">Pending withdrawals</div></div>
     </div>
     <div class="panel-card">
-      <h2 class="sec" style="margin-top:0">MarzPay available balance</h2>
-      <p class="muted" style="margin-top:0">The real float sitting in MarzPay's own account -- what payouts actually get sent from, distinct from members' own wallet balances above.</p>
-      <div id="marzBalance">${spinnerHtml()}</div>
-    </div>
-    <!-- PesaJet. Deliberately NOT called a balance: PesaJet publishes no
-         balance endpoint (neither of their official SDKs has one), so this is
-         what Petro itself has moved through them, which is exact for that and
-         silent about their float. The card is hidden entirely unless PesaJet
-         is actually in the payment path or has history, so it does not clutter
-         a panel for an operator who does not use it. -->
-    <div class="panel-card hidden" id="pesajetCard">
-      <h2 class="sec" style="margin-top:0">PesaJet money moved</h2>
-      <!-- Two paragraphs, not one with a <b> in it: the translator matches a
-           WHOLE text node, so inline markup would split this into fragments
-           that no row can ever apply to, and one 200-character sentence would
-           be over the engine's own 160-character cap. Split this way, both
-           halves translate. -->
-      <p class="muted" style="margin-top:0">PesaJet does not publish a balance endpoint, so this is our own record of what has gone through them &mdash; not the float in their account.</p>
-      <p class="muted" style="margin:4px 0 0">It cannot see PesaJet's fees, or anything settled out to a bank.</p>
-      <div id="pesajetSummary">${spinnerHtml()}</div>
-    </div>
-    <div class="panel-card">
       <h2 class="sec" style="margin-top:0">Recent transactions</h2>
       <div class="table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Amount</th></tr></thead><tbody id="dashTx"><tr><td colspan="3">${spinnerHtml()}</td></tr></tbody></table></div>
     </div>`;
-  const [r, mb, pj] = await Promise.all([
-    api('/admin/transactions/list', { limit: 12 }),
-    api('/admin/marzpay/balance'),
-    api('/admin/pesajet/summary'),
-  ]);
+  const r = await api('/admin/transactions/list', { limit: 12 });
   if(staleTab('dashboard')) return;
   const list = (r.transactions || []).slice(0, 12);
   $('dashTx').innerHTML = list.length ? list.map(t=>`
     <tr><td>${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td>
     <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0), t.regionKey)}</td></tr>`).join('') : '<tr><td colspan="3" class="empty">No transactions</td></tr>';
-  $('marzBalance').innerHTML = mb.status==='success'
-    ? `<div class="n" style="font-size:26px">${ugx(mb.amount)}</div>${mb.accountStatus?`<p class="muted" style="margin:4px 0 0">Account status: ${esc(mb.accountStatus)}</p>`:''}`
-    : `<p class="muted" style="margin:0">${esc(mb.message||'Could not check MarzPay balance right now.')}</p>`;
-  paintPesajetSummary(pj);
-}
-// Hidden unless PesaJet is actually selected as a gateway or has moved money
-// before -- an operator on MarzPay alone should not be shown a card of zeroes.
-function paintPesajetSummary(pj){
-  const card = $('pesajetCard'), box = $('pesajetSummary');
-  if (!card || !box) return;
-  if (!pj || pj.status !== 'success') {
-    // A failed read still shows the card IF the gateway is in use, because
-    // silence would look like "nothing has gone through" rather than "we could
-    // not read it".
-    if (pj && pj.selected) { card.classList.remove('hidden'); box.innerHTML = `<p class="muted" style="margin:0">${esc((pj && pj.message) || 'Could not read the PesaJet summary right now.')}</p>`; }
-    return;
-  }
-  const regions = Array.isArray(pj.regions) ? pj.regions : [];
-  const anyHistory = regions.some(b => b.collectedCount || b.paidOutCount || b.pendingInCount || b.pendingOutCount);
-  if (!pj.selected && !anyHistory) return;          // stays hidden
-  card.classList.remove('hidden');
-  if (!regions.length) {
-    box.innerHTML = `<p class="muted" style="margin:0">Nothing has gone through PesaJet yet.</p>`;
-    return;
-  }
-  box.innerHTML = regions.map(b => `
-    ${regions.length>1?`<h3 class="sec" style="margin:10px 0 6px;font-size:14px">${esc('Uganda')}</h3>`:''}
-    <div class="cards">
-      <div class="stat"><div class="n">${ugx(b.collected, b.regionKey)}</div><div class="l">Collected</div></div>
-      <div class="stat"><div class="n">${ugx(b.paidOut, b.regionKey)}</div><div class="l">Paid out</div></div>
-      <div class="stat"><div class="n">${ugx(b.net, b.regionKey)}</div><div class="l">Net through PesaJet</div></div>
-    </div>
-    <p class="muted" style="margin:8px 0 0">${b.pendingInCount||0} recharge(s) still arriving, worth ${ugx(b.pendingIn, b.regionKey)}</p>
-    <p class="muted" style="margin:2px 0 0">${b.pendingOutCount||0} payout(s) still sending, worth ${ugx(b.pendingOut, b.regionKey)}</p>`).join('');
-  if (pj.truncated) box.innerHTML += `<p class="muted" style="margin:8px 0 0;color:var(--danger)">These totals are incomplete &mdash; there is more history than this read can scan.</p>`;
-  if (!pj.configured) box.innerHTML += `<p class="muted" style="margin:8px 0 0">No PesaJet API key is set on the server yet.</p>`;
 }
 function statusPill(s){
   s=String(s||'success').toLowerCase();
@@ -1806,7 +1744,7 @@ async function openUser(uid){
         // member's own phone into the payment gateway -- so that's
         // labelled honestly instead of showing a blank or a made-up value.
         const paidTo = d.method==='manual' ? esc(d.assignedNumber||'Not set')
-          : `Automatic (${d.provider==='pesajet'?'PesaJet':'MarzPay'})`;
+          : d.method==='usdt' ? 'USDT wallet' : esc(d.method||'Not set');
         const paidFrom = esc(d.senderPhone||d.phone||'Not set');
         return `<tr><td style="white-space:nowrap">${fdate(d.createdAt)}</td><td><b>${ugx(d.amount, d.regionKey)}</b></td><td>${paidTo}</td><td>${paidFrom}</td><td>${statusPill(d.status)}</td></tr>`;
       }).join('')}
@@ -1942,46 +1880,86 @@ async function openUser(uid){
 }
 
 // ── DEPOSITS ──
-async function syncMarzPay(btn, afterFn){
-  const t=btn.textContent; btn.disabled=true; btn.textContent='Syncing…';
-  const d = await api('/admin/payments/sync');
-  btn.disabled=false; btn.textContent=t;
-  if(d.status==='success'){
-    const settled = (d.depositsSettled||0) + (d.withdrawalsSettled||0);
-    toast(settled>0 ? `Synced, settled ${d.depositsSettled} deposit(s), ${d.withdrawalsSettled} withdrawal(s)` : 'Synced, nothing was waiting', 'ok');
-    afterFn();
-  } else toast(d.message||'Sync failed','err');
+// ── RECHARGES (Bank / Wallet claims + USDT) ──
+// Owner: "the deposit doesn't show badge, why doesn't it show the sent message, force credit should be named
+// approve because this is manual, remove PesaJet, MarzPay, cards, OTPs -- we are using USDT and manual".
+// Every recharge is a CARD (not a wide table row, so the status badge, the member's message and the buttons
+// are all on screen on a phone). A member's claim (status 'review') is what needs the admin, so that is the
+// first tab; before, those claims had no tab at all and were only visible under "All".
+const DEP_GROUPS = { review: ['review','awaiting_verification'], pending: ['pending','initiating'], matched: ['matched'], failed: ['failed','rejected'] };
+const DEP_TABS = [['review','To approve'],['pending','Waiting for message'],['matched','Approved'],['failed','Rejected'],['all','All']];
+let _deps=[], _depFilter='review', _depFilterTouched=false;
+function depBadge(d){
+  const s=String(d.status||'');
+  if(s==='matched') return '<span class="pill-tag t-ok">Approved</span>';
+  if(s==='review'||s==='awaiting_verification') return '<span class="pill-tag t-warn">To approve</span>';
+  if(s==='pending'||s==='initiating') return '<span class="pill-tag t-mut">Waiting for message</span>';
+  if(s==='failed'||s==='rejected') return '<span class="pill-tag t-bad">Rejected</span>';
+  return `<span class="pill-tag t-mut">${esc(s||'unknown')}</span>`;
 }
-const DEP_GROUPS = { pending: ['initiating','pending','awaiting_verification'], review: ['review'], matched: ['matched'], failed: ['failed','rejected'] };
-let _deps=[], _depFilter='pending';
+function depTabLabel(k,l){ const n = k==='all' ? _deps.length : _deps.filter(d=>(DEP_GROUPS[k]||[]).includes(d.status)).length; return `${l} (${n})`; }
 async function renderDeposits(){
   const r = await api('/admin/deposits/list', {});
   if(staleTab('deposits')) return;
   _deps = r.deposits||[];
-  const grp = k => _deps.filter(d=>(DEP_GROUPS[k]||[]).includes(d.status)).length;
-  const subs = [['pending','Pending'],['matched','Successful'],['failed','Failed'],['all','All']];
+  // Open on the claims waiting for approval; if there are none, on whatever is waiting for a message, then All.
+  if(!_depFilterTouched){ _depFilter = _deps.some(d=>DEP_GROUPS.review.includes(d.status)) ? 'review' : (_deps.some(d=>DEP_GROUPS.pending.includes(d.status)) ? 'pending' : 'all'); }
   const dpbd = r.processedByDay||[];
   const dMaxP = Math.max(1, ...dpbd.map(d=>d.count));
   const dRows = dpbd.slice().reverse();
   const depProcChart = dpbd.length ? `<div class="panel-card">
-    <div class="row" style="align-items:center;margin-bottom:2px"><h2 class="sec" style="flex:1;margin:0">Processed per day</h2>
-    <div class="muted"><b>${grp('matched')}</b> processed all-time · ${ugx(r.processedAmount||0)} received</div></div>
-    <div class="chart">${dpbd.map(d=>`<div class="chart-col" title="${esc(dayLabel(d.day))}: ${d.count} processed · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/dMaxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>
-    <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Recharges processed</th><th>Amount received</th></tr></thead>
+    <div class="row" style="align-items:center;margin-bottom:2px"><h2 class="sec" style="flex:1;margin:0">Approved per day</h2>
+    <div class="muted"><b>${_deps.filter(d=>d.status==='matched').length}</b> approved all-time · ${ugx(r.processedAmount||0)} received</div></div>
+    <div class="chart">${dpbd.map(d=>`<div class="chart-col" title="${esc(dayLabel(d.day))}: ${d.count} approved · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/dMaxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${esc(dayLabel(d.day))}</div></div>`).join('')}</div>
+    <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Recharges approved</th><th>Amount received</th></tr></thead>
     <tbody>${dRows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Recharges</h2>
-      <button class="btn sm ghost" id="depSync">Sync payments</button></div>
-    <p class="muted" style="margin:0 0 12px">Every recharge attempt, all time — the automatic gateway (MarzPay or PesaJet), MarzPay card payments, and USDT TRC20. A stuck automatic or card recharge can be force-credited once you've verified the money landed. A USDT claim resolves itself against the real blockchain when a TronGrid key is configured (credited if it checks out, declined — tagged "Auto-declined" — if it plainly doesn't); Approve/Reject only ever shows up as a manual backstop for one still Awaiting Review.</p>
+    <h2 class="sec" style="margin:0 0 4px">Recharges</h2>
+    <p class="muted" style="margin:0 0 12px">Members pay into one of your Payment Numbers (bank or Telebirr) or send USDT. When a member sends the payment message, it appears under <b>To approve</b>. Check that the money really arrived, then tap <b>Approve</b> to add it to their wallet &mdash; or <b>Reject</b>.</p>
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_deps.length+' recharges only. The platform has more history than this list can currently display.</div>':''}
-    ${depProcChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
-    <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}</button>`).join('')}</div>
-    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Paid from</th><th>Method</th><th>Amount</th><th>Ref</th><th>Status</th><th></th></tr></thead><tbody id="depRows"></tbody></table></div>`;
-  $('depSync').addEventListener('click', ()=>syncMarzPay($('depSync'), renderDeposits));
+    <div class="subtabs" id="depTabs">${DEP_TABS.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${depTabLabel(k,l)}</button>`).join('')}</div>
+    <div id="depRows"></div>
+    ${depProcChart}`;
   $('depSearch').addEventListener('input', drawDeps);
-  document.querySelectorAll('[data-df]').forEach(b=>b.addEventListener('click',()=>{ _depFilter=b.dataset.df; drawDeps(); }));
+  document.querySelectorAll('[data-df]').forEach(b=>b.addEventListener('click',()=>{ _depFilter=b.dataset.df; _depFilterTouched=true; document.querySelectorAll('[data-df]').forEach(x=>x.classList.toggle('active',x===b)); drawDeps(); }));
   drawDeps();
+}
+function depCardHtml(d){
+  const isUsdt = d.method==='usdt', isManual = d.method==='manual';
+  const open = d.status==='review' || d.status==='awaiting_verification';
+  const waiting = d.status==='pending' || d.status==='initiating';
+  let actions = '';
+  // Approve / Reject are owner-only (crediting is a money decision). Approve is offered only once the member has
+  // SENT a message (or a USDT hash): a "waiting" order has nothing to check, so it can only be rejected.
+  if (SESSION_ROLE === 'owner') {
+    if (open || d.status==='failed') actions += `<button class="btn ok sm" data-force="${esc(d.id)}" data-was="${esc(d.status)}">Approve</button> `;
+    if (open || waiting) actions += `<button class="btn danger sm" data-usdt-reject="${esc(d.id)}">Reject</button>`;
+  }
+  const method = isUsdt
+    ? `USDT (TRC20)${d.autoVerified?' <span class="pill-tag t-ok" style="font-size:9.5px;padding:2px 6px">Auto</span>':d.autoDeclined?' <span class="pill-tag t-bad" style="font-size:9.5px;padding:2px 6px">Auto-declined</span>':''}<br><a href="https://tronscan.org/#/transaction/${esc(d.txid||'')}" target="_blank" rel="noopener" style="font-size:11px">${esc((d.txid||'').slice(0,12))}…</a>${d.exactMicros?`<br><span style="font-size:11px" title="The transfer must be exactly this amount">${esc((Number(d.exactMicros)/1e6).toFixed(6))} USDT</span>`:''}`
+    : isManual ? `<span data-no-i18n>${esc(d.network||'Bank / Wallet')}</span><br><span class="muted" style="font-size:12px" data-no-i18n>${esc(d.assignedName||'')}${d.assignedName?' · ':''}${esc(d.assignedNumber||'')}</span>`
+    : esc(d.method||'Recharge');
+  const checks = [];
+  if (d.pastedSmsAmount != null) checks.push(`Message amount: <b>${ugx(d.pastedSmsAmount)}</b> ${d.pastedSmsAmountMatches===true?'<span style="color:var(--ok)">matches the order</span>':d.pastedSmsAmountMatches===false?'<span style="color:var(--danger)">does NOT match the order</span>':''}`);
+  if (d.pastedSmsTxId) checks.push(`Transaction code: <b data-no-i18n>${esc(d.pastedSmsTxId)}</b>`);
+  const sms = d.pastedSms ? `<div style="margin-top:10px;background:rgba(0,0,0,.03);border-radius:10px;padding:10px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;opacity:.7;margin-bottom:6px">Payment message from the member${d.pastedAt?` · ${fdate(d.pastedAt)}`:''}</div>
+      <pre translate="no" data-no-i18n style="margin:0 0 8px;white-space:pre-wrap;word-break:break-word;font-size:12.5px;line-height:1.5;max-height:190px;overflow:auto;background:var(--card,#fff);border:1px solid rgba(0,0,0,.12);border-radius:8px;padding:10px">${esc(d.pastedSms)}</pre>
+      ${checks.length?`<div style="font-size:12px;line-height:1.7">${checks.join('<br>')}</div>`:''}</div>`
+    : (waiting ? '<div class="muted" style="margin-top:8px;font-size:12px">The member has not sent a payment message yet.</div>' : '');
+  const why = d.status==='failed' && d.failureReason ? `<div class="muted" style="margin-top:6px;font-size:12px" data-no-i18n>${esc(d.failureReason)}</div>` : '';
+  return `<div class="panel-card dep-card${d.userId?' clickable':''}" ${d.userId?`data-uid="${esc(d.userId)}"`:''} style="margin-bottom:10px">
+    <div class="row" style="align-items:center;gap:8px">
+      <div style="flex:1;min-width:0"><b style="font-size:19px">${ugx(d.amount, d.regionKey)}</b></div>
+      <div>${depBadge(d)}</div>
+    </div>
+    <div style="margin-top:6px;font-size:13px"><b data-no-i18n>${esc(d.accountPhone||d.phone||'Not set')}</b>${d.referralCode?` <span class="muted" style="font-size:11px" data-no-i18n>${esc(d.referralCode)}</span>`:''}</div>
+    <div style="margin-top:6px;font-size:13px">${method}</div>
+    <div class="muted" style="margin-top:6px;font-size:12px"><span data-no-i18n>${fdate(d.createdAt)}</span> · <span data-no-i18n>${esc(d.ref||'')}</span></div>
+    ${sms}${why}
+    ${actions?`<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">${actions}</div>`:''}
+  </div>`;
 }
 function drawDeps(){
   let list = _depFilter==='all' ? _deps : _deps.filter(d=>(DEP_GROUPS[_depFilter]||[]).includes(d.status));
@@ -1990,128 +1968,37 @@ function drawDeps(){
   if(q) list = list.filter(d =>
     (d.referralCode||'').toLowerCase().includes(q) ||
     (qCore && phoneCore(d.accountPhone||d.phone).includes(qCore)) ||
-    (qCore && phoneCore(d.senderPhone||'').includes(qCore))
+    (qCore && phoneCore(d.senderPhone||'').includes(qCore)) ||
+    (d.pastedSmsTxId||'').toLowerCase().includes(q) || (d.ref||'').toLowerCase().includes(q)
   );
-  $('depRows').innerHTML = list.length?list.map(d=>{
-    const isManual = d.method==='manual';
-    const isUsdt = d.method==='usdt';
-    const isCard = d.method==='card';
-    const stuck = d.status==='initiating' || d.status==='pending' || d.status==='failed' || d.status==='review' || d.status==='awaiting_verification';
-    const code = d.referralCode;
-    // /admin/deposit/force-credit is verifyOwner-gated (crediting a deposit
-    // that was never resolved automatically is a real money-safety decision,
-    // not a routine action) -- the button matches that, same silent pattern
-    // as every other owner-only control, rather than showing one that just
-    // errors. /admin/deposit/usdt/reject is the same gate, for the other
-    // direction -- only shown for a USDT claim still genuinely open
-    // (awaiting_verification), never one already matched or failed.
-    let actions = '';
-    if (SESSION_ROLE === 'owner' && stuck) {
-      actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`;
-      if ((isUsdt && d.status === 'awaiting_verification') || (isManual && (d.status === 'review' || d.status === 'pending'))) {
-        actions += ` <button class="btn danger sm" data-usdt-reject="${esc(d.id)}">Reject</button>`;
-      }
-    }
-    const usdtBadge = d.autoVerified ? ' <span class="pill-tag t-ok" style="font-size:9.5px;padding:2px 6px">Auto</span>'
-      : d.autoDeclined ? ' <span class="pill-tag t-bad" style="font-size:9.5px;padding:2px 6px">Auto-declined</span>' : '';
-    const methodLabel = isUsdt
-      ? `USDT (TRC20)${usdtBadge}<br><a href="https://tronscan.org/#/transaction/${esc(d.txid||'')}" target="_blank" rel="noopener" style="font-size:11px">${esc((d.txid||'').slice(0,10))}…</a>${d.exactMicros?`<br><span style="font-size:11px" title="The transfer must be exactly this amount">${esc((Number(d.exactMicros)/1e6).toFixed(6))} USDT exact</span>`:''}`
-      : isCard
-      ? 'Card (MarzPay)'
-      : isManual
-      // data-no-i18n: the network and the collection number are DATA, and the
-      // cell flattens to "Manualmtn · 0770000001", which is not a sentence in
-      // any language. Marking it says so once instead of leaving every sweep
-      // to rediscover it.
-      ? `Manual<br><span class="muted" style="font-size:11px" data-no-i18n>${esc(d.network||'')} · ${esc(d.assignedNumber||'')}</span>`
-      // provider is only set on deposits created since Round 102 -- an
-      // older row with none falls back to the same plain "Automatic" label
-      // it always had (it can only ever have gone through MarzPay).
-      : (d.provider==='pesajet'?'PesaJet':d.provider==='marzpay'?'MarzPay':'Automatic');
-    const reviewNote = d.status==='review' && d.reviewReason ? `<br><span class="muted" style="font-size:11px">${esc(d.reviewReason)}</span>` : '';
-    // Owner: "only the sent message from after refresh on manual payment page
-    // should appear to admin panel in its full details so as admin verifies
-    // manually or rejects." Manual deposits are no longer credited by any
-    // automatic path, so this row IS the evidence -- approving on the
-    // one-line reviewReason alone would be approving blind.
-    //
-    // The message is rendered in a <pre> at its FULL length, deliberately not
-    // truncated: an operator SMS carries the transaction id and the exact
-    // amount near the end, which is precisely what a "…" would cut off. It is
-    // wrapped and scrollable instead so a long one cannot stretch the table.
-    // esc() then white-space:pre-wrap -- the text is a member-supplied string
-    // going into innerHTML, and it must render as the characters they sent,
-    // never as markup.
-    const smsChecks = [];
-    if (d.pastedSmsAmount != null) smsChecks.push(`Message amount: <b>${ugx(d.pastedSmsAmount)}</b> ${d.pastedSmsAmountMatches===true?'<span style="color:var(--ok)">matches the order</span>':d.pastedSmsAmountMatches===false?'<span style="color:var(--danger)">does NOT match the order</span>':''}`);
-    if (d.pastedSmsTxId) smsChecks.push(`Transaction id: <b>${esc(d.pastedSmsTxId)}</b>`);
-    if (d.pastedSmsCounterparty) smsChecks.push(`${d.pastedSmsDirection==='sent'?'Paid to':'Received from'}: <b>${esc(d.pastedSmsCounterparty)}</b> ${d.pastedSmsNumberMatches===true?'<span style="color:var(--ok)">the assigned number</span>':d.pastedSmsNumberMatches===false?'<span style="color:var(--danger)">NOT the assigned number</span>':''}`);
-    if (d.pastedSmsParsed === false) smsChecks.push('<span style="color:var(--warn,#dd6b00)">This server could not read the message automatically — read it yourself before approving.</span>');
-    if (d.pastedSmsSource === 'forwarder') smsChecks.push('<span class="muted">Arrived from the forwarder app, held for approval</span>');
-    const smsBlock = d.pastedSms ? `<tr class="sms-detail"><td colspan="8" style="background:rgba(0,0,0,.03);padding:10px 14px">
-        <div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;opacity:.7;margin-bottom:6px">Payment message from the member${d.pastedAt?` · ${fdate(d.pastedAt)}`:''}</div>
-        <pre translate="no" data-no-i18n style="margin:0 0 8px;white-space:pre-wrap;word-break:break-word;font-size:12.5px;line-height:1.5;max-height:190px;overflow:auto;background:var(--card,#fff);border:1px solid rgba(0,0,0,.12);border-radius:8px;padding:10px">${esc(d.pastedSms)}</pre>
-        ${smsChecks.length?`<div style="font-size:12px;line-height:1.7">${smsChecks.join('<br>')}</div>`:''}
-      </td></tr>` : '';
-    // Owner: "let me see even user number he used to send besides account
-    // and method" -- the "User" column is the member's own REGISTERED
-    // account phone (accountPhone, from the users collection); the number
-    // they actually paid FROM on this one order is a separate field
-    // (senderPhone for a manual order, phone for an automatic one -- both
-    // captured server-side at /deposit/manual/init and /deposit/marzpay,
-    // never shown here before this column existed) and can genuinely
-    // differ, e.g. paying from a friend's or a shared phone.
-    const paidFrom = d.senderPhone || d.phone || 'Not set';
-    return `<tr class="${d.userId?'clickable':''}" ${d.userId?`data-uid="${esc(d.userId)}"`:''}><td>${fdate(d.createdAt)}</td>
-      <td>${esc(d.accountPhone||d.phone||'Not set')}${code?`<br><span class="muted" style="font-size:11px">${esc(code)}</span>`:''}</td>
-      <td>${esc(paidFrom)}</td>
-      <td>${methodLabel}</td>
-      <td><b>${ugx(d.amount, d.regionKey)}</b></td>
-      <td>${esc(d.ref||'Not set')}</td>
-      <td>${statusPill(d.status)}${reviewNote}</td>
-      <td>${actions}</td></tr>${smsBlock}`;
-  }).join(''):'<tr><td colspan="8" class="empty">No recharges</td></tr>';
-  // Owner: "l want them to have... l can tap on a deposit to see user
-  // details just like those when a user is tapped in user list" -- same
-  // pattern the Withdrawals tab's own rows already use: tapping anywhere
-  // on the row opens the SAME full user-detail modal as the Users tab,
-  // except when the tap actually landed on one of the row's own
-  // Force-credit/Approve/Reject buttons, which must still do their own
-  // thing instead of also opening the modal underneath them.
-  document.querySelectorAll('#depRows tr[data-uid]').forEach(tr=>tr.addEventListener('click', e=>{
-    if(e.target.closest('button')) return;
-    openUser(tr.dataset.uid);
+  $('depRows').innerHTML = list.length ? list.map(depCardHtml).join('') : '<div class="panel-card empty">No recharges here</div>';
+  // Tapping a card opens the member (same as the Users tab), except on its own buttons.
+  document.querySelectorAll('#depRows .dep-card[data-uid]').forEach(c=>c.addEventListener('click', e=>{
+    if(e.target.closest('button,a')) return;
+    openUser(c.dataset.uid);
   }));
-  document.querySelectorAll('[data-force]').forEach(b=>b.addEventListener('click',async(e)=>{
+  document.querySelectorAll('#depRows [data-force]').forEach(b=>b.addEventListener('click',async(e)=>{
     e.stopPropagation();
-    if(!confirm('Credit this deposit? Only do this if you have verified the money actually landed.'))return;
+    const was=b.dataset.was==='failed' ? '\n\nThis recharge was REJECTED earlier. Only approve it if you have now confirmed the money arrived.' : '';
+    if(!confirm('Approve this recharge and add the money to the member\'s wallet? Only do this after you have checked that the payment really arrived.'+was))return;
     b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/force-credit',{depositId:b.dataset.force});
-    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
+    toast(d.status==='success'?(d.message||'Approved'):(d.message||'Could not approve'),d.status==='success'?'ok':'err'); renderDeposits();
   }));
-  document.querySelectorAll('[data-usdt-reject]').forEach(b=>b.addEventListener('click',async(e)=>{
+  document.querySelectorAll('#depRows [data-usdt-reject]').forEach(b=>b.addEventListener('click',async(e)=>{
     e.stopPropagation();
-    const reason=prompt('Reason for rejecting this USDT deposit (shown to no one but kept in the audit log):','Could not verify this transaction');
+    const reason=prompt('Reason for rejecting this recharge (kept in the activity log):','Could not verify this payment');
     if(reason===null)return;
     b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/usdt/reject',{depositId:b.dataset.usdtReject,reason});
-    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
+    toast(d.status==='success'?'Rejected':(d.message||'Could not reject'),d.status==='success'?'ok':'err'); renderDeposits();
   }));
 }
-// Live-refresh counterpart to renderDeposits() -- see quietRefreshUsers()
-// for why this exists instead of just calling renderDeposits() on a timer.
-// Deliberately skips rebuilding the processed-per-day chart (its own data
-// barely moves minute to minute, and re-running .chart's DOM would only add
-// back the flash this is meant to remove) -- that stays as of the last full
-// render/tab switch, everything else stays current.
+// Live-refresh counterpart to renderDeposits(): re-reads the list and repaints the cards and the tab counts without
+// rebuilding the search box (so typing is never interrupted).
 async function quietRefreshDeposits(){
   const r = await api('/admin/deposits/list', {});
   if(staleTab('deposits') || !$('depRows')) return;
   _deps = r.deposits||[];
-  const grp = k => _deps.filter(d=>(DEP_GROUPS[k]||[]).includes(d.status)).length;
-  const subs = [['pending','Pending'],['review','Needs Review'],['matched','Successful'],['failed','Failed'],['all','All']];
-  document.querySelectorAll('[data-df]').forEach(b=>{
-    const k=b.dataset.df, l=(subs.find(s=>s[0]===k)||[])[1]||k;
-    b.textContent = `${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}`;
-  });
+  document.querySelectorAll('[data-df]').forEach(b=>{ const k=b.dataset.df, l=(DEP_TABS.find(t=>t[0]===k)||[])[1]||k; b.textContent = depTabLabel(k,l); });
   drawDeps();
 }
 
@@ -2121,7 +2008,7 @@ async function renderWithdrawals(){
   const r = await api('/admin/withdrawals/list', {});
   if(staleTab('withdrawals')) return;
   _wits = r.withdrawals||[];
-  _witProvider = r.payoutMode || 'marzpay';
+  _witProvider = r.payoutMode || 'manual';
   _witManualPayouts = _witProvider === 'manual';
   const counts = r.counts || {};
   // subagent-audit-caught: 'sending' had no filter tab of its own, so an
@@ -2139,7 +2026,7 @@ async function renderWithdrawals(){
     <tbody>${rows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Withdrawals</h2>
-      ${_witManualPayouts?'':`<button class="btn sm ghost" id="witSync">Sync payments</button>`}</div>
+    </div>
     ${_witManualPayouts?`<p class="muted" style="margin:0 0 12px"><b>Payments are set to Manual</b>, so payouts do not go through any automatic gateway. Send the money yourself from an admin mobile money phone to the destination number on the row, then tap <b>Mark as paid</b>. Marking a row paid only records a payment you have already made, it never sends anything. Auto-approve is ignored while this mode is on.</p>`:`<p class="muted" style="margin:0 0 12px">Every withdraw request waits here as <b>Pending</b> until an admin sends it, nothing reaches ${PROVIDER_LABEL[normalizeProv(_witProvider)]} on its own. Members withdraw to a bound mobile money number (see each row's destination).</p>`}
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_wits.length+' withdrawals only. The platform has more history than this list can currently display.</div>':''}
     ${procChart}
@@ -2147,7 +2034,6 @@ async function renderWithdrawals(){
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${k==='all'?` (${_wits.length})`:(counts[k]?` (${counts[k]})`:' (0)')}</button>`).join('')}</div>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Amount</th><th>Net</th><th>Destination</th><th>Status</th><th></th></tr></thead><tbody id="witRows"></tbody></table></div>`;
   document.querySelectorAll('[data-wf]').forEach(b=>b.addEventListener('click',()=>{ _witFilter=b.dataset.wf; drawWits(); }));
-  if($('witSync')) $('witSync').addEventListener('click', ()=>syncMarzPay($('witSync'), renderWithdrawals));
   $('witSearch').addEventListener('input', drawWits);
   drawWits();
 }
@@ -2157,7 +2043,7 @@ async function renderWithdrawals(){
 // system performs into a record of one a person already performed.
 var _witManualPayouts = false;
 // Raw payoutMode from the server -- 'marzpay' | 'pesajet' | 'manual'.
-var _witProvider = 'marzpay';
+var _witProvider = 'manual';
 function witStatusPill(w){
   if(w.status==='pending') return `<span class="pill-tag t-warn">Awaiting approval</span>`;
   // subagent-audit-caught: 'sending' (MarzPay network-errored mid-request,
@@ -2229,7 +2115,7 @@ async function quietRefreshWithdrawals(){
   const r = await api('/admin/withdrawals/list', {});
   if(staleTab('withdrawals') || !$('witRows')) return;
   _wits = r.withdrawals||[];
-  _witProvider = r.payoutMode || 'marzpay';
+  _witProvider = r.payoutMode || 'manual';
   _witManualPayouts = _witProvider === 'manual';
   const counts = r.counts || {};
   // subagent-audit-caught: 'sending' had no filter tab of its own, so an
@@ -2657,7 +2543,7 @@ const AUDIT_LABELS = {
   manual_pay_image_set:'Manual-pay screen image changed',
   products_saved:'Products saved',
   product_deleted:'Product deleted', products_cleared:'All products cleared', products_synced:'Product pricing synced to defaults',
-  deposit_force_credited:'Recharge force-credited', giftcode_generated:'Gift codes generated', giftcode_deactivated:'Gift code deactivated',
+  deposit_force_credited:'Recharge approved', giftcode_generated:'Gift codes generated', giftcode_deactivated:'Gift code deactivated',
   totals_recounted:'Totals recalculated',
 };
 async function renderAuditLog(){
@@ -3195,14 +3081,6 @@ async function renderSettings(){
         <div><label>Cycle (days)</label><input id="sCycle" type="number" value="${v('cycleDays',150)}"></div>
         <div><label>Max withdrawals per user per day</label><input id="sMaxWitDay" type="number" min="0" value="${v('maxWithdrawalsPerDay',2)}"></div>
       </div>
-      <!-- OTP verification codes cost real money per SMS (MarzSms, ~30 UGX
-           each) -- capped per phone number, resetting daily. 0 means send
-           none, not unlimited; see otpDailyLimit()'s own comment in server.js. -->
-      <div class="row" style="margin-top:6px">
-        <div><label>OTP codes/day &middot; registration</label><input id="sOtpReg" type="number" min="0" value="${v('otpDailyLimitRegister',2)}"></div>
-        <div><label>OTP codes/day &middot; password reset</label><input id="sOtpReset" type="number" min="0" value="${v('otpDailyLimitReset',3)}"></div>
-        <div><label>OTP codes/day &middot; add bank account</label><input id="sOtpBank" type="number" min="0" value="${v('otpDailyLimitBank',2)}"></div>
-      </div>
       <div class="row" style="margin-top:10px">
         <div><label>Inner pages background opacity (%)</label><input id="sInnerBgOpacity" type="number" min="0" max="100" value="${v('innerBgOpacity',100)}"></div>
         <div><label>Inner pages background blur (px)</label><input id="sInnerBgBlur" type="number" min="0" max="40" value="${v('innerBgBlur',0)}"></div>
@@ -3210,10 +3088,6 @@ async function renderSettings(){
       <p class="muted" style="font-size:12px;margin:6px 0 0">Applies only after login: Home, Assets, Network, Profile, Recharge, Withdraw, Wallet and other inner pages. Authentication screens are unchanged.</p>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only withdrawals)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
-      <div class="switch-row" style="margin-top:8px"><span><b>OTP verification (registration, reset, add wallet)</b> <span class="muted">(off: registration and payout accounts save without a code; Forgot Password still asks for one)</span></span>
-        <label style="width:auto;margin:0"><input type="checkbox" id="sOtpVerification" ${s.otpVerificationEnabled!==false?'checked':''} style="width:auto"></label></div>
-      <div class="switch-row" style="margin-top:8px"><span><b>Require OTP to add a payout account</b> <span class="muted">(off by default; ignored while OTP verification above is off)</span></span>
-        <label style="width:auto;margin:0"><input type="checkbox" id="sBankOtp" ${s.bankOtpRequired===true?'checked':''} style="width:auto"></label></div>
       <!-- Owner: "one withdrawal time should be SETTABLE IN ADMIN, such that
            when one tries to withdrawal he sees, that withdrawals start from
            this time to this time, nothing much ie 6pm to 5pm." -->
@@ -3240,43 +3114,22 @@ async function renderSettings(){
       <label style="margin-top:14px">Allowed website domains</label>
       <textarea id="sAllowedOrigins" rows="4" placeholder="petro-platform.com&#10;www.petro-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Only these domains may reach the backend &mdash; one per line, include www. petro-platform.com and this VPS's own address are always allowed.</p>
-      <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
-      <p class="muted" style="margin:0 0 4px">Automatic recharge is the only recharge method. Every withdrawal waits as Pending until you act on it in Withdrawals.</p>
       <button class="btn block" id="saveRates">Save rates</button>
     </div>
 
-    <h2 class="sec">Payments</h2>
+    <h2 class="sec">Recharges and withdrawals</h2>
     <div class="panel-card">
-      <label>Recharge gateway</label>
-      <div style="margin:0 0 12px">
-        <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:4px;"><input type="radio" name="depGateway" id="depGatewayMarz" value="marzpay" ${normalizeProv(v('depositMethod','marzpay'))==='marzpay'?'checked':''} style="width:auto"> MarzPay</label>
-        <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="depGateway" id="depGatewayPesa" value="pesajet" ${normalizeProv(v('depositMethod','marzpay'))==='pesajet'?'checked':''} style="width:auto"> PesaJet</label>
-      </div>
-      <h2 class="sec" style="margin:16px 0 4px">Withdrawals</h2>
-      <p class="muted" style="margin:0 0 8px">Follows the recharge gateway above by default &mdash; pin a different method only if recharges and withdrawals should differ.</p>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodFollow" value="follow" ${v('withdrawMethod','follow')==='follow'?'checked':''} style="width:auto"> Follow the recharge gateway above</label>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodMarz" value="marzpay" ${v('withdrawMethod','follow')==='marzpay'||v('withdrawMethod','follow')==='automatic'?'checked':''} style="width:auto"> Always automatic (MarzPay sends payouts)</label>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodPesa" value="pesajet" ${v('withdrawMethod','follow')==='pesajet'?'checked':''} style="width:auto"> Always automatic (PesaJet sends payouts)</label>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="witMethod" id="witMethodManual" value="manual" ${v('withdrawMethod','follow')==='manual'?'checked':''} style="width:auto"> Always manual (you send payouts by hand)</label>
-      <button class="btn block" id="saveDepMethod" style="margin-top:10px">Save payment method</button>
+      <p class="muted" style="margin-top:0"><b>Bank / Wallet:</b> add the accounts members pay into under <b>Payment Numbers</b>. Members send you the payment message and you approve it under <b>Recharges</b>. <b>USDT:</b> set it up below. <b>Withdrawals</b> are paid by you: send the money, then record it under <b>Withdrawals</b>.</p>
     </div>
 
     <h2 class="sec">Crypto recharges (USDT TRC20)</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">A third recharge rail alongside MarzPay/PesaJet above (that flow is unaffected by this). A member sends USDT to the wallet address below on their own and submits the transaction hash in-app. With a TronGrid API key set on the server (TRONGRID_API_KEY), the server checks it against the real blockchain right at submission &mdash; a real match credits it instantly ("Auto"), and a transaction that's confirmed but plainly wrong (wrong token, wrong address, short amount) declines instantly too ("Auto-declined"), no admin needed either way. Anything still unconfirmed keeps retrying in the background and resolves itself within 15 minutes at the latest. Without a key configured, every claim simply waits as Awaiting Review for your own Approve/Reject in the Recharges tab &mdash; nothing here ever forces automatic mode on you.</p>
+      <p class="muted" style="margin-top:0">A member sends USDT to the wallet address below on their own and submits the transaction hash in-app. With a TronGrid API key set on the server (TRONGRID_API_KEY), the server checks it against the real blockchain right at submission &mdash; a real match credits it instantly ("Auto"), and a transaction that's confirmed but plainly wrong (wrong token, wrong address, short amount) declines instantly too ("Auto-declined"), no admin needed either way. Anything still unconfirmed keeps retrying in the background and resolves itself within 15 minutes at the latest. Without a key configured, every claim simply waits as Awaiting Review for your own Approve/Reject in the Recharges tab &mdash; nothing here ever forces automatic mode on you.</p>
       <div class="switch-row"><span><b>Enable USDT recharges</b> <span class="muted">(shows the option in the app)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sUsdtEnabled" ${s.usdtEnabled?'checked':''} style="width:auto"></label></div>
       <label>Receiving wallet address (TRC20)</label><input id="sUsdtAddr" value="${esc(v('usdtWalletAddress',''))}" placeholder="T...">
       <label>Exchange rate (Br per 1 USDT)</label><input id="sUsdtRate" type="number" step="1" min="0" value="${v('usdtRate',0)}" placeholder="e.g. 3750">
       <button class="btn block" id="saveUsdt" style="margin-top:10px">Save crypto recharge settings</button>
-    </div>
-
-    <h2 class="sec">Card recharges (MarzPay)</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">A fourth recharge rail, through MarzPay's own card gateway -- always MarzPay regardless of which gateway is picked for mobile money above. A member is sent to MarzPay's hosted card page to pay, then returns to the app; the recharge resolves the same way a mobile-money one does (webhook + this app's own live re-check), no separate review needed. Requires an active Card Payments subscription on your MarzPay business account -- without one, MarzPay will refuse every attempt even with this switched on.</p>
-      <div class="switch-row"><span><b>Enable card recharges</b> <span class="muted">(shows the option in the app)</span></span>
-        <label style="width:auto;margin:0"><input type="checkbox" id="sCardEnabled" ${s.cardDepositEnabled?'checked':''} style="width:auto"></label></div>
-      <button class="btn block" id="saveCard" style="margin-top:10px">Save card recharge setting</button>
     </div>
 
     <h2 class="sec">Support contacts</h2>
@@ -3330,26 +3183,11 @@ async function renderSettings(){
     </div>`;
   renderAboutBlocksEditor();
   renderRulesBlocksEditor();
-  $('saveDepMethod').addEventListener('click', async()=>{
-    const gateway = document.querySelector('input[name="depGateway"]:checked').value;
-    const witMethod = (document.querySelector('input[name="witMethod"]:checked')||{}).value || 'follow';
-    const d = await api('/admin/settings/update', { settings: {
-      depositMethod: gateway, withdrawMethod: witMethod,
-    } });
-    const payoutProv = witMethod==='follow' ? gateway : witMethod;
-    toast(d.status==='success'
-      ? `Saved. Recharges: ${PROVIDER_LABEL[normalizeProv(gateway)]}. Payouts: ${PROVIDER_LABEL[normalizeProv(payoutProv)]}.`
-      : (d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
   $('saveUsdt').addEventListener('click', async()=>{
     const upd = { usdtEnabled:$('sUsdtEnabled').checked,
       usdtWalletAddress:$('sUsdtAddr').value.trim(), usdtRate:Number($('sUsdtRate').value)||0 };
     const d = await api('/admin/settings/update', { settings: upd });
     toast(d.status==='success' ? 'Crypto deposit settings saved' : (d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
-  $('saveCard').addEventListener('click', async()=>{
-    const d = await api('/admin/settings/update', { settings: { cardDepositEnabled:$('sCardEnabled').checked } });
-    toast(d.status==='success' ? 'Card deposit setting saved' : (d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
@@ -3359,10 +3197,7 @@ async function renderSettings(){
       returnMultiple:+$('sReturnMult').value, cycleDays:+$('sCycle').value,
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
       innerBgOpacity:+$('sInnerBgOpacity').value, innerBgBlur:+$('sInnerBgBlur').value,
-      otpDailyLimitRegister:+$('sOtpReg').value, otpDailyLimitReset:+$('sOtpReset').value, otpDailyLimitBank:+$('sOtpBank').value,
       requireInvestToWithdraw:$('sReqInvest').checked, requireReferralCode:$('sReqReferral').checked,
-      otpVerificationEnabled:$('sOtpVerification').checked,
-      bankOtpRequired:$('sBankOtp').checked,
       withdrawWindowEnabled:$('sWitWindow').checked,
       withdrawOpenFrom:$('sWitFrom').value, withdrawOpenTo:$('sWitTo').value,
       // Sent as raw text; the server splits, validates and de-duplicates it,

@@ -37,14 +37,14 @@ function source(name) {
   const getProducts = new Function('getProductsRaw', `${source('getProducts')}; return getProducts;`)(async () => products);
   assert.deepEqual(await getProducts(), [{ key: 'asset', price: 15000 }]);
 
-  const getSettings = new Function('db', 'DEFAULT_SETTINGS', 'sanitizeAllowedOrigins', 'refreshHostPolicy', `
+  const getSettings = new Function('db', 'DEFAULT_SETTINGS', 'sanitizeAllowedOrigins', 'refreshHostPolicy', 'FORCED_SETTINGS', `
     let _settingsCache = null, _settingsCacheTs = 0, _mainAllowedHosts = [];
     ${source('getSettings')}
     return getSettings;
   `)({ collection: name => ({ doc: id => ({ get: async () => {
     assert.equal(name, 'settings'); assert.equal(id, 'main');
     return { exists: true, data: () => ({ minDeposit: 15000 }) };
-  } }) }) }, { minDeposit: 30000 }, () => ({ hosts: [] }), () => {});
+  } }) }) }, { minDeposit: 30000 }, () => ({ hosts: [] }), () => {}, {});
   assert.equal((await getSettings()).minDeposit, 15000);
   assert.doesNotMatch(server, /'254':\s*\{ code: 'KE'/);
   assert.doesNotMatch(server + member + panel, new RegExp('lipa' + 'pay', 'i'));

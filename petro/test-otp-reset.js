@@ -22,8 +22,8 @@ const res = () => ({ code: 200, body: null, status(c) { this.code = c; return th
   let r = await send('register'); ok(r.code === 503 && r.body.code === 'OTP_DISABLED', 'register: codes are off');
   r = await send('bank'); ok(r.code === 503 && r.body.code === 'OTP_DISABLED', 'bank: codes are off');
   // ...but reset goes ahead (it reaches the SMS-provider check, which is unset in this test)
-  r = await send('reset'); ok(r.body.code !== 'OTP_DISABLED', 'reset: not blocked by the switch (' + JSON.stringify(r.body) + ')');
-  ok(/SMS verification is not available/.test(r.body.message), 'reset proceeds as far as the SMS provider');
+  // Owner: "remove OTPs" -- no SMS codes at all now; a forgotten password is reset by Support.
+  r = await send('reset'); ok(r.body.code === 'OTP_DISABLED' && /contact Support/i.test(r.body.message), 'reset: no SMS code is sent; the member is told to contact Support (' + JSON.stringify(r.body) + ')');
   // switch on: unchanged
   settings = { otpVerificationEnabled: true }; r = await send('register'); ok(r.body.code !== 'OTP_DISABLED', 'switch on: register proceeds');
   // reset confirm still requires a ticket with the switch off
@@ -35,5 +35,5 @@ const res = () => ({ code: 200, body: null, status(c) { this.code = c; return th
   const page = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8'), mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
   ok(!/forgotSupportGroup/.test(page + mod), 'no support-message replacement for Forgot Password');
   ok(/forgotFormGroup/.test(page), 'the form is still there');
-  console.log(`PASS: Forgot Password keeps its OTP with the master switch off (${checks} checks)`); process.exit(0);
+  console.log(`PASS: no SMS codes; Forgot Password points to Support (${checks} checks)`); process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

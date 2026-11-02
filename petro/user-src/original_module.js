@@ -850,6 +850,11 @@ var LANG_ROWS = [
   ['Submitted. Our team is checking your payment.', '', '', '', '', '', 'ተልኳል። ቡድናችን ክፍያዎን በመፈተሽ ላይ ነው።'],
   ['This recharge is no longer open. Start a new one.', '', '', '', '', '', 'ይህ ሂሳብ መሙላት ከአሁን በኋላ ክፍት አይደለም። አዲስ ይጀምሩ።'],
   ['Could not load payment options', '', '', '', '', '', 'የክፍያ አማራጮችን መጫን አልተቻለም'],
+  ['To reset your password, please contact Support. They will set a new one for you.', '', '', '', '', '', 'የይለፍ ቃልዎን ለመቀየር እባክዎ ድጋፍን ያነጋግሩ። አዲስ ይሰጡዎታል።'],
+  ['Forgot your password?', '', '', '', '', '', 'የይለፍ ቃልዎን ረሱ?'],
+  ['We will help you get back in.', '', '', '', '', '', 'ተመልሰው እንዲገቡ እንረዳዎታለን።'],
+  ['Please contact Support to reset your password.', '', '', '', '', '', 'የይለፍ ቃልዎን ለመቀየር እባክዎ ድጋፍን ያነጋግሩ።'],
+  ['Email Support', '', '', '', '', '', 'የኢሜይል ድጋፍ'],
 ];
 // ── SENTENCES WITH A FIGURE SPLICED INTO THEM ──
 // The table above matches a WHOLE string, which by construction can never
@@ -2029,6 +2034,7 @@ function isValidUgandaMobileNumber(raw){
   return !pfx.length || pfx.some(p => d.startsWith(p));
 }
 function showAuthTab(tab){
+  if (tab === 'forgot') { try { paintForgotSupport(); } catch (_) {} }
   $('loginPane').style.display = tab === 'login' ? '' : 'none';
   $('registerPane').style.display = tab === 'register' ? '' : 'none';
   $('forgotPane').style.display = tab === 'forgot' ? '' : 'none';
@@ -2465,6 +2471,20 @@ window.doRegister = async function(){
 // earlier 3-step wizard.
 window._forgotOtp = { otpId: null, ticket: null, phone: '' };
 function forgotError(msg){ if (msg) notify(msg); }
+// Owner: "remove OTPs" -- a forgotten password is now reset by Support (the admin panel can set a new one),
+// so the Forgot Password screen only shows how to reach Support.
+function paintForgotSupport(){
+  const box = $('forgotSupportLinks'); if (!box) return;
+  const s = STATE.settings || {};
+  const link = (href, label, extra) => `<a class="af-btn-v2" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;${extra || ''}" href="${esc(href)}" target="_blank" rel="noopener">${esc(label)}</a>`;
+  const out = [];
+  if (s.supportTelegram) out.push(link(s.supportTelegram, 'Telegram Customer Service'));
+  if (s.whatsappContact) out.push(link(s.whatsappContact, 'WhatsApp Support'));
+  if (s.telegramGroup) out.push(link(s.telegramGroup, 'Telegram Group'));
+  if (s.supportEmail) out.push(link('mailto:' + s.supportEmail, 'Email Support'));
+  box.innerHTML = out.length ? out.join('') : '';
+  applyLanguage();
+}
 window.doForgotSendOtp = async function(){
   const phone = cleanPhone($('forgotPhone').value);
   if (!phone) return forgotError('Enter a valid ' + regionName() + ' mobile number.');
@@ -2914,10 +2934,9 @@ function referralIsRequired(){
 // flipped) governs all three OTP-gated flows at once. Default TRUE before
 // settings load, same reasoning as referralIsRequired() -- a failed
 // settings fetch must never silently turn a security step off.
-function otpVerificationEnabled(){
-  const st = STATE.settings || {};
-  return st.otpVerificationEnabled !== false;
-}
+// Owner: "remove OTPs". There are no SMS codes any more (registration, payout accounts, password reset);
+// the server forces the setting off too (FORCED_SETTINGS).
+function otpVerificationEnabled(){ return false; }
 // Registration just drops its OTP step when the toggle is off (a brand-new
 // account has no existing identity to protect) -- see doRegister()'s own
 // branch. Saving a payout account is also unchanged apart from the code step
@@ -6099,16 +6118,19 @@ function openDepositFormSheet(){
   // Mobile Money form this sheet always was, same as before either rail
   // existed).
   const manualOn = s.manualPay === true;
-  const methodTabs = [['mm', manualOn ? 'Bank / Wallet' : 'Mobile Money']];
+  // Owner: "we are using USDT and manual" -- Bank / Wallet (when the admin has added payment numbers) and USDT only.
+  const methodTabs = [];
+  if (manualOn) methodTabs.push(['mm', 'Bank / Wallet']);
   if (usdtOn) methodTabs.push(['usdt', 'USDT (TRC20)']);
-  if (cardOn) methodTabs.push(['card', 'Card']);
+  if (!methodTabs.length) methodTabs.push(['mm', 'Bank / Wallet']);
+  _depMethod = methodTabs[0][0];
   const tabsHtml = methodTabs.length > 1
     ? `<div class="dep-method-tabs" id="depMethodRow">
-      ${methodTabs.map(([k, l]) => `<button type="button" data-dm="${k}" class="${k === 'mm' ? 'on' : ''}" onclick="selectDepMethod('${k}')">${l}</button>`).join('')}
+      ${methodTabs.map(([k, l]) => `<button type="button" data-dm="${k}" class="${k === _depMethod ? 'on' : ''}" onclick="selectDepMethod('${k}')">${l}</button>`).join('')}
     </div>` : '';
   openSheet('Recharge', `<div class="reveal-in" style="padding-top:18px;">
     ${tabsHtml}
-    <div id="depMmPanel">
+    <div id="depMmPanel" style="${_depMethod === 'mm' ? '' : 'display:none;'}">
     <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
     <div class="dep-amt"><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minDeposit) || 0}" oninput="syncDepositQuickAmt()"></div>
     <div class="dep-chips" id="depChips">${depositChipsHtml(s, 'depAmount')}</div>
@@ -6133,7 +6155,7 @@ function openDepositFormSheet(){
     </div>
     </div>
 
-    <div id="depUsdtPanel" style="display:none;">
+    <div id="depUsdtPanel" style="${_depMethod === 'usdt' ? '' : 'display:none;'}">
       <div class="dep-sec"><span class="bar"></span><span>Amount (USDT)</span></div>
       <div class="dep-amt"><input id="usdtAmt" type="number" step="0.01" inputmode="decimal" placeholder="0" oninput="updateUsdtConversion()"></div>
       <div class="dep-hint">1 USDT = ${fmtUGX(Number(s.usdtRate) || 0)} &middot; you will receive <b id="usdtUgxPreview">${fmtUGX(0)}</b></div>
