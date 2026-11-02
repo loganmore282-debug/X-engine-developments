@@ -2419,7 +2419,9 @@ body.deposit-status-open .bottom-nav{display:none;}
 .sheet-body{position:relative;z-index:1;}
 
 
-/* Up to eight quick deposit amounts on the member deposit page (owner: five left empty slots, "let there be the next 3 figures"). */
+/* Eight quick deposit amounts in a tidy grid: four per row, two rows, every chip the same width (owner: a third row looked disorganised). */
+.dep-chips{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
+.dep-chips .dep-chip{width:100%;padding:9px 4px;white-space:nowrap;}
 .dep-chips .dep-chip:nth-child(n+9){display:none!important;}
 
 

@@ -7532,3 +7532,7 @@ Owner (two screenshots): the Recharge quick-amount row showed only 5 chips with 
 - **Phone box:** `sanitizePhoneInput` strips a typed or auto-filled leading `0` and a pasted `251` / `+251`, keeping at most 9 digits. It runs on input, change and blur, and `tidyAuthPhones` re-runs it on `pageshow`, when the app becomes visible again, and 0.3 / 1 / 2.5 s after load (browser autofill fills silently). The saved browser credential id is the 9 digits (was `0` + digits).
 - **Server unchanged:** `cleanPhone` already accepts `926176362`, `0926176362`, `+251926176362` and `251926176362`; all become `+251926176362` and the login address `926176362@petro-platform.com`, so existing members still sign in.
 - Tests: `test-phone-format.js` (24), `test-manual-pay-ui.js` (39). App cache v249.
+
+## Follow-up 72 -- Quick recharge amounts: exactly two rows of four
+
+Owner (screenshot): with eight amounts the row wrapped into three uneven rows (4 / 3 / 1). He wanted two rows, filled to the end. `.dep-chips` is now a 4-column grid, every button the same width, the ninth onwards hidden. Test: `test-manual-pay-ui.js` (41) checks two rows of four and equal widths. App cache v250.
