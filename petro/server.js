@@ -433,14 +433,24 @@ const MARZ_TIMEOUT = 20000;
 const MARZSMS_BASE = 'https://sms.wearemarz.com/api/v1';
 const MARZSMS_KEY  = process.env.MARZSMS_KEY || '';
 
-// Uganda is the only supported currency and phone market. Historical accounts
-// with another currency remain in storage for review, but cannot transact.
-const DEFAULT_REGION_KEY = 'ug';
+// Ethiopia is the only supported currency and phone market (owner: "change
+// country code to +251, languages English and Amharic, currency ETB symbol
+// Br"). Mobile numbers are +251 then 9 digits starting 9 (Ethio Telecom) or
+// 7 (Safaricom Ethiopia). The currency CODE stays ETB in storage and in
+// anything sent to a payment provider; only what a member READS is the
+// symbol Br (see currencyLabel()). Historical accounts saved under another
+// region remain in storage for review, but cannot transact.
+const DEFAULT_REGION_KEY = 'et';
 const DEFAULT_REGION = Object.freeze({
-  key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256',
-  localLength: 9, prefixes: ['7'], utcOffsetMin: 180,
-  active: true, isDefault: true, languages: ['en'], defaultLang: 'en',
+  key: 'et', name: 'Ethiopia', currency: 'ETB', dialCode: '251',
+  localLength: 9, prefixes: ['9', '7'], utcOffsetMin: 180,
+  active: true, isDefault: true, languages: ['en', 'am'], defaultLang: 'en',
 });
+// The label printed in front of an amount. Only ETB differs from its code.
+function currencyLabel(code) {
+  const c = String(code || '').toUpperCase();
+  return c === 'ETB' ? 'Br' : c;
+}
 let _mainAllowedHosts = [];
 let _baseDomain = 'petro-platform.com';
 let _blockRootDomain = true;
@@ -1172,7 +1182,7 @@ async function getRulesContent() {
 function fmtMoney(n, currency) {
   const v = Number(n) || 0;
   const hasCents = Math.round(v * 100) % 100 !== 0;
-  const cur = currency || currentRegion().currency || 'UGX';
+  const cur = currencyLabel(currency || currentRegion().currency || 'ETB');
   // Grouping only -- 'en-UG' is a digit-grouping locale here, not a
   // currency, so the same "1,234,567" shape is right for every region and
   // the label in front of it is what changes.
@@ -7451,7 +7461,7 @@ app.get('/statement/pdf', async (req, res) => {
     const u = userSnap.data();
     if (u.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended.' });
     const brand = sett.brandName || 'Petro';
-    const currency = currentRegion().currency || 'UGX';
+    const currency = currentRegion().currency || 'ETB';
     const rows = snap.docs.map(d => ({ id: d.id, ...d.data(), statementId: statementIdFor(d) }));
     // Same admin-uploaded 'logo' slot the app itself shows on Home/Account/
     // Auth (STATE.brandLogo) -- so uploading a logo once already covers the
@@ -9758,7 +9768,7 @@ app.get('/admin/pesajet/summary', async (req, res) => {
     const truncated = depSnap.size >= PESAJET_SUMMARY_SCAN || witSnap.size >= PESAJET_SUMMARY_SCAN;
     const zero = () => ({ collected: 0, collectedCount: 0, paidOut: 0, paidOutCount: 0,
                           pendingIn: 0, pendingInCount: 0, pendingOut: 0, pendingOutCount: 0 });
-    const summary = Object.assign({ regionKey: 'ug', currency: 'UGX' }, zero());
+    const summary = Object.assign({ regionKey: 'et', currency: 'ETB' }, zero());
     for (const d of depSnap.docs) {
       const row = d.data();
       const amt = finiteMoney(row.displayAmount != null ? row.displayAmount : row.amount);

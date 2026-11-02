@@ -102,7 +102,7 @@
      condensed/narrow, which combined with this app's many font-weight:700/
      800 rules is what read as "still Petro's bold font") with weights wide
      enough that headings/buttons don't need to reach for 800 to stand out. -->
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Ethiopic:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* ── Petro design tokens ──────────────────────────────────────────────
    Value-only swap of the token names this codebase already uses everywhere
@@ -201,7 +201,7 @@
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;touch-action:manipulation;}
 *{-webkit-tap-highlight-color:transparent;}
-body{background:var(--snow-canvas);font-weight:400;font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--snow-ink);-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;}
+body{background:var(--snow-canvas);font-weight:400;font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,'Noto Sans Ethiopic','Nyala','Abyssinica SIL',sans-serif;color:var(--snow-ink);-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;}
 .mono{font-variant-numeric:lining-nums tabular-nums;font-family:var(--number-font,inherit);}
 /* Petro leads with a serif display face for headings/figures over a
    condensed sans for body copy, matching every approved mockup. */
@@ -1381,6 +1381,11 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    which is what made the button invisible everywhere paintLangButton() already
    ran -- removing the markup on top of that makes it gone unconditionally,
    not dependent on a region config staying correctly set. */
+.lang-btn{position:absolute;top:14px;right:14px;z-index:4;display:inline-flex;align-items:center;gap:6px;
+  padding:7px 11px;border:1px solid rgba(255,255,255,.42);border-radius:var(--r-pill);
+  background:rgba(20,10,5,.26);color:#fff;font:inherit;font-size:13px;font-weight:600;
+  letter-spacing:.01em;cursor:pointer;-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);}
+.lang-btn:active{transform:translateY(1px);}
 .lang-sheet-bg{position:fixed;inset:0;z-index:70;display:flex;align-items:flex-end;justify-content:center;
   background:rgba(20,10,5,.45);opacity:0;pointer-events:none;transition:opacity .2s ease;}
 .lang-sheet-bg.show{opacity:1;pointer-events:auto;}
@@ -1433,6 +1438,7 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    message above the existing glass fields. */
 .auth-screen-v2{position:relative;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;background:var(--petro-grad);}
 @supports (min-height:100dvh){.auth-screen-v2{min-height:100dvh;}}
+.auth-screen-v2 .lang-btn{z-index:4;}
 .auth-screen-v2::after{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;
   background:linear-gradient(to bottom, rgba(12,7,4,.35) 0%, rgba(12,7,4,.55) 55%, rgba(12,7,4,.8) 100%);}
 /* Owner: "my tabs are boxed and these are round ... login is raised up" --
@@ -2856,6 +2862,12 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
        now, not two). -->
   <div class="auth-screen-v2" id="authHero">
     <span class="auth-bg" id="authHeroBg" aria-hidden="true"></span>
+    <!-- Language button (English / Amharic), top right of the sign-in screen. Hidden by paintLangButton() when only one language is allowed. data-no-i18n: its label is already in its own language. -->
+    <button type="button" class="lang-btn" id="langBtn" data-no-i18n style="display:none;" onclick="openLangPicker()" aria-label="Change language">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.8 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.8-3.8-9S9.5 5.7 12 3Z"/></svg>
+      <span id="langBtnLabel">English</span>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
     <div class="auth-scroll-v2">
       <div id="loginPane">
         <div class="auth-intro">
@@ -2868,7 +2880,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
           <p>Log in to your Petro account to continue.</p>
         </div>
         <div class="af-v2">
-          <span class="af-prefix" id="loginDial">+256</span>
+          <span class="af-prefix" id="loginDial">+251</span>
           <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
         <!-- Which country this web address serves. Shown only when the
@@ -2906,7 +2918,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
           <p>Create your account to get started.</p>
         </div>
         <div class="af-v2">
-          <span class="af-prefix" id="regDial">+256</span>
+          <span class="af-prefix" id="regDial">+251</span>
           <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
         <div id="regRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:rgba(255,255,255,.75);text-align:center;"></div>
@@ -2952,7 +2964,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
         </div>
         <div id="forgotFormGroup">
           <div class="af-v2">
-            <span class="af-prefix" id="forgotDial">+256</span>
+            <span class="af-prefix" id="forgotDial">+251</span>
             <input id="forgotPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
           </div>
           <div class="af-v2 with-btn">
