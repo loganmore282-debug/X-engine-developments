@@ -3933,7 +3933,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
       // working". Two regions sharing a currency have no arithmetic problem,
       // which is the only thing this rule was ever protecting.
       if (String(refDoc.data().regionKey || DEFAULT_REGION_KEY) !== DEFAULT_REGION_KEY)
-        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'This referral code is unavailable. Ask for a Uganda referral code.' } };
+        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'This referral code is unavailable. Ask for an Ethiopia referral code.' } };
       referrerId = refDoc.id;
     }
 
@@ -7988,7 +7988,7 @@ app.post('/admin/settings/update', async (req, res) => {
     if ('strictRegionHosts' in updates || 'rotateEntry' in updates)
       return res.status(400).json({ status: 'error', message: 'Country address options have been retired.' });
     if (req.body.region && req.body.region !== DEFAULT_REGION_KEY)
-      return res.status(400).json({ status: 'error', message: 'Only Uganda settings are supported.' });
+      return res.status(400).json({ status: 'error', message: 'Only Ethiopia settings are supported.' });
     for (const [key, [min, max]] of Object.entries(SETTINGS_CRITICAL_RANGES)) {
       if (!(key in updates)) continue;
       const n = Number(updates[key]);
@@ -8480,7 +8480,7 @@ app.post('/admin/products/save', async (req, res) => {
   try {
     const list = Array.isArray(req.body.products) ? req.body.products : [];
     if (req.body.region && req.body.region !== DEFAULT_REGION_KEY)
-      return res.status(400).json({ status: 'error', message: 'Only Uganda assets are supported.' });
+      return res.status(400).json({ status: 'error', message: 'Only Ethiopia assets are supported.' });
     const sanitized = [];
     // Owner: "make sure all 2 asset name fields are editable" -- Key is no
     // longer locked once an asset exists, so a save can now be a RENAME
