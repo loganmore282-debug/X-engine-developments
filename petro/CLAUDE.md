@@ -7524,3 +7524,11 @@ Owner (screenshot of the member's Network page, Referral tasks 5 / 15 / 20 / 35 
 - **Claims are remembered per TARGET number** (`milestoneClaimed_<target>` / `depositMilestoneClaimed_<target>` on the member), so changing a reward does not pay anyone who already claimed that step again, and a brand-new target is claimable once. Reusing an old target number with a new reward therefore stays "claimed" for members who took it before.
 - Tests: `test-task-rewards.js` (37), `test-task-rewards-admin.js` (8); `test-payment-recovery.js` now loads the two new helpers. Admin cache v79.
 
+
+## Follow-up 71 -- Eight quick recharge amounts; phone box shows the number WITHOUT a leading 0
+
+Owner (two screenshots): the Recharge quick-amount row showed only 5 chips with 3 empty places, and the sign-in / register phone box showed `0986433477` after the +251 chip. He wants *"+251986433477"* -- e.g. his second number is `926176362`, never `0926176362`.
+- **Chips:** `depositChipsHtml` now shows up to **eight** (was five); CSS hides only the ninth onwards. Chips are the distinct asset prices at or above the minimum recharge, smallest first, so eight appear only when at least eight such prices exist.
+- **Phone box:** `sanitizePhoneInput` strips a typed or auto-filled leading `0` and a pasted `251` / `+251`, keeping at most 9 digits. It runs on input, change and blur, and `tidyAuthPhones` re-runs it on `pageshow`, when the app becomes visible again, and 0.3 / 1 / 2.5 s after load (browser autofill fills silently). The saved browser credential id is the 9 digits (was `0` + digits).
+- **Server unchanged:** `cleanPhone` already accepts `926176362`, `0926176362`, `+251926176362` and `251926176362`; all become `+251926176362` and the login address `926176362@petro-platform.com`, so existing members still sign in.
+- Tests: `test-phone-format.js` (24), `test-manual-pay-ui.js` (39). App cache v249.

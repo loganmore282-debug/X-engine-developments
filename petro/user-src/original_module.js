@@ -1751,14 +1751,24 @@ function petroMarkHtml(size){
   const fs = Math.max(7, Math.round(px / (0.68 * Math.max(3, name.length))));
   return `<span style="display:inline-flex;align-items:center;justify-content:center;width:${px}px;height:${px}px;border-radius:${Math.round(px/4)}px;background:var(--petro-grad);color:#fff;font-weight:800;font-size:${fs}px;letter-spacing:.02em;">${esc(name)}</span>`;
 }
+// Owner: the box sits right after the "+251" chip, so the number is shown the way it is dialled from abroad,
+// +251 986433477: NO leading 0 (a number typed or auto-filled as 0986433477, or as +251986433477 or
+// 251986433477, is shown as 986433477). cleanPhone()/localDigits() still accept every form, so nothing that
+// was saved with a 0 stops working.
 function sanitizePhoneInput(el){
   let digits = el.value.replace(/\D/g, '');
   const len = localLen(), d = dial();
   if (digits.startsWith(d) && digits.length > len) digits = digits.slice(d.length);
-  const maxDigits = digits.startsWith('0') ? len + 1 : len;
-  if (digits.length > maxDigits) digits = digits.slice(0, maxDigits);
-  el.value = digits;
+  digits = digits.replace(/^0+/, '');
+  if (digits.length > len) digits = digits.slice(0, len);
+  if (el.value !== digits) el.value = digits;
 }
+// A password manager can fill the box with 0986433477 without any typing event, so the sign-in boxes are
+// re-checked shortly after the screen opens and again whenever it comes back to the front.
+function tidyAuthPhones(){ for (const id of ['loginPhone', 'regPhone']) { const el = document.getElementById(id); if (el && el.value) sanitizePhoneInput(el); } }
+[300, 1000, 2500].forEach(ms => setTimeout(tidyAuthPhones, ms));
+window.addEventListener('pageshow', tidyAuthPhones);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) tidyAuthPhones(); });
 function $(id){ return document.getElementById(id); }
 function togglePw(id, btn){
   const el = $(id);
@@ -2183,7 +2193,7 @@ function credManSupported(){
 async function storeCredentialIfPossible(email, pass, displayPhone){
   if (!credManSupported()) return;
   const local = displayPhone ? localDigits(displayPhone) : null;
-  const id = local ? '0' + local : email;
+  const id = local || email;
   try { await navigator.credentials.store(new PasswordCredential({ id, password: pass, name: id })); } catch (_) {}
 }
 // Returns true if a stored credential was found AND a sign-in attempt was
@@ -6417,7 +6427,7 @@ function depositChipsHtml(s, inputId){
     .map(p => Number(p.price) || 0)
     .filter(p => p >= (Number(s.minDeposit) || 0))))
     .sort((a, b) => a - b)
-    .slice(0, 5);
+    .slice(0, 8);
   const chosen = _chosenAmountFor(inputId);
   return amounts.map(a =>
     `<button type="button" class="dep-chip${a === chosen ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a},'${inputId}')">${Number(a).toLocaleString('en-US')}</button>`

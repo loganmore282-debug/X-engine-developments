@@ -42,6 +42,9 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  // 1. the deposit form hides the phone box and goes to the pages
  await page.evaluate(()=>{openDepositSheet()});await page.waitForTimeout(500);
  ok(!(await page.$('#depPhone')),'the recharge form has no phone box when payment numbers exist');
+ // quick amounts: eight, not five (the owner's screenshot had three empty places)
+ const chips=await page.evaluate(()=>{STATE.products=[500,1500,3000,6000,12000,25000,50000,100000,250000,500000].map((p,i)=>({key:'p'+i,name:'A'+i,price:p}));document.getElementById('depChips').innerHTML=depositChipsHtml({minDeposit:300},'depAmount');return [...document.querySelectorAll('#depChips .dep-chip')].filter(e=>getComputedStyle(e).display!=='none').map(e=>e.textContent.trim());});
+ ok(chips.join()==='500,1,500,3,000,6,000,12,000,25,000,50,000,100,000','eight quick amounts are shown, smallest first ('+chips.join(' | ')+')');
  await page.fill('#depAmount','100');await page.evaluate(()=>{submitDeposit();});await page.waitForTimeout(100);
  ok(!(await page.$('#mpFlow.show')),'below the minimum does not open the payment pages');
  await page.fill('#depAmount','550');await page.evaluate(()=>{submitDeposit();});await page.waitForTimeout(120);

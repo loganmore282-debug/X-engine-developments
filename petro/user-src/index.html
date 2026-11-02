@@ -2419,8 +2419,8 @@ body.deposit-status-open .bottom-nav{display:none;}
 .sheet-body{position:relative;z-index:1;}
 
 
-/* Exactly five quick deposit amounts on the member deposit page. */
-.dep-chips .dep-chip:nth-child(n+6){display:none!important;}
+/* Up to eight quick deposit amounts on the member deposit page (owner: five left empty slots, "let there be the next 3 figures"). */
+.dep-chips .dep-chip:nth-child(n+9){display:none!important;}
 
 
 /* ── Inner-page backdrop controls + payout readability ─────────────── */
@@ -2951,7 +2951,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
         </div>
         <div class="af-v2">
           <span class="af-prefix" id="loginDial">+251</span>
-          <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
+          <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)" onchange="sanitizePhoneInput(this)" onblur="sanitizePhoneInput(this)">
         </div>
         <!-- Which country this web address serves. Shown only when the
              platform actually runs in more than one, so a single-country
@@ -2989,7 +2989,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
         </div>
         <div class="af-v2">
           <span class="af-prefix" id="regDial">+251</span>
-          <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
+          <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)" onchange="sanitizePhoneInput(this)" onblur="sanitizePhoneInput(this)">
         </div>
         <div id="regRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:rgba(255,255,255,.75);text-align:center;"></div>
         <div class="af-v2 with-btn" id="regOtpRow">
