@@ -3546,6 +3546,7 @@ app.get('/public/settings', async (req, res) => {
     // no reason to hand every member's phone the list of domains that can
     // reach this backend, so it is dropped here alongside maintenanceMsg.
     const { maintenanceMsg, allowedOrigins, ...rest } = s;
+    const manualPayOn = (await activePayChannels()).length > 0;
     // referralRequired is the RESOLVED answer (setting AND "a member already
     // exists"), not the raw setting -- same reasoning as the resolved product
     // figures below. The Sign Up screen shows the field as required or
@@ -3567,7 +3568,8 @@ app.get('/public/settings', async (req, res) => {
       // depositPayAEnabled before manual deposit collection -- PAY B -- was
       // removed outright; renamed since "PAY A" no longer means anything
       // once there is no PAY B to contrast it with.)
-      depositAvailable: payAAvailable(s),
+      manualPay: manualPayOn,
+      depositAvailable: payAAvailable(s) || manualPayOn,
       referralRequired: await referralRequiredNow(),
     // How many countries this platform runs in. The app only uses it to add
     // "if you signed up on another country's site, sign in there" to a
@@ -5926,6 +5928,212 @@ app.post('/deposit/card/submit', async (req, res) => {
 // resumes checking the real result on its own (see doCardDeposit()'s own
 // localStorage-based resume, user-src) whether or not this page is ever
 // even seen.
+// ── MANUAL BANK / WALLET RECHARGE (Ethiopia) ──
+// Owner: payment numbers (a bank account, a Telebirr wallet ...) are typed into
+// the admin panel with a logo. A member picks one, is shown the account to pay
+// for 30 minutes, pays from their own bank/wallet app, then pastes the SMS or
+// receipt code. The claim goes to the admin Recharges tab (status 'review')
+// where it is approved with Force-credit (creditDeposit() is the only thing
+// that ever moves money) or rejected. Nothing here credits a wallet.
+const PAY_CHANNEL_KINDS = ['bank', 'wallet'];
+const MANUAL_ORDER_MS = 30 * 60 * 1000;
+const MAX_PAY_CHANNELS = 20;
+const MAX_PAY_LOGO_CHARS = 220 * 1024;
+let _payChannelsCache = null;
+async function readPayChannels() {
+  const now = Date.now();
+  if (_payChannelsCache && now - _payChannelsCache.at < 10000) return _payChannelsCache.rows;
+  const snap = await db.collection('payChannels').get();
+  const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0) || (tsMillis(a.createdAt) || 0) - (tsMillis(b.createdAt) || 0));
+  _payChannelsCache = { at: now, rows };
+  return rows;
+}
+function dropPayChannelsCache() { _payChannelsCache = null; }
+async function activePayChannels() {
+  try { return (await readPayChannels()).filter(c => c.active !== false && c.accountNumber); }
+  catch (_) { return []; }
+}
+function payChannelPublic(c) {
+  return { id: c.id, name: c.name, kind: c.kind === 'wallet' ? 'wallet' : 'bank', logo: c.logo || '' };
+}
+function cleanPayText(v, max) { return String(v == null ? '' : v).replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max); }
+app.get('/public/pay-channels', async (req, res) => {
+  try {
+    const rows = await activePayChannels();
+    res.set('Cache-Control', 'no-store');
+    res.json({ status: 'success', channels: rows.map(payChannelPublic) });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load payment options' }); }
+});
+app.post('/admin/pay-channels/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { dropPayChannelsCache(); res.json({ status: 'success', channels: await readPayChannels() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load payment numbers' }); }
+});
+app.post('/admin/pay-channels/save', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const b = req.body || {};
+    const name = cleanPayText(b.name, 60);
+    const accountName = cleanPayText(b.accountName, 80);
+    const accountNumber = cleanPayText(b.accountNumber, 40).replace(/\s+/g, '');
+    if (!name) return res.status(400).json({ status: 'error', message: 'Enter the payment name (for example Commercial Bank of Ethiopia).' });
+    if (!accountName) return res.status(400).json({ status: 'error', message: 'Enter the account name.' });
+    if (!/^[0-9A-Za-z+\-]{4,40}$/.test(accountNumber)) return res.status(400).json({ status: 'error', message: 'Enter a valid account number.' });
+    const kind = PAY_CHANNEL_KINDS.includes(b.kind) ? b.kind : 'bank';
+    const rows = await readPayChannels();
+    const id = b.id ? String(b.id) : '';
+    const existing = id ? rows.find(r => r.id === id) : null;
+    if (id && !existing) return res.status(404).json({ status: 'error', message: 'That payment number no longer exists.' });
+    if (!existing && rows.length >= MAX_PAY_CHANNELS) return res.status(400).json({ status: 'error', message: `You can keep up to ${MAX_PAY_CHANNELS} payment numbers. Remove one first.` });
+    // logo: undefined/null = keep, '' = remove, a PNG data URI = replace.
+    let logo = existing ? (existing.logo || '') : '';
+    if (typeof b.logo === 'string') {
+      if (b.logo === '') logo = '';
+      else if (/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(b.logo) && b.logo.length <= MAX_PAY_LOGO_CHARS) logo = b.logo;
+      else return res.status(400).json({ status: 'error', message: 'That logo is not valid or is too large. Upload a smaller image.' });
+    }
+    const doc = {
+      name, kind, accountName, accountNumber, logo, active: b.active !== false,
+      order: Number.isFinite(Number(b.order)) ? Math.max(0, Math.min(999, Math.round(Number(b.order)))) : (existing ? Number(existing.order) || 0 : rows.length),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    const ref = existing ? db.collection('payChannels').doc(existing.id) : db.collection('payChannels').doc();
+    if (existing) await ref.update(doc); else await ref.set({ ...doc, createdAt: FieldValue.serverTimestamp() });
+    dropPayChannelsCache();
+    logAdminAction(req, 'pay_channel_saved', { id: ref.id, name, kind, active: doc.active });
+    res.json({ status: 'success', id: ref.id });
+  } catch (e) { console.error('pay-channels save:', e.message); res.status(500).json({ status: 'error', message: 'Could not save this payment number' }); }
+});
+app.post('/admin/pay-channels/delete', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const id = String((req.body || {}).id || '');
+    if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
+    const ref = db.collection('payChannels').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'That payment number no longer exists.' });
+    await ref.delete();
+    dropPayChannelsCache();
+    logAdminAction(req, 'pay_channel_deleted', { id, name: snap.data().name });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove this payment number' }); }
+});
+// Creates (or re-points) the member's one open order and returns the account to pay.
+// `depositId` is sent back by "switch": the same order moves to another channel and keeps its clock.
+app.post('/deposit/manual/order', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const amt = paymentAmount(req.body.amount);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
+  try {
+    const [uSnap, sett, channels] = await Promise.all([db.collection('users').doc(userId).get(), getSettings(), activePayChannels()]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
+    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before topping up.' });
+    if (!channels.length) return res.status(400).json({ status: 'error', message: 'Recharges are not available right now.' });
+    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
+    const ch = channels.find(c => c.id === String(req.body.channelId || ''));
+    if (!ch) return res.status(400).json({ status: 'error', message: 'Please select a payment method' });
+    const now = Date.now();
+    const openSnap = await db.collection('pendingDeposits').where('userId', '==', userId).where('status', '==', 'pending').get();
+    const open = openSnap.docs.filter(d => d.data().method === 'manual' && !d.data().pastedSms && (tsMillis(d.data().expiresAt) || 0) > now);
+    let depRef, ref, expiresMs;
+    const mine = open.find(d => d.id === String(req.body.depositId || '')) || open[0];
+    const channelFields = { network: ch.name, channelId: ch.id, channelKind: ch.kind === 'wallet' ? 'wallet' : 'bank', assignedNumber: ch.accountNumber, assignedName: ch.accountName };
+    if (mine) {
+      depRef = mine.ref; ref = mine.data().ref; expiresMs = tsMillis(mine.data().expiresAt);
+      await depRef.update({ ...channelFields, amount: amt });
+    } else {
+      ref = await uniqueRef('M');
+      const { date, time } = nowStr();
+      depRef = db.collection('pendingDeposits').doc();
+      expiresMs = now + MANUAL_ORDER_MS;
+      await depRef.set({
+        userId, method: 'manual', provider: 'manual', amount: amt, ref, status: 'pending', ...channelFields,
+        commissionBasis: 'deposit', commissionPending: true, commissionPaidLevels: [],
+        regionKey: currentRegionKey(), date, time,
+        expiresAt: new Date(expiresMs), createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+    res.json({ status: 'success', depositId: depRef.id, reference: ref, amount: amt, expiresAt: expiresMs,
+      channel: payChannelPublic(ch), accountName: ch.accountName, accountNumber: ch.accountNumber });
+  } catch (e) { console.error('manual order:', e.message); res.status(500).json({ status: 'error', message: 'Could not start recharge' }); }
+});
+// What a pasted SMS / receipt is allowed to be. CBE receipts carry "v2-..." (23 characters) or an
+// "FT" reference (12 characters, sometimes followed by 8 account digits); Telebirr's
+// transaction number is exactly 10 letters/digits. Anything else is refused up front.
+function extractManualRef(text) {
+  const t = String(text || '');
+  let m = /v2-[A-Za-z0-9]{6,40}/i.exec(t);
+  if (m) return { ref: m[0].toLowerCase(), kind: 'cbe-v2' };
+  m = /\bFT[0-9A-Z]{10,22}\b/i.exec(t);
+  if (m) return { ref: m[0].toUpperCase().slice(0, 12), kind: 'cbe-ft' };
+  m = /transaction number is\s+([A-Z0-9]{10})\b/i.exec(t) || /receipt\/([A-Z0-9]{10})\b/i.exec(t);
+  if (m) return { ref: m[1].toUpperCase(), kind: 'telebirr' };
+  m = /^\s*([A-Z0-9]{10})\s*$/i.exec(t);
+  if (m && /[A-Z]/i.test(m[1]) && /\d/.test(m[1])) return { ref: m[1].toUpperCase(), kind: 'telebirr' };
+  return null;
+}
+function extractManualAmount(text) {
+  const m = /(?:transferred|sent|debited(?: with)?|paid)\s*(?:ETB|Br|birr)?\s*([\d,]+(?:\.\d+)?)/i.exec(String(text || '')) || /ETB\s*([\d,]+(?:\.\d+)?)/i.exec(String(text || ''));
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+const _manualSubmitDebounce = new Map();
+app.post('/deposit/manual/submit', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const sms = String((req.body || {}).sms || '').trim().slice(0, 2000);
+    const found = extractManualRef(sms);
+    if (!found) return res.status(400).json({ status: 'error', code: 'BAD_SMS', message: 'please enter the correct transfer sms' });
+    const last = _manualSubmitDebounce.get(userId) || 0;
+    if (Date.now() - last < 3000) return res.status(429).json({ status: 'error', message: 'Please wait a moment.' });
+    _manualSubmitDebounce.set(userId, Date.now());
+    const depRef = db.collection('pendingDeposits').doc(String(req.body.depositId || '_'));
+    const snap = await depRef.get();
+    if (!snap.exists || snap.data().userId !== userId || snap.data().method !== 'manual')
+      return res.status(404).json({ status: 'error', message: 'Recharge not found' });
+    const dep = snap.data();
+    if (dep.status === 'review') return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
+    if (dep.status !== 'pending') return res.status(400).json({ status: 'error', message: 'This recharge is no longer open. Start a new one.' });
+    // A real transfer can back ONE open or credited claim, by anyone.
+    const dupSnap = await db.collection('pendingDeposits').where('pastedSmsTxId', '==', found.ref).get();
+    if (dupSnap.docs.some(d => d.id !== snap.id && d.data().status !== 'failed'))
+      return res.status(409).json({ status: 'error', message: 'This transaction hash has already been submitted.' });
+    const smsAmount = extractManualAmount(sms);
+    const updated = await depRef.updateIf({ status: 'pending' }, {
+      status: 'review', reviewReason: 'Waiting for the admin to check the payment message',
+      pastedSms: sms, pastedAt: FieldValue.serverTimestamp(), pastedSmsTxId: found.ref, pastedSmsKind: found.kind, pastedSmsParsed: true,
+      ...(smsAmount != null ? { pastedSmsAmount: smsAmount, pastedSmsAmountMatches: Math.abs(smsAmount - Number(dep.amount)) < 0.01 } : {}),
+    });
+    if (!updated) return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
+    const { date, time } = nowStr();
+    await db.collection('transactions').add({
+      userId, statementId: newStatementId(), type: 'deposit', description: `Deposit: Processing (${fmtMoney(dep.amount)})`,
+      amount: dep.amount, displayAmount: dep.amount, status: 'pending', date, time, ref: dep.ref, depositId: snap.id, createdAt: FieldValue.serverTimestamp()
+    }).catch(e => console.error(`Manual deposit ledger row create failed for dep=${snap.id}:`, e.message));
+    res.json({ status: 'success', state: 'review', depositId: snap.id, reference: dep.ref, message: 'Submitted. Our team is checking your payment.' });
+  } catch (e) { console.error('manual submit:', e.message); res.status(500).json({ status: 'error', message: 'Could not submit your recharge. Please try again.' }); }
+});
+// An order nobody paid for is closed after the clock (30 min) plus a grace of 30.
+async function sweepManualOrders() {
+  try {
+    const snap = await db.collection('pendingDeposits').where('status', '==', 'pending').limit(200).get();
+    const cut = Date.now() - 30 * 60 * 1000;
+    for (const d of snap.docs) {
+      const x = d.data();
+      if (x.method !== 'manual' || x.pastedSms) continue;
+      if ((tsMillis(x.expiresAt) || 0) > cut) continue;
+      await d.ref.updateIf({ status: 'pending' }, { status: 'failed', failureReason: 'The payment order expired' }).catch(() => {});
+    }
+  } catch (e) { console.error('sweepManualOrders:', e.message); }
+}
+// END MANUAL BANK / WALLET RECHARGE
 app.get('/deposit/callback', (req, res) => {
   res.set('Content-Type', 'text/html; charset=utf-8').send(
     '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
@@ -11077,6 +11285,7 @@ connectMongo(MONGODB_URI)
     setTimeout(reconcileCashback, 500);
     setInterval(autoApproveWithdrawalsTick, 10 * 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
+    setInterval(sweepManualOrders, 10 * 60 * 1000);
     setInterval(reconcileBlockedCommissions, 5 * 60 * 1000);
   })
   .catch(e => { console.error('Mongo connection failed:', e.message); process.exit(1); });

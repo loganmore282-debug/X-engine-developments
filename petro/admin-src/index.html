@@ -381,6 +381,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
         <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="settings" id="settingsTab">Settings</button>
         <button class="tab" data-tab="banners" id="bannersTab">Banners</button>
+        <button class="tab hidden" data-tab="paynumbers" id="payNumbersTab">Payment Numbers</button>
         <button class="tab hidden" data-tab="admins" id="adminsTab">Admins</button>
         <button class="tab hidden" data-tab="auditlog" id="auditLogTab">Activity Log</button>
       </div>
@@ -795,9 +796,9 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
     if (wanted && VALID_TABS.has(wanted)) { lastTab = wanted; history.replaceState(null, '', location.pathname); }
   } catch (_) {}
   const isOwner = SESSION_ROLE === 'owner';
-  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'bannersTab', 'promocodesTab']
+  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'bannersTab', 'promocodesTab', 'payNumbersTab']
     .forEach(id => $(id).classList.toggle('hidden', !isOwner));
-  if (!isOwner && ['products', 'settings', 'banners', 'promocodes'].includes(lastTab)) lastTab = 'dashboard';
+  if (!isOwner && ['products', 'settings', 'banners', 'promocodes', 'paynumbers'].includes(lastTab)) lastTab = 'dashboard';
   // The country list is needed before anything renders: every money figure
   // in this panel is labelled from it (see ugx()/curOf()), and the region
   // picker on Settings and Products is built from it. Failure is silent and
@@ -1057,7 +1058,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('mess
 });
 
 // ── TABS ──
-const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','transactions','referrals','settings','banners','admins','auditlog']);
+const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','transactions','referrals','settings','banners','paynumbers','admins','auditlog']);
 let _tab='dashboard', _tabSequence=0;
 function staleTab(name){ return _tab !== name; }
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{ if (t.dataset.tab==='users') _userFilter='all'; if (_tab !== t.dataset.tab) switchTab(t.dataset.tab); }));
@@ -1075,7 +1076,7 @@ function switchTab(name){
   const spinnerTimer = setTimeout(() => { if (sequence === _tabSequence) c.innerHTML=spinnerHtml(); }, 120);
   const fn = ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
      products:renderProducts, promocodes:renderPromoCodes, transactions:renderTransactions,
-     referrals:renderReferrals, settings:renderSettings, banners:renderBanners, admins:renderAdmins, auditlog:renderAuditLog }[name]);
+     referrals:renderReferrals, settings:renderSettings, banners:renderBanners, paynumbers:renderPayNumbers, admins:renderAdmins, auditlog:renderAuditLog }[name]);
   // The switch lives in the topbar, OUTSIDE #content, so a tab render can
   // never take it with it -- which is why this no longer waits for the tab
   // to paint. Only the note under the tabs depends on which tab is open, and
@@ -2007,7 +2008,7 @@ function drawDeps(){
     let actions = '';
     if (SESSION_ROLE === 'owner' && stuck) {
       actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`;
-      if (isUsdt && d.status === 'awaiting_verification') {
+      if ((isUsdt && d.status === 'awaiting_verification') || (isManual && (d.status === 'review' || d.status === 'pending'))) {
         actions += ` <button class="btn danger sm" data-usdt-reject="${esc(d.id)}">Reject</button>`;
       }
     }
@@ -2843,6 +2844,113 @@ function applyAdminBrandName(name){
 // sharing renderSettings()'s, same self-contained pattern every other tab
 // already uses -- one extra round of these 4 small fetches on switching
 // tabs, in exchange for not threading one function's closure across two.
+
+// ── PAYMENT NUMBERS (bank / wallet accounts members pay into) ──
+// Owner: "make when l can put payment numbers from admin panel ... make when l can upload the logos,
+// so system will remove background so that they fit perfectly". Each entry is one row on the member's
+// "Please choose payment" page. The logo goes through fileToLogoPng(): the background connected to the
+// picture edge is cleared and the picture is cropped tight, so it sits perfectly inside the round frame.
+let _payRows = [], _payEdit = null, _payLogo = undefined;
+async function renderPayNumbers(){
+  const r = await api('/admin/pay-channels/list', {});
+  if (staleTab('paynumbers')) return;
+  _payRows = (r && r.channels) || [];
+  _payEdit = null; _payLogo = undefined;
+  drawPayNumbers();
+}
+function payLogoBox(src, size){
+  size = size || 44;
+  return src
+    ? `<div style="width:${size}px;height:${size}px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;border:1px solid var(--line);background:#fff"><img src="${esc(src)}" alt="" style="max-width:76%;max-height:76%;object-fit:contain"></div>`
+    : `<div style="width:${size}px;height:${size}px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;border:1px dashed var(--line);color:var(--muted,#888);font-size:11px">No logo</div>`;
+}
+function drawPayNumbers(){
+  const e = _payEdit;
+  const logoNow = e ? (_payLogo === undefined ? (e.logo || '') : _payLogo) : '';
+  const form = e ? `
+    <div class="panel-card">
+      <h3 style="margin:0 0 10px;font-size:15px">${e.id ? 'Edit payment number' : 'Add payment number'}</h3>
+      <div class="row">
+        <div><label>Name members see</label><input id="pcName" maxlength="60" value="${esc(e.name || '')}" placeholder="Commercial Bank of Ethiopia"></div>
+        <div><label>Type</label><select id="pcKind"><option value="bank"${e.kind !== 'wallet' ? ' selected' : ''}>Bank</option><option value="wallet"${e.kind === 'wallet' ? ' selected' : ''}>Wallet (Telebirr)</option></select></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div><label>Account name</label><input id="pcAccName" maxlength="80" value="${esc(e.accountName || '')}" placeholder="Ashenafi"></div>
+        <div><label>Account number</label><input id="pcAccNo" maxlength="40" value="${esc(e.accountNumber || '')}" placeholder="1000809418239"></div>
+      </div>
+      <div class="banner-row" style="margin-top:10px">
+        ${payLogoBox(logoNow, 52)}
+        <div style="flex:1;min-width:0;font-size:12px">${logoNow ? 'Logo ready (background removed)' : '<span class="muted">No logo yet</span>'}</div>
+        ${logoNow ? '<button class="btn danger sm" id="pcLogoClear" type="button">Remove logo</button>' : ''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload logo<input type="file" id="pcLogoFile" accept="image/*" hidden></label>
+      <p class="muted" style="margin:6px 0 0;font-size:12px">Upload the logo as it is. The system clears the background around it and crops it so it fits the round frame.</p>
+      <div class="row" style="margin-top:10px;align-items:end">
+        <div><label>Order (smaller first)</label><input id="pcOrder" type="number" min="0" max="999" value="${esc(e.order != null ? e.order : _payRows.length)}"></div>
+        <div><label style="display:flex;align-items:center;gap:8px;margin-top:22px"><input id="pcActive" type="checkbox" style="width:auto"${e.active === false ? '' : ' checked'}> Show to members</label></div>
+      </div>
+      <div class="row" style="margin-top:14px"><button class="btn block" id="pcSave" type="button">Save</button><button class="btn ghost block" id="pcCancel" type="button">Cancel</button></div>
+    </div>` : '';
+  $('content').innerHTML = `
+    <h2 class="sec">Payment numbers</h2>
+    <p class="muted" style="margin:0 0 12px">These are the accounts members pay into on the recharge page (a bank account, a Telebirr wallet and so on). Each one appears as a row under &ldquo;Please choose payment&rdquo; with its logo. A member who taps <b>switch</b> goes back to this list.</p>
+    ${form}
+    ${e ? '' : '<button class="btn block" id="pcAdd" type="button" style="margin-bottom:14px">Add payment number</button>'}
+    <div class="panel-card">
+      ${_payRows.length ? _payRows.map(c => `
+        <div class="banner-row" data-pcid="${esc(c.id)}">
+          ${payLogoBox(c.logo, 44)}
+          <div style="flex:1;min-width:0;font-size:13px">
+            <b data-no-i18n>${esc(c.name)}</b> <span class="pill-tag ${c.active === false ? 't-bad' : 't-ok'}" style="font-size:10px">${c.active === false ? 'Hidden' : 'Showing'}</span>
+            <div class="muted" style="font-size:12px" data-no-i18n>${esc(c.accountName)} &middot; ${esc(c.accountNumber)} &middot; ${c.kind === 'wallet' ? 'Wallet' : 'Bank'}</div>
+          </div>
+          <button class="btn ghost sm" data-pc-edit="${esc(c.id)}" type="button">Edit</button>
+          <button class="btn danger sm" data-pc-del="${esc(c.id)}" type="button">Delete</button>
+        </div>`).join('') : '<p class="muted" style="margin:0">No payment numbers yet. Until you add one, members cannot recharge by bank or wallet.</p>'}
+    </div>`;
+  const add = $('pcAdd'); if (add) add.onclick = () => { _payEdit = { active: true, kind: 'bank' }; _payLogo = undefined; drawPayNumbers(); };
+  $('content').querySelectorAll('[data-pc-edit]').forEach(b => b.onclick = () => { _payEdit = _payRows.find(r => r.id === b.dataset.pcEdit) || null; _payLogo = undefined; drawPayNumbers(); });
+  $('content').querySelectorAll('[data-pc-del]').forEach(b => b.onclick = async () => {
+    const row = _payRows.find(r => r.id === b.dataset.pcDel); if (!row) return;
+    if (!window.confirm('Delete "' + row.name + '"? Members will no longer see it.')) return;
+    b.disabled = true;
+    const d = await api('/admin/pay-channels/delete', { id: row.id });
+    toast(d.status === 'success' ? 'Deleted' : (d.message || 'Could not delete'), d.status === 'success' ? 'ok' : 'err');
+    renderPayNumbers();
+  });
+  const cancel = $('pcCancel'); if (cancel) cancel.onclick = () => { _payEdit = null; _payLogo = undefined; drawPayNumbers(); };
+  const file = $('pcLogoFile');
+  if (file) file.addEventListener('change', async ev => {
+    const f = ev.target.files[0]; if (!f) return; ev.target.value = '';
+    keepPayForm();
+    try {
+      toast('Processing logo…', 'ok');
+      const result = await fileToLogoPng(f, 256);
+      _payLogo = result.image;
+      toast(result.cleared ? 'Background removed' : 'Logo ready', 'ok');
+      drawPayNumbers();
+    } catch (err) { toast(err.message || 'Could not process the logo', 'err'); }
+  });
+  const clr = $('pcLogoClear'); if (clr) clr.onclick = () => { keepPayForm(); _payLogo = ''; drawPayNumbers(); };
+  const save = $('pcSave');
+  if (save) save.onclick = async () => {
+    keepPayForm();
+    const body = { id: _payEdit.id, name: _payEdit.name, kind: _payEdit.kind, accountName: _payEdit.accountName, accountNumber: _payEdit.accountNumber, order: _payEdit.order, active: _payEdit.active };
+    if (_payLogo !== undefined) body.logo = _payLogo;
+    save.disabled = true;
+    const d = await api('/admin/pay-channels/save', body);
+    toast(d.status === 'success' ? 'Saved' : (d.message || 'Could not save'), d.status === 'success' ? 'ok' : 'err');
+    if (d.status === 'success') renderPayNumbers(); else save.disabled = false;
+  };
+}
+// Copies what is typed in the form back into the entry being edited, so a redraw (after choosing a logo) keeps it.
+function keepPayForm(){
+  if (!_payEdit || !$('pcName')) return;
+  _payEdit = Object.assign({}, _payEdit, {
+    name: $('pcName').value, kind: $('pcKind').value, accountName: $('pcAccName').value, accountNumber: $('pcAccNo').value,
+    order: $('pcOrder').value === '' ? undefined : Number($('pcOrder').value), active: $('pcActive').checked,
+  });
+}
 async function renderBanners(){
   const [r, br, cir, bar] = await Promise.all([
     api('/admin/settings'), api('/admin/banner'), api('/admin/petro-images'), api('/admin/brand-assets')

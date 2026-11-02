@@ -678,7 +678,6 @@ var LANG_ROWS = [
   ['Could not claim that reward right now', '', '', '', '', '', 'አሁን ያንን ሽልማት መጠየቅ አልተቻለም'],
   ['Sign in with your Petro phone account.', '', '', '', '', '', 'በፔትሮ የስልክ መለያዎ ይግቡ።'],
   ['Could not create your profile', '', '', '', '', '', 'መገለጫዎን መፍጠር አልተቻለም'],
-  ['A referral code is required to sign up. Ask the person who invited you for theirs.', '', '', '', '', '', 'ለመመዝገብ የግብዣ ኮድ ያስፈልጋል። ከጋበዘዎት ሰው ኮዱን ይጠይቁ።'],
   ['That referral code does not exist.', '', '', '', '', '', 'ያ የግብዣ ኮድ የለም።'],
   ['You cannot use your own referral code.', '', '', '', '', '', 'የራስዎን የግብዣ ኮድ መጠቀም አይችሉም።'],
   ['That referral code is no longer active.', '', '', '', '', '', 'ያ የግብዣ ኮድ ከአሁን በኋላ ንቁ አይደለም።'],
@@ -817,6 +816,40 @@ var LANG_ROWS = [
   ['Sign-in is temporarily unavailable. Please try again shortly.', '', '', '', '', '', 'መግቢያ ለጊዜው አይገኝም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'],
   ['Something went wrong. Try again.', '', '', '', '', '', 'የሆነ ችግር ተፈጥሯል። እንደገና ይሞክሩ።'],
   ['The payment has not been confirmed yet, and nothing is lost. If it goes through, your balance updates on its own automatically, or look under Transaction Statement later to check.', '', '', '', '', '', 'ክፍያው እስካሁን አልተረጋገጠም፣ እና ምንም አልጠፋም። ከተሳካ ቀሪ ሂሳብዎ በራሱ በራስ-ሰር ይሻሻላል፣ ወይም ለመፈተሽ ቆይተው በ«የግብይት መግለጫ» ስር ይመልከቱ።'],
+  ['Bank / Wallet', '', '', '', '', '', 'ባንክ / ቦርሳ'],
+  ['Pay to the account shown', '', '', '', '', '', 'ወደሚታየው መለያ ይክፈሉ'],
+  ['Tap Confirm Recharge, pick a bank or wallet, copy the account and pay from your own app.', '', '', '', '', '', '«ሂሳብ መሙላቱን አረጋግጥ» ን ይንኩ፣ ባንክ ወይም ቦርሳ ይምረጡ፣ መለያውን ገልብጠው ከራስዎ መተግበሪያ ይክፈሉ።'],
+  ['Order Amount', '', '', '', '', '', 'የትዕዛዝ መጠን'],
+  ['Please choose payment', '', '', '', '', '', 'እባክዎ የመክፈያ ዘዴ ይምረጡ'],
+  ['Friendly reminder: Please use the corresponding bank to complete the transfer.', '', '', '', '', '', 'ወዳጃዊ ማስታወሻ፡ ዝውውሩን ለማጠናቀቅ እባክዎ ተመሳሳይ ባንክ ይጠቀሙ።'],
+  ['Please do not use interbank transfers from other banks to avoid delays and inconvenience.', '', '', '', '', '', 'መዘግየትና ችግር እንዳይፈጠር እባክዎ ከሌሎች ባንኮች የባንክ-ለባንክ ዝውውር አይጠቀሙ።'],
+  ['Thank you for your understanding!', '', '', '', '', '', 'ስለተረዱን እናመሰግናለን!'],
+  ['loading...', '', '', '', '', '', 'በመጫን ላይ...'],
+  ['Order Remaining', '', '', '', '', '', 'ቀሪ የትዕዛዝ ጊዜ'],
+  ['Min', '', '', '', '', '', 'ደቂቃ'],
+  ['Sec', '', '', '', '', '', 'ሰከንድ'],
+  ['Step 1', '', '', '', '', '', 'ደረጃ 1'],
+  ['Copy account for payment', '', '', '', '', '', 'ለክፍያ መለያውን ቅዳ'],
+  ['Payment Channel', '', '', '', '', '', 'የክፍያ መንገድ'],
+  ['Account Name', '', '', '', '', '', 'የመለያ ስም'],
+  ['Account Number', '', '', '', '', '', 'የመለያ ቁጥር'],
+  ['switch', '', '', '', '', '', 'ቀይር'],
+  ['copy', '', '', '', '', '', 'ቅዳ'],
+  ['After the transfer is complete → check the SMS. The code starts with: "v2-" or "FT"', '', '', '', '', '', 'ዝውውሩ ከተጠናቀቀ በኋላ → ኤስኤምኤስን ይመልከቱ። ኮዱ የሚጀምረው በ "v2-" ወይም "FT" ነው'],
+  ['v2-hf = enter the 23-character code', '', '', '', '', '', 'v2-hf = ባለ 23 ቁምፍ ኮዱን ያስገቡ'],
+  ['FT = enter the 12-character code', '', '', '', '', '', 'FT = ባለ 12 ቁምፍ ኮዱን ያስገቡ'],
+  ['Telebirr = 10 characters only', '', '', '', '', '', 'ቴሌብር = 10 ቁምፍ ብቻ'],
+  ['Step 2', '', '', '', '', '', 'ደረጃ 2'],
+  ['Paste payment SMS or enter v2- or FT', '', '', '', '', '', 'የክፍያ ኤስኤምኤስ ይለጥፉ ወይም v2- ወይም FT ያስገቡ'],
+  ['Paste the confirmation message here, or enter the code (FT or v2-):', '', '', '', '', '', 'የማረጋገጫ መልዕክቱን እዚህ ይለጥፉ፣ ወይም ኮዱን ያስገቡ (FT ወይም v2-)፡'],
+  ['Do not save the account number! It changes in real time. Otherwise the transfer will fail.', '', '', '', '', '', 'የመለያ ቁጥሩን አያስቀምጡ! በእውነተኛ ጊዜ ይቀየራል። ካልሆነ ዝውውሩ አይሳካም።'],
+  ['Name Copied', '', '', '', '', '', 'ስሙ ተቀድቷል'],
+  ['Copied.', '', '', '', '', '', 'ተቀድቷል።'],
+  ['please enter the correct transfer sms', '', '', '', '', '', 'እባክዎ ትክክለኛውን የዝውውር ኤስኤምኤስ ያስገቡ'],
+  ['This order has expired. Please start again.', '', '', '', '', '', 'የዚህ ትዕዛዝ ጊዜ አብቅቷል። እባክዎ እንደገና ይጀምሩ።'],
+  ['Submitted. Our team is checking your payment.', '', '', '', '', '', 'ተልኳል። ቡድናችን ክፍያዎን በመፈተሽ ላይ ነው።'],
+  ['This recharge is no longer open. Start a new one.', '', '', '', '', '', 'ይህ ሂሳብ መሙላት ከአሁን በኋላ ክፍት አይደለም። አዲስ ይጀምሩ።'],
+  ['Could not load payment options', '', '', '', '', '', 'የክፍያ አማራጮችን መጫን አልተቻለም'],
 ];
 // ── SENTENCES WITH A FIGURE SPLICED INTO THEM ──
 // The table above matches a WHOLE string, which by construction can never
@@ -912,6 +945,7 @@ var LANG_PATTERNS = [
   ['Enter a valid {0} mobile number.', '', '', '', '', '', 'ትክክለኛ የ{0} የሞባይል ቁጥር ያስገቡ።'],
   ['If the prompt does not come up, dial {0} on that phone to find and approve the pending payment yourself.', '', '', '', '', '', 'ጥያቄው ካልመጣ፣ በዚያ ስልክ ላይ {0} ይደውሉና በመጠባበቅ ላይ ያለውን ክፍያ እራስዎ ይፈልጉና ያጽድቁ።'],
   ['This recharge did not go through. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Your {0} balance has not changed.', '', '', '', '', '', 'ይህ ሂሳብ መሙላት አልተሳካም። ጥያቄውን በጊዜ ካላጸደቁ፣ ከሰረዙት፣ ወይም በቂ ገንዘብ ከሌለዎት ይህ ሊከሰት ይችላል። የ{0} ቀሪ ሂሳብዎ አልተቀየረም።'],
+  ['Enter at least {0}.', '', '', '', '', '', 'ቢያንስ {0} ያስገቡ።'],
 ];
 // ==== I18N TABLE: SHARED WITH THE ADMIN PANEL - END ====
 // ==== I18N ENGINE: SHARED WITH THE ADMIN PANEL - BEGIN ====
@@ -6047,7 +6081,8 @@ function openDepositFormSheet(){
   // with neither on shows no tab row at all (byte-for-byte the same single
   // Mobile Money form this sheet always was, same as before either rail
   // existed).
-  const methodTabs = [['mm', 'Mobile Money']];
+  const manualOn = s.manualPay === true;
+  const methodTabs = [['mm', manualOn ? 'Bank / Wallet' : 'Mobile Money']];
   if (usdtOn) methodTabs.push(['usdt', 'USDT (TRC20)']);
   if (cardOn) methodTabs.push(['card', 'Card']);
   const tabsHtml = methodTabs.length > 1
@@ -6061,20 +6096,21 @@ function openDepositFormSheet(){
     <div class="dep-amt"><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minDeposit) || 0}" oninput="syncDepositQuickAmt()"></div>
     <div class="dep-chips" id="depChips">${depositChipsHtml(s, 'depAmount')}</div>
 
-    <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Payment Phone</span></div>
+    ${manualOn ? '' : `<div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Payment Phone</span></div>
     <div class="dep-phone">
       <span class="prefix">${esc(dialPlus())}</span>
       <input id="depPhone" type="tel" inputmode="numeric" placeholder="Your payment number (${esc(phoneHintBody())})" value="${esc(defaultPhone)}" oninput="sanitizePhoneInput(this)">
     </div>
-    <div class="dep-hint">Phone number must start with 0 and be ${localLen() + 1} digits</div>
+    <div class="dep-hint">Phone number must start with 0 and be ${localLen() + 1} digits</div>`}
 
     <button class="primary-button" id="depSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="submitDeposit()">Confirm Recharge</button>
 
     <div class="dep-instr deposit-guide">
       <h3>How to add funds</h3>
       <ol class="deposit-steps">
-        <li><b>Choose your amount</b><span>Enter at least ${fmtUGX(s.minDeposit)} and the mobile money number to charge.</span></li>
-        <li><b>Approve on your phone</b><span>Tap Confirm Recharge, then approve the payment prompt using your mobile money PIN on your phone.</span></li>
+        ${manualOn ? `<li><b>Choose your amount</b><span>Enter at least ${fmtUGX(s.minDeposit)}.</span></li>
+        <li><b>Pay to the account shown</b><span>Tap Confirm Recharge, pick a bank or wallet, copy the account and pay from your own app.</span></li>` : `<li><b>Choose your amount</b><span>Enter at least ${fmtUGX(s.minDeposit)} and the mobile money number to charge.</span></li>
+        <li><b>Approve on your phone</b><span>Tap Confirm Recharge, then approve the payment prompt using your mobile money PIN on your phone.</span></li>`}
         <li><b>Follow the payment status</b><span>Wait for confirmation. This checks itself automatically. If money leaves your phone but the balance has not updated, keep the transaction reference and contact Customer Support.</span></li>
       </ol>
     </div>
@@ -6705,8 +6741,14 @@ function setDepositStatusUnknown(){
 }
 window.submitDeposit = async function(){
   const submitBtn = $('depSubmitBtn');
-  if (!submitBtn || submitBtn.disabled || !$('depAmount') || !$('depPhone')) return;
+  if (!submitBtn || submitBtn.disabled || !$('depAmount')) return;
   const amount = parseMoneyInput($('depAmount').value);
+  if ((STATE.settings || {}).manualPay === true) {
+    if (!amount || amount <= 0) return notify('Enter a valid amount');
+    if (amount < (Number((STATE.settings || {}).minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX((STATE.settings || {}).minDeposit));
+    return openManualPayFlow(amount);
+  }
+  if (!$('depPhone')) return;
   // Owner: "why when one didn't put number, it just continues to poll ... l
   // tried to leave not putting number and clicked confirm deposit but it
   // didn't reject it just continued to go to poll page."
@@ -6754,6 +6796,189 @@ window.submitDeposit = async function(){
   if ($('depSubmitBtn') === submitBtn && _openSheetTitle === 'Recharge') closeSheet({ fromAction: true });
   openDepositStatusModal(amount, phone);
   pollDepositStatus(r.depositId);
+};
+// ── MANUAL BANK / WALLET RECHARGE PAGES (Ethiopia) ──
+// Owner's three screens, built to his screenshots (412 css px wide, 2.625 device px per css px):
+//   1. a "loading..." page with a blue ring while the payment page is prepared,
+//   2. "Please choose payment" -- the payment numbers the admin typed in (with logos),
+//   3. the payment page: Step 1 copy the account, Step 2 paste the payment SMS, a 30 minute clock.
+// "switch" goes back to page 2. Nothing is credited here: the claim goes to the admin Recharges tab.
+var _mp = { amount: 0, channels: [], order: null, stage: '', pushed: 0, timer: 0, ignorePop: false, busy: false, toastT: 0 };
+function mpMoney(n){ return cur() + ' ' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+var MP_ICON_WARN = '<svg class="mpf-warn-ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4L12 3.5Z"/><path d="M12 10v4.6M12 17.2v.2"/></svg>';
+var MP_ICON_DIAMOND = '<svg class="mpf-dia" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 22 12 12 22 2 12 12 2Z" fill="#2f8ff5"/><path d="M12 2 22 12H2L12 2Z" fill="#7cc0ff"/></svg>';
+function mpRoot(){
+  let el = $('mpFlow');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'mpFlow';
+    document.body.appendChild(el);
+  }
+  return el;
+}
+function mpLogoHtml(ch, cls){
+  if (ch && ch.logo) return '<img class="' + cls + '" alt="" src="' + esc(ch.logo) + '">';
+  const letter = esc(String((ch && ch.name) || '?').trim().charAt(0).toUpperCase());
+  return '<span class="' + cls + ' mpf-noimg" aria-hidden="true">' + letter + '</span>';
+}
+function mpToast(msg){
+  let el = $('mpToast');
+  if (!el) { el = document.createElement('div'); el.id = 'mpToast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+  el.textContent = t(msg);
+  el.classList.add('show');
+  clearTimeout(_mp.toastT);
+  _mp.toastT = setTimeout(() => el.classList.remove('show'), 1800);
+}
+function mpStopTimer(){ if (_mp.timer) { clearInterval(_mp.timer); _mp.timer = 0; } }
+function mpCloseRoot(){
+  mpStopTimer();
+  const el = $('mpFlow');
+  if (el) { el.classList.remove('show'); el.innerHTML = ''; }
+  document.body.classList.remove('mp-open');
+  _mp.stage = ''; _mp.order = null;
+}
+// Closes the pages and unwinds the history entries this flow pushed.
+window.mpClose = function(){
+  const n = _mp.pushed; _mp.pushed = 0;
+  mpCloseRoot();
+  if (n > 0) { _mp.ignorePop = true; try { history.go(-n); } catch(_){} setTimeout(() => { _mp.ignorePop = false; }, 400); }
+};
+window.addEventListener('popstate', () => {
+  if (_mp.ignorePop || !_mp.stage) return;
+  if (_mp.stage === 'pay') { _mp.pushed = Math.max(0, _mp.pushed - 1); mpShowChoose(); return; }
+  _mp.pushed = 0; mpCloseRoot();
+});
+function mpShowLoading(){
+  _mp.stage = 'load';
+  const el = mpRoot();
+  el.className = 'show dark';
+  el.innerHTML = '<div class="mpf-load"><svg class="mpf-ring" width="36" height="36" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" fill="none" stroke="#1870f8" stroke-width="4" stroke-dasharray="39.3 55" transform="rotate(30 18 18)"/></svg><div class="mpf-loadtxt">loading...</div></div>';
+  document.body.classList.add('mp-open');
+  applyLanguage();
+}
+function mpShowChoose(){
+  _mpStageSet('choose');
+  const el = mpRoot();
+  el.className = 'show';
+  const rows = _mp.channels.map((c, i) => '<button type="button" class="mpf-row" onclick="mpPick(' + i + ')">' + mpLogoHtml(c, 'mpf-logo') +
+    '<span class="mpf-rname" data-no-i18n>' + esc(c.name) + '</span><svg class="mpf-chev" width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="#bbb" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5 7.5 7.5l-6 6"/></svg></button>').join('');
+  el.innerHTML = '<div class="mpf-choose">' +
+    '<div class="mpf-ohead"><span class="mpf-olab">Order Amount</span><span class="mpf-oval" data-no-i18n>' + esc(mpMoney(_mp.amount)) + '</span></div>' +
+    '<div class="mpf-pick">Please choose payment</div>' +
+    '<div class="mpf-rows">' + rows + '</div>' +
+    '<div class="mpf-remind">' + MP_ICON_WARN + '<span>Friendly reminder: Please use the corresponding bank to complete the transfer.</span><span>Please do not use interbank transfers from other banks to avoid delays and inconvenience.</span><span>Thank you for your understanding!</span></div>' +
+    '</div>';
+  document.body.classList.add('mp-open');
+  applyLanguage();
+}
+function _mpStageSet(st){ _mp.stage = st; if (st !== 'pay') mpStopTimer(); }
+window.mpPick = async function(i){
+  if (_mp.busy) return;
+  const ch = _mp.channels[i];
+  if (!ch) return;
+  _mp.busy = true;
+  mpShowLoading();
+  let r;
+  try { r = await post('/deposit/manual/order', { amount: _mp.amount, channelId: ch.id, depositId: _mp.order ? _mp.order.depositId : undefined }); }
+  finally { _mp.busy = false; }
+  if (!_mp.stage) return;
+  if (!r || r.stale) { mpShowChoose(); return; }
+  if (r.status !== 'success') { mpShowChoose(); return mpToast(r.message || 'Could not start recharge'); }
+  _mp.order = r;
+  history.pushState({ mp: 'pay' }, '', ''); _mp.pushed++;
+  mpShowPay();
+};
+function mpShowPay(){
+  const o = _mp.order; if (!o) return mpShowChoose();
+  const ch = o.channel || {};
+  _mpStageSet('pay');
+  const el = mpRoot();
+  el.className = 'show dark';
+  const isWallet = ch.kind === 'wallet';
+  const ph = isWallet
+    ? 'Dear AMIR You have transferred ETB 5.00 to MASFIN FTINAFU (2510****3268) on 01/02/2026 13:07:25. Your transaction number is DA39J9GAMN. The service fee is ETB 0.87 and 15% VAT on the service fee is ETB 0.13. Your current E-Money Account balance is ETB 1300.22. To download your payment information please click this link: https://transactioninfo.ethiotelecom.et/receipt/DA39J9GAMN.'
+    : 'https://mbreciept.cbe.com.et/v2-hfHCxFT8tBhc0zxe95aa\n\nhttps://apps.cbe.com.et:100/?id=FT25512S26V825101122';
+  const phHead = isWallet ? '' : t('Paste the confirmation message here, or enter the code (FT or v2-):') + '\n\n';
+  el.innerHTML = '<div class="mpf-pay">' +
+    '<div class="mpf-head">' + mpLogoHtml(ch, 'mpf-hlogo') + '<div class="mpf-clock"><span>Order Remaining</span><b id="mpM1"></b><b id="mpM2"></b><span>Min</span><b id="mpS1"></b><b id="mpS2"></b><span>Sec</span></div></div>' +
+    '<div class="mpf-card">' +
+      '<div class="mpf-step"><b>Step 1</b><span>Copy account for payment</span></div>' +
+      '<div class="mpf-box">' +
+        '<div class="mpf-amt"><span class="mpf-l1">Order Amount</span><b data-no-i18n>' + esc(mpMoney(o.amount)) + '</b></div>' +
+        '<div class="mpf-k">Payment Channel</div>' +
+        '<div class="mpf-v"><b data-no-i18n>' + esc(ch.name) + '</b><button type="button" class="mpf-pill" onclick="mpSwitch()">switch</button></div>' +
+        '<div class="mpf-k">Account Name</div>' +
+        '<div class="mpf-v"><b data-no-i18n>' + esc(o.accountName) + '</b><button type="button" class="mpf-pill" onclick="mpCopy(\'name\')">copy</button></div>' +
+        '<div class="mpf-k">Account Number</div>' +
+        '<div class="mpf-v"><b data-no-i18n>' + esc(o.accountNumber) + '</b><button type="button" class="mpf-pill" onclick="mpCopy(\'number\')">copy</button></div>' +
+      '</div>' +
+      '<div class="mpf-help"><p>After the transfer is complete → check the SMS. The code starts with: "v2-" or "FT"</p>' +
+        '<p>' + MP_ICON_DIAMOND + '<span>v2-hf = enter the 23-character code</span></p>' +
+        '<p>' + MP_ICON_DIAMOND + '<span>FT = enter the 12-character code</span></p>' +
+        '<p>' + MP_ICON_DIAMOND + '<span>Telebirr = 10 characters only</span></p></div>' +
+      '<div class="mpf-step2"><b>Step 2</b><span>Paste payment SMS or enter v2- or FT</span></div>' +
+      '<textarea id="mpSms" class="mpf-ta" data-no-i18n rows="6" maxlength="2000" spellcheck="false" autocomplete="off" placeholder="' + esc(phHead + ph) + '"></textarea>' +
+      '<button type="button" class="mpf-submit" id="mpSubmit" onclick="mpSubmit()">Submit</button>' +
+      '<div class="mpf-note">' + MP_ICON_WARN + '<span>Do not save the account number! It changes in real time. Otherwise the transfer will fail.</span></div>' +
+    '</div></div>';
+  document.body.classList.add('mp-open');
+  mpTick();
+  mpStopTimer(); _mp.timer = setInterval(mpTick, 1000);
+  applyLanguage();
+}
+function mpTick(){
+  const o = _mp.order; if (!o || _mp.stage !== 'pay') return mpStopTimer();
+  const left = Math.max(0, Math.floor((Number(o.expiresAt) - Date.now()) / 1000));
+  const m = Math.floor(left / 60), sec = left % 60;
+  const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+  set('mpM1', String(Math.floor(m / 10))); set('mpM2', String(m % 10));
+  set('mpS1', String(Math.floor(sec / 10))); set('mpS2', String(sec % 10));
+  if (left <= 0) { mpStopTimer(); mpToast('This order has expired. Please start again.'); setTimeout(() => window.mpClose(), 900); }
+}
+window.mpSwitch = function(){ if (_mp.pushed > 0) history.back(); else mpShowChoose(); };
+window.mpCopy = async function(what){
+  const o = _mp.order; if (!o) return;
+  const text = what === 'name' ? o.accountName : o.accountNumber;
+  let ok = false;
+  try { await navigator.clipboard.writeText(String(text)); ok = true; } catch (_) {
+    try {
+      const ta = document.createElement('textarea'); ta.value = String(text); ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+      document.body.appendChild(ta); ta.select(); ok = document.execCommand('copy'); ta.remove();
+    } catch (_e) {}
+  }
+  mpToast(ok ? (what === 'name' ? 'Name Copied' : 'Copied.') : 'Could not copy');
+};
+window.mpSubmit = async function(){
+  const o = _mp.order, ta = $('mpSms'), btn = $('mpSubmit');
+  if (!o || !ta || !btn || btn.disabled) return;
+  const sms = ta.value.trim();
+  if (!sms) return mpToast('please enter the correct transfer sms');
+  btn.disabled = true; btn.classList.add('busy');
+  let r;
+  try { r = await post('/deposit/manual/submit', { depositId: o.depositId, sms }); }
+  finally { if ($('mpSubmit') === btn) { btn.disabled = false; btn.classList.remove('busy'); } }
+  if (!r || r.stale) return;
+  if (r.status !== 'success') return mpToast(r.message || 'Could not submit your recharge. Please try again.');
+  refreshTransactionsCache().catch(() => {});
+  window.mpClose();
+  try { if (_openSheetTitle === 'Recharge') closeSheet({ fromAction: true }); } catch (_) {}
+  notify(r.message || 'Submitted. Our team is checking your payment.');
+};
+window.openManualPayFlow = async function(amount){
+  _mp.amount = Number(amount) || 0; _mp.order = null; _mp.channels = [];
+  history.pushState({ mp: 'choose' }, '', ''); _mp.pushed = 1;
+  mpShowLoading();
+  const t0 = Date.now();
+  const r = await api('/public/pay-channels');
+  // The ring is shown for a beat even when the answer is instant, so the page does not flash.
+  const wait = 450 - (Date.now() - t0); if (wait > 0) await new Promise(res => setTimeout(res, wait));
+  if (_mp.stage !== 'load') return;
+  if (!r || r.status !== 'success' || !Array.isArray(r.channels) || !r.channels.length) {
+    window.mpClose();
+    return notify('Recharges are not available right now.');
+  }
+  _mp.channels = r.channels;
+  mpShowChoose();
 };
 // Owner: "callback speed is low, so try to make the system solid and faster
 // validation on payments."
