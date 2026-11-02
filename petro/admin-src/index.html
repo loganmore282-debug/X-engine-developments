@@ -3444,6 +3444,56 @@ async function renderSettings(){
       if (d.status==='success') _rulesBlocksDirty = false;
     })());
   });
+  mountDangerZone();
+}
+// ── RESET DATABASE ──
+// Owner: "put admin panel button to make vps to reset database so that database is cleaned".
+const DB_WIPE_LABELS = { users:'Members', transactions:'Records', pendingDeposits:'Recharges', withdrawals:'Withdrawals', investments:'Member plans',
+  bankAccounts:'Payout wallets', turntableSpins:'Spins', promoCodes:'Gift codes', promoRedemptions:'Gift code uses', usdtIntents:'USDT requests',
+  securityEvents:'Security events', otpCodes:'Verification codes', otpSendLog:'Code send log', messageReads:'Message read marks',
+  statementDownloads:'Statement downloads', memberSessions:'Member logins', counters:'Account number counter' };
+function mountDangerZone(){
+  if (SESSION_ROLE !== 'owner' || !$('content') || $('dangerZone')) return;
+  $('content').insertAdjacentHTML('beforeend', `<h2 class="sec" style="margin-top:28px;color:#c62828">Danger zone</h2>
+    <div class="panel-card" id="dangerZone" style="border-color:#e7b4b4">
+      <p class="muted" style="margin-top:0">Erase every member and everything that belongs to them &mdash; wallets, recharges, withdrawals, plans, records and their sign-in accounts &mdash; so the app starts clean. Your settings, assets, banners, About and Rules, payment numbers, admin accounts and messages are kept. <b>There is no undo.</b></p>
+      <button class="btn danger block" id="dbResetOpen" type="button">Reset database&hellip;</button>
+    </div>`);
+  $('dbResetOpen').onclick = openDbReset;
+}
+async function openDbReset(){
+  openModal('<h3 style="margin:0 0 10px">Reset database</h3><div id="dbResetBody"><p class="muted">Counting what would be erased&hellip;</p></div>');
+  const r = await api('/admin/database/reset-preview', {});
+  const box = $('dbResetBody'); if (!box) return;
+  if (!r || r.status !== 'success') { box.innerHTML = `<p style="color:#c62828">${esc((r && r.message) || 'Could not load.')}</p>`; return; }
+  const rows = (r.wipe||[]).map(k => `<tr><td>${esc(DB_WIPE_LABELS[k]||k)}</td><td style="text-align:right"><b>${Number(r.counts[k]||0).toLocaleString('en-US')}</b></td></tr>`).join('');
+  const risky = (r.unfinishedDeposits||0) + (r.unfinishedWithdrawals||0);
+  box.innerHTML = `
+    <p style="margin:0 0 8px;font-size:13px">This will <b>permanently erase</b>:</p>
+    <table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:8px">${rows}</table>
+    <p class="muted" style="margin:0 0 8px;font-size:12px">Money held in member wallets right now: <b>${ugx(r.walletTotal||0)}</b>. Their sign-in accounts are removed too.</p>
+    <p class="muted" style="margin:0 0 10px;font-size:12px"><b>Kept:</b> settings, assets, banners, About &amp; Rules, payment numbers, admin accounts, messages, activity log.</p>
+    ${risky ? `<div style="background:#fdecea;border:1px solid #e7b4b4;border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:10px"><b>Unfinished money:</b> ${r.unfinishedDeposits||0} recharge(s) and ${r.unfinishedWithdrawals||0} withdrawal(s) are not finished yet. Erasing now loses the record of them.<label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="dbAck" style="width:auto"> Erase anyway</label></div>` : ''}
+    <label>Type <b>${esc(r.phrase)}</b> to confirm</label>
+    <input id="dbPhrase" autocomplete="off" autocapitalize="characters" placeholder="${esc(r.phrase)}">
+    <label style="margin-top:8px">Admin key</label>
+    <input id="dbKey" type="password" autocomplete="off" placeholder="Your admin key">
+    <p id="dbErr" style="color:#c62828;font-size:12px;min-height:16px;margin:6px 0 0"></p>
+    <div class="row" style="margin-top:8px"><button class="btn danger block" id="dbGo" type="button" disabled>Erase everything</button><button class="btn ghost block" id="dbNo" type="button">Cancel</button></div>`;
+  const sync = () => { $('dbGo').disabled = $('dbPhrase').value.trim() !== r.phrase || !$('dbKey').value || (risky && !$('dbAck').checked); };
+  ['dbPhrase','dbKey'].forEach(id => $(id).addEventListener('input', sync)); if ($('dbAck')) $('dbAck').addEventListener('change', sync);
+  $('dbNo').onclick = closeModal;
+  $('dbGo').onclick = async () => {
+    $('dbGo').disabled = true; $('dbGo').textContent = 'Erasing…'; $('dbErr').textContent = '';
+    const d = await api('/admin/database/reset', { confirm: $('dbPhrase').value.trim(), key: $('dbKey').value, ack: risky ? $('dbAck').checked : false });
+    if (d.status === 'success') {
+      const total = Object.values(d.erased||{}).reduce((a,n)=>a+n,0);
+      $('dbResetBody').innerHTML = `<p style="font-size:14px"><b>Done.</b> ${total.toLocaleString('en-US')} records erased and ${Number(d.loginsRemoved||0).toLocaleString('en-US')} member sign-in accounts removed.</p>${d.loginError ? `<p style="color:#c62828;font-size:12px">Sign-in accounts could not all be removed: ${esc(d.loginError)}. Run the reset again to finish.</p>` : ''}<button class="btn block" id="dbClose" type="button">Close</button>`;
+      $('dbClose').onclick = () => { closeModal(); switchTab(_tab); };
+      return;
+    }
+    $('dbErr').textContent = d.message || 'Could not reset.'; $('dbGo').textContent = 'Erase everything'; sync();
+  };
 }
 // About page block editor -- a plain ordered array of {type:'text',text} /
 // {type:'image',image} kept in _aboutBlocks while the tab is open, redrawn

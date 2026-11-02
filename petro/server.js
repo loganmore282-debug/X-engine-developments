@@ -9649,6 +9649,78 @@ app.post('/admin/user/delete', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
   finally { _userBeingDeleted.delete(userId); }
 });
+// ── RESET DATABASE (owner only) ──
+// Owner: "put admin panel button to make vps to reset database so that database is cleaned".
+// Wipes the MEMBERS and everything that belongs to them (wallets, recharges, withdrawals, plans,
+// records, sessions, codes, counters) plus their sign-in accounts, and keeps the CONFIGURATION
+// (settings, assets, banners, About/Rules, payment numbers, admin accounts, messages, activity log).
+// Guarded four ways: owner session, the exact phrase, the owner's master key typed again, and a
+// second acknowledgement when money is still in flight. There is no undo -- take a MongoDB Atlas
+// backup first if there is anything worth keeping.
+const DB_RESET_WIPE = ['users', 'transactions', 'pendingDeposits', 'withdrawals', 'investments', 'bankAccounts',
+  'turntableSpins', 'promoCodes', 'promoRedemptions', 'usdtIntents', 'securityEvents', 'otpCodes', 'otpSendLog',
+  'messageReads', 'statementDownloads', 'memberSessions', 'counters'];
+const DB_RESET_KEEP = ['settings', 'products', 'banners', 'content', 'payChannels', 'messages', 'adminUsers', 'adminSessions', 'adminPushTokens', 'adminAuditLog'];
+const DB_RESET_PHRASE = 'RESET DATABASE';
+let _dbResetting = false;
+async function dbResetPreview() {
+  const counts = {};
+  for (const c of DB_RESET_WIPE) counts[c] = await db.collection(c).count().catch(() => 0);
+  const gwDeps = await db.collection('pendingDeposits').where('status', 'in', ['initiating', 'pending']).get().catch(() => ({ docs: [] }));
+  const unfinishedDeposits = gwDeps.docs.filter(d => d.data().method !== 'manual' || d.data().pastedSms).length;
+  const reviewSnap = await db.collection('pendingDeposits').where('status', '==', 'review').count().catch(() => 0);
+  const wd = await db.collection('withdrawals').where('status', 'in', ['pending', 'processing', 'sending']).count().catch(() => 0);
+  let walletTotal = 0;
+  try { (await db.collection('users').get()).forEach(u => { walletTotal += Number(u.data().walletBalance) || 0; }); } catch (_) {}
+  return { counts, unfinishedDeposits: unfinishedDeposits + reviewSnap, unfinishedWithdrawals: wd, walletTotal };
+}
+app.post('/admin/database/reset-preview', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', phrase: DB_RESET_PHRASE, wipe: DB_RESET_WIPE, keep: DB_RESET_KEEP, ...(await dbResetPreview()) }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not count the data' }); }
+});
+async function wipeCollection(name) {
+  const snap = await db.collection(name).get();
+  const docs = snap.docs.slice();
+  for (let i = 0; i < docs.length; i += 200) await Promise.all(docs.slice(i, i + 200).map(d => d.ref.delete()));
+  return docs.length;
+}
+async function wipeMemberLogins() {
+  let removed = 0, token;
+  do {
+    const page = await admin.auth().listUsers(1000, token);
+    const ids = page.users.filter(u => /@petro-platform\.com$/i.test(u.email || '')).map(u => u.uid);
+    for (let i = 0; i < ids.length; i += 1000) { await admin.auth().deleteUsers(ids.slice(i, i + 1000)); removed += ids.slice(i, i + 1000).length; }
+    token = page.pageToken;
+  } while (token);
+  return removed;
+}
+app.post('/admin/database/reset', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!ADMIN_KEY) return res.status(500).json({ status: 'error', message: 'Admin key not configured' });
+  const b = req.body || {};
+  if (b.confirm !== DB_RESET_PHRASE) return res.status(400).json({ status: 'error', message: `Type ${DB_RESET_PHRASE} exactly to confirm.` });
+  if (loginLocked('db-reset')) return res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in 15 minutes.' });
+  if (!safeEqual(b.key, ADMIN_KEY)) { recordLoginFail('db-reset'); return res.status(401).json({ status: 'error', message: 'That admin key is not correct.' }); }
+  clearLoginFails('db-reset');
+  if (_dbResetting) return res.status(409).json({ status: 'error', message: 'A reset is already running.' });
+  _dbResetting = true;
+  try {
+    const pre = await dbResetPreview();
+    if ((pre.unfinishedDeposits || pre.unfinishedWithdrawals) && b.ack !== true)
+      return res.status(409).json({ status: 'error', code: 'UNFINISHED', message: 'Some recharges or withdrawals are still unfinished. Tick the box to erase anyway.', ...pre });
+    const erased = {};
+    for (const c of DB_RESET_WIPE) erased[c] = await wipeCollection(c);
+    let loginsRemoved = 0, loginError = '';
+    try { loginsRemoved = await wipeMemberLogins(); } catch (e) { loginError = String(e.message || e).slice(0, 200); }
+    logAdminAction(req, 'database_reset', { erased, loginsRemoved, loginError });
+    console.warn('DATABASE RESET by owner:', JSON.stringify({ erased, loginsRemoved, loginError }));
+    res.json({ status: 'success', erased, loginsRemoved, loginError });
+  } catch (e) {
+    console.error('Database reset failed:', e.message);
+    res.status(500).json({ status: 'error', message: 'The reset stopped part-way: ' + String(e.message || e).slice(0, 160) + '. Run it again to finish.' });
+  } finally { _dbResetting = false; }
+});
 const _adminCreditDebounce = new Map();
 const _adminDebitDebounce = new Map();
 app.post('/admin/deposit', async (req, res) => {

@@ -7490,3 +7490,12 @@ Owner sent screenshots of three pages (a "loading..." page with a blue ring, "Pl
 - **Not automatic:** nothing verifies the SMS against CBE or Telebirr; the admin checks and approves. An automatic receipt check would need CBE/Telebirr receipt lookups (not built).
 - Tests added to `test:audit`: `test-manual-pay.js` (61 checks, server routes), `test-manual-pay-ui.js` (38), `test-pay-numbers-admin.js` (15, real logo with white background and white detail). Amharic rows for every new string; `test-amharic-sweep.js` now also walks the new pages. Cache user v245, admin v76.
 
+## Follow-up 66 -- Admin "Reset database" button
+
+Owner: *"put admin panel button to make vps to reset database so that database is cleaned."* Settings tab -> **Danger zone -> Reset database...** (owner only).
+- **Erases** (`DB_RESET_WIPE` in `server.js`): members, records, recharges, withdrawals, plans, payout wallets, spins, gift codes and their uses, USDT requests, security events, verification codes, message read marks, statement downloads, member logins and the account-number counter, **and the members' Firebase sign-in accounts** (only those whose email ends `@petro-platform.com`; any other account in the Firebase project is left alone).
+- **Keeps** (`DB_RESET_KEEP`): settings, assets, banners, About/Rules content, payment numbers, admin accounts and sessions, admin push tokens, broadcast messages, and the activity log (the reset itself is logged as `database_reset`).
+- **Guards**: owner session; the exact phrase `RESET DATABASE`; the owner's master `ADMIN_KEY` typed again (wrong keys count toward a 15-minute lock); and, when recharges or withdrawals are still unfinished (an unpaid manual order does not count), a second "Erase anyway" tick. The modal first shows the live count of every collection and the money still held in wallets. Routes: `POST /admin/database/reset-preview`, `POST /admin/database/reset`.
+- **No undo.** For a copy first, take a MongoDB Atlas backup / snapshot. If the Firebase cleanup fails part-way the reply says so and running the reset again finishes it.
+- Tests: `test-db-reset.js` (29, server), `test-db-reset-admin.js` (11, built panel). Admin cache v77.
+
