@@ -4841,12 +4841,6 @@ window.openWalletSheet = async function(){
   // it lands. Cached on STATE for the lifetime of the tab, same as
   // products/settings -- this rarely changes and re-fetching on every
   // sheet open buys nothing.
-  if (!Array.isArray(STATE.supportedBanks)) {
-    api('/bank/supported-banks').then(br => {
-      STATE.supportedBanks = br.status === 'success' && Array.isArray(br.banks) ? br.banks : [];
-      if (_openSheetTitle === 'Wallet' && _walletEditing) renderWalletSheet();
-    }).catch(() => { STATE.supportedBanks = STATE.supportedBanks || []; });
-  }
   const r = await api('/bank/list');
   if (r.status === 'success') STATE.bankAccounts = r.accounts;
   else if (!hadCache) STATE.bankAccounts = [];
@@ -4867,7 +4861,10 @@ function currentWallet(){ return (STATE.bankAccounts || [])[0] || null; }
 // MarzPay's own live list) at the moment it was bound. No client-side list
 // membership check needed to tell the two apart; this one distinction is
 // definitional, not a lookup.
-function isMobileMoneyNetwork(network){ return network === 'MTN Mobile Money' || network === 'Airtel Money'; }
+// Owner: "on bind bank use these only: Commercial Bank of Ethiopia, Telebirr". Telebirr is a wallet (phone number);
+// the bank takes an account number. MTN / Airtel are still read as wallets so an older saved account displays.
+var PAYOUT_PROVIDERS = ['Commercial Bank of Ethiopia', 'Telebirr'];
+function isMobileMoneyNetwork(network){ return network === 'Telebirr' || network === 'MTN Mobile Money' || network === 'Airtel Money'; }
 function maskedTail(phone){
   const d = String(phone || '').replace(/\D/g, '');
   return d ? '****' + d.slice(-4) : '****';
@@ -4906,7 +4903,7 @@ function walletPlainRowHtml(w){
     <div class="wallet-plain-copy">
       <div class="wallet-plain-number mono">${esc(walletDestDisplay(w))}</div>
       <div class="wallet-plain-name">${esc(String(w.holder || '').toUpperCase())}</div>
-      <div class="wallet-plain-network">${esc(network)}</div>
+      <div class="wallet-plain-network" data-no-i18n>${esc(network)}</div>
     </div>
     <button class="wallet-delete" type="button" onclick="deleteWallet('${esc(w.id)}')" aria-label="Delete payout wallet">${ICONS.trash}</button>
   </div>`;
@@ -4920,7 +4917,7 @@ function renderWalletSheet(){
   // until that lands (or if MarzPay's bank-transfer product isn't
   // reachable/subscribed), in which case the picker just shows the two
   // mobile-money options exactly as it always has.
-  const providers = ['MTN Mobile Money', 'Airtel Money', ...(STATE.supportedBanks || [])];
+  const providers = PAYOUT_PROVIDERS;
   if (w && !_walletEditing) {
     // One row per saved wallet, not just the first -- walletPlainRowHtml()'s
     // own delete button already worked per-row, it just never had more than
@@ -4946,7 +4943,7 @@ function renderWalletSheet(){
           <input id="walProvider" type="text" readonly placeholder="Select network or bank" value="${prefill && prefill.network ? esc(prefill.network) : ''}">
           <svg class="prov-caret" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </div>
-        <div class="prov-list" id="walProviderList">
+        <div class="prov-list" id="walProviderList" data-no-i18n>
           ${providers.map(p => `<button type="button" class="prov-opt${prefill && prefill.network === p ? ' on' : ''}" onclick="pickProvider('${esc(p)}')">${esc(p)}</button>`).join('')}
         </div>
       </div>

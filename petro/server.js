@@ -1486,7 +1486,11 @@ function depositSenderPhone(body, accountPhone, keys) {
   return fallback ? { phone: fallback }
                   : { error: 'Enter a valid mobile-money phone number.' };
 }
-const NETWORK_NAMES = new Set(['MTN Mobile Money', 'Airtel Money']);
+// Withdrawal ("Bind bank card") accounts: owner: "on bind bank use these only -- Commercial Bank of
+// Ethiopia, Telebirr". Telebirr is a wallet (a phone number, +251); the bank takes an account number.
+// MTN / Airtel stay in this set only so an account saved before the change keeps being read as mobile money.
+const PAYOUT_ACCOUNT_TYPES = Object.freeze({ 'Commercial Bank of Ethiopia': 'bank', 'Telebirr': 'wallet' });
+const NETWORK_NAMES = new Set(['Telebirr', 'MTN Mobile Money', 'Airtel Money']);
 const MAX_MONEY_AMOUNT = 999_999_999;
 // The most spins one purchase can ever grant. Used in TWO places that must
 // agree: sanitizeProductInput() refuses a bigger number at save time, and
@@ -7246,8 +7250,7 @@ app.post('/pesajet/webhook', async (req, res) => {
 app.get('/bank/supported-banks', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const banks = await getSupportedBanks();
-  res.json({ status: 'success', banks: banks.map(b => b.name) });
+  res.json({ status: 'success', banks: Object.keys(PAYOUT_ACCOUNT_TYPES).filter(k => PAYOUT_ACCOUNT_TYPES[k] === 'bank') });
 });
 const MAX_SAVED_PAYOUT_ACCOUNTS = 10;
 app.post('/bank/save', async (req, res) => {
@@ -7256,7 +7259,9 @@ app.post('/bank/save', async (req, res) => {
   const holder = stripHtml(req.body.holder);
   const rawNetwork = String(req.body.network || '').trim();
   if (!holder || !rawNetwork) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
-  const isMobileMoney = NETWORK_NAMES.has(rawNetwork);
+  if (!Object.prototype.hasOwnProperty.call(PAYOUT_ACCOUNT_TYPES, rawNetwork))
+    return res.status(400).json({ status: 'error', message: 'Choose Commercial Bank of Ethiopia or Telebirr.' });
+  const isMobileMoney = PAYOUT_ACCOUNT_TYPES[rawNetwork] === 'wallet';
   // Owner: "so some bank account exceed character limit so no capping of
   // characters please" -- cleanPhone() enforces this region's phone SHAPE
   // (exact digit count, dial code), which is correct for MTN/Airtel but
@@ -7272,12 +7277,6 @@ app.post('/bank/save', async (req, res) => {
   } else {
     destValue = String(req.body.phone || req.body.accountNumber || '').replace(/\s+/g, '').trim();
     if (!/^[A-Za-z0-9]{4,34}$/.test(destValue)) return res.status(400).json({ status: 'error', message: 'Enter a valid bank account number' });
-    // Validated against the SAME live/cached list #bank/supported-banks
-    // serves -- a bank name the picker never offered has no business
-    // reaching MarzPay's own bank-transfer create call, where an unknown
-    // code is what its docs describe as UNSUPPORTED/UNKNOWN BANK.
-    const banks = await getSupportedBanks();
-    if (!banks.some(b => b.name === rawNetwork)) return res.status(400).json({ status: 'error', message: 'That bank is not currently supported. Pick one from the list.' });
   }
   try {
     const uSnap = await db.collection('users').doc(userId).get();
@@ -7309,17 +7308,7 @@ app.post('/bank/save', async (req, res) => {
     // entry rather than silently overwritten, since a shared/company
     // account can legitimately have a different registered name.
     let verifiedHolder = holder;
-    if (!isMobileMoney) {
-      // marzValidateBankAccount() now handles its own network errors and
-      // one transient-failure retry internally (never throws) -- providerDown
-      // is the one signal to check for either case.
-      const v = await marzValidateBankAccount(rawNetwork, destValue);
-      if (v.providerDown) return res.status(500).json({ status: 'error', message: 'Could not verify this account right now. Please try again in a moment.' });
-      if (v.status !== 'success' || !v.data?.valid) {
-        return res.status(400).json({ status: 'error', message: marzUserMsg(v, 'Account could not be validated. Please check the account number and bank.') });
-      }
-      if (v.data?.account_name) verifiedHolder = String(v.data.account_name).trim() || holder;
-    }
+    // The Ethiopian bank is paid by hand by the admin (no gateway here), so there is no gateway check to run.
     // Saving/removing a payout destination here doesn't move any money by
     // itself -- see /withdraw/request for the actual money-moving path.
     const dup = await withLock('bank-save:' + userId, async () => {

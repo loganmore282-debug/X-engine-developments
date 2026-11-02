@@ -7499,3 +7499,7 @@ Owner: *"put admin panel button to make vps to reset database so that database i
 - **No undo.** For a copy first, take a MongoDB Atlas backup / snapshot. If the Firebase cleanup fails part-way the reply says so and running the reset again finishes it.
 - Tests: `test-db-reset.js` (29, server), `test-db-reset-admin.js` (11, built panel). Admin cache v77.
 
+## Follow-up 67 -- "Bind bank card" offers only Commercial Bank of Ethiopia and Telebirr
+
+Owner: *"on bind bank use these only: Commercial Bank of Ethiopia, Telebirr."* The picker (`PAYOUT_PROVIDERS` in the app) lists exactly those two; the server (`PAYOUT_ACCOUNT_TYPES`, `/bank/save`) refuses any other name. Telebirr is a wallet (a +251 phone number, checked with `cleanPhone()`); the bank takes an account number (4-34 letters/digits). The MarzPay bank list and bank-account validation are no longer used (they are Uganda-only). MTN/Airtel stay readable for any account saved earlier. Withdrawals in Ethiopia are paid by hand (no gateway serves +251), so the admin sees the bank name and number in Withdrawals and records the payment. Test: `test-payment-review.js` section 2b. App cache v246.
+
