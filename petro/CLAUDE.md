@@ -7545,3 +7545,10 @@ Owner (screenshot of Settings -> withdraw hours, then two requests): the opens /
 - **Deploy (once, on the VPS):** `bash /srv/petro-src/petro/deploy/set-wildcard.sh petro-cchnug.com` -- Hostinger API token (asked once), `*` A record, ONE wildcard certificate (`petro-wild`, renewed by certbot through the same token), `/etc/nginx/sites-available/petro-wild` (server_name regex of exactly four characters, quoted because of the braces; `api.` and `qumx.` keep their exact names, which nginx prefers), removes the old `app.` block from the live file (copy kept as `petro.before-wildcard`; restored automatically if `nginx -t` fails), writes `SHARE_DOMAIN`, restarts `petro-server`. Safe to run again. Until it has run, links keep the old address, so nothing breaks.
 - `deploy/nginx-petro.conf.template` still has the `app.` block (a fresh install needs one address before the wildcard exists); the script retires it. `app.petro-cchnug.com` is no longer shown anywhere.
 - Tests: `test-share-domain.js` (10) -- server domain parsing, 3000 generated addresses, no domain / other domain keeps the origin, script sanity.
+
+## Follow-up 74 -- Email removed everywhere; Support goes to the group
+
+Owner (screenshot: tapping Support on Home said "Support email is not set up yet"): *"remove things of email everywhere -- put the group link I already put in admin."*
+- **Home Support tile** now calls `openSupportGroup()`: opens the Telegram group, else the WhatsApp group, else the Telegram customer service link; none set -> "Support group is not set up yet. Please try again later." (Amharic row added).
+- **Removed:** the admin "Support email" box, the Email Support row on the Support page and on the Forgot Password page, the email icon and styles, the server default `supportEmail` and its email validator; `/admin/settings/update` now drops a `supportEmail` sent by an old panel. A `supportEmail` left in an old database is never shown.
+- Tests: `test-contact-links.js` (13, source and built). App v252, admin v81.
