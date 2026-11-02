@@ -3132,6 +3132,9 @@ async function renderSettings(){
       <button class="btn block" id="saveUsdt" style="margin-top:10px">Save crypto recharge settings</button>
     </div>
 
+    <h2 class="sec">Task Center rewards</h2>
+    <div class="panel-card" id="taskRewardsCard"><p class="muted" style="margin:0">Loading&hellip;</p></div>
+
     <h2 class="sec">Support contacts</h2>
     <div class="panel-card">
       <label>Telegram group</label><input id="spTgGroup" value="${esc(v('telegramGroup',''))}" placeholder="https://t.me/yourgroup">
@@ -3280,6 +3283,62 @@ async function renderSettings(){
     })());
   });
   mountDangerZone();
+  mountTaskRewards();
+}
+
+// ── TASK CENTER REWARDS ──
+// Owner: "put settings for these in admin panel" (the Referral tasks / Recharge tasks on the member's Network page).
+// Each task is a target and a reward, claimable once per member. A member's claim is remembered per TARGET number:
+// changing a reward does not pay anyone who already claimed that step again, and a new target is claimable once.
+let _taskLadders = null;
+function taskRowsHtml(kind){
+  const rows = _taskLadders[kind];
+  const tLabel = kind === 'count' ? 'Active referrals needed' : `Whole-team recharges needed (${adminCur()})`;
+  return rows.map((r,i)=>`<div class="row" style="align-items:end;margin-bottom:6px" data-trow="${kind}:${i}">
+      <div><label>${tLabel}</label><input type="number" min="1" step="1" data-tt="${kind}:${i}" value="${esc(r.target)}"></div>
+      <div><label>Reward (${adminCur()})</label><input type="number" min="1" step="1" data-tr="${kind}:${i}" value="${esc(r.reward)}"></div>
+      <div style="flex:0 0 auto"><button class="btn danger sm" type="button" data-tdel="${kind}:${i}">Remove</button></div>
+    </div>`).join('');
+}
+function readTaskInputs(){
+  for (const kind of ['count','deposit']) {
+    _taskLadders[kind] = _taskLadders[kind].map((_,i)=>({ target:Number(document.querySelector(`[data-tt="${kind}:${i}"]`)?.value), reward:Number(document.querySelector(`[data-tr="${kind}:${i}"]`)?.value) }));
+  }
+}
+function drawTaskRewards(){
+  const box = $('taskRewardsCard'); if (!box || !_taskLadders) return;
+  box.innerHTML = `
+    <p class="muted" style="margin-top:0">These are the tasks on the member's <b>Network</b> page. Each can be claimed once per member. Changing a reward never pays anyone who already claimed that step again.</p>
+    <h4 style="margin:10px 0 6px;font-size:14px">Referral tasks <span class="muted" style="font-weight:400">(Level 1 members who have recharged)</span></h4>
+    ${taskRowsHtml('count')}
+    <button class="btn ghost sm" type="button" data-tadd="count">+ Add a referral task</button>
+    <h4 style="margin:18px 0 6px;font-size:14px">Recharge tasks <span class="muted" style="font-weight:400">(what the whole team has recharged)</span></h4>
+    ${taskRowsHtml('deposit')}
+    <button class="btn ghost sm" type="button" data-tadd="deposit">+ Add a recharge task</button>
+    <div class="row" style="margin-top:14px"><button class="btn block" id="taskSave" type="button">Save task rewards</button><button class="btn ghost block" id="taskDefault" type="button">Restore the standard rewards</button></div>`;
+  box.querySelectorAll('[data-tadd]').forEach(b=>b.onclick=()=>{ readTaskInputs(); const k=b.dataset.tadd; if(_taskLadders[k].length>=20) return toast('Up to 20 tasks in each list','err'); _taskLadders[k].push({target:'',reward:''}); drawTaskRewards(); });
+  box.querySelectorAll('[data-tdel]').forEach(b=>b.onclick=()=>{ readTaskInputs(); const [k,i]=b.dataset.tdel.split(':'); if(_taskLadders[k].length<=1) return toast('Keep at least one task in each list','err'); _taskLadders[k].splice(Number(i),1); drawTaskRewards(); });
+  $('taskSave').onclick = async()=>{
+    readTaskInputs();
+    $('taskSave').disabled = true;
+    const d = await api('/admin/task-rewards/save', { count:_taskLadders.count, deposit:_taskLadders.deposit });
+    toast(d.status==='success' ? 'Task rewards saved, live for every member' : (d.message||'Could not save'), d.status==='success'?'ok':'err');
+    if (d.status==='success') mountTaskRewards(); else $('taskSave').disabled = false;
+  };
+  $('taskDefault').onclick = async()=>{
+    if (!confirm('Put both lists back to the standard rewards?')) return;
+    const d = await api('/admin/task-rewards/save', { count:null, deposit:null });
+    toast(d.status==='success' ? 'Standard rewards restored' : (d.message||'Could not save'), d.status==='success'?'ok':'err');
+    if (d.status==='success') mountTaskRewards();
+  };
+}
+async function mountTaskRewards(){
+  if (!$('taskRewardsCard')) return;
+  const r = await api('/admin/task-rewards/get', {});
+  if (!$('taskRewardsCard')) return;
+  if (!r || r.status !== 'success' || !Array.isArray(r.count) || !Array.isArray(r.deposit)) { $('taskRewardsCard').innerHTML = `<p style="color:#c62828;margin:0">${esc((r&&r.message)||'Could not load the task rewards.')}</p>`; return; }
+  _taskLadders = { count: r.count.map(x=>({target:x.target,reward:x.reward})), deposit: r.deposit.map(x=>({target:x.target,reward:x.reward})) };
+  drawTaskRewards();
 }
 // ── RESET DATABASE ──
 // Owner: "put admin panel button to make vps to reset database so that database is cleaned".

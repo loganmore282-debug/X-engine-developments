@@ -1682,6 +1682,30 @@ const TEAM_DEPOSIT_MILESTONES = [
   { target: 750000, reward: 20000 }, { target: 1000000, reward: 20000 },
   { target: 1500000, reward: 50000 }, { target: 2000000, reward: 50000 },
 ];
+// Owner: "put settings for these in admin panel". The two ladders above are only the DEFAULTS; the admin can
+// replace either one (Admin -> Settings -> Task Center rewards). A stored ladder is validated on the way in and
+// again on the way out, and an invalid or missing one falls back to the default, so a bad value can never empty
+// the Task Center. A member's claim is remembered per TARGET number, so changing a reward does not re-pay anyone
+// who already claimed that step, and a brand-new target is claimable once.
+const TASK_LADDER_MAX_ROWS = 20;
+function cleanTaskLadder(list, maxTarget) {
+  if (!Array.isArray(list) || !list.length || list.length > TASK_LADDER_MAX_ROWS) return null;
+  const out = [], seen = new Set();
+  for (const r of list) {
+    const target = Number(r && r.target), reward = Number(r && r.reward);
+    if (!Number.isInteger(target) || target < 1 || target > maxTarget) return null;
+    if (!Number.isInteger(reward) || reward < 1 || reward > MAX_MONEY_AMOUNT) return null;
+    if (seen.has(target)) return null;
+    seen.add(target); out.push({ target, reward });
+  }
+  return out.sort((a, b) => a.target - b.target);
+}
+function taskTablesFrom(sett) {
+  return {
+    count: cleanTaskLadder(sett && sett.taskCountMilestones, 100000) || TEAM_MILESTONES,
+    deposit: cleanTaskLadder(sett && sett.taskDepositMilestones, MAX_MONEY_AMOUNT) || TEAM_DEPOSIT_MILESTONES,
+  };
+}
 async function activeL1Count(userId) {
   const snap = await db.collection('users').where('referredBy', '==', userId).get();
   let n = 0;
@@ -3336,10 +3360,11 @@ app.get('/team/stats', async (req, res) => {
     if (u.status === 'banned')
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     const l1ActiveCount = await activeL1Count(userId);
+    const tasks = taskTablesFrom(sett);
     const milestones = [
-      ...TEAM_MILESTONES.map(m => ({ type: 'count', target: m.target, reward: m.reward,
+      ...tasks.count.map(m => ({ type: 'count', target: m.target, reward: m.reward,
         current: l1ActiveCount, achieved: l1ActiveCount >= m.target, claimed: !!u['milestoneClaimed_' + m.target] })),
-      ...TEAM_DEPOSIT_MILESTONES.map(m => ({ type: 'deposit', target: m.target, reward: m.reward,
+      ...tasks.deposit.map(m => ({ type: 'deposit', target: m.target, reward: m.reward,
         current: deposits, achieved: deposits >= m.target, claimed: !!u['depositMilestoneClaimed_' + m.target] })),
     ];
     const rewardTxSnap = await db.collection('transactions').where('userId', '==', userId).where('type', '==', 'team_reward').get();
@@ -3365,7 +3390,8 @@ app.post('/team/milestone/claim', async (req, res) => {
   const target = Number(req.body.target);
   if (!['count', 'deposit'].includes(req.body.type)) return res.status(400).json({ status: 'error', message: 'Unknown task category' });
   const isDeposit = req.body.type === 'deposit';
-  const table = isDeposit ? TEAM_DEPOSIT_MILESTONES : TEAM_MILESTONES;
+  const tasks = taskTablesFrom(await getSettings());
+  const table = isDeposit ? tasks.deposit : tasks.count;
   const m = table.find(x => x.target === target);
   if (!m) return res.status(400).json({ status: 'error', message: 'Unknown milestone' });
   try {
@@ -3414,6 +3440,36 @@ app.post('/team/milestone/claim', async (req, res) => {
   } catch (e) { console.error('Milestone claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
 });
 
+app.post('/admin/task-rewards/get', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const sett = await getSettings();
+    const cur = taskTablesFrom(sett);
+    res.json({ status: 'success', count: cur.count, deposit: cur.deposit,
+      defaults: { count: TEAM_MILESTONES, deposit: TEAM_DEPOSIT_MILESTONES },
+      custom: { count: !!cleanTaskLadder(sett.taskCountMilestones, 100000), deposit: !!cleanTaskLadder(sett.taskDepositMilestones, MAX_MONEY_AMOUNT) } });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the task rewards' }); }
+});
+app.post('/admin/task-rewards/save', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const b = req.body || {};
+    const updates = {};
+    const fields = [['count', 'taskCountMilestones', 100000, 'referral'], ['deposit', 'taskDepositMilestones', MAX_MONEY_AMOUNT, 'recharge']];
+    for (const [key, field, maxTarget, label] of fields) {
+      if (!(key in b)) continue;
+      if (b[key] === null) { updates[field] = FieldValue.delete(); continue; }   // back to the default ladder
+      const clean = cleanTaskLadder(b[key], maxTarget);
+      if (!clean) return res.status(400).json({ status: 'error', message: `The ${label} tasks need 1 to ${TASK_LADDER_MAX_ROWS} rows, each with a whole-number target and reward above 0, and no target repeated.` });
+      updates[field] = clean;
+    }
+    if (!Object.keys(updates).length) return res.status(400).json({ status: 'error', message: 'Nothing to save.' });
+    await db.collection('settings').doc('main').set(updates, { merge: true });
+    _settingsCacheTs = 0;
+    logAdminAction(req, 'task_rewards_updated', { fields: Object.keys(updates) });
+    res.json({ status: 'success' });
+  } catch (e) { console.error('task-rewards save:', e.message); res.status(500).json({ status: 'error', message: 'Could not save the task rewards' }); }
+});
 // ── MISSION CENTER — REMOVED ──
 // Owner: "remove mission center". The three routes that lived here
 // (/mission/status, /mission/salary/claim, /mission/deposit/claim) are gone,
