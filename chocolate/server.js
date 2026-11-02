@@ -5270,13 +5270,13 @@ async function _creditDepositNow(depDoc, source) {
           // outcome always means the ledger row reflects what actually
           // happened, regardless of what state it was in before.
           await Promise.all(txSnap.docs.map(txDoc => txDoc.ref.update({
-            status: 'success', description: `Deposit: Success (${fmtMoney(depAmount)})`,
+            status: 'success', description: 'Online Deposit',
             amount: depAmount, displayAmount: depAmount,
           })));
         } else {
           const { date, time } = nowStr();
           await db.collection('transactions').add({
-            userId: depUserId, statementId: newStatementId(), type: 'deposit', description: `Deposit: Success (${fmtMoney(depAmount)})`,
+            userId: depUserId, statementId: newStatementId(), type: 'deposit', description: 'Online Deposit',
             amount: depAmount, displayAmount: depAmount, status: 'success', date, time, ref: fd.ref, depositId: depDoc.id,
             createdAt: FieldValue.serverTimestamp()
           });

@@ -5224,7 +5224,8 @@ function recordsRowAmount(t){
   return Number(t.amount) || 0;
 }
 
-function cleanDesc(d){ return d || ''; }
+// Owner: a finished deposit reads just "Online Deposit" (old rows were saved as "Deposit: Success (UGX 500)").
+function cleanDesc(d){ d = d || ''; return /^Deposit: Success\b/i.test(String(d)) ? 'Online Deposit' : d; }
 
 // Manual (admin-number, SMS-matched) deposit collection -- PAY B, and the
 // PAY A/PAY B choice screen itself -- was removed outright per owner
