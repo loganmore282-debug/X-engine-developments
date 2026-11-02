@@ -4231,7 +4231,25 @@ function paintAssets(){
 // And a failure is silent by design: the link falls back to this origin,
 // which is always a working invite.
 function refreshShareHost(){ STATE.shareHost = ''; return Promise.resolve(); }
-function shareOrigin(){ return location.origin; }
+// Random 4-character addresses (h6re.<domain>, suag.<domain>, 7wht.<domain>): a fresh one on every Share open and every Copy. The server names the
+// domain (settings.shareDomain, set by deploy/set-wildcard.sh); with none set, or when the app is open somewhere else, the link keeps this origin.
+var SHARE_LABEL_RESERVED = ['qumx'];                    // the admin panel's own address
+function shareRand(n){
+  try { const a = new Uint32Array(1); window.crypto.getRandomValues(a); return a[0] % n; } catch (_) { return Math.floor(Math.random() * n); }
+}
+function shareLabel(){
+  const all = 'abcdefghijklmnopqrstuvwxyz0123456789', letters = 'abcdefghijklmnopqrstuvwxyz';
+  let out = '';
+  for (let i = 0; i < 4; i++) out += all[shareRand(all.length)];
+  if (/^\d+$/.test(out)) out = letters[shareRand(letters.length)] + out.slice(1);   // never all digits
+  return SHARE_LABEL_RESERVED.indexOf(out) >= 0 ? shareLabel() : out;
+}
+function shareOrigin(){
+  const d = String((STATE.settings || {}).shareDomain || '').toLowerCase();
+  const h = location.hostname.toLowerCase();
+  if (!d || location.protocol !== 'https:' || !(h === d || h.endsWith('.' + d))) return location.origin;
+  return 'https://' + shareLabel() + '.' + d;
+}
 // ── MY ASSETS investment helpers ──
 var _investmentsLoadFailed = false;
 var MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];

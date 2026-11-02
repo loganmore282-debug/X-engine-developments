@@ -15,7 +15,8 @@
 #     > /etc/nginx/sites-available/petro
 #
 # api.PETRO_DOMAIN   -> proxied to the Node backend (server.js via pm2, :3000)
-# app.PETRO_DOMAIN   -> static files, petro/user/  (member app)
+# app.PETRO_DOMAIN   -> static files, petro/user/  (member app) -- RETIRED: deploy/set-wildcard.sh moves the member app to random 4-character
+#                      addresses (h6re.PETRO_DOMAIN ...) and removes this block; run it once after the first install.
 # qumx.PETRO_DOMAIN  -> static files, petro/admin/ (admin panel)
 #
 # The admin subdomain is deliberately a random 4-letter string, not the

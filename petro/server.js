@@ -451,12 +451,18 @@ function currencyLabel(code) {
   const c = String(code || '').toUpperCase();
   return c === 'ETB' ? 'Br' : c;
 }
+// The domain whose random 4-character subdomains carry the member app and invite links (deploy/set-wildcard.sh saves it as SHARE_DOMAIN in
+// deploy/secrets.local.js): https://h6re.<domain>/share.html?... Empty = invite links keep the address the app is open on.
+const SHARE_DOMAIN = (() => {
+  const d = String(process.env.SHARE_DOMAIN || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^\*\./, '').replace(/\/.*$/, '');
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d) ? d : '';
+})();
 let _mainAllowedHosts = [];
 let _baseDomain = 'petro-platform.com';
 let _blockRootDomain = true;
 let _parkedHosts = [];
 function refreshCorsSnapshot() {
-  const all = _mainAllowedHosts.concat(_parkedHosts, _baseDomain ? [_baseDomain, 'www.' + _baseDomain] : []);
+  const all = _mainAllowedHosts.concat(_parkedHosts, _baseDomain ? [_baseDomain, 'www.' + _baseDomain] : [], SHARE_DOMAIN ? [SHARE_DOMAIN] : []);
   _corsExtraHosts = all.filter((h, i) => h && all.indexOf(h) === i);
 }
 function refreshHostPolicy(sett) {
@@ -3622,6 +3628,7 @@ app.get('/public/settings', async (req, res) => {
     publicJson(req, res, { status: 'success', settings: {
       ...rest,
       maintenanceMsg: s.maintenanceMode ? maintenanceMsg : '',
+      shareDomain: SHARE_DOMAIN,
       payoutManual: payoutIsManual(s),
       // RESOLVED, not a raw setting: deposits are only real if a gateway can
       // actually reach this country's phone numbers. Sending an unresolved

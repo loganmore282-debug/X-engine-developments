@@ -114,6 +114,10 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   input,select,textarea{width:100%;padding:12px 13px;border:1.5px solid var(--line);border-radius:11px;
     font-size:14px;background:var(--card);color:var(--ink);outline:none;margin-top:6px}
   input:focus,select:focus,textarea:focus{border-color:var(--gold)}
+  /* 24-hour time picker: two drop-downs (hour, minute) so the clock never turns into AM / PM. */
+  .t24{display:flex;align-items:center;gap:6px}
+  .t24 select{flex:1;min-width:0;text-align:center;text-align-last:center;padding:12px 6px}
+  .t24 span{font-weight:700}
   /* The two language pickers. Every other select in this panel is a full-width
      form control; these two are chrome, so they opt out of that width rather
      than stretching the topbar row and the login card's brand line. */
@@ -3094,8 +3098,8 @@ async function renderSettings(){
       <div class="switch-row" style="margin-top:8px"><span><b>Only allow withdraw between set hours</b> <span class="muted">(members see the hours on the Withdraw screen)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sWitWindow" ${s.withdrawWindowEnabled===true?'checked':''} style="width:auto"></label></div>
       <div class="row" style="margin-top:6px">
-        <div><label>Withdraw opens at</label><input id="sWitFrom" type="time" value="${esc(v('withdrawOpenFrom','09:00'))}"></div>
-        <div><label>Withdraw closes at</label><input id="sWitTo" type="time" value="${esc(v('withdrawOpenTo','17:00'))}"></div>
+        <div><label>Withdraw opens at</label><div class="t24" data-t24="sWitFrom"><select data-no-i18n aria-label="Hour"></select><span>:</span><select data-no-i18n aria-label="Minute"></select><input type="hidden" id="sWitFrom" value="${esc(v('withdrawOpenFrom','09:00'))}"></div></div>
+        <div><label>Withdraw closes at</label><div class="t24" data-t24="sWitTo"><select data-no-i18n aria-label="Hour"></select><span>:</span><select data-no-i18n aria-label="Minute"></select><input type="hidden" id="sWitTo" value="${esc(v('withdrawOpenTo','17:00'))}"></div></div>
       </div>
       <!-- It said "East Africa Time" and gave its example in 12-hour ("between
            5pm and 6pm"), and both were wrong once countries existed. The window
@@ -3104,7 +3108,8 @@ async function renderSettings(){
            is 24-hour. Owner: "withdrawal time has problems, is it in 24hrs or,
            please make sure every withdrawal time is reading very well on each
            country". -->
-      <p class="muted" style="margin:6px 0 0">24-hour, local time. Can run past midnight (e.g. 18:00&ndash;17:00). One withdrawal at a time per member, always.</p>
+      <p class="muted" style="margin:6px 0 0">24-hour clock, Ethiopia time. Can run past midnight (for example 18:00 to 17:00). One withdrawal at a time per member, always.</p>
+      <p class="muted" id="witNow" data-no-i18n style="margin:6px 0 0;font-weight:600"></p>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a referral code to sign up</b> <span class="muted">(every new member must be invited by an existing one)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqReferral" ${s.requireReferralCode!==false?'checked':''} style="width:auto"></label></div>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Leave ON &mdash; the first-ever account is always let through.</p>
@@ -3192,6 +3197,34 @@ async function renderSettings(){
     const d = await api('/admin/settings/update', { settings: upd });
     toast(d.status==='success' ? 'Crypto deposit settings saved' : (d.message||'Failed'), d.status==='success'?'ok':'err');
   });
+  // 24-hour pickers: build the hour / minute drop-downs from the hidden value and write "HH:MM" back into it.
+  document.querySelectorAll('[data-t24]').forEach(box=>{
+    const hid=box.querySelector('input[type=hidden]'), [hs,ms]=box.querySelectorAll('select');
+    const m=/^(\d{1,2}):(\d{2})/.exec(hid.value||'')||[0,'9','00'];
+    const hh=Math.min(23,+m[1]), mm=Math.min(59,+m[2]);
+    const two=n=>String(n).padStart(2,'0');
+    hs.innerHTML=Array.from({length:24},(_,i)=>`<option value="${two(i)}">${two(i)}</option>`).join('');
+    const mins=new Set(Array.from({length:12},(_,i)=>i*5)); mins.add(mm);
+    ms.innerHTML=[...mins].sort((a,b)=>a-b).map(i=>`<option value="${two(i)}">${two(i)}</option>`).join('');
+    hs.value=two(hh); ms.value=two(mm); hid.value=two(hh)+':'+two(mm);
+    const sync=()=>{ hid.value=hs.value+':'+ms.value; hid.dispatchEvent(new Event('change')); };
+    hs.addEventListener('change',sync); ms.addEventListener('change',sync);
+  });
+  // Says plainly, from the two times above, whether withdrawing is open this moment (Ethiopia time, UTC+3, the clock the server uses).
+  function refreshWitNow(){
+    const el=$('witNow'); if(!el) return;
+    const on=$('sWitWindow')&&$('sWitWindow').checked, f=$('sWitFrom').value, t=$('sWitTo').value;
+    const m=x=>{const r=/^(\d{1,2}):(\d{2})/.exec(x||'');return r?(+r[1])*60+(+r[2]):null;};
+    const d=new Date(Date.now()+3*3600000), now=d.getUTCHours()*60+d.getUTCMinutes(), a=m(f), b=m(t);
+    const clock=String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');
+    const dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getUTCDay()];
+    if(!on){ el.textContent='Right now it is '+dayName+' '+clock+' Ethiopia time. The hours switch is off: members can withdraw at any hour.'; return; }
+    if(a==null||b==null||a===b){ el.textContent='Pick two different times.'; return; }
+    const open=a<b?(now>=a&&now<b):(now>=a||now<b);
+    el.textContent='Right now it is '+dayName+' '+clock+' Ethiopia time: withdrawing is '+(open?'OPEN.':'CLOSED.');
+  }
+  ['sWitWindow','sWitFrom','sWitTo'].forEach(id=>{ const e=$(id); if(e){ e.addEventListener('change',refreshWitNow); e.addEventListener('input',refreshWitNow); } });
+  refreshWitNow();
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
       minDeposit:+$('sMinDep').value, minWithdraw:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
