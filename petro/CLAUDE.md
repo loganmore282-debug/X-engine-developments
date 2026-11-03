@@ -7552,3 +7552,7 @@ Owner (screenshot: tapping Support on Home said "Support email is not set up yet
 - **Home Support tile** now calls `openSupportGroup()`: opens the Telegram group, else the WhatsApp group, else the Telegram customer service link; none set -> "Support group is not set up yet. Please try again later." (Amharic row added).
 - **Removed:** the admin "Support email" box, the Email Support row on the Support page and on the Forgot Password page, the email icon and styles, the server default `supportEmail` and its email validator; `/admin/settings/update` now drops a `supportEmail` sent by an old panel. A `supportEmail` left in an old database is never shown.
 - Tests: `test-contact-links.js` (13, source and built). App v252, admin v81.
+
+## Follow-up 75 -- Pasting works in every text box (page guard no longer blocks the long-press menu inside fields)
+
+Owner (payment page, Step 2, and earlier the USDT hash box): *"here also I couldn't paste."* Cause: `guard-src.js` blocked the `contextmenu` event on the whole page. On Android a long-press in a field raises the "Paste / Select all" bubble through that same event, so the bubble never appeared. Now the event is blocked everywhere EXCEPT inside `<input>`, `<textarea>` and editable elements (selection, copy and drag outside fields stay blocked as before). Test: `test-paste-allowed.js` (4; fails on the previous build). App cache v253.
