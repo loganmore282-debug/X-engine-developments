@@ -633,7 +633,7 @@ const DEFAULT_SETTINGS = {
   // there is no code in existence to type, so requiring one would make the
   // platform impossible to launch. Turn this off temporarily if you ever need
   // to onboard someone with no upline.
-  requireReferralCode: true,
+  requireReferralCode: false,
   // Extra frontend domains allowed to call this backend, set from the admin
   // panel (Settings -> Allowed website domains). ADDED to the built-in
   // allowlist, never replacing it -- see _corsExtraHosts.
@@ -682,7 +682,7 @@ const DEFAULT_SETTINGS = {
   // WEEKENDS. Owner: products rest on Saturday and Sunday (no cashback is credited for those two days) and nobody can request a withdrawal on
   // either day. Cashback is credited at local midnight for the day that just ended, so Friday's is credited at 00:00 Saturday, and the next
   // credit is at 00:00 Tuesday (for Monday). Both are ON by default and can be switched off in Admin > Settings.
-  weekendCashbackPause: true, weekendWithdrawBlock: true,
+  weekendCashbackPause: false, weekendWithdrawBlock: false,
   // What every NEW mobile-money recharge / withdrawal reference starts with (soda2610111048053568). Admin > Settings; existing references never change.
   referencePrefix: 'S',
   // AUTOMATIC WITHDRAWALS (Admin > Settings > Withdrawals). Off by default. Requests always arrive as 'pending' as usual; only while this is
@@ -777,7 +777,9 @@ let _settingsCache = null, _settingsCacheTs = 0;
 // Owner: "remove PesaJet, MarzPay, cards, OTPs -- we are using USDT and manual." Whatever an old database
 // still holds, these can never be switched on again: no SMS codes (registration, payout accounts, password
 // reset), no card payments. Recharges are Bank / Wallet (manual, approved by the admin).
-const FORCED_SETTINGS = Object.freeze({ otpVerificationEnabled: false, bankOtpRequired: false, cardDepositEnabled: false });
+// Owner: "remove" the weekend-rest switches and the referral-code switch from the admin panel. With no switch left they must not stay stuck ON, so
+// they are pinned OFF whatever an old database holds: products pay and members can withdraw on Saturday and Sunday, and a referral code is optional.
+const FORCED_SETTINGS = Object.freeze({ otpVerificationEnabled: false, bankOtpRequired: false, cardDepositEnabled: false, weekendCashbackPause: false, weekendWithdrawBlock: false, requireReferralCode: false });
 async function getSettings() {
   if (_settingsCache && Date.now() - _settingsCacheTs < 60 * 1000) return _settingsCache;
   try {

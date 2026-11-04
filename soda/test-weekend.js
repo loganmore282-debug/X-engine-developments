@@ -41,10 +41,11 @@ assert.equal(off.payoutsDueCount(fri, eat('2026-10-19T12:00:00'), 8), 3);
 assert.match(src, /sett\.weekendWithdrawBlock !== false && !unrestricted && \[0, 6\]\.includes\(eatWeekday\(Date\.now\(\)\)\)/);
 assert.match(src, /code: 'WEEKEND_CLOSED'/);
 assert.equal((src.match(/nextPayoutAt: new Date\(payoutDueAtMs\(Date\.now\(\), 1\)\)/g) || []).length, 2);
-assert.match(src, /weekendCashbackPause: true, weekendWithdrawBlock: true/);
+assert.match(src, /weekendCashbackPause: false, weekendWithdrawBlock: false/);
+assert.match(src, /FORCED_SETTINGS = Object\.freeze\(\{[^}]*weekendCashbackPause: false, weekendWithdrawBlock: false, requireReferralCode: false/);   // the owner removed the switches: pinned off
 assert.match(src, /'weekendCashbackPause', 'weekendWithdrawBlock'/);
 const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
-assert.ok(/id="sWeekendCash"/.test(admin) && /id="sWeekendWit"/.test(admin) && /weekendCashbackPause:\$\('sWeekendCash'\)\.checked, weekendWithdrawBlock:\$\('sWeekendWit'\)\.checked/.test(admin));
+assert.ok(!/sWeekendCash|sWeekendWit|sReqReferral/.test(admin), 'the weekend and referral-code switches are gone from the admin panel');
 const member = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
 assert.ok(/function weekendWithdrawShut\(s\)/.test(member) && /Withdrawals are closed on Saturday and Sunday/.test(member));
 console.log('PASS: weekend rest (cashback skips Saturday and Sunday credits; no weekend withdrawals)');
