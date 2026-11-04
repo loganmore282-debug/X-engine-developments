@@ -1158,7 +1158,7 @@ function fmtMoney(n, currency) {
   // Grouping only -- 'en-UG' is a digit-grouping locale here, not a
   // currency, so the same "1,234,567" shape is right for every region and
   // the label in front of it is what changes.
-  return cur + v.toLocaleString('en-UG', hasCents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});
+  return cur + ' ' + v.toLocaleString('en-UG', hasCents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});
 }
 // Rounds to the nearest UGX cent (2 decimal places). Used by gift codes, the spin
 // wheel/turntable and reporting math.

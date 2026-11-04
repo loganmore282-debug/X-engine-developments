@@ -26,8 +26,8 @@ const S = new Function('DEFAULT_REGION', 'const currentRegion=()=>DEFAULT_REGION
 for (const [raw, want] of [['0912345678', '+251912345678'], ['912345678', '+251912345678'], ['+251912345678', '+251912345678'], ['0712345678', '+251712345678'], ['0812345678', null], ['0771234567', '+251771234567'], ['091234567', null]])
   assert.equal(S.cleanPhone(raw), want, 'phone ' + raw);
 assert.equal(S.phoneToEmail('0912345678'), '912345678@soda-platform.com');
-assert.equal(S.fmtMoney(12500), 'Br12,500'); assert.equal(S.fmtMoney(1234.5), 'Br1,234.50');
-assert.equal(S.fmtMoney(5, 'ETB'), 'Br5');
+assert.equal(S.fmtMoney(12500), 'Br 12,500'); assert.equal(S.fmtMoney(1234.5), 'Br 1,234.50');
+assert.equal(S.fmtMoney(5, 'ETB'), 'Br 5');
 // ── member app ──
 assert.match(member, /var REGION = \{ key: 'et', name: 'Ethiopia', currency: 'ETB', dialCode: '251'/);
 assert.match(member, /languages: \['en','am'\]/);
