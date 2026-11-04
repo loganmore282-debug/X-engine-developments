@@ -1451,14 +1451,11 @@ body.mp-open{overflow:hidden;}
 .mpf-note{margin-top:11.4px;padding:12px 11px;border-radius:8px;background:#f9ecec;color:#c45f5f;font-size:12.2px;line-height:14.2px;}
 #mpToast{position:fixed;left:50%;top:48%;z-index:9600;max-width:218px;padding:11px 17px;border-radius:10px;background:rgba(74,74,74,.96);color:#fff;font:400 15px/1.35 Roboto,'Noto Sans Ethiopic',system-ui,sans-serif;word-break:break-all;opacity:0;pointer-events:none;transform:translate(-50%,-50%);transition:opacity .18s ease;}
 #mpToast.show{opacity:1;}
-/* Language switch: one pill holding every language side by side; the chosen one is a white tab. One tap changes the language, no sheet. */
-.lang-btn{position:absolute;top:14px;right:14px;z-index:4;display:inline-flex;align-items:center;gap:2px;padding:3px;
-  border:1px solid rgba(255,255,255,.38);border-radius:999px;background:rgba(255,255,255,.14);
-  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 4px 14px rgba(0,0,0,.16);}
-.lang-seg-opt{border:0;background:transparent;color:rgba(255,255,255,.92);font:inherit;font-size:13px;font-weight:600;line-height:1;
-  padding:8px 13px;border-radius:999px;cursor:pointer;transition:background .15s,color .15s;}
-.lang-seg-opt.on{background:#fff;color:var(--snow-wine,#c01616);font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.2);}
-.lang-seg-opt:active{transform:scale(.97);}
+.lang-btn{position:absolute;top:14px;right:14px;z-index:4;display:inline-flex;align-items:center;gap:6px;
+  padding:7px 11px;border:1px solid rgba(255,255,255,.42);border-radius:var(--r-pill);
+  background:rgba(20,10,5,.26);color:#fff;font:inherit;font-size:13px;font-weight:600;
+  letter-spacing:.01em;cursor:pointer;-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);}
+.lang-btn:active{transform:translateY(1px);}
 .lang-sheet-bg{position:fixed;inset:0;z-index:70;display:flex;align-items:flex-end;justify-content:center;
   background:rgba(20,10,5,.45);opacity:0;pointer-events:none;transition:opacity .2s ease;}
 .lang-sheet-bg.show{opacity:1;pointer-events:auto;}
@@ -2936,7 +2933,11 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
   <div class="auth-screen-v2" id="authHero">
     <span class="auth-bg" id="authHeroBg" aria-hidden="true"></span>
     <!-- Language button (English / Amharic), top right of the sign-in screen. Hidden by paintLangButton() when only one language is allowed. data-no-i18n: its label is already in its own language. -->
-    <div class="lang-btn" id="langBtn" data-no-i18n style="display:none;" role="group" aria-label="Language"></div>
+    <button type="button" class="lang-btn" id="langBtn" data-no-i18n style="display:none;" onclick="openLangPicker()" aria-label="Change language">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.8 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.8-3.8-9S9.5 5.7 12 3Z"/></svg>
+      <span id="langBtnLabel">English</span>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
     <div class="auth-scroll-v2">
       <div id="loginPane">
         <div class="auth-intro">
