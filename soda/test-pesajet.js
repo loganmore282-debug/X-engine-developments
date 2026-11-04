@@ -757,8 +757,8 @@ async function finish() {
       db: { collection: name => q(name) },
       verifyAdmin: () => true,
       getSettings: async () => settings,
-      adminUserRegions: async () => ({ u1: 'ug', u2: 'ug' }),
-      rowRegionKey: (row, map) => row.regionKey || map[row.userId] || 'ug',
+      adminUserRegions: async () => ({ u1: 'et', u2: 'et' }),
+      rowRegionKey: (row, map) => row.regionKey || map[row.userId] || 'et',
       regionByKey: () => ({ currency: 'UGX' }),
       // The real one: status alone is not enough, because claim-before-credit
       // can leave 'matched' with the wallet write unfinished.
@@ -781,7 +781,7 @@ async function finish() {
       return out;
     };
     const all = await run(null);
-    const ug = all.regions.find(r => r.regionKey === 'ug');
+    const ug = all.regions.find(r => r.regionKey === 'et');
     ck(ug && ug.collected === 30000 && ug.collectedCount === 1,
        'only a deposit that really landed counts as collected');
     ck(ug && ug.pendingIn === 50000 && ug.pendingInCount === 1,

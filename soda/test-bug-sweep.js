@@ -27,7 +27,7 @@ ok(/function loadFailed\(/.test(admin) && (admin.match(/loadFailed\(/g) || []).l
 ok(/codes\.join\('\\n'\)/.test(admin) && !/codes\.join\('\\\\n'\)/.test(admin), 'Copy all puts one gift code per line');
 ok(/cannot be blank/.test(admin), 'a blank number in Settings is refused instead of saved as 0');
 ok(/phoneCore\(w\.accountPhone/.test(admin), 'withdrawal search also matches the login phone');
-ok(/x\.classList\.toggle\('active',x\.dataset\.df===_depFilter\)/.test(admin) && /x\.classList\.toggle\('active',x\.dataset\.wf===_witFilter\)/.test(admin), 'Deposits / Withdrawals subtab highlight follows the click');
+ok(/data-df\]'\)\.forEach\(x=>x\.classList\.toggle\('active',x===b\)\)/.test(admin) && /x\.classList\.toggle\('active',x\.dataset\.wf===_witFilter\)/.test(admin), 'Deposits / Withdrawals subtab highlight follows the click');
 ok(/upline\.map\(m=>rowHtml\(m\)\)/.test(admin), 'no stray index digits on the referral chain');
 ok(/Math\.round\(parseFloat\(\$\('adjAmt'\)/.test(admin), 'Credit / Debit confirm the whole amount the server will apply');
 ok(/'admins', 'auditlog'\]\.includes\(lastTab\)/.test(admin), 'a staff deep link to an owner tab does not log staff out');

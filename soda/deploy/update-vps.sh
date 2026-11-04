@@ -32,12 +32,27 @@ ALSO_FILE=${SODA_ALSO_HOSTS_FILE:-/srv/soda-secrets/also-hosts}
 ALSO_HOSTS=""; [ -s "$ALSO_FILE" ] && ALSO_HOSTS=$(tr -d '[:space:]' < "$ALSO_FILE")
 echo "    member app host: $APP_HOST${ALSO_HOSTS:+   also answers on: $ALSO_HOSTS}"
 
+# Random invite-link addresses (deploy/set-wildcard.sh): every four-character <xxxx>.<domain> serves the app, with its own wildcard certificate. Used only when both
+# the domain file and the certificate exist, so a half-finished set-up can never make nginx refuse the file.
+WILD_FILE=${SODA_WILD_FILE:-/srv/soda-secrets/wildcard-domain}
+WILD_CERT_DIR=${SODA_WILD_CERT_DIR:-/etc/letsencrypt/live/soda-wild}
+WILD_DOMAIN=""
+if [ -s "$WILD_FILE" ] && [ -f "$WILD_CERT_DIR/fullchain.pem" ] && [ -f "$WILD_CERT_DIR/privkey.pem" ]; then
+  WILD_DOMAIN=$(tr -d '[:space:]' < "$WILD_FILE"); export SODA_WILD_CERT_DIR="$WILD_CERT_DIR"; echo "    random addresses: *.$WILD_DOMAIN"
+fi
+
 # Secret PesaJet webhook address: the token lives only on this server (made by deploy/make-hook-url.sh), never in git.
 HOOK_FILE=${SODA_HOOK_FILE:-/srv/soda-secrets/hook-token}
 HOOK_HOST_FILE=${SODA_HOOK_HOST_FILE:-/srv/soda-secrets/hook-host}
 if [ -s "$HOOK_FILE" ]; then SODA_HOOK_TOKEN=$(tr -d '[:space:]' < "$HOOK_FILE"); export SODA_HOOK_TOKEN; echo "    (secret PesaJet webhook address is ON)"; fi
 if [ -s "$HOOK_FILE" ] && [ -s "$HOOK_HOST_FILE" ]; then SODA_HOOK_HOST=$(tr -d '[:space:]' < "$HOOK_HOST_FILE"); export SODA_HOOK_HOST; echo "    (webhook-only host: $SODA_HOOK_HOST)"; fi
 
+# The random-address file is taken away while certbot runs and put back after it (see make-nginx.js --wild-only for why).
+WILD_CONF=${SODA_WILD_CONF:-/etc/nginx/conf.d/soda.wild.conf}; WILD_BAK=/tmp/soda.wild.keep
+rm -f "$WILD_BAK"
+[ -f "$WILD_CONF" ] && (umask 077; cp -p "$WILD_CONF" "$WILD_BAK")
+rm -f "$WILD_CONF"
+_restore_wild() { [ -f "$WILD_BAK" ] && cp -p "$WILD_BAK" "$WILD_CONF"; return 0; }
 say "3/7  nginx: new walls (the old file is kept at $BAK and put back if the new one is refused)"
 [ -f "$CONF" ] && cp "$CONF" "$BAK"
 if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" ${ALSO_HOSTS:+--also="$ALSO_HOSTS"} > /tmp/soda.conf.new) && cp /tmp/soda.conf.new "$CONF" && nginx -t >/tmp/soda.nginxtest 2>&1; then
@@ -45,6 +60,7 @@ if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_
 else
   echo "    !! nginx refused the new file: putting the old one back"
   [ -f "$BAK" ] && cp "$BAK" "$CONF"
+  _restore_wild
   tail -3 /tmp/soda.nginxtest 2>/dev/null
   echo "    Nothing was changed on the live site. Send me the lines above."
   exit 1
@@ -86,14 +102,21 @@ sed -i -E 's#return 301 https://#return 308 https://#' "$CONF"
 # the old file back: reloading port-80-only nginx would lock every browser out (the site sends HSTS).
 if [ -f "$BAK" ] && grep -q ssl_certificate "$BAK" && ! grep -q ssl_certificate "$CONF"; then
   echo "    !! HTTPS sections are missing after the certificate step: putting the previous nginx file back"
-  cp "$BAK" "$CONF"; nginx -t >/dev/null 2>&1 && systemctl reload nginx
+  cp "$BAK" "$CONF"; _restore_wild; nginx -t >/dev/null 2>&1 && systemctl reload nginx
   echo "    Check the DNS records (see above) and run this again."; exit 1
 fi
 # HTTP/2 lets a phone fetch many files over ONE connection (a big gain on long-distance links). Added only if missing, and undone if nginx refuses it.
 (umask 077; cp "$CONF" /tmp/soda.conf.pre-h2)   # the file holds the secret webhook address: keep the copy private
 sed -i -E '/^[[:space:]]*listen .*443 ssl/{/http2/!s/443 ssl/443 ssl http2/}' "$CONF"
 if nginx -t >/dev/null 2>&1; then echo "    HTTP/2 on: $(grep -c 'ssl http2' "$CONF") listen line(s)"; else echo "    (HTTP/2 not accepted by this nginx, left as it was)"; cp /tmp/soda.conf.pre-h2 "$CONF"; fi
-if nginx -t >/dev/null 2>&1; then systemctl reload nginx && echo "    nginx reloaded"; else echo "    !! nginx test failed after certbot, putting the old file back"; cp "$BAK" "$CONF"; nginx -t 2>&1 | tail -1; systemctl reload nginx; exit 1; fi
+if nginx -t >/dev/null 2>&1; then systemctl reload nginx && echo "    nginx reloaded"; else echo "    !! nginx test failed after certbot, putting the old file back"; cp "$BAK" "$CONF"; _restore_wild; nginx -t 2>&1 | tail -1; systemctl reload nginx; exit 1; fi
+if [ -n "$WILD_DOMAIN" ]; then
+  if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" --wild="$WILD_DOMAIN" --wild-only > "$WILD_CONF") && nginx -t >/tmp/soda.nginxtest 2>&1; then
+    chmod 644 "$WILD_CONF"; systemctl reload nginx && echo "    random addresses (*.$WILD_DOMAIN) on: $WILD_CONF"
+  else
+    echo "    !! nginx refused the random-address file: it is left out, the rest of the site is unchanged"; tail -3 /tmp/soda.nginxtest; rm -f "$WILD_CONF"; nginx -t >/dev/null 2>&1 && systemctl reload nginx
+  fi
+fi
 
 say "5/7  Restart Soda (secrets re-read)"
 cd "$SODA/deploy" || exit 1

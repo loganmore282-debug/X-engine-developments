@@ -110,6 +110,10 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   input,select,textarea{width:100%;padding:12px 13px;border:1.5px solid var(--line);border-radius:11px;
     font-size:14px;background:var(--card);color:var(--ink);outline:none;margin-top:6px}
   input:focus,select:focus,textarea:focus{border-color:var(--gold)}
+  /* 24-hour time picker: two drop-downs (hour, minute) so the clock never turns into AM / PM. */
+  .t24{display:flex;align-items:center;gap:6px}
+  .t24 select{flex:1;min-width:0;text-align:center;text-align-last:center;padding:12px 6px}
+  .t24 span{font-weight:700}
   /* The two language pickers. Every other select in this panel is a full-width
      form control; these two are chrome, so they opt out of that width rather
      than stretching the topbar row and the login card's brand line. */
@@ -378,6 +382,7 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
         <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="settings" id="settingsTab">Settings</button>
         <button class="tab" data-tab="banners" id="bannersTab">Banners</button>
+        <button class="tab hidden" data-tab="paynumbers" id="payNumbersTab">Payment Numbers</button>
         <button class="tab hidden" data-tab="admins" id="adminsTab">Admins</button>
         <button class="tab hidden" data-tab="auditlog" id="auditLogTab">Activity Log</button>
       </div>
@@ -438,8 +443,8 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;'
 // number is not left with a +254 stuck on the front of it.
 function toLocalPhoneDisplay(num, regionKey){
   const s = String(num || '').trim();
-  const p = '+' + '256';
-  return s.indexOf(p) === 0 ? '0' + s.slice(p.length) : s;
+  const p = '+' + '251';
+  return s.indexOf(p) === 0 ? s.slice(p.length) : s;
 }
 async function copyText(str, btn){
   try {
@@ -619,11 +624,11 @@ function fileToSquarePng(file, size){
 let _toastT=null;
 function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('div'); t.id='adToast'; document.body.appendChild(t);} t.className='toast'+(kind?' '+kind:''); t.textContent=msg; clearTimeout(_toastT); _toastT=setTimeout(()=>t.remove(),3000); }
 
-// All amounts in this panel are Ugandan shillings.
-const ADMIN_REGIONS = [{ key: 'ug', name: 'Uganda', currency: 'UGX' }];
-const ADMIN_REGION = 'ug';
+// All amounts in this panel are Ethiopian birr (ETB, printed as the symbol Br).
+const ADMIN_REGIONS = [{ key: 'et', name: 'Ethiopia', currency: 'ETB' }];
+const ADMIN_REGION = 'et';
 function regionByKeyAdmin(){ return ADMIN_REGIONS[0]; }
-function adminOneRegion(){ return 'ug'; }
+function adminOneRegion(){ return 'et'; }
 const ADMIN_LANGS = [
   { code:'en', name:'English', native:'English' },
   { code:'lg', name:'Luganda', native:'Luganda' },
@@ -632,8 +637,8 @@ const ADMIN_LANGS = [
   { code:'rw', name:'Kinyarwanda', native:'Ikinyarwanda' },
   { code:'nyn', name:'Runyankole', native:'Runyankore' },
 ];
-function curOf(){ return 'UGX'; }
-function adminCur(){ return 'UGX'; }
+function curOf(){ return 'Br'; }
+function adminCur(){ return 'Br'; }
 var _adminPending = new Map();
 function api(path, body, method){
   if (body || (method && method !== 'GET')) return adminRequest(path, body, method);
@@ -705,9 +710,9 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
     if (wanted && VALID_TABS.has(wanted)) { lastTab = wanted; history.replaceState(null, '', location.pathname); }
   } catch (_) {}
   const isOwner = SESSION_ROLE === 'owner';
-  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'bannersTab', 'promocodesTab']
+  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'bannersTab', 'promocodesTab', 'payNumbersTab']
     .forEach(id => $(id).classList.toggle('hidden', !isOwner));
-  if (!isOwner && ['products', 'settings', 'banners', 'promocodes', 'admins', 'auditlog'].includes(lastTab)) lastTab = 'dashboard';
+    if (!isOwner && ['products', 'settings', 'banners', 'promocodes', 'paynumbers', 'admins', 'auditlog'].includes(lastTab)) lastTab = 'dashboard';
   // The country list is needed before anything renders: every money figure
   // in this panel is labelled from it (see ugx()/curOf()), and the region
   // picker on Settings and Products is built from it. Failure is silent and
@@ -967,7 +972,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('mess
 });
 
 // ── TABS ──
-const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','messages','transactions','referrals','settings','banners','admins','auditlog']);
+  const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','messages','transactions','referrals','settings','banners','paynumbers','admins','auditlog']);
 let _tab='dashboard', _tabSequence=0;
 function staleTab(name){ return _tab !== name; }
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{ if (_tab !== t.dataset.tab) switchTab(t.dataset.tab); }));
@@ -980,8 +985,8 @@ function switchTab(name){
   c.inert = true; c.setAttribute('aria-busy','true');
   const spinnerTimer = setTimeout(() => { if (sequence === _tabSequence) c.innerHTML=spinnerHtml(); }, 120);
   const fn = ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
-     products:renderProducts, promocodes:renderPromoCodes, messages:renderMessages, transactions:renderTransactions,
-     referrals:renderReferrals, settings:renderSettings, banners:renderBanners, admins:renderAdmins, auditlog:renderAuditLog }[name]);
+       products:renderProducts, promocodes:renderPromoCodes, messages:renderMessages, transactions:renderTransactions,
+       referrals:renderReferrals, settings:renderSettings, banners:renderBanners, paynumbers:renderPayNumbers, admins:renderAdmins, auditlog:renderAuditLog }[name]);
   // The switch lives in the topbar, OUTSIDE #content, so a tab render can
   // never take it with it -- which is why this no longer waits for the tab
   // to paint. Only the note under the tabs depends on which tab is open, and
@@ -1123,77 +1128,15 @@ async function renderDashboard(){
       <div class="stat"><div class="n">${stats.pendingWitCount||0}</div><div class="l">Pending withdrawals</div></div>
     </div>
     <div class="panel-card">
-      <h2 class="sec" style="margin-top:0">MarzPay available balance</h2>
-      <p class="muted" style="margin-top:0">The real float sitting in MarzPay's own account -- what payouts actually get sent from, distinct from members' own wallet balances above.</p>
-      <div id="marzBalance">${spinnerHtml()}</div>
-    </div>
-    <!-- PesaJet. Deliberately NOT called a balance: PesaJet publishes no
-         balance endpoint (neither of their official SDKs has one), so this is
-         what Soda itself has moved through them, which is exact for that and
-         silent about their float. The card is hidden entirely unless PesaJet
-         is actually in the payment path or has history, so it does not clutter
-         a panel for an operator who does not use it. -->
-    <div class="panel-card hidden" id="pesajetCard">
-      <h2 class="sec" style="margin-top:0">PesaJet money moved</h2>
-      <!-- Two paragraphs, not one with a <b> in it: the translator matches a
-           WHOLE text node, so inline markup would split this into fragments
-           that no row can ever apply to, and one 200-character sentence would
-           be over the engine's own 160-character cap. Split this way, both
-           halves translate. -->
-      <p class="muted" style="margin-top:0">PesaJet does not publish a balance endpoint, so this is our own record of what has gone through them &mdash; not the float in their account.</p>
-      <p class="muted" style="margin:4px 0 0">It cannot see PesaJet's fees, or anything settled out to a bank.</p>
-      <div id="pesajetSummary">${spinnerHtml()}</div>
-    </div>
-    <div class="panel-card">
       <h2 class="sec" style="margin-top:0">Recent transactions</h2>
       <div class="table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Amount</th></tr></thead><tbody id="dashTx"><tr><td colspan="3">${spinnerHtml()}</td></tr></tbody></table></div>
     </div>`;
-  const [r, mb, pj] = await Promise.all([
-    api('/admin/transactions/list', { limit: 12 }),
-    api('/admin/marzpay/balance'),
-    api('/admin/pesajet/summary'),
-  ]);
+  const r = await api('/admin/transactions/list', { limit: 12 });
   if(staleTab('dashboard')) return;
   const list = (r.transactions || []).slice(0, 12);
   $('dashTx').innerHTML = list.length ? list.map(t=>`
     <tr><td>${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td>
     <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0), t.regionKey)}</td></tr>`).join('') : '<tr><td colspan="3" class="empty">No transactions</td></tr>';
-  $('marzBalance').innerHTML = mb.status==='success'
-    ? `<div class="n" style="font-size:26px">${ugx(mb.amount)}</div>${mb.accountStatus?`<p class="muted" style="margin:4px 0 0">Account status: ${esc(mb.accountStatus)}</p>`:''}`
-    : `<p class="muted" style="margin:0">${esc(mb.message||'Could not check MarzPay balance right now.')}</p>`;
-  paintPesajetSummary(pj);
-}
-// Hidden unless PesaJet is actually selected as a gateway or has moved money
-// before -- an operator on MarzPay alone should not be shown a card of zeroes.
-function paintPesajetSummary(pj){
-  const card = $('pesajetCard'), box = $('pesajetSummary');
-  if (!card || !box) return;
-  if (!pj || pj.status !== 'success') {
-    // A failed read still shows the card IF the gateway is in use, because
-    // silence would look like "nothing has gone through" rather than "we could
-    // not read it".
-    if (pj && pj.selected) { card.classList.remove('hidden'); box.innerHTML = `<p class="muted" style="margin:0">${esc((pj && pj.message) || 'Could not read the PesaJet summary right now.')}</p>`; }
-    return;
-  }
-  const regions = Array.isArray(pj.regions) ? pj.regions : [];
-  const anyHistory = regions.some(b => b.collectedCount || b.paidOutCount || b.pendingInCount || b.pendingOutCount);
-  if (!pj.selected && !anyHistory) return;          // stays hidden
-  card.classList.remove('hidden');
-  if (!regions.length) {
-    box.innerHTML = `<p class="muted" style="margin:0">Nothing has gone through PesaJet yet.</p>`;
-    return;
-  }
-  box.innerHTML = regions.map(b => `
-    ${regions.length>1?`<h3 class="sec" style="margin:10px 0 6px;font-size:14px">${esc('Uganda')}</h3>`:''}
-    <div class="cards">
-      <div class="stat"><div class="n">${ugx(b.collected, b.regionKey)}</div><div class="l">Collected</div></div>
-      <div class="stat"><div class="n">${ugx(b.paidOut, b.regionKey)}</div><div class="l">Paid out</div></div>
-      <div class="stat"><div class="n">${ugx(b.net, b.regionKey)}</div><div class="l">Net through PesaJet</div></div>
-    </div>
-    <p class="muted" style="margin:8px 0 0">${b.pendingInCount||0} recharge(s) still arriving, worth ${ugx(b.pendingIn, b.regionKey)}</p>
-    <p class="muted" style="margin:2px 0 0">${b.pendingOutCount||0} payout(s) still sending, worth ${ugx(b.pendingOut, b.regionKey)}</p>`).join('');
-  if (pj.truncated) box.innerHTML += `<p class="muted" style="margin:8px 0 0;color:var(--danger)">These totals are incomplete &mdash; there is more history than this read can scan.</p>`;
-  if (!pj.configured) box.innerHTML += `<p class="muted" style="margin:8px 0 0">No PesaJet API key is set on the server yet.</p>`;
 }
 function statusPill(s){
   s=String(s||'success').toLowerCase();
@@ -1327,7 +1270,7 @@ async function renderAnalytics(silent){
     <div class="seg">${[7,30,90].map(d=>`<button class="${_anPeriod===d?'on':''}" data-per="${d}">${d} days</button>`).join('')}</div>
     <div class="panel-card">
       <div class="row" style="align-items:center;gap:12px;flex-wrap:wrap"><h2 class="sec" style="margin:0;flex:1">Transactions for a day</h2><label class="muted">Select day <input id="analytics-day" type="date" value="${esc(selected.day||a.today)}" style="padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text)"></label><button id="analytics-today" class="btn">Today</button></div>
-      <p class="muted" style="margin:8px 0 12px">Uganda time (EAT). Completed amounts use recorded credit or payout times; older records without these times use the request date. Open requests show what is still outstanding now from requests created on the selected date. Arrival times are unconfirmed.</p>
+      <p class="muted" style="margin:8px 0 12px">Ethiopia time (EAT). Completed amounts use recorded credit or payout times; older records without these times use the request date. Open requests show what is still outstanding now from requests created on the selected date. Arrival times are unconfirmed.</p>
       <div class="cards">
         <div class="stat"><div class="n" style="color:var(--ok)">${ugx(selected.depositsCompletedAmount)}</div><div class="l">Deposits credited (${selected.depositsCompletedCount||0})</div></div>
         <div class="stat"><div class="n" style="color:var(--danger)">${ugx(selected.withdrawalsCompletedAmount)}</div><div class="l">Withdrawals paid (${selected.withdrawalsCompletedCount||0})</div></div>
@@ -1336,7 +1279,7 @@ async function renderAnalytics(silent){
       </div>
     </div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Cashback schedule for ${esc(selected.day||a.today)}</h2>
-      <p class="muted">Saved purchase terms, paid at midnight 00:00 Uganda time (the first one at the first midnight after purchase), with the same rounding as settlement. Scheduled cashback is credited to wallets; members decide when to withdraw. Future purchases and deposits are unknown.</p>
+      <p class="muted">Saved purchase terms, paid at midnight 00:00 Ethiopia time (the first one at the first midnight after purchase), with the same rounding as settlement. Scheduled cashback is credited to wallets; members decide when to withdraw. Future purchases and deposits are unknown.</p>
       <div class="cards">
         <div class="stat"><div class="n">${ugx(schedule.scheduledAmount)}</div><div class="l">Contract cashback scheduled for this day</div></div>
         <div class="stat"><div class="n">${ugx(schedule.unpaidAmount)}</div><div class="l">This day's cashback still unpaid (eligible accounts)</div></div>
@@ -1411,7 +1354,7 @@ async function renderAnalytics(silent){
 
 // ── USERS ──
 let _users=[];
-function phoneCore(p){ let n=String(p||'').replace(/\D/g,''); if(n.startsWith('256')) n=n.slice(3); n=n.replace(/^0+/,''); return n; }
+function phoneCore(p){ let n=String(p||'').replace(/\D/g,''); if(n.startsWith('251')) n=n.slice(3); n=n.replace(/^0+/,''); return n; }
 async function renderUsers(){
   const r = await api('/admin/users');
   if(staleTab('users')) return;
@@ -1612,7 +1555,7 @@ function makePdf(){
 }
 function pdfMoney(n){ return Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 function pdfDay(ms){ if (!ms) return '-'; const d = new Date(Number(ms) + 3 * 3600 * 1000); const p = x => String(x).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`; }
-function pdfStamp(){ const d = new Date(Date.now() + 3 * 3600 * 1000); const p = x => String(x).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} (Uganda time)`; }
+function pdfStamp(){ const d = new Date(Date.now() + 3 * 3600 * 1000); const p = x => String(x).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} (Ethiopia time)`; }
 function chainPdfBlob(r){
   const pdf = makePdf(), M = 36, W = pdf.W, H = pdf.H, BOT = H - 40;
   const INK = [0.1, 0.12, 0.2], MUTED = [0.45, 0.5, 0.6], BLUE = [0.09, 0.22, 0.72], LINE = [0.82, 0.85, 0.93], HEAD = [0.92, 0.94, 0.99], GOOD = [0.1, 0.55, 0.3], BAD = [0.8, 0.15, 0.2];
@@ -1659,9 +1602,9 @@ function chainPdfBlob(r){
   const colW = (W - 2 * M) / 4;
   [['Phone', u.phone || '-'], ['Referral code', u.referralCode || 'not set'], ['Status', String(u.status || 'active')], ['Joined', pdfDay(u.createdAt)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 30;
-  [['Referred by', u.referredByPhone || 'nobody (this is a root account)'], ['Wallet balance', 'UGX ' + pdfMoney(u.walletBalance)], ['Total deposited', 'UGX ' + pdfMoney(u.totalDeposited)], ['Total invested', 'UGX ' + pdfMoney(u.totalInvested)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
+  [['Referred by', u.referredByPhone || 'nobody (this is a root account)'], ['Wallet balance', 'Br ' + pdfMoney(u.walletBalance)], ['Total deposited', 'Br ' + pdfMoney(u.totalDeposited)], ['Total invested', 'Br ' + pdfMoney(u.totalInvested)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 30;
-  [['Total withdrawn', 'UGX ' + pdfMoney(u.totalWithdrawn)], ['Total earned (all sources)', 'UGX ' + pdfMoney(u.totalEarned)], ['Team members (all levels)', pdfMoney(downline.length) + (r.downlineTruncated ? '+' : '')], ["Team's recharges (L1-L3)", 'UGX ' + pdfMoney(r.teamDeposits)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
+  [['Total withdrawn', 'Br ' + pdfMoney(u.totalWithdrawn)], ['Total earned (all sources)', 'Br ' + pdfMoney(u.totalEarned)], ['Team members (all levels)', pdfMoney(downline.length) + (r.downlineTruncated ? '+' : '')], ["Team's recharges (L1-L3)", 'Br ' + pdfMoney(r.teamDeposits)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 34;
   if (r.cycleDetected || r.downlineCycleDetected) { pdf.text(M, y, 'Warning: a cycle was found in the referral data; the walk stopped early.', 9, true, 'l', BAD); y += 16; }
   // 2. Team by level
@@ -1670,7 +1613,7 @@ function chainPdfBlob(r){
   const lvRows = levels.map(agg);
   if (lvRows.length) {
     const tot = { _bold: true, _lv: 'Total', n: downline.length, banned: lvRows.reduce((s, x) => s + x.banned, 0), dep: lvRows.reduce((s, x) => s + x.dep, 0), inv: lvRows.reduce((s, x) => s + x.inv, 0), wd: lvRows.reduce((s, x) => s + x.wd, 0), earn: lvRows.reduce((s, x) => s + x.earn, 0), payers: lvRows.reduce((s, x) => s + x.payers, 0) };
-    heading('2. Team by level', 'figures are the members\' own lifetime totals, in UGX');
+    heading('2. Team by level', 'figures are the members\' own lifetime totals, in Br');
     table([
       { h: 'Level', w: 70, k: x => x._lv === 'Total' ? 'Total' : 'Level ' + x._lv }, { h: 'Members', w: 70, r: 1, k: x => pdfMoney(x.n) }, { h: 'Have deposited', w: 90, r: 1, k: x => pdfMoney(x.payers) },
       { h: 'Banned', w: 60, r: 1, k: x => pdfMoney(x.banned) }, { h: 'Deposited', w: 105, r: 1, k: x => pdfMoney(x.dep) }, { h: 'Invested', w: 105, r: 1, k: x => pdfMoney(x.inv) },
@@ -1680,7 +1623,7 @@ function chainPdfBlob(r){
   // 3. Commission
   if (r.commission) {
     heading('3. Commission this member earned from the team', `${pdfMoney(r.commission.count)} commission payment${r.commission.count === 1 ? '' : 's'}`);
-    table([{ h: 'Level 1', w: 100, r: 1, k: x => pdfMoney(x.l1) }, { h: 'Level 2', w: 100, r: 1, k: x => pdfMoney(x.l2) }, { h: 'Level 3', w: 100, r: 1, k: x => pdfMoney(x.l3) }, { h: 'Total (UGX)', w: 120, r: 1, k: x => pdfMoney(x.total) }], [r.commission], { zebra: false });
+    table([{ h: 'Level 1', w: 100, r: 1, k: x => pdfMoney(x.l1) }, { h: 'Level 2', w: 100, r: 1, k: x => pdfMoney(x.l2) }, { h: 'Level 3', w: 100, r: 1, k: x => pdfMoney(x.l3) }, { h: 'Total (Br)', w: 120, r: 1, k: x => pdfMoney(x.total) }], [r.commission], { zebra: false });
   }
   // 4. Upline
   heading('4. Upline (direct referrer to root)', `${(r.upline || []).length} link${(r.upline || []).length === 1 ? '' : 's'}`);
@@ -1705,7 +1648,7 @@ function chainPdfBlob(r){
     need(60);
     pdf.rect(M, y - 2, W - 2 * M, 17, [0.85, 0.9, 1]);
     pdf.text(M + 6, y + 1.5, `Level ${lv}  -  ${pdfMoney(rows.length)} member${rows.length === 1 ? '' : 's'}`, 9.5, true, 'l', BLUE);
-    pdf.text(W - M - 6, y + 2, `deposited ${pdfMoney(a.dep)}   invested ${pdfMoney(a.inv)}   (UGX)`, 8.5, false, 'r', INK);
+    pdf.text(W - M - 6, y + 2, `deposited ${pdfMoney(a.dep)}   invested ${pdfMoney(a.inv)}   (Br)`, 8.5, false, 'r', INK);
     y += 21;
     table(dcols, rows);
   });
@@ -1814,7 +1757,7 @@ async function openUser(uid){
       <div style="flex:2"><input id="pwNew" type="text" placeholder="New password (min 6 chars)"></div>
       <button class="btn sky sm" id="pwBtn" title="Set a new login password for this user">Reset password</button>
     </div>
-    <label style="margin-top:14px">Correct phone number ${u.phone && !/^\+2567\d{8}$/.test(u.phone)?'<span class="pill-tag t-warn" style="margin-left:6px">Looks malformed</span>':''}</label>
+    <label style="margin-top:14px">Correct phone number ${u.phone && !/^\+251[79]\d{8}$/.test(u.phone)?'<span class="pill-tag t-warn" style="margin-left:6px">Looks malformed</span>':''}</label>
     <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">Only fixes their profile phone (search/display/referral matching) -- they still log in exactly how they always have.</div>
     <div class="row">
       <div style="flex:2"><input id="phoneFix" type="text" placeholder="07XXXXXXXX"></div>
@@ -1869,7 +1812,7 @@ async function openUser(uid){
         // member's own phone into the payment gateway -- so that's
         // labelled honestly instead of showing a blank or a made-up value.
         const paidTo = d.method==='manual' ? esc(d.assignedNumber||'Not set')
-          : `Automatic (${d.provider==='pesajet'?'PesaJet':'MarzPay'})`;
+          : d.method==='usdt' ? 'USDT wallet' : esc(d.method||'Not set');
         const paidFrom = esc(d.senderPhone||d.phone||'Not set');
         return `<tr><td style="white-space:nowrap">${fdate(d.createdAt)}</td><td><b>${ugx(d.amount, d.regionKey)}</b></td><td>${paidTo}</td><td>${paidFrom}</td><td>${statusPill(d.status)}</td></tr>`;
       }).join('')}
@@ -2008,57 +1951,94 @@ async function openUser(uid){
 }
 
 // ── DEPOSITS ──
-async function syncMarzPay(btn, afterFn){
-  const t=btn.textContent; btn.disabled=true; btn.textContent='Syncing…';
-  const d = await api('/admin/payments/sync');
-  btn.disabled=false; btn.textContent=t;
-  if(d.status==='success'){
-    const settled = (d.depositsSettled||0) + (d.withdrawalsSettled||0);
-    toast(settled>0 ? `Synced, settled ${d.depositsSettled} deposit(s), ${d.withdrawalsSettled} withdrawal(s)` : 'Synced, nothing was waiting', 'ok');
-    afterFn();
-  } else toast(d.message||'Sync failed','err');
-}
+// ── RECHARGES (Bank / Wallet claims + USDT) ──
+// Owner: "the deposit doesn't show badge, why doesn't it show the sent message, force credit should be named
+// approve because this is manual, remove PesaJet, MarzPay, cards, OTPs -- we are using USDT and manual".
+// Every recharge is a CARD (not a wide table row, so the status badge, the member's message and the buttons
+// are all on screen on a phone). A member's claim (status 'review') is what needs the admin, so that is the
+// first tab; before, those claims had no tab at all and were only visible under "All".
 // A failed fetch (timeout, 429, 5xx, dropped network) must never be drawn as "no rows": keep what is on screen, or say it could not load.
 function loadFailed(r, what){
   if(r && r.status==='success') return false;
   const c=$('content'); if(c && !c.querySelector('table')) c.innerHTML=`<div class="empty" style="padding:24px;text-align:center">Could not load ${what}. Check the connection, then press Refresh.</div>`;
   return true;
 }
-const DEP_GROUPS = { pending: ['initiating','pending','awaiting_verification'], review: ['review'], matched: ['matched'], failed: ['failed','rejected'] };
-let _deps=[], _depFilter='pending';
-// A deposit whose payment succeeded but whose wallet credit failed is stored as 'matched' with needsManualCredit: it is NOT paid yet, so it belongs
-// under Pending with a Force-credit button, never under Successful.
-const depNotCredited = d => d.status==='matched' && d.needsManualCredit===true && d.walletCredited!==true;
-const depIn = (d,k) => k==='all' ? true : depNotCredited(d) ? k==='pending' : (DEP_GROUPS[k]||[]).includes(d.status);
+const DEP_GROUPS = { review: ['review','awaiting_verification'], pending: ['pending','initiating'], matched: ['matched'], failed: ['failed','rejected'] };
+const DEP_TABS = [['review','To approve'],['pending','Waiting for message'],['matched','Approved'],['failed','Rejected'],['all','All']];
+let _deps=[], _depFilter='review', _depFilterTouched=false;
+const depIn = (d,k) => k==='all' ? true : (DEP_GROUPS[k]||[]).includes(d.status);
+function depBadge(d){
+  const s=String(d.status||'');
+  if(s==='matched') return '<span class="pill-tag t-ok">Approved</span>';
+  if(s==='review'||s==='awaiting_verification') return '<span class="pill-tag t-warn">To approve</span>';
+  if(s==='pending'||s==='initiating') return '<span class="pill-tag t-mut">Waiting for message</span>';
+  if(s==='failed'||s==='rejected') return '<span class="pill-tag t-bad">Rejected</span>';
+  return `<span class="pill-tag t-mut">${esc(s||'unknown')}</span>`;
+}
+function depTabLabel(k,l){ const n = k==='all' ? _deps.length : _deps.filter(d=>(DEP_GROUPS[k]||[]).includes(d.status)).length; return `${l} (${n})`; }
 async function renderDeposits(){
   const r = await api('/admin/deposits/list', {});
   if(staleTab('deposits')) return;
   if(loadFailed(r,'deposits')) return;
   _deps = r.deposits||[];
-  const grp = k => _deps.filter(d=>depIn(d,k)).length;
-  const subs = [['pending','Pending'],['review','Needs Review'],['matched','Successful'],['failed','Failed'],['all','All']];
+  // Open on the claims waiting for approval; if there are none, on whatever is waiting for a message, then All.
+  if(!_depFilterTouched){ _depFilter = _deps.some(d=>DEP_GROUPS.review.includes(d.status)) ? 'review' : (_deps.some(d=>DEP_GROUPS.pending.includes(d.status)) ? 'pending' : 'all'); }
   const dpbd = r.processedByDay||[];
   const dMaxP = Math.max(1, ...dpbd.map(d=>d.count));
   const dRows = dpbd.slice().reverse();
   const depProcChart = dpbd.length ? `<div class="panel-card">
-    <div class="row" style="align-items:center;margin-bottom:2px"><h2 class="sec" style="flex:1;margin:0">Processed per day</h2>
-    <div class="muted"><b>${grp('matched')}</b> processed all-time · ${ugx(r.processedAmount||0)} received</div></div>
-    <div class="chart">${dpbd.map(d=>`<div class="chart-col" title="${esc(dayLabel(d.day))}: ${d.count} processed · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/dMaxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>
-    <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Recharges processed</th><th>Amount received</th></tr></thead>
+    <div class="row" style="align-items:center;margin-bottom:2px"><h2 class="sec" style="flex:1;margin:0">Approved per day</h2>
+    <div class="muted"><b>${_deps.filter(d=>d.status==='matched').length}</b> approved all-time · ${ugx(r.processedAmount||0)} received</div></div>
+    <div class="chart">${dpbd.map(d=>`<div class="chart-col" title="${esc(dayLabel(d.day))}: ${d.count} approved · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/dMaxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${esc(dayLabel(d.day))}</div></div>`).join('')}</div>
+    <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Recharges approved</th><th>Amount received</th></tr></thead>
     <tbody>${dRows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
-      <button class="btn sm ghost" id="depSync">Sync payments</button></div>
-    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time — through the automatic gateway (MarzPay or PesaJet). A stuck deposit can be force-credited once you've verified the money landed.</p>
+    <h2 class="sec" style="margin:0 0 4px">Recharges</h2>
+    <p class="muted" style="margin:0 0 12px">Members pay into one of your Payment Numbers (bank or Telebirr) or send USDT. When a member sends the payment message, it appears under <b>To approve</b>. Check that the money really arrived, then tap <b>Approve</b> to add it to their wallet &mdash; or <b>Reject</b>.</p>
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_deps.length+' recharges only. The platform has more history than this list can currently display.</div>':''}
-    ${depProcChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
-    <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}</button>`).join('')}</div>
-    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Paid from</th><th>Method</th><th>Amount</th><th>Ref</th><th>Status</th><th></th></tr></thead><tbody id="depRows"></tbody></table></div>`;
-  $('depSync').addEventListener('click', ()=>syncMarzPay($('depSync'), renderDeposits));
+    <div class="subtabs" id="depTabs">${DEP_TABS.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${depTabLabel(k,l)}</button>`).join('')}</div>
+    <div id="depRows"></div>
+    ${depProcChart}`;
   $('depSearch').addEventListener('input', drawDeps);
-  document.querySelectorAll('[data-df]').forEach(b=>b.addEventListener('click',()=>{ _depFilter=b.dataset.df; drawDeps(); document.querySelectorAll('[data-df]').forEach(x=>x.classList.toggle('active',x.dataset.df===_depFilter)); }));
+  document.querySelectorAll('[data-df]').forEach(b=>b.addEventListener('click',()=>{ _depFilter=b.dataset.df; _depFilterTouched=true; document.querySelectorAll('[data-df]').forEach(x=>x.classList.toggle('active',x===b)); drawDeps(); }));
   drawDeps();
+}
+function depCardHtml(d){
+  const isUsdt = d.method==='usdt', isManual = d.method==='manual';
+  const open = d.status==='review' || d.status==='awaiting_verification';
+  const waiting = d.status==='pending' || d.status==='initiating';
+  let actions = '';
+  // Approve / Reject are owner-only (crediting is a money decision). Approve is offered only once the member has
+  // SENT a message (or a USDT hash): a "waiting" order has nothing to check, so it can only be rejected.
+  if (SESSION_ROLE === 'owner') {
+    if (open || d.status==='failed') actions += `<button class="btn ok sm" data-force="${esc(d.id)}" data-was="${esc(d.status)}">Approve</button> `;
+    if (open || waiting) actions += `<button class="btn danger sm" data-dep-reject="${esc(d.id)}">Reject</button>`;
+  }
+  const method = isUsdt
+    ? `USDT (TRC20)${d.autoVerified?' <span class="pill-tag t-ok" style="font-size:9.5px;padding:2px 6px">Auto</span>':d.autoDeclined?' <span class="pill-tag t-bad" style="font-size:9.5px;padding:2px 6px">Auto-declined</span>':''}<br><a href="https://tronscan.org/#/transaction/${esc(d.txid||'')}" target="_blank" rel="noopener" style="font-size:11px">${esc((d.txid||'').slice(0,12))}…</a>${d.exactMicros?`<br><span style="font-size:11px" title="The transfer must be exactly this amount">${esc((Number(d.exactMicros)/1e6).toFixed(6))} USDT</span>`:''}`
+    : isManual ? `<span data-no-i18n>${esc(d.network||'Bank / Wallet')}</span><br><span class="muted" style="font-size:12px" data-no-i18n>${esc(d.assignedName||'')}${d.assignedName?' · ':''}${esc(d.assignedNumber||'')}</span>`
+    : esc(d.method||'Recharge');
+  const checks = [];
+  if (d.pastedSmsAmount != null) checks.push(`Message amount: <b>${ugx(d.pastedSmsAmount)}</b> ${d.pastedSmsAmountMatches===true?'<span style="color:var(--ok)">matches the order</span>':d.pastedSmsAmountMatches===false?'<span style="color:var(--danger)">does NOT match the order</span>':''}`);
+  if (d.pastedSmsTxId) checks.push(`Transaction code: <b data-no-i18n>${esc(d.pastedSmsTxId)}</b>`);
+  const sms = d.pastedSms ? `<div style="margin-top:10px;background:rgba(0,0,0,.03);border-radius:10px;padding:10px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;opacity:.7;margin-bottom:6px">Payment message from the member${d.pastedAt?` · ${fdate(d.pastedAt)}`:''}</div>
+      <pre translate="no" data-no-i18n style="margin:0 0 8px;white-space:pre-wrap;word-break:break-word;font-size:12.5px;line-height:1.5;max-height:190px;overflow:auto;background:var(--card,#fff);border:1px solid rgba(0,0,0,.12);border-radius:8px;padding:10px">${esc(d.pastedSms)}</pre>
+      ${checks.length?`<div style="font-size:12px;line-height:1.7">${checks.join('<br>')}</div>`:''}</div>`
+    : (waiting ? '<div class="muted" style="margin-top:8px;font-size:12px">The member has not sent a payment message yet.</div>' : '');
+  const why = d.status==='failed' && d.failureReason ? `<div class="muted" style="margin-top:6px;font-size:12px" data-no-i18n>${esc(d.failureReason)}</div>` : '';
+  return `<div class="panel-card dep-card${d.userId?' clickable':''}" ${d.userId?`data-uid="${esc(d.userId)}"`:''} style="margin-bottom:10px">
+    <div class="row" style="align-items:center;gap:8px">
+      <div style="flex:1;min-width:0"><b style="font-size:19px">${ugx(d.amount, d.regionKey)}</b></div>
+      <div>${depBadge(d)}</div>
+    </div>
+    <div style="margin-top:6px;font-size:13px"><b data-no-i18n>${esc(d.accountPhone||d.phone||'Not set')}</b>${d.referralCode?` <span class="muted" style="font-size:11px" data-no-i18n>${esc(d.referralCode)}</span>`:''}</div>
+    <div style="margin-top:6px;font-size:13px">${method}</div>
+    <div class="muted" style="margin-top:6px;font-size:12px"><span data-no-i18n>${fdate(d.createdAt)}</span> · <span data-no-i18n>${esc(d.ref||'')}</span></div>
+    ${sms}${why}
+    ${actions?`<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">${actions}</div>`:''}
+  </div>`;
 }
 function drawDeps(){
   let list = _deps.filter(d=>depIn(d,_depFilter));
@@ -2066,106 +2046,39 @@ function drawDeps(){
   const q = raw.toLowerCase(), qCore = phoneCore(raw);
   if(q) list = list.filter(d =>
     (d.referralCode||'').toLowerCase().includes(q) ||
-    (qCore.length>=3 && phoneCore(d.accountPhone||d.phone).includes(qCore)) ||
-    (qCore.length>=3 && phoneCore(d.senderPhone||'').includes(qCore))
+    (qCore && phoneCore(d.accountPhone||d.phone).includes(qCore)) ||
+    (qCore && phoneCore(d.senderPhone||'').includes(qCore)) ||
+    (d.pastedSmsTxId||'').toLowerCase().includes(q) || (d.ref||'').toLowerCase().includes(q)
   );
-  $('depRows').innerHTML = list.length?list.map(d=>{
-    const isManual = d.method==='manual';
-    const stuck = depNotCredited(d) || d.status==='initiating' || d.status==='pending' || d.status==='failed' || d.status==='review' || d.status==='awaiting_verification';
-    const code = d.referralCode;
-    // /admin/deposit/force-credit is verifyOwner-gated (crediting a deposit
-    // that was never resolved automatically is a real money-safety decision,
-    // not a routine action) -- the button matches that, same silent pattern
-    // as every other owner-only control, rather than showing one that just
-    // errors.
-    let actions = '';
-    if (SESSION_ROLE === 'owner' && stuck) {
-      actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`;
-    }
-    const methodLabel = isManual
-      ? `Manual<br><span class="muted" style="font-size:11px" data-no-i18n>${esc(d.network||'')} · ${esc(d.assignedNumber||'')}</span>`
-      // provider is only set on deposits created since Round 102 -- an
-      // older row with none falls back to the same plain "Automatic" label
-      // it always had (it can only ever have gone through MarzPay).
-      : (d.provider==='pesajet'?'PesaJet':d.provider==='marzpay'?'MarzPay':'Automatic');
-    const reviewNote = d.status==='review' && d.reviewReason ? `<br><span class="muted" style="font-size:11px">${esc(d.reviewReason)}</span>` : '';
-    // Owner: "only the sent message from after refresh on manual payment page
-    // should appear to admin panel in its full details so as admin verifies
-    // manually or rejects." Manual deposits are no longer credited by any
-    // automatic path, so this row IS the evidence -- approving on the
-    // one-line reviewReason alone would be approving blind.
-    //
-    // The message is rendered in a <pre> at its FULL length, deliberately not
-    // truncated: an operator SMS carries the transaction id and the exact
-    // amount near the end, which is precisely what a "…" would cut off. It is
-    // wrapped and scrollable instead so a long one cannot stretch the table.
-    // esc() then white-space:pre-wrap -- the text is a member-supplied string
-    // going into innerHTML, and it must render as the characters they sent,
-    // never as markup.
-    const smsChecks = [];
-    if (d.pastedSmsAmount != null) smsChecks.push(`Message amount: <b>${ugx(d.pastedSmsAmount)}</b> ${d.pastedSmsAmountMatches===true?'<span style="color:var(--ok)">matches the order</span>':d.pastedSmsAmountMatches===false?'<span style="color:var(--danger)">does NOT match the order</span>':''}`);
-    if (d.pastedSmsTxId) smsChecks.push(`Transaction id: <b>${esc(d.pastedSmsTxId)}</b>`);
-    if (d.pastedSmsCounterparty) smsChecks.push(`${d.pastedSmsDirection==='sent'?'Paid to':'Received from'}: <b>${esc(d.pastedSmsCounterparty)}</b> ${d.pastedSmsNumberMatches===true?'<span style="color:var(--ok)">the assigned number</span>':d.pastedSmsNumberMatches===false?'<span style="color:var(--danger)">NOT the assigned number</span>':''}`);
-    if (d.pastedSmsParsed === false) smsChecks.push('<span style="color:var(--warn,#dd6b00)">This server could not read the message automatically — read it yourself before approving.</span>');
-    if (d.pastedSmsSource === 'forwarder') smsChecks.push('<span class="muted">Arrived from the forwarder app, held for approval</span>');
-    const smsBlock = d.pastedSms ? `<tr class="sms-detail"><td colspan="8" style="background:rgba(0,0,0,.03);padding:10px 14px">
-        <div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;opacity:.7;margin-bottom:6px">Payment message from the member${d.pastedAt?` · ${fdate(d.pastedAt)}`:''}</div>
-        <pre translate="no" data-no-i18n style="margin:0 0 8px;white-space:pre-wrap;word-break:break-word;font-size:12.5px;line-height:1.5;max-height:190px;overflow:auto;background:var(--card,#fff);border:1px solid rgba(0,0,0,.12);border-radius:8px;padding:10px">${esc(d.pastedSms)}</pre>
-        ${smsChecks.length?`<div style="font-size:12px;line-height:1.7">${smsChecks.join('<br>')}</div>`:''}
-      </td></tr>` : '';
-    // Owner: "let me see even user number he used to send besides account
-    // and method" -- the "User" column is the member's own REGISTERED
-    // account phone (accountPhone, from the users collection); the number
-    // they actually paid FROM on this one order is a separate field
-    // (senderPhone for a manual order, phone for an automatic one -- both
-    // captured server-side at /deposit/manual/init and /deposit/marzpay,
-    // never shown here before this column existed) and can genuinely
-    // differ, e.g. paying from a friend's or a shared phone.
-    const paidFrom = d.senderPhone || d.phone || 'Not set';
-    return `<tr class="${d.userId?'clickable':''}" ${d.userId?`data-uid="${esc(d.userId)}"`:''}><td>${fdate(d.createdAt)}</td>
-      <td>${esc(d.accountPhone||d.phone||'Not set')}${code?`<br><span class="muted" style="font-size:11px">${esc(code)}</span>`:''}</td>
-      <td>${esc(paidFrom)}</td>
-      <td>${methodLabel}</td>
-      <td><b>${ugx(d.amount, d.regionKey)}</b></td>
-      <td>${esc(d.ref||'Not set')}</td>
-      <td>${depNotCredited(d)?'<span class="pill-tag t-bad">Not credited</span>':statusPill(d.status)}${reviewNote}</td>
-      <td>${actions}</td></tr>${smsBlock}`;
-  }).join(''):'<tr><td colspan="8" class="empty">No recharges</td></tr>';
-  // Owner: "l want them to have... l can tap on a deposit to see user
-  // details just like those when a user is tapped in user list" -- same
-  // pattern the Withdrawals tab's own rows already use: tapping anywhere
-  // on the row opens the SAME full user-detail modal as the Users tab,
-  // except when the tap actually landed on one of the row's own
-  // Force-credit/Approve/Reject buttons, which must still do their own
-  // thing instead of also opening the modal underneath them.
-  document.querySelectorAll('#depRows tr[data-uid]').forEach(tr=>tr.addEventListener('click', e=>{
-    if(e.target.closest('button')) return;
-    openUser(tr.dataset.uid);
+  $('depRows').innerHTML = list.length ? list.map(depCardHtml).join('') : '<div class="panel-card empty">No recharges here</div>';
+  // Tapping a card opens the member (same as the Users tab), except on its own buttons.
+  document.querySelectorAll('#depRows .dep-card[data-uid]').forEach(c=>c.addEventListener('click', e=>{
+    if(e.target.closest('button,a')) return;
+    openUser(c.dataset.uid);
   }));
-  document.querySelectorAll('[data-force]').forEach(b=>b.addEventListener('click',async(e)=>{
+  document.querySelectorAll('#depRows [data-force]').forEach(b=>b.addEventListener('click',async(e)=>{
     e.stopPropagation();
-    if(!confirm('Credit this deposit? Only do this if you have verified the money actually landed.'))return;
+    const was=b.dataset.was==='failed' ? '\n\nThis recharge was REJECTED earlier. Only approve it if you have now confirmed the money arrived.' : '';
+    if(!confirm('Approve this recharge and add the money to the member\'s wallet? Only do this after you have checked that the payment really arrived.'+was))return;
     b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/force-credit',{depositId:b.dataset.force});
-    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
+    toast(d.status==='success'?(d.message||'Approved'):(d.message||'Could not approve'),d.status==='success'?'ok':'err'); renderDeposits();
+  }));
+  document.querySelectorAll('#depRows [data-dep-reject]').forEach(b=>b.addEventListener('click',async(e)=>{
+    e.stopPropagation();
+    const reason=prompt('Reason for rejecting this recharge (kept in the activity log):','Could not verify this payment');
+    if(reason===null)return;
+    b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/reject',{depositId:b.dataset.depReject,reason});
+    toast(d.status==='success'?'Rejected':(d.message||'Could not reject'),d.status==='success'?'ok':'err'); renderDeposits();
   }));
 }
-// Live-refresh counterpart to renderDeposits() -- see quietRefreshUsers()
-// for why this exists instead of just calling renderDeposits() on a timer.
-// Deliberately skips rebuilding the processed-per-day chart (its own data
-// barely moves minute to minute, and re-running .chart's DOM would only add
-// back the flash this is meant to remove) -- that stays as of the last full
-// render/tab switch, everything else stays current.
+// Live-refresh counterpart to renderDeposits(): re-reads the list and repaints the cards and the tab counts without
+// rebuilding the search box (so typing is never interrupted).
 async function quietRefreshDeposits(){
   const r = await api('/admin/deposits/list', {});
   if(staleTab('deposits') || !$('depRows')) return;
   if(r.status!=='success') return;
   _deps = r.deposits||[];
-  const grp = k => _deps.filter(d=>depIn(d,k)).length;
-  const subs = [['pending','Pending'],['review','Needs Review'],['matched','Successful'],['failed','Failed'],['all','All']];
-  document.querySelectorAll('[data-df]').forEach(b=>{
-    const k=b.dataset.df, l=(subs.find(s=>s[0]===k)||[])[1]||k;
-    b.textContent = `${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}`;
-  });
+  document.querySelectorAll('[data-df]').forEach(b=>{ const k=b.dataset.df, l=(DEP_TABS.find(t=>t[0]===k)||[])[1]||k; b.textContent = depTabLabel(k,l); });
   drawDeps();
 }
 
@@ -2176,7 +2089,7 @@ async function renderWithdrawals(){
   if(staleTab('withdrawals')) return;
   if(loadFailed(r,'withdrawals')) return;
   _wits = r.withdrawals||[];
-  _witProvider = r.payoutMode || 'marzpay'; _witAuto = !!r.autoWithdrawals; _witAutoLimit = Number(r.autoLimit)||0;
+    _witProvider = r.payoutMode || 'manual'; _witAuto = !!r.autoWithdrawals; _witAutoLimit = Number(r.autoLimit)||0;
   _witManualPayouts = _witProvider === 'manual';
   const counts = r.counts || {};
   // subagent-audit-caught: 'sending' had no filter tab of its own, so an
@@ -2194,15 +2107,14 @@ async function renderWithdrawals(){
     <tbody>${rows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Withdrawals</h2>
-      ${_witManualPayouts?'':`<button class="btn sm ghost" id="witSync">Sync payments</button>`}</div>
-    ${_witManualPayouts?`<p class="muted" style="margin:0 0 12px"><b>Payments are set to Manual</b>, so payouts do not go through any automatic gateway. Send the money yourself from an admin mobile money phone to the destination number on the row, then tap <b>Mark as paid</b>. Marking a row paid only records a payment you have already made, it never sends anything. Auto-approve is ignored while this mode is on.</p>`:`<p class="muted" style="margin:0 0 12px">${r.autoWithdrawals?`<b>Automatic withdrawals are ON</b>: every request still appears here as <b>Pending</b>, then the server sends it to ${PROVIDER_LABEL[normalizeProv(_witProvider)]} after its own random wait (see Settings). You can still press Send or Reject at any time.`:`Every withdraw request waits here as <b>Pending</b> until an admin sends it, nothing reaches ${PROVIDER_LABEL[normalizeProv(_witProvider)]} on its own.`} Members withdraw to a bound mobile money number (see each row's destination).</p>`}
+    </div>
+    ${_witManualPayouts?`<p class="muted" style="margin:0 0 12px"><b>Payments are set to Manual</b>, so payouts do not go through any automatic gateway. Send the money yourself from an admin mobile money phone to the destination number on the row, then tap <b>Mark as paid</b>. Marking a row paid only records a payment you have already made, it never sends anything. Auto-approve is ignored while this mode is on.</p>`:`<p class="muted" style="margin:0 0 12px">Every withdraw request waits here as <b>Pending</b> until an admin sends it, nothing reaches ${PROVIDER_LABEL[normalizeProv(_witProvider)]} on its own. Members withdraw to a bound mobile money number (see each row's destination).</p>`}
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_wits.length+' withdrawals only. The platform has more history than this list can currently display.</div>':''}
     ${procChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="witSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${k==='all'?` (${_wits.length})`:(counts[k]?` (${counts[k]})`:' (0)')}</button>`).join('')}</div>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Amount</th><th>Net</th><th>Destination</th><th>Status</th><th></th></tr></thead><tbody id="witRows"></tbody></table></div>`;
   document.querySelectorAll('[data-wf]').forEach(b=>b.addEventListener('click',()=>{ _witFilter=b.dataset.wf; drawWits(); document.querySelectorAll('[data-wf]').forEach(x=>x.classList.toggle('active',x.dataset.wf===_witFilter)); }));
-  if($('witSync')) $('witSync').addEventListener('click', ()=>syncMarzPay($('witSync'), renderWithdrawals));
   $('witSearch').addEventListener('input', drawWits);
   drawWits();
 }
@@ -2212,7 +2124,7 @@ async function renderWithdrawals(){
 // system performs into a record of one a person already performed.
 var _witManualPayouts = false;
 // Raw payoutMode from the server -- 'marzpay' | 'pesajet' | 'manual'.
-var _witProvider = 'marzpay';
+var _witProvider = 'manual';
 function witStatusPill(w){
   if(w.status==='pending') return `<span class="pill-tag t-warn">Awaiting approval</span>`;
   // subagent-audit-caught: 'sending' (MarzPay network-errored mid-request,
@@ -2285,7 +2197,7 @@ async function quietRefreshWithdrawals(){
   if(staleTab('withdrawals') || !$('witRows')) return;
   if(r.status!=='success') return;
   _wits = r.withdrawals||[];
-  _witProvider = r.payoutMode || 'marzpay'; _witAuto = !!r.autoWithdrawals; _witAutoLimit = Number(r.autoLimit)||0;
+    _witProvider = r.payoutMode || 'manual'; _witAuto = !!r.autoWithdrawals; _witAutoLimit = Number(r.autoLimit)||0;
   _witManualPayouts = _witProvider === 'manual';
   const counts = r.counts || {};
   // subagent-audit-caught: 'sending' had no filter tab of its own, so an
@@ -2396,7 +2308,7 @@ function editProduct(p, order){
     <div class="switch-row"><span><b>Upcoming</b> <span class="muted">(shown, but not buyable — no clock)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="pSoon" ${p.comingSoon?'checked':''} style="width:auto"></label></div>
     <div class="muted" style="margin:14px 0 6px"><b>Opening schedule</b> — leave blank for always open.
-      Upcoming above overrides both. Times are Uganda time.</div>
+      Upcoming above overrides both. Times are Ethiopia time.</div>
     <label>Opens at (one-off) — shows a countdown until then, open for good after</label>
     <input id="pOpenAt" type="datetime-local" value="${p.openAt?new Date(Number(p.openAt)-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16):''}">
     <div class="row2">
@@ -2473,7 +2385,7 @@ function editProduct(p, order){
       expectedReturn:$('pRet').value, multiplier:_retIsTruth?'':$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, vip:$('pVip').value, order:$('pOrder').value,
       image, active:$('pActive').checked, comingSoon:$('pSoon').checked,
       // datetime-local has no zone, so the browser reads it as local time --
-      // which for the owner IS Uganda time. Sent as epoch ms so the server
+      // which for the owner IS Ethiopia time. Sent as epoch ms so the server
       // never has to guess a zone.
       openAt: $('pOpenAt').value ? new Date($('pOpenAt').value).getTime() : '',
       openFrom: $('pOpenFrom').value, openTo: $('pOpenTo').value };
@@ -2527,7 +2439,7 @@ async function renderMessages(){
       <div class="panel-card" style="margin-bottom:10px">
         <div style="font-weight:700">${esc(m.title||'')}</div>
         <div class="muted" style="font-size:11.5px;margin:2px 0 6px">${esc(m.id)} &middot; ${esc(m.date||'')} ${esc(m.time||'')}${ADMIN_REGIONS.length>1
-          ? ' &middot; ' + (!m.regionKey || m.regionKey==='all' ? 'every country' : esc('Uganda'))
+          ? ' &middot; ' + (!m.regionKey || m.regionKey==='all' ? 'every country' : esc('Ethiopia'))
           : ''}</div>
         <div style="font-size:13px;white-space:pre-line">${esc(m.body||'')}</div>
         <div style="margin-top:10px;display:flex;gap:8px">
@@ -2594,7 +2506,7 @@ async function renderPromoCodes(){
       const cCur = c.regionKey && c.regionKey !== 'all' ? c.regionKey : undefined;
       const rewardCol = c.minReward===c.maxReward ? ugx(c.minReward, cCur) : `${ugx(c.minReward, cCur)} – ${ugx(c.maxReward, cCur)}`;
       const claimedCol = c.uses ? `<b>${ugx(c.totalClaimed, cCur)}</b>` : '<span class="muted">Not claimed yet</span>';
-      return `<tr><td><b class="mono">${esc(String(c.code||'').toUpperCase())}</b> <button class="btn sm ghost" data-copy="${esc(String(c.code||'').toUpperCase())}" title="Copy code">Copy</button></td><td>${rewardCol}</td>${ADMIN_REGIONS.length>1?`<td>${c.regionKey==='all'?'<span class="muted">All countries</span>':esc('Uganda')}</td>`:''}<td>${c.uses||0} / ${c.maxUses||'∞'}</td>
+      return `<tr><td><b class="mono">${esc(String(c.code||'').toUpperCase())}</b> <button class="btn sm ghost" data-copy="${esc(String(c.code||'').toUpperCase())}" title="Copy code">Copy</button></td><td>${rewardCol}</td>${ADMIN_REGIONS.length>1?`<td>${c.regionKey==='all'?'<span class="muted">All countries</span>':esc('Ethiopia')}</td>`:''}<td>${c.uses||0} / ${c.maxUses||'∞'}</td>
       <td>${claimedCol}</td>
       <td><span class="pill-tag ${statusClass}">${statusLabel}</span></td>
       <td>${c.expiresAt?fdate(c.expiresAt):'<span class="muted">Never</span>'}</td>
@@ -2721,7 +2633,7 @@ const AUDIT_LABELS = {
   manual_pay_image_set:'Manual-pay screen image changed',
   products_saved:'Products saved',
   product_deleted:'Product deleted', products_cleared:'All products cleared', products_synced:'Product pricing synced to defaults',
-  deposit_force_credited:'Recharge force-credited', giftcode_generated:'Gift codes generated', giftcode_deactivated:'Gift code deactivated',
+  deposit_force_credited:'Recharge approved', giftcode_generated:'Gift codes generated', giftcode_deactivated:'Gift code deactivated',
   totals_recounted:'Totals recalculated',
 };
 async function renderAuditLog(){
@@ -2885,6 +2797,170 @@ function applyAdminBrandName(name){
 // sharing renderSettings()'s, same self-contained pattern every other tab
 // already uses -- one extra round of these 4 small fetches on switching
 // tabs, in exchange for not threading one function's closure across two.
+
+// Remove only the logo background connected to the image perimeter. The
+// flood cannot reach white artwork enclosed by the logo outline. Source RGB
+// values are retained; only outside alpha is cleared before tight cropping.
+function fileToPayLogo(file, maxDim=1024){
+  return new Promise((resolve,reject)=>{
+    if(!file) return reject(new Error('Choose a logo image'));
+    if(!/^image\//.test(file.type||guessMimeFromName(file.name))) return reject(new Error('Choose an image file'));
+    const fr=new FileReader();
+    fr.onerror=()=>reject(new Error('Could not read the logo'));
+    fr.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('That logo could not be loaded'));
+      img.onload=()=>{
+        let w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
+        if(!w||!h)return reject(new Error('That logo could not be loaded'));
+        if(Math.max(w,h)>maxDim){const s=maxDim/Math.max(w,h);w=Math.max(1,Math.round(w*s));h=Math.max(1,Math.round(h*s));}
+        const c=document.createElement('canvas');c.width=w;c.height=h;
+        const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(img,0,0,w,h);
+        let data;try{data=ctx.getImageData(0,0,w,h);}catch(_){return reject(new Error('Could not process the logo'));}
+        const p=data.data,n=w*h,seen=new Uint8Array(n),q=new Int32Array(n),tol2=55*55;
+        const bins=new Map(),step=Math.max(1,Math.floor(Math.max(w,h)/900));
+        const binAt=k=>((p[k]>>4)<<8)|((p[k+1]>>4)<<4)|(p[k+2]>>4);
+        function sample(x,y){const k=(y*w+x)*4;if(p[k+3]<245)return;const b=binAt(k);bins.set(b,(bins.get(b)||0)+1);}
+        for(let x=0;x<w;x+=step){sample(x,0);if(h>1)sample(x,h-1);}
+        for(let y=step;y<h;y+=step){sample(0,y);if(w>1)sample(w-1,y);}
+        let best=null,votes=0;for(const [b,count] of bins)if(count>votes){best=b;votes=count;}
+        let cleared=false,backgroundFound=false;
+        if(best!==null){
+          const r=((best>>8)&15)*16+8,g=((best>>4)&15)*16+8,b=(best&15)*16+8;
+          const near=i=>{const k=i*4,dr=p[k]-r,dg=p[k+1]-g,db=p[k+2]-b;return p[k+3]>0&&dr*dr+dg*dg+db*db<=tol2;};
+          let edgeCount=0,matching=0;
+          function edge(x,y){edgeCount++;if(near(y*w+x))matching++;}
+          for(let x=0;x<w;x+=step){edge(x,0);if(h>1)edge(x,h-1);}
+          for(let y=step;y<h;y+=step){edge(0,y);if(w>1)edge(w-1,y);}
+          if(edgeCount&&matching/edgeCount>=.58){
+            let head=0,tail=0;
+            function seed(i){if(!seen[i]&&near(i)){seen[i]=1;q[tail++]=i;}}
+            for(let x=0;x<w;x++){seed(x);if(h>1)seed((h-1)*w+x);}
+            for(let y=1;y<h-1;y++){seed(y*w);if(w>1)seed(y*w+w-1);}
+            while(head<tail){const i=q[head++],x=i%w,y=(i/w)|0;if(x)seed(i-1);if(x+1<w)seed(i+1);if(y)seed(i-w);if(y+1<h)seed(i+w);}
+            if(tail<n-Math.max(16,Math.floor(n*.001))){for(let j=0;j<tail;j++)p[q[j]*4+3]=0;cleared=tail>0;backgroundFound=tail>0;}
+          }
+        }
+        let minX=w,minY=h,maxX=-1,maxY=-1;
+        for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(p[(y*w+x)*4+3]){if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;}
+        if(maxX<minX||maxY<minY)return reject(new Error('Could not isolate the logo. Choose an image with a clear outline.'));
+        const cw=maxX-minX+1,ch=maxY-minY+1,out=document.createElement('canvas');out.width=cw;out.height=ch;
+        const ox=out.getContext('2d');
+        try{const cropped=ctx.createImageData(cw,ch);for(let y=0;y<ch;y++){const from=((minY+y)*w+minX)*4,to=y*cw*4;cropped.data.set(p.subarray(from,from+cw*4),to);}ox.putImageData(cropped,0,0);resolve({image:out.toDataURL('image/png'),cleared,backgroundFound});}
+        catch(_){reject(new Error('Could not encode the logo as a transparent PNG'));}
+      };
+      img.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+// ── PAYMENT NUMBERS (bank / wallet accounts members pay into) ──
+// Owner: "make when l can put payment numbers from admin panel ... make when l can upload the logos,
+// so system will remove background so that they fit perfectly". Each entry is one row on the member's
+// "Please choose payment" page. The logo goes through fileToPayLogo(): the background connected to the
+// picture edge is cleared and the picture is cropped tight, so it sits perfectly inside the round frame.
+let _payRows = [], _payEdit = null, _payLogo = undefined;
+async function renderPayNumbers(){
+  const r = await api('/admin/pay-channels/list', {});
+  if (staleTab('paynumbers')) return;
+  _payRows = (r && r.channels) || [];
+  _payEdit = null; _payLogo = undefined;
+  drawPayNumbers();
+}
+function payLogoBox(src, size){
+  size = size || 44;
+  return src
+    ? `<div style="width:${size}px;height:${size}px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;border:1px solid var(--line);background:#fff"><img src="${esc(src)}" alt="" style="max-width:76%;max-height:76%;object-fit:contain"></div>`
+    : `<div style="width:${size}px;height:${size}px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;border:1px dashed var(--line);color:var(--muted,#888);font-size:11px">No logo</div>`;
+}
+function drawPayNumbers(){
+  const e = _payEdit;
+  const logoNow = e ? (_payLogo === undefined ? (e.logo || '') : _payLogo) : '';
+  const form = e ? `
+    <div class="panel-card">
+      <h3 style="margin:0 0 10px;font-size:15px">${e.id ? 'Edit payment number' : 'Add payment number'}</h3>
+      <div class="row">
+        <div><label>Name members see</label><input id="pcName" maxlength="60" value="${esc(e.name || '')}" placeholder="Commercial Bank of Ethiopia"></div>
+        <div><label>Type</label><select id="pcKind"><option value="bank"${e.kind !== 'wallet' ? ' selected' : ''}>Bank</option><option value="wallet"${e.kind === 'wallet' ? ' selected' : ''}>Wallet (Telebirr)</option></select></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div><label>Account name</label><input id="pcAccName" maxlength="80" value="${esc(e.accountName || '')}" placeholder="Ashenafi"></div>
+        <div><label>Account number</label><input id="pcAccNo" maxlength="40" value="${esc(e.accountNumber || '')}" placeholder="1000809418239"></div>
+      </div>
+      <div class="banner-row" style="margin-top:10px">
+        ${payLogoBox(logoNow, 52)}
+        <div style="flex:1;min-width:0;font-size:12px">${logoNow ? 'Logo ready (background removed)' : '<span class="muted">No logo yet</span>'}</div>
+        ${logoNow ? '<button class="btn danger sm" id="pcLogoClear" type="button">Remove logo</button>' : ''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload logo<input type="file" id="pcLogoFile" accept="image/*" hidden></label>
+      <p class="muted" style="margin:6px 0 0;font-size:12px">Upload the logo as it is. The system clears the background around it and crops it so it fits the round frame.</p>
+      <div class="row" style="margin-top:10px;align-items:end">
+        <div><label>Order (smaller first)</label><input id="pcOrder" type="number" min="0" max="999" value="${esc(e.order != null ? e.order : _payRows.length)}"></div>
+        <div><label style="display:flex;align-items:center;gap:8px;margin-top:22px"><input id="pcActive" type="checkbox" style="width:auto"${e.active === false ? '' : ' checked'}> Show to members</label></div>
+      </div>
+      <div class="row" style="margin-top:14px"><button class="btn block" id="pcSave" type="button">Save</button><button class="btn ghost block" id="pcCancel" type="button">Cancel</button></div>
+    </div>` : '';
+  $('content').innerHTML = `
+    <h2 class="sec">Payment numbers</h2>
+    <p class="muted" style="margin:0 0 12px">These are the accounts members pay into on the recharge page (a bank account, a Telebirr wallet and so on). Each one appears as a row under &ldquo;Please choose payment&rdquo; with its logo. A member who taps <b>switch</b> goes back to this list.</p>
+    ${form}
+    ${e ? '' : '<button class="btn block" id="pcAdd" type="button" style="margin-bottom:14px">Add payment number</button>'}
+    <div class="panel-card">
+      ${_payRows.length ? _payRows.map(c => `
+        <div class="banner-row" data-pcid="${esc(c.id)}">
+          ${payLogoBox(c.logo, 44)}
+          <div style="flex:1;min-width:0;font-size:13px">
+            <b data-no-i18n>${esc(c.name)}</b> <span class="pill-tag ${c.active === false ? 't-bad' : 't-ok'}" style="font-size:10px">${c.active === false ? 'Hidden' : 'Showing'}</span>
+            <div class="muted" style="font-size:12px" data-no-i18n>${esc(c.accountName)} &middot; ${esc(c.accountNumber)} &middot; ${c.kind === 'wallet' ? 'Wallet' : 'Bank'}</div>
+          </div>
+          <button class="btn ghost sm" data-pc-edit="${esc(c.id)}" type="button">Edit</button>
+          <button class="btn danger sm" data-pc-del="${esc(c.id)}" type="button">Delete</button>
+        </div>`).join('') : '<p class="muted" style="margin:0">No payment numbers yet. Until you add one, members cannot recharge by bank or wallet.</p>'}
+    </div>`;
+  const add = $('pcAdd'); if (add) add.onclick = () => { _payEdit = { active: true, kind: 'bank' }; _payLogo = undefined; drawPayNumbers(); };
+  $('content').querySelectorAll('[data-pc-edit]').forEach(b => b.onclick = () => { _payEdit = _payRows.find(r => r.id === b.dataset.pcEdit) || null; _payLogo = undefined; drawPayNumbers(); });
+  $('content').querySelectorAll('[data-pc-del]').forEach(b => b.onclick = async () => {
+    const row = _payRows.find(r => r.id === b.dataset.pcDel); if (!row) return;
+    if (!window.confirm('Delete "' + row.name + '"? Members will no longer see it.')) return;
+    b.disabled = true;
+    const d = await api('/admin/pay-channels/delete', { id: row.id });
+    toast(d.status === 'success' ? 'Deleted' : (d.message || 'Could not delete'), d.status === 'success' ? 'ok' : 'err');
+    renderPayNumbers();
+  });
+  const cancel = $('pcCancel'); if (cancel) cancel.onclick = () => { _payEdit = null; _payLogo = undefined; drawPayNumbers(); };
+  const file = $('pcLogoFile');
+  if (file) file.addEventListener('change', async ev => {
+    const f = ev.target.files[0]; if (!f) return; ev.target.value = '';
+    keepPayForm();
+    try {
+      toast('Processing logo…', 'ok');
+      const result = await fileToPayLogo(f, 256);
+      _payLogo = result.image;
+      toast(result.cleared ? 'Background removed' : 'Logo ready', 'ok');
+      drawPayNumbers();
+    } catch (err) { toast(err.message || 'Could not process the logo', 'err'); }
+  });
+  const clr = $('pcLogoClear'); if (clr) clr.onclick = () => { keepPayForm(); _payLogo = ''; drawPayNumbers(); };
+  const save = $('pcSave');
+  if (save) save.onclick = async () => {
+    keepPayForm();
+    const body = { id: _payEdit.id, name: _payEdit.name, kind: _payEdit.kind, accountName: _payEdit.accountName, accountNumber: _payEdit.accountNumber, order: _payEdit.order, active: _payEdit.active };
+    if (_payLogo !== undefined) body.logo = _payLogo;
+    save.disabled = true;
+    const d = await api('/admin/pay-channels/save', body);
+    toast(d.status === 'success' ? 'Saved' : (d.message || 'Could not save'), d.status === 'success' ? 'ok' : 'err');
+    if (d.status === 'success') renderPayNumbers(); else save.disabled = false;
+  };
+}
+// Copies what is typed in the form back into the entry being edited, so a redraw (after choosing a logo) keeps it.
+function keepPayForm(){
+  if (!_payEdit || !$('pcName')) return;
+  _payEdit = Object.assign({}, _payEdit, {
+    name: $('pcName').value, kind: $('pcKind').value, accountName: $('pcAccName').value, accountNumber: $('pcAccNo').value,
+    order: $('pcOrder').value === '' ? undefined : Number($('pcOrder').value), active: $('pcActive').checked,
+  });
+}
 async function renderBanners(){
   const [r, br, cir, bar, annr] = await Promise.all([
     api('/admin/settings'), api('/admin/banner'), api('/admin/soda-images'), api('/admin/brand-assets'), api('/admin/announcement-image')
@@ -3145,6 +3221,54 @@ function wireBannerHandlers(){
     toast(d.status==='success'?'Login screen background and card appearance saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
 }
+// ── RESET DATABASE ──
+// Owner: "put admin panel button to make vps to reset database so that database is cleaned".
+const DB_WIPE_LABELS = { users:'Members', transactions:'Records', pendingDeposits:'Recharges', withdrawals:'Withdrawals', investments:'Member plans',
+  bankAccounts:'Payout wallets', turntableSpins:'Spins', promoCodes:'Gift codes', promoRedemptions:'Gift code uses', securityEvents:'Security events', messageReads:'Message read marks',
+  authAccounts:'Sign-in accounts', memberSessions:'Member logins', counters:'Account number counter' };
+function mountDangerZone(){
+  if (SESSION_ROLE !== 'owner' || !$('content') || $('dangerZone')) return;
+  $('content').insertAdjacentHTML('beforeend', `<h2 class="sec" style="margin-top:28px;color:#c62828">Danger zone</h2>
+    <div class="panel-card" id="dangerZone" style="border-color:#e7b4b4">
+      <p class="muted" style="margin-top:0">Erase every member and everything that belongs to them &mdash; wallets, recharges, withdrawals, plans, records and their sign-in accounts &mdash; so the app starts clean. Your settings, assets, banners, About and Rules, payment numbers, admin accounts and messages are kept. <b>There is no undo.</b></p>
+      <button class="btn danger block" id="dbResetOpen" type="button">Reset database&hellip;</button>
+    </div>`);
+  $('dbResetOpen').onclick = openDbReset;
+}
+async function openDbReset(){
+  openModal('<h3 style="margin:0 0 10px">Reset database</h3><div id="dbResetBody"><p class="muted">Counting what would be erased&hellip;</p></div>');
+  const r = await api('/admin/database/reset-preview', {});
+  const box = $('dbResetBody'); if (!box) return;
+  if (!r || r.status !== 'success') { box.innerHTML = `<p style="color:#c62828">${esc((r && r.message) || 'Could not load.')}</p>`; return; }
+  const rows = (r.wipe||[]).map(k => `<tr><td>${esc(DB_WIPE_LABELS[k]||k)}</td><td style="text-align:right"><b>${Number(r.counts[k]||0).toLocaleString('en-US')}</b></td></tr>`).join('');
+  const risky = (r.unfinishedDeposits||0) + (r.unfinishedWithdrawals||0);
+  box.innerHTML = `
+    <p style="margin:0 0 8px;font-size:13px">This will <b>permanently erase</b>:</p>
+    <table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:8px">${rows}</table>
+    <p class="muted" style="margin:0 0 8px;font-size:12px">Money held in member wallets right now: <b>${ugx(r.walletTotal||0)}</b>. Their sign-in accounts are removed too.</p>
+    <p class="muted" style="margin:0 0 10px;font-size:12px"><b>Kept:</b> settings, products, banners, payment numbers, admin accounts, messages, activity log.</p>
+    ${risky ? `<div style="background:#fdecea;border:1px solid #e7b4b4;border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:10px"><b>Unfinished money:</b> ${r.unfinishedDeposits||0} recharge(s) and ${r.unfinishedWithdrawals||0} withdrawal(s) are not finished yet. Erasing now loses the record of them.<label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="dbAck" style="width:auto"> Erase anyway</label></div>` : ''}
+    <label>Type <b>${esc(r.phrase)}</b> to confirm</label>
+    <input id="dbPhrase" autocomplete="off" autocapitalize="characters" placeholder="${esc(r.phrase)}">
+    <label style="margin-top:8px">Admin key</label>
+    <input id="dbKey" type="password" autocomplete="off" placeholder="Your admin key">
+    <p id="dbErr" style="color:#c62828;font-size:12px;min-height:16px;margin:6px 0 0"></p>
+    <div class="row" style="margin-top:8px"><button class="btn danger block" id="dbGo" type="button" disabled>Erase everything</button><button class="btn ghost block" id="dbNo" type="button">Cancel</button></div>`;
+  const sync = () => { $('dbGo').disabled = $('dbPhrase').value.trim() !== r.phrase || !$('dbKey').value || (risky && !$('dbAck').checked); };
+  ['dbPhrase','dbKey'].forEach(id => $(id).addEventListener('input', sync)); if ($('dbAck')) $('dbAck').addEventListener('change', sync);
+  $('dbNo').onclick = closeModal;
+  $('dbGo').onclick = async () => {
+    $('dbGo').disabled = true; $('dbGo').textContent = 'Erasing…'; $('dbErr').textContent = '';
+    const d = await api('/admin/database/reset', { confirm: $('dbPhrase').value.trim(), key: $('dbKey').value, ack: risky ? $('dbAck').checked : false });
+    if (d.status === 'success') {
+      const total = Object.values(d.erased||{}).reduce((a,n)=>a+n,0);
+      $('dbResetBody').innerHTML = `<p style="font-size:14px"><b>Done.</b> ${total.toLocaleString('en-US')} records erased and ${Number(d.loginsRemoved||0).toLocaleString('en-US')} member sign-in accounts removed.</p>${d.loginError ? `<p style="color:#c62828;font-size:12px">Sign-in accounts could not all be removed: ${esc(d.loginError)}. Run the reset again to finish.</p>` : ''}<button class="btn block" id="dbClose" type="button">Close</button>`;
+      $('dbClose').onclick = () => { closeModal(); switchTab(_tab); };
+      return;
+    }
+    $('dbErr').textContent = d.message || 'Could not reset.'; $('dbGo').textContent = 'Erase everything'; sync();
+  };
+}
 async function renderSettings(){
   // Image/banner uploads all moved to their own tab, see renderBanners() --
   // this fetch only needs what Rates/Payments/Support/App name/About
@@ -3182,8 +3306,8 @@ async function renderSettings(){
       <div class="switch-row" style="margin-top:8px"><span><b>Only allow withdraw between set hours</b> <span class="muted">(members see the hours on the Withdraw screen)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sWitWindow" ${s.withdrawWindowEnabled===true?'checked':''} style="width:auto"></label></div>
       <div class="row" style="margin-top:6px">
-        <div><label>Withdraw opens at</label><input id="sWitFrom" type="time" value="${esc(v('withdrawOpenFrom','09:00'))}"></div>
-        <div><label>Withdraw closes at</label><input id="sWitTo" type="time" value="${esc(v('withdrawOpenTo','17:00'))}"></div>
+        <div><label>Withdraw opens at</label><div class="t24" data-t24="sWitFrom"><select data-no-i18n aria-label="Hour"></select><span>:</span><select data-no-i18n aria-label="Minute"></select><input type="hidden" id="sWitFrom" value="${esc(v('withdrawOpenFrom','09:00'))}"></div></div>
+        <div><label>Withdraw closes at</label><div class="t24" data-t24="sWitTo"><select data-no-i18n aria-label="Hour"></select><span>:</span><select data-no-i18n aria-label="Minute"></select><input type="hidden" id="sWitTo" value="${esc(v('withdrawOpenTo','17:00'))}"></div></div>
       </div>
       <!-- It said "East Africa Time" and gave its example in 12-hour ("between
            5pm and 6pm"), and both were wrong once countries existed. The window
@@ -3192,8 +3316,8 @@ async function renderSettings(){
            is 24-hour. Owner: "withdrawal time has problems, is it in 24hrs or,
            please make sure every withdrawal time is reading very well on each
            country". -->
-      <p class="muted" style="margin:6px 0 0">Uganda time. Members can withdraw only between these two times, for example 6:00 AM to 4:00 PM. One withdrawal at a time per member, always.</p>
-      <p class="muted" id="witNow" style="margin:6px 0 0;font-weight:600"></p>
+      <p class="muted" style="margin:6px 0 0">24-hour clock, Ethiopia time. Can run past midnight (for example 18:00 to 17:00). One withdrawal at a time per member, always.</p>
+      <p class="muted" id="witNow" data-no-i18n style="margin:6px 0 0;font-weight:600"></p>
       <!-- Weekends: products rest on Saturday and Sunday (no cashback credited for those two days) and members cannot request a withdrawal on either day. -->
       <div class="switch-row" style="margin-top:14px"><span><b>Rest products at the weekend</b> <span class="muted">(no cashback for Saturday or Sunday; it pays again from Monday's earnings, credited at 00:00 Tuesday)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sWeekendCash" ${s.weekendCashbackPause!==false?'checked':''} style="width:auto"></label></div>
@@ -3205,7 +3329,7 @@ async function renderSettings(){
       <div class="row" style="margin-top:6px">
         <div><label>Shortest wait (seconds)</label><input id="sAutoMin" type="number" min="0" max="86400" step="1" value="${v('autoApproveMinSec',10)}"></div>
         <div><label>Longest wait (seconds)</label><input id="sAutoMax" type="number" min="0" max="86400" step="1" value="${v('autoApproveMaxSec',60)}"></div>
-        <div><label>Automatic up to (UGX, 0 = no limit)</label><input id="sAutoCap" type="number" min="0" step="1" value="${v('autoApproveMaxAmount',0)}"></div>
+        <div><label>Automatic up to (Br, 0 = no limit)</label><input id="sAutoCap" type="number" min="0" step="1" value="${v('autoApproveMaxAmount',0)}"></div>
       </div>
       <p class="muted" id="autoWitNote" style="margin:6px 0 0"></p>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a referral code to sign up</b> <span class="muted">(every new member must be invited by an existing one)</span></span>
@@ -3220,20 +3344,9 @@ async function renderSettings(){
       <button class="btn block" id="saveRates">Save rates</button>
     </div>
 
-    <h2 class="sec">Payments</h2>
+    <h2 class="sec">Recharges and withdrawals</h2>
     <div class="panel-card">
-      <label>Recharge gateway</label>
-      <div style="margin:0 0 12px">
-        <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:4px;"><input type="radio" name="depGateway" id="depGatewayMarz" value="marzpay" ${normalizeProv(v('depositMethod','marzpay'))==='marzpay'?'checked':''} style="width:auto"> MarzPay</label>
-        <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="depGateway" id="depGatewayPesa" value="pesajet" ${normalizeProv(v('depositMethod','marzpay'))==='pesajet'?'checked':''} style="width:auto"> PesaJet</label>
-      </div>
-      <h2 class="sec" style="margin:16px 0 4px">Withdrawals</h2>
-      <p class="muted" style="margin:0 0 8px">Follows the recharge gateway above by default &mdash; pin a different method only if recharges and withdrawals should differ.</p>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodFollow" value="follow" ${v('withdrawMethod','follow')==='follow'?'checked':''} style="width:auto"> Follow the recharge gateway above</label>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodMarz" value="marzpay" ${v('withdrawMethod','follow')==='marzpay'||v('withdrawMethod','follow')==='automatic'?'checked':''} style="width:auto"> Always automatic (MarzPay sends payouts)</label>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodPesa" value="pesajet" ${v('withdrawMethod','follow')==='pesajet'?'checked':''} style="width:auto"> Always automatic (PesaJet sends payouts)</label>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="witMethod" id="witMethodManual" value="manual" ${v('withdrawMethod','follow')==='manual'?'checked':''} style="width:auto"> Always manual (you send payouts by hand)</label>
-      <button class="btn block" id="saveDepMethod" style="margin-top:10px">Save payment method</button>
+      <p class="muted" style="margin-top:0"><b>Bank / Wallet:</b> add the accounts members pay into under <b>Payment Numbers</b>. Members send you the payment message and you approve it under <b>Recharges</b>. <b>USDT:</b> set it up below. <b>Withdrawals</b> are paid by you: send the money, then record it under <b>Withdrawals</b>.</p>
     </div>
 
     <h2 class="sec">Support contacts</h2>
@@ -3262,18 +3375,20 @@ async function renderSettings(){
       <label>App name</label><input id="brandNameInput" maxlength="24" value="${esc(v('brandName','Soda'))}" placeholder="Soda">
       <button class="btn block" id="saveBrandName" style="margin-top:6px">Save app name</button>
     </div>`;
-  $('saveDepMethod').addEventListener('click', async()=>{
-    const gateway = document.querySelector('input[name="depGateway"]:checked').value;
-    const witMethod = (document.querySelector('input[name="witMethod"]:checked')||{}).value || 'follow';
-    const d = await api('/admin/settings/update', { settings: {
-      depositMethod: gateway, withdrawMethod: witMethod,
-    } });
-    const payoutProv = witMethod==='follow' ? gateway : witMethod;
-    toast(d.status==='success'
-      ? `Saved. Recharges: ${PROVIDER_LABEL[normalizeProv(gateway)]}. Payouts: ${PROVIDER_LABEL[normalizeProv(payoutProv)]}.`
-      : (d.message||'Failed'), d.status==='success'?'ok':'err');
+  // 24-hour pickers: build the hour / minute drop-downs from the hidden value and write "HH:MM" back into it.
+  document.querySelectorAll('[data-t24]').forEach(box=>{
+    const hid=box.querySelector('input[type=hidden]'), [hs,ms]=box.querySelectorAll('select');
+    const m=/^(\d{1,2}):(\d{2})/.exec(hid.value||'')||[0,'9','00'];
+    const hh=Math.min(23,+m[1]), mm=Math.min(59,+m[2]);
+    const two=n=>String(n).padStart(2,'0');
+    hs.innerHTML=Array.from({length:24},(_,i)=>`<option value="${two(i)}">${two(i)}</option>`).join('');
+    const mins=new Set(Array.from({length:12},(_,i)=>i*5)); mins.add(mm);
+    ms.innerHTML=[...mins].sort((a,b)=>a-b).map(i=>`<option value="${two(i)}">${two(i)}</option>`).join('');
+    hs.value=two(hh); ms.value=two(mm); hid.value=two(hh)+':'+two(mm);
+    const sync=()=>{ hid.value=hs.value+':'+ms.value; hid.dispatchEvent(new Event('change')); };
+    hs.addEventListener('change',sync); ms.addEventListener('change',sync);
   });
-  // Says plainly, from the two times typed above, whether withdrawing is open at this moment (Uganda time, the same clock the server uses).
+  // Says plainly, from the two times typed above, whether withdrawing is open at this moment (Ethiopia time, the same clock the server uses).
   function refreshWitNow(){
     const el=$('witNow'); if(!el) return;
     const on=$('sWitWindow')&&$('sWitWindow').checked, f=$('sWitFrom').value, t=$('sWitTo').value;
@@ -3282,11 +3397,11 @@ async function renderSettings(){
     const clock=String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');
     const dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getUTCDay()];
     const weekendShut=!!($('sWeekendWit')&&$('sWeekendWit').checked)&&(d.getUTCDay()===0||d.getUTCDay()===6);
-    if(weekendShut){ el.textContent='Right now it is '+dayName+' '+clock+' Uganda time: withdrawing is CLOSED (weekend).'; return; }
-    if(!on){ el.textContent='Right now it is '+dayName+' '+clock+' Uganda time. The hours switch is off: members can withdraw at any hour (Monday to Friday'+($('sWeekendWit')&&$('sWeekendWit').checked?'':', and weekends too')+').'; return; }
+    if(weekendShut){ el.textContent='Right now it is '+dayName+' '+clock+' Ethiopia time: withdrawing is CLOSED (weekend).'; return; }
+    if(!on){ el.textContent='Right now it is '+dayName+' '+clock+' Ethiopia time. The hours switch is off: members can withdraw at any hour (Monday to Friday'+($('sWeekendWit')&&$('sWeekendWit').checked?'':', and weekends too')+').'; return; }
     if(a==null||b==null||a===b){ el.textContent='Pick two different times.'; return; }
     const open=a<b?(now>=a&&now<b):(now>=a||now<b);
-    el.textContent='Right now it is '+dayName+' '+clock+' Uganda time: withdrawing is '+(open?'OPEN.':'CLOSED.');
+    el.textContent='Right now it is '+dayName+' '+clock+' Ethiopia time: withdrawing is '+(open?'OPEN.':'CLOSED.');
   }
   const refreshAutoNote=()=>{
     const on=$('sAutoWit').checked, lo=$('sAutoMin').value.trim(), hi=$('sAutoMax').value.trim(), cap=+$('sAutoCap').value||0, n=$('autoWitNote');
@@ -3380,6 +3495,7 @@ async function renderSettings(){
     toast(d.status==='success'?'App name saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
     if (d.status==='success') applyAdminBrandName(name);
   });
+  mountDangerZone();
 }
 
 // ── MODAL ──
@@ -3594,8 +3710,8 @@ const ADMIN_LANG_ROWS = [
   ['Generate codes', 'Kola koodi', 'Tengeneza misimbo', 'Générer des codes', 'Gukora kode', 'Hanga koodi'],
   ['How many', 'Mmeka', 'Ngapi', 'Combien', 'Zingahe', 'Ningahe'],
   ['Reward range', 'Ekigero ky\'empeera', 'Kiwango cha zawadi', 'Fourchette de récompense', 'Urwego rw\'ibihembo', 'Ekigyero ky\'empeera'],
-  ['Min reward (UGX)', 'Empeera esinga obutono (UGX)', 'Zawadi ndogo (UGX)', 'Récompense minimale (UGX)', 'Igihembo gito (UGX)', 'Empeera erikukira obukye (UGX)'],
-  ['Max reward (UGX)', 'Empeera esinga obunene (UGX)', 'Zawadi kubwa (UGX)', 'Récompense maximale (UGX)', 'Igihembo kinini (UGX)', 'Empeera erikukira obwingi (UGX)'],
+  ['Min reward (Br)', 'Empeera esinga obutono (Br)', 'Zawadi ndogo (Br)', 'Récompense minimale (Br)', 'Igihembo gito (Br)', 'Empeera erikukira obukye (Br)'],
+  ['Max reward (Br)', 'Empeera esinga obunene (Br)', 'Zawadi kubwa (Br)', 'Récompense maximale (Br)', 'Igihembo kinini (Br)', 'Empeera erikukira obwingi (Br)'],
   ['Max uses per code (optional)', 'Emirundi egisinga buli koodi (si kya buwaze)', 'Matumizi mengi kwa msimbo (si lazima)', 'Utilisations max par code (facultatif)', 'Inshuro ntarengwa kuri buri kode (ntabwo ari itegeko)', 'Emirundi erikukira aha buri koodi (tikya buriijo)'],
   ['Expires after (seconds, optional)', 'Kiggwaako oluvannyuma (obutundutundu, si kya buwaze)', 'Inaisha baada ya (sekunde, si lazima)', 'Expire après (secondes, facultatif)', 'Birangira nyuma ya (amasegonda, ntabwo ari itegeko)', 'Nikihwaho bwanyima ya (obucweka, tikya buriijo)'],
   ['e.g. 30 for a flash code', 'okugeza 30 ku koodi ey\'akaseera', 'mfano 30 kwa msimbo wa haraka', 'ex. 30 pour un code éclair', 'urugero 30 kuri kode y\'igihe gito', 'nk\'okugyera 30 aha koodi y\'akaanya'],
@@ -3632,8 +3748,8 @@ const ADMIN_LANG_ROWS = [
   ['Save auto-approve settings', 'Tereka entegeka y\'okukkiriza okw\'obwetwaze', 'Hifadhi mipangilio ya idhini otomatiki', 'Enregistrer les paramètres d\'approbation automatique', 'Bika igenamiterere ryo kwemeza kwikora', 'Biika entebeekanisa y\'okwikiriza kwonka'],
   ['Turntable (spin wheel)', 'Nnamuziga (eddiba erizunguluka)', 'Gurudumu (la kuzungusha)', 'Roue (tourner)', 'Uruziga (ruzunguruka)', 'Orupiira (orurikuzengurutsa)'],
   ['Daily free spin', 'Okuzungusa okwa buli lunaku okw\'obwereere', 'Mzungusho bure wa kila siku', 'Tour gratuit quotidien', 'Kuzunguza k\'ubuntu kwa buri munsi', 'Okuzengurutsa kwa buri izooba okwa busha'],
-  ['Minimum win (UGX)', 'Okuwangula okusinga obutono (UGX)', 'Ushindi mdogo (UGX)', 'Gain minimum (UGX)', 'Gutsinda guto (UGX)', 'Okusingura okurikukira obukye (UGX)'],
-  ['Maximum win (UGX)', 'Okuwangula okusinga obunene (UGX)', 'Ushindi mkubwa (UGX)', 'Gain maximum (UGX)', 'Gutsinda kunini (UGX)', 'Okusingura okurikukira obwingi (UGX)'],
+  ['Minimum win (Br)', 'Okuwangula okusinga obutono (Br)', 'Ushindi mdogo (Br)', 'Gain minimum (Br)', 'Gutsinda guto (Br)', 'Okusingura okurikukira obukye (Br)'],
+  ['Maximum win (Br)', 'Okuwangula okusinga obunene (Br)', 'Ushindi mkubwa (Br)', 'Gain maximum (Br)', 'Gutsinda kunini (Br)', 'Okusingura okurikukira obwingi (Br)'],
   ['Spins earned by buying products', 'Okuzungusa okufunibwa mu kugula ebyamaguzi', 'Mizungusho inayopatikana kwa kununua bidhaa', 'Tours gagnés en achetant des produits', 'Kuzunguza kuboneka mu kugura ibicuruzwa', 'Okuzengurutsa okurikutungwa omu kugura ebyamaguzi'],
   ['Save turntable settings', 'Tereka entegeka ya nnamuziga', 'Hifadhi mipangilio ya gurudumu', 'Enregistrer les paramètres de la roue', 'Bika igenamiterere ry\'uruziga', 'Biika entebeekanisa y\'orupiira'],
   ['Maintenance mode', 'Embeera y\'okuddaabiriza', 'Hali ya matengenezo', 'Mode maintenance', 'Uburyo bwo gusana', 'Embeera y\'okugyerurura'],

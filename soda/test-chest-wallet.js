@@ -20,11 +20,11 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 (async () => {
   await new Promise(r => setTimeout(r, 30));
   // Wallet: one saved row is shown, prefilled, with no delete control anywhere.
-  w.eval('STATE.bankAccounts=[{id:"b1",network:"MTN Mobile Money",phone:"256769968158",holder:"Jane Doe"}]');
+  w.eval('STATE.bankAccounts=[{id:"b1",network:"Telebirr",phone:"251969968158",holder:"Jane Doe"}]');
   w.eval('openSheet("Wallet","");renderWalletSheet()');
   ok(d.querySelectorAll('.v-wal-row').length === 1, 'exactly one wallet row');
   ok(!d.querySelector('.v-wal-row button') && !/deleteWallet|Delete wallet/.test(d.getElementById('sheetBody').innerHTML), 'no delete / bin control');
-  ok(d.getElementById('walProvider').value === 'MTN' && d.getElementById('walPhone').value === '0769968158' && d.getElementById('walHolder').value === 'JANE DOE', 'the form edits the saved wallet in place');
+  ok(d.getElementById('walProvider').value === 'Telebirr' && d.getElementById('walPhone').value === '0969968158' && d.getElementById('walHolder').value === 'JANE DOE', 'the form edits the saved wallet in place');
   ok(d.getElementById('walEditHead').textContent === 'Edit Wallet', 'heading is Edit Wallet');
   ok(typeof w.deleteWallet === 'undefined', 'deleteWallet is gone');
   w.eval('STATE.bankAccounts=[];openSheet("Wallet","");renderWalletSheet()');

@@ -436,20 +436,36 @@ const MARZ_TIMEOUT = 20000;
 const MARZSMS_BASE = 'https://sms.wearemarz.com/api/v1';
 const MARZSMS_KEY  = process.env.MARZSMS_KEY || '';
 
-// Uganda is the only supported currency and phone market. Historical accounts
-// with another currency remain in storage for review, but cannot transact.
-const DEFAULT_REGION_KEY = 'ug';
+// Ethiopia is the only supported currency and phone market (owner: "change
+// country code to +251, languages English and Amharic, currency ETB symbol
+// Br"). Mobile numbers are +251 then 9 digits starting 9 (Ethio Telecom) or
+// 7 (Safaricom Ethiopia). The currency CODE stays ETB in storage and in
+// anything sent to a payment provider; only what a member READS is the
+// symbol Br (see currencyLabel()). Historical accounts saved under another
+// region remain in storage for review, but cannot transact.
+const DEFAULT_REGION_KEY = 'et';
 const DEFAULT_REGION = Object.freeze({
-  key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256',
-  localLength: 9, prefixes: ['7'], utcOffsetMin: 180,
-  active: true, isDefault: true, languages: ['en'], defaultLang: 'en',
+  key: 'et', name: 'Ethiopia', currency: 'ETB', dialCode: '251',
+  localLength: 9, prefixes: ['9', '7'], utcOffsetMin: 180,
+  active: true, isDefault: true, languages: ['en', 'am'], defaultLang: 'en',
 });
+// The label printed in front of an amount. Only ETB differs from its code.
+function currencyLabel(code) {
+  const c = String(code || '').toUpperCase();
+  return c === 'ETB' ? 'Br' : c;
+}
+// The domain whose random 4-character subdomains carry the member app and invite links (deploy/set-wildcard.sh saves it as SHARE_DOMAIN in
+// deploy/secrets.local.js): https://h6re.<domain>/share.html?... Empty = invite links keep the address the app is open on.
+const SHARE_DOMAIN = (() => {
+  const d = String(process.env.SHARE_DOMAIN || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^\*\./, '').replace(/\/.*$/, '');
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d) ? d : '';
+})();
 let _mainAllowedHosts = [];
 let _baseDomain = 'soda-platform.com';
 let _blockRootDomain = true;
 let _parkedHosts = [];
 function refreshCorsSnapshot() {
-  const all = _mainAllowedHosts.concat(_parkedHosts, _baseDomain ? [_baseDomain, 'www.' + _baseDomain] : []);
+  const all = _mainAllowedHosts.concat(_parkedHosts, _baseDomain ? [_baseDomain, 'www.' + _baseDomain] : [], SHARE_DOMAIN ? [SHARE_DOMAIN] : []);
   _corsExtraHosts = all.filter((h, i) => h && all.indexOf(h) === i);
 }
 function refreshHostPolicy(sett) {
@@ -674,7 +690,7 @@ const DEFAULT_SETTINGS = {
   // leave in one burst or on a fixed rhythm). It uses exactly the same processWithdrawalCore as the manual Send button. autoApproveMaxAmount:
   // 0 = no limit; a nonzero value leaves anything above it for manual review. autoApproveEnabledAt is stamped by the server when the switch is turned on.
   autoApproveWithdrawalsEnabled: false, autoApproveMinSec: 10, autoApproveMaxSec: 60, autoApproveMaxAmount: 0, autoApproveEnabledAt: 0,
-  supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', supportEmail: '',
+  supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   rulesText: '', aboutText: '',
   // Owner: "l would like to also to edit the app name soda, so make it when
   // it can be editable everywhere." The platform's own name, previously
@@ -758,12 +774,16 @@ const DEFAULT_PRODUCTS = [];
 
 // The active settings document is settings/main.
 let _settingsCache = null, _settingsCacheTs = 0;
+// Owner: "remove PesaJet, MarzPay, cards, OTPs -- we are using USDT and manual." Whatever an old database
+// still holds, these can never be switched on again: no SMS codes (registration, payout accounts, password
+// reset), no card payments. Recharges are Bank / Wallet (manual, approved by the admin).
+const FORCED_SETTINGS = Object.freeze({ otpVerificationEnabled: false, bankOtpRequired: false, cardDepositEnabled: false });
 async function getSettings() {
   if (_settingsCache && Date.now() - _settingsCacheTs < 60 * 1000) return _settingsCache;
   try {
     const snap = await db.collection('settings').doc('main').get();
     const stored = snap.exists ? snap.data() : {};
-    _settingsCache = Object.assign({}, DEFAULT_SETTINGS, stored);
+    _settingsCache = Object.assign({}, DEFAULT_SETTINGS, stored, FORCED_SETTINGS);
     _mainAllowedHosts = sanitizeAllowedOrigins(stored.allowedOrigins).hosts || [];
     refreshHostPolicy(_settingsCache);
     _settingsCacheTs = Date.now();
@@ -1132,7 +1152,7 @@ async function getAboutContent() {
 function fmtMoney(n, currency) {
   const v = Number(n) || 0;
   const hasCents = Math.round(v * 100) % 100 !== 0;
-  const cur = currency || currentRegion().currency || 'UGX';
+  const cur = currencyLabel(currency || currentRegion().currency || 'ETB');
   // Grouping only -- 'en-UG' is a digit-grouping locale here, not a
   // currency, so the same "1,234,567" shape is right for every region and
   // the label in front of it is what changes.
@@ -1495,7 +1515,11 @@ function depositSenderPhone(body, accountPhone, keys) {
   return fallback ? { phone: fallback }
                   : { error: 'Enter a valid mobile-money phone number.' };
 }
-const NETWORK_NAMES = new Set(['MTN Mobile Money', 'Airtel Money']);
+// Withdrawal ("Bind bank card") accounts: owner: "on bind bank use these only -- Commercial Bank of
+// Ethiopia, Telebirr". Telebirr is a wallet (a phone number, +251); the bank takes an account number.
+// MTN / Airtel stay in this set only so an account saved before the change keeps being read as mobile money.
+const PAYOUT_ACCOUNT_TYPES = Object.freeze({ 'Commercial Bank of Ethiopia': 'bank', 'Telebirr': 'wallet' });
+const NETWORK_NAMES = new Set(['Telebirr', 'MTN Mobile Money', 'Airtel Money']);
 const MAX_MONEY_AMOUNT = 999_999_999;
 // The most spins one purchase can ever grant. Used in TWO places that must
 // agree: sanitizeProductInput() refuses a bigger number at save time, and
@@ -3530,6 +3554,7 @@ app.get('/public/settings', async (req, res) => {
     // no reason to hand every member's phone the list of domains that can
     // reach this backend, so it is dropped here alongside maintenanceMsg.
     const { maintenanceMsg, allowedOrigins, ...rest0 } = s;
+    const manualPayOn = (await activePayChannels()).length > 0;
     // Operator settings the app never reads stay on the server: the automatic-withdrawal limits (a member could keep a request just under the
     // automatic cap), the payment-rail choice, the reference prefix and the host policy.
     const rest = {};
@@ -3548,6 +3573,7 @@ app.get('/public/settings', async (req, res) => {
     publicJson(req, res, { status: 'success', settings: {
       ...rest,
       maintenanceMsg: s.maintenanceMode ? maintenanceMsg : '',
+      shareDomain: SHARE_DOMAIN,
       payoutManual: payoutIsManual(s),
       // RESOLVED, not a raw setting: deposits are only real if a gateway can
       // actually reach this country's phone numbers. Sending an unresolved
@@ -3558,7 +3584,8 @@ app.get('/public/settings', async (req, res) => {
       // depositPayAEnabled before manual deposit collection -- PAY B -- was
       // removed outright; renamed since "PAY A" no longer means anything
       // once there is no PAY B to contrast it with.)
-      depositAvailable: payAAvailable(s),
+      manualPay: manualPayOn,
+      depositAvailable: manualPayOn,
       referralRequired: await referralRequiredNow(),
     // How many countries this platform runs in. The app only uses it to add
     // "if you signed up on another country's site, sign in there" to a
@@ -3925,7 +3952,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
       // working". Two regions sharing a currency have no arithmetic problem,
       // which is the only thing this rule was ever protecting.
       if (String(refDoc.data().regionKey || DEFAULT_REGION_KEY) !== DEFAULT_REGION_KEY)
-        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'This referral code is unavailable. Ask for a Uganda referral code.' } };
+        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'This referral code is unavailable. Ask for an Ethiopia referral code.' } };
       referrerId = refDoc.id;
     }
 
@@ -5103,6 +5130,212 @@ app.post('/deposit/marzpay/status', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Could not check payment status' });
   }
 });
+// ── MANUAL BANK / WALLET RECHARGE (Ethiopia) ──
+// Owner: payment numbers (a bank account, a Telebirr wallet ...) are typed into
+// the admin panel with a logo. A member picks one, is shown the account to pay
+// for 30 minutes, pays from their own bank/wallet app, then pastes the SMS or
+// receipt code. The claim goes to the admin Recharges tab (status 'review')
+// where it is approved with Force-credit (creditDeposit() is the only thing
+// that ever moves money) or rejected. Nothing here credits a wallet.
+const PAY_CHANNEL_KINDS = ['bank', 'wallet'];
+const MANUAL_ORDER_MS = 30 * 60 * 1000;
+const MAX_PAY_CHANNELS = 20;
+const MAX_PAY_LOGO_CHARS = 220 * 1024;
+let _payChannelsCache = null;
+async function readPayChannels() {
+  const now = Date.now();
+  if (_payChannelsCache && now - _payChannelsCache.at < 10000) return _payChannelsCache.rows;
+  const snap = await db.collection('payChannels').get();
+  const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0) || (tsMillis(a.createdAt) || 0) - (tsMillis(b.createdAt) || 0));
+  _payChannelsCache = { at: now, rows };
+  return rows;
+}
+function dropPayChannelsCache() { _payChannelsCache = null; }
+async function activePayChannels() {
+  try { return (await readPayChannels()).filter(c => c.active !== false && c.accountNumber); }
+  catch (_) { return []; }
+}
+function payChannelPublic(c) {
+  return { id: c.id, name: c.name, kind: c.kind === 'wallet' ? 'wallet' : 'bank', logo: c.logo || '' };
+}
+function cleanPayText(v, max) { return String(v == null ? '' : v).replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max); }
+app.get('/public/pay-channels', async (req, res) => {
+  try {
+    const rows = await activePayChannels();
+    res.set('Cache-Control', 'no-store');
+    res.json({ status: 'success', channels: rows.map(payChannelPublic) });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load payment options' }); }
+});
+app.post('/admin/pay-channels/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { dropPayChannelsCache(); res.json({ status: 'success', channels: await readPayChannels() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load payment numbers' }); }
+});
+app.post('/admin/pay-channels/save', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const b = req.body || {};
+    const name = cleanPayText(b.name, 60);
+    const accountName = cleanPayText(b.accountName, 80);
+    const accountNumber = cleanPayText(b.accountNumber, 40).replace(/\s+/g, '');
+    if (!name) return res.status(400).json({ status: 'error', message: 'Enter the payment name (for example Commercial Bank of Ethiopia).' });
+    if (!accountName) return res.status(400).json({ status: 'error', message: 'Enter the account name.' });
+    if (!/^[0-9A-Za-z+\-]{4,40}$/.test(accountNumber)) return res.status(400).json({ status: 'error', message: 'Enter a valid account number.' });
+    const kind = PAY_CHANNEL_KINDS.includes(b.kind) ? b.kind : 'bank';
+    const rows = await readPayChannels();
+    const id = b.id ? String(b.id) : '';
+    const existing = id ? rows.find(r => r.id === id) : null;
+    if (id && !existing) return res.status(404).json({ status: 'error', message: 'That payment number no longer exists.' });
+    if (!existing && rows.length >= MAX_PAY_CHANNELS) return res.status(400).json({ status: 'error', message: `You can keep up to ${MAX_PAY_CHANNELS} payment numbers. Remove one first.` });
+    // logo: undefined/null = keep, '' = remove, a PNG data URI = replace.
+    let logo = existing ? (existing.logo || '') : '';
+    if (typeof b.logo === 'string') {
+      if (b.logo === '') logo = '';
+      else if (/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(b.logo) && b.logo.length <= MAX_PAY_LOGO_CHARS) logo = b.logo;
+      else return res.status(400).json({ status: 'error', message: 'That logo is not valid or is too large. Upload a smaller image.' });
+    }
+    const doc = {
+      name, kind, accountName, accountNumber, logo, active: b.active !== false,
+      order: Number.isFinite(Number(b.order)) ? Math.max(0, Math.min(999, Math.round(Number(b.order)))) : (existing ? Number(existing.order) || 0 : rows.length),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    const ref = existing ? db.collection('payChannels').doc(existing.id) : db.collection('payChannels').doc();
+    if (existing) await ref.update(doc); else await ref.set({ ...doc, createdAt: FieldValue.serverTimestamp() });
+    dropPayChannelsCache();
+    logAdminAction(req, 'pay_channel_saved', { id: ref.id, name, kind, active: doc.active });
+    res.json({ status: 'success', id: ref.id });
+  } catch (e) { console.error('pay-channels save:', e.message); res.status(500).json({ status: 'error', message: 'Could not save this payment number' }); }
+});
+app.post('/admin/pay-channels/delete', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const id = String((req.body || {}).id || '');
+    if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
+    const ref = db.collection('payChannels').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'That payment number no longer exists.' });
+    await ref.delete();
+    dropPayChannelsCache();
+    logAdminAction(req, 'pay_channel_deleted', { id, name: snap.data().name });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove this payment number' }); }
+});
+// Creates (or re-points) the member's one open order and returns the account to pay.
+// `depositId` is sent back by "switch": the same order moves to another channel and keeps its clock.
+app.post('/deposit/manual/order', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const amt = paymentAmount(req.body.amount);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
+  try {
+    const [uSnap, sett, channels] = await Promise.all([db.collection('users').doc(userId).get(), getSettings(), activePayChannels()]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
+    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before topping up.' });
+    if (!channels.length) return res.status(400).json({ status: 'error', message: 'Recharges are not available right now.' });
+    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
+    const ch = channels.find(c => c.id === String(req.body.channelId || ''));
+    if (!ch) return res.status(400).json({ status: 'error', message: 'Please select a payment method' });
+    const now = Date.now();
+    const openSnap = await db.collection('pendingDeposits').where('userId', '==', userId).where('status', '==', 'pending').get();
+    const open = openSnap.docs.filter(d => d.data().method === 'manual' && !d.data().pastedSms && (tsMillis(d.data().expiresAt) || 0) > now);
+    let depRef, ref, expiresMs;
+    const mine = open.find(d => d.id === String(req.body.depositId || '')) || open[0];
+    const channelFields = { network: ch.name, channelId: ch.id, channelKind: ch.kind === 'wallet' ? 'wallet' : 'bank', assignedNumber: ch.accountNumber, assignedName: ch.accountName };
+    if (mine) {
+      depRef = mine.ref; ref = mine.data().ref; expiresMs = tsMillis(mine.data().expiresAt);
+      await depRef.update({ ...channelFields, amount: amt });
+    } else {
+      ref = await uniqueRef('M');
+      const { date, time } = nowStr();
+      depRef = db.collection('pendingDeposits').doc();
+      expiresMs = now + MANUAL_ORDER_MS;
+      await depRef.set({
+        userId, method: 'manual', provider: 'manual', amount: amt, ref, status: 'pending', ...channelFields,
+        commissionBasis: 'deposit', commissionPending: true, commissionPaidLevels: [],
+        regionKey: currentRegionKey(), date, time,
+        expiresAt: new Date(expiresMs), createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+    res.json({ status: 'success', depositId: depRef.id, reference: ref, amount: amt, expiresAt: expiresMs,
+      channel: payChannelPublic(ch), accountName: ch.accountName, accountNumber: ch.accountNumber });
+  } catch (e) { console.error('manual order:', e.message); res.status(500).json({ status: 'error', message: 'Could not start recharge' }); }
+});
+// What a pasted SMS / receipt is allowed to be. CBE receipts carry "v2-..." (23 characters) or an
+// "FT" reference (12 characters, sometimes followed by 8 account digits); Telebirr's
+// transaction number is exactly 10 letters/digits. Anything else is refused up front.
+function extractManualRef(text) {
+  const t = String(text || '');
+  let m = /v2-[A-Za-z0-9]{6,40}/i.exec(t);
+  if (m) return { ref: m[0].toLowerCase(), kind: 'cbe-v2' };
+  m = /\bFT[0-9A-Z]{10,22}\b/i.exec(t);
+  if (m) return { ref: m[0].toUpperCase().slice(0, 12), kind: 'cbe-ft' };
+  m = /transaction number is\s+([A-Z0-9]{10})\b/i.exec(t) || /receipt\/([A-Z0-9]{10})\b/i.exec(t);
+  if (m) return { ref: m[1].toUpperCase(), kind: 'telebirr' };
+  m = /^\s*([A-Z0-9]{10})\s*$/i.exec(t);
+  if (m && /[A-Z]/i.test(m[1]) && /\d/.test(m[1])) return { ref: m[1].toUpperCase(), kind: 'telebirr' };
+  return null;
+}
+function extractManualAmount(text) {
+  const m = /(?:transferred|sent|debited(?: with)?|paid)\s*(?:ETB|Br|birr)?\s*([\d,]+(?:\.\d+)?)/i.exec(String(text || '')) || /ETB\s*([\d,]+(?:\.\d+)?)/i.exec(String(text || ''));
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+const _manualSubmitDebounce = new Map();
+app.post('/deposit/manual/submit', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const sms = String((req.body || {}).sms || '').trim().slice(0, 2000);
+    const found = extractManualRef(sms);
+    if (!found) return res.status(400).json({ status: 'error', code: 'BAD_SMS', message: 'please enter the correct transfer sms' });
+    const last = _manualSubmitDebounce.get(userId) || 0;
+    if (Date.now() - last < 3000) return res.status(429).json({ status: 'error', message: 'Please wait a moment.' });
+    _manualSubmitDebounce.set(userId, Date.now());
+    const depRef = db.collection('pendingDeposits').doc(String(req.body.depositId || '_'));
+    const snap = await depRef.get();
+    if (!snap.exists || snap.data().userId !== userId || snap.data().method !== 'manual')
+      return res.status(404).json({ status: 'error', message: 'Recharge not found' });
+    const dep = snap.data();
+    if (dep.status === 'review') return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
+    if (dep.status !== 'pending') return res.status(400).json({ status: 'error', message: 'This recharge is no longer open. Start a new one.' });
+    // A real transfer can back ONE open or credited claim, by anyone.
+    const dupSnap = await db.collection('pendingDeposits').where('pastedSmsTxId', '==', found.ref).get();
+    if (dupSnap.docs.some(d => d.id !== snap.id && d.data().status !== 'failed'))
+      return res.status(409).json({ status: 'error', message: 'This transaction hash has already been submitted.' });
+    const smsAmount = extractManualAmount(sms);
+    const updated = await depRef.updateIf({ status: 'pending' }, {
+      status: 'review', reviewReason: 'Waiting for the admin to check the payment message',
+      pastedSms: sms, pastedAt: FieldValue.serverTimestamp(), pastedSmsTxId: found.ref, pastedSmsKind: found.kind, pastedSmsParsed: true,
+      ...(smsAmount != null ? { pastedSmsAmount: smsAmount, pastedSmsAmountMatches: Math.abs(smsAmount - Number(dep.amount)) < 0.01 } : {}),
+    });
+    if (!updated) return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
+    const { date, time } = nowStr();
+    await db.collection('transactions').add({
+      userId, statementId: newStatementId(), type: 'deposit', description: `Deposit: Processing (${fmtMoney(dep.amount)})`,
+      amount: dep.amount, displayAmount: dep.amount, status: 'pending', date, time, ref: dep.ref, depositId: snap.id, createdAt: FieldValue.serverTimestamp()
+    }).catch(e => console.error(`Manual deposit ledger row create failed for dep=${snap.id}:`, e.message));
+    res.json({ status: 'success', state: 'review', depositId: snap.id, reference: dep.ref, message: 'Submitted. Our team is checking your payment.' });
+  } catch (e) { console.error('manual submit:', e.message); res.status(500).json({ status: 'error', message: 'Could not submit your recharge. Please try again.' }); }
+});
+// An order nobody paid for is closed after the clock (30 min) plus a grace of 30.
+async function sweepManualOrders() {
+  try {
+    const snap = await db.collection('pendingDeposits').where('status', '==', 'pending').limit(200).get();
+    const cut = Date.now() - 30 * 60 * 1000;
+    for (const d of snap.docs) {
+      const x = d.data();
+      if (x.method !== 'manual' || x.pastedSms) continue;
+      if ((tsMillis(x.expiresAt) || 0) > cut) continue;
+      await d.ref.updateIf({ status: 'pending' }, { status: 'failed', failureReason: 'The payment order expired' }).catch(() => {});
+    }
+  } catch (e) { console.error('sweepManualOrders:', e.message); }
+}
+// END MANUAL BANK / WALLET RECHARGE
 // ── MARZPAY DEPOSIT WEBHOOK ──
 // MarzPay webhook. Never trusts the claimed status alone — crediting only
 // ever happens after an independent live re-check confirms it, and a uuid
@@ -6226,8 +6459,7 @@ app.post('/pesajet/webhook', async (req, res) => {
 app.get('/bank/supported-banks', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const banks = await getSupportedBanks();
-  res.json({ status: 'success', banks: banks.map(b => b.name) });
+  res.json({ status: 'success', banks: Object.keys(PAYOUT_ACCOUNT_TYPES).filter(k => PAYOUT_ACCOUNT_TYPES[k] === 'bank') });
 });
 const MAX_SAVED_PAYOUT_ACCOUNTS = 1; // one wallet per member; /bank/save edits it in place
 app.post('/bank/save', async (req, res) => {
@@ -6238,7 +6470,9 @@ app.post('/bank/save', async (req, res) => {
   if (!holder || !rawNetwork) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
   // A holder name is a name: at most 60 characters and at least one letter (a 300-character or all-digit holder broke the Wallet card).
   if (holder.length > 60 || !/\p{L}/u.test(holder)) return res.status(400).json({ status: 'error', message: 'Enter the account holder name (letters, up to 60 characters).' });
-  const isMobileMoney = NETWORK_NAMES.has(rawNetwork);
+  if (!Object.prototype.hasOwnProperty.call(PAYOUT_ACCOUNT_TYPES, rawNetwork))
+    return res.status(400).json({ status: 'error', message: 'Choose Commercial Bank of Ethiopia or Telebirr.' });
+  const isMobileMoney = PAYOUT_ACCOUNT_TYPES[rawNetwork] === 'wallet';
   // Owner: "so some bank account exceed character limit so no capping of
   // characters please" -- cleanPhone() enforces this region's phone SHAPE
   // (exact digit count, dial code), which is correct for MTN/Airtel but
@@ -6254,12 +6488,6 @@ app.post('/bank/save', async (req, res) => {
   } else {
     destValue = String(req.body.phone || req.body.accountNumber || '').replace(/\s+/g, '').trim();
     if (!/^[A-Za-z0-9]{4,64}$/.test(destValue)) return res.status(400).json({ status: 'error', message: 'Enter a valid bank account number' });
-    // Validated against the SAME live/cached list #bank/supported-banks
-    // serves -- a bank name the picker never offered has no business
-    // reaching MarzPay's own bank-transfer create call, where an unknown
-    // code is what its docs describe as UNSUPPORTED/UNKNOWN BANK.
-    const banks = await getSupportedBanks();
-    if (!banks.some(b => b.name === rawNetwork)) return res.status(400).json({ status: 'error', message: 'That bank is not currently supported. Pick one from the list.' });
   }
   try {
     const uSnap = await db.collection('users').doc(userId).get();
@@ -6276,17 +6504,7 @@ app.post('/bank/save', async (req, res) => {
     // entry rather than silently overwritten, since a shared/company
     // account can legitimately have a different registered name.
     let verifiedHolder = holder;
-    if (!isMobileMoney) {
-      // marzValidateBankAccount() now handles its own network errors and
-      // one transient-failure retry internally (never throws) -- providerDown
-      // is the one signal to check for either case.
-      const v = await marzValidateBankAccount(rawNetwork, destValue);
-      if (v.providerDown) return res.status(500).json({ status: 'error', message: 'Could not verify this account right now. Please try again in a moment.' });
-      if (v.status !== 'success' || !v.data?.valid) {
-        return res.status(400).json({ status: 'error', message: marzUserMsg(v, 'Account could not be validated. Please check the account number and bank.') });
-      }
-      if (v.data?.account_name) verifiedHolder = String(v.data.account_name).trim() || holder;
-    }
+    // The Ethiopian bank is paid by hand by the admin (no gateway here), so there is no gateway check to run.
     // Saving/removing a payout destination here doesn't move any money by
     // itself -- see /withdraw/request for the actual money-moving path.
     // One payout wallet per member: saving EDITS it in place (any older extra rows are dropped), it never adds a second.
@@ -6977,16 +7195,6 @@ function isSafeExternalUrl(v) {
   try { const u = new URL(String(v)); return u.protocol === 'http:' || u.protocol === 'https:'; }
   catch (_) { return false; }
 }
-// Same XSS class as SETTINGS_URL_FIELDS above: supportEmail is rendered
-// into href="mailto:${esc(...)}" (openSupportSheet() and the Home Support
-// tile in user-src/original_module.js), and esc() does not touch the URI
-// scheme. A plain "looks like an email" check keeps a "javascript:..."
-// value from ever being savable here in the first place.
-const SETTINGS_EMAIL_FIELDS = ['supportEmail'];
-function isSafeEmail(v) {
-  if (!v) return true; // blank clears the field -- always allowed
-  return /^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+$/.test(String(v)) && String(v).length <= 120;
-}
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
@@ -6994,7 +7202,7 @@ app.post('/admin/settings/update', async (req, res) => {
     if ('strictRegionHosts' in updates || 'rotateEntry' in updates)
       return res.status(400).json({ status: 'error', message: 'Country address options have been retired.' });
     if (req.body.region && req.body.region !== DEFAULT_REGION_KEY)
-      return res.status(400).json({ status: 'error', message: 'Only Uganda settings are supported.' });
+      return res.status(400).json({ status: 'error', message: 'Only Ethiopia settings are supported.' });
     for (const [key, [min, max]] of Object.entries(SETTINGS_CRITICAL_RANGES)) {
       if (!(key in updates)) continue;
       const n = Number(updates[key]);
@@ -7009,10 +7217,7 @@ app.post('/admin/settings/update', async (req, res) => {
       if (key in updates && !isSafeExternalUrl(updates[key]))
         return res.status(400).json({ status: 'error', message: `${key} must be a valid http(s) link, or left blank.` });
     }
-    for (const key of SETTINGS_EMAIL_FIELDS) {
-      if (key in updates && !isSafeEmail(updates[key]))
-        return res.status(400).json({ status: 'error', message: `${key} must be a valid email address, or left blank.` });
-    }
+    delete updates.supportEmail;   // email support was removed; an old client cannot save it again
     if ('allowedOrigins' in updates) {
       const r = sanitizeAllowedOrigins(updates.allowedOrigins);
       if (r.error) return res.status(400).json({ status: 'error', message: r.error });
@@ -7464,7 +7669,7 @@ app.post('/admin/products/save', async (req, res) => {
   try {
     const list = Array.isArray(req.body.products) ? req.body.products : [];
     if (req.body.region && req.body.region !== DEFAULT_REGION_KEY)
-      return res.status(400).json({ status: 'error', message: 'Only Uganda products are supported.' });
+      return res.status(400).json({ status: 'error', message: 'Only Ethiopia products are supported.' });
     const sanitized = [];
     // Owner: "make sure all 2 asset name fields are editable" -- Key is no
     // longer locked once an asset exists, so a save can now be a RENAME
@@ -8356,6 +8561,67 @@ app.post('/admin/user/delete', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
   finally { _userBeingDeleted.delete(userId); }
 });
+// ── RESET DATABASE (owner only) ──
+// Owner: "put admin panel button to make vps to reset database so that database is cleaned".
+// Wipes the MEMBERS and everything that belongs to them (wallets, recharges, withdrawals, plans,
+// records, sessions, codes, counters) plus their sign-in accounts, and keeps the CONFIGURATION
+// (settings, assets, banners, About/Rules, payment numbers, admin accounts, messages, activity log).
+// Guarded four ways: owner session, the exact phrase, the owner's master key typed again, and a
+// second acknowledgement when money is still in flight. There is no undo -- take a MongoDB Atlas
+// backup first if there is anything worth keeping.
+const DB_RESET_WIPE = ['users', 'transactions', 'pendingDeposits', 'withdrawals', 'investments', 'bankAccounts',
+  'turntableSpins', 'promoCodes', 'promoRedemptions', 'securityEvents', 'messageReads', 'authAccounts', 'memberSessions', 'counters'];
+const DB_RESET_KEEP = ['settings', 'products', 'banners', 'content', 'payChannels', 'messages', 'adminUsers', 'adminSessions', 'adminPushTokens', 'adminAuditLog'];
+const DB_RESET_PHRASE = 'RESET DATABASE';
+let _dbResetting = false;
+async function dbResetPreview() {
+  const counts = {};
+  for (const c of DB_RESET_WIPE) counts[c] = await db.collection(c).count().catch(() => 0);
+  const gwDeps = await db.collection('pendingDeposits').where('status', 'in', ['initiating', 'pending']).get().catch(() => ({ docs: [] }));
+  const unfinishedDeposits = gwDeps.docs.filter(d => d.data().method !== 'manual' || d.data().pastedSms).length;
+  const reviewSnap = await db.collection('pendingDeposits').where('status', '==', 'review').count().catch(() => 0);
+  const wd = await db.collection('withdrawals').where('status', 'in', ['pending', 'processing', 'sending']).count().catch(() => 0);
+  let walletTotal = 0;
+  try { (await db.collection('users').get()).forEach(u => { walletTotal += Number(u.data().walletBalance) || 0; }); } catch (_) {}
+  return { counts, unfinishedDeposits: unfinishedDeposits + reviewSnap, unfinishedWithdrawals: wd, walletTotal };
+}
+app.post('/admin/database/reset-preview', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', phrase: DB_RESET_PHRASE, wipe: DB_RESET_WIPE, keep: DB_RESET_KEEP, ...(await dbResetPreview()) }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not count the data' }); }
+});
+async function wipeCollection(name) {
+  const snap = await db.collection(name).get();
+  const docs = snap.docs.slice();
+  for (let i = 0; i < docs.length; i += 200) await Promise.all(docs.slice(i, i + 200).map(d => d.ref.delete()));
+  return docs.length;
+}
+app.post('/admin/database/reset', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!ADMIN_KEY) return res.status(500).json({ status: 'error', message: 'Admin key not configured' });
+  const b = req.body || {};
+  if (b.confirm !== DB_RESET_PHRASE) return res.status(400).json({ status: 'error', message: `Type ${DB_RESET_PHRASE} exactly to confirm.` });
+  if (loginLocked('db-reset')) return res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in 15 minutes.' });
+  if (!safeEqual(b.key, ADMIN_KEY)) { recordLoginFail('db-reset'); return res.status(401).json({ status: 'error', message: 'That admin key is not correct.' }); }
+  clearLoginFails('db-reset');
+  if (_dbResetting) return res.status(409).json({ status: 'error', message: 'A reset is already running.' });
+  _dbResetting = true;
+  try {
+    const pre = await dbResetPreview();
+    if ((pre.unfinishedDeposits || pre.unfinishedWithdrawals) && b.ack !== true)
+      return res.status(409).json({ status: 'error', code: 'UNFINISHED', message: 'Some recharges or withdrawals are still unfinished. Tick the box to erase anyway.', ...pre });
+    const erased = {};
+    for (const c of DB_RESET_WIPE) erased[c] = await wipeCollection(c);
+    // Member sign-in accounts live in MongoDB (authAccounts, wiped above), so there is no separate login store to clean.
+    const loginsRemoved = erased.authAccounts || 0, loginError = '';
+    logAdminAction(req, 'database_reset', { erased, loginsRemoved, loginError });
+    console.warn('DATABASE RESET by owner:', JSON.stringify({ erased, loginsRemoved, loginError }));
+    res.json({ status: 'success', erased, loginsRemoved, loginError });
+  } catch (e) {
+    console.error('Database reset failed:', e.message);
+    res.status(500).json({ status: 'error', message: 'The reset stopped part-way: ' + String(e.message || e).slice(0, 160) + '. Run it again to finish.' });
+  } finally { _dbResetting = false; }
+});
 const _adminCreditDebounce = new Map();
 const _adminDebitDebounce = new Map();
 app.post('/admin/deposit', async (req, res) => {
@@ -8498,6 +8764,22 @@ app.post('/admin/deposits/list', async (req, res) => {
     // the cap even when one of the two source queries was truncated.
     const truncated = snap.docs.length >= 5000 || unresolvedSnap.docs.length >= 5000;
     res.json({ status: 'success', deposits: rows, counts, total: rows.length, processedByDay, processedAmount, truncated, regionKey: want || 'all' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Reject a recharge claim (a manual Bank / Wallet claim sitting in the Recharges tab). Owner only; a credited recharge cannot be rejected.
+app.post('/admin/deposit/reject', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const depositId = String(req.body.depositId || '');
+  if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
+  try {
+    const snap = await db.collection('pendingDeposits').doc(depositId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Recharge not found' });
+    const dep = snap.data();
+    if (depositFullyCredited(dep)) return res.status(400).json({ status: 'error', message: 'This recharge was already credited -- cannot reject it now.' });
+    const reason = String(req.body.reason || '').trim() || 'Rejected by admin';
+    await markDepositFailed(snap.ref, dep.userId, reason);
+    logAdminAction(req, 'deposit_rejected', { depositId, reason });
+    res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/deposit/force-credit', async (req, res) => {
@@ -8660,7 +8942,8 @@ app.get('/admin/stats', async (req, res) => {
       db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).limit(STATS_SCAN_LIMIT).get(),
       db.collection('withdrawals').where('status', '==', 'pending').limit(STATS_SCAN_LIMIT).get(),
     ]);
-    const pendingDepCount = pendDepSnap.docs.length;
+    // An unpaid Bank / Wallet order (no payment message yet) is not work for the admin, so it is not counted.
+    const pendingDepCount = pendDepSnap.docs.filter(d => { const x = d.data(); return !(x.method === 'manual' && x.status === 'pending' && !x.pastedSms); }).length;
     const pendingWitCount = pendWitSnap.docs.length;
     // In a one-country view the scalar fields stay backward-compatible. In
     // All countries they are null on purpose: UGX + KES is not money. The
@@ -8738,7 +9021,7 @@ app.get('/admin/pesajet/summary', async (req, res) => {
     const truncated = depSnap.size >= PESAJET_SUMMARY_SCAN || witSnap.size >= PESAJET_SUMMARY_SCAN;
     const zero = () => ({ collected: 0, collectedCount: 0, paidOut: 0, paidOutCount: 0,
                           pendingIn: 0, pendingInCount: 0, pendingOut: 0, pendingOutCount: 0 });
-    const summary = Object.assign({ regionKey: 'ug', currency: 'UGX' }, zero());
+    const summary = Object.assign({ regionKey: 'et', currency: 'ETB' }, zero());
     for (const d of depSnap.docs) {
       const row = d.data();
       const amt = finiteMoney(row.displayAmount != null ? row.displayAmount : row.amount);
@@ -10272,6 +10555,8 @@ connectMongo(MONGODB_URI)
     migratePayoutsToMidnightOnce().then(n => { if (n) console.log(`Moved ${n} running investments to the midnight payout schedule`); }).catch(e => console.error('Midnight schedule migration:', e.message)).then(() => backfillNextPayoutAt()).then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); armMidnightSweep(); });
     setInterval(autoApproveWithdrawalsTick, 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
+    setInterval(sweepManualOrders, 10 * 60 * 1000);
     setInterval(reconcileBlockedCommissions, 5 * 60 * 1000);
+    setInterval(sweepManualOrders, 10 * 60 * 1000);
   })
   .catch(e => { console.error('Mongo connection failed:', e.message); process.exit(1); });
