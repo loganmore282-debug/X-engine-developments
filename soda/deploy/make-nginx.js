@@ -225,14 +225,17 @@ ${hdr(ADMIN_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;', 'add_he
     # Old-style referral links (<origin>/refCode=<code>) are a real path.
     location ^~ /refCode= { rewrite ^ /index.html break; }
     location = / {
+        if ($soda_preview_bot) { rewrite ^ /${API}/public/link-preview-page last; }
         try_files $soda_bot_html /index.html =404;
 ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
     }
     location = /index.html {
+        if ($soda_preview_bot) { rewrite ^ /${API}/public/link-preview-page last; }
         try_files $soda_bot_html /index.html =404;
 ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
     }
     location = /share.html {
+        if ($soda_preview_bot) { rewrite ^ /${API}/public/link-preview-page last; }
         try_files $soda_bot_html /share.html =404;
 ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
     }
@@ -297,6 +300,11 @@ map $http_user_agent $soda_bad_ua {
 
 # Link-preview crawlers (WhatsApp, Telegram, ...) get an empty page, every real
 # browser gets the real one (see no-preview.html and soda/CLAUDE.md).
+# The same crawlers are sent to the server's link-preview page (title, text and the landscape picture set in Admin > Banners > Link preview).
+map $http_user_agent $soda_preview_bot {
+    default 0;
+    ~*(WhatsApp|facebookexternalhit|Facebot|TelegramBot|Twitterbot|Slackbot|LinkedInBot|Discordbot|SkypeUriPreview|redditbot|Pinterest|vkShare|Viber|line-poker) 1;
+}
 map $http_user_agent $soda_bot_html {
     default '';
     ~*(WhatsApp|facebookexternalhit|Facebot|TelegramBot|Twitterbot|Slackbot|LinkedInBot|Discordbot|SkypeUriPreview|redditbot|Pinterest|vkShare|Viber|line-poker) '/no-preview.html';
