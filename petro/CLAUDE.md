@@ -7556,3 +7556,5 @@ Owner (screenshot: tapping Support on Home said "Support email is not set up yet
 ## Follow-up 75 -- Pasting works in every text box (page guard no longer blocks the long-press menu inside fields)
 
 Owner (payment page, Step 2, and earlier the USDT hash box): *"here also I couldn't paste."* Cause: `guard-src.js` blocked the `contextmenu` event on the whole page. On Android a long-press in a field raises the "Paste / Select all" bubble through that same event, so the bubble never appeared. Now the event is blocked everywhere EXCEPT inside `<input>`, `<textarea>` and editable elements (selection, copy and drag outside fields stay blocked as before). Test: `test-paste-allowed.js` (4; fails on the previous build). App cache v253.
+
+(Follow-up 76, the two-option language switch, was reverted at the owner's request: it was meant for Soda only. Petro keeps the original language button and sheet. App cache v255.)
