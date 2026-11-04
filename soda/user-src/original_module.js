@@ -6107,7 +6107,7 @@ function mpShowPay(){
   const ph = isWallet
     ? 'Dear AMIR You have transferred ETB 5.00 to MASFIN FTINAFU (2510****3268) on 01/02/2026 13:07:25. Your transaction number is DA39J9GAMN. The service fee is ETB 0.87 and 15% VAT on the service fee is ETB 0.13. Your current E-Money Account balance is ETB 1300.22. To download your payment information please click this link: https://transactioninfo.ethiotelecom.et/receipt/DA39J9GAMN.'
     : 'https://mbreciept.cbe.com.et/v2-hfHCxFT8tBhc0zxe95aa\n\nhttps://apps.cbe.com.et:100/?id=FT25512S26V825101122';
-  const phHead = isWallet ? '' : t('Paste the confirmation message here, or enter the code (FT or v2-):') + '\n\n';
+  const phHead = isWallet ? '' : 'ማስረጃ ማገናኛውን እዚህ ለጥፉ፣ ወይም ኮዱን ያስገቡ (FT ወይም v2-):\n\n';
   el.innerHTML = '<div class="mpf-pay">' +
     '<div class="mpf-head">' + mpLogoHtml(ch, 'mpf-hlogo') + '<div class="mpf-clock"><span>Order Remaining</span><b id="mpM1"></b><b id="mpM2"></b><span>Min</span><b id="mpS1"></b><b id="mpS2"></b><span>Sec</span></div></div>' +
     '<div class="mpf-card">' +
@@ -6121,14 +6121,15 @@ function mpShowPay(){
         '<div class="mpf-k">Account Number</div>' +
         '<div class="mpf-v"><b data-no-i18n>' + esc(o.accountNumber) + '</b><button type="button" class="mpf-pill" onclick="mpCopy(\'number\')">copy</button></div>' +
       '</div>' +
-      '<div class="mpf-help"><p>After the transfer is complete → check the SMS. The code starts with: "v2-" or "FT"</p>' +
-        '<p>' + MP_ICON_DIAMOND + '<span>v2-hf = enter the 23-character code</span></p>' +
-        '<p>' + MP_ICON_DIAMOND + '<span>FT = enter the 12-character code</span></p>' +
-        '<p>' + MP_ICON_DIAMOND + '<span>Telebirr = 10 characters only</span></p></div>' +
+      // Owner (his screenshots): the instructions, the box's first line and the warning are always in Amharic, whatever language the app is in.
+      '<div class="mpf-help" data-no-i18n lang="am"><p>ግብይት ከተጠናቀቀ → ኤስኤምኤስ ይመልከቱ ኮድ ይጀምራል በ፡ "v2-" ወይም "FT"</p>' +
+        '<p>' + MP_ICON_DIAMOND + '<span>v2-hf = 23 አሃዝ ኮድ ያስገቡ</span></p>' +
+        '<p>' + MP_ICON_DIAMOND + '<span>FT = 12 አሃዝ ኮድ ያስገቡ</span></p>' +
+        '<p>' + MP_ICON_DIAMOND + '<span>ቴሌብር = 10 አሃዝ ብቻ ፣ ፊደል አይፈትሹ</span></p></div>' +
       '<div class="mpf-step2"><b>Step 2</b><span>Paste payment SMS or enter v2- or FT</span></div>' +
       '<textarea id="mpSms" class="mpf-ta" data-no-i18n rows="6" maxlength="2000" spellcheck="false" autocomplete="off" placeholder="' + esc(phHead + ph) + '"></textarea>' +
       '<button type="button" class="mpf-submit" id="mpSubmit" onclick="mpSubmit()">Submit</button>' +
-      '<div class="mpf-note">' + MP_ICON_WARN + '<span>Do not save the account number! It changes in real time. Otherwise the transfer will fail.</span></div>' +
+      '<div class="mpf-note" data-no-i18n lang="am">' + MP_ICON_WARN + '<span>የመለያ ቁጥር አታስቀምጡ! በእውነተኛ ሰዓት ይቀየራል። አለበለዚያ፡ ማስተላለፍ አይሳካም።</span></div>' +
     '</div></div>';
   document.body.classList.add('mp-open');
   mpTick();
