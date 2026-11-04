@@ -1355,8 +1355,9 @@ function paintLangButton(){
       const el = $(id);
       if (el) el.style.display = many ? '' : 'none';
     }
-    const lbl = $('langBtnLabel');
-    if (lbl) lbl.textContent = langMeta(LANG).native;
+    // The sign-in switch: every allowed language side by side, the current one highlighted; tapping one changes the language at once.
+    const seg = $('langBtn');
+    if (seg && many) seg.innerHTML = LANG_ALLOWED.map(code => `<button type="button" class="lang-seg-opt${code === LANG ? ' on' : ''}" onclick="setLang('${esc(code)}')">${esc(langMeta(code).native)}</button>`).join('');
     const row = $('langRowValue');
     if (row) row.textContent = langMeta(LANG).native;
   } catch(_){}
