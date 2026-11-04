@@ -1454,7 +1454,7 @@ function numGroup(n, cents){
 function fmtUGX(n){
   const v = Number(n)||0;
   const hasCents = Math.round(v*100)%100 !== 0;
-  return cur() + ' ' + numGroup(v, hasCents);
+  return cur() + numGroup(v, hasCents);
 }
 // Keep investment and payout amounts on the same cents-aware formatter.
 function fmtUGXCents(n){ return fmtUGX(n); }
@@ -6014,7 +6014,7 @@ window.submitDeposit = async function(){
 //   3. the payment page: Step 1 copy the account, Step 2 paste the payment SMS, a 30 minute clock.
 // "switch" goes back to page 2. Nothing is credited here: the claim goes to the admin Recharges tab.
 var _mp = { amount: 0, channels: [], order: null, stage: '', pushed: 0, timer: 0, ignorePop: false, busy: false, toastT: 0 };
-function mpMoney(n){ return cur() + ' ' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function mpMoney(n){ return cur() + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 var MP_ICON_WARN = '<svg class="mpf-warn-ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4L12 3.5Z"/><path d="M12 10v4.6M12 17.2v.2"/></svg>';
 var MP_ICON_DIAMOND = '<svg class="mpf-dia" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 22 12 12 22 2 12 12 2Z" fill="#2f8ff5"/><path d="M12 2 22 12H2L12 2Z" fill="#7cc0ff"/></svg>';
 function mpRoot(){

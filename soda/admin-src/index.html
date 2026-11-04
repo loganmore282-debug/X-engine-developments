@@ -468,7 +468,7 @@ function btnBusyHtml(text){ return '<span class="verify-spin" style="margin-righ
 function ugx(n, regionKey){
   const v = Number(n)||0;
   const hasCents = Math.round(v*100)%100 !== 0;
-  return curOf(regionKey) + ' ' + v.toLocaleString('en-UG', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
+  return curOf(regionKey) + v.toLocaleString('en-UG', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
 }
 // Mirrors server.js's own normalizeProviderValue() -- 'automatic' is a
 // legacy literal a value could still be if this database predates the
@@ -1602,9 +1602,9 @@ function chainPdfBlob(r){
   const colW = (W - 2 * M) / 4;
   [['Phone', u.phone || '-'], ['Referral code', u.referralCode || 'not set'], ['Status', String(u.status || 'active')], ['Joined', pdfDay(u.createdAt)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 30;
-  [['Referred by', u.referredByPhone || 'nobody (this is a root account)'], ['Wallet balance', 'Br ' + pdfMoney(u.walletBalance)], ['Total deposited', 'Br ' + pdfMoney(u.totalDeposited)], ['Total invested', 'Br ' + pdfMoney(u.totalInvested)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
+  [['Referred by', u.referredByPhone || 'nobody (this is a root account)'], ['Wallet balance', 'Br' + pdfMoney(u.walletBalance)], ['Total deposited', 'Br' + pdfMoney(u.totalDeposited)], ['Total invested', 'Br' + pdfMoney(u.totalInvested)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 30;
-  [['Total withdrawn', 'Br ' + pdfMoney(u.totalWithdrawn)], ['Total earned (all sources)', 'Br ' + pdfMoney(u.totalEarned)], ['Team members (all levels)', pdfMoney(downline.length) + (r.downlineTruncated ? '+' : '')], ["Team's recharges (L1-L3)", 'Br ' + pdfMoney(r.teamDeposits)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
+  [['Total withdrawn', 'Br' + pdfMoney(u.totalWithdrawn)], ['Total earned (all sources)', 'Br' + pdfMoney(u.totalEarned)], ['Team members (all levels)', pdfMoney(downline.length) + (r.downlineTruncated ? '+' : '')], ["Team's recharges (L1-L3)", 'Br' + pdfMoney(r.teamDeposits)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 34;
   if (r.cycleDetected || r.downlineCycleDetected) { pdf.text(M, y, 'Warning: a cycle was found in the referral data; the walk stopped early.', 9, true, 'l', BAD); y += 16; }
   // 2. Team by level

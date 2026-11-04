@@ -63,7 +63,7 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  near(r1.y,121,2.5,'first payment row top');near(r1.h,63.5,1,'payment row height');near(r2.y-r1.y,63.5,1,'row pitch');
  near((await box('.mpf-logo')).w,37.7,0.6,'logo circle size');
  near((await box('.mpf-remind')).y,259,3,'reminder box top');
- ok((await page.textContent('.mpf-oval')).trim()==='Br 550.00','amount shown as Br with two decimals');
+ ok((await page.textContent('.mpf-oval')).trim()==='Br550.00','amount shown as Br with two decimals');
  // 4. payment page
  await page.click('.mpf-row >> nth=0');await page.waitForSelector('.mpf-pay',{timeout:5000});
  ok(posts.find(p=>p[0]==='order'&&p[1].amount===550&&p[1].channelId==='c1'),'order requested for the chosen channel');
