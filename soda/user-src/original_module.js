@@ -1477,11 +1477,11 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&am
 function vMoney(n){
   const v = Number(n) || 0;
   const hasCents = Math.round(v * 100) % 100 !== 0;
-  return cur() + numGroup(v, hasCents);
+  return cur() + ' ' + numGroup(v, hasCents);
 }
 // Long money figures (nine digits and more) step the font down in two sizes so they stay on one line inside their box.
 function vFit(text, a, b){ var n = String(text).length; return n > b ? 'v-fit2' : n > a ? 'v-fit1' : ''; }
-function vMoney2(n){ return cur() + numGroup(n, true); }
+function vMoney2(n){ return cur() + ' ' + numGroup(n, true); }
 // Icons traced from the owner's screenshots live in a square box 288 units wide drawn 1:1 with a 22 px picture (13.1 units = 1 px); the stroke sits on the <g> so a bigger/smaller box keeps the same proportions.
 function vSvgT(cx, cy, sw, body, size){ size = size || 288; var h = size / 2; return '<svg viewBox="' + (cx - h) + ' ' + (cy - h) + ' ' + size + ' ' + size + '" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g stroke-width="' + sw + '">' + body + '</g></svg>'; }
 function vSvg(body, extra){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + (extra || '') + '>' + body + '</svg>'; }
@@ -5563,7 +5563,7 @@ function openDepositFormSheet(){
       <ol>
         <li>Recharge time: 7*24 hours.</li>
         <li>If the deposit is not received, please contact Support.</li>
-        <li>Minimum deposit amount: ${esc(cur())}${vGroup(min)}</li>
+        <li>Minimum deposit amount: ${esc(cur())} ${vGroup(min)}</li>
         <li>Please do not save old account recharge.</li>
       </ol>
     </div>
