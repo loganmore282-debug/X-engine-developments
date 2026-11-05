@@ -12,7 +12,8 @@ ok(!/'adminSessions'|'memberSessions'/.test(srv.slice(srv.indexOf('const ADMIN_L
 ok((dbsrc.match(/bumpWrite\(this\._col\)/g) || []).length >= 6 && /module\.exports = \{[^}]*writeVersions/.test(dbsrc), 'every write path in db.js raises its collection counter');
 ok(/req\.path === '\/live' \? adminLiveLimiter/.test(srv), 'the one-second check has its own rate allowance');
 const s2 = fs.readFileSync(path.join(__dirname, 'admin-src/index.html'), 'utf8');
-ok(!/@keyframes/.test(s2) && !/animation:/.test(s2) && /function spinnerHtml\(\)\{ return '<div class="ld-text">Loading\.\.\.<\/div>'; \}/.test(s2), 'no animation anywhere in the panel; the loader is the words Loading...');
+ok(!/cm-spinner|cmSpin/.test(s2) && /function spinnerHtml\(\)\{ return '<div class="ld-text">Loading\.\.\.<\/div>'; \}/.test(s2), 'the ring loader is gone; the loader is the words Loading...');
+ok(/function btnBusyHtml\(text\)\{ return '<span class="verify-spin"[^\n]*\+esc\(text\); \}/.test(s2), 'busy buttons are unchanged: their small turning icon and their own word (Removing..., Crediting...)');
 // ── browser ──
 let live = { boot: 'b1', v: { pendingDeposits: 1, withdrawals: 1, users: 1 } }, depCalls = 0, liveCalls = 0, holdDeps = false;
 const DEPS = [{ id: 'd1', status: 'pending', amount: 5000, method: 'manual', userId: 'u1', phone: '+2348012345678', createdAt: '2026-11-05T10:00:00Z' }];

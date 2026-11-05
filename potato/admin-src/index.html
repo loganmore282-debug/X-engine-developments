@@ -165,6 +165,9 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   /* Owner: every loader in the panel is the plain words "Loading..." -- no spinner, no animation. */
   .ld-text{padding:40px 0;text-align:center;font-size:14px;font-weight:600;color:var(--sub);}
   td .ld-text{padding:14px 0;}
+  /* The busy buttons keep their small turning icon and their own word (Removing..., Crediting...): only the ring loaders became "Loading...". */
+  .verify-spin{display:inline-flex;animation:verifySpin .9s linear infinite;}
+  @keyframes verifySpin{to{transform:rotate(360deg);}}
 
   .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
   .prod{border:1.5px solid var(--line);border-radius:14px;overflow:hidden;background:var(--card)}
@@ -401,7 +404,7 @@ async function copyText(str, btn){
   } catch (e) { toast('Could not copy','err'); }
 }
 function spinnerHtml(){ return '<div class="ld-text">Loading...</div>'; }
-function btnBusyHtml(){ return 'Loading...'; }
+function btnBusyHtml(text){ return '<span class="verify-spin" style="margin-right:7px;vertical-align:-3px"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>'+esc(text); }
 // Every money amount elsewhere is always a whole shilling -- only a
 // treasure-code reward can ever carry cents (Round 137's randomized rewards),
 // so this only shows decimals on a value that actually has them, and
