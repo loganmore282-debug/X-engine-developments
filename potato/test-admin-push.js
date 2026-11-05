@@ -106,6 +106,39 @@ async function serverTests() {
   await t.run();
   eq(t.sent.flat().map(m => m.token), ['live'], 'a rotated (retired) token gets no alert, so no duplicates');
   await sleep(10); eq([...t.db.store.get('adminPushTokens').keys()].sort(), ['live', 'retiredNow'], 'a retired token past its grace is purged');
+  // the server cannot send yet: the device is still saved, and the page is told why
+  {
+    const handlers = {}; const app = { post: (p, h) => { handlers[p] = h; } }; const db2 = fakeDb();
+    new Function('app', 'verifyAdmin', 'verifyOwner', 'db', 'FieldValue', 'crypto', 'pushAdminReady', 'pushAdminWhy', regSrc)(app, () => true, () => true, db2, FieldValue, crypto, false, 'no key');
+    const res = { code: 200, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; } };
+    await handlers['/admin/push/register']({ body: { token: 'devZ' }, adminUser: { username: 'boss' } }, res);
+    eq([res.body.status, res.body.pushReady, res.body.pushWhy], ['success', false, 'no key'], 'register says the server cannot send yet');
+    ok(db2.store.get('adminPushTokens').has('devZ'), 'the device is saved anyway');
+  }
+  // status + test alert routes
+  {
+    const tSrc = slice("app.get('/admin/push/status'", "app.post('/admin/push/register'");
+    async function routes(ready, sendImpl, stored) {
+      const handlers = {}; const app = { get: (p, h) => { handlers['GET ' + p] = h; }, post: (p, h) => { handlers[p] = h; } };
+      const db3 = fakeDb(); for (const k of stored || []) await db3.collection('adminPushTokens').doc(k).set({ role: 'owner' });
+      const sent = []; const adm = { messaging: () => ({ send: async m => { sent.push(m); if (sendImpl) await sendImpl(m); return 'id'; } }) };
+      const pushErrorText = e => 'WHY:' + (e.code || e.message);
+      new Function('app', 'verifyAdmin', 'db', 'admin', 'ADMIN_PUSH_HEADERS', 'pushAdminReady', 'pushAdminWhy', 'pushErrorText', 'console', tSrc)(app, () => true, db3, adm, { Urgency: 'high' }, ready, 'no key', pushErrorText, { warn() {} });
+      const call = async (k, body) => { const res = { code: 200, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; } }; await handlers[k]({ body: body || {} }, res); return res; };
+      return { call, sent };
+    }
+    let R = await routes(false); eq((await R.call('GET /admin/push/status')).body, { status: 'success', ready: false, why: 'no key' });
+    eq((await R.call('/admin/push/test', { token: 'devA' })).body, { status: 'error', message: 'no key' }, 'test alert explains a server without a key'); eq(R.sent.length, 0);
+    R = await routes(true, null, ['devA']); eq((await R.call('/admin/push/test', { token: 'devA' })).body, { status: 'success' });
+    eq([R.sent[0].token, R.sent[0].data.type, R.sent[0].data.title], ['devA', 'test', 'Test alert'], 'one test alert to this device only');
+    R = await routes(true, null, []); eq((await R.call('/admin/push/test', { token: 'devQ' })).body.status, 'error', 'an unregistered device is not sent to'); eq(R.sent.length, 0);
+    R = await routes(true, async () => { const e = new Error('SenderId mismatch'); e.code = 'messaging/mismatched-credential'; throw e; }, ['devA']);
+    eq((await R.call('/admin/push/test', { token: 'devA' })).body, { status: 'error', message: 'WHY:messaging/mismatched-credential' }, 'a Google refusal is reported, not hidden');
+    const errSrc = slice('function pushErrorText(err)', 'async function sendAdminPush(');
+    const pet = new Function('PUSH_PROJECT', errSrc + '\nreturn pushErrorText;')('chnpetrol');
+    ok(/different Firebase project/.test(pet({ code: 'messaging/mismatched-credential' })), 'wrong project explained');
+    ok(/off, then on again/.test(pet({ code: 'messaging/registration-token-not-registered' })), 'expired device explained');
+  }
   // unregister: rotation retires, switching off deletes
   const unregSrc = slice("app.post('/admin/push/unregister'", "app.get('/admin/settings'");
   async function unreg(body, seedTok) {
@@ -248,7 +281,7 @@ async function pageTests() {
       w.fetch = async (u, o = {}) => {
         const path = String(u).replace(/^https?:\/\/[^/]+/, '').replace(/^\/k7x2(?=\/)/, ''); const body = o.body ? JSON.parse(o.body) : null; S.calls.push([path, body]);
         const base = { status: 'success', token: 't', username: 'owner', role, settings: {}, users: [], products: [], withdrawals: [], deposits: [], transactions: [], stats: {}, pendingWithdrawals: 0 };
-        return { status: 200, ok: true, json: async () => (path === '/admin/push/register' ? S.registerReply : base) };
+        return { status: 200, ok: true, json: async () => (path === '/admin/push/register' ? S.registerReply : path === '/admin/push/test' && S.testReply ? S.testReply : path === '/admin/push/status' && S.statusReply ? S.statusReply : base) };
       };
       w.matchMedia = () => ({ matches: false, addListener() {}, removeListener() {} });
       w.Notification = { get permission() { return S.perm; }, requestPermission: async () => { S.asked = true; return S.perm === 'denied' ? 'denied' : (S.perm = 'granted'); } };
@@ -274,7 +307,21 @@ async function pageTests() {
   eq(P.pathCalls('/admin/push/register').length, 1); eq(P.pathCalls('/admin/push/register')[0][1], { token: 'tok1' });
   eq([P.w.localStorage.getItem('snow_admin_push_token'), P.w.localStorage.getItem('potato_admin_push_ver'), P.w.localStorage.getItem('potato_admin_push_key_version')], ['tok1', '2', 'v2']);
   ok(/Notify: on/.test(P.w.document.getElementById('pushBtn').textContent), 'button shows on');
+  eq(P.pathCalls('/admin/push/test').length, 1, 'a test alert is sent to this device'); eq(P.pathCalls('/admin/push/test')[0][1], { token: 'tok1' });
+  ok(/test alert was sent/.test(P.toast()), 'owner told a test alert was sent');
   eq(P.errors, [], 'no page errors'); P.w.close();
+  // the server has no push key: said plainly, and no test alert is attempted
+  P = await page(); P.registerReply = { status: 'success', quickApprove: true, pushReady: false, pushWhy: 'FIREBASE_SERVICE_ACCOUNT is not set' }; await P.login();
+  P.w.document.getElementById('pushBtn').click(); await sleep(250);
+  ok(/cannot send alerts yet/.test(P.toast()) && /FIREBASE_SERVICE_ACCOUNT/.test(P.toast()), 'a server with no push key is reported: ' + P.toast());
+  eq(P.pathCalls('/admin/push/test').length, 0); P.w.close();
+  // the test alert is refused by Google: the reason is shown
+  P = await page(); P.testReply = { status: 'error', message: 'different Firebase project' }; await P.login();
+  P.w.document.getElementById('pushBtn').click(); await sleep(250);
+  ok(/test alert failed: different Firebase project/.test(P.toast()), 'a failed test alert is reported: ' + P.toast()); P.w.close();
+  // Notify already on, server cannot send: told when the panel opens
+  P = await page({ permission: 'granted', stored: { snow_admin_push_token: 'tok1', potato_admin_push_ver: '2', potato_admin_push_key_version: 'v2' } }); P.statusReply = { status: 'success', ready: false, why: 'no push key on the server' }; await P.login(); await sleep(150);
+  ok(/alerts cannot be sent/.test(P.toast()) && /no push key/.test(P.toast()), 'opening the panel reports a server that cannot send: ' + P.toast()); P.w.close();
   // the service worker never becomes ready: Notify must not look dead
   P = await page({ swReady: new Promise(() => {}), fastTimers: true }); await P.login();
   P.w.document.getElementById('pushBtn').click(); await sleep(60);
@@ -284,7 +331,7 @@ async function pageTests() {
   ok(!P.w.document.getElementById('pushBtn').disabled && /^Notify$/.test(P.w.document.getElementById('pushBtn').textContent), 'button usable again'); eq(P.pathCalls('/admin/push/register').length, 0); P.w.close();
   // staff: plain message
   P = await page({ role: 'staff' }); await P.login(); P.w.document.getElementById('pushBtn').click(); await sleep(250);
-  ok(/Push notifications enabled/.test(P.toast()) && !/Approve/.test(P.toast()), 'staff are not promised a button: ' + P.toast()); P.w.close();
+  ok(/Notifications on\. A test alert was sent/.test(P.toast()) && !/Approve/.test(P.toast()), 'staff are not promised a button: ' + P.toast()); P.w.close();
   // blocked
   P = await page({ permission: 'denied' }); await P.login(); P.w.document.getElementById('pushBtn').click(); await sleep(150);
   ok(/blocked/.test(P.toast()), 'blocked notifications are explained: ' + P.toast()); eq(P.pathCalls('/admin/push/register').length, 0); ok(!P.asked, 'no pointless permission request'); P.w.close();

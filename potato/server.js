@@ -404,14 +404,23 @@ app.use((req, _res, next) => { try { stripMongoOperators(req.body); } catch (_) 
 // until Web Push replaces them, and only when a service account is supplied --
 // the server starts and members sign in with no Firebase at all.
 let pushAdminReady = false;
+// Why admin alerts cannot go out, in plain words -- shown in the admin panel when
+// Notify is switched on, so "Notify: on" never hides a server that sends nothing.
+let pushAdminWhy = 'The server has no push key: FIREBASE_SERVICE_ACCOUNT is not set in the secrets file. On the VPS run: bash /srv/potato-src/potato/deploy/copy-secret.sh FIREBASE_SERVICE_ACCOUNT then pm2 restart potato-server';
+// The Firebase project the admin panel gets its device tokens from. The push
+// key must belong to the SAME project, or every alert is refused.
+const PUSH_PROJECT = 'chnpetrol';
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   try {
     const { sa: pushSa, fatal: pushFatal } = require('./service-account').loadServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT);
     if (pushFatal) throw new Error(pushFatal);
+    if (pushSa.project_id !== PUSH_PROJECT)
+      throw new Error('the push key is for the Firebase project "' + pushSa.project_id + '" but the admin panel uses "' + PUSH_PROJECT + '". Copy the key from the ' + PUSH_PROJECT + ' project instead.');
     admin.initializeApp({ credential: admin.credential.cert(pushSa) });
-    pushAdminReady = true;
-  } catch (e) { console.warn('Admin push (FCM) disabled:', e.message); }
-}
+    pushAdminReady = true; pushAdminWhy = '';
+    console.log('Admin push alerts: on (Firebase project ' + pushSa.project_id + ')');
+  } catch (e) { pushAdminWhy = 'Admin alerts are off: ' + e.message; console.warn('Admin push (FCM) disabled:', e.message); }
+} else console.warn('Admin push alerts: off -- FIREBASE_SERVICE_ACCOUNT is not set');
 
 // ── MONGODB ──
 const { connectMongo, db, FieldValue, pingDb, writeVersions } = require('./db');
@@ -1698,6 +1707,19 @@ const ADMIN_PUSH_HEADERS = { Urgency: 'high', TTL: '7200' };
 // push token rotated keeps working (the secret is tied to the retired token).
 const PUSH_RETIRED_GRACE_MS = 48 * 60 * 60 * 1000;
 function pushRetiredExpired(t) { return !!t.retiredAt && Date.now() - tsMillis(t.retiredAt) > PUSH_RETIRED_GRACE_MS; }
+// A Firebase sending error in words the owner can act on.
+function pushErrorText(err) {
+  const code = String((err && err.code) || ''), msg = String((err && err.message) || '');
+  if (code === 'messaging/mismatched-credential' || /SenderId mismatch/i.test(msg))
+    return 'The push key on the server belongs to a different Firebase project than the admin panel (' + PUSH_PROJECT + '). Copy the key from the ' + PUSH_PROJECT + ' project.';
+  if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-registration-token')
+    return 'This device\'s registration has expired. Switch Notify off, then on again.';
+  if (code === 'messaging/third-party-auth-error')
+    return 'Google refused the alert for this browser (web push key problem). Switch Notify off, then on again.';
+  if (code === 'app/invalid-credential' || /invalid_grant|invalid JWT|Invalid JWT/i.test(msg))
+    return 'Google rejected the push key on the server (it was deleted or is wrong). Make a new key in the ' + PUSH_PROJECT + ' Firebase project and set FIREBASE_SERVICE_ACCOUNT again.';
+  return (code ? code + ': ' : '') + (msg || 'unknown error');
+}
 async function sendAdminPush(title, body, data = {}, opts = {}) {
   if (typeof pushAdminReady !== 'undefined' && !pushAdminReady) return; // admin push needs its own setup (see the FIREBASE note near the top)
   try {
@@ -1730,6 +1752,7 @@ async function sendAdminPush(title, body, data = {}, opts = {}) {
         const code = r.success ? null : (r.error && r.error.code);
         if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-registration-token')
           stale.push(chunk[j].token);
+        else if (code) console.warn('sendAdminPush: a device refused the alert:', pushErrorText(r.error));
       });
     }
     if (stale.length) await Promise.all(stale.map(t => db.collection('adminPushTokens').doc(t).delete().catch(() => {})));
@@ -6868,6 +6891,28 @@ app.get('/admin/audit-log', async (req, res) => {
     res.json({ status: 'success', log: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Can this server send alerts at all? Asked by the panel each time it opens on
+// a device that has Notify on.
+app.get('/admin/push/status', (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  res.json({ status: 'success', ready: pushAdminReady, why: pushAdminWhy });
+});
+// Sends one test alert to THIS device only, and says exactly why if it fails.
+app.post('/admin/push/test', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!pushAdminReady) return res.json({ status: 'error', message: pushAdminWhy });
+  const token = String(req.body.token || '').trim();
+  if (!token || token.length > 4096) return res.status(400).json({ status: 'error', message: 'Missing token' });
+  try {
+    const rec = await db.collection('adminPushTokens').doc(token).get();
+    if (!rec.exists) return res.json({ status: 'error', message: 'This device is not registered. Switch Notify off, then on again.' });
+    await admin.messaging().send({ token, data: { type: 'test', title: 'Test alert', body: 'Notifications are working on this device.' }, webpush: { headers: ADMIN_PUSH_HEADERS } });
+    res.json({ status: 'success' });
+  } catch (e) {
+    console.warn('Admin test alert failed:', e.code || '', e.message);
+    res.json({ status: 'error', message: pushErrorText(e) });
+  }
+});
 app.post('/admin/push/register', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const token = String(req.body.token || '').trim();
@@ -6890,6 +6935,9 @@ app.post('/admin/push/register', async (req, res) => {
     };
     if (owner) fields.quickApproveSecret = was.quickApproveSecret || crypto.randomUUID();
     await ref.set(fields);
+    // The device is saved either way (alerts start the moment the key is set),
+    // but the panel is told plainly when the server cannot send anything yet.
+    if (typeof pushAdminReady !== 'undefined' && !pushAdminReady) return res.json({ status: 'success', quickApprove: owner, pushReady: false, pushWhy: pushAdminWhy });
     res.json({ status: 'success', quickApprove: owner });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not register for notifications' }); }
 });

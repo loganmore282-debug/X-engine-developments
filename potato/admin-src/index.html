@@ -974,7 +974,13 @@ async function enablePush(){
     } catch(_){}
     setPushUIState(true);
     enabled = true;
-    toast(r.quickApprove ? 'Notifications on. New withdrawals show an Approve button.' : 'Push notifications enabled', 'ok');
+    // This device is saved, but the server may have no push key yet: say so
+    // plainly instead of claiming alerts will arrive.
+    if (r.pushReady === false) return toast('This device is saved, but the server cannot send alerts yet. ' + (r.pushWhy || ''), 'err');
+    // One real test alert, so it is clear at once that alerts reach this phone.
+    const t = await api('/admin/push/test', { token }).catch(e => ({ status: 'error', message: (e && e.message) || 'no answer' }));
+    if (t && t.status === 'error') return toast('Notify is on, but the test alert failed: ' + (t.message || 'unknown error'), 'err');
+    toast(r.quickApprove ? 'Notifications on. A test alert was sent. New withdrawals show an Approve button.' : 'Notifications on. A test alert was sent.', 'ok');
   } catch(e) {
     const detail = e && e.message ? e.message : 'Unknown browser error';
     toast('Could not enable notifications: ' + detail, 'err');
@@ -1004,6 +1010,10 @@ async function enablePush(){
 async function resyncPushToken(){
   let prevToken = ''; try { prevToken = localStorage.getItem('snow_admin_push_token') || ''; } catch(_){}
   if (!prevToken) return; // push was never enabled on this device -- nothing to resync
+  // Notify is on here: make sure the server can actually send, and say why not.
+  api('/admin/push/status', null, 'GET').then(st => {
+    if (st && st.status === 'success' && st.ready === false) toast('Notify is on, but alerts cannot be sent. ' + (st.why || ''), 'err');
+  }).catch(()=>{});
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   const messaging = firebaseMessagingReady();
   if (!messaging) return;
@@ -1040,6 +1050,9 @@ function adminPushRefresh(){ try { refreshBadges().catch(()=>{}); liveTick(); } 
   const d = payload.data || {}, n = payload.notification || {};
   const title = d.title || n.title || '';
   toast((title ? title + ': ' : '') + (d.body || n.body || 'New activity'), 'ok');
+  // A test alert is also shown as a real phone notification while the panel
+  // is open, so it is plain that alerts reach this device.
+  if (d.type === 'test' && navigator.serviceWorker) navigator.serviceWorker.ready.then(reg => reg.showNotification(title || 'Test alert', { body: d.body || '', icon: 'icon-192.png', tag: 'push-test' })).catch(()=>{});
   adminPushRefresh();
 }); })();
 // What the service worker tells an open panel after a notification is tapped
