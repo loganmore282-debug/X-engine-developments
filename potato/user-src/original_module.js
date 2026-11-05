@@ -3500,6 +3500,7 @@ window.openBalanceRecordSheet = function(tab){
 window.openMessagesSheet = async function(){
   const hadCache = Array.isArray(STATE.messages);
   openSheet('Messages', '<div id="msgBody"></div>');
+  $('sheetBg').classList.add('v-rec-page');
   if (hadCache) renderMessagesList();
   else $('msgBody').innerHTML = '<div class="list-loading">' + NAV_LOADER + '</div>';
   const r = await api('/messages');
@@ -3508,18 +3509,32 @@ window.openMessagesSheet = async function(){
   if (_openSheetTitle === 'Messages') renderMessagesList();
   updateMessageBadge();
 };
+// Laid out like the Balance Detail records: one striped card per date, the
+// date above it, and every message shown in full inside its card -- opening
+// Messages is all it takes, there is no second tap on each message.
 function renderMessagesList(){
   const box = $('msgBody');
   if (!box) return;
   const list = STATE.messages || [];
-  if (!list.length) { box.innerHTML = _messagesLoadFailed ? loadFailHtml('messages') : '<div class="pt-emp"><span>\ud83d\udced</span><b>No messages</b></div>'; return; }
-  box.innerHTML = '<div class="reveal-in">' + list.map((m, i) => `
-    <button class="mg-mrow${m.read ? ' read' : ''}" onclick="openMessageDetail(${i})">
-      <span class="av"></span>
-      <span class="t">${esc(m.title || '')}</span>
-      <span class="d">${esc(m.date || '')}<br>${esc(m.time || '')}</span>
-      ${m.read ? '' : '<i class="dot"></i>'}
-    </button>`).join('') + '</div>';
+  if (!list.length) { box.innerHTML = _messagesLoadFailed ? loadFailHtml('messages') : '<div class="pt-norec">No messages</div>'; return; }
+  const groups = []; const idx = {};
+  list.forEach(m => { const k = statementDayKey(m); if (!(k in idx)) { idx[k] = groups.length; groups.push({ k, rows: [] }); } groups[idx[k]].rows.push(m); });
+  box.innerHTML = groups.map(g => `
+    <div class="pt-day"><i></i><b>${esc(g.k)}</b><span>${g.rows.length} ${g.rows.length === 1 ? 'message' : 'messages'}</span></div>
+    <article class="pt-rec"><div class="pt-rec-in">${g.rows.map(m => `<div class="pt-msg${m.read ? '' : ' new'}">
+      <div class="h"><b>${esc(m.title || '')}</b><small>${esc(statementClock(m))}</small></div>
+      ${m.body ? `<p>${esc(m.body)}</p>` : ''}
+      ${m.hasImage ? `<div class="im"><img src="${esc(API_BASE + '/public/message-image/' + encodeURIComponent(m.id))}" alt="" loading="lazy" onerror="this.parentNode.style.display='none'"></div>` : ''}
+    </div>`).join('')}</div></article>`).join('');
+  markMessagesShownRead(list);
+}
+// Everything on the screen has been seen: mark the unread ones read in one call.
+function markMessagesShownRead(list){
+  const ids = list.filter(m => !m.read && m.id).map(m => m.id);
+  if (!ids.length) return;
+  list.forEach(m => { m.read = true; });
+  updateMessageBadge();
+  post('/messages/read', { messageIds: ids.slice(0, 100) }).catch(() => {});
 }
 window.openMessageDetail = async function(index){
   const m = (STATE.messages || [])[index];

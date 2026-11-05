@@ -6565,13 +6565,16 @@ app.get('/public/message-image/:id', async (req, res) => {
 app.post('/messages/read', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const messageId = String(req.body.messageId || '').slice(0, 120);
-  if (!messageId) return res.status(400).json({ status: 'error', message: 'messageId required' });
+  // One id (`messageId`) or the whole screen at once (`messageIds`, up to 100:
+  // the Messages page shows every message in full, so opening it reads them all).
+  const ids = [...new Set((Array.isArray(req.body.messageIds) ? req.body.messageIds : [req.body.messageId])
+    .map(v => String(v || '').slice(0, 120)).filter(Boolean))].slice(0, 100);
+  if (!ids.length) return res.status(400).json({ status: 'error', message: 'messageId required' });
   try {
     // Deterministic doc id -> marking the same message read twice is a
     // harmless idempotent overwrite, never a duplicate row.
-    await db.collection('messageReads').doc(uid + '_' + messageId)
-      .set({ userId: uid, messageId, readAt: Date.now() }, { merge: true });
+    await Promise.all(ids.map(messageId => db.collection('messageReads').doc(uid + '_' + messageId)
+      .set({ userId: uid, messageId, readAt: Date.now() }, { merge: true })));
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not update this message' }); }
 });

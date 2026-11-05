@@ -2199,6 +2199,15 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .pt-rec .a.in{color:#25b440;}.pt-rec .a.out{color:#d0605f;}
 .pt-norec{margin:40px 0;text-align:center;font:400 12.5px/20px Roboto,sans-serif;color:#8795a8;}
 /* Messages */
+.pt-msg{position:relative;padding:12px 14.4px 13px;}
+.pt-msg+.pt-msg::before{content:'';position:absolute;left:14.4px;right:14.4px;top:0;height:1px;background:#e3e3e3;}
+.pt-msg .h{display:flex;align-items:baseline;gap:10px;}
+.pt-msg .h b{flex:1;min-width:0;font:700 13.5px/18px Roboto,sans-serif;color:#b03833;word-break:break-word;}
+.pt-msg .h small{flex:0 0 auto;font:400 11px/15px Roboto,sans-serif;color:#8e96a0;}
+.pt-msg.new .h b::after{content:'';display:inline-block;width:7px;height:7px;margin-left:6px;border-radius:50%;background:#e5231d;vertical-align:2px;}
+.pt-msg p{margin:6px 0 0;font:400 12.5px/1.55 Roboto,sans-serif;color:#4a4f57;white-space:pre-line;word-break:break-word;}
+.pt-msg .im{margin-top:9px;border-radius:10px;overflow:hidden;background:#f6f6f6;}
+.pt-msg .im img{display:block;width:100%;height:auto;max-height:420px;object-fit:contain;}
 .pt-emp{margin:0 14px;height:156px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:12px;background:#f4f6fd;box-shadow:0 8px 18px -12px rgba(70,80,140,.25);}
 .pt-emp span{font-size:22px;line-height:28px;}
 .pt-emp b{margin-top:6px;font:700 14px/20px Roboto,sans-serif;color:#b0332f;}
