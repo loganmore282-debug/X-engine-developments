@@ -10218,6 +10218,115 @@ async function migratePayoutsToMidnightOnce() {
   await marker.set({ at: new Date(), moved: n });
   return n;
 }
+// ── STUCK RECHARGES: ask the payment provider what really happened ──
+// Owner: recharges sat on "Needs Review" and the Sync button never cleared them. Two kinds of row were invisible to every sweep: rows parked as
+// 'review' (the sweeps only read pending/initiating), and LworxPay / ObPay rows whose start reply was lost (no <provider>Ref was ever saved, so the
+// sweep had nothing to ask with). Those gateways are asked by OUR reference (the deposit id), which always exists, so every one of these can be read.
+// Settling goes through the same locked paths as a webhook (gatewayApply -> creditDeposit / markDepositFailed), so a late webhook, the member's poll
+// and this can never credit twice; a row already credited is never touched. 'failed' is only concluded when the provider says so, or answers "no such
+// payment" (HTTP 404) for a row that is parked or older than 30 minutes (the payment prompt never existed, so nothing was taken). A failed row can still
+// be Force-credited if money did land.
+const STUCK_SYNC_COOLDOWN_MS = 5 * 60 * 1000, STUCK_SYNC_MAX_AGE_MS = 7 * 24 * 3600 * 1000, STUCK_NO_RECORD_AFTER_MS = 30 * 60 * 1000;
+const STUCK_PROVIDER_NAMES = { pesajet: 'PesaJet', tavupay: 'TavuPay', lworxpay: 'LworxPay', obpay: 'ObPay', marzpay: 'MarzPay' };
+async function syncOneDeposit(doc) {
+  const dep = doc.data(), p = dep.provider || 'marzpay', name = STUCK_PROVIDER_NAMES[p] || 'The payment provider';
+  const ageMs = Date.now() - (tsMillis(dep.createdAt) || Date.now());
+  if (depositFullyCredited(dep)) return { outcome: 'already', message: 'Already credited' };
+  if (dep.status === 'failed' || dep.status === 'rejected') return { outcome: 'already', message: 'Already closed as failed' };
+  if (dep.method === 'manual') return { outcome: 'skipped', message: 'Manual recharges are approved or rejected by hand' };
+  const waiting = message => ({ outcome: 'waiting', message });
+  const failed = async (why) => { await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG); return { outcome: 'failed', message: why }; };
+  const credited = async () => {
+    const again = await doc.ref.get();
+    return again.exists && depositFullyCredited(again.data()) ? { outcome: 'credited', message: name + ' confirmed the payment; the wallet was credited' } : waiting('The payment is confirmed but the wallet credit did not finish; it will be retried');
+  };
+  const noRecordOk = dep.status === 'review' || ageMs > STUCK_NO_RECORD_AFTER_MS;
+  if (GATEWAY_DEFS[p]) {
+    const t = await gatewayGetTx(p, dep[p + 'Ref'] || doc.id);
+    if (t.providerDown) return waiting(name + ' is not answering right now');
+    if (t.unavailable) {
+      if (t.httpStatus === 404 && noRecordOk) return failed(name + ' has no record of this payment, so no money was taken');
+      return waiting(name + ' would not answer for this payment' + (t.httpStatus ? ' (HTTP ' + t.httpStatus + ')' : ''));
+    }
+    if (t.status === 'success' || t.status === 'failed') {
+      const out = await gatewayApply(p, doc, t, 'admin sync');
+      if (out === 'success') return credited();
+      if (out === 'failed') return { outcome: 'failed', message: name + ' says the payment failed' };
+      if (out === 'review') return { outcome: 'review', message: name + ' reports a different amount; check it, then Force-credit only if the right amount was paid' };
+    }
+    return waiting(t.rawStatus ? name + ' says: ' + t.rawStatus : name + ' has not decided yet');
+  }
+  if (p === 'tavupay') {
+    if (!dep.tavupayRef) return waiting('No TavuPay reference was ever saved for this payment; check TavuPay by hand');
+    const t = await tavupayGetTx(dep.tavupayRef);
+    if (t.providerDown || t.unavailable) return waiting(name + ' would not answer for this payment');
+    const out = await tavupayApply(doc, t, 'admin sync');
+    if (out === 'success') return credited();
+    if (out === 'failed') return { outcome: 'failed', message: name + ' says the payment failed' };
+    if (out === 'review') return { outcome: 'review', message: name + ' reports a different amount; check it, then Force-credit only if the right amount was paid' };
+    return waiting(name + ' has not decided yet');
+  }
+  if (p === 'pesajet') {
+    let status = '';
+    if (dep.pesajetTxId) {
+      const t = await pesajetGetTx(dep.pesajetTxId);
+      if (t.providerDown) return waiting(name + ' is not answering right now');
+      status = t.status;
+    } else {
+      const hit = await pesajetFindByReference(dep.ref || doc.id, { sinceMs: tsMillis(dep.createdAt) });
+      if (hit.providerDown || hit.unreadable) return waiting(name + ' is not answering right now');
+      if (!hit.found || !hit.transactionId) return hit.complete && noRecordOk ? failed(name + ' has no record of this payment, so no money was taken') : waiting(name + ' could not be searched fully; try again');
+      await doc.ref.update({ pesajetTxId: hit.transactionId }).catch(() => {});
+      status = hit.status;
+    }
+    const real = pesajetStatusLabel(status);
+    if (real === 'success') { await creditDeposit(doc, 'admin sync'); return credited(); }
+    if (real === 'failed') { await markDepositFailed(doc.ref, dep.userId, pesajetFailureMsg(status)); return { outcome: 'failed', message: name + ' says the payment failed' }; }
+    return waiting(name + ' has not decided yet');
+  }
+  if (!dep.marzTxUuid) return waiting('No MarzPay reference was ever saved for this payment; check MarzPay by hand');
+  const marzTx = await marzGetCollectTx(dep.marzTxUuid);
+  if (SUCCESS_STATUSES.has(marzTx.status)) { await creditDeposit(doc, 'admin sync'); return credited(); }
+  if (FAILED_STATUSES.has(marzTx.status)) { await markDepositFailed(doc.ref, dep.userId, marzDepositFailureMsg(marzTx)); return { outcome: 'failed', message: name + ' says the payment failed' }; }
+  return waiting(name + ' has not decided yet');
+}
+// One row, locked against a second sync of the same row, with the answer written on it so the admin list can show what was found.
+const _syncingDeposits = new Set();
+async function syncDepositById(depositId) {
+  const snap = await db.collection('pendingDeposits').doc(depositId).get();
+  if (!snap.exists) return { outcome: 'missing', message: 'Recharge not found' };
+  if (_syncingDeposits.has(depositId)) return { outcome: 'waiting', message: 'Already being checked' };
+  _syncingDeposits.add(depositId);
+  try {
+    const r = await syncOneDeposit(snap);
+    if (r.outcome === 'waiting' || r.outcome === 'review') await snap.ref.update({ syncedAtMs: Date.now(), syncNote: String(r.message).slice(0, 240) }).catch(() => {});
+    return r;
+  } catch (e) {
+    console.error('Deposit sync error (' + depositId + '):', e.message);
+    return { outcome: 'waiting', message: 'Could not check: ' + e.message };
+  } finally { _syncingDeposits.delete(depositId); }
+}
+async function resolveStuckDeposits({ force = false, limit = 10 } = {}) {
+  const out = { credited: 0, failed: 0, waiting: 0, checked: 0 };
+  try {
+    const snap = await db.collection('pendingDeposits').where('status', 'in', ['review', 'pending', 'initiating']).orderBy('createdAt', 'desc').limit(300).get();
+    const now = Date.now();
+    const rows = snap.docs.filter(d => {
+      const x = d.data(), age = now - (tsMillis(x.createdAt) || now);
+      if (x.method === 'manual' || age > STUCK_SYNC_MAX_AGE_MS) return false;
+      if (!force && now - (Number(x.syncedAtMs) || 0) < STUCK_SYNC_COOLDOWN_MS) return false;
+      if (x.status === 'review') return true;
+      // pending/initiating rows that the normal sweeps CAN read are theirs; these are the ones they cannot (a gateway row whose start reply was lost).
+      return !!GATEWAY_DEFS[x.provider] && !x[x.provider + 'Ref'] && age > 3 * 60 * 1000;
+    }).slice(0, limit);
+    await inChunks(rows, 3, async (doc) => {
+      const r = await syncDepositById(doc.id);
+      out.checked++;
+      if (r.outcome === 'credited') out.credited++; else if (r.outcome === 'failed') out.failed++; else if (r.outcome === 'waiting' || r.outcome === 'review') out.waiting++;
+    });
+  } catch (e) { console.error('Resolve stuck deposits error:', e.message); }
+  return out;
+}
 // A MarzPay payment that never got a gateway id (the start reply was lost, or the server restarted during it) has nothing to poll. If no webhook
 // settled it within 30 minutes it is parked as 'review' so it shows in the admin Deposits list (Needs Review) for a person to check at MarzPay and
 // Force-credit; it is never marked failed here, because the member may have paid.
@@ -10247,7 +10356,7 @@ function runReconciler() {
   _reconcilerRunning = true;
   // Deposits and withdrawals are settled side by side: a slow gateway on one must not hold the other back.
   Promise.allSettled([
-    reconcilePendingDeposits().then(parkLostMarzDeposits),
+    reconcilePendingDeposits().then(() => resolveStuckDeposits()).then(parkLostMarzDeposits),
     reconcilePendingWithdrawals().then(reconcileStuckWithdrawalRefunds),
   ]).then(() => reconcileCommissions()).catch(() => {}).finally(() => { _reconcilerRunning = false; });
 }
@@ -10306,7 +10415,20 @@ app.get('/admin/payments/sync', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const [depSettled, witSettled] = await Promise.all([reconcilePendingDeposits(), reconcilePendingWithdrawals()]);
-    res.json({ status: 'success', depositsSettled: depSettled, withdrawalsSettled: witSettled });
+    // Then the rows no sweep could read (Needs Review, and gateway recharges whose start reply was lost): asked at the provider right now.
+    const stuck = await resolveStuckDeposits({ force: true, limit: 40 });
+    res.json({ status: 'success', depositsSettled: depSettled + stuck.credited, depositsFailed: stuck.failed, depositsStillWaiting: stuck.waiting, withdrawalsSettled: witSettled });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// One recharge, asked at its provider right now: credited if paid, closed as failed if not, or told why it is still undecided.
+app.post('/admin/deposit/sync', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const depositId = String(req.body.depositId || '').slice(0, 80);
+  if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
+  try {
+    const r = await syncDepositById(depositId);
+    if (r.outcome === 'credited') logAdminAction(req, 'deposit_synced_credited', { depositId });
+    res.json({ status: r.outcome === 'missing' ? 'error' : 'success', outcome: r.outcome, message: r.message });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 

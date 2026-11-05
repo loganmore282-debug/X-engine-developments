@@ -2208,8 +2208,13 @@ async function syncMarzPay(btn, afterFn){
   const d = await api('/admin/payments/sync');
   btn.disabled=false; btn.textContent=t;
   if(d.status==='success'){
-    const settled = (d.depositsSettled||0) + (d.withdrawalsSettled||0);
-    toast(settled>0 ? `Synced, settled ${d.depositsSettled} deposit(s), ${d.withdrawalsSettled} withdrawal(s)` : 'Synced, nothing was waiting', 'ok');
+    const settled = (d.depositsSettled||0) + (d.withdrawalsSettled||0), closed = d.depositsFailed||0, waiting = d.depositsStillWaiting||0;
+    const parts = [];
+    if (d.depositsSettled) parts.push(`${d.depositsSettled} deposit(s) credited`);
+    if (closed) parts.push(`${closed} closed as failed`);
+    if (d.withdrawalsSettled) parts.push(`${d.withdrawalsSettled} withdrawal(s) settled`);
+    if (waiting) parts.push(`${waiting} still undecided at the provider (see the note under each)`);
+    toast(parts.length ? 'Synced: ' + parts.join(', ') : 'Synced, nothing was waiting', settled>0||closed>0||!waiting ? 'ok' : 'err');
     afterFn();
   } else toast(d.message||'Sync failed','err');
 }
@@ -2244,7 +2249,7 @@ async function renderDeposits(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
       <button class="btn sm ghost" id="depSync">Sync payments</button></div>
-    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time — through the automatic gateway (MarzPay or PesaJet). A stuck deposit can be force-credited once you've verified the money landed.</p>
+    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time. Press Sync (top, or on a row) to ask the payment provider what really happened: paid ones are credited, unpaid ones are closed as failed. Force-credit only if you have seen the money land.</p>
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_deps.length+' recharges only. The platform has more history than this list can currently display.</div>':''}
     ${depProcChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
@@ -2274,8 +2279,12 @@ function drawDeps(){
     // as every other owner-only control, rather than showing one that just
     // errors.
     let actions = '';
+    // Sync asks the provider what really happened to THIS payment (credit if paid, close if not): any admin may press it, it only follows the provider's answer.
+    if (!isManual && (d.status==='review' || d.status==='pending' || d.status==='initiating' || depNotCredited(d))) {
+      actions += `<button class="btn ghost sm" data-sync="${esc(d.id)}">Sync</button> `;
+    }
     if (SESSION_ROLE === 'owner' && stuck) {
-      actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`;
+      actions += `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`;
     }
     const methodLabel = isManual
       ? `Manual<br><span class="muted" style="font-size:11px" data-no-i18n>${esc(d.network||'')} · ${esc(d.assignedNumber||'')}</span>`
@@ -2283,7 +2292,8 @@ function drawDeps(){
       // older row with none falls back to the same plain "Automatic" label
       // it always had (it can only ever have gone through MarzPay).
       : (({pesajet:'PesaJet',tavupay:'TavuPay',lworxpay:'LworxPay',obpay:'ObPay',marzpay:'MarzPay'})[d.provider]||'Automatic');
-    const reviewNote = d.status==='review' && d.reviewReason ? `<br><span class="muted" style="font-size:11px">${esc(d.reviewReason)}</span>` : '';
+    const reviewNote = (d.status==='review' && d.reviewReason ? `<br><span class="muted" style="font-size:11px">${esc(d.reviewReason)}</span>` : '')
+      + ((d.status==='review'||d.status==='pending'||d.status==='initiating') && d.syncNote ? `<br><span class="muted" style="font-size:11px">Last check${d.syncedAtMs?' '+esc(fdate(d.syncedAtMs)):''}: ${esc(d.syncNote)}</span>` : '');
     // Owner: "only the sent message from after refresh on manual payment page
     // should appear to admin panel in its full details so as admin verifies
     // manually or rejects." Manual deposits are no longer credited by any
@@ -2336,6 +2346,13 @@ function drawDeps(){
   document.querySelectorAll('#depRows tr[data-uid]').forEach(tr=>tr.addEventListener('click', e=>{
     if(e.target.closest('button')) return;
     openUser(tr.dataset.uid);
+  }));
+  document.querySelectorAll('[data-sync]').forEach(b=>b.addEventListener('click',async(e)=>{
+    e.stopPropagation();
+    b.disabled=true; b.textContent='Checking…';
+    const d=await api('/admin/deposit/sync',{depositId:b.dataset.sync});
+    toast(d.message||d.status, d.status==='success' && (d.outcome==='credited'||d.outcome==='failed'||d.outcome==='already') ? 'ok' : 'err');
+    renderDeposits();
   }));
   document.querySelectorAll('[data-force]').forEach(b=>b.addEventListener('click',async(e)=>{
     e.stopPropagation();
@@ -2924,7 +2941,7 @@ const AUDIT_LABELS = {
   manual_pay_image_set:'Manual-pay screen image changed',
   products_saved:'Products saved',
   product_deleted:'Product deleted', products_cleared:'All products cleared', products_synced:'Product pricing synced to defaults',
-  deposit_force_credited:'Recharge force-credited', giftcode_generated:'Gift codes generated', giftcode_deactivated:'Gift code deactivated',
+  deposit_force_credited:'Recharge force-credited', deposit_synced_credited:'Recharge credited by Sync', giftcode_generated:'Gift codes generated', giftcode_deactivated:'Gift code deactivated',
   totals_recounted:'Totals recalculated',
 };
 async function renderAuditLog(){
