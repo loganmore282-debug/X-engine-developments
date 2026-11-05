@@ -4657,23 +4657,9 @@ window.submitWithdraw = async function(){
   if (STATE.account) {
     STATE.account.walletBalance = Math.max(0, (Number(STATE.account.walletBalance) || 0) - amount);
   }
-  // Owner: "l nolonger need that ugly old notify that cash out processing ...
-  // our card notifies, with the warning sign, so it can say other words and
-  // show amount to be received after the charges plus okay button."
-  // `net` comes from the server, which is the authority on the fee it actually
-  // charged; the client-side sum is the fallback for a backend that has not
-  // redeployed yet.
-  const pct = withdrawalFeePct(STATE.settings || {});
-  const net = Number.isFinite(Number(r.net)) && r.net !== null
-    ? Number(r.net) : amount - Math.round(amount * pct / 100);
-  // Owner: "when one requests withdrawal then he is forwarded to records of
-  // withdrawals to see his processing withdrawal."
-  // On OK, not before: the card carries the amount they will actually receive,
-  // and yanking the screen out from under it while they are still reading is
-  // how that number gets missed.
-  notify(`Withdraw of ${fmtUGXCents(amount)} is processing. You will receive `
-    + `${fmtUGXCents(net)} after the ${pct}% charge.`,
-    () => openBalanceRecordSheet('withdraw'));
+  // Owner: "on withdrawal submission, just that notify should say that withdrawal submitted successfully".
+  // OK then opens the withdrawal records, where the request shows as processing.
+  notify('Withdrawal submitted successfully', () => openBalanceRecordSheet('withdraw'));
   if (_openSheetTitle === 'Withdraw' && $('witSubmitBtn') === submitBtn) closeSheet({ fromAction: true });
   refreshAfterWithdraw();
 };
