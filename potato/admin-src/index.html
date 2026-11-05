@@ -162,20 +162,9 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .t-mut{background:var(--line);color:var(--sub)}
   .table-scroll{overflow-x:auto}
   .empty{color:var(--sub);font-size:13px;padding:18px;text-align:center}
-  /* Same loading spinner as the user app — replaces plain "Loading…" text. */
-  .cm-spin-wrap{display:flex;align-items:center;justify-content:center;padding:40px 0;}
-  .cm-spinner{width:34px;height:34px;color:var(--gold-deep);animation:cmSpinRotate 1.4s linear infinite;}
-  .cm-spinner circle{stroke:currentColor;stroke-linecap:round;fill:none;stroke-width:3.6;animation:cmSpinDash 1.4s ease-in-out infinite;}
-  @keyframes cmSpinRotate{100%{transform:rotate(360deg);}}
-  @keyframes cmSpinDash{
-    0%{stroke-dasharray:1px,200px;stroke-dashoffset:0px;}
-    50%{stroke-dasharray:100px,200px;stroke-dashoffset:-15px;}
-    100%{stroke-dasharray:100px,200px;stroke-dashoffset:-125px;}
-  }
-  /* Small inline spinner for busy buttons (Credit/Debit/etc while a
-     request is in flight) -- same small spinning-arc icon as the user app. */
-  .verify-spin{display:inline-flex;animation:verifySpin .9s linear infinite;}
-  @keyframes verifySpin{to{transform:rotate(360deg);}}
+  /* Owner: every loader in the panel is the plain words "Loading..." -- no spinner, no animation. */
+  .ld-text{padding:40px 0;text-align:center;font-size:14px;font-weight:600;color:var(--sub);}
+  td .ld-text{padding:14px 0;}
 
   .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
   .prod{border:1.5px solid var(--line);border-radius:14px;overflow:hidden;background:var(--card)}
@@ -388,6 +377,8 @@ function storeSession(token, username, role){
 function clearSession(){
   _adminSession.clear();
   if (_liveTimer) { clearInterval(_liveTimer); _liveTimer = null; }
+  if (_fastLiveTimer) { clearInterval(_fastLiveTimer); _fastLiveTimer = null; }
+  _liveSig = null; _livePending = false;
   $('content').innerHTML = '';
   _tab = ''; // invalidate in-flight tab renders immediately
   SESSION_TOKEN = ''; SESSION_USER = ''; SESSION_ROLE = '';
@@ -409,8 +400,8 @@ async function copyText(str, btn){
     toast('Copied to clipboard','ok');
   } catch (e) { toast('Could not copy','err'); }
 }
-function spinnerHtml(){ return '<div class="cm-spin-wrap"><svg class="cm-spinner" viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2"></circle></svg></div>'; }
-function btnBusyHtml(text){ return '<span class="verify-spin" style="margin-right:7px;vertical-align:-3px"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>'+esc(text); }
+function spinnerHtml(){ return '<div class="ld-text">Loading...</div>'; }
+function btnBusyHtml(){ return 'Loading...'; }
 // Every money amount elsewhere is always a whole shilling -- only a
 // treasure-code reward can ever carry cents (Round 137's randomized rewards),
 // so this only shows decimals on a value that actually has them, and
@@ -1170,22 +1161,59 @@ function contentHasFocus(){
   const c=$('content'), el=document.activeElement;
   return !!(c && el && el!==document.body && c.contains(el));
 }
-function liveTick(){
-  if(document.hidden || !SESSION_TOKEN || !_adminSession.check()) return;
-  refreshBadges().catch(()=>{});
-  if(!_live || modalOpen() || contentHasFocus() || window._tabBusyCount > 0 || !LIVE_TABS.has(_tab)) return;
+// Returns true when the open tab was really refreshed (false: skipped because the admin is typing, a dialog is open, an upload is
+// running, or a refresh is already on its way).
+function liveTick(opts){
+  if(document.hidden || !SESSION_TOKEN || !_adminSession.check()) return false;
+  if(!(opts && opts.noBadges)) refreshBadges().catch(()=>{});
+  if(!_live || modalOpen() || contentHasFocus() || window._tabBusyCount > 0 || !LIVE_TABS.has(_tab) || _liveRendering) return false;
   const tab = _tab;
   const scrollY = window.scrollY;
+  _liveRendering = true;
   Promise.resolve((RENDERERS[tab]||(()=>{}))()).then(()=>{
     if(staleTab(tab)) return; // admin switched tabs while this was loading -- don't touch whatever's shown now
     // The switch itself is in the topbar and a tab render cannot touch it,
     window.scrollTo(0, scrollY);
-  }).catch(()=>{});
+  }).catch(()=>{}).finally(()=>{ _liveRendering = false; });
+  return true;
 }
-// 30s, not 5s -- pending approvals/deposits don't need second-by-second
-// polling, and a slower cadence means fewer chances to catch someone
-// mid-interaction even with the quiet-refresh functions above in place.
-function startLive(){ if(_liveTimer) return; _liveTimer=setInterval(liveTick, 30000); }
+// ── REAL-TIME: THE ONE-SECOND CHANGE CHECK ──
+// Owner: "improve live check speed in the admin panel, just like how fast the user app listens to updates". Every second the panel asks
+// the server /admin/live, which answers from memory (no database read): one counter per collection, raised on every write. When a
+// collection the open tab shows has changed, that tab is refreshed at once (the quiet refreshes above, so nothing typed is lost);
+// when nothing changed, nothing is reloaded. A change that lands while the admin is typing or a dialog is open is kept and applied
+// on the first second it is safe. The 30-second refresh below stays as a safety net.
+const LIVE_TAB_COLS = {
+  dashboard: ['users', 'pendingDeposits', 'withdrawals', 'transactions', 'investments'],
+  analytics: ['users', 'pendingDeposits', 'withdrawals', 'transactions', 'investments'],
+  users: ['users', 'investments', 'bankAccounts'],
+  deposits: ['pendingDeposits'],
+  withdrawals: ['withdrawals'],
+  products: ['products', 'investments'],
+  transactions: ['transactions'],
+  referrals: ['users'],
+  auditlog: ['adminAuditLog'],
+};
+let _fastLiveTimer = null, _liveSig = null, _livePending = false, _liveRendering = false, _liveAsking = false;
+async function fastLiveTick(){
+  if(document.hidden || !SESSION_TOKEN || _liveAsking) return;
+  _liveAsking = true;
+  let r;
+  try { r = await api('/admin/live'); } finally { _liveAsking = false; }
+  if(!r || r.status!=='success' || !r.v) return;
+  const prev = _liveSig; _liveSig = { boot: r.boot, v: r.v };
+  if(!prev) return;   // the first answer only sets the starting point
+  const moved = c => prev.boot !== r.boot || (prev.v[c]||0) !== (r.v[c]||0);
+  if(moved('withdrawals') || moved('pendingDeposits')) refreshBadges().catch(()=>{});
+  if((LIVE_TAB_COLS[_tab]||[]).some(moved)) _livePending = true;
+  if(_livePending && liveTick({ noBadges: true })) _livePending = false;
+}
+document.addEventListener('visibilitychange', () => { if(!document.hidden && _fastLiveTimer) fastLiveTick(); });
+// The 30-second full refresh is the safety net; the real-time part is the one-second change check (fastLiveTick) above.
+function startLive(){
+  if(!_liveTimer) _liveTimer=setInterval(liveTick, 30000);
+  if(!_fastLiveTimer) { _liveSig = null; _fastLiveTimer=setInterval(fastLiveTick, 1000); fastLiveTick(); }
+}
 function setLive(on){ _live=on; const d=$('liveDot'); if(d) d.style.background = on ? 'var(--ok)' : 'var(--sub)';
   $('liveBtn').style.opacity = on ? '1' : '.6'; }
 
@@ -1984,7 +2012,7 @@ async function openUser(uid){
     </tbody></table></div>`:'<p class="muted" style="margin:0">No plans purchased yet.</p>'}
     ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Give a product</h4>
     <div class="row">
-      <div style="flex:3"><select id="grantAsset"><option value="">Loading products…</option></select></div>
+      <div style="flex:3"><select id="grantAsset"><option value="">Loading...</option></select></div>
       <button class="btn sky sm" id="grantAssetBtn" disabled>Activate</button>
     </div>
     <div class="muted" style="font-size:11.5px;margin-top:4px">Free for the member: nothing is taken from their wallet. It runs like a bought product and pays its full return.</div>`:''}
@@ -3540,7 +3568,7 @@ async function renderSettings(){
     <h2 class="sec">Reward tiers</h2>
     <div class="panel-card" id="taskCard">
       <p class="muted" style="margin-top:0">The Reward tab on Myteam. A member's team total (everything levels 1 to 3 have bought) puts them on the highest tier it reaches, and each calendar day on a reached tier earns that tier's reward; rewards the member does not claim keep adding up. A day already paid stays paid when you change the numbers.</p>
-      <div id="taskEditor" class="muted">Loading&hellip;</div>
+      <div id="taskEditor" class="muted">Loading...</div>
       <button class="btn block" id="saveTasks" style="margin-top:12px" disabled>Save reward tiers</button>
     </div>
 

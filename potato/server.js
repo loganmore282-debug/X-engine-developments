@@ -145,7 +145,11 @@ const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders:
   message: { status: 'error', message: 'Too many requests. Slow down.' } });
 app.use('/admin/check-key', adminLoginLimiter);
 app.use('/admin/login', adminLoginLimiter);
-app.use('/admin/', adminLimiter);
+// The panel's once-a-second "has anything changed?" check (/admin/live) has its own allowance, so it never eats into the 200 a minute
+// that the real reads and actions use.
+const adminLiveLimiter = rateLimit({ windowMs: 60 * 1000, max: 240, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests. Slow down.' } });
+app.use('/admin/', (req, res, next) => (req.path === '/live' ? adminLiveLimiter(req, res, next) : adminLimiter(req, res, next)));
 // If a Bearer token is a valid staff session, attach req.adminUser so
 // verifyAdmin()/verifyOwner() below can recognise it. A raw master-key
 // Authorization header skips the DB lookup entirely and falls through
@@ -410,7 +414,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 }
 
 // ── MONGODB ──
-const { connectMongo, db, FieldValue, pingDb } = require('./db');
+const { connectMongo, db, FieldValue, pingDb, writeVersions } = require('./db');
 
 // ── CONFIG ──
 const ADMIN_KEY   = process.env.ADMIN_KEY   || '';
@@ -8993,6 +8997,18 @@ app.post('/admin/user/referral-chain', async (req, res) => {
       downline, downlineCountByLevel, downlineTruncated: downline.length >= DOWNLINE_CAP, downlineCycleDetected,
     });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// ── LIVE CHANGE CHECK ──
+// Owner: "improve live check speed in admin panel just like how fast the user app updates". The panel calls this every second. It
+// reads NO database: it returns the in-memory write counters of the collections the panel shows (db.js writeVersions), and the panel
+// reloads the open tab only when one of them moved. Session collections are left out on purpose (every request touches them).
+const SERVER_BOOT_ID = require('crypto').randomBytes(6).toString('hex');   // a restart resets the counters: the panel treats a new id as "changed"
+const ADMIN_LIVE_COLLECTIONS = ['users', 'pendingDeposits', 'withdrawals', 'transactions', 'investments', 'products', 'promoCodes',
+  'promoRedemptions', 'bankAccounts', 'adminAuditLog', 'messages', 'settings', 'banners', 'adminUsers'];
+app.get('/admin/live', (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  res.set('Cache-Control', 'no-store');
+  res.json({ status: 'success', boot: SERVER_BOOT_ID, v: writeVersions(ADMIN_LIVE_COLLECTIONS) });
 });
 app.get('/admin/badges', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });

@@ -400,6 +400,15 @@ class QuerySnapshot {
 }
 
 // ── DocumentReference ────────────────────────────────────────────────────────
+// ── WRITE VERSIONS ──
+// One counter per collection, raised after every successful write made through this layer. The admin panel asks for these every
+// second (/admin/live, no database read at all) and reloads a tab only when a collection it shows has changed: real-time without
+// re-reading every list every second. In memory only, like the money locks (one server process); a restart starts again at 0, which
+// the panel simply reads as "changed" once.
+const _writeVersions = Object.create(null);
+function bumpWrite(col) { _writeVersions[col] = (_writeVersions[col] || 0) + 1; }
+function writeVersions(cols) { const out = {}; for (const c of cols) out[c] = _writeVersions[c] || 0; return out; }
+
 class DocumentReference {
   constructor(colName, id) {
     this._col = colName;
@@ -419,6 +428,7 @@ class DocumentReference {
       const plain = resolveFieldValues(data);
       await _mdb.collection(this._col).replaceOne({ _id: this.id }, { ...plain, _id: this.id }, { upsert: true });
     }
+    bumpWrite(this._col);
   }
   async update(updates) {
     const op = buildMongoUpdate(updates);
@@ -435,9 +445,11 @@ class DocumentReference {
       err.code = 'NOT_FOUND';
       throw err;
     }
+    bumpWrite(this._col);
   }
   async delete() {
-    await _mdb.collection(this._col).deleteOne({ _id: this.id });
+    const r = await _mdb.collection(this._col).deleteOne({ _id: this.id });
+    if (r && r.deletedCount) bumpWrite(this._col);
   }
   // Conditional atomic update: applies `updates` only if this document ALSO
   // matches `extraFilter` (in addition to its own _id). Returns whether the
@@ -454,6 +466,7 @@ class DocumentReference {
     const op = buildMongoUpdate(updates);
     if (!Object.keys(op).length) return false;
     const result = await _mdb.collection(this._col).updateOne({ _id: this.id, ...extraFilter }, op);
+    if (result.matchedCount > 0) bumpWrite(this._col);
     return result.matchedCount > 0;
   }
   // Atomic create-if-missing for deterministic idempotency records. Unlike
@@ -467,6 +480,7 @@ class DocumentReference {
         { $setOnInsert: { ...plain, _id: this.id } },
         { upsert: true }
       );
+      if (result.upsertedCount > 0) bumpWrite(this._col);
       return result.upsertedCount > 0;
     } catch (e) {
       // Two requests racing to create the same document: on MongoDB the loser can get a duplicate-key error instead of a quiet no-op.
@@ -573,6 +587,7 @@ class CollectionReference extends Query {
     const id   = require('crypto').randomUUID();
     const plain = resolveFieldValues(data);
     await _mdb.collection(this._col).insertOne({ ...plain, _id: id });
+    bumpWrite(this._col);
     return new DocumentReference(this._col, id);
   }
 }
@@ -623,4 +638,4 @@ const db = {
   },
 };
 
-module.exports = { connectMongo, db, FieldValue, Timestamp, pingDb };
+module.exports = { connectMongo, db, FieldValue, Timestamp, pingDb, writeVersions };
