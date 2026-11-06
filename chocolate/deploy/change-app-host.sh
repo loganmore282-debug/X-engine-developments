@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
 # Moves the member app to a new address. The OLD address keeps answering as an extra address of the same app, so installed apps, old links and
 # the GitHub / payment webhooks keep working while you switch over. Nothing is changed unless the new name already points at this server.
-# Run as root:  bash /srv/chocolate-src/chocolate/deploy/change-app-host.sh app        (app -> app.chocolate.example.com; a full host name also works)
+# Run as root:  bash /srv/chocolate-src/chocolate/deploy/change-app-host.sh random      (a random 4-character address of the same domain, e.g. k3f9.yourdomain.com;
+#                                                                                         this is how the old "app." address is replaced)
+#               bash /srv/chocolate-src/chocolate/deploy/change-app-host.sh k3f9        (that word on the same domain; a full host name also works)
 #               bash /srv/chocolate-src/chocolate/deploy/change-app-host.sh drop-old    (later: stop answering on the old address)
 set -u
 CHOCOLATE=${CHOCOLATE_DIR:-/srv/chocolate-src/chocolate}
-BASE=${CHOCOLATE_BASE_DOMAIN:-chocolate.example.com}
 APP_HOST_FILE=${CHOCOLATE_APP_HOST_FILE:-/srv/chocolate-secrets/app-host}
 ALSO_FILE=${CHOCOLATE_ALSO_HOSTS_FILE:-/srv/chocolate-secrets/also-hosts}
 [ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }
 ARG=${1:-}
-[ -n "$ARG" ] || { echo "Say the new name, e.g.:  bash $0 app"; exit 1; }
+[ -n "$ARG" ] || { echo "Say the new name, e.g.:  bash $0 random"; exit 1; }
 CUR=${CHOCOLATE_APP_HOST:-app.chocolate.example.com}; [ -s "$APP_HOST_FILE" ] && CUR=$(tr -d '[:space:]' < "$APP_HOST_FILE")
+# The domain is the current member address without its first word (app.yourdomain.com -> yourdomain.com), unless it is given.
+BASE=${CHOCOLATE_BASE_DOMAIN:-$(printf '%s' "$CUR" | sed -E 's/^[^.]+\.//')}
+# "random": a letter and 3 letters/digits, like k3f9 (the same shape the random invite addresses use).
+if [ "$ARG" = random ]; then ARG="$(tr -dc 'a-z' < /dev/urandom | head -c 1)$(tr -dc 'a-z0-9' < /dev/urandom | head -c 3)"; echo "Random address chosen: $ARG.$BASE"; fi
 
 if [ "$ARG" = drop-old ]; then
   OLD=""; [ -s "$ALSO_FILE" ] && OLD=$(tr -d '[:space:]' < "$ALSO_FILE")
@@ -20,6 +25,14 @@ if [ "$ARG" = drop-old ]; then
   if bash "$CHOCOLATE/deploy/update-vps.sh" > /tmp/chocolate.host-update.log 2>&1 && grep -q "^DONE\." /tmp/chocolate.host-update.log; then
     grep -E "removing no-longer-served|certificate now covers" /tmp/chocolate.host-update.log
     echo "Done: only $CUR answers now."
+    # The old address's DNS record (like  app ) is removed from Hostinger too, when the Hostinger token from set-wildcard.sh is here and the old address is a plain
+    # first word of the same domain. Only that ONE A record is touched; the wildcard (*), the bare domain and everything else stay.
+    OLDW=${OLD%%.*}
+    if [ -n "$OLD" ] && [ "${OLD#*.}" = "$BASE" ] && [ -s "${CHOCOLATE_HOSTINGER_TOKEN_FILE:-/srv/chocolate-secrets/hostinger.token}" ]; then
+      node "$CHOCOLATE/deploy/hostinger-dns.js" del-a "$BASE" "$OLDW" 2>&1 | sed 's/^/  Hostinger: /'
+    else
+      echo "  (Delete the A record  $OLDW  of $BASE yourself in Hostinger -> Domains -> DNS, after the checks below.)"
+    fi
     echo; echo "Before you delete the old address's DNS record in Hostinger, check BOTH:"
     echo "  1. the line 'certificate now covers' above no longer lists the old address (otherwise the certificate could not renew later);"
     echo "  2. the GitHub webhook points at https://$CUR/k7x2/deploy/webhook (the old address used to receive it; auto-deploy stops silently if it still points there)."
@@ -36,6 +49,7 @@ MYIP=$(curl -4 -s --max-time 8 https://ifconfig.me || true); NEWIP=$(getent ahos
 if [ -z "$MYIP" ] || [ "$NEWIP" != "$MYIP" ]; then
   echo "!! $NEW does not point to this server yet (it points to '${NEWIP:-nothing}', this server is '$MYIP')."
   echo "   In Hostinger DNS add an A record: Name = ${NEW%%.*}   Points to = $MYIP   then wait a few minutes and run this again."
+  echo "   (With the wildcard record * from set-wildcard.sh every random address already points here: if this one does not, that record is missing.)"
   echo "   NOTHING was changed."; exit 1
 fi
 

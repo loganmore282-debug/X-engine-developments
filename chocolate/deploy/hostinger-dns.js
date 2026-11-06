@@ -4,6 +4,7 @@
 // certificate AND for every renewal (certbot calls the "auth" and "cleanup" commands, see set-wildcard.sh).
 //   node deploy/hostinger-dns.js check   <domain>             token works and the domain is on this Hostinger account
 //   node deploy/hostinger-dns.js wild-a  <domain> <ip>        *.<domain>  A  <ip>
+//   node deploy/hostinger-dns.js del-a   <domain> <word>      removes the ONE A record named <word> (like app); never *, @ or anything else
 //   node deploy/hostinger-dns.js auth                         (certbot) puts _acme-challenge TXT = $CERTBOT_VALIDATION, waits until it is visible
 //   node deploy/hostinger-dns.js cleanup                      (certbot) removes that TXT record again
 // The API token (Hostinger hPanel -> API) is read from HOSTINGER_API_TOKEN or /srv/chocolate-secrets/hostinger.token (root only); it is never printed.
@@ -43,6 +44,10 @@ async function visibleOnAuthoritative(domain, want) {
   } else if (cmd === 'wild-a') {
     if (!a || !/^\d{1,3}(\.\d{1,3}){3}$/.test(b || '')) die('usage: wild-a <domain> <ip>');
     await put(a, '*', 'A', 300, [b]); console.log('*.' + a + ' -> ' + b);
+  } else if (cmd === 'del-a') {
+    // Only a plain word (letters, digits, hyphens): never the wildcard (*), the bare domain (@), _acme-challenge or a dotted name.
+    if (!a || !/^[a-z0-9][a-z0-9-]{0,40}$/.test(b || '') || b === 'www') die('usage: del-a <domain> <word>   (a plain first word like app)');
+    await del(a, b, 'A'); console.log('removed the A record ' + b + '.' + a);
   } else if (cmd === 'auth') {
     const dom = process.env.CERTBOT_DOMAIN, val = process.env.CERTBOT_VALIDATION;
     if (!dom || !val) die('certbot did not give CERTBOT_DOMAIN / CERTBOT_VALIDATION');
@@ -53,5 +58,5 @@ async function visibleOnAuthoritative(domain, want) {
   } else if (cmd === 'cleanup') {
     const dom = process.env.CERTBOT_DOMAIN; if (!dom) die('certbot did not give CERTBOT_DOMAIN');
     await del(dom, '_acme-challenge', 'TXT').catch(() => {});   // never fail a certificate because the tidy-up failed
-  } else die('commands: check | wild-a | auth | cleanup');
+  } else die('commands: check | wild-a | del-a | auth | cleanup');
 })().catch(e => die('hostinger-dns: ' + (e && e.message || e)));

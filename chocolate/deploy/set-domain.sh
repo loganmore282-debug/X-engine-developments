@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Puts a bought domain on Chocolate: nginx, the HTTPS certificate and the payment callback address, in one command.
 #   bash /srv/chocolate-src/chocolate/deploy/set-domain.sh yourdomain.com
-# The member app goes on  app.yourdomain.com  and the hidden admin panel on a random-looking address (shown at the end).
-# FIRST add two DNS "A" records at the place the domain is managed, both pointing to this server (the command prints them, and changes
-# NOTHING until they exist):   app   and   the admin label it shows.      Nothing here touches Soda or Cookie.
+# The member app goes on a RANDOM 4-character address of the domain (like  k3f9.yourdomain.com , chosen once and remembered; there is no "app." any more)
+# and the hidden admin panel on another random-looking address (both shown at the end). A second word (bash set-domain.sh yourdomain.com app) still
+# forces that exact first word.
+# FIRST make sure the DNS "A" records exist at the place the domain is managed, pointing to this server (the command prints them, and changes
+# NOTHING until they exist). With the wildcard record from set-wildcard.sh (*.yourdomain.com) every random address already points here, so nothing
+# needs adding.      Nothing here touches Soda or Cookie.
 set -u
 [ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,8 +24,18 @@ if [ -z "$RAW" ]; then
 fi
 DOM=$(printf '%s' "$RAW" | tr 'A-Z' 'a-z' | sed -E 's#^https?://##; s#/.*$##; s#^www\.##')
 printf '%s' "$DOM" | grep -Eq '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$' || { echo "Not understood: $RAW   (write it like  yourdomain.com)"; exit 1; }
-LABEL=${2:-app}
-printf '%s' "$LABEL" | grep -Eq '^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$' || { echo "The first word must be letters/digits, e.g.  app"; exit 1; }
+LABEL=${2:-}
+if [ -z "$LABEL" ]; then
+  # No first word given: keep the member address already chosen for this domain, unless it is the old "app." one, which is dropped for a random
+  # 4-character word (a letter, then 3 letters or digits), chosen once and then remembered in the app-host file.
+  CURAPP=""; [ -s "$APP_HOST_FILE" ] && CURAPP=$(tr -d '[:space:]' < "$APP_HOST_FILE")
+  case "$CURAPP" in "app.$DOM") CURAPP="" ;; esac
+  case "$CURAPP" in
+    *".$DOM") LABEL=${CURAPP%%.*} ;;
+    *) LABEL="$(tr -dc 'a-z' < /dev/urandom | head -c 1)$(tr -dc 'a-z0-9' < /dev/urandom | head -c 3)" ;;
+  esac
+fi
+printf '%s' "$LABEL" | grep -Eq '^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$' || { echo "The first word must be letters/digits, e.g.  k3f9"; exit 1; }
 APP="$LABEL.$DOM"
 CURADMIN=""; [ -s "$ADMIN_HOST_FILE" ] && CURADMIN=$(tr -d '[:space:]' < "$ADMIN_HOST_FILE")
 case "$CURADMIN" in *".$DOM") ADMIN=$CURADMIN ;; *) ADMIN="${CHOCOLATE_ADMIN_LABEL:-$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-6)}.$DOM" ;; esac
