@@ -65,7 +65,8 @@ const ENV = { TAVUPAY_API_KEY: 'ep_live_key', TAVUPAY_API_SECRET: 'the-secret' }
   ok(L({ status: 'failed', success: true }) === 'failed', 'a failed word beats success:true');
   const A = h.X.tavupayAmountOk;
   ok(A({ amount: 30000 }, 30000, 0) && A({ amount: 30000 }, 30450, 450) && A({ amount: 30000 }, NaN, 0) && A({ amount: 30000 }, undefined, 0), 'equal, equal after the fee, or not reported');
-  ok(!A({ amount: 30000 }, 500, 0) && !A({ amount: 30000 }, 30001, 0), 'a different figure is not accepted');
+  ok(!A({ amount: 30000 }, 500, 0) && !A({ amount: 30000 }, 29999, 0) && !A({ amount: 30000 }, 40000, 0), 'a payment of LESS than the recharge, or far more, is not accepted');
+  ok(A({ amount: 32000 }, 32640, 0) && A({ amount: 32000 }, 32640, 640) && A({ amount: 30000 }, 30001, 0), 'what the customer paid may include TavuPay\'s own charge (32,000 shown as 32,640), even when a webhook carries no fee');
 
   // ── re-reading a payment
   h = harness(ENV);

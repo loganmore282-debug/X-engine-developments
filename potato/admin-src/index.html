@@ -2251,7 +2251,7 @@ async function renderDeposits(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
       <button class="btn sm ghost" id="depSync">Sync payments</button></div>
-    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time. Press Sync (top, or on a row) to ask the payment provider what really happened: paid ones are credited, unpaid ones are closed as failed. Force-credit only if you have seen the money land.</p>
+    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time. Press Sync (top, or on a row) to ask the payment provider what really happened: paid ones are credited (even ones marked Failed), unpaid ones are closed as failed. Force-credit only if you have seen the money land.</p>
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_deps.length+' recharges only. The platform has more history than this list can currently display.</div>':''}
     ${depProcChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
@@ -2282,7 +2282,7 @@ function drawDeps(){
     // errors.
     let actions = '';
     // Sync asks the provider what really happened to THIS payment (credit if paid, close if not): any admin may press it, it only follows the provider's answer.
-    if (!isManual && (d.status==='review' || d.status==='pending' || d.status==='initiating' || depNotCredited(d))) {
+    if (!isManual && (d.status==='review' || d.status==='pending' || d.status==='initiating' || d.status==='failed' || depNotCredited(d))) {
       actions += `<button class="btn ghost sm" data-sync="${esc(d.id)}">Sync</button> `;
     }
     if (SESSION_ROLE === 'owner' && stuck) {
@@ -2295,7 +2295,8 @@ function drawDeps(){
       // it always had (it can only ever have gone through MarzPay).
       : (({pesajet:'PesaJet',tavupay:'TavuPay',lworxpay:'LworxPay',obpay:'ObPay',marzpay:'MarzPay'})[d.provider]||'Automatic');
     const reviewNote = (d.status==='review' && d.reviewReason ? `<br><span class="muted" style="font-size:11px">${esc(d.reviewReason)}</span>` : '')
-      + ((d.status==='review'||d.status==='pending'||d.status==='initiating') && d.syncNote ? `<br><span class="muted" style="font-size:11px">Last check${d.syncedAtMs?' '+esc(fdate(d.syncedAtMs)):''}: ${esc(d.syncNote)}</span>` : '');
+      + (d.status==='failed' && d.failedVia ? `<br><span class="muted" style="font-size:11px">Closed as failed by: ${esc(d.failedVia)}</span>` : '')
+      + ((d.status==='review'||d.status==='pending'||d.status==='initiating'||d.status==='failed') && d.syncNote ? `<br><span class="muted" style="font-size:11px">Last check${d.syncedAtMs?' '+esc(fdate(d.syncedAtMs)):''}: ${esc(d.syncNote)}</span>` : '');
     // Owner: "only the sent message from after refresh on manual payment page
     // should appear to admin panel in its full details so as admin verifies
     // manually or rejects." Manual deposits are no longer credited by any
@@ -2353,7 +2354,7 @@ function drawDeps(){
     e.stopPropagation();
     b.disabled=true; b.textContent='Checking…';
     const d=await api('/admin/deposit/sync',{depositId:b.dataset.sync});
-    toast(d.message||d.status, d.status==='success' && (d.outcome==='credited'||d.outcome==='failed'||d.outcome==='already') ? 'ok' : 'err');
+    toast(d.message||d.status, d.status==='success' && (d.outcome==='credited'||d.outcome==='failed'||d.outcome==='already'||d.outcome==='stillfailed') ? 'ok' : 'err');
     renderDeposits();
   }));
   document.querySelectorAll('[data-force]').forEach(b=>b.addEventListener('click',async(e)=>{

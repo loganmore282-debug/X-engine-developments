@@ -1893,15 +1893,15 @@ function logSecurityEvent(userId, type, meta) {
   db.collection('securityEvents').add({ userId, type, meta: meta || null, createdAt: FieldValue.serverTimestamp() })
     .catch(e => console.error('logSecurityEvent error:', e.message));
 }
-async function markDepositFailed(depRef, userId, reason) {
-  try { return await _markDepositFailedNow(depRef, userId, reason); }
+async function markDepositFailed(depRef, userId, reason, via) {
+  try { return await _markDepositFailedNow(depRef, userId, reason, via); }
   finally {
     if (typeof _notifyDeposit === 'function') _notifyDeposit(depRef.id);   // wake a held status request (see waitDepositSettled)
     // The member may try again at once: a failed payment is not an "already being processed" one and must not count as an abusive attempt.
     if (userId) { _depCreateDebounce.delete(userId); const a = _depAttempts.get(userId); if (a && a.length) a.pop(); }
   }   // wake a held status request (see waitDepositSettled)
 }
-async function _markDepositFailedNow(depRef, userId, reason) {
+async function _markDepositFailedNow(depRef, userId, reason, via) {
   // subagent-audit-caught HIGH bug: this used to overwrite status:'failed'
   // unconditionally, with no check that the deposit hadn't already been
   // credited by a DIFFERENT in-flight check (the client poll, the webhook,
@@ -1922,7 +1922,8 @@ async function _markDepositFailedNow(depRef, userId, reason) {
   await withLock('dep:' + depRef.id, async () => {
     const fresh = await depRef.get();
     if (fresh.exists && (depositFullyCredited(fresh.data()) || (fresh.data().status === 'matched' && fresh.data().walletCredited === true))) { alreadyCredited = true; return; }
-    await depRef.update({ status: 'failed', failureReason: reason }).catch(() => {});
+    // `failedVia` says WHICH path closed it (and the provider's own word), so a recharge that failed here but succeeded at the provider can be traced.
+    await depRef.update({ status: 'failed', failureReason: reason, failedVia: String(via || '').slice(0, 160), failedAtMs: Date.now() }).catch(() => {});
     // Codex-caught real bug (2nd money-flow audit): this ledger-row update
     // used to run AFTER the dep:<id> lock above was released -- a
     // concurrent creditDeposit() call (a LATER poll/webhook/reconciler tick
@@ -2727,6 +2728,10 @@ function tavupayAmountOk(dep, reported, fee) {
   if (!Number.isFinite(got) || got <= 0) return true;
   const want = Number(dep && dep.amount) || 0;
   const f = Number(fee) || 0;
+  // TavuPay reports what the CUSTOMER paid, which can include its own charge (a 32,000 recharge shows as 32,640 with a 640 charge), and a webhook may
+  // not carry the fee at all. The wallet is paid OUR stored amount either way, so a payment of the amount or MORE (up to 10 %, at least 500) is
+  // right; only a payment of LESS than the recharge is parked for review.
+  if (got >= want - 0.5 && got - want <= Math.max(want * 0.1, 500)) return true;
   return Math.abs(got - want) < 0.5 || (f > 0 && Math.abs(got - f - want) < 0.5);
 }
 // Settle one deposit from a result {status, amount, fee}. The wallet is paid OUR stored amount, and only when the figures agree.
@@ -2745,7 +2750,7 @@ async function tavupayApply(doc, t, source) {
     await creditDeposit(doc, source);
     return 'success';
   }
-  if (t.status === 'failed') { await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG); return 'failed'; }
+  if (t.status === 'failed') { await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG, `${source || 'tavupay'}: TavuPay said ${t.rawStatus || 'failed'}`); return 'failed'; }
   return 'pending';
 }
 // The server watches each TavuPay recharge itself from the moment it is accepted and credits it the moment TavuPay says so, like the PesaJet
@@ -2832,7 +2837,9 @@ async function tavupayWebhookWork(body, verified) {
     const doc = await tavupayFindDeposit(wh.candidates);
     if (!doc) return;
     const dep = doc.data();
-    if (dep.status !== 'pending' && dep.status !== 'initiating') return;
+    // A recharge already closed as failed (or parked for review) is still settled when the provider says it was PAID: a wrong "failed" must not be final.
+    const reopen = (dep.status === 'failed' || dep.status === 'review') && wh.label === 'success';
+    if (dep.status !== 'pending' && dep.status !== 'initiating' && !reopen) return;
     // A SIGNED webhook settles the payment by itself; an unsigned or wrongly signed one is only a hint and the payment is re-read.
     if (verified && (wh.label === 'success' || wh.label === 'failed')) {
       await tavupayApply(doc, { status: wh.label, amount: wh.amount, fee: wh.fee }, 'TavuPay webhook');
@@ -2848,7 +2855,7 @@ async function tavupayWebhookOpen(body) {
   const wh = tavupayWebhookFields(body);
   if (wh.isPayout) return payGwPayoutWebhookOpen('tavupay', wh.candidates);
   const doc = await tavupayFindDeposit(wh.candidates);
-  return !!doc && ['pending', 'initiating'].includes(doc.data().status);
+  return !!doc && ['pending', 'initiating', 'failed', 'review'].includes(doc.data().status);
 }
 
 // ═══════════════════════════════════════════
@@ -3000,7 +3007,7 @@ async function gatewayApply(provider, doc, t, source) {
     await creditDeposit(doc, source);
     return 'success';
   }
-  if (t.status === 'failed') { await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG); return 'failed'; }
+  if (t.status === 'failed') { await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG, `${source || name}: ${name} said ${t.rawStatus || 'failed'}`); return 'failed'; }
   return 'pending';
 }
 // The server watches each of these recharges itself from the moment it is accepted (same settle path as every other gateway: single-writer locked, so
@@ -3052,7 +3059,7 @@ async function gatewayCollectStart(provider, { depRef, userId, amt, phone }) {
     // A gateway that is merely BUSY (5xx, a lost reply) has not refused this payment: it may be live on the phone, so the row stays pending.
     // LworxPay's 503 GATEWAY_UNAVAILABLE is documented as "safe to retry": nothing was sent, so that one is failed.
     const clean = !r.providerDown || gwError(r.data).code === 'GATEWAY_UNAVAILABLE';
-    if (clean) await markDepositFailed(depRef, userId, gatewayUserMsg(provider, r.providerDown ? { ...r, providerDown: false, notConfigured: false } : r, 'Could not start the payment'));
+    if (clean) await markDepositFailed(depRef, userId, gatewayUserMsg(provider, r.providerDown ? { ...r, providerDown: false, notConfigured: false } : r, 'Could not start the payment'), 'start refused by ' + g.name + ': HTTP ' + r.httpStatus + ' ' + JSON.stringify(r.data || {}).slice(0, 100));
     return;
   }
   const d = (r.data && typeof r.data.data === 'object' && r.data.data) || {};
@@ -3112,7 +3119,8 @@ async function gatewayWebhookWork(provider, body, verified) {
     const doc = await gatewayFindDeposit(provider, wh);
     if (!doc) return;
     const dep = doc.data();
-    if (dep.status !== 'pending' && dep.status !== 'initiating') return;
+    const reopen = (dep.status === 'failed' || dep.status === 'review') && wh.label === 'success';   // a wrong "failed" must not be final
+    if (dep.status !== 'pending' && dep.status !== 'initiating' && !reopen) return;
     // LworxPay: a SIGNED call settles by itself. ObPay: its own document says to read the transaction before delivering anything, even after a
     // callback, so for ObPay the webhook only triggers that read. An unsigned LworxPay call is a hint and is re-read too.
     if (provider === 'lworxpay' && verified && (wh.label === 'success' || wh.label === 'failed')) {
@@ -3128,7 +3136,7 @@ async function gatewayWebhookOpen(provider, body) {
   const wh0 = gatewayWebhookFields(provider, body);
   if (wh0.isPayout) return payGwPayoutWebhookOpen(provider, wh0.refs.concat(wh0.txId ? [wh0.txId] : []));
   const doc = await gatewayFindDeposit(provider, gatewayWebhookFields(provider, body));
-  return !!doc && ['pending', 'initiating'].includes(doc.data().status);
+  return !!doc && ['pending', 'initiating', 'failed', 'review'].includes(doc.data().status);
 }
 
 // ── DAILY CASHBACK AT 00:00 (settle-on-read + a 1s background sweep) ──
@@ -4705,7 +4713,7 @@ app.post('/deposit/marzpay', async (req, res) => {
       if (!tv.ok) {
         console.error('TavuPay collect rejected:', tv.httpStatus, JSON.stringify(tv.data).slice(0, 300));
         // A gateway that is merely BUSY has not refused this payment: leave the row pending rather than tell a member it failed.
-        if (!tv.providerDown) await markDepositFailed(depRef, userId, tavupayUserMsg(tv, 'Could not start the payment'));
+        if (!tv.providerDown) await markDepositFailed(depRef, userId, tavupayUserMsg(tv, 'Could not start the payment'), 'start refused by TavuPay: HTTP ' + tv.httpStatus + ' ' + JSON.stringify(tv.data || {}).slice(0, 100));
         return;
       }
       const tavupayRef = String((tv.data && (tv.data.reference || (tv.data.data && tv.data.data.reference))) || '').trim() || null;
@@ -10507,7 +10515,8 @@ async function syncOneDeposit(doc) {
   const dep = doc.data(), p = dep.provider || 'marzpay', name = STUCK_PROVIDER_NAMES[p] || 'The payment provider';
   const ageMs = Date.now() - (tsMillis(dep.createdAt) || Date.now());
   if (depositFullyCredited(dep)) return { outcome: 'already', message: 'Already credited' };
-  if (dep.status === 'failed' || dep.status === 'rejected') return { outcome: 'already', message: 'Already closed as failed' };
+  if (dep.status === 'rejected') return { outcome: 'already', message: 'Already rejected' };
+  if (dep.status === 'failed') return recheckFailedDeposit(doc);
   if (dep.method === 'manual') return { outcome: 'skipped', message: 'Manual recharges are approved or rejected by hand' };
   const waiting = message => ({ outcome: 'waiting', message });
   const failed = async (why) => { await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG); return { outcome: 'failed', message: why }; };
@@ -10566,6 +10575,46 @@ async function syncOneDeposit(doc) {
   return waiting(name + ' has not decided yet');
 }
 // One row, locked against a second sync of the same row, with the answer written on it so the admin list can show what was found.
+// What the provider says about a recharge, by every id we may hold (LworxPay / ObPay: by OUR deposit id). {status:'success'|'failed'|'processing'|'', amount, fee}
+async function providerVerdictForDeposit(doc) {
+  const dep = doc.data(), p = dep.provider || 'marzpay';
+  if (GATEWAY_DEFS[p]) return gatewayGetTx(p, dep[p + 'Ref'] || doc.id, { attempts: 1 });
+  if (p === 'tavupay') return dep.tavupayRef ? tavupayGetTx(dep.tavupayRef, { attempts: 1 }) : { status: '', unavailable: true };
+  if (p === 'pesajet') {
+    if (!dep.pesajetTxId) return { status: '', unavailable: true };
+    const t = await pesajetGetTx(dep.pesajetTxId, { attempts: 1 });
+    return t.providerDown ? { providerDown: true } : { status: pesajetStatusLabel(t.status), amount: NaN, rawStatus: t.status };
+  }
+  if (!dep.marzTxUuid) return { status: '', unavailable: true };
+  const m = await marzGetCollectTx(dep.marzTxUuid);
+  return { status: SUCCESS_STATUSES.has(m.status) ? 'success' : FAILED_STATUSES.has(m.status) ? 'failed' : 'processing', amount: NaN, rawStatus: m.status };
+}
+// A recharge we closed as FAILED is asked about again: the provider is the authority, and mobile money does flip an early "failed" (a timeout, a slow
+// approval, a wrong first read) into a payment that went through. Only SUCCESS acts: it credits (the same locked, once-only path as everywhere), or
+// parks the row for review if the provider's amount differs. Anything else leaves it failed. Never touches a row that is not 'failed'.
+async function recheckFailedDeposit(doc) {
+  const dep = doc.data(), p = dep.provider || 'marzpay', name = STUCK_PROVIDER_NAMES[p] || 'The payment provider';
+  if (dep.status !== 'failed' || dep.method === 'manual') return { outcome: 'skipped', message: 'Nothing to re-check' };
+  const t = await providerVerdictForDeposit(doc);
+  await doc.ref.update({ recheckedAtMs: Date.now() }).catch(() => {});
+  if (t.providerDown) return { outcome: 'waiting', message: name + ' is not answering right now' };
+  if (t.unavailable) return { outcome: 'stillfailed', message: dep.tavupayRef || dep[p + 'Ref'] || dep.pesajetTxId || dep.marzTxUuid ? name + ' would not answer for this payment' : 'No ' + name + ' reference was ever saved for this payment, so it cannot be looked up: if ' + name + ' shows it as paid, use Force-credit' };
+  if (t.status !== 'success') return { outcome: 'stillfailed', message: name + ' still says: ' + (t.rawStatus || t.status || 'not paid') };
+  const amountOk = p === 'tavupay' ? tavupayAmountOk(dep, t.amount, t.fee) : gatewayAmountOk(dep, t.amount);
+  if (!amountOk) {
+    await withLock('dep:' + doc.id, async () => {
+      const fresh = await doc.ref.get();
+      if (fresh.exists && fresh.data().status === 'failed') await doc.ref.update({ status: 'review', reviewReason: `${name} says this recharge was PAID but reports ${t.amount} for a recharge of ${dep.amount}. Check ${name}; Force-credit only if the right amount was paid.` });
+    }).catch(() => {});
+    return { outcome: 'review', message: name + ' says it was paid but with a different amount; moved to Needs Review' };
+  }
+  console.warn(`RECHECK: recharge ${doc.id} was marked failed (${dep.failedVia || 'unknown path'}) but ${name} says it was PAID -- crediting`);
+  await creditDeposit(doc, 're-check of a failed recharge');
+  const again = await doc.ref.get();
+  return again.exists && depositFullyCredited(again.data())
+    ? { outcome: 'credited', message: name + ' says this was PAID (it had been marked failed); the wallet was credited' }
+    : { outcome: 'waiting', message: 'Paid at ' + name + ' but the wallet credit did not finish; it will be retried' };
+}
 const _syncingDeposits = new Set();
 async function syncDepositById(depositId) {
   const snap = await db.collection('pendingDeposits').doc(depositId).get();
@@ -10574,7 +10623,7 @@ async function syncDepositById(depositId) {
   _syncingDeposits.add(depositId);
   try {
     const r = await syncOneDeposit(snap);
-    if (r.outcome === 'waiting' || r.outcome === 'review') await snap.ref.update({ syncedAtMs: Date.now(), syncNote: String(r.message).slice(0, 240) }).catch(() => {});
+    if (r.outcome === 'waiting' || r.outcome === 'review' || r.outcome === 'stillfailed') await snap.ref.update({ syncedAtMs: Date.now(), syncNote: String(r.message).slice(0, 240) }).catch(() => {});
     return r;
   } catch (e) {
     console.error('Deposit sync error (' + depositId + '):', e.message);
@@ -10584,11 +10633,13 @@ async function syncDepositById(depositId) {
 async function resolveStuckDeposits({ force = false, limit = 10 } = {}) {
   const out = { credited: 0, failed: 0, waiting: 0, checked: 0 };
   try {
-    const snap = await db.collection('pendingDeposits').where('status', 'in', ['review', 'pending', 'initiating']).orderBy('createdAt', 'desc').limit(300).get();
+    const snap = await db.collection('pendingDeposits').where('status', 'in', ['review', 'pending', 'initiating', 'failed']).orderBy('createdAt', 'desc').limit(300).get();
     const now = Date.now();
     const rows = snap.docs.filter(d => {
       const x = d.data(), age = now - (tsMillis(x.createdAt) || now);
       if (x.method === 'manual' || age > STUCK_SYNC_MAX_AGE_MS) return false;
+      // A failed recharge is re-asked every 10 minutes for its first 2 hours, then hourly (up to 7 days): a wrong "failed" gets corrected, a real one costs little.
+      if (x.status === 'failed') return force || now - (Number(x.recheckedAtMs) || 0) >= (age < 2 * 3600 * 1000 ? 10 * 60 * 1000 : 3600 * 1000);
       if (!force && now - (Number(x.syncedAtMs) || 0) < STUCK_SYNC_COOLDOWN_MS) return false;
       if (x.status === 'review') return true;
       // pending/initiating rows that the normal sweeps CAN read are theirs; these are the ones they cannot (a gateway row whose start reply was lost).
