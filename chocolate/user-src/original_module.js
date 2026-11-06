@@ -5057,10 +5057,13 @@ function maybeAnnounceAfterHomeNav(prevPage){
 }
 // Owner: the dialog also comes when Back is pressed on Deposit or Withdraw (the arrow in the page's header or the phone's Back button), like Cookie's.
 // Only a plain Back: a sheet that closes itself after a submitted deposit/withdrawal, or because a tab was tapped, does not call this.
+// ONLY when the page underneath is HOME: Deposit / Withdraw opened from Home and closed with Back. Opened from Profile (or Orders, Promotion, Team), Back returns to
+// that page and the welcome announcement must NOT appear there (owner: it belongs on Home).
 function maybeAnnounceAfterSheetBack(title){
   if (title !== 'Deposit' && title !== 'Withdraw') return;
+  if (STATE.page !== 'home') return;
   clearTimeout(_annNavTimer);
-  _annNavTimer = setTimeout(() => { if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }, 350);
+  _annNavTimer = setTimeout(() => { if (STATE.page === 'home' && !isAnyOverlayOpen()) maybeShowAnnouncement(); }, 350);
 }
 // Owner: "l also wanted the dialog to show when on every visit ie logging in
 // again, registration like that." A second, independent trigger alongside
