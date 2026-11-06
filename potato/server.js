@@ -810,16 +810,18 @@ function payAAvailable(sett, region) {
 }
 function withdrawProvider(sett, region) {
   const w = (sett && sett.withdrawMethod) || 'follow';
-  let chosen = w === 'follow' ? depositProvider(sett) : normalizeProviderValue(w);
+  // 'rotate' = every automatic gateway in turn (see PAYOUT_ROTATION); tavupay / lworxpay / obpay can also be pinned on their own.
+  const pinned = (w === 'rotate' || w === 'tavupay' || w === 'lworxpay' || w === 'obpay') ? w : null;
+  let chosen = pinned || (w === 'follow' ? depositProvider(sett) : normalizeProviderValue(w));
   // TavuPay collects recharges only: payouts are not wired to it, so a payout that would "follow" a TavuPay recharge goes through
   // MarzPay, the historical default, exactly as before.
-  if (chosen === 'tavupay') chosen = 'marzpay';
+  if (chosen === 'tavupay' && !pinned) chosen = 'marzpay';
   // A gateway that cannot reach this country's numbers must never be handed a
   // payout. Falling back to manual leaves the money with a human, which is the
   // only correct answer until a gateway for that country exists -- the
   // alternative is a real payout attempted against a provider that either
   // refuses it or, worse, accepts a number it should not.
-  if (chosen !== 'manual' && !gatewayServesRegion(chosen, region)) return 'manual';
+  if (chosen !== 'manual' && !gatewayServesRegion(chosen === 'rotate' ? 'pesajet' : chosen, region)) return 'manual';
   return chosen;
 }
 function payoutIsManual(sett, region) { return withdrawProvider(sett, region) === 'manual'; }
@@ -2825,7 +2827,8 @@ async function tavupayFindDeposit(candidates) {
 async function tavupayWebhookWork(body, verified) {
   try {
     const wh = tavupayWebhookFields(body);
-    if (wh.event === 'ping' || wh.isPayout) return;
+    if (wh.event === 'ping') return;
+    if (wh.isPayout) { await payGwPayoutWebhookWork('tavupay', wh.candidates); return; }
     const doc = await tavupayFindDeposit(wh.candidates);
     if (!doc) return;
     const dep = doc.data();
@@ -2843,7 +2846,7 @@ async function tavupayWebhookWork(body, verified) {
 }
 async function tavupayWebhookOpen(body) {
   const wh = tavupayWebhookFields(body);
-  if (wh.isPayout) return false;
+  if (wh.isPayout) return payGwPayoutWebhookOpen('tavupay', wh.candidates);
   const doc = await tavupayFindDeposit(wh.candidates);
   return !!doc && ['pending', 'initiating'].includes(doc.data().status);
 }
@@ -3081,11 +3084,12 @@ function gatewayWebhookFields(provider, body) {
   const event = String(b.event || '').toLowerCase();
   const prefix = provider === 'lworxpay' ? 'payment.' : 'collection.';
   const isCollection = event.startsWith(prefix);
+  const isPayout = event.startsWith('payout.');
   let label = '';
   if (/success$/.test(event)) label = 'success'; else if (/failed$/.test(event)) label = 'failed';
   const refs = [];
   for (const v of [d.reference, d.merchant_reference, b.reference]) { const x = String(v == null ? '' : v).trim(); if (x && x.length <= 80 && !refs.includes(x)) refs.push(x); }
-  return { event, isCollection, label, refs, txId: String(d.transaction_id || '').trim(), amount: Number(d.amount) };
+  return { event, isCollection, isPayout, label, refs, txId: String(d.transaction_id || '').trim(), amount: Number(d.amount) };
 }
 async function gatewayFindDeposit(provider, wh) {
   for (const c of wh.refs) {
@@ -3103,6 +3107,7 @@ async function gatewayFindDeposit(provider, wh) {
 async function gatewayWebhookWork(provider, body, verified) {
   try {
     const wh = gatewayWebhookFields(provider, body);
+    if (wh.isPayout) { await payGwPayoutWebhookWork(provider, wh.refs.concat(wh.txId ? [wh.txId] : [])); return; }
     if (!wh.isCollection) return;
     const doc = await gatewayFindDeposit(provider, wh);
     if (!doc) return;
@@ -3120,6 +3125,8 @@ async function gatewayWebhookWork(provider, body, verified) {
   } catch (e) { console.error(GATEWAY_DEFS[provider].name + ' webhook error (already acked):', e.message); }
 }
 async function gatewayWebhookOpen(provider, body) {
+  const wh0 = gatewayWebhookFields(provider, body);
+  if (wh0.isPayout) return payGwPayoutWebhookOpen(provider, wh0.refs.concat(wh0.txId ? [wh0.txId] : []));
   const doc = await gatewayFindDeposit(provider, gatewayWebhookFields(provider, body));
   return !!doc && ['pending', 'initiating'].includes(doc.data().status);
 }
@@ -5519,6 +5526,185 @@ async function markWithdrawalProcessed(witRef, userId) {
 // is on -- but every amount in the replies and in the member's ledger row
 // belongs to the MEMBER. The region is switched to theirs as soon as the
 // withdrawal document names them.
+// ═══════════════════════════════════════════
+// PAYOUTS THROUGH ALL FOUR GATEWAYS, IN TURN
+// ═══════════════════════════════════════════
+// Owner: "let the server use all four for withdrawals, not picking one; if one fails the server tries another." Admin > Settings > Withdrawals >
+// "All gateways in turn" (withdrawMethod 'rotate'): each new withdrawal starts on the NEXT gateway of PesaJet, TavuPay, LworxPay, ObPay (an even
+// round robin), and when a gateway CLEANLY refuses (it answered and said no: low balance, bad key, not whitelisted, a number it will not pay) the
+// withdrawal is handed to the next one at once. A gateway that refused is skipped for 5 minutes so the next withdrawals do not queue behind it.
+// MONEY SAFETY (unchanged): a lost reply is AMBIGUOUS -- the row stays on 'sending' and is NEVER handed to another gateway (that could pay twice);
+// only a clean refusal moves on. Every attempt uses the withdrawal id as the reference / idempotency key.
+// The three newer gateways store the same three fields: payGw (which one), payGwRef (our reference = the withdrawal id), payGwTxId (theirs).
+// Contracts, from the owner's saved documents: LworxPay POST /payout {amount, phone, reference, callback_url}; ObPay POST /payouts {amount, currency,
+// phone_number, customer_name, reference, callback_url}; TavuPay POST /payments {type:'disbursement', ...} (PesaJet's and MarzPay's are unchanged).
+const PAYOUT_ROTATION = Object.freeze(['pesajet', 'tavupay', 'lworxpay', 'obpay']);
+const PAYOUT_NAMES = Object.freeze({ pesajet: 'PesaJet', marzpay: 'MarzPay', tavupay: 'TavuPay', lworxpay: 'LworxPay', obpay: 'ObPay' });
+const PAYOUT_PAUSE_MS = 5 * 60 * 1000;
+const _payoutPausedUntil = new Map();
+let _payoutTurn = Math.floor(Math.random() * 1000);
+function payoutGatewayConfigured(p) {
+  if (p === 'pesajet') return pesajetConfigured();
+  if (p === 'tavupay') return tavupayConfigured();
+  if (GATEWAY_DEFS[p]) return GATEWAY_DEFS[p].configured();
+  return p === 'marzpay';
+}
+// The gateways to try for ONE withdrawal, in order: the next in the round robin first, then the rest; gateways that refused in the last 5 minutes go last.
+function payoutRotationOrder(region) {
+  const ready = PAYOUT_ROTATION.filter(p => payoutGatewayConfigured(p) && gatewayServesRegion(p, region));
+  if (!ready.length) return [];
+  const now = Date.now();
+  const live = ready.filter(p => (_payoutPausedUntil.get(p) || 0) <= now), paused = ready.filter(p => !live.includes(p));
+  const start = live.length ? (_payoutTurn++) % live.length : 0;
+  return live.slice(start).concat(live.slice(0, start), paused);
+}
+// A payout (type 'disbursement'). The withdrawal's own id is the idempotency key, so a retry of the same withdrawal is the same payout at TavuPay.
+async function tavupayDisburse({ amount, phone, description, idempotencyKey }) {
+  const payload = { type: 'disbursement', phone: pesajetPhone(phone), amount: Math.round(Number(amount)) };
+  const key = tavupayIdempotencyKey(idempotencyKey);
+  if (key) payload.idempotencyKey = key;
+  if (description) payload.description = String(description).slice(0, 200);
+  return _tavupayRequest('/payments', { method: 'POST', body: payload });
+}
+// What an ADMIN is told when a gateway refuses a payout (a member never sees this): the owner can fix a key, a whitelist, KYC or an empty balance.
+function payoutRefusalMsg(provider, r) {
+  const name = PAYOUT_NAMES[provider] || 'The payment provider';
+  if (!r || r.notConfigured) return `${name} is not set up on the server yet.`;
+  const d = r.data || {}, e = provider === 'tavupay' ? { code: '', message: [d.message, d.error].find(v => typeof v === 'string' && v.trim()) || '' } : gwError(d);
+  if (r.httpStatus === 401 || r.httpStatus === 403 || /^(AUTHENTICATION_FAILED|IP_NOT_ALLOWED|KYC_REQUIRED|ACCOUNT_COOLDOWN|WITHDRAWAL_DISABLED|WITHDRAWALS_BLOCKED)$/.test(e.code)) {
+    console.error(`${name} refused a payout (HTTP ${r.httpStatus} ${e.code}): ${JSON.stringify(d).slice(0, 300)} -- check the key, the IP whitelist, KYC approval and the account status`);
+    return `${name} refused the request (check its key, the IP whitelist and that the account is approved to send payouts).`;
+  }
+  if (e.code === 'INSUFFICIENT_BALANCE' || /insufficient/i.test(e.message)) return `${name} has too little balance to send this payout (top up its wallet).`;
+  return e.message ? `${name} said: ${String(e.message).slice(0, 160)}.` : `${name} could not send this payout right now.`;
+}
+const PAYOUT_ADAPTERS = {
+  tavupay: {
+    async send({ wit, id }) {
+      const r = await tavupayDisburse({ amount: wit.net, phone: wit.phone, description: 'Withdrawal', idempotencyKey: id });
+      const d = (r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : (r.data || {});
+      return { r, txId: String(d.reference || (r.data && r.data.reference) || '').trim() || null };
+    },
+    read: w => tavupayGetTx(w.payGwTxId, { attempts: 1 }),
+  },
+  lworxpay: {
+    async send({ wit, id }) {
+      const body = { amount: Math.round(Number(wit.net)), phone: lworxPhone(wit.phone), reference: id };
+      const cb = GATEWAY_DEFS.lworxpay.callback(); if (cb && /^https:\/\//i.test(cb)) body.callback_url = cb;
+      const r = await _gwRequest('lworxpay', '/payout', { method: 'POST', body });
+      const d = (r.data && typeof r.data.data === 'object' && r.data.data) || {};
+      return { r, txId: String(d.transaction_id || '').trim() || id };   // it can always be read back by OUR reference (the withdrawal id)
+    },
+    read: w => gatewayGetTx('lworxpay', w.payGwRef, { attempts: 1 }),
+  },
+  obpay: {
+    async send({ wit, id }) {
+      const body = { amount: Math.round(Number(wit.net)), currency: 'UGX', phone_number: lworxPhone(wit.phone), customer_name: String(wit.holder || 'Member').slice(0, 60), reference: id, description: 'Withdrawal' };
+      const cb = GATEWAY_DEFS.obpay.callback(); if (cb && /^https:\/\//i.test(cb)) body.callback_url = cb;
+      const r = await _gwRequest('obpay', '/payouts', { method: 'POST', body });
+      const d = (r.data && typeof r.data.data === 'object' && r.data.data) || {};
+      return { r, txId: String(d.reference || '').trim() || id };
+    },
+    read: w => gatewayGetTx('obpay', w.payGwRef, { attempts: 1 }),
+  },
+};
+// Settle one payout from a verdict ('success' | 'failed') that came from the gateway ITSELF (a live read of our reference / its id, never a bare webhook body).
+async function payGwApplyPayout(doc, label, { amount } = {}) {
+  const wit = doc.data();
+  if (wit.status !== 'processing' && wit.status !== 'sending') return 'ignored';
+  if (label === 'success') {
+    const got = Number(amount);
+    if (Number.isFinite(got) && got > 0 && Math.abs(got - Number(wit.net)) >= 0.5)
+      console.error(`${(PAYOUT_NAMES[wit.payGw] || 'GATEWAY').toUpperCase()} PAYOUT AMOUNT DIFFERS withdrawal=${doc.id} net=${wit.net} reported=${got} -- recorded as paid (the money left); check the provider`);
+    if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
+    return 'success';
+  }
+  if (label === 'failed') {
+    const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the payment provider', ['processing', 'sending']);
+    if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
+    return 'failed';
+  }
+  return 'pending';
+}
+// A payout webhook of any of the three (TavuPay transfer.*, LworxPay / ObPay payout.*) only says "look": the payout is re-read at the gateway and only
+// that answer counts, so a forged call can settle nothing.
+async function payGwFindWithdrawal(provider, candidates) {
+  for (const c of candidates) {
+    if (/^[A-Za-z0-9_-]{8,64}$/.test(c)) {
+      const byId = await db.collection('withdrawals').doc(c).get();
+      if (byId.exists && byId.data().payGw === provider) return byId;
+    }
+    const q = await db.collection('withdrawals').where('payGwTxId', '==', c).limit(1).get();
+    if (!q.empty && q.docs[0].data().payGw === provider) return q.docs[0];
+  }
+  return null;
+}
+async function payGwPayoutWebhookWork(provider, candidates) {
+  const doc = await payGwFindWithdrawal(provider, candidates);
+  if (!doc) return;
+  const wit = doc.data();
+  if (wit.status !== 'processing' && wit.status !== 'sending') return;
+  const ad = PAYOUT_ADAPTERS[provider];
+  if (provider === 'tavupay' && !wit.payGwTxId) return;
+  const t = await ad.read(wit);
+  if (t.providerDown || t.unavailable) return;
+  // TavuPay: a read of a payout still on 'sending' is not enough to REFUND it (it may not be the same payout); success is always safe to record.
+  if (provider === 'tavupay' && t.status === 'failed' && wit.status === 'sending') return;
+  if (t.status === 'success' || t.status === 'failed') await payGwApplyPayout(doc, t.status, { amount: t.amount });
+}
+async function payGwPayoutWebhookOpen(provider, candidates) {
+  const doc = await payGwFindWithdrawal(provider, candidates);
+  return !!doc && ['processing', 'sending'].includes(doc.data().status);
+}
+// Accepted payouts that are still 'processing' are read at their gateway; a payout left on 'sending' by a lost reply is looked up by OUR reference
+// (LworxPay / ObPay can do that): a verdict or an in-flight payout moves it on (counted once), and a gateway that has NO such payout hands it back to
+// Pending, since it was never taken. TavuPay has no lookup by our reference, so its 'sending' rows wait for its webhook or for a person.
+async function reconcileGatewayPayouts() {
+  let settled = 0;
+  try {
+    const snap = await db.collection('withdrawals').where('status', '==', 'processing').where('payGwTxId', '>', '').orderBy('createdAt', 'asc').limit(20).get();
+    for (const doc of snap.docs) {
+      const w = doc.data(), ad = PAYOUT_ADAPTERS[w.payGw];
+      if (!ad) continue;
+      const t = await ad.read(w);
+      if (t.providerDown || t.unavailable) continue;
+      const out = await payGwApplyPayout(doc, t.status, { amount: t.amount });
+      if (out === 'success' || out === 'failed') settled++;
+    }
+    const lost = await db.collection('withdrawals').where('status', '==', 'sending').where('payGwRef', '>', '').orderBy('createdAt', 'asc').limit(20).get();
+    for (const doc of lost.docs) {
+      const w = doc.data();
+      if (w.payGw !== 'lworxpay' && w.payGw !== 'obpay') continue;
+      const sentMs = tsMillis(w.sendingAt) || tsMillis(w.createdAt);
+      if (_withdrawInFlight.has(doc.id) || !sentMs || Date.now() - sentMs < SENDING_RECOVER_AFTER_MS) continue;
+      const t = await PAYOUT_ADAPTERS[w.payGw].read(w);
+      if (t.providerDown) continue;
+      _withdrawInFlight.add(doc.id);
+      try {
+        if (t.unavailable) {
+          if (t.httpStatus === 404) {
+            await doc.ref.updateIf({ status: 'sending' }, { status: 'pending', sendingReference: null, payGw: null, payGwRef: null, payGwTxId: null, sendingBy: null, sendingAt: null });
+            console.log(`${PAYOUT_NAMES[w.payGw]} has no record of payout ${doc.id}: handed back to pending`);
+          }
+          continue;
+        }
+        if (t.status === 'success' || t.status === 'failed' || t.status === 'processing') {
+          await withLock('bal:' + w.userId, async () => {
+            await doc.ref.update({ payGwTxId: w.payGwTxId || w.payGwRef });
+            const claimed = await doc.ref.updateIf({ status: 'sending' }, { status: 'processing', processedBy: w.sendingBy || 'recovered', processedAt: FieldValue.serverTimestamp() });
+            if (!claimed) return;
+            await db.collection('users').doc(w.userId).update({ totalWithdrawn: FieldValue.increment(w.net) }).catch(e => console.error(`MONEY-SAFETY: totalWithdrawn increment failed for recovered withdrawal ${doc.id}:`, e.message));
+          });
+          try { const tx = await db.collection('transactions').where('withdrawalId', '==', doc.id).limit(1).get(); if (!tx.empty) await tx.docs[0].ref.updateIf({ status: 'pending' }, { status: 'processing' }); } catch (_) {}
+          const fresh = await doc.ref.get();
+          if (fresh.exists && t.status !== 'processing') { await payGwApplyPayout(fresh, t.status, { amount: t.amount }); settled++; }
+        }
+      } catch (e) { console.error('Gateway payout recovery error:', e.message); }
+      finally { _withdrawInFlight.delete(doc.id); }
+    }
+  } catch (e) { console.error('Reconcile gateway payouts error:', e.message); }
+  return settled;
+}
 async function processWithdrawalCore(withdrawalId, processedBy) {
   try {
     const pre = await db.collection('withdrawals').doc(withdrawalId).get();
@@ -5591,7 +5777,10 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
     if (owner.exists && owner.data().status === 'banned')
       return { code: 409, body: { status: 'error', message: 'This member is suspended, so the payout was not sent. Reject it to refund them, or unban the account first.' } };
 
-    if (withdrawProvider(settNow) === 'pesajet') {
+    // One attempt through ONE gateway. A CLEAN refusal returns `clean: true` (the row is already back on Pending), so 'rotate' can offer the same
+    // withdrawal to the next gateway; a sent payout and an ambiguous (lost-reply) one never carry it, so they are never handed on.
+    const attemptVia = async (chosen) => {
+    if (chosen === 'pesajet') {
       // PesaJet payout. The three rules that matter are:
       //   * the outbound identifier is written BEFORE the provider is ever
       //     called, so a later write failure can never leave a real payout
@@ -5620,7 +5809,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
         // A clean refusal -- PesaJet answered and said no, so nothing was
         // sent and the row is safe to hand back to Pending.
         await witRef.updateIf({ status: 'sending', sendingReference: sendingMarker }, { status: 'pending', sendingReference: null, pesajetRef: null, pesajetTxId: null, sendingBy: null, sendingAt: null }).catch(() => {});
-        return { code: 400, body: { status: 'error', message: pesajetUserMsg(pj, 'PesaJet could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') } };
+        return { code: 400, clean: true, body: { status: 'error', message: pesajetUserMsg(pj, 'PesaJet could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') } };
       }
       const tx = pj.data?.data || pj.data || {};
       const pesajetTxId = tx.transactionId || null;
@@ -5647,6 +5836,51 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       return {
         code: 200,
         body: { status: 'success', sandbox: false, message: `Sending ${fmtMoney(wit.net)} to ${wit.phone}` },
+        meta: { amount: wit.net, dest: wit.phone, userId: wit.userId },
+      };
+    }
+
+    if (PAYOUT_ADAPTERS[chosen]) {
+      // TavuPay / LworxPay / ObPay payout -- the PesaJet branch above with each gateway's own request. The withdrawal id is written first as our
+      // reference (and is the idempotency key / unique reference sent); a lost reply is ambiguous and the row stays on 'sending'; acceptance lands
+      // on 'processing' and the gateway's webhook (a hint) or the reconciler's live read finishes it. See payGwApplyPayout.
+      const ad = PAYOUT_ADAPTERS[chosen], gname = PAYOUT_NAMES[chosen];
+      const sendingMarker = withdrawalId;
+      const sendingClaimed = await witRef.updateIf({ status: 'pending' }, { status: 'sending', sendingReference: sendingMarker, payGw: chosen, payGwRef: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
+      if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Withdrawal status changed. Refresh the list.' } };
+      const sent = await ad.send({ wit, id: withdrawalId });
+      const gr = sent.r;
+      // 429 means the gateway did NOT take the payout (a clean refusal, handled below); any other busy answer or a lost reply is ambiguous.
+      if (gr.providerDown && gr.httpStatus !== 429) {
+        console.error(`${gname} payout unreachable (ambiguous, NOT reverting to pending):`, gr.httpStatus, JSON.stringify(gr.data).slice(0, 200));
+        return { code: 500, body: { status: 'error', message: `Lost contact with ${gname} mid-request. We cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly. Check the ${gname} dashboard before rejecting it.`, sendingReference: sendingMarker } };
+      }
+      if (!gr.ok) {
+        console.error(`${gname} payout refused:`, gr.httpStatus, JSON.stringify(gr.data).slice(0, 300));
+        await witRef.updateIf({ status: 'sending', sendingReference: sendingMarker }, { status: 'pending', sendingReference: null, payGw: null, payGwRef: null, payGwTxId: null, sendingBy: null, sendingAt: null }).catch(() => {});
+        return { code: 400, clean: true, body: { status: 'error', message: payoutRefusalMsg(chosen, gr) + ' The withdrawal stays pending and untouched.' } };
+      }
+      if (!sent.txId) {
+        console.error(`${gname} accepted withdrawal ${withdrawalId} but returned no reference; left on 'sending'`);
+        return { code: 500, body: { status: 'error', message: `${gname} accepted the payout but did not return its reference. It stays on "Sending"; do not reject it before checking the ${gname} dashboard.` } };
+      }
+      await withLock('bal:' + wit.userId, async () => {
+        await witRef.update({ payGwRef: sendingMarker, payGwTxId: sent.txId });
+        const claimed = await witRef.updateIf({ status: 'sending' }, { status: 'processing', processedBy, processedAt: FieldValue.serverTimestamp() });
+        if (!claimed) return;
+        try {
+          await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
+        } catch (twErr) {
+          console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER withdrawal ${withdrawalId} was marked sent via ${gname} — user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
+        }
+      });
+      try {
+        const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
+        if (!txSnap.empty) await txSnap.docs[0].ref.updateIf({ status: 'pending' }, { status: 'processing' });
+      } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
+      return {
+        code: 200,
+        body: { status: 'success', sandbox: false, message: `Sending ${fmtMoney(wit.net)} to ${wit.phone} via ${gname}` },
         meta: { amount: wit.net, dest: wit.phone, userId: wit.userId },
       };
     }
@@ -5688,7 +5922,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
     }
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
       await witRef.updateIf({ status: 'sending', sendingReference: sendingMarker }, { status: 'pending', sendingReference: null, marzReference: null, sendingBy: null, sendingAt: null }).catch(() => {});
-      return { code: 400, body: { status: 'error', message: marzUserMsg(mpData, 'MarzPay could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') } };
+      return { code: 400, clean: true, body: { status: 'error', message: marzUserMsg(mpData, 'MarzPay could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') } };
     }
     const sandbox = mpData.status === 'sandbox';
     const updateFields = { status: sandbox ? 'processed' : 'processing', processedBy, processedAt: FieldValue.serverTimestamp(), marzReference: sendingMarker, marzTxUuid: mpData.data?.transaction?.uuid || null };
@@ -5726,6 +5960,20 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       body: { status: 'success', sandbox, message: sandbox ? `Sandbox: withdrawal marked complete, ${fmtMoney(wit.net)} to ${wit.phone}` : `Sending ${fmtMoney(wit.net)} to ${wit.phone}` },
       meta: { amount: wit.net, dest: wit.phone, userId: wit.userId }
     };
+    };   // end of attemptVia
+    const mode = withdrawProvider(settNow);
+    const chain = mode === 'rotate' ? payoutRotationOrder() : [mode];
+    if (!chain.length) return { code: 400, body: { status: 'error', message: 'No automatic payout gateway is set up on the server yet (PesaJet, TavuPay, LworxPay or ObPay). The withdrawal stays pending and untouched.' } };
+    const refusals = [];
+    for (let i = 0; i < chain.length; i++) {
+      const result = await attemptVia(chain[i]);
+      // Sent, ambiguous (lost reply), changed under us -- or a single pinned gateway: exactly as before. Only a clean refusal in 'rotate' moves on.
+      if (!(result && result.clean) || mode !== 'rotate') return result;
+      _payoutPausedUntil.set(chain[i], Date.now() + PAYOUT_PAUSE_MS);
+      refusals.push((PAYOUT_NAMES[chain[i]] || chain[i]) + ': ' + String((result.body && result.body.message) || '').replace(/\s*The withdrawal stays pending and untouched\.?.*$/s, ''));
+      console.warn(`Payout via ${chain[i]} was refused for withdrawal ${withdrawalId}; ${chain[i + 1] ? 'trying ' + chain[i + 1] : 'no gateway left'}`);
+    }
+    return { code: 400, body: { status: 'error', message: 'Every payout gateway refused this withdrawal (' + refusals.join(' | ') + '). It stays pending and untouched; try again shortly.' } };
   } catch (e) {
     console.error('Process withdrawal error:', e.message);
     return { code: 500, body: { status: 'error', message: e.message } };
@@ -5850,6 +6098,24 @@ app.post('/admin/withdraw/verify', async (req, res) => {
       else if (realStatus === 'processing') pjMessage = `PesaJet still has this payout in flight (status: ${t.status}). Not finished, not failed.`;
       else pjMessage = `PesaJet reports status: ${t.status || 'unknown'}.`;
       return res.json({ status: 'success', ourStatus: w.status, marzStatus: t.status || 'unknown', message: pjMessage });
+    }
+    // TavuPay / LworxPay / ObPay payouts (payGw): read live at that gateway, by its own id (TavuPay) or by OUR reference (LworxPay, ObPay).
+    if (w.payGw && PAYOUT_ADAPTERS[w.payGw]) {
+      const gname = PAYOUT_NAMES[w.payGw];
+      if (w.payGw === 'tavupay' && !w.payGwTxId) {
+        return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'unverifiable', message: `A send attempt WAS made via TavuPay (reference: ${w.payGwRef}) but we never recorded TavuPay's own reference to check against -- this does NOT mean nothing was sent. Check the TavuPay dashboard before rejecting; rejecting a payout that already went out refunds the member on top of it.` });
+      }
+      const t = await PAYOUT_ADAPTERS[w.payGw].read(w);
+      if (t.providerDown || (t.unavailable && t.httpStatus !== 404)) {
+        return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'unverifiable', message: `A send attempt WAS made via ${gname} but it would not tell us the result just now. Try Verify again in a moment -- this does NOT mean nothing was sent.` });
+      }
+      if (t.unavailable) return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'no_record', message: `${gname} has no record of this payout, so nothing was sent through it.` });
+      let gMessage;
+      if (t.status === 'success') gMessage = `${gname} confirms this payout was SENT.`;
+      else if (t.status === 'failed') gMessage = `${gname} says this payout FAILED (status: ${t.rawStatus || 'failed'}).`;
+      else if (t.status === 'processing') gMessage = `${gname} still has this payout in flight (status: ${t.rawStatus || 'pending'}). Not finished, not failed.`;
+      else gMessage = `${gname} reports status: ${t.rawStatus || 'unknown'}.`;
+      return res.json({ status: 'success', ourStatus: w.status, marzStatus: t.rawStatus || t.status || 'unknown', message: gMessage });
     }
     if (!w.marzTxUuid) {
       // Codex-caught real bug (2nd money-flow audit): this used to claim
@@ -6110,7 +6376,7 @@ for (const [gwKey, hdr] of [['lworxpay', 'x-lworxpay-signature'], ['obpay', 'x-o
     const wh = gatewayWebhookFields(gwKey, body);
     console.log(`${GATEWAY_DEFS[gwKey].name} webhook: ${wh.event || '?'} ${wh.refs[0] || '?'}${check.verified ? ' (signed)' : ''}`);
     await gatewayWebhookWork(gwKey, body, check.verified);
-    retryCallbackWork(GATEWAY_DEFS[gwKey].name + ' webhook', () => gatewayWebhookWork(gwKey, body, check.verified), () => gatewayWebhookOpen(gwKey, body), wh.isCollection && (wh.label === 'success' || wh.label === 'failed'));
+    retryCallbackWork(GATEWAY_DEFS[gwKey].name + ' webhook', () => gatewayWebhookWork(gwKey, body, check.verified), () => gatewayWebhookOpen(gwKey, body), (wh.isCollection || wh.isPayout) && (wh.label === 'success' || wh.label === 'failed'));
   });
 }
 // ═══════════════════════════════════════════
@@ -7126,8 +7392,8 @@ app.post('/admin/settings/update', async (req, res) => {
     // MarzPay) -- it just can never be WRITTEN again going forward.
     if ('depositMethod' in updates && !['marzpay', 'pesajet', 'tavupay'].includes(updates.depositMethod))
       return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay', 'pesajet' or 'tavupay'` });
-    if ('withdrawMethod' in updates && !['follow', 'marzpay', 'pesajet', 'manual'].includes(updates.withdrawMethod))
-      return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'marzpay', 'pesajet' or 'manual'` });
+    if ('withdrawMethod' in updates && !['follow', 'marzpay', 'pesajet', 'tavupay', 'lworxpay', 'obpay', 'rotate', 'manual'].includes(updates.withdrawMethod))
+      return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'rotate', 'marzpay', 'pesajet', 'tavupay', 'lworxpay', 'obpay' or 'manual'` });
     // The link-preview words: plain text only, trimmed and capped (Telegram shows about this much).
     for (const [key, max] of [['linkPreviewTitle', 70], ['linkPreviewText', 260]]) {
       if (!(key in updates)) continue;
@@ -8631,6 +8897,14 @@ async function payoutRejectGuard(witId, w) {
     if (f.found && !FINAL_FAIL.includes(f.status)) return live('PesaJet', f.status);
     return null;
   }
+  if (w.payGw && PAYOUT_ADAPTERS[w.payGw]) {
+    const gname = PAYOUT_NAMES[w.payGw];
+    if (w.payGw === 'tavupay' && !w.payGwTxId) return { code: 503, message: 'TavuPay cannot confirm this payout from here (its reference was never saved). Check the TavuPay dashboard first; rejecting a payout that already went out refunds the member on top of it.' };
+    const t = await PAYOUT_ADAPTERS[w.payGw].read(w);
+    if (t.providerDown || (t.unavailable && t.httpStatus !== 404)) return busy(gname);
+    if (t.unavailable) return null;                       // the gateway has no such payout: nothing was sent
+    return t.status === 'failed' ? null : live(gname, t.rawStatus || t.status);
+  }
   if (w.marzTxUuid) {
     const st = await marzGetSendStatus(w.marzTxUuid);
     if (!st) return busy('MarzPay');
@@ -10012,6 +10286,7 @@ async function reconcilePendingWithdrawals() {
   try {
     await reconcileWithdrawalCreations();
     await resolveSendingPesajetPayouts();
+    settled += await reconcileGatewayPayouts();
     // Codex-caught real bug (2nd money-flow audit): same starvation risk as
     // reconcilePendingDeposits() above -- see its own comment for the full
     // reasoning. A `processing` row with no marzTxUuid was never
