@@ -256,7 +256,7 @@ a{color:inherit;}
 .navitem.active .lbl{font-weight:700;color:var(--snow-wine);}
 @media (prefers-reduced-motion:reduce){
   .navitem::before,.navitem .nav-ic,.navitem .nav-ic svg,.navitem .lbl{transition:none;}
-  .navitem.nav-tap::before{animation:none;}}
+  .navitem.nav-tap::before,.navitem.nav-tap .nav-ic svg{animation:none;}}
 
 
 
@@ -2417,13 +2417,14 @@ html.mg-gut .mg-top{margin-right:-15px;}
 @keyframes cardTapBounce{0%{transform:scale(1);}38%{transform:scale(.982);}72%{transform:scale(1.003);}100%{transform:scale(1);}}
 /* The start-up loader's background picture takes the whole screen, edge to edge, nothing cropped and no black frame. */
 #loadingScreen .ld-bg{background-size:100% 100%;background-position:center;}
-/* Owner: only the SELECTOR (the tan box behind the icon) bounces when a tab is tapped, like a tapped product card: it squeezes in, springs past its size
-   and settles, TWICE with no gap. The icon and the label stay perfectly still. The box's transform is its own graphics layer, so it keeps moving while the next page is built. */
-.navitem::before{will-change:transform;}
-/* Twice, back to back: two iterations of the same bounce, each starting the instant the last ends (no pause between them). */
-.navitem.nav-tap::before{animation:navBubbleBounce .3s ease-out 0s 2 normal none;}
+/* Owner: when a tab is tapped, the SELECTOR (the tan box) and the ICON bounce TOGETHER, in the same direction and by the same amount (the same keyframes, the
+   same timing): they squeeze in, spring past their size and settle, TWICE, back to back (two iterations, each starting the instant the last ends). The label
+   stays still. Both are transforms on their own graphics layers, so they keep moving while the next page is built. */
+.navitem::before,.navitem .nav-ic svg{will-change:transform;}
+.navitem .nav-ic svg{backface-visibility:hidden;transform-origin:50% 50%;}
+.navitem.nav-tap::before,.navitem.nav-tap .nav-ic svg{animation:navBubbleBounce .3s ease-out 0s 2 normal none;}
 @keyframes navBubbleBounce{0%{transform:scale(1);}30%{transform:scale(.86);}65%{transform:scale(1.07);}100%{transform:scale(1);}}
-@media (prefers-reduced-motion:reduce){.navitem.nav-tap::before{animation:none;}}
+@media (prefers-reduced-motion:reduce){.navitem.nav-tap::before,.navitem.nav-tap .nav-ic svg{animation:none;}}
 /* Home skeleton (shown for about a second when returning to Home): the real classes and sizes with pale bones that shimmer. */
 .ch-skhome .sk{background:#efe9e0;border-radius:12px;}
 .ch-skhome .sk::after{background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent);}

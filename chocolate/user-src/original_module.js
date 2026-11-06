@@ -2764,7 +2764,8 @@ function hookNavTapBox(){
   // and nothing is left holding a finished animation.
   nav.addEventListener('animationend', e => {
     if (e.animationName === 'navBubbleBounce') {
-      // The animation is on the item's ::before (the selector box), so the event target is the .navitem itself (closest() also matches itself).
+      // The selector box (::before, target = the .navitem itself) and the icon (target = the svg inside it) play the SAME animation and end together;
+      // closest() finds the .navitem either way, and the class comes off once both have finished.
       const btn = e.target.closest && e.target.closest('.navitem');
       if (btn) btn.classList.remove('nav-tap');
     }
