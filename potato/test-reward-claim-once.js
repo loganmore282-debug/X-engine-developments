@@ -54,5 +54,19 @@ function world(user, total) {
   r = await w.call('/salary/claim', { tierId: 's1' }); eq(r.code, 409, 'not paid again'); eq(w.user().walletBalance, 0);
   // a banned member is refused
   w = world({ status: 'banned' }, total); r = await w.call('/salary/claim', { tierId: 's1' }); eq(r.code, 403); eq(w.user().walletBalance, 0);
+  // ── the one-time migration: members paid under the old daily wage get their tiers written down as claimed, even if the amounts are edited later ──
+  {
+    const mig = src.slice(src.indexOf('async function migrateRewardsToClaimOnce'), src.indexOf('// The old Task Center and Mission Center claim routes'));
+    const db = makeDb({ meta: {}, transactions: { t1: { type: 'mission_salary', userId: 'a', amount: 4000 }, t2: { type: 'mission_salary', userId: 'a', amount: 2000 }, t3: { type: 'mission_salary', userId: 'b', amount: 2000 }, t4: { type: 'cashback', userId: 'c', amount: 9999 } },
+      users: { a: {}, b: { creditedSalaryDays: [1] }, c: { salaryTierReward: 6000 }, d: {}, e: { salaryTierReward: 2000, claimedSalaryTiers: ['s1'] } } });
+    const tiers = [{ id: 's1', target: 1, reward: 2000 }, { id: 's2', target: 2, reward: 4000 }, { id: 's3', target: 3, reward: 6000 }];
+    const c = vm.createContext({ db, FieldValue: FV, getSettings: async () => ({ salaryTiers: tiers }), taskRows: r => r, Math, Number, Array, Date, Map });
+    vm.runInContext(mig, c);
+    eq(await c.migrateRewardsToClaimOnce(), 4, 'four members had been paid the daily wage');
+    const U = id => db.rows.users[id].claimedSalaryTiers;
+    eq([U('a'), U('b'), U('c'), U('d'), U('e')], [['s1', 's2'], ['s1'], ['s1', 's2', 's3'], undefined, ['s1']], 'a: largest ledger payment 4000 -> tiers 1-2; b: 2000 -> tier 1; c: recorded tier reward 6000 -> all; d never claimed -> nothing');
+    eq(await c.migrateRewardsToClaimOnce(), 0, 'it runs once'); ok(db.rows.meta.rewardClaimOnce, 'and leaves its marker');
+  }
+  ok(/migrateRewardsToClaimOnce\(\)\.then/.test(src), 'it is started at boot');
   console.log('PASS: Myteam rewards are claim-once (' + n + ' checks)');
 })().catch(e => { console.error(e); process.exit(1); });

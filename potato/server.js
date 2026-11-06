@@ -3618,6 +3618,29 @@ app.post('/salary/claim', async (req, res) => {
     res.status(out.code).json(out.body);
   } catch (e) { console.error('Reward claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim the reward right now' }); }
 });
+// ONE-TIME, at start-up: members who were paid under the old DAILY wage get the tiers they were already paid for written down as claimed, for good
+// (a permanent mark, so a later edit of the tiers' amounts can never re-open one). "Paid for" = every tier whose reward is at most the most they were
+// ever paid (the tier reward recorded on their account, or their largest 'Team reward' ledger row). Runs once (marker meta/rewardClaimOnce).
+async function migrateRewardsToClaimOnce() {
+  const marker = db.collection('meta').doc('rewardClaimOnce');
+  if ((await marker.get()).exists) return 0;
+  const tiers = taskRows((await getSettings()).salaryTiers, 'salary');
+  const maxPaid = new Map();
+  const rows = await db.collection('transactions').where('type', '==', 'mission_salary').limit(500000).get();
+  rows.forEach(d => { const t = d.data(); const a = Number(t.amount) || 0; if (t.userId && a > (maxPaid.get(t.userId) || 0)) maxPaid.set(t.userId, a); });
+  const users = await db.collection('users').limit(200000).get();
+  let n = 0;
+  for (const d of users.docs) {
+    const u = d.data();
+    const paid = Math.max(Number(u.salaryTierReward) || 0, maxPaid.get(d.id) || 0);
+    const had = paid > 0 || (Array.isArray(u.creditedSalaryDays) && u.creditedSalaryDays.length > 0);
+    if (!had) continue;
+    const ids = tiers.filter(t => t.reward <= paid).map(t => t.id);
+    if (ids.length) { await d.ref.update({ claimedSalaryTiers: FieldValue.arrayUnion(...ids) }); n++; }
+  }
+  await marker.set({ at: new Date(), members: n });
+  return n;
+}
 // The old Task Center and Mission Center claim routes are gone from Potato (they are not on its screens). Rows they already paid
 // stay in the ledger, and the labels that render them stay too (team_reward, mission_salary, mission_deposit_reward).
 
@@ -10795,6 +10818,7 @@ connectMongo(MONGODB_URI)
     // (still a single lightweight query -- .where('status','==','active'),
     // not a full-ledger scan) -- worth knowing on the M0 free tier, not
     // expected to be a real problem at Snow's current scale.
+    migrateRewardsToClaimOnce().then(n => { if (n) console.log(`Reward tiers: ${n} members who were paid the old daily wage keep those tiers as claimed`); }).catch(e => console.error('Reward claim-once migration:', e.message));
     migratePayoutsToMidnightOnce().then(n => { if (n) console.log(`Moved ${n} running investments to the midnight payout schedule`); }).catch(e => console.error('Midnight schedule migration:', e.message)).then(() => backfillNextPayoutAt()).then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); armMidnightSweep(); });
     setInterval(autoApproveWithdrawalsTick, 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
