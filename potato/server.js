@@ -566,9 +566,9 @@ app.use(async (req, res, next) => {
 const DEFAULT_SETTINGS = {
   withdrawFeePct: 15, minWithdraw: 8000, minDeposit: 30000,
   welcomeBonus: 5000, commL1: 25, commL2: 2, commL3: 1,
-  // Reward tiers (Myteam > Reward tab): the team's total purchases decide the tier; each calendar day at a reached tier earns its reward.
+  // Reward tiers (Myteam > Reward tab): the team's total purchases decide which tiers are reached; each reached tier is claimed ONCE, for good.
   // Edited in the admin panel under Settings > Reward tiers. `id` stays with a row when its numbers are edited, so an edit can never
-  // let a member claim the same day twice.
+  // let a member claim the same tier twice.
   salaryTiers: [
     { id: 's1', target: 500000, reward: 2000 }, { id: 's2', target: 1000000, reward: 4000 }, { id: 's3', target: 3000000, reward: 6000 },
     { id: 's4', target: 5000000, reward: 8000 }, { id: 's5', target: 10000000, reward: 10000 }, { id: 's6', target: 30000000, reward: 12000 },
@@ -3530,40 +3530,22 @@ app.get('/team/stats', async (req, res) => {
   }
 });
 // ═══════════════════════════════════════════
-// DAILY SALARY (the Salary tab)
+// TEAM REWARDS (the Reward tab of Myteam): each tier is claimed ONCE, for good
 // ═══════════════════════════════════════════
-// The team's total purchases (levels 1-3, the same figure Team shows) put a member on a tier. Every calendar day (the region's
-// clock) spent on a reached tier is one day of wages. Days nobody claims keep accruing; each claim pays the EARLIEST unclaimed
-// day at the reward that day was worth. Money-safe the way a deposit credit is: one claim at a time per member, the live figure is
-// re-read here (the app's own is never trusted), and the credit, the day's "already paid" token and the totals land in ONE atomic
-// user update, so a double tap, two phones or a retry can never pay the same day twice. The ledger row is written (or repaired)
-// afterwards under a key built from the day.
-const SALARY_BACKFILL_DAYS = 60;
-function salaryDayNumber(ms) { return Math.floor(((ms == null ? Date.now() : ms) + tzOffMs()) / 86400000); }
+// Owner: the Reward tab must be claim-once, permanently -- not a reward that comes back tomorrow. The team's total purchases (levels 1-3, the
+// same figure Team shows) decide which tiers are reached. Each reached tier can be claimed exactly one time per member; its button then
+// reads "Claimed" for good. Money-safe the way a deposit credit is: one claim at a time per member, the live total is re-read here (the app's
+// own figure is never trusted), and the credit, the tier's "already claimed" mark and the totals land in ONE atomic user update, so a double
+// tap, two phones or a retry can never pay a tier twice. A tier keeps its id when the admin edits its numbers, so an edit never re-opens it.
+// The ledger row is written (or repaired) afterwards under a key built from the tier.
 function salaryTierFor(tiers, total) { let t = null; for (const x of tiers) if (total >= x.target) t = x; return t; }
-// Pure: what the member's wage book looks like today. Days between two looks are paid at the reward recorded at the last look
-// (never at a tier reached only today); today itself is paid at today's tier. Nothing before the first reached day accrues.
-function salaryAccrue(u, tier, today) {
-  const paid = new Set(Array.isArray(u.creditedSalaryDays) ? u.creditedSalaryDays : []);
-  const accrued = (Array.isArray(u.salaryAccrued) ? u.salaryAccrued : [])
-    .filter(e => e && Number.isInteger(e.d) && Number(e.r) > 0 && !paid.has(e.d))
-    .map(e => ({ d: e.d, r: Number(e.r) }));
-  const have = new Set(accrued.map(e => e.d));
-  const last = Number.isInteger(u.salaryLastDay) ? u.salaryLastDay : null;
-  let tierReward = Number(u.salaryTierReward) || 0;
-  let newLast = last;
-  if (tier) {
-    const from = last == null ? today : Math.max(last + 1, today - SALARY_BACKFILL_DAYS + 1);
-    for (let d = from; d <= today; d++) {
-      if (have.has(d) || paid.has(d)) continue;
-      accrued.push({ d, r: (d < today && tierReward > 0) ? tierReward : tier.reward });
-      have.add(d);
-    }
-    tierReward = tier.reward;
-    newLast = Math.max(last == null ? today : last, today);
-  } else if (last != null) newLast = Math.max(last, today);
-  accrued.sort((x, y) => x.d - y.d);
-  return { accrued, last: newLast, tierReward };
+// The tier ids this member has already claimed. A member from the earlier DAILY wage was already paid for the tiers up to the one they were on
+// (their recorded tier reward), so those count as claimed and are never paid a second time.
+function salaryClaimedSet(u, tiers) {
+  const s = new Set(Array.isArray(u.claimedSalaryTiers) ? u.claimedSalaryTiers : []);
+  const legacy = Number(u.salaryTierReward) || 0;
+  if (legacy > 0) for (const t of tiers) if (t.reward <= legacy) s.add(t.id);
+  return s;
 }
 async function salaryView(userId) {
   const [sett, teamNow] = await Promise.all([getSettings(), wholeTeamStats(userId)]);
@@ -3575,31 +3557,22 @@ app.get('/salary/status', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const out = await withLock('salary:' + userId, async () => {
-      const uRef = db.collection('users').doc(userId);
-      const uSnap = await uRef.get();
-      if (!uSnap.exists) return { code: 404, body: { status: 'error', message: 'User not found' } };
-      const u = uSnap.data();
-      if (u.status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
-      const view = await salaryView(userId);
-      const book = salaryAccrue(u, view.tier, salaryDayNumber());
-      const changed = book.last !== (Number.isInteger(u.salaryLastDay) ? u.salaryLastDay : null)
-        || book.tierReward !== (Number(u.salaryTierReward) || 0)
-        || book.accrued.length !== (Array.isArray(u.salaryAccrued) ? u.salaryAccrued.length : 0);
-      if (changed) await uRef.update({ salaryAccrued: book.accrued, salaryLastDay: book.last, salaryTierReward: book.tierReward });
-      return { code: 200, body: {
-        status: 'success', total: view.total, accruedDays: book.accrued.length,
-        nextReward: book.accrued.length ? book.accrued[0].r : (view.tier ? view.tier.reward : 0),
-        tierId: view.tier ? view.tier.id : null,
-        tiers: view.tiers.map(t => ({ id: t.id, target: t.target, reward: t.reward, reached: view.total >= t.target })),
-      } };
-    });
-    res.status(out.code).json(out.body);
+    const uSnap = await db.collection('users').doc(userId).get();
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const u = uSnap.data();
+    if (u.status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    const view = await salaryView(userId);
+    const claimed = salaryClaimedSet(u, view.tiers);
+    const tiers = view.tiers.map(t => ({ id: t.id, target: t.target, reward: t.reward, reached: view.total >= t.target, claimed: claimed.has(t.id) }));
+    const open = tiers.filter(t => t.reached && !t.claimed);
+    // `accruedDays` = how many rewards can be claimed right now (the name an older cached app still reads).
+    res.json({ status: 'success', total: view.total, accruedDays: open.length, nextReward: open.length ? open[0].reward : 0, tierId: view.tier ? view.tier.id : null, tiers });
   } catch (e) { console.error('Salary status error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the rewards' }); }
 });
 app.post('/salary/claim', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const wantId = String((req.body && req.body.tierId) || '').slice(0, 40);
   try {
     const out = await withLock('salary:' + userId, async () => {
       const uRef = db.collection('users').doc(userId);
@@ -3608,37 +3581,42 @@ app.post('/salary/claim', async (req, res) => {
       const u = first.data();
       if (u.status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
       const view = await salaryView(userId);
-      if (!view.tier) {
-        const lowest = view.tiers[0];
-        return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: lowest ? `Need ${fmtMoney(Math.max(0, lowest.target - view.total))} more to claim` : 'Rewards are not available yet.' } };
+      const claimed = salaryClaimedSet(u, view.tiers);
+      // The button names its tier; an older app that names none claims the lowest reward that is open.
+      const tier = wantId ? view.tiers.find(t => t.id === wantId) : view.tiers.find(t => view.total >= t.target && !claimed.has(t.id));
+      if (wantId && !tier) return { code: 400, body: { status: 'error', code: 'UNKNOWN_TIER', message: 'This reward is no longer available.' } };
+      if (!tier) {
+        if (!view.tier) {
+          const lowest = view.tiers[0];
+          return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: lowest ? `Need ${fmtMoney(Math.max(0, lowest.target - view.total))} more to claim` : 'Rewards are not available yet.' } };
+        }
+        return { code: 400, body: { status: 'error', code: 'NOTHING_TO_CLAIM', message: 'You have already claimed every reward you have reached.' } };
       }
-      const book = salaryAccrue(u, view.tier, salaryDayNumber());
-      if (!book.accrued.length) return { code: 400, body: { status: 'error', code: 'NOTHING_TO_CLAIM', message: 'Nothing to claim yet. Come back tomorrow.' } };
-      const entry = book.accrued[0], rest = book.accrued.slice(1);
+      if (view.total < tier.target) return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: `Need ${fmtMoney(Math.max(0, tier.target - view.total))} more to claim` } };
+      if (claimed.has(tier.id)) return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'You have already claimed this reward.' } };
       const { date, time } = nowStr();
-      const ledger = () => db.collection('transactions').doc(`salary:${userId}:${entry.d}`).createIfAbsent({
+      const ledger = () => db.collection('transactions').doc(`salary:${userId}:tier:${tier.id}`).createIfAbsent({
         userId, statementId: newStatementId(), type: 'mission_salary', description: 'Team reward',
-        amount: entry.r, salaryDay: entry.d, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+        amount: tier.reward, salaryTier: tier.id, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
       let balance = 0, applied = false;
       await withLock('bal:' + userId, async () => {
-        applied = await uRef.updateIf({ creditedSalaryDays: { $ne: entry.d }, status: { $ne: 'banned' } }, {
-          walletBalance: FieldValue.increment(entry.r), totalEarned: FieldValue.increment(entry.r),
-          creditedSalaryDays: FieldValue.arrayUnion(entry.d),
-          salaryAccrued: rest, salaryLastDay: book.last, salaryTierReward: book.tierReward
+        applied = await uRef.updateIf({ claimedSalaryTiers: { $ne: tier.id }, status: { $ne: 'banned' } }, {
+          walletBalance: FieldValue.increment(tier.reward), totalEarned: FieldValue.increment(tier.reward),
+          claimedSalaryTiers: FieldValue.arrayUnion(tier.id)
         });
         const after = await uRef.get();
         balance = round2(Number(after.exists && after.data().walletBalance) || 0);
       });
-      if (!applied) return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'Already claimed' } };
-      // The money is already in the wallet. If only the history row fails to write, say success (a later claim repairs nothing
-      // twice: the row key is the day) instead of telling the member it failed.
+      if (!applied) return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'You have already claimed this reward.' } };
+      // The money is already in the wallet. If only the history row fails to write, say success (the row key is the tier, so it is never doubled).
       try { await ledger(); }
-      catch (e1) { try { await ledger(); } catch (e2) { console.error('Salary ledger row failed (credit is applied):', e2.message); } }
-      return { code: 200, body: { status: 'success', amount: entry.r, walletBalance: balance, accruedDays: rest.length, message: `${fmtMoney(entry.r)} added to your wallet` } };
+      catch (e1) { try { await ledger(); } catch (e2) { console.error('Reward ledger row failed (credit is applied):', e2.message); } }
+      const left = view.tiers.filter(t => view.total >= t.target && t.id !== tier.id && !claimed.has(t.id)).length;
+      return { code: 200, body: { status: 'success', amount: tier.reward, tierId: tier.id, walletBalance: balance, accruedDays: left, message: `${fmtMoney(tier.reward)} added to your wallet` } };
     });
     res.status(out.code).json(out.body);
-  } catch (e) { console.error('Salary claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim the reward right now' }); }
+  } catch (e) { console.error('Reward claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim the reward right now' }); }
 });
 // The old Task Center and Mission Center claim routes are gone from Potato (they are not on its screens). Rows they already paid
 // stay in the ledger, and the labels that render them stay too (team_reward, mission_salary, mission_deposit_reward).

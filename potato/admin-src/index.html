@@ -3607,7 +3607,7 @@ async function renderSettings(){
 
     <h2 class="sec">Reward tiers</h2>
     <div class="panel-card" id="taskCard">
-      <p class="muted" style="margin-top:0">The Reward tab on Myteam. A member's team total (everything levels 1 to 3 have bought) puts them on the highest tier it reaches, and each calendar day on a reached tier earns that tier's reward; rewards the member does not claim keep adding up. A day already paid stays paid when you change the numbers.</p>
+      <p class="muted" style="margin-top:0">The Reward tab on Myteam. A member's team total (everything levels 1 to 3 have bought) decides which tiers are reached. Each reached tier can be claimed ONCE per member, for good: its button then reads Claimed and never comes back. Changing the numbers of a tier never lets a member claim it again.</p>
       <div id="taskEditor" class="muted">Loading...</div>
       <button class="btn block" id="saveTasks" style="margin-top:12px" disabled>Save reward tiers</button>
     </div>
@@ -3700,7 +3700,7 @@ async function renderSettings(){
     const upd = { supportTelegram:$('spTg').value.trim(), telegramGroup:$('spTgGroup').value.trim() };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
-  // ── Reward tiers editor: one table of team total / reward per day, each row keeps its id so edits never re-pay a claimed day ──
+  // ── Reward tiers editor: one table of team total / one-time reward, each row keeps its id so edits never re-pay a claimed tier ──
   const taskRowHtml=(r)=>`<div class="task-row" data-id="${esc(r.id||'')}" style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
       <input type="number" min="1" step="1" class="tk-target" value="${r.target||''}" placeholder="Team total" style="flex:1;margin:0">
       <input type="number" min="1" step="1" class="tk-reward" value="${r.reward||''}" placeholder="Reward" style="flex:1;margin:0">

@@ -2838,13 +2838,14 @@ function ptRewardHtml(loading){
   const S = STATE.salary;
   if (!S && loading) return '<div class="mg-nomem">Loading...</div>';   // still on its way: not a failure
   if (!S) return '<div class="v-empty" onclick="renderNetwork()">Could not load. Tap to try again.</div>';
-  const tiers = S.tiers || [], total = Number(S.total) || 0, days = Number(S.accruedDays) || 0;
+  const tiers = S.tiers || [], total = Number(S.total) || 0;
   const money = n => cur() + ' ' + numGroup(n, false);
   return tiers.map((tier, i) => {
     const pct = tier.target > 0 ? Math.min(100, Math.floor(total / tier.target * 100)) : 0;
+    // Each tier is claimed ONCE, for good: Share to Unlock -> Claim -> Claimed (it never comes back).
     const btn = !tier.reached ? '<button type="button" class="pt-rbtn" onclick="navigatePage(\'promo\')">Share to Unlock</button>'
-      : days > 0 ? '<button type="button" class="pt-rbtn go" onclick="claimSalary(this)">Claim</button>'
-      : '<button type="button" class="pt-rbtn done" onclick="notify(\'Nothing to claim yet. Come back tomorrow.\')">Claimed</button>';
+      : !tier.claimed ? `<button type="button" class="pt-rbtn go" onclick="claimSalary(this, '${esc(tier.id)}')">Claim</button>`
+      : '<button type="button" class="pt-rbtn done" onclick="notify(\'You have already claimed this reward.\')">Claimed</button>';
     return `<section class="pt-tier"><header><span>Tier ${i + 1}</span><b>+${esc(money(tier.reward))}</b></header>
       <div class="pt-tb"><div class="pt-tl"><span>Consumption Threshold</span><b>${esc(money(tier.target))}</b></div>
       <div class="pt-bar"><i style="width:${pct}%"></i></div>
@@ -2942,10 +2943,10 @@ window.shareTo = function(where){
 
 // ── SALARY (the Reward tab of Myteam) ──
 var _salaryBusy = false;
-window.claimSalary = async function(btn){
+window.claimSalary = async function(btn, tierId){
   if (_salaryBusy) return;
   _salaryBusy = true; if (btn) btn.disabled = true;
-  const r = await post('/salary/claim', {});
+  const r = await post('/salary/claim', tierId ? { tierId } : {});
   _salaryBusy = false;
   if (r && r.stale) return;
   const fresh = await api('/salary/status');

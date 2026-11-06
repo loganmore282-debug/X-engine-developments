@@ -1,5 +1,5 @@
 'use strict';
-// Daily Salary (the Salary tab): the server's tier validation and wage book (accrual rules), the claim route's money guards,
+// Team rewards (the Reward tab of Myteam): each tier is claimed ONCE, for good. The server's tier validation, the claim route's money guards,
 // and the member page. Drives source (and --built) in JSDOM; server helpers via vm.
 const fs = require('node:fs'), zlib = require('node:zlib'), vm = require('node:vm'), assert = require('node:assert/strict');
 const { JSDOM } = require('jsdom');
@@ -12,9 +12,9 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 // ── server helpers ──
 {
   const i = server.indexOf('const TASK_MAX_ROWS'), j = server.indexOf('// The WHOLE team (L1+L2+L3)');
-  const k = server.indexOf('const SALARY_BACKFILL_DAYS'), l = server.indexOf('async function salaryView');
+  const k = server.indexOf('function salaryTierFor'), l = server.indexOf('async function salaryView');
   const ctx = { crypto: require('node:crypto'), MAX_MONEY_AMOUNT: 999999999, tzOffMs: () => 3 * 3600000 }; vm.createContext(ctx);
-  vm.runInContext(server.slice(i, j) + '\n' + server.slice(k, l) + '\nthis.S=sanitizeTaskRows;this.T=taskRows;this.accrue=salaryAccrue;this.tierFor=salaryTierFor;this.day=salaryDayNumber;', ctx);
+  vm.runInContext(server.slice(i, j) + '\n' + server.slice(k, l) + '\nthis.S=sanitizeTaskRows;this.T=taskRows;this.tierFor=salaryTierFor;this.claimedSet=salaryClaimedSet;', ctx);
   const good = ctx.S([{ id: 's1', target: 500000, reward: 2000 }, { target: 100, reward: 5 }], 'salary');
   ok(good.rows.map(r => r.target).join() === '100,500000' && good.rows[1].id === 's1', 'tiers are sorted and keep their id');
   ok(ctx.S([{ target: 5, reward: 1 }, { target: 5, reward: 2 }], 'salary').error, 'two tiers cannot share a target');
@@ -22,32 +22,16 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(ctx.S([{ target: 50000000, reward: 14000 }], 'salary').rows, 'a large team total is allowed');
   const tiers = ctx.T([{ id: 'a', target: 500000, reward: 2000 }, { id: 'b', target: 1000000, reward: 4000 }], 'salary');
   ok(ctx.tierFor(tiers, 499999) === null && ctx.tierFor(tiers, 500000).id === 'a' && ctx.tierFor(tiers, 2500000).id === 'b', 'the highest tier reached is the member\'s tier');
-  // day numbers follow the region clock (UTC+3): 22:00 UTC is already the next day in Uganda
-  ok(ctx.day(Date.UTC(2026, 9, 19, 22, 0)) === ctx.day(Date.UTC(2026, 9, 20, 1, 0)) && ctx.day(Date.UTC(2026, 9, 19, 20, 0)) !== ctx.day(Date.UTC(2026, 9, 20, 1, 0)), 'a salary day is a calendar day on the Uganda clock');
-  const T1 = tiers[0], T2 = tiers[1], today = 20000;
-  let b = ctx.accrue({}, null, today);
-  ok(b.accrued.length === 0 && b.last === null, 'below the lowest tier nothing accrues');
-  b = ctx.accrue({}, T1, today);
-  ok(b.accrued.length === 1 && b.accrued[0].d === today && b.accrued[0].r === 2000, 'the day the lowest tier is reached accrues one day');
-  // two days later, tier went up to T2 in between: yesterday is paid at the old reward, today at the new one
-  let u = { salaryAccrued: b.accrued, salaryLastDay: b.last, salaryTierReward: b.tierReward };
-  b = ctx.accrue(u, T2, today + 2);
-  ok(b.accrued.map(e => e.d + ':' + e.r).join() === `${today}:2000,${today + 1}:2000,${today + 2}:4000`, 'missed days are paid at the reward recorded at the last look, today at today\'s tier');
-  // a day already paid never accrues again
-  u = { salaryAccrued: [], salaryLastDay: today, salaryTierReward: 2000, creditedSalaryDays: [today, today + 1] };
-  b = ctx.accrue(u, T1, today + 1);
-  ok(b.accrued.length === 0, 'a day already paid is never accrued again');
-  // looking twice on the same day changes nothing
-  u = { salaryAccrued: [{ d: today, r: 2000 }], salaryLastDay: today, salaryTierReward: 2000 };
-  b = ctx.accrue(u, T1, today);
-  ok(b.accrued.length === 1, 'looking twice on one day does not add a second day');
-  // a long absence is capped
-  b = ctx.accrue({ salaryLastDay: today - 1000, salaryTierReward: 2000 }, T1, today);
-  ok(b.accrued.length === 60, 'at most 60 days are back-filled');
+  // a member's claimed tiers: the ones they claimed, plus (from the earlier daily wage) the tiers up to the one they were paid at
+  ok([...ctx.claimedSet({}, tiers)].length === 0, 'a new member has claimed nothing');
+  ok([...ctx.claimedSet({ claimedSalaryTiers: ['b'] }, tiers)].join() === 'b', 'a claimed tier stays claimed');
+  ok([...ctx.claimedSet({ salaryTierReward: 2000 }, tiers)].join() === 'a', 'a member paid daily at the first tier already had that tier: it is not paid again');
+  ok([...ctx.claimedSet({ salaryTierReward: 4000, claimedSalaryTiers: ['b'] }, tiers)].sort().join() === 'a,b', 'both together');
   ok(/app\.get\('\/salary\/status'/.test(server) && /app\.post\('\/salary\/claim'/.test(server), 'the salary routes exist');
-  const claim = server.slice(server.indexOf("app.post('/salary/claim'"), server.indexOf("app.post('/salary/claim'") + 4500);
-  ok(/withLock\('salary:' \+ userId/.test(claim) && /creditedSalaryDays: \{ \$ne: entry\.d \}/.test(claim) && /FieldValue\.arrayUnion\(entry\.d\)/.test(claim) && /FieldValue\.increment\(entry\.r\)/.test(claim), 'the claim is locked per member and one atomic update carries the credit and the day\'s paid token');
-  ok(/createIfAbsent/.test(claim) && /salary:\$\{userId\}:\$\{entry\.d\}/.test(claim), 'the ledger row is keyed by the day');
+  const claim = server.slice(server.indexOf("app.post('/salary/claim'"), server.indexOf("app.post('/salary/claim'") + 5200);
+  ok(/withLock\('salary:' \+ userId/.test(claim) && /claimedSalaryTiers: \{ \$ne: tier\.id \}/.test(claim) && /FieldValue\.arrayUnion\(tier\.id\)/.test(claim) && /FieldValue\.increment\(tier\.reward\)/.test(claim), 'the claim is locked per member and one atomic update carries the credit and the tier\'s claimed mark');
+  ok(/createIfAbsent/.test(claim) && /salary:\$\{userId\}:tier:\$\{tier\.id\}/.test(claim), 'the ledger row is keyed by the tier');
+  ok(!/salaryAccrue|creditedSalaryDays|salaryDayNumber|Come back tomorrow/.test(server.slice(server.indexOf('TEAM REWARDS (the Reward tab'), server.indexOf('The old Task Center and Mission Center'))), 'no daily wage left in the reward code');
   ok(/app\.post\('\/admin\/salary\/save', async \(req, res\) => \{\s*if \(!verifyOwner/.test(server), 'only the owner can save the tiers');
   ok(!/team\/task\/claim|taskReferrals|taskDeposits|creditedTaskKeys/.test(server), 'the Task Center is gone from the server');
 }
@@ -65,10 +49,10 @@ for (const s of d.scripts) {
 (async () => {
   await new Promise(r => setTimeout(r, 30));
   const tiers = [[500000, 2000], [1000000, 4000], [3000000, 6000]].map(([t, r], i) => ({ id: 's' + i, target: t, reward: r, reached: 700000 >= t }));
-  let status = { status: 'success', total: 700000, accruedDays: 2, nextReward: 2000, tierId: 's0', tiers };
+  let status = { status: 'success', total: 700000, accruedDays: 1, nextReward: 2000, tierId: 's0', tiers };
   const calls = [];
   w.api = async (p) => { calls.push(p); if (p === '/salary/status') return JSON.parse(JSON.stringify(status)); if (p === '/account') return { status: 'success', account: { walletBalance: 1 } }; if (p === '/team/stats') return { status: 'success', referralCode: 'ABCDE', commRates: { l1: 20, l2: 5, l3: 1 }, team: { l1: 0, l2: 0, l3: 0 }, totalTeam: 0, teamCommission: 0, teamDeposits: 0, levelCommission: {}, levelPurchase: {} }; return { status: 'success', transactions: [], messages: [] }; };
-  w.post = async (p, b) => { calls.push(p + ' ' + JSON.stringify(b)); status = Object.assign({}, status, { accruedDays: 1 }); return { status: 'success', amount: 2000, walletBalance: 9000, accruedDays: 1 }; };
+  w.post = async (p, b) => { calls.push(p + ' ' + JSON.stringify(b)); status = Object.assign({}, status, { accruedDays: 0, tiers: status.tiers.map((t, i) => i === 0 ? Object.assign({}, t, { claimed: true }) : t) }); return { status: 'success', amount: 2000, walletBalance: 9000, accruedDays: 0 }; };
   w.eval('STATE.account={walletBalance:5000}; STATE.page="network"; STATE.teamTab="reward"');
   await w.renderNetwork(); await new Promise(r => setTimeout(r, 20));
   ok(d.querySelectorAll('.bottom-nav .navitem').length === 5, 'five tabs');
@@ -78,13 +62,16 @@ for (const s of d.scripts) {
   ok(cards.length === 3 && /Tier 1/.test(cards[0].textContent) && /\+UGX 2,000/.test(cards[0].textContent) && /UGX 500,000/.test(cards[0].textContent), 'one card per tier with its reward and threshold');
   ok(/UGX 500,000 \/ UGX 500,000/.test(cards[0].querySelector('.pt-tn').textContent) && /UGX 700,000 \/ UGX 1,000,000/.test(cards[1].querySelector('.pt-tn').textContent), 'the progress line shows the team total against the threshold');
   ok(cards[0].querySelector('.pt-rbtn.go') && !cards[1].querySelector('.pt-rbtn.go') && cards[1].querySelector('.pt-rbtn').textContent === 'Share to Unlock', 'a reached tier shows Claim, an unreached one Share to Unlock');
-  w.claimSalary(d.querySelector('.pt-rbtn.go')); await new Promise(r => setTimeout(r, 40));
-  ok(calls.includes('/salary/claim {}'), 'Claim posts to the server');
+  w.claimSalary(d.querySelector('.pt-rbtn.go'), 's0'); await new Promise(r => setTimeout(r, 40));
+  ok(calls.includes('/salary/claim {"tierId":"s0"}'), 'Claim names its tier');
   ok(/UGX 2,000 added to your wallet/.test(d.getElementById('notifyMsg').textContent), 'the member is told what was paid');
-  ok(w.eval('STATE.account.walletBalance') === 9000 && w.eval('STATE.salary.accruedDays') === 1, 'the wallet figure and the accrued days are updated');
+  ok(w.eval('STATE.account.walletBalance') === 9000 && w.eval('STATE.salary.tiers[0].claimed') === true, 'the wallet figure and the tier\'s claimed mark are updated');
+  const after = [...d.querySelectorAll('.pt-tier')];
+  ok(after[0].querySelector('.pt-rbtn.done') && after[0].querySelector('.pt-rbtn').textContent === 'Claimed' && !after[0].querySelector('.pt-rbtn.go'), 'a claimed tier reads Claimed and offers no Claim');
+  ok(!/tomorrow/i.test(after[0].textContent) && !/tomorrow/.test(w.eval('String(ptRewardHtml)')), 'and nothing says it will be claimable again tomorrow');
   w.closeNotify();
-  w.post = async () => ({ status: 'error', message: 'No wages to claim yet. Come back tomorrow.' });
+  w.post = async () => ({ status: 'error', message: 'You have already claimed every reward you have reached.' });
   w.claimSalary(null); await new Promise(r => setTimeout(r, 40));
-  ok(/No wages to claim yet/.test(d.getElementById('notifyMsg').textContent), 'a refused claim shows the server\'s message');
+  ok(/already claimed every reward/.test(d.getElementById('notifyMsg').textContent), 'a refused claim shows the server\'s message');
   console.log('test-salary: ' + n + ' checks passed' + (built ? ' (built)' : ''));
 })().catch(e => { console.error(e); process.exit(1); });
