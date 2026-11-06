@@ -31,7 +31,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   const claim = server.slice(server.indexOf("app.post('/salary/claim'"), server.indexOf("app.post('/salary/claim'") + 5200);
   ok(/withLock\('salary:' \+ userId/.test(claim) && /claimedSalaryTiers: \{ \$ne: tier\.id \}/.test(claim) && /FieldValue\.arrayUnion\(tier\.id\)/.test(claim) && /FieldValue\.increment\(tier\.reward\)/.test(claim), 'the claim is locked per member and one atomic update carries the credit and the tier\'s claimed mark');
   ok(/createIfAbsent/.test(claim) && /salary:\$\{userId\}:tier:\$\{tier\.id\}/.test(claim), 'the ledger row is keyed by the tier');
-  ok(!/salaryAccrue|creditedSalaryDays|salaryDayNumber|Come back tomorrow/.test(server.slice(server.indexOf('TEAM REWARDS (the Reward tab'), server.indexOf('The old Task Center and Mission Center'))), 'no daily wage left in the reward code');
+  ok(!/salaryAccrue|creditedSalaryDays|salaryDayNumber|Come back tomorrow/.test(server.slice(server.indexOf('TEAM REWARDS (the Reward tab'), server.indexOf('ONE-TIME, at start-up'))), 'no daily wage left in the reward code');
   ok(/app\.post\('\/admin\/salary\/save', async \(req, res\) => \{\s*if \(!verifyOwner/.test(server), 'only the owner can save the tiers');
   ok(!/team\/task\/claim|taskReferrals|taskDeposits|creditedTaskKeys/.test(server), 'the Task Center is gone from the server');
 }
