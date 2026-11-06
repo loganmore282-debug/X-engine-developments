@@ -117,7 +117,7 @@ sed -i -E '/^[[:space:]]*listen .*443 ssl/{/http2/!s/443 ssl/443 ssl http2/}' "$
 if nginx -t >/dev/null 2>&1; then echo "    HTTP/2 on: $(grep -c 'ssl http2' "$CONF") listen line(s)"; else echo "    (HTTP/2 not accepted by this nginx, left as it was)"; cp /tmp/chocolate.conf.pre-h2 "$CONF"; fi
 if nginx -t >/dev/null 2>&1; then systemctl reload nginx && echo "    nginx reloaded"; else echo "    !! nginx test failed after certbot, putting the old file back"; cp "$BAK" "$CONF"; _restore_wild; nginx -t 2>&1 | tail -1; systemctl reload nginx; exit 1; fi
 if [ -n "$WILD_DOMAIN" ]; then
-  if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" --wild="$WILD_DOMAIN" --wild-only > "$WILD_CONF") && nginx -t >/tmp/chocolate.nginxtest 2>&1; then
+  if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" ${ALSO_HOSTS:+--also="$ALSO_HOSTS"} --wild="$WILD_DOMAIN" --wild-only > "$WILD_CONF") && nginx -t >/tmp/chocolate.nginxtest 2>&1; then
     chmod 644 "$WILD_CONF"; systemctl reload nginx && echo "    random addresses (*.$WILD_DOMAIN) on: $WILD_CONF"
   else
     echo "    !! nginx refused the random-address file: it is left out, the rest of the site is unchanged"; tail -3 /tmp/chocolate.nginxtest; rm -f "$WILD_CONF"; nginx -t >/dev/null 2>&1 && systemctl reload nginx
