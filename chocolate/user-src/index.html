@@ -2338,7 +2338,8 @@ body{color:var(--ch-ink);font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
 .mg-dl{background:none;}
 .mg-dl-bg{position:sticky;top:0;align-self:stretch;flex:0 0 auto;width:auto;margin:-318px -22px calc(318px - (100vh - var(--nav-h)));height:calc(100vh - var(--nav-h));background:linear-gradient(180deg,#e8dcc7 0%,#f1e8d8 45%,#f8f2e6 100%) center/100% 100% no-repeat #f6efe2;z-index:0;pointer-events:none;}
 @supports (height:100dvh){.mg-dl-bg{height:calc(100dvh - var(--nav-h));margin-bottom:calc(318px - (100dvh - var(--nav-h)));}}
-.mg-dl-btn{position:relative;z-index:1;}
+/* The button is held in place like the picture: sticky at the same 318px it sits at when the page is at rest, so the page can scroll (it is 62px longer than the screen) and neither the picture nor the button moves. */
+.mg-dl-btn{position:sticky;top:318px;z-index:1;}
 .mg-dl-btn{background:var(--ch-btn);border-radius:12px;}
 .mg-loadtxt{color:#a39683;}
 .mg-nomem .mg-loadtxt{color:#a39683;}

@@ -42,6 +42,7 @@ for (const s of d.scripts) { if (s.type === 'module' || s.src) continue; if (s.h
   const dl = d.querySelector('#sheetBody .mg-dl'), bg = dl && dl.querySelector('.mg-dl-bg');
   ok(bg && /background-image:url\(/.test(bg.getAttribute('style')) && !/background-image/.test(dl.getAttribute('style') || ''), 'the uploaded picture is on its own layer, not on the scrolling page');
   ok(/\.mg-dl-bg\{position:sticky;top:0;/.test(html), 'that layer sticks to the top of the scroll area');
+  ok(/\.mg-dl-btn\{position:sticky;top:318px;z-index:1;\}/.test(html), 'and the Download Now button is held at its resting place too, so it does not float up when the page scrolls');
   // ── Profile cards replay on every return ──
   ok(/#pageHost\.mg-enter \.mg-my \.mg-me,#pageHost\.mg-enter \.mg-my \.mg-me-btns,#pageHost\.mg-enter \.mg-my \.mg-sec,#pageHost\.mg-enter \.mg-my \.mg-set \.mg-row,#pageHost\.mg-enter \.mg-my \.mg-logout\{animation:chCardIn/.test(html), 'the card animation is tied to the page-in class');
   ok(/function replayPageIn\(\)\{[^}]*classList\.remove\('mg-enter'\)[^}]*offsetWidth[^}]*classList\.add\('mg-enter'\)/.test(source), 'which is removed and re-added to restart it');
