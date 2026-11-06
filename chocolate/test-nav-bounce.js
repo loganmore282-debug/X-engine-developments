@@ -3,7 +3,7 @@
 const fs = require('node:fs'), assert = require('node:assert/strict');
 const css = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8'), js = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
-ok(/\.navitem\.nav-tap::before\{animation:navBubbleBounce [^}]*\}/.test(css), 'the selector box (::before) bounces on a tap');
+ok(/\.navitem\.nav-tap::before\{animation:navBubbleBounce \.3s ease-out 0s 2 normal none;\}/.test(css), 'the selector box (::before) bounces on a tap, twice (2 iterations), with a 0s delay and nothing held between them');
 ok(/@keyframes navBubbleBounce\{0%\{transform:scale\(1\);\}30%\{transform:scale\(\.86\);\}65%\{transform:scale\(1\.07\);\}100%\{transform:scale\(1\);\}\}/.test(css), 'it squeezes in, springs past its size and settles');
 ok(!/\.navitem\.nav-tap[^{,]*(\.nav-ic|svg|\.lbl|supplied-icon)[^{]*\{[^}]*animation:/.test(css), 'no tap animation is left on the icon or the label');
 ok(!/navTapSignal|mgLbl/.test(css + js), 'the old icon / label bounce keyframes are gone');

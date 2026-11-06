@@ -2418,9 +2418,10 @@ html.mg-gut .mg-top{margin-right:-15px;}
 /* The start-up loader's background picture takes the whole screen, edge to edge, nothing cropped and no black frame. */
 #loadingScreen .ld-bg{background-size:100% 100%;background-position:center;}
 /* Owner: only the SELECTOR (the tan box behind the icon) bounces when a tab is tapped, like a tapped product card: it squeezes in, springs past its size
-   and settles. The icon and the label stay perfectly still. The box's transform is its own graphics layer, so it keeps moving while the next page is built. */
+   and settles, TWICE with no gap. The icon and the label stay perfectly still. The box's transform is its own graphics layer, so it keeps moving while the next page is built. */
 .navitem::before{will-change:transform;}
-.navitem.nav-tap::before{animation:navBubbleBounce .42s ease-out;}
+/* Twice, back to back: two iterations of the same bounce, each starting the instant the last ends (no pause between them). */
+.navitem.nav-tap::before{animation:navBubbleBounce .3s ease-out 0s 2 normal none;}
 @keyframes navBubbleBounce{0%{transform:scale(1);}30%{transform:scale(.86);}65%{transform:scale(1.07);}100%{transform:scale(1);}}
 @media (prefers-reduced-motion:reduce){.navitem.nav-tap::before{animation:none;}}
 /* Home skeleton (shown for about a second when returning to Home): the real classes and sizes with pale bones that shimmer. */
