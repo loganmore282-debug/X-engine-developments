@@ -4308,6 +4308,22 @@ function mgSetRow(tile, icon, title, sub, onclick, badge){
     <b>${title}</b><small>${sub}</small>
   </button>`;
 }
+// The balance (and ID / phone) on Profile, brought up to date the moment the page opens. One write of the final text, never a tween: a balance that moved
+// while the member was elsewhere changes in a single jump, and a balance that is not known yet stays hidden (not "UGX 0.00") until it is.
+async function refreshProfileFigures(){
+  try {
+    const r = await api('/account');
+    if (!r || r.status !== 'success' || STATE.page !== 'account') return;
+    STATE.account = r.account;
+    const el = $('myBalance'), text = vMoney2(r.account.walletBalance);
+    if (el && (el.textContent !== text || el.classList.contains('wait'))) { el.textContent = text; el.classList.remove('wait'); }
+    const idEl = document.querySelector('.mg-me-id b'), phEl = document.querySelector('.mg-me-id span');
+    const id = 'ID: ' + (r.account.publicId != null ? r.account.publicId : '');
+    if (idEl && idEl.textContent !== id) idEl.textContent = id;
+    const a = r.account || {}, ph = localDigits(a.phone) ? '0' + localDigits(a.phone).replace(/^0+/, '') : (walletLocalPhone(a.phone) || formatPhoneDisplay(a.phone));
+    if (phEl && ph && phEl.textContent !== ph) phEl.textContent = ph;
+  } catch (_) { /* the figure on screen stays; the live refresh retries */ }
+}
 async function renderAccount(){
   const a = STATE.account || {};
   const avatar = STATE.profileLogo
@@ -4322,7 +4338,7 @@ async function renderAccount(){
       <div class="mg-me-id"><b>ID: ${esc(a.publicId != null ? a.publicId : '')}</b><span>${esc(phone)}</span></div>
     </div>
     <div class="mg-me-line"></div>
-    <div class="mg-me-bal" id="myBalance">${esc(vMoney2(a.walletBalance))}</div>
+    <div class="mg-me-bal${a.walletBalance == null ? ' wait' : ''}" id="myBalance">${a.walletBalance == null ? '&nbsp;' : esc(vMoney2(a.walletBalance))}</div>
   </div>
   <div class="mg-me-btns">
     <button type="button" class="dep" onclick="openDepositSheet()">Deposit</button>
@@ -4340,6 +4356,8 @@ async function renderAccount(){
   <button type="button" class="mg-logout" onclick="doLogout()"><span>${MGI.door}</span>Log Out</button>
 </div>`;
   $('pageHost').innerHTML = html;
+  // Coming back to Profile: the figures on it are the CURRENT ones. Ask for the account at once and write them in ONE step (no counting up, no digit by digit).
+  refreshProfileFigures();
   // The unread count on the Messages tile comes from the inbox; ask for it once per visit (never blocks the paint).
   api('/messages').then(r => { if (r.status === 'success') { STATE.messages = r.messages; updateMessageBadge(); } }).catch(() => {});
 }

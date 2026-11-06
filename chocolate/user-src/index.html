@@ -2422,9 +2422,30 @@ html.mg-gut .mg-top{margin-right:-15px;}
    stays still. Both are transforms on their own graphics layers, so they keep moving while the next page is built. */
 .navitem::before,.navitem .nav-ic svg{will-change:transform;}
 .navitem .nav-ic svg{backface-visibility:hidden;transform-origin:50% 50%;}
-.navitem.nav-tap::before,.navitem.nav-tap .nav-ic svg{animation:navBubbleBounce .3s ease-out 0s 2 normal none;}
-@keyframes navBubbleBounce{0%{transform:scale(1);}30%{transform:scale(.86);}65%{transform:scale(1.07);}100%{transform:scale(1);}}
+.navitem.nav-tap::before,.navitem.nav-tap .nav-ic svg{animation:navBubbleBounce .66s cubic-bezier(.37,0,.63,1) 0s 1 normal none;}
+/* ONE continuous spring, two bounces, no pause: press in, spring out, press in a little less, spring out a little less, settle. Every segment eases in and out
+   like a sine wave, so the speed is zero only at the turning points (the extremes) and the box never stalls or jerks anywhere else. */
+@keyframes navBubbleBounce{0%{transform:scale(1);}16%{transform:scale(.84);}38%{transform:scale(1.1);}58%{transform:scale(.92);}80%{transform:scale(1.05);}100%{transform:scale(1);}}
 @media (prefers-reduced-motion:reduce){.navitem.nav-tap::before,.navitem.nav-tap .nav-ic svg{animation:none;}}
+/* Profile (My): the cards appear one after another instead of all at once -- the balance card rises first, then the two buttons, the Settings heading, each
+   settings tile in turn (left to right, top to bottom) and Log Out. Each rises 16px, fades in and settles with a small spring (a back-out curve). `backwards`
+   only: it holds the hidden start during the delay but never keeps overriding the element afterwards, so taps and hovers still work. */
+@keyframes chCardIn{0%{opacity:0;transform:translate3d(0,16px,0) scale(.94);}60%{opacity:1;}100%{opacity:1;transform:translate3d(0,0,0) scale(1);}}
+.mg-my .mg-me,.mg-my .mg-me-btns,.mg-my .mg-sec,.mg-my .mg-set .mg-row,.mg-my .mg-logout{animation:chCardIn .55s cubic-bezier(.22,1.2,.36,1) backwards;}
+.mg-my .mg-me{animation-delay:.02s;}
+.mg-my .mg-me-btns{animation-delay:.1s;}
+.mg-my .mg-sec{animation-delay:.16s;}
+.mg-my .mg-set .mg-row:nth-child(1){animation-delay:.2s;}
+.mg-my .mg-set .mg-row:nth-child(2){animation-delay:.25s;}
+.mg-my .mg-set .mg-row:nth-child(3){animation-delay:.3s;}
+.mg-my .mg-set .mg-row:nth-child(4){animation-delay:.35s;}
+.mg-my .mg-set .mg-row:nth-child(5){animation-delay:.4s;}
+.mg-my .mg-set .mg-row:nth-child(6){animation-delay:.45s;}
+.mg-my .mg-logout{animation-delay:.52s;}
+/* the page itself no longer fades under the cards on Profile (they are the animation); the balance waits, hidden, until the real figure is known */
+#pageHost.mg-enter:has(.mg-my){animation:none;}
+.mg-me-bal.wait{visibility:hidden;}
+@media (prefers-reduced-motion:reduce){.mg-my .mg-me,.mg-my .mg-me-btns,.mg-my .mg-sec,.mg-my .mg-set .mg-row,.mg-my .mg-logout{animation:none;}}
 /* Home skeleton (shown for about a second when returning to Home): the real classes and sizes with pale bones that shimmer. */
 .ch-skhome .sk{background:#efe9e0;border-radius:12px;}
 .ch-skhome .sk::after{background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent);}
