@@ -2332,7 +2332,13 @@ body{color:var(--ch-ink);font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
 .pay-card.pl .pay-note.bad{background:#fbeaea;color:#9a3a3a;}
 /* other green leftovers */
 .mg-dots i.on{background:#d8a42e;}
-.mg-dl{background:linear-gradient(180deg,#e8dcc7 0%,#f1e8d8 45%,#f8f2e6 100%) center/100% 100% no-repeat #f6efe2;}   /* the uploaded picture takes the whole page, edge to edge, nothing cropped */
+/* Owner: the Download App picture must be FIXED, not move or slide when the page is scrolled. The picture is its own layer (.mg-dl-bg) that sticks to the top of the
+   scroll area, exactly one screen tall, and the button scrolls over it; it takes the whole screen, edge to edge, nothing cropped. (sticky rather than fixed: a fixed
+   layer would shift with the 6px slide-in of the page for its first 0.3 s.) */
+.mg-dl{background:none;}
+.mg-dl-bg{position:sticky;top:0;align-self:stretch;flex:0 0 auto;width:auto;margin:-318px -22px calc(318px - (100vh - var(--nav-h)));height:calc(100vh - var(--nav-h));background:linear-gradient(180deg,#e8dcc7 0%,#f1e8d8 45%,#f8f2e6 100%) center/100% 100% no-repeat #f6efe2;z-index:0;pointer-events:none;}
+@supports (height:100dvh){.mg-dl-bg{height:calc(100dvh - var(--nav-h));margin-bottom:calc(318px - (100dvh - var(--nav-h)));}}
+.mg-dl-btn{position:relative;z-index:1;}
 .mg-dl-btn{background:var(--ch-btn);border-radius:12px;}
 .mg-loadtxt{color:#a39683;}
 .mg-nomem .mg-loadtxt{color:#a39683;}
@@ -2427,25 +2433,26 @@ html.mg-gut .mg-top{margin-right:-15px;}
    like a sine wave, so the speed is zero only at the turning points (the extremes) and the box never stalls or jerks anywhere else. */
 @keyframes navBubbleBounce{0%{transform:scale(1);}16%{transform:scale(.84);}38%{transform:scale(1.1);}58%{transform:scale(.92);}80%{transform:scale(1.05);}100%{transform:scale(1);}}
 @media (prefers-reduced-motion:reduce){.navitem.nav-tap::before,.navitem.nav-tap .nav-ic svg{animation:none;}}
-/* Profile (My): the cards appear one after another instead of all at once -- the balance card rises first, then the two buttons, the Settings heading, each
+/* Profile (My): the cards appear one after another instead of all at once, EVERY time the page appears (a tab tap, and the back arrow from any page opened from Profile:
+   replayPageIn() re-adds .mg-enter, which restarts these) -- the balance card rises first, then the two buttons, the Settings heading, each
    settings tile in turn (left to right, top to bottom) and Log Out. Each rises 16px, fades in and settles with a small spring (a back-out curve). `backwards`
    only: it holds the hidden start during the delay but never keeps overriding the element afterwards, so taps and hovers still work. */
 @keyframes chCardIn{0%{opacity:0;transform:translate3d(0,16px,0) scale(.94);}60%{opacity:1;}100%{opacity:1;transform:translate3d(0,0,0) scale(1);}}
-.mg-my .mg-me,.mg-my .mg-me-btns,.mg-my .mg-sec,.mg-my .mg-set .mg-row,.mg-my .mg-logout{animation:chCardIn .55s cubic-bezier(.22,1.2,.36,1) backwards;}
-.mg-my .mg-me{animation-delay:.02s;}
-.mg-my .mg-me-btns{animation-delay:.1s;}
-.mg-my .mg-sec{animation-delay:.16s;}
-.mg-my .mg-set .mg-row:nth-child(1){animation-delay:.2s;}
-.mg-my .mg-set .mg-row:nth-child(2){animation-delay:.25s;}
-.mg-my .mg-set .mg-row:nth-child(3){animation-delay:.3s;}
-.mg-my .mg-set .mg-row:nth-child(4){animation-delay:.35s;}
-.mg-my .mg-set .mg-row:nth-child(5){animation-delay:.4s;}
-.mg-my .mg-set .mg-row:nth-child(6){animation-delay:.45s;}
-.mg-my .mg-logout{animation-delay:.52s;}
+#pageHost.mg-enter .mg-my .mg-me,#pageHost.mg-enter .mg-my .mg-me-btns,#pageHost.mg-enter .mg-my .mg-sec,#pageHost.mg-enter .mg-my .mg-set .mg-row,#pageHost.mg-enter .mg-my .mg-logout{animation:chCardIn .55s cubic-bezier(.22,1.2,.36,1) backwards;}
+#pageHost.mg-enter .mg-my .mg-me{animation-delay:.02s;}
+#pageHost.mg-enter .mg-my .mg-me-btns{animation-delay:.1s;}
+#pageHost.mg-enter .mg-my .mg-sec{animation-delay:.16s;}
+#pageHost.mg-enter .mg-my .mg-set .mg-row:nth-child(1){animation-delay:.2s;}
+#pageHost.mg-enter .mg-my .mg-set .mg-row:nth-child(2){animation-delay:.25s;}
+#pageHost.mg-enter .mg-my .mg-set .mg-row:nth-child(3){animation-delay:.3s;}
+#pageHost.mg-enter .mg-my .mg-set .mg-row:nth-child(4){animation-delay:.35s;}
+#pageHost.mg-enter .mg-my .mg-set .mg-row:nth-child(5){animation-delay:.4s;}
+#pageHost.mg-enter .mg-my .mg-set .mg-row:nth-child(6){animation-delay:.45s;}
+#pageHost.mg-enter .mg-my .mg-logout{animation-delay:.52s;}
 /* the page itself no longer fades under the cards on Profile (they are the animation); the balance waits, hidden, until the real figure is known */
 #pageHost.mg-enter:has(.mg-my){animation:none;}
 .mg-me-bal.wait{visibility:hidden;}
-@media (prefers-reduced-motion:reduce){.mg-my .mg-me,.mg-my .mg-me-btns,.mg-my .mg-sec,.mg-my .mg-set .mg-row,.mg-my .mg-logout{animation:none;}}
+@media (prefers-reduced-motion:reduce){#pageHost.mg-enter .mg-my .mg-me,#pageHost.mg-enter .mg-my .mg-me-btns,#pageHost.mg-enter .mg-my .mg-sec,#pageHost.mg-enter .mg-my .mg-set .mg-row,#pageHost.mg-enter .mg-my .mg-logout{animation:none;}}
 /* Home skeleton (shown for about a second when returning to Home): the real classes and sizes with pale bones that shimmer. */
 .ch-skhome .sk{background:#efe9e0;border-radius:12px;}
 .ch-skhome .sk::after{background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent);}

@@ -16,9 +16,9 @@ ok(!/navTapSignal|mgLbl/.test(css + js), 'the old separate icon / label bounce k
 ok(/animationName === 'navBubbleBounce'/.test(js), 'the tap class is cleaned off when the box has finished');
 ok(/prefers-reduced-motion:reduce\)\{\.navitem\.nav-tap::before,\.navitem\.nav-tap \.nav-ic svg\{animation:none;\}\}/.test(css), 'and it stays still for people who ask for reduced motion');
 // ── Profile: the cards appear one after another; the balance is written once ──
-ok(/\.mg-my \.mg-me,\.mg-my \.mg-me-btns,\.mg-my \.mg-sec,\.mg-my \.mg-set \.mg-row,\.mg-my \.mg-logout\{animation:chCardIn \.55s [^;]*backwards;\}/.test(css), 'the Profile cards share one rise-and-settle animation (backwards only, so taps still work after it)');
-const delays = [...css.matchAll(/\.mg-my \.mg-set \.mg-row:nth-child\((\d)\)\{animation-delay:\.(\d+)s;\}/g)].map(m => parseFloat('0.' + m[2]));
+ok(/#pageHost\.mg-enter \.mg-my \.mg-me,#pageHost\.mg-enter \.mg-my \.mg-me-btns,#pageHost\.mg-enter \.mg-my \.mg-sec,#pageHost\.mg-enter \.mg-my \.mg-set \.mg-row,#pageHost\.mg-enter \.mg-my \.mg-logout\{animation:chCardIn \.55s [^;]*backwards;\}/.test(css), 'the Profile cards share one rise-and-settle animation (backwards only, so taps still work after it), tied to the page-in class so it replays every time');
+const delays = [...css.matchAll(/#pageHost\.mg-enter \.mg-my \.mg-set \.mg-row:nth-child\((\d)\)\{animation-delay:\.(\d+)s;\}/g)].map(m => parseFloat('0.' + m[2]));
 ok(delays.length === 6 && delays.every((d, i) => i === 0 || d > delays[i - 1]), 'the six settings tiles come in one after another');
-ok(/prefers-reduced-motion:reduce\)\{\.mg-my \.mg-me/.test(css), 'and not at all for reduced motion');
+ok(/prefers-reduced-motion:reduce\)\{#pageHost\.mg-enter \.mg-my \.mg-me/.test(css), 'and not at all for reduced motion');
 ok(/function refreshProfileFigures\(\)/.test(js) && /refreshProfileFigures\(\);/.test(js) && !/countUp|\btween\b(?!\.)|animateNumber/i.test(js.replace(/never a tween/g, "")), 'Profile asks for the current account when it opens and writes the figures in one step (no counting animation anywhere)');
 console.log('test-nav-bounce: ' + n + ' checks passed');

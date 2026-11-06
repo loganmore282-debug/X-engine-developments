@@ -3552,10 +3552,13 @@ function patchHomeBalances(){
     if (el) el.textContent = fmtUGX(account[key]);
   }
   // The figures the current screens actually show: My (balance), Income (total earnings) and the Balance Record header.
-  for (const [id, key] of [['myBalance','walletBalance'], ['incomeTotal','totalEarned'], ['recBalance','walletBalance'], ['witBalance','walletBalance']]) {
+  for (const [id, key] of [['myBalance','walletBalance'], ['recBalance','walletBalance'], ['witBalance','walletBalance']]) {
     const el = $(id);
     if (el) el.textContent = vMoney2(account[key]);
   }
+  // Orders > Total Earnings is the products' own earnings only (see productEarnings), not the account's all-sources figure.
+  const inc = $('incomeTotal');
+  if (inc && Array.isArray(STATE.investments)) inc.textContent = vMoney2(productEarnings());
 }
 // THE single place this app works out what a product pays. /public/products
 // already sends resolved expectedReturn/cycle/dailyPayout figures computed
@@ -3674,6 +3677,11 @@ function statementStampMs(ms){
   const p = n => String(n).padStart(2, '0');
   return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+// Owner: the Total Earnings on Orders is what the member's PRODUCTS have paid, not earnings from other sources (commissions, rewards, gift codes, check-in, spins).
+// Each product records its own running total (`paidOut`, written with every cashback payment), so this is their sum -- never the account's all-sources totalEarned.
+function productEarnings(){
+  return (STATE.investments || []).reduce((sum, i) => { const v = Number(i && i.paidOut); return sum + (Number.isFinite(v) && v > 0 ? v : 0); }, 0);
+}
 function paintAssets(loading){
   applyProductImageOpacity();
   const a = STATE.account || {};
@@ -3684,7 +3692,7 @@ function paintAssets(loading){
     || String(x.id || '').localeCompare(String(y.id || '')));
   const html = `
 <div class="v-page mg-orders-page">
-  <div class="mg-total"><span>Total Earnings</span><b id="incomeTotal">${esc(vMoney2(a.totalEarned))}</b></div>
+  <div class="mg-total"><span>Total Earnings</span><b id="incomeTotal">${Array.isArray(STATE.investments) ? esc(vMoney2(productEarnings())) : '&nbsp;'}</b></div>
   <div class="mg-orders" id="ownedAssets">${loading ? '<div class="v-empty mg-none">' + NAV_LOADER + '</div>' : owned.length ? owned.map(vOwnedCardHtml).join('') : _investmentsLoadFailed ? loadFailHtml('assets', 'mg-none') : '<div class="v-empty mg-none">No Orders</div>'}</div>
 </div>`;
   $('pageHost').innerHTML = html;
@@ -4746,6 +4754,7 @@ window.switchStatementCategory = function(cat){
   const tabs = $('statementTabs');
   if (tabs) tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.cat === cat));
   renderStatement();
+  replaySheetIn();   // switching between All / Deposit / Withdraw ...: the page appears in full again, like a tab change
 };
 window.openTransactionStatement = async function(cat){
   _statementCat = ['all','deposit','withdraw','turntable','salary'].includes(cat) ? cat : 'all';
@@ -5066,6 +5075,13 @@ function maybeAnnounceOnEntry(){
   if (isAnyOverlayOpen()) return;
   maybeShowAnnouncement();
 }
+// The full-page appearing animation (the same one a tab change, Team, Profile and the sign-in pages use) for the open page. Restarted by hand: a sheet that is
+// already showing (Deposit opened from Records, a Records tab switch) does not get it from `.show` being added again.
+function replaySheetIn(){
+  const sb = $('sheetBg');
+  if (!sb) return;
+  sb.style.animation = 'none'; void sb.offsetWidth; sb.style.animation = '';
+}
 function openSheet(title, bodyHtml){
   dismissNotify();
   $('sheetBg').classList.remove('v-rec-page', 'mg-nohead');
@@ -5091,6 +5107,7 @@ function openSheet(title, bodyHtml){
   else history.pushState({ sheet: title }, '', '');
   lockBodyScroll();
   if (window.mgGutters) window.mgGutters();   // the 4px scrollbar room is made now, before the first paint of the page
+  replaySheetIn();   // Deposit, Withdraw, Records, Messages, Bank Account, the passwords: every page appears in full, every time it is opened
 }
 // opts.fromAction/opts.navigating used to gate whether closing a sheet could
 // trigger the announcement dialog (a submitted withdrawal, a recharge
@@ -6066,7 +6083,7 @@ window.promptInstallApp = async function(){
 // The Download App page: the admin's picture with one Download Now button. Starting the install shows no pop-up of ours (owner: removed).
 window.openDownloadPage = function(){
   const bg = STATE.downloadBg ? ' style="background-image:url(' + esc(JSON.stringify(STATE.downloadBg).slice(1, -1)) + ')"' : '';
-  openSheet('Download App', `<div class="mg-dl"${bg}>
+  openSheet('Download App', `<div class="mg-dl"><div class="mg-dl-bg"${bg}></div>
     <button type="button" class="mg-dl-btn" onclick="promptInstallApp()">Download Now</button>
   </div>`);
   $('sheetBg').classList.add('mg-nohead');

@@ -54,7 +54,7 @@ async function main(){
   const originalBanner=d.querySelector('.home-banner');await w.liveRefreshVisible();
   assert.equal(d.querySelector('.home-banner'),originalBanner,'balance refresh must not rebuild Home');
   w.eval('STATE.page="assets"');w.eval('STATE.investments=[{status:"active",tierKey:"a1",tierLabel:"Test Asset",amount:15000,payoutsTotal:30,payoutsMade:3,dailyPayout:1500,expectedReturn:45000,paidOut:4500,createdAt:new Date().toISOString()},{status:"active",tierKey:"a1",tierLabel:"Gifted",amount:0,payoutsTotal:30,payoutsMade:1,dailyPayout:1500,expectedReturn:45000,paidOut:0,createdAt:new Date().toISOString(),granted:true}]');w.paintAssets();
-  assert.match(d.querySelector('.mg-total').textContent,/Total Earnings/);assert.match(d.querySelector('#incomeTotal').textContent,/UGX 700\.00/);
+  assert.match(d.querySelector('.mg-total').textContent,/Total Earnings/);assert.match(d.querySelector('#incomeTotal').textContent,/UGX 4,500\.00/,'Orders Total Earnings is what the PRODUCTS paid (4,500), not the account\'s all-sources total (700)');
   assert.equal(d.querySelectorAll('#ownedAssets .mg-card').length,2,'Orders lists every owned asset');
   assert(d.querySelector('#ownedAssets .v-gift .mg-gift'),'a gifted asset carries the GIFT ribbon');
   assert.equal(d.querySelectorAll('#ownedAssets .mg-dates').length,2,'each owned card shows Purchase and Expire');
