@@ -4710,26 +4710,24 @@ function statementAmountText(t){
   const amt = recordsRowAmount(t);
   return (amt < 0 ? '-' : '+') + vMoney2(Math.abs(amt));
 }
-// `animate`: the rows appear one after another (a tab switch, the page opening, the first data arriving). A quiet refresh of the same list (a live update) repaints
-// without it, so the list does not replay itself every few seconds.
-function renderStatement(animate){
+// Owner: no appearing animation while navigating the transaction records (switching All / Deposit / Withdraw ...): the rows simply change.
+function renderStatement(){
   const body = $('statementBody');
   if (!body) return;
-  body.classList.toggle('rec-anim', !!animate);
   const all = (STATE.transactions || []).filter(t => statementCategoryMatch(_statementCat, t));
   if (!all.length) { body.innerHTML = _recordsLoadFailed && !(STATE.transactions || []).length ? loadFailHtml('records') : '<div class="v-empty">No Records</div>'; return; }
   const rows = all;   // every held record, no Load More button
   // The Load More button always sits under the list (as on the owner's Balance Record, even with two rows): it shows the next ten, or, when
   // everything held is already on screen, asks the server again for anything newer or older.
   const more = false;
-  body.innerHTML = rows.map((t, i) => {
+  body.innerHTML = rows.map(t => {
     const title = statementDescription(t);
     const chip = statementChip(t);
     const amt = recordsRowAmount(t);
     const desc = t.type === 'cashback' ? String(t.description || '').replace(/\s*(daily )?cashback$/i, '') : cleanDesc(t.description);
     const line = chip ? `<span class="v-chip ${chip.cls}">${esc(chip.text)}</span>` : `<span class="v-rdesc">${esc(desc || title)}</span>`;
     return `
-      <article class="v-rec"${i < 14 ? ` style="--i:${i}"` : ''}>
+      <article class="v-rec">
         <span class="v-rav ${amt < 0 ? 'out' : ''}">${esc(title.charAt(0).toUpperCase())}</span>
         <div class="v-rmid"><b>${esc(title)}</b><small>${esc(statementDate(t))}</small>${line}</div>
         <span class="v-ramt ${amt < 0 ? 'out' : 'in'}">${esc(statementAmountText(t))}</span>
@@ -4756,8 +4754,7 @@ window.switchStatementCategory = function(cat){
   _statementCat = cat; _statementShown = 10;
   const tabs = $('statementTabs');
   if (tabs) tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.cat === cat));
-  renderStatement(true);
-  replaySheetIn();   // switching between All / Deposit / Withdraw ...: the page appears in full again, like a tab change
+  renderStatement();   // no appearing animation here (owner): the list just changes
 };
 window.openTransactionStatement = async function(cat){
   _statementCat = ['all','deposit','withdraw','turntable','salary'].includes(cat) ? cat : 'all';
@@ -4771,7 +4768,7 @@ window.openTransactionStatement = async function(cat){
     </div>
     <div id="statementBody"></div>`);
   $('sheetBg').classList.add('v-rec-page');
-  if (hadCache) renderStatement(true);
+  if (hadCache) renderStatement();
   else $('statementBody').innerHTML = '<div class="list-loading">' + NAV_LOADER + '</div>';
   const r = await api('/transactions');
   if (r.status === 'success') {
@@ -4782,7 +4779,7 @@ window.openTransactionStatement = async function(cat){
     STATE.transactions = [];
     _recordsLoadFailed = true;
   }
-  if (_openSheetTitle === 'Balance Record') renderStatement(!hadCache);   // the first data after the loader appears row by row; a refresh of what was already shown does not replay
+  if (_openSheetTitle === 'Balance Record') renderStatement();
 };
 // Compatibility for post-withdraw flows and any stale call sites.
 window.openBalanceRecordSheet = function(tab){

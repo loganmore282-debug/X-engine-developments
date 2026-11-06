@@ -35,8 +35,7 @@ for (const s of d.scripts) { if (s.type === 'module' || s.src) continue; if (s.h
   w.eval('openSheet("Deposit", "<div>x</div>")'); await new Promise(r => setTimeout(r, 10));
   ok(typeof w.replaySheetIn === 'function' || /function replaySheetIn\(\)/.test(source), 'there is a replay helper for the open page');
   ok(/function openSheet\([^)]*\)\{[\s\S]*?replaySheetIn\(\);/.test(source), 'every page opened through openSheet (Deposit, Withdraw, Records, Messages, Bank Account, passwords, Download) replays it');
-  ok(/window\.switchStatementCategory = function\(cat\)\{[\s\S]*?replaySheetIn\(\);/.test(source), 'switching the Records tabs (All / Deposit / Withdraw ...) replays it');
-  mo.disconnect();
+    mo.disconnect();
   // ── Download App: the picture is its own layer that sticks while the page scrolls ──
   w.STATE.downloadBg = 'data:image/png;base64,AAAA'; w.openDownloadPage();
   const dl = d.querySelector('#sheetBody .mg-dl'), bg = dl && dl.querySelector('.mg-dl-bg');
@@ -48,9 +47,8 @@ for (const s of d.scripts) { if (s.type === 'module' || s.src) continue; if (s.h
   ok(/function replayPageIn\(\)\{[^}]*classList\.remove\('mg-enter'\)[^}]*offsetWidth[^}]*classList\.add\('mg-enter'\)/.test(source), 'which is removed and re-added to restart it');
   ok(/if \(wasOpen && !\(opts && opts\.navigating\)\) replayPageIn\(\)/.test(source), 'and re-added whenever a page opened from Profile is closed (the back arrow, the phone Back button)');
   // ── Balance Record: rows appear one after another; the phone's Back button replays the page underneath too ──
-  ok(/#statementBody\.rec-anim \.v-rec\{animation:chRecIn [^;]*backwards;animation-delay:calc\(var\(--i,0\) \* 40ms\);\}/.test(html), 'Records rows appear one after another (40 ms apart), backwards only');
-  ok(/function renderStatement\(animate\)\{[\s\S]*?classList\.toggle\('rec-anim', !!animate\)/.test(source), 'only when asked: a live refresh of the same list does not set it, so the list never replays itself');
-  ok(/classList\.toggle\('on', b\.dataset\.cat === cat\)\);\s*renderStatement\(true\);\s*replaySheetIn\(\);/.test(source) && /if \(hadCache\) renderStatement\(true\);/.test(source) && /renderStatement\(!hadCache\)/.test(source), 'a tab switch, the page opening and the first data after the loader all animate');
+  ok(!/rec-anim|chRecIn/.test(html + source), 'Records has no appearing animation of its own: no row stagger anywhere');
+  ok(!/window\.switchStatementCategory = function\(cat\)\{[^]*?replaySheetIn\(\)[^]*?\n\};/.test(source.slice(source.indexOf('window.switchStatementCategory'), source.indexOf('window.openTransactionStatement'))), 'switching the Records tabs (All / Deposit / Withdraw ...) does not replay any appearing animation: the list just changes');
   ok(/if \(_backTitle\) replayPageIn\(\);/.test(source), 'the phone\'s Back button / gesture (popstate) replays the page underneath, like the arrow (it bypassed closeSheet before)');
   console.log('test-orders-download-motion: ' + n + ' checks passed');
 })().catch(e => { console.error(e); process.exit(1); });
