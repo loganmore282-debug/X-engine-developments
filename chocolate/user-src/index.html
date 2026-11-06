@@ -2454,6 +2454,11 @@ html.mg-gut .mg-top{margin-right:-15px;}
 #pageHost.mg-enter:has(.mg-my){animation:none;}
 .mg-me-bal.wait{visibility:hidden;}
 @media (prefers-reduced-motion:reduce){#pageHost.mg-enter .mg-my .mg-me,#pageHost.mg-enter .mg-my .mg-me-btns,#pageHost.mg-enter .mg-my .mg-sec,#pageHost.mg-enter .mg-my .mg-set .mg-row,#pageHost.mg-enter .mg-my .mg-logout{animation:none;}}
+/* Balance Record: the rows appear one after another (each 40ms after the one above, the first 14), on every tab switch, when the page opens and when the first data
+   arrives after the loader. `backwards` only, so nothing is held afterwards. A live refresh of the same list does not set .rec-anim, so it never replays. */
+@keyframes chRecIn{0%{opacity:0;transform:translate3d(0,14px,0) scale(.97);}60%{opacity:1;}100%{opacity:1;transform:translate3d(0,0,0) scale(1);}}
+#statementBody.rec-anim .v-rec{animation:chRecIn .45s cubic-bezier(.22,1.15,.36,1) backwards;animation-delay:calc(var(--i,0) * 40ms);}
+@media (prefers-reduced-motion:reduce){#statementBody.rec-anim .v-rec{animation:none;}}
 /* Home skeleton (shown for about a second when returning to Home): the real classes and sizes with pale bones that shimmer. */
 .ch-skhome .sk{background:#efe9e0;border-radius:12px;}
 .ch-skhome .sk::after{background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent);}
