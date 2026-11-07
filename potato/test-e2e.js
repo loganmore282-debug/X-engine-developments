@@ -22,7 +22,7 @@ const ph = () => '07' + String(70000000 + Math.floor(Math.random() * 9999999)).p
 async function member(pass, pin, ref) { const cap = await J('GET', '/auth/captcha'); const su = await J('POST', '/auth/signup', { phone: ph(), password: pass, captchaId: cap.j.id, captchaCode: '0000' }); const reg = await J('POST', '/register', { pin, referralCode: ref || '' }, su.j.token); return { tok: su.j.token, reg: reg.j, uid: su.j.uid }; }
 (async () => {
   for (let i = 0; i < 60; i++) { try { const h = await fetch(base + '/health'); if (h.ok) break; } catch (_) {} await sleep(250); }
-  await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 500000 } }, null, true);
+  await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 500000, requireTwofaToWithdraw: false } }, null, true);
   const A = await member('secret12', '123456', ''); const B = await member('secret34', '123456', A.reg.referralCode);
   const prods = (await J('GET', '/public/products')).j.products.filter(p => p.price > 0).sort((a, b) => a.price - b.price); const p1 = prods[0];
   // ---- daily cashback at 00:00

@@ -11,7 +11,7 @@ const vendor = fs.readFileSync(__dirname + '/user-src/vendor-qrcode.js', 'utf8')
 const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
 const server = fs.readFileSync(__dirname + '/server.js', 'utf8');
 const build = fs.readFileSync(__dirname + '/build-core.js', 'utf8');
-const a = mod.indexOf('// ── GOOGLE AUTHENTICATOR (the optional second step of a withdrawal) ──'), b = mod.indexOf('// ── TREASURE CHEST');
+const a = mod.indexOf('// ── GOOGLE AUTHENTICATOR (the second step of every withdrawal; compulsory unless the owner switches the rule off) ──'), b = mod.indexOf('// ── TREASURE CHEST');
 ok(a > 0 && b > a, 'the Google Authenticator block is in the member app');
 const block = mod.slice(a, b);
 const dlg = mod.slice(mod.indexOf('function askAuthCode(){'), mod.indexOf('// Transaction Statement (openBalanceRecordSheet()) is cache-first'));
@@ -28,6 +28,12 @@ ok(/vendor-\.\*\\\.js/.test(build) && /vendored/.test(build), 'build-core.js put
 ok(/MIT/.test(vendor) && /Kazuhiko Arase/.test(vendor) && /qrcode-generator 1\.4\.4/.test(vendor), 'the vendored QR library keeps its licence and version');
 ok(/id="reset2faBtn"/.test(admin) && /\/admin\/user\/reset-2fa/.test(admin) && /u\.twofaEnabled===true/.test(admin), 'the admin shows the status and has the reset button');
 ok(/app\.post\('\/admin\/user\/reset-2fa'[\s\S]{0,200}verifyOwner/.test(server), 'only the owner can reset it');
+// ---- compulsory: the rule, the owner's switch and where the app checks it
+ok(/requireTwofaToWithdraw: true,/.test(server) && /SETTINGS_BOOLEAN_FIELDS = \[[^\]]*'requireTwofaToWithdraw'/.test(server), 'the rule is on by default and can be saved from Admin > Settings');
+ok(/else if \(sett\.requireTwofaToWithdraw !== false\) \{[\s\S]{0,700}code: 'TWOFA_SETUP_REQUIRED'/.test(server), 'the server refuses a member who has not set it up');
+ok(/id="sReqTwofa"/.test(admin) && /requireTwofaToWithdraw:\$\('sReqTwofa'\)\.checked/.test(admin) && /twofaReq/.test(admin), 'the admin has the switch, saves it, and the member page words it');
+ok(/if \(witNeedsAuthSetup\(\)\) return gaRequiredNotice\(\);\s*\/\/ The Trade Password is asked/.test(mod), 'the app checks the rule when Withdraw is tapped, BEFORE the Trade Password is asked');
+ok(/r\.code === 'TWOFA_SETUP_REQUIRED'[\s\S]{0,260}return gaRequiredNotice\(\);/.test(mod), 'and when the server says so (an old copy of the account or rule)');
 
 // ---- the screens (real code, stubbed server)
 const dom = new JSDOM('<body><div id="sheetBg"><div id="sheetBody"></div></div><div class="pin-bg" id="totpBg"><div class="pin-card"><input id="totpInput" maxlength="6"><p id="totpHelp"></p><p id="totpWarn"></p><button id="totpAlt"></button><button id="totpNo"></button><button id="totpOk"></button></div></div></body>', { runScripts: 'outside-only', pretendToBeVisual: true });
@@ -41,10 +47,13 @@ w.eval(`
   function joinedStamp(ts){ return 'WHEN'; }
   function ptPwClear(){ var e = $('ptPwErr'); if (e) e.textContent = ''; }
   function ptPwError(m){ var e = $('ptPwErr'); if (e) e.textContent = m; }
-  function notify(m){ __notes.push(m); }
+  var __cb = null, _openSheetTitle = 'Withdraw';
+  function notify(m, cb){ __notes.push(m); __cb = cb || null; }
+  function openWithdrawSheet(){ __calls.push(['openWithdrawSheet']); _openSheetTitle = 'Withdraw'; document.getElementById('sheetBody').innerHTML = '<input id="witAmount">'; }
+  function syncWithdrawReceiveAmt(){ __calls.push(['syncWithdrawReceiveAmt']); }
   async function post(p, body){ __calls.push([p, body]); var r = __answers[p]; return typeof r === 'function' ? r(body) : (r || { status: 'error', message: 'no answer' }); }
   async function api(p){ __calls.push([p]); var r = __answers[p]; return typeof r === 'function' ? r() : (r || { status: 'error' }); }
-  function openSheet(title, body){ document.getElementById('sheetBody').innerHTML = body; }
+  function openSheet(title, body){ _openSheetTitle = title; document.getElementById('sheetBody').innerHTML = body; }
   window.copyText = function(t){ __notes.push('copied:' + t); };
 `);
 w.eval(vendor); w.eval(block); w.eval(dlg);
@@ -55,7 +64,7 @@ const ev = expr => JSON.parse(JSON.stringify(w.eval(expr)));   // objects made i
   // off
   w.eval(`__answers['/account/2fa/status'] = { status: 'success', enabled: false, backupLeft: 0 };`);
   w.openAuthenticatorSheet(); await tick();
-  ok(/Secure your withdrawals/.test(txt()) && /Download Google Authenticator/.test(txt()) && $('gaPin') && $('gaStartBtn'), 'off: the intro, the stores and the Trade Password box');
+  ok(/Google Authenticator is required/.test(txt()) && !/before you can withdraw/.test(txt()) && /Download Google Authenticator/.test(txt()) && $('gaPin') && $('gaStartBtn'), 'off: it says it is required, then the stores and the Trade Password box');
   ok([...w.document.querySelectorAll('.pt-ga-stores a')].every(x => /noopener/.test(x.rel) && x.target === '_blank'), 'off: the store links open safely');
   // a short Trade Password is refused before anything is sent
   $('gaPin').value = '12'; await w.gaStart(); ok($('ptPwErr').textContent === 'Enter your 6-digit Trade Password.' && w.eval('__calls.filter(c => c[0] === "/account/2fa/start").length') === 0, 'start: a short Trade Password is refused without a request');
@@ -105,7 +114,9 @@ const ev = expr => JSON.parse(JSON.stringify(w.eval(expr)));   // objects made i
   ok($('ptPwErr').textContent === 'That code is not right.' && w.eval('STATE.account.twofaEnabled') === true, 'off: a refusal is shown and it stays on');
   w.eval(`__answers['/account/2fa/disable'] = { status: 'success' };`); await w.gaDoManage(); await tick();
   eq(ev('__calls.filter(c => c[0] === "/account/2fa/disable").pop()[1]'), { pin: '123456', code: 'abcde-fghjk' }, 'off: the Trade Password and the typed code are sent as typed');
-  ok(w.eval('STATE.account.twofaEnabled') === false && /Secure your withdrawals/.test(txt()) && w.eval('__notes').includes('Google Authenticator is off'), 'off: the app knows, and the page is back to the intro');
+  ok(w.eval('STATE.account.twofaEnabled') === false && /Google Authenticator is required/.test(txt()) && w.eval('__notes').includes('Google Authenticator is off'), 'off: the app knows, and the page is back to the intro');
+  w.gaManage('off'); ok(/You will not be able to withdraw until you set Google Authenticator up again/.test(txt()), 'turn off: warns that withdrawing stops until it is set up again');
+  w.eval(`STATE.settings = { requireTwofaToWithdraw: false }`); w.gaManage('off'); ok(/Withdrawals will need only your Trade Password again/.test(txt()), 'turn off, owner\'s switch off: the older wording'); w.eval('STATE.settings = {}'); w.gaPaint();
   // a phone clock far from the server's is called out
   w.eval('_ptSkewMs = 45000'); w.gaPaint(); ok(/clock is about 45 seconds away/.test(txt()), 'a phone clock more than 20 seconds off is warned about');
   w.eval('_ptSkewMs = 8000'); w.gaPaint(); ok(!/clock is about/.test(txt()), 'a small difference is not');
@@ -119,5 +130,53 @@ const ev = expr => JSON.parse(JSON.stringify(w.eval(expr)));   // objects made i
   const asked3 = w.askAuthCode(); $('totpNo').onclick(); eq(await asked3, null, 'dialog: Cancel hands back nothing');
   ok(!$('totpBg').classList.contains('show'), 'dialog: closes');
   w.eval('_ptSkewMs = 40000'); const asked4 = w.askAuthCode(); ok(/clock is about 40 seconds away/.test($('totpWarn').textContent), 'dialog: warns about a wrong phone clock'); $('totpNo').onclick(); await asked4;
+  // ---- COMPULSORY: the rule, the wording, and the way back to the Withdraw page
+  w.eval(`STATE.settings = {}; STATE.account = { twofaEnabled: false }; _ptSkewMs = 0;`);
+  ok(w.witNeedsAuthSetup() === true, 'rule: a member without it must set it up (the rule is on unless the owner says otherwise)');
+  w.eval(`STATE.settings = { requireTwofaToWithdraw: true }`); ok(w.witNeedsAuthSetup() === true, 'rule: on, said so');
+  w.eval(`STATE.settings = { requireTwofaToWithdraw: false }`); ok(w.witNeedsAuthSetup() === false, 'rule: the owner\'s switch off: nobody is sent to set it up');
+  w.eval(`STATE.settings = {}; STATE.account.twofaEnabled = true`); ok(w.witNeedsAuthSetup() === false, 'rule: already on: nothing to set up');
+  w.eval(`STATE.account = null`); ok(w.witNeedsAuthSetup() === false, 'rule: before the account is loaded the app does not guess (the server decides)');
+  w.eval(`STATE.settings = {}; STATE.account = { twofaEnabled: false }`);
+  // the notice icons: the real classification rule from notify() in the app
+  { const m = /const good = (\/.*?\/i)\.test\(String\(message \|\| ''\)\) && !(\/.*?\/i)\.test/.exec(mod), isGood = t => eval(m[1]).test(t) && !eval(m[2]).test(t);
+    ok(m && isGood('Google Authenticator setup done. You can withdraw now.'), 'notice: finishing the set-up shows the tick');
+    ok(m && !isGood('Google Authenticator is required to withdraw. Set it up first.'), 'notice: "required" shows the cross'); }
+  // tapping Withdraw: the notice, then the set-up page with the amount remembered
+  w.document.getElementById('sheetBody').innerHTML = '<input id="witAmount" value="25,000">'; w.eval(`_openSheetTitle = 'Withdraw'; __notes.length = 0; __cb = null;`);
+  w.gaRequiredNotice();
+  eq(ev('__notes'), ['Google Authenticator is required to withdraw. Set it up first.'], 'tap Withdraw: says why, in plain words');
+  ok(typeof w.eval('__cb') === 'function', 'tap Withdraw: and goes on to the set-up page when the notice closes');
+  w.eval(`__answers['/account/2fa/status'] = { status: 'success', enabled: false, backupLeft: 0 }; __cb();`); await tick();
+  ok(w.eval('_ga.forWithdraw') === true && w.eval('_ga.amount') === '25,000', 'tap Withdraw: the set-up page knows it came from Withdraw and keeps the amount');
+  ok(/Google Authenticator is required/.test(txt()) && /You need it before you can withdraw/.test(txt()) && /Download Google Authenticator/.test(txt()) && $('gaPin'), 'tap Withdraw: the page says you need it to withdraw, shows the stores and the first step');
+  // a member who has already left the Withdraw page is not dragged to the set-up
+  w.document.getElementById('sheetBody').innerHTML = '<input id="witAmount" value="9,000">'; w.eval(`__notes.length = 0; __cb = null;`); w.gaRequiredNotice();
+  w.eval(`_openSheetTitle = 'Gift Code'; document.getElementById('sheetBody').innerHTML = 'elsewhere'; __cb();`); await tick();
+  ok(/elsewhere/.test(txt()), 'tap Withdraw: if the member has already gone to another page, nothing opens over it');
+  // the whole set-up from Withdraw, then back to Withdraw with the amount
+  w.eval(`_openSheetTitle = 'Withdraw'; __notes.length = 0; __calls.length = 0;`);
+  w.openAuthenticatorSheet({ forWithdraw: true, amount: '25,000' }); await tick();
+  w.eval(`__answers['/account/2fa/start'] = { status: 'success', secret: '${secret}', otpauth: '${link}', issuer: 'Potato', account: '+256770300047', expiresInSec: 900 };`);
+  $('gaPin').value = '123456'; await w.gaStart(); await tick();
+  w.eval(`__answers['/account/2fa/confirm'] = { status: 'success', backupCodes: ${JSON.stringify(codes)} };`);
+  $('gaCode').value = '123456'; await w.gaConfirm(); await tick();
+  ok(/Google Authenticator is on/.test(txt()) && /I have saved them/.test(txt()) && w.eval('STATE.account.twofaEnabled') === true, 'set-up from Withdraw: the backup codes are still shown first');
+  ok(w.eval('__calls.filter(c => c[0] === "openWithdrawSheet").length') === 0, 'set-up from Withdraw: the member is not thrown out before they have seen the backup codes');
+  w.gaCodesDone(); await tick();
+  ok(w.eval('__calls.filter(c => c[0] === "openWithdrawSheet").length') === 1 && $('witAmount') && $('witAmount').value === '25,000', 'set-up from Withdraw: "I have saved them" returns to the Withdraw page with the amount');
+  ok(w.eval('__calls.filter(c => c[0] === "syncWithdrawReceiveAmt").length') === 1 && w.eval('__notes').includes('Google Authenticator setup done. You can withdraw now.') && w.eval('_ga.forWithdraw') === false, 'set-up from Withdraw: the amounts are refreshed and the member is told they can withdraw');
+  // opened from Withdraw but it was already on (the app held an old copy): straight back
+  w.eval(`STATE.account = { twofaEnabled: false }; _openSheetTitle = 'Withdraw'; __notes.length = 0; __calls.length = 0; __answers['/account/2fa/status'] = { status: 'success', enabled: true, backupLeft: 8 };`);
+  w.openAuthenticatorSheet({ forWithdraw: true, amount: '' }); await tick(); await tick();
+  ok(w.eval('STATE.account.twofaEnabled') === true && w.eval('__calls.filter(c => c[0] === "openWithdrawSheet").length') === 1, 'already on: the app learns it and goes straight back to Withdraw');
+  // opened from the My page (no Withdraw behind it): "I have saved them" shows the On page, as before
+  w.eval(`STATE.account = { twofaEnabled: false }; __calls.length = 0; __answers['/account/2fa/status'] = { status: 'success', enabled: false, backupLeft: 0 };`);
+  w.openAuthenticatorSheet(); await tick();
+  ok(w.eval('_ga.forWithdraw') === false && !/before you can withdraw/.test(txt()) && /Google Authenticator is required/.test(txt()), 'from the My page: the same page without the "before you can withdraw" line');
+  // the owner's switch off: the older, optional wording
+  w.eval(`STATE.settings = { requireTwofaToWithdraw: false }`); w.openAuthenticatorSheet(); await tick();
+  ok(/Secure your withdrawals/.test(txt()) && !/is required/.test(txt()), 'owner\'s switch off: the page offers it instead of demanding it');
+  w.eval(`STATE.settings = {}`);
   console.log('test-authenticator-ui: ' + n + ' checks passed');
 })().catch(e => { console.error(e); process.exit(1); });

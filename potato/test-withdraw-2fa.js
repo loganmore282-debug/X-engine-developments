@@ -1,7 +1,7 @@
 'use strict';
 // WITHDRAWAL 2-STEP VERIFICATION (Google Authenticator), end to end on the REAL server.js against the in-memory MongoDB stand-in, with codes made by an
 // authenticator stand-in (totp.codeAt on the secret the server hands out, exactly what the phone does).
-// Off by default and for everybody else; turning it on needs the Trade Password and a correct first code; once on, a withdrawal needs the Trade Password AND
+// COMPULSORY (the setting is on by default; the owner can switch the rule off in Admin > Settings): a member who has not set it up cannot withdraw; turning it on needs the Trade Password and a correct first code; once on, a withdrawal needs the Trade Password AND
 // a code; a code works once; wrong codes lock the member out; backup codes; turning it off; the owner's reset; the secret is stored encrypted and never
 // sent to anybody again; an unreadable secret refuses the withdrawal instead of skipping the check.
 const path = require('path'), Module = require('module'), crypto = require('crypto'), fs = require('fs'), os = require('os');
@@ -43,8 +43,16 @@ const wrongCode = secret => { for (let i = 0; i < 50; i++) { const c = String(Ma
   await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 600000, withdrawMethod: 'manual', maxWithdrawalsPerDay: 0 } }, null, true);
   const A = await member(), B = await member(), C = await member();
   // ---- 0. off for everybody until the member turns it on
-  let acc = (await J('GET', '/account', null, A.tok)).j.account; ok(acc.twofaEnabled === false, 'off by default', acc);
-  ok((await wdraw(B)).s === 200, 'a member who never turned it on withdraws with just the Trade Password'); await settle(B);
+  let acc = (await J('GET', '/account', null, A.tok)).j.account; ok(acc.twofaEnabled === false, 'nobody has it until they set it up', acc);
+  ok((await J('GET', '/public/settings')).j.settings.requireTwofaToWithdraw === true, 'the app is told that it is compulsory (on by default)');
+  // ---- 0b. COMPULSORY: a member who has not set it up cannot withdraw at all
+  {
+    const wB0 = user(B.uid).walletBalance, rowsB0 = rowsOf(B).length;
+    const rB = await wdraw(B); ok(rB.s === 403 && rB.j.code === 'TWOFA_SETUP_REQUIRED' && /Google Authenticator/.test(rB.j.message), 'a member who has not set it up is refused and told to set it up', rB.j);
+    ok(user(B.uid).walletBalance === wB0 && rowsOf(B).length === rowsB0, 'nothing is taken and no request is created');
+    const rBp = await wdraw(B, { pin: '654321' }); ok(rBp.s === 400 && rBp.j.code === 'WRONG_PIN', 'the Trade Password is still checked first (a wrong one says so)', rBp.j);
+    const rBc = await wdraw(B, { totp: '123456' }); ok(rBc.s === 403 && rBc.j.code === 'TWOFA_SETUP_REQUIRED', 'a code sent by somebody who has not set it up changes nothing', rBc.j);
+  }
   // ---- 1. starting needs the Trade Password
   ok((await J('POST', '/account/2fa/start', {}, null)).s === 401, 'starting needs a signed-in member');
   const bad = await J('POST', '/account/2fa/start', { pin: '654321' }, A.tok); ok(bad.s === 400 && bad.j.code === 'WRONG_PIN' && !user(A.uid).twofaPendingEnc, 'a wrong Trade Password starts nothing', bad);
@@ -54,7 +62,7 @@ const wrongCode = secret => { for (let i = 0; i < 50; i++) { const c = String(Ma
   ok(st.j.otpauth === 'otpauth://totp/' + encodeURIComponent(st.j.issuer) + ':' + encodeURIComponent(user(A.uid).phone) + '?secret=' + secret + '&issuer=' + encodeURIComponent(st.j.issuer) + '&algorithm=SHA1&digits=6&period=30', 'the link Google Authenticator opens is the standard otpauth address', st.j.otpauth);
   ok(user(A.uid).twofaPendingEnc && !JSON.stringify(user(A.uid)).includes(secret), 'the waiting secret is stored encrypted: its plain text is nowhere on the account');
   ok(user(A.uid).twofaEnabled !== true, 'and nothing is switched on yet');
-  ok((await wdraw(A)).s === 200, 'while it is only half set up, withdrawing still works without a code'); await settle(A);
+  { const half = await wdraw(A); ok(half.s === 403 && half.j.code === 'TWOFA_SETUP_REQUIRED', 'while it is only half set up it still counts as not set up: refused', half.j); }
   // ---- 2. confirming needs a correct first code
   const c0 = await J('POST', '/account/2fa/confirm', { code: wrongCode(secret) }, A.tok);
   ok(c0.s === 400 && c0.j.code === 'TWOFA_INVALID' && /4 tries left/.test(c0.j.message) && user(A.uid).twofaEnabled !== true, 'a wrong first code does not turn it on and is counted', c0.j);
@@ -126,13 +134,13 @@ const wrongCode = secret => { for (let i = 0; i < 50; i++) { const c = String(Ma
   advance(1); const off = await J('POST', '/account/2fa/disable', { pin: '123456', code: codeNow(secret, 0) }, A.tok);
   ok(off.s === 200, 'off: the Trade Password and a right code turn it off', off.j);
   const ua = user(A.uid); ok(['twofaEnabled', 'twofaSecretEnc', 'twofaLastStep', 'twofaBackup', 'twofaPendingEnc', 'twofaFailCount'].every(k => ua[k] === undefined), 'everything about it is wiped from the account', Object.keys(ua).filter(k => /twofa/.test(k)));
-  ok((await wdraw(A)).s === 200, 'withdrawals ask only for the Trade Password again'); await settle(A);
+  { const afterOff = await wdraw(A); ok(afterOff.s === 403 && afterOff.j.code === 'TWOFA_SETUP_REQUIRED', 'after turning it off the member must set it up again before the next withdrawal', afterOff.j); }
   const again = await J('POST', '/account/2fa/start', { pin: '123456' }, A.tok); ok(again.s === 200 && again.j.secret !== secret, 'it can be set up again, with a NEW secret', again.j.secret === secret);
   // ---- 8. the owner's reset (lost phone and lost backup codes)
   const sec2 = again.j.secret; advance(1); await J('POST', '/account/2fa/confirm', { code: codeNow(sec2) }, A.tok); ok(user(A.uid).twofaEnabled === true, 'on again');
   ok((await J('POST', '/admin/user/reset-2fa', { userId: A.uid }, null, false)).s === 401, 'only the owner can reset it');
   const rs = await J('POST', '/admin/user/reset-2fa', { userId: A.uid }, null, true); ok(rs.s === 200 && user(A.uid).twofaEnabled === undefined && user(A.uid).twofaSecretEnc === undefined, 'the owner\'s reset switches it off and wipes it', rs.j);
-  ok((await wdraw(A)).s === 200, 'the member withdraws with just the Trade Password again'); await settle(A);
+  { const afterReset = await wdraw(A); ok(afterReset.s === 403 && afterReset.j.code === 'TWOFA_SETUP_REQUIRED', 'after the owner\'s reset the member must set it up again before the next withdrawal', afterReset.j); }
   ok([...fm.__stores.auditLog ? fm.__stores.auditLog.values() : []].length >= 0, 'audit store reachable');
   // ---- 9. the setup expires; it is a member-only, signed-in feature
   await J('POST', '/account/2fa/start', { pin: '123456' }, B.tok); user(B.uid).twofaPendingAt = Date.now() - 20 * 60000;
@@ -166,6 +174,28 @@ const wrongCode = secret => { for (let i = 0; i < 50; i++) { const c = String(Ma
     advance(1); const offF = await J('POST', '/account/2fa/disable', { pin: '123456', code: codeNow(sf, 0) }, F.tok); ok(offF.s === 200, 'they can turn it off', offF.j);
     const s2 = (await J('POST', '/account/2fa/start', { pin: '123456' }, F.tok)).j.secret; advance(1); await J('POST', '/account/2fa/confirm', { code: codeNow(s2, 0) }, F.tok);
     ok(first.open(fileKey, F.uid, user(F.uid).twofaSecretEnc) === s2 && first.open(adminKey, F.uid, user(F.uid).twofaSecretEnc) === null, 'and the new setup is locked with the key file');
+  }
+  // ---- 11c. the owner's switch (Admin > Settings): off = optional again, but a member who DID set it up is still asked for the code
+  {
+    const G = await member(), H = await member();
+    const enrol = async m => { const sec = (await J('POST', '/account/2fa/start', { pin: '123456' }, m.tok)).j.secret; await J('POST', '/account/2fa/confirm', { code: codeNow(sec) }, m.tok); return sec; };
+    const sh = await enrol(H);
+    const detOn = await J('POST', '/admin/user/detail', { userId: G.uid }, null, true); ok(detOn.j.twofaRequired === true, 'the owner\'s member page knows the rule is on', detOn.j.twofaRequired);
+    const offSw = await J('POST', '/admin/settings/update', { settings: { requireTwofaToWithdraw: false } }, null, true); ok(offSw.s === 200, 'the owner can switch the rule off', offSw.j);
+    ok((await J('GET', '/public/settings')).j.settings.requireTwofaToWithdraw === false && (await J('POST', '/admin/user/detail', { userId: G.uid }, null, true)).j.twofaRequired === false, 'the app and the member page are told');
+    const g1 = await wdraw(G); ok(g1.s === 200, 'switch off: a member who has not set it up withdraws with just the Trade Password', g1.j); await settle(G);
+    const hNo = await wdraw(H); ok(hNo.s === 400 && hNo.j.code === 'TWOFA_REQUIRED', 'switch off: a member who DID set it up is still asked for the code', hNo.j);
+    const hOk = await wdraw(H, { totp: codeNow(sh, 1) }); ok(hOk.s === 200, 'and with the code it goes through', hOk.j); await settle(H);
+    // switch off, member turns it on between the check and the money moving: nothing is taken
+    {
+      const wm = W(), realSet = wm.set.bind(wm), wG0 = user(G.uid).walletBalance;
+      wm.set = (k, v) => { const r = realSet(k, v); if (v && v.status === 'creating') user(G.uid).twofaEnabled = true; return r; };
+      const ch = await wdraw(G); wm.set = realSet; delete user(G.uid).twofaEnabled;
+      ok(ch.s === 400 && ch.j.code === 'TWOFA_CHANGED' && user(G.uid).walletBalance === wG0, 'switch off: if the member turns it on while the request is being made, nothing is taken', ch.j);
+    }
+    const onSw = await J('POST', '/admin/settings/update', { settings: { requireTwofaToWithdraw: true } }, null, true); ok(onSw.s === 200, 'the owner can switch it back on', onSw.j);
+    const g2 = await wdraw(G); ok(g2.s === 403 && g2.j.code === 'TWOFA_SETUP_REQUIRED', 'switched back on: refused again until it is set up', g2.j);
+    ok((await J('GET', '/public/settings')).j.settings.requireTwofaToWithdraw === true && (await J('POST', '/admin/user/detail', { userId: G.uid }, null, true)).j.twofaRequired === true, 'and everybody is told');
   }
   // ---- 12. the books still balance
   const ig = await J('GET', '/admin/integrity', null, null, true); ok(ig.s === 200 && ig.j.mismatches.length === 0, 'the integrity check finds every wallet equal to its history', ig.j.mismatches);

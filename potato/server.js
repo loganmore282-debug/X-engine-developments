@@ -641,6 +641,10 @@ const DEFAULT_SETTINGS = {
   // right after the loading screen. See the MAINTENANCE GATE section below
   // for the actual server-side enforcement.
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
+  // Owner: "make it compulsory so that after one puts in the Trade Password he puts in the 2fa code; if he had not, he has to download and do the process."
+  // On for everybody: a member who has not set up Google Authenticator (Profile > Google Authenticator) cannot withdraw until they have, and every withdrawal
+  // then asks for the Trade Password AND the 6-digit code. Admin > Settings can switch the requirement off (a member who already turned it on is still asked).
+  requireTwofaToWithdraw: true,
   // The hours withdraw is open. Owner: "one withdrawal time should be
   // SETTABLE IN ADMIN, such that when one tries to withdrawal he sees, that
   // withdrawals start from this time to this time, nothing much ie 6pm to
@@ -5242,9 +5246,10 @@ async function pinCheck(userId, pin0) {
 // WITHDRAWAL 2-STEP VERIFICATION (Google Authenticator) -- optional, turned on by the MEMBER
 // ═══════════════════════════════════════════
 // Owner: "increase the security of the withdrawal: after the Trade Password, one has to put in the authenticator code; one has to enable it, so one
-// downloads Google Authenticator." Off for everybody until the member turns it on (Profile > Google Authenticator). Once on, /withdraw/request needs the
-// Trade Password AND a 6-digit code from the authenticator app (or, for a lost phone, one single-use backup code). The server enforces it: the app only
-// shows the box. How it is kept safe:
+// downloads Google Authenticator." Then: "make it compulsory ... if he had not, he has to download and do the process." So it is REQUIRED for every member
+// (setting requireTwofaToWithdraw, on by default, switchable in Admin > Settings): a member who has not set it up (Profile > Google Authenticator) is refused with
+// TWOFA_SETUP_REQUIRED, and once on, /withdraw/request needs the Trade Password AND a 6-digit code from the authenticator app (or, for a lost phone, one
+// single-use backup code). The server enforces it: the app only shows the box and the way to set it up. How it is kept safe:
 //   * Standard TOTP (RFC 6238: SHA-1, 6 digits, 30 seconds, a 160-bit secret in base32), so Google Authenticator, Microsoft Authenticator, Authy and 2FAS all work.
 //   * The secret is stored ENCRYPTED (AES-256-GCM, bound to the member's id, key made by the server itself: twofa-vault.js) and is shown to the member once, while setting up. Turning it on needs the Trade
 //     Password AND a correct first code, so a wrong or half-finished setup can never lock anybody out. Nothing is switched on until that code is right.
@@ -5518,6 +5523,11 @@ app.post('/withdraw/request', async (req, res) => {
         twofaChk = await twofaCheck(userId, req.body.totp);
         if (!twofaChk.ok) return twofaFail(res, twofaChk);
         twofaSp = twofaSpend(twofaChk);
+      } else if (sett.requireTwofaToWithdraw !== false) {
+        // COMPULSORY (Admin > Settings can switch this off): a member who has not set Google Authenticator up cannot withdraw. Nothing is charged and no request
+        // is created; the app takes them to the set-up page. Only reached with a right Trade Password, so it is no help to somebody guessing one.
+        return res.status(403).json({ status: 'error', code: 'TWOFA_SETUP_REQUIRED',
+          message: 'To withdraw you must first set up Google Authenticator. Download Google Authenticator, then open My > Google Authenticator and follow the steps. After that, every withdrawal asks for your Trade Password and a 6-digit code.' });
       }
     }
     const boundSnap = await db.collection('bankAccounts')
@@ -7529,7 +7539,7 @@ const SETTINGS_CRITICAL_RANGES = {
   myBannerOpacity: [0, 100], myBannerBlur: [0, 40], appClaimAmount: [0, MAX_MONEY_AMOUNT],
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'requireTwofaToWithdraw', 'autoApproveWithdrawalsEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -8386,6 +8396,7 @@ app.post('/admin/user/detail', async (req, res) => {
       // modal always showed "UGX 0" / "None saved" regardless of reality.
       bankAccounts: bankSnap.docs.map(d => ({ id: d.id, ...d.data() })),
       teamDeposits, earnedBreakdown,
+      twofaRequired: (await getSettings()).requireTwofaToWithdraw !== false,   // so the panel can say what "not set up" means for this member
     });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });

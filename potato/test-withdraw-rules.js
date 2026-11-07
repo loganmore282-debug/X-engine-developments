@@ -261,7 +261,7 @@ function run(state, body) {
 function fresh(extra = {}) {
   return {
     settings: { minWithdraw: 5000, withdrawFeePct: 15, withdrawMultiple: 5000,
-                requireInvestToWithdraw: false, maxWithdrawalsPerDay: 0,
+                requireInvestToWithdraw: false, requireTwofaToWithdraw: false, maxWithdrawalsPerDay: 0,
                 withdrawWindowEnabled: false, ...(extra.settings || {}) },
     user: { walletBalance: 100000, totalInvested: 50000, status: 'active' },
     banks: [{ id: 'b1', userId: 'u1', network: 'MTN Mobile Money', phone: '0770000001', holder: 'A B' }],

@@ -3680,11 +3680,15 @@ window.submitTradePasswordChange = async function(){
   notify(first ? 'Trade password saved' : 'Trade password changed');
 };
 
-// ── GOOGLE AUTHENTICATOR (the optional second step of a withdrawal) ──
+// ── GOOGLE AUTHENTICATOR (the second step of every withdrawal; compulsory unless the owner switches the rule off) ──
 // Owner: "after the Trade Password, one has to put in the authenticator code; one has to enable it; one downloads Google Authenticator."
 // The SERVER decides whether a code is needed (it reads the account); this page only turns it on and off. The secret is made by the server, shown here
 // once as a link, a setup key and a picture drawn on this phone (the vendored qrcode-generator): it is never sent to any outside service.
-var _ga = { view: 'loading', setup: null, codes: null, status: null, action: '' };
+var _ga = { view: 'loading', setup: null, codes: null, status: null, action: '', forWithdraw: false, amount: '' };
+// COMPULSORY (owner: "make it compulsory ... if he had not, he has to download and do the process"). The SERVER refuses a withdrawal from a member who has not
+// set it up; the app only tells them first and takes them there (their amount is kept for when they come back). Admin > Settings can switch the rule off.
+function authRequiredToWithdraw(){ return (STATE.settings || {}).requireTwofaToWithdraw !== false; }
+function witNeedsAuthSetup(){ return authRequiredToWithdraw() && !!STATE.account && STATE.account.twofaEnabled !== true; }
 var GA_PLAY = 'https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2';
 var GA_STORE = 'https://apps.apple.com/app/google-authenticator/id388497605';
 // The authenticator reads the phone's own clock: when that is more than 20 seconds away from the server's, its codes cannot match.
@@ -3706,7 +3710,10 @@ function ptQrSvg(text){
   return `<svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Setup picture for Google Authenticator" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect width="${size}" height="${size}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
 }
 function gaOffHtml(){
-  return `<section class="pt-ga-card pt-ga-hero"><span class="pt-ga-badge">${PT_MENU_IC.auth}</span><h2>Secure your withdrawals</h2><p>Add a second lock. After your Trade Password you will also type a 6-digit code from Google Authenticator before any withdrawal.</p></section>
+  const hero = authRequiredToWithdraw()
+    ? `<h2>Google Authenticator is required</h2><p>${_ga.forWithdraw ? 'You need it before you can withdraw. ' : ''}After your Trade Password, every withdrawal also asks for a 6-digit code from Google Authenticator. Setting it up takes about two minutes.</p>`
+    : '<h2>Secure your withdrawals</h2><p>Add a second lock. After your Trade Password you will also type a 6-digit code from Google Authenticator before any withdrawal.</p>';
+  return `<section class="pt-ga-card pt-ga-hero"><span class="pt-ga-badge">${PT_MENU_IC.auth}</span>${hero}</section>
   <section class="pt-ga-card"><div class="pt-ga-step"><i>1</i><div><b>Download Google Authenticator</b><span>A free app from Google. Install it on your phone first.</span></div></div>
     <div class="pt-ga-stores"><a href="${GA_PLAY}" target="_blank" rel="noopener">Google Play</a><a href="${GA_STORE}" target="_blank" rel="noopener">App Store</a></div></section>
   <section class="pt-ga-card"><div class="pt-ga-step"><i>2</i><div><b>Enter your Trade Password</b><span>This confirms that it is really you.</span></div></div>
@@ -3750,7 +3757,7 @@ function gaOnHtml(){
 function gaManageHtml(){
   const off = _ga.action === 'off';
   return `<section class="pt-ga-card"><b class="pt-ga-h">${off ? 'Turn off Google Authenticator' : 'Make new backup codes'}</b>
-    <p class="pt-ga-note left">${off ? 'Withdrawals will need only your Trade Password again.' : 'Your old backup codes stop working as soon as the new ones are made.'}</p>
+    <p class="pt-ga-note left">${off ? (authRequiredToWithdraw() ? 'You will not be able to withdraw until you set Google Authenticator up again.' : 'Withdrawals will need only your Trade Password again.') : 'Your old backup codes stop working as soon as the new ones are made.'}</p>
     <div class="pt-ga-form"><label for="gaPin">Trade Password</label>${vPwBox('gaPin', 'Enter trade password', true)}
     <label for="gaCode">Authenticator code</label>${gaCodeBox('gaCode', '6-digit code or a backup code', true)}<p class="pt-pwerr" id="ptPwErr"></p>
     <button type="button" class="pt-ga-btn" id="gaDoBtn" onclick="gaDoManage()">${off ? 'Turn Off' : 'Make New Codes'}</button>
@@ -3771,10 +3778,11 @@ async function gaLoad(){
   if (r.stale || !$('gaBody')) return;
   if (r.status !== 'success') { _ga.view = 'error'; return gaPaint(); }
   _ga.status = r; if (STATE.account) STATE.account.twofaEnabled = r.enabled === true;
+  if (r.enabled && _ga.forWithdraw) return gaReturnToWithdraw();   // it was already on (the app held an old copy of the account): nothing to set up
   _ga.view = r.enabled ? 'on' : 'off'; gaPaint();
 }
-window.openAuthenticatorSheet = function(){
-  _ga = { view: 'loading', setup: null, codes: null, status: null, action: '' };
+window.openAuthenticatorSheet = function(opts){
+  _ga = { view: 'loading', setup: null, codes: null, status: null, action: '', forWithdraw: !!(opts && opts.forWithdraw), amount: (opts && opts.amount) || '' };
   openSheet('Google Authenticator', '<div class="pt-ga" id="gaBody"></div>');
   gaLoad();
 };
@@ -3805,7 +3813,23 @@ window.gaConfirm = async function(){
   if (STATE.account) STATE.account.twofaEnabled = true;
   _ga.setup = null; _ga.codes = r.backupCodes || []; _ga.view = 'codes'; gaPaint();
 };
-window.gaCodesDone = function(){ _ga.codes = null; gaLoad(); };
+window.gaCodesDone = function(){ _ga.codes = null; if (_ga.forWithdraw) return gaReturnToWithdraw(); gaLoad(); };
+// Set up from the Withdraw button: back to the Withdraw page with the amount that was typed, and the member can go on (Trade Password, then the code).
+function gaReturnToWithdraw(){
+  const amount = _ga.amount || '';
+  _ga.forWithdraw = false;
+  openWithdrawSheet();
+  const f = $('witAmount'); if (f && amount) { f.value = amount; syncWithdrawReceiveAmt(); }
+  notify('Google Authenticator setup done. You can withdraw now.');
+}
+// Tapping Withdraw without it: say why (the usual notice), then open the set-up page, unless the member has already left the Withdraw page.
+function gaRequiredNotice(){
+  const amount = $('witAmount') ? $('witAmount').value : '';
+  notify('Google Authenticator is required to withdraw. Set it up first.', () => {
+    if (_openSheetTitle !== 'Withdraw') return;
+    openAuthenticatorSheet({ forWithdraw: true, amount });
+  });
+}
 window.gaCancel = function(){ _ga.setup = null; _ga.view = 'off'; gaPaint(); };
 window.gaManage = function(action){ _ga.action = action; _ga.view = 'manage'; gaPaint(); };
 window.gaBack = function(){ _ga.view = 'on'; gaPaint(); };
@@ -4811,6 +4835,9 @@ window.submitWithdraw = async function(){
   const win = withdrawWindow(STATE.settings || {});
   if (win.enabled && !win.open && !(STATE.account && STATE.account.withdrawAnytime))
     return notify(`Withdraw is open from ${win.from} to ${win.to}. Please come back then.`);
+  // COMPULSORY Google Authenticator: no set-up yet -> the member is told and taken to the set-up page BEFORE any Trade Password is asked (the server refuses
+  // the withdrawal as well, so a changed app gains nothing).
+  if (witNeedsAuthSetup()) return gaRequiredNotice();
   // The Trade Password is asked in a small dialog, right when the member taps Withdraw (the owner's Withdraw page has no box for it).
   if ($('pinBg') && $('pinBg').classList.contains('show')) return;   // a second tap while the dialog is open does nothing
   const witPin = await askTradePin();
@@ -4840,6 +4867,11 @@ window.submitWithdraw = async function(){
   if (r.stale) return;
   if (r.status !== 'success') {
     if (r.code === 'TWOFA_REQUIRED' && STATE.account) STATE.account.twofaEnabled = true;   // the account says it is on: the next tap asks for the code
+    if (r.code === 'TWOFA_SETUP_REQUIRED') {   // the server says it is compulsory and not set up (the app held an old copy of the account or of the rule)
+      if (STATE.account) STATE.account.twofaEnabled = false;
+      if (STATE.settings) STATE.settings.requireTwofaToWithdraw = true;
+      return gaRequiredNotice();
+    }
     return notify(r.message || 'Could not request withdrawal.');
   }
   // Owner: "why when l withdrawal the value still remains???"

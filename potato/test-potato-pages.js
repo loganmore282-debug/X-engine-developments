@@ -28,7 +28,7 @@ async function member() {
 }
 (async () => {
   for (let i = 0; i < 60; i++) { try { const h = await fetch(base + '/health'); if (h.ok) break; } catch (_) {} await sleep(250); }
-  await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 5000 } }, null, true);
+  await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 5000, requireTwofaToWithdraw: false } }, null, true);
   await J('POST', '/admin/products/save', { products: [
     { key: 'vip1', name: 'VIP-1', price: 3000, cycle: 30, multiplier: 3, buyLimit: 1, order: 0, vip: 1, orderGift: 800 },
     { key: 'vip2', name: 'VIP-2', price: 50000, cycle: 40, multiplier: 3, buyLimit: 3, order: 1, vip: 2, orderGift: 2000 },

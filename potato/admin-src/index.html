@@ -1958,7 +1958,7 @@ async function openReferralChain(uid){
 async function openUser(uid){
   const r = await api('/admin/user/detail',{ userId:uid });
   if(r.status!=='success'){ toast(r.message||'Not found','err'); return; }
-  const u=r.user;
+  const u=r.user, twofaReq=r.twofaRequired!==false;   // Google Authenticator compulsory for withdrawals (Settings)
   // Owner: "money/unknown money is continuing to pile up... a very bad
   // bug bro." Root cause traced to a genuinely misleading label, not a
   // money bug: "Cashback earned" (totalEarned) is actually cashback PLUS
@@ -2044,9 +2044,9 @@ async function openUser(uid){
       <button class="btn ghost sm" id="resetPinBtn">Set PIN</button>
     </div>`:''}
     ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Google Authenticator</h4>
-    <div class="kv"><span class="k">Withdrawals</span><span id="twofaState">${u.twofaEnabled===true?'Protected: a 6-digit code is needed after the Trade Password':'Off: the Trade Password only'}</span></div>
+    <div class="kv"><span class="k">Withdrawals</span><span id="twofaState">${u.twofaEnabled===true?'Protected: a 6-digit code is needed after the Trade Password':(twofaReq?'Not set up: cannot withdraw yet':'Off: the Trade Password only')}</span></div>
     ${u.twofaEnabled===true?`<p class="muted" style="margin:2px 0 8px;font-size:12px">The member turned this on themselves. If they lost their phone AND their backup codes, switch it off here once you are sure who is asking. They can turn it on again themselves.</p>
-    <button class="btn danger sm" id="reset2faBtn">Reset Google Authenticator</button>`:'<p class="muted" style="margin:2px 0 0;font-size:12px">The member can turn it on in the app (Profile, Google Authenticator).</p>'}`:''}
+    <button class="btn danger sm" id="reset2faBtn">Reset Google Authenticator</button>`:`<p class="muted" style="margin:2px 0 0;font-size:12px">${twofaReq?'The app takes the member there when they tap Withdraw (My, Google Authenticator).':'The member can turn it on in the app (My, Google Authenticator).'}</p>`}`:''}
     ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Withdrawal limits</h4>
     <div class="kv"><span class="k">This member</span><span id="anyTimeState">${u.withdrawAnytime===true?'Unrestricted: any hour and any number of withdrawals a day':'Follows the withdrawal hours and the daily number'}</span></div>
     <button class="btn ${u.withdrawAnytime===true?'ghost':'sky'} sm" id="anyTimeBtn" style="margin-top:6px">${u.withdrawAnytime===true?'Follow the withdrawal limits':'Make unrestricted (hours and daily number)'}</button>`:''}
@@ -2188,7 +2188,7 @@ async function openUser(uid){
     if(d.status==='success'){ u.withdrawAnytime=on; closeModal(); (RENDERERS[_tab]||renderUsers)(); } else b.disabled=false;
   });
   $('reset2faBtn')?.addEventListener('click', async()=>{
-    if(!confirm(`Switch off Google Authenticator for ${u.phone}? Do this only when you are sure the person asking is the member (lost phone and lost backup codes). Their withdrawals will need only the Trade Password until they turn it on again.`)) return;
+    if(!confirm(`Switch off Google Authenticator for ${u.phone}? Do this only when you are sure the person asking is the member (lost phone and lost backup codes). ${twofaReq?'They will have to set it up again before their next withdrawal.':'Their withdrawals will need only the Trade Password until they turn it on again.'}`)) return;
     const b=$('reset2faBtn'); b.disabled=true;
     const d=await api('/admin/user/reset-2fa',{userId:uid});
     toast(d.status==='success'?'Google Authenticator switched off for this member':(d.message||'Failed'), d.status==='success'?'ok':'err');
@@ -3548,6 +3548,8 @@ async function renderSettings(){
       </div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only withdrawals)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
+      <div class="switch-row" style="margin-top:8px"><span><b>Require Google Authenticator to withdraw</b> <span class="muted">(a member must set it up first; then every withdrawal asks for the Trade Password and a 6-digit code)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sReqTwofa" ${s.requireTwofaToWithdraw!==false?'checked':''} style="width:auto"></label></div>
       <!-- Owner: "one withdrawal time should be SETTABLE IN ADMIN, such that
            when one tries to withdrawal he sees, that withdrawals start from
            this time to this time, nothing much ie 6pm to 5pm." -->
@@ -3706,7 +3708,7 @@ async function renderSettings(){
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
       autoApproveWithdrawalsEnabled:$('sAutoWit').checked, autoApproveMinSec:+$('sAutoMin').value, autoApproveMaxSec:+$('sAutoMax').value, autoApproveMaxAmount:+$('sAutoCap').value,
       referencePrefix:$('sRefPrefix').value.trim(),
-      requireInvestToWithdraw:$('sReqInvest').checked,
+      requireInvestToWithdraw:$('sReqInvest').checked, requireTwofaToWithdraw:$('sReqTwofa').checked,
       withdrawWindowEnabled:$('sWitWindow').checked, withdrawOpenFrom:$('sWitFrom').value, withdrawOpenTo:$('sWitTo').value,
       // Sent as raw text; the server splits, validates and de-duplicates it,
       // and rejects the whole save naming the bad line rather than silently

@@ -21,7 +21,7 @@ for(const s of d.scripts){
 }
 const tick=()=>new Promise(r=>setTimeout(r,5));
 function deferred(){let resolve;const promise=new Promise(r=>{resolve=r});return {promise,resolve}}
-function setState(){w.eval('STATE.page="home"; STATE.account={walletBalance:50000,totalEarned:100,totalDeposited:20000,totalWithdrawn:5000}; STATE.settings={minDeposit:15000,minWithdraw:5000,withdrawFeePct:0,weekendWithdrawBlock:false}; STATE.investments=[]; STATE.bankAccounts=[{id:"wallet",network:"MTN Mobile Money",phone:"256771234567",holder:"Test Member"}];')}
+function setState(){w.eval('STATE.page="home"; STATE.account={walletBalance:50000,totalEarned:100,totalDeposited:20000,totalWithdrawn:5000}; STATE.settings={minDeposit:15000,minWithdraw:5000,withdrawFeePct:0,weekendWithdrawBlock:false,requireTwofaToWithdraw:false}; STATE.investments=[]; STATE.bankAccounts=[{id:"wallet",network:"MTN Mobile Money",phone:"256771234567",holder:"Test Member"}];')}
 async function main(){
   await tick();setState();
   const request=w.api, originalFetch=w.fetch;
@@ -82,6 +82,30 @@ async function main(){
   await w.openWithdrawSheet();
   stale.resolve({status:'success',accounts:[{id:'old',phone:'256701111111'}]});await previous;
   assert.match(d.querySelector('#witWalletBlock').textContent,/Current Wallet/i,'late request must not replace a new screen');
+  { // COMPULSORY Google Authenticator: rule on and nothing set up -> Withdraw sends nothing, asks for no Trade Password, says why, then opens the set-up page
+    let sent=0;const realPost=w.post,realNotify=w.notify,realApi=w.api,realAsk=w.askAuthCode,notes=[];
+    w.post=()=>{sent++;return Promise.resolve({status:'success'})};w.notify=(m,cb)=>{notes.push([m,cb])};
+    w.eval('STATE.settings.requireTwofaToWithdraw=true;STATE.account.twofaEnabled=false');
+    d.querySelector('#witAmount').value='5000';
+    await w.submitWithdraw();
+    assert.equal(sent,0,'nothing is sent while Google Authenticator is not set up');
+    assert(!d.querySelector('#pinBg').classList.contains('show'),'and no Trade Password is asked first');
+    assert.equal(notes.length,1);assert.match(notes[0][0],/Google Authenticator is required to withdraw/);
+    w.api=async()=>({status:'success',enabled:false,backupLeft:0});
+    notes[0][1]();await tick();
+    assert.match(d.querySelector('#sheetBody').textContent,/Google Authenticator is required/);assert.match(d.querySelector('#sheetBody').textContent,/before you can withdraw/);
+    // the server saying so (an old copy of the rule or the account) does the same
+    w.eval('STATE.account.twofaEnabled=true;STATE.settings.requireTwofaToWithdraw=false');
+    w.api=async()=>({status:'success',accounts:[{id:'wallet',network:'MTN Mobile Money',phone:'256771234567',holder:'Test Member'}]});
+    await w.openWithdrawSheet();d.querySelector('#witAmount').value='5000';notes.length=0;
+    w.askAuthCode=async()=>'123456';
+    w.post=(path,body)=>{sent++;return Promise.resolve({status:'error',code:'TWOFA_SETUP_REQUIRED',message:'To withdraw you must first set up Google Authenticator.'})};
+    const run=w.submitWithdraw();await tick();d.querySelector('#pinInput').value='123456';d.querySelector('#pinOk').click();await run;
+    assert.equal(sent,1);assert.equal(w.eval('STATE.account.twofaEnabled'),false,'the app learns the account is not set up');
+    assert.match(notes[notes.length-1][0],/Google Authenticator is required to withdraw/,'the server\'s refusal leads to the same notice');
+    await w.openWithdrawSheet();
+    w.post=realPost;w.notify=realNotify;w.api=realApi;w.askAuthCode=realAsk;w.eval('STATE.settings.requireTwofaToWithdraw=false');
+  }
   const payment=deferred();let posts=0;
   w.post=()=>{posts++;return payment.promise};w.notify=()=>{};w.refreshAfterWithdraw=()=>{};
   d.querySelector('#witAmount').value='5000';
