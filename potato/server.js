@@ -3546,6 +3546,19 @@ function salaryTierFor(tiers, total) { let t = null; for (const x of tiers) if (
 function salaryClaimedSet(u) {
   return new Set(Array.isArray(u.claimedSalaryTiers) ? u.claimedSalaryTiers : []);
 }
+// The one-time repair below runs at start-up. Until it has finished, a member's claimed list may still be the OLD (wrong or missing) one, so the Reward
+// routes wait for it (and answer "try again in a moment" if it could not finish yet) instead of letting a tier be paid a second time.
+let _rewardRepair = { done: false, promise: null };
+async function rewardRepairReady() {
+  if (!_rewardRepair.done && _rewardRepair.promise) { try { await _rewardRepair.promise; } catch (_) {} }
+  return _rewardRepair.done;
+}
+function startRewardRepair() {
+  _rewardRepair.promise = migrateRewardsToClaimOnce()
+    .then(n => { _rewardRepair.done = true; if (n) console.log(`Reward tiers: ${n} members' claimed tiers were rewritten from their real payments`); })
+    .catch(e => { console.error('Reward claim-once repair (retrying in 60 seconds):', e.message); const t = setTimeout(startRewardRepair, 60000); if (t.unref) t.unref(); });
+}
+const REWARD_REPAIR_BUSY = { code: 503, body: { status: 'error', message: 'Rewards are being updated. Please try again in a moment.' } };
 async function salaryView(userId) {
   const [sett, teamNow] = await Promise.all([getSettings(), wholeTeamStats(userId)]);
   const tiers = taskRows(sett.salaryTiers, 'salary');
@@ -3560,6 +3573,7 @@ app.get('/salary/status', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const u = uSnap.data();
     if (u.status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    if (!(await rewardRepairReady())) return res.status(REWARD_REPAIR_BUSY.code).json(REWARD_REPAIR_BUSY.body);
     const view = await salaryView(userId);
     const claimed = salaryClaimedSet(u);
     const tiers = view.tiers.map(t => ({ id: t.id, target: t.target, reward: t.reward, reached: view.total >= t.target, claimed: claimed.has(t.id) }));
@@ -3572,6 +3586,7 @@ app.post('/salary/claim', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const wantId = String((req.body && req.body.tierId) || '').slice(0, 40);
+  if (!(await rewardRepairReady())) return res.status(REWARD_REPAIR_BUSY.code).json(REWARD_REPAIR_BUSY.body);
   try {
     const out = await withLock('salary:' + userId, async () => {
       const uRef = db.collection('users').doc(userId);
@@ -3625,6 +3640,10 @@ async function migrateRewardsToClaimOnce() {
   const marker = db.collection('meta').doc('rewardClaimOnceV2');
   if ((await marker.get()).exists) return 0;
   const tiers = taskRows((await getSettings()).salaryTiers, 'salary');
+  // ORDER MATTERS (a member can claim while this runs): members are read FIRST, the ledger second, and each member is re-read under the claim lock
+  // just before writing. A claim made after the first read is either in the ledger scan or shows up as a tier that was not on the account at the
+  // first read, and that one is always kept.
+  const users = await db.collection('users').limit(200000).get();
   const maxDaily = new Map(), named = new Map();
   const rows = await db.collection('transactions').where('type', '==', 'mission_salary').limit(500000).get();
   rows.forEach(d => {
@@ -3632,18 +3651,24 @@ async function migrateRewardsToClaimOnce() {
     if (t.salaryTier) { if (!named.has(t.userId)) named.set(t.userId, new Set()); named.get(t.userId).add(t.salaryTier); }
     else { const a = Number(t.amount) || 0; if (a > (maxDaily.get(t.userId) || 0)) maxDaily.set(t.userId, a); }
   });
-  const users = await db.collection('users').limit(200000).get();
   let n = 0;
   for (const d of users.docs) {
-    const u = d.data();
+    const had = Array.isArray(d.data().claimedSalaryTiers) ? d.data().claimedSalaryTiers : [];
     const ids = new Set(named.get(d.id) || []);
     const paid = maxDaily.get(d.id) || 0;
     if (paid > 0) for (const t of tiers) if (t.reward <= paid) ids.add(t.id);
-    const want = [...ids];
-    const have = Array.isArray(u.claimedSalaryTiers) ? u.claimedSalaryTiers : [];
-    const same = have.length === want.length && want.every(x => have.includes(x));
-    if (same) continue;
-    await d.ref.update({ claimedSalaryTiers: want }); n++;
+    if (!had.length && !ids.size) continue;
+    const changed = await withLock('salary:' + d.id, async () => {
+      const fresh = await db.collection('users').doc(d.id).get();
+      if (!fresh.exists) return false;
+      const now = Array.isArray(fresh.data().claimedSalaryTiers) ? fresh.data().claimedSalaryTiers : [];
+      const want = new Set(ids);
+      for (const id of now) if (!had.includes(id)) want.add(id);
+      if (now.length === want.size && now.every(x => want.has(x))) return false;
+      await fresh.ref.update({ claimedSalaryTiers: [...want] });
+      return true;
+    });
+    if (changed) n++;
   }
   await marker.set({ at: new Date(), members: n });
   return n;
@@ -10872,7 +10897,7 @@ connectMongo(MONGODB_URI)
     // (still a single lightweight query -- .where('status','==','active'),
     // not a full-ledger scan) -- worth knowing on the M0 free tier, not
     // expected to be a real problem at Snow's current scale.
-    migrateRewardsToClaimOnce().then(n => { if (n) console.log(`Reward tiers: ${n} members who were paid the old daily wage keep those tiers as claimed`); }).catch(e => console.error('Reward claim-once migration:', e.message));
+    startRewardRepair();
     migratePayoutsToMidnightOnce().then(n => { if (n) console.log(`Moved ${n} running investments to the midnight payout schedule`); }).catch(e => console.error('Midnight schedule migration:', e.message)).then(() => backfillNextPayoutAt()).then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); armMidnightSweep(); });
     setInterval(autoApproveWithdrawalsTick, 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);

@@ -20,8 +20,9 @@ function world(user, total) {
     nowStr: () => ({ date: 'd', time: 't' }), newStatementId: () => 'st', round2: x => Math.round(x * 100) / 100, fmtMoney: x => 'UGX ' + x });
   vm.runInContext(section('function withLock(key, fn)', 'const _userBeingDeleted'), c);
   vm.runInContext(section('function salaryTierFor', "// The old Task Center and Mission Center claim routes"), c);
+  vm.runInContext('_rewardRepair.done = true', c);   // the start-up repair has finished (its own test is below)
   const call = async (key, body) => { const res = { code: 200, status(x) { this.code = x; return this; }, json(b) { this.body = b; return this; } }; await routes[key]({ body: body || {}, headers: {} }, res); return res; };
-  return { call, db, ledger, user: () => db.rows.users.u };
+  return { call, db, ledger, ctx: c, user: () => db.rows.users.u };
 }
 (async () => {
   const total = { v: 700000 };
@@ -53,6 +54,10 @@ function world(user, total) {
   w = world({ salaryTierReward: 6000 }, total);
   r = await w.call('GET /salary/status'); eq(r.body.tiers.map(t => t.claimed), [false, false, false], 'a recorded tier reward alone never marks a tier Claimed');
   r = await w.call('/salary/claim', { tierId: 's1' }); eq([r.code, r.body.amount], [200, 2000], 'and it can still be claimed'); eq(w.user().walletBalance, 2000);
+  // until the start-up repair has finished, neither route answers (a stale claimed list could pay a tier twice)
+  w = world({}, total); vm.runInContext('_rewardRepair.done = false', w.ctx);
+  r = await w.call('GET /salary/status'); eq(r.code, 503, 'status waits for the repair'); r = await w.call('/salary/claim', { tierId: 's1' }); eq(r.code, 503, 'claim waits for the repair'); eq(w.user().walletBalance, 0, 'nothing paid meanwhile');
+  vm.runInContext('_rewardRepair.done = true', w.ctx); r = await w.call('/salary/claim', { tierId: 's1' }); eq(r.code, 200, 'and works once it has finished');
   // a banned member is refused
   w = world({ status: 'banned' }, total); r = await w.call('/salary/claim', { tierId: 's1' }); eq(r.code, 403); eq(w.user().walletBalance, 0);
   // ── the one-time migration: tiers written down as claimed ONLY from real payment rows, replacing wrong marks left by the first version ──
@@ -65,7 +70,8 @@ function world(user, total) {
       users: { a: {}, b: { creditedSalaryDays: [1] }, c: { salaryTierReward: 6000, claimedSalaryTiers: ['s1', 's2', 's3'] }, d: { salaryTierReward: 6000 },
         e: { claimedSalaryTiers: ['s1', 's2'] }, f: {}, g: { claimedSalaryTiers: ['s1'] } } });
     const tiers = [{ id: 's1', target: 1, reward: 2000 }, { id: 's2', target: 2, reward: 4000 }, { id: 's3', target: 3, reward: 6000 }];
-    const c = vm.createContext({ db, FieldValue: FV, getSettings: async () => ({ salaryTiers: tiers }), taskRows: r => r, Math, Number, Array, Date, Map, Set });
+    const c = vm.createContext({ db, FieldValue: FV, getSettings: async () => ({ salaryTiers: tiers }), taskRows: r => r, Math, Number, Array, Date, Map, Set, _lockTails: new Map(), Promise, setTimeout, console: { log() {}, warn() {}, error() {} } });
+    vm.runInContext(section('function withLock(key, fn)', 'const _userBeingDeleted'), c);
     vm.runInContext(mig, c);
     // the OLD marker (first version) does not stop the repair
     eq(await c.migrateRewardsToClaimOnce(), 6, 'a, b, c (wrong marks removed), e (wrong marks removed), f, g (wrong mark removed) change; d is untouched');
@@ -73,7 +79,15 @@ function world(user, total) {
     eq([U('a'), U('b'), U('c'), U('d'), U('e'), U('f'), U('g')], [['s1', 's2'], ['s1'], [], undefined, [], ['s3'], []],
       'a: paid up to 4000 -> tiers 1-2; b: paid 2000 -> tier 1; c/e/g: never paid -> the wrong marks are cleared; d: only looked -> nothing; f: a tier-3 claim row -> tier 3');
     eq(await c.migrateRewardsToClaimOnce(), 0, 'it runs once'); ok(db.rows.meta.rewardClaimOnceV2, 'and leaves its marker');
+    // a member CLAIMS a tier while the repair is running (after the members were read): that claim survives, even before its ledger row exists
+    const db2 = makeDb({ meta: {}, transactions: {}, users: { h: { claimedSalaryTiers: ['s1'] }, i: {} } });
+    const col2 = db2.collection.bind(db2);
+    db2.collection = name => { const cc = col2(name); if (name === 'transactions') { const w = cc.where.bind(cc); cc.where = (...a) => { db2.rows.users.i.claimedSalaryTiers = ['s2']; db2.rows.users.h.claimedSalaryTiers = ['s1', 's3']; return w(...a); }; } return cc; };
+    const c2 = vm.createContext({ db: db2, FieldValue: FV, getSettings: async () => ({ salaryTiers: tiers }), taskRows: r => r, Math, Number, Array, Date, Map, Set, _lockTails: new Map(), Promise, setTimeout, console: { log() {}, warn() {}, error() {} } });
+    vm.runInContext(section('function withLock(key, fn)', 'const _userBeingDeleted'), c2); vm.runInContext(mig, c2);
+    await c2.migrateRewardsToClaimOnce();
+    eq([db2.rows.users.h.claimedSalaryTiers, db2.rows.users.i.claimedSalaryTiers], [['s3'], ['s2']], 'h: the unpaid wrong mark (tier 1) is cleared but the tier claimed DURING the repair (tier 3) is kept; i: a claim made during the repair is kept');
   }
-  ok(/migrateRewardsToClaimOnce\(\)\.then/.test(src), 'it is started at boot');
+  ok(/startRewardRepair\(\);/.test(src.slice(src.indexOf('app.listen') - 4000)) || /^\s+startRewardRepair\(\);/m.test(src), 'the repair is started at boot');
   console.log('PASS: Myteam rewards are claim-once (' + n + ' checks)');
 })().catch(e => { console.error(e); process.exit(1); });
