@@ -1989,7 +1989,8 @@ async function _markDepositFailedNow(depRef, userId, reason, via) {
   let alreadyCredited = false;
   await withLock('dep:' + depRef.id, async () => {
     const fresh = await depRef.get();
-    if (fresh.exists && depositFullyCredited(fresh.data())) { alreadyCredited = true; return; }
+    // Credited (even if only the follow-up bookkeeping is still pending: the wallet already got the money) = a stale FAILED verdict must not close it.
+    if (fresh.exists && (depositFullyCredited(fresh.data()) || (fresh.data().status === 'matched' && fresh.data().walletCredited === true))) { alreadyCredited = true; return; }
     // `failedVia` says WHICH path closed it (and the provider's own word), so a recharge that failed here but succeeded at the provider can be traced.
     await depRef.update({ status: 'failed', failureReason: reason, failedVia: String(via || '').slice(0, 160), failedAtMs: Date.now() }).catch(() => {});
     // Codex-caught real bug (2nd money-flow audit): this ledger-row update
@@ -2023,6 +2024,7 @@ async function _markDepositFailedNow(depRef, userId, reason, via) {
     try {
       const txSnap = await db.collection('transactions').where('depositId', '==', depRef.id).limit(5).get();
       await Promise.all(txSnap.docs.map(txDoc => {
+        if (txDoc.data().status === 'failed') return null;   // a repeated FAILED verdict must not rewrite "Failed (UGX 30,000)" as "Failed (UGX 0)"
         const amt = Math.abs(Number(txDoc.data().amount) || 0);
         return txDoc.ref.update({ status: 'failed', description: `Deposit: Failed (${fmtMoney(amt)})`, amount: 0 });
       }));
@@ -5688,7 +5690,13 @@ app.post('/withdraw/request', async (req, res) => {
       const debited = await uRef.updateIf({ walletBalance: { $gte: amt - 0.005 }, status: { $ne: 'banned' }, debitedWithdrawalIds: { $ne: witId } }, {
         walletBalance: FieldValue.increment(-amt), debitedWithdrawalIds: FieldValue.arrayUnion(witId)
       });
-      if (!debited) throw new Error('Your balance or account status changed. Please refresh and try again.');
+      if (!debited) {
+        // Nothing was charged: close the row at once (it would block the next request until the reconciler declines it) and give the real reason,
+        // not "your withdrawal is being checked" (witId is cleared so the catch below answers with this message).
+        await witRef.updateIf({ status: 'creating' }, { status: 'declined', failureReason: 'Not charged: balance or account changed' }).catch(() => {});
+        witId = undefined;
+        throw new Error('Your balance or account status changed. Please refresh and try again.');
+      }
       await finishWithdrawalCreation(witRef, userId);
     });
     sendAdminPush('New withdrawal request', `${fmtMoney(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }, { quickApprove: true }).catch(() => {});

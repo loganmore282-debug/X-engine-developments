@@ -129,6 +129,20 @@ const wallet = id => fm.__stores.users.get(id).walletBalance, dep = id => fm.__s
   // ---- the server's own integrity check: every wallet equals its history
   const ig = await J('GET', '/admin/integrity', null, true);
   ok(ig.s === 200 && ig.j.mismatches.length === 0, 'the integrity check finds no wallet that disagrees with its history', ig.j.mismatches);
+  // ---- markDepositFailed itself (the function every path uses to close a row): a credited row is never closed, a repeated failure never rewrites the history row
+  {
+    const text = require('fs').readFileSync(path.join(root, 'server.js'), 'utf8');
+    const a = text.indexOf('async function markDepositFailed(depRef, userId, reason, via)'), b = text.indexOf('// ── MARZPAY (mobile money collect/send) ──');
+    const store = { dep: { status: 'matched', walletCredited: true, needsManualCredit: true, amount: 32000 }, tx: { status: 'failed', amount: 0, description: 'Deposit: Failed (UGX 32,000)' } };
+    const depRef = { id: 'dep', get: async () => ({ exists: true, data: () => store.dep }), update: async v => { Object.assign(store.dep, v); } };
+    const txRef = { update: async v => { Object.assign(store.tx, v); } };
+    const dbStub = { collection: () => ({ where: () => ({ limit: () => ({ get: async () => ({ docs: [{ data: () => store.tx, ref: txRef }] }) }) }) }) };
+    const run = new Function('depositFullyCredited', 'withLock', 'db', 'fmtMoney', 'console', '_depCreateDebounce', '_depAttempts', 'Promise', text.slice(a, b).split('\n// ── MARZPAY')[0] + '\nreturn markDepositFailed;')(d => d.status === 'matched' && !d.needsManualCredit, (k, fn) => fn(), dbStub, x => 'UGX ' + x, { warn() {}, error() {} }, new Map(), new Map(), Promise);
+    ok((await run(depRef, 'u', 'why', 'test')) === false && store.dep.status === 'matched', 'a recharge whose wallet was already credited is never closed as failed, even with its bookkeeping still pending');
+    store.dep.status = 'failed'; store.dep.walletCredited = false; delete store.dep.needsManualCredit;
+    await run(depRef, 'u', 'why', 'test');
+    ok(store.tx.description === 'Deposit: Failed (UGX 32,000)' && store.tx.amount === 0, 'a repeated failed verdict does not rewrite the history row as "Failed (UGX 0)"', store.tx);
+  }
   const fatal = serverErrors.filter(e => /ReferenceError|TypeError|is not a function|is not defined|Cannot read/i.test(e));
   ok(fatal.length === 0, 'no code errors were logged by the server', fatal);
   const src = require('fs').readFileSync(path.join(root, 'server.js'), 'utf8');
