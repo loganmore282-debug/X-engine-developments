@@ -4,15 +4,17 @@
 // Off by default and for everybody else; turning it on needs the Trade Password and a correct first code; once on, a withdrawal needs the Trade Password AND
 // a code; a code works once; wrong codes lock the member out; backup codes; turning it off; the owner's reset; the secret is stored encrypted and never
 // sent to anybody again; an unreadable secret refuses the withdrawal instead of skipping the check.
-const path = require('path'), Module = require('module'), crypto = require('crypto');
+const path = require('path'), Module = require('module'), crypto = require('crypto'), fs = require('fs'), os = require('os');
 const root = __dirname;
 const fm = require('./test-helpers/fake-mongodb.js');
 const origResolve = Module._resolveFilename;
 Module._resolveFilename = function (req, ...a) { return req === 'mongodb' ? path.join(root, 'test-helpers', 'fake-mongodb.js') : origResolve.call(this, req, ...a); };
 const PORT = 3200 + Math.floor(Math.random() * 90);
-Object.assign(process.env, { PORT: String(PORT), MONGODB_URI: 'mongodb://fake/app', ADMIN_KEY: 'tf-admin-key-123456', NODE_ENV: 'development' });
+// the folder the server makes its own key file in (on the VPS it is /srv/potato-secrets): empty at the start, so the server has to make the key itself
+const KEYFILE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'twofa-e2e-')), 'twofa.key');
+Object.assign(process.env, { PORT: String(PORT), MONGODB_URI: 'mongodb://fake/app', ADMIN_KEY: 'tf-admin-key-123456', NODE_ENV: 'development', TWOFA_KEY_FILE: KEYFILE });
 const cap = require('./captcha.js'); const realVerify = cap.verify; cap.verify = (id, code) => code === '0000' ? true : realVerify(id, code);
-const totp = require('./totp.js');
+const totp = require('./totp.js'), first = require('./test-helpers/twofa-first-version.js');   // `first` = the first version's own lock and unlock code, copied as it shipped
 const realNow = Date.now; let skew = 0; Date.now = () => realNow() + skew; const advance = (steps) => { skew += (steps || 1) * 30000; };   // the server shares this clock: a new 30-second step without waiting
 const realLog = console.log; console.log = () => {}; console.warn = () => {}; console.error = () => {};
 require('./server.js');
@@ -62,6 +64,10 @@ const wrongCode = secret => { for (let i = 0; i < 50; i++) { const c = String(Ma
   const u = user(A.uid);
   ok(u.twofaEnabled === true && u.twofaSecretEnc && !JSON.stringify(u).includes(secret) && !u.twofaPendingEnc && u.twofaBackup.length === 8, 'on: the secret is encrypted, the waiting copy is gone, 8 backup hashes are kept', Object.keys(u));
   ok(on.j.backupCodes.every(c => !JSON.stringify(u).includes(c.replace('-', '')) && !JSON.stringify(u).includes(c)), 'the backup codes themselves are not stored (only keyed hashes)');
+  ok(/^[0-9a-f]{64}\n$/.test(fs.readFileSync(KEYFILE, 'utf8')) && (fs.statSync(KEYFILE).mode & 0o777) === 0o600, 'the server made its own key file when it started (64 hex characters, owner only): nothing for the owner to set up');
+  const fileKey = first.key(fs.readFileSync(KEYFILE, 'utf8').trim()), adminKey = first.key('tf-admin-key-123456');
+  ok(first.open(fileKey, A.uid, u.twofaSecretEnc) === secret && first.open(adminKey, A.uid, u.twofaSecretEnc) === null, 'the member\'s secret is locked with that key file and NOT with the ADMIN_KEY (so a changed admin password cannot lock anybody out)');
+  { const want = on.j.backupCodes.map(c => first.backupHash(fileKey, A.uid, c.replace('-', ''))); ok(u.twofaBackup.length === 8 && want.every(h => u.twofaBackup.includes(h)), 'and the backup codes are kept as keyed hashes under the same key'); }
   ok(Number.isInteger(u.twofaLastStep) && u.twofaFailCount === 0, 'the first code is already spent and the wrong-code count is reset', { last: u.twofaLastStep, f: u.twofaFailCount });
   acc = (await J('GET', '/account', null, A.tok)).j.account; ok(acc.twofaEnabled === true, 'the app is told to ask for the code', acc.twofaEnabled);
   const stt = await J('GET', '/account/2fa/status', null, A.tok); ok(stt.j.enabled === true && stt.j.backupLeft === 8 && !JSON.stringify(stt.j).includes(secret), 'the status says on, 8 backup codes left, and carries no secret', stt.j);
@@ -145,6 +151,22 @@ const wrongCode = secret => { for (let i = 0; i < 50; i++) { const c = String(Ma
   const dump = JSON.stringify([lst.j, det.j]);
   ok(!/twofaSecretEnc|twofaPendingEnc|twofaBackup/.test(dump) && !dump.includes(sd), 'the admin panel never receives the secret, the waiting secret or the backup hashes');
   ok(det.j.user && det.j.user.twofaEnabled === true, 'but it does show that Google Authenticator is on', det.j.user && det.j.user.twofaEnabled);
+  // ---- 11b. a member who set it up with the FIRST version (locked with the ADMIN_KEY, before the key file existed) is not locked out
+  {
+    const F = await member(), sf = totp.generateSecret(), shown = ['QWERT-23456', 'ASDFG-78923'];
+    Object.assign(user(F.uid), { twofaEnabled: true, twofaSecretEnc: first.seal(adminKey, F.uid, sf), twofaLastStep: 0, twofaFailCount: 0,
+      twofaBackup: shown.map(c => first.backupHash(adminKey, F.uid, c.replace('-', ''))) });
+    const f0 = user(F.uid).walletBalance;
+    const st0 = await J('GET', '/account/2fa/status', null, F.tok); ok(st0.j.enabled === true && st0.j.backupLeft === 2, 'the status of such a member reads normally', st0.j);
+    const fr1 = await wdraw(F, { totp: codeNow(sf, 0) }); ok(fr1.s === 200 && user(F.uid).walletBalance === f0 - 20000, 'such a member still withdraws with the 6-digit code', fr1.j); await settle(F);
+    const fr2 = await wdraw(F, { totp: shown[0] }); ok(fr2.s === 200 && fr2.j.usedBackupCode === true && fr2.j.backupLeft === 1 && user(F.uid).twofaBackup.length === 1, 'and their old backup code works once and is removed', fr2.j); await settle(F);
+    const fr3 = await wdraw(F, { totp: shown[0] }); ok(fr3.s === 400 && fr3.j.code === 'TWOFA_INVALID', 'but not twice', fr3.j);
+    const fr4 = await wdraw(F, { totp: wrongCode(sf) }); ok(fr4.s === 400 && fr4.j.code === 'TWOFA_INVALID' && user(F.uid).walletBalance === f0, 'a wrong code is still refused for them', fr4.j);
+    // turning it off and on again locks the NEW secret with the key file
+    advance(1); const offF = await J('POST', '/account/2fa/disable', { pin: '123456', code: codeNow(sf, 0) }, F.tok); ok(offF.s === 200, 'they can turn it off', offF.j);
+    const s2 = (await J('POST', '/account/2fa/start', { pin: '123456' }, F.tok)).j.secret; advance(1); await J('POST', '/account/2fa/confirm', { code: codeNow(s2, 0) }, F.tok);
+    ok(first.open(fileKey, F.uid, user(F.uid).twofaSecretEnc) === s2 && first.open(adminKey, F.uid, user(F.uid).twofaSecretEnc) === null, 'and the new setup is locked with the key file');
+  }
   // ---- 12. the books still balance
   const ig = await J('GET', '/admin/integrity', null, null, true); ok(ig.s === 200 && ig.j.mismatches.length === 0, 'the integrity check finds every wallet equal to its history', ig.j.mismatches);
   realLog(fails ? 'FAIL: ' + fails + ' of ' + n : 'test-withdraw-2fa: ' + n + ' checks passed');

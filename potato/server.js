@@ -4,6 +4,7 @@ if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = String(Mat
 const sessionPolicy = require('./session-policy');
 const { createFailGuard } = require('./security-guard');
 const totp = require('./totp');
+const twofaVault = require('./twofa-vault');
 const captcha = require('./captcha');
 const express     = require('express');
 const admin       = require('firebase-admin');
@@ -5245,7 +5246,7 @@ async function pinCheck(userId, pin0) {
 // Trade Password AND a 6-digit code from the authenticator app (or, for a lost phone, one single-use backup code). The server enforces it: the app only
 // shows the box. How it is kept safe:
 //   * Standard TOTP (RFC 6238: SHA-1, 6 digits, 30 seconds, a 160-bit secret in base32), so Google Authenticator, Microsoft Authenticator, Authy and 2FAS all work.
-//   * The secret is stored ENCRYPTED (AES-256-GCM, bound to the member's id) and is shown to the member once, while setting up. Turning it on needs the Trade
+//   * The secret is stored ENCRYPTED (AES-256-GCM, bound to the member's id, key made by the server itself: twofa-vault.js) and is shown to the member once, while setting up. Turning it on needs the Trade
 //     Password AND a correct first code, so a wrong or half-finished setup can never lock anybody out. Nothing is switched on until that code is right.
 //   * A code works ONCE. The step it belongs to is written down (`twofaLastStep`) in the SAME atomic update that takes the money, so a captured or repeated
 //     code (even two requests at the same instant) can never pay a second withdrawal. A code only a little early or late (clock drift of one step) is accepted.
@@ -5254,26 +5255,14 @@ async function pinCheck(userId, pin0) {
 //   * 8 single-use backup codes are made at setup (only their keyed hashes are stored). Turning it off or making new backup codes needs the Trade Password
 //     and a code. A member who lost the phone and the backup codes is reset by the owner (Admin > Users > the member > Reset Google Authenticator).
 const TWOFA_MAX_FAILS = 5, TWOFA_LOCK_MS = 15 * 60 * 1000, TWOFA_PENDING_MS = 15 * 60 * 1000;
-if (!process.env.TWOFA_ENC_KEY) console.warn('Member Google Authenticator secrets are encrypted with a key made from ADMIN_KEY. Set TWOFA_ENC_KEY (any long random text, never changed afterwards) so a later change of ADMIN_KEY cannot make them unreadable.');
-const TWOFA_KEY = crypto.createHash('sha256').update('potato-member-2fa-v1|' + (process.env.TWOFA_ENC_KEY || process.env.ADMIN_KEY || 'potato-dev')).digest();
-function twofaSeal(userId, plain) {
-  const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', TWOFA_KEY, iv);
-  c.setAAD(Buffer.from('2fa|' + userId));
-  const ct = Buffer.concat([c.update(String(plain), 'utf8'), c.final()]);
-  return 'v1.' + iv.toString('base64url') + '.' + c.getAuthTag().toString('base64url') + '.' + ct.toString('base64url');
-}
-function twofaOpen(userId, blob) {
-  try {
-    const [v, iv, tag, ct] = String(blob || '').split('.');
-    if (v !== 'v1' || !iv || !tag || !ct) return null;
-    const d = crypto.createDecipheriv('aes-256-gcm', TWOFA_KEY, Buffer.from(iv, 'base64url'));
-    d.setAAD(Buffer.from('2fa|' + userId)); d.setAuthTag(Buffer.from(tag, 'base64url'));
-    return Buffer.concat([d.update(Buffer.from(ct, 'base64url')), d.final()]).toString('utf8');
-  } catch (_) { return null; }
-}
+// The key that locks the secrets is made and kept by the server itself -- nothing for the owner to set up (see twofa-vault.js: a key file in the secrets
+// folder, TWOFA_ENC_KEY if the owner ever sets it, and the first version's ADMIN_KEY key kept only so what it locked still opens).
+const TWOFA = twofaVault.loadKeys(), twofaCrypt = twofaVault.createVault(TWOFA.keys);
+const twofaSeal = (userId, plain) => twofaCrypt.seal(userId, plain);
+const twofaOpen = (userId, blob) => twofaCrypt.open(userId, blob);
 const TWOFA_BACKUP_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // 32 symbols, none that look alike (no 0 O 1 I)
 function twofaBackupNorm(s) { return String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, ''); }
-function twofaBackupHash(userId, code) { return crypto.createHmac('sha256', TWOFA_KEY).update('backup|' + userId + '|' + twofaBackupNorm(code)).digest('hex'); }
+function twofaBackupHash(userId, code) { return twofaCrypt.backupHashes(userId, twofaBackupNorm(code))[0]; }   // the form stored for a NEW code
 // 8 codes of 10 symbols (50 bits each), shown as XXXXX-XXXXX. Returns { codes, hashes }.
 function twofaNewBackupCodes(userId) {
   const codes = [];
@@ -5331,10 +5320,11 @@ async function twofaCheck(userId, raw) {
       if (m.step <= last) return { ok: false, code: 'TWOFA_USED', message: 'That code was already used. Wait for the next code in Google Authenticator (it changes every 30 seconds) and try again.' };
       out = { ok: true, kind: 'totp', step: m.step };
     } else {
-      const h = twofaBackupHash(userId, norm); let hit = false;
-      for (const x of (Array.isArray(u.twofaBackup) ? u.twofaBackup : [])) if (twofaEqHex(x, h)) hit = true;
+      // A stored code may have been made under an earlier key (see twofa-vault.js), so it is compared in the form of every key; no early exit.
+      const hs = twofaCrypt.backupHashes(userId, norm); let hit = null;
+      for (const x of (Array.isArray(u.twofaBackup) ? u.twofaBackup : [])) for (const h of hs) if (twofaEqHex(x, h)) hit = x;
       if (!hit) return twofaNoteFail(uRef, u, userId, now);
-      out = { ok: true, kind: 'backup', hash: h, backupLeft: (Array.isArray(u.twofaBackup) ? u.twofaBackup.length : 1) - 1 };
+      out = { ok: true, kind: 'backup', hash: hit, backupLeft: (Array.isArray(u.twofaBackup) ? u.twofaBackup.length : 1) - 1 };
     }
     if (Number(u.twofaFailCount) > 0) await uRef.update({ twofaFailCount: 0 });
     return out;
