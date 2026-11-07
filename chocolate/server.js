@@ -6779,13 +6779,15 @@ app.get('/messages', async (req, res) => {
   try {
     const rows = await listBroadcastMessages();
     const reads = await db.collection('messageReads').where('userId', '==', uid).limit(200).get();
-    const readIds = new Set(reads.docs.map(d => d.data().messageId));
+    // messageId -> when this member read it. A message the admin RENEWED after that is unread again (renewedAt), without touching anyone's read rows.
+    const readAt = new Map(reads.docs.map(d => [d.data().messageId, Number(d.data().readAt) || 0]));
+    const readIds = { has: id => readAt.has(id) };
     res.json({ status: 'success', messages: rows.map(m => ({
       id: m.id, title: m.title || '', body: m.body || '',
       date: m.date || '', time: m.time || '', createdAt: m.createdAt || 0,
       // The picture itself is fetched on its own (/public/message-image/<id>) so a poll never carries image bytes.
       hasImage: !!m.image,
-      read: readIds.has(m.id),
+      read: readIds.has(m.id) && readAt.get(m.id) >= (Number(m.renewedAt) || 0),
     })) });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load your messages' }); }
 });
@@ -7864,6 +7866,23 @@ app.post('/admin/messages/save', async (req, res) => {
     logAdminAction(req, 'message_saved', { id, title });
     res.json({ status: 'success', id });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save this message' }); }
+});
+// Renew: the message becomes the LATEST one -- it moves to the top of every member's inbox with today's date and time, and shows as unread (new) again for everyone
+// who had read it. Nothing is rewritten or fanned out: the message's time is set to now and `renewedAt` records when, and a member counts as having read it only if
+// they read it after that (see /messages). The text and picture are untouched.
+app.post('/admin/messages/renew', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const id = String(req.body.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 120);
+  if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
+  try {
+    const ref = db.collection('messages').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists || snap.data().deleted) return res.status(404).json({ status: 'error', message: 'Message not found' });
+    const stamp = nowStr(), now = Date.now();
+    await ref.set({ date: stamp.date, time: stamp.time, createdAt: now, renewedAt: now }, { merge: true });
+    logAdminAction(req, 'message_renewed', { id, title: snap.data().title || '' });
+    res.json({ status: 'success', message: 'Message renewed: it is now the latest and shows as new to everyone' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not renew this message' }); }
 });
 app.post('/admin/messages/delete', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });

@@ -2592,6 +2592,7 @@ async function renderMessages(){
         ${m.image?`<img class="img-thumb" src="${esc(m.image)}" style="margin-top:8px;max-width:160px" alt="">`:''}
         <div style="margin-top:10px;display:flex;gap:8px">
           <button class="btn sm" data-medit="${esc(m.id)}">Edit</button>
+          <button class="btn sm ok" data-mren="${esc(m.id)}" title="Make this the latest message: it moves to the top with today's date and shows as new to every member again">Renew</button>
           <button class="btn sm danger" data-mdel="${esc(m.id)}">Delete</button>
         </div>
       </div>`).join('') : '<div class="muted">No messages posted yet.</div>'}`;
@@ -2619,6 +2620,12 @@ async function renderMessages(){
     $('mId').value = m.id; $('mTitle').value = m.title||''; $('mBody').value = m.body||'';
     mImage = null; paintMImg(m.image||'', m.image ? 'Current picture' : 'No picture');
     window.scrollTo({ top:0, behavior:'smooth' });
+  }));
+  document.querySelectorAll('[data-mren]').forEach(b=>b.addEventListener('click',async()=>{
+    if(!confirm('Renew this message? It becomes the latest one (top of every inbox, today\'s date and time) and shows as new to every member again.')) return;
+    b.disabled=true; const d = await api('/admin/messages/renew', { id: b.dataset.mren });
+    toast(d.status==='success'?(d.message||'Renewed'):(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success') renderMessages(); else b.disabled=false;
   }));
   document.querySelectorAll('[data-mdel]').forEach(b=>b.addEventListener('click',async()=>{
     if(!confirm('Delete this message? It disappears from every member\'s inbox.')) return;
