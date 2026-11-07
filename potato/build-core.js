@@ -64,6 +64,12 @@ if (!fs.existsSync(SRC_MOD)) {
 
 // ── 2. Read the module source ─────────────────────────────────────────────
 let source = fs.readFileSync(SRC_MOD, 'utf8');
+// Vendored libraries (kept whole, with their licences, in user-src/vendor-*.js) go in front of the app's own code, so their top-level names exist
+// before it runs. The app's own file stays free of them (its tests and its readability).
+for (const f of fs.readdirSync(path.join(ROOT, 'user-src')).filter(n => /^vendor-.*\.js$/.test(n)).sort()) {
+  source = fs.readFileSync(path.join(ROOT, 'user-src', f), 'utf8') + '\n' + source;
+  log('vendored      :', f);
+}
 log('logic-only src:', source.length, 'bytes');
 
 // ── 3. Syntax-check the source ────────────────────────────────────────────

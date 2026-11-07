@@ -49,5 +49,20 @@ function verify(secretB32, code, now = Date.now(), lastStep = -1, window = 1) {
   if (found === null || found <= lastStep) return { ok: false, step: null };
   return { ok: true, step: found };
 }
+// Which 30-second step a code belongs to (the current one or one either side), WITHOUT the use-once rule: the caller decides whether that step was
+// already spent (a member's account keeps its own `lastStep`). Returns { step } or null. Every step is always compared, in constant time.
+function match(secretB32, code, now = Date.now(), window = 1) {
+  const secret = base32Decode(secretB32);
+  const given = String(code || '').replace(/\s/g, '');
+  if (!secret || !secret.length || !/^\d{6}$/.test(given)) return null;
+  const cur = Math.floor(now / STEP_MS);
+  let found = null;
+  for (let d = -window; d <= window; d++) {
+    const step = cur + d;
+    const want = Buffer.from(hotp(secret, step)), have = Buffer.from(given);
+    if (crypto.timingSafeEqual(want, have) && found === null) found = step;
+  }
+  return found === null ? null : { step: found };
+}
 const generateSecret = () => base32Encode(crypto.randomBytes(20));
-module.exports = { base32Encode, base32Decode, hotp, codeAt, verify, generateSecret, STEP_MS };
+module.exports = { base32Encode, base32Decode, hotp, codeAt, verify, match, generateSecret, STEP_MS };

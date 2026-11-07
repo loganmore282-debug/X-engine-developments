@@ -3101,6 +3101,8 @@ var PT_MENU_IC = {
   bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5a1.5 1.5 0 0 1 1.5 1.5v.6c3 .7 4.8 3.2 4.8 6.2v3.6l1.9 2.7v.9H3.8v-.9l1.9-2.7v-3.6c0-3 1.8-5.5 4.8-6.2V4A1.5 1.5 0 0 1 12 2.5zM9.6 19.2h4.8a2.4 2.4 0 0 1-4.8 0z"/></svg>',
   down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10.5 3h3v8.3l3-3 2.1 2.1L12 16.9 5.4 10.4l2.1-2.1 3 3z"/><path fill="currentColor" d="M4 19h16v2.4H4z"/></svg>',
   info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="7.6" r="1.4" fill="currentColor"/><path d="M12 10.8v6.6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  auth: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5.2" y="2.2" width="13.6" height="19.6" rx="2.7" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="12" cy="10.4" r="3.7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 8.4v2.2l1.6 1.1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="18.1" r="1.2" fill="currentColor"/></svg>',
+  tick: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.8l4.4 4.4L19 7.4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
 };
 function ptMenuRow(icon, label, fn, badge){
@@ -3162,6 +3164,7 @@ async function renderAccount(){
     ${ptMenuRow('mail', 'Messages', 'openMessagesSheet()', true)}
     ${ptMenuRow('lock', 'Login Password', 'openChangeLoginPasswordSheet()')}
     ${ptMenuRow('shield', 'Trade Password', 'openChangeTradePasswordSheet()')}
+    ${ptMenuRow('auth', 'Google Authenticator', 'openAuthenticatorSheet()')}
     ${ptMenuRow('card', 'Bank Card', 'openWalletSheet()')}
     ${ptMenuRow('bell', 'Gift Code', 'openChestSheet()')}
     ${ptMenuRow('down', 'APP Download', 'openDownloadPage()')}
@@ -3677,6 +3680,149 @@ window.submitTradePasswordChange = async function(){
   notify(first ? 'Trade password saved' : 'Trade password changed');
 };
 
+// ── GOOGLE AUTHENTICATOR (the optional second step of a withdrawal) ──
+// Owner: "after the Trade Password, one has to put in the authenticator code; one has to enable it; one downloads Google Authenticator."
+// The SERVER decides whether a code is needed (it reads the account); this page only turns it on and off. The secret is made by the server, shown here
+// once as a link, a setup key and a picture drawn on this phone (the vendored qrcode-generator): it is never sent to any outside service.
+var _ga = { view: 'loading', setup: null, codes: null, status: null, action: '' };
+var GA_PLAY = 'https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2';
+var GA_STORE = 'https://apps.apple.com/app/google-authenticator/id388497605';
+// The authenticator reads the phone's own clock: when that is more than 20 seconds away from the server's, its codes cannot match.
+function gaClockSecs(){ return Math.round(Math.abs(_ptSkewMs) / 1000); }
+function gaClockWarning(){
+  const off = gaClockSecs();
+  return off > 20 ? `<p class="pt-ga-warn">Your phone's clock is about ${off} seconds away from the real time, so authenticator codes will not match. Turn on automatic date and time in your phone settings.</p>` : '';
+}
+function gaCodeBox(id, placeholder, any){
+  return `<div class="pt-pbox"><input id="${id}" type="text" ${any ? 'maxlength="11" inputmode="text" autocapitalize="characters"' : 'maxlength="6" inputmode="numeric"'} placeholder="${esc(placeholder)}" autocomplete="one-time-code" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore oninput="ptPwClear()"></div>`;
+}
+// The setup picture: one SVG path of the dark squares, drawn here with a 4-square white border, so a camera can read it.
+function ptQrSvg(text){
+  if (typeof qrcode !== 'function') return '';
+  const q = qrcode(0, 'L'); q.addData(String(text)); q.make();
+  const n = q.getModuleCount(), quiet = 4, size = n + quiet * 2;
+  let d = '';
+  for (let r = 0; r < n; r++) { let c = 0; while (c < n) { if (q.isDark(r, c)) { let e = c; while (e < n && q.isDark(r, e)) e++; d += 'M' + (c + quiet) + ' ' + (r + quiet) + 'h' + (e - c) + 'v1h-' + (e - c) + 'z'; c = e; } else c++; } }
+  return `<svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Setup picture for Google Authenticator" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect width="${size}" height="${size}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+}
+function gaOffHtml(){
+  return `<section class="pt-ga-card pt-ga-hero"><span class="pt-ga-badge">${PT_MENU_IC.auth}</span><h2>Secure your withdrawals</h2><p>Add a second lock. After your Trade Password you will also type a 6-digit code from Google Authenticator before any withdrawal.</p></section>
+  <section class="pt-ga-card"><div class="pt-ga-step"><i>1</i><div><b>Download Google Authenticator</b><span>A free app from Google. Install it on your phone first.</span></div></div>
+    <div class="pt-ga-stores"><a href="${GA_PLAY}" target="_blank" rel="noopener">Google Play</a><a href="${GA_STORE}" target="_blank" rel="noopener">App Store</a></div></section>
+  <section class="pt-ga-card"><div class="pt-ga-step"><i>2</i><div><b>Enter your Trade Password</b><span>This confirms that it is really you.</span></div></div>
+    <div class="pt-ga-form">${vPwBox('gaPin', 'Enter trade password', true)}<p class="pt-pwerr" id="ptPwErr"></p>
+    <button type="button" class="pt-ga-btn" id="gaStartBtn" onclick="gaStart()">Continue</button></div></section>${gaClockWarning()}`;
+}
+function gaSetupHtml(){
+  const s = _ga.setup || {}, groups = String(s.secret || '').match(/.{1,4}/g) || [], key = groups.slice(0, 4).join(' ') + '<br>' + groups.slice(4).join(' ');   // two tidy lines of four groups (base32 letters and digits only, nothing to escape)
+  return `<section class="pt-ga-card"><div class="pt-ga-step"><i>1</i><div><b>Add this account to Google Authenticator</b><span>Choose the way that suits you.</span></div></div>
+    <a class="pt-ga-btn" href="${esc(s.otpauth)}">Open Google Authenticator</a>
+    <p class="pt-ga-note">If nothing opens, install the app first (Google Play or App Store), then use the setup key below.</p>
+    <p class="pt-ga-or"><span>or type the setup key</span></p>
+    <div class="pt-ga-key" id="gaKey">${key}</div>
+    <button type="button" class="pt-ga-btn line" onclick="copyText('${esc(s.secret)}')">Copy key</button>
+    <p class="pt-ga-note">In the app tap <b>+</b>, then <b>Enter a setup key</b>. Account: ${esc(s.issuer)}. Type of key: <b>Time based</b>.</p>
+    <p class="pt-ga-or"><span>or scan the picture</span></p>
+    <div class="pt-ga-qr" id="gaQr"></div>
+    <p class="pt-ga-note">Scan it with Google Authenticator on another phone or tablet.</p></section>
+  <section class="pt-ga-card"><div class="pt-ga-step"><i>2</i><div><b>Type the 6-digit code</b><span>Google Authenticator now shows a 6-digit code for ${esc(s.issuer)}. Type it here to finish.</span></div></div>
+    <div class="pt-ga-form">${gaCodeBox('gaCode', 'Enter 6-digit code')}<p class="pt-pwerr" id="ptPwErr"></p>
+    <button type="button" class="pt-ga-btn" id="gaConfirmBtn" onclick="gaConfirm()">Turn On</button>
+    <button type="button" class="pt-ga-btn line" onclick="gaCancel()">Cancel</button></div></section>${gaClockWarning()}`;
+}
+function gaCodesHtml(){
+  const codes = _ga.codes || [];
+  return `<section class="pt-ga-card pt-ga-hero"><span class="pt-ga-badge on">${PT_MENU_IC.tick}</span><h2>Google Authenticator is on</h2><p>Save your backup codes now.</p></section>
+  <section class="pt-ga-card"><b class="pt-ga-h">Your backup codes</b>
+    <p class="pt-ga-note left">If you lose your phone, one of these codes lets you withdraw once. Each code works one time only. They are shown only now, so write them down or copy them and keep them somewhere safe.</p>
+    <div class="pt-ga-codes">${codes.map(c => `<span>${esc(c)}</span>`).join('')}</div>
+    <button type="button" class="pt-ga-btn line" onclick="copyText('${esc(codes.join('  '))}')">Copy all codes</button>
+    <button type="button" class="pt-ga-btn" onclick="gaCodesDone()">I have saved them</button></section>`;
+}
+function gaOnHtml(){
+  const st = _ga.status || {}, left = Number(st.backupLeft) || 0;
+  return `<section class="pt-ga-card pt-ga-hero"><span class="pt-ga-badge on">${PT_MENU_IC.tick}</span><h2>Google Authenticator is on</h2>${st.enabledAt ? `<p>Turned on ${esc(joinedStamp(st.enabledAt))}</p>` : ''}</section>
+  <section class="pt-ga-card"><p class="pt-ga-line">Every withdrawal needs your Trade Password and a 6-digit code from Google Authenticator.</p>
+    <p class="pt-ga-line"><b>Backup codes left:</b> ${left} of 8</p>${left <= 2 ? '<p class="pt-ga-warn">You are running low on backup codes. Make new ones.</p>' : ''}
+    <button type="button" class="pt-ga-btn line" onclick="gaManage('codes')">New backup codes</button>
+    <button type="button" class="pt-ga-btn" onclick="gaManage('off')">Turn Off</button></section>${gaClockWarning()}`;
+}
+function gaManageHtml(){
+  const off = _ga.action === 'off';
+  return `<section class="pt-ga-card"><b class="pt-ga-h">${off ? 'Turn off Google Authenticator' : 'Make new backup codes'}</b>
+    <p class="pt-ga-note left">${off ? 'Withdrawals will need only your Trade Password again.' : 'Your old backup codes stop working as soon as the new ones are made.'}</p>
+    <div class="pt-ga-form"><label for="gaPin">Trade Password</label>${vPwBox('gaPin', 'Enter trade password', true)}
+    <label for="gaCode">Authenticator code</label>${gaCodeBox('gaCode', '6-digit code or a backup code', true)}<p class="pt-pwerr" id="ptPwErr"></p>
+    <button type="button" class="pt-ga-btn" id="gaDoBtn" onclick="gaDoManage()">${off ? 'Turn Off' : 'Make New Codes'}</button>
+    <button type="button" class="pt-ga-btn line" onclick="gaBack()">Cancel</button></div></section>${gaClockWarning()}`;
+}
+function gaPaint(){
+  const host = $('gaBody'); if (!host) return;
+  const v = _ga.view;
+  host.innerHTML = v === 'loading' ? '<div class="mg-nomem">Loading...</div>'
+    : v === 'error' ? '<div class="v-empty" onclick="gaLoad()">Could not load. Tap to try again.</div>'
+    : v === 'off' ? gaOffHtml() : v === 'setup' ? gaSetupHtml() : v === 'codes' ? gaCodesHtml() : v === 'manage' ? gaManageHtml() : gaOnHtml();
+  if (v === 'setup') { const q = $('gaQr'); if (q) q.innerHTML = ptQrSvg((_ga.setup || {}).otpauth); }
+  $('sheetBg').scrollTop = 0;
+}
+async function gaLoad(){
+  _ga.view = 'loading'; gaPaint();
+  const r = await api('/account/2fa/status');
+  if (r.stale || !$('gaBody')) return;
+  if (r.status !== 'success') { _ga.view = 'error'; return gaPaint(); }
+  _ga.status = r; if (STATE.account) STATE.account.twofaEnabled = r.enabled === true;
+  _ga.view = r.enabled ? 'on' : 'off'; gaPaint();
+}
+window.openAuthenticatorSheet = function(){
+  _ga = { view: 'loading', setup: null, codes: null, status: null, action: '' };
+  openSheet('Google Authenticator', '<div class="pt-ga" id="gaBody"></div>');
+  gaLoad();
+};
+window.gaStart = async function(){
+  const pin = ($('gaPin').value || '').trim();
+  if (!/^\d{6}$/.test(pin)) return ptPwError('Enter your 6-digit Trade Password.');
+  const btn = $('gaStartBtn'); btn.disabled = true;
+  const r = await post('/account/2fa/start', { pin });
+  if (r.stale) return;
+  if ($('gaStartBtn')) $('gaStartBtn').disabled = false;
+  if (r.status !== 'success') {
+    if (r.code === 'TWOFA_ALREADY_ON') return gaLoad();
+    return ptPwError(r.message || 'Could not start. Please try again.');
+  }
+  _ga.setup = r; _ga.view = 'setup'; gaPaint();
+};
+window.gaConfirm = async function(){
+  const code = ($('gaCode').value || '').replace(/\s/g, '');
+  if (!/^\d{6}$/.test(code)) return ptPwError('Enter the 6-digit code from Google Authenticator.');
+  const btn = $('gaConfirmBtn'); btn.disabled = true;
+  const r = await post('/account/2fa/confirm', { code });
+  if (r.stale) return;
+  if ($('gaConfirmBtn')) $('gaConfirmBtn').disabled = false;
+  if (r.status !== 'success') {
+    if (r.code === 'TWOFA_NO_SETUP') { _ga.setup = null; _ga.view = 'off'; gaPaint(); return notify(r.message); }
+    return ptPwError((r.message || 'Could not turn it on.') + (r.code === 'TWOFA_INVALID' && gaClockSecs() > 20 ? ` Your phone's clock is about ${gaClockSecs()} seconds off.` : ''));
+  }
+  if (STATE.account) STATE.account.twofaEnabled = true;
+  _ga.setup = null; _ga.codes = r.backupCodes || []; _ga.view = 'codes'; gaPaint();
+};
+window.gaCodesDone = function(){ _ga.codes = null; gaLoad(); };
+window.gaCancel = function(){ _ga.setup = null; _ga.view = 'off'; gaPaint(); };
+window.gaManage = function(action){ _ga.action = action; _ga.view = 'manage'; gaPaint(); };
+window.gaBack = function(){ _ga.view = 'on'; gaPaint(); };
+window.gaDoManage = async function(){
+  const off = _ga.action === 'off';
+  const pin = ($('gaPin').value || '').trim(), code = ($('gaCode').value || '').trim();
+  if (!/^\d{6}$/.test(pin)) return ptPwError('Enter your 6-digit Trade Password.');
+  if (!code) return ptPwError('Enter the 6-digit code from Google Authenticator, or a backup code.');
+  const btn = $('gaDoBtn'); btn.disabled = true;
+  const r = await post(off ? '/account/2fa/disable' : '/account/2fa/backup-codes', { pin, code });
+  if (r.stale) return;
+  if ($('gaDoBtn')) $('gaDoBtn').disabled = false;
+  if (r.status !== 'success') return ptPwError(r.message || 'Could not finish. Please try again.');
+  if (off) { if (STATE.account) STATE.account.twofaEnabled = false; _ga.view = 'off'; gaPaint(); return notify('Google Authenticator is off'); }
+  _ga.codes = r.backupCodes || []; _ga.view = 'codes'; gaPaint();
+};
+
 // ── TREASURE CHEST (Chest.dc.html / ChestSuccess.dc.html) ──
 // The bouncing chest on Home opens this full screen: glowing ring, bouncing
 // chest artwork, key field, OPEN CHEST. A valid key flashes the green
@@ -3955,6 +4101,7 @@ function resetOverlayState(){
   const win = $('ptClaimBg'); if (win) win.remove();
   const gw = $('ptWinBg'); if (gw) gw.remove();            // the Gift Code win card (it shows the New Balance)
   const pin = $('pinBg'); if (pin) pin.classList.remove('show');   // the Trade Password dialog
+  const tp = $('totpBg'); if (tp) tp.classList.remove('show');     // the authenticator code dialog
   _openSheetTitle = null; _depActiveDepositId = null; _withdrawSubmitting = false;
   if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
 }
@@ -4590,6 +4737,28 @@ function askTradePin(){
     input.onkeydown = e => { if (e.key === 'Enter') done(input.value.trim()); };
   });
 }
+// The second step of a withdrawal, only for a member who turned Google Authenticator on: the 6-digit code (or one backup code). Resolves with the typed text, or null when cancelled.
+function askAuthCode(){
+  return new Promise(resolve => {
+    const bg = $('totpBg'); if (!bg) return resolve('');
+    const input = $('totpInput'); let backup = false;
+    const setMode = b => {
+      backup = b; input.value = ''; input.maxLength = b ? 11 : 6; input.setAttribute('inputmode', b ? 'text' : 'numeric'); input.placeholder = b ? 'Enter a backup code' : 'Enter 6-digit code';
+      $('totpAlt').textContent = b ? 'Use the 6-digit code instead' : 'Use a backup code instead';
+      $('totpHelp').textContent = b ? 'Type one of the backup codes you saved. Each one works only once.' : 'Open Google Authenticator and type the code it shows now.';
+    };
+    setMode(false);
+    const warn = $('totpWarn'); if (warn) { const off = gaClockSecs(); warn.textContent = off > 20 ? `Your phone's clock is about ${off} seconds away from the real time, so the code will not match. Turn on automatic date and time.` : ''; }
+    bg.classList.add('show');
+    setTimeout(() => { try { input.focus(); } catch (_) {} }, 60);
+    const done = v => { bg.classList.remove('show'); $('totpOk').onclick = $('totpNo').onclick = $('totpAlt').onclick = null; bg.onclick = null; input.onkeydown = null; resolve(v); };
+    $('totpOk').onclick = () => done(input.value.trim());
+    $('totpNo').onclick = () => done(null);
+    $('totpAlt').onclick = () => { setMode(!backup); try { input.focus(); } catch (_) {} };
+    bg.onclick = e => { if (e.target === bg) done(null); };
+    input.onkeydown = e => { if (e.key === 'Enter') done(input.value.trim()); };
+  });
+}
 // Transaction Statement (openBalanceRecordSheet()) is cache-first: it paints from
 // whatever STATE.transactions already holds, and per Round 55's own fix,
 // deliberately does NOT repaint once its own background refetch lands (that
@@ -4647,10 +4816,17 @@ window.submitWithdraw = async function(){
   const witPin = await askTradePin();
   if (witPin === null) return;
   if (!/^\d{6}$/.test(witPin)) return notify('Enter your 6-digit Trade Password.');
+  // Google Authenticator, when the member turned it on: the code is asked right after the Trade Password. The SERVER enforces it either way.
+  let witCode = '';
+  if (STATE.account && STATE.account.twofaEnabled) {
+    witCode = await askAuthCode();
+    if (witCode === null) return;
+    if (!witCode) return notify('Enter the 6-digit code from Google Authenticator.');
+  }
   _withdrawSubmitting = true;
   submitBtn.disabled = true;
   let r;
-  try { r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone, pin: witPin }); }
+  try { r = await post('/withdraw/request', Object.assign({ amount, network: acct.network, phone: acct.phone, pin: witPin }, witCode ? { totp: witCode } : {})); }
   finally {
     _withdrawSubmitting = false;
     submitBtn.disabled = false;
@@ -4662,7 +4838,10 @@ window.submitWithdraw = async function(){
     if (current && current !== submitBtn) current.disabled = false;
   }
   if (r.stale) return;
-  if (r.status !== 'success') return notify(r.message || 'Could not request withdrawal.');
+  if (r.status !== 'success') {
+    if (r.code === 'TWOFA_REQUIRED' && STATE.account) STATE.account.twofaEnabled = true;   // the account says it is on: the next tap asks for the code
+    return notify(r.message || 'Could not request withdrawal.');
+  }
   // Owner: "why when l withdrawal the value still remains???"
   // Because nothing here refreshed it. The SERVER debits immediately --
   // /withdraw/request does walletBalance: increment(-amt) before it answers --
@@ -4675,7 +4854,7 @@ window.submitWithdraw = async function(){
   }
   // Owner: "on withdrawal submission, just that notify should say that withdrawal submitted successfully".
   // OK then opens the withdrawal records, where the request shows as processing.
-  notify('Withdrawal submitted successfully', () => openBalanceRecordSheet('withdraw'));
+  notify('Withdrawal submitted successfully' + (r.usedBackupCode ? `. You have ${Number(r.backupLeft) || 0} backup code${Number(r.backupLeft) === 1 ? '' : 's'} left.` : ''), () => openBalanceRecordSheet('withdraw'));
   if (_openSheetTitle === 'Withdraw' && $('witSubmitBtn') === submitBtn) closeSheet({ fromAction: true });
   refreshAfterWithdraw();
 };

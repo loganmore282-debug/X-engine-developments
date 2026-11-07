@@ -2043,6 +2043,10 @@ async function openUser(uid){
       <div style="flex:2"><input id="pinNew" type="text" inputmode="numeric" maxlength="6" placeholder="New 6-digit trade password"></div>
       <button class="btn ghost sm" id="resetPinBtn">Set PIN</button>
     </div>`:''}
+    ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Google Authenticator</h4>
+    <div class="kv"><span class="k">Withdrawals</span><span id="twofaState">${u.twofaEnabled===true?'Protected: a 6-digit code is needed after the Trade Password':'Off: the Trade Password only'}</span></div>
+    ${u.twofaEnabled===true?`<p class="muted" style="margin:2px 0 8px;font-size:12px">The member turned this on themselves. If they lost their phone AND their backup codes, switch it off here once you are sure who is asking. They can turn it on again themselves.</p>
+    <button class="btn danger sm" id="reset2faBtn">Reset Google Authenticator</button>`:'<p class="muted" style="margin:2px 0 0;font-size:12px">The member can turn it on in the app (Profile, Google Authenticator).</p>'}`:''}
     ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Withdrawal limits</h4>
     <div class="kv"><span class="k">This member</span><span id="anyTimeState">${u.withdrawAnytime===true?'Unrestricted: any hour and any number of withdrawals a day':'Follows the withdrawal hours and the daily number'}</span></div>
     <button class="btn ${u.withdrawAnytime===true?'ghost':'sky'} sm" id="anyTimeBtn" style="margin-top:6px">${u.withdrawAnytime===true?'Follow the withdrawal limits':'Make unrestricted (hours and daily number)'}</button>`:''}
@@ -2182,6 +2186,13 @@ async function openUser(uid){
     const d=await api('/admin/user/withdraw-anytime',{userId:uid,enabled:on});
     toast(d.status==='success'?(on?'Unrestricted: any hour, any number a day':'Follows the withdrawal limits again'):(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success'){ u.withdrawAnytime=on; closeModal(); (RENDERERS[_tab]||renderUsers)(); } else b.disabled=false;
+  });
+  $('reset2faBtn')?.addEventListener('click', async()=>{
+    if(!confirm(`Switch off Google Authenticator for ${u.phone}? Do this only when you are sure the person asking is the member (lost phone and lost backup codes). Their withdrawals will need only the Trade Password until they turn it on again.`)) return;
+    const b=$('reset2faBtn'); b.disabled=true;
+    const d=await api('/admin/user/reset-2fa',{userId:uid});
+    toast(d.status==='success'?'Google Authenticator switched off for this member':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'){ u.twofaEnabled=false; closeModal(); (RENDERERS[_tab]||renderUsers)(); } else b.disabled=false;
   });
   $('resetPinBtn')?.addEventListener('click', async()=>{
     const np=($('pinNew').value||'').trim();

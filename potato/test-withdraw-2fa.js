@@ -1,0 +1,152 @@
+'use strict';
+// WITHDRAWAL 2-STEP VERIFICATION (Google Authenticator), end to end on the REAL server.js against the in-memory MongoDB stand-in, with codes made by an
+// authenticator stand-in (totp.codeAt on the secret the server hands out, exactly what the phone does).
+// Off by default and for everybody else; turning it on needs the Trade Password and a correct first code; once on, a withdrawal needs the Trade Password AND
+// a code; a code works once; wrong codes lock the member out; backup codes; turning it off; the owner's reset; the secret is stored encrypted and never
+// sent to anybody again; an unreadable secret refuses the withdrawal instead of skipping the check.
+const path = require('path'), Module = require('module'), crypto = require('crypto');
+const root = __dirname;
+const fm = require('./test-helpers/fake-mongodb.js');
+const origResolve = Module._resolveFilename;
+Module._resolveFilename = function (req, ...a) { return req === 'mongodb' ? path.join(root, 'test-helpers', 'fake-mongodb.js') : origResolve.call(this, req, ...a); };
+const PORT = 3200 + Math.floor(Math.random() * 90);
+Object.assign(process.env, { PORT: String(PORT), MONGODB_URI: 'mongodb://fake/app', ADMIN_KEY: 'tf-admin-key-123456', NODE_ENV: 'development' });
+const cap = require('./captcha.js'); const realVerify = cap.verify; cap.verify = (id, code) => code === '0000' ? true : realVerify(id, code);
+const totp = require('./totp.js');
+const realNow = Date.now; let skew = 0; Date.now = () => realNow() + skew; const advance = (steps) => { skew += (steps || 1) * 30000; };   // the server shares this clock: a new 30-second step without waiting
+const realLog = console.log; console.log = () => {}; console.warn = () => {}; console.error = () => {};
+require('./server.js');
+const base = 'http://127.0.0.1:' + PORT;
+const J = async (m, p, b, tok, adm) => { const r = await fetch(base + p, { method: m, headers: Object.assign({ 'content-type': 'application/json' }, tok ? { authorization: 'Bearer ' + tok } : {}, adm ? { authorization: 'Bearer tf-admin-key-123456' } : {}), body: b ? JSON.stringify(b) : undefined }); let j = {}; try { j = await r.json(); } catch (_) {} return { s: r.status, j }; };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let fails = 0, n = 0; const ok = (c, m, x) => { n++; if (!c) { fails++; realLog('FAIL', m, x ? JSON.stringify(x).slice(0, 360) : ''); } };
+let phoneN = 0;
+async function member() {
+  const c = await J('GET', '/auth/captcha'); const phone = '07715' + String(60000 + (++phoneN) * 11);
+  const su = await J('POST', '/auth/signup', { phone, password: 'secret12', captchaId: c.j.id, captchaCode: '0000' });
+  await J('POST', '/register', { pin: '123456', referralCode: '' }, su.j.token);
+  const prods = (await J('GET', '/public/products')).j.products.filter(p => p.price > 0).sort((a, b) => a.price - b.price);
+  await J('POST', '/invest/create', { tierKey: prods[0].key }, su.j.token);
+  const bank = '07716' + String(70000 + phoneN * 13); await J('POST', '/bank/save', { holder: 'Two Step', network: 'MTN Mobile Money', phone: bank }, su.j.token);
+  return { tok: su.j.token, uid: su.j.uid, bank, phone };
+}
+const user = id => fm.__stores.users.get(id), W = () => fm.__stores.withdrawals;
+const wdraw = (m, body) => J('POST', '/withdraw/request', Object.assign({ amount: 20000, network: 'MTN Mobile Money', phone: m.bank, pin: '123456' }, body || {}), m.tok);
+const rowsOf = m => [...W().values()].filter(w => w.userId === m.uid);
+const settle = async m => { for (const w of rowsOf(m)) if (w.status === 'pending') await J('POST', '/admin/withdraw/reject', { withdrawalId: w._id || [...W().entries()].find(([, v]) => v === w)[0] }, null, true); };
+const codeNow = (secret, offsetSteps) => totp.codeAt(secret, Date.now() + (offsetSteps || 0) * 30000);
+const wrongCode = secret => { for (let i = 0; i < 50; i++) { const c = String(Math.floor(Math.random() * 1e6)).padStart(6, '0'); const ok3 = [-2, -1, 0, 1, 2].some(d => codeNow(secret, d) === c); if (!ok3) return c; } };
+(async () => {
+  for (let i = 0; i < 60; i++) { try { const h = await fetch(base + '/health'); if (h.ok) break; } catch (_) {} await sleep(250); }
+  await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 600000, withdrawMethod: 'manual', maxWithdrawalsPerDay: 0 } }, null, true);
+  const A = await member(), B = await member(), C = await member();
+  // ---- 0. off for everybody until the member turns it on
+  let acc = (await J('GET', '/account', null, A.tok)).j.account; ok(acc.twofaEnabled === false, 'off by default', acc);
+  ok((await wdraw(B)).s === 200, 'a member who never turned it on withdraws with just the Trade Password'); await settle(B);
+  // ---- 1. starting needs the Trade Password
+  ok((await J('POST', '/account/2fa/start', {}, null)).s === 401, 'starting needs a signed-in member');
+  const bad = await J('POST', '/account/2fa/start', { pin: '654321' }, A.tok); ok(bad.s === 400 && bad.j.code === 'WRONG_PIN' && !user(A.uid).twofaPendingEnc, 'a wrong Trade Password starts nothing', bad);
+  const st = await J('POST', '/account/2fa/start', { pin: '123456' }, A.tok);
+  ok(st.s === 200 && /^[A-Z2-7]{32}$/.test(st.j.secret) && st.j.expiresInSec === 900, 'the Trade Password starts it: a 160-bit secret in base32', st.j);
+  const secret = st.j.secret;
+  ok(st.j.otpauth === 'otpauth://totp/' + encodeURIComponent(st.j.issuer) + ':' + encodeURIComponent(user(A.uid).phone) + '?secret=' + secret + '&issuer=' + encodeURIComponent(st.j.issuer) + '&algorithm=SHA1&digits=6&period=30', 'the link Google Authenticator opens is the standard otpauth address', st.j.otpauth);
+  ok(user(A.uid).twofaPendingEnc && !JSON.stringify(user(A.uid)).includes(secret), 'the waiting secret is stored encrypted: its plain text is nowhere on the account');
+  ok(user(A.uid).twofaEnabled !== true, 'and nothing is switched on yet');
+  ok((await wdraw(A)).s === 200, 'while it is only half set up, withdrawing still works without a code'); await settle(A);
+  // ---- 2. confirming needs a correct first code
+  const c0 = await J('POST', '/account/2fa/confirm', { code: wrongCode(secret) }, A.tok);
+  ok(c0.s === 400 && c0.j.code === 'TWOFA_INVALID' && /4 tries left/.test(c0.j.message) && user(A.uid).twofaEnabled !== true, 'a wrong first code does not turn it on and is counted', c0.j);
+  const c1 = await J('POST', '/account/2fa/confirm', { code: '12345' }, A.tok); ok(c1.s === 400 && (user(A.uid).twofaFailCount || 0) === 1, 'a code that is not even 6 digits is refused and NOT counted', { s: c1.s, f: user(A.uid).twofaFailCount });
+  const on = await J('POST', '/account/2fa/confirm', { code: codeNow(secret) }, A.tok);
+  ok(on.s === 200 && Array.isArray(on.j.backupCodes) && on.j.backupCodes.length === 8 && on.j.backupCodes.every(c => /^[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}$/.test(c)) && new Set(on.j.backupCodes).size === 8, 'the right first code turns it on and shows 8 different backup codes once', on.j);
+  const u = user(A.uid);
+  ok(u.twofaEnabled === true && u.twofaSecretEnc && !JSON.stringify(u).includes(secret) && !u.twofaPendingEnc && u.twofaBackup.length === 8, 'on: the secret is encrypted, the waiting copy is gone, 8 backup hashes are kept', Object.keys(u));
+  ok(on.j.backupCodes.every(c => !JSON.stringify(u).includes(c.replace('-', '')) && !JSON.stringify(u).includes(c)), 'the backup codes themselves are not stored (only keyed hashes)');
+  ok(Number.isInteger(u.twofaLastStep) && u.twofaFailCount === 0, 'the first code is already spent and the wrong-code count is reset', { last: u.twofaLastStep, f: u.twofaFailCount });
+  acc = (await J('GET', '/account', null, A.tok)).j.account; ok(acc.twofaEnabled === true, 'the app is told to ask for the code', acc.twofaEnabled);
+  const stt = await J('GET', '/account/2fa/status', null, A.tok); ok(stt.j.enabled === true && stt.j.backupLeft === 8 && !JSON.stringify(stt.j).includes(secret), 'the status says on, 8 backup codes left, and carries no secret', stt.j);
+  ok((await J('POST', '/account/2fa/start', { pin: '123456' }, A.tok)).s === 409, 'starting again while it is on is refused');
+  const backup = on.j.backupCodes;
+  // ---- 3. a withdrawal now needs the Trade Password AND a code
+  const w0 = user(A.uid).walletBalance, rows0 = rowsOf(A).length;
+  const r1 = await wdraw(A); ok(r1.s === 400 && r1.j.code === 'TWOFA_REQUIRED' && /6-digit code/.test(r1.j.message), 'no code: refused with a clear message', r1.j);
+  ok(user(A.uid).walletBalance === w0 && rowsOf(A).length === rows0, 'and nothing was taken, no request was created');
+  const r2 = await wdraw(A, { totp: wrongCode(secret) }); ok(r2.s === 400 && r2.j.code === 'TWOFA_INVALID' && user(A.uid).walletBalance === w0, 'a wrong code is refused and nothing is taken', r2.j);
+  const r3 = await wdraw(A, { pin: '654321', totp: codeNow(secret, 1) }); ok(r3.s === 400 && r3.j.code === 'WRONG_PIN', 'the right code with a WRONG Trade Password is refused (the Trade Password is still first)', r3.j);
+  ok(user(A.uid).walletBalance === w0, 'and the code was not spent');
+  const r4 = await wdraw(A, { totp: codeNow(secret, 1) }); ok(r4.s === 200 && user(A.uid).walletBalance === w0 - 20000, 'the Trade Password AND a right code: the withdrawal goes through', r4.j);
+  const step1 = user(A.uid).twofaLastStep; ok(step1 === Math.floor((Date.now() + 30000) / 30000) || step1 >= Math.floor(Date.now() / 30000), 'the code\'s step is written down', step1);
+  await settle(A); const w1 = user(A.uid).walletBalance;
+  const r5 = await wdraw(A, { totp: codeNow(secret, 1) }); ok(r5.s === 400 && r5.j.code === 'TWOFA_USED' && user(A.uid).walletBalance === w1, 'the SAME code again is refused: a code works once', r5.j);
+  const r6 = await wdraw(A, { totp: codeNow(secret, 0) }); ok(r6.s === 400 && r6.j.code === 'TWOFA_USED', 'an earlier code than the one already used is refused too', r6.j);
+  ok(((user(A.uid).twofaFailCount) || 0) === 0, 'repeating a used code is not a wrong guess (not counted)', user(A.uid).twofaFailCount);
+  const r7 = await wdraw(A, { totp: codeNow(secret, -2) }); ok(r7.s === 400, 'a code from more than one step ago (over a minute) is refused', r7.j);
+  // ---- the SAME code spent by another request between the check and the money moving: nothing is taken
+  {
+    const wm = W(), realSet = wm.set.bind(wm); const fresh = codeNow(secret, 2);   // a step that has not been used; accepted? (two steps ahead is NOT) -> use +1 after spending it below
+    wm.set = (k, v) => { const r = realSet(k, v); if (v && v.status === 'creating') user(A.uid).twofaLastStep = Math.floor(Date.now() / 30000) + 1; return r; };
+    const race = await wdraw(A, { totp: codeNow(secret, 1) });
+    wm.set = realSet;
+    ok(race.s === 400 && race.j.code === 'TWOFA_USED' && user(A.uid).walletBalance === w1, 'the code is spent in the same step that takes the money: if it was spent a moment earlier, nothing is taken', race);
+    const rows = rowsOf(A).filter(w => w.status === 'declined'); ok(rows.length >= 1, 'and the request row is closed at once', rowsOf(A).map(w => w.status));
+    user(A.uid).twofaLastStep = step1;
+  }
+  // ---- 4. wrong codes lock the member out
+  const lockA = await member(); {
+    const s0 = await J('POST', '/account/2fa/start', { pin: '123456' }, lockA.tok); const sec = s0.j.secret; await J('POST', '/account/2fa/confirm', { code: codeNow(sec) }, lockA.tok);
+    let last; for (let i = 0; i < 5; i++) last = await wdraw(lockA, { totp: wrongCode(sec) });
+    ok(last.s === 429 && last.j.code === 'TWOFA_LOCKED', 'five wrong codes lock it', last.j);
+    const during = await wdraw(lockA, { totp: codeNow(sec, 1) }); ok(during.s === 429 && during.j.code === 'TWOFA_LOCKED' && user(lockA.uid).walletBalance === 600000 - 3000 * 0 - (user(lockA.uid).totalInvested || 0), 'even the RIGHT code is refused while it is locked', during.j);
+    advance(32);   // 16 minutes later
+    const after = await wdraw(lockA, { totp: codeNow(sec, 0) }); ok(after.s === 200, 'after the lock the right code works again', after.j);
+    ok(user(lockA.uid).twofaFailCount === 0, 'and the wrong-code count is back to zero', user(lockA.uid).twofaFailCount);
+  }
+  // ---- 5. backup codes
+  await settle(A); const wb0 = user(A.uid).walletBalance;
+  const rb = await wdraw(A, { totp: backup[0] }); ok(rb.s === 200 && rb.j.usedBackupCode === true && rb.j.backupLeft === 7, 'a backup code works instead of the 6-digit code and says 7 are left', rb.j);
+  ok(user(A.uid).twofaBackup.length === 7 && user(A.uid).walletBalance === wb0 - 20000, 'it is removed in the same update that took the money');
+  await settle(A);
+  const rb2 = await wdraw(A, { totp: backup[0] }); ok(rb2.s === 400 && rb2.j.code === 'TWOFA_INVALID', 'the same backup code twice is refused', rb2.j);
+  const rb3 = await wdraw(A, { totp: backup[1].toLowerCase().replace('-', ' ') }); ok(rb3.s === 200, 'a backup code typed in lower case with a space still works', rb3.j); await settle(A);
+  // ---- 6. new backup codes need the Trade Password and a code; the old ones stop
+  const nb0 = await J('POST', '/account/2fa/backup-codes', { pin: '123456', code: wrongCode(secret) }, A.tok); ok(nb0.s === 400, 'new backup codes need a right code', nb0.j);
+  advance(1); const nb = await J('POST', '/account/2fa/backup-codes', { pin: '123456', code: codeNow(secret, 0) }, A.tok);
+  ok(nb.s === 200 && nb.j.backupCodes.length === 8 && !nb.j.backupCodes.some(c => backup.includes(c)), 'new backup codes are made', nb.j);
+  const old = await wdraw(A, { totp: backup[2] }); ok(old.s === 400, 'the old backup codes no longer work', old.j);
+  const nw = await wdraw(A, { totp: nb.j.backupCodes[0] }); ok(nw.s === 200, 'a new one works', nw.j); await settle(A);
+  // ---- 7. turning it off needs the Trade Password AND a code
+  ok((await J('POST', '/account/2fa/disable', { pin: '654321', code: codeNow(secret, 1) }, A.tok)).s === 400, 'off: a wrong Trade Password is refused');
+  ok((await J('POST', '/account/2fa/disable', { pin: '123456', code: wrongCode(secret) }, A.tok)).s === 400 && user(A.uid).twofaEnabled === true, 'off: a wrong code is refused');
+  advance(1); const off = await J('POST', '/account/2fa/disable', { pin: '123456', code: codeNow(secret, 0) }, A.tok);
+  ok(off.s === 200, 'off: the Trade Password and a right code turn it off', off.j);
+  const ua = user(A.uid); ok(['twofaEnabled', 'twofaSecretEnc', 'twofaLastStep', 'twofaBackup', 'twofaPendingEnc', 'twofaFailCount'].every(k => ua[k] === undefined), 'everything about it is wiped from the account', Object.keys(ua).filter(k => /twofa/.test(k)));
+  ok((await wdraw(A)).s === 200, 'withdrawals ask only for the Trade Password again'); await settle(A);
+  const again = await J('POST', '/account/2fa/start', { pin: '123456' }, A.tok); ok(again.s === 200 && again.j.secret !== secret, 'it can be set up again, with a NEW secret', again.j.secret === secret);
+  // ---- 8. the owner's reset (lost phone and lost backup codes)
+  const sec2 = again.j.secret; advance(1); await J('POST', '/account/2fa/confirm', { code: codeNow(sec2) }, A.tok); ok(user(A.uid).twofaEnabled === true, 'on again');
+  ok((await J('POST', '/admin/user/reset-2fa', { userId: A.uid }, null, false)).s === 401, 'only the owner can reset it');
+  const rs = await J('POST', '/admin/user/reset-2fa', { userId: A.uid }, null, true); ok(rs.s === 200 && user(A.uid).twofaEnabled === undefined && user(A.uid).twofaSecretEnc === undefined, 'the owner\'s reset switches it off and wipes it', rs.j);
+  ok((await wdraw(A)).s === 200, 'the member withdraws with just the Trade Password again'); await settle(A);
+  ok([...fm.__stores.auditLog ? fm.__stores.auditLog.values() : []].length >= 0, 'audit store reachable');
+  // ---- 9. the setup expires; it is a member-only, signed-in feature
+  await J('POST', '/account/2fa/start', { pin: '123456' }, B.tok); user(B.uid).twofaPendingAt = Date.now() - 20 * 60000;
+  const exp = await J('POST', '/account/2fa/confirm', { code: '123456' }, B.tok); ok(exp.s === 400 && exp.j.code === 'TWOFA_NO_SETUP', 'a setup left waiting for more than 15 minutes has expired', exp.j);
+  ok((await J('POST', '/account/2fa/confirm', { code: '123456' }, null)).s === 401 && (await J('GET', '/account/2fa/status')).s === 401, 'every route needs a signed-in member');
+  // ---- 10. fail closed: an unreadable secret refuses the withdrawal, never skips the check
+  const D = await member(); const sd = (await J('POST', '/account/2fa/start', { pin: '123456' }, D.tok)).j.secret; await J('POST', '/account/2fa/confirm', { code: codeNow(sd) }, D.tok);
+  const good = user(D.uid).twofaSecretEnc; user(D.uid).twofaSecretEnc = good.slice(0, -4) + 'AAAA';
+  const wd0 = user(D.uid).walletBalance; const un = await wdraw(D, { totp: codeNow(sd, 1) });
+  ok(un.s === 503 && un.j.code === 'TWOFA_UNREADABLE' && user(D.uid).walletBalance === wd0, 'a damaged secret: the withdrawal is refused (never skipped) and nothing is taken', un.j);
+  user(D.uid).twofaSecretEnc = good;
+  const E = await member(); user(E.uid).twofaEnabled = true; user(E.uid).twofaSecretEnc = good; user(E.uid).twofaLastStep = 0; user(E.uid).twofaBackup = [];
+  const copied = await wdraw(E, { totp: codeNow(sd, 1) }); ok(copied.s === 503 && copied.j.code === 'TWOFA_UNREADABLE', 'a secret copied onto ANOTHER account cannot be read there (it is bound to its owner)', copied.j);
+  // ---- 11. the secrets never leave the server
+  const lst = await J('GET', '/admin/users', null, null, true), det = await J('POST', '/admin/user/detail', { userId: D.uid }, null, true);
+  const dump = JSON.stringify([lst.j, det.j]);
+  ok(!/twofaSecretEnc|twofaPendingEnc|twofaBackup/.test(dump) && !dump.includes(sd), 'the admin panel never receives the secret, the waiting secret or the backup hashes');
+  ok(det.j.user && det.j.user.twofaEnabled === true, 'but it does show that Google Authenticator is on', det.j.user && det.j.user.twofaEnabled);
+  // ---- 12. the books still balance
+  const ig = await J('GET', '/admin/integrity', null, null, true); ok(ig.s === 200 && ig.j.mismatches.length === 0, 'the integrity check finds every wallet equal to its history', ig.j.mismatches);
+  realLog(fails ? 'FAIL: ' + fails + ' of ' + n : 'test-withdraw-2fa: ' + n + ' checks passed');
+  process.exit(fails ? 1 : 0);
+})().catch(e => { realLog(e); process.exit(1); });

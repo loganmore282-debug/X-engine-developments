@@ -181,6 +181,8 @@ function run(state, body) {
     pinCheck: async (_u, pin) => pin === 'LOCK!' ? { ok: false, code: 'LOCKED', message: 'Too many wrong Trade Password attempts.' }
       : pin === '123456' ? { ok: true }
       : { ok: false, code: /^\d{6}$/.test(String(pin || '')) ? 'WRONG_PIN' : 'INVALID_PIN', message: 'Incorrect Trade Password.' },
+    // Google Authenticator (a second step for members who turned it on) is proved end to end in test-withdraw-2fa.js: in these cases nobody has it on.
+    twofaOn: () => false, twofaCheck: async () => ({ ok: true }), twofaFail: () => {}, twofaSpend: () => ({ filter: {}, set: {} }),
     cleanPhone: p => String(p || '').replace(/\D/g, '') || '',
     uniqueRef: async () => 'S1',
     mobileMoneyRefPrefix: async () => 'S',
@@ -234,7 +236,7 @@ function run(state, body) {
     } },
   };
   const fn = new Function('sandbox', `
-    const { console, crypto, verifyAuth, withLock, getSettings, pinCheck, cleanPhone,
+    const { console, crypto, verifyAuth, withLock, getSettings, pinCheck, twofaOn, twofaCheck, twofaFail, twofaSpend, cleanPhone,
             uniqueRef, mobileMoneyRefPrefix, textOf, nowStr, fmtMoney, logSecurityEvent, sendAdminPush,
             sendWithdrawalSmsAlert, NETWORK_NAMES, MAX_MONEY_AMOUNT,
             _witRequestInFlight, _userBeingDeleted, FieldValue, db,

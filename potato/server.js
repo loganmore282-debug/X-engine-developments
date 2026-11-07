@@ -4386,7 +4386,7 @@ app.get('/account', async (req, res) => {
       phone: u.phone, walletBalance: round2(u.walletBalance), totalDeposited: u.totalDeposited || 0,
       totalEarned: round2(u.totalEarned), totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
-      hasTradePin: !!u.transactionPinHash, vipLevel, withdrawAnytime: u.withdrawAnytime === true, appClaimed: u.appClaimed === true,
+      hasTradePin: !!u.transactionPinHash, twofaEnabled: u.twofaEnabled === true, vipLevel, withdrawAnytime: u.withdrawAnytime === true, appClaimed: u.appClaimed === true,
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
     // The member's OWN region, which the middleware has already put in
     // force for this request. The app re-reads its currency, dialling code
@@ -5237,6 +5237,215 @@ async function pinCheck(userId, pin0) {
     return { ok: true };
   });
 }
+// ═══════════════════════════════════════════
+// WITHDRAWAL 2-STEP VERIFICATION (Google Authenticator) -- optional, turned on by the MEMBER
+// ═══════════════════════════════════════════
+// Owner: "increase the security of the withdrawal: after the Trade Password, one has to put in the authenticator code; one has to enable it, so one
+// downloads Google Authenticator." Off for everybody until the member turns it on (Profile > Google Authenticator). Once on, /withdraw/request needs the
+// Trade Password AND a 6-digit code from the authenticator app (or, for a lost phone, one single-use backup code). The server enforces it: the app only
+// shows the box. How it is kept safe:
+//   * Standard TOTP (RFC 6238: SHA-1, 6 digits, 30 seconds, a 160-bit secret in base32), so Google Authenticator, Microsoft Authenticator, Authy and 2FAS all work.
+//   * The secret is stored ENCRYPTED (AES-256-GCM, bound to the member's id) and is shown to the member once, while setting up. Turning it on needs the Trade
+//     Password AND a correct first code, so a wrong or half-finished setup can never lock anybody out. Nothing is switched on until that code is right.
+//   * A code works ONCE. The step it belongs to is written down (`twofaLastStep`) in the SAME atomic update that takes the money, so a captured or repeated
+//     code (even two requests at the same instant) can never pay a second withdrawal. A code only a little early or late (clock drift of one step) is accepted.
+//   * Wrong codes are counted and the member is locked out after 5 (15 minutes), like the Trade Password. Malformed input is not counted.
+//   * Fail closed: if the secret cannot be read, nothing is withdrawn (never "skip the check").
+//   * 8 single-use backup codes are made at setup (only their keyed hashes are stored). Turning it off or making new backup codes needs the Trade Password
+//     and a code. A member who lost the phone and the backup codes is reset by the owner (Admin > Users > the member > Reset Google Authenticator).
+const TWOFA_MAX_FAILS = 5, TWOFA_LOCK_MS = 15 * 60 * 1000, TWOFA_PENDING_MS = 15 * 60 * 1000;
+if (!process.env.TWOFA_ENC_KEY) console.warn('Member Google Authenticator secrets are encrypted with a key made from ADMIN_KEY. Set TWOFA_ENC_KEY (any long random text, never changed afterwards) so a later change of ADMIN_KEY cannot make them unreadable.');
+const TWOFA_KEY = crypto.createHash('sha256').update('potato-member-2fa-v1|' + (process.env.TWOFA_ENC_KEY || process.env.ADMIN_KEY || 'potato-dev')).digest();
+function twofaSeal(userId, plain) {
+  const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', TWOFA_KEY, iv);
+  c.setAAD(Buffer.from('2fa|' + userId));
+  const ct = Buffer.concat([c.update(String(plain), 'utf8'), c.final()]);
+  return 'v1.' + iv.toString('base64url') + '.' + c.getAuthTag().toString('base64url') + '.' + ct.toString('base64url');
+}
+function twofaOpen(userId, blob) {
+  try {
+    const [v, iv, tag, ct] = String(blob || '').split('.');
+    if (v !== 'v1' || !iv || !tag || !ct) return null;
+    const d = crypto.createDecipheriv('aes-256-gcm', TWOFA_KEY, Buffer.from(iv, 'base64url'));
+    d.setAAD(Buffer.from('2fa|' + userId)); d.setAuthTag(Buffer.from(tag, 'base64url'));
+    return Buffer.concat([d.update(Buffer.from(ct, 'base64url')), d.final()]).toString('utf8');
+  } catch (_) { return null; }
+}
+const TWOFA_BACKUP_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // 32 symbols, none that look alike (no 0 O 1 I)
+function twofaBackupNorm(s) { return String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+function twofaBackupHash(userId, code) { return crypto.createHmac('sha256', TWOFA_KEY).update('backup|' + userId + '|' + twofaBackupNorm(code)).digest('hex'); }
+// 8 codes of 10 symbols (50 bits each), shown as XXXXX-XXXXX. Returns { codes, hashes }.
+function twofaNewBackupCodes(userId) {
+  const codes = [];
+  while (codes.length < 8) { let c = ''; for (let i = 0; i < 10; i++) c += TWOFA_BACKUP_ALPHABET[crypto.randomInt(TWOFA_BACKUP_ALPHABET.length)]; if (!codes.includes(c)) codes.push(c); }
+  return { codes: codes.map(c => c.slice(0, 5) + '-' + c.slice(5)), hashes: codes.map(c => twofaBackupHash(userId, c)) };
+}
+function twofaEqHex(a, b) { a = String(a || ''); b = String(b || ''); return a.length === b.length && a.length > 0 && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b)); }
+const twofaOn = u => !!u && u.twofaEnabled === true;
+const TWOFA_CLEAR = () => ({ twofaEnabled: FieldValue.delete(), twofaSecretEnc: FieldValue.delete(), twofaLastStep: FieldValue.delete(), twofaBackup: FieldValue.delete(), twofaEnabledAt: FieldValue.delete(),
+  twofaFailCount: FieldValue.delete(), twofaLockedUntil: FieldValue.delete(), twofaPendingEnc: FieldValue.delete(), twofaPendingAt: FieldValue.delete() });
+const TWOFA_WRONG_HELP = "Open Google Authenticator and type the code it shows now. If it keeps failing, set your phone's date and time to automatic.";
+// Counts a wrong code (the caller holds the 2fa lock) and locks after TWOFA_MAX_FAILS.
+async function twofaNoteFail(uRef, u, userId, now) {
+  const fails = (Number(u.twofaFailCount) || 0) + 1;
+  if (fails >= TWOFA_MAX_FAILS) {
+    await uRef.update({ twofaFailCount: 0, twofaLockedUntil: new Date(now + TWOFA_LOCK_MS) });
+    logSecurityEvent(userId, '2fa_locked', {});
+    return { ok: false, code: 'TWOFA_LOCKED', message: `Too many wrong codes. Try again in ${TWOFA_LOCK_MS / 60000} minutes.` };
+  }
+  await uRef.update({ twofaFailCount: fails });
+  logSecurityEvent(userId, '2fa_wrong_code', { fails });
+  const left = TWOFA_MAX_FAILS - fails;
+  return { ok: false, code: 'TWOFA_INVALID', message: `That code is not right (${left} ${left === 1 ? 'try' : 'tries'} left). ${TWOFA_WRONG_HELP}` };
+}
+function twofaLockedReply(u, now) {
+  if (u.twofaLockedUntil && tsMillis(u.twofaLockedUntil) > now) {
+    const mins = Math.ceil((tsMillis(u.twofaLockedUntil) - now) / 60000);
+    return { ok: false, code: 'TWOFA_LOCKED', message: `Too many wrong codes. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` };
+  }
+  return null;
+}
+const TWOFA_STATUS = { TWOFA_LOCKED: 429, TWOFA_UNREADABLE: 503 };
+// Checks a code for a member who has it on. A 6-digit code is the authenticator's; anything shaped like a backup code is a backup code. NOTHING is spent
+// here: on success it returns what the caller must write ATOMICALLY with its own change ({kind:'totp', step} or {kind:'backup', hash}), so a code that is
+// used for a withdrawal is spent in the same update that takes the money.
+async function twofaCheck(userId, raw) {
+  const input = textOf(raw).trim();
+  if (!input) return { ok: false, code: 'TWOFA_REQUIRED', message: 'Enter the 6-digit code from Google Authenticator.' };
+  const digits = input.replace(/\s/g, '');
+  const isTotp = /^\d{6}$/.test(digits), norm = twofaBackupNorm(input), isBackup = !isTotp && /^[A-Z0-9]{10}$/.test(norm);
+  if (!isTotp && !isBackup) return { ok: false, code: 'TWOFA_INVALID', message: 'Enter the 6-digit code from Google Authenticator.' };   // a typo is not counted
+  return withLock('2fa:' + userId, async () => {
+    const uRef = db.collection('users').doc(userId), snap = await uRef.get();
+    if (!snap.exists) return { ok: false, code: 'NOT_FOUND', message: 'Account not found' };
+    const u = snap.data(), now = Date.now();
+    if (!twofaOn(u)) return { ok: false, code: 'TWOFA_OFF', message: 'Google Authenticator is not turned on for this account.' };
+    const locked = twofaLockedReply(u, now); if (locked) return locked;
+    let out;
+    if (isTotp) {
+      const secret = twofaOpen(userId, u.twofaSecretEnc);
+      if (!secret) { console.error(`2-step: the secret of ${userId} could not be read (key changed or data damaged) -- withdrawals for this member are refused until the owner resets it`); return { ok: false, code: 'TWOFA_UNREADABLE', message: 'Your Google Authenticator could not be read. Please contact customer service.' }; }
+      const m = totp.match(secret, digits, now, 1);
+      if (!m) return twofaNoteFail(uRef, u, userId, now);
+      const last = Number.isInteger(u.twofaLastStep) ? u.twofaLastStep : -1;
+      if (m.step <= last) return { ok: false, code: 'TWOFA_USED', message: 'That code was already used. Wait for the next code in Google Authenticator (it changes every 30 seconds) and try again.' };
+      out = { ok: true, kind: 'totp', step: m.step };
+    } else {
+      const h = twofaBackupHash(userId, norm); let hit = false;
+      for (const x of (Array.isArray(u.twofaBackup) ? u.twofaBackup : [])) if (twofaEqHex(x, h)) hit = true;
+      if (!hit) return twofaNoteFail(uRef, u, userId, now);
+      out = { ok: true, kind: 'backup', hash: h, backupLeft: (Array.isArray(u.twofaBackup) ? u.twofaBackup.length : 1) - 1 };
+    }
+    if (Number(u.twofaFailCount) > 0) await uRef.update({ twofaFailCount: 0 });
+    return out;
+  });
+}
+// What an atomic update must also require / write to spend a checked code (see twofaCheck).
+function twofaSpend(chk) {
+  return chk.kind === 'totp'
+    ? { filter: { twofaEnabled: true, twofaLastStep: { $lt: chk.step } }, set: { twofaLastStep: chk.step } }
+    : { filter: { twofaEnabled: true, twofaBackup: chk.hash }, set: { twofaBackup: FieldValue.arrayRemove(chk.hash) } };
+}
+function twofaOtpauth(issuer, account, secret) {
+  return 'otpauth://totp/' + encodeURIComponent(issuer) + ':' + encodeURIComponent(account) + '?secret=' + secret + '&issuer=' + encodeURIComponent(issuer) + '&algorithm=SHA1&digits=6&period=30';
+}
+// A signed-in, unsuspended, fully registered member (the same gate as the other account routes); sends the refusal itself and returns null otherwise.
+async function twofaMember(req, res) {
+  const userId = await verifyAuth(req);
+  if (!userId) { res.status(401).json({ status: 'error', message: 'Please sign in again' }); return null; }
+  const snap = await db.collection('users').doc(userId).get();
+  if (!snap.exists) { res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'Account not found' }); return null; }
+  if (snap.data().status === 'banned') { res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' }); return null; }
+  if (snap.data().registrationDone === false) { res.status(409).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up first.' }); return null; }
+  res.set('Cache-Control', 'no-store');
+  return { userId, u: snap.data() };
+}
+const twofaFail = (res, r) => res.status(TWOFA_STATUS[r.code] || (r.code === 'LOCKED' ? 429 : 400)).json({ status: 'error', code: r.code, message: r.message });
+app.get('/account/2fa/status', async (req, res) => {
+  const m = await twofaMember(req, res); if (!m) return;
+  res.json({ status: 'success', enabled: twofaOn(m.u), enabledAt: twofaOn(m.u) ? (tsMillis(m.u.twofaEnabledAt) || null) : null, backupLeft: twofaOn(m.u) ? (Array.isArray(m.u.twofaBackup) ? m.u.twofaBackup.length : 0) : 0 });
+});
+// Step 1 of turning it on: the Trade Password, then a fresh secret is made and shown ONCE (as a link, a setup key and a QR picture drawn in the app).
+// Nothing is switched on yet; the secret waits, encrypted, for 15 minutes.
+app.post('/account/2fa/start', async (req, res) => {
+  try {
+    const m = await twofaMember(req, res); if (!m) return;
+    if (twofaOn(m.u)) return res.status(409).json({ status: 'error', code: 'TWOFA_ALREADY_ON', message: 'Google Authenticator is already turned on.' });
+    const pin = await pinCheck(m.userId, req.body.pin);
+    if (!pin.ok) return twofaFail(res, pin);
+    const secret = totp.generateSecret(), issuer = brandName(await getSettings()), account = m.u.phone || 'member';
+    await db.collection('users').doc(m.userId).update({ twofaPendingEnc: twofaSeal(m.userId, secret), twofaPendingAt: Date.now() });
+    res.json({ status: 'success', secret, otpauth: twofaOtpauth(issuer, account, secret), issuer, account, expiresInSec: TWOFA_PENDING_MS / 1000 });
+  } catch (e) { console.error('2-step start error:', e.message); res.status(500).json({ status: 'error', message: 'Could not start the setup right now' }); }
+});
+// Step 2: the member types the first code the app shows. Right -> it is on, and the backup codes are shown ONCE. Wrong -> counted, nothing changes.
+app.post('/account/2fa/confirm', async (req, res) => {
+  try {
+    const m = await twofaMember(req, res); if (!m) return;
+    const code = textOf(req.body.code).replace(/\s/g, '');
+    if (!/^\d{6}$/.test(code)) return res.status(400).json({ status: 'error', code: 'TWOFA_INVALID', message: 'Enter the 6-digit code from Google Authenticator.' });
+    const out = await withLock('2fa:' + m.userId, async () => {
+      const uRef = db.collection('users').doc(m.userId), u = (await uRef.get()).data() || {}, now = Date.now();
+      if (twofaOn(u)) return { code: 409, body: { status: 'error', code: 'TWOFA_ALREADY_ON', message: 'Google Authenticator is already turned on.' } };
+      const locked = twofaLockedReply(u, now); if (locked) return { code: 429, body: { status: 'error', code: locked.code, message: locked.message } };
+      const secret = u.twofaPendingEnc && now - (Number(u.twofaPendingAt) || 0) < TWOFA_PENDING_MS ? twofaOpen(m.userId, u.twofaPendingEnc) : null;
+      if (!secret) return { code: 400, body: { status: 'error', code: 'TWOFA_NO_SETUP', message: 'This setup has expired. Start again and add the new key to Google Authenticator.' } };
+      const hit = totp.match(secret, code, now, 1);
+      if (!hit) { const r = await twofaNoteFail(uRef, u, m.userId, now); return { code: TWOFA_STATUS[r.code] || 400, body: { status: 'error', code: r.code, message: r.message } }; }
+      const backup = twofaNewBackupCodes(m.userId);
+      const applied = await uRef.updateIf({ twofaEnabled: { $ne: true } }, { twofaEnabled: true, twofaSecretEnc: u.twofaPendingEnc, twofaLastStep: hit.step, twofaBackup: backup.hashes, twofaEnabledAt: new Date(),
+        twofaPendingEnc: FieldValue.delete(), twofaPendingAt: FieldValue.delete(), twofaFailCount: 0, twofaLockedUntil: FieldValue.delete() });
+      if (!applied) return { code: 409, body: { status: 'error', code: 'TWOFA_ALREADY_ON', message: 'Google Authenticator is already turned on.' } };
+      logSecurityEvent(m.userId, '2fa_enabled', {});
+      return { code: 200, body: { status: 'success', backupCodes: backup.codes } };
+    });
+    res.status(out.code).json(out.body);
+  } catch (e) { console.error('2-step confirm error:', e.message); res.status(500).json({ status: 'error', message: 'Could not turn it on right now' }); }
+});
+// Turning it off: the Trade Password AND a code (or a backup code). The same for new backup codes (the old ones stop working at once).
+async function twofaGuarded(req, res, apply) {
+  const m = await twofaMember(req, res); if (!m) return;
+  if (!twofaOn(m.u)) return res.status(409).json({ status: 'error', code: 'TWOFA_OFF', message: 'Google Authenticator is not turned on.' });
+  const pin = await pinCheck(m.userId, req.body.pin); if (!pin.ok) return twofaFail(res, pin);
+  const chk = await twofaCheck(m.userId, req.body.code); if (!chk.ok) return twofaFail(res, chk);
+  const sp = twofaSpend(chk);
+  const out = await apply(m, chk, sp);
+  if (!out) return res.status(409).json({ status: 'error', code: 'TWOFA_USED', message: 'That code was already used. Wait for the next code in Google Authenticator and try again.' });
+  res.json(out);
+}
+app.post('/account/2fa/disable', async (req, res) => {
+  try {
+    await twofaGuarded(req, res, async (m, chk, sp) => {
+      const ok = await db.collection('users').doc(m.userId).updateIf(sp.filter, TWOFA_CLEAR());
+      if (ok) logSecurityEvent(m.userId, '2fa_disabled', {});
+      return ok ? { status: 'success' } : null;
+    });
+  } catch (e) { console.error('2-step disable error:', e.message); res.status(500).json({ status: 'error', message: 'Could not turn it off right now' }); }
+});
+app.post('/account/2fa/backup-codes', async (req, res) => {
+  try {
+    await twofaGuarded(req, res, async (m, chk, sp) => {
+      const backup = twofaNewBackupCodes(m.userId);
+      const ok = await db.collection('users').doc(m.userId).updateIf(sp.filter, Object.assign({}, chk.kind === 'totp' ? sp.set : {}, { twofaBackup: backup.hashes }));
+      if (ok) logSecurityEvent(m.userId, '2fa_backup_codes_renewed', {});
+      return ok ? { status: 'success', backupCodes: backup.codes } : null;
+    });
+  } catch (e) { console.error('2-step backup codes error:', e.message); res.status(500).json({ status: 'error', message: 'Could not make new backup codes right now' }); }
+});
+// Lost phone AND lost backup codes: the owner switches it off for that member (after checking who is asking), and the member can set it up again.
+app.post('/admin/user/reset-2fa', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || '').slice(0, 120);
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const ref = db.collection('users').doc(userId), snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    await withLock('2fa:' + userId, () => ref.update(TWOFA_CLEAR()));
+    logAdminAction(req, 'user_2fa_reset', { userId });
+    logSecurityEvent(userId, '2fa_reset_by_admin', {});
+    res.json({ status: 'success', message: 'Google Authenticator was switched off for this member. They can turn it on again.' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
 // Caller holds bal:<userId>. A restart can finish a charged request, but
 // must never charge an unconfirmed request on the member's behalf.
 async function finishWithdrawalCreation(witRef, userId) {
@@ -5310,6 +5519,17 @@ app.post('/withdraw/request', async (req, res) => {
     const pinResult = await pinCheck(userId, req.body.pin);
     if (!pinResult.ok)
       return res.status(pinResult.code === 'LOCKED' ? 429 : 400).json({ status: 'error', code: pinResult.code, message: pinResult.message });
+    // SECOND STEP (Google Authenticator), only for a member who turned it on. Decided HERE from the account itself, never from anything the app says:
+    // an edited app that hides the box gets "Enter the 6-digit code" and nothing else. A checked code is spent in the same atomic update as the debit below.
+    let twofaChk = null, twofaSp = null;
+    {
+      const fresh2 = await db.collection('users').doc(userId).get();
+      if (twofaOn(fresh2.exists ? fresh2.data() : null)) {
+        twofaChk = await twofaCheck(userId, req.body.totp);
+        if (!twofaChk.ok) return twofaFail(res, twofaChk);
+        twofaSp = twofaSpend(twofaChk);
+      }
+    }
     const boundSnap = await db.collection('bankAccounts')
       .where('userId', '==', userId).where('network', '==', rawNetwork).where('phone', '==', destValue).limit(1).get();
     if (boundSnap.empty)
@@ -5375,19 +5595,25 @@ app.post('/withdraw/request', async (req, res) => {
       // request that an administrator could still send.
       await witRef.set({ userId, amount: amt, fee, net, holder, network: rawNetwork, phone: destValue, ref,
         status: 'creating', regionKey: currentRegionKey(), date, time, createdAt: FieldValue.serverTimestamp() });
-      const debited = await uRef.updateIf({ walletBalance: { $gte: amt - 0.005 }, status: { $ne: 'banned' }, debitedWithdrawalIds: { $ne: witId } }, {
+      const debited = await uRef.updateIf(Object.assign({ walletBalance: { $gte: amt - 0.005 }, status: { $ne: 'banned' }, debitedWithdrawalIds: { $ne: witId } }, twofaSp ? twofaSp.filter : { twofaEnabled: { $ne: true } }), Object.assign({
         walletBalance: FieldValue.increment(-amt), debitedWithdrawalIds: FieldValue.arrayUnion(witId)
-      });
+      }, twofaSp ? twofaSp.set : {}));
       if (!debited) {
         // Nothing was charged: close the row at once (it would block the next request until the reconciler declines it) and give the real reason.
         await witRef.updateIf({ status: 'creating' }, { status: 'declined', failureReason: 'Not charged: balance or account changed' }).catch(() => {});
         witId = undefined;
-        throw new Error('Your balance or account status changed. Please refresh and try again.');
+        // Why: the code was spent a moment ago by another request, or the member's security setting changed in between, or (as before) balance / suspension.
+        const now2 = (await uRef.get()).data() || {};
+        const spent = twofaChk && twofaChk.kind === 'totp' ? Number(now2.twofaLastStep) >= twofaChk.step : twofaChk && twofaChk.kind === 'backup' ? !(Array.isArray(now2.twofaBackup) ? now2.twofaBackup : []).includes(twofaChk.hash) : false;
+        const changed = twofaOn(now2) !== !!twofaChk;
+        const err = new Error(changed ? 'Your security settings changed. Please try again.' : spent ? 'That code was already used. Wait for the next code in Google Authenticator (it changes every 30 seconds) and try again.' : 'Your balance or account status changed. Please refresh and try again.');
+        if (changed || spent) err.code = changed ? 'TWOFA_CHANGED' : 'TWOFA_USED';
+        throw err;
       }
       await finishWithdrawalCreation(witRef, userId);
     });
     sendAdminPush('New withdrawal request', `${fmtMoney(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }, { quickApprove: true }).catch(() => {});
-    res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Withdrawal requested, processing now' });
+    res.json(Object.assign({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Withdrawal requested, processing now' }, twofaChk && twofaChk.kind === 'backup' ? { usedBackupCode: true, backupLeft: twofaChk.backupLeft } : {}));
   } catch (e) {
     if (witId) return res.status(503).json({ status: 'error', code: 'WITHDRAWAL_RECOVERY_PENDING', withdrawalId: witId, message: 'Your withdrawal request is being checked. Check Transaction Statement before submitting again.' });
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
@@ -8104,7 +8330,7 @@ app.get('/admin/users', async (req, res) => {
   try {
     const want = adminRegionFilter(req);
     const snap = await db.collection('users').limit(10000).get();
-    let users = snap.docs.map(d => { const { transactionPinHash, ...safe } = d.data(); return { id: d.id, ...safe }; });
+    let users = snap.docs.map(d => { const { transactionPinHash, twofaSecretEnc, twofaPendingEnc, twofaBackup, ...safe } = d.data(); return { id: d.id, ...safe }; });
     users = users.map(u => {
       u.regionKey = String(u.regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY;
       return u;
@@ -8153,7 +8379,7 @@ app.post('/admin/user/detail', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     // transactionPinHash never leaves this server, even to an admin --
     // hasPayoutPin is the boolean the admin UI actually needs.
-    const { transactionPinHash, ...userSafe } = uSnap.data();
+    const { transactionPinHash, twofaSecretEnc, twofaPendingEnc, twofaBackup, ...userSafe } = uSnap.data();
     const earnedBreakdown = {};
     EARNING_TX_TYPES.forEach(t => { earnedBreakdown[t] = 0; });
     earnedTxSnap.forEach(d => {

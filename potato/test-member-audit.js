@@ -60,7 +60,7 @@ async function main(){
   assert.equal(d.querySelectorAll('#ownedAssets .pt-run-mat').length,2,'each owned card shows its maturity bar');
   w.eval('STATE.page="account"');await w.renderAccount();
   assert.match(d.querySelector('.pt-mystat').textContent,/70,000\.00/);
-  assert.deepEqual([...d.querySelectorAll('.pt-menu b, .pt-menu span')].map(e=>e.textContent.trim()).filter(Boolean).slice(0,8),['Balance Detail','Messages','Login Password','Trade Password','Bank Card','Gift Code','APP Download','About Us']);
+  assert.deepEqual([...d.querySelectorAll('.pt-menu b, .pt-menu span')].map(e=>e.textContent.trim()).filter(Boolean).slice(0,9),['Balance Detail','Messages','Login Password','Trade Password','Google Authenticator','Bank Card','Gift Code','APP Download','About Us']);
   w.eval('STATE.page="home"');
   // The old full-screen "Congratulations!" win card (showChestWin()) was
   // removed -- a redeemed gift code is now just this toast (see

@@ -2136,6 +2136,48 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .pin-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;}
 .pin-btns button{height:40px;border:0;border-radius:20px;background:#f1f3f8;color:#8795a8;font:700 13px/40px Roboto,sans-serif;cursor:pointer;}
 .pin-btns button#pinOk{background:#e5231d;color:#fff;}
+.pin-btns button#totpOk{background:#e5231d;color:#fff;}
+.pin-help{margin:10px 2px 0;font:400 12px/16px Roboto,sans-serif;color:#8795a8;}
+.pin-warn{margin:8px 2px 0;font:400 11.8px/16px Roboto,sans-serif;color:#c9244a;}
+.pin-warn:empty{display:none;}
+.pin-alt{margin-top:8px;padding:2px 4px;border:0;background:none;color:#c83a30;font:700 12px/18px Roboto,sans-serif;text-decoration:underline;cursor:pointer;}
+/* Google Authenticator page (Profile > Google Authenticator) */
+.pt-ga{margin:0 14px 28px;}
+.pt-ga-card{margin:0 0 12px;padding:15px 14.5px;border-radius:14px;background:#fff;box-shadow:0 8px 18px -12px rgba(70,80,140,.25);}
+.pt-ga-hero{display:flex;flex-direction:column;align-items:center;text-align:center;padding:20px 18px 18px;}
+.pt-ga-badge{display:flex;align-items:center;justify-content:center;width:58px;height:58px;margin-bottom:11px;border-radius:50%;background:#fdecea;color:#e5231d;}
+.pt-ga-badge svg{width:30px;height:30px;display:block;}
+.pt-ga-badge.on{background:#e6f6ec;color:#1f9d55;}
+.pt-ga-hero h2{margin:0 0 6px;font:700 16.5px/22px Roboto,sans-serif;color:#14304f;}
+.pt-ga-hero p{margin:0;font:400 12.8px/18px Roboto,sans-serif;color:#5c6475;}
+.pt-ga-step{display:flex;align-items:flex-start;gap:11px;}
+.pt-ga-step i{flex:0 0 24px;height:24px;border-radius:50%;background:#e5231d;color:#fff;font:700 12.5px/24px Roboto,sans-serif;font-style:normal;text-align:center;}
+.pt-ga-step b{display:block;font:700 14px/20px Roboto,sans-serif;color:#14304f;}
+.pt-ga-step span{display:block;margin-top:2px;font:400 12.4px/17px Roboto,sans-serif;color:#5c6475;}
+.pt-ga-stores{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px;}
+.pt-ga-stores a{display:block;height:40px;border:1.7px solid #dca3a8;border-radius:20px;color:#c83a30;font:700 13px/37px Roboto,sans-serif;text-align:center;text-decoration:none;}
+.pt-ga-form{margin-top:12px;}
+.pt-ga-form label{display:block;margin:0 0 6px;font:700 13px/18px Roboto,sans-serif;color:#5c6475;}
+.pt-ga-form label:not(:first-child){margin-top:14px;}
+.pt-ga-btn{display:block;width:100%;height:43.4px;margin-top:12px;border:0;border-radius:22px;background:linear-gradient(100deg,#f03028,#c9161d);color:#fff;font:700 13.4px/43.4px Roboto,sans-serif;letter-spacing:1px;text-align:center;text-decoration:none;box-shadow:0 8px 14px -8px rgba(110,90,150,.5);cursor:pointer;}
+.pt-ga-btn.line{border:1.7px solid #dca3a8;background:#fff;color:#c83a30;line-height:40px;box-shadow:none;}
+.pt-ga-btn:disabled{opacity:.6;}
+.pt-ga-note{margin:9px 2px 0;font:400 12px/16.5px Roboto,sans-serif;color:#8795a8;text-align:center;}
+.pt-ga-note.left{text-align:left;}
+.pt-ga-note b{color:#5c6475;}
+.pt-ga-warn{margin:10px 2px 0;padding:9px 12px;border-radius:10px;background:#fff4e5;font:400 12.2px/17px Roboto,sans-serif;color:#9a5a00;}
+.pt-ga>.pt-ga-warn{margin:0 0 12px;}
+.pt-ga-or{position:relative;margin:16px 0 4px;text-align:center;font:700 11.5px/14px Roboto,sans-serif;color:#8795a8;letter-spacing:.4px;text-transform:uppercase;}
+.pt-ga-or::before{content:'';position:absolute;left:0;right:0;top:50%;height:1px;background:#e9ecf3;}
+.pt-ga-or span{position:relative;padding:0 10px;background:#fff;}
+.pt-ga-key{margin:10px 0 0;padding:11px 8px;border-radius:10px;background:#f4f6fd;color:#14304f;font:700 15px/24px ui-monospace,Menlo,Consolas,monospace;letter-spacing:1.4px;text-align:center;overflow-wrap:anywhere;-webkit-user-select:all;user-select:all;}
+.pt-ga-qr{display:block;width:216px;height:216px;margin:10px auto 0;border:1px solid #eceffa;border-radius:12px;overflow:hidden;background:#fff;}
+.pt-ga-qr svg{display:block;width:100%;height:100%;}
+.pt-ga-h{display:block;font:700 14.5px/20px Roboto,sans-serif;color:#14304f;}
+.pt-ga-codes{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 0;}
+.pt-ga-codes span{padding:10px 4px;border-radius:10px;background:#f4f6fd;color:#14304f;font:700 13.6px/18px ui-monospace,Menlo,Consolas,monospace;letter-spacing:1px;text-align:center;-webkit-user-select:all;user-select:all;}
+.pt-ga-line{margin:0 0 10px;font:400 13px/18px Roboto,sans-serif;color:#33415a;}
+.pt-ga-line b{font-weight:700;color:#14304f;}
 /* Bank Cards */
 .pt-bk{margin:0 13.5px;padding:13.4px 13.8px 28px;min-height:calc(100vh - 124px);box-sizing:border-box;border:1px solid #eceffa;border-bottom:0;border-radius:17px 17px 0 0;background:#f4f6fd;}
 .pt-bcard{position:relative;height:153.9px;border-radius:21px;background:linear-gradient(150deg,#050505 0,#2a2a2a 45%,#7a7a7a 100%);box-shadow:0 12px 18px -8px rgba(0,0,0,.55);color:#fff;text-shadow:0 2px 3px rgba(0,0,0,.6);}
@@ -2708,6 +2750,13 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
 <div class="pin-bg" id="pinBg">
   <div class="pin-card"><h3>Trade Password</h3><input id="pinInput" class="pin-input pa-mask" type="text" name="pt_trade_pin" inputmode="numeric" maxlength="6" placeholder="Enter 6-digit trade password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore>
     <div class="pin-btns"><button type="button" id="pinNo">Cancel</button><button type="button" id="pinOk">Confirm</button></div></div>
+</div>
+
+<div class="pin-bg" id="totpBg">
+  <div class="pin-card"><h3>Authenticator Code</h3><input id="totpInput" class="pin-input" type="text" name="pt_auth_code" inputmode="numeric" maxlength="6" placeholder="Enter 6-digit code" autocomplete="one-time-code" autocapitalize="characters" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore>
+    <p class="pin-help" id="totpHelp">Open Google Authenticator and type the code it shows now.</p><p class="pin-warn" id="totpWarn"></p>
+    <button type="button" class="pin-alt" id="totpAlt">Use a backup code instead</button>
+    <div class="pin-btns"><button type="button" id="totpNo">Cancel</button><button type="button" id="totpOk">Confirm</button></div></div>
 </div>
 
 <div class="confirm-bg" id="confirmBg" onclick="if(event.target===this)closeConfirm()">
