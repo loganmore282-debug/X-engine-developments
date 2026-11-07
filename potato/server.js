@@ -3540,13 +3540,11 @@ app.get('/team/stats', async (req, res) => {
 // tap, two phones or a retry can never pay a tier twice. A tier keeps its id when the admin edits its numbers, so an edit never re-opens it.
 // The ledger row is written (or repaired) afterwards under a key built from the tier.
 function salaryTierFor(tiers, total) { let t = null; for (const x of tiers) if (total >= x.target) t = x; return t; }
-// The tier ids this member has already claimed. A member from the earlier DAILY wage was already paid for the tiers up to the one they were on
-// (their recorded tier reward), so those count as claimed and are never paid a second time.
-function salaryClaimedSet(u, tiers) {
-  const s = new Set(Array.isArray(u.claimedSalaryTiers) ? u.claimedSalaryTiers : []);
-  const legacy = Number(u.salaryTierReward) || 0;
-  if (legacy > 0) for (const t of tiers) if (t.reward <= legacy) s.add(t.id);
-  return s;
+// The tier ids this member has already claimed: ONLY what is written down in `claimedSalaryTiers`. (The old DAILY wage kept `salaryTierReward`
+// on the account just for LOOKING at the tab, not for being paid, so it is never read as proof of payment. Real payments are the ledger rows;
+// migrateRewardsToClaimOnce reads those.)
+function salaryClaimedSet(u) {
+  return new Set(Array.isArray(u.claimedSalaryTiers) ? u.claimedSalaryTiers : []);
 }
 async function salaryView(userId) {
   const [sett, teamNow] = await Promise.all([getSettings(), wholeTeamStats(userId)]);
@@ -3563,7 +3561,7 @@ app.get('/salary/status', async (req, res) => {
     const u = uSnap.data();
     if (u.status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     const view = await salaryView(userId);
-    const claimed = salaryClaimedSet(u, view.tiers);
+    const claimed = salaryClaimedSet(u);
     const tiers = view.tiers.map(t => ({ id: t.id, target: t.target, reward: t.reward, reached: view.total >= t.target, claimed: claimed.has(t.id) }));
     const open = tiers.filter(t => t.reached && !t.claimed);
     // `accruedDays` = how many rewards can be claimed right now (the name an older cached app still reads).
@@ -3582,7 +3580,7 @@ app.post('/salary/claim', async (req, res) => {
       const u = first.data();
       if (u.status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
       const view = await salaryView(userId);
-      const claimed = salaryClaimedSet(u, view.tiers);
+      const claimed = salaryClaimedSet(u);
       // The button names its tier; an older app that names none claims the lowest reward that is open.
       const tier = wantId ? view.tiers.find(t => t.id === wantId) : view.tiers.find(t => view.total >= t.target && !claimed.has(t.id));
       if (wantId && !tier) return { code: 400, body: { status: 'error', code: 'UNKNOWN_TIER', message: 'This reward is no longer available.' } };
@@ -3619,25 +3617,33 @@ app.post('/salary/claim', async (req, res) => {
     res.status(out.code).json(out.body);
   } catch (e) { console.error('Reward claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim the reward right now' }); }
 });
-// ONE-TIME, at start-up: members who were paid under the old DAILY wage get the tiers they were already paid for written down as claimed, for good
-// (a permanent mark, so a later edit of the tiers' amounts can never re-open one). "Paid for" = every tier whose reward is at most the most they were
-// ever paid (the tier reward recorded on their account, or their largest 'Team reward' ledger row). Runs once (marker meta/rewardClaimOnce).
+// ONE-TIME, at start-up (marker meta/rewardClaimOnceV2): writes down, for each member, the tiers they were REALLY paid for, from the ledger and nothing
+// else, and REPLACES what is on the account. This also repairs the first version of this migration, which trusted `salaryTierReward` (set by merely
+// opening the old Reward tab) and so showed unpaid tiers as Claimed. A tier counts as claimed when (a) a 'Team reward' ledger row names it (a claim
+// made since claim-once), or (b) it is at or below the largest amount an old DAILY 'Team reward' row paid that member. No payment row, no claim.
 async function migrateRewardsToClaimOnce() {
-  const marker = db.collection('meta').doc('rewardClaimOnce');
+  const marker = db.collection('meta').doc('rewardClaimOnceV2');
   if ((await marker.get()).exists) return 0;
   const tiers = taskRows((await getSettings()).salaryTiers, 'salary');
-  const maxPaid = new Map();
+  const maxDaily = new Map(), named = new Map();
   const rows = await db.collection('transactions').where('type', '==', 'mission_salary').limit(500000).get();
-  rows.forEach(d => { const t = d.data(); const a = Number(t.amount) || 0; if (t.userId && a > (maxPaid.get(t.userId) || 0)) maxPaid.set(t.userId, a); });
+  rows.forEach(d => {
+    const t = d.data(); if (!t.userId) return;
+    if (t.salaryTier) { if (!named.has(t.userId)) named.set(t.userId, new Set()); named.get(t.userId).add(t.salaryTier); }
+    else { const a = Number(t.amount) || 0; if (a > (maxDaily.get(t.userId) || 0)) maxDaily.set(t.userId, a); }
+  });
   const users = await db.collection('users').limit(200000).get();
   let n = 0;
   for (const d of users.docs) {
     const u = d.data();
-    const paid = Math.max(Number(u.salaryTierReward) || 0, maxPaid.get(d.id) || 0);
-    const had = paid > 0 || (Array.isArray(u.creditedSalaryDays) && u.creditedSalaryDays.length > 0);
-    if (!had) continue;
-    const ids = tiers.filter(t => t.reward <= paid).map(t => t.id);
-    if (ids.length) { await d.ref.update({ claimedSalaryTiers: FieldValue.arrayUnion(...ids) }); n++; }
+    const ids = new Set(named.get(d.id) || []);
+    const paid = maxDaily.get(d.id) || 0;
+    if (paid > 0) for (const t of tiers) if (t.reward <= paid) ids.add(t.id);
+    const want = [...ids];
+    const have = Array.isArray(u.claimedSalaryTiers) ? u.claimedSalaryTiers : [];
+    const same = have.length === want.length && want.every(x => have.includes(x));
+    if (same) continue;
+    await d.ref.update({ claimedSalaryTiers: want }); n++;
   }
   await marker.set({ at: new Date(), members: n });
   return n;

@@ -25,8 +25,8 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   // a member's claimed tiers: the ones they claimed, plus (from the earlier daily wage) the tiers up to the one they were paid at
   ok([...ctx.claimedSet({}, tiers)].length === 0, 'a new member has claimed nothing');
   ok([...ctx.claimedSet({ claimedSalaryTiers: ['b'] }, tiers)].join() === 'b', 'a claimed tier stays claimed');
-  ok([...ctx.claimedSet({ salaryTierReward: 2000 }, tiers)].join() === 'a', 'a member paid daily at the first tier already had that tier: it is not paid again');
-  ok([...ctx.claimedSet({ salaryTierReward: 4000, claimedSalaryTiers: ['b'] }, tiers)].sort().join() === 'a,b', 'both together');
+  ok([...ctx.claimedSet({ salaryTierReward: 2000 }, tiers)].length === 0, 'salaryTierReward (set by merely opening the old tab) is NOT proof of payment: nothing is Claimed from it');
+  ok([...ctx.claimedSet({ salaryTierReward: 4000, claimedSalaryTiers: ['b'] }, tiers)].join() === 'b', 'only the written-down claimed tiers count');
   ok(/app\.get\('\/salary\/status'/.test(server) && /app\.post\('\/salary\/claim'/.test(server), 'the salary routes exist');
   const claim = server.slice(server.indexOf("app.post('/salary/claim'"), server.indexOf("app.post('/salary/claim'") + 5200);
   ok(/withLock\('salary:' \+ userId/.test(claim) && /claimedSalaryTiers: \{ \$ne: tier\.id \}/.test(claim) && /FieldValue\.arrayUnion\(tier\.id\)/.test(claim) && /FieldValue\.increment\(tier\.reward\)/.test(claim), 'the claim is locked per member and one atomic update carries the credit and the tier\'s claimed mark');

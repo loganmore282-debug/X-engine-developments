@@ -176,3 +176,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all`: use the names
 
 ## Renew a message (owner: "Even make on potato")
 - Admin > Messages has a Renew button beside Edit and Delete. `POST /admin/messages/renew` re-stamps the message with today's date/time and a fresh `createdAt` (so it jumps to the top as the latest) and sets `renewedAt`. In `/messages` a member's message counts as read only when `readAt >= renewedAt`, so a renewed message shows as new to everyone again. Test: test-messages.js (23 checks). Admin cache potato-admin-shell-v176.
+
+## Reward tab showed unpaid tiers as "Claimed" (owner: "I have not yet claimed any of these but see now")
+- Cause: the claim-once port treated the account field `salaryTierReward` as proof a member had been paid under the old daily wage. The old code set that field just for OPENING the Reward tab, so anyone with a reached tier got those tiers marked Claimed without ever being paid. No money was wrongly paid; the tiers were wrongly locked.
+- Fix: `salaryClaimedSet(u)` reads only `claimedSalaryTiers`. `migrateRewardsToClaimOnce` now runs once more under marker `meta/rewardClaimOnceV2` and REPLACES each member's claimed list from the ledger only: a tier counts when a 'Team reward' row names it (`salaryTier`), or it is at or below the largest amount an old daily row paid that member. No payment row, no claim. It also clears the wrong marks the first version wrote. Test: test-reward-claim-once.js (35 checks).

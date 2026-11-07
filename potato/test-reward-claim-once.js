@@ -48,24 +48,31 @@ function world(user, total) {
   w = world({}, total); const paid = [];
   for (let i = 0; i < 4; i++) { r = await w.call('/salary/claim', {}); paid.push(r.code === 200 ? r.body.amount : r.code); }
   eq(paid, [2000, 4000, 6000, 400], 'one tap, one reward, each tier once'); eq(w.user().walletBalance, 12000);
-  // a member from the earlier DAILY wage (paid at the second tier) does not get those tiers again
-  w = world({ salaryTierReward: 4000 }, total);
-  r = await w.call('GET /salary/status'); eq(r.body.tiers.map(t => t.claimed), [true, true, false], 'tiers up to the one they were paid at count as claimed');
-  r = await w.call('/salary/claim', { tierId: 's1' }); eq(r.code, 409, 'not paid again'); eq(w.user().walletBalance, 0);
+  // THE BUG THE OWNER SAW: the old daily code wrote `salaryTierReward` just for opening the tab, so it proves nothing -- a member who only LOOKED
+  // (nothing paid) must see every tier open, not Claimed
+  w = world({ salaryTierReward: 6000 }, total);
+  r = await w.call('GET /salary/status'); eq(r.body.tiers.map(t => t.claimed), [false, false, false], 'a recorded tier reward alone never marks a tier Claimed');
+  r = await w.call('/salary/claim', { tierId: 's1' }); eq([r.code, r.body.amount], [200, 2000], 'and it can still be claimed'); eq(w.user().walletBalance, 2000);
   // a banned member is refused
   w = world({ status: 'banned' }, total); r = await w.call('/salary/claim', { tierId: 's1' }); eq(r.code, 403); eq(w.user().walletBalance, 0);
-  // ── the one-time migration: members paid under the old daily wage get their tiers written down as claimed, even if the amounts are edited later ──
+  // ── the one-time migration: tiers written down as claimed ONLY from real payment rows, replacing wrong marks left by the first version ──
   {
     const mig = src.slice(src.indexOf('async function migrateRewardsToClaimOnce'), src.indexOf('// The old Task Center and Mission Center claim routes'));
-    const db = makeDb({ meta: {}, transactions: { t1: { type: 'mission_salary', userId: 'a', amount: 4000 }, t2: { type: 'mission_salary', userId: 'a', amount: 2000 }, t3: { type: 'mission_salary', userId: 'b', amount: 2000 }, t4: { type: 'cashback', userId: 'c', amount: 9999 } },
-      users: { a: {}, b: { creditedSalaryDays: [1] }, c: { salaryTierReward: 6000 }, d: {}, e: { salaryTierReward: 2000, claimedSalaryTiers: ['s1'] } } });
+    const db = makeDb({ meta: { rewardClaimOnce: { at: 1 } }, transactions: {
+      t1: { type: 'mission_salary', userId: 'a', amount: 4000 }, t2: { type: 'mission_salary', userId: 'a', amount: 2000 },
+      t3: { type: 'mission_salary', userId: 'b', amount: 2000 }, t4: { type: 'cashback', userId: 'c', amount: 9999 },
+      t5: { type: 'mission_salary', userId: 'f', amount: 6000, salaryTier: 's3' } },
+      users: { a: {}, b: { creditedSalaryDays: [1] }, c: { salaryTierReward: 6000, claimedSalaryTiers: ['s1', 's2', 's3'] }, d: { salaryTierReward: 6000 },
+        e: { claimedSalaryTiers: ['s1', 's2'] }, f: {}, g: { claimedSalaryTiers: ['s1'] } } });
     const tiers = [{ id: 's1', target: 1, reward: 2000 }, { id: 's2', target: 2, reward: 4000 }, { id: 's3', target: 3, reward: 6000 }];
-    const c = vm.createContext({ db, FieldValue: FV, getSettings: async () => ({ salaryTiers: tiers }), taskRows: r => r, Math, Number, Array, Date, Map });
+    const c = vm.createContext({ db, FieldValue: FV, getSettings: async () => ({ salaryTiers: tiers }), taskRows: r => r, Math, Number, Array, Date, Map, Set });
     vm.runInContext(mig, c);
-    eq(await c.migrateRewardsToClaimOnce(), 4, 'four members had been paid the daily wage');
+    // the OLD marker (first version) does not stop the repair
+    eq(await c.migrateRewardsToClaimOnce(), 6, 'a, b, c (wrong marks removed), e (wrong marks removed), f, g (wrong mark removed) change; d is untouched');
     const U = id => db.rows.users[id].claimedSalaryTiers;
-    eq([U('a'), U('b'), U('c'), U('d'), U('e')], [['s1', 's2'], ['s1'], ['s1', 's2', 's3'], undefined, ['s1']], 'a: largest ledger payment 4000 -> tiers 1-2; b: 2000 -> tier 1; c: recorded tier reward 6000 -> all; d never claimed -> nothing');
-    eq(await c.migrateRewardsToClaimOnce(), 0, 'it runs once'); ok(db.rows.meta.rewardClaimOnce, 'and leaves its marker');
+    eq([U('a'), U('b'), U('c'), U('d'), U('e'), U('f'), U('g')], [['s1', 's2'], ['s1'], [], undefined, [], ['s3'], []],
+      'a: paid up to 4000 -> tiers 1-2; b: paid 2000 -> tier 1; c/e/g: never paid -> the wrong marks are cleared; d: only looked -> nothing; f: a tier-3 claim row -> tier 3');
+    eq(await c.migrateRewardsToClaimOnce(), 0, 'it runs once'); ok(db.rows.meta.rewardClaimOnceV2, 'and leaves its marker');
   }
   ok(/migrateRewardsToClaimOnce\(\)\.then/.test(src), 'it is started at boot');
   console.log('PASS: Myteam rewards are claim-once (' + n + ' checks)');
