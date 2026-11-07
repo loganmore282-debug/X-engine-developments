@@ -810,8 +810,9 @@ function payAAvailable(sett, region) {
 }
 function withdrawProvider(sett, region) {
   const w = (sett && sett.withdrawMethod) || 'follow';
-  // 'rotate' = every automatic gateway in turn (see PAYOUT_ROTATION); tavupay / lworxpay / obpay can also be pinned on their own.
-  const pinned = (w === 'rotate' || w === 'tavupay' || w === 'lworxpay' || w === 'obpay') ? w : null;
+  // 'rotate' = every automatic gateway in turn (see PAYOUT_ROTATION); tavupay / obpay can also be pinned on their own. LworxPay no longer sends payouts (owner): a
+  // setting still saved as 'lworxpay' is read as 'rotate' (never as MarzPay, which is what an unknown value would fall back to).
+  const pinned = (w === 'rotate' || w === 'lworxpay' ) ? 'rotate' : (w === 'tavupay' || w === 'obpay') ? w : null;
   let chosen = pinned || (w === 'follow' ? depositProvider(sett) : normalizeProviderValue(w));
   // TavuPay collects recharges only: payouts are not wired to it, so a payout that would "follow" a TavuPay recharge goes through
   // MarzPay, the historical default, exactly as before.
@@ -5539,7 +5540,7 @@ async function markWithdrawalProcessed(witRef, userId) {
 // PAYOUTS THROUGH ALL FOUR GATEWAYS, IN TURN
 // ═══════════════════════════════════════════
 // Owner: "let the server use all four for withdrawals, not picking one; if one fails the server tries another." Admin > Settings > Withdrawals >
-// "All gateways in turn" (withdrawMethod 'rotate'): each new withdrawal starts on the NEXT gateway of PesaJet, TavuPay, LworxPay, ObPay (an even
+// "All gateways in turn" (withdrawMethod 'rotate'): each new withdrawal starts on the NEXT gateway of PesaJet, TavuPay, ObPay (an even
 // round robin), and when a gateway CLEANLY refuses (it answered and said no: low balance, bad key, not whitelisted, a number it will not pay) the
 // withdrawal is handed to the next one at once. A gateway that refused is skipped for 5 minutes so the next withdrawals do not queue behind it.
 // MONEY SAFETY (unchanged): a lost reply is AMBIGUOUS -- the row stays on 'sending' and is NEVER handed to another gateway (that could pay twice);
@@ -5547,7 +5548,9 @@ async function markWithdrawalProcessed(witRef, userId) {
 // The three newer gateways store the same three fields: payGw (which one), payGwRef (our reference = the withdrawal id), payGwTxId (theirs).
 // Contracts, from the owner's saved documents: LworxPay POST /payout {amount, phone, reference, callback_url}; ObPay POST /payouts {amount, currency,
 // phone_number, customer_name, reference, callback_url}; TavuPay POST /payments {type:'disbursement', ...} (PesaJet's and MarzPay's are unchanged).
-const PAYOUT_ROTATION = Object.freeze(['pesajet', 'tavupay', 'lworxpay', 'obpay']);
+// LworxPay is NOT in the circle (owner: remove it from processing withdrawals). It still receives recharges, and its adapter below can still READ a payout that was
+// sent through it earlier, so those finish; it is never asked to send a new one.
+const PAYOUT_ROTATION = Object.freeze(['pesajet', 'tavupay', 'obpay']);
 const PAYOUT_NAMES = Object.freeze({ pesajet: 'PesaJet', marzpay: 'MarzPay', tavupay: 'TavuPay', lworxpay: 'LworxPay', obpay: 'ObPay' });
 const PAYOUT_PAUSE_MS = 5 * 60 * 1000;
 const _payoutPausedUntil = new Map();
@@ -5597,13 +5600,7 @@ const PAYOUT_ADAPTERS = {
     read: w => tavupayGetTx(w.payGwTxId, { attempts: 1 }),
   },
   lworxpay: {
-    async send({ wit, id }) {
-      const body = { amount: Math.round(Number(wit.net)), phone: lworxPhone(wit.phone), reference: id };
-      const cb = GATEWAY_DEFS.lworxpay.callback(); if (cb && /^https:\/\//i.test(cb)) body.callback_url = cb;
-      const r = await _gwRequest('lworxpay', '/payout', { method: 'POST', body });
-      const d = (r.data && typeof r.data.data === 'object' && r.data.data) || {};
-      return { r, txId: String(d.transaction_id || '').trim() || id };   // it can always be read back by OUR reference (the withdrawal id)
-    },
+    // No send(): LworxPay does not send payouts any more (owner). Only the read below stays, so a payout it already took still settles.
     read: w => gatewayGetTx('lworxpay', w.payGwRef, { attempts: 1 }),
   },
   obpay: {
@@ -5849,8 +5846,8 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       };
     }
 
-    if (PAYOUT_ADAPTERS[chosen]) {
-      // TavuPay / LworxPay / ObPay payout -- the PesaJet branch above with each gateway's own request. The withdrawal id is written first as our
+    if (PAYOUT_ADAPTERS[chosen] && PAYOUT_ADAPTERS[chosen].send) {
+      // TavuPay / ObPay payout -- the PesaJet branch above with each gateway's own request. The withdrawal id is written first as our
       // reference (and is the idempotency key / unique reference sent); a lost reply is ambiguous and the row stays on 'sending'; acceptance lands
       // on 'processing' and the gateway's webhook (a hint) or the reconciler's live read finishes it. See payGwApplyPayout.
       const ad = PAYOUT_ADAPTERS[chosen], gname = PAYOUT_NAMES[chosen];
@@ -5893,6 +5890,9 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
         meta: { amount: wit.net, dest: wit.phone, userId: wit.userId },
       };
     }
+
+    // Anything that is not MarzPay and has no sender above (LworxPay, which no longer sends payouts) must never fall through to MarzPay's send below.
+    if (chosen !== 'marzpay') return { code: 400, body: { status: 'error', message: (PAYOUT_NAMES[chosen] || 'This gateway') + ' does not send payouts. Choose another payout method in Settings.' } };
 
     const sendingMarker = crypto.randomUUID();
     // Codex-caught real bug (2nd money-flow audit): marzReference -- the
@@ -5972,7 +5972,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
     };   // end of attemptVia
     const mode = withdrawProvider(settNow);
     const chain = mode === 'rotate' ? payoutRotationOrder() : [mode];
-    if (!chain.length) return { code: 400, body: { status: 'error', message: 'No automatic payout gateway is set up on the server yet (PesaJet, TavuPay, LworxPay or ObPay). The withdrawal stays pending and untouched.' } };
+    if (!chain.length) return { code: 400, body: { status: 'error', message: 'No automatic payout gateway is set up on the server yet (PesaJet, TavuPay or ObPay). The withdrawal stays pending and untouched.' } };
     const refusals = [];
     for (let i = 0; i < chain.length; i++) {
       const result = await attemptVia(chain[i]);
@@ -7401,8 +7401,8 @@ app.post('/admin/settings/update', async (req, res) => {
     // MarzPay) -- it just can never be WRITTEN again going forward.
     if ('depositMethod' in updates && !['marzpay', 'pesajet', 'tavupay'].includes(updates.depositMethod))
       return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay', 'pesajet' or 'tavupay'` });
-    if ('withdrawMethod' in updates && !['follow', 'marzpay', 'pesajet', 'tavupay', 'lworxpay', 'obpay', 'rotate', 'manual'].includes(updates.withdrawMethod))
-      return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'rotate', 'marzpay', 'pesajet', 'tavupay', 'lworxpay', 'obpay' or 'manual'` });
+    if ('withdrawMethod' in updates && !['follow', 'marzpay', 'pesajet', 'tavupay', 'obpay', 'rotate', 'manual'].includes(updates.withdrawMethod))
+      return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'rotate', 'marzpay', 'pesajet', 'tavupay', 'obpay' or 'manual'` });
     // The link-preview words: plain text only, trimmed and capped (Telegram shows about this much).
     for (const [key, max] of [['linkPreviewTitle', 70], ['linkPreviewText', 260]]) {
       if (!(key in updates)) continue;

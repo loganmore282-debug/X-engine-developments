@@ -380,7 +380,7 @@ async function finish() {
   // The enums, or the admin can never save the choice.
   ck(/'depositMethod' in updates && !\['marzpay', 'pesajet', 'tavupay'\]/.test(S),
      'depositMethod accepts pesajet at /admin/settings/update');
-  ck(/'withdrawMethod' in updates && !\['follow', 'marzpay', 'pesajet', 'tavupay', 'lworxpay', 'obpay', 'rotate', 'manual'\]/.test(S),
+  ck(/'withdrawMethod' in updates && !\['follow', 'marzpay', 'pesajet', 'tavupay', 'obpay', 'rotate', 'manual'\]/.test(S),
      'and so does withdrawMethod');
 
   // Webhooks arrive with no Origin. Without the exemption the host guard
@@ -458,7 +458,7 @@ async function finish() {
   // reverted to pending, acceptance is not completion.
   {
     const i = S.indexOf("if (chosen === 'pesajet')");
-    const nextGateway = S.indexOf('if (PAYOUT_ADAPTERS[chosen])', i);
+    const nextGateway = S.indexOf('if (PAYOUT_ADAPTERS[chosen] &&', i);
     if (i < 0 || nextGateway < i) throw new Error('PesaJet payout boundaries missing');
     const body = S.slice(i, nextGateway);
     ck(i > 0, 'processWithdrawalCore has a PesaJet branch');
