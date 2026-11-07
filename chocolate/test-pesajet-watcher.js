@@ -68,7 +68,7 @@ function env(rows) {
   e._notifyDeposit('nobody-waiting'); ok(true, 'notifying a deposit nobody waits for is harmless');
   // the real callers wake held requests, and the route only holds under the right conditions
   ok(/async function creditDeposit\(depDoc, source\) \{[\s\S]*?_notifyDeposit\(depDoc\.id\)/.test(src), 'creditDeposit wakes held requests');
-  ok(/async function markDepositFailed\(depRef, userId, reason\) \{\s*try \{ return await _markDepositFailedNow[\s\S]*?finally \{[^}]*_notifyDeposit\(depRef\.id\)/.test(src), 'markDepositFailed wakes held requests (also on errors)');
+  ok(/async function markDepositFailed\(depRef, userId, reason, via\) \{\s*try \{ return await _markDepositFailedNow[\s\S]*?finally \{[^}]*_notifyDeposit\(depRef\.id\)/.test(src), 'markDepositFailed wakes held requests (also on errors)');
   const rs0 = src.indexOf("app.post('/deposit/marzpay/status'"); const route0 = src.slice(rs0, src.indexOf("// ── CARD DEPOSIT (MarzPay) ──", rs0));
   ok(/Math\.min\(Math\.max\(parseInt\(req\.body\.waitMs, 10\) \|\| 0, 0\), 9000\)/.test(route0), 'the hold is capped at 9 s whatever the client asks');
   ok(/holdMs > 0 && dep\.provider === 'pesajet' && \(dep\.status === 'pending' \|\| dep\.status === 'initiating'\) && pesajetWatcherFresh\(depSnap\.id\)/.test(route0), 'it holds only a PesaJet deposit that is still pending AND has a live watcher');
