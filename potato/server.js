@@ -5708,8 +5708,24 @@ async function reconcileGatewayPayouts() {
       } catch (e) { console.error('Gateway payout recovery error:', e.message); }
       finally { _withdrawInFlight.delete(doc.id); }
     }
+    await watchRejectedLworxPayouts();
   } catch (e) { console.error('Reconcile gateway payouts error:', e.message); }
   return settled;
+}
+// A LworxPay payout the owner rejected while it was pending is looked at every 30 minutes for 14 days: if LworxPay completes it after all, the member has been refunded AND
+// paid, so the row is flagged (paidAfterReject) for the admin panel and the log. Nothing is changed on the member's money automatically.
+async function watchRejectedLworxPayouts() {
+  const snap = await db.collection('withdrawals').where('rejectedWhilePending', '==', true).limit(30).get();
+  for (const doc of snap.docs) {
+    const w = doc.data(), now = Date.now();
+    if (w.paidAfterReject || w.payGw !== 'lworxpay' || now - (Number(w.rejectedAtMs) || 0) > 14 * 24 * 3600 * 1000 || now - (Number(w.lateCheckedAtMs) || 0) < 30 * 60 * 1000) continue;
+    await doc.ref.update({ lateCheckedAtMs: now }).catch(() => {});
+    const t = await PAYOUT_ADAPTERS.lworxpay.read(w).catch(() => null);
+    if (t && t.status === 'success') {
+      console.error(`MONEY: LworxPay COMPLETED payout ${doc.id} (${w.net}) that was rejected and refunded -- the member was paid twice; collect it back`);
+      await doc.ref.update({ paidAfterReject: true, paidAfterRejectAtMs: now }).catch(() => {});
+    }
+  }
 }
 async function processWithdrawalCore(withdrawalId, processedBy) {
   try {
@@ -8889,7 +8905,7 @@ app.post('/admin/withdrawals/list', async (req, res) => {
 // Reject refunds the member, so it must never run on a payout that may be live at the gateway. Pending rows were never sent. For every other row the
 // gateway is asked first (PesaJet by transaction id, or by our reference when the id was never recorded; MarzPay by uuid).
 // Only a final failed/expired answer, or PesaJet reporting that it has no such payment at all, allows the refund.
-async function payoutRejectGuard(witId, w) {
+async function payoutRejectGuard(witId, w, opts) {
   if (w.status === 'pending') return null;
   const busy = (what) => ({ code: 503, message: `${what} could not be reached to confirm this payout. Try again in a moment.` });
   const live = (what, st) => ({ code: 409, message: `${what} reports this payout as ${st || 'unknown'}, so it cannot be rejected. Wait for the final result.` });
@@ -8905,6 +8921,17 @@ async function payoutRejectGuard(witId, w) {
     if (f.providerDown || (!f.found && !f.complete)) return { code: 503, message: 'PesaJet could not confirm whether this payout was sent (no transaction id was saved). Try again in a moment, or check PesaJet\'s own dashboard first.' };
     if (f.found && !FINAL_FAIL.includes(f.status)) return live('PesaJet', f.status);
     return null;
+  }
+  // LworxPay no longer sends payouts (owner), so a payout of its that is stuck pending can be rejected -- once the owner has confirmed it. A payout it reports as
+  // COMPLETED went out and is never rejectable. Anything else (pending, waiting for approval, unreachable, no record) needs the owner's explicit OK, because it might still
+  // be paid later; rejecting then refunds the member now, and the row is watched afterwards (see watchRejectedLworxPayouts).
+  if (w.payGw === 'lworxpay') {
+    const t = await PAYOUT_ADAPTERS.lworxpay.read(w).catch(() => ({ providerDown: true }));
+    if (t.status === 'success') return { code: 409, message: 'LworxPay says this payout was SENT (completed), so it cannot be rejected. Nothing was refunded.' };
+    if (t.status === 'failed') return null;
+    if (opts && opts.confirmPending) return null;
+    const what = t.providerDown || (t.unavailable && t.httpStatus !== 404) ? 'could not be asked about this payout just now' : t.unavailable ? 'has no record of this payout' : `shows this payout as ${t.rawStatus || t.status || 'pending'} (not completed)`;
+    return { code: 409, needsConfirm: true, message: `LworxPay ${what}. Rejecting refunds the member now. If LworxPay still completes it later, the member is paid twice, so cancel it in the LworxPay dashboard too. If it does get paid, this row will be flagged.` };
   }
   if (w.payGw && PAYOUT_ADAPTERS[w.payGw]) {
     const gname = PAYOUT_NAMES[w.payGw];
@@ -8945,12 +8972,14 @@ app.post('/admin/withdraw/reject', async (req, res) => {
     // (the payout already happened; rejecting would refund on top of it).
     if (w.status !== 'pending' && w.status !== 'processing' && w.status !== 'sending') return res.status(400).json({ status: 'error', message: `Cannot reject, the status is '${w.status}'` });
     // A payout the gateway may already have must be asked about first: rejecting (= refunding) a payout that then completes pays the member twice.
-    const blocked = await payoutRejectGuard(witId, w);
-    if (blocked) return res.status(blocked.code).json({ status: 'error', message: blocked.message });
+    const blocked = await payoutRejectGuard(witId, w, { confirmPending: req.body.confirmPending === true });
+    if (blocked) return res.status(blocked.code).json({ status: 'error', message: blocked.message, ...(blocked.needsConfirm ? { needsConfirm: true } : {}) });
     const { declined, refunded } = await declineWithdrawalAndRefund(ref, w.userId, stripHtml(textOf(req.body.reason)).slice(0, 200) || 'Rejected by admin', ['pending', 'processing', 'sending'], req.adminUser?.username || 'owner');
     if (!declined) return res.status(409).json({ status: 'error', message: 'Withdrawal status changed before this could be applied. Refresh and try again.' });
     await finalizeWithdrawalTransactionRecord(witId, 'declined', refunded);
-    logAdminAction(req, 'withdrawal_rejected', { withdrawalId: witId, refunded });
+    // A LworxPay payout rejected while it was still pending is watched afterwards: if LworxPay completes it anyway, the row is flagged (paidAfterReject).
+    if (w.payGw === 'lworxpay') await ref.update({ rejectedWhilePending: true, rejectedAtMs: Date.now() }).catch(() => {});
+    logAdminAction(req, 'withdrawal_rejected', { withdrawalId: witId, refunded, ...(w.payGw === 'lworxpay' ? { lworxpay: true } : {}) });
     res.json({ status: 'success', message: refunded ? 'Withdrawal rejected and refunded' : 'Withdrawal rejected, refund is pending and will complete shortly' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
   finally { _withdrawInFlight.delete(witId); }
