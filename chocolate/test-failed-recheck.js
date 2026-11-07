@@ -111,6 +111,15 @@ const wallet = id => fm.__stores.users.get(id).walletBalance, dep = id => fm.__s
   const w3 = wallet('d');
   await J('POST', '/tavupay/webhook', { event: 'payment.failed', reference: 'TV6' }); await sleep(400);
   ok(dep('wFail').status === 'failed' && dep('wFail').failedVia === 'first' && wallet('d') === w3, 'a failed webhook leaves an already failed row exactly as it was');
+  // ---- the admin presses Force-credit on a failed row while the re-check, a webhook and a second Force-credit all fire: the member is paid ONCE
+  failedDeposit('dRace', 'h', { provider: 'tavupay', tavupayRef: 'TV7', createdAt: old(5 * MIN) }); says.tavupay.TV7 = { status: 'successful', amount: 32000 };
+  const wr0 = wallet('h');
+  const race = await Promise.all([J('POST', '/admin/deposit/force-credit', { depositId: 'dRace' }, true), J('GET', '/admin/payments/sync', null, true), J('POST', '/tavupay/webhook', { event: 'payment.success', reference: 'TV7', data: { amount: 32000 } }), J('POST', '/admin/deposit/force-credit', { depositId: 'dRace' }, true)]);
+  await sleep(800);
+  ok(wallet('h') === wr0 + 32000, 'Force-credit + Sync + a webhook + a second Force-credit on one failed row: paid exactly once', { paid: wallet('h') - wr0, answers: race.map(x => x.s) });
+  ok(dep('dRace').status === 'matched' && tx('dRace').status === 'success' && tx('dRace').amount === 32000, 'and the row and its history are consistent', { st: dep('dRace').status, tx: tx('dRace') });
+  const again2 = await J('POST', '/admin/deposit/force-credit', { depositId: 'dRace' }, true);
+  ok(again2.s === 200 && /Already credited/.test(again2.j.message || '') && wallet('h') === wr0 + 32000, 'pressing Force-credit later says Already credited and pays nothing', again2);
   // ---- the periodic sweep: only rows that are due (new: every 10 minutes; older than 2 hours: hourly)
   failedDeposit('p1', 'a', { tavupayRef: 'P1' }); failedDeposit('p2', 'a', { tavupayRef: 'P2', recheckedAtMs: Date.now() - 1000 });
   failedDeposit('p3', 'a', { tavupayRef: 'P3', createdAt: old(30 * MIN), recheckedAtMs: old(20 * MIN).getTime() });
