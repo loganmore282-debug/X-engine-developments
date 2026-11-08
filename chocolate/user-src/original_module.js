@@ -5884,12 +5884,11 @@ function paintWithdrawSheet(s){
     <div class="v-sec"><span class="bar"></span><h2>Trade Password</h2></div>
  
     <div class="v-pin"><input id="witPin" type="text" inputmode="numeric" maxlength="6" placeholder="Enter trade password" autocomplete="off"></div>
-    <div class="v-fee">Fee: ${fee}%</div>
+    <div class="v-fee">Fee: ${fee}%</div>   <!-- the fee is shown ONCE, here beside the button (the owner: it was showing twice; the instructions below no longer repeat it) -->
     <button class="v-cta fade" id="witSubmitBtn" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Confirm Withdraw</button>
     <div class="v-info">
       <h3>Withdrawal Instructions</h3>
       <ol>
-        <li>Fee: ${fee}%</li>
         <li>Withdrawal amounts should be between ${vGroup(min)}${max ? ' and ' + vGroup(max) : ' and your available balance'}${mult ? ', in multiples of ' + vGroup(mult) : ''}.</li>
         <li>${perDay ? 'You can make up to ' + perDay + ' withdrawals per day.' : 'One cash-out at a time. Wait for a pending request to finish before the next.'}</li>
         <li>${win.enabled ? 'Withdrawal time: ' + esc(secs(win.from)) + ' - ' + esc(secs(win.to)) + '.' : 'Withdrawals can be requested at any time of day.'}</li>

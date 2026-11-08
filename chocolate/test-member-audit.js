@@ -76,7 +76,7 @@ async function main(){
   assert(d.querySelector('#witSubmitBtn').classList.contains('fade')===false,'the button un-fades once an amount is typed');
   bank.resolve({status:'success',accounts:[{id:'wallet',network:'MTN Mobile Money',phone:'256771234567',holder:'Test Member'}]});await opened;
   assert.equal(d.querySelector('#witAmount'),input);assert.equal(input.value,'15,000');
-  assert.equal(d.querySelectorAll('.v-info li').length,4,'four withdrawal instructions');assert.match(d.querySelector('.v-info').textContent,/Fee: 0%/);assert(d.querySelector('#witPin'),'the Trade Password is asked on the Withdraw screen');
+  assert.equal(d.querySelectorAll('.v-info li').length,3,'three withdrawal instructions (the fee is not repeated in them)');assert.match(d.querySelector('.v-fee').textContent,/Fee: 0%/);assert.equal((d.querySelector('#sheetBody').textContent.match(/Fee:/g)||[]).length,1,'the fee is shown once on the Withdraw page, not twice');assert.doesNotMatch(d.querySelector('.v-info').textContent,/Fee:/);assert(d.querySelector('#witPin'),'the Trade Password is asked on the Withdraw screen');
   const stale=deferred();w.api=()=>stale.promise;const previous=w.openWithdrawSheet();
   w.api=async()=>({status:'success',accounts:[{id:'new',network:'Airtel Money',phone:'256751234567',holder:'Current Wallet'}]});
   await w.openWithdrawSheet();
