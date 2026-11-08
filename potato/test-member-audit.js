@@ -61,6 +61,19 @@ async function main(){
   w.eval('STATE.page="account"');await w.renderAccount();
   assert.match(d.querySelector('.pt-mystat').textContent,/70,000\.00/);
   assert.deepEqual([...d.querySelectorAll('.pt-menu b, .pt-menu span')].map(e=>e.textContent.trim()).filter(Boolean).slice(0,9),['Balance Detail','Messages','Login Password','Trade Password','Google Authenticator','Bank Card','Gift Code','APP Download','About Us']);
+  { // the owner's switch (Admin > Settings): off = the Google Authenticator row is gone, live (no repaint) and on a fresh paint; on = it is back after the Trade Password
+    const rows=()=>[...d.querySelectorAll('.pt-menu .pt-mrow b')].map(e=>e.textContent.trim());
+    const marker=d.querySelector('.pt-menu');
+    w.eval('STATE.settings.requireTwofaToWithdraw=false');w.patchAuthRow();
+    assert.deepEqual(rows(),['Balance Detail','Messages','Login Password','Trade Password','Bank Card','Gift Code','APP Download','About Us'],'switched off: the row goes away');
+    assert.equal(d.querySelector('.pt-menu'),marker,'in place: the menu is not repainted');
+    w.eval('STATE.settings.requireTwofaToWithdraw=true');w.patchAuthRow();
+    assert.deepEqual(rows(),['Balance Detail','Messages','Login Password','Trade Password','Google Authenticator','Bank Card','Gift Code','APP Download','About Us'],'switched on: the row is back right after the Trade Password');
+    w.eval('STATE.settings.requireTwofaToWithdraw=false');await w.renderAccount();
+    assert.equal(rows().includes('Google Authenticator'),false,'a fresh paint with the switch off draws no row');
+    w.eval('delete STATE.settings.requireTwofaToWithdraw');await w.renderAccount();
+    assert.equal(rows().includes('Google Authenticator'),true,'and with the switch on (the default) it is drawn');
+  }
   w.eval('STATE.page="home"');
   // The old full-screen "Congratulations!" win card (showChestWin()) was
   // removed -- a redeemed gift code is now just this toast (see
@@ -83,7 +96,8 @@ async function main(){
   stale.resolve({status:'success',accounts:[{id:'old',phone:'256701111111'}]});await previous;
   assert.match(d.querySelector('#witWalletBlock').textContent,/Current Wallet/i,'late request must not replace a new screen');
   { // COMPULSORY Google Authenticator: rule on and nothing set up -> Withdraw sends nothing, asks for no Trade Password, says why, then opens the set-up page
-    let sent=0;const realPost=w.post,realNotify=w.notify,realApi=w.api,realAsk=w.askAuthCode,notes=[];
+    let sent=0;const realPost=w.post,realNotify=w.notify,realApi=w.api,realAsk=w.askAuthCode,realRefresh=w.refreshAfterWithdraw,notes=[];
+    w.refreshAfterWithdraw=()=>{};   // a success here would otherwise reload the account from the stubbed api
     w.post=()=>{sent++;return Promise.resolve({status:'success'})};w.notify=(m,cb)=>{notes.push([m,cb])};
     w.eval('STATE.settings.requireTwofaToWithdraw=true;STATE.account.twofaEnabled=false');
     d.querySelector('#witAmount').value='5000';
@@ -94,17 +108,31 @@ async function main(){
     w.api=async()=>({status:'success',enabled:false,backupLeft:0});
     notes[0][1]();await tick();
     assert.match(d.querySelector('#sheetBody').textContent,/Google Authenticator is required/);assert.match(d.querySelector('#sheetBody').textContent,/before you can withdraw/);
-    // the server saying so (an old copy of the rule or the account) does the same
+    // the owner's switch OFF: a member who set it up is NOT asked for a code, and nothing about it is sent
     w.eval('STATE.account.twofaEnabled=true;STATE.settings.requireTwofaToWithdraw=false');
     w.api=async()=>({status:'success',accounts:[{id:'wallet',network:'MTN Mobile Money',phone:'256771234567',holder:'Test Member'}]});
     await w.openWithdrawSheet();d.querySelector('#witAmount').value='5000';notes.length=0;
-    w.askAuthCode=async()=>'123456';
+    let asked=0,bodies=[];w.askAuthCode=async()=>{asked++;return '123456'};
+    w.post=(path,body)=>{sent++;bodies.push(body);return Promise.resolve({status:'success',net:4250})};
+    let run=w.submitWithdraw();await tick();d.querySelector('#pinInput').value='123456';d.querySelector('#pinOk').click();await run;
+    assert.equal(asked,0,'switch off: no code dialog');assert.equal(bodies.length,1);assert.equal('totp' in bodies[0],false,'switch off: no code is sent');
+    // the app held an old copy of the rule (settings are refreshed every 30 seconds): the server says a code is needed -> the app learns it is ON and asks next time
+    await w.openWithdrawSheet();d.querySelector('#witAmount').value='5000';notes.length=0;
+    w.post=(path,body)=>{sent++;bodies.push(body);return Promise.resolve({status:'error',code:'TWOFA_REQUIRED',message:'Enter the 6-digit code from Google Authenticator.'})};
+    run=w.submitWithdraw();await tick();d.querySelector('#pinInput').value='123456';d.querySelector('#pinOk').click();await run;
+    assert.equal(w.eval('STATE.settings.requireTwofaToWithdraw'),true,'the server\'s word wins over the app\'s old copy of the rule');
+    await w.openWithdrawSheet();d.querySelector('#witAmount').value='5000';
+    run=w.submitWithdraw();await tick();d.querySelector('#pinInput').value='123456';d.querySelector('#pinOk').click();await run;
+    assert.equal(asked,1,'and the next withdrawal asks for the code');assert.equal(bodies[bodies.length-1].totp,'123456');
+    // the server saying a member has not set it up (an old copy of the account) does the same notice as the tap
+    w.eval('STATE.account.twofaEnabled=true;STATE.settings.requireTwofaToWithdraw=false');
+    await w.openWithdrawSheet();d.querySelector('#witAmount').value='5000';notes.length=0;
     w.post=(path,body)=>{sent++;return Promise.resolve({status:'error',code:'TWOFA_SETUP_REQUIRED',message:'To withdraw you must first set up Google Authenticator.'})};
-    const run=w.submitWithdraw();await tick();d.querySelector('#pinInput').value='123456';d.querySelector('#pinOk').click();await run;
-    assert.equal(sent,1);assert.equal(w.eval('STATE.account.twofaEnabled'),false,'the app learns the account is not set up');
+    run=w.submitWithdraw();await tick();d.querySelector('#pinInput').value='123456';d.querySelector('#pinOk').click();await run;
+    assert.equal(w.eval('STATE.account.twofaEnabled'),false,'the app learns the account is not set up');
     assert.match(notes[notes.length-1][0],/Google Authenticator is required to withdraw/,'the server\'s refusal leads to the same notice');
     await w.openWithdrawSheet();
-    w.post=realPost;w.notify=realNotify;w.api=realApi;w.askAuthCode=realAsk;w.eval('STATE.settings.requireTwofaToWithdraw=false');
+    w.post=realPost;w.notify=realNotify;w.api=realApi;w.askAuthCode=realAsk;w.refreshAfterWithdraw=realRefresh;w.eval('STATE.settings.requireTwofaToWithdraw=false');
   }
   const payment=deferred();let posts=0;
   w.post=()=>{posts++;return payment.promise};w.notify=()=>{};w.refreshAfterWithdraw=()=>{};

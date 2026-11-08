@@ -17,10 +17,11 @@ const block = mod.slice(a, b);
 const dlg = mod.slice(mod.indexOf('function askAuthCode(){'), mod.indexOf('// Transaction Statement (openBalanceRecordSheet()) is cache-first'));
 
 // ---- wiring
-ok(/\$\{ptMenuRow\('shield', 'Trade Password', 'openChangeTradePasswordSheet\(\)'\)\}\s*\$\{ptMenuRow\('auth', 'Google Authenticator', 'openAuthenticatorSheet\(\)'\)\}/.test(mod), 'the My page lists Google Authenticator right after the Trade Password');
+ok(/\$\{ptMenuRow\('shield', 'Trade Password', 'openChangeTradePasswordSheet\(\)'\)\}\s*\$\{gaMenuRowHtml\(\)\}/.test(mod), 'the My page lists Google Authenticator right after the Trade Password, through gaMenuRowHtml() (only while the feature is on)');
+ok(/if \(changed\) \{ applyBrandName\(\); patchAuthRow\(\); \}/.test(mod), 'the 30-second settings check adds or takes away the row in place');
 ok(/id="totpBg"/.test(html) && /id="totpInput"/.test(html) && /id="totpOk"/.test(html) && /id="totpNo"/.test(html) && /id="totpAlt"/.test(html), 'the code dialog exists in the page');
 ok(/\.pt-ga-card/.test(html) && /\.pt-ga-qr/.test(html) && /\.pt-ga-codes/.test(html), 'the page has its styles');
-ok(/if \(STATE\.account && STATE\.account\.twofaEnabled\) \{\s*witCode = await askAuthCode\(\);/.test(mod) && /Object\.assign\(\{ amount, network: acct\.network, phone: acct\.phone, pin: witPin \}, witCode \? \{ totp: witCode \} : \{\}\)/.test(mod), 'a withdrawal asks for the code after the Trade Password, only when it is on, and sends it as `totp`');
+ok(/if \(authRequiredToWithdraw\(\) && STATE\.account && STATE\.account\.twofaEnabled\) \{\s*witCode = await askAuthCode\(\);/.test(mod) && /Object\.assign\(\{ amount, network: acct\.network, phone: acct\.phone, pin: witPin \}, witCode \? \{ totp: witCode \} : \{\}\)/.test(mod), 'a withdrawal asks for the code after the Trade Password, only when it is on, and sends it as `totp`');
 ok(/const tp = \$\('totpBg'\); if \(tp\) tp\.classList\.remove\('show'\);/.test(mod), 'a session that ends takes the code dialog down with it');
 ok(/Ensure|noopener/.test(block) && !/\\ud83|\\u26|[\u{1F300}-\u{1FAFF}]/u.test(block), 'safe store links and no emoji on the page');
 ok(!/\b2FA\b/.test(block) && !/\b2FA\b/.test(dlg), 'no abbreviation "2FA" in anything the member reads');
@@ -30,7 +31,8 @@ ok(/id="reset2faBtn"/.test(admin) && /\/admin\/user\/reset-2fa/.test(admin) && /
 ok(/app\.post\('\/admin\/user\/reset-2fa'[\s\S]{0,200}verifyOwner/.test(server), 'only the owner can reset it');
 // ---- compulsory: the rule, the owner's switch and where the app checks it
 ok(/requireTwofaToWithdraw: true,/.test(server) && /SETTINGS_BOOLEAN_FIELDS = \[[^\]]*'requireTwofaToWithdraw'/.test(server), 'the rule is on by default and can be saved from Admin > Settings');
-ok(/else if \(sett\.requireTwofaToWithdraw !== false\) \{[\s\S]{0,700}code: 'TWOFA_SETUP_REQUIRED'/.test(server), 'the server refuses a member who has not set it up');
+ok(/const twofaFeature = sett\.requireTwofaToWithdraw !== false;[\s\S]{0,1400}code: 'TWOFA_SETUP_REQUIRED'/.test(server), 'the server refuses a member who has not set it up, and asks nothing at all when the owner has switched the feature off');
+ok(/code: 'TWOFA_DISABLED'/.test(server) && /available: m\.featureOn/.test(server), 'with the feature off the member routes are closed and the status says so');
 ok(/id="sReqTwofa"/.test(admin) && /requireTwofaToWithdraw:\$\('sReqTwofa'\)\.checked/.test(admin) && /twofaReq/.test(admin), 'the admin has the switch, saves it, and the member page words it');
 ok(/if \(witNeedsAuthSetup\(\)\) return gaRequiredNotice\(\);\s*\/\/ The Trade Password is asked/.test(mod), 'the app checks the rule when Withdraw is tapped, BEFORE the Trade Password is asked');
 ok(/r\.code === 'TWOFA_SETUP_REQUIRED'[\s\S]{0,260}return gaRequiredNotice\(\);/.test(mod), 'and when the server says so (an old copy of the account or rule)');
@@ -43,6 +45,7 @@ w.eval(`
   function $(id){ return document.getElementById(id); }
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   var PT_MENU_IC = { auth: '<svg id="icAuth"></svg>', tick: '<svg id="icTick"></svg>' };
+  function ptMenuRow(icon, label, fn){ return '<button type="button" class="pt-mrow" onclick="' + fn + '"><b>' + label + '</b></button>'; }
   function vPwBox(id, ph){ return '<div class="pt-pbox"><input id="' + id + '" type="password" placeholder="' + ph + '"></div>'; }
   function joinedStamp(ts){ return 'WHEN'; }
   function ptPwClear(){ var e = $('ptPwErr'); if (e) e.textContent = ''; }
@@ -116,7 +119,6 @@ const ev = expr => JSON.parse(JSON.stringify(w.eval(expr)));   // objects made i
   eq(ev('__calls.filter(c => c[0] === "/account/2fa/disable").pop()[1]'), { pin: '123456', code: 'abcde-fghjk' }, 'off: the Trade Password and the typed code are sent as typed');
   ok(w.eval('STATE.account.twofaEnabled') === false && /Google Authenticator is required/.test(txt()) && w.eval('__notes').includes('Google Authenticator is off'), 'off: the app knows, and the page is back to the intro');
   w.gaManage('off'); ok(/You will not be able to withdraw until you set Google Authenticator up again/.test(txt()), 'turn off: warns that withdrawing stops until it is set up again');
-  w.eval(`STATE.settings = { requireTwofaToWithdraw: false }`); w.gaManage('off'); ok(/Withdrawals will need only your Trade Password again/.test(txt()), 'turn off, owner\'s switch off: the older wording'); w.eval('STATE.settings = {}'); w.gaPaint();
   // a phone clock far from the server's is called out
   w.eval('_ptSkewMs = 45000'); w.gaPaint(); ok(/clock is about 45 seconds away/.test(txt()), 'a phone clock more than 20 seconds off is warned about');
   w.eval('_ptSkewMs = 8000'); w.gaPaint(); ok(!/clock is about/.test(txt()), 'a small difference is not');
@@ -175,8 +177,25 @@ const ev = expr => JSON.parse(JSON.stringify(w.eval(expr)));   // objects made i
   w.openAuthenticatorSheet(); await tick();
   ok(w.eval('_ga.forWithdraw') === false && !/before you can withdraw/.test(txt()) && /Google Authenticator is required/.test(txt()), 'from the My page: the same page without the "before you can withdraw" line');
   // the owner's switch off: the older, optional wording
-  w.eval(`STATE.settings = { requireTwofaToWithdraw: false }`); w.openAuthenticatorSheet(); await tick();
-  ok(/Secure your withdrawals/.test(txt()) && !/is required/.test(txt()), 'owner\'s switch off: the page offers it instead of demanding it');
+  // ---- the owner's switch OFF: the whole feature goes away
+  w.eval(`STATE.settings = { requireTwofaToWithdraw: false }; STATE.account = { twofaEnabled: true }`);
+  ok(w.gaMenuRowHtml() === '', 'switch off: the My page draws no Google Authenticator row');
+  ok(w.witNeedsAuthSetup() === false && w.authRequiredToWithdraw() === false, 'switch off: nobody is sent to set it up, and the app knows the feature is off');
+  w.eval(`STATE.settings = {}`);
+  ok(/data-ga-row="1"/.test(w.gaMenuRowHtml()) && /Google Authenticator/.test(w.gaMenuRowHtml()) && /openAuthenticatorSheet\(\)/.test(w.gaMenuRowHtml()), 'switch on: the row is drawn, marked so it can be found, and opens the page');
+  // the row is added and taken away IN PLACE (no repaint of the My page) when the settings change while it is open
+  w.document.body.insertAdjacentHTML('beforeend', '<div class="pt-menu" id="fakeMenu"><button class="pt-mrow"><b>Balance Detail</b></button><button class="pt-mrow"><b>Login Password</b></button><button class="pt-mrow"><b>Trade Password</b></button><button class="pt-mrow"><b>Bank Card</b></button></div>');
+  const menuTexts = () => [...w.document.querySelectorAll('#fakeMenu b')].map(e => e.textContent);
+  w.patchAuthRow(); eq(menuTexts(), ['Balance Detail', 'Login Password', 'Trade Password', 'Google Authenticator', 'Bank Card'], 'switch on while the page is open: the row appears right after the Trade Password');
+  w.patchAuthRow(); ok(menuTexts().filter(t => t === 'Google Authenticator').length === 1, 'and a second check does not add it again');
+  w.eval(`STATE.settings = { requireTwofaToWithdraw: false }`); w.patchAuthRow(); eq(menuTexts(), ['Balance Detail', 'Login Password', 'Trade Password', 'Bank Card'], 'switch off while the page is open: the row goes away');
+  w.eval(`STATE.settings = {}`); w.patchAuthRow(); ok(menuTexts().includes('Google Authenticator'), 'switched on again: it comes back');
+  w.document.getElementById('fakeMenu').remove(); w.patchAuthRow();   // no menu on screen: nothing happens and nothing breaks
+  // an old copy of the app (or an open page) when the owner has switched it off: the server answers available:false and the page says so
+  w.eval(`STATE.settings = {}; STATE.account = { twofaEnabled: false }; __answers['/account/2fa/status'] = { status: 'success', available: false, enabled: false, backupLeft: 0 };`);
+  w.openAuthenticatorSheet(); await tick();
+  ok(/Google Authenticator is switched off/.test(txt()) && /ask only for your Trade Password/.test(txt()) && !$('gaPin'), 'switch off: an open page says it is switched off and offers nothing to set up');
+  ok(w.eval('STATE.settings.requireTwofaToWithdraw') === false, 'and the app drops the rule from its own copy of the settings');
   w.eval(`STATE.settings = {}`);
   console.log('test-authenticator-ui: ' + n + ' checks passed');
 })().catch(e => { console.error(e); process.exit(1); });

@@ -642,8 +642,11 @@ const DEFAULT_SETTINGS = {
   // for the actual server-side enforcement.
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
   // Owner: "make it compulsory so that after one puts in the Trade Password he puts in the 2fa code; if he had not, he has to download and do the process."
-  // On for everybody: a member who has not set up Google Authenticator (Profile > Google Authenticator) cannot withdraw until they have, and every withdrawal
-  // then asks for the Trade Password AND the 6-digit code. Admin > Settings can switch the requirement off (a member who already turned it on is still asked).
+  // On for everybody: a member who has not set up Google Authenticator (My > Google Authenticator) cannot withdraw until they have, and every withdrawal
+  // then asks for the Trade Password AND the 6-digit code. Then: "if I toggle this off, even the category of Google Authenticator in the user panel should go
+  // away" -- so Admin > Settings is the switch of the WHOLE feature: off = no Google Authenticator page in the app, no code asked at a withdrawal from anybody
+  // (even a member who had set it up), and its member routes are closed. Nobody's set-up is touched: switch it on again and every member's own secret and backup
+  // codes work as before.
   requireTwofaToWithdraw: true,
   // The hours withdraw is open. Owner: "one withdrawal time should be
   // SETTABLE IN ADMIN, such that when one tries to withdrawal he sees, that
@@ -5247,7 +5250,7 @@ async function pinCheck(userId, pin0) {
 // ═══════════════════════════════════════════
 // Owner: "increase the security of the withdrawal: after the Trade Password, one has to put in the authenticator code; one has to enable it, so one
 // downloads Google Authenticator." Then: "make it compulsory ... if he had not, he has to download and do the process." So it is REQUIRED for every member
-// (setting requireTwofaToWithdraw, on by default, switchable in Admin > Settings): a member who has not set it up (Profile > Google Authenticator) is refused with
+// (setting requireTwofaToWithdraw, on by default; Admin > Settings switches the WHOLE feature off: no page, no code, routes closed): a member who has not set it up (My > Google Authenticator) is refused with
 // TWOFA_SETUP_REQUIRED, and once on, /withdraw/request needs the Trade Password AND a 6-digit code from the authenticator app (or, for a lost phone, one
 // single-use backup code). The server enforces it: the app only shows the box and the way to set it up. How it is kept safe:
 //   * Standard TOTP (RFC 6238: SHA-1, 6 digits, 30 seconds, a 160-bit secret in base32), so Google Authenticator, Microsoft Authenticator, Authy and 2FAS all work.
@@ -5345,20 +5348,24 @@ function twofaOtpauth(issuer, account, secret) {
   return 'otpauth://totp/' + encodeURIComponent(issuer) + ':' + encodeURIComponent(account) + '?secret=' + secret + '&issuer=' + encodeURIComponent(issuer) + '&algorithm=SHA1&digits=6&period=30';
 }
 // A signed-in, unsuspended, fully registered member (the same gate as the other account routes); sends the refusal itself and returns null otherwise.
-async function twofaMember(req, res) {
+async function twofaMember(req, res, allowOff) {
   const userId = await verifyAuth(req);
   if (!userId) { res.status(401).json({ status: 'error', message: 'Please sign in again' }); return null; }
   const snap = await db.collection('users').doc(userId).get();
   if (!snap.exists) { res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'Account not found' }); return null; }
   if (snap.data().status === 'banned') { res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' }); return null; }
   if (snap.data().registrationDone === false) { res.status(409).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up first.' }); return null; }
+  const featureOn = (await getSettings()).requireTwofaToWithdraw !== false;
+  // Switched off by the owner (Admin > Settings): the member routes are closed, so a changed or old copy of the app cannot start something that has no effect.
+  // Only the status answers (so an open page can say so).
+  if (!featureOn && !allowOff) { res.status(403).json({ status: 'error', code: 'TWOFA_DISABLED', message: 'Google Authenticator is switched off right now.' }); return null; }
   res.set('Cache-Control', 'no-store');
-  return { userId, u: snap.data() };
+  return { userId, u: snap.data(), featureOn };
 }
 const twofaFail = (res, r) => res.status(TWOFA_STATUS[r.code] || (r.code === 'LOCKED' ? 429 : 400)).json({ status: 'error', code: r.code, message: r.message });
 app.get('/account/2fa/status', async (req, res) => {
-  const m = await twofaMember(req, res); if (!m) return;
-  res.json({ status: 'success', enabled: twofaOn(m.u), enabledAt: twofaOn(m.u) ? (tsMillis(m.u.twofaEnabledAt) || null) : null, backupLeft: twofaOn(m.u) ? (Array.isArray(m.u.twofaBackup) ? m.u.twofaBackup.length : 0) : 0 });
+  const m = await twofaMember(req, res, true); if (!m) return;
+  res.json({ status: 'success', available: m.featureOn, enabled: twofaOn(m.u), enabledAt: twofaOn(m.u) ? (tsMillis(m.u.twofaEnabledAt) || null) : null, backupLeft: twofaOn(m.u) ? (Array.isArray(m.u.twofaBackup) ? m.u.twofaBackup.length : 0) : 0 });
 });
 // Step 1 of turning it on: the Trade Password, then a fresh secret is made and shown ONCE (as a link, a setup key and a QR picture drawn in the app).
 // Nothing is switched on yet; the secret waits, encrypted, for 15 minutes.
@@ -5516,16 +5523,18 @@ app.post('/withdraw/request', async (req, res) => {
       return res.status(pinResult.code === 'LOCKED' ? 429 : 400).json({ status: 'error', code: pinResult.code, message: pinResult.message });
     // SECOND STEP (Google Authenticator), only for a member who turned it on. Decided HERE from the account itself, never from anything the app says:
     // an edited app that hides the box gets "Enter the 6-digit code" and nothing else. A checked code is spent in the same atomic update as the debit below.
+    // Admin > Settings can switch the whole feature off: then nothing about it is asked or checked for anybody (their set-up is kept for when it is switched on again).
+    const twofaFeature = sett.requireTwofaToWithdraw !== false;
     let twofaChk = null, twofaSp = null;
-    {
+    if (twofaFeature) {
       const fresh2 = await db.collection('users').doc(userId).get();
       if (twofaOn(fresh2.exists ? fresh2.data() : null)) {
         twofaChk = await twofaCheck(userId, req.body.totp);
         if (!twofaChk.ok) return twofaFail(res, twofaChk);
         twofaSp = twofaSpend(twofaChk);
-      } else if (sett.requireTwofaToWithdraw !== false) {
-        // COMPULSORY (Admin > Settings can switch this off): a member who has not set Google Authenticator up cannot withdraw. Nothing is charged and no request
-        // is created; the app takes them to the set-up page. Only reached with a right Trade Password, so it is no help to somebody guessing one.
+      } else {
+        // COMPULSORY: a member who has not set Google Authenticator up cannot withdraw. Nothing is charged and no request is created; the app takes them to the
+        // set-up page. Only reached with a right Trade Password, so it is no help to somebody guessing one.
         return res.status(403).json({ status: 'error', code: 'TWOFA_SETUP_REQUIRED',
           message: 'To withdraw you must first set up Google Authenticator. Download Google Authenticator, then open My > Google Authenticator and follow the steps. After that, every withdrawal asks for your Trade Password and a 6-digit code.' });
       }
@@ -5595,7 +5604,7 @@ app.post('/withdraw/request', async (req, res) => {
       // request that an administrator could still send.
       await witRef.set({ userId, amount: amt, fee, net, holder, network: rawNetwork, phone: destValue, ref,
         status: 'creating', regionKey: currentRegionKey(), date, time, createdAt: FieldValue.serverTimestamp() });
-      const debited = await uRef.updateIf(Object.assign({ walletBalance: { $gte: amt - 0.005 }, status: { $ne: 'banned' }, debitedWithdrawalIds: { $ne: witId } }, twofaSp ? twofaSp.filter : { twofaEnabled: { $ne: true } }), Object.assign({
+      const debited = await uRef.updateIf(Object.assign({ walletBalance: { $gte: amt - 0.005 }, status: { $ne: 'banned' }, debitedWithdrawalIds: { $ne: witId } }, twofaSp ? twofaSp.filter : {}), Object.assign({
         walletBalance: FieldValue.increment(-amt), debitedWithdrawalIds: FieldValue.arrayUnion(witId)
       }, twofaSp ? twofaSp.set : {}));
       if (!debited) {
@@ -5605,7 +5614,7 @@ app.post('/withdraw/request', async (req, res) => {
         // Why: the code was spent a moment ago by another request, or the member's security setting changed in between, or (as before) balance / suspension.
         const now2 = (await uRef.get()).data() || {};
         const spent = twofaChk && twofaChk.kind === 'totp' ? Number(now2.twofaLastStep) >= twofaChk.step : twofaChk && twofaChk.kind === 'backup' ? !(Array.isArray(now2.twofaBackup) ? now2.twofaBackup : []).includes(twofaChk.hash) : false;
-        const changed = twofaOn(now2) !== !!twofaChk;
+        const changed = twofaFeature && twofaOn(now2) !== !!twofaChk;
         const err = new Error(changed ? 'Your security settings changed. Please try again.' : spent ? 'That code was already used. Wait for the next code in Google Authenticator (it changes every 30 seconds) and try again.' : 'Your balance or account status changed. Please refresh and try again.');
         if (changed || spent) err.code = changed ? 'TWOFA_CHANGED' : 'TWOFA_USED';
         throw err;

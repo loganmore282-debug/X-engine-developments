@@ -175,26 +175,45 @@ const wrongCode = secret => { for (let i = 0; i < 50; i++) { const c = String(Ma
     const s2 = (await J('POST', '/account/2fa/start', { pin: '123456' }, F.tok)).j.secret; advance(1); await J('POST', '/account/2fa/confirm', { code: codeNow(s2, 0) }, F.tok);
     ok(first.open(fileKey, F.uid, user(F.uid).twofaSecretEnc) === s2 && first.open(adminKey, F.uid, user(F.uid).twofaSecretEnc) === null, 'and the new setup is locked with the key file');
   }
-  // ---- 11c. the owner's switch (Admin > Settings): off = optional again, but a member who DID set it up is still asked for the code
+  // ---- 11c. the owner's switch (Admin > Settings) turns the WHOLE feature off: no code asked from anybody (even a member who set it up), the member routes closed,
+  //      every set-up kept for when it is switched on again
   {
-    const G = await member(), H = await member();
+    const G = await member(), H = await member(), I2 = await member(), K = await member();
     const enrol = async m => { const sec = (await J('POST', '/account/2fa/start', { pin: '123456' }, m.tok)).j.secret; await J('POST', '/account/2fa/confirm', { code: codeNow(sec) }, m.tok); return sec; };
-    const sh = await enrol(H);
-    const detOn = await J('POST', '/admin/user/detail', { userId: G.uid }, null, true); ok(detOn.j.twofaRequired === true, 'the owner\'s member page knows the rule is on', detOn.j.twofaRequired);
-    const offSw = await J('POST', '/admin/settings/update', { settings: { requireTwofaToWithdraw: false } }, null, true); ok(offSw.s === 200, 'the owner can switch the rule off', offSw.j);
-    ok((await J('GET', '/public/settings')).j.settings.requireTwofaToWithdraw === false && (await J('POST', '/admin/user/detail', { userId: G.uid }, null, true)).j.twofaRequired === false, 'the app and the member page are told');
-    const g1 = await wdraw(G); ok(g1.s === 200, 'switch off: a member who has not set it up withdraws with just the Trade Password', g1.j); await settle(G);
-    const hNo = await wdraw(H); ok(hNo.s === 400 && hNo.j.code === 'TWOFA_REQUIRED', 'switch off: a member who DID set it up is still asked for the code', hNo.j);
-    const hOk = await wdraw(H, { totp: codeNow(sh, 1) }); ok(hOk.s === 200, 'and with the code it goes through', hOk.j); await settle(H);
-    // switch off, member turns it on between the check and the money moving: nothing is taken
+    const sh = await enrol(H), si = await enrol(I2);
+    const detOn = await J('POST', '/admin/user/detail', { userId: G.uid }, null, true); ok(detOn.j.twofaRequired === true, 'the owner\'s member page knows the feature is on', detOn.j.twofaRequired);
+    // ON, a member turns it off while the request is being made: nothing is taken (TWOFA_CHANGED)
     {
-      const wm = W(), realSet = wm.set.bind(wm), wG0 = user(G.uid).walletBalance;
-      wm.set = (k, v) => { const r = realSet(k, v); if (v && v.status === 'creating') user(G.uid).twofaEnabled = true; return r; };
-      const ch = await wdraw(G); wm.set = realSet; delete user(G.uid).twofaEnabled;
-      ok(ch.s === 400 && ch.j.code === 'TWOFA_CHANGED' && user(G.uid).walletBalance === wG0, 'switch off: if the member turns it on while the request is being made, nothing is taken', ch.j);
+      const sj = await enrol(K), wm = W(), realSet = wm.set.bind(wm), wJ0 = user(K.uid).walletBalance;
+      wm.set = (k, v) => { const r = realSet(k, v); if (v && v.status === 'creating') delete user(K.uid).twofaEnabled; return r; };
+      const ch = await wdraw(K, { totp: codeNow(sj, 1) }); wm.set = realSet; user(K.uid).twofaEnabled = true;
+      ok(ch.s === 400 && ch.j.code === 'TWOFA_CHANGED' && user(K.uid).walletBalance === wJ0, 'on: if the member turns it off while the request is being made, nothing is taken', ch.j);
     }
-    const onSw = await J('POST', '/admin/settings/update', { settings: { requireTwofaToWithdraw: true } }, null, true); ok(onSw.s === 200, 'the owner can switch it back on', onSw.j);
-    const g2 = await wdraw(G); ok(g2.s === 403 && g2.j.code === 'TWOFA_SETUP_REQUIRED', 'switched back on: refused again until it is set up', g2.j);
+    const before = { last: user(H.uid).twofaLastStep, backups: user(H.uid).twofaBackup.length, fails: user(H.uid).twofaFailCount || 0, enc: user(H.uid).twofaSecretEnc };
+    const offSw = await J('POST', '/admin/settings/update', { settings: { requireTwofaToWithdraw: false } }, null, true); ok(offSw.s === 200, 'the owner can switch it off', offSw.j);
+    ok((await J('GET', '/public/settings')).j.settings.requireTwofaToWithdraw === false && (await J('POST', '/admin/user/detail', { userId: G.uid }, null, true)).j.twofaRequired === false, 'the app and the member page are told');
+    const g1 = await wdraw(G); ok(g1.s === 200, 'off: a member who has not set it up withdraws with just the Trade Password', g1.j); await settle(G);
+    const h1 = await wdraw(H); ok(h1.s === 200 && h1.j.usedBackupCode === undefined, 'off: a member who HAD set it up is not asked for a code either', h1.j); await settle(H);
+    const h2 = await wdraw(H, { totp: wrongCode(sh) }); ok(h2.s === 200, 'off: a code that is sent along is ignored (even a wrong one)', h2.j); await settle(H);
+    ok(user(H.uid).twofaLastStep === before.last && user(H.uid).twofaBackup.length === before.backups && (user(H.uid).twofaFailCount || 0) === before.fails && user(H.uid).twofaSecretEnc === before.enc && user(H.uid).twofaEnabled === true, 'off: nothing about their set-up is checked, spent, counted or changed');
+    // a refusal for another reason says that reason, never a Google Authenticator one
+    { const wm = W(), realSet = wm.set.bind(wm), wH0 = user(H.uid).walletBalance;
+      wm.set = (k, v) => { const r = realSet(k, v); if (v && v.status === 'creating') user(H.uid).walletBalance = 0; return r; };
+      const bal = await wdraw(H); wm.set = realSet; user(H.uid).walletBalance = wH0;
+      ok(bal.s === 400 && !/^TWOFA_/.test(bal.j.code || '') && /balance or account status changed/i.test(bal.j.message) && user(H.uid).walletBalance === wH0, 'off: if the balance changes mid-request the refusal says so (not a Google Authenticator reason) and nothing is taken', bal.j); }
+    // the member routes are closed, the status says so, and the owner\'s reset still works
+    const st = await J('GET', '/account/2fa/status', null, H.tok); ok(st.s === 200 && st.j.available === false && st.j.enabled === true, 'off: the status says the feature is not available (and that H still has a set-up)', st.j);
+    for (const [path, body] of [['/account/2fa/start', { pin: '123456' }], ['/account/2fa/confirm', { code: '123456' }], ['/account/2fa/disable', { pin: '123456', code: codeNow(sh, 1) }], ['/account/2fa/backup-codes', { pin: '123456', code: codeNow(sh, 1) }]]) {
+      const r = await J('POST', path, body, H.tok); ok(r.s === 403 && r.j.code === 'TWOFA_DISABLED', 'off: ' + path + ' is closed', r.j);
+    }
+    ok(user(H.uid).twofaEnabled === true && user(H.uid).twofaLastStep === before.last, 'and the closed routes changed nothing');
+    const rsOff = await J('POST', '/admin/user/reset-2fa', { userId: I2.uid }, null, true); ok(rsOff.s === 200 && user(I2.uid).twofaEnabled === undefined, 'off: the owner can still reset a member', rsOff.j);
+    // ON again: the set-up that was kept applies again, with the SAME secret
+    const onSw = await J('POST', '/admin/settings/update', { settings: { requireTwofaToWithdraw: true } }, null, true); ok(onSw.s === 200, 'the owner switches it back on', onSw.j);
+    const h3 = await wdraw(H); ok(h3.s === 400 && h3.j.code === 'TWOFA_REQUIRED', 'on again: the member who set it up is asked for the code again', h3.j);
+    const h4 = await wdraw(H, { totp: codeNow(sh, 1) }); ok(h4.s === 200, 'and the code from the same secret works: nothing had to be set up again', h4.j); await settle(H);
+    const g2 = await wdraw(G); ok(g2.s === 403 && g2.j.code === 'TWOFA_SETUP_REQUIRED', 'on again: a member who never set it up is refused until they do', g2.j);
+    const st2 = await J('GET', '/account/2fa/status', null, H.tok); ok(st2.j.available === true && st2.j.enabled === true, 'and the status says available again', st2.j);
     ok((await J('GET', '/public/settings')).j.settings.requireTwofaToWithdraw === true && (await J('POST', '/admin/user/detail', { userId: G.uid }, null, true)).j.twofaRequired === true, 'and everybody is told');
   }
   // ---- 12. the books still balance
