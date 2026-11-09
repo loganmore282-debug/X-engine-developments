@@ -12,5 +12,5 @@ assert.strictEqual(rlKeyByUser(req(null, '/withdraw/request')), '1.1.1.1', 'no t
 assert.strictEqual(rlKeyByUser(req('x'.repeat(64), '/auth/otp/send')), '1.1.1.1', 'pre-sign-in routes stay on IP');
 assert.strictEqual(rlKeyByUser(req('x'.repeat(64), '/register')), '1.1.1.1');
 assert(!k1.includes('a'.repeat(10)), 'token never appears in the key');
-for (const gone of ["app.post('/checkin'", "app.post('/team/milestone/claim'"]) assert(!src.includes(gone), gone + ' must stay removed');
+for (const gone of ["app.post('/team/milestone/claim'"]) assert(!src.includes(gone), gone + ' must stay removed');
 console.log('PASS: per-member rate-limit key, IP key before sign-in, removed payout routes');

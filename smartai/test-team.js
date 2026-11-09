@@ -1,6 +1,7 @@
 'use strict';
-// Team screen: a level's member list is refreshed (not frozen for the session) and a failed fetch is
-// never stored as "no members". Drives source (and --built) in JSDOM.
+// Team page: a level's member list is read fresh from the server every time it is opened (never frozen for the session), a failed read says so
+// instead of "no members", and every row is a real figure. Drives the REAL app code in jsdom (source, and the built bundle with --built) with the
+// server calls stubbed; the whole flow on a real server is in test-smartai-app.js.
 const fs = require('node:fs'), zlib = require('node:zlib'), assert = require('node:assert/strict');
 const { JSDOM } = require('jsdom');
 const built = process.argv.includes('--built');
@@ -19,29 +20,22 @@ for (const s of d.scripts) {
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 (async () => {
   await new Promise(r => setTimeout(r, 30));
-  w.eval("STATE.page='network'; STATE.account={referralCode:'ABCD'}; STATE.teamStats={referralCode:'ABCD',commRates:{l1:20,l2:5,l3:1},team:{l1:1,l2:0,l3:0},totalTeam:1,teamDeposits:0,levelCommission:{}}");
-  let calls = 0, mode = 'ok', people = [{ id: 'a', phone: '0771234567', invested: 0, createdAt: null }];
-  w.api = async () => { calls++; return mode === 'ok' ? { status: 'success', members: people } : { status: 'error', message: 'Could not load your team' }; };
-  w.eval('paintNetwork()'); await new Promise(r => setTimeout(r, 20));
-  const box = () => d.getElementById('teamMembersBox').textContent.replace(/\s+/g, ' ').trim();
-  ok(d.querySelectorAll('.mg-mem').length === 1 && calls === 1, 'first open fetches and shows the member');
-  // a second member joins: reopening after the list is stale refetches it
-  people = [...people, { id: 'b', phone: '0779999999', invested: 0, createdAt: null }];
-  w.eval('_teamMembersAt = {}'); w.eval('paintNetwork()'); await new Promise(r => setTimeout(r, 20));
-  ok(d.querySelectorAll('.mg-mem').length === 2 && calls === 2, 'a stale list is refetched and the new member appears');
-  // a fresh list is shown at once without another fetch
-  w.eval('paintNetwork()'); await new Promise(r => setTimeout(r, 20));
-  ok(calls === 2 && d.querySelectorAll('.mg-mem').length === 2, 'a fresh list is not refetched');
-  // a failed fetch keeps the held list, never turning it into "no members"
-  mode = 'fail'; w.eval('_teamMembersAt = {}'); w.eval('paintNetwork()'); await new Promise(r => setTimeout(r, 20));
-  ok(d.querySelectorAll('.mg-mem').length === 2 && !/No Members/.test(box()), 'a failed refresh keeps the list on screen');
-  // a level never loaded and failing shows the retry line, not "No members at this level yet"
-  w.eval('STATE.teamMembers={1:null,2:null,3:null}; _teamMembersAt = {}; _teamMembersFailed = {}');
-  await w.switchTeamLevel(2);
-  ok(box() === 'Could not load your team' && !/No Members/.test(box()), 'a failed first load says it could not load, not "No Members": ' + box());
-  mode = 'ok'; people = [];
-  await w.switchTeamLevel(2);
-  ok(/No Members/.test(box()), 'a real empty level says No Members');
+  let calls = [], mode = 'ok', people = [{ id: 'a', phone: '0771234567', phoneMasked: '077****567', invested: 30000, createdAt: Date.now() - 86400000 }];
+  w.api = async p => { calls.push(p); return mode === 'ok' ? { status: 'success', members: people } : { status: 'error', message: 'Could not load your team' }; };
+  const list = () => d.getElementById('teamLevelList').textContent.replace(/\s+/g, ' ').trim();
+  await w.openTeamLevel(1);
+  ok(calls[0] === '/team/members?level=1' && d.getElementById('teamLevelTitle').textContent === 'Level 1 members', 'opening a level asks the server for that level');
+  ok(/1 member/.test(list()) && /077\*{4}567/.test(list()) && /UGX 30,000/.test(list()), 'a member shows the hidden number and what they invested: ' + list());
+  // a second member joins: opening again asks again
+  people = people.concat([{ id: 'b', phone: '0779999999', phoneMasked: '077****999', invested: 0, createdAt: null }]);
+  await w.openTeamLevel(1);
+  ok(calls.length === 2 && /2 members/.test(list()) && /UGX 0/.test(list()), 'opening again reads the list again, and a member who has not invested shows UGX 0: ' + list());
+  // an empty level
+  people = []; await w.openTeamLevel(3);
+  ok(calls[2] === '/team/members?level=3' && /No Level 3 members yet/.test(list()), 'a real empty level says so');
+  // a failed read is never turned into "no members"
+  mode = 'fail'; await w.openTeamLevel(2);
+  ok(/Could not load this list/.test(list()) && !/No Level 2 members yet/.test(list()), 'a failed read says it could not load, not "no members": ' + list());
   // server: the cards read the live team
   ok(/team: \{ l1: n1, l2: n2, l3: n3 \}/.test(server) && /async function wholeTeamStats/.test(server), 'server /team/stats reads live level counts');
   console.log('test-team: ' + n + ' checks passed' + (built ? ' (built)' : ''));

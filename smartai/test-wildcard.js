@@ -7,37 +7,39 @@ const src = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8'),
 const tree = acorn.parse(src, { ecmaVersion: 'latest', sourceType: 'script', allowReturnOutsideFunction: true });
 const fnSrc = n => { const x = tree.body.find(t => t.type === 'FunctionDeclaration' && t.id.name === n); assert(x, 'missing ' + n); return src.slice(x.start, x.end); };
 const kit = (domain, host, protocol = 'https:') => {
-  const copied = [], els = { '.pt-purl': { textContent: '' } };
-  const c = vm.createContext({ STATE: { settings: { shareDomain: domain }, account: { referralCode: '2k3ct' }, teamStats: {} }, location: { hostname: host, protocol, origin: protocol + '//' + host },
-    window: { crypto: globalThis.crypto }, Uint32Array, Math, String, encodeURIComponent, document: { querySelector: q => els[q] || null }, writeClipboard: t => copied.push(t),
-    notify: () => {}, rapidTapGuardOk: () => true });
-  vm.runInContext('var SHARE_LABEL_RESERVED = ' + /var SHARE_LABEL_RESERVED = (\[.*?\]);/.exec(src)[1] + ';\nvar _promoLink = "x";\n' + ['shareRand', 'shareLabel', 'shareOrigin', 'promoLink', 'refreshPromoLink'].map(fnSrc).join('\n') +
-    '\n' + /window\.copyPromoLink = function[\s\S]*?\n\};/.exec(src)[0], c);
+  const copied = [], els = { teamLink: { textContent: '' } };
+  const c = vm.createContext({ STATE: { referralCode: '2k3ct' }, getSettings: () => ({ shareDomain: domain }), location: { hostname: host, protocol, origin: protocol + '//' + host },
+    window: { crypto: globalThis.crypto }, Uint32Array, Math, String, encodeURIComponent, $: id => els[id] || null, copyText: t => copied.push(t),
+    toast: () => {}, navigator: {}, brandName: () => 'Smart AI' });
+  vm.runInContext('var SHARE_LABEL_RESERVED = ' + /var SHARE_LABEL_RESERVED = (\[.*?\]);/.exec(src)[1] + ';\nvar _promoLink = "", _promoCode = "";\n' + ['shareRand', 'shareLabel', 'shareOrigin', 'promoLink', 'freshPromoLink', 'copyCode'].map(fnSrc).join('\n'), c);
   return { c, copied, els };
 };
 // each link is on a new random address of the domain, exactly 4 characters, the exact link shape the owner wants
 let { c, copied, els } = kit('mydomain.com', 'app.mydomain.com');
 const seen = new Set();
 for (let i = 0; i < 40; i++) {
-  const link = c.promoLink();
+  const link = c.freshPromoLink();
   const m = /^https:\/\/([a-z][a-z0-9]{3})\.mydomain\.com\/#\/inviteRegister\?invitecode=2K3CT$/.exec(link);
   assert.ok(m, 'link shape: ' + link); assert.ok(!['mail', 'smtp', 'host'].includes(m[1])); seen.add(m[1]);
 }
 assert.ok(seen.size >= 36, 'the address changes every time (' + seen.size + ' different in 40)');
+// a repaint keeps the link that is on screen (it only changes when the member copies or shares)
+{ const one = c.promoLink(); assert.equal(c.promoLink(), one, 'promoLink() is stable between repaints'); }
 // Copy makes a fresh one, shows it and copies the very same text
-c.window.copyPromoLink(null); c.window.copyPromoLink(null);
-assert.equal(copied.length, 2); assert.notEqual(copied[0], copied[1], 'two copies, two addresses'); assert.equal(els['.pt-purl'].textContent, copied[1], 'the page shows what was copied');
+c.copyCode(); c.copyCode();
+assert.equal(copied.length, 2); assert.notEqual(copied[0], copied[1], 'two copies, two addresses'); assert.equal(els.teamLink.textContent, copied[1], 'the page shows what was copied');
 // without the setting, or on another address (the IP preview, http), the link keeps the address the app is open on
 assert.equal(kit('', 'app.mydomain.com').c.shareOrigin(), 'https://app.mydomain.com');
 assert.equal(kit('mydomain.com', '179.198.197.114', 'http:').c.shareOrigin(), 'http://179.198.197.114');
 assert.equal(kit('mydomain.com', 'other.org').c.shareOrigin(), 'https://other.org');
-assert.equal(kit('', '179.198.197.114', 'http:').c.promoLink(), 'http://179.198.197.114/#/inviteRegister?invitecode=2K3CT');
+assert.equal(kit('', '179.198.197.114', 'http:').c.freshPromoLink(), 'http://179.198.197.114/#/inviteRegister?invitecode=2K3CT');
 // the app reads the code from that link (and from the older forms)
 { const code = fnSrc('captureReferralFromUrl');
-  const read = (search, hash, pathname = '/') => { const box = { v: '', tab: '' };
-    const ctx = vm.createContext({ location: { search, hash, pathname }, URLSearchParams, STATE: {}, $: () => box, showAuthTab: t => { box.tab = t; }, decodeURIComponent, RegExp });
-    vm.runInContext(code + '\ncaptureReferralFromUrl();', ctx); return { ref: ctx.STATE.refCode, tab: box.tab, field: box.value }; };
+  const read = (search, hash, pathname = '/') => { const box = { value: '' }; let mode = '';
+    const ctx = vm.createContext({ location: { search, hash, pathname }, URLSearchParams, $: () => box, setAuthMode: t => { mode = t; }, decodeURIComponent, RegExp, String });
+    vm.runInContext('var _refFromUrl = "";\n' + code + '\ncaptureReferralFromUrl();', ctx); return { ref: ctx._refFromUrl || undefined, tab: mode, field: box.value }; };
   assert.equal(read('', '#/inviteRegister?invitecode=2K3CT').ref, '2K3CT'); assert.equal(read('', '#/inviteRegister?invitecode=2K3CT').tab, 'register');
+  assert.equal(read('', '#/inviteRegister?invitecode=2K3CT').field, '2K3CT');
   assert.equal(read('', '#/inviteRegister?inviteCode=2K3CT').ref, '2K3CT');
   assert.equal(read('?ref=ABCDE', '').ref, 'ABCDE'); assert.equal(read('?v=1&code=ABCDE', '').ref, 'ABCDE'); assert.equal(read('', '').ref, undefined); }
 // the server publishes the domain, from the secret SHARE_DOMAIN, and lets its random addresses reach the API

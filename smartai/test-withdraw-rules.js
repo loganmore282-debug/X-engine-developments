@@ -384,7 +384,7 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
 
   console.log('\n— the app tells the member the hours when it is shut —');
   const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
-  ck(/const win = withdrawWindow\(STATE\.settings \|\| \{\}\);\s*if \(win\.enabled && !win\.open && !\(STATE\.account && STATE\.account\.withdrawAnytime\)\)\s*return notify\(`Withdraw is open from/.test(mod),
+  ck(/var win = withdrawWindow\(sett\);\s*if \(win\.enabled && !win\.open && !STATE\.withdrawAnytime\) \{ toast\('Withdraw is open from/.test(mod),
      'tapping Withdraw outside the hours says "Withdraw is open from ... to ..."');
   ck(!/Withdrawal time: 06:00:00 - 17:00:00/.test(mod), 'and no hardcoded hours are promised');
 

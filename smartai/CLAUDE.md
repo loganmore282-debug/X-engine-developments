@@ -1,13 +1,15 @@
 # Smart AI — project memory (read this first)
 
-**What it is:** Smart AI is the newest app of the same code family (Soda -> Mint -> Potato -> **Smart AI**; Chocolate is a sibling copied from Mint). It was
-copied from **Potato** (`potato/`, branch `claude/potato-build`, Potato commit `a72b2e5`) and renamed with `node set-brand.js "Smart AI"`.
-The owner's words: "Another one called smart ai", and for the base: **"ChocoMCC's look and features on the Potato setup"**. So everything about money, login,
-payouts, the admin panel, security and tests is Potato's (own phone + password login, MongoDB on the VPS, Google Authenticator for withdrawals with its
-admin switch, the Users contacts export, every money fix), and the look, pages, products and rules are to become **ChocoMCC's**: the older app in
-`choco-mcc/` (branch `claude/voltra-session-continue-mk95gw`; its chocolate-brand products, Firebase login and Render hosting are NOT brought over). The
-owner sends screenshots of the pages; build them and compare side by side (Playwright, 360x701 at 2x) before saying it matches. Potato's history of rules and
-reasons is in the inherited notes below and in `docs/SODA-LOG.md`: read the "Money-safety" parts before touching payment, payout or withdrawal code.
+**What it is:** Smart AI is the newest app of the same code family (Soda -> Mint -> Potato -> **Smart AI**; Chocolate is a sibling copied from Mint). Its SERVER
+(money, login, payouts, MongoDB, security, tests) and its ADMIN PANEL were copied from **Potato** (`potato/`, branch `claude/potato-build`, Potato commit
+`a72b2e5`) and renamed with `node set-brand.js "Smart AI"`. Its MEMBER APP is **ChocoMCC's pages, layout and features in blue and white** with the owner's own
+icon pack, written from scratch on Smart AI's server (Potato's red, screenshot-measured member screens are NOT in it any more).
+The owner's words: "Another one called smart ai"; for the base **"ChocoMCC's look and features on the Potato setup"**; then, after I had only recoloured Potato's
+layouts: **"We are using chocomcc not potato, I didn't tell you to use potato"**. ChocoMCC itself is the older app in `choco-mcc/` (branch
+`claude/voltra-session-continue-mk95gw`); its chocolate-brand products, Firebase login and Render hosting are NOT brought over. Potato's history of rules and
+reasons (for the SERVER and ADMIN) is in the inherited notes below and in `docs/SODA-LOG.md`: read the "Money-safety" parts before touching payment, payout or
+withdrawal code. The notes below about Potato's member screens (`pt*` functions, `.pt-*` CSS, `design-ref/` pictures, "v4xx" caches) describe an app Smart AI no
+longer has: skip them.
 
 The owner speaks plainly, wants things done (not lots of questions), keeps answers short, hates abbreviations ("UGX 23,000", never "23k"), wants
 SVG icons, exact match to his screenshots, everything configurable from admin, and does not want features nobody asked for. **Never tell him to upload
@@ -51,16 +53,62 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
 
 ## Status of Smart AI
 1. (done) Copied from Potato (`a72b2e5`), renamed "Smart AI" (`set-brand.js`), ports 3006/8100/8101, own secrets/process/fail2ban/nginx names, placeholder hosts,
-   new admin path `N85d57j4`, cache names `smartai-shell-v1` / `smartai-admin-shell-v1`, placeholder icons. `npm run test:audit` passes.
-2. (open) ChocoMCC's products, commissions, fees, minimums and rewards as the defaults (read from `choco-mcc/server.js`); everything stays editable in the admin panel.
-3. (partly done) The look is **blue and white** with the owner's own icon pack (see the next section). ChocoMCC's page layouts are still to come: the pages are Potato's until the owner sends screenshots (he was shown 12 pictures of ChocoMCC itself, red-brown on cream, and answered "it will be blue and white").
-4. (open, owner) Atlas user + connection string, VPS first-setup, GitHub webhook, domain.
+   new admin path `N85d57j4`, placeholder icons.
+2. (done) **Member app rebuilt as ChocoMCC's pages in blue and white** (see the next section). `npm run test:audit` passes.
+3. (open, owner) **ChocoMCC's starting numbers as the defaults** (asked, not answered yet): minimum top-up and cash-out UGX 5,000, welcome gift UGX 7,000, commissions
+   27% / 2% / 1%, cash-out fee 15%, 2 cash-outs a day, ChocoMCC's product list (he adds products himself in the admin). Today the server still has Potato's numbers
+   (`DEFAULT_SETTINGS`); everything is editable in Admin > Settings, nothing is hard-coded in the app.
+4. (open, owner) Atlas user + connection string, VPS first-setup, GitHub webhook, domain, the real logo (the app icons are placeholders: a blue "SA" ring).
 
-## Blue and white + the owner's icon pack (owner: "Bro it will be blue and white, and these will be icons so render them correctly, extract them perfectly, so get some the best one, not just using all")
-- **Colours.** Every BRAND red of Potato's member CSS (`user-src/index.html`, 265 colour values) was turned to the blue of the icons by rotating its hue to 212 degrees, keeping its lightness and saturation: brand `#137aef` (`--mg-green`, `--snow-wine`, `--pt-red`), dark `#0d69d2`, link/text blue `#296bb6`, pale tints `#ebf4fe` / `#d1e2f5`, page `#eef4ff` (body gradient `#f3f7ff` -> `#e8f0fc`), loader `#0964cd` with `#b2d6ff` text, sign-in wash white -> `#add0f7`, manifest theme `#eef4ff`. The old purple shadows and lilac tints went blue too. **Error / failure reds stay red on purpose** (a red "something is wrong" must not look like the brand): `.notify-ic`, `.cp-ic.bad`, `.cp-chgerr`, `.cp-msg.bad`, `.pt-noprod.bad`, `.pin-warn`, `.pt-rec .m em.bad`, `.pt-pwerr`, `.pa-err`, `.pt-rec .a.out` (money out in Balance Detail), `--v-bad`. `test-icons-builtin.js` fails if any other red shows up in the CSS (a pasted Potato rule would bring it back). The old variable names (`--snow-wine`, `--pt-red`, `--mg-green`) now hold blues: do NOT rename them (rules and tests use them). The admin panel was NOT recoloured (the owner spoke of the app).
-- **Icons.** The owner sent `SMART_AI_35_Individual_Icons.zip`: 35 PNGs (512 x 512; `A_` primary set, `B_` alternates, `Nav_` bottom-bar versions with the label baked in), every one with a light-blue halo and a faint leftover rectangle baked in (not transparent). I cut them out cleanly (page = what the border flood reaches without crossing an edge, closed-form matting on a 2 px rim, thin slivers and slits repaired, the shield of `B_trade_password` outlined by hand; checked on white, light blue, brand blue and navy) and shipped **the best 20, not all**: `user/icons/*.webp` (transparent WebP, 192 x 192, 6-9 kB each, 155 kB in all). Tools and method: `tools/icon-cutout/` (README there). Used: tabs `navhome` (A_home), `navincome` (A_income), `navteam` (A_team), `navshare` (A_share), `navmy` (A_account); Home buttons `recharge` (B_deposit), `withdraw` (B_withdraw), `service` (A_ai_robots, the robot wears a headset), `channel` (A_messages); floating `ordergift` (B_gift_code), `downloadapp` (A_app_download); My page rows `balancedetail`, `messages` (B), `loginpassword` (B), `tradepassword` (B), `authenticator` (A_security), `bankcard`, `giftcode`, `appdownload` (B), `about`. Left out on purpose: the five `Nav_*` (label baked in), `A_settings`/`B_settings` (no Settings page), `A_balance`, `A_log_out` (Log Out stays a button), `A_deposit`/`A_withdraw` (white tray tops are the same colour as the page, so the cut leaves bites; the `B_` pair cuts clean) and the other duplicates.
-- **How the app picks a picture** (`ptIconSrc(key)` in `original_module.js`): a picture uploaded in the admin (Banners > Icons, slots unchanged) wins, an empty slot keeps the built-in one (`SMARTAI_ICON_DEFAULTS`, `/icons/<slot>.webp`), `payicon` has none. The My page rows use `PT_MENU_PIC` (built-in only, not admin slots; 36 px `.pt-mrow .ic img`). The small SVG badges of the Google Authenticator pages are unchanged. The admin Icons box says "Built-in blue picture" for an empty slot (`SMARTAI_ICON_BUILTIN` in `admin-src`). Files are same-origin static files: the member host serves them from `user/`, the service worker caches them on first use (bump `smartai-shell-vN` when a picture changes). Test: `test-icons-builtin.js` (files exist and none is unused, real WebP with alpha, 192 x 192, under 20 kB, the upload-wins / empty-keeps-built-in rule, every drawing site goes through it, no stray red).
-- To add or swap a picture: cut it with `tools/icon-cutout/`, save it over `user/icons/<name>.webp`, bump `user/sw.js`, push. The Gift Code page hero and the win card show the built-in `giftcode.webp` (the old orange gift emoji clashed with the blue). Caches: member `smartai-shell-v3`, admin `smartai-admin-shell-v2`.
+## Member app = ChocoMCC's pages, blue and white, the owner's icons (rebuilt from scratch on Smart AI's server)
+- **Files.** `user-src/index.html` (markup + CSS + the sign-in script + the loader script) and `user-src/original_module.js` (about 2,100 lines, classic script,
+  top-level functions) -> `node build-core.js` -> `user/index.html` (+ identical `user/share.html` for invitation links). Plain `var` / `function` style, no build
+  tools. Dev tools: `ln -sfn ../potato/node_modules smartai/node_modules` (git-ignored) or `npm install --include=dev`.
+- **Tabs and pages.** Bottom bar Home / AI Robots / Rewards / Team / Me. Home (balance, Add Funds, Cash Out, live-activity strip, featured robots), AI Robots (shop,
+  sold-out and owned bands), Rewards (daily check-in with a streak, Gift Code, Task Center = the team-reward tiers, claimed once for good), Team (link, level 1/2/3
+  cards, tap a level for its members), Me. Full-page overlays (one at a time, phone Back closes them: pushState/replaceState/popstate): Add Funds, deposit status
+  (poll), Cash Out, Support, About (the admin's HTML, cleaned on the server AND again on the phone by `cleanAboutHtml`), Terms & Rules (setting `rulesText`), Ledger
+  (Accrued / Topups / Cash Outs), Payout Account (up to 5 MTN / Airtel cards, no PIN), Security (Login Password, Trade Password, Google Authenticator), Messages
+  (unread badge), Order Gifts, My Products, Accrued Earnings, team level lists. Dialogs: network picker, Trade Password (6 digits), authenticator code, change Trade
+  Password, install sheet (+ Claim button for the app reward), gift reveal, announcement (admin picture + Join Channel). A notice is a centred dim dialog that
+  closes by itself after 2.6 s and never blocks a tap.
+- **Server calls it uses** (all Potato's, plus the new block below): `/auth/signup|login|logout|password/change`, `/register`, `/account`, `/investments`, `/transactions`,
+  `/bank/save|select|list`, `/invest/create`, `/deposit/start`, `/deposit/marzpay` (+ `/status`), `/withdraw/request`, `/account/2fa/*`, `/account/transaction-pin/change`,
+  `/redeem`, `/salary/status|claim`, `/gifts/list|claim`, `/app/claim`, `/messages` (+ `/read`), `/team/stats`, `/team/members`, `/public/settings|products|banner|
+  smartai-images|announcement-image|about-content|activity-feed`. Reads are retried on a weak connection; a call that moves money is NEVER retried; `/register` is
+  retried (safe to repeat).
+- **Added to `server.js`** (block "DAILY CHECK-IN, ACTIVITY FEED, TOP-UP AND CASH-OUT LISTS"): `POST /checkin` (one a day, locked per member, one atomic update guarded by
+  `lastCheckin != today`, ledger row `checkin:<uid>:<MM-DD-YYYY>`, streak counted from the real history, amount = setting `dailyCheckin`, 0 closes it, maintenance
+  blocks it), `GET /public/activity-feed` (18 simulated rows, same for everybody, made once and kept 25 s, amounts never below the admin's minimums), `GET /deposits`
+  and `GET /withdrawals` (the member's OWN rows including waiting / declined ones, only whitelisted fields, newest 100). `/account` also returns `checkinStreak` and
+  `lastCheckin`. New admin settings: `dailyCheckin`, `supportHours`, `rulesText`, and the Telegram / WhatsApp links used by Support. Admin: Daily check-in box
+  (Settings), Support extras, "Daily check-in" in the earned breakdown.
+- **Pictures.** Every banner is the admin's picture when set, else a blue "art" banner (`.art-fill` rings + one of the owner's icons). The owner's icon pack: 21 built-in
+  transparent WebP files `user/icons/<slot>.webp` (192 x 192, under 20 kB): `home, robots, income, share, my, deposit, withdraw, gift, support, ledger, team, payout,
+  security, inbox, about, rules, download, signout, balance, loginpw, tradepw` (+ `mtn.jpg`, `airtel.jpg` network logos). The same names are the admin's icon slots
+  (`SMARTAI_ICON_SLOTS` in `server.js`, `SMARTAI_ICON_BUILTIN` / `SMARTAI_ICON_LABELS` in `admin-src`): a picture uploaded in Admin > Banners > Icons replaces the
+  built-in one (`iconUrl()` / `paintIcons()` in the app; uploaded icons must be PNG). Every `<img data-icon="x">` starts with its own `src="/icons/x.webp"` so it shows on
+  the first frame. Tools to cut an icon cleanly: `tools/icon-cutout/` (README there).
+- **Colours.** Blue and white: `--caramel:#137AEF` (brand), `--caramel-deep:#0D5FD2`, `--caramel-pale:#D7E7FF`, `--cocoa:#0B2A5B` (navy text), `--cocoa-soft:#3F5C8F`,
+  `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
+  `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
+  red appears. The admin panel was NOT recoloured (the owner spoke of the app).
+- **Cache names.** Member `user/sw.js` `smartai-shell-v4`, admin `admin/sw.js` `smartai-admin-shell-v3`. Bump on every change that must reach phones.
+- **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
+  `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
+  time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
+  signs anyone out; a 401 from the server (`sessionEnded()`) does.
+- **Tests that guard it** (all in `npm run test:audit`): `test-smartai-app.js` (real Chromium + real server + in-memory database: sign-up from an invitation link, login,
+  buy, check-in incl. 3 taps at once, gift code, payout cards, compulsory Google Authenticator set-up and a cash-out with Trade Password + code, ledger tabs, messages,
+  team + Task Center, announcement, Back button, a session the server ended), `test-smartai-auth.js` (the same screen with things going wrong: wrong password, no
+  network, server error, 429, slow answer + double tap, half-finished sign-up, wrong invitation code, someone else's number, banned, reopened offline),
+  `test-smartai-ui.js` (static: every handler's function exists, every looked-up id exists, no duplicate ids, no other app's words, no emoji, `.overlay` rules, money
+  written in full, toast rules), `test-checkin-feed.js` (the new routes), `test-smartai-pages.js` (gifts, app claim, cards, About HTML, settings), `test-icons-builtin.js`,
+  `test-authenticator-ui.js` (jsdom, the QR checked square by square), `test-team.js`, `test-loader.js`, `test-chest-wallet.js` and the inherited server tests.
+  `test-smartai-ui.js --built` and `test-team.js --built` / `test-loader.js --built` also read the built page.
+- **Assumptions to tell the owner.** Daily check-in amount default UGX 250 (his admin box); the live-activity strip is simulated on purpose (not real people); the
+  Telegram / WhatsApp links and Support hours come from Admin > Settings > Support; Terms & Rules text from Admin; ChocoMCC's own numbers are NOT applied yet
+  (status 3 above).
 
 # Inherited notes (Potato's history up to the copy; "Potato" in them means Smart AI here, and Potato-only names such as `claude/potato-build` or port 3004 are Smart AI's `claude/smartai-build` and 3006)
 

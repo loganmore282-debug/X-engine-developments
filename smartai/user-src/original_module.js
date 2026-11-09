@@ -2,7 +2,7 @@
    The pages are ChocoMCC's (Home, AI Robots, Rewards, Team, Me and their full-screen sheets) in blue and white with the owner's icons,
    running on Smart AI's own server: its sign-in (/auth/*), 6-digit Trade Password, Google Authenticator, deposits, withdrawals and rewards. */
 // The server answers under /k7x2 on the page's own host (nginx strips the prefix). No domain is baked in, so a new host never needs a rebuild.
-var SERVER = '/k7x2';
+var API_BASE = '/k7x2';
 var BRAND_CACHE_KEY = 'smartai_brand_name';
 var SETTINGS_CACHE_KEY = 'smartai_settings_cache';
 var PRODUCTS_CACHE_KEY = 'smartai_products_cache';
@@ -134,7 +134,7 @@ async function _apiRaw(path, body, method, retry){
     if (body) { headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
     try {
       var sentAt = Date.now();
-      var resp = await fetch(SERVER + path, opts);
+      var resp = await fetch(API_BASE + path, opts);
       noteServerClock(resp, sentAt);
       var data = await resp.json();
       clearTimeout(timer);
@@ -548,7 +548,7 @@ async function logout(opts){
     var u = window.fbAuth && window.fbAuth.currentUser;
     if (u && !opts.skipServer) u.getIdToken().then(function(t){
       var ac = new AbortController(); setTimeout(function(){ ac.abort(); }, 5000);
-      return fetch(SERVER + '/auth/session/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + t }, signal: ac.signal });
+      return fetch(API_BASE + '/auth/session/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + t }, signal: ac.signal });
     }).catch(function(){});
     _authEpoch++;
     STATE = null; _appEntered = false;
@@ -672,7 +672,24 @@ document.addEventListener('click', function(e){
   var el = e.target.closest && e.target.closest('[data-open-url]');
   if (el) { e.preventDefault(); openLink(el.getAttribute('data-open-url')); }
 });
-// About Us is the article the admin wrote (Admin > About), fetched when the page is opened. The server cleans it; it is still only shown as the markup it returned.
+// About Us is the article the admin wrote (Admin > About), fetched when the page is opened. The server cleans it when it is saved and this function cleans it
+// again before it is shown: no scripts, frames, forms, event handlers, javascript: links or styles that load things.
+function cleanAboutHtml(html){
+  var tpl = document.createElement('template');
+  tpl.innerHTML = String(html || '');
+  tpl.content.querySelectorAll('script,iframe,object,embed,link,meta,base,form,noscript,frame,frameset,applet,input,button,textarea,select').forEach(function(n){ n.remove(); });
+  tpl.content.querySelectorAll('*').forEach(function(el){
+    Array.prototype.slice.call(el.attributes).forEach(function(a){
+      var n = a.name.toLowerCase(), v = String(a.value).replace(/[\s\u0000-\u001f]/g, '').toLowerCase();
+      if (n.indexOf('on') === 0) el.removeAttribute(a.name);
+      else if (['href', 'src', 'xlink:href', 'action', 'formaction', 'srcset', 'poster'].indexOf(n) !== -1 && /^(javascript|vbscript|data:text)/.test(v)) el.removeAttribute(a.name);
+      else if (n === 'style' && /expression\(|javascript:|url\(\s*['"]?\s*(javascript|data:text)/i.test(a.value)) el.removeAttribute(a.name);
+    });
+    if (el.tagName === 'A') { el.setAttribute('rel', 'noopener noreferrer'); if (el.getAttribute('target')) el.setAttribute('target', '_blank'); }
+    if (el.tagName === 'STYLE') el.textContent = String(el.textContent).replace(/@import[^;]*;?|expression\([^)]*\)|javascript:/gi, '');
+  });
+  return tpl.innerHTML;
+}
 var _aboutLoaded = false;
 async function loadAbout(){
   var box = $('aboutBody');
@@ -681,7 +698,7 @@ async function loadAbout(){
   var r = await api('/public/about-content');
   if (r.status !== 'success') { box.innerHTML = '<div class="empty">Could not load this page. Try again.</div>'; return; }
   _aboutLoaded = true;
-  box.innerHTML = r.html ? '<div class="about-html">' + r.html + '</div>' : '<div class="empty">Nothing published yet.</div>';
+  box.innerHTML = r.html ? '<div class="about-html">' + cleanAboutHtml(r.html) + '</div>' : '<div class="empty">Nothing published yet.</div>';
 }
 
 /* ====================== ANNOUNCEMENT (the welcome picture) ======================
@@ -1150,9 +1167,9 @@ document.addEventListener('visibilitychange', function(){
 var _recordsTab = 'accrued';
 var _recordsLoaded = { accrued: true, topups: false, cashouts: false };
 // The kinds of ledger row that are money coming IN as earnings (the Accrued tab). A top-up is in Topups and a cash-out is in Cash Outs.
-var INCOME_TYPES = ['cashback', 'checkin', 'commission', 'mission_salary', 'promocode', 'order_gift', 'app_claim', 'welcome_bonus', 'admin_credit'];
+var INCOME_TYPES = ['cashback', 'checkin', 'commission', 'mission_salary', 'promocode', 'order_gift', 'app_claim', 'welcome_bonus', 'admin_credit', 'investment_refund'];
 var REC_TYPE_LABEL = { cashback: 'AI robot income', checkin: 'Daily reward', commission: 'Referral commission', mission_salary: 'Task Center reward', promocode: 'Gift code',
-  order_gift: 'Order gift', app_claim: 'App reward', welcome_bonus: 'Welcome gift', admin_credit: 'Account credit' };
+  order_gift: 'Order gift', app_claim: 'App reward', welcome_bonus: 'Welcome gift', admin_credit: 'Account credit', investment_refund: 'Product refund' };
 function recStatusInfo(s){
   s = String(s || 'success').toLowerCase();
   if (['success', 'matched', 'processed'].indexOf(s) !== -1) return { label: 'Completed', cls: 'ok' };
@@ -1305,7 +1322,7 @@ function paintMessages(){
     return '<div class="msg-card' + (m.read ? '' : ' unread') + '">' +
       '<div class="msg-top"><b>' + esc(m.title || 'Message') + '</b>' + (m.read ? '' : '<i class="msg-dot"></i>') + '</div>' +
       (stamp ? '<div class="msg-date">' + esc(stamp) + '</div>' : '') +
-      (m.hasImage ? '<img class="msg-img" src="' + SERVER + '/public/message-image/' + encodeURIComponent(m.id) + '" alt="" onerror="this.remove()">' : '') +
+      (m.hasImage ? '<img class="msg-img" src="' + API_BASE + '/public/message-image/' + encodeURIComponent(m.id) + '" alt="" onerror="this.remove()">' : '') +
       '<div class="msg-body">' + esc(m.body || '').replace(/\n/g, '<br>') + '</div></div>';
   }).join('');
   renderMeRows();
@@ -1510,10 +1527,18 @@ async function doDeposit(){
 }
 
 /* ====================== DEPOSIT STATUS (checks the payment by itself) ====================== */
-var _depPollTimer = null, _depPollAttempt = 0, _depPollMax = 120, _depPollId = null, _depConfirmed = false, _depPollChecking = false;
+// The first check comes 1 s after the page opens, then every 1.5 s (PesaJet's own SDK cadence); the server holds an automatic check for up to DEP_HOLD_MS while its own watcher is
+// on the payment, so a settled payment shows at once. The Verify button never waits behind a held request. After DEP_POLL_MAX checks the page says so (Verify still works).
+var DEP_POLL_FIRST_MS = 1000;
+var DEP_POLL_EVERY_MS = 1500;
+var DEP_POLL_MAX = 120;
+var DEP_HOLD_MS = 8000;
+function depositStatusHold(depositId){ return api('/deposit/marzpay/status', { depositId: depositId, waitMs: DEP_HOLD_MS }); }
+function depositStatusCheck(depositId){ return api('/deposit/marzpay/status', { depositId: depositId }); }
+var _depPollTimer = null, _depFirstTimer = null, _depPollAttempt = 0, _depPollId = null, _depConfirmed = false, _depPollChecking = false;
 var _depIcPending = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.4"/><path d="M11 18h2"/></svg>';
 var _depIcSuccess = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
-function stopDepositPoll(){ clearInterval(_depPollTimer); _depPollTimer = null; _depPollId = null; }
+function stopDepositPoll(){ clearInterval(_depPollTimer); clearTimeout(_depFirstTimer); _depPollTimer = null; _depFirstTimer = null; _depPollId = null; }
 function openDepositStatus(depositId, reference, phone){
   _depPollId = depositId; _depPollAttempt = 0; _depConfirmed = false;
   $('depStatusIc').innerHTML = _depIcPending;
@@ -1527,9 +1552,9 @@ function openDepositStatus(depositId, reference, phone){
   $('depVerifyBtn').onclick = manualVerifyDeposit;
   setVerifySpinning(false);
   openOverlay('depositStatus');
-  clearInterval(_depPollTimer);
-  _depPollTimer = setInterval(pollDepositStatus, 3000);
-  pollDepositStatus();
+  clearInterval(_depPollTimer); clearTimeout(_depFirstTimer);
+  _depFirstTimer = setTimeout(pollDepositStatus, DEP_POLL_FIRST_MS);
+  _depPollTimer = setInterval(pollDepositStatus, DEP_POLL_EVERY_MS);
 }
 function showDepositSuccess(){
   _depConfirmed = true;
@@ -1566,9 +1591,8 @@ async function pollDepositStatus(manual){
   try {
     _depPollAttempt++;
     var attEl = $('depStatusAttempt');
-    if (attEl) attEl.textContent = 'Auto-verifying… (attempt ' + _depPollAttempt + '/' + _depPollMax + ')';
-    // waitMs lets the server hold the answer while its own watcher is on this payment, so a payment is announced the moment it settles.
-    var r = await api('/deposit/marzpay/status', manual === true ? { depositId: _depPollId } : { depositId: _depPollId, waitMs: 8000 });
+    if (attEl) attEl.textContent = 'Auto-verifying… (attempt ' + _depPollAttempt + '/' + DEP_POLL_MAX + ')';
+    var r = await (manual === true ? depositStatusCheck(_depPollId) : depositStatusHold(_depPollId));
     if (r.stale || !STATE) return;
     if (r.status === 'success') {
       if (r.state === 'matched') {
@@ -1589,7 +1613,7 @@ async function pollDepositStatus(manual){
     } else if (manual === true) {
       toast(r.message || 'Could not check the payment status right now');
     }
-    if (_depPollAttempt >= _depPollMax) {
+    if (_depPollAttempt >= DEP_POLL_MAX) {
       clearInterval(_depPollTimer); _depPollTimer = null;
       setDepStatusMsg('failed', "We couldn't confirm this payment automatically. Tap Verify Payment or contact support.");
     }
@@ -1692,7 +1716,7 @@ async function doWithdraw(){
   var card = selectedBank();
   if (!card) { toast('Bind a mobile-money account first'); goBindBank(true); return; }
   var win = withdrawWindow(sett);
-  if (win.enabled && !win.open && !STATE.withdrawAnytime) { toast('Cash-out is open from ' + win.from + ' to ' + win.to + '. Please come back then.'); return; }
+  if (win.enabled && !win.open && !STATE.withdrawAnytime) { toast('Withdraw is open from ' + win.from + ' to ' + win.to + '. Please come back then.'); return; }
   // COMPULSORY Google Authenticator: no set-up yet = the member is told and taken to the set-up page before any password is asked (the server refuses as well).
   if (needsAuthSetup()) { gaRequiredNotice(); return; }
   var pin = await askTradePin('Trade Password', 'Enter your 6-digit Trade Password to cash out ' + ugx(amt) + '.');
@@ -1923,7 +1947,7 @@ async function redeemGiftCode(){
   var raw = $('giftCodeInput').value.trim().toUpperCase();
   if (!raw) { toast('Enter a code'); return; }
   var btn = $('redeemBtn'), label = btn ? btn.textContent : '';
-  if (btn) { if (btn.disabled) return; btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…'); }
+  if (btn) { if (btn.disabled) return; btn.disabled = true; btn.innerHTML = btnBusyHtml('Opening…'); }
   try {
     var r = await api('/redeem', { code: raw });
     if (r.stale) return;

@@ -1,11 +1,7 @@
 'use strict';
-// Team rewards (the Reward tab of Myteam): each tier is claimed ONCE, for good. The server's tier validation, the claim route's money guards,
-// and the member page. Drives source (and --built) in JSDOM; server helpers via vm.
-const fs = require('node:fs'), zlib = require('node:zlib'), vm = require('node:vm'), assert = require('node:assert/strict');
-const { JSDOM } = require('jsdom');
-const built = process.argv.includes('--built');
-const html = fs.readFileSync(__dirname + (built ? '/user/index.html' : '/user-src/index.html'), 'utf8');
-const source = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
+// Team rewards (the Task Center): each tier is claimed ONCE, for good. The server's tier validation and the claim route's money guards (server helpers
+// run via vm). The member page for it (tiers, Claim, Claimed) is driven in a real browser by test-smartai-app.js.
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
 const server = fs.readFileSync(__dirname + '/server.js', 'utf8');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 
@@ -35,43 +31,4 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(/app\.post\('\/admin\/salary\/save', async \(req, res\) => \{\s*if \(!verifyOwner/.test(server), 'only the owner can save the tiers');
   ok(!/team\/task\/claim|taskReferrals|taskDeposits|creditedTaskKeys/.test(server), 'the Task Center is gone from the server');
 }
-
-// ── the member app ──
-const dom = new JSDOM(html, { url: 'https://mysmartai.smartai.example.com/', runScripts: 'outside-only', pretendToBeVisual: true });
-const w = dom.window, d = w.document;
-w.scrollTo = () => {}; w.HTMLElement.prototype.scrollIntoView = () => {}; w.matchMedia = () => ({ matches: true, addListener() {}, removeListener() {} });
-w.fetch = async () => ({ json: async () => ({ status: 'success', settings: {}, products: [], messages: [], accounts: [] }) }); w.open = () => null;
-for (const s of d.scripts) {
-  if (s.type === 'module' || s.src) continue;
-  if (s.hasAttribute('data-nx-core')) w.eval(built ? zlib.inflateSync(Buffer.from(s.textContent.match(/atob\("([A-Za-z0-9+/=]+)"\)/)[1], 'base64')).toString() : source);
-  else if (s.textContent.trim()) w.eval(s.textContent);
-}
-(async () => {
-  await new Promise(r => setTimeout(r, 30));
-  const tiers = [[500000, 2000], [1000000, 4000], [3000000, 6000]].map(([t, r], i) => ({ id: 's' + i, target: t, reward: r, reached: 700000 >= t }));
-  let status = { status: 'success', total: 700000, accruedDays: 1, nextReward: 2000, tierId: 's0', tiers };
-  const calls = [];
-  w.api = async (p) => { calls.push(p); if (p === '/salary/status') return JSON.parse(JSON.stringify(status)); if (p === '/account') return { status: 'success', account: { walletBalance: 1 } }; if (p === '/team/stats') return { status: 'success', referralCode: 'ABCDE', commRates: { l1: 20, l2: 5, l3: 1 }, team: { l1: 0, l2: 0, l3: 0 }, totalTeam: 0, teamCommission: 0, teamDeposits: 0, levelCommission: {}, levelPurchase: {} }; return { status: 'success', transactions: [], messages: [] }; };
-  w.post = async (p, b) => { calls.push(p + ' ' + JSON.stringify(b)); status = Object.assign({}, status, { accruedDays: 0, tiers: status.tiers.map((t, i) => i === 0 ? Object.assign({}, t, { claimed: true }) : t) }); return { status: 'success', amount: 2000, walletBalance: 9000, accruedDays: 0 }; };
-  w.eval('STATE.account={walletBalance:5000}; STATE.page="network"; STATE.teamTab="reward"');
-  await w.renderNetwork(); await new Promise(r => setTimeout(r, 20));
-  ok(d.querySelectorAll('.bottom-nav .navitem').length === 5, 'five tabs');
-  ok([...d.querySelectorAll('.bottom-nav .lbl')].map(e => e.textContent).join() === 'Home,Income,Myteam,Share,My', 'tab names: Home, Income, Myteam, Share, My');
-  ok(calls.includes('/salary/status'), 'the Myteam page reads the salary status');
-  const cards = [...d.querySelectorAll('.pt-tier')];
-  ok(cards.length === 3 && /Tier 1/.test(cards[0].textContent) && /\+UGX 2,000/.test(cards[0].textContent) && /UGX 500,000/.test(cards[0].textContent), 'one card per tier with its reward and threshold');
-  ok(/UGX 500,000 \/ UGX 500,000/.test(cards[0].querySelector('.pt-tn').textContent) && /UGX 700,000 \/ UGX 1,000,000/.test(cards[1].querySelector('.pt-tn').textContent), 'the progress line shows the team total against the threshold');
-  ok(cards[0].querySelector('.pt-rbtn.go') && !cards[1].querySelector('.pt-rbtn.go') && cards[1].querySelector('.pt-rbtn').textContent === 'Share to Unlock', 'a reached tier shows Claim, an unreached one Share to Unlock');
-  w.claimSalary(d.querySelector('.pt-rbtn.go'), 's0'); await new Promise(r => setTimeout(r, 40));
-  ok(calls.includes('/salary/claim {"tierId":"s0"}'), 'Claim names its tier');
-  ok(/UGX 2,000 added to your wallet/.test(d.getElementById('notifyMsg').textContent), 'the member is told what was paid');
-  ok(w.eval('STATE.account.walletBalance') === 9000 && w.eval('STATE.salary.tiers[0].claimed') === true, 'the wallet figure and the tier\'s claimed mark are updated');
-  const after = [...d.querySelectorAll('.pt-tier')];
-  ok(after[0].querySelector('.pt-rbtn.done') && after[0].querySelector('.pt-rbtn').textContent === 'Claimed' && !after[0].querySelector('.pt-rbtn.go'), 'a claimed tier reads Claimed and offers no Claim');
-  ok(!/tomorrow/i.test(after[0].textContent) && !/tomorrow/.test(w.eval('String(ptRewardHtml)')), 'and nothing says it will be claimable again tomorrow');
-  w.closeNotify();
-  w.post = async () => ({ status: 'error', message: 'You have already claimed every reward you have reached.' });
-  w.claimSalary(null); await new Promise(r => setTimeout(r, 40));
-  ok(/already claimed every reward/.test(d.getElementById('notifyMsg').textContent), 'a refused claim shows the server\'s message');
-  console.log('test-salary: ' + n + ' checks passed' + (built ? ' (built)' : ''));
-})().catch(e => { console.error(e); process.exit(1); });
+console.log('test-salary: ' + n + ' checks passed');

@@ -55,7 +55,7 @@ const alphaAt = (r, x, y) => r.data[(y * r.w + x) * 4 + 3];
   const r = smartaiCutout(d, w, h); ok(Math.abs(r.w - 101) <= 3, 'a speck far from the icon does not stretch the crop (got ' + r.w + ')'); }
 
 // wiring
-ok(/fileToCutoutPng\(f, 640\)/.test(admin) && /iconFile_\$\{k\}/.test(admin) && /SMARTAI_ICON_LABELS = \{ navhome/.test(admin), 'the Icons box is on the Banners tab');
+ok(/fileToCutoutPng\(f, 640\)/.test(admin) && /iconFile_\$\{k\}/.test(admin) && /SMARTAI_ICON_LABELS = \{ home:/.test(admin), 'the Icons box is on the Banners tab');
 const srv = fs.readFileSync(__dirname + '/server.js', 'utf8');
-ok(/SMARTAI_ICON_SLOTS = \['navhome'/.test(srv) && /Icons must be PNG pictures/.test(srv), 'the server knows the two icon slots and only takes PNGs for them');
+ok(/SMARTAI_ICON_SLOTS = \['home'/.test(srv) && /Icons must be PNG pictures/.test(srv), 'the server knows the icon slots and only takes PNGs for them');
 console.log('PASS: icon cut-out (' + n + ' checks)');

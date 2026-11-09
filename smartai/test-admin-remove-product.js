@@ -91,6 +91,6 @@ const mk = () => setup(
   // panel and app wiring
   const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8'), app = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
   ok(/data-rmprod/.test(admin) && /\/admin\/user\/remove-product/.test(admin) && /SESSION_ROLE==='owner'\?`<div style="margin-top:5px"><button class="btn danger sm" data-rmprod/.test(admin), 'the owner sees a Remove button under each product in the user window');
-  ok(/investment_refund: 'Product refund'/.test(admin) && /investment_refund'\) return 'Refund'/.test(app), 'a refund row has a name in the panel and on the member\'s Balance Record');
+  ok(/investment_refund: 'Product refund'/.test(admin) && /investment_refund: 'Product refund'/.test(app) && /INCOME_TYPES = \[[^\]]*'investment_refund'/.test(app), 'a refund row has a name in the panel and is listed (as Product refund) among the member\'s Accrued rows');
   console.log(`PASS: remove a product from a member (${n} checks)`);
 })().catch(e => { console.error(e); process.exit(1); });

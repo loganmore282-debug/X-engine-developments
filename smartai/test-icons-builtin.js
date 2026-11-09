@@ -1,33 +1,33 @@
 'use strict';
-// The built-in blue icon pictures (the owner's icon pack, cut out to transparent WebP in user/icons/) and the blue-and-white colours.
+// The built-in blue icon pictures (the owner's icon pack, cut out to transparent WebP in user/icons/), the admin slots that can replace them, and the
+// blue-and-white colours.
 //   node test-icons-builtin.js
 const fs = require('fs'), path = require('path'), vm = require('vm');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ok   - ' + m); } else { fail++; console.log('  FAIL - ' + m); } };
-const src = fs.readFileSync(path.join(__dirname, 'user-src', 'original_module.js'), 'utf8');
-const css = fs.readFileSync(path.join(__dirname, 'user-src', 'index.html'), 'utf8');
+const rd = f => fs.readFileSync(path.join(__dirname, f), 'utf8');
+const src = rd('user-src/original_module.js'), css = rd('user-src/index.html'), server = rd('server.js'), admin = rd('admin-src/index.html');
 const dir = path.join(__dirname, 'user', 'icons');
+const list = (text, re) => (text.match(re) || [, ''])[1].split(',').map(s => s.trim().replace(/['"]/g, '')).filter(Boolean);
 
-// ---- which pictures the app asks for ----
-const defMatch = src.match(/var SMARTAI_ICON_DEFAULTS = (\{[\s\S]*?\n\});/);
-ok(!!defMatch, 'the app has a table of built-in icon pictures (SMARTAI_ICON_DEFAULTS)');
-const defaults = defMatch ? vm.runInNewContext('(' + defMatch[1] + ')') : {};
-const picMatch = src.match(/var PT_MENU_PIC = (\{[^}]*\});/);
-ok(!!picMatch, 'the My page rows have their picture table (PT_MENU_PIC)');
-const rowPics = picMatch ? vm.runInNewContext('(' + picMatch[1] + ')') : {};
-const slots = (src.match(/var NAV_ICON_SLOT = (\{[^}]*\})/) || [])[1];
-const navSlots = slots ? Object.values(vm.runInNewContext('(' + slots + ')')) : [];
-ok(navSlots.length === 5 && navSlots.every(s => defaults[s]), 'all five bottom-bar tabs have a built-in picture');
-const serverSlots = (fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8').match(/const SMARTAI_ICON_SLOTS = \[([^\]]*)\]/) || [])[1] || '';
-const slotNames = serverSlots.split(',').map(s => s.trim().replace(/'/g, '')).filter(Boolean);
-ok(['recharge', 'withdraw', 'service', 'channel', 'ordergift', 'downloadapp'].every(s => defaults[s] && slotNames.includes(s)), 'the Home buttons and the two floating pictures have built-in pictures, and are still admin slots');
-ok(Object.keys(defaults).every(k => slotNames.includes(k)), 'every built-in picture belongs to an admin icon slot, so an upload still replaces it');
+// ---- the slots: the server, the admin panel and the files agree ----
+const serverSlots = list(server, /const SMARTAI_ICON_SLOTS = \[([^\]]*)\]/);
+const adminBuiltin = list(admin, /const SMARTAI_ICON_BUILTIN = \[([^\]]*)\]/);
+const labelBlock = (admin.match(/const SMARTAI_ICON_LABELS = \{([\s\S]*?)\};/) || [, ''])[1];
+const adminLabels = [...labelBlock.matchAll(/(?:^|[,{\s])([a-z]+):\s*'/g)].map(m => m[1]);
+ok(serverSlots.length === 21 && new Set(serverSlots).size === 21, 'the server knows 21 icon slots (' + serverSlots.length + ')');
+ok(JSON.stringify(serverSlots) === JSON.stringify(adminBuiltin), 'the admin panel lists the same slots, in the same order, as having a built-in picture');
+ok(serverSlots.every(s => adminLabels.includes(s)) && adminLabels.length === serverSlots.length, 'and gives every slot a plain label (' + adminLabels.length + ')');
+ok(/Icons must be PNG pictures with a transparent background/.test(server), 'the server takes only PNG pictures for an icon slot');
 
 // ---- the files ----
-const wanted = new Set([...Object.values(defaults).map(u => u.replace(/^\/icons\//, '')), ...Object.values(rowPics).map(n => n + '.webp')]);
 const have = new Set(fs.existsSync(dir) ? fs.readdirSync(dir) : []);
-ok([...wanted].every(f => have.has(f)), 'every picture the app asks for is in user/icons/ (' + wanted.size + ' files)');
-ok([...have].every(f => wanted.has(f)), 'no unused picture is shipped (the owner: pick the best, not all)');
+ok(serverSlots.every(s => have.has(s + '.webp')), 'every slot has its built-in picture in user/icons/');
+const refs = new Set([...(css + src).matchAll(/\/icons\/([A-Za-z0-9_-]+\.(?:webp|jpg|png))/g)].map(m => m[1]));
+ok([...refs].every(f => have.has(f)), 'every picture the app asks for is in user/icons/ (' + refs.size + ' named in the code)');
+const slotFiles = new Set(serverSlots.map(s => s + '.webp'));
+ok([...have].every(f => slotFiles.has(f) || refs.has(f)), 'no unused picture is shipped (the owner: pick the best, not all): ' + [...have].filter(f => !slotFiles.has(f) && !refs.has(f)).join(', '));
+ok(have.has('mtn.jpg') && have.has('airtel.jpg') && /<img src="\/icons\/mtn\.jpg"/.test(css) && /<img src="\/icons\/airtel\.jpg"/.test(css), 'the two network logos (MTN, Airtel) are there and used by the network pickers');
 function webp(buf) {
   if (buf.length < 30 || buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WEBP') return null;
   let off = 12;
@@ -38,49 +38,53 @@ function webp(buf) {
   }
   return { alpha: false, w: 0, h: 0 };
 }
-let allAlpha = true, allSquare = true, allSmall = true, allWebp = true, total = 0;
-for (const f of have) {
+let allAlpha = true, allSquare = true, allSmall = true, allWebp = true, total = 0, bad = [];
+for (const f of serverSlots.map(s => s + '.webp')) {
+  if (!have.has(f)) continue;
   const buf = fs.readFileSync(path.join(dir, f)); total += buf.length;
   const w = webp(buf);
-  if (!w) { allWebp = false; continue; }
-  if (!w.alpha) allAlpha = false;
-  if (w.w !== 192 || w.h !== 192) allSquare = false;
-  if (buf.length > 20000) allSmall = false;
+  if (!w) { allWebp = false; bad.push(f + ' not WebP'); continue; }
+  if (!w.alpha) { allAlpha = false; bad.push(f + ' no alpha'); }
+  if (w.w !== 192 || w.h !== 192) { allSquare = false; bad.push(f + ' ' + w.w + 'x' + w.h); }
+  if (buf.length > 20000) { allSmall = false; bad.push(f + ' ' + buf.length + ' bytes'); }
 }
-ok(allWebp, 'every file is a real WebP picture');
+ok(allWebp, 'every slot picture is a real WebP picture');
 ok(allAlpha, 'every picture has a transparent background (cut out, no baked-in box)');
-ok(allSquare, 'every picture is 192 x 192 (centred in a square, sharp up to 64 px on a 3x phone)');
+ok(allSquare, 'every picture is 192 x 192 (centred in a square, sharp up to 64 px on a 3x phone)' + (bad.length ? ' -> ' + bad.join('; ') : ''));
 ok(allSmall && total < 260000, 'every picture is under 20 kB (' + Math.round(total / 1024) + ' kB in all)');
 
 // ---- the rule that picks the picture: an admin upload wins, else the built-in one ----
-const fn = (src.match(/function ptIconSrc\(key\)\{[\s\S]*?\n\}/) || [''])[0];
-ok(!!fn, 'ptIconSrc picks the picture of a slot');
-const ctx = { STATE: { icons: {} }, SMARTAI_ICON_DEFAULTS: defaults };
+const fn = (src.match(/function iconUrl\(name\)\{[^\n]*\}/) || [''])[0];
+ok(!!fn, 'iconUrl picks the picture of a slot');
+const ctx = { STATE_ICONS: {} };
 vm.createContext(ctx); vm.runInContext(fn, ctx);
-const pick = k => vm.runInContext('ptIconSrc(' + JSON.stringify(k) + ')', ctx);
-ok(pick('navhome') === '/icons/navhome.webp', 'nothing uploaded: the built-in Home picture shows');
-ctx.STATE.icons = { navhome: 'data:image/png;base64,AAAA', recharge: null, withdraw: '' };
-ok(pick('navhome') === 'data:image/png;base64,AAAA', 'an uploaded picture replaces the built-in one');
-ok(pick('recharge') === '/icons/recharge.webp' && pick('withdraw') === '/icons/withdraw.webp', 'a slot the admin left empty (null / "") keeps the built-in picture');
-ok(pick('payicon') === '' && pick('nothing') === '', 'a slot with no built-in picture (the deposit pay-button logo) stays empty');
-ctx.STATE = null;
-ok(pick('navmy') === '/icons/navmy.webp', 'before the member data exists the built-in pictures already show (no empty tab bar)');
+const pick = k => vm.runInContext('iconUrl(' + JSON.stringify(k) + ')', ctx);
+ok(pick('home') === '/icons/home.webp', 'nothing uploaded: the built-in Home picture shows');
+ctx.STATE_ICONS = { home: 'data:image/png;base64,AAAA', deposit: null, withdraw: '' };
+ok(pick('home') === 'data:image/png;base64,AAAA', 'an uploaded picture replaces the built-in one');
+ok(pick('deposit') === '/icons/deposit.webp' && pick('withdraw') === '/icons/withdraw.webp', 'a slot the admin left empty (null / "") keeps the built-in picture');
+ctx.STATE_ICONS = null;
+ok(pick('my') === '/icons/my.webp', 'before the pictures arrive the built-in ones already show (no empty tab bar)');
+ok(/img\.onerror = function\(\)\{ this\.onerror = null; this\.src = '\/icons\/' \+ name \+ '\.webp'; \};/.test(src), 'an uploaded picture that cannot be loaded falls back to the built-in one');
+ok(/STATE_ICONS = im\.icons \|\| \{\};/.test(src), 'the uploaded pictures come from /public/smartai-images');
 
-// ---- every place that draws an icon goes through that rule ----
-ok(/const src = ptIconSrc\(NAV_ICON_SLOT\[key\]\);/.test(src), 'the bottom bar uses it');
-ok(/ptIconSrc\('ordergift'\)/.test(src) && /ptIconSrc\('downloadapp'\)/.test(src), 'the two floating pictures use it');
-ok(/const src = ptIconSrc\(key\);\s*\n\s*if \(!src\) return '';/.test(src), 'the Home buttons (ptIconHtml) use it');
-ok(/'<img src="\/icons\/' \+ PT_MENU_PIC\[icon\] \+ '\.webp"/.test(src), 'the My page rows show their picture');
-ok(!/STATE\.icons\[/.test(src.replace(/function ptIconSrc[\s\S]*?\n\}/, '')), 'nothing reads the uploaded icons directly any more (all go through ptIconSrc)');
+// ---- every place that draws an icon names a real slot ----
+const used = new Set([...(css + src).matchAll(/data-icon=\\?["']([a-z]+)\\?["']/g)].map(m => m[1]).concat([...src.matchAll(/artFillHtml\('([a-z]+)'\)|artHtml\([^,]+,\s*'([a-z]+)'\)/g)].map(m => m[1] || m[2])));
+ok(used.size >= 15 && [...used].every(u => serverSlots.includes(u)), 'every data-icon in the app names a real slot (' + used.size + ' used)' + ([...used].filter(u => !serverSlots.includes(u)).join(',')));
+const mapNames = [...src.matchAll(/\['[A-Za-z]+Banner(?:Art)?', [^,]*, '([a-z]+)'\]/g)].map(m => m[1]);
+ok(mapNames.length >= 10 && mapNames.every(u => serverSlots.includes(u)), 'every art banner uses a real slot (' + mapNames.length + ' banners)');
+ok(!/STATE_ICONS\[/.test(src.replace(/function iconUrl[^\n]*\n/, '')), 'nothing reads the uploaded icons directly (all go through iconUrl)');
+const imgs = [...css.matchAll(/<img[^>]*data-icon="([a-z]+)"[^>]*>/g)];
+ok(imgs.length >= 20 && imgs.every(m => !/\ssrc="/.test(m[0]) || new RegExp('src="/icons/' + m[1] + '\\.webp"').test(m[0])), 'each picture in the page starts with its own built-in file, so it shows on the first frame (' + imgs.length + ' pictures)');
 
-// ---- blue and white: no brand red is left in the member app's CSS ----
+// ---- blue and white: the only reds are error / failure colours ----
 function hsl(r, g, b) {
   r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2; let h = 0, s = 0;
   if (mx !== mn) { const d = mx - mn; s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn); h = mx === r ? ((g - b) / d + (g < b ? 6 : 0)) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; }
   return { h, s, l };
 }
 const noComments = css.replace(/\/\*[\s\S]*?\*\//g, m => ' '.repeat(m.length)).replace(/<!--[\s\S]*?-->/g, m => ' '.repeat(m.length));
-const reds = new Map();
+const reds = new Set();
 const tok = /#([0-9a-fA-F]{6})\b|#([0-9a-fA-F]{3})\b|rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*[\d.]+\s*)?\)/g;
 let m;
 while ((m = tok.exec(noComments))) {
@@ -88,16 +92,13 @@ while ((m = tok.exec(noComments))) {
   if (m[1] || m[2]) { const x = m[1] || m[2].split('').map(c => c + c).join(''); r = parseInt(x.slice(0, 2), 16); g = parseInt(x.slice(2, 4), 16); b = parseInt(x.slice(4, 6), 16); }
   else { r = +m[3]; g = +m[4]; b = +m[5]; }
   const { h, s, l } = hsl(r, g, b);
-  if (s >= 0.22 && (h >= 335 || h <= 22) && l > 0.12 && l < 0.97) {
-    const bb = noComments.lastIndexOf('{', m.index); const a = Math.max(noComments.lastIndexOf('}', bb), noComments.lastIndexOf('>', bb), noComments.lastIndexOf(';', bb)) + 1;
-    const sel = noComments.slice(a, bb).trim().replace(/\s+/g, ' ');
-    reds.set(m[0].toLowerCase() + ' in ' + sel.slice(-48), 1);
-  }
+  if (s >= 0.22 && (h >= 335 || h <= 22) && l > 0.12 && l < 0.97) reds.add(m[0].toLowerCase());
 }
-const ERROR_RULES = ['.notify-ic', '.cp-ic.bad', '.cp-chgerr', '.cp-msg.bad', '.pt-noprod.bad', '.pin-warn', '.pt-rec .m em.bad', '.pt-pwerr', '.pa-err', '.pt-rec .a.out'];
-const strays = [...reds.keys()].filter(k => !ERROR_RULES.some(e => k.includes(' in ') && k.slice(k.indexOf(' in ') + 4).includes(e.slice(-Math.min(e.length, 40)))) && !/^#e40613 in :root|--v-bad/.test(k));
-ok(strays.length === 0, 'the only reds left in the CSS are error / failure colours (a stray one would be Potato\'s red back again)' + (strays.length ? ' -> ' + strays.slice(0, 5).join(' | ') : ''));
-ok(/--mg-green:#137aef/.test(css) && /--snow-wine:#137aef/.test(css), 'the brand colour is the blue of the icons');
+const ERROR_REDS = new Set(['#c23b4b', '#f8dee1', '#9c2c3a', 'rgba(194,59,75,.5)']);   // --berry, --berry-pale and the danger button
+const strays = [...reds].filter(c => !ERROR_REDS.has(c));
+ok(strays.length === 0, 'the only reds in the CSS are the error / failure colours (a stray one would be a pasted ChocoMCC red)' + (strays.length ? ' -> ' + strays.join(' | ') : ''));
+ok(/--caramel:#137AEF/i.test(css) && /--cream:#EEF4FF/i.test(css) && /--caramel-deep:#0D5FD2/i.test(css), 'the brand colours are the blues of the icons');
+ok(/<meta name="theme-color" content="#(?:EEF4FF|137AEF|0964CD)"/i.test(css), 'the phone\'s address bar is blue or white too');
 
 console.log(pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

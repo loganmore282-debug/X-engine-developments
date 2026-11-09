@@ -22,10 +22,6 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok((await call({ messageIds: ['b', 'c', 'b', ''] })).body.status === 'success' && reads.has('u1_b') && reads.has('u1_c') && reads.size === 3, 'many marked read in one call, no duplicates');
   ok((await call({ messageIds: Array.from({ length: 150 }, (_, k) => 'm' + k) })) && reads.size === 103, 'at most 100 per call');
   ok((await call({})).code === 400, 'nothing to mark is refused');
-  // the page: grouped by date in striped cards, full text and picture shown, no second tap
-  const page = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
-  const r = page.slice(page.indexOf('function renderMessagesList()'), page.indexOf('window.openMessageDetail'));
-  ok(/pt-day/.test(r) && /pt-rec-in/.test(r) && /pt-msg/.test(r) && /message-image/.test(r) && !/openMessageDetail\(/.test(r), 'Messages: one striped card per date, each message shown in full');
   {
   // ── Renew: the message becomes the latest and unread again for everyone ──
   const vm = require('node:vm'), crypto = require('node:crypto');

@@ -17,10 +17,10 @@ ok(codes.every(c => !/[ILO01]/.test(c)), 'no I, L, O, 0 or 1 (unambiguous)');
 for (const ex of ['S62BV', 'GST3V']) ok([...ex].every(ch => REFERRAL_CHARS.includes(ch)), 'the owner\'s example ' + ex + ' is a code this generator could produce');
 ok(/referralCodeLower: codeLower/.test(src) && /where\('referralCodeLower', '==', lower\)/.test(src), 'a code typed in any case is found (lower-case twin)');
 ok(/String\(code\)\.toUpperCase\(\)/.test(mod), 'the invite link carries the code in capitals');
-// deposit page
-const form = mod.slice(mod.indexOf('function openDepositFormSheet'), mod.indexOf('window.pickPayLabel'));
-ok(form.indexOf('id="depAmount"') > 0 && !/depPhone/.test(form), 'the Deposit page has the amount box and no phone box (the owner\'s screens have none)');
-const sub = mod.slice(mod.indexOf('window.submitDeposit = '), mod.indexOf('window.submitDeposit = ') + 4000);
-ok(!/depPhone/.test(sub) && !/if \(!phone\)/.test(sub), 'no typed number is required: the payment request goes to the member\'s own number');
-ok(/post\('\/deposit\/marzpay', \{ amount, slot \}\)/.test(sub), 'only the amount and the pay button position are sent with the deposit');
+// deposit page (ChocoMCC's: the amount, the network and the number the member pays FROM, which may be a different number from the account's)
+const page = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
+ok(page.indexOf('id="depAmt"') > 0 && page.indexOf('id="depPhone"') > 0 && page.indexOf('id="depNetworkRow"') > 0, 'the Deposit page has the amount box, the network and the number to pay from');
+const sub = mod.slice(mod.indexOf('async function doDeposit'), mod.indexOf('async function doDeposit') + 2500);
+ok(/if \(!\$\('depPhone'\)\.value\.trim\(\)\)/.test(sub) && /localDigits\(\$\('depPhone'\)\.value\)/.test(sub), 'the number to pay from is asked for and checked');
+ok(/phone: '\+256' \+ local/.test(sub) && /network: _depNetwork/.test(sub) && /body\.slot = _depSlot/.test(sub), 'the payment request carries the typed number, the network and the pay button position');
 console.log('PASS: referral code format and deposit phone box (' + n + ' checks)');

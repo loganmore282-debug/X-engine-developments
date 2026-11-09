@@ -63,9 +63,9 @@ const deps = () => [...fm.__stores.pendingDeposits.values()];
   // admin panel wiring
   const admin = fs.readFileSync(path.join(root, 'admin-src/index.html'), 'utf8'), app = fs.readFileSync(path.join(root, 'user-src/original_module.js'), 'utf8');
   ok(/id="depGwRotate"/.test(admin) && /depositGateways: _depGws\.join/.test(admin) && /'lworxpay','LworxPay'/.test(admin) && /'obpay','ObPay'/.test(admin), 'the admin has a gateway picker per button and a Rotate button');
-  ok(/post\('\/deposit\/marzpay', \{ amount, slot \}\)/.test(app), 'the app sends the position of the chosen button');
-  ok(/api\('\/deposit\/start'\)/.test(app) && /Math\.floor\(Math\.random\(\) \* names\.length\)/.test(app) && !/findIndex\(x => \/\\\*\$\/\.test\(x\)\)/.test(app), 'the app uses the server\'s pick, with a random one as the fallback, and no fixed default');
-  ok(/btn\.textContent = 'Opening\.\.\.'/.test(app) && /\.pt-gcgo:disabled/.test(fs.readFileSync(path.join(root, 'user-src/index.html'), 'utf8')), 'the Redeem button says Opening... while it works');
+  ok(/body\.slot = _depSlot/.test(app) && /api\('\/deposit\/marzpay', body\)/.test(app), 'the app sends the position of the pay button the server chose');
+  ok(/api\('\/deposit\/start'\)/.test(app) && /_depSlot = r\.start/.test(app) && /refreshDepositSlot\(\);\s*\/\/ the next deposit uses the next method in turn/.test(app), 'the app uses the server\'s pick (asked one deposit ahead), so every method is used in turn');
+  ok(/btnBusyHtml\('Opening…'\)/.test(app), 'the Redeem button says Opening... while it works');
   realLog(fails ? fails + ' FAILED' : 'PASS: deposit buttons -> gateways (' + n + ' checks)');
   process.exit(fails ? 1 : 0);
 })().catch(e => { realErr(e); process.exit(2); });

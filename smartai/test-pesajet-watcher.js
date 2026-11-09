@@ -73,8 +73,8 @@ function env(rows) {
   ok(/Math\.min\(Math\.max\(parseInt\(req\.body\.waitMs, 10\) \|\| 0, 0\), 9000\)/.test(route0), 'the hold is capped at 9 s whatever the client asks');
   ok(/holdMs > 0 && dep\.provider === 'pesajet' && \(dep\.status === 'pending' \|\| dep\.status === 'initiating'\) && pesajetWatcherFresh\(depSnap\.id\)/.test(route0), 'it holds only a PesaJet deposit that is still pending AND has a live watcher');
   const app = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
-  ok(/function depositStatusHold\(depositId\)\{\s*return post\('\/deposit\/marzpay\/status', \{ depositId, waitMs: DEP_HOLD_MS \}\)/.test(app), 'the app autopoll asks the server to hold');
-  ok(/function depositStatusCheck\(depositId\)\{[\s\S]*?post\('\/deposit\/marzpay\/status', \{ depositId \}\)/.test(app), 'the Verify button still asks for an immediate answer (never waits behind a held request)');
+  ok(/function depositStatusHold\(depositId\)\{\s*return api\('\/deposit\/marzpay\/status', \{ depositId: depositId, waitMs: DEP_HOLD_MS \}\)/.test(app), 'the app autopoll asks the server to hold');
+  ok(/function depositStatusCheck\(depositId\)\{[\s\S]*?api\('\/deposit\/marzpay\/status', \{ depositId: depositId \}\)/.test(app) && /manual === true \? depositStatusCheck\(_depPollId\) : depositStatusHold\(_depPollId\)/.test(app), 'the Verify button still asks for an immediate answer (never waits behind a held request)');
   // wiring in the real routes
   const marker = src.slice(src.indexOf("if (pesajetTxId) watchPesajetDeposit(depRef.id)") - 600, src.indexOf("if (pesajetTxId) watchPesajetDeposit(depRef.id)") + 80);
   ok(/status: 'pending', pesajetTxId/.test(marker), 'the watcher starts only AFTER the transaction id is saved');

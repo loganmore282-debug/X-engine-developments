@@ -37,10 +37,10 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(server.indexOf('captcha.verify(') < server.indexOf("cleanPhone(textOf(req.body.phone))", server.indexOf("app.post('/auth/signup'")), 'the captcha is checked before anything else in sign-up');
   ok(/const MEMBER_PASSWORD_MIN = 6,/.test(server) && !/weakPasswordReason/.test(server) && !fs.existsSync(__dirname + '/weak-passwords.js'), 'passwords: at least 6, no weak-password list');
   ok(/window\.fbCreateUser = async \(email, pass\) =>/.test(html) && !/captchaId/.test(html) && !/loadAuthCaptcha|capError/.test(mod), 'the app no longer sends or asks for a captcha (the owner\'s Create Account has none)');
-  ok(/pass\.length < 6\) return regError\('Password must be at least 6 characters'\)/.test(mod), 'the app asks for 6 characters');
-  for (const id of ['authLogo', 'authLogoImg', 'authHeroBg', 'loginPhone', 'loginPassword', 'rememberMe', 'loginBtn', 'regPhone', 'regPassword', 'regPassword2', 'regTradePin', 'regReferral', 'regBtn']) ok(html.includes('id="' + id + '"'), 'markup has ' + id);
-  ok(/placeholder="Enter password"/.test(html) && /placeholder="Re-enter password"/.test(html) && /placeholder="6-digit trade password"/.test(html) && /placeholder="Enter Username Number"/.test(html), 'the words are the screenshot\'s');
-  ok(/id="loginDial">\+256</.test(html) && /id="regDial">\+256</.test(html), '+256 on both forms');
-  ok(/SMARTAI_IMAGE_SLOTS = \['logo', 'authhero', 'authlogo',/.test(server) && /id="authLogoFile"/.test(R('admin-src/index.html')) && /applyAuthLogo/.test(mod), 'the circle logo is an admin-uploaded slot');
+  ok(/pass\.length < 6\) \{ toast\('Password must be at least 6 characters'\)/.test(mod), 'the app asks for 6 characters');
+  for (const id of ['authBanner', 'authMark', 'fPhone', 'fPass', 'fPassConfirm', 'fPin', 'fCode', 'authGo', 'authSwitchBtn']) ok(html.includes('id="' + id + '"'), 'markup has ' + id);
+  ok(/placeholder="Password"/.test(html) && /placeholder="Confirm password"/.test(html) && /placeholder="Trade Password \(6 digits\)"/.test(html) && /placeholder="Invitation code \(optional\)"/.test(html), 'the words of the sign-up form');
+  ok((html.match(/<span class="phone-prefix">\+256<\/span>/g) || []).length >= 2, '+256 before the phone boxes');
+  ok(/SMARTAI_IMAGE_SLOTS = \['logo', 'authhero', 'authlogo',/.test(server) && /id="authLogoFile"/.test(R('admin-src/index.html')) && /function paintAuthArt\(\)/.test(mod) && /ART\.authlogo/.test(mod), 'the circle logo is an admin-uploaded slot');
 }
 console.log(`PASS: captcha and Smart AI sign-up wiring (${n} checks)`);

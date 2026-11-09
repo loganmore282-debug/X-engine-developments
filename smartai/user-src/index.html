@@ -316,7 +316,7 @@
   @keyframes viewAppear{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
 
   /* ---------- Overlay pages ---------- */
-  .overlay{position:fixed;inset:0;background:var(--cream);z-index:80;display:none;overflow-y:auto;}
+  .overlay{position:fixed;inset:0;background:var(--cream);z-index:80;display:none;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;}
   .overlay.show{display:block;}
   .ov-top{display:flex;align-items:center;gap:12px;padding:18px 20px 16px;position:sticky;top:0;background:var(--cream);z-index:5;border-bottom:2px solid rgba(11,42,91,.16);}
   .ov-back{width:38px;height:38px;border-radius:12px;background:var(--card);box-shadow:var(--shadow);border:none;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
@@ -1412,8 +1412,8 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   // rewritten by set-backend-url.js together with the app's other copies.
   const SMARTAI_AUTH_API = '/k7x2';
   const KEY = 'smartai_auth_session';
-  // Kept in window.smartaiKeep (localStorage), so the member stays signed in after closing the app, until the server ends the session
-  // (4 hours idle or in all) or they log out. It used to be sessionStorage: closing the tab ended every login.
+  // Kept in window.smartaiKeep (localStorage), so the member stays signed in after closing the app, until they log out or change their password, or the
+  // server ends the session (a ban, a removed account). There is no time limit. It used to be sessionStorage: closing the tab ended every login.
   const keep = () => window.smartaiKeep || sessionStorage;
   const read = () => {
     try {

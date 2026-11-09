@@ -57,26 +57,16 @@ async function serverChecks(){
   assert.equal(validSession({expiresAt:new Date(now+MAX_MS)},now),false,'old admin sessions without activity metadata expire');
 }
 function clientChecksUser(){
+  // A member's login has no time limit (owner), so the member app carries NO idle timer at all: nothing signs a member out but Sign Out, the server
+  // ending the login (password change, ban, delete) and a 401. The page only keeps the stored login where the browser allows it.
   const built = process.argv.includes('--built');
   const html = fs.readFileSync(__dirname+(built?'/user/index.html':'/user-src/index.html'),'utf8');
   if (built) assert.equal(html,fs.readFileSync(__dirname+'/user/share.html','utf8'),'referral entry ships the same member policy');
   const user = html.match(/<script data-smartai-idle>([\s\S]*?)<\/script>/)[1];
-  assert(user.includes('IDLE = Infinity, MAX = Infinity'), 'the member app has no idle or maximum time');
-  let now=1800000000000, expired=0, pulses=0;
-  const listeners={},store=new Map();
-  const document={hidden:false,addEventListener:(name,fn)=>listeners[name]=fn};
-  const window={addEventListener:(name,fn)=>listeners[name]=fn};
-  const context={window,document,Date:{now:()=>now},Number,JSON,Promise,setInterval:()=>1,clearInterval:()=>{},sessionStorage:{getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)}};
-  vm.runInNewContext(user,context);
-  const session=window.createSmartAIIdleSession('test',()=>expired++,()=>pulses++);
-  assert(session.begin('alice',now,true));
-  const DAY=86400000;
-  for (const d of [0.2,1,30,400]) { now+=d*DAY; assert(session.check(), 'still signed in after more days of silence: '+d); }
-  listeners.pointerdown({isTrusted:true}); assert.equal(expired,0,'a tap after a year of silence does not sign the member out');
-  now-=3*DAY; assert(session.check(),'a phone clock set back by days never signs the member out'); assert.equal(expired,0);
-  assert(session.begin('alice',now,false),'reopening the app keeps the saved login'); assert.equal(expired,0);
-  assert.equal(session.begin('nan',NaN,true),false,'a login with no usable start time is refused');
-  store.set('test',JSON.stringify({identity:'corrupt',started:now}));assert.equal(session.begin('corrupt',now,false),false);
+  assert(/window\.smartaiKeep = /.test(user) && !/IDLE\b|createSmartAIIdleSession/.test(user), 'the member page keeps the login in local storage and has no idle or maximum time');
+  const mod = fs.readFileSync(__dirname+'/user-src/original_module.js','utf8');
+  assert(!/createSmartAIIdleSession|_memberSession/.test(mod), 'the member app has no idle session');
+  assert(/resp\.status === 401 && !isPublic && STATE/.test(mod) && /function sessionEnded\(\)/.test(mod), 'a login the server ended (401) takes the member back to the sign-in screen');
 }
 function clientChecks(panel, idleMs, maxMs){
   const built = process.argv.includes('--built');
@@ -84,7 +74,6 @@ function clientChecks(panel, idleMs, maxMs){
   if (built) assert.equal(html,fs.readFileSync(__dirname+'/user/share.html','utf8'),'referral entry ships the same member policy');
   const user = html.match(/<script data-smartai-idle>([\s\S]*?)<\/script>/)[1];
   const admin = fs.readFileSync(__dirname+'/admin-src/index.html','utf8').match(/<script data-smartai-idle>([\s\S]*?)<\/script>/)[1];
-  assert(user.includes('IDLE = Infinity, MAX = Infinity'), 'the member app has no idle or maximum time');
   assert(admin.includes('IDLE = 2 * 60 * 60 * 1000'));
   let now=1800000000000, expired=0, pulses=0;
   const listeners={},store=new Map();

@@ -28,9 +28,6 @@ const lib = new Function('crypto', `const _scrypt = (password, salt) => new Prom
   // 4. nginx + node
   ok(/gzip on;/.test(nginx) && /application\/json/.test(nginx) && /upstream smartai_node/.test(nginx) && /keepalive 32;/.test(nginx) && /proxy_set_header Connection ""/.test(nginx), 'nginx compresses and keeps connections to Node open');
   ok(/keepAliveTimeout = 65 \* 1000/.test(server), 'Node keeps those connections longer than nginx does');
-  // 5. the live loop reads the heavy lists only when the balance moved or their own beat elapsed
-  const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
-  ok((mod.match(/liveDue\('(inv|tx|messages)'/g) || []).length === 4 && /_liveAccountMoved = true/.test(mod), 'Home, Income, Balance Record and Messages re-read their lists only when the balance moved or after their own beat, not every second');
   // 00:00: every running product falls due in the same second -- they are paid a few at a time, a full page carries on at once, and a timer is aimed at the exact midnight
   ok(/const CASHBACK_PARALLEL = 12;/.test(server) && /await settleMany\(snap\.docs\);/.test(server) && /if \(!full && snap\.docs\.length >= 1000\) setImmediate\(reconcileCashback\);/.test(server), 'the payout sweep pays due products a few at a time and drains a full page at once');
   ok(/function armMidnightSweep\(\)/.test(server) && /eatNextMidnight\(Date\.now\(\)\) - Date\.now\(\) \+ 50/.test(server) && /armMidnightSweep\(\); \}\);/.test(server), 'a timer starts a sweep at the exact Uganda midnight');

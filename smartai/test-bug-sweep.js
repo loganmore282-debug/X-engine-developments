@@ -1,4 +1,4 @@
-// Pins the fixes from the multi-agent bug sweep (see CLAUDE.md 6cw). Source-level checks plus a few real behaviours.
+// Pins the fixes from the multi-agent bug sweep (see CLAUDE.md 6cw). Source-level checks plus a few real behaviours. (The checks of the old Potato screens went with those screens; test-smartai-app.js drives the member app.)
 const fs = require('fs'), assert = require('assert'), vm = require('vm'), cp = require('child_process');
 const rd = f => fs.readFileSync(__dirname + '/' + f, 'utf8');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
@@ -33,14 +33,7 @@ ok(/Math\.round\(parseFloat\(\$\('adjAmt'\)/.test(admin), 'Credit / Debit confir
 ok(/'admins', 'auditlog'\]\.includes\(lastTab\)/.test(admin), 'a staff deep link to an owner tab does not log staff out');
 
 // member app
-ok(/sheet === 'Balance Detail'/.test(mod) && !/sheet === 'Transaction Statement'/.test(mod), 'Balance Detail live-refreshes (the sheet title test matches)');
-ok(/\['myBalance','walletBalance'\]/.test(mod), 'the live balance patch reaches My, Income and the Balance Record header');
-ok(/changed\|processing\|updated/.test(mod), 'success notices (password changed, withdrawal processing) get the tick');
-ok(/\.notify-bg\{[^}]*z-index:440/.test(html), 'notices sit above the Help and Download dialogs');
-ok(/_catalogRefreshedAt/.test(mod) && /30000 - \(Date\.now\(\) - _catalogRefreshedAt\)/.test(mod), 'a phone clock ahead of the server cannot make the catalogue refetch in a loop');
-ok(/r\.code === 'AUTH_UNAVAILABLE' \|\| r\.code === 'SERVER_ERROR'/.test(mod), 'a busy or unavailable server on opening the app does not sign the member out');
 ok(!/signal:\s*AbortSignal\.timeout/.test(mod), 'no AbortSignal.timeout (older phones would skip the server logout)');
-ok(/messages: null, salary: null, page: 'home'/.test(mod), 'logout also forgets messages and the open tab');
 
 // deploy / infra
 const upd = rd('deploy/update-vps.sh');
@@ -71,19 +64,6 @@ ok(/async function inChunks\(/.test(server) && /Promise\.allSettled\(\[\s*reconc
   ok(!/smartai_bad_ua/.test(hostBlock.slice(0, hostBlock.indexOf('location / { return 404; }'))), 'the webhook-only host has no user-agent wall'); }
 ok(/return 308 https:/.test(rd('deploy/update-vps.sh')), 'update-vps.sh turns certbot\'s 301 into 308 so a POST callback keeps its body when it is redirected');
 ok(/maxretry = 3/.test(rd('deploy/fail2ban/smartai.local').slice(rd('deploy/fail2ban/smartai.local').indexOf('[smartai-badua]'), rd('deploy/fail2ban/smartai.local').indexOf('[smartai-adminlogin]'))), 'one odd sender name no longer bans an address for a day');
-ok(/async function finishSignupToLogin\(typedPhone\)/.test(mod) && /if \(signupFlow\) \{ await finishSignupToLogin\(regTypedPhone\); return; \}/.test(mod) && /if \(ph\) ph\.value = typedPhone;/.test(mod), 'after signing up the member lands on Login with the number already filled in (only the password is typed)');
-ok(/!window\._pendingRegPhone && !window\._pendingLoginSuccess\) \{\s*\$\('authScreen'\)\.style\.display = 'none';\s*showLoadingScreen\(\)/.test(mod), 'a typed login never shows the startup loader (Login stays until Home is ready)');
-ok(/phoneError\('login', phoneErrorText\(\)\)/.test(mod) && /id="loginPhoneErr"/.test(html) && /notify\('Missing required parameter'\)/.test(mod), 'a wrong phone number is the red line under the phone box; every other login refusal is the centred notice');
-ok(/function loadFailHtml\(/.test(mod) && /window\.retryLoad = /.test(mod) && /_productsLoadFailed \? '<div class="pt-noprod bad"/.test(mod) && /_investmentsLoadFailed \? loadFailHtml\('assets'/.test(mod) && /_recordsLoadFailed && !\(STATE\.transactions/.test(mod) && /_messagesLoadFailed \? loadFailHtml\('messages'\)/.test(mod), 'a list that failed to load says so with a tap-to-retry, instead of "No products / No Orders / No Records / No Messages"');
-ok(/notify\('Purchase successful', \(\) => showPage\('assets'\)\)/.test(mod) && !/See it under|is now running/.test(mod) && /var _buyBusy = false;/.test(mod) && !/Confirm Investment|confirmActionBtn/.test(mod), 'Buy Now buys at once with no confirmation pop-up (a second tap while it is on its way does nothing); the success notice reads "Purchase successful" and the member is then taken to the Income page by itself');
 ok(/const memberCaptchaLimiter = rateLimit\(\{ windowMs: 5 \* 60 \* 1000, max: 600/.test(server), 'the captcha limit allows a new picture on every Sign Up tap, even behind one carrier address');
-ok(/#pageHost\.mg-enter\{position:relative;animation:mgPageIn \.3s ease-out;\}/.test(html) && /@keyframes mgPageIn\{from\{opacity:0;top:6px;\}to\{opacity:1;top:0;\}\}/.test(html) && /@keyframes mgSheetIn\{from\{opacity:0;transform:translateY\(6px\);/.test(html), 'the page appearing animation runs once on #pageHost itself (a repaint of its content never restarts it) and rises by `top`, never a transform, so the fixed Treasure Chest stays in its corner');
-ok(/function replayPageIn\(\)/.test(mod) && /if \(wasOpen && !\(opts && opts\.navigating\)\) replayPageIn\(\);/.test(mod), 'closing a sheet (back arrow or phone Back) replays the page appearing animation on the page underneath');
-{ const dl = mod.slice(mod.indexOf('window.openDownloadPage'), mod.indexOf('// ── ABOUT US')); ok(/Download APK/.test(dl) && /Install in 3 steps/.test(dl) && /<h3><i><\/i>FAQ<\/h3>/.test(dl), 'the Download App page is the owner\'s: hero with Download APK, three steps, three tiles and the FAQ'); }
-ok(/class="mg-mem"/.test(mod) && /<b class="mg-mem-ph">/.test(mod) && /Joined \$\{esc\(joinedStamp\(m\.createdAt\)\)\}/.test(mod) && /<b class="mg-mem-amt">\$\{esc\(vMoney2\(m\.invested\)\)\}/.test(mod) && />No More<\/div>/.test(mod) && !/Total Purchase|<b>User<\/b>/.test(mod.slice(mod.indexOf('function renderTeamMembers'), mod.indexOf('async function renderNetwork'))) && /\.pt-mlist\{/.test(html) && /\.mg-mem\{display:flex;[^}]*height:40\.3px/.test(html), 'a Team member row is the owner\'s screenshot: one white card, a pale row per member with the hidden number, "Joined" date and time, the amount bought (0.00 until a purchase) and "No More" under the card');
 ok(!/capError|regCapErr|regCaptcha|captchaId/.test(mod + fs.readFileSync(__dirname + '/user-src/index.html', 'utf8')), 'Create Account has no captcha box or line (the owner\'s screens have none)');
-ok(/btn\.classList\.toggle\('shown', show\)/.test(mod) && /\.pa-eye\.shown \.off\{display:none;\}/.test(fs.readFileSync(__dirname + '/user-src/index.html', 'utf8')), 'the password eye gets a slash while the password is shown');
-ok(/'Processing\.\.\.'/.test(mod) && /'Logging in\.\.\.'/.test(mod) && /\.pa-btn:disabled\{/.test(fs.readFileSync(__dirname + '/user-src/index.html', 'utf8')), 'the Register and Login buttons read "Processing..." / "Logging in..." in the faded look while working');
-{ const css = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8'), mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
-  ok(/\.pa-hero\{[^}]*height:245\.3px/.test(css) && !/\.pa-hero[^{]*\{[^}]*transition/.test(css) && /\.pa-page\{[^}]*min-height:calc\(100% \+ 66\.6px\)/.test(css) && /var PA_REST = 66\.6;/.test(mod) && /sc\.scrollTop = invited \? 0 : PA_REST/.test(mod), 'the sign-in banner is the whole 245.3 px picture on a page that scrolls; the pages rest 66.6 px down (the owner\'s recording), an invitation link at the top'); }
 console.log(`PASS: bug sweep fixes (${n} checks)`);
