@@ -536,7 +536,7 @@ app.use((req, res, next) => {
 });
 
 // ── MAINTENANCE GATE ──
-const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/redeem', '/salary', '/gifts', '/app'];
+const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/redeem', '/salary', '/gifts', '/app', '/checkin'];
 const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/pesajet/webhook', '/tavupay/webhook', '/lworxpay/webhook', '/obpay/webhook']);
 // The platform's name, as the owner last set it in Admin -> Settings. Every
 // server-side string that names the app goes through here rather than
@@ -668,6 +668,10 @@ const DEFAULT_SETTINGS = {
   // 0 = no limit; a nonzero value leaves anything above it for manual review. autoApproveEnabledAt is stamped by the server when the switch is turned on.
   autoApproveWithdrawalsEnabled: false, autoApproveMinSec: 10, autoApproveMaxSec: 60, autoApproveMaxAmount: 0, autoApproveEnabledAt: 0,
   supportTelegram: '', telegramGroup: '',
+  // Daily check-in (Rewards tab): what one tap a day pays into the wallet; 0 turns the card off. The streak and the day are the member's own.
+  dailyCheckin: 250,
+  // More support links (Telegram channel, WhatsApp group and contact), the support hours, and the Terms & Rules text shown in the app. All plain text; a link must be http(s).
+  telegramChannel: '', whatsappGroup: '', whatsappContact: '', supportHours: '', rulesText: '',
   // Owner: "l would like to also to edit the app name smartai, so make it when
   // it can be editable everywhere." The platform's own name, previously
   // written into about a dozen strings across the client by hand. It has a
@@ -882,7 +886,7 @@ async function getHomeBanner() {
 // (aboutlogo). Stored in the 'banners' collection as `smartai-<slot>`, cached for 60 s. Only the pictures the owner's screenshots show exist.
 // Transparent cut-out ICONS the owner uploads in the admin panel (Banners > Icons); the panel removes each picture's background and crops it
 // tight before saving, so these are always PNGs. To add an icon, add its name here AND its label in admin-src (SMARTAI_ICON_LABELS).
-const SMARTAI_ICON_SLOTS = ['navhome', 'navincome', 'navteam', 'navshare', 'navmy', 'recharge', 'withdraw', 'service', 'channel', 'ordergift', 'downloadapp', 'payicon'];
+const SMARTAI_ICON_SLOTS = ['home', 'robots', 'income', 'share', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'inbox', 'about', 'rules', 'download', 'signout', 'balance', 'loginpw', 'tradepw'];
 const SMARTAI_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'promobanner', 'profilelogo', 'loaderbg', 'linkpreview', 'teambanner', 'mybanner', 'aboutbanner', 'aboutlogo', ...SMARTAI_ICON_SLOTS];
 const _smartaiImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
@@ -4395,6 +4399,7 @@ app.get('/account', async (req, res) => {
       totalEarned: round2(u.totalEarned), totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
       hasTradePin: !!u.transactionPinHash, twofaEnabled: u.twofaEnabled === true, vipLevel, withdrawAnytime: u.withdrawAnytime === true, appClaimed: u.appClaimed === true,
+      checkinStreak: u.checkinStreak || 0, lastCheckin: u.lastCheckin || null,
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
     // The member's OWN region, which the middleware has already put in
     // force for this request. The app re-reads its currency, dialling code
@@ -6779,6 +6784,144 @@ app.post('/account/transaction-pin/change', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// DAILY CHECK-IN, ACTIVITY FEED, TOP-UP AND CASH-OUT LISTS (the Rewards tab, Home and Ledger of the member app)
+// ═══════════════════════════════════════════
+// "MM/DD/YYYY" of the day key "YYYY-MM-DD" (the same shape nowStr().date and the user's `lastCheckin` use).
+function dayKeyToLastCheckinFormat(key) {
+  const [y, m, d] = key.split('-');
+  return `${m}/${d}/${y}`;
+}
+// What the streak SHOULD be, purely from the real history of 'checkin' ledger rows: the run of consecutive calendar days ending at the latest check-in.
+// Read again on every check-in, so a stale or damaged stored value can never keep a real streak broken; it never touches the wallet.
+function computeCheckinStreak(dayKeysSet) {
+  if (!dayKeysSet.size) return { streak: 0, lastCheckin: null };
+  const sorted = [...dayKeysSet].sort();
+  let streak = 1;
+  for (let i = sorted.length - 1; i > 0; i--) {
+    const cur = Date.parse(sorted[i] + 'T00:00:00Z'), prev = Date.parse(sorted[i - 1] + 'T00:00:00Z');
+    if (cur - prev === 86400000) streak++; else break;
+  }
+  return { streak, lastCheckin: dayKeyToLastCheckinFormat(sorted[sorted.length - 1]) };
+}
+// One tap a day. Locked per member (a double tap or two phones cannot pay twice), the credit and the day mark land in ONE update that only applies
+// while the member has not checked in today, and the ledger row is keyed on the day so it can never be written twice.
+app.post('/checkin', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const out = await withLock('checkin:' + uid, async () => {
+      const sett = await getSettings();
+      const bonus = Math.round(Number(sett.dailyCheckin) || 0);
+      if (bonus <= 0) return { code: 400, body: { status: 'error', message: 'Daily check-in is not available right now.' } };
+      const ref = db.collection('users').doc(uid);
+      const snap = await ref.get();
+      if (!snap.exists) return { code: 404, body: { status: 'error', code: 'NOT_FOUND', message: 'User not found' } };
+      const u = snap.data();
+      if (u.status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
+      if (u.registrationDone === false) return { code: 409, body: { status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up first.' } };
+      const { date, time } = nowStr();
+      if (u.lastCheckin === date) {
+        logSecurityEvent(uid, 'checkin_already_claimed', null);
+        return { code: 400, body: { status: 'error', code: 'ALREADY_CHECKED_IN', message: 'Already checked in today' } };
+      }
+      // The streak comes from the real history of check-ins (one small query on this member's own rows), not from the stored number alone.
+      const ledgerSnap = await db.collection('transactions').where('userId', '==', uid).where('type', '==', 'checkin').limit(500).get();
+      const dayKeys = new Set();
+      ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
+      const real = computeCheckinStreak(dayKeys);
+      const y = new Date(eatNow().getTime() - 86400000), p2 = n => String(n).padStart(2, '0');
+      const yesterday = p2(y.getUTCMonth() + 1) + '/' + p2(y.getUTCDate()) + '/' + y.getUTCFullYear();
+      const streak = real.lastCheckin === yesterday ? real.streak + 1 : 1;
+      const applied = await withLock('bal:' + uid, () => ref.updateIf({ lastCheckin: { $ne: date }, status: { $ne: 'banned' } },
+        { walletBalance: FieldValue.increment(bonus), totalEarned: FieldValue.increment(bonus), lastCheckin: date, checkinStreak: streak }));
+      if (!applied) return { code: 400, body: { status: 'error', code: 'ALREADY_CHECKED_IN', message: 'Already checked in today' } };
+      // The money is already in the wallet: if only the history row fails, say success (the row key is the member and the day, so it is never doubled).
+      const row = () => db.collection('transactions').doc(`checkin:${uid}:${date.replace(/\//g, '-')}`).createIfAbsent({
+        userId: uid, statementId: newStatementId(), type: 'checkin', description: `Daily reward, day ${streak}`,
+        amount: bonus, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
+      try { await row(); } catch (e1) { try { await row(); } catch (e2) { console.error('Check-in ledger row failed (credit is applied):', e2.message); } }
+      return { code: 200, body: { status: 'success', bonus, streak } };
+    });
+    res.status(out.code).json(out.body);
+  } catch (e) {
+    console.error('Checkin error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Check-in failed' });
+  }
+});
+// The live-activity strip on Home. Simulated on purpose and the same for everybody (made here, cached, refreshed every ~25 s): it is not the member's
+// own money and not a list of real people. Both floors follow the admin's minimums, so a row can never be below what the app itself allows.
+const _DEPOSIT_LADDER = [10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000, 50000, 60000, 70000, 80000, 90000, 100000, 120000, 150000, 180000, 200000, 250000,
+  300000, 350000, 400000, 450000, 500000, 600000, 700000, 800000, 900000, 1000000];
+const _ACT_WIRE_STEP = 5000, _ACT_WIRE_CAP = 500000;
+function activityMaskedMsisdn(used) {
+  for (let tries = 0; tries < 50; tries++) {
+    const n = '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+    if (!used.has(n)) { used.add(n); return n; }
+  }
+  return '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+}
+async function buildActivityFeed() {
+  const sett = await getSettings();
+  const minDep = Number(sett.minDeposit) || 0, minWit = Number(sett.minWithdraw) || 0;
+  let depositPool = _DEPOSIT_LADDER.slice();
+  try {
+    const prices = (await getProducts()).filter(p => !p.deleted).map(p => Number(p.price)).filter(n => n > 0);
+    depositPool = Array.from(new Set(depositPool.concat(prices)));
+  } catch (_) {}
+  depositPool = depositPool.filter(n => n >= minDep);
+  const withdrawPool = [];
+  for (let a = _ACT_WIRE_STEP; a <= _ACT_WIRE_CAP; a += _ACT_WIRE_STEP) if (a >= minWit) withdrawPool.push(a);
+  // An admin minimum above the whole ladder must not leave an empty pool: fall back to the floor itself.
+  if (!depositPool.length) depositPool = [minDep || 30000];
+  if (!withdrawPool.length) withdrawPool.push(minWit || 5000);
+  const rows = [], used = new Set();
+  for (let i = 0; i < 18; i++) {
+    const kind = Math.random() < 0.6 ? 'deposit' : 'withdraw';
+    const pool = kind === 'deposit' ? depositPool : withdrawPool;
+    rows.push({ kind, phone: activityMaskedMsisdn(used), amount: pool[Math.floor(Math.random() * pool.length)] });
+  }
+  return rows;
+}
+let _activityFeed = [], _activityTs = 0, _activityBuilding = false;
+app.get('/public/activity-feed', async (_req, res) => {
+  if (!_activityFeed.length && !_activityBuilding) {
+    _activityBuilding = true;
+    try { _activityFeed = await buildActivityFeed(); _activityTs = Date.now(); }
+    catch (e) { console.error('Activity feed error:', e.message); }
+    finally { _activityBuilding = false; }
+  } else if (!_activityBuilding && Date.now() - _activityTs > 25000) {
+    _activityBuilding = true;
+    buildActivityFeed().then(f => { _activityFeed = f; _activityTs = Date.now(); })
+      .catch(e => console.error('Activity feed error:', e.message)).finally(() => { _activityBuilding = false; });
+  }
+  res.set('Cache-Control', 'no-store');
+  res.json({ status: 'success', feed: _activityFeed });
+});
+// The member's own top-ups and cash-outs INCLUDING the ones still waiting or declined (the general ledger only gets a row once money has moved).
+// Only the fields the Ledger shows are sent: the rows also hold gateway references and internal notes that never leave the server.
+async function memberRecords(uid, collection, pick) {
+  const snap = await db.collection(collection).where('userId', '==', uid).limit(200).get();
+  const list = snap.docs.map(d => ({ id: d.id, ...pick(d.data()) }));
+  list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+  return list.slice(0, 100);
+}
+const _depositView = r => ({ ref: r.ref || '', amount: r.amount, network: r.network || '', phone: r.phone || '', status: r.status || '', failureReason: r.status === 'failed' ? (r.failureReason || '') : '', date: r.date || '', time: r.time || '', createdAt: r.createdAt || null });
+const _withdrawalView = r => ({ ref: r.ref || '', amount: r.amount, fee: r.fee, net: r.net, holder: r.holder || '', network: r.network || '', phone: r.phone || '', status: r.status || '',
+  failureReason: (r.status === 'declined' || r.status === 'rejected') ? (r.failureReason || r.rejectReason || '') : '', date: r.date || '', time: r.time || '', createdAt: r.createdAt || null });
+app.get('/deposits', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', deposits: await memberRecords(uid, 'pendingDeposits', _depositView) }); }
+  catch (e) { console.error('Deposits list error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load your top-ups' }); }
+});
+app.get('/withdrawals', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', withdrawals: await memberRecords(uid, 'withdrawals', _withdrawalView) }); }
+  catch (e) { console.error('Withdrawals list error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load your cash-outs' }); }
+});
+
+// ═══════════════════════════════════════════
 // GIFT CODES
 // ═══════════════════════════════════════════
 // Guessing a key is slowed to a crawl: 8 wrong keys inside 10 minutes lock that member's treasure chest for the rest of the 10 minutes.
@@ -7545,7 +7688,7 @@ const SETTINGS_CRITICAL_RANGES = {
   // one -- a multiple larger than the maximum withdrawal would make every
   // amount invalid, which the admin panel warns about rather than forbids.
   withdrawMultiple: [0, MAX_MONEY_AMOUNT],
-  myBannerOpacity: [0, 100], myBannerBlur: [0, 40], appClaimAmount: [0, MAX_MONEY_AMOUNT],
+  myBannerOpacity: [0, 100], myBannerBlur: [0, 40], appClaimAmount: [0, MAX_MONEY_AMOUNT], dailyCheckin: [0, MAX_MONEY_AMOUNT],
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
 };
 const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'requireTwofaToWithdraw', 'autoApproveWithdrawalsEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
@@ -7558,7 +7701,7 @@ const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', '
 // scope) the instant any member taps it. Rejecting anything but a genuine
 // http(s) link at save time closes this for every place these fields are
 // ever rendered, in one spot, rather than patching each render site.
-const SETTINGS_URL_FIELDS = ['telegramGroup', 'supportTelegram'];
+const SETTINGS_URL_FIELDS = ['telegramGroup', 'supportTelegram', 'telegramChannel', 'whatsappGroup', 'whatsappContact'];
 function isSafeExternalUrl(v) {
   if (!v) return true; // blank clears the field -- always allowed
   try { const u = new URL(String(v)); return u.protocol === 'http:' || u.protocol === 'https:'; }
@@ -7639,6 +7782,9 @@ app.post('/admin/settings/update', async (req, res) => {
       const hint = String(updates.giftCodeHint == null ? '' : updates.giftCodeHint).replace(/[<>]/g, '').trim().slice(0, 40);
       updates.giftCodeHint = hint || DEFAULT_SETTINGS.giftCodeHint;
     }
+    // Plain text shown in the app: the hours under Support (one short line) and the Terms & Rules page (capped; the app writes it as text, never as markup).
+    if ('supportHours' in updates) updates.supportHours = String(updates.supportHours == null ? '' : updates.supportHours).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+    if ('rulesText' in updates) updates.rulesText = String(updates.rulesText == null ? '' : updates.rulesText).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f<>]/g, '').replace(/\r\n?/g, '\n').trim().slice(0, 20000);
     if ('depositMethodNames' in updates) {
       const names = String(updates.depositMethodNames == null ? '' : updates.depositMethodNames).split(',').map(x => x.replace(/[<>*]/g, '').trim().slice(0, 20)).filter(Boolean).slice(0, 6);
       updates.depositMethodNames = names.length ? names.join(', ') : DEFAULT_SETTINGS.depositMethodNames;
@@ -10236,7 +10382,7 @@ app.get('/admin/integrity', async (req, res) => {
 // earned" label is a real misnomer -- this field is cashback PLUS
 // referral commission PLUS gift-code/team-reward
 // bonuses, all folded into one number.
-const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'mission_salary', 'mission_deposit_reward', 'order_gift', 'app_claim'];
+const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'mission_salary', 'mission_deposit_reward', 'order_gift', 'app_claim', 'checkin'];
 async function computeUserRealTotals(userId) {
   const [txSnap, invSnap, witSnap] = await Promise.all([
     db.collection('transactions').where('userId', '==', userId).limit(50000).get(),

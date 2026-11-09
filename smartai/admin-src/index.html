@@ -433,7 +433,7 @@ const TX_LABELS = {
   deposit: 'Recharge', withdraw: 'Withdraw', commission: 'Commission', team_reward: 'Team reward',
   cashback: 'Product cashback', investment: 'Product purchase',
   promocode: 'Gift code redeemed', admin_credit: 'Credit', admin_debit: 'Adjustment',
-  welcome_bonus: 'Welcome bonus', mission_salary: 'Team reward', order_gift: 'Order gift', app_claim: 'Download App reward', mission_deposit_reward: 'Team reward',
+  welcome_bonus: 'Welcome bonus', mission_salary: 'Team reward', order_gift: 'Order gift', app_claim: 'Download App reward', checkin: 'Daily check-in', mission_deposit_reward: 'Team reward',
   deposit_reversal: 'Recharge reversed (fraud)',
   investment_refund: 'Product refund',
 };
@@ -642,8 +642,8 @@ function smartaiCutout(src, w, h){
 }
 // The icon slots (same names as SMARTAI_ICON_SLOTS in server.js). Add a name here AND in server.js to get a new upload box.
 // Slots that already have a built-in blue picture in the app (user/icons/); an upload here replaces it, Remove brings it back.
-const SMARTAI_ICON_BUILTIN = ['navhome','navincome','navteam','navshare','navmy','recharge','withdraw','service','channel','ordergift','downloadapp'];
-const SMARTAI_ICON_LABELS = { navhome:'Home tab icon', navincome:'Income tab icon', navteam:'Myteam tab icon', navshare:'Share tab icon', navmy:'My tab icon', recharge:'Recharge button icon (Home)', withdraw:'Withdraw button icon (Home)', service:'Service button icon (Home)', channel:'Channel button icon (Home)', ordergift:'Order gifts picture (floating chest)', downloadapp:'Download app picture (floating)', payicon:'Deposit pay button icon (one small round picture shown on all four pay buttons)' };
+const SMARTAI_ICON_BUILTIN = ['home', 'robots', 'income', 'share', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'inbox', 'about', 'rules', 'download', 'signout', 'balance', 'loginpw', 'tradepw'];
+const SMARTAI_ICON_LABELS = { home:'Home tab', robots:'AI Robots tab, My Products and the robot picture', income:'Rewards tab', share:'Team tab', my:'Me tab', deposit:'Add Funds button (Home)', withdraw:'Cash Out button (Home) and the Cash Outs figure', gift:'Rewards Hub button, gift code, order gifts and the reward reveal', support:'Support button (Home and Me)', ledger:'Ledger (Me)', team:'My Team (Me)', payout:'Payout Account (Me)', security:'Security (Me) and Google Authenticator', inbox:'Messages (Me)', about:'About Us (Me)', rules:'Terms & Rules (Me)', download:'Download App (Me)', signout:'Sign Out (Me)', balance:'Balance figure (Me)', loginpw:'Login Password (Security)', tradepw:'Trade Password (Security)' };
 // An uploaded file -> a transparent, tightly cropped PNG data URL (longest side at most `maxDim`).
 function fileToCutoutPng(file, maxDim){
   return new Promise((resolve,reject)=>{
@@ -2028,7 +2028,7 @@ async function openUser(uid){
     <div class="kv"><span class="k">Invested</span><span>${ugx(u.totalInvested)}</span></div>
     <div class="kv"><span class="k">Cashed out</span><span>${ugx(u.totalWithdrawn)}</span></div>
     <div class="kv"><span class="k">Total earned (all sources)</span><span>${ugx(u.totalEarned)}</span></div>
-    <div class="muted" style="font-size:11px;margin:-4px 0 8px;line-height:1.6">Investment cashback ${ugx(eb.cashback)} &middot; Referral commission ${ugx(eb.commission)} &middot; Gift codes ${ugx(eb.promocode)} &middot; Team rewards ${ugx((Number(eb.team_reward)||0)+(Number(mission)||0))} &middot; Order gifts ${ugx(eb.order_gift)} &middot; Download App reward ${ugx(eb.app_claim)}</div>
+    <div class="muted" style="font-size:11px;margin:-4px 0 8px;line-height:1.6">Investment cashback ${ugx(eb.cashback)} &middot; Referral commission ${ugx(eb.commission)} &middot; Gift codes ${ugx(eb.promocode)} &middot; Team rewards ${ugx((Number(eb.team_reward)||0)+(Number(mission)||0))} &middot; Order gifts ${ugx(eb.order_gift)} &middot; Download App reward ${ugx(eb.app_claim)} &middot; Daily check-in ${ugx(eb.checkin)}</div>
     <div class="kv"><span class="k">Team commission <span class="muted" style="font-size:10.5px">(already included above)</span></span><span>${ugx(u.teamCommission)}</span></div>
     <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'Not set')}</span></div>
     <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
@@ -3662,6 +3662,9 @@ async function renderSettings(){
       <h2 class="sec" style="margin:16px 0 4px">Download App claim</h2>
       <p class="muted" style="margin:0 0 8px">The amount the Claim button on the Download App page pays, once per member. 0 hides the button.</p>
       <input id="appClaimInput" type="number" min="0" step="1" value="${esc(v('appClaimAmount',0))}" placeholder="0">
+      <h2 class="sec" style="margin:16px 0 4px">Daily check-in</h2>
+      <p class="muted" style="margin:0 0 8px">What one tap a day on the Rewards tab pays into the member's wallet. 0 hides the check-in card.</p>
+      <input id="dailyCheckinInput" type="number" min="0" step="1" value="${esc(v('dailyCheckin',250))}" placeholder="250">
       <button class="btn block" id="saveDepMethod" style="margin-top:10px">Save payment method</button>
     </div>
 
@@ -3669,6 +3672,12 @@ async function renderSettings(){
     <div class="panel-card">
       <label>Telegram group</label><input id="spTgGroup" value="${esc(v('telegramGroup',''))}" placeholder="https://t.me/yourgroup">
       <label>Customer Service (Telegram)</label><input id="spTg" value="${esc(v('supportTelegram',''))}" placeholder="https://t.me/youragent">
+      <label>Telegram channel</label><input id="spTgChannel" value="${esc(v('telegramChannel',''))}" placeholder="https://t.me/yourchannel">
+      <label>WhatsApp group</label><input id="spWaGroup" value="${esc(v('whatsappGroup',''))}" placeholder="https://chat.whatsapp.com/...">
+      <label>WhatsApp contact</label><input id="spWaContact" value="${esc(v('whatsappContact',''))}" placeholder="https://wa.me/256700000000">
+      <label>Support hours</label><input id="spHours" maxlength="40" value="${esc(v('supportHours',''))}" placeholder="8am &ndash; 9pm">
+      <label>Terms &amp; Rules (the page members open from Me)</label>
+      <textarea id="spRules" rows="8" maxlength="20000" placeholder="Write the rules members must follow. A blank line starts a new paragraph.">${esc(v('rulesText',''))}</textarea>
       <button class="btn block" id="saveSupport">Save support contacts</button>
     </div>
 
@@ -3704,7 +3713,7 @@ async function renderSettings(){
     const witMethod = (document.querySelector('input[name="witMethod"]:checked')||{}).value || 'follow';
     const d = await api('/admin/settings/update', { settings: {
       depositMethod: gateway, withdrawMethod: witMethod,
-      depositMethodNames: $('depNamesInput').value, depositGateways: _depGws.join(', '), lworxCollect: (document.querySelector('input[name="lworxMode"]:checked')||{}).value||'standard', giftCodeHint: $('giftHintInput').value, shareMessage: $('shareMsgInput').value, appClaimAmount: Math.max(0, Math.round(+$('appClaimInput').value || 0)),
+      depositMethodNames: $('depNamesInput').value, depositGateways: _depGws.join(', '), lworxCollect: (document.querySelector('input[name="lworxMode"]:checked')||{}).value||'standard', giftCodeHint: $('giftHintInput').value, shareMessage: $('shareMsgInput').value, appClaimAmount: Math.max(0, Math.round(+$('appClaimInput').value || 0)), dailyCheckin: Math.max(0, Math.round(+$('dailyCheckinInput').value || 0)),
     } });
     const payoutProv = witMethod==='follow' ? (gateway==='tavupay'?'marzpay':gateway) : witMethod;
     toast(d.status==='success'
@@ -3764,7 +3773,7 @@ async function renderSettings(){
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveSupport').addEventListener('click', async()=>{
-    const upd = { supportTelegram:$('spTg').value.trim(), telegramGroup:$('spTgGroup').value.trim() };
+    const upd = { supportTelegram:$('spTg').value.trim(), telegramGroup:$('spTgGroup').value.trim(), telegramChannel:$('spTgChannel').value.trim(), whatsappGroup:$('spWaGroup').value.trim(), whatsappContact:$('spWaContact').value.trim(), supportHours:$('spHours').value.trim(), rulesText:$('spRules').value };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   // ── Reward tiers editor: one table of team total / one-time reward, each row keeps its id so edits never re-pay a claimed tier ──
