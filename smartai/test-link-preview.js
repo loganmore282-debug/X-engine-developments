@@ -117,5 +117,5 @@ assert.ok(/id="lpTitle"/.test(adm) && /id="lpText"/.test(adm) && /linkPreviewTit
 assert.ok(/\[\['linkPreviewTitle', 70\], \['linkPreviewText', 260\]\]/.test(srv) && /linkPreviewTitle: '', linkPreviewText: ''/.test(srv), 'the server trims and caps them, and defaults are empty');
 assert.ok(/id="linkPreviewFile"/.test(adm)&&/wireSmartAIImageSlot\('linkpreview'/.test(adm)&&/fileToWideDataUrl/.test(adm),'and uploads a wide picture');
 assert.ok(/WhatsApp and other apps show no preview at all/.test(adm),'the panel says WhatsApp shows none');
-assert.ok(/'linkPreviewTitle', 'linkPreviewText'\]\.includes\(k\)/.test(srv)&&/'profilelogo', 'linkpreview'[^\]]*\]/.test(srv),'the words stay out of the public settings; the picture is a normal admin slot');
+assert.ok(/'linkPreviewTitle', 'linkPreviewText'\]\.includes\(k\)/.test(srv)&&/const SMARTAI_IMAGE_SLOTS = \[\.\.\.SMARTAI_BANNER_SLOTS, 'linkpreview'/.test(srv),'the words stay out of the public settings; the picture is a normal admin slot');
 console.log('PASS: link preview wiring (nginx, admin)');

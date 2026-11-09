@@ -42,11 +42,11 @@ function runStats(rows) {
   assert.deepStrictEqual(empty.levelCommission, { l1: 0, l2: 0, l3: 0 }); n++;
 
   // 2. profile logo slot: stored, served to members and to the admin
-  ok(/const SMARTAI_IMAGE_SLOTS = \[[^\]]*'profilelogo'/.test(src), 'profilelogo is a known image slot');
-  ok(/publicJson\(req, res, \{ status: 'success', authhero, authlogo, promobanner, profilelogo, teambanner, mybanner, aboutbanner, icons \}/.test(src), 'members get it from /public/smartai-images');
-  ok(/res\.json\(\{ status: 'success', authhero, authlogo, promobanner, profilelogo, linkpreview, teambanner, mybanner, aboutbanner, icons \}\)/.test(src), 'and the admin panel reads it');
-  ok(/id="profileLogoFile"/.test(adm) && /wireSmartAIImageSlot\('profilelogo'/.test(adm), 'the admin panel can upload and remove it');
-  ok(['promobanner', 'teambanner', 'mybanner', 'aboutbanner', 'authhero', 'authlogo'].every(k => new RegExp("wireSmartAIImageSlot\\('" + k + "'").test(adm) && src.includes("'" + k + "'")), 'the admin can upload the Rewards, Team, Me, About and Log In pictures');
+  ok(/const SMARTAI_BANNER_SLOTS = \[[^\]]*'profilelogo'/.test(src) && /const SMARTAI_IMAGE_SLOTS = \[\.\.\.SMARTAI_BANNER_SLOTS/.test(src), 'profilelogo is a known image slot');
+  ok(/publicJson\(req, res, Object\.assign\(\{ status: 'success' \}, banners, \{ icons \}\), IMAGE_CACHE\)/.test(src), 'members get it from /public/smartai-images');
+  ok(/res\.json\(Object\.assign\(\{ status: 'success' \}, banners, \{ linkpreview, icons \}\)\)/.test(src), 'and the admin panel reads it');
+  ok(/file:'profileLogoFile'/.test(adm) && /PICTURE_SLOTS\.forEach\(o => wireSmartAIImageSlot\(o\.slot, o\.file, o\.clear/.test(adm), 'the admin panel can upload and remove it');
+  ok(['promobanner', 'teambanner', 'mybanner', 'authhero', 'authlogo'].every(k => new RegExp("slot:'" + k + "'").test(adm) && src.includes("'" + k + "'")) && /wireSmartAIImageSlot\('aboutbanner'/.test(adm) && src.includes("'aboutbanner'"), 'the admin can upload the Rewards, Team, Me, About and Log In pictures');
   ok(!/checkinBannerFile|homeSlide|brandLogoFile|aboutLogoFile|loaderBgFile|myBannerOp|myBannerBlur|downloadBgFile/.test(adm) && !/'banner[2-5]'|'checkinbanner'|'downloadbg'|'logo'|'aboutlogo'|'loaderbg'|myBannerOpacity/.test(src), 'the pictures the app never shows (Home slides, brand logo, About round picture, loading picture, My banner fade and blur, ...) are gone');
 
   // 5. production hygiene

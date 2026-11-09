@@ -10,6 +10,9 @@ Writes, into out-dir (default user/anim):
                        Only the inside of the sphere (radius 95.5 px around its centre) is kept; the dither noise of the GIF is removed.
   pay-orb.webp         the glowing orb of the PAYMENT page: 100 frames of 224 x 224 px (the 312 x 312 px around the orb, scaled), same 10 x 10 layout.
   loader-poster.txt    a tiny first frame of the sphere as a data: address (shown for the instant before the sheet has arrived).
+  orb-free.webp        the same orb as pay-orb.webp but on its own, with NO background: 100 frames of 192 x 192 px with transparency (the glass ball only, cut at its
+                       edge; the dark field and glow around it are gone), same 10 x 10 layout. This is the app's page loader (ring loaders everywhere are replaced by it).
+  orb-poster.txt       a tiny first frame of that free orb (64 px, transparent) as a data: address, shown until orb-free.webp has arrived.
   plate.json           the static background of the start-up animation as radial colour stops (radius in GIF pixels -> r, g, b),
                        which the loader paints with a CSS radial gradient. Printed as a JavaScript array as well, ready to paste.
 
@@ -27,6 +30,9 @@ LOADER_FRAME = 192                         # sprite frame size (px); the sphere 
 LOADER_MASK_R = 95.5                       # real GIF pixels are kept out to here; the app fades them out between 94.2 and 95.4
 ORB_CX, ORB_CY = 399.5, 299.5
 ORB_SRC, ORB_OUT = 312, 224
+# The free orb (no background): the glass ball is a disc of radius ORB_R around the same centre (measured: the shell's edge is its 50 % point, a step from
+# colour 16,26,105 to 7,15,77 about 1.5 px wide); everything outside it is the GIF's own dark field and glow and is thrown away.
+FREE_R, FREE_SRC, FREE_OUT, FREE_POSTER = 140.4, 288, 192, 64
 
 
 def frames_of(path):
@@ -50,6 +56,36 @@ def sheet(frames, size, cols=10):
     for k, f in enumerate(frames):
         sh[(k // cols) * size:(k // cols + 1) * size, (k % cols) * size:(k % cols + 1) * size] = f
     return Image.fromarray(sh)
+
+
+def free_orb(frames):
+    """Cuts the glass ball out of the payment GIF with a transparent surround. Returns (sheet RGBA image, poster RGBA image)."""
+    x0, y0 = int(round(ORB_CX + 0.5 - FREE_SRC / 2)), int(round(ORB_CY + 0.5 - FREE_SRC / 2))
+    yy, xx = np.mgrid[0:FREE_SRC, 0:FREE_SRC].astype(np.float32)
+    dx, dy = xx - (ORB_CX - x0), yy - (ORB_CY - y0)
+    rr = np.hypot(dx, dy)
+    # Past the rim the colour is copied from just inside it along the same radius, so the soft edge never carries the dark field's colour (no dark fringe).
+    r_in = FREE_R - 3.9
+    k = np.where(rr > r_in, r_in / np.maximum(rr, 1e-6), 1.0)
+    mapx, mapy = ((ORB_CX - x0) + dx * k).astype(np.float32), ((ORB_CY - y0) + dy * k).astype(np.float32)
+    alpha = np.clip(0.5 - (rr - FREE_R) / 1.5, 0, 1).astype(np.float32)
+    tiles, poster = [], None
+    for n, f in enumerate(frames):
+        c = denoise(f[y0:y0 + FREE_SRC, x0:x0 + FREE_SRC], 5)
+        c = cv2.remap(np.ascontiguousarray(c), mapx, mapy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE).astype(np.float32)
+        def down(size):
+            pm = cv2.resize(c * alpha[..., None], (size, size), interpolation=cv2.INTER_AREA)   # premultiplied, so the rim blends cleanly
+            a = cv2.resize(alpha, (size, size), interpolation=cv2.INTER_AREA)
+            col = np.where(a[..., None] > 1e-4, pm / np.maximum(a[..., None], 1e-4), 0)
+            return np.dstack([np.clip(col, 0, 255), np.clip(a, 0, 1) * 255]).round().astype(np.uint8)
+        tiles.append(down(FREE_OUT))
+        if n == 0: poster = down(FREE_POSTER)
+    cols = 10
+    rows = (len(tiles) + cols - 1) // cols
+    sh = np.zeros((rows * FREE_OUT, cols * FREE_OUT, 4), np.uint8)
+    for k_, t in enumerate(tiles):
+        sh[(k_ // cols) * FREE_OUT:(k_ // cols + 1) * FREE_OUT, (k_ % cols) * FREE_OUT:(k_ % cols + 1) * FREE_OUT] = t
+    return Image.fromarray(sh, 'RGBA'), Image.fromarray(poster, 'RGBA')
 
 
 def plate_stops(frames):
@@ -111,7 +147,11 @@ def main():
         d = denoise(f[oy:oy + c, ox:ox + c], 5)
         cut2.append(cv2.resize(d, (ORB_OUT, ORB_OUT), interpolation=cv2.INTER_AREA))
     sheet(cut2, ORB_OUT).save(os.path.join(out, 'pay-orb.webp'), 'WEBP', quality=72, method=6)
-    for n in ('loader-sphere.webp', 'pay-orb.webp', 'loader-poster.txt', 'plate.json'):
+    sheet_free, poster_free = free_orb(fr2)
+    sheet_free.save(os.path.join(out, 'orb-free.webp'), 'WEBP', quality=75, method=6, alpha_quality=100)
+    b = io.BytesIO(); poster_free.save(b, 'WEBP', quality=70, method=6, alpha_quality=100)
+    open(os.path.join(out, 'orb-poster.txt'), 'w').write('data:image/webp;base64,' + base64.b64encode(b.getvalue()).decode())
+    for n in ('loader-sphere.webp', 'pay-orb.webp', 'orb-free.webp', 'loader-poster.txt', 'orb-poster.txt', 'plate.json'):
         print(n, os.path.getsize(os.path.join(out, n)), 'bytes')
 
 

@@ -3079,6 +3079,46 @@ function applyAdminBrandName(name){
 // sharing renderSettings()'s, same self-contained pattern every other tab
 // already uses -- one extra round of these 4 small fetches on switching
 // tabs, in exchange for not threading one function's closure across two.
+// The member app's plain picture slots, in the order a member meets them. (Home, About, the welcome picture, the link preview, the app icon and the Icons box
+// have their own cards.) `file` / `clear` are the element ids the wiring looks for; the server holds the same slot names (SMARTAI_BANNER_SLOTS in server.js).
+const PICTURE_SLOTS = [
+  { slot:'authhero', title:'Login &amp; Sign Up banner', file:'authHeroFile', clear:'authHeroClear', upload:'Upload banner', empty:'Blue picture',
+    hint:'The banner picture at the top of Log In and Sign Up. Wide, about 1200&times;600. Without one, the blue picture shows.',
+    saved:'Banner saved, live on Log In and Sign Up', cleared:'Banner removed' },
+  { slot:'authlogo', title:'Login &amp; Sign Up circle logo', round:true, file:'authLogoFile', clear:'authLogoClear', upload:'Upload circle logo', empty:'Blue robot picture',
+    hint:'The round picture above the Log In and Sign Up forms. Square, about 400&times;400 (it is cropped to a circle). Without one, the blue robot picture shows.',
+    saved:'Circle logo saved, live on Log In and Sign Up', cleared:'Circle logo removed' },
+  { slot:'shopbanner', title:'AI Robots page banner', file:'shopBannerFile', clear:'shopBannerClear', empty:'Not set &mdash; the blue picture shows',
+    hint:'The picture at the top of the AI Robots tab, behind the My Products and Accrued earnings buttons. Tall, about 1200&times;800. Without one, the blue picture shows.',
+    saved:'AI Robots banner saved', cleared:'AI Robots banner removed' },
+  { slot:'promobanner', title:'Rewards page banner', file:'promoBannerFile', clear:'promoBannerClear', empty:'Not set &mdash; the blue gift picture shows',
+    hint:'The picture at the top of the Rewards tab, above the daily check-in. Wide, about 1200&times;600. Without one, the blue gift picture shows.',
+    saved:'Rewards banner saved', cleared:'Rewards banner removed' },
+  { slot:'teambanner', title:'Team page banner', file:'teamBannerFile', clear:'teamBannerClear', empty:'Not set &mdash; the blue picture shows',
+    hint:'The picture at the top of the Team tab. About 1000&times;560. Without one, the blue picture shows.',
+    saved:'Team banner saved', cleared:'Team banner removed' },
+  { slot:'mybanner', title:'Me page banner (account background)', file:'myBannerFile', clear:'myBannerClear', empty:'Not set &mdash; the blue picture shows',
+    hint:'The background at the top of the Me tab (the account page), behind the dark card with the logo and the phone number. About 1000&times;560. Without one, the blue picture with the big person shows.',
+    saved:'Me page banner saved', cleared:'Me page banner removed' },
+  { slot:'profilelogo', title:'Profile logo (account logo)', file:'profileLogoFile', clear:'profileLogoClear', empty:'Not set &mdash; the blue robot picture shows',
+    hint:'The logo in the white square beside the phone number, in the dark card on the Me tab. Square, about 400&times;400. Without one, the blue robot picture shows.',
+    saved:'Profile logo saved, live for every member', cleared:'Profile logo removed' },
+  { slot:'depositbanner', title:'Add Funds page banner', file:'depositBannerFile', clear:'depositBannerClear', empty:'Not set &mdash; the blue picture shows',
+    hint:'The picture at the top of the Add Funds page. Wide, about 1200&times;560. Without one, the blue picture shows.',
+    saved:'Add Funds banner saved', cleared:'Add Funds banner removed' },
+  { slot:'withdrawbanner', title:'Cash Out page banner', file:'withdrawBannerFile', clear:'withdrawBannerClear', empty:'Not set &mdash; the blue picture shows',
+    hint:'The picture at the top of the Cash Out page. Wide, about 1200&times;560. Without one, the blue picture shows.',
+    saved:'Cash Out banner saved', cleared:'Cash Out banner removed' },
+  { slot:'supportbanner', title:'Support page banner', file:'supportBannerFile', clear:'supportBannerClear', empty:'Not set &mdash; the blue picture shows',
+    hint:'The picture at the top of the Support page. Wide, about 1200&times;560. Without one, the blue picture shows.',
+    saved:'Support banner saved', cleared:'Support banner removed' },
+  { slot:'recordsbanner', title:'Ledger page banner', file:'recordsBannerFile', clear:'recordsBannerClear', empty:'Not set &mdash; the blue picture shows',
+    hint:'The picture at the top of the Ledger page (the same on Accrued, Topups and Cash Outs). Wide and short, about 1200&times;400. Without one, the blue picture shows.',
+    saved:'Ledger banner saved', cleared:'Ledger banner removed' },
+  { slot:'bindbankbanner', title:'Payout Account page banner', file:'bindbankBannerFile', clear:'bindbankBannerClear', empty:'Not set &mdash; the blue picture shows',
+    hint:'The picture at the top of the Payout Account page. Wide, about 1200&times;560. Without one, the blue picture shows.',
+    saved:'Payout Account banner saved', cleared:'Payout Account banner removed' },
+];
 async function renderBanners(){
   const [r, br, cir, bar, annr] = await Promise.all([
     api('/admin/settings'), api('/admin/banner'), api('/admin/smartai-images'), api('/admin/brand-assets'), api('/admin/announcement-image')
@@ -3088,18 +3128,31 @@ async function renderBanners(){
   const s = r.settings||{};
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
   const bannerImage = br.image||'';
-  const authHeroImage = cir.authhero||'';
-  const authLogoImage = cir.authlogo||'';
   const linkPreviewImage = cir.linkpreview||'';
-  const promoBannerImage = cir.promobanner||'';
-  const profileLogoImage = cir.profilelogo||'';
-  const teamBannerImage = cir.teambanner||'', myBannerImage = cir.mybanner||'', aboutBannerImage = cir.aboutbanner||'';
+  const aboutBannerImage = cir.aboutbanner||'';
+  // One card per plain picture slot (PICTURE_SLOTS): what it is, what shows, Upload / Remove. The same list wires the buttons.
+  const pic = slot => {
+    const o = PICTURE_SLOTS.find(x=>x.slot===slot), img = cir[slot]||'';
+    const round = o.round ? ';border-radius:50%;aspect-ratio:1;object-fit:cover' : '';
+    return `<h2 class="sec">${o.title}</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">${o.hint}</p>
+      <div class="banner-row">
+        ${img?`<img class="img-thumb" style="${round.slice(1)}" src="${esc(img)}" onerror="this.style.opacity=.3">`:`<div class="img-thumb" style="opacity:.25${round}"></div>`}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${img?'Custom image':`<span class="muted">${o.empty}</span>`}</div>
+        ${img?`<button class="btn danger sm" id="${o.clear}">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">${o.upload||'Upload image'}<input type="file" id="${o.file}" accept="image/*" hidden></label>
+    </div>`;
+  };
   const aboutHtmlRes = await api('/admin/about-html'); if (aboutHtmlRes.status!=='success'){ loadFailed(aboutHtmlRes,'the About page'); return; }   // an empty box here would blank the page on Save
   const aboutHtmlText = aboutHtmlRes.html||'';
   const announcementImage = (annr && annr.image) || '';
   const appIconImage = bar.appIcon||'';
   const appIconCustom = !!bar.appIconCustom;
   $('content').innerHTML = `
+    ${pic('authhero')}
+    ${pic('authlogo')}
     <h2 class="sec">Home banner</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">The picture at the top of the Home tab. Wide, about 1200&times;600. The title and line of words over it are set under Settings &rarr; Home banner words.</p>
@@ -3110,76 +3163,14 @@ async function renderBanners(){
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="homeBannerFile" accept="image/*" hidden></label>
     </div>
-
-    <h2 class="sec">Icons &middot; background removed automatically</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">Upload a picture on any background. The panel takes the background away, trims the picture to its edges and saves it as a transparent PNG; the app then places it with no box around it. Until you upload one, the app shows the built-in blue picture of that slot (Remove brings it back). Best results: the icon on a plain or softly shaded background, at least 256&times;256.</p>
-      ${Object.keys(SMARTAI_ICON_LABELS).map(k=>`
-      <div style="font-weight:700;margin:14px 0 6px">${esc(SMARTAI_ICON_LABELS[k])}</div>
-      <div class="banner-row">
-        ${(cir.icons&&cir.icons[k])?`<img class="img-thumb alpha" style="width:64px;height:64px" src="${esc(cir.icons[k])}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;width:64px;height:64px"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px">${(cir.icons&&cir.icons[k])?'Custom picture':(SMARTAI_ICON_BUILTIN.includes(k)?'<span class="muted">Built-in blue picture</span>':'<span class="muted">Not set</span>')}</div>
-        ${(cir.icons&&cir.icons[k])?`<button class="btn danger sm" id="iconClear_${k}">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload ${esc(SMARTAI_ICON_LABELS[k].toLowerCase())}<input type="file" id="iconFile_${k}" accept="image/*" hidden></label>`).join('')}
-    </div>
-
-    <h2 class="sec">Rewards page banner</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">The picture at the top of the Rewards tab, above the daily check-in. Wide, about 1200&times;600. Without one, the blue gift picture shows.</p>
-      <div class="banner-row">
-        ${promoBannerImage?`<img class="img-thumb" src="${esc(promoBannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${promoBannerImage?'Custom image':'<span class="muted">Not set &mdash; the blue gift picture shows</span>'}</div>
-        ${promoBannerImage?`<button class="btn danger sm" id="promoBannerClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="promoBannerFile" accept="image/*" hidden></label>
-    </div>
-
-    <h2 class="sec">Welcome announcement</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">The picture members see when they open the app, with a Join Channel button under it (the Telegram group link, set under Support). Without a picture, no dialog is shown.</p>
-      <p class="muted" style="margin:14px 0 6px">The picture: tall portrait or wide banner.</p>
-      <div class="banner-row">
-        ${announcementImage?`<img class="img-thumb" src="${esc(announcementImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${announcementImage?'Custom image':'<span class="muted">Not set</span>'}</div>
-        ${announcementImage?`<button class="btn danger sm" id="annImageClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="annImageFile" accept="image/*" hidden></label>
-    </div>
-
-    <h2 class="sec">Profile logo</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">The round picture on every member's Me tab. Square, about 400&times;400.</p>
-      <div class="banner-row">
-        ${profileLogoImage?`<img class="img-thumb" src="${esc(profileLogoImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${profileLogoImage?'Custom image':'<span class="muted">Not set &mdash; a plain person icon shows</span>'}</div>
-        ${profileLogoImage?`<button class="btn danger sm" id="profileLogoClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="profileLogoFile" accept="image/*" hidden></label>
-    </div>
-
-    <h2 class="sec">Team page banner</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">The picture at the top of the Team tab. About 1000&times;560. Without one, the blue picture shows.</p>
-      <div class="banner-row">
-        ${teamBannerImage?`<img class="img-thumb" src="${esc(teamBannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${teamBannerImage?'Custom image':'<span class="muted">Not set</span>'}</div>
-        ${teamBannerImage?`<button class="btn danger sm" id="teamBannerClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="teamBannerFile" accept="image/*" hidden></label>
-    </div>
-
-    <h2 class="sec">Me page banner</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">The picture at the top of the Me tab, behind the round picture and the phone number. About 1000&times;560. Without one, the blue picture shows.</p>
-      <div class="banner-row">
-        ${myBannerImage?`<img class="img-thumb" src="${esc(myBannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${myBannerImage?'Custom image':'<span class="muted">Not set</span>'}</div>
-        ${myBannerImage?`<button class="btn danger sm" id="myBannerClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="myBannerFile" accept="image/*" hidden></label>
-    </div>
-
+    ${pic('shopbanner')}
+    ${pic('promobanner')}
+    ${pic('teambanner')}
+    ${pic('mybanner')}
+    ${pic('profilelogo')}
+    ${pic('depositbanner')}
+    ${pic('withdrawbanner')}
+    ${pic('supportbanner')}
     <h2 class="sec">About page</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">The banner at the top. Everything under it is the HTML you paste below (scripts and frames are removed when it is saved).</p>
@@ -3194,7 +3185,19 @@ async function renderBanners(){
       <textarea id="aboutHtmlInput" rows="12" style="width:100%;font-family:monospace;font-size:12px" placeholder="&lt;div&gt;...&lt;/div&gt;">${esc(aboutHtmlText)}</textarea>
       <button class="btn block" id="saveAboutHtml" style="margin-top:10px">Save About page content</button>
     </div>
-
+    ${pic('recordsbanner')}
+    ${pic('bindbankbanner')}
+    <h2 class="sec">Welcome announcement</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The picture members see when they open the app, with a Join Channel button under it (the Telegram group link, set under Support). Without a picture, no dialog is shown.</p>
+      <p class="muted" style="margin:14px 0 6px">The picture: tall portrait or wide banner.</p>
+      <div class="banner-row">
+        ${announcementImage?`<img class="img-thumb" src="${esc(announcementImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${announcementImage?'Custom image':'<span class="muted">Not set</span>'}</div>
+        ${announcementImage?`<button class="btn danger sm" id="annImageClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="annImageFile" accept="image/*" hidden></label>
+    </div>
     <h2 class="sec">Link preview (Telegram)</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">What Telegram shows when someone pastes a link to the app: the app name, your text, and a wide picture underneath. WhatsApp and other apps show no preview at all. Telegram remembers a link for a while, so a change may take some time to show on a link that was already shared.</p>
@@ -3210,29 +3213,6 @@ async function renderBanners(){
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload wide picture (about 1200&times;630)<input type="file" id="linkPreviewFile" accept="image/*" hidden></label>
     </div>
-
-    <h2 class="sec">Login &amp; Sign Up circle logo</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">The round picture above the Log In and Sign Up forms. Square, about 400&times;400 (it is cropped to a circle). Without one, the blue robot picture shows.</p>
-      <div class="banner-row">
-        ${authLogoImage?`<img class="img-thumb" src="${esc(authLogoImage)}" style="border-radius:50%;aspect-ratio:1;object-fit:cover" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;border-radius:50%;aspect-ratio:1"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${authLogoImage?'Custom image':'<span class="muted">Blue robot picture</span>'}</div>
-        ${authLogoImage?`<button class="btn danger sm" id="authLogoClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload circle logo<input type="file" id="authLogoFile" accept="image/*" hidden></label>
-    </div>
-
-    <h2 class="sec">Login &amp; Sign Up banner</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">The banner picture at the top of Log In and Sign Up. Wide, about 1200&times;600. Without one, the blue picture shows.</p>
-      <div class="banner-row">
-        ${authHeroImage?`<img class="img-thumb" src="${esc(authHeroImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${authHeroImage?'Custom image':'<span class="muted">Blue picture</span>'}</div>
-        ${authHeroImage?`<button class="btn danger sm" id="authHeroClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload background image<input type="file" id="authHeroFile" accept="image/*" hidden></label>
-    </div>
-
     <h2 class="sec">App icon</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">The member app icon (home screen and browser tab). Square PNG, 1024&times;1024 (transparency kept, corners rounded for you). The admin panel always keeps its own built-in icon.</p>
@@ -3243,6 +3223,18 @@ async function renderBanners(){
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload icon<input type="file" id="appIconFile" accept="image/*" hidden></label>
       <p class="muted" style="margin:10px 0 0;font-size:12px">Phones that already installed the app keep the old icon until reinstalled.</p>
+    </div>
+    <h2 class="sec">Icons &middot; background removed automatically</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">Upload a picture on any background. The panel takes the background away, trims the picture to its edges and saves it as a transparent PNG; the app then places it with no box around it. Until you upload one, the app shows the built-in blue picture of that slot (Remove brings it back). Best results: the icon on a plain or softly shaded background, at least 256&times;256.</p>
+      ${Object.keys(SMARTAI_ICON_LABELS).map(k=>`
+      <div style="font-weight:700;margin:14px 0 6px">${esc(SMARTAI_ICON_LABELS[k])}</div>
+      <div class="banner-row">
+        ${(cir.icons&&cir.icons[k])?`<img class="img-thumb alpha" style="width:64px;height:64px" src="${esc(cir.icons[k])}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;width:64px;height:64px"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px">${(cir.icons&&cir.icons[k])?'Custom picture':(SMARTAI_ICON_BUILTIN.includes(k)?'<span class="muted">Built-in blue picture</span>':'<span class="muted">Not set</span>')}</div>
+        ${(cir.icons&&cir.icons[k])?`<button class="btn danger sm" id="iconClear_${k}">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload ${esc(SMARTAI_ICON_LABELS[k].toLowerCase())}<input type="file" id="iconFile_${k}" accept="image/*" hidden></label>`).join('')}
     </div>
 
   `;
@@ -3323,8 +3315,7 @@ function wireBannerHandlers(){
       if (d.status==='success') renderBanners();
     })());
   });
-  wireSmartAIImageSlot('authhero', 'authHeroFile', 'authHeroClear', 'Banner saved, live on Log In and Sign Up', 'Banner removed');
-  wireSmartAIImageSlot('authlogo', 'authLogoFile', 'authLogoClear', 'Circle logo saved, live on Log In and Sign Up', 'Circle logo removed');
+  PICTURE_SLOTS.forEach(o => wireSmartAIImageSlot(o.slot, o.file, o.clear, o.saved, o.cleared));
   wireSmartAIImageSlot('linkpreview', 'linkPreviewFile', 'linkPreviewClear', 'Link preview picture saved', 'Link preview picture removed');
   // Icons: the picture is cut out and cropped in this browser, then saved as a PNG through the same endpoint as the other pictures.
   Object.keys(SMARTAI_ICON_LABELS).forEach(k=>{
@@ -3355,7 +3346,6 @@ function wireBannerHandlers(){
     const d = await api('/admin/settings/update', { settings: { linkPreviewTitle: $('lpTitle').value, linkPreviewText: $('lpText').value } });
     toast(d.status==='success'?'Link preview words saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
-  wireSmartAIImageSlot('promobanner', 'promoBannerFile', 'promoBannerClear', 'Rewards banner saved', 'Rewards banner removed');
   const annImageFile = $('annImageFile');
   if (annImageFile) annImageFile.addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
@@ -3377,8 +3367,6 @@ function wireBannerHandlers(){
       if (d.status==='success') renderBanners();
     })());
   });
-  wireSmartAIImageSlot('teambanner', 'teamBannerFile', 'teamBannerClear', 'Team banner saved', 'Team banner removed');
-  wireSmartAIImageSlot('mybanner', 'myBannerFile', 'myBannerClear', 'Me page banner saved', 'Me page banner removed');
   wireSmartAIImageSlot('aboutbanner', 'aboutBannerFile', 'aboutBannerClear', 'About banner saved', 'About banner removed');
   const saveAboutHtml = $('saveAboutHtml');
   if (saveAboutHtml) saveAboutHtml.addEventListener('click', async()=>{
@@ -3386,7 +3374,6 @@ function wireBannerHandlers(){
     toast(d.status==='success'?'About page content saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
     if (d.status==='success') $('aboutHtmlInput').value = d.html;
   });
-  wireSmartAIImageSlot('profilelogo', 'profileLogoFile', 'profileLogoClear', 'Profile logo saved, live for every member', 'Profile logo removed');
 }
 // "Opens at" is typed in the REGION's time (Uganda by default), whatever time zone the admin's own browser is in; the server judges it the same way.
 var REGION_OFF_MIN = 180;

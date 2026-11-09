@@ -36,7 +36,7 @@ files or run quick-update.sh by hand: a push to `claude/smartai-build` deploys b
   `npm run test:audit` (wait for exit 0, run it in the background and read the `EXIT` line; the chain stops at the first failing test), commit, push
   to **`claude/smartai-build`**. `npm install --include=dev` for the dev tools.
 - `node set-brand.js "Name"` renames the app everywhere again (files must be git-tracked).
-- **`npm run test:audit` is the whole suite** (74 commands). The sixteen old test files of other apps that failed the same way
+- **`npm run test:audit` is the whole suite** (76 commands). The sixteen old test files of other apps that failed the same way
   in Potato (Kenya regions, Snow branding, `render.yaml`, ...) were deleted on 2026-11-09 together with `design-ref/` (Potato's screen pictures, 9.6 MB), `static-server.js`,
   `set-backend-url.js`, `deploy/deploy.sh` (an old rsync deploy to `/srv/smartai`, not the VPS layout), `translate-*` and `captcha.js`: nothing used them.
 - The app icons (`user/` and `admin/` `icon-192.png`, `icon-512.png`) and `user/link-preview.jpg` are PLACEHOLDERS (blue "SA" ring) until the owner sends the logo.
@@ -88,6 +88,8 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
    blue "SA" ring), the payment-company keys.
 5. (done, owner's order, 2026-11-09) **Start-up animation** and **payment animation** from his two GIFs, **no browser dialog on Sign Out**, and **a clean-out of old Potato
    leftovers in the admin panel and the server** (see the three sections that follow the member-app section).
+6. (done, owner's order, 2026-11-09) **The payment animation's orb is the page loader everywhere (no background) and every banner can be uploaded from the admin panel**
+   (see "Page loader" and "Every banner is uploadable" below).
 
 ## Member app = ChocoMCC's pages, blue and white, the owner's icons (rebuilt from scratch on Smart AI's server)
 - **Files.** `user-src/index.html` (markup + CSS + the sign-in script + the loader script) and `user-src/original_module.js` (about 2,100 lines, classic script,
@@ -124,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v6`, admin `admin/sw.js` `smartai-admin-shell-v5`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v7`, admin `admin/sw.js` `smartai-admin-shell-v6`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -175,8 +177,39 @@ server code, tests and wording: picture slots `logo` (Brand logo), `banner2` / `
 `signupCaptcha`: off since the owner's screens have none), the withdrawal "multiple of" rule (`withdrawMultiple`, no admin control, always 0) and the never-set `maxWithdraw`, the
 legacy image-document migration, the `slides` / `banner1` fallbacks of the Home picture. Wording fixed to what the Smart AI app really has: "Rewards page banner" (slot
 `promobanner`), "Team page banner", "Me page banner", "Task Center tiers", "Gift code box words", "Gateways used in turn" (the deposit rotation names are labels only: members
-never see them), "treasure code" -> "gift code". What the Banners tab keeps: Home banner (+ its words under Settings), Icons (17), Rewards / Team / Me / About banners, Profile logo,
-Log In banner and circle logo, Welcome announcement, Link preview (Telegram), App icon.
+never see them), "treasure code" -> "gift code". What the Banners tab keeps: see "Every banner is uploadable" below.
+
+## Page loader (the owner: "use the very loader on the polling payment page to replace the ring loaders everywhere ... don't put the background on it, let it be freely loading")
+- Every ring loader of the member app is now the glass orb of the payment animation, **on its own: no tile, no background, no shadow**. Sprite `user/anim/orb-free.webp`
+  (RGBA, 10 x 10 frames of 192 px, 100 frames at 20 ms = the GIF's 2 s loop, 228 kB), cut by `tools/make-anim-sprites.py` from the payment GIF: the glass ball is the disc of radius 140.4
+  GIF px around (399.5, 299.5) (the shell's edge, measured: its 50 % point), everything outside it (the dark field and the glow) is thrown away, the rim is anti-aliased and its colour is
+  copied from just inside (no dark fringe), de-noised like the opaque sheet. The ball keeps its own dark glass body on purpose: that is what makes the white parts of the petals readable on the
+  light page. (If the owner wants ONLY the petals with no dark ball, that is a different matte: ask him.) `orb-poster.txt` = frame 0 at 64 px, inlined as `ORB_POSTER` until the sheet arrives.
+- App code (`original_module.js`, block "THE PAGE LOADER"): `orbHtml()` returns the markup (`<div class="orb-wrap"><canvas class="orb-ld">`, 84 css px, CSS in `index.html`), `orbTick()` is the one
+  `requestAnimationFrame` timer for every loader on screen (it paints only canvases that are visible and sleeps when none exists: `_orbRaf === 0`), `orbLoad()` fetches the sheet once (also
+  1.2 s after the app opens, so the first waiting page already has it). `spinnerHtml()` and the `.cm-spinner` styles are gone; **a busy BUTTON keeps its small turning arc + its word**
+  (`btnBusyHtml`, `.verify-spin`): the owner said "ring loaders only" for the admin panel before, so only loaders were replaced. The payment (polling) page keeps its dark rounded tile
+  (`showPayOrb`, `pay-orb.webp`): the owner contrasted it with the new loader, so it was left as he approved it; say so if he wants it free too.
+- Where it shows: About Us, Ledger (Topups, Cash Outs, Accrued), My Team (a level's list), Task Center, My Products, Accrued earnings, Payout Account, and the robot lists (Home strip and AI Robots).
+  A list that is empty only because it has not arrived must never say "none yet": `STATE.ok = { inv, bank, tx }` (set by `refreshFromServer`) and `_productsOk` say what has really come from
+  the server; `dataLoaded()` / `waitForData()` show the orb, ask again, and if the answer does not come show "Could not load this page" + **Try again** (`retryData`, `retryRecords`: the Ledger's old
+  ring turned for ever when a list failed). A phone that already holds the list shows it at once, with no loader. In the normal flow the app is entered only after those lists arrived, so
+  My Products / Payout Account / Accrued open straight away; the orb is what they show whenever they would otherwise have to wait.
+- Test: `test-orb-loader.js` (in the audit): the sheet's header (alpha, 1920 x 1920), no ring left in code or styles, no background on the orb or its box, and in a real phone-sized browser against the
+  real server with each page's request held back: the orb shows (84 px, see-through corners, round ball only, really animating), is replaced by the content, Try again works, one sheet request.
+  (A test must NOT `await` a page function that waits on a held request: `ev(() => { openTeamLevel(1); })`.)
+
+## Every banner is uploadable (owner: "have you made it so I can upload all banners: the authenticator banner, account background and logo banner?")
+- ChocoMCC lets its owner replace every banner; Smart AI now does too: **13 picture slots** = server `SMARTAI_BANNER_SLOTS`, admin `PICTURE_SLOTS`, app `ART_SLOTS` (one list each, kept equal by
+  `test-banner-slots.js`): `authhero` (Login & Sign Up banner, top picture), `authlogo` (Login & Sign Up circle logo), `promobanner` (Rewards), `profilelogo` (the logo in the white square beside the phone
+  number on the Me page), `teambanner`, `mybanner` (the Me page banner = the account background), `aboutbanner`, and the six that could not be replaced before: `shopbanner` (AI Robots),
+  `depositbanner` (Add Funds), `withdrawbanner` (Cash Out), `supportbanner`, `recordsbanner` (Ledger, one picture for its three tabs) and `bindbankbanner` (Payout Account). Plus the Home banner (own
+  route `/admin/banner`), the welcome picture, the link preview, the app icon and the 17 icons (own cards). `paintArt()` gives each banner element its `ART.<slot>`; no picture = the blue art.
+- Admin > Banners now lists them in the order a member meets them: Login & Sign Up banner, its circle logo, Home, AI Robots, Rewards, Team, Me page banner (account background), Profile logo, Add Funds,
+  Cash Out, Support, About (banner + text), Ledger, Payout Account, Welcome announcement, Link preview, App icon, and the long Icons box LAST. The plain slots are cards from one list
+  (`PICTURE_SLOTS`: title, hint with the size, element ids, messages) and one wiring loop. A new picture slot = add its name to all three lists + a `paintArt()` entry + the banner element.
+- Pictures are shrunk in the admin panel before saving (1280 px, 1600 for the Login banner, 480 for the circle logo) and members get all of them in one `/public/smartai-images` answer (ETag, kept
+  60 s: a change reaches a phone within about two minutes).
 
 ## Status (Potato, inherited)
 1. (done) Copied from Mint, renamed to Potato, ports 3004/8096/8097, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path.

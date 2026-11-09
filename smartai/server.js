@@ -855,14 +855,18 @@ async function getHomeBanner() {
   _bannerCacheTs = Date.now();
   return _bannerCache;
 }
-// The admin-uploaded pictures (Admin > Banners), the ones the member app really shows: Login banner (authhero) and circle logo (authlogo), Rewards
-// banner (promobanner), My page avatar (profilelogo), Team / Me / About banners (teambanner, mybanner, aboutbanner) and the link preview picture
-// (linkpreview, read by the Telegram preview page below). The Home banner and the welcome picture have their own routes. Stored in the 'banners'
-// collection as `smartai-<slot>`, cached for 60 s.
+// The admin-uploaded pictures (Admin > Banners), the ones the member app really shows: one slot for every banner the app draws (as in ChocoMCC, where the
+// owner can replace every banner): Login banner (authhero) and circle logo (authlogo), Rewards (promobanner), AI Robots (shopbanner), Team (teambanner),
+// Me page (mybanner), the logo beside the phone number (profilelogo), Add Funds (depositbanner), Cash Out (withdrawbanner), Support (supportbanner), About
+// (aboutbanner), Ledger (recordsbanner), Payout Account (bindbankbanner), and the link preview picture (linkpreview, read by the Telegram preview page below).
+// The Home banner and the welcome picture have their own routes. Stored in the 'banners' collection as `smartai-<slot>`, cached for 60 s.
 // Transparent cut-out ICONS the owner uploads in the admin panel (Banners > Icons); the panel removes each picture's background and crops it
 // tight before saving, so these are always PNGs. To add an icon, add its name here AND its label in admin-src (SMARTAI_ICON_LABELS).
 const SMARTAI_ICON_SLOTS = ['home', 'robots', 'income', 'share', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout'];
-const SMARTAI_IMAGE_SLOTS = ['authhero', 'authlogo', 'promobanner', 'profilelogo', 'linkpreview', 'teambanner', 'mybanner', 'aboutbanner', ...SMARTAI_ICON_SLOTS];
+// The pictures members get (all of these go to /public/smartai-images; linkpreview is the Telegram preview's own and is only read by the admin and that page).
+const SMARTAI_BANNER_SLOTS = ['authhero', 'authlogo', 'promobanner', 'profilelogo', 'teambanner', 'mybanner', 'aboutbanner',
+  'shopbanner', 'depositbanner', 'withdrawbanner', 'supportbanner', 'recordsbanner', 'bindbankbanner'];
+const SMARTAI_IMAGE_SLOTS = [...SMARTAI_BANNER_SLOTS, 'linkpreview', ...SMARTAI_ICON_SLOTS];
 const _smartaiImageCache = {};
 async function getSmartAIImage(slot) {
   if (!SMARTAI_IMAGE_SLOTS.includes(slot)) return null;
@@ -876,6 +880,12 @@ async function getSmartAIImage(slot) {
   } catch (_) { image = cached ? cached.image : null; }
   _smartaiImageCache[slot] = { image, ts: Date.now() };
   return image;
+}
+// { slot: picture-or-null } for a list of slots, read together.
+async function getSmartAIImages(slots) {
+  const list = await Promise.all(slots.map(getSmartAIImage));
+  const out = {}; slots.forEach((k, n) => { out[k] = list[n] || null; });
+  return out;
 }
 // ── BRAND ASSETS: the installed-app icon ──
 //
@@ -4064,13 +4074,8 @@ ${imageUrl ? `<meta name="twitter:image" content="${htmlText(imageUrl)}">\n` : '
 });
 app.get('/public/smartai-images', async (req, res) => {
   try {
-    const [authhero, authlogo, promobanner, profilelogo, teambanner, mybanner, aboutbanner] = await Promise.all([
-      getSmartAIImage('authhero'), getSmartAIImage('authlogo'), getSmartAIImage('promobanner'), getSmartAIImage('profilelogo'),
-      getSmartAIImage('teambanner'), getSmartAIImage('mybanner'), getSmartAIImage('aboutbanner'),
-    ]);
-    const iconList = await Promise.all(SMARTAI_ICON_SLOTS.map(getSmartAIImage));
-    const icons = {}; SMARTAI_ICON_SLOTS.forEach((k, n) => { icons[k] = iconList[n] || null; });
-    publicJson(req, res, { status: 'success', authhero, authlogo, promobanner, profilelogo, teambanner, mybanner, aboutbanner, icons }, IMAGE_CACHE);
+    const [banners, icons] = await Promise.all([getSmartAIImages(SMARTAI_BANNER_SLOTS), getSmartAIImages(SMARTAI_ICON_SLOTS)]);
+    publicJson(req, res, Object.assign({ status: 'success' }, banners, { icons }), IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -7422,13 +7427,8 @@ app.post('/admin/about-html/set', async (req, res) => {
 app.get('/admin/smartai-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [authhero, authlogo, promobanner, profilelogo, linkpreview, teambanner, mybanner, aboutbanner] = await Promise.all([
-      getSmartAIImage('authhero'), getSmartAIImage('authlogo'), getSmartAIImage('promobanner'), getSmartAIImage('profilelogo'), getSmartAIImage('linkpreview'),
-      getSmartAIImage('teambanner'), getSmartAIImage('mybanner'), getSmartAIImage('aboutbanner'),
-    ]);
-    const iconList = await Promise.all(SMARTAI_ICON_SLOTS.map(getSmartAIImage));
-    const icons = {}; SMARTAI_ICON_SLOTS.forEach((k, n) => { icons[k] = iconList[n] || null; });
-    res.json({ status: 'success', authhero, authlogo, promobanner, profilelogo, linkpreview, teambanner, mybanner, aboutbanner, icons });
+    const [banners, icons, linkpreview] = await Promise.all([getSmartAIImages(SMARTAI_BANNER_SLOTS), getSmartAIImages(SMARTAI_ICON_SLOTS), getSmartAIImage('linkpreview')]);
+    res.json(Object.assign({ status: 'success' }, banners, { linkpreview, icons }));
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/smartai-image/set', async (req, res) => {

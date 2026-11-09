@@ -22,9 +22,13 @@ try {
   var _cachedProducts = JSON.parse(localStorage.getItem(PRODUCTS_CACHE_KEY) || 'null');
   if (Array.isArray(_cachedProducts) && _cachedProducts.length) PRODUCTS = _cachedProducts;
 } catch (e) {}
+// False until the robot list has come from the server (or this phone had a saved copy): until then an empty list means "not here yet", and the page shows the loader.
+var _productsOk = PRODUCTS.length > 0;
 var NETWORK_COLORS = { 'MTN Mobile Money': { color: '#FFCC08', textColor: '#0B2A5B' }, 'Airtel Money': { color: '#ED1C24', textColor: '#fff' } };
-// Pictures the admin uploaded (Admin > Banners): Home banner, Login banner and logo, Team / My / About / Share banners. None set = a blue art banner.
-var ART = { home: '', authhero: '', authlogo: '', teambanner: '', mybanner: '', aboutbanner: '', promobanner: '', profilelogo: '', announcement: '' };
+// Pictures the admin uploaded (Admin > Banners): one for every banner the app draws, plus the Login logo and the profile logo. None set = a blue art banner.
+var ART_SLOTS = ['authhero', 'authlogo', 'promobanner', 'profilelogo', 'teambanner', 'mybanner', 'aboutbanner', 'shopbanner', 'depositbanner', 'withdrawbanner', 'supportbanner', 'recordsbanner', 'bindbankbanner'];
+var ART = { home: '', announcement: '' };
+ART_SLOTS.forEach(function(k){ ART[k] = ''; });
 var LOCKOUT_IC_MAINT = '<svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 005 5l-9.5 9.5a2.1 2.1 0 01-3-3l9.5-9.5a4 4 0 01-2-1.5z"/><circle cx="17" cy="7" r="1.2" fill="currentColor" stroke="none"/></svg>';
 var LOCKOUT_IC_BANNED = '<svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+
   '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="12" cy="16" r="1.6" fill="currentColor" stroke="none"/>'+
@@ -198,7 +202,9 @@ async function refreshFromServer(){
     _serverUnreachableWarned = true;
     toast('Could not reach the server, showing your last known balance');
   }
+  if (!STATE.ok) STATE.ok = { inv: false, bank: false, tx: false };
   if (invR.status === 'success' && Array.isArray(invR.investments)) {
+    STATE.ok.inv = true;
     // Every figure is read straight off the server's own record of the purchase and never worked out here, so the app can only show the real number.
     STATE.investments = invR.investments.map(function(iv){
       return { id: iv.id, key: iv.tierKey, name: iv.tierLabel, price: iv.amount,
@@ -206,8 +212,9 @@ async function refreshFromServer(){
         dailyIncome: iv.dailyPayout, totalIncome: iv.expectedReturn, purchasedAt: tsMs(iv.createdAt) || null };
     });
   }
-  if (bankR.status === 'success') STATE.bankAccounts = bankR.accounts || [];
+  if (bankR.status === 'success') { STATE.bankAccounts = bankR.accounts || []; STATE.ok.bank = true; }
   if (txR.status === 'success' && Array.isArray(txR.transactions)) {
+    STATE.ok.tx = true;
     STATE.transactions = txR.transactions.map(function(t){
       var when = tsMs(t.createdAt) || tsMs((t.date || '') + ' ' + (t.time || ''));
       return { type: t.type, amount: Number(t.amount) || 0, desc: t.description || '', status: t.status || 'success', ref: t.ref || t.statementId || '', when: when };
@@ -216,6 +223,28 @@ async function refreshFromServer(){
   saveState();
   return accR;
 }
+// A list that is empty only because it has not arrived must never say "none yet": a page that needs one of the three lists (STATE.ok) shows the loader, asks
+// the server, and if the answer does not come says so with a Try again button (never a loader that turns for ever).
+var _dataFailed = {}, _dataAsking = null;
+function dataLoaded(kind, list){ return !!(list && list.length) || !!(STATE && STATE.ok && STATE.ok[kind]); }
+function ensureData(){
+  if (!_dataAsking) _dataAsking = refreshFromServer().then(function(r){ _dataAsking = null; return r; }, function(){ _dataAsking = null; return null; });
+  return _dataAsking;
+}
+function waitForData(kind, box, again){
+  if (_dataFailed[kind]) {
+    box.innerHTML = '<div class="empty">Could not load this page.<br><button type="button" class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="retryData(\'' + kind + '\')">Try again</button></div>';
+    return;
+  }
+  box.innerHTML = orbHtml();
+  var epoch = _authEpoch;
+  ensureData().then(function(){
+    if (!STATE || epoch !== _authEpoch) return;
+    _dataFailed[kind] = !(STATE.ok && STATE.ok[kind]);
+    again();
+  });
+}
+function retryData(kind){ _dataFailed[kind] = false; renderMyRobots(); renderEarnings(); renderBankList(); renderRecords(); }
 // The admin's economics, products and pictures, so a change made in the admin panel reaches members without a new app. Settings are kept in
 // localStorage next to the products, so the next launch paints with the last real numbers before the network answers.
 async function syncPublicConfig(){
@@ -230,6 +259,9 @@ async function syncPublicConfig(){
     if (r2 && r2.status === 'success' && Array.isArray(r2.products)) {
       PRODUCTS = r2.products.filter(function(p){ return !p.deleted; });
       saveProductsCache();
+      var firstArrival = !_productsOk;
+      _productsOk = true;
+      if (firstArrival && STATE) { renderFeatured(); renderShop(); }   // the loader that stood in for the list is replaced by the list
     }
   }).catch(function(){}));
   await Promise.all(jobs);
@@ -250,7 +282,7 @@ async function _syncArtwork(){
   var rs = await Promise.all([ api('/public/smartai-images'), api('/public/banner'), api('/public/announcement-image') ]);
   var im = rs[0], bn = rs[1], an = rs[2];
   if (im.status === 'success') {
-    ['authhero', 'authlogo', 'teambanner', 'mybanner', 'aboutbanner', 'promobanner', 'profilelogo'].forEach(function(k){ ART[k] = im[k] || ''; });
+    ART_SLOTS.forEach(function(k){ ART[k] = im[k] || ''; });
     STATE_ICONS = im.icons || {};
   }
   if (bn.status === 'success') ART.home = bn.image || '';
@@ -285,7 +317,6 @@ function productExpectedReturn(p){ return Number(p && p.expectedReturn) || Math.
 function dailyReturn(p){ return Math.round(productExpectedReturn(p) / productCycle(p)); }
 function ugx(n){ n = Number(n) || 0; var hasCents = Math.round(n * 100) % 100 !== 0; return 'UGX ' + (hasCents ? (Math.round(n * 100) / 100).toFixed(2) : String(Math.round(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]; }); }
-function spinnerHtml(){ return '<div class="cm-spin-wrap"><svg class="cm-spinner" viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2"></circle></svg></div>'; }
 // Same small spinning-arc icon already used on the deposit status screen's
 // Verify Payment button (.verify-spin) -- reused here as one shared helper
 // so every "Please wait…" busy state app-wide (sign in/register, redeem
@@ -319,7 +350,8 @@ function freshState(uid, phone){
     balance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0,
     checkinStreak: 0, lastCheckin: null, team: { l1: 0, l2: 0, l3: 0, commission: 0 },
     hasTradePin: false, withdrawAnytime: false,
-    investments: [], transactions: [], bankAccounts: [], depositRecords: null, withdrawalRecords: null, salary: null
+    investments: [], transactions: [], bankAccounts: [], depositRecords: null, withdrawalRecords: null, salary: null,
+    ok: { inv: false, bank: false, tx: false }   // which of those three lists has really come from the server (see waitForData)
   };
 }
 
@@ -547,7 +579,7 @@ async function logout(opts){
     _authEpoch++;
     STATE = null; _appEntered = false;
     clearCachedState();
-    _recordsLoaded = { accrued: true, topups: false, cashouts: false };
+    _recordsLoaded = { accrued: true, topups: false, cashouts: false }; _recordsFailed = { topups: false, cashouts: false }; _dataFailed = {};
     stopActivityFeed(); stopAccountPoll(); stopDepositPoll();
     closeOverlay(); closeAllSheets();
     $('app').style.display = 'none';
@@ -580,6 +612,7 @@ function enterApp(){
   refreshDepositSlot();
   hideLoadingScreen();
   maybeShowAnnouncement();
+  setTimeout(orbLoad, 1200);   // the page loader's sheet is fetched once the start-up screen is out of the way, so the first page that waits already has it
 }
 // Fires once the sign-in script has said who (if anyone) is signed in: at start-up, then on every sign-in and sign-out. It sits out while the form's
 // own handler is driving a sign-in (_authInProgress), so the two can never race.
@@ -687,7 +720,7 @@ var _aboutLoaded = false;
 async function loadAbout(){
   var box = $('aboutBody');
   if (_aboutLoaded) return;
-  box.innerHTML = spinnerHtml();
+  box.innerHTML = orbHtml();
   var r = await api('/public/about-content');
   if (r.status !== 'success') { box.innerHTML = '<div class="empty">Could not load this page. Try again.</div>'; return; }
   _aboutLoaded = true;
@@ -821,9 +854,9 @@ function artFillHtml(icon){
 function paintArt(){
   var sett = getSettings();
   var map = [
-    ['depositBanner', '', 'deposit'], ['withdrawBanner', '', 'withdraw'], ['supportBanner', '', 'support'], ['aboutBanner', ART.aboutbanner, 'about'],
-    ['bindbankBanner', '', 'payout'], ['shopBannerArt', '', 'robots'], ['accountBanner', ART.mybanner, 'my'], ['rewardsBanner', ART.promobanner, 'gift'],
-    ['recordsBanner', '', 'ledger'], ['teamBanner', ART.teambanner, 'share']
+    ['depositBanner', ART.depositbanner, 'deposit'], ['withdrawBanner', ART.withdrawbanner, 'withdraw'], ['supportBanner', ART.supportbanner, 'support'],
+    ['aboutBanner', ART.aboutbanner, 'about'], ['bindbankBanner', ART.bindbankbanner, 'payout'], ['shopBannerArt', ART.shopbanner, 'robots'],
+    ['accountBanner', ART.mybanner, 'my'], ['rewardsBanner', ART.promobanner, 'gift'], ['recordsBanner', ART.recordsbanner, 'ledger'], ['teamBanner', ART.teambanner, 'share']
   ];
   map.forEach(function(m){ var el = $(m[0]); if (el) el.innerHTML = artHtml(m[1], m[2]); });
   var hb = $('homeBanner');
@@ -920,7 +953,7 @@ function renderTierCard(t, total){
 async function loadTaskCenter(){
   var box = $('taskCenterList');
   if (!box) return;
-  box.innerHTML = spinnerHtml();
+  box.innerHTML = orbHtml();
   var r = await api('/salary/status');
   if (r.stale) return;
   if (r.status !== 'success' || !Array.isArray(r.tiers)) { box.innerHTML = '<div class="empty">' + esc((r && r.message) || 'Could not load the Task Center. Try again.') + '</div>'; return; }
@@ -976,7 +1009,7 @@ function renderFeatured(){
       '<div class="choc-price">' + ugx(p.price) + '</div>' +
       '<div class="choc-ret">+' + ugx(dailyReturn(p)) + '/day</div></div></button>';
   }).join('');
-  $('featStrip').innerHTML = html || '<div class="empty" style="width:100%">No AI robots yet. Check back soon.</div>';
+  $('featStrip').innerHTML = html || (_productsOk ? '<div class="empty" style="width:100%">No AI robots yet. Check back soon.</div>' : orbHtml());
 }
 // renderShop() runs on every poll and rebuilds the Buy buttons, which would restart their glow sweep: a negative delay equal to how far into the cycle
 // "now" is makes a freshly built button carry on exactly where the old one was.
@@ -1011,7 +1044,7 @@ function renderShop(){
         '</div>' + btn +
       '</div></div>';
   }).join('');
-  $('shopGrid').innerHTML = html || '<div class="empty">No AI robots yet. Check back soon.</div>';
+  $('shopGrid').innerHTML = html || (_productsOk ? '<div class="empty">No AI robots yet. Check back soon.</div>' : orbHtml());
   syncSweepPhase($('shopGrid'));
 }
 function investmentStats(){
@@ -1020,6 +1053,7 @@ function investmentStats(){
 }
 function productByKey(key){ return PRODUCTS.filter(function(p){ return p.key === key; })[0]; }
 function renderMyRobots(){
+  if (!dataLoaded('inv', STATE && STATE.investments)) { waitForData('inv', $('mychocList'), renderMyRobots); return; }
   var rows = investmentStats();
   if (!rows.length) { $('mychocList').innerHTML = '<div class="empty">No AI robots running yet. Buy one from AI Robots to start earning.</div>'; return; }
   $('mychocList').innerHTML = rows.map(function(r){
@@ -1040,6 +1074,7 @@ function renderMyRobots(){
   }).join('');
 }
 function renderEarnings(){
+  if (!dataLoaded('inv', STATE && STATE.investments)) { $('earningsTotal').textContent = '—'; waitForData('inv', $('earningsList'), renderEarnings); return; }
   var rows = investmentStats();
   var total = rows.reduce(function(s, r){ return s + r.accrued; }, 0);
   $('earningsTotal').textContent = ugx(total);
@@ -1115,7 +1150,7 @@ document.addEventListener('visibilitychange', function(){
 
 /* ====================== LEDGER — Accrued (income) / Topups (deposits) / Cash Outs (withdrawals) ====================== */
 var _recordsTab = 'accrued';
-var _recordsLoaded = { accrued: true, topups: false, cashouts: false };
+var _recordsLoaded = { accrued: true, topups: false, cashouts: false }, _recordsFailed = { topups: false, cashouts: false };
 // The kinds of ledger row that are money coming IN as earnings (the Accrued tab). A top-up is in Topups and a cash-out is in Cash Outs.
 var INCOME_TYPES = ['cashback', 'checkin', 'commission', 'mission_salary', 'promocode', 'welcome_bonus', 'admin_credit', 'investment_refund'];
 var REC_TYPE_LABEL = { cashback: 'AI robot income', checkin: 'Daily reward', commission: 'Referral commission', mission_salary: 'Task Center reward', promocode: 'Gift code',
@@ -1139,16 +1174,22 @@ function setRecordsTab(t){
 async function loadRecordsTab(t){
   if (t === 'topups') {
     var r = await api('/deposits');
-    if (r.status === 'success' && STATE) { STATE.depositRecords = r.deposits || []; _recordsLoaded.topups = true; }
+    if (r.stale) return;
+    if (r.status === 'success' && STATE) { STATE.depositRecords = r.deposits || []; _recordsLoaded.topups = true; _recordsFailed.topups = false; }
+    else if (!_recordsLoaded.topups) _recordsFailed.topups = true;
   } else if (t === 'cashouts') {
     var r2 = await api('/withdrawals');
-    if (r2.status === 'success' && STATE) { STATE.withdrawalRecords = r2.withdrawals || []; _recordsLoaded.cashouts = true; }
+    if (r2.stale) return;
+    if (r2.status === 'success' && STATE) { STATE.withdrawalRecords = r2.withdrawals || []; _recordsLoaded.cashouts = true; _recordsFailed.cashouts = false; }
+    else if (!_recordsLoaded.cashouts) _recordsFailed.cashouts = true;
   }
 }
+function retryRecords(){ _recordsFailed[_recordsTab] = false; setRecordsTab(_recordsTab); }
 function renderRecords(){
   var s = STATE;
   if (!s) return;
   if (_recordsTab === 'accrued') {
+    if (!dataLoaded('tx', s.transactions)) { $('recordsStats').innerHTML = ''; waitForData('tx', $('recordsList'), renderRecords); return; }
     var rows = s.transactions.filter(function(t){ return INCOME_TYPES.indexOf(t.type) !== -1 && t.amount > 0; });
     var total = rows.reduce(function(sum, t){ return sum + t.amount; }, 0);
     $('recordsStats').innerHTML = '<div class="stat"><div class="n" style="color:var(--mint)">' + ugx(total) + '</div><div class="l">Total accrued</div></div>';
@@ -1165,7 +1206,13 @@ function renderRecords(){
   }
   var isTop = _recordsTab === 'topups';
   var list = isTop ? (s.depositRecords || []) : (s.withdrawalRecords || []);
-  if (!_recordsLoaded[_recordsTab]) { $('recordsList').innerHTML = spinnerHtml(); $('recordsStats').innerHTML = ''; return; }
+  if (!_recordsLoaded[_recordsTab]) {
+    $('recordsStats').innerHTML = '';
+    $('recordsList').innerHTML = _recordsFailed[_recordsTab]
+      ? '<div class="empty">Could not load this list.<br><button type="button" class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="retryRecords()">Try again</button></div>'
+      : orbHtml();
+    return;
+  }
   var sum = list.reduce(function(acc, r){ return acc + (isTop ? (r.status === 'matched' ? Number(r.amount) || 0 : 0) : (r.status === 'processed' ? Number(r.net || r.amount) || 0 : 0)); }, 0);
   $('recordsStats').innerHTML = '<div class="stat"><div class="n" style="color:' + (isTop ? 'var(--mint)' : 'var(--berry)') + '">' + ugx(sum) + '</div><div class="l">Total ' + (isTop ? 'topped up' : 'cashed out') + '</div></div>';
   if (!list.length) { $('recordsList').innerHTML = '<div class="empty">' + (isTop ? 'No top-ups yet.' : 'No cash-outs yet.') + '</div>'; return; }
@@ -1260,6 +1307,7 @@ function bankBadge(b){
   return '<div class="bank-net-badge" style="background:' + nc.color + ';color:' + nc.textColor + '">' + esc(initials) + '</div>';
 }
 function renderBankList(){
+  if (!dataLoaded('bank', STATE && STATE.bankAccounts)) { waitForData('bank', $('bankList'), renderBankList); return; }
   var list = (STATE && STATE.bankAccounts) || [];
   var sel = selectedBank();
   if (!list.length) { $('bankList').innerHTML = '<div class="empty">No accounts bound yet. Add one below.</div>'; return; }
@@ -1399,6 +1447,45 @@ async function doDeposit(){
   $('depAmt').value = '';
   refreshDepositSlot();   // the next deposit uses the next method in turn
   openDepositStatus(r.depositId, r.reference, '0' + local);
+}
+
+/* ====================== THE PAGE LOADER (the payment animation's orb, on its own) ======================
+   Every ring loader of the app is this orb: the glass ball of the owner's payment animation with the dark field around it cut away (anim/orb-free.webp: the GIF's
+   100 frames, 192 x 192 px each, 10 per row, transparent outside the ball), 20 ms a frame = the GIF's own 2 s loop. No tile, no background, nothing but the ball.
+   One sprite and one timer serve every loader that is on screen; the timer sleeps when none is. Until the sprite has arrived, a small copy of frame 0 stands in.
+   (The little turning arc inside a busy BUTTON, btnBusyHtml(), is not a loader and stays.) */
+var ORB_CELL = 192, ORB_FRAMES = 100, ORB_MS = 20;
+var ORB_POSTER = 'data:image/webp;base64,UklGRjQEAABXRUJQVlA4WAoAAAAQAAAAPwAAPwAAQUxQSEcBAAABB6EwkiQzdXrbiIgAQdYqiBjUc9H32MhcWqkLigiiwUEkSYp0zAxPR+Pf5vPWC+iP6L8Dt5EUKVnmo4Z7gveNfpQU5V9J5HuAUdXNl2U77H9oucxdFTklbk6rvVWnJnZFNlztQ6/KXJBOm32hpvRbwnaxL10UfkV+Ngcq/4L6Zk681Z8S9Ls5cu+Dz76l42HOPOR/sjyaU/XBYn+45ejfX203x+71u7vezLk3vf66ng1Q4StaQ9Sr39rCsKTPTAap50CxUSh7ZDBMPUa5K8dVdxoD1Z0TyUlStJIo8lQZaiV1LJ00s8zyLyzyo4VlUbKxKCkOlkOlwZY8/Ap/CH8h/nuL/2743y0fN/i4hcdNPm7zeQPPW3zexPM2XzfgdQtfN+F1G1434nUrXzfjdTveN9B9C9434X0b3TfSfSvdN/9m347/byAAVlA4IMYCAAAwEQCdASpAAEAAPok4lUglI6IhOfdqqKARCWwAtSHA0/435md9HwVDje7DIeJ700/Mx5yXpA/yvqAf0/qRt5L/cvBOTBqg3FFDA2upCOz8X+1vQTS3N5dfHYrtRn0JOYYeIYmZuvMVzjzvnNeMGeV9SMLBCsKzQW6P1NJE07RvoQJWBteV1w6TF9fx84gUMfOaAAD+8mzTBXAf7MCJ1P5ZtuLyXmER2OvoAfL7GKBukP5JsQ2CfLlTZE1NjievZY4UXkGvgGTZc83GdBQDwbr5icdAWpaezK8JZB3MIH3skAvCkc82c2l6CH3jQxJaPxvtF33QEZ2EeLXOPEzypcJppvsxsk1DFy9QbWw7yVOkJINK6aQ12g6G8Oqd3KPE165KTyoi8CRI6WNi9TH1eoLCAJUkw6a6RbOfDiSgA3LyQiqx+GfBFzie9ObFRI/1KAj4dDyC0GJmk/uBS6Y8D9lCa5WqFjTalEkdNnKhA2yViim1fCs+cJKWlyQO9H2hWCxGca5S91o5jS6FFkPii6P34/j68yqSN8A9WZzM6bZ2FmHiJHyeMe/v3JJfkUCmJ0GA3lP/9yheyguuh9/H/G0m2FsAwWh15NzeUm4jo2c+Kn0VAeBsSYEuvAXjWlXXJJOVDJJ8pTwgIZrs0882vvTDYVQbGoRIoXqQNIIf1XBoT8yuZ/37jza6vM/lJqVz6b7q6VHtZtidPES/byP0vN3eTzTvqh968GDX2g7l8/Dw5JSc3Qr/y6YfeQ7frRf0Aj8+9E6X91lOtNVP6gFP/Vln35SeuxaMsH/wF2zKmcjnl5GuOSXVa14skemqBmKfxpwOWxNhtkPj6WwtO4H6uzev8RqoAVmepFyAmmZqzYR95EmdNevMvyd1Rev2m/4OB1jIEovupzXXrNrNf5nZbk0x72TVxmYvkH/2sVEuXbXAQwe612QwAA==';
+var _orbSheet = null, _orbSheetOk = false, _orbPoster = null, _orbPosterOk = false, _orbRaf = 0, _orbT0 = 0;
+function orbLoad(){
+  if (!_orbSheet) { _orbSheet = new Image(); _orbSheet.onload = function(){ _orbSheetOk = true; }; _orbSheet.src = '/anim/orb-free.webp'; }
+  if (!_orbPoster) { _orbPoster = new Image(); _orbPoster.onload = function(){ _orbPosterOk = true; }; _orbPoster.src = ORB_POSTER; }
+}
+function orbWake(){ if (!_orbRaf) { if (!_orbT0) _orbT0 = performance.now(); _orbRaf = requestAnimationFrame(orbTick); } }
+function orbTick(){
+  _orbRaf = 0;
+  var list = document.querySelectorAll('canvas.orb-ld');
+  if (!list.length) return;                                   // none on any page: sleep until orbHtml() is called again
+  var n = Math.floor((performance.now() - _orbT0) / ORB_MS) % ORB_FRAMES;
+  for (var i = 0; i < list.length; i++) {
+    var cv = list[i];
+    if (!cv.offsetParent) continue;                           // on a page that is closed: nothing to paint
+    var src = _orbSheetOk ? _orbSheet : (_orbPosterOk ? _orbPoster : null);
+    if (!src) continue;
+    var frame = _orbSheetOk ? n : -1;                         // the stand-in is one picture: painted once
+    if (cv._orbFrame === frame && cv._orbSrc === src) continue;
+    cv._orbFrame = frame; cv._orbSrc = src;
+    var c = cv.getContext('2d');
+    c.clearRect(0, 0, cv.width, cv.height);
+    if (_orbSheetOk) c.drawImage(src, (n % 10) * ORB_CELL, Math.floor(n / 10) * ORB_CELL, ORB_CELL, ORB_CELL, 0, 0, cv.width, cv.height);
+    else c.drawImage(src, 0, 0, cv.width, cv.height);
+  }
+  _orbRaf = requestAnimationFrame(orbTick);
+}
+// The loader itself: put the returned markup where the content will come, and replace it with the content when it arrives.
+function orbHtml(){
+  orbLoad(); orbWake();
+  return '<div class="orb-wrap" role="status" aria-label="Loading"><canvas class="orb-ld" width="' + ORB_CELL + '" height="' + ORB_CELL + '"></canvas></div>';
 }
 
 /* ====================== THE PAYMENT ANIMATION (the owner's second GIF) ======================
@@ -1777,7 +1864,7 @@ async function refreshTeamStats(){
 async function openTeamLevel(level){
   openOverlay('teamlevel');
   $('teamLevelTitle').textContent = 'Level ' + level + ' members';
-  $('teamLevelList').innerHTML = spinnerHtml();
+  $('teamLevelList').innerHTML = orbHtml();
   var r = await api('/team/members?level=' + level);
   if (r.stale) return;
   if (r.status !== 'success') { $('teamLevelList').innerHTML = '<div class="empty">Could not load this list. Try again.</div>'; return; }

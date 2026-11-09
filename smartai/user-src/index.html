@@ -140,16 +140,9 @@
   .verify-spin{display:inline-flex;animation:verifySpin .9s linear infinite;}
   @keyframes verifySpin{to{transform:rotate(360deg);}}
 
-  /* App-wide loading spinner — replaces plain "Loading…" text everywhere. */
-  .cm-spin-wrap{display:flex;align-items:center;justify-content:center;padding:40px 0;}
-  .cm-spinner{width:36px;height:36px;color:var(--caramel-deep);animation:cmSpinRotate 1.4s linear infinite;}
-  .cm-spinner circle{stroke:currentColor;stroke-linecap:round;fill:none;stroke-width:3.6;animation:cmSpinDash 1.4s ease-in-out infinite;}
-  @keyframes cmSpinRotate{100%{transform:rotate(360deg);}}
-  @keyframes cmSpinDash{
-    0%{stroke-dasharray:1px,200px;stroke-dashoffset:0px;}
-    50%{stroke-dasharray:100px,200px;stroke-dashoffset:-15px;}
-    100%{stroke-dasharray:100px,200px;stroke-dashoffset:-125px;}
-  }
+  /* App-wide page loader: the glass orb of the payment animation, on its own (no tile, no background). Painted by orbTick() in the app script. */
+  .orb-wrap{display:flex;align-items:center;justify-content:center;padding:30px 0;background:none;}
+  .orb-ld{display:block;width:84px;height:84px;background:none;}
 
   /* ---------- Auth ---------- */
   #authScreen{min-height:100vh;display:flex;flex-direction:column;justify-content:flex-start;padding:32px 26px;background:
