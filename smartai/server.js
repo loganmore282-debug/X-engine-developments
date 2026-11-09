@@ -792,6 +792,17 @@ function depositProviderForSlot(sett, slot) {
   if (Number.isInteger(n) && n >= 0 && n < list.length && list[n]) return list[n];
   return depositAutomaticProvider(sett);
 }
+// Has the gateway's key been put on the server? A top-up through one that has none can only fail, so it must say so at once instead of answering "Payment initiated" and
+// leaving the member waiting for a prompt that will never come (owner's phone: "Payment initiated", then "the payment provider is busy").
+function depositGatewayConfigured(p) {
+  return p === 'pesajet' ? pesajetConfigured() : p === 'tavupay' ? tavupayConfigured() : p === 'lworxpay' ? !!LWORX_KEY : p === 'obpay' ? !!OBPAY_KEY : p === 'marzpay' ? !!MARZPAY_KEY : false;
+}
+// The button's own gateway when it is set up; otherwise the first set-up one (so a server with a single key still works from every button); otherwise none.
+function depositProviderUsable(sett, slot) {
+  const own = depositProviderForSlot(sett, slot);
+  if (depositGatewayConfigured(own)) return own;
+  return depositGatewayList(sett).concat([depositAutomaticProvider(sett)]).find(x => x && depositGatewayConfigured(x)) || null;
+}
 function payAAvailable(sett, region) {
   return gatewayServesRegion(depositAutomaticProvider(sett), region);
 }
@@ -4531,9 +4542,12 @@ app.post('/deposit/marzpay', async (req, res) => {
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
     if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before topping up.' });
-    const provider = depositProviderForSlot(sett, req.body.slot);
+    let provider = depositProviderForSlot(sett, req.body.slot);
     if (!DEPOSIT_GATEWAYS_READY.has(provider))
       return res.status(400).json({ status: 'error', code: 'GATEWAY_SOON', message: 'This payment method is not available right now. Please choose another one.' });
+    provider = depositProviderUsable(sett, req.body.slot);
+    if (!provider)
+      return res.status(503).json({ status: 'error', code: 'GATEWAY_NOT_SET', message: 'Top-ups are not available right now. Please try again later.' });
     // The gateway has to be able to reach THIS country's phone numbers. Every
     // automatic gateway here is Uganda-only (see GATEWAY_DIAL_CODES), and a
     // new region inherits Uganda's settings, so without this a Kenyan deposit

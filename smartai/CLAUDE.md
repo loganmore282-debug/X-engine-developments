@@ -36,7 +36,7 @@ files or run quick-update.sh by hand: a push to `claude/smartai-build` deploys b
   `npm run test:audit` (wait for exit 0, run it in the background and read the `EXIT` line; the chain stops at the first failing test), commit, push
   to **`claude/smartai-build`**. `npm install --include=dev` for the dev tools.
 - `node set-brand.js "Name"` renames the app everywhere again (files must be git-tracked).
-- **`npm run test:audit` is the whole suite** (76 commands). The sixteen old test files of other apps that failed the same way
+- **`npm run test:audit` is the whole suite** (77 commands). The sixteen old test files of other apps that failed the same way
   in Potato (Kenya regions, Snow branding, `render.yaml`, ...) were deleted on 2026-11-09 together with `design-ref/` (Potato's screen pictures, 9.6 MB), `static-server.js`,
   `set-backend-url.js`, `deploy/deploy.sh` (an old rsync deploy to `/srv/smartai`, not the VPS layout), `translate-*` and `captcha.js`: nothing used them.
 - The app icons (`user/` and `admin/` `icon-192.png`, `icon-512.png`) and `user/link-preview.jpg` are PLACEHOLDERS (blue "SA" ring) until the owner sends the logo.
@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v7`, admin `admin/sw.js` `smartai-admin-shell-v6`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v8`, admin `admin/sw.js` `smartai-admin-shell-v6`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -369,3 +369,11 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 - Admin > Users, OWNER ONLY, under the search box: **Save contacts (.vcf)** and **Copy numbers**, with a count ("1,234 numbers in all" / "12 numbers in this search"). The list is what the search shows (the same filter as the table: `usersMatching()`); with the search empty it is EVERY user, not just the 500 the table draws (the page already holds them all; `/admin/users` returns up to 10,000).
 - Only the NUMBER leaves the panel. The .vcf (vCard 3.0, CR LF lines) has one contact per number: `FN` and `N` are the number itself (a contact must have a name) and `TEL;TYPE=CELL`; nothing else (no name, balance, code or status). Copy numbers puts them on the clipboard separated by commas, no spaces. Numbers are cleaned to digits with a leading `+` kept; duplicates and unusable ones ("Not set", under 7 or over 15 digits) are left out; banned users are included (they are on the list). File name `<app>-contacts-YYYY-MM-DD.vcf` (the app name comes from the panel's title).
 - All in `admin-src/index.html` (no server change, nothing is logged); test-admin-contacts.js (56 checks, in `npm run test:audit`: the real functions, the numbers, the exact file text, the 500 cap not applying, the search, owner-only wiring). Checked in a real browser on the built admin: a real download whose contacts equal the users, and the real clipboard. Admin cache potato-admin-shell-v180. Mint's admin has the same buttons (its own branch).
+
+## Bug round (owner: "Now fix bugs ... there is something")
+- **A top-up through a gateway with no key on the server answered "Payment initiated"** and the member later saw "the payment provider is busy" (the owner's phone, before any payment key existed). Now
+  `/deposit/marzpay` checks `depositGatewayConfigured()` first: the button's own gateway if its key is set, else the first gateway that has a key (so a server with ONE key works from every button),
+  else a plain 503 `GATEWAY_NOT_SET` "Top-ups are not available right now. Please try again later." with nothing written and no attempt counted. Test `test-deposit-nokeys.js` (runs the server twice: no keys,
+  only MarzPay's key); `test-deposit-gateways.js` now sets a fake key for every gateway. (Tests that make several top-ups use a new member each time: 5 attempts a minute from one member are slowed down.)
+- **About Us and the banners did not follow an admin edit while the app stayed open** (the first copy was kept until the app was reopened). About now shows what it has and asks again quietly on every
+  open; the settings poll (every ~64 s) also re-reads the pictures (`syncArtwork()`).

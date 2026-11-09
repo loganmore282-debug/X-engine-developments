@@ -80,6 +80,7 @@ const front = http.createServer((req, res) => {
   await sleep(400);
   ok(await ev(() => !document.querySelector('canvas.orb-ld')) && await ev(() => window._orbRaf === 0), 'with nothing loading there is no loader and its timer is asleep');
 
+  await ev(() => stopAccountPoll());   // the app's own 8 s refresh would otherwise fill the lists in the middle of a step (a race only seen when the machine is busy)
   // hold back one kind of request until told to go on (or answer it with an error)
   const held = {};
   async function hold(pattern) {

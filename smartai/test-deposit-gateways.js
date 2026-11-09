@@ -9,6 +9,7 @@ const fm = require('./test-helpers/fake-mongodb.js');
 const origResolve = Module._resolveFilename;
 Module._resolveFilename = function (req, ...a) { return req === 'mongodb' ? path.join(root, 'test-helpers', 'fake-mongodb.js') : origResolve.call(this, req, ...a); };
 const PORT = 3700 + Math.floor(Math.random() * 90);
+process.env.PESAJET_API_KEY = 'k-pesajet'; process.env.TAVUPAY_API_KEY = 'k-tavu'; process.env.TAVUPAY_API_SECRET = 's-tavu'; process.env.LWORXPAY_API_KEY = 'k-lworx'; process.env.OBPAY_SECRET_KEY = 'sk_test_obpay'; process.env.MARZPAY_KEY = 'k-marz';   // every gateway has its key: a top-up through one without a key is refused (test-deposit-nokeys.js)
 process.env.PORT = String(PORT); process.env.MONGODB_URI = 'mongodb://fake/smartai'; process.env.ADMIN_KEY = 'e2e-admin-key-123456'; process.env.NODE_ENV = 'development';
 const realLog = console.log; console.log = () => {}; console.warn = () => {}; const realErr = console.error; console.error = () => {};
 require('./server.js');
@@ -24,7 +25,7 @@ const deps = () => [...fm.__stores.pendingDeposits.values()];
   const pub = (await J('GET', '/public/settings')).j;
   ok(!JSON.stringify(pub).includes('depositGateways') && !/lworxpay|obpay/.test(JSON.stringify(pub)), 'the gateway list never reaches the app');
   ok((pub.settings || pub).depositMethodNames === 'Pay-B, Pay-A, Pay-D, Pay-C', 'the buttons are Pay-B, Pay-A, Pay-D, Pay-C');
-  const dep = async (m, slot) => { await sleep(7100); const r = await J('POST', '/deposit/marzpay', slot === undefined ? { amount: 30000 } : { amount: 30000, slot }, m.tok); await sleep(150); return r; };
+  const dep = async (m0, slot) => { await sleep(7100); const m = await member() /* a new member each time: five attempts in a minute from one member are slowed down on purpose */; const r = await J('POST', '/deposit/marzpay', slot === undefined ? { amount: 30000 } : { amount: 30000, slot }, m.tok); await sleep(150); return r; };
   const m = await member();
   let r = await dep(m, 0); ok(r.j.status === 'success' && deps().at(-1).provider === 'tavupay', 'button 1 (Pay-B) is TavuPay', r.j);
   r = await dep(m, 1); ok(r.j.status === 'success' && deps().at(-1).provider === 'pesajet', 'button 2 (Pay-A) is PesaJet', r.j);

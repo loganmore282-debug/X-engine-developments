@@ -716,15 +716,18 @@ function cleanAboutHtml(html){
   });
   return tpl.innerHTML;
 }
-var _aboutLoaded = false;
+var _aboutLoaded = false, _aboutShown = '';
+// The first time the page is opened it waits behind the loader; after that it shows what it has at once and asks again quietly, so an edit made in the admin panel
+// reaches a member who already has the app open (before, the first copy was kept until the app was reopened).
 async function loadAbout(){
   var box = $('aboutBody');
-  if (_aboutLoaded) return;
-  box.innerHTML = orbHtml();
+  if (!_aboutLoaded) box.innerHTML = orbHtml();
   var r = await api('/public/about-content');
-  if (r.status !== 'success') { box.innerHTML = '<div class="empty">Could not load this page. Try again.</div>'; return; }
+  if (r.stale) return;
+  if (r.status !== 'success') { if (!_aboutLoaded) box.innerHTML = '<div class="empty">Could not load this page. Try again.</div>'; return; }
   _aboutLoaded = true;
-  box.innerHTML = r.html ? '<div class="about-html">' + cleanAboutHtml(r.html) + '</div>' : '<div class="empty">Nothing published yet.</div>';
+  var html = r.html ? '<div class="about-html">' + cleanAboutHtml(r.html) + '</div>' : '<div class="empty">Nothing published yet.</div>';
+  if (html !== _aboutShown) { _aboutShown = html; box.innerHTML = html; }
 }
 
 /* ====================== ANNOUNCEMENT (the welcome picture) ======================
@@ -1129,7 +1132,7 @@ async function runAccountPoll(){
   try {
     await refreshFromServer();
     _settingsPollCounter++;
-    if (_settingsPollCounter % SETTINGS_POLL_EVERY === 0) { await syncPublicConfig(); renderStaticPages(); }
+    if (_settingsPollCounter % SETTINGS_POLL_EVERY === 0) { await syncPublicConfig(); renderStaticPages(); syncArtwork(); }   // pictures too: a banner changed in the admin panel reaches an open app
     if (STATE) {
       renderAll();
       var recOv = $('ovRecords');
