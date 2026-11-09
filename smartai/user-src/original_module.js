@@ -3886,7 +3886,7 @@ window.gaDoManage = async function(){
 // full-screen win state with the amount won and the new balance.
 window.openChestSheet = function(){
   openSheet('Gift Code', `<div class="pt-gc">
-    <section class="pt-gchero"><span class="pt-gcbox" aria-hidden="true">\ud83c\udf81</span><h2>Mystery Gift Code</h2><p>One free redeem per day</p></section>
+    <section class="pt-gchero"><span class="pt-gcbox" aria-hidden="true"><img src="/icons/giftcode.webp" alt="" draggable="false"></span><h2>Mystery Gift Code</h2><p>One free redeem per day</p></section>
     <section class="pt-gcform"><label for="chestKey">Gift Code Key</label>
       <div class="pt-gcin"><span>\ud83d\udddd\ufe0f</span><input id="chestKey" type="text" placeholder="${esc(((STATE.settings || {}).giftCodeHint) || 'Enter gift code (T-XXXX)')}" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"></div>
       <button class="pt-gcgo" id="chestOpenBtn" type="button" onclick="submitChestKey()">Redeem Gift Code</button>
@@ -5027,7 +5027,7 @@ window.ptWinDialog = function(amount, balance){
     const fall = Math.round(14 - (top / 100) * (window.innerHeight || 700));
     bubbles += `<i style="width:${size}px;height:${size}px;left:${left}%;top:${top}%;--fall:${fall}px;animation-delay:${delay}s"></i>`;
   }
-  bg.innerHTML = `<div class="pt-win-fx" aria-hidden="true">${bubbles}</div><div class="pt-win" role="dialog" aria-modal="true"><span class="e" aria-hidden="true">\ud83c\udf81</span><h3>Congratulations!</h3><p class="w">You won</p><b class="amt" id="ptWinAmt"><span>${esc(vMoney2(amount))}</span></b><p class="nb">New Balance: ${esc(vMoney2(balance))}</p><button type="button" onclick="closeWinDialog()">Collect</button></div>`;
+  bg.innerHTML = `<div class="pt-win-fx" aria-hidden="true">${bubbles}</div><div class="pt-win" role="dialog" aria-modal="true"><span class="e" aria-hidden="true"><img src="/icons/giftcode.webp" alt="" draggable="false"></span><h3>Congratulations!</h3><p class="w">You won</p><b class="amt" id="ptWinAmt"><span>${esc(vMoney2(amount))}</span></b><p class="nb">New Balance: ${esc(vMoney2(balance))}</p><button type="button" onclick="closeWinDialog()">Collect</button></div>`;
   bg.onclick = e => { if (e.target === bg) closeWinDialog(); };
   document.body.appendChild(bg);
   const a = $('ptWinAmt'); if (a) { const t = a.firstChild, box = a.parentNode.clientWidth - 56; let fs = 38; while (t.getBoundingClientRect().width > box && fs > 22) { fs -= 1; a.style.fontSize = fs + 'px'; } }
