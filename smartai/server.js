@@ -598,6 +598,8 @@ const DEFAULT_SETTINGS = {
   // LworxPay's collection endpoint: 'standard' = POST /collect (the customer pays 4 % on top of the amount) | 'stanbic' = POST /collect-stanbic (free for the customer).
   lworxCollect: 'standard',
   giftCodeHint: 'Enter gift code (T-XXXX)',
+  // Words laid over the Home banner picture (ChocoMCC's Home banner title and text); empty = nothing is drawn over the picture.
+  homeBannerTitle: '', homeBannerText: '',
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   shareMessage: 'Join me on {app}',
   // The sign-up captcha picture is off: the owner's Create Account screen has none. Sign-up is guarded by the rate limits instead.
@@ -7408,6 +7410,8 @@ app.post('/admin/settings/update', async (req, res) => {
       const hint = String(updates.giftCodeHint == null ? '' : updates.giftCodeHint).replace(/[<>]/g, '').trim().slice(0, 40);
       updates.giftCodeHint = hint || DEFAULT_SETTINGS.giftCodeHint;
     }
+    if ('homeBannerTitle' in updates) updates.homeBannerTitle = String(updates.homeBannerTitle == null ? '' : updates.homeBannerTitle).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+    if ('homeBannerText' in updates) updates.homeBannerText = String(updates.homeBannerText == null ? '' : updates.homeBannerText).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
     // Plain text shown in the app: the hours under Support (one short line) and the Terms & Rules page (capped; the app writes it as text, never as markup).
     if ('supportHours' in updates) updates.supportHours = String(updates.supportHours == null ? '' : updates.supportHours).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
     if ('rulesText' in updates) updates.rulesText = String(updates.rulesText == null ? '' : updates.rulesText).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f<>]/g, '').replace(/\r\n?/g, '\n').trim().slice(0, 20000);

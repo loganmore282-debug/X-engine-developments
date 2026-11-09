@@ -100,6 +100,14 @@ async function member() {
   ok(((await J('GET', '/public/settings')).j.settings || {}).shareMessage === 'Invest with {app} now', 'the share message is saved from the admin (tags removed)');
   await J('POST', '/admin/settings/update', { settings: { shareMessage: '' } }, null, true);
   ok(((await J('GET', '/public/settings')).j.settings || {}).shareMessage === 'Join me on {app}', 'an empty share message falls back to the default');
+  await J('POST', '/admin/settings/update', { settings: { homeBannerTitle: '  Welcome <b>back</b>  ', homeBannerText: 'Robots work\nwhile you sleep ' } }, null, true);
+  { const st2 = ((await J('GET', '/public/settings')).j.settings || {});
+    ok(st2.homeBannerTitle === 'Welcome  b back /b' || st2.homeBannerTitle === 'Welcome b back /b' || (!/[<>]/.test(st2.homeBannerTitle) && /Welcome/.test(st2.homeBannerTitle) && /back/.test(st2.homeBannerTitle)), 'the Home banner title is saved from the admin without tags', st2.homeBannerTitle);
+    ok(st2.homeBannerText === 'Robots work while you sleep', 'and the Home banner text, on one line', st2.homeBannerText); }
+  await J('POST', '/admin/settings/update', { settings: { homeBannerTitle: 'x'.repeat(200), homeBannerText: 'y'.repeat(500) } }, null, true);
+  { const st3 = ((await J('GET', '/public/settings')).j.settings || {}); ok(st3.homeBannerTitle.length === 60 && st3.homeBannerText.length === 160, 'both are capped (60 and 160 characters)'); }
+  await J('POST', '/admin/settings/update', { settings: { homeBannerTitle: '', homeBannerText: '' } }, null, true);
+  ok((((await J('GET', '/public/settings')).j.settings || {}).homeBannerTitle) === '', 'empty words mean nothing is drawn over the banner');
   await J('POST', '/admin/settings/update', { settings: { giftCodeHint: '' } }, null, true);
   ok(((await J('GET', '/public/settings')).j.settings || {}).giftCodeHint === 'Enter gift code (T-XXXX)', 'an empty hint falls back to the default');
 

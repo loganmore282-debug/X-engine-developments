@@ -21,6 +21,9 @@ Download App reward, and the Security hub page** (ChocoMCC's Security page is ju
 Known differences left (say so, do not hide): the Task Center counts team PURCHASES with admin-editable tiers (ChocoMCC: Level 1 referrals who invest + Level 1
 deposits, fixed ladders); the welcome dialog is a picture + Join Channel (ChocoMCC: admin title and text + WhatsApp and Telegram pills); ChocoMCC's USDT deposit and
 bank-transfer cash-out do not exist on Smart AI's server; sign-up asks a 6-digit Trade Password as in Potato, Mint and Chocolate (ChocoMCC makes a 4-digit payout PIN at first use).
+ChocoMCC's Home banner shows an admin title and a line of text over the picture: Smart AI has it as the settings `homeBannerTitle` (60 characters) and `homeBannerText`
+(160), edited in the admin panel under Settings -> "Home banner words"; both empty = the picture alone. The two UGX coin pictures of the Me page (Balance, Cash Outs) are
+`user/icons/ugx-coin.png`, ChocoMCC's own file, not an admin icon slot.
 
 The owner speaks plainly, wants things done (not lots of questions), keeps answers short, hates abbreviations ("UGX 23,000", never "23k"), wants
 SVG icons, exact match to his screenshots, everything configurable from admin, and does not want features nobody asked for. **Never tell him to upload
@@ -107,7 +110,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v4`, admin `admin/sw.js` `smartai-admin-shell-v3`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v5`, admin `admin/sw.js` `smartai-admin-shell-v4`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
