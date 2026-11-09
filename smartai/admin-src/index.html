@@ -641,6 +641,8 @@ function smartaiCutout(src, w, h){
   return { data:out, w:cw, h:ch, empty:false };
 }
 // The icon slots (same names as SMARTAI_ICON_SLOTS in server.js). Add a name here AND in server.js to get a new upload box.
+// Slots that already have a built-in blue picture in the app (user/icons/); an upload here replaces it, Remove brings it back.
+const SMARTAI_ICON_BUILTIN = ['navhome','navincome','navteam','navshare','navmy','recharge','withdraw','service','channel','ordergift','downloadapp'];
 const SMARTAI_ICON_LABELS = { navhome:'Home tab icon', navincome:'Income tab icon', navteam:'Myteam tab icon', navshare:'Share tab icon', navmy:'My tab icon', recharge:'Recharge button icon (Home)', withdraw:'Withdraw button icon (Home)', service:'Service button icon (Home)', channel:'Channel button icon (Home)', ordergift:'Order gifts picture (floating chest)', downloadapp:'Download app picture (floating)', payicon:'Deposit pay button icon (one small round picture shown on all four pay buttons)' };
 // An uploaded file -> a transparent, tightly cropped PNG data URL (longest side at most `maxDim`).
 function fileToCutoutPng(file, maxDim){
@@ -3240,12 +3242,12 @@ async function renderBanners(){
 
     <h2 class="sec">Icons &middot; background removed automatically</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Upload a picture on any background. The panel takes the background away, trims the picture to its edges and saves it as a transparent PNG; the app then places it with no box around it. The pictures below move in the app exactly as in your screen recordings. Best results: the icon on a plain or softly shaded background, at least 256&times;256.</p>
+      <p class="muted" style="margin-top:0">Upload a picture on any background. The panel takes the background away, trims the picture to its edges and saves it as a transparent PNG; the app then places it with no box around it. Until you upload one, the app shows the built-in blue picture of that slot (Remove brings it back). The pictures below move in the app exactly as in your screen recordings. Best results: the icon on a plain or softly shaded background, at least 256&times;256.</p>
       ${Object.keys(SMARTAI_ICON_LABELS).map(k=>`
       <div style="font-weight:700;margin:14px 0 6px">${esc(SMARTAI_ICON_LABELS[k])}</div>
       <div class="banner-row">
         ${(cir.icons&&cir.icons[k])?`<img class="img-thumb alpha" style="width:64px;height:64px" src="${esc(cir.icons[k])}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;width:64px;height:64px"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px">${(cir.icons&&cir.icons[k])?'Custom picture':'<span class="muted">Not set</span>'}</div>
+        <div style="flex:1;min-width:0;font-size:12px">${(cir.icons&&cir.icons[k])?'Custom picture':(SMARTAI_ICON_BUILTIN.includes(k)?'<span class="muted">Built-in blue picture</span>':'<span class="muted">Not set</span>')}</div>
         ${(cir.icons&&cir.icons[k])?`<button class="btn danger sm" id="iconClear_${k}">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload ${esc(SMARTAI_ICON_LABELS[k].toLowerCase())}<input type="file" id="iconFile_${k}" accept="image/*" hidden></label>`).join('')}

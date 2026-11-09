@@ -1712,7 +1712,7 @@ function hookNavTapBox(){
   // No tap pulse or ripple on the tab icons (owner's request): they just switch to the active look.
 }
 
-// The five tab pictures are the admin's cut-out icons (Banners > Icons); a tab whose picture is not uploaded yet shows just its label.
+// The five tab pictures: the admin's cut-out icon of the slot (Banners > Icons) when one is uploaded, else the built-in picture above.
 var NAV_ICON_SLOT = { home: 'navhome', assets: 'navincome', network: 'navteam', promo: 'navshare', account: 'navmy' };
 function updateNavIcons(){
   hookNavTapBox();
@@ -1720,7 +1720,7 @@ function updateNavIcons(){
     const key = btn.dataset.nav;
     btn.classList.toggle('active', key === STATE.page);
     const slot = btn.querySelector('.nav-ic');
-    const src = (STATE.icons && STATE.icons[NAV_ICON_SLOT[key]]) || '';
+    const src = ptIconSrc(NAV_ICON_SLOT[key]);
     if (slot && slot.dataset.src !== src) { slot.innerHTML = src ? '<img src="' + esc(src) + '" alt="" draggable="false">' : ''; slot.dataset.src = src; }
   });
   paintFloats();
@@ -1728,9 +1728,8 @@ function updateNavIcons(){
 // The two pictures that float at the right of every signed-in page: Order gifts (chest) over Download app. Each is hidden on its own page.
 function paintFloats(){
   const box = $('ptFloats'); if (!box) return;
-  const ic = STATE.icons || {};
-  const html = (ic.ordergift ? '<button class="pt-fl pt-fl-chest" type="button" onclick="openOrderGiftsPage()" aria-label="Order gifts">' + ptIconHtml('ordergift', 'gift') + '</button>' : '')
-    + (ic.downloadapp ? '<button class="pt-fl pt-fl-app" type="button" onclick="openDownloadPage()" aria-label="Download app">' + ptIconHtml('downloadapp', 'appfloat') + '</button>' : '');
+  const html = (ptIconSrc('ordergift') ? '<button class="pt-fl pt-fl-chest" type="button" onclick="openOrderGiftsPage()" aria-label="Order gifts">' + ptIconHtml('ordergift', 'gift') + '</button>' : '')
+    + (ptIconSrc('downloadapp') ? '<button class="pt-fl pt-fl-app" type="button" onclick="openDownloadPage()" aria-label="Download app">' + ptIconHtml('downloadapp', 'appfloat') + '</button>' : '');
   if (box.dataset.sig !== html) { box.innerHTML = html; box.dataset.sig = html; }
 }
 // Keeps balances/team stats quietly current while the app just sits open --
@@ -2311,10 +2310,23 @@ window.openContactLink = function(kind){
   window.open(url, '_blank', 'noopener');
 };
 // ── Admin-uploaded cut-out icons and the flip clock (motion and look measured from the owner's screen recordings; CSS in index.html, PT-ANIM block) ──
-// An icon slot's picture as an <img>, or '' when none has been uploaded (the screen then simply has no picture there). `motion` is 'gift'
+// ── BUILT-IN ICON PICTURES (the owner's blue and white icon pack) ──
+// Owner: "it will be blue and white, and these will be icons ... extract them perfectly, get the best ones, not all". 20 of the 35 pictures in his zip were
+// cut out of their baked-in light-blue backgrounds (transparent WebP, 192 px, files in `user/icons/`) and are the app's own icons. A picture uploaded in the
+// admin (Banners > Icons) still replaces the built-in one of its slot; nothing else about the slots changed.
+var SMARTAI_ICON_DEFAULTS = {
+  navhome: '/icons/navhome.webp', navincome: '/icons/navincome.webp', navteam: '/icons/navteam.webp', navshare: '/icons/navshare.webp', navmy: '/icons/navmy.webp',
+  recharge: '/icons/recharge.webp', withdraw: '/icons/withdraw.webp', service: '/icons/service.webp', channel: '/icons/channel.webp',
+  ordergift: '/icons/ordergift.webp', downloadapp: '/icons/downloadapp.webp'
+};
+function ptIconSrc(key){
+  const up = STATE && STATE.icons && STATE.icons[key];
+  return (typeof up === 'string' && up) ? up : ((typeof SMARTAI_ICON_DEFAULTS === 'object' && SMARTAI_ICON_DEFAULTS && SMARTAI_ICON_DEFAULTS[key]) || '');
+}
+// An icon slot's picture as an <img>: the admin's upload, else the built-in picture, or '' for a slot with neither (the screen then simply has no picture there). `motion` is 'gift'
 // (order gift bounce) or 'appfloat' (download-app float) or '' for a still picture.
 function ptIconHtml(key, motion, extraClass){
-  const src = STATE.icons && STATE.icons[key];
+  const src = ptIconSrc(key);
   if (!src) return '';
   return '<img class="pt-icon' + (motion ? ' pt-' + motion : '') + (extraClass ? ' ' + extraClass : '') + '" src="' + esc(src) + '" alt="" draggable="false">';
 }
@@ -3105,8 +3117,11 @@ var PT_MENU_IC = {
   tick: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.8l4.4 4.4L19 7.4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
 };
+// The My page rows show the owner's blue picture (built-in, `user/icons/`); the plain drawings above stay for the small badges of the set-up pages.
+var PT_MENU_PIC = { bars: 'balancedetail', mail: 'messages', lock: 'loginpassword', shield: 'tradepassword', auth: 'authenticator', card: 'bankcard', bell: 'giftcode', down: 'appdownload', info: 'about' };
 function ptMenuRow(icon, label, fn, badge){
-  return `<button type="button" class="pt-mrow" onclick="${fn}"><span class="ic">${PT_MENU_IC[icon]}</span><b>${label}</b>${badge ? `<em id="msgBadge"${mgUnread() ? '' : ' style="display:none"'}>${mgUnread()}</em>` : ''}<span class="ch">${PT_MENU_IC.chev}</span></button>`;
+  const pic = PT_MENU_PIC[icon] ? '<img src="/icons/' + PT_MENU_PIC[icon] + '.webp" alt="" draggable="false">' : PT_MENU_IC[icon];
+  return `<button type="button" class="pt-mrow" onclick="${fn}"><span class="ic">${pic}</span><b>${label}</b>${badge ? `<em id="msgBadge"${mgUnread() ? '' : ' style="display:none"'}>${mgUnread()}</em>` : ''}<span class="ch">${PT_MENU_IC.chev}</span></button>`;
 }
 // The My page balances count up from zero to their figure each time the page is shown (a visit, or coming back from Balance Detail, Messages ...).
 function ptCountUp(el, target, ms, from){

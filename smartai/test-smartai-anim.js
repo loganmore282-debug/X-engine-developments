@@ -19,7 +19,7 @@ ok(/\.pt-icon\.pt-gift\{animation:ptGiftBounce 1\.2s linear infinite/.test(css),
   ok(ys.length === 33 && Math.min(...ys) === -9 && ys[0] > -1 && ys[ys.length - 1] > -1, 'download app: traced float, 33 stops, up 9% and back'); }
 ok(/\.pt-icon\.pt-appfloat\{animation:ptAppFloat 1\.6s linear infinite/.test(css), 'download app cycle is 1.6 s, straight lines');
 // the flip clock look
-ok(/\.pt-fd\{[^}]*width:27\.7px;height:39px;[^}]*font:700 25px\/39px Roboto/.test(css) && /background:#191919/.test(css) && /background:#e0211f/.test(css), 'tiles 27.7 x 39, bold 25 px digits, dark tile, red dots');
+ok(/\.pt-fd\{[^}]*width:27\.7px;height:39px;[^}]*font:700 25px\/39px Roboto/.test(css) && /background:#191919/.test(css) && /background:#1578ea/.test(css), 'tiles 27.7 x 39, bold 25 px digits, dark tile, blue dots');
 ok(/animation:ptFoldTop 267ms 58ms linear both/.test(css) && /animation:ptUnfoldBot 233ms 317ms cubic-bezier\(\.3,\.5,\.7,\.8\) both/.test(css) && /ptHideBot 550ms/.test(css), 'fold 0.06-0.33 s, unfold 0.32-0.55 s');
 
 // behaviour of the clock (jsdom, no layout)
@@ -42,6 +42,7 @@ eq($$('.pt-fd').map(d => d.classList.contains('pt-go')), [false, false, false, t
 w.ptFlipSettle(u); ok(!u.classList.contains('pt-go') && u.querySelector('.pt-fb i').textContent === u.getAttribute('data-v'), 'settling leaves every layer on the current digit');
 // icons
 ok(/class="pt-icon pt-gift" src="data:image\/png;base64,AAAA"/.test(w.ptIconHtml('ordergift', 'gift')), 'an uploaded icon is an <img> with its motion class');
-eq(w.ptIconHtml('downloadapp', 'appfloat'), '', 'an icon that was not uploaded shows nothing');
+ok(/class="pt-icon pt-appfloat" src="\/icons\/downloadapp\.webp"/.test(w.ptIconHtml('downloadapp', 'appfloat')), 'an icon that was not uploaded shows the built-in blue picture of its slot');
+eq(w.ptIconHtml('payicon', ''), '', 'a slot with no upload and no built-in picture shows nothing');
 ok(/STATE\.icons = \(ci\.status === 'success' && ci\.icons/.test(mod), 'the app reads the icons from /public/smartai-images');
 console.log('PASS: Smart AI motion and flip clock (' + n + ' checks)');
