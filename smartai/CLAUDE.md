@@ -36,6 +36,11 @@ files or run quick-update.sh by hand: a push to `claude/smartai-build` deploys b
   `npm run test:audit` (wait for exit 0, run it in the background and read the `EXIT` line; the chain stops at the first failing test), commit, push
   to **`claude/smartai-build`**. `npm install --include=dev` for the dev tools.
 - `node set-brand.js "Name"` renames the app everywhere again (files must be git-tracked).
+- **Only `npm run test:audit` counts.** Sixteen older test files in this folder are NOT in it and fail exactly the same way in Potato (they look for files and names of
+  older apps: `render.yaml`, Kenya regions, Snow branding, `GIFTCODE_UPPER` ...): test-activity-feed-region, test-allowed-origins, test-banner-video-upload,
+  test-banner-video-url, test-brand-assets, test-brand-manifest, test-code-security, test-cors-origins, test-gateway-regions, test-manual-review,
+  test-manualpay-matches-snow, test-no-snow-branding, test-product-config, test-product-legacy-key-route, test-regions, test-security-hardening.
+  Checked on 2026-11-09 (Smart AI and Potato: all sixteen exit 1). Leftovers, not regressions: do not "fix" them and do not trust them.
 - The app icons (`user/` and `admin/` `icon-192.png`, `icon-512.png`) and `user/link-preview.jpg` are PLACEHOLDERS (blue "SA" ring) until the owner sends the logo.
 
 ## Hosting (same Hostinger VPS as Soda, Mint, Cookie, Potato and Chocolate, completely separate)
