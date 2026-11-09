@@ -49,6 +49,8 @@ files or run quick-update.sh by hand: a push to `claude/smartai-build` deploys b
 | dev ports | 8096 / 8097 | 8100 / 8101 |
 | admin path | `Tq5m8zr` | **`N85d57j4`** |
 Port plan: Soda 3001/8090/8091, Mint 3002/8092/8093, Cookie 3003/8094/8095, Potato 3004/8096/8097, Chocolate 3005/8098/8099, Smart AI 3006/8100/8101. API prefix `/k7x2` (same as the others).
+**The VPS address is `179.198.197.114`** (`ssh root@179.198.197.114` from the owner's Termux; one Hostinger machine for every app). Always give him the real address, never a `<vps ip>`
+placeholder: he has sent it to us many times and was rightly annoyed when it was left out.
 Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: it would restart the other apps too. Use the names. Hosts in the code
 (`app.smartai.example.com`) are placeholders until `deploy/set-domain.sh` is run with the real domain.
 
@@ -58,8 +60,12 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
    (installs packages, asks for the MongoDB connection string with hidden typing and CHECKS it, asks for the admin password, writes the secrets file, starts pm2
    `smartai-server`, tests `/health`.)
 3. GitHub webhook (repo -> Settings -> Webhooks -> Add webhook): Payload URL `http://<vps ip>:8100/k7x2/deploy/webhook` until a domain exists (then `https://<app host>/k7x2/deploy/webhook`),
-   content type `application/json`, event: just the push event, Secret = `DEPLOY_WEBHOOK_SECRET`: read it with `grep DEPLOY_WEBHOOK_SECRET /srv/smartai-secrets/secrets.local.js`
+   content type `application/json`, event: just the push event, Secret = `DEPLOY_WEBHOOK_SECRET`: print just the code with
+   `node -e "console.log(require('/srv/smartai-secrets/secrets.local.js').DEPLOY_WEBHOOK_SECRET)"`
    (`bash smartai/deploy/show-links.sh github` prints all three but only once a domain is set up). The server pulls its own branch, runs npm install, reloads `smartai-server`.
+   **Pitfall (happened on 2026-11-09):** GitHub's default content type is `application/x-www-form-urlencoded`. The server only reads JSON for `/deploy/webhook`, so the
+   ping then shows a red 401 "Bad signature" even with the right secret (tested on the real server: JSON + right secret = 200 "pong", form = 401, wrong secret = 401).
+   Fix: webhook Settings -> Content type `application/json`, Change secret (paste it again), Update webhook, then Recent Deliveries -> the ping -> Redeliver -> green 200.
 4. Temporary preview by IP: `bash /srv/smartai-src/smartai/deploy/preview.sh on` serves the app at `http://<vps ip>:8100/` and the hidden admin at
    `http://<vps ip>:8100/N85d57j4/` (plain HTTP, design work only, never real members or money).
 5. Domain later: `bash /srv/smartai-src/smartai/deploy/set-domain.sh` (asks for the domain), then `make-hook-url.sh` for the secret payment-webhook address,
@@ -73,7 +79,9 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
 3. (open, owner) **ChocoMCC's starting numbers as the defaults** (asked, not answered yet): minimum top-up and cash-out UGX 5,000, welcome gift UGX 7,000, commissions
    27% / 2% / 1%, cash-out fee 15%, 2 cash-outs a day, ChocoMCC's product list (he adds products himself in the admin). Today the server still has Potato's numbers
    (`DEFAULT_SETTINGS`); everything is editable in Admin > Settings, nothing is hard-coded in the app.
-4. (open, owner) Atlas user + connection string, VPS first-setup, GitHub webhook, domain, the real logo (the app icons are placeholders: a blue "SA" ring).
+4. (done, owner, 2026-11-09) Atlas user + connection string, VPS first-setup (`/srv/smartai-src`, pm2 `smartai-server`), IP preview on port 8100, GitHub webhook: the ping answers 200
+   (green), so every push to `claude/smartai-build` now deploys by itself. (open, owner) the domain (`deploy/set-domain.sh`), the real logo (the app icons are placeholders: a
+   blue "SA" ring), the payment-company keys.
 
 ## Member app = ChocoMCC's pages, blue and white, the owner's icons (rebuilt from scratch on Smart AI's server)
 - **Files.** `user-src/index.html` (markup + CSS + the sign-in script + the loader script) and `user-src/original_module.js` (about 2,100 lines, classic script,
