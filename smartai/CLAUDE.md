@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v8`, admin `admin/sw.js` `smartai-admin-shell-v6`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v9`, admin `admin/sw.js` `smartai-admin-shell-v6`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -179,25 +179,12 @@ legacy image-document migration, the `slides` / `banner1` fallbacks of the Home 
 `promobanner`), "Team page banner", "Me page banner", "Task Center tiers", "Gift code box words", "Gateways used in turn" (the deposit rotation names are labels only: members
 never see them), "treasure code" -> "gift code". What the Banners tab keeps: see "Every banner is uploadable" below.
 
-## Page loader (the owner: "use the very loader on the polling payment page to replace the ring loaders everywhere ... don't put the background on it, let it be freely loading")
-- Every ring loader of the member app is now the glass orb of the payment animation, **on its own: no tile, no background, no shadow**. Sprite `user/anim/orb-free.webp`
-  (RGBA, 10 x 10 frames of 192 px, 100 frames at 20 ms = the GIF's 2 s loop, 228 kB), cut by `tools/make-anim-sprites.py` from the payment GIF: the glass ball is the disc of radius 140.4
-  GIF px around (399.5, 299.5) (the shell's edge, measured: its 50 % point), everything outside it (the dark field and the glow) is thrown away, the rim is anti-aliased and its colour is
-  copied from just inside (no dark fringe), de-noised like the opaque sheet. The ball keeps its own dark glass body on purpose: that is what makes the white parts of the petals readable on the
-  light page. (If the owner wants ONLY the petals with no dark ball, that is a different matte: ask him.) `orb-poster.txt` = frame 0 at 64 px, inlined as `ORB_POSTER` until the sheet arrives.
-- App code (`original_module.js`, block "THE PAGE LOADER"): `orbHtml()` returns the markup (`<div class="orb-wrap"><canvas class="orb-ld">`, 84 css px, CSS in `index.html`), `orbTick()` is the one
-  `requestAnimationFrame` timer for every loader on screen (it paints only canvases that are visible and sleeps when none exists: `_orbRaf === 0`), `orbLoad()` fetches the sheet once (also
-  1.2 s after the app opens, so the first waiting page already has it). `spinnerHtml()` and the `.cm-spinner` styles are gone; **a busy BUTTON keeps its small turning arc + its word**
-  (`btnBusyHtml`, `.verify-spin`): the owner said "ring loaders only" for the admin panel before, so only loaders were replaced. The payment (polling) page keeps its dark rounded tile
-  (`showPayOrb`, `pay-orb.webp`): the owner contrasted it with the new loader, so it was left as he approved it; say so if he wants it free too.
-- Where it shows: About Us, Ledger (Topups, Cash Outs, Accrued), My Team (a level's list), Task Center, My Products, Accrued earnings, Payout Account, and the robot lists (Home strip and AI Robots).
-  A list that is empty only because it has not arrived must never say "none yet": `STATE.ok = { inv, bank, tx }` (set by `refreshFromServer`) and `_productsOk` say what has really come from
-  the server; `dataLoaded()` / `waitForData()` show the orb, ask again, and if the answer does not come show "Could not load this page" + **Try again** (`retryData`, `retryRecords`: the Ledger's old
-  ring turned for ever when a list failed). A phone that already holds the list shows it at once, with no loader. In the normal flow the app is entered only after those lists arrived, so
-  My Products / Payout Account / Accrued open straight away; the orb is what they show whenever they would otherwise have to wait.
-- Test: `test-orb-loader.js` (in the audit): the sheet's header (alpha, 1920 x 1920), no ring left in code or styles, no background on the orb or its box, and in a real phone-sized browser against the
-  real server with each page's request held back: the orb shows (84 px, see-through corners, round ball only, really animating), is replaced by the content, Try again works, one sheet request.
-  (A test must NOT `await` a page function that waits on a held request: `ev(() => { openTeamLevel(1); })`.)
+## Page loader = the RING again (owner: "Return back ring loaders")
+- The glass-orb page loader (made earlier the same day from the payment GIF) was taken out on the owner's order; every page loader is the original ring (`spinnerHtml()`, `.cm-spin-wrap` / `.cm-spinner` in `index.html`)
+  again, and `user/anim/orb-free.webp` is no longer shipped (`tools/make-anim-sprites.py` can still cut it: function `free_orb`). The payment (polling) page keeps the payment animation in its tile; a busy BUTTON keeps its small arc.
+- What stayed from that round (it is correct, not about looks): a list that is empty only because it has not arrived never says "none yet" (`STATE.ok = { inv, bank, tx }`, `_productsOk`, `dataLoaded()` / `waitForData()`: the
+  ring shows, the app asks again, and if the answer does not come the page says "Could not load this page" + **Try again**, `retryData` / `retryRecords`; the Ledger's ring used to turn for ever when a list failed).
+- Test: `test-page-loader.js` (in the audit): the ring is in the code and styles, the orb is gone, and in a real phone-sized browser with each page's request held back the ring shows, is replaced by the content, and Try again works.
 
 ## Every banner is uploadable (owner: "have you made it so I can upload all banners: the authenticator banner, account background and logo banner?")
 - ChocoMCC lets its owner replace every banner; Smart AI now does too: **13 picture slots** = server `SMARTAI_BANNER_SLOTS`, admin `PICTURE_SLOTS`, app `ART_SLOTS` (one list each, kept equal by

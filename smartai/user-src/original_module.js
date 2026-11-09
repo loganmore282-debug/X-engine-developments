@@ -236,7 +236,7 @@ function waitForData(kind, box, again){
     box.innerHTML = '<div class="empty">Could not load this page.<br><button type="button" class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="retryData(\'' + kind + '\')">Try again</button></div>';
     return;
   }
-  box.innerHTML = orbHtml();
+  box.innerHTML = spinnerHtml();
   var epoch = _authEpoch;
   ensureData().then(function(){
     if (!STATE || epoch !== _authEpoch) return;
@@ -317,6 +317,7 @@ function productExpectedReturn(p){ return Number(p && p.expectedReturn) || Math.
 function dailyReturn(p){ return Math.round(productExpectedReturn(p) / productCycle(p)); }
 function ugx(n){ n = Number(n) || 0; var hasCents = Math.round(n * 100) % 100 !== 0; return 'UGX ' + (hasCents ? (Math.round(n * 100) / 100).toFixed(2) : String(Math.round(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]; }); }
+function spinnerHtml(){ return '<div class="cm-spin-wrap"><svg class="cm-spinner" viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2"></circle></svg></div>'; }
 // Same small spinning-arc icon already used on the deposit status screen's
 // Verify Payment button (.verify-spin) -- reused here as one shared helper
 // so every "Please wait…" busy state app-wide (sign in/register, redeem
@@ -612,7 +613,6 @@ function enterApp(){
   refreshDepositSlot();
   hideLoadingScreen();
   maybeShowAnnouncement();
-  setTimeout(orbLoad, 1200);   // the page loader's sheet is fetched once the start-up screen is out of the way, so the first page that waits already has it
 }
 // Fires once the sign-in script has said who (if anyone) is signed in: at start-up, then on every sign-in and sign-out. It sits out while the form's
 // own handler is driving a sign-in (_authInProgress), so the two can never race.
@@ -721,7 +721,7 @@ var _aboutLoaded = false, _aboutShown = '';
 // reaches a member who already has the app open (before, the first copy was kept until the app was reopened).
 async function loadAbout(){
   var box = $('aboutBody');
-  if (!_aboutLoaded) box.innerHTML = orbHtml();
+  if (!_aboutLoaded) box.innerHTML = spinnerHtml();
   var r = await api('/public/about-content');
   if (r.stale) return;
   if (r.status !== 'success') { if (!_aboutLoaded) box.innerHTML = '<div class="empty">Could not load this page. Try again.</div>'; return; }
@@ -956,7 +956,7 @@ function renderTierCard(t, total){
 async function loadTaskCenter(){
   var box = $('taskCenterList');
   if (!box) return;
-  box.innerHTML = orbHtml();
+  box.innerHTML = spinnerHtml();
   var r = await api('/salary/status');
   if (r.stale) return;
   if (r.status !== 'success' || !Array.isArray(r.tiers)) { box.innerHTML = '<div class="empty">' + esc((r && r.message) || 'Could not load the Task Center. Try again.') + '</div>'; return; }
@@ -1012,7 +1012,7 @@ function renderFeatured(){
       '<div class="choc-price">' + ugx(p.price) + '</div>' +
       '<div class="choc-ret">+' + ugx(dailyReturn(p)) + '/day</div></div></button>';
   }).join('');
-  $('featStrip').innerHTML = html || (_productsOk ? '<div class="empty" style="width:100%">No AI robots yet. Check back soon.</div>' : orbHtml());
+  $('featStrip').innerHTML = html || (_productsOk ? '<div class="empty" style="width:100%">No AI robots yet. Check back soon.</div>' : spinnerHtml());
 }
 // renderShop() runs on every poll and rebuilds the Buy buttons, which would restart their glow sweep: a negative delay equal to how far into the cycle
 // "now" is makes a freshly built button carry on exactly where the old one was.
@@ -1047,7 +1047,7 @@ function renderShop(){
         '</div>' + btn +
       '</div></div>';
   }).join('');
-  $('shopGrid').innerHTML = html || (_productsOk ? '<div class="empty">No AI robots yet. Check back soon.</div>' : orbHtml());
+  $('shopGrid').innerHTML = html || (_productsOk ? '<div class="empty">No AI robots yet. Check back soon.</div>' : spinnerHtml());
   syncSweepPhase($('shopGrid'));
 }
 function investmentStats(){
@@ -1213,7 +1213,7 @@ function renderRecords(){
     $('recordsStats').innerHTML = '';
     $('recordsList').innerHTML = _recordsFailed[_recordsTab]
       ? '<div class="empty">Could not load this list.<br><button type="button" class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="retryRecords()">Try again</button></div>'
-      : orbHtml();
+      : spinnerHtml();
     return;
   }
   var sum = list.reduce(function(acc, r){ return acc + (isTop ? (r.status === 'matched' ? Number(r.amount) || 0 : 0) : (r.status === 'processed' ? Number(r.net || r.amount) || 0 : 0)); }, 0);
@@ -1450,45 +1450,6 @@ async function doDeposit(){
   $('depAmt').value = '';
   refreshDepositSlot();   // the next deposit uses the next method in turn
   openDepositStatus(r.depositId, r.reference, '0' + local);
-}
-
-/* ====================== THE PAGE LOADER (the payment animation's orb, on its own) ======================
-   Every ring loader of the app is this orb: the glass ball of the owner's payment animation with the dark field around it cut away (anim/orb-free.webp: the GIF's
-   100 frames, 192 x 192 px each, 10 per row, transparent outside the ball), 20 ms a frame = the GIF's own 2 s loop. No tile, no background, nothing but the ball.
-   One sprite and one timer serve every loader that is on screen; the timer sleeps when none is. Until the sprite has arrived, a small copy of frame 0 stands in.
-   (The little turning arc inside a busy BUTTON, btnBusyHtml(), is not a loader and stays.) */
-var ORB_CELL = 192, ORB_FRAMES = 100, ORB_MS = 20;
-var ORB_POSTER = 'data:image/webp;base64,UklGRjQEAABXRUJQVlA4WAoAAAAQAAAAPwAAPwAAQUxQSEcBAAABB6EwkiQzdXrbiIgAQdYqiBjUc9H32MhcWqkLigiiwUEkSYp0zAxPR+Pf5vPWC+iP6L8Dt5EUKVnmo4Z7gveNfpQU5V9J5HuAUdXNl2U77H9oucxdFTklbk6rvVWnJnZFNlztQ6/KXJBOm32hpvRbwnaxL10UfkV+Ngcq/4L6Zk681Z8S9Ls5cu+Dz76l42HOPOR/sjyaU/XBYn+45ejfX203x+71u7vezLk3vf66ng1Q4StaQ9Sr39rCsKTPTAap50CxUSh7ZDBMPUa5K8dVdxoD1Z0TyUlStJIo8lQZaiV1LJ00s8zyLyzyo4VlUbKxKCkOlkOlwZY8/Ap/CH8h/nuL/2743y0fN/i4hcdNPm7zeQPPW3zexPM2XzfgdQtfN+F1G1434nUrXzfjdTveN9B9C9434X0b3TfSfSvdN/9m347/byAAVlA4IMYCAAAwEQCdASpAAEAAPok4lUglI6IhOfdqqKARCWwAtSHA0/435md9HwVDje7DIeJ700/Mx5yXpA/yvqAf0/qRt5L/cvBOTBqg3FFDA2upCOz8X+1vQTS3N5dfHYrtRn0JOYYeIYmZuvMVzjzvnNeMGeV9SMLBCsKzQW6P1NJE07RvoQJWBteV1w6TF9fx84gUMfOaAAD+8mzTBXAf7MCJ1P5ZtuLyXmER2OvoAfL7GKBukP5JsQ2CfLlTZE1NjievZY4UXkGvgGTZc83GdBQDwbr5icdAWpaezK8JZB3MIH3skAvCkc82c2l6CH3jQxJaPxvtF33QEZ2EeLXOPEzypcJppvsxsk1DFy9QbWw7yVOkJINK6aQ12g6G8Oqd3KPE165KTyoi8CRI6WNi9TH1eoLCAJUkw6a6RbOfDiSgA3LyQiqx+GfBFzie9ObFRI/1KAj4dDyC0GJmk/uBS6Y8D9lCa5WqFjTalEkdNnKhA2yViim1fCs+cJKWlyQO9H2hWCxGca5S91o5jS6FFkPii6P34/j68yqSN8A9WZzM6bZ2FmHiJHyeMe/v3JJfkUCmJ0GA3lP/9yheyguuh9/H/G0m2FsAwWh15NzeUm4jo2c+Kn0VAeBsSYEuvAXjWlXXJJOVDJJ8pTwgIZrs0882vvTDYVQbGoRIoXqQNIIf1XBoT8yuZ/37jza6vM/lJqVz6b7q6VHtZtidPES/byP0vN3eTzTvqh968GDX2g7l8/Dw5JSc3Qr/y6YfeQ7frRf0Aj8+9E6X91lOtNVP6gFP/Vln35SeuxaMsH/wF2zKmcjnl5GuOSXVa14skemqBmKfxpwOWxNhtkPj6WwtO4H6uzev8RqoAVmepFyAmmZqzYR95EmdNevMvyd1Rev2m/4OB1jIEovupzXXrNrNf5nZbk0x72TVxmYvkH/2sVEuXbXAQwe612QwAA==';
-var _orbSheet = null, _orbSheetOk = false, _orbPoster = null, _orbPosterOk = false, _orbRaf = 0, _orbT0 = 0;
-function orbLoad(){
-  if (!_orbSheet) { _orbSheet = new Image(); _orbSheet.onload = function(){ _orbSheetOk = true; }; _orbSheet.src = '/anim/orb-free.webp'; }
-  if (!_orbPoster) { _orbPoster = new Image(); _orbPoster.onload = function(){ _orbPosterOk = true; }; _orbPoster.src = ORB_POSTER; }
-}
-function orbWake(){ if (!_orbRaf) { if (!_orbT0) _orbT0 = performance.now(); _orbRaf = requestAnimationFrame(orbTick); } }
-function orbTick(){
-  _orbRaf = 0;
-  var list = document.querySelectorAll('canvas.orb-ld');
-  if (!list.length) return;                                   // none on any page: sleep until orbHtml() is called again
-  var n = Math.floor((performance.now() - _orbT0) / ORB_MS) % ORB_FRAMES;
-  for (var i = 0; i < list.length; i++) {
-    var cv = list[i];
-    if (!cv.offsetParent) continue;                           // on a page that is closed: nothing to paint
-    var src = _orbSheetOk ? _orbSheet : (_orbPosterOk ? _orbPoster : null);
-    if (!src) continue;
-    var frame = _orbSheetOk ? n : -1;                         // the stand-in is one picture: painted once
-    if (cv._orbFrame === frame && cv._orbSrc === src) continue;
-    cv._orbFrame = frame; cv._orbSrc = src;
-    var c = cv.getContext('2d');
-    c.clearRect(0, 0, cv.width, cv.height);
-    if (_orbSheetOk) c.drawImage(src, (n % 10) * ORB_CELL, Math.floor(n / 10) * ORB_CELL, ORB_CELL, ORB_CELL, 0, 0, cv.width, cv.height);
-    else c.drawImage(src, 0, 0, cv.width, cv.height);
-  }
-  _orbRaf = requestAnimationFrame(orbTick);
-}
-// The loader itself: put the returned markup where the content will come, and replace it with the content when it arrives.
-function orbHtml(){
-  orbLoad(); orbWake();
-  return '<div class="orb-wrap" role="status" aria-label="Loading"><canvas class="orb-ld" width="' + ORB_CELL + '" height="' + ORB_CELL + '"></canvas></div>';
 }
 
 /* ====================== THE PAYMENT ANIMATION (the owner's second GIF) ======================
@@ -1867,7 +1828,7 @@ async function refreshTeamStats(){
 async function openTeamLevel(level){
   openOverlay('teamlevel');
   $('teamLevelTitle').textContent = 'Level ' + level + ' members';
-  $('teamLevelList').innerHTML = orbHtml();
+  $('teamLevelList').innerHTML = spinnerHtml();
   var r = await api('/team/members?level=' + level);
   if (r.stale) return;
   if (r.status !== 'success') { $('teamLevelList').innerHTML = '<div class="empty">Could not load this list. Try again.</div>'; return; }
