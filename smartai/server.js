@@ -4,7 +4,6 @@ if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = String(Mat
 const sessionPolicy = require('./session-policy');
 const { createFailGuard } = require('./security-guard');
 const totp = require('./totp');
-const twofaVault = require('./twofa-vault');
 const captcha = require('./captcha');
 const express     = require('express');
 const admin       = require('firebase-admin');
@@ -108,7 +107,7 @@ const healthLimiter = rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders
 // getSettings()/getProducts()'s own 60s in-process cache (see their own
 // comments), so a flood here costs cheap memory reads, not repeated Mongo
 // hits, regardless of how generous this ceiling is.
-const LIVE_POLL_ROUTES = new Set(['/account', '/public/settings', '/investments', '/public/products', '/team/stats', '/transactions', '/messages']);
+const LIVE_POLL_ROUTES = new Set(['/account', '/public/settings', '/investments', '/public/products', '/team/stats', '/transactions']);
 const livePollLimiter = rateLimit({ windowMs: 60 * 1000, max: 1200, keyGenerator: rlKeyByUser,
   standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests. Slow down.' } });
@@ -191,7 +190,7 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // route once, before that route was added here too.
 // /admin/app-icon/set carries TWO PNGs (512 and 192) in one body, so it
 // needs the image parser even though each one on its own is small.
-const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/smartai-image/set', '/admin/app-icon/set', '/admin/messages/save']);
+const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/smartai-image/set', '/admin/app-icon/set']);
 const HUGE_JSON_ROUTES = new Set(['/admin/about-html/set']);
 // PesaJet signs the RAW REQUEST PAYLOAD -- their dashboard says so in as many
 // words ("computing an HMAC-SHA256 digest of the raw request payload using
@@ -536,7 +535,7 @@ app.use((req, res, next) => {
 });
 
 // ── MAINTENANCE GATE ──
-const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/redeem', '/salary', '/gifts', '/app', '/checkin'];
+const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/redeem', '/salary', '/checkin'];
 const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/pesajet/webhook', '/tavupay/webhook', '/lworxpay/webhook', '/obpay/webhook']);
 // The platform's name, as the owner last set it in Admin -> Settings. Every
 // server-side string that names the app goes through here rather than
@@ -601,8 +600,6 @@ const DEFAULT_SETTINGS = {
   giftCodeHint: 'Enter gift code (T-XXXX)',
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   shareMessage: 'Join me on {app}',
-  // What "Claim" on the Download App page pays (once per member); 0 hides the button.
-  appClaimAmount: 0,
   // The sign-up captcha picture is off: the owner's Create Account screen has none. Sign-up is guarded by the rate limits instead.
   signupCaptcha: false,
   // What Telegram shows when a link to the app is pasted (title and text; the picture is the 'linkpreview' image). Empty = the app's own defaults.
@@ -641,13 +638,6 @@ const DEFAULT_SETTINGS = {
   // right after the loading screen. See the MAINTENANCE GATE section below
   // for the actual server-side enforcement.
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
-  // Owner: "make it compulsory so that after one puts in the Trade Password he puts in the 2fa code; if he had not, he has to download and do the process."
-  // On for everybody: a member who has not set up Google Authenticator (My > Google Authenticator) cannot withdraw until they have, and every withdrawal
-  // then asks for the Trade Password AND the 6-digit code. Then: "if I toggle this off, even the category of Google Authenticator in the user panel should go
-  // away" -- so Admin > Settings is the switch of the WHOLE feature: off = no Google Authenticator page in the app, no code asked at a withdrawal from anybody
-  // (even a member who had set it up), and its member routes are closed. Nobody's set-up is touched: switch it on again and every member's own secret and backup
-  // codes work as before.
-  requireTwofaToWithdraw: true,
   // The hours withdraw is open. Owner: "one withdrawal time should be
   // SETTABLE IN ADMIN, such that when one tries to withdrawal he sees, that
   // withdrawals start from this time to this time, nothing much ie 6pm to
@@ -886,7 +876,7 @@ async function getHomeBanner() {
 // (aboutlogo). Stored in the 'banners' collection as `smartai-<slot>`, cached for 60 s. Only the pictures the owner's screenshots show exist.
 // Transparent cut-out ICONS the owner uploads in the admin panel (Banners > Icons); the panel removes each picture's background and crops it
 // tight before saving, so these are always PNGs. To add an icon, add its name here AND its label in admin-src (SMARTAI_ICON_LABELS).
-const SMARTAI_ICON_SLOTS = ['home', 'robots', 'income', 'share', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'inbox', 'about', 'rules', 'download', 'signout', 'balance', 'loginpw', 'tradepw'];
+const SMARTAI_ICON_SLOTS = ['home', 'robots', 'income', 'share', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout'];
 const SMARTAI_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'promobanner', 'profilelogo', 'loaderbg', 'linkpreview', 'teambanner', 'mybanner', 'aboutbanner', 'aboutlogo', ...SMARTAI_ICON_SLOTS];
 const _smartaiImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
@@ -4398,7 +4388,7 @@ app.get('/account', async (req, res) => {
       phone: u.phone, walletBalance: round2(u.walletBalance), totalDeposited: u.totalDeposited || 0,
       totalEarned: round2(u.totalEarned), totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
-      hasTradePin: !!u.transactionPinHash, twofaEnabled: u.twofaEnabled === true, vipLevel, withdrawAnytime: u.withdrawAnytime === true, appClaimed: u.appClaimed === true,
+      hasTradePin: !!u.transactionPinHash, vipLevel, withdrawAnytime: u.withdrawAnytime === true,
       checkinStreak: u.checkinStreak || 0, lastCheckin: u.lastCheckin || null,
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
     // The member's OWN region, which the middleware has already put in
@@ -5250,209 +5240,6 @@ async function pinCheck(userId, pin0) {
     return { ok: true };
   });
 }
-// ═══════════════════════════════════════════
-// WITHDRAWAL 2-STEP VERIFICATION (Google Authenticator) -- optional, turned on by the MEMBER
-// ═══════════════════════════════════════════
-// Owner: "increase the security of the withdrawal: after the Trade Password, one has to put in the authenticator code; one has to enable it, so one
-// downloads Google Authenticator." Then: "make it compulsory ... if he had not, he has to download and do the process." So it is REQUIRED for every member
-// (setting requireTwofaToWithdraw, on by default; Admin > Settings switches the WHOLE feature off: no page, no code, routes closed): a member who has not set it up (My > Google Authenticator) is refused with
-// TWOFA_SETUP_REQUIRED, and once on, /withdraw/request needs the Trade Password AND a 6-digit code from the authenticator app (or, for a lost phone, one
-// single-use backup code). The server enforces it: the app only shows the box and the way to set it up. How it is kept safe:
-//   * Standard TOTP (RFC 6238: SHA-1, 6 digits, 30 seconds, a 160-bit secret in base32), so Google Authenticator, Microsoft Authenticator, Authy and 2FAS all work.
-//   * The secret is stored ENCRYPTED (AES-256-GCM, bound to the member's id, key made by the server itself: twofa-vault.js) and is shown to the member once, while setting up. Turning it on needs the Trade
-//     Password AND a correct first code, so a wrong or half-finished setup can never lock anybody out. Nothing is switched on until that code is right.
-//   * A code works ONCE. The step it belongs to is written down (`twofaLastStep`) in the SAME atomic update that takes the money, so a captured or repeated
-//     code (even two requests at the same instant) can never pay a second withdrawal. A code only a little early or late (clock drift of one step) is accepted.
-//   * Wrong codes are counted and the member is locked out after 5 (15 minutes), like the Trade Password. Malformed input is not counted.
-//   * Fail closed: if the secret cannot be read, nothing is withdrawn (never "skip the check").
-//   * 8 single-use backup codes are made at setup (only their keyed hashes are stored). Turning it off or making new backup codes needs the Trade Password
-//     and a code. A member who lost the phone and the backup codes is reset by the owner (Admin > Users > the member > Reset Google Authenticator).
-const TWOFA_MAX_FAILS = 5, TWOFA_LOCK_MS = 15 * 60 * 1000, TWOFA_PENDING_MS = 15 * 60 * 1000;
-// The key that locks the secrets is made and kept by the server itself -- nothing for the owner to set up (see twofa-vault.js: a key file in the secrets
-// folder, TWOFA_ENC_KEY if the owner ever sets it, and the first version's ADMIN_KEY key kept only so what it locked still opens).
-const TWOFA = twofaVault.loadKeys(), twofaCrypt = twofaVault.createVault(TWOFA.keys);
-const twofaSeal = (userId, plain) => twofaCrypt.seal(userId, plain);
-const twofaOpen = (userId, blob) => twofaCrypt.open(userId, blob);
-const TWOFA_BACKUP_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // 32 symbols, none that look alike (no 0 O 1 I)
-function twofaBackupNorm(s) { return String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, ''); }
-function twofaBackupHash(userId, code) { return twofaCrypt.backupHashes(userId, twofaBackupNorm(code))[0]; }   // the form stored for a NEW code
-// 8 codes of 10 symbols (50 bits each), shown as XXXXX-XXXXX. Returns { codes, hashes }.
-function twofaNewBackupCodes(userId) {
-  const codes = [];
-  while (codes.length < 8) { let c = ''; for (let i = 0; i < 10; i++) c += TWOFA_BACKUP_ALPHABET[crypto.randomInt(TWOFA_BACKUP_ALPHABET.length)]; if (!codes.includes(c)) codes.push(c); }
-  return { codes: codes.map(c => c.slice(0, 5) + '-' + c.slice(5)), hashes: codes.map(c => twofaBackupHash(userId, c)) };
-}
-function twofaEqHex(a, b) { a = String(a || ''); b = String(b || ''); return a.length === b.length && a.length > 0 && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b)); }
-const twofaOn = u => !!u && u.twofaEnabled === true;
-const TWOFA_CLEAR = () => ({ twofaEnabled: FieldValue.delete(), twofaSecretEnc: FieldValue.delete(), twofaLastStep: FieldValue.delete(), twofaBackup: FieldValue.delete(), twofaEnabledAt: FieldValue.delete(),
-  twofaFailCount: FieldValue.delete(), twofaLockedUntil: FieldValue.delete(), twofaPendingEnc: FieldValue.delete(), twofaPendingAt: FieldValue.delete() });
-const TWOFA_WRONG_HELP = "Open Google Authenticator and type the code it shows now. If it keeps failing, set your phone's date and time to automatic.";
-// Counts a wrong code (the caller holds the 2fa lock) and locks after TWOFA_MAX_FAILS.
-async function twofaNoteFail(uRef, u, userId, now) {
-  const fails = (Number(u.twofaFailCount) || 0) + 1;
-  if (fails >= TWOFA_MAX_FAILS) {
-    await uRef.update({ twofaFailCount: 0, twofaLockedUntil: new Date(now + TWOFA_LOCK_MS) });
-    logSecurityEvent(userId, '2fa_locked', {});
-    return { ok: false, code: 'TWOFA_LOCKED', message: `Too many wrong codes. Try again in ${TWOFA_LOCK_MS / 60000} minutes.` };
-  }
-  await uRef.update({ twofaFailCount: fails });
-  logSecurityEvent(userId, '2fa_wrong_code', { fails });
-  const left = TWOFA_MAX_FAILS - fails;
-  return { ok: false, code: 'TWOFA_INVALID', message: `That code is not right (${left} ${left === 1 ? 'try' : 'tries'} left). ${TWOFA_WRONG_HELP}` };
-}
-function twofaLockedReply(u, now) {
-  if (u.twofaLockedUntil && tsMillis(u.twofaLockedUntil) > now) {
-    const mins = Math.ceil((tsMillis(u.twofaLockedUntil) - now) / 60000);
-    return { ok: false, code: 'TWOFA_LOCKED', message: `Too many wrong codes. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` };
-  }
-  return null;
-}
-const TWOFA_STATUS = { TWOFA_LOCKED: 429, TWOFA_UNREADABLE: 503 };
-// Checks a code for a member who has it on. A 6-digit code is the authenticator's; anything shaped like a backup code is a backup code. NOTHING is spent
-// here: on success it returns what the caller must write ATOMICALLY with its own change ({kind:'totp', step} or {kind:'backup', hash}), so a code that is
-// used for a withdrawal is spent in the same update that takes the money.
-async function twofaCheck(userId, raw) {
-  const input = textOf(raw).trim();
-  if (!input) return { ok: false, code: 'TWOFA_REQUIRED', message: 'Enter the 6-digit code from Google Authenticator.' };
-  const digits = input.replace(/\s/g, '');
-  const isTotp = /^\d{6}$/.test(digits), norm = twofaBackupNorm(input), isBackup = !isTotp && /^[A-Z0-9]{10}$/.test(norm);
-  if (!isTotp && !isBackup) return { ok: false, code: 'TWOFA_INVALID', message: 'Enter the 6-digit code from Google Authenticator.' };   // a typo is not counted
-  return withLock('2fa:' + userId, async () => {
-    const uRef = db.collection('users').doc(userId), snap = await uRef.get();
-    if (!snap.exists) return { ok: false, code: 'NOT_FOUND', message: 'Account not found' };
-    const u = snap.data(), now = Date.now();
-    if (!twofaOn(u)) return { ok: false, code: 'TWOFA_OFF', message: 'Google Authenticator is not turned on for this account.' };
-    const locked = twofaLockedReply(u, now); if (locked) return locked;
-    let out;
-    if (isTotp) {
-      const secret = twofaOpen(userId, u.twofaSecretEnc);
-      if (!secret) { console.error(`2-step: the secret of ${userId} could not be read (key changed or data damaged) -- withdrawals for this member are refused until the owner resets it`); return { ok: false, code: 'TWOFA_UNREADABLE', message: 'Your Google Authenticator could not be read. Please contact customer service.' }; }
-      const m = totp.match(secret, digits, now, 1);
-      if (!m) return twofaNoteFail(uRef, u, userId, now);
-      const last = Number.isInteger(u.twofaLastStep) ? u.twofaLastStep : -1;
-      if (m.step <= last) return { ok: false, code: 'TWOFA_USED', message: 'That code was already used. Wait for the next code in Google Authenticator (it changes every 30 seconds) and try again.' };
-      out = { ok: true, kind: 'totp', step: m.step };
-    } else {
-      // A stored code may have been made under an earlier key (see twofa-vault.js), so it is compared in the form of every key; no early exit.
-      const hs = twofaCrypt.backupHashes(userId, norm); let hit = null;
-      for (const x of (Array.isArray(u.twofaBackup) ? u.twofaBackup : [])) for (const h of hs) if (twofaEqHex(x, h)) hit = x;
-      if (!hit) return twofaNoteFail(uRef, u, userId, now);
-      out = { ok: true, kind: 'backup', hash: hit, backupLeft: (Array.isArray(u.twofaBackup) ? u.twofaBackup.length : 1) - 1 };
-    }
-    if (Number(u.twofaFailCount) > 0) await uRef.update({ twofaFailCount: 0 });
-    return out;
-  });
-}
-// What an atomic update must also require / write to spend a checked code (see twofaCheck).
-function twofaSpend(chk) {
-  return chk.kind === 'totp'
-    ? { filter: { twofaEnabled: true, twofaLastStep: { $lt: chk.step } }, set: { twofaLastStep: chk.step } }
-    : { filter: { twofaEnabled: true, twofaBackup: chk.hash }, set: { twofaBackup: FieldValue.arrayRemove(chk.hash) } };
-}
-function twofaOtpauth(issuer, account, secret) {
-  return 'otpauth://totp/' + encodeURIComponent(issuer) + ':' + encodeURIComponent(account) + '?secret=' + secret + '&issuer=' + encodeURIComponent(issuer) + '&algorithm=SHA1&digits=6&period=30';
-}
-// A signed-in, unsuspended, fully registered member (the same gate as the other account routes); sends the refusal itself and returns null otherwise.
-async function twofaMember(req, res, allowOff) {
-  const userId = await verifyAuth(req);
-  if (!userId) { res.status(401).json({ status: 'error', message: 'Please sign in again' }); return null; }
-  const snap = await db.collection('users').doc(userId).get();
-  if (!snap.exists) { res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'Account not found' }); return null; }
-  if (snap.data().status === 'banned') { res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' }); return null; }
-  if (snap.data().registrationDone === false) { res.status(409).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up first.' }); return null; }
-  const featureOn = (await getSettings()).requireTwofaToWithdraw !== false;
-  // Switched off by the owner (Admin > Settings): the member routes are closed, so a changed or old copy of the app cannot start something that has no effect.
-  // Only the status answers (so an open page can say so).
-  if (!featureOn && !allowOff) { res.status(403).json({ status: 'error', code: 'TWOFA_DISABLED', message: 'Google Authenticator is switched off right now.' }); return null; }
-  res.set('Cache-Control', 'no-store');
-  return { userId, u: snap.data(), featureOn };
-}
-const twofaFail = (res, r) => res.status(TWOFA_STATUS[r.code] || (r.code === 'LOCKED' ? 429 : 400)).json({ status: 'error', code: r.code, message: r.message });
-app.get('/account/2fa/status', async (req, res) => {
-  const m = await twofaMember(req, res, true); if (!m) return;
-  res.json({ status: 'success', available: m.featureOn, enabled: twofaOn(m.u), enabledAt: twofaOn(m.u) ? (tsMillis(m.u.twofaEnabledAt) || null) : null, backupLeft: twofaOn(m.u) ? (Array.isArray(m.u.twofaBackup) ? m.u.twofaBackup.length : 0) : 0 });
-});
-// Step 1 of turning it on: the Trade Password, then a fresh secret is made and shown ONCE (as a link, a setup key and a QR picture drawn in the app).
-// Nothing is switched on yet; the secret waits, encrypted, for 15 minutes.
-app.post('/account/2fa/start', async (req, res) => {
-  try {
-    const m = await twofaMember(req, res); if (!m) return;
-    if (twofaOn(m.u)) return res.status(409).json({ status: 'error', code: 'TWOFA_ALREADY_ON', message: 'Google Authenticator is already turned on.' });
-    const pin = await pinCheck(m.userId, req.body.pin);
-    if (!pin.ok) return twofaFail(res, pin);
-    const secret = totp.generateSecret(), issuer = brandName(await getSettings()), account = m.u.phone || 'member';
-    await db.collection('users').doc(m.userId).update({ twofaPendingEnc: twofaSeal(m.userId, secret), twofaPendingAt: Date.now() });
-    res.json({ status: 'success', secret, otpauth: twofaOtpauth(issuer, account, secret), issuer, account, expiresInSec: TWOFA_PENDING_MS / 1000 });
-  } catch (e) { console.error('2-step start error:', e.message); res.status(500).json({ status: 'error', message: 'Could not start the setup right now' }); }
-});
-// Step 2: the member types the first code the app shows. Right -> it is on, and the backup codes are shown ONCE. Wrong -> counted, nothing changes.
-app.post('/account/2fa/confirm', async (req, res) => {
-  try {
-    const m = await twofaMember(req, res); if (!m) return;
-    const code = textOf(req.body.code).replace(/\s/g, '');
-    if (!/^\d{6}$/.test(code)) return res.status(400).json({ status: 'error', code: 'TWOFA_INVALID', message: 'Enter the 6-digit code from Google Authenticator.' });
-    const out = await withLock('2fa:' + m.userId, async () => {
-      const uRef = db.collection('users').doc(m.userId), u = (await uRef.get()).data() || {}, now = Date.now();
-      if (twofaOn(u)) return { code: 409, body: { status: 'error', code: 'TWOFA_ALREADY_ON', message: 'Google Authenticator is already turned on.' } };
-      const locked = twofaLockedReply(u, now); if (locked) return { code: 429, body: { status: 'error', code: locked.code, message: locked.message } };
-      const secret = u.twofaPendingEnc && now - (Number(u.twofaPendingAt) || 0) < TWOFA_PENDING_MS ? twofaOpen(m.userId, u.twofaPendingEnc) : null;
-      if (!secret) return { code: 400, body: { status: 'error', code: 'TWOFA_NO_SETUP', message: 'This setup has expired. Start again and add the new key to Google Authenticator.' } };
-      const hit = totp.match(secret, code, now, 1);
-      if (!hit) { const r = await twofaNoteFail(uRef, u, m.userId, now); return { code: TWOFA_STATUS[r.code] || 400, body: { status: 'error', code: r.code, message: r.message } }; }
-      const backup = twofaNewBackupCodes(m.userId);
-      const applied = await uRef.updateIf({ twofaEnabled: { $ne: true } }, { twofaEnabled: true, twofaSecretEnc: u.twofaPendingEnc, twofaLastStep: hit.step, twofaBackup: backup.hashes, twofaEnabledAt: new Date(),
-        twofaPendingEnc: FieldValue.delete(), twofaPendingAt: FieldValue.delete(), twofaFailCount: 0, twofaLockedUntil: FieldValue.delete() });
-      if (!applied) return { code: 409, body: { status: 'error', code: 'TWOFA_ALREADY_ON', message: 'Google Authenticator is already turned on.' } };
-      logSecurityEvent(m.userId, '2fa_enabled', {});
-      return { code: 200, body: { status: 'success', backupCodes: backup.codes } };
-    });
-    res.status(out.code).json(out.body);
-  } catch (e) { console.error('2-step confirm error:', e.message); res.status(500).json({ status: 'error', message: 'Could not turn it on right now' }); }
-});
-// Turning it off: the Trade Password AND a code (or a backup code). The same for new backup codes (the old ones stop working at once).
-async function twofaGuarded(req, res, apply) {
-  const m = await twofaMember(req, res); if (!m) return;
-  if (!twofaOn(m.u)) return res.status(409).json({ status: 'error', code: 'TWOFA_OFF', message: 'Google Authenticator is not turned on.' });
-  const pin = await pinCheck(m.userId, req.body.pin); if (!pin.ok) return twofaFail(res, pin);
-  const chk = await twofaCheck(m.userId, req.body.code); if (!chk.ok) return twofaFail(res, chk);
-  const sp = twofaSpend(chk);
-  const out = await apply(m, chk, sp);
-  if (!out) return res.status(409).json({ status: 'error', code: 'TWOFA_USED', message: 'That code was already used. Wait for the next code in Google Authenticator and try again.' });
-  res.json(out);
-}
-app.post('/account/2fa/disable', async (req, res) => {
-  try {
-    await twofaGuarded(req, res, async (m, chk, sp) => {
-      const ok = await db.collection('users').doc(m.userId).updateIf(sp.filter, TWOFA_CLEAR());
-      if (ok) logSecurityEvent(m.userId, '2fa_disabled', {});
-      return ok ? { status: 'success' } : null;
-    });
-  } catch (e) { console.error('2-step disable error:', e.message); res.status(500).json({ status: 'error', message: 'Could not turn it off right now' }); }
-});
-app.post('/account/2fa/backup-codes', async (req, res) => {
-  try {
-    await twofaGuarded(req, res, async (m, chk, sp) => {
-      const backup = twofaNewBackupCodes(m.userId);
-      const ok = await db.collection('users').doc(m.userId).updateIf(sp.filter, Object.assign({}, chk.kind === 'totp' ? sp.set : {}, { twofaBackup: backup.hashes }));
-      if (ok) logSecurityEvent(m.userId, '2fa_backup_codes_renewed', {});
-      return ok ? { status: 'success', backupCodes: backup.codes } : null;
-    });
-  } catch (e) { console.error('2-step backup codes error:', e.message); res.status(500).json({ status: 'error', message: 'Could not make new backup codes right now' }); }
-});
-// Lost phone AND lost backup codes: the owner switches it off for that member (after checking who is asking), and the member can set it up again.
-app.post('/admin/user/reset-2fa', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const userId = String(req.body.userId || '').slice(0, 120);
-  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
-  try {
-    const ref = db.collection('users').doc(userId), snap = await ref.get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    await withLock('2fa:' + userId, () => ref.update(TWOFA_CLEAR()));
-    logAdminAction(req, 'user_2fa_reset', { userId });
-    logSecurityEvent(userId, '2fa_reset_by_admin', {});
-    res.json({ status: 'success', message: 'Google Authenticator was switched off for this member. They can turn it on again.' });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
 // Caller holds bal:<userId>. A restart can finish a charged request, but
 // must never charge an unconfirmed request on the member's behalf.
 async function finishWithdrawalCreation(witRef, userId) {
@@ -5526,24 +5313,6 @@ app.post('/withdraw/request', async (req, res) => {
     const pinResult = await pinCheck(userId, req.body.pin);
     if (!pinResult.ok)
       return res.status(pinResult.code === 'LOCKED' ? 429 : 400).json({ status: 'error', code: pinResult.code, message: pinResult.message });
-    // SECOND STEP (Google Authenticator), only for a member who turned it on. Decided HERE from the account itself, never from anything the app says:
-    // an edited app that hides the box gets "Enter the 6-digit code" and nothing else. A checked code is spent in the same atomic update as the debit below.
-    // Admin > Settings can switch the whole feature off: then nothing about it is asked or checked for anybody (their set-up is kept for when it is switched on again).
-    const twofaFeature = sett.requireTwofaToWithdraw !== false;
-    let twofaChk = null, twofaSp = null;
-    if (twofaFeature) {
-      const fresh2 = await db.collection('users').doc(userId).get();
-      if (twofaOn(fresh2.exists ? fresh2.data() : null)) {
-        twofaChk = await twofaCheck(userId, req.body.totp);
-        if (!twofaChk.ok) return twofaFail(res, twofaChk);
-        twofaSp = twofaSpend(twofaChk);
-      } else {
-        // COMPULSORY: a member who has not set Google Authenticator up cannot withdraw. Nothing is charged and no request is created; the app takes them to the
-        // set-up page. Only reached with a right Trade Password, so it is no help to somebody guessing one.
-        return res.status(403).json({ status: 'error', code: 'TWOFA_SETUP_REQUIRED',
-          message: 'To withdraw you must first set up Google Authenticator. Download Google Authenticator, then open My > Google Authenticator and follow the steps. After that, every withdrawal asks for your Trade Password and a 6-digit code.' });
-      }
-    }
     const boundSnap = await db.collection('bankAccounts')
       .where('userId', '==', userId).where('network', '==', rawNetwork).where('phone', '==', destValue).limit(1).get();
     if (boundSnap.empty)
@@ -5609,25 +5378,19 @@ app.post('/withdraw/request', async (req, res) => {
       // request that an administrator could still send.
       await witRef.set({ userId, amount: amt, fee, net, holder, network: rawNetwork, phone: destValue, ref,
         status: 'creating', regionKey: currentRegionKey(), date, time, createdAt: FieldValue.serverTimestamp() });
-      const debited = await uRef.updateIf(Object.assign({ walletBalance: { $gte: amt - 0.005 }, status: { $ne: 'banned' }, debitedWithdrawalIds: { $ne: witId } }, twofaSp ? twofaSp.filter : {}), Object.assign({
+      const debited = await uRef.updateIf({ walletBalance: { $gte: amt - 0.005 }, status: { $ne: 'banned' }, debitedWithdrawalIds: { $ne: witId } }, {
         walletBalance: FieldValue.increment(-amt), debitedWithdrawalIds: FieldValue.arrayUnion(witId)
-      }, twofaSp ? twofaSp.set : {}));
+      });
       if (!debited) {
         // Nothing was charged: close the row at once (it would block the next request until the reconciler declines it) and give the real reason.
         await witRef.updateIf({ status: 'creating' }, { status: 'declined', failureReason: 'Not charged: balance or account changed' }).catch(() => {});
         witId = undefined;
-        // Why: the code was spent a moment ago by another request, or the member's security setting changed in between, or (as before) balance / suspension.
-        const now2 = (await uRef.get()).data() || {};
-        const spent = twofaChk && twofaChk.kind === 'totp' ? Number(now2.twofaLastStep) >= twofaChk.step : twofaChk && twofaChk.kind === 'backup' ? !(Array.isArray(now2.twofaBackup) ? now2.twofaBackup : []).includes(twofaChk.hash) : false;
-        const changed = twofaFeature && twofaOn(now2) !== !!twofaChk;
-        const err = new Error(changed ? 'Your security settings changed. Please try again.' : spent ? 'That code was already used. Wait for the next code in Google Authenticator (it changes every 30 seconds) and try again.' : 'Your balance or account status changed. Please refresh and try again.');
-        if (changed || spent) err.code = changed ? 'TWOFA_CHANGED' : 'TWOFA_USED';
-        throw err;
+        throw new Error('Your balance or account status changed. Please refresh and try again.');
       }
       await finishWithdrawalCreation(witRef, userId);
     });
     sendAdminPush('New withdrawal request', `${fmtMoney(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }, { quickApprove: true }).catch(() => {});
-    res.json(Object.assign({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Withdrawal requested, processing now' }, twofaChk && twofaChk.kind === 'backup' ? { usedBackupCode: true, backupLeft: twofaChk.backupLeft } : {}));
+    res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Withdrawal requested, processing now' });
   } catch (e) {
     if (witId) return res.status(503).json({ status: 'error', code: 'WITHDRAWAL_RECOVERY_PENDING', withdrawalId: witId, message: 'Your withdrawal request is being checked. Check Transaction Statement before submitting again.' });
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
@@ -6935,80 +6698,6 @@ function treasureKeyLockedOut(userId) {
   const now = Date.now(), rec = (_wrongKeys.get(userId) || []).filter(t => now - t < 600000);
   return rec.length >= 8;
 }
-// The one-time "Claim" on the Download App page (Admin > Settings > App claim amount; 0 = off). Claimed once per member by an atomic token.
-app.post('/app/claim', async (req, res) => {
-  const uid = await verifyAuth(req);
-  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const amount = Math.round(Number((await getSettings()).appClaimAmount) || 0);
-    if (amount <= 0) return res.status(400).json({ status: 'error', message: 'There is nothing to claim right now.' });
-    let result = null;
-    await withLock('appclaim:' + uid, async () => {
-      const uSnap = await db.collection('users').doc(uid).get();
-      if (!uSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
-      if (uSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
-      const applied = await withLock('bal:' + uid, () => db.collection('users').doc(uid).updateIf(
-        { appClaimed: { $ne: true } },
-        { walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount), appClaimed: true }
-      ));
-      if (!applied) { result = { code: 400, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'You have already claimed this.' } }; return; }
-      const { date, time } = nowStr();
-      await db.collection('transactions').add({ userId: uid, statementId: newStatementId(), type: 'app_claim', description: 'App download reward', amount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
-      const body = { status: 'success', amount };
-      try { const fresh = await db.collection('users').doc(uid).get(); const bal = fresh.exists ? Number(fresh.data().walletBalance) : NaN; if (Number.isFinite(bal)) body.walletBalance = round2(bal); } catch (_) {}
-      result = { code: 200, body };
-    });
-    res.status(result.code).json(result.body);
-  } catch (e) { console.error('App claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim right now' }); }
-});
-// ── ORDER GIFTS ──
-// Each product can carry a gift (Admin > Products > Order gift). A member who has BOUGHT that product (a product the admin gave does not count)
-// may receive its gift once. The claim is made once for ever by an atomic token on the member's own record, so a double tap, a retry after a
-// crash or two phones at once can never pay twice.
-app.get('/gifts/list', async (req, res) => {
-  const uid = await verifyAuth(req);
-  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const [products, invSnap, uSnap] = await Promise.all([getProducts(), db.collection('investments').where('userId', '==', uid).get(), db.collection('users').doc(uid).get()]);
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
-    const bought = new Set(); invSnap.forEach(d => { const r = d.data(); if (r.granted !== true && r.tierKey) bought.add(r.tierKey); });
-    const claimed = new Set(Array.isArray(uSnap.data().orderGiftsClaimed) ? uSnap.data().orderGiftsClaimed : []);
-    const gifts = products.filter(p => p.active !== false && Number(p.orderGift) > 0).sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
-      .map(p => ({ key: p.key, name: p.name, amount: Number(p.orderGift), owned: bought.has(p.key), claimed: claimed.has(p.key) }));
-    res.json({ status: 'success', gifts });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the order gifts' }); }
-});
-app.post('/gifts/claim', async (req, res) => {
-  const uid = await verifyAuth(req);
-  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const key = textOf(req.body.key).trim();
-    if (!key) return res.status(400).json({ status: 'error', message: 'Choose a gift.' });
-    let result = null;
-    await withLock('gift:' + uid + ':' + key, async () => {
-      const [products, invSnap, uSnap] = await Promise.all([getProducts(), db.collection('investments').where('userId', '==', uid).get(), db.collection('users').doc(uid).get()]);
-      if (!uSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
-      if (uSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
-      const product = products.find(p => p.key === key);
-      const amount = product ? Math.round(Number(product.orderGift) || 0) : 0;
-      if (!product || amount <= 0) { result = { code: 404, body: { status: 'error', message: 'This product has no gift.' } }; return; }
-      let owned = false; invSnap.forEach(d => { const r = d.data(); if (r.tierKey === key && r.granted !== true) owned = true; });
-      if (!owned) { result = { code: 400, body: { status: 'error', code: 'NOT_OWNED', message: 'Buy this product first to receive its gift.' } }; return; }
-      const applied = await withLock('bal:' + uid, () => db.collection('users').doc(uid).updateIf(
-        { orderGiftsClaimed: { $ne: key } },
-        { walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount), orderGiftsClaimed: FieldValue.arrayUnion(key) }
-      ));
-      if (!applied) { result = { code: 400, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'You have already received this gift.' } }; return; }
-      const { date, time } = nowStr();
-      await db.collection('transactions').add({ userId: uid, statementId: newStatementId(), type: 'order_gift', description: `${product.name} order gift`, giftKey: key,
-        amount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
-      const body = { status: 'success', amount };
-      try { const fresh = await db.collection('users').doc(uid).get(); const bal = fresh.exists ? Number(fresh.data().walletBalance) : NaN; if (Number.isFinite(bal)) body.walletBalance = round2(bal); } catch (_) {}
-      result = { code: 200, body };
-    });
-    res.status(result.code).json(result.body);
-  } catch (e) { console.error('Gift claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not receive this gift' }); }
-});
 app.post('/redeem', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
@@ -7216,69 +6905,6 @@ app.get('/transactions', async (req, res) => {
     const transactions = snap.docs.map(d => ({ id: d.id, ...d.data(), statementId: statementIdFor(d) }));
     res.json({ status: 'success', transactions, truncated: transactions.length >= TX_LIST_LIMIT });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load your records' }); }
-});
-
-// ═══════════════════════════════════════════
-// MESSAGES (member inbox)
-// ═══════════════════════════════════════════
-// Smart AI has a real inbox -- Snow deliberately does not (see smartai/CLAUDE.md's
-// "Structural differences from Snow"). Messages are admin-authored
-// BROADCASTS stored once in `messages`; per-member read state lives in
-// `messageReads` keyed `<uid>_<messageId>` so a broadcast never has to be
-// fanned out into one document per member.
-// Only what the admin writes in the panel is ever shown: there is no built-in or "welcome" message,
-// so a deployment with nothing written shows the empty "No messages" screen.
-async function listBroadcastMessages() {
-  const snap = await db.collection('messages').orderBy('createdAt', 'desc').limit(100).get();
-  return snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(m => !m.deleted);
-}
-app.get('/messages', async (req, res) => {
-  const uid = await verifyAuth(req);
-  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const rows = await listBroadcastMessages();
-    const reads = await db.collection('messageReads').where('userId', '==', uid).limit(200).get();
-    // messageId -> when this member read it. A message the admin RENEWED after that is unread again (renewedAt), without touching anyone's read rows.
-    const readAt = new Map(reads.docs.map(d => [d.data().messageId, Number(d.data().readAt) || 0]));
-    const readIds = { has: id => readAt.has(id) };
-    res.json({ status: 'success', messages: rows.map(m => ({
-      id: m.id, title: m.title || '', body: m.body || '',
-      date: m.date || '', time: m.time || '', createdAt: m.createdAt || 0,
-      // The picture itself is fetched on its own (/public/message-image/<id>) so a poll never carries image bytes.
-      hasImage: !!m.image,
-      read: readIds.has(m.id) && readAt.get(m.id) >= (Number(m.renewedAt) || 0),
-    })) });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load your messages' }); }
-});
-app.get('/public/message-image/:id', async (req, res) => {
-  try {
-    const id = String(req.params.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 120);
-    const snap = id ? await db.collection('messages').doc(id).get() : null;
-    const d = snap && snap.exists ? snap.data() : null;
-    const m = d && !d.deleted && /^data:(image\/(?:png|jpe?g|webp|gif));base64,(.+)$/.exec(d.image || '');
-    if (!m) return res.status(404).end();
-    const buf = Buffer.from(m[2], 'base64');
-    const etag = '"' + crypto.createHash('sha1').update(buf).digest('hex') + '"';
-    res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=3600', ETag: etag });
-    if (req.headers['if-none-match'] === etag) return res.status(304).end();
-    res.send(buf);
-  } catch (e) { res.status(500).end(); }
-});
-app.post('/messages/read', async (req, res) => {
-  const uid = await verifyAuth(req);
-  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  // One id (`messageId`) or the whole screen at once (`messageIds`, up to 100:
-  // the Messages page shows every message in full, so opening it reads them all).
-  const ids = [...new Set((Array.isArray(req.body.messageIds) ? req.body.messageIds : [req.body.messageId])
-    .map(v => String(v || '').slice(0, 120)).filter(Boolean))].slice(0, 100);
-  if (!ids.length) return res.status(400).json({ status: 'error', message: 'messageId required' });
-  try {
-    // Deterministic doc id -> marking the same message read twice is a
-    // harmless idempotent overwrite, never a duplicate row.
-    await Promise.all(ids.map(messageId => db.collection('messageReads').doc(uid + '_' + messageId)
-      .set({ userId: uid, messageId, readAt: Date.now() }, { merge: true })));
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not update this message' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -7688,10 +7314,10 @@ const SETTINGS_CRITICAL_RANGES = {
   // one -- a multiple larger than the maximum withdrawal would make every
   // amount invalid, which the admin panel warns about rather than forbids.
   withdrawMultiple: [0, MAX_MONEY_AMOUNT],
-  myBannerOpacity: [0, 100], myBannerBlur: [0, 40], appClaimAmount: [0, MAX_MONEY_AMOUNT], dailyCheckin: [0, MAX_MONEY_AMOUNT],
+  myBannerOpacity: [0, 100], myBannerBlur: [0, 40], dailyCheckin: [0, MAX_MONEY_AMOUNT],
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'requireTwofaToWithdraw', 'autoApproveWithdrawalsEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -8136,13 +7762,7 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     vip = Number(p.vip);
     if (!Number.isInteger(vip) || vip < 0 || vip > 100) return refuse('VIP level', 'must be a whole number from 0 to 100');
   }
-  // The gift a member may receive once on the Order Gifts page after buying this product (0 = no gift for it).
-  let orderGift = 0;
-  if (p?.orderGift != null && p.orderGift !== '') {
-    orderGift = Math.round(Number(p.orderGift));
-    if (!Number.isFinite(orderGift) || orderGift < 0 || orderGift > MAX_MONEY_AMOUNT) return refuse('Order gift', `must be a number between 0 and ${MAX_MONEY_AMOUNT} (0 = no gift)`);
-  }
-  return { key, name, price, cycle, expectedReturn, multiplier, buyLimit, vip, orderGift, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
+  return { key, name, price, cycle, expectedReturn, multiplier, buyLimit, vip, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
 }
 // `?region=ke` hands the editor that region's view of every product -- its
 // own price where it has one, Uganda's where it has not -- plus `overrides`,
@@ -8254,13 +7874,8 @@ app.post('/admin/products/save', async (req, res) => {
     // number, the purchase-limit count, the picture and the name.
     for (const { oldKey, newKey } of renames) {
       try {
-        // The Order Gift a member already received is remembered by the product KEY: the new key is added FIRST (so there is never a moment when
-        // the member owns the renamed product without the mark), then the investments move, then the old key is dropped.
-        const claimed = await db.collection('users').where('orderGiftsClaimed', 'array-contains', oldKey).get();
-        for (const d of claimed.docs) await d.ref.update({ orderGiftsClaimed: FieldValue.arrayUnion(newKey) });
         const owned = await db.collection('investments').where('tierKey', '==', oldKey).get();
         for (const d of owned.docs) await d.ref.update({ tierKey: newKey });
-        for (const d of claimed.docs) await d.ref.update({ orderGiftsClaimed: FieldValue.arrayRemove(oldKey) });
       } catch (e) { console.error('Product rename: could not move investments from ' + oldKey + ' to ' + newKey + ':', e.message); }
     }
     _productsCacheTs = 0; _vipCache.clear();
@@ -8302,73 +7917,6 @@ app.post('/admin/products/clear', async (req, res) => {
     logAdminAction(req, 'products_cleared', { removed });
     res.json({ status: 'success', removed });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear products' }); }
-});
-
-// ═══════════════════════════════════════════
-// ADMIN — MESSAGES
-// ═══════════════════════════════════════════
-app.get('/admin/messages/list', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const messages = await listBroadcastMessages();
-    res.json({ status: 'success', messages });
-  }
-  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load messages' }); }
-});
-app.post('/admin/messages/save', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const title = stripHtml(req.body.title).slice(0, 200);
-  const body = stripHtml(req.body.body).slice(0, 4000);
-  if (!title) return res.status(400).json({ status: 'error', message: 'A title is required' });
-  if (!body) return res.status(400).json({ status: 'error', message: 'A message body is required' });
-  // An optional picture shown under the message: undefined = leave as it is, '' = remove it, a data URL = set it.
-  let imageField;
-  if ('image' in req.body) {
-    const img = String(req.body.image || '');
-    if (img === '') imageField = '';
-    else if (/^data:image\/(?:png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(img) && img.length <= 3 * 1024 * 1024) imageField = img;
-    else return res.status(400).json({ status: 'error', message: 'The picture must be a PNG, JPG, WebP or GIF under 2 MB.' });
-  }
-  // An explicit id edits that message in place; no id writes a new one.
-  const explicitId = String(req.body.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 120);
-  const id = explicitId || 'msg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  try {
-    const stamp = nowStr();
-    await db.collection('messages').doc(id).set({
-      title, body, date: stamp.date, time: stamp.time, createdAt: Date.now(), deleted: false,
-      ...(imageField !== undefined ? { image: imageField } : {}),
-    }, { merge: true });
-    logAdminAction(req, 'message_saved', { id, title });
-    res.json({ status: 'success', id });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save this message' }); }
-});
-// Renew: the message becomes the LATEST one -- it moves to the top of every member's inbox with today's date and time, and shows as unread (new) again for everyone
-// who had read it. Nothing is rewritten or fanned out: the message's time is set to now and `renewedAt` records when, and a member counts as having read it only if
-// they read it after that (see /messages). The text and picture are untouched.
-app.post('/admin/messages/renew', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const id = String(req.body.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 120);
-  if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
-  try {
-    const ref = db.collection('messages').doc(id);
-    const snap = await ref.get();
-    if (!snap.exists || snap.data().deleted) return res.status(404).json({ status: 'error', message: 'Message not found' });
-    const stamp = nowStr(), now = Date.now();
-    await ref.set({ date: stamp.date, time: stamp.time, createdAt: now, renewedAt: now }, { merge: true });
-    logAdminAction(req, 'message_renewed', { id, title: snap.data().title || '' });
-    res.json({ status: 'success', message: 'Message renewed: it is now the latest and shows as new to everyone' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not renew this message' }); }
-});
-app.post('/admin/messages/delete', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const id = String(req.body.id || '');
-  if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
-  try {
-    // Marked deleted rather than removed, so the row stays out of every list but is not lost.
-    await db.collection('messages').doc(id).set({ deleted: true }, { merge: true });
-    logAdminAction(req, 'message_deleted', { id });
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not delete this message' }); }
 });
 
 // ── ADMIN: Daily Salary tiers (what members earn on the Salary tab) ──
@@ -8485,7 +8033,7 @@ app.get('/admin/users', async (req, res) => {
   try {
     const want = adminRegionFilter(req);
     const snap = await db.collection('users').limit(10000).get();
-    let users = snap.docs.map(d => { const { transactionPinHash, twofaSecretEnc, twofaPendingEnc, twofaBackup, ...safe } = d.data(); return { id: d.id, ...safe }; });
+    let users = snap.docs.map(d => { const { transactionPinHash, ...safe } = d.data(); return { id: d.id, ...safe }; });
     users = users.map(u => {
       u.regionKey = String(u.regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY;
       return u;
@@ -8534,7 +8082,7 @@ app.post('/admin/user/detail', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     // transactionPinHash never leaves this server, even to an admin --
     // hasPayoutPin is the boolean the admin UI actually needs.
-    const { transactionPinHash, twofaSecretEnc, twofaPendingEnc, twofaBackup, ...userSafe } = uSnap.data();
+    const { transactionPinHash, ...userSafe } = uSnap.data();
     const earnedBreakdown = {};
     EARNING_TX_TYPES.forEach(t => { earnedBreakdown[t] = 0; });
     earnedTxSnap.forEach(d => {
@@ -8551,7 +8099,6 @@ app.post('/admin/user/detail', async (req, res) => {
       // modal always showed "UGX 0" / "None saved" regardless of reality.
       bankAccounts: bankSnap.docs.map(d => ({ id: d.id, ...d.data() })),
       teamDeposits, earnedBreakdown,
-      twofaRequired: (await getSettings()).requireTwofaToWithdraw !== false,   // so the panel can say what "not set up" means for this member
     });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -9799,7 +9346,7 @@ app.post('/admin/user/referral-chain', async (req, res) => {
 // reloads the open tab only when one of them moved. Session collections are left out on purpose (every request touches them).
 const SERVER_BOOT_ID = require('crypto').randomBytes(6).toString('hex');   // a restart resets the counters: the panel treats a new id as "changed"
 const ADMIN_LIVE_COLLECTIONS = ['users', 'pendingDeposits', 'withdrawals', 'transactions', 'investments', 'products', 'promoCodes',
-  'promoRedemptions', 'bankAccounts', 'adminAuditLog', 'messages', 'settings', 'banners', 'adminUsers'];
+  'promoRedemptions', 'bankAccounts', 'adminAuditLog', 'settings', 'banners', 'adminUsers'];
 app.get('/admin/live', (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   res.set('Cache-Control', 'no-store');
@@ -10382,7 +9929,7 @@ app.get('/admin/integrity', async (req, res) => {
 // earned" label is a real misnomer -- this field is cashback PLUS
 // referral commission PLUS gift-code/team-reward
 // bonuses, all folded into one number.
-const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'mission_salary', 'mission_deposit_reward', 'order_gift', 'app_claim', 'checkin'];
+const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'mission_salary', 'mission_deposit_reward', 'checkin'];
 async function computeUserRealTotals(userId) {
   const [txSnap, invSnap, witSnap] = await Promise.all([
     db.collection('transactions').where('userId', '==', userId).limit(50000).get(),

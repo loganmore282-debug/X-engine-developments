@@ -34,6 +34,6 @@ for (const off of [180, 60]) {   // Uganda (UTC+3) and Nigeria (UTC+1)
 ok(/const dueCount = payoutsDueCount\(createdMs, Date\.now\(\), total\) - made;/.test(server) && /const newMade = fMade \+ 1;/.test(server) && /const target = Math\.round\(fExpected \* newMade \/ fTotal\);/.test(server), 'settlement pays one cumulative-target payment per due midnight');
 ok(/const payoutKey = `\$\{doc\.id\}:\$\{newMade\}`;/.test(server) && /creditedPayoutKeys: \{ \$ne: payoutKey \}/.test(server), 'each payment has its own once-only token');
 ok(/function armMidnightSweep\(\) \{\s+const wait = Math\.max\(20, eatNextMidnight\(Date\.now\(\)\) - Date\.now\(\) \+ 50\);/.test(server) && /setInterval\(reconcileCashback, 500\)/.test(server) && /armMidnightSweep\(\);/.test(server), 'a sweep starts 50 ms after 00:00 and another runs every half second');
-// The member app does not draw a countdown any more (ChocoMCC's pages); it still notes the server's own clock (X-Server-Time) for the authenticator warning.
+// The member app does not draw a countdown any more (ChocoMCC's pages); it still notes the server's own clock (X-Server-Time) for the cash-out hours.
 ok(/X-Server-Time/.test(mod) && /X-Server-Time/.test(server) && /exposedHeaders: \['X-Server-Time'\]/.test(server), 'the server sends its clock on every reply and the app reads it');
 console.log('PASS: daily cashback at 00:00 (' + n + ' checks)');

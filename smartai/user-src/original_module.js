@@ -1,6 +1,6 @@
 /* Smart AI member app.
    The pages are ChocoMCC's (Home, AI Robots, Rewards, Team, Me and their full-screen sheets) in blue and white with the owner's icons,
-   running on Smart AI's own server: its sign-in (/auth/*), 6-digit Trade Password, Google Authenticator, deposits, withdrawals and rewards. */
+   running on Smart AI's own server: its sign-in (/auth/*), 6-digit Trade Password, deposits, withdrawals and rewards. */
 // The server answers under /k7x2 on the page's own host (nginx strips the prefix). No domain is baked in, so a new host never needs a rebuild.
 var API_BASE = '/k7x2';
 var BRAND_CACHE_KEY = 'smartai_brand_name';
@@ -10,10 +10,10 @@ var PRODUCTS_CACHE_KEY = 'smartai_products_cache';
 var DEFAULT_SETTINGS = {
   withdrawFeePct: 15, minWithdraw: 8000, minDeposit: 30000, welcomeBonus: 0,
   commL1: 25, commL2: 2, commL3: 1, dailyCheckin: 250, maxWithdrawalsPerDay: 2,
-  requireTwofaToWithdraw: true, withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
+  withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   salaryTiers: [], depositMethodNames: '', brandName: '', shareMessage: 'Join me on {app}', shareDomain: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', whatsappGroup: '', whatsappContact: '',
-  rulesText: '', homeBannerTitle: '', homeBannerText: '', giftCodeHint: 'Enter gift code', appClaimAmount: 0
+  rulesText: '', homeBannerTitle: '', homeBannerText: '', giftCodeHint: 'Enter gift code'
 };
 var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
 // Filled by syncPublicConfig() from the admin's products; the last copy this device saw is read first so the very first paint is already right.
@@ -88,8 +88,7 @@ function showLockout(kind, message){
 // Counts money-moving requests in flight, so a service-worker update never reloads the page in the middle of a payment (see index.html).
 window.__moneyCallsInFlight = 0;
 var _wokenUp = false;
-// The server's own clock (X-Server-Time on every reply): the offset from this phone's clock. Only used to warn that the phone's clock is wrong,
-// because a Google Authenticator code is made from the phone's clock and cannot match when it is far from the real time.
+// The server's own clock (X-Server-Time on every reply): the offset from this phone's clock, used by the cash-out hours, which follow the server's time.
 var _skewMs = 0, _skewRtt = Infinity;
 function noteServerClock(resp, sentAt){
   try {
@@ -190,8 +189,8 @@ async function refreshFromServer(){
     STATE.totalInvested = a.totalInvested || 0;
     STATE.checkinStreak = a.checkinStreak || 0; STATE.lastCheckin = a.lastCheckin || null;
     STATE.referralCode = a.referralCode || STATE.referralCode;
-    STATE.twofaEnabled = a.twofaEnabled === true; STATE.hasTradePin = a.hasTradePin === true;
-    STATE.withdrawAnytime = a.withdrawAnytime === true; STATE.appClaimed = a.appClaimed === true;
+    STATE.hasTradePin = a.hasTradePin === true;
+    STATE.withdrawAnytime = a.withdrawAnytime === true;
     STATE.team = a.team || STATE.team;
   } else if (accR.code === 'MAINTENANCE' || accR.code === 'BANNED' || accR.code === 'HOST_PARKED') {
     // handled by the full-screen lock-out inside api()
@@ -319,8 +318,8 @@ function freshState(uid, phone){
     uid: uid, phone: phone || '', referralCode: '',
     balance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0,
     checkinStreak: 0, lastCheckin: null, team: { l1: 0, l2: 0, l3: 0, commission: 0 },
-    twofaEnabled: false, hasTradePin: false, withdrawAnytime: false, appClaimed: false,
-    investments: [], transactions: [], bankAccounts: [], depositRecords: null, withdrawalRecords: null, messages: null, salary: null
+    hasTradePin: false, withdrawAnytime: false,
+    investments: [], transactions: [], bankAccounts: [], depositRecords: null, withdrawalRecords: null, salary: null
   };
 }
 
@@ -584,7 +583,6 @@ function enterApp(){
   updateDownloadTileVisibility();
   syncArtwork();
   refreshDepositSlot();
-  refreshMessageBadge();
   hideLoadingScreen();
   maybeShowAnnouncement();
 }
@@ -743,17 +741,15 @@ function isStandalone(){
   return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 }
 function isIos(){ return /iphone|ipad|ipod/i.test(navigator.userAgent); }
-// The reward for installing (Admin > Settings > Download App claim) can be claimed once; while it is still there to claim, the tile stays even in the installed app.
-function claimAvailable(){ return (Number(getSettings().appClaimAmount) || 0) > 0 && !!STATE && !STATE.appClaimed; }
-// The Me-screen tile is hidden once the app is installed and nothing is left to offer.
+// The Me-screen tile is hidden once the app is installed.
 function updateDownloadTileVisibility(){
   var tile = $('downloadAppTile');
   if (!tile) return;
-  tile.style.display = (isStandalone() && !claimAvailable()) ? 'none' : 'flex';
+  tile.style.display = isStandalone() ? 'none' : 'flex';
 }
 function openInstallSheet(){
   var stepsEl = $('installManualSteps'), btn = $('installNowBtn');
-  if (isStandalone()) { stepsEl.style.display = 'none'; btn.style.display = 'none'; }   // already installed: only the reward, if there is one, is left to offer
+  if (isStandalone()) { stepsEl.style.display = 'none'; btn.style.display = 'none'; }   // already installed: nothing to install
   else if (_deferredInstallPrompt) { stepsEl.style.display = 'none'; btn.style.display = 'block'; }
   else if (isIos()) {
     // Safari has no install call, only the Share sheet.
@@ -788,12 +784,11 @@ function maybeOfferInstallAfterSignup(){
 }
 
 /* ====================== SMALL DIALOGS ======================
-   The Trade Password and the Google Authenticator code are asked in small dialogs when a member cashes out (or changes a payout setting). Each resolves
+   The Trade Password is asked in a small dialog when a member cashes out (or changes a payout setting). It resolves
    with the typed text, or null when the member cancels. */
 function closeAllSheets(){
-  ['networkPickerBg', 'tradePinBg', 'totpBg', 'installSheetBg', 'announcementBg', 'changePinBg'].forEach(function(id){ var el = $(id); if (el) el.classList.remove('show'); });
+  ['networkPickerBg', 'tradePinBg', 'installSheetBg', 'announcementBg', 'changePinBg'].forEach(function(id){ var el = $(id); if (el) el.classList.remove('show'); });
   if (_pinResolve) { var r = _pinResolve; _pinResolve = null; r(null); }
-  if (_totpResolve) { var r2 = _totpResolve; _totpResolve = null; r2(null); }
 }
 var _pinResolve = null;
 function askTradePin(title, sub, err){
@@ -818,39 +813,6 @@ function tradePinCancel(){
   $('tradePinBg').classList.remove('show');
   if (_pinResolve) { var r = _pinResolve; _pinResolve = null; r(null); }
 }
-// The second step of a cash-out, only for a member who turned Google Authenticator on: the 6-digit code, or one backup code.
-var _totpResolve = null, _totpBackup = false;
-function totpMode(b){
-  _totpBackup = b;
-  var input = $('totpInput');
-  input.value = ''; input.maxLength = b ? 11 : 6;
-  input.setAttribute('inputmode', b ? 'text' : 'numeric');
-  input.placeholder = b ? 'Backup code' : '6-digit code';
-  $('totpAlt').textContent = b ? 'Use the 6-digit code instead' : 'Use a backup code instead';
-  $('totpHelp').textContent = b ? 'Type one of the backup codes you saved. Each one works only once.' : 'Open Google Authenticator and type the code it shows now.';
-  try { input.focus(); } catch (e) {}
-}
-function askAuthCode(){
-  return new Promise(function(resolve){
-    if (_totpResolve) { var prev = _totpResolve; _totpResolve = null; prev(null); }
-    _totpResolve = resolve;
-    totpMode(false);
-    var off = clockOffSecs();
-    $('totpWarn').textContent = off > 20 ? 'Your phone’s clock is about ' + off + ' seconds away from the real time, so the code will not match. Turn on automatic date and time.' : '';
-    $('totpBg').classList.add('show');
-    setTimeout(function(){ try { $('totpInput').focus(); } catch (e) {} }, 60);
-  });
-}
-function totpSubmit(){
-  var v = $('totpInput').value.trim().replace(/\s/g, '');
-  if (!v) { shakeVibrate($('totpInput')); return; }
-  $('totpBg').classList.remove('show');
-  if (_totpResolve) { var r = _totpResolve; _totpResolve = null; r(v); }
-}
-function totpCancel(){
-  $('totpBg').classList.remove('show');
-  if (_totpResolve) { var r = _totpResolve; _totpResolve = null; r(null); }
-}
 
 /* ====================== PICTURES ======================
    Every banner is either a picture the admin uploaded (Admin > Banners) or a blue art banner with one of the owner's icons. */
@@ -866,7 +828,7 @@ function paintArt(){
   var map = [
     ['depositBanner', '', 'deposit'], ['withdrawBanner', '', 'withdraw'], ['supportBanner', '', 'support'], ['aboutBanner', ART.aboutbanner, 'about'],
     ['bindbankBanner', '', 'payout'], ['shopBannerArt', '', 'robots'], ['accountBanner', ART.mybanner, 'my'], ['rewardsBanner', ART.promobanner, 'gift'],
-    ['recordsBanner', '', 'ledger'], ['teamBanner', ART.teambanner, 'share'], ['messagesBanner', '', 'inbox']
+    ['recordsBanner', '', 'ledger'], ['teamBanner', ART.teambanner, 'share']
   ];
   map.forEach(function(m){ var el = $(m[0]); if (el) el.innerHTML = artHtml(m[1], m[2]); });
   var hb = $('homeBanner');
@@ -937,14 +899,8 @@ function renderCheckin(){
   $('streakDots').innerHTML = dots;
   var gc = $('giftCodeInput'); if (gc) gc.placeholder = getSettings().giftCodeHint || 'Enter gift code';
 }
-// The Me page: rows that depend on settings (Google Authenticator) and the unread count on Messages.
+// The Me page: the Download App tile follows whether the app is already installed.
 function renderMeRows(){
-  var on = authFeatureOn();
-  var row = $('gaRow'); if (row) row.style.display = on ? '' : 'none';
-  var n = unreadCount();
-  document.querySelectorAll('.msg-badge').forEach(function(b){ b.textContent = n > 99 ? '99+' : n; b.style.display = n > 0 ? 'flex' : 'none'; });
-  var claim = $('appClaimBtn');
-  if (claim) { var amt = Number(getSettings().appClaimAmount) || 0; claim.style.display = claimAvailable() ? 'block' : 'none'; claim.textContent = 'Claim ' + ugx(amt); }
   updateDownloadTileVisibility();
 }
 
@@ -1151,7 +1107,6 @@ async function runAccountPoll(){
       var openOv = document.querySelector('.overlay.show');
       if (openOv && openOv.id === 'ovMychoc') renderMyRobots();
       if (openOv && openOv.id === 'ovEarnings') renderEarnings();
-      if (openOv && openOv.id === 'ovMessages') refreshMessages(true);
     }
   } catch (e) {}
   _accountPollRunning = false;
@@ -1167,9 +1122,9 @@ document.addEventListener('visibilitychange', function(){
 var _recordsTab = 'accrued';
 var _recordsLoaded = { accrued: true, topups: false, cashouts: false };
 // The kinds of ledger row that are money coming IN as earnings (the Accrued tab). A top-up is in Topups and a cash-out is in Cash Outs.
-var INCOME_TYPES = ['cashback', 'checkin', 'commission', 'mission_salary', 'promocode', 'order_gift', 'app_claim', 'welcome_bonus', 'admin_credit', 'investment_refund'];
+var INCOME_TYPES = ['cashback', 'checkin', 'commission', 'mission_salary', 'promocode', 'welcome_bonus', 'admin_credit', 'investment_refund'];
 var REC_TYPE_LABEL = { cashback: 'AI robot income', checkin: 'Daily reward', commission: 'Referral commission', mission_salary: 'Task Center reward', promocode: 'Gift code',
-  order_gift: 'Order gift', app_claim: 'App reward', welcome_bonus: 'Welcome gift', admin_credit: 'Account credit', investment_refund: 'Product refund' };
+  welcome_bonus: 'Welcome gift', admin_credit: 'Account credit', investment_refund: 'Product refund' };
 function recStatusInfo(s){
   s = String(s || 'success').toLowerCase();
   if (['success', 'matched', 'processed'].indexOf(s) !== -1) return { label: 'Completed', cls: 'ok' };
@@ -1285,11 +1240,7 @@ function openOverlay(name){
   if (name === 'earnings') renderEarnings();
   if (name === 'taskcenter') loadTaskCenter();
   if (name === 'about') loadAbout();
-  if (name === 'messages') loadMessages();
-  if (name === 'authenticator') gaOpen();
-  if (name === 'gifts') loadGifts();
   if (name === 'deposit') prepareDeposit();
-  if (name === 'security') renderMeRows();
 }
 function closeOverlay(){
   if (!_ovOpen) { hideOverlays(); return; }
@@ -1301,78 +1252,6 @@ window.addEventListener('popstate', function(){
   if (document.querySelector('.modal-bg.show:not(#giftRevealBg)')) closeAllSheets();
   if (_ovOpen) { _ovOpen = false; hideOverlays(); }
 });
-
-/* ====================== MESSAGES (the inbox) ====================== */
-function unreadCount(){ return (STATE && STATE.messages ? STATE.messages : []).filter(function(m){ return !m.read; }).length; }
-async function refreshMessageBadge(){
-  var r = await api('/messages');
-  if (r.status === 'success' && STATE) { STATE.messages = r.messages || []; renderMeRows(); }
-}
-async function refreshMessages(quiet){
-  var r = await api('/messages');
-  if (r.status !== 'success' || !STATE) { if (!quiet) $('messagesList').innerHTML = '<div class="empty">Could not load your messages. Try again.</div>'; return; }
-  STATE.messages = r.messages || [];
-  paintMessages();
-}
-function paintMessages(){
-  var list = STATE.messages || [];
-  if (!list.length) { $('messagesList').innerHTML = '<div class="empty">No messages</div>'; renderMeRows(); return; }
-  $('messagesList').innerHTML = list.map(function(m){
-    var stamp = ((m.date || '') + ' ' + (m.time || '')).trim();
-    return '<div class="msg-card' + (m.read ? '' : ' unread') + '">' +
-      '<div class="msg-top"><b>' + esc(m.title || 'Message') + '</b>' + (m.read ? '' : '<i class="msg-dot"></i>') + '</div>' +
-      (stamp ? '<div class="msg-date">' + esc(stamp) + '</div>' : '') +
-      (m.hasImage ? '<img class="msg-img" src="' + API_BASE + '/public/message-image/' + encodeURIComponent(m.id) + '" alt="" onerror="this.remove()">' : '') +
-      '<div class="msg-body">' + esc(m.body || '').replace(/\n/g, '<br>') + '</div></div>';
-  }).join('');
-  renderMeRows();
-}
-// Opening the inbox reads every message in it (the page shows each one in full).
-async function loadMessages(){
-  if (STATE.messages) paintMessages(); else $('messagesList').innerHTML = spinnerHtml();
-  await refreshMessages(false);
-  if (!STATE) return;
-  var ids = (STATE.messages || []).filter(function(m){ return !m.read; }).map(function(m){ return m.id; });
-  if (ids.length) {
-    // Shown as read here at once; the server is told behind it.
-    api('/messages/read', { messageIds: ids.slice(0, 100) }).then(function(r){
-      if (r.status === 'success' && STATE) { (STATE.messages || []).forEach(function(m){ if (ids.indexOf(m.id) !== -1) m.read = true; }); renderMeRows(); }
-    });
-  }
-}
-
-/* ====================== ORDER GIFTS ====================== */
-// A robot can carry a one-time gift (Admin > Products > Order gift). A member who BOUGHT it may receive the gift once.
-async function loadGifts(){
-  var box = $('giftsList');
-  box.innerHTML = spinnerHtml();
-  var r = await api('/gifts/list');
-  if (r.stale) return;
-  if (r.status !== 'success') { box.innerHTML = '<div class="empty">' + esc(r.message || 'Could not load the order gifts. Try again.') + '</div>'; return; }
-  var gifts = r.gifts || [];
-  if (!gifts.length) { box.innerHTML = '<div class="empty">No order gifts at the moment.</div>'; return; }
-  box.innerHTML = gifts.map(function(g){
-    var state = g.claimed ? 'Received' : (g.owned ? 'Receive' : 'Buy to unlock');
-    var can = g.owned && !g.claimed;
-    return '<div class="bank-row">' + imgTag(productByKey(g.key), '', 'width:48px;height:48px;border-radius:12px;object-fit:cover;flex:0 0 auto') +
-      '<div class="bank-info"><b>' + esc(g.name) + '</b><span>Gift ' + ugx(g.amount) + '</span></div>' +
-      '<button type="button" class="tk-pill ' + (g.claimed ? 'is-done' : (can ? 'is-ready' : '')) + '" style="width:auto;padding:0 14px;margin:0"' +
-        (can ? ' data-gift="' + esc(g.key) + '" onclick="claimGift(this)"' : ' disabled') + '>' + state + '</button></div>';
-  }).join('');
-}
-async function claimGift(btn){
-  var key = btn && btn.getAttribute('data-gift');
-  if (!key || btn.disabled) return;
-  var label = btn.textContent;
-  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
-  var r = await api('/gifts/claim', { key: key });
-  if (r.stale) return;
-  if (r.status !== 'success') { toast(r.message || 'Could not receive this gift'); btn.disabled = false; btn.textContent = label; loadGifts(); return; }
-  showGiftReveal(r.amount);
-  await refreshFromServer();
-  renderAll();
-  loadGifts();
-}
 
 /* ====================== PAYOUT ACCOUNT (the mobile-money cards cash-outs are sent to) ====================== */
 // A member may keep several cards. The server holds which one is active (the one a cash-out goes to); a tap on a card makes it the active one.
@@ -1645,8 +1524,6 @@ function shakeVibrate(){
   }
   if (navigator.vibrate) navigator.vibrate([60, 40, 60]);
 }
-function authFeatureOn(){ return getSettings().requireTwofaToWithdraw !== false; }
-function needsAuthSetup(){ return authFeatureOn() && !!STATE && STATE.twofaEnabled !== true; }
 // The hours cash-out is open (Admin > Settings), as the server judges them: a window may wrap past midnight (18:00 to 17:00).
 function witMinutes(v){ var m = /^(\d{1,2}):(\d{2})$/.exec(String(v || '').trim()); return m ? Number(m[1]) * 60 + Number(m[2]) : null; }
 function withdrawWindow(s){
@@ -1666,8 +1543,6 @@ function renderWitBankBox(){
   var win = withdrawWindow(sett);
   var wn = $('witWindowNote');
   if (wn) { wn.style.display = win.enabled ? '' : 'none'; wn.textContent = win.enabled ? ('Cash-outs are open from ' + win.from + ' to ' + win.to + '.') : ''; }
-  var gn = $('witGaNote');
-  if (gn) gn.style.display = needsAuthSetup() ? '' : 'none';
   var box = $('witBankBox');
   var b = selectedBank();
   if (!b) {
@@ -1692,13 +1567,6 @@ function renderWitCalc(){
   $('witFee').textContent = ugx(fee);
   $('witNet').textContent = ugx(amt - fee);
 }
-// Tapping Cash Out without Google Authenticator set up: say why, then take the member to the set-up page (the amount typed is kept for the way back).
-var _gaReturn = null;
-function gaRequiredNotice(){
-  _gaReturn = { amount: $('witAmt') ? $('witAmt').value : '' };
-  toast('Google Authenticator is required to cash out. Set it up first.');
-  setTimeout(function(){ if (_ovName === 'withdraw') openOverlay('authenticator'); }, 900);
-}
 var _withdrawBusy = false;
 async function doWithdraw(){
   if (_withdrawBusy) return;
@@ -1717,35 +1585,20 @@ async function doWithdraw(){
   if (!card) { toast('Bind a mobile-money account first'); goBindBank(true); return; }
   var win = withdrawWindow(sett);
   if (win.enabled && !win.open && !STATE.withdrawAnytime) { toast('Withdraw is open from ' + win.from + ' to ' + win.to + '. Please come back then.'); return; }
-  // COMPULSORY Google Authenticator: no set-up yet = the member is told and taken to the set-up page before any password is asked (the server refuses as well).
-  if (needsAuthSetup()) { gaRequiredNotice(); return; }
   var pin = await askTradePin('Trade Password', 'Enter your 6-digit Trade Password to cash out ' + ugx(amt) + '.');
   if (pin === null) return;
-  var code = '';
-  // The code is asked right after the Trade Password, for a member who turned Google Authenticator on. The SERVER enforces it either way.
-  if (authFeatureOn() && STATE.twofaEnabled) {
-    code = await askAuthCode();
-    if (code === null) return;
-  }
   var btn = $('witGoBtn'), label = btn.textContent;
   _withdrawBusy = true;
   btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
   var r;
   try {
-    r = await api('/withdraw/request', Object.assign({ amount: amt, network: card.network, phone: card.phone, pin: pin }, code ? { totp: code } : {}));
+    r = await api('/withdraw/request', { amount: amt, network: card.network, phone: card.phone, pin: pin });
   } finally {
     _withdrawBusy = false;
     btn.disabled = false; btn.textContent = label;
   }
   if (r.stale || !STATE) return;
   if (r.status !== 'success') {
-    // What the server says about the rule wins over this app's copy of it: any Google Authenticator refusal means it is ON.
-    if (/^TWOFA_/.test(r.code || '')) {
-      var st = getSettings(); st.requireTwofaToWithdraw = true;
-      try { localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(st)); } catch (e) {}
-    }
-    if (r.code === 'TWOFA_REQUIRED') STATE.twofaEnabled = true;
-    if (r.code === 'TWOFA_SETUP_REQUIRED') { STATE.twofaEnabled = false; gaRequiredNotice(); return; }
     toast(r.message || 'Could not process the cash-out');
     return;
   }
@@ -1753,7 +1606,7 @@ async function doWithdraw(){
   // The server took the money at once; show it gone now and let the refresh below confirm.
   STATE.balance = Math.max(0, STATE.balance - amt);
   closeOverlay(); renderAll();
-  toast('Withdrawal submitted successfully' + (r.usedBackupCode ? '. You have ' + (Number(r.backupLeft) || 0) + ' backup code' + (Number(r.backupLeft) === 1 ? '' : 's') + ' left.' : ''));
+  toast('Withdrawal submitted successfully');
   refreshFromServer().then(function(){ if (STATE) renderAll(); });
 }
 
@@ -1776,155 +1629,6 @@ async function doChangeTradePin(){
   if (r.status !== 'success') { errEl.textContent = r.message || 'Could not change the Trade Password'; errEl.style.display = ''; return; }
   closeChangeTradePin();
   toast('Trade Password updated');
-}
-
-/* ====================== GOOGLE AUTHENTICATOR ======================
-   The SERVER decides whether a code is needed (it reads the account); this page only turns it on and off. The secret is made by the server and shown
-   once as a link, a setup key and a picture drawn on this phone (the vendored qrcode-generator): it is never sent to any outside service. */
-var _ga = { view: 'loading', setup: null, codes: null, status: null, action: '' };
-var GA_PLAY = 'https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2';
-var GA_STORE = 'https://apps.apple.com/app/google-authenticator/id388497605';
-function gaWarn(){
-  var off = clockOffSecs();
-  return off > 20 ? '<p class="ga-warn">Your phone’s clock is about ' + off + ' seconds away from the real time, so authenticator codes will not match. Turn on automatic date and time in your phone settings.</p>' : '';
-}
-function gaMsg(msg){ var el = $('gaErr'); if (el) { el.textContent = msg || ''; el.style.display = msg ? '' : 'none'; } }
-function gaBox(id, placeholder, kind){
-  var any = kind === 'any';
-  return '<input class="famt ga-input" id="' + id + '" type="' + (kind === 'pin' ? 'password' : 'text') + '" ' +
-    (any ? 'maxlength="11" inputmode="text" autocapitalize="characters"' : 'maxlength="6" inputmode="numeric"') + ' placeholder="' + esc(placeholder) +
-    '" autocomplete="one-time-code" autocorrect="off" spellcheck="false" data-lpignore="true" oninput="gaMsg(\'\')">';
-}
-// The setup picture: one SVG path of the dark squares with a 4-square white border, so a camera can read it.
-function qrSvg(text){
-  if (typeof qrcode !== 'function') return '';
-  var q = qrcode(0, 'L'); q.addData(String(text)); q.make();
-  var n = q.getModuleCount(), quiet = 4, size = n + quiet * 2, d = '';
-  for (var r = 0; r < n; r++) { var c = 0; while (c < n) { if (q.isDark(r, c)) { var e = c; while (e < n && q.isDark(r, e)) e++; d += 'M' + (c + quiet) + ' ' + (r + quiet) + 'h' + (e - c) + 'v1h-' + (e - c) + 'z'; c = e; } else c++; } }
-  return '<svg viewBox="0 0 ' + size + ' ' + size + '" role="img" aria-label="Setup picture for Google Authenticator" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect width="' + size + '" height="' + size + '" fill="#fff"/><path d="' + d + '" fill="#000"/></svg>';
-}
-function gaOffHtml(){
-  return '<section class="ga-card ga-hero"><b class="ga-h">Google Authenticator is required</b><p>After your Trade Password, every cash-out also asks for a 6-digit code from Google Authenticator. Setting it up takes about two minutes.</p></section>' +
-    '<section class="ga-card"><div class="ga-step"><i>1</i><div><b>Download Google Authenticator</b><span>A free app from Google. Install it on your phone first.</span></div></div>' +
-      '<div class="ga-stores"><a href="' + GA_PLAY + '" target="_blank" rel="noopener">Google Play</a><a href="' + GA_STORE + '" target="_blank" rel="noopener">App Store</a></div></section>' +
-    '<section class="ga-card"><div class="ga-step"><i>2</i><div><b>Enter your Trade Password</b><span>This confirms that it is really you.</span></div></div>' +
-      '<div class="ga-form">' + gaBox('gaPin', 'Enter trade password', 'pin') + '<p class="ga-err" id="gaErr" style="display:none"></p>' +
-      '<button type="button" class="btn btn-primary btn-block" id="gaStartBtn" onclick="gaStart()">Continue</button></div></section>' + gaWarn();
-}
-function gaSetupHtml(){
-  var s = _ga.setup || {}, groups = String(s.secret || '').match(/.{1,4}/g) || [], key = groups.slice(0, 4).join(' ') + '<br>' + groups.slice(4).join(' ');
-  return '<section class="ga-card"><div class="ga-step"><i>1</i><div><b>Add this account to Google Authenticator</b><span>Choose the way that suits you.</span></div></div>' +
-      '<a class="btn btn-primary btn-block" href="' + esc(s.otpauth) + '">Open Google Authenticator</a>' +
-      '<p class="ga-note">If nothing opens, install the app first (Google Play or App Store), then use the setup key below.</p>' +
-      '<p class="ga-or"><span>or type the setup key</span></p>' +
-      '<div class="ga-key" id="gaKey">' + key + '</div>' +
-      '<button type="button" class="btn btn-ghost btn-block" data-copy="' + esc(s.secret) + '" onclick="copyText(this.dataset.copy,\'Key copied\')">Copy key</button>' +
-      '<p class="ga-note">In the app tap <b>+</b>, then <b>Enter a setup key</b>. Account: ' + esc(s.issuer) + '. Type of key: <b>Time based</b>.</p>' +
-      '<p class="ga-or"><span>or scan the picture</span></p><div class="ga-qr" id="gaQr"></div>' +
-      '<p class="ga-note">Scan it with Google Authenticator on another phone or tablet.</p></section>' +
-    '<section class="ga-card"><div class="ga-step"><i>2</i><div><b>Type the 6-digit code</b><span>Google Authenticator now shows a 6-digit code for ' + esc(s.issuer) + '. Type it here to finish.</span></div></div>' +
-      '<div class="ga-form">' + gaBox('gaCode', 'Enter 6-digit code') + '<p class="ga-err" id="gaErr" style="display:none"></p>' +
-      '<button type="button" class="btn btn-primary btn-block" id="gaConfirmBtn" onclick="gaConfirm()">Turn On</button>' +
-      '<button type="button" class="btn btn-ghost btn-block" style="margin-top:10px" onclick="gaCancel()">Cancel</button></div></section>' + gaWarn();
-}
-function gaCodesHtml(){
-  var codes = _ga.codes || [];
-  return '<section class="ga-card ga-hero"><b class="ga-h">Google Authenticator is on</b><p>Save your backup codes now.</p></section>' +
-    '<section class="ga-card"><b class="ga-h">Your backup codes</b>' +
-      '<p class="ga-note left">If you lose your phone, one of these codes lets you cash out once. Each code works one time only. They are shown only now, so write them down or copy them and keep them somewhere safe.</p>' +
-      '<div class="ga-codes">' + codes.map(function(c){ return '<span>' + esc(c) + '</span>'; }).join('') + '</div>' +
-      '<button type="button" class="btn btn-ghost btn-block" data-copy="' + esc(codes.join('  ')) + '" onclick="copyText(this.dataset.copy,\'Codes copied\')">Copy all codes</button>' +
-      '<button type="button" class="btn btn-primary btn-block" style="margin-top:10px" onclick="gaCodesDone()">I have saved them</button></section>';
-}
-function gaOnHtml(){
-  var st = _ga.status || {}, left = Number(st.backupLeft) || 0;
-  return '<section class="ga-card ga-hero"><b class="ga-h">Google Authenticator is on</b>' + (st.enabledAt ? '<p>Turned on ' + esc(fmtStamp(Number(st.enabledAt))) + '</p>' : '') + '</section>' +
-    '<section class="ga-card"><p class="ga-line">Every cash-out needs your Trade Password and a 6-digit code from Google Authenticator.</p>' +
-      '<p class="ga-line"><b>Backup codes left:</b> ' + left + ' of 8</p>' + (left <= 2 ? '<p class="ga-warn">You are running low on backup codes. Make new ones.</p>' : '') +
-      '<button type="button" class="btn btn-ghost btn-block" onclick="gaManage(\'codes\')">New backup codes</button>' +
-      '<button type="button" class="btn btn-primary btn-block" style="margin-top:10px" onclick="gaManage(\'off\')">Turn Off</button></section>' + gaWarn();
-}
-function gaManageHtml(){
-  var off = _ga.action === 'off';
-  return '<section class="ga-card"><b class="ga-h">' + (off ? 'Turn off Google Authenticator' : 'Make new backup codes') + '</b>' +
-    '<p class="ga-note left">' + (off ? 'You will not be able to cash out until you set Google Authenticator up again.' : 'Your old backup codes stop working as soon as the new ones are made.') + '</p>' +
-    '<div class="ga-form"><span class="flabel">Trade Password</span>' + gaBox('gaPin', 'Enter trade password', 'pin') +
-    '<span class="flabel" style="margin-top:12px">Authenticator code</span>' + gaBox('gaCode', '6-digit code or a backup code', 'any') + '<p class="ga-err" id="gaErr" style="display:none"></p>' +
-    '<button type="button" class="btn btn-primary btn-block" id="gaDoBtn" onclick="gaDoManage()">' + (off ? 'Turn Off' : 'Make New Codes') + '</button>' +
-    '<button type="button" class="btn btn-ghost btn-block" style="margin-top:10px" onclick="gaBack()">Cancel</button></div></section>' + gaWarn();
-}
-function gaPaint(){
-  var host = $('gaBody'); if (!host) return;
-  var v = _ga.view;
-  host.innerHTML = v === 'loading' ? spinnerHtml()
-    : v === 'error' ? '<div class="empty" onclick="gaLoad()" style="cursor:pointer">Could not load. Tap to try again.</div>'
-    : v === 'disabled' ? '<section class="ga-card ga-hero"><b class="ga-h">Google Authenticator is switched off</b><p>It is not needed right now. Cash-outs ask only for your Trade Password.</p></section>'
-    : v === 'off' ? gaOffHtml() : v === 'setup' ? gaSetupHtml() : v === 'codes' ? gaCodesHtml() : v === 'manage' ? gaManageHtml() : gaOnHtml();
-  if (v === 'setup') { var q = $('gaQr'); if (q) q.innerHTML = qrSvg((_ga.setup || {}).otpauth); }
-  var ov = $('ovAuthenticator'); if (ov) ov.scrollTop = 0;
-}
-async function gaLoad(){
-  _ga.view = 'loading'; gaPaint();
-  var r = await api('/account/2fa/status');
-  if (r.stale || !$('gaBody')) return;
-  if (r.status !== 'success') { _ga.view = 'error'; return gaPaint(); }
-  _ga.status = r; if (STATE) STATE.twofaEnabled = r.enabled === true;
-  if (r.available === false) { var st = getSettings(); st.requireTwofaToWithdraw = false; try { localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(st)); } catch (e) {} renderMeRows(); _ga.view = 'disabled'; return gaPaint(); }
-  if (r.enabled && _gaReturn) return gaReturnToWithdraw();   // it was already on (the app held an old copy of the account): nothing to set up
-  _ga.view = r.enabled ? 'on' : 'off'; gaPaint();
-}
-function gaOpen(){ _ga = { view: 'loading', setup: null, codes: null, status: null, action: '' }; gaLoad(); }
-async function gaStart(){
-  var pin = ($('gaPin').value || '').trim();
-  if (!/^\d{6}$/.test(pin)) return gaMsg('Enter your 6-digit Trade Password.');
-  var btn = $('gaStartBtn'); btn.disabled = true;
-  var r = await api('/account/2fa/start', { pin: pin });
-  if (r.stale) return;
-  if ($('gaStartBtn')) $('gaStartBtn').disabled = false;
-  if (r.status !== 'success') {
-    if (r.code === 'TWOFA_ALREADY_ON') return gaLoad();
-    return gaMsg(r.message || 'Could not start. Please try again.');
-  }
-  _ga.setup = r; _ga.view = 'setup'; gaPaint();
-}
-async function gaConfirm(){
-  var code = ($('gaCode').value || '').replace(/\s/g, '');
-  if (!/^\d{6}$/.test(code)) return gaMsg('Enter the 6-digit code from Google Authenticator.');
-  var btn = $('gaConfirmBtn'); btn.disabled = true;
-  var r = await api('/account/2fa/confirm', { code: code });
-  if (r.stale) return;
-  if ($('gaConfirmBtn')) $('gaConfirmBtn').disabled = false;
-  if (r.status !== 'success') {
-    if (r.code === 'TWOFA_NO_SETUP') { _ga.setup = null; _ga.view = 'off'; gaPaint(); return toast(r.message); }
-    return gaMsg((r.message || 'Could not turn it on.') + (r.code === 'TWOFA_INVALID' && clockOffSecs() > 20 ? ' Your phone’s clock is about ' + clockOffSecs() + ' seconds off.' : ''));
-  }
-  if (STATE) STATE.twofaEnabled = true;
-  _ga.setup = null; _ga.codes = r.backupCodes || []; _ga.view = 'codes'; gaPaint();
-}
-function gaCodesDone(){ _ga.codes = null; if (_gaReturn) return gaReturnToWithdraw(); gaLoad(); }
-// Set up from the Cash Out button: back to Cash Out with the amount that was typed, and the member can go on (Trade Password, then the code).
-function gaReturnToWithdraw(){
-  var amount = (_gaReturn && _gaReturn.amount) || '';
-  _gaReturn = null;
-  openOverlay('withdraw');
-  if (amount) { $('witAmt').value = amount; renderWitCalc(); }
-  toast('Google Authenticator setup done. You can cash out now.');
-}
-function gaCancel(){ _ga.setup = null; _ga.view = 'off'; gaPaint(); }
-function gaManage(action){ _ga.action = action; _ga.view = 'manage'; gaPaint(); }
-function gaBack(){ _ga.view = 'on'; gaPaint(); }
-async function gaDoManage(){
-  var off = _ga.action === 'off';
-  var pin = ($('gaPin').value || '').trim(), code = ($('gaCode').value || '').trim();
-  if (!/^\d{6}$/.test(pin)) return gaMsg('Enter your 6-digit Trade Password.');
-  if (!code) return gaMsg('Enter the 6-digit code from Google Authenticator, or a backup code.');
-  var btn = $('gaDoBtn'); btn.disabled = true;
-  var r = await api(off ? '/account/2fa/disable' : '/account/2fa/backup-codes', { pin: pin, code: code });
-  if (r.stale) return;
-  if ($('gaDoBtn')) $('gaDoBtn').disabled = false;
-  if (r.status !== 'success') return gaMsg(r.message || 'Could not finish. Please try again.');
-  if (off) { if (STATE) STATE.twofaEnabled = false; _ga.view = 'off'; gaPaint(); return toast('Google Authenticator is off'); }
-  _ga.codes = r.backupCodes || []; _ga.view = 'codes'; gaPaint();
 }
 
 /* ====================== DAILY REWARD, GIFT CODE ====================== */
@@ -1984,20 +1688,6 @@ function showGiftReveal(amount){
 function closeGiftReveal(){
   $('giftRevealBg').classList.remove('show');
   if (_giftCountRaf) { cancelAnimationFrame(_giftCountRaf); _giftCountRaf = null; }
-}
-// "Download App": a one-time reward for installing (Admin > Settings > App claim amount; 0 = off).
-async function claimAppReward(){
-  var btn = $('appClaimBtn'); if (!btn || btn.disabled) return;
-  var label = btn.textContent;
-  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
-  var r = await api('/app/claim', {});
-  btn.disabled = false; btn.textContent = label;
-  if (r.stale) return;
-  if (r.status !== 'success') { toast(r.message || 'Could not claim right now'); if (r.code === 'ALREADY_CLAIMED' && STATE) { STATE.appClaimed = true; renderMeRows(); } return; }
-  if (STATE) STATE.appClaimed = true;
-  showGiftReveal(r.amount);
-  await refreshFromServer();
-  renderAll();
 }
 
 /* ====================== TEAM, SHARE ====================== */

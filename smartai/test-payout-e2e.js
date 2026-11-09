@@ -87,7 +87,7 @@ const postsFor = wid => ['pesajet', 'tavupay', 'obpay'].filter(g => gw.posts[g].
 const usedGateway = w => w.payGw || (w.pesajetTxId ? 'pesajet' : '');
 (async () => {
   for (let i = 0; i < 60; i++) { try { const h = await realFetch(base + '/health'); if (h.ok) break; } catch (_) {} await sleep(250); }
-  const sv = await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 400000, withdrawMethod: 'rotate', requireTwofaToWithdraw: false } }, null, true); ok(sv.s === 200, 'settings saved: all gateways in turn', sv);
+  const sv = await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 400000, withdrawMethod: 'rotate' } }, null, true); ok(sv.s === 200, 'settings saved: all gateways in turn', sv);
   const M = []; for (let i = 0; i < 8; i++) M.push(await member());
   // ---- 1. an even round robin: three withdrawals, three gateways, one each
   const w1 = []; for (let i = 0; i < 3; i++) { const r = await request(M[i], 20000); ok(r.s === 200, 'withdrawal ' + (i + 1) + ' requested', r); w1.push(r.j.withdrawalId); }

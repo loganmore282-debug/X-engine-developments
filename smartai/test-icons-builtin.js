@@ -15,7 +15,7 @@ const serverSlots = list(server, /const SMARTAI_ICON_SLOTS = \[([^\]]*)\]/);
 const adminBuiltin = list(admin, /const SMARTAI_ICON_BUILTIN = \[([^\]]*)\]/);
 const labelBlock = (admin.match(/const SMARTAI_ICON_LABELS = \{([\s\S]*?)\};/) || [, ''])[1];
 const adminLabels = [...labelBlock.matchAll(/(?:^|[,{\s])([a-z]+):\s*'/g)].map(m => m[1]);
-ok(serverSlots.length === 21 && new Set(serverSlots).size === 21, 'the server knows 21 icon slots (' + serverSlots.length + ')');
+ok(serverSlots.length === 17 && new Set(serverSlots).size === 17, 'the server knows 17 icon slots (' + serverSlots.length + ')');
 ok(JSON.stringify(serverSlots) === JSON.stringify(adminBuiltin), 'the admin panel lists the same slots, in the same order, as having a built-in picture');
 ok(serverSlots.every(s => adminLabels.includes(s)) && adminLabels.length === serverSlots.length, 'and gives every slot a plain label (' + adminLabels.length + ')');
 ok(/Icons must be PNG pictures with a transparent background/.test(server), 'the server takes only PNG pictures for an icon slot');
@@ -27,6 +27,7 @@ const refs = new Set([...(css + src).matchAll(/\/icons\/([A-Za-z0-9_-]+\.(?:webp
 ok([...refs].every(f => have.has(f)), 'every picture the app asks for is in user/icons/ (' + refs.size + ' named in the code)');
 const slotFiles = new Set(serverSlots.map(s => s + '.webp'));
 ok([...have].every(f => slotFiles.has(f) || refs.has(f)), 'no unused picture is shipped (the owner: pick the best, not all): ' + [...have].filter(f => !slotFiles.has(f) && !refs.has(f)).join(', '));
+ok(have.has('ugx-coin.png') && /<img class="ugx-coin" src="\/icons\/ugx-coin\.png"/.test(css) && (css.match(/src="\/icons\/ugx-coin\.png"/g) || []).length === 2, 'ChocoMCC\'s UGX coin picture is shipped and is both coins of the Me page');
 ok(have.has('mtn.jpg') && have.has('airtel.jpg') && /<img src="\/icons\/mtn\.jpg"/.test(css) && /<img src="\/icons\/airtel\.jpg"/.test(css), 'the two network logos (MTN, Airtel) are there and used by the network pickers');
 function webp(buf) {
   if (buf.length < 30 || buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WEBP') return null;
@@ -70,9 +71,9 @@ ok(/STATE_ICONS = im\.icons \|\| \{\};/.test(src), 'the uploaded pictures come f
 
 // ---- every place that draws an icon names a real slot ----
 const used = new Set([...(css + src).matchAll(/data-icon=\\?["']([a-z]+)\\?["']/g)].map(m => m[1]).concat([...src.matchAll(/artFillHtml\('([a-z]+)'\)|artHtml\([^,]+,\s*'([a-z]+)'\)/g)].map(m => m[1] || m[2])));
-ok(used.size >= 15 && [...used].every(u => serverSlots.includes(u)), 'every data-icon in the app names a real slot (' + used.size + ' used)' + ([...used].filter(u => !serverSlots.includes(u)).join(',')));
+ok(used.size >= 14 && [...used].every(u => serverSlots.includes(u)), 'every data-icon in the app names a real slot (' + used.size + ' used)' + ([...used].filter(u => !serverSlots.includes(u)).join(',')));
 const mapNames = [...src.matchAll(/\['[A-Za-z]+Banner(?:Art)?', [^,]*, '([a-z]+)'\]/g)].map(m => m[1]);
-ok(mapNames.length >= 10 && mapNames.every(u => serverSlots.includes(u)), 'every art banner uses a real slot (' + mapNames.length + ' banners)');
+ok(mapNames.length >= 9 && mapNames.every(u => serverSlots.includes(u)), 'every art banner uses a real slot (' + mapNames.length + ' banners)');
 ok(!/STATE_ICONS\[/.test(src.replace(/function iconUrl[^\n]*\n/, '')), 'nothing reads the uploaded icons directly (all go through iconUrl)');
 const imgs = [...css.matchAll(/<img[^>]*data-icon="([a-z]+)"[^>]*>/g)];
 ok(imgs.length >= 20 && imgs.every(m => !/\ssrc="/.test(m[0]) || new RegExp('src="/icons/' + m[1] + '\\.webp"').test(m[0])), 'each picture in the page starts with its own built-in file, so it shows on the first frame (' + imgs.length + ' pictures)');

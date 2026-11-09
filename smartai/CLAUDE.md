@@ -11,12 +11,23 @@ reasons (for the SERVER and ADMIN) is in the inherited notes below and in `docs/
 withdrawal code. The notes below about Potato's member screens (`pt*` functions, `.pt-*` CSS, `design-ref/` pictures, "v4xx" caches) describe an app Smart AI no
 longer has: skip them.
 
+**THE RULE FOR SMART AI (owner, twice: "We are using chocomcc not potato" and "I was specifically saying to use only things of chocomcc, not to introduce anything
+without my consent"): the member app contains ONLY what ChocoMCC's app has.** No page, tile, button, dialog, notice, setting or admin control from Potato, Mint or
+Chocolate (or invented here) may be added without his say-so; if something seems missing or useful, ASK first. What he DID ask for from the Potato/Mint/Chocolate family is
+the engine under it: speed, accuracy and security (scrypt password and Trade Password hashing, locks and atomic money updates, rate limits, signed gateway webhooks, the
+admin's optional login code, MongoDB indexes, nginx). Removed on his word because ChocoMCC has none of them: **Google Authenticator (member side), Messages, Order Gifts, the
+Download App reward, and the Security hub page** (ChocoMCC's Security page is just the change-password form). The compare list ChocoMCC vs Smart AI is the test
+`test-smartai-ui.js` ("only ChocoMCC's things"): its ten Me tiles, its thirteen full-page screens, no authenticator / messages / gifts / app-claim routes anywhere.
+Known differences left (say so, do not hide): the Task Center counts team PURCHASES with admin-editable tiers (ChocoMCC: Level 1 referrals who invest + Level 1
+deposits, fixed ladders); the welcome dialog is a picture + Join Channel (ChocoMCC: admin title and text + WhatsApp and Telegram pills); ChocoMCC's USDT deposit and
+bank-transfer cash-out do not exist on Smart AI's server; sign-up asks a 6-digit Trade Password as in Potato, Mint and Chocolate (ChocoMCC makes a 4-digit payout PIN at first use).
+
 The owner speaks plainly, wants things done (not lots of questions), keeps answers short, hates abbreviations ("UGX 23,000", never "23k"), wants
 SVG icons, exact match to his screenshots, everything configurable from admin, and does not want features nobody asked for. **Never tell him to upload
 files or run quick-update.sh by hand: a push to `claude/smartai-build` deploys by itself through the GitHub webhook.**
 
 ## Where things are (all under `smartai/`)
-- `server.js` (backend, MongoDB only), `db.js`, `captcha.js`, `session-policy.js`, `service-account.js`, `totp.js`, `twofa-vault.js`
+- `server.js` (backend, MongoDB only), `db.js`, `captcha.js`, `session-policy.js`, `service-account.js`, `totp.js` (only the ADMIN login's optional 6-digit code uses it)
 - `user-src/` (member app) -> `node build-core.js` -> `user/`;  `admin-src/index.html` -> `node build-admin.js` -> `admin/`
 - Always rebuild after editing `-src`, bump the cache names (`user/sw.js` `smartai-shell-vN`, `admin/sw.js` `smartai-admin-shell-vN`), run
   `npm run test:audit` (wait for exit 0, run it in the background and read the `EXIT` line; the chain stops at the first failing test), commit, push
@@ -42,10 +53,10 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
 1. Atlas: Database Access -> add user `smartaiapp` (readWrite on database `smartai` only); Network Access already allows the VPS.
 2. One command: `git clone --filter=blob:none --no-checkout --branch claude/smartai-build "$(git -C /srv/potato-src remote get-url origin)" /srv/smartai-src && cd /srv/smartai-src && git sparse-checkout set smartai && git checkout && bash smartai/deploy/first-setup.sh`
    (installs packages, asks for the MongoDB connection string with hidden typing and CHECKS it, asks for the admin password, writes the secrets file, starts pm2
-   `smartai-server`, tests `/health`.) The Google Authenticator key file is made by the server itself the first time it starts (`/srv/smartai-secrets/twofa.key`): nothing to set.
-3. GitHub webhook (repo -> Settings -> Webhooks): Payload URL `http://<vps ip>:8100/k7x2/deploy/webhook` until a domain exists (then `https://<app host>/k7x2/deploy/webhook`),
-   content type JSON, the secret is `DEPLOY_WEBHOOK_SECRET` from `/srv/smartai-secrets/secrets.local.js` (`bash smartai/deploy/show-links.sh github` prints all three), event: push.
-   The server pulls its own branch, runs npm install, reloads `smartai-server`.
+   `smartai-server`, tests `/health`.)
+3. GitHub webhook (repo -> Settings -> Webhooks -> Add webhook): Payload URL `http://<vps ip>:8100/k7x2/deploy/webhook` until a domain exists (then `https://<app host>/k7x2/deploy/webhook`),
+   content type `application/json`, event: just the push event, Secret = `DEPLOY_WEBHOOK_SECRET`: read it with `grep DEPLOY_WEBHOOK_SECRET /srv/smartai-secrets/secrets.local.js`
+   (`bash smartai/deploy/show-links.sh github` prints all three but only once a domain is set up). The server pulls its own branch, runs npm install, reloads `smartai-server`.
 4. Temporary preview by IP: `bash /srv/smartai-src/smartai/deploy/preview.sh on` serves the app at `http://<vps ip>:8100/` and the hidden admin at
    `http://<vps ip>:8100/N85d57j4/` (plain HTTP, design work only, never real members or money).
 5. Domain later: `bash /srv/smartai-src/smartai/deploy/set-domain.sh` (asks for the domain), then `make-hook-url.sh` for the secret payment-webhook address,
@@ -55,6 +66,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
 1. (done) Copied from Potato (`a72b2e5`), renamed "Smart AI" (`set-brand.js`), ports 3006/8100/8101, own secrets/process/fail2ban/nginx names, placeholder hosts,
    new admin path `N85d57j4`, placeholder icons.
 2. (done) **Member app rebuilt as ChocoMCC's pages in blue and white** (see the next section). `npm run test:audit` passes.
+   (done, owner's order) Google Authenticator, Messages, Order Gifts, the app reward and the Security hub were taken OUT (server routes, admin tab / switches / inputs, app, tests); ChocoMCC's two UGX coin pictures are back on the Me page.
 3. (open, owner) **ChocoMCC's starting numbers as the defaults** (asked, not answered yet): minimum top-up and cash-out UGX 5,000, welcome gift UGX 7,000, commissions
    27% / 2% / 1%, cash-out fee 15%, 2 cash-outs a day, ChocoMCC's product list (he adds products himself in the admin). Today the server still has Potato's numbers
    (`DEFAULT_SETTINGS`); everything is editable in Admin > Settings, nothing is hard-coded in the app.
@@ -68,13 +80,14 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   sold-out and owned bands), Rewards (daily check-in with a streak, Gift Code, Task Center = the team-reward tiers, claimed once for good), Team (link, level 1/2/3
   cards, tap a level for its members), Me. Full-page overlays (one at a time, phone Back closes them: pushState/replaceState/popstate): Add Funds, deposit status
   (poll), Cash Out, Support, About (the admin's HTML, cleaned on the server AND again on the phone by `cleanAboutHtml`), Terms & Rules (setting `rulesText`), Ledger
-  (Accrued / Topups / Cash Outs), Payout Account (up to 5 MTN / Airtel cards, no PIN), Security (Login Password, Trade Password, Google Authenticator), Messages
-  (unread badge), Order Gifts, My Products, Accrued Earnings, team level lists. Dialogs: network picker, Trade Password (6 digits), authenticator code, change Trade
-  Password, install sheet (+ Claim button for the app reward), gift reveal, announcement (admin picture + Join Channel). A notice is a centred dim dialog that
+  (Accrued / Topups / Cash Outs), Payout Account (up to 5 MTN / Airtel cards; a "Change Trade Password" link at the bottom, where ChocoMCC has "Change payout PIN"), Security (ChocoMCC's
+  change-password form only), My Products, Accrued Earnings, Task Center, team level lists. Dialogs: network picker, Trade Password (6 digits), change Trade
+  Password, install sheet, gift reveal, announcement (admin picture + Join Channel). The Me page: ChocoMCC's ten tiles and its two UGX coin pictures (`user/icons/ugx-coin.png`,
+  the ORIGINAL ChocoMCC image, 251 x 201, shown 30 px in both the Balance and the Cash Outs figure). A notice is a centred dim dialog that
   closes by itself after 2.6 s and never blocks a tap.
 - **Server calls it uses** (all Potato's, plus the new block below): `/auth/signup|login|logout|password/change`, `/register`, `/account`, `/investments`, `/transactions`,
-  `/bank/save|select|list`, `/invest/create`, `/deposit/start`, `/deposit/marzpay` (+ `/status`), `/withdraw/request`, `/account/2fa/*`, `/account/transaction-pin/change`,
-  `/redeem`, `/salary/status|claim`, `/gifts/list|claim`, `/app/claim`, `/messages` (+ `/read`), `/team/stats`, `/team/members`, `/public/settings|products|banner|
+  `/bank/save|select|list`, `/invest/create`, `/deposit/start`, `/deposit/marzpay` (+ `/status`), `/withdraw/request`, `/account/transaction-pin/change`,
+  `/redeem`, `/salary/status|claim`, `/team/stats`, `/team/members`, `/public/settings|products|banner|
   smartai-images|announcement-image|about-content|activity-feed`. Reads are retried on a weak connection; a call that moves money is NEVER retried; `/register` is
   retried (safe to repeat).
 - **Added to `server.js`** (block "DAILY CHECK-IN, ACTIVITY FEED, TOP-UP AND CASH-OUT LISTS"): `POST /checkin` (one a day, locked per member, one atomic update guarded by
@@ -83,9 +96,10 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   and `GET /withdrawals` (the member's OWN rows including waiting / declined ones, only whitelisted fields, newest 100). `/account` also returns `checkinStreak` and
   `lastCheckin`. New admin settings: `dailyCheckin`, `supportHours`, `rulesText`, and the Telegram / WhatsApp links used by Support. Admin: Daily check-in box
   (Settings), Support extras, "Daily check-in" in the earned breakdown.
-- **Pictures.** Every banner is the admin's picture when set, else a blue "art" banner (`.art-fill` rings + one of the owner's icons). The owner's icon pack: 21 built-in
+- **Pictures.** Every banner is the admin's picture when set, else a blue "art" banner (`.art-fill` rings + one of the owner's icons). The owner's icon pack: 17 built-in
   transparent WebP files `user/icons/<slot>.webp` (192 x 192, under 20 kB): `home, robots, income, share, my, deposit, withdraw, gift, support, ledger, team, payout,
-  security, inbox, about, rules, download, signout, balance, loginpw, tradepw` (+ `mtn.jpg`, `airtel.jpg` network logos). The same names are the admin's icon slots
+  security, about, rules, download, signout` (+ `mtn.jpg`, `airtel.jpg` network logos and ChocoMCC's `ugx-coin.png`; the pack's balance, inbox, login password and trade password
+  pictures were dropped with the features that used them). The same names are the admin's icon slots
   (`SMARTAI_ICON_SLOTS` in `server.js`, `SMARTAI_ICON_BUILTIN` / `SMARTAI_ICON_LABELS` in `admin-src`): a picture uploaded in Admin > Banners > Icons replaces the
   built-in one (`iconUrl()` / `paintIcons()` in the app; uploaded icons must be PNG). Every `<img data-icon="x">` starts with its own `src="/icons/x.webp"` so it shows on
   the first frame. Tools to cut an icon cleanly: `tools/icon-cutout/` (README there).
@@ -99,17 +113,20 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
   signs anyone out; a 401 from the server (`sessionEnded()`) does.
 - **Tests that guard it** (all in `npm run test:audit`): `test-smartai-app.js` (real Chromium + real server + in-memory database: sign-up from an invitation link, login,
-  buy, check-in incl. 3 taps at once, gift code, payout cards, compulsory Google Authenticator set-up and a cash-out with Trade Password + code, ledger tabs, messages,
+  buy, check-in incl. 3 taps at once, gift code, payout cards, a cash-out with the Trade Password, ledger tabs, the Me page (tiles, UGX coins, Security page),
   team + Task Center, announcement, Back button, a session the server ended), `test-smartai-auth.js` (the same screen with things going wrong: wrong password, no
   network, server error, 429, slow answer + double tap, half-finished sign-up, wrong invitation code, someone else's number, banned, reopened offline),
   `test-smartai-ui.js` (static: every handler's function exists, every looked-up id exists, no duplicate ids, no other app's words, no emoji, `.overlay` rules, money
-  written in full, toast rules), `test-checkin-feed.js` (the new routes), `test-smartai-pages.js` (gifts, app claim, cards, About HTML, settings), `test-icons-builtin.js`,
-  `test-authenticator-ui.js` (jsdom, the QR checked square by square), `test-team.js`, `test-loader.js`, `test-chest-wallet.js` and the inherited server tests.
+  written in full, toast rules, and the "only ChocoMCC's things" guard), `test-checkin-feed.js` (the new routes), `test-smartai-pages.js` (cards, About HTML, settings, and that the removed routes do not exist), `test-icons-builtin.js`,
+  `test-team.js`, `test-loader.js`, `test-chest-wallet.js` and the inherited server tests.
   `test-smartai-ui.js --built` and `test-team.js --built` / `test-loader.js --built` also read the built page.
 - **Assumptions to tell the owner.** Daily check-in amount default UGX 250 (his admin box); the live-activity strip is simulated on purpose (not real people); the
   Telegram / WhatsApp links and Support hours come from Admin > Settings > Support; Terms & Rules text from Admin; ChocoMCC's own numbers are NOT applied yet
   (status 3 above).
 
+# NOTE ON THE NOTES BELOW: the "Google Authenticator", "Member Messages page", "Renew a message", Order Gifts, "Download App claim" and Potato member-screen (`pt*`) notes describe features Smart AI
+# does NOT have any more (taken out on the owner's order, see the rule at the top). Their server/admin/test files are deleted. Everything about money, payouts, gateways, deposits,
+# sessions, the admin panel and speed still applies.
 # Inherited notes (Potato's history up to the copy; "Potato" in them means Smart AI here, and Potato-only names such as `claude/potato-build` or port 3004 are Smart AI's `claude/smartai-build` and 3006)
 
 ## Status (Potato, inherited)

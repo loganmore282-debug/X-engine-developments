@@ -34,7 +34,7 @@ const eatDate = () => { const d = new Date(Date.now() + 3 * 3600000), p = n => S
 
 (async () => {
   for (let i = 0; i < 60; i++) { try { const h = await fetch(base + '/health'); if (h.ok) break; } catch (_) {} await sleep(250); }
-  await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 0, requireTwofaToWithdraw: false, dailyCheckin: 500 } }, null, true);
+  await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 0, dailyCheckin: 500 } }, null, true);
 
   // ---- the first check-in
   const A = await member();

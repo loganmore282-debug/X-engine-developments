@@ -1,7 +1,7 @@
 'use strict';
 // The Smart AI member app (ChocoMCC's pages in blue and white) driven in a real phone-sized Chromium against the REAL server.js on the in-memory
-// database: sign up from an invitation link, log out and in, buy, daily check-in, gift code, payout cards, the compulsory Google Authenticator set-up and
-// a cash-out with the Trade Password and the code, messages, team and Task Center, the ledger lists, a session the server ended, and the Back button.
+// database: sign up from an invitation link, log out and in, buy, daily check-in, gift code, payout cards, a cash-out with the Trade Password, the Me page
+// (ChocoMCC's tiles and its two UGX coins, nothing else), team and Task Center, the ledger lists, a session the server ended, and the Back button.
 //   node test-smartai-app.js
 const path = require('path'), Module = require('module'), http = require('http'), fs = require('fs');
 process.chdir(__dirname);
@@ -14,7 +14,6 @@ process.env.POTATO_SECRETS_DIR = fs.mkdtempSync(path.join(require('os').tmpdir()
 const realLog = console.log, serverErrors = [];
 console.log = () => {}; console.warn = () => {}; console.error = (...a) => { serverErrors.push(a.map(x => (x && x.message) || String(x)).join(' ').slice(0, 300)); };
 require(path.join(__dirname, 'server.js'));
-const totp = require('./totp');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; realLog('  ok   - ' + m); } else { fail++; realLog('  FAIL - ' + m); } };
 const base = 'http://127.0.0.1:' + BACK, ADMIN = 'Bearer app-test-admin-key-123456';
@@ -158,43 +157,22 @@ async function member(ref) {
   await ev(id => pickBankAccount(id), await ev(() => STATE.bankAccounts.filter(b => b.network === 'MTN Mobile Money')[0].id)); await sleep(900);
   await ev(() => closeOverlay());
 
-  // ---- 7. cash out: Google Authenticator is compulsory ----
+  // ---- 7. cash out: the Trade Password, then the money moves ----
   await ev(() => openOverlay('withdraw')); await sleep(400);
-  ok(await ev(() => document.getElementById('witGaNote').style.display !== 'none'), 'Cash Out says Google Authenticator is required before it is set up');
   await page.fill('#witAmt', '20000'); await sleep(200);
   ok(await ev(() => document.getElementById('witFee').textContent) === 'UGX 3,000' && await ev(() => document.getElementById('witNet').textContent) === 'UGX 17,000', 'the fee and what the member receives follow the setting (15%)');
   await page.fill('#witAmt', '500'); await page.click('#witGoBtn'); await sleep(300);
   ok(/Minimum cash-out/.test(await toastText()), 'an amount under the minimum is refused on the phone');
-  await page.fill('#witAmt', '20000'); await page.click('#witGoBtn'); await sleep(300);
-  ok(/Google Authenticator is required/.test(await toastText()), 'Request Cash Out without Google Authenticator says it is required');
-  ok(await until(() => document.getElementById('ovAuthenticator').classList.contains('show'), null, 4000), 'and takes the member to the set-up page');
-  await until(() => !!document.getElementById('gaPin'), null, 6000);
-  await page.fill('#gaPin', '654321'); await page.click('#gaStartBtn'); await sleep(900);
-  ok(/Incorrect Trade Password/i.test(await ev(() => document.getElementById('gaErr').textContent)), 'a wrong Trade Password is refused on the set-up page');
-  await page.fill('#gaPin', '123456'); await page.click('#gaStartBtn');
-  ok(await until(() => !!document.getElementById('gaKey'), null, 8000), 'the right Trade Password shows the setup key');
-  const secret = (await ev(() => _ga.setup.secret));
-  ok(/^[A-Z2-7]{32}$/.test(secret) && await ev(() => document.querySelectorAll('#gaQr svg path').length) === 1, 'the key is a 32-character base32 key and the setup picture is drawn on the phone');
-  await page.fill('#gaCode', '000000'); await page.click('#gaConfirmBtn'); await sleep(900);
-  ok((await ev(() => document.getElementById('gaErr').textContent)).length > 0, 'a wrong first code does not turn it on');
-  await page.fill('#gaCode', totp.codeAt(secret)); await page.click('#gaConfirmBtn');
-  ok(await until(() => document.querySelectorAll('.ga-codes span').length === 8, null, 8000), 'a right first code turns it on and shows 8 backup codes');
-  await page.click('.ga-card .btn-primary'); await sleep(900);
-  ok(await shown('ovWithdraw') && await ev(() => document.getElementById('witAmt').value) === '20000', 'after the set-up Cash Out opens again with the amount kept');
-  ok(await ev(() => STATE.twofaEnabled) === true, 'the app knows Google Authenticator is on');
   // wrong Trade Password
-  await page.click('#witGoBtn'); await until(() => document.getElementById('tradePinBg').classList.contains('show'), null, 4000);
-  await page.fill('#tradePinInput', '111111'); await page.click('#tradePinOk');
-  await until(() => document.getElementById('totpBg').classList.contains('show'), null, 4000);
-  await page.fill('#totpInput', totp.codeAt(secret, Date.now() + 30000)); await page.click('#totpOk'); await sleep(1200);
+  await page.fill('#witAmt', '20000'); await page.click('#witGoBtn'); await until(() => document.getElementById('tradePinBg').classList.contains('show'), null, 4000);
+  ok(!await ev(() => /authenticator|2-step|backup code/i.test(document.body.innerText)), 'only the Trade Password is asked (no second code)');
+  await page.fill('#tradePinInput', '111111'); await page.click('#tradePinOk'); await sleep(1500);
   ok(/Incorrect Trade Password/i.test(await toastText()) && await ev(() => STATE.balance) === bal0 + 3000, 'a wrong Trade Password takes nothing');
-  // right everything
+  // right Trade Password
   const balBefore = await ev(() => STATE.balance);
   await page.click('#witGoBtn'); await until(() => document.getElementById('tradePinBg').classList.contains('show'), null, 4000);
   await page.fill('#tradePinInput', '123456'); await page.click('#tradePinOk');
-  await until(() => document.getElementById('totpBg').classList.contains('show'), null, 4000);
-  await page.fill('#totpInput', totp.codeAt(secret, Date.now() + 30000)); await page.click('#totpOk');
-  ok(await until(() => /Withdrawal submitted successfully/.test(document.getElementById('toast').textContent), null, 10000), 'a cash-out with the Trade Password and the code is submitted');
+  ok(await until(() => /Withdrawal submitted successfully/.test(document.getElementById('toast').textContent), null, 10000), 'a cash-out with the Trade Password is submitted');
   await sleep(1500);
   ok(await ev(() => STATE.balance) === balBefore - 20000 && !await shown('ovWithdraw'), 'the wallet is debited and the page closes');
   const wl = await J('GET', '/withdrawals', null, MEtok);
@@ -210,13 +188,20 @@ async function member(ref) {
   const dr = await J('GET', '/deposits', null, MEtok);
   ok(dr.s === 200 && Array.isArray(dr.j.deposits), '/deposits answers');
 
-  // ---- 8. messages ----
-  await J('POST', '/admin/messages/save', { title: 'App test message', body: 'Line one\nLine two', id: '' }, null, true);
-  await ev(() => refreshMessageBadge()); await sleep(800);
-  ok(await ev(() => document.querySelector('.msg-badge').style.display) === 'flex' && await ev(() => document.querySelector('.msg-badge').textContent) === '1', 'a new message shows a count on Messages');
-  await ev(() => switchTab('account')); await ev(() => openOverlay('messages')); await sleep(1500);
-  ok(/App test message/.test(await ev(() => document.getElementById('messagesList').textContent)) && await ev(() => document.querySelector('.msg-badge').style.display) === 'none', 'opening Messages shows the message and clears the count');
+  // ---- 8. the Me page is ChocoMCC's: its tiles, its two UGX coins, its Security page, and nothing that is not in ChocoMCC ----
+  await ev(() => switchTab('account')); await sleep(600);
+  const tiles = await ev(() => [...document.querySelectorAll('#viewAccount .menu-tile-lbl')].map(e => e.textContent.trim()));
+  ok(JSON.stringify(tiles) === JSON.stringify(['My Products', 'Ledger', 'My Team', 'Payout Account', 'Security', 'About Us', 'Terms & Rules', 'Support', 'Download App', 'Sign Out']), 'Me has exactly ChocoMCC\'s ten tiles: ' + tiles.join(', '));
+  const coins = await ev(() => [...document.querySelectorAll('#viewAccount img.ugx-coin')].map(i => ({ src: i.getAttribute('src'), ok: i.complete && i.naturalWidth > 0 })));
+  ok(coins.length === 2 && coins.every(c => c.src === '/icons/ugx-coin.png' && c.ok), 'the Balance and Cash Outs figures each have ChocoMCC\'s UGX coin picture');
+  await ev(() => document.querySelector('#viewAccount .menu-tile-lbl') && [...document.querySelectorAll('#viewAccount .menu-tile')].find(b => /Security/.test(b.textContent)).click()); await sleep(300);
+  ok(await shown('ovChangepass') && /Security/.test(await ev(() => document.querySelector('#ovChangepass .ov-title').textContent)) && await ev(() => !!document.getElementById('pwCur') && !!document.getElementById('pwNew2')), 'Security opens the change-password page (current, new, confirm), as in ChocoMCC');
   await ev(() => closeOverlay());
+  await ev(() => goBindBank(false)); await sleep(300);
+  ok(/Change Trade Password/.test(await ev(() => document.getElementById('ovBindbank').textContent)), 'Payout Account has the Change Trade Password link');
+  await ev(() => closeOverlay());
+  ok(!await ev(() => /Google Authenticator|authenticator|Order Gifts|Messages|Download App reward/i.test(document.getElementById('app').innerText) || document.getElementById('app').innerHTML.indexOf('ovAuthenticator') !== -1 || document.getElementById('app').innerHTML.indexOf('ovMessages') !== -1 || document.getElementById('app').innerHTML.indexOf('ovGifts') !== -1), 'nothing from Potato is in the app: no Google Authenticator, no Messages, no Order Gifts, no app reward');
+  ok((await J('GET', '/messages', null, MEtok)).s === 404 && (await J('GET', '/gifts/list', null, MEtok)).s === 404 && (await J('POST', '/app/claim', {}, MEtok)).s === 404 && (await J('GET', '/account/2fa/status', null, MEtok)).s === 404, 'and the server has no such routes either');
 
   // ---- 9. team and Task Center ----
   const L1 = await member(await ev(() => STATE.referralCode));

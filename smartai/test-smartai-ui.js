@@ -44,7 +44,7 @@ function scan(text, label) {
 scan(html.replace(/<script[\s\S]*?<\/script>/g, ''), 'page');
 // handlers written inside the app's own HTML strings (quotes escaped with a backslash in a '...' string, or written in a "..." string)
 scan(mod.replace(/\\"/g, '"'), 'code');
-ok(handlers > 100, 'the page and the app\'s own markup carry many handlers (' + handlers + ' read)');
+ok(handlers > 70, 'the page and the app\'s own markup carry many handlers (' + handlers + ' read)');
 ok(missing.size === 0, 'every function a handler calls exists' + (missing.size ? ' -> missing: ' + [...missing].map(([k, v]) => k + ' (' + v[0] + ')').join('; ') : ''));
 
 // ---- ids ----
@@ -67,6 +67,18 @@ ok(others.length === 0, 'nothing from another app reaches a member (names, words
 const pics = visible.match(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{2712}\u{2715}-\u{27BF}\u{2B00}-\u{2BFF}]/gu) || [];
 ok(pics.length === 0, 'no emoji pictures in the pages or the code (SVG icons and the owner\'s pictures only)' + (pics.length ? ' -> ' + [...new Set(pics)].join(' ') : ''));
 ok(!/\bUGX\s*\d+(?:\.\d+)?\s*[kKmM]\b|\b\d+(?:\.\d+)?\s*[kK]\b(?!g|m|b)/.test(visible.replace(/\b0x[0-9a-f]+\b/gi, '')), 'no abbreviated money ("23k") in anything a member reads');
+
+// ---- only ChocoMCC's things (owner: "use only things of ChocoMCC, do not introduce anything without my consent") ----
+const tiles = [...pageHtml.matchAll(/<div class="menu-tile-lbl"[^>]*>([^<]+)<\/div>/g)].map(m => m[1].replace(/&amp;/g, '&'));
+ok(JSON.stringify(tiles) === JSON.stringify(['My Products', 'Ledger', 'My Team', 'Payout Account', 'Security', 'About Us', 'Terms & Rules', 'Support', 'Download App', 'Sign Out']), 'the Me page has exactly ChocoMCC\'s ten tiles, in its order: ' + tiles.join(', '));
+const overlayIds = [...pageHtml.matchAll(/<div class="overlay" id="(ov[A-Za-z]+)"/g)].map(m => m[1]).sort();
+ok(JSON.stringify(overlayIds) === JSON.stringify(['ovAbout', 'ovBindbank', 'ovChangepass', 'ovDeposit', 'ovDepositStatus', 'ovEarnings', 'ovMychoc', 'ovRecords', 'ovRules', 'ovSupport', 'ovTaskcenter', 'ovTeamlevel', 'ovWithdraw'].sort()), 'the full-page screens are exactly ChocoMCC\'s thirteen: ' + overlayIds.join(', '));
+const serverSrc = fs.readFileSync(__dirname + '/server.js', 'utf8'), adminSrc = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8').replace(/base64,[A-Za-z0-9+\/=]{200,}/g, 'base64,...');   // (the panel's embedded font and pictures are not words)
+ok(!/authenticator|twofa|2fa|totp/i.test(pageHtml + mod), 'no Google Authenticator anywhere in the member app');
+ok(!/twofa|2fa|Google Authenticator/i.test(serverSrc + adminSrc), 'no Google Authenticator in the server or the admin panel (the admin LOGIN keeps its own optional 6-digit code, as in Potato, Mint and Chocolate)');
+ok(!/api\('\/(messages|gifts|app\/claim|account\/2fa)/.test(mod) && !/app\.(get|post)\('\/(messages|gifts|app\/claim|account\/2fa|admin\/messages)/.test(serverSrc), 'no Messages, Order Gifts or app-reward route is called or served');
+ok(!/orderGift|appClaim|order_gift|app_claim/.test(mod + serverSrc + adminSrc), 'no order gift or app reward setting, field or ledger kind is left');
+ok(/<img class="ugx-coin" src="\/icons\/ugx-coin\.png" alt="UGX">/.test(pageHtml) && (pageHtml.match(/class="ugx-coin"/g) || []).length === 2, 'the Balance and Cash Outs figures have ChocoMCC\'s two UGX coin pictures');
 
 // ---- layout: a full-page screen cannot be dragged sideways or hand its scroll to the page behind ----
 const ovRule = (html.match(/\.overlay\{[^}]*\}/) || [''])[0];

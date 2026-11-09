@@ -1,7 +1,6 @@
 'use strict';
-// END-TO-END for the routes behind the signed-in pages: order gifts (list, claim once, not-owned), the one-time App claim, bank cards (up to five,
-// the first is active, /bank/select, duplicate refused), the About page HTML (cleaned when saved, public), and the admin settings
-// (deposit method names, My banner opacity/blur, App claim amount). Runs the REAL server.js against the in-memory MongoDB stand-in.
+// END-TO-END for the routes behind the signed-in pages: bank cards (up to five, the first is active, /bank/select, duplicate refused), the About page
+// HTML (cleaned when saved, public), and the admin settings (deposit method names, My banner opacity/blur), and that nothing from Potato's extras exists. Runs the REAL server.js against the in-memory MongoDB stand-in.
 const path = require('path'), Module = require('module');
 const root = __dirname;
 const fm = require('./test-helpers/fake-mongodb.js');
@@ -28,48 +27,32 @@ async function member() {
 }
 (async () => {
   for (let i = 0; i < 60; i++) { try { const h = await fetch(base + '/health'); if (h.ok) break; } catch (_) {} await sleep(250); }
-  await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 5000, requireTwofaToWithdraw: false } }, null, true);
+  await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 5000 } }, null, true);
   await J('POST', '/admin/products/save', { products: [
-    { key: 'vip1', name: 'VIP-1', price: 3000, cycle: 30, multiplier: 3, buyLimit: 1, order: 0, vip: 1, orderGift: 800 },
-    { key: 'vip2', name: 'VIP-2', price: 50000, cycle: 40, multiplier: 3, buyLimit: 3, order: 1, vip: 2, orderGift: 2000 },
+    { key: 'vip1', name: 'VIP-1', price: 3000, cycle: 30, multiplier: 3, buyLimit: 1, order: 0, vip: 1 },
+    { key: 'vip2', name: 'VIP-2', price: 50000, cycle: 40, multiplier: 3, buyLimit: 3, order: 1, vip: 2 },
     { key: 'vip3', name: 'VIP-3', price: 120000, cycle: 50, multiplier: 3, buyLimit: 3, order: 2, vip: 3 }
   ] }, null, true);
   const pub = (await J('GET', '/public/products')).j.products || [];
   ok(!pub.some(p => 'category' in p), 'products carry no Home category any more', pub[0]);
   const acct = async tok => (await J('GET', '/account', null, tok)).j.account;
 
-  // ---- order gifts
+  // ---- what is NOT here: Order Gifts, the app reward, Messages and Google Authenticator are not ChocoMCC's, so the server has no such routes
   const A = await member();
-  let l = await J('GET', '/gifts/list', null, A.tok);
-  ok(l.j.status === 'success' && l.j.gifts.length === 2 && l.j.gifts[0].name === 'VIP-1' && l.j.gifts[0].amount === 800 && !l.j.gifts[0].owned && !l.j.gifts[0].claimed, 'the list shows the products that carry a gift, none owned yet', l.j);
-  let c = await J('POST', '/gifts/claim', { key: 'vip1' }, A.tok);
-  ok(c.s === 400 && c.j.code === 'NOT_OWNED', 'a gift cannot be received before the product is bought', c.j);
-  const b0 = (await acct(A.tok)).walletBalance;
-  const buy = await J('POST', '/invest/create', { tierKey: 'vip1' }, A.tok); ok(buy.j.status === 'success', 'A buys VIP-1', buy.j);
-  const b1 = (await acct(A.tok)).walletBalance; ok(Math.round(b0 - b1) === 3000, 'the price is taken: ' + b0 + ' -> ' + b1);
-  l = await J('GET', '/gifts/list', null, A.tok); ok(l.j.gifts[0].owned === true && l.j.gifts[1].owned === false, 'the bought product is marked owned', l.j);
-  c = await J('POST', '/gifts/claim', { key: 'vip1' }, A.tok);
-  ok(c.j.status === 'success' && c.j.amount === 800, 'the gift is received', c.j);
-  const b2 = (await acct(A.tok)).walletBalance; ok(Math.round(b2 - b1) === 800, 'and 800 reaches the wallet: ' + b1 + ' -> ' + b2);
-  const twice = await Promise.all([J('POST', '/gifts/claim', { key: 'vip1' }, A.tok), J('POST', '/gifts/claim', { key: 'vip1' }, A.tok)]);
-  ok(twice.every(r => r.s === 400 && r.j.code === 'ALREADY_CLAIMED'), 'a repeat (even two at once) is refused', twice.map(r => r.j));
-  const b3 = (await acct(A.tok)).walletBalance; ok(b3 === b2, 'and pays nothing more');
-  l = await J('GET', '/gifts/list', null, A.tok); ok(l.j.gifts[0].claimed === true, 'the list now says claimed', l.j);
-  c = await J('POST', '/gifts/claim', { key: 'vip3' }, A.tok); ok(c.s === 404, 'a product without a gift has nothing to receive', c.j);
-  c = await J('POST', '/gifts/claim', { key: 'vip1' }); ok(c.s === 401, 'signing in is required');
-  const tx = (await J('GET', '/transactions', null, A.tok)).j.transactions || [];
-  ok(tx.some(t => t.type === 'order_gift' && t.amount === 800), 'the ledger has the gift row', tx.map(t => t.type));
-
-  // ---- App claim
-  const B = await member();
-  let r = await J('POST', '/app/claim', {}, B.tok); ok(r.s === 400, 'nothing to claim while the admin amount is 0', r.j);
-  await J('POST', '/admin/settings/update', { settings: { appClaimAmount: 200 } }, null, true);
-  const a0 = (await acct(B.tok)).walletBalance;
-  const both = await Promise.all([J('POST', '/app/claim', {}, B.tok), J('POST', '/app/claim', {}, B.tok)]);
-  ok(both.filter(x => x.j.status === 'success').length === 1 && both.filter(x => x.j.code === 'ALREADY_CLAIMED').length === 1, 'two taps at once pay exactly once', both.map(x => x.j));
-  const a1 = (await acct(B.tok)).walletBalance; ok(Math.round(a1 - a0) === 200, 'the wallet gets 200 once: ' + a0 + ' -> ' + a1);
+  for (const [m, pth, body] of [['GET', '/gifts/list'], ['POST', '/gifts/claim', { key: 'vip1' }], ['POST', '/app/claim', {}], ['GET', '/messages'], ['POST', '/messages/read', { messageId: 'x' }], ['GET', '/account/2fa/status'], ['POST', '/account/2fa/start', { pin: '123456' }], ['POST', '/admin/messages/save', { title: 't', body: 'b' }], ['GET', '/admin/messages/list'], ['POST', '/admin/user/reset-2fa', { userId: 'x' }]]) {
+    const r0 = await J(m, pth, body, A.tok, pth.startsWith('/admin'));
+    ok(r0.s === 404, m + ' ' + pth + ' does not exist (' + r0.s + ')');
+  }
+  const acc0 = await acct(A.tok);
+  ok(!('twofaEnabled' in acc0) && !('appClaimed' in acc0), '/account carries no Google Authenticator or app-reward flag', Object.keys(acc0));
+  const set0 = (await J('GET', '/public/settings')).j.settings || {};
+  ok(!('requireTwofaToWithdraw' in set0) && !('appClaimAmount' in set0), 'the public settings carry neither', Object.keys(set0).filter(k => /twofa|claim/i.test(k)));
+  const buyA = await J('POST', '/invest/create', { tierKey: 'vip1' }, A.tok); ok(buyA.j.status === 'success', 'a member can still buy a product', buyA.j);
+  const pgot = (await J('GET', '/public/products')).j.products || [];
+  ok(pgot.every(p => !('orderGift' in p)), 'products carry no order gift', pgot[0]);
 
   // ---- bank cards
+  let r;
   const C = await member();
   const save = (phone, net = 'MTN Mobile Money') => J('POST', '/bank/save', { holder: 'Test Holder', network: net, phone }, C.tok);
   const p1 = ph(), p2 = ph(), p3 = ph(), p4 = ph(), p5 = ph(), p6 = ph();

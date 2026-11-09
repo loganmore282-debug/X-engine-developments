@@ -657,7 +657,7 @@
   .choc-hold-item span{display:block;font-size:11px;color:var(--cocoa-faint);margin-bottom:2px;}
   .choc-hold-item b{display:block;font-size:13.5px;}
 
-/* ---- Smart AI additions: art banners, messages, Google Authenticator ---- */
+/* ---- Smart AI additions: art banners ---- */
 .art-host{position:absolute;inset:0;overflow:hidden;}
 .art-fill{position:absolute;inset:0;overflow:hidden;display:flex;align-items:center;justify-content:center;
   background:radial-gradient(circle at 78% 16%,rgba(255,255,255,.24),transparent 46%),linear-gradient(150deg,#2b8bf6 0%,#137aef 42%,#0b4fb8 100%);}
@@ -675,50 +675,19 @@ img.art-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
 .acct-icon{background:#fff;overflow:hidden;}
 .acct-icon img{width:100%;height:100%;object-fit:contain;padding:4px;}
 .menu-tile-ic.pic{position:relative;}
-.msg-badge{position:absolute;top:-4px;right:-10px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--berry);color:#fff;font-size:10.5px;font-weight:800;align-items:center;justify-content:center;box-shadow:0 0 0 2px #fff;}
 .menu-ic.pic{width:40px;height:40px;background:none;}
 .menu-ic.pic img{width:38px;height:38px;object-fit:contain;}
 #shopBanner .pb-tint.pb-btn-row{align-items:flex-end;padding:0 16px 22px;}
 #shopBannerArt .art-fill img.art-bot{margin-top:-46px;height:56%;}
 .acct-cover .art-fill img.art-bot{margin-top:-52px;height:58%;}
-.ugx-coin{width:30px;height:30px;}
+.ugx-coin{width:30px;height:30px;object-fit:contain;}
 .ugx-n span{white-space:nowrap;min-width:0;}
 #checkinBtn{margin-top:4px;}
 .about-html{word-break:break-word;}
 .about-html img{max-width:100%;height:auto;border-radius:12px;}
 .about-html h1,.about-html h2,.about-html h3{color:var(--cocoa);margin:14px 0 6px;}
 .about-html p{margin:0 0 10px;}
-.msg-card{background:var(--card);border-radius:18px;box-shadow:var(--shadow);padding:15px 16px;margin-bottom:12px;border:1px solid transparent;}
-.msg-card.unread{border-color:var(--caramel);}
-.msg-top{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14.5px;}
-.msg-dot{width:9px;height:9px;border-radius:50%;background:var(--berry);flex:0 0 auto;}
-.msg-date{font-size:11.5px;color:var(--cocoa-faint);margin:3px 0 8px;font-weight:600;}
-.msg-img{width:100%;border-radius:12px;margin:4px 0 10px;}
-.msg-body{font-size:13.5px;line-height:1.6;color:var(--cocoa-soft);word-break:break-word;}
-.ga-card{background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:18px;margin-bottom:14px;border:1px solid var(--line);}
-.ga-hero{text-align:center;}
-.ga-h{display:block;font-size:16px;font-weight:800;margin-bottom:6px;}
-.ga-card p{font-size:13px;line-height:1.55;color:var(--cocoa-soft);}
-.ga-step{display:flex;gap:12px;align-items:flex-start;margin-bottom:12px;}
-.ga-step i{flex:0 0 auto;width:28px;height:28px;border-radius:50%;background:var(--caramel);color:#fff;font-style:normal;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:13px;}
-.ga-step b{display:block;font-size:14px;}
-.ga-step span{display:block;font-size:12.5px;color:var(--cocoa-soft);margin-top:2px;line-height:1.45;}
-.ga-stores{display:flex;gap:10px;}
-.ga-stores a{flex:1;text-align:center;padding:12px;border-radius:14px;background:var(--cream-deep);color:var(--caramel-deep);font-weight:800;font-size:13.5px;text-decoration:none;}
 a.btn{text-decoration:none;}
-.ga-input{font-size:17px;padding:13px;margin-bottom:10px;letter-spacing:2px;text-align:center;}
-.ga-err{color:var(--berry);font-size:12.5px;font-weight:700;margin:2px 0 10px;}
-.ga-note{font-size:12px;color:var(--cocoa-faint)!important;margin:10px 0;line-height:1.5;}
-.ga-note.left{text-align:left;}
-.ga-or{display:flex;align-items:center;gap:10px;margin:14px 0 10px;color:var(--cocoa-faint)!important;font-size:12px!important;font-weight:700;}
-.ga-or::before,.ga-or::after{content:'';height:1px;background:var(--line);flex:1;}
-.ga-key{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:17px;letter-spacing:1.5px;text-align:center;background:var(--cream);border-radius:14px;padding:14px;margin-bottom:10px;font-weight:700;color:var(--cocoa);}
-.ga-qr{width:210px;height:210px;margin:0 auto 8px;background:#fff;border-radius:12px;padding:6px;border:1px solid var(--line);}
-.ga-qr svg{width:100%;height:100%;display:block;}
-.ga-codes{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 12px;}
-.ga-codes span{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;text-align:center;background:var(--cream);border-radius:10px;padding:10px 4px;font-weight:700;letter-spacing:1px;}
-.ga-warn{color:var(--berry)!important;font-size:12.5px!important;font-weight:700;margin:10px 0;}
-.ga-line{margin-bottom:8px;}
 
 /* ---- start-up screen (Smart AI) ---- */
 #loadingScreen{position:fixed;inset:0;overflow:hidden;background:#0964cd;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:65px;box-sizing:border-box;z-index:500;}
@@ -1057,17 +1026,15 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
         </div>
       </div>
       <div class="cards" style="margin:0 20px 18px">
-        <div class="stat" style="cursor:pointer" onclick="openOverlay('records')"><div class="n ugx-n" style="color:var(--mint)"><img class="ugx-coin" src="/icons/balance.webp" alt="" data-icon="balance"><span id="acctBalNum">UGX 0</span></div><div class="l">Balance</div></div>
-        <div class="stat" style="cursor:pointer" onclick="openOverlay('records');setRecordsTab('cashouts')"><div class="n ugx-n" style="color:var(--berry)"><img class="ugx-coin" src="/icons/withdraw.webp" alt="" data-icon="withdraw"><span id="acctWitNum">UGX 0</span></div><div class="l">Cash Outs</div></div>
+        <div class="stat" style="cursor:pointer" onclick="openOverlay('records')"><div class="n ugx-n" style="color:var(--mint)"><img class="ugx-coin" src="/icons/ugx-coin.png" alt="UGX"><span id="acctBalNum">UGX 0</span></div><div class="l">Balance</div></div>
+        <div class="stat" style="cursor:pointer" onclick="openOverlay('records');setRecordsTab('cashouts')"><div class="n ugx-n" style="color:var(--berry)"><img class="ugx-coin" src="/icons/ugx-coin.png" alt="UGX"><span id="acctWitNum">UGX 0</span></div><div class="l">Cash Outs</div></div>
       </div>
       <div class="menu-grid">
         <button class="menu-tile" onclick="openOverlay('mychoc')"><div class="menu-tile-ic pic"><img src="/icons/robots.webp" alt="My Products" data-icon="robots"></div><div class="menu-tile-lbl">My Products</div></button>
         <button class="menu-tile" onclick="openOverlay('records')"><div class="menu-tile-ic pic"><img src="/icons/ledger.webp" alt="Ledger" data-icon="ledger"></div><div class="menu-tile-lbl">Ledger</div></button>
         <button class="menu-tile" onclick="switchTab('team')"><div class="menu-tile-ic pic"><img src="/icons/team.webp" alt="My Team" data-icon="team"></div><div class="menu-tile-lbl">My Team</div></button>
         <button class="menu-tile" onclick="goBindBank(false)"><div class="menu-tile-ic pic"><img src="/icons/payout.webp" alt="Payout Account" data-icon="payout"></div><div class="menu-tile-lbl">Payout Account</div></button>
-        <button class="menu-tile" onclick="openOverlay('messages')"><div class="menu-tile-ic pic"><img src="/icons/inbox.webp" alt="Messages" data-icon="inbox"><span class="msg-badge" style="display:none">0</span></div><div class="menu-tile-lbl">Messages</div></button>
-        <button class="menu-tile" onclick="openOverlay('gifts')"><div class="menu-tile-ic pic"><img src="/icons/gift.webp" alt="Order Gifts" data-icon="gift"></div><div class="menu-tile-lbl">Order Gifts</div></button>
-        <button class="menu-tile" onclick="openOverlay('security')"><div class="menu-tile-ic pic"><img src="/icons/security.webp" alt="Security" data-icon="security"></div><div class="menu-tile-lbl">Security</div></button>
+        <button class="menu-tile" onclick="openOverlay('changepass')"><div class="menu-tile-ic pic"><img src="/icons/security.webp" alt="Security" data-icon="security"></div><div class="menu-tile-lbl">Security</div></button>
         <button class="menu-tile" onclick="openOverlay('about')"><div class="menu-tile-ic pic"><img src="/icons/about.webp" alt="About Us" data-icon="about"></div><div class="menu-tile-lbl">About Us</div></button>
         <button class="menu-tile" onclick="openOverlay('rules')"><div class="menu-tile-ic pic"><img src="/icons/rules.webp" alt="Terms & Rules" data-icon="rules"></div><div class="menu-tile-lbl">Terms &amp; Rules</div></button>
         <button class="menu-tile" onclick="openOverlay('support')"><div class="menu-tile-ic pic"><img src="/icons/support.webp" alt="Support" data-icon="support"></div><div class="menu-tile-lbl">Support</div></button>
@@ -1164,7 +1131,6 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
     <div class="photo-banner" id="withdrawBanner"></div>
     <div class="info-box">Minimum cash-out <b id="witMinAmt">UGX 0</b>. A service fee of <b id="witFeePctInfo">0%</b> applies to every cash-out. Up to <b><span id="witMaxPerDay">2</span> cash-outs</b> per day.</div>
     <div class="info-box" id="witWindowNote" style="display:none"></div>
-    <div class="info-box" id="witGaNote" style="display:none;background:var(--berry-pale);color:var(--berry)">Google Authenticator is required to cash out. <b style="text-decoration:underline;cursor:pointer" onclick="_gaReturn={amount:$('witAmt').value};openOverlay('authenticator')">Set it up</b></div>
     <div id="witBankBox"></div>
     <div class="form-card">
       <span class="flabel">Amount (UGX)</span>
@@ -1176,7 +1142,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
         <h4>How cash-outs work</h4>
         <div class="howto-step"><span class="howto-num">1</span><p>Bind your mobile-money account under <b>Me &rarr; Payout Account</b>.</p></div>
         <div class="howto-step"><span class="howto-num">2</span><p>Enter the amount you want and tap Request Cash Out.</p></div>
-        <div class="howto-step"><span class="howto-num">3</span><p>Enter your 6-digit Trade Password and the code from Google Authenticator to confirm. Never share them with anyone, not even &ldquo;customer service&rdquo;.</p></div>
+        <div class="howto-step"><span class="howto-num">3</span><p>Enter your 6-digit Trade Password to confirm. Never share it with anyone, not even &ldquo;customer service&rdquo;.</p></div>
         <div class="howto-step"><span class="howto-num">4</span><p>Your request is processed and the amount after the service fee is sent to your mobile-money number.</p></div>
         <div class="howto-step"><span class="howto-num">5</span><p>Track the status any time under <b>Me &rarr; Ledger &rarr; Cash Outs</b>.</p></div>
       </div>
@@ -1235,19 +1201,11 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
     <div class="info-box">Save the mobile-money account you want cash-outs sent to. You can bind up to 5 and tap the one to use. Every cash-out asks for your Trade Password.</div>
     <div id="bankList" style="padding:0 20px"></div>
     <div style="padding:6px 20px 20px"><button class="btn btn-primary btn-block" onclick="openNetworkPicker()">+ Bind a new account</button></div>
-  </div>
-
-  <div class="overlay" id="ovSecurity">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Security</div></div>
-    <div style="padding:16px 20px 20px">
-      <button class="menu-item" style="margin:0 0 10px" onclick="openOverlay('changepass')"><div class="menu-ic pic"><img src="/icons/loginpw.webp" alt="" data-icon="loginpw"></div><div class="menu-lbl">Login Password</div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
-      <button class="menu-item" style="margin:0 0 10px" onclick="openChangeTradePin()"><div class="menu-ic pic"><img src="/icons/tradepw.webp" alt="" data-icon="tradepw"></div><div class="menu-lbl">Trade Password</div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
-      <button class="menu-item" id="gaRow" style="margin:0 0 10px" onclick="openOverlay('authenticator')"><div class="menu-ic pic"><img src="/icons/security.webp" alt="" data-icon="security"></div><div class="menu-lbl">Google Authenticator</div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
-    </div>
+    <div style="text-align:center;padding:0 20px 20px"><span class="muted" onclick="openChangeTradePin()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Change Trade Password</span></div>
   </div>
 
   <div class="overlay" id="ovChangepass">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Login Password</div></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Security</div></div>
     <div class="info-box">Enter your current password once, then choose a new one. You will sign in again afterwards.</div>
     <div class="form-card">
       <span class="flabel">Current password</span>
@@ -1258,22 +1216,6 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <div class="field" style="margin-bottom:0"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="12" r="4"/><path d="M11 12h10M16.5 12v3M19.5 12v3"/></svg></span><input id="pwNew2" type="password" placeholder="Re-enter new password" autocomplete="new-password"></div>
     </div>
     <div style="padding:6px 20px 20px"><button class="btn btn-primary btn-block" id="changePassBtn" onclick="doChangePassword()">Update password</button></div>
-  </div>
-
-  <div class="overlay" id="ovAuthenticator">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Google Authenticator</div></div>
-    <div id="gaBody" style="padding:6px 20px 24px"></div>
-  </div>
-
-  <div class="overlay" id="ovMessages">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Messages</div></div>
-    <div id="messagesList" style="padding:6px 20px 20px"></div>
-  </div>
-
-  <div class="overlay" id="ovGifts">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Order Gifts</div></div>
-    <div class="info-box">Buy an AI robot to receive its gift once. A gift goes straight to your wallet.</div>
-    <div id="giftsList" style="padding:0 20px"></div>
   </div>
 
   <div class="overlay" id="ovMychoc">
@@ -1329,20 +1271,6 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
     </div>
   </div>
 
-  <div class="modal-bg" id="totpBg" onclick="if(event.target===this) totpCancel()">
-    <div class="modal-sheet" style="text-align:center">
-      <h3>Google Authenticator</h3>
-      <p class="muted" style="font-size:13.5px;margin-bottom:10px" id="totpHelp">Open Google Authenticator and type the code it shows now.</p>
-      <p style="font-size:12.5px;color:var(--berry);margin-bottom:6px" id="totpWarn"></p>
-      <div class="form-card" style="margin:0 0 14px;padding:16px">
-        <input class="famt" id="totpInput" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code" autocorrect="off" spellcheck="false" style="text-align:center;letter-spacing:6px;font-size:20px" onkeydown="if(event.key==='Enter'){totpSubmit();}">
-      </div>
-      <button class="btn btn-primary btn-block" id="totpOk" onclick="totpSubmit()">Confirm</button>
-      <div style="text-align:center;margin-top:14px"><span class="muted" id="totpAlt" onclick="totpMode(!_totpBackup)" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Use a backup code instead</span></div>
-      <div style="text-align:center;margin-top:10px"><span class="muted" id="totpNo" onclick="totpCancel()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Cancel</span></div>
-    </div>
-  </div>
-
   <div class="modal-bg" id="changePinBg" onclick="if(event.target===this) closeChangeTradePin()">
     <div class="modal-sheet" style="text-align:center">
       <h3>Change Trade Password</h3>
@@ -1366,7 +1294,6 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <p class="muted" style="font-size:13.5px;margin-bottom:20px">Add <span data-brandname>Smart AI</span> to your home screen for one-tap access, faster loading, and a full-screen app experience with no browser bars.</p>
       <div id="installManualSteps" style="display:none;text-align:left;background:var(--cream-deep);border-radius:14px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--cocoa-soft)"></div>
       <button class="btn btn-primary btn-block" id="installNowBtn" onclick="doInstallApp()">Install now</button>
-      <button class="btn btn-ghost btn-block" id="appClaimBtn" style="display:none;margin-top:10px" onclick="claimAppReward()">Claim</button>
       <div style="text-align:center;margin-top:14px"><span class="muted" onclick="dismissInstallSheet()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Maybe later</span></div>
     </div>
   </div>

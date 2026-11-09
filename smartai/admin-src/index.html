@@ -334,7 +334,6 @@ window.createSmartAIIdleSession = function(key, onExpire, onActivity){
         <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
         <button class="tab" data-tab="products" id="productsTab">Products</button>
         <button class="tab" data-tab="promocodes" id="promocodesTab">Gift Codes</button>
-        <button class="tab" data-tab="messages" id="messagesTab">Messages</button>
         <button class="tab" data-tab="transactions">Transactions</button>
         <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="settings" id="settingsTab">Settings</button>
@@ -433,7 +432,7 @@ const TX_LABELS = {
   deposit: 'Recharge', withdraw: 'Withdraw', commission: 'Commission', team_reward: 'Team reward',
   cashback: 'Product cashback', investment: 'Product purchase',
   promocode: 'Gift code redeemed', admin_credit: 'Credit', admin_debit: 'Adjustment',
-  welcome_bonus: 'Welcome bonus', mission_salary: 'Team reward', order_gift: 'Order gift', app_claim: 'Download App reward', checkin: 'Daily check-in', mission_deposit_reward: 'Team reward',
+  welcome_bonus: 'Welcome bonus', mission_salary: 'Team reward', checkin: 'Daily check-in', mission_deposit_reward: 'Team reward',
   deposit_reversal: 'Recharge reversed (fraud)',
   investment_refund: 'Product refund',
 };
@@ -642,8 +641,8 @@ function smartaiCutout(src, w, h){
 }
 // The icon slots (same names as SMARTAI_ICON_SLOTS in server.js). Add a name here AND in server.js to get a new upload box.
 // Slots that already have a built-in blue picture in the app (user/icons/); an upload here replaces it, Remove brings it back.
-const SMARTAI_ICON_BUILTIN = ['home', 'robots', 'income', 'share', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'inbox', 'about', 'rules', 'download', 'signout', 'balance', 'loginpw', 'tradepw'];
-const SMARTAI_ICON_LABELS = { home:'Home tab', robots:'AI Robots tab, My Products and the robot picture', income:'Rewards tab', share:'Team tab', my:'Me tab', deposit:'Add Funds button (Home)', withdraw:'Cash Out button (Home) and the Cash Outs figure', gift:'Rewards Hub button, gift code, order gifts and the reward reveal', support:'Support button (Home and Me)', ledger:'Ledger (Me)', team:'My Team (Me)', payout:'Payout Account (Me)', security:'Security (Me) and Google Authenticator', inbox:'Messages (Me)', about:'About Us (Me)', rules:'Terms & Rules (Me)', download:'Download App (Me)', signout:'Sign Out (Me)', balance:'Balance figure (Me)', loginpw:'Login Password (Security)', tradepw:'Trade Password (Security)' };
+const SMARTAI_ICON_BUILTIN = ['home', 'robots', 'income', 'share', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout'];
+const SMARTAI_ICON_LABELS = { home:'Home tab', robots:'AI Robots tab, My Products and the robot picture', income:'Rewards tab', share:'Team tab', my:'Me tab', deposit:'Add Funds button (Home)', withdraw:'Cash Out button (Home) and the Cash Outs figure', gift:'Rewards Hub button, gift code and the reward reveal', support:'Support button (Home and Me)', ledger:'Ledger (Me)', team:'My Team (Me)', payout:'Payout Account (Me)', security:'Security (Me)', about:'About Us (Me)', rules:'Terms & Rules (Me)', download:'Download App (Me)', signout:'Sign Out (Me)' };
 // An uploaded file -> a transparent, tightly cropped PNG data URL (longest side at most `maxDim`).
 function fileToCutoutPng(file, maxDim){
   return new Promise((resolve,reject)=>{
@@ -1070,7 +1069,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('mess
 });
 
 // ── TABS ──
-const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','messages','transactions','referrals','settings','banners','admins','auditlog']);
+const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','transactions','referrals','settings','banners','admins','auditlog']);
 let _tab='dashboard', _tabSequence=0;
 function staleTab(name){ return _tab !== name; }
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{ if (_tab !== t.dataset.tab) switchTab(t.dataset.tab); }));
@@ -1088,7 +1087,7 @@ function switchTab(name){
   const before = c.innerHTML;
   const spinnerTimer = setTimeout(() => { if (sequence === _tabSequence && c.innerHTML === before) c.innerHTML=spinnerHtml(); }, 120);
   const fn = ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
-     products:renderProducts, promocodes:renderPromoCodes, messages:renderMessages, transactions:renderTransactions,
+     products:renderProducts, promocodes:renderPromoCodes, transactions:renderTransactions,
      referrals:renderReferrals, settings:renderSettings, banners:renderBanners, admins:renderAdmins, auditlog:renderAuditLog }[name]);
   // The switch lives in the topbar, OUTSIDE #content, so a tab render can
   // never take it with it -- which is why this no longer waits for the tab
@@ -2003,7 +2002,7 @@ async function openReferralChain(uid){
 async function openUser(uid){
   const r = await api('/admin/user/detail',{ userId:uid });
   if(r.status!=='success'){ toast(r.message||'Not found','err'); return; }
-  const u=r.user, twofaReq=r.twofaRequired!==false;   // Google Authenticator compulsory for withdrawals (Settings)
+  const u=r.user;
   // Owner: "money/unknown money is continuing to pile up... a very bad
   // bug bro." Root cause traced to a genuinely misleading label, not a
   // money bug: "Cashback earned" (totalEarned) is actually cashback PLUS
@@ -2028,7 +2027,7 @@ async function openUser(uid){
     <div class="kv"><span class="k">Invested</span><span>${ugx(u.totalInvested)}</span></div>
     <div class="kv"><span class="k">Cashed out</span><span>${ugx(u.totalWithdrawn)}</span></div>
     <div class="kv"><span class="k">Total earned (all sources)</span><span>${ugx(u.totalEarned)}</span></div>
-    <div class="muted" style="font-size:11px;margin:-4px 0 8px;line-height:1.6">Investment cashback ${ugx(eb.cashback)} &middot; Referral commission ${ugx(eb.commission)} &middot; Gift codes ${ugx(eb.promocode)} &middot; Team rewards ${ugx((Number(eb.team_reward)||0)+(Number(mission)||0))} &middot; Order gifts ${ugx(eb.order_gift)} &middot; Download App reward ${ugx(eb.app_claim)} &middot; Daily check-in ${ugx(eb.checkin)}</div>
+    <div class="muted" style="font-size:11px;margin:-4px 0 8px;line-height:1.6">Investment cashback ${ugx(eb.cashback)} &middot; Referral commission ${ugx(eb.commission)} &middot; Gift codes ${ugx(eb.promocode)} &middot; Team rewards ${ugx((Number(eb.team_reward)||0)+(Number(mission)||0))} &middot; Daily check-in ${ugx(eb.checkin)}</div>
     <div class="kv"><span class="k">Team commission <span class="muted" style="font-size:10.5px">(already included above)</span></span><span>${ugx(u.teamCommission)}</span></div>
     <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'Not set')}</span></div>
     <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
@@ -2088,10 +2087,6 @@ async function openUser(uid){
       <div style="flex:2"><input id="pinNew" type="text" inputmode="numeric" maxlength="6" placeholder="New 6-digit trade password"></div>
       <button class="btn ghost sm" id="resetPinBtn">Set PIN</button>
     </div>`:''}
-    ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Google Authenticator</h4>
-    <div class="kv"><span class="k">Withdrawals</span><span id="twofaState">${twofaReq?(u.twofaEnabled===true?'Protected: a 6-digit code is needed after the Trade Password':'Not set up: cannot withdraw yet'):(u.twofaEnabled===true?'Set up, but switched off in Settings: the Trade Password only':'Switched off in Settings: the Trade Password only')}</span></div>
-    ${u.twofaEnabled===true?`<p class="muted" style="margin:2px 0 8px;font-size:12px">The member set this up themselves${twofaReq?'':' (it is kept, and applies again when you switch Google Authenticator back on in Settings)'}. If they lost their phone AND their backup codes, switch it off here once you are sure who is asking. They can set it up again themselves.</p>
-    <button class="btn danger sm" id="reset2faBtn">Reset Google Authenticator</button>`:`<p class="muted" style="margin:2px 0 0;font-size:12px">${twofaReq?'The app takes the member there when they tap Withdraw (My, Google Authenticator).':'Google Authenticator is switched off in Settings, so the app does not show it.'}</p>`}`:''}
     ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Withdrawal limits</h4>
     <div class="kv"><span class="k">This member</span><span id="anyTimeState">${u.withdrawAnytime===true?'Unrestricted: any hour and any number of withdrawals a day':'Follows the withdrawal hours and the daily number'}</span></div>
     <button class="btn ${u.withdrawAnytime===true?'ghost':'sky'} sm" id="anyTimeBtn" style="margin-top:6px">${u.withdrawAnytime===true?'Follow the withdrawal limits':'Make unrestricted (hours and daily number)'}</button>`:''}
@@ -2231,13 +2226,6 @@ async function openUser(uid){
     const d=await api('/admin/user/withdraw-anytime',{userId:uid,enabled:on});
     toast(d.status==='success'?(on?'Unrestricted: any hour, any number a day':'Follows the withdrawal limits again'):(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success'){ u.withdrawAnytime=on; closeModal(); (RENDERERS[_tab]||renderUsers)(); } else b.disabled=false;
-  });
-  $('reset2faBtn')?.addEventListener('click', async()=>{
-    if(!confirm(`Switch off Google Authenticator for ${u.phone}? Do this only when you are sure the person asking is the member (lost phone and lost backup codes). ${twofaReq?'They will have to set it up again before their next withdrawal.':'Google Authenticator is switched off in Settings, so withdrawals need only the Trade Password anyway.'}`)) return;
-    const b=$('reset2faBtn'); b.disabled=true;
-    const d=await api('/admin/user/reset-2fa',{userId:uid});
-    toast(d.status==='success'?'Google Authenticator switched off for this member':(d.message||'Failed'), d.status==='success'?'ok':'err');
-    if(d.status==='success'){ u.twofaEnabled=false; closeModal(); (RENDERERS[_tab]||renderUsers)(); } else b.disabled=false;
   });
   $('resetPinBtn')?.addEventListener('click', async()=>{
     const np=($('pinNew').value||'').trim();
@@ -2650,8 +2638,6 @@ function editProduct(p, order){
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Each product has its OWN multiplier — nothing is fixed globally. Type a multiplier and the total payout fills in automatically (and vice versa). If both are set, the multiplier wins, so repricing a product updates its payout on its own.</p>
     <label>VIP level (0 = none)</label><input id="pVip" type="number" min="0" max="100" step="1" value="${p.vip>0?p.vip:''}" placeholder="0">
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">A member's VIP is the highest VIP among the products they own, including products you give them.</p>
-    <label>Order gift (0 = none)</label><input id="pGift" type="number" min="0" step="1" value="${p.orderGift>0?p.orderGift:''}" placeholder="0">
-    <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">The gift a member can receive once on the Order Gifts page after buying this product.</p>
     <label>Purchase limit per member (0 = no limit)</label><input id="pLimit" type="number" min="0" step="1" value="${p.buyLimit>0?p.buyLimit:''}" placeholder="0">
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Members see it on the card as owned/limit, for example 0/3.</p>
     <div class="row">
@@ -2746,7 +2732,7 @@ function editProduct(p, order){
     const typedKey = $('pKey').value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'').slice(0,24);
     const key = typedKey || p.key || ($('pLabel').value.toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,24)) || ('item'+Date.now());
     const body = { key, name:$('pLabel').value, price:$('pPrice').value,
-      expectedReturn:$('pRet').value, multiplier:_retIsTruth?'':$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, vip:$('pVip').value, orderGift:$('pGift').value, order:$('pOrder').value,
+      expectedReturn:$('pRet').value, multiplier:_retIsTruth?'':$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, vip:$('pVip').value, order:$('pOrder').value,
       image, active:$('pActive').checked, comingSoon:$('pSoon').checked,
       // datetime-local has no zone, so the browser reads it as local time --
       // which for the owner IS Uganda time. Sent as epoch ms so the server
@@ -2774,87 +2760,6 @@ function editProduct(p, order){
     toast(d.status==='success'?'Saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success'){ closeModal(); renderProducts(); }
   });
-}
-
-// ── MESSAGES (member inbox broadcasts) ──
-// Smart AI has a real in-app inbox (Snow does not). Anything written here is
-// broadcast to every member's Messages screen; read state is tracked per
-// member server-side, so editing a message does not re-mark it unread.
-async function renderMessages(){
-  const r = await api('/admin/messages/list');
-  if(staleTab('messages')) return;
-  const list = r.messages||[];
-  $('content').innerHTML = `
-    <h2 class="sec">Messages</h2>
-    <div class="panel-card">
-      <div class="muted" style="font-size:12px;margin-bottom:8px">Broadcast to every member's in-app Messages inbox. Leave the ID blank to post a new message; fill it to edit an existing one.</div>
-      ${ADMIN_REGIONS.length>1?`<div class="muted" style="font-size:12px;margin-bottom:8px">${ADMIN_REGION==='all'
-        ? 'This message will go to <b>every country</b>. Pick one country in the switch above to write for that country only &mdash; useful when the wording names an amount, a currency or a payment operator.'
-        : `This message will go to <b>${esc(regionByKeyAdmin().name)}</b> members only.`}</div>`:''}
-      <div class="row">
-        <div style="flex:2"><label>Title</label><input id="mTitle" type="text" maxlength="200" placeholder="Welcome to Smart AI"></div>
-        <div><label>ID (blank = new)</label><input id="mId" type="text" placeholder="new"></div>
-      </div>
-      <div style="margin-top:6px"><label>Message</label><textarea id="mBody" rows="5" maxlength="4000" placeholder="Write the message members will read..."></textarea></div>
-      <div style="margin-top:10px"><label>Picture (optional, shown under the message)</label>
-        <div class="banner-row"><img class="img-thumb" id="mImgThumb" style="display:none" alt=""><div id="mImgNote" class="muted" style="flex:1;font-size:12px">No picture</div><button class="btn danger sm" id="mImgClear" type="button" style="display:none">Remove</button></div>
-        <label class="btn block file-btn" style="margin-top:8px">Choose picture<input type="file" id="mImgFile" accept="image/*" hidden></label></div>
-      <button class="btn" id="mSave" style="margin-top:10px">Post message</button>
-    </div>
-    <h3 class="sec" style="margin-top:18px">Posted messages</h3>
-    ${list.length ? list.map(m=>`
-      <div class="panel-card" style="margin-bottom:10px">
-        <div style="font-weight:700">${esc(m.title||'')}</div>
-        <div class="muted" style="font-size:11.5px;margin:2px 0 6px">${esc(m.id)} &middot; ${esc(m.date||'')} ${esc(m.time||'')}${ADMIN_REGIONS.length>1
-          ? ' &middot; ' + (!m.regionKey || m.regionKey==='all' ? 'every country' : esc('Uganda'))
-          : ''}</div>
-        <div style="font-size:13px;white-space:pre-line">${esc(m.body||'')}</div>
-        ${m.image?`<img class="img-thumb" src="${esc(m.image)}" style="margin-top:8px;max-width:160px" alt="">`:''}
-        <div style="margin-top:10px;display:flex;gap:8px">
-          <button class="btn sm" data-medit="${esc(m.id)}">Edit</button>
-          <button class="btn sm ok" data-mren="${esc(m.id)}" title="Make this the latest message: it moves to the top with today's date and shows as new to every member again">Renew</button>
-          <button class="btn sm danger" data-mdel="${esc(m.id)}">Delete</button>
-        </div>
-      </div>`).join('') : '<div class="muted">No messages posted yet.</div>'}`;
-  // null = leave the stored picture alone, '' = remove it, otherwise the new picture (a data URL)
-  let mImage = null;
-  const paintMImg = (src, note)=>{ const t=$('mImgThumb'); t.style.display = src ? '' : 'none'; if (src) t.src = src; $('mImgNote').textContent = note; $('mImgClear').style.display = src ? '' : 'none'; };
-  $('mImgFile').addEventListener('change', async e=>{
-    const f=e.target.files[0]; if(!f) return;
-    try { mImage = await fileToDataUrl(f, 1000, 0.82); paintMImg(mImage, 'New picture'); } catch(err){ toast(err.message||'Could not read image','err'); }
-  });
-  $('mImgClear').addEventListener('click', ()=>{ mImage = ''; paintMImg('', 'Picture will be removed'); });
-  $('mSave').addEventListener('click', async ()=>{
-    if($('mSave').disabled) return;
-    const title = $('mTitle').value.trim();
-    const body = $('mBody').value.trim();
-    if(!title) return toast('Enter a title','err');
-    if(!body) return toast('Enter the message','err');
-    const payload = { id: $('mId').value.trim(), title, body };
-    if (mImage !== null) payload.image = mImage;
-    $('mSave').disabled = true;   // a second tap while it is on its way would post the message twice
-    const d = await api('/admin/messages/save', payload);
-    toast(d.status==='success'?'Message posted':(d.message||'Failed'), d.status==='success'?'ok':'err');
-    if(d.status==='success') renderMessages(); else $('mSave').disabled = false;
-  });
-  document.querySelectorAll('[data-medit]').forEach(b=>b.addEventListener('click',()=>{
-    const m = list.find(x=>x.id===b.dataset.medit); if(!m) return;
-    $('mId').value = m.id; $('mTitle').value = m.title||''; $('mBody').value = m.body||'';
-    mImage = null; paintMImg(m.image||'', m.image ? 'Current picture' : 'No picture');
-    window.scrollTo({ top:0, behavior:'smooth' });
-  }));
-  document.querySelectorAll('[data-mren]').forEach(b=>b.addEventListener('click',async()=>{
-    if(!confirm('Renew this message? It becomes the latest one (top of every inbox, today\'s date and time) and shows as new to every member again.')) return;
-    b.disabled=true; const d = await api('/admin/messages/renew', { id: b.dataset.mren });
-    toast(d.status==='success'?(d.message||'Renewed'):(d.message||'Failed'), d.status==='success'?'ok':'err');
-    if(d.status==='success') renderMessages(); else b.disabled=false;
-  }));
-  document.querySelectorAll('[data-mdel]').forEach(b=>b.addEventListener('click',async()=>{
-    if(!confirm('Delete this message? It disappears from every member\'s inbox.')) return;
-    const d = await api('/admin/messages/delete', { id: b.dataset.mdel });
-    toast(d.status==='success'?'Deleted':(d.message||'Failed'), d.status==='success'?'ok':'err');
-    if(d.status==='success') renderMessages();
-  }));
 }
 
 // ── GIFT CODES ──
@@ -3593,8 +3498,6 @@ async function renderSettings(){
       </div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only withdrawals)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
-      <div class="switch-row" style="margin-top:8px"><span><b>Require Google Authenticator to withdraw</b> <span class="muted">(On: a member must set it up first, then every withdrawal asks for the Trade Password and a 6-digit code. Off: the Google Authenticator page disappears from the app and nobody is asked for a code; what members already set up is kept)</span></span>
-        <label style="width:auto;margin:0"><input type="checkbox" id="sReqTwofa" ${s.requireTwofaToWithdraw!==false?'checked':''} style="width:auto"></label></div>
       <!-- Owner: "one withdrawal time should be SETTABLE IN ADMIN, such that
            when one tries to withdrawal he sees, that withdrawals start from
            this time to this time, nothing much ie 6pm to 5pm." -->
@@ -3659,9 +3562,6 @@ async function renderSettings(){
       <h2 class="sec" style="margin:16px 0 4px">Gift Code page hint</h2>
       <p class="muted" style="margin:0 0 8px">The grey words inside the code box on the Gift Code page.</p>
       <input id="giftHintInput" maxlength="40" value="${esc(v('giftCodeHint','Enter gift code (T-XXXX)'))}" placeholder="Enter gift code (T-XXXX)">
-      <h2 class="sec" style="margin:16px 0 4px">Download App claim</h2>
-      <p class="muted" style="margin:0 0 8px">The amount the Claim button on the Download App page pays, once per member. 0 hides the button.</p>
-      <input id="appClaimInput" type="number" min="0" step="1" value="${esc(v('appClaimAmount',0))}" placeholder="0">
       <h2 class="sec" style="margin:16px 0 4px">Daily check-in</h2>
       <p class="muted" style="margin:0 0 8px">What one tap a day on the Rewards tab pays into the member's wallet. 0 hides the check-in card.</p>
       <input id="dailyCheckinInput" type="number" min="0" step="1" value="${esc(v('dailyCheckin',250))}" placeholder="250">
@@ -3713,7 +3613,7 @@ async function renderSettings(){
     const witMethod = (document.querySelector('input[name="witMethod"]:checked')||{}).value || 'follow';
     const d = await api('/admin/settings/update', { settings: {
       depositMethod: gateway, withdrawMethod: witMethod,
-      depositMethodNames: $('depNamesInput').value, depositGateways: _depGws.join(', '), lworxCollect: (document.querySelector('input[name="lworxMode"]:checked')||{}).value||'standard', giftCodeHint: $('giftHintInput').value, shareMessage: $('shareMsgInput').value, appClaimAmount: Math.max(0, Math.round(+$('appClaimInput').value || 0)), dailyCheckin: Math.max(0, Math.round(+$('dailyCheckinInput').value || 0)),
+      depositMethodNames: $('depNamesInput').value, depositGateways: _depGws.join(', '), lworxCollect: (document.querySelector('input[name="lworxMode"]:checked')||{}).value||'standard', giftCodeHint: $('giftHintInput').value, shareMessage: $('shareMsgInput').value, dailyCheckin: Math.max(0, Math.round(+$('dailyCheckinInput').value || 0)),
     } });
     const payoutProv = witMethod==='follow' ? (gateway==='tavupay'?'marzpay':gateway) : witMethod;
     toast(d.status==='success'
@@ -3762,7 +3662,7 @@ async function renderSettings(){
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
       autoApproveWithdrawalsEnabled:$('sAutoWit').checked, autoApproveMinSec:+$('sAutoMin').value, autoApproveMaxSec:+$('sAutoMax').value, autoApproveMaxAmount:+$('sAutoCap').value,
       referencePrefix:$('sRefPrefix').value.trim(),
-      requireInvestToWithdraw:$('sReqInvest').checked, requireTwofaToWithdraw:$('sReqTwofa').checked,
+      requireInvestToWithdraw:$('sReqInvest').checked,
       withdrawWindowEnabled:$('sWitWindow').checked, withdrawOpenFrom:$('sWitFrom').value, withdrawOpenTo:$('sWitTo').value,
       // Sent as raw text; the server splits, validates and de-duplicates it,
       // and rejects the whole save naming the bad line rather than silently
