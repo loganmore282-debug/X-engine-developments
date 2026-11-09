@@ -70,7 +70,7 @@ if (HOOK_HOST && (!HOOK_TOKEN || mode !== 'prod' || !/^[a-z0-9]([a-z0-9-]*[a-z0-
 const ROOT = process.env.SMARTAI_ROOT || '/srv/smartai-src/smartai';
 const prod = mode === 'prod';
 
-const MEMBER_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'";
+const MEMBER_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'" + (prod ? "; upgrade-insecure-requests" : '');
 // The panel's push (Firebase Cloud Messaging, until Web Push replaces it) talks to Google.
 const ADMIN_CSP = MEMBER_CSP.replace("connect-src 'self'", "connect-src 'self' https://*.googleapis.com");
 const PERMS = 'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()';

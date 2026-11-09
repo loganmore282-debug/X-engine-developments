@@ -233,7 +233,7 @@ function ensureData(){
 }
 function waitForData(kind, box, again){
   if (_dataFailed[kind]) {
-    box.innerHTML = '<div class="empty">Could not load this page.<br><button type="button" class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="retryData(\'' + kind + '\')">Try again</button></div>';
+    box.innerHTML = '<div class="empty">Could not load this page.<br><button type="button" class="btn btn-ghost btn-sm" style="margin-top:12px" data-kind="' + kind + '" onclick="retryData(this.dataset.kind)">Try again</button></div>';
     return;
   }
   box.innerHTML = spinnerHtml();
@@ -1007,7 +1007,7 @@ function closedLabel(p){
 function renderFeatured(){
   // Sold-out and coming-soon robots are never featured: no point steering anyone toward something they cannot buy yet.
   var html = PRODUCTS.filter(function(p){ return !isProductSoldOut(p); }).slice(0, 6).map(function(p){
-    return '<button class="choc-card" onclick="goToShopProduct(\'' + esc(p.key) + '\')">' + imgTag(p, 'choc-img') +
+    return '<button class="choc-card" data-key="' + esc(p.key) + '" onclick="goToShopProduct(this.dataset.key)">' + imgTag(p, 'choc-img') +
       '<div class="choc-body"><div class="choc-name">' + esc(p.name) + '</div>' +
       '<div class="choc-price">' + ugx(p.price) + '</div>' +
       '<div class="choc-ret">+' + ugx(dailyReturn(p)) + '/day</div></div></button>';
@@ -1032,7 +1032,7 @@ function renderShop(){
       ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed;margin-top:14px">' + esc(closedLabel(p)) + '</button>'
       : capped
         ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed;margin-top:14px">Limit reached (' + ownedCount(p.key) + '/' + lim + ')</button>'
-        : '<button class="btn btn-primary btn-block btn-buy-glow" style="margin-top:14px" onclick="buyProduct(this,\'' + esc(p.key) + '\')">Buy</button>';
+        : '<button class="btn btn-primary btn-block btn-buy-glow" style="margin-top:14px" data-key="' + esc(p.key) + '" onclick="buyProduct(this,this.dataset.key)">Buy</button>';
     return '<div class="prod-card' + (soldOut ? ' is-soldout' : '') + '" id="prodCard-' + esc(p.key) + '">' +
       '<div class="prod-img-wrap">' + imgTag(p, 'prod-img') +
       '<span class="prod-rank">' + esc(rank) + '</span>' +

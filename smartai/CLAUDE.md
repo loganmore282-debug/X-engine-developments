@@ -36,7 +36,7 @@ files or run quick-update.sh by hand: a push to `claude/smartai-build` deploys b
   `npm run test:audit` (wait for exit 0, run it in the background and read the `EXIT` line; the chain stops at the first failing test), commit, push
   to **`claude/smartai-build`**. `npm install --include=dev` for the dev tools.
 - `node set-brand.js "Name"` renames the app everywhere again (files must be git-tracked).
-- **`npm run test:audit` is the whole suite** (77 commands). The sixteen old test files of other apps that failed the same way
+- **`npm run test:audit` is the whole suite** (78 commands). The sixteen old test files of other apps that failed the same way
   in Potato (Kenya regions, Snow branding, `render.yaml`, ...) were deleted on 2026-11-09 together with `design-ref/` (Potato's screen pictures, 9.6 MB), `static-server.js`,
   `set-backend-url.js`, `deploy/deploy.sh` (an old rsync deploy to `/srv/smartai`, not the VPS layout), `translate-*` and `captcha.js`: nothing used them.
 - The app icons (`user/` and `admin/` `icon-192.png`, `icon-512.png`) and `user/link-preview.jpg` are PLACEHOLDERS (blue "SA" ring) until the owner sends the logo.
@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v9`, admin `admin/sw.js` `smartai-admin-shell-v6`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v10`, admin `admin/sw.js` `smartai-admin-shell-v6`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -364,3 +364,15 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
   only MarzPay's key); `test-deposit-gateways.js` now sets a fake key for every gateway. (Tests that make several top-ups use a new member each time: 5 attempts a minute from one member are slowed down.)
 - **About Us and the banners did not follow an admin edit while the app stayed open** (the first copy was kept until the app was reopened). About now shows what it has and asks again quietly on every
   open; the settings poll (every ~64 s) also re-reads the pictures (`syncArtwork()`).
+
+## Security audit round (owner: "Audit functions and callbacks, safeguard http request to prevent interception or any other form of attack")
+- Audited and found already sound (inherited from Potato, now covered by `test-http-safeguards.js`): helmet + hand-set headers (nosniff, DENY framing, HSTS, no-referrer, permissions policy, no `X-Powered-By`),
+  CORS only for the app's own hosts, 1 MB JSON limit, `$` / `.` keys stripped from bodies (no NoSQL operator injection), nginx method allow-list (GET HEAD POST OPTIONS), rate limits and connection limits,
+  admin routes 401 without the key, constant-time (`timingSafeEqual`) signature checks, the strict CSP (`connect-src 'self'`: injected script cannot send a token anywhere else), product keys limited to
+  letters / digits / `-` / `_`. **Callbacks:** PesaJet / TavuPay / LworxPay / ObPay webhooks are signed; the MarzPay `/deposit/callback` and `/withdraw/callback` are NOT signed, but they only trigger a read of the
+  payment from MarzPay by its uuid and credit from THAT answer, never from the caller's body (a forged callback credits nothing); the deploy webhook is HMAC-signed.
+- Added: (1) the page sends a real address opened over plain http to https at once (script at the top of `user-src/index.html`; the IP preview, localhost and 127.x are left alone); (2) the https site's CSP
+  now has `upgrade-insecure-requests` (`make-nginx.js`, prod only: it would break the http IP preview); (3) inline handlers no longer carry data inside a JavaScript string (`data-key` + `this.dataset.key`:
+  esc() makes `'` into `&#39;`, which the browser turns back into `'` inside an onclick); (4) `logSafe()` on the MarzPay callback log lines (a caller could write fake log lines with a new line in the reference).
+- **What cannot be fixed in code: the IP preview `http://179.198.197.114:8100` is plain http, so anyone on the same network path can read a password or session sent over it.** Real protection needs the domain
+  (`deploy/set-domain.sh`: certificate, redirect, HSTS). Use the preview for design only, never real members' money. Still open for the owner to decide: weak Trade Passwords (111111, 123456) are accepted at sign-up.

@@ -5162,11 +5162,13 @@ async function marzDepositCallbackOpen(body) {
   const q = await db.collection('pendingDeposits').where('marzReference', '==', reference).limit(1).get();
   return !q.empty && ['pending', 'initiating'].includes(q.docs[0].data().status);
 }
+// Whatever a caller sends is cut to plain characters before it is written to the log (no new lines, no control characters, short).
+function logSafe(v) { return String(v == null ? '' : v).replace(/[^\w.:@ -]/g, '?').slice(0, 80); }
 app.post('/deposit/callback', async (req, res) => {
   res.status(200).json({ status: 'ok' });
   const body = req.body || {};
   const st = marzCallbackRawStatus(body);
-  console.log(`MarzPay deposit callback: ${st || body.event_type || 'no status'} ${body.data?.reference || body.reference || body.transaction?.reference || '?'}`);
+  console.log(`MarzPay deposit callback: ${logSafe(st || body.event_type || 'no status')} ${logSafe(body.data?.reference || body.reference || body.transaction?.reference || '?')}`);   // logSafe: a forged callback cannot write fake lines into the log
   await marzDepositCallbackWork(body);
   retryCallbackWork('MarzPay deposit callback', () => marzDepositCallbackWork(body), () => marzDepositCallbackOpen(body), SUCCESS_STATUSES.has(st) || FAILED_STATUSES.has(st));
 });
@@ -6273,7 +6275,7 @@ app.post('/withdraw/callback', async (req, res) => {
   res.status(200).json({ status: 'ok' });
   const body = req.body || {};
   const st = marzCallbackRawStatus(body);
-  console.log(`MarzPay payout callback: ${st || body.event_type || 'no status'} ${body.data?.reference || body.reference || body.transaction?.reference || '?'}`);
+  console.log(`MarzPay payout callback: ${logSafe(st || body.event_type || 'no status')} ${logSafe(body.data?.reference || body.reference || body.transaction?.reference || '?')}`);   // logSafe: a forged callback cannot write fake lines into the log
   await marzWithdrawCallbackWork(body);
   retryCallbackWork('MarzPay payout callback', () => marzWithdrawCallbackWork(body), () => marzWithdrawCallbackOpen(body), SUCCESS_STATUSES.has(st) || FAILED_STATUSES.has(st));
 });
