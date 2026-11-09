@@ -1,0 +1,24 @@
+{
+  "name": "Smart AI",
+  "short_name": "Smart AI",
+  "description": "Smart AI — invest, earn daily income, and grow your team.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f5fb",
+  "theme_color": "#f4f5fb",
+  "icons": [
+    {
+      "src": "/k7x2/public/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/k7x2/public/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
