@@ -8,8 +8,8 @@ var SETTINGS_CACHE_KEY = 'smartai_settings_cache';
 var PRODUCTS_CACHE_KEY = 'smartai_products_cache';
 // The numbers before the server has answered: the server's own defaults. Everything the member sees is replaced by what /public/settings says.
 var DEFAULT_SETTINGS = {
-  withdrawFeePct: 15, minWithdraw: 8000, minDeposit: 30000, welcomeBonus: 0,
-  commL1: 25, commL2: 2, commL3: 1, dailyCheckin: 250, maxWithdrawalsPerDay: 2,
+  withdrawFeePct: 15, minWithdraw: 5000, minDeposit: 5000, welcomeBonus: 7000,
+  commL1: 27, commL2: 2, commL3: 1, dailyCheckin: 250, maxWithdrawalsPerDay: 2,
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   salaryTiers: [], depositMethodNames: '', brandName: '', shareMessage: 'Join me on {app}', shareDomain: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', whatsappGroup: '', whatsappContact: '',
@@ -253,7 +253,7 @@ async function _syncArtwork(){
     ['authhero', 'authlogo', 'teambanner', 'mybanner', 'aboutbanner', 'promobanner', 'profilelogo'].forEach(function(k){ ART[k] = im[k] || ''; });
     STATE_ICONS = im.icons || {};
   }
-  if (bn.status === 'success') ART.home = (bn.image || (Array.isArray(bn.slides) && bn.slides[0]) || bn.banner1 || '') || '';
+  if (bn.status === 'success') ART.home = bn.image || '';
   if (an.status === 'success') ART.announcement = an.image || '';
   if ((im.status !== 'success' || bn.status !== 'success') && _artTries++ < 3) setTimeout(syncArtwork, 4000);
   paintArt();
@@ -324,26 +324,22 @@ function freshState(uid, phone){
 }
 
 /* ====================== THE START-UP SCREEN ======================
-   Stays for at least LOADER_MIN_MS from the moment the page began, then "Loading... 100%" turns to "Ready" for a moment and the page opens. */
-var LOADER_MIN_MS = 2500, _ldTimer = null, _annAfterLoader = false, LOADED_MS = 150, READY_MS = 350;
+   The animation (see the script at the top of index.html) stays for at least LOADER_MIN_MS from the moment the page began, then the page opens. */
+var LOADER_MIN_MS = 2500, _ldTimer = null, _annAfterLoader = false;
 function hideLoadingScreen(){
   var ls = $('loadingScreen'); if (!ls || ls.style.display === 'none') return;
   var began = Number(window._smartaiLoaderStart) || 0;
   var minMs = typeof window._smartaiLoaderMinMs === 'number' ? window._smartaiLoaderMinMs : LOADER_MIN_MS;
   var wait = began ? Math.max(0, minMs - (Date.now() - began)) : 0;
   if (_ldTimer) { clearTimeout(_ldTimer); _ldTimer = null; }
-  var finish = function(){
-    if (window._smartaiLoaderProgress) window._smartaiLoaderProgress(100);
-    var go = function(){
-      _ldTimer = null;
-      ls.style.display = 'none';
-      if (_annAfterLoader) { _annAfterLoader = false; maybeShowAnnouncement(); }
-    };
-    if (!window._smartaiLoaderReady || window._smartaiLoaderReadyMs === 0) { go(); return; }   // (the tests set _smartaiLoaderReadyMs = 0, like _smartaiLoaderMinMs)
-    _ldTimer = setTimeout(function(){ window._smartaiLoaderReady(); _ldTimer = setTimeout(go, READY_MS); }, LOADED_MS);
+  var go = function(){
+    _ldTimer = null;
+    ls.style.display = 'none';
+    if (window._smartaiLoaderEnded) window._smartaiLoaderEnded();   // the animation lets go of its picture sheet and the status bar goes back to the app's colour
+    if (_annAfterLoader) { _annAfterLoader = false; maybeShowAnnouncement(); }
   };
-  if (!wait) { finish(); return; }
-  _ldTimer = setTimeout(function(){ _ldTimer = null; finish(); }, wait);
+  if (!wait) { go(); return; }
+  _ldTimer = setTimeout(go, wait);
 }
 function showLoadingScreen(){
   _annAfterLoader = false;
@@ -416,7 +412,6 @@ function authErrMsg(e){
   if (code === 'auth/too-many-requests') return (e && e.message) || 'Too many attempts. Try again shortly.';
   if (code === 'auth/network-request-failed') return 'Could not reach the server. Check your connection and try again.';
   if (code === 'auth/invalid-email') return 'Enter a valid mobile number (07XXXXXXXX).';
-  if (code === 'auth/bad-captcha') return (e && e.message) || 'The captcha code is wrong. Please try again.';
   return (e && e.message && code.indexOf('auth/') !== 0) ? e.message : 'Something went wrong, try again.';
 }
 // Finishes a sign-up that has an account but no profile yet (the Trade Password, the invitation code and the welcome gift are added here).
@@ -1380,6 +1375,7 @@ function prepareDeposit(){
   $('depMin').textContent = ugx(min);
   renderQuickAmounts();
   refreshDepositSlot();
+  preloadPayOrb();   // the animation of the next page is fetched while the member types the amount
 }
 // Money amount boxes cannot be left to type() alone: a number input has no real upper bound, and a 20-digit figure would overflow every sum below.
 function capAmountInput(el){ if (el.value.length > 10) el.value = el.value.slice(0, 10); }
@@ -1405,6 +1401,41 @@ async function doDeposit(){
   openDepositStatus(r.depositId, r.reference, '0' + local);
 }
 
+/* ====================== THE PAYMENT ANIMATION (the owner's second GIF) ======================
+   A glowing orb with two petals, played on a canvas from a sprite sheet (anim/pay-orb.webp: the GIF's 100 frames, 224 x 224 px each, 10 per row) in place of the old
+   phone picture while a payment is being checked. 20 ms a frame = a 2 s loop, the GIF's own timing. It stops by itself when the page is closed. */
+var PAY_ORB_CELL = 224, PAY_ORB_FRAMES = 100, PAY_ORB_MS = 20, PAY_ORB_CSS = 116;
+var _payOrbImg = null, _payOrbOk = false, _payOrbRaf = 0, _payOrbT0 = 0;
+function preloadPayOrb(){
+  if (_payOrbImg) return;
+  _payOrbImg = new Image();
+  _payOrbImg.onload = function(){ _payOrbOk = true; };
+  _payOrbImg.src = '/anim/pay-orb.webp';
+}
+function payOrbFrame(){
+  _payOrbRaf = 0;
+  var cv = $('payOrbCv'), ov = $('ovDepositStatus');
+  if (!cv || !ov || !ov.classList.contains('show')) { releasePayOrb(); return; }
+  if (_payOrbOk) {
+    var n = Math.floor((Date.now() - _payOrbT0) / PAY_ORB_MS) % PAY_ORB_FRAMES, c = cv.getContext('2d');
+    c.imageSmoothingEnabled = true; if ('imageSmoothingQuality' in c) c.imageSmoothingQuality = 'high';
+    c.drawImage(_payOrbImg, (n % 10) * PAY_ORB_CELL, Math.floor(n / 10) * PAY_ORB_CELL, PAY_ORB_CELL, PAY_ORB_CELL, 0, 0, cv.width, cv.height);
+  }
+  _payOrbRaf = requestAnimationFrame(payOrbFrame);
+}
+function showPayOrb(){
+  var ic = $('depStatusIc'); if (!ic) return;
+  var px = Math.round(PAY_ORB_CSS * Math.min(window.devicePixelRatio || 1, 3));
+  ic.className = 'pay-status-ic orb';
+  ic.innerHTML = '<canvas id="payOrbCv" width="' + px + '" height="' + px + '" role="img" aria-label="Checking your payment"></canvas>';
+  preloadPayOrb();
+  _payOrbT0 = Date.now();
+  stopPayOrb(); _payOrbRaf = requestAnimationFrame(payOrbFrame);
+}
+function stopPayOrb(){ if (_payOrbRaf) { cancelAnimationFrame(_payOrbRaf); _payOrbRaf = 0; } }
+// The sheet is 2240 x 2240 px once decoded: it is let go of when the page is left or the tick shows (the next Add Funds visit fetches it again, from the cache).
+function releasePayOrb(){ stopPayOrb(); _payOrbImg = null; _payOrbOk = false; }
+
 /* ====================== DEPOSIT STATUS (checks the payment by itself) ====================== */
 // The first check comes 1 s after the page opens, then every 1.5 s (PesaJet's own SDK cadence); the server holds an automatic check for up to DEP_HOLD_MS while its own watcher is
 // on the payment, so a settled payment shows at once. The Verify button never waits behind a held request. After DEP_POLL_MAX checks the page says so (Verify still works).
@@ -1415,12 +1446,12 @@ var DEP_HOLD_MS = 8000;
 function depositStatusHold(depositId){ return api('/deposit/marzpay/status', { depositId: depositId, waitMs: DEP_HOLD_MS }); }
 function depositStatusCheck(depositId){ return api('/deposit/marzpay/status', { depositId: depositId }); }
 var _depPollTimer = null, _depFirstTimer = null, _depPollAttempt = 0, _depPollId = null, _depConfirmed = false, _depPollChecking = false;
-var _depIcPending = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.4"/><path d="M11 18h2"/></svg>';
+/* The picture shown while a payment is being checked is the owner's second animation (see THE PAYMENT ANIMATION below); the tick shows once it is paid. */
 var _depIcSuccess = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
 function stopDepositPoll(){ clearInterval(_depPollTimer); clearTimeout(_depFirstTimer); _depPollTimer = null; _depFirstTimer = null; _depPollId = null; }
 function openDepositStatus(depositId, reference, phone){
   _depPollId = depositId; _depPollAttempt = 0; _depConfirmed = false;
-  $('depStatusIc').innerHTML = _depIcPending;
+  showPayOrb();
   $('depStatusTitle').textContent = 'Payment Initiated Successfully!';
   $('depStatusPhone').textContent = 'You will receive a payment prompt on ' + phone + ' shortly.';
   $('depStatusSteps').style.display = '';
@@ -1437,6 +1468,8 @@ function openDepositStatus(depositId, reference, phone){
 }
 function showDepositSuccess(){
   _depConfirmed = true;
+  releasePayOrb();
+  $('depStatusIc').className = 'pay-status-ic';
   $('depStatusIc').innerHTML = _depIcSuccess;
   $('depStatusTitle').textContent = 'Payment Successful!';
   $('depStatusPhone').textContent = 'Your wallet has been credited.';
@@ -1503,7 +1536,7 @@ async function pollDepositStatus(manual){
   }
 }
 function manualVerifyDeposit(){ pollDepositStatus(true); }
-function cancelDepositStatus(){ stopDepositPoll(); closeOverlay(); if (STATE) renderAll(); }
+function cancelDepositStatus(){ stopDepositPoll(); releasePayOrb(); closeOverlay(); if (STATE) renderAll(); }
 function copyDepositRef(){ copyText($('depStatusRef').textContent, 'Reference copied'); }
 // The clipboard may be missing (an old browser, an insecure address): say so instead of claiming it worked.
 function copyText(text, okMsg){
@@ -1573,13 +1606,8 @@ async function doWithdraw(){
   var sett = getSettings();
   var amt = parseMoney($('witAmt').value);
   if (!amt) { toast('Enter a valid amount'); shakeVibrate($('witAmt')); return; }
-  // The minimum is checked first, as the server does, so the suggestions below can never be amounts under it. The server checks every rule again.
+  // The server checks every rule again; these checks only save the member a round trip.
   if (amt < sett.minWithdraw) { toast('Minimum cash-out is ' + ugx(sett.minWithdraw)); shakeVibrate($('witAmt'), $('witGoBtn')); return; }
-  var mult = Math.max(0, Math.floor(Number(sett.withdrawMultiple) || 0));
-  if (mult > 0 && amt % mult !== 0) {
-    var low = Math.floor(amt / mult) * mult, high = low + mult;
-    toast('Cash-out must be a multiple of ' + ugx(mult) + '. Try ' + ugx(low || high) + ' or ' + ugx(high) + '.'); shakeVibrate($('witAmt')); return;
-  }
   if (amt > STATE.balance) { toast('Insufficient balance'); shakeVibrate($('witAmt'), $('witGoBtn')); return; }
   var card = selectedBank();
   if (!card) { toast('Bind a mobile-money account first'); goBindBank(true); return; }

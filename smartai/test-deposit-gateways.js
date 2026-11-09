@@ -10,7 +10,6 @@ const origResolve = Module._resolveFilename;
 Module._resolveFilename = function (req, ...a) { return req === 'mongodb' ? path.join(root, 'test-helpers', 'fake-mongodb.js') : origResolve.call(this, req, ...a); };
 const PORT = 3700 + Math.floor(Math.random() * 90);
 process.env.PORT = String(PORT); process.env.MONGODB_URI = 'mongodb://fake/smartai'; process.env.ADMIN_KEY = 'e2e-admin-key-123456'; process.env.NODE_ENV = 'development';
-const cap = require('./captcha.js'); const realVerify = cap.verify; cap.verify = (id, code) => code === '0000' ? true : realVerify(id, code);
 const realLog = console.log; console.log = () => {}; console.warn = () => {}; const realErr = console.error; console.error = () => {};
 require('./server.js');
 const base = 'http://127.0.0.1:' + PORT;
@@ -18,7 +17,7 @@ const J = async (m, p, b, tok, adm) => { const r = await fetch(base + p, { metho
 let fails = 0, n = 0; const ok = (c, m, x) => { n++; if (!c) { fails++; realLog('FAIL', m, x ? JSON.stringify(x).slice(0, 260) : ''); } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ph = () => '07' + String(70000000 + Math.floor(Math.random() * 9999999)).padStart(8, '0').slice(-8);
-async function member() { const c = await J('GET', '/auth/captcha'); const su = await J('POST', '/auth/signup', { phone: ph(), password: 'secret12', captchaId: c.j.id, captchaCode: '0000' }); await J('POST', '/register', { pin: '123456', referralCode: '' }, su.j.token); return { tok: su.j.token, uid: su.j.uid }; }
+async function member() { const su = await J('POST', '/auth/signup', { phone: ph(), password: 'secret12' }); await J('POST', '/register', { pin: '123456', referralCode: '' }, su.j.token); return { tok: su.j.token, uid: su.j.uid }; }
 const deps = () => [...fm.__stores.pendingDeposits.values()];
 (async () => {
   for (let i = 0; i < 60; i++) { try { const h = await fetch(base + '/health'); if (h.ok) break; } catch (_) {} await sleep(250); }

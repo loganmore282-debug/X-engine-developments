@@ -8,8 +8,8 @@ The owner's words: "Another one called smart ai"; for the base **"ChocoMCC's loo
 layouts: **"We are using chocomcc not potato, I didn't tell you to use potato"**. ChocoMCC itself is the older app in `choco-mcc/` (branch
 `claude/voltra-session-continue-mk95gw`); its chocolate-brand products, Firebase login and Render hosting are NOT brought over. Potato's history of rules and
 reasons (for the SERVER and ADMIN) is in the inherited notes below and in `docs/SODA-LOG.md`: read the "Money-safety" parts before touching payment, payout or
-withdrawal code. The notes below about Potato's member screens (`pt*` functions, `.pt-*` CSS, `design-ref/` pictures, "v4xx" caches) describe an app Smart AI no
-longer has: skip them.
+withdrawal code. The notes below about Potato's member screens (`pt*` functions, `.pt-*` CSS, "v4xx" caches) describe an app Smart AI no
+longer has: skip them (the `design-ref/` pictures they mention were deleted).
 
 **THE RULE FOR SMART AI (owner, twice: "We are using chocomcc not potato" and "I was specifically saying to use only things of chocomcc, not to introduce anything
 without my consent"): the member app contains ONLY what ChocoMCC's app has.** No page, tile, button, dialog, notice, setting or admin control from Potato, Mint or
@@ -30,17 +30,15 @@ SVG icons, exact match to his screenshots, everything configurable from admin, a
 files or run quick-update.sh by hand: a push to `claude/smartai-build` deploys by itself through the GitHub webhook.**
 
 ## Where things are (all under `smartai/`)
-- `server.js` (backend, MongoDB only), `db.js`, `captcha.js`, `session-policy.js`, `service-account.js`, `totp.js` (only the ADMIN login's optional 6-digit code uses it)
+- `server.js` (backend, MongoDB only), `db.js`, `security-guard.js`, `session-policy.js`, `service-account.js`, `totp.js` (only the ADMIN login's optional 6-digit code uses it)
 - `user-src/` (member app) -> `node build-core.js` -> `user/`;  `admin-src/index.html` -> `node build-admin.js` -> `admin/`
 - Always rebuild after editing `-src`, bump the cache names (`user/sw.js` `smartai-shell-vN`, `admin/sw.js` `smartai-admin-shell-vN`), run
   `npm run test:audit` (wait for exit 0, run it in the background and read the `EXIT` line; the chain stops at the first failing test), commit, push
   to **`claude/smartai-build`**. `npm install --include=dev` for the dev tools.
 - `node set-brand.js "Name"` renames the app everywhere again (files must be git-tracked).
-- **Only `npm run test:audit` counts.** Sixteen older test files in this folder are NOT in it and fail exactly the same way in Potato (they look for files and names of
-  older apps: `render.yaml`, Kenya regions, Snow branding, `GIFTCODE_UPPER` ...): test-activity-feed-region, test-allowed-origins, test-banner-video-upload,
-  test-banner-video-url, test-brand-assets, test-brand-manifest, test-code-security, test-cors-origins, test-gateway-regions, test-manual-review,
-  test-manualpay-matches-snow, test-no-snow-branding, test-product-config, test-product-legacy-key-route, test-regions, test-security-hardening.
-  Checked on 2026-11-09 (Smart AI and Potato: all sixteen exit 1). Leftovers, not regressions: do not "fix" them and do not trust them.
+- **`npm run test:audit` is the whole suite** (74 commands). The sixteen old test files of other apps that failed the same way
+  in Potato (Kenya regions, Snow branding, `render.yaml`, ...) were deleted on 2026-11-09 together with `design-ref/` (Potato's screen pictures, 9.6 MB), `static-server.js`,
+  `set-backend-url.js`, `deploy/deploy.sh` (an old rsync deploy to `/srv/smartai`, not the VPS layout), `translate-*` and `captcha.js`: nothing used them.
 - The app icons (`user/` and `admin/` `icon-192.png`, `icon-512.png`) and `user/link-preview.jpg` are PLACEHOLDERS (blue "SA" ring) until the owner sends the logo.
 
 ## Hosting (same Hostinger VPS as Soda, Mint, Cookie, Potato and Chocolate, completely separate)
@@ -81,12 +79,15 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
    new admin path `N85d57j4`, placeholder icons.
 2. (done) **Member app rebuilt as ChocoMCC's pages in blue and white** (see the next section). `npm run test:audit` passes.
    (done, owner's order) Google Authenticator, Messages, Order Gifts, the app reward and the Security hub were taken OUT (server routes, admin tab / switches / inputs, app, tests); ChocoMCC's two UGX coin pictures are back on the Me page.
-3. (open, owner) **ChocoMCC's starting numbers as the defaults** (asked, not answered yet): minimum top-up and cash-out UGX 5,000, welcome gift UGX 7,000, commissions
-   27% / 2% / 1%, cash-out fee 15%, 2 cash-outs a day, ChocoMCC's product list (he adds products himself in the admin). Today the server still has Potato's numbers
-   (`DEFAULT_SETTINGS`); everything is editable in Admin > Settings, nothing is hard-coded in the app.
+3. (done, owner: "Yes all should be for chocomcc", 2026-11-09) **ChocoMCC's starting numbers are the defaults**: minimum top-up and cash-out UGX 5,000, welcome gift UGX 7,000,
+   commissions 27% / 2% / 1%, cash-out fee 15%, 2 cash-outs a day, daily check-in UGX 250 (`DEFAULT_SETTINGS` in `server.js`, the app's own fallback in `original_module.js`, the admin
+   boxes' fallbacks; guarded by `test-smartai-ui.js`). Everything stays editable in Admin > Settings. A value the admin has ever SAVED wins over the default, so a database
+   that was set up before this change keeps its old numbers until they are saved again. Products are NOT ChocoMCC's list: the owner adds them himself in the admin.
 4. (done, owner, 2026-11-09) Atlas user + connection string, VPS first-setup (`/srv/smartai-src`, pm2 `smartai-server`), IP preview on port 8100, GitHub webhook: the ping answers 200
    (green), so every push to `claude/smartai-build` now deploys by itself. (open, owner) the domain (`deploy/set-domain.sh`), the real logo (the app icons are placeholders: a
    blue "SA" ring), the payment-company keys.
+5. (done, owner's order, 2026-11-09) **Start-up animation** and **payment animation** from his two GIFs, **no browser dialog on Sign Out**, and **a clean-out of old Potato
+   leftovers in the admin panel and the server** (see the three sections that follow the member-app section).
 
 ## Member app = ChocoMCC's pages, blue and white, the owner's icons (rebuilt from scratch on Smart AI's server)
 - **Files.** `user-src/index.html` (markup + CSS + the sign-in script + the loader script) and `user-src/original_module.js` (about 2,100 lines, classic script,
@@ -123,7 +124,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v5`, admin `admin/sw.js` `smartai-admin-shell-v4`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v6`, admin `admin/sw.js` `smartai-admin-shell-v5`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -144,6 +145,38 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
 # does NOT have any more (taken out on the owner's order, see the rule at the top). Their server/admin/test files are deleted. Everything about money, payouts, gateways, deposits,
 # sessions, the admin panel and speed still applies.
 # Inherited notes (Potato's history up to the copy; "Potato" in them means Smart AI here, and Potato-only names such as `claude/potato-build` or port 3004 are Smart AI's `claude/smartai-build` and 3006)
+
+## Start-up animation (the owner's first GIF) and payment animation (his second GIF)
+Both are the owner's own GIFs (800 x 600, 100 frames), played by code from sprite sheets that `tools/make-anim-sprites.py` cuts out of them (the GIFs are not in git;
+the sheets are): `python3 tools/make-anim-sprites.py <start-up.gif> <payment.gif>` (needs Pillow, numpy, opencv; it prints the background stops for the loader).
+- **Start-up loader** = the `<script data-smartai-loader>` at the top of `user-src/index.html` drawing on `#ldCanvas`; the screen is dark (`#loadingScreen`), nothing else on it
+  (no name, no bar, no percentage; the admin's "Loading screen box picture" is gone). The GIF's measured facts: 25 frames a second, 100 frames = a 4 s loop; the **sphere**
+  (radius 92.5 px, centre = the picture's centre) is played from `user/anim/loader-sphere.webp` (10 x 10 sheet of 192 px frames, de-noised, cross-faded between frames);
+  the **teal wedge** (pie behind the sphere, radius ~128, 54 degrees: hard front edge, tail fading over 30 degrees, colour 23,198,204) turns clockwise 3.6 degrees a frame;
+  **36 dots** every 10 degrees on a ring of radius 128.73 centred 1.37 px right / 1.11 px below the sphere, the lit stretch (6 dots, full inside 12 degrees of its middle,
+  gone at 31.5) starts at 35 degrees and turns the OTHER way at the same speed; **71 sparkles** (1 px, pale cyan/white) sit in the ring between radius 96 and 129.5, 25 to 78
+  degrees behind the wedge's front edge, each living 1 to 4 frames; **a burst of 365 sparkles** flies out of the sphere in frames 34 to 47; the **background** is a circular
+  gradient (the `PLATE` stops, measured on the median of all frames: the dark band 94-107, the glow band 108-125, then fading to 0,10,14). Until the sheet has arrived a 96 px
+  copy of frame 0 (`POSTER`, inline) stands in. The page head preloads the sheet. Scale: 0.72 of the screen's short side over 273 px, between 0.7 and 1.25. The app keeps
+  `LOADER_MIN_MS = 2500`; `hideLoadingScreen()` is the only way out. Hooks: `_smartaiLoaderStart`, `_smartaiLoaderRestart`, tests use `_smartaiLoaderDraw(frame)` (draws and freezes
+  the loop) and `_smartaiLoaderScale` (1 = one css pixel per GIF pixel: then the canvas can be compared with the GIF frame by frame; mean difference 6/255 inside the sphere,
+  4 on the rings, 0.6 outside). `test-loader.js` reads pixels back (wedge, dots, sphere, burst) in a real browser.
+- **Payment animation** = `showPayOrb()` / `payOrbFrame()` in `original_module.js`: a 116 px dark rounded tile on the Add Funds status page in place of the old phone picture,
+  playing `user/anim/pay-orb.webp` (100 frames of 224 px, 20 ms each = the GIF's 2 s loop, no blending). The tick still replaces it when the payment is confirmed
+  (`showDepositSuccess`). The sheet is fetched when the Add Funds page opens (`preloadPayOrb`). Guarded in `test-smartai-app.js` (step 7b).
+- **No dialog of the browser's own anywhere in the member app** (owner: "remove ugly things saying ... says sign-out, let it just sign-out"): Sign Out calls `logout()` at
+  once. `test-smartai-ui.js` fails on any `confirm(` / `alert(` / `prompt(` in the app. (The ADMIN panel keeps its confirm boxes: they guard money actions.)
+
+## Admin panel and server: what was cleaned out (owner: "residues in admin panel like banners old codes for potato ... make sure they are end to end formed")
+Rule: every control in the admin panel must reach the server AND show in the member app (or in the server's own behaviour). Checked by comparing the admin's `api()` calls with
+the server's routes (none missing, none unused), the settings with their readers, and the picture slots with what `_syncArtwork()` / `paintArt()` read. Removed, with their
+server code, tests and wording: picture slots `logo` (Brand logo), `banner2` / `banner3` (Home slides 2 and 3: the app shows one Home picture), `aboutlogo`, `loaderbg`
+(+ `/public/loader-image`), the My page banner's opacity and blur (`myBannerOpacity`, `myBannerBlur`: the app never read them), the sign-up captcha (`captcha.js`, `/auth/captcha`,
+`signupCaptcha`: off since the owner's screens have none), the withdrawal "multiple of" rule (`withdrawMultiple`, no admin control, always 0) and the never-set `maxWithdraw`, the
+legacy image-document migration, the `slides` / `banner1` fallbacks of the Home picture. Wording fixed to what the Smart AI app really has: "Rewards page banner" (slot
+`promobanner`), "Team page banner", "Me page banner", "Task Center tiers", "Gift code box words", "Gateways used in turn" (the deposit rotation names are labels only: members
+never see them), "treasure code" -> "gift code". What the Banners tab keeps: Home banner (+ its words under Settings), Icons (17), Rewards / Team / Me / About banners, Profile logo,
+Log In banner and circle logo, Welcome announcement, Link preview (Telegram), App icon.
 
 ## Status (Potato, inherited)
 1. (done) Copied from Mint, renamed to Potato, ports 3004/8096/8097, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path.

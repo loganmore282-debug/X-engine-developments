@@ -1,6 +1,6 @@
 'use strict';
 // END-TO-END: runs the REAL server.js (in this process, against an in-memory stand-in for MongoDB) and drives it over HTTP like the app does:
-// sign-up with the captcha, registration with a referral code typed in lower case, an unknown referral code, login, first-purchase commission,
+// sign-up, registration with a referral code typed in lower case, an unknown referral code, login, first-purchase commission,
 // daily cashback paid at 00:00, buyers-only and open treasure codes and the wrong-key lock, the admin Plans analytics, a
 // withdrawal request and its refusals, and 40 simultaneous registrations (every account id and referral code different).
 const path = require('path'), Module = require('module');
@@ -10,8 +10,6 @@ const origResolve = Module._resolveFilename;
 Module._resolveFilename = function (req, ...a) { return req === 'mongodb' ? path.join(root, 'test-helpers', 'fake-mongodb.js') : origResolve.call(this, req, ...a); };
 const PORT = 3900 + Math.floor(Math.random() * 90);
 process.env.PORT = String(PORT); process.env.MONGODB_URI = 'mongodb://fake/smartai'; process.env.ADMIN_KEY = 'e2e-admin-key-123456'; process.env.NODE_ENV = 'development';
-// The captcha picture's answer never leaves the server, so this test run accepts 0000 (the real check is covered by test-captcha.js).
-const cap = require('./captcha.js'); const realVerify = cap.verify; cap.verify = (id, code) => code === '0000' ? true : realVerify(id, code);
 const realLog = console.log; console.log = () => {}; const realWarn = console.warn; console.warn = () => {};
 require('./server.js');
 const base = 'http://127.0.0.1:' + PORT;
@@ -19,7 +17,7 @@ const J = async (m, p, b, tok, adm) => { const r = await fetch(base + p, { metho
 let fails = 0; const ok = (c, m, x) => { if (!c) { fails++; realLog('FAIL', m, x ? JSON.stringify(x).slice(0, 260) : ''); } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ph = () => '07' + String(70000000 + Math.floor(Math.random() * 9999999)).padStart(8, '0').slice(-8);
-async function member(pass, pin, ref) { const cap = await J('GET', '/auth/captcha'); const su = await J('POST', '/auth/signup', { phone: ph(), password: pass, captchaId: cap.j.id, captchaCode: '0000' }); const reg = await J('POST', '/register', { pin, referralCode: ref || '' }, su.j.token); return { tok: su.j.token, reg: reg.j, uid: su.j.uid }; }
+async function member(pass, pin, ref) { const su = await J('POST', '/auth/signup', { phone: ph(), password: pass }); const reg = await J('POST', '/register', { pin, referralCode: ref || '' }, su.j.token); return { tok: su.j.token, reg: reg.j, uid: su.j.uid }; }
 (async () => {
   for (let i = 0; i < 60; i++) { try { const h = await fetch(base + '/health'); if (h.ok) break; } catch (_) {} await sleep(250); }
   await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 500000 } }, null, true);

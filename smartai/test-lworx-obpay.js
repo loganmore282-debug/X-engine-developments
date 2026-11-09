@@ -13,7 +13,6 @@ Object.assign(process.env, { PORT: String(PORT), MONGODB_URI: 'mongodb://fake/sm
   LWORXPAY_API_KEY: 'lw_key_123', LWORXPAY_CALLBACK_URL: 'https://hook.example/h-abc/lworxpay', LWORXPAY_READ_GAP_MS: '0',
   OBPAY_SECRET_KEY: 'sk_live_abc', OBPAY_WEBHOOK_SECRET: 'whsec_test', OBPAY_CALLBACK_URL: 'https://hook.example/h-abc/obpay', OBPAY_READ_GAP_MS: '0', GATEWAY_WATCH_MS: '400' });
 const LW_SECRET = crypto.createHmac('sha256', 'lw_key_123').update('smartai-lworxpay-callback').digest('hex');
-const cap = require('./captcha.js'); const realVerify = cap.verify; cap.verify = (id, code) => code === '0000' ? true : realVerify(id, code);
 
 const calls = []; let script = () => null;
 const realRequest = https.request;
@@ -38,7 +37,7 @@ const J = async (m, p, b, tok, adm) => { const r = await fetch(base + p, { metho
 let fails = 0, n = 0; const ok = (c, m, x) => { n++; if (!c) { fails++; realLog('FAIL', m, x ? JSON.stringify(x).slice(0, 300) : ''); } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ph = () => '07' + String(70000000 + Math.floor(Math.random() * 9999999)).padStart(8, '0').slice(-8);
-async function member() { const c = await J('GET', '/auth/captcha'); const su = await J('POST', '/auth/signup', { phone: ph(), password: 'secret12', captchaId: c.j.id, captchaCode: '0000' }); await J('POST', '/register', { pin: '123456', referralCode: '' }, su.j.token); return { tok: su.j.token, uid: su.j.uid }; }
+async function member() { const su = await J('POST', '/auth/signup', { phone: ph(), password: 'secret12' }); await J('POST', '/register', { pin: '123456', referralCode: '' }, su.j.token); return { tok: su.j.token, uid: su.j.uid }; }
 const wallet = uid => fm.__stores.users.get(uid).walletBalance;
 const depOf = uid => [...fm.__stores.pendingDeposits.entries()].filter(([, d]) => d.userId === uid).map(([id, d]) => ({ id, ...d })).pop();
 async function deposit(m, slot, amount = 30000) { const r = await J('POST', '/deposit/marzpay', { amount, slot }, m.tok); await sleep(300); return r; }

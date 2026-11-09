@@ -405,7 +405,7 @@ async function copyText(str, btn, msg){
 function spinnerHtml(){ return '<div class="ld-text">Loading...</div>'; }
 function btnBusyHtml(text){ return '<span class="verify-spin" style="margin-right:7px;vertical-align:-3px"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>'+esc(text); }
 // Every money amount elsewhere is always a whole shilling -- only a
-// treasure-code reward can ever carry cents (Round 137's randomized rewards),
+// gift-code reward can ever carry cents (Round 137's randomized rewards),
 // so this only shows decimals on a value that actually has them, and
 // everything else keeps its old, clean whole-number look with no changes
 // needed at any individual call site. Mirrors server.js's own fmtUGX().
@@ -1113,7 +1113,7 @@ async function refreshBadges(){
 // Refresh (or worse, reload the page) to see current data -- but it must
 // never look or feel like a reload while doing it. Two guards keep this
 // from ever clobbering something the admin is mid-typing: modalOpen()
-// (edit dialogs live in the modal, e.g. products/treasure codes) and
+// (edit dialogs live in the modal, e.g. products/gift codes) and
 // contentHasFocus() (a plain input sitting right on the tab itself, e.g.
 // Settings' rate fields or the Admins tab's "create admin" form) -- a tick
 // that would touch either just skips silently and tries again next cycle.
@@ -1159,7 +1159,7 @@ function withTabBusy(promise) {
   const safety = setTimeout(finish, 45000);
   return Promise.resolve(promise).finally(() => { clearTimeout(safety); finish(); });
 }
-// Settings, Treasure Codes and Admins are forms: a refresh every 30 s wiped what the owner was typing (once the keyboard closed and no field had focus), so they are not live tabs.
+// Settings, Gift Codes and Admins are forms: a refresh every 30 s wiped what the owner was typing (once the keyboard closed and no field had focus), so they are not live tabs.
 const LIVE_TABS=new Set(['dashboard','analytics','users','deposits','withdrawals','products','transactions','referrals','auditlog']);
 // The list-style tabs (Users, Deposits, Withdrawals, Transactions,
 // Referrals) get their OWN quiet*() function here instead of the full
@@ -1441,7 +1441,7 @@ async function renderAnalytics(silent){
       'No accounts repeatedly trying to withdraw more than their balance.');
     const giftcodeRows = rowsOr(ab.giftcodeGuessing,
       r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td><td>${(r.samples||[]).map(esc).join(', ')}</td>${lastCol(r)}</tr>`,
-      'No accounts trying treasure codes that don\'t exist.');
+      'No accounts trying gift codes that don\'t exist.');
     return `
     <div class="row" style="align-items:center;margin:18px 0 6px"><h2 class="sec" style="flex:1;margin:0">Suspicious activity (${ab.period}-day, ${ab.minCount}+ to appear)</h2></div>
     <p class="muted" style="margin:0 0 10px">Owner-only. Patterns worth a look, not automatic accusations -- a slow connection or a genuine mistake can also produce a repeat or two.</p>
@@ -1529,7 +1529,7 @@ async function renderAnalytics(silent){
       </div><p class="muted">Open requests can complete, fail or be cancelled; no completion date is guaranteed. Cashback due and withdrawal requests are separate figures and must not be added as a prediction of today's withdrawals. All withdrawal amounts shown are net payouts.</p>
     </div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Withdrawals to be processed today</h2>
-      <p class="muted">Follows your withdrawal rules (Settings): ${wt.rules.needProduct?'a member must have bought a product, ':''}minimum ${ugx(wt.rules.min)}${wt.rules.multiple?', multiples of '+ugx(wt.rules.multiple):''}${wt.rules.max?', at most '+ugx(wt.rules.max)+' each':''}, fee ${wt.rules.feePct||0}%, ${wt.rules.perDay?wt.rules.perDay+' withdrawal'+(wt.rules.perDay===1?'':'s')+' a day':'no daily limit'}, one unpaid request at a time${wt.rules.hours?', open '+esc(wt.rules.hours):''}. Banned members and unrestricted members are handled as the server handles them.</p>
+      <p class="muted">Follows your withdrawal rules (Settings): ${wt.rules.needProduct?'a member must have bought a product, ':''}minimum ${ugx(wt.rules.min)}, fee ${wt.rules.feePct||0}%, ${wt.rules.perDay?wt.rules.perDay+' withdrawal'+(wt.rules.perDay===1?'':'s')+' a day':'no daily limit'}, one unpaid request at a time${wt.rules.hours?', open '+esc(wt.rules.hours):''}. Banned members and unrestricted members are handled as the server handles them.</p>
       <div class="cards">
         <div class="stat"><div class="n">${ugx(wt.waiting.net)}</div><div class="l">Requests waiting to be paid today, net (${wt.waiting.count||0})</div></div>
         <div class="stat"><div class="n">${ugx(wt.canDo.net)}</div><div class="l">Most that could still be requested today, net payout (${wt.canDo.count||0} members)</div></div>
@@ -2006,7 +2006,7 @@ async function openUser(uid){
   // Owner: "money/unknown money is continuing to pile up... a very bad
   // bug bro." Root cause traced to a genuinely misleading label, not a
   // money bug: "Cashback earned" (totalEarned) is actually cashback PLUS
-  // referral commission PLUS checkin/treasure-code/Task-Center/Mission-Center
+  // referral commission PLUS checkin/gift-code/Task-Center
   // bonuses all folded into one number, shown directly above a SEPARATE
   // "Team commission" line that looks like an independent pool of money
   // stacking on top of it -- it's actually already counted INSIDE it. A
@@ -2237,7 +2237,7 @@ async function openUser(uid){
     if(d.status==='success'){ closeModal(); } else { b.disabled=false; b.textContent=lbl; }
   });
   $('delBtn')?.addEventListener('click', async()=>{
-    const typed = prompt(`This PERMANENTLY deletes ${u.phone}'s login and personal data (bound withdrawal accounts, treasure-code history, security log, any unmatched pending deposit). Their investments, transactions and withdrawals are KEPT as financial records, orphaned from any login. This cannot be undone.\n\nType DELETE to confirm:`);
+    const typed = prompt(`This PERMANENTLY deletes ${u.phone}'s login and personal data (bound withdrawal accounts, gift-code history, security log, any unmatched pending deposit). Their investments, transactions and withdrawals are KEPT as financial records, orphaned from any login. This cannot be undone.\n\nType DELETE to confirm:`);
     if (typed === null) return;
     if (typed.trim() !== 'DELETE') return toast('Not deleted, you must type DELETE exactly','err');
     const b=$('delBtn'); b.disabled=true; b.textContent='Deleting…';
@@ -2834,7 +2834,7 @@ async function renderPromoCodes(){
     }
     if(failMsg) toast(failMsg,'err');
   });
-  document.querySelectorAll('[data-off]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Deactivate this treasure code? It can no longer be redeemed once deactivated.')) return; const d=await api('/admin/promocodes/deactivate',{id:b.dataset.off}); toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderPromoCodes(); }));
+  document.querySelectorAll('[data-off]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Deactivate this gift code? It can no longer be redeemed once deactivated.')) return; const d=await api('/admin/promocodes/deactivate',{id:b.dataset.off}); toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderPromoCodes(); }));
   wireCopyButtons();
   function wireCopyButtons(){
     document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>copyText(b.dataset.copy,b));
@@ -3091,33 +3091,18 @@ async function renderBanners(){
   const authHeroImage = cir.authhero||'';
   const authLogoImage = cir.authlogo||'';
   const linkPreviewImage = cir.linkpreview||'';
-  const homeSlide2Image = cir.banner2||'';
-  const homeSlide3Image = cir.banner3||'';
   const promoBannerImage = cir.promobanner||'';
-  const logoImage = cir.logo||'';
   const profileLogoImage = cir.profilelogo||'';
-  const loaderBgImage = cir.loaderbg||'';
-  const teamBannerImage = cir.teambanner||'', myBannerImage = cir.mybanner||'', aboutBannerImage = cir.aboutbanner||'', aboutLogoImage = cir.aboutlogo||'';
+  const teamBannerImage = cir.teambanner||'', myBannerImage = cir.mybanner||'', aboutBannerImage = cir.aboutbanner||'';
   const aboutHtmlRes = await api('/admin/about-html'); if (aboutHtmlRes.status!=='success'){ loadFailed(aboutHtmlRes,'the About page'); return; }   // an empty box here would blank the page on Save
   const aboutHtmlText = aboutHtmlRes.html||'';
   const announcementImage = (annr && annr.image) || '';
   const appIconImage = bar.appIcon||'';
   const appIconCustom = !!bar.appIconCustom;
   $('content').innerHTML = `
-    <h2 class="sec">Brand logo</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">The app's own logo picture (used as the Login circle logo when no circle logo is uploaded). Square, about 800&times;800. It is saved exactly as you upload it.</p>
-      <div class="banner-row">
-        ${logoImage?`<img class="img-thumb" src="${esc(logoImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px">${logoImage?'Custom image':'<span class="muted">Not set</span>'}</div>
-        ${logoImage?'<button class="btn danger sm" id="brandLogoClear">Remove</button>':''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="brandLogoFile" accept="image/*" hidden></label>
-    </div>
-
     <h2 class="sec">Home banner</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Home tab's top banner &mdash; slide 1 of up to 5 (the other slides are below). Wide, about 1200&times;600.</p>
+      <p class="muted" style="margin-top:0">The picture at the top of the Home tab. Wide, about 1200&times;600. The title and line of words over it are set under Settings &rarr; Home banner words.</p>
       <div class="banner-row">
         ${bannerImage?`<img class="img-thumb" src="${esc(bannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${bannerImage?'Custom image':'<span class="muted">Default artwork</span>'}</div>
@@ -3126,28 +3111,9 @@ async function renderBanners(){
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="homeBannerFile" accept="image/*" hidden></label>
     </div>
 
-    <h2 class="sec">Home banner &middot; slides 2 and 3</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">More slides for the Home banner. Members swipe through them (and they change by themselves every few seconds); the dots at the bottom right show how many there are. Same size as slide 1 (wide, about 1200&times;600). A slide with no picture is skipped.</p>
-      <div style="font-weight:700;margin:0px 0 6px">Slide 2</div>
-      <div class="banner-row">
-        ${homeSlide2Image?`<img class="img-thumb" src="${esc(homeSlide2Image)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${homeSlide2Image?'Custom image':'<span class="muted">Not set &mdash; slide skipped</span>'}</div>
-        ${homeSlide2Image?`<button class="btn danger sm" id="homeSlide2Clear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload slide 2 image<input type="file" id="homeSlide2File" accept="image/*" hidden></label>
-      <div style="font-weight:700;margin:14px 0 6px">Slide 3</div>
-      <div class="banner-row">
-        ${homeSlide3Image?`<img class="img-thumb" src="${esc(homeSlide3Image)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${homeSlide3Image?'Custom image':'<span class="muted">Not set &mdash; slide skipped</span>'}</div>
-        ${homeSlide3Image?`<button class="btn danger sm" id="homeSlide3Clear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload slide 3 image<input type="file" id="homeSlide3File" accept="image/*" hidden></label>
-    </div>
-
     <h2 class="sec">Icons &middot; background removed automatically</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Upload a picture on any background. The panel takes the background away, trims the picture to its edges and saves it as a transparent PNG; the app then places it with no box around it. Until you upload one, the app shows the built-in blue picture of that slot (Remove brings it back). The pictures below move in the app exactly as in your screen recordings. Best results: the icon on a plain or softly shaded background, at least 256&times;256.</p>
+      <p class="muted" style="margin-top:0">Upload a picture on any background. The panel takes the background away, trims the picture to its edges and saves it as a transparent PNG; the app then places it with no box around it. Until you upload one, the app shows the built-in blue picture of that slot (Remove brings it back). Best results: the icon on a plain or softly shaded background, at least 256&times;256.</p>
       ${Object.keys(SMARTAI_ICON_LABELS).map(k=>`
       <div style="font-weight:700;margin:14px 0 6px">${esc(SMARTAI_ICON_LABELS[k])}</div>
       <div class="banner-row">
@@ -3158,12 +3124,12 @@ async function renderBanners(){
       <label class="btn block file-btn" style="margin-top:10px">Upload ${esc(SMARTAI_ICON_LABELS[k].toLowerCase())}<input type="file" id="iconFile_${k}" accept="image/*" hidden></label>`).join('')}
     </div>
 
-    <h2 class="sec">Share page banner</h2>
+    <h2 class="sec">Rewards page banner</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The picture at the top of the Share tab (above Share URL). Wide, about 1200&times;600. Without one, Home slide 1 is used.</p>
+      <p class="muted" style="margin-top:0">The picture at the top of the Rewards tab, above the daily check-in. Wide, about 1200&times;600. Without one, the blue gift picture shows.</p>
       <div class="banner-row">
         ${promoBannerImage?`<img class="img-thumb" src="${esc(promoBannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${promoBannerImage?'Custom image':'<span class="muted">Not set &mdash; uses Home slide 1</span>'}</div>
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${promoBannerImage?'Custom image':'<span class="muted">Not set &mdash; the blue gift picture shows</span>'}</div>
         ${promoBannerImage?`<button class="btn danger sm" id="promoBannerClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="promoBannerFile" accept="image/*" hidden></label>
@@ -3183,7 +3149,7 @@ async function renderBanners(){
 
     <h2 class="sec">Profile logo</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The round picture on every member's My page. Square, about 400&times;400.</p>
+      <p class="muted" style="margin-top:0">The round picture on every member's Me tab. Square, about 400&times;400.</p>
       <div class="banner-row">
         ${profileLogoImage?`<img class="img-thumb" src="${esc(profileLogoImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${profileLogoImage?'Custom image':'<span class="muted">Not set &mdash; a plain person icon shows</span>'}</div>
@@ -3192,9 +3158,9 @@ async function renderBanners(){
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="profileLogoFile" accept="image/*" hidden></label>
     </div>
 
-    <h2 class="sec">Myteam page banner</h2>
+    <h2 class="sec">Team page banner</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The picture at the top of the Myteam tab, behind the Team Count and Total Commission card. About 1000&times;560.</p>
+      <p class="muted" style="margin-top:0">The picture at the top of the Team tab. About 1000&times;560. Without one, the blue picture shows.</p>
       <div class="banner-row">
         ${teamBannerImage?`<img class="img-thumb" src="${esc(teamBannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${teamBannerImage?'Custom image':'<span class="muted">Not set</span>'}</div>
@@ -3203,25 +3169,20 @@ async function renderBanners(){
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="teamBannerFile" accept="image/*" hidden></label>
     </div>
 
-    <h2 class="sec">My page banner</h2>
+    <h2 class="sec">Me page banner</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The picture behind the phone number and the Balance card on the My tab. About 1000&times;560. The two numbers below fade and blur it.</p>
+      <p class="muted" style="margin-top:0">The picture at the top of the Me tab, behind the round picture and the phone number. About 1000&times;560. Without one, the blue picture shows.</p>
       <div class="banner-row">
         ${myBannerImage?`<img class="img-thumb" src="${esc(myBannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${myBannerImage?'Custom image':'<span class="muted">Not set</span>'}</div>
         ${myBannerImage?`<button class="btn danger sm" id="myBannerClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="myBannerFile" accept="image/*" hidden></label>
-      <div class="row" style="margin-top:10px">
-        <div><label>Opacity (0&ndash;100%)</label><input id="myBannerOp" type="number" min="0" max="100" value="${esc(v('myBannerOpacity',100))}"></div>
-        <div><label>Blur (0&ndash;40 px)</label><input id="myBannerBlur" type="number" min="0" max="40" value="${esc(v('myBannerBlur',0))}"></div>
-      </div>
-      <button class="btn block" id="saveMyBanner" style="margin-top:14px">Save My page banner look</button>
     </div>
 
     <h2 class="sec">About page</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Banner at the top and the round picture over its bottom edge. Everything under them is the HTML you paste below (scripts and frames are removed when it is saved).</p>
+      <p class="muted" style="margin-top:0">The banner at the top. Everything under it is the HTML you paste below (scripts and frames are removed when it is saved).</p>
       <div style="font-weight:700;margin:6px 0">Banner</div>
       <div class="banner-row">
         ${aboutBannerImage?`<img class="img-thumb" src="${esc(aboutBannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
@@ -3229,27 +3190,9 @@ async function renderBanners(){
         ${aboutBannerImage?`<button class="btn danger sm" id="aboutBannerClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="aboutBannerFile" accept="image/*" hidden></label>
-      <div style="font-weight:700;margin:14px 0 6px">Round picture</div>
-      <div class="banner-row">
-        ${aboutLogoImage?`<img class="img-thumb" src="${esc(aboutLogoImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${aboutLogoImage?'Custom image':'<span class="muted">Not set</span>'}</div>
-        ${aboutLogoImage?`<button class="btn danger sm" id="aboutLogoClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="aboutLogoFile" accept="image/*" hidden></label>
       <label style="margin-top:14px">Page content (HTML)</label>
       <textarea id="aboutHtmlInput" rows="12" style="width:100%;font-family:monospace;font-size:12px" placeholder="&lt;div&gt;...&lt;/div&gt;">${esc(aboutHtmlText)}</textarea>
       <button class="btn block" id="saveAboutHtml" style="margin-top:10px">Save About page content</button>
-    </div>
-
-    <h2 class="sec">Loading screen box picture</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">The square picture in the middle of the red start-up screen, above the app name and the loading bar. The app rounds its corners by itself. Square, about 600&times;600. Without one, the box is left empty.</p>
-      <div class="banner-row">
-        ${loaderBgImage?`<img class="img-thumb" src="${esc(loaderBgImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${loaderBgImage?'Custom image':'<span class="muted">Not set</span>'}</div>
-        ${loaderBgImage?`<button class="btn danger sm" id="loaderBgClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="loaderBgFile" accept="image/*" hidden></label>
     </div>
 
     <h2 class="sec">Link preview (Telegram)</h2>
@@ -3270,10 +3213,10 @@ async function renderBanners(){
 
     <h2 class="sec">Login &amp; Sign Up circle logo</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The round picture with the yellow ring above the Log In and Sign Up forms. Square, about 400&times;400 (it is cropped to a circle). Without one, the app logo is used.</p>
+      <p class="muted" style="margin-top:0">The round picture above the Log In and Sign Up forms. Square, about 400&times;400 (it is cropped to a circle). Without one, the blue robot picture shows.</p>
       <div class="banner-row">
         ${authLogoImage?`<img class="img-thumb" src="${esc(authLogoImage)}" style="border-radius:50%;aspect-ratio:1;object-fit:cover" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;border-radius:50%;aspect-ratio:1"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${authLogoImage?'Custom image':'<span class="muted">App logo</span>'}</div>
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${authLogoImage?'Custom image':'<span class="muted">Blue robot picture</span>'}</div>
         ${authLogoImage?`<button class="btn danger sm" id="authLogoClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload circle logo<input type="file" id="authLogoFile" accept="image/*" hidden></label>
@@ -3281,10 +3224,10 @@ async function renderBanners(){
 
     <h2 class="sec">Login &amp; Sign Up banner</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The banner photo at the top of Log In and Sign Up (it fades into the form). Wide, about 1200&times;600.</p>
+      <p class="muted" style="margin-top:0">The banner picture at the top of Log In and Sign Up. Wide, about 1200&times;600. Without one, the blue picture shows.</p>
       <div class="banner-row">
         ${authHeroImage?`<img class="img-thumb" src="${esc(authHeroImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${authHeroImage?'Custom image':'<span class="muted">Brand gradient</span>'}</div>
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${authHeroImage?'Custom image':'<span class="muted">Blue picture</span>'}</div>
         ${authHeroImage?`<button class="btn danger sm" id="authHeroClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload background image<input type="file" id="authHeroFile" accept="image/*" hidden></label>
@@ -3326,7 +3269,7 @@ function wireBannerHandlers(){
       if (d.status==='success') renderBanners();
     })());
   });
-  // The two Smart AI-only slots share one endpoint pair, so they share one
+  // The picture slots share one endpoint pair, so they share one
   // wiring helper rather than repeating the upload/clear pair per slot.
   function wireSmartAIImageSlot(slot, fileId, clearId, savedMsg, clearedMsg){
     const file = $(fileId);
@@ -3337,12 +3280,10 @@ function wireBannerHandlers(){
           toast('Uploading…','ok');
           // The auth backdrop fills a large area, so it keeps more
           // resolution than the banners.
-          const maxDim = slot==='logo' ? 800
-                       : slot==='loaderbg' ? 1080
-                       : slot==='authhero' ? 1600
+          const maxDim = slot==='authhero' ? 1600
                        : slot==='authlogo' ? 480
                        : 1280;
-          const image = slot==='linkpreview' ? await fileToWideDataUrl(f, 1200, 630, 0.85) : await fileToDataUrl(f, maxDim, slot==='loaderbg' ? 0.7 : 0.82);
+          const image = slot==='linkpreview' ? await fileToWideDataUrl(f, 1200, 630, 0.85) : await fileToDataUrl(f, maxDim, 0.82);
           const d = await api('/admin/smartai-image/set', { slot, image });
           toast(d.status==='success'?savedMsg:(d.message||'Failed'), d.status==='success'?'ok':'err');
           if (d.status==='success') renderBanners();
@@ -3414,9 +3355,7 @@ function wireBannerHandlers(){
     const d = await api('/admin/settings/update', { settings: { linkPreviewTitle: $('lpTitle').value, linkPreviewText: $('lpText').value } });
     toast(d.status==='success'?'Link preview words saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
-  wireSmartAIImageSlot('banner2', 'homeSlide2File', 'homeSlide2Clear', 'Slide 2 saved, live on Home', 'Slide 2 removed');
-  wireSmartAIImageSlot('banner3', 'homeSlide3File', 'homeSlide3Clear', 'Slide 3 saved, live on Home', 'Slide 3 removed');
-  wireSmartAIImageSlot('promobanner', 'promoBannerFile', 'promoBannerClear', 'Share banner saved', 'Share banner removed');
+  wireSmartAIImageSlot('promobanner', 'promoBannerFile', 'promoBannerClear', 'Rewards banner saved', 'Rewards banner removed');
   const annImageFile = $('annImageFile');
   if (annImageFile) annImageFile.addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
@@ -3438,27 +3377,16 @@ function wireBannerHandlers(){
       if (d.status==='success') renderBanners();
     })());
   });
-  wireSmartAIImageSlot('teambanner', 'teamBannerFile', 'teamBannerClear', 'Myteam banner saved', 'Myteam banner removed');
-  wireSmartAIImageSlot('mybanner', 'myBannerFile', 'myBannerClear', 'My page banner saved', 'My page banner removed');
+  wireSmartAIImageSlot('teambanner', 'teamBannerFile', 'teamBannerClear', 'Team banner saved', 'Team banner removed');
+  wireSmartAIImageSlot('mybanner', 'myBannerFile', 'myBannerClear', 'Me page banner saved', 'Me page banner removed');
   wireSmartAIImageSlot('aboutbanner', 'aboutBannerFile', 'aboutBannerClear', 'About banner saved', 'About banner removed');
-  wireSmartAIImageSlot('aboutlogo', 'aboutLogoFile', 'aboutLogoClear', 'About round picture saved', 'About round picture removed');
-  const saveMyBanner = $('saveMyBanner');
-  if (saveMyBanner) saveMyBanner.addEventListener('click', async()=>{
-    const op = +$('myBannerOp').value, bl = +$('myBannerBlur').value;
-    if (!Number.isFinite(op) || op<0 || op>100) return toast('Opacity must be between 0 and 100','err');
-    if (!Number.isFinite(bl) || bl<0 || bl>40) return toast('Blur must be between 0 and 40','err');
-    const d = await api('/admin/settings/update', { settings:{ myBannerOpacity:op, myBannerBlur:bl } });
-    toast(d.status==='success'?'My page banner look saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
   const saveAboutHtml = $('saveAboutHtml');
   if (saveAboutHtml) saveAboutHtml.addEventListener('click', async()=>{
     const d = await api('/admin/about-html/set', { html: $('aboutHtmlInput').value });
     toast(d.status==='success'?'About page content saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
     if (d.status==='success') $('aboutHtmlInput').value = d.html;
   });
-  wireSmartAIImageSlot('loaderbg', 'loaderBgFile', 'loaderBgClear', 'Loading screen picture saved', 'Loading screen picture removed');
   wireSmartAIImageSlot('profilelogo', 'profileLogoFile', 'profileLogoClear', 'Profile logo saved, live for every member', 'Profile logo removed');
-  wireSmartAIImageSlot('logo', 'brandLogoFile', 'brandLogoClear', 'Brand logo saved', 'Brand logo removed');
 }
 // "Opens at" is typed in the REGION's time (Uganda by default), whatever time zone the admin's own browser is in; the server judges it the same way.
 var REGION_OFF_MIN = 180;
@@ -3481,13 +3409,13 @@ async function renderSettings(){
     <h2 class="sec">Rates &amp; limits${ADMIN_REGIONS.length > 1 ? ' &middot; ' + esc(regionByKeyAdmin().name) : ''}</h2>
     <div class="panel-card">
       <div class="row">
-        <div><label>Min recharge</label><input id="sMinDep" type="number" value="${v('minDeposit',30000)}"></div>
-        <div><label>Min withdraw</label><input id="sMinWit" type="number" value="${v('minWithdraw',8000)}"></div>
-        <div><label>Welcome bonus</label><input id="sWelcome" type="number" value="${v('welcomeBonus',5000)}"></div>
+        <div><label>Min recharge</label><input id="sMinDep" type="number" value="${v('minDeposit',5000)}"></div>
+        <div><label>Min withdraw</label><input id="sMinWit" type="number" value="${v('minWithdraw',5000)}"></div>
+        <div><label>Welcome bonus</label><input id="sWelcome" type="number" value="${v('welcomeBonus',7000)}"></div>
       </div>
       <div class="row" style="margin-top:6px">
         <div><label>Withdraw fee (%)</label><input id="sFee" type="number" step="1" value="${v('withdrawFeePct',15)}"></div>
-        <div><label>L1 commission (%)</label><input id="sC1" type="number" step="1" value="${v('commL1',25)}"></div>
+        <div><label>L1 commission (%)</label><input id="sC1" type="number" step="1" value="${v('commL1',27)}"></div>
         <div><label>L2 commission (%)</label><input id="sC2" type="number" step="1" value="${v('commL2',2)}"></div>
         <div><label>L3 commission (%)</label><input id="sC3" type="number" step="1" value="${v('commL3',1)}"></div>
       </div>
@@ -3545,11 +3473,11 @@ async function renderSettings(){
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodObpay" value="obpay" ${v('withdrawMethod','follow')==='obpay'?'checked':''} style="width:auto"> Always automatic (ObPay sends payouts)</label>
       <label style="width:auto;display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodRotate" value="rotate" ${v('withdrawMethod','follow')==='rotate'?'checked':''} style="width:auto;margin-top:3px"> <span><b>All gateways in turn</b> (PesaJet, TavuPay, ObPay). Each withdrawal goes to the next gateway so all three are used evenly. If one refuses, the next one is tried at once.</span></label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="witMethod" id="witMethodManual" value="manual" ${v('withdrawMethod','follow')==='manual'?'checked':''} style="width:auto"> Always manual (you send payouts by hand)</label>
-      <h2 class="sec" style="margin:16px 0 4px">Deposit page buttons</h2>
-      <p class="muted" style="margin:0 0 8px">The names under the amount on the Deposit page, separated by commas; each shows after the app name (for example Smart AI Pay-A). Which button is already selected when the page opens is NOT fixed: the server picks them in turn for every visit, so every method is used equally. Up to 6.</p>
+      <h2 class="sec" style="margin:16px 0 4px">Gateways used in turn</h2>
+      <p class="muted" style="margin:0 0 8px">One name for each gateway you want in the rotation, separated by commas (up to 6). The server hands the names out in turn, one for every new top-up, so every gateway below is used equally. Members never see these names (they only choose MTN or Airtel); they are labels for you.</p>
       <input id="depNamesInput" maxlength="100" value="${esc(String(v('depositMethodNames','Pay-B, Pay-A, Pay-D, Pay-C')).replace(/\*/g,''))}" placeholder="Pay-B, Pay-A, Pay-D, Pay-C">
-      <h2 class="sec" style="margin:16px 0 4px">Gateway behind each button</h2>
-      <p class="muted" style="margin:0 0 8px">Pick which payment gateway each button above uses. <b>Rotate</b> moves every button's gateway to the next button (the last one wraps to the first); nothing is saved until you press Save payment method.</p>
+      <h2 class="sec" style="margin:16px 0 4px">Gateway for each name</h2>
+      <p class="muted" style="margin:0 0 8px">Pick which payment gateway each name above uses. <b>Rotate</b> moves every name's gateway to the next name (the last one wraps to the first); nothing is saved until you press Save payment method.</p>
       <div id="depGwRows"></div>
       <button class="btn sm" id="depGwRotate" type="button" style="margin-top:6px">Rotate gateways</button>
       <h2 class="sec" style="margin:16px 0 4px">LworxPay collection</h2>
@@ -3557,10 +3485,10 @@ async function renderSettings(){
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:4px;"><input type="radio" name="lworxMode" value="standard" ${v('lworxCollect','standard')!=='stanbic'?'checked':''} style="width:auto"> Standard (/collect, member pays 4% extra)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="lworxMode" value="stanbic" ${v('lworxCollect','standard')==='stanbic'?'checked':''} style="width:auto"> Stanbic (/collect-stanbic, free for the member)</label>
       <h2 class="sec" style="margin:16px 0 4px">Share message</h2>
-      <p class="muted" style="margin:0 0 8px">The words that go with the invite link when a member taps WhatsApp or Telegram on the Share page. Write {app} where the app's name should appear. The link is added after your words.</p>
+      <p class="muted" style="margin:0 0 8px">The words that go with the invite link when a member taps Share on the Team tab. Write {app} where the app's name should appear. The link is added after your words.</p>
       <input id="shareMsgInput" maxlength="200" value="${esc(v('shareMessage','Join me on {app}'))}" placeholder="Join me on {app}">
-      <h2 class="sec" style="margin:16px 0 4px">Gift Code page hint</h2>
-      <p class="muted" style="margin:0 0 8px">The grey words inside the code box on the Gift Code page.</p>
+      <h2 class="sec" style="margin:16px 0 4px">Gift code box words</h2>
+      <p class="muted" style="margin:0 0 8px">The grey words inside the gift code box on the Rewards tab.</p>
       <input id="giftHintInput" maxlength="40" value="${esc(v('giftCodeHint','Enter gift code (T-XXXX)'))}" placeholder="Enter gift code (T-XXXX)">
       <h2 class="sec" style="margin:16px 0 4px">Home banner words</h2>
       <p class="muted" style="margin:0 0 8px">A short title and a line of text laid over the Home banner picture. Leave both empty to show the picture alone.</p>
@@ -3585,11 +3513,11 @@ async function renderSettings(){
       <button class="btn block" id="saveSupport">Save support contacts</button>
     </div>
 
-    <h2 class="sec">Reward tiers</h2>
+    <h2 class="sec">Task Center tiers</h2>
     <div class="panel-card" id="taskCard">
-      <p class="muted" style="margin-top:0">The Reward tab on Myteam. A member's team total (everything levels 1 to 3 have bought) decides which tiers are reached. Each reached tier can be claimed ONCE per member, for good: its button then reads Claimed and never comes back. Changing the numbers of a tier never lets a member claim it again.</p>
+      <p class="muted" style="margin-top:0">The Task Center on the Rewards tab. A member's team total (everything levels 1 to 3 have bought) decides which tiers are reached. Each reached tier can be claimed ONCE per member, for good: its button then reads Claimed and never comes back. Changing the numbers of a tier never lets a member claim it again.</p>
       <div id="taskEditor" class="muted">Loading...</div>
-      <button class="btn block" id="saveTasks" style="margin-top:12px" disabled>Save reward tiers</button>
+      <button class="btn block" id="saveTasks" style="margin-top:12px" disabled>Save Task Center tiers</button>
     </div>
 
     <h2 class="sec">App name</h2>
@@ -3680,7 +3608,7 @@ async function renderSettings(){
     const upd = { supportTelegram:$('spTg').value.trim(), telegramGroup:$('spTgGroup').value.trim(), telegramChannel:$('spTgChannel').value.trim(), whatsappGroup:$('spWaGroup').value.trim(), whatsappContact:$('spWaContact').value.trim(), supportHours:$('spHours').value.trim(), rulesText:$('spRules').value };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
-  // ── Reward tiers editor: one table of team total / one-time reward, each row keeps its id so edits never re-pay a claimed tier ──
+  // ── Task Center tiers editor: one table of team total / one-time reward, each row keeps its id so edits never re-pay a claimed tier ──
   const taskRowHtml=(r)=>`<div class="task-row" data-id="${esc(r.id||'')}" style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
       <input type="number" min="1" step="1" class="tk-target" value="${r.target||''}" placeholder="Team total" style="flex:1;margin:0">
       <input type="number" min="1" step="1" class="tk-reward" value="${r.reward||''}" placeholder="Reward" style="flex:1;margin:0">
@@ -3699,7 +3627,7 @@ async function renderSettings(){
     .map(r=>({ id:r.id, target:Number(r.target), reward:Number(r.reward) }));
   api('/admin/salary').then(d=>{
     const box=$('taskEditor'); if(!box) return;
-    if(d.status!=='success'){ box.textContent=d.message||'Could not load the reward tiers'; return; }
+    if(d.status!=='success'){ box.textContent=d.message||'Could not load the Task Center tiers'; return; }
     box.classList.remove('muted');
     box.innerHTML=taskTableHtml(d.tiers||[]);
     box.querySelectorAll('.task-table').forEach(wireTaskTable);
@@ -3709,7 +3637,7 @@ async function renderSettings(){
     const b=$('saveTasks'); if(b.disabled) return; b.disabled=true;
     const d=await api('/admin/salary/save',{ tiers:readTaskTable() });
     b.disabled=false;
-    toast(d.status==='success'?'Reward tiers saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    toast(d.status==='success'?'Task Center tiers saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success'){ const box=$('taskEditor'); box.innerHTML=taskTableHtml(d.tiers); box.querySelectorAll('.task-table').forEach(wireTaskTable); }
   });
   $('saveBrandName').addEventListener('click', async()=>{

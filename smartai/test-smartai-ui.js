@@ -100,6 +100,26 @@ ok(money(1234.5) === 'UGX 1,234.50' && money(null) === 'UGX 0' && money('abc') =
 ok(/function toast\(msg\)\{[\s\S]*?setTimeout\(function\(\)\{ bg\.classList\.remove\('show'\); \}, 2600\)/.test(mod), 'a notice closes by itself after 2.6 seconds');
 ok(/\.toast-bg\{[^}]*pointer-events:none/.test(html) && !/\.toast-bg\.show[^{]*\{[^}]*pointer-events:(?:auto|all)/.test(html), 'and never blocks a tap on the page behind it');
 
+// ---- no dialog of the browser's own ("179.198.197.114:8100 says Sign out?") ----
+{
+  const stripJs = js => js.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/[^\n]*/g, '$1').replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g, "''");
+  const dialogCall = /(^|[^.\w$])(?:confirm|alert|prompt)\s*\(/;
+  const attrJs = [...html.matchAll(/\son[a-z]+="([^"]*)"/g)].map(m => m[1].replace(/'(?:[^'\\]|\\.)*'/g, "''")).join('\n');
+  ok(dialogCall.test('if(confirm(\'x\')) go()') && dialogCall.test(stripJs('var a = 1; alert(a);')), 'the check below can see a confirm( or alert( call');
+  ok(!dialogCall.test(stripJs(mod)) && !dialogCall.test(stripJs(scripts)) && !dialogCall.test(attrJs), 'the app never opens the browser\'s own confirm / alert / prompt box: every question or message is the app\'s own');
+  ok(/<button class="menu-tile" onclick="logout\(\)"><div class="menu-tile-ic pic"><img src="\/icons\/signout\.webp"/.test(html), 'Sign Out on the Me page signs out at once, with no question');
+}
+// ---- ChocoMCC's starting numbers (owner: "all should be for chocomcc"), the same on the server, in the app and in the admin panel ----
+{
+  const srvText = fs.readFileSync(__dirname + '/server.js', 'utf8'), adm = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
+  const sd = srvText.match(/const DEFAULT_SETTINGS = \{[\s\S]*?withdrawFeePct: (\d+), minWithdraw: (\d+), minDeposit: (\d+),\s*welcomeBonus: (\d+), commL1: (\d+), commL2: (\d+), commL3: (\d+),/);
+  ok(sd && sd.slice(1).join(',') === '15,5000,5000,7000,27,2,1', 'the server starts with fee 15%, minimum UGX 5,000 to top up and to cash out, welcome UGX 7,000 and commissions 27 / 2 / 1 % (' + (sd && sd.slice(1).join(',')) + ')');
+  ok(/maxWithdrawalsPerDay: 2,/.test(srvText) && /dailyCheckin: 250,/.test(srvText), 'two cash-outs a day and a daily check-in of UGX 250');
+  const cd = mod.match(/var DEFAULT_SETTINGS = \{\s*withdrawFeePct: (\d+), minWithdraw: (\d+), minDeposit: (\d+), welcomeBonus: (\d+),\s*commL1: (\d+), commL2: (\d+), commL3: (\d+), dailyCheckin: (\d+), maxWithdrawalsPerDay: (\d+)/);
+  ok(cd && cd.slice(1).join(',') === '15,5000,5000,7000,27,2,1,250,2', 'the app\'s own fallback is the same (' + (cd && cd.slice(1).join(',')) + ')');
+  ok(/v\('minDeposit',5000\)/.test(adm) && /v\('minWithdraw',5000\)/.test(adm) && /v\('welcomeBonus',7000\)/.test(adm) && /v\('commL1',27\)/.test(adm) && /v\('maxWithdrawalsPerDay',2\)/.test(adm), 'and so are the admin panel\'s boxes');
+}
+
 // ---- shell, name, cache ----
 const sw = fs.readFileSync(__dirname + '/user/sw.js', 'utf8'), manifest = JSON.parse(fs.readFileSync(__dirname + '/user/manifest.json', 'utf8'));
 ok(/const CACHE = 'smartai-shell-v\d+'/.test(sw), 'the service worker has its own cache name');

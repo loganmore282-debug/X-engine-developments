@@ -258,7 +258,7 @@ function run(state, body) {
 
 function fresh(extra = {}) {
   return {
-    settings: { minWithdraw: 5000, withdrawFeePct: 15, withdrawMultiple: 5000,
+    settings: { minWithdraw: 5000, withdrawFeePct: 15,
                 requireInvestToWithdraw: false, maxWithdrawalsPerDay: 0,
                 withdrawWindowEnabled: false, ...(extra.settings || {}) },
     user: { walletBalance: 100000, totalInvested: 50000, status: 'active' },

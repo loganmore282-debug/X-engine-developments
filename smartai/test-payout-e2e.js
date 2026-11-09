@@ -11,7 +11,6 @@ const origResolve = Module._resolveFilename;
 Module._resolveFilename = function (req, ...a) { return req === 'mongodb' ? path.join(root, 'test-helpers', 'fake-mongodb.js') : origResolve.call(this, req, ...a); };
 const PORT = 3400 + Math.floor(Math.random() * 90);
 Object.assign(process.env, { PORT: String(PORT), MONGODB_URI: 'mongodb://fake/smartai', ADMIN_KEY: 'po-admin-key-123456', NODE_ENV: 'development', PESAJET_API_KEY: 'pj-key', TAVUPAY_API_KEY: 'tv-key', TAVUPAY_API_SECRET: 'tv-secret', OBPAY_SECRET_KEY: 'ob-key' });
-const cap = require('./captcha.js'); const realVerify = cap.verify; cap.verify = (id, code) => code === '0000' ? true : realVerify(id, code);
 const realLog = console.log; console.log = () => {}; console.warn = () => {};
 const serverErrors = []; console.error = (...a) => { serverErrors.push(a.map(x => (x && x.message) || String(x)).join(' ').slice(0, 200)); };
 // ---- the gateways' side of the world. mode[gateway][withdrawalId] = 'accept' (default) | 'refuse' | 'lost'; status[gateway][theirId] = their word ----
@@ -69,8 +68,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 let fails = 0, n = 0; const ok = (c, m, x) => { n++; if (!c) { fails++; realLog('FAIL', m, x ? JSON.stringify(x).slice(0, 320) : ''); } };
 let phoneN = 0;
 async function member() {
-  const c = await J('GET', '/auth/captcha'); const phone = '07712' + String(30000 + (++phoneN) * 7);
-  const su = await J('POST', '/auth/signup', { phone, password: 'secret12', captchaId: c.j.id, captchaCode: '0000' });
+  const phone = '07712' + String(30000 + (++phoneN) * 7);
+  const su = await J('POST', '/auth/signup', { phone, password: 'secret12' });
   await J('POST', '/register', { pin: '123456', referralCode: '' }, su.j.token);
   const prods = (await J('GET', '/public/products')).j.products.filter(p => p.price > 0).sort((a, b) => a.price - b.price);
   await J('POST', '/invest/create', { tierKey: prods[0].key }, su.j.token);

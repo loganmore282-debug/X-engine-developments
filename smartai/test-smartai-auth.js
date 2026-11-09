@@ -41,14 +41,14 @@ const userByPhone = phone => [...fm.__stores.users.values()].find(u => String(u.
 
 (async () => {
   for (let i = 0; i < 60; i++) { try { const h = await fetch(base + '/health'); if (h.ok) break; } catch (_) {} await sleep(250); }
-  await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 7000, signupCaptcha: false } }, null, true);
+  await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 7000 } }, null, true);
   await new Promise(r => front.listen(FRONT, '127.0.0.1', r));
   const { chromium } = require('playwright'); const browser = await chromium.launch();
   const url = 'http://127.0.0.1:' + FRONT + '/';
   const errs = [];
   async function fresh(hash) {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
-    await ctx.addInitScript(() => { window._smartaiLoaderMinMs = 0; window._smartaiLoaderReadyMs = 0; });
+    await ctx.addInitScript(() => { window._smartaiLoaderMinMs = 0; });
     const page = await ctx.newPage();
     page.on('pageerror', e => errs.push('pageerror: ' + String(e.message || e).slice(0, 200)));
     page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource|net::ERR|Content Security Policy|Function\(/.test(m.text())) errs.push('console: ' + m.text().slice(0, 200)); });

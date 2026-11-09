@@ -49,7 +49,7 @@ async function member(ref) {
   await new Promise(r => front.listen(FRONT, '127.0.0.1', r));
   const { chromium } = require('playwright'); const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
-  await ctx.addInitScript(() => { window._smartaiLoaderMinMs = 0; window._smartaiLoaderReadyMs = 0; });
+  await ctx.addInitScript(() => { window._smartaiLoaderMinMs = 0; });
   const page = await ctx.newPage(); const errs = [];
   page.on('pageerror', e => errs.push('pageerror: ' + String(e.message || e).slice(0, 200)));
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource|net::ERR|Content Security Policy|Function\(/.test(m.text())) errs.push('console: ' + m.text().slice(0, 200)); });
@@ -188,6 +188,18 @@ async function member(ref) {
   const dr = await J('GET', '/deposits', null, MEtok);
   ok(dr.s === 200 && Array.isArray(dr.j.deposits), '/deposits answers');
 
+  // ---- 7b. the payment page plays the owner's second animation in place of the old phone picture; the tick comes back once it is paid ----
+  await ev(() => preloadPayOrb()); ok(await until(() => _payOrbOk === true, null, 8000), 'the orb\'s sheet (anim/pay-orb.webp) loads');
+  await ev(() => openDepositStatus('dep-anim-test', 'S2611090000000001', '0771234567')); await sleep(700);
+  const orb = await ev(() => { const ic = document.getElementById('depStatusIc'), cv = document.getElementById('payOrbCv'); return { cls: ic.className, canvas: !!cv, px: cv ? cv.width : 0, css: ic.getBoundingClientRect().width, phone: /<rect x="7" y="2"/.test(ic.innerHTML) }; });
+  ok(orb.cls === 'pay-status-ic orb' && orb.canvas && orb.px >= 116 && Math.round(orb.css) === 116 && !orb.phone, 'while a payment is being checked the page shows the animated orb (116 px), not the phone picture: ' + JSON.stringify(orb));
+  const shots = []; for (let i = 0; i < 5; i++) { shots.push(await ev(() => document.getElementById('payOrbCv').toDataURL())); await sleep(130); }
+  ok(new Set(shots).size >= 3 && shots.every(u => u.length > 3000), 'the orb is moving (the canvas changes from one look to the next)');
+  await ev(() => showDepositSuccess()); await sleep(200);
+  ok(await ev(() => document.getElementById('depStatusIc').className === 'pay-status-ic' && !document.getElementById('payOrbCv') && /M5 12\.5l4\.5 4\.5L19 7/.test(document.getElementById('depStatusIc').innerHTML)), 'once the payment is confirmed the orb gives way to the green tick');
+  ok(await ev(() => _payOrbRaf === 0), 'and the animation stops running');
+  await ev(() => { stopDepositPoll(); closeOverlay(); }); await sleep(200);
+
   // ---- 8. the Me page is ChocoMCC's: its tiles, its two UGX coins, its Security page, and nothing that is not in ChocoMCC ----
   await ev(() => switchTab('account')); await sleep(600);
   const tiles = await ev(() => [...document.querySelectorAll('#viewAccount .menu-tile-lbl')].map(e => e.textContent.trim()));
@@ -214,6 +226,8 @@ async function member(ref) {
   await ev(() => closeOverlay());
   await ev(() => openOverlay('taskcenter')); await sleep(1500);
   ok(await ev(() => document.querySelectorAll('#taskCenterList .tk-card').length) === 2 && await ev(() => document.querySelectorAll('#taskCenterList .tk-pill.is-ready').length) === 1, 'Task Center shows both tiers and the reached one can be claimed');
+  // (the downline member's purchase above paid this member a commission on the server; the phone only learns of it at its next refresh, so refresh first)
+  await ev(async () => { await refreshFromServer(); renderAll(); });
   const bT = await ev(() => STATE.balance);
   await page.click('#taskCenterList .tk-pill.is-ready'); await sleep(1800);
   ok(await ev(() => STATE.balance) === bT + 1500 && await ev(() => document.querySelectorAll('#taskCenterList .tk-pill.is-done').length) === 1, 'claiming pays the tier once and it reads Claimed');

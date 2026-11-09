@@ -85,13 +85,10 @@ async function member() {
   r = await J('POST', '/admin/about-html/set', { html: '<p>x</p>' }); ok(r.s === 401, 'only the owner can change it');
 
   // ---- settings
-  r = await J('POST', '/admin/settings/update', { settings: { myBannerOpacity: 140 } }, null, true); ok(r.j.status === 'error', 'an opacity above 100 is refused', r.j);
-  r = await J('POST', '/admin/settings/update', { settings: { myBannerBlur: 99 } }, null, true); ok(r.j.status === 'error', 'a blur above 40 is refused', r.j);
-  r = await J('POST', '/admin/settings/update', { settings: { depositMethodNames: ' Pay-A, <b>Pay-B</b>,, Pay-C,Pay-D,Pay-E,Pay-F,Pay-G ', myBannerOpacity: 60, myBannerBlur: 12 } }, null, true);
+  r = await J('POST', '/admin/settings/update', { settings: { depositMethodNames: ' Pay-A, <b>Pay-B</b>,, Pay-C,Pay-D,Pay-E,Pay-F,Pay-G ' } }, null, true);
   ok(r.j.status === 'success', 'settings saved', r.j);
   const st = (await J('GET', '/public/settings')).j.settings || {};
   ok(typeof st.depositMethodNames === 'string' && st.depositMethodNames.split(', ').length === 6 && !/[<>]/.test(st.depositMethodNames), 'deposit buttons: at most six names, no markup', st.depositMethodNames);
-  ok(st.myBannerOpacity === 60 && st.myBannerBlur === 12, 'My banner opacity and blur are saved and public', [st.myBannerOpacity, st.myBannerBlur]);
   r = await J('POST', '/admin/settings/update', { settings: { depositMethodNames: ' , ' } }, null, true);
   ok(((await J('GET', '/public/settings')).j.settings || {}).depositMethodNames === 'Pay-B, Pay-A, Pay-D, Pay-C', 'an empty list falls back to the default four buttons');
   await J('POST', '/admin/settings/update', { settings: { giftCodeHint: '  Type the <b>code</b> ' } }, null, true);

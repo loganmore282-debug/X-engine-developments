@@ -31,15 +31,14 @@ function makeEnv() {
     where: (f, o, v) => ({ limit() { return this; }, get: async () => { const rows = [...store[col]].filter(([, r]) => r[f] === v);
       return { empty: !rows.length, docs: rows.map(([id, r]) => ({ id, data: () => clone(r), ref: docRef(col, id) })) }; } }) }) };
   const handlers = {}; const app = { use() {}, post: (p, ...a) => { handlers[p] = a[a.length - 1]; }, get: (p, ...a) => { handlers[p] = a[a.length - 1]; } };
-  const captcha = { verify: (id, code) => id === 'cid' && code === '1234', issue: () => ({ id: 'cid', image: 'data:image/svg+xml;base64,AA==', code: '1234' }) };
   const lim = () => (q, s, n) => n();
   let failStore = false;
   const dbProxy = new Proxy(db, { get: (t, k) => k === 'collection' ? col => { if (failStore && col === 'memberSessions') throw new Error('mongo down'); return t.collection(col); } : t[k] });
-  const fn = new Function('textOf', 'passwordOf', 'memberLoginIpGuard', 'app', 'db', 'crypto', 'sessionPolicy', 'FieldValue', 'cleanPhone', 'badPhoneMessage', 'tsMillis', 'rateLimit', 'console', 'captcha',
-    'const _lockTails = new Map();\nconst getSettings = async () => ({ signupCaptcha: globalThis.__capOn === true });\n' + helpSrc + '\n' + hashSrc.replace("const _loginFails", "") + '\n' + lockSrc + '\n' + authSrc + '\n' + loginSrc + '\nreturn { _decodeAuth, verifyAuth, verifyAuthWithEmail, setMemberPassword, deleteMemberLogin, findAccountByUid };')
+  const fn = new Function('textOf', 'passwordOf', 'memberLoginIpGuard', 'app', 'db', 'crypto', 'sessionPolicy', 'FieldValue', 'cleanPhone', 'badPhoneMessage', 'tsMillis', 'rateLimit', 'console',
+    'const _lockTails = new Map();\nconst getSettings = async () => ({});\n' + helpSrc + '\n' + hashSrc.replace("const _loginFails", "") + '\n' + lockSrc + '\n' + authSrc + '\n' + loginSrc + '\nreturn { _decodeAuth, verifyAuth, verifyAuthWithEmail, setMemberPassword, deleteMemberLogin, findAccountByUid };')
     (v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''), v => typeof v === 'string' ? v : '', { locked: () => false, fail() {}, clear() {} }, app, dbProxy, crypto, sessionPolicy, { serverTimestamp: () => new Date(), delete: () => DEL }, p => { const d = String(p || '').replace(/\D/g, ''); return d.length === 10 ? d : ''; }, () => 'bad phone',
-      v => v instanceof Date ? v.getTime() : Number(v) || 0, lim, { error() {}, warn: (...m) => warnings.push(m.join(' ')) }, captcha);
-  const call = async (path, body, headers = {}) => { if (path === '/auth/signup' && body && !('captchaId' in body)) body = Object.assign({ captchaId: 'cid', captchaCode: '1234' }, body);
+      v => v instanceof Date ? v.getTime() : Number(v) || 0, lim, { error() {}, warn: (...m) => warnings.push(m.join(' ')) });
+  const call = async (path, body, headers = {}) => {
     const res = { code: 200, body: null, set() { return this; }, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; } };
     await handlers[path]({ body, headers, path, ip: '1.1.1.1' }, res); return res; };
   return { store, call, fn, setFail: v => { failStore = v; } };
@@ -59,16 +58,6 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
   r = await E.call('/auth/signup', { phone: '0770000009', password: 'five5' }); eq([r.code, r.body.code], [400, 'WEAK_PASSWORD'], 'five characters are refused (minimum is 6)'); eq(r.body.message, 'Password must be at least 6 characters.');
   r = await E.call('/auth/signup', { phone: '0770000019', password: 'six6xy' }); eq(r.code, 200, 'six characters are accepted');
   for (const [i, easy] of ['123456', 'password', 'qwerty', '111111', '0770000001'].entries()) { const rr = await E.call('/auth/signup', { phone: '07700001' + String(20 + i), password: easy }); ok(rr.code === 200, 'any password of 6 or more is accepted, even a common one: ' + easy); }
-  // the captcha (only when the setting `signupCaptcha` is on; Smart AI's Create Account has none): asked first, wrong or missing answers are refused and never create an account
-  globalThis.__capOn = true;
-  r = await E.call('/auth/signup', { phone: '0770000031', password: 'secret1secret1', captchaId: 'cid', captchaCode: '' }); eq([r.code, r.body.code], [400, 'CAPTCHA_REQUIRED']);
-  r = await E.call('/auth/signup', { phone: '0770000031', password: 'secret1secret1', captchaId: 'cid', captchaCode: '9999' }); eq([r.code, r.body.code], [400, 'BAD_CAPTCHA']);
-  r = await E.call('/auth/signup', { phone: '0770000031', password: 'secret1secret1', captchaId: 'zzz', captchaCode: '1234' }); eq([r.code, r.body.code], [400, 'BAD_CAPTCHA']);
-  r = await E.call('/auth/signup', { phone: '0770000031', password: 'secret1secret1', captchaId: { $ne: 1 }, captchaCode: { $ne: 1 } }); eq([r.code, r.body.code], [400, 'CAPTCHA_REQUIRED']);
-  ok(![...E.store.authAccounts].some(([, a]) => a.phone && String(a.phone).endsWith('770000031')), 'a failed captcha creates no account');
-  globalThis.__capOn = false;
-  { const plain = await E.call('/auth/signup', { phone: '0770000041', password: 'secret1secret1', captchaId: 'zzz', captchaCode: '' }); eq(plain.code, 200, 'with the setting off, no captcha is asked for'); }
-  r = await E.call('/auth/captcha', {}); ok(r.body.status === 'success' && r.body.id && /^data:image\/svg\+xml/.test(r.body.image), 'GET /auth/captcha hands out a picture');
   r = await E.call('/auth/signup', { phone: '0770000009', password: 'ten1234567' }); eq(r.code, 200, 'ten characters are accepted');
   r = await E.call('/auth/signup', { phone: '0770000009', password: 'x'.repeat(129) }); eq(r.code, 400, 'over-long password');
   for (const odd of [{ $gt: '' }, ['abcdefghijk1'], 1234567890123, true]) { r = await E.call('/auth/signup', { phone: '0770000009', password: odd }); eq(r.code, 400, 'a password that is not text is refused: ' + JSON.stringify(odd)); }

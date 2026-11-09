@@ -64,6 +64,5 @@ ok(/async function inChunks\(/.test(server) && /Promise\.allSettled\(\[\s*reconc
   ok(!/smartai_bad_ua/.test(hostBlock.slice(0, hostBlock.indexOf('location / { return 404; }'))), 'the webhook-only host has no user-agent wall'); }
 ok(/return 308 https:/.test(rd('deploy/update-vps.sh')), 'update-vps.sh turns certbot\'s 301 into 308 so a POST callback keeps its body when it is redirected');
 ok(/maxretry = 3/.test(rd('deploy/fail2ban/smartai.local').slice(rd('deploy/fail2ban/smartai.local').indexOf('[smartai-badua]'), rd('deploy/fail2ban/smartai.local').indexOf('[smartai-adminlogin]'))), 'one odd sender name no longer bans an address for a day');
-ok(/const memberCaptchaLimiter = rateLimit\(\{ windowMs: 5 \* 60 \* 1000, max: 600/.test(server), 'the captcha limit allows a new picture on every Sign Up tap, even behind one carrier address');
 ok(!/capError|regCapErr|regCaptcha|captchaId/.test(mod + fs.readFileSync(__dirname + '/user-src/index.html', 'utf8')), 'Create Account has no captcha box or line (the owner\'s screens have none)');
 console.log(`PASS: bug sweep fixes (${n} checks)`);

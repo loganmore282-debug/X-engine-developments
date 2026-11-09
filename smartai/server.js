@@ -4,7 +4,6 @@ if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = String(Mat
 const sessionPolicy = require('./session-policy');
 const { createFailGuard } = require('./security-guard');
 const totp = require('./totp');
-const captcha = require('./captcha');
 const express     = require('express');
 const admin       = require('firebase-admin');
 const cors        = require('cors');
@@ -564,32 +563,18 @@ app.use(async (req, res, next) => {
 // ladder"). Admin panel overrides live in the settings/products collections;
 // these are only the boot fallback.
 const DEFAULT_SETTINGS = {
-  withdrawFeePct: 15, minWithdraw: 8000, minDeposit: 30000,
-  welcomeBonus: 5000, commL1: 25, commL2: 2, commL3: 1,
-  // Reward tiers (Myteam > Reward tab): the team's total purchases decide which tiers are reached; each reached tier is claimed ONCE, for good.
-  // Edited in the admin panel under Settings > Reward tiers. `id` stays with a row when its numbers are edited, so an edit can never
+  // ChocoMCC's own starting numbers (owner, 2026-11-09: "all should be for chocomcc"): top-up and cash-out minimum UGX 5,000, welcome gift UGX 7,000,
+  // commissions 27 % / 2 % / 1 %, cash-out fee 15 %, 2 cash-outs a day (maxWithdrawalsPerDay below), daily check-in 250. Everything stays editable in the admin.
+  withdrawFeePct: 15, minWithdraw: 5000, minDeposit: 5000,
+  welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1,
+  // Task Center tiers (Rewards tab > Task Center): the team's total purchases decide which tiers are reached; each reached tier is claimed ONCE, for good.
+  // Edited in the admin panel under Settings > Task Center tiers. `id` stays with a row when its numbers are edited, so an edit can never
   // let a member claim the same tier twice.
   salaryTiers: [
     { id: 's1', target: 500000, reward: 2000 }, { id: 's2', target: 1000000, reward: 4000 }, { id: 's3', target: 3000000, reward: 6000 },
     { id: 's4', target: 5000000, reward: 8000 }, { id: 's5', target: 10000000, reward: 10000 }, { id: 's6', target: 30000000, reward: 12000 },
     { id: 's7', target: 50000000, reward: 14000 },
   ],
-  // Not yet confirmed by the owner — a reasonable Snow-scaled default,
-  // admin-editable like every other rate here.
-  // Owner: "let the withdrawal multiple be set from admin, so default
-  // multiple should be 5000, ie one withdrawals 5000,10000,25000,30000,
-  // 35000 like that." Set to 0 to turn the rule off entirely and allow any
-  // amount above the minimum.
-  // Owner: "remove multiplier of with multiples of withdrawal settings" --
-  // 0 means any amount above the minimum is allowed (see the check at
-  // /withdraw/request). Admin control for this removed; left settable only
-  // by editing this default or writing to the setting directly.
-  withdrawMultiple: 0,
-  // Login / Sign Up backdrops: fully opaque and unblurred, so an
-  // uploaded image shows exactly as supplied until the owner dials it
-  // back. With no image set these do nothing at all.
-  // The My page banner (Admin > Banners > My page banner): 100 = as uploaded, 0 blur = sharp.
-  myBannerOpacity: 100, myBannerBlur: 0,
   // The names under the Deposit page's method buttons, comma separated; each shows after the app name ("Smart AI Pay-A"). The first one is chosen at first.
   depositMethodNames: 'Pay-B, Pay-A, Pay-D, Pay-C',
   // The gateway behind each of those buttons, in the SAME order (Pay-B = TavuPay, Pay-A = PesaJet, Pay-D = LworxPay, Pay-C = OBPay). The admin can
@@ -602,8 +587,6 @@ const DEFAULT_SETTINGS = {
   homeBannerTitle: '', homeBannerText: '',
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   shareMessage: 'Join me on {app}',
-  // The sign-up captcha picture is off: the owner's Create Account screen has none. Sign-up is guarded by the rate limits instead.
-  signupCaptcha: false,
   // What Telegram shows when a link to the app is pasted (title and text; the picture is the 'linkpreview' image). Empty = the app's own defaults.
   linkPreviewTitle: '', linkPreviewText: '',
   // One opacity for EVERY product picture (Admin > Banners > Product pictures): 100 = as uploaded.
@@ -872,16 +855,15 @@ async function getHomeBanner() {
   _bannerCacheTs = Date.now();
   return _bannerCache;
 }
-// The admin-uploaded pictures (Admin > Banners): Login banner (authhero) and circle logo (authlogo), Home slides 2 and 3 (banner2, banner3;
-// slide 1 is the Home banner), Share banner (promobanner), brand logo (logo), My page avatar (profilelogo), loading-screen box picture
-// (loaderbg), link preview picture (linkpreview), Myteam / My / About banners (teambanner, mybanner, aboutbanner) and the About circle logo
-// (aboutlogo). Stored in the 'banners' collection as `smartai-<slot>`, cached for 60 s. Only the pictures the owner's screenshots show exist.
+// The admin-uploaded pictures (Admin > Banners), the ones the member app really shows: Login banner (authhero) and circle logo (authlogo), Rewards
+// banner (promobanner), My page avatar (profilelogo), Team / Me / About banners (teambanner, mybanner, aboutbanner) and the link preview picture
+// (linkpreview, read by the Telegram preview page below). The Home banner and the welcome picture have their own routes. Stored in the 'banners'
+// collection as `smartai-<slot>`, cached for 60 s.
 // Transparent cut-out ICONS the owner uploads in the admin panel (Banners > Icons); the panel removes each picture's background and crops it
 // tight before saving, so these are always PNGs. To add an icon, add its name here AND its label in admin-src (SMARTAI_ICON_LABELS).
 const SMARTAI_ICON_SLOTS = ['home', 'robots', 'income', 'share', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout'];
-const SMARTAI_IMAGE_SLOTS = ['logo', 'authhero', 'authlogo', 'banner2', 'banner3', 'promobanner', 'profilelogo', 'loaderbg', 'linkpreview', 'teambanner', 'mybanner', 'aboutbanner', 'aboutlogo', ...SMARTAI_ICON_SLOTS];
+const SMARTAI_IMAGE_SLOTS = ['authhero', 'authlogo', 'promobanner', 'profilelogo', 'linkpreview', 'teambanner', 'mybanner', 'aboutbanner', ...SMARTAI_ICON_SLOTS];
 const _smartaiImageCache = {};
-const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getSmartAIImage(slot) {
   if (!SMARTAI_IMAGE_SLOTS.includes(slot)) return null;
   const cached = _smartaiImageCache[slot];
@@ -891,19 +873,6 @@ async function getSmartAIImage(slot) {
     const ref = db.collection('banners').doc('smartai-' + slot);
     const snap = await ref.get();
     image = (snap.exists && snap.data().image) || null;
-    // One-time data migration only: older uploads lived under the fork's
-    // document prefix. If Smart AI has no value yet, copy that image into the
-    // Smart AI document and delete the obsolete source document.
-    if (!snap.exists) {
-      const legacyRef = db.collection('banners').doc(LEGACY_IMAGE_PREFIX + slot);
-      const legacy = await legacyRef.get();
-      if (legacy.exists) {
-        const d = legacy.data() || {};
-        await ref.set({ image: d.image || null });
-        await legacyRef.delete();
-        image = d.image || null;
-      }
-    }
   } catch (_) { image = cached ? cached.image : null; }
   _smartaiImageCache[slot] = { image, ts: Date.now() };
   return image;
@@ -4047,23 +4016,6 @@ app.get('/public/announcement-image', async (req, res) => {
   try { publicJson(req, res, { status: 'success', image: await getAnnouncementImage() }, IMAGE_CACHE); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-// The start-up loader's background, served as a real image (not JSON) so the
-// browser can paint it from its own cache in the first frame of the next
-// launch. stale-while-revalidate: it is painted from the cache at once and
-// refreshed in the background, so it never delays the app; a re-upload
-// shows on the open after next.
-app.get('/public/loader-image', async (req, res) => {
-  try {
-    const image = await getSmartAIImage('loaderbg');
-    const m = /^data:(image\/(?:png|jpe?g|webp|gif));base64,(.+)$/.exec(image || '');
-    if (!m) return res.status(404).end();
-    const buf = Buffer.from(m[2], 'base64');
-    const etag = '"' + crypto.createHash('sha1').update(buf).digest('hex') + '"';
-    res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=0, stale-while-revalidate=604800', ETag: etag });
-    if (req.headers['if-none-match'] === etag) return res.status(304).end();
-    res.send(buf);
-  } catch (e) { res.status(500).end(); }
-});
 // Smart AI artwork needed by the current member surfaces, fetched together.
 // The path nginx puts in front of this server's routes (API in deploy/make-nginx.js and the app's own API base): a crawler needs the picture's full address.
 const PUBLIC_API_PREFIX = 'k7x2';
@@ -4112,16 +4064,13 @@ ${imageUrl ? `<meta name="twitter:image" content="${htmlText(imageUrl)}">\n` : '
 });
 app.get('/public/smartai-images', async (req, res) => {
   try {
-    const [logo, authhero, authlogo, banner2, banner3, promobanner, profilelogo, teambanner, mybanner, aboutbanner, aboutlogo] = await Promise.all([
-      getSmartAIImage('logo'),
-      getSmartAIImage('authhero'), getSmartAIImage('authlogo'), getSmartAIImage('banner2'),
-      getSmartAIImage('banner3'), getSmartAIImage('promobanner'),
-      getSmartAIImage('profilelogo'),
-      getSmartAIImage('teambanner'), getSmartAIImage('mybanner'), getSmartAIImage('aboutbanner'), getSmartAIImage('aboutlogo'),
+    const [authhero, authlogo, promobanner, profilelogo, teambanner, mybanner, aboutbanner] = await Promise.all([
+      getSmartAIImage('authhero'), getSmartAIImage('authlogo'), getSmartAIImage('promobanner'), getSmartAIImage('profilelogo'),
+      getSmartAIImage('teambanner'), getSmartAIImage('mybanner'), getSmartAIImage('aboutbanner'),
     ]);
     const iconList = await Promise.all(SMARTAI_ICON_SLOTS.map(getSmartAIImage));
     const icons = {}; SMARTAI_ICON_SLOTS.forEach((k, n) => { icons[k] = iconList[n] || null; });
-    publicJson(req, res, { status: 'success', logo, authhero, authlogo, banner2, banner3, promobanner, profilelogo, teambanner, mybanner, aboutbanner, aboutlogo, icons }, IMAGE_CACHE);
+    publicJson(req, res, { status: 'success', authhero, authlogo, promobanner, profilelogo, teambanner, mybanner, aboutbanner, icons }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -5297,16 +5246,6 @@ app.post('/withdraw/request', async (req, res) => {
       return res.status(400).json({ status: 'error', code: 'WINDOW_CLOSED',
         message: `Withdraw is open from ${win.from} to ${win.to}. Please come back then.` });
     if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum withdraw is ${fmtMoney(sett.minWithdraw)}` });
-    // Checked HERE, not only in the app: the client's own check is a
-    // courtesy so a member sees the rule before submitting, but /withdraw/
-    // request is a plain authenticated POST and the amount in its body is
-    // whatever the caller chose to send.
-    const wMult = Math.max(0, Math.floor(Number(sett.withdrawMultiple) || 0));
-    if (wMult > 0 && amt % wMult !== 0) {
-      const low = Math.floor(amt / wMult) * wMult, high = low + wMult;
-      return res.status(400).json({ status: 'error',
-        message: `Withdraw must be a multiple of ${fmtMoney(wMult)}. Try ${fmtMoney(Math.max(low, sett.minWithdraw))} or ${fmtMoney(high)}.` });
-    }
     // Trade Password gate. The six-digit Trade Password chosen at sign-up is asked
     // on the Withdraw screen and checked HERE, before anything is charged:
     // pinCheck() verifies the scrypt hash and locks the account for 15 minutes
@@ -7018,14 +6957,6 @@ const memberAuthLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 60, standard
 const memberSignupLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 150, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Please wait a few minutes and try again.' } });
 const sessionReply = (res, uid, sess) => res.json({ status: 'success', token: sess.token, uid, authTime: sess.authTime, expiresAt: sess.expiresAt });
-// The sign-up captcha picture (see captcha.js). Cheap to make, and a new one is asked for every time Sign Up is opened, so it has its own generous limit (many members share one carrier address); the answer never leaves the server.
-const memberCaptchaLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 600, standardHeaders: true, legacyHeaders: false,
-  message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Please wait a few minutes and try again.' } });
-app.get('/auth/captcha', memberCaptchaLimiter, (req, res) => {
-  const c = captcha.issue();
-  res.set('Cache-Control', 'no-store');
-  res.json({ status: 'success', id: c.id, image: c.image });
-});
 // Log in, sign up and finishing a sign-up are the three requests a new member waits on: any that takes over 0.6 s is written to the log
 // ("SLOW /auth/login 840 ms"), so a slow moment can be seen later with  pm2 logs smartai-server | grep SLOW
 app.use(['/auth/login', '/auth/signup', '/register'], (req, res, next) => {
@@ -7035,13 +6966,6 @@ app.use(['/auth/login', '/auth/signup', '/register'], (req, res, next) => {
 });
 app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
   try {
-    // Smart AI's Create Account screen has no captcha (owner's screenshots), so it is only demanded when the setting `signupCaptcha` is switched on.
-    // When on, it is checked first, and its picture is used up by this answer whatever happens next.
-    if ((await getSettings()).signupCaptcha === true) {
-      if (!textOf(req.body.captchaCode).trim()) return res.status(400).json({ status: 'error', code: 'CAPTCHA_REQUIRED', message: 'Enter the captcha code.' });
-      if (!captcha.verify(textOf(req.body.captchaId), textOf(req.body.captchaCode)))
-        return res.status(400).json({ status: 'error', code: 'BAD_CAPTCHA', message: 'The captcha code is wrong. Please try again.' });
-    }
     const phone = cleanPhone(textOf(req.body.phone));
     if (!phone) return res.status(400).json({ status: 'error', code: 'INVALID_PHONE', message: badPhoneMessage() });
     const password = tidyPassword(passwordOf(req.body.password));
@@ -7303,21 +7227,7 @@ const SETTINGS_CRITICAL_RANGES = {
   welcomeBonus: [0, MAX_MONEY_AMOUNT], commL1: [0, 100], commL2: [0, 100], commL3: [0, 100],
   maxWithdrawalsPerDay: [0, 1000],
   autoApproveMinSec: [0, 86400], autoApproveMaxSec: [0, 86400], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
-  // 0 = not scheduled; upper bound is a plain sanity cap (year 2100), not a
-  // real business constraint -- an admin fat-fingering a date shouldn't be
-  // able to silently store something outside "any date anyone would ever
-  // actually pick here."
-  // Login / Sign Up backdrops. Opacity is stored as a PERCENT (0-100)
-  // rather than a 0-1 fraction: every other number an admin types in
-  // this panel is a whole number, and Math.round() below would flatten
-  // 0.45 to 0. Blur is in px, capped at 40 -- past that the image is
-  // indistinguishable from a flat colour wash and only costs GPU time.
-  // 0 disables the rule. The upper bound is a sanity cap, not a business
-  // one -- a multiple larger than the maximum withdrawal would make every
-  // amount invalid, which the admin panel warns about rather than forbids.
-  withdrawMultiple: [0, MAX_MONEY_AMOUNT],
-  myBannerOpacity: [0, 100], myBannerBlur: [0, 40], dailyCheckin: [0, MAX_MONEY_AMOUNT],
-  // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
+  dailyCheckin: [0, MAX_MONEY_AMOUNT],
 };
 const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
@@ -7512,16 +7422,13 @@ app.post('/admin/about-html/set', async (req, res) => {
 app.get('/admin/smartai-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [logo, authhero, authlogo, banner2, banner3, promobanner, profilelogo, loaderbg, linkpreview, teambanner, mybanner, aboutbanner, aboutlogo] = await Promise.all([
-      getSmartAIImage('logo'),
-      getSmartAIImage('authhero'), getSmartAIImage('authlogo'), getSmartAIImage('banner2'),
-      getSmartAIImage('banner3'), getSmartAIImage('promobanner'),
-      getSmartAIImage('profilelogo'), getSmartAIImage('loaderbg'), getSmartAIImage('linkpreview'),
-      getSmartAIImage('teambanner'), getSmartAIImage('mybanner'), getSmartAIImage('aboutbanner'), getSmartAIImage('aboutlogo'),
+    const [authhero, authlogo, promobanner, profilelogo, linkpreview, teambanner, mybanner, aboutbanner] = await Promise.all([
+      getSmartAIImage('authhero'), getSmartAIImage('authlogo'), getSmartAIImage('promobanner'), getSmartAIImage('profilelogo'), getSmartAIImage('linkpreview'),
+      getSmartAIImage('teambanner'), getSmartAIImage('mybanner'), getSmartAIImage('aboutbanner'),
     ]);
     const iconList = await Promise.all(SMARTAI_ICON_SLOTS.map(getSmartAIImage));
     const icons = {}; SMARTAI_ICON_SLOTS.forEach((k, n) => { icons[k] = iconList[n] || null; });
-    res.json({ status: 'success', logo, authhero, authlogo, banner2, banner3, promobanner, profilelogo, loaderbg, linkpreview, teambanner, mybanner, aboutbanner, aboutlogo, icons });
+    res.json({ status: 'success', authhero, authlogo, promobanner, profilelogo, linkpreview, teambanner, mybanner, aboutbanner, icons });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/smartai-image/set', async (req, res) => {
@@ -8132,7 +8039,7 @@ app.post('/admin/user/reset-payout-pin', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Owner: make one member "unrestricted by withdrawal time": they can request a withdrawal at any hour even when the withdrawal hours are
-// switched on in Settings, and the daily number of withdrawals does not stop them. Everything else (minimum, multiple, fee, Trade Password, one at a time) still applies.
+// switched on in Settings, and the daily number of withdrawals does not stop them. Everything else (minimum, fee, Trade Password, one at a time) still applies.
 app.post('/admin/user/withdraw-anytime', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = String(req.body.userId || '');
@@ -9662,9 +9569,9 @@ app.post('/admin/analytics', async (req, res) => {
     // Withdrawals that can be processed today, worked out with the live withdrawal rules (Admin > Settings): the requests already waiting,
     // and the most members could still request today. A member counts only if they pass the same checks /withdraw/request makes:
     // not banned, a product bought when that is required, no unpaid request already open, today's number of withdrawals not used up
-    // and a balance that reaches the minimum once cut down to the allowed multiple and the maximum.
+    // and a balance that reaches the minimum.
     const wSett = await getSettings();
-    const wMin = Number(wSett.minWithdraw) || 0, wMax = Number(wSett.maxWithdraw) || 0, wMult = Math.max(0, Math.floor(Number(wSett.withdrawMultiple) || 0));
+    const wMin = Number(wSett.minWithdraw) || 0;
     const wFee = Number(wSett.withdrawFeePct) || 0, wPerDay = Number(wSett.maxWithdrawalsPerDay) || 0, wNeedProduct = wSett.requireInvestToWithdraw !== false;
     const todayStartMs = eatNextMidnight(nowMs) - 86400000;
     const runningUsers = new Set(); activeInvSnap.forEach(d => runningUsers.add(d.data().userId));
@@ -9693,8 +9600,7 @@ app.post('/admin/analytics', async (req, res) => {
       if (wNeedProduct && !(finiteMoney(u.totalInvested) > 0)) { blocked.noProduct++; return; }
       if (openUsers.has(d.id)) { blocked.hasRequest++; return; }
       if (wPerDay > 0 && u.withdrawAnytime !== true && (usedToday.get(d.id) || 0) >= wPerDay) { blocked.dailyUsed++; return; }
-      let amt = Math.min(bal, wMax > 0 ? wMax : bal);
-      amt = wMult > 0 ? Math.floor(amt / wMult) * wMult : Math.floor(amt);
+      const amt = Math.floor(bal);
       if (amt < wMin || amt <= 0) { blocked.belowMin++; return; }
       const net = amt - Math.round(amt * wFee / 100);
       canDo.count++; canDo.gross += amt; canDo.net += net;
@@ -9702,7 +9608,7 @@ app.post('/admin/analytics', async (req, res) => {
     });
     const withdrawToday = {
       waiting, canDo, blocked,
-      rules: { min: wMin, max: wMax, multiple: wMult, feePct: wFee, perDay: wPerDay, needProduct: wNeedProduct,
+      rules: { min: wMin, feePct: wFee, perDay: wPerDay, needProduct: wNeedProduct,
         hours: wSett.withdrawWindowEnabled ? `${wSett.withdrawOpenFrom || ''} to ${wSett.withdrawOpenTo || ''}` : '' },
     };
     plans.nextMaturing = plans._upcoming.map(u => ({ phone: (accounts.get(u.userId) || {}).phone || '', product: u.product, amount: u.amount, cashback: u.cashback, at: u.at })); delete plans._upcoming;

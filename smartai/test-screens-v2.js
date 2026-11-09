@@ -43,11 +43,11 @@ function runStats(rows) {
 
   // 2. profile logo slot: stored, served to members and to the admin
   ok(/const SMARTAI_IMAGE_SLOTS = \[[^\]]*'profilelogo'/.test(src), 'profilelogo is a known image slot');
-  ok(/publicJson\(req, res, \{ status: 'success', logo, authhero, authlogo, banner2,[^}]*profilelogo[^}]*icons \}/.test(src), 'members get it from /public/smartai-images');
-  ok(/res\.json\(\{ status: 'success', logo, authhero, authlogo, banner2, banner3, promobanner, profilelogo, loaderbg, linkpreview, teambanner, mybanner, aboutbanner, aboutlogo, icons \}\)/.test(src), 'and the admin panel reads it');
+  ok(/publicJson\(req, res, \{ status: 'success', authhero, authlogo, promobanner, profilelogo, teambanner, mybanner, aboutbanner, icons \}/.test(src), 'members get it from /public/smartai-images');
+  ok(/res\.json\(\{ status: 'success', authhero, authlogo, promobanner, profilelogo, linkpreview, teambanner, mybanner, aboutbanner, icons \}\)/.test(src), 'and the admin panel reads it');
   ok(/id="profileLogoFile"/.test(adm) && /wireSmartAIImageSlot\('profilelogo'/.test(adm), 'the admin panel can upload and remove it');
-  ok(['banner2', 'banner3', 'promobanner'].every(k => new RegExp("wireSmartAIImageSlot\\('" + k + "'").test(adm) && src.includes("'" + k + "'")), 'the admin can upload Home slides 2 and 3, and the Promotion banner');
-  ok(!/checkinBannerFile|homeSlide4File|homeSlide5File|downloadBgFile/.test(adm) && !/'banner4'|'banner5'|'checkinbanner'|'downloadbg'/.test(src), 'the Check-in banner, slides 4 and 5 and the Download page background are gone');
+  ok(['promobanner', 'teambanner', 'mybanner', 'aboutbanner', 'authhero', 'authlogo'].every(k => new RegExp("wireSmartAIImageSlot\\('" + k + "'").test(adm) && src.includes("'" + k + "'")), 'the admin can upload the Rewards, Team, Me, About and Log In pictures');
+  ok(!/checkinBannerFile|homeSlide|brandLogoFile|aboutLogoFile|loaderBgFile|myBannerOp|myBannerBlur|downloadBgFile/.test(adm) && !/'banner[2-5]'|'checkinbanner'|'downloadbg'|'logo'|'aboutlogo'|'loaderbg'|myBannerOpacity/.test(src), 'the pictures the app never shows (Home slides, brand logo, About round picture, loading picture, My banner fade and blur, ...) are gone');
 
   // 5. production hygiene
   ok(/const DEFAULT_PRODUCTS = \[\];/.test(src), 'no built-in placeholder assets: members only see what the admin created');

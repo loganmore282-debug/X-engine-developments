@@ -32,7 +32,7 @@ ok(!/gstatic\.com\/firebasejs|firebase-app\.js/.test(read('user-src/index.html')
   ok(PREFIX !== 'api' && /^[a-z0-9]{3,16}$/.test(PREFIX), 'the API prefix is a private word, not /api');
   const want = {
     'user-src/original_module.js': [`var API_BASE = '/${PREFIX}';`],
-    'user-src/index.html': [`const SMARTAI_AUTH_API = '/${PREFIX}';`, `/${PREFIX}/public/loader-image`, `/${PREFIX}/public/app-icon-192.png`],
+    'user-src/index.html': [`const SMARTAI_AUTH_API = '/${PREFIX}';`, `/${PREFIX}/public/app-icon-192.png`],
     'admin-src/index.html': [`const SERVER = '/${PREFIX}';`],
     'user/sw.js': [`const API_ORIGIN = '/${PREFIX}';`, `'/${PREFIX}/'`],
     'admin/sw.js': [`'/${PREFIX}'`, `'/${PREFIX}/'`],

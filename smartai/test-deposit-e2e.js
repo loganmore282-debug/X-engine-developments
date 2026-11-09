@@ -11,7 +11,6 @@ const origResolve = Module._resolveFilename;
 Module._resolveFilename = function (req, ...a) { return req === 'mongodb' ? path.join(root, 'test-helpers', 'fake-mongodb.js') : origResolve.call(this, req, ...a); };
 const PORT = 3300 + Math.floor(Math.random() * 90);
 Object.assign(process.env, { PORT: String(PORT), MONGODB_URI: 'mongodb://fake/smartai', ADMIN_KEY: 'dp-admin-key-123456', NODE_ENV: 'development', PESAJET_API_KEY: 'pj-key', TAVUPAY_API_KEY: 'tv-key', TAVUPAY_API_SECRET: 'tv-secret' });
-const cap = require('./captcha.js'); const realVerify = cap.verify; cap.verify = (id, code) => code === '0000' ? true : realVerify(id, code);
 const realLog = console.log; console.log = () => {}; console.warn = () => {};
 const serverErrors = []; console.error = (...a) => { serverErrors.push(a.map(x => (x && x.message) || String(x)).join(' ').slice(0, 200)); };
 const gw = { pesajet: {}, tavupay: {}, byRef: {}, collects: { pesajet: [], tavupay: [] } };   // gw[provider][theirId] = their word
@@ -47,7 +46,7 @@ const J = async (m, p, b, tok, adm) => { const r = await realFetch(base + p, { m
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let fails = 0, n = 0; const ok = (c, m, x) => { n++; if (!c) { fails++; realLog('FAIL', m, x ? JSON.stringify(x).slice(0, 320) : ''); } };
 let phoneN = 0;
-async function member() { const c = await J('GET', '/auth/captcha'); const phone = '07714' + String(50000 + (++phoneN) * 9); const su = await J('POST', '/auth/signup', { phone, password: 'secret12', captchaId: c.j.id, captchaCode: '0000' }); await J('POST', '/register', { pin: '123456', referralCode: '' }, su.j.token); return { tok: su.j.token, uid: su.j.uid, phone }; }
+async function member() { const phone = '07714' + String(50000 + (++phoneN) * 9); const su = await J('POST', '/auth/signup', { phone, password: 'secret12' }); await J('POST', '/register', { pin: '123456', referralCode: '' }, su.j.token); return { tok: su.j.token, uid: su.j.uid, phone }; }
 const user = id => fm.__stores.users.get(id), dep = id => fm.__stores.pendingDeposits.get(id);
 const rowOf = did => [...fm.__stores.transactions.values()].find(t => t.depositId === did);
 const adminSync = () => J('GET', '/admin/payments/sync', null, null, true);
