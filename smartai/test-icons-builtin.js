@@ -95,8 +95,7 @@ while ((m = tok.exec(noComments))) {
   const { h, s, l } = hsl(r, g, b);
   if (s >= 0.22 && (h >= 335 || h <= 22) && l > 0.12 && l < 0.97) reds.add(m[0].toLowerCase());
 }
-const ERROR_REDS = new Set(['#c23b4b', '#f8dee1', '#9c2c3a', 'rgba(194,59,75,.5)',   // --berry, --berry-pale and the danger button
-  '#e3474a', 'rgba(255,70,70,.75)', 'rgba(255,70,70,.55)', 'rgba(255,70,70,.18)']);   // the red SOLD OUT plate on a closed product (the owner's own reference picture)
+const ERROR_REDS = new Set(['#c23b4b', '#f8dee1', '#9c2c3a', 'rgba(194,59,75,.5)']);   // --berry, --berry-pale and the danger button
 const strays = [...reds].filter(c => !ERROR_REDS.has(c));
 ok(strays.length === 0, 'the only reds in the CSS are the error / failure colours (a stray one would be a pasted ChocoMCC red)' + (strays.length ? ' -> ' + strays.join(' | ') : ''));
 ok(/--caramel:#137AEF/i.test(css) && /--cream:#EEF4FF/i.test(css) && /--caramel-deep:#0D5FD2/i.test(css), 'the brand colours are the blues of the icons');
