@@ -205,7 +205,7 @@ async function member(ref) {
   // ---- 8. the Me page is ChocoMCC's: its tiles, its two UGX coins, its Security page, and nothing that is not in ChocoMCC ----
   await ev(() => switchTab('account')); await sleep(600);
   const tiles = await ev(() => [...document.querySelectorAll('#viewAccount .menu-tile-lbl')].map(e => e.textContent.trim()));
-  ok(JSON.stringify(tiles) === JSON.stringify(['My machines', 'Ledger', 'My Team', 'Payout Account', 'Security', 'About Us', 'Terms & Rules', 'Support', 'Download App', 'Sign Out']), 'Me has exactly ChocoMCC\'s ten tiles: ' + tiles.join(', '));
+  ok(JSON.stringify(tiles) === JSON.stringify(['My AI robots', 'Ledger', 'My Team', 'Payout Account', 'Security', 'About Us', 'Terms & Rules', 'Support', 'Download App', 'Sign Out']), 'Me has exactly ChocoMCC\'s ten tiles: ' + tiles.join(', '));
   const coins = await ev(() => [...document.querySelectorAll('#viewAccount img.ugx-coin')].map(i => ({ src: i.getAttribute('src'), ok: i.complete && i.naturalWidth > 0 })));
   ok(coins.length === 2 && coins.every(c => c.src === '/icons/ugx-coin.png' && c.ok), 'the Balance and Cash Outs figures each have ChocoMCC\'s UGX coin picture');
   await ev(() => document.querySelector('#viewAccount .menu-tile-lbl') && [...document.querySelectorAll('#viewAccount .menu-tile')].find(b => /Security/.test(b.textContent)).click()); await sleep(300);

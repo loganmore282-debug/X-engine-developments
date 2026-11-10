@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v54`, admin `admin/sw.js` `smartai-admin-shell-v24`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v55`, admin `admin/sw.js` `smartai-admin-shell-v25`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -539,3 +539,6 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## AI Robots header banner is shorter (owner: "reduce that header banner")
 - `#shopBanner` (the picture behind My machines / Accrued earnings) is **104 px** high, was 150 (flush, round bottom and the white melt unchanged). The two buttons sit at its bottom (12 px up); only a thin strip of the picture shows above them. The default robot art inside it is smaller and moved up to clear the buttons. The admin picture keeps filling the banner (cover). test-animations expects 104. Member cache v54.
+
+## "My machines" is now "My AI robots" (owner: "change machines to My AI robots")
+- The AI Robots header button, the Me page tile (and its icon's alt text), that page's header title and the admin's icon labels all read **My AI robots**. Ids and routes are unchanged (`mychoc`). Notes above saying "My Products" / "My machines" mean this page. Member cache v55, admin v25.

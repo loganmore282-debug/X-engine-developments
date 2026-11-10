@@ -189,7 +189,7 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   ok(await p.evaluate(() => !!document.querySelector('#depStatusIc img') && !document.querySelector('#depStatusIc .ok-check')), 'a picture uploaded for the tick stands still in its place');
   await p.evaluate(() => { STATE_ICONS = {}; closeOverlay(); });
   await p.evaluate(() => switchTab('shop')); await sleep(80);
-  ok(await p.evaluate(() => Math.round(document.getElementById('shopBanner').getBoundingClientRect().height) === 104), 'the AI Robots header (My machines / Accrued earnings) is 104 px high');
+  ok(await p.evaluate(() => Math.round(document.getElementById('shopBanner').getBoundingClientRect().height) === 104), 'the AI Robots header (My AI robots / Accrued earnings) is 104 px high');
   // every page change shows the dots
   await p.evaluate(() => switchTab('home')); await sleep(60);
   ok(await p.evaluate(() => { const v = document.getElementById('navVeil'); return v.classList.contains('on') && !!v.querySelector('svg.dl') && getComputedStyle(v).opacity === '1'; }), 'moving to another tab shows the dots over the page');
