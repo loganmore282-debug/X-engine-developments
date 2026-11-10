@@ -264,11 +264,11 @@
   .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;}
 
   /* ---------- Grid / Shop ---------- */
-  .prod-grid{display:flex;flex-direction:column;gap:16px;padding:6px var(--gut) 10px;}
+  .prod-grid{display:flex;flex-direction:column;gap:14px;padding:12px var(--gut) 10px;}
   .prod-card{position:relative;background:var(--card);border-radius:24px;box-shadow:var(--shadow);overflow:hidden;width:100%;}
   .prod-img-wrap{position:relative;}
-  .prod-img{width:100%;height:240px;object-fit:contain;background:var(--card);display:block;transition:opacity .15s ease;}
-  .prod-rank{position:absolute;top:12px;left:12px;background:rgba(11,42,91,.72);color:#fff;font-size:11px;font-weight:800;
+  .prod-img{width:100%;height:150px;object-fit:contain;background:var(--card);display:block;transition:opacity .15s ease;}
+  .prod-rank{position:absolute;top:10px;left:12px;background:rgba(11,42,91,.72);color:#fff;font-size:11px;font-weight:800;
     padding:5px 11px;border-radius:999px;letter-spacing:.3px;}
   /* A closed product: its picture and figures are lightly blurred (still a little visible) and a slanting COMING SOON plate lies across the card (peach plate, the same orange-brown edge and letters as the admin's Upcoming tag, soft orange glow). */
   .prod-card.is-soldout .prod-img-wrap,.prod-card.is-soldout .prod-body-full{filter:blur(var(--soon-blur,2px)) brightness(.95);}
@@ -278,15 +278,15 @@
   /* Every chocolate's full info sits right on its Shop card now -- no
      more tapping through to a separate detail page. Classic plain list
      (same .kv row pattern used elsewhere in the app), no tiles/gradients. */
-  .prod-body-full{padding:16px 18px 18px;}
-  .prod-name{font-size:16.5px;font-weight:800;margin-bottom:4px;}
+  .prod-body-full{padding:8px 16px 14px;}
+  .prod-name{font-size:15.5px;font-weight:800;margin-bottom:2px;}
   /* One compact divided row instead of 4 stacked rows -- same classic
      divider style as Team's L1/L2/L3 row, just no colored boxes. */
-  .prod-stats-line{display:flex;margin:2px 0 14px;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
+  .prod-stats-line{display:flex;margin:2px 0 8px;padding:8px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
   .prod-stat-cell{flex:1;text-align:center;}
   .prod-stat-cell:not(:last-child){border-right:1px solid var(--line);}
   .prod-stat-cell-lbl{font-size:9px;color:var(--cocoa-faint);font-weight:700;text-transform:uppercase;letter-spacing:.2px;line-height:1.25;}
-  .prod-stat-cell-val{font-size:12px;font-weight:800;color:var(--cocoa);margin-top:5px;}
+  .prod-stat-cell-val{font-size:12px;font-weight:800;color:var(--cocoa);margin-top:3px;}
   .prod-stat-cell-val.is-mint{color:var(--mint);}
   .choc-card.is-soldout{opacity:.72;}
   .choc-card:disabled{cursor:default;}

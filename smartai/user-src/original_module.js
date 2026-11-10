@@ -1422,10 +1422,10 @@ function renderShop(){
     var lim = Number(p.buyLimit) || 0;
     var rank = Number(p.vip) > 0 ? 'VIP ' + p.vip : 'Robot ' + (i + 1);
     var btn = soldOut
-      ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed;margin-top:14px">' + esc(closedLabel(p)) + '</button>'
+      ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed;margin-top:6px">' + esc(closedLabel(p)) + '</button>'
       : capped
-        ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed;margin-top:14px">Limit reached (' + ownedCount(p.key) + '/' + lim + ')</button>'
-        : '<button class="btn btn-primary btn-block btn-buy-glow" style="margin-top:14px" data-key="' + esc(p.key) + '" onclick="buyProduct(this,this.dataset.key)">Buy</button>';
+        ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed;margin-top:6px">Limit reached (' + ownedCount(p.key) + '/' + lim + ')</button>'
+        : '<button class="btn btn-primary btn-block btn-buy-glow" style="margin-top:6px" data-key="' + esc(p.key) + '" onclick="buyProduct(this,this.dataset.key)">Buy</button>';
     var tag = soldOut ? esc(closedLabel(p)) : '';
     return '<div class="prod-card' + (soldOut ? ' is-soldout' : '') + '" id="prodCard-' + esc(p.key) + '">' +
       (soldOut ? '<div class="prod-sold" aria-hidden="true"><span class="prod-sold-tag' + (tag.length > 9 ? ' long' : '') + '">' + tag + '</span></div>' : '') +

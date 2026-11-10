@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v50`, admin `admin/sw.js` `smartai-admin-shell-v24`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v51`, admin `admin/sw.js` `smartai-admin-shell-v24`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -526,3 +526,6 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## "My Products" is now "My machines" (owner: "change my products to My machines")
 - The AI Robots header button and the Me page tile (and its icon's alt text) read **My machines**; the admin's icon labels say the same. The page behind them, its list and the ids (`mychoc`, `mychocList`) are unchanged. Older notes above that say "My Products" mean this page. Member cache v50, admin v24.
+
+## Shorter product cards (owner: "the product cards are too big in height ... reduce it in respect to the images so it keeps showing")
+- Shop card: picture frame 240 px to 150 px (the picture is still shown WHOLE, `object-fit:contain`, just smaller), body padding 16/18 to 8/16, name 15.5 px, stats row padding 12 to 8, Buy button gap 14 to 6 px, list gap 14 px. A card went from about 420 px to about 295 px tall. The COMING SOON plate and blur are unchanged. Member cache v51.
