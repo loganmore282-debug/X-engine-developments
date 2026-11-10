@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v53`, admin `admin/sw.js` `smartai-admin-shell-v24`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v54`, admin `admin/sw.js` `smartai-admin-shell-v24`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -536,3 +536,6 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 ## Compact blue header on EVERY page, name in the middle, like Potato (owner: "Return back header but ... words in middle just like potato, it is not too big")
 - This replaces the two sections above about floating arrows and the header that only some pages had. Every overlay page (13) now has the same header: blue gradient (135deg #2b88f3 to #0a4fc6) with a soft light circle, **52 px** tall plus the phone's top inset, 24 px round bottom, soft shadow, sticky; a plain white **chevron** (`‹`, no circle) at the left and the page name **centred** in white, 18 px bold. Titles: Add Funds, Cash Out, Support, About Us, Terms & Rules, Ledger, Payout Account, Security, My machines, Accrued Earnings, Task Center, Level N members, Add Funds (status page).
 - A page picture sits UNDER the header (150 px, full width, no frame, the Me page's white flow melting its bottom into the page). The tab banners (Home, AI Robots, Team, Me) are untouched. Member cache v53.
+
+## AI Robots header banner is shorter (owner: "reduce that header banner")
+- `#shopBanner` (the picture behind My machines / Accrued earnings) is **104 px** high, was 150 (flush, round bottom and the white melt unchanged). The two buttons sit at its bottom (12 px up); only a thin strip of the picture shows above them. The default robot art inside it is smaller and moved up to clear the buttons. The admin picture keeps filling the banner (cover). test-animations expects 104. Member cache v54.
