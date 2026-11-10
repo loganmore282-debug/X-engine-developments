@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v39`, admin `admin/sw.js` `smartai-admin-shell-v20`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v40`, admin `admin/sw.js` `smartai-admin-shell-v21`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -478,3 +478,4 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 ## Only COMING SOON is shown (owner: "remove sold out, only leave coming soon, blur it but the product a bit visible")
 - **This replaces the Sold out switch and plate text above.** The admin product editor has NO Sold out switch any more (back to Active / Upcoming / schedule). Every closed product (Active off, Upcoming, outside its hours) wears the **COMING SOON** plate (`closedLabel`: scheduled openings keep 'Opens HH:MM'); the word "Sold out" appears nowhere. An old product that still carries the removed `soldOut` flag stays closed as coming soon (`productOpenState` treats it like `comingSoon`, the product sanitizer folds it into `comingSoon`).
 - The blur is light now: picture and figures `blur(2px) brightness(.95)` under a faint tint (was 4px / .82), so the product stays a little visible behind the plate. Member cache v39, admin v20.
+- **The owner sets the COMING SOON blur**: Admin > Settings > "Coming soon products" > Blur (0 to 12 px, default 2). `comingSoonBlur` in `DEFAULT_SETTINGS` / `SETTINGS_CRITICAL_RANGES` (server) and the app's fallback; `paintIconSizes()` writes it to `--soon-blur`, the card blur reads it. Tests: `test-icon-sizes.js`, `test-animations.js`. Member cache v40, admin v21.

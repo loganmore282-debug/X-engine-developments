@@ -13,7 +13,7 @@ var DEFAULT_SETTINGS = {
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   salaryTiers: [], depositMethodNames: '', brandName: '', shareMessage: 'Join me on {app}', shareDomain: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', whatsappGroup: '', whatsappContact: '',
-  rulesText: '', homeBannerTitle: '', homeBannerText: '', myBannerOpacity: 100, myBannerBlur: 0, navIconSize: 26, homeIconSize: 34, meIconSize: 36, giftCodeHint: 'Enter gift code'
+  rulesText: '', homeBannerTitle: '', homeBannerText: '', myBannerOpacity: 100, myBannerBlur: 0, comingSoonBlur: 2, navIconSize: 26, homeIconSize: 34, meIconSize: 36, giftCodeHint: 'Enter gift code'
 };
 var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
 // Filled by syncPublicConfig() from the admin's products; the last copy this device saw is read first so the very first paint is already right.
@@ -51,7 +51,7 @@ function brandName(){ return brandNameKnown() || 'Smart AI'; }
 // Icon sizes from Admin > Settings: bottom navigation, Home actions, Me page. They are CSS variables, so the box around each icon follows it.
 function paintIconSizes(){
   var sett = getSettings(), root = document.documentElement.style;
-  [['--nav-ic', 'navIconSize', 14, 48, 26], ['--home-ic', 'homeIconSize', 20, 64, 34], ['--me-ic', 'meIconSize', 20, 64, 36]].forEach(function(d){
+  [['--nav-ic', 'navIconSize', 14, 48, 26], ['--home-ic', 'homeIconSize', 20, 64, 34], ['--me-ic', 'meIconSize', 20, 64, 36], ['--soon-blur', 'comingSoonBlur', 0, 12, 2]].forEach(function(d){
     var n = Number(sett[d[1]]); if (!isFinite(n)) n = d[4];
     root.setProperty(d[0], Math.max(d[2], Math.min(d[3], Math.round(n))) + 'px');
   });

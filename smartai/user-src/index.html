@@ -268,7 +268,7 @@
   .prod-rank{position:absolute;top:12px;left:12px;background:rgba(11,42,91,.72);color:#fff;font-size:11px;font-weight:800;
     padding:5px 11px;border-radius:999px;letter-spacing:.3px;}
   /* A closed product: its picture and figures are lightly blurred (still a little visible) and a slanting COMING SOON plate lies across the card (peach plate, the same orange-brown edge and letters as the admin's Upcoming tag, soft orange glow). */
-  .prod-card.is-soldout .prod-img-wrap,.prod-card.is-soldout .prod-body-full{filter:blur(2px) brightness(.95);}
+  .prod-card.is-soldout .prod-img-wrap,.prod-card.is-soldout .prod-body-full{filter:blur(var(--soon-blur,2px)) brightness(.95);}
   .prod-sold{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;pointer-events:none;background:rgba(6,14,36,.05);}
   .prod-sold-tag{display:block;transform:rotate(-30deg);padding:11px 26px 11px 30px;border-radius:14px;background:#fbefe4;border:3px solid #b45309;color:#b45309;font-size:27px;font-weight:900;letter-spacing:.24em;text-transform:uppercase;white-space:nowrap;text-shadow:0 0 10px rgba(180,83,9,.25);box-shadow:0 0 24px rgba(180,83,9,.42),inset 0 0 12px rgba(180,83,9,.12);}
   .prod-sold-tag.long{font-size:19px;letter-spacing:.16em;padding:10px 20px 10px 24px;}

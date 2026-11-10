@@ -51,12 +51,20 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   }
   const d2 = (await J('GET', '/public/settings')).j.settings;
   ok(d2.navIconSize === 22 && d2.homeIconSize === 30 && d2.meIconSize === 32, 'a refused value changes nothing');
+  ok(d2.comingSoonBlur === 2, 'the COMING SOON blur is 2 px until the owner sets it');
+  r = await up({ comingSoonBlur: 6 }); const d4 = (await J('GET', '/public/settings')).j.settings;
+  ok(r.s === 200 && d4.comingSoonBlur === 6, 'the owner can save a blur of 6 and members receive it');
+  for (const bad of [{ comingSoonBlur: 13 }, { comingSoonBlur: -1 }, { comingSoonBlur: 'lots' }]) { r = await up(bad); ok(r.s === 400, 'refused: ' + JSON.stringify(bad)); }
+  r = await up({ comingSoonBlur: 0 }); ok(r.s === 200 && (await J('GET', '/public/settings')).j.settings.comingSoonBlur === 0, '0 (sharp) is allowed');
+  await up({ comingSoonBlur: 2 });
   r = await J('POST', '/admin/settings/update', { settings: { navIconSize: 20 } });
   ok(r.s === 401, 'without the admin key nothing is saved');
 
   const src = read('admin-src/index.html'), css = read('user-src/index.html');
   ok(/id="navSzInput"[^>]*min="14"[^>]*max="48"/.test(src) && /id="homeSzInput"[^>]*min="20"[^>]*max="64"/.test(src) && /id="meSzInput"[^>]*min="20"[^>]*max="64"/.test(src), 'the Settings tab has Navigation, Home and Me size boxes');
   ok(/\.tab \.ti img\{width:var\(--nav-ic/.test(css) && /\.act-ic\{width:var\(--home-ic/.test(css) && /\.menu-tile-ic\.pic img\{width:var\(--me-ic/.test(css), 'the three kinds of icon take their size from the owner\'s numbers');
+  ok(/id="soonBlurInput"[^>]*min="0"[^>]*max="12"/.test(src) && /comingSoonBlur: sz\('soonBlurInput', 0, 12, 2\)/.test(src), 'the Settings tab has the Coming soon blur box (0 to 12) and Save sends it');
+  ok(/blur\(var\(--soon-blur,2px\)\)/.test(css), 'the blur behind the COMING SOON plate reads the owner\'s value');
   const { chromium } = require('playwright'); const browser = await chromium.launch();
   const sent = [];
   const settings = { brandName: 'Smart AI', minDeposit: 5000, minWithdraw: 5000, welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1, withdrawFeePct: 15, maxWithdrawalsPerDay: 2, dailyCheckin: 250, depositMethodNames: 'Pay-B, Pay-A, Pay-D, Pay-C', navIconSize: 20, homeIconSize: 28, meIconSize: 30 };
