@@ -153,10 +153,12 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .t-mut{background:var(--line);color:var(--sub)}
   .table-scroll{overflow-x:auto}
   .empty{color:var(--sub);font-size:13px;padding:18px;text-align:center}
-  /* Owner: every loader in the panel is the plain words "Loading..." -- no spinner, no animation. */
-  .ld-text{padding:40px 0;text-align:center;font-size:14px;font-weight:600;color:var(--sub);}
-  td .ld-text{padding:14px 0;}
-  /* The busy buttons keep their small turning icon and their own word (Removing..., Crediting...): only the ring loaders became "Loading...". */
+  /* Owner: the panel's loader is the SAME dots loader as the member app (blue). The busy buttons keep their small turning icon and their own word (Removing..., Crediting...). */
+  .ld-dots{display:flex;align-items:center;justify-content:center;padding:34px 0;}
+  td .ld-dots{padding:8px 0;}
+  svg.dl{width:72px;height:72px;display:block;}
+  td svg.dl{width:44px;height:44px;}
+  svg.dl circle{fill:#137aef;}
   .verify-spin{display:inline-flex;animation:verifySpin .9s linear infinite;}
   @keyframes verifySpin{to{transform:rotate(360deg);}}
 
@@ -393,7 +395,34 @@ async function copyText(str, btn, msg){
     toast(msg || 'Copied to clipboard','ok');
   } catch (e) { toast('Could not copy','err'); }
 }
-function spinnerHtml(){ return '<div class="ld-text">Loading...</div>'; }
+// The same dots loader as the member app (12 blue circles, 2 s loop, drawn from the app's own numbers). Every list or tab that is waiting for the server shows it.
+var DL_THETA = [0.0,0.3,1.4,2.2,2.9,3.5,4.0,4.5,5.1,5.6,6.0,6.4,6.8,7.2,7.5,7.7,8.0,8.2,8.4,8.6,8.7,8.9,8.9,9.0,9.0,9.2,9.4,9.9,10.6,11.5,12.7,14.5,16.8,19.5,22.8,26.8,32.0,38.2,44.9,52.4,61.1,72.0,84.8,98.5,112.0,126.0,140.9,155.7,168.5,179.5,189.7,200.0,210.1,219.3,227.2,234.5,241.9,249.0,255.2,260.6,265.8,271.2,276.5,281.3,285.4,289.2,293.0,296.8,300.5,304.0,307.2,310.3,313.4,316.3,318.9,321.5,324.2,326.8,329.1,331.1,332.9,334.8,336.8,338.8,340.6,342.3,344.0,345.6,347.0,348.3,349.4,350.6,351.8,353.1,354.2,355.3,356.4,357.4,358.4,359.6,360.0];
+function dlTheta(t){
+  var x = (t % 2) / 0.02, i = Math.floor(x), f = x - i;
+  return 81 + DL_THETA[i] + (DL_THETA[i + 1] - DL_THETA[i]) * f;
+}
+// 12 circles [cx, cy, r] at time t (seconds)
+function dlCircles(t){
+  var th = dlTheta(t), s = 0.8546 + 0.1425 * Math.sin(Math.PI * t), out = [], k, a, d2r = Math.PI / 180;
+  for (k = 0; k < 4; k++) { a = (th + 90 * k) * d2r; out.push([224.9 * Math.cos(a), 224.9 * Math.sin(a), 46.88]); }
+  for (k = 0; k < 4; k++) { a = (th - 46 + 90 * k) * d2r; out.push([224.9 * s * Math.cos(a), 224.9 * s * Math.sin(a), 46.88 * s]); }
+  for (k = 0; k < 4; k++) { a = (90 - th + 90 * k) * d2r; out.push([80.9 * Math.cos(a), 80.9 * Math.sin(a), 16.38]); }
+  return out;
+}
+function dlMarkup(){
+  var c = dlCircles((Date.now() % 2000) / 1000), h = '<svg class="dl" viewBox="-280 -280 560 560" aria-hidden="true">', i;
+  for (i = 0; i < c.length; i++) h += '<circle cx="' + c[i][0].toFixed(1) + '" cy="' + c[i][1].toFixed(1) + '" r="' + c[i][2].toFixed(1) + '"></circle>';
+  return h + '</svg>';
+}
+function spinnerHtml(){ return '<div class="ld-dots" role="status" aria-label="Loading">' + dlMarkup() + '</div>'; }
+(function dlTick(){
+  const dls = document.querySelectorAll('svg.dl');
+  if (dls.length && !document.hidden) {
+    const c = dlCircles((Date.now() % 2000) / 1000);
+    dls.forEach(svg => { const ch = svg.children; for (let k = 0; k < 12 && k < ch.length; k++) { ch[k].setAttribute('cx', c[k][0].toFixed(1)); ch[k].setAttribute('cy', c[k][1].toFixed(1)); ch[k].setAttribute('r', c[k][2].toFixed(1)); } });
+    requestAnimationFrame(dlTick);
+  } else setTimeout(dlTick, 250);
+})();
 function btnBusyHtml(text){ return '<span class="verify-spin" style="margin-right:7px;vertical-align:-3px"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>'+esc(text); }
 // Every money amount elsewhere is always a whole shilling -- only a
 // gift-code reward can ever carry cents (Round 137's randomized rewards),
@@ -3538,7 +3567,7 @@ async function renderSettings(){
     <h2 class="sec">Task Center tiers</h2>
     <div class="panel-card" id="taskCard">
       <p class="muted" style="margin-top:0">The Task Center on the Rewards tab. A member's team total (everything levels 1 to 3 have bought) decides which tiers are reached. Each reached tier can be claimed ONCE per member, for good: its button then reads Claimed and never comes back. Changing the numbers of a tier never lets a member claim it again.</p>
-      <div id="taskEditor" class="muted">Loading...</div>
+      <div id="taskEditor">${spinnerHtml()}</div>
       <button class="btn block" id="saveTasks" style="margin-top:12px" disabled>Save Task Center tiers</button>
     </div>
 

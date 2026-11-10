@@ -12,7 +12,7 @@ ok(!/'adminSessions'|'memberSessions'/.test(srv.slice(srv.indexOf('const ADMIN_L
 ok((dbsrc.match(/bumpWrite\(this\._col\)/g) || []).length >= 6 && /module\.exports = \{[^}]*writeVersions/.test(dbsrc), 'every write path in db.js raises its collection counter');
 ok(/req\.path === '\/live' \? adminLiveLimiter/.test(srv), 'the one-second check has its own rate allowance');
 const s2 = fs.readFileSync(path.join(__dirname, 'admin-src/index.html'), 'utf8');
-ok(!/cm-spinner|cmSpin/.test(s2) && /function spinnerHtml\(\)\{ return '<div class="ld-text">Loading\.\.\.<\/div>'; \}/.test(s2), 'the ring loader is gone; the loader is the words Loading...');
+ok(!/cm-spinner|cmSpin/.test(s2) && /function spinnerHtml\(\)\{ return '<div class="ld-dots"/.test(s2) && /function dlCircles/.test(s2) && /svg\.dl circle\{fill:#137aef/.test(s2), 'the loader is the same blue dots loader as the member app');
 ok(/function btnBusyHtml\(text\)\{ return '<span class="verify-spin"[^\n]*\+esc\(text\); \}/.test(s2), 'busy buttons are unchanged: their small turning icon and their own word (Removing..., Crediting...)');
 // ── browser ──
 let live = { boot: 'b1', v: { pendingDeposits: 1, withdrawals: 1, users: 1 } }, depCalls = 0, liveCalls = 0, holdDeps = false;
@@ -33,11 +33,11 @@ const server = http.createServer((q, r) => { let f = path.join(ROOT, q.url.split
     await page.route('https://fonts.googleapis.com/**', r => r.fulfill({ status: 200, contentType: 'text/css', body: '' }));
     await page.goto('http://127.0.0.1:8879/index.html', { waitUntil: 'load' });
     await page.fill('#keyInput', 'secret'); await page.click('#loginBtn'); await page.waitForSelector('#shell:not(.hidden)');
-    // the loader while a tab is loading: the words, nothing moving
+    // the loader while a tab is loading: the same moving dots as the member app
     holdDeps = true;
     await page.click('[data-tab="deposits"]'); await page.waitForTimeout(300);
-    const loading = await page.evaluate(() => { const el = document.querySelector('#content .ld-text'); if (!el) return null; const cs = getComputedStyle(el); return { text: el.textContent, anim: cs.animationName, svg: !!document.querySelector('#content svg.cm-spinner') }; });
-    ok(loading && loading.text === 'Loading...' && loading.anim === 'none' && !loading.svg, 'a tab that is loading shows "Loading..." with no animation: ' + JSON.stringify(loading));
+    const loading = await page.evaluate(async () => { const svg = document.querySelector('#content svg.dl'); if (!svg) return null; const a = [...svg.children].map(c => c.getAttribute('cx')).join(); await new Promise(r => setTimeout(r, 160)); const b = [...svg.children].map(c => c.getAttribute('cx')).join(); return { n: svg.children.length, moves: a !== b, fill: getComputedStyle(svg.children[0]).fill, w: Math.round(svg.getBoundingClientRect().width) }; });
+    ok(loading && loading.n === 12 && loading.moves && loading.fill === 'rgb(19, 122, 239)' && loading.w >= 60, 'a tab that is loading shows the blue dots loader and it moves: ' + JSON.stringify(loading));
     holdDeps = false; await page.waitForTimeout(1800);
     // nothing changes for 3 seconds: the list is not reloaded
     const before = depCalls, liveBefore = liveCalls;
@@ -58,7 +58,7 @@ const server = http.createServer((q, r) => { let f = path.join(ROOT, q.url.split
     const t1 = Date.now(); while (depCalls === c2 && Date.now() - t1 < 4000) await page.waitForTimeout(50);
     ok(depCalls > c2, 'after a server restart the tab is refreshed once');
     ok(errs.length === 0, 'no page errors: ' + errs.join(' | '));
-    console.log('PASS: admin real-time (one-second change check) and plain Loading... (' + checks + ' checks)');
+    console.log('PASS: admin real-time (one-second change check) and blue dots loader (' + checks + ' checks)');
   } catch (e) { failed = e; }
   await b.close(); server.close(); if (failed) { console.error(failed); process.exitCode = 1; }
 });
