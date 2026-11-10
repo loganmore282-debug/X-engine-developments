@@ -223,6 +223,27 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   // the owner sets the blur behind the COMING SOON plate (Admin > Settings): the card follows
   const sb = await p.evaluate(() => { const o = JSON.parse(localStorage.getItem(SETTINGS_CACHE_KEY) || '{}'); o.comingSoonBlur = 7; localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(o)); paintIconSizes(); const c = document.querySelector('.prod-card'), k = c.id.replace('prodCard-', ''), pr = PRODUCTS.find(x => x.key === k), old = pr.active; pr.active = false; renderShop(); const f = getComputedStyle(document.getElementById('prodCard-' + k).querySelector('.prod-img-wrap')).filter; const v = getComputedStyle(document.documentElement).getPropertyValue('--soon-blur').trim(); pr.active = old; o.comingSoonBlur = 2; localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(o)); paintIconSizes(); renderShop(); return { f, v }; });
   ok(/blur\(7px\)/.test(sb.f) && sb.v === '7px', 'a blur of 7 set by the owner shows on the closed product (' + sb.f + ')');
+  // the Me page balances count up when the page is shown (a tab tap, or coming back from a page opened from it)
+  await p.evaluate(() => { try { stopAccountPoll(); } catch (e) {} _lastDataAt = Date.now() + 600000; STATE.balance = 48000; STATE.totalWithdrawn = 12000; switchTab('home'); }); await sleep(900);
+  await p.evaluate(() => switchTab('account')); await sleep(60);
+  const cm0 = await p.evaluate(() => document.getElementById('acctBalNum').textContent);
+  await sleep(900);
+  const cm1 = await p.evaluate(() => document.getElementById('acctBalNum').textContent);
+  await sleep(1500);
+  const cm2 = await p.evaluate(() => ({ b: document.getElementById('acctBalNum').textContent, w: document.getElementById('acctWitNum').textContent }));
+  const nm = t => Number(String(t).replace(/[^0-9.]/g, ''));
+  ok(nm(cm0) < 2000 && nm(cm1) > nm(cm0) && nm(cm1) < 48000 && cm2.b === 'UGX 48,000' && cm2.w === 'UGX 12,000', 'arriving on Me: the balances start at 0 and count up to their figure (' + cm0 + ' -> ' + cm1 + ' -> ' + cm2.b + ')');
+  await p.evaluate(() => openOverlay('records')); await sleep(700);
+  await p.evaluate(() => closeOverlay()); await sleep(700);
+  const dm1 = await p.evaluate(() => document.getElementById('acctBalNum').textContent);
+  await sleep(1800);
+  const dm2 = await p.evaluate(() => document.getElementById('acctBalNum').textContent);
+  ok(nm(dm1) < 48000 && dm2 === 'UGX 48,000', 'coming back to Me from a page opened from it counts up again (' + dm1 + ' -> ' + dm2 + ')');
+  await p.evaluate(() => { STATE.balance = 55000; renderAll(); }); await sleep(250);
+  const em1 = await p.evaluate(() => document.getElementById('acctBalNum').textContent); await sleep(1200);
+  const em2 = await p.evaluate(() => document.getElementById('acctBalNum').textContent);
+  ok(nm(em1) > 48000 && nm(em1) < 55000 && em2 === 'UGX 55,000', 'a balance that changes while Me is open runs up from the old figure to the new one (' + em1 + ' -> ' + em2 + ')');
+  await p.evaluate(() => { _lastDataAt = 0; STATE.balance = 0; STATE.totalWithdrawn = 0; renderAll(); switchTab('home'); });
   // tapping a Featured robot on Home must still scroll to its card while the dots are up and the page data is on its way
   await p.evaluate(() => { _lastDataAt = 0; _lastCfgAt = 0; switchTab('home'); }); await sleep(1200);
   await p.route('**/k7x2/investments', async (route) => { await sleep(900); route.continue().catch(() => {}); });

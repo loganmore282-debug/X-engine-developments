@@ -1170,14 +1170,51 @@ function fitMoney(el, text){
   var n = String(text).length;
   el.style.fontSize = n <= 11 ? '' : n <= 13 ? '14px' : n <= 15 ? '12.5px' : '11px';
 }
+// The Me page balances count up from zero to their figure each time the page is shown (a tab tap, or coming back from a page opened from it), like Potato's;
+// a figure that changes while the page is open (a deposit lands, an earning is paid) runs up from what it showed to the new amount.
+function moneyCountUp(el, target, ms, from){
+  if (!el) return;
+  var f = Number(from) || 0, to = Number(target) || 0, token = (el._cu = (el._cu || 0) + 1);
+  el._to = to; el.dataset.val = String(to);
+  var whole = Math.round(to * 100) % 100 === 0;
+  var done = function(){ fitMoney(el, ugx(el._to)); delete el.dataset.counting; };
+  if (to === f || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { done(); return; }
+  el.dataset.counting = '1';
+  fitMoney(el, ugx(to));   // the size for the final figure, so the text does not jump while it grows
+  var t0 = performance.now();
+  var step = function(now){
+    if (el._cu !== token || !el.isConnected) return;
+    var k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+    if (k >= 1) { done(); return; }
+    var v = f + (to - f) * e;
+    el.textContent = ugx(whole ? Math.round(v) : Math.round(v * 100) / 100);
+    requestAnimationFrame(step);
+  };
+  el.textContent = ugx(f);
+  requestAnimationFrame(step);
+}
+function setMoney(el, target){
+  if (!el) return;
+  var to = Number(target) || 0;
+  if (el.dataset.counting) { el._to = to; el.dataset.val = String(to); return; }
+  if (el.dataset.val === undefined) { fitMoney(el, ugx(to)); el.dataset.val = String(to); return; }
+  if (Number(el.dataset.val) !== to) moneyCountUp(el, to, 900, Number(el.dataset.val));
+}
+// Arriving on Me: both figures show 0 at once (under the page dots), then run up as soon as the dots have lifted.
+function countMyBalances(){
+  if (!STATE) return;
+  var b = $('acctBalNum'), w = $('acctWitNum'), pairs = [[b, STATE.balance], [w, STATE.totalWithdrawn]];
+  pairs.forEach(function(p){ var el = p[0]; if (!el) return; el._cu = (el._cu || 0) + 1; delete el.dataset.counting; fitMoney(el, ugx(0)); el.dataset.val = String(Number(p[1]) || 0); });
+  afterVeil(function(){ if (STATE && _lastTab === 'account') pairs.forEach(function(p){ moneyCountUp(p[0], p[1], 1100, 0); }); });
+}
 function renderAll(){
   var s = STATE;
   if (!s) return;
   var sett = getSettings();
   paintArt();
   $('acctPhone').textContent = displayPhone(s.phone);
-  fitMoney($('acctBalNum'), ugx(s.balance));
-  fitMoney($('acctWitNum'), ugx(s.totalWithdrawn));
+  setMoney($('acctBalNum'), s.balance);
+  setMoney($('acctWitNum'), s.totalWithdrawn);
   $('teamLink').textContent = promoLink() || '—';
   $('teamL1').textContent = s.team.l1; $('teamL2').textContent = s.team.l2; $('teamL3').textContent = s.team.l3;
   $('teamComm').textContent = ugx(s.team.commission);
@@ -1615,6 +1652,7 @@ function switchTab(name){
   hideOverlays(); _ovOpen = false;
   window.scrollTo(0, 0);
   if (STATE && (name === 'rewards' || name === 'team' || name === 'home')) renderAll();
+  if (name === 'account' && STATE && _lastTab !== 'account') countMyBalances();
   if (name === 'team') medalPreload();
   if (name === 'rewards') giftPreload();
   // Coming back to Home from another tab shows the announcement again (its buttons shaking straight away).
@@ -1659,11 +1697,12 @@ function closeOverlay(){
   _ovOpen = false;
   navVeil(false);
   hideOverlays();
+  if (_lastTab === 'account') countMyBalances();   // back on Me: the balances count up again
   try { if (history.state && history.state.ov) history.back(); } catch (e) {}
 }
 window.addEventListener('popstate', function(){
   if (document.querySelector('.modal-bg.show:not(#giftRevealBg)')) closeAllSheets();
-  if (_ovOpen) { _ovOpen = false; navVeil(false); hideOverlays(); }
+  if (_ovOpen) { _ovOpen = false; navVeil(false); hideOverlays(); if (_lastTab === 'account') countMyBalances(); }
 });
 
 /* ====================== PAYOUT ACCOUNT (the mobile-money cards cash-outs are sent to) ====================== */
