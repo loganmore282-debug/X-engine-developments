@@ -395,8 +395,78 @@ function medalPose(el, tick){
   var cell = tl[tick % tl.length];
   el.style.backgroundPosition = ((cell % 10) / 9 * 100).toFixed(3) + '% ' + (Math.floor(cell / 10) / 8 * 100).toFixed(3) + '%';
 }
-// The gift (an inline SVG, see GB_SVG; the gradients live once in the page, #gbL ...): sharp at any size, animated by CSS. The opened box with its coins is a picture (gift-open.webp).
-var GB_SVG = '<svg class="gb" viewBox="0 0 200 210" aria-hidden="true"><ellipse class="gb-sh" cx="100" cy="190" rx="66" ry="11" fill="rgba(8,40,110,.28)"/><g class="gb-all"><g class="gb-body"><path d="M38 100L100 124V182L38 158Z" fill="url(#gbL)"/><path d="M100 124L162 100V158L100 182Z" fill="url(#gbR)"/><path d="M62 109.3L78 115.5V173.5L62 167.3Z" fill="url(#gbRib)"/><path d="M122 115.5L138 109.3V167.3L122 173.5Z" fill="url(#gbRibD)"/><path d="M44 106L53 109.5V153L44 149.5Z" fill="#fff" opacity=".28"/><path d="M100 124V182" stroke="#1c63c4" stroke-width="1.6" opacity=".7"/><path d="M38 100L100 124L162 100M38 100V158L100 182L162 158V100" fill="none" stroke="#1c63c4" stroke-width="1.6" stroke-linejoin="round" opacity=".75"/><path class="gb-slit" d="M38 100L100 76L162 100L100 124Z" fill="url(#gbGlow)"/></g><g class="gb-lid"><path d="M34 77L100 102V126L34 101Z" fill="url(#gbL)"/><path d="M100 102L166 77V101L100 126Z" fill="url(#gbR)"/><path d="M62 87.6L78 93.7V117.7L62 111.6Z" fill="url(#gbRib)"/><path d="M122 93.7L138 87.6V111.6L122 117.7Z" fill="url(#gbRibD)"/><path d="M100 52L166 77L100 102L34 77Z" fill="url(#gbT)"/><path d="M62 87.6L78 93.7L144 68.7L128 62.6Z" fill="url(#gbRib)"/><path d="M122 93.7L138 87.6L72 62.6L56 68.7Z" fill="url(#gbRib)"/><path d="M56 70L96 55.5L126 66.5L110 74Z" fill="#fff" opacity=".22"/><path d="M34 77L100 102L166 77M34 77V101L100 126L166 101V77M100 102V126M34 77L100 52L166 77" fill="none" stroke="#1c63c4" stroke-width="1.6" stroke-linejoin="round" opacity=".75"/><path d="M40 82L47 84.6V98L40 95.4Z" fill="#fff" opacity=".3"/><g class="gb-bow"><path d="M100 76C86 42 52 40 54 62C56 78 86 82 100 76Z" fill="url(#gbRib)" stroke="#d98600" stroke-width="1.6"/><path d="M100 76C114 42 148 40 146 62C144 78 114 82 100 76Z" fill="url(#gbRibD)" stroke="#d98600" stroke-width="1.6"/><path d="M92 69C82 54 66 52 66 62C68 70 84 74 92 69Z" fill="#7a4a00" opacity=".55"/><path d="M108 69C118 54 134 52 134 62C132 70 116 74 108 69Z" fill="#7a4a00" opacity=".55"/><path d="M90 60C80 50 66 51 64 58" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".55"/><circle cx="100" cy="76" r="10" fill="url(#gbRib)" stroke="#d98600" stroke-width="1.6"/><path d="M94 73a8 8 0 0 1 8-3" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" opacity=".7"/></g></g></g></svg>';
+// The gift (an inline SVG; the gradients live once in the page, #gbL ...): sharp at any size. Its idle loop copies the original recording: the whole box squashes fat with its walls bowed out, snaps tall with the walls pinched in, then the lid lifts over a yellow glow as if the box were about to burst. Every wall is a polygon re-drawn each frame through gbWarp(), so the walls really bend. The opened box with its coins is a picture (gift-open.webp).
+var GB_PARTS = [
+  // [lid?, closed subpaths, fill / stroke attributes]
+  [0, [[[38,100],[100,124],[100,182],[38,158]]], 'fill="url(#gbL)"'],
+  [0, [[[100,124],[162,100],[162,158],[100,182]]], 'fill="url(#gbR)"'],
+  [0, [[[62,109.3],[78,115.5],[78,173.5],[62,167.3]]], 'fill="url(#gbRib)"'],
+  [0, [[[122,115.5],[138,109.3],[138,167.3],[122,173.5]]], 'fill="url(#gbRibD)"'],
+  [0, [[[44,106],[53,109.5],[53,153],[44,149.5]]], 'fill="#fff" opacity=".28"'],
+  [0, [[[38,100],[100,124],[162,100]], [[38,100],[38,158],[100,182],[162,158],[162,100]], [[100,124],[100,182]]], 'fill="none" stroke="#1c63c4" stroke-width="1.6" stroke-linejoin="round" opacity=".75" data-open="1"'],
+  [0, [[[38,100],[100,76],[162,100],[100,124]]], 'class="gb-slit" fill="url(#gbGlow)"'],
+  [1, [[[34,77],[100,102],[100,126],[34,101]]], 'fill="url(#gbL)"'],
+  [1, [[[100,102],[166,77],[166,101],[100,126]]], 'fill="url(#gbR)"'],
+  [1, [[[62,87.6],[78,93.7],[78,117.7],[62,111.6]]], 'fill="url(#gbRib)"'],
+  [1, [[[122,93.7],[138,87.6],[138,111.6],[122,117.7]]], 'fill="url(#gbRibD)"'],
+  [1, [[[100,52],[166,77],[100,102],[34,77]]], 'fill="url(#gbT)"'],
+  [1, [[[62,87.6],[78,93.7],[144,68.7],[128,62.6]]], 'fill="url(#gbRib)"'],
+  [1, [[[122,93.7],[138,87.6],[72,62.6],[56,68.7]]], 'fill="url(#gbRib)"'],
+  [1, [[[56,70],[96,55.5],[126,66.5],[110,74]]], 'fill="#fff" opacity=".22"'],
+  [1, [[[34,77],[100,102],[166,77]], [[34,77],[34,101],[100,126],[166,101],[166,77]], [[100,102],[100,126]], [[34,77],[100,52],[166,77]]], 'fill="none" stroke="#1c63c4" stroke-width="1.6" stroke-linejoin="round" opacity=".75" data-open="1"'],
+  [1, [[[40,82],[47,84.6],[47,98],[40,95.4]]], 'fill="#fff" opacity=".3"']
+];
+var GB_BOW = '<path d="M100 76C86 42 52 40 54 62C56 78 86 82 100 76Z" fill="url(#gbRib)" stroke="#d98600" stroke-width="1.6"/><path d="M100 76C114 42 148 40 146 62C144 78 114 82 100 76Z" fill="url(#gbRibD)" stroke="#d98600" stroke-width="1.6"/><path d="M92 69C82 54 66 52 66 62C68 70 84 74 92 69Z" fill="#7a4a00" opacity=".55"/><path d="M108 69C118 54 134 52 134 62C132 70 116 74 108 69Z" fill="#7a4a00" opacity=".55"/><path d="M90 60C80 50 66 51 64 58" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".55"/><circle cx="100" cy="76" r="10" fill="url(#gbRib)" stroke="#d98600" stroke-width="1.6"/><path d="M94 73a8 8 0 0 1 8-3" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" opacity=".7"/>';
+// Poses read off the recording (t = share of the 0.433 s loop): s = height (1 = normal), b = how far the walls bow out (negative = pinched in), lift = how far the lid is up.
+var GB_KEYS = [
+  [0,.90,11,0],[.04,1,1,0],[.08,1,0,0],[.12,1.07,-6,0],[.20,1.08,-7,0],[.24,1.05,-4,6],[.30,1.04,-3,22],[.40,1.02,-2,24],
+  [.50,1,0,22],[.55,1,0,12],[.58,1,0,0],[.62,1,0,0],[.66,.97,3,0],[.74,.94,6,0],[.85,.91,10,0],[1,.90,11,0]
+];
+function gbPose(t){
+  var k = GB_KEYS, i = 1;
+  while (i < k.length - 1 && t > k[i][0]) i++;
+  var a = k[i - 1], c = k[i], f = c[0] > a[0] ? (t - a[0]) / (c[0] - a[0]) : 1;
+  f = f * f * (3 - 2 * f);
+  return { s: a[1] + (c[1] - a[1]) * f, b: a[2] + (c[2] - a[2]) * f, lift: a[3] + (c[3] - a[3]) * f };
+}
+// One point of the box through a pose: squash/stretch about the floor, walls bowed by a sine over the height, a fatter box when short and a slimmer one when tall.
+function gbWarp(x, y, o, lid){
+  var tt = Math.min(1, Math.max(0, (182 - y) / 130)), w = o.s < 1 ? 1 + (1 - o.s) * 0.9 : 1 - (o.s - 1) * 0.5;
+  return [100 + (x - 100) * w + o.b * ((x - 100) / 66) * Math.sin(Math.PI * tt), 182 - (182 - y) * o.s - (lid ? o.lift : 0)];
+}
+function gbPath(subs, o, lid, open){
+  var d = '', si, pi, n, p, q, e, pts;
+  for (si = 0; si < subs.length; si++) {
+    pts = subs[si]; d += 'M';
+    for (pi = 0; pi < pts.length; pi++) {
+      p = pts[pi]; q = pts[(pi + 1) % pts.length];
+      if (open && pi === pts.length - 1) { e = gbWarp(p[0], p[1], o, lid); d += e[0].toFixed(1) + ' ' + e[1].toFixed(1); break; }
+      for (n = 0; n < 6; n++) { e = gbWarp(p[0] + (q[0] - p[0]) * n / 6, p[1] + (q[1] - p[1]) * n / 6, o, lid); d += e[0].toFixed(1) + ' ' + e[1].toFixed(1) + 'L'; }
+    }
+    d = d.replace(/L$/, '') + (open ? '' : 'Z');
+  }
+  return d;
+}
+function gbSvg(t){
+  var o = gbPose(t), body = '', lid = '', i, P, d;
+  for (i = 0; i < GB_PARTS.length; i++) {
+    P = GB_PARTS[i]; d = gbPath(P[1], o, P[0], /data-open/.test(P[2]));
+    (P[0] ? (lid += '<path d="' + d + '" ' + P[2] + '/>') : (body += '<path d="' + d + '" ' + P[2] + '/>'));
+  }
+  return '<svg class="gb" viewBox="0 0 200 210" aria-hidden="true"><ellipse class="gb-sh" cx="100" cy="190" rx="66" ry="11" fill="rgba(8,40,110,.28)"/><g class="gb-body">' + body + '</g><g class="gb-lid">' + lid + '<g class="gb-bow">' + GB_BOW + '</g></g></svg>';
+}
+// Redraws one gift at time t: every wall path in the order the markup lists them, the glow under the lifted lid, the bow riding on the lid, and the shadow.
+function gbDraw(svg, t){
+  var o = gbPose(t), paths = svg.querySelectorAll('.gb-body > path, .gb-lid > path'), i, P, w = o.s < 1 ? 1 + (1 - o.s) * 0.9 : 1 - (o.s - 1) * 0.5;
+  for (i = 0; i < GB_PARTS.length && i < paths.length; i++) {
+    P = GB_PARTS[i]; paths[i].setAttribute('d', gbPath(P[1], o, P[0], /data-open/.test(P[2])));
+    if (paths[i].classList.contains('gb-slit')) paths[i].style.opacity = Math.min(1, o.lift / 8).toFixed(2);
+  }
+  var bow = svg.querySelector('.gb-bow'), by = 182 - 106 * o.s - o.lift;
+  if (bow) bow.setAttribute('transform', 'translate(100 ' + by.toFixed(1) + ') scale(' + w.toFixed(3) + ' ' + o.s.toFixed(3) + ') translate(-100 -76)');
+  var sh = svg.querySelector('.gb-sh'); if (sh) sh.setAttribute('rx', (66 * w).toFixed(1));
+}
+var GB_SVG = gbSvg(0.5);
 function giftPreload(){ var op = new Image(); op.src = customIcon('giftopen') || '/anim/gift-open.webp'; }
 function paintGift(){
   var custom = customIcon('giftbox');
@@ -410,13 +480,14 @@ function paintGift(){
 }
 var _animLast = -1;
 function animTick(){
-  var dls = document.querySelectorAll('svg.dl'), meds = document.querySelectorAll('.medal.live'), n = dls.length + meds.length;
+  var dls = document.querySelectorAll('svg.dl'), meds = document.querySelectorAll('.medal.live'), gbs = document.querySelectorAll('.gbox svg.gb'), n = dls.length + meds.length + gbs.length;
   if (n && !document.hidden) {
     var now = Date.now(), c, i, j, ch;
     if (dls.length) {
       c = dlCircles((now % 2000) / 1000);
       for (i = 0; i < dls.length; i++) { ch = dls[i].children; for (j = 0; j < 12; j++) { ch[j].setAttribute('cx', c[j][0].toFixed(1)); ch[j].setAttribute('cy', c[j][1].toFixed(1)); ch[j].setAttribute('r', c[j][2].toFixed(1)); } }
     }
+    for (i = 0; i < gbs.length; i++) if (gbs[i].getBoundingClientRect().width) gbDraw(gbs[i], (now % 433) / 433);
     var tick = Math.floor((now % 3000) / (1000 / 30));
     if (meds.length && tick !== _animLast) {
       _animLast = tick;
@@ -2050,13 +2121,19 @@ function copyCode(){
   if (!link) { toast('Your invite link is not ready yet.'); return; }
   copyText(link, 'Referral link copied');
 }
-function shareLink(){
+// Each brand button opens that app's own share screen with the invite link; TikTok has no web share page, so it hands the link to the phone's share sheet (or copies it).
+function shareTo(kind){
   var link = freshPromoLink();
   if (!link) { toast('Your invite link is not ready yet.'); return; }
-  // The words with the link are the admin's (Settings > Share message); {app} stands for the app's name.
   var words = String(getSettings().shareMessage || 'Join me on {app}').replace(/\{app\}/gi, brandName());
+  var u = encodeURIComponent(link), t = encodeURIComponent(words);
+  var url = '';
+  if (kind === 'tg') url = 'https://t.me/share/url?url=' + u + '&text=' + t;
+  else if (kind === 'wa') url = 'https://wa.me/?text=' + encodeURIComponent(words + ' ' + link);
+  else if (kind === 'fb') url = 'https://www.facebook.com/sharer/sharer.php?u=' + u;
+  if (url) { window.open(url, '_blank', 'noopener'); return; }
   if (navigator.share) { navigator.share({ title: brandName(), text: words, url: link }).catch(function(){}); return; }
-  copyText(link, 'Referral link copied');
+  copyText(link, 'Link copied. Paste it in TikTok.');
 }
 async function refreshTeamStats(){
   var r = await api('/team/stats');
