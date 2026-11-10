@@ -13,7 +13,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 
 // ---- the page ----
 ok(/<div id="loadingScreen">\s*<div id="ldBox">\s*<canvas id="ldCanvas" aria-hidden="true"><\/canvas>\s*<div id="ldText" role="status" aria-live="polite">SMART AI Loading\.\.\.<\/div>/.test(htmlText), 'the start-up screen is the animation (one canvas) and the live words "SMART AI Loading..."');
-ok(/#loadingScreen\{[^}]*background:#fefefe/.test(htmlText) && /\.sr-only\{/.test(htmlText), "it is white (the GIF's own white, #fefefe) from the first frame");
+ok(/#loadingScreen\{[^}]*background:#fefefe/.test(htmlText), "it is white (the GIF's own white, #fefefe) from the first frame");
 ok(/<link rel="preload" as="image" href="\/anim\/loader-robot\.webp"/.test(htmlText), 'the robot sheet starts downloading in the page head');
 ok(!/loader-sphere|000a0e|ld-name|id="ldFill"|id="ldPct"|ld-bar/.test(htmlText + mod), 'the old glass-sphere loader, its dark page and the old name / bar / percentage are gone');
 const script = (htmlText.match(/<script data-smartai-loader>([\s\S]*?)<\/script>/) || [, ''])[1];

@@ -321,9 +321,14 @@ function serverTodayKey(){
   var p = function(n){ return String(n).padStart(2, '0'); };
   return p(d.getUTCMonth() + 1) + '/' + p(d.getUTCDate()) + '/' + d.getUTCFullYear();
 }
+// Read from every screen paint, so the stored text is only parsed again when it has changed.
+var _settingsRaw = null, _settingsObj = {};
 function getSettings(){
-  try { return Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(SETTINGS_CACHE_KEY) || '{}')); }
-  catch (e) { return Object.assign({}, DEFAULT_SETTINGS); }
+  try {
+    var raw = localStorage.getItem(SETTINGS_CACHE_KEY) || '';
+    if (raw !== _settingsRaw) { _settingsObj = raw ? JSON.parse(raw) : {}; _settingsRaw = raw; }
+    return Object.assign({}, DEFAULT_SETTINGS, _settingsObj);
+  } catch (e) { _settingsRaw = null; return Object.assign({}, DEFAULT_SETTINGS); }
 }
 // What a member sees before buying is exactly what he will be paid: the product's own payout and cycle win (the server computes it the same way).
 function productCycle(p){ return Number(p && p.cycle) || 150; }
@@ -489,7 +494,6 @@ $('authGo').onclick = async function(){
   }
   if (!window.fbSignIn) { toast('Still connecting, try again in a moment'); return; }
   var email = phoneToEmail(local);
-  var label = btn.textContent;
   btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
   _authInProgress = true;
   try {
@@ -1131,19 +1135,37 @@ function renderEarnings(){
 /* ====================== ACTIVITY TICKER AND LIVE REFRESH ====================== */
 // A simulated live feed (not the member's own transactions, and not supposed to be): the same rows for everybody, made by the server and refreshed
 // now and then. The track is drawn twice back to back and animated from -50% to 0% so it loops without a seam.
-var _activityFeed = [], _activityFeedTimer = null;
+var _activityFeed = [], _activityFeedTimer = null, _activityFeedOn = false, _activityFeedSig = '', ACTIVITY_FEED_MS = 27000;
 // Every renderTicker() builds a new track, which would restart the CSS animation; a negative delay equal to how far into the cycle "now" is lets it resume.
 var TICKER_EPOCH = Date.now(), TICKER_CYCLE = 36;   // must match .ticker-track's animation duration
 async function refreshActivityFeed(){
   var r = await api('/public/activity-feed');
-  if (r.status === 'success') { _activityFeed = r.feed || []; renderTicker(); }
+  if (r.status !== 'success') return;
+  // The same rows as a moment ago: leave the running ticker alone instead of rebuilding it.
+  var feed = r.feed || [], sig = JSON.stringify(feed);
+  if (sig === _activityFeedSig && _activityFeed.length) return;
+  _activityFeedSig = sig; _activityFeed = feed; renderTicker();
+}
+// Self-scheduling like the account poll: one request at a time, none while the app is in the background, and one at once when it comes back.
+function scheduleActivityFeed(){
+  clearTimeout(_activityFeedTimer); _activityFeedTimer = null;
+  if (!_activityFeedOn || document.hidden) return;
+  _activityFeedTimer = setTimeout(async function(){
+    try { await refreshActivityFeed(); } catch (e) {}
+    scheduleActivityFeed();
+  }, ACTIVITY_FEED_MS);
 }
 function startActivityFeed(){
+  _activityFeedOn = true; _activityFeedSig = '';
   refreshActivityFeed();
-  clearInterval(_activityFeedTimer);
-  _activityFeedTimer = setInterval(refreshActivityFeed, 27000);
+  scheduleActivityFeed();
 }
-function stopActivityFeed(){ clearInterval(_activityFeedTimer); _activityFeedTimer = null; }
+function stopActivityFeed(){ _activityFeedOn = false; clearTimeout(_activityFeedTimer); _activityFeedTimer = null; }
+document.addEventListener('visibilitychange', function(){
+  if (!_activityFeedOn) return;
+  if (document.hidden) { clearTimeout(_activityFeedTimer); _activityFeedTimer = null; return; }
+  refreshActivityFeed(); scheduleActivityFeed();
+});
 function renderTicker(){
   var box = $('tickerBox');
   if (!_activityFeed.length) { box.innerHTML = ''; return; }

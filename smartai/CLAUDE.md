@@ -36,7 +36,7 @@ files or run quick-update.sh by hand: a push to `claude/smartai-build` deploys b
   `npm run test:audit` (wait for exit 0, run it in the background and read the `EXIT` line; the chain stops at the first failing test), commit, push
   to **`claude/smartai-build`**. `npm install --include=dev` for the dev tools.
 - `node set-brand.js "Name"` renames the app everywhere again (files must be git-tracked).
-- **`npm run test:audit` is the whole suite** (81 commands). The sixteen old test files of other apps that failed the same way
+- **`npm run test:audit` is the whole suite** (82 commands). The sixteen old test files of other apps that failed the same way
   in Potato (Kenya regions, Snow branding, `render.yaml`, ...) were deleted on 2026-11-09 together with `design-ref/` (Potato's screen pictures, 9.6 MB), `static-server.js`,
   `set-backend-url.js`, `deploy/deploy.sh` (an old rsync deploy to `/srv/smartai`, not the VPS layout), `translate-*` and `captcha.js`: nothing used them.
 - The app icons (`user/` and `admin/` `icon-192.png`, `icon-512.png`) and `user/link-preview.jpg` are PLACEHOLDERS (blue "SA" ring) until the owner sends the logo.
@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v14`, admin `admin/sw.js` `smartai-admin-shell-v9`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v15`, admin `admin/sw.js` `smartai-admin-shell-v9`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -395,3 +395,8 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 - Admin > Settings > "Icon sizes": `navIconSize` (14–48, default 26; was 34), `homeIconSize` (20–64, default 34; was 44), `meIconSize` (20–64, default 36; was 46). Server `DEFAULT_SETTINGS` + `SETTINGS_CRITICAL_RANGES` (out of range = 400); public via `/public/settings`.
 - App: `paintIconSizes()` sets CSS variables `--nav-ic`, `--home-ic`, `--me-ic` on `<html>` (at start from the cached settings, and after each settings fetch). CSS: `.tab .ti img`, `.act-ic`, `.menu-tile-ic.pic img`, `.menu-ic.pic` use them, so the pill/box around each icon shrinks with it. Tab padding 9→7 px, Home chip padding 14→12, Me tile padding 20→16 px.
 - Admin Save: an empty or non-number box = the standard size; numbers are clamped to the range. Test: `test-icon-sizes.js` (audit now 81 commands).
+
+## Code quality pass (owner: "Improve quality of css, intelligence of js")
+- **CSS** (`user-src/index.html`): 47 dead rules removed (old newspaper About layout `.np-*`, balance hero, topbar, profile card, wa-pill, sr-only, …); the six selectors that were written twice (`.auth-mark`, `.pb-tint`, `.ugx-coin`, `.acct-icon`, `.menu-tile-ic.pic`) are merged into one rule each (same final look; before/after screenshots of every tab and 8 overlays were pixel-identical apart from timing noise). Added keyboard `:focus-visible` rings on buttons/links, `touch-action:manipulation` (no tap delay), `text-size-adjust`, and `prefers-reduced-motion` for the page-change/tap animations.
+- **JS** (`user-src/original_module.js`): the live activity strip now schedules itself (one request at a time, none while the app is in the background, one at once on return) and leaves the running strip alone when the rows are unchanged; `getSettings()` (called on every paint) parses the stored text only when it changed; an unused variable removed. ESLint on the file: 0 errors (only unused `catch (e)` names remain, kept on purpose for old phones).
+- Guard test `test-app-quality.js` (in the audit, now 82 commands): fails if a CSS class is unused, a selector is written twice, or the strip/settings behave as before.
