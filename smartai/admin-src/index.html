@@ -42,7 +42,7 @@
      ignores it), which is exactly why render.yaml keeps sending the header
      version too. The two are not redundant. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
-<meta name="theme-color" content="#e5231d">
+<meta name="theme-color" content="#137aef">
 <link rel="manifest" href="manifest.json">
 <!-- The admin panel always uses its OWN built-in icon (the files next to this
      page). The icon uploaded in Admin -> Brand is for the members' app only. -->
@@ -56,21 +56,12 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   var b = document.getElementById('installBtn'); if (b) b.classList.add('hidden'); });</script>
 <style>
   :root{
-    /* Re-themed again to match the user app's new "Premium Industrial
-       Energy" identity (owner-specified: Corporate Red primary, Clean White
-       background, Golden Orange secondary accent, Charcoal text/secondary
-       UI -- green stays functional-only, not a theme color). Variable NAMES
-       kept (--gold/--gold-deep/--gold-ink etc.) with only the VALUES
-       swapped -- same low-risk convention as every earlier reskin here, so
-       nothing downstream (every rule in this file already reads these
-       tokens) needed touching. --gold now carries RED, not gold/orange --
-       the name is legacy (this file has been "value-only, keep the name"
-       for three re-themes running; renaming it here would mean re-reading
-       every rule that touches it to confirm nothing assumes the old value,
-       for a cosmetic variable name no one but this file's own source reads). */
-    --bg:#f4f5fb; --card:#ffffff; --ink:#25262b; --sub:#6b6d76; --line:#ececee; --line2:#f5f5f6;
-    --gold:#e5231d; --gold-deep:#c9161d; --gold-ink:#ffffff; --ok:#0f9d58; --ok-bg:rgba(15,157,88,.12);
-    --danger:#d1293e; --danger-bg:rgba(209,41,62,.1); --warn:#b45309; --warn-bg:rgba(180,83,9,.12); --sky:#f5a000;
+    /* Smart AI blue and white, the same colours as the member app (--caramel #137AEF, --caramel-deep #0D5FD2, cream #EEF4FF, navy ink #0B2A5B).
+       Variable NAMES (--gold, --gold-deep, --gold-ink) are legacy; only the values are blue. Green (ok), red (danger) and amber (warn) stay
+       functional-only colours, never theme colours. */
+    --bg:#eef4ff; --card:#ffffff; --ink:#0b2a5b; --sub:#3f5c8f; --line:#d6e3f8; --line2:#e8f0fd;
+    --gold:#137aef; --gold-deep:#0d5fd2; --gold-ink:#ffffff; --ok:#0f9d58; --ok-bg:rgba(15,157,88,.12);
+    --danger:#d1293e; --danger-bg:rgba(209,41,62,.1); --warn:#b45309; --warn-bg:rgba(180,83,9,.12); --sky:#2b8bf6;
   }
   /* Neutral, unobtrusive scrollbar. Two properties because they cover
      two different scrollbars: `scrollbar-color` is the only one an OVERLAY

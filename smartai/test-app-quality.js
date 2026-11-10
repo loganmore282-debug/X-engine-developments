@@ -51,6 +51,8 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   ok(dup.length === 0, 'no selector is written twice' + (dup.length ? ': ' + dup.join(' | ') : ''));
   ok(/button:focus-visible/.test(css) && /touch-action:manipulation/.test(css) && /prefers-reduced-motion/.test(css), 'keyboard focus rings, no tap delay and reduced motion are handled');
 
+  const admin = read('admin-src/index.html'), man = JSON.parse(read('admin/manifest.json'));
+  ok(/--gold:#137aef;/.test(admin) && /--gold-deep:#0d5fd2;/.test(admin) && !/e5231d|c9161d/i.test(admin) && man.theme_color === '#137aef', 'the admin panel is blue like the app (no leftover red theme in the page, its colour bar or its manifest)');
   // ---- 2 and 3. the real app
   for (let i = 0; i < 60; i++) { try { const hh = await fetch(base + '/health'); if (hh.ok) break; } catch (_) {} await sleep(250); }
   const front = staticServer(path.join(__dirname, 'user'), true); await new Promise(r => front.listen(FRONT, '127.0.0.1', r));

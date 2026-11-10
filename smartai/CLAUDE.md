@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v15`, admin `admin/sw.js` `smartai-admin-shell-v9`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v15`, admin `admin/sw.js` `smartai-admin-shell-v10`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -400,3 +400,7 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 - **CSS** (`user-src/index.html`): 47 dead rules removed (old newspaper About layout `.np-*`, balance hero, topbar, profile card, wa-pill, sr-only, …); the six selectors that were written twice (`.auth-mark`, `.pb-tint`, `.ugx-coin`, `.acct-icon`, `.menu-tile-ic.pic`) are merged into one rule each (same final look; before/after screenshots of every tab and 8 overlays were pixel-identical apart from timing noise). Added keyboard `:focus-visible` rings on buttons/links, `touch-action:manipulation` (no tap delay), `text-size-adjust`, and `prefers-reduced-motion` for the page-change/tap animations.
 - **JS** (`user-src/original_module.js`): the live activity strip now schedules itself (one request at a time, none while the app is in the background, one at once on return) and leaves the running strip alone when the rows are unchanged; `getSettings()` (called on every paint) parses the stored text only when it changed; an unused variable removed. ESLint on the file: 0 errors (only unused `catch (e)` names remain, kept on purpose for old phones).
 - Guard test `test-app-quality.js` (in the audit, now 82 commands): fails if a CSS class is unused, a selector is written twice, or the strip/settings behave as before.
+
+## Admin panel is blue now (owner: "it is red instead of blue ... all those old codes")
+- The admin still wore Potato's red theme. `admin-src/index.html` `:root` tokens are now the member app's blue/white (`--gold:#137aef`, `--gold-deep:#0d5fd2`, `--bg:#eef4ff`, ink `#0b2a5b`, `--sky:#2b8bf6`; names stay legacy, only values changed); `theme-color` meta and `admin/manifest.json` blue; admin cache `smartai-admin-shell-v10`. Green/red/amber stay as OK/danger/warn only. Guard check in `test-app-quality.js`.
+- The Firebase web config in the admin (`chnpetrol`) is the shared push project, not theme code; left as is.
