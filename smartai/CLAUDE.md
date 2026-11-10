@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v36`, admin `admin/sw.js` `smartai-admin-shell-v17`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v37`, admin `admin/sw.js` `smartai-admin-shell-v18`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -472,3 +472,4 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Sold-out products (owner's reference: a slanting SOLD OUT plate, blurred details)
 - A product that is closed (Active off, Upcoming/coming soon, or outside its opening hours: `isProductSoldOut`) gets `.prod-sold` over its shop card: a black plate turned -30 degrees with a red edge, red letters (letter-spaced) and red glow (`.prod-sold-tag`; the longer words 'Coming soon' / 'Opens 10:30' use `.long`, smaller), while the picture and figures are blurred and dimmed (`filter: blur(4px) brightness(.82)`). The word comes from `closedLabel(p)`: Coming soon / Opens HH:MM / **Sold out** (was 'Not available'); the disabled button says the same. The plate ignores taps. Member cache v36.
+- **Admin > Products > edit: a real Sold out switch** (above Upcoming): `soldOut` flag saved by the product sanitizer, `productOpenState` closes it first (mode 'sold', wins over Upcoming and any schedule, so it cannot be bought), the list shows a red 'Sold out' pill, and the member app shows the SOLD OUT plate (`closedLabel`). Active off still shows the plate too. Member cache v37, admin v18.

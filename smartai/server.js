@@ -3853,6 +3853,7 @@ app.get('/public/settings', async (req, res) => {
 // minute, or even just putting as it is that coming soon."
 //
 // Three ways to close a product, in this order of precedence:
+//   0. soldOut           — closed flat, shown with the SOLD OUT plate (Admin > Products > Sold out). Wins over everything below.
 //   1. comingSoon        — closed flat, no clock. The existing checkbox.
 //   2. openAt            — closed UNTIL one specific moment, then open for good.
 //   3. openFrom/openTo   — a DAILY window in EAT ("14:00" to "16:30"). Open
@@ -3894,6 +3895,7 @@ function withdrawWindowState(sett, ts) {
 }
 function productOpenState(p, nowMs) {
   const now = Number(nowMs) || Date.now();
+  if (p && p.soldOut === true) return { open: false, mode: 'sold', opensAt: null };
   if (p && p.comingSoon === true) return { open: false, mode: 'soon', opensAt: null };
   const openAt = Number(p && p.openAt) || 0;
   if (openAt && now < openAt) return { open: false, mode: 'until', opensAt: openAt };
@@ -7712,7 +7714,7 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     vip = Number(p.vip);
     if (!Number.isInteger(vip) || vip < 0 || vip > 100) return refuse('VIP level', 'must be a whole number from 0 to 100');
   }
-  return { key, name, price, cycle, expectedReturn, multiplier, buyLimit, vip, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false,
+  return { key, name, price, cycle, expectedReturn, multiplier, buyLimit, vip, image, active: p?.active !== false, soldOut: p?.soldOut === true, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false,
     // The category (Admin > Products > Categories) is only written when the caller sends one, so saving a product from its editor never moves it.
     ...(typeof p?.category === 'string' ? { category: p.category.trim().slice(0, 24) } : {}) };
 }

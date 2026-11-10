@@ -1274,7 +1274,7 @@ async function claimTier(btn){
 }
 
 /* ====================== AI ROBOTS (the products) ====================== */
-function isProductSoldOut(p){ return p.active === false || !!p.comingSoon || p.isOpen === false; }
+function isProductSoldOut(p){ return p.active === false || !!p.soldOut || !!p.comingSoon || p.isOpen === false; }
 function productImg(p){ return p && p.image ? p.image : iconUrl('robots'); }
 // A product picture is shown WHOLE (any shape, tall or wide), not cropped: object-fit contain inside its frame, and the frame takes the colour of the picture's own
 // corners so the picture melts into it (a white photo sits on white, the blue default art on blue). A picture from another website cannot be read and keeps the soft blue.
@@ -1309,6 +1309,7 @@ function limitReached(p){
   return lim > 0 && ownedCount(p.key) >= lim;
 }
 function closedLabel(p){
+  if (p.soldOut || p.openMode === 'sold') return 'Sold out';
   if (p.comingSoon || p.openMode === 'soon') return 'Coming soon';
   if (p.isOpen === false && p.opensAt) {
     var d = new Date(Number(p.opensAt)), p2 = function(n){ return String(n).padStart(2, '0'); };
