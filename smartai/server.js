@@ -582,7 +582,7 @@ const DEFAULT_SETTINGS = {
   depositGateways: 'tavupay, pesajet, lworxpay, obpay',
   // LworxPay's collection endpoint: 'standard' = POST /collect (the customer pays 4 % on top of the amount) | 'stanbic' = POST /collect-stanbic (free for the customer).
   lworxCollect: 'standard',
-  giftCodeHint: 'Enter gift code (T-XXXX)',
+  giftCodeHint: 'Enter gift code',   // codes are 10 capital letters and digits, e.g. 25LVI2IRLX (the old default said "T-XXXX", a format that does not exist)
   // Words laid over the Home banner picture (ChocoMCC's Home banner title and text); empty = nothing is drawn over the picture.
   homeBannerTitle: '', homeBannerText: '',
   // The Me page picture: how solid it is (0-100 percent) and how soft (0-40 px of blur). 100 / 0 shows the uploaded picture as it is.
@@ -709,6 +709,7 @@ async function getSettings() {
     const stored = snap.exists ? snap.data() : {};
     _settingsCache = Object.assign({}, DEFAULT_SETTINGS, stored);
     // The very first default was one button, "Pay-A"; an install that still holds exactly that was never changed by the admin, so it gets the four buttons.
+    if (String(_settingsCache.giftCodeHint).trim() === 'Enter gift code (T-XXXX)') _settingsCache.giftCodeHint = DEFAULT_SETTINGS.giftCodeHint;   // an install that still holds the old wrong default
     if (String(_settingsCache.depositMethodNames).trim() === 'Pay-A') _settingsCache.depositMethodNames = DEFAULT_SETTINGS.depositMethodNames;
     _mainAllowedHosts = sanitizeAllowedOrigins(stored.allowedOrigins).hosts || [];
     refreshHostPolicy(_settingsCache);

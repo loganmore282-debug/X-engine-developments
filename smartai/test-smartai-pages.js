@@ -112,7 +112,7 @@ async function member() {
   await J('POST', '/admin/settings/update', { settings: { homeBannerTitle: '', homeBannerText: '' } }, null, true);
   ok((((await J('GET', '/public/settings')).j.settings || {}).homeBannerTitle) === '', 'empty words mean nothing is drawn over the banner');
   await J('POST', '/admin/settings/update', { settings: { giftCodeHint: '' } }, null, true);
-  ok(((await J('GET', '/public/settings')).j.settings || {}).giftCodeHint === 'Enter gift code (T-XXXX)', 'an empty hint falls back to the default');
+  ok(((await J('GET', '/public/settings')).j.settings || {}).giftCodeHint === 'Enter gift code', 'an empty hint falls back to the default');
 
   realLog(fails ? fails + ' FAILED of ' + checks : 'PASS: Smart AI pages server routes (' + checks + ' checks)');
   process.exit(fails ? 1 : 0);

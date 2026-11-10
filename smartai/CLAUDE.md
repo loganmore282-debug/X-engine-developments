@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v59`, admin `admin/sw.js` `smartai-admin-shell-v25`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v60`, admin `admin/sw.js` `smartai-admin-shell-v26`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -556,3 +556,7 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Floating gift REMOVED (owner: "remove it, it is not good")
 - The floating gift (`#floatGift`, `.float-gift`, its `switchTab` lines and its test) is gone again; the two sections above about it (floating, raised) no longer apply. The big gift on the Rewards page is untouched. Member cache v59.
+
+## Code formats like the owner's other app (owner: "the referral code design like ours is 5 characters of capital letters, and our gift codes are capital letters i.e. 25LVI2IRLX")
+- Generation was already right and is unchanged: a referral code is **5 capital letters / digits** (`REFERRAL_LENGTH` 5, no I L O 0 1, e.g. S62BV) and a gift code is **10 capital letters / digits** (`TREASURE_CODE_LENGTH` 10, e.g. 25LVI2IRLX).
+- What changed: (1) the member app turns anything typed or pasted into those formats as it goes in (`capsCode()`: strips spaces and dashes, capitals, cut to 5 for the Create Account invitation code `#fCode` and to 10 for the gift popup `#giftCodeInput`; a code from a link is shown in capitals); both fields are bold and letter-spaced; (2) the gift field's placeholder default said "Enter gift code (T-XXXX)", a format that does not exist: the default is now "Enter gift code" (server `DEFAULT_SETTINGS`, the admin box, and an install still holding the old default is read as the new one). test-animations checks the 10 / 5 cut. Member cache v60, admin v26.

@@ -688,7 +688,8 @@
 @keyframes gsFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-8px);}}
 .gs-card{position:relative;z-index:2;width:min(88vw,340px);background:rgba(255,255,255,.96);border-radius:24px;padding:18px 16px 16px;box-shadow:0 24px 50px -14px rgba(0,30,110,.55),0 0 0 1.5px rgba(255,214,110,.7);color:var(--cocoa);text-align:center;}
 .gs-card-title{font-size:15px;font-weight:800;margin-bottom:10px;}
-.gs-input{font-size:15px;padding:13px;margin-bottom:10px;text-transform:uppercase;text-align:center;letter-spacing:1px;}
+.gs-input{font-size:16px;font-weight:800;padding:13px;margin-bottom:10px;text-transform:uppercase;text-align:center;letter-spacing:2px;}
+.gs-input::placeholder{font-weight:700;letter-spacing:.4px;text-transform:none;}
 .gs-btn{position:relative;z-index:2;min-width:190px;margin-top:10px;}
 /* the burst */
 .gs-burst .gs-box{display:none;}
@@ -1011,7 +1012,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       </div>
       <div id="regCodeField" class="field" style="display:none">
         <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a5 5 0 007 0l2-2a5 5 0 00-7-7l-1 1"/><path d="M14 10a5 5 0 00-7 0l-2 2a5 5 0 007 7l1-1"/></svg></span>
-        <input id="fCode" placeholder="Invitation code (optional)" autocomplete="off">
+        <input id="fCode" placeholder="Invitation code (optional)" autocomplete="off" autocapitalize="characters" spellcheck="false" style="text-transform:uppercase;letter-spacing:1.5px;font-weight:800">
       </div>
     </div>
     <div id="authErr" class="auth-err" style="display:none"></div>
@@ -1422,7 +1423,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       </div>
       <div class="gs-card" id="gsCard">
         <div class="gs-card-title">Enter your gift code</div>
-        <input class="famt gs-input" id="giftCodeInput" placeholder="Enter gift code" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        <input class="famt gs-input" id="giftCodeInput" placeholder="Enter gift code" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text">
         <button class="btn btn-primary btn-block" id="redeemBtn" onclick="redeemGiftCode()">Open gift</button>
       </div>
       <div class="gs-text">

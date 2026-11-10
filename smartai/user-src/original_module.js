@@ -691,7 +691,7 @@ function captureReferralFromUrl(){
     if (!ref) ref = search.get('code');
     if (!ref) return;
     _refFromUrl = String(ref).trim();
-    $('fCode').value = _refFromUrl;
+    _refFromUrl = _refFromUrl.toUpperCase(); $('fCode').value = _refFromUrl;
     setAuthMode('register');
   } catch (e) {}
 }
@@ -2174,6 +2174,17 @@ async function doCheckin(){
 }
 // The gift: tapping it (or Open gift) with a code typed shows the stage -- the page blurs, spoke rings turn, the gift spins with glitter while the code is checked --
 // and a right code bursts the gift open: a coin rises, coins and ribbon bits fly, balloons float up, and the figure counts up to the real amount.
+// Codes are written the way the owner's other app writes them: a referral code is 5 capital letters / digits (S62BV), a gift code 10 (25LVI2IRLX). Whatever is typed or pasted
+// (lower case, spaces, dashes) is turned into capitals and cut to that length as it goes in.
+function capsCode(el, max){
+  if (!el) return;
+  el.addEventListener('input', function(){
+    var v = String(el.value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, max);
+    if (v !== el.value) el.value = v;
+  });
+}
+capsCode($('fCode'), 5);
+capsCode($('giftCodeInput'), 10);
 function tapGiftBox(){ openGiftStage(); }
 async function redeemGiftCode(){
   var raw = $('giftCodeInput').value.trim().toUpperCase();
