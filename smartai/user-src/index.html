@@ -225,9 +225,12 @@
   .net-card img{width:44px;height:44px;object-fit:contain;border-radius:10px;}
   .net-card span.net-lbl{font-size:13px;font-weight:800;color:var(--cocoa);}
   .net-card.active{border-color:var(--caramel);background:var(--caramel-pale);}
-  .net-card .net-check{display:none;position:absolute;bottom:-6px;right:-6px;width:22px;height:22px;border-radius:50%;
+  .net-card .net-check{display:none;position:absolute;bottom:-6px;right:-6px;width:24px;height:24px;border-radius:50%;
     background:var(--caramel);color:#fff;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(11,42,91,.3);}
-  .net-card.active .net-check{display:flex;}
+  .net-card.active .net-check{display:flex;animation:calTick .3s cubic-bezier(.2,1.7,.4,1) both;}
+  @media (prefers-reduced-motion:reduce){span.net-check{animation:none !important;}}
+  /* the same tick as the check-in calendar: a real heavy check mark character, white */
+  .net-card .net-check::after{content:"\2713\FE0E";font:900 14px/1 system-ui,"Segoe UI Symbol","Noto Sans Symbols2",sans-serif;color:#fff;}
   .auth-tag{display:inline-block;color:var(--mint);font-weight:800;font-size:11.5px;
     text-transform:uppercase;margin-bottom:14px;letter-spacing:.6px;}
 
@@ -1160,11 +1163,11 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <div class="net-card-row" id="depNetworkRow">
         <button type="button" class="net-card" data-net="MTN Mobile Money" onclick="selectDepNetwork('MTN Mobile Money')">
           <img src="/icons/mtn.jpg" alt="MTN"><span class="net-lbl">MTN</span>
-          <span class="net-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>
+          <span class="net-check" aria-hidden="true"></span>
         </button>
         <button type="button" class="net-card" data-net="Airtel Money" onclick="selectDepNetwork('Airtel Money')">
           <img src="/icons/airtel.jpg" alt="Airtel"><span class="net-lbl">Airtel</span>
-          <span class="net-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>
+          <span class="net-check" aria-hidden="true"></span>
         </button>
       </div>
       <span class="flabel">Mobile-money number to pay from</span>

@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v43`, admin `admin/sw.js` `smartai-admin-shell-v22`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v44`, admin `admin/sw.js` `smartai-admin-shell-v22`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -500,3 +500,6 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Category tabs sit in an oval bar (owner: "put a bar oval or what to enclose them")
 - `.cat-tabs` (All, Class A, ...) is now a white pill-shaped track with a thin blue edge and soft shadow (hugs the tabs, scrolls sideways if there are many); inactive tabs are plain text, the active one keeps the blue gradient pill. CSS only (user-src/index.html). Member cache v43.
+
+## Network-choice tick = the calendar's tick (owner: "change those ticks, it should be like the one we use on calendar")
+- The blue badge on the selected MTN / Airtel card (Add Funds) no longer draws an SVG check. It shows the same real heavy ✓ character as the check-in calendar (`\2713\FE0E`, 900 weight, white) and pops in with the calendar's `calTick` animation (off for reduced-motion). CSS only, user-src/index.html. Member cache v44.
