@@ -209,6 +209,14 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   // no blue flashes on product pictures: a repaint with nothing new keeps the very same picture elements, and a framed picture is never shown on an empty blue frame
   const flash = await p.evaluate(async () => { switchTab('shop'); await new Promise(r => setTimeout(r, 600)); const a = document.querySelector('.prod-img'); renderAll(); renderAll(); const b = document.querySelector('.prod-img'); const cs = getComputedStyle(b); return { same: a === b, op: cs.opacity, bg: cs.backgroundColor, blue: /221, ?233, ?252/.test(cs.backgroundColor) }; });
   ok(flash.same && flash.op === '1' && !flash.blue, 'repainting the shop keeps the same picture elements and never shows the blue empty frame');
+  // moving between product categories shows the dots until the products have really been asked of the server
+  await p.evaluate(() => { _lastCfgAt = 0; switchTab('shop'); }); await sleep(1100);
+  await p.route('**/k7x2/public/products', async (route) => { await sleep(1300); route.continue().catch(() => {}); });
+  await p.evaluate(() => { CATEGORIES = [{ id: 'catA', name: 'Cat A' }, { id: 'catB', name: 'Cat B' }]; _shopCat = ''; _lastCfgAt = 0; renderShop(); document.querySelector('.cat-tab[data-cat="catA"]').click(); }); await sleep(900);
+  ok(await p.evaluate(() => document.getElementById('navVeil').classList.contains('on') && document.querySelector('.cat-tab.active').dataset.cat === 'catA'), 'tapping a product category turns its tab on and brings the dots, which stay while the server answers');
+  ok(await until(() => !document.getElementById('navVeil').classList.contains('on'), null, 5000), 'and they lift when the products have been painted');
+  await p.unroute('**/k7x2/public/products');
+  await p.evaluate(() => { CATEGORIES = []; _shopCat = ''; renderShop(); });
   // tapping a Featured robot on Home must still scroll to its card while the dots are up and the page data is on its way
   await p.evaluate(() => { _lastDataAt = 0; _lastCfgAt = 0; switchTab('home'); }); await sleep(1200);
   await p.route('**/k7x2/investments', async (route) => { await sleep(900); route.continue().catch(() => {}); });

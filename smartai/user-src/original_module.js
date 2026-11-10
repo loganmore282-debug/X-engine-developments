@@ -1345,7 +1345,14 @@ function renderShopTabs(){
     return '<button type="button" class="cat-tab' + (c.id === _shopCat ? ' active' : '') + '" role="tab" aria-selected="' + (c.id === _shopCat) + '" data-cat="' + esc(c.id) + '" onclick="selectShopCat(this.dataset.cat)">' + esc(c.name) + '</button>';
   }).join('');
 }
-function selectShopCat(id){ _shopCat = id || ''; renderShop(); }
+// Tapping a category: the tab turns active at once, the dots come over the page and stay until the products and categories have really been asked of the server and painted.
+function selectShopCat(id){
+  id = id || '';
+  if (id === _shopCat) return;
+  _shopCat = id; renderShop();
+  var epoch = _authEpoch;
+  navVeil(false, liveConfig(2000).then(function(){ if (STATE && epoch === _authEpoch) renderShop(); }));
+}
 function renderShop(){
   renderShopTabs();
   var firstOpen = -1;
