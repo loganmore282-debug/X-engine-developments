@@ -1121,7 +1121,7 @@ function tradePinCancel(){
    Every banner is either a picture the admin uploaded (Admin > Banners) or a blue art banner with one of the owner's icons. */
 function artHtml(url, icon){
   // The blue art is always underneath; a picture the admin uploaded covers it, and falls away by itself if it cannot be loaded.
-  return artFillHtml(icon) + (url ? '<img class="art-photo" src="' + esc(url) + '" alt="" onerror="this.remove()">' : '');
+  return artFillHtml(icon) + (url ? '<img class="art-photo" src="' + esc(url) + '" alt="" onload="var b=this.closest(\'.photo-banner,.acct-cover\'); if(b) b.classList.add(\'fit\')" onerror="this.remove()">' : '');
 }
 function artFillHtml(icon){
   return '<div class="art-fill"><span class="art-ring r1"></span><span class="art-ring r2"></span><span class="art-ring r3"></span><img class="art-bot" data-icon="' + icon + '" src="' + iconUrl(icon) + '" alt=""></div>';
