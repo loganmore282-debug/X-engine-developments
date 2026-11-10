@@ -1274,7 +1274,7 @@ async function claimTier(btn){
 }
 
 /* ====================== AI ROBOTS (the products) ====================== */
-function isProductSoldOut(p){ return p.active === false || !!p.soldOut || !!p.comingSoon || p.isOpen === false; }
+function isProductSoldOut(p){ return p.active === false || !!p.comingSoon || p.isOpen === false; }   // closed for any reason: the card wears the COMING SOON plate
 function productImg(p){ return p && p.image ? p.image : iconUrl('robots'); }
 // A product picture is shown WHOLE (any shape, tall or wide), not cropped: object-fit contain inside its frame, and the frame takes the colour of the picture's own
 // corners so the picture melts into it (a white photo sits on white, the blue default art on blue). A picture from another website cannot be read and keeps the soft blue.
@@ -1309,14 +1309,13 @@ function limitReached(p){
   return lim > 0 && ownedCount(p.key) >= lim;
 }
 function closedLabel(p){
-  if (p.soldOut || p.openMode === 'sold') return 'Sold out';
   if (p.comingSoon || p.openMode === 'soon') return 'Coming soon';
   if (p.isOpen === false && p.opensAt) {
     var d = new Date(Number(p.opensAt)), p2 = function(n){ return String(n).padStart(2, '0'); };
     var today = new Date(); var same = d.toDateString() === today.toDateString();
     return 'Opens ' + (same ? '' : p2(d.getDate()) + '/' + p2(d.getMonth() + 1) + ' ') + p2(d.getHours()) + ':' + p2(d.getMinutes());
   }
-  return 'Sold out';
+  return 'Coming soon';   // every other closed product (Active off) reads the same: only COMING SOON is shown to members
 }
 function renderFeatured(){
   // Sold-out and coming-soon robots are never featured: no point steering anyone toward something they cannot buy yet.

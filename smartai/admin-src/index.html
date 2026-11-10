@@ -2628,7 +2628,7 @@ async function renderProducts(){
       <div class="prod">
         <div class="thumb" style="${p.image?`background-image:url('${esc(p.image)}')`:''}">${p.image?'':tintSwatch()}</div>
         <div class="pb">
-          <div class="pt">${esc(p.name||p.label)}${p.active===false?'<span class="pill-tag t-mut">Off</span>':''}${p.soldOut?'<span class="pill-tag t-warn">Sold out</span>':''}${(!p.soldOut&&p.comingSoon)?'<span class="pill-tag t-warn">Upcoming</span>':''}${(!p.comingSoon&&p.openFrom&&p.openTo)?`<span class="pill-tag t-warn">${esc(p.openFrom)}–${esc(p.openTo)}</span>`:''}${(!p.comingSoon&&p.openAt&&Number(p.openAt)>Date.now())?'<span class="pill-tag t-warn">Scheduled</span>':''}</div>
+          <div class="pt">${esc(p.name||p.label)}${p.active===false?'<span class="pill-tag t-mut">Off</span>':''}${(p.comingSoon||p.soldOut)?'<span class="pill-tag t-warn">Upcoming</span>':''}${(!p.comingSoon&&p.openFrom&&p.openTo)?`<span class="pill-tag t-warn">${esc(p.openFrom)}–${esc(p.openTo)}</span>`:''}${(!p.comingSoon&&p.openAt&&Number(p.openAt)>Date.now())?'<span class="pill-tag t-warn">Scheduled</span>':''}</div>
           <div class="pp">${ugx(p.price)} · ${p.cycle||0} days · VIP ${p.vip||0}</div>
           <div class="pr">Pays ${ugx(resolvedPayout(p))}${(Number(p.multiplier)>0)?` <span class="muted">(&times;${esc(String(p.multiplier))})</span>`:''}</div>
           ${cats.length?`<div style="margin:6px 0"><select data-catof="${esc(p.key)}" aria-label="Category of ${esc(p.name||p.label||p.key)}" style="width:100%"><option value="">Category: All only</option>${cats.map(c=>`<option value="${esc(c.id)}"${p.category===c.id?' selected':''}>${esc(c.name)}</option>`).join('')}</select></div>`:''}
@@ -2700,8 +2700,6 @@ function editProduct(p, order){
     <input id="pImage" value="${esc(p.image&&!/^data:/.test(p.image)?p.image:'')}" placeholder="https://…/product.png">
     <div class="switch-row" style="margin-top:10px"><span><b>Active</b> <span class="muted">(shown in the app)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="pActive" ${p.active!==false?'checked':''} style="width:auto"></label></div>
-    <div class="switch-row"><span><b>Sold out</b> <span class="muted">(shown with the SOLD OUT plate, blurred, not buyable)</span></span>
-      <label style="width:auto;margin:0"><input type="checkbox" id="pSold" ${p.soldOut?'checked':''} style="width:auto"></label></div>
     <div class="switch-row"><span><b>Upcoming</b> <span class="muted">(shown, but not buyable — no clock)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="pSoon" ${p.comingSoon?'checked':''} style="width:auto"></label></div>
     <div class="muted" style="margin:14px 0 6px"><b>Opening schedule</b> — leave blank for always open.
@@ -2780,7 +2778,7 @@ function editProduct(p, order){
     const key = typedKey || p.key || ($('pLabel').value.toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,24)) || ('item'+Date.now());
     const body = { key, name:$('pLabel').value, price:$('pPrice').value,
       expectedReturn:$('pRet').value, multiplier:_retIsTruth?'':$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, vip:$('pVip').value, order:$('pOrder').value,
-      image, active:$('pActive').checked, soldOut:$('pSold').checked, comingSoon:$('pSoon').checked,
+      image, active:$('pActive').checked, comingSoon:$('pSoon').checked,
       // datetime-local has no zone, so the browser reads it as local time --
       // which for the owner IS Uganda time. Sent as epoch ms so the server
       // never has to guess a zone.

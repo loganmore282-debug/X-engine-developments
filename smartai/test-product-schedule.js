@@ -57,10 +57,7 @@ const soon = at({ comingSoon: true });
 check(soon.open === false && soon.mode === 'soon' && soon.opensAt === null,
   'comingSoon closes it with NO clock -- "or even just putting as it is that coming soon"');
 
-const sold = at({ soldOut: true });
-check(sold.open === false && sold.mode === 'sold' && sold.opensAt === null, 'soldOut closes it with no clock (the SOLD OUT plate in the app)');
-check(at({ soldOut: true, comingSoon: true }).mode === 'sold' && at({ soldOut: true, openFrom: '00:00', openTo: '23:59' }).open === false, 'soldOut beats comingSoon and any window');
-check(/soldOut: p\?\.soldOut === true/.test(src), 'the product editor saves the soldOut flag');
+check(at({ soldOut: true }).open === false && at({ soldOut: true }).mode === 'soon', 'an old product that still carries the removed soldOut flag stays closed, as coming soon');
 
 const until = at({ openAt: NOW + 3600000 });
 check(until.open === false && until.mode === 'until' && until.opensAt === NOW + 3600000,
