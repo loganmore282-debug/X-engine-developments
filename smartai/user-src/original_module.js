@@ -1460,11 +1460,12 @@ function recStatusInfo(s){
   if (['failed', 'declined', 'cancelled', 'rejected', 'expired'].indexOf(s) !== -1) return { label: 'Declined', cls: 'bad' };
   return { label: s.charAt(0).toUpperCase() + s.slice(1), cls: 'mut' };
 }
+var _recordsAsk = null;   // the request the last setRecordsTab() sent (the page veil waits for it); setRecordsTab itself returns nothing so a caller never has to wait
 function setRecordsTab(t){
   _recordsTab = t;
   document.querySelectorAll('.uline-tab[data-rt]').forEach(function(b){ b.classList.toggle('active', b.dataset.rt === t); });
   renderRecords();
-  return Promise.all([loadRecordsTab(t), liveData(8000)]).then(renderRecords);
+  _recordsAsk = Promise.all([loadRecordsTab(t), liveData(8000)]).then(renderRecords);
 }
 // Top-ups and cash-outs are asked for fresh every time (a deposit that was still pending a minute ago may be done now); _recordsLoaded only
 // decides whether the "loading" placeholder is shown the first time.
@@ -1578,7 +1579,7 @@ function openOverlay(name){
   var rt = null;
   if (name === 'bindbank') renderBankList();
   if (name === 'withdraw') prepareWithdraw();
-  if (name === 'records') rt = setRecordsTab(_recordsTab === 'accrued' || _recordsTab === 'topups' || _recordsTab === 'cashouts' ? _recordsTab : 'accrued');
+  if (name === 'records') { setRecordsTab(_recordsTab === 'accrued' || _recordsTab === 'topups' || _recordsTab === 'cashouts' ? _recordsTab : 'accrued'); rt = _recordsAsk; }
   if (name === 'mychoc') renderMyRobots();
   if (name === 'earnings') renderEarnings();
   if (name === 'deposit') prepareDeposit();
