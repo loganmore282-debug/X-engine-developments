@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v48`, admin `admin/sw.js` `smartai-admin-shell-v23`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v49`, admin `admin/sw.js` `smartai-admin-shell-v23`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -520,3 +520,6 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Page pictures flow into the page in white, like the Me page (owner: "images will have white flowing transition just like on the me page")
 - `.overlay .photo-banner::after` uses the same melt as `.acct-cover::after` (two soft cream ellipses at the bottom corners plus a cream fade up from the bottom), so the picture of every full page (Ledger, About, Add Funds, Cash Out, Support, Payout Account) fades into the page colour. These banners are now square-cornered with no shadow so there is no edge (the 28 px rounded bottom was dropped); the old "About Us square banner" rule is gone. test-team.js reads "Level 1 · 1 member" instead of the removed title. Member cache v48.
+
+## Slimmer bottom bar (owner: "the navigation bar is too big")
+- `.tabbar` padding 8 px to 4 px (top and bottom), `.tab` padding 7 px to 5 px / 4 px, label 10 px, icon-to-label gap 3 px to 1 px: the bar went from about 72 px to 56 px tall with the icons at their set size (Admin > Settings > icon sizes still decide the icon). `#root` bottom space 86 px to 66 px so the last card still clears the bar. Member cache v49.
