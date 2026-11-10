@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v21`, admin `admin/sw.js` `smartai-admin-shell-v14`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v22`, admin `admin/sw.js` `smartai-admin-shell-v14`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -432,3 +432,8 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 - **`shareTo(kind)`** (replaces `shareLink()`): `tg` -> `https://t.me/share/url?url=&text=`, `wa` -> `https://wa.me/?text=`, `fb` -> `facebook.com/sharer/sharer.php?u=`; TikTok has no web share page so it uses `navigator.share` or copies the link ("Link copied. Paste it in TikTok."). The words come from Settings > Share message; the link is a fresh `freshPromoLink()`.
 - **The gift now bends.** `GB_SVG` = `gbSvg()`: every wall is a polygon (`GB_PARTS`, edges cut into 6 pieces) redrawn each frame by `gbDraw(svg, t)` through `gbWarp()`: squash/stretch about the floor, walls bowed by a sine over the height (`b` positive = barrel when squashed, negative = pinched when tall), fatter when short and slimmer when tall, lid lifted (`lift`) over the yellow `.gb-slit` glow, bow and shadow follow. `GB_KEYS` = the poses read off the 26 recording pictures (0.433 s loop). Driven by `animTick()` for every visible `.gbox svg.gb`; the old CSS keyframes (gbWob, gbLid, gbSlit) are gone.
 - Tests: `test-animations.js` (79 checks) covers the four buttons, their share addresses and the bending walls.
+
+## Support page icons (owner: two recordings of the animated Telegram and WhatsApp app icons, "telegram group, channel, WhatsApp group, support")
+- The Support overlay (`#supportLinks`, `renderStaticPages()`) rows now use `supIcon('tg'|'wa')`: the squircle app icons **traced off the recordings** (`SUP_ART` in `original_module.js`, 600 x 600 paths; gradients `#supTg` / `#supWa` live once in the zero-size defs `<svg>` before the tab bar). Labels: Telegram Channel, Telegram Group, Telegram Support, WhatsApp Group, WhatsApp Support (each shows only if the admin set its link, Settings > contacts).
+- **Animation** (`.sup-ic`, `@keyframes supPop`, 2.667 s loop, phases staggered 0.55 s per row): the icon pops from 75 % to full size in 0.3 s, dips to 94 % and back, dips to 98 % and back, holds full to 2.17 s, then shrinks back to 75 %; sampled from the recordings at 60 pictures a second. `prefers-reduced-motion` stops it.
+- Test: `test-animations.js` (80 checks).
