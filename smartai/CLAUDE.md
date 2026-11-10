@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v10`, admin `admin/sw.js` `smartai-admin-shell-v6`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v11`, admin `admin/sw.js` `smartai-admin-shell-v6`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -151,18 +151,16 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
 ## Start-up animation (the owner's first GIF) and payment animation (his second GIF)
 Both are the owner's own GIFs (800 x 600, 100 frames), played by code from sprite sheets that `tools/make-anim-sprites.py` cuts out of them (the GIFs are not in git;
 the sheets are): `python3 tools/make-anim-sprites.py <start-up.gif> <payment.gif>` (needs Pillow, numpy, opencv; it prints the background stops for the loader).
-- **Start-up loader** = the `<script data-smartai-loader>` at the top of `user-src/index.html` drawing on `#ldCanvas`; the screen is dark (`#loadingScreen`), nothing else on it
-  (no name, no bar, no percentage; the admin's "Loading screen box picture" is gone). The GIF's measured facts: 25 frames a second, 100 frames = a 4 s loop; the **sphere**
-  (radius 92.5 px, centre = the picture's centre) is played from `user/anim/loader-sphere.webp` (10 x 10 sheet of 192 px frames, de-noised, cross-faded between frames);
-  the **teal wedge** (pie behind the sphere, radius ~128, 54 degrees: hard front edge, tail fading over 30 degrees, colour 23,198,204) turns clockwise 3.6 degrees a frame;
-  **36 dots** every 10 degrees on a ring of radius 128.73 centred 1.37 px right / 1.11 px below the sphere, the lit stretch (6 dots, full inside 12 degrees of its middle,
-  gone at 31.5) starts at 35 degrees and turns the OTHER way at the same speed; **71 sparkles** (1 px, pale cyan/white) sit in the ring between radius 96 and 129.5, 25 to 78
-  degrees behind the wedge's front edge, each living 1 to 4 frames; **a burst of 365 sparkles** flies out of the sphere in frames 34 to 47; the **background** is a circular
-  gradient (the `PLATE` stops, measured on the median of all frames: the dark band 94-107, the glow band 108-125, then fading to 0,10,14). Until the sheet has arrived a 96 px
-  copy of frame 0 (`POSTER`, inline) stands in. The page head preloads the sheet. Scale: 0.72 of the screen's short side over 273 px, between 0.7 and 1.25. The app keeps
-  `LOADER_MIN_MS = 2500`; `hideLoadingScreen()` is the only way out. Hooks: `_smartaiLoaderStart`, `_smartaiLoaderRestart`, tests use `_smartaiLoaderDraw(frame)` (draws and freezes
-  the loop) and `_smartaiLoaderScale` (1 = one css pixel per GIF pixel: then the canvas can be compared with the GIF frame by frame; mean difference 6/255 inside the sphere,
-  4 on the rings, 0.6 outside). `test-loader.js` reads pixels back (wedge, dots, sphere, burst) in a real browser.
+- **Start-up loader = the owner's ROBOT loading GIF** (his second start-up animation, replaced the glass sphere on 2026-11-10; owner: "Replace the start up loader with this but put SMART AI BEFORE THE WORD Loading...").
+  The GIF is 357 x 356, 12 frames of 130 ms (a 1.56 s loop); it is a white page with a robot, turning blue arcs, changing faces, a star / sparkle in some frames, a platform and five progress dots (its own "Loading..."
+  words are in the picture). `tools/make-robot-loader.py <gif>` cuts `user/anim/loader-robot.webp` (4 x 3 sheet of 357 x 356 frames, 127 kB) and WIPES the GIF's words (rows 266-307, the glow above ends at 262
+  and the dots start at 311, so nothing else is touched). The page (`<script data-smartai-loader>` + `#ldBox`, `#ldCanvas`, `#ldText` in `user-src/index.html`) plays the 12 frames at 130 ms on a canvas (about
+  0.8 of the screen width, 240-420 px, drawn at the device's sharpness up to 3x: the GIF has only 357 px, so a big screen shows it soft) and writes **"SMART AI Loading..."** as LIVE text (bold navy `#0b1a4f`,
+  Poppins / Inter / system sans, 24 px per 357 px of animation) at 80.9 % of the box height = where the GIF's own words were. The page is white `#fefefe` (the GIF's own white; the sheet decodes to exactly 254);
+  the status bar (`theme-color`) and `manifest.json` `background_color` are the same white. The app keeps `LOADER_MIN_MS = 2500` and `hideLoadingScreen()` is the only way out; hooks `_smartaiLoaderStart`,
+  `_smartaiLoaderRestart`, `_smartaiLoaderEnded`, and `_smartaiLoaderDraw(frame)` for tests. `user/anim/loader-sphere.webp` is no longer shipped (`tools/make-anim-sprites.py` can still cut it). `test-loader.js`
+  (35 checks): the words and their order, white page, sheet 1428 x 1068, all 12 frames drawn, the GIF's words gone from every frame, the dots present, 12 different pictures, and a real run: a new picture about every
+  130 ms and the same picture back after 1.56 s.
 - **Payment animation** = `showPayOrb()` / `payOrbFrame()` in `original_module.js`: a 116 px dark rounded tile on the Add Funds status page in place of the old phone picture,
   playing `user/anim/pay-orb.webp` (100 frames of 224 px, 20 ms each = the GIF's 2 s loop, no blending). The tick still replaces it when the payment is confirmed
   (`showDepositSuccess`). The sheet is fetched when the Add Funds page opens (`preloadPayOrb`). Guarded in `test-smartai-app.js` (step 7b).

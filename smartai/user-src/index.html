@@ -56,7 +56,7 @@
      app keeps the colour it was installed with until it is reinstalled. -->
 <meta name="theme-color" content="#eef4ff">
 <link rel="manifest" href="/manifest.json">
-<link rel="preload" as="image" href="/anim/loader-sphere.webp" type="image/webp">
+<link rel="preload" as="image" href="/anim/loader-robot.webp" type="image/webp">
 <!-- The app icon and the share card are both admin-uploadable, which is why
      these point at smartai-server rather than at the files sitting next to
      this one. Neither consumer can be reached from our JavaScript: Chrome
@@ -695,9 +695,11 @@ img.art-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
 .about-html p{margin:0 0 10px;}
 a.btn{text-decoration:none;}
 
-/* ---- start-up screen (Smart AI): the owner's animation, on its own dark background ---- */
-#loadingScreen{position:fixed;inset:0;overflow:hidden;background:#000a0e;display:flex;align-items:center;justify-content:center;z-index:500;}
-#loadingScreen canvas{display:block;flex:none;}
+/* ---- start-up screen (Smart AI): the owner's robot loading animation on its white page, with "SMART AI Loading..." written live under it ---- */
+#loadingScreen{position:fixed;inset:0;overflow:hidden;background:#fefefe;display:flex;align-items:center;justify-content:center;z-index:500;}
+#ldBox{position:relative;flex:none;width:288px;}
+#ldBox canvas{display:block;width:100%;height:auto;}
+#ldText{position:absolute;left:-10%;right:-10%;top:80.9%;transform:translateY(-50%);text-align:center;white-space:nowrap;font-weight:800;font-size:19px;letter-spacing:.2px;color:#0b1a4f;font-family:'Poppins','Inter','Segoe UI',system-ui,-apple-system,Roboto,Arial,sans-serif;}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
 </style>
 <script data-smartai-idle>
@@ -707,147 +709,58 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
 <body>
 
 <div id="loadingScreen">
-  <canvas id="ldCanvas" aria-hidden="true"></canvas>
-  <span class="sr-only" role="status" aria-live="polite">Loading</span>
+  <div id="ldBox">
+    <canvas id="ldCanvas" aria-hidden="true"></canvas>
+    <div id="ldText" role="status" aria-live="polite">SMART AI Loading...</div>
+  </div>
 </div>
 <script data-smartai-loader>
-/* THE START-UP ANIMATION. The owner's first GIF (800 x 600, 25 frames a second, 100 frames = a 4 s loop), built in code and played on a canvas:
- *  - the glass sphere is played from a sprite sheet, anim/loader-sphere.webp (its 100 frames cut out of the GIF, 190 x 190 each, 10 x 10);
- *  - the teal wedge turns once, clockwise, in every loop (3.6 degrees a frame); its front edge is hard, its tail fades out over 30 degrees;
- *  - 36 dots sit on a ring (every 10 degrees); the lit part of the ring (6 dots, brightest in the middle) turns the other way at the same speed;
- *  - a cloud of 71 single-pixel sparkles stays behind the wedge, and once a loop (frames 34 to 47) a ring of sparkles flies out of the sphere;
- *  - everything sits on the GIF's own dark background, a circular gradient.
- * Lengths below are in GIF pixels around the sphere's centre; they were measured on the GIF frame by frame (see smartai/CLAUDE.md, "Start-up animation").
- * The pictures are painted from the first frame: the wedge, dots and sparkles need no file, and a tiny copy of frame 0 stands in for the sphere
- * until its sheet has arrived. Hooks the app uses: _smartaiLoaderStart (min time), _smartaiLoaderRestart (shown again); tests use _smartaiLoaderDraw(frame)
- * and _smartaiLoaderScale (css pixels per GIF pixel). */
+/* The start-up screen is the owner's robot loading GIF (357 x 356, 12 frames, 130 ms each = a 1.56 s loop), played from a sprite sheet (anim/loader-robot.webp, 4 x 3 frames,
+ * made by tools/make-robot-loader.py): the robot, the turning blue arcs, the sparkles, the faces and the five progress dots are the GIF's own, frame for frame at its own timing.
+ * The GIF's words "Loading..." are wiped out of the sheet and written here as live text, "SMART AI Loading...", in the same place. The page is white (#fefefe, the GIF's own white).
+ * Hooks the app uses: _smartaiLoaderStart (min time), _smartaiLoaderRestart (shown again), _smartaiLoaderEnded; tests use _smartaiLoaderDraw(frame) (draws that frame and stops the loop). */
 (function(){
   window._smartaiLoaderStart = Date.now();
-  var ls = document.getElementById('loadingScreen'), cv = document.getElementById('ldCanvas');
-  if (!ls || !cv || !cv.getContext) return;
-  var ctx = cv.getContext('2d');
-  if (!ctx) return;
-  var LOOP = 100, FRAME_MS = 40, BOX = 300, CELL = 192, SPX = 96, SPY = 96, DOT_DX = 1.37, DOT_DY = 1.11;   // (the ring of dots is centred 1.37 px right and 1.11 px below the sphere)
-  // The background: radial stops [radius, r, g, b], measured around the sphere (the dark band right outside it, the glow band, then the fade to black-teal).
-  var PLATE = [[0,11,8,85],[94,11,8,85],[95,15,7,81],[96,16,7,80],[98,15,7,78],[100,14,7,74],[102,12,6,69],[104,10,6,65],[106,9,6,62],[107,9,6,64],[108,11,6,70],[109,14,8,81],[110,13,8,86],[111,12,8,87],[112,11,8,86],[114,10,8,83],[116,10,8,83],[118,8,7,79],[120,8,6,76],[122,8,6,74],[126,8,6,73],[131,8,4,71],[135,8,4,71],[140,8,4,70],[150,8,4,68],[160,8,4,66],[175,7,6,62],[190,7,6,60],[205,6,6,56],[220,6,6,54],[240,6,6,49],[260,4,7,45],[280,4,8,42],[300,3,8,37],[320,3,8,32],[340,2,8,28],[360,1,9,25],[380,1,10,20],[400,0,10,15],[420,0,10,14],[520,0,10,14]];
-  var POSTER = 'data:image/webp;base64,UklGRi4DAABXRUJQVlA4ICIDAAAwFgCdASpgAGAAPrlKnkqnJCKhtHesSOAXCWQAwQ/HlLmrTvSuwK07jP8GFTlBSOSiffrPiP7eOmellrZUBOkQ3NjAxltjlW1R0nopDcgYHO1BbXUGqqWHdE06QfHBK4dZ4iKFOdcjudbawCvKb5CCKOJXBIqJ8JP2oqhaspUGg5aniA2GqF45Cje1SeDbdBqL1v3ZixhwAUSfue2Cr/dcWcep+JzyqI/HLqzKOJ7bYnZqu7yvE9BIrAAA/vZ5FK37wo/In/zh9UJ/R/eznY/wt8cVjnq9v9tNX6YkWSrQVuWCqVKlYUv1Jy1BT6CbgW5UcS3qfRj39f5vK4gPOACtP9j0IK9FWUR7waHl/SMfHEBw0o+lYs6qGYmh9culDeJgrIzAnjZuWhaOTUbUAi05fLY/9VlM8GRvRjMNzXGjdqdHgj98tfUzE3cF7ymdCVPWeZFjP/5lnkh5ZlIc1DL6ZWQFst3fGxYNKSh8oxDJEG2yzhnN5Jx8xY5EeZFvl6QZ8y66cQ808BNb2ySMRpiqzpIswOfv2VQ6sJ7im8AZ9X2bj/W/VKnLmPSYK+F7tlkoLc/7ECyUAZYeGiSWW10qQd0+fcCeI1iOGD1BI1s5xTJCGyO5aDKjRK7DFEv/SJ8zmagoj4BMUae/jgCnf5Okz2KHui7EUCqVoHAkXF1zbgNXH+MhyDaygRUTwvwzMUSfl4GzMkRvv/gI87fL41sbWg0v0SMNAAeq1uSE3bM8gV28tA2NqzFuovIWHuSjCqXNsSfA1Tb98p1PfNrfncutscFuzl8B9RykhmgcYLtSdOwlwtic9aj4zO1YnX1cUHNdHsGTmyC6EFtMaAoSXt1G6l2obMi1cRnXkKlt01p6CHJMwSyTcuXYDKuuxGR73E0Emz+D92BvZTZ4ZatvvQix0oDm4ZDA84ZQTRWWhL7I1J5fo5+3thH10fubklPqSCfiIE3jSc7QB9IZxrFskNEEsjbuB8rSnTjyGD036eQOgG5R3QO6bV0r3UJr0Z3VRCY6OyzzbeiIQ4UfEfOMwjuKPWjM1eXrMamMhcJg6dAAAAAA';
-  var SPARK = ['rgb(144,192,224)','rgb(96,224,240)','rgb(112,208,224)','rgb(64,224,240)','rgb(176,176,240)','rgb(205,232,250)'];
-  // The burst: per frame 34..47, the sparkles alive (of 365), the middle radius of the ring and its spread (5% to 95%).
-  var BURST_N = [86,175,232,286,323,365,291,247,201,148,109,77,38,29], BURST_R = [94.4,96.2,97.6,99.8,102.4,104.3,107.9,112.4,115.8,118.5,122.3,125.6,128.5,130], BURST_W = [4.1,7.1,10.2,12.6,15.2,17,15.4,13.2,11.9,11.3,9.6,9,6.7,6.3];
-  var k = 1, scale = 1, wedge = null, wedgeSize = 0, dot = null, dotSize = 0, sprite = null, spriteOk = false, poster = null, raf = 0, t0 = Date.now();
-  var ic = document.createElement('canvas'); ic.width = ic.height = CELL; var ix = ic.getContext('2d');
-  var mask = ix.createRadialGradient(SPX, SPY, 94.2, SPX, SPY, 95.4); mask.addColorStop(0, 'rgba(0,0,0,1)'); mask.addColorStop(1, 'rgba(0,0,0,0)');
-
-  function rnd(a, b){ var h = (Math.imul(a + 1, 374761393) + Math.imul(b + 7, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
-  function lerp(a, b, t){ return a + (b - a) * t; }
-  function table(arr, t){ var i = Math.floor(t); if (i < 0) return arr[0]; if (i >= arr.length - 1) return arr[arr.length - 1]; return lerp(arr[i], arr[i + 1], t - i); }
-
-  function buildWedge(){
-    // The wedge pointing up (its hard edge on the 12 o'clock line, its body to the left), 130 px out; drawn turned by the loop's angle.
-    var R = 130.5, n = Math.ceil(2 * R * k), c = document.createElement('canvas'); c.width = c.height = n;
-    var x = c.getContext('2d'), id = x.createImageData(n, n), d = id.data, h = n / 2, TAN = Math.tan(54 * Math.PI / 180) + 0.02;
-    for (var j = 0; j < n; j++) {
-      var dy = (j + 0.5 - h) / k; if (dy >= 0) continue;
-      for (var i = 0; i < n; i++) {
-        var dx = (i + 0.5 - h) / k; if (dx > 1.2 || -dx > -dy * TAN + 1) continue;
-        var r = Math.sqrt(dx * dx + dy * dy); if (r > R) continue;
-        var ar = Math.min(0.97, (130.5 - r) / 5); if (ar <= 0) continue;
-        var edge = Math.min(1, Math.max(0, 0.5 - (dx - 0.15) / 2.2)), behind = Math.atan2(-dx, -dy) * 180 / Math.PI;
-        var a = Math.min(1, Math.max(0, (54 - behind) / 30)) * edge * ar; if (a <= 0) continue;
-        var q = (j * n + i) * 4; d[q] = 23; d[q + 1] = 198; d[q + 2] = 204; d[q + 3] = Math.round(a * 255);
-      }
-    }
-    x.putImageData(id, 0, 0); wedge = c; wedgeSize = n / k;
-  }
-  function buildDot(){
-    var R = 11, n = Math.ceil(2 * R * k), c = document.createElement('canvas'); c.width = c.height = n;
-    var x = c.getContext('2d'), g = x.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, R * k);
-    g.addColorStop(0, 'rgba(197,210,246,1)'); g.addColorStop(3.3 / R, 'rgba(197,210,246,1)'); g.addColorStop(3.9 / R, 'rgba(197,210,246,0.3)'); g.addColorStop(4.8 / R, 'rgba(197,210,246,0.2)'); g.addColorStop(6.2 / R, 'rgba(197,210,246,0.14)'); g.addColorStop(7.6 / R, 'rgba(197,210,246,0.08)'); g.addColorStop(9.2 / R, 'rgba(197,210,246,0.03)'); g.addColorStop(1, 'rgba(197,210,246,0)');
-    x.fillStyle = g; x.fillRect(0, 0, n, n); dot = c; dotSize = n / k;
-  }
+  var ls = document.getElementById('loadingScreen'), cv = document.getElementById('ldCanvas'), box = document.getElementById('ldBox'), tx = document.getElementById('ldText');
+  if (!ls || !cv || !box) return;
+  var FW = 357, FH = 356, COLS = 4, N = 12, MS = 130;
+  var sprite = null, ok = false, raf = 0, t0 = Date.now(), last = -1;
+  var meta = document.querySelector('meta[name="theme-color"]'), keepColor = meta && meta.getAttribute('content');
   function layout(){
-    var w = ls.clientWidth || window.innerWidth || 360, h = ls.clientHeight || window.innerHeight || 640;
-    scale = typeof window._smartaiLoaderScale === 'number' ? window._smartaiLoaderScale : Math.max(0.7, Math.min(1.25, Math.min(w, h) * 0.72 / 273));
-    var dpr = Math.min(window.devicePixelRatio || 1, 3), css = Math.round(BOX * scale);
-    cv.style.width = css + 'px'; cv.style.height = css + 'px';
-    cv.width = cv.height = Math.round(css * dpr);
-    k = cv.width / BOX;
-    ls.style.background = 'radial-gradient(circle at 50% 50%,' + PLATE.map(function(p){ return 'rgb(' + p[1] + ',' + p[2] + ',' + p[3] + ') ' + (p[0] * scale).toFixed(1) + 'px'; }).join(',') + ')';
-    buildWedge(); buildDot();
+    var vw = window.innerWidth || 360, vh = window.innerHeight || 640;
+    var w = Math.round(Math.max(240, Math.min(420, vw * 0.8, vh * 0.55)));
+    box.style.width = w + 'px';
+    var dpr = Math.min(window.devicePixelRatio || 1, 3), px = Math.round(w * dpr);
+    if (cv.width !== px) { cv.width = px; cv.height = Math.round(px * FH / FW); last = -1; }
+    if (tx) tx.style.fontSize = (w * 24 / FW).toFixed(1) + 'px';
   }
-
-  function drawSphere(p){
-    if (!spriteOk && !posterOk) return;
-    ix.globalCompositeOperation = 'source-over'; ix.globalAlpha = 1; ix.clearRect(0, 0, CELL, CELL);
-    if (spriteOk) {
-      var n0 = Math.floor(p) % LOOP, n1 = (n0 + 1) % LOOP, f = p - Math.floor(p);
-      ix.drawImage(sprite, (n0 % 10) * CELL, Math.floor(n0 / 10) * CELL, CELL, CELL, 0, 0, CELL, CELL);
-      if (f > 0.02) { ix.globalAlpha = f; ix.drawImage(sprite, (n1 % 10) * CELL, Math.floor(n1 / 10) * CELL, CELL, CELL, 0, 0, CELL, CELL); ix.globalAlpha = 1; }
-    } else ix.drawImage(poster, 0, 0, poster.naturalWidth, poster.naturalHeight, 0, 0, CELL, CELL);
-    ix.globalCompositeOperation = 'destination-in'; ix.fillStyle = mask; ix.fillRect(0, 0, CELL, CELL); ix.globalCompositeOperation = 'source-over';
-    ctx.drawImage(ic, -SPX, -SPY, CELL, CELL);
+  function draw(n){
+    if (!ok || !sprite) return;
+    var c = cv.getContext('2d'); c.imageSmoothingEnabled = true; if ('imageSmoothingQuality' in c) c.imageSmoothingQuality = 'high';
+    c.clearRect(0, 0, cv.width, cv.height);
+    c.drawImage(sprite, (n % COLS) * FW, Math.floor(n / COLS) * FH, FW, FH, 0, 0, cv.width, cv.height);
+    last = n;
   }
-  function spark(x, y, c, a){ ctx.globalAlpha = a; ctx.fillStyle = c; ctx.fillRect(x - 0.5, y - 0.5, 1, 1); }
-  function drawDust(p){
-    // 71 sparkles on the ring between 96 and 129.5 px, from 25 to 78 degrees behind the wedge's front edge; each one stays where it was born for 1 to 4 frames.
-    var tick = Math.floor(p);
-    for (var j = 0; j < 71; j++) {
-      var life = 1 + Math.floor(rnd(j, 1) * 4), b = tick - ((tick + Math.floor(rnd(j, 2) * life)) % life), bk = ((b % LOOP) + LOOP) % LOOP;
-      var ang = (3.6 * b - 78 + 53 * rnd(j * 131 + bk, 3)) * Math.PI / 180, r = Math.sqrt(96 * 96 + (129.5 * 129.5 - 96 * 96) * rnd(j * 131 + bk, 4));
-      spark(r * Math.sin(ang), -r * Math.cos(ang), SPARK[Math.floor(rnd(j, bk + 5) * SPARK.length)], 0.55 + 0.45 * rnd(j * 7 + bk, 6));
-    }
-    ctx.globalAlpha = 1;
-  }
-  function drawBurst(p){
-    var t = p - 34; if (t < 0 || t > 13) return;
-    var alive = table(BURST_N, t) / 365, rm = table(BURST_R, t), w = table(BURST_W, t) / 0.9;
-    for (var i = 0; i < 365; i++) {
-      var u = rnd(i, 11); if (u >= alive) continue;
-      var ang = rnd(i, 12) * Math.PI * 2, r = rm + (rnd(i, 13) - 0.5) * w;
-      spark(r * Math.sin(ang), -r * Math.cos(ang), SPARK[Math.floor(rnd(i, 14) * SPARK.length)], 0.7 + 0.3 * rnd(i, 15));
-    }
-    ctx.globalAlpha = 1;
-  }
-  function drawDots(p){
-    // 36 dots, one every 10 degrees; the lit stretch (full strength inside 12 degrees of its middle, gone at 31.5) starts at 35 degrees and turns back 3.6 degrees a frame.
-    var centre = 35 - 3.6 * p;
-    for (var j = 0; j < 36; j++) {
-      var d = Math.abs(((j * 10 - centre) % 360 + 540) % 360 - 180), a, m;
-      if (d < 12) { a = 1; m = 1; } else if (d < 24) { a = lerp(1, 0.8, (d - 12) / 12); m = 1; } else if (d < 28) { a = lerp(0.8, 0.55, (d - 24) / 4); m = lerp(1, 0.75, (d - 24) / 4); } else if (d < 31.5) { a = lerp(0.55, 0, (d - 28) / 3.5); m = lerp(0.75, 0.45, (d - 28) / 3.5); } else continue;
-      var ang = j * 10 * Math.PI / 180, s = dotSize * m;
-      ctx.globalAlpha = a; ctx.drawImage(dot, DOT_DX + 128.73 * Math.sin(ang) - s / 2, DOT_DY - 128.73 * Math.cos(ang) - s / 2, s, s);
-    }
-    ctx.globalAlpha = 1;
-  }
-  function draw(p){
-    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
-    ctx.setTransform(k, 0, 0, k, cv.width / 2, cv.height / 2);
-    ctx.imageSmoothingEnabled = true; if ('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality = 'high';
-    ctx.save(); ctx.rotate(3.6 * p * Math.PI / 180); ctx.drawImage(wedge, -wedgeSize / 2, -wedgeSize / 2, wedgeSize, wedgeSize); ctx.restore();
-    drawSphere(p); drawDust(p); drawBurst(p); drawDots(p);
-  }
-  function frame(){
+  function tick(){
     raf = 0;
     if (ls.style.display === 'none') return;
-    draw(((Date.now() - t0) / FRAME_MS) % LOOP);
-    raf = requestAnimationFrame(frame);
+    var n = Math.floor((Date.now() - t0) / MS) % N;
+    if (n !== last) draw(n);
+    raf = requestAnimationFrame(tick);
   }
-  function go(){ if (!raf && ls.style.display !== 'none') raf = requestAnimationFrame(frame); }
-
-  var posterOk = false, meta = document.querySelector('meta[name="theme-color"]'), keepColor = meta && meta.getAttribute('content');
-  // The sheet (1920 x 1920 px once decoded) is held only while the screen is shown; the phone's status bar is dark with it.
+  function go(){ if (!raf) raf = requestAnimationFrame(tick); }
+  // The sheet (1428 x 1068 px) is held only while the screen is shown; the phone's status bar is white with it.
   function acquire(){
-    if (meta) meta.setAttribute('content', '#000a0e');
+    if (meta) meta.setAttribute('content', '#fefefe');
     if (sprite) return;
-    try { var im = new Image(); im.onload = function(){ if (sprite === im) spriteOk = true; }; sprite = im; spriteOk = false; im.src = '/anim/loader-sphere.webp'; } catch (e) { sprite = null; }
+    try { var im = new Image(); im.onload = function(){ if (sprite === im) { ok = true; last = -1; } }; sprite = im; ok = false; im.src = '/anim/loader-robot.webp'; } catch (e) {}
   }
-  try { poster = new Image(); poster.onload = function(){ posterOk = true; }; poster.src = POSTER; } catch (e) {}
   acquire();
   layout();
   window.addEventListener('resize', function(){ if (ls.style.display !== 'none') layout(); });
-  window._smartaiLoaderRestart = function(){ window._smartaiLoaderStart = Date.now(); t0 = Date.now(); acquire(); layout(); go(); };
-  window._smartaiLoaderEnded = function(){ if (meta && keepColor) meta.setAttribute('content', keepColor); sprite = null; spriteOk = false; };
-  window._smartaiLoaderDraw = function(p){ if (raf) { cancelAnimationFrame(raf); raf = 0; } draw(p); return { sprite: spriteOk, poster: posterOk, scale: scale, k: k }; };
+  window._smartaiLoaderRestart = function(){ window._smartaiLoaderStart = Date.now(); t0 = Date.now(); last = -1; acquire(); layout(); go(); };
+  window._smartaiLoaderEnded = function(){ if (meta && keepColor) meta.setAttribute('content', keepColor); sprite = null; ok = false; };
+  window._smartaiLoaderDraw = function(n){ if (raf) { cancelAnimationFrame(raf); raf = 0; } last = -1; draw(((n % N) + N) % N); return { sprite: ok, frame: last, width: cv.width, height: cv.height }; };
   go();
 })();
 </script>
