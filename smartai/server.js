@@ -587,6 +587,8 @@ const DEFAULT_SETTINGS = {
   homeBannerTitle: '', homeBannerText: '',
   // The Me page picture: how solid it is (0-100 percent) and how soft (0-40 px of blur). 100 / 0 shows the uploaded picture as it is.
   myBannerOpacity: 100, myBannerBlur: 0,
+  // Icon sizes in pixels: bottom navigation, the four Home actions, the Me page tiles (the box around each icon follows the icon).
+  navIconSize: 26, homeIconSize: 34, meIconSize: 36,
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   shareMessage: 'Join me on {app}',
   // What Telegram shows when a link to the app is pasted (title and text; the picture is the 'linkpreview' image). Empty = the app's own defaults.
@@ -7252,6 +7254,7 @@ const SETTINGS_CRITICAL_RANGES = {
   autoApproveMinSec: [0, 86400], autoApproveMaxSec: [0, 86400], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
   dailyCheckin: [0, MAX_MONEY_AMOUNT],
   myBannerOpacity: [0, 100], myBannerBlur: [0, 40],
+  navIconSize: [14, 48], homeIconSize: [20, 64], meIconSize: [20, 64],
 };
 const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight

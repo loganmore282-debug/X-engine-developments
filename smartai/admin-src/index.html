@@ -3510,6 +3510,14 @@ async function renderSettings(){
       <input id="myOpInput" type="number" min="0" max="100" step="1" value="${esc(v('myBannerOpacity',100))}" placeholder="100">
       <label class="muted" for="myBlurInput" style="margin-top:8px;display:block">Blur (0 to 40)</label>
       <input id="myBlurInput" type="number" min="0" max="40" step="1" value="${esc(v('myBannerBlur',0))}" placeholder="0">
+      <h2 class="sec" style="margin:16px 0 4px">Icon sizes</h2>
+      <p class="muted" style="margin:0 0 8px">How big the icons are, in pixels. The box around each icon grows and shrinks with it. Navigation: 14 to 48 (bottom bar). Home: 20 to 64 (Add Funds, Cash Out, Rewards, Support). Me: 20 to 64 (the Me page tiles).</p>
+      <label class="muted" for="navSzInput">Navigation icons (14 to 48)</label>
+      <input id="navSzInput" type="number" min="14" max="48" step="1" value="${esc(v('navIconSize',26))}" placeholder="26">
+      <label class="muted" for="homeSzInput" style="margin-top:8px;display:block">Home icons (20 to 64)</label>
+      <input id="homeSzInput" type="number" min="20" max="64" step="1" value="${esc(v('homeIconSize',34))}" placeholder="34">
+      <label class="muted" for="meSzInput" style="margin-top:8px;display:block">Me icons (20 to 64)</label>
+      <input id="meSzInput" type="number" min="20" max="64" step="1" value="${esc(v('meIconSize',36))}" placeholder="36">
       <h2 class="sec" style="margin:16px 0 4px">Daily check-in</h2>
       <p class="muted" style="margin:0 0 8px">What one tap a day on the Rewards tab pays into the member's wallet. 0 hides the check-in card.</p>
       <input id="dailyCheckinInput" type="number" min="0" step="1" value="${esc(v('dailyCheckin',250))}" placeholder="250">
@@ -3556,12 +3564,14 @@ async function renderSettings(){
   drawDepGw();
   $('depNamesInput').addEventListener('input', drawDepGw);
   $('depGwRotate').addEventListener('click', ()=>{ if(_depGws.length > 1) _depGws.unshift(_depGws.pop()); drawDepGw(); });
+  // A size box: a whole number inside its range; an empty or non-number box means the standard size.
+  const sz = (id, lo, hi, dflt) => { const t = $(id).value.trim(), n = Math.round(+t); return t === '' || !isFinite(n) ? dflt : Math.max(lo, Math.min(hi, n)); };
   $('saveDepMethod').addEventListener('click', async()=>{
     const gateway = document.querySelector('input[name="depGateway"]:checked').value;
     const witMethod = (document.querySelector('input[name="witMethod"]:checked')||{}).value || 'follow';
     const d = await api('/admin/settings/update', { settings: {
       depositMethod: gateway, withdrawMethod: witMethod,
-      depositMethodNames: $('depNamesInput').value, depositGateways: _depGws.join(', '), lworxCollect: (document.querySelector('input[name="lworxMode"]:checked')||{}).value||'standard', giftCodeHint: $('giftHintInput').value, homeBannerTitle: $('hbTitleInput').value, homeBannerText: $('hbTextInput').value, myBannerOpacity: Math.max(0, Math.min(100, $('myOpInput').value.trim() === '' ? 100 : Math.round(+$('myOpInput').value || 0))), myBannerBlur: Math.max(0, Math.min(40, Math.round(+$('myBlurInput').value || 0))), shareMessage: $('shareMsgInput').value, dailyCheckin: Math.max(0, Math.round(+$('dailyCheckinInput').value || 0)),
+      depositMethodNames: $('depNamesInput').value, depositGateways: _depGws.join(', '), lworxCollect: (document.querySelector('input[name="lworxMode"]:checked')||{}).value||'standard', giftCodeHint: $('giftHintInput').value, homeBannerTitle: $('hbTitleInput').value, homeBannerText: $('hbTextInput').value, myBannerOpacity: Math.max(0, Math.min(100, $('myOpInput').value.trim() === '' ? 100 : Math.round(+$('myOpInput').value || 0))), myBannerBlur: Math.max(0, Math.min(40, Math.round(+$('myBlurInput').value || 0))), navIconSize: sz('navSzInput', 14, 48, 26), homeIconSize: sz('homeSzInput', 20, 64, 34), meIconSize: sz('meSzInput', 20, 64, 36), shareMessage: $('shareMsgInput').value, dailyCheckin: Math.max(0, Math.round(+$('dailyCheckinInput').value || 0)),
     } });
     const payoutProv = witMethod==='follow' ? (gateway==='tavupay'?'marzpay':gateway) : witMethod;
     toast(d.status==='success'
