@@ -2659,7 +2659,7 @@ function editProduct(p, order){
     <div class="row">
       <div><label>Display position (lower appears first)</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order!=null?order:0)}"></div>
     </div>
-    <label>Product image <span class="muted" style="font-weight:400">— best 1200 &times; 670 (wide, 16:9). Keep the robot in the middle: the AI Robots card shows it about 1.8 : 1 and the Home strip about 1.2 : 1, so the edges are trimmed</span></label>
+    <label>Product image <span class="muted" style="font-weight:400">— any shape works: the picture is shown WHOLE (never cropped), centred in its frame, and the frame takes the colour of the picture's corners. A plain or white background looks best; about 1200 px on the long side</span></label>
     <div class="img-picker">
       <div class="img-prev" id="pImgPrev">${p.image?`<img src="${esc(p.image)}" alt="">`:'<span class="muted">No image</span>'}</div>
       <div class="img-picker-actions">

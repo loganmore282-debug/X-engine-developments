@@ -1276,8 +1276,20 @@ async function claimTier(btn){
 /* ====================== AI ROBOTS (the products) ====================== */
 function isProductSoldOut(p){ return p.active === false || !!p.comingSoon || p.isOpen === false; }
 function productImg(p){ return p && p.image ? p.image : iconUrl('robots'); }
+// A product picture is shown WHOLE (any shape, tall or wide), not cropped: object-fit contain inside its frame, and the frame takes the colour of the picture's own
+// corners so the picture melts into it (a white photo sits on white, the blue default art on blue). A picture from another website cannot be read and keeps the soft blue.
+function fitImgBg(img){
+  try {
+    var c = document.createElement('canvas'); c.width = 8; c.height = 8;
+    var x = c.getContext('2d'); x.drawImage(img, 0, 0, 8, 8);
+    var r = 0, g = 0, b = 0, a = 0;
+    [[0, 0], [7, 0], [0, 7], [7, 7]].forEach(function(q){ var d = x.getImageData(q[0], q[1], 1, 1).data; r += d[0]; g += d[1]; b += d[2]; a += d[3]; });
+    if (a / 4 < 128) return;   // see-through corners: the page colour stays
+    img.style.background = 'rgb(' + Math.round(r / 4) + ',' + Math.round(g / 4) + ',' + Math.round(b / 4) + ')';
+  } catch (e) {}
+}
 function imgTag(p, cls, style){
-  return '<img' + (cls ? ' class="' + cls + '"' : '') + (style ? ' style="' + style + '"' : '') + ' src="' + esc(productImg(p)) + '" alt="" onerror="this.onerror=null;this.src=\'/icons/robots.webp\'">';
+  return '<img' + (cls ? ' class="' + cls + '"' : '') + (style ? ' style="' + style + '"' : '') + ' src="' + esc(productImg(p)) + '" alt="" onload="fitImgBg(this)" onerror="this.onerror=null;this.src=\'/icons/robots.webp\'">';
 }
 function ownedCount(key){
   return (STATE && STATE.investments || []).filter(function(i){ return i.key === key; }).length;
