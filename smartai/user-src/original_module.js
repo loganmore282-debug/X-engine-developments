@@ -1669,6 +1669,8 @@ function switchTab(name){
     }
   });
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === name); });
+  var fg = $('floatGift'); if (fg) fg.style.display = name === 'rewards' ? 'none' : '';   // the floating gift: every tab but Rewards (which has the big one)
+  if (name !== 'rewards') giftPreload();
   var tapped = document.querySelector('.tab[data-tab="' + name + '"]');
   if (tapped) { tapped.classList.remove('tab-tapped'); void tapped.offsetWidth; tapped.classList.add('tab-tapped'); }
   hideOverlays(); _ovOpen = false;
