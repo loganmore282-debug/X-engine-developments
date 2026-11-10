@@ -1278,18 +1278,28 @@ function isProductSoldOut(p){ return p.active === false || !!p.comingSoon || p.i
 function productImg(p){ return p && p.image ? p.image : iconUrl('robots'); }
 // A product picture is shown WHOLE (any shape, tall or wide), not cropped: object-fit contain inside its frame, and the frame takes the colour of the picture's own
 // corners so the picture melts into it (a white photo sits on white, the blue default art on blue). A picture from another website cannot be read and keeps the soft blue.
+var _imgBg = {};   // picture address -> its corner colour, so a repaint (every refresh builds the cards again) never shows the empty frame for a moment
+// Repaints that would write the very same cards again are skipped, so the pictures are not thrown away and loaded again (that is what flickered).
+function setHtmlIfChanged(el, html){ if (el._lastHtml === html) return; el._lastHtml = html; el.innerHTML = html; }
 function fitImgBg(img){
+  var key = img.getAttribute('src');
+  img.style.opacity = '1';
+  if (!_imgBg[key]) _imgBg[key] = 'none';   // loaded, colour not (yet) known: never hide it again on a repaint
   try {
     var c = document.createElement('canvas'); c.width = 8; c.height = 8;
     var x = c.getContext('2d'); x.drawImage(img, 0, 0, 8, 8);
     var r = 0, g = 0, b = 0, a = 0;
     [[0, 0], [7, 0], [0, 7], [7, 7]].forEach(function(q){ var d = x.getImageData(q[0], q[1], 1, 1).data; r += d[0]; g += d[1]; b += d[2]; a += d[3]; });
     if (a / 4 < 128) return;   // see-through corners: the page colour stays
-    img.style.background = 'rgb(' + Math.round(r / 4) + ',' + Math.round(g / 4) + ',' + Math.round(b / 4) + ')';
+    var col = 'rgb(' + Math.round(r / 4) + ',' + Math.round(g / 4) + ',' + Math.round(b / 4) + ')';
+    img.style.background = col; _imgBg[key] = col;
   } catch (e) {}
 }
 function imgTag(p, cls, style){
-  return '<img' + (cls ? ' class="' + cls + '"' : '') + (style ? ' style="' + style + '"' : '') + ' src="' + esc(productImg(p)) + '" alt="" onload="fitImgBg(this)" onerror="this.onerror=null;this.src=\'/icons/robots.webp\'">';
+  var src = productImg(p), framed = cls === 'prod-img' || cls === 'choc-img', col = framed ? _imgBg[src] : '';
+  // A framed picture stays invisible until it has loaded (no blue frame flashing first); once its colour is known the frame is painted at once on every repaint.
+  var st = (style || '') + (framed ? (col === 'none' ? '' : col ? 'background:' + col + ';' : 'opacity:0;') : '');
+  return '<img' + (cls ? ' class="' + cls + '"' : '') + (st ? ' style="' + st + '"' : '') + ' src="' + esc(src) + '" alt=""' + (framed ? ' onload="fitImgBg(this)"' : '') + ' onerror="this.onerror=null;this.src=\'/icons/robots.webp\'">';
 }
 function ownedCount(key){
   return (STATE && STATE.investments || []).filter(function(i){ return i.key === key; }).length;
@@ -1315,7 +1325,7 @@ function renderFeatured(){
       '<div class="choc-price">' + ugx(p.price) + '</div>' +
       '<div class="choc-ret">+' + ugx(dailyReturn(p)) + '/day</div></div></button>';
   }).join('');
-  $('featStrip').innerHTML = html || (_productsOk ? '<div class="empty" style="width:100%">No AI robots yet. Check back soon.</div>' : spinnerHtml());
+  setHtmlIfChanged($('featStrip'), html || (_productsOk ? '<div class="empty" style="width:100%">No AI robots yet. Check back soon.</div>' : spinnerHtml()));
 }
 // renderShop() runs on every poll and rebuilds the Buy buttons, which would restart their glow sweep: a negative delay equal to how far into the cycle
 // "now" is makes a freshly built button carry on exactly where the old one was.
@@ -1364,7 +1374,7 @@ function renderShop(){
         '</div>' + btn +
       '</div></div>';
   }).join('');
-  $('shopGrid').innerHTML = html || (_productsOk ? '<div class="empty">' + (_shopCat ? 'No AI robots in this category yet.' : 'No AI robots yet. Check back soon.') + '</div>' : spinnerHtml());
+  setHtmlIfChanged($('shopGrid'), html || (_productsOk ? '<div class="empty">' + (_shopCat ? 'No AI robots in this category yet.' : 'No AI robots yet. Check back soon.') + '</div>' : spinnerHtml()));
   syncSweepPhase($('shopGrid'));
 }
 function investmentStats(){

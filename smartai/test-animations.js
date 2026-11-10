@@ -206,6 +206,9 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   ok(await p.evaluate(() => document.getElementById('navVeil').classList.contains('on')), 'while the Team page is still waiting for the server the dots stay on (not a fixed timer)');
   ok(await until(() => !document.getElementById('navVeil').classList.contains('on'), null, 4000), 'and they lift when the answer has come');
   await p.unroute('**/team/stats');
+  // no blue flashes on product pictures: a repaint with nothing new keeps the very same picture elements, and a framed picture is never shown on an empty blue frame
+  const flash = await p.evaluate(async () => { switchTab('shop'); await new Promise(r => setTimeout(r, 600)); const a = document.querySelector('.prod-img'); renderAll(); renderAll(); const b = document.querySelector('.prod-img'); const cs = getComputedStyle(b); return { same: a === b, op: cs.opacity, bg: cs.backgroundColor, blue: /221, ?233, ?252/.test(cs.backgroundColor) }; });
+  ok(flash.same && flash.op === '1' && !flash.blue, 'repainting the shop keeps the same picture elements and never shows the blue empty frame');
   // tapping a Featured robot on Home must still scroll to its card while the dots are up and the page data is on its way
   await p.evaluate(() => { _lastDataAt = 0; _lastCfgAt = 0; switchTab('home'); }); await sleep(1200);
   await p.route('**/k7x2/investments', async (route) => { await sleep(900); route.continue().catch(() => {}); });
