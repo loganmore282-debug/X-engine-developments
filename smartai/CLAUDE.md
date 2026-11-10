@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v27`, admin `admin/sw.js` `smartai-admin-shell-v14`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v28`, admin `admin/sw.js` `smartai-admin-shell-v14`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -451,5 +451,5 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 - `liveData(8000)` / `liveConfig(15000)` share one answer between quick taps (`_lastDataAt`, `_lastCfgAt`), so tab switching does not hammer the server. Tests switch the veil off with `window._smartaiNavMs = 0` (the requests still go). `test-animations.js` holds the Team answer back 1.6 s and checks the dots stay on, then lift.
 - Team referral link sits in its own dashed box (`.link-row.link-boxed`) with Copy inside it.
 
-## Featured robot tap still scrolls (owner: "the loader has silenced the auto scroll to the product")
-- `goToShopProduct(key)` used one smooth `scrollIntoView` 50 ms after `switchTab('shop')`; with the page loader and the tab's data repaint (`tabTask` -> `renderAll`) that single smooth scroll could be lost on a phone. Now `switchTab` keeps its request in `_tabAsk`; the scroll is instant (`behavior:'auto'`, done behind the dots), at 50 ms, again right after the page's data is painted, and once more 380 ms later when the dots lift. Test: `test-animations.js` taps the last Featured robot with the answer held back 0.9 s and checks its card is in view.
+## Featured robot tap: dots first, then the scroll (owner: "show loader first, then auto scroll")
+- `goToShopProduct(key)` switches to AI Robots (the dots come up and stay until the page's data is painted), and only THEN scrolls: `afterVeil(fn)` runs `fn` 120 ms after the dots have lifted (at once when no dots are showing); the scroll is a visible smooth glide (`scrollIntoView smooth, block:center`) and, 1.1 s later, an instant one if the card is not near the middle (a slow phone). `navVeil` calls `flushVeilWaiters()` when it hides. Test: `test-animations.js` taps the last Featured robot with the answer held back 0.9 s: dots on and scrollY about 0 at first, then after they lift the card is centred.

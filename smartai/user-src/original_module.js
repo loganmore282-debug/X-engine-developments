@@ -512,6 +512,7 @@ function navVeil(over, task){
   function hide(){
     if (token !== _navVeilToken) return;
     v.classList.remove('on');
+    flushVeilWaiters();
     _navVeilTimer = setTimeout(function(){ if (!v.classList.contains('on')) v.innerHTML = ''; }, 260);
   }
   if (task && task.then) {
@@ -520,6 +521,14 @@ function navVeil(over, task){
     _navVeilTimer = setTimeout(hide, NAV_VEIL_MAX);
   } else _navVeilTimer = setTimeout(hide, ms);
 }
+// Something that must happen AFTER the dots have lifted (a scroll the member should see): runs once the veil is off, at once when none is showing.
+var _veilWaiters = [];
+function afterVeil(fn){
+  var v = $('navVeil');
+  if (!v || !v.classList.contains('on')) { setTimeout(fn, 0); return; }
+  _veilWaiters.push(fn);
+}
+function flushVeilWaiters(){ var l = _veilWaiters.splice(0); l.forEach(function(f){ setTimeout(f, 120); }); }
 // The account, products, bank cards and ledger, asked afresh when the last answer is older than maxAge ms (several quick taps share one answer).
 function liveData(maxAge){ return Date.now() - _lastDataAt < maxAge ? Promise.resolve() : ensureData(); }
 function liveConfig(maxAge){ if (Date.now() - _lastCfgAt < maxAge) return Promise.resolve(); _lastCfgAt = Date.now(); return syncPublicConfig(); }
@@ -1564,10 +1573,14 @@ function switchTab(name){
 // The Featured strip on Home: go to AI Robots and scroll straight to that robot's own card.
 function goToShopProduct(key){
   switchTab('shop');
-  // The tab's own data is painted a moment later (the dots are up meanwhile) and that repaint would undo an early scroll: scroll once the cards are in place, then again at once if the page is still being built.
-  var go = function(){ var el = $('prodCard-' + key); if (el) el.scrollIntoView({ behavior: 'auto', block: 'center' }); };
-  setTimeout(go, 50);
-  if (_tabAsk && _tabAsk.then) _tabAsk.then(function(){ setTimeout(go, 0); setTimeout(go, 380); }, go);   // again when the dots lift, in case pictures moved the card meanwhile
+  // The dots come first; the scroll happens once they have lifted (and the page's data is painted), so the member sees the page glide to the robot. If the first glide
+  // did not land (a slow phone), an instant one finishes the job.
+  var near = function(){ var el = $('prodCard-' + key); if (!el) return true; var r = el.getBoundingClientRect(); return Math.abs((r.top + r.height / 2) - window.innerHeight / 2) < 140; };
+  var go = function(smooth){ var el = $('prodCard-' + key); if (el) el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'center' }); };
+  afterVeil(function(){
+    go(true);
+    setTimeout(function(){ if (!near()) go(false); }, 1100);
+  });
 }
 // One full-screen page at a time. The phone's Back button closes it (one history entry, replaced when one page opens another) instead of leaving the app.
 var _ovOpen = false, _ovName = '';

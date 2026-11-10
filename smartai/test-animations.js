@@ -200,8 +200,12 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   await p.evaluate(() => { _lastDataAt = 0; _lastCfgAt = 0; switchTab('home'); }); await sleep(1200);
   await p.route('**/k7x2/investments', async (route) => { await sleep(900); route.continue().catch(() => {}); });
   const lastKey = await p.evaluate(() => { const c = [...document.querySelectorAll('[id^="prodCard-"]')]; return c.length ? c[c.length - 1].id.replace('prodCard-', '') : ''; });
-  await p.evaluate((k) => { _lastDataAt = 0; goToShopProduct(k); }, lastKey); await sleep(2600);
-  ok(lastKey && await p.evaluate((k) => { const r = document.getElementById('prodCard-' + k).getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight - 40 && window.scrollY > 100; }, lastKey), 'tapping a Featured robot scrolls to its card even though the page loader is up');
+  await p.evaluate((k) => { _lastDataAt = 0; goToShopProduct(k); }, lastKey); await sleep(250);
+  const early = await p.evaluate(() => ({ veil: document.getElementById('navVeil').classList.contains('on'), y: Math.round(window.scrollY) }));
+  ok(early.veil && early.y < 50, 'tapping a Featured robot shows the dots first, the page has not scrolled yet (scrollY ' + early.y + ')');
+  ok(await until(() => !document.getElementById('navVeil').classList.contains('on'), null, 4000), 'the dots lift when the page data has come');
+  await sleep(1800);
+  ok(lastKey && await p.evaluate((k) => { const r = document.getElementById('prodCard-' + k).getBoundingClientRect(); return window.scrollY > 100 && Math.abs((r.top + r.height / 2) - innerHeight / 2) < 160; }, lastKey), 'and after they lift the page scrolls to that robot (its card ends up in the middle of the screen)');
   await p.unroute('**/k7x2/investments');
   await p.evaluate(() => { window._smartaiNavMs = 0; }); await sleep(700);
   await p.evaluate(() => switchTab('shop')); await sleep(60);
