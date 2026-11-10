@@ -36,7 +36,7 @@ files or run quick-update.sh by hand: a push to `claude/smartai-build` deploys b
   `npm run test:audit` (wait for exit 0, run it in the background and read the `EXIT` line; the chain stops at the first failing test), commit, push
   to **`claude/smartai-build`**. `npm install --include=dev` for the dev tools.
 - `node set-brand.js "Name"` renames the app everywhere again (files must be git-tracked).
-- **`npm run test:audit` is the whole suite** (78 commands). The sixteen old test files of other apps that failed the same way
+- **`npm run test:audit` is the whole suite** (79 commands). The sixteen old test files of other apps that failed the same way
   in Potato (Kenya regions, Snow branding, `render.yaml`, ...) were deleted on 2026-11-09 together with `design-ref/` (Potato's screen pictures, 9.6 MB), `static-server.js`,
   `set-backend-url.js`, `deploy/deploy.sh` (an old rsync deploy to `/srv/smartai`, not the VPS layout), `translate-*` and `captcha.js`: nothing used them.
 - The app icons (`user/` and `admin/` `icon-192.png`, `icon-512.png`) and `user/link-preview.jpg` are PLACEHOLDERS (blue "SA" ring) until the owner sends the logo.
@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v11`, admin `admin/sw.js` `smartai-admin-shell-v6`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v12`, admin `admin/sw.js` `smartai-admin-shell-v7`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -374,3 +374,14 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
   esc() makes `'` into `&#39;`, which the browser turns back into `'` inside an onclick); (4) `logSafe()` on the MarzPay callback log lines (a caller could write fake log lines with a new line in the reference).
 - **What cannot be fixed in code: the IP preview `http://179.198.197.114:8100` is plain http, so anyone on the same network path can read a password or session sent over it.** Real protection needs the domain
   (`deploy/set-domain.sh`: certificate, redirect, HSTS). Use the preview for design only, never real members' money. Still open for the owner to decide: weak Trade Passwords (111111, 123456) are accepted at sign-up.
+
+## Robot categories (owner: "create a category ie Class A, Class B, Vip ... edit the names, remove category, edit order, easily put a product in its category, make the first one or default "All"")
+- Asked for by the owner (the "only ChocoMCC's things" rule gives way to his word). **"All" is built in**: always the first tab, shows EVERY product, cannot be renamed, removed or moved. The admin's categories come
+  after it in his order; a product with no category is only in All; a product in Class A is in Class A AND in All. No category made = no tab row at all. The old title "AI Robots" and the line "Every robot pays a daily
+  reward until it matures" are gone from the AI Robots page (the owner circled them); the tabs take their place.
+- Server: the list is one document `meta/productCategories` = `{ list: [{ id, name }] }` (id `c` + 8 hex made by the server; order = tab order; at most 12; names 1-30 characters, no "All", no duplicates). A product
+  points at its category by id (`product.category`, '' = none), so renaming moves nothing. Routes: `GET /admin/categories`, `POST /admin/categories/save {categories}` (owner; the whole list in its new order; products
+  of a removed category go back to ''), `POST /admin/products/category {key, category}` (owner; one-tap move). `/public/products` also returns `categories`. `sanitizeProductInput` only writes `category` when the caller
+  sends one, so saving a product from its editor never moves it.
+- App: `CATEGORIES` (cached in localStorage `smartai_categories_cache`), `renderShopTabs()`, `selectShopCat()`, `_shopCat`; `renderShop()` filters by it and keeps each robot's own "Robot N" number.
+- Admin > Products: a **Categories** card on top (add, rename in place, up / down arrows, Remove with a question) and, once a category exists, a category box on every product card. Test `test-categories.js` (47 checks).

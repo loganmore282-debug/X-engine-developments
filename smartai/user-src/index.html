@@ -700,6 +700,11 @@ a.btn{text-decoration:none;}
 #ldBox{position:relative;flex:none;width:288px;}
 #ldBox canvas{display:block;width:100%;height:auto;}
 #ldText{position:absolute;left:-10%;right:-10%;top:80.9%;transform:translateY(-50%);text-align:center;white-space:nowrap;font-weight:800;font-size:19px;letter-spacing:.2px;color:#0b1a4f;font-family:'Poppins','Inter','Segoe UI',system-ui,-apple-system,Roboto,Arial,sans-serif;}
+/* ---- robot categories (All, Class A, ...): a row of pills above the robots, shown only when the admin has made categories ---- */
+.cat-tabs{display:flex;gap:10px;overflow-x:auto;padding:16px 20px 2px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.cat-tabs::-webkit-scrollbar{display:none;}
+.cat-tab{flex:none;border:none;border-radius:999px;padding:10px 20px;font-weight:800;font-size:14px;font-family:inherit;background:#fff;color:var(--cocoa-soft);box-shadow:0 4px 12px -6px rgba(11,42,91,.25);}
+.cat-tab.active{background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;box-shadow:0 8px 16px -8px rgba(19,122,239,.6);}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
 </style>
 <script data-smartai-idle>
@@ -959,10 +964,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
           <button class="pb-action-btn" onclick="openOverlay('earnings')">Accrued earnings <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
         </div>
       </div>
-      <div class="view-pad">
-        <div class="view-title">AI Robots</div>
-        <div class="muted" style="font-size:13px">Every robot pays a daily reward until it matures.</div>
-      </div>
+      <div class="cat-tabs" id="shopCats" role="tablist" aria-label="Robot categories" style="display:none"></div>
       <div class="prod-grid" id="shopGrid"></div>
       <div style="height:14px"></div>
     </div>

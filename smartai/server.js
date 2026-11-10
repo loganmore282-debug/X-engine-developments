@@ -3969,15 +3969,15 @@ function publicJson(req, res, body, cacheControl, prebuilt) {
 const IMAGE_CACHE = 'public, max-age=60';
 app.get('/public/products', async (req, res) => {
   try {
-    const [products, sett] = await Promise.all([getProducts(), getSettings()]);
+    const [products, sett, categories] = await Promise.all([getProducts(), getSettings(), getCategories()]);
     // Prices: revalidated every time, so a change is never served stale --
     // but unchanged prices cost a 304 instead of every product photo again.
     // The product list (with every picture, megabytes of base64) is serialised and hashed once per change, not once per poll: the key is
     // when the product cache, the settings cache and the clock-driven open/closed states last changed.
     const states = products.map(p => { const st = productOpenState(p, Date.now()); return (st.open ? 1 : 0) + ':' + (st.mode || ''); }).join(',');
-    const key = _productsCacheTs + '|' + _settingsCacheTs + '|' + states;
+    const key = _productsCacheTs + '|' + _settingsCacheTs + '|' + _categoriesTs + '|' + categories.map(c => c.id + c.name).join('~') + '|' + states;
     if (!_publicProductsBuilt || _publicProductsBuilt.key !== key) {
-      const raw = JSON.stringify({ status: 'success', products: products.map(p => publicProductView(p, sett)) });
+      const raw = JSON.stringify({ status: 'success', categories, products: products.map(p => publicProductView(p, sett)) });
       _publicProductsBuilt = { key, raw, etag: 'W/"' + crypto.createHash('sha1').update(raw).digest('base64').slice(0, 22) + '"' };
     }
     publicJson(req, res, null, null, _publicProductsBuilt);
@@ -7689,7 +7689,9 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     vip = Number(p.vip);
     if (!Number.isInteger(vip) || vip < 0 || vip > 100) return refuse('VIP level', 'must be a whole number from 0 to 100');
   }
-  return { key, name, price, cycle, expectedReturn, multiplier, buyLimit, vip, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
+  return { key, name, price, cycle, expectedReturn, multiplier, buyLimit, vip, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false,
+    // The category (Admin > Products > Categories) is only written when the caller sends one, so saving a product from its editor never moves it.
+    ...(typeof p?.category === 'string' ? { category: p.category.trim().slice(0, 24) } : {}) };
 }
 // `?region=ke` hands the editor that region's view of every product -- its
 // own price where it has one, Uganda's where it has not -- plus `overrides`,
@@ -7697,6 +7699,74 @@ function sanitizeProductInput(p, fallbackOrder, out) {
 // can show which figures are its own and which are still inherited.
 // Without a region it returns the RAW documents exactly as before, which is
 // the founding region's own editor.
+// ── PRODUCT CATEGORIES (Class A, Class B, VIP ...) ──
+// Owner: "create a category ie Class A, Class B, Vip ... edit the names, remove category, edit order, easily put a product in its category ... the first one or default is "All"".
+// The list lives in one document (meta/productCategories: [{ id, name }], its order = the order of the tabs). "All" is NOT in it: it is built into the app, always first, and shows
+// every product; a product with no category is only in All. A product points at its category by id (product.category), so renaming a category moves nothing.
+let _categoriesCache = null, _categoriesTs = 0;
+async function getCategories() {
+  if (_categoriesCache && Date.now() - _categoriesTs < 30 * 1000) return _categoriesCache;
+  try {
+    const snap = await db.collection('meta').doc('productCategories').get();
+    const list = snap.exists && Array.isArray(snap.data().list) ? snap.data().list : [];
+    _categoriesCache = list.filter(c => c && typeof c.id === 'string' && typeof c.name === 'string').map(c => ({ id: c.id, name: c.name }));
+  } catch (_) { _categoriesCache = _categoriesCache || []; }
+  _categoriesTs = Date.now();
+  return _categoriesCache;
+}
+const CATEGORY_MAX = 12;
+app.get('/admin/categories', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { _categoriesTs = 0; res.json({ status: 'success', categories: await getCategories() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not read the categories' }); }
+});
+// Saves the WHOLE list in its new order: names edited, a category removed, a new one added (id empty or unknown = new). Products of a removed category go back to All only.
+app.post('/admin/categories/save', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const incoming = req.body && req.body.categories;
+  if (!Array.isArray(incoming) || incoming.length > CATEGORY_MAX) return res.status(400).json({ status: 'error', message: 'At most ' + CATEGORY_MAX + ' categories' });
+  try {
+    const before = await (async () => { _categoriesTs = 0; return getCategories(); })();
+    const known = new Set(before.map(c => c.id)), seenId = new Set(), seenName = new Set(), list = [];
+    for (const c of incoming) {
+      if (!c || typeof c !== 'object' || typeof c.name !== 'string') return res.status(400).json({ status: 'error', message: 'Every category needs a name' });
+      const name = c.name.replace(/\s+/g, ' ').trim();
+      if (!name || name.length > 30) return res.status(400).json({ status: 'error', message: 'A category name is 1 to 30 characters' });
+      if (name.toLowerCase() === 'all') return res.status(400).json({ status: 'error', message: '"All" is built in: it always comes first and shows every product' });
+      if (seenName.has(name.toLowerCase())) return res.status(400).json({ status: 'error', message: '"' + name + '" is used twice' });
+      seenName.add(name.toLowerCase());
+      let id = typeof c.id === 'string' && known.has(c.id) && !seenId.has(c.id) ? c.id : '';
+      if (!id) { do { id = 'c' + crypto.randomBytes(4).toString('hex'); } while (known.has(id) || seenId.has(id)); }
+      seenId.add(id); list.push({ id, name });
+    }
+    await db.collection('meta').doc('productCategories').set({ list });
+    // products in a category that no longer exists go back to All only
+    const gone = before.filter(c => !seenId.has(c.id)).map(c => c.id);
+    let moved = 0;
+    if (gone.length) {
+      const prods = await db.collection('products').limit(100000).get();
+      for (const d of prods.docs) { const p = d.data(); if (gone.includes(p.category)) { await d.ref.update({ category: '' }); moved++; } }
+    }
+    _categoriesCache = list; _categoriesTs = Date.now(); _productsCacheTs = 0;
+    logAdminAction(req, 'categories_saved', { count: list.length, removed: gone.length, moved });
+    res.json({ status: 'success', categories: list, moved });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the categories' }); }
+});
+// One tap: put a product in a category ('' = All only).
+app.post('/admin/products/category', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const key = String(req.body.key || ''), category = req.body.category == null ? '' : String(req.body.category);
+  if (!key) return res.status(400).json({ status: 'error', message: 'key required' });
+  try {
+    if (category) { _categoriesTs = 0; if (!(await getCategories()).some(c => c.id === category)) return res.status(400).json({ status: 'error', message: 'That category does not exist' }); }
+    const ref = db.collection('products').doc(key), snap = await ref.get();
+    if (!snap.exists || snap.data().deleted) return res.status(404).json({ status: 'error', message: 'Product not found' });
+    await ref.update({ category });
+    _productsCacheTs = 0;
+    logAdminAction(req, 'product_category', { key, category });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not move the product' }); }
+});
 // ── STARTER ASSETS: Smart AI A to Smart AI J ──
 // Owner: "name them Smart AI A, B, C, D ... so they will be 10, I will come and edit the
 // existing prices from the admin panel, and the names are editable too." They are
