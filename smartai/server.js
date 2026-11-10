@@ -10518,6 +10518,53 @@ async function backfillNextPayoutAt() {
 // One-time move to the daily-midnight schedule: running investments may carry a `nextPayoutAt` aimed at the closing time (the older locked-cashback
 // rule); it is recomputed so the 0.5 s sweep picks each one up at its next midnight. Settlement itself never depended on it (it re-derives what is
 // due from the purchase time), so this only keeps payments on time.
+// ONE PAYOUT NUMBER, ONE MEMBER, for numbers saved BEFORE that rule existed (owner: "let the server delete the number which was created later"):
+// where two or more members hold the same wallet number, the member who saved it FIRST keeps it and the others' copies are deleted. A row with no
+// time counts as the oldest. Nothing in flight changes (every withdrawal row carries its own copy of where it was sent). A member who lost their
+// active card to this gets their oldest remaining card as the active one. Idempotent: runs at start-up and from the owner-only route below; what it
+// removed is written to adminAuditLog ('shared_payout_numbers_removed') so it can be put back by hand.
+async function dedupeSharedPayoutNumbers(trigger) {
+  const snap = await db.collection('bankAccounts').get();
+  const byPhone = new Map();
+  for (const d of (snap.docs || [])) {
+    const r = d.data();
+    if (!r || !r.phone || !NETWORK_NAMES.has(r.network)) continue;
+    if (!byPhone.has(r.phone)) byPhone.set(r.phone, []);
+    byPhone.get(r.phone).push({ ref: d.ref, id: d.id, r });
+  }
+  const removed = [], touched = new Set();
+  for (const [phone, rows] of byPhone) {
+    if (new Set(rows.map(x => x.r.userId)).size < 2) continue;
+    await withLock('bank-dest:mm:' + phone, async () => {
+      rows.sort((a, b) => (tsMillis(a.r.createdAt) - tsMillis(b.r.createdAt)) || (a.id < b.id ? -1 : 1));
+      const keep = rows[0].r.userId;
+      for (const x of rows) {
+        if (x.r.userId === keep) continue;
+        await x.ref.delete();
+        removed.push({ userId: x.r.userId, accountId: x.id, network: x.r.network, holder: x.r.holder || '', phone, keptBy: keep, savedAtMs: tsMillis(x.r.createdAt) });
+        touched.add(x.r.userId);
+      }
+    });
+  }
+  for (const uid of touched) {
+    await withLock('bank-save:' + uid, async () => {
+      const mine = await db.collection('bankAccounts').where('userId', '==', uid).get();
+      const rows = (mine.docs || []).slice().sort((a, b) => (tsMillis(a.data().createdAt) - tsMillis(b.data().createdAt)) || (a.id < b.id ? -1 : 1));
+      if (rows.length && !rows.some(d => d.data().isDefault === true)) await rows[0].ref.update({ isDefault: true });
+    });
+  }
+  if (removed.length) {
+    console.log(`Removed ${removed.length} payout number(s) saved later by a second member (${trigger})`);
+    await db.collection('adminAuditLog').add({ actor: 'server', role: 'system', action: 'shared_payout_numbers_removed', meta: { trigger, removed }, createdAt: FieldValue.serverTimestamp() })
+      .catch(e => console.warn('audit log write failed:', e.message));
+  }
+  return removed;
+}
+app.post('/admin/payout-numbers/dedupe', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { const removed = await dedupeSharedPayoutNumbers('owner'); logAdminAction(req, 'payout_numbers_dedupe', { removed: removed.length }); res.json({ status: 'success', removed: removed.length, details: removed }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not check the payout numbers' }); }
+});
 async function migratePayoutsToMidnightOnce() {
   const marker = db.collection('meta').doc('payoutDailyMidnight');
   if ((await marker.get()).exists) return 0;
@@ -10849,6 +10896,7 @@ connectMongo(MONGODB_URI)
     // expected to be a real problem at Snow's current scale.
     startRewardRepair();
     migratePayoutsToMidnightOnce().then(n => { if (n) console.log(`Moved ${n} running investments to the midnight payout schedule`); }).catch(e => console.error('Midnight schedule migration:', e.message)).then(() => backfillNextPayoutAt()).then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); armMidnightSweep(); });
+    dedupeSharedPayoutNumbers('start-up').catch(e => console.error('Shared payout number clean-up:', e.message));
     setInterval(autoApproveWithdrawalsTick, 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
     setInterval(reconcileBlockedCommissions, 5 * 60 * 1000);
