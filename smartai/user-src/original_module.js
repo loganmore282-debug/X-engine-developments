@@ -9,7 +9,7 @@ var PRODUCTS_CACHE_KEY = 'smartai_products_cache';
 // The numbers before the server has answered: the server's own defaults. Everything the member sees is replaced by what /public/settings says.
 var DEFAULT_SETTINGS = {
   withdrawFeePct: 15, minWithdraw: 5000, minDeposit: 5000, welcomeBonus: 7000,
-  commL1: 27, commL2: 2, commL3: 1, dailyCheckin: 250, maxWithdrawalsPerDay: 2,
+  commL1: 27, commL2: 2, commL3: 1, checkinLadder: [100, 200, 300, 500, 600, 700, 800, 1000], dailyCheckin: 250, maxWithdrawalsPerDay: 2,
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   salaryTiers: [], depositMethodNames: '', brandName: '', shareMessage: 'Join me on {app}', shareDomain: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', whatsappGroup: '', whatsappContact: '',
@@ -29,7 +29,7 @@ var CATEGORIES_CACHE_KEY = 'smartai_categories_cache', CATEGORIES = [], _shopCat
 try { var _cachedCats = JSON.parse(localStorage.getItem(CATEGORIES_CACHE_KEY) || 'null'); if (Array.isArray(_cachedCats)) CATEGORIES = _cachedCats.filter(function(c){ return c && c.id && c.name; }); } catch (e) {}
 var NETWORK_COLORS = { 'MTN Mobile Money': { color: '#FFCC08', textColor: '#0B2A5B' }, 'Airtel Money': { color: '#ED1C24', textColor: '#fff' } };
 // Pictures the admin uploaded (Admin > Banners): one for every banner the app draws, plus the Login logo and the profile logo. None set = a blue art banner.
-var ART_SLOTS = ['authhero', 'authlogo', 'promobanner', 'profilelogo', 'teambanner', 'mybanner', 'aboutbanner', 'shopbanner', 'depositbanner', 'withdrawbanner', 'supportbanner', 'recordsbanner', 'bindbankbanner'];
+var ART_SLOTS = ['authhero', 'authlogo', 'profilelogo', 'teambanner', 'mybanner', 'aboutbanner', 'shopbanner', 'depositbanner', 'withdrawbanner', 'supportbanner', 'recordsbanner', 'bindbankbanner'];
 var ART = { home: '', announcement: '' };
 ART_SLOTS.forEach(function(k){ ART[k] = ''; });
 var LOCKOUT_IC_MAINT = '<svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 005 5l-9.5 9.5a2.1 2.1 0 01-3-3l9.5-9.5a4 4 0 01-2-1.5z"/><circle cx="17" cy="7" r="1.2" fill="currentColor" stroke="none"/></svg>';
@@ -395,42 +395,28 @@ function medalPose(el, tick){
   var cell = tl[tick % tl.length];
   el.style.backgroundPosition = ((cell % 10) / 9 * 100).toFixed(3) + '% ' + (Math.floor(cell / 10) / 8 * 100).toFixed(3) + '%';
 }
-// The gift that wants to open: gift-idle.webp = 26 pictures (6 x 5) of a 0.433 s loop, played at 60 a second.
-var _giftReady = false;
-function giftPose(now){
-  var i = Math.floor((now % 433.3) / (1000 / 60)) % 26;
-  return ((i % 6) / 5 * 100).toFixed(2) + '% ' + (Math.floor(i / 6) / 4 * 100).toFixed(2) + '%';
-}
-function giftPreload(){
-  if (_giftReady || _giftLoading) return;
-  _giftLoading = true;
-  var im = new Image();
-  im.onload = function(){ _giftReady = true; paintGift(); };
-  im.onerror = function(){ _giftLoading = false; };
-  im.src = '/anim/gift-idle.webp';
-  var op = new Image(); op.src = '/anim/gift-open.webp';
-}
-var _giftLoading = false;
+// The gift (an inline SVG, see GB_SVG; the gradients live once in the page, #gbL ...): sharp at any size, animated by CSS. The opened box with its coins is a picture (gift-open.webp).
+var GB_SVG = '<svg class="gb" viewBox="0 0 200 210" aria-hidden="true"><ellipse class="gb-sh" cx="100" cy="190" rx="66" ry="11" fill="rgba(8,40,110,.28)"/><g class="gb-all"><g class="gb-body"><path d="M38 100L100 124V182L38 158Z" fill="url(#gbL)"/><path d="M100 124L162 100V158L100 182Z" fill="url(#gbR)"/><path d="M62 109.3L78 115.5V173.5L62 167.3Z" fill="url(#gbRib)"/><path d="M122 115.5L138 109.3V167.3L122 173.5Z" fill="url(#gbRibD)"/><path d="M44 106L53 109.5V153L44 149.5Z" fill="#fff" opacity=".28"/><path d="M100 124V182" stroke="#1c63c4" stroke-width="1.6" opacity=".7"/><path d="M38 100L100 124L162 100M38 100V158L100 182L162 158V100" fill="none" stroke="#1c63c4" stroke-width="1.6" stroke-linejoin="round" opacity=".75"/><path class="gb-slit" d="M38 100L100 76L162 100L100 124Z" fill="url(#gbGlow)"/></g><g class="gb-lid"><path d="M34 77L100 102V126L34 101Z" fill="url(#gbL)"/><path d="M100 102L166 77V101L100 126Z" fill="url(#gbR)"/><path d="M62 87.6L78 93.7V117.7L62 111.6Z" fill="url(#gbRib)"/><path d="M122 93.7L138 87.6V111.6L122 117.7Z" fill="url(#gbRibD)"/><path d="M100 52L166 77L100 102L34 77Z" fill="url(#gbT)"/><path d="M62 87.6L78 93.7L144 68.7L128 62.6Z" fill="url(#gbRib)"/><path d="M122 93.7L138 87.6L72 62.6L56 68.7Z" fill="url(#gbRib)"/><path d="M56 70L96 55.5L126 66.5L110 74Z" fill="#fff" opacity=".22"/><path d="M34 77L100 102L166 77M34 77V101L100 126L166 101V77M100 102V126M34 77L100 52L166 77" fill="none" stroke="#1c63c4" stroke-width="1.6" stroke-linejoin="round" opacity=".75"/><path d="M40 82L47 84.6V98L40 95.4Z" fill="#fff" opacity=".3"/><g class="gb-bow"><path d="M100 76C86 42 52 40 54 62C56 78 86 82 100 76Z" fill="url(#gbRib)" stroke="#d98600" stroke-width="1.6"/><path d="M100 76C114 42 148 40 146 62C144 78 114 82 100 76Z" fill="url(#gbRibD)" stroke="#d98600" stroke-width="1.6"/><path d="M92 69C82 54 66 52 66 62C68 70 84 74 92 69Z" fill="#7a4a00" opacity=".55"/><path d="M108 69C118 54 134 52 134 62C132 70 116 74 108 69Z" fill="#7a4a00" opacity=".55"/><path d="M90 60C80 50 66 51 64 58" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".55"/><circle cx="100" cy="76" r="10" fill="url(#gbRib)" stroke="#d98600" stroke-width="1.6"/><path d="M94 73a8 8 0 0 1 8-3" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" opacity=".7"/></g></g></g></svg>';
+function giftPreload(){ var op = new Image(); op.src = customIcon('giftopen') || '/anim/gift-open.webp'; }
 function paintGift(){
-  var pose = giftPose(Date.now()), custom = customIcon('giftbox');
+  var custom = customIcon('giftbox');
   document.querySelectorAll('.gbox').forEach(function(el){
     // A picture uploaded in Admin > Banners > Animations stands still in place of the gift; Back to default brings the animation.
-    if (custom) { el.classList.add('custom'); el.classList.remove('live'); el.style.backgroundImage = 'url("' + String(custom).replace(/"/g, '%22') + '")'; el.style.backgroundSize = 'contain'; el.style.backgroundPosition = 'center'; return; }
-    el.classList.remove('custom'); el.style.backgroundImage = ''; el.style.backgroundSize = '';
-    el.classList.toggle('live', _giftReady); if (_giftReady) el.style.backgroundPosition = pose; else el.style.backgroundPosition = '';
+    if (custom) { el.classList.add('custom'); el.innerHTML = ''; el.style.backgroundImage = 'url("' + String(custom).replace(/"/g, '%22') + '")'; return; }
+    el.classList.remove('custom'); el.style.backgroundImage = '';
+    if (!el.firstChild) el.innerHTML = GB_SVG;
   });
   var op = document.querySelector('.gs-open'); if (op) op.setAttribute('src', customIcon('giftopen') || '/anim/gift-open.webp');
 }
 var _animLast = -1;
 function animTick(){
-  var dls = document.querySelectorAll('svg.dl'), meds = document.querySelectorAll('.medal.live'), gbs = document.querySelectorAll('.gbox.live'), n = dls.length + meds.length + gbs.length;
+  var dls = document.querySelectorAll('svg.dl'), meds = document.querySelectorAll('.medal.live'), n = dls.length + meds.length;
   if (n && !document.hidden) {
     var now = Date.now(), c, i, j, ch;
     if (dls.length) {
       c = dlCircles((now % 2000) / 1000);
       for (i = 0; i < dls.length; i++) { ch = dls[i].children; for (j = 0; j < 12; j++) { ch[j].setAttribute('cx', c[j][0].toFixed(1)); ch[j].setAttribute('cy', c[j][1].toFixed(1)); ch[j].setAttribute('r', c[j][2].toFixed(1)); } }
     }
-    if (gbs.length) { var gp = giftPose(now); for (i = 0; i < gbs.length; i++) gbs[i].style.backgroundPosition = gp; }
     var tick = Math.floor((now % 3000) / (1000 / 30));
     if (meds.length && tick !== _animLast) {
       _animLast = tick;
@@ -1002,7 +988,7 @@ function paintArt(){
   var map = [
     ['depositBanner', ART.depositbanner, 'deposit'], ['withdrawBanner', ART.withdrawbanner, 'withdraw'], ['supportBanner', ART.supportbanner, 'support'],
     ['aboutBanner', ART.aboutbanner, 'about'], ['bindbankBanner', ART.bindbankbanner, 'payout'], ['shopBannerArt', ART.shopbanner, 'robots'],
-    ['accountBanner', ART.mybanner, 'my'], ['rewardsBanner', ART.promobanner, 'gift'], ['recordsBanner', ART.recordsbanner, 'ledger'], ['teamBanner', ART.teambanner, 'share']
+    ['accountBanner', ART.mybanner, 'my'], ['recordsBanner', ART.recordsbanner, 'ledger'], ['teamBanner', ART.teambanner, 'share']
   ];
   map.forEach(function(m){ var el = $(m[0]); if (el) el.innerHTML = artHtml(m[1], m[2]); });
   paintMeLook();
@@ -1055,23 +1041,35 @@ function renderAll(){
   renderFeatured(); renderTicker(); renderShop(); renderRecords();
 }
 // The daily reward card (Rewards tab).
+// The daily check-in CALENDAR: 30 days, the ladder of amounts along it (Admin > Settings > Daily check-in calendar; empty = one flat amount). A claimed day is filled
+// blue, the day the next tap pays is outlined and pulses. Day 31 starts the cycle again, and a missed day sends the run back to day 1 (the server decides; this only draws it).
+function cleanLadder(v){ return (Array.isArray(v) ? v : []).map(Number).filter(function(n){ return isFinite(n) && n >= 1; }).slice(0, 30); }
+function serverYesterdayKey(){
+  var d = new Date(Date.now() + 3 * 3600000 - 86400000), p = function(n){ return String(n).padStart(2, '0'); };
+  return p(d.getUTCMonth() + 1) + '/' + p(d.getUTCDate()) + '/' + d.getUTCFullYear();
+}
 function renderCheckin(){
-  var s = STATE, sett = getSettings(), amt = Number(sett.dailyCheckin) || 0;
-  var card = $('checkinCard'); if (card) card.style.display = amt > 0 ? '' : 'none';
-  $('checkinAmt').textContent = ugx(amt).replace('UGX ', '');
+  var s = STATE, sett = getSettings(), ladder = cleanLadder(sett.checkinLadder), flat = Math.round(Number(sett.dailyCheckin) || 0);
+  var card = $('checkinCard'); if (card) card.style.display = (ladder.length || flat > 0) ? '' : 'none';
+  var amtFor = function(day){ return ladder.length ? ladder[(day - 1) % ladder.length] : flat; };
   var done = s.lastCheckin === serverTodayKey();
+  var alive = s.checkinStreak > 0 && (done || s.lastCheckin === serverYesterdayKey());
+  var cyclePos = alive ? ((s.checkinStreak - 1) % 30) + 1 : 0;           // days of this cycle already claimed
+  var claimed = done ? cyclePos : (cyclePos === 30 ? 0 : cyclePos);        // day 31 = day 1 of the next cycle
+  var todayPos = done ? 0 : claimed + 1;
   var btn = $('checkinBtn');
   if (!btn.dataset.busy) {
-    btn.innerHTML = done ? '<span style="display:inline-flex;align-items:center;gap:6px;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12l4.5 4.5L19.5 6"/></svg>Claimed today</span>' : ('Check in for ' + ugx(amt));
+    btn.innerHTML = done ? '<span style="display:inline-flex;align-items:center;gap:6px;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12l4.5 4.5L19.5 6"/></svg>Claimed today</span>' : ('Check in for ' + ugx(amtFor(todayPos)));
     btn.disabled = done; btn.style.opacity = done ? '.55' : '1';
   }
-  $('streakNum').textContent = s.checkinStreak;
-  // The ring is a 30-day cycle: day 30 shows a full ring and day 31 starts again at day 1.
-  var cyclePos = s.checkinStreak > 0 ? ((s.checkinStreak - 1) % 30) + 1 : 0;
-  $('checkinRing').style.setProperty('--pct', (cyclePos / 30 * 100) + '%');
-  $('streakCycleLabel').textContent = s.checkinStreak > 0 ? ('Day ' + cyclePos + ' of 30') : 'Start your streak today';
-  var dots = ''; for (var i = 0; i < 30; i++) dots += '<i class="' + (i < cyclePos ? 'on' : '') + '"></i>';
-  $('streakDots').innerHTML = dots;
+  $('streakNum').textContent = alive ? s.checkinStreak : 0;
+  var cells = '';
+  for (var i = 1; i <= 30; i++) {
+    cells += '<div class="cal-d' + (i <= claimed ? ' done' : '') + (i === todayPos ? ' today' : '') + '"><span class="cal-n">' + i + '</span><span class="cal-a">' + String(amtFor(i)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '</span></div>';
+  }
+  $('calGrid').innerHTML = cells;
+  var nextDay = done ? (cyclePos % 30) + 1 : todayPos;
+  $('streakCycleLabel').textContent = done ? ('Day ' + cyclePos + ' claimed. Tomorrow pays ' + ugx(amtFor(nextDay))) : (claimed > 0 ? ('Today is day ' + todayPos + ' of 30: ' + ugx(amtFor(todayPos))) : ('Start your run today: ' + ugx(amtFor(1))));
   var gc = $('giftCodeInput'); if (gc) gc.placeholder = getSettings().giftCodeHint || 'Enter gift code';
 }
 // The Me page: the Download App tile follows whether the app is already installed.
@@ -1925,22 +1923,19 @@ async function doCheckin(){
 }
 // The gift: tapping it (or Open gift) with a code typed shows the stage -- the page blurs, spoke rings turn, the gift spins with glitter while the code is checked --
 // and a right code bursts the gift open: a coin rises, coins and ribbon bits fly, balloons float up, and the figure counts up to the real amount.
-function tapGiftBox(){
-  var inp = $('giftCodeInput');
-  if (!inp.value.trim()) { toast('Type your gift code first'); try { inp.focus(); } catch (e) {} shakeVibrate(inp); return; }
-  redeemGiftCode();
-}
+function tapGiftBox(){ openGiftStage(); }
 async function redeemGiftCode(){
   var raw = $('giftCodeInput').value.trim().toUpperCase();
-  if (!raw) { toast('Enter a code'); return; }
-  var btn = $('redeemBtn'), label = btn ? btn.textContent : '';
+  if (!$('giftRevealBg').classList.contains('show')) openGiftStage();
+  if (!raw) { toast('Enter a code'); shakeVibrate($('giftCodeInput')); return; }
+  var btn = $('redeemBtn'), label = btn ? btn.textContent : '', st = $('giftStage');
   if (btn) { if (btn.disabled) return; btn.disabled = true; btn.innerHTML = btnBusyHtml('Opening…'); }
-  var openedAt = Date.now(), staged = false;
+  var openedAt = Date.now();
+  st.className = 'gs gs-opening';   // the card goes, the gift spins with glitter while the code is checked
   try {
-    openGiftStage(); staged = true;
     var r = await api('/redeem', { code: raw });
     if (r.stale) { closeGiftReveal(); return; }
-    if (r.status !== 'success') { closeGiftReveal(); toast(r.message || "That code isn't valid"); return; }
+    if (r.status !== 'success') { st.className = 'gs gs-ask'; toast(r.message || "That code isn't valid"); shakeVibrate($('giftCodeInput')); return; }
     $('giftCodeInput').value = '';
     await refreshFromServer();
     renderAll();
@@ -1948,7 +1943,7 @@ async function redeemGiftCode(){
     if (wait > 0) await new Promise(function(res){ setTimeout(res, wait); });
     showGiftReveal(r.reward != null ? r.reward : r.amount);
   } catch (e) {
-    if (staged) closeGiftReveal();
+    st.className = 'gs gs-ask';
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = label; }
   }
@@ -1957,7 +1952,7 @@ var GIFT_OPEN_MS = 1100;
 var _giftCountRaf = null;
 function giftStageReset(){
   var bg = $('giftRevealBg'), st = $('giftStage');
-  st.className = 'gs gs-opening';
+  st.className = 'gs gs-ask';
   $('gsLabel').textContent = 'Opening your gift…';
   $('giftRevealAmount').textContent = ugx(0);
   $('gsGlitter').innerHTML = ''; $('gsConfetti').innerHTML = '';
@@ -1973,10 +1968,12 @@ function giftStageReset(){
   giftPreload(); paintGift();
   return bg;
 }
+// Tapping the gift: the popup with the gift behind it and the code field; "Open gift" starts the opening.
 function openGiftStage(){
   var bg = giftStageReset();
   bg.classList.add('show');
   if (navigator.vibrate) navigator.vibrate(20);
+  setTimeout(function(){ var i = $('giftCodeInput'); if (bg.classList.contains('show') && $('giftStage').classList.contains('gs-ask')) { try { i.focus(); } catch (e) {} } }, 380);
 }
 function showGiftReveal(amount){
   amount = Number(amount) || 0;

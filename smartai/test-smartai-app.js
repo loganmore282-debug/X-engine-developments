@@ -119,7 +119,7 @@ async function member(ref) {
   await ev(() => switchTab('rewards')); await sleep(300);
   const before = await ev(() => STATE.balance);
   await page.click('#checkinBtn'); await sleep(1500);
-  ok(await ev(() => STATE.balance) === before + 250 && await ev(() => STATE.checkinStreak) === 1, 'Check in pays the daily reward and starts the streak');
+  ok(await ev(() => STATE.balance) === before + 100 && await ev(() => STATE.checkinStreak) === 1, 'Check in pays the first day of the calendar (UGX 100) and starts the streak');
   ok(await ev(() => document.getElementById('checkinBtn').disabled) === true && /Claimed today/.test(await ev(() => document.getElementById('checkinBtn').textContent)), 'the button then reads Claimed today');
   const again = await J('POST', '/checkin', {}, MEtok);
   ok(again.s === 400 && again.j.code === 'ALREADY_CHECKED_IN', 'a second check-in the same day is refused by the server');
@@ -129,15 +129,17 @@ async function member(ref) {
   // ---- 5. gift code ----
   const gen = await J('POST', '/admin/promocodes/generate', { minReward: 3000, maxReward: 3000, maxUses: 5 }, null, true);
   const code = gen.j.code; const bal0 = await ev(() => STATE.balance);
+  await page.click('#giftBoxBtn'); await sleep(450);   // tapping the gift opens the popup with the code field
   await page.fill('#giftCodeInput', code); await page.click('#redeemBtn');
-  ok(await until(() => document.getElementById('giftRevealBg').classList.contains('show'), null, 8000), 'a right gift code opens the reveal');
+  ok(await until(() => document.getElementById('giftStage').classList.contains('gs-burst'), null, 8000), 'a right gift code bursts the gift open');
   await until(() => /3,000/.test(document.getElementById('giftRevealAmount').textContent), null, 8000);   // the gift spins about a second, then bursts and the figure counts up
   ok(/3,000/.test(await ev(() => document.getElementById('giftRevealAmount').textContent)) && await ev(() => STATE.balance) === bal0 + 3000, 'the reveal counts up to the real reward and the wallet has it');
   await ev(() => closeGiftReveal());
-  await page.fill('#giftCodeInput', code); await page.click('#redeemBtn'); await sleep(1200);
-  ok(!await shown('giftRevealBg') && (await toastText()).length > 0 && await ev(() => STATE.balance) === bal0 + 3000, 'the same code again pays nothing and says why');
-  await page.fill('#giftCodeInput', 'WRONGWRONG'); await page.click('#redeemBtn'); await sleep(1000);
-  ok(!await shown('giftRevealBg'), 'a wrong code opens nothing');
+  await page.click('#giftBoxBtn'); await sleep(450); await page.fill('#giftCodeInput', code); await page.click('#redeemBtn'); await sleep(1500);
+  ok(!await ev(() => document.getElementById('giftStage').classList.contains('gs-burst')) && (await toastText()).length > 0 && await ev(() => STATE.balance) === bal0 + 3000, 'the same code again pays nothing and says why');
+  await page.fill('#giftCodeInput', 'WRONGWRONG'); await page.click('#redeemBtn'); await sleep(1500);
+  ok(!await ev(() => document.getElementById('giftStage').classList.contains('gs-burst')), 'a wrong code opens nothing');
+  await ev(() => closeGiftReveal());
 
   // ---- 6. payout accounts ----
   await ev(() => goBindBank(false)); await sleep(300);

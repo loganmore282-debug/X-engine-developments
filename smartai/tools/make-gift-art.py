@@ -1,7 +1,8 @@
-"""Makes the Rewards-page gift art from the owner's recordings (screen recordings of two gift boxes):
-   user/anim/gift-idle.webp  the box that "wants to open" (video 1: 26 pictures of a 0.433 s loop, teal turned to the blue of the other box)
-   user/anim/gift-open.webp  the open box with its coin pile (video 4), WITHOUT its star and star pattern: the app puts a coin where the star was
-   python3 tools/make-gift-art.py <dir with box/f and burst/f folders of 60 fps frames 00001.png ...>      (needs numpy, opencv, Pillow)"""
+"""Makes the opened gift picture from the owner's recording of the bursting gift box (video 4):
+   user/anim/gift-open.webp  the open box with its coin pile, WITHOUT its star and star pattern: the app puts a UGX coin where the star was
+   (The gift that "wants to open" is NOT cut from video any more: it is drawn as SVG in the app, GB_SVG, so it is sharp at any size; it moves like
+   the recording's 0.433 s loop.)
+   python3 tools/make-gift-art.py <dir with a burst/f folder of 60 fps frames 00001.png ...>      (needs numpy, opencv, Pillow)"""
 import sys, os, json, glob
 import numpy as np, cv2
 from PIL import Image, ImageDraw
@@ -38,38 +39,6 @@ def key_alpha(bgr, thresh=58, no_purple=False):
         fillc = np.where(inside[:, :, None], fillc, newc); inside = inside | (cnt > 0.01)
     rgb = np.where(er.astype(bool)[:, :, None], rgb, fillc)
     return rgb, alpha
-
-def to_blue(rgb):
-    """the teal box -> the blue of the opening box (hue, less saturated, brighter); gold ribbon a little brighter"""
-    hsv = cv2.cvtColor(np.clip(rgb, 0, 255).astype(np.uint8)[:, :, ::-1], cv2.COLOR_BGR2HSV).astype(np.float32)
-    h, s, v = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
-    teal = (h > 66) & (h < 104) & (s > 45)
-    h2 = np.where(teal, 102 + (h - 90) * 0.25, h)
-    s2 = np.where(teal, s * 0.68, s)
-    v2 = np.where(teal, np.minimum(255, v * 1.45), np.where((h > 8) & (h < 32) & (s > 140), np.minimum(255, v * 1.08), v))
-    out = cv2.cvtColor(np.dstack([h2, s2, v2]).astype(np.uint8), cv2.COLOR_HSV2BGR)
-    return out[:, :, ::-1].astype(np.float32)
-
-# ------------------------------------------------------------------ the box that wants to open
-files = sorted(glob.glob(f'{SRC}/box/f/*.png'))[:26]
-cells, boxes = [], []
-for f in files:
-    rgb, a = key_alpha(cv2.imread(f), 70, True); rgb = to_blue(rgb)
-    cells.append((rgb, a))
-ys = [np.where(a.max(axis=1) > 0.3)[0] for _, a in cells]; xs = [np.where(a.max(axis=0) > 0.3)[0] for _, a in cells]
-y0 = min(y.min() for y in ys); y1 = max(y.max() for y in ys); x0 = min(x.min() for x in xs); x1 = max(x.max() for x in xs)
-side = max(y1 - y0, x1 - x0) + 8; cy = (y0 + y1) // 2; cx = (x0 + x1) // 2
-H, W = cells[0][1].shape
-sy0 = int(np.clip(cy - side // 2, 0, max(0, H - side))); sx0 = int(np.clip(cx - side // 2, 0, max(0, W - side)))
-CELL, COLS = 224, 6
-rows = (len(cells) + COLS - 1) // COLS
-sheet = Image.new('RGBA', (COLS * CELL, rows * CELL), (0, 0, 0, 0))
-for i, (rgb, a) in enumerate(cells):
-    c = np.dstack([rgb, a * 255.0])[sy0:sy0 + side, sx0:sx0 + side]
-    im = Image.fromarray(np.clip(c, 0, 255).astype(np.uint8), 'RGBA').resize((CELL, CELL), Image.LANCZOS)
-    sheet.paste(im, ((i % COLS) * CELL, (i // COLS) * CELL))
-sheet.save(os.path.join(OUT, 'gift-idle.webp'), 'WEBP', quality=86, method=6, alpha_quality=95)
-print('idle', len(cells), 'cells', sheet.size, os.path.getsize(os.path.join(OUT, 'gift-idle.webp')) // 1024, 'kB')
 
 # ------------------------------------------------------------------ the open box, no star
 im = cv2.imread(f'{SRC}/burst/f/00070.png')

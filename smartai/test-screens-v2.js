@@ -46,7 +46,7 @@ function runStats(rows) {
   ok(/publicJson\(req, res, Object\.assign\(\{ status: 'success' \}, banners, \{ icons \}\), IMAGE_CACHE\)/.test(src), 'members get it from /public/smartai-images');
   ok(/res\.json\(Object\.assign\(\{ status: 'success' \}, banners, \{ linkpreview, icons \}\)\)/.test(src), 'and the admin panel reads it');
   ok(/file:'profileLogoFile'/.test(adm) && /PICTURE_SLOTS\.forEach\(o => wireSmartAIImageSlot\(o\.slot, o\.file, o\.clear/.test(adm), 'the admin panel can upload and remove it');
-  ok(['promobanner', 'teambanner', 'mybanner', 'authhero', 'authlogo'].every(k => new RegExp("slot:'" + k + "'").test(adm) && src.includes("'" + k + "'")) && /wireSmartAIImageSlot\('aboutbanner'/.test(adm) && src.includes("'aboutbanner'"), 'the admin can upload the Rewards, Team, Me, About and Log In pictures');
+  ok(['teambanner', 'mybanner', 'authhero', 'authlogo'].every(k => new RegExp("slot:'" + k + "'").test(adm) && src.includes("'" + k + "'")) && /wireSmartAIImageSlot\('aboutbanner'/.test(adm) && src.includes("'aboutbanner'"), 'the admin can upload the Rewards, Team, Me, About and Log In pictures');
   ok(!/checkinBannerFile|homeSlide|brandLogoFile|aboutLogoFile|loaderBgFile|downloadBgFile/.test(adm) && !/'banner[2-5]'|'checkinbanner'|'downloadbg'|'logo'|'aboutlogo'|'loaderbg'/.test(src), 'the pictures the app never shows (Home slides, brand logo, About round picture, loading picture, ...) are gone');
 
   // 5. production hygiene

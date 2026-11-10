@@ -43,14 +43,14 @@ const serverSlots = listOf(server, /const SMARTAI_BANNER_SLOTS = \[([^\]]*)\]/);
 const appSlots = listOf(app, /var ART_SLOTS = \[([^\]]*)\]/);
 const adminSlots = [...adminSrc.matchAll(/\{ slot:'([a-z]+)', title:/g)].map(m => m[1]).concat('aboutbanner');   // About has its own card (banner + page text)
 const sameSet = (a, b) => !!a && !!b && a.length === b.length && a.every(x => b.includes(x));
-ok(serverSlots && serverSlots.length === 13, 'the server knows thirteen member pictures (' + (serverSlots || []).join(', ') + ')');
+ok(serverSlots && serverSlots.length === 12, 'the server knows twelve member pictures (' + (serverSlots || []).join(', ') + ')');
 ok(sameSet(serverSlots, appSlots), 'the app reads exactly those slots');
 ok(sameSet(serverSlots, adminSlots), 'the admin panel has a card for exactly those slots');
-const need = ['authhero', 'authlogo', 'mybanner', 'profilelogo', 'shopbanner', 'depositbanner', 'withdrawbanner', 'supportbanner', 'recordsbanner', 'bindbankbanner', 'promobanner', 'teambanner', 'aboutbanner'];
+const need = ['authhero', 'authlogo', 'mybanner', 'profilelogo', 'shopbanner', 'depositbanner', 'withdrawbanner', 'supportbanner', 'recordsbanner', 'bindbankbanner', 'teambanner', 'aboutbanner'];
 ok(need.every(k => serverSlots.includes(k)), 'Login banner, Login circle logo, Me page banner (account background), Profile logo, AI Robots, Add Funds, Cash Out, Support, Ledger, Payout Account, Rewards, Team and About are all there');
 const paint = (app.match(/function paintArt\(\)\{[\s\S]*?\n\}/) || [''])[0];
 const entries = [...paint.matchAll(/\['([A-Za-z]+)', ([^,]+), '([a-z]+)'\]/g)];
-ok(entries.length === 10 && entries.every(e => /^ART\.[a-z]+$/.test(e[2])), 'paintArt() gives every page banner its own picture, none is left on the blue art for good (' + entries.length + ' banners)');
+ok(entries.length === 9 && entries.every(e => /^ART\.[a-z]+$/.test(e[2])), 'paintArt() gives every page banner its own picture, none is left on the blue art for good (' + entries.length + ' banners)');
 ok(entries.every(e => new RegExp('id="' + e[1] + '"').test(page)), 'and each of those banners exists on its page');
 ok(/img data-icon="robots"|\(ART\.profilelogo \? '' : ' data-icon="robots"'\)/.test(paint) && /ART\.profilelogo/.test(paint) && /ART\.authlogo/.test(app), 'the profile logo and the Login circle logo come from their slots too');
 ok(!/id="[A-Za-z]*Banner"[^>]*>\s*<img/.test(page), 'no banner is a fixed picture in the page');
@@ -105,7 +105,7 @@ ok(!/id="[A-Za-z]*Banner"[^>]*>\s*<img/.test(page), 'no banner is a fixed pictur
   ok(await until(() => document.getElementById('app').style.display === 'block', null, 15000), 'a member signs in');
   await ev(() => { try { dismissAnnouncement(); } catch (e) {} try { dismissInstallSheet(); } catch (e) {} });
   await ev(() => _artPromise);
-  const map = { homeBanner: colour.authhero, shopBannerArt: colour.shopbanner, teamBanner: colour.teambanner, rewardsBanner: colour.promobanner, accountBanner: colour.mybanner,
+  const map = { homeBanner: colour.authhero, shopBannerArt: colour.shopbanner, teamBanner: colour.teambanner, accountBanner: colour.mybanner,
     depositBanner: colour.depositbanner, withdrawBanner: colour.withdrawbanner, supportBanner: colour.supportbanner, aboutBanner: colour.aboutbanner,
     recordsBanner: colour.recordsbanner, bindbankBanner: colour.bindbankbanner };
   const got = await ev(m => Object.keys(m).map(id => { const el = document.getElementById(id), i = el && el.querySelector('img.art-photo'); return [id, i ? i.getAttribute('src') : null]; }), map);
@@ -165,11 +165,11 @@ ok(!/id="[A-Za-z]*Banner"[^>]*>\s*<img/.test(page), 'no banner is a fixed pictur
   const heads = await ap.evaluate(() => [...document.querySelectorAll('#content h2.sec')].map(h => h.textContent.trim()));
   ok(heads[0] === 'Login & Sign Up banner' && heads[1] === 'Login & Sign Up circle logo', 'the Banners tab starts with the Login & Sign Up banner and circle logo (' + heads.slice(0, 2).join(' | ') + ')');
   ok(/^Icons/.test(heads[heads.length - 1]), 'the long Icons box is last, so every banner is found before it');
-  const wanted = ['Home banner', 'AI Robots page banner', 'Rewards page banner', 'Team page banner', 'Me page banner (account background)', 'Profile logo (account logo)', 'Add Funds page banner', 'Cash Out page banner',
+  const wanted = ['Home banner', 'AI Robots page banner', 'Team page banner', 'Me page banner (account background)', 'Profile logo (account logo)', 'Add Funds page banner', 'Cash Out page banner',
     'Support page banner', 'About page', 'Ledger page banner', 'Payout Account page banner', 'Welcome announcement', 'Link preview (Telegram)', 'App icon'];
   ok(wanted.every(t => heads.includes(t)), 'every banner has its own card: ' + wanted.filter(t => !heads.includes(t)).join(', ') + (wanted.every(t => heads.includes(t)) ? 'all ' + wanted.length + ' found' : ' MISSING'));
   const slotsInPanel = [...adminSrc.matchAll(/\{ slot:'([a-z]+)', title:'[^']*',(?: round:true,)? file:'([A-Za-z]+)', clear:'([A-Za-z]+)'/g)].map(m => ({ slot: m[1], file: m[2], clear: m[3] }));
-  ok(slotsInPanel.length === 12, 'twelve plain picture cards (About keeps its own card with the page text)');
+  ok(slotsInPanel.length === 11, 'eleven plain picture cards (About keeps its own card with the page text)');
   for (const o of slotsInPanel) {
     const before = posts.length;
     await ap.setInputFiles('#' + o.file, { name: 'pic.png', mimeType: 'image/png', buffer: pngBuf(200, 30, 30) });

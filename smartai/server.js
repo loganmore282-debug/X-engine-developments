@@ -647,7 +647,9 @@ const DEFAULT_SETTINGS = {
   // 0 = no limit; a nonzero value leaves anything above it for manual review. autoApproveEnabledAt is stamped by the server when the switch is turned on.
   autoApproveWithdrawalsEnabled: false, autoApproveMinSec: 10, autoApproveMaxSec: 60, autoApproveMaxAmount: 0, autoApproveEnabledAt: 0,
   supportTelegram: '', telegramGroup: '',
-  // Daily check-in (Rewards tab): what one tap a day pays into the wallet; 0 turns the card off. The streak and the day are the member's own.
+  // Daily check-in (Rewards tab): the CALENDAR pays a rising ladder over a 30-day cycle (day 1 = first amount, day 9 = the first again, ...; a missed day starts over at day 1).
+  // `checkinLadder` empty = every day pays the flat `dailyCheckin`; both empty / 0 = the card is off. The streak and the day are the member's own.
+  checkinLadder: [100, 200, 300, 500, 600, 700, 800, 1000],
   dailyCheckin: 250,
   // More support links (Telegram channel, WhatsApp group and contact), the support hours, and the Terms & Rules text shown in the app. All plain text; a link must be http(s).
   telegramChannel: '', whatsappGroup: '', whatsappContact: '', supportHours: '', rulesText: '',
@@ -871,7 +873,7 @@ async function getHomeBanner() {
   return _bannerCache;
 }
 // The admin-uploaded pictures (Admin > Banners), the ones the member app really shows: one slot for every banner the app draws (as in ChocoMCC, where the
-// owner can replace every banner): Login banner (authhero) and circle logo (authlogo), Rewards (promobanner), AI Robots (shopbanner), Team (teambanner),
+// owner can replace every banner): Login banner (authhero) and circle logo (authlogo), AI Robots (shopbanner), Team (teambanner),
 // Me page (mybanner), the logo beside the phone number (profilelogo), Add Funds (depositbanner), Cash Out (withdrawbanner), Support (supportbanner), About
 // (aboutbanner), Ledger (recordsbanner), Payout Account (bindbankbanner), and the link preview picture (linkpreview, read by the Telegram preview page below).
 // The Home banner and the welcome picture have their own routes. Stored in the 'banners' collection as `smartai-<slot>`, cached for 60 s.
@@ -880,7 +882,7 @@ async function getHomeBanner() {
 // The last eight are the owner's ANIMATIONS (the three Team-page level medals, the dots loader, the gift box, the opened gift, the payment tick and cross): a picture uploaded for one stands still in its place, Remove ("Back to default") brings the animation back.
 const SMARTAI_ICON_SLOTS = ['home', 'robots', 'income', 'share', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout', 'level1', 'level2', 'level3', 'loader', 'giftbox', 'giftopen', 'tick', 'cross'];
 // The pictures members get (all of these go to /public/smartai-images; linkpreview is the Telegram preview's own and is only read by the admin and that page).
-const SMARTAI_BANNER_SLOTS = ['authhero', 'authlogo', 'promobanner', 'profilelogo', 'teambanner', 'mybanner', 'aboutbanner',
+const SMARTAI_BANNER_SLOTS = ['authhero', 'authlogo', 'profilelogo', 'teambanner', 'mybanner', 'aboutbanner',
   'shopbanner', 'depositbanner', 'withdrawbanner', 'supportbanner', 'recordsbanner', 'bindbankbanner'];
 const SMARTAI_IMAGE_SLOTS = [...SMARTAI_BANNER_SLOTS, 'linkpreview', ...SMARTAI_ICON_SLOTS];
 const _smartaiImageCache = {};
@@ -6535,14 +6537,25 @@ function computeCheckinStreak(dayKeysSet) {
 }
 // One tap a day. Locked per member (a double tap or two phones cannot pay twice), the credit and the day mark land in ONE update that only applies
 // while the member has not checked in today, and the ledger row is keyed on the day so it can never be written twice.
+// The ladder as a clean list of whole amounts (what is saved, what is shown, what is paid).
+function cleanCheckinLadder(v) {
+  const raw = Array.isArray(v) ? v : String(v == null ? '' : v).split(/[\s,;]+/);
+  return raw.map(x => Math.round(typeof x === 'number' ? x : Number(String(x).replace(/[^0-9.\-]/g, '')))).filter(n => Number.isFinite(n) && n >= 1 && n <= MAX_MONEY_AMOUNT).slice(0, 30);
+}
+// Pays for the day number `streak` of the member's run: the 30-day calendar cycle (day 31 starts again at day 1) read along the ladder.
+function checkinAmountFor(sett, streak) {
+  const ladder = cleanCheckinLadder(sett.checkinLadder);
+  if (!ladder.length) return Math.round(Number(sett.dailyCheckin) || 0);
+  const pos = (Math.max(1, Math.floor(Number(streak) || 1)) - 1) % 30;
+  return ladder[pos % ladder.length];
+}
 app.post('/checkin', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   try {
     const out = await withLock('checkin:' + uid, async () => {
       const sett = await getSettings();
-      const bonus = Math.round(Number(sett.dailyCheckin) || 0);
-      if (bonus <= 0) return { code: 400, body: { status: 'error', message: 'Daily check-in is not available right now.' } };
+      if (checkinAmountFor(sett, 1) <= 0) return { code: 400, body: { status: 'error', message: 'Daily check-in is not available right now.' } };
       const ref = db.collection('users').doc(uid);
       const snap = await ref.get();
       if (!snap.exists) return { code: 404, body: { status: 'error', code: 'NOT_FOUND', message: 'User not found' } };
@@ -6562,6 +6575,8 @@ app.post('/checkin', async (req, res) => {
       const y = new Date(eatNow().getTime() - 86400000), p2 = n => String(n).padStart(2, '0');
       const yesterday = p2(y.getUTCMonth() + 1) + '/' + p2(y.getUTCDate()) + '/' + y.getUTCFullYear();
       const streak = real.lastCheckin === yesterday ? real.streak + 1 : 1;
+      const bonus = checkinAmountFor(sett, streak);
+      if (bonus <= 0) return { code: 400, body: { status: 'error', message: 'Daily check-in is not available right now.' } };
       const applied = await withLock('bal:' + uid, () => ref.updateIf({ lastCheckin: { $ne: date }, status: { $ne: 'banned' } },
         { walletBalance: FieldValue.increment(bonus), totalEarned: FieldValue.increment(bonus), lastCheckin: date, checkinStreak: streak }));
       if (!applied) return { code: 400, body: { status: 'error', code: 'ALREADY_CHECKED_IN', message: 'Already checked in today' } };
@@ -7344,6 +7359,7 @@ app.post('/admin/settings/update', async (req, res) => {
       const words = String(updates.shareMessage == null ? '' : updates.shareMessage).replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 200);
       updates.shareMessage = words || DEFAULT_SETTINGS.shareMessage;
     }
+    if ('checkinLadder' in updates) updates.checkinLadder = cleanCheckinLadder(updates.checkinLadder);
     if ('giftCodeHint' in updates) {
       const hint = String(updates.giftCodeHint == null ? '' : updates.giftCodeHint).replace(/[<>]/g, '').trim().slice(0, 40);
       updates.giftCodeHint = hint || DEFAULT_SETTINGS.giftCodeHint;

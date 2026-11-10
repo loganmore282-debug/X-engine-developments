@@ -115,7 +115,7 @@ ok(/\.toast-bg\{[^}]*pointer-events:none/.test(html) && !/\.toast-bg\.show[^{]*\
   const sd = srvText.match(/const DEFAULT_SETTINGS = \{[\s\S]*?withdrawFeePct: (\d+), minWithdraw: (\d+), minDeposit: (\d+),\s*welcomeBonus: (\d+), commL1: (\d+), commL2: (\d+), commL3: (\d+),/);
   ok(sd && sd.slice(1).join(',') === '15,5000,5000,7000,27,2,1', 'the server starts with fee 15%, minimum UGX 5,000 to top up and to cash out, welcome UGX 7,000 and commissions 27 / 2 / 1 % (' + (sd && sd.slice(1).join(',')) + ')');
   ok(/maxWithdrawalsPerDay: 2,/.test(srvText) && /dailyCheckin: 250,/.test(srvText), 'two cash-outs a day and a daily check-in of UGX 250');
-  const cd = mod.match(/var DEFAULT_SETTINGS = \{\s*withdrawFeePct: (\d+), minWithdraw: (\d+), minDeposit: (\d+), welcomeBonus: (\d+),\s*commL1: (\d+), commL2: (\d+), commL3: (\d+), dailyCheckin: (\d+), maxWithdrawalsPerDay: (\d+)/);
+  const cd = mod.match(/var DEFAULT_SETTINGS = \{\s*withdrawFeePct: (\d+), minWithdraw: (\d+), minDeposit: (\d+), welcomeBonus: (\d+),\s*commL1: (\d+), commL2: (\d+), commL3: (\d+), checkinLadder: \[[^\]]*\], dailyCheckin: (\d+), maxWithdrawalsPerDay: (\d+)/);
   ok(cd && cd.slice(1).join(',') === '15,5000,5000,7000,27,2,1,250,2', 'the app\'s own fallback is the same (' + (cd && cd.slice(1).join(',')) + ')');
   ok(/v\('minDeposit',5000\)/.test(adm) && /v\('minWithdraw',5000\)/.test(adm) && /v\('welcomeBonus',7000\)/.test(adm) && /v\('commL1',27\)/.test(adm) && /v\('maxWithdrawalsPerDay',2\)/.test(adm), 'and so are the admin panel\'s boxes');
 }

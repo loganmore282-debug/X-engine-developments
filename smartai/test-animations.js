@@ -61,9 +61,9 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   ok(/svg\.dl circle\{fill:var\(--caramel\)/.test(css), 'the loader is the app\'s blue');
 
   const dims = f => { const b = fs.readFileSync(path.join(__dirname, f)); return { w: 1 + b.readUIntLE(24, 3), h: 1 + b.readUIntLE(27, 3) }; };
-  const gi = dims('user/anim/gift-idle.webp'), go = dims('user/anim/gift-open.webp');
-  ok(gi.w === 1344 && gi.h === 1120 && go.w === 512, 'the gift sheets are there: 26 pictures of the box that wants to open (6 x 5 of 224 px) and the opened box with its coin pile');
-  ok(/function giftPose/.test(src) && /433\.3/.test(src) && /% 26/.test(src), 'the gift plays 26 pictures in 0.433 s (the loop of the recording, 60 a second)');
+  const go = dims('user/anim/gift-open.webp');
+  ok(go.w === 512 && !fs.existsSync(path.join(__dirname, 'user/anim/gift-idle.webp')), 'the opened box with its coin pile is a picture; the gift that wants to open is NOT a blurry video cut any more');
+  ok(/var GB_SVG = '<svg class="gb"/.test(src) && /\.gb-all\{animation:gbWob \.433s/.test(css) && /\.gb-lid\{animation:gbLid \.433s/.test(css) && /id="gbL"/.test(css), 'the gift is drawn as SVG (sharp at any size) and moves like the recording: a 0.433 s loop, squash and stretch, the lid lifting over the yellow glow');
   ok(/\.ok-disc\{animation:anPop \.27s/.test(css) && /\.ok-halo\{animation:anHalo \.3s[^}]*\.08s/.test(css) && /\.ok-check\{[^}]*\.15s/.test(css) && /r="182"/.test(src) && /r="300"/.test(src), 'the tick: disc grows in 0.27 s, halo follows after 0.08 s, the check is drawn after 0.15 s (measured), disc 182 and halo 300');
   ok(/\.no-halo\{animation:anSpring \.34s/.test(css) && /r="187"/.test(src) && /r="303"/.test(src) && /#fe1e3d/.test(src), 'the cross: red disc 187 with a springing halo 303, as measured');
   ok(!/\bstars?\b/i.test((css.match(/\.gs[\s\S]*?\/\* ---- Smart AI additions/) || [''])[0].replace(/\/\*[\s\S]*?\*\//g, '')) && /UGX/.test(css) && /class="c"|i\.c\{/.test(css), 'the burst has a coin where the recording had a star, and little coins instead of star bits');
@@ -120,26 +120,45 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   ok(await p.evaluate(() => { const m = document.querySelector('.medal[data-medal="2"]'); return m.classList.contains('live') && !m.classList.contains('custom') && m.style.backgroundImage === ''; }), 'Back to default: the animation is back');
   // the Rewards page: the gift first, the daily reward second
   await p.evaluate(() => switchTab('rewards'));
-  ok(await p.evaluate(() => { const g = document.getElementById('giftBoxBtn'), c = document.getElementById('checkinCard'); return !!g && !!c && (g.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0; }), 'on the Rewards page the gift is the first thing, the daily reward comes after it');
-  ok(await until(() => !!document.querySelector('#giftBoxBtn .gbox.live'), null, 10000), 'the gift switches to its animation (sheet loaded)');
-  const gseen = new Set(); for (let i = 0; i < 10; i++) { gseen.add(await p.evaluate(() => document.querySelector('#giftBoxBtn .gbox').style.backgroundPosition)); await sleep(60); }
-  ok(gseen.size >= 5, 'and it plays (' + gseen.size + ' different pictures in 0.6 s)');
-  await p.evaluate(() => { document.getElementById('giftCodeInput').value = ''; }); await p.evaluate(() => document.getElementById('giftBoxBtn').click()); await sleep(150);
-  ok(await p.evaluate(() => !document.getElementById('giftRevealBg').classList.contains('show')), 'tapping the gift with no code typed opens nothing (it asks for the code)');
+  ok(await p.evaluate(() => { const g = document.getElementById('giftBoxBtn'), c = document.getElementById('checkinCard'); return !!g && !!c && (g.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0; }), 'on the Rewards page the gift is the first thing, the daily check-in calendar comes after it');
+  ok(await p.evaluate(() => !document.getElementById('rewardsBanner') && !document.querySelector('#viewRewards .photo-banner')), 'the banner at the top of the Rewards page is gone');
+  ok(await p.evaluate(() => !!document.querySelector('#giftBoxBtn .gbox svg.gb') && !document.getElementById('giftCodeInput').offsetParent), 'the page shows only the gift (the code field lives in the popup)');
+  const gseen = new Set(); for (let i = 0; i < 12; i++) { gseen.add(await p.evaluate(() => getComputedStyle(document.querySelector('#giftBoxBtn .gb-all')).transform + '|' + getComputedStyle(document.querySelector('#giftBoxBtn .gb-lid')).transform)); await sleep(37); }
+  ok(gseen.size >= 5, 'the gift moves (' + gseen.size + ' different poses in 0.45 s)');
+  await p.evaluate(() => document.getElementById('giftBoxBtn').click()); await sleep(450);
+  const ask = await p.evaluate(() => { const st = document.getElementById('giftStage'), bg = document.getElementById('giftRevealBg'), inp = document.getElementById('giftCodeInput'), sp = document.querySelector('.gs-spokes'); return { show: bg.classList.contains('show'), ask: st.classList.contains('gs-ask'), blur: getComputedStyle(bg).backdropFilter || getComputedStyle(bg).webkitBackdropFilter, field: !!inp.offsetParent, spokes: getComputedStyle(sp).animationName, gold: /255, ?(1[5-9]\d|2\d\d), ?\d+/.test(getComputedStyle(sp).backgroundImage), box: !!document.querySelector('.gs-box svg.gb'), card: !!document.getElementById('gsCard').offsetParent }; });
+  ok(ask.show && ask.ask && /blur/.test(ask.blur) && ask.field && ask.card && ask.spokes === 'gsSpin' && ask.gold && ask.box, 'tapping the gift opens the popup: blurred page, rotating GOLD spoke rings, the gift behind, and the field for the gift code');
+  await p.evaluate(() => { document.getElementById('giftCodeInput').value = ''; document.getElementById('redeemBtn').click(); }); await sleep(200);
+  ok(await p.evaluate(() => document.getElementById('giftStage').classList.contains('gs-ask') && document.getElementById('giftRevealBg').classList.contains('show')), 'opening with an empty field says so and keeps the popup');
+  await p.evaluate(() => { document.getElementById('giftCodeInput').value = 'WRONGWRONG'; document.getElementById('redeemBtn').click(); });
+  ok(await until(() => document.getElementById('giftStage').classList.contains('gs-ask') && !document.getElementById('redeemBtn').disabled, null, 6000) && await p.evaluate(() => !document.getElementById('giftStage').classList.contains('gs-burst')), 'a wrong code brings the popup back (nothing opened, nothing paid)');
+  await p.evaluate(() => closeGiftReveal()); await sleep(100);
+  ok(await p.evaluate(() => !document.getElementById('giftRevealBg').classList.contains('show')), 'the X closes the popup');
   const gen = await J('POST', '/admin/promocodes/generate', { minReward: 3000, maxReward: 3000, maxUses: 5 }, null, true);
-  await p.evaluate(c => { document.getElementById('giftCodeInput').value = c; }, gen.j.code);
-  await p.evaluate(() => { window._hold = true; }); await p.evaluate(() => document.getElementById('giftBoxBtn').click()); await sleep(250);
+  await p.evaluate(() => document.getElementById('giftBoxBtn').click()); await sleep(300);
+  await p.evaluate(c => { document.getElementById('giftCodeInput').value = c; document.getElementById('redeemBtn').click(); }, gen.j.code); await sleep(250);
   const stage = await p.evaluate(() => { const bg = document.getElementById('giftRevealBg'), st = document.getElementById('giftStage'), sp = document.querySelector('.gs-spokes'); return { show: bg.classList.contains('show'), opening: st.classList.contains('gs-opening'), blur: getComputedStyle(bg).backdropFilter || getComputedStyle(bg).webkitBackdropFilter, spokes: getComputedStyle(sp).animationName, glitter: document.querySelectorAll('#gsGlitter i').length, spin: getComputedStyle(document.querySelector('.gs-box')).animationName, label: document.getElementById('gsLabel').textContent }; });
-  ok(stage.show && stage.opening && /blur/.test(stage.blur) && stage.spokes === 'gsSpin' && stage.glitter === 16 && stage.spin === 'gsTurn' && /Opening/.test(stage.label), 'tapping the gift with a code: the page blurs, the spoke rings turn, the gift spins with glitter ("Opening your gift...")');
+  ok(stage.show && stage.opening && /blur/.test(stage.blur) && stage.spokes === 'gsSpin' && stage.glitter === 16 && stage.spin === 'gsTurn' && /Opening/.test(stage.label), 'pressing Open gift: the card goes, the gift spins with glitter inside the gold spoke rings ("Opening your gift...")');
   ok(await until(() => document.getElementById('giftStage').classList.contains('gs-burst'), null, 8000), 'a right code bursts it open');
   await sleep(1400);
   const burst = await p.evaluate(() => ({ coin: getComputedStyle(document.querySelector('.gs-coin')).display, open: getComputedStyle(document.querySelector('.gs-open')).display, box: getComputedStyle(document.querySelector('.gs-box')).display, conf: document.querySelectorAll('#gsConfetti i').length, coins: document.querySelectorAll('#gsConfetti i.c').length, balloons: document.querySelectorAll('.gs-balloon').length, amount: document.getElementById('giftRevealAmount').textContent, uses: document.querySelector('.gs-coin text') && document.querySelector('.gs-coin text').textContent }));
   ok(burst.coin === 'block' && burst.open === 'block' && burst.box === 'none' && burst.conf === 30 && burst.coins >= 15 && burst.balloons === 3 && /3,000/.test(burst.amount) && burst.uses === 'UGX', 'the burst: the opened box, a coin rising (no star), 30 pieces (20 of them little coins), 3 balloons, UGX 3,000');
   await p.evaluate(() => closeGiftReveal());
   await p.evaluate(png => { STATE_ICONS = { giftbox: png, giftopen: png }; paintGift(); }, png);
-  ok(await p.evaluate(() => { const g = document.querySelector('#giftBoxBtn .gbox'); return g.classList.contains('custom') && !g.classList.contains('live') && /^url\(/.test(g.style.backgroundImage) && /^data:image\/png/.test(document.querySelector('.gs-open').getAttribute('src')); }), 'a picture uploaded for the gift stands still in its place (and for the opened gift)');
+  ok(await p.evaluate(() => { const g = document.querySelector('#giftBoxBtn .gbox'); return g.classList.contains('custom') && !g.querySelector('svg') && /^url\(/.test(g.style.backgroundImage) && /^data:image\/png/.test(document.querySelector('.gs-open').getAttribute('src')); }), 'a picture uploaded for the gift stands still in its place (and for the opened gift)');
   await p.evaluate(() => { STATE_ICONS = {}; paintGift(); });
-  ok(await p.evaluate(() => { const g = document.querySelector('#giftBoxBtn .gbox'); return g.classList.contains('live') && !g.classList.contains('custom') && g.style.backgroundImage === '' && /gift-open\.webp$/.test(document.querySelector('.gs-open').getAttribute('src')); }), 'Back to default: the animated gift is back');
+  ok(await p.evaluate(() => { const g = document.querySelector('#giftBoxBtn .gbox'); return !g.classList.contains('custom') && !!g.querySelector('svg.gb') && g.style.backgroundImage === '' && /gift-open\.webp$/.test(document.querySelector('.gs-open').getAttribute('src')); }), 'Back to default: the animated gift is back');
+  // the daily check-in calendar
+  await p.evaluate(() => { renderCheckin(); });
+  const cal = await p.evaluate(() => ({ n: document.querySelectorAll('#calGrid .cal-d').length, amts: [...document.querySelectorAll('#calGrid .cal-a')].slice(0, 12).map(e => e.textContent), today: [...document.querySelectorAll('#calGrid .cal-d')].findIndex(e => e.classList.contains('today')) + 1, btn: document.getElementById('checkinBtn').textContent.trim(), ring: !!document.getElementById('checkinRing') }));
+  ok(cal.n === 30 && cal.amts.join() === '100,200,300,500,600,700,800,1,000,100,200,300,500' && cal.today === 1 && /Check in for UGX 100/.test(cal.btn) && !cal.ring, 'the check-in is a 30-day calendar climbing 100, 200, 300, 500, 600, 700, 800, 1,000 and starting again; today is day 1; the ring is gone');
+  await p.evaluate(() => { STATE.checkinStreak = 3; STATE.lastCheckin = serverYesterdayKey(); renderCheckin(); });
+  const cal2 = await p.evaluate(() => ({ done: document.querySelectorAll('#calGrid .cal-d.done').length, today: [...document.querySelectorAll('#calGrid .cal-d')].findIndex(e => e.classList.contains('today')) + 1, btn: document.getElementById('checkinBtn').textContent.trim() }));
+  ok(cal2.done === 3 && cal2.today === 4 && /Check in for UGX 500/.test(cal2.btn), 'after three days in a row: three filled days, today is day 4 and pays UGX 500');
+  await p.evaluate(() => { STATE.lastCheckin = serverTodayKey(); renderCheckin(); });
+  ok(await p.evaluate(() => document.querySelectorAll('#calGrid .cal-d.done').length === 3 && !document.querySelector('#calGrid .cal-d.today') && document.getElementById('checkinBtn').disabled && /Claimed today/.test(document.getElementById('checkinBtn').textContent)), 'once claimed today the button reads Claimed today');
+  await p.evaluate(() => { STATE.checkinStreak = 5; STATE.lastCheckin = '01/01/2020'; renderCheckin(); });
+  ok(await p.evaluate(() => document.querySelectorAll('#calGrid .cal-d.done').length === 0 && [...document.querySelectorAll('#calGrid .cal-d')].findIndex(e => e.classList.contains('today')) === 0), 'a missed day sends the calendar back to day 1');
   // the tick and the cross on the payment pages
   await p.evaluate(() => { openOverlay('depositStatus'); showDepositSuccess(); }); await sleep(120);
   ok(await p.evaluate(() => { const ic = document.getElementById('depStatusIc'); return ic.className === 'pay-status-ic anim' && !!ic.querySelector('.ok-check') && getComputedStyle(ic.querySelector('.ok-disc')).animationName === 'anPop'; }), 'a successful payment shows the animated green tick');

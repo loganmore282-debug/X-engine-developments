@@ -34,7 +34,7 @@ const eatDate = () => { const d = new Date(Date.now() + 3 * 3600000), p = n => S
 
 (async () => {
   for (let i = 0; i < 60; i++) { try { const h = await fetch(base + '/health'); if (h.ok) break; } catch (_) {} await sleep(250); }
-  await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 0, dailyCheckin: 500 } }, null, true);
+  await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 0, dailyCheckin: 500, checkinLadder: [] } }, null, true);   // the flat amount first; the calendar ladder has its own section below
 
   // ---- the first check-in
   const A = await member();
@@ -75,6 +75,22 @@ const eatDate = () => { const d = new Date(Date.now() + 3 * 3600000), p = n => S
   r = await J('POST', '/checkin', {}, G.tok); ok(r.s >= 400 && r.j.status === 'error' && (user(G.uid).walletBalance || 0) === g0, 'a banned member gets nothing', { s: r.s, j: r.j });
   const su = await J('POST', '/auth/signup', { phone: ph(), password: 'secret12' });
   r = await J('POST', '/checkin', {}, su.j.token); ok(r.s >= 400 && r.j.status === 'error', 'someone who has not finished signing up cannot check in', { s: r.s, j: r.j });
+  // ---- the calendar ladder: 100, 200, 300, 500, 600, 700, 800, 1000, then again, over a 30-day cycle
+  const LAD = [100, 200, 300, 500, 600, 700, 800, 1000];
+  let rr = await J('POST', '/admin/settings/update', { settings: { checkinLadder: '100, 200, 300, 500, 600, 700, 800, 1000', dailyCheckin: 0 } }, null, true);
+  ok(rr.j.status === 'success' && JSON.stringify(((await J('GET', '/public/settings')).j.settings || {}).checkinLadder) === JSON.stringify(LAD), 'the owner saves the calendar as a list and members read it');
+  const days = n => { const o = {}; return o; };
+  for (const [prior, want] of [[0, 100], [1, 200], [2, 300], [3, 500], [4, 600], [5, 700], [6, 800], [7, 1000], [8, 100], [9, 200], [28, 600], [29, 700], [30, 100]]) {
+    const L = await member(); for (let k = 1; k <= prior; k++) seedCheckin(L.uid, k);
+    const b0 = user(L.uid).walletBalance || 0; r = await J('POST', '/checkin', {}, L.tok);
+    ok(r.j.status === 'success' && r.j.streak === prior + 1 && r.j.bonus === want && (user(L.uid).walletBalance || 0) - b0 === want, 'day ' + (prior + 1) + ' of the run pays UGX ' + want + ' (the ladder read round the 30-day cycle)', r.j);
+  }
+  void days;
+  rr = await J('POST', '/admin/settings/update', { settings: { checkinLadder: [' 50 ', '0', 'x', 120.4, -3] } }, null, true);
+  ok(JSON.stringify(((await J('GET', '/public/settings')).j.settings || {}).checkinLadder) === JSON.stringify([50, 120]), 'junk in the list is dropped, amounts are whole numbers');
+  await J('POST', '/admin/settings/update', { settings: { checkinLadder: Array.from({ length: 40 }, (_, i) => i + 1) } }, null, true);
+  ok(((await J('GET', '/public/settings')).j.settings || {}).checkinLadder.length === 30, 'at most 30 amounts (one a day of the cycle)');
+  await J('POST', '/admin/settings/update', { settings: { checkinLadder: [] } }, null, true);
   await J('POST', '/admin/settings/update', { settings: { dailyCheckin: 0 } }, null, true);
   const H = await member(); const h0 = user(H.uid).walletBalance || 0;
   r = await J('POST', '/checkin', {}, H.tok); ok(r.s === 400 && /not available/.test(r.j.message) && (user(H.uid).walletBalance || 0) === h0 && !user(H.uid).lastCheckin, 'with the amount set to 0 the check-in is closed, and the day is not used up', r.j);
