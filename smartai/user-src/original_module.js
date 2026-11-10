@@ -457,8 +457,8 @@ function gbSvg(t){
   return '<svg class="gb" viewBox="0 0 200 210" aria-hidden="true"><ellipse class="gb-sh" cx="100" cy="190" rx="66" ry="11" fill="rgba(8,40,110,.28)"/><g class="gb-body">' + body + '</g><g class="gb-lid">' + lid + '<g class="gb-bow">' + GB_BOW + '</g></g></svg>';
 }
 // Redraws one gift at time t: every wall path in the order the markup lists them, the glow under the lifted lid, the bow riding on the lid, and the shadow.
-function gbDraw(svg, t){
-  var o = gbPose(t), paths = svg.querySelectorAll('.gb-body > path, .gb-lid > path'), i, P, w = o.s < 1 ? 1 + (1 - o.s) * 0.9 : 1 - (o.s - 1) * 0.5;
+function gbDraw(svg, t, pose){
+  var o = pose || gbPose(t), paths = svg.querySelectorAll('.gb-body > path, .gb-lid > path'), i, P, w = o.s < 1 ? 1 + (1 - o.s) * 0.9 : 1 - (o.s - 1) * 0.5;
   for (i = 0; i < GB_PARTS.length && i < paths.length; i++) {
     P = GB_PARTS[i]; paths[i].setAttribute('d', gbPath(P[1], o, P[0], /data-open/.test(P[2])));
     if (paths[i].classList.contains('gb-slit')) paths[i].style.opacity = Math.min(1, o.lift / 8).toFixed(2);
@@ -467,8 +467,19 @@ function gbDraw(svg, t){
   if (bow) bow.setAttribute('transform', 'translate(100 ' + by.toFixed(1) + ') scale(' + w.toFixed(3) + ' ' + o.s.toFixed(3) + ') translate(-100 -76)');
   var sh = svg.querySelector('.gb-sh'); if (sh) sh.setAttribute('rx', (66 * w).toFixed(1));
 }
+// The claim: while the code is checked the box shakes and SWELLS (walls bulging more and more, the lid rattling); when the answer is yes it BANGS (puffs up fat, the lid blown
+// off) and the opened box takes its place. _giftPhaseAt = when the stage entered that phase.
+var _giftPhaseAt = 0;
+function gbSwellPose(ms){
+  var p = Math.min(1, ms / 1100), e = p * p * (3 - 2 * p), sh = Math.sin(ms / 22) * (0.4 + 2.2 * e);
+  return { s: 1 + 0.16 * e + 0.012 * sh, b: 4 + 20 * e + sh, lift: 1 + 6 * e * Math.abs(Math.sin(ms / 45)) };
+}
+function gbBangPose(ms){
+  var p = Math.min(1, ms / 260), e = 1 - Math.pow(1 - p, 3);
+  return { s: 1.16 + 0.26 * e, b: 24 + 14 * e, lift: 8 + 70 * e };
+}
 var GB_SVG = gbSvg(0.5);
-function giftPreload(){ var op = new Image(); op.src = customIcon('giftopen') || '/anim/gift-open.webp'; }
+function giftPreload(){ var c = customIcon('giftopen'); if (c) { var op = new Image(); op.src = c; } }
 function paintGift(){
   var custom = customIcon('giftbox');
   document.querySelectorAll('.gbox').forEach(function(el){
@@ -477,7 +488,9 @@ function paintGift(){
     el.classList.remove('custom'); el.style.backgroundImage = '';
     if (!el.firstChild) el.innerHTML = GB_SVG;
   });
-  var op = document.querySelector('.gs-open'); if (op) op.setAttribute('src', customIcon('giftopen') || '/anim/gift-open.webp');
+  // The opened box is vector too; a picture uploaded for it in the admin replaces it, Back to default brings the vector back.
+  var cu = document.querySelector('.go-custom'), cv = document.querySelector('.gs-open svg.go'), cust = customIcon('giftopen');
+  if (cu && cv) { if (cust) cu.setAttribute('src', cust); else cu.removeAttribute('src'); cu.hidden = !cust; cv.style.display = cust ? 'none' : ''; }
 }
 var _animLast = -1;
 function animTick(){
@@ -488,7 +501,11 @@ function animTick(){
       c = dlCircles((now % 2000) / 1000);
       for (i = 0; i < dls.length; i++) { ch = dls[i].children; for (j = 0; j < 12; j++) { ch[j].setAttribute('cx', c[j][0].toFixed(1)); ch[j].setAttribute('cy', c[j][1].toFixed(1)); ch[j].setAttribute('r', c[j][2].toFixed(1)); } }
     }
-    for (i = 0; i < gbs.length; i++) if (gbs[i].getBoundingClientRect().width) gbDraw(gbs[i], (now % 433) / 433);
+    for (i = 0; i < gbs.length; i++) {
+      if (!gbs[i].getBoundingClientRect().width) continue;
+      var stg = gbs[i].closest('.gs'), ph = stg && stg.classList.contains('gs-opening') ? gbSwellPose(now - _giftPhaseAt) : stg && stg.classList.contains('gs-bang') ? gbBangPose(now - _giftPhaseAt) : null;
+      gbDraw(gbs[i], (now % 433) / 433, ph);
+    }
     var tick = Math.floor((now % 3000) / (1000 / 30));
     if (meds.length && tick !== _animLast) {
       _animLast = tick;
@@ -2069,7 +2086,8 @@ async function redeemGiftCode(){
   var btn = $('redeemBtn'), label = btn ? btn.textContent : '', st = $('giftStage');
   if (btn) { if (btn.disabled) return; btn.disabled = true; btn.innerHTML = btnBusyHtml('Opening…'); }
   var openedAt = Date.now();
-  st.className = 'gs gs-opening';   // the card goes, the gift spins with glitter while the code is checked
+  st.className = 'gs gs-opening';   // the card goes, the gift shakes and swells while the code is checked
+  _giftPhaseAt = Date.now();
   try {
     var r = await api('/redeem', { code: raw });
     if (r.stale) { closeGiftReveal(); return; }
@@ -2118,6 +2136,17 @@ function showGiftReveal(amount){
   var bg = $('giftRevealBg'), st = $('giftStage');
   if (!bg.classList.contains('show')) giftStageReset();
   bg.classList.add('show');
+  // First the bang (the swollen box puffs up and its lid is blown off), then the opened box with its coins.
+  if (st.classList.contains('gs-opening')) {
+    st.className = 'gs gs-bang'; _giftPhaseAt = Date.now();
+    if (navigator.vibrate) navigator.vibrate(40);
+    setTimeout(function(){ if (bg.classList.contains('show')) burstReveal(amount); }, 280);
+    return;
+  }
+  burstReveal(amount);
+}
+function burstReveal(amount){
+  var st = $('giftStage');
   st.className = 'gs gs-burst';
   $('gsLabel').textContent = 'You got';
   // The burst, replayed each time: ribbon bits and little coins fly out, balloons float up.
