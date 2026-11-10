@@ -35,6 +35,12 @@ async function member() {
   ] }, null, true);
   const pub = (await J('GET', '/public/products')).j.products || [];
   ok(!pub.some(p => 'category' in p), 'products carry no Home category any more', pub[0]);
+  { const body = (await J('GET', '/public/products')).j; ok(!('categories' in body), 'the product list carries no categories (the feature is gone)');
+    const gone = await J('GET', '/admin/categories', null, null, true), gone2 = await J('POST', '/admin/categories/save', { categories: [{ id: '', name: 'Class A' }] }, null, true), gone3 = await J('POST', '/admin/products/category', { key: 'vip1', category: 'x' }, null, true);
+    ok(gone.s === 404 && gone2.s === 404 && gone3.s === 404, 'the category routes no longer exist (404)');
+    const sv = await J('POST', '/admin/products/save', { products: [{ key: 'vip1', name: 'VIP-1', price: 3000, cycle: 30, multiplier: 3, buyLimit: 1, order: 0, vip: 1, category: 'zzz' }] }, null, true);
+    const saved = (await J('GET', '/admin/products', null, null, true)).j.products || [];
+    ok(sv.s === 200 && !saved.some(p => p.category === 'zzz'), 'a category sent with a product is ignored, not saved'); }
   const acct = async tok => (await J('GET', '/account', null, tok)).j.account;
 
   // ---- what is NOT here: Order Gifts, the app reward, Messages and Google Authenticator are not ChocoMCC's, so the server has no such routes

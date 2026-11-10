@@ -24,9 +24,7 @@ try {
 } catch (e) {}
 // False until the robot list has come from the server (or this phone had a saved copy): until then an empty list means "not here yet", and the page shows the loader.
 var _productsOk = PRODUCTS.length > 0;
-// The admin's robot categories (Admin > Products > Categories), in tab order. "All" is built in and is not in this list. The last copy this phone saw is read first.
-var CATEGORIES_CACHE_KEY = 'smartai_categories_cache', CATEGORIES = [], _shopCat = '';
-try { var _cachedCats = JSON.parse(localStorage.getItem(CATEGORIES_CACHE_KEY) || 'null'); if (Array.isArray(_cachedCats)) CATEGORIES = _cachedCats.filter(function(c){ return c && c.id && c.name; }); } catch (e) {}
+try { localStorage.removeItem('smartai_categories_cache'); } catch (e) {}   // the old category list this phone kept (categories are gone)
 var NETWORK_COLORS = { 'MTN Mobile Money': { color: '#FFCC08', textColor: '#0B2A5B' }, 'Airtel Money': { color: '#ED1C24', textColor: '#fff' } };
 // Pictures the admin uploaded (Admin > Banners): one for every banner the app draws, plus the Login logo and the profile logo. None set = a blue art banner.
 var ART_SLOTS = ['authhero', 'authlogo', 'profilelogo', 'teambanner', 'mybanner', 'aboutbanner', 'shopbanner', 'depositbanner', 'withdrawbanner', 'supportbanner', 'recordsbanner', 'bindbankbanner'];
@@ -283,7 +281,6 @@ async function syncPublicConfig(){
     if (r2 && r2.status === 'success' && Array.isArray(r2.products)) {
       PRODUCTS = r2.products.filter(function(p){ return !p.deleted; });
       saveProductsCache();
-      if (Array.isArray(r2.categories)) { CATEGORIES = r2.categories.filter(function(c){ return c && c.id && c.name; }); try { localStorage.setItem(CATEGORIES_CACHE_KEY, JSON.stringify(CATEGORIES)); } catch (e) {} }
       var firstArrival = !_productsOk;
       _productsOk = true;
       if (firstArrival && STATE) { renderFeatured(); renderShop(); }   // the loader that stood in for the list is replaced by the list
@@ -1417,31 +1414,10 @@ function syncSweepPhase(root){
   var delay = -(((Date.now() - SWEEP_EPOCH) / 1000) % SWEEP_CYCLE);
   (root || document).querySelectorAll('.btn-buy-glow').forEach(function(el){ el.style.setProperty('--sweep-delay', delay + 's'); });
 }
-// The tabs above the robots: All first, then the admin's categories in his order. Nothing is shown until he has made one. A tab that no longer exists falls back to All.
-function renderShopTabs(){
-  var el = $('shopCats'); if (!el) return;
-  if (_shopCat && !CATEGORIES.some(function(c){ return c.id === _shopCat; })) _shopCat = '';
-  if (!CATEGORIES.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
-  var tabs = [{ id: '', name: 'All' }].concat(CATEGORIES);
-  el.style.display = '';
-  el.innerHTML = tabs.map(function(c){
-    return '<button type="button" class="cat-tab' + (c.id === _shopCat ? ' active' : '') + '" role="tab" aria-selected="' + (c.id === _shopCat) + '" data-cat="' + esc(c.id) + '" onclick="selectShopCat(this.dataset.cat)">' + esc(c.name) + '</button>';
-  }).join('');
-}
-// Tapping a category: the tab turns active at once, the dots come over the page and stay until the products and categories have really been asked of the server and painted.
-function selectShopCat(id){
-  id = id || '';
-  if (id === _shopCat) return;
-  _shopCat = id; renderShop();
-  var epoch = _authEpoch;
-  navVeil(false, liveConfig(2000).then(function(){ if (STATE && epoch === _authEpoch) renderShop(); }));
-}
 function renderShop(){
-  renderShopTabs();
   var firstOpen = -1;
   PRODUCTS.forEach(function(p, i){ if (firstOpen < 0 && !isProductSoldOut(p)) firstOpen = i; });
   var html = PRODUCTS.map(function(p, i){
-    if (_shopCat && p.category !== _shopCat) return '';   // the numbers (Robot 1, Popular) stay what they are in All
     var soldOut = isProductSoldOut(p), capped = !soldOut && limitReached(p);
     var lim = Number(p.buyLimit) || 0;
     var rank = Number(p.vip) > 0 ? 'VIP ' + p.vip : 'Robot ' + (i + 1);
@@ -1466,7 +1442,7 @@ function renderShop(){
         '</div>' + btn +
       '</div></div>';
   }).join('');
-  setHtmlIfChanged($('shopGrid'), html || (_productsOk ? '<div class="empty">' + (_shopCat ? 'No AI robots in this category yet.' : 'No AI robots yet. Check back soon.') + '</div>' : spinnerHtml()));
+  setHtmlIfChanged($('shopGrid'), html || (_productsOk ? '<div class="empty">' + 'No AI robots yet. Check back soon.' + '</div>' : spinnerHtml()));
   syncSweepPhase($('shopGrid'));
 }
 function investmentStats(){
