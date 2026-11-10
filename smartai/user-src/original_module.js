@@ -1315,7 +1315,7 @@ function closedLabel(p){
     var today = new Date(); var same = d.toDateString() === today.toDateString();
     return 'Opens ' + (same ? '' : p2(d.getDate()) + '/' + p2(d.getMonth() + 1) + ' ') + p2(d.getHours()) + ':' + p2(d.getMinutes());
   }
-  return 'Not available';
+  return 'Sold out';
 }
 function renderFeatured(){
   // Sold-out and coming-soon robots are never featured: no point steering anyone toward something they cannot buy yet.
@@ -1367,7 +1367,9 @@ function renderShop(){
       : capped
         ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed;margin-top:14px">Limit reached (' + ownedCount(p.key) + '/' + lim + ')</button>'
         : '<button class="btn btn-primary btn-block btn-buy-glow" style="margin-top:14px" data-key="' + esc(p.key) + '" onclick="buyProduct(this,this.dataset.key)">Buy</button>';
+    var tag = soldOut ? esc(closedLabel(p)) : '';
     return '<div class="prod-card' + (soldOut ? ' is-soldout' : '') + '" id="prodCard-' + esc(p.key) + '">' +
+      (soldOut ? '<div class="prod-sold" aria-hidden="true"><span class="prod-sold-tag' + (tag.length > 9 ? ' long' : '') + '">' + tag + '</span></div>' : '') +
       '<div class="prod-img-wrap">' + imgTag(p, 'prod-img') +
       '<span class="prod-rank">' + esc(rank) + '</span>' +
       (i === firstOpen ? '<span class="prod-ribbon">Popular</span>' : '') + '</div>' +
