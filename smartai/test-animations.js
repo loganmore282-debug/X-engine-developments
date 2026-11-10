@@ -196,6 +196,13 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   ok(await p.evaluate(() => document.getElementById('navVeil').classList.contains('on')), 'while the Team page is still waiting for the server the dots stay on (not a fixed timer)');
   ok(await until(() => !document.getElementById('navVeil').classList.contains('on'), null, 4000), 'and they lift when the answer has come');
   await p.unroute('**/team/stats');
+  // tapping a Featured robot on Home must still scroll to its card while the dots are up and the page data is on its way
+  await p.evaluate(() => { _lastDataAt = 0; _lastCfgAt = 0; switchTab('home'); }); await sleep(1200);
+  await p.route('**/k7x2/investments', async (route) => { await sleep(900); route.continue().catch(() => {}); });
+  const lastKey = await p.evaluate(() => { const c = [...document.querySelectorAll('[id^="prodCard-"]')]; return c.length ? c[c.length - 1].id.replace('prodCard-', '') : ''; });
+  await p.evaluate((k) => { _lastDataAt = 0; goToShopProduct(k); }, lastKey); await sleep(2600);
+  ok(lastKey && await p.evaluate((k) => { const r = document.getElementById('prodCard-' + k).getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight - 40 && window.scrollY > 100; }, lastKey), 'tapping a Featured robot scrolls to its card even though the page loader is up');
+  await p.unroute('**/k7x2/investments');
   await p.evaluate(() => { window._smartaiNavMs = 0; }); await sleep(700);
   await p.evaluate(() => switchTab('shop')); await sleep(60);
   ok(await p.evaluate(() => !document.getElementById('navVeil').classList.contains('on')), 'with window._smartaiNavMs = 0 (tests) no veil comes');

@@ -1533,8 +1533,10 @@ function renderRecords(){
 /* ====================== TABS / OVERLAYS ====================== */
 // Home starts as the active tab in the markup, so _lastTab is seeded to 'home': that is what makes a Home -> Home tap NOT show the announcement again.
 var _lastTab = 'home';
+var _tabAsk = null;   // the request the last tab switch sent; a caller that wants to scroll inside the new tab waits for it so the page is built first
 function switchTab(name){
-  if (name !== _lastTab || _ovOpen) navVeil(false, tabTask(name));
+  _tabAsk = null;
+  if (name !== _lastTab || _ovOpen) { _tabAsk = tabTask(name); navVeil(false, _tabAsk); }
   var enteringHomeFromElsewhere = (name === 'home' && _lastTab !== 'home');
   ['home', 'shop', 'rewards', 'team', 'account'].forEach(function(t){
     var el = $('view' + t.charAt(0).toUpperCase() + t.slice(1));
@@ -1562,7 +1564,10 @@ function switchTab(name){
 // The Featured strip on Home: go to AI Robots and scroll straight to that robot's own card.
 function goToShopProduct(key){
   switchTab('shop');
-  setTimeout(function(){ var el = $('prodCard-' + key); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50);
+  // The tab's own data is painted a moment later (the dots are up meanwhile) and that repaint would undo an early scroll: scroll once the cards are in place, then again at once if the page is still being built.
+  var go = function(){ var el = $('prodCard-' + key); if (el) el.scrollIntoView({ behavior: 'auto', block: 'center' }); };
+  setTimeout(go, 50);
+  if (_tabAsk && _tabAsk.then) _tabAsk.then(function(){ setTimeout(go, 0); setTimeout(go, 380); }, go);   // again when the dots lift, in case pictures moved the card meanwhile
 }
 // One full-screen page at a time. The phone's Back button closes it (one history entry, replaced when one page opens another) instead of leaving the app.
 var _ovOpen = false, _ovName = '';
