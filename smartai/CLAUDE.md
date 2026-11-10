@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v52`, admin `admin/sw.js` `smartai-admin-shell-v24`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v53`, admin `admin/sw.js` `smartai-admin-shell-v24`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -532,3 +532,7 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Blue curved header only on pages WITHOUT a picture (owner: "put a blue curve header where need be, not everywhere, like on the task center page")
 - A page that has a picture (Add Funds, Cash Out, Support, About Us, Ledger, Payout Account) is as before: no title, picture to the top, floating arrow. A page WITHOUT one (Task Center, My machines, Accrued Earnings, Terms & Rules, Security, Add Funds status, Level 1/2/3 lists) now has a **blue curved header**: 70 px (plus the phone's top inset) tall, blue gradient with two soft light circles, 28 px round bottom, shadow, the back arrow in a see-through white circle and the page name in white beside it (`.ov-title`, hidden everywhere else). Sticky, so it stays while the page scrolls. All by `:has(.photo-banner)` in CSS; the titles are back in index.html for those seven pages (`teamLevelTitle` is filled by `openTeamLevel` again and the count line reads "3 members"). Member cache v52.
+
+## Compact blue header on EVERY page, name in the middle, like Potato (owner: "Return back header but ... words in middle just like potato, it is not too big")
+- This replaces the two sections above about floating arrows and the header that only some pages had. Every overlay page (13) now has the same header: blue gradient (135deg #2b88f3 to #0a4fc6) with a soft light circle, **52 px** tall plus the phone's top inset, 24 px round bottom, soft shadow, sticky; a plain white **chevron** (`‹`, no circle) at the left and the page name **centred** in white, 18 px bold. Titles: Add Funds, Cash Out, Support, About Us, Terms & Rules, Ledger, Payout Account, Security, My machines, Accrued Earnings, Task Center, Level N members, Add Funds (status page).
+- A page picture sits UNDER the header (150 px, full width, no frame, the Me page's white flow melting its bottom into the page). The tab banners (Home, AI Robots, Team, Me) are untouched. Member cache v53.
