@@ -6570,7 +6570,7 @@ app.post('/checkin', async (req, res) => {
         return { code: 400, body: { status: 'error', code: 'ALREADY_CHECKED_IN', message: 'Already checked in today' } };
       }
       // The streak comes from the real history of check-ins (one small query on this member's own rows), not from the stored number alone.
-      const ledgerSnap = await db.collection('transactions').where('userId', '==', uid).where('type', '==', 'checkin').limit(500).get();
+      const ledgerSnap = await db.collection('transactions').where('userId', '==', uid).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(3000).get();   // the NEWEST 3000 (more than eight years of days): without the order a member past the limit would be read from their oldest days and the streak would restart at 1
       const dayKeys = new Set();
       ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
       const real = computeCheckinStreak(dayKeys);
