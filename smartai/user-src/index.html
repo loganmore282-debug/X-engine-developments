@@ -321,7 +321,13 @@
   .ov-top{position:sticky;top:0;height:0;z-index:6;}
   .overlay:not(:has(.photo-banner)) .ov-top{height:68px;}
   .ov-back{position:absolute;top:calc(env(safe-area-inset-top,0px) + 14px);left:var(--gut);width:42px;height:42px;border-radius:50%;background:rgba(8,20,45,.5);color:#fff;border:none;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;}
-  .overlay .photo-banner,.overlay .photo-banner.pb-sm{margin:0 0 16px;height:176px;border-radius:0 0 28px 28px;}
+  .overlay .photo-banner,.overlay .photo-banner.pb-sm,.overlay #aboutBanner{margin:0 0 16px;height:176px;border-radius:0;box-shadow:none;}
+  /* the Me page's white flow: the bottom of every page picture melts into the page */
+  .overlay .photo-banner::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+    background:
+      radial-gradient(ellipse 55% 70% at 14% 112%, var(--cream) 0%, rgba(238,244,255,0) 62%),
+      radial-gradient(ellipse 60% 75% at 84% 108%, var(--cream) 0%, rgba(238,244,255,0) 60%),
+      linear-gradient(0deg, var(--cream) 0%, rgba(238,244,255,0) 42%);}
 
   .info-box{margin:16px var(--gut);background:var(--caramel-pale);border-radius:16px;padding:14px 16px;font-size:12.5px;color:var(--caramel-deep);line-height:1.5;font-weight:600;}
   .photo-banner{position:relative;margin:16px var(--gut);border-radius:0;overflow:hidden;box-shadow:var(--shadow);height:150px;background:var(--cream-deep);}
@@ -348,8 +354,6 @@
       radial-gradient(ellipse 60% 60% at 84% 114%, var(--cream) 0%, rgba(238,244,255,0) 60%);}
   .photo-banner.pb-shop .pb-tint{z-index:2;}
 
-  /* ---------- About Us: square banner, no curved frame ---------- */
-  #aboutBanner{border-radius:0;}
 
   .photo-banner.pb-sm{height:110px;}
   .photo-banner.pb-full{height:150px;}
