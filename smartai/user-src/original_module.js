@@ -190,7 +190,7 @@ function fmtStamp(ms){
 // Pulls the live account, products, bank cards and ledger from the server and stamps them onto STATE. Called on entry, after every money action
 // and by the poll, because deposits, withdrawals and the daily payouts all settle on the server.
 // A slow or briefly unreachable server would otherwise raise the same warning on every poll: it is said once per outage.
-var _serverUnreachableWarned = false;
+var _serverUnreachableWarned = false, _lastDataAt = 0, _lastCfgAt = 0;
 async function refreshFromServer(){
   var results = await Promise.all([ api('/account'), api('/investments'), api('/bank/list'), api('/transactions') ]);
   var accR = results[0], invR = results[1], bankR = results[2], txR = results[3];
@@ -231,6 +231,7 @@ async function refreshFromServer(){
       return { type: t.type, amount: Number(t.amount) || 0, desc: t.description || '', status: t.status || 'success', ref: t.ref || t.statementId || '', when: when };
     });
   }
+  if (accR.status === 'success') _lastDataAt = Date.now();
   saveState();
   return accR;
 }
@@ -497,15 +498,56 @@ function animTick(){
   if (n) requestAnimationFrame(animTick); else setTimeout(animTick, 250);
 }
 animTick();
-// Every page change shows the dots over a veil in the page colour for a moment; the page is already built underneath. Tests switch it off with window._smartaiNavMs = 0.
-var _navVeilTimer = null, NAV_VEIL_MS = 450;
-function navVeil(over){
+// Every page change shows the dots over a veil in the page colour. The veil is REAL: it stays up for as long as that page's own request to the server is
+// in flight (the account, products, ledger, team, activity ...) and goes the moment the answer is on screen (never before 300 ms, never after 10 s). A
+// page with nothing to ask for (Terms, Support text) keeps it for 450 ms. Tests switch it off with window._smartaiNavMs = 0.
+var _navVeilTimer = null, _navVeilToken = 0, NAV_VEIL_MS = 450, NAV_VEIL_MIN = 300, NAV_VEIL_MAX = 10000;
+function navVeil(over, task){
   var ms = window._smartaiNavMs != null ? window._smartaiNavMs : (window._smartaiLoaderMinMs === 0 ? 0 : NAV_VEIL_MS), v = $('navVeil');
   if (!v || !ms || !STATE || document.hidden) return;
   clearTimeout(_navVeilTimer);
+  var token = ++_navVeilToken, started = Date.now();
   v.className = 'nav-veil on' + (over ? ' over' : '');
   v.innerHTML = dlMarkup();
-  _navVeilTimer = setTimeout(function(){ v.classList.remove('on'); _navVeilTimer = setTimeout(function(){ if (!v.classList.contains('on')) v.innerHTML = ''; }, 260); }, ms);
+  function hide(){
+    if (token !== _navVeilToken) return;
+    v.classList.remove('on');
+    _navVeilTimer = setTimeout(function(){ if (!v.classList.contains('on')) v.innerHTML = ''; }, 260);
+  }
+  if (task && task.then) {
+    var finish = function(){ if (token !== _navVeilToken) return; clearTimeout(_navVeilTimer); _navVeilTimer = setTimeout(hide, Math.max(0, NAV_VEIL_MIN - (Date.now() - started))); };
+    task.then(finish, finish);
+    _navVeilTimer = setTimeout(hide, NAV_VEIL_MAX);
+  } else _navVeilTimer = setTimeout(hide, ms);
+}
+// The account, products, bank cards and ledger, asked afresh when the last answer is older than maxAge ms (several quick taps share one answer).
+function liveData(maxAge){ return Date.now() - _lastDataAt < maxAge ? Promise.resolve() : ensureData(); }
+function liveConfig(maxAge){ if (Date.now() - _lastCfgAt < maxAge) return Promise.resolve(); _lastCfgAt = Date.now(); return syncPublicConfig(); }
+// What each tab really asks the server when it opens; the answer is painted before the veil lifts.
+function tabTask(name){
+  if (!STATE) return null;
+  var epoch = _authEpoch, t;
+  if (name === 'home') t = Promise.all([liveData(8000), liveConfig(15000), refreshActivityFeed()]);
+  else if (name === 'shop') t = Promise.all([liveData(8000), liveConfig(15000)]);
+  else if (name === 'rewards' || name === 'account') t = liveData(8000);
+  else if (name === 'team') t = Promise.all([liveData(8000), refreshTeamStats()]);
+  else return null;
+  return t.then(function(){ if (STATE && epoch === _authEpoch) renderAll(); });
+}
+// And each page that opens over a tab.
+function overlayTask(name){
+  if (!STATE) return null;
+  var epoch = _authEpoch, t = null, again = null;
+  if (name === 'taskcenter') return loadTaskCenter();
+  if (name === 'about') return loadAbout();
+  if (name === 'mychoc') again = renderMyRobots;
+  else if (name === 'earnings') again = renderEarnings;
+  else if (name === 'bindbank') again = renderBankList;
+  else if (name === 'withdraw') again = renderWitBankBox;
+  else if (name === 'support' || name === 'rules') return liveConfig(15000).then(function(){ if (STATE && epoch === _authEpoch) renderStaticPages(); });
+  else if (name === 'deposit') again = refreshDepositSlot;
+  if (!again) return null;
+  return liveData(8000).then(function(){ if (STATE && epoch === _authEpoch && _ovName === name) again(); });
 }
 // Same small spinning-arc icon already used on the deposit status screen's
 // Verify Payment button (.verify-spin) -- reused here as one shared helper
@@ -1422,7 +1464,7 @@ function setRecordsTab(t){
   _recordsTab = t;
   document.querySelectorAll('.uline-tab[data-rt]').forEach(function(b){ b.classList.toggle('active', b.dataset.rt === t); });
   renderRecords();
-  loadRecordsTab(t).then(renderRecords);
+  return Promise.all([loadRecordsTab(t), liveData(8000)]).then(renderRecords);
 }
 // Top-ups and cash-outs are asked for fresh every time (a deposit that was still pending a minute ago may be done now); _recordsLoaded only
 // decides whether the "loading" placeholder is shown the first time.
@@ -1491,7 +1533,7 @@ function renderRecords(){
 // Home starts as the active tab in the markup, so _lastTab is seeded to 'home': that is what makes a Home -> Home tap NOT show the announcement again.
 var _lastTab = 'home';
 function switchTab(name){
-  if (name !== _lastTab || _ovOpen) navVeil(false);
+  if (name !== _lastTab || _ovOpen) navVeil(false, tabTask(name));
   var enteringHomeFromElsewhere = (name === 'home' && _lastTab !== 'home');
   ['home', 'shop', 'rewards', 'team', 'account'].forEach(function(t){
     var el = $('view' + t.charAt(0).toUpperCase() + t.slice(1));
@@ -1512,7 +1554,6 @@ function switchTab(name){
   if (STATE && (name === 'rewards' || name === 'team' || name === 'home')) renderAll();
   if (name === 'team') medalPreload();
   if (name === 'rewards') giftPreload();
-  if (name === 'team' && STATE) refreshTeamStats();
   // Coming back to Home from another tab shows the announcement again (its buttons shaking straight away).
   if (enteringHomeFromElsewhere) maybeShowAnnouncement(true);
   _lastTab = name;
@@ -1528,20 +1569,20 @@ function hideOverlays(){ document.querySelectorAll('.overlay').forEach(function(
 function openOverlay(name){
   var el = $('ov' + name.charAt(0).toUpperCase() + name.slice(1));
   if (!el) return;
-  navVeil(true);
+  _ovName = name;
   hideOverlays();
   el.scrollTop = 0;
   el.classList.add('show');
   try { if (_ovOpen) history.replaceState({ ov: name }, ''); else history.pushState({ ov: name }, ''); } catch (e) {}
   _ovOpen = true; _ovName = name;
+  var rt = null;
   if (name === 'bindbank') renderBankList();
   if (name === 'withdraw') prepareWithdraw();
-  if (name === 'records') setRecordsTab(_recordsTab === 'accrued' || _recordsTab === 'topups' || _recordsTab === 'cashouts' ? _recordsTab : 'accrued');
+  if (name === 'records') rt = setRecordsTab(_recordsTab === 'accrued' || _recordsTab === 'topups' || _recordsTab === 'cashouts' ? _recordsTab : 'accrued');
   if (name === 'mychoc') renderMyRobots();
   if (name === 'earnings') renderEarnings();
-  if (name === 'taskcenter') loadTaskCenter();
-  if (name === 'about') loadAbout();
   if (name === 'deposit') prepareDeposit();
+  navVeil(true, rt || overlayTask(name));
 }
 function closeOverlay(){
   if (!_ovOpen) { hideOverlays(); return; }

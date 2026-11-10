@@ -189,6 +189,13 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   await sleep(700);
   await p.evaluate(() => closeOverlay()); await sleep(60);
   ok(await p.evaluate(() => document.getElementById('navVeil').classList.contains('on')), 'going back shows them too');
+  // the dots are real loading: the Team page asks the server for its figures, and the dots stay for as long as that answer takes (here 1.6 s, longer than the 400 ms a pure design veil would stay)
+  await p.evaluate(() => { _lastDataAt = 0; _lastCfgAt = 0; switchTab('home'); }); await sleep(900);
+  await p.route('**/team/stats', async (route) => { await sleep(1600); route.continue().catch(() => {}); });
+  await p.evaluate(() => switchTab('team')); await sleep(1000);
+  ok(await p.evaluate(() => document.getElementById('navVeil').classList.contains('on')), 'while the Team page is still waiting for the server the dots stay on (not a fixed timer)');
+  ok(await until(() => !document.getElementById('navVeil').classList.contains('on'), null, 4000), 'and they lift when the answer has come');
+  await p.unroute('**/team/stats');
   await p.evaluate(() => { window._smartaiNavMs = 0; }); await sleep(700);
   await p.evaluate(() => switchTab('shop')); await sleep(60);
   ok(await p.evaluate(() => !document.getElementById('navVeil').classList.contains('on')), 'with window._smartaiNavMs = 0 (tests) no veil comes');

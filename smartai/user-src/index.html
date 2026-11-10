@@ -499,6 +499,7 @@
   @keyframes shWord{0%,53%{opacity:1}67%{opacity:.2}90%,100%{opacity:1}}
   @media (prefers-reduced-motion:reduce){.sh-grid .sh-fill,.sh-grid .sh-fill svg,.sh-grid .sh-word{animation:none;}.sh-grid .sh-fill{left:100%;}}
   .link-row{display:flex;align-items:center;gap:10px;}
+  .link-boxed{padding:10px 10px 10px 14px;background:var(--cream);border:1.5px dashed var(--caramel);border-radius:16px;}
   .link-row span{flex:1;font-size:12.5px;font-weight:700;color:var(--cocoa-soft);}
 
   .pay-status-card{margin:16px var(--gut);background:var(--mint-pale);border-radius:20px;padding:22px 20px;text-align:center;}
@@ -1028,7 +1029,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <div class="photo-banner pb-flush pb-full pb-flow" id="teamBanner"></div>
       <div class="tm-card">
         <div class="muted" style="font-size:11px;font-weight:700;margin-bottom:6px">YOUR REFERRAL LINK</div>
-        <div class="link-row">
+        <div class="link-row link-boxed">
           <span id="teamLink" style="word-break:break-all">—</span>
           <button class="btn btn-dark btn-sm" onclick="copyCode()">Copy</button>
         </div>
