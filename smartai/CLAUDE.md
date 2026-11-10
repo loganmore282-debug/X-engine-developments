@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v23`, admin `admin/sw.js` `smartai-admin-shell-v14`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v24`, admin `admin/sw.js` `smartai-admin-shell-v14`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -437,3 +437,7 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 - The Support overlay (`#supportLinks`, `renderStaticPages()`) rows now use `supIcon('tg'|'wa')`: the squircle app icons **traced off the recordings** (`SUP_ART` in `original_module.js`, 600 x 600 paths; gradients `#supTg` / `#supWa` live once in the zero-size defs `<svg>` before the tab bar). Labels: Telegram Channel, Telegram Group, Telegram Support, WhatsApp Group, WhatsApp Support (each shows only if the admin set its link, Settings > contacts).
 - **Animation** (`.sup-ic`, `@keyframes supPop`, 2.667 s loop, phases staggered 0.55 s per row): the icon pops from 75 % to full size in 0.3 s, dips to 94 % and back, dips to 98 % and back, holds full to 2.17 s, then shrinks back to 75 %; sampled from the recordings at 60 pictures a second. `prefers-reduced-motion` stops it.
 - Test: `test-animations.js` (80 checks).
+
+## One side gutter for every page (owner: "this should be done on all pages, everything should match")
+- `:root --gut:10px` is the space between the screen edge and every card, banner, row, list and text block of the member app (Home, AI Robots, Rewards, Team, Me and all overlays). Before it was 20 px in dozens of places; those now read `var(--gut)` (`.actions-row .sec-head .strip .ticker .view-pad .prod-grid .ov-top .info-box .photo-banner .uline-tabs .rec-card .form-card .menu-grid .menu-item (width calc(100% - 2 * var(--gut))) .acct-card .link-box .pay-status-card .tk-lead .tk-card .howto-card .rw-card .cat-tabs .tm-card .comm-row` and the inline `padding/margin` on the overlay lists). Change the one variable to move them all; do not write 20px side margins again.
+- Team page blocks (`.tm-card`) each sit in a white card; see "Share buttons" above.

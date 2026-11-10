@@ -98,7 +98,7 @@
     --line:#D6E3F8;
     --shadow: 0 10px 24px -12px rgba(11,42,91,.28);
     --shadow-lg: 0 20px 44px -16px rgba(11,42,91,.35);
-    --radius: 20px;
+    --radius: 20px; --gut:10px;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;height:100%;}
@@ -234,17 +234,17 @@
   /* ---------- App shell ---------- */
   #app{display:none;}
 
-  .actions-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 20px;}
+  .actions-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px var(--gut);}
   .act-chip{background:var(--card);border-radius:18px;box-shadow:var(--shadow);padding:12px 6px;text-align:center;border:none;}
   .act-ic{width:var(--home-ic,34px);height:var(--home-ic,34px);border-radius:12px;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
   .act-ic img{width:100%;height:100%;object-fit:contain;display:block;}
   .act-lbl{font-size:11.5px;font-weight:700;color:var(--cocoa-soft);}
 
-  .sec-head{display:flex;align-items:center;justify-content:space-between;margin:22px 20px 12px;}
+  .sec-head{display:flex;align-items:center;justify-content:space-between;margin:22px var(--gut) 12px;}
   .sec-head h3{font-size:16.5px;}
   .sec-head a{font-size:12.5px;color:var(--caramel-deep);font-weight:800;text-decoration:none;}
 
-  .strip{display:flex;gap:12px;overflow-x:auto;padding:0 20px 6px;scrollbar-width:none;}
+  .strip{display:flex;gap:12px;overflow-x:auto;padding:0 var(--gut) 6px;scrollbar-width:none;}
   .strip::-webkit-scrollbar{display:none;}
   .choc-card{position:relative;flex:0 0 132px;background:var(--card);border-radius:20px;box-shadow:var(--shadow);overflow:hidden;border:none;text-align:left;}
   .choc-img{width:100%;height:110px;object-fit:cover;background:var(--cream-deep);}
@@ -253,7 +253,7 @@
   .choc-price{font-size:12px;color:var(--caramel-deep);font-weight:800;margin-top:3px;}
   .choc-ret{font-size:10.5px;color:var(--mint);font-weight:700;margin-top:2px;}
 
-  .ticker{margin:0 20px;background:var(--card);border-radius:18px;box-shadow:var(--shadow);overflow:hidden;height:224px;}
+  .ticker{margin:0 var(--gut);background:var(--card);border-radius:18px;box-shadow:var(--shadow);overflow:hidden;height:224px;}
   .ticker-track{display:flex;flex-direction:column;animation:tickerFlow 36s linear infinite;}
   @keyframes tickerFlow{from{transform:translateY(-50%)}to{transform:translateY(0)}}
   .ticker-row{display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:12.5px;border-bottom:1px solid var(--line);}
@@ -261,9 +261,9 @@
   .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;}
 
   /* ---------- Grid / Shop ---------- */
-  .view-pad{padding:18px 20px 10px;}
+  .view-pad{padding:18px var(--gut) 10px;}
   .view-title{font-size:22px;margin-bottom:4px;}
-  .prod-grid{display:flex;flex-direction:column;gap:16px;padding:6px 20px 10px;}
+  .prod-grid{display:flex;flex-direction:column;gap:16px;padding:6px var(--gut) 10px;}
   .prod-card{background:var(--card);border-radius:24px;box-shadow:var(--shadow);overflow:hidden;width:100%;}
   .prod-img-wrap{position:relative;}
   .prod-img{width:100%;height:190px;object-fit:cover;background:var(--cream-deep);display:block;}
@@ -312,12 +312,12 @@
   /* ---------- Overlay pages ---------- */
   .overlay{position:fixed;inset:0;background:var(--cream);z-index:80;display:none;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;}
   .overlay.show{display:block;}
-  .ov-top{display:flex;align-items:center;gap:12px;padding:18px 20px 16px;position:sticky;top:0;background:var(--cream);z-index:5;border-bottom:2px solid rgba(11,42,91,.16);}
+  .ov-top{display:flex;align-items:center;gap:12px;padding:18px var(--gut) 16px;position:sticky;top:0;background:var(--cream);z-index:5;border-bottom:2px solid rgba(11,42,91,.16);}
   .ov-back{width:38px;height:38px;border-radius:12px;background:var(--card);box-shadow:var(--shadow);border:none;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
   .ov-title{font-size:17px;font-weight:800;}
 
-  .info-box{margin:16px 20px;background:var(--caramel-pale);border-radius:16px;padding:14px 16px;font-size:12.5px;color:var(--caramel-deep);line-height:1.5;font-weight:600;}
-  .photo-banner{position:relative;margin:16px 20px;border-radius:0;overflow:hidden;box-shadow:var(--shadow);height:150px;background:var(--cream-deep);}
+  .info-box{margin:16px var(--gut);background:var(--caramel-pale);border-radius:16px;padding:14px 16px;font-size:12.5px;color:var(--caramel-deep);line-height:1.5;font-weight:600;}
+  .photo-banner{position:relative;margin:16px var(--gut);border-radius:0;overflow:hidden;box-shadow:var(--shadow);height:150px;background:var(--cream-deep);}
   .photo-banner img{width:100%;height:100%;object-fit:cover;display:block;}
   .photo-banner .pb-tint{position:absolute;inset:0;background:linear-gradient(0deg,rgba(8,30,70,.72),rgba(8,30,70,0) 65%);display:flex;align-items:flex-end;padding:14px 18px;z-index:2;}
   .photo-banner .pb-tint span{color:#fff;font-weight:800;font-size:14px;letter-spacing:.2px;}
@@ -354,7 +354,7 @@
       radial-gradient(ellipse 45% 85% at 48% 104%, var(--cream) 0%, rgba(238,244,255,0) 55%),
       linear-gradient(0deg, var(--cream) 0%, rgba(238,244,255,0) 48%),
       linear-gradient(160deg, rgba(19,122,239,.32), rgba(11,42,91,.38) 70%);}
-  .uline-tabs{display:flex;gap:22px;margin:4px 20px 0;border-bottom:1.5px solid var(--line);}
+  .uline-tabs{display:flex;gap:22px;margin:4px var(--gut) 0;border-bottom:1.5px solid var(--line);}
   .uline-tab{background:none;border:none;padding:10px 2px;font-size:14px;font-weight:800;color:var(--cocoa-faint);
     border-bottom:2.5px solid transparent;margin-bottom:-1.5px;}
   .uline-tab.active{color:var(--caramel-deep);border-bottom-color:var(--caramel-deep);}
@@ -365,7 +365,7 @@
      caramel rule, and every field below it (Description/Amount/Number/Date)
      is separated from the next by a dashed line instead of running together
      in one flat block. */
-  .rec-card{margin:0 20px 12px;padding:14px 16px;border-radius:16px;background:var(--cream-deep);}
+  .rec-card{margin:0 var(--gut) 12px;padding:14px 16px;border-radius:16px;background:var(--cream-deep);}
   .rec-card:last-child{margin-bottom:0;}
   .rec-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-bottom:10px;border-bottom:1.5px dashed var(--caramel);}
   .rec-ref{font-size:13.5px;font-weight:800;color:var(--cocoa);word-break:break-all;}
@@ -388,7 +388,7 @@
      the tight stat tile instead of overwhelming it. */
   .ugx-n{display:flex;align-items:center;gap:8px;}
   .ugx-coin{width:34px;height:30px;flex:0 0 auto;display:block;object-fit:contain;}
-  .form-card{margin:6px 20px;background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:18px;}
+  .form-card{margin:6px var(--gut);background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:18px;}
   .flabel{font-size:12px;font-weight:800;color:var(--cocoa-soft);margin-bottom:8px;display:block;}
   .famt{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:14px;font-size:20px;font-weight:800;color:var(--cocoa);outline:none;margin-bottom:14px;}
   /* Wraps to as many rows as it needs -- the 28% basis lets exactly three
@@ -434,10 +434,10 @@
   .flat-amt{font-size:13.5px;font-weight:800;text-align:right;flex:0 0 auto;}
   .flat-amt.zero{color:var(--cocoa-faint);font-weight:700}
   .flat-amt.pos{color:var(--mint)}
-  .menu-item{display:flex;align-items:center;gap:14px;padding:16px 18px;background:var(--card);border-radius:18px;margin:0 20px 10px;box-shadow:var(--shadow);border:none;width:calc(100% - 40px);text-align:left;}
+  .menu-item{display:flex;align-items:center;gap:14px;padding:16px 18px;background:var(--card);border-radius:18px;margin:0 var(--gut) 10px;box-shadow:var(--shadow);border:none;width:calc(100% - 2 * var(--gut));text-align:left;}
   .menu-ic{width:36px;height:36px;border-radius:11px;background:var(--caramel-pale);color:var(--caramel-deep);display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
   .menu-lbl{font-size:14px;font-weight:700;flex:1;}
-  .menu-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:0 20px 14px;}
+  .menu-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:0 var(--gut) 14px;}
   .menu-tile{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:8px;padding:16px 8px;background:var(--card);border-radius:18px;box-shadow:var(--shadow);border:none;text-align:center;}
   .menu-tile-ic{width:48px;height:48px;border-radius:14px;background:var(--caramel-pale);color:var(--caramel-deep);display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
   /* Menu-tile pictures are self-shaded 3D renders (already have their own
@@ -460,7 +460,7 @@
       radial-gradient(ellipse 55% 95% at 12% 110%, var(--cream) 0%, rgba(238,244,255,0) 60%),
       radial-gradient(ellipse 60% 100% at 82% 105%, var(--cream) 0%, rgba(238,244,255,0) 58%),
       linear-gradient(0deg, var(--cream) 0%, rgba(238,244,255,0) 42%);}
-  .acct-card{position:absolute;left:20px;right:20px;bottom:-32px;z-index:2;background:linear-gradient(150deg,#16407f,#0a2350);
+  .acct-card{position:absolute;left:var(--gut);right:var(--gut);bottom:-32px;z-index:2;background:linear-gradient(150deg,#16407f,#0a2350);
     border-radius:20px;box-shadow:var(--shadow-lg);padding:16px 18px;display:flex;align-items:center;gap:14px;color:#fff;}
   .acct-icon{width:46px;height:46px;border-radius:14px;background:#fff;overflow:hidden;
     display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
@@ -471,7 +471,7 @@
   .prod-ribbon{position:absolute;top:12px;right:12px;background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;
     font-size:10.5px;font-weight:800;padding:5px 11px;border-radius:999px;letter-spacing:.3px;box-shadow:0 4px 10px -2px rgba(13,95,210,.5);}
 
-  .link-box{background:var(--cream-deep);border:1.5px dashed var(--caramel);border-radius:14px;padding:14px 16px;margin:14px 20px;}
+  .link-box{background:var(--cream-deep);border:1.5px dashed var(--caramel);border-radius:14px;padding:14px 16px;margin:14px var(--gut);}
   /* Support page icons: Telegram and WhatsApp app icons that pop big, settle, dip twice and shrink back, one 2.67 s loop measured off the recordings. */
   .sup-ic{display:block;width:100%;height:100%;animation:supPop 2.667s linear infinite;animation-delay:var(--d,0s);}
   .sup-ic svg{display:block;width:100%;height:100%;}
@@ -492,7 +492,7 @@
   .link-row{display:flex;align-items:center;gap:10px;}
   .link-row span{flex:1;font-size:12.5px;font-weight:700;color:var(--cocoa-soft);}
 
-  .pay-status-card{margin:16px 20px;background:var(--mint-pale);border-radius:20px;padding:22px 20px;text-align:center;}
+  .pay-status-card{margin:16px var(--gut);background:var(--mint-pale);border-radius:20px;padding:22px 20px;text-align:center;}
   .pay-status-ic{width:52px;height:52px;border-radius:16px;background:var(--mint);color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
   .pay-status-ic.orb{width:116px;height:116px;border-radius:30px;background:radial-gradient(circle at 50% 50%,#05155c 0,#020a2c 75%);overflow:hidden;box-shadow:0 10px 24px rgba(2,10,60,.28);}
   .pay-status-ic canvas{display:block;width:100%;height:100%;}
@@ -501,16 +501,16 @@
   .pay-steps li{position:relative;padding:6px 0 6px 22px;font-size:12.5px;color:var(--cocoa-soft);font-weight:600;}
   .pay-steps li::before{content:"";position:absolute;left:2px;top:13px;width:6px;height:6px;border-radius:50%;background:var(--mint);}
 
-  .tm-card{margin:12px 10px 0;padding:16px;background:var(--card);border-radius:20px;box-shadow:var(--shadow);}
+  .tm-card{margin:12px var(--gut) 0;padding:16px;background:var(--card);border-radius:20px;box-shadow:var(--shadow);}
   .tm-over{padding-bottom:6px;}
   .tm-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
   .tm-head h3{font-size:16.5px;}
-  .comm-row{display:flex;margin:12px 10px 0;padding:16px 0;background:var(--card);border-radius:20px;box-shadow:var(--shadow);}
+  .comm-row{display:flex;margin:12px var(--gut) 0;padding:16px 0;background:var(--card);border-radius:20px;box-shadow:var(--shadow);}
   .comm-tile{flex:1;text-align:center;}
   .comm-tile:not(:last-child){border-right:1px solid var(--line);}
   .tm-task-link{display:flex;align-items:center;gap:2px;background:none;border:0;padding:0;color:var(--caramel-deep);font:inherit;font-size:13.5px;font-weight:800;}
-  .tk-lead{margin:6px 20px 16px;font-size:13px;color:var(--cocoa-soft);line-height:1.5;}
-  .tk-card{margin:0 20px 14px;padding:18px;border-radius:20px;background:var(--card);box-shadow:var(--shadow);border:1px solid var(--line);}
+  .tk-lead{margin:6px var(--gut) 16px;font-size:13px;color:var(--cocoa-soft);line-height:1.5;}
+  .tk-card{margin:0 var(--gut) 14px;padding:18px;border-radius:20px;background:var(--card);box-shadow:var(--shadow);border:1px solid var(--line);}
   .tk-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
   .tk-ic{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
 
@@ -534,7 +534,7 @@
   .comm-tile span{font-size:10.5px;color:var(--cocoa-faint);font-weight:700;}
 
   /* ---------- How it works — numbered instruction cards ---------- */
-  .howto-card{margin:0 20px 16px;padding:16px 16px 4px;background:var(--card);border-radius:18px;box-shadow:var(--shadow);}
+  .howto-card{margin:0 var(--gut) 16px;padding:16px 16px 4px;background:var(--card);border-radius:18px;box-shadow:var(--shadow);}
   .howto-card.howto-flat{background:none;box-shadow:none;padding:16px 0 4px;border-top:1px solid var(--line);}
   .howto-card h4{font-size:14px;font-weight:800;color:var(--cocoa);margin-bottom:10px;}
   .howto-step{display:flex;align-items:flex-start;gap:11px;margin-bottom:14px;}
@@ -612,7 +612,7 @@
 
 
 /* ---- Rewards page, the gift animations and the success / failed icons (the owner's recordings; see the notes in CLAUDE.md) ---- */
-.rw-card{margin:14px 20px;background:var(--card);border-radius:22px;box-shadow:var(--shadow);padding:20px 18px;text-align:center;}
+.rw-card{margin:14px var(--gut);background:var(--card);border-radius:22px;box-shadow:var(--shadow);padding:20px 18px;text-align:center;}
 .rw-title{font-size:19px;margin:0;}
 .rw-sub{font-size:13px;color:var(--cocoa-faint);margin:6px 0 14px;line-height:1.45;}
 .rw-gbtn:active .gbox{transform:scale(.95);}
@@ -750,7 +750,7 @@ a.btn{text-decoration:none;}
 #ldBox canvas{display:block;width:100%;height:auto;}
 #ldText{position:absolute;left:-10%;right:-10%;top:80.9%;transform:translateY(-50%);text-align:center;white-space:nowrap;font-weight:800;font-size:19px;letter-spacing:.2px;color:#0b1a4f;font-family:'Poppins','Inter','Segoe UI',system-ui,-apple-system,Roboto,Arial,sans-serif;}
 /* ---- robot categories (All, Class A, ...): a row of pills above the robots, shown only when the admin has made categories ---- */
-.cat-tabs{display:flex;gap:10px;overflow-x:auto;padding:16px 20px 2px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.cat-tabs{display:flex;gap:10px;overflow-x:auto;padding:16px var(--gut) 2px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .cat-tabs::-webkit-scrollbar{display:none;}
 .cat-tab{flex:none;border:none;border-radius:999px;padding:10px 20px;font-weight:800;font-size:14px;font-family:inherit;background:#fff;color:var(--cocoa-soft);box-shadow:0 4px 12px -6px rgba(11,42,91,.25);}
 .cat-tab.active{background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;box-shadow:0 8px 16px -8px rgba(19,122,239,.6);}
@@ -1020,8 +1020,8 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
 
     <!-- TEAM -->
     <div id="viewTeam" style="display:none">
-      <div class="photo-banner" id="teamBanner" style="margin:16px 10px"></div>
-      <div class="view-pad" style="padding:18px 14px 2px">
+      <div class="photo-banner" id="teamBanner"></div>
+      <div class="view-pad" style="padding-bottom:2px">
         <div class="view-title">My Team</div>
         <div class="muted" style="font-size:13px">Share your link, earn on every level.</div>
       </div>
@@ -1047,7 +1047,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
         <div class="kv" style="border-bottom:none"><span>Commission earned</span><b id="teamComm">UGX 0</b></div>
       </div>
       </div>
-      <div class="howto-card" style="margin:12px 10px 0">
+      <div class="howto-card" style="margin:12px var(--gut) 0">
         <h4>How referrals work</h4>
         <div class="howto-step"><span class="howto-num">1</span><p>Share your referral link above with friends and family.</p></div>
         <div class="howto-step"><span class="howto-num">2</span><p>When someone signs up with your link and buys an AI robot, you earn a commission.</p></div>
@@ -1087,7 +1087,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
           <div class="acct-num" id="acctPhone">—</div>
         </div>
       </div>
-      <div class="cards" style="margin:0 20px 18px">
+      <div class="cards" style="margin:0 var(--gut) 18px">
         <div class="stat" style="cursor:pointer" onclick="openOverlay('records')"><div class="n ugx-n" style="color:var(--mint)"><img class="ugx-coin" src="/icons/ugx-coin.png" alt="UGX"><span id="acctBalNum">UGX 0</span></div><div class="l">Balance</div></div>
         <div class="stat" style="cursor:pointer" onclick="openOverlay('records');setRecordsTab('cashouts')"><div class="n ugx-n" style="color:var(--berry)"><img class="ugx-coin" src="/icons/ugx-coin.png" alt="UGX"><span id="acctWitNum">UGX 0</span></div><div class="l">Cash Outs</div></div>
       </div>
@@ -1121,7 +1121,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   <!-- OVERLAYS -->
   <div class="overlay" id="ovTeamlevel">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title" id="teamLevelTitle">Level 1 members</div></div>
-    <div style="padding:6px 20px 20px" id="teamLevelList"></div>
+    <div style="padding:6px var(--gut) 20px" id="teamLevelList"></div>
   </div>
 
   <div class="overlay" id="ovDeposit">
@@ -1180,7 +1180,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <div class="link-row"><span id="depStatusRef" style="word-break:break-all"></span><button class="btn btn-dark btn-sm" onclick="copyDepositRef()">Copy</button></div>
     </div>
     <div class="info-box" id="depStatusMsg" style="background:var(--caramel-pale);color:var(--caramel-deep)">Payment initiated. Check your phone.</div>
-    <div style="padding:0 20px">
+    <div style="padding:0 var(--gut)">
       <button class="btn btn-primary btn-block" id="depVerifyBtn" onclick="manualVerifyDeposit()">
         <span class="verify-spin" id="depVerifySpin" style="display:none"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>
         <span id="depVerifyLabel">Verify Payment</span>
@@ -1216,18 +1216,18 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   <div class="overlay" id="ovSupport">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Support</div></div>
     <div class="photo-banner" id="supportBanner"></div>
-    <div style="padding:6px 20px" id="supportLinks"></div>
+    <div style="padding:6px var(--gut)" id="supportLinks"></div>
   </div>
 
   <div class="overlay" id="ovAbout">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">About Us</div></div>
     <div class="photo-banner" id="aboutBanner"></div>
-    <div style="padding:6px 20px 24px;font-size:13.5px;line-height:1.7;color:var(--cocoa-soft)" id="aboutBody"></div>
+    <div style="padding:6px var(--gut) 24px;font-size:13.5px;line-height:1.7;color:var(--cocoa-soft)" id="aboutBody"></div>
   </div>
 
   <div class="overlay" id="ovRules">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Terms &amp; Rules</div></div>
-    <div style="padding:16px 20px 20px;font-size:13.5px;line-height:1.7;color:var(--cocoa-soft)" id="rulesBody"><div class="empty">Nothing published yet.</div></div>
+    <div style="padding:16px var(--gut) 20px;font-size:13.5px;line-height:1.7;color:var(--cocoa-soft)" id="rulesBody"><div class="empty">Nothing published yet.</div></div>
   </div>
 
   <!-- ANNOUNCEMENT -->
@@ -1255,7 +1255,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <button class="uline-tab" data-rt="topups" onclick="setRecordsTab('topups')">Topups</button>
       <button class="uline-tab" data-rt="cashouts" onclick="setRecordsTab('cashouts')">Cash Outs</button>
     </div>
-    <div class="cards" style="margin:14px 20px" id="recordsStats"></div>
+    <div class="cards" style="margin:14px var(--gut)" id="recordsStats"></div>
     <div id="recordsList"></div>
   </div>
 
@@ -1263,9 +1263,9 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Payout Account</div></div>
     <div class="photo-banner" id="bindbankBanner"></div>
     <div class="info-box">Save the mobile-money account you want cash-outs sent to. You can bind up to 5 and tap the one to use. Every cash-out asks for your Trade Password.</div>
-    <div id="bankList" style="padding:0 20px"></div>
-    <div style="padding:6px 20px 20px"><button class="btn btn-primary btn-block" onclick="openNetworkPicker()">+ Bind a new account</button></div>
-    <div style="text-align:center;padding:0 20px 20px"><span class="muted" onclick="openChangeTradePin()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Change Trade Password</span></div>
+    <div id="bankList" style="padding:0 var(--gut)"></div>
+    <div style="padding:6px var(--gut) 20px"><button class="btn btn-primary btn-block" onclick="openNetworkPicker()">+ Bind a new account</button></div>
+    <div style="text-align:center;padding:0 var(--gut) 20px"><span class="muted" onclick="openChangeTradePin()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Change Trade Password</span></div>
   </div>
 
   <div class="overlay" id="ovChangepass">
@@ -1279,19 +1279,19 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <span class="flabel">Confirm new password</span>
       <div class="field" style="margin-bottom:0"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="12" r="4"/><path d="M11 12h10M16.5 12v3M19.5 12v3"/></svg></span><input id="pwNew2" type="password" placeholder="Re-enter new password" autocomplete="new-password"></div>
     </div>
-    <div style="padding:6px 20px 20px"><button class="btn btn-primary btn-block" id="changePassBtn" onclick="doChangePassword()">Update password</button></div>
+    <div style="padding:6px var(--gut) 20px"><button class="btn btn-primary btn-block" id="changePassBtn" onclick="doChangePassword()">Update password</button></div>
   </div>
 
   <div class="overlay" id="ovMychoc">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">My Products</div></div>
     <div class="info-box">Every AI robot you own, running until it matures.</div>
-    <div id="mychocList" style="padding:0 20px"></div>
+    <div id="mychocList" style="padding:0 var(--gut)"></div>
   </div>
 
   <div class="overlay" id="ovEarnings">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Accrued Earnings</div></div>
-    <div class="cards" style="margin:16px 20px"><div class="stat"><div class="n" style="color:var(--mint)" id="earningsTotal">UGX 0</div><div class="l">Total accrued so far</div></div></div>
-    <div id="earningsList" style="padding:0 20px"></div>
+    <div class="cards" style="margin:16px var(--gut)"><div class="stat"><div class="n" style="color:var(--mint)" id="earningsTotal">UGX 0</div><div class="l">Total accrued so far</div></div></div>
+    <div id="earningsList" style="padding:0 var(--gut)"></div>
   </div>
 
   <div class="overlay" id="ovTaskcenter">
