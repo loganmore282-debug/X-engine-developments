@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v55`, admin `admin/sw.js` `smartai-admin-shell-v25`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v56`, admin `admin/sw.js` `smartai-admin-shell-v25`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -542,3 +542,7 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## "My machines" is now "My AI robots" (owner: "change machines to My AI robots")
 - The AI Robots header button, the Me page tile (and its icon's alt text), that page's header title and the admin's icon labels all read **My AI robots**. Ids and routes are unchanged (`mychoc`). Notes above saying "My Products" / "My machines" mean this page. Member cache v55, admin v25.
+
+## Gift opened box: the coin sits IN the box, and the box glows and shines (owner: "coins are just hanging on top of the gift box, make it do a best glow or shinning of the giftbox")
+- The big UGX coin no longer hangs and bobs above the box. It is part of the opened-box vector (`<g class="go-bigcoin">` in `tools/make-gift-open-svg.py`, between the coin heap and the front of the box): on the burst it POPS OUT of the box, spins (`go-bigspin`, `goCoinSpin`) and comes back down to stand in the heap with its foot inside the opening (`goCoinOut`, 1.6 s), then a glint of light slides across it every 2.6 s (`goGlint`). The old floating `.gs-coin` is now only used when the admin uploaded a picture for the opened box (`.gs-open.custom-open + .gs-coin`, class set by `paintGift`).
+- The shine: a band of light sweeps over the whole box (`goShine`, clipped to the box silhouette `goBodyClip`, every 2.8 s), ten round glints twinkle around it (`go-tw`, no stars), the box has a gold glow (`drop-shadow` 16 px) and a gold halo pulses behind it (`.gs-burst .gs-main::before`, `gsHalo`). All off for reduced-motion. test-animations checks the coin is inside the vector (96 checks). To change the art edit the generator and paste its output over `<svg class="go">` in index.html. Member cache v56.

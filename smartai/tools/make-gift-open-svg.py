@@ -8,6 +8,14 @@ def poly(pts, fill, extra=''):
 
 LINE = 'stroke="#1c63c4" stroke-width="1.6" stroke-linejoin="round"'
 parts = []
+# local defs: the sweep of light over the box, the clip it is cut to, and the big coin's own gradient
+BODY = [[(38,100),(100,76),(162,100),(100,124)], [(38,100),(100,124),(100,182),(38,158)], [(100,124),(162,100),(162,158),(100,182)],
+        [(38,100),(100,124),(86,150),(24,126)], [(100,124),(162,100),(176,126),(114,150)],
+        [(38,100),(100,76),(84,38),(22,62)], [(100,76),(162,100),(178,62),(116,38)]]
+parts.append('<defs><linearGradient id="goShineG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".9"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>'
+             '<clipPath id="goBodyClip">' + ''.join('<path d="M' + 'L'.join('%g %g' % q for q in pl) + 'Z"/>' for pl in BODY) + '</clipPath>'
+             '<clipPath id="goCoinClip"><circle r="17.6"/></clipPath>'
+             '<linearGradient id="goCoinG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff0a0"/><stop offset=".5" stop-color="#ffc728"/><stop offset="1" stop-color="#e48f00"/></linearGradient></defs>')
 parts.append('<ellipse class="go-sh" cx="100" cy="190" rx="66" ry="11" fill="rgba(8,40,110,.28)"/>')
 # back flaps, folded out behind the box (each hinged on a back edge of the opening)
 parts.append('<g class="gf gf-bl">' + poly([(38,100),(100,76),(84,38),(22,62)], 'url(#gbFl)', LINE) +
@@ -31,6 +39,14 @@ for y, xs in rows:
     for x in xs:
         heap += coin(x, y)
 parts.append('<g class="go-heap">' + heap + '</g>')
+# the big UGX coin: it pops OUT of the box, spins, and comes back down to stand in the heap, its foot inside the opening (the front of the box overlaps it)
+parts.append('<g transform="translate(100 99)"><g class="go-bigcoin"><g class="go-bigspin">'
+             '<circle r="19" fill="#c67700"/><circle r="17.6" fill="url(#goCoinG)"/><circle r="14.2" fill="none" stroke="#e39a00" stroke-width="1.4"/>'
+             '<circle r="13.2" fill="none" stroke="#fff3b8" stroke-width=".6" opacity=".8"/>'
+             '<text y="3" text-anchor="middle" font-size="7.6" font-weight="900" fill="#b36a00" font-family="Inter,Roboto,Arial,sans-serif">UGX</text>'
+             '<path d="M-12.2 -9a15.4 15.4 0 0 1 14.6 -10.5" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".55"/>'
+             '<g clip-path="url(#goCoinClip)"><g transform="rotate(25)"><rect class="go-glint" x="-26" y="-30" width="6" height="60" fill="url(#goShineG)"/></g></g>'
+             '</g></g></g>')
 # the body (the same faces as the closed box)
 parts.append(poly([(38,100),(100,124),(100,182),(38,158)], 'url(#gbL)'))
 parts.append(poly([(100,124),(162,100),(162,158),(100,182)], 'url(#gbR)'))
@@ -43,4 +59,8 @@ parts.append('<g class="gf gf-fl">' + poly([(38,100),(100,124),(86,150),(24,126)
              poly([(59.7,108.4),(78.3,115.6),(64.3,141.6),(45.7,134.4)], 'url(#gbRib)') + '</g>')
 parts.append('<g class="gf gf-fr">' + poly([(100,124),(162,100),(176,126),(114,150)], 'url(#gbFl)', LINE) +
              poly([(121.7,115.6),(140.3,108.4),(154.3,134.4),(135.7,141.6)], 'url(#gbRibD)') + '</g>')
+# a band of light sweeps across the whole box (cut to its silhouette), and round glints twinkle around it
+parts.append('<g clip-path="url(#goBodyClip)"><g transform="rotate(18 100 105)"><rect class="go-shine" x="-50" y="20" width="30" height="190" fill="url(#goShineG)"/></g></g>')
+for i, (x, y, d) in enumerate([(46, 72, 0), (154, 64, .35), (100, 28, .7), (26, 118, 1.05), (176, 120, .2), (124, 50, .55), (74, 44, .9), (142, 92, 1.25), (58, 150, .45), (150, 150, .8)]):
+    parts.append('<circle class="go-tw" cx="%g" cy="%g" r="2" fill="#fff" style="animation-delay:%gs"/>' % (x, y, d + 0.9))
 sys.stdout.write('<svg class="go" viewBox="0 0 200 210" aria-hidden="true">' + ''.join(parts) + '</svg>')

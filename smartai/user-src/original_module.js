@@ -497,7 +497,7 @@ function paintGift(){
   });
   // The opened box is vector too; a picture uploaded for it in the admin replaces it, Back to default brings the vector back.
   var cu = document.querySelector('.go-custom'), cv = document.querySelector('.gs-open svg.go'), cust = customIcon('giftopen');
-  if (cu && cv) { if (cust) cu.setAttribute('src', cust); else cu.removeAttribute('src'); cu.hidden = !cust; cv.style.display = cust ? 'none' : ''; }
+  if (cu && cv) { if (cust) cu.setAttribute('src', cust); else cu.removeAttribute('src'); cu.hidden = !cust; cv.style.display = cust ? 'none' : ''; cv.parentNode.classList.toggle('custom-open', !!cust); }
 }
 var _animLast = -1;
 function animTick(){
