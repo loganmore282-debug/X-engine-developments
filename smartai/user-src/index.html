@@ -728,9 +728,17 @@
 .cal-d.done{background:linear-gradient(150deg,var(--caramel),var(--caramel-deep));}
 .cal-d.done .cal-n,.cal-d.done .cal-a{color:#fff;}
 .cal-d.done::after{content:"";position:absolute;right:4px;top:4px;width:7px;height:4px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg);}
-.cal-d.today{border-color:var(--caramel);background:#fff;box-shadow:0 0 0 3px rgba(19,122,239,.18);animation:calPulse 1.6s ease-in-out infinite;}
+.cal-d.today{border-color:var(--caramel);background:#fff;box-shadow:0 0 0 3px rgba(19,122,239,.18);}
+/* today's box breathes a soft blue glow (an outline layer that only fades in and out, so scrolling stays smooth); a claim pops the tick and fills the box solid blue */
+.cal-d.today::after{content:"";position:absolute;inset:-3px;border-radius:15px;box-shadow:0 0 0 2px rgba(19,122,239,.6),0 0 12px rgba(19,122,239,.4);opacity:.12;pointer-events:none;animation:calGlow 2.5s ease-in-out infinite;}
+.cal-d.done.pop::after{animation:calTick .3s cubic-bezier(.2,1.7,.4,1) both;}
+.cal-d.done.pop::before{content:"";position:absolute;inset:-1.5px;border-radius:inherit;background:#fff;z-index:1;pointer-events:none;animation:calFill .3s ease-out .04s forwards;}
+.cal-d.done.pop .cal-n,.cal-d.done.pop .cal-a{position:relative;z-index:2;}
+@keyframes calGlow{0%,100%{opacity:.12;}50%{opacity:1;}}
+@keyframes calTick{0%{transform:rotate(-45deg) scale(0);opacity:0;}60%{transform:rotate(-45deg) scale(1.4);opacity:1;}100%{transform:rotate(-45deg) scale(1);opacity:1;}}
+@keyframes calFill{from{opacity:1;}to{opacity:0;}}
+@media (prefers-reduced-motion:reduce){.cal-grid .cal-d.today::after{animation:none;opacity:.6;}.cal-grid .cal-d.done.pop::after{animation:none;}.cal-grid .cal-d.done.pop::before{display:none;}}
 .cal-d.today .cal-n{color:var(--caramel-deep);}
-@keyframes calPulse{0%,100%{box-shadow:0 0 0 3px rgba(19,122,239,.16);}50%{box-shadow:0 0 0 6px rgba(19,122,239,.26);}}
 
 /* ---- Smart AI additions: art banners ---- */
 .art-host{position:absolute;inset:0;overflow:hidden;}

@@ -1194,6 +1194,7 @@ function serverYesterdayKey(){
   var d = new Date(Date.now() + 3 * 3600000 - 86400000), p = function(n){ return String(n).padStart(2, '0'); };
   return p(d.getUTCMonth() + 1) + '/' + p(d.getUTCDate()) + '/' + d.getUTCFullYear();
 }
+var _calToday = 0, _calPop = 0;   // the day a claim would pay now / the day just claimed (its tick pops)
 function renderCheckin(){
   var s = STATE, sett = getSettings(), ladder = cleanLadder(sett.checkinLadder), flat = Math.round(Number(sett.dailyCheckin) || 0);
   var card = $('checkinCard'); if (card) card.style.display = (ladder.length || flat > 0) ? '' : 'none';
@@ -1203,6 +1204,7 @@ function renderCheckin(){
   var cyclePos = alive ? ((s.checkinStreak - 1) % 30) + 1 : 0;           // days of this cycle already claimed
   var claimed = done ? cyclePos : (cyclePos === 30 ? 0 : cyclePos);        // day 31 = day 1 of the next cycle
   var todayPos = done ? 0 : claimed + 1;
+  _calToday = todayPos;
   var btn = $('checkinBtn');
   if (!btn.dataset.busy) {
     btn.innerHTML = done ? '<span style="display:inline-flex;align-items:center;gap:6px;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12l4.5 4.5L19.5 6"/></svg>Claimed today</span>' : ('Check in for ' + ugx(amtFor(todayPos)));
@@ -1211,9 +1213,10 @@ function renderCheckin(){
   $('streakNum').textContent = alive ? s.checkinStreak : 0;
   var cells = '';
   for (var i = 1; i <= 30; i++) {
-    cells += '<div class="cal-d' + (i <= claimed ? ' done' : '') + (i === todayPos ? ' today' : '') + '"><span class="cal-n">' + i + '</span><span class="cal-a">' + String(amtFor(i)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '</span></div>';
+    cells += '<div class="cal-d' + (i <= claimed ? ' done' : '') + (i === _calPop && i <= claimed ? ' pop' : '') + (i === todayPos ? ' today' : '') + '"><span class="cal-n">' + i + '</span><span class="cal-a">' + String(amtFor(i)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '</span></div>';
   }
   $('calGrid').innerHTML = cells;
+  _calPop = 0;   // the tick pops once, on the render right after a claim
   var nextDay = done ? (cyclePos % 30) + 1 : todayPos;
   $('streakCycleLabel').textContent = done ? ('Day ' + cyclePos + ' claimed. Tomorrow pays ' + ugx(amtFor(nextDay))) : (claimed > 0 ? ('Today is day ' + todayPos + ' of 30: ' + ugx(amtFor(todayPos))) : ('Start your run today: ' + ugx(amtFor(1))));
   var gc = $('giftCodeInput'); if (gc) gc.placeholder = getSettings().giftCodeHint || 'Enter gift code';
@@ -2068,6 +2071,7 @@ async function doCheckin(){
     var r = await api('/checkin', {});
     if (r.stale) return;
     if (r.status !== 'success') { toast(r.message || 'Check-in failed'); return; }
+    _calPop = _calToday;
     await refreshFromServer();
     toast('Checked in successfully ✓');
   } catch (e) {
