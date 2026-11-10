@@ -1207,7 +1207,7 @@ function renderCheckin(){
   _calToday = todayPos;
   var btn = $('checkinBtn');
   if (!btn.dataset.busy) {
-    btn.innerHTML = done ? '<span style="display:inline-flex;align-items:center;gap:6px;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12l4.5 4.5L19.5 6"/></svg>Claimed today</span>' : ('Check in for ' + ugx(amtFor(todayPos)));
+    btn.innerHTML = done ? '<span class="tick-txt">\u2713\uFE0E</span> Claimed today' : ('Check in for ' + ugx(amtFor(todayPos)));
     btn.disabled = done; btn.style.opacity = done ? '.55' : '1';
   }
   $('streakNum').textContent = alive ? s.checkinStreak : 0;

@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v31`, admin `admin/sw.js` `smartai-admin-shell-v14`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v32`, admin `admin/sw.js` `smartai-admin-shell-v14`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -462,3 +462,4 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 - Today's available box (`.cal-d.today`) has a layer (`::after`, opacity-only `calGlow`, 2.5 s, infinite) that breathes a faint blue outline (the old `calPulse` box-shadow animation is gone: it repainted every frame). All other boxes are static.
 - A successful claim (`doCheckin` sets `_calPop = _calToday`, `renderCheckin` marks that cell `.pop` once): the box fills solid blue (`::before` white layer fading out, `calFill` 0.3 s) and the SAME white tick as the other claimed days pops in (`calTick` 0.3 s, scale 0 -> 1.4 -> 1, keeps its -45 degree turn). Later repaints do not replay it. `prefers-reduced-motion` turns both off. Layout, sizes, spacing, colours and amounts are untouched. Test: `test-animations.js`.
 - The claimed-day tick is the real **✓ character** (U+2713, text form `\2713\FE0E`, white, 13 px bold) on `.cal-d.done::after`, exactly as the owner typed it, not a drawn shape; `calTick` pops it (scale 0 -> 1.4 -> 1, 0.3 s).
+- The **Claimed today** button now shows the same real ✓ character (`.tick-txt`, U+2713 text form) instead of a drawn check.
