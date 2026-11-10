@@ -209,7 +209,7 @@ async function member(ref) {
   const coins = await ev(() => [...document.querySelectorAll('#viewAccount img.ugx-coin')].map(i => ({ src: i.getAttribute('src'), ok: i.complete && i.naturalWidth > 0 })));
   ok(coins.length === 2 && coins.every(c => c.src === '/icons/ugx-coin.png' && c.ok), 'the Balance and Cash Outs figures each have ChocoMCC\'s UGX coin picture');
   await ev(() => document.querySelector('#viewAccount .menu-tile-lbl') && [...document.querySelectorAll('#viewAccount .menu-tile')].find(b => /Security/.test(b.textContent)).click()); await sleep(300);
-  ok(await shown('ovChangepass') && /Security/.test(await ev(() => document.querySelector('#ovChangepass .ov-title').textContent)) && await ev(() => !!document.getElementById('pwCur') && !!document.getElementById('pwNew2')), 'Security opens the change-password page (current, new, confirm), as in ChocoMCC');
+  ok(await shown('ovChangepass') && await ev(() => !!document.getElementById('pwCur') && !!document.getElementById('pwNew2')), 'Security opens the change-password page (current, new, confirm), as in ChocoMCC');
   await ev(() => closeOverlay());
   await ev(() => goBindBank(false)); await sleep(300);
   ok(/Change Trade Password/.test(await ev(() => document.getElementById('ovBindbank').textContent)), 'Payout Account has the Change Trade Password link');

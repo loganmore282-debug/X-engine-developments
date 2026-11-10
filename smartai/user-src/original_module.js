@@ -2338,7 +2338,6 @@ async function refreshTeamStats(){
 // Tapping Level 1 / 2 / 3 opens that level's members, walked fresh on the server (never just the number already on screen).
 async function openTeamLevel(level){
   openOverlay('teamlevel');
-  $('teamLevelTitle').textContent = 'Level ' + level + ' members';
   $('teamLevelList').innerHTML = spinnerHtml();
   var r = await api('/team/members?level=' + level);
   if (r.stale) return;
@@ -2354,7 +2353,7 @@ async function openTeamLevel(level){
       '<div class="flat-main"><b>' + esc(display) + '</b><span>Joined ' + esc(joined) + '</span></div>' +
       '<div class="flat-amt' + (invested > 0 ? ' pos' : ' zero') + '">' + ugx(invested) + '</div></div>';
   }).join('');
-  $('teamLevelList').innerHTML = '<div class="muted" style="font-size:12px;margin-bottom:2px">' + list.length + ' member' + (list.length === 1 ? '' : 's') + '</div><div class="flat-list">' + rows + '</div>';
+  $('teamLevelList').innerHTML = '<div class="muted" style="font-size:12px;margin-bottom:2px">Level ' + level + ' &middot; ' + list.length + ' member' + (list.length === 1 ? '' : 's') + '</div><div class="flat-list">' + rows + '</div>';
 }
 
 /* ====================== NOTICES ====================== */
