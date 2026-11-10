@@ -632,8 +632,10 @@ function smartaiCutout(src, w, h){
 }
 // The icon slots (same names as SMARTAI_ICON_SLOTS in server.js). Add a name here AND in server.js to get a new upload box.
 // Slots that already have a built-in blue picture in the app (user/icons/); an upload here replaces it, Remove brings it back.
-const SMARTAI_ICON_BUILTIN = ['home', 'robots', 'income', 'share', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout'];
-const SMARTAI_ICON_LABELS = { home:'Home tab', robots:'AI Robots tab, My Products and the robot picture', income:'Rewards tab', share:'Team tab', my:'Me tab', deposit:'Add Funds button (Home)', withdraw:'Cash Out button (Home) and the Cash Outs figure', gift:'Rewards Hub button, gift code and the reward reveal', support:'Support button (Home and Me)', ledger:'Ledger (Me)', team:'My Team (Me)', payout:'Payout Account (Me)', security:'Security (Me)', about:'About Us (Me)', rules:'Terms & Rules (Me)', download:'Download App (Me)', signout:'Sign Out (Me)' };
+const SMARTAI_ICON_BUILTIN = ['home', 'robots', 'income', 'share', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout', 'level1', 'level2', 'level3', 'loader'];
+const SMARTAI_ICON_LABELS = { home:'Home tab', robots:'AI Robots tab, My Products and the robot picture', income:'Rewards tab', share:'Team tab', my:'Me tab', deposit:'Add Funds button (Home)', withdraw:'Cash Out button (Home) and the Cash Outs figure', gift:'Rewards Hub button, gift code and the reward reveal', support:'Support button (Home and Me)', ledger:'Ledger (Me)', team:'My Team (Me)', payout:'Payout Account (Me)', security:'Security (Me)', about:'About Us (Me)', rules:'Terms & Rules (Me)', download:'Download App (Me)', signout:'Sign Out (Me)', level1:'Level 1 medal (Team page)', level2:'Level 2 medal (Team page)', level3:'Level 3 medal (Team page)', loader:'Page loader (the dots)' };
+// The four that are animations (the owner's recordings). A picture uploaded for one stands still in its place; Back to default brings the animation back.
+const SMARTAI_ANIM_KEYS = ['loader', 'level1', 'level2', 'level3'];
 // An uploaded file -> a transparent, tightly cropped PNG data URL (longest side at most `maxDim`).
 function fileToCutoutPng(file, maxDim){
   return new Promise((resolve,reject)=>{
@@ -3164,6 +3166,15 @@ async function renderBanners(){
   const announcementImage = (annr && annr.image) || '';
   const appIconImage = bar.appIcon||'';
   const appIconCustom = !!bar.appIconCustom;
+  // One picture row (thumbnail, status, Remove / Back to default, Upload). The animations say "default animation" because their default is the owner's recording, not a picture.
+  const iconRow = k => { const anim = SMARTAI_ANIM_KEYS.includes(k), custom = !!(cir.icons&&cir.icons[k]); return `
+      <div style="font-weight:700;margin:14px 0 6px">${esc(SMARTAI_ICON_LABELS[k])}</div>
+      <div class="banner-row">
+        ${(cir.icons&&cir.icons[k])?`<img class="img-thumb alpha" style="width:64px;height:64px" src="${esc(cir.icons[k])}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;width:64px;height:64px"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px">${(cir.icons&&cir.icons[k])?'Custom picture':(SMARTAI_ICON_BUILTIN.includes(k)?(anim?'<span class="muted">Default animation</span>':'<span class="muted">Built-in blue picture</span>'):'<span class="muted">Not set</span>')}</div>
+        ${(cir.icons&&cir.icons[k])?`<button class="btn danger sm" id="iconClear_${k}">${anim?'Back to default':'Remove'}</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">${anim?'Upload a picture instead of':'Upload'} ${esc(SMARTAI_ICON_LABELS[k].toLowerCase())}<input type="file" id="iconFile_${k}" accept="image/*" hidden></label>`; };
   $('content').innerHTML = `
     ${pic('authhero')}
     ${pic('authlogo')}
@@ -3238,17 +3249,15 @@ async function renderBanners(){
       <label class="btn block file-btn" style="margin-top:10px">Upload icon<input type="file" id="appIconFile" accept="image/*" hidden></label>
       <p class="muted" style="margin:10px 0 0;font-size:12px">Phones that already installed the app keep the old icon until reinstalled.</p>
     </div>
+    <h2 class="sec">Animations &middot; back to default any time</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The page loader (the dots, shown whenever a page loads or you move between pages) and the three level medals on the Team page are animations. A picture uploaded here stands in place of one of them; <b>Back to default</b> brings the animation back.</p>
+      ${SMARTAI_ANIM_KEYS.map(iconRow).join('')}
+    </div>
     <h2 class="sec">Icons &middot; background removed automatically</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">Upload a picture on any background. The panel takes the background away, trims the picture to its edges and saves it as a transparent PNG; the app then places it with no box around it. Until you upload one, the app shows the built-in blue picture of that slot (Remove brings it back). Best results: the icon on a plain or softly shaded background, at least 256&times;256.</p>
-      ${Object.keys(SMARTAI_ICON_LABELS).map(k=>`
-      <div style="font-weight:700;margin:14px 0 6px">${esc(SMARTAI_ICON_LABELS[k])}</div>
-      <div class="banner-row">
-        ${(cir.icons&&cir.icons[k])?`<img class="img-thumb alpha" style="width:64px;height:64px" src="${esc(cir.icons[k])}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;width:64px;height:64px"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px">${(cir.icons&&cir.icons[k])?'Custom picture':(SMARTAI_ICON_BUILTIN.includes(k)?'<span class="muted">Built-in blue picture</span>':'<span class="muted">Not set</span>')}</div>
-        ${(cir.icons&&cir.icons[k])?`<button class="btn danger sm" id="iconClear_${k}">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload ${esc(SMARTAI_ICON_LABELS[k].toLowerCase())}<input type="file" id="iconFile_${k}" accept="image/*" hidden></label>`).join('')}
+      ${Object.keys(SMARTAI_ICON_LABELS).filter(k=>!SMARTAI_ANIM_KEYS.includes(k)).map(iconRow).join('')}
     </div>
 
   `;

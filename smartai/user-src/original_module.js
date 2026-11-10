@@ -307,7 +307,9 @@ async function _syncArtwork(){
 // The pictures of the app are the owner's built-in icon pack (/icons/<name>.webp); a picture uploaded in Admin > Banners > Icons for the same name replaces it.
 var STATE_ICONS = {};
 function iconUrl(name){ return (STATE_ICONS && STATE_ICONS[name]) || '/icons/' + name + '.webp'; }
+function customIcon(name){ return (STATE_ICONS && STATE_ICONS[name]) || ''; }
 function paintIcons(){
+  paintMedals();
   document.querySelectorAll('img[data-icon]').forEach(function(img){
     var name = img.getAttribute('data-icon'), u = iconUrl(name);
     if (img.getAttribute('src') !== u) {
@@ -336,7 +338,90 @@ function productExpectedReturn(p){ return Number(p && p.expectedReturn) || Math.
 function dailyReturn(p){ return Math.round(productExpectedReturn(p) / productCycle(p)); }
 function ugx(n){ n = Number(n) || 0; var hasCents = Math.round(n * 100) % 100 !== 0; return 'UGX ' + (hasCents ? (Math.round(n * 100) / 100).toFixed(2) : String(Math.round(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]; }); }
-function spinnerHtml(){ return '<div class="cm-spin-wrap"><svg class="cm-spinner" viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2"></circle></svg></div>'; }
+/* ====================== THE OWNER'S ANIMATIONS: dots loader, level medals ======================
+   Dots loader: measured frame by frame from his screen recording (2 s loop). Three rings of four dots. Outer (big) dots turn once round a loop with a pause
+   (DL_THETA = their angle every 20 ms, measured; 81 degrees to start). Middle dots follow 46 degrees behind and breathe: ring and dot size both x(0.8546 + 0.1425 sin(pi t)).
+   Small inner dots turn the other way (90 minus the outer angle). Blue in the app's colour (CSS var --caramel). One shared ticker moves every dots loader and
+   medal that is on screen; with nothing to draw it only looks again four times a second. */
+var DL_THETA = [0.0,0.3,1.4,2.2,2.9,3.5,4.0,4.5,5.1,5.6,6.0,6.4,6.8,7.2,7.5,7.7,8.0,8.2,8.4,8.6,8.7,8.9,8.9,9.0,9.0,9.2,9.4,9.9,10.6,11.5,12.7,14.5,16.8,19.5,22.8,26.8,32.0,38.2,44.9,52.4,61.1,72.0,84.8,98.5,112.0,126.0,140.9,155.7,168.5,179.5,189.7,200.0,210.1,219.3,227.2,234.5,241.9,249.0,255.2,260.6,265.8,271.2,276.5,281.3,285.4,289.2,293.0,296.8,300.5,304.0,307.2,310.3,313.4,316.3,318.9,321.5,324.2,326.8,329.1,331.1,332.9,334.8,336.8,338.8,340.6,342.3,344.0,345.6,347.0,348.3,349.4,350.6,351.8,353.1,354.2,355.3,356.4,357.4,358.4,359.6,360.0];
+function dlTheta(t){
+  var x = (t % 2) / 0.02, i = Math.floor(x), f = x - i;
+  return 81 + DL_THETA[i] + (DL_THETA[i + 1] - DL_THETA[i]) * f;
+}
+// 12 circles [cx, cy, r] at time t (seconds)
+function dlCircles(t){
+  var th = dlTheta(t), s = 0.8546 + 0.1425 * Math.sin(Math.PI * t), out = [], k, a, d2r = Math.PI / 180;
+  for (k = 0; k < 4; k++) { a = (th + 90 * k) * d2r; out.push([224.9 * Math.cos(a), 224.9 * Math.sin(a), 46.88]); }
+  for (k = 0; k < 4; k++) { a = (th - 46 + 90 * k) * d2r; out.push([224.9 * s * Math.cos(a), 224.9 * s * Math.sin(a), 46.88 * s]); }
+  for (k = 0; k < 4; k++) { a = (90 - th + 90 * k) * d2r; out.push([80.9 * Math.cos(a), 80.9 * Math.sin(a), 16.38]); }
+  return out;
+}
+function dlMarkup(){
+  var c = dlCircles((Date.now() % 2000) / 1000), h = '<svg class="dl" viewBox="-280 -280 560 560" aria-hidden="true">', i;
+  for (i = 0; i < c.length; i++) h += '<circle cx="' + c[i][0].toFixed(1) + '" cy="' + c[i][1].toFixed(1) + '" r="' + c[i][2].toFixed(1) + '"></circle>';
+  return h + '</svg>';
+}
+// Admin > Banners > Animations: a picture uploaded for the loader replaces the dots (it turns round); removing it brings the dots back.
+function spinnerHtml(){
+  var custom = customIcon('loader');
+  return '<div class="cm-spin-wrap">' + (custom ? '<img class="dl-custom" src="' + esc(custom) + '" alt="">' : dlMarkup()) + '</div>';
+}
+// Level medals: sprite sheets of 10 columns x 9 rows (128 px cells); MEDAL_TL[level][n] = the cell shown during the n-th thirtieth of a second of the 3 s loop.
+var MEDAL_TL = {1:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,59,60,61,62,63,64,65,65,66,66,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,82,82],2:[0,1,1,2,2,3,4,5,6,7,8,9,10,11,12,13,14,14,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84],3:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89]};
+var _medalReady = {};
+function medalPreload(){
+  [1, 2, 3].forEach(function(n){
+    if (_medalReady[n] !== undefined || customIcon('level' + n)) return;
+    _medalReady[n] = false;
+    var im = new Image();
+    im.onload = function(){ _medalReady[n] = true; paintMedals(); };
+    im.onerror = function(){ _medalReady[n] = undefined; };
+    im.src = '/anim/medal-' + n + '.webp';
+  });
+}
+// A picture uploaded in Admin > Banners > Animations stands still in place of the animated medal; Back to default brings the animation.
+function paintMedals(){
+  document.querySelectorAll('.medal[data-medal]').forEach(function(el){
+    var n = el.getAttribute('data-medal'), custom = customIcon('level' + n);
+    if (custom) { el.classList.add('custom'); el.classList.remove('live'); el.style.backgroundImage = 'url("' + String(custom).replace(/"/g, '%22') + '")'; return; }
+    el.classList.remove('custom'); el.style.backgroundImage = '';
+    el.classList.toggle('live', !!_medalReady[n]);
+    if (_medalReady[n]) medalPose(el, Math.floor((Date.now() % 3000) / (1000 / 30)));   // the right picture at once, not the middle of the sheet for a thirtieth of a second
+  });
+}
+function medalPose(el, tick){
+  var tl = MEDAL_TL[el.getAttribute('data-medal')]; if (!tl) return;
+  var cell = tl[tick % tl.length];
+  el.style.backgroundPosition = ((cell % 10) / 9 * 100).toFixed(3) + '% ' + (Math.floor(cell / 10) / 8 * 100).toFixed(3) + '%';
+}
+var _animLast = -1;
+function animTick(){
+  var dls = document.querySelectorAll('svg.dl'), meds = document.querySelectorAll('.medal.live'), n = dls.length + meds.length;
+  if (n && !document.hidden) {
+    var now = Date.now(), c, i, j, ch;
+    if (dls.length) {
+      c = dlCircles((now % 2000) / 1000);
+      for (i = 0; i < dls.length; i++) { ch = dls[i].children; for (j = 0; j < 12; j++) { ch[j].setAttribute('cx', c[j][0].toFixed(1)); ch[j].setAttribute('cy', c[j][1].toFixed(1)); ch[j].setAttribute('r', c[j][2].toFixed(1)); } }
+    }
+    var tick = Math.floor((now % 3000) / (1000 / 30));
+    if (meds.length && tick !== _animLast) {
+      _animLast = tick;
+      for (i = 0; i < meds.length; i++) medalPose(meds[i], tick);
+    }
+  }
+  if (n) requestAnimationFrame(animTick); else setTimeout(animTick, 250);
+}
+animTick();
+// Every page change shows the dots over a veil in the page colour for a moment; the page is already built underneath. Tests switch it off with window._smartaiNavMs = 0.
+var _navVeilTimer = null, NAV_VEIL_MS = 450;
+function navVeil(over){
+  var ms = window._smartaiNavMs != null ? window._smartaiNavMs : (window._smartaiLoaderMinMs === 0 ? 0 : NAV_VEIL_MS), v = $('navVeil');
+  if (!v || !ms || !STATE || document.hidden) return;
+  clearTimeout(_navVeilTimer);
+  v.className = 'nav-veil on' + (over ? ' over' : '');
+  v.innerHTML = dlMarkup();
+  _navVeilTimer = setTimeout(function(){ v.classList.remove('on'); _navVeilTimer = setTimeout(function(){ if (!v.classList.contains('on')) v.innerHTML = ''; }, 260); }, ms);
+}
 // Same small spinning-arc icon already used on the deposit status screen's
 // Verify Payment button (.verify-spin) -- reused here as one shared helper
 // so every "Please wait…" busy state app-wide (sign in/register, redeem
@@ -625,6 +710,7 @@ function enterApp(){
   renderStaticPages();
   applyBrandName();
   startActivityFeed();
+  setTimeout(medalPreload, 700);
   startAccountPoll();
   updateDownloadTileVisibility();
   syncArtwork();
@@ -1300,6 +1386,7 @@ function renderRecords(){
 // Home starts as the active tab in the markup, so _lastTab is seeded to 'home': that is what makes a Home -> Home tap NOT show the announcement again.
 var _lastTab = 'home';
 function switchTab(name){
+  if (name !== _lastTab || _ovOpen) navVeil(false);
   var enteringHomeFromElsewhere = (name === 'home' && _lastTab !== 'home');
   ['home', 'shop', 'rewards', 'team', 'account'].forEach(function(t){
     var el = $('view' + t.charAt(0).toUpperCase() + t.slice(1));
@@ -1318,6 +1405,7 @@ function switchTab(name){
   hideOverlays(); _ovOpen = false;
   window.scrollTo(0, 0);
   if (STATE && (name === 'rewards' || name === 'team' || name === 'home')) renderAll();
+  if (name === 'team') medalPreload();
   if (name === 'team' && STATE) refreshTeamStats();
   // Coming back to Home from another tab shows the announcement again (its buttons shaking straight away).
   if (enteringHomeFromElsewhere) maybeShowAnnouncement(true);
@@ -1334,6 +1422,7 @@ function hideOverlays(){ document.querySelectorAll('.overlay').forEach(function(
 function openOverlay(name){
   var el = $('ov' + name.charAt(0).toUpperCase() + name.slice(1));
   if (!el) return;
+  navVeil(true);
   hideOverlays();
   el.scrollTop = 0;
   el.classList.add('show');
@@ -1351,12 +1440,13 @@ function openOverlay(name){
 function closeOverlay(){
   if (!_ovOpen) { hideOverlays(); return; }
   _ovOpen = false;
+  navVeil(false);
   hideOverlays();
   try { if (history.state && history.state.ov) history.back(); } catch (e) {}
 }
 window.addEventListener('popstate', function(){
   if (document.querySelector('.modal-bg.show:not(#giftRevealBg)')) closeAllSheets();
-  if (_ovOpen) { _ovOpen = false; hideOverlays(); }
+  if (_ovOpen) { _ovOpen = false; navVeil(false); hideOverlays(); }
 });
 
 /* ====================== PAYOUT ACCOUNT (the mobile-money cards cash-outs are sent to) ====================== */

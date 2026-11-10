@@ -39,4 +39,5 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   // server: the cards read the live team
   ok(/team: \{ l1: n1, l2: n2, l3: n3 \}/.test(server) && /async function wholeTeamStats/.test(server), 'server /team/stats reads live level counts');
   console.log('test-team: ' + n + ' checks passed' + (built ? ' (built)' : ''));
+  process.exit(0);   // the app keeps its animation ticker alive, so the page never lets the process end by itself
 })().catch(e => { console.error(e); process.exit(1); });

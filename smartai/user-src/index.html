@@ -145,16 +145,25 @@
   .verify-spin{display:inline-flex;animation:verifySpin .9s linear infinite;}
   @keyframes verifySpin{to{transform:rotate(360deg);}}
 
-  /* App-wide loading spinner (the ring) — replaces plain "Loading…" text everywhere. */
-  .cm-spin-wrap{display:flex;align-items:center;justify-content:center;padding:40px 0;}
-  .cm-spinner{width:36px;height:36px;color:var(--caramel-deep);animation:cmSpinRotate 1.4s linear infinite;}
-  .cm-spinner circle{stroke:currentColor;stroke-linecap:round;fill:none;stroke-width:3.6;animation:cmSpinDash 1.4s ease-in-out infinite;}
-  @keyframes cmSpinRotate{100%{transform:rotate(360deg);}}
-  @keyframes cmSpinDash{
-    0%{stroke-dasharray:1px,200px;stroke-dashoffset:0px;}
-    50%{stroke-dasharray:100px,200px;stroke-dashoffset:-15px;}
-    100%{stroke-dasharray:100px,200px;stroke-dashoffset:-125px;}
-  }
+  /* App-wide loader = the owner's dots animation, in the app's blue (12 dots, 2 s loop; drawn by dlFrame() in the app). */
+  .cm-spin-wrap{display:flex;align-items:center;justify-content:center;padding:34px 0;}
+  svg.dl{width:72px;height:72px;display:block;}
+  svg.dl circle{fill:var(--caramel);}
+  .dl-custom{width:48px;height:48px;object-fit:contain;animation:verifySpin 1.2s linear infinite;}
+  /* Every page change: the dots over a veil in the page colour for a moment (navVeil() in the app). */
+  .nav-veil{position:fixed;inset:0;background:var(--cream);z-index:39;display:flex;align-items:center;justify-content:center;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .18s ease,visibility 0s .18s;}
+  .nav-veil.on{opacity:1;visibility:visible;transition:none;}
+  .nav-veil.over{z-index:90;}
+  /* Team level medals: the owner's three animations (sprite sheets from /anim/medal-N.webp); the resting picture shows until a sheet has loaded. */
+  .medal{display:block;width:56px;height:56px;margin:0 auto 4px;background:no-repeat center/contain;}
+  .medal[data-medal="1"]{background-image:url(/icons/level1.webp);}
+  .medal[data-medal="2"]{background-image:url(/icons/level2.webp);}
+  .medal[data-medal="3"]{background-image:url(/icons/level3.webp);}
+  .medal.live{background-size:1000% 900%;}
+  .medal.live[data-medal="1"]{background-image:url(/anim/medal-1.webp);}
+  .medal.live[data-medal="2"]{background-image:url(/anim/medal-2.webp);}
+  .medal.live[data-medal="3"]{background-image:url(/anim/medal-3.webp);}
+  .medal.custom{background-size:contain;background-position:center;}
 
   /* ---------- Auth ---------- */
   #authScreen{min-height:100vh;display:flex;flex-direction:column;justify-content:flex-start;padding:32px 26px;background:
@@ -458,12 +467,6 @@
     display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
   .acct-num{font-size:16px;font-weight:800;}
 
-  /* ---------- Team level medal badges ---------- */
-  .team-badge{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-    font-weight:800;font-size:13px;color:#fff;margin:0 auto 8px;}
-  .team-badge-gold{background:linear-gradient(135deg,#F0C550,#C9932A);box-shadow:0 4px 10px -2px rgba(201,147,42,.55);}
-  .team-badge-silver{background:linear-gradient(135deg,#DCE1E6,#9AA3AC);box-shadow:0 4px 10px -2px rgba(154,163,172,.55);}
-  .team-badge-bronze{background:linear-gradient(135deg,#D69A6A,#A9663A);box-shadow:0 4px 10px -2px rgba(169,102,58,.55);}
 
   /* ---------- Shop ribbon badges ---------- */
   .prod-ribbon{position:absolute;top:12px;right:12px;background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;
@@ -932,9 +935,9 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
         <button class="btn btn-primary btn-block" style="margin-top:12px" onclick="shareLink()">Share link</button>
       </div>
       <div class="comm-row">
-        <div class="comm-tile"><div class="team-badge team-badge-gold">1</div><b id="commL1Pct">0%</b><span>LEVEL 1</span></div>
-        <div class="comm-tile"><div class="team-badge team-badge-silver">2</div><b id="commL2Pct">0%</b><span>LEVEL 2</span></div>
-        <div class="comm-tile"><div class="team-badge team-badge-bronze">3</div><b id="commL3Pct">0%</b><span>LEVEL 3</span></div>
+        <div class="comm-tile"><span class="medal" data-medal="1" role="img" aria-label="Level 1"></span><b id="commL1Pct">0%</b><span>LEVEL 1</span></div>
+        <div class="comm-tile"><span class="medal" data-medal="2" role="img" aria-label="Level 2"></span><b id="commL2Pct">0%</b><span>LEVEL 2</span></div>
+        <div class="comm-tile"><span class="medal" data-medal="3" role="img" aria-label="Level 3"></span><b id="commL3Pct">0%</b><span>LEVEL 3</span></div>
       </div>
       <div class="sec-head"><h3>Team overview</h3><button type="button" class="tm-task-link" onclick="openOverlay('taskcenter')">Task Center <span style="font-size:16px;line-height:1">&rsaquo;</span></button></div>
       <div style="padding:0 20px">
@@ -1012,6 +1015,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
     </div>
 
     <!-- TAB BAR -->
+    <div class="nav-veil" id="navVeil" aria-hidden="true"></div>
     <div class="tabbar">
       <button class="tab active" data-tab="home" onclick="switchTab('home')"><span class="ti"><img src="/icons/home.webp" alt="Home" data-icon="home"></span>Home</button>
       <button class="tab" data-tab="shop" onclick="switchTab('shop')"><span class="ti"><img src="/icons/robots.webp" alt="AI Robots" data-icon="robots"></span>AI Robots</button>

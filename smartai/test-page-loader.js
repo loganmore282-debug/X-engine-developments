@@ -24,13 +24,13 @@ if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
 // ---------------------------------------------------------------- 1. the files and the code (no browser)
 const read = f => fs.readFileSync(path.join(__dirname, f), 'utf8');
 const src = read('user-src/original_module.js'), html = read('user-src/index.html');
-ok(/function spinnerHtml\(\)/.test(src) && /\.cm-spinner\{/.test(html) && /@keyframes cmSpinRotate/.test(html), 'the ring loader is in the app (code and styles)');
+ok(/function spinnerHtml\(\)/.test(src) && /svg\.dl\{/.test(html) && /function dlCircles/.test(src) && !/cmSpinRotate/.test(html), 'the dots loader (the owner\'s recording, in blue) is in the app and the ring is gone');
 ok(!/orbHtml|orbTick|orbLoad|orb-free|orb-ld|orb-wrap/.test(src + html), 'the glass-orb page loader is gone from the app (the payment page keeps its own animation)');
 ok(!fs.existsSync(path.join(__dirname, 'user', 'anim', 'orb-free.webp')), 'and its sheet is not shipped any more');
 ok(/showPayOrb/.test(src) && fs.existsSync(path.join(__dirname, 'user', 'anim', 'pay-orb.webp')), 'the payment (polling) page still plays the owner\'s payment animation');
 ok(/function btnBusyHtml\(/.test(src) && /\.verify-spin\{/.test(html), 'a busy BUTTON keeps its own small turning icon');
 ok((src.match(/spinnerHtml\(\)/g) || []).length >= 8, 'every page that waits uses the ring (About Us, Ledger, My Team, Task Center, My Products, Accrued earnings, Payout Account, the robot lists)');
-if (process.argv.includes('--built')) { const built = read('user/index.html'); ok(/\.cm-spinner\{/.test(built) && !/orb-ld/.test(built), 'the built page carries the ring styles'); }
+if (process.argv.includes('--built')) { const built = read('user/index.html'); ok(/svg\.dl\{/.test(built) && !/orb-ld/.test(built), 'the built page carries the dots loader styles'); }
 
 // ---------------------------------------------------------------- 2. the real app
 const userDir = path.join(__dirname, 'user');
@@ -69,7 +69,7 @@ const front = http.createServer((req, res) => {
   await until(() => document.getElementById('announcementBg').classList.contains('show'), null, 6000).catch(() => {});
   await ev(() => { try { dismissAnnouncement(); } catch (e) {} try { dismissInstallSheet(); } catch (e) {} });
   await sleep(400);
-  ok(await ev(() => !document.querySelector('.cm-spinner')), 'with nothing loading there is no loader');
+  ok(await ev(() => !document.querySelector('svg.dl')), 'with nothing loading there is no loader');
 
   await ev(() => stopAccountPoll());   // the app's own 8 s refresh would otherwise fill the lists in the middle of a step (a race only seen when the machine is busy)
   // hold back one kind of request until told to go on (or answer it with an error)
@@ -87,9 +87,9 @@ const front = http.createServer((req, res) => {
     held[pattern] = h; return h;
   }
   // what the loader in a box looks like, read from the page itself
-  const look = sel => ev(s => { const box = document.querySelector(s); if (!box) return null; const r = box.querySelector('.cm-spinner'); if (!r) return { canvas: false }; const b = r.getBoundingClientRect(); return { canvas: true, shown: b.width > 0 && !!r.offsetParent, w: Math.round(b.width), h: Math.round(b.height) }; }, sel);
+  const look = sel => ev(s => { const box = document.querySelector(s); if (!box) return null; const r = box.querySelector('svg.dl'); if (!r) return { canvas: false }; const b = r.getBoundingClientRect(); return { canvas: true, shown: b.width > 0 && !!r.offsetParent, w: Math.round(b.width), h: Math.round(b.height) }; }, sel);
   async function waitLoader(sel, what) {
-    const got = await until(s => { const b = document.querySelector(s), c = b && b.querySelector('.cm-spinner'); return !!(c && c.getBoundingClientRect().width > 0); }, sel, 6000);
+    const got = await until(s => { const b = document.querySelector(s), c = b && b.querySelector('svg.dl'); return !!(c && c.getBoundingClientRect().width > 0); }, sel, 6000);
     ok(got, what + ': the ring shows while it waits');
     return look(sel);
   }
@@ -105,7 +105,7 @@ const front = http.createServer((req, res) => {
   await animates('#aboutBody', 'About Us');
   await shot('about-us-loading');
   hAbout.release();
-  ok(await until(() => /About this app/.test(document.getElementById('aboutBody').textContent) && !document.querySelector('#aboutBody .cm-spinner'), null, 6000), 'About Us: the page replaces the ring when it arrives');
+  ok(await until(() => /About this app/.test(document.getElementById('aboutBody').textContent) && !document.querySelector('#aboutBody svg.dl'), null, 6000), 'About Us: the page replaces the ring when it arrives');
   await ev(() => closeOverlay());
 
   // ---- Ledger: Topups and Cash Outs (and what happens when the list cannot be read)
@@ -118,11 +118,11 @@ const front = http.createServer((req, res) => {
   hDep.hold(); await ev(() => document.querySelector('#recordsList button').click());
   await waitLoader('#recordsList', 'Ledger, Topups, after Try again');
   hDep.release();
-  ok(await until(() => /No top-ups yet|Mobile-money top-up/.test(document.getElementById('recordsList').textContent) && !document.querySelector('#recordsList .cm-spinner'), null, 6000), 'Ledger, Topups: the list replaces the ring');
+  ok(await until(() => /No top-ups yet|Mobile-money top-up/.test(document.getElementById('recordsList').textContent) && !document.querySelector('#recordsList svg.dl'), null, 6000), 'Ledger, Topups: the list replaces the ring');
   await ev(() => setRecordsTab('cashouts'));
   await checkFree('#recordsList', 'Ledger, Cash Outs');
   hWit.release();
-  ok(await until(() => /No cash-outs yet|Cash out/.test(document.getElementById('recordsList').textContent) && !document.querySelector('#recordsList .cm-spinner'), null, 6000), 'Ledger, Cash Outs: the list replaces the ring');
+  ok(await until(() => /No cash-outs yet|Cash out/.test(document.getElementById('recordsList').textContent) && !document.querySelector('#recordsList svg.dl'), null, 6000), 'Ledger, Cash Outs: the list replaces the ring');
   await ev(() => closeOverlay());
 
   // ---- My Team: a level's members
@@ -131,7 +131,7 @@ const front = http.createServer((req, res) => {
   await ev(() => { openTeamLevel(1); });   // not awaited: the page is waiting for the held request, and so would the test
   await checkFree('#teamLevelList', 'My Team'); await shot('my-team-loading');
   hTeam.release();
-  ok(await until(() => /No Level 1 members yet|member/.test(document.getElementById('teamLevelList').textContent) && !document.querySelector('#teamLevelList .cm-spinner'), null, 6000), 'My Team: the list replaces the ring');
+  ok(await until(() => /No Level 1 members yet|member/.test(document.getElementById('teamLevelList').textContent) && !document.querySelector('#teamLevelList svg.dl'), null, 6000), 'My Team: the list replaces the ring');
   await ev(() => closeOverlay());
 
   // ---- Task Center
@@ -139,7 +139,7 @@ const front = http.createServer((req, res) => {
   await ev(() => switchTab('rewards')); await ev(() => openOverlay('taskcenter'));
   await checkFree('#taskCenterList', 'Task Center');
   hTask.release();
-  ok(await until(() => !!document.querySelector('#taskCenterList .tk-card, #taskCenterList .empty, #taskCenterList [class*=tk]') && !document.querySelector('#taskCenterList .cm-spinner'), null, 6000), 'Task Center: the tiers replace the ring');
+  ok(await until(() => !!document.querySelector('#taskCenterList .tk-card, #taskCenterList .empty, #taskCenterList [class*=tk]') && !document.querySelector('#taskCenterList svg.dl'), null, 6000), 'Task Center: the tiers replace the ring');
   await ev(() => closeOverlay());
 
   // ---- My Products, Accrued earnings, Payout Account, Ledger Accrued: while the phone has not yet been given the list
@@ -151,33 +151,33 @@ const front = http.createServer((req, res) => {
   await checkFree('#mychocList', 'My Products'); await shot('my-products-loading');
   ok(!await ev(() => /No AI robots running yet/.test(document.getElementById('mychocList').textContent)), 'My Products: while the list has not arrived it does not claim "none yet"');
   for (const hh of [hInv, hBank, hTx, hAcc]) hh.release();
-  ok(await until(() => /No AI robots running yet/.test(document.getElementById('mychocList').textContent) && !document.querySelector('#mychocList .cm-spinner'), null, 6000), 'My Products: the real answer replaces the ring');
+  ok(await until(() => /No AI robots running yet/.test(document.getElementById('mychocList').textContent) && !document.querySelector('#mychocList svg.dl'), null, 6000), 'My Products: the real answer replaces the ring');
   await ev(() => closeOverlay());
   for (const hh of [hInv, hBank, hTx, hAcc]) hh.hold();
   await forget();
   await ev(() => openOverlay('bindbank'));
   await checkFree('#bankList', 'Payout Account'); await shot('payout-account-loading');
   for (const hh of [hInv, hBank, hTx, hAcc]) hh.release();
-  ok(await until(() => /No accounts bound yet/.test(document.getElementById('bankList').textContent) && !document.querySelector('#bankList .cm-spinner'), null, 6000), 'Payout Account: the real answer replaces the ring');
+  ok(await until(() => /No accounts bound yet/.test(document.getElementById('bankList').textContent) && !document.querySelector('#bankList svg.dl'), null, 6000), 'Payout Account: the real answer replaces the ring');
   await ev(() => closeOverlay());
   for (const hh of [hInv, hBank, hTx, hAcc]) hh.hold();
   await forget();
   await ev(() => openOverlay('earnings'));
   await checkFree('#earningsList', 'Accrued earnings');
   for (const hh of [hInv, hBank, hTx, hAcc]) hh.release();
-  ok(await until(() => /No AI robots running yet/.test(document.getElementById('earningsList').textContent) && !document.querySelector('#earningsList .cm-spinner'), null, 6000), 'Accrued earnings: the real answer replaces the ring');
+  ok(await until(() => /No AI robots running yet/.test(document.getElementById('earningsList').textContent) && !document.querySelector('#earningsList svg.dl'), null, 6000), 'Accrued earnings: the real answer replaces the ring');
   await ev(() => closeOverlay());
   for (const hh of [hInv, hBank, hTx, hAcc]) hh.hold();
   await forget();
   await ev(() => { openOverlay('records'); setRecordsTab('accrued'); });
   await checkFree('#recordsList', 'Ledger, Accrued');
   for (const hh of [hInv, hBank, hTx, hAcc]) hh.release();
-  ok(await until(() => !document.querySelector('#recordsList .cm-spinner') && /accrued|Completed/i.test(document.getElementById('recordsList').textContent), null, 6000), 'Ledger, Accrued: the real answer replaces the ring');
+  ok(await until(() => !document.querySelector('#recordsList svg.dl') && /accrued|Completed/i.test(document.getElementById('recordsList').textContent), null, 6000), 'Ledger, Accrued: the real answer replaces the ring');
   await ev(() => closeOverlay());
   // a member who HAS the list sees it at once, never a loader
   await ev(() => { STATE.ok = { inv: false, bank: false, tx: false }; STATE.bankAccounts = [{ id: 'b1', holder: 'Test Holder', network: 'MTN Mobile Money', phone: '+256771234567', isDefault: true }]; });
   await ev(() => openOverlay('bindbank'));
-  ok(await ev(() => !document.querySelector('#bankList .cm-spinner') && /Test Holder/.test(document.getElementById('bankList').textContent)), 'Payout Account: a phone that already holds the cards shows them at once, with no loader');
+  ok(await ev(() => !document.querySelector('#bankList svg.dl') && /Test Holder/.test(document.getElementById('bankList').textContent)), 'Payout Account: a phone that already holds the cards shows them at once, with no loader');
   await ev(() => closeOverlay());
   // the page must say so when the lists cannot be read at all
   hInv.fail(); hBank.fail(); hTx.fail(); hAcc.fail();
@@ -191,13 +191,13 @@ const front = http.createServer((req, res) => {
 
   // ---- the robot lists (AI Robots and Home) before the first list has come
   await ev(() => { window.__products = PRODUCTS; PRODUCTS = []; _productsOk = false; renderShop(); renderFeatured(); });
-  ok(await ev(() => !!document.querySelector('#shopGrid .cm-spinner') && !!document.querySelector('#featStrip .cm-spinner') && !/No AI robots yet/.test(document.getElementById('shopGrid').textContent)), 'AI Robots and Home: the ring stands in until the robot list has come (never "no robots")');
+  ok(await ev(() => !!document.querySelector('#shopGrid svg.dl') && !!document.querySelector('#featStrip svg.dl') && !/No AI robots yet/.test(document.getElementById('shopGrid').textContent)), 'AI Robots and Home: the ring stands in until the robot list has come (never "no robots")');
   await ev(() => { PRODUCTS = window.__products; _productsOk = true; renderShop(); renderFeatured(); });
-  ok(await ev(() => !document.querySelector('#shopGrid .cm-spinner') && document.querySelectorAll('#shopGrid .prod-card').length > 0), 'AI Robots: the robots replace the ring');
+  ok(await ev(() => !document.querySelector('#shopGrid svg.dl') && document.querySelectorAll('#shopGrid .prod-card').length > 0), 'AI Robots: the robots replace the ring');
 
   // ---- all gone: nothing is left turning, the timer sleeps
   await sleep(300);
-  ok(await ev(() => !document.querySelector('.cm-spinner') && !document.querySelector('.cm-spinner, .cm-spin-wrap')), 'when every page has its content there is no loader and no ring anywhere');
+  ok(await ev(() => !document.querySelector('svg.dl') && !document.querySelector('svg.dl, .cm-spin-wrap')), 'when every page has its content there is no loader and no ring anywhere');
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
   ok(serverErrors.length === 0, 'no server errors' + (serverErrors.length ? ': ' + serverErrors.slice(0, 2).join(' | ') : ''));
   await browser.close(); front.close();

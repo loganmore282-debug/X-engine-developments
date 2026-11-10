@@ -14,8 +14,8 @@ const list = (text, re) => (text.match(re) || [, ''])[1].split(',').map(s => s.t
 const serverSlots = list(server, /const SMARTAI_ICON_SLOTS = \[([^\]]*)\]/);
 const adminBuiltin = list(admin, /const SMARTAI_ICON_BUILTIN = \[([^\]]*)\]/);
 const labelBlock = (admin.match(/const SMARTAI_ICON_LABELS = \{([\s\S]*?)\};/) || [, ''])[1];
-const adminLabels = [...labelBlock.matchAll(/(?:^|[,{\s])([a-z]+):\s*'/g)].map(m => m[1]);
-ok(serverSlots.length === 17 && new Set(serverSlots).size === 17, 'the server knows 17 icon slots (' + serverSlots.length + ')');
+const adminLabels = [...labelBlock.matchAll(/(?:^|[,{\s])([a-z0-9]+):\s*'/g)].map(m => m[1]);
+ok(serverSlots.length === 21 && new Set(serverSlots).size === 21, 'the server knows 21 icon slots (17 pictures + the loader and 3 medals) (' + serverSlots.length + ')');
 ok(JSON.stringify(serverSlots) === JSON.stringify(adminBuiltin), 'the admin panel lists the same slots, in the same order, as having a built-in picture');
 ok(serverSlots.every(s => adminLabels.includes(s)) && adminLabels.length === serverSlots.length, 'and gives every slot a plain label (' + adminLabels.length + ')');
 ok(/Icons must be PNG pictures with a transparent background/.test(server), 'the server takes only PNG pictures for an icon slot');
@@ -74,7 +74,7 @@ const used = new Set([...(css + src).matchAll(/data-icon=\\?["']([a-z]+)\\?["']/
 ok(used.size >= 14 && [...used].every(u => serverSlots.includes(u)), 'every data-icon in the app names a real slot (' + used.size + ' used)' + ([...used].filter(u => !serverSlots.includes(u)).join(',')));
 const mapNames = [...src.matchAll(/\['[A-Za-z]+Banner(?:Art)?', [^,]*, '([a-z]+)'\]/g)].map(m => m[1]);
 ok(mapNames.length >= 9 && mapNames.every(u => serverSlots.includes(u)), 'every art banner uses a real slot (' + mapNames.length + ' banners)');
-ok(!/STATE_ICONS\[/.test(src.replace(/function iconUrl[^\n]*\n/, '')), 'nothing reads the uploaded icons directly (all go through iconUrl)');
+ok(!/STATE_ICONS\[/.test(src.replace(/function (?:iconUrl|customIcon)[^\n]*\n/g, '')), 'nothing reads the uploaded icons directly (all go through iconUrl)');
 const imgs = [...css.matchAll(/<img[^>]*data-icon="([a-z]+)"[^>]*>/g)];
 ok(imgs.length >= 20 && imgs.every(m => !/\ssrc="/.test(m[0]) || new RegExp('src="/icons/' + m[1] + '\\.webp"').test(m[0])), 'each picture in the page starts with its own built-in file, so it shows on the first frame (' + imgs.length + ' pictures)');
 
