@@ -13,7 +13,7 @@ var DEFAULT_SETTINGS = {
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   salaryTiers: [], depositMethodNames: '', brandName: '', shareMessage: 'Join me on {app}', shareDomain: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', whatsappGroup: '', whatsappContact: '',
-  rulesText: '', homeBannerTitle: '', homeBannerText: '', giftCodeHint: 'Enter gift code'
+  rulesText: '', homeBannerTitle: '', homeBannerText: '', myBannerOpacity: 100, myBannerBlur: 0, giftCodeHint: 'Enter gift code'
 };
 var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
 // Filled by syncPublicConfig() from the admin's products; the last copy this device saw is read first so the very first paint is already right.
@@ -256,6 +256,7 @@ async function syncPublicConfig(){
     if (r && r.status === 'success' && r.settings) {
       try { localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(r.settings)); } catch (e) {}
       applyBrandName();
+      paintMeLook();
     }
   }).catch(function(){}));
   jobs.push(api('/public/products').then(function(r2){
@@ -858,6 +859,16 @@ function artHtml(url, icon){
 function artFillHtml(icon){
   return '<div class="art-fill"><span class="art-ring r1"></span><span class="art-ring r2"></span><span class="art-ring r3"></span><img class="art-bot" data-icon="' + icon + '" src="' + iconUrl(icon) + '" alt=""></div>';
 }
+// Me page picture: the owner's own opacity (0-100) and blur (0-40 px), from Admin > Settings. A little zoom hides the soft edges blur leaves.
+function paintMeLook(){
+  var mb = $('accountBanner'), mp = mb && mb.querySelector('img.art-photo');
+  if (!mp) return;
+  var sett = getSettings(), mo = Number(sett.myBannerOpacity), mbl = Number(sett.myBannerBlur);
+  mo = isFinite(mo) ? Math.max(0, Math.min(100, mo)) : 100; mbl = isFinite(mbl) ? Math.max(0, Math.min(40, mbl)) : 0;
+  mp.style.opacity = String(mo / 100);
+  mp.style.filter = mbl > 0 ? 'blur(' + mbl + 'px)' : '';
+  mp.style.transform = mbl > 0 ? 'scale(' + (1 + mbl / 100).toFixed(3) + ')' : '';
+}
 function paintArt(){
   var sett = getSettings();
   var map = [
@@ -866,6 +877,7 @@ function paintArt(){
     ['accountBanner', ART.mybanner, 'my'], ['rewardsBanner', ART.promobanner, 'gift'], ['recordsBanner', ART.recordsbanner, 'ledger'], ['teamBanner', ART.teambanner, 'share']
   ];
   map.forEach(function(m){ var el = $(m[0]); if (el) el.innerHTML = artHtml(m[1], m[2]); });
+  paintMeLook();
   var hb = $('homeBanner');
   if (hb) {
     var t = (sett.homeBannerTitle || '').trim(), x = (sett.homeBannerText || '').trim();

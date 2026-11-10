@@ -36,7 +36,7 @@ files or run quick-update.sh by hand: a push to `claude/smartai-build` deploys b
   `npm run test:audit` (wait for exit 0, run it in the background and read the `EXIT` line; the chain stops at the first failing test), commit, push
   to **`claude/smartai-build`**. `npm install --include=dev` for the dev tools.
 - `node set-brand.js "Name"` renames the app everywhere again (files must be git-tracked).
-- **`npm run test:audit` is the whole suite** (79 commands). The sixteen old test files of other apps that failed the same way
+- **`npm run test:audit` is the whole suite** (80 commands). The sixteen old test files of other apps that failed the same way
   in Potato (Kenya regions, Snow branding, `render.yaml`, ...) were deleted on 2026-11-09 together with `design-ref/` (Potato's screen pictures, 9.6 MB), `static-server.js`,
   `set-backend-url.js`, `deploy/deploy.sh` (an old rsync deploy to `/srv/smartai`, not the VPS layout), `translate-*` and `captcha.js`: nothing used them.
 - The app icons (`user/` and `admin/` `icon-192.png`, `icon-512.png`) and `user/link-preview.jpg` are PLACEHOLDERS (blue "SA" ring) until the owner sends the logo.
@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v12`, admin `admin/sw.js` `smartai-admin-shell-v7`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v13`, admin `admin/sw.js` `smartai-admin-shell-v8`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -385,3 +385,8 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
   sends one, so saving a product from its editor never moves it.
 - App: `CATEGORIES` (cached in localStorage `smartai_categories_cache`), `renderShopTabs()`, `selectShopCat()`, `_shopCat`; `renderShop()` filters by it and keeps each robot's own "Robot N" number.
 - Admin > Products: a **Categories** card on top (add, rename in place, up / down arrows, Remove with a question) and, once a category exists, a category box on every product card. Test `test-categories.js` (47 checks).
+
+## Me page picture: opacity and blur (owner: "edit the opacity and blur of the background image on the Me page")
+- Admin > Settings > "Me page picture": **Opacity** 0–100 (default 100) and **Blur** 0–40 (default 0). Saved as `myBannerOpacity` / `myBannerBlur` (server `DEFAULT_SETTINGS`, `SETTINGS_CRITICAL_RANGES` refuses anything outside the range and rounds fractions; they reach the app through `/public/settings`).
+- The app applies them in `paintMeLook()` (called from `paintArt()` and right after the settings are fetched) to `#accountBanner img.art-photo` only: opacity = value/100, `filter: blur(Npx)` with a small `scale()` so blur leaves no soft edge. They act on the uploaded Me page picture; the blue art underneath is untouched. An empty Opacity box means 100, never invisible.
+- Computed `transform` reads `none` while the Me tab is hidden (no box), so tests must open the Me tab before checking it. Test: `test-me-banner-look.js` (in the audit, now 80 commands).
