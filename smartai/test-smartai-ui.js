@@ -86,7 +86,7 @@ ok(/position:fixed/.test(ovRule) && /inset:0/.test(ovRule) && /overflow-y:auto/.
 ok(/\.modal-bg\{[^}]*position:fixed;inset:0/.test(html), 'dialogs cover the whole phone');
 ok(/\.ov-top\{[^}]*position:sticky;top:0/.test(html), 'a page\'s title bar stays at the top while it scrolls');
 ok(/<meta name="viewport" content="[^"]*width=device-width[^"]*"/.test(html) && /viewport-fit=cover/.test(html), 'the page fits the phone width and the notch');
-ok(/padding-bottom:calc\(86px \+ env\(safe-area-inset-bottom/.test(html), 'the last card of a tab ends above the bottom bar');
+ok(/padding-bottom:calc\(66px \+ env\(safe-area-inset-bottom/.test(html), 'the last card of a tab ends above the bottom bar');
 
 // ---- money, the way a member reads it ----
 const ugxSrc = (mod.match(/function ugx\(n\)\{[^\n]*\}/) || [''])[0];
