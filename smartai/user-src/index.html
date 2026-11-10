@@ -319,7 +319,11 @@
   .overlay.show{display:block;}
   /* A page has no title bar and no line: the picture of the page runs to the very top and the back arrow floats on it in a dark see-through circle. A page without a picture keeps a clear space for the arrow. */
   .ov-top{position:sticky;top:0;height:0;z-index:6;}
-  .overlay:not(:has(.photo-banner)) .ov-top{height:68px;}
+  /* A page WITHOUT a picture gets a blue curved header: the arrow and the page name sit in it (pages with a picture have neither title nor header). */
+  .ov-title{display:none;}
+  .overlay:not(:has(.photo-banner)) .ov-top{height:calc(70px + env(safe-area-inset-top,0px));background:radial-gradient(circle at 88% 20%,rgba(255,255,255,.16) 0,rgba(255,255,255,0) 38%),radial-gradient(circle at 8% 110%,rgba(255,255,255,.14) 0,rgba(255,255,255,0) 44%),linear-gradient(135deg,#2b88f3,#0a4fc6);border-radius:0 0 28px 28px;box-shadow:0 12px 26px -16px rgba(11,42,91,.6);margin-bottom:12px;}
+  .overlay:not(:has(.photo-banner)) .ov-title{display:block;position:absolute;left:calc(var(--gut) + 56px);right:var(--gut);top:calc(env(safe-area-inset-top,0px) + 14px);line-height:42px;color:#fff;font-size:18px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .overlay:not(:has(.photo-banner)) .ov-back{background:rgba(255,255,255,.2);}
   .ov-back{position:absolute;top:calc(env(safe-area-inset-top,0px) + 14px);left:var(--gut);width:42px;height:42px;border-radius:50%;background:rgba(8,20,45,.5);color:#fff;border:none;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;}
   .overlay .photo-banner,.overlay .photo-banner.pb-sm,.overlay #aboutBanner{margin:0 0 16px;height:176px;border-radius:0;box-shadow:none;}
   /* the Me page's white flow: the bottom of every page picture melts into the page */
@@ -1148,7 +1152,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
 
   <!-- OVERLAYS -->
   <div class="overlay" id="ovTeamlevel">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title" id="teamLevelTitle">Level 1 members</div></div>
     <div style="padding:6px var(--gut) 20px" id="teamLevelList"></div>
   </div>
 
@@ -1192,7 +1196,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   </div>
 
   <div class="overlay" id="ovDepositStatus">
-    <div class="ov-top"><button class="ov-back" onclick="cancelDepositStatus()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button></div>
+    <div class="ov-top"><button class="ov-back" onclick="cancelDepositStatus()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Add Funds</div></div>
     <div class="pay-status-card">
       <div class="pay-status-ic" id="depStatusIc"></div>
       <h3 id="depStatusTitle">Payment Initiated Successfully!</h3>
@@ -1254,7 +1258,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   </div>
 
   <div class="overlay" id="ovRules">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Terms &amp; Rules</div></div>
     <div style="padding:16px var(--gut) 20px;font-size:13.5px;line-height:1.7;color:var(--cocoa-soft)" id="rulesBody"><div class="empty">Nothing published yet.</div></div>
   </div>
 
@@ -1297,7 +1301,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   </div>
 
   <div class="overlay" id="ovChangepass">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Security</div></div>
     <div class="info-box">Enter your current password once, then choose a new one. You will sign in again afterwards.</div>
     <div class="form-card">
       <span class="flabel">Current password</span>
@@ -1311,19 +1315,19 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   </div>
 
   <div class="overlay" id="ovMychoc">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">My machines</div></div>
     <div class="info-box">Every AI robot you own, running until it matures.</div>
     <div id="mychocList" style="padding:0 var(--gut)"></div>
   </div>
 
   <div class="overlay" id="ovEarnings">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Accrued Earnings</div></div>
     <div class="cards" style="margin:16px var(--gut)"><div class="stat"><div class="n" style="color:var(--mint)" id="earningsTotal">UGX 0</div><div class="l">Total accrued so far</div></div></div>
     <div id="earningsList" style="padding:0 var(--gut)"></div>
   </div>
 
   <div class="overlay" id="ovTaskcenter">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Task Center</div></div>
     <p class="tk-lead">Your team&rsquo;s purchases (all 3 levels) unlock rewards. Each reward can be claimed once.</p>
     <div id="taskCenterList"></div>
     <div style="height:14px"></div>

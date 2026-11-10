@@ -24,7 +24,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   w.api = async p => { calls.push(p); return mode === 'ok' ? { status: 'success', members: people } : { status: 'error', message: 'Could not load your team' }; };
   const list = () => d.getElementById('teamLevelList').textContent.replace(/\s+/g, ' ').trim();
   await w.openTeamLevel(1);
-  ok(calls[0] === '/team/members?level=1' && /^Level 1 \u00b7 1 member/.test(list()), 'opening a level asks the server for that level');
+  ok(calls[0] === '/team/members?level=1' && d.getElementById('teamLevelTitle').textContent === 'Level 1 members', 'opening a level asks the server for that level');
   ok(/1 member/.test(list()) && /077\*{4}567/.test(list()) && /UGX 30,000/.test(list()), 'a member shows the hidden number and what they invested: ' + list());
   // a second member joins: opening again asks again
   people = people.concat([{ id: 'b', phone: '0779999999', phoneMasked: '077****999', invested: 0, createdAt: null }]);
