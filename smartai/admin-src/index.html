@@ -632,10 +632,10 @@ function smartaiCutout(src, w, h){
 }
 // The icon slots (same names as SMARTAI_ICON_SLOTS in server.js). Add a name here AND in server.js to get a new upload box.
 // Slots that already have a built-in blue picture in the app (user/icons/); an upload here replaces it, Remove brings it back.
-const SMARTAI_ICON_BUILTIN = ['home', 'robots', 'income', 'share', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout', 'level1', 'level2', 'level3', 'loader'];
-const SMARTAI_ICON_LABELS = { home:'Home tab', robots:'AI Robots tab, My Products and the robot picture', income:'Rewards tab', share:'Team tab', my:'Me tab', deposit:'Add Funds button (Home)', withdraw:'Cash Out button (Home) and the Cash Outs figure', gift:'Rewards Hub button, gift code and the reward reveal', support:'Support button (Home and Me)', ledger:'Ledger (Me)', team:'My Team (Me)', payout:'Payout Account (Me)', security:'Security (Me)', about:'About Us (Me)', rules:'Terms & Rules (Me)', download:'Download App (Me)', signout:'Sign Out (Me)', level1:'Level 1 medal (Team page)', level2:'Level 2 medal (Team page)', level3:'Level 3 medal (Team page)', loader:'Page loader (the dots)' };
+const SMARTAI_ICON_BUILTIN = ['home', 'robots', 'income', 'share', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout', 'level1', 'level2', 'level3', 'loader', 'giftbox', 'giftopen', 'tick', 'cross'];
+const SMARTAI_ICON_LABELS = { home:'Home tab', robots:'AI Robots tab, My Products and the robot picture', income:'Rewards tab', share:'Team tab', my:'Me tab', deposit:'Add Funds button (Home)', withdraw:'Cash Out button (Home) and the Cash Outs figure', gift:'Rewards Hub button, gift code and the reward reveal', support:'Support button (Home and Me)', ledger:'Ledger (Me)', team:'My Team (Me)', payout:'Payout Account (Me)', security:'Security (Me)', about:'About Us (Me)', rules:'Terms & Rules (Me)', download:'Download App (Me)', signout:'Sign Out (Me)', level1:'Level 1 medal (Team page)', level2:'Level 2 medal (Team page)', level3:'Level 3 medal (Team page)', loader:'Page loader (the dots)', giftbox:'Gift box (Rewards page)', giftopen:'Opened gift with coins (when a code is redeemed)', tick:'Payment success tick', cross:'Payment failed cross' };
 // The four that are animations (the owner's recordings). A picture uploaded for one stands still in its place; Back to default brings the animation back.
-const SMARTAI_ANIM_KEYS = ['loader', 'level1', 'level2', 'level3'];
+const SMARTAI_ANIM_KEYS = ['loader', 'level1', 'level2', 'level3', 'giftbox', 'giftopen', 'tick', 'cross'];
 // An uploaded file -> a transparent, tightly cropped PNG data URL (longest side at most `maxDim`).
 function fileToCutoutPng(file, maxDim){
   return new Promise((resolve,reject)=>{
@@ -3251,7 +3251,7 @@ async function renderBanners(){
     </div>
     <h2 class="sec">Animations &middot; back to default any time</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The page loader (the dots, shown whenever a page loads or you move between pages) and the three level medals on the Team page are animations. A picture uploaded here stands in place of one of them; <b>Back to default</b> brings the animation back.</p>
+      <p class="muted" style="margin-top:0">The page loader (the dots), the three level medals on the Team page, the gift box and the opened gift on the Rewards page, and the payment success tick and failed cross are animations. A picture uploaded here stands in place of one of them; <b>Back to default</b> brings the animation back.</p>
       ${SMARTAI_ANIM_KEYS.map(iconRow).join('')}
     </div>
     <h2 class="sec">Icons &middot; background removed automatically</h2>

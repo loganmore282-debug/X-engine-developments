@@ -131,7 +131,7 @@ async function member(ref) {
   const code = gen.j.code; const bal0 = await ev(() => STATE.balance);
   await page.fill('#giftCodeInput', code); await page.click('#redeemBtn');
   ok(await until(() => document.getElementById('giftRevealBg').classList.contains('show'), null, 8000), 'a right gift code opens the reveal');
-  await sleep(1300);
+  await until(() => /3,000/.test(document.getElementById('giftRevealAmount').textContent), null, 8000);   // the gift spins about a second, then bursts and the figure counts up
   ok(/3,000/.test(await ev(() => document.getElementById('giftRevealAmount').textContent)) && await ev(() => STATE.balance) === bal0 + 3000, 'the reveal counts up to the real reward and the wallet has it');
   await ev(() => closeGiftReveal());
   await page.fill('#giftCodeInput', code); await page.click('#redeemBtn'); await sleep(1200);
@@ -196,7 +196,7 @@ async function member(ref) {
   const shots = []; for (let i = 0; i < 5; i++) { shots.push(await ev(() => document.getElementById('payOrbCv').toDataURL())); await sleep(130); }
   ok(new Set(shots).size >= 3 && shots.every(u => u.length > 3000), 'the orb is moving (the canvas changes from one look to the next)');
   await ev(() => showDepositSuccess()); await sleep(200);
-  ok(await ev(() => document.getElementById('depStatusIc').className === 'pay-status-ic' && !document.getElementById('payOrbCv') && /M5 12\.5l4\.5 4\.5L19 7/.test(document.getElementById('depStatusIc').innerHTML)), 'once the payment is confirmed the orb gives way to the green tick');
+  ok(await ev(() => document.getElementById('depStatusIc').className === 'pay-status-ic anim' && !document.getElementById('payOrbCv') && /ok-check/.test(document.getElementById('depStatusIc').innerHTML)), 'once the payment is confirmed the orb gives way to the green tick (the owner\'s animated tick)');
   ok(await ev(() => _payOrbRaf === 0), 'and the animation stops running');
   await ev(() => { stopDepositPoll(); closeOverlay(); }); await sleep(200);
 

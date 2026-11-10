@@ -335,7 +335,7 @@
 
   .photo-banner.pb-sm{height:110px;}
   .photo-banner.pb-hero{height:120px;margin:10px 20px;}
-  .photo-banner.pb-full{height:240px;}
+  .photo-banner.pb-full{height:150px;}
   /* No box-shadow here on purpose — a drop shadow draws its own hard
      rectangular edge right along the container's bottom regardless of
      overflow:hidden or how soft the ::after fade below is, which is what
@@ -523,7 +523,6 @@
   .howto-step p{font-size:12.5px;line-height:1.5;color:var(--cocoa-soft);padding-top:2px;}
   .howto-step b{color:var(--cocoa);}
 
-  .checkin-wrap{padding:16px 24px;text-align:center;}
   .checkin-ring{width:132px;height:132px;border-radius:50%;margin:12px auto;background:conic-gradient(var(--caramel) var(--pct,0%), var(--cream-deep) 0);
     display:flex;align-items:center;justify-content:center;position:relative;}
   .checkin-ring::before{content:"";position:absolute;inset:8px;border-radius:50%;background:var(--cream);}
@@ -558,25 +557,6 @@
      counts up from 0 (driven by showGiftReveal() in JS) instead of just
      appearing, so claiming a code feels like a live reveal rather than a
      static toast. A real device vibration fires alongside it too. */
-  .gift-reveal-stage{position:relative;width:180px;height:180px;margin:4px auto 6px;display:flex;align-items:center;justify-content:center;}
-  .gift-reveal-glow{position:absolute;inset:0;border-radius:50%;
-    background:radial-gradient(circle, rgba(255,205,90,.85) 0%, rgba(255,205,90,.4) 40%, rgba(255,205,90,0) 72%);
-    animation:giftGlowBurst .5s ease-out both, giftGlowPulse 1s ease-in-out .5s infinite;}
-  @keyframes giftGlowBurst{0%{transform:scale(0);opacity:0;}100%{transform:scale(1);opacity:1;}}
-  @keyframes giftGlowPulse{0%,100%{transform:scale(.85);opacity:.55;}50%{transform:scale(1.15);opacity:1;}}
-  .gift-reveal-chest{position:relative;width:150px;height:150px;object-fit:contain;filter:drop-shadow(0 10px 18px rgba(180,120,20,.45));
-    animation:giftChestPop .5s cubic-bezier(.34,1.56,.64,1) both, giftChestShake .35s ease-in-out .5s infinite;}
-  @keyframes giftChestPop{0%{transform:scale(0) rotate(-8deg);opacity:0;}60%{transform:scale(1.12) rotate(3deg);opacity:1;}100%{transform:scale(1) rotate(0deg);opacity:1;}}
-  @keyframes giftChestShake{0%,100%{transform:translate(0,0) rotate(0deg);}20%{transform:translate(-3px,1px) rotate(-2.5deg);}40%{transform:translate(3px,-1px) rotate(2.5deg);}60%{transform:translate(-2px,1px) rotate(-1.5deg);}80%{transform:translate(2px,0) rotate(1.5deg);}}
-  .gift-spark{position:absolute;width:8px;height:8px;border-radius:50%;background:#FFD873;box-shadow:0 0 7px 1px rgba(255,216,115,.95);
-    opacity:0;animation:giftSparkFly 1.3s ease-out infinite;}
-  @keyframes giftSparkFly{0%{transform:translate(0,10px) scale(.3);opacity:0;}12%{opacity:1;}100%{transform:var(--spark-end) scale(1);opacity:0;}}
-  .gift-spark-1{top:50%;left:50%;--spark-end:translate(-55px,-115px);animation-delay:.05s;}
-  .gift-spark-2{top:50%;left:50%;--spark-end:translate(50px,-125px);animation-delay:.25s;}
-  .gift-spark-3{top:50%;left:50%;--spark-end:translate(-95px,-40px);animation-delay:.45s;}
-  .gift-spark-4{top:50%;left:50%;--spark-end:translate(90px,-55px);animation-delay:.15s;}
-  .gift-spark-5{top:50%;left:50%;--spark-end:translate(-15px,-140px);animation-delay:.55s;}
-  .gift-spark-6{top:50%;left:50%;--spark-end:translate(20px,-135px);animation-delay:.35s;}
   .gift-reveal-label{color:var(--cocoa-faint);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;}
   .gift-reveal-amount{font-size:32px;font-weight:900;color:var(--mint);margin-bottom:20px;}
   /* Announcement popup — square corners throughout (no curved frames), and
@@ -618,6 +598,83 @@
   .choc-hold-item span{display:block;font-size:11px;color:var(--cocoa-faint);margin-bottom:2px;}
   .choc-hold-item b{display:block;font-size:13.5px;}
 
+
+/* ---- Rewards page, the gift animations and the success / failed icons (the owner's recordings; see the notes in CLAUDE.md) ---- */
+.rw-card{margin:14px 20px;background:var(--card);border-radius:22px;box-shadow:var(--shadow);padding:20px 18px;text-align:center;}
+.rw-title{font-size:19px;margin:0;}
+.rw-sub{font-size:13px;color:var(--cocoa-faint);margin:6px 0 14px;line-height:1.45;}
+.rw-input{font-size:15px;padding:13px;margin-bottom:10px;text-transform:uppercase;text-align:center;letter-spacing:1px;}
+.rw-gift{padding-top:10px;background:radial-gradient(ellipse at 50% 0%,#dcecff 0,transparent 62%),var(--card);}
+.rw-gbtn{display:block;margin:0 auto 2px;padding:0;border:0;background:none;width:172px;height:172px;}
+.rw-gbtn:active .gbox{transform:scale(.95);}
+.rw-daily .checkin-ring{margin:14px auto;}
+/* the gift that wants to open: sprite sheet, 26 pictures of a 0.433 s loop (gift-idle.webp), blue; the still picture shows until the sheet has loaded */
+.gbox{display:block;width:100%;height:100%;background:url(/icons/gift.webp) no-repeat center/contain;transition:transform .12s ease;}
+.gbox.live{background-image:url(/anim/gift-idle.webp);background-size:600% 500%;}
+/* the stage: a blurred page, rotating spoke rings, the gift (spinning with glitter while it opens), then the burst with a coin */
+.gs-bg{padding:0;z-index:160;}
+.gs-bg.show{background:rgba(8,32,92,.46);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);}
+.gs{position:relative;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;color:#fff;}
+.gs-spokes::after{content:"";position:absolute;inset:34%;border-radius:50%;border:2px solid rgba(255,255,255,.35);}
+.gs-spokes{position:absolute;left:50%;top:44%;width:var(--d);height:var(--d);margin:calc(var(--d) / -2) 0 0 calc(var(--d) / -2);border-radius:50%;pointer-events:none;
+  background:repeating-conic-gradient(rgba(255,255,255,.2) 0 4deg,transparent 4deg 12deg);
+  -webkit-mask:radial-gradient(circle,transparent 0 33%,#000 34% 60%,transparent 61%);mask:radial-gradient(circle,transparent 0 33%,#000 34% 60%,transparent 61%);animation:gsSpin 18s linear infinite;}
+.gs-a{--d:min(124vw,520px);}
+.gs-b{--d:min(92vw,380px);background:repeating-conic-gradient(rgba(190,220,255,.3) 0 2.5deg,transparent 2.5deg 7.5deg);animation:gsSpin 11s linear infinite reverse;}
+@keyframes gsSpin{to{transform:rotate(360deg);}}
+.gs-main{position:relative;width:270px;height:270px;perspective:700px;flex:0 0 auto;}
+.gs-box{position:absolute;left:50%;top:50%;width:230px;height:230px;margin:-115px 0 0 -115px;}
+.gs-opening .gs-box{animation:gsTurn .9s linear infinite;}
+@keyframes gsTurn{0%{transform:rotateY(0) scale(1);}50%{transform:rotateY(180deg) scale(1.08);}100%{transform:rotateY(360deg) scale(1);}}
+.gs-open{position:absolute;left:50%;bottom:10px;width:248px;transform:translateX(-50%);display:none;filter:drop-shadow(0 14px 18px rgba(3,20,70,.4));}
+.gs-coin{position:absolute;left:50%;top:50%;width:92px;height:92px;margin:-46px 0 0 -46px;display:none;filter:drop-shadow(0 6px 12px rgba(120,70,0,.5));}
+.gs-coin svg{display:block;width:100%;height:100%;}
+.gs-rays{position:absolute;left:50%;top:36%;width:340px;height:340px;margin:-170px 0 0 -170px;border-radius:50%;opacity:0;pointer-events:none;
+  background:repeating-conic-gradient(rgba(255,226,120,.55) 0 5deg,transparent 5deg 15deg);
+  -webkit-mask:radial-gradient(circle,#000 0,transparent 68%);mask:radial-gradient(circle,#000 0,transparent 68%);}
+.gs-flash{position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px 0 0 -30px;border-radius:50%;border:5px solid rgba(255,255,255,.9);opacity:0;pointer-events:none;}
+.gs-glitter,.gs-confetti{position:absolute;inset:0;pointer-events:none;}
+.gs-glitter i{position:absolute;width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 8px 2px rgba(190,225,255,.95);opacity:0;animation:gsTwinkle 1.1s ease-in-out infinite;}
+@keyframes gsTwinkle{0%,100%{opacity:0;transform:scale(.2);}50%{opacity:1;transform:scale(1.1);}}
+.gs-text{position:relative;z-index:2;text-align:center;min-height:86px;margin-top:6px;text-shadow:0 2px 10px rgba(0,30,100,.7);}
+.gs .gift-reveal-label{color:#dcebff;}
+.gs .gift-reveal-amount{color:#fff;text-shadow:0 2px 14px rgba(0,40,120,.6);margin-bottom:0;}
+.gs-opening .gift-reveal-amount,.gs-opening .gs-btn{visibility:hidden;}
+.gs-btn{position:relative;z-index:2;min-width:190px;margin-top:10px;}
+/* the burst */
+.gs-burst .gs-box{display:none;}
+.gs-burst .gs-open{display:block;animation:gsPop .6s cubic-bezier(.2,1.5,.3,1) both;}
+.gs-burst .gs-flash{animation:gsFlash .7s ease-out both;}
+.gs-burst .gs-rays{animation:gsRays 2.4s ease-out both,gsSpin 16s linear infinite;}
+.gs-burst .gs-coin{display:block;animation:gsCoinUp 1.1s cubic-bezier(.2,.9,.25,1) .1s both,gsBob 2.2s ease-in-out 1.2s infinite;}
+@keyframes gsPop{0%{transform:translateX(-50%) scale(.6) rotate(-6deg);opacity:0;}100%{transform:translateX(-50%) scale(1) rotate(0);opacity:1;}}
+@keyframes gsFlash{0%{transform:scale(.4);opacity:1;}100%{transform:scale(7);opacity:0;}}
+@keyframes gsRays{0%{opacity:0;transform:scale(.4);}25%{opacity:1;}100%{opacity:.5;transform:scale(1);}}
+@keyframes gsCoinUp{0%{transform:translateY(46px) scale(.25) rotateY(0);opacity:0;}15%{opacity:1;}60%{transform:translateY(-92px) scale(1.2) rotateY(540deg);}100%{transform:translateY(-74px) scale(1) rotateY(720deg);}}
+@keyframes gsBob{0%,100%{transform:translateY(-74px) scale(1);}50%{transform:translateY(-84px) scale(1.04);}}
+.gs-confetti i{position:absolute;left:50%;top:46%;opacity:0;animation:gsConf 1.5s cubic-bezier(.15,.7,.3,1) both;}
+.gs-confetti i.c{width:11px;height:11px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff2a8,#ffc21f 60%,#d98a00);box-shadow:0 0 0 1.5px #c97d00 inset;}
+.gs-confetti i.r{width:8px;height:15px;border-radius:2px;background:var(--cc,#7cc4ff);}
+@keyframes gsConf{0%{transform:translate(0,0) rotate(0);opacity:1;}70%{opacity:1;}100%{transform:translate(var(--dx),var(--dy)) rotate(var(--rot));opacity:0;}}
+.gs-balloon{position:absolute;bottom:-70px;width:34px;height:42px;border-radius:50% 50% 48% 48%;background:radial-gradient(circle at 35% 30%,#fff 0,var(--bc) 38%);opacity:.92;animation:gsUp 3.2s ease-out both;}
+.gs-balloon::after{content:"";position:absolute;left:50%;top:100%;width:1.5px;height:46px;background:rgba(255,255,255,.6);}
+@keyframes gsUp{0%{transform:translateY(0);}100%{transform:translateY(-118vh) translateX(var(--sway));}}
+/* success tick and failed cross of the payment pages: green / red disc that grows, a halo behind it, the mark drawn in (the owner's recordings) */
+.pay-status-ic.anim{background:none;width:108px;height:108px;border-radius:0;color:inherit;}
+.pay-status-ic.anim svg{width:100%;height:100%;display:block;overflow:visible;}
+.an-pop{transform-box:fill-box;transform-origin:center;}
+.ok-disc{animation:anPop .27s cubic-bezier(.16,1,.3,1) both;}
+.ok-halo{animation:anHalo .3s cubic-bezier(.16,1,.3,1) .08s both;}
+.ok-check{stroke-dasharray:240;stroke-dashoffset:240;animation:anDraw .2s ease-out .15s forwards;}
+.no-disc{animation:anFade .07s linear both;}
+.no-halo{animation:anSpring .34s ease-out .08s both;}
+.no-x{opacity:0;animation:anFade .12s linear .12s forwards;}
+@keyframes anPop{0%{transform:scale(0);}100%{transform:scale(1);}}
+@keyframes anHalo{0%{transform:scale(0);opacity:0;}30%{opacity:1;}100%{transform:scale(1);opacity:1;}}
+@keyframes anDraw{to{stroke-dashoffset:0;}}
+@keyframes anFade{from{opacity:0;}to{opacity:1;}}
+@keyframes anSpring{0%{transform:scale(.6);opacity:0;}20%{opacity:1;}60%{transform:scale(1.1);}100%{transform:scale(1);opacity:1;}}
+
 /* ---- Smart AI additions: art banners ---- */
 .art-host{position:absolute;inset:0;overflow:hidden;}
 .art-fill{position:absolute;inset:0;overflow:hidden;display:flex;align-items:center;justify-content:center;
@@ -634,11 +691,10 @@ img.art-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
 .acct-icon img{width:100%;height:100%;object-fit:contain;padding:4px;}
 .menu-ic.pic{width:var(--me-ic,36px);height:var(--me-ic,36px);background:none;}
 .menu-ic.pic img{width:calc(var(--me-ic,36px) - 2px);height:calc(var(--me-ic,36px) - 2px);object-fit:contain;}
-#shopBanner .pb-tint.pb-btn-row{align-items:flex-end;padding:0 16px 22px;}
-#shopBannerArt .art-fill img.art-bot{margin-top:-46px;height:56%;}
+#shopBanner .pb-tint.pb-btn-row{align-items:flex-end;padding:0 16px 14px;}
+#shopBannerArt .art-fill img.art-bot{margin-top:-46px;height:50%;}
 .acct-cover .art-fill img.art-bot{margin-top:-52px;height:58%;}
 .ugx-n span{white-space:nowrap;min-width:0;}
-#checkinBtn{margin-top:4px;}
 .about-html{word-break:break-word;}
 .about-html img{max-width:100%;height:auto;border-radius:12px;}
 .about-html h1,.about-html h2,.about-html h3{color:var(--cocoa);margin:14px 0 6px;}
@@ -959,29 +1015,26 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
     <!-- REWARDS -->
     <div id="viewRewards" style="display:none">
       <div class="photo-banner pb-hero" id="rewardsBanner"></div>
-      <div id="checkinCard">
-        <div class="checkin-wrap" style="padding-top:6px">
-          <span class="auth-tag">Daily Reward</span>
-          <h2 style="font-size:20px;margin-top:10px">Tap in, get your daily reward</h2>
-          <p class="muted" style="font-size:13px;margin-top:6px">One tap a day. UGX <span id="checkinAmt">0</span> straight to your wallet.</p>
-          <div class="checkin-ring" id="checkinRing">
-            <div class="checkin-inner">
-              <b id="streakNum">0</b>
-              <span class="muted" style="font-size:11.5px">day streak</span>
-            </div>
-          </div>
-          <div class="streak-dots" id="streakDots"></div>
-          <div class="streak-cycle-label" id="streakCycleLabel"></div>
-          <button class="btn btn-primary btn-block" id="checkinBtn" onclick="doCheckin()">Check in</button>
-        </div>
+      <div class="rw-card rw-gift">
+        <button type="button" class="rw-gbtn" id="giftBoxBtn" onclick="tapGiftBox()" aria-label="Open the gift"><span class="gbox" data-gift="idle" role="img" aria-label="Gift"></span></button>
+        <h2 class="rw-title">Gift Code</h2>
+        <p class="rw-sub">Tap the gift once you have a code, or type it below and open it.</p>
+        <input class="famt rw-input" id="giftCodeInput" placeholder="Enter gift code" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        <button class="btn btn-primary btn-block" id="redeemBtn" onclick="redeemGiftCode()">Open gift</button>
       </div>
-      <div class="sec-head"><h3>Redeem a Gift Code</h3></div>
-      <div style="margin:0 20px 20px;display:flex;gap:12px;align-items:center">
-        <img src="/icons/gift.webp" alt="" style="width:56px;height:56px;object-fit:contain;flex:0 0 auto" data-icon="gift">
-        <div style="flex:1">
-          <input class="famt" id="giftCodeInput" style="font-size:15px;padding:12px;margin-bottom:10px;text-transform:uppercase" placeholder="Enter gift code" autocomplete="off" autocapitalize="characters" spellcheck="false">
-          <button class="btn btn-primary btn-block" id="redeemBtn" onclick="redeemGiftCode()">Redeem</button>
+      <div class="rw-card rw-daily" id="checkinCard">
+        <span class="auth-tag">Daily Reward</span>
+        <h2 class="rw-title" style="margin-top:8px">Tap in, get your daily reward</h2>
+        <p class="rw-sub">One tap a day. UGX <span id="checkinAmt">0</span> straight to your wallet.</p>
+        <div class="checkin-ring" id="checkinRing">
+          <div class="checkin-inner">
+            <b id="streakNum">0</b>
+            <span class="muted" style="font-size:11.5px">day streak</span>
+          </div>
         </div>
+        <div class="streak-dots" id="streakDots"></div>
+        <div class="streak-cycle-label" id="streakCycleLabel"></div>
+        <button class="btn btn-primary btn-block" id="checkinBtn" onclick="doCheckin()">Check in</button>
       </div>
       <div style="height:14px"></div>
     </div>
@@ -1269,21 +1322,24 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
     </div>
   </div>
 
-  <div class="modal-bg" id="giftRevealBg">
-    <div class="modal-sheet gift-reveal-sheet" style="text-align:center">
-      <div class="gift-reveal-stage">
-        <div class="gift-reveal-glow"></div>
-        <span class="gift-spark gift-spark-1"></span>
-        <span class="gift-spark gift-spark-2"></span>
-        <span class="gift-spark gift-spark-3"></span>
-        <span class="gift-spark gift-spark-4"></span>
-        <span class="gift-spark gift-spark-5"></span>
-        <span class="gift-spark gift-spark-6"></span>
-        <img class="gift-reveal-chest" src="/icons/gift.webp" alt="Reward" data-icon="gift">
+  <div class="modal-bg gs-bg" id="giftRevealBg">
+    <div class="gs" id="giftStage">
+      <div class="gs-spokes gs-a"></div>
+      <div class="gs-spokes gs-b"></div>
+      <div class="gs-main">
+        <div class="gs-rays"></div>
+        <div class="gs-flash"></div>
+        <span class="gbox gs-box" data-gift="idle"></span>
+        <img class="gs-open" src="/anim/gift-open.webp" alt="">
+        <span class="gs-coin"><svg viewBox="-50 -50 100 100" aria-hidden="true"><defs><linearGradient id="gsCoinG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe98a"/><stop offset=".5" stop-color="#ffc728"/><stop offset="1" stop-color="#e48f00"/></linearGradient></defs><circle r="47" fill="#c67700"/><circle r="43.5" fill="url(#gsCoinG)"/><circle r="35" fill="none" stroke="#e39a00" stroke-width="3.5"/><circle r="32.5" fill="none" stroke="#fff3b8" stroke-width="1.4" opacity=".8"/><text y="7.5" text-anchor="middle" font-size="19" font-weight="900" fill="#b36a00" font-family="Inter,Roboto,Arial,sans-serif">UGX</text><path d="M-30 -22a38 38 0 0 1 36 -26" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".55"/></svg></span>
+        <div class="gs-glitter" id="gsGlitter"></div>
+        <div class="gs-confetti" id="gsConfetti"></div>
       </div>
-      <div class="gift-reveal-label">You got</div>
-      <div class="gift-reveal-amount" id="giftRevealAmount">UGX 0</div>
-      <button class="btn btn-primary btn-block" onclick="closeGiftReveal()">Awesome!</button>
+      <div class="gs-text">
+        <div class="gift-reveal-label" id="gsLabel">Opening your gift…</div>
+        <div class="gift-reveal-amount" id="giftRevealAmount">UGX 0</div>
+      </div>
+      <button class="btn btn-primary gs-btn" id="gsBtn" onclick="closeGiftReveal()">Awesome!</button>
     </div>
   </div>
 

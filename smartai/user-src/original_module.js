@@ -310,6 +310,7 @@ function iconUrl(name){ return (STATE_ICONS && STATE_ICONS[name]) || '/icons/' +
 function customIcon(name){ return (STATE_ICONS && STATE_ICONS[name]) || ''; }
 function paintIcons(){
   paintMedals();
+  paintGift();
   document.querySelectorAll('img[data-icon]').forEach(function(img){
     var name = img.getAttribute('data-icon'), u = iconUrl(name);
     if (img.getAttribute('src') !== u) {
@@ -394,15 +395,42 @@ function medalPose(el, tick){
   var cell = tl[tick % tl.length];
   el.style.backgroundPosition = ((cell % 10) / 9 * 100).toFixed(3) + '% ' + (Math.floor(cell / 10) / 8 * 100).toFixed(3) + '%';
 }
+// The gift that wants to open: gift-idle.webp = 26 pictures (6 x 5) of a 0.433 s loop, played at 60 a second.
+var _giftReady = false;
+function giftPose(now){
+  var i = Math.floor((now % 433.3) / (1000 / 60)) % 26;
+  return ((i % 6) / 5 * 100).toFixed(2) + '% ' + (Math.floor(i / 6) / 4 * 100).toFixed(2) + '%';
+}
+function giftPreload(){
+  if (_giftReady || _giftLoading) return;
+  _giftLoading = true;
+  var im = new Image();
+  im.onload = function(){ _giftReady = true; paintGift(); };
+  im.onerror = function(){ _giftLoading = false; };
+  im.src = '/anim/gift-idle.webp';
+  var op = new Image(); op.src = '/anim/gift-open.webp';
+}
+var _giftLoading = false;
+function paintGift(){
+  var pose = giftPose(Date.now()), custom = customIcon('giftbox');
+  document.querySelectorAll('.gbox').forEach(function(el){
+    // A picture uploaded in Admin > Banners > Animations stands still in place of the gift; Back to default brings the animation.
+    if (custom) { el.classList.add('custom'); el.classList.remove('live'); el.style.backgroundImage = 'url("' + String(custom).replace(/"/g, '%22') + '")'; el.style.backgroundSize = 'contain'; el.style.backgroundPosition = 'center'; return; }
+    el.classList.remove('custom'); el.style.backgroundImage = ''; el.style.backgroundSize = '';
+    el.classList.toggle('live', _giftReady); if (_giftReady) el.style.backgroundPosition = pose; else el.style.backgroundPosition = '';
+  });
+  var op = document.querySelector('.gs-open'); if (op) op.setAttribute('src', customIcon('giftopen') || '/anim/gift-open.webp');
+}
 var _animLast = -1;
 function animTick(){
-  var dls = document.querySelectorAll('svg.dl'), meds = document.querySelectorAll('.medal.live'), n = dls.length + meds.length;
+  var dls = document.querySelectorAll('svg.dl'), meds = document.querySelectorAll('.medal.live'), gbs = document.querySelectorAll('.gbox.live'), n = dls.length + meds.length + gbs.length;
   if (n && !document.hidden) {
     var now = Date.now(), c, i, j, ch;
     if (dls.length) {
       c = dlCircles((now % 2000) / 1000);
       for (i = 0; i < dls.length; i++) { ch = dls[i].children; for (j = 0; j < 12; j++) { ch[j].setAttribute('cx', c[j][0].toFixed(1)); ch[j].setAttribute('cy', c[j][1].toFixed(1)); ch[j].setAttribute('r', c[j][2].toFixed(1)); } }
     }
+    if (gbs.length) { var gp = giftPose(now); for (i = 0; i < gbs.length; i++) gbs[i].style.backgroundPosition = gp; }
     var tick = Math.floor((now % 3000) / (1000 / 30));
     if (meds.length && tick !== _animLast) {
       _animLast = tick;
@@ -711,6 +739,7 @@ function enterApp(){
   applyBrandName();
   startActivityFeed();
   setTimeout(medalPreload, 700);
+  setTimeout(giftPreload, 900);
   startAccountPoll();
   updateDownloadTileVisibility();
   syncArtwork();
@@ -1406,6 +1435,7 @@ function switchTab(name){
   window.scrollTo(0, 0);
   if (STATE && (name === 'rewards' || name === 'team' || name === 'home')) renderAll();
   if (name === 'team') medalPreload();
+  if (name === 'rewards') giftPreload();
   if (name === 'team' && STATE) refreshTeamStats();
   // Coming back to Home from another tab shows the announcement again (its buttons shaking straight away).
   if (enteringHomeFromElsewhere) maybeShowAnnouncement(true);
@@ -1649,6 +1679,14 @@ function depositStatusHold(depositId){ return api('/deposit/marzpay/status', { d
 function depositStatusCheck(depositId){ return api('/deposit/marzpay/status', { depositId: depositId }); }
 var _depPollTimer = null, _depFirstTimer = null, _depPollAttempt = 0, _depPollId = null, _depConfirmed = false, _depPollChecking = false;
 /* The picture shown while a payment is being checked is the owner's second animation (see THE PAYMENT ANIMATION below); the tick shows once it is paid. */
+// The success tick and the failed cross (the owner's recordings, redrawn): a disc grows, a faint halo follows, the mark is drawn in.
+// Disc radius 182, halo 300 (x1.65); check stroke 0.163 of the disc, X stroke 0.145; times measured at 60 pictures a second.
+function tickHtml(){
+  return '<svg viewBox="-300 -300 600 600" aria-hidden="true"><circle class="an-pop ok-halo" r="300" fill="rgba(3,239,0,.17)"/><circle class="an-pop ok-disc" r="182" fill="#03ef00"/><path class="ok-check" d="M-60 -4L-16 42L78 -53" fill="none" stroke="#111" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+function crossHtml(){
+  return '<svg viewBox="-310 -310 620 620" aria-hidden="true"><circle class="an-pop no-halo" r="303" fill="rgba(254,30,61,.15)"/><circle class="an-pop no-disc" r="187" fill="#fe1e3d"/><path class="no-x" d="M-51 -51L51 51M51 -51L-51 51" fill="none" stroke="#111" stroke-width="27" stroke-linecap="round"/></svg>';
+}
 var _depIcSuccess = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
 function stopDepositPoll(){ clearInterval(_depPollTimer); clearTimeout(_depFirstTimer); _depPollTimer = null; _depFirstTimer = null; _depPollId = null; }
 function openDepositStatus(depositId, reference, phone){
@@ -1671,8 +1709,8 @@ function openDepositStatus(depositId, reference, phone){
 function showDepositSuccess(){
   _depConfirmed = true;
   releasePayOrb();
-  $('depStatusIc').className = 'pay-status-ic';
-  $('depStatusIc').innerHTML = _depIcSuccess;
+  $('depStatusIc').className = 'pay-status-ic anim';
+  $('depStatusIc').innerHTML = customIcon('tick') ? '<img src="' + esc(customIcon('tick')) + '" alt="" style="width:100%;height:100%;object-fit:contain">' : tickHtml();
   $('depStatusTitle').textContent = 'Payment Successful!';
   $('depStatusPhone').textContent = 'Your wallet has been credited.';
   $('depStatusSteps').style.display = 'none';
@@ -1682,6 +1720,13 @@ function showDepositSuccess(){
   var btn = $('depVerifyBtn');
   btn.disabled = false;
   btn.onclick = function(){ closeOverlay(); switchTab('home'); renderAll(); };
+}
+function showDepositFailed(){
+  releasePayOrb();
+  $('depStatusIc').className = 'pay-status-ic anim';
+  $('depStatusIc').innerHTML = customIcon('cross') ? '<img src="' + esc(customIcon('cross')) + '" alt="" style="width:100%;height:100%;object-fit:contain">' : crossHtml();
+  $('depStatusTitle').textContent = 'Payment Not Completed';
+  $('depStatusSteps').style.display = 'none';
 }
 function setDepStatusMsg(kind, text){
   var el = $('depStatusMsg');
@@ -1720,6 +1765,7 @@ async function pollDepositStatus(manual){
       if (r.state === 'failed') {
         clearInterval(_depPollTimer); _depPollTimer = null;
         setDepStatusMsg('failed', r.message || 'Payment was not completed.');
+        showDepositFailed();
         if (manual === true) toast('Declined: ' + (r.message || 'payment was not completed'));
         return;
       }
@@ -1877,36 +1923,84 @@ async function doCheckin(){
     if (STATE) renderAll();
   }
 }
+// The gift: tapping it (or Open gift) with a code typed shows the stage -- the page blurs, spoke rings turn, the gift spins with glitter while the code is checked --
+// and a right code bursts the gift open: a coin rises, coins and ribbon bits fly, balloons float up, and the figure counts up to the real amount.
+function tapGiftBox(){
+  var inp = $('giftCodeInput');
+  if (!inp.value.trim()) { toast('Type your gift code first'); try { inp.focus(); } catch (e) {} shakeVibrate(inp); return; }
+  redeemGiftCode();
+}
 async function redeemGiftCode(){
   var raw = $('giftCodeInput').value.trim().toUpperCase();
   if (!raw) { toast('Enter a code'); return; }
   var btn = $('redeemBtn'), label = btn ? btn.textContent : '';
   if (btn) { if (btn.disabled) return; btn.disabled = true; btn.innerHTML = btnBusyHtml('Opening…'); }
+  var openedAt = Date.now(), staged = false;
   try {
+    openGiftStage(); staged = true;
     var r = await api('/redeem', { code: raw });
-    if (r.stale) return;
-    if (r.status !== 'success') { toast(r.message || "That code isn't valid"); return; }
+    if (r.stale) { closeGiftReveal(); return; }
+    if (r.status !== 'success') { closeGiftReveal(); toast(r.message || "That code isn't valid"); return; }
     $('giftCodeInput').value = '';
     await refreshFromServer();
-    renderAll(); showGiftReveal(r.reward != null ? r.reward : r.amount);
+    renderAll();
+    var wait = GIFT_OPEN_MS - (Date.now() - openedAt);   // the spin is seen for a moment even when the answer is quick
+    if (wait > 0) await new Promise(function(res){ setTimeout(res, wait); });
+    showGiftReveal(r.reward != null ? r.reward : r.amount);
+  } catch (e) {
+    if (staged) closeGiftReveal();
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = label; }
   }
 }
-// A treasure-chest reveal on a successful redeem: the chest pops in and keeps shaking while light bursts upward and coin sparks fly out (pure CSS,
-// replayed each time by a reflow), with a real vibration, while the figure counts up from 0 to the real amount over about 0.9 s.
+var GIFT_OPEN_MS = 1100;
 var _giftCountRaf = null;
+function giftStageReset(){
+  var bg = $('giftRevealBg'), st = $('giftStage');
+  st.className = 'gs gs-opening';
+  $('gsLabel').textContent = 'Opening your gift…';
+  $('giftRevealAmount').textContent = ugx(0);
+  $('gsGlitter').innerHTML = ''; $('gsConfetti').innerHTML = '';
+  st.querySelectorAll('.gs-balloon').forEach(function(b){ b.remove(); });
+  if (_giftCountRaf) { cancelAnimationFrame(_giftCountRaf); _giftCountRaf = null; }
+  // glitter around the gift while it spins
+  var g = '', i;
+  for (i = 0; i < 16; i++) {
+    var a = Math.random() * 6.283, rad = 70 + Math.random() * 62;
+    g += '<i style="left:' + (135 + Math.cos(a) * rad - 3).toFixed(0) + 'px;top:' + (135 + Math.sin(a) * rad - 3).toFixed(0) + 'px;animation-delay:' + (Math.random() * 1.1).toFixed(2) + 's;animation-duration:' + (0.8 + Math.random() * 0.7).toFixed(2) + 's"></i>';
+  }
+  $('gsGlitter').innerHTML = g;
+  giftPreload(); paintGift();
+  return bg;
+}
+function openGiftStage(){
+  var bg = giftStageReset();
+  bg.classList.add('show');
+  if (navigator.vibrate) navigator.vibrate(20);
+}
 function showGiftReveal(amount){
   amount = Number(amount) || 0;
-  var bg = $('giftRevealBg'), amountEl = $('giftRevealAmount');
-  var chest = bg.querySelector('.gift-reveal-chest'), glow = bg.querySelector('.gift-reveal-glow'), sparks = bg.querySelectorAll('.gift-spark');
-  amountEl.textContent = ugx(0);
+  var bg = $('giftRevealBg'), st = $('giftStage');
+  if (!bg.classList.contains('show')) giftStageReset();
   bg.classList.add('show');
-  // A reflow so showing it again replays the animations from the first frame.
-  [chest, glow].concat(Array.prototype.slice.call(sparks)).forEach(function(el){ el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; });
+  st.className = 'gs gs-burst';
+  $('gsLabel').textContent = 'You got';
+  // The burst, replayed each time: ribbon bits and little coins fly out, balloons float up.
+  var c = '', i, cols = ['#7cc4ff', '#2b8bf6', '#ffffff', '#b5dcff', '#137aef'];
+  for (i = 0; i < 30; i++) {
+    var a = (i / 30) * 6.283 + Math.random() * 0.4, d = 90 + Math.random() * 120, coin = i % 3 !== 0;
+    c += '<i class="' + (coin ? 'c' : 'r') + '" style="--dx:' + (Math.cos(a) * d).toFixed(0) + 'px;--dy:' + (Math.sin(a) * d * 0.9 - 40).toFixed(0) + 'px;--rot:' + ((Math.random() - 0.5) * 900).toFixed(0) + 'deg;--cc:' + cols[i % cols.length] + ';animation-delay:' + (0.1 + Math.random() * 0.25).toFixed(2) + 's"></i>';
+  }
+  $('gsConfetti').innerHTML = c;
+  [['16%', '#7cc4ff', 0.15], ['46%', '#2b8bf6', 0.4], ['78%', '#b5dcff', 0.0]].forEach(function(b, k){
+    var el = document.createElement('span'); el.className = 'gs-balloon';
+    el.style.cssText = 'left:' + b[0] + ';--bc:' + b[1] + ';--sway:' + ((k - 1) * 26) + 'px;animation-delay:' + b[2] + 's';
+    st.appendChild(el);
+  });
   if (navigator.vibrate) navigator.vibrate([40, 30, 40, 30, 90]);
   if (_giftCountRaf) cancelAnimationFrame(_giftCountRaf);
-  var start = null, duration = 900;
+  var start = null, duration = 900, amountEl = $('giftRevealAmount');
+  amountEl.textContent = ugx(0);
   function step(ts){
     if (!start) start = ts;
     var p = Math.min(1, (ts - start) / duration), eased = 1 - Math.pow(1 - p, 3);

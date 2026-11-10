@@ -5,6 +5,7 @@
 //   3. a real phone-sized browser: the dots move and are blue, the medals play, a custom picture stands still, Back to default brings the animation back,
 //      and every page change shows the dots for a moment;
 //   4. the admin panel's Animations card has Upload / Back to default for each of the four.
+//   The same for the second set of recordings: the gift that wants to open, the burst with a coin, the payment tick and cross, and the Rewards page they live on.
 //   node test-animations.js
 const path = require('path'), Module = require('module'), http = require('http'), fs = require('fs'), zlib = require('zlib');
 process.chdir(__dirname);
@@ -59,10 +60,19 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   ok(!/team-badge/.test(css) && (css.match(/class="medal"/g) || []).length === 3, 'the static 1, 2, 3 of the Team page are gone: three animated medals take their place');
   ok(/svg\.dl circle\{fill:var\(--caramel\)/.test(css), 'the loader is the app\'s blue');
 
+  const dims = f => { const b = fs.readFileSync(path.join(__dirname, f)); return { w: 1 + b.readUIntLE(24, 3), h: 1 + b.readUIntLE(27, 3) }; };
+  const gi = dims('user/anim/gift-idle.webp'), go = dims('user/anim/gift-open.webp');
+  ok(gi.w === 1344 && gi.h === 1120 && go.w === 512, 'the gift sheets are there: 26 pictures of the box that wants to open (6 x 5 of 224 px) and the opened box with its coin pile');
+  ok(/function giftPose/.test(src) && /433\.3/.test(src) && /% 26/.test(src), 'the gift plays 26 pictures in 0.433 s (the loop of the recording, 60 a second)');
+  ok(/\.ok-disc\{animation:anPop \.27s/.test(css) && /\.ok-halo\{animation:anHalo \.3s[^}]*\.08s/.test(css) && /\.ok-check\{[^}]*\.15s/.test(css) && /r="182"/.test(src) && /r="300"/.test(src), 'the tick: disc grows in 0.27 s, halo follows after 0.08 s, the check is drawn after 0.15 s (measured), disc 182 and halo 300');
+  ok(/\.no-halo\{animation:anSpring \.34s/.test(css) && /r="187"/.test(src) && /r="303"/.test(src) && /#fe1e3d/.test(src), 'the cross: red disc 187 with a springing halo 303, as measured');
+  ok(!/\bstars?\b/i.test((css.match(/\.gs[\s\S]*?\/\* ---- Smart AI additions/) || [''])[0].replace(/\/\*[\s\S]*?\*\//g, '')) && /UGX/.test(css) && /class="c"|i\.c\{/.test(css), 'the burst has a coin where the recording had a star, and little coins instead of star bits');
+  ok(/\.photo-banner\.pb-full\{height:150px/.test(css), 'the AI Robots header is 150 px (was 240)');
+
   // ---- 2. the server
   for (let i = 0; i < 60; i++) { try { const hh = await fetch(base + '/health'); if (hh.ok) break; } catch (_) {} await sleep(250); }
   const png = 'data:image/png;base64,' + pngBuf(30, 120, 230).toString('base64');
-  const slots = ['level1', 'level2', 'level3', 'loader'];
+  const slots = ['level1', 'level2', 'level3', 'loader', 'giftbox', 'giftopen', 'tick', 'cross'];
   for (const k of slots) { const r = await J('POST', '/admin/smartai-image/set', { slot: k, image: png }, null, true); ok(r.s === 200, 'the admin can upload a picture for ' + k); }
   let pub = (await J('GET', '/public/smartai-images')).j;
   ok(slots.every(k => pub.icons && pub.icons[k] === png), 'members receive them with the other icons');
@@ -108,6 +118,38 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   ok(await p.evaluate(() => { const m = document.querySelector('.medal[data-medal="2"]'); return m.classList.contains('custom') && !m.classList.contains('live') && /^url\(/.test(m.style.backgroundImage); }) && await p.evaluate(() => document.querySelector('.medal[data-medal="1"]').classList.contains('live')), 'a picture uploaded for Level 2 stands still in its place; the other medals keep playing');
   await p.evaluate(() => { STATE_ICONS = {}; paintMedals(); });
   ok(await p.evaluate(() => { const m = document.querySelector('.medal[data-medal="2"]'); return m.classList.contains('live') && !m.classList.contains('custom') && m.style.backgroundImage === ''; }), 'Back to default: the animation is back');
+  // the Rewards page: the gift first, the daily reward second
+  await p.evaluate(() => switchTab('rewards'));
+  ok(await p.evaluate(() => { const g = document.getElementById('giftBoxBtn'), c = document.getElementById('checkinCard'); return !!g && !!c && (g.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0; }), 'on the Rewards page the gift is the first thing, the daily reward comes after it');
+  ok(await until(() => !!document.querySelector('#giftBoxBtn .gbox.live'), null, 10000), 'the gift switches to its animation (sheet loaded)');
+  const gseen = new Set(); for (let i = 0; i < 10; i++) { gseen.add(await p.evaluate(() => document.querySelector('#giftBoxBtn .gbox').style.backgroundPosition)); await sleep(60); }
+  ok(gseen.size >= 5, 'and it plays (' + gseen.size + ' different pictures in 0.6 s)');
+  await p.evaluate(() => { document.getElementById('giftCodeInput').value = ''; }); await p.evaluate(() => document.getElementById('giftBoxBtn').click()); await sleep(150);
+  ok(await p.evaluate(() => !document.getElementById('giftRevealBg').classList.contains('show')), 'tapping the gift with no code typed opens nothing (it asks for the code)');
+  const gen = await J('POST', '/admin/promocodes/generate', { minReward: 3000, maxReward: 3000, maxUses: 5 }, null, true);
+  await p.evaluate(c => { document.getElementById('giftCodeInput').value = c; }, gen.j.code);
+  await p.evaluate(() => { window._hold = true; }); await p.evaluate(() => document.getElementById('giftBoxBtn').click()); await sleep(250);
+  const stage = await p.evaluate(() => { const bg = document.getElementById('giftRevealBg'), st = document.getElementById('giftStage'), sp = document.querySelector('.gs-spokes'); return { show: bg.classList.contains('show'), opening: st.classList.contains('gs-opening'), blur: getComputedStyle(bg).backdropFilter || getComputedStyle(bg).webkitBackdropFilter, spokes: getComputedStyle(sp).animationName, glitter: document.querySelectorAll('#gsGlitter i').length, spin: getComputedStyle(document.querySelector('.gs-box')).animationName, label: document.getElementById('gsLabel').textContent }; });
+  ok(stage.show && stage.opening && /blur/.test(stage.blur) && stage.spokes === 'gsSpin' && stage.glitter === 16 && stage.spin === 'gsTurn' && /Opening/.test(stage.label), 'tapping the gift with a code: the page blurs, the spoke rings turn, the gift spins with glitter ("Opening your gift...")');
+  ok(await until(() => document.getElementById('giftStage').classList.contains('gs-burst'), null, 8000), 'a right code bursts it open');
+  await sleep(1400);
+  const burst = await p.evaluate(() => ({ coin: getComputedStyle(document.querySelector('.gs-coin')).display, open: getComputedStyle(document.querySelector('.gs-open')).display, box: getComputedStyle(document.querySelector('.gs-box')).display, conf: document.querySelectorAll('#gsConfetti i').length, coins: document.querySelectorAll('#gsConfetti i.c').length, balloons: document.querySelectorAll('.gs-balloon').length, amount: document.getElementById('giftRevealAmount').textContent, uses: document.querySelector('.gs-coin text') && document.querySelector('.gs-coin text').textContent }));
+  ok(burst.coin === 'block' && burst.open === 'block' && burst.box === 'none' && burst.conf === 30 && burst.coins >= 15 && burst.balloons === 3 && /3,000/.test(burst.amount) && burst.uses === 'UGX', 'the burst: the opened box, a coin rising (no star), 30 pieces (20 of them little coins), 3 balloons, UGX 3,000');
+  await p.evaluate(() => closeGiftReveal());
+  await p.evaluate(png => { STATE_ICONS = { giftbox: png, giftopen: png }; paintGift(); }, png);
+  ok(await p.evaluate(() => { const g = document.querySelector('#giftBoxBtn .gbox'); return g.classList.contains('custom') && !g.classList.contains('live') && /^url\(/.test(g.style.backgroundImage) && /^data:image\/png/.test(document.querySelector('.gs-open').getAttribute('src')); }), 'a picture uploaded for the gift stands still in its place (and for the opened gift)');
+  await p.evaluate(() => { STATE_ICONS = {}; paintGift(); });
+  ok(await p.evaluate(() => { const g = document.querySelector('#giftBoxBtn .gbox'); return g.classList.contains('live') && !g.classList.contains('custom') && g.style.backgroundImage === '' && /gift-open\.webp$/.test(document.querySelector('.gs-open').getAttribute('src')); }), 'Back to default: the animated gift is back');
+  // the tick and the cross on the payment pages
+  await p.evaluate(() => { openOverlay('depositStatus'); showDepositSuccess(); }); await sleep(120);
+  ok(await p.evaluate(() => { const ic = document.getElementById('depStatusIc'); return ic.className === 'pay-status-ic anim' && !!ic.querySelector('.ok-check') && getComputedStyle(ic.querySelector('.ok-disc')).animationName === 'anPop'; }), 'a successful payment shows the animated green tick');
+  await p.evaluate(() => { _depConfirmed = false; showDepositFailed(); }); await sleep(120);
+  ok(await p.evaluate(() => { const ic = document.getElementById('depStatusIc'); return !!ic.querySelector('.no-x') && /Not Completed/.test(document.getElementById('depStatusTitle').textContent); }), 'a failed payment shows the animated red cross and "Payment Not Completed"');
+  await p.evaluate(png => { STATE_ICONS = { tick: png, cross: png }; showDepositSuccess(); }, png);
+  ok(await p.evaluate(() => !!document.querySelector('#depStatusIc img') && !document.querySelector('#depStatusIc .ok-check')), 'a picture uploaded for the tick stands still in its place');
+  await p.evaluate(() => { STATE_ICONS = {}; closeOverlay(); });
+  await p.evaluate(() => switchTab('shop')); await sleep(80);
+  ok(await p.evaluate(() => Math.round(document.getElementById('shopBanner').getBoundingClientRect().height) === 150), 'the AI Robots header (My Products / Accrued earnings) is 150 px high');
   // every page change shows the dots
   await p.evaluate(() => switchTab('home')); await sleep(60);
   ok(await p.evaluate(() => { const v = document.getElementById('navVeil'); return v.classList.contains('on') && !!v.querySelector('svg.dl') && getComputedStyle(v).opacity === '1'; }), 'moving to another tab shows the dots over the page');
@@ -147,7 +189,7 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   await ap.waitForSelector('#iconFile_loader', { state: 'attached', timeout: 8000 });
   const heads = await ap.evaluate(() => [...document.querySelectorAll('#content h2.sec')].map(h => h.textContent.trim()));
   ok(heads.some(h => /^Animations/.test(h)), 'the Banners tab has an Animations card (' + heads.filter(h => /Animations|Icons/.test(h)).join(' | ') + ')');
-  ok(await ap.evaluate(() => ['loader', 'level1', 'level2', 'level3'].every(k => !!document.getElementById('iconFile_' + k))), 'with an upload box for the loader and each level medal');
+  ok(await ap.evaluate(() => ['loader', 'level1', 'level2', 'level3', 'giftbox', 'giftopen', 'tick', 'cross'].every(k => !!document.getElementById('iconFile_' + k))), 'with an upload box for the loader, each level medal, the gift, the opened gift, the tick and the cross');
   ok(await ap.evaluate(() => /Default animation/.test(document.getElementById('iconFile_level2').closest('label').previousElementSibling.textContent)) && await ap.evaluate(() => /Custom picture/.test(document.getElementById('iconClear_level1').parentElement.textContent)), 'it says "Default animation" or "Custom picture" for each');
   ok(await ap.evaluate(() => document.getElementById('iconClear_level1').textContent.trim() === 'Back to default'), 'and the button to undo a custom picture reads Back to default');
   ok(await ap.evaluate(() => !document.querySelector('#iconFile_level1') || [...document.querySelectorAll('#content h2.sec')].filter(h => /^Icons/.test(h.textContent)).every(h => !h.nextElementSibling.querySelector('#iconFile_level1'))), 'the animations are not repeated in the long Icons box');

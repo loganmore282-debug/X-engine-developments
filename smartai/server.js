@@ -877,8 +877,8 @@ async function getHomeBanner() {
 // The Home banner and the welcome picture have their own routes. Stored in the 'banners' collection as `smartai-<slot>`, cached for 60 s.
 // Transparent cut-out ICONS the owner uploads in the admin panel (Banners > Icons); the panel removes each picture's background and crops it
 // tight before saving, so these are always PNGs. To add an icon, add its name here AND its label in admin-src (SMARTAI_ICON_LABELS).
-// The last four are the owner's ANIMATIONS (the three Team-page level medals and the dots loader): a picture uploaded for one stands still in its place, Remove ("Back to default") brings the animation back.
-const SMARTAI_ICON_SLOTS = ['home', 'robots', 'income', 'share', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout', 'level1', 'level2', 'level3', 'loader'];
+// The last eight are the owner's ANIMATIONS (the three Team-page level medals, the dots loader, the gift box, the opened gift, the payment tick and cross): a picture uploaded for one stands still in its place, Remove ("Back to default") brings the animation back.
+const SMARTAI_ICON_SLOTS = ['home', 'robots', 'income', 'share', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout', 'level1', 'level2', 'level3', 'loader', 'giftbox', 'giftopen', 'tick', 'cross'];
 // The pictures members get (all of these go to /public/smartai-images; linkpreview is the Telegram preview's own and is only read by the admin and that page).
 const SMARTAI_BANNER_SLOTS = ['authhero', 'authlogo', 'promobanner', 'profilelogo', 'teambanner', 'mybanner', 'aboutbanner',
   'shopbanner', 'depositbanner', 'withdrawbanner', 'supportbanner', 'recordsbanner', 'bindbankbanner'];
