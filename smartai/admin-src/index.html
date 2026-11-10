@@ -758,9 +758,10 @@ async function adminRequest(path, body, method){
   const requestToken = SESSION_TOKEN;
   method = method || (body ? 'POST' : 'GET');
   try{
-    const opts = { method, headers:{ ...(SESSION_TOKEN?{ Authorization:'Bearer '+SESSION_TOKEN }:{}) }, signal:AbortSignal.timeout(30000) };
+    const opts = { method, headers:{ ...(SESSION_TOKEN?{ Authorization:'Bearer '+SESSION_TOKEN }:{}) }, signal:AbortSignal.timeout(body && JSON.stringify(body).length > 200000 ? 120000 : 30000) };   // a big picture upload on a slow line needs longer than 30 seconds
     if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
     const r = await fetch(SERVER+path, opts);
+    if (r.status === 413) return { status:'error', message:'That upload is too large. Use a smaller picture.' };   // the web server's own page, not JSON
     const d = await r.json();
     if (requestToken !== SESSION_TOKEN) return {status:'error',message:'Session changed'};
     if (r.status === 401 && path !== '/admin/login' && path !== '/admin/check-key') {

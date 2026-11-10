@@ -24,6 +24,12 @@ ok(/data-key="' \+ esc\(p\.key\) \+ '" onclick="buyProduct\(this,this\.dataset\.
 const prodConf = cp.execFileSync('node', ['deploy/make-nginx.js', 'prod', 'a.example.com', 'N85d57j4'], { encoding: 'utf8' }), devConf = cp.execFileSync('node', ['deploy/make-nginx.js', 'dev', 'N85d57j4'], { encoding: 'utf8' });
 ok(/upgrade-insecure-requests/.test(prodConf) && !/upgrade-insecure-requests/.test(devConf), "the https site's CSP upgrades insecure requests; the IP preview's does not");
 ok(/connect-src 'self'/.test(prodConf) && /frame-ancestors 'none'/.test(prodConf) && /Strict-Transport-Security/.test(prodConf), 'and it keeps connect-src self, no framing and HSTS');
+// Request bugs found in the HTTP pass: the About article (13 MB at the server) must also fit through the web server; a money call never says "try again" after a lost answer;
+// the web server's own 429 / 413 pages (not JSON) are explained; the admin allows a slow big upload longer than 30 seconds.
+ok(/location = \/k7x2\/admin\/about-html\/set \{\s*client_max_body_size 14m;/.test(devConf) && /client_max_body_size 8m;/.test(devConf), 'nginx lets the About article (up to 13 MB) through on its own route, 8 MB everywhere else');
+ok(/movesMoney/.test(app) && /Check Records before trying again, in case it went through/.test(app), 'a money call whose answer is lost says to check Records, not "try again"');
+ok(/resp\.status === 429[\s\S]{0,160}Too many requests/.test(app), 'the web server\'s own 429 page is explained in words');
+{ const adm = read('admin-src/index.html'); ok(/r\.status === 413[\s\S]{0,120}too large/.test(adm) && /120000 : 30000/.test(adm), 'the admin explains a 413 and gives a big upload 120 seconds'); }
 (async () => {
   for (let i = 0; i < 60; i++) { try { if ((await fetch(base + '/health')).ok) break; } catch (_) {} await sleep(250); }
   let r = await fetch(base + '/public/settings', { headers: { Origin: 'https://evil.example' } });

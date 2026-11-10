@@ -150,7 +150,13 @@ async function _apiRaw(path, body, method, retry){
       var sentAt = Date.now();
       var resp = await fetch(API_BASE + path, opts);
       noteServerClock(resp, sentAt);
-      var data = await resp.json();
+      var data;
+      try { data = await resp.json(); }
+      catch (pe) {
+        // The web server's own "too many requests" page is not JSON: say what it means instead of "could not reach the server".
+        if (resp.status === 429) { clearTimeout(timer); return { status: 'error', message: 'Too many requests. Please wait a moment and try again.' }; }
+        throw pe;
+      }
       clearTimeout(timer);
       if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid response');
       _wokenUp = true;
@@ -164,7 +170,11 @@ async function _apiRaw(path, body, method, retry){
     } catch (e) {
       clearTimeout(timer);
       if (!isPublic && epoch !== _authEpoch) return { status: 'error', stale: true, message: 'Session changed' };
-      if (i === attempts - 1) return { status: 'error', message: ctl.signal.aborted ? 'The request took too long. Check Records before trying a payment again.' : 'Could not reach the server. Check your connection and try again.' };
+      if (i === attempts - 1) {
+        // A call that moves money may have reached the server even though the answer never came back: never say "try again" for those.
+        var movesMoney = /^\/(deposit|invest|withdraw|redeem|salary\/claim|checkin)/.test(path);
+        return { status: 'error', message: ctl.signal.aborted ? 'The request took too long. Check Records before trying a payment again.' : (movesMoney ? 'The connection dropped. Check Records before trying again, in case it went through.' : 'Could not reach the server. Check your connection and try again.') };
+      }
     }
   }
 }

@@ -201,6 +201,13 @@ ${proxy()}
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${proxy()}
     }
+` : ''}${role !== 'member' ? `    # The About article may carry many pictures: the server accepts up to 13 MB for this one route, so the web server must let that much through (8 MB elsewhere).
+    location = /${API}/admin/about-html/set {
+        client_max_body_size 14m;
+        limit_req zone=smartai_api burst=20 nodelay;
+${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
+${proxy()}
+    }
 ` : ''}    location /${API}/ {
         limit_req zone=smartai_api burst=200 nodelay;
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}

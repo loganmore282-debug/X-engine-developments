@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v41`, admin `admin/sw.js` `smartai-admin-shell-v21`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v42`, admin `admin/sw.js` `smartai-admin-shell-v22`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -490,3 +490,10 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 ## Check-in streak is read from the NEWEST rows (bug hunt, owner: "check bugs from first line to last line")
 - `/checkin` counted the streak from the member's check-in ledger rows with `.limit(500)` and no order, so a member past 500 check-in days was read from their OLDEST rows and the streak restarted at 1 (wrong ladder amount). It now reads `orderBy('createdAt','desc').limit(3000)`. test-checkin-long-streak.js (in `npm run test:audit`) seeds 600 days and expects streak 601.
 - The rest of the pass: eslint over server.js, db.js and the member app and admin scripts (no real errors; only unused catch variables), and a hand read of `/invest/create`, `/withdraw/request`, `/checkin`, `/redeem`, `/salary/*` and db.js's write helpers. Nothing else found. NOT every one of the ~21,000 lines was read by hand. One wording note left as is: `/redeem` errors still say "treasure chest" ("Wrong treasure chest password") and the app shows them as they come; four tests assert those exact words.
+
+## HTTP request pass (owner: "check http request bugs")
+- Member `api()`: (1) a money call (`/deposit`, `/invest`, `/withdraw`, `/redeem`, `/salary/claim`, `/checkin`) whose answer never arrives now says "The connection dropped. Check Records before trying again, in case it went through." (it used to say "try again", which could double a purchase); (2) the web server's own 429 page (not JSON) now reads "Too many requests. Please wait a moment and try again." instead of "Could not reach the server".
+- Admin `adminRequest()`: a 413 (the web server's page, not JSON) says the upload is too large; a request with a body over 200,000 characters gets 120 seconds instead of 30 (a big picture on a slow line used to time out with "Server is waking up").
+- nginx (`deploy/make-nginx.js`): `/admin/about-html/set` has its own `client_max_body_size 14m` (the server accepts 13 MB for the About article with many pictures, but nginx stopped everything at 8 MB). Everything else stays 8 MB. **Needs the nginx file regenerated on the VPS** (the auto-deploy script does this; if the owner sees "too large" on a big About article, run `deploy/make-nginx.js` again).
+- Checked and fine: body limits per route (64 kB default, 4 MB pictures, 13 MB About, 1 MB webhooks), the error handler (413 and bad JSON give clean JSON), CORS (allow-list + owner domains), `X-Server-Time`, rate limits, keep-alive and header timeouts, reads retried / money never retried, stale-session guard.
+- Tests: four new checks in test-http-safeguards.js.
