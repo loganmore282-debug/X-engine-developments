@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v42`, admin `admin/sw.js` `smartai-admin-shell-v22`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v43`, admin `admin/sw.js` `smartai-admin-shell-v22`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -497,3 +497,6 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 - nginx (`deploy/make-nginx.js`): `/admin/about-html/set` has its own `client_max_body_size 14m` (the server accepts 13 MB for the About article with many pictures, but nginx stopped everything at 8 MB). Everything else stays 8 MB. **Needs the nginx file regenerated on the VPS** (the auto-deploy script does this; if the owner sees "too large" on a big About article, run `deploy/make-nginx.js` again).
 - Checked and fine: body limits per route (64 kB default, 4 MB pictures, 13 MB About, 1 MB webhooks), the error handler (413 and bad JSON give clean JSON), CORS (allow-list + owner domains), `X-Server-Time`, rate limits, keep-alive and header timeouts, reads retried / money never retried, stale-session guard.
 - Tests: four new checks in test-http-safeguards.js.
+
+## Category tabs sit in an oval bar (owner: "put a bar oval or what to enclose them")
+- `.cat-tabs` (All, Class A, ...) is now a white pill-shaped track with a thin blue edge and soft shadow (hugs the tabs, scrolls sideways if there are many); inactive tabs are plain text, the active one keeps the blue gradient pill. CSS only (user-src/index.html). Member cache v43.

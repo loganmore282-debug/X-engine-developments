@@ -778,9 +778,9 @@ a.btn{text-decoration:none;}
 #ldBox canvas{display:block;width:100%;height:auto;}
 #ldText{position:absolute;left:-10%;right:-10%;top:80.9%;transform:translateY(-50%);text-align:center;white-space:nowrap;font-weight:800;font-size:19px;letter-spacing:.2px;color:#0b1a4f;font-family:'Poppins','Inter','Segoe UI',system-ui,-apple-system,Roboto,Arial,sans-serif;}
 /* ---- robot categories (All, Class A, ...): a row of pills above the robots, shown only when the admin has made categories ---- */
-.cat-tabs{display:flex;gap:10px;overflow-x:auto;padding:16px var(--gut) 2px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.cat-tabs{display:flex;gap:4px;overflow-x:auto;width:fit-content;max-width:calc(100% - 2 * var(--gut));margin:16px var(--gut) 2px;padding:5px;border-radius:999px;background:#fff;border:1.5px solid rgba(19,122,239,.22);box-shadow:0 8px 20px -12px rgba(11,42,91,.35),inset 0 1px 0 rgba(255,255,255,.9);-webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .cat-tabs::-webkit-scrollbar{display:none;}
-.cat-tab{flex:none;border:none;border-radius:999px;padding:10px 20px;font-weight:800;font-size:14px;font-family:inherit;background:#fff;color:var(--cocoa-soft);box-shadow:0 4px 12px -6px rgba(11,42,91,.25);}
+.cat-tab{flex:none;border:none;border-radius:999px;padding:9px 20px;font-weight:800;font-size:14px;font-family:inherit;background:transparent;color:var(--cocoa-soft);}
 .cat-tab.active{background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;box-shadow:0 8px 16px -8px rgba(19,122,239,.6);}
 
 </style>
