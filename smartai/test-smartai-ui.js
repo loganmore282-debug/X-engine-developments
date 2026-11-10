@@ -70,7 +70,7 @@ ok(!/\bUGX\s*\d+(?:\.\d+)?\s*[kKmM]\b|\b\d+(?:\.\d+)?\s*[kK]\b(?!g|m|b)/.test(vi
 
 // ---- only ChocoMCC's things (owner: "use only things of ChocoMCC, do not introduce anything without my consent") ----
 const tiles = [...pageHtml.matchAll(/<div class="menu-tile-lbl"[^>]*>([^<]+)<\/div>/g)].map(m => m[1].replace(/&amp;/g, '&'));
-ok(JSON.stringify(tiles) === JSON.stringify(['My Products', 'Ledger', 'My Team', 'Payout Account', 'Security', 'About Us', 'Terms & Rules', 'Support', 'Download App', 'Sign Out']), 'the Me page has exactly ChocoMCC\'s ten tiles, in its order: ' + tiles.join(', '));
+ok(JSON.stringify(tiles) === JSON.stringify(['My machines', 'Ledger', 'My Team', 'Payout Account', 'Security', 'About Us', 'Terms & Rules', 'Support', 'Download App', 'Sign Out']), 'the Me page has exactly ChocoMCC\'s ten tiles, in its order: ' + tiles.join(', '));
 const overlayIds = [...pageHtml.matchAll(/<div class="overlay" id="(ov[A-Za-z]+)"/g)].map(m => m[1]).sort();
 ok(JSON.stringify(overlayIds) === JSON.stringify(['ovAbout', 'ovBindbank', 'ovChangepass', 'ovDeposit', 'ovDepositStatus', 'ovEarnings', 'ovMychoc', 'ovRecords', 'ovRules', 'ovSupport', 'ovTaskcenter', 'ovTeamlevel', 'ovWithdraw'].sort()), 'the full-page screens are exactly ChocoMCC\'s thirteen: ' + overlayIds.join(', '));
 const serverSrc = fs.readFileSync(__dirname + '/server.js', 'utf8'), adminSrc = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8').replace(/base64,[A-Za-z0-9+\/=]{200,}/g, 'base64,...');   // (the panel's embedded font and pictures are not words)
