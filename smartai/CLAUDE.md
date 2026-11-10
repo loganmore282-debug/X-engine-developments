@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v44`, admin `admin/sw.js` `smartai-admin-shell-v22`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v45`, admin `admin/sw.js` `smartai-admin-shell-v22`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -503,3 +503,8 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Network-choice tick = the calendar's tick (owner: "change those ticks, it should be like the one we use on calendar")
 - The blue badge on the selected MTN / Airtel card (Add Funds) no longer draws an SVG check. It shows the same real heavy ✓ character as the check-in calendar (`\2713\FE0E`, 900 weight, white) and pops in with the calendar's `calTick` animation (off for reduced-motion). CSS only, user-src/index.html. Member cache v44.
+
+## Product picture whites match the card (owner: "let the backgrounds of product image whites match all over smoothly")
+- A product picture on a white or very light grey/off-white backdrop (every channel 205+, channels within 22 of each other, read from the four corners) is lifted to pure white: `lightBackdropFilter()` makes one SVG `feComponentTransfer` filter per backdrop colour (ids `wf-R-G-B`, kept in the hidden `<svg id="whiteFilters">` in index.html) that scales each channel so the corner colour becomes 255,255,255, and the frame is the card colour. Before, the frame took the picture's own corner colour (e.g. grey 233) and showed as a grey block beside the white card text.
+- Applied to the shop card, the Home strip and the 48 px pictures in My Products / Accrued earnings (`imgTag` now runs `fitImgBg` on every product picture; small ones get the lift but no frame). A coloured backdrop (the blue default art) keeps a frame of its own corner colour; dark greys and see-through corners are left alone. The filter is written into the HTML on repaints (`_imgFx`), so there is no grey flash. Cross-site pictures cannot be read (canvas) and stay as before.
+- test-product-whites.js (10 checks, in the audit). Member cache v45.

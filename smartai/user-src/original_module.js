@@ -1328,25 +1328,61 @@ function productImg(p){ return p && p.image ? p.image : iconUrl('robots'); }
 var _imgBg = {};   // picture address -> its corner colour, so a repaint (every refresh builds the cards again) never shows the empty frame for a moment
 // Repaints that would write the very same cards again are skipped, so the pictures are not thrown away and loaded again (that is what flickered).
 function setHtmlIfChanged(el, html){ if (el._lastHtml === html) return; el._lastHtml = html; el.innerHTML = html; }
+// A picture whose corners are WHITE or very light grey (a photo on a plain light backdrop, the usual product picture) is brought to the card's own white: its
+// backdrop is lifted to pure white (a brightness filter worked out from the corners) and the frame is the card colour, so every white matches and no grey
+// block shows in a card, in My Products or on the Home strip. A coloured backdrop (the blue default art) still gets a frame of its own corner colour.
+var _imgFx = {};   // picture address -> the filter that lifts its light backdrop to white ('' when none is needed)
+function lightBackdropFilter(r, g, b){
+  var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  if (mn < 205 || mx - mn > 22) return null;   // not a plain light backdrop
+  if (mn >= 253) return '';   // already white
+  // Each colour channel is scaled so the corner colour becomes exactly 255,255,255 (an off-white with a warm or cool tint turns pure white, not just brighter).
+  r = Math.round(r / 2) * 2 || 2; g = Math.round(g / 2) * 2 || 2; b = Math.round(b / 2) * 2 || 2;   // steps of two: few filters, one per backdrop colour
+  var id = 'wf-' + r + '-' + g + '-' + b;
+  if (!document.getElementById(id)) {
+    var host = document.getElementById('whiteFilters');
+    if (!host) {
+      host = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      host.setAttribute('id', 'whiteFilters'); host.setAttribute('width', '0'); host.setAttribute('height', '0'); host.setAttribute('aria-hidden', 'true');
+      host.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none';
+      document.body.appendChild(host);
+    }
+    var NS = 'http://www.w3.org/2000/svg', f = document.createElementNS(NS, 'filter'), t = document.createElementNS(NS, 'feComponentTransfer');
+    f.setAttribute('id', id); f.setAttribute('color-interpolation-filters', 'sRGB');
+    [['feFuncR', r], ['feFuncG', g], ['feFuncB', b]].forEach(function(q){
+      var fn = document.createElementNS(NS, q[0]); fn.setAttribute('type', 'linear'); fn.setAttribute('slope', (255 / q[1]).toFixed(4)); t.appendChild(fn);
+    });
+    f.appendChild(t); host.appendChild(f);
+  }
+  return 'url(#' + id + ')';
+}
 function fitImgBg(img){
-  var key = img.getAttribute('src');
+  var key = img.getAttribute('src'), framed = img.classList.contains('prod-img') || img.classList.contains('choc-img');
   img.style.opacity = '1';
-  if (!_imgBg[key]) _imgBg[key] = 'none';   // loaded, colour not (yet) known: never hide it again on a repaint
+  if (framed && !_imgBg[key]) _imgBg[key] = 'none';   // loaded, colour not (yet) known: never hide it again on a repaint
   try {
     var c = document.createElement('canvas'); c.width = 8; c.height = 8;
     var x = c.getContext('2d'); x.drawImage(img, 0, 0, 8, 8);
     var r = 0, g = 0, b = 0, a = 0;
     [[0, 0], [7, 0], [0, 7], [7, 7]].forEach(function(q){ var d = x.getImageData(q[0], q[1], 1, 1).data; r += d[0]; g += d[1]; b += d[2]; a += d[3]; });
     if (a / 4 < 128) return;   // see-through corners: the page colour stays
-    var col = 'rgb(' + Math.round(r / 4) + ',' + Math.round(g / 4) + ',' + Math.round(b / 4) + ')';
+    r = Math.round(r / 4); g = Math.round(g / 4); b = Math.round(b / 4);
+    var fx = lightBackdropFilter(r, g, b);
+    if (fx !== null) {
+      _imgFx[key] = fx; img.style.filter = fx;
+      if (framed) { img.style.background = 'var(--card)'; _imgBg[key] = 'var(--card)'; }
+      return;
+    }
+    if (!framed) return;
+    var col = 'rgb(' + r + ',' + g + ',' + b + ')';
     img.style.background = col; _imgBg[key] = col;
   } catch (e) {}
 }
 function imgTag(p, cls, style){
-  var src = productImg(p), framed = cls === 'prod-img' || cls === 'choc-img', col = framed ? _imgBg[src] : '';
+  var src = productImg(p), framed = cls === 'prod-img' || cls === 'choc-img', col = framed ? _imgBg[src] : '', fx = _imgFx[src] ? 'filter:' + _imgFx[src] + ';' : '';
   // A framed picture stays invisible until it has loaded (no blue frame flashing first); once its colour is known the frame is painted at once on every repaint.
-  var st = (style || '') + (framed ? (col === 'none' ? '' : col ? 'background:' + col + ';' : 'opacity:0;') : '');
-  return '<img' + (cls ? ' class="' + cls + '"' : '') + (st ? ' style="' + st + '"' : '') + ' src="' + esc(src) + '" alt=""' + (framed ? ' onload="fitImgBg(this)"' : '') + ' onerror="this.onerror=null;this.src=\'/icons/robots.webp\'">';
+  var st = (style || '') + fx + (framed ? (col === 'none' ? '' : col ? 'background:' + col + ';' : 'opacity:0;') : '');
+  return '<img' + (cls ? ' class="' + cls + '"' : '') + (st ? ' style="' + st + '"' : '') + ' src="' + esc(src) + '" alt=""' + ' onload="fitImgBg(this)"' + ' onerror="this.onerror=null;this.src=\'/icons/robots.webp\'">';
 }
 function ownedCount(key){
   return (STATE && STATE.investments || []).filter(function(i){ return i.key === key; }).length;
