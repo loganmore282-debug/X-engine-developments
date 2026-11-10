@@ -39,7 +39,7 @@ files or run quick-update.sh by hand: a push to `claude/smartai-build` deploys b
 - **`npm run test:audit` is the whole suite** (82 commands). The sixteen old test files of other apps that failed the same way
   in Potato (Kenya regions, Snow branding, `render.yaml`, ...) were deleted on 2026-11-09 together with `design-ref/` (Potato's screen pictures, 9.6 MB), `static-server.js`,
   `set-backend-url.js`, `deploy/deploy.sh` (an old rsync deploy to `/srv/smartai`, not the VPS layout), `translate-*` and `captcha.js`: nothing used them.
-- The app icons (`user/` and `admin/` `icon-192.png`, `icon-512.png`) and `user/link-preview.jpg` are PLACEHOLDERS (blue "SA" ring) until the owner sends the logo.
+- The app icons (`user/` and `admin/` `icon-192.png`, `icon-512.png`) and `user/link-preview.jpg` are the owner's AI robot (no letters: he said "Don't use letters to make icon, use a good ai robot icon like the ones existing") on the app's blue gradient, made by `python3 tools/make-app-icons.py <robot-512-cutout.png>` (source: the 512 px cut-out of his icon pack, `A_ai_robots.png`; the in-app `user/icons/robots.webp` is only 192 px). Still placeholders until he sends a final logo.
 
 ## Hosting (same Hostinger VPS as Soda, Mint, Cookie, Potato and Chocolate, completely separate)
 | | Potato | Smart AI |
@@ -84,8 +84,8 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
    boxes' fallbacks; guarded by `test-smartai-ui.js`). Everything stays editable in Admin > Settings. A value the admin has ever SAVED wins over the default, so a database
    that was set up before this change keeps its old numbers until they are saved again. Products are NOT ChocoMCC's list: the owner adds them himself in the admin.
 4. (done, owner, 2026-11-09) Atlas user + connection string, VPS first-setup (`/srv/smartai-src`, pm2 `smartai-server`), IP preview on port 8100, GitHub webhook: the ping answers 200
-   (green), so every push to `claude/smartai-build` now deploys by itself. (open, owner) the domain (`deploy/set-domain.sh`), the real logo (the app icons are placeholders: a
-   blue "SA" ring), the payment-company keys.
+   (green), so every push to `claude/smartai-build` now deploys by itself. (open, owner) the domain (`deploy/set-domain.sh`), the real logo (the app icons are placeholders:
+   the AI robot, no letters), the payment-company keys.
 5. (done, owner's order, 2026-11-09) **Start-up animation** and **payment animation** from his two GIFs, **no browser dialog on Sign Out**, and **a clean-out of old Potato
    leftovers in the admin panel and the server** (see the three sections that follow the member-app section).
 6. (done, owner's order, 2026-11-09) **The payment animation's orb is the page loader everywhere (no background) and every banner can be uploaded from the admin panel**
@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v15`, admin `admin/sw.js` `smartai-admin-shell-v10`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v16`, admin `admin/sw.js` `smartai-admin-shell-v11`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -402,5 +402,5 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 - Guard test `test-app-quality.js` (in the audit, now 82 commands): fails if a CSS class is unused, a selector is written twice, or the strip/settings behave as before.
 
 ## Admin panel is blue now (owner: "it is red instead of blue ... all those old codes")
-- The admin still wore Potato's red theme. `admin-src/index.html` `:root` tokens are now the member app's blue/white (`--gold:#137aef`, `--gold-deep:#0d5fd2`, `--bg:#eef4ff`, ink `#0b2a5b`, `--sky:#2b8bf6`; names stay legacy, only values changed); `theme-color` meta and `admin/manifest.json` blue; admin cache `smartai-admin-shell-v10`. Green/red/amber stay as OK/danger/warn only. Guard check in `test-app-quality.js`.
+- The admin still wore Potato's red theme. `admin-src/index.html` `:root` tokens are now the member app's blue/white (`--gold:#137aef`, `--gold-deep:#0d5fd2`, `--bg:#eef4ff`, ink `#0b2a5b`, `--sky:#2b8bf6`; names stay legacy, only values changed); `theme-color` meta and `admin/manifest.json` blue; admin cache `smartai-admin-shell-v11`. Green/red/amber stay as OK/danger/warn only. Guard check in `test-app-quality.js`.
 - The Firebase web config in the admin (`chnpetrol`) is the shared push project, not theme code; left as is.
