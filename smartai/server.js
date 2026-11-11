@@ -648,6 +648,7 @@ const DEFAULT_SETTINGS = {
   autoApproveWithdrawalsEnabled: false, autoApproveMinSec: 10, autoApproveMaxSec: 60, autoApproveMaxAmount: 0, autoApproveEnabledAt: 0,
   supportTelegram: '', telegramGroup: '',
   // The welcome announcement dialog (ChocoMCC's): a switch, a title and a body of text; its picture is the 'announcement' banner, its two buttons are the WhatsApp and Telegram group links below.
+  pageParticles: false,   // true = the dark particle background fills every page of the app (Admin > Banners > Animations)
   annEnabled: false, annTitle: '', annBody: '',   // the text may hold :fire: style tokens, which the app draws as the owner's animated emojis (see ANN_EMOJI in the app)
   // Daily check-in (Rewards tab): the CALENDAR pays a rising ladder over a 30-day cycle (day 1 = first amount, day 9 = the first again, ...; a missed day starts over at day 1).
   // `checkinLadder` empty = every day pays the flat `dailyCheckin`; both empty / 0 = the card is off. The streak and the day are the member's own.
@@ -7363,6 +7364,7 @@ app.post('/admin/settings/update', async (req, res) => {
       const words = String(updates.shareMessage == null ? '' : updates.shareMessage).replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 200);
       updates.shareMessage = words || DEFAULT_SETTINGS.shareMessage;
     }
+    if ('pageParticles' in updates) updates.pageParticles = updates.pageParticles === true;
     if ('annEnabled' in updates) updates.annEnabled = updates.annEnabled === true;
     if ('annTitle' in updates) updates.annTitle = String(updates.annTitle == null ? '' : updates.annTitle).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
     if ('annBody' in updates) updates.annBody = String(updates.annBody == null ? '' : updates.annBody).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f<>]/g, '').replace(/\r\n?/g, '\n').trim().slice(0, 2000);

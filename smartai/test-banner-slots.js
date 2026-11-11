@@ -179,6 +179,9 @@ ok(!/id="[A-Za-z]*Banner"[^>]*>\s*<img/.test(page), 'no banner is a fixed pictur
   const bs = posts.length; await ap.click('#saveAnn'); for (let i = 0; i < 40 && posts.length === bs; i++) await sleep(100);
   const sv = posts[posts.length - 1];
   ok(sv && sv.op === 'settings' && sv.settings.annBody === 'Hello:fire::tick: world' && /:robot:/.test(sv.settings.annTitle) && !('annEmoji' in sv.settings), 'Save announcement sends the title and the text with the emoji words in them');
+  const bp = posts.length; await ap.evaluate(() => { const s = document.getElementById('pfSwitch'); s.checked = true; s.dispatchEvent(new Event('change', { bubbles: true })); });
+  for (let i = 0; i < 40 && posts.length === bp; i++) await sleep(100);
+  ok(posts.length > bp && posts[posts.length - 1].op === 'settings' && posts[posts.length - 1].settings.pageParticles === true, 'the Animations card has the switch "Particle background on every page" and it saves at once');
   const slotsInPanel = [...adminSrc.matchAll(/\{ slot:'([a-z]+)', title:'[^']*',(?: round:true,)? file:'([A-Za-z]+)', clear:'([A-Za-z]+)'/g)].map(m => ({ slot: m[1], file: m[2], clear: m[3] }));
   ok(slotsInPanel.length === 11, 'eleven plain picture cards (About keeps its own card with the page text)');
   for (const o of slotsInPanel) {

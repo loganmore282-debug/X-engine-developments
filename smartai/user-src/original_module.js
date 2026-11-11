@@ -13,7 +13,7 @@ var DEFAULT_SETTINGS = {
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   salaryTiers: [], depositMethodNames: '', brandName: '', shareMessage: 'Join me on {app}', shareDomain: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', whatsappGroup: '', whatsappContact: '',
-  rulesText: '', annEnabled: false, annTitle: '', annBody: '', homeBannerTitle: '', homeBannerText: '', myBannerOpacity: 100, myBannerBlur: 0, navIconSize: 26, homeIconSize: 34, meIconSize: 36, giftCodeHint: 'Enter gift code'
+  rulesText: '', annEnabled: false, annTitle: '', annBody: '', pageParticles: false, homeBannerTitle: '', homeBannerText: '', myBannerOpacity: 100, myBannerBlur: 0, navIconSize: 26, homeIconSize: 34, meIconSize: 36, giftCodeHint: 'Enter gift code'
 };
 var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
 // Filled by syncPublicConfig() from the admin's products; the last copy this device saw is read first so the very first paint is already right.
@@ -275,6 +275,7 @@ async function syncPublicConfig(){
       applyBrandName();
       paintMeLook();
       paintIconSizes();
+      syncPageParticles();
       try { var as = getSettings(); preloadAnnEmoji(String(as.annTitle || '') + ' ' + String(as.annBody || '')); } catch (e) {}
     }
   }).catch(function(){}));
@@ -1071,7 +1072,8 @@ function makeParticleField(cv, opt){
       if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { draw(3); raf = 0; return; }
       raf = requestAnimationFrame(frame);
     },
-    stop: function(){ if (raf) cancelAnimationFrame(raf); raf = 0; }
+    stop: function(){ if (raf) cancelAnimationFrame(raf); raf = 0; },
+    running: function(){ return !!raf; }
   };
 }
 var _annField = null, _payField = null, _scrollLocked = false, _lockY = 0;
@@ -1083,7 +1085,21 @@ function syncScrollLock(){
   if (open) { _lockY = window.pageYOffset || 0; document.body.style.top = (-_lockY) + 'px'; document.body.classList.add('scroll-locked'); }
   else { document.body.classList.remove('scroll-locked'); document.body.style.top = ''; window.scrollTo(0, _lockY); }
 }
-new MutationObserver(syncScrollLock).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['class'] });
+var _pfField = null;
+// The particle field behind EVERY page (Admin switch pageParticles): body.pf-on turns the dark backdrop on; while a full page (overlay) is open the app underneath is hidden so the field shows through.
+function syncPageParticles(){
+  var on = !!getSettings().pageParticles, b = document.body;
+  if (!b) return;
+  b.classList.toggle('pf-on', on);
+  if (on) {
+    if (!_pfField) _pfField = makeParticleField($('pfBg'), { horizon: 0.45, scale: 1.15, alive: function(){ return document.body.classList.contains('pf-on') && !document.hidden; } });
+    if (!_pfField.running()) _pfField.start();
+  } else if (_pfField) _pfField.stop();
+  syncOvOpen();
+}
+function syncOvOpen(){ var open = !!document.querySelector('.overlay.show'); if (document.body.classList.contains('ov-open') !== open) document.body.classList.toggle('ov-open', open); }
+document.addEventListener('visibilitychange', function(){ if (!document.hidden && document.body.classList.contains('pf-on') && _pfField && !_pfField.running()) _pfField.start(); });
+new MutationObserver(function(){ syncScrollLock(); syncOvOpen(); }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['class'] });
 /* ====================== ANNOUNCEMENT (the welcome dialog, ChocoMCC's) ======================
    Shown on every app open and every time Home is entered from another tab, while Admin > Settings > Announcement dialog is switched on and has text. A title, the body text,
    an optional picture on top (Admin > Banners > Welcome announcement; without one the small gift badge shows), then the WhatsApp Group and Telegram Group buttons (Settings > Support). */
@@ -2493,6 +2509,7 @@ function toast(msg){
 captureReferralFromUrl();
 applyBrandName();
 paintIconSizes();
+syncPageParticles();
 paintAuthArt();
 setAuthMode(authMode);
 window.addEventListener('snow-auth', function(ev){ onFbAuthChanged(ev.detail); });

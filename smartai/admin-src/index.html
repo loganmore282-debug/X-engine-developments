@@ -3270,6 +3270,10 @@ async function renderBanners(){
     </div>
     <h2 class="sec">Animations &middot; back to default any time</h2>
     <div class="panel-card">
+      <div class="switch-row"><span><b>Particle background on every page</b><br><span class="muted" style="font-size:12px">The dark moving-particle wave (the one behind the welcome dialog and the payment page) fills the whole app. The cards stay white; the words that sit straight on the backdrop turn white. Switch it off to go back to the usual light pages. Saves at once.</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="pfSwitch" ${v('pageParticles',false)?'checked':''} style="width:auto"></label></div>
+    </div>
+    <div class="panel-card">
       <p class="muted" style="margin-top:0">The page loader (the dots), the three level medals on the Team page, the gift box and the opened gift on the Rewards page, and the payment success tick and failed cross are animations. A picture uploaded here stands in place of one of them; <b>Back to default</b> brings the animation back.</p>
       ${SMARTAI_ANIM_KEYS.map(iconRow).join('')}
     </div>
@@ -3399,6 +3403,12 @@ function wireBannerHandlers(){
     f.value = f.value.slice(0,st) + tok + f.value.slice(en);
     const pos = st + tok.length; f.focus(); try{ f.setSelectionRange(pos,pos); }catch(_){}
   }));
+  $('pfSwitch').addEventListener('change', async e=>{
+    const on = e.target.checked;
+    const d = await api('/admin/settings/update', { settings: { pageParticles: on } });
+    toast(d.status==='success'?(on?'Particle background is ON for every page':'Back to the usual light pages'):(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if (d.status!=='success') e.target.checked = !on;
+  });
   $('saveAnn').addEventListener('click', async()=>{
     const d=await api('/admin/settings/update', { settings: { annEnabled:$('aEnabled').checked, annTitle:$('aTitle').value.trim(), annBody:$('aBody').value } });
     toast(d.status==='success'?'Announcement saved':(d.message||'Failed'), d.status==='success'?'ok':'err');

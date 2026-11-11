@@ -98,7 +98,7 @@
     --line:#D6E3F8;
     --shadow: 0 10px 24px -12px rgba(11,42,91,.28);
     --shadow-lg: 0 20px 44px -16px rgba(11,42,91,.35);
-    --radius: 20px; --gut:10px;
+    --radius: 20px; --gut:10px; --flow:var(--cream);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;height:100%;}
@@ -313,6 +313,17 @@
   /* ---------- Overlay pages ---------- */
   .overlay{position:fixed;inset:0;background:var(--cream);z-index:80;display:none;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;}
   .overlay.show{display:block;}
+  /* "Particle background on every page" (Admin > Banners > Animations): the dark particle field fills the whole app. The pages' light backdrop gives way to it, the banners fade into
+     it, the white cards stay as they are, and the words that sit straight on the backdrop turn white. Switched off, none of this applies. */
+  .pf-bg{position:fixed;inset:0;width:100%;height:100%;display:none;z-index:-1;pointer-events:none;}
+  body.pf-on{--flow:#061638;background:radial-gradient(130% 90% at 50% 108%,#0c3f9c 0%,#071b56 42%,#040b26 100%);background-attachment:fixed;}
+  body.pf-on .pf-bg{display:block;}
+  body.pf-on #root{background:transparent;}
+  body.pf-on .overlay{background:transparent;}
+  body.pf-on.ov-open #viewHome,body.pf-on.ov-open #viewShop,body.pf-on.ov-open #viewRewards,body.pf-on.ov-open #viewShare,body.pf-on.ov-open #viewTeam,body.pf-on.ov-open #viewAccount,body.pf-on.ov-open .tabbar{visibility:hidden;}
+  body.pf-on .nav-veil{background:rgba(5,14,44,.94);}
+  body.pf-on .sec-head h3,body.pf-on .empty,body.pf-on .streak-cycle-label,body.pf-on #supportLinks .kv,body.pf-on #ovBindbank .muted{color:#fff;}
+  body.pf-on #rulesBody,body.pf-on .about-html{color:#e6efff !important;}
   /* Every page has a compact blue curved header like Potato's: a plain white chevron at the left and the page name centred in white. */
   .ov-top{position:relative;z-index:6;height:calc(52px + env(safe-area-inset-top,0px));margin-bottom:12px;background:radial-gradient(circle at 90% 10%,rgba(255,255,255,.16) 0,rgba(255,255,255,0) 40%),linear-gradient(135deg,#2b88f3,#0a4fc6);border-radius:0 0 24px 24px;box-shadow:0 10px 22px -14px rgba(11,42,91,.6);}
   .ov-back{position:absolute;left:6px;top:calc(env(safe-area-inset-top,0px) + 4px);width:44px;height:44px;border:none;background:none;color:#fff;display:flex;align-items:center;justify-content:center;}
@@ -321,9 +332,9 @@
   /* the Me page's white flow: the bottom of every page picture melts into the page */
   .overlay .photo-banner::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
     background:
-      radial-gradient(ellipse 55% 70% at 14% 112%, var(--cream) 0%, rgba(238,244,255,0) 62%),
-      radial-gradient(ellipse 60% 75% at 84% 108%, var(--cream) 0%, rgba(238,244,255,0) 60%),
-      linear-gradient(0deg, var(--cream) 0%, rgba(238,244,255,0) 42%);}
+      radial-gradient(ellipse 55% 70% at 14% 112%, var(--flow) 0%, rgba(238,244,255,0) 62%),
+      radial-gradient(ellipse 60% 75% at 84% 108%, var(--flow) 0%, rgba(238,244,255,0) 60%),
+      linear-gradient(0deg, var(--flow) 0%, rgba(238,244,255,0) 42%);}
 
   .info-box{margin:16px var(--gut);background:var(--caramel-pale);border-radius:16px;padding:14px 16px;font-size:12.5px;color:var(--caramel-deep);line-height:1.5;font-weight:600;}
   .photo-banner{position:relative;margin:16px var(--gut);border-radius:0;overflow:hidden;box-shadow:var(--shadow);height:150px;background:var(--cream-deep);}
@@ -342,12 +353,12 @@
   .photo-banner.pb-flow{height:170px;}
   .photo-banner.pb-flow::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
     background:
-      radial-gradient(ellipse 55% 70% at 14% 112%, var(--cream) 0%, rgba(238,244,255,0) 62%),
-      radial-gradient(ellipse 60% 75% at 84% 108%, var(--cream) 0%, rgba(238,244,255,0) 60%),
+      radial-gradient(ellipse 55% 70% at 14% 112%, var(--flow) 0%, rgba(238,244,255,0) 62%),
+      radial-gradient(ellipse 60% 75% at 84% 108%, var(--flow) 0%, rgba(238,244,255,0) 60%),
       linear-gradient(0deg, rgba(238,244,255,.92) 0%, rgba(238,244,255,0) 34%);}
   .photo-banner.pb-shop::after{background:
-      radial-gradient(ellipse 55% 55% at 14% 118%, var(--cream) 0%, rgba(238,244,255,0) 62%),
-      radial-gradient(ellipse 60% 60% at 84% 114%, var(--cream) 0%, rgba(238,244,255,0) 60%);}
+      radial-gradient(ellipse 55% 55% at 14% 118%, var(--flow) 0%, rgba(238,244,255,0) 62%),
+      radial-gradient(ellipse 60% 60% at 84% 114%, var(--flow) 0%, rgba(238,244,255,0) 60%);}
   .photo-banner.pb-shop .pb-tint{z-index:2;}
 
 
@@ -367,10 +378,10 @@
      stopping dead at one flat horizontal line. */
   .auth-banner::after{content:"";position:absolute;inset:0;
     background:
-      radial-gradient(ellipse 55% 90% at 14% 108%, var(--cream) 0%, rgba(238,244,255,0) 62%),
-      radial-gradient(ellipse 65% 100% at 78% 112%, var(--cream) 0%, rgba(238,244,255,0) 58%),
-      radial-gradient(ellipse 45% 85% at 48% 104%, var(--cream) 0%, rgba(238,244,255,0) 55%),
-      linear-gradient(0deg, var(--cream) 0%, rgba(238,244,255,0) 48%),
+      radial-gradient(ellipse 55% 90% at 14% 108%, var(--flow) 0%, rgba(238,244,255,0) 62%),
+      radial-gradient(ellipse 65% 100% at 78% 112%, var(--flow) 0%, rgba(238,244,255,0) 58%),
+      radial-gradient(ellipse 45% 85% at 48% 104%, var(--flow) 0%, rgba(238,244,255,0) 55%),
+      linear-gradient(0deg, var(--flow) 0%, rgba(238,244,255,0) 48%),
       linear-gradient(160deg, rgba(19,122,239,.32), rgba(11,42,91,.38) 70%);}
   .uline-tabs{display:flex;gap:22px;margin:4px var(--gut) 0;border-bottom:1.5px solid var(--line);}
   .uline-tab{background:none;border:none;padding:10px 2px;font-size:14px;font-weight:800;color:var(--cocoa-faint);
@@ -483,9 +494,9 @@
      container would clip the card too. */
   .acct-cover::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
     background:
-      radial-gradient(ellipse 55% 95% at 12% 110%, var(--cream) 0%, rgba(238,244,255,0) 60%),
-      radial-gradient(ellipse 60% 100% at 82% 105%, var(--cream) 0%, rgba(238,244,255,0) 58%),
-      linear-gradient(0deg, var(--cream) 0%, rgba(238,244,255,0) 42%);}
+      radial-gradient(ellipse 55% 95% at 12% 110%, var(--flow) 0%, rgba(238,244,255,0) 60%),
+      radial-gradient(ellipse 60% 100% at 82% 105%, var(--flow) 0%, rgba(238,244,255,0) 58%),
+      linear-gradient(0deg, var(--flow) 0%, rgba(238,244,255,0) 42%);}
   .acct-card{position:absolute;left:var(--gut);right:var(--gut);bottom:-32px;z-index:2;background:linear-gradient(150deg,#16407f,#0a2350);
     border-radius:20px;box-shadow:var(--shadow-lg);padding:16px 18px;display:flex;align-items:center;gap:14px;color:#fff;}
   .acct-icon{width:46px;height:46px;border-radius:14px;background:#fff;overflow:hidden;
@@ -536,8 +547,10 @@
   .pay-status-card h3{font-size:17px;color:#fff;text-shadow:0 0 16px rgba(90,170,255,.6);}
   .pay-status-card .muted{color:rgba(205,222,255,.85);}
   .pay-steps{list-style:none;margin:16px 0 0;padding:0;text-align:left;}
-  .pay-steps li{position:relative;padding:6px 0 6px 22px;font-size:12.5px;color:rgba(226,237,255,.93);font-weight:600;}
-  .pay-steps li::before{content:"";position:absolute;left:2px;top:13px;width:6px;height:6px;border-radius:50%;background:#59b6ff;box-shadow:0 0 8px 2px rgba(89,182,255,.8);}
+  .pay-steps li{position:relative;padding:6px 0 6px 22px;font-size:12.5px;color:var(--cocoa-soft);font-weight:600;}
+  .pay-status-card .pay-steps li{color:rgba(226,237,255,.93);}
+  .pay-steps li::before{content:"";position:absolute;left:2px;top:13px;width:6px;height:6px;border-radius:50%;background:var(--mint);}
+  .pay-status-card .pay-steps li::before{background:#59b6ff;box-shadow:0 0 8px 2px rgba(89,182,255,.8);}
 
   .tm-card{margin:12px var(--gut) 0;padding:16px;background:var(--card);border-radius:20px;box-shadow:var(--shadow);}
   .tm-over{padding-bottom:6px;}
@@ -856,6 +869,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
 </script>
 </head>
 <body>
+<canvas class="pf-bg" id="pfBg" aria-hidden="true"></canvas>
 
 <div id="loadingScreen">
   <div id="ldBox">

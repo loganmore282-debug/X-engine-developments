@@ -200,6 +200,23 @@ async function member(ref) {
   ok(pf.fixed === 'fixed' && pf.full && pf.dark, 'the payment page is the full-page dark particle field (a canvas as big as the screen behind the words)');
   const pw = []; for (let i = 0; i < 4; i++) { pw.push(await ev(() => document.getElementById('payFx').toDataURL())); await sleep(250); }
   ok(new Set(pw).size >= 3 && pw.every(u => u.length > 5000), 'and the particles on it are painted and moving');
+  await ev(() => { stopDepositPoll(); closeOverlay(); }); await sleep(300);
+  await ev(() => openOverlay('deposit')); await sleep(600);
+  ok(await ev(() => { const li = document.querySelector('#ovDeposit .pay-steps li'); const c = getComputedStyle(li).color.match(/\d+/g).map(Number); return c[0] < 120 && c[1] < 140; }), 'on Add Funds the Deposit procedure steps are dark and readable on their light box (not white)');
+  await ev(() => closeOverlay()); await sleep(300);
+  // the particle background on EVERY page: off by default, the admin switch turns it on, and back
+  ok(await ev(() => !document.body.classList.contains('pf-on') && getComputedStyle(document.getElementById('pfBg')).display === 'none'), 'particle background on every page is off until the admin switches it on');
+  ok((await J('POST', '/admin/settings/update', { settings: { pageParticles: 'yes' } }, null, true)).s === 200 && (await J('GET', '/public/settings')).j.settings.pageParticles === false, 'anything but true is stored as off');
+  await J('POST', '/admin/settings/update', { settings: { pageParticles: true } }, null, true);
+  await ev(() => syncPublicConfig()); await sleep(1200);
+  ok(await ev(() => document.body.classList.contains('pf-on') && getComputedStyle(document.getElementById('pfBg')).display === 'block' && getComputedStyle(document.getElementById('pfBg')).zIndex === '-1' && document.getElementById('pfBg').toDataURL().length > 5000), 'switched on, the particle field is painted behind every page');
+  await ev(() => openOverlay('deposit')); await sleep(500);
+  ok(await ev(() => document.body.classList.contains('ov-open') && getComputedStyle(document.getElementById('viewHome')).visibility === 'hidden' && getComputedStyle(document.getElementById('ovDeposit')).backgroundColor === 'rgba(0, 0, 0, 0)'), 'a full page opens over the field (the tab pages underneath are hidden, the page itself is see-through)');
+  await ev(() => closeOverlay()); await sleep(300);
+  await J('POST', '/admin/settings/update', { settings: { pageParticles: false } }, null, true);
+  await ev(() => syncPublicConfig()); await sleep(900);
+  ok(await ev(() => !document.body.classList.contains('pf-on') && getComputedStyle(document.getElementById('pfBg')).display === 'none'), 'switched off again, the usual light pages are back');
+  await ev(() => openDepositStatus('dep-anim-test2', 'S2611090000000002', '0771234567')); await sleep(500);
   await ev(() => showDepositSuccess()); await sleep(200);
   ok(await ev(() => document.getElementById('depStatusIc').className === 'pay-status-ic anim' && !document.querySelector('#depStatusIc svg.dl') && /ok-check/.test(document.getElementById('depStatusIc').innerHTML)), 'once the payment is confirmed the dots give way to the green tick (the owner\'s animated tick)');
   ok(await ev(() => !document.querySelector('#depStatusIc svg.dl')), 'and the dots are gone');
