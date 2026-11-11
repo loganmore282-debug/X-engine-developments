@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v82`, admin `admin/sw.js` `smartai-admin-shell-v32`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v83`, admin `admin/sw.js` `smartai-admin-shell-v32`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -636,3 +636,6 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Particle wave calmed to the recording's own size (owner: "this is too much, use my original one to see the wave length and height")
 - Compared side by side with the recording at the same scale (harness in the scratchpad: the engine on a 384 x 744 black canvas next to a video frame): the original is DIM (dots about 45,115,200, never white), its dots are separate and soft, the sheet is nearly flat in front, and only the far part rolls: one slow swell about as long as the whole width and about 8 % of the width high, with a modest crest. So: dots smaller and softer with no white core (`sprite()` colours, `base` radius 2.5), brightness 0.72, swells at most 0.09, bowl 0.012, crest height 0.04 + 0.09 sin(1.4 x - 0.8 t) (one wave across the screen), crest far away (distance 4.7 of 1..6), the lines sway sideways a little (0.14). Member cache v82.
+
+## Particle wave: the wave is back, at the recording's SPEED (owner: "this one has no wave even ... speed should be like the other original")
+- Measured the recording's motion by correlating frames: the dots do NOT stream toward the viewer; the whole surface bobs up and down slowly (shifts of +2 px per frame turning to -4.7 px per frame at 768 px wide, 24 frames a second, one swing in about 8 seconds), carried by the swell and the crest. So: forward row scroll is now almost nothing (0.035 distance units a second, was 0.4), the swells and the crest move at 0.8 to 1.2 radians a second (periods of 5 to 8 s), amplitudes are between the two earlier versions (swells up to 0.3, bowl 0.03, crest 0.1 + 0.08 sin(1.4 x - 0.9 t) + 0.025 ripples), the dim soft dots stay. `makeParticleField(...).at(t)` draws one picture at time t (for measuring, tests). Member cache v83.

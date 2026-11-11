@@ -1030,7 +1030,7 @@ function makeParticleField(cv, opt){
     return true;
   }
   function sm(a, b, x){ x = Math.max(0, Math.min(1, (x - a) / (b - a))); return x * x * (3 - 2 * x); }
-  var ZN = 1, ZF = 6, CAMH = 1.2;     // nearest and farthest distance of the sheet, camera height (world units)
+  var ZN = 1, ZF = 5.5, CAMH = 1.2;     // nearest and farthest distance of the sheet, camera height (world units)
   function draw(t){
     if (!size()) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
@@ -1038,24 +1038,24 @@ function makeParticleField(cv, opt){
     var dim = opt.dim == null ? 1 : opt.dim, k = (opt.scale || 1) * Math.max(0.8, Math.min(1.5, W / 390));
     var y0 = H * (opt.horizon == null ? 0.16 : opt.horizon), fx = W * 0.9, fy = (H * 1.1 - y0) * ZN / CAMH, range = ZF - ZN;
     var DX = 1 / (fx / W * 6.5), DZ = Math.max(0.03, (W / 13) / (H * 1.1 - y0)), NR = Math.min(150, Math.ceil(range / DZ)), NC = Math.ceil((W / 2) * ZF / fx / DX) + 1;   // about 6 dots across the near rows, rows half as far apart as columns
-    var zr = 4.7 + 0.35 * Math.sin(t * 0.27), xr = 1.4 * Math.sin(t * 0.21);          // where the bright crest is now (distance, and how far it leans left or right)
+    var zr = 4.4 + 0.4 * Math.sin(t * 0.22), xr = 1.4 * Math.sin(t * 0.18);          // where the bright crest is now (distance, and how far it leans left or right)
     var r, c;
     for (r = 0; r < NR; r++) {
-      var z = ZN + (((r * DZ - t * 0.4) % range) + range) % range;
+      var z = ZN + (((r * DZ - t * 0.035) % range) + range) % range;
       var zn = (z - ZN) / range;                                                      // 0 near ... 1 far
       var fade = sm(0, 0.05, zn) * (1 - sm(0.94, 1, zn));
       if (fade < 0.01) continue;
-      var big = 0.015 + 0.075 * sm(0.2, 0.95, zn);                                     // the swells grow toward the far hills
+      var big = 0.02 + 0.28 * sm(0.2, 0.95, zn);                                     // the swells grow toward the far hills
       var ridge = Math.exp(-Math.pow((z - zr) / 0.5, 2));
       var spr = zn < 0.3 ? SP[0] : (zn < 0.65 ? SP[1] : SP[2]);
       var base = 2.5 * k * Math.pow(ZN / z, 0.95);
       for (c = -NC; c <= NC; c++) {
         var x = c * DX;
         x += 0.14 * Math.sin(1.1 * z + 0.7 * t + 0.35 * x) * (0.25 + zn);                // the lines sway sideways in S-curves
-        var h = big * (Math.sin(0.7 * x + 1.5 * z - 0.9 * t) + 0.6 * Math.sin(-1.1 * x + 0.8 * z + 0.7 * t) + 0.35 * Math.sin(2 * x + 2 * z - 1.3 * t));
-        h += 0.012 * x * x * sm(0.3, 1, zn);                                           // the far sides curl up like a bowl
+        var h = big * (Math.sin(0.7 * x + 1.5 * z - 1.05 * t) + 0.6 * Math.sin(-1.1 * x + 0.8 * z + 0.8 * t) + 0.3 * Math.sin(2 * x + 2 * z - 1.2 * t));
+        h += 0.03 * x * x * sm(0.2, 1, zn);                                           // the far sides curl up like a bowl
         var rw = ridge * Math.exp(-Math.pow((x - xr) / 3.6, 2) * 0.35);
-        h += rw * (0.04 + 0.09 * Math.sin(1.4 * x - 0.8 * t) + 0.012 * Math.sin(7 * x + 2 * z - 2.4 * t));               // the crest, with quick little ripples along it
+        h += rw * (0.1 + 0.08 * Math.sin(1.4 * x - 0.9 * t) + 0.025 * Math.sin(5 * x + 2 * z - 2 * t));               // the crest, with quick little ripples along it
         var px = W / 2 + fx * x / z, py = y0 + fy * (CAMH - h) / z;
         if (px < -12 || px > W + 12 || py < -12 || py > H + 12) continue;
         var a = fade * dim * 0.72 * (0.7 + 0.25 * zn + 0.4 * rw) * (0.84 + 0.16 * Math.sin(t * 1.7 + c * 1.3 + r * 0.7));
@@ -1082,7 +1082,8 @@ function makeParticleField(cv, opt){
       raf = requestAnimationFrame(frame);
     },
     stop: function(){ if (raf) cancelAnimationFrame(raf); raf = 0; },
-    running: function(){ return !!raf; }
+    running: function(){ return !!raf; },
+    at: function(t){ draw(t); }     // draws one picture at time t (seconds); used by the tests
   };
 }
 var _annField = null, _payField = null, _scrollLocked = false, _lockY = 0;
