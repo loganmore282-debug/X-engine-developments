@@ -150,6 +150,7 @@ ok(!/id="[A-Za-z]*Banner"[^>]*>\s*<img/.test(page), 'no banner is a fixed pictur
     if (p === '/admin/brand-assets') return { status: 'success', appIcon: null, appIconCustom: false };
     if (p === '/admin/announcement-image') return { status: 'success', image: null };
     if (p === '/admin/about-html') return { status: 'success', html: '<p>About</p>' };
+    if (p === '/admin/settings/update') { posts.push({ op: 'settings', settings: body.settings }); return { status: 'success' }; }
     if (p === '/admin/smartai-image/set') { posts.push({ op: 'set', slot: body.slot, image: body.image }); images[body.slot] = body.image; return { status: 'success' }; }
     if (p === '/admin/smartai-image/clear') { posts.push({ op: 'clear', slot: body.slot }); images[body.slot] = null; return { status: 'success' }; }
     return { status: 'success', message: 'ok', stats: {}, products: [], users: [], transactions: [], deposits: [], withdrawals: [] };
@@ -168,6 +169,16 @@ ok(!/id="[A-Za-z]*Banner"[^>]*>\s*<img/.test(page), 'no banner is a fixed pictur
   const wanted = ['Home banner', 'AI Robots page banner', 'Team page banner', 'Me page banner (account background)', 'Profile logo (account logo)', 'Add Funds page banner', 'Cash Out page banner',
     'Support page banner', 'About page', 'Ledger page banner', 'Payout Account page banner', 'Welcome announcement', 'Link preview (Telegram)', 'App icon'];
   ok(wanted.every(t => heads.includes(t)), 'every banner has its own card: ' + wanted.filter(t => !heads.includes(t)).join(', ') + (wanted.every(t => heads.includes(t)) ? 'all ' + wanted.length + ' found' : ' MISSING'));
+  // the seven animated emoji buttons put a :word: into the title or the text, at the cursor
+  ok(await ap.evaluate(() => document.querySelectorAll('#annEmojiRow .emo-opt').length) === 7, 'the Welcome announcement card has seven emoji buttons');
+  await ap.fill('#aBody', 'Hello world'); await ap.evaluate(() => { const f = document.getElementById('aBody'); f.focus(); f.setSelectionRange(5, 5); });
+  await ap.click('#annEmojiRow [data-emo="fire"]'); await ap.click('#annEmojiRow [data-emo="tick"]');
+  ok(await ap.evaluate(() => document.getElementById('aBody').value) === 'Hello:fire::tick: world', 'tapping Fire then Tick puts :fire::tick: into the text where the cursor was');
+  await ap.fill('#aTitle', 'News'); await ap.click('#aTitle'); await ap.click('#annEmojiRow [data-emo="robot"]');
+  ok(/:robot:/.test(await ap.evaluate(() => document.getElementById('aTitle').value)) && !/:robot:/.test(await ap.evaluate(() => document.getElementById('aBody').value)), 'with the cursor in the title, the emoji goes into the title');
+  const bs = posts.length; await ap.click('#saveAnn'); for (let i = 0; i < 40 && posts.length === bs; i++) await sleep(100);
+  const sv = posts[posts.length - 1];
+  ok(sv && sv.op === 'settings' && sv.settings.annBody === 'Hello:fire::tick: world' && /:robot:/.test(sv.settings.annTitle) && !('annEmoji' in sv.settings), 'Save announcement sends the title and the text with the emoji words in them');
   const slotsInPanel = [...adminSrc.matchAll(/\{ slot:'([a-z]+)', title:'[^']*',(?: round:true,)? file:'([A-Za-z]+)', clear:'([A-Za-z]+)'/g)].map(m => ({ slot: m[1], file: m[2], clear: m[3] }));
   ok(slotsInPanel.length === 11, 'eleven plain picture cards (About keeps its own card with the page text)');
   for (const o of slotsInPanel) {

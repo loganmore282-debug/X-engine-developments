@@ -228,9 +228,8 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .chart-bars i{display:block;width:7px;border-radius:3px 3px 0 0;min-height:2px}
   .chart-x{font-size:9px;color:var(--sub);white-space:nowrap}
   .emo-row{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px;}
-  .emo-opt{width:64px;height:64px;padding:0;border-radius:14px;border:2px solid var(--line,#d6e3f8);background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;}
-  .emo-opt.on{border-color:#1a73e8;box-shadow:0 0 0 3px rgba(26,115,232,.25);}
-  .emo-none{font-size:12px;font-weight:700;color:#5b6b85;}
+  .emo-opt{width:74px;padding:6px 4px 4px;border-radius:14px;border:2px solid var(--line,#d6e3f8);background:#fff;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;}
+  .emo-name{font-size:10.5px;font-weight:700;color:#5b6b85;}
   .emo-pic{display:block;width:56px;height:56px;background:url(/anim/emoji-posters.webp) no-repeat;background-size:392px 56px;}
 </style>
 <script data-smartai-idle>
@@ -3173,7 +3172,6 @@ async function renderBanners(){
   const aboutHtmlRes = await api('/admin/about-html'); if (aboutHtmlRes.status!=='success'){ loadFailed(aboutHtmlRes,'the About page'); return; }   // an empty box here would blank the page on Save
   const aboutHtmlText = aboutHtmlRes.html||'';
   const announcementImage = (annr && annr.image) || '';
-  const annEmojiSel = (n=>Number.isInteger(n)&&n>=1&&n<=7?n:0)(Number(s.annEmoji));
   const appIconImage = bar.appIcon||'';
   const appIconCustom = !!bar.appIconCustom;
   // One picture row (thumbnail, status, Remove / Back to default, Upload). The animations say "default animation" because their default is the owner's recording, not a picture.
@@ -3230,11 +3228,11 @@ async function renderBanners(){
       <input id="aTitle" maxlength="60" value="${esc(v('annTitle',''))}" placeholder="Notice">
       <label>Text <span class="muted">(blank line = new paragraph)</span></label>
       <textarea id="aBody" rows="7" maxlength="2000" placeholder="Write the announcement…">${esc(v('annBody',''))}</textarea>
-      <label style="margin-top:12px">Animated emoji <span class="muted">(pick one above the title, or None)</span></label>
+      <label style="margin-top:12px">Animated emojis <span class="muted">(tap one to put it into the title or the text, wherever the cursor is; use as many as you like)</span></label>
       <div class="emo-row" id="annEmojiRow">
-        <button type="button" class="emo-opt${annEmojiSel?'':' on'}" data-emo="0" aria-label="No emoji"><span class="emo-none">None</span></button>
-        ${[1,2,3,4,5,6,7].map(n=>`<button type="button" class="emo-opt${annEmojiSel===n?' on':''}" data-emo="${n}" aria-label="Emoji ${n}"><span class="emo-pic" style="background-position:${-(n-1)*56}px 0"></span></button>`).join('')}
+        ${[['bangs','Double exclamation'],['alert','Red warning'],['warning','Yellow warning'],['fire','Fire'],['boom','Explosion'],['tick','Green tick'],['robot','Robot in love']].map(([k,n],i)=>`<button type="button" class="emo-opt" data-emo="${k}" title=":${k}: &mdash; ${n}" aria-label="${n}"><span class="emo-pic" style="background-position:${-i*56}px 0"></span><span class="emo-name">:${k}:</span></button>`).join('')}
       </div>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">In the box it shows as a word between colons, like <b>:fire:</b>. Members see the little animated picture in its place. The title and the text can both have them.</p>
       <button class="btn block" id="saveAnn" style="margin-top:10px">Save announcement</button>
       <p class="muted" style="margin:14px 0 6px">The picture on top <span class="muted">(optional; tall portrait or wide banner)</span></p>
       <div class="banner-row">
@@ -3390,9 +3388,19 @@ function wireBannerHandlers(){
     const d = await api('/admin/settings/update', { settings: { linkPreviewTitle: $('lpTitle').value, linkPreviewText: $('lpText').value } });
     toast(d.status==='success'?'Link preview words saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
-  document.querySelectorAll('#annEmojiRow .emo-opt').forEach(b=>b.addEventListener('click',()=>{ document.querySelectorAll('#annEmojiRow .emo-opt').forEach(x=>x.classList.toggle('on',x===b)); }));
+  let annField = $('aBody');
+  ['aTitle','aBody'].forEach(id=>$(id).addEventListener('focus',()=>{ annField = $(id); }));
+  document.querySelectorAll('#annEmojiRow .emo-opt').forEach(b=>b.addEventListener('mousedown',e=>e.preventDefault()));   // keep the cursor where it is in the box
+  document.querySelectorAll('#annEmojiRow .emo-opt').forEach(b=>b.addEventListener('click',()=>{
+    const f = annField, tok = ':'+b.dataset.emo+':';
+    const room = (f.maxLength>0 ? f.maxLength : 100000) - f.value.length;
+    if (room < tok.length) { toast('No room left for another emoji here','err'); return; }
+    const st = f.selectionStart==null ? f.value.length : f.selectionStart, en = f.selectionEnd==null ? st : f.selectionEnd;
+    f.value = f.value.slice(0,st) + tok + f.value.slice(en);
+    const pos = st + tok.length; f.focus(); try{ f.setSelectionRange(pos,pos); }catch(_){}
+  }));
   $('saveAnn').addEventListener('click', async()=>{
-    const d=await api('/admin/settings/update', { settings: { annEnabled:$('aEnabled').checked, annTitle:$('aTitle').value.trim(), annBody:$('aBody').value, annEmoji:Number((document.querySelector('#annEmojiRow .emo-opt.on')||{dataset:{emo:0}}).dataset.emo)||0 } });
+    const d=await api('/admin/settings/update', { settings: { annEnabled:$('aEnabled').checked, annTitle:$('aTitle').value.trim(), annBody:$('aBody').value } });
     toast(d.status==='success'?'Announcement saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   const annImageFile = $('annImageFile');
