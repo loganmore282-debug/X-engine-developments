@@ -519,14 +519,24 @@
   .link-boxed{padding:10px 10px 10px 14px;background:var(--cream);border:1.5px dashed var(--caramel);border-radius:16px;}
   .link-row span{flex:1;font-size:12.5px;font-weight:700;color:var(--cocoa-soft);}
 
-  .pay-status-card{margin:16px var(--gut);background:var(--mint-pale);border-radius:20px;padding:22px 20px;text-align:center;}
+  /* The whole payment page is the dark particle field (full page, fixed behind the words; makeParticleField draws it), with the cards sitting on it. */
+  #ovDepositStatus{background:radial-gradient(130% 90% at 50% 108%,#0c3f9c 0%,#071b56 42%,#040b26 100%);color:#fff;}
+  .pay-fx{position:fixed;inset:0;width:100%;height:100%;display:block;pointer-events:none;}
+  #ovDepositStatus>:not(.pay-fx){position:relative;z-index:1;}
+  #ovDepositStatus .link-box{background:rgba(255,255,255,.07);border-color:rgba(130,190,255,.6);color:#fff;}
+  #ovDepositStatus .link-row{color:#fff;}
+  #ovDepositStatus .link-box .muted{color:rgba(205,222,255,.85);}
+  #ovDepositStatus .info-box{border:1px solid rgba(130,190,255,.3);}
+  #ovDepositStatus .muted{color:rgba(205,222,255,.8);}
+  .pay-status-card{margin:16px var(--gut);padding:22px 20px 10px;text-align:center;color:#fff;}
   .pay-status-ic{width:52px;height:52px;border-radius:16px;background:var(--mint);color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
-  .pay-status-ic.orb{width:116px;height:116px;border-radius:30px;background:radial-gradient(circle at 50% 50%,#05155c 0,#020a2c 75%);overflow:hidden;box-shadow:0 10px 24px rgba(2,10,60,.28);}
+  .pay-status-ic.orb{width:116px;height:116px;border-radius:30px;background:radial-gradient(circle at 50% 50%,#05155c 0,#020a2c 75%);overflow:hidden;box-shadow:0 0 0 2px rgba(130,190,255,.4),0 0 30px 6px rgba(50,135,255,.5);}
   .pay-status-ic canvas{display:block;width:100%;height:100%;}
-  .pay-status-card h3{font-size:17px;color:var(--cocoa);}
+  .pay-status-card h3{font-size:17px;color:#fff;text-shadow:0 0 16px rgba(90,170,255,.6);}
+  .pay-status-card .muted{color:rgba(205,222,255,.85);}
   .pay-steps{list-style:none;margin:16px 0 0;padding:0;text-align:left;}
-  .pay-steps li{position:relative;padding:6px 0 6px 22px;font-size:12.5px;color:var(--cocoa-soft);font-weight:600;}
-  .pay-steps li::before{content:"";position:absolute;left:2px;top:13px;width:6px;height:6px;border-radius:50%;background:var(--mint);}
+  .pay-steps li{position:relative;padding:6px 0 6px 22px;font-size:12.5px;color:rgba(226,237,255,.93);font-weight:600;}
+  .pay-steps li::before{content:"";position:absolute;left:2px;top:13px;width:6px;height:6px;border-radius:50%;background:#59b6ff;box-shadow:0 0 8px 2px rgba(89,182,255,.8);}
 
   .tm-card{margin:12px var(--gut) 0;padding:16px;background:var(--card);border-radius:20px;box-shadow:var(--shadow);}
   .tm-over{padding-bottom:6px;}
@@ -589,7 +599,6 @@
      past its bottom edge. */
   .modal-wrap{position:relative;width:100%;max-width:440px;margin:0 auto;}
   .modal-wrap .modal-sheet{width:100%;max-width:none;margin:0;}
-  .ann-close-float{position:absolute;left:50%;bottom:-20px;transform:translateX(-50%);width:40px;height:40px;border-radius:50%;background:var(--cream);box-shadow:var(--shadow);border:none;display:flex;align-items:center;justify-content:center;color:var(--cocoa-soft);z-index:2;}
   /* Gift-code redeem reveal — a treasure chest pops in, then keeps shaking
      in place (matching the owner's reference GIF) while gold light bursts
      upward from it and coin sparks fly outward, and the reward figure
@@ -603,21 +612,46 @@
      class instead of the About/Rules pages' spacious nl2p blank-line
      style) so a long admin-written notice still fits without feeling like
      an endless scroll. */
-  .ann-sheet{border-radius:24px;padding:18px;}
-  .ann-sheet h3{margin-bottom:8px;font-size:18px;}
-  /* Decorative header band the sheet's own padding is punched out for
-     (negative margin = the sheet's padding) so it bleeds edge-to-edge.
-     Shows the admin's uploaded image if there is one, otherwise a caramel
-     gift-box badge so the dialog never opens looking flat/empty. */
-  .ann-hero{margin:-18px -18px 12px;padding:16px 18px 12px;text-align:center;
-    background:linear-gradient(165deg,var(--caramel-pale) 0%,var(--cream) 82%);}
-  .ann-hero img{width:100%;border-radius:0;object-fit:cover;max-height:130px;display:block;box-shadow:var(--shadow);}
-  .ann-badge{width:44px;height:44px;border-radius:14px;margin:0 auto;display:flex;align-items:center;justify-content:center;color:#fff;
-    background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));box-shadow:0 10px 18px -8px rgba(13,95,210,.6);}
+  /* The welcome dialog: a dark blue card with the owner's particle wave (a canvas, see makeParticleField) moving behind the words. It opens with a rise-and-settle, the robot pops
+     in, the lines of words follow one after the other, and the blue X pops in last. The page behind cannot be scrolled while it is open (body.scroll-locked). */
+  .ann-sheet{position:relative;overflow:hidden;max-height:none;padding:0;border-radius:24px;color:#fff;transition:none;
+    background:radial-gradient(130% 90% at 50% 105%,#0c3f9c 0%,#071b56 42%,#040b26 100%);border:1px solid rgba(110,170,255,.28);box-shadow:0 26px 60px rgba(0,8,40,.65),0 0 46px rgba(40,120,255,.28);}
+  .ann-fx{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;}
+  .ann-inner{position:relative;z-index:1;max-height:min(86vh,720px);overflow-y:auto;overscroll-behavior:contain;padding:22px 18px 20px;}
+  .ann-sheet h3{margin-bottom:8px;font-size:19px;color:#fff;text-shadow:0 0 20px rgba(90,170,255,.65);}
+  .ann-hero{margin:0 0 10px;text-align:center;}
+  .ann-hero #annImg{width:100%;border-radius:16px;object-fit:cover;max-height:130px;display:block;box-shadow:0 8px 24px rgba(0,10,50,.55);}
+  .ann-bot{position:relative;width:78px;height:78px;margin:0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 50% 35%,#2b66e8 0%,#0c2f8f 62%,#071a55 100%);box-shadow:0 0 0 2px rgba(130,190,255,.55),0 0 28px 6px rgba(50,135,255,.6);}
+  .ann-bot img{width:56px;height:56px;object-fit:contain;display:block;animation:annFloat 3.2s ease-in-out infinite;}
+  .ann-bot::after{content:"";position:absolute;inset:-7px;border-radius:50%;border:2px solid transparent;border-top-color:#8fd0ff;border-right-color:rgba(143,208,255,.3);animation:annSpin 3.4s linear infinite;}
+  .ann-sheet #annBody{font-size:13.5px;line-height:1.58;color:rgba(228,238,255,.94);}
+  .ann-divider{height:1px;background:linear-gradient(90deg,transparent,rgba(150,195,255,.45),transparent);margin:6px 0 14px;}
+  .ann-close-float{position:absolute;left:50%;bottom:-24px;transform:translateX(-50%);width:48px;height:48px;border-radius:50%;border:2px solid rgba(255,255,255,.7);color:#fff;z-index:2;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 35% 25%,#5aa6ff 0%,#1f6df0 48%,#0a3fc0 100%);box-shadow:0 10px 24px rgba(20,100,255,.6),0 0 0 5px rgba(40,120,255,.22);transition:transform .15s ease,box-shadow .15s ease;}
+  .ann-close-float:active{transform:translateX(-50%) scale(.9);box-shadow:0 5px 14px rgba(20,100,255,.6),0 0 0 3px rgba(40,120,255,.3);}
+  #announcementBg.show{background:rgba(2,8,30,.66);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);animation:annFade .35s ease both;}
+  #announcementBg.show .ann-sheet{animation:annIn .66s cubic-bezier(.17,.95,.3,1.07) both;}
+  #announcementBg.show .ann-inner>*{animation:annRise .55s cubic-bezier(.2,.9,.3,1) both;}
+  #announcementBg.show .ann-inner>:nth-child(1){animation-delay:.16s;}
+  #announcementBg.show .ann-inner>:nth-child(2){animation-delay:.26s;}
+  #announcementBg.show .ann-inner>:nth-child(3){animation-delay:.34s;}
+  #announcementBg.show .ann-inner>:nth-child(4){animation-delay:.42s;}
+  #announcementBg.show .ann-inner>:nth-child(5){animation-delay:.5s;}
+  #announcementBg.show .ann-bot{animation:annPop .75s cubic-bezier(.2,1.5,.35,1) .2s both;}
+  #announcementBg.show .ann-close-float{animation:annPopX .55s cubic-bezier(.2,1.6,.35,1) .6s both;}
+  @keyframes annFade{from{opacity:0;}to{opacity:1;}}
+  @keyframes annIn{0%{opacity:0;transform:translateY(64px) scale(.84);}55%{opacity:1;}100%{opacity:1;transform:none;}}
+  @keyframes annRise{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;}}
+  @keyframes annPop{0%{opacity:0;transform:scale(.3);}100%{opacity:1;transform:scale(1);}}
+  @keyframes annPopX{0%{opacity:0;transform:translateX(-50%) scale(.3);}100%{opacity:1;transform:translateX(-50%) scale(1);}}
+  @keyframes annFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-4px);}}
+  @keyframes annSpin{to{transform:rotate(360deg);}}
+  @media (prefers-reduced-motion:reduce){#announcementBg.show .ann-sheet,#announcementBg.show .ann-inner>*,#announcementBg.show .ann-bot,#announcementBg.show .ann-close-float,.ann-bot img,.ann-bot::after{animation:none;}}
+  body.scroll-locked{position:fixed;left:0;right:0;width:100%;overflow:hidden;}
   .ann-p{margin:0 0 10px;}
   .ann-p:last-child{margin-bottom:0;}
   .emo-i{display:inline-block;width:26px;height:26px;vertical-align:-8px;margin:-5px 1px;background-repeat:no-repeat;}
-  .ann-divider{height:1px;background:var(--line);margin:2px 0 14px;}
 
   .tg-row{display:none;gap:8px;margin-top:2px;}
   .tg-pill{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:linear-gradient(135deg,#2AABEE,#229ED9);color:#fff;font-weight:800;font-size:12px;padding:11px 6px;border-radius:14px;border:none;
@@ -1226,6 +1260,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   </div>
 
   <div class="overlay" id="ovDepositStatus">
+    <canvas class="pay-fx" id="payFx" aria-hidden="true"></canvas>
     <div class="ov-top"><button class="ov-back" onclick="cancelDepositStatus()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Add Funds</div></div>
     <div class="pay-status-card">
       <div class="pay-status-ic" id="depStatusIc"></div>
@@ -1241,7 +1276,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <div class="muted" style="font-size:11px;font-weight:700;margin-bottom:6px">TRANSACTION REFERENCE</div>
       <div class="link-row"><span id="depStatusRef" style="word-break:break-all"></span><button class="btn btn-dark btn-sm" onclick="copyDepositRef()">Copy</button></div>
     </div>
-    <div class="info-box" id="depStatusMsg" style="background:var(--caramel-pale);color:var(--caramel-deep)">Payment initiated. Check your phone.</div>
+    <div class="info-box" id="depStatusMsg" style="background:rgba(40,120,255,.22);color:#d3e6ff">Payment initiated. Check your phone.</div>
     <div style="padding:0 var(--gut)">
       <button class="btn btn-primary btn-block" id="depVerifyBtn" onclick="manualVerifyDeposit()">
         <span class="verify-spin" id="depVerifySpin" style="display:none"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>
@@ -1296,16 +1331,19 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   <div class="modal-bg" id="announcementBg" onclick="if(event.target===this) dismissAnnouncement()">
     <div class="modal-wrap">
       <div class="modal-sheet ann-sheet" id="announcementSheet">
-        <div class="ann-hero">
-          <img id="annImg" alt="" style="display:none">
-          <div class="ann-badge" id="annBadge"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="2.5"/><path d="M3 12.5h18"/><path d="M12 8v13"/><path d="M12 8c-1.3-4.2-6.2-4.2-6.2-1.3C5.8 8.6 8.8 8 12 8z"/><path d="M12 8c1.3-4.2 6.2-4.2 6.2-1.3C18.2 8.6 15.2 8 12 8z"/></svg></div>
+        <canvas class="ann-fx" id="annFx" aria-hidden="true"></canvas>
+        <div class="ann-inner">
+          <div class="ann-hero">
+            <img id="annImg" alt="" style="display:none">
+            <div class="ann-bot" id="annBadge"><img src="/icons/robots.webp?v=70" alt="" data-icon="robots"></div>
+          </div>
+          <h3 id="annTitle">Notice</h3>
+          <div id="annBody"></div>
+          <div class="ann-divider" id="annDivider" style="display:none"></div>
+          <div id="annTgRow" class="tg-row"></div>
         </div>
-        <h3 id="annTitle">Notice</h3>
-        <div id="annBody" style="font-size:13px;line-height:1.55;color:var(--cocoa-soft)"></div>
-        <div class="ann-divider" id="annDivider" style="display:none"></div>
-        <div id="annTgRow" class="tg-row"></div>
       </div>
-      <button class="ann-close-float" onclick="dismissAnnouncement()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <button class="ann-close-float" onclick="dismissAnnouncement()" aria-label="Close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
     </div>
   </div>
 

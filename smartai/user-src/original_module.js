@@ -1005,6 +1005,85 @@ async function loadAbout(){
   if (html !== _aboutShown) { _aboutShown = html; box.innerHTML = html; }
 }
 
+/* ====================== PARTICLE WAVE (the owner's recording, redone in code) ======================
+   A sheet of glowing blue dots in rows and columns that runs toward the viewer while a slow wave rolls through it and a bright crest of crowded dots rides in the distance, with
+   a few specks drifting up in the dark above. Drawn on a canvas with pre-made glow pictures (brighter, bigger and sharper than the recording, at any screen size). Used behind
+   the welcome dialog and the payment page. makeParticleField(canvas, { horizon: 0.4, alive: function(){ return true; } }) gives { start, stop }; it stops by itself when alive() says no. */
+function makeParticleField(cv, opt){
+  opt = opt || {};
+  var ctx = cv.getContext('2d'), raf = 0, t0 = 0, W = 0, H = 0, dpr = 1;
+  function sprite(r, g, b){
+    var s = document.createElement('canvas'); s.width = s.height = 48;
+    var c = s.getContext('2d'), gr = c.createRadialGradient(24, 24, 0, 24, 24, 24);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.16, 'rgba(' + r + ',' + g + ',' + b + ',1)');
+    gr.addColorStop(0.5, 'rgba(' + r + ',' + g + ',' + b + ',0.3)'); gr.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
+    c.fillStyle = gr; c.fillRect(0, 0, 48, 48); return s;
+  }
+  var SP = [sprite(40, 120, 255), sprite(90, 170, 255), sprite(170, 232, 255)];
+  var specks = [], i;
+  for (i = 0; i < 26; i++) specks.push({ x: Math.random(), y: Math.random(), v: 0.03 + Math.random() * 0.05, r: 0.9 + Math.random() * 1.7, p: Math.random() * 6.28 });
+  function size(){
+    var w = cv.clientWidth, h = cv.clientHeight, d = Math.min(window.devicePixelRatio || 1, 2);
+    if (!w || !h) return false;
+    if (w !== W || h !== H || d !== dpr) { W = w; H = h; dpr = d; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    return true;
+  }
+  function sm(a, b, x){ x = Math.max(0, Math.min(1, (x - a) / (b - a))); return x * x * (3 - 2 * x); }
+  function draw(t){
+    if (!size()) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+    var hor = H * (opt.horizon || 0.4), span = H - hor, cols = Math.max(9, Math.min(17, Math.round(W / 26))), rows = 36, r, c;
+    for (r = 0; r < rows; r++) {
+      var u = (((r / rows) - t * 0.05) % 1 + 1) % 1;                       // 0 = near (bottom) ... 1 = far (horizon); the rows run toward the viewer
+      var s = 1 - 0.6 * u, yb = hor + span * Math.pow(1 - u, 1.8);
+      var fade = sm(0, 0.06, u) * (1 - sm(0.96, 1, u));
+      var amp = 0.03 + 0.1 * u, rad = (2.7 - 1.9 * u) * (opt.scale || 1), spr = u < 0.38 ? SP[0] : (u < 0.74 ? SP[1] : SP[2]);
+      var boost = 0.5 + 0.35 * sm(0.1, 0.9, u) + 0.45 * sm(0.78, 1, u);   // the far crest is the brightest
+      for (c = 0; c < cols; c++) {
+        var x = (c / (cols - 1) - 0.5) * 2.3;
+        var hh = amp * (Math.sin(x * 3.1 + u * 7 - t * 1.1) + 0.6 * Math.sin(x * 5.7 - u * 4 + t * 0.8));
+        var crest = 0.05 * Math.exp(-Math.pow((u - (0.82 + 0.1 * Math.sin(t * 0.4))) / 0.07, 2)) * Math.sin(x * 9 + t * 2.4);
+        var px = W / 2 + x * W * 0.5 * s, py = yb - span * (hh + crest) * s;
+        var a = Math.min(1, fade * boost * (0.75 + 0.25 * Math.sin(t * 2 + c * 1.7 + r)));
+        if (a < 0.02) continue;
+        var R = rad * 2.5; ctx.globalAlpha = a * 0.9; ctx.drawImage(spr, px - R, py - R, R * 2, R * 2);
+      }
+    }
+    for (i = 0; i < specks.length; i++) {                                    // a few specks drifting up through the dark
+      var p = specks[i], yy = ((p.y - t * p.v) % 1 + 1) % 1, tw = 0.45 + 0.55 * Math.sin(t * 1.6 + p.p);
+      ctx.globalAlpha = Math.max(0, tw) * sm(0, 0.15, yy) * (1 - sm(0.7, 1, yy)) * 0.9;
+      var X = (p.x + 0.02 * Math.sin(t * 0.4 + p.p)) * W, Y = yy * hor * 1.15, q = p.r * 4;
+      ctx.drawImage(SP[2], X - q, Y - q, q * 2, q * 2);
+    }
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  }
+  function frame(now){
+    raf = 0;
+    if (!document.body.contains(cv) || (opt.alive && !opt.alive())) return;
+    draw((now - t0) / 1000);
+    raf = requestAnimationFrame(frame);
+  }
+  return {
+    start: function(){
+      if (raf) cancelAnimationFrame(raf);
+      t0 = performance.now() - 2500 * Math.random();
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { draw(3); raf = 0; return; }
+      raf = requestAnimationFrame(frame);
+    },
+    stop: function(){ if (raf) cancelAnimationFrame(raf); raf = 0; }
+  };
+}
+var _annField = null, _payField = null, _scrollLocked = false, _lockY = 0;
+// While any popup is open the page behind it cannot be scrolled (the body is pinned where it was and put back when the last popup closes).
+function syncScrollLock(){
+  var open = !!document.querySelector('.modal-bg.show');
+  if (open === _scrollLocked || !document.body) return;
+  _scrollLocked = open;
+  if (open) { _lockY = window.pageYOffset || 0; document.body.style.top = (-_lockY) + 'px'; document.body.classList.add('scroll-locked'); }
+  else { document.body.classList.remove('scroll-locked'); document.body.style.top = ''; window.scrollTo(0, _lockY); }
+}
+new MutationObserver(syncScrollLock).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['class'] });
 /* ====================== ANNOUNCEMENT (the welcome dialog, ChocoMCC's) ======================
    Shown on every app open and every time Home is entered from another tab, while Admin > Settings > Announcement dialog is switched on and has text. A title, the body text,
    an optional picture on top (Admin > Banners > Welcome announcement; without one the small gift badge shows), then the WhatsApp Group and Telegram Group buttons (Settings > Support). */
@@ -1079,6 +1158,8 @@ async function maybeShowAnnouncement(immediateShake){
   $('annDivider').style.display = btns ? 'block' : 'none';
   if (immediateShake) tgRow.querySelectorAll('.tg-pill,.wa-pill').forEach(function(el){ el.style.animationDelay = '-2.4s, -2.4s'; });
   $('announcementBg').classList.add('show');
+  if (!_annField) _annField = makeParticleField($('annFx'), { horizon: 0.56, alive: function(){ return $('announcementBg').classList.contains('show'); } });
+  _annField.start();
   startAnnEmoji();
 }
 function dismissAnnouncement(){ $('announcementBg').classList.remove('show'); }
@@ -1964,6 +2045,8 @@ function showPayOrb(){
   var px = Math.round(PAY_ORB_CSS * Math.min(window.devicePixelRatio || 1, 3));
   ic.className = 'pay-status-ic orb';
   ic.innerHTML = '<canvas id="payOrbCv" width="' + px + '" height="' + px + '" role="img" aria-label="Checking your payment"></canvas>';
+  if (!_payField) _payField = makeParticleField($('payFx'), { horizon: 0.36, scale: 1.25, alive: function(){ var o = $('ovDepositStatus'); return !!(o && o.classList.contains('show')); } });
+  _payField.start();
   preloadPayOrb();
   _payOrbT0 = Date.now();
   stopPayOrb(); _payOrbRaf = requestAnimationFrame(payOrbFrame);
@@ -2035,8 +2118,8 @@ function showDepositFailed(){
 function setDepStatusMsg(kind, text){
   var el = $('depStatusMsg');
   el.textContent = text;
-  el.style.background = kind === 'matched' ? 'var(--mint-pale)' : kind === 'failed' ? 'var(--berry-pale)' : 'var(--caramel-pale)';
-  el.style.color = kind === 'matched' ? 'var(--mint)' : kind === 'failed' ? 'var(--berry)' : 'var(--caramel-deep)';
+  el.style.background = kind === 'matched' ? 'rgba(46,204,113,.2)' : kind === 'failed' ? 'rgba(255,90,110,.2)' : 'rgba(40,120,255,.22)';
+  el.style.color = kind === 'matched' ? '#8dffbd' : kind === 'failed' ? '#ffa3b0' : '#d3e6ff';
 }
 function setVerifySpinning(on){
   var spin = $('depVerifySpin'), label = $('depVerifyLabel');
