@@ -194,9 +194,6 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   await p.evaluate(() => { STATE_ICONS = {}; closeOverlay(); });
   await p.evaluate(() => switchTab('shop')); await sleep(80);
   ok(await p.evaluate(() => Math.round(document.getElementById('shopBanner').getBoundingClientRect().height) === 104), 'the AI Robots header (My AI robots / Accrued earnings) is 104 px high');
-  // an uploaded page picture is shown whole at its own proportions (not cropped to a fixed box); the AI Robots header stays short
-  const fit = await p.evaluate(async () => { const c = document.createElement('canvas'); c.width = 600; c.height = 300; const x = c.getContext('2d'); x.fillStyle = '#c33'; x.fillRect(0, 0, 600, 300); const url = c.toDataURL('image/png'); ART.recordsbanner = url; ART.shopbanner = url; ART.home = url; paintArt(); await new Promise(r => setTimeout(r, 500)); const q = id => document.getElementById(id), w = q('homeBanner').getBoundingClientRect(); return { home: Math.round(w.height), want: Math.round(w.width / 2), records: q('recordsBanner').classList.contains('fit'), shop: Math.round(q('shopBanner').getBoundingClientRect().height) }; });
-  ok(Math.abs(fit.home - fit.want) <= 2 && fit.records && fit.shop === 104, 'a 2:1 picture on Home is shown whole (' + fit.home + ' px high for ' + fit.want + ' wide, not cropped to 150), and the AI Robots header keeps its short ' + fit.shop + ' px');
   // every page change shows the dots
   await p.evaluate(() => switchTab('home')); await sleep(60);
   ok(await p.evaluate(() => { const v = document.getElementById('navVeil'); return v.classList.contains('on') && !!v.querySelector('svg.dl') && getComputedStyle(v).opacity === '1'; }), 'moving to another tab shows the dots over the page');

@@ -782,11 +782,6 @@
 .photo-banner.pb-sm .art-fill img.art-bot{height:76%;}
 .auth-banner .art-fill img.art-bot{margin-top:-30px;}
 img.art-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;}
-/* An uploaded page picture is shown WHOLE at its own height (width 100%, height from its proportions), not cropped to a fixed box: once it has loaded its banner gets .fit and the box grows to it (never taller than 70 % of the screen). The AI Robots header (buttons on it) keeps its short fixed box. */
-.photo-banner.fit:not(#shopBanner),.overlay .photo-banner.fit:not(#shopBanner){height:auto !important;}
-.acct-cover.fit{height:auto;}
-.fit:not(#shopBanner) > .art-host{position:relative;inset:auto;}
-.photo-banner.fit:not(#shopBanner) img.art-photo,.acct-cover.fit img.art-photo{position:relative;height:auto;max-height:70vh;object-fit:cover;display:block;}
 .auth-mark img{width:46px;height:46px;object-fit:contain;}
 .acct-icon img{width:100%;height:100%;object-fit:contain;padding:4px;}
 .menu-ic.sup{width:46px;height:46px;border-radius:0;background:none;}
