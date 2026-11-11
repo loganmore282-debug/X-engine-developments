@@ -50,7 +50,7 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  await page.fill('#depAmount','550');await page.evaluate(()=>{submitDeposit();});await page.waitForTimeout(120);
  // 2. loading page: the blue ring and the word "loading..."
  ok(await page.$('#mpFlow.dark .mpf-ring circle[stroke="#1870f8"]'),'loading page shows the blue ring');
- ok((await page.textContent('.mpf-loadtxt'))==='loading...','and the word loading...');
+ ok(['loading...','chargement…'].includes(await page.textContent('.mpf-loadtxt')),'and the word loading...');
  const ring=await box('.mpf-ring'),txt=await box('.mpf-loadtxt');
  near(ring.y+ring.h/2,164,3,'ring centre height');near(txt.y+txt.h/2,210,3,'loading text centre height');
  // 3. choose page
@@ -60,7 +60,7 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  near(r1.y,121,2.5,'first payment row top');near(r1.h,63.5,1,'payment row height');near(r2.y-r1.y,63.5,1,'row pitch');
  near((await box('.mpf-logo')).w,37.7,0.6,'logo circle size');
  near((await box('.mpf-remind')).y,259,3,'reminder box top');
- ok((await page.textContent('.mpf-oval')).trim()==='Br 550.00','amount shown as Br with two decimals');
+ ok((await page.textContent('.mpf-oval')).trim()==='XOF 550.00','amount shown as XOF with two decimals');
  // 4. payment page
  await page.click('.mpf-row >> nth=0');await page.waitForSelector('.mpf-pay',{timeout:5000});
  ok(posts.find(p=>p[0]==='order'&&p[1].amount===550&&p[1].channelId==='c1'),'order requested for the chosen channel');
@@ -78,7 +78,7 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  ok((await page.textContent('.mpf-v b >> nth=2')).trim()==='1000809418239','account number shown');
  // 5. empty submit -> the owner's toast
  await page.evaluate(()=>mpSubmit());await page.waitForTimeout(150);
- ok((await page.textContent('#mpToast'))==='please enter the correct transfer sms','empty paste shows the toast');
+ ok(['please enter the correct transfer sms','veuillez saisir le bon SMS de virement'].includes(await page.textContent('#mpToast')),'empty paste shows the toast');
  ok(!posts.find(p=>p[0]==='submit'),'and nothing is sent');
  // 6. switch goes back to the choose page, and the SAME order moves
  await page.click('.mpf-pill >> nth=0');await page.waitForSelector('.mpf-row',{timeout:3000});

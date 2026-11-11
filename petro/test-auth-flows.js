@@ -93,7 +93,10 @@ function fakeServer(w, handle) {
   return calls;
 }
 const okAccount = { status: 'success', account: { phone: '+256771234567', walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0, team: { l1: 0, l2: 0, l3: 0, commission: 0 } }, region: {} };
-const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t; };
+// The app is French (Côte d'Ivoire): a notice arrives already translated. Map it back to the English source sentence so the
+// assertions below keep describing WHAT was said rather than which language it was said in.
+const FR2EN = (() => { const src = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8'); const a = src.indexOf('var LANG_ROWS = ['), b = src.indexOf('// ==== I18N TABLE: SHARED WITH THE ADMIN PANEL - END'); const { LANG_ROWS, LANG_PATTERNS } = new Function(src.slice(a, b) + ';return {LANG_ROWS, LANG_PATTERNS}')(); const m = new Map(); for (const r of [...LANG_ROWS, ...LANG_PATTERNS]) if (r[3] && r[3] !== '=') m.set(r[3], r[0]); return m; })();
+const toasts = w => { const t = []; w.notify = m => t.push(FR2EN.get(String(m)) || String(m)); return t; };
 
 (async () => {
   // ─── 1. Firebase error wording: never developer text, always something to do ───
@@ -126,23 +129,23 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     eq(shown(w, 'loadingScreen'), false, 'watchdog takes the spinner down');
     eq(shown(w, 'authScreen'), true, 'watchdog shows the login screen');
     // Timing-proof: whether the watchdog fired before or after toasts() swapped notify for a collector, the message is either recorded or on screen.
-    ok(/Could not load the sign-in service/.test($(w, 'notifyMsg').textContent) || t.some(m => /Could not load the sign-in service/.test(m)), 'watchdog says what is wrong');
+    ok(/Could not load the sign-in service|Impossible de charger le service de connexion/.test($(w, 'notifyMsg').textContent) || t.some(m => /Could not load the sign-in service|Impossible de charger le service de connexion/.test(m)), 'watchdog says what is wrong');
     $(w, 'loginPhone').value = '0771234567'; $(w, 'loginPassword').value = 'secret1';
     t.length = 0; await w.doLogin();
     eq(t.length, 1); ok(/not available right now/.test(t[0]) && !/not a function/.test(t[0]), 'login says so instead of throwing: ' + t[0]);
     eq($(w, 'loginBtn').disabled, false, 'login button usable again');
-    eq($(w, 'loginBtn').textContent, 'Log In');
+    ok(/^(Log In|Connexion)$/.test($(w, 'loginBtn').textContent), 'login button label');
     $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1'; $(w, 'regPassword2').value = 'secret1'; $(w, 'regReferral').value = 'abc';
     w._settings = { otpVerificationEnabled: false, referralRequired: false }; w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:false}');
     t.length = 0; await w.doRegister();
     ok(t.length === 1 && /not available right now/.test(t[0]), 'sign-up says so too: ' + t[0]);
-    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Register');
+    eq($(w, 'regBtn').disabled, false); ok(/^(Register|S'inscrire)$/.test($(w, 'regBtn').textContent), 'register button label');
     await closeSoon(dom);
   }
   {
     // Firebase arriving LATE (slow network) is waited for, not failed.
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; w._FIREBASE_READY_MS = 2000; }), w = dom.window; await sleep(20);
-    const t = toasts(w); const accounts = { '771234567@petro-platform.com': { pass: 'secret1', uid: 'u1' } };
+    const t = toasts(w); const accounts = { '0771234567@petro-platform.com': { pass: 'secret1', uid: 'u1' } };
     fakeServer(w, async p => p === '/account' ? { status: 200, body: okAccount } : null);
     $(w, 'loginPhone').value = '0771234567'; $(w, 'loginPassword').value = 'secret1';
     setTimeout(() => fakeFirebase(w, accounts, false), 300);
@@ -162,7 +165,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
 
   // ─── 3. Login: every outcome ends in "app open" or "login screen + message" ───
   trace('section 3');
-  const phone = '0771234567', email = '771234567@petro-platform.com';
+  const phone = '0771234567', email = '0771234567@petro-platform.com';
   async function loginScenario(setup, { expectOpen, expectMsg, expectSignOut = null }) {
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
     const t = toasts(w);
@@ -173,7 +176,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     $(w, 'loginPhone').value = phone; $(w, 'loginPassword').value = setup.pass || 'secret1';
     await w.doLogin(); await sleep(60);
     eq($(w, 'loginBtn').disabled, false, 'login button usable again');
-    eq($(w, 'loginBtn').textContent, 'Log In');
+    ok(/^(Log In|Connexion)$/.test($(w, 'loginBtn').textContent), 'login button label');
     eq(shown(w, 'loadingScreen'), false, 'no stuck spinner');
     if (expectOpen) { eq(shown(w, 'app'), true, 'app open'); eq(shown(w, 'authScreen'), false); ok(t.some(m => /Login successful/.test(m)), 'says it worked'); }
     else { eq(shown(w, 'app'), false, 'app not open'); eq(shown(w, 'authScreen'), true, 'login screen showing'); ok(t.some(m => expectMsg.test(m)), 'tells the member why: ' + JSON.stringify(t)); }
@@ -254,7 +257,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     await w.doRegister();
     eq(w.eval('window._pendingRegPhone'), '', 'a failed sign-up stages nothing for the next sign-in');
     ok(t.length === 1 && /Check your connection/.test(t[0]) && !/Firebase/.test(t[0]), 'friendly message: ' + t[0]);
-    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Register');
+    eq($(w, 'regBtn').disabled, false); ok(/^(Register|S'inscrire)$/.test($(w, 'regBtn').textContent), 'register button label');
     await closeSoon(dom);
   }
   {

@@ -433,23 +433,23 @@ const MARZ_TIMEOUT = 20000;
 const MARZSMS_BASE = 'https://sms.wearemarz.com/api/v1';
 const MARZSMS_KEY  = process.env.MARZSMS_KEY || '';
 
-// Ethiopia is the only supported currency and phone market (owner: "change
-// country code to +251, languages English and Amharic, currency ETB symbol
-// Br"). Mobile numbers are +251 then 9 digits starting 9 (Ethio Telecom) or
-// 7 (Safaricom Ethiopia). The currency CODE stays ETB in storage and in
-// anything sent to a payment provider; only what a member READS is the
-// symbol Br (see currencyLabel()). Historical accounts saved under another
-// region remain in storage for review, but cannot transact.
-const DEFAULT_REGION_KEY = 'et';
+// Côte d'Ivoire is the only supported currency and phone market (owner: "change
+// it when it is in French not English and currency XOF plus Ivory Coast country
+// code"). Mobile numbers are +225 then 10 digits that START WITH the 0 -- since
+// 2021 the 0 is part of the number (01 Moov, 05 MTN, 07 Orange), so it is kept,
+// unlike Ethiopia where it was dropped. The currency is the CFA franc, code XOF,
+// printed as XOF in front of an amount and stored/sent as XOF. The app is French
+// only (the language button stays hidden). Historical accounts saved under
+// another region remain in storage for review, but cannot transact.
+const DEFAULT_REGION_KEY = 'ci';
 const DEFAULT_REGION = Object.freeze({
-  key: 'et', name: 'Ethiopia', currency: 'ETB', dialCode: '251',
-  localLength: 9, prefixes: ['9', '7'], utcOffsetMin: 180,
-  active: true, isDefault: true, languages: ['en', 'am'], defaultLang: 'en',
+  key: 'ci', name: "Côte d'Ivoire", currency: 'XOF', dialCode: '225',
+  localLength: 10, prefixes: ['01', '05', '07'], utcOffsetMin: 0,
+  active: true, isDefault: true, languages: ['fr'], defaultLang: 'fr',
 });
-// The label printed in front of an amount. Only ETB differs from its code.
+// The label printed in front of an amount: the plain currency code.
 function currencyLabel(code) {
-  const c = String(code || '').toUpperCase();
-  return c === 'ETB' ? 'Br' : c;
+  return String(code || '').toUpperCase();
 }
 let _mainAllowedHosts = [];
 let _baseDomain = 'petro-platform.com';
@@ -1186,7 +1186,7 @@ async function getRulesContent() {
 function fmtMoney(n, currency) {
   const v = Number(n) || 0;
   const hasCents = Math.round(v * 100) % 100 !== 0;
-  const cur = currencyLabel(currency || currentRegion().currency || 'ETB');
+  const cur = currencyLabel(currency || currentRegion().currency || 'XOF');
   // Grouping only -- 'en-UG' is a digit-grouping locale here, not a
   // currency, so the same "1,234,567" shape is right for every region and
   // the label in front of it is what changes.
@@ -1374,7 +1374,9 @@ function localDigits(raw, region) {
   const len = Number(r.localLength) || 9;
   const s = String(raw || '').replace(/\D/g, '');
   if (s.startsWith(dial) && s.length === dial.length + len) return s.slice(dial.length);
-  if (s.startsWith('0') && s.length === len + 1) return s.slice(1);
+  // Côte d'Ivoire numbers START WITH the 0 (01 / 05 / 07 ...), which is part of the number, not a trunk zero.
+  const keepsZero = (Array.isArray(r.prefixes) && r.prefixes.filter(Boolean).length > 0 && r.prefixes.filter(Boolean).every(x => String(x).startsWith('0')));
+  if (!keepsZero && s.startsWith('0') && s.length === len + 1) return s.slice(1);
   if (s.length === len) return s;
   return null;
 }
@@ -1416,7 +1418,8 @@ function regionUsesBareLocal(region) {
 }
 function phoneToEmail(phone, region) {
   const r = region || currentRegion();
-  const local = localDigits(phone, r) || String(phone).replace(/\D/g, '').replace(/^0+/, '');
+  const keepsZero = (Array.isArray(r.prefixes) && r.prefixes.filter(Boolean).length > 0 && r.prefixes.filter(Boolean).every(x => String(x).startsWith('0')));
+  const local = localDigits(phone, r) || (keepsZero ? String(phone).replace(/\D/g, '') : String(phone).replace(/\D/g, '').replace(/^0+/, ''));
   return (regionUsesBareLocal(r) ? local : String(r.dialCode || '') + local) + '@petro-platform.com';
 }
 // STRICT on purpose — for Uganda every real mobile number is 256 + exactly 9
@@ -1444,7 +1447,8 @@ function phoneFormatHint(region) {
   const len = Number(r.localLength) || 9;
   const lead = (Array.isArray(r.prefixes) && r.prefixes[0]) || '';
   const body = lead + 'X'.repeat(Math.max(0, len - lead.length));
-  return { local: '0' + body, intl: '+' + String(r.dialCode || '') + body, name: r.name || '' };
+  const keepsZero = (Array.isArray(r.prefixes) && r.prefixes.filter(Boolean).length > 0 && r.prefixes.filter(Boolean).every(x => String(x).startsWith('0')));
+  return { local: keepsZero ? body : '0' + body, intl: '+' + String(r.dialCode || '') + body, name: r.name || '' };
 }
 function badPhoneMessage(region) {
   const h = phoneFormatHint(region);
@@ -3999,7 +4003,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
       // working". Two regions sharing a currency have no arithmetic problem,
       // which is the only thing this rule was ever protecting.
       if (String(refDoc.data().regionKey || DEFAULT_REGION_KEY) !== DEFAULT_REGION_KEY)
-        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'This referral code is unavailable. Ask for an Ethiopia referral code.' } };
+        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'This referral code is unavailable. Ask for a Côte d\'Ivoire referral code.' } };
       referrerId = refDoc.id;
     }
 
@@ -6144,7 +6148,7 @@ function extractManualRef(text) {
   return null;
 }
 function extractManualAmount(text) {
-  const m = /(?:transferred|sent|debited(?: with)?|paid)\s*(?:ETB|Br|birr)?\s*([\d,]+(?:\.\d+)?)/i.exec(String(text || '')) || /ETB\s*([\d,]+(?:\.\d+)?)/i.exec(String(text || ''));
+  const m = /(?:transferred|sent|debited(?: with)?|paid)\s*(?:ETB|Br|birr|XOF|FCFA|CFA)?\s*([\d,]+(?:\.\d+)?)/i.exec(String(text || '')) || /(?:ETB|XOF|FCFA)\s*([\d,]+(?:\.\d+)?)/i.exec(String(text || ''));
   if (!m) return null;
   const n = Number(m[1].replace(/,/g, ''));
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -7720,7 +7724,7 @@ app.get('/statement/pdf', async (req, res) => {
     const u = userSnap.data();
     if (u.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended.' });
     const brand = sett.brandName || 'Petro';
-    const currency = currentRegion().currency || 'ETB';
+    const currency = currentRegion().currency || 'XOF';
     const rows = snap.docs.map(d => ({ id: d.id, ...d.data(), statementId: statementIdFor(d) }));
     // Same admin-uploaded 'logo' slot the app itself shows on Home/Account/
     // Auth (STATE.brandLogo) -- so uploading a logo once already covers the
@@ -8247,7 +8251,7 @@ app.post('/admin/settings/update', async (req, res) => {
     if ('strictRegionHosts' in updates || 'rotateEntry' in updates)
       return res.status(400).json({ status: 'error', message: 'Country address options have been retired.' });
     if (req.body.region && req.body.region !== DEFAULT_REGION_KEY)
-      return res.status(400).json({ status: 'error', message: 'Only Ethiopia settings are supported.' });
+      return res.status(400).json({ status: 'error', message: 'Only Côte d\'Ivoire settings are supported.' });
     for (const [key, [min, max]] of Object.entries(SETTINGS_CRITICAL_RANGES)) {
       if (!(key in updates)) continue;
       const n = Number(updates[key]);
@@ -8739,7 +8743,7 @@ app.post('/admin/products/save', async (req, res) => {
   try {
     const list = Array.isArray(req.body.products) ? req.body.products : [];
     if (req.body.region && req.body.region !== DEFAULT_REGION_KEY)
-      return res.status(400).json({ status: 'error', message: 'Only Ethiopia assets are supported.' });
+      return res.status(400).json({ status: 'error', message: 'Only Côte d\'Ivoire assets are supported.' });
     const sanitized = [];
     // Owner: "make sure all 2 asset name fields are editable" -- Key is no
     // longer locked once an asset exists, so a save can now be a RENAME
@@ -10100,7 +10104,7 @@ app.get('/admin/pesajet/summary', async (req, res) => {
     const truncated = depSnap.size >= PESAJET_SUMMARY_SCAN || witSnap.size >= PESAJET_SUMMARY_SCAN;
     const zero = () => ({ collected: 0, collectedCount: 0, paidOut: 0, paidOutCount: 0,
                           pendingIn: 0, pendingInCount: 0, pendingOut: 0, pendingOutCount: 0 });
-    const summary = Object.assign({ regionKey: 'et', currency: 'ETB' }, zero());
+    const summary = Object.assign({ regionKey: DEFAULT_REGION_KEY, currency: DEFAULT_REGION.currency }, zero());
     for (const d of depSnap.docs) {
       const row = d.data();
       const amt = finiteMoney(row.displayAmount != null ? row.displayAmount : row.amount);
