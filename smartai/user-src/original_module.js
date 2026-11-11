@@ -1100,7 +1100,7 @@ var _pfField = null;
 function syncPageParticles(){
   var on = !!getSettings().pageParticles, b = document.body;
   if (!b) return;
-  b.classList.toggle('pf-on', on);
+  b.classList.toggle('pf-on', on); document.documentElement.classList.toggle('pf-on', on);   // the page edge shows the same dark colour when you pull past the end
   if (on) {
     if (!_pfField) _pfField = makeParticleField($('pfBg'), { horizon: 0.14, dim: 0.85, alive: function(){ return document.body.classList.contains('pf-on') && !document.hidden; } });
     if (!_pfField.running()) _pfField.start();
@@ -1188,6 +1188,7 @@ async function maybeShowAnnouncement(immediateShake){
   _annField.start();
   startAnnEmoji();
 }
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && $('announcementBg') && $('announcementBg').classList.contains('show')) dismissAnnouncement(); });
 function dismissAnnouncement(){ $('announcementBg').classList.remove('show'); }
 
 /* ====================== INSTALL AS AN APP ====================== */
@@ -2096,7 +2097,7 @@ function openDepositStatus(depositId, reference, phone){
 }
 function showDepositSuccess(){
   _depConfirmed = true;
-  releasePayLoader();
+  $('depStatusIc').removeAttribute('role'); $('depStatusIc').removeAttribute('aria-label');
   $('depStatusIc').className = 'pay-status-ic anim';
   $('depStatusIc').innerHTML = customIcon('tick') ? '<img src="' + esc(customIcon('tick')) + '" alt="" style="width:100%;height:100%;object-fit:contain">' : tickHtml();
   $('depStatusTitle').textContent = 'Payment Successful!';
@@ -2110,7 +2111,7 @@ function showDepositSuccess(){
   btn.onclick = function(){ closeOverlay(); switchTab('home'); renderAll(); };
 }
 function showDepositFailed(){
-  releasePayLoader();
+  $('depStatusIc').removeAttribute('role'); $('depStatusIc').removeAttribute('aria-label');
   $('depStatusIc').className = 'pay-status-ic anim';
   $('depStatusIc').innerHTML = customIcon('cross') ? '<img src="' + esc(customIcon('cross')) + '" alt="" style="width:100%;height:100%;object-fit:contain">' : crossHtml();
   $('depStatusTitle').textContent = 'Payment Not Completed';

@@ -276,6 +276,7 @@ async function member(ref) {
   ok(await ev(() => document.getElementById('annTitle').textContent.trim()) === 'Big news' && await ev(() => document.querySelectorAll('#annBody .ann-p').length) === 2 && /Second line/.test(await ev(() => document.getElementById('annBody').textContent)), 'the dialog shows the admin\'s title and text (a blank line starts a new paragraph)');
   ok(await ev(() => document.querySelectorAll('#annTgRow .wa-pill, #annTgRow .tg-pill').length) === 2 && /WhatsApp Group/.test(await ev(() => document.getElementById('annTgRow').textContent)) && /Telegram Group/.test(await ev(() => document.getElementById('annTgRow').textContent)), 'with its WhatsApp Group and Telegram Group buttons');
   ok(await ev(() => getComputedStyle(document.getElementById('annImg')).display !== 'none'), 'and the admin picture on top');
+  ok(await ev(() => document.getElementById('announcementSheet').getAttribute('role') === 'dialog' && document.getElementById('announcementSheet').getAttribute('aria-modal') === 'true'), 'the welcome dialog is announced as a dialog');
   ok(await ev(() => document.body.classList.contains('scroll-locked')) && await ev(() => getComputedStyle(document.body).position) === 'fixed', 'while the dialog is open the page behind it cannot scroll (the body is pinned)');
   ok(await ev(() => { const i = document.querySelector('#annBadge img'); return i.dataset.icon === 'robots' && /robots\.webp/.test(i.getAttribute('src')); }), 'the badge at the top of the dialog is the AI robot (shown when no admin picture is set), not a gift box');
   ok(await ev(() => /gradient/.test(getComputedStyle(document.querySelector('.ann-close-float')).backgroundImage) && getComputedStyle(document.querySelector('.ann-close-float')).borderRadius === '50%'), 'the close X is a round blue button');
@@ -288,7 +289,8 @@ async function member(ref) {
   ok(p1 !== await ev(() => document.querySelector('#annBody .emo-i').style.backgroundPosition), 'and they play (the picture changes a few times a second)');
   const lockstep = await ev(() => { const a = [...document.querySelectorAll('#announcementBg .emo-i[data-e="4"]')].map(e => e.style.backgroundPosition); return a.length === 2 && a[0] === a[1]; });
   ok(lockstep, 'two of the same emoji move together');
-  await ev(() => dismissAnnouncement());
+  await ev(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))); await sleep(200);
+  ok(!(await shown('announcementBg')) && await ev(() => !document.body.classList.contains('scroll-locked')), 'Escape closes the dialog and the page behind can scroll again');
   // switched off, or empty text: no dialog at all
   await J('POST', '/admin/settings/update', { settings: { annEnabled: false } }, null, true);
   await ev(() => syncPublicConfig()); await sleep(600);

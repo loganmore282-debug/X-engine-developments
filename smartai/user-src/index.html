@@ -324,6 +324,11 @@
   body.pf-on .nav-veil{background:rgba(5,14,44,.94);}
   body.pf-on .sec-head h3,body.pf-on .empty,body.pf-on .streak-cycle-label,body.pf-on #supportLinks .kv,body.pf-on #ovBindbank .muted{color:#fff;}
   body.pf-on #rulesBody,body.pf-on .about-html{color:#e6efff !important;}
+  body.pf-on .sec-head a{color:#8fcaff;}
+  body.pf-on .uline-tab{color:#b4cbef;}
+  body.pf-on .uline-tab.active{color:#fff;border-bottom-color:#8fcaff;}
+  body.pf-on .tk-lead{color:#cfe0fb;}
+  html.pf-on{background:#040b26;}
   /* Every page has a compact blue curved header like Potato's: a plain white chevron at the left and the page name centred in white. */
   .ov-top{position:relative;z-index:6;height:calc(52px + env(safe-area-inset-top,0px));margin-bottom:12px;background:radial-gradient(circle at 90% 10%,rgba(255,255,255,.16) 0,rgba(255,255,255,0) 40%),linear-gradient(135deg,#2b88f3,#0a4fc6);border-radius:0 0 24px 24px;box-shadow:0 10px 22px -14px rgba(11,42,91,.6);}
   .ov-back{position:absolute;left:6px;top:calc(env(safe-area-inset-top,0px) + 4px);width:44px;height:44px;border:none;background:none;color:#fff;display:flex;align-items:center;justify-content:center;}
@@ -1345,7 +1350,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   <!-- ANNOUNCEMENT -->
   <div class="modal-bg" id="announcementBg" onclick="if(event.target===this) dismissAnnouncement()">
     <div class="modal-wrap">
-      <div class="modal-sheet ann-sheet" id="announcementSheet">
+      <div class="modal-sheet ann-sheet" id="announcementSheet" role="dialog" aria-modal="true" aria-labelledby="annTitle">
         <canvas class="ann-fx" id="annFx" aria-hidden="true"></canvas>
         <div class="ann-inner">
           <div class="ann-hero">
