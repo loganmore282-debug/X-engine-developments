@@ -1743,7 +1743,10 @@ function selectedBank(){
   var l = (STATE && STATE.bankAccounts) || [];
   return l.filter(function(b){ return b.isDefault; })[0] || l[0] || null;
 }
+// The mobile-money logo (MTN yellow, Airtel red) of a payout card; any other network keeps its coloured initials.
+var NETWORK_LOGOS = { 'MTN Mobile Money': '/icons/mtn-logo.jpg', 'Airtel Money': '/icons/airtel-logo.jpg' };
 function bankBadge(b){
+  if (NETWORK_LOGOS[b.network]) return '<img class="bank-net-badge bank-net-logo" src="' + NETWORK_LOGOS[b.network] + '" alt="' + esc(String(b.network).split(' ')[0]) + '">';
   var nc = NETWORK_COLORS[b.network] || { color: '#D6E3F8', textColor: '#0B2A5B' };
   var initials = String(b.network || '').split(' ').map(function(w){ return w.charAt(0); }).join('').slice(0, 2);
   return '<div class="bank-net-badge" style="background:' + nc.color + ';color:' + nc.textColor + '">' + esc(initials) + '</div>';

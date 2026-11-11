@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v71`, admin `admin/sw.js` `smartai-admin-shell-v28`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v72`, admin `admin/sw.js` `smartai-admin-shell-v28`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -593,3 +593,6 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Built-in icon addresses carry a version (`?v=`), the Share tab showed the Team figures on the owner's phone
 - Cause: `/icons/share.webp` was changed to the three figures at v68 and back to the share picture at v70, but a phone that had loaded the v68 file kept it (same address). Fix: `iconUrl()` and the `data-icon` images in `user-src/index.html` now ask for `/icons/<name>.webp?v=<ICON_VER>` (`ICON_VER` at the top of the icon code in `original_module.js`, and `?v=` in the markup). **Whenever a built-in picture in `user/icons/` is replaced, raise `ICON_VER` (and the `?v=` in the markup) together with the cache name.** Now `70`; member cache v71. Tests accept the suffix.
+
+## Network logos: the owner's MTN and Airtel pictures, big, and on the payout cards too
+- `user/icons/mtn-logo.jpg` (yellow, MTN oval) and `user/icons/airtel-logo.jpg` (red, airtel money), 256 px, replace the old `mtn.jpg` / `airtel.jpg` (new names so a phone's cached copy is never reused). The Add Funds and Choose-network pickers show them 84 px, rounded, filling the card. `bankBadge()` (Payout Account list, the "Cash out to ..." row on Cash Out) now shows the logo for MTN Mobile Money / Airtel Money (`NETWORK_LOGOS`) instead of the "MM" / "AM" letters; any other network keeps its coloured initials. Member cache v72. `test-icons-builtin.js` follows the new names.

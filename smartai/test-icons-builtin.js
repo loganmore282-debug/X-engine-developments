@@ -28,7 +28,7 @@ ok([...refs].every(f => have.has(f)), 'every picture the app asks for is in user
 const slotFiles = new Set(serverSlots.map(s => s + '.webp'));
 ok([...have].every(f => slotFiles.has(f) || refs.has(f)), 'no unused picture is shipped (the owner: pick the best, not all): ' + [...have].filter(f => !slotFiles.has(f) && !refs.has(f)).join(', '));
 ok(have.has('ugx-coin.png') && /<img class="ugx-coin" src="\/icons\/ugx-coin\.png"/.test(css) && (css.match(/src="\/icons\/ugx-coin\.png"/g) || []).length === 2, 'ChocoMCC\'s UGX coin picture is shipped and is both coins of the Me page');
-ok(have.has('mtn.jpg') && have.has('airtel.jpg') && /<img src="\/icons\/mtn\.jpg"/.test(css) && /<img src="\/icons\/airtel\.jpg"/.test(css), 'the two network logos (MTN, Airtel) are there and used by the network pickers');
+ok(have.has('mtn-logo.jpg') && have.has('airtel-logo.jpg') && /<img src="\/icons\/mtn-logo\.jpg"/.test(css) && /<img src="\/icons\/airtel-logo\.jpg"/.test(css), 'the two network logos (MTN, Airtel) are there and used by the network pickers');
 function webp(buf) {
   if (buf.length < 30 || buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WEBP') return null;
   let off = 12;
