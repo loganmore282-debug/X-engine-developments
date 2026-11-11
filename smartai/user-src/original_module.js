@@ -1038,7 +1038,7 @@ function makeParticleField(cv, opt){
     var dim = opt.dim == null ? 1 : opt.dim, k = (opt.scale || 1) * Math.max(0.8, Math.min(1.5, W / 390));
     var y0 = H * (opt.horizon == null ? 0.16 : opt.horizon), fx = W * 0.9, fy = (H * 1.1 - y0) * ZN / CAMH, range = ZF - ZN;
     var DX = 1 / (fx / W * 6.5), DZ = Math.max(0.03, (W / 13) / (H * 1.1 - y0)), NR = Math.min(150, Math.ceil(range / DZ)), NC = Math.ceil((W / 2) * ZF / fx / DX) + 1;   // about 6 dots across the near rows, rows half as far apart as columns
-    var zr = 4.4 + 0.4 * Math.sin(t * 0.22), xr = 1.4 * Math.sin(t * 0.18);          // where the bright crest is now (distance, and how far it leans left or right)
+    var zr = 4.4 + 0.25 * Math.sin(t * 0.22);                                          // where the bright crest is now (its distance); it runs evenly across the whole width
     var r, c;
     for (r = 0; r < NR; r++) {
       var z = ZN + (((r * DZ - t * 0.035) % range) + range) % range;
@@ -1052,10 +1052,10 @@ function makeParticleField(cv, opt){
       for (c = -NC; c <= NC; c++) {
         var x = c * DX;
         x += 0.14 * Math.sin(1.1 * z + 0.7 * t + 0.35 * x) * (0.25 + zn);                // the lines sway sideways in S-curves
-        var h = big * (Math.sin(0.7 * x + 1.5 * z - 1.05 * t) + 0.6 * Math.sin(-1.1 * x + 0.8 * z + 0.8 * t) + 0.3 * Math.sin(2 * x + 2 * z - 1.2 * t));
+        var h = big * (Math.sin(0.8 * x + 1.2 * z - 1.0 * t) + 0.2 * Math.sin(1.6 * x - 0.8 * z + 0.7 * t));
         h += 0.03 * x * x * sm(0.2, 1, zn);                                           // the far sides curl up like a bowl
-        var rw = ridge * Math.exp(-Math.pow((x - xr) / 3.6, 2) * 0.35);
-        h += rw * (0.1 + 0.08 * Math.sin(1.4 * x - 0.9 * t) + 0.025 * Math.sin(5 * x + 2 * z - 2 * t));               // the crest, with quick little ripples along it
+        var rw = ridge;
+        h += rw * (0.09 + 0.06 * Math.sin(1.2 * x - 0.9 * t));               // the crest, with quick little ripples along it
         var px = W / 2 + fx * x / z, py = y0 + fy * (CAMH - h) / z;
         if (px < -12 || px > W + 12 || py < -12 || py > H + 12) continue;
         var a = fade * dim * 0.72 * (0.7 + 0.25 * zn + 0.4 * rw) * (0.84 + 0.16 * Math.sin(t * 1.7 + c * 1.3 + r * 0.7));

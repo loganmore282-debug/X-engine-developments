@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v86`, admin `admin/sw.js` `smartai-admin-shell-v32`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v87`, admin `admin/sw.js` `smartai-admin-shell-v32`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -645,3 +645,6 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Particles hidden by a solid blue (owner's screenshot) -- my v85 `html.pf-on` rule
 - Giving `html` a background stops `body`'s own background from being used as the page background, so the body painted its gradient as a box ABOVE the particle canvas (z-index -1) and covered it everywhere. Now the gradient is on `html.pf-on` only and `body.pf-on{background:none}`. Test: the body has no background while the page has the gradient. Rule: never give the body a background in `pf-on`. Member cache v86.
+
+## Particle wave made uniform (owner: "wave is not uniform")
+- The crest used to be strong at one place and weak elsewhere (a bell-shaped strength along the width that also drifted left and right, plus three swells of unrelated lengths), so one side looked high and bright and the other flat. Now the wave is the same everywhere across the width: the crest is a band at one distance with the same strength from edge to edge (`rw = ridge`), the swells are one regular wave with a small second one (0.8 x and 1.6 x), the crest has one smooth wave along it (1.2 x), only its distance drifts slowly. Member cache v87.
