@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v87`, admin `admin/sw.js` `smartai-admin-shell-v32`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v88`, admin `admin/sw.js` `smartai-admin-shell-v32`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -648,3 +648,6 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Particle wave made uniform (owner: "wave is not uniform")
 - The crest used to be strong at one place and weak elsewhere (a bell-shaped strength along the width that also drifted left and right, plus three swells of unrelated lengths), so one side looked high and bright and the other flat. Now the wave is the same everywhere across the width: the crest is a band at one distance with the same strength from edge to edge (`rw = ridge`), the swells are one regular wave with a small second one (0.8 x and 1.6 x), the crest has one smooth wave along it (1.2 x), only its distance drifts slowly. Member cache v87.
+
+## Tapping the tab you are already on does nothing new (owner: "when you retap on the very page via nav icon it re-appears ... let it just do once")
+- `switchTab(name)` now returns early when `name` is the tab already showing and no full page is open: no loader veil, no `view-appear` replay, no repaint, no data request; the tab button only gives its small tap pulse and the page glides back to the top if it had been scrolled. Coming back from a full page (overlay) or from another tab behaves as before. Test in `test-smartai-app.js`. Member cache v88.

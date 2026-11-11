@@ -1815,6 +1815,14 @@ function renderRecords(){
 var _lastTab = 'home';
 var _tabAsk = null;   // the request the last tab switch sent; a caller that wants to scroll inside the new tab waits for it so the page is built first
 function switchTab(name){
+  // Tapping the tab you are already on does nothing new: no loader, no re-appearing of the page, no repaint. (It only glides back to the top if the page was scrolled.)
+  var same = $('view' + name.charAt(0).toUpperCase() + name.slice(1));
+  if (name === _lastTab && !_ovOpen && same && getComputedStyle(same).display !== 'none') {
+    var tp = document.querySelector('.tab[data-tab="' + name + '"]');
+    if (tp) { tp.classList.remove('tab-tapped'); void tp.offsetWidth; tp.classList.add('tab-tapped'); }
+    if ((window.pageYOffset || 0) > 4) window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
   _tabAsk = null;
   if (name !== _lastTab || _ovOpen) { _tabAsk = tabTask(name); navVeil(false, _tabAsk); }
   var enteringHomeFromElsewhere = (name === 'home' && _lastTab !== 'home');

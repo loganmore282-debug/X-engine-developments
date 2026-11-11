@@ -250,6 +250,10 @@ async function member(ref) {
   await ev(() => switchTab('share')); await sleep(1200);
   ok(await ev(() => !!document.querySelector('#viewShare #teamLink') && document.querySelectorAll('#viewShare .sh-btn').length === 4 && !!document.querySelector('#viewShare .howto-card')) && /inviteRegister\?invitecode=/.test(await ev(() => document.getElementById('teamLink').textContent)) && await ev(() => document.getElementById('viewShare').style.display) === 'block' && await ev(() => document.querySelector('.tab[data-tab="share"]').classList.contains('active')), 'Share holds the invite link, the four share buttons and how referrals work');
   await ev(() => switchTab('team')); await sleep(800);
+  // tapping the tab you are already on does nothing new: the page does not re-appear and no loader comes
+  await ev(() => { const v = document.getElementById('viewTeam'); v.classList.remove('view-appear'); window.__sameTab = 0; const o = window.navVeil; window.navVeil = function(){ window.__sameTab++; return o.apply(this, arguments); }; switchTab('team'); });
+  await sleep(200);
+  ok(await ev(() => !document.getElementById('viewTeam').classList.contains('view-appear') && window.__sameTab === 0), 'tapping the tab you are already on does not make the page appear again and brings no loader');
   await ev(() => openTeamLevel(1)); await sleep(1200);
   ok(await ev(() => document.querySelectorAll('#teamLevelList .flat-row').length) === 1 && /\*\*\*\*/.test(await ev(() => document.getElementById('teamLevelList').textContent)), 'Level 1 lists the member with a hidden number');
   await ev(() => closeOverlay());
