@@ -107,7 +107,7 @@ ok(/\.toast-bg\{[^}]*pointer-events:none/.test(html) && !/\.toast-bg\.show[^{]*\
   const attrJs = [...html.matchAll(/\son[a-z]+="([^"]*)"/g)].map(m => m[1].replace(/'(?:[^'\\]|\\.)*'/g, "''")).join('\n');
   ok(dialogCall.test('if(confirm(\'x\')) go()') && dialogCall.test(stripJs('var a = 1; alert(a);')), 'the check below can see a confirm( or alert( call');
   ok(!dialogCall.test(stripJs(mod)) && !dialogCall.test(stripJs(scripts)) && !dialogCall.test(attrJs), 'the app never opens the browser\'s own confirm / alert / prompt box: every question or message is the app\'s own');
-  ok(/<button class="menu-tile" onclick="logout\(\)"><div class="menu-tile-ic pic"><img src="\/icons\/signout\.webp"/.test(html), 'Sign Out on the Me page signs out at once, with no question');
+  ok(/<button class="menu-tile" onclick="logout\(\)"><div class="menu-tile-ic pic"><img src="\/icons\/signout\.webp(\?v=\d+)?"/.test(html), 'Sign Out on the Me page signs out at once, with no question');
 }
 // ---- ChocoMCC's starting numbers (owner: "all should be for chocomcc"), the same on the server, in the app and in the admin panel ----
 {

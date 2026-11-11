@@ -57,16 +57,16 @@ ok(allSmall && total < 260000, 'every picture is under 20 kB (' + Math.round(tot
 // ---- the rule that picks the picture: an admin upload wins, else the built-in one ----
 const fn = (src.match(/function iconUrl\(name\)\{[^\n]*\}/) || [''])[0];
 ok(!!fn, 'iconUrl picks the picture of a slot');
-const ctx = { STATE_ICONS: {} };
+const ctx = { STATE_ICONS: {}, ICON_VER: '70' };
 vm.createContext(ctx); vm.runInContext(fn, ctx);
 const pick = k => vm.runInContext('iconUrl(' + JSON.stringify(k) + ')', ctx);
-ok(pick('home') === '/icons/home.webp', 'nothing uploaded: the built-in Home picture shows');
+ok(pick('home') === '/icons/home.webp?v=70', 'nothing uploaded: the built-in Home picture shows');
 ctx.STATE_ICONS = { home: 'data:image/png;base64,AAAA', deposit: null, withdraw: '' };
 ok(pick('home') === 'data:image/png;base64,AAAA', 'an uploaded picture replaces the built-in one');
-ok(pick('deposit') === '/icons/deposit.webp' && pick('withdraw') === '/icons/withdraw.webp', 'a slot the admin left empty (null / "") keeps the built-in picture');
+ok(pick('deposit') === '/icons/deposit.webp?v=70' && pick('withdraw') === '/icons/withdraw.webp?v=70', 'a slot the admin left empty (null / "") keeps the built-in picture');
 ctx.STATE_ICONS = null;
-ok(pick('my') === '/icons/my.webp', 'before the pictures arrive the built-in ones already show (no empty tab bar)');
-ok(/img\.onerror = function\(\)\{ this\.onerror = null; this\.src = '\/icons\/' \+ name \+ '\.webp'; \};/.test(src), 'an uploaded picture that cannot be loaded falls back to the built-in one');
+ok(pick('my') === '/icons/my.webp?v=70', 'before the pictures arrive the built-in ones already show (no empty tab bar)');
+ok(src.includes("img.onerror = function(){ this.onerror = null; this.src = '/icons/' + name + '.webp?v=' + ICON_VER; };"), 'an uploaded picture that cannot be loaded falls back to the built-in one')
 ok(/STATE_ICONS = im\.icons \|\| \{\};/.test(src), 'the uploaded pictures come from /public/smartai-images');
 
 // ---- every place that draws an icon names a real slot ----
@@ -76,7 +76,7 @@ const mapNames = [...src.matchAll(/\['[A-Za-z]+Banner(?:Art)?', [^,]*, '([a-z]+)
 ok(mapNames.length >= 9 && mapNames.every(u => serverSlots.includes(u)), 'every art banner uses a real slot (' + mapNames.length + ' banners)');
 ok(!/STATE_ICONS\[/.test(src.replace(/function (?:iconUrl|customIcon)[^\n]*\n/g, '')), 'nothing reads the uploaded icons directly (all go through iconUrl)');
 const imgs = [...css.matchAll(/<img[^>]*data-icon="([a-z]+)"[^>]*>/g)];
-ok(imgs.length >= 17 && imgs.every(m => !/\ssrc="/.test(m[0]) || new RegExp('src="/icons/' + m[1] + '\\.webp"').test(m[0])), 'each picture in the page starts with its own built-in file, so it shows on the first frame (' + imgs.length + ' pictures)');
+ok(imgs.length >= 17 && imgs.every(m => !/\ssrc="/.test(m[0]) || new RegExp('src="/icons/' + m[1] + '\\.webp(\\?v=\\d+)?"').test(m[0])), 'each picture in the page starts with its own built-in file, so it shows on the first frame (' + imgs.length + ' pictures)');
 
 // ---- blue and white: the only reds are error / failure colours ----
 function hsl(r, g, b) {

@@ -130,7 +130,7 @@ ok(!/id="[A-Za-z]*Banner"[^>]*>\s*<img/.test(page), 'no banner is a fixed pictur
   await page3.evaluate(() => _artPromise);
   const after = await page3.evaluate(m => Object.keys(m).map(id => { const el = document.getElementById(id); return [id, !!el.querySelector('img.art-photo'), !!el.querySelector('.art-fill')]; }), map);
   ok(after.every(a => !a[1] && a[2]), 'with the pictures removed every banner is the blue art again (' + after.length + ' checked)');
-  ok(await page3.evaluate(() => /\/icons\/robots\.webp$/.test(document.querySelector('#acctIcon img').getAttribute('src'))), 'and the logo beside the phone number is the blue robot again');
+  ok(await page3.evaluate(() => /\/icons\/robots\.webp(\?v=\d+)?$/.test(document.querySelector('#acctIcon img').getAttribute('src'))), 'and the logo beside the phone number is the blue robot again');
   await ctx3.close();
 
   // ---------------------------------------------------------------- 4. the admin panel

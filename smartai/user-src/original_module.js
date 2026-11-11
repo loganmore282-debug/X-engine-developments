@@ -314,7 +314,9 @@ async function _syncArtwork(){
 }
 // The pictures of the app are the owner's built-in icon pack (/icons/<name>.webp); a picture uploaded in Admin > Banners > Icons for the same name replaces it.
 var STATE_ICONS = {};
-function iconUrl(name){ return (STATE_ICONS && STATE_ICONS[name]) || '/icons/' + name + '.webp'; }
+// ICON_VER: raise it whenever a built-in picture in user/icons/ is replaced, so a phone that kept the old file under the same address fetches the new one.
+var ICON_VER = '70';
+function iconUrl(name){ return (STATE_ICONS && STATE_ICONS[name]) || '/icons/' + name + '.webp?v=' + ICON_VER; }
 function customIcon(name){ return (STATE_ICONS && STATE_ICONS[name]) || ''; }
 function paintIcons(){
   paintMedals();
@@ -322,7 +324,7 @@ function paintIcons(){
   document.querySelectorAll('img[data-icon]').forEach(function(img){
     var name = img.getAttribute('data-icon'), u = iconUrl(name);
     if (img.getAttribute('src') !== u) {
-      img.onerror = function(){ this.onerror = null; this.src = '/icons/' + name + '.webp'; };
+      img.onerror = function(){ this.onerror = null; this.src = '/icons/' + name + '.webp?v=' + ICON_VER; };
       img.setAttribute('src', u);
     }
   });
