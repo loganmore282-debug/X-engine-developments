@@ -405,22 +405,18 @@
   .cards .stat{background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:14px;}
   .cards .stat .n{font-size:16px;font-weight:800;}
   .cards .stat .l{font-size:11px;color:var(--cocoa-faint);font-weight:700;margin-top:4px;}
-  /* The two figure cards on Me turn over like a coin: front (Balance / Cash Outs) for 4 s, a 1 s turn, back (Total earned / Total top-ups) for 4 s, a 1 s turn back, so a face
-     changes every 5 s. The second card follows a beat later. */
-  .cards .flip-stat{background:none;box-shadow:none;padding:0;perspective:900px;}
-  .flip-in{position:relative;transform-style:preserve-3d;animation:statFlip 10s infinite;}
-  .flip-late .flip-in{animation-delay:.35s;}
-  .flip-face{background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:14px;-webkit-backface-visibility:hidden;backface-visibility:hidden;}
-  .flip-back{position:absolute;inset:0;transform:rotateY(180deg);background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));}
-  .flip-back .n{color:#fff;}
-  .flip-back .ugx-coin{background:#fff;border-radius:9px;}
-  .flip-back .l{color:rgba(255,255,255,.82);}
-  @keyframes statFlip{0%,40%{transform:rotateY(0deg);}50%,90%{transform:rotateY(180deg);}100%{transform:rotateY(360deg);}}
-  @media (prefers-reduced-motion:reduce){.cards .flip-in{animation:none;}}
+  /* The UGX coin picture beside each figure on Me flips over like a real coin every 5 s: it hops up, turns once (front, then the back, drawn by ::after) and lands. The second coin
+     follows a beat later. */
+  .coin-flip{position:relative;display:block;width:34px;height:30px;flex:0 0 auto;transform-style:preserve-3d;animation:coinFlip 5s ease-in-out infinite;}
+  .coin-late{animation-delay:.45s;}
+  .coin-flip .ugx-coin{-webkit-backface-visibility:hidden;backface-visibility:hidden;}
+  .coin-flip::after{content:"";position:absolute;inset:0;background:url(/icons/ugx-coin.png) center/contain no-repeat;transform:rotateY(180deg);-webkit-backface-visibility:hidden;backface-visibility:hidden;}
+  @keyframes coinFlip{0%,78%{transform:rotateY(0deg) translateY(0) scale(1);}89%{transform:rotateY(180deg) translateY(-8px) scale(1.14);}100%{transform:rotateY(360deg) translateY(0) scale(1);}}
+  @media (prefers-reduced-motion:reduce){.ugx-n .coin-flip{animation:none;}}
   /* Account (Me) balance/cash-out figures only — the UGX coin icon sits
      right beside the number, sized down to match the text so it fits in
      the tight stat tile instead of overwhelming it. */
-  .ugx-n{display:flex;align-items:center;gap:8px;}
+  .ugx-n{display:flex;align-items:center;gap:8px;perspective:320px;}
   .ugx-coin{width:34px;height:30px;flex:0 0 auto;display:block;object-fit:contain;}
   .form-card{margin:6px var(--gut);background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:18px;}
   .flabel{font-size:12px;font-weight:800;color:var(--cocoa-soft);margin-bottom:8px;display:block;}
@@ -1156,14 +1152,8 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
         </div>
       </div>
       <div class="cards" style="margin:0 var(--gut) 18px">
-        <div class="stat flip-stat" style="cursor:pointer" onclick="openOverlay('records')"><div class="flip-in">
-          <div class="flip-face flip-front"><div class="n ugx-n" style="color:var(--mint)"><img class="ugx-coin" src="/icons/ugx-coin.png" alt="UGX"><span id="acctBalNum">UGX 0</span></div><div class="l">Balance</div></div>
-          <div class="flip-face flip-back" aria-hidden="true"><div class="n ugx-n"><img class="ugx-coin" src="/icons/ugx-coin.png" alt=""><span id="acctEarnNum">UGX 0</span></div><div class="l">Total earned</div></div>
-        </div></div>
-        <div class="stat flip-stat flip-late" style="cursor:pointer" onclick="openOverlay('records');setRecordsTab('cashouts')"><div class="flip-in">
-          <div class="flip-face flip-front"><div class="n ugx-n" style="color:var(--berry)"><img class="ugx-coin" src="/icons/ugx-coin.png" alt="UGX"><span id="acctWitNum">UGX 0</span></div><div class="l">Cash Outs</div></div>
-          <div class="flip-face flip-back" aria-hidden="true"><div class="n ugx-n"><img class="ugx-coin" src="/icons/ugx-coin.png" alt=""><span id="acctTopNum">UGX 0</span></div><div class="l">Total top-ups</div></div>
-        </div></div>
+        <div class="stat" style="cursor:pointer" onclick="openOverlay('records')"><div class="n ugx-n" style="color:var(--mint)"><span class="coin-flip"><img class="ugx-coin" src="/icons/ugx-coin.png" alt="UGX"></span><span id="acctBalNum">UGX 0</span></div><div class="l">Balance</div></div>
+        <div class="stat" style="cursor:pointer" onclick="openOverlay('records');setRecordsTab('cashouts')"><div class="n ugx-n" style="color:var(--berry)"><span class="coin-flip coin-late"><img class="ugx-coin" src="/icons/ugx-coin.png" alt="UGX"></span><span id="acctWitNum">UGX 0</span></div><div class="l">Cash Outs</div></div>
       </div>
       <div class="menu-grid">
         <button class="menu-tile" onclick="openOverlay('mychoc')"><div class="menu-tile-ic pic"><img src="/icons/robots.webp?v=70" alt="My AI robots" data-icon="robots"></div><div class="menu-tile-lbl">My AI robots</div></button>

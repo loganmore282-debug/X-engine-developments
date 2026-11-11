@@ -1232,8 +1232,6 @@ function renderAll(){
   $('acctPhone').textContent = displayPhone(s.phone);
   setMoney($('acctBalNum'), s.balance);
   setMoney($('acctWitNum'), s.totalWithdrawn);
-  setMoney($('acctEarnNum'), s.totalEarned);
-  setMoney($('acctTopNum'), s.totalDeposited);
   $('teamLink').textContent = promoLink() || '—';
   $('teamL1').textContent = s.team.l1; $('teamL2').textContent = s.team.l2; $('teamL3').textContent = s.team.l3;
   $('teamComm').textContent = ugx(s.team.commission);

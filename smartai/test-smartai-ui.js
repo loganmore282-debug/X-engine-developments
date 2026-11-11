@@ -78,7 +78,7 @@ ok(!/authenticator|twofa|2fa|totp/i.test(pageHtml + mod), 'no Google Authenticat
 ok(!/twofa|2fa|Google Authenticator/i.test(serverSrc + adminSrc), 'no Google Authenticator in the server or the admin panel (the admin LOGIN keeps its own optional 6-digit code, as in Potato, Mint and Chocolate)');
 ok(!/api\('\/(messages|gifts|app\/claim|account\/2fa)/.test(mod) && !/app\.(get|post)\('\/(messages|gifts|app\/claim|account\/2fa|admin\/messages)/.test(serverSrc), 'no Messages, Order Gifts or app-reward route is called or served');
 ok(!/orderGift|appClaim|order_gift|app_claim/.test(mod + serverSrc + adminSrc), 'no order gift or app reward setting, field or ledger kind is left');
-ok(/<img class="ugx-coin" src="\/icons\/ugx-coin\.png" alt="UGX">/.test(pageHtml) && (pageHtml.match(/class="ugx-coin"/g) || []).length === 4, 'the Balance and Cash Outs figures have ChocoMCC\'s two UGX coin pictures');
+ok(/<img class="ugx-coin" src="\/icons\/ugx-coin\.png" alt="UGX">/.test(pageHtml) && (pageHtml.match(/class="ugx-coin"/g) || []).length === 2, 'the Balance and Cash Outs figures have ChocoMCC\'s two UGX coin pictures');
 
 // ---- layout: a full-page screen cannot be dragged sideways or hand its scroll to the page behind ----
 const ovRule = (html.match(/\.overlay\{[^}]*\}/) || [''])[0];
