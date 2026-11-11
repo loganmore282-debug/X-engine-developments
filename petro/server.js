@@ -451,12 +451,18 @@ const DEFAULT_REGION = Object.freeze({
 function currencyLabel(code) {
   return String(code || '').toUpperCase();
 }
+// The domain whose random 4-character subdomains carry the member app and invite links (deploy/set-wildcard.sh saves it as SHARE_DOMAIN in
+// deploy/secrets.local.js): https://h6re.<domain>/share.html?... Empty = invite links keep the address the app is open on.
+const SHARE_DOMAIN = (() => {
+  const d = String(process.env.SHARE_DOMAIN || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^\*\./, '').replace(/\/.*$/, '');
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d) ? d : '';
+})();
 let _mainAllowedHosts = [];
 let _baseDomain = 'petro-platform.com';
 let _blockRootDomain = true;
 let _parkedHosts = [];
 function refreshCorsSnapshot() {
-  const all = _mainAllowedHosts.concat(_parkedHosts, _baseDomain ? [_baseDomain, 'www.' + _baseDomain] : []);
+  const all = _mainAllowedHosts.concat(_parkedHosts, _baseDomain ? [_baseDomain, 'www.' + _baseDomain] : [], SHARE_DOMAIN ? [SHARE_DOMAIN] : []);
   _corsExtraHosts = all.filter((h, i) => h && all.indexOf(h) === i);
 }
 function refreshHostPolicy(sett) {
@@ -678,7 +684,7 @@ const DEFAULT_SETTINGS = {
   // autoApproveMaxAmount: 0 = unlimited; a nonzero value leaves anything
   // above it for manual review instead.
   autoApproveWithdrawalsEnabled: false, autoApproveIntervalSec: 10, autoApproveMaxAmount: 0,
-  supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', supportEmail: '',
+  supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   rulesText: '', aboutText: '',
   // Owner: "l would like to also to edit the app name petro, so make it when
   // it can be editable everywhere." The platform's own name, previously
@@ -3626,6 +3632,7 @@ app.get('/public/settings', async (req, res) => {
     publicJson(req, res, { status: 'success', settings: {
       ...rest,
       maintenanceMsg: s.maintenanceMode ? maintenanceMsg : '',
+      shareDomain: SHARE_DOMAIN,
       payoutManual: payoutIsManual(s),
       // RESOLVED, not a raw setting: deposits are only real if a gateway can
       // actually reach this country's phone numbers. Sending an unresolved
@@ -8234,16 +8241,6 @@ function isSafeExternalUrl(v) {
   try { const u = new URL(String(v)); return u.protocol === 'http:' || u.protocol === 'https:'; }
   catch (_) { return false; }
 }
-// Same XSS class as SETTINGS_URL_FIELDS above: supportEmail is rendered
-// into href="mailto:${esc(...)}" (openSupportSheet() and the Home Support
-// tile in user-src/original_module.js), and esc() does not touch the URI
-// scheme. A plain "looks like an email" check keeps a "javascript:..."
-// value from ever being savable here in the first place.
-const SETTINGS_EMAIL_FIELDS = ['supportEmail'];
-function isSafeEmail(v) {
-  if (!v) return true; // blank clears the field -- always allowed
-  return /^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+$/.test(String(v)) && String(v).length <= 120;
-}
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
@@ -8266,10 +8263,7 @@ app.post('/admin/settings/update', async (req, res) => {
       if (key in updates && !isSafeExternalUrl(updates[key]))
         return res.status(400).json({ status: 'error', message: `${key} must be a valid http(s) link, or left blank.` });
     }
-    for (const key of SETTINGS_EMAIL_FIELDS) {
-      if (key in updates && !isSafeEmail(updates[key]))
-        return res.status(400).json({ status: 'error', message: `${key} must be a valid email address, or left blank.` });
-    }
+    delete updates.supportEmail;   // email support was removed; an old client cannot save it again
     if ('allowedOrigins' in updates) {
       const r = sanitizeAllowedOrigins(updates.allowedOrigins);
       if (r.error) return res.status(400).json({ status: 'error', message: r.error });

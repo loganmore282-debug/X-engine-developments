@@ -351,8 +351,8 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   console.log('\n— admin can set it —');
   const adm = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
   ck(/id="sWitWindow"/.test(adm), 'there is a toggle');
-  ck(/id="sWitFrom"[^>]*type="time"/.test(adm), 'an opening time input');
-  ck(/id="sWitTo"[^>]*type="time"/.test(adm), 'a closing time input');
+  ck(/data-t24="sWitFrom"[\s\S]*?id="sWitFrom"/.test(adm) && !/type="time" value="\$\{esc\(v\('withdrawOpenFrom'/.test(adm), 'an opening time (24-hour hour and minute lists)');
+  ck(/data-t24="sWitTo"[\s\S]*?id="sWitTo"/.test(adm), 'a closing time (24-hour hour and minute lists)');
   ck(/withdrawOpenFrom:\$\('sWitFrom'\)\.value/.test(adm.replace(/\s+/g, '')) ||
      /withdrawOpenFrom:\$\('sWitFrom'\)\.value/.test(adm),
      'and all three are sent on save');

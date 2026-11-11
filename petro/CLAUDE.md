@@ -7533,7 +7533,33 @@ Owner (two screenshots): the Recharge quick-amount row showed only 5 chips with 
 - **Server unchanged:** `cleanPhone` already accepts `926176362`, `0926176362`, `+251926176362` and `251926176362`; all become `+251926176362` and the login address `926176362@petro-platform.com`, so existing members still sign in.
 - Tests: `test-phone-format.js` (24), `test-manual-pay-ui.js` (39). App cache v249.
 
-## Follow-up 72 -- Côte d'Ivoire: French only, XOF, +225 (replaces Ethiopia: English/Amharic, ETB, +251)
+## Follow-up 72 -- Quick recharge amounts: exactly two rows of four
+
+Owner (screenshot): with eight amounts the row wrapped into three uneven rows (4 / 3 / 1). He wanted two rows, filled to the end. `.dep-chips` is now a 4-column grid, every button the same width, the ninth onwards hidden. Test: `test-manual-pay-ui.js` (41) checks two rows of four and equal widths. App cache v250.
+
+## Follow-up 73 -- Withdraw hours as a 24-hour picker; member app on random 4-character addresses (no more app.)
+
+Owner (screenshot of Settings -> withdraw hours, then two requests): the opens / closes boxes showed `06:00 AM` / `06:00 PM` (the phone's own time box) under a line that said "24-hour", and one box had a red border: *"this time is malformed, use like that of Potato or Chocolate"*. Then: *"let's drop app. -- and put many random subdomains of 4 characters, i.e. suag, h6re, 7wht."*
+- **Admin withdraw hours** (`admin-src/index.html`): each time is now an hour list (00-23) and a minute list (5-minute steps, plus the saved minute if different) -- never AM / PM, no browser time box. A hidden input with the same id (`sWitFrom` / `sWitTo`) still holds `HH:MM`, so Save is unchanged. Added the live line Chocolate has under the hours ("Right now it is Monday 14:05 Ethiopia time: withdrawing is OPEN / CLOSED", Ethiopia = UTC+3) and the wording now says "24-hour clock, Ethiopia time". Admin cache v80. Test `test-withdraw-hours-admin.js` (8).
+- **Random addresses.** Same mechanism as Chocolate. Server: `SHARE_DOMAIN` (from `deploy/secrets.local.js`) is sent to the app as `settings.shareDomain` and its subdomains may call the API (CORS). App (`shareOrigin`): when the app is open on that domain, every Share open / Copy makes a NEW link `https://h6re.<domain>/share.html?...` (4 random letters or digits, never all digits, never `qumx`, the admin address); otherwise it keeps the current address. App cache v251.
+- **Deploy (once, on the VPS):** `bash /srv/petro-src/petro/deploy/set-wildcard.sh petro-cchnug.com` -- Hostinger API token (asked once), `*` A record, ONE wildcard certificate (`petro-wild`, renewed by certbot through the same token), `/etc/nginx/sites-available/petro-wild` (server_name regex of exactly four characters, quoted because of the braces; `api.` and `qumx.` keep their exact names, which nginx prefers), removes the old `app.` block from the live file (copy kept as `petro.before-wildcard`; restored automatically if `nginx -t` fails), writes `SHARE_DOMAIN`, restarts `petro-server`. Safe to run again. Until it has run, links keep the old address, so nothing breaks.
+- `deploy/nginx-petro.conf.template` still has the `app.` block (a fresh install needs one address before the wildcard exists); the script retires it. `app.petro-cchnug.com` is no longer shown anywhere.
+- Tests: `test-share-domain.js` (10) -- server domain parsing, 3000 generated addresses, no domain / other domain keeps the origin, script sanity.
+
+## Follow-up 74 -- Email removed everywhere; Support goes to the group
+
+Owner (screenshot: tapping Support on Home said "Support email is not set up yet"): *"remove things of email everywhere -- put the group link I already put in admin."*
+- **Home Support tile** now calls `openSupportGroup()`: opens the Telegram group, else the WhatsApp group, else the Telegram customer service link; none set -> "Support group is not set up yet. Please try again later." (Amharic row added).
+- **Removed:** the admin "Support email" box, the Email Support row on the Support page and on the Forgot Password page, the email icon and styles, the server default `supportEmail` and its email validator; `/admin/settings/update` now drops a `supportEmail` sent by an old panel. A `supportEmail` left in an old database is never shown.
+- Tests: `test-contact-links.js` (13, source and built). App v252, admin v81.
+
+## Follow-up 75 -- Pasting works in every text box (page guard no longer blocks the long-press menu inside fields)
+
+Owner (payment page, Step 2, and earlier the USDT hash box): *"here also I couldn't paste."* Cause: `guard-src.js` blocked the `contextmenu` event on the whole page. On Android a long-press in a field raises the "Paste / Select all" bubble through that same event, so the bubble never appeared. Now the event is blocked everywhere EXCEPT inside `<input>`, `<textarea>` and editable elements (selection, copy and drag outside fields stay blocked as before). Test: `test-paste-allowed.js` (4; fails on the previous build). App cache v253.
+
+(Follow-up 76, the two-option language switch, was reverted at the owner's request: it was meant for Soda only. Petro keeps the original language button and sheet. App cache v255.)
+
+## Follow-up 76 -- Côte d'Ivoire: French only, XOF, +225 (replaces Ethiopia: English/Amharic, ETB, +251)
 
 Owner: *"On petrol, change it when it is in French not English and currency XOF plus Ivory Coast country code."* (Petro is the app meant.)
 - **Region** (`server.js` `DEFAULT_REGION`, app fallback `REGION`): key `ci`, name `Côte d'Ivoire`, currency `XOF`, dial `225`, **10-digit** local number that **keeps its leading 0** and starts `01` / `05` / `07` (Moov / MTN / Orange), `utcOffsetMin` 0, languages `['fr']`, `defaultLang` `fr`. `DEFAULT_REGION_KEY` is `ci`. Amounts print as `XOF 12,500` (`currencyLabel()` / `cur()` return the code; the Br symbol is gone).
@@ -7542,4 +7568,4 @@ Owner: *"On petrol, change it when it is in French not English and currency XOF 
 - **Admin panel** stays English (it has its own language picker); its amounts print `XOF`, `ADMIN_REGIONS` is `ci`, the USDT rate label says XOF per 1 USDT, and payment numbers show as `07...`.
 - Pasted-SMS amount reader also accepts `XOF` / `FCFA` / `CFA`.
 - **NOT changed (needs the owner):** payout providers are still `Commercial Bank of Ethiopia` / `Telebirr` (`PAYOUT_ACCOUNT_TYPES`, `PAYOUT_PROVIDERS`) and the manual-pay SMS example is the Ethiopian one; the Ivorian wallets are Orange Money, MTN MoMo, Moov Money and Wave. Prices, minimums and the USDT rate in Settings are plain numbers that were set for birr and were not rescaled. Members saved under region `et` (9-digit numbers) remain in the database but cannot sign in on the new number rules; the admin "Reset database" button clears them.
-- Tests: `test-cote-divoire.js` (replaces `test-ethiopia.js`), `test-french-sweep.js` (replaces `test-amharic-sweep.js`: fails on any visible English sentence from the table), `test-phone-format.js` rewritten for 10-digit numbers; other tests updated for XOF, +225 and French labels. Cache user v250, admin v80.
+- Tests: `test-cote-divoire.js` (replaces `test-ethiopia.js`), `test-french-sweep.js` (replaces `test-amharic-sweep.js`: fails on any visible English sentence from the table), `test-phone-format.js` rewritten for 10-digit numbers; other tests updated for XOF, +225 and French labels. Cache user v256, admin v82.

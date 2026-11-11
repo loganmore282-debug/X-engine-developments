@@ -45,6 +45,10 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  // quick amounts: eight, not five (the owner's screenshot had three empty places)
  const chips=await page.evaluate(()=>{STATE.products=[500,1500,3000,6000,12000,25000,50000,100000,250000,500000].map((p,i)=>({key:'p'+i,name:'A'+i,price:p}));document.getElementById('depChips').innerHTML=depositChipsHtml({minDeposit:300},'depAmount');return [...document.querySelectorAll('#depChips .dep-chip')].filter(e=>getComputedStyle(e).display!=='none').map(e=>e.textContent.trim());});
  ok(chips.join()==='500,1,500,3,000,6,000,12,000,25,000,50,000,100,000','eight quick amounts are shown, smallest first ('+chips.join(' | ')+')');
+ const grid=await page.evaluate(()=>[...document.querySelectorAll('#depChips .dep-chip')].filter(e=>getComputedStyle(e).display!=='none').map(e=>{const r=e.getBoundingClientRect();return {t:Math.round(r.top),w:Math.round(r.width)};}));
+ const rows=[...new Set(grid.map(g=>g.t))];
+ ok(rows.length===2&&grid.filter(g=>g.t===rows[0]).length===4&&grid.filter(g=>g.t===rows[1]).length===4,'the eight amounts sit in exactly two rows of four ('+rows.length+' rows)');
+ ok(new Set(grid.map(g=>g.w)).size===1,'every amount button is the same width');
  await page.fill('#depAmount','100');await page.evaluate(()=>{submitDeposit();});await page.waitForTimeout(100);
  ok(!(await page.$('#mpFlow.show')),'below the minimum does not open the payment pages');
  await page.fill('#depAmount','550');await page.evaluate(()=>{submitDeposit();});await page.waitForTimeout(120);

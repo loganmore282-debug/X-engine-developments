@@ -628,7 +628,7 @@ var LANG_ROWS = [
   ['Verification code sent. It can take a moment to arrive.', '', '', 'Code de vérification envoyé. Son arrivée peut prendre un instant.', '', '', 'የማረጋገጫ ኮድ ተልኳል። ለመድረስ ትንሽ ጊዜ ሊወስድ ይችላል።'],
   ['Could not reach the server. Check your connection and try again.', '', '', 'Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.', '', '', 'አገልጋዩን ማግኘት አልተቻለም። ግንኙነትዎን ያረጋግጡና እንደገና ይሞክሩ።'],
   ['Send every digit, exactly. A different amount cannot be credited automatically.', '', '', 'Envoyez chaque chiffre à l\'identique. Un montant différent ne peut pas être crédité automatiquement.', '', '', 'እያንዳንዱን አሃዝ በትክክል ይላኩ። የተለየ መጠን በራስ-ሰር ሊመዘገብ አይችልም።'],
-  ['Support email is not set up yet. Please try again later.', '', '', 'L\'e-mail de l\'assistance n\'est pas encore configuré. Veuillez réessayer plus tard.', '', '', 'የድጋፍ ኢሜይል እስካሁን አልተዘጋጀም። እባክዎ ቆይተው እንደገና ይሞክሩ።'],
+  ['Support group is not set up yet. Please try again later.', '', '', 'Le groupe d\'assistance n\'est pas encore configuré. Veuillez réessayer plus tard.', '', '', 'የድጋፍ ቡድን እስካሁን አልተዘጋጀም። እባክዎ ቆይተው እንደገና ይሞክሩ።'],
   ['Enter a valid gift code to add its reward to your balance.', '', '', 'Saisissez un code cadeau valide pour ajouter sa récompense à votre solde.', '', '', 'ሽልማቱን ወደ ቀሪ ሂሳብዎ ለመጨመር ትክክለኛ የስጦታ ኮድ ያስገቡ።'],
   ['TRC20 (Tron) network only — any other network permanently loses the funds.', '', '', 'Réseau TRC20 (Tron) uniquement — tout autre réseau entraîne la perte définitive des fonds.', '', '', 'TRC20 (ትሮን) አውታረ መረብ ብቻ — ሌላ ማንኛውም አውታረ መረብ ገንዘቡን እስከመጨረሻው ያጠፋል።'],
   ['Could not load the sign-in service. Check your connection, then reload the app.', '', '', 'Impossible de charger le service de connexion. Vérifiez votre connexion, puis rechargez l\'application.', '', '', 'የመግቢያ አገልግሎቱን መጫን አልተቻለም። ግንኙነትዎን ያረጋግጡና መተግበሪያውን እንደገና ይጫኑ።'],
@@ -856,7 +856,6 @@ var LANG_ROWS = [
   ['Forgot your password?', '', '', 'Mot de passe oublié ?', '', '', 'የይለፍ ቃልዎን ረሱ?'],
   ['We will help you get back in.', '', '', 'Nous vous aiderons à retrouver l\'accès.', '', '', 'ተመልሰው እንዲገቡ እንረዳዎታለን።'],
   ['Please contact Support to reset your password.', '', '', 'Veuillez contacter l\'assistance pour réinitialiser votre mot de passe.', '', '', 'የይለፍ ቃልዎን ለመቀየር እባክዎ ድጋፍን ያነጋግሩ።'],
-  ['Email Support', '', '', 'Écrire à l\'assistance', '', '', 'የኢሜይል ድጋፍ'],
 ];
 // ── SENTENCES WITH A FIGURE SPLICED INTO THEM ──
 // The table above matches a WHOLE string, which by construction can never
@@ -1484,9 +1483,6 @@ var ICONS = {
   grid: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg>',
   megaphone: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1Z"/><path d="M14.5 8.5a4.5 4.5 0 0 1 0 7"/><path d="M17.5 5.5a8.5 8.5 0 0 1 0 13"/></svg>',
   envelope: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 6l8 7 8-7"/></svg>',
-  // Full-size support-email badge, rebuilt from the supplied red envelope
-  // reference with Petro's red, orange and yellow palette (no white fill).
-  emailPetro: '<svg class="email-petro-icon" width="48" height="48" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#E30613"/><circle cx="32" cy="32" r="26.5" fill="#F15A24"/><path d="M15.5 22.5c0-2.2 1.8-4 4-4h25c2.2 0 4 1.8 4 4v19c0 2.2-1.8 4-4 4h-25c-2.2 0-4-1.8-4-4v-19Z" fill="#FFB51B" stroke="#9F1420" stroke-width="2.7"/><path d="m17.5 22 14.5 12 14.5-12" stroke="#D91E2B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m18 42 11-10m17 10L35 32" stroke="#F05A28" stroke-width="2.5" stroke-linecap="round"/><path d="M20 24h24" stroke="#FFE17A" stroke-width="1.8" stroke-linecap="round"/></svg>',
   // ── Petro re-theme additions: the Home mockup's own icon set (Deposit/
   // Withdraw/Invite/Support tiles, the notification bell, the gift-box
   // Daily Check-in card, the wallet-balance eye toggle, the 3 stat-card
@@ -2495,7 +2491,6 @@ function paintForgotSupport(){
   if (s.supportTelegram) out.push(link(s.supportTelegram, 'Telegram Customer Service'));
   if (s.whatsappContact) out.push(link(s.whatsappContact, 'WhatsApp Support'));
   if (s.telegramGroup) out.push(link(s.telegramGroup, 'Telegram Group'));
-  if (s.supportEmail) out.push(link('mailto:' + s.supportEmail, 'Email Support'));
   box.innerHTML = out.length ? out.join('') : '';
   applyLanguage();
 }
@@ -3841,7 +3836,7 @@ window.showPage = async function(name){
 // deliberately kept as a no-op rather than deleted specifically so
 // maybeAnnounceAfterSheet()'s five call sites never needed touching either
 // time; this round just gives it a real body again. Content (annTitle/
-// annBody) and the WhatsApp/email CTAs (whatsappGroup/supportEmail) reuse
+// annBody) and the WhatsApp/email CTAs (whatsappGroup/telegramGroup) reuse
 // the exact same admin settings and rendering pattern openSupportSheet()
 // already established -- one set of contact fields, two places they show.
 window.closeAnnouncement = function(){
@@ -3987,7 +3982,7 @@ ${homeBannerBlockHtml(st)}
   <button class="home-action" onclick="navigatePage('network')">
     <span class="badge">${suppliedMemberIcon('invite')}</span><span class="lbl">Invite</span>
   </button>
-  <button class="home-action" onclick="openSupportMail()">
+  <button class="home-action" onclick="openSupportGroup()">
     <span class="badge">${suppliedMemberIcon('support')}</span><span class="lbl">Support</span>
   </button>
 </div>
@@ -4235,7 +4230,25 @@ function paintAssets(){
 // And a failure is silent by design: the link falls back to this origin,
 // which is always a working invite.
 function refreshShareHost(){ STATE.shareHost = ''; return Promise.resolve(); }
-function shareOrigin(){ return location.origin; }
+// Random 4-character addresses (h6re.<domain>, suag.<domain>, 7wht.<domain>): a fresh one on every Share open and every Copy. The server names the
+// domain (settings.shareDomain, set by deploy/set-wildcard.sh); with none set, or when the app is open somewhere else, the link keeps this origin.
+var SHARE_LABEL_RESERVED = ['qumx'];                    // the admin panel's own address
+function shareRand(n){
+  try { const a = new Uint32Array(1); window.crypto.getRandomValues(a); return a[0] % n; } catch (_) { return Math.floor(Math.random() * n); }
+}
+function shareLabel(){
+  const all = 'abcdefghijklmnopqrstuvwxyz0123456789', letters = 'abcdefghijklmnopqrstuvwxyz';
+  let out = '';
+  for (let i = 0; i < 4; i++) out += all[shareRand(all.length)];
+  if (/^\d+$/.test(out)) out = letters[shareRand(letters.length)] + out.slice(1);   // never all digits
+  return SHARE_LABEL_RESERVED.indexOf(out) >= 0 ? shareLabel() : out;
+}
+function shareOrigin(){
+  const d = String((STATE.settings || {}).shareDomain || '').toLowerCase();
+  const h = location.hostname.toLowerCase();
+  if (!d || location.protocol !== 'https:' || !(h === d || h.endsWith('.' + d))) return location.origin;
+  return 'https://' + shareLabel() + '.' + d;
+}
 // ── MY ASSETS investment helpers ──
 var _investmentsLoadFailed = false;
 var MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -5779,7 +5792,7 @@ window.openInfoSheet = function(kind){
   // deleted, as the generic fallback the three branches above grew out of.
   openSheet('Info', '');
 };
-// ── SUPPORT: MAIL ON HOME, A REAL PAGE UNDER ACCOUNT ──
+// ── SUPPORT: THE GROUP ON HOME, A REAL PAGE UNDER ACCOUNT ──
 //
 // Owner: "introduce support instead of customer care, in account, so
 // support will have a channel link for WhatsApp and customer service
@@ -5796,11 +5809,13 @@ window.openInfoSheet = function(kind){
 // shortcut -- that function (customerServiceUrl()/openCustomerService())
 // had zero callers left once both tiles moved to these, so it's gone
 // rather than left behind as dead code with nothing pointing at it.
-window.openSupportMail = function(){
+window.openSupportGroup = function(){
+  // Owner: Support on Home takes the member straight to the group he put in the admin panel.
   const s = STATE.settings || {};
-  const email = String(s.supportEmail || '').trim();
-  if (!email) return notify('Support email is not set up yet. Please try again later.');
-  window.location.href = 'mailto:' + email;
+  const url = String(s.telegramGroup || s.whatsappGroup || s.supportTelegram || '').trim();
+  if (!url) return notify('Support group is not set up yet. Please try again later.');
+  const w = window.open(url, '_blank', 'noopener');
+  if (!w) window.location.href = url;
 };
 // Owner, on the first pass: "support page is too ugly and small tiny tab
 // make good design and extract those icons so [thumbs-up] for email and
@@ -5827,7 +5842,6 @@ window.openSupportSheet = function(){
   if (s.whatsappGroup) rows.push(supportRowHtml('whatsapp', ICONS.whatsapp, 'WhatsApp Channel', 'Chat with us', s.whatsappGroup));
   if (s.telegramGroup) rows.push(supportRowHtml('telegram', ICONS.telegram, 'Telegram Group', 'Join our group', s.telegramGroup));
   if (s.supportTelegram) rows.push(supportRowHtml('telegram', ICONS.telegram, 'Telegram Customer Service', 'Chat with an agent', s.supportTelegram));
-  if (s.supportEmail) rows.push(supportRowHtml('mail', ICONS.emailPetro, 'Email Support', s.supportEmail, 'mailto:' + s.supportEmail));
   openSheet('Support', `<div class="reveal-in">
     ${rows.length ? rows.join('') : `<p style="line-height:1.6;color:var(--snow-muted);">${esc(t('Contact support for help with your account.'))}</p>`}
     ${s.supportHours ? `<div class="support-hours-card"><span class="support-hours-icon">${ICONS.clock}</span><span class="support-row-txt"><span class="t1">Support hours</span><span class="t2">${esc(s.supportHours)}</span></span></div>` : ''}

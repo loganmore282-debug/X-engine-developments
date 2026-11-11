@@ -30,7 +30,13 @@
   warn();
 
   // 3. BLOCK CONTEXT MENU (right-click / long-press save)
-  document.addEventListener("contextmenu", function(e){ e.preventDefault(); }, { capture:true });
+  // NOT inside a text box: on Android, long-pressing a field raises the "Paste / Select all" bubble through this same event, so blocking it
+  // there meant a member could not paste the payment message or a transaction hash. Everywhere else stays blocked.
+  document.addEventListener("contextmenu", function(e){
+    var t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable === true)) return;
+    e.preventDefault();
+  }, { capture:true });
 
   // 4. BLOCK DEV / SOURCE SHORTCUTS
   document.addEventListener("keydown", function(e){

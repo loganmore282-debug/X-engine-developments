@@ -2419,7 +2419,9 @@ body.deposit-status-open .bottom-nav{display:none;}
 .sheet-body{position:relative;z-index:1;}
 
 
-/* Up to eight quick deposit amounts on the member deposit page (owner: five left empty slots, "let there be the next 3 figures"). */
+/* Eight quick deposit amounts in a tidy grid: four per row, two rows, every chip the same width (owner: a third row looked disorganised). */
+.dep-chips{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
+.dep-chips .dep-chip{width:100%;padding:9px 4px;white-space:nowrap;}
 .dep-chips .dep-chip:nth-child(n+9){display:none!important;}
 
 
@@ -2635,8 +2637,6 @@ html,body,#app{overscroll-behavior-y:none;}
 .support-row-icon.whatsapp{background:#25d366;}
 .support-row-icon.telegram{background:#2aabee;}
 .support-row-icon.telegram svg{width:24px;height:24px;margin-right:2px;}
-.support-row-icon.mail{background:transparent;}
-.support-row-icon.mail .email-petro-icon{width:48px;height:48px;}
 .support-row-txt{min-width:0;flex:1;}
 .support-row-txt .t1{display:block;font-size:15.5px;font-weight:800;line-height:1.2;color:#fff;}
 .support-row-txt .t2{display:block;font-size:12.5px;font-weight:500;color:rgba(255,255,255,.62);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
