@@ -563,7 +563,7 @@ function tabTask(name){
   if (name === 'home') t = Promise.all([liveData(8000), liveConfig(15000), refreshActivityFeed()]);
   else if (name === 'shop') t = Promise.all([liveData(8000), liveConfig(15000)]);
   else if (name === 'rewards' || name === 'account') t = liveData(8000);
-  else if (name === 'team') t = Promise.all([liveData(8000), refreshTeamStats()]);
+  else if (name === 'team' || name === 'share') t = Promise.all([liveData(8000), refreshTeamStats()]);
   else return null;
   return t.then(function(){ if (STATE && epoch === _authEpoch) renderAll(); });
 }
@@ -1149,7 +1149,7 @@ function paintArt(){
   var map = [
     ['depositBanner', ART.depositbanner, 'deposit'], ['withdrawBanner', ART.withdrawbanner, 'withdraw'], ['supportBanner', ART.supportbanner, 'support'],
     ['aboutBanner', ART.aboutbanner, 'about'], ['bindbankBanner', ART.bindbankbanner, 'payout'], ['shopBannerArt', ART.shopbanner, 'robots'],
-    ['accountBanner', ART.mybanner, 'my'], ['recordsBanner', ART.recordsbanner, 'ledger'], ['teamBanner', ART.teambanner, 'share']
+    ['accountBanner', ART.mybanner, 'my'], ['recordsBanner', ART.recordsbanner, 'ledger'], ['teamBanner', ART.teambanner, 'teamnav'], ['shareBanner', ART.teambanner, 'share']
   ];
   map.forEach(function(m){ var el = $(m[0]); if (el) el.innerHTML = artHtml(m[1], m[2]); });
   paintMeLook();
@@ -1665,7 +1665,7 @@ function switchTab(name){
   _tabAsk = null;
   if (name !== _lastTab || _ovOpen) { _tabAsk = tabTask(name); navVeil(false, _tabAsk); }
   var enteringHomeFromElsewhere = (name === 'home' && _lastTab !== 'home');
-  ['home', 'shop', 'rewards', 'team', 'account'].forEach(function(t){
+  ['home', 'shop', 'rewards', 'share', 'team', 'account'].forEach(function(t){
     var el = $('view' + t.charAt(0).toUpperCase() + t.slice(1));
     if (t === name) {
       el.style.display = 'block';
@@ -1681,7 +1681,7 @@ function switchTab(name){
   if (tapped) { tapped.classList.remove('tab-tapped'); void tapped.offsetWidth; tapped.classList.add('tab-tapped'); }
   hideOverlays(); _ovOpen = false;
   window.scrollTo(0, 0);
-  if (STATE && (name === 'rewards' || name === 'team' || name === 'home')) renderAll();
+  if (STATE && (name === 'rewards' || name === 'team' || name === 'share' || name === 'home')) renderAll();
   if (name === 'account' && STATE && _lastTab !== 'account') countMyBalances();
   if (name === 'team') medalPreload();
   if (name === 'rewards') giftPreload();

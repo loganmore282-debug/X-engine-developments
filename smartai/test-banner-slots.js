@@ -50,7 +50,7 @@ const need = ['authhero', 'authlogo', 'mybanner', 'profilelogo', 'shopbanner', '
 ok(need.every(k => serverSlots.includes(k)), 'Login banner, Login circle logo, Me page banner (account background), Profile logo, AI Robots, Add Funds, Cash Out, Support, Ledger, Payout Account, Rewards, Team and About are all there');
 const paint = (app.match(/function paintArt\(\)\{[\s\S]*?\n\}/) || [''])[0];
 const entries = [...paint.matchAll(/\['([A-Za-z]+)', ([^,]+), '([a-z]+)'\]/g)];
-ok(entries.length === 9 && entries.every(e => /^ART\.[a-z]+$/.test(e[2])), 'paintArt() gives every page banner its own picture, none is left on the blue art for good (' + entries.length + ' banners)');
+ok(entries.length === 10 && entries.every(e => /^ART\.[a-z]+$/.test(e[2])), 'paintArt() gives every page banner its own picture (Team and Share pages both use the Team banner slot), none is left on the blue art for good (' + entries.length + ' banners)');
 ok(entries.every(e => new RegExp('id="' + e[1] + '"').test(page)), 'and each of those banners exists on its page');
 ok(/img data-icon="robots"|\(ART\.profilelogo \? '' : ' data-icon="robots"'\)/.test(paint) && /ART\.profilelogo/.test(paint) && /ART\.authlogo/.test(app), 'the profile logo and the Login circle logo come from their slots too');
 ok(!/id="[A-Za-z]*Banner"[^>]*>\s*<img/.test(page), 'no banner is a fixed picture in the page');

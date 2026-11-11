@@ -223,6 +223,11 @@ async function member(ref) {
   await J('POST', '/invest/create', { tierKey: P1.key }, L1.tok);
   await ev(() => switchTab('team')); await sleep(1500);
   ok(await ev(() => document.getElementById('teamL1').textContent) === '1' && /inviteRegister\?invitecode=/.test(await ev(() => document.getElementById('teamLink').textContent)), 'Team shows the Level 1 count and the invitation link');
+  ok(await ev(() => document.querySelectorAll('.tabbar .tab').length) === 6 && await ev(() => [...document.querySelectorAll('.tabbar .tab')].map(b => b.dataset.tab).join()) === 'home,shop,rewards,share,team,account', 'the bottom bar has six buttons: Home, AI Robots, Rewards, Share, Team, Me');
+  ok(await ev(() => document.querySelector('#viewTeam #teamL1') && document.querySelector('#viewTeam #commL1Pct') && !document.querySelector('#viewTeam #teamLink')), 'Team holds the commission levels and the team overview, not the invite link');
+  await ev(() => switchTab('share')); await sleep(1200);
+  ok(await ev(() => !!document.querySelector('#viewShare #teamLink') && document.querySelectorAll('#viewShare .sh-btn').length === 4 && !!document.querySelector('#viewShare .howto-card')) && /inviteRegister\?invitecode=/.test(await ev(() => document.getElementById('teamLink').textContent)) && await ev(() => document.getElementById('viewShare').style.display) === 'block' && await ev(() => document.querySelector('.tab[data-tab="share"]').classList.contains('active')), 'Share holds the invite link, the four share buttons and how referrals work');
+  await ev(() => switchTab('team')); await sleep(800);
   await ev(() => openTeamLevel(1)); await sleep(1200);
   ok(await ev(() => document.querySelectorAll('#teamLevelList .flat-row').length) === 1 && /\*\*\*\*/.test(await ev(() => document.getElementById('teamLevelList').textContent)), 'Level 1 lists the member with a hidden number');
   await ev(() => closeOverlay());
