@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v88`, admin `admin/sw.js` `smartai-admin-shell-v32`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v89`, admin `admin/sw.js` `smartai-admin-shell-v32`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -651,3 +651,7 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Tapping the tab you are already on does nothing new (owner: "when you retap on the very page via nav icon it re-appears ... let it just do once")
 - `switchTab(name)` now returns early when `name` is the tab already showing and no full page is open: no loader veil, no `view-appear` replay, no repaint, no data request; the tab button only gives its small tap pulse and the page glides back to the top if it had been scrolled. Coming back from a full page (overlay) or from another tab behaves as before. Test in `test-smartai-app.js`. Member cache v88.
+
+## Words changed by the owner: subordinates, Recharge, Withdraw, and the referral steps
+- "members" of a team level are now **subordinates** (Team overview rows, the level page title, its empty line and count line). **Add Funds is Recharge** (Home button, the page title, its button, the "Tap Recharge" step, toasts) and **Cash Out is Withdraw** (Home button, page title, the "Request Withdrawal" button, "How withdrawals work", the "Withdraw to ..." row, toasts and the minimum-withdrawal line). Related words follow: Topups -> Recharges, Cash Outs -> Withdrawals (Ledger tabs and the Me figure label), "No recharges yet", "No withdrawals yet", the live feed reads "recharged" / "withdrew", the server's two list errors say recharges / withdrawals. The admin panel keeps its own words.
+- "How referrals work" (Share page) is the owner's four plain lines (unique link to register users under your account; commission when a registered subordinate buys an AI Robot; three levels of direct, second-tier, third-tier subordinates; commissions credited automatically and immediately to the wallet balance), with NO bold or highlighted words. Tests: `test-smartai-app.js` (labels, the four lines, nothing bold), `test-team.js`, `test-page-loader.js`. Member cache v89.

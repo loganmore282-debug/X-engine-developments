@@ -24,18 +24,18 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   w.api = async p => { calls.push(p); return mode === 'ok' ? { status: 'success', members: people } : { status: 'error', message: 'Could not load your team' }; };
   const list = () => d.getElementById('teamLevelList').textContent.replace(/\s+/g, ' ').trim();
   await w.openTeamLevel(1);
-  ok(calls[0] === '/team/members?level=1' && d.getElementById('teamLevelTitle').textContent === 'Level 1 members', 'opening a level asks the server for that level');
-  ok(/1 member/.test(list()) && /077\*{4}567/.test(list()) && /UGX 30,000/.test(list()), 'a member shows the hidden number and what they invested: ' + list());
+  ok(calls[0] === '/team/members?level=1' && d.getElementById('teamLevelTitle').textContent === 'Level 1 subordinates', 'opening a level asks the server for that level');
+  ok(/1 subordinate/.test(list()) && /077\*{4}567/.test(list()) && /UGX 30,000/.test(list()), 'a member shows the hidden number and what they invested: ' + list());
   // a second member joins: opening again asks again
   people = people.concat([{ id: 'b', phone: '0779999999', phoneMasked: '077****999', invested: 0, createdAt: null }]);
   await w.openTeamLevel(1);
-  ok(calls.length === 2 && /2 members/.test(list()) && /UGX 0/.test(list()), 'opening again reads the list again, and a member who has not invested shows UGX 0: ' + list());
+  ok(calls.length === 2 && /2 subordinates/.test(list()) && /UGX 0/.test(list()), 'opening again reads the list again, and a member who has not invested shows UGX 0: ' + list());
   // an empty level
   people = []; await w.openTeamLevel(3);
-  ok(calls[2] === '/team/members?level=3' && /No Level 3 members yet/.test(list()), 'a real empty level says so');
+  ok(calls[2] === '/team/members?level=3' && /No Level 3 subordinates yet/.test(list()), 'a real empty level says so');
   // a failed read is never turned into "no members"
   mode = 'fail'; await w.openTeamLevel(2);
-  ok(/Could not load this list/.test(list()) && !/No Level 2 members yet/.test(list()), 'a failed read says it could not load, not "no members": ' + list());
+  ok(/Could not load this list/.test(list()) && !/No Level 2 subordinates yet/.test(list()), 'a failed read says it could not load, not "no members": ' + list());
   // server: the cards read the live team
   ok(/team: \{ l1: n1, l2: n2, l3: n3 \}/.test(server) && /async function wholeTeamStats/.test(server), 'server /team/stats reads live level counts');
   console.log('test-team: ' + n + ' checks passed' + (built ? ' (built)' : ''));

@@ -1095,11 +1095,11 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <div class="actions-row">
         <button class="act-chip" onclick="openOverlay('deposit')">
           <div class="act-ic"><img src="/icons/deposit.webp?v=70" alt="" data-icon="deposit"></div>
-          <div class="act-lbl">Add Funds</div>
+          <div class="act-lbl">Recharge</div>
         </button>
         <button class="act-chip" onclick="openOverlay('withdraw')">
           <div class="act-ic"><img src="/icons/withdraw.webp?v=70" alt="" data-icon="withdraw"></div>
-          <div class="act-lbl">Cash Out</div>
+          <div class="act-lbl">Withdraw</div>
         </button>
         <button class="act-chip" onclick="switchTab('rewards')">
           <div class="act-ic"><img src="/icons/gift.webp?v=70" alt="" data-icon="gift"></div>
@@ -1145,10 +1145,10 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       </div>
       <div class="howto-card" style="margin:12px var(--gut) 0">
         <h4>How referrals work</h4>
-        <div class="howto-step"><span class="howto-num">1</span><p>Share your referral link above with friends and family.</p></div>
-        <div class="howto-step"><span class="howto-num">2</span><p>When someone signs up with your link and buys an AI robot, you earn a commission.</p></div>
-        <div class="howto-step"><span class="howto-num">3</span><p>You earn on <b>3 levels</b> — people you invite directly (Level 1), the people they invite (Level 2), and the people those invite (Level 3).</p></div>
-        <div class="howto-step"><span class="howto-num">4</span><p>Commissions land straight in your wallet balance — no waiting, no claiming.</p></div>
+        <div class="howto-step"><span class="howto-num">1</span><p>Share your unique referral link to register new users under your account.</p></div>
+        <div class="howto-step"><span class="howto-num">2</span><p>Earn a commission whenever a registered subordinate purchases an AI Robot.</p></div>
+        <div class="howto-step"><span class="howto-num">3</span><p>Receive commissions across three levels: direct subordinates (Level 1), second-tier subordinates (Level 2), and third-tier subordinates (Level 3).</p></div>
+        <div class="howto-step"><span class="howto-num">4</span><p>All earned commissions are credited automatically and immediately to your wallet balance.</p></div>
       </div>
       <div style="height:14px"></div>
     </div>
@@ -1163,9 +1163,9 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <div class="tm-card tm-over">
       <div class="tm-head"><h3>Team overview</h3><button type="button" class="tm-task-link" onclick="openOverlay('taskcenter')">Task Center <span style="font-size:16px;line-height:1">&rsaquo;</span></button></div>
       <div>
-        <div class="kv" style="cursor:pointer" onclick="openTeamLevel(1)"><span>Level 1 members</span><span style="display:flex;align-items:center"><b id="teamL1">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
-        <div class="kv" style="cursor:pointer" onclick="openTeamLevel(2)"><span>Level 2 members</span><span style="display:flex;align-items:center"><b id="teamL2">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
-        <div class="kv" style="cursor:pointer" onclick="openTeamLevel(3)"><span>Level 3 members</span><span style="display:flex;align-items:center"><b id="teamL3">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
+        <div class="kv" style="cursor:pointer" onclick="openTeamLevel(1)"><span>Level 1 subordinates</span><span style="display:flex;align-items:center"><b id="teamL1">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
+        <div class="kv" style="cursor:pointer" onclick="openTeamLevel(2)"><span>Level 2 subordinates</span><span style="display:flex;align-items:center"><b id="teamL2">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
+        <div class="kv" style="cursor:pointer" onclick="openTeamLevel(3)"><span>Level 3 subordinates</span><span style="display:flex;align-items:center"><b id="teamL3">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
         <div class="kv" style="border-bottom:none"><span>Commission earned</span><b id="teamComm">UGX 0</b></div>
       </div>
       </div>
@@ -1204,7 +1204,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       </div>
       <div class="cards" style="margin:0 var(--gut) 18px">
         <div class="stat" style="cursor:pointer" onclick="openOverlay('records')"><div class="n ugx-n" style="color:var(--mint)"><span class="coin-flip"><img class="ugx-coin" src="/icons/ugx-coin.png" alt="UGX"></span><span id="acctBalNum">UGX 0</span></div><div class="l">Balance</div></div>
-        <div class="stat" style="cursor:pointer" onclick="openOverlay('records');setRecordsTab('cashouts')"><div class="n ugx-n" style="color:var(--berry)"><span class="coin-flip coin-late"><img class="ugx-coin" src="/icons/ugx-coin.png" alt="UGX"></span><span id="acctWitNum">UGX 0</span></div><div class="l">Cash Outs</div></div>
+        <div class="stat" style="cursor:pointer" onclick="openOverlay('records');setRecordsTab('cashouts')"><div class="n ugx-n" style="color:var(--berry)"><span class="coin-flip coin-late"><img class="ugx-coin" src="/icons/ugx-coin.png" alt="UGX"></span><span id="acctWitNum">UGX 0</span></div><div class="l">Withdrawals</div></div>
       </div>
       <div class="menu-grid">
         <button class="menu-tile" onclick="openOverlay('mychoc')"><div class="menu-tile-ic pic"><img src="/icons/robots.webp?v=70" alt="My AI robots" data-icon="robots"></div><div class="menu-tile-lbl">My AI robots</div></button>
@@ -1241,7 +1241,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   </div>
 
   <div class="overlay" id="ovDeposit">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Add Funds</div></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Recharge</div></div>
     <div class="photo-banner" id="depositBanner"></div>
     <div class="info-box">Minimum deposit <b id="depMin">UGX 0</b>. Funds are added to your wallet once your mobile-money payment is confirmed.</div>
     <div class="form-card">
@@ -1265,7 +1265,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
         <span class="phone-prefix">+256</span>
         <input id="depPhone" type="tel" placeholder="123456789" maxlength="14">
       </div>
-      <button class="btn btn-primary btn-block" id="depGoBtn" onclick="doDeposit()">Add Funds</button>
+      <button class="btn btn-primary btn-block" id="depGoBtn" onclick="doDeposit()">Recharge</button>
     </div>
     <div class="info-box" style="background:var(--cream-deep);color:var(--cocoa-soft)">
       <b class="bar-title" style="color:var(--cocoa);display:block;margin-bottom:2px;font-size:12.5px">Deposit procedure</b>
@@ -1273,7 +1273,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
         <li>Enter the amount you want to add</li>
         <li>Choose your mobile-money network</li>
         <li>Enter the number you're paying from</li>
-        <li>Tap Add Funds, then confirm the prompt on your phone</li>
+        <li>Tap Recharge, then confirm the prompt on your phone</li>
         <li>Your wallet updates automatically once confirmed</li>
       </ul>
     </div>
@@ -1281,7 +1281,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
 
   <div class="overlay" id="ovDepositStatus">
     <canvas class="pay-fx" id="payFx" aria-hidden="true"></canvas>
-    <div class="ov-top"><button class="ov-back" onclick="cancelDepositStatus()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Add Funds</div></div>
+    <div class="ov-top"><button class="ov-back" onclick="cancelDepositStatus()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Recharge</div></div>
     <div class="pay-status-card">
       <div class="pay-status-ic" id="depStatusIc"></div>
       <h3 id="depStatusTitle">Payment Initiated Successfully!</h3>
@@ -1308,9 +1308,9 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   </div>
 
   <div class="overlay" id="ovWithdraw">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Cash Out</div></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Withdraw</div></div>
     <div class="photo-banner" id="withdrawBanner"></div>
-    <div class="info-box">Minimum cash-out <b id="witMinAmt">UGX 0</b>. A service fee of <b id="witFeePctInfo">0%</b> applies to every cash-out. Up to <b><span id="witMaxPerDay">2</span> cash-outs</b> per day.</div>
+    <div class="info-box">Minimum withdrawal <b id="witMinAmt">UGX 0</b>. A service fee of <b id="witFeePctInfo">0%</b> applies to every withdrawal. Up to <b><span id="witMaxPerDay">2</span> withdrawals</b> per day.</div>
     <div class="info-box" id="witWindowNote" style="display:none"></div>
     <div id="witBankBox"></div>
     <div class="form-card">
@@ -1318,14 +1318,14 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <input class="famt" id="witAmt" type="number" inputmode="numeric" placeholder="0" oninput="capAmountInput(this);renderWitCalc()">
       <div class="calc-row"><span>Service fee (<span id="witFeePctLabel">0%</span>)</span><span id="witFee">UGX 0</span></div>
       <div class="calc-row"><span>You receive</span><span id="witNet">UGX 0</span></div>
-      <button class="btn btn-primary btn-block" style="margin-top:12px" id="witGoBtn" onclick="doWithdraw()">Request Cash Out</button>
+      <button class="btn btn-primary btn-block" style="margin-top:12px" id="witGoBtn" onclick="doWithdraw()">Request Withdrawal</button>
       <div class="howto-card howto-flat" style="margin:16px 0 0;padding:16px 0 0">
-        <h4>How cash-outs work</h4>
+        <h4>How withdrawals work</h4>
         <div class="howto-step"><span class="howto-num">1</span><p>Bind your mobile-money account under <b>Me &rarr; Payout Account</b>.</p></div>
-        <div class="howto-step"><span class="howto-num">2</span><p>Enter the amount you want and tap Request Cash Out.</p></div>
+        <div class="howto-step"><span class="howto-num">2</span><p>Enter the amount you want and tap Request Withdrawal.</p></div>
         <div class="howto-step"><span class="howto-num">3</span><p>Enter your 6-digit Trade Password to confirm. Never share it with anyone, not even &ldquo;customer service&rdquo;.</p></div>
         <div class="howto-step"><span class="howto-num">4</span><p>Your request is processed and the amount after the service fee is sent to your mobile-money number.</p></div>
-        <div class="howto-step"><span class="howto-num">5</span><p>Track the status any time under <b>Me &rarr; Ledger &rarr; Cash Outs</b>.</p></div>
+        <div class="howto-step"><span class="howto-num">5</span><p>Track the status any time under <b>Me &rarr; Ledger &rarr; Withdrawals</b>.</p></div>
       </div>
     </div>
   </div>
@@ -1372,8 +1372,8 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
     <div class="photo-banner pb-sm" id="recordsBanner"></div>
     <div class="uline-tabs">
       <button class="uline-tab active" data-rt="accrued" onclick="setRecordsTab('accrued')">Accrued</button>
-      <button class="uline-tab" data-rt="topups" onclick="setRecordsTab('topups')">Topups</button>
-      <button class="uline-tab" data-rt="cashouts" onclick="setRecordsTab('cashouts')">Cash Outs</button>
+      <button class="uline-tab" data-rt="topups" onclick="setRecordsTab('topups')">Recharges</button>
+      <button class="uline-tab" data-rt="cashouts" onclick="setRecordsTab('cashouts')">Withdrawals</button>
     </div>
     <div class="cards" style="margin:14px var(--gut)" id="recordsStats"></div>
     <div id="recordsList"></div>
@@ -1382,7 +1382,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   <div class="overlay" id="ovBindbank">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Payout Account</div></div>
     <div class="photo-banner" id="bindbankBanner"></div>
-    <div class="info-box">Save the mobile-money account you want cash-outs sent to. You can bind up to 5 and tap the one to use. Every cash-out asks for your Trade Password.</div>
+    <div class="info-box">Save the mobile-money account you want withdrawals sent to. You can bind up to 5 and tap the one to use. Every withdrawal asks for your Trade Password.</div>
     <div id="bankList" style="padding:0 var(--gut)"></div>
     <div style="padding:6px var(--gut) 20px"><button class="btn btn-primary btn-block" onclick="openNetworkPicker()">+ Bind a new account</button></div>
     <div style="text-align:center;padding:0 var(--gut) 20px"><span class="muted" onclick="openChangeTradePin()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Change Trade Password</span></div>

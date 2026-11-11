@@ -6662,13 +6662,13 @@ app.get('/deposits', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try { res.json({ status: 'success', deposits: await memberRecords(uid, 'pendingDeposits', _depositView) }); }
-  catch (e) { console.error('Deposits list error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load your top-ups' }); }
+  catch (e) { console.error('Deposits list error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load your recharges' }); }
 });
 app.get('/withdrawals', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try { res.json({ status: 'success', withdrawals: await memberRecords(uid, 'withdrawals', _withdrawalView) }); }
-  catch (e) { console.error('Withdrawals list error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load your cash-outs' }); }
+  catch (e) { console.error('Withdrawals list error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load your withdrawals' }); }
 });
 
 // ═══════════════════════════════════════════

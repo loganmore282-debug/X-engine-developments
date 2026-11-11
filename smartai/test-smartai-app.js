@@ -164,7 +164,7 @@ async function member(ref) {
   await page.fill('#witAmt', '20000'); await sleep(200);
   ok(await ev(() => document.getElementById('witFee').textContent) === 'UGX 3,000' && await ev(() => document.getElementById('witNet').textContent) === 'UGX 17,000', 'the fee and what the member receives follow the setting (15%)');
   await page.fill('#witAmt', '500'); await page.click('#witGoBtn'); await sleep(300);
-  ok(/Minimum cash-out/.test(await toastText()), 'an amount under the minimum is refused on the phone');
+  ok(/Minimum withdrawal/.test(await toastText()), 'an amount under the minimum is refused on the phone');
   // wrong Trade Password
   await page.fill('#witAmt', '20000'); await page.click('#witGoBtn'); await until(() => document.getElementById('tradePinBg').classList.contains('show'), null, 4000);
   ok(!await ev(() => /authenticator|2-step|backup code/i.test(document.body.innerText)), 'only the Trade Password is asked (no second code)');
@@ -182,7 +182,7 @@ async function member(ref) {
   await ev(() => openOverlay('records')); await ev(() => setRecordsTab('cashouts')); await sleep(1500);
   ok(/Settling/.test(await ev(() => document.getElementById('recordsList').textContent)) && /17,000/.test(await ev(() => document.getElementById('recordsList').textContent)), 'Ledger > Cash Outs shows it settling with the amount received');
   await ev(() => setRecordsTab('topups')); await sleep(1200);
-  ok(/No top-ups yet/.test(await ev(() => document.getElementById('recordsList').textContent)), 'Ledger > Topups is empty for a member who has not paid by mobile money');
+  ok(/No recharges yet/.test(await ev(() => document.getElementById('recordsList').textContent)), 'Ledger > Recharges is empty for a member who has not paid by mobile money');
   await ev(() => setRecordsTab('accrued')); await sleep(500);
   const accrued = await ev(() => document.getElementById('recordsList').textContent);
   ok(/Daily reward/.test(accrued) && /Welcome gift/.test(accrued) && /Gift code/.test(accrued), 'Ledger > Accrued lists the daily reward, the welcome gift and the gift code');
@@ -254,6 +254,9 @@ async function member(ref) {
   await ev(() => { const v = document.getElementById('viewTeam'); v.classList.remove('view-appear'); window.__sameTab = 0; const o = window.navVeil; window.navVeil = function(){ window.__sameTab++; return o.apply(this, arguments); }; switchTab('team'); });
   await sleep(200);
   ok(await ev(() => !document.getElementById('viewTeam').classList.contains('view-appear') && window.__sameTab === 0), 'tapping the tab you are already on does not make the page appear again and brings no loader');
+  ok(await ev(() => [...document.querySelectorAll('#viewTeam .kv > span:first-child')].map(e => e.textContent).slice(0, 3).join('|')) === 'Level 1 subordinates|Level 2 subordinates|Level 3 subordinates', 'the Team overview says subordinates, not members');
+  ok((await ev(() => [...document.querySelectorAll('.act-lbl')].map(e => e.textContent))).slice(0, 2).join() === 'Recharge,Withdraw', 'the Home buttons are Recharge and Withdraw');
+  ok(await ev(() => { const s = [...document.querySelectorAll('#viewShare .howto-step p')]; return s.length === 4 && s[0].textContent === 'Share your unique referral link to register new users under your account.' && s[3].textContent === 'All earned commissions are credited automatically and immediately to your wallet balance.' && !document.querySelector('#viewShare .howto-step b, #viewShare .howto-step strong, #viewShare .howto-step mark'); }), 'the referral instructions are the owner\'s four lines, with nothing bold or highlighted');
   await ev(() => openTeamLevel(1)); await sleep(1200);
   ok(await ev(() => document.querySelectorAll('#teamLevelList .flat-row').length) === 1 && /\*\*\*\*/.test(await ev(() => document.getElementById('teamLevelList').textContent)), 'Level 1 lists the member with a hidden number');
   await ev(() => closeOverlay());

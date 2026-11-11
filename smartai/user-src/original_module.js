@@ -1685,7 +1685,7 @@ function renderTicker(){
   var rows = _activityFeed.map(function(f){
     var isDep = f.kind === 'deposit';
     return '<div class="ticker-row"><span class="dot" style="background:' + (isDep ? 'var(--mint)' : 'var(--berry)') + '"></span>' +
-      '<span style="flex:1">' + esc(f.phone) + ' ' + (isDep ? 'added funds' : 'cashed out') + '</span>' +
+      '<span style="flex:1">' + esc(f.phone) + ' ' + (isDep ? 'recharged' : 'withdrew') + '</span>' +
       '<b style="color:' + (isDep ? 'var(--mint)' : 'var(--berry)') + '">' + (isDep ? '+' : '-') + ugx(f.amount).replace('UGX ', '') + '</b></div>';
   }).join('');
   var delay = -(((Date.now() - TICKER_EPOCH) / 1000) % TICKER_CYCLE);
@@ -1792,12 +1792,12 @@ function renderRecords(){
     return;
   }
   var sum = list.reduce(function(acc, r){ return acc + (isTop ? (r.status === 'matched' ? Number(r.amount) || 0 : 0) : (r.status === 'processed' ? Number(r.net || r.amount) || 0 : 0)); }, 0);
-  $('recordsStats').innerHTML = '<div class="stat"><div class="n" style="color:' + (isTop ? 'var(--mint)' : 'var(--berry)') + '">' + ugx(sum) + '</div><div class="l">Total ' + (isTop ? 'topped up' : 'cashed out') + '</div></div>';
-  if (!list.length) { $('recordsList').innerHTML = '<div class="empty">' + (isTop ? 'No top-ups yet.' : 'No cash-outs yet.') + '</div>'; return; }
+  $('recordsStats').innerHTML = '<div class="stat"><div class="n" style="color:' + (isTop ? 'var(--mint)' : 'var(--berry)') + '">' + ugx(sum) + '</div><div class="l">Total ' + (isTop ? 'recharged' : 'withdrawn') + '</div></div>';
+  if (!list.length) { $('recordsList').innerHTML = '<div class="empty">' + (isTop ? 'No recharges yet.' : 'No withdrawals yet.') + '</div>'; return; }
   $('recordsList').innerHTML = list.slice(0, 80).map(function(r){
     var st = recStatusInfo(r.status);
     var stamp = r.createdAt ? fmtStamp(tsMs(r.createdAt)) : ((r.date || '') + ' ' + (r.time || '')).trim();
-    var desc = isTop ? 'Mobile-money top-up' : ('Cash out' + (r.holder ? ' to ' + r.holder : '') + (r.network ? ' (' + r.network + ')' : ''));
+    var desc = isTop ? 'Mobile-money recharge' : ('Withdrawal' + (r.holder ? ' to ' + r.holder : '') + (r.network ? ' (' + r.network + ')' : ''));
     // The reason a request was declined (set by the admin, or by the server when the payment provider refused it).
     var reasonRow = (st.cls === 'bad' && r.failureReason) ? '<div class="rec-line"><span>Reason</span><b>' + esc(r.failureReason) + '</b></div>' : '';
     return '<div class="rec-card"><div class="rec-head"><span class="rec-ref">' + esc(r.ref || 'pending') + '</span><span class="rec-st ' + st.cls + '">' + st.label + '</span></div>' +
@@ -1979,7 +1979,7 @@ async function buyProduct(btn, key){
   if (!p) return;
   if (isProductSoldOut(p)) { toast('This AI robot is not available right now'); return; }
   if (limitReached(p)) { toast('You already own the most you can of this AI robot'); return; }
-  if (STATE.balance < p.price) { toast('Not enough balance, add funds first'); return; }
+  if (STATE.balance < p.price) { toast('Not enough balance, recharge first'); return; }
   if (btn) { if (btn.disabled) return; btn.disabled = true; }
   toast('Processing…');
   try {
@@ -2220,7 +2220,7 @@ function renderWitBankBox(){
   $('witFeePctLabel').textContent = sett.withdrawFeePct + '%';
   var win = withdrawWindow(sett);
   var wn = $('witWindowNote');
-  if (wn) { wn.style.display = win.enabled ? '' : 'none'; wn.textContent = win.enabled ? ('Cash-outs are open from ' + win.from + ' to ' + win.to + '.') : ''; }
+  if (wn) { wn.style.display = win.enabled ? '' : 'none'; wn.textContent = win.enabled ? ('Withdrawals are open from ' + win.from + ' to ' + win.to + '.') : ''; }
   var box = $('witBankBox');
   var b = selectedBank();
   if (!b) {
@@ -2229,7 +2229,7 @@ function renderWitBankBox(){
     return;
   }
   box.innerHTML = '<div class="bank-row" style="margin:16px 20px 0">' + bankBadge(b) +
-    '<div class="bank-info"><b>Cash out to ' + esc(b.holder) + '</b><span>' + esc(b.network) + ' · ' + esc(maskPhone(b.phone)) + '</span></div>' +
+    '<div class="bank-info"><b>Withdraw to ' + esc(b.holder) + '</b><span>' + esc(b.network) + ' · ' + esc(maskPhone(b.phone)) + '</span></div>' +
     '<b style="font-size:12px;color:var(--caramel-deep);cursor:pointer" onclick="goBindBank(true)">Change</b></div>';
 }
 function prepareWithdraw(){
@@ -2252,13 +2252,13 @@ async function doWithdraw(){
   var amt = parseMoney($('witAmt').value);
   if (!amt) { toast('Enter a valid amount'); shakeVibrate($('witAmt')); return; }
   // The server checks every rule again; these checks only save the member a round trip.
-  if (amt < sett.minWithdraw) { toast('Minimum cash-out is ' + ugx(sett.minWithdraw)); shakeVibrate($('witAmt'), $('witGoBtn')); return; }
+  if (amt < sett.minWithdraw) { toast('Minimum withdrawal is ' + ugx(sett.minWithdraw)); shakeVibrate($('witAmt'), $('witGoBtn')); return; }
   if (amt > STATE.balance) { toast('Insufficient balance'); shakeVibrate($('witAmt'), $('witGoBtn')); return; }
   var card = selectedBank();
   if (!card) { toast('Bind a mobile-money account first'); goBindBank(true); return; }
   var win = withdrawWindow(sett);
   if (win.enabled && !win.open && !STATE.withdrawAnytime) { toast('Withdraw is open from ' + win.from + ' to ' + win.to + '. Please come back then.'); return; }
-  var pin = await askTradePin('Trade Password', 'Enter your 6-digit Trade Password to cash out ' + ugx(amt) + '.');
+  var pin = await askTradePin('Trade Password', 'Enter your 6-digit Trade Password to withdraw ' + ugx(amt) + '.');
   if (pin === null) return;
   var btn = $('witGoBtn'), label = btn.textContent;
   _withdrawBusy = true;
@@ -2272,7 +2272,7 @@ async function doWithdraw(){
   }
   if (r.stale || !STATE) return;
   if (r.status !== 'success') {
-    toast(r.message || 'Could not process the cash-out');
+    toast(r.message || 'Could not process the withdrawal');
     return;
   }
   $('witAmt').value = ''; renderWitCalc();
@@ -2498,13 +2498,13 @@ async function refreshTeamStats(){
 // Tapping Level 1 / 2 / 3 opens that level's members, walked fresh on the server (never just the number already on screen).
 async function openTeamLevel(level){
   openOverlay('teamlevel');
-  $('teamLevelTitle').textContent = 'Level ' + level + ' members';
+  $('teamLevelTitle').textContent = 'Level ' + level + ' subordinates';
   $('teamLevelList').innerHTML = spinnerHtml();
   var r = await api('/team/members?level=' + level);
   if (r.stale) return;
   if (r.status !== 'success') { $('teamLevelList').innerHTML = '<div class="empty">Could not load this list. Try again.</div>'; return; }
   var list = r.members || [];
-  if (!list.length) { $('teamLevelList').innerHTML = '<div class="empty">No Level ' + level + ' members yet.</div>'; return; }
+  if (!list.length) { $('teamLevelList').innerHTML = '<div class="empty">No Level ' + level + ' subordinates yet.</div>'; return; }
   // Every row is a real figure off the server (what that member has invested), never a vague phrase: a member who has not invested shows UGX 0.
   var rows = list.map(function(m){
     var display = m.phoneMasked || m.phone || 'Not set';
@@ -2514,7 +2514,7 @@ async function openTeamLevel(level){
       '<div class="flat-main"><b>' + esc(display) + '</b><span>Joined ' + esc(joined) + '</span></div>' +
       '<div class="flat-amt' + (invested > 0 ? ' pos' : ' zero') + '">' + ugx(invested) + '</div></div>';
   }).join('');
-  $('teamLevelList').innerHTML = '<div class="muted" style="font-size:12px;margin-bottom:2px">' + list.length + ' member' + (list.length === 1 ? '' : 's') + '</div><div class="flat-list">' + rows + '</div>';
+  $('teamLevelList').innerHTML = '<div class="muted" style="font-size:12px;margin-bottom:2px">' + list.length + ' subordinate' + (list.length === 1 ? '' : 's') + '</div><div class="flat-list">' + rows + '</div>';
 }
 
 /* ====================== NOTICES ====================== */

@@ -118,11 +118,11 @@ const front = http.createServer((req, res) => {
   hDep.hold(); await ev(() => document.querySelector('#recordsList button').click());
   await waitLoader('#recordsList', 'Ledger, Topups, after Try again');
   hDep.release();
-  ok(await until(() => /No top-ups yet|Mobile-money top-up/.test(document.getElementById('recordsList').textContent) && !document.querySelector('#recordsList svg.dl'), null, 6000), 'Ledger, Topups: the list replaces the ring');
+  ok(await until(() => /No recharges yet|Mobile-money recharge/.test(document.getElementById('recordsList').textContent) && !document.querySelector('#recordsList svg.dl'), null, 6000), 'Ledger, Topups: the list replaces the ring');
   await ev(() => setRecordsTab('cashouts'));
   await checkFree('#recordsList', 'Ledger, Cash Outs');
   hWit.release();
-  ok(await until(() => /No cash-outs yet|Cash out/.test(document.getElementById('recordsList').textContent) && !document.querySelector('#recordsList svg.dl'), null, 6000), 'Ledger, Cash Outs: the list replaces the ring');
+  ok(await until(() => /No withdrawals yet|Withdrawal/.test(document.getElementById('recordsList').textContent) && !document.querySelector('#recordsList svg.dl'), null, 6000), 'Ledger, Cash Outs: the list replaces the ring');
   await ev(() => closeOverlay());
 
   // ---- My Team: a level's members
@@ -131,7 +131,7 @@ const front = http.createServer((req, res) => {
   await ev(() => { openTeamLevel(1); });   // not awaited: the page is waiting for the held request, and so would the test
   await checkFree('#teamLevelList', 'My Team'); await shot('my-team-loading');
   hTeam.release();
-  ok(await until(() => /No Level 1 members yet|member/.test(document.getElementById('teamLevelList').textContent) && !document.querySelector('#teamLevelList svg.dl'), null, 6000), 'My Team: the list replaces the ring');
+  ok(await until(() => /No Level 1 subordinates yet|subordinate/.test(document.getElementById('teamLevelList').textContent) && !document.querySelector('#teamLevelList svg.dl'), null, 6000), 'My Team: the list replaces the ring');
   await ev(() => closeOverlay());
 
   // ---- Task Center
