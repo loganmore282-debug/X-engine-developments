@@ -19,7 +19,7 @@ admin's optional login code, MongoDB indexes, nginx). Removed on his word becaus
 Download App reward, and the Security hub page** (ChocoMCC's Security page is just the change-password form). The compare list ChocoMCC vs Smart AI is the test
 `test-smartai-ui.js` ("only ChocoMCC's things"): its ten Me tiles, its thirteen full-page screens, no authenticator / messages / gifts / app-claim routes anywhere.
 Known differences left (say so, do not hide): the Task Center counts team PURCHASES with admin-editable tiers (ChocoMCC: Level 1 referrals who invest + Level 1
-deposits, fixed ladders); the welcome dialog is a picture + Join Channel (ChocoMCC: admin title and text + WhatsApp and Telegram pills); ChocoMCC's USDT deposit and
+deposits, fixed ladders); ChocoMCC's USDT deposit and
 bank-transfer cash-out do not exist on Smart AI's server; sign-up asks a 6-digit Trade Password as in Potato, Mint and Chocolate (ChocoMCC makes a 4-digit payout PIN at first use).
 ChocoMCC's Home banner shows an admin title and a line of text over the picture: Smart AI has it as the settings `homeBannerTitle` (60 characters) and `homeBannerText`
 (160), edited in the admin panel under Settings -> "Home banner words"; both empty = the picture alone. The two UGX coin pictures of the Me page (Balance, Cash Outs) are
@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v68`, admin `admin/sw.js` `smartai-admin-shell-v26`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v69`, admin `admin/sw.js` `smartai-admin-shell-v27`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -582,3 +582,7 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Add Funds with no gateway key goes to the payment page again
 - `/deposit/marzpay` no longer answers 503 `GATEWAY_NOT_SET` ("Top-ups are not available right now") when no gateway key is on the server. It uses the button's gateway, else the first one with a key, else the button's own gateway anyway, and the member lands on the payment page like before (the gateway call then fails and that page says so). `test-deposit-nokeys.js` now checks this. Server change only: no member cache bump (v68).
+
+## Welcome announcement = ChocoMCC's text dialog (owner: "the welcome announcement dialog is not image, it is text and much more")
+- Settings `annEnabled` (switch, default off), `annTitle` (60 characters, empty = "Notice"), `annBody` (2000 characters, blank line = new paragraph); server cleans them in `/admin/settings/update`, `/public/settings` hands them to the app. Admin > Banners > "Welcome announcement" has the switch, title, text and Save; the optional picture on top is the same `announcement` image as before (without one a small gift badge shows).
+- Member `maybeShowAnnouncement()` shows it on app open and when Home is entered from another tab ONLY while the switch is on AND there is text. Buttons: WhatsApp Group (`whatsappGroup`) and Telegram Group (`telegramGroup`), each only when its link is set (Support settings); they glow and shake as in ChocoMCC. The old picture-only dialog with "Join Channel" is gone, so a picture alone no longer opens a dialog. `test-smartai-app.js` checks title, paragraphs, both buttons, picture and the off switch. Member cache v69, admin v27.

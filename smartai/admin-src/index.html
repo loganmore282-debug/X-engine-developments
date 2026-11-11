@@ -3217,11 +3217,18 @@ async function renderBanners(){
     ${pic('bindbankbanner')}
     <h2 class="sec">Welcome announcement</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The picture members see when they open the app, with a Join Channel button under it (the Telegram group link, set under Support). Without a picture, no dialog is shown.</p>
-      <p class="muted" style="margin:14px 0 6px">The picture: tall portrait or wide banner.</p>
+      <p class="muted" style="margin-top:0">The dialog members see when they open the app, and each time they come back to Home from another tab. Its picture (optional) sits on top, then the title, your text, and two buttons: the WhatsApp group and the Telegram group (links set under Support). Switched off, or with no text, no dialog is shown.</p>
+      <div class="switch-row"><span><b>Show the announcement dialog</b></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="aEnabled" ${v('annEnabled',false)?'checked':''} style="width:auto"></label></div>
+      <label>Title <span class="muted">(up to 60 characters; empty = Notice)</span></label>
+      <input id="aTitle" maxlength="60" value="${esc(v('annTitle',''))}" placeholder="Notice">
+      <label>Text <span class="muted">(blank line = new paragraph)</span></label>
+      <textarea id="aBody" rows="7" maxlength="2000" placeholder="Write the announcement…">${esc(v('annBody',''))}</textarea>
+      <button class="btn block" id="saveAnn" style="margin-top:10px">Save announcement</button>
+      <p class="muted" style="margin:14px 0 6px">The picture on top <span class="muted">(optional; tall portrait or wide banner)</span></p>
       <div class="banner-row">
         ${announcementImage?`<img class="img-thumb" src="${esc(announcementImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${announcementImage?'Custom image':'<span class="muted">Not set</span>'}</div>
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${announcementImage?'Custom image':'<span class="muted">Not set &mdash; a small gift badge shows</span>'}</div>
         ${announcementImage?`<button class="btn danger sm" id="annImageClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="annImageFile" accept="image/*" hidden></label>
@@ -3371,6 +3378,10 @@ function wireBannerHandlers(){
   if (saveLinkPreview) saveLinkPreview.addEventListener('click', async()=>{
     const d = await api('/admin/settings/update', { settings: { linkPreviewTitle: $('lpTitle').value, linkPreviewText: $('lpText').value } });
     toast(d.status==='success'?'Link preview words saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('saveAnn').addEventListener('click', async()=>{
+    const d=await api('/admin/settings/update', { settings: { annEnabled:$('aEnabled').checked, annTitle:$('aTitle').value.trim(), annBody:$('aBody').value } });
+    toast(d.status==='success'?'Announcement saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   const annImageFile = $('annImageFile');
   if (annImageFile) annImageFile.addEventListener('change', async e=>{

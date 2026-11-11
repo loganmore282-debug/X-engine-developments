@@ -39,7 +39,7 @@ async function member(ref) {
 (async () => {
   for (let i = 0; i < 60; i++) { try { const h = await fetch(base + '/health'); if (h.ok) break; } catch (_) {} await sleep(250); }
   await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 7000, withdrawMethod: 'manual', withdrawOpenFrom: '00:00', withdrawOpenTo: '23:59', dailyCheckin: 250, minWithdraw: 8000, minDeposit: 30000,
-    supportTelegram: 'https://t.me/help_acct', telegramGroup: 'https://t.me/grp_acct', rulesText: 'Be honest.\n\nOne account each.', supportHours: '9am – 6pm' } }, null, true);
+    supportTelegram: 'https://t.me/help_acct', telegramGroup: 'https://t.me/grp_acct', whatsappGroup: 'https://chat.whatsapp.com/abc123', annEnabled: true, annTitle: 'Big news', annBody: 'First line.\nSecond line.\n\nNew paragraph.', rulesText: 'Be honest.\n\nOne account each.', supportHours: '9am – 6pm' } }, null, true);
   await J('POST', '/admin/salary/save', { tiers: [{ id: 'sx1', target: 20000, reward: 1500 }, { id: 'sx2', target: 9000000, reward: 9000 }] }, null, true);
   await J('POST', '/admin/products/add-starters', {}, null, true);
   const prods = (await J('GET', '/public/products')).j.products.filter(p => p.price > 0).sort((a, b) => a.price - b.price);
@@ -240,14 +240,24 @@ async function member(ref) {
 
   // ---- 10. support, rules, about, announcement ----
   await ev(() => openOverlay('support')); await sleep(300);
-  ok(await ev(() => document.querySelectorAll('#supportLinks [data-open-url]').length) === 2 && /9am – 6pm/.test(await ev(() => document.getElementById('supportLinks').textContent)), 'Support lists the links the admin set and the hours');
+  ok(await ev(() => document.querySelectorAll('#supportLinks [data-open-url]').length) === 3 && /9am – 6pm/.test(await ev(() => document.getElementById('supportLinks').textContent)), 'Support lists the links the admin set and the hours');
   await ev(() => closeOverlay());
   await ev(() => openOverlay('rules')); await sleep(200);
   ok(/Be honest/.test(await ev(() => document.getElementById('rulesBody').textContent)), 'Terms & Rules shows the admin\'s text');
   await ev(() => closeOverlay());
   await ev(() => switchTab('shop')); await ev(() => switchTab('home')); await sleep(1500);
-  ok(await shown('announcementBg'), 'with a welcome picture set, Home shows the announcement when it is entered from another tab');
+  ok(await shown('announcementBg'), 'with the announcement switched on, Home shows it when it is entered from another tab');
+  ok(await ev(() => document.getElementById('annTitle').textContent) === 'Big news' && await ev(() => document.querySelectorAll('#annBody .ann-p').length) === 2 && /Second line/.test(await ev(() => document.getElementById('annBody').textContent)), 'the dialog shows the admin\'s title and text (a blank line starts a new paragraph)');
+  ok(await ev(() => document.querySelectorAll('#annTgRow .wa-pill, #annTgRow .tg-pill').length) === 2 && /WhatsApp Group/.test(await ev(() => document.getElementById('annTgRow').textContent)) && /Telegram Group/.test(await ev(() => document.getElementById('annTgRow').textContent)), 'with its WhatsApp Group and Telegram Group buttons');
+  ok(await ev(() => getComputedStyle(document.getElementById('annImg')).display !== 'none'), 'and the admin picture on top');
   await ev(() => dismissAnnouncement());
+  // switched off, or empty text: no dialog at all
+  await J('POST', '/admin/settings/update', { settings: { annEnabled: false } }, null, true);
+  await ev(() => syncPublicConfig()); await sleep(600);
+  await ev(() => switchTab('shop')); await ev(() => switchTab('home')); await sleep(1500);
+  ok(!(await shown('announcementBg')), 'switched off, Home shows no announcement');
+  await J('POST', '/admin/settings/update', { settings: { annEnabled: true } }, null, true);
+  await ev(() => syncPublicConfig()); await sleep(600);
 
   // ---- 11. the Back button closes a page instead of leaving the app ----
   await ev(() => switchTab('account')); await ev(() => openOverlay('about')); await sleep(300);

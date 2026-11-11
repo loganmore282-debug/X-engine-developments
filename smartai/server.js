@@ -648,6 +648,8 @@ const DEFAULT_SETTINGS = {
   // 0 = no limit; a nonzero value leaves anything above it for manual review. autoApproveEnabledAt is stamped by the server when the switch is turned on.
   autoApproveWithdrawalsEnabled: false, autoApproveMinSec: 10, autoApproveMaxSec: 60, autoApproveMaxAmount: 0, autoApproveEnabledAt: 0,
   supportTelegram: '', telegramGroup: '',
+  // The welcome announcement dialog (ChocoMCC's): a switch, a title and a body of text; its picture is the 'announcement' banner, its two buttons are the WhatsApp and Telegram group links below.
+  annEnabled: false, annTitle: '', annBody: '',
   // Daily check-in (Rewards tab): the CALENDAR pays a rising ladder over a 30-day cycle (day 1 = first amount, day 9 = the first again, ...; a missed day starts over at day 1).
   // `checkinLadder` empty = every day pays the flat `dailyCheckin`; both empty / 0 = the card is off. The streak and the day are the member's own.
   checkinLadder: [100, 200, 300, 500, 600, 700, 800, 1000],
@@ -7362,6 +7364,9 @@ app.post('/admin/settings/update', async (req, res) => {
       const words = String(updates.shareMessage == null ? '' : updates.shareMessage).replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 200);
       updates.shareMessage = words || DEFAULT_SETTINGS.shareMessage;
     }
+    if ('annEnabled' in updates) updates.annEnabled = updates.annEnabled === true;
+    if ('annTitle' in updates) updates.annTitle = String(updates.annTitle == null ? '' : updates.annTitle).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+    if ('annBody' in updates) updates.annBody = String(updates.annBody == null ? '' : updates.annBody).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f<>]/g, '').replace(/\r\n?/g, '\n').trim().slice(0, 2000);
     if ('checkinLadder' in updates) updates.checkinLadder = cleanCheckinLadder(updates.checkinLadder);
     if ('giftCodeHint' in updates) {
       const hint = String(updates.giftCodeHint == null ? '' : updates.giftCodeHint).replace(/[<>]/g, '').trim().slice(0, 40);
