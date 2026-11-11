@@ -210,6 +210,7 @@ async function member(ref) {
   await J('POST', '/admin/settings/update', { settings: { pageParticles: true } }, null, true);
   await ev(() => syncPublicConfig()); await sleep(1200);
   ok(await ev(() => document.body.classList.contains('pf-on') && getComputedStyle(document.getElementById('pfBg')).display === 'block' && getComputedStyle(document.getElementById('pfBg')).zIndex === '-1' && document.getElementById('pfBg').toDataURL().length > 5000), 'switched on, the particle field is painted behind every page');
+  ok(await ev(() => getComputedStyle(document.body).backgroundImage === 'none' && getComputedStyle(document.body).backgroundColor === 'rgba(0, 0, 0, 0)' && /gradient/.test(getComputedStyle(document.documentElement).backgroundImage)), 'the dark colour is on the page itself, not on the body (a body colour would paint OVER the particles and hide them)');
   await ev(() => openOverlay('deposit')); await sleep(500);
   ok(await ev(() => document.body.classList.contains('ov-open') && getComputedStyle(document.getElementById('viewHome')).visibility === 'hidden' && getComputedStyle(document.getElementById('ovDeposit')).backgroundColor === 'rgba(0, 0, 0, 0)'), 'a full page opens over the field (the tab pages underneath are hidden, the page itself is see-through)');
   await ev(() => closeOverlay()); await sleep(300);

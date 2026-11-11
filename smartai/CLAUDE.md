@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v85`, admin `admin/sw.js` `smartai-admin-shell-v32`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v86`, admin `admin/sw.js` `smartai-admin-shell-v32`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -642,3 +642,6 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Bug sweep (owner: "check for all kinds of bugs and fix them")
 - Looked at every page and overlay with the particle background switched ON, a 25-round soak (dialog open / close and tab changes at random speeds, 12 page open / close rounds, payment page opened and cancelled, switch on then off) and the new code line by line. Found and fixed: (1) the payment page's particle field was stopped the moment a payment was confirmed or failed (the page went flat dark behind the tick); it now runs until the page is closed; (2) the tick / cross kept the "Checking your payment" screen-reader label; (3) with the switch on, text on the dark backdrop was too dim in four places (the Home "See all" link, the Ledger tabs, the Task Center intro line) and the page edge showed white when pulling past the end (`html.pf-on`); (4) the welcome dialog had no dialog role and Escape did not close it (`role="dialog" aria-modal`, Escape closes). The soak showed: the scroll lock is always released, no particle loop is left running after closing (1 loop with the switch off: the dots ticker), no page errors. Member cache v85.
+
+## Particles hidden by a solid blue (owner's screenshot) -- my v85 `html.pf-on` rule
+- Giving `html` a background stops `body`'s own background from being used as the page background, so the body painted its gradient as a box ABOVE the particle canvas (z-index -1) and covered it everywhere. Now the gradient is on `html.pf-on` only and `body.pf-on{background:none}`. Test: the body has no background while the page has the gradient. Rule: never give the body a background in `pf-on`. Member cache v86.

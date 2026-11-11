@@ -316,7 +316,7 @@
   /* "Particle background on every page" (Admin > Banners > Animations): the dark particle field fills the whole app. The pages' light backdrop gives way to it, the banners fade into
      it, the white cards stay as they are, and the words that sit straight on the backdrop turn white. Switched off, none of this applies. */
   .pf-bg{position:fixed;inset:0;width:100%;height:100%;display:none;z-index:-1;pointer-events:none;}
-  body.pf-on{--flow:#061638;background:radial-gradient(130% 90% at 50% 108%,#0c3f9c 0%,#071b56 42%,#040b26 100%);background-attachment:fixed;}
+  body.pf-on{--flow:#061638;background:none;}
   body.pf-on .pf-bg{display:block;}
   body.pf-on #root{background:transparent;}
   body.pf-on .overlay{background:transparent;}
@@ -328,7 +328,7 @@
   body.pf-on .uline-tab{color:#b4cbef;}
   body.pf-on .uline-tab.active{color:#fff;border-bottom-color:#8fcaff;}
   body.pf-on .tk-lead{color:#cfe0fb;}
-  html.pf-on{background:#040b26;}
+  html.pf-on{background:#040b26 radial-gradient(130% 90% at 50% 108%,#0c3f9c 0%,#071b56 42%,#040b26 100%) fixed;}
   /* Every page has a compact blue curved header like Potato's: a plain white chevron at the left and the page name centred in white. */
   .ov-top{position:relative;z-index:6;height:calc(52px + env(safe-area-inset-top,0px));margin-bottom:12px;background:radial-gradient(circle at 90% 10%,rgba(255,255,255,.16) 0,rgba(255,255,255,0) 40%),linear-gradient(135deg,#2b88f3,#0a4fc6);border-radius:0 0 24px 24px;box-shadow:0 10px 22px -14px rgba(11,42,91,.6);}
   .ov-back{position:absolute;left:6px;top:calc(env(safe-area-inset-top,0px) + 4px);width:44px;height:44px;border:none;background:none;color:#fff;display:flex;align-items:center;justify-content:center;}
