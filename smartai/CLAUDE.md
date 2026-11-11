@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v78`, admin `admin/sw.js` `smartai-admin-shell-v31`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v79`, admin `admin/sw.js` `smartai-admin-shell-v31`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -623,3 +623,6 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 - Payment polling page (`#ovDepositStatus`): the WHOLE page is the dark particle field (`#payFx`, `position:fixed` full screen, horizon 0.36) with the orb, words, reference box, message box and buttons on it (translucent boxes, white words; `setDepStatusMsg` uses translucent blue / green / red). Started in `showPayOrb()`, stops when the page closes.
 - No scrolling behind any popup: `syncScrollLock()` (a MutationObserver on class changes) pins the body (`body.scroll-locked`, position fixed at the old scroll place) while any `.modal-bg.show` exists and restores the place when the last one closes; the dialog's own words scroll inside it (`.ann-inner`, `overscroll-behavior:contain`).
 - Member cache v78. Tests in `test-smartai-app.js` (robot badge, X, animation name, painted canvas, scroll lock, full-page payment canvas that moves).
+
+## Payment page: the app's DOTTED loader replaces the orb (owner: "Remove this, use our dotted loader instead")
+- `showPayLoader()` (was `showPayOrb`) puts the dotted loader (`dlMarkup()`, 12 dots, moved by `animTick()`) in `#depStatusIc` (class `pay-status-ic dots`, 104 px, bright blue with a glow) over the full-page particle field; `releasePayLoader()` stops the field. The orb code (`PAY_ORB_*`, `preloadPayOrb`, `payOrbFrame`) and its 2240 x 2240 sheet `user/anim/pay-orb.webp` are deleted. The tick / cross still replace the dots when the payment settles. The reference number is white on the dark page. Member cache v79. Tests updated (`test-smartai-app.js`, `test-loader.js`, `test-page-loader.js`).

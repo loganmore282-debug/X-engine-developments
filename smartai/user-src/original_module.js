@@ -1992,7 +1992,6 @@ function prepareDeposit(){
   $('depMin').textContent = ugx(min);
   renderQuickAmounts();
   refreshDepositSlot();
-  preloadPayOrb();   // the animation of the next page is fetched while the member types the amount
 }
 // Money amount boxes cannot be left to type() alone: a number input has no real upper bound, and a 20-digit figure would overflow every sum below.
 function capAmountInput(el){ if (el.value.length > 10) el.value = el.value.slice(0, 10); }
@@ -2018,42 +2017,18 @@ async function doDeposit(){
   openDepositStatus(r.depositId, r.reference, '0' + local);
 }
 
-/* ====================== THE PAYMENT ANIMATION (the owner's second GIF) ======================
-   A glowing orb with two petals, played on a canvas from a sprite sheet (anim/pay-orb.webp: the GIF's 100 frames, 224 x 224 px each, 10 per row) in place of the old
-   phone picture while a payment is being checked. 20 ms a frame = a 2 s loop, the GIF's own timing. It stops by itself when the page is closed. */
-var PAY_ORB_CELL = 224, PAY_ORB_FRAMES = 100, PAY_ORB_MS = 20, PAY_ORB_CSS = 116;
-var _payOrbImg = null, _payOrbOk = false, _payOrbRaf = 0, _payOrbT0 = 0;
-function preloadPayOrb(){
-  if (_payOrbImg) return;
-  _payOrbImg = new Image();
-  _payOrbImg.onload = function(){ _payOrbOk = true; };
-  _payOrbImg.src = '/anim/pay-orb.webp';
-}
-function payOrbFrame(){
-  _payOrbRaf = 0;
-  var cv = $('payOrbCv'), ov = $('ovDepositStatus');
-  if (!cv || !ov || !ov.classList.contains('show')) { releasePayOrb(); return; }
-  if (_payOrbOk) {
-    var n = Math.floor((Date.now() - _payOrbT0) / PAY_ORB_MS) % PAY_ORB_FRAMES, c = cv.getContext('2d');
-    c.imageSmoothingEnabled = true; if ('imageSmoothingQuality' in c) c.imageSmoothingQuality = 'high';
-    c.drawImage(_payOrbImg, (n % 10) * PAY_ORB_CELL, Math.floor(n / 10) * PAY_ORB_CELL, PAY_ORB_CELL, PAY_ORB_CELL, 0, 0, cv.width, cv.height);
-  }
-  _payOrbRaf = requestAnimationFrame(payOrbFrame);
-}
-function showPayOrb(){
+/* ====================== THE PAYMENT PAGE LOADER ======================
+   While a payment is being checked the page shows the app's own dotted loader (the same dots as every page loader; animTick() moves it) in bright blue, big, over the full-page
+   particle field. The field stops when the page is left. */
+function showPayLoader(){
   var ic = $('depStatusIc'); if (!ic) return;
-  var px = Math.round(PAY_ORB_CSS * Math.min(window.devicePixelRatio || 1, 3));
-  ic.className = 'pay-status-ic orb';
-  ic.innerHTML = '<canvas id="payOrbCv" width="' + px + '" height="' + px + '" role="img" aria-label="Checking your payment"></canvas>';
+  ic.className = 'pay-status-ic dots';
+  ic.innerHTML = dlMarkup();
+  ic.setAttribute('role', 'img'); ic.setAttribute('aria-label', 'Checking your payment');
   if (!_payField) _payField = makeParticleField($('payFx'), { horizon: 0.36, scale: 1.25, alive: function(){ var o = $('ovDepositStatus'); return !!(o && o.classList.contains('show')); } });
   _payField.start();
-  preloadPayOrb();
-  _payOrbT0 = Date.now();
-  stopPayOrb(); _payOrbRaf = requestAnimationFrame(payOrbFrame);
 }
-function stopPayOrb(){ if (_payOrbRaf) { cancelAnimationFrame(_payOrbRaf); _payOrbRaf = 0; } }
-// The sheet is 2240 x 2240 px once decoded: it is let go of when the page is left or the tick shows (the next Add Funds visit fetches it again, from the cache).
-function releasePayOrb(){ stopPayOrb(); _payOrbImg = null; _payOrbOk = false; }
+function releasePayLoader(){ if (_payField) _payField.stop(); }
 
 /* ====================== DEPOSIT STATUS (checks the payment by itself) ====================== */
 // The first check comes 1 s after the page opens, then every 1.5 s (PesaJet's own SDK cadence); the server holds an automatic check for up to DEP_HOLD_MS while its own watcher is
@@ -2065,7 +2040,7 @@ var DEP_HOLD_MS = 8000;
 function depositStatusHold(depositId){ return api('/deposit/marzpay/status', { depositId: depositId, waitMs: DEP_HOLD_MS }); }
 function depositStatusCheck(depositId){ return api('/deposit/marzpay/status', { depositId: depositId }); }
 var _depPollTimer = null, _depFirstTimer = null, _depPollAttempt = 0, _depPollId = null, _depConfirmed = false, _depPollChecking = false;
-/* The picture shown while a payment is being checked is the owner's second animation (see THE PAYMENT ANIMATION below); the tick shows once it is paid. */
+/* The picture shown while a payment is being checked is the app's dotted loader (see THE PAYMENT PAGE LOADER); the tick shows once it is paid. */
 // The success tick and the failed cross (the owner's recordings, redrawn): a disc grows, a faint halo follows, the mark is drawn in.
 // Disc radius 182, halo 300 (x1.65); check stroke 0.163 of the disc, X stroke 0.145; times measured at 60 pictures a second.
 function tickHtml(){
@@ -2078,7 +2053,7 @@ var _depIcSuccess = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none"
 function stopDepositPoll(){ clearInterval(_depPollTimer); clearTimeout(_depFirstTimer); _depPollTimer = null; _depFirstTimer = null; _depPollId = null; }
 function openDepositStatus(depositId, reference, phone){
   _depPollId = depositId; _depPollAttempt = 0; _depConfirmed = false;
-  showPayOrb();
+  showPayLoader();
   $('depStatusTitle').textContent = 'Payment Initiated Successfully!';
   $('depStatusPhone').textContent = 'You will receive a payment prompt on ' + phone + ' shortly.';
   $('depStatusSteps').style.display = '';
@@ -2095,7 +2070,7 @@ function openDepositStatus(depositId, reference, phone){
 }
 function showDepositSuccess(){
   _depConfirmed = true;
-  releasePayOrb();
+  releasePayLoader();
   $('depStatusIc').className = 'pay-status-ic anim';
   $('depStatusIc').innerHTML = customIcon('tick') ? '<img src="' + esc(customIcon('tick')) + '" alt="" style="width:100%;height:100%;object-fit:contain">' : tickHtml();
   $('depStatusTitle').textContent = 'Payment Successful!';
@@ -2109,7 +2084,7 @@ function showDepositSuccess(){
   btn.onclick = function(){ closeOverlay(); switchTab('home'); renderAll(); };
 }
 function showDepositFailed(){
-  releasePayOrb();
+  releasePayLoader();
   $('depStatusIc').className = 'pay-status-ic anim';
   $('depStatusIc').innerHTML = customIcon('cross') ? '<img src="' + esc(customIcon('cross')) + '" alt="" style="width:100%;height:100%;object-fit:contain">' : crossHtml();
   $('depStatusTitle').textContent = 'Payment Not Completed';
@@ -2171,7 +2146,7 @@ async function pollDepositStatus(manual){
   }
 }
 function manualVerifyDeposit(){ pollDepositStatus(true); }
-function cancelDepositStatus(){ stopDepositPoll(); releasePayOrb(); closeOverlay(); if (STATE) renderAll(); }
+function cancelDepositStatus(){ stopDepositPoll(); releasePayLoader(); closeOverlay(); if (STATE) renderAll(); }
 function copyDepositRef(){ copyText($('depStatusRef').textContent, 'Reference copied'); }
 // The clipboard may be missing (an old browser, an insecure address): say so instead of claiming it worked.
 function copyText(text, okMsg){

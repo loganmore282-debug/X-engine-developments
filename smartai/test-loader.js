@@ -50,10 +50,10 @@ function webp(buf) {
 }
 const dir = path.join(__dirname, 'user', 'anim');
 ok(!fs.existsSync(path.join(dir, 'loader-sphere.webp')), 'the old sphere sheet is not shipped any more');
-const robot = fs.readFileSync(path.join(dir, 'loader-robot.webp')), orb = fs.readFileSync(path.join(dir, 'pay-orb.webp'));
-const rd = webp(robot), od = webp(orb);
+const robot = fs.readFileSync(path.join(dir, 'loader-robot.webp'));
+const rd = webp(robot);
 ok(rd && rd.w === 1428 && rd.h === 1068, 'loader-robot.webp is a 4 x 3 sheet of 357 x 356 frames (' + JSON.stringify(rd) + ')');
-ok(od && od.w === 2240 && od.h === 2240, 'pay-orb.webp (the payment page) is still its 10 x 10 sheet of 224 px frames');
+ok(!fs.existsSync(path.join(dir, 'pay-orb.webp')), 'the payment page orb sheet is not shipped any more (the page uses the dotted loader)');
 ok(robot.length < 200000, 'the robot sheet is light (' + Math.round(robot.length / 1024) + ' kB)');
 ok(fs.existsSync(__dirname + '/tools/make-robot-loader.py'), "the tool that cuts it from the owner's GIF is in the repo");
 

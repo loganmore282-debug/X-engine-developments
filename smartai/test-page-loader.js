@@ -27,7 +27,7 @@ const src = read('user-src/original_module.js'), html = read('user-src/index.htm
 ok(/function spinnerHtml\(\)/.test(src) && /svg\.dl\{/.test(html) && /function dlCircles/.test(src) && !/cmSpinRotate/.test(html), 'the dots loader (the owner\'s recording, in blue) is in the app and the ring is gone');
 ok(!/orbHtml|orbTick|orbLoad|orb-free|orb-ld|orb-wrap/.test(src + html), 'the glass-orb page loader is gone from the app (the payment page keeps its own animation)');
 ok(!fs.existsSync(path.join(__dirname, 'user', 'anim', 'orb-free.webp')), 'and its sheet is not shipped any more');
-ok(/showPayOrb/.test(src) && fs.existsSync(path.join(__dirname, 'user', 'anim', 'pay-orb.webp')), 'the payment (polling) page still plays the owner\'s payment animation');
+ok(/function showPayLoader/.test(src) && !/payOrb|PayOrb/.test(src) && !fs.existsSync(path.join(__dirname, 'user', 'anim', 'pay-orb.webp')), 'the payment (polling) page shows the dotted loader, the orb is gone');
 ok(/function btnBusyHtml\(/.test(src) && /\.verify-spin\{/.test(html), 'a busy BUTTON keeps its own small turning icon');
 ok((src.match(/spinnerHtml\(\)/g) || []).length >= 8, 'every page that waits uses the ring (About Us, Ledger, My Team, Task Center, My Products, Accrued earnings, Payout Account, the robot lists)');
 if (process.argv.includes('--built')) { const built = read('user/index.html'); ok(/svg\.dl\{/.test(built) && !/orb-ld/.test(built), 'the built page carries the dots loader styles'); }

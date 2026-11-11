@@ -191,19 +191,18 @@ async function member(ref) {
   ok(dr.s === 200 && Array.isArray(dr.j.deposits), '/deposits answers');
 
   // ---- 7b. the payment page plays the owner's second animation in place of the old phone picture; the tick comes back once it is paid ----
-  await ev(() => preloadPayOrb()); ok(await until(() => _payOrbOk === true, null, 8000), 'the orb\'s sheet (anim/pay-orb.webp) loads');
   await ev(() => openDepositStatus('dep-anim-test', 'S2611090000000001', '0771234567')); await sleep(700);
-  const orb = await ev(() => { const ic = document.getElementById('depStatusIc'), cv = document.getElementById('payOrbCv'); return { cls: ic.className, canvas: !!cv, px: cv ? cv.width : 0, css: ic.getBoundingClientRect().width, phone: /<rect x="7" y="2"/.test(ic.innerHTML) }; });
-  ok(orb.cls === 'pay-status-ic orb' && orb.canvas && orb.px >= 116 && Math.round(orb.css) === 116 && !orb.phone, 'while a payment is being checked the page shows the animated orb (116 px), not the phone picture: ' + JSON.stringify(orb));
-  const shots = []; for (let i = 0; i < 5; i++) { shots.push(await ev(() => document.getElementById('payOrbCv').toDataURL())); await sleep(130); }
-  ok(new Set(shots).size >= 3 && shots.every(u => u.length > 3000), 'the orb is moving (the canvas changes from one look to the next)');
+  const dl = await ev(() => { const ic = document.getElementById('depStatusIc'), s = ic.querySelector('svg.dl'); return { cls: ic.className, svg: !!s, n: s ? s.children.length : 0, css: Math.round(ic.getBoundingClientRect().width), fill: s ? getComputedStyle(s.children[0]).fill : '', orb: !!document.getElementById('payOrbCv'), phone: /<rect x="7" y="2"/.test(ic.innerHTML) }; });
+  ok(dl.cls === 'pay-status-ic dots' && dl.svg && dl.n === 12 && dl.css === 104 && !dl.orb && !dl.phone, 'while a payment is being checked the page shows the app\'s dotted loader (12 dots, 104 px), not the orb or the phone: ' + JSON.stringify(dl));
+  const shots = []; for (let i = 0; i < 5; i++) { shots.push(await ev(() => [...document.querySelectorAll('#depStatusIc svg.dl circle')].map(c => c.getAttribute('cx')).join())); await sleep(130); }
+  ok(new Set(shots).size >= 3, 'the dots are moving');
   const pf = await ev(() => { const cv = document.getElementById('payFx'), r = cv.getBoundingClientRect(), o = document.getElementById('ovDepositStatus'); return { fixed: getComputedStyle(cv).position, full: Math.round(r.width) === window.innerWidth && Math.round(r.height) === window.innerHeight, dark: getComputedStyle(o).backgroundImage.indexOf('gradient') >= 0 }; });
   ok(pf.fixed === 'fixed' && pf.full && pf.dark, 'the payment page is the full-page dark particle field (a canvas as big as the screen behind the words)');
   const pw = []; for (let i = 0; i < 4; i++) { pw.push(await ev(() => document.getElementById('payFx').toDataURL())); await sleep(250); }
   ok(new Set(pw).size >= 3 && pw.every(u => u.length > 5000), 'and the particles on it are painted and moving');
   await ev(() => showDepositSuccess()); await sleep(200);
-  ok(await ev(() => document.getElementById('depStatusIc').className === 'pay-status-ic anim' && !document.getElementById('payOrbCv') && /ok-check/.test(document.getElementById('depStatusIc').innerHTML)), 'once the payment is confirmed the orb gives way to the green tick (the owner\'s animated tick)');
-  ok(await ev(() => _payOrbRaf === 0), 'and the animation stops running');
+  ok(await ev(() => document.getElementById('depStatusIc').className === 'pay-status-ic anim' && !document.querySelector('#depStatusIc svg.dl') && /ok-check/.test(document.getElementById('depStatusIc').innerHTML)), 'once the payment is confirmed the dots give way to the green tick (the owner\'s animated tick)');
+  ok(await ev(() => !document.querySelector('#depStatusIc svg.dl')), 'and the dots are gone');
   await ev(() => { stopDepositPoll(); closeOverlay(); }); await sleep(200);
 
   // ---- 8. the Me page is ChocoMCC's: its tiles, its two UGX coins, its Security page, and nothing that is not in ChocoMCC ----

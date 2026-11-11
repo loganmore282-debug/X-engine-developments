@@ -524,14 +524,15 @@
   .pay-fx{position:fixed;inset:0;width:100%;height:100%;display:block;pointer-events:none;}
   #ovDepositStatus>:not(.pay-fx){position:relative;z-index:1;}
   #ovDepositStatus .link-box{background:rgba(255,255,255,.07);border-color:rgba(130,190,255,.6);color:#fff;}
-  #ovDepositStatus .link-row{color:#fff;}
+  #ovDepositStatus .link-row,#ovDepositStatus #depStatusRef{color:#fff;}
   #ovDepositStatus .link-box .muted{color:rgba(205,222,255,.85);}
   #ovDepositStatus .info-box{border:1px solid rgba(130,190,255,.3);}
   #ovDepositStatus .muted{color:rgba(205,222,255,.8);}
   .pay-status-card{margin:16px var(--gut);padding:22px 20px 10px;text-align:center;color:#fff;}
   .pay-status-ic{width:52px;height:52px;border-radius:16px;background:var(--mint);color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
-  .pay-status-ic.orb{width:116px;height:116px;border-radius:30px;background:radial-gradient(circle at 50% 50%,#05155c 0,#020a2c 75%);overflow:hidden;box-shadow:0 0 0 2px rgba(130,190,255,.4),0 0 30px 6px rgba(50,135,255,.5);}
-  .pay-status-ic canvas{display:block;width:100%;height:100%;}
+  .pay-status-ic.dots{width:104px;height:104px;border-radius:0;background:none;margin-bottom:10px;}
+  .pay-status-ic.dots svg.dl{width:100%;height:100%;}
+  .pay-status-ic.dots svg.dl circle{fill:#63b8ff;filter:drop-shadow(0 0 5px rgba(90,170,255,.95));}
   .pay-status-card h3{font-size:17px;color:#fff;text-shadow:0 0 16px rgba(90,170,255,.6);}
   .pay-status-card .muted{color:rgba(205,222,255,.85);}
   .pay-steps{list-style:none;margin:16px 0 0;padding:0;text-align:left;}
