@@ -39,7 +39,7 @@ async function member(ref) {
 (async () => {
   for (let i = 0; i < 60; i++) { try { const h = await fetch(base + '/health'); if (h.ok) break; } catch (_) {} await sleep(250); }
   await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 7000, withdrawMethod: 'manual', withdrawOpenFrom: '00:00', withdrawOpenTo: '23:59', dailyCheckin: 250, minWithdraw: 8000, minDeposit: 30000,
-    supportTelegram: 'https://t.me/help_acct', telegramGroup: 'https://t.me/grp_acct', whatsappGroup: 'https://chat.whatsapp.com/abc123', annEnabled: true, annTitle: 'Big news', annBody: 'First line.\nSecond line.\n\nNew paragraph.', rulesText: 'Be honest.\n\nOne account each.', supportHours: '9am – 6pm' } }, null, true);
+    supportTelegram: 'https://t.me/help_acct', telegramGroup: 'https://t.me/grp_acct', whatsappGroup: 'https://chat.whatsapp.com/abc123', annEnabled: true, annEmoji: 3, annTitle: 'Big news', annBody: 'First line.\nSecond line.\n\nNew paragraph.', rulesText: 'Be honest.\n\nOne account each.', supportHours: '9am – 6pm' } }, null, true);
   await J('POST', '/admin/salary/save', { tiers: [{ id: 'sx1', target: 20000, reward: 1500 }, { id: 'sx2', target: 9000000, reward: 9000 }] }, null, true);
   await J('POST', '/admin/products/add-starters', {}, null, true);
   const prods = (await J('GET', '/public/products')).j.products.filter(p => p.price > 0).sort((a, b) => a.price - b.price);
@@ -256,13 +256,24 @@ async function member(ref) {
   ok(await ev(() => document.getElementById('annTitle').textContent) === 'Big news' && await ev(() => document.querySelectorAll('#annBody .ann-p').length) === 2 && /Second line/.test(await ev(() => document.getElementById('annBody').textContent)), 'the dialog shows the admin\'s title and text (a blank line starts a new paragraph)');
   ok(await ev(() => document.querySelectorAll('#annTgRow .wa-pill, #annTgRow .tg-pill').length) === 2 && /WhatsApp Group/.test(await ev(() => document.getElementById('annTgRow').textContent)) && /Telegram Group/.test(await ev(() => document.getElementById('annTgRow').textContent)), 'with its WhatsApp Group and Telegram Group buttons');
   ok(await ev(() => getComputedStyle(document.getElementById('annImg')).display !== 'none'), 'and the admin picture on top');
+  ok(await ev(() => { const e = document.getElementById('annEmoji'); return getComputedStyle(e).display !== 'none' && /\/anim\/emoji3\.webp/.test(e.style.backgroundImage) && e.getBoundingClientRect().width === 88; }), 'the animated emoji the admin picked sits above the title (88 px, its sprite sheet)');
+  const p1 = await ev(() => document.getElementById('annEmoji').style.backgroundPosition); await sleep(400);
+  ok(p1 !== await ev(() => document.getElementById('annEmoji').style.backgroundPosition), 'and it plays (the picture changes)');
+  ok((await J('POST', '/admin/settings/update', { settings: { annEmoji: 99 } }, null, true)).s === 200 && (await J('GET', '/public/settings')).j.settings.annEmoji === 0, 'a number outside 1 to 7 is stored as 0 (no emoji)');
+  await J('POST', '/admin/settings/update', { settings: { annEmoji: 3 } }, null, true);
   await ev(() => dismissAnnouncement());
   // switched off, or empty text: no dialog at all
   await J('POST', '/admin/settings/update', { settings: { annEnabled: false } }, null, true);
   await ev(() => syncPublicConfig()); await sleep(600);
   await ev(() => switchTab('shop')); await ev(() => switchTab('home')); await sleep(1500);
   ok(!(await shown('announcementBg')), 'switched off, Home shows no announcement');
-  await J('POST', '/admin/settings/update', { settings: { annEnabled: true } }, null, true);
+  await J('POST', '/admin/settings/update', { settings: { annEnabled: true, annEmoji: 0 } }, null, true);
+  await ev(() => syncPublicConfig()); await sleep(600);
+  await ev(() => switchTab('shop')); await ev(() => switchTab('home')); await sleep(1500);
+  ok(await shown('announcementBg') && await ev(() => getComputedStyle(document.getElementById('annEmoji')).display) === 'none', 'with None picked there is no emoji, only the text');
+  await ev(() => dismissAnnouncement());
+  await J('POST', '/admin/settings/update', { settings: { annEnabled: false } }, null, true);
+  await J('POST', '/admin/settings/update', { settings: { annEnabled: true, annEmoji: 3 } }, null, true);
   await ev(() => syncPublicConfig()); await sleep(600);
 
   // ---- 11. the Back button closes a page instead of leaving the app ----
