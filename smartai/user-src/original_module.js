@@ -1017,12 +1017,12 @@ function makeParticleField(cv, opt){
   var ctx = cv.getContext('2d'), raf = 0, t0 = 0, W = 0, H = 0, dpr = 1;
   function sprite(r, g, b){
     var s = document.createElement('canvas'); s.width = s.height = 48;
-    var c = s.getContext('2d'), gr = c.createRadialGradient(24, 24, 0, 24, 24, 24);
-    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(' + r + ',' + g + ',' + b + ',1)');
-    gr.addColorStop(0.6, 'rgba(' + r + ',' + g + ',' + b + ',0.26)'); gr.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
+    var c = s.getContext('2d'), gr = c.createRadialGradient(24, 24, 0, 24, 24, 24), lr = Math.min(255, r + 70), lg = Math.min(255, g + 60), lb = Math.min(255, b + 20);
+    gr.addColorStop(0, 'rgba(' + lr + ',' + lg + ',' + lb + ',1)'); gr.addColorStop(0.3, 'rgba(' + r + ',' + g + ',' + b + ',1)');
+    gr.addColorStop(0.62, 'rgba(' + r + ',' + g + ',' + b + ',0.2)'); gr.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
     c.fillStyle = gr; c.fillRect(0, 0, 48, 48); return s;
   }
-  var SP = [sprite(30, 120, 255), sprite(70, 160, 255), sprite(120, 200, 255), sprite(190, 240, 255)];
+  var SP = [sprite(28, 105, 225), sprite(48, 128, 232), sprite(85, 160, 240), sprite(125, 190, 248)];
   function size(){
     var w = cv.clientWidth, h = cv.clientHeight, d = Math.min(window.devicePixelRatio || 1, 2);
     if (!w || !h) return false;
@@ -1030,7 +1030,7 @@ function makeParticleField(cv, opt){
     return true;
   }
   function sm(a, b, x){ x = Math.max(0, Math.min(1, (x - a) / (b - a))); return x * x * (3 - 2 * x); }
-  var ZN = 1, ZF = 5, CAMH = 1.2;     // nearest and farthest distance of the sheet, camera height (world units)
+  var ZN = 1, ZF = 6, CAMH = 1.2;     // nearest and farthest distance of the sheet, camera height (world units)
   function draw(t){
     if (!size()) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
@@ -1038,32 +1038,32 @@ function makeParticleField(cv, opt){
     var dim = opt.dim == null ? 1 : opt.dim, k = (opt.scale || 1) * Math.max(0.8, Math.min(1.5, W / 390));
     var y0 = H * (opt.horizon == null ? 0.16 : opt.horizon), fx = W * 0.9, fy = (H * 1.1 - y0) * ZN / CAMH, range = ZF - ZN;
     var DX = 1 / (fx / W * 6.5), DZ = Math.max(0.03, (W / 13) / (H * 1.1 - y0)), NR = Math.min(150, Math.ceil(range / DZ)), NC = Math.ceil((W / 2) * ZF / fx / DX) + 1;   // about 6 dots across the near rows, rows half as far apart as columns
-    var zr = 3.7 + 0.6 * Math.sin(t * 0.27), xr = 1.3 * Math.sin(t * 0.21);          // where the bright crest is now (distance, and how far it leans left or right)
+    var zr = 4.7 + 0.35 * Math.sin(t * 0.27), xr = 1.4 * Math.sin(t * 0.21);          // where the bright crest is now (distance, and how far it leans left or right)
     var r, c;
     for (r = 0; r < NR; r++) {
       var z = ZN + (((r * DZ - t * 0.4) % range) + range) % range;
       var zn = (z - ZN) / range;                                                      // 0 near ... 1 far
       var fade = sm(0, 0.05, zn) * (1 - sm(0.94, 1, zn));
       if (fade < 0.01) continue;
-      var big = 0.03 + 0.42 * sm(0.15, 0.95, zn);                                     // the swells grow toward the far hills
-      var ridge = Math.exp(-Math.pow((z - zr) / 0.32, 2));
+      var big = 0.015 + 0.075 * sm(0.2, 0.95, zn);                                     // the swells grow toward the far hills
+      var ridge = Math.exp(-Math.pow((z - zr) / 0.5, 2));
       var spr = zn < 0.3 ? SP[0] : (zn < 0.65 ? SP[1] : SP[2]);
-      var base = 3.9 * k * Math.pow(ZN / z, 0.95);
+      var base = 2.5 * k * Math.pow(ZN / z, 0.95);
       for (c = -NC; c <= NC; c++) {
         var x = c * DX;
-        x += 0.1 * Math.sin(1.7 * z + 0.8 * t + 0.35 * x) * (0.2 + zn);                // the lines sway sideways in S-curves
+        x += 0.14 * Math.sin(1.1 * z + 0.7 * t + 0.35 * x) * (0.25 + zn);                // the lines sway sideways in S-curves
         var h = big * (Math.sin(0.7 * x + 1.5 * z - 0.9 * t) + 0.6 * Math.sin(-1.1 * x + 0.8 * z + 0.7 * t) + 0.35 * Math.sin(2 * x + 2 * z - 1.3 * t));
-        h += 0.045 * x * x * sm(0.1, 1, zn);                                           // the far sides curl up like a bowl
-        var rw = ridge * Math.exp(-Math.pow((x - xr) / 3.2, 2) * 0.35);
-        h += rw * (0.16 + 0.06 * Math.sin(3.4 * x + 2.6 * z - 2.4 * t));               // the crest, with quick little ripples along it
+        h += 0.012 * x * x * sm(0.3, 1, zn);                                           // the far sides curl up like a bowl
+        var rw = ridge * Math.exp(-Math.pow((x - xr) / 3.6, 2) * 0.35);
+        h += rw * (0.04 + 0.09 * Math.sin(1.4 * x - 0.8 * t) + 0.012 * Math.sin(7 * x + 2 * z - 2.4 * t));               // the crest, with quick little ripples along it
         var px = W / 2 + fx * x / z, py = y0 + fy * (CAMH - h) / z;
         if (px < -12 || px > W + 12 || py < -12 || py > H + 12) continue;
-        var a = fade * dim * (0.62 + 0.3 * zn + 0.55 * rw) * (0.84 + 0.16 * Math.sin(t * 1.7 + c * 1.3 + r * 0.7));
+        var a = fade * dim * 0.72 * (0.7 + 0.25 * zn + 0.4 * rw) * (0.84 + 0.16 * Math.sin(t * 1.7 + c * 1.3 + r * 0.7));
         if (a < 0.03) continue;
-        var rad = Math.max(0.6 * k, base) * (1 + 0.3 * rw);
+        var rad = Math.max(0.6 * k, base) * (1 + 0.15 * rw);
         ctx.globalAlpha = Math.min(1, a);
-        if (rad < 1.3) { ctx.fillStyle = rw > 0.35 ? '#d8f4ff' : '#7cc0ff'; ctx.fillRect(px - rad, py - rad, rad * 2, rad * 2); }
-        else { var R = rad * 3; ctx.drawImage(rw > 0.45 ? SP[3] : spr, px - R, py - R, R * 2, R * 2); }
+        if (rad < 1.3) { ctx.fillStyle = rw > 0.35 ? '#a9d6ff' : '#5a9ee8'; ctx.fillRect(px - rad, py - rad, rad * 2, rad * 2); }
+        else { var R = rad * 2.6; ctx.drawImage(rw > 0.45 ? SP[3] : spr, px - R, py - R, R * 2, R * 2); }
       }
     }
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
