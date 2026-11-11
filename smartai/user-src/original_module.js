@@ -1459,7 +1459,7 @@ function renderMyRobots(){
     return '<div class="choc-hold-card">' +
       '<div class="choc-hold-top">' + imgTag(productByKey(r.inv.key), '', 'width:48px;height:48px;border-radius:12px;object-fit:cover;flex:0 0 auto') +
         '<div class="bank-info"><b>' + esc(r.inv.name) + '</b><span>' + ugx(r.inv.price) + '</span></div>' +
-        '<span style="font-size:10.5px;font-weight:800;color:' + (r.matured ? 'var(--mint)' : 'var(--cocoa-faint)') + '">' + (r.matured ? 'Matured' : 'Ongoing') + '</span>' +
+        '<span style="font-size:10.5px;font-weight:800;color:' + (r.matured ? 'var(--mint)' : 'var(--cocoa-faint)') + '">' + (r.matured ? 'Matured' : 'Working') + '</span>' +
       '</div>' +
       '<div class="choc-hold-daylbl">' + r.daysElapsed + ' / ' + r.cycleDays + ' days</div>' +
       '<div class="choc-hold-grid">' +

@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v62`, admin `admin/sw.js` `smartai-admin-shell-v26`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v63`, admin `admin/sw.js` `smartai-admin-shell-v26`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -563,3 +563,6 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Page pictures back to their ORIGINAL fixed boxes (owner: "just leave it as it was originally")
 - The "show every page picture whole at its own height" change (section above, cache v61) is reverted: banners are fixed-height boxes again (Home / Team 150-170 px, page pictures 150 px, Me cover 170 px, AI Robots header 104 px) and `img.art-photo` fills the box with `object-fit:cover`, as before. The `.fit` class and the `onload` that added it are gone. Member cache v62 (a new number so phones holding v61 fetch the reverted build).
+
+## "Ongoing" is now "Working" on My AI robots (owner: "change ongoing to working under my ai robots")
+- Each robot's status on the My AI robots page reads **Working** while it runs (it still reads **Matured** when its cycle is complete). Only that label changed. Member cache v63.
