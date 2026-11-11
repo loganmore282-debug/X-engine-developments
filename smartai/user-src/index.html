@@ -318,7 +318,7 @@
   .overlay{position:fixed;inset:0;background:var(--cream);z-index:80;display:none;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;}
   .overlay.show{display:block;}
   /* Every page has a compact blue curved header like Potato's: a plain white chevron at the left and the page name centred in white. */
-  .ov-top{position:sticky;top:0;z-index:6;height:calc(52px + env(safe-area-inset-top,0px));margin-bottom:12px;background:radial-gradient(circle at 90% 10%,rgba(255,255,255,.16) 0,rgba(255,255,255,0) 40%),linear-gradient(135deg,#2b88f3,#0a4fc6);border-radius:0 0 24px 24px;box-shadow:0 10px 22px -14px rgba(11,42,91,.6);}
+  .ov-top{position:relative;z-index:6;height:calc(52px + env(safe-area-inset-top,0px));margin-bottom:12px;background:radial-gradient(circle at 90% 10%,rgba(255,255,255,.16) 0,rgba(255,255,255,0) 40%),linear-gradient(135deg,#2b88f3,#0a4fc6);border-radius:0 0 24px 24px;box-shadow:0 10px 22px -14px rgba(11,42,91,.6);}
   .ov-back{position:absolute;left:6px;top:calc(env(safe-area-inset-top,0px) + 4px);width:44px;height:44px;border:none;background:none;color:#fff;display:flex;align-items:center;justify-content:center;}
   .ov-title{position:absolute;left:56px;right:56px;top:env(safe-area-inset-top,0px);height:52px;line-height:52px;text-align:center;color:#fff;font-size:18px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .overlay .photo-banner,.overlay .photo-banner.pb-sm,.overlay #aboutBanner{margin:0 0 14px;height:150px;border-radius:0;box-shadow:none;}

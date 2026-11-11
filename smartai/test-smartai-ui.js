@@ -84,7 +84,7 @@ ok(/<img class="ugx-coin" src="\/icons\/ugx-coin\.png" alt="UGX">/.test(pageHtml
 const ovRule = (html.match(/\.overlay\{[^}]*\}/) || [''])[0];
 ok(/position:fixed/.test(ovRule) && /inset:0/.test(ovRule) && /overflow-y:auto/.test(ovRule) && /overflow-x:hidden/.test(ovRule) && /overscroll-behavior:contain/.test(ovRule), 'a full-page screen fills the phone, scrolls up and down only, and keeps its scroll to itself');
 ok(/\.modal-bg\{[^}]*position:fixed;inset:0/.test(html), 'dialogs cover the whole phone');
-ok(/\.ov-top\{[^}]*position:sticky;top:0/.test(html), 'a page\'s title bar stays at the top while it scrolls');
+ok(/\.ov-top\{position:relative;/.test(html) && !/\.ov-top\{[^}]*position:sticky/.test(html), 'a page\'s blue header scrolls away with the page (not sticky), like Potato');
 ok(/<meta name="viewport" content="[^"]*width=device-width[^"]*"/.test(html) && /viewport-fit=cover/.test(html), 'the page fits the phone width and the notch');
 ok(/padding-bottom:calc\(66px \+ env\(safe-area-inset-bottom/.test(html), 'the last card of a tab ends above the bottom bar');
 

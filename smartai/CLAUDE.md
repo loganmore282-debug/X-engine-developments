@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v66`, admin `admin/sw.js` `smartai-admin-shell-v26`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v67`, admin `admin/sw.js` `smartai-admin-shell-v26`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -573,3 +573,6 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 - The button on every AI robot card in the shop reads **Rent now** (it was Buy) and the confirmation toast says "Rented <name>!". Nothing else changed: the function is still `buyProduct`, the route `/invest/create`, and the server's ledger wording ("Bought ...") is untouched. Member cache v65.
 
 - (owner, grammar) The My AI robots line is "Every AI robot you own **works** until it matures." (no comma). Member cache v66.
+
+## The page header scrolls WITH the page (owner: "why is the round header static while scrolling, just like potato it should go with the scroll")
+- `.ov-top` (the compact blue header of every full page) is `position:relative` again, not `sticky`: it is the first thing on the page and scrolls up and away with the content, like Potato's. The back arrow and the title are inside it, so they go with it too (the phone's Back button still goes back). Notes above that say "sticky" no longer apply. Member cache v67.
