@@ -4555,9 +4555,9 @@ app.post('/deposit/marzpay', async (req, res) => {
     let provider = depositProviderForSlot(sett, req.body.slot);
     if (!DEPOSIT_GATEWAYS_READY.has(provider))
       return res.status(400).json({ status: 'error', code: 'GATEWAY_SOON', message: 'This payment method is not available right now. Please choose another one.' });
-    provider = depositProviderUsable(sett, req.body.slot);
-    if (!provider)
-      return res.status(503).json({ status: 'error', code: 'GATEWAY_NOT_SET', message: 'Top-ups are not available right now. Please try again later.' });
+    // The button's own gateway, or the first one that has its key. When none has a key the top-up still goes on to the payment page with the button's own gateway (owner: "make
+    // it take him to the payment page just like before"); the gateway call then fails and the page says so, instead of a dark "not available" box on Add Funds.
+    provider = depositProviderUsable(sett, req.body.slot) || provider;
     // The gateway has to be able to reach THIS country's phone numbers. Every
     // automatic gateway here is Uganda-only (see GATEWAY_DIAL_CODES), and a
     // new region inherits Uganda's settings, so without this a Kenyan deposit

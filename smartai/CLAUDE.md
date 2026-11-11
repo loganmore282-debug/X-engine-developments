@@ -579,3 +579,6 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Team tab picture = the owner's three figures on a blue ring
 - `user/icons/share.webp` (the admin "Team tab" slot, key `share`) is now the owner's picture of three white figures on a glowing blue ring, cut off its pale backdrop (transparent, 192 px WebP, checked on white, blue and dark). The Team page banner uses the same slot, so it shows the same picture. Admin can still upload another or press Back to default. Member cache v68.
+
+## Add Funds with no gateway key goes to the payment page again
+- `/deposit/marzpay` no longer answers 503 `GATEWAY_NOT_SET` ("Top-ups are not available right now") when no gateway key is on the server. It uses the button's gateway, else the first one with a key, else the button's own gateway anyway, and the member lands on the payment page like before (the gateway call then fails and that page says so). `test-deposit-nokeys.js` now checks this. Server change only: no member cache bump (v68).

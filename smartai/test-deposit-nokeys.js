@@ -1,7 +1,7 @@
 'use strict';
-// A top-up through a gateway whose key is not on the server must say so AT ONCE ("Top-ups are not available right now"), not answer "Payment initiated" and leave the member
-// waiting for a prompt that never comes (owner's phone: "Payment initiated", then "the payment provider is busy"). Real server.js, in-memory database, run twice:
-//   no keys at all -> refused (503 GATEWAY_NOT_SET), nothing written;  only MarzPay's key -> every button still works, through MarzPay.
+// A top-up whose gateway has no key on the server still leads to the payment page (owner: no dark "Top-ups are not available right now" box on Add Funds). Real server.js,
+// in-memory database, run twice:
+//   no keys at all -> answers success and goes to the payment page;  only MarzPay's key -> every button still works, through MarzPay.
 const path = require('path'), Module = require('module'), fs = require('fs'), cp = require('child_process');
 const mode = process.argv[2];
 if (!mode) {
@@ -32,10 +32,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   for (const slot of [0, 1, 2, 3, undefined]) {
     const su = await newMember();   // a new member each time: five attempts in a minute from one member are slowed down on purpose
     const r = await J('POST', '/deposit/marzpay', slot === undefined ? { amount: 30000 } : { amount: 30000, slot }, su.j.token);
-    if (mode === 'none') ok(r.s === 503 && r.j.code === 'GATEWAY_NOT_SET' && /not available right now/.test(r.j.message), 'no keys: button ' + slot + ' is refused at once', r);
+    if (mode === 'none') ok(r.s === 200 && r.j.status === 'success' && r.j.depositId, 'no keys: button ' + slot + ' still leads to the payment page (no "not available" box)', r);
     else ok(r.s === 200 && r.j.status === 'success', 'only MarzPay set up: button ' + slot + ' still starts a top-up', r);
   }
-  if (mode === 'none') ok(deps().length === 0, 'nothing was written: no pending deposit, no ledger row, no debounce used');
+  if (mode === 'none') ok(deps().length === 5, 'no keys: each top-up has its pending deposit, as before');
   else ok(deps().length === 5 && deps().every(d => d.provider === 'marzpay'), 'every top-up went through the one gateway that has its key');
   realLog((fails ? 'FAIL' : 'ok') + ' - ' + mode + ' (' + n + ' checks)'); process.exit(fails ? 1 : 0);
 })();
