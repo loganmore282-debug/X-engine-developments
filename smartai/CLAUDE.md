@@ -126,7 +126,7 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
   `--cocoa-faint:#8196B8`, `--cream:#EEF4FF` (page), `--cream-deep:#DDE9FC`, `--line:#D6E3F8`; error red `--berry:#C23B4B` / `--berry-pale:#F8DEE1` and green
   `--mint:#2F9E68` only. (The variable NAMES are ChocoMCC's chocolate words; they are invisible, do not rename them.) `test-icons-builtin.js` fails if any other
   red appears. The admin panel was NOT recoloured (the owner spoke of the app).
-- **Cache names.** Member `user/sw.js` `smartai-shell-v72`, admin `admin/sw.js` `smartai-admin-shell-v28`. Bump on every change that must reach phones.
+- **Cache names.** Member `user/sw.js` `smartai-shell-v73`, admin `admin/sw.js` `smartai-admin-shell-v28`. Bump on every change that must reach phones.
 - **Sign-in.** Own phone + password login (`/auth/*`), the small module script in `index.html` exposes `window.fbSignIn / fbCreateUser / fbSignOut / fbChangePassword`,
   `fbAuth.currentUser` and the `snow-auth` event; the phone becomes the "email" `<9 digits>@smartai-platform.com`. Uganda only (+256, 9 digits starting 7, UGX). No
   time limit on a member's login. State is cached per member in sessionStorage (`smartai_state_<uid>`) so a reopened app paints at once and a dropped connection never
@@ -596,3 +596,7 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 
 ## Network logos: the owner's MTN and Airtel pictures, big, and on the payout cards too
 - `user/icons/mtn-logo.jpg` (yellow, MTN oval) and `user/icons/airtel-logo.jpg` (red, airtel money), 256 px, replace the old `mtn.jpg` / `airtel.jpg` (new names so a phone's cached copy is never reused). The Add Funds and Choose-network pickers show them 84 px, rounded, filling the card. `bankBadge()` (Payout Account list, the "Cash out to ..." row on Cash Out) now shows the logo for MTN Mobile Money / Airtel Money (`NETWORK_LOGOS`) instead of the "MM" / "AM" letters; any other network keeps its coloured initials. Member cache v72. `test-icons-builtin.js` follows the new names.
+
+## Network logos smaller; the two UGX cards on Me flip every 5 seconds
+- Choose-network cards: logo 56 px (rounded 14 px), card padding 14 px. The Payout Account / Cash Out badge is 48 px.
+- Me page figure cards (`.flip-stat`, Balance and Cash Outs): each is a coin-style 3D flip (`.flip-in`, keyframes `statFlip`, 10 s loop = front 4 s, 1 s turn, back 4 s, 1 s turn, so a face changes every 5 s; the second card starts 0.35 s later). Back faces (blue): Balance's back = **Total earned** (`acctEarnNum`, `STATE.totalEarned`), Cash Outs' back = **Total top-ups** (`acctTopNum`, `STATE.totalDeposited`). Tapping either card still opens the Ledger (the same tap target). No animation with reduced motion. The page now holds four UGX coin pictures (tests updated). Member cache v73.

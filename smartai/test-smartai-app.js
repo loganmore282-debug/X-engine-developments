@@ -207,7 +207,8 @@ async function member(ref) {
   const tiles = await ev(() => [...document.querySelectorAll('#viewAccount .menu-tile-lbl')].map(e => e.textContent.trim()));
   ok(JSON.stringify(tiles) === JSON.stringify(['My AI robots', 'Ledger', 'My Team', 'Payout Account', 'Security', 'About Us', 'Terms & Rules', 'Support', 'Download App', 'Sign Out']), 'Me has exactly ChocoMCC\'s ten tiles: ' + tiles.join(', '));
   const coins = await ev(() => [...document.querySelectorAll('#viewAccount img.ugx-coin')].map(i => ({ src: i.getAttribute('src'), ok: i.complete && i.naturalWidth > 0 })));
-  ok(coins.length === 2 && coins.every(c => c.src === '/icons/ugx-coin.png' && c.ok), 'the Balance and Cash Outs figures each have ChocoMCC\'s UGX coin picture');
+  ok(coins.length === 4 && coins.every(c => c.src === '/icons/ugx-coin.png' && c.ok), 'the Balance and Cash Outs figures (and the back of each card) have ChocoMCC\'s UGX coin picture');
+  ok(await ev(() => document.querySelectorAll('#viewAccount .flip-stat').length) === 2 && await ev(() => getComputedStyle(document.querySelector('.flip-in')).animationName) === 'statFlip' && await ev(() => getComputedStyle(document.querySelector('.flip-in')).animationDuration) === '10s' && /Total earned/.test(await ev(() => document.querySelector('.flip-back').textContent)), 'the two figure cards turn over (a face every 5 s) and show Total earned / Total top-ups on the back');
   await ev(() => document.querySelector('#viewAccount .menu-tile-lbl') && [...document.querySelectorAll('#viewAccount .menu-tile')].find(b => /Security/.test(b.textContent)).click()); await sleep(300);
   ok(await shown('ovChangepass') && await ev(() => !!document.getElementById('pwCur') && !!document.getElementById('pwNew2')), 'Security opens the change-password page (current, new, confirm), as in ChocoMCC');
   await ev(() => closeOverlay());
