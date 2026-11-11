@@ -245,6 +245,7 @@
 
   .sec-head{display:flex;align-items:center;justify-content:space-between;margin:22px var(--gut) 12px;}
   .sec-head h3{font-size:16.5px;}
+  .sec-head h3::before,.tm-head h3::before,.howto-card h4::before,.bar-title::before{content:"";display:inline-block;width:5px;height:1.3em;margin-right:9px;border-radius:3px;background:var(--caramel-deep);vertical-align:-.28em;}
   .sec-head a{font-size:12.5px;color:var(--caramel-deep);font-weight:800;text-decoration:none;}
 
   .strip{display:flex;gap:12px;overflow-x:auto;padding:0 var(--gut) 6px;scrollbar-width:none;}
@@ -270,11 +271,6 @@
   .prod-img{width:100%;height:150px;object-fit:contain;background:var(--card);display:block;transition:opacity .15s ease;}
   .prod-rank{position:absolute;top:10px;left:12px;background:rgba(11,42,91,.72);color:#fff;font-size:11px;font-weight:800;
     padding:5px 11px;border-radius:999px;letter-spacing:.3px;}
-  /* A closed product: its picture and figures are lightly blurred (still a little visible) and a slanting COMING SOON plate lies across the card (peach plate, the same orange-brown edge and letters as the admin's Upcoming tag, soft orange glow). */
-  .prod-card.is-soldout .prod-img-wrap,.prod-card.is-soldout .prod-body-full{filter:blur(var(--soon-blur,2px)) brightness(.95);}
-  .prod-sold{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;pointer-events:none;background:rgba(6,14,36,.05);}
-  .prod-sold-tag{display:block;transform:rotate(-30deg);padding:11px 26px 11px 30px;border-radius:14px;background:#fbefe4;border:3px solid #b45309;color:#b45309;font-size:27px;font-weight:900;letter-spacing:.24em;text-transform:uppercase;white-space:nowrap;text-shadow:0 0 10px rgba(180,83,9,.25);box-shadow:0 0 24px rgba(180,83,9,.42),inset 0 0 12px rgba(180,83,9,.12);}
-  .prod-sold-tag.long{font-size:19px;letter-spacing:.16em;padding:10px 20px 10px 24px;}
   /* Every chocolate's full info sits right on its Shop card now -- no
      more tapping through to a separate detail page. Classic plain list
      (same .kv row pattern used elsewhere in the app), no tiles/gradients. */
@@ -593,7 +589,7 @@
      past its bottom edge. */
   .modal-wrap{position:relative;width:100%;max-width:440px;margin:0 auto;}
   .modal-wrap .modal-sheet{width:100%;max-width:none;margin:0;}
-  .ann-close-float{position:absolute;left:50%;bottom:-20px;transform:translateX(-50%);width:40px;height:40px;border-radius:0;background:var(--cream);box-shadow:var(--shadow);border:none;display:flex;align-items:center;justify-content:center;color:var(--cocoa-soft);z-index:2;}
+  .ann-close-float{position:absolute;left:50%;bottom:-20px;transform:translateX(-50%);width:40px;height:40px;border-radius:50%;background:var(--cream);box-shadow:var(--shadow);border:none;display:flex;align-items:center;justify-content:center;color:var(--cocoa-soft);z-index:2;}
   /* Gift-code redeem reveal — a treasure chest pops in, then keeps shaking
      in place (matching the owner's reference GIF) while gold light bursts
      upward from it and coin sparks fly outward, and the reward figure
@@ -602,12 +598,12 @@
      static toast. A real device vibration fires alongside it too. */
   .gift-reveal-label{color:var(--cocoa-faint);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;}
   .gift-reveal-amount{font-size:32px;font-weight:900;color:var(--mint);margin-bottom:20px;}
-  /* Announcement popup — square corners throughout (no curved frames), and
+  /* Announcement popup — rounded like the cards and tabs (24 px sheet, 14 px buttons), and
      kept compact: small header band, tight paragraph spacing (own .ann-p
      class instead of the About/Rules pages' spacious nl2p blank-line
      style) so a long admin-written notice still fits without feeling like
      an endless scroll. */
-  .ann-sheet{border-radius:0;padding:18px;}
+  .ann-sheet{border-radius:24px;padding:18px;}
   .ann-sheet h3{margin-bottom:8px;font-size:18px;}
   /* Decorative header band the sheet's own padding is punched out for
      (negative margin = the sheet's padding) so it bleeds edge-to-edge.
@@ -616,7 +612,7 @@
   .ann-hero{margin:-18px -18px 12px;padding:16px 18px 12px;text-align:center;
     background:linear-gradient(165deg,var(--caramel-pale) 0%,var(--cream) 82%);}
   .ann-hero img{width:100%;border-radius:0;object-fit:cover;max-height:130px;display:block;box-shadow:var(--shadow);}
-  .ann-badge{width:44px;height:44px;border-radius:0;margin:0 auto;display:flex;align-items:center;justify-content:center;color:#fff;
+  .ann-badge{width:44px;height:44px;border-radius:14px;margin:0 auto;display:flex;align-items:center;justify-content:center;color:#fff;
     background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));box-shadow:0 10px 18px -8px rgba(13,95,210,.6);}
   .ann-p{margin:0 0 10px;}
   .ann-p:last-child{margin-bottom:0;}
@@ -624,11 +620,11 @@
   .ann-divider{height:1px;background:var(--line);margin:2px 0 14px;}
 
   .tg-row{display:none;gap:8px;margin-top:2px;}
-  .tg-pill{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:linear-gradient(135deg,#2AABEE,#229ED9);color:#fff;font-weight:800;font-size:12px;padding:11px 6px;border-radius:0;border:none;
+  .tg-pill{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:linear-gradient(135deg,#2AABEE,#229ED9);color:#fff;font-weight:800;font-size:12px;padding:11px 6px;border-radius:14px;border:none;
     box-shadow:0 6px 14px rgba(34,158,217,.35);animation:tgPillGlow 3s ease-in-out infinite, tgPillShake 3s ease-in-out infinite;}
   @keyframes tgPillGlow{0%,60%,100%{box-shadow:0 6px 14px rgba(34,158,217,.35);}80%{box-shadow:0 6px 14px rgba(34,158,217,.35),0 0 16px 5px rgba(42,171,238,.85);}}
 
-  .wa-pill{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:linear-gradient(135deg,#25D366,#1DA851);color:#fff;font-weight:800;font-size:12px;padding:11px 6px;border-radius:0;border:none;
+  .wa-pill{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:linear-gradient(135deg,#25D366,#1DA851);color:#fff;font-weight:800;font-size:12px;padding:11px 6px;border-radius:14px;border:none;
     box-shadow:0 6px 14px rgba(29,168,81,.35);animation:waPillGlow 3s ease-in-out infinite, tgPillShake 3s ease-in-out infinite;}
   .wa-pill img{width:16px;height:16px;display:block;}
   @keyframes waPillGlow{0%,60%,100%{box-shadow:0 6px 14px rgba(29,168,81,.35);}80%{box-shadow:0 6px 14px rgba(29,168,81,.35),0 0 16px 5px rgba(37,211,102,.85);}}
@@ -1086,7 +1082,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
     <div id="viewShare" style="display:none">
       <div class="photo-banner pb-flush pb-full pb-flow" id="shareBanner"></div>
       <div class="tm-card">
-        <div class="muted" style="font-size:11px;font-weight:700;margin-bottom:6px">YOUR REFERRAL LINK</div>
+        <div class="muted bar-title" style="font-size:11px;font-weight:700;margin-bottom:6px;letter-spacing:.6px">YOUR REFERRAL LINK</div>
         <div class="link-row link-boxed">
           <span id="teamLink" style="word-break:break-all">—</span>
           <button class="btn btn-dark btn-sm" onclick="copyCode()">Copy</button>
@@ -1218,7 +1214,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <button class="btn btn-primary btn-block" id="depGoBtn" onclick="doDeposit()">Add Funds</button>
     </div>
     <div class="info-box" style="background:var(--cream-deep);color:var(--cocoa-soft)">
-      <b style="color:var(--cocoa);display:block;margin-bottom:2px;font-size:12.5px">Deposit procedure</b>
+      <b class="bar-title" style="color:var(--cocoa);display:block;margin-bottom:2px;font-size:12.5px">Deposit procedure</b>
       <ul class="pay-steps" style="margin-top:6px">
         <li>Enter the amount you want to add</li>
         <li>Choose your mobile-money network</li>

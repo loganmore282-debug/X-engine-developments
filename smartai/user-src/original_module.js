@@ -13,7 +13,7 @@ var DEFAULT_SETTINGS = {
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   salaryTiers: [], depositMethodNames: '', brandName: '', shareMessage: 'Join me on {app}', shareDomain: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', whatsappGroup: '', whatsappContact: '',
-  rulesText: '', annEnabled: false, annTitle: '', annBody: '', homeBannerTitle: '', homeBannerText: '', myBannerOpacity: 100, myBannerBlur: 0, comingSoonBlur: 2, navIconSize: 26, homeIconSize: 34, meIconSize: 36, giftCodeHint: 'Enter gift code'
+  rulesText: '', annEnabled: false, annTitle: '', annBody: '', homeBannerTitle: '', homeBannerText: '', myBannerOpacity: 100, myBannerBlur: 0, navIconSize: 26, homeIconSize: 34, meIconSize: 36, giftCodeHint: 'Enter gift code'
 };
 var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
 // Filled by syncPublicConfig() from the admin's products; the last copy this device saw is read first so the very first paint is already right.
@@ -49,7 +49,7 @@ function brandName(){ return brandNameKnown() || 'Smart AI'; }
 // Icon sizes from Admin > Settings: bottom navigation, Home actions, Me page. They are CSS variables, so the box around each icon follows it.
 function paintIconSizes(){
   var sett = getSettings(), root = document.documentElement.style;
-  [['--nav-ic', 'navIconSize', 14, 48, 26], ['--home-ic', 'homeIconSize', 20, 64, 34], ['--me-ic', 'meIconSize', 20, 64, 36], ['--soon-blur', 'comingSoonBlur', 0, 12, 2]].forEach(function(d){
+  [['--nav-ic', 'navIconSize', 14, 48, 26], ['--home-ic', 'homeIconSize', 20, 64, 34], ['--me-ic', 'meIconSize', 20, 64, 36]].forEach(function(d){
     var n = Number(sett[d[1]]); if (!isFinite(n)) n = d[4];
     root.setProperty(d[0], Math.max(d[2], Math.min(d[3], Math.round(n))) + 'px');
   });
@@ -1373,7 +1373,7 @@ async function claimTier(btn){
 }
 
 /* ====================== AI ROBOTS (the products) ====================== */
-function isProductSoldOut(p){ return p.active === false || !!p.comingSoon || p.isOpen === false; }   // closed for any reason: the card wears the COMING SOON plate
+function isProductSoldOut(p){ return p.active === false || !!p.comingSoon || p.isOpen === false; }   // closed for any reason: the card's button reads Coming soon (or Opens hh:mm)
 function productImg(p){ return p && p.image ? p.image : iconUrl('robots'); }
 // A product picture is shown WHOLE (any shape, tall or wide), not cropped: object-fit contain inside its frame, and the frame takes the colour of the picture's own
 // corners so the picture melts into it (a white photo sits on white, the blue default art on blue). A picture from another website cannot be read and keeps the soft blue.
@@ -1481,9 +1481,7 @@ function renderShop(){
       : capped
         ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed;margin-top:6px">Limit reached (' + ownedCount(p.key) + '/' + lim + ')</button>'
         : '<button class="btn btn-primary btn-block btn-buy-glow" style="margin-top:6px" data-key="' + esc(p.key) + '" onclick="buyProduct(this,this.dataset.key)">Rent now</button>';
-    var tag = soldOut ? esc(closedLabel(p)) : '';
     return '<div class="prod-card' + (soldOut ? ' is-soldout' : '') + '" id="prodCard-' + esc(p.key) + '">' +
-      (soldOut ? '<div class="prod-sold" aria-hidden="true"><span class="prod-sold-tag' + (tag.length > 9 ? ' long' : '') + '">' + tag + '</span></div>' : '') +
       '<div class="prod-img-wrap">' + imgTag(p, 'prod-img') +
       '<span class="prod-rank">' + esc(rank) + '</span>' +
       (i === firstOpen ? '<span class="prod-ribbon">Popular</span>' : '') + '</div>' +

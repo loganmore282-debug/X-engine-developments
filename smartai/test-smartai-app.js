@@ -256,6 +256,7 @@ async function member(ref) {
   ok(await ev(() => document.getElementById('annTitle').textContent.trim()) === 'Big news' && await ev(() => document.querySelectorAll('#annBody .ann-p').length) === 2 && /Second line/.test(await ev(() => document.getElementById('annBody').textContent)), 'the dialog shows the admin\'s title and text (a blank line starts a new paragraph)');
   ok(await ev(() => document.querySelectorAll('#annTgRow .wa-pill, #annTgRow .tg-pill').length) === 2 && /WhatsApp Group/.test(await ev(() => document.getElementById('annTgRow').textContent)) && /Telegram Group/.test(await ev(() => document.getElementById('annTgRow').textContent)), 'with its WhatsApp Group and Telegram Group buttons');
   ok(await ev(() => getComputedStyle(document.getElementById('annImg')).display !== 'none'), 'and the admin picture on top');
+  ok(await ev(() => getComputedStyle(document.getElementById('announcementSheet')).borderRadius) === '24px' && await ev(() => getComputedStyle(document.querySelector('#annTgRow .wa-pill')).borderRadius) === '14px', 'the dialog is curved like the cards (24 px) with 14 px buttons, no square corners');
   ok(await ev(() => document.querySelectorAll('#annBody .emo-i').length) === 3 && await ev(() => document.querySelectorAll('#annTitle .emo-i').length) === 1 && await ev(() => [...document.querySelectorAll('#announcementBg .emo-i')].map(e => e.dataset.e).join()) === '4,6,4,7', 'the :fire: :tick: :robot: words in the title and the text become animated emojis, in place');
   ok(await ev(() => [...document.querySelectorAll('#announcementBg .emo-i')].every(e => { const r = e.getBoundingClientRect(); return Math.round(r.width) === 26 && Math.round(r.height) === 26 && /\/anim\/emoji\d\.webp/.test(e.style.backgroundImage); })), 'each is a 26 px picture from its sprite sheet, sitting inside the line of words');
   ok(/:nope:/.test(await ev(() => document.getElementById('annBody').textContent)) && !(await ev(() => !!document.querySelector('#annBody b'))) && !/:fire:|:tick:|:robot:/.test(await ev(() => document.getElementById('annBody').textContent)), 'an unknown :word: stays as words, typed HTML is shown as plain text, and the real emoji words are gone from the text');
@@ -267,6 +268,7 @@ async function member(ref) {
   // switched off, or empty text: no dialog at all
   await J('POST', '/admin/settings/update', { settings: { annEnabled: false } }, null, true);
   await ev(() => syncPublicConfig()); await sleep(600);
+  ok(await ev(() => ['.sec-head h3', '.tm-head h3', '.howto-card h4'].every(q => { const e = document.querySelector(q); const c = getComputedStyle(e, '::before'); return c.content !== 'none' && c.width === '5px' && c.display === 'inline-block'; })), 'the section titles (Featured AI robots, Team overview, How referrals work) start with a bold 5 px bar');
   await ev(() => switchTab('shop')); await ev(() => switchTab('home')); await sleep(1500);
   ok(!(await shown('announcementBg')), 'switched off, Home shows no announcement');
   await J('POST', '/admin/settings/update', { settings: { annEnabled: false } }, null, true);
