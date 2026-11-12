@@ -6068,7 +6068,7 @@ var WV_SVG = {
   open: '<svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5.5"/><path d="M15 3h6v6M10 14 21 3"/></svg>',
   qr: '<svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM19 14h2v2h-2zM14 19h2v2h-2zM19 19h2v2h-2z" fill="currentColor"/></svg>',
   check: '<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#fff"/><path d="M6.5 12.4l3.6 3.6 7.3-7.6" fill="none" stroke="#ccc" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  receipt: '<svg width="25" height="25" viewBox="0 0 24 24" fill="#666" aria-hidden="true"><path d="M5 2h14v20l-2.3-1.6L14.4 22 12 20.4 9.6 22l-2.3-1.6L5 22V2zm3 5v2h8V7H8zm0 4v2h8v-2H8zm0 4v2h8v-2H8z"/></svg>',
+  receipt: '<svg width="19" height="21" viewBox="5 2 14 20" preserveAspectRatio="none" fill="#666" aria-hidden="true"><path d="M5 2h14v20l-2.3-1.6L14.4 22 12 20.4 9.6 22l-2.3-1.6L5 22V2zm3 5v2h8V7H8zm0 4v2h8v-2H8zm0 4v2h8v-2H8z"/></svg>',
   download: '<svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10.5l5 5 5-5M4 20h16"/></svg>',
   ok: '<svg width="25" height="25" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#4caf50"/><path d="M6.8 12.4l3.5 3.5 7-7.4" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   shield: '<svg width="19.8" height="19.8" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 4.5 5.6v5.6c0 4.6 3.1 8.4 7.5 10.3 4.4-1.9 7.5-5.7 7.5-10.3V5.6L12 2.5z" fill="#fff" fill-opacity=".92"/><path d="M12 4.5 6.4 6.9v4.5c0 3.6 2.3 6.6 5.6 8.2 3.3-1.6 5.6-4.6 5.6-8.2V6.9L12 4.5z" fill="#2f7fe0"/><path d="M8.8 11.9l2.2 2.2 4.1-4.3" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -6076,7 +6076,15 @@ var WV_SVG = {
   warn: '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 1.8 20.5h20.4L12 3z" fill="#fff"/><path d="M12 9.4v5.2M12 16.6v1.7" stroke="#f98a00" stroke-width="2.3" stroke-linecap="round"/></svg>',
 };
 function wvRoot(){ return mpRoot(); }
-function wvMode(cls){ const el = wvRoot(); el.className = 'show wv ' + (cls || ''); document.body.classList.add('mp-open'); return el; }
+function wvMode(cls){ const el = wvRoot(); el.className = 'show wv ' + (cls || ''); document.body.classList.add('mp-open'); wvFit(); return el; }
+// Sizes follow the phone: the pages are drawn for a 411 px wide screen and scaled to the real width, so a 360 px phone and a 430 px phone
+// show the same page in the same proportions (owner: "font sizes vary per phone ... check yours and see do they use phone sizes").
+function wvFit(){
+  const el = $('mpFlow'); if (!el) return;
+  const k = Math.max(.75, Math.min(1.5, (window.innerWidth || 411) / 411));
+  el.style.zoom = Math.abs(k - 1) < .01 ? '' : String(k);
+}
+window.addEventListener('resize', wvFit);
 function wvCloseBtn(){ return '<button type="button" class="wv-x" aria-label="' + wvt('closeA') + '" onclick="mpClose()">' + WV_SVG.x + '</button>'; }
 function wvPill(){ return '<button type="button" class="wv-lang wv-rip" onclick="wvLang()" aria-label="' + wvt('langA') + '">' + WV_SVG.globe + '<span>' + wvt('pillTo') + '</span></button>'; }
 // ── loaders: a grey veil with the ring and its word, then three dots; the veil fades away when the page is ready ──
@@ -6251,7 +6259,7 @@ function wvBodyHtml(){
   }
   const tx = _wv.txId;
   return '<div class="wv-info" onclick="wvSheet(\'qr\')"><span class="wv-i">i</span><span>' + wvt('howQr') + '</span></div>'
-    + '<img class="wv-qr" alt="" onload="if(this.naturalHeight>this.naturalWidth*1.15)this.classList.add(\'tall\')" src="' + esc(wvSafeQr(o.qrImage)) + '">'
+    + '<img class="wv-qr" alt="" src="' + esc(wvSafeQr(o.qrImage)) + '">'
     + '<div class="wv-info wv-info2" style="cursor:default"><span class="wv-i">i</span><span>' + wvt('qrInfo') + '</span></div>'
     + '<div class="wv-tx' + (tx ? ' has' : '') + '" id="wvTx">' + WV_SVG.receipt + '<div class="wv-fin"><label for="wvTxIn">' + wvt('txLabel') + '</label><input id="wvTxIn" type="text" autocomplete="off" maxlength="60" value="' + esc(tx) + '" oninput="wvTxIn(this)" onfocus="wvTxFocus(1)" onblur="wvTxFocus(0)"></div><span class="wv-bang">!</span></div>'
     + '<div id="wvTxMsg">' + wvTxHint() + '</div>'
@@ -6292,9 +6300,13 @@ window.wvOpenApp = function(){
   try { window.open(url, '_blank', 'noopener,noreferrer'); } catch (_) { try { location.href = url; } catch (__) {} }
 };
 window.wvTxIn = function(inp){
+  const had = !!_wv.txId;
   _wv.txId = String(inp.value).replace(/[^\w\-]/g, '').slice(0, 60);
   if (inp.value !== _wv.txId) inp.value = _wv.txId;
   const f = $('wvTx'); if (f) { f.classList.toggle('has', !!_wv.txId); f.classList.remove('err'); }
+  // Rubbing the whole ID out turns the box red at once, shows the "required" line and shakes the word sideways.
+  if (had && !_wv.txId) wvTxEmpty();
+  else { const m0 = $('wvTxMsg'); if (m0 && m0.querySelector('.wv-txe')) m0.innerHTML = wvTxHint(); }
   const b = $('wvRes'); if (b) { const on = !!_wv.txId.trim(); b.classList.toggle('on', on); b.classList.toggle('off', !on); }
   const m = $('wvTxMsg'); if (m && !m.firstChild) m.innerHTML = wvTxHint();
 };
@@ -6326,13 +6338,13 @@ window.wvGetResult = function(){
   if (!_wv.opened) return;
   wvSend({ wallet: _wv.wallet });
 };
+function wvTxEmpty(){
+  const f = $('wvTx'); if (f) { f.classList.add('err'); f.classList.remove('shk'); void f.offsetWidth; f.classList.add('shk'); }
+  const m = $('wvTxMsg'); if (m) m.innerHTML = '<div class="wv-txe">' + wvt('txReq') + '</div>';
+}
 window.wvCheckTx = function(){
   const id = _wv.txId.trim();
-  if (!id) {
-    const f = $('wvTx'); if (f) f.classList.add('err');
-    const m = $('wvTxMsg'); if (m) m.innerHTML = '<div class="wv-txe">' + wvt('txReq') + '</div>';
-    return;
-  }
+  if (!id) { wvTxEmpty(); return; }
   wvSend({ txId: id, wallet: _wv.wallet });
 };
 // ── bottom sheets: slide up over a darkening page ──
