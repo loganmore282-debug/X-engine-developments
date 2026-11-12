@@ -4671,6 +4671,8 @@ function setAdminLang(code){
   LANG = ADMIN_PICKABLE.includes(code) ? code : 'en';
   try { localStorage.setItem(ADMIN_LANG_KEY, LANG); } catch (_) {}
   try { translateTree(document.body); } catch (_) {}
+  // Text built in code (dates, month names) is made at render time, so paint the open tab again.
+  try { if (SESSION_TOKEN && typeof RENDERERS !== 'undefined' && RENDERERS[_tab]) RENDERERS[_tab](); } catch (_) {}
   markAdminPageLanguage();
   paintAdminLangPickers();
 }

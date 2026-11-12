@@ -7589,4 +7589,4 @@ The admin language picker now offers only **English** and **French** (`ADMIN_PIC
 - The browser's own pop-ups (`confirm` / `prompt` / `alert`) are wrapped at the top of the script so their message goes through `t()` first -- they are not DOM text, so the page translator never reached them before.
 - Month and day names (`monthShort()`, `dayLong()`) and `fdate()` follow the language (fr-FR dates in French).
 - New English admin text still needs a French row; `python3 find-admin-untranslated.py <outdir> fr` drives every tab and lists what is missing (dates, brand names and the `marzpay` data value are expected). `test-admin-i18n.js` now requires only the English and French cells of each row to be filled.
-- Deploy: admin cache is `petro-admin-shell-v85`.
+- Changing the language repaints the open tab (text built in code is made at render time). Deploy: admin cache is `petro-admin-shell-v86`.
