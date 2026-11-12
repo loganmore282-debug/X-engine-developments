@@ -67,7 +67,7 @@ for (const s of d.scripts) {
   await w.openTaskCenter(); await new Promise(r => setTimeout(r, 20));
   ok(d.getElementById('sheetTitle').textContent === 'Centre des tâches', 'it opens as a full page titled Task Center');
   ok(d.querySelectorAll('.v-tk-tabs button').length === 2 && /Parrainages/.test(d.querySelectorAll('.v-tk-tabs button')[0].textContent) && /Dépôts/.test(d.querySelectorAll('.v-tk-tabs button')[1].textContent), 'two tabs: Referrals and Deposits');
-  ok(/Filleuls actifs de niveau 1/.test(d.querySelector('.v-tk-hero').textContent) && /Dépôts de l'équipe/.test(d.querySelector('.v-tk-hero').textContent) && /XOF 400,000/.test(d.querySelector('.v-tk-hero').textContent), 'the summary shows both figures');
+  ok(/Filleuls actifs de niveau 1/.test(d.querySelector('.v-tk-hero').textContent) && /Dépôts de l'équipe/.test(d.querySelector('.v-tk-hero').textContent) && /FCFA 400,000/.test(d.querySelector('.v-tk-hero').textContent), 'the summary shows both figures');
   let cards = [...d.querySelectorAll('.v-tk-card')];
   ok(cards.length === 3, 'Referrals lists its 3 tasks (the cached row without an id is skipped)');
   ok(cards[0].classList.contains('ready') && cards[1].classList.contains('next') && cards[2].classList.contains('locked'), 'states: ready, next, locked');
@@ -75,15 +75,15 @@ for (const s of d.scripts) {
   ok(cards[0].querySelector('.v-tk-btn.go') && !cards[1].querySelector('.v-tk-btn.go') && cards[1].querySelector('.v-tk-btn').getAttribute('onclick').indexOf('taskNotReached') === 0, 'only the reached task has an active Claim button; the others answer "not reached"');
   w.taskNotReached('count'); ok(/Objectif de parrainage non atteint/.test(d.getElementById('notifyMsg').textContent), 'tapping Claim on an unreached referral task says Referral target not reached');
   w.taskNotReached('deposit'); ok(/Objectif de dépôt non atteint/.test(d.getElementById('notifyMsg').textContent), 'and on an unreached deposit task says Deposit target not reached');
-  ok(/XOF 10,000/.test(cards[0].querySelector('.v-tk-reward').textContent), 'the reward is shown');
+  ok(/FCFA 10,000/.test(cards[0].querySelector('.v-tk-reward').textContent), 'the reward is shown');
   w.switchTaskTab('deposit'); cards = [...d.querySelectorAll('.v-tk-card')];
-  ok(cards.length === 2 && cards[0].classList.contains('done') && /Réclamé/.test(cards[0].textContent) && /XOF 250,000/.test(cards[0].textContent), 'Deposits tab: a claimed task shows Claimed');
+  ok(cards.length === 2 && cards[0].classList.contains('done') && /Réclamé/.test(cards[0].textContent) && /FCFA 250,000/.test(cards[0].textContent), 'Deposits tab: a claimed task shows Claimed');
   w.switchTaskTab('count');
   // claim
   const btn = d.querySelector('.v-tk-btn.go'); const onclick = btn.getAttribute('onclick'); w.eval(onclick.replace(/this\)/, 'document.querySelector(".v-tk-btn.go"))'));
   await new Promise(r => setTimeout(r, 30));
   ok(calls.some(c => c === '/team/task/claim {"type":"count","id":"r1"}'), 'tapping Claim posts the task type and id');
-  ok(d.getElementById('chestWinBg') && /XOF 10,000\.00/.test(d.getElementById('chestWinBg').textContent) && /Nouveau solde : XOF 15,000\.00/.test(d.getElementById('chestWinBg').textContent), 'the Congratulations card shows the reward and the new balance');
+  ok(d.getElementById('chestWinBg') && /FCFA 10,000\.00/.test(d.getElementById('chestWinBg').textContent) && /Nouveau solde : FCFA 15,000\.00/.test(d.getElementById('chestWinBg').textContent), 'the Congratulations card shows the reward and the new balance');
   cards = [...d.querySelectorAll('.v-tk-card')]; ok(cards[0].classList.contains('done'), 'the task now shows as claimed');
   ok(d.getElementById('tkBadge').style.display === 'none', 'the badge on the Team page is cleared');
   w.collectChestWin();

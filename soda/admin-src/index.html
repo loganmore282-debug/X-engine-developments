@@ -648,7 +648,7 @@ function fileToSquarePng(file, size){
 let _toastT=null;
 function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('div'); t.id='adToast'; document.body.appendChild(t);} t.className='toast'+(kind?' '+kind:''); t.textContent=msg; clearTimeout(_toastT); _toastT=setTimeout(()=>t.remove(),3000); }
 
-// All amounts in this panel are CFA francs (XOF).
+// All amounts in this panel are CFA francs (FCFA).
 const ADMIN_REGIONS = [{ key: 'ci', name: "Côte d'Ivoire", currency: 'XOF' }];
 const ADMIN_REGION = 'ci';
 function regionByKeyAdmin(){ return ADMIN_REGIONS[0]; }
@@ -678,8 +678,8 @@ function dayLong(i){ return (ADMIN_DAYS[LANG] || ADMIN_DAYS.en)[i]; }
   window.prompt = (m, d) => _p(t(String(m)), typeof d === 'string' ? t(d) : d);
   window.alert = m => _a(t(String(m)));
 })();
-function curOf(){ return 'XOF'; }
-function adminCur(){ return 'XOF'; }
+function curOf(){ return 'FCFA'; }
+function adminCur(){ return 'FCFA'; }
 var _adminPending = new Map();
 function api(path, body, method){
   if (body || (method && method !== 'GET')) return adminRequest(path, body, method);
@@ -1658,9 +1658,9 @@ function chainPdfBlob(r){
   const colW = (W - 2 * M) / 4;
   [['Phone', u.phone || '-'], ['Referral code', u.referralCode || 'not set'], ['Status', String(u.status || 'active')], ['Joined', pdfDay(u.createdAt)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 30;
-  [['Referred by', u.referredByPhone || 'nobody (this is a root account)'], ['Wallet balance', 'XOF ' + pdfMoney(u.walletBalance)], ['Total deposited', 'XOF ' + pdfMoney(u.totalDeposited)], ['Total invested', 'XOF ' + pdfMoney(u.totalInvested)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
+  [['Referred by', u.referredByPhone || 'nobody (this is a root account)'], ['Wallet balance', 'FCFA ' + pdfMoney(u.walletBalance)], ['Total deposited', 'FCFA ' + pdfMoney(u.totalDeposited)], ['Total invested', 'FCFA ' + pdfMoney(u.totalInvested)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 30;
-  [['Total withdrawn', 'XOF ' + pdfMoney(u.totalWithdrawn)], ['Total earned (all sources)', 'XOF ' + pdfMoney(u.totalEarned)], ['Team members (all levels)', pdfMoney(downline.length) + (r.downlineTruncated ? '+' : '')], ["Team's recharges (L1-L3)", 'XOF ' + pdfMoney(r.teamDeposits)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
+  [['Total withdrawn', 'FCFA ' + pdfMoney(u.totalWithdrawn)], ['Total earned (all sources)', 'FCFA ' + pdfMoney(u.totalEarned)], ['Team members (all levels)', pdfMoney(downline.length) + (r.downlineTruncated ? '+' : '')], ["Team's recharges (L1-L3)", 'FCFA ' + pdfMoney(r.teamDeposits)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 34;
   if (r.cycleDetected || r.downlineCycleDetected) { pdf.text(M, y, 'Warning: a cycle was found in the referral data; the walk stopped early.', 9, true, 'l', BAD); y += 16; }
   // 2. Team by level
@@ -1669,7 +1669,7 @@ function chainPdfBlob(r){
   const lvRows = levels.map(agg);
   if (lvRows.length) {
     const tot = { _bold: true, _lv: 'Total', n: downline.length, banned: lvRows.reduce((s, x) => s + x.banned, 0), dep: lvRows.reduce((s, x) => s + x.dep, 0), inv: lvRows.reduce((s, x) => s + x.inv, 0), wd: lvRows.reduce((s, x) => s + x.wd, 0), earn: lvRows.reduce((s, x) => s + x.earn, 0), payers: lvRows.reduce((s, x) => s + x.payers, 0) };
-    heading('2. Team by level', 'figures are the members\' own lifetime totals, in XOF');
+    heading('2. Team by level', 'figures are the members\' own lifetime totals, in FCFA');
     table([
       { h: 'Level', w: 70, k: x => x._lv === 'Total' ? 'Total' : 'Level ' + x._lv }, { h: 'Members', w: 70, r: 1, k: x => pdfMoney(x.n) }, { h: 'Have deposited', w: 90, r: 1, k: x => pdfMoney(x.payers) },
       { h: 'Banned', w: 60, r: 1, k: x => pdfMoney(x.banned) }, { h: 'Deposited', w: 105, r: 1, k: x => pdfMoney(x.dep) }, { h: 'Invested', w: 105, r: 1, k: x => pdfMoney(x.inv) },
@@ -1679,7 +1679,7 @@ function chainPdfBlob(r){
   // 3. Commission
   if (r.commission) {
     heading('3. Commission this member earned from the team', `${pdfMoney(r.commission.count)} ${t(r.commission.count === 1 ? 'commission payment' : 'commission payments')}`);
-    table([{ h: 'Level 1', w: 100, r: 1, k: x => pdfMoney(x.l1) }, { h: 'Level 2', w: 100, r: 1, k: x => pdfMoney(x.l2) }, { h: 'Level 3', w: 100, r: 1, k: x => pdfMoney(x.l3) }, { h: 'Total (XOF)', w: 120, r: 1, k: x => pdfMoney(x.total) }], [r.commission], { zebra: false });
+    table([{ h: 'Level 1', w: 100, r: 1, k: x => pdfMoney(x.l1) }, { h: 'Level 2', w: 100, r: 1, k: x => pdfMoney(x.l2) }, { h: 'Level 3', w: 100, r: 1, k: x => pdfMoney(x.l3) }, { h: 'Total (FCFA)', w: 120, r: 1, k: x => pdfMoney(x.total) }], [r.commission], { zebra: false });
   }
   // 4. Upline
   heading('4. Upline (direct referrer to root)', `${(r.upline || []).length} ${t((r.upline || []).length === 1 ? 'link' : 'links')}`);
@@ -1704,7 +1704,7 @@ function chainPdfBlob(r){
     need(60);
     pdf.rect(M, y - 2, W - 2 * M, 17, [0.85, 0.9, 1]);
     pdf.text(M + 6, y + 1.5, `${t('Level')} ${lv}  -  ${pdfMoney(rows.length)} ${t(rows.length === 1 ? 'member' : 'members')}`, 9.5, true, 'l', BLUE);
-    pdf.text(W - M - 6, y + 2, `deposited ${pdfMoney(a.dep)}   invested ${pdfMoney(a.inv)}   (XOF)`, 8.5, false, 'r', INK);
+    pdf.text(W - M - 6, y + 2, `deposited ${pdfMoney(a.dep)}   invested ${pdfMoney(a.inv)}   (FCFA)`, 8.5, false, 'r', INK);
     y += 21;
     table(dcols, rows);
   });
@@ -3385,7 +3385,7 @@ async function renderSettings(){
       <div class="row" style="margin-top:6px">
         <div><label>Shortest wait (seconds)</label><input id="sAutoMin" type="number" min="0" max="86400" step="1" value="${v('autoApproveMinSec',10)}"></div>
         <div><label>Longest wait (seconds)</label><input id="sAutoMax" type="number" min="0" max="86400" step="1" value="${v('autoApproveMaxSec',60)}"></div>
-        <div><label>Automatic up to (XOF, 0 = no limit)</label><input id="sAutoCap" type="number" min="0" step="1" value="${v('autoApproveMaxAmount',0)}"></div>
+        <div><label>Automatic up to (FCFA, 0 = no limit)</label><input id="sAutoCap" type="number" min="0" step="1" value="${v('autoApproveMaxAmount',0)}"></div>
       </div>
       <p class="muted" id="autoWitNote" style="margin:6px 0 0"></p>
       <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app for users)</span></span>
@@ -3753,8 +3753,8 @@ const ADMIN_LANG_ROWS = [
   ['Generate codes', 'Kola koodi', 'Tengeneza misimbo', 'Générer des codes', 'Gukora kode', 'Hanga koodi'],
   ['How many', 'Mmeka', 'Ngapi', 'Combien', 'Zingahe', 'Ningahe'],
   ['Reward range', 'Ekigero ky\'empeera', 'Kiwango cha zawadi', 'Fourchette de récompense', 'Urwego rw\'ibihembo', 'Ekigyero ky\'empeera'],
-  ['Min reward (XOF)', 'Empeera esinga obutono (XOF)', 'Zawadi ndogo (XOF)', 'Récompense minimale (XOF)', 'Igihembo gito (XOF)', 'Empeera erikukira obukye (XOF)'],
-  ['Max reward (XOF)', 'Empeera esinga obunene (XOF)', 'Zawadi kubwa (XOF)', 'Récompense maximale (XOF)', 'Igihembo kinini (XOF)', 'Empeera erikukira obwingi (XOF)'],
+  ['Min reward (FCFA)', 'Empeera esinga obutono (FCFA)', 'Zawadi ndogo (FCFA)', 'Récompense minimale (FCFA)', 'Igihembo gito (FCFA)', 'Empeera erikukira obukye (FCFA)'],
+  ['Max reward (FCFA)', 'Empeera esinga obunene (FCFA)', 'Zawadi kubwa (FCFA)', 'Récompense maximale (FCFA)', 'Igihembo kinini (FCFA)', 'Empeera erikukira obwingi (FCFA)'],
   ['Max uses per code (optional)', 'Emirundi egisinga buli koodi (si kya buwaze)', 'Matumizi mengi kwa msimbo (si lazima)', 'Utilisations max par code (facultatif)', 'Inshuro ntarengwa kuri buri kode (ntabwo ari itegeko)', 'Emirundi erikukira aha buri koodi (tikya buriijo)'],
   ['Expires after (seconds, optional)', 'Kiggwaako oluvannyuma (obutundutundu, si kya buwaze)', 'Inaisha baada ya (sekunde, si lazima)', 'Expire après (secondes, facultatif)', 'Birangira nyuma ya (amasegonda, ntabwo ari itegeko)', 'Nikihwaho bwanyima ya (obucweka, tikya buriijo)'],
   ['e.g. 30 for a flash code', 'okugeza 30 ku koodi ey\'akaseera', 'mfano 30 kwa msimbo wa haraka', 'ex. 30 pour un code éclair', 'urugero 30 kuri kode y\'igihe gito', 'nk\'okugyera 30 aha koodi y\'akaanya'],
@@ -3791,8 +3791,8 @@ const ADMIN_LANG_ROWS = [
   ['Save auto-approve settings', 'Tereka entegeka y\'okukkiriza okw\'obwetwaze', 'Hifadhi mipangilio ya idhini otomatiki', 'Enregistrer les paramètres d\'approbation automatique', 'Bika igenamiterere ryo kwemeza kwikora', 'Biika entebeekanisa y\'okwikiriza kwonka'],
   ['Turntable (spin wheel)', 'Nnamuziga (eddiba erizunguluka)', 'Gurudumu (la kuzungusha)', 'Roue (tourner)', 'Uruziga (ruzunguruka)', 'Orupiira (orurikuzengurutsa)'],
   ['Daily free spin', 'Okuzungusa okwa buli lunaku okw\'obwereere', 'Mzungusho bure wa kila siku', 'Tour gratuit quotidien', 'Kuzunguza k\'ubuntu kwa buri munsi', 'Okuzengurutsa kwa buri izooba okwa busha'],
-  ['Minimum win (XOF)', 'Okuwangula okusinga obutono (XOF)', 'Ushindi mdogo (XOF)', 'Gain minimum (XOF)', 'Gutsinda guto (XOF)', 'Okusingura okurikukira obukye (XOF)'],
-  ['Maximum win (XOF)', 'Okuwangula okusinga obunene (XOF)', 'Ushindi mkubwa (XOF)', 'Gain maximum (XOF)', 'Gutsinda kunini (XOF)', 'Okusingura okurikukira obwingi (XOF)'],
+  ['Minimum win (FCFA)', 'Okuwangula okusinga obutono (FCFA)', 'Ushindi mdogo (FCFA)', 'Gain minimum (FCFA)', 'Gutsinda guto (FCFA)', 'Okusingura okurikukira obukye (FCFA)'],
+  ['Maximum win (FCFA)', 'Okuwangula okusinga obunene (FCFA)', 'Ushindi mkubwa (FCFA)', 'Gain maximum (FCFA)', 'Gutsinda kunini (FCFA)', 'Okusingura okurikukira obwingi (FCFA)'],
   ['Spins earned by buying products', 'Okuzungusa okufunibwa mu kugula ebyamaguzi', 'Mizungusho inayopatikana kwa kununua bidhaa', 'Tours gagnés en achetant des produits', 'Kuzunguza kuboneka mu kugura ibicuruzwa', 'Okuzengurutsa okurikutungwa omu kugura ebyamaguzi'],
   ['Save turntable settings', 'Tereka entegeka ya nnamuziga', 'Hifadhi mipangilio ya gurudumu', 'Enregistrer les paramètres de la roue', 'Bika igenamiterere ry\'uruziga', 'Biika entebeekanisa y\'orupiira'],
   ['Maintenance mode', 'Embeera y\'okuddaabiriza', 'Hali ya matengenezo', 'Mode maintenance', 'Uburyo bwo gusana', 'Embeera y\'okugyerurura'],
@@ -3979,7 +3979,7 @@ const ADMIN_LANG_ROWS = [
   ['e.g. New assets are live', '', '', 'ex. : De nouveaux actifs sont disponibles', '', ''],
   ['Energy for a Better Tomorrow', '', '', 'L’énergie pour un meilleur demain', '', ''],
   ['Erase every member and everything that belongs to them — wallets, recharges, withdrawals, plans, records and their sign-in accounts — so the app starts clean. Your settings, assets, banners, About and Rules, payment numbers, admin accounts and messages are kept. There is no undo.', '', '', 'Efface chaque membre et tout ce qui lui appartient — portefeuilles, recharges, retraits, plans, historiques et comptes de connexion — pour que l’application reparte à zéro. Vos paramètres, actifs, bannières, pages À propos et Règles, numéros de paiement, comptes admin et messages sont conservés. Impossible d’annuler.', '', ''],
-  ['Exchange rate (XOF per 1 USDT)', '', '', 'Taux de change (XOF pour 1 USDT)', '', ''],
+  ['Exchange rate (FCFA per 1 USDT)', '', '', 'Taux de change (FCFA pour 1 USDT)', '', ''],
   ['Free for the member: nothing is taken from their wallet. It runs like a bought asset and pays its full return.', '', '', 'Gratuit pour le membre : rien n’est prélevé sur son portefeuille. Il fonctionne comme un actif acheté et verse son rendement complet.', '', ''],
   ['Give an asset', '', '', 'Offrir un actif', '', ''],
   ['Home\'s Support tile opens this address directly in the member\'s mail app. Account > Support shows it alongside the WhatsApp link and the working hours below.', '', '', 'La tuile Assistance de l’Accueil ouvre cette adresse directement dans l’application de messagerie du membre. Compte > Assistance l’affiche avec le lien WhatsApp et les horaires ci-dessous.', '', ''],
@@ -4515,7 +4515,7 @@ const ADMIN_LANG_ROWS = [
   // ── English + French coverage round (owner: the admin panel must be fully switchable to French) ──
   ['+ Add task', '', '', '+ Ajouter une tâche', '', ''],
   ['Add Soda A to J', '', '', 'Ajouter Soda A à J', '', ''],
-  ['Automatic up to (XOF, 0 = no limit)', '', '', 'Automatique jusqu’à (XOF, 0 = sans limite)', '', ''],
+  ['Automatic up to (FCFA, 0 = no limit)', '', '', 'Automatique jusqu’à (FCFA, 0 = sans limite)', '', ''],
   ['Creates Soda A to Soda J if they are missing; never changes a product that already exists', '', '', 'Crée Soda A à Soda J s’ils manquent ; ne modifie jamais un produit déjà existant', '', ''],
   ['Free for the member: nothing is taken from their wallet. It runs like a bought product and pays its full return.', '', '', 'Gratuit pour le membre : rien n’est prélevé sur son portefeuille. Il fonctionne comme un produit acheté et verse son rendement complet.', '', ''],
   ['Give a product', '', '', 'Offrir un produit', '', ''],
@@ -4559,7 +4559,7 @@ const ADMIN_LANG_ROWS = [
   ['Team\'s recharges (L1-L3)', '', '', 'Recharges de l’équipe (N1-N3)', '', ''],
   ['Warning: a cycle was found in the referral data; the walk stopped early.', '', '', 'Attention : un cycle a été trouvé dans les données de parrainage ; le parcours s’est arrêté tôt.', '', ''],
   ['2. Team by level', '', '', '2. Équipe par niveau', '', ''],
-  ['figures are the members\' own lifetime totals, in XOF', '', '', 'les chiffres sont les totaux cumulés propres aux membres, en XOF', '', ''],
+  ['figures are the members\' own lifetime totals, in FCFA', '', '', 'les chiffres sont les totaux cumulés propres aux membres, en FCFA', '', ''],
   ['Level', '', '', 'Niveau', '', ''],
   ['Have deposited', '', '', 'Ont déposé', '', ''],
   ['Deposited', '', '', 'Déposé', '', ''],
@@ -4567,7 +4567,7 @@ const ADMIN_LANG_ROWS = [
   ['3. Commission this member earned from the team', '', '', '3. Commission gagnée par ce membre grâce à son équipe', '', ''],
   ['commission payment', '', '', 'paiement de commission', '', ''],
   ['commission payments', '', '', 'paiements de commission', '', ''],
-  ['Total (XOF)', '', '', '=', '', ''],
+  ['Total (FCFA)', '', '', '=', '', ''],
   ['4. Upline (direct referrer to root)', '', '', '4. Lignée ascendante (parrain direct jusqu’à la racine)', '', ''],
   ['Position', '', '', '=', '', ''],
   ['Direct referrer', '', '', 'Parrain direct', '', ''],
@@ -4844,7 +4844,7 @@ const ADMIN_LANG_PATTERNS = [
   ['{0} waiting request(s) ({1}) belong to banned members.', '', '', '{0} demande(s) en attente ({1}) appartiennent à des membres bannis.', '', ''],
   ['{0} - code {1}', '', '', '=', '', ''],
   ['Referral chain - {0}', '', '', 'Chaîne de parrainage - {0}', '', ''],
-  ['deposited {0} invested {1} (XOF)', '', '', 'déposé {0} investi {1} (XOF)', '', ''],
+  ['deposited {0} invested {1} (FCFA)', '', '', 'déposé {0} investi {1} (FCFA)', '', ''],
   ['Page {0} of {1}', '', '', 'Page {0} sur {1}', '', ''],
   ['Remove {0} from {1}? It stops earning at once and disappears from their account. Cashback already paid to them ({2}) stays in their wallet.', '', '', 'Retirer {0} de {1} ?\n\nIl cesse de rapporter immédiatement et disparaît de son compte. Le cashback déjà versé ({2}) reste dans son portefeuille.', '', ''],
   ['Also give back the {0} they paid for {1}, into their wallet? OK = remove and refund {2} Cancel = remove WITHOUT a refund', '', '', 'Rembourser aussi les {0} payés pour {1}, dans son portefeuille ?\n\nOK = retirer et rembourser {2}\nAnnuler = retirer SANS remboursement', '', ''],

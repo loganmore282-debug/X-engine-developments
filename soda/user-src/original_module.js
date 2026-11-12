@@ -32,8 +32,8 @@ var API_BASE = '/k7x2';
 // paint uses -- so a cold start with no network still formats money and
 // validates a phone number the way it always did.
 var REGION = { key: 'ci', name: "Côte d'Ivoire", currency: 'XOF', dialCode: '225', localLength: 10, prefixes: ['01','05','07'], utcOffsetMin: 0, isDefault: true, languages: ['fr'], defaultLang: 'fr' };
-// What a member READS in front of an amount: the currency code (XOF).
-function cur(){ return String((REGION && REGION.currency) || 'XOF').toUpperCase(); }
+// What a member READS in front of an amount: FCFA (the region's currency code stays XOF underneath).
+function cur(){ const c = String((REGION && REGION.currency) || 'XOF').toUpperCase(); return (c === 'XOF' || c === 'XAF') ? 'FCFA' : c; }
 // Côte d'Ivoire numbers START WITH the 0 (01 / 05 / 07 + 8 digits), so the 0 is part of the number and is never stripped.
 function keepsLeadZero(){ const p = regionPrefixes(); return p.length > 0 && p.every(x => String(x).startsWith('0')); }
 function regionName(){ const n = (REGION && REGION.name) || "Côte d'Ivoire"; return typeof t === 'function' ? t(n) : n; }

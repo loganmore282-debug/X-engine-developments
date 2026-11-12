@@ -448,8 +448,10 @@ const DEFAULT_REGION = Object.freeze({
   active: true, isDefault: true, languages: ['fr'], defaultLang: 'fr',
 });
 // The label printed in front of an amount: the plain currency code.
+// What a person READS in front of an amount: the CFA franc is written FCFA (the stored/sent currency code stays XOF).
 function currencyLabel(code) {
-  return String(code || '').toUpperCase();
+  const c = String(code || '').toUpperCase();
+  return (c === 'XOF' || c === 'XAF') ? 'FCFA' : c;
 }
 // The domain whose random 4-character subdomains carry the member app and invite links (deploy/set-wildcard.sh saves it as SHARE_DOMAIN in
 // deploy/secrets.local.js): https://h6re.<domain>/share.html?... Empty = invite links keep the address the app is open on.
