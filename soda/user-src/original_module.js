@@ -6198,31 +6198,76 @@ window.openManualPayFlow = async function(amount){
   mpShowChoose();
 };
 // ── WAVE PAYMENT PAGES (Côte d'Ivoire) ──
-// Owner's screenshots of the payment pages (411 css px wide, 2.625 device px per css px): a ring loader, then three dots, then
-// the pay page (30 minute clock, amount, the Wave row, the wallet number, Soumettre), a "Traitement en cours..." card, and
-// the result page with two tabs -- Ouvrir l'application (Wave's own link) and Scanner le code QR (the QR the admin uploaded,
-// the member's transaction ID). Nothing is credited here: the claim goes to the admin Recharges tab (same as the SMS flow).
+// Owner's screenshots and two screen recordings of the payment pages (411 css px wide, 2.625 device px per css px): a ring loader,
+// then three dots, then the pay page (30 minute clock, amount, the Wave row, the wallet number, Soumettre), a "Traitement en cours..."
+// card, and the result page with two tabs -- Ouvrir l'application (Wave's own link) and Scanner le code QR (the QR the admin
+// uploaded, the member's transaction number). English or French (the pill at the top, the choice is remembered). Nothing is
+// credited here: the claim goes to the admin Recharges tab (same as the SMS flow).
 var WV_IMG_ICON = 'data:image/png;base64,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';
 var WV_IMG_PAYWITH = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWwAAACcCAMAAABspGEmAAABIFBMVEUuJR/l2M3vzXXtyZ+ar9JkW2VRKA0Ruf/GppSeb1OjnJncdCqWrrKrxlfTp49UV5wnJ0+RWTW2mGXQbi3Bk2ls0O3fgi9YtP2+oYb/cAFsTCzWp4eX5GDEpazCeUrj1HS7aDONzfHtyHD/hQDhciS6uc6+k3i9c0TJ9XS7bTuxs1QS9jCOc4m3nI7T9Iiuy1h5im1n8luD1agA/1o3yPBl4aidpQC9mTOwwJ/Aek3/04L///83bv8A/7m/liaivUis2gDHjCbUiSrAlnzc/x4AAAD+/fkHBgT+8tr+6Mz114O3qJnEpo3UqoT417Wrq6zseye9p4/tyKfkuZPIpobNp4TbtZDFpYkA2v+ls68A+v96ud2Qud7z2H0oBQBWV5Ao87UgAAAAYHRSTlP///n+Hf//CVv///Qq//P/////l+oU+A+XGf+jKDHpYH4TniFt/6edKotdC/9oKkX/Fh8IERUi//+7ZQgRCHc7CHeQuxEA//////9Md/n/MP5u//6tzf+QCC4IGRn///8f8v/BAAAfaElEQVR42u2dCXfbOJKAKVGnrShjx44dO87V2XQ63T09MzuzO8feu3KIACTDm5Rk5///iwVIkMRFEmLUE+8+IfFLLFEi+LFYqCoUCsZKv73+7cs3w+Gb1aH1bIb+oX8dmp9wM4cHar8+7Nc5a9wOsv3rw169HN7lsIfPD9x+JdjPn79/X/zvx5fDT58I75fPD7j3D/vH98Oyvfxx9ePv//BmmIv28DBO7gH26ILXG7nauMu1x/Dl758/f/7LyyFRJnefzOe5afLbA8KesG9m734e1b8OC9af7ujAiMX7lw8fPryh8KltMvzbgWIP2KPrs5PLWaWrhzXpEvenu+GQ6m16Iz6Z5l8PFHvARsv5/PSaivb7kibLuvr97tMbqmOGLw8Qe8C+uT4aj+fLG6pDarR3Ct6fhh9+GQ6xEsF6/PfvX7558+bl+wNNPdgXNzez6+VPBPaMZ32XN0HEyRD5ywfM+fm/P3+OFcsdVekHnhqwCenl0p5XsN/fUW1xl9t9d3e8FikcSWybPH/+kqAu78fwIN2dsG9my9PTo6Oj8ePxuIA9LOV3OHz06NFwqIB9V9yHQvjJ/bg70NaBPZpjmcbty5fH4+W1u1r9qbY+HpF2ysp2+d/yHwL99JSKv3kwvLsk+10O+/GXL19+Wi6vZwtTAftOhF3gzsW6kP7c2TnEBDtgX8yWuWxj2I9/OlraYQU75/jo7OwNS5vVKHf0dhS08SHDfzxA7Rgg8fh4NM9F+/F4fmT7ubtCJfv07J+fPn36T1Rvi8hL1qVsHwKw3aYfNkfs5U9fSCMmieM45twksE8J62PcKG1RwGvYj4oDDnqk26kZzZbLnx5/obiPBuZ8XIj28Clm/fnz8XERExFhn54KsD8doHZ7kJj2T8QeyYGPsR04Xjq5Uv43zJr8/a8h5+AUCsW8Mk5r2PlLB3tEx11fHuWwC9xEvJ3csflPwprQfjmUYDunhnH06M+/u7rCyKnXeYC9E2xKm8DGTP/n+LiA/TS3Nzg14lwZ+CH4nWEY49NT8wC7D+yCN4U9fJqrbEx7Jfjtn5wjw/jNeGyQdlTC/tcDVR3YSwY2pv3YcQpb+2mhSI6PRWvbGRu/oc0wrgrYwx//H2Jar6f7HiCXjznYVI98Gr7Jh0j88x9DUbB/UzXjytGAfeFCiP9WLYOum23WD5s09DwPQQ3cmZu57mKz7YSNsF/Dw/4yNim/l1RrH3OwndhgYY+Lg1+2uZDXAW5x/hPH+N/8x7YTz324rN0wcABwzAh2HDii1xYE1+2wb9AZ8di/cK0U7U/m3wo1cvzBZFgzSqSATY42Pyz+1Nwd3GtLagCAIPRGD5T1KHSsW9wsEHRIBCqvDZibFtguTCL7aCzAxr+bhdr+ZP78grT5qVmjNscGB3vukBZcXnoJgup+waLfcrOAb6PNQ2SdIrPsMwjbaYflgZYPm2G7iekMBmAgt+peAcfxfeLE15IJlkf/wLYBPXKQM3fVsG+bGhacB6lL3KCSD45hmq5XKa/ao+pI32uGjZoErnfD6C5UD5rT9pkgeYC02YcRhFTXbaGXJAl5gpmxcKsFex2A2303y3F3hX1rmcn2wcFmuwzsrJDqAD/hpJnOdS3dF3qwo18Btr877Fsr9v5PwHZLNc4NmnqSvfKc/cMOesDGV/PgFAn0GTVyWYzhsB4z49musEfxvnX2LUBpl5jQxp3aRw/Nv8mYAdKE5Q2on0W4K+zU27cesWzY8Uw6Nm0xOzqDKHtopl8l2paTTGXYO0v2ahbsWbRBmHXA9kNEPHUXojBmbrXz4LR2lji5uQuccFG8MkVfI9mrzN6zaPte2gUbuaXohIwWA8mD8yRhEmMPw4+TkqvLwq7VJQsbtbnrex4irYaBjoXtVdoZho56YHWhh3CDpT+artdr/iaSV6QHP91u0wZw09EIfwUfUpri44Wvxd+73ZY+C3avwygKk7IXIxgysENYhtE42NiGPc9w9/GfmbvlYbv2XvUI8NadsJmbj+qzW8GiCkp4oR3k3qidwNfpGmucvPNww0bjSDyOVVn5/cFHuYoerN385nkeXDM3FBUvMoNM5qHEI4cRvNOZF2LYUUgd3AUK7Qr2bWyHSXEcBzuBEF7aAfG5fd8O6fko7PO9ijaw4WoX2G5t6FsB/WgGbR/ryvw1ywkuPWQ6tNEwj1u9wNj0y/I1ZymfPqjeDEpltalfqzqU+dVrN/Q0eQjCJKeZ4TcHtdItghN5B1h3PQqjwCl6j41xECQZG/Vz9+lFOpebbtjM/Rglg+p1al65ic8ahRY2Xmr0xSEzB5QmWfUgbQJADwLBuSTYIf1K/BXlmDKrkSzpLdtWhwFyptJfL37bhKYEyipsQhY26S0rfU5uZZWwt6GzR4cGrnaC/Zp53cxtKWiL4RpQj+EACV9W2z512EjVifrxtagveBHWz5RDbxkMmOhdeoFAfUC6Wii9bYCmnBoxYyBGL0gXq8kDuDeDxGo23zQkOyCwZ7xgUCeIh50ysCO3gt12xz1ffJeJ6ZU2/tpjDbt0W8HGZul5g92W21AM7IEs/Q42WyrYqbcvRdIS9m2ALepsNwTt3mkjbBjUd81rC5dSDV27J5XNnNUnJ0/MNql+HaDt1NWCrTokdplpsU3iW3saHc91YCMmPs9aIzDd1PH6BlunJ2wGHAiJPfZHzi4oXBFYMwvQesVINobNyoV4+zetsEkw3GANnj3ItgVCmK60YFeHwchhQ1HbLo2Wa8guNaKCjfWIxXkCC+4RcvIu1R5L/rVMKGOARqvzUFZwZIQmsEOr43lkV4tlKAZfKdzAt6FevBKbogXt7SxkA2uJ63LiZgE/DhywM2xLBRvWchkQewRyEbhc/zHS7yTn5DQ1bKIssA0EwK0QT3MWEmzcb5/rNkhSbtEp8Y2+Bjc2KJGrGRz2o8SbYdMfhRHD2vK9jHtSQRxij4M7Bne7L+yLhLNg1t5Aip7V7p2VqxUWNpH8DZmurTX90ibuTi5gnBoB2NlJuG6DZC0sp3Y9O+iJG9uhcQIvdCPxfhn1424viGDGipsfocV2tc48Pn6iBVsVn6gj0ZjsVhyIHc/dMnGP/CFNmQGyOC92IVl33YPZRnTXMWsE3a2LGAVpXYqwV6mLEtsf0IwDLchFMoIT4NN2BZG4yQM6b8yPIskoq00v0udtGa3ydWDDDti15Wb5yIVCsBPYM1jLvpPHxDjJLuOAbCBqowhE4ZfzHm1Q3AY7VyYIPykkiSaOl+OJ0dYm42WebGMnCLndcf/OmZoIXjDihvtcxnCmzKipBftWCZtB54Qo8cVpucSrdBgNyTMDpIOm9Eu6QqyV9cvYkWrYxKXbZO4Cq1N7/rGrze0QwZFmAllHBAbEcM2aXoBJQmLuwVfAxr5bNaNlJ5XXDKoge2gLWSLs7UEjcfIAqGE7SVrGnKpRwQrXbfVGXHRmdMKeLJH+lHg7bDwibVkcWPhcRiZ9DWukE/YorCU3qh4WszxhVCtZ6vZwamSqOy2GFBGCdtgX15OP3W2+Q/5BqxoBfh7EZGBzM5JezM9vrnvBZsxoPERb5RRdJe21TqcYp18J29eV7NN7Ddj3Z+4+YFsg9vKxZtEHdqblQfIuOzgqH/EasR2L38nCLucgd5gW04aNrj7qtCs0+mrY2AUoI+wZAzvZqKJIRWykJ2zGaVnW8lwalqYpCmc/NbIz7FFiaMGeXLp9YLNZrH6A7enKOrNUIa2bOjII8uGH0dnVXP4UdcJmXHZQDQ1JJdoDUTMpTD/Wo4/RfmDDuRZrrEdgD9imjX2vvIUhl/WaMSFA21NFBqk14smwXSYq3wRbCiXhcRlJ0XwnWevAtvYEO0XM8GgcDY4M5rejMTtEoh6w/cgrFx8spg3POb7kUt63qHYhC9irGTMTWOibEWJCWE2wt4kj5bi4nineALRqhs0EZmN0sQ/Y7iWjRY7w0RVt48/kN0aP9ILdmLLK6F3sZcymEkYKmzkO2MSQ4bzjRtjYZRfj76N1ZlsNs6gdsP1wNtoHbMbINvLDy9/H+ZmZd8O0B+zGNSrshYM4hHkmjz0QA1HcLAsJa2G/l50KCJpE4FzQI2SM2wg5YaCyZ5UDZB1vB8SnK8IUm6+ADU9rnDne2zEj5izs+2u3B2zUuCCI0SP4eY6x8xHHfLByKs1R4zE29sGtDuwVD7YYCvkwCWNkpArTj5tM88kymqUAG+4Ke36vKdkfT3Vhe+pUhpbE0TwTQIhDgmTVnaFoNaoR1m0iF5LP82acuDPZc0rY3BfkqWnZ18FGDOxcmCu8xoDX2R/nsI9kN+qeLOyYqaEXDVvn8Zphj7jvLx75DTdsMlPWKg+SHcPriXdXpUagLmwGpzEejHlrhLXBT/rAnrXMnsVdE0yF8m29Kc2w18iX8225qV9mZn6qGCAZW70KpGzVsFnJ3hpf6z8WPqRujqJ6dl2yzrxWmQWVVSBPmppdsZGVoKBBNJISednEZSVsKXvE8S5WI1VsBGrBHiWTHWCnu8KuEsvVlpBipn8JJNgSbRBrwWbUgGXSvrOvsSpuyoZY67wPYf7f8baMzmaWldWqzkrWxi7O+n3eFA779UgXdnVqs3VQdT1hMhTEdTyuvk9rj5mixuOUbS81rBEyUNdR7ZGEpQ4i5sdWC2icWj4uPJPPjoPr1Vq1DjKrYXvN9bPd63uJ9OSEtInEWzs6kjn1Itj2wOzGs5m5aTK9GZafLeayy8OigC7WxDZYmIRBdw5cMQTTDzkzxWvcJ116XsCeF9NmJ0+LjzArfCvhO68WjgLYAvuUJz2ZnPzl1RPcXn3/4mRicMAN7SjrLKTTvOGs40gyyevTZTcOdu0zN4yKj0aImzL1wgi/EYUhcl23DkSx8TgV7eLLIqYb5QkiXimmqDwvN6SPXC+JHdo/83qdJ24qLq6+4nUFe3rjutw5ZqwxgkV6/sOTJ5/zdox5z+dXRq9QlFuUZMjOuw8l2dTk+rFzmEdf1wsaS2EuGGK/MQxJijTMcPcvGNitCSz4yzLyXQv+/ubfL3WteNkVF66kGUQowQ0hGh3eFFfncqK3KT5OvEyDzvH+PJ/P381eM8bICWNHn569enL8uW7HT344O2Xuxqk27N1aen7hbkdNo29R4oFMOCdZUQ9klPi3SsX7q7WULKvWbTns6exsQlTyvE6xSVljxJhj2J/Z9uTV2dzoE/fb53XW6jCarYtwFROHDR9e3YFi7frZhEKtQnEbzvK7P3nx9gnP+opV2pNvAXvL5FGH0B1h/R2aWnb8t4Ttnk0qqOWSqIyfWL+fvMCK5JjqkCffY5OEfdtI0m8JG4+GEdacbNSvzHZ/aLA3Se0r3mPFLQVYC3Pk5OTF9z+8wn++nwuo8bvhN1jhn7IRCmDGXNTPeYjFYgwh4vRxcgbJMDmTZtaJ9TeZXOEfQ/Zrzr7FmnPYnMYN4geoRTBs9x3vl09OSdYNfwe6k0e+BewsHDTGV1H6IGFLMjw5TeAime/CWj/ut1/Rbsiat5zkAWpsAluO7t3PQxRe7Qb7W5gjqylUrQO4Bf7DZE1gy9G9+7lt7wb76ts8tlMYmSJuy4nRAy1cZ0wTlXIeHxk7wZ58q2IKGSIRFLZqXezB7eqhwg6VI+Hk426wLy++0QWkrpfYQdWiemn7A4Sdhvcfv74Z777hk5uS8A/+mc1c93z1gJuxSow9wN4h7vf/uE3THgNkH9izB3TRGY3jLv5+GuWP7iyvpIEQbH66DC6W2r9px/1uFi5ti3OVIGyzRX4ECSCrWE03fyi/IVsoRsJRBr0wDO04jvI4dx2lX/8Bf6L4II2KXuBOtJ2L6VPe4WyRjUZKNeZ5YVRUFwns8BJBN1XDhvN9KG3NCfZZEYAuWqAoR3fDHXAt9Xl9HTCfl8r55qNlZZ6QXGSbZshuluwHz+XOXKfNnaaH5B8V65iQ3Lg4P2U5E0rOmqjMT9ld79c0g6wBU8sV90oqCDVaslWIhdnA3Gl0uAPMlL/uJBDSp4rVme7rDfdBQJTe1GRLHivOVSqlgOuzwz0Da5jYjuRZ5WeVcRsrbdE2jCLJT2mCG6FOlG3Ne3zypKyQMAKk0O0S8DGQLXvdoXLBrOUEIfJCNmplRef5jRWSWdWd9rjSJ3xaQObFDXVsLZITupVgr/XScYw66qPAfa81wb4WlosBwRfKLoEQUBK+1eWXiZYZNvlDgezGgtFOFHFhFMvekJIyQCeFSkh6ZYtqkhQAq6Xuio2ylsmDljbmvkimrZdcya/Mp4UoGJZiXTBR9IWkdeZmuUkM2lZYyrDlzqjLUPN9cup1PlnSUcYCmHwSej4tNuumzbO+HYz7BVn5ZFFJcqGw5JYtSJdLL5/dxyTDuGF7tRSwlGELCz7U8/Epv+iKyZDIPKerZIjlhGwaOq1Y2UV7LH2PKNsnWob2OuFD0HwS2rm0mkyofJlFlpxanbOOdioBXsDmEiybspiFYgKgCii6ocYpsQKDIuxRB21DjtIPjF62nydcH6cnt1JaqlCNUXjwnYRGZBbJbuXWLZsuFBG+bquy+9Qd1mKd084E2Hkyw06s+QRt/SBrq55UlHLkpU0c0src4R1ZU8lebUKgflCYR5F/2KrptizUPCU7kWFUqqmF9lj5NbzanvysFdgUn0puPxIYKxLfmXDiiE9Ct2glvjXatW4vhb0S9IjCHhkJtkh0Tu0Q7YJall/NPdfVz2AjbUM91ccrEkMvuXLKXx+7jhArdEdRFMPlXB6p5tiqT5W8EjYUUMq1kQVbxKS3w9vh9taTz3Vi5etG2T5q+BZOtO+v9eJ+Qu8Bs45JVVmM83tgIKT7Uwts5zpiJWx+cYfCHpkKWoTeelXBOew1+qQslKV4Ol0R9mraINtG0xz2oE/cT7DeWEsbqqrvmsxYgAIFmlSlRIhbTa68oQRTCVvMhpDqXt/wvaVVRVO5lAdwSADK85LQlgzCKrmeSxmenU60NbYk2qeacT/BbmUsbWU1EqbmyGvxPrkqr5N86YAU/0XkyuOB1QZbsPsdsTqysGKPPmZiuSOM0048OE1X63PoJbYv9AjYCxl2ClW0jxphH/VZWCP0v7a0p8lAWcnIbbCyaUF0ec0YiEMvT4BONy4KVV5eBVu4wZawC4Dg0VBo5+LYAuKECYNsYCJoGYs+MUIyvIK20az6uCFyopnvJ9h39fqVrbIYJKNHebORPhOybe7YiAknu8h2WmALg6sQHhAWCdK+igMysIUA3xaJRxQ+vrjygF3X26VFeDfSSPQSlYVgVG1pL9QF0+tlQ2igEHnpkcY+2wV/5fJNrGG7fFZVucRSOYqU912MpsVywRXhflDBMCQjXkyQGrTAHnPJlZr7UwplIitL2wsalpjSJ1RY6knr6YiKHtjiovhUNg1r2KIpytsjvBYZFD0R18Sqduk6R7EwGKhgrzZormeLSPaI7qJqflCqIjtugwVXxTR5e4sulxbrILIlSmoBkga0CrYovJw9wtui9L1zwYJxQpXNu4gU2l5ewCRkZrfCvv3YZ1E1PxCWYVJO/gYKPcrHsunCUMH9p5UPxWFCLjFSwb7g7/GAjY/wdj0tizESniWyxcRr/IhM+QmcMJaDhYYiMHeiq7J5pX2iO8HOB6MA1fUcNlMellI+lk3jyqL+VC9bmkWgCbZU/DZrHl1GKgfetkPENc8j65qE2QpfDRuPkfqwx1xyZS+lbdHNCbgr48qLUHs6VNkNQmUGX72NyEaoTcnC5r0s1mPlz1hGFgTvEfhNbSAN84YqVmRoWdki7Ctd2IInUVjaa24dgR2zxi+UlStdmbsWQlNNOfCCo89GboWoNiPawhmp2QR77TKTz6aqFp1ya5faYR9xE+yaKyte85fne0S0R6zA+DYj/FTYhMe9UD5TQcyihvstbFXAhcn5vb4Ye4TX9GWwF/baGswiYQlDFZjrCVu75JwgMpeZwBLYIQunKAyABgrrW5wAvmyw9TeXoEmNiAZNPT3AOaxV7K7fjj757VXB5iR7oA3buNQdIXmLOfdOuIcZREk4EIJVfCy7XAwmwvaaHCuvGXbKlzepitbyhbsq9YL6wQ7UsFNOZ+vDvl9q5/vxHSaboXGDkR8i1vTIO8qPS+WSUpfXxYNEM/zFwhZEuwzG8HM0VRWkKQL9YEMl7O3lfS/Y2nE/Ue8BtE05zRIg1+N+J5WeuY+UQXwBdvMOOZ7fDFsw8SjWTHkL+sK+bYDN12PYAbb+omo+fgfCxYaFgY3lEbfPhp9kCy6WXQVmBTXSArtFssV7X5gd/MDCRGj6wSY7S6lgzz/2GiB3WFTNyxJ+xFxuw9nEJVMC7OVDyMtZOeWwEHV2oxoBLbCFAEKx1wE3IDPmd0+dbap19qwvbP1iirzYWCbiInOO95q3Tizb84TycGXAR4DdFHkU7XEethC2zu0RPi7CVI3qO0AuVLBTPvVvB9j3ofYSZv5S/DCxLUGyuCOckAs11L7LSLSzG9bkbaI22EJENM8f4d0gpmoU6mdnq62RrTf52MuD/Pjxv/UX1nB6BNhRzCmNFVe8kEBk/XfGy1uHeh6koNtF2HwxXDIYbnhFx5QdEDzIAdBqzvVUBXvzzugXG9lpUTVnHVg2y5KUbRPy/pjy+IWcvW4Yrnz1BgxiopkIezXj5tYCtOCTHAZMLFGIjRSlqcleqOVPXqY64luY90uGLdRj0I/67RBkFeVjeWRJs5LcEVwxVjZYJEb9ImUXYEvUj7rzwoRGwr3ARrnFNCM7ge7FejXabrej7Xo9cvF/tpvNTZZldAmJuxht0pUObP3Jgx2CrJIVu2RRFo/sgvWwl0vVdIIinq2sFN0Wzy7DNZztEYd89+xF8yQw3apBepg253S9Dvnn9aoB9qk+7KPesIUckIFs1q1ZTTMwpQkx5ZQsqaStGPJjqwO2MET6EW9kc0aOYG46yrTuNQrzqmykapqNtchaS7JbR8hxf9iNkcq6+GdDRVaLS7aU0gpCschrCqPmOUj1TRvYfvPEpJCOaak2r9tChx0ezaJ8YDfssbbK3qkQxrapam2V/Zc1pPAJyZjy7PqMm10fcYXOm2AL/jyX/gCE/Z+FlH1gS4F8V7APLSfTg21oq+xdBshG56BGuW6YAXY4c17ONhlEjKilLooGtxqweeNwCVqS0hZy3kgmjBHCkhPLbIC9uTR6ZUTtUrS8RUsMahXYcDuExF6kzIjK8vHfhSiMWzOimowMZRZqwzIsckKXzYiSsrBAcq6GvfYmulk6Yj7Pu11qT6h3w+W2m1Xejtzxbc5ayq8NX31CJl5D9WI9FeyLxqLd8sImKYkVOLYHF5vRBTY8vERaQtaQfpaLylWfLNadC85tE6cp7tt6O8QVZspcaZK/G8fKBN4G2M2iHXhTybyRSoEBsjcDWcZtx/KyptJWVc2uzzUT0Ix+q3xbBRdEm47b4aD2+eOaaNsklQz7PHE0BZvffKi+v0VT7aesShmm3/ROXPE70NLYuxYJVQou8NImW7zkNOtIrNOaEdx0xk/qmztVGa47nNJRJMNXD4lUE15nTc3uZTBSVYown/6lsMVBuJAUUsc+7bqwlXrECpRX5cXatOvEIVUqA5r3WC1G6kRNd4ItLtOTcgzEvH86gK5V7rj19bBTRX/42ACXOam7ggkE8gIm1o6U0oY11kH2qO2ncCL5JUSK+T51wfcs2nUd5GalqRuatnhxkQn0WNeBSBXs9c+TzqUeMuv7nUuEKow2IX1MMeqrBQ2GPVb4yjkcimEvWjT13tOhDUwmTqUswz+bd65dNxS1dHYt7ZfKA6AgtzNJ9kHDWWCPtevyl5jy4NaYibLKULfeBjFbgNdQm8Dy0prxoJ21cbl7/TNpABTlVhqzmjexclsFTZh9sGzlBN4osloHbNHXhnb782RhX4cdx9QbTKjqvRi12z5WlHc58XavWSlFP4Cwenwq7gfTMDnQcemWb4v1RtYaCQ/NWqvsXkM5mdLwDsqtclthuz+r1ugZRwPSfmfsrbAfdITgmIhyJEbPUPPCnXNStEhVSWdgJwgKlXRSnfxLcr52EXK9yFfjtoAfeQKThq1TYB76uxd3ATJwE/cIyt82TnuVmssCrkyTYnL82rTYmlDBouPSA0euERVCNz33uBpR1435LIA737JLhM4hsgPHsqRoQWCjTDSFm/apwYqEbE0zx+1kMlEVkarfxsBPZv0KsS/KzWfyKQ3F6pT1NXOAHWZa185MagchrRe6QcwXXZ83fZ49Cp9voaELSeiJLCauSq4R0glSVJtr3BToX05O5t8/KXYBmp/cy6hPXvxANwk6OTlZrHq2cvOZfH+XTcMB5W6/C43Ff1uXLOy1SWk4ssUNXJRc0yyD3d+zdiHTNIswujOUkB1CgyAOYrLsw1OXCWzeNe9tuQkQ2QVoLgh3vuFEtbfHk7erh9TWGzfLXOi62fbvVmg63eaTu/ik7qbxVjbBfsttS3P85AVH+/7qBb9vzfGz1aF1NkOHNZHeFxNWrr9/Ih5woN0X9rOnIsvPbxnTe/JCYv356YF2T9gyy8/HP1Sj5P3JK/n9z28PMHvBVgg2ViSVaBsvjhXvH0S7H+y3n1Ww/zIpR8cfVO8fRLsf7CdKmK+oHrmfPznA/rVhvy1g39+/OMDeK+yneSOaGP/Nf54SW3ti3BuTyYu3x0+pVn/KvH+A3dPOfvbds+++++7ZM/zvs++KH/zqDIVhiG7w2/Td4r1neTuw7Au70SkdjQ7Merf/BS4TdtqSjuEtAAAAAElFTkSuQmCC';
-var _wv = { amount: 0, channels: [], ch: null, wallet: '', order: null, tab: 'app', opened: false, busy: false, txId: '' };
+var _wv = { amount: 0, channels: [], ch: null, wallet: '', order: null, tab: 'app', opened: false, busy: false, txId: '', lang: 'fr', toastT: 0 };
+var WV_T = {
+  fr: {
+    loading: 'Chargement', payAmount: 'Montant du paiement', walletPh: 'Veuillez entrer le numéro de portefeuille',
+    hint: 'Veuillez saisir correctement votre numéro de portefeuille de paiement à 10 chiffres pour que votre paiement arrive avec précision',
+    submit: 'Soumettre', secT: 'Paiement Sécurisé Protégé', secP: 'Vos informations de paiement sont entièrement cryptées. Veuillez vérifier attentivement les détails.',
+    toast: 'Veuillez saisir le numéro de portefeuille correct', close: 'CLOSE', proc: 'Traitement en cours...',
+    tabApp: 'Ouvrir l\'application', tabQr: 'Scanner le code QR', amount: 'Montant',
+    howApp: 'Comment ouvrir l\'application de paiement? Cliquez ici pour voir!', card: 'Cliquez sur le bouton ci-dessous pour ouvrir l\'application de paiement et compléter votre transaction.',
+    openPay: 'Ouvrir l\'application pour payer', after: 'Après avoir cliqué, vous serez redirigé vers l\'application de paiement',
+    warn: 'Si vous avez terminé le transfert, veuillez cliquer sur le bouton ci-dessous pour obtenir le résultat du paiement dans la plateforme', getRes: 'Obtenir le résultat du paiement',
+    howQr: 'Comment scanner? Cliquez ici pour voir', qrInfo: 'Si vous avez terminé le paiement, veuillez remplir le numéro de transaction et cliquer pour vérifier le résultat du paiement',
+    txLabel: 'Numéro de transaction', txPh: 'Entrez le numéro de transaction du relevé de transfert de l\'application', txHint: 'Veuillez entrer le numéro de transaction du relevé de transfert de votre application',
+    txReq: 'Le numéro de transaction est requis', checkRes: 'Vérifier le résultat du paiement', saveQr: 'Enregistrer le code QR', saveHint: 'Enregistrez le code QR sur votre appareil et scannez-le plus tard',
+    qrSaved: 'Code QR enregistré', pillTo: 'ENGLISH',
+    qrTitle: 'Comment scanner le code QR ?', qrSteps: ['Ouvrez votre application de paiement Wave', 'Touchez la fonction de scan de code QR', 'Pointez votre caméra vers le code QR ci-dessus', 'Confirmez le montant du paiement et terminez la transaction'], sheetClose: 'FERMER',
+    gTitle: 'Guide de configuration du téléphone Android (une seule fois)', gIntro: 'Si l\'application Wave ne s\'ouvre pas directement après avoir cliqué, veuillez suivre ces étapes :',
+    g1: 'Appuyez longuement sur l\'icône de l\'application Wave', g1b: '→ Touchez « Infos sur l\'appli » ou « Afficher les infos »', g2: 'Touchez « Ouvrir par défaut » ou « Applications par défaut »',
+    g3: 'Touchez « Ajouter un lien » ou « Liens pris en charge »', g3b: 'Ajoutez les domaines suivants dans les liens pris en charge :', g4: 'Retournez sur la page et cliquez de nouveau sur « Ouvrir l\'application »', g4b: 'L\'application Wave s\'ouvrira directement.',
+  },
+  en: {
+    loading: 'Loading', payAmount: 'Payment amount', walletPh: 'Please enter wallet number',
+    hint: 'Please enter your 10-digit payment wallet number correctly to help your payment arrive accurately',
+    submit: 'Submit', secT: 'Secure Payment Protected', secP: 'Your payment information is fully encrypted. Please confirm payment details carefully.',
+    toast: 'Please enter the correct wallet number', close: 'CLOSE', proc: 'Processing...',
+    tabApp: 'Open App', tabQr: 'Scan QR Code', amount: 'Amount',
+    howApp: 'How to jump app? Click here to view!', card: 'Click the button below to open the payment app and complete your transaction.',
+    openPay: 'Open App to Pay', after: 'After clicking, you will be redirected to the payment app',
+    warn: 'If you have completed the transfer, please click the button below to get the payment result in the platform', getRes: 'Get Payment Result',
+    howQr: 'How to scan? Click here to view', qrInfo: 'If you have completed the payment, please enter the transaction ID and click to check the payment result',
+    txLabel: 'Transaction ID', txPh: 'Enter transaction ID from app transfer record', txHint: 'Please enter the transaction ID from your app transfer record',
+    txReq: 'Transaction ID is required', checkRes: 'Check Payment Result', saveQr: 'Save QR Code', saveHint: 'Save the QR code to your device and scan it later',
+    qrSaved: 'QR code saved', pillTo: 'FRANÇAIS',
+    qrTitle: 'How to scan QR code?', qrSteps: ['Open your payment app Wave', 'Tap the scan QR code feature', 'Point your camera at the QR code above', 'Confirm the payment amount and complete the transaction'], sheetClose: 'CLOSE',
+    gTitle: 'Android Phone Setup Guide (One-time only)', gIntro: 'If the Wave App does not open directly after clicking, please follow these steps:',
+    g1: 'Long press the Wave App icon', g1b: '→ Tap "App info" or "View info"', g2: 'Tap "Open by default" or "Default apps"',
+    g3: 'Tap "Add link" or "Supported links"', g3b: 'Add the following domains in Supported links:', g4: 'Return to the page and click "Open App" again', g4b: 'The Wave App will open directly.',
+  },
+};
+function wvt(k){ return (WV_T[_wv.lang] || WV_T.fr)[k]; }
+try { const l = localStorage.getItem('wv_lang'); if (l === 'en' || l === 'fr') _wv.lang = l; } catch (_) {}
 function wvMoney(n){ return 'FCFA ' + (Number(n) || 0).toLocaleString('en-US'); }
 var WV_SVG = {
   x: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M2 2l10 10M12 2 2 12"/></svg>',
+  globe: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#1aaae4"/><path d="M5 8.2c1.5-2.2 4-3.6 6.2-3.2.9.2.9 1.3.1 1.8-.9.5-1.2 1.4-2 1.6-.9.2-1.6-.6-2.4-.3-.8.3-1 1.5-1.9.1zM12.6 11c1.2-.3 2.5.1 3.3 1 1 1.1.4 2.2-.4 3.3-.7.9-.5 2.2-1.5 2.9-.9.6-1.6-.4-1.6-1.3 0-1.1-.7-1.6-1-2.5-.4-1.3-.2-2.9 1.2-3.4zM17.6 6.6c1 .3 2 1.3 2.3 2.4.2.8-.7 1-1.2.5-.7-.6-1.7-1-1.9-1.9-.1-.8.2-1.2.8-1z" fill="#fff"/></svg>',
   open: '<svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5.5"/><path d="M15 3h6v6M10 14 21 3"/></svg>',
   qr: '<svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM19 14h2v2h-2zM14 19h2v2h-2zM19 19h2v2h-2z" fill="currentColor"/></svg>',
   check: '<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#fff"/><path d="M6.5 12.4l3.6 3.6 7.3-7.6" fill="none" stroke="#ccc" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   receipt: '<svg width="25" height="25" viewBox="0 0 24 24" fill="#666" aria-hidden="true"><path d="M5 2h14v20l-2.3-1.6L14.4 22 12 20.4 9.6 22l-2.3-1.6L5 22V2zm3 5v2h8V7H8zm0 4v2h8v-2H8zm0 4v2h8v-2H8z"/></svg>',
   download: '<svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10.5l5 5 5-5M4 20h16"/></svg>',
   ok: '<svg width="25" height="25" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#4caf50"/><path d="M6.8 12.4l3.5 3.5 7-7.4" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  shield: '<svg width="39" height="39" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 4.5 5.6v5.6c0 4.6 3.1 8.4 7.5 10.3 4.4-1.9 7.5-5.7 7.5-10.3V5.6L12 2.5z" fill="#fff" fill-opacity=".92"/><path d="M12 4.5 6.4 6.9v4.5c0 3.6 2.3 6.6 5.6 8.2 3.3-1.6 5.6-4.6 5.6-8.2V6.9L12 4.5z" fill="#2f7fe0"/><path d="M8.8 11.9l2.2 2.2 4.1-4.3" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  lock: '<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7.5a5 5 0 0 1 10 0V10" fill="none" stroke="#e0a23a" stroke-width="2.2"/><rect x="4.5" y="10" width="15" height="11" rx="2.2" fill="#f7c948"/><circle cx="12" cy="15.3" r="1.7" fill="#a86f12"/></svg>',
+  shield: '<svg width="19.8" height="19.8" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 4.5 5.6v5.6c0 4.6 3.1 8.4 7.5 10.3 4.4-1.9 7.5-5.7 7.5-10.3V5.6L12 2.5z" fill="#fff" fill-opacity=".92"/><path d="M12 4.5 6.4 6.9v4.5c0 3.6 2.3 6.6 5.6 8.2 3.3-1.6 5.6-4.6 5.6-8.2V6.9L12 4.5z" fill="#2f7fe0"/><path d="M8.8 11.9l2.2 2.2 4.1-4.3" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  lock: '<svg width="16.4" height="16.4" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7.5a5 5 0 0 1 10 0V10" fill="none" stroke="#e0a23a" stroke-width="2.2"/><rect x="4.5" y="10" width="15" height="11" rx="2.2" fill="#f7c948"/><circle cx="12" cy="15.3" r="1.7" fill="#a86f12"/></svg>',
+  warn: '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 1.8 20.5h20.4L12 3z" fill="#fff"/><path d="M12 9.4v5.2M12 16.6v1.7" stroke="#f98a00" stroke-width="2.3" stroke-linecap="round"/></svg>',
 };
 function wvRoot(){ return mpRoot(); }
 function wvMode(cls){ const el = wvRoot(); el.className = 'show wv ' + (cls || ''); document.body.classList.add('mp-open'); return el; }
-function wvCloseBtn(){ return '<button type="button" class="wv-x" aria-label="Fermer" onclick="mpClose()">' + WV_SVG.x + '</button>'; }
+function wvCloseBtn(){ return '<button type="button" class="wv-x" aria-label="Close" onclick="mpClose()">' + WV_SVG.x + '</button>'; }
+function wvPill(){ return '<button type="button" class="wv-lang wv-rip" onclick="wvLang()" aria-label="Language">' + WV_SVG.globe + '<span>' + wvt('pillTo') + '</span></button>'; }
+// ── loaders: a grey veil with the ring and its word, then three dots; the veil fades away when the page is ready ──
 function wvRing(){
   _mp.stage = 'wload';
-  wvMode('').innerHTML = wvCloseBtn() + '<div class="wv-veil"><div class="wv-ring"></div><div class="wv-ringtxt">Chargement</div></div>';
+  wvMode('').innerHTML = wvCloseBtn() + '<div class="wv-veil"><div class="wv-ring"></div><div class="wv-ringtxt">' + wvt('loading') + '</div></div>';
 }
 function wvDots(){
   const el = wvRoot();
@@ -6230,17 +6275,46 @@ function wvDots(){
   if (v) v.insertAdjacentHTML('afterbegin', '<div class="wv-dots"><i></i><i></i><i></i></div>');
   else el.insertAdjacentHTML('beforeend', '<div class="wv-veil"><div class="wv-dots"><i></i><i></i><i></i></div></div>');
 }
+function wvVeilOut(){
+  const v = wvRoot().querySelector('.wv-veil'); if (!v) return;
+  v.classList.add('out'); setTimeout(() => { if (v.parentNode) v.remove(); }, 380);
+}
+// ── processing card: the page goes dark, the card grows in; both fade out when the next page is up ──
 function wvProc(on){
   const el = wvRoot();
-  const old = el.querySelector('.wv-proc'); if (old) old.remove();
-  const veil = el.querySelector('.wv-pveil'); if (veil) veil.remove();
-  if (!on) return;
-  el.insertAdjacentHTML('beforeend', '<div class="wv-pveil"></div><div class="wv-proc" role="status"><div class="wv-pring"><svg width="56" height="56" viewBox="0 0 56 56" fill="none" stroke-width="4.3" aria-hidden="true"><path d="M7 30a21 21 0 0 0 21 21" stroke="#ff8000"/><path d="M36 8.3A21 21 0 0 0 11.6 19" stroke="#ee9b59"/><path d="M45.6 20.5a21 21 0 0 1 2.3 14" stroke="#00a550"/></svg></div><b>Traitement en cours...</b><div class="wv-pdots"><i></i><i></i><i></i></div></div>');
+  if (!on) {
+    el.querySelectorAll('.wv-proc,.wv-pveil').forEach(n => { n.classList.add('out'); setTimeout(() => { if (n.parentNode) n.remove(); }, 300); });
+    return;
+  }
+  el.querySelectorAll('.wv-proc,.wv-pveil').forEach(n => n.remove());
+  el.insertAdjacentHTML('beforeend', '<div class="wv-pveil"></div><div class="wv-proc" role="status"><div class="wv-pring"><svg width="56" height="56" viewBox="0 0 56 56" fill="none" stroke-width="4.3" aria-hidden="true"><path d="M7 30a21 21 0 0 0 21 21" stroke="#ff8000"/><path d="M36 8.3A21 21 0 0 0 11.6 19" stroke="#ee9b59"/><path d="M45.6 20.5a21 21 0 0 1 2.3 14" stroke="#00a550"/></svg></div><b>' + wvt('proc') + '</b><div class="wv-pdots"><i></i><i></i><i></i></div></div>');
 }
+// ── a warning bar over the wallet box: fades in, waits, then slides up off the top ──
+function wvToast(msg){
+  clearTimeout(_wv.toastT);
+  const el = wvRoot();
+  el.querySelectorAll('.wv-toast').forEach(n => n.remove());
+  el.insertAdjacentHTML('beforeend', '<div class="wv-toast" role="alert"><span class="wv-ti">' + WV_SVG.warn + '</span><span class="wv-tt">' + msg + '</span><button type="button" class="wv-tc wv-rip" onclick="wvToastOut()">' + wvt('close') + '</button></div>');
+  _wv.toastT = setTimeout(wvToastOut, 2000);
+}
+window.wvToastOut = function(){
+  clearTimeout(_wv.toastT);
+  const n = wvRoot().querySelector('.wv-toast'); if (!n || n.classList.contains('out')) return;
+  n.classList.add('out'); setTimeout(() => { if (n.parentNode) n.remove(); }, 420);
+};
+// material-style ripple on every button marked wv-rip
+document.addEventListener('pointerdown', function(ev){
+  const b = ev.target && ev.target.closest ? ev.target.closest('.wv-rip') : null;
+  if (!b || b.classList.contains('off')) return;
+  const r = b.getBoundingClientRect(), d = Math.max(r.width, r.height) * 2.2;
+  const s = document.createElement('span'); s.className = 'wv-rp';
+  s.style.cssText = 'width:' + d + 'px;height:' + d + 'px;left:' + (ev.clientX - r.left - d / 2) + 'px;top:' + (ev.clientY - r.top - d / 2) + 'px';
+  b.appendChild(s); setTimeout(() => { if (s.parentNode) s.remove(); }, 650);
+}, true);
 function wvWait(ms){ return new Promise(r => setTimeout(r, ms)); }
 // The first call: ring, then dots, then the pay page. The order is opened (30 minute clock) while the dots show.
 window.openWavePayFlow = async function(amount){
-  _wv = { amount: Number(amount) || 0, channels: [], ch: null, wallet: '', order: null, tab: 'app', opened: false, busy: false, txId: '' };
+  _wv = Object.assign(_wv, { amount: Number(amount) || 0, channels: [], ch: null, wallet: '', order: null, tab: 'app', opened: false, busy: false, txId: '' });
   _mp.amount = _wv.amount; _mp.order = null;
   history.pushState({ mp: 'wv' }, '', ''); _mp.pushed = 1;
   wvRing();
@@ -6257,7 +6331,7 @@ window.openWavePayFlow = async function(amount){
   const wait2 = 500 - (Date.now() - t1); if (wait2 > 0) await wvWait(wait2);
   if (_mp.stage !== 'wload') return;
   if (!o) { window.mpClose(); return; }
-  wvPayPage();
+  wvPayPage(true);
 };
 // Creates (or re-points) the one open order. Returns the server answer, or null after showing why not.
 async function wvOrder(extra){
@@ -6268,20 +6342,22 @@ async function wvOrder(extra){
   _wv.order = r; _mp.order = r;
   return r;
 }
-function wvPayPage(){
+function wvPayPage(fromLoader){
   _mp.stage = 'wpay'; mpStopTimer();
   const o = _wv.order; if (!o) return window.mpClose();
+  const keep = fromLoader ? wvRoot().querySelector('.wv-veil') : null;
   const el = wvMode('');
-  const rows = _wv.channels.map((c, i) => '<button type="button" class="wv-row' + (c.id === _wv.ch.id ? ' on' : '') + '" onclick="wvSelect(' + i + ')" data-no-i18n>' + esc(c.name) + '<span class="wv-chk"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="#e99b59" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.8 8.8l3.3 3.2L13.2 4.4"/></svg></span></button>').join('');
+  const rows = _wv.channels.map((c, i) => '<button type="button" class="wv-row wv-rip' + (c.id === _wv.ch.id ? ' on' : '') + '" onclick="wvSelect(' + i + ')" data-no-i18n>' + esc(c.name) + '<span class="wv-chk"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="#e99b59" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.8 8.8l3.3 3.2L13.2 4.4"/></svg></span></button>').join('');
   const has = _wv.wallet ? ' has' : '';
-  el.innerHTML = wvCloseBtn() + '<div class="wv-card"><div class="wv-head"><div class="wv-timer" id="wvTimer">30:00</div></div>'
-    + '<div class="wv-amt"><span>Montant du paiement</span><b data-no-i18n>' + esc(wvMoney(_wv.amount)) + '</b></div>'
+  el.innerHTML = wvCloseBtn() + '<div class="wv-card' + (fromLoader ? ' wv-in' : '') + '"><div class="wv-head"><div class="wv-timer" id="wvTimer">30:00</div>' + wvPill() + '</div>'
+    + '<div class="wv-amt"><span>' + wvt('payAmount') + '</span><b data-no-i18n>' + esc(wvMoney(_wv.amount)) + '</b></div>'
     + '<img class="wv-logo" alt="" src="' + esc(_wv.ch.logo || WV_IMG_ICON) + '">'
     + '<div class="wv-rows">' + rows + '</div>'
-    + '<div class="wv-field' + has + '" id="wvField"><span class="wv-cc" data-no-i18n>+' + esc((REGION && REGION.dialCode) || '225') + '</span><div class="wv-fin"><label for="wvWallet">Veuillez entrer le numéro de portefeuille</label><input id="wvWallet" type="tel" inputmode="numeric" autocomplete="off" value="' + esc(_wv.wallet) + '" oninput="wvWalletIn(this)" onfocus="wvFocus(1)" onblur="wvFocus(0)"></div></div>'
-    + '<p class="wv-hint">Veuillez saisir correctement votre numéro de portefeuille de paiement à 10 chiffres pour que votre paiement arrive avec précision</p>'
-    + '<button type="button" class="wv-go" onclick="wvSubmit()">Soumettre</button>'
-    + '<div class="wv-sec"><span class="wv-shield">' + WV_SVG.shield + '</span><b>' + WV_SVG.lock + 'Paiement Sécurisé Protégé</b><p>Vos informations de paiement sont entièrement cryptées. Veuillez vérifier attentivement les détails.</p></div></div>';
+    + '<div class="wv-field' + has + '" id="wvField"><span class="wv-cc" data-no-i18n>+' + esc((REGION && REGION.dialCode) || '225') + '</span><div class="wv-fin"><label for="wvWallet">' + wvt('walletPh') + '</label><input id="wvWallet" type="tel" inputmode="numeric" autocomplete="off" value="' + esc(_wv.wallet) + '" oninput="wvWalletIn(this)" onfocus="wvFocus(1)" onblur="wvFocus(0)"></div></div>'
+    + '<p class="wv-hint">' + wvt('hint') + '</p>'
+    + '<button type="button" class="wv-go wv-rip" onclick="wvSubmit()">' + wvt('submit') + '</button>'
+    + '<div class="wv-sec"><span class="wv-shield">' + WV_SVG.shield + '</span><b>' + WV_SVG.lock + wvt('secT') + '</b><p>' + wvt('secP') + '</p></div></div>';
+  if (keep) { el.appendChild(keep); wvVeilOut(); }
   mpTickWv(); _mp.timer = setInterval(mpTickWv, 1000);
 }
 function mpTickWv(){
@@ -6290,11 +6366,23 @@ function mpTickWv(){
   const e = $('wvTimer'); if (e) e.textContent = String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0');
   if (left <= 0) { mpStopTimer(); mpToast('Cette commande a expiré. Veuillez recommencer.'); setTimeout(() => window.mpClose(), 900); }
 }
+// English <-> French: the page text dips and comes back in the other language; what was typed stays.
+window.wvLang = function(){
+  _wv.lang = _wv.lang === 'fr' ? 'en' : 'fr';
+  try { localStorage.setItem('wv_lang', _wv.lang); } catch (_) {}
+  const box = wvRoot().querySelector('.wv-card,.wv-pg');
+  if (box) box.classList.add('wv-dip');
+  setTimeout(() => {
+    wvSheetClose(true);
+    if (_mp.stage === 'wpay') { const t = wvRoot().querySelector('.wv-toast'); wvPayPage(false); if (t) wvToastOut(); const b2 = wvRoot().querySelector('.wv-card'); if (b2) b2.classList.add('wv-in2'); }
+    else if (_mp.stage === 'wres') { wvResultPage(false); const b2 = wvRoot().querySelector('.wv-pg'); if (b2) b2.classList.add('wv-in2'); }
+  }, 130);
+};
 window.wvSelect = async function(i){
   const c = _wv.channels[i]; if (!c || c.id === _wv.ch.id || _wv.busy) return;
   _wv.ch = c; _wv.busy = true;
-  const o = await wvOrder(); _wv.busy = false;
-  if (o) wvPayPage(); else wvPayPage();
+  await wvOrder(); _wv.busy = false;
+  wvPayPage(false);
 };
 window.wvWalletIn = function(inp){
   const d = String(inp.value).replace(/\D/g, '').slice(0, 10);
@@ -6309,81 +6397,93 @@ window.wvFocus = function(on){
 window.wvSubmit = async function(){
   if (_wv.busy) return;
   const need = (REGION && REGION.localLength) || 10;
-  if (_wv.wallet.length !== need) { const f = $('wvField'); if (f) f.classList.add('err'); const i = $('wvWallet'); if (i) i.focus(); return; }
+  if (_wv.wallet.length !== need) { wvToast(wvt('toast')); return; }
   _wv.busy = true; wvProc(true);
   const t0 = Date.now();
   const o = await wvOrder({ wallet: _wv.wallet });
-  const wait = 900 - (Date.now() - t0); if (wait > 0) await wvWait(wait);
-  _wv.busy = false; wvProc(false);
-  if (!o || (_mp.stage !== 'wpay')) return;
+  const wait = 1500 - (Date.now() - t0); if (wait > 0) await wvWait(wait);
+  _wv.busy = false;
+  if (!o || (_mp.stage !== 'wpay')) { wvProc(false); return; }
   _wv.tab = 'app'; _wv.opened = false;
   history.pushState({ mp: 'wres' }, '', ''); _mp.pushed++;
-  wvResultPage();
+  wvResultPage(true);
+  wvProc(false);
 };
-function wvResultPage(){
+function wvTabsHtml(){
+  return '<div class="wv-tabs" id="wvTabs"><button type="button" class="wv-tab' + (_wv.tab === 'app' ? ' on' : '') + '" onclick="wvTab(\'app\')">' + WV_SVG.open + '<span>' + wvt('tabApp') + '</span></button>'
+    + '<button type="button" class="wv-tab' + (_wv.tab === 'qr' ? ' on' : '') + '" onclick="wvTab(\'qr\')">' + WV_SVG.qr + '<span>' + wvt('tabQr') + '</span></button></div>';
+}
+function wvBodyHtml(){
+  const o = _wv.order;
+  if (_wv.tab === 'app') {
+    return '<div class="wv-info" onclick="wvSheet(\'app\')"><span class="wv-i">i</span><span>' + wvt('howApp') + '</span></div>'
+      + '<div class="wv-oc"><img alt="" src="' + WV_IMG_PAYWITH + '"><p>' + wvt('card') + '</p></div>'
+      + '<button type="button" class="wv-pay wv-rip" onclick="wvOpenApp()">' + WV_SVG.open + '<span>' + wvt('openPay') + '</span></button>'
+      + '<p class="wv-after">' + wvt('after') + '</p>'
+      + '<div class="wv-warn"><span class="wv-i">i</span><span>' + wvt('warn') + '</span></div>'
+      + '<button type="button" class="wv-res wv-rip' + (_wv.opened ? ' on' : ' off') + '" id="wvRes" onclick="wvGetResult()">' + WV_SVG.check + '<span>' + wvt('getRes') + '</span></button>';
+  }
+  const tx = _wv.txId;
+  return '<div class="wv-info" onclick="wvSheet(\'qr\')"><span class="wv-i">i</span><span>' + wvt('howQr') + '</span></div>'
+    + '<img class="wv-qr" alt="" src="' + esc(o.qrImage) + '">'
+    + '<div class="wv-info wv-info2" style="cursor:default"><span class="wv-i">i</span><span>' + wvt('qrInfo') + '</span></div>'
+    + '<div class="wv-tx' + (tx ? ' has' : '') + '" id="wvTx">' + WV_SVG.receipt + '<div class="wv-fin"><label for="wvTxIn">' + wvt('txLabel') + '</label><input id="wvTxIn" type="text" autocomplete="off" maxlength="60" value="' + esc(tx) + '" oninput="wvTxIn(this)" onfocus="wvTxFocus(1)" onblur="wvTxFocus(0)"></div><span class="wv-bang">!</span></div>'
+    + '<div id="wvTxMsg">' + wvTxHint() + '</div>'
+    + '<button type="button" class="wv-res wv-rip' + (tx.trim() ? ' on' : ' off') + '" id="wvRes" onclick="wvCheckTx()">' + WV_SVG.check + '<span>' + wvt('checkRes') + '</span></button>'
+    + '<button type="button" class="wv-save wv-rip" onclick="wvSaveQr()">' + WV_SVG.download + '<span>' + wvt('saveQr') + '</span></button>'
+    + '<p class="wv-savet">' + wvt('saveHint') + '</p>';
+}
+function wvTxHint(){ return '<div class="wv-txh"><span class="wv-i">i</span><span>' + wvt('txHint') + '</span></div>'; }
+function wvAmtHtml(){ return '<div class="wv-ar"><span>' + wvt('amount') + '</span><b data-no-i18n>' + esc(String(Math.round(_wv.amount))) + '<small>FCFA</small></b></div>'; }
+function wvResultPage(enter){
   _mp.stage = 'wres';
   const o = _wv.order; if (!o) return window.mpClose();
-  const el = wvMode('wvg');
   const hasQr = !!o.qrImage, hasLink = !!o.payLink;
   if (_wv.tab === 'qr' && !hasQr) _wv.tab = 'app';
   if (_wv.tab === 'app' && !hasLink && hasQr) _wv.tab = 'qr';
-  const tabs = '<div class="wv-tabs"><button type="button" class="wv-tab' + (_wv.tab === 'app' ? ' on' : '') + '" onclick="wvTab(\'app\')">' + WV_SVG.open + '<span>Ouvrir l\'application</span></button>'
-    + '<button type="button" class="wv-tab' + (_wv.tab === 'qr' ? ' on' : '') + '" onclick="wvTab(\'qr\')">' + WV_SVG.qr + '<span>Scanner le code QR</span></button></div>';
-  const amt = '<div class="wv-ar"><span>Montant</span><b data-no-i18n>' + esc(String(Math.round(_wv.amount))) + '<small>FCFA</small></b></div>';
-  let body;
-  if (_wv.tab === 'app') {
-    body = amt
-      + '<div class="wv-info" onclick="wvSheet(\'app\')"><span class="wv-i">i</span><span>Comment ouvrir l\'application de paiement? Cliquez ici pour voir!</span></div>'
-      + '<div class="wv-oc"><img alt="" src="' + WV_IMG_PAYWITH + '"><p>Cliquez sur le bouton ci-dessous pour ouvrir l\'application de paiement et compléter votre transaction.</p></div>'
-      + '<button type="button" class="wv-pay" onclick="wvOpenApp()">' + WV_SVG.open + '<span>Ouvrir l\'application pour payer</span></button>'
-      + '<p class="wv-after">Après avoir cliqué, vous serez redirigé vers l\'application de paiement</p>'
-      + '<div class="wv-warn"><span class="wv-i">i</span><span>Si vous avez terminé le transfert, veuillez cliquer sur le bouton ci-dessous pour obtenir le résultat du paiement dans la plateforme</span></div>'
-      + '<button type="button" class="wv-res' + (_wv.opened ? ' on' : '') + '" id="wvRes" onclick="wvGetResult()">' + WV_SVG.check + '<span>Obtenir le résultat du paiement</span></button>';
-  } else {
-    body = amt
-      + '<div class="wv-info" onclick="wvSheet(\'qr\')"><span class="wv-i">i</span><span>Comment scanner? Cliquez ici pour voir</span></div>'
-      + '<img class="wv-qr" alt="" src="' + esc(o.qrImage) + '">'
-      + '<div class="wv-info wv-info2" style="cursor:default"><span class="wv-i">i</span><span>Si vous avez effectué le paiement, veuillez saisir l\'ID de transaction et cliquer pour vérifier le résultat du paiement</span></div>'
-      + '<div class="wv-tx' + (_wv.txId ? ' has' : '') + '" id="wvTx">' + WV_SVG.receipt + '<div class="wv-fin"><label for="wvTxIn">ID de transaction</label><input id="wvTxIn" type="text" autocomplete="off" maxlength="60" value="' + esc(_wv.txId) + '" placeholder="" oninput="wvTxIn(this)" onfocus="wvTxFocus(1)" onblur="wvTxFocus(0)"></div><span class="wv-bang">!</span></div>'
-      + '<div id="wvTxMsg"><div class="wv-txh"><span class="wv-i">i</span><span>Veuillez saisir l\'ID de transaction figurant dans l\'historique de transfert de votre application</span></div></div>'
-      + '<button type="button" class="wv-res' + (_wv.txId.trim() ? ' on' : '') + '" id="wvRes" onclick="wvCheckTx()">' + WV_SVG.check + '<span>Vérifier le résultat du paiement</span></button>'
-      + '<button type="button" class="wv-save" onclick="wvSaveQr()">' + WV_SVG.download + '<span>Enregistrer le code QR</span></button>'
-      + '<p class="wv-savet">Enregistrez le code QR sur votre appareil pour le scanner plus tard</p>';
-  }
-  el.innerHTML = wvCloseBtn() + '<div class="wv-pg">' + tabs + body + '</div>';
+  const el = wvMode('wvg');
+  el.innerHTML = wvCloseBtn() + '<div class="wv-pg' + (enter ? ' wv-in' : '') + '"><div class="wv-lrow">' + wvPill() + '</div>' + wvTabsHtml() + wvAmtHtml() + '<div class="wv-body" id="wvBody">' + wvBodyHtml() + '</div></div>';
 }
-window.wvTab = function(t){ if (_wv.tab === t) return; _wv.tab = t; wvResultPage(); };
+// A tab: the buttons change at once, the part below the amount fades out, is replaced and fades back in.
+window.wvTab = function(t){
+  if (_wv.tab === t || _wv.busy) return;
+  _wv.tab = t;
+  const tabs = $('wvTabs'), body = $('wvBody');
+  if (!tabs || !body) return wvResultPage(false);
+  tabs.outerHTML = wvTabsHtml();
+  const nt = $('wvTabs'); if (nt) { nt.classList.add('wv-tp'); setTimeout(() => nt.classList.remove('wv-tp'), 320); }
+  body.classList.add('wv-fo');
+  setTimeout(() => { const b = $('wvBody'); if (!b) return; b.innerHTML = wvBodyHtml(); b.classList.remove('wv-fo'); b.classList.add('wv-fi'); setTimeout(() => b.classList.remove('wv-fi'), 340); }, 140);
+};
 window.wvOpenApp = function(){
   const o = _wv.order; if (!o || !o.payLink) return;
   _wv.opened = true;
-  const b = $('wvRes'); if (b) b.classList.add('on');
+  const b = $('wvRes'); if (b) { b.classList.add('on'); b.classList.remove('off'); }
   try { window.open(o.payLink, '_blank', 'noopener'); } catch (_) { try { location.href = o.payLink; } catch (__) {} }
 };
 window.wvTxIn = function(inp){
   _wv.txId = String(inp.value).replace(/[^\w\-]/g, '').slice(0, 60);
   if (inp.value !== _wv.txId) inp.value = _wv.txId;
   const f = $('wvTx'); if (f) { f.classList.toggle('has', !!_wv.txId); f.classList.remove('err'); }
-  const b = $('wvRes'); if (b) b.classList.toggle('on', !!_wv.txId.trim());
-  const m = $('wvTxMsg'); if (m && !m.firstChild) m.innerHTML = WV_TXHINT;
+  const b = $('wvRes'); if (b) { const on = !!_wv.txId.trim(); b.classList.toggle('on', on); b.classList.toggle('off', !on); }
+  const m = $('wvTxMsg'); if (m && !m.firstChild) m.innerHTML = wvTxHint();
 };
-var WV_TXHINT = '<div class="wv-txh"><span class="wv-i">i</span><span>Veuillez saisir l\'ID de transaction figurant dans l\'historique de transfert de votre application</span></div>';
 window.wvTxFocus = function(on){
   const f = $('wvTx'); if (f) f.classList.toggle('f', !!on);
-  if (on) { const i = $('wvTxIn'); if (i) i.placeholder = 'Saisissez l\'ID de transaction du relevé de transfert de l\'application'; }
-  else { const i = $('wvTxIn'); if (i) i.placeholder = ''; }
+  const i = $('wvTxIn'); if (i) i.placeholder = on ? wvt('txPh') : '';
 };
 window.wvSaveQr = function(){
   const o = _wv.order; if (!o || !o.qrImage) return;
   const a = document.createElement('a'); a.href = o.qrImage; a.download = 'wave-qr.png';
   document.body.appendChild(a); a.click(); a.remove();
-  mpToast('Code QR enregistré');
+  mpToast(wvt('qrSaved'));
 };
 async function wvSend(body){
   if (_wv.busy) return;
   _wv.busy = true; wvProc(true);
   const t0 = Date.now();
   const r = await post('/deposit/manual/submit', Object.assign({ depositId: _wv.order.depositId }, body));
-  const wait = 900 - (Date.now() - t0); if (wait > 0) await wvWait(wait);
+  const wait = 1500 - (Date.now() - t0); if (wait > 0) await wvWait(wait);
   _wv.busy = false; wvProc(false);
   if (!r || r.stale) return;
   if (r.status !== 'success') return mpToast(r.message || 'Impossible d\'envoyer votre recharge. Veuillez réessayer.');
@@ -6400,20 +6500,33 @@ window.wvCheckTx = function(){
   const id = _wv.txId.trim();
   if (!id) {
     const f = $('wvTx'); if (f) f.classList.add('err');
-    const m = $('wvTxMsg'); if (m) m.innerHTML = '<div class="wv-txe">L\'ID de transaction est requis</div>';
+    const m = $('wvTxMsg'); if (m) m.innerHTML = '<div class="wv-txe">' + wvt('txReq') + '</div>';
     return;
   }
   wvSend({ txId: id, wallet: _wv.wallet });
 };
+// ── bottom sheets: slide up over a darkening page ──
 window.wvSheet = function(kind){
-  wvSheetClose();
-  const steps = kind === 'qr'
-    ? ['Ouvrez votre application de paiement Wave', 'Touchez la fonction de scan de code QR', 'Pointez votre caméra vers le code QR ci-dessus', 'Confirmez le montant du paiement et terminez la transaction']
-    : ['Touchez le bouton « Ouvrir l\'application pour payer »', 'L\'application Wave s\'ouvre avec le paiement prêt', 'Confirmez le montant et terminez la transaction', 'Revenez ici et touchez « Obtenir le résultat du paiement »'];
-  const title = kind === 'qr' ? 'Comment scanner le code QR ?' : 'Comment ouvrir l\'application de paiement ?';
-  wvRoot().insertAdjacentHTML('beforeend', '<div class="wv-sbg" id="wvSbg" onclick="wvSheetClose()"></div><div class="wv-sheet" id="wvSheet"><h3>' + title + '</h3><div class="wv-sl">' + steps.map(s => '<div>' + WV_SVG.ok + '<span>' + s + '</span></div>').join('') + '</div><div class="wv-sf"><button type="button" class="wv-sc" onclick="wvSheetClose()">Fermer</button></div></div>');
+  wvSheetClose(true);
+  let inner;
+  if (kind === 'qr') {
+    inner = '<h3>' + wvt('qrTitle') + '</h3><div class="wv-sl">' + wvt('qrSteps').map(s => '<div>' + WV_SVG.ok + '<span>' + s + '</span></div>').join('') + '</div>';
+  } else {
+    inner = '<h3 class="wv-gt">' + wvt('gTitle') + '</h3><p class="wv-gi">' + wvt('gIntro') + '</p><div class="wv-gb">'
+      + '<div class="wv-gs"><i>1</i><div><b>' + wvt('g1') + '</b><em>' + wvt('g1b') + '</em></div></div>'
+      + '<div class="wv-gs"><i>2</i><div><b>' + wvt('g2') + '</b></div></div>'
+      + '<div class="wv-gs"><i>3</i><div><b>' + wvt('g3') + '</b><span>' + wvt('g3b') + '</span><u><s>pay.wave.com</s><s>www.wave.com</s><s>*.confirm.wave.com</s><s>promo.wave.com</s></u></div></div>'
+      + '<div class="wv-gs"><i>4</i><div><b>' + wvt('g4') + '</b><span>' + wvt('g4b') + '</span></div></div></div>';
+  }
+  wvRoot().insertAdjacentHTML('beforeend', '<div class="wv-sbg" id="wvSbg" onclick="wvSheetClose()"></div><div class="wv-sheet' + (kind === 'qr' ? '' : ' wv-big') + '" id="wvSheet">' + inner + '<div class="wv-sf"><button type="button" class="wv-sc wv-rip" onclick="wvSheetClose()">' + wvt('sheetClose') + '</button></div></div>');
 };
-window.wvSheetClose = function(){ ['wvSbg', 'wvSheet'].forEach(id => { const e = $(id); if (e) e.remove(); }); };
+window.wvSheetClose = function(now){
+  ['wvSbg', 'wvSheet'].forEach(id => {
+    const e = $(id); if (!e) return;
+    if (now === true) return e.remove();
+    e.classList.add('out'); setTimeout(() => { if (e.parentNode) e.remove(); }, 320);
+  });
+};
 // Owner: "callback speed is low, so try to make the system solid and faster
 // validation on payments."
 //

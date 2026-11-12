@@ -991,7 +991,7 @@ body.mp-open{overflow:hidden;}
 .mpf-submit.busy{opacity:.6;}
 .mpf-note{margin-top:11.4px;padding:12px 11px;border-radius:8px;background:#f9ecec;color:#c45f5f;font-size:12.2px;line-height:14.2px;}
 /* ── WAVE PAYMENT PAGES (Côte d'Ivoire) ──
-   Built to the owner's screenshots of the payment pages: 411 css px wide, 2.625 device px per css px (1080 px screenshots).
+   Built to the owner's screenshots and screen recordings of the payment pages: 411 css px wide, 2.625 device px per css px (1080 px screenshots).
    Every size below is a measured screenshot value / 2.625 (font sizes are solved from the measured text widths). Roboto. */
 #mpFlow.wv{background:#ee9b59;color:#333;font-family:Roboto,system-ui,-apple-system,'Segoe UI',Arial,sans-serif;}
 #mpFlow.wv.wvg{background:linear-gradient(165deg,#ee9b59 0%,#1286ad 100%);background-attachment:fixed;}
@@ -1011,8 +1011,8 @@ body.mp-open{overflow:hidden;}
 @keyframes wvdot{0%,100%{transform:scale(1.25);}50%{transform:scale(.7);}}
 /* pay page */
 .wv-card{margin:80.8px 10.5px 25px;background:#fff;border-radius:12px;padding:8.2px 17.7px 25.9px;box-shadow:0 10px 30px rgba(120,60,0,.28);}
-.wv-head{height:39.5px;display:flex;justify-content:center;align-items:center;}
-.wv-timer{height:38.5px;min-width:66.3px;padding:0 9px;border-radius:7px;background:#fff;box-shadow:0 2px 9px rgba(0,0,0,.16);display:flex;align-items:center;justify-content:center;font-size:19.2px;line-height:1;font-weight:700;color:#e99b59;font-variant-numeric:tabular-nums;}
+.wv-head{height:39.5px;display:flex;justify-content:space-between;align-items:center;}
+.wv-timer{margin-left:88.4px;height:38.5px;min-width:66.3px;padding:0 9px;border-radius:7px;background:#fff;box-shadow:0 2px 9px rgba(0,0,0,.16);display:flex;align-items:center;justify-content:center;font-size:19.2px;line-height:1;font-weight:700;color:#e99b59;font-variant-numeric:tabular-nums;}
 .wv-amt{margin-top:21.6px;height:62.5px;border-radius:12px;background:#f8f9fb;display:flex;align-items:center;justify-content:space-between;padding:0 16px 0 17.9px;}
 .wv-amt span{font-size:18.2px;font-weight:700;color:#666;}
 .wv-amt b{height:37px;padding:0 8.9px;border:1px solid #e6e8ec;border-radius:7px;background:#f8f9fb;display:flex;align-items:center;font-size:15px;font-weight:700;color:#e99b59;}
@@ -1035,14 +1035,16 @@ body.mp-open{overflow:hidden;}
 .wv-hint{margin:14.5px 0 0;font-size:14.9px;line-height:22.5px;font-weight:700;color:#ee6a52;}
 .wv-go{display:block;width:100%;height:44.2px;margin-top:25px;border:0;border-radius:2px;background:#ec9b59;color:#fff;font:700 16px/1 Roboto,system-ui,sans-serif;box-shadow:0 2px 5px rgba(0,0,0,.25);cursor:pointer;}
 .wv-go:active{filter:brightness(.95);}
-.wv-sec{margin-top:15.6px;height:77.3px;border-radius:14px;background:linear-gradient(90deg,#2594ed 0%,#1d86e2 55%,#1a7bd6 100%);color:#fff;padding:9px 3px 0 49px;position:relative;box-shadow:0 4px 12px rgba(21,101,192,.25);}
-.wv-sec .wv-shield{position:absolute;left:14px;top:25px;}
-.wv-sec b{display:block;font-size:16.2px;line-height:22px;font-weight:700;}
-.wv-sec b svg{vertical-align:-5px;margin-right:2px;}
-.wv-sec p{margin:5px 0 0 0;font-size:14.2px;line-height:16px;color:#e8f3ff;}
+.wv-sec{margin-top:15.6px;height:77.3px;border-radius:14px;background:linear-gradient(90deg,#2594ed 0%,#1d86e2 55%,#1a7bd6 100%);color:#fff;padding:12.4px 40px 0 49.5px;position:relative;box-shadow:0 4px 12px rgba(21,101,192,.25);}
+.wv-sec .wv-shield{position:absolute;left:18.8px;top:28.4px;}
+.wv-sec b{display:block;font-size:13.1px;line-height:17px;font-weight:700;}
+.wv-sec b svg{vertical-align:-4px;margin-right:6.5px;}
+.wv-sec p{margin:6px 0 0 0;font-size:11.8px;line-height:16px;color:#e8f3ff;}
 /* processing dialog */
-.wv-pveil{position:fixed;inset:0;z-index:6;background:#18100a;}
-.wv-proc{position:fixed;left:50%;top:50%;z-index:7;width:256.4px;height:226px;margin:-113px 0 0 -128.2px;border-radius:24px;background:#f2f2f2;box-shadow:0 0 70px 36px rgba(40,40,44,.38);display:flex;flex-direction:column;align-items:center;}
+.wv-pveil{position:fixed;inset:0;z-index:6;background:#18100a;animation:wvfi .32s ease-out both;}
+.wv-pveil.out{animation:wvfo .28s ease-in both;}
+.wv-proc{position:fixed;left:50%;top:50%;z-index:7;width:256.4px;height:226px;margin:-113px 0 0 -128.2px;border-radius:24px;background:#f2f2f2;box-shadow:0 0 70px 36px rgba(40,40,44,.38);display:flex;flex-direction:column;align-items:center;animation:wvpop .32s cubic-bezier(.2,.8,.25,1) both;}
+.wv-proc.out{animation:wvpopo .26s ease-in both;}
 .wv-pring{position:relative;width:56px;height:56px;margin-top:50px;animation:wvspin 1.1s linear infinite;}
 .wv-pring svg{display:block;}
 .wv-proc b{margin-top:35px;font-size:20px;line-height:24px;font-weight:700;color:#333;}
@@ -1053,7 +1055,8 @@ body.mp-open{overflow:hidden;}
 .wv-pdots i:nth-child(3){background:#00a550;animation-delay:.4s;}
 @keyframes wvpd{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(.7);opacity:.55;}}
 /* Open App / Scan QR page */
-.wv-pg{margin:16.8px 16.8px 31px;background:#fff;border-radius:12px;padding:21.7px 21.7px 43px;box-shadow:0 6px 26px rgba(0,0,0,.2);}
+.wv-pg{margin:16.8px 16.8px 31px;background:#fff;border-radius:12px;padding:21.4px 21.7px 43px;box-shadow:0 6px 26px rgba(0,0,0,.2);}
+.wv-lrow{display:flex;justify-content:flex-end;height:39.6px;margin-bottom:4.3px;}
 .wv-tabs{display:flex;height:62px;padding:0;border-radius:12px;background:#f5f5f5;}
 .wv-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:9px;border:0;border-radius:12px;background:none;color:#666;font:500 16.5px/19px Roboto,system-ui,sans-serif;text-align:left;cursor:pointer;padding:0 8px;}
 .wv-tab.on{background:#ee9b59;color:#fff;font-weight:700;box-shadow:0 3px 12px rgba(0,170,255,.28);}
@@ -1102,6 +1105,56 @@ body.mp-open{overflow:hidden;}
 .wv-sl svg{flex:0 0 auto;width:19px;height:19px;margin-top:3px;}
 .wv-sf{border-top:1px solid #e0e0e0;padding:12px 21px 0;}
 .wv-sc{display:block;width:100%;height:48.4px;border:0;border-radius:2px;background:#ee9b59;color:#fff;font:700 16.5px/1 Roboto,system-ui,sans-serif;text-transform:uppercase;box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer;}
+/* language pill, as in the screenshots: globe, ENGLISH / FRANÇAIS, white, soft shadow */
+.wv-lang{position:relative;overflow:hidden;display:flex;align-items:center;gap:2.5px;height:39.6px;padding:0 12px 0 8px;border:0;border-radius:20px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.14);color:#ee9b59;font:700 12.7px/1 Roboto,system-ui,sans-serif;letter-spacing:.45px;cursor:pointer;}
+.wv-lang svg{width:18.5px;height:18.5px;flex:0 0 auto;margin-right:2px;}
+/* animations seen in the recordings */
+@keyframes wvfi{from{opacity:0;}to{opacity:1;}}
+@keyframes wvfo{to{opacity:0;}}
+@keyframes wvpop{from{opacity:0;transform:scale(.82);}to{opacity:1;transform:scale(1);}}
+@keyframes wvpopo{to{opacity:0;transform:scale(.9);}}
+@keyframes wvtp{0%{opacity:.4;}100%{opacity:1;}}
+.wv-veil.out{animation:wvfo .36s ease-out both;pointer-events:none;}
+.wv-in{animation:wvfi .3s ease-out both;}
+.wv-in2{animation:wvfi .22s ease-out both;}
+.wv-dip{opacity:.25;transition:opacity .12s;}
+.wv-body.wv-fo{opacity:0;transition:opacity .13s;}
+.wv-body.wv-fi{animation:wvfi .3s ease-out both;}
+.wv-tp .wv-tab{animation:wvtp .3s ease-out;}
+.wv-rip{position:relative;overflow:hidden;}
+.wv-rp{position:absolute;border-radius:50%;background:rgba(255,255,255,.38);transform:scale(0);animation:wvrp .6s ease-out forwards;pointer-events:none;}
+.wv-lang .wv-rp,.wv-sc .wv-rp{background:rgba(0,0,0,.1);}
+@keyframes wvrp{to{transform:scale(1);opacity:0;}}
+.wv-res.off{cursor:default;}
+/* warning bar over the wallet box */
+.wv-toast{position:fixed;left:10.7px;right:10.5px;top:calc(50% - 34px);z-index:9;height:58.3px;border-radius:12px;background:linear-gradient(120deg,#ff9800 0%,#f78305 100%);display:flex;align-items:center;padding:0 12.6px 0 18px;color:#fff;box-shadow:0 5px 16px rgba(0,0,0,.18);animation:wvfi .18s ease-out both;}
+.wv-toast.out{animation:wvtout .42s cubic-bezier(.45,0,.75,.35) both;pointer-events:none;}
+@keyframes wvtout{from{opacity:1;transform:translateY(0);}to{opacity:0;transform:translateY(-360px);}}
+.wv-ti{flex:0 0 17.5px;margin-right:18.5px;display:flex;}
+.wv-ti svg{width:17.5px;height:17.5px;}
+.wv-tt{flex:1;font:700 13.9px/22px Roboto,system-ui,sans-serif;}
+.wv-tc{flex:0 0 auto;width:79.6px;height:38px;margin-left:8px;border:0;border-radius:8px;background:rgba(255,255,255,.2);color:#fff;font:500 15.2px/1 Roboto,system-ui,sans-serif;cursor:pointer;}
+/* bottom sheets slide up; the page behind darkens */
+.wv-sbg{animation:wvfi .3s ease-out both;}
+.wv-sbg.out{animation:wvfo .3s ease-in both;}
+.wv-sheet{animation:wvsl .32s cubic-bezier(.2,.8,.25,1) both;}
+.wv-sheet.out{animation:wvslo .3s ease-in both;}
+@keyframes wvsl{from{transform:translateY(100%);}to{transform:translateY(0);}}
+@keyframes wvslo{to{transform:translateY(100%);}}
+.wv-sheet.wv-big{top:141.6px;display:flex;flex-direction:column;padding:0;}
+.wv-sheet.wv-big .wv-gt{padding:23px 21px 0;border:0;font-size:19.8px;line-height:34.4px;}
+.wv-gi{margin:6px 21px 0;padding-bottom:17px;font-size:14px;line-height:21px;color:#666;border-bottom:1px solid #e0e0e0;margin-right:0;padding-right:21px;}
+.wv-gb{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:23px 21px 0;}
+.wv-gs{display:flex;align-items:flex-start;gap:14px;margin-bottom:18px;}
+.wv-gs i{flex:0 0 22.5px;height:22.5px;margin-top:1px;border-radius:4px;background:linear-gradient(180deg,#8591a0 0%,#5d6a78 100%);color:#fff;font:700 15px/22.5px Roboto,sans-serif;text-align:center;font-style:normal;box-shadow:0 1px 2px rgba(0,0,0,.3);}
+.wv-gs b{display:block;font-size:15.1px;line-height:22px;font-weight:500;color:#333;}
+.wv-gs em{display:block;margin-top:5px;font-size:14px;line-height:21px;font-style:normal;color:#f4994a;}
+.wv-gs span{display:block;margin-top:9px;font-size:14px;line-height:21px;color:#666;}
+.wv-gs u{display:block;margin-top:14px;padding:14px 12px 10px;border-left:4px solid #f4994a;border-radius:12px;background:#f4f5fb;text-decoration:none;}
+.wv-gs s{display:block;position:relative;padding-left:21px;margin-bottom:8px;text-decoration:none;font:12.2px/15.4px 'Courier New',Courier,monospace;letter-spacing:1.3px;color:#555;}
+.wv-gs s:before{content:'';position:absolute;left:3px;top:5.5px;width:4.5px;height:4.5px;border-radius:50%;background:#444;}
+.wv-sheet.wv-big .wv-sf{border-top:1px solid #e0e0e0;padding:12px 21px 12.4px;}
+.wv-sc{position:relative;overflow:hidden;font-weight:500;font-size:17.4px;}
 #mpToast{position:fixed;left:50%;top:48%;z-index:9600;max-width:218px;padding:11px 17px;border-radius:10px;background:rgba(74,74,74,.96);color:#fff;font:400 15px/1.35 Roboto,'Noto Sans Ethiopic',system-ui,sans-serif;word-break:break-all;opacity:0;pointer-events:none;transform:translate(-50%,-50%);transition:opacity .18s ease;}
 #mpToast.show{opacity:1;}
 /* Language switch: one pill holding every language side by side; the chosen one is a white tab. One tap changes the language, no sheet. */

@@ -62,20 +62,32 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  const go=await box('.wv-go');near(go.y,528,3,'Soumettre top');near(go.h,44.2,1.5,'Soumettre height');
  const sec=await box('.wv-sec');near(sec.y,587.8,3,'secure card top');near(sec.h,77.3,2,'secure card height');
  ok(/Paiement Sécurisé Protégé/.test(await page.textContent('.wv-sec')),'secure card words');
- ok(!/english|français/i.test(await page.evaluate(()=>document.getElementById('mpFlow').innerText)),'no language button: the app is French only');
+ ok((await page.textContent('.wv-lang'))==='ENGLISH','the pill offers English while the page is French');
+ const pill=await box('.wv-lang');near(pill.h,39.6,1.5,'pill height');near(pill.y,88.8,2,'pill top');near(pill.x+pill.w,383,2,'pill right edge');
+ ok((await box('#wvTimer')).x>100&&(await box('#wvTimer')).x<130,'the clock sits left of centre, as in the screenshot');
+ await page.evaluate(()=>{wvLang()});await page.waitForTimeout(500);
+ ok((await page.textContent('.wv-amt span'))==='Payment amount'&&(await page.textContent('.wv-go'))==='Submit'&&(await page.textContent('.wv-lang'))==='FRANÇAIS','English: the whole page changes and the pill offers Français');
+ ok(/Please enter wallet number/.test(await page.textContent('.wv-fin label'))&&/10-digit/.test(await page.textContent('.wv-hint'))&&/Secure Payment Protected/.test(await page.textContent('.wv-sec')),'English wallet label, hint and secure card');
+ ok((await page.evaluate(()=>localStorage.getItem('wv_lang')))==='en','the choice is remembered');
+ await page.evaluate(()=>{wvLang()});await page.waitForTimeout(500);
+ ok((await page.textContent('.wv-amt span'))==='Montant du paiement','and back to French');
  // 3. wallet number: digits only, ten of them
  await page.fill('#wvWallet','07a69 96-81 58999');ok((await page.inputValue('#wvWallet'))==='0769968158','digits only, ten of them');
- await page.fill('#wvWallet','0769');await page.evaluate(()=>{wvSubmit();});await page.waitForTimeout(150);
- ok(await page.$('#wvField.err'),'a short number turns the box red');ok(!(await page.$('.wv-proc')),'and nothing is sent');
+ await page.fill('#wvWallet','0769');await page.evaluate(()=>{wvSubmit();});await page.waitForTimeout(350);
+ ok(await page.$('.wv-toast'),'a short number shows the orange warning bar');ok(/Veuillez saisir le numéro de portefeuille correct/.test(await page.textContent('.wv-tt')),'with the owner\'s words');
+ const tb=await box('.wv-toast');near(tb.h,58.3,1.5,'warning bar height');near(tb.y,354,6,'warning bar sits over the wallet box');
+ ok((await page.evaluate(()=>getComputedStyle(document.querySelector('.wv-toast')).backgroundImage)).includes('255, 152, 0'),'orange');
+ ok(await page.$('.wv-tc'),'with a CLOSE button');await page.click('.wv-tc');await page.waitForTimeout(600);ok(!(await page.$('.wv-toast')),'CLOSE sends it away');
+ ok(!(await page.$('.wv-proc')),'and nothing was sent');
  const posts0=posts.filter(p=>p[0]==='order').length;
  await page.fill('#wvWallet','0769968158');
  // 4. submit -> processing card -> Open App page
- await page.evaluate(()=>{wvSubmit();});await page.waitForTimeout(300);
+ await page.evaluate(()=>{wvSubmit();});await page.waitForTimeout(450);
  const pc=await box('.wv-proc');ok(pc,'the processing card shows');near(pc.w,256.4,1,'card width');near(pc.h,226,1,'card height');
  ok((await page.textContent('.wv-proc b'))==='Traitement en cours...','Traitement en cours...');
  ok((await page.evaluate(()=>getComputedStyle(document.querySelector('.wv-proc')).backgroundColor))==='rgb(242, 242, 242)','light grey card');
  ok((await page.evaluate(()=>getComputedStyle(document.querySelector('.wv-pveil')).backgroundColor))==='rgb(24, 16, 10)','dark page behind it');
- await page.waitForTimeout(1300);
+ await page.waitForTimeout(1700);
  const o2=posts.filter(p=>p[0]==='order').pop();ok(o2[1].wallet==='0769968158'&&o2[1].depositId==='d1','the wallet goes to the SAME order');ok(posts.filter(p=>p[0]==='order').length===posts0+1,'one order call for the submit');
  ok(!(await page.$('.wv-proc')),'the card goes away');
  // 5. Open App page
@@ -93,20 +105,24 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  await page.evaluate(()=>wvGetResult());await page.waitForTimeout(200);ok(!posts.some(p=>p[0]==='submit'),'a grey button sends nothing');
  await page.click('.wv-pay');ok((await page.evaluate(()=>window.__opened))==='https://pay.wave.com/m/test/','the blue button opens the Wave link');
  ok((await page.evaluate(()=>getComputedStyle(document.getElementById('wvRes')).backgroundColor))==='rgb(238, 155, 89)','the result button turns orange');
- await page.evaluate(()=>{wvSheet('app')});await page.waitForTimeout(100);ok(await page.$('#wvSheet'),'the how-to sheet opens from the blue banner');
- const sh=await box('#wvSheet');near(sh.y+sh.h,776,1,'the sheet sits on the bottom edge');ok(/Comment ouvrir/.test(await page.textContent('#wvSheet h3')),'its title');
- await page.click('.wv-sc');ok(!(await page.$('#wvSheet')),'Fermer closes it');
+ await page.evaluate(()=>{wvSheet('app')});await page.waitForTimeout(500);ok(await page.$('#wvSheet'),'the guide sheet opens from the blue banner');
+ const sh=await box('#wvSheet');near(sh.y+sh.h,776,1,'the sheet sits on the bottom edge');near(sh.y,141.6,2,'and reaches up to the same height as in the recording');
+ ok(/Guide de configuration du téléphone Android/.test(await page.textContent('#wvSheet h3'))&&/pay\.wave\.com/.test(await page.textContent('#wvSheet')),'its title and the Wave domains');
+ await page.click('.wv-sc');await page.waitForTimeout(450);ok(!(await page.$('#wvSheet')),'Fermer closes it');
+ await page.evaluate(()=>{wvLang()});await page.waitForTimeout(450);ok(/Open App/.test(await page.textContent('.wv-tab.on'))&&/Get Payment Result/.test(await page.textContent('#wvRes')),'English on the result page too');
+ await page.evaluate(()=>{wvSheet('app')});await page.waitForTimeout(500);ok(/Android Phone Setup Guide \(One-time only\)/.test(await page.textContent('#wvSheet h3')),'the English guide');
+ await page.evaluate(()=>{wvSheetClose(true);wvLang()});await page.waitForTimeout(450);
  // 6. QR tab
- await page.evaluate(()=>wvTab('qr'));await page.waitForTimeout(100);
+ await page.evaluate(()=>wvTab('qr'));await page.waitForTimeout(500);
  ok(await page.$('.wv-qr'),'the QR picture shows');ok(/Enregistrer le code QR/.test(await page.textContent('.wv-save')),'with Enregistrer le code QR');
  const sv=await box('.wv-save');near(sv.h,55.8,1.5,'save button height');
  ok((await page.evaluate(()=>getComputedStyle(document.querySelector('.wv-save')).backgroundColor))==='rgb(76, 175, 80)','green save button');
  const tx=await box('#wvTx');near(tx.h,42.3,1.5,'transaction box height');
- await page.evaluate(()=>wvCheckTx());ok(await page.$('#wvTx.err'),'an empty ID turns the box red');ok(/L'ID de transaction est requis/.test(await page.textContent('#wvTxMsg')),'ID required message');
+ await page.evaluate(()=>wvCheckTx());ok(await page.$('#wvTx.err'),'an empty ID turns the box red');ok(/Le numéro de transaction est requis/.test(await page.textContent('#wvTxMsg')),'transaction number required message');
  const subs0=posts.filter(p=>p[0]==='submit').length;ok(subs0===0,'nothing sent yet');
  await page.fill('#wvTxIn','wave abc-12');ok((await page.inputValue('#wvTxIn'))==='waveabc-12','spaces are dropped from the ID');
  ok(!(await page.$('#wvTx.err')),'typing clears the red box');
- await page.evaluate(()=>{wvCheckTx();});await page.waitForTimeout(1400);
+ await page.evaluate(()=>{wvCheckTx();});await page.waitForTimeout(2200);
  const sub=posts.find(p=>p[0]==='submit');ok(sub&&sub[1].depositId==='d1'&&sub[1].txId==='waveabc-12'&&sub[1].wallet==='0769968158','the claim carries the order, the ID and the wallet');
  ok(!(await page.$('#mpFlow.show')),'the pages close after sending');
  ok(errs.length===0,'no page errors: '+errs.join(' | '));
