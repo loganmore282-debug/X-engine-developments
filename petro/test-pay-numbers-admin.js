@@ -68,6 +68,18 @@ const srv = http.createServer((q, r) => {
     await page.click('[data-pc-edit]'); await page.waitForSelector('#pcLink');
     await page.fill('#pcLink', 'https://pay.wave.com/m/other/'); await page.click('#pcSave'); await page.waitForSelector('[data-pcid]');
     ok(saved.length === 2 && saved[1].payLink === 'https://pay.wave.com/m/other/' && !('qrImage' in saved[1]), 'editing without a new QR picture does not resend it');
+    // the poster Wave gives is over 1 MB: it is shrunk by the panel instead of being refused
+    const bigUrl = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 1057; c.height = 1488; const x = c.getContext('2d'); const im = x.createImageData(1057, 1488);
+      for (let i = 0; i < im.data.length; i += 4) { im.data[i] = (Math.random() * 256) | 0; im.data[i + 1] = (Math.random() * 256) | 0; im.data[i + 2] = (Math.random() * 256) | 0; im.data[i + 3] = 255; }
+      x.putImageData(im, 0, 0); return c.toDataURL('image/png'); });
+    const bigFile = path.join(require('os').tmpdir(), 'wave-big-test.png'); fs.writeFileSync(bigFile, Buffer.from(bigUrl.split(',')[1], 'base64'));
+    ok(fs.statSync(bigFile).size > 1000 * 1024, 'the test poster is over 1 MB (' + fs.statSync(bigFile).size + ' bytes)');
+    await page.click('[data-pc-edit]'); await page.waitForSelector('#pcQrFile', { state: 'attached' });
+    await page.setInputFiles('#pcQrFile', bigFile);
+    await page.waitForFunction(() => /QR picture ready/.test(document.getElementById('content').textContent), null, { timeout: 15000 });
+    await page.click('#pcSave'); await page.waitForSelector('[data-pcid]');
+    const last = saved[saved.length - 1];
+    ok(/^data:image\/(png|jpeg);base64,/.test(last.qrImage) && last.qrImage.length <= 480000, 'a poster over 1 MB is shrunk to fit (' + last.qrImage.length + ' characters)');
     // delete
     page.once('dialog', d => d.accept());
     await page.click('[data-pc-del]'); await page.waitForSelector('text=No Wave payment yet');
