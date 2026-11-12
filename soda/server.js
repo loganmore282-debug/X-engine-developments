@@ -3535,7 +3535,8 @@ app.get('/public/settings', async (req, res) => {
     // no reason to hand every member's phone the list of domains that can
     // reach this backend, so it is dropped here alongside maintenanceMsg.
     const { maintenanceMsg, allowedOrigins, ...rest0 } = s;
-    const manualPayOn = (await activePayChannels()).length > 0;
+    const payChs = await activePayChannels();
+    const manualPayOn = payChs.length > 0;
     // Operator settings the app never reads stay on the server: the automatic-withdrawal limits (a member could keep a request just under the
     // automatic cap), the payment-rail choice, the reference prefix and the host policy.
     const rest = {};
@@ -3567,6 +3568,7 @@ app.get('/public/settings', async (req, res) => {
       // once there is no PAY B to contrast it with.)
       manualPay: manualPayOn,
       depositAvailable: manualPayOn,
+      wavePay: payChs.some(c => c.kind === 'wave'),
       referralRequired: await referralRequiredNow(),
     // How many countries this platform runs in. The app only uses it to add
     // "if you signed up on another country's site, sign in there" to a
@@ -5163,7 +5165,8 @@ app.post('/deposit/marzpay/status', async (req, res) => {
 // receipt code. The claim goes to the admin Recharges tab (status 'review')
 // where it is approved with Force-credit (creditDeposit() is the only thing
 // that ever moves money) or rejected. Nothing here credits a wallet.
-const PAY_CHANNEL_KINDS = ['bank', 'wallet'];
+const PAY_CHANNEL_KINDS = ['bank', 'wallet', 'wave'];
+const MAX_PAY_QR_CHARS = 600 * 1024;
 const MANUAL_ORDER_MS = 30 * 60 * 1000;
 const MAX_PAY_CHANNELS = 20;
 const MAX_PAY_LOGO_CHARS = 220 * 1024;
@@ -5179,11 +5182,16 @@ async function readPayChannels() {
 }
 function dropPayChannelsCache() { _payChannelsCache = null; }
 async function activePayChannels() {
-  try { return (await readPayChannels()).filter(c => c.active !== false && c.accountNumber); }
+  try { return (await readPayChannels()).filter(c => c.active !== false && (c.accountNumber || (c.kind === 'wave' && (c.payLink || c.qrImage)))); }
   catch (_) { return []; }
 }
 function payChannelPublic(c) {
-  return { id: c.id, name: c.name, kind: c.kind === 'wallet' ? 'wallet' : 'bank', logo: c.logo || '' };
+  return { id: c.id, name: c.name, kind: c.kind === 'wallet' ? 'wallet' : c.kind === 'wave' ? 'wave' : 'bank', logo: c.logo || '' };
+}
+// A member's wallet number for the Wave pages: digits only, exactly the region's local length (Cote d'Ivoire: 10).
+function waveWalletDigits(v) {
+  const d = String(v == null ? '' : v).replace(/\D/g, '');
+  return d.length === (Number(currentRegion().localLength) || 10) ? d : '';
 }
 function cleanPayText(v, max) { return String(v == null ? '' : v).replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max); }
 app.get('/public/pay-channels', async (req, res) => {
@@ -5203,12 +5211,14 @@ app.post('/admin/pay-channels/save', async (req, res) => {
   try {
     const b = req.body || {};
     const name = cleanPayText(b.name, 60);
+    const kind = PAY_CHANNEL_KINDS.includes(b.kind) ? b.kind : 'bank';
     const accountName = cleanPayText(b.accountName, 80);
     const accountNumber = cleanPayText(b.accountNumber, 40).replace(/\s+/g, '');
-    if (!name) return res.status(400).json({ status: 'error', message: 'Enter the payment name (for example Commercial Bank of Ethiopia).' });
-    if (!accountName) return res.status(400).json({ status: 'error', message: 'Enter the account name.' });
-    if (!/^[0-9A-Za-z+\-]{4,40}$/.test(accountNumber)) return res.status(400).json({ status: 'error', message: 'Enter a valid account number.' });
-    const kind = PAY_CHANNEL_KINDS.includes(b.kind) ? b.kind : 'bank';
+    if (!name) return res.status(400).json({ status: 'error', message: 'Enter the payment name (for example Wave).' });
+    if (kind !== 'wave') {
+      if (!accountName) return res.status(400).json({ status: 'error', message: 'Enter the account name.' });
+      if (!/^[0-9A-Za-z+\-]{4,40}$/.test(accountNumber)) return res.status(400).json({ status: 'error', message: 'Enter a valid account number.' });
+    }
     const rows = await readPayChannels();
     const id = b.id ? String(b.id) : '';
     const existing = id ? rows.find(r => r.id === id) : null;
@@ -5221,8 +5231,23 @@ app.post('/admin/pay-channels/save', async (req, res) => {
       else if (/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(b.logo) && b.logo.length <= MAX_PAY_LOGO_CHARS) logo = b.logo;
       else return res.status(400).json({ status: 'error', message: 'That logo is not valid or is too large. Upload a smaller image.' });
     }
+    // Wave: the payment link the "Ouvrir l'application pour payer" button opens, and the QR picture. undefined = keep, '' = remove.
+    let payLink = existing ? (existing.payLink || '') : '';
+    if (typeof b.payLink === 'string') {
+      const v = b.payLink.trim();
+      if (v === '') payLink = '';
+      else if (/^https:\/\/[^\s<>"']{4,480}$/i.test(v)) payLink = v;
+      else return res.status(400).json({ status: 'error', message: 'The payment link must start with https:// and have no spaces.' });
+    }
+    let qrImage = existing ? (existing.qrImage || '') : '';
+    if (typeof b.qrImage === 'string') {
+      if (b.qrImage === '') qrImage = '';
+      else if (/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(b.qrImage) && b.qrImage.length <= MAX_PAY_QR_CHARS) qrImage = b.qrImage;
+      else return res.status(400).json({ status: 'error', message: 'That QR picture is not valid or is too large. Upload a smaller PNG or JPEG.' });
+    }
+    if (kind === 'wave' && !payLink && !qrImage) return res.status(400).json({ status: 'error', message: 'Add the payment link or the QR picture (or both) for Wave.' });
     const doc = {
-      name, kind, accountName, accountNumber, logo, active: b.active !== false,
+      name, kind, accountName, accountNumber, logo, payLink, qrImage, active: b.active !== false,
       order: Number.isFinite(Number(b.order)) ? Math.max(0, Math.min(999, Math.round(Number(b.order)))) : (existing ? Number(existing.order) || 0 : rows.length),
       updatedAt: FieldValue.serverTimestamp(),
     };
@@ -5270,7 +5295,13 @@ app.post('/deposit/manual/order', async (req, res) => {
     const open = openSnap.docs.filter(d => d.data().method === 'manual' && !d.data().pastedSms && (tsMillis(d.data().expiresAt) || 0) > now);
     let depRef, ref, expiresMs;
     const mine = open.find(d => d.id === String(req.body.depositId || '')) || open[0];
-    const channelFields = { network: ch.name, channelId: ch.id, channelKind: ch.kind === 'wallet' ? 'wallet' : 'bank', assignedNumber: ch.accountNumber, assignedName: ch.accountName };
+    const isWave = ch.kind === 'wave';
+    let wallet = '';
+    if (isWave && req.body.wallet != null && String(req.body.wallet) !== '') {
+      wallet = waveWalletDigits(req.body.wallet);
+      if (!wallet) return res.status(400).json({ status: 'error', message: 'Veuillez saisir correctement votre numéro de portefeuille de paiement à ' + (Number(currentRegion().localLength) || 10) + ' chiffres' });
+    }
+    const channelFields = { network: ch.name, channelId: ch.id, channelKind: isWave ? 'wave' : ch.kind === 'wallet' ? 'wallet' : 'bank', assignedNumber: ch.accountNumber || '', assignedName: ch.accountName || '', ...(wallet ? { walletNumber: wallet } : {}) };
     if (mine) {
       depRef = mine.ref; ref = mine.data().ref; expiresMs = tsMillis(mine.data().expiresAt);
       await depRef.update({ ...channelFields, amount: amt });
@@ -5287,7 +5318,9 @@ app.post('/deposit/manual/order', async (req, res) => {
       });
     }
     res.json({ status: 'success', depositId: depRef.id, reference: ref, amount: amt, expiresAt: expiresMs,
-      channel: payChannelPublic(ch), accountName: ch.accountName, accountNumber: ch.accountNumber });
+      channel: payChannelPublic(ch), accountName: ch.accountName || '', accountNumber: ch.accountNumber || '',
+      // Wave: only handed out once the member has typed their wallet number (the pay pages ask for it first).
+      ...(isWave && (wallet || (mine && mine.data().walletNumber)) ? { payLink: ch.payLink || '', qrImage: ch.qrImage || '', wallet: wallet || mine.data().walletNumber } : {}) });
   } catch (e) { console.error('manual order:', e.message); res.status(500).json({ status: 'error', message: 'Impossible de démarrer la recharge' }); }
 });
 // What a pasted SMS / receipt is allowed to be. CBE receipts carry "v2-..." (23 characters) or an
@@ -5316,6 +5349,10 @@ app.post('/deposit/manual/submit', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Veuillez vous reconnecter' });
   try {
+    const body0 = req.body || {};
+    // Wave orders have no SMS: the claim is the member's wallet number and, when they used the QR page, the transaction ID.
+    const waveDep = body0.depositId ? await db.collection('pendingDeposits').doc(String(body0.depositId)).get() : null;
+    if (waveDep && waveDep.exists && waveDep.data().userId === userId && waveDep.data().channelKind === 'wave') return await submitWaveClaim(req, res, userId, waveDep);
     const sms = String((req.body || {}).sms || '').trim().slice(0, 2000);
     const found = extractManualRef(sms);
     if (!found) return res.status(400).json({ status: 'error', code: 'BAD_SMS', message: 'veuillez saisir le bon SMS de virement' });
@@ -5348,6 +5385,40 @@ app.post('/deposit/manual/submit', async (req, res) => {
     res.json({ status: 'success', state: 'review', depositId: snap.id, reference: dep.ref, message: 'Envoyé. Notre équipe vérifie votre paiement.' });
   } catch (e) { console.error('manual submit:', e.message); res.status(500).json({ status: 'error', message: 'Impossible d\'envoyer votre recharge. Veuillez réessayer.' }); }
 });
+async function submitWaveClaim(req, res, userId, snap) {
+  const b = req.body || {};
+  const dep = snap.data();
+  const last = _manualSubmitDebounce.get(userId) || 0;
+  if (Date.now() - last < 3000) return res.status(429).json({ status: 'error', message: 'Veuillez patienter un instant.' });
+  if (dep.method !== 'manual') return res.status(404).json({ status: 'error', message: 'Recharge introuvable' });
+  if (dep.status === 'review') return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'Cette transaction a déjà été envoyée et est en cours de vérification.' });
+  if (dep.status !== 'pending') return res.status(400).json({ status: 'error', message: 'Cette recharge n\'est plus ouverte. Lancez-en une nouvelle.' });
+  const wallet = waveWalletDigits(b.wallet) || dep.walletNumber || '';
+  if (!wallet) return res.status(400).json({ status: 'error', message: 'Veuillez saisir correctement votre numéro de portefeuille de paiement à ' + (Number(currentRegion().localLength) || 10) + ' chiffres' });
+  const rawTx = String(b.txId == null ? '' : b.txId).trim();
+  if (rawTx && !/^[A-Za-z0-9_\-]{4,60}$/.test(rawTx)) return res.status(400).json({ status: 'error', code: 'BAD_TX', message: 'Veuillez saisir le bon ID de transaction' });
+  const txId = rawTx.toUpperCase();
+  _manualSubmitDebounce.set(userId, Date.now());
+  // A real transfer can back ONE open or credited claim, by anyone.
+  if (txId) {
+    const dupSnap = await db.collection('pendingDeposits').where('pastedSmsTxId', '==', txId).get();
+    if (dupSnap.docs.some(d => d.id !== snap.id && d.data().status !== 'failed'))
+      return res.status(409).json({ status: 'error', message: 'Ce hash de transaction a déjà été envoyé.' });
+  }
+  const note = 'Wave - portefeuille ' + wallet + (txId ? ' - ID de transaction ' + txId : ' - sans ID de transaction (page Ouvrir l\'application)');
+  const updated = await snap.ref.updateIf({ status: 'pending' }, {
+    status: 'review', reviewReason: 'Waiting for the admin to check the Wave payment',
+    walletNumber: wallet, pastedSms: note, pastedAt: FieldValue.serverTimestamp(), pastedSmsParsed: true,
+    ...(txId ? { pastedSmsTxId: txId, pastedSmsKind: 'wave' } : {}),
+  });
+  if (!updated) return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'Cette transaction a déjà été envoyée et est en cours de vérification.' });
+  const { date, time } = nowStr();
+  await db.collection('transactions').add({
+    userId, statementId: newStatementId(), type: 'deposit', description: `Deposit: Processing (${fmtMoney(dep.amount)})`,
+    amount: dep.amount, displayAmount: dep.amount, status: 'pending', date, time, ref: dep.ref, depositId: snap.id, createdAt: FieldValue.serverTimestamp()
+  }).catch(e => console.error(`Wave deposit ledger row create failed for dep=${snap.id}:`, e.message));
+  res.json({ status: 'success', state: 'review', depositId: snap.id, reference: dep.ref, message: 'Envoyé. Notre équipe vérifie votre paiement.' });
+}
 // An order nobody paid for is closed after the clock (30 min) plus a grace of 30.
 async function sweepManualOrders() {
   try {
