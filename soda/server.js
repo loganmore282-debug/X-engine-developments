@@ -5309,6 +5309,8 @@ app.post('/deposit/manual/order', async (req, res) => {
     // NEW order with a fresh 30 minute clock; only the same page re-pointing its own order (wallet typed, tab changed) reuses it.
     // Older unsent orders of this member are closed so they do not pile up.
     const mine = req.body.depositId ? open.find(d => d.id === String(req.body.depositId)) : null;
+    // Coming back to the payment pages after leaving: only the SAME still-open order may be picked up again, never a new one.
+    if (req.body.resume && !mine) return res.status(409).json({ status: 'error', code: 'ORDER_GONE', message: 'Cette commande n\'est plus ouverte.' });
     for (const o of open) if (!mine || o.id !== mine.id) await o.ref.updateIf({ status: 'pending' }, { status: 'failed', failureReason: 'Replaced by a newer payment order' }).catch(() => {});
     const channelFields = { network: ch.name || 'Wave', channelId: ch.id, channelKind: 'wave', ...(wallet ? { walletNumber: wallet } : {}) };
     if (mine) {

@@ -138,6 +138,14 @@ const QR = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAA
   r = await call(H['POST /deposit/manual/order'], { amount: 5000, channelId: w1, wallet: '0722222222' });
   ok(r.code === 200 && r.body.payLink === keepL && r.body.qrImage === '', 'a good link is served but a fake picture is dropped');
   chRow.qrImage = keepQ; api.dropPayChannelsCache();
+  // coming back to the pages after leaving: the SAME open order is picked up; a closed one is never replaced by a new order
+  const nOrders = () => [...db.col('pendingDeposits').keys()].length;
+  r = await call(H['POST /deposit/manual/order'], { amount: 5000, channelId: w1, wallet: '0722222222' }); const live = r.body.depositId;
+  const before = nOrders();
+  r = await call(H['POST /deposit/manual/order'], { amount: 5000, channelId: w1, wallet: '0722222222', depositId: live, resume: true });
+  ok(r.code === 200 && r.body.depositId === live && r.body.payLink, 'resume: the same order comes back with its link');
+  r = await call(H['POST /deposit/manual/order'], { amount: 5000, channelId: w1, depositId: 'gone-order', resume: true });
+  ok(r.code === 409 && r.body.code === 'ORDER_GONE' && nOrders() === before, 'resume of an order that is gone is refused and creates nothing');
   // wiring in the source
   const full = fs.readFileSync(__dirname + '/server.js', 'utf8');
   ok(/IMAGE_BODY_ROUTES = new Set\(\['\/admin\/pay-channels\/save'/.test(full), 'saving a Wave payment may carry a picture (the 64 KB body cap gave "La requête est trop volumineuse")');
