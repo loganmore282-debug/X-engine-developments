@@ -3712,7 +3712,7 @@ function paintHome(){
   const st = STATE.settings || {};
   // A product the admin switched off (Active unticked) is not offered on Home; owners still see it on Income.
   const products = (STATE.products || []).filter(p => p.active !== false);
-  const ticker = String(st.tickerText || 'Tous les gains des produits sont ajoutés automatiquement à votre solde à minuit 00:00.');
+  const ticker = String(st.tickerText || 'Les gains de chaque produit sont ajoutés automatiquement à votre solde toutes les 24 heures après l’achat.');
   const html = `
 <div class="v-page v-home">
   ${vBannerHtml()}
