@@ -7582,3 +7582,11 @@ Owner: *"I don't want auto translation, I want it to be in French, all of it, no
 
 ## Follow-up 78 -- Admin clock and labels follow the country (UTC), not Uganda/Ethiopia
 The admin panel still had two hard-coded `+3 hours` clocks (the "is withdrawing open now" line and the withdraw-window preview) and "Uganda time (EAT)" labels, while the server's clock is the region's (`utcOffsetMin` 0 for Côte d'Ivoire). They now read UTC and say "Côte d'Ivoire time". The member's "Choose Commercial Bank of Ethiopia or Telebirr." message is French. Cache user v258, admin v84.
+
+## Follow-up 79 -- Admin panel: English and French only, and everything follows the choice
+The admin language picker now offers only **English** and **French** (`ADMIN_PICKABLE` in `admin-src/index.html`; the full six-column `ADMIN_LANGS` list stays because the table is indexed by column). Switching to French now covers the whole panel:
+- About 600 more French rows/templates were added to `ADMIN_LANG_ROWS` / `ADMIN_LANG_PATTERNS` (analytics, activity log, member dialogs, confirm texts, toasts, settings help, payment numbers, banners, reset database, the live "Right now it is ..." line). The engine's text cap for the panel is now 1500 characters so the long settings paragraphs translate.
+- The browser's own pop-ups (`confirm` / `prompt` / `alert`) are wrapped at the top of the script so their message goes through `t()` first -- they are not DOM text, so the page translator never reached them before.
+- Month and day names (`monthShort()`, `dayLong()`) and `fdate()` follow the language (fr-FR dates in French).
+- New English admin text still needs a French row; `python3 find-admin-untranslated.py <outdir> fr` drives every tab and lists what is missing (dates, brand names and the `marzpay` data value are expected). `test-admin-i18n.js` now requires only the English and French cells of each row to be filled.
+- Deploy: admin cache is `petro-admin-shell-v85`.

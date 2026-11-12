@@ -127,7 +127,7 @@ PATTERN_OUT = [_tpl_re(r[LANG_IDX]) for r in PATTERNS
 # ── what is NOT a translatable word ───────────────────────────────────────
 DATA_PATTERNS = [
     r'^[\d\s,.:+%/×x—–-]+$',
-    r'^[+\-]?(UGX|KES|TZS|RWF)\s?[\d,.]*$',
+    r'^[+\-]?(UGX|KES|TZS|RWF|XOF)\s?[\d,.]*$',
     r'^\+?\d[\d\s-]*$',
     r'^0\d{8,}$',
     r'^[A-Z0-9]{5,12}$',
@@ -152,7 +152,7 @@ DATA_PATTERNS = [
     r'^[a-z]{2,3} · .*$',
     # Money and plan figures the panel composes: "UGX 30,000 · 150 days",
     # "Pays UGX 900,000", "-UGX 20,000".
-    r'^(Pays )?[−+-]?(UGX|KES|TZS|RWF)\s?[\d,.]+( · .*)?$',
+    r'^(Pays )?[−+-]?(UGX|KES|TZS|RWF|XOF)\s?[\d,.]+( · .*)?$',
     # An internal action key out of the audit log ("settings_update").
     r'^[a-z][a-z0-9]*(_[a-z0-9]+)+$',
 ]
@@ -407,7 +407,7 @@ async def main():
             await r.fulfill(status=200, content_type="application/json", body=json.dumps(body))
         await page.route(f"{API}/**", api)
         await page.add_init_script(
-            "try{localStorage.setItem('chipz_admin_lang',%r);}catch(e){}" % LANG)
+            "try{localStorage.setItem('petro_admin_lang',%r);}catch(e){}" % LANG)
 
         await page.goto(f"http://127.0.0.1:{PORT}/index.html", wait_until="load")
         await page.wait_for_timeout(600)

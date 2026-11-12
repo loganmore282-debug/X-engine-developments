@@ -111,14 +111,16 @@ const CAP_FOR_ROWS = Number((/var I18N_MAX_LEN_OVERRIDE = (\d+);/.exec(adminSrc)
 let badWidth = 0, blank = 0, repeats = 0, tooLong = 0;
 for (const r of adminRows.concat(adminPats)) {
   if (r.length !== width) badWidth++;
-  for (let i = 0; i < r.length; i++) {
+  // Only English (0) and French (3) are offered in the panel's language picker (ADMIN_PICKABLE), so those
+  // two cells must always be filled; the other columns may stay blank.
+  for (const i of [0, 3]) {
     if (typeof r[i] !== 'string' || !r[i].trim()) blank++;
     if (i && r[i].trim() === r[0].trim() && r[i] !== '=') repeats++;
   }
   if (r[0].length > CAP_FOR_ROWS) tooLong++;
 }
 ck(badWidth === 0, 'every row has exactly one cell per language');
-ck(blank === 0, 'no cell is blank in any language');
+ck(blank === 0, 'no English or French cell is blank');
 ck(repeats === 0, "no cell merely repeats its English -- '=' says that on purpose");
 // The engine skips any text node longer than this, so a row over it could
 // never apply however carefully it were written. Read out of the SOURCES
@@ -133,7 +135,7 @@ ck(repeats === 0, "no cell merely repeats its English -- '=' says that on purpos
 // silently fall below.
 const capDefault = Number((/I18N_MAX_LEN_OVERRIDE : (\d+);/.exec(engine) || [])[1]);
 const capPanel = Number((/var I18N_MAX_LEN_OVERRIDE = (\d+);/.exec(adminSrc) || [])[1]);
-ck(capDefault === 160, `the engine's own default cap is 160 (${capDefault})`);
+ck(capDefault === 400, `the engine's own default cap is 400 (${capDefault})`);
 ck(Number.isFinite(capPanel) && capPanel >= capDefault,
    `the panel raises it rather than lowering it (${capPanel})`);
 const cap = capPanel;
@@ -200,7 +202,7 @@ ck(/const ADMIN_LANG_KEY = 'petro_admin_lang'/.test(adminSrc),
 ck(!/localStorage\.getItem\(ADMIN_LANG_KEY\)[\s\S]{0,40}chipz_lang/.test(adminSrc) &&
    !adminSrc.includes("'chipz_lang'"),
    "and NOT under the member app's key -- they are different products on different origins");
-ck(/startAdminI18n\(\);\s*\n\s*if\(SESSION_TOKEN\)/.test(adminSrc),
+ck(/startAdminI18n\(\);\s*\n\s*if\(SESSION_TOKEN\b/.test(adminSrc),
    'the language is applied at boot, before the shell opens');
 ck(/function startAdminI18n\(\)[\s\S]*?startI18nObserver\(\)/.test(adminSrc),
    'and the observer is started, so a tab rendered later is translated as it lands');

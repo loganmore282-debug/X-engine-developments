@@ -24,13 +24,13 @@ const dom = new JSDOM(html, {
 setTimeout(async () => {
   try {
     assert.deepEqual(errors, []);
-    assert.equal(dom.window.document.querySelectorAll('#langLogin option').length, 6);
+    assert.equal(dom.window.document.querySelectorAll('#langLogin option').length, 2);
     assert.equal(dom.window.document.getElementById('regionSwitch'), null);
     dom.window.document.getElementById('keyInput').value = 'test-key';
     dom.window.document.getElementById('loginBtn').click();
     await new Promise(resolve => setTimeout(resolve, 100));
     assert.match(dom.window.document.getElementById('content').textContent, /XOF 12,345/);
-    console.log('Admin initializes with six translations and no country switch: pass');
+    console.log('Admin initializes with its language list and no country switch: pass');
   } catch (e) { console.error(e); process.exitCode = 1; }
   finally { dom.window.close(); }
 }, 300);

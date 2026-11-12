@@ -12,7 +12,7 @@ the drift would show up as a screen quietly no longer being covered.
 # kept stubbing a host the panel no longer called: its name uses an
 # UNDERSCORE, so the find-*.py glob that migrated every other harness never
 # matched it. The rule was right and the glob was wrong.
-from chipz_test_api import API
+from petro_test_api import API
 
 # ── fixtures rich enough that every tab actually paints ───────────────────
 REGIONS = [

@@ -34,7 +34,7 @@ const srv = http.createServer((q, r) => { let f = path.join(ROOT, q.url.split('?
     await hours[2].selectOption('05'); await hours[3].selectOption('45');
     ok(await page.inputValue('#sWitFrom') === '18:30' && await page.inputValue('#sWitTo') === '05:45', 'picking writes 24-hour HH:MM (18:30 and 05:45, past midnight)');
     await page.check('#sWitWindow');
-    ok(/Ethiopia time/.test(await page.textContent('#witNow')) && /OPEN|CLOSED/.test(await page.textContent('#witNow')), 'a live line says whether withdrawing is open now');
+    ok(/Côte d’Ivoire time/.test(await page.textContent('#witNow')) && /OPEN|CLOSED/.test(await page.textContent('#witNow')), 'a live line says whether withdrawing is open now');
     await page.click('#saveRates'); await page.waitForTimeout(500);
     const sv = saves.find(x => 'withdrawOpenFrom' in x);
     ok(sv && sv.withdrawOpenFrom === '18:30' && sv.withdrawOpenTo === '05:45' && sv.withdrawWindowEnabled === true, 'Save sends the 24-hour times');
