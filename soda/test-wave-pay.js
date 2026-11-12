@@ -38,11 +38,11 @@ function build(db, ctx) {
   const handlers = {};
   const app = { get: (p, h) => { handlers['GET ' + p] = h; }, post: (p, h) => { handlers['POST ' + p] = h; } };
   const mk = new Function('app', 'db', 'ctx', 'FieldValue', 'tsMillis', 'currentRegionKey', 'MAX_MONEY_AMOUNT', 'fmtMoney', 'paymentAmount', 'getSettings',
-    'currentRegion', 'verifyAuth', 'verifyAdmin', 'verifyOwner', 'logAdminAction', 'uniqueRef', 'nowStr', 'newStatementId', '_userBeingDeleted',
-    block + '\nreturn { sweepManualOrders, activePayChannels, dropPayChannelsCache, waveWalletDigits };');
+    'currentRegion', 'verifyAuth', 'verifyAdmin', 'verifyOwner', 'logAdminAction', 'uniqueRef', 'nowStr', 'newStatementId', '_userBeingDeleted', 'crypto',
+    block + '\nreturn { safeWaveLink, safeWaveQr, sweepManualOrders, activePayChannels, dropPayChannelsCache, waveWalletDigits };');
   const api = mk(app, db, ctx, { serverTimestamp: () => SERVER_TS }, v => (v && v.getTime ? v.getTime() : 0), () => 'et', 1e9,
     n => 'FCFA ' + n, v => Number(v), async () => ({ minDeposit: 300 }),
-    () => ({ localLength: 10 }), async () => ctx.user, () => ctx.admin, () => ctx.owner, () => {}, async l => l + (++ctx.refN), () => ({ date: '01/01/2026', time: '10:00' }), () => 'S' + (++ctx.refN), new Set());
+    () => ({ localLength: 10 }), async () => ctx.user, () => ctx.admin, () => ctx.owner, () => {}, async l => l + (++ctx.refN), () => ({ date: '01/01/2026', time: '10:00' }), () => 'S' + (++ctx.refN), new Set(), require('node:crypto'));
   return { handlers, api };
 }
 async function call(h, body, opts = {}) {
@@ -54,7 +54,7 @@ async function call(h, body, opts = {}) {
 const LOGO = 'data:image/png;base64,iVBORw0KGgo=';
 
 
-const QR = 'data:image/png;base64,UVJRUg==';
+const QR = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 (async () => {
   const db = makeDb();
   const ctx = { user: 'u1', owner: true, admin: true, refN: 0 };
@@ -64,6 +64,17 @@ const QR = 'data:image/png;base64,UVJRUg==';
   db.col('users').set('u2', { phone: '0722222222', status: 'active', walletBalance: 0, totalDeposited: 0 });
   eq(api.waveWalletDigits('07 69 96 81 58'), '0769968158', 'wallet number: spaces dropped, 10 digits');
   for (const bad of ['', '12345', '076996815', '07699681581', 'abc']) eq(api.waveWalletDigits(bad), '', 'refused wallet number: ' + bad);
+  // ── security: nobody can slip in their own payment link or QR picture ──
+  const GOOD_LINKS = ['https://pay.wave.com/m/test/', 'https://qr.wave.com/abc/def/p', 'https://wave.com/pay?x=1'];
+  for (const l of GOOD_LINKS) eq(api.safeWaveLink(l), l, 'a Wave link is accepted: ' + l);
+  const EVIL_LINKS = ['http://pay.wave.com/m/x', 'https://evil.com/pay.wave.com', 'https://pay.wave.com@evil.com/m/x', 'https://user:pw@pay.wave.com/m/x', 'https://wave.com.evil.com/m/x',
+    'https://evilwave.com/m/x', 'https://pay.wave.com:8443/m/x', 'https://pay.wave.com\\@evil.com/', 'javascript:alert(1)', 'data:text/html,<script>1</script>', 'https://pay.wave.com/m/x y', 'https://pay.wave.com/"onmouseover="x',
+    'https://xn--wave-9ua.com/m/x', '//evil.com/m/x', 'https://pay.wave.com.evil.com/', 'ftp://pay.wave.com/x', '', 'https://' + 'a'.repeat(500) + '.wave.com/'];
+  for (const l of EVIL_LINKS) eq(api.safeWaveLink(l), '', 'a foreign or odd link is refused: ' + l.slice(0, 50));
+  const JPG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==';
+  eq(api.safeWaveQr(QR), QR, 'a real PNG is accepted'); eq(api.safeWaveQr(JPG), JPG, 'a real JPEG is accepted');
+  for (const q of ['data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=', 'data:text/html;base64,PGh0bWw+', 'data:image/png;base64,PGh0bWw+PHNjcmlwdD4=', 'data:image/jpeg;base64,' + QR.split(',')[1], 'data:image/png;base64,' + JPG.split(',')[1], 'https://evil.com/qr.png', 'data:image/png;base64,iVBORw0KGgo=<x>', ''])
+    eq(api.safeWaveQr(q), '', 'a fake or foreign picture is refused: ' + q.slice(0, 50));
   // admin: a Wave channel
   let r = await call(H['POST /admin/pay-channels/save'], { name: 'Wave', kind: 'wave', payLink: 'https://pay.wave.com/m/test/', qrImage: QR, logo: LOGO });
   eq(r.code, 200, 'Wave needs no account name or number'); const w1 = r.body.id;
@@ -114,6 +125,19 @@ const QR = 'data:image/png;base64,UVJRUg==';
   eq(db.col('pendingDeposits').get('stale').status, 'failed', 'the older unsent order is closed');
   const keep = r.body.depositId; r = await call(H['POST /deposit/manual/order'], { amount: 6000, channelId: w1, depositId: keep });
   eq(r.body.depositId, keep, 'the same page re-pointing its own order keeps it (and its clock)');
+  // a row changed behind the app's back (database edited directly) is never served
+  r = await call(H['POST /admin/pay-channels/save'], { id: w1, name: 'Wave', kind: 'wave', payLink: 'https://evil.com/pay.wave.com' });
+  eq(r.code, 400, 'a link on another site cannot be saved');
+  const chRow = db.col('payChannels').get(w1), keepL = chRow.payLink, keepQ = chRow.qrImage;
+  chRow.payLink = 'https://evil.com/pay'; chRow.qrImage = 'data:image/png;base64,PGh0bWw+PHNjcmlwdD4='; api.dropPayChannelsCache();
+  r = await call(H['GET /public/pay-channels'], {});
+  eq(r.body.channels.length, 0, 'a tampered row (foreign link, fake picture) is not offered to members at all');
+  r = await call(H['POST /deposit/manual/order'], { amount: 5000, channelId: w1, wallet: '0722222222' });
+  ok(r.code === 400 && !JSON.stringify(r.body).includes('evil.com'), 'and cannot be ordered');
+  chRow.payLink = keepL; chRow.qrImage = 'data:image/png;base64,PGh0bWw+'; api.dropPayChannelsCache();
+  r = await call(H['POST /deposit/manual/order'], { amount: 5000, channelId: w1, wallet: '0722222222' });
+  ok(r.code === 200 && r.body.payLink === keepL && r.body.qrImage === '', 'a good link is served but a fake picture is dropped');
+  chRow.qrImage = keepQ; api.dropPayChannelsCache();
   // wiring in the source
   const full = fs.readFileSync(__dirname + '/server.js', 'utf8');
   ok(!/wavePay/.test(full), 'there is no separate switch: Wave is the only way to recharge');

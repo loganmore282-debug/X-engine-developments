@@ -104,6 +104,10 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  await page.evaluate(()=>{window.open=(u)=>{window.__opened=u;};});
  await page.evaluate(()=>wvGetResult());await page.waitForTimeout(200);ok(!posts.some(p=>p[0]==='submit'),'a grey button sends nothing');
  await page.click('.wv-pay');ok((await page.evaluate(()=>window.__opened))==='https://pay.wave.com/m/test/?amount=5000','the blue button opens the Wave link with the amount filled in');
+ await page.evaluate(()=>{window.__opened=null;_wv.order.payLink='https://evil.com/pay.wave.com';});await page.click('.wv-pay');
+ ok(!(await page.evaluate(()=>window.__opened)),'a link that is not on wave.com is never opened, whatever the server sent');
+ ok(await page.evaluate(()=>[wvSafeLink('https://pay.wave.com@evil.com/x'),wvSafeLink('http://pay.wave.com/x'),wvSafeLink('javascript:alert(1)'),wvSafeQr('data:image/svg+xml;base64,PHN2Zz4='),wvSafeQr('https://evil.com/q.png')].every(v=>v==='')),'foreign links and pictures are refused in the browser too');
+ await page.evaluate(()=>{_wv.order.payLink='https://pay.wave.com/m/test/';});
  ok((await page.evaluate(()=>getComputedStyle(document.getElementById('wvRes')).backgroundColor))==='rgb(238, 155, 89)','the result button turns orange');
  await page.evaluate(()=>{wvSheet('app')});await page.waitForTimeout(500);ok(await page.$('#wvSheet'),'the guide sheet opens from the blue banner');
  const sh=await box('#wvSheet');near(sh.y+sh.h,776,1,'the sheet sits on the bottom edge');near(sh.y,141.6,2,'and reaches up to the same height as in the recording');

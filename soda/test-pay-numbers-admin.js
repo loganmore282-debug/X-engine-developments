@@ -48,6 +48,11 @@ const srv = http.createServer((q, r) => {
     const form = await page.textContent('#content');
     ok(!/Telebirr|Commercial Bank|Ethiopia|Upload logo|Account number|Account name/i.test(form), 'no Ethiopian payment wording in the form');
     ok(/Payment link/.test(form) && /Upload QR picture/.test(form), 'the form asks for the Wave link and QR picture');
+    // a link that is not on wave.com is refused by the panel itself (and by the server)
+    for (const evil of ['https://evil.com/pay', 'http://pay.wave.com/m/x', 'https://pay.wave.com@evil.com/m/x']) {
+      await page.fill('#pcLink', evil); await page.click('#pcSave'); await page.waitForTimeout(150);
+      ok(saved.length === 0 && await page.$('#pcSave'), 'not saved: ' + evil);
+    }
     await page.fill('#pcLink', 'https://pay.wave.com/m/test/');
     const qr = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
     const tmp = path.join(require('os').tmpdir(), 'wave-qr-test.png'); fs.writeFileSync(tmp, Buffer.from(qr.split(',')[1], 'base64'));
