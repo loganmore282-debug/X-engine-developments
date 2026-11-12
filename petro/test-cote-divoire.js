@@ -38,7 +38,7 @@ assert.match(member, /languages: \['fr'\], defaultLang: 'fr'/);
 assert.match(member, /var LANG = 'en';/); assert.match(member, /var LANG_ALLOWED = \['en'\];/); // 'en' only means "no runtime translation": the text itself is French
 assert.equal((shell.match(/id="(login|reg|forgot)Dial">\+225</g) || []).length, 2, 'both dial chips (Log In, Sign Up) say +225');
 assert.doesNotMatch(shell, /Dial">\+25[16]</);
-assert.match(shell, /<html lang="fr">/);
+assert.match(shell, /<html lang="fr"[^>]*>/);
 assert.match(shell, /id="langBtn"/, 'the language button exists (hidden because there is only one language)');
 // the table: a French cell for every row, placeholders intact, no cell that just repeats English
 const a = member.indexOf('var LANG_ROWS = ['), b = member.indexOf('// ==== I18N TABLE: SHARED WITH THE ADMIN PANEL - END');
