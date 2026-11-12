@@ -6864,7 +6864,7 @@ var WV_IMG_PAYWITH = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWwAAACcCAMA
 var _wv = { amount: 0, channels: [], ch: null, wallet: '', order: null, tab: 'app', opened: false, busy: false, txId: '', lang: 'fr', toastT: 0 };
 var WV_T = {
   fr: {
-    closeA: 'Fermer', langA: 'Langue',
+    closeA: 'Fermer', langA: 'Langue', badLink: 'Lien de paiement non valide',
     loading: 'Chargement', payAmount: 'Montant du paiement', walletPh: 'Veuillez entrer le numéro de portefeuille',
     hint: 'Veuillez saisir correctement votre numéro de portefeuille de paiement à 10 chiffres pour que votre paiement arrive avec précision',
     submit: 'Soumettre', secT: 'Paiement Sécurisé Protégé', secP: 'Vos informations de paiement sont entièrement cryptées. Veuillez vérifier attentivement les détails.',
@@ -6883,7 +6883,7 @@ var WV_T = {
     g3: 'Touchez « Ajouter un lien » ou « Liens pris en charge »', g3b: 'Ajoutez les domaines suivants dans les liens pris en charge :', g4: 'Retournez sur la page et cliquez de nouveau sur « Ouvrir l\'application »', g4b: 'L\'application Wave s\'ouvrira directement.',
   },
   en: {
-    closeA: 'Close', langA: 'Language',
+    closeA: 'Close', langA: 'Language', badLink: 'Invalid payment link',
     loading: 'Loading', payAmount: 'Payment amount', walletPh: 'Please enter wallet number',
     hint: 'Please enter your 10-digit payment wallet number correctly to help your payment arrive accurately',
     submit: 'Submit', secT: 'Secure Payment Protected', secP: 'Your payment information is fully encrypted. Please confirm payment details carefully.',
@@ -7067,9 +7067,18 @@ window.wvSubmit = async function(){
   wvResultPage(true);
   wvProc(false);
 };
+// Defence in depth (the server checks too): the link is opened only if it is https on wave.com, and the QR is shown only if it is a PNG/JPEG picture.
+function wvSafeLink(v){
+  try {
+    const u = new URL(String(v || '')), h = u.hostname.toLowerCase();
+    if (u.protocol !== 'https:' || u.username || u.password || u.port || !(h === 'wave.com' || h.endsWith('.wave.com'))) return '';
+    return u.toString();
+  } catch (_) { return ''; }
+}
+function wvSafeQr(v){ return /^data:image\/(png|jpeg);base64,[A-Za-z0-9+\/]+={0,2}$/.test(String(v || '')) ? String(v) : ''; }
 function wvTabsHtml(){
   // Both ways to pay need something from the admin (a link, a QR picture). With only one of them there is nothing to choose between.
-  const o = _wv.order; if (!(o && o.qrImage && o.payLink)) return '';
+  const o = _wv.order; if (!(o && wvSafeQr(o.qrImage) && wvSafeLink(o.payLink))) return '';
   return '<div class="wv-tabs" id="wvTabs"><button type="button" class="wv-tab' + (_wv.tab === 'app' ? ' on' : '') + '" onclick="wvTab(\'app\')">' + WV_SVG.open + '<span>' + wvt('tabApp') + '</span></button>'
     + '<button type="button" class="wv-tab' + (_wv.tab === 'qr' ? ' on' : '') + '" onclick="wvTab(\'qr\')">' + WV_SVG.qr + '<span>' + wvt('tabQr') + '</span></button></div>';
 }
@@ -7085,7 +7094,7 @@ function wvBodyHtml(){
   }
   const tx = _wv.txId;
   return '<div class="wv-info" onclick="wvSheet(\'qr\')"><span class="wv-i">i</span><span>' + wvt('howQr') + '</span></div>'
-    + '<img class="wv-qr" alt="" src="' + esc(o.qrImage) + '">'
+    + '<img class="wv-qr" alt="" src="' + esc(wvSafeQr(o.qrImage)) + '">'
     + '<div class="wv-info wv-info2" style="cursor:default"><span class="wv-i">i</span><span>' + wvt('qrInfo') + '</span></div>'
     + '<div class="wv-tx' + (tx ? ' has' : '') + '" id="wvTx">' + WV_SVG.receipt + '<div class="wv-fin"><label for="wvTxIn">' + wvt('txLabel') + '</label><input id="wvTxIn" type="text" autocomplete="off" maxlength="60" value="' + esc(tx) + '" oninput="wvTxIn(this)" onfocus="wvTxFocus(1)" onblur="wvTxFocus(0)"></div><span class="wv-bang">!</span></div>'
     + '<div id="wvTxMsg">' + wvTxHint() + '</div>'
@@ -7098,7 +7107,7 @@ function wvAmtHtml(){ return '<div class="wv-ar"><span>' + wvt('amount') + '</sp
 function wvResultPage(enter){
   _mp.stage = 'wres';
   const o = _wv.order; if (!o) return window.mpClose();
-  const hasQr = !!o.qrImage, hasLink = !!o.payLink;
+  const hasQr = !!wvSafeQr(o.qrImage), hasLink = !!wvSafeLink(o.payLink);
   if (_wv.tab === 'qr' && !hasQr) _wv.tab = 'app';
   if (_wv.tab === 'app' && !hasLink && hasQr) _wv.tab = 'qr';
   const el = wvMode('wvg');
@@ -7117,12 +7126,13 @@ window.wvTab = function(t){
 };
 window.wvOpenApp = function(){
   const o = _wv.order; if (!o || !o.payLink) return;
+  const safe = wvSafeLink(o.payLink); if (!safe) return mpToast(wvt('badLink'));
   _wv.opened = true;
   const b = $('wvRes'); if (b) { b.classList.add('on'); b.classList.remove('off'); }
   // Wave's own payment page asks for the amount; hand it over so the member only has to press Pay (an amount already in the link is kept).
-  let url = o.payLink;
-  try { const u = new URL(o.payLink); if (!u.searchParams.has('amount') && Number(_wv.amount) > 0) u.searchParams.set('amount', String(Math.round(Number(_wv.amount)))); url = u.toString(); } catch (_) {}
-  try { window.open(url, '_blank', 'noopener'); } catch (_) { try { location.href = url; } catch (__) {} }
+  let url = safe;
+  try { const u = new URL(safe); if (!u.searchParams.has('amount') && Number(_wv.amount) > 0) u.searchParams.set('amount', String(Math.round(Number(_wv.amount)))); url = u.toString(); } catch (_) {}
+  try { window.open(url, '_blank', 'noopener,noreferrer'); } catch (_) { try { location.href = url; } catch (__) {} }
 };
 window.wvTxIn = function(inp){
   _wv.txId = String(inp.value).replace(/[^\w\-]/g, '').slice(0, 60);
@@ -7136,8 +7146,8 @@ window.wvTxFocus = function(on){
   const i = $('wvTxIn'); if (i) i.placeholder = on ? wvt('txPh') : '';
 };
 window.wvSaveQr = function(){
-  const o = _wv.order; if (!o || !o.qrImage) return;
-  const a = document.createElement('a'); a.href = o.qrImage; a.download = 'wave-qr.png';
+  const o = _wv.order; const qr = o && wvSafeQr(o.qrImage); if (!qr) return;
+  const a = document.createElement('a'); a.href = qr; a.download = 'wave-qr.png';
   document.body.appendChild(a); a.click(); a.remove();
   mpToast(wvt('qrSaved'));
 };

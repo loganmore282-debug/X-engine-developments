@@ -6027,7 +6027,7 @@ async function readPayChannels() {
 }
 function dropPayChannelsCache() { _payChannelsCache = null; }
 async function activePayChannels() {
-  try { return (await readPayChannels()).filter(c => c.active !== false && (c.payLink || c.qrImage)); }
+  try { return (await readPayChannels()).filter(c => c.active !== false && (safeWaveLink(c.payLink) || safeWaveQr(c.qrImage))); }
   catch (_) { return []; }
 }
 function payChannelPublic(c) {
@@ -6037,6 +6037,30 @@ function payChannelPublic(c) {
 function waveWalletDigits(v) {
   const d = String(v == null ? '' : v).replace(/\D/g, '');
   return d.length === (Number(currentRegion().localLength) || 10) ? d : '';
+}
+// ── SECURITY: the only link and the only picture the Wave pages may ever show or open ──
+// Owner: "make sure the page is secured to prevent hackers from injecting their payment QR codes and links".
+// Checked when the owner saves them, AGAIN every time they are handed to a member (so a row changed behind the app's back in
+// the database is still refused), and a third time in the browser. A link must be https on wave.com (or a wave.com sub-domain),
+// with no user:pass@, no port and no odd characters; a picture must be a real PNG or JPEG (the first bytes are checked, not just
+// the label in front of the data).
+const WAVE_LINK_MAX = 480;
+function safeWaveLink(v) {
+  const s = typeof v === 'string' ? v.trim() : '';
+  if (!s || s.length > WAVE_LINK_MAX || /[\s<>"'`\\]/.test(s) || !/^https:\/\//i.test(s)) return '';
+  let u; try { u = new URL(s); } catch (_) { return ''; }
+  const h = u.hostname.toLowerCase();
+  if (u.protocol !== 'https:' || u.username || u.password || u.port || !/^[a-z0-9.-]+$/.test(h)) return '';
+  return (h === 'wave.com' || h.endsWith('.wave.com')) ? s : '';
+}
+function safeWaveQr(v) {
+  if (typeof v !== 'string' || v.length > MAX_PAY_QR_CHARS) return '';
+  const m = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/]+={0,2})$/.exec(v);
+  if (!m) return '';
+  const head = Buffer.from(m[2].slice(0, 16), 'base64');
+  const png = head.length >= 8 && head.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const jpg = head.length >= 3 && head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;
+  return ((m[1] === 'png' && png) || (m[1] === 'jpeg' && jpg)) ? v : '';
 }
 function cleanPayText(v, max) { return String(v == null ? '' : v).replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max); }
 app.get('/public/pay-channels', async (req, res) => {
@@ -6066,13 +6090,13 @@ app.post('/admin/pay-channels/save', async (req, res) => {
     if (typeof b.payLink === 'string') {
       const v = b.payLink.trim();
       if (v === '') payLink = '';
-      else if (/^https:\/\/[^\s<>"']{4,480}$/i.test(v)) payLink = v;
-      else return res.status(400).json({ status: 'error', message: 'The payment link must start with https:// and have no spaces.' });
+      else if (safeWaveLink(v)) payLink = v;
+      else return res.status(400).json({ status: 'error', message: 'The payment link must be a secure https:// link on wave.com (for example https://pay.wave.com/m/...).' });
     }
     let qrImage = existing ? (existing.qrImage || '') : '';
     if (typeof b.qrImage === 'string') {
       if (b.qrImage === '') qrImage = '';
-      else if (/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(b.qrImage) && b.qrImage.length <= MAX_PAY_QR_CHARS) qrImage = b.qrImage;
+      else if (safeWaveQr(b.qrImage)) qrImage = b.qrImage;
       else return res.status(400).json({ status: 'error', message: 'That QR picture is not valid or is too large. Upload a smaller PNG or JPEG.' });
     }
     if (!payLink && !qrImage) return res.status(400).json({ status: 'error', message: 'Add the payment link or the QR picture (or both) for Wave.' });
@@ -6084,7 +6108,9 @@ app.post('/admin/pay-channels/save', async (req, res) => {
     const ref = existing ? db.collection('payChannels').doc(existing.id) : db.collection('payChannels').doc();
     if (existing) await ref.update(doc); else await ref.set({ ...doc, createdAt: FieldValue.serverTimestamp() });
     dropPayChannelsCache();
-    logAdminAction(req, 'pay_channel_saved', { id: ref.id, name, kind: 'wave', active: doc.active });
+    logAdminAction(req, 'pay_channel_saved', { id: ref.id, name, kind: 'wave', active: doc.active,
+      linkChanged: payLink !== (existing ? (existing.payLink || '') : ''), qrChanged: qrImage !== (existing ? (existing.qrImage || '') : ''),
+      linkHost: payLink ? new URL(payLink).hostname : '', qrFingerprint: qrImage ? crypto.createHash('sha256').update(qrImage).digest('hex').slice(0, 16) : '' });
     res.json({ status: 'success', id: ref.id });
   } catch (e) { console.error('pay-channels save:', e.message); res.status(500).json({ status: 'error', message: 'Could not save this Wave payment' }); }
 });
@@ -6151,7 +6177,7 @@ app.post('/deposit/manual/order', async (req, res) => {
     }
     const known = wallet || (mine && mine.data().walletNumber) || '';
     res.json({ status: 'success', depositId: depRef.id, reference: ref, amount: amt, expiresAt: expiresMs, channel: payChannelPublic(ch),
-      ...(known ? { payLink: ch.payLink || '', qrImage: ch.qrImage || '', wallet: known } : {}) });
+      ...(known ? { payLink: safeWaveLink(ch.payLink), qrImage: safeWaveQr(ch.qrImage), wallet: known } : {}) });
   } catch (e) { console.error('wave order:', e.message); res.status(500).json({ status: 'error', message: 'Impossible de démarrer la recharge' }); }
 });
 const _manualSubmitDebounce = new Map();

@@ -2756,6 +2756,11 @@ function applyAdminBrandName(name){
 // Owner: "put Wave only in all". Each entry is one Wave payment: the link the member's "Ouvrir l'application pour payer" button
 // opens and/or the QR picture shown on the QR tab. The pages use Wave's own icon, so there is no logo to upload.
 let _payRows = [], _payEdit = null, _payQr = undefined;
+// Same rule as the server: https on wave.com only, so a link pointing members at another site cannot be saved by mistake or by a thief.
+function adminWaveLinkOk(v){
+  try { const u = new URL(String(v || '').trim()), h = u.hostname.toLowerCase(); return u.protocol === 'https:' && !u.username && !u.password && !u.port && (h === 'wave.com' || h.endsWith('.wave.com')); }
+  catch (_) { return false; }
+}
 async function renderPayNumbers(){
   const r = await api('/admin/pay-channels/list', {});
   if (staleTab('paynumbers')) return;
@@ -2769,7 +2774,7 @@ function drawPayNumbers(){
   const form = e ? `
     <div class="panel-card">
       <h3 style="margin:0 0 10px;font-size:15px">${e.id ? 'Edit Wave payment' : 'Add Wave payment'}</h3>
-      <div><label>Payment link</label><input id="pcLink" maxlength="480" value="${esc(e.payLink || '')}" placeholder="https://pay.wave.com/m/..."></div>
+      <div><label>Payment link</label><input id="pcLink" maxlength="480" value="${esc(e.payLink || '')}" placeholder="https://pay.wave.com/m/..."><p class="muted" style="margin:6px 0 0;font-size:12px">Only secure links on wave.com are accepted, so nobody can point your members to another site.</p></div>
       <div class="banner-row" style="margin-top:10px">
         ${qrNow ? `<img src="${esc(qrNow)}" alt="" style="width:64px;height:auto;border-radius:8px;flex-shrink:0">` : ''}
         <div style="flex:1;min-width:0;font-size:12px">${qrNow ? 'QR picture ready' : '<span class="muted">No QR picture yet</span>'}</div>
@@ -2815,6 +2820,7 @@ function drawPayNumbers(){
     const f = ev.target.files[0]; if (!f) return; ev.target.value = '';
     keepPayForm();
     if (f.size > 420 * 1024) return toast('That QR picture is too large (up to about 400 KB).', 'err');
+    if (!/^image\/(png|jpeg)$/.test(f.type)) return toast('Upload the QR as a PNG or JPEG picture.', 'err');
     const reader = new FileReader();
     reader.onload = () => { _payQr = String(reader.result); toast('QR picture ready', 'ok'); drawPayNumbers(); };
     reader.onerror = () => toast('Could not read the picture', 'err');
@@ -2824,6 +2830,7 @@ function drawPayNumbers(){
   const save = $('pcSave');
   if (save) save.onclick = async () => {
     keepPayForm();
+    if (_payEdit.payLink && !adminWaveLinkOk(_payEdit.payLink)) return toast('The payment link must be a secure https:// link on wave.com (for example https://pay.wave.com/m/...).', 'err');
     const body = { id: _payEdit.id, payLink: _payEdit.payLink || '', order: _payEdit.order, active: _payEdit.active };
     if (_payQr !== undefined) body.qrImage = _payQr;
     save.disabled = true;
@@ -4462,6 +4469,10 @@ const ADMIN_LANG_ROWS = [
   ['Payment link', '', '', 'Lien de paiement', '', ''],
   ['No Wave payment yet. Until you add one, members cannot recharge.', '', '', 'Aucun paiement Wave pour l’instant. Tant que vous n’en ajoutez pas, les membres ne peuvent pas recharger.', '', ''],
   ['Delete this Wave payment? Members will no longer see it.', '', '', 'Supprimer ce paiement Wave ? Les membres ne le verront plus.', '', ''],
+  ['The payment link must be a secure https:// link on wave.com (for example https://pay.wave.com/m/...).', '', '', 'Le lien de paiement doit être un lien sécurisé https:// sur wave.com (par exemple https://pay.wave.com/m/...).', '', ''],
+  ['Upload the QR as a PNG or JPEG picture.', '', '', 'Téléversez le QR sous forme d’image PNG ou JPEG.', '', ''],
+  ['Only secure links on wave.com are accepted, so nobody can point your members to another site.', '', '', 'Seuls les liens sécurisés sur wave.com sont acceptés, afin que personne ne puisse envoyer vos membres vers un autre site.', '', ''],
+  ['That QR picture is not valid or is too large. Upload a smaller PNG or JPEG.', '', '', 'Cette image QR n’est pas valide ou est trop grande. Téléversez un PNG ou JPEG plus petit.', '', ''],
 ];
 const ADMIN_LANG_PATTERNS = [
   ['Prices, payouts, spins and the opening schedule are saved for {0} — the country in the switch at the top. Names, photos and order are shared by every country.', 'Ebbeeyi, okusasula, okukyusa n\'enteekateeka y\'okuggulawo bitereka ku {0} — eggwanga eriri mu kakyusa waggulu. Amannya, ebifaananyi n\'entegeka bigabanibwa amawanga gonna.', 'Bei, malipo, mizunguko na ratiba ya kufungua huhifadhiwa kwa {0} — nchi iliyo kwenye kibadilishi hapo juu. Majina, picha na mpangilio hushirikiwa na kila nchi.', 'Les prix, les versements, les tours et l\'horaire d\'ouverture sont enregistrés pour {0} — le pays du sélecteur en haut. Les noms, les photos et l\'ordre sont partagés par tous les pays.', 'Ibiciro, kwishyura, inzunguruka na gahunda yo gufungura bibikwa kuri {0} — igihugu kiri mu guhitamo haruguru. Amazina, amafoto n\'urutonde bisangirwa n\'ibihugu byose.', 'Ebiihendo, okushashura, okuzunguka n\'entebekanisa y\'okwigura nibibikwa aha {0} — eihanga eriri omu kacwamu haiguru. Amaziina, ebishushani n\'entebekanisa nibigabanwa amahanga goona.'],
