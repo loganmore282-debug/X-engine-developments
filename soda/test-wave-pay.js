@@ -106,6 +106,14 @@ const QR = 'data:image/png;base64,UVJRUg==';
   r = await call(H['POST /deposit/manual/submit'], { depositId: dep2 }); eq(r.code, 404, 'someone else\'s order is refused');
   r = await call(H['POST /deposit/manual/submit'], { depositId: dep3, txId: 'OTHER-1' });
   eq(r.code, 429, 'two sends in a row are slowed down');
+  // opening the pages again is a NEW order with a fresh clock; the older unsent one is closed (owner: "it shares the same time")
+  ctx.user = 'u2'; db.col('pendingDeposits').set('stale', { userId: 'u2', method: 'manual', status: 'pending', amount: 5000, expiresAt: new Date(Date.now() + 60 * 1000) });
+  r = await call(H['POST /deposit/manual/order'], { amount: 5000, channelId: w1 });
+  ok(r.code === 200 && r.body.depositId !== 'stale', 'opening the payment pages again creates a new order');
+  ok(r.body.expiresAt - Date.now() > 29 * 60 * 1000, 'with its own fresh 30 minute clock, not the old one');
+  eq(db.col('pendingDeposits').get('stale').status, 'failed', 'the older unsent order is closed');
+  const keep = r.body.depositId; r = await call(H['POST /deposit/manual/order'], { amount: 6000, channelId: w1, depositId: keep });
+  eq(r.body.depositId, keep, 'the same page re-pointing its own order keeps it (and its clock)');
   // wiring in the source
   const full = fs.readFileSync(__dirname + '/server.js', 'utf8');
   ok(!/wavePay/.test(full), 'there is no separate switch: Wave is the only way to recharge');

@@ -6225,6 +6225,8 @@ window.wvSubmit = async function(){
   wvProc(false);
 };
 function wvTabsHtml(){
+  // Both ways to pay need something from the admin (a link, a QR picture). With only one of them there is nothing to choose between.
+  const o = _wv.order; if (!(o && o.qrImage && o.payLink)) return '';
   return '<div class="wv-tabs" id="wvTabs"><button type="button" class="wv-tab' + (_wv.tab === 'app' ? ' on' : '') + '" onclick="wvTab(\'app\')">' + WV_SVG.open + '<span>' + wvt('tabApp') + '</span></button>'
     + '<button type="button" class="wv-tab' + (_wv.tab === 'qr' ? ' on' : '') + '" onclick="wvTab(\'qr\')">' + WV_SVG.qr + '<span>' + wvt('tabQr') + '</span></button></div>';
 }

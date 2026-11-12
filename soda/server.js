@@ -5279,7 +5279,11 @@ app.post('/deposit/manual/order', async (req, res) => {
     const openSnap = await db.collection('pendingDeposits').where('userId', '==', userId).where('status', '==', 'pending').get();
     const open = openSnap.docs.filter(d => d.data().method === 'manual' && !d.data().pastedSms && (tsMillis(d.data().expiresAt) || 0) > now);
     let depRef, ref, expiresMs;
-    const mine = open.find(d => d.id === String(req.body.depositId || '')) || open[0];
+    // Owner: "it doesn't create a new payment order, it shares the same time". Opening the payment pages (no depositId) always starts a
+    // NEW order with a fresh 30 minute clock; only the same page re-pointing its own order (wallet typed, tab changed) reuses it.
+    // Older unsent orders of this member are closed so they do not pile up.
+    const mine = req.body.depositId ? open.find(d => d.id === String(req.body.depositId)) : null;
+    for (const o of open) if (!mine || o.id !== mine.id) await o.ref.updateIf({ status: 'pending' }, { status: 'failed', failureReason: 'Replaced by a newer payment order' }).catch(() => {});
     const channelFields = { network: ch.name || 'Wave', channelId: ch.id, channelKind: 'wave', ...(wallet ? { walletNumber: wallet } : {}) };
     if (mine) {
       depRef = mine.ref; ref = mine.data().ref; expiresMs = tsMillis(mine.data().expiresAt);
