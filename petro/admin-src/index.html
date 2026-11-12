@@ -2785,6 +2785,27 @@ function fileToQrPicture(file){
     reader.readAsDataURL(file);
   });
 }
+// A lighter copy of an already prepared QR picture (smallest JPEG that fits `limit` characters, or the smallest tried).
+function shrinkQrToLimit(dataUrl, limit){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onerror = () => reject(new Error('Could not read the picture'));
+    img.onload = () => {
+      let best = dataUrl;
+      for (const [maxSide, q] of [[640, .8], [560, .75], [500, .7], [440, .65], [380, .6]]) {
+        const k = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+        const w = Math.max(1, Math.round(img.naturalWidth * k)), h = Math.max(1, Math.round(img.naturalHeight * k));
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.imageSmoothingQuality = 'high'; x.drawImage(img, 0, 0, w, h);
+        const out = c.toDataURL('image/jpeg', q);
+        if (out.length < best.length) best = out;
+        if (out.length <= limit) return resolve(out);
+      }
+      resolve(best);
+    };
+    img.src = dataUrl;
+  });
+}
 // Same rule as the server: https on wave.com only, so a link pointing members at another site cannot be saved by mistake or by a thief.
 function adminWaveLinkOk(v){
   try { const u = new URL(String(v || '').trim()), h = u.hostname.toLowerCase(); return u.protocol === 'https:' && !u.username && !u.password && !u.port && (h === 'wave.com' || h.endsWith('.wave.com')); }
@@ -2860,7 +2881,11 @@ function drawPayNumbers(){
     const body = { id: _payEdit.id, payLink: _payEdit.payLink || '', order: _payEdit.order, active: _payEdit.active };
     if (_payQr !== undefined) body.qrImage = _payQr;
     save.disabled = true;
-    const d = await api('/admin/pay-channels/save', body);
+    let d = await api('/admin/pay-channels/save', body);
+    // A server that still has the small request cap answers "too large": send a lighter copy of the picture once instead of failing.
+    if (d.status !== 'success' && body.qrImage && /volumineuse|too large|413/i.test(String(d.message || ''))) {
+      try { body.qrImage = await shrinkQrToLimit(body.qrImage, 58000); d = await api('/admin/pay-channels/save', body); } catch (_) {}
+    }
     toast(d.status === 'success' ? 'Saved' : (d.message || 'Could not save'), d.status === 'success' ? 'ok' : 'err');
     if (d.status === 'success') renderPayNumbers(); else save.disabled = false;
   };
