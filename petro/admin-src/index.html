@@ -385,7 +385,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
         <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="settings" id="settingsTab">Settings</button>
         <button class="tab" data-tab="banners" id="bannersTab">Banners</button>
-        <button class="tab hidden" data-tab="paynumbers" id="payNumbersTab">Payment Numbers</button>
+        <button class="tab hidden" data-tab="paynumbers" id="payNumbersTab">Wave payments</button>
         <button class="tab hidden" data-tab="admins" id="adminsTab">Admins</button>
         <button class="tab hidden" data-tab="auditlog" id="auditLogTab">Activity Log</button>
       </div>
@@ -1901,7 +1901,7 @@ async function openUser(uid){
 }
 
 // ── DEPOSITS ──
-// ── RECHARGES (Bank / Wallet claims + USDT) ──
+// ── RECHARGES (Wave claims + USDT) ──
 // Owner: "the deposit doesn't show badge, why doesn't it show the sent message, force credit should be named
 // approve because this is manual, remove PesaJet, MarzPay, cards, OTPs -- we are using USDT and manual".
 // Every recharge is a CARD (not a wide table row, so the status badge, the member's message and the buttons
@@ -1936,7 +1936,7 @@ async function renderDeposits(){
     <tbody>${dRows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
     <h2 class="sec" style="margin:0 0 4px">Recharges</h2>
-    <p class="muted" style="margin:0 0 12px">Members pay into one of your Payment Numbers (bank or Telebirr) or send USDT. When a member sends the payment message, it appears under <b>To approve</b>. Check that the money really arrived, then tap <b>Approve</b> to add it to their wallet &mdash; or <b>Reject</b>.</p>
+    <p class="muted" style="margin:0 0 12px">Members pay with Wave (set up under Wave payments) or send USDT. When a member sends the payment details, it appears under <b>To approve</b>. Check that the money really arrived, then tap <b>Approve</b> to add it to their wallet &mdash; or <b>Reject</b>.</p>
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_deps.length+' recharges only. The platform has more history than this list can currently display.</div>':''}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs" id="depTabs">${DEP_TABS.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${depTabLabel(k,l)}</button>`).join('')}</div>
@@ -1959,7 +1959,7 @@ function depCardHtml(d){
   }
   const method = isUsdt
     ? `USDT (TRC20)${d.autoVerified?' <span class="pill-tag t-ok" style="font-size:9.5px;padding:2px 6px">Auto</span>':d.autoDeclined?' <span class="pill-tag t-bad" style="font-size:9.5px;padding:2px 6px">Auto-declined</span>':''}<br><a href="https://tronscan.org/#/transaction/${esc(d.txid||'')}" target="_blank" rel="noopener" style="font-size:11px">${esc((d.txid||'').slice(0,12))}…</a>${d.exactMicros?`<br><span style="font-size:11px" title="The transfer must be exactly this amount">${esc((Number(d.exactMicros)/1e6).toFixed(6))} USDT</span>`:''}`
-    : isManual ? `<span data-no-i18n>${esc(d.network||'Bank / Wallet')}</span><br><span class="muted" style="font-size:12px" data-no-i18n>${esc(d.assignedName||'')}${d.assignedName?' · ':''}${esc(d.assignedNumber||'')}</span>`
+    : isManual ? `<span data-no-i18n>${esc(d.network||'Wave')}</span><br><span class="muted" style="font-size:12px" data-no-i18n>${esc(d.assignedName||'')}${d.assignedName?' · ':''}${esc(d.assignedNumber||'')}</span>`
     : esc(d.method||'Recharge');
   const checks = [];
   if (d.pastedSmsAmount != null) checks.push(`Message amount: <b>${ugx(d.pastedSmsAmount)}</b> ${d.pastedSmsAmountMatches===true?'<span style="color:var(--ok)">matches the order</span>':d.pastedSmsAmountMatches===false?'<span style="color:var(--danger)">does NOT match the order</span>':''}`);
@@ -2752,57 +2752,31 @@ function applyAdminBrandName(name){
 // already uses -- one extra round of these 4 small fetches on switching
 // tabs, in exchange for not threading one function's closure across two.
 
-// ── PAYMENT NUMBERS (bank / wallet accounts members pay into) ──
-// Owner: "make when l can put payment numbers from admin panel ... make when l can upload the logos,
-// so system will remove background so that they fit perfectly". Each entry is one row on the member's
-// "Please choose payment" page. The logo goes through fileToLogoPng(): the background connected to the
-// picture edge is cleared and the picture is cropped tight, so it sits perfectly inside the round frame.
-let _payRows = [], _payEdit = null, _payLogo = undefined, _payQr = undefined;
+// ── WAVE PAYMENTS (what members pay into) ──
+// Owner: "put Wave only in all". Each entry is one Wave payment: the link the member's "Ouvrir l'application pour payer" button
+// opens and/or the QR picture shown on the QR tab. The pages use Wave's own icon, so there is no logo to upload.
+let _payRows = [], _payEdit = null, _payQr = undefined;
 async function renderPayNumbers(){
   const r = await api('/admin/pay-channels/list', {});
   if (staleTab('paynumbers')) return;
   _payRows = (r && r.channels) || [];
-  _payEdit = null; _payLogo = undefined; _payQr = undefined;
+  _payEdit = null; _payQr = undefined;
   drawPayNumbers();
-}
-function payLogoBox(src, size){
-  size = size || 44;
-  return src
-    ? `<div style="width:${size}px;height:${size}px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;border:1px solid var(--line);background:#fff"><img src="${esc(src)}" alt="" style="max-width:76%;max-height:76%;object-fit:contain"></div>`
-    : `<div style="width:${size}px;height:${size}px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;border:1px dashed var(--line);color:var(--muted,#888);font-size:11px">No logo</div>`;
 }
 function drawPayNumbers(){
   const e = _payEdit;
-  const logoNow = e ? (_payLogo === undefined ? (e.logo || '') : _payLogo) : '';
   const qrNow = e ? (_payQr === undefined ? (e.qrImage || '') : _payQr) : '';
-  const isWave = !!e && e.kind === 'wave';
   const form = e ? `
     <div class="panel-card">
-      <h3 style="margin:0 0 10px;font-size:15px">${e.id ? 'Edit payment number' : 'Add payment number'}</h3>
-      <div class="row">
-        <div><label>Name members see</label><input id="pcName" maxlength="60" value="${esc(e.name || '')}" placeholder="Commercial Bank of Ethiopia"></div>
-        <div><label>Type</label><select id="pcKind"><option value="bank"${e.kind !== 'wallet' && e.kind !== 'wave' ? ' selected' : ''}>Bank</option><option value="wallet"${e.kind === 'wallet' ? ' selected' : ''}>Wallet (Telebirr)</option><option value="wave"${e.kind === 'wave' ? ' selected' : ''}>Wave (link + QR)</option></select></div>
-      </div>
-      ${isWave ? `
-      <div style="margin-top:8px"><label>Payment link (opened by &ldquo;Ouvrir l&rsquo;application pour payer&rdquo;)</label><input id="pcLink" maxlength="480" value="${esc(e.payLink || '')}" placeholder="https://pay.wave.com/m/..."></div>
+      <h3 style="margin:0 0 10px;font-size:15px">${e.id ? 'Edit Wave payment' : 'Add Wave payment'}</h3>
+      <div><label>Payment link</label><input id="pcLink" maxlength="480" value="${esc(e.payLink || '')}" placeholder="https://pay.wave.com/m/..."></div>
       <div class="banner-row" style="margin-top:10px">
         ${qrNow ? `<img src="${esc(qrNow)}" alt="" style="width:64px;height:auto;border-radius:8px;flex-shrink:0">` : ''}
         <div style="flex:1;min-width:0;font-size:12px">${qrNow ? 'QR picture ready' : '<span class="muted">No QR picture yet</span>'}</div>
         ${qrNow ? '<button class="btn danger sm" id="pcQrClear" type="button">Remove QR</button>' : ''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload QR picture<input type="file" id="pcQrFile" accept="image/png,image/jpeg" hidden></label>
-      <p class="muted" style="margin:6px 0 0;font-size:12px">The QR picture you get from Wave, shown as it is on the &ldquo;Scanner le code QR&rdquo; tab (PNG or JPEG, up to about 400 KB). Members must enter the transaction ID after paying; you approve the claim under Recharges.</p>` : `
-      <div class="row" style="margin-top:8px">
-        <div><label>Account name</label><input id="pcAccName" maxlength="80" value="${esc(e.accountName || '')}" placeholder="Ashenafi"></div>
-        <div><label>Account number</label><input id="pcAccNo" maxlength="40" value="${esc(e.accountNumber || '')}" placeholder="1000809418239"></div>
-      </div>`}
-      <div class="banner-row" style="margin-top:10px">
-        ${payLogoBox(logoNow, 52)}
-        <div style="flex:1;min-width:0;font-size:12px">${logoNow ? 'Logo ready (background removed)' : '<span class="muted">No logo yet</span>'}</div>
-        ${logoNow ? '<button class="btn danger sm" id="pcLogoClear" type="button">Remove logo</button>' : ''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload logo<input type="file" id="pcLogoFile" accept="image/*" hidden></label>
-      <p class="muted" style="margin:6px 0 0;font-size:12px">Upload the logo as it is. The system clears the background around it and crops it so it fits the round frame.</p>
+      <p class="muted" style="margin:6px 0 0;font-size:12px">The QR picture you get from Wave, shown as it is on the QR tab (PNG or JPEG, up to about 400 KB). Members must enter the transaction ID after paying; you approve the claim under Recharges.</p>
       <div class="row" style="margin-top:10px;align-items:end">
         <div><label>Order (smaller first)</label><input id="pcOrder" type="number" min="0" max="999" value="${esc(e.order != null ? e.order : _payRows.length)}"></div>
         <div><label style="display:flex;align-items:center;gap:8px;margin-top:22px"><input id="pcActive" type="checkbox" style="width:auto"${e.active === false ? '' : ' checked'}> Show to members</label></div>
@@ -2810,34 +2784,32 @@ function drawPayNumbers(){
       <div class="row" style="margin-top:14px"><button class="btn block" id="pcSave" type="button">Save</button><button class="btn ghost block" id="pcCancel" type="button">Cancel</button></div>
     </div>` : '';
   $('content').innerHTML = `
-    <h2 class="sec">Payment numbers</h2>
-    <p class="muted" style="margin:0 0 12px">These are the accounts members pay into on the recharge page (a bank account, a Telebirr wallet and so on). Each one appears as a row under &ldquo;Please choose payment&rdquo; with its logo. A member who taps <b>switch</b> goes back to this list.</p>
+    <h2 class="sec">Wave payments</h2>
+    <p class="muted" style="margin:0 0 12px">Members recharge with Wave. Add your Wave payment link and/or QR picture here. They see the Wave pages, pay from their own Wave app and send you their wallet number (and the transaction ID on the QR page). You check that the money arrived and approve it under Recharges.</p>
     ${form}
-    ${e ? '' : '<button class="btn block" id="pcAdd" type="button" style="margin-bottom:14px">Add payment number</button>'}
+    ${e ? '' : '<button class="btn block" id="pcAdd" type="button" style="margin-bottom:14px">Add Wave payment</button>'}
     <div class="panel-card">
       ${_payRows.length ? _payRows.map(c => `
         <div class="banner-row" data-pcid="${esc(c.id)}">
-          ${payLogoBox(c.logo, 44)}
           <div style="flex:1;min-width:0;font-size:13px">
-            <b data-no-i18n>${esc(c.name)}</b> <span class="pill-tag ${c.active === false ? 't-bad' : 't-ok'}" style="font-size:10px">${c.active === false ? 'Hidden' : 'Showing'}</span>
-            <div class="muted" style="font-size:12px" data-no-i18n>${c.kind === 'wave' ? 'Wave &middot; ' + (c.payLink ? 'link' : 'no link') + ' &middot; ' + (c.qrImage ? 'QR' : 'no QR') : esc(c.accountName) + ' &middot; ' + esc(c.accountNumber) + ' &middot; ' + (c.kind === 'wallet' ? 'Wallet' : 'Bank')}</div>
+            <b data-no-i18n>${esc(c.name || 'Wave')}</b> <span class="pill-tag ${c.active === false ? 't-bad' : 't-ok'}" style="font-size:10px">${c.active === false ? 'Hidden' : 'Showing'}</span>
+            <div class="muted" style="font-size:12px" data-no-i18n>${c.payLink ? 'Link' : 'No link'} &middot; ${c.qrImage ? 'QR' : 'No QR'}</div>
           </div>
           <button class="btn ghost sm" data-pc-edit="${esc(c.id)}" type="button">Edit</button>
           <button class="btn danger sm" data-pc-del="${esc(c.id)}" type="button">Delete</button>
-        </div>`).join('') : '<p class="muted" style="margin:0">No payment numbers yet. Until you add one, members cannot recharge by bank or wallet.</p>'}
+        </div>`).join('') : '<p class="muted" style="margin:0">No Wave payment yet. Until you add one, members cannot recharge.</p>'}
     </div>`;
-  const add = $('pcAdd'); if (add) add.onclick = () => { _payEdit = { active: true, kind: 'wave' }; _payLogo = undefined; _payQr = undefined; drawPayNumbers(); };
-  $('content').querySelectorAll('[data-pc-edit]').forEach(b => b.onclick = () => { _payEdit = _payRows.find(r => r.id === b.dataset.pcEdit) || null; _payLogo = undefined; _payQr = undefined; drawPayNumbers(); });
-  const kindSel = $('pcKind'); if (kindSel) kindSel.onchange = () => { keepPayForm(); drawPayNumbers(); };
+  const add = $('pcAdd'); if (add) add.onclick = () => { _payEdit = { active: true }; _payQr = undefined; drawPayNumbers(); };
+  $('content').querySelectorAll('[data-pc-edit]').forEach(b => b.onclick = () => { _payEdit = _payRows.find(r => r.id === b.dataset.pcEdit) || null; _payQr = undefined; drawPayNumbers(); });
   $('content').querySelectorAll('[data-pc-del]').forEach(b => b.onclick = async () => {
     const row = _payRows.find(r => r.id === b.dataset.pcDel); if (!row) return;
-    if (!window.confirm('Delete "' + row.name + '"? Members will no longer see it.')) return;
+    if (!window.confirm('Delete this Wave payment? Members will no longer see it.')) return;
     b.disabled = true;
     const d = await api('/admin/pay-channels/delete', { id: row.id });
     toast(d.status === 'success' ? 'Deleted' : (d.message || 'Could not delete'), d.status === 'success' ? 'ok' : 'err');
     renderPayNumbers();
   });
-  const cancel = $('pcCancel'); if (cancel) cancel.onclick = () => { _payEdit = null; _payLogo = undefined; _payQr = undefined; drawPayNumbers(); };
+  const cancel = $('pcCancel'); if (cancel) cancel.onclick = () => { _payEdit = null; _payQr = undefined; drawPayNumbers(); };
   const qrFile = $('pcQrFile');
   if (qrFile) qrFile.addEventListener('change', async ev => {
     const f = ev.target.files[0]; if (!f) return; ev.target.value = '';
@@ -2849,25 +2821,10 @@ function drawPayNumbers(){
     reader.readAsDataURL(f);
   });
   const qrClr = $('pcQrClear'); if (qrClr) qrClr.onclick = () => { keepPayForm(); _payQr = ''; drawPayNumbers(); };
-  const file = $('pcLogoFile');
-  if (file) file.addEventListener('change', async ev => {
-    const f = ev.target.files[0]; if (!f) return; ev.target.value = '';
-    keepPayForm();
-    try {
-      toast('Processing logo…', 'ok');
-      const result = await fileToLogoPng(f, 256);
-      _payLogo = result.image;
-      toast(result.cleared ? 'Background removed' : 'Logo ready', 'ok');
-      drawPayNumbers();
-    } catch (err) { toast(err.message || 'Could not process the logo', 'err'); }
-  });
-  const clr = $('pcLogoClear'); if (clr) clr.onclick = () => { keepPayForm(); _payLogo = ''; drawPayNumbers(); };
   const save = $('pcSave');
   if (save) save.onclick = async () => {
     keepPayForm();
-    const body = { id: _payEdit.id, name: _payEdit.name, kind: _payEdit.kind, accountName: _payEdit.accountName, accountNumber: _payEdit.accountNumber, order: _payEdit.order, active: _payEdit.active };
-    if (_payEdit.kind === 'wave') body.payLink = _payEdit.payLink || '';
-    if (_payLogo !== undefined) body.logo = _payLogo;
+    const body = { id: _payEdit.id, payLink: _payEdit.payLink || '', order: _payEdit.order, active: _payEdit.active };
     if (_payQr !== undefined) body.qrImage = _payQr;
     save.disabled = true;
     const d = await api('/admin/pay-channels/save', body);
@@ -2875,12 +2832,11 @@ function drawPayNumbers(){
     if (d.status === 'success') renderPayNumbers(); else save.disabled = false;
   };
 }
-// Copies what is typed in the form back into the entry being edited, so a redraw (after choosing a logo) keeps it.
+// Copies what is typed in the form back into the entry being edited, so a redraw (after choosing the QR picture) keeps it.
 function keepPayForm(){
-  if (!_payEdit || !$('pcName')) return;
+  if (!_payEdit || !$('pcLink')) return;
   _payEdit = Object.assign({}, _payEdit, {
-    name: $('pcName').value, kind: $('pcKind').value, accountName: $('pcAccName') ? $('pcAccName').value : _payEdit.accountName, accountNumber: $('pcAccNo') ? $('pcAccNo').value : _payEdit.accountNumber, payLink: $('pcLink') ? $('pcLink').value : _payEdit.payLink,
-    order: $('pcOrder').value === '' ? undefined : Number($('pcOrder').value), active: $('pcActive').checked,
+    payLink: $('pcLink').value, order: $('pcOrder').value === '' ? undefined : Number($('pcOrder').value), active: $('pcActive').checked,
   });
 }
 async function renderBanners(){
@@ -3166,7 +3122,7 @@ async function renderSettings(){
 
     <h2 class="sec">Recharges and withdrawals</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0"><b>Bank / Wallet:</b> add the accounts members pay into under <b>Payment Numbers</b>. Members send you the payment message and you approve it under <b>Recharges</b>. <b>USDT:</b> set it up below. <b>Withdrawals</b> are paid by you: send the money, then record it under <b>Withdrawals</b>.</p>
+      <p class="muted" style="margin-top:0"><b>Wave:</b> add your Wave link and QR picture under <b>Wave payments</b>. Members send you their payment details and you approve it under <b>Recharges</b>. <b>USDT:</b> set it up below. <b>Withdrawals</b> are paid by you: send the money, then record it under <b>Withdrawals</b>.</p>
     </div>
 
     <h2 class="sec">Crypto recharges (USDT TRC20)</h2>
@@ -3929,7 +3885,6 @@ const ADMIN_LANG_ROWS = [
   ['Set per product, not here — open Products, edit a product, and use its "Turntable spins from this product" section to set how many spins it earns and what each can win. That way every product can pay differently.', 'Kiteekebwa ku buli kyamaguzi, si wano — ggulawo Ebyamaguzi, kyusa ekyamaguzi, era okozese ekitundu kyakyo ekya "Turntable spins from this product" okuteeka okukyusa kwe kiwa n\'ekyo buli kumu kwe kuyinza okuwangula. Mu ngeri eyo buli kyamaguzi kisobola okusasula mu ngeri yaakyo.', 'Huwekwa kwa kila bidhaa, si hapa — fungua Bidhaa, hariri bidhaa, kisha tumia sehemu yake ya "Turntable spins from this product" kuweka mizunguko inayopatikana na kila mmoja anaweza kushinda kiasi gani. Kwa njia hiyo kila bidhaa inaweza kulipa tofauti.', 'À régler par produit, pas ici — ouvrez Produits, modifiez un produit, et utilisez sa section "Turntable spins from this product" pour définir combien de tours il rapporte et ce que chacun peut gagner. Ainsi chaque produit peut payer différemment.', 'Bishyirwaho kuri buri gicuruzwa, atari hano — fungura Ibicuruzwa, uhindure igicuruzwa, hanyuma ukoreshe igice cyacyo cya "Turntable spins from this product" kugira ngo ushyireho inzunguruka gitanga n\'ibyo buri imwe ishobora gutsindira. Muri ubwo buryo buri gicuruzwa gishobora kwishyura ukundi.', 'Nikitebekwa aha buri kyamaguzi, ti hanu — igura Ebyamaguzi, ohindure ekyamaguzi, reero okoreese akacweka kaakyo aka "Turntable spins from this product" kugira ngo ote okuzunguka oku kirikuha n\'eki buri kumwe kurikubaasa kutunga. Omu muringo ogwo buri kyamaguzi nikibaasa kushashura kwahukanye.'],
   // ── English + French coverage round (owner: the admin panel must be fully switchable to French) ──
   ['+ New asset', '', '', '+ Nouvel actif', '', ''],
-  ['24-hour clock, Ethiopia time. Can run past midnight (for example 18:00 to 17:00). One withdrawal at a time per member, always.', '', '', 'Horloge de 24 heures, heure de la Côte d’Ivoire. Peut dépasser minuit (par exemple de 18:00 à 17:00). Un seul retrait à la fois par membre, toujours.', '', ''],
   ['24-hour clock, Côte d’Ivoire time. Can run past midnight (for example 18:00 to 17:00). One withdrawal at a time per member, always.', '', '', 'Horloge de 24 heures, heure de la Côte d’Ivoire. Peut dépasser minuit (par exemple de 18:00 à 17:00). Un seul retrait à la fois par membre, toujours.', '', ''],
   ['A popup shown every time a member logs in or completes registration, and also when they navigate back to Home from Assets, Network or Account. Its WhatsApp and Telegram group buttons use the links set in Support contacts above.', '', '', 'Une fenêtre affichée à chaque connexion ou fin d’inscription d’un membre, et aussi quand il revient à l’Accueil depuis Actifs, Réseau ou Compte. Ses boutons de groupe WhatsApp et Telegram utilisent les liens définis dans « Contacts d’assistance » ci-dessus.', '', ''],
   ['Activate', '', '', 'Activer', '', ''],
@@ -3939,8 +3894,8 @@ const ADMIN_LANG_ROWS = [
   ['Attach the member\'s referrer once. Eligible commission from their first confirmed recharge is processed immediately. Existing commission payments are preserved; attaching a referrer does not pay them again.', '', '', 'Rattachez le parrain du membre une seule fois. La commission éligible de sa première recharge confirmée est traitée immédiatement. Les commissions déjà versées sont conservées ; rattacher un parrain ne les paie pas une seconde fois.', '', ''],
   ['Background blur (0–40 px)', '', '', 'Flou de l’arrière-plan (0–40 px)', '', ''],
   ['Background opacity (0–100%)', '', '', 'Opacité de l’arrière-plan (0–100 %)', '', ''],
-  ['Bank / Wallet: add the accounts members pay into under Payment Numbers. Members send you the payment message and you approve it under Recharges. USDT: set it up below. Retraits are paid by you: send the money, then record it under Retraits.', '', '', 'Banque / Portefeuille : ajoutez les comptes sur lesquels les membres paient dans « Numéros de paiement ». Les membres vous envoient le message de paiement et vous l’approuvez dans Recharges. USDT : configurez-le plus bas. Les retraits sont payés par vous : envoyez l’argent, puis enregistrez-le dans Retraits.', '', ''],
-  ['Bank / Wallet: add the accounts members pay into under Payment Numbers. Members send you the payment message and you approve it under Recharges. USDT: set it up below. Withdrawals are paid by you: send the money, then record it under Withdrawals.', '', '', 'Banque / Portefeuille : ajoutez les comptes sur lesquels les membres paient dans « Numéros de paiement ». Les membres vous envoient le message de paiement et vous l’approuvez dans Recharges. USDT : configurez-le plus bas. Les retraits sont payés par vous : envoyez l’argent, puis enregistrez-le dans Retraits.', '', ''],
+  ['Wave: add your Wave link and QR picture under Wave payments. Members send you their payment details and you approve it under Recharges. USDT: set it up below. Retraits are paid by you: send the money, then record it under Retraits.', '', '', 'Wave : ajoutez votre lien Wave et votre image QR dans « Paiements Wave ». Les membres vous envoient leurs détails de paiement et vous les approuvez dans Recharges. USDT : configurez-le plus bas. Les retraits sont payés par vous : envoyez l’argent, puis enregistrez-le dans Retraits.', '', ''],
+  ['Wave: add your Wave link and QR picture under Wave payments. Members send you their payment details and you approve it under Recharges. USDT: set it up below. Withdrawals are paid by you: send the money, then record it under Withdrawals.', '', '', 'Wave : ajoutez votre lien Wave et votre image QR dans « Paiements Wave ». Les membres vous envoient leurs détails de paiement et vous les approuvez dans Recharges. USDT : configurez-le plus bas. Les retraits sont payés par vous : envoyez l’argent, puis enregistrez-le dans Retraits.', '', ''],
   ['Banned users · tap to view', '', '', 'Utilisateurs bannis · touchez pour voir', '', ''],
   ['Banners', '', '', 'Bannières', '', ''],
   ['Build the member-facing Rules and Regulations page with ordered text and image blocks. Changes appear in Account after saving.', '', '', 'Construisez la page « Règles et conditions » vue par les membres avec des blocs de texte et d’image ordonnés. Les changements apparaissent dans Compte après l’enregistrement.', '', ''],
@@ -3962,15 +3917,15 @@ const ADMIN_LANG_ROWS = [
   ['Make unrestricted by withdrawal time', '', '', 'Retirer la limite des heures de retrait', '', ''],
   ['Max reward (XOF)', '', '', 'Récompense maximale (XOF)', '', ''],
   ['Min reward (XOF)', '', '', 'Récompense minimale (XOF)', '', ''],
-  ['Members pay into one of your Payment Numbers (bank or Telebirr) or send USDT. When a member sends the payment message, it appears under To approve. Check that the money really arrived, then tap Approuver to add it to their wallet — or Refuser.', '', '', 'Les membres paient sur l’un de vos numéros de paiement (banque ou Telebirr) ou envoient des USDT. Quand un membre envoie le message de paiement, il apparaît sous « À approuver ». Vérifiez que l’argent est bien arrivé, puis touchez Approuver pour l’ajouter à son portefeuille — ou Refuser.', '', ''],
-  ['Members pay into one of your Payment Numbers (bank or Telebirr) or send USDT. When a member sends the payment message, it appears under To approve. Check that the money really arrived, then tap Approve to add it to their wallet — or Reject.', '', '', 'Les membres paient sur l’un de vos numéros de paiement (banque ou Telebirr) ou envoient des USDT. Quand un membre envoie le message de paiement, il apparaît sous « À approuver ». Vérifiez que l’argent est bien arrivé, puis touchez Approuver pour l’ajouter à son portefeuille — ou Refuser.', '', ''],
+  ['Members pay with Wave (set up under Wave payments) or send USDT. When a member sends the payment details, it appears under To approve. Check that the money really arrived, then tap Approuver to add it to their wallet — or Refuser.', '', '', 'Les membres paient avec Wave (configuré dans « Paiements Wave ») ou envoient des USDT. Quand un membre envoie les détails du paiement, il apparaît sous « À approuver ». Vérifiez que l’argent est bien arrivé, puis touchez Approuver pour l’ajouter à son portefeuille — ou Refuser.', '', ''],
+  ['Members pay with Wave (set up under Wave payments) or send USDT. When a member sends the payment details, it appears under To approve. Check that the money really arrived, then tap Approve to add it to their wallet — or Reject.', '', '', 'Les membres paient avec Wave (configuré dans « Paiements Wave ») ou envoient des USDT. Quand un membre envoie les détails du paiement, il apparaît sous « À approuver ». Vérifiez que l’argent est bien arrivé, puis touchez Approuver pour l’ajouter à son portefeuille — ou Refuser.', '', ''],
   ['Min recharge', '', '', 'Recharge minimale', '', ''],
   ['Min withdraw', '', '', 'Retrait minimal', '', ''],
   ['Mon-Sat, 9am-6pm', '', '', 'Lun-Sam, 9h-18h', '', ''],
   ['No recharges here', '', '', 'Aucune recharge ici', '', ''],
   ['No rules content yet. Add text and image blocks below.', '', '', 'Aucun contenu pour les règles. Ajoutez des blocs de texte et d’image ci-dessous.', '', ''],
   ['Only these domains may reach the backend — one per line, include www. petro-platform.com and this VPS\'s own address are always allowed.', '', '', 'Seuls ces domaines peuvent joindre le serveur — un par ligne, avec www. petro-platform.com et l’adresse propre de ce VPS sont toujours autorisés.', '', ''],
-  ['Payment Numbers', '', '', 'Numéros de paiement', '', ''],
+  ['Wave payments', '', '', 'Paiements Wave', '', ''],
   ['Pending recharges', '', '', 'Recharges en attente', '', ''],
   ['Rates & limits', '', '', 'Taux et limites', '', ''],
   ['Receiving wallet address (TRC20)', '', '', 'Adresse du portefeuille de réception (TRC20)', '', ''],
@@ -4241,7 +4196,7 @@ const ADMIN_LANG_ROWS = [
   ['Day', '', '', 'Jour', '', ''],
   ['Recharges approved', '', '', 'Recharges approuvées', '', ''],
   ['Amount received', '', '', 'Montant reçu', '', ''],
-  ['Members pay into one of your Payment Numbers (bank or Telebirr) or send USDT. When a member sends the payment message, it appears under', '', '', 'Les membres paient sur l’un de vos numéros de paiement (banque ou Telebirr) ou envoient des USDT. Quand un membre envoie le message de paiement, il apparaît sous', '', ''],
+  ['Members pay with Wave (set up under Wave payments) or send USDT. When a member sends the payment details, it appears under', '', '', 'Les membres paient avec Wave (configuré dans « Paiements Wave ») ou envoient des USDT. Quand un membre envoie les détails du paiement, il apparaît sous', '', ''],
   ['to add it to their wallet — or', '', '', 'pour l’ajouter à son portefeuille — ou', '', ''],
   ['Showing the first', '', '', 'Affichage des premiers', '', ''],
   ['recharges only. The platform has more history than this list can currently display.', '', '', 'recharges seulement. La plateforme a plus d’historique que cette liste ne peut en afficher actuellement.', '', ''],
@@ -4375,26 +4330,11 @@ const ADMIN_LANG_ROWS = [
   ['Team L1/L2/L3', '', '', 'Équipe N1/N2/N3', '', ''],
   ['No matching member', '', '', 'Aucun membre correspondant', '', ''],
   ['Admin', '', '', '=', '', ''],
-  ['No logo', '', '', 'Aucun logo', '', ''],
-  ['Name members see', '', '', 'Nom vu par les membres', '', ''],
-  ['Bank', '', '', 'Banque', '', ''],
-  ['Wallet (Telebirr)', '', '', 'Portefeuille (Telebirr)', '', ''],
-  ['Account name', '', '', 'Nom du compte', '', ''],
-  ['Account number', '', '', 'Numéro de compte', '', ''],
   ['Upload logo', '', '', 'Téléverser le logo', '', ''],
-  ['Upload the logo as it is. The system clears the background around it and crops it so it fits the round frame.', '', '', 'Téléversez le logo tel quel. Le système efface l’arrière-plan autour et le recadre pour qu’il tienne dans le cadre rond.', '', ''],
   ['Order (smaller first)', '', '', 'Ordre (le plus petit d’abord)', '', ''],
   ['Show to members', '', '', 'Afficher aux membres', '', ''],
-  ['Edit payment number', '', '', 'Modifier le numéro de paiement', '', ''],
-  ['Add payment number', '', '', 'Ajouter un numéro de paiement', '', ''],
-  ['Logo ready (background removed)', '', '', 'Logo prêt (arrière-plan retiré)', '', ''],
-  ['No logo yet', '', '', 'Pas encore de logo', '', ''],
-  ['Remove logo', '', '', 'Retirer le logo', '', ''],
-  ['These are the accounts members pay into on the recharge page (a bank account, a Telebirr wallet and so on). Each one appears as a row under Please choose payment with its logo. A member who taps', '', '', 'Ce sont les comptes sur lesquels les membres paient dans la page de recharge (un compte bancaire, un portefeuille Telebirr, etc.). Chacun apparaît comme une ligne sous « Veuillez choisir le paiement » avec son logo. Un membre qui touche', '', ''],
-  ['goes back to this list.', '', '', 'revient à cette liste.', '', ''],
   ['Hidden', '', '', 'Masqué', '', ''],
   ['Showing', '', '', 'Affiché', '', ''],
-  ['No payment numbers yet. Until you add one, members cannot recharge by bank or wallet.', '', '', 'Aucun numéro de paiement pour l’instant. Tant que vous n’en ajoutez pas, les membres ne peuvent pas recharger par banque ou portefeuille.', '', ''],
   ['Delete "', '', '', 'Supprimer «', '', ''],
   ['"? Members will no longer see it.', '', '', '» ? Les membres ne le verront plus.', '', ''],
   ['Could not delete', '', '', 'Impossible de supprimer', '', ''],
@@ -4444,7 +4384,6 @@ const ADMIN_LANG_ROWS = [
   ['Blur', '', '', 'Flou', '', ''],
   ['Opacity', '', '', 'Opacité', '', ''],
   ['Login screen opacity & blur saved', '', '', 'Opacité et flou de l’écran de connexion enregistrés', '', ''],
-  ['Bank / Wallet:', '', '', 'Banque / Portefeuille :', '', ''],
   ['add the accounts members pay into under', '', '', 'ajoutez les comptes sur lesquels les membres paient dans', '', ''],
   ['USDT:', '', '', 'USDT :', '', ''],
   ['set it up below.', '', '', 'configurez-le plus bas.', '', ''],
@@ -4510,15 +4449,19 @@ const ADMIN_LANG_ROWS = [
   ['Image', '', '', '=', '', ''],
   ['Text', '', '', 'Texte', '', ''],
   // ── English + French coverage round (owner: the admin panel must be fully switchable to French) ──
-  ['Wave (link + QR)', '', '', 'Wave (lien + QR)', '', ''],
-  ['Payment link (opened by “Ouvrir l’application pour payer”)', '', '', 'Lien de paiement (ouvert par « Ouvrir l’application pour payer »)', '', ''],
-  ['QR picture ready', '', '', 'Image QR prête', '', ''],
+    ['QR picture ready', '', '', 'Image QR prête', '', ''],
   ['No QR picture yet', '', '', 'Pas encore d’image QR', '', ''],
   ['Remove QR', '', '', 'Retirer le QR', '', ''],
   ['Upload QR picture', '', '', 'Téléverser l’image QR', '', ''],
-  ['The QR picture you get from Wave, shown as it is on the “Scanner le code QR” tab (PNG or JPEG, up to about 400 KB). Members must enter the transaction ID after paying; you approve the claim under Recharges.', '', '', 'L’image QR fournie par Wave, affichée telle quelle dans l’onglet « Scanner le code QR » (PNG ou JPEG, environ 400 Ko au maximum). Les membres doivent saisir l’ID de transaction après le paiement ; vous approuvez la demande sous Recharges.', '', ''],
+  ['The QR picture you get from Wave, shown as it is on the QR tab (PNG or JPEG, up to about 400 KB). Members must enter the transaction ID after paying; you approve the claim under Recharges.', '', '', 'L’image QR fournie par Wave, affichée telle quelle dans l’onglet « Scanner le code QR » (PNG ou JPEG, environ 400 Ko au maximum). Les membres doivent saisir l’ID de transaction après le paiement ; vous approuvez la demande sous Recharges.', '', ''],
   ['That QR picture is too large (up to about 400 KB).', '', '', 'Cette image QR est trop grande (environ 400 Ko au maximum).', '', ''],
   ['Could not read the picture', '', '', 'Impossible de lire l’image', '', ''],
+  ['Members recharge with Wave. Add your Wave payment link and/or QR picture here. They see the Wave pages, pay from their own Wave app and send you their wallet number (and the transaction ID on the QR page). You check that the money arrived and approve it under Recharges.', '', '', 'Les membres rechargent avec Wave. Ajoutez ici votre lien de paiement Wave et/ou votre image QR. Ils voient les pages Wave, paient depuis leur propre application Wave et vous envoient leur numéro de portefeuille (et l’identifiant de transaction sur la page QR). Vous vérifiez que l’argent est arrivé et vous l’approuvez dans Recharges.', '', ''],
+  ['Add Wave payment', '', '', 'Ajouter un paiement Wave', '', ''],
+  ['Edit Wave payment', '', '', 'Modifier le paiement Wave', '', ''],
+  ['Payment link', '', '', 'Lien de paiement', '', ''],
+  ['No Wave payment yet. Until you add one, members cannot recharge.', '', '', 'Aucun paiement Wave pour l’instant. Tant que vous n’en ajoutez pas, les membres ne peuvent pas recharger.', '', ''],
+  ['Delete this Wave payment? Members will no longer see it.', '', '', 'Supprimer ce paiement Wave ? Les membres ne le verront plus.', '', ''],
 ];
 const ADMIN_LANG_PATTERNS = [
   ['Prices, payouts, spins and the opening schedule are saved for {0} — the country in the switch at the top. Names, photos and order are shared by every country.', 'Ebbeeyi, okusasula, okukyusa n\'enteekateeka y\'okuggulawo bitereka ku {0} — eggwanga eriri mu kakyusa waggulu. Amannya, ebifaananyi n\'entegeka bigabanibwa amawanga gonna.', 'Bei, malipo, mizunguko na ratiba ya kufungua huhifadhiwa kwa {0} — nchi iliyo kwenye kibadilishi hapo juu. Majina, picha na mpangilio hushirikiwa na kila nchi.', 'Les prix, les versements, les tours et l\'horaire d\'ouverture sont enregistrés pour {0} — le pays du sélecteur en haut. Les noms, les photos et l\'ordre sont partagés par tous les pays.', 'Ibiciro, kwishyura, inzunguruka na gahunda yo gufungura bibikwa kuri {0} — igihugu kiri mu guhitamo haruguru. Amazina, amafoto n\'urutonde bisangirwa n\'ibihugu byose.', 'Ebiihendo, okushashura, okuzunguka n\'entebekanisa y\'okwigura nibibikwa aha {0} — eihanga eriri omu kacwamu haiguru. Amaziina, ebishushani n\'entebekanisa nibigabanwa amahanga goona.'],

@@ -30,7 +30,7 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
 
   // 2. saved-account cap
   ok(/const MAX_SAVED_PAYOUT_ACCOUNTS = 10;/.test(src), 'cap is defined');
-  async function save(existing, phone, network = 'Telebirr') {
+  async function save(existing, phone, network = 'Wave') {
     const rows = existing.map((p, i) => ({ id: 'b' + i, userId: 'u1', phone: p })); let added = 0, code = 200, body;
     const chain = (list, f = []) => ({ where: (k, o, v) => chain(list, [...f, [k, v]]), limit: () => chain(list, f),
       get: async () => { const got = list.filter(r => f.every(([k, v]) => r[k] === v)); return { empty: !got.length, size: got.length, docs: got.map(r => ({ id: r.id, data: () => r })) }; } });
@@ -38,7 +38,7 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
     let handler; const app = { post: (p, h) => { if (p === '/bank/save') handler = h; } };
     const i = src.indexOf('const MAX_SAVED_PAYOUT_ACCOUNTS'), j = src.indexOf('app.get(\'/bank/list\'');
     new Function('app', 'db', 'verifyAuth', 'stripHtml', 'PAYOUT_ACCOUNT_TYPES', 'NETWORK_NAMES', 'cleanPhone', 'badPhoneMessage', 'getSettings', 'getSupportedBanks', 'consumeOtpTicket', 'marzValidateBankAccount', 'marzUserMsg', 'withLock', 'FieldValue',
-      src.slice(i, j))(app, db, async () => 'u1', s => String(s || '').trim(), { 'Telebirr': 'wallet', 'Commercial Bank of Ethiopia': 'bank' }, new Set(['Telebirr']), p => String(p).replace(/\D/g, ''), () => 'bad phone',
+      src.slice(i, j))(app, db, async () => 'u1', s => String(s || '').trim(), { 'Wave': 'wallet' }, new Set(['Wave']), p => String(p).replace(/\D/g, ''), () => 'bad phone',
       async () => ({ otpVerificationEnabled: false }), async () => [], async () => true, async () => ({}), () => '', (k, g) => g(), { serverTimestamp: () => 1 });
     const res = { status(c) { code = c; return this; }, json(b) { body = b; return this; } };
     await handler({ body: { holder: 'A B', network, phone } }, res); return { code, body, added };
@@ -50,10 +50,10 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
   r = await save(Array.from({ length: 10 }, (_, i) => '07000000' + (10 + i)), '0700000010');
   ok(r.code === 400 && /déjà enregistré/.test(r.body.message), 'a duplicate still gets the duplicate message');
 
-  // 2b. owner: "on bind bank use these only: Commercial Bank of Ethiopia, Telebirr"
-  r = await save([], '1000809418239', 'Commercial Bank of Ethiopia'); eq([r.code, r.added], [200, 1], 'the bank is accepted with a plain account number');
-  for (const other of ['MTN Mobile Money', 'Airtel Money', 'CBE Birr', 'Stanbic Bank', '']) { r = await save([], '0912345678', other); ok(r.code === 400 && r.added === 0 && (other === '' || /Commercial Bank of Ethiopia (or|ou) Telebirr/.test(r.body.message)), 'refused: ' + (other || '(empty)')); }
-  ok(/PAYOUT_PROVIDERS = \['Commercial Bank of Ethiopia', 'Telebirr'\]/.test(fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8')), 'the app offers exactly these two');
+  // 2b. owner: "put Wave only in all" -- the payout account is a Wave wallet and nothing else
+  r = await save([], '0712345678'); eq([r.code, r.added], [200, 1], 'a Wave wallet is accepted');
+  for (const other of ['Telebirr', 'Commercial Bank of Ethiopia', 'MTN Mobile Money', 'Airtel Money', 'CBE Birr', 'Stanbic Bank', '']) { r = await save([], '0912345678', other); ok(r.code === 400 && r.added === 0 && (other === '' || /Wave/.test(r.body.message)), 'refused: ' + (other || '(empty)')); }
+  ok(/PAYOUT_PROVIDERS = \['Wave'\]/.test(fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8')), 'the app offers exactly Wave');
   // 3. sweep
   const sweep = fn('sweepEphemeralState');
   ok(/_usdtSubmitDebounce/.test(sweep) && /_cardSubmitDebounce/.test(sweep), 'USDT and card debounce maps are swept');

@@ -4,8 +4,8 @@
 const fs = require('node:fs'), assert = require('node:assert/strict');
 let checks = 0; const ok = (c, m) => { checks++; assert.ok(c, m); }; const eq = (a, b, m) => { checks++; assert.deepEqual(a, b, m); };
 const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
-const a = src.indexOf('// ── MANUAL BANK / WALLET RECHARGE (Ethiopia) ──'), b = src.indexOf('// END MANUAL BANK / WALLET RECHARGE', a);
-ok(a >= 0 && b > a, 'manual recharge block found');
+const a = src.indexOf("// ── WAVE RECHARGE (Côte d'Ivoire) ──"), b = src.indexOf('// END WAVE RECHARGE', a);
+ok(a >= 0 && b > a, 'Wave recharge block found');
 const block = src.slice(a, b);
 
 // ── in-memory database with just what the block uses ──
@@ -39,7 +39,7 @@ function build(db, ctx) {
   const app = { get: (p, h) => { handlers['GET ' + p] = h; }, post: (p, h) => { handlers['POST ' + p] = h; } };
   const mk = new Function('app', 'db', 'ctx', 'FieldValue', 'tsMillis', 'currentRegionKey', 'MAX_MONEY_AMOUNT', 'fmtMoney', 'paymentAmount', 'getSettings',
     'currentRegion', 'verifyAuth', 'verifyAdmin', 'verifyOwner', 'logAdminAction', 'uniqueRef', 'nowStr', 'newStatementId', '_userBeingDeleted',
-    block + '\nreturn { extractManualRef, sweepManualOrders, activePayChannels, dropPayChannelsCache, waveWalletDigits };');
+    block + '\nreturn { sweepManualOrders, activePayChannels, dropPayChannelsCache, waveWalletDigits };');
   const api = mk(app, db, ctx, { serverTimestamp: () => SERVER_TS }, v => (v && v.getTime ? v.getTime() : 0), () => 'et', 1e9,
     n => 'FCFA ' + n, v => Number(v), async () => ({ minDeposit: 300 }),
     () => ({ localLength: 10 }), async () => ctx.user, () => ctx.admin, () => ctx.owner, () => {}, async l => l + (++ctx.refN), () => ({ date: '01/01/2026', time: '10:00' }), () => 'S' + (++ctx.refN), new Set());
@@ -103,10 +103,13 @@ const QR = 'data:image/png;base64,UVJRUg==';
   r = await call(H['POST /deposit/manual/order'], { amount: 6000, channelId: w1, wallet: '0733333333' }); const dep3 = r.body.depositId;
   r = await call(H['POST /deposit/manual/submit'], { depositId: dep3, txId: 'WAVE-ABC123' });
   eq(r.code, 409, 'the same transfer cannot back a second claim');
-  r = await call(H['POST /deposit/manual/submit'], { depositId: dep2 }); eq(r.code, 400, 'someone else\'s order is refused');
+  r = await call(H['POST /deposit/manual/submit'], { depositId: dep2 }); eq(r.code, 404, 'someone else\'s order is refused');
   r = await call(H['POST /deposit/manual/submit'], { depositId: dep3, txId: 'OTHER-1' });
   eq(r.code, 429, 'two sends in a row are slowed down');
   // wiring in the source
-  ok(/wavePay: payChs\.some\(c => c\.kind === 'wave'\)/.test(fs.readFileSync(__dirname + '/server.js', 'utf8')), 'public settings say when the Wave pages should be used');
+  const full = fs.readFileSync(__dirname + '/server.js', 'utf8');
+  ok(!/wavePay/.test(full), 'there is no separate switch: Wave is the only way to recharge');
+  ok(!/Telebirr|Commercial Bank|Ethiopia/i.test(block), 'no Ethiopian payment wording is left in the recharge code');
+  ok(/PAYOUT_ACCOUNT_TYPES = Object\.freeze\(\{ 'Wave': 'wallet' \}\)/.test(full), 'payout accounts: Wave only');
   console.log('PASS: Wave payment channel, order and claim (' + checks + ' checks)');
 })().catch(e => { console.error(e); process.exit(1); });

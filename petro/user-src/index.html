@@ -1381,74 +1381,12 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    which is what made the button invisible everywhere paintLangButton() already
    ran -- removing the markup on top of that makes it gone unconditionally,
    not dependent on a region config staying correctly set. */
-/* ── MANUAL BANK / WALLET PAYMENT PAGES (Ethiopia) ──
-   Built to the owner's screenshots: 412 css px wide, 2.625 device px per css px
-   (1080 px screenshots). Every size below is a measured screenshot value / 2.625. */
+/* ── PAYMENT PAGES ROOT (the Wave pages below live inside it) ── */
 #mpFlow{display:none;position:fixed;inset:0;z-index:9500;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;
-  background:#fff;color:#333;font-family:Roboto,'Noto Sans Ethiopic','Nyala',system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;}
+  background:#fff;color:#333;font-family:Roboto,system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;}
 #mpFlow.show{display:block;}
-#mpFlow.dark{background:linear-gradient(180deg,#1f224f 0%,#826786 100%);background-attachment:fixed;}
 #mpFlow *{box-sizing:border-box;}
 body.mp-open{overflow:hidden;}
-.mpf-load{position:absolute;left:0;right:0;top:146px;display:flex;flex-direction:column;align-items:center;}
-.mpf-ring{margin-left:-17px;animation:mpfspin .9s linear infinite;}
-@keyframes mpfspin{to{transform:rotate(360deg);}}
-.mpf-loadtxt{margin-top:20px;font-size:13.8px;line-height:16px;color:#fff;}
-.mpf-choose{padding-top:0;min-height:100%;}
-.mpf-ohead{display:flex;justify-content:space-between;align-items:flex-start;height:61px;padding-top:25.5px;margin:0 17.7px;border-bottom:1px solid #ebebeb;line-height:26px;}
-.mpf-olab{font-size:19.2px;color:#777;}
-.mpf-oval{font-size:19.1px;font-weight:700;color:#8b6e8e;}
-.mpf-pick{margin:20px 17.7px 0;padding-bottom:19px;line-height:20px;font-size:13.8px;font-weight:700;color:#333;border-bottom:1px solid #ebebeb;}
-.mpf-rows{display:block;}
-.mpf-row{display:flex;align-items:center;width:calc(100% - 45.5px);height:63.5px;margin:0 17.7px 0 27.8px;padding:0;background:none;border:0;border-bottom:1px solid #eee;text-align:left;font:inherit;color:#333;cursor:pointer;-webkit-tap-highlight-color:transparent;}
-.mpf-row:last-child{border-bottom:0;}
-.mpf-row:active{background:#fafafa;}
-.mpf-logo{flex:0 0 37.7px;width:37.7px;height:37.7px;border:1px solid #cdcdcd;border-radius:50%;background:#fff;padding:5px;object-fit:contain;display:block;}
-.mpf-noimg{display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;color:#8b6e8e;padding:0;}
-.mpf-rname{margin-left:9.5px;font-size:14.9px;line-height:20px;flex:1;min-width:0;}
-.mpf-chev{flex:0 0 9px;margin-right:22px;}
-.mpf-remind{margin:11px 28px 24px;padding:10px 11px;border-radius:8px;background:#f9ecec;color:#c85d5d;font-size:11.6px;line-height:15.2px;}
-.mpf-remind span{display:block;}
-.mpf-remind span:first-of-type{display:inline;}
-.mpf-warn-ic{vertical-align:-2px;margin-right:4px;}
-.mpf-pay{padding-bottom:62px;}
-.mpf-head{height:60px;display:flex;align-items:center;justify-content:space-between;padding:0 17.7px 0 19px;}
-.mpf-hlogo{width:41px;height:41px;object-fit:contain;display:block;}
-.mpf-hlogo.mpf-noimg{color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:50%;font-size:18px;}
-.mpf-clock{display:flex;align-items:center;font-size:12.7px;color:#d4d6e6;white-space:nowrap;}
-.mpf-clock span{position:relative;top:1.5px;}
-.mpf-clock span:first-child{margin-right:2.5px;}
-.mpf-clock span:not(:first-child){margin:0 0 0 5.7px;}
-.mpf-clock b{display:inline-flex;align-items:center;justify-content:center;width:19.8px;height:29.3px;border:1px solid rgba(255,255,255,.42);border-radius:3px;background:#4a4f72;color:#fff;font-size:15px;font-weight:500;}
-.mpf-clock b + b{margin-left:4.6px;}
-.mpf-clock span + b{margin-left:2.5px;}
-.mpf-card{margin:0 10.7px;background:#fff;border-radius:9px;padding:22px 17px 15px;}
-.mpf-step,.mpf-step2{display:flex;align-items:center;height:24px;}
-.mpf-step b,.mpf-step2 b{font-size:13.4px;font-weight:700;color:#303030;white-space:nowrap;}
-.mpf-step span{margin-left:12px;font-size:13.9px;color:#707070;}
-.mpf-step2 span{margin-left:12px;font-size:13.9px;font-weight:700;color:#c64a31;}
-.mpf-box{margin-top:7px;background:#f5f5f5;border:1px solid #ccc;border-radius:6px;padding:0 17px 17px;}
-.mpf-amt{display:flex;justify-content:space-between;align-items:flex-start;height:47px;padding-top:10px;line-height:30px;border-bottom:1px solid #e8e8e8;}
-.mpf-amt .mpf-l1{font-size:19.2px;color:#999;}
-.mpf-amt b{font-size:19.1px;font-weight:700;color:#8b6e8e;}
-.mpf-k{margin-top:8px;line-height:20px;font-size:13.9px;color:#999;}
-.mpf-amt + .mpf-k{margin-top:10px;}
-.mpf-v{display:flex;justify-content:space-between;align-items:center;height:30px;margin-top:0;}
-.mpf-v b{font-size:12.8px;font-weight:500;color:#303030;min-width:0;overflow-wrap:anywhere;}
-.mpf-pill{flex:0 0 auto;min-width:40px;height:18px;padding:0 7px;border:1px solid #8b6e8e;border-radius:9px;background:none;color:#8b6e8e;font:700 12.5px/16px Roboto,'Noto Sans Ethiopic',system-ui,sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent;}
-.mpf-pill:active{background:rgba(139,110,142,.12);}
-.mpf-help{margin-top:15px;color:#a57335;font-size:15px;line-height:19.8px;}
-.mpf-help p{margin:0;}
-.mpf-help p + p{display:flex;align-items:flex-start;}
-.mpf-dia{flex:0 0 15px;margin:2.5px 6px 0 2px;}
-.mpf-step2{margin-top:4px;}
-.mpf-ta{display:block;width:100%;height:151.6px;margin-top:8px;padding:12px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#333;font:400 13.9px/21.7px Roboto,'Noto Sans Ethiopic',system-ui,sans-serif;resize:none;outline:none;white-space:pre-wrap;}
-.mpf-ta::placeholder{color:#c8c8c8;opacity:1;}
-.mpf-ta:focus{border-color:#8b6e8e;}
-.mpf-submit{display:block;width:calc(100% - 22px);height:41px;margin:12px 11px 0;border:1px solid #e3dbe6;border-radius:21px;background:#8b6d8d;color:#fff;font:400 18px/39px Roboto,'Noto Sans Ethiopic',system-ui,sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent;}
-.mpf-submit:active{filter:brightness(.94);}
-.mpf-submit.busy{opacity:.6;}
-.mpf-note{margin-top:11.4px;padding:12px 11px;border-radius:8px;background:#f9ecec;color:#c45f5f;font-size:12.2px;line-height:14.2px;}
 /* ── WAVE PAYMENT PAGES (Côte d'Ivoire) ──
    Built to the owner's screenshots and screen recordings of the payment pages: 411 css px wide, 2.625 device px per css px (1080 px screenshots).
    Every size below is a measured screenshot value / 2.625 (font sizes are solved from the measured text widths). Roboto. */
