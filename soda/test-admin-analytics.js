@@ -151,6 +151,8 @@ async function read(body = {}, authorized = true) {
     const ugx = n => 'UGX ' + n;
     const esc = s => String(s ?? '');
     const fdate = n => String(n);
+    const t = x => x;
+    const withdrawRulesText = () => 'withdrawal rules';
     ${view}`);
   await dom.window.renderAnalytics();
   assert.equal(dom.window.document.getElementById('analytics-day').value, '2026-10-04');

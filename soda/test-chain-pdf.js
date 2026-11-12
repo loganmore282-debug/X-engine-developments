@@ -3,12 +3,12 @@ const fs = require('fs'), assert = require('assert');
 const src = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
 const a = src.indexOf('// ── Referral chain as a PDF ──'), b = src.indexOf('async function openReferralChain(uid){');
 assert(a > 0 && b > a, 'the PDF writer is in the admin panel');
-const ctx = {}; const fn = new Function('Blob', src.slice(a, b) + '\nreturn { chainPdfBlob, pdfWidth, pdfAscii };');
+const ctx = {}; const fn = new Function('Blob', 't', src.slice(a, b) + '\nreturn { chainPdfBlob, pdfWidth, pdfAscii };');
 class FakeBlob { constructor(parts, o) { this.text = parts.join(''); this.type = o.type; } }
-const { chainPdfBlob, pdfWidth, pdfAscii } = fn(FakeBlob);
+const { chainPdfBlob, pdfWidth, pdfAscii } = fn(FakeBlob, x => x);
 let n = 0; const ok = (c, m) => { assert(c, m); n++; };
 ok(Math.abs(pdfWidth('Hello', 10, false) - 22.78) < 0.05, 'Helvetica widths are right (Hello at 10 pt = 22.78)');
-ok(pdfAscii('a→b · é') === 'a->b - ?', 'non-ASCII becomes plain ASCII');
+ok(pdfAscii('a→b · é') === 'a->b - e' && pdfAscii('Chaîne œuvre ¤') === 'Chaine oeuvre ?', 'accents are dropped and other non-ASCII becomes plain ASCII');
 const mk = i => ({ id: 'u' + i, phone: '+25677' + String(1000000 + i), referralCode: 'c' + i, status: i % 7 === 0 ? 'banned' : 'active', totalInvested: i * 1000, totalDeposited: i * 2000, totalWithdrawn: 0, totalEarned: i * 10, walletBalance: 5000, createdAt: 1790000000000 + i * 3600000, level: 1 + (i % 4), referredByPhone: '+25677000000' });
 const r = { user: { ...mk(0), referredByPhone: '' }, commission: { l1: 1, l2: 2, l3: 3, total: 6, count: 3 }, root: mk(0), upline: [mk(900), mk(901)], teamDeposits: 123456, downline: Array.from({ length: 400 }, (_, i) => mk(i + 1)), downlineTruncated: false, cycleDetected: false };
 const { pdf, total } = chainPdfBlob(r);

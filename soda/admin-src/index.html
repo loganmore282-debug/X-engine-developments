@@ -489,7 +489,7 @@ function msToDatetimeLocal(ms){
   const pad = n => String(n).padStart(2,'0');
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
-function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
+function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString(LANG==='fr'?'fr-FR':'en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
 const TX_LABELS = {
   deposit: 'Recharge', withdraw: 'Withdraw', commission: 'Commission', team_reward: 'Task Center reward',
   checkin: 'Daily reward', cashback: 'Product cashback', investment: 'Product purchase',
@@ -513,7 +513,7 @@ function dayLabel(iso){
   if(iso===today) return 'Today';
   if(iso===yest) return 'Yesterday';
   const d=new Date(iso+'T00:00:00Z');
-  return d.getUTCDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
+  return d.getUTCDate()+' '+monthShort(d.getUTCMonth());
 }
 // A wide, centre-cropped picture (the link preview's large card picture, 1200 x 630, landscape).
 function fileToWideDataUrl(file, w=1200, h=630, quality=0.85){
@@ -653,6 +653,9 @@ const ADMIN_REGIONS = [{ key: 'ci', name: "Côte d'Ivoire", currency: 'XOF' }];
 const ADMIN_REGION = 'ci';
 function regionByKeyAdmin(){ return ADMIN_REGIONS[0]; }
 function adminOneRegion(){ return 'ci'; }
+// The full list stays here because the shared translation engine finds a language's COLUMN in the table by its position in
+// this list (en, lg, sw, fr, rw, nyn). What a person can PICK is ADMIN_PICKABLE: English and French only (owner: "even soda admin
+// should have French and English only"). The other columns stay in the table but nothing can select them.
 const ADMIN_LANGS = [
   { code:'en', name:'English', native:'English' },
   { code:'lg', name:'Luganda', native:'Luganda' },
@@ -661,6 +664,20 @@ const ADMIN_LANGS = [
   { code:'rw', name:'Kinyarwanda', native:'Ikinyarwanda' },
   { code:'nyn', name:'Runyankole', native:'Runyankore' },
 ];
+const ADMIN_PICKABLE = ['en', 'fr'];
+// Month and day names follow the chosen language (the DOM translator only sees text, not Date output).
+const ADMIN_MONTHS = { en: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], fr: ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'] };
+const ADMIN_DAYS = { en: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], fr: ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'] };
+function monthShort(i){ return (ADMIN_MONTHS[LANG] || ADMIN_MONTHS.en)[i]; }
+function dayLong(i){ return (ADMIN_DAYS[LANG] || ADMIN_DAYS.en)[i]; }
+// The browser's own pop-ups (confirm / prompt / alert) are not DOM text, so the page translator never reaches them.
+// Run every message through t() first so French mode shows French there too.
+(function(){
+  const _c = window.confirm.bind(window), _p = window.prompt.bind(window), _a = window.alert.bind(window);
+  window.confirm = m => _c(t(String(m)));
+  window.prompt = (m, d) => _p(t(String(m)), typeof d === 'string' ? t(d) : d);
+  window.alert = m => _a(t(String(m)));
+})();
 function curOf(){ return 'XOF'; }
 function adminCur(){ return 'XOF'; }
 var _adminPending = new Map();
@@ -1322,14 +1339,14 @@ async function renderAnalytics(silent){
       </div><p class="muted">Open requests can complete, fail or be cancelled; no completion date is guaranteed. Cashback due and withdrawal requests are separate figures and must not be added as a prediction of today's withdrawals. All withdrawal amounts shown are net payouts.</p>
     </div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Withdrawals to be processed today</h2>
-      <p class="muted">Follows your withdrawal rules (Settings): ${wt.rules.needProduct?'a member must have bought a product, ':''}minimum ${ugx(wt.rules.min)}${wt.rules.multiple?', multiples of '+ugx(wt.rules.multiple):''}${wt.rules.max?', at most '+ugx(wt.rules.max)+' each':''}, fee ${wt.rules.feePct||0}%, ${wt.rules.perDay?wt.rules.perDay+' withdrawal'+(wt.rules.perDay===1?'':'s')+' a day':'no daily limit'}, one unpaid request at a time${wt.rules.hours?', open '+esc(wt.rules.hours):''}. Banned members and unrestricted members are handled as the server handles them.</p>
+      <p class="muted">${withdrawRulesText(wt.rules)}</p>
       <div class="cards">
         <div class="stat"><div class="n">${ugx(wt.waiting.net)}</div><div class="l">Requests waiting to be paid today, net (${wt.waiting.count||0})</div></div>
         <div class="stat"><div class="n">${ugx(wt.canDo.net)}</div><div class="l">Most that could still be requested today, net payout (${wt.canDo.count||0} members)</div></div>
         <div class="stat"><div class="n">${ugx(wt.canDo.runningNet)}</div><div class="l">Of that, members with a running product (${wt.canDo.runningCount||0})</div></div>
         <div class="stat"><div class="n">${ugx(wt.canDo.gross)}</div><div class="l">Same members, wallet amount before the fee</div></div>
       </div>
-      <p class="muted">Not counted because a rule stops them: ${wt.blocked.noProduct||0} with no product bought, ${wt.blocked.hasRequest||0} with a request already waiting, ${wt.blocked.dailyUsed||0} who used today's number of withdrawals, ${wt.blocked.belowMin||0} below the minimum once cut to the allowed multiple, ${wt.blocked.banned||0} banned.${wt.waiting.heldCount?` ${wt.waiting.heldCount} waiting request(s) (${ugx(wt.waiting.heldNet)}) belong to banned members.`:''}</p>
+      <p class="muted">Not counted because a rule stops them: ${wt.blocked.noProduct||0} with no product bought, ${wt.blocked.hasRequest||0} with a request already waiting, ${wt.blocked.dailyUsed||0} who used today's number of withdrawals, ${wt.blocked.belowMin||0} below the minimum once cut to the allowed multiple, ${wt.blocked.banned||0} banned.</p>${wt.waiting.heldCount?`<p class="muted">${wt.waiting.heldCount} waiting request(s) (${ugx(wt.waiting.heldNet)}) belong to banned members.</p>`:''}
       <p class="muted">The second figure is a ceiling, not a forecast: it assumes every member who is allowed to withdraw asks for the most they can, once, today.</p>
     </div>
     ${a.truncated?'<p class="muted" style="color:var(--gold)">Some totals may be incomplete because an analytics scan reached its record limit. Use transaction records and database reconciliation for a complete total.</p>':''}
@@ -1527,9 +1544,24 @@ async function quietRefreshUsers(){
 // Helvetica-Bold), text, filled boxes and lines. Text is plain ASCII, so the file is exactly what is written here.
 const PDF_W_REG = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
 const PDF_W_BOLD = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
-function pdfAscii(s){ return String(s == null ? '' : s).replace(/[–—]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/→/g, '->').replace(/·/g, '-').replace(/[^\x20-\x7e]/g, '?'); }
+// The withdrawal-rules sentence is assembled from the saved settings, so it is translated piece by piece (the page translator
+// can only match a whole fixed sentence).
+function withdrawRulesText(r){
+  r = r || {};
+  const parts = [];
+  if (r.needProduct) parts.push(t('a member must have bought a product'));
+  parts.push(t('minimum') + ' ' + ugx(r.min));
+  if (r.multiple) parts.push(t('multiples of') + ' ' + ugx(r.multiple));
+  if (r.max) parts.push(t('at most') + ' ' + ugx(r.max) + ' ' + t('each'));
+  parts.push(t('fee') + ' ' + (r.feePct || 0) + '%');
+  parts.push(r.perDay ? r.perDay + ' ' + t(r.perDay === 1 ? 'withdrawal a day' : 'withdrawals a day') : t('no daily limit'));
+  parts.push(t('one unpaid request at a time'));
+  if (r.hours) parts.push(t('open') + ' ' + esc(r.hours));
+  return t('Follows your withdrawal rules (Settings):') + ' ' + parts.join(', ') + '. ' + t('Banned members and unrestricted members are handled as the server handles them.');
+}
+function pdfAscii(s){ return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/œ/g, 'oe').replace(/Œ/g, 'OE').replace(/[–—]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/→/g, '->').replace(/·/g, '-').replace(/[^\x20-\x7e]/g, '?'); }
 function pdfWidth(s, size, bold){ const w = bold ? PDF_W_BOLD : PDF_W_REG; let t = 0; for (const ch of pdfAscii(s)) t += w[ch.charCodeAt(0) - 32] || 556; return t * size / 1000; }
-function pdfFit(s, size, bold, maxW){ s = pdfAscii(s); if (pdfWidth(s, size, bold) <= maxW) return s; while (s.length > 1 && pdfWidth(s + '...', size, bold) > maxW) s = s.slice(0, -1); return s + '...'; }
+function pdfFit(s, size, bold, maxW){ s = pdfAscii(t(s)); if (pdfWidth(s, size, bold) <= maxW) return s; while (s.length > 1 && pdfWidth(s + '...', size, bold) > maxW) s = s.slice(0, -1); return s + '...'; }
 function makePdf(){
   const W = 842, H = 595;                         // A4 landscape, in points
   const pages = []; let cur = null;
@@ -1545,11 +1577,11 @@ function makePdf(){
     line(x1, y1, x2, y2, col, width){ api_.color(col[0], col[1], col[2], true); cur.push(`${num(width || 0.5)} w ${num(x1)} ${num(H - y1)} m ${num(x2)} ${num(H - y2)} l S`); },
     // y is the TOP of the text line measured from the top of the page; align: 'l' | 'r' | 'c'
     text(x, y, str, size, bold, align, col){
-      const t = pdfAscii(str); if (!t) return;
-      const w = pdfWidth(t, size, bold);
+      const ts = pdfAscii(t(str)); if (!ts) return;
+      const w = pdfWidth(ts, size, bold);
       const px = align === 'r' ? x - w : align === 'c' ? x - w / 2 : x;
       const c = col || [0.1, 0.12, 0.2];
-      cur.push(`BT /${bold ? 'F2' : 'F1'} ${num(size)} Tf ${num(c[0])} ${num(c[1])} ${num(c[2])} rg ${num(px)} ${num(H - y - size * 0.85)} Td (${esc(t)}) Tj ET`);
+      cur.push(`BT /${bold ? 'F2' : 'F1'} ${num(size)} Tf ${num(c[0])} ${num(c[1])} ${num(c[2])} rg ${num(px)} ${num(H - y - size * 0.85)} Td (${esc(ts)}) Tj ET`);
     },
     build(title){
       const parts = []; const offsets = []; let len = 0;
@@ -1646,11 +1678,11 @@ function chainPdfBlob(r){
   }
   // 3. Commission
   if (r.commission) {
-    heading('3. Commission this member earned from the team', `${pdfMoney(r.commission.count)} commission payment${r.commission.count === 1 ? '' : 's'}`);
+    heading('3. Commission this member earned from the team', `${pdfMoney(r.commission.count)} ${t(r.commission.count === 1 ? 'commission payment' : 'commission payments')}`);
     table([{ h: 'Level 1', w: 100, r: 1, k: x => pdfMoney(x.l1) }, { h: 'Level 2', w: 100, r: 1, k: x => pdfMoney(x.l2) }, { h: 'Level 3', w: 100, r: 1, k: x => pdfMoney(x.l3) }, { h: 'Total (XOF)', w: 120, r: 1, k: x => pdfMoney(x.total) }], [r.commission], { zebra: false });
   }
   // 4. Upline
-  heading('4. Upline (direct referrer to root)', `${(r.upline || []).length} link${(r.upline || []).length === 1 ? '' : 's'}`);
+  heading('4. Upline (direct referrer to root)', `${(r.upline || []).length} ${t((r.upline || []).length === 1 ? 'link' : 'links')}`);
   if ((r.upline || []).length) {
     table([
       { h: '#', w: 28, k: (x, i) => String(i + 1) }, { h: 'Position', w: 110, k: (x, i) => i === 0 ? 'Direct referrer' : (i === r.upline.length - 1 ? 'Root' : 'Level ' + (i + 1) + ' up') },
@@ -1659,7 +1691,7 @@ function chainPdfBlob(r){
     ], r.upline);
   } else { pdf.text(M, y, 'No referrer: this account is the root.', 9.5, false, 'l', MUTED); y += 18; }
   // 5. Downline, level by level
-  heading('5. Downline, level by level', `${pdfMoney(downline.length)}${r.downlineTruncated ? '+' : ''} members`);
+  heading('5. Downline, level by level', `${pdfMoney(downline.length)}${r.downlineTruncated ? '+' : ''} ${t('members')}`);
   const dcols = [
     { h: '#', w: 28, k: (x, i) => String(i + 1) }, { h: 'Phone', w: 105, k: x => x.phone }, { h: 'Code', w: 72, k: x => x.referralCode || '-' }, { h: 'Referred by', w: 105, k: x => x.referredByPhone || '-' },
     { h: 'Status', w: 52, k: x => x.status, color: x => x.status === 'banned' ? BAD : GOOD }, { h: 'Joined', w: 68, k: x => pdfDay(x.createdAt) },
@@ -1671,7 +1703,7 @@ function chainPdfBlob(r){
     const rows = downline.filter(d => d.level === lv); const a = agg(lv);
     need(60);
     pdf.rect(M, y - 2, W - 2 * M, 17, [0.85, 0.9, 1]);
-    pdf.text(M + 6, y + 1.5, `Level ${lv}  -  ${pdfMoney(rows.length)} member${rows.length === 1 ? '' : 's'}`, 9.5, true, 'l', BLUE);
+    pdf.text(M + 6, y + 1.5, `${t('Level')} ${lv}  -  ${pdfMoney(rows.length)} ${t(rows.length === 1 ? 'member' : 'members')}`, 9.5, true, 'l', BLUE);
     pdf.text(W - M - 6, y + 2, `deposited ${pdfMoney(a.dep)}   invested ${pdfMoney(a.inv)}   (XOF)`, 8.5, false, 'r', INK);
     y += 21;
     table(dcols, rows);
@@ -1725,7 +1757,7 @@ async function openReferralChain(uid){
     <div class="kv"><span class="k">Team's total recharges</span><b>${ugx(r.teamDeposits)}</b></div>
     <h4 style="margin:10px 0 6px;font-size:13px">Root</h4>
     <div class="kv"><span class="k">${esc(r.root.phone||r.root.id)}</span><span>${esc(r.root.referralCode||'Not set')}${r.root.id===r.user.id?' <span class="pill-tag t-ok">This user</span>':''}</span></div>
-    <h4 style="margin:14px 0 6px;font-size:13px">Upline (direct referrer → root), ${r.upline.length} link${r.upline.length===1?'':'s'}</h4>
+    <h4 style="margin:14px 0 6px;font-size:13px">${r.upline.length===1?'Upline (direct referrer → root), 1 link':`Upline (direct referrer → root), ${r.upline.length} links`}</h4>
     <div class="table-scroll" style="max-height:180px">${uplineHtml}</div>
     <h4 style="margin:14px 0 6px;font-size:13px">Downline (this member's own team), ${r.downline.length}${r.downlineTruncated?'+':''} total -- ${esc(levelSummary)}</h4>
     ${r.downline.length ? `<div class="table-scroll" style="max-height:260px">${downlineRows}</div>${r.downlineTruncated?'<p class="muted" style="font-size:11.5px;margin:6px 0 0">List capped at 5,000 nodes -- the level counts above still cover everyone.</p>':''}` : '<p class="muted" style="margin:0">This user has not referred anyone.</p>'}
@@ -2278,14 +2310,14 @@ async function renderProducts(){
     if(!confirm('Create the ten products Soda A to Soda J that are missing? Products that already exist are not changed. Their prices are placeholders: edit them afterwards.'))return;
     const b=$('addStarters'); b.disabled=true; b.textContent='Adding…';
     const d=await api('/admin/products/add-starters', {});
-    toast(d.status==='success'?(d.created?`Added ${d.created} product${d.created===1?'':'s'}`:'Nothing to add, all ten already exist'):(d.message||'Failed'),d.status==='success'?'ok':'err');
+    toast(d.status==='success'?(d.created?t(d.created===1?'Added 1 product':`Added ${d.created} products`):'Nothing to add, all ten already exist'):(d.message||'Failed'),d.status==='success'?'ok':'err');
     renderProducts();
   });
   $('clearProd').addEventListener('click',async()=>{
     if(!confirm('Delete EVERY product? The app catalogue reverts to the built-in defaults until you add new ones. This cannot be undone.'))return;
     const b=$('clearProd'); b.disabled=true; b.textContent='Clearing…';
     const d=await api('/admin/products/clear', {});
-    toast(d.status==='success'?`Removed ${d.removed} product${d.removed===1?'':'s'}`:(d.message||'Failed'),d.status==='success'?'ok':'err');
+    toast(d.status==='success'?t(d.removed===1?'Removed 1 product':`Removed ${d.removed} products`):(d.message||'Failed'),d.status==='success'?'ok':'err');
     renderProducts();
   });
   document.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>editProduct(list.find(p=>p.key===b.dataset.edit))));
@@ -3434,7 +3466,7 @@ async function renderSettings(){
     const m=x=>{const r=/^(\d{1,2}):(\d{2})/.exec(x||'');return r?(+r[1])*60+(+r[2]):null;};
     const d=new Date(Date.now()), now=d.getUTCHours()*60+d.getUTCMinutes(), a=m(f), b=m(t);
     const clock=String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');
-    const dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getUTCDay()];
+    const dayName=dayLong(d.getUTCDay());
     if(!on){ el.textContent='Right now it is '+dayName+' '+clock+' Côte d’Ivoire time. The hours switch is off: members can withdraw at any hour.'; return; }
     if(a==null||b==null||a===b){ el.textContent='Pick two different times.'; return; }
     const open=a<b?(now>=a&&now<b):(now>=a||now<b);
@@ -3443,8 +3475,10 @@ async function renderSettings(){
   const refreshAutoNote=()=>{
     const on=$('sAutoWit').checked, lo=$('sAutoMin').value.trim(), hi=$('sAutoMax').value.trim(), cap=+$('sAutoCap').value||0, n=$('autoWitNote');
     n.textContent = on
-      ? `ON: every new withdrawal is sent by the VPS after its own random wait of ${lo||'?'} to ${hi||'?'} seconds${cap?`, only up to ${ugx(cap)} (larger ones wait for you)`:''}. It uses the payment method chosen above; with "manual" payment nothing is sent automatically.`
-      : 'OFF: withdrawals wait in Withdrawals until you press Send.';
+      ? t(`ON: every new withdrawal is sent by the VPS after its own random wait of ${lo||'?'} to ${hi||'?'} seconds.`)
+        + (cap ? ' ' + t(`Only up to ${ugx(cap)}: larger ones wait for you.`) : '')
+        + ' ' + t('It uses the payment method chosen above; with "manual" payment nothing is sent automatically.')
+      : t('OFF: withdrawals wait in Withdrawals until you press Send.');
     n.style.color = on ? 'var(--ok)' : '';
   };
   ['sAutoWit','sAutoMin','sAutoMax','sAutoCap'].forEach(id=>{ $(id).addEventListener('input',refreshAutoNote); $(id).addEventListener('change',refreshAutoNote); });
@@ -3587,11 +3621,7 @@ const ADMIN_LANG_ROWS = [
   ['Dashboard', 'Olutimbe', 'Dashibodi', 'Tableau de bord', 'Imbonerahamwe', 'Orubaju rw\'ebikuru'],
   ['Analytics', 'Okwekenneenya', 'Uchanganuzi', 'Analyses', 'Isesengura', 'Okucondooza'],
   ['Users', 'Abakozesa', 'Watumiaji', 'Utilisateurs', 'Abakoresha', 'Abakozesa'],
-  ['Deposits', 'Ssente eziteekebwamu', 'Amana', 'Dépôts', 'Ubwishyu bwinjiye', 'Sente ezitairwemu'],
-  ['Withdrawals', 'Okuggyamu ssente', 'Utoaji', 'Retraits', 'Kubikuza', 'Okwihamu sente'],
   ['Transactions', 'Emirimu gy\'ssente', 'Miamala', '=', 'Ibikorwa by\'amafaranga', 'Emirimo ya sente'],
-  ['Referrals', 'Okuyita', 'Mialiko', 'Parrainages', 'Gutumira', 'Okweta'],
-  ['Gift Codes', 'Koodi z\'ebirabo', 'Misimbo ya Zawadi', 'Codes cadeaux', 'Kode z\'impano', 'Koodi z\'ebiconco'],
   ['Gift codes', 'Koodi z\'ebirabo', 'Misimbo ya zawadi', 'Codes cadeaux', 'Kode z\'impano', 'Koodi z\'ebiconco'],
   ['Countries', 'Amawanga', 'Nchi', 'Pays', 'Ibihugu', 'Amahanga'],
   ['Admins', 'Abaduumizi', 'Wasimamizi', 'Administrateurs', 'Abayobozi', 'Abebembezi'],
@@ -3627,9 +3657,7 @@ const ADMIN_LANG_ROWS = [
   ['Who', 'Ani', 'Nani', 'Qui', 'Nde', 'Oha'],
   ['When', 'Ddi', 'Lini', 'Quand', 'Ryari', 'Ryari'],
   ['Phone', 'Essimu', 'Simu', 'Téléphone', 'Telefone', 'Esimu'],
-  ['Phone number', 'Namba y\'essimu', 'Namba ya simu', 'Numéro de téléphone', 'Nomero ya telefone', 'Namba ya esimu'],
   ['Number', 'Namba', 'Namba', 'Numéro', 'Nomero', 'Namba'],
-  ['Network', 'Ekitongole ky\'essimu', 'Mtandao', 'Réseau', 'Uruhererekane', 'Ekitongore kya esimu'],
   ['Country', 'Eggwanga', 'Nchi', 'Pays', 'Igihugu', 'Ihanga'],
   ['Currency', 'Ssente z\'eggwanga', 'Sarafu', 'Devise', 'Ifaranga', 'Sente z\'ihanga'],
   ['Clock', 'Essaawa', 'Saa', 'Horloge', 'Isaha', 'Eshaaha'],
@@ -3653,7 +3681,6 @@ const ADMIN_LANG_ROWS = [
   ['Copy code', 'Koppa koodi', 'Nakili msimbo', 'Copier le code', 'Gukoporora kode', 'Koppa koodi'],
   ['Title', 'Omutwe', 'Kichwa', 'Titre', 'Umutwe', 'Omutwe'],
   ['Message', 'Obubaka', 'Ujumbe', '=', 'Ubutumwa', 'Obutumwa'],
-  ['Invested', 'Ssente eziteekeddwamu', 'Iliyowekezwa', 'Investi', 'Yashowe', 'Sente ezitairwemu'],
   ['Referred user', 'Omukozesa ayitiddwa', 'Mtumiaji aliyealikwa', 'Utilisateur parrainé', 'Umukoresha watumiwe', 'Omukozesa oyetsirwe'],
   ['Referrer\'s code', 'Koodi y\'oyo ayise', 'Msimbo wa mwalikaji', 'Code du parrain', 'Kode y\'uwatumiye', 'Koodi y\'oworikweta'],
   ['Referred by', 'Yayitibwa', 'Alialikwa na', 'Parrainé par', 'Yatumiwe na', 'Yayetsirwe'],
@@ -3666,8 +3693,6 @@ const ADMIN_LANG_ROWS = [
   ['L1 commission', 'Ssente ez\'omutendera 1', 'Kamisheni ya ngazi 1', 'Commission niveau 1', 'Komisiyo y\'urwego rwa 1', 'Sente z\'omurengo 1'],
   ['l1 commission', 'ssente ez\'omutendera 1', 'kamisheni ya ngazi 1', 'commission niveau 1', 'komisiyo y\'urwego rwa 1', 'sente z\'omurengo 1'],
   ['turntable', 'nnamuziga', 'gurudumu', 'roue', 'uruziga', 'orupiira'],
-  ['Turntable win', 'Okuwangula ku nnamuziga', 'Ushindi wa gurudumu', 'Gain à la roue', 'Gutsindira ku ruziga', 'Okusingura aha rupiira'],
-  ['Deposit: Paid', 'Okuteekamu: Kisasuddwa', 'Amana: Imelipwa', 'Dépôt : Payé', 'Ubwishyu: Byishyuwe', 'Okuteeramu: Kishashuriirwe'],
   ['Withdrawal: Processing', 'Okuggyamu: Kirongoosebwa', 'Utoaji: Inashughulikiwa', 'Retrait : En traitement', 'Kubikuza: Birimo gutunganywa', 'Okwihamu: Nikikorwaho'],
   ['The full-screen picture behind the Download button, on the screen a member reaches from Account → Download APP. Portrait, 1080 × 1920 (any size works — it is cropped to fill). A dark overlay is drawn on top so the white heading and the button stay readable, so a bright picture is fine. An empty slot shows the brand gradient.', 'Ekifaananyi ekijjuza olupapula emabega wa bbaatani ya Download, ku lupapula omuntu lw\'atuukako okuva ku Akaawunti → Download APP. Eky\'obuwanvu, 1080 × 1920 (obunene bwonna bukola — kisalibwa okujjuza). Ekibikka ekiddugavu kiteekebwa waggulu omutwe omweru ne bbaatani bisobole okusomeka, kale ekifaananyi ekitangaavu tekiriiko kabi. Ekifo ekyereere kiraga langi z\'ekitongole.', 'Picha ya skrini nzima nyuma ya kitufe cha Download, kwenye skrini mwanachama anayofikia kutoka Akaunti → Download APP. Wima, 1080 × 1920 (ukubwa wowote unafaa — hukatwa ili kujaza). Kifuniko cheusi huchorwa juu ili kichwa cheupe na kitufe vibaki vinasomeka, kwa hivyo picha nyangavu haina shida. Nafasi tupu huonyesha upinde rangi wa chapa.', 'L\'image plein écran derrière le bouton Download, sur l\'écran que le membre atteint depuis Compte → Download APP. Portrait, 1080 × 1920 (toute taille convient — elle est recadrée pour remplir). Un voile sombre est dessiné par-dessus pour que le titre blanc et le bouton restent lisibles, donc une image claire ne pose pas de problème. Un emplacement vide affiche le dégradé de la marque.', 'Ishusho yuzuye ipaji iri inyuma ya buto ya Download, ku ipaji umunyamuryango agera kuva kuri Konti → Download APP. Ihagaritse, 1080 × 1920 (ingano iyo ari yo yose irakora — icibwa kugira ngo yuzure). Igipfukisho cyijimye gishyirwa hejuru kugira ngo umutwe wera na buto bisomeke, bityo ishusho imurika nta kibazo. Umwanya usa ugaragaza amabara y\'ikirango.', 'Ekishushani ekirikwijuza orupapura enyima ya akabatuni ka Download, aha rupapura omuntu arikuhikaho kuruga aha Akaunti → Download APP. Ekya kwemeera, 1080 × 1920 (obungi bwoona nibukora — nikicwa kugira ngo kiijuze). Ekibundikiro ekikwatsiire nikitebekwa haiguru kugira ngo omutwe omwera n\'akabatuni bishoboke kushomwa, n\'ahabw\'ekyo ekishushani ekyakire tikirikubaho kibi. Omwanya ogwo busha nigworeka amabara g\'ekitongore.'],
   ['The icon members see on their phone\'s home screen after they install the app, and in the browser tab. Upload a square PNG, 1024 × 1024 (512 × 512 also works — anything square does; it is resized here to the exact 512 and 192 sizes Android asks for). Transparency is kept, and the corners are rounded for you — upload a plain square and it comes out with the rounded shape an app icon has. Keep the logo away from the very edges so the rounding does not cut into it.', 'Akafaananyi abantu ke balaba ku lupapula lwa ssimu zaabwe nga bamaze okuteekawo app, ne ku ttabu lya bbulawuza. Teeka PNG ey\'enjuyi enkanaanya, 1024 × 1024 (512 × 512 nayo ekola — kyonna ekikanaanya kikola; kikyusibwa wano okutuuka ku bunene bwa 512 ne 192 Android bw\'esaba). Obwereere bukuumibwa, era ensonda zizingululwa — teeka ekifaananyi ekikanaanya kifuluma nga kirina enkula enzingulule ey\'akafaananyi ka app. Teeka akabonero wala n\'ensonda enkulu okusobola obutasalibwako.', 'Aikoni wanachama wanayoona kwenye skrini ya nyumbani ya simu zao baada ya kusakinisha programu, na kwenye kichupo cha kivinjari. Pakia PNG ya mraba, 1024 × 1024 (512 × 512 pia inafaa — chochote cha mraba kinafaa; hubadilishwa hapa kuwa ukubwa kamili wa 512 na 192 ambao Android huomba). Uwazi huhifadhiwa, na pembe huzungushwa kwa ajili yako — pakia mraba tu na hutoka na umbo la mviringo ambalo aikoni ya programu inalo. Weka nembo mbali na pembezoni kabisa ili mviringo usiikate.', 'L\'icône que les membres voient sur l\'écran d\'accueil de leur téléphone après avoir installé l\'application, et dans l\'onglet du navigateur. Téléversez un PNG carré, 1024 × 1024 (512 × 512 fonctionne aussi — tout carré convient ; il est redimensionné ici aux tailles exactes 512 et 192 demandées par Android). La transparence est conservée et les coins sont arrondis pour vous — téléversez un simple carré et il ressort avec la forme arrondie d\'une icône d\'application. Gardez le logo loin des bords pour que l\'arrondi ne l\'entame pas.', 'Agashushondanga abanyamuryango babona kuri ecran y\'ibanze ya telefoni zabo nyuma yo gushyiraho porogaramu, no ku gice cy\'umushakisha. Shyiraho PNG ifite impande zingana, 1024 × 1024 (512 × 512 na yo irakora — ikintu cyose gifite impande zingana kirakora; ihindurwa hano ikagira ingano nyayo ya 512 na 192 Android isaba). Ububonerane burabikwa, kandi impera zirazingurutswa — shyiraho igishushanyo gisanzwe kigire impande zingana kikazasohoka gifite isura izengurutse agashushondanga ka porogaramu kagira. Shyira ikirango kure y\'impera kugira ngo kuzingurutsa bitagice.', 'Akashushani abantu ka barikureeba aha rupapura rw\'omuka rwa nyabarugo zaabo bwanyima y\'okuteeka puroguramu, n\'aha kacweka ka buraawuza. Ta PNG ey\'empande ezirikwingana, 1024 × 1024 (512 × 512 nayo neekora — kyoona ekirikwingana nikikora; nikihindurwa hanu kikahika aha bungi bwa 512 na 192 Android eri kushaba). Obwereere nibukuumwa, kandi ensonda nizizingurutswa — ta ekirikwingana kwonka kandi nikiija kiine enshusha ezingurukire ei akashushani ka puroguramu karikugira. Ta ekirango hare n\'empera kugira ngo okuzingurutsa kutakicwaho.'],
@@ -3800,13 +3825,11 @@ const ADMIN_LANG_ROWS = [
   ['Save payment method', 'Tereka engeri y\'okusasula', 'Hifadhi njia ya malipo', 'Enregistrer le mode de paiement', 'Bika uburyo bwo kwishyura', 'Biika omuringo gw\'okushashura'],
   ['Payment numbers', 'Namba z\'okusasulirako', 'Namba za malipo', 'Numéros de paiement', 'Nomero zo kwishyuriraho', 'Namba z\'okushashuriraho'],
   ['+ Add payment number', '+ Yongerako namba y\'okusasulirako', '+ Ongeza namba ya malipo', '+ Ajouter un numéro de paiement', '+ Ongeraho nomero yo kwishyuriraho', '+ Yongyeraho namba y\'okushashuriraho'],
-  ['Account holder name', 'Erinnya ly\'nannyini akawunti', 'Jina la mwenye akaunti', 'Nom du titulaire du compte', 'Izina rya nyir\'ukonti', 'Eiziina rya nyineeka akaunti'],
   ['MTN steps', 'Amatendera ga MTN', 'Hatua za MTN', 'Étapes MTN', 'Intambwe za MTN', 'Emitwarize ya MTN'],
   ['Airtel steps', 'Amatendera ga Airtel', 'Hatua za Airtel', 'Étapes Airtel', 'Intambwe za Airtel', 'Emitwarize ya Airtel'],
   ['e.g. Dial *185#, Select Send Money…', 'okugeza Kuba *185#, Londa Sindika Ssente…', 'mfano Piga *185#, Chagua Tuma Pesa…', 'ex. Composez *185#, Choisissez Envoyer de l\'argent…', 'urugero Hamagara *185#, Hitamo Kohereza amafaranga…', 'nk\'okugyera Teera *185#, Toorana Tuma Sente…'],
   ['Save payment reminder', 'Tereka ekijjukizo ky\'okusasula', 'Hifadhi kikumbusho cha malipo', 'Enregistrer le rappel de paiement', 'Bika urwibutso rwo kwishyura', 'Biika ekiijukyo ky\'okushashura'],
   ['Support contacts', 'Endagiriro z\'obuyambi', 'Mawasiliano ya usaidizi', 'Contacts d\'assistance', 'Aho wahamagara ubufasha', 'Endagiriro z\'obuhwezi'],
-  ['Support hours', 'Essaawa z\'obuyambi', 'Saa za usaidizi', 'Heures d\'assistance', 'Amasaha y\'ubufasha', 'Eshaaha z\'obuhwezi'],
   ['Every day, 8am – 9pm', 'Buli lunaku, ku ssaawa 2 ez\'oku makya okutuuka ku 3 ez\'ekiro', 'Kila siku, saa 2 asubuhi – saa 3 usiku', 'Tous les jours, 8h – 21h', 'Buri munsi, saa 2 za mu gitondo – saa 3 z\'ijoro', 'Buri izooba, shaaha 2 ez\'omu kasheeshe – shaaha 3 ez\'ekiro'],
   ['Telegram channel', 'Omukutu gwa Telegram', 'Chaneli ya Telegram', 'Canal Telegram', 'Umuyoboro wa Telegram', 'Omuyanja gwa Telegram'],
   ['Telegram group', 'Ekibiina kya Telegram', 'Kikundi cha Telegram', 'Groupe Telegram', 'Itsinda rya Telegram', 'Ekibiina kya Telegram'],
@@ -3944,6 +3967,755 @@ const ADMIN_LANG_ROWS = [
   ['Server-driven: while on, every incoming withdrawal request first waits the interval below (measured from the moment it was requested, even a single request always waits the full interval, it\'s never approved instantly) before the server approves and sends it. It checks every few seconds, and every request that\'s old enough at that moment is approved and sent back-to-back in the same pass, not spaced apart from each other. No tap needed per request. It reuses the exact same send logic as the approve button on the Withdrawals tab (whichever provider that currently sends through), so it can never double-pay a request or act on one that isn\'t still genuinely pending.', 'Kikolebwa sseva: nga kikola, buli kusaba okuggyamu ssente kusooka kulinda ekiseera ekiri wansi (okubalirwa okuva lwe kusabiddwa, ne bwe kuba kumu kulinda ekiseera kyonna, tekukkirizibwa mangu) sseva nga tennakukkiriza n\'okukusindika. Ekebera buli sekonda ntono, era buli kusaba okumaze ekiseera ekimala mu kaseera ako kukkirizibwa ne kusindikibwa kumpi na kunnaakwo mu mulundi gwe gumu, si nga kwawukanyiziddwa. Tewali kunyiga kwetaagisa ku buli kusaba. Kikozesa enkola y\'okusindika y\'emu n\'eya bbaatani ey\'okukkiriza ku ttabu lya Okuggyamu (ne provider gw\'ekozesa mu kiseera ekyo), kale tekiyinza kusasula mulundi gwa kubiri oba okukola ku kusaba okutakyali mu kulindirira.', 'Inaendeshwa na seva: ikiwa imewashwa, kila ombi la utoaji linalowasili kwanza husubiri muda ulio hapa chini (unaohesabiwa tangu ombi lilipowekwa, hata ombi moja husubiri muda wote, halikubaliwi papo hapo) kabla seva haijaidhinisha na kulituma. Hukagua kila sekunde chache, na kila ombi lililokomaa wakati huo huidhinishwa na kutumwa mfululizo katika pasi ile ile, si kwa kutenganishwa. Hakuna kugusa kunakohitajika kwa kila ombi. Hutumia mantiki ile ile ya kutuma kama kitufe cha kuidhinisha kwenye kichupo cha Utoaji (mtoa huduma yeyote anayetumika wakati huo), kwa hivyo haiwezi kamwe kulipa ombi mara mbili au kushughulikia lile ambalo halisubiri kweli.', 'Piloté par le serveur : lorsqu\'il est actif, chaque demande de retrait entrante attend d\'abord l\'intervalle ci-dessous (compté depuis le moment de la demande ; même une demande isolée attend toujours l\'intervalle complet, elle n\'est jamais approuvée instantanément) avant que le serveur ne l\'approuve et ne l\'envoie. Il vérifie toutes les quelques secondes, et chaque demande assez ancienne à ce moment-là est approuvée et envoyée à la suite dans le même passage, sans être espacée. Aucun appui nécessaire par demande. Il réutilise exactement la même logique d\'envoi que le bouton d\'approbation de l\'onglet Retraits (quel que soit le prestataire qui envoie actuellement), il ne peut donc jamais payer deux fois une demande ni agir sur une demande qui n\'est plus réellement en attente.', 'Biyoborwa na seriveri: iyo bikoresha, buri busabe bwo kubikuza buhageze butegereza mbere igihe kiri hasi (kibarwa uhereye igihe bwasabwe; n\'ubusabe bumwe buhora butegereza igihe cyose, ntibwemezwa ako kanya) mbere y\'uko seriveri ibwemeza ikanabwohereza. Igenzura buri masegonda macye, kandi buri busabe bwakuze icyo gihe bwemezwa bukoherezwa bukurikiranye muri iyo nzira imwe, atari mu buryo butandukanyije. Nta gukanda bikenewe kuri buri busabe. Ikoresha uburyo bwo kohereza bumwe n\'ubwa buto bwo kwemeza bwo ku gice cy\'Ukubikuza (uwo ari we wese utanga serivisi icyo gihe), bityo ntibishobora kwishyura ubusabe kabiri cyangwa gukora ku bwo butakiri ku butegereje koko.', 'Nikikorwa seeva: ku erikuba erikukora, buri kushaba okwihamu sente kurikwija nikubanza kutegyereza obwire oburi ahansi (nibubarwa kuruga obu kwashabirwe; n\'okushaba kumwe nikutegyereza obwire bwoona, tikurikwikirizibwa ahonaaho) seeva etakakwikiriize n\'okukutuma. Neekyebera buri sekonda nkye, kandi buri kushaba okumazire obwire obuhikire aha kaanya ako nikwikirizibwa kikatumwa nikukuratana omu muringo gumwe, ti nikwahukanisibwa. Tihariho kukanda okurikwetengwa aha buri kushaba. Nikikoresa omuringo gw\'okutuma ogwo gumwe nk\'ogwa akabatuni k\'okwikiriza aha kacweka k\'Okwihamu (ou arikuheereza aha kaanya ako), n\'ahabw\'ekyo tikirikubaasa kushashura okushaba emirundi ebiri nari kukora aha okutakiri omu kutegyerezibwa buzima.'],
   ['Shown centered over Home every time a member opens or returns to it. Dark background, matching the Home activity ticker. The optional image (if set) shows above the message and scrolls together with it if the dialog\'s content runs long. The OK button opens Telegram group above (falls back to the channel link if group is blank) and closes the dialog; the X in the corner just closes it.', 'Kiraga wakati ku Home buli lwe omuntu aggula oba adda ku yo. Emabega eddugavu, nga lifaanagana n\'olukalala lw\'ebikolebwa ku Home. Ekifaananyi ekiyinza okuteekebwa (bwe kiba kiriwo) kiraga waggulu w\'obubaka era kiseerera nakyo singa ebiri mu kabokisi biba biwanvu. Bbaatani ya OK egguka ggwanika lya Telegram eriri waggulu (bw\'eba nga terimu, egguka ekkubo ly\'omukutu) era eggalawo akabokisi; X eri ku nsonda ekaggalawo kyokka.', 'Huonyeshwa katikati juu ya Nyumbani kila mara mwanachama anapofungua au kurudi. Mandharinyuma meusi, yanayolingana na mstari wa shughuli wa Nyumbani. Picha ya hiari (ikiwekwa) huonyeshwa juu ya ujumbe na husogea pamoja nao ikiwa maudhui ya kisanduku ni marefu. Kitufe cha SAWA hufungua kikundi cha Telegram hapo juu (hurudi kwenye kiungo cha chaneli ikiwa kikundi ni tupu) na hufunga kisanduku; X iliyo pembeni huifunga tu.', 'Affiché centré par-dessus l\'Accueil chaque fois qu\'un membre l\'ouvre ou y revient. Fond sombre, assorti au bandeau d\'activité de l\'Accueil. L\'image facultative (si elle est définie) apparaît au-dessus du message et défile avec lui si le contenu de la boîte est long. Le bouton OK ouvre le groupe Telegram ci-dessus (et revient au lien du canal si le groupe est vide) puis ferme la boîte ; le X dans le coin ne fait que la fermer.', 'Bigaragara hagati hejuru ya Ahabanza buri gihe umunyamuryango afunguye cyangwa agarutseho. Inyuma yijimye, ihuye n\'umurongo w\'ibikorwa wo Ahabanza. Ishusho itari itegeko (niba yashyizweho) igaragara hejuru y\'ubutumwa kandi inyerera hamwe na bwo iyo ibiri mu kazu ari byinshi. Buto ya OK ifungura itsinda rya Telegram riri haruguru (igasubira ku murongo w\'umuyoboro iyo itsinda risa) hanyuma igafunga akazu; X iri ku mpera ihita ikafunga gusa.', 'Nikireeberwa ahagati aha Home buri obu omuntu arikwigura nari kugarukaho. Enyima ekwatsiire, erikushushana n\'orurongo rw\'ebirikukorwa aha Home. Ekishushani ekirikubaasa kutairweho (ku kiraabe kiriho) nikireeberwa haiguru y\'obutumwa kandi nikigyenda nabwo ku ebiri omu kabokisi biraabe biri bireingwa. Akabatuni ka OK nikigura ekibiina kya Telegram ekiri haiguru (kikagaruka aha muhanda gw\'omuhanda ku ekibiina kiraabe kiri busha) reero kikakinga akabokisi; X eri aha nsonda neekinga kwonka.'],
   ['Set per product, not here — open Products, edit a product, and use its "Turntable spins from this product" section to set how many spins it earns and what each can win. That way every product can pay differently.', 'Kiteekebwa ku buli kyamaguzi, si wano — ggulawo Ebyamaguzi, kyusa ekyamaguzi, era okozese ekitundu kyakyo ekya "Turntable spins from this product" okuteeka okukyusa kwe kiwa n\'ekyo buli kumu kwe kuyinza okuwangula. Mu ngeri eyo buli kyamaguzi kisobola okusasula mu ngeri yaakyo.', 'Huwekwa kwa kila bidhaa, si hapa — fungua Bidhaa, hariri bidhaa, kisha tumia sehemu yake ya "Turntable spins from this product" kuweka mizunguko inayopatikana na kila mmoja anaweza kushinda kiasi gani. Kwa njia hiyo kila bidhaa inaweza kulipa tofauti.', 'À régler par produit, pas ici — ouvrez Produits, modifiez un produit, et utilisez sa section "Turntable spins from this product" pour définir combien de tours il rapporte et ce que chacun peut gagner. Ainsi chaque produit peut payer différemment.', 'Bishyirwaho kuri buri gicuruzwa, atari hano — fungura Ibicuruzwa, uhindure igicuruzwa, hanyuma ukoreshe igice cyacyo cya "Turntable spins from this product" kugira ngo ushyireho inzunguruka gitanga n\'ibyo buri imwe ishobora gutsindira. Muri ubwo buryo buri gicuruzwa gishobora kwishyura ukundi.', 'Nikitebekwa aha buri kyamaguzi, ti hanu — igura Ebyamaguzi, ohindure ekyamaguzi, reero okoreese akacweka kaakyo aka "Turntable spins from this product" kugira ngo ote okuzunguka oku kirikuha n\'eki buri kumwe kurikubaasa kutunga. Omu muringo ogwo buri kyamaguzi nikibaasa kushashura kwahukanye.'],
+  // ── English + French coverage (owner: Soda admin English and French only) ──
+  ['Reset password (Firebase)', '', '', 'Réinitialiser le mot de passe (Firebase)', '', ''],
+  ['Min reward (UGX)', '', '', 'Récompense minimale (UGX)', '', ''],
+  ['Max reward (UGX)', '', '', 'Récompense maximale (UGX)', '', ''],
+  ['Minimum win (UGX)', '', '', 'Gain minimum (UGX)', '', ''],
+  ['Maximum win (UGX)', '', '', 'Gain maximum (UGX)', '', ''],
+  ['Set a new login password for this user via Firebase', '', '', 'Définir un nouveau mot de passe de connexion pour cet utilisateur via Firebase', '', ''],
+  ['+ New asset', '', '', '+ Nouvel actif', '', ''],
+  ['24-hour clock, Ethiopia time. Can run past midnight (for example 18:00 to 17:00). One withdrawal at a time per member, always.', '', '', 'Horloge de 24 heures, heure de la Côte d’Ivoire. Peut dépasser minuit (par exemple de 18:00 à 17:00). Un seul retrait à la fois par membre, toujours.', '', ''],
+  ['24-hour clock, Côte d’Ivoire time. Can run past midnight (for example 18:00 to 17:00). One withdrawal at a time per member, always.', '', '', 'Horloge de 24 heures, heure de la Côte d’Ivoire. Peut dépasser minuit (par exemple de 18:00 à 17:00). Un seul retrait à la fois par membre, toujours.', '', ''],
+  ['A popup shown every time a member logs in or completes registration, and also when they navigate back to Home from Assets, Network or Account. Its WhatsApp and Telegram group buttons use the links set in Support contacts above.', '', '', 'Une fenêtre affichée à chaque connexion ou fin d’inscription d’un membre, et aussi quand il revient à l’Accueil depuis Actifs, Réseau ou Compte. Ses boutons de groupe WhatsApp et Telegram utilisent les liens définis dans « Contacts d’assistance » ci-dessus.', '', ''],
+  ['Activate', '', '', 'Activer', '', ''],
+  ['An ordered list of text and image blocks, shown with a scroll-reveal animation.', '', '', 'Une liste ordonnée de blocs de texte et d’image, affichée avec une animation au défilement.', '', ''],
+  ['App tagline (shown under the logo on Login)', '', '', 'Slogan de l’application (affiché sous le logo à la connexion)', '', ''],
+  ['Applies only after login: Home, Assets, Network, Profile, Recharge, Withdraw, Wallet and other inner pages. Authentication screens are unchanged.', '', '', 'S’applique seulement après la connexion : Accueil, Actifs, Réseau, Profil, Recharge, Retrait, Portefeuille et les autres pages intérieures. Les écrans de connexion ne changent pas.', '', ''],
+  ['Attach the member\'s referrer once. Eligible commission from their first confirmed recharge is processed immediately. Existing commission payments are preserved; attaching a referrer does not pay them again.', '', '', 'Rattachez le parrain du membre une seule fois. La commission éligible de sa première recharge confirmée est traitée immédiatement. Les commissions déjà versées sont conservées ; rattacher un parrain ne les paie pas une seconde fois.', '', ''],
+  ['Background blur (0–40 px)', '', '', 'Flou de l’arrière-plan (0–40 px)', '', ''],
+  ['Background opacity (0–100%)', '', '', 'Opacité de l’arrière-plan (0–100 %)', '', ''],
+  ['Bank / Wallet: add the accounts members pay into under Payment Numbers. Members send you the payment message and you approve it under Recharges. USDT: set it up below. Retraits are paid by you: send the money, then record it under Retraits.', '', '', 'Banque / Portefeuille : ajoutez les comptes sur lesquels les membres paient dans « Numéros de paiement ». Les membres vous envoient le message de paiement et vous l’approuvez dans Recharges. USDT : configurez-le plus bas. Les retraits sont payés par vous : envoyez l’argent, puis enregistrez-le dans Retraits.', '', ''],
+  ['Bank / Wallet: add the accounts members pay into under Payment Numbers. Members send you the payment message and you approve it under Recharges. USDT: set it up below. Withdrawals are paid by you: send the money, then record it under Withdrawals.', '', '', 'Banque / Portefeuille : ajoutez les comptes sur lesquels les membres paient dans « Numéros de paiement ». Les membres vous envoient le message de paiement et vous l’approuvez dans Recharges. USDT : configurez-le plus bas. Les retraits sont payés par vous : envoyez l’argent, puis enregistrez-le dans Retraits.', '', ''],
+  ['Banned users · tap to view', '', '', 'Utilisateurs bannis · touchez pour voir', '', ''],
+  ['Banners', '', '', 'Bannières', '', ''],
+  ['Build the member-facing Rules and Regulations page with ordered text and image blocks. Changes appear in Account after saving.', '', '', 'Construisez la page « Règles et conditions » vue par les membres avec des blocs de texte et d’image ordonnés. Les changements apparaissent dans Compte après l’enregistrement.', '', ''],
+  ['Controls only Home, Assets, Network, Profile, Recharge, Withdraw, Wallet and other pages after login. Login, Sign Up and Forgot Password are not changed.', '', '', 'Ne concerne que l’Accueil, Actifs, Réseau, Profil, Recharge, Retrait, Portefeuille et les autres pages après la connexion. Connexion, inscription et mot de passe oublié ne changent pas.', '', ''],
+  ['Could not load the task rewards.', '', '', 'Impossible de charger les récompenses des tâches.', '', ''],
+  ['Crypto recharges (USDT TRC20)', '', '', 'Recharges crypto (USDT TRC20)', '', ''],
+  ['Customer Service (Telegram)', '', '', 'Service client (Telegram)', '', ''],
+  ['Danger zone', '', '', 'Zone dangereuse', '', ''],
+  ['e.g. New assets are live', '', '', 'ex. : De nouveaux actifs sont disponibles', '', ''],
+  ['Energy for a Better Tomorrow', '', '', 'L’énergie pour un meilleur demain', '', ''],
+  ['Erase every member and everything that belongs to them — wallets, recharges, withdrawals, plans, records and their sign-in accounts — so the app starts clean. Your settings, assets, banners, About and Rules, payment numbers, admin accounts and messages are kept. There is no undo.', '', '', 'Efface chaque membre et tout ce qui lui appartient — portefeuilles, recharges, retraits, plans, historiques et comptes de connexion — pour que l’application reparte à zéro. Vos paramètres, actifs, bannières, pages À propos et Règles, numéros de paiement, comptes admin et messages sont conservés. Impossible d’annuler.', '', ''],
+  ['Exchange rate (XOF per 1 USDT)', '', '', 'Taux de change (XOF pour 1 USDT)', '', ''],
+  ['Free for the member: nothing is taken from their wallet. It runs like a bought asset and pays its full return.', '', '', 'Gratuit pour le membre : rien n’est prélevé sur son portefeuille. Il fonctionne comme un actif acheté et verse son rendement complet.', '', ''],
+  ['Give an asset', '', '', 'Offrir un actif', '', ''],
+  ['Home\'s Support tile opens this address directly in the member\'s mail app. Account > Support shows it alongside the WhatsApp link and the working hours below.', '', '', 'La tuile Assistance de l’Accueil ouvre cette adresse directement dans l’application de messagerie du membre. Compte > Assistance l’affiche avec le lien WhatsApp et les horaires ci-dessous.', '', ''],
+  ['Inner pages background blur (px)', '', '', 'Flou de l’arrière-plan des pages intérieures (px)', '', ''],
+  ['Inner pages background opacity (%)', '', '', 'Opacité de l’arrière-plan des pages intérieures (%)', '', ''],
+  ['Leave ON — the first-ever account is always let through.', '', '', 'Laissez activé — le tout premier compte est toujours accepté.', '', ''],
+  ['Make unrestricted by withdrawal time', '', '', 'Retirer la limite des heures de retrait', '', ''],
+  ['Members pay into one of your Payment Numbers (bank or Telebirr) or send USDT. When a member sends the payment message, it appears under To approve. Check that the money really arrived, then tap Approuver to add it to their wallet — or Refuser.', '', '', 'Les membres paient sur l’un de vos numéros de paiement (banque ou Telebirr) ou envoient des USDT. Quand un membre envoie le message de paiement, il apparaît sous « À approuver ». Vérifiez que l’argent est bien arrivé, puis touchez Approuver pour l’ajouter à son portefeuille — ou Refuser.', '', ''],
+  ['Members pay into one of your Payment Numbers (bank or Telebirr) or send USDT. When a member sends the payment message, it appears under To approve. Check that the money really arrived, then tap Approve to add it to their wallet — or Reject.', '', '', 'Les membres paient sur l’un de vos numéros de paiement (banque ou Telebirr) ou envoient des USDT. Quand un membre envoie le message de paiement, il apparaît sous « À approuver ». Vérifiez que l’argent est bien arrivé, puis touchez Approuver pour l’ajouter à son portefeuille — ou Refuser.', '', ''],
+  ['Min recharge', '', '', 'Recharge minimale', '', ''],
+  ['Min withdraw', '', '', 'Retrait minimal', '', ''],
+  ['Mon-Sat, 9am-6pm', '', '', 'Lun-Sam, 9h-18h', '', ''],
+  ['No recharges here', '', '', 'Aucune recharge ici', '', ''],
+  ['No rules content yet. Add text and image blocks below.', '', '', 'Aucun contenu pour les règles. Ajoutez des blocs de texte et d’image ci-dessous.', '', ''],
+  ['Payment Numbers', '', '', 'Numéros de paiement', '', ''],
+  ['Pending recharges', '', '', 'Recharges en attente', '', ''],
+  ['Rates & limits', '', '', 'Taux et limites', '', ''],
+  ['Receiving wallet address (TRC20)', '', '', 'Adresse du portefeuille de réception (TRC20)', '', ''],
+  ['Recharges and withdrawals', '', '', 'Recharges et retraits', '', ''],
+  ['Rejected', '', '', 'Refusé', '', ''],
+  ['Renames the app everywhere inside it — Home, profile, About, browser tab. Up to 24 characters.', '', '', 'Renomme l’application partout — Accueil, profil, À propos, onglet du navigateur. 24 caractères au maximum.', '', ''],
+  ['Reset database…', '', '', 'Réinitialiser la base de données…', '', ''],
+  ['Save crypto recharge settings', '', '', 'Enregistrer les paramètres de recharge crypto', '', ''],
+  ['Save inner background', '', '', 'Enregistrer l’arrière-plan intérieur', '', ''],
+  ['Save Rules and Regulations', '', '', 'Enregistrer les règles et conditions', '', ''],
+  ['Saved withdrawal accounts', '', '', 'Comptes de retrait enregistrés', '', ''],
+  ['Set each asset\'s member-facing name, photo and display position however you want. The stable key is only the internal reference that keeps existing purchases attached to that asset.', '', '', 'Définissez comme vous voulez le nom, la photo et la position d’affichage de chaque actif pour les membres. La clé stable n’est que la référence interne qui garde les achats existants rattachés à cet actif.', '', ''],
+  ['Signed-in page background', '', '', 'Arrière-plan des pages connectées', '', ''],
+  ['Statements', '', '', 'Relevés', '', ''],
+  ['Tap to see the banned users', '', '', 'Touchez pour voir les utilisateurs bannis', '', ''],
+  ['Task Center rewards', '', '', 'Récompenses du Centre des tâches', '', ''],
+  ['The PIN is one-way hashed -- it can never be viewed, only replaced. Sets the 6-digit trade password below directly; give it to the member so they can withdraw. They can also change it themselves in the app (Account -> Trade Password).', '', '', 'Le code PIN est chiffré à sens unique — il ne peut jamais être consulté, seulement remplacé. Il définit directement le mot de passe de transaction à 6 chiffres ci-dessous ; donnez-le au membre pour qu’il puisse retirer. Il peut aussi le changer lui-même dans l’application (Compte -> Mot de passe de transaction).', '', ''],
+  ['Total cashed out', '', '', 'Total retiré', '', ''],
+  ['Total topped up', '', '', 'Total rechargé', '', ''],
+  ['Updates price/cycle/expectedReturn on any saved asset back to the current code defaults -- leaves images, active/coming-soon, and order untouched', '', '', 'Remet le prix, le cycle et le rendement attendu de chaque actif enregistré aux valeurs par défaut du code — ne touche pas aux images, à l’état actif/bientôt disponible ni à l’ordre', '', ''],
+  ['Waiting for message', '', '', 'En attente du message', '', ''],
+  ['What you want members to see when they open the app.', '', '', 'Ce que vous voulez que les membres voient à l’ouverture de l’application.', '', ''],
+  ['WhatsApp group or channel', '', '', 'Groupe ou chaîne WhatsApp', '', ''],
+  ['Withdraw closes at', '', '', 'Fermeture des retraits à', '', ''],
+  ['Withdraw fee (%)', '', '', 'Frais de retrait (%)', '', ''],
+  ['Withdraw opens at', '', '', 'Ouverture des retraits à', '', ''],
+  ['Withdrawal hours', '', '', 'Heures de retrait', '', ''],
+  ['Working hours', '', '', 'Horaires de travail', '', ''],
+  ['Live', '', '', 'En direct', '', ''],
+  ['(blocks bonus-only withdrawals)', '', '', '(bloque les retraits de bonus seuls)', '', ''],
+  ['Only allow withdraw between set hours', '', '', 'Autoriser les retraits seulement entre les heures définies', '', ''],
+  ['(members see the hours on the Withdraw screen)', '', '', '(les membres voient les heures sur l’écran de retrait)', '', ''],
+  ['(every new member must be invited by an existing one)', '', '', '(chaque nouveau membre doit être invité par un membre existant)', '', ''],
+  ['(blocks the app for users)', '', '', '(bloque l’application pour les utilisateurs)', '', ''],
+  ['Enable USDT recharges', '', '', 'Activer les recharges USDT', '', ''],
+  ['(shows the option in the app)', '', '', '(affiche l’option dans l’application)', '', ''],
+  ['Enable announcement', '', '', 'Activer l’annonce', '', ''],
+  ['1. Text', '', '', '1. Texte', '', ''],
+  ['Topped up', '', '', 'Rechargé', '', ''],
+  ['Cashed out', '', '', 'Retiré', '', ''],
+  ['Total earned (all sources)', '', '', 'Total gagné (toutes sources)', '', ''],
+  ['Team commission', '', '', 'Commission d’équipe', '', ''],
+  ['(already included above)', '', '', '(déjà inclus ci-dessus)', '', ''],
+  ['Team L1 / L2 / L3', '', '', 'Équipe N1 / N2 / N3', '', ''],
+  ['Team\'s total recharges', '', '', 'Total des recharges de l’équipe', '', ''],
+  ['Check-in streak', '', '', 'Série de pointages', '', ''],
+  ['This member', '', '', 'Ce membre', '', ''],
+  ['Follows the withdrawal hours', '', '', 'Suit les heures de retrait', '', ''],
+  ['Copied to clipboard', '', '', 'Copié dans le presse-papiers', '', ''],
+  ['by hand', '', '', 'à la main', '', ''],
+  ['Commission', '', '', '=', '', ''],
+  ['Task Center reward', '', '', 'Récompense du Centre des tâches', '', ''],
+  ['Daily reward', '', '', 'Récompense quotidienne', '', ''],
+  ['Plan cashback', '', '', 'Gain de l’actif', '', ''],
+  ['Plan purchase', '', '', 'Achat d’actif', '', ''],
+  ['Promo code redeemed', '', '', 'Code promo utilisé', '', ''],
+  ['Adjustment', '', '', 'Ajustement', '', ''],
+  ['Mission Center salary', '', '', 'Salaire du Centre des missions', '', ''],
+  ['Mission Center recharge reward', '', '', 'Récompense de recharge du Centre des missions', '', ''],
+  ['Recharge reversed (fraud)', '', '', 'Recharge annulée (fraude)', '', ''],
+  ['Statement downloaded', '', '', 'Relevé téléchargé', '', ''],
+  ['System default', '', '', 'Par défaut du système', '', ''],
+  ['Today', '', '', 'Aujourd’hui', '', ''],
+  ['Yesterday', '', '', 'Hier', '', ''],
+  ['No file', '', '', 'Aucun fichier', '', ''],
+  ['Please choose an image file', '', '', 'Veuillez choisir un fichier image', '', ''],
+  ['Could not read the file', '', '', 'Impossible de lire le fichier', '', ''],
+  ['That image could not be loaded', '', '', 'Cette image n’a pas pu être chargée', '', ''],
+  ['Could not process the image', '', '', 'Impossible de traiter l’image', '', ''],
+  ['Choose a logo image', '', '', 'Choisissez une image de logo', '', ''],
+  ['Choose an image file', '', '', 'Choisissez un fichier image', '', ''],
+  ['Could not read the logo', '', '', 'Impossible de lire le logo', '', ''],
+  ['That logo could not be loaded', '', '', 'Ce logo n’a pas pu être chargé', '', ''],
+  ['Could not process the logo', '', '', 'Impossible de traiter le logo', '', ''],
+  ['Could not isolate the logo. Choose an image with a clear outline.', '', '', 'Impossible d’isoler le logo. Choisissez une image avec un contour net.', '', ''],
+  ['Could not encode the logo as a transparent PNG', '', '', 'Impossible d’encoder le logo en PNG transparent', '', ''],
+  ['Session changed', '', '', 'Session modifiée', '', ''],
+  ['Server is waking up. Try again in a moment.', '', '', 'Le serveur se réveille. Réessayez dans un instant.', '', ''],
+  ['Network error', '', '', 'Erreur de réseau', '', ''],
+  ['Enter the admin key.', '', '', 'Saisissez la clé admin.', '', ''],
+  ['Checking…', '', '', 'Vérification…', '', ''],
+  ['Invalid credentials.', '', '', 'Identifiants invalides.', '', ''],
+  ['Open the browser menu and choose Install app', '', '', 'Ouvrez le menu du navigateur et choisissez Installer l’application', '', ''],
+  ['The Google notification script did not load. Check your connection and reload the panel.', '', '', 'Le script de notification de Google n’a pas pu se charger. Vérifiez votre connexion et rechargez le panneau.', '', ''],
+  ['Notification', '', '', '=', '', ''],
+  ['This browser has no notification support.', '', '', 'Ce navigateur ne prend pas en charge les notifications.', '', ''],
+  ['This browser has no service worker support (open the panel over HTTPS in Chrome, not inside another app).', '', '', 'Ce navigateur ne prend pas en charge les service workers (ouvrez le panneau en HTTPS dans Chrome, pas dans une autre application).', '', ''],
+  ['This browser cannot do push (private mode, or an in-app browser). Open the panel in Chrome and try again.', '', '', 'Ce navigateur ne peut pas recevoir de notifications push (navigation privée ou navigateur intégré). Ouvrez le panneau dans Chrome et réessayez.', '', ''],
+  ['Push could not start:', '', '', 'Les notifications push n’ont pas pu démarrer :', '', ''],
+  ['unknown error', '', '', 'erreur inconnue', '', ''],
+  ['Notify: on', '', '', 'Notifications : activées', '', ''],
+  ['Push notifications on, click to disable', '', '', 'Notifications push activées, cliquez pour les désactiver', '', ''],
+  ['Push notifications are not configured yet', '', '', 'Les notifications push ne sont pas encore configurées', '', ''],
+  ['This browser cannot show notifications. On an iPhone, add the admin panel to the Home Screen first.', '', '', 'Ce navigateur ne peut pas afficher de notifications. Sur iPhone, ajoutez d’abord le panneau d’administration à l’écran d’accueil.', '', ''],
+  ['Notifications are blocked for this site. Allow them in browser Site settings, then tap Notify again.', '', '', 'Les notifications sont bloquées pour ce site. Autorisez-les dans les réglages du site du navigateur, puis touchez Notifications de nouveau.', '', ''],
+  ['Push notifications are not supported on this device/browser', '', '', 'Les notifications push ne sont pas prises en charge sur cet appareil/navigateur', '', ''],
+  ['Enabling…', '', '', 'Activation…', '', ''],
+  ['Enabling notifications…', '', '', 'Activation des notifications…', '', ''],
+  ['Notification permission was not granted', '', '', 'L’autorisation de notification n’a pas été accordée', '', ''],
+  ['The notification service worker could not start', '', '', 'Le service worker de notifications n’a pas pu démarrer', '', ''],
+  ['The notification service worker did not become ready', '', '', 'Le service worker de notifications n’est pas devenu prêt', '', ''],
+  ['The server rejected the push token', '', '', 'Le serveur a refusé le jeton de notification', '', ''],
+  ['Notifications on. New withdrawals show an Approve button.', '', '', 'Notifications activées. Les nouveaux retraits affichent un bouton Approuver.', '', ''],
+  ['Push notifications enabled', '', '', 'Notifications push activées', '', ''],
+  ['Unknown browser error', '', '', 'Erreur de navigateur inconnue', '', ''],
+  ['Could not enable notifications:', '', '', 'Impossible d’activer les notifications :', '', ''],
+  ['Push notifications disabled', '', '', 'Notifications push désactivées', '', ''],
+  ['New activity', '', '', 'Nouvelle activité', '', ''],
+  ['Could not load stats.', '', '', 'Impossible de charger les statistiques.', '', ''],
+  ['These totals are incomplete.', '', '', 'Ces totaux sont incomplets.', '', ''],
+  ['There is now more history than this screen reads in one go, so the figures below cover only part of it. Tell your developer -- the totals need to be computed in the database rather than added up here.', '', '', 'Il y a maintenant plus d’historique que cet écran n’en lit d’un coup, donc les chiffres ci-dessous ne couvrent qu’une partie. Prévenez votre développeur — les totaux doivent être calculés dans la base de données plutôt qu’additionnés ici.', '', ''],
+  ['Awaiting Review', '', '', 'En attente de vérification', '', ''],
+  ['Could not load analytics.', '', '', 'Impossible de charger les analyses.', '', ''],
+  ['· busiest', '', '', '· le plus actif', '', ''],
+  ['No active product contracts.', '', '', 'Aucun contrat de produit actif.', '', ''],
+  ['No accounts with repeated failed recharges in this period.', '', '', 'Aucun compte avec des recharges échouées répétées sur cette période.', '', ''],
+  ['No accounts repeatedly trying to withdraw more than their balance.', '', '', 'Aucun compte qui tente de retirer plus que son solde de façon répétée.', '', ''],
+  ['No accounts repeatedly re-tapping check-in after already claiming.', '', '', 'Aucun compte qui retouche le pointage de façon répétée après l’avoir déjà réclamé.', '', ''],
+  ['No accounts trying gift/promo codes that don\'t exist.', '', '', 'Aucun compte qui essaie des codes cadeaux/promo inexistants.', '', ''],
+  ['Owner-only. Patterns worth a look, not automatic accusations -- a slow connection or a genuine mistake can also produce a repeat or two.', '', '', 'Réservé au propriétaire. Des schémas à examiner, pas des accusations automatiques — une connexion lente ou une simple erreur peut aussi produire une ou deux répétitions.', '', ''],
+  ['Repeated failed recharges', '', '', 'Recharges échouées répétées', '', ''],
+  ['Failures', '', '', 'Échecs', '', ''],
+  ['Recent amounts', '', '', 'Montants récents', '', ''],
+  ['Last seen', '', '', 'Dernière activité', '', ''],
+  ['Repeated insufficient-funds withdraw attempts', '', '', 'Tentatives répétées de retrait avec solde insuffisant', '', ''],
+  ['Attempts', '', '', 'Tentatives', '', ''],
+  ['Recent tries', '', '', 'Essais récents', '', ''],
+  ['Repeated "already checked in" taps', '', '', 'Appuis répétés sur « déjà pointé »', '', ''],
+  ['Gift/promo code guessing', '', '', 'Devinettes de codes cadeaux/promo', '', ''],
+  ['Codes tried', '', '', 'Codes essayés', '', ''],
+  ['Who\'s actually approving/declining payouts, and how much of the workload each person carries.', '', '', 'Qui approuve/refuse réellement les versements, et quelle part de la charge chacun porte.', '', ''],
+  ['Staff', '', '', 'Personnel', '', ''],
+  ['Approved', '', '', 'Approuvé', '', ''],
+  ['Declined', '', '', 'Refusé', '', ''],
+  ['Handled', '', '', 'Traité', '', ''],
+  ['Share', '', '', 'Part', '', ''],
+  ['Amount approved', '', '', 'Montant approuvé', '', ''],
+  ['Last action', '', '', 'Dernière action', '', ''],
+  ['Recent approval activity', '', '', 'Activité d’approbation récente', '', ''],
+  ['Staff withdrawal approvals', '', '', 'Approbations de retraits par le personnel', '', ''],
+  ['No withdrawals approved or declined in this period yet.', '', '', 'Aucun retrait approuvé ou refusé sur cette période pour l’instant.', '', ''],
+  ['Healthy', '', '', 'Sain', '', ''],
+  ['Under load', '', '', 'Sous charge', '', ''],
+  ['Degraded', '', '', 'Dégradé', '', ''],
+  ['VPS health', '', '', 'Santé du VPS', '', ''],
+  ['Live, updates automatically -- no need to refresh the page.', '', '', 'En direct, mise à jour automatique — inutile d’actualiser la page.', '', ''],
+  ['Database ping', '', '', 'Ping de la base de données', '', ''],
+  ['Callback lag (responsiveness)', '', '', 'Retard de rappel (réactivité)', '', ''],
+  ['CPU load, 5 / 15 min', '', '', 'Charge CPU, 5 / 15 min', '', ''],
+  ['Server process uptime', '', '', 'Durée de fonctionnement du serveur', '', ''],
+  ['Down', '', '', 'Hors service', '', ''],
+  ['Couldn\'t reach the health check just now. Retrying on the next refresh.', '', '', 'Impossible de joindre la vérification de santé à l’instant. Nouvelle tentative à la prochaine actualisation.', '', ''],
+  ['Transactions for a day', '', '', 'Transactions d’une journée', '', ''],
+  ['Select day', '', '', 'Choisir le jour', '', ''],
+  ['Côte d’Ivoire time (UTC). Completed amounts use recorded credit or payout times; older records without these times use the request date. Open requests show what is still outstanding now from requests created on the selected date. Arrival times are unconfirmed.', '', '', 'Heure de la Côte d’Ivoire (UTC). Les montants terminés utilisent les heures de crédit ou de versement enregistrées ; les anciens enregistrements sans ces heures utilisent la date de la demande. Les demandes ouvertes montrent ce qui reste à traiter, parmi les demandes créées à la date choisie. Les heures d’arrivée ne sont pas confirmées.', '', ''],
+  ['Saved purchase terms, every 24 hours from purchase, with the same rounding as settlement. Scheduled cashback is credited to wallets; members decide when to withdraw. Future purchases and deposits are unknown.', '', '', 'Conditions d’achat enregistrées, toutes les 24 heures après l’achat, avec le même arrondi que le règlement. Les gains planifiés sont crédités aux portefeuilles ; les membres décident quand retirer. Les achats et dépôts futurs sont inconnus.', '', ''],
+  ['Contract cashback scheduled for this day', '', '', 'Gains de contrats prévus pour ce jour', '', ''],
+  ['This day\'s cashback still unpaid (eligible accounts)', '', '', 'Gains de ce jour encore impayés (comptes éligibles)', '', ''],
+  ['Contracts scheduled to finish this day', '', '', 'Contrats qui se terminent ce jour', '', ''],
+  ['This day\'s unpaid cashback on banned or unavailable accounts', '', '', 'Gains impayés de ce jour sur des comptes bannis ou indisponibles', '', ''],
+  ['Historical dates show contractual schedules, including contracts that have since matured. Unpaid figures reflect current settlement progress, not a historical balance snapshot. Scheduled returns include the contract\'s full return; principal is not added again.', '', '', 'Les dates passées montrent les calendriers contractuels, y compris les contrats arrivés à échéance depuis. Les chiffres impayés reflètent l’avancement actuel du règlement, pas un instantané historique du solde. Les retours prévus incluent le rendement complet du contrat ; le capital n’est pas ajouté de nouveau.', '', ''],
+  ['Outstanding now (all request dates)', '', '', 'Restant dû maintenant (toutes dates de demande)', '', ''],
+  ['Cashback due now, awaiting settlement (eligible accounts)', '', '', 'Gains dus maintenant, en attente de règlement (comptes éligibles)', '', ''],
+  ['Cashback due on banned or unavailable accounts', '', '', 'Gains dus sur des comptes bannis ou indisponibles', '', ''],
+  ['Open requests can complete, fail or be cancelled; no completion date is guaranteed. Cashback due and withdrawal requests are separate figures and must not be added as a prediction of today\'s withdrawals. All withdrawal amounts shown are net payouts.', '', '', 'Les demandes ouvertes peuvent aboutir, échouer ou être annulées ; aucune date de fin n’est garantie. Les gains dus et les demandes de retrait sont des chiffres séparés et ne doivent pas être additionnés comme une prévision des retraits du jour. Tous les montants de retrait affichés sont des versements nets.', '', ''],
+  ['Net flow', '', '', 'Flux net', '', ''],
+  ['New users', '', '', 'Nouveaux utilisateurs', '', ''],
+  ['Active investors', '', '', 'Investisseurs actifs', '', ''],
+  ['Invested (all time)', '', '', 'Investi (depuis le début)', '', ''],
+  ['Commissions paid (all time)', '', '', 'Commissions versées (depuis le début)', '', ''],
+  ['Task Center rewards paid (all time)', '', '', 'Récompenses du Centre des tâches versées (depuis le début)', '', ''],
+  ['When people transact, by hour of day', '', '', 'Quand les gens font des transactions, par heure de la journée', '', ''],
+  ['Busiest recharge time:', '', '', 'Heure de recharge la plus active :', '', ''],
+  ['· busiest withdraw time:', '', '', '· heure de retrait la plus active :', '', ''],
+  ['Running products (active contracts)', '', '', 'Produits en cours (contrats actifs)', '', ''],
+  ['Uses each active contract\'s saved purchase terms, so later catalog price or cashback edits do not rewrite past deals.', '', '', 'Utilise les conditions d’achat enregistrées de chaque contrat actif, de sorte que les modifications ultérieures de prix ou de gains du catalogue ne réécrivent pas les contrats passés.', '', ''],
+  ['Contract payout remaining', '', '', 'Versement restant du contrat', '', ''],
+  ['Top referrers', '', '', 'Meilleurs parrains', '', ''],
+  ['Direct team', '', '', 'Équipe directe', '', ''],
+  ['Commission earned', '', '', 'Commission gagnée', '', ''],
+  ['Top rechargers', '', '', 'Meilleurs rechargeurs', '', ''],
+  ['Biggest withdrawals', '', '', 'Plus gros retraits', '', ''],
+  ['Some totals may be incomplete because an analytics scan reached its record limit. Use transaction records and database reconciliation for a complete total.', '', '', 'Certains totaux peuvent être incomplets car une analyse a atteint sa limite d’enregistrements. Utilisez les enregistrements de transactions et le rapprochement de la base de données pour un total complet.', '', ''],
+  ['Unavailable', '', '', 'Indisponible', '', ''],
+  ['Morning', '', '', 'Matin', '', ''],
+  ['Afternoon', '', '', 'Après-midi', '', ''],
+  ['Evening', '', '', 'Soir', '', ''],
+  ['Night', '', '', 'Nuit', '', ''],
+  ['No referrers yet', '', '', 'Aucun parrain pour l’instant', '', ''],
+  ['No recharges yet', '', '', 'Aucune recharge pour l’instant', '', ''],
+  ['No withdrawals yet', '', '', 'Aucun retrait pour l’instant', '', ''],
+  ['Banned', '', '', 'Banni', '', ''],
+  ['Shortening…', '', '', 'Raccourcissement…', '', ''],
+  ['Every account id is already 5 digits', '', '', 'Tous les identifiants de compte ont déjà 5 chiffres', '', ''],
+  ['Recalculating…', '', '', 'Recalcul…', '', ''],
+  ['This request timed out waiting -- it may still be running server-side (this scan reads every transaction/investment/user, which can genuinely take a while). Check back in a minute before retrying.', '', '', 'La requête a expiré en attente — elle tourne peut-être encore côté serveur (cette analyse lit chaque transaction/investissement/utilisateur, ce qui peut prendre du temps). Revenez dans une minute avant de réessayer.', '', ''],
+  ['Auditing…', '', '', 'Audit en cours…', '', ''],
+  ['Audit failed', '', '', 'Échec de l’audit', '', ''],
+  ['Total earned', '', '', 'Total gagné', '', ''],
+  ['Duplicate recharge credit', '', '', 'Crédit de recharge en double', '', ''],
+  ['Negative balance', '', '', 'Solde négatif', '', ''],
+  ['Registration never completed', '', '', 'Inscription jamais terminée', '', ''],
+  ['Open user', '', '', 'Ouvrir l’utilisateur', '', ''],
+  ['Repair wallet', '', '', 'Réparer le portefeuille', '', ''],
+  ['All clear. Every balance/total matches its real records, no duplicate credits, no negative balances, no stuck registrations.', '', '', 'Tout est en ordre. Chaque solde/total correspond à ses vrais enregistrements, sans crédit en double, sans solde négatif, sans inscription bloquée.', '', ''],
+  ['Recharge this wallet to match the real ledger total? Only do this after you understand why the gap exists -- this only adds to the wallet, it never reduces one.', '', '', 'Recharger ce portefeuille pour qu’il corresponde au total réel du registre ? À ne faire qu’après avoir compris pourquoi l’écart existe — cela ne fait qu’ajouter au portefeuille, jamais le réduire.', '', ''],
+  ['Repairing…', '', '', 'Réparation…', '', ''],
+  ['No banned users', '', '', 'Aucun utilisateur banni', '', ''],
+  ['No matching users', '', '', 'Aucun utilisateur correspondant', '', ''],
+  ['Could not load referral chain', '', '', 'Impossible de charger la chaîne de parrainage', '', ''],
+  ['No referrer -- this account IS the root.', '', '', 'Aucun parrain — ce compte EST la racine.', '', ''],
+  ['No downline', '', '', 'Aucune descendance', '', ''],
+  ['Referral chain', '', '', 'Chaîne de parrainage', '', ''],
+  ['Team L1/L2/L3 members', '', '', 'Membres de l’équipe N1/N2/N3', '', ''],
+  ['Root', '', '', 'Racine', '', ''],
+  ['Cycle detected in data -- stopped early', '', '', 'Cycle détecté dans les données — arrêt anticipé', '', ''],
+  ['This user', '', '', 'Cet utilisateur', '', ''],
+  ['List capped at 5,000 nodes -- the level counts above still cover everyone.', '', '', 'Liste limitée à 5 000 nœuds — les effectifs par niveau ci-dessus couvrent tout le monde.', '', ''],
+  ['This user has not referred anyone.', '', '', 'Cet utilisateur n’a parrainé personne.', '', ''],
+  ['Not found', '', '', 'Introuvable', '', ''],
+  ['Unban', '', '', 'Débannir', '', ''],
+  ['Credit, debit, ban and delete are owner-only.', '', '', 'Créditer, débiter, bannir et supprimer sont réservés au propriétaire.', '', ''],
+  ['Complete registration', '', '', 'Terminer l’inscription', '', ''],
+  ['This account signed up (Firebase login works) but never finished registering -- no referral code, no welcome bonus. Finish it for them: pick their Trade Password and, if you know who invited them, their referrer\'s code.', '', '', 'Ce compte s’est inscrit (la connexion fonctionne) mais n’a jamais terminé son inscription — pas de code de parrainage, pas de bonus de bienvenue. Terminez-la pour lui : choisissez son mot de passe de transaction et, si vous savez qui l’a invité, le code de son parrain.', '', ''],
+  ['Complete', '', '', 'Terminer', '', ''],
+  ['Loading assets…', '', '', 'Chargement des actifs…', '', ''],
+  ['Set', '', '', 'Définir', '', ''],
+  ['Unrestricted, can withdraw at any hour', '', '', 'Sans restriction, peut retirer à toute heure', '', ''],
+  ['Follow the withdrawal hours', '', '', 'Suivre les heures de retrait', '', ''],
+  ['USDT wallet', '', '', 'Portefeuille USDT', '', ''],
+  ['No recharges yet.', '', '', 'Aucune recharge pour l’instant.', '', ''],
+  ['Select an asset…', '', '', 'Choisir un actif…', '', ''],
+  ['No assets available', '', '', 'Aucun actif disponible', '', ''],
+  ['Could not load assets', '', '', 'Impossible de charger les actifs', '', ''],
+  ['Select an asset first', '', '', 'Choisissez d’abord un actif', '', ''],
+  ['Activating…', '', '', 'Activation…', '', ''],
+  ['Enter an amount', '', '', 'Saisissez un montant', '', ''],
+  ['Crediting…', '', '', 'Crédit en cours…', '', ''],
+  ['Debiting…', '', '', 'Débit en cours…', '', ''],
+  ['New password must be at least 6 characters', '', '', 'Le nouveau mot de passe doit comporter au moins 6 caractères', '', ''],
+  ['Resetting…', '', '', 'Réinitialisation…', '', ''],
+  ['Password reset, give it to the user', '', '', 'Mot de passe réinitialisé, donnez-le à l’utilisateur', '', ''],
+  ['Enter the real phone number', '', '', 'Saisissez le vrai numéro de téléphone', '', ''],
+  ['Saving…', '', '', 'Enregistrement…', '', ''],
+  ['Phone corrected', '', '', 'Téléphone corrigé', '', ''],
+  ['Enter a 6-digit Trade Password', '', '', 'Saisissez un mot de passe de transaction à 6 chiffres', '', ''],
+  ['and counts them toward', '', '', 'et le compte dans l’équipe de', '', ''],
+  ['\'s team', '', '', '— équipe', '', ''],
+  ['Completing…', '', '', 'Finalisation…', '', ''],
+  ['This account had already finished registering', '', '', 'Ce compte avait déjà terminé son inscription', '', ''],
+  ['Enter the referral code', '', '', 'Saisissez le code de parrainage', '', ''],
+  ['Attaching…', '', '', 'Rattachement…', '', ''],
+  ['Referrer attached, first-purchase commission credited', '', '', 'Parrain rattaché, commission du premier achat créditée', '', ''],
+  ['Referrer attached', '', '', 'Parrain rattaché', '', ''],
+  ['Unrestricted by withdrawal time', '', '', 'Sans restriction d’heures de retrait', '', ''],
+  ['Follows the withdrawal hours again', '', '', 'Suit de nouveau les heures de retrait', '', ''],
+  ['Enter a new 6-digit trade password', '', '', 'Saisissez un nouveau mot de passe de transaction à 6 chiffres', '', ''],
+  ['Setting…', '', '', 'Définition…', '', ''],
+  ['New PIN set', '', '', 'Nouveau code PIN défini', '', ''],
+  ['Not deleted, you must type DELETE exactly', '', '', 'Non supprimé, vous devez taper DELETE exactement', '', ''],
+  ['Deleting…', '', '', 'Suppression…', '', ''],
+  ['Login and personal data deleted (financial records kept)', '', '', 'Connexion et données personnelles supprimées (enregistrements financiers conservés)', '', ''],
+  ['To approve', '', '', 'À approuver', '', ''],
+  ['Approved per day', '', '', 'Approuvés par jour', '', ''],
+  ['Day', '', '', 'Jour', '', ''],
+  ['Recharges approved', '', '', 'Recharges approuvées', '', ''],
+  ['Amount received', '', '', 'Montant reçu', '', ''],
+  ['Members pay into one of your Payment Numbers (bank or Telebirr) or send USDT. When a member sends the payment message, it appears under', '', '', 'Les membres paient sur l’un de vos numéros de paiement (banque ou Telebirr) ou envoient des USDT. Quand un membre envoie le message de paiement, il apparaît sous', '', ''],
+  ['to add it to their wallet — or', '', '', 'pour l’ajouter à son portefeuille — ou', '', ''],
+  ['Showing the first', '', '', 'Affichage des premiers', '', ''],
+  ['recharges only. The platform has more history than this list can currently display.', '', '', 'recharges seulement. La plateforme a plus d’historique que cette liste ne peut en afficher actuellement.', '', ''],
+  ['Auto', '', '', '=', '', ''],
+  ['Auto-declined', '', '', 'Refusé automatiquement', '', ''],
+  ['Message amount:', '', '', 'Montant du message :', '', ''],
+  ['matches the order', '', '', 'correspond à la commande', '', ''],
+  ['does NOT match the order', '', '', 'ne correspond PAS à la commande', '', ''],
+  ['Transaction code:', '', '', 'Code de transaction :', '', ''],
+  ['The member has not sent a payment message yet.', '', '', 'Le membre n’a pas encore envoyé de message de paiement.', '', ''],
+  ['This recharge was REJECTED earlier. Only approve it if you have now confirmed the money arrived.', '', '', 'Cette recharge a été REFUSÉE auparavant. Ne l’approuvez que si vous avez maintenant confirmé que l’argent est arrivé.', '', ''],
+  ['Approve this recharge and add the money to the member\'s wallet? Only do this after you have checked that the payment really arrived.', '', '', 'Approuver cette recharge et ajouter l’argent au portefeuille du membre ? À ne faire qu’après avoir vérifié que le paiement est vraiment arrivé.', '', ''],
+  ['Could not approve', '', '', 'Impossible d’approuver', '', ''],
+  ['Reason for rejecting this recharge (kept in the activity log):', '', '', 'Motif du refus de cette recharge (conservé dans le journal d’activité) :', '', ''],
+  ['Could not verify this payment', '', '', 'Impossible de vérifier ce paiement', '', ''],
+  ['Could not reject', '', '', 'Impossible de refuser', '', ''],
+  ['Sending', '', '', 'Envoi en cours', '', ''],
+  ['Processed', '', '', 'Traité', '', ''],
+  ['Processed per day', '', '', 'Traités par jour', '', ''],
+  ['Withdrawals processed', '', '', 'Retraits traités', '', ''],
+  ['Payments are set to Manual', '', '', 'Les paiements sont réglés sur Manuel', '', ''],
+  [', so payouts do not go through any automatic gateway. Send the money yourself from an admin mobile money phone to the destination number on the row, then tap', '', '', ', donc les versements ne passent par aucune passerelle automatique. Envoyez vous-même l’argent depuis un téléphone Mobile Money d’administration vers le numéro de destination de la ligne, puis touchez', '', ''],
+  ['Every withdraw request waits here as', '', '', 'Chaque demande de retrait attend ici comme', '', ''],
+  ['withdrawals only. The platform has more history than this list can currently display.', '', '', 'retraits seulement. La plateforme a plus d’historique que cette liste ne peut en afficher actuellement.', '', ''],
+  ['Stuck sending, check the provider', '', '', 'Bloqué à l’envoi, vérifiez auprès du prestataire', '', ''],
+  ['Send via', '', '', 'Envoyer via', '', ''],
+  ['Owner only', '', '', 'Propriétaire seulement', '', ''],
+  ['Only do this AFTER you have actually sent the money from an admin phone to the number on this row. This records the payout as paid and closes it. It does not send anything.', '', '', 'À faire UNIQUEMENT APRÈS avoir réellement envoyé l’argent depuis un téléphone d’administration vers le numéro de cette ligne. Cela enregistre le versement comme payé et le clôture. Cela n’envoie rien.', '', ''],
+  ['Only reject this if you have CONFIRMED on the payment provider\'s own dashboard that this payout did NOT actually go out. If it shows as sent, do nothing here -- rejecting now would refund the member on top of a real payout. Reason for rejection?', '', '', 'Ne refusez ceci que si vous avez CONFIRMÉ sur le tableau de bord du prestataire de paiement que ce versement n’est PAS réellement parti. S’il apparaît comme envoyé, ne faites rien ici — refuser maintenant rembourserait le membre en plus d’un vrai versement. Motif du refus ?', '', ''],
+  ['Reason for rejection? (funds are refunded to the user)', '', '', 'Motif du refus ? (les fonds sont remboursés à l’utilisateur)', '', ''],
+  ['Rejected by admin', '', '', 'Refusé par l’administrateur', '', ''],
+  ['Verify failed', '', '', 'Échec de la vérification', '', ''],
+  ['Prices, payouts and the opening schedule are saved for', '', '', 'Les prix, versements et le calendrier d’ouverture sont enregistrés pour', '', ''],
+  ['— the country in the switch at the top. Names, photos and order are shared by every country.', '', '', '— le pays choisi en haut. Les noms, photos et l’ordre sont partagés par tous les pays.', '', ''],
+  ['Scheduled', '', '', 'Planifié', '', ''],
+  ['No assets yet. The app catalogue reverts to defaults until you add one.', '', '', 'Aucun actif pour l’instant. Le catalogue de l’application revient aux valeurs par défaut tant que vous n’en ajoutez pas.', '', ''],
+  ['Update price/total-payout/cycle on every saved product to match the current built-in pricing table? Images, active/coming-soon, and order are left untouched. A product that was never individually saved is already correct and is skipped.', '', '', 'Mettre à jour prix/versement total/cycle de chaque produit enregistré selon la grille de prix intégrée actuelle ? Les images, l’état actif/bientôt disponible et l’ordre ne sont pas touchés. Un produit jamais enregistré individuellement est déjà correct et est ignoré.', '', ''],
+  ['Syncing…', '', '', 'Synchronisation…', '', ''],
+  ['Check for duplicate products created by the old key-saving bug (editing "product-1" used to silently create a separate "product1")? Unambiguous duplicates are merged back into the correct product automatically; anything both copies were separately edited is left for you to sort out by hand and listed here.', '', '', 'Rechercher les produits en double créés par l’ancien bug d’enregistrement de clé (modifier « product-1 » créait silencieusement un « product1 » séparé) ? Les doublons évidents sont fusionnés automatiquement dans le bon produit ; tout ce que les deux copies ont modifié séparément est laissé à votre appréciation et listé ici.', '', ''],
+  ['No duplicates found', '', '', 'Aucun doublon trouvé', '', ''],
+  ['Delete EVERY product? The app catalogue reverts to the built-in defaults until you add new ones. This cannot be undone.', '', '', 'Supprimer TOUS les produits ? Le catalogue de l’application revient aux valeurs par défaut intégrées tant que vous n’en ajoutez pas de nouveaux. Impossible d’annuler.', '', ''],
+  ['Clearing…', '', '', 'Suppression…', '', ''],
+  ['Delete this asset?', '', '', 'Supprimer cet actif ?', '', ''],
+  ['Deleted', '', '', 'Supprimé', '', ''],
+  ['Member-facing asset name', '', '', 'Nom de l’actif vu par les membres', '', ''],
+  ['Members see this name. It is independent from the stable key below.', '', '', 'Les membres voient ce nom. Il est indépendant de la clé stable ci-dessous.', '', ''],
+  ['Stable key (internal; preserve for existing assets)', '', '', 'Clé stable (interne ; à conserver pour les actifs existants)', '', ''],
+  ['Multiplier (×)', '', '', 'Multiplicateur (×)', '', ''],
+  ['Each product has its OWN multiplier — nothing is fixed globally. Type a multiplier and the total payout fills in automatically (and vice versa). If both are set, the multiplier wins, so repricing a product updates its payout on its own.', '', '', 'Chaque produit a son PROPRE multiplicateur — rien n’est fixé globalement. Saisissez un multiplicateur et le versement total se remplit automatiquement (et inversement). Si les deux sont renseignés, le multiplicateur l’emporte, donc changer le prix d’un produit met à jour son versement tout seul.', '', ''],
+  ['Display position (lower appears first)', '', '', 'Position d’affichage (la plus basse apparaît en premier)', '', ''],
+  ['Asset image', '', '', 'Image de l’actif', '', ''],
+  ['Remove', '', '', 'Retirer', '', ''],
+  ['…or paste a hosted image URL', '', '', '…ou collez l’URL d’une image hébergée', '', ''],
+  ['(shown in the app)', '', '', '(affiché dans l’application)', '', ''],
+  ['(shown, but not buyable — no clock)', '', '', '(affiché, mais non achetable — sans horloge)', '', ''],
+  ['Opening schedule', '', '', 'Calendrier d’ouverture', '', ''],
+  ['— leave blank for always open. Upcoming above overrides both. Times are Côte d’Ivoire time.', '', '', '— laissez vide pour toujours ouvert. « À venir » ci-dessus remplace les deux. Les heures sont à l’heure de la Côte d’Ivoire.', '', ''],
+  ['Opens at (one-off) — shows a countdown until then, open for good after', '', '', 'S’ouvre à (une seule fois) — affiche un compte à rebours jusque-là, puis reste ouvert', '', ''],
+  ['Open daily from', '', '', 'Ouvert chaque jour de', '', ''],
+  ['Save asset', '', '', 'Enregistrer l’actif', '', ''],
+  ['Edit asset', '', '', 'Modifier l’actif', '', ''],
+  ['New asset', '', '', 'Nouvel actif', '', ''],
+  ['No image', '', '', 'Aucune image', '', ''],
+  ['Image ready at', '', '', 'Image prête à', '', ''],
+  [', tap Save product', '', '', ', touchez Enregistrer le produit', '', ''],
+  ['Could not read image', '', '', 'Impossible de lire l’image', '', ''],
+  ['A daily window needs BOTH a from and an until time', '', '', 'Une plage quotidienne exige une heure de début ET une heure de fin', '', ''],
+  ['A daily window cannot start and end at the same minute', '', '', 'Une plage quotidienne ne peut pas commencer et finir à la même minute', '', ''],
+  ['Enter a price', '', '', 'Saisissez un prix', '', ''],
+  ['Saved', '', '', 'Enregistré', '', ''],
+  ['This message will go to', '', '', 'Ce message sera envoyé à', '', ''],
+  ['every country', '', '', 'tous les pays', '', ''],
+  ['members only.', '', '', 'membres seulement.', '', ''],
+  ['No messages posted yet.', '', '', 'Aucun message publié pour l’instant.', '', ''],
+  ['Enter a title', '', '', 'Saisissez un titre', '', ''],
+  ['Enter the message', '', '', 'Saisissez le message', '', ''],
+  ['Message posted', '', '', 'Message publié', '', ''],
+  ['Delete this message? It disappears from every member\'s inbox.', '', '', 'Supprimer ce message ? Il disparaît de la boîte de réception de chaque membre.', '', ''],
+  ['These codes will be claimable in', '', '', 'Ces codes pourront être utilisés en', '', ''],
+  [', each paying the amount above in the claimer\'s own currency.', '', '', ', chacun versant le montant ci-dessus dans la devise de la personne qui l’utilise.', '', ''],
+  ['These codes are for', '', '', 'Ces codes sont pour', '', ''],
+  ['above to cut a code anybody can claim.', '', '', 'ci-dessus pour créer un code que tout le monde peut utiliser.', '', ''],
+  ['Expired', '', '', 'Expiré', '', ''],
+  ['Not claimed yet', '', '', 'Pas encore utilisé', '', ''],
+  ['No codes yet', '', '', 'Aucun code pour l’instant', '', ''],
+  ['Enter a minimum reward amount', '', '', 'Saisissez un montant de récompense minimale', '', ''],
+  ['Max reward must be at least the minimum', '', '', 'La récompense maximale doit être au moins égale au minimum', '', ''],
+  ['Generating…', '', '', 'Génération…', '', ''],
+  ['Copy all', '', '', 'Tout copier', '', ''],
+  ['Deactivate this gift code? It can no longer be redeemed once deactivated.', '', '', 'Désactiver ce code cadeau ? Il ne pourra plus être utilisé une fois désactivé.', '', ''],
+  ['Unknown', '', '', 'Inconnu', '', ''],
+  ['No other admins yet', '', '', 'Aucun autre administrateur pour l’instant', '', ''],
+  ['Enter a username and password', '', '', 'Saisissez un nom d’utilisateur et un mot de passe', '', ''],
+  ['Creating…', '', '', 'Création…', '', ''],
+  ['Admin account created', '', '', 'Compte administrateur créé', '', ''],
+  ['Reactivated', '', '', 'Réactivé', '', ''],
+  ['Password reset, they are signed out everywhere and must log in again', '', '', 'Mot de passe réinitialisé, il est déconnecté partout et doit se reconnecter', '', ''],
+  ['Admin deactivated', '', '', 'Administrateur désactivé', '', ''],
+  ['Admin reactivated', '', '', 'Administrateur réactivé', '', ''],
+  ['Admin password reset', '', '', 'Mot de passe de l’administrateur réinitialisé', '', ''],
+  ['Admin account deleted', '', '', 'Compte administrateur supprimé', '', ''],
+  ['Unmatched SMS marked resolved', '', '', 'SMS non rapproché marqué comme résolu', '', ''],
+  ['Withdraw declined', '', '', 'Retrait refusé', '', ''],
+  ['Withdraw sent', '', '', 'Retrait envoyé', '', ''],
+  ['Manual credit', '', '', 'Crédit manuel', '', ''],
+  ['Manual debit', '', '', 'Débit manuel', '', ''],
+  ['User banned', '', '', 'Utilisateur banni', '', ''],
+  ['User unbanned', '', '', 'Utilisateur débanni', '', ''],
+  ['User password reset', '', '', 'Mot de passe de l’utilisateur réinitialisé', '', ''],
+  ['User phone corrected', '', '', 'Téléphone de l’utilisateur corrigé', '', ''],
+  ['User ledger repaired', '', '', 'Registre de l’utilisateur réparé', '', ''],
+  ['Registration completed', '', '', 'Inscription terminée', '', ''],
+  ['Check-in streak reconciled', '', '', 'Série de pointages rapprochée', '', ''],
+  ['Trade Password reset', '', '', 'Mot de passe de transaction réinitialisé', '', ''],
+  ['User account deleted', '', '', 'Compte utilisateur supprimé', '', ''],
+  ['Settings updated', '', '', 'Paramètres mis à jour', '', ''],
+  ['Banner changed', '', '', 'Bannière modifiée', '', ''],
+  ['Announcement image changed', '', '', 'Image de l’annonce modifiée', '', ''],
+  ['Manual-pay screen image changed', '', '', 'Image de l’écran de paiement manuel modifiée', '', ''],
+  ['Products saved', '', '', 'Produits enregistrés', '', ''],
+  ['Product deleted', '', '', 'Produit supprimé', '', ''],
+  ['All products cleared', '', '', 'Tous les produits supprimés', '', ''],
+  ['Product pricing synced to defaults', '', '', 'Prix des produits synchronisés aux valeurs par défaut', '', ''],
+  ['Recharge approved', '', '', 'Recharge approuvée', '', ''],
+  ['Gift codes generated', '', '', 'Codes cadeaux générés', '', ''],
+  ['Gift code deactivated', '', '', 'Code cadeau désactivé', '', ''],
+  ['Totals recalculated', '', '', 'Totaux recalculés', '', ''],
+  ['Nothing logged yet', '', '', 'Rien d’enregistré pour l’instant', '', ''],
+  ['referrals only. The platform has more than this list can currently display.', '', '', 'parrainages seulement. La plateforme en compte plus que cette liste ne peut en afficher actuellement.', '', ''],
+  ['No referrals yet', '', '', 'Aucun parrainage pour l’instant', '', ''],
+  ['Team L1/L2/L3', '', '', 'Équipe N1/N2/N3', '', ''],
+  ['No matching member', '', '', 'Aucun membre correspondant', '', ''],
+  ['Admin', '', '', '=', '', ''],
+  ['No logo', '', '', 'Aucun logo', '', ''],
+  ['Name members see', '', '', 'Nom vu par les membres', '', ''],
+  ['Bank', '', '', 'Banque', '', ''],
+  ['Wallet (Telebirr)', '', '', 'Portefeuille (Telebirr)', '', ''],
+  ['Account name', '', '', 'Nom du compte', '', ''],
+  ['Upload logo', '', '', 'Téléverser le logo', '', ''],
+  ['Upload the logo as it is. The system clears the background around it and crops it so it fits the round frame.', '', '', 'Téléversez le logo tel quel. Le système efface l’arrière-plan autour et le recadre pour qu’il tienne dans le cadre rond.', '', ''],
+  ['Order (smaller first)', '', '', 'Ordre (le plus petit d’abord)', '', ''],
+  ['Show to members', '', '', 'Afficher aux membres', '', ''],
+  ['Edit payment number', '', '', 'Modifier le numéro de paiement', '', ''],
+  ['Add payment number', '', '', 'Ajouter un numéro de paiement', '', ''],
+  ['Logo ready (background removed)', '', '', 'Logo prêt (arrière-plan retiré)', '', ''],
+  ['No logo yet', '', '', 'Pas encore de logo', '', ''],
+  ['Remove logo', '', '', 'Retirer le logo', '', ''],
+  ['These are the accounts members pay into on the recharge page (a bank account, a Telebirr wallet and so on). Each one appears as a row under Please choose payment with its logo. A member who taps', '', '', 'Ce sont les comptes sur lesquels les membres paient dans la page de recharge (un compte bancaire, un portefeuille Telebirr, etc.). Chacun apparaît comme une ligne sous « Veuillez choisir le paiement » avec son logo. Un membre qui touche', '', ''],
+  ['goes back to this list.', '', '', 'revient à cette liste.', '', ''],
+  ['Hidden', '', '', 'Masqué', '', ''],
+  ['Showing', '', '', 'Affiché', '', ''],
+  ['No payment numbers yet. Until you add one, members cannot recharge by bank or wallet.', '', '', 'Aucun numéro de paiement pour l’instant. Tant que vous n’en ajoutez pas, les membres ne peuvent pas recharger par banque ou portefeuille.', '', ''],
+  ['Delete "', '', '', 'Supprimer «', '', ''],
+  ['"? Members will no longer see it.', '', '', '» ? Les membres ne le verront plus.', '', ''],
+  ['Could not delete', '', '', 'Impossible de supprimer', '', ''],
+  ['Processing logo…', '', '', 'Traitement du logo…', '', ''],
+  ['Background removed', '', '', 'Arrière-plan retiré', '', ''],
+  ['Logo ready', '', '', 'Logo prêt', '', ''],
+  ['Could not save', '', '', 'Impossible d’enregistrer', '', ''],
+  ['Home tab\'s top banner — a 3-slide carousel with dots.', '', '', 'Bannière du haut de l’onglet Accueil — un carrousel de 3 diapositives avec des points.', '', ''],
+  ['Home banner · slides 2 & 3', '', '', 'Bannière d’accueil · diapositives 2 et 3', '', ''],
+  ['Optional extra carousel slides — image only, same size as the main banner.', '', '', 'Diapositives de carrousel supplémentaires facultatives — image seulement, même taille que la bannière principale.', '', ''],
+  ['Upload slide 2 image', '', '', 'Téléverser l’image de la diapositive 2', '', ''],
+  ['Upload slide 3 image', '', '', 'Téléverser l’image de la diapositive 3', '', ''],
+  ['Daily Check-in banner', '', '', 'Bannière du pointage quotidien', '', ''],
+  ['Optional image shown behind the member\'s Daily Check-in total and claim button.', '', '', 'Image facultative affichée derrière le total du pointage quotidien du membre et le bouton de réclamation.', '', ''],
+  ['Login & Sign Up background', '', '', 'Arrière-plan de connexion et d’inscription', '', ''],
+  ['One background photo behind Log In, Sign Up and Forgot Password. Portrait, about 1200×1600.', '', '', 'Une photo d’arrière-plan derrière Connexion, Inscription et Mot de passe oublié. Portrait, environ 1200×1600.', '', ''],
+  ['Upload background image', '', '', 'Téléverser l’image d’arrière-plan', '', ''],
+  ['The home-screen and browser-tab icon. Square PNG, 1024×1024 (transparency kept, corners rounded for you).', '', '', 'L’icône de l’écran d’accueil et de l’onglet du navigateur. PNG carré, 1024×1024 (transparence conservée, coins arrondis pour vous).', '', ''],
+  ['Phones that already installed the app keep the old icon until reinstalled.', '', '', 'Les téléphones qui ont déjà installé l’application gardent l’ancienne icône jusqu’à la réinstallation.', '', ''],
+  ['Transparent PNG saved', '', '', 'PNG transparent enregistré', '', ''],
+  ['No custom logo uploaded', '', '', 'Aucun logo personnalisé téléversé', '', ''],
+  ['Custom image', '', '', 'Image personnalisée', '', ''],
+  ['Revert', '', '', 'Rétablir', '', ''],
+  ['Not set — slide skipped', '', '', 'Non défini — diapositive ignorée', '', ''],
+  ['Brand background', '', '', 'Arrière-plan de la marque', '', ''],
+  ['Custom icon', '', '', 'Icône personnalisée', '', ''],
+  ['Built-in app icon', '', '', 'Icône d’application intégrée', '', ''],
+  ['Uploading…', '', '', 'Téléversement…', '', ''],
+  ['Banner saved, live for every user', '', '', 'Bannière enregistrée, en ligne pour tous les utilisateurs', '', ''],
+  ['Reverted to the default image', '', '', 'Rétabli à l’image par défaut', '', ''],
+  ['App icon saved — new installs will use it', '', '', 'Icône de l’application enregistrée — les nouvelles installations l’utiliseront', '', ''],
+  ['Could not read that image', '', '', 'Impossible de lire cette image', '', ''],
+  ['App icon reset to the built-in app icon', '', '', 'Icône de l’application rétablie à l’icône intégrée', '', ''],
+  ['Background image saved, live on Log In and Sign Up', '', '', 'Image d’arrière-plan enregistrée, en ligne sur Connexion et Inscription', '', ''],
+  ['Background image removed', '', '', 'Image d’arrière-plan retirée', '', ''],
+  ['Slide 2 saved, live on Home', '', '', 'Diapositive 2 enregistrée, en ligne sur l’Accueil', '', ''],
+  ['Slide 2 removed', '', '', 'Diapositive 2 retirée', '', ''],
+  ['Slide 3 saved, live on Home', '', '', 'Diapositive 3 enregistrée, en ligne sur l’Accueil', '', ''],
+  ['Slide 3 removed', '', '', 'Diapositive 3 retirée', '', ''],
+  ['Check-in banner saved, live for every user', '', '', 'Bannière de pointage enregistrée, en ligne pour tous les utilisateurs', '', ''],
+  ['Check-in banner removed', '', '', 'Bannière de pointage retirée', '', ''],
+  ['Background removed; transparent logo saved', '', '', 'Arrière-plan retiré ; logo transparent enregistré', '', ''],
+  ['Logo saved as transparent PNG', '', '', 'Logo enregistré en PNG transparent', '', ''],
+  ['Logo saved unchanged; no clear edge background was detected', '', '', 'Logo enregistré tel quel ; aucun arrière-plan de bord net n’a été détecté', '', ''],
+  ['Brand logo removed', '', '', 'Logo de la marque retiré', '', ''],
+  ['Blur', '', '', 'Flou', '', ''],
+  ['Opacity', '', '', 'Opacité', '', ''],
+  ['Login screen opacity & blur saved', '', '', 'Opacité et flou de l’écran de connexion enregistrés', '', ''],
+  ['Bank / Wallet:', '', '', 'Banque / Portefeuille :', '', ''],
+  ['add the accounts members pay into under', '', '', 'ajoutez les comptes sur lesquels les membres paient dans', '', ''],
+  ['USDT:', '', '', 'USDT :', '', ''],
+  ['set it up below.', '', '', 'configurez-le plus bas.', '', ''],
+  ['are paid by you: send the money, then record it under', '', '', 'sont payés par vous : envoyez l’argent, puis enregistrez-le dans', '', ''],
+  ['A member sends USDT to the wallet address below on their own and submits the transaction hash in-app. With a TronGrid API key set on the server (TRONGRID_API_KEY), the server checks it against the real blockchain right at submission — a real match credits it instantly ("Auto"), and a transaction that\'s confirmed but plainly wrong (wrong token, wrong address, short amount) declines instantly too ("Auto-declined"), no admin needed either way. Anything still unconfirmed keeps retrying in the background and resolves itself within 15 minutes at the latest. Without a key configured, every claim simply waits as Awaiting Review for your own Approve/Reject in the Recharges tab — nothing here ever forces automatic mode on you.', '', '', 'Un membre envoie des USDT à l’adresse de portefeuille ci-dessous de son côté et soumet le hash de transaction dans l’application. Avec une clé API TronGrid définie sur le serveur (TRONGRID_API_KEY), le serveur le vérifie sur la vraie blockchain dès l’envoi — une correspondance réelle le crédite instantanément (« Auto »), et une transaction confirmée mais clairement erronée est refusée automatiquement. Sans clé, ou si la blockchain est injoignable, la demande attend votre approbation manuelle.', '', ''],
+  ['Rates and payment methods apply to', '', '', 'Les taux et les moyens de paiement s’appliquent à', '', ''],
+  ['above; the app name, domain list and images apply everywhere.', '', '', 'ci-dessus ; le nom de l’application, la liste des domaines et les images s’appliquent partout.', '', ''],
+  ['Crypto deposit settings saved', '', '', 'Paramètres de dépôt crypto enregistrés', '', ''],
+  ['Rates saved', '', '', 'Taux enregistrés', '', ''],
+  ['Support saved', '', '', 'Assistance enregistrée', '', ''],
+  ['Announcement saved', '', '', 'Annonce enregistrée', '', ''],
+  ['App name cannot be blank', '', '', 'Le nom de l’application ne peut pas être vide', '', ''],
+  ['App name saved', '', '', 'Nom de l’application enregistré', '', ''],
+  ['Tagline saved', '', '', 'Slogan enregistré', '', ''],
+  ['Rules and Regulations saved, live for every user', '', '', 'Règles et conditions enregistrées, en ligne pour tous les utilisateurs', '', ''],
+  ['Active referrals needed', '', '', 'Filleuls actifs requis', '', ''],
+  ['These are the tasks on the member\'s', '', '', 'Ce sont les tâches de la page', '', ''],
+  ['page. Each can be claimed once per member. Changing a reward never pays anyone who already claimed that step again.', '', '', 'du membre. Chacune peut être réclamée une fois par membre. Changer une récompense ne paie jamais à nouveau quelqu’un qui a déjà réclamé cette étape.', '', ''],
+  ['(Level 1 members who have recharged)', '', '', '(membres de niveau 1 qui ont rechargé)', '', ''],
+  ['+ Add a referral task', '', '', '+ Ajouter une tâche de parrainage', '', ''],
+  ['(what the whole team has recharged)', '', '', '(ce que toute l’équipe a rechargé)', '', ''],
+  ['+ Add a recharge task', '', '', '+ Ajouter une tâche de recharge', '', ''],
+  ['Save task rewards', '', '', 'Enregistrer les récompenses des tâches', '', ''],
+  ['Restore the standard rewards', '', '', 'Rétablir les récompenses standard', '', ''],
+  ['Up to 20 tasks in each list', '', '', '20 tâches au maximum dans chaque liste', '', ''],
+  ['Keep at least one task in each list', '', '', 'Gardez au moins une tâche dans chaque liste', '', ''],
+  ['Task rewards saved, live for every member', '', '', 'Récompenses des tâches enregistrées, en ligne pour tous les membres', '', ''],
+  ['Put both lists back to the standard rewards?', '', '', 'Remettre les deux listes aux récompenses standard ?', '', ''],
+  ['Standard rewards restored', '', '', 'Récompenses standard rétablies', '', ''],
+  ['Members', '', '', 'Membres', '', ''],
+  ['Records', '', '', 'Enregistrements', '', ''],
+  ['Member plans', '', '', 'Plans des membres', '', ''],
+  ['Payout wallets', '', '', 'Portefeuilles de retrait', '', ''],
+  ['Spins', '', '', 'Tours de roue', '', ''],
+  ['Gift code uses', '', '', 'Utilisations de codes cadeaux', '', ''],
+  ['USDT requests', '', '', 'Demandes USDT', '', ''],
+  ['Security events', '', '', 'Événements de sécurité', '', ''],
+  ['Verification codes', '', '', 'Codes de vérification', '', ''],
+  ['Code send log', '', '', 'Journal d’envoi des codes', '', ''],
+  ['Message read marks', '', '', 'Marques de lecture des messages', '', ''],
+  ['Statement downloads', '', '', 'Téléchargements de relevés', '', ''],
+  ['Member logins', '', '', 'Connexions des membres', '', ''],
+  ['Account number counter', '', '', 'Compteur de numéros de compte', '', ''],
+  ['Erase every member and everything that belongs to them — wallets, recharges, withdrawals, plans, records and their sign-in accounts — so the app starts clean. Your settings, assets, banners, About and Rules, payment numbers, admin accounts and messages are kept.', '', '', 'Efface chaque membre et tout ce qui lui appartient — portefeuilles, recharges, retraits, plans, historiques et comptes de connexion — pour que l’application reparte à zéro. Vos paramètres, actifs, bannières, pages À propos et Règles, numéros de paiement, comptes admin et messages sont conservés.', '', ''],
+  ['There is no undo.', '', '', 'Impossible d’annuler.', '', ''],
+  ['Reset database', '', '', 'Réinitialiser la base de données', '', ''],
+  ['Counting what would be erased…', '', '', 'Comptage de ce qui serait effacé…', '', ''],
+  ['Could not load.', '', '', 'Impossible de charger.', '', ''],
+  ['This will', '', '', 'Ceci va', '', ''],
+  ['permanently erase', '', '', 'effacer définitivement', '', ''],
+  ['Money held in member wallets right now:', '', '', 'Argent détenu dans les portefeuilles des membres en ce moment :', '', ''],
+  ['Kept:', '', '', 'Conservé :', '', ''],
+  ['settings, assets, banners, About & Rules, payment numbers, admin accounts, messages, activity log.', '', '', 'paramètres, actifs, bannières, À propos et Règles, numéros de paiement, comptes admin, messages, journal d’activité.', '', ''],
+  ['to confirm', '', '', 'pour confirmer', '', ''],
+  ['Admin key', '', '', 'Clé admin', '', ''],
+  ['Erase everything', '', '', 'Tout effacer', '', ''],
+  ['Unfinished money:', '', '', 'Argent en cours :', '', ''],
+  ['Erase anyway', '', '', 'Effacer quand même', '', ''],
+  ['Erasing…', '', '', 'Effacement…', '', ''],
+  ['Done.', '', '', 'Terminé.', '', ''],
+  ['Could not reset.', '', '', 'Impossible de réinitialiser.', '', ''],
+  ['No blocks yet, add a text block or an image below.', '', '', 'Aucun bloc pour l’instant, ajoutez un bloc de texte ou d’image ci-dessous.', '', ''],
+  ['Image', '', '', '=', '', ''],
+  ['Text', '', '', 'Texte', '', ''],
+  // ── English + French coverage round (owner: the admin panel must be fully switchable to French) ──
+  ['+ Add task', '', '', '+ Ajouter une tâche', '', ''],
+  ['Add Soda A to J', '', '', 'Ajouter Soda A à J', '', ''],
+  ['Automatic up to (XOF, 0 = no limit)', '', '', 'Automatique jusqu’à (XOF, 0 = sans limite)', '', ''],
+  ['Creates Soda A to Soda J if they are missing; never changes a product that already exists', '', '', 'Crée Soda A à Soda J s’ils manquent ; ne modifie jamais un produit déjà existant', '', ''],
+  ['Free for the member: nothing is taken from their wallet. It runs like a bought product and pays its full return.', '', '', 'Gratuit pour le membre : rien n’est prélevé sur son portefeuille. Il fonctionne comme un produit acheté et verse son rendement complet.', '', ''],
+  ['Give a product', '', '', 'Offrir un produit', '', ''],
+  ['Leave empty for the built-in sentence', '', '', 'Laisser vide pour la phrase par défaut', '', ''],
+  ['Level 1 members who have deposited', '', '', 'Membres de niveau 1 ayant fait un dépôt', '', ''],
+  ['Longest wait (seconds)', '', '', 'Attente maximale (secondes)', '', ''],
+  ['Make unrestricted (hours and daily number)', '', '', 'Lever les restrictions (horaires et nombre par jour)', '', ''],
+  ['Max withdrawals per user per day (0 = no limit)', '', '', 'Nombre maximal de retraits par utilisateur et par jour (0 = sans limite)', '', ''],
+  ['OFF: withdrawals wait in Withdrawals until you press Send.', '', '', 'DÉSACTIVÉ : les retraits attendent dans Retraits jusqu’à ce que vous appuyiez sur Envoyer.', '', ''],
+  ['Only these domains may reach the backend — one per line, include www. soda-platform.com and this VPS\'s own address are always allowed.', '', '', 'Seuls ces domaines peuvent joindre le serveur — un par ligne, avec www. soda-platform.com et l’adresse propre de ce VPS sont toujours autorisés.', '', ''],
+  ['Payment reference starts with', '', '', 'La référence de paiement commence par', '', ''],
+  ['Renames the app everywhere inside it — the browser tab and the app name. Up to 24 characters.', '', '', 'Renomme l’application partout — l’onglet du navigateur et le nom de l’application. 24 caractères au maximum.', '', ''],
+  ['Rewards on the Team page. Referrals count a member\'s own Level 1 members who have deposited. Deposits count what their whole team (levels 1 to 3) has deposited. A task a member has already claimed stays claimed when you change its numbers.', '', '', 'Récompenses de la page Équipe. Les parrainages comptent les membres de niveau 1 du membre qui ont fait un dépôt. Les dépôts comptent ce que toute son équipe (niveaux 1 à 3) a déposé. Une tâche déjà réclamée par un membre reste réclamée quand vous changez ses chiffres.', '', ''],
+  ['Save Task Center', '', '', 'Enregistrer le Centre de tâches', '', ''],
+  ['Scrolling line on Home', '', '', 'Ligne défilante sur l’accueil', '', ''],
+  ['Set each product\'s member-facing name, photo and display position however you want. The stable key is only the internal reference that keeps existing purchases attached to that product.', '', '', 'Définissez comme vous voulez le nom, la photo et la position d’affichage de chaque produit, tels que les voient les membres. La clé stable est seulement la référence interne qui garde les achats existants rattachés à ce produit.', '', ''],
+  ['Shortest wait (seconds)', '', '', 'Attente minimale (secondes)', '', ''],
+  ['Team deposits, levels 1 to 3', '', '', 'Dépôts de l’équipe, niveaux 1 à 3', '', ''],
+  ['Withdrawal limits', '', '', 'Limites de retrait', '', ''],
+  // ── Soda admin: English and French coverage, strings found in the panel code ──
+  ['Saved purchase terms, paid every 24 hours (the first one 24 hours after purchase), with the same rounding as settlement. Scheduled cashback is credited to wallets; members decide when to withdraw. Future purchases and deposits are unknown.', '', '', 'Conditions d’achat enregistrées, versées toutes les 24 heures (la première 24 heures après l’achat), avec le même arrondi que le règlement. Le cashback programmé est crédité sur les portefeuilles ; les membres décident quand retirer. Les achats et dépôts futurs sont inconnus.', '', ''],
+  ['Withdrawals to be processed today', '', '', 'Retraits à traiter aujourd’hui', '', ''],
+  ['Same members, wallet amount before the fee', '', '', 'Mêmes membres, montant du portefeuille avant les frais', '', ''],
+  ['The second figure is a ceiling, not a forecast: it assumes every member who is allowed to withdraw asks for the most they can, once, today.', '', '', 'Le deuxième chiffre est un plafond, pas une prévision : il suppose que chaque membre autorisé à retirer demande le maximum possible, une seule fois, aujourd’hui.', '', ''],
+  ['a member must have bought a product', '', '', 'un membre doit avoir acheté un produit', '', ''],
+  ['multiples of', '', '', 'multiples de', '', ''],
+  ['at most', '', '', 'au maximum', '', ''],
+  ['withdrawal a day', '', '', 'retrait par jour', '', ''],
+  ['withdrawals a day', '', '', 'retraits par jour', '', ''],
+  ['no daily limit', '', '', 'aucune limite par jour', '', ''],
+  ['one unpaid request at a time', '', '', 'une seule demande impayée à la fois', '', ''],
+  ['Follows your withdrawal rules (Settings):', '', '', 'Suit vos règles de retrait (Paramètres) :', '', ''],
+  ['Banned members and unrestricted members are handled as the server handles them.', '', '', 'Les membres bannis et les membres sans restriction sont traités comme le fait le serveur.', '', ''],
+  ['REFERRAL CHAIN REPORT', '', '', 'RAPPORT DE CHAÎNE DE PARRAINAGE', '', ''],
+  ['not set', '', '', 'non défini', '', ''],
+  ['Generated', '', '', 'Généré', '', ''],
+  ['1. The member', '', '', '1. Le membre', '', ''],
+  ['Joined', '', '', 'Inscrit le', '', ''],
+  ['nobody (this is a root account)', '', '', 'personne (ce compte est une racine)', '', ''],
+  ['Team members (all levels)', '', '', 'Membres de l’équipe (tous niveaux)', '', ''],
+  ['Team\'s recharges (L1-L3)', '', '', 'Recharges de l’équipe (N1-N3)', '', ''],
+  ['Warning: a cycle was found in the referral data; the walk stopped early.', '', '', 'Attention : un cycle a été trouvé dans les données de parrainage ; le parcours s’est arrêté tôt.', '', ''],
+  ['2. Team by level', '', '', '2. Équipe par niveau', '', ''],
+  ['figures are the members\' own lifetime totals, in XOF', '', '', 'les chiffres sont les totaux cumulés propres aux membres, en XOF', '', ''],
+  ['Level', '', '', 'Niveau', '', ''],
+  ['Have deposited', '', '', 'Ont déposé', '', ''],
+  ['Deposited', '', '', 'Déposé', '', ''],
+  ['Withdrawn', '', '', 'Retiré', '', ''],
+  ['3. Commission this member earned from the team', '', '', '3. Commission gagnée par ce membre grâce à son équipe', '', ''],
+  ['commission payment', '', '', 'paiement de commission', '', ''],
+  ['commission payments', '', '', 'paiements de commission', '', ''],
+  ['Total (XOF)', '', '', '=', '', ''],
+  ['4. Upline (direct referrer to root)', '', '', '4. Lignée ascendante (parrain direct jusqu’à la racine)', '', ''],
+  ['Position', '', '', '=', '', ''],
+  ['Direct referrer', '', '', 'Parrain direct', '', ''],
+  ['No referrer: this account is the root.', '', '', 'Aucun parrain : ce compte est la racine.', '', ''],
+  ['5. Downline, level by level', '', '', '5. Lignée descendante, niveau par niveau', '', ''],
+  ['No members in this team yet.', '', '', 'Aucun membre dans cette équipe pour le moment.', '', ''],
+  ['The list stops at 5,000 members; the level totals above cover only the members listed.', '', '', 'La liste s’arrête à 5 000 membres ; les totaux par niveau ci-dessus ne couvrent que les membres listés.', '', ''],
+  ['Download PDF', '', '', 'Télécharger le PDF', '', ''],
+  ['PDF ready', '', '', 'PDF prêt', '', ''],
+  ['Could not make the PDF:', '', '', 'Impossible de créer le PDF :', '', ''],
+  ['This account signed up (their login works) but never finished registering -- no referral code, no welcome bonus. Finish it for them: pick their Trade Password and, if you know who invited them, their referrer\'s code.', '', '', 'Ce compte s’est inscrit (sa connexion fonctionne) mais n’a jamais terminé l’inscription -- pas de code de parrainage, pas de bonus de bienvenue. Terminez-la pour lui : choisissez son mot de passe de trading et, si vous savez qui l’a invité, le code de son parrain.', '', ''],
+  ['Loading products…', '', '', 'Chargement des produits…', '', ''],
+  ['Unrestricted: any hour and any number of withdrawals a day', '', '', 'Sans restriction : à toute heure et sans limite de retraits par jour', '', ''],
+  ['Follows the withdrawal hours and the daily number', '', '', 'Suit les horaires de retrait et le nombre par jour', '', ''],
+  ['Follow the withdrawal limits', '', '', 'Suivre les limites de retrait', '', ''],
+  ['this product', '', '', 'ce produit', '', ''],
+  ['Removing…', '', '', 'Retrait en cours…', '', ''],
+  ['Select a product…', '', '', 'Choisir un produit…', '', ''],
+  ['No products available', '', '', 'Aucun produit disponible', '', ''],
+  ['Could not load products', '', '', 'Impossible de charger les produits', '', ''],
+  ['Select a product first', '', '', 'Choisissez d’abord un produit', '', ''],
+  ['Unrestricted: any hour, any number a day', '', '', 'Sans restriction : à toute heure, sans limite par jour', '', ''],
+  ['Follows the withdrawal limits again', '', '', 'Suit à nouveau les limites de retrait', '', ''],
+  ['auto-send gave up: send by hand', '', '', 'envoi auto abandonné : envoyer à la main', '', ''],
+  ['over the automatic limit: send by hand', '', '', 'au-dessus de la limite automatique : envoyer à la main', '', ''],
+  ['auto-send soon', '', '', 'envoi auto bientôt', '', ''],
+  ['No products yet. The app catalogue reverts to defaults until you add one.', '', '', 'Aucun produit pour l’instant. Le catalogue de l’application revient aux valeurs par défaut tant que vous n’en ajoutez pas.', '', ''],
+  ['Create the ten products Soda A to Soda J that are missing? Products that already exist are not changed. Their prices are placeholders: edit them afterwards.', '', '', 'Créer les dix produits Soda A à Soda J qui manquent ? Les produits déjà existants ne sont pas modifiés. Leurs prix sont des valeurs provisoires : modifiez-les ensuite.', '', ''],
+  ['Adding…', '', '', 'Ajout en cours…', '', ''],
+  ['Added 1 product', '', '', '1 produit ajouté', '', ''],
+  ['Removed 1 product', '', '', '1 produit retiré', '', ''],
+  ['Nothing to add, all ten already exist', '', '', 'Rien à ajouter, les dix existent déjà', '', ''],
+  ['Delete this product?', '', '', 'Supprimer ce produit ?', '', ''],
+  ['Member-facing product name', '', '', 'Nom du produit visible par les membres', '', ''],
+  ['Stable key (internal; preserve for existing products)', '', '', 'Clé stable (interne ; à conserver pour les produits existants)', '', ''],
+  ['VIP level (0 = none)', '', '', 'Niveau VIP (0 = aucun)', '', ''],
+  ['A member\'s VIP is the highest VIP among the products they own, including products you give them.', '', '', 'Le VIP d’un membre est le VIP le plus élevé parmi les produits qu’il possède, y compris ceux que vous lui offrez.', '', ''],
+  ['Purchase limit per member (0 = no limit)', '', '', 'Limite d’achat par membre (0 = sans limite)', '', ''],
+  ['Members see it on the card as owned/limit, for example 0/3.', '', '', 'Les membres la voient sur la carte sous la forme possédé/limite, par exemple 0/3.', '', ''],
+  ['Product image', '', '', 'Image du produit', '', ''],
+  ['Save product', '', '', 'Enregistrer le produit', '', ''],
+  ['Edit product', '', '', 'Modifier le produit', '', ''],
+  ['New product', '', '', 'Nouveau produit', '', ''],
+  ['Image ready, tap Save product', '', '', 'Image prête, appuyez sur Enregistrer le produit', '', ''],
+  ['Enter a display position (a number; lower shows first)', '', '', 'Saisissez une position d’affichage (un nombre ; le plus petit s’affiche en premier)', '', ''],
+  ['The round picture on the Treasure Chest page. Square, about 800×800. It is saved exactly as you upload it (nothing is removed or changed).', '', '', 'L’image ronde de la page Coffre au trésor. Carrée, environ 800×800. Elle est enregistrée exactement comme vous la téléversez (rien n’est retiré ni modifié).', '', ''],
+  ['Announcement picture', '', '', 'Image d’annonce', '', ''],
+  ['The portrait picture members see when they open the app (with Join Channel and Close under it). Tall portrait (for example 1080×2200); it is shown as tall as the screen allows. It shows to every member on opening the app while a picture is uploaded; remove the picture to turn it off.', '', '', 'L’image en portrait que les membres voient à l’ouverture de l’application (avec Rejoindre le canal et Fermer en dessous). Grand portrait (par exemple 1080×2200) ; elle s’affiche aussi haute que l’écran le permet. Elle s’affiche à chaque membre à l’ouverture tant qu’une image est téléversée ; retirez l’image pour la désactiver.', '', ''],
+  ['Profile logo', '', '', 'Logo de profil', '', ''],
+  ['The round picture on every member\'s My page. Square, about 400×400.', '', '', 'L’image ronde de la page Compte de chaque membre. Carrée, environ 400×400.', '', ''],
+  ['Link preview', '', '', 'Aperçu du lien', '', ''],
+  ['What WhatsApp, Telegram and other apps show when someone pastes a link to the app: the title, your text and a wide (landscape) picture. The picture is cut to 1200×630 from its centre. Those apps remember a link for a while, so a change may take some time to show on a link that was already shared.', '', '', 'Ce que WhatsApp, Telegram et d’autres applications affichent quand quelqu’un colle un lien vers l’application : le titre, votre texte et une grande image (paysage). L’image est découpée en 1200×630 depuis son centre. Ces applications mémorisent un lien un certain temps, donc un changement peut mettre du temps à apparaître sur un lien déjà partagé.', '', ''],
+  ['(up to 70 characters; empty = the app name)', '', '', '(70 caractères au maximum ; vide = le nom de l’application)', '', ''],
+  ['(up to 260 characters)', '', '', '(260 caractères au maximum)', '', ''],
+  ['Save title and text', '', '', 'Enregistrer le titre et le texte', '', ''],
+  ['Upload landscape picture (about 1200×630)', '', '', 'Téléverser une image paysage (environ 1200×630)', '', ''],
+  ['Loading screen background', '', '', 'Arrière-plan de l’écran de chargement', '', ''],
+  ['The picture behind the word "Loading . . ." when the app starts. Portrait, about 1080×1920. Without one, a blue background shows.', '', '', 'L’image derrière le mot « Chargement . . . » au démarrage de l’application. Portrait, environ 1080×1920. Sans image, un fond bleu s’affiche.', '', ''],
+  ['Save loading screen appearance', '', '', 'Enregistrer l’apparence de l’écran de chargement', '', ''],
+  ['Frosted authentication card', '', '', 'Carte d’authentification givrée', '', ''],
+  ['Card opacity (0–100%)', '', '', 'Opacité de la carte (0–100 %)', '', ''],
+  ['Save background and card appearance', '', '', 'Enregistrer l’apparence de l’arrière-plan et de la carte', '', ''],
+  ['The member app icon (home screen and browser tab). Square PNG, 1024×1024 (transparency kept, corners rounded for you). The admin panel always keeps its own built-in icon.', '', '', 'L’icône de l’application membre (écran d’accueil et onglet du navigateur). PNG carré, 1024×1024 (la transparence est conservée, les coins sont arrondis pour vous). Le panneau d’administration garde toujours sa propre icône intégrée.', '', ''],
+  ['Not set — a plain person icon shows', '', '', 'Non défini — une icône de personne simple s’affiche', '', ''],
+  ['Custom picture (landscape)', '', '', 'Image personnalisée (paysage)', '', ''],
+  ['Not set — the app icon shows', '', '', 'Non défini — l’icône de l’application s’affiche', '', ''],
+  ['Announcement picture saved, live for every member', '', '', 'Image d’annonce enregistrée, visible par tous les membres', '', ''],
+  ['Announcement picture removed', '', '', 'Image d’annonce retirée', '', ''],
+  ['Link preview picture saved', '', '', 'Image d’aperçu du lien enregistrée', '', ''],
+  ['Link preview picture removed', '', '', 'Image d’aperçu du lien retirée', '', ''],
+  ['Link preview words saved', '', '', 'Texte d’aperçu du lien enregistré', '', ''],
+  ['Loading screen background saved', '', '', 'Arrière-plan de l’écran de chargement enregistré', '', ''],
+  ['Loading screen background removed', '', '', 'Arrière-plan de l’écran de chargement retiré', '', ''],
+  ['Profile logo saved, live for every member', '', '', 'Logo de profil enregistré, visible par tous les membres', '', ''],
+  ['Profile logo removed', '', '', 'Logo de profil retiré', '', ''],
+  ['Brand logo saved', '', '', 'Logo de la marque enregistré', '', ''],
+  ['Fill in both Opacity and Blur', '', '', 'Renseignez l’opacité et le flou', '', ''],
+  ['Loading screen appearance saved', '', '', 'Apparence de l’écran de chargement enregistrée', '', ''],
+  ['Fill in every Opacity and Blur box', '', '', 'Renseignez chaque champ d’opacité et de flou', '', ''],
+  ['Login screen background and card appearance saved', '', '', 'Arrière-plan de l’écran de connexion et apparence de la carte enregistrés', '', ''],
+  ['Sign-in accounts', '', '', 'Comptes de connexion', '', ''],
+  ['settings, products, banners, payment numbers, admin accounts, messages, activity log.', '', '', 'paramètres, produits, bannières, numéros de paiement, comptes administrateur, messages, journal d’activité.', '', ''],
+  ['Automatic withdrawals', '', '', 'Retraits automatiques', '', ''],
+  ['(the VPS sends them; requests still arrive as Pending)', '', '', '(le VPS les envoie ; les demandes arrivent toujours en attente)', '', ''],
+  ['It uses the payment method chosen above; with "manual" payment nothing is sent automatically.', '', '', 'Il utilise le mode de paiement choisi ci-dessus ; avec le paiement « manuel », rien n’est envoyé automatiquement.', '', ''],
+  ['Use 1 to 12 letters or digits, starting with a letter (for example soda)', '', '', 'Utilisez 1 à 12 lettres ou chiffres, en commençant par une lettre (par exemple soda)', '', ''],
+  ['Use whole numbers only (no decimals or minus sign).', '', '', 'Utilisez uniquement des nombres entiers (ni décimales ni signe moins).', '', ''],
+  ['Minimum deposit', '', '', 'Dépôt minimum', '', ''],
+  ['Minimum withdrawal', '', '', 'Retrait minimum', '', ''],
+  ['Withdrawal fee', '', '', 'Frais de retrait', '', ''],
+  ['Level 1 commission', '', '', 'Commission niveau 1', '', ''],
+  ['Level 2 commission', '', '', 'Commission niveau 2', '', ''],
+  ['Level 3 commission', '', '', 'Commission niveau 3', '', ''],
+  ['Withdrawals per day', '', '', 'Retraits par jour', '', ''],
+  ['Shortest wait', '', '', 'Attente minimale', '', ''],
+  ['Longest wait', '', '', 'Attente maximale', '', ''],
+  ['Automatic limit', '', '', 'Limite automatique', '', ''],
+  ['cannot be blank. Type a number (0 is allowed).', '', '', 'ne peut pas être vide. Saisissez un nombre (0 est permis).', '', ''],
+  ['The longest wait cannot be shorter than the shortest wait.', '', '', 'L’attente maximale ne peut pas être plus courte que l’attente minimale.', '', ''],
+  ['Target', '', '', 'Objectif', '', ''],
+  ['Could not load the tasks', '', '', 'Impossible de charger les tâches', '', ''],
+  ['Task Center saved', '', '', 'Centre de tâches enregistré', '', ''],
+  // ── English + French coverage round (owner: the admin panel must be fully switchable to French) ──
+  ['link', '', '', 'lien', '', ''],
+  ['links', '', '', 'liens', '', ''],
+  ['member', '', '', 'membre', '', ''],
+  ['members', '', '', 'membres', '', ''],
+  ['minimum', '', '', '=', '', ''],
+  ['fee', '', '', 'frais', '', ''],
+  ['open', '', '', 'ouvert', '', ''],
+  ['each', '', '', 'chacun', '', ''],
+  // ── English + French coverage round (owner: the admin panel must be fully switchable to French) ──
+  ['Welcome to Soda', '', '', 'Bienvenue sur Soda', '', ''],
 ];
 const ADMIN_LANG_PATTERNS = [
   ['Prices, payouts, spins and the opening schedule are saved for {0} — the country in the switch at the top. Names, photos and order are shared by every country.', 'Ebbeeyi, okusasula, okukyusa n\'enteekateeka y\'okuggulawo bitereka ku {0} — eggwanga eriri mu kakyusa waggulu. Amannya, ebifaananyi n\'entegeka bigabanibwa amawanga gonna.', 'Bei, malipo, mizunguko na ratiba ya kufungua huhifadhiwa kwa {0} — nchi iliyo kwenye kibadilishi hapo juu. Majina, picha na mpangilio hushirikiwa na kila nchi.', 'Les prix, les versements, les tours et l\'horaire d\'ouverture sont enregistrés pour {0} — le pays du sélecteur en haut. Les noms, les photos et l\'ordre sont partagés par tous les pays.', 'Ibiciro, kwishyura, inzunguruka na gahunda yo gufungura bibikwa kuri {0} — igihugu kiri mu guhitamo haruguru. Amazina, amafoto n\'urutonde bisangirwa n\'ibihugu byose.', 'Ebiihendo, okushashura, okuzunguka n\'entebekanisa y\'okwigura nibibikwa aha {0} — eihanga eriri omu kacwamu haiguru. Amaziina, ebishushani n\'entebekanisa nibigabanwa amahanga goona.'],
@@ -3981,6 +4753,123 @@ const ADMIN_LANG_PATTERNS = [
   ['Declined ({0})', 'Ebigaaniddwa ({0})', 'Yaliyokataliwa ({0})', 'Refusé ({0})', 'Byanzwe ({0})', 'Ebyangirwe ({0})'],
   ['{0} recharge(s) still arriving, worth {1}', 'Okuteekamu {0} kukyajja, kwa {1}', 'Malipo {0} bado yanakuja, yenye thamani ya {1}', '{0} recharge(s) encore en cours, pour {1}', 'Kongeramo {0} biracyaza, bifite agaciro ka {1}', 'Okutamu {0} nikuza, kwa {1}'],
   ['{0} payout(s) still sending, worth {1}', 'Okusasula {0} kukyasindikibwa, kwa {1}', 'Malipo {0} bado yanatumwa, yenye thamani ya {1}', '{0} versement(s) encore en cours d\'envoi, pour {1}', 'Kwishyura {0} biracyoherezwa, bifite agaciro ka {1}', 'Okushashura {0} nikutumwa, kwa {1}'],
+  // ── English + French coverage (owner: Soda admin English and French only) ──
+  ['Active ({0})', '', '', 'Actifs ({0})', '', ''],
+  ['Assets ({0})', '', '', 'Actifs ({0})', '', ''],
+  ['Approved ({0})', '', '', 'Approuvé ({0})', '', ''],
+  ['Banned ({0})', '', '', 'Banni ({0})', '', ''],
+  ['Recharges ({0})', '', '', '=', '', ''],
+  ['Rejected ({0})', '', '', 'Refusé ({0})', '', ''],
+  ['To approve ({0})', '', '', 'À approuver ({0})', '', ''],
+  ['Waiting for message ({0})', '', '', 'En attente du message ({0})', '', ''],
+  ['tried {0} with {1}', '', '', 'a essayé {0} avec {1}', '', ''],
+  ['Suspicious activity ({0}-day, {1}+ to appear)', '', '', 'Activité suspecte ({0} jours, {1}+ pour apparaître)', '', ''],
+  ['Staff withdrawal approvals ({0}-day)', '', '', 'Approbations de retraits par le personnel ({0} jours)', '', ''],
+  ['CPU load, 1 min ({0} core{1})', '', '', 'Charge CPU, 1 min ({0} cœur{1})', '', ''],
+  ['Memory used ({0} of {1})', '', '', 'Mémoire utilisée ({0} sur {1})', '', ''],
+  ['Deposits credited ({0})', '', '', 'Dépôts crédités ({0})', '', ''],
+  ['Withdrawals paid ({0})', '', '', 'Retraits payés ({0})', '', ''],
+  ['Open deposit requests ({0})', '', '', 'Demandes de dépôt ouvertes ({0})', '', ''],
+  ['Open withdrawal requests ({0})', '', '', 'Demandes de retrait ouvertes ({0})', '', ''],
+  ['Cashback schedule for {0}', '', '', 'Calendrier des gains pour {0}', '', ''],
+  ['Unconfirmed deposits / credits awaiting completion ({0})', '', '', 'Dépôts / crédits non confirmés en attente de finalisation ({0})', '', ''],
+  ['Requested withdrawals awaiting payout, net ({0})', '', '', 'Retraits demandés en attente de versement, net ({0})', '', ''],
+  ['Time of day ({0} is busiest)', '', '', 'Heure de la journée ({0} est la plus active)', '', ''],
+  ['Daily trend (last {0} days)', '', '', 'Tendance quotidienne ({0} derniers jours)', '', ''],
+  ['{0} contract(s) have incomplete schedule data and are excluded from these calculations.', '', '', '{0} contrat(s) ont des données de calendrier incomplètes et sont exclus de ces calculs.', '', ''],
+  ['{0} id(s) shortened ({1}{2})', '', '', '{0} identifiant(s) raccourci(s) ({1}{2})', '', ''],
+  ['{0} skipped -- the shorter id is already taken: {1}', '', '', '{0} ignoré(s) — l’identifiant plus court est déjà pris : {1}', '', ''],
+  ['Totals rebuilt for {0} user(s){1}{2}{3}', '', '', 'Totaux reconstruits pour {0} utilisateur(s){1}{2}{3}', '', ''],
+  [', {0} check-in streak(s) corrected', '', '', ', {0} série(s) de pointage corrigée(s)', '', ''],
+  [', {0} invested total(s) corrected', '', '', ', {0} total(aux) investi(s) corrigé(s)', '', ''],
+  [', {0} team count(s) corrected', '', '', ', {0} effectif(s) d’équipe corrigé(s)', '', ''],
+  ['credited {0}x', '', '', 'crédité {0}x', '', ''],
+  ['balance {0}', '', '', 'solde {0}', '', ''],
+  ['{0}h ago, still not finished', '', '', 'il y a {0} h, toujours pas terminé', '', ''],
+  ['{0} ≠ real{1}', '', '', '{0} ≠ réel{1}', '', ''],
+  ['stored {0} vs real {1} (diff {2})', '', '', 'enregistré {0} contre réel {1} (écart {2})', '', ''],
+  ['{0} user(s) checked', '', '', '{0} utilisateur(s) vérifié(s)', '', ''],
+  ['{0} issue(s) found.{1}{2}', '', '', '{0} problème(s) trouvé(s).{1}{2}', '', ''],
+  ['{0} wallet-balance mismatch(es) -- click "Repair wallet" where the real ledger is HIGHER (safe to auto-close); a lower real total still needs a human to diagnose by hand.', '', '', '{0} écart(s) de solde de portefeuille — cliquez sur « Réparer le portefeuille » lorsque le vrai registre est SUPÉRIEUR (sans risque à refermer automatiquement) ; un total réel plus bas demande encore qu’une personne l’examine à la main.', '', ''],
+  ['{0} deposited/earned/invested mismatch(es) will be fixed by "Recalculate totals" above.', '', '', '{0} écart(s) déposé/gagné/investi seront corrigés par « Recalculer les totaux » ci-dessus.', '', ''],
+  ['Showing first 500 of {0}. Search by phone or code to find anyone.', '', '', 'Affichage des 500 premiers sur {0}. Cherchez par téléphone ou par code pour trouver n’importe qui.', '', ''],
+  ['Upline (direct referrer → root), {0} link{1}', '', '', 'Ascendance (parrain direct → racine), {0} lien{1}', '', ''],
+  ['Downline (this member\'s own team), {0}{1} total -- {2}', '', '', 'Descendance (équipe propre de ce membre), {0}{1} au total — {2}', '', ''],
+  ['Activate {0} for {1}? It is free for them (no wallet debit) and will pay its full return.', '', '', 'Activer {0} pour {1} ? C’est gratuit pour lui (aucun débit du portefeuille) et il versera son rendement complet.', '', ''],
+  ['Credit {0} to {1}\'s wallet? This immediately increases their real balance.', '', '', 'Créditer {0} sur le portefeuille de {1} ? Cela augmente immédiatement son solde réel.', '', ''],
+  ['Debit {0} from {1}\'s wallet? This immediately reduces their real balance.', '', '', 'Débiter {0} du portefeuille de {1} ? Cela réduit immédiatement son solde réel.', '', ''],
+  ['Suspend {0}? This immediately blocks their deposits, withdrawals, purchases, and cashback.', '', '', 'Suspendre {0} ? Cela bloque immédiatement ses dépôts, retraits, achats et gains.', '', ''],
+  ['Reset password for {0}? They will need to use the new password to log in.', '', '', 'Réinitialiser le mot de passe de {0} ? Il devra utiliser le nouveau mot de passe pour se connecter.', '', ''],
+  ['Finish registration for {0}? This assigns their referral code, sets this PIN, and credits the current welcome bonus{1}.', '', '', 'Terminer l’inscription de {0} ? Cela attribue son code de parrainage, définit ce code PIN et crédite le bonus de bienvenue actuel{1}.', '', ''],
+  ['Registration completed -- welcome bonus of {0} credited', '', '', 'Inscription terminée — bonus de bienvenue de {0} crédité', '', ''],
+  ['Attach {0} as this member\'s referrer? This updates their team and processes any eligible first-deposit commission.', '', '', 'Rattacher {0} comme parrain de ce membre ? Cela met à jour son équipe et traite toute commission éligible du premier dépôt.', '', ''],
+  ['Let {0} withdraw at any hour, even outside the withdrawal hours?', '', '', 'Laisser {0} retirer à toute heure, même hors des heures de retrait ?', '', ''],
+  ['Make {0} follow the withdrawal hours again?', '', '', 'Faire de nouveau suivre à {0} les heures de retrait ?', '', ''],
+  ['Set a new Trade Password for {0}? Give it to them directly.', '', '', 'Définir un nouveau mot de passe de transaction pour {0} ? Donnez-le-lui directement.', '', ''],
+  ['Streak corrected: {0} → {1}', '', '', 'Série corrigée : {0} → {1}', '', ''],
+  ['Streak was already correct ({0})', '', '', 'La série était déjà correcte ({0})', '', ''],
+  ['This PERMANENTLY deletes {0}\'s login and personal data (bound withdrawal accounts, gift-code history, security log, any unmatched pending deposit). Their investments, transactions and withdrawals are KEPT as financial records, orphaned from any login. This cannot be undone. Type DELETE to confirm:', '', '', 'Ceci SUPPRIME DÉFINITIVEMENT la connexion et les données personnelles de {0} (comptes de retrait liés, historique des codes cadeaux, journal de sécurité, tout dépôt en attente non rapproché). Ses investissements, transactions et retraits sont CONSERVÉS comme enregistrements financiers, détachés de toute connexion. Impossible d’annuler. Tapez DELETE pour confirmer :', '', ''],
+  ['approved all-time · {0} received', '', '', 'approuvés au total · {0} reçus', '', ''],
+  ['USDT (TRC20){0}', '', '', '=', '', ''],
+  ['{0} USDT', '', '', '=', '', ''],
+  ['processed all-time · {0} paid out', '', '', 'traités au total · {0} versés', '', ''],
+  ['until an admin sends it, nothing reaches {0} on its own. Members withdraw to a bound mobile money number (see each row\'s destination).', '', '', 'jusqu’à ce qu’un administrateur l’envoie, rien n’arrive à {0} tout seul. Les membres retirent vers un numéro Mobile Money lié (voir la destination de chaque ligne).', '', ''],
+  ['declined by {0} · {1}', '', '', 'refusé par {0} · {1}', '', ''],
+  ['Send this payout through {0} now?', '', '', 'Envoyer ce versement via {0} maintenant ?', '', ''],
+  ['Payout verify Our record: {0} Provider says: {1} {2}', '', '', 'Vérification du versement Notre enregistrement : {0} Le prestataire indique : {1} {2}', '', ''],
+  ['{0} · {1} days', '', '', '{0} · {1} jours', '', ''],
+  ['Synced {0} product{1}', '', '', '{0} produit{1} synchronisé(s)', '', ''],
+  ['merged {0} duplicate{1} back into {2}', '', '', '{0} doublon{1} fusionné(s) dans {2}', '', ''],
+  ['{0} need your review: both {1} were separately edited -- open each, compare, keep the right one and Delete the other', '', '', '{0} à examiner : les deux {1} ont été modifiés séparément — ouvrez chacun, comparez, gardez le bon et supprimez l’autre', '', ''],
+  ['Removed {0} product{1}', '', '', '{0} produit{1} supprimé(s)', '', ''],
+  ['Price ({0})', '', '', 'Prix ({0})', '', ''],
+  ['Total payout ({0})', '', '', 'Versement total ({0})', '', ''],
+  ['Min reward ({0})', '', '', 'Récompense minimale ({0})', '', ''],
+  ['Max reward ({0})', '', '', 'Récompense maximale ({0})', '', ''],
+  ['and pay in {0}. Members of other countries cannot claim them. Pick', '', '', 'et paient en {0}. Les membres d’autres pays ne peuvent pas les utiliser. Choisissez', '', ''],
+  ['a random amount between {0} and {1}', '', '', 'un montant aléatoire entre {0} et {1}', '', ''],
+  ['{0} code(s) generated, each claim paying {1}{2}', '', '', '{0} code(s) généré(s), chaque utilisation versant {1}{2}', '', ''],
+  [', expiring in {0} second{1}', '', '', ', expire dans {0} seconde{1}', '', ''],
+  ['Deactivate "{0}"? Their access ends immediately, including any device they\'re already signed in on.', '', '', 'Désactiver « {0} » ? Son accès prend fin immédiatement, y compris sur tout appareil où il est déjà connecté.', '', ''],
+  ['Reactivate "{0}"? They will be able to sign in again immediately.', '', '', 'Réactiver « {0} » ? Il pourra se connecter de nouveau immédiatement.', '', ''],
+  ['New password for "{0}" (at least 8 characters):', '', '', 'Nouveau mot de passe pour « {0} » (8 caractères minimum) :', '', ''],
+  ['Permanently delete "{0}"? This cannot be undone.', '', '', 'Supprimer définitivement « {0} » ? Impossible d’annuler.', '', ''],
+  ['Downloaded by {0}', '', '', 'Téléchargé par {0}', '', ''],
+  ['Showing the most recent {0} (more exist), newest first.', '', '', 'Affichage des {0} plus récents (il en existe d’autres), du plus récent au plus ancien.', '', ''],
+  ['{0} match{1} -- tap one to see its team\'s phone numbers and total deposits.', '', '', '{0} résultat{1} — touchez-en un pour voir les numéros de téléphone de son équipe et ses dépôts totaux.', '', ''],
+  ['{0} must be between 0 and {1}', '', '', '{0} doit être compris entre 0 et {1}', '', ''],
+  ['Whole-team recharges needed ({0})', '', '', 'Recharges de toute l’équipe requises ({0})', '', ''],
+  ['Reward ({0})', '', '', 'Récompense ({0})', '', ''],
+  ['{0} recharge(s) and {1} withdrawal(s) are not finished yet. Erasing now loses the record of them.', '', '', '{0} recharge(s) et {1} retrait(s) ne sont pas terminés. Effacer maintenant en perd la trace.', '', ''],
+  ['{0} records erased and {1} member sign-in accounts removed.', '', '', '{0} enregistrements effacés et {1} comptes de connexion de membres supprimés.', '', ''],
+  ['Sign-in accounts could not all be removed: {0}. Run the reset again to finish.', '', '', 'Tous les comptes de connexion n’ont pas pu être supprimés : {0}. Relancez la réinitialisation pour terminer.', '', ''],
+  ['Right now it is {0} {1} Côte d’Ivoire time. The hours switch is off: members can withdraw at any hour.', '', '', 'Il est actuellement {0} {1}, heure de Côte d’Ivoire. L’interrupteur des horaires est désactivé : les membres peuvent retirer à toute heure.', '', ''],
+  ['Right now it is {0} {1} Côte d’Ivoire time: withdrawing is OPEN.', '', '', 'Il est actuellement {0} {1}, heure de Côte d’Ivoire : les retraits sont OUVERTS.', '', ''],
+  ['Right now it is {0} {1} Côte d’Ivoire time: withdrawing is CLOSED.', '', '', 'Il est actuellement {0} {1}, heure de Côte d’Ivoire : les retraits sont FERMÉS.', '', ''],
+  // ── English + French coverage round (owner: the admin panel must be fully switchable to French) ──
+  ['Products ({0})', '', '', 'Produits ({0})', '', ''],
+  ['New payments will look like: {0}', '', '', 'Les nouveaux paiements ressembleront à : {0}', '', ''],
+  // ── Soda admin: English and French coverage, strings found in the panel code ──
+  ['Requests waiting to be paid today, net ({0})', '', '', 'Demandes en attente de paiement aujourd’hui, net ({0})', '', ''],
+  ['Most that could still be requested today, net payout ({0} members)', '', '', 'Maximum encore demandable aujourd’hui, paiement net ({0} membres)', '', ''],
+  ['Of that, members with a running product ({0})', '', '', 'Dont membres avec un produit en cours ({0})', '', ''],
+  ['Not counted because a rule stops them: {0} with no product bought, {1} with a request already waiting, {2} who used today\'s number of withdrawals, {3} below the minimum once cut to the allowed multiple, {4} banned.', '', '', 'Non comptés car une règle les bloque : {0} sans produit acheté, {1} avec une demande déjà en attente, {2} ayant utilisé le nombre de retraits du jour, {3} sous le minimum une fois ramenés au multiple autorisé, {4} bannis.', '', ''],
+  ['{0} waiting request(s) ({1}) belong to banned members.', '', '', '{0} demande(s) en attente ({1}) appartiennent à des membres bannis.', '', ''],
+  ['{0} - code {1}', '', '', '=', '', ''],
+  ['Referral chain - {0}', '', '', 'Chaîne de parrainage - {0}', '', ''],
+  ['deposited {0} invested {1} (XOF)', '', '', 'déposé {0} investi {1} (XOF)', '', ''],
+  ['Page {0} of {1}', '', '', 'Page {0} sur {1}', '', ''],
+  ['Remove {0} from {1}? It stops earning at once and disappears from their account. Cashback already paid to them ({2}) stays in their wallet.', '', '', 'Retirer {0} de {1} ?\n\nIl cesse de rapporter immédiatement et disparaît de son compte. Le cashback déjà versé ({2}) reste dans son portefeuille.', '', ''],
+  ['Also give back the {0} they paid for {1}, into their wallet? OK = remove and refund {2} Cancel = remove WITHOUT a refund', '', '', 'Rembourser aussi les {0} payés pour {1}, dans son portefeuille ?\n\nOK = retirer et rembourser {2}\nAnnuler = retirer SANS remboursement', '', ''],
+  ['Make {0} unrestricted: any hour, and any number of withdrawals a day?', '', '', 'Lever les restrictions de {0} : à toute heure, et sans limite de retraits par jour ?', '', ''],
+  ['Make {0} follow the withdrawal hours and the daily number again?', '', '', 'Faire suivre à {0} les horaires de retrait et le nombre par jour à nouveau ?', '', ''],
+  ['Could not load {0}. Check the connection, then press Refresh.', '', '', 'Impossible de charger {0}. Vérifiez la connexion, puis appuyez sur Actualiser.', '', ''],
+  ['auto-send at {0}', '', '', 'envoi auto à {0}', '', ''],
+  ['{0} · {1} days · VIP {2}', '', '', '{0} · {1} jours · VIP {2}', '', ''],
+  ['Added {0} products', '', '', '{0} produits ajoutés', '', ''],
+  ['Daily payout ({0})', '', '', 'Versement quotidien ({0})', '', ''],
+  ['ON: every new withdrawal is sent by the VPS after its own random wait of {0} to {1} seconds.', '', '', 'ACTIVÉ : chaque nouveau retrait est envoyé par le VPS après une attente aléatoire de {0} à {1} secondes.', '', ''],
+  ['Only up to {0}: larger ones wait for you.', '', '', 'Seulement jusqu’à {0} : les plus gros attendent votre action.', '', ''],
 ];
 
 // ==== SHARED I18N TABLE: REPLACED BY build-admin.js - BEGIN ====
@@ -4007,7 +4896,7 @@ LANG_PATTERNS = LANG_PATTERNS.concat(ADMIN_LANG_PATTERNS);
 // owner asked to have translated. A row longer than the cap can never apply,
 // so without this those 43 paragraphs would stay English however carefully
 // they were written. Declared BEFORE the engine, which reads it at load.
-var I18N_MAX_LEN_OVERRIDE = 700;
+var I18N_MAX_LEN_OVERRIDE = 1500;
 // ==== SHARED I18N ENGINE: REPLACED BY build-admin.js - BEGIN ====
 // ==== SHARED I18N ENGINE: REPLACED BY build-admin.js - END ====
 
@@ -4018,7 +4907,7 @@ var I18N_MAX_LEN_OVERRIDE = 700;
 // <select>s is for: "Kiswahili" reads the same in every language, and a
 // picker whose options change language as you change language is unusable.
 function paintAdminLangPickers(){
-  const opts = LANGS.map(l => `<option value="${esc(l.code)}"${l.code === LANG ? ' selected' : ''}>${esc(l.native)}</option>`).join('');
+  const opts = LANGS.filter(l => ADMIN_PICKABLE.includes(l.code)).map(l => `<option value="${esc(l.code)}"${l.code === LANG ? ' selected' : ''}>${esc(l.native)}</option>`).join('');
   for (const id of ['langSwitch', 'langLogin']) {
     const sel = $(id);
     if (!sel) continue;
@@ -4033,9 +4922,11 @@ function paintAdminLangPickers(){
 // Switching BACK to English is not a special case: t() returns each node's
 // stored original, so a full pass restores the panel word for word.
 function setAdminLang(code){
-  LANG = LANG_CODES.includes(code) ? code : 'en';
+  LANG = ADMIN_PICKABLE.includes(code) ? code : 'en';
   try { localStorage.setItem(ADMIN_LANG_KEY, LANG); } catch (_) {}
   try { translateTree(document.body); } catch (_) {}
+  // Text built in code (dates, month names, composed sentences) is made at render time, so paint the open tab again.
+  try { if (SESSION_TOKEN && typeof RENDERERS !== 'undefined' && RENDERERS[_tab]) RENDERERS[_tab](); } catch (_) {}
   markAdminPageLanguage();
   paintAdminLangPickers();
 }
@@ -4059,7 +4950,7 @@ function markAdminPageLanguage(){
 function startAdminI18n(){
   let stored = '';
   try { stored = localStorage.getItem(ADMIN_LANG_KEY) || ''; } catch (_) {}
-  LANG = LANG_CODES.includes(stored) ? stored : 'en';
+  LANG = ADMIN_PICKABLE.includes(stored) ? stored : 'en';
   markAdminPageLanguage();
   paintAdminLangPickers();
   // Newly rendered HTML is translated as it lands -- which is the whole of
