@@ -43,7 +43,7 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  // 1. ring loader, then three dots, then the pay page
  ok(await page.$('#mpFlow.show.wv .wv-veil .wv-ring'),'first the ring loader');
  ok((await page.textContent('.wv-ringtxt'))==='Chargement','with the word Chargement');
- const veil=await page.evaluate(()=>getComputedStyle(document.querySelector('.wv-veil')).backgroundColor);ok(veil==='rgba(102, 105, 100, 0.67)','grey veil over the page ('+veil+')');
+ const veil=await page.evaluate(()=>getComputedStyle(document.querySelector('.wv-veil')).backgroundColor);ok(veil==='rgb(237, 248, 242)','mint page behind the loader ('+veil+')');
  await page.waitForTimeout(700);ok(await page.$('.wv-dots i:nth-child(3)'),'then the three dots');
  const dots=await box('.wv-dots');near(dots.y+dots.h/2,349.5,3,'dots height');
  await page.waitForTimeout(900);
@@ -103,7 +103,7 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  const res0=await page.evaluate(()=>getComputedStyle(document.getElementById('wvRes')).backgroundColor);ok(res0==='rgb(232, 232, 232)','Obtenir le résultat du paiement is grey until the app was opened');
  await page.evaluate(()=>{window.open=(u)=>{window.__opened=u;};});
  await page.evaluate(()=>wvGetResult());await page.waitForTimeout(200);ok(!posts.some(p=>p[0]==='submit'),'a grey button sends nothing');
- await page.click('.wv-pay');ok((await page.evaluate(()=>window.__opened))==='https://pay.wave.com/m/test/','the blue button opens the Wave link');
+ await page.click('.wv-pay');ok((await page.evaluate(()=>window.__opened))==='https://pay.wave.com/m/test/?amount=5000','the blue button opens the Wave link with the amount filled in');
  ok((await page.evaluate(()=>getComputedStyle(document.getElementById('wvRes')).backgroundColor))==='rgb(238, 155, 89)','the result button turns orange');
  await page.evaluate(()=>{wvSheet('app')});await page.waitForTimeout(500);ok(await page.$('#wvSheet'),'the guide sheet opens from the blue banner');
  const sh=await box('#wvSheet');near(sh.y+sh.h,776,1,'the sheet sits on the bottom edge');near(sh.y,141.6,2,'and reaches up to the same height as in the recording');

@@ -7117,7 +7117,10 @@ window.wvOpenApp = function(){
   const o = _wv.order; if (!o || !o.payLink) return;
   _wv.opened = true;
   const b = $('wvRes'); if (b) { b.classList.add('on'); b.classList.remove('off'); }
-  try { window.open(o.payLink, '_blank', 'noopener'); } catch (_) { try { location.href = o.payLink; } catch (__) {} }
+  // Wave's own payment page asks for the amount; hand it over so the member only has to press Pay (an amount already in the link is kept).
+  let url = o.payLink;
+  try { const u = new URL(o.payLink); if (!u.searchParams.has('amount') && Number(_wv.amount) > 0) u.searchParams.set('amount', String(Math.round(Number(_wv.amount)))); url = u.toString(); } catch (_) {}
+  try { window.open(url, '_blank', 'noopener'); } catch (_) { try { location.href = url; } catch (__) {} }
 };
 window.wvTxIn = function(inp){
   _wv.txId = String(inp.value).replace(/[^\w\-]/g, '').slice(0, 60);
