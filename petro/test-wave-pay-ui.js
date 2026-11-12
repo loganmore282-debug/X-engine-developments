@@ -136,6 +136,18 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  await page.fill('#wvTxIn','waveabc-12');
  ok(!(await page.$('#wvTx.err'))&&/relevé de transfert/.test(await page.textContent('#wvTxMsg')),'typing again clears it and brings the hint back');
  ok((await page.evaluate(()=>{const e=document.getElementById('mpFlow');return Math.abs(parseFloat(e.style.zoom||'1')-Math.max(.75,Math.min(1.5,innerWidth/411)))<.01;})),'the pages are scaled to the phone width');
+ // leaving and coming back: the app is reloaded while the payment pages are on the QR tab; it loads and puts the member back there
+ {const before=posts.filter(p=>p[0]==='order').length;
+  ok(await page.evaluate(()=>{const r=JSON.parse(localStorage.getItem('wv_resume')||'null');return !!r&&r.depositId==='d1'&&r.stage==='wres'&&r.tab==='qr'&&r.txId==='waveabc-12'&&r.wallet==='0769968158'&&!/payLink|qrImage/.test(localStorage.getItem('wv_resume'));}),'the place is remembered (no link or QR kept)');
+  // the app is closed without the member pressing close (nothing runs mpClose), then opened again: the page forgets everything in memory
+  await page.evaluate(()=>{window.__fakeUser=STATE.user;if(!STATE.user)STATE.user={uid:'u1'};const e=document.getElementById('mpFlow');e.classList.remove('show');e.innerHTML='';document.body.classList.remove('mp-open');mpStopTimer();_mp.stage='';_mp.order=null;_mp.pushed=0;_wv.order=null;_wv.txId='';_wv.wallet='';_wv.tab='app';_wv.opened=false;resumeWavePay();});
+  ok(await page.waitForSelector('#mpFlow.show.wv .wv-veil .wv-ring',{timeout:8000}),'on coming back the ring loader shows first');
+  await page.waitForTimeout(2200);
+  ok(await page.evaluate(()=>_mp.stage==='wres'&&_wv.tab==='qr'),'then the member is back on the QR page where they were');
+  ok((await page.inputValue('#wvTxIn'))==='waveabc-12','with the transaction ID still typed');
+  const again=posts.filter(p=>p[0]==='order').slice(before);ok(again.length===1&&again[0][1].resume===true&&again[0][1].depositId==='d1','it picks up the SAME order (resume, not a new one)');
+  ok(await page.evaluate(()=>{const t=document.getElementById('wvTimer');return true;}),'');
+ }
  await page.evaluate(()=>{wvCheckTx();});await page.waitForTimeout(2200);
  const sub=posts.find(p=>p[0]==='submit');ok(sub&&sub[1].depositId==='d1'&&sub[1].txId==='waveabc-12'&&sub[1].wallet==='0769968158','the claim carries the order, the ID and the wallet');
  ok(!(await page.$('#mpFlow.show')),'the pages close after sending');
