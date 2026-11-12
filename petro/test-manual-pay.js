@@ -123,7 +123,7 @@ const LOGO = 'data:image/png;base64,iVBORw0KGgo=';
   const bal = () => db.col('users').get('u1').walletBalance + ':' + db.col('users').get('u1').totalDeposited;
   const before = bal();
   r = await call(H['POST /deposit/manual/submit'], { depositId: o1.depositId, sms: 'I paid' });
-  eq([r.code, r.body.message], [400, 'please enter the correct transfer sms'], 'text without a code is refused with the owner\'s wording');
+  eq([r.code, r.body.message], [400, 'veuillez saisir le bon SMS de virement'], 'text without a code is refused with the owner\'s wording');
   r = await call(H['POST /deposit/manual/submit'], { depositId: 'missing', sms: 'FT25512S26V8' }); eq(r.code, 404, 'unknown order');
   ctx.user = 'u2'; r = await call(H['POST /deposit/manual/submit'], { depositId: o1.depositId, sms: 'FT25512S26V8' }); eq(r.code, 404, 'somebody else\'s order'); ctx.user = 'u1';
   const realNow = Date.now; Date.now = () => realNow() + 10000;

@@ -2766,7 +2766,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
       <circle class="ring-arc ring-arc-2" cx="60" cy="60" r="48" pathLength="100"/>
       <circle class="ring-arc ring-arc-3" cx="60" cy="60" r="44" pathLength="100"/>
     </svg>
-    <div class="ls-percent" id="lsPercent" role="status" aria-label="Loading">0</div>
+    <div class="ls-percent" id="lsPercent" role="status" aria-label="Chargement">0</div>
   </div>
 </div>
 
@@ -2912,9 +2912,9 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
 
 <div id="openingGate">
   <div class="og-mark" data-brandmark></div>
-  <div class="og-label">Opening in</div>
+  <div class="og-label">Ouverture dans</div>
   <div class="og-countdown" id="openingGateCountdown">--:--:--</div>
-  <div class="og-sub">We're getting ready. Come back once the countdown ends.</div>
+  <div class="og-sub">Nous nous préparons. Revenez à la fin du compte à rebours.</div>
 </div>
 
 <!-- ═══════════ AUTH ═══════════ -->
@@ -2933,7 +2933,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
   <div class="auth-screen-v2" id="authHero">
     <span class="auth-bg" id="authHeroBg" aria-hidden="true"></span>
     <!-- Language button (English / Amharic), top right of the sign-in screen. Hidden by paintLangButton() when only one language is allowed. data-no-i18n: its label is already in its own language. -->
-    <button type="button" class="lang-btn" id="langBtn" data-no-i18n style="display:none;" onclick="openLangPicker()" aria-label="Change language">
+    <button type="button" class="lang-btn" id="langBtn" data-no-i18n style="display:none;" onclick="openLangPicker()" aria-label="Changer de langue">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.8 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.8-3.8-9S9.5 5.7 12 3Z"/></svg>
       <span id="langBtnLabel">English</span>
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
@@ -2946,12 +2946,12 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
             <span class="auth-brand-fallback" id="loginBrandFallback" aria-hidden="true">P</span>
           </div>
           <p class="auth-tagline" id="authTagline" style="display:none;"></p>
-          <h1>Welcome back</h1>
-          <p>Log in to your Petro account to continue.</p>
+          <h1>Bon retour</h1>
+          <p>Connectez-vous à votre compte Petro pour continuer.</p>
         </div>
         <div class="af-v2">
           <span class="af-prefix" id="loginDial">+225</span>
-          <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)" onchange="sanitizePhoneInput(this)" onblur="sanitizePhoneInput(this)">
+          <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Saisissez votre numéro de téléphone" autocomplete="tel" oninput="sanitizePhoneInput(this)" onchange="sanitizePhoneInput(this)" onblur="sanitizePhoneInput(this)">
         </div>
         <!-- Which country this web address serves. Shown only when the
              platform actually runs in more than one, so a single-country
@@ -2962,13 +2962,13 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
         <div id="loginRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:rgba(255,255,255,.75);text-align:center;"></div>
         <div class="af-v2">
           <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-          <input id="loginPassword" type="password" placeholder="Enter your password" autocomplete="current-password">
-          <button class="af-eye" onclick="togglePw('loginPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          <input id="loginPassword" type="password" placeholder="Saisissez votre mot de passe" autocomplete="current-password">
+          <button class="af-eye" onclick="togglePw('loginPassword',this)" aria-label="Afficher le mot de passe"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
-        <p class="af-forgot"><a href="#" onclick="showAuthTab('forgot');return false;">Forgot Password?</a></p>
-        <button class="af-btn-v2" id="loginBtn" onclick="doLogin()">Log In <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
-        <div class="af-or"><span></span>or<span></span></div>
-        <button class="af-btn-outline" onclick="showAuthTab('register');return false;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.4"/><path d="M2.8 19c.7-3.3 3.2-5.2 6.2-5.2s5.5 1.9 6.2 5.2"/><path d="M18 4.6v5.2M15.4 7.2h5.2"/></svg> Create New Account</button>
+        <p class="af-forgot"><a href="#" onclick="showAuthTab('forgot');return false;">Mot de passe oublié ?</a></p>
+        <button class="af-btn-v2" id="loginBtn" onclick="doLogin()">Connexion <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+        <div class="af-or"><span></span>ou<span></span></div>
+        <button class="af-btn-outline" onclick="showAuthTab('register');return false;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.4"/><path d="M2.8 19c.7-3.3 3.2-5.2 6.2-5.2s5.5 1.9 6.2 5.2"/><path d="M18 4.6v5.2M15.4 7.2h5.2"/></svg> Créer un nouveau compte</button>
       </div>
 
       <!-- Sign Up: ONE screen -- phone, verification code (Send Code inline),
@@ -2984,36 +2984,36 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
             <img class="auth-brand-logo" id="registerBrandLogo" data-auth-brand-logo data-auth-fallback="registerBrandFallback" alt="" aria-hidden="true" style="display:none;" onerror="this.style.display='none';var f=document.getElementById('registerBrandFallback');if(f)f.style.display='flex'">
             <span class="auth-brand-fallback" id="registerBrandFallback" aria-hidden="true">P</span>
           </div>
-          <h1>Create your Petro account</h1>
-          <p>Create your account to get started.</p>
+          <h1>Créez votre compte Petro</h1>
+          <p>Créez votre compte pour commencer.</p>
         </div>
         <div class="af-v2">
           <span class="af-prefix" id="regDial">+225</span>
-          <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)" onchange="sanitizePhoneInput(this)" onblur="sanitizePhoneInput(this)">
+          <input id="regPhone" type="tel" inputmode="numeric" placeholder="Saisissez votre numéro de téléphone" autocomplete="tel" oninput="sanitizePhoneInput(this)" onchange="sanitizePhoneInput(this)" onblur="sanitizePhoneInput(this)">
         </div>
         <div id="regRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:rgba(255,255,255,.75);text-align:center;"></div>
         <div class="af-v2 with-btn" id="regOtpRow">
           <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 6v5.5c0 4.6 3 7.8 7 9 4-1.2 7-4.4 7-9V6l-7-2.5Z"/><path d="M12 8.5v5M9.5 11h5"/></svg></span>
-          <input id="regOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="Enter verification code" autocomplete="one-time-code" oninput="onRegOtpInput(this)">
-          <button class="af-inline-btn" id="regSendOtpBtn" onclick="doRegSendOtp()">Send Code</button>
+          <input id="regOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="Saisissez le code de vérification" autocomplete="one-time-code" oninput="onRegOtpInput(this)">
+          <button class="af-inline-btn" id="regSendOtpBtn" onclick="doRegSendOtp()">Envoyer le code</button>
         </div>
         <div class="af-v2">
           <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-          <input id="regPassword" type="password" placeholder="Create a password" autocomplete="new-password">
-          <button class="af-eye" onclick="togglePw('regPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          <input id="regPassword" type="password" placeholder="Créez un mot de passe" autocomplete="new-password">
+          <button class="af-eye" onclick="togglePw('regPassword',this)" aria-label="Afficher le mot de passe"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
         <div class="af-v2">
           <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-          <input id="regPassword2" type="password" placeholder="Confirm your password" autocomplete="new-password">
-          <button class="af-eye" onclick="togglePw('regPassword2',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          <input id="regPassword2" type="password" placeholder="Confirmez votre mot de passe" autocomplete="new-password">
+          <button class="af-eye" onclick="togglePw('regPassword2',this)" aria-label="Afficher le mot de passe"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
         <div class="af-v2">
           <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.4"/><path d="M2.8 19c.7-3.3 3.2-5.2 6.2-5.2s5.5 1.9 6.2 5.2"/><path d="M18 4.6v5.2M15.4 7.2h5.2"/></svg></span>
-          <input id="regReferral" type="text" placeholder="Enter invitation code (optional)" autocomplete="off" maxlength="12">
+          <input id="regReferral" type="text" placeholder="Saisissez le code d'invitation (facultatif)" autocomplete="off" maxlength="12">
         </div>
         <p class="af-reg-referral-hint" id="regReferralHint"></p>
-        <button class="af-btn-v2" id="regBtn" onclick="doRegister()">Register</button>
-        <p class="af-switch">Already have an account? <a href="#" onclick="showAuthTab('login');return false;">Log In</a></p>
+        <button class="af-btn-v2" id="regBtn" onclick="doRegister()">S'inscrire</button>
+        <p class="af-switch">Vous avez déjà un compte ? <a href="#" onclick="showAuthTab('login');return false;">Connexion</a></p>
       </div>
 
       <!-- Forgot password, reached from Log In above. No Firebase session
@@ -3029,14 +3029,14 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
             <img class="auth-brand-logo" id="forgotBrandLogo" data-auth-brand-logo data-auth-fallback="forgotBrandFallback" alt="" aria-hidden="true" style="display:none;" onerror="this.style.display='none';var f=document.getElementById('forgotBrandFallback');if(f)f.style.display='flex'">
             <span class="auth-brand-fallback" id="forgotBrandFallback" aria-hidden="true">P</span>
           </div>
-          <h1>Forgot your password?</h1>
-          <p>We will help you get back in.</p>
+          <h1>Mot de passe oublié ?</h1>
+          <p>Nous vous aiderons à retrouver l'accès.</p>
         </div>
         <div id="forgotFormGroup">
-          <p class="af-switch" style="text-align:center;margin:0 0 14px;">To reset your password, please contact Support. They will set a new one for you.</p>
+          <p class="af-switch" style="text-align:center;margin:0 0 14px;">Pour réinitialiser votre mot de passe, veuillez contacter l'assistance. Elle en définira un nouveau pour vous.</p>
           <div id="forgotSupportLinks" style="display:flex;flex-direction:column;gap:10px;"></div>
         </div>
-        <p class="af-forgot after-btn"><a href="#" onclick="showAuthTab('login');return false;">Back to Log In</a></p>
+        <p class="af-forgot after-btn"><a href="#" onclick="showAuthTab('login');return false;">Retour à la connexion</a></p>
       </div>
     </div>
   </div>
@@ -3052,16 +3052,16 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
        from here any more; 'assets'/'network' are the two new consolidated
        pages (renderAssets()/renderNetwork()) that absorb them. -->
   <div class="bottom-nav">
-    <button class="navitem" data-nav="home" onclick="navigatePage('home')"><span class="nav-ic"></span><div class="lbl">Home</div></button>
-    <button class="navitem" data-nav="assets" onclick="navigatePage('assets')"><span class="nav-ic"></span><div class="lbl">Assets</div></button>
-    <button class="navitem" data-nav="network" onclick="navigatePage('network')"><span class="nav-ic"></span><div class="lbl">Network</div></button>
-    <button class="navitem" data-nav="account" onclick="navigatePage('account')"><span class="nav-ic"></span><div class="lbl">Account</div></button>
+    <button class="navitem" data-nav="home" onclick="navigatePage('home')"><span class="nav-ic"></span><div class="lbl">Accueil</div></button>
+    <button class="navitem" data-nav="assets" onclick="navigatePage('assets')"><span class="nav-ic"></span><div class="lbl">Actifs</div></button>
+    <button class="navitem" data-nav="network" onclick="navigatePage('network')"><span class="nav-ic"></span><div class="lbl">Réseau</div></button>
+    <button class="navitem" data-nav="account" onclick="navigatePage('account')"><span class="nav-ic"></span><div class="lbl">Compte</div></button>
   </div>
 </div>
 
 <div class="sheet-bg" id="sheetBg">
   <div class="sheet-head">
-    <button class="back" onclick="closeSheet()" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#25262b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="back" onclick="closeSheet()" aria-label="Retour"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#25262b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <h2 id="sheetTitle"></h2>
   </div>
   <div class="sheet-body" id="sheetBody"></div>
@@ -3113,16 +3113,16 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
      the browser, which drops the list out of the card entirely. -->
 <div class="pay-page" id="depStatusBg">
   <div class="sheet-head pay-head">
-    <button class="back" onclick="closeDepositStatusModal()" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#25262b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="back" onclick="closeDepositStatusModal()" aria-label="Retour"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#25262b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
   </div>
   <div class="pay-body">
     <div class="pay-card">
       <div class="dep-status-icon" id="depStatusIcon"></div>
-      <h3 id="depStatusTitle">Processing your recharge</h3>
+      <h3 id="depStatusTitle">Traitement de votre recharge</h3>
       <div id="depStatusBody"></div>
       <div class="pay-actions">
-        <button class="secondary-button" id="depVerifyBtn" style="display:none;" onclick="verifyDepositNow()">Verify</button>
-        <button class="primary-button" id="depStatusCloseBtn" style="display:none;" onclick="closeDepositStatusModal()">Close</button>
+        <button class="secondary-button" id="depVerifyBtn" style="display:none;" onclick="verifyDepositNow()">Vérifier</button>
+        <button class="primary-button" id="depStatusCloseBtn" style="display:none;" onclick="closeDepositStatusModal()">Fermer</button>
       </div>
     </div>
   </div>

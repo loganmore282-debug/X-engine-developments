@@ -35,7 +35,7 @@ assert.doesNotMatch(server, /'ETB'\)/, 'no ETB fallback left in a currency label
 // ── member app ──
 assert.match(member, /var REGION = \{ key: 'ci', name: "Côte d'Ivoire", currency: 'XOF', dialCode: '225', localLength: 10, prefixes: \['01','05','07'\]/);
 assert.match(member, /languages: \['fr'\], defaultLang: 'fr'/);
-assert.match(member, /var LANG = 'fr';/); assert.match(member, /var LANG_ALLOWED = \['fr'\];/);
+assert.match(member, /var LANG = 'en';/); assert.match(member, /var LANG_ALLOWED = \['en'\];/); // 'en' only means "no runtime translation": the text itself is French
 assert.equal((shell.match(/id="(login|reg|forgot)Dial">\+225</g) || []).length, 2, 'both dial chips (Log In, Sign Up) say +225');
 assert.doesNotMatch(shell, /Dial">\+25[16]</);
 assert.match(shell, /<html lang="fr">/);

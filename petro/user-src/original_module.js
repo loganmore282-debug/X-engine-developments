@@ -131,11 +131,14 @@ var LANGS = [
   { code: 'am',  name: 'Amharic',     native: '\u12a0\u121b\u122d\u129b' },
 ];
 var LANG_CODES = LANGS.map(l => l.code);
-var LANG = 'fr';
+// THE APP IS WRITTEN IN FRENCH (owner: "I don't want auto translation, I want it to be in French, all of it, no English").
+// There is no runtime translation any more: every string in this file, in index.html and in the server's messages IS the
+// French text. 'en' below only means "leave the text alone" -- t() returns what it is given and the DOM sweep is off.
+var LANG = 'en';
 // What this country allows, from the region. Until the region lands it is
 // English alone -- one option is not a choice, so the button stays hidden
 // rather than flashing a list that is about to change.
-var LANG_ALLOWED = ['fr'];
+var LANG_ALLOWED = ['en'];
 var LANG_STORE_KEY = 'petro_lang';
 // ── THE TABLE ──
 // One row per English string: [english, lg, sw, fr, rw, nyn, am].
@@ -1303,6 +1306,8 @@ try {
 // Petro-specific loader treatment -- the replacement loader shows a plain
 // numeric percentage only, which needs no translation at all.
 function applyLanguage(){
+  paintLangButton();
+  return;
   try {
     translateTree(document.body);
     const btn = $('langBtnLabel');
@@ -1339,6 +1344,8 @@ function resolveLang(){
   return allowed[0] || 'en';
 }
 function applyRegionLanguages(){
+  LANG_ALLOWED = ['en']; LANG = 'en'; paintLangButton();
+  return;
   const list = (REGION && Array.isArray(REGION.languages) ? REGION.languages : [])
     .map(c => String(c || '').toLowerCase()).filter(c => LANG_CODES.includes(c));
   LANG_ALLOWED = list.length ? list.filter((c, i) => list.indexOf(c) === i) : ['en'];
@@ -1392,8 +1399,8 @@ function openLangPicker(){
   // data-no-i18n on the whole sheet: every name in it is already written in
   // its own language and must never be put through the table.
   bg.innerHTML = `<div class="lang-sheet">
-    <div class="lang-head"><b>${esc(t('Language'))}</b>
-      <button class="lang-x" onclick="closeLangPicker()" aria-label="Close">
+    <div class="lang-head"><b>${esc(t('Langue'))}</b>
+      <button class="lang-x" onclick="closeLangPicker()" aria-label="Fermer">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
@@ -1477,7 +1484,7 @@ function toLocalPhoneDisplay(num){
 // someone pasting a full number WITH the country code straight into this
 // now-local-only field (strips a leading "256" back off first) rather than
 // mangling it down to a wrong, truncated value.
-var GIFT_CODE_REFERENCE_SVG = '<svg class="gift-reference-svg" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Gift box"><defs><linearGradient id="giftGold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff3bf"/><stop offset="1" stop-color="#dba344"/></linearGradient><linearGradient id="giftRed" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff5c2c"/><stop offset=".5" stop-color="#e70618"/><stop offset="1" stop-color="#af0012"/></linearGradient><linearGradient id="giftSide" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e20a1a"/><stop offset="1" stop-color="#9c0010"/></linearGradient></defs><rect x="4" y="4" width="112" height="112" rx="2" fill="url(#giftGold)"/><g fill="none" stroke-linecap="round"><path d="M60 12v17M36 21l8 12M83 21l-8 12M21 42l15 6M99 42l-15 6M24 69l11-3M96 69l-11-3" stroke="#cf2620" stroke-width="2.6"/><path d="M47 16l1 5M74 16l-1 5M17 56l5 1M103 56l-5 1M39 36l-3-3M81 36l3-3" stroke="#fff7d6" stroke-width="2"/></g><path d="m42 52 18-8 20 8-19 9Z" fill="#ffba32"/><path d="M42 53v37l19 10V61Z" fill="url(#giftRed)"/><path d="M61 61v39l19-10V53Z" fill="url(#giftSide)"/><path d="m41 52 20 9 20-9v10l-20 9-20-9Z" fill="#fb3025"/><path d="m55 58 8 4v37l-8-4Z" fill="#ffbd31"/><path d="m63 62 7-3v36l-7 4Z" fill="#ffcc48"/><path d="m55 46 8-3 7 3-7 3Z" fill="#ffe16c"/><path d="M61 46c-9-1-15-5-13-10 2-5 11 0 13 10Zm2 0c9-1 15-5 13-10-2-5-11 0-13 10Z" fill="#ffbd31" stroke="#d87016" stroke-width="1.5" stroke-linejoin="round"/><circle cx="62" cy="46" r="3.6" fill="#ffe56e"/><path d="m27 28 2 3 3-2-2 3 3 3-4-1-2 3v-4l-3-2 4-1Zm66 5 2 2 2-2-1 3 3 2-4-1-2 3v-4l-3-2 3-1Z" fill="#fff8db"/></svg>';
+var GIFT_CODE_REFERENCE_SVG = '<svg class="gift-reference-svg" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Coffret cadeau"><defs><linearGradient id="giftGold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff3bf"/><stop offset="1" stop-color="#dba344"/></linearGradient><linearGradient id="giftRed" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff5c2c"/><stop offset=".5" stop-color="#e70618"/><stop offset="1" stop-color="#af0012"/></linearGradient><linearGradient id="giftSide" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e20a1a"/><stop offset="1" stop-color="#9c0010"/></linearGradient></defs><rect x="4" y="4" width="112" height="112" rx="2" fill="url(#giftGold)"/><g fill="none" stroke-linecap="round"><path d="M60 12v17M36 21l8 12M83 21l-8 12M21 42l15 6M99 42l-15 6M24 69l11-3M96 69l-11-3" stroke="#cf2620" stroke-width="2.6"/><path d="M47 16l1 5M74 16l-1 5M17 56l5 1M103 56l-5 1M39 36l-3-3M81 36l3-3" stroke="#fff7d6" stroke-width="2"/></g><path d="m42 52 18-8 20 8-19 9Z" fill="#ffba32"/><path d="M42 53v37l19 10V61Z" fill="url(#giftRed)"/><path d="M61 61v39l19-10V53Z" fill="url(#giftSide)"/><path d="m41 52 20 9 20-9v10l-20 9-20-9Z" fill="#fb3025"/><path d="m55 58 8 4v37l-8-4Z" fill="#ffbd31"/><path d="m63 62 7-3v36l-7 4Z" fill="#ffcc48"/><path d="m55 46 8-3 7 3-7 3Z" fill="#ffe16c"/><path d="M61 46c-9-1-15-5-13-10 2-5 11 0 13 10Zm2 0c9-1 15-5 13-10-2-5-11 0-13 10Z" fill="#ffbd31" stroke="#d87016" stroke-width="1.5" stroke-linejoin="round"/><circle cx="62" cy="46" r="3.6" fill="#ffe56e"/><path d="m27 28 2 3 3-2-2 3 3 3-4-1-2 3v-4l-3-2 4-1Zm66 5 2 2 2-2-1 3 3 2-4-1-2 3v-4l-3-2 3-1Z" fill="#fff8db"/></svg>';
 var ICONS = {
   // ── Petro additions ──────────────────────────────────────────────────
   grid: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg>',
@@ -1774,7 +1781,7 @@ function togglePw(id, btn){
   el.type = showing ? 'text' : 'password';
   if (btn) {
     btn.innerHTML = showing ? ICONS.eyeOff : ICONS.eye;
-    btn.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
+    btn.setAttribute('aria-label', showing ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
   }
 }
 
@@ -1816,7 +1823,7 @@ var _memberSession = window.createPetroIdleSession('petro_member_session', funct
   // NOT permanently disable Chrome's autofill-then-submit convenience the
   // way a deliberate "Log Out" tap does.
   window.doLogout({ auto: true }).catch(() => {});
-  notify(window._sessionFailureMessage || 'Your session ended. Please log in again. If this repeats, check automatic date and time on your phone.');
+  notify(window._sessionFailureMessage || 'Votre session a pris fin. Veuillez vous reconnecter. Si cela se répète, vérifiez la date et l\'heure automatiques de votre téléphone.');
   window._sessionFailureMessage = '';
 }, () => post('/auth/session/activity', {}));
 var _apiPending = new Map();
@@ -1845,7 +1852,7 @@ async function apiRequest(path, opts){
   // below), so gating them here would discard that legitimate boot data
   // every single page load.
   const isPublicCall = path.indexOf('/public/') === 0;
-  if (!isPublicCall && STATE.user && path !== '/auth/session/logout' && !_memberSession.check()) return { status:'error', message:'Session expired. Log in again.' };
+  if (!isPublicCall && STATE.user && path !== '/auth/session/logout' && !_memberSession.check()) return { status:'error', message:'Session expirée. Reconnectez-vous.' };
   const startEpoch = STATE.authEpoch;
   // ── Content-Type ONLY WHEN THERE IS A BODY ──
   // MEASURED (test-boot-speed.py, against a real cross-origin server):
@@ -1880,7 +1887,7 @@ async function apiRequest(path, opts){
         const token = await Promise.race([
           window.fbAuth.currentUser.getIdToken(),
           new Promise((_, reject) => {
-            tokenAbort = () => reject(new Error('Authentication request timed out'));
+            tokenAbort = () => reject(new Error('La demande d\'authentification a expiré'));
             if (controller.signal.aborted) tokenAbort();
             else controller.signal.addEventListener('abort', tokenAbort, { once: true });
           })
@@ -1893,15 +1900,15 @@ async function apiRequest(path, opts){
     const resp = await fetch(API_BASE + path, Object.assign({}, opts, { headers, signal: controller.signal }));
     data = await resp.json();
     if (resp.status === 401 && !isPublicCall && STATE.authEpoch === startEpoch && STATE.user) {
-      window._sessionFailureMessage = 'Your login session was rejected. Please log in again. If this continues, contact support.';
+      window._sessionFailureMessage = 'Votre session de connexion a été refusée. Veuillez vous reconnecter. Si cela continue, contactez l\'assistance.';
       _memberSession.expire();
     }
-    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid response');
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Réponse invalide');
   } catch (e) {
     if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', stale: true, message: 'Session changed' };
     return { status: 'error', message: controller.signal.aborted
-      ? 'Request timed out. Check Transaction Statement before trying a payment again.'
-      : 'Could not reach the server. Check your connection and try again.' };
+      ? 'La requête a expiré. Consultez l\'Historique du solde avant de tenter un nouveau paiement.'
+      : 'Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.' };
   } finally {
     clearTimeout(timeout);
     if (opts.signal) opts.signal.removeEventListener('abort', abort);
@@ -1948,8 +1955,8 @@ function showHostParked(msg){
   box.setAttribute('style', 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--snow-canvas,#fbf1e8);');
   box.innerHTML = `<div style="max-width:340px;text-align:center;">
     <div style="font-size:26px;font-weight:800;margin-bottom:12px;">${esc(brandName())}</div>
-    <div style="font-size:16px;line-height:1.55;color:var(--snow-ink,#1a1310);">${esc(msg || 'This address does not serve the app.')}</div>
-    ${host ? `<div style="font-size:13px;margin-top:14px;color:var(--snow-muted,#8c7f76);">You opened <b>${esc(host)}</b>.</div>` : ''}
+    <div style="font-size:16px;line-height:1.55;color:var(--snow-ink,#1a1310);">${esc(msg || 'Cette adresse ne sert pas l\'application.')}</div>
+    ${host ? `<div style="font-size:13px;margin-top:14px;color:var(--snow-muted,#8c7f76);">Vous avez ouvert <b>${esc(host)}</b>.</div>` : ''}
   </div>`;
   document.body.appendChild(box);
 }
@@ -2070,8 +2077,8 @@ function resetAuthScreen(){
     }
     window._regOtp = { otpId: null, ticket: null, phone: '' };
     window._forgotOtp = { otpId: null, ticket: null, phone: '' };
-    setBtnLoading('regBtn', false, 'Register');
-    setBtnLoading('loginBtn', false, 'Log In');
+    setBtnLoading('regBtn', false, 'S\'inscrire');
+    setBtnLoading('loginBtn', false, 'Connexion');
   } catch (_) {}
 }
 // ── OTP RESEND COOLDOWN ──
@@ -2085,7 +2092,7 @@ var _otpCooldownActive = {};
 function startOtpResendCooldown(linkId, seconds, idleLabel){
   const el = $(linkId);
   if (!el) return;
-  const label = idleLabel || 'Send Code';
+  const label = idleLabel || 'Envoyer le code';
   _otpCooldownActive[linkId] = true;
   el.style.pointerEvents = 'none';
   el.style.opacity = '.55';
@@ -2122,23 +2129,23 @@ function setBtnLoading(id, loading, label, busy){
 }
 function fbErrMsg(e){
   const code = e && e.code || '';
-  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') return 'Incorrect phone number or password.';
-  if (code === 'auth/user-not-found') return 'No account found for that number.';
-  if (code === 'auth/email-already-in-use') return 'An account with that number already exists.';
-  if (code === 'auth/weak-password') return 'Password must be at least 6 characters.';
-  if (code === 'auth/too-many-requests') return 'Too many attempts. Try again shortly.';
+  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') return 'Numéro de téléphone ou mot de passe incorrect.';
+  if (code === 'auth/user-not-found') return 'Aucun compte trouvé pour ce numéro.';
+  if (code === 'auth/email-already-in-use') return 'Un compte avec ce numéro existe déjà.';
+  if (code === 'auth/weak-password') return 'Le mot de passe doit comporter au moins 6 caractères.';
+  if (code === 'auth/too-many-requests') return 'Trop de tentatives. Réessayez sous peu.';
   // A weak connection is the commonest real failure here, and without these
   // the member was shown Firebase's own developer text, e.g.
   // "Firebase: Error (auth/network-request-failed)."
-  if (code === 'auth/network-request-failed' || code === 'auth/timeout') return 'Could not reach the sign-in service. Check your connection and try again.';
-  if (code === 'auth/user-disabled') return 'This account has been disabled. Contact support.';
-  if (code === 'auth/invalid-email') return 'Enter a valid mobile number.';
+  if (code === 'auth/network-request-failed' || code === 'auth/timeout') return 'Impossible de joindre le service de connexion. Vérifiez votre connexion et réessayez.';
+  if (code === 'auth/user-disabled') return 'Ce compte a été désactivé. Contactez l\'assistance.';
+  if (code === 'auth/invalid-email') return 'Saisissez un numéro de mobile valide.';
   if (code === 'auth/operation-not-allowed' || code === 'auth/internal-error' || code === 'auth/quota-exceeded' || code === 'auth/app-not-authorized' || code === 'auth/invalid-api-key')
-    return 'Sign-in is temporarily unavailable. Please try again shortly.';
+    return 'La connexion est temporairement indisponible. Veuillez réessayer sous peu.';
   const msg = e && e.message;
   // Any other Firebase code, or its "Firebase: ..." wording, is not for members.
-  if (code.indexOf('auth/') === 0 || /^Firebase:/i.test(msg || '')) return 'Something went wrong. Try again.';
-  return msg ? msg : 'Something went wrong. Try again.';
+  if (code.indexOf('auth/') === 0 || /^Firebase:/i.test(msg || '')) return 'Une erreur s\'est produite. Réessayez.';
+  return msg ? msg : 'Une erreur s\'est produite. Réessayez.';
 }
 // ── THE SIGN-IN SERVICE MAY NOT BE THERE ──
 // Firebase is a separate <script type="module"> that imports from gstatic
@@ -2168,7 +2175,7 @@ setTimeout(function(){
   try {
     $('loadingScreen').style.display = 'none';
     if ($('app').style.display === 'none') $('authScreen').style.display = '';
-    notify('Could not load the sign-in service. Check your connection, then reload the app.');
+    notify('Impossible de charger le service de connexion. Vérifiez votre connexion, puis rechargez l\'application.');
   } catch (_) {}
 }, Number(window._FIREBASE_WATCHDOG_MS) || 15000);
 // ── SAVED-CREDENTIAL AUTO SIGN-IN ──
@@ -2230,15 +2237,15 @@ window.doLogin = async function(){
   if (window._logoutPromise) await window._logoutPromise;
   const phone = cleanPhone($('loginPhone').value);
   const pass = $('loginPassword').value;
-  if (!phone) return notify('Enter a valid ' + regionName() + ' mobile number.');
-  if (!pass) return notify('Enter your password.');
-  setBtnLoading('loginBtn', true, 'Log In', 'Logging in…');
+  if (!phone) return notify(`Saisissez un numéro de mobile ${regionName()} valide.`);
+  if (!pass) return notify('Entrez votre mot de passe.');
+  setBtnLoading('loginBtn', true, 'Connexion', 'Connexion en cours…');
   window._pendingLoginSuccess = true;
   try {
     // Tries this region's address, then the other shape for the same region
     // -- see loginAddressCandidates(). The LAST error is the one reported, so
     // a genuinely wrong password still reads as a wrong password.
-    if (!(await firebaseReady(8000, 'fbSignIn'))) throw new Error('Sign-in is not available right now. Check your connection and try again.');
+    if (!(await firebaseReady(8000, 'fbSignIn'))) throw new Error('La connexion n\'est pas disponible pour le moment. Vérifiez votre connexion et réessayez.');
     const tries = loginAddressCandidates(phone);
     let email = tries[0], lastErr = null;
     for (const cand of tries) {
@@ -2264,12 +2271,12 @@ window.doLogin = async function(){
   catch (e) {
     window._pendingLoginSuccess = false;
     notify(fbErrMsg(e));
-    setBtnLoading('loginBtn', false, 'Log In');
+    setBtnLoading('loginBtn', false, 'Connexion');
   }
   } finally {
     window._loginInProgress = false;
     if (!window._suppressAutofillLogin) window._autofillLoginTried = false;
-    setBtnLoading('loginBtn', false, 'Log In');
+    setBtnLoading('loginBtn', false, 'Connexion');
   }
 };
 // ── SIGN UP: phone -> OTP -> password -> confirm password ──
@@ -2320,7 +2327,7 @@ var OTP_TICKET_FRESH_MS = 9 * 60 * 1000;
 // instead of spending another of the code's five attempts.
 function regVerifyOtp(code){
   const st = window._regOtp;
-  if (!st.otpId) return Promise.resolve({ ok: false, message: 'Please tap Send Code first.' });
+  if (!st.otpId) return Promise.resolve({ ok: false, message: 'Veuillez d\'abord toucher « Envoyer le code ».' });
   if (st.ticket && st.verifiedCode === code && Date.now() - st.verifiedAt < OTP_TICKET_FRESH_MS) return Promise.resolve({ ok: true });
   if (st.pending && st.pendingCode === code) return st.pending;
   st.pendingCode = code;
@@ -2333,7 +2340,7 @@ function regVerifyOtp(code){
       st.ticket = v.ticket; st.verifiedCode = code; st.verifiedAt = Date.now();
       return { ok: true };
     }
-    return { ok: false, message: v.message || 'Incorrect verification code.' };
+    return { ok: false, message: v.message || 'Code de vérification incorrect.' };
   });
   st.pending = p;
   return p;
@@ -2348,16 +2355,16 @@ window.onRegOtpInput = function(el){
 };
 window.doRegSendOtp = async function(){
   const phone = cleanPhone($('regPhone').value);
-  if (!phone) return regError('Enter a valid ' + regionName() + ' mobile number.');
+  if (!phone) return regError(`Saisissez un numéro de mobile ${regionName()} valide.`);
   regError('');
-  setBtnLoading('regSendOtpBtn', true, 'Send Code', 'Sending…');
+  setBtnLoading('regSendOtpBtn', true, 'Envoyer le code', 'Envoi en cours…');
   const d = await post('/auth/otp/send', { purpose: 'register', phone });
-  setBtnLoading('regSendOtpBtn', false, 'Send Code');
-  if (d.status !== 'success') return regError(d.message || 'Could not send the code');
+  setBtnLoading('regSendOtpBtn', false, 'Envoyer le code');
+  if (d.status !== 'success') return regError(d.message || 'Impossible d\'envoyer le code');
   window._regOtp = { otpId: d.otpId, ticket: null, phone };
   const otpInput = $('regOtp');
   if (otpInput) { otpInput.value = ''; try { otpInput.focus(); } catch (_) {} }
-  notify('Verification code sent. It can take a moment to arrive.');
+  notify('Code de vérification envoyé. Son arrivée peut prendre un instant.');
   startOtpResendCooldown('regSendOtpBtn', 30);
   listenForSmsCode('regOtp');
 };
@@ -2371,30 +2378,30 @@ window.doRegister = async function(){
   // whether that's the link's code, untouched, or something typed by hand.
   // Petro makes it REQUIRED (Snow allowed skipping it) -- see CLAUDE.md.
   const referral = $('regReferral').value.trim();
-  if (!phone) return regError('Enter a valid ' + regionName() + ' mobile number.');
+  if (!phone) return regError(`Saisissez un numéro de mobile ${regionName()} valide.`);
   const otpOn = otpVerificationEnabled();
   if (otpOn) {
     if (!window._regOtp.otpId || window._regOtp.phone !== phone)
-      return regError('Please tap Send Code first.');
-    if (!/^\d{6}$/.test(code)) return regError('Enter the 6-digit verification code sent to your phone.');
+      return regError('Veuillez d\'abord toucher « Envoyer le code ».');
+    if (!/^\d{6}$/.test(code)) return regError('Saisissez le code de vérification à 6 chiffres envoyé sur votre téléphone.');
   }
-  if (!pass || pass.length < 6) return regError('Password must be at least 6 characters.');
-  if (pass !== pass2) return regError('The two passwords do not match.');
+  if (!pass || pass.length < 6) return regError('Le mot de passe doit comporter au moins 6 caractères.');
+  if (pass !== pass2) return regError('Les deux mots de passe ne correspondent pas.');
   // Required or not is the SERVER's call (settings.referralRequired), which
   // already accounts for the founder case: on a platform with no members yet
   // there is no code in existence to type, so the first account is let
   // through. Hard-coding "always required" here made the app impossible to
   // sign up to at all on day one.
   if (!referral && referralIsRequired())
-    return regError('A referral code is required to sign up. Ask the person who invited you for theirs.');
+    return regError('Un code de parrainage est nécessaire pour s\'inscrire. Demandez le sien à la personne qui vous a invité.');
   regError('');
   // See firebaseReady(): without the sign-in service there is nothing to
   // create the account with, and the code below would only throw at the member.
   if (!(window.fbCreateUser && window.fbAuth)) {
-    setBtnLoading('regBtn', true, 'Register', 'Connecting…');
+    setBtnLoading('regBtn', true, 'S\'inscrire', 'Connexion en cours…');
     const ready = await firebaseReady(8000, 'fbCreateUser');
-    setBtnLoading('regBtn', false, 'Register');
-    if (!ready) return regError('Sign-up is not available right now. Check your connection and try again.');
+    setBtnLoading('regBtn', false, 'S\'inscrire');
+    if (!ready) return regError('L\'inscription n\'est pas disponible pour le moment. Vérifiez votre connexion et réessayez.');
   }
   // Owner: "when l disable otp verification system the functions go away
   // completely" -- with the toggle off, registration skips straight to
@@ -2408,14 +2415,14 @@ window.doRegister = async function(){
     // been checked yet shows the extra "Verifying code…" step.
     const st = window._regOtp;
     const checked = st.ticket && st.verifiedCode === code && Date.now() - st.verifiedAt < OTP_TICKET_FRESH_MS;
-    if (!checked) setBtnLoading('regBtn', true, 'Register', 'Verifying code…');
+    if (!checked) setBtnLoading('regBtn', true, 'S\'inscrire', 'Vérification du code…');
     const r = await regVerifyOtp(code);
     if (!r.ok) {
-      setBtnLoading('regBtn', false, 'Register');
-      return regError(r.stale ? 'A new code was sent. Enter the latest code.' : (r.message || 'Incorrect verification code.'));
+      setBtnLoading('regBtn', false, 'S\'inscrire');
+      return regError(r.stale ? 'Un nouveau code a été envoyé. Saisissez le dernier code.' : (r.message || 'Code de vérification incorrect.'));
     }
   }
-  setBtnLoading('regBtn', true, 'Register', 'Creating your account…');
+  setBtnLoading('regBtn', true, 'S\'inscrire', 'Création de votre compte…');
   STATE.refCode = referral;
   window._pendingRegPin = '';
   window._pendingRegPhone = phone;
@@ -2468,7 +2475,7 @@ window.doRegister = async function(){
     // /register call, and a "Registration successful" toast on a plain login.
     window._pendingRegPin = ''; window._pendingRegPhone = ''; window._pendingRegOtpTicket = '';
     regError(fbErrMsg(e));
-    setBtnLoading('regBtn', false, 'Register');
+    setBtnLoading('regBtn', false, 'S\'inscrire');
   }
 };
 // ── FORGOT PASSWORD: phone -> OTP -> new password, one screen ──
@@ -2488,24 +2495,24 @@ function paintForgotSupport(){
   const s = STATE.settings || {};
   const link = (href, label, extra) => `<a class="af-btn-v2" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;${extra || ''}" href="${esc(href)}" target="_blank" rel="noopener">${esc(label)}</a>`;
   const out = [];
-  if (s.supportTelegram) out.push(link(s.supportTelegram, 'Telegram Customer Service'));
-  if (s.whatsappContact) out.push(link(s.whatsappContact, 'WhatsApp Support'));
-  if (s.telegramGroup) out.push(link(s.telegramGroup, 'Telegram Group'));
+  if (s.supportTelegram) out.push(link(s.supportTelegram, 'Service client Telegram'));
+  if (s.whatsappContact) out.push(link(s.whatsappContact, 'Assistance WhatsApp'));
+  if (s.telegramGroup) out.push(link(s.telegramGroup, 'Groupe Telegram'));
   box.innerHTML = out.length ? out.join('') : '';
   applyLanguage();
 }
 window.doForgotSendOtp = async function(){
   const phone = cleanPhone($('forgotPhone').value);
-  if (!phone) return forgotError('Enter a valid ' + regionName() + ' mobile number.');
+  if (!phone) return forgotError(`Saisissez un numéro de mobile ${regionName()} valide.`);
   forgotError('');
-  setBtnLoading('forgotSendOtpBtn', true, 'Send Code', 'Sending…');
+  setBtnLoading('forgotSendOtpBtn', true, 'Envoyer le code', 'Envoi en cours…');
   const d = await post('/auth/otp/send', { purpose: 'reset', phone });
-  setBtnLoading('forgotSendOtpBtn', false, 'Send Code');
-  if (d.status !== 'success') return forgotError(d.message || 'Could not send the code');
+  setBtnLoading('forgotSendOtpBtn', false, 'Envoyer le code');
+  if (d.status !== 'success') return forgotError(d.message || 'Impossible d\'envoyer le code');
   window._forgotOtp = { otpId: d.otpId, ticket: null, phone };
   const otpInput = $('forgotOtp');
   if (otpInput) { otpInput.value = ''; try { otpInput.focus(); } catch (_) {} }
-  notify('Verification code sent. It can take a moment to arrive.');
+  notify('Code de vérification envoyé. Son arrivée peut prendre un instant.');
   startOtpResendCooldown('forgotSendOtpBtn', 30);
   listenForSmsCode('forgotOtp');
 };
@@ -2514,21 +2521,21 @@ window.doForgotSubmit = async function(){
   const code = ($('forgotOtp').value || '').trim();
   const pass = $('forgotPassword').value;
   const pass2 = $('forgotPassword2').value;
-  if (!phone) return forgotError('Enter a valid ' + regionName() + ' mobile number.');
-  if (!window._forgotOtp.otpId || window._forgotOtp.phone !== phone) return forgotError('Please tap Send Code first.');
-  if (!/^\d{6}$/.test(code)) return forgotError('Enter the 6-digit verification code sent to your phone.');
-  if (!pass || pass.length < 6) return forgotError('Password must be at least 6 characters.');
-  if (pass !== pass2) return forgotError('The two passwords do not match.');
+  if (!phone) return forgotError(`Saisissez un numéro de mobile ${regionName()} valide.`);
+  if (!window._forgotOtp.otpId || window._forgotOtp.phone !== phone) return forgotError('Veuillez d\'abord toucher « Envoyer le code ».');
+  if (!/^\d{6}$/.test(code)) return forgotError('Saisissez le code de vérification à 6 chiffres envoyé sur votre téléphone.');
+  if (!pass || pass.length < 6) return forgotError('Le mot de passe doit comporter au moins 6 caractères.');
+  if (pass !== pass2) return forgotError('Les deux mots de passe ne correspondent pas.');
   forgotError('');
-  setBtnLoading('forgotSubmitBtn', true, 'Reset Password', 'Verifying code…');
+  setBtnLoading('forgotSubmitBtn', true, 'Réinitialiser le mot de passe', 'Vérification du code…');
   const v = await post('/auth/otp/verify', { otpId: window._forgotOtp.otpId, code });
-  if (v.status !== 'success') { setBtnLoading('forgotSubmitBtn', false, 'Reset Password'); return forgotError(v.message || 'Incorrect verification code.'); }
+  if (v.status !== 'success') { setBtnLoading('forgotSubmitBtn', false, 'Réinitialiser le mot de passe'); return forgotError(v.message || 'Code de vérification incorrect.'); }
   window._forgotOtp.ticket = v.ticket;
-  setBtnLoading('forgotSubmitBtn', true, 'Reset Password', 'Resetting password…');
+  setBtnLoading('forgotSubmitBtn', true, 'Réinitialiser le mot de passe', 'Réinitialisation du mot de passe…');
   const d = await post('/auth/reset/confirm', { phone: window._forgotOtp.phone, ticket: window._forgotOtp.ticket, newPassword: pass });
-  setBtnLoading('forgotSubmitBtn', false, 'Reset Password');
-  if (d.status !== 'success') return forgotError(d.message || 'Could not reset your password');
-  notify('Password reset. Please log in.');
+  setBtnLoading('forgotSubmitBtn', false, 'Réinitialiser le mot de passe');
+  if (d.status !== 'success') return forgotError(d.message || 'Impossible de réinitialiser votre mot de passe');
+  notify('Mot de passe réinitialisé. Veuillez vous connecter.');
   window._forgotOtp = { otpId: null, ticket: null, phone: '' };
   $('loginPhone').value = $('forgotPhone').value;
   $('loginPassword').value = '';
@@ -2962,7 +2969,7 @@ function updateReferralFieldHint(){
   const input = $('regReferral');
   if (!input) return;
   const required = referralIsRequired();
-  input.placeholder = required ? 'Referral code' : 'Referral code (optional)';
+  input.placeholder = required ? 'Code de parrainage' : 'Code de parrainage (facultatif)';
   const hint = $('regReferralHint');
   if (hint) {
     // Owner: "don't replace it with any word down... let only optional in
@@ -2972,7 +2979,7 @@ function updateReferralFieldHint(){
     // time. Nothing shows here at all in that case now -- hidden outright
     // (not just emptied), so no blank line is left behind either.
     if (required) {
-      hint.textContent = 'Referral code is required';
+      hint.textContent = 'Le code de parrainage est obligatoire';
       hint.style.display = '';
     } else {
       hint.textContent = '';
@@ -3053,10 +3060,10 @@ function handleMemberAuth(user){
 }
 window.addEventListener('snow-auth', ev => {
   handleMemberAuth(ev.detail).catch(() => {
-    notify('Could not open your account. Please try logging in again.');
+    notify('Impossible d\'ouvrir votre compte. Veuillez vous reconnecter.');
     $('loadingScreen').style.display = 'none';
     $('authScreen').style.display = '';
-    setBtnLoading('loginBtn', false, 'Log In');
+    setBtnLoading('loginBtn', false, 'Connexion');
   });
 });
 async function processMemberAuth(user){
@@ -3077,7 +3084,7 @@ async function processMemberAuth(user){
       if (!_memberSession.begin(user.uid + ':' + started, started, false)) return;
       try { sessionStorage.removeItem('petro_relogin_required'); } catch (_) {}
     } catch (_) {
-      notify('Could not verify your login session. Please try again.');
+      notify('Impossible de vérifier votre session. Veuillez réessayer.');
       await window.doLogout({ auto: true }); return;
     }
   } else { _memberSession.clear(); clearCachedState(); }
@@ -3094,8 +3101,8 @@ async function processMemberAuth(user){
     $('loadingScreen').style.display = 'none';
     $('app').style.display = 'none';
     $('authScreen').style.display = '';
-    setBtnLoading('loginBtn', false, 'Log In');
-    setBtnLoading('regBtn', false, 'Sign Up');
+    setBtnLoading('loginBtn', false, 'Connexion');
+    setBtnLoading('regBtn', false, 'S\'inscrire');
     // Sign Up needs to know whether a referral code is required BEFORE
     // anyone submits, and boot() (which normally loads settings) only runs
     // after sign-in. Without this the screen would fall back to "required"
@@ -3209,7 +3216,7 @@ async function enterApp(){
   resetAuthScreen();
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
-  if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Login successful ✓')); }
+  if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Connexion réussie ✓')); }
   refreshAppDataInBackground(uid);
 }
 // Shared by both bootFromNetwork() branches below -- retries /register,
@@ -3233,7 +3240,7 @@ async function registerCurrentUser(pin, phone, otpTicket){
   // doRegister()'s email-already-in-use branch, which signs them in and
   // finishes this same registration with the corrected code.
   if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode && !referralIsRequired()) {
-    notify(reg.message || t('That referral code is invalid. Continuing without it.'));
+    notify(reg.message || t('Ce code de parrainage est invalide. Nous continuons sans lui.'));
     STATE.refCode = '';
     reg = await post('/register', { referralCode: '', pin: pin || '', phone: phone || '', otpTicket: otpTicket || '' });
   }
@@ -3252,9 +3259,9 @@ var SIGNUP_UNFINISHED_CODES = ['OTP_REQUIRED', 'REFERRAL_REQUIRED', 'BAD_REFERRA
 async function abandonUnfinishedSignup(reg){
   $('loadingScreen').style.display = 'none';
   if (SIGNUP_UNFINISHED_CODES.indexOf(reg.code) === -1) {
-    notify(reg.message || 'Could not complete registration');
+    notify(reg.message || 'Impossible de finaliser l\'inscription');
     $('authScreen').style.display = '';
-    setBtnLoading('regBtn', false, 'Register');
+    setBtnLoading('regBtn', false, 'S\'inscrire');
     return;
   }
   const local = localDigits(String((STATE.user && STATE.user.email) || '').split('@')[0]);
@@ -3264,10 +3271,10 @@ async function abandonUnfinishedSignup(reg){
   showAuthTab('register');
   if (local && $('regPhone')) $('regPhone').value = (keepsLeadZero() ? '' : '0') + local;
   if ($('regReferral') && STATE.refCode) $('regReferral').value = STATE.refCode;
-  setBtnLoading('regBtn', false, 'Register');
+  setBtnLoading('regBtn', false, 'S\'inscrire');
   notify(reg.code === 'OTP_REQUIRED'
-    ? 'Your sign-up was not finished. Verify your number below to finish creating your account.'
-    : (reg.message || 'Your sign-up was not finished.') + ' Complete your sign-up below.');
+    ? 'Votre inscription n\'est pas terminée. Vérifiez votre numéro ci-dessous pour finir de créer votre compte.'
+    : (reg.message || 'Votre inscription n\'est pas terminée.') + ' Terminez votre inscription ci-dessous.');
 }
 async function bootFromNetwork(uid){
   // Was `!!window._pendingRegOtpTicket` -- broke the moment OTP verification
@@ -3301,9 +3308,9 @@ async function bootFromNetwork(uid){
     if (reg.stale || !STATE.user || STATE.user.uid !== uid) return;
     if (reg.status !== 'success' && reg.status !== 'already_done') {
       $('loadingScreen').style.display = 'none';
-      notify(reg.message || 'Could not complete registration');
+      notify(reg.message || 'Impossible de finaliser l\'inscription');
       $('authScreen').style.display = '';
-      setBtnLoading('regBtn', false, 'Register');
+      setBtnLoading('regBtn', false, 'S\'inscrire');
       return;
     }
     window._pendingRegPin = ''; window._pendingRegPhone = ''; window._pendingRegOtpTicket = '';
@@ -3329,7 +3336,7 @@ async function bootFromNetwork(uid){
   if (r.status === 'error') {
     $('loadingScreen').style.display = 'none';
     if (r.code === 'BANNED') { notify(r.message); await window.fbSignOut(); return; }
-    notify(r.message || 'Could not load your account');
+    notify(r.message || 'Impossible de charger votre compte');
     await window.fbSignOut();
     return;
   }
@@ -3360,8 +3367,8 @@ async function bootFromNetwork(uid){
   resetAuthScreen();
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
-  if (signupFlow) { window._pendingLoginSuccess = false; notify(t('Registration successful ✓')); }
-  else if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Login successful ✓')); }
+  if (signupFlow) { window._pendingLoginSuccess = false; notify(t('Inscription réussie ✓')); }
+  else if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Connexion réussie ✓')); }
   // The invite-address pool, fetched behind the app rather than in front of
   // it, so even the FIRST open of the Referral screen has an address ready
   // and costs no round trip. Tiny (a few hostnames), un-awaited, and a
@@ -3850,10 +3857,10 @@ function maybeShowAnnouncement(){
   const bg = $('annBg'), sheet = $('annSheet');
   if (!bg || !sheet) return;
   const ctas = [];
-  if (s.whatsappGroup) ctas.push(`<a class="whatsapp" href="${esc(s.whatsappGroup)}" target="_blank" rel="noopener">${ICONS.whatsapp}<span>WhatsApp Channel</span></a>`);
-  if (s.telegramGroup) ctas.push(`<a class="telegram" href="${esc(s.telegramGroup)}" target="_blank" rel="noopener">${ICONS.telegram}<span>Telegram Group</span></a>`);
+  if (s.whatsappGroup) ctas.push(`<a class="whatsapp" href="${esc(s.whatsappGroup)}" target="_blank" rel="noopener">${ICONS.whatsapp}<span>Chaîne WhatsApp</span></a>`);
+  if (s.telegramGroup) ctas.push(`<a class="telegram" href="${esc(s.telegramGroup)}" target="_blank" rel="noopener">${ICONS.telegram}<span>Groupe Telegram</span></a>`);
   sheet.innerHTML = `
-    <button class="ann-close" onclick="closeAnnouncement()" aria-label="Close">${ICONS.x}</button>
+    <button class="ann-close" onclick="closeAnnouncement()" aria-label="Fermer">${ICONS.x}</button>
     <div class="ann-mark">${ICONS.megaphone}</div>
     ${s.annTitle ? `<h3 class="ann-title">${esc(s.annTitle)}</h3>` : ''}
     ${s.annBody ? `<p class="ann-body">${esc(s.annBody)}</p>` : ''}
@@ -3977,38 +3984,38 @@ ${homeBannerBlockHtml(st)}
     <span class="badge">${suppliedMemberIcon('deposit')}</span><span class="lbl">Recharge</span>
   </button>
   <button class="home-action" onclick="openWithdrawSheet()">
-    <span class="badge">${suppliedMemberIcon('withdraw')}</span><span class="lbl">Withdraw</span>
+    <span class="badge">${suppliedMemberIcon('withdraw')}</span><span class="lbl">Retrait</span>
   </button>
   <button class="home-action" onclick="navigatePage('network')">
-    <span class="badge">${suppliedMemberIcon('invite')}</span><span class="lbl">Invite</span>
+    <span class="badge">${suppliedMemberIcon('invite')}</span><span class="lbl">Inviter</span>
   </button>
   <button class="home-action" onclick="openSupportGroup()">
-    <span class="badge">${suppliedMemberIcon('support')}</span><span class="lbl">Support</span>
+    <span class="badge">${suppliedMemberIcon('support')}</span><span class="lbl">Assistance</span>
   </button>
 </div>
 <div class="wallet-bal-card">
   <div class="wbc-row1">
-    <span class="wbc-lbl">Total Wallet Balance</span>
+    <span class="wbc-lbl">Solde total du portefeuille</span>
   </div>
   <div class="wbc-row2">
     <span class="mono wbc-amt" id="homeWalletBalance">${esc(balText)}</span>
   </div>
 </div>
 <div class="home-stat-row">
-  <div class="home-stat"><span class="hs-ic hs-gold">${ICONS.coinsStack}</span><div class="hs-lbl">Cumulative Earnings</div><div class="mono hs-val hs-gold-txt" id="homeTotalEarned">${esc(fmtUGX(Number(a.totalEarned) || 0))}</div></div>
-  <div class="home-stat"><span class="hs-ic hs-red">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Recharges</div><div class="mono hs-val hs-red-txt" id="homeTotalDeposited">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
-  <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowUpCircle}</span><div class="hs-lbl">Total Withdrawals</div><div class="mono hs-val" id="homeTotalWithdrawn">${esc(fmtUGX(Number(a.totalWithdrawn) || 0))}</div></div>
+  <div class="home-stat"><span class="hs-ic hs-gold">${ICONS.coinsStack}</span><div class="hs-lbl">Gains cumulés</div><div class="mono hs-val hs-gold-txt" id="homeTotalEarned">${esc(fmtUGX(Number(a.totalEarned) || 0))}</div></div>
+  <div class="home-stat"><span class="hs-ic hs-red">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total des recharges</div><div class="mono hs-val hs-red-txt" id="homeTotalDeposited">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
+  <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowUpCircle}</span><div class="hs-lbl">Total des retraits</div><div class="mono hs-val" id="homeTotalWithdrawn">${esc(fmtUGX(Number(a.totalWithdrawn) || 0))}</div></div>
 </div>
 <div class="checkin-card">
   <span class="cic-gift">${ICONS.checkinCalendar}</span>
   <div class="cic-text">
-    <div class="cic-title">Daily Check-in</div>
-    <div class="cic-sub">Check in daily to receive rewards and grow your earnings!</div>
+    <div class="cic-title">Pointage quotidien</div>
+    <div class="cic-sub">Pointez chaque jour pour recevoir des récompenses et faire grandir vos gains !</div>
   </div>
-  <button class="cic-btn" onclick="openCheckinSheet()">Check In</button>
+  <button class="cic-btn" onclick="openCheckinSheet()">Pointer</button>
 </div>
-<section class="home-my-assets" aria-label="My Assets">
-  <h2>My Assets</h2>
+<section class="home-my-assets" aria-label="Mes actifs">
+  <h2>Mes actifs</h2>
   <div id="myAssetsInner">${myAssetsInnerHtml()}</div>
 </section>
 <div style="height:8px;"></div>`;
@@ -4068,9 +4075,9 @@ function productCardHtml(p){
     <div class="p-img">${img}<div class="p-name">${esc(p.name)}</div></div>
     <div class="p-body">
       <div class="p-stats">
-        <div class="p-stat"><div class="k">Price</div><div class="v">${fmtUGXCents(p.price)}</div></div>
-        <div class="p-stat"><div class="k">Days</div><div class="v">${cycle}</div></div>
-        <div class="p-stat"><div class="k">Daily</div><div class="v">${fmtUGXCents(dailyPayout)}</div></div>
+        <div class="p-stat"><div class="k">Prix</div><div class="v">${fmtUGXCents(p.price)}</div></div>
+        <div class="p-stat"><div class="k">Jours</div><div class="v">${cycle}</div></div>
+        <div class="p-stat"><div class="k">Quotidien</div><div class="v">${fmtUGXCents(dailyPayout)}</div></div>
         <div class="p-stat warm"><div class="k">Total</div><div class="v">${fmtUGXCents(expected)}</div></div>
       </div>
       ${productCtaHtml(p)}
@@ -4098,14 +4105,14 @@ function productCardHtml(p){
 function productCtaHtml(p){
   const open = p.isOpen !== false && !p.comingSoon;
   if (open) {
-    return `<button class="primary-button p-cta" onclick="openInvestConfirm('${esc(p.key)}',this)">Buy Asset</button>`;
+    return `<button class="primary-button p-cta" onclick="openInvestConfirm('${esc(p.key)}',this)">Acheter l'actif</button>`;
   }
   const at = Number(p.opensAt) || 0;
   if (!at || p.openMode === 'soon' || p.comingSoon) {
-    return '<button class="primary-button p-cta" disabled>Coming Soon</button>';
+    return '<button class="primary-button p-cta" disabled>Bientôt disponible</button>';
   }
   return `<button class="primary-button p-cta" disabled data-opens-at="${at}">`
-    + `Coming soon in ${fmtCountdown(at - Date.now())}</button>`;
+    + `Bientôt disponible dans ${fmtCountdown(at - Date.now())}</button>`;
 }
 // HH:MM:SS, and days folded into the hours rather than shown separately -- a
 // product opening in two days reads "48:00:00", which is still a countdown. A
@@ -4131,8 +4138,8 @@ function startProductCountdowns(){
     let due = false;
     nodes.forEach(el => {
       const left = Number(el.getAttribute('data-opens-at')) - Date.now();
-      if (left <= 0) { due = true; el.textContent = 'Opening…'; return; }
-      el.textContent = 'Coming soon in ' + fmtCountdown(left);
+      if (left <= 0) { due = true; el.textContent = 'Ouverture…'; return; }
+      el.textContent = 'Bientôt disponible dans ' + fmtCountdown(left);
     });
     if (due) {
       clearInterval(_openCountdownTimer); _openCountdownTimer = null;
@@ -4154,7 +4161,7 @@ async function refreshCatalogNow(){
 window.openChannelLink = function(){
   const st = STATE.settings || {};
   const url = st.telegramGroup || st.telegramChannel || '';
-  if (!url) { notify('No channel link is set yet.'); return; }
+  if (!url) { notify('Aucun lien de canal n\'est encore défini.'); return; }
   window.open(url, '_blank', 'noopener');
 };
 
@@ -4193,10 +4200,10 @@ function assetRowHtml(p){
     <div class="asset-body">
       <div class="asset-name">${esc(p.name)}</div>
       <div class="asset-stats">
-        <span>Cost <b class="mono">${fmtUGX(Number(p.price) || 0)}</b></span>
-        <span>Term <b>${cycle} Days</b></span>
-        <span>Daily Yield <b class="mono">${fmtUGX(daily)}</b></span>
-        <span>Expected Return <b class="mono">${fmtUGX(expected)}</b></span>
+        <span>Coût <b class="mono">${fmtUGX(Number(p.price) || 0)}</b></span>
+        <span>Durée <b>${cycle} jours</b></span>
+        <span>Rendement quotidien <b class="mono">${fmtUGX(daily)}</b></span>
+        <span>Rendement attendu <b class="mono">${fmtUGX(expected)}</b></span>
       </div>
       ${productCtaHtml(p)}
     </div>
@@ -4205,9 +4212,9 @@ function assetRowHtml(p){
 function paintAssets(){
   const products = STATE.products || [];
   const html = `
-<div class="member-page-title">Assets</div>
+<div class="member-page-title">Actifs</div>
 <div id="assetsBody" style="padding:0 10px;">
-  ${products.length ? products.map(assetRowHtml).join('') : '<div class="list-empty">No assets yet.</div>'}
+  ${products.length ? products.map(assetRowHtml).join('') : '<div class="list-empty">Aucun actif pour l\'instant.</div>'}
 </div>
 <div style="height:20px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
@@ -4251,7 +4258,7 @@ function shareOrigin(){
 }
 // ── MY ASSETS investment helpers ──
 var _investmentsLoadFailed = false;
-var MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var MONTHS_SHORT = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
 function fmtDay(value){
   if (!value) return '—';
   const d = new Date(typeof value === 'number' ? value : String(value));
@@ -4262,7 +4269,7 @@ function fmtDay(value){
   // getters are LOCAL, so a member in Kampala sees the moment they tapped
   // Buy, not the UTC instant the server wrote down.
   const t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
-  return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' at ' + t;
+  return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' à ' + t;
 }
 // Petro's compact triangle activity mark. It remains because the live payment
 // polling screen still uses it as its processing indicator.
@@ -4272,7 +4279,7 @@ var PLAN_SPIN = '<span class="pspin" aria-hidden="true">'
 // Payment polling has its own branded mark so the provider's legacy artwork
 // can never leak onto this page. Keep the motion self-contained in CSS and
 // leave the product-row PLAN_SPIN unchanged.
-var DEPOSIT_POLL_SPIN = '<svg class="dep-poll-loader" viewBox="0 0 120 120" role="img" aria-label="Processing payment">'
+var DEPOSIT_POLL_SPIN = '<svg class="dep-poll-loader" viewBox="0 0 120 120" role="img" aria-label="Traitement du paiement">'
   + '<circle class="dep-poll-track" cx="60" cy="60" r="50"/>'
   + '<circle class="dep-poll-arc dep-poll-arc-one" cx="60" cy="60" r="50"/>'
   + '<circle class="dep-poll-track" cx="60" cy="60" r="40"/>'
@@ -4316,7 +4323,7 @@ function planStats(inv){
 function myAssetRowHtml(inv){
   const st = planStats(inv);
   const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
-  const name = inv.tierLabel || p.name || 'Asset';
+  const name = inv.tierLabel || p.name || 'Actif';
   const initial = esc(String(name || '?').trim()[0] || '?');
   const thumb = p.image
     ? `<img src="${esc(p.image)}" alt="" onerror="this.outerHTML='&lt;span&gt;${initial}&lt;/span&gt;'">`
@@ -4330,26 +4337,26 @@ function myAssetRowHtml(inv){
         <div class="mar-name">${esc(name)}</div>
         <div class="mar-date">${esc(fmtDay(inv.createdAt))}</div>
       </div>
-      <span class="mar-status">${st.matured ? 'Completed' : 'Ongoing'}</span>
+      <span class="mar-status">${st.matured ? 'Terminé' : 'En cours'}</span>
     </div>
     <div class="mar-values">
-      <div><span>Invested</span><b class="mono">${fmtUGXCents(st.amount)}</b></div>
-      <div><span>Earned</span><b class="mono">${fmtUGXCents(st.earned)}</b></div>
-      <div><span>${st.matured ? 'Return' : 'Daily'}</span><b class="mono">${fmtUGXCents(st.matured ? st.expected : st.daily)}</b></div>
+      <div><span>Investi</span><b class="mono">${fmtUGXCents(st.amount)}</b></div>
+      <div><span>Gagné</span><b class="mono">${fmtUGXCents(st.earned)}</b></div>
+      <div><span>${st.matured ? 'Retour' : 'Quotidien'}</span><b class="mono">${fmtUGXCents(st.matured ? st.expected : st.daily)}</b></div>
     </div>
     <div class="mar-progress"><i style="width:${progress}%"></i></div>
     <div class="mar-foot">
-      <span>${st.matured ? 'Finished' : `Day ${st.made} of ${st.total}`}</span>
-      <span>${st.matured ? fmtUGXCents(st.expected) + ' paid' : fmtUGXCents(st.remaining) + ' remaining'}</span>
+      <span>${st.matured ? 'Terminé' : `Jour ${st.made} sur ${st.total}`}</span>
+      <span>${st.matured ? `${fmtUGXCents(st.expected)} payé` : fmtUGXCents(st.remaining) + ' remaining'}</span>
     </div>
   </div>`;
 }
 function myAssetsInnerHtml(){
   const investments = (STATE.investments || []).filter(i => i.status === 'active' || i.status === 'matured');
   if (!Array.isArray(STATE.investments) && _investmentsLoadFailed) {
-    return '<div class="my-assets-empty">Could not load your assets.</div>';
+    return '<div class="my-assets-empty">Impossible de charger vos actifs.</div>';
   }
-  if (!investments.length) return '<div class="my-assets-empty">No investments yet. Browse Assets to get started.</div>';
+  if (!investments.length) return '<div class="my-assets-empty">Aucun investissement pour l\'instant. Parcourez les actifs pour commencer.</div>';
   return '<div class="my-assets-list">' + investments.map(myAssetRowHtml).join('') + '</div>';
 }
 function paintMyAssetsInner(){
@@ -4374,9 +4381,9 @@ window.switchTeamLevel = async function(level){
   // shows that level's own rate and member count in the mockup, not L1's.
   const t = STATE.teamStats || {}, rates = t.commRates || {}, team = t.team || {};
   const setTxt = (id, v) => { const el = $(id); if (el) el.textContent = v; };
-  setTxt('teamCommLevelLabel', 'Level ' + level);
+  setTxt('teamCommLevelLabel', 'Niveau ' + level);
   setTxt('teamCommPct', (rates['l' + level] != null ? rates['l' + level] : 0) + '%');
-  setTxt('teamCommMembers', ((team['l' + level]) || 0) + ' Members');
+  setTxt('teamCommMembers', `${(team['l' + level]) || 0} membres`);
   if (!STATE.teamMembers[level]) {
     // The downline for a level that has not been fetched yet takes a real
     // round trip, and until this the box simply stayed as whatever the
@@ -4449,7 +4456,7 @@ function joinedStamp(ts){
 function renderTeamMembers(level){
   const members = STATE.teamMembers[level] || [];
   const box = $('teamMembersBox');
-  if (!members.length) { box.innerHTML = '<div class="list-empty reveal-in">No members at this level yet.</div>'; return; }
+  if (!members.length) { box.innerHTML = '<div class="list-empty reveal-in">Aucun membre à ce niveau pour l\'instant.</div>'; return; }
   // Owner: "a profile logo like one uploaded from admin, number and active
   // or inactive nothing else to put" -- a deliberate strip-down of the
   // richer Team.dc.html mockup card (amount/joined-date/footer) this list
@@ -4468,7 +4475,7 @@ function renderTeamMembers(level){
     <div class="top">
       <div class="avatar" style="background:${idx % 2 ? 'linear-gradient(135deg,#ffb000,#e30613)' : 'var(--petro-grad)'};">${avatar}</div>
       <div class="phone mono">${esc(maskPhone(m.phone))}</div>
-      <span class="status-pill ${m.active ? 'active' : 'inactive'}">${m.active ? 'Active' : 'Inactive'}</span>
+      <span class="status-pill ${m.active ? 'active' : 'inactive'}">${m.active ? 'En cours' : 'Inactif'}</span>
     </div>
   </div>`).join('') + '</div>';
 }
@@ -4521,39 +4528,39 @@ function paintNetwork(){
   const link = code ? `${shareOrigin()}/share.html?v=${Math.floor(Date.now() / 1000)}&code=${encodeURIComponent(code)}` : '';
   const earnText = _earningsHidden ? cur() + ' ••••••' : fmtUGX(Number(t.teamCommission) || 0);
   const html = `
-<div class="member-page-title">Network</div>
+<div class="member-page-title">Réseau</div>
 <div class="net-simple">
   <section class="net-section net-invite-section">
-    <div class="net-section-title">Invite</div>
+    <div class="net-section-title">Inviter</div>
   <div class="net-invite-line">
-    <div><span>Invitation code</span><b class="mono">${esc(code || '—')}</b></div>
-    <button onclick="copyText('${esc(code)}')" aria-label="Copy invitation code">${ICONS.copy}</button>
+    <div><span>Code d'invitation</span><b class="mono">${esc(code || '—')}</b></div>
+    <button onclick="copyText('${esc(code)}')" aria-label="Copier le code d'invitation">${ICONS.copy}</button>
   </div>
   <div class="net-invite-line">
-    <div><span>Invitation link</span><b class="net-link">${esc(link || '—')}</b></div>
-    <button onclick="copyText('${esc(link)}')" aria-label="Copy invitation link">${ICONS.copy}</button>
+    <div><span>Lien d'invitation</span><b class="net-link">${esc(link || '—')}</b></div>
+    <button onclick="copyText('${esc(link)}')" aria-label="Copier le lien d'invitation">${ICONS.copy}</button>
   </div>
   </section>
 
   <section class="net-section">
-    <div class="net-section-title">Team</div>
+    <div class="net-section-title">Équipe</div>
   <div class="net-levels">
-    <div><b class="mono">${(t.team && t.team.l1) || 0}</b><span>Level 1</span><small>${rates.l1 != null ? rates.l1 : 27}%</small></div>
-    <div><b class="mono">${(t.team && t.team.l2) || 0}</b><span>Level 2</span><small>${rates.l2 != null ? rates.l2 : 2}%</small></div>
-    <div><b class="mono">${(t.team && t.team.l3) || 0}</b><span>Level 3</span><small>${rates.l3 != null ? rates.l3 : 1}%</small></div>
+    <div><b class="mono">${(t.team && t.team.l1) || 0}</b><span>Niveau 1</span><small>${rates.l1 != null ? rates.l1 : 27}%</small></div>
+    <div><b class="mono">${(t.team && t.team.l2) || 0}</b><span>Niveau 2</span><small>${rates.l2 != null ? rates.l2 : 2}%</small></div>
+    <div><b class="mono">${(t.team && t.team.l3) || 0}</b><span>Niveau 3</span><small>${rates.l3 != null ? rates.l3 : 1}%</small></div>
   </div>
   </section>
 
   <section class="net-section net-earn-section">
-    <div class="net-section-title">Earnings</div>
+    <div class="net-section-title">Gains</div>
   <div class="net-earn-simple">
     <div>
-      <span>Referral earnings</span>
+      <span>Gains de parrainage</span>
       <b class="mono" id="netEarnAmt">${esc(earnText)}</b>
     </div>
     <div class="net-earn-actions">
-      <button id="netEarnEyeBtn" onclick="toggleEarningsVisibility()" aria-label="Show or hide earnings">${_earningsHidden ? ICONS.eyeOff : ICONS.eyeOpen}</button>
-      <button onclick="openAllReferralsSheet()">View team</button>
+      <button id="netEarnEyeBtn" onclick="toggleEarningsVisibility()" aria-label="Afficher ou masquer les gains">${_earningsHidden ? ICONS.eyeOff : ICONS.eyeOpen}</button>
+      <button onclick="openAllReferralsSheet()">Voir l'équipe</button>
     </div>
   </div>
   </section>
@@ -4571,16 +4578,16 @@ function taskCenterCardsHtml(type, progress, milestones){
     const current = Number(progress) || 0;
     const targetText = isDeposit ? fmtUGX(target) : String(target);
     const currentText = isDeposit ? fmtUGX(current) : String(current);
-    const label = isDeposit ? 'Team recharge' : 'Level 1 active referrals';
+    const label = isDeposit ? 'Recharge de l\'équipe' : 'Filleuls actifs de niveau 1';
     const button = m.claimed
-      ? '<button class="secondary-button" disabled style="min-width:88px;padding:10px 12px;opacity:.72;">Claimed</button>'
+      ? '<button class="secondary-button" disabled style="min-width:88px;padding:10px 12px;opacity:.72;">Réclamé</button>'
       : m.achieved
-        ? `<button class="primary-button" onclick="claimTaskCenterReward('${type}',${target},this)" style="min-width:88px;padding:10px 12px;">Claim</button>`
-        : '<button class="secondary-button" disabled style="min-width:88px;padding:10px 12px;opacity:.62;">Claim</button>';
+        ? `<button class="primary-button" onclick="claimTaskCenterReward('${type}',${target},this)" style="min-width:88px;padding:10px 12px;">Réclamer</button>`
+        : '<button class="secondary-button" disabled style="min-width:88px;padding:10px 12px;opacity:.62;">Réclamer</button>';
     return `<article class="task-center-card">
       <div class="task-card-top"><span class="task-card-kind">${label}</span><b class="mono task-card-reward">${fmtUGX(Number(m.reward) || 0)}</b></div>
       <div class="task-card-target">${targetText}</div>
-      <div class="task-card-bottom"><span class="task-card-progress">Progress: ${currentText} / ${targetText}</span>${button}</div>
+      <div class="task-card-bottom"><span class="task-card-progress">Progression : ${currentText} / ${targetText}</span>${button}</div>
     </article>`;
   }).join('');
 }
@@ -4588,10 +4595,10 @@ function taskCenterHtml(t){
   const l1 = Number(t.l1ActiveCount) || 0;
   const deposits = Number(t.teamDeposits) || 0;
   return `<section id="taskCenter" class="task-center">
-    <div class="task-center-heading"><div><div class="net-section-title">Task Center</div><b>Earn from team progress</b></div></div>
-    <p class="task-center-note">Referral tasks unlock only after your direct Level 1 referral recharges. Every completed task is claimable once.</p>
-    <div class="task-category"><div class="task-category-title">Referral tasks</div><div class="task-center-grid">${taskCenterCardsHtml('count', l1, t.milestones)}</div></div>
-    <div class="task-category"><div class="task-category-title">Recharge tasks</div><div class="task-center-grid">${taskCenterCardsHtml('deposit', deposits, t.milestones)}</div></div>
+    <div class="task-center-heading"><div><div class="net-section-title">Centre des tâches</div><b>Gagnez grâce à la progression de l'équipe</b></div></div>
+    <p class="task-center-note">Les tâches de parrainage ne se débloquent qu'après la recharge de votre filleul direct de niveau 1. Chaque tâche terminée ne peut être réclamée qu'une fois.</p>
+    <div class="task-category"><div class="task-category-title">Tâches de parrainage</div><div class="task-center-grid">${taskCenterCardsHtml('count', l1, t.milestones)}</div></div>
+    <div class="task-category"><div class="task-category-title">Tâches de recharge</div><div class="task-center-grid">${taskCenterCardsHtml('deposit', deposits, t.milestones)}</div></div>
   </section>
 `;
 }
@@ -4602,25 +4609,25 @@ window.openTaskCenter = function(){
 window.claimTaskCenterReward = async function(type, target, btn){
   if (btn && btn.disabled) return;
   const prior = btn && btn.textContent;
-  if (btn) { btn.disabled = true; btn.textContent = 'Claiming…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Réclamation…'; }
   const r = await api('/team/milestone/claim', { method:'POST', body:JSON.stringify({ type, target }) });
   if (r.status !== 'success') {
-    if (btn) { btn.disabled = false; btn.textContent = prior || 'Claim'; }
-    notify(r.message || 'Could not claim that reward');
+    if (btn) { btn.disabled = false; btn.textContent = prior || 'Réclamer'; }
+    notify(r.message || 'Impossible de réclamer cette récompense');
     return;
   }
   const fresh = await api('/team/stats');
   if (fresh.status === 'success') STATE.teamStats = fresh;
   if (STATE.page === 'network') paintNetwork();
-  notify(r.message || 'Reward added to your wallet');
+  notify(r.message || 'Récompense ajoutée à votre portefeuille');
 };
 
 window.openAllReferralsSheet = function(){
   openSheet('All Referrals', `
 <div class="lv-switcher" style="margin-bottom:14px;">
-  <button class="lv on" data-level="1" onclick="switchTeamLevel(1)">Level 1</button>
-  <button class="lv" data-level="2" onclick="switchTeamLevel(2)">Level 2</button>
-  <button class="lv" data-level="3" onclick="switchTeamLevel(3)">Level 3</button>
+  <button class="lv on" data-level="1" onclick="switchTeamLevel(1)">Niveau 1</button>
+  <button class="lv" data-level="2" onclick="switchTeamLevel(2)">Niveau 2</button>
+  <button class="lv" data-level="3" onclick="switchTeamLevel(3)">Niveau 3</button>
 </div>
 <div id="teamMembersBox">${teamLoadingHtml()}</div>`);
   switchTeamLevel(1);
@@ -4686,7 +4693,7 @@ function flashCopiedOne(btn){
   // and leave the control permanently stuck on it.
   if (btn._copyRevert) clearTimeout(btn._copyRevert);
   else btn._copyBefore = btn.innerHTML;
-  btn.innerHTML = isIconBtn ? COPY_TICK : 'Copied';
+  btn.innerHTML = isIconBtn ? COPY_TICK : 'Copié';
   btn.classList.add('copied');
   btn._copyRevert = setTimeout(() => {
     btn.innerHTML = btn._copyBefore;
@@ -4714,12 +4721,12 @@ function flashCopied(btn){
   for (let i = 0; i < all.length; i++) flashCopiedOne(all[i]);
 }
 function writeClipboard(text, btn){
-  if (!navigator.clipboard) return notify('Could not copy');
+  if (!navigator.clipboard) return notify('Copie impossible');
   navigator.clipboard.writeText(text)
     .then(() => flashCopied(btn))
     // A failure has nothing visible to show for itself, so it still needs
     // saying -- and that is exactly what the alert card is for.
-    .catch(() => notify('Could not copy'));
+    .catch(() => notify('Copie impossible'));
 }
 // The button is taken from the event rather than passed in by every call site:
 // the markup already routes through onclick, so `this` is the control that was
@@ -4790,13 +4797,7 @@ function acctListCardHtml(iconName, title, onclick){
 // icon -- see test-csp-runtime.py's own note) will refuse to load until the
 // real HTTPS domain cutover, so the icon degrades instead of showing broken.
 function downloadAppRowHtml(){
-  return '<button class="acct-list-card" onclick="promptInstallApp()">' +
-    '<span class="acct-list-icon">' +
-      '<img src="' + API_BASE + '/public/app-icon-192.png" alt="" style="width:34px;height:34px;border-radius:9px;object-fit:cover;" onerror="this.style.display=\'none\';var f=this.nextElementSibling;if(f)f.style.display=\'flex\';">' +
-      '<span class="download-app-fallback" style="display:none;width:40px;height:40px;align-items:center;justify-content:center;">' + ICONS.downloadApp + '</span>' +
-    '</span>' +
-    '<span class="acct-list-label">Download App</span>' + ICONS.chevronRight +
-  '</button>';
+  return `<button class="acct-list-card" onclick="promptInstallApp()"><span class="acct-list-icon"><img src="${API_BASE}/public/app-icon-192.png" alt="" style="width:34px;height:34px;border-radius:9px;object-fit:cover;" onerror="this.style.display='none';var f=this.nextElementSibling;if(f)f.style.display='flex';"><span class="download-app-fallback" style="display:none;width:40px;height:40px;align-items:center;justify-content:center;">${ICONS.downloadApp}</span></span><span class="acct-list-label">Télécharger l'application</span>${ICONS.chevronRight}</button>`;
 }
 function settingRowHtml(icon, title, sub, onclick){
   const rowIcons = {
@@ -4841,7 +4842,7 @@ async function renderAccount(){
   const a = STATE.account || {};
   const html = `
 <div class="account-page" style="padding:0 10px;">
-  <div class="member-page-title">Profile</div>
+  <div class="member-page-title">Profil</div>
   <div class="acct-card">
     <div class="acct-avatar">
       <span id="accountBrandFallback" class="acct-avatar-fallback" style="display:${STATE.brandLogo ? 'none' : 'flex'}">${ICONS.peopleGroup}</span>
@@ -4853,19 +4854,19 @@ async function renderAccount(){
   </div>
   <div class="account-money-actions">
     <button class="account-money-action" onclick="openDepositSheet()"><span>${suppliedMemberIcon('deposit')}</span>Recharge</button>
-    <button class="account-money-action" onclick="openWithdrawSheet()"><span>${suppliedMemberIcon('withdraw')}</span>Withdraw</button>
+    <button class="account-money-action" onclick="openWithdrawSheet()"><span>${suppliedMemberIcon('withdraw')}</span>Retrait</button>
   </div>
   <div class="account-action-list">
-    ${acctListCardHtml('accountWallet', 'Bind bank card', 'openWalletSheet()')}
-    ${acctListCardHtml('accountStatement', 'Transaction Statement', "openTransactionStatement('income')")}
-    ${acctListCardHtml('accountGift', 'Redeem Gift', 'openChestSheet()')}
-    ${acctListCardHtml('accountRules', 'Rules and Regulations', 'openRulesSheet()')}
-    ${acctListCardHtml('accountSecurity', 'Security Settings', 'openChangeLoginPasswordSheet()')}
-    ${acctListCardHtml('support', 'Support', 'openSupportSheet()')}
-    ${acctListCardHtml('accountAbout', 'About Us', 'openAboutSheet()')}
+    ${acctListCardHtml('accountWallet', 'Lier une carte bancaire', 'openWalletSheet()')}
+    ${acctListCardHtml('accountStatement', 'Historique du solde', "openTransactionStatement('income')")}
+    ${acctListCardHtml('accountGift', 'Utiliser un cadeau', 'openChestSheet()')}
+    ${acctListCardHtml('accountRules', 'Règles et conditions', 'openRulesSheet()')}
+    ${acctListCardHtml('accountSecurity', 'Paramètres de sécurité', 'openChangeLoginPasswordSheet()')}
+    ${acctListCardHtml('support', 'Assistance', 'openSupportSheet()')}
+    ${acctListCardHtml('accountAbout', 'À propos de nous', 'openAboutSheet()')}
     ${downloadAppRowHtml()}
   </div>
-  <button class="logout-btn-v2" onclick="doLogout()">${ICONS.logoutArrow} Log Out</button>
+  <button class="logout-btn-v2" onclick="doLogout()">${ICONS.logoutArrow} Déconnexion</button>
   <div style="height:20px;"></div>
 </div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
@@ -4900,7 +4901,7 @@ var _walletEditing = false;
 window.openWalletSheet = async function(){
   const hadCache = Array.isArray(STATE.bankAccounts);
   _walletEditing = hadCache ? !(STATE.bankAccounts || []).length : false;
-  openSheet('Wallet', hadCache ? '' : '<div class="list-empty">Loading&hellip;</div>');
+  openSheet('Wallet', hadCache ? '' : '<div class="list-empty">Chargement…</div>');
   if (hadCache) renderWalletSheet();
   // Fetched alongside the bound-wallet list, not awaited together with it --
   // a slow/failed bank list must never hold up showing the existing wallet
@@ -4938,11 +4939,11 @@ function maskedTail(phone){
 }
 function walletCardHtml(w){
   const provider = w && w.network ? String(w.network).replace(/\s*(Mobile )?Money$/i, '') : 'Mobile Money';
-  return `<div class="wallet-card"><div class="wallet-kicker">Payout Wallet</div>
-    <div class="num"${w ? '' : ' style="font-size:18px"'}>${w ? esc(walletDestDisplay(w)) : 'No payout wallet linked'}</div>
+  return `<div class="wallet-card"><div class="wallet-kicker">Portefeuille de retrait</div>
+    <div class="num"${w ? '' : ' style="font-size:18px"'}>${w ? esc(walletDestDisplay(w)) : 'Aucun portefeuille de retrait lié'}</div>
     <div class="wallet-meta">
-      ${w ? `<div class="meta-item"><span>Account holder</span><b>${esc(String(w.holder || '').toUpperCase())}</b></div>` : ''}
-      <div class="meta-item"><span>Network</span><b>${w ? esc(provider) : '—'}</b></div>
+      ${w ? `<div class="meta-item"><span>Titulaire du compte</span><b>${esc(String(w.holder || '').toUpperCase())}</b></div>` : ''}
+      <div class="meta-item"><span>Réseau</span><b>${w ? esc(provider) : '—'}</b></div>
     </div></div>`;
 }
 function walletLocalPhone(phone){
@@ -4973,7 +4974,7 @@ function walletPlainRowHtml(w){
       <div class="wallet-plain-name">${esc(String(w.holder || '').toUpperCase())}</div>
       <div class="wallet-plain-network" data-no-i18n>${esc(network)}</div>
     </div>
-    <button class="wallet-delete" type="button" onclick="deleteWallet('${esc(w.id)}')" aria-label="Delete payout wallet">${ICONS.trash}</button>
+    <button class="wallet-delete" type="button" onclick="deleteWallet('${esc(w.id)}')" aria-label="Supprimer le portefeuille de retrait">${ICONS.trash}</button>
   </div>`;
 }
 function renderWalletSheet(){
@@ -4992,7 +4993,7 @@ function renderWalletSheet(){
     // one row to act on before this round. "Add another wallet" reuses the
     // exact same add-form toggleWalletEdit() already drives.
     const rows = (STATE.bankAccounts || []).map(walletPlainRowHtml).join('');
-    const addBtn = '<button class="btn-bind" type="button" style="margin:6px 0 0;" onclick="toggleWalletEdit(true)">+ Add another wallet</button>';
+    const addBtn = '<button class="btn-bind" type="button" style="margin:6px 0 0;" onclick="toggleWalletEdit(true)">+ Ajouter un autre portefeuille</button>';
     $('sheetBody').innerHTML = '<div class="wallet-minimal reveal-in">' + rows + addBtn + '</div>';
     return;
   }
@@ -5008,7 +5009,7 @@ function renderWalletSheet(){
     <div class="wallet-add-form" id="walFormGroup">
       <div class="prov-pick" id="walProviderPick">
         <div class="wallet-line-field prov-input" onclick="toggleProviderList()">
-          <input id="walProvider" type="text" readonly placeholder="Select network or bank" value="${prefill && prefill.network ? esc(prefill.network) : ''}">
+          <input id="walProvider" type="text" readonly placeholder="Choisissez un réseau ou une banque" value="${prefill && prefill.network ? esc(prefill.network) : ''}">
           <svg class="prov-caret" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </div>
         <div class="prov-list" id="walProviderList" data-no-i18n>
@@ -5016,18 +5017,18 @@ function renderWalletSheet(){
         </div>
       </div>
       <div class="wallet-line-field">
-        <input id="walPhone" type="${editingBank ? 'text' : 'tel'}" inputmode="${editingBank ? 'text' : 'numeric'}" autocomplete="${editingBank ? 'off' : 'tel'}" enterkeyhint="next" placeholder="${editingBank ? 'Account number' : 'Phone number'}" value="${prefill ? esc(walletDestDisplay(prefill)) : ''}" oninput="handleWalDestInput(this)">
+        <input id="walPhone" type="${editingBank ? 'text' : 'tel'}" inputmode="${editingBank ? 'text' : 'numeric'}" autocomplete="${editingBank ? 'off' : 'tel'}" enterkeyhint="next" placeholder="${editingBank ? 'Numéro de compte' : 'Numéro de téléphone'}" value="${prefill ? esc(walletDestDisplay(prefill)) : ''}" oninput="handleWalDestInput(this)">
       </div>
-      <div class="wallet-line-field"><input id="walHolder" type="text" autocomplete="name" enterkeyhint="done" placeholder="Account holder name" value="${prefill ? esc(prefill.holder || '') : ''}"></div>
-      <button class="primary-button wallet-save" id="walSaveBtn" onclick="submitWallet()">Save</button>
+      <div class="wallet-line-field"><input id="walHolder" type="text" autocomplete="name" enterkeyhint="done" placeholder="Nom du titulaire du compte" value="${prefill ? esc(prefill.holder || '') : ''}"></div>
+      <button class="primary-button wallet-save" id="walSaveBtn" onclick="submitWallet()">Enregistrer</button>
     </div>
     <div id="walOtpGroup" style="display:none;">
-      <div class="wallet-line-field"><input id="walOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code"></div>
+      <div class="wallet-line-field"><input id="walOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="Code à 6 chiffres" autocomplete="one-time-code"></div>
       <div class="wallet-otp-actions">
-        <button type="button" onclick="cancelWalletOtp()">Back</button>
-        <button class="primary-button" id="walConfirmBtn" onclick="confirmWalletOtp()">Confirm</button>
+        <button type="button" onclick="cancelWalletOtp()">Retour</button>
+        <button class="primary-button" id="walConfirmBtn" onclick="confirmWalletOtp()">Confirmer</button>
       </div>
-      <a href="#" id="walResendBtn" onclick="submitWallet();return false;">Resend code</a>
+      <a href="#" id="walResendBtn" onclick="submitWallet();return false;">Renvoyer le code</a>
     </div>
   </div>`;
 }
@@ -5055,7 +5056,7 @@ window.pickProvider = function(name){
     dest.type = nowBank ? 'text' : 'tel';
     dest.inputMode = nowBank ? 'text' : 'numeric';
     dest.autocomplete = nowBank ? 'off' : 'tel';
-    dest.placeholder = nowBank ? 'Account number' : 'Phone number';
+    dest.placeholder = nowBank ? 'Numéro de compte' : 'Numéro de téléphone';
     // Crossing the mobile-money/bank boundary means whatever was already
     // typed can never be valid for the new type (a phone number is not a
     // bank account number, and vice versa) -- cleared so a member cannot
@@ -5099,39 +5100,39 @@ window.submitWallet = async function(){
   const network = $('walProvider').value;
   const phone = $('walPhone').value;
   const holder = $('walHolder').value.trim();
-  if (!network) return notify('Select your wallet provider.');
+  if (!network) return notify('Choisissez l\'opérateur de votre portefeuille.');
   // Mobile money keeps its own digit-count check; a bank account number is
   // never phone-shaped, so it only needs to be present and a plausible
   // length -- never capped tighter than that (see handleWalDestInput()'s
   // own comment for why), the server does the real validation against
   // MarzPay before this is ever saved.
   if (isMobileMoneyNetwork(network)) {
-    if (String(phone).replace(/\D/g, '').length < 9) return notify('Enter a valid wallet account number.');
+    if (String(phone).replace(/\D/g, '').length < 9) return notify('Entrez un numéro de compte de portefeuille valide.');
   } else if (String(phone).trim().length < 4) {
-    return notify('Enter a valid bank account number.');
+    return notify('Saisissez un numéro de compte bancaire valide.');
   }
-  if (!holder) return notify('Enter the account holder name.');
+  if (!holder) return notify('Entrez le nom du titulaire du compte.');
   const btn = $('walSaveBtn');
   // A code step only exists when OTP is on AND the payout-account option is
   // on; turning OTP off just removes the code request, saving is unchanged.
   if (!otpVerificationEnabled() || !(STATE.settings || {}).bankOtpRequired) {
-    btn.disabled = true; btn.textContent = 'Saving…';
+    btn.disabled = true; btn.textContent = 'Enregistrement…';
     const r = await post('/bank/save', { holder, network, phone });
-    btn.disabled = false; btn.textContent = 'Submit';
-    if (r.status !== 'success') return notify(r.message || 'Could not save your wallet.');
+    btn.disabled = false; btn.textContent = 'Envoyer';
+    if (r.status !== 'success') return notify(r.message || 'Impossible d\'enregistrer votre portefeuille.');
     return finishWalletSave();
   }
-  btn.disabled = true; btn.textContent = 'Sending code…';
+  btn.disabled = true; btn.textContent = 'Envoi du code…';
   const d = await post('/auth/otp/send', { purpose: 'bank' });
-  btn.disabled = false; btn.textContent = 'Submit';
-  if (d.status !== 'success') return notify(d.message || 'Could not send a verification code.');
+  btn.disabled = false; btn.textContent = 'Envoyer';
+  if (d.status !== 'success') return notify(d.message || 'Impossible d\'envoyer un code de vérification.');
   _walletPending = { holder, network, phone };
   _walletOtpId = d.otpId;
   const otpInput = $('walOtp'); if (otpInput) otpInput.value = '';
   const formGroup = $('walFormGroup'), otpGroup = $('walOtpGroup');
   if (formGroup) formGroup.style.display = 'none';
   if (otpGroup) otpGroup.style.display = '';
-  startOtpResendCooldown('walResendBtn', 30, 'Resend code');
+  startOtpResendCooldown('walResendBtn', 30, 'Renvoyer le code');
 };
 window.cancelWalletOtp = function(){
   _walletPending = null; _walletOtpId = null;
@@ -5142,15 +5143,15 @@ window.cancelWalletOtp = function(){
 window.confirmWalletOtp = async function(){
   if (!_walletPending || !_walletOtpId) return cancelWalletOtp();
   const code = ($('walOtp').value || '').trim();
-  if (!/^\d{6}$/.test(code)) return notify('Enter the 6-digit code sent to your phone.');
+  if (!/^\d{6}$/.test(code)) return notify('Saisissez le code à 6 chiffres envoyé sur votre téléphone.');
   const btn = $('walConfirmBtn');
-  btn.disabled = true; btn.textContent = 'Verifying…';
+  btn.disabled = true; btn.textContent = 'Vérification…';
   const v = await post('/auth/otp/verify', { otpId: _walletOtpId, code });
-  if (v.status !== 'success') { btn.disabled = false; btn.textContent = 'Confirm'; return notify(v.message || 'Incorrect code.'); }
-  btn.textContent = 'Saving…';
+  if (v.status !== 'success') { btn.disabled = false; btn.textContent = 'Confirmer'; return notify(v.message || 'Code incorrect.'); }
+  btn.textContent = 'Enregistrement…';
   const r = await post('/bank/save', Object.assign({}, _walletPending, { otpTicket: v.ticket }));
-  btn.disabled = false; btn.textContent = 'Confirm';
-  if (r.status !== 'success') return notify(r.message || 'Could not save your wallet.');
+  btn.disabled = false; btn.textContent = 'Confirmer';
+  if (r.status !== 'success') return notify(r.message || 'Impossible d\'enregistrer votre portefeuille.');
   _walletPending = null; _walletOtpId = null;
   await finishWalletSave();
 };
@@ -5162,14 +5163,14 @@ async function finishWalletSave(){
   const fresh = await api('/bank/list');
   STATE.bankAccounts = fresh.status === 'success' ? fresh.accounts : (STATE.bankAccounts || []);
   _walletEditing = false;
-  notify('Wallet saved');
+  notify('Portefeuille enregistré');
   if (_openSheetTitle === 'Wallet') renderWalletSheet();
 }
 window.deleteWallet = function(id){
   if (!id) return;
-  openSimpleConfirm('Delete wallet', 'Remove this payout number?', async () => {
+  openSimpleConfirm('Supprimer le portefeuille', 'Supprimer ce numéro de retrait ?', async () => {
     const r = await post('/bank/delete', { id });
-    if (r.status !== 'success') { notify(r.message || 'Could not remove the wallet.'); return false; }
+    if (r.status !== 'success') { notify(r.message || 'Impossible de supprimer le portefeuille.'); return false; }
     STATE.bankAccounts = (STATE.bankAccounts || []).filter(x => x.id !== id);
     // Was unconditional -- correct back when a delete always emptied the
     // list entirely (Petro's old one-wallet rule), wrong now that deleting
@@ -5236,26 +5237,26 @@ function statementCategoryMatch(cat, t){
 }
 function statementDescription(t){
   if (t.type === 'deposit') return 'Recharge';
-  if (t.type === 'withdraw') return 'Withdraw';
-  if (t.type === 'cashback') return 'Daily Income';
-  if (t.type === 'commission') return 'Referral Commission';
-  if (t.type === 'promocode') return 'Gift Code';
-  if (t.type === 'checkin') return 'Check-in Reward';
-  if (t.type === 'welcome_bonus') return 'Welcome Bonus';
-  if (t.type === 'team_reward') return 'Team Reward';
-  if (t.type === 'mission_salary') return 'Mission Salary';
-  if (t.type === 'mission_deposit_reward') return 'Mission Reward';
-  if (t.type === 'turntable' || t.type === 'spin' || t.type === 'spin_bonus') return 'Reward';
-  if (t.type === 'admin_credit') return brandName() + ' Credit';
+  if (t.type === 'withdraw') return 'Retrait';
+  if (t.type === 'cashback') return 'Revenu quotidien';
+  if (t.type === 'commission') return 'Commission de parrainage';
+  if (t.type === 'promocode') return 'Code cadeau';
+  if (t.type === 'checkin') return 'Récompense de pointage';
+  if (t.type === 'welcome_bonus') return 'Bonus de bienvenue';
+  if (t.type === 'team_reward') return 'Récompense d\'équipe';
+  if (t.type === 'mission_salary') return 'Salaire de mission';
+  if (t.type === 'mission_deposit_reward') return 'Récompense de mission';
+  if (t.type === 'turntable' || t.type === 'spin' || t.type === 'spin_bonus') return 'Récompense';
+  if (t.type === 'admin_credit') return brandName() + ' (crédit)';
   return 'Transaction';
 }
 function statementStatus(t){
   const rawStatus = String(t.status || '').toLowerCase();
   const desc = String(t.description || '').toLowerCase();
   const raw = rawStatus + ' ' + desc;
-  if (/fail|declin|reject|cancel|error/.test(raw)) return { text:'Failed', cls:'failed' };
-  if (/pend|process|await|initiating/.test(raw)) return { text:'Pending', cls:'pending' };
-  return { text:'Completed', cls:'completed' };
+  if (/fail|declin|reject|cancel|error/.test(raw)) return { text:'Échoué', cls:'failed' };
+  if (/pend|process|await|initiating/.test(raw)) return { text:'En attente', cls:'pending' };
+  return { text:'Terminé', cls:'completed' };
 }
 function statementDate(t){
   const d = String(t.date || '');
@@ -5273,12 +5274,12 @@ function renderStatement(){
   if (!body) return;
   const rows = (STATE.transactions || []).filter(t => statementCategoryMatch(_statementCat, t));
   if (!rows.length) {
-    body.innerHTML = '<div class="statement-empty">No transactions in this category.</div>';
+    body.innerHTML = '<div class="statement-empty">Aucune transaction dans cette catégorie.</div>';
     return;
   }
   const footer = STATE.transactionsTruncated
-    ? '<div class="statement-end">Showing your most recent transactions</div>'
-    : '<div class="statement-end">End of statement</div>';
+    ? '<div class="statement-end">Vos transactions les plus récentes</div>'
+    : '<div class="statement-end">Fin du relevé</div>';
   body.innerHTML = rows.map(t => {
     const st = statementStatus(t);
     const amt = recordsRowAmount(t);
@@ -5308,19 +5309,19 @@ window.openTransactionStatement = async function(cat){
   const hadCache = Array.isArray(STATE.transactions);
   openSheet('Transaction Statement', `
     <div class="statement-download-row">
-      <button type="button" class="statement-download-btn" id="statementDownloadBtn" onclick="downloadStatementPdf()">${ICONS.download}<span>Download Statement</span></button>
+      <button type="button" class="statement-download-btn" id="statementDownloadBtn" onclick="downloadStatementPdf()">${ICONS.download}<span>Télécharger le relevé</span></button>
     </div>
     <div class="statement-tabs" id="statementTabs">
-      <button data-cat="income" class="${_statementCat==='income'?'on':''}" onclick="switchStatementCategory('income')">Income</button>
+      <button data-cat="income" class="${_statementCat==='income'?'on':''}" onclick="switchStatementCategory('income')">Revenus</button>
       <button data-cat="deposit" class="${_statementCat==='deposit'?'on':''}" onclick="switchStatementCategory('deposit')">Recharges</button>
-      <button data-cat="withdraw" class="${_statementCat==='withdraw'?'on':''}" onclick="switchStatementCategory('withdraw')">Withdrawals</button>
+      <button data-cat="withdraw" class="${_statementCat==='withdraw'?'on':''}" onclick="switchStatementCategory('withdraw')">Retraits</button>
     </div>
     <div class="statement-head" aria-hidden="true">
-      <span>Transaction</span><span>Amount</span>
+      <span>Transaction</span><span>Montant</span>
     </div>
     <div id="statementBody"></div>`);
   if (hadCache) renderStatement();
-  else $('statementBody').innerHTML = '<div class="statement-empty">Loading statement…</div>';
+  else $('statementBody').innerHTML = '<div class="statement-empty">Chargement du relevé…</div>';
   const r = await api('/transactions');
   if (r.status === 'success') {
     STATE.transactions = r.transactions;
@@ -5344,11 +5345,11 @@ window.downloadStatementPdf = async function(){
   if (btn && btn.classList.contains('busy')) return; // already in flight
   if (btn) { btn.classList.add('busy'); }
   try {
-    if (!(window.fbAuth && window.fbAuth.currentUser)) { notify('Please sign in again to download your statement.'); return; }
+    if (!(window.fbAuth && window.fbAuth.currentUser)) { notify('Veuillez vous reconnecter pour télécharger votre relevé.'); return; }
     const token = await window.fbAuth.currentUser.getIdToken();
     const resp = await fetch(API_BASE + '/statement/pdf', { headers: { Authorization: 'Bearer ' + token } });
     if (!resp.ok) {
-      let msg = 'Could not generate your statement right now.';
+      let msg = 'Impossible de générer votre relevé pour le moment.';
       try { const j = await resp.json(); if (j && j.message) msg = j.message; } catch(_){}
       notify(msg);
       return;
@@ -5367,7 +5368,7 @@ window.downloadStatementPdf = async function(){
     // picker a dead reference.
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   } catch (e) {
-    notify('Could not reach the server. Check your connection and try again.');
+    notify('Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.');
   } finally {
     if (btn) btn.classList.remove('busy');
   }
@@ -5385,7 +5386,7 @@ window.openMessagesSheet = async function(){
   const hadCache = Array.isArray(STATE.messages);
   openSheet('Messages', '<div id="msgBody"></div>');
   if (hadCache) renderMessagesList();
-  else $('msgBody').innerHTML = '<div class="list-empty">Loading&hellip;</div>';
+  else $('msgBody').innerHTML = '<div class="list-empty">Chargement…</div>';
   const r = await api('/messages');
   if (r.status === 'success') STATE.messages = r.messages;
   else if (!hadCache) STATE.messages = [];
@@ -5400,7 +5401,7 @@ function renderMessagesList(){
   const box = $('msgBody');
   if (!box) return;
   const list = STATE.messages || [];
-  if (!list.length) { box.innerHTML = '<div class="list-empty">No messages yet.</div>'; return; }
+  if (!list.length) { box.innerHTML = '<div class="list-empty">Aucun message pour l\'instant.</div>'; return; }
   box.innerHTML = '<div class="reveal-in">' + list.map((m, i) => `
     <button class="msg-row${m.read ? ' read' : ''}" onclick="openMessageDetail(${i})">
       <span class="av">C</span>
@@ -5417,7 +5418,7 @@ window.openMessageDetail = async function(index){
   const m = (STATE.messages || [])[index];
   if (!m) return;
   $('msgDetail').innerHTML = `
-    <button class="xbtn" onclick="closeMessageDetail()" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+    <button class="xbtn" onclick="closeMessageDetail()" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
     <div class="head">
       <div class="av">C</div>
       <div>
@@ -5477,41 +5478,41 @@ function pwFieldHtml(id, placeholder, pin){
 }
 window.openChangeLoginPasswordSheet = function(){
   openSheet('Security Settings', `<div class="pw-form reveal-in">
-    <div class="pw-form-heading"><span class="pw-heading-icon">${pwLockSvg()}</span><div><h3>Change login password</h3><p>Protect your ${esc(brandName())} account with a new password.</p></div></div>
+    <div class="pw-form-heading"><span class="pw-heading-icon">${pwLockSvg()}</span><div><h3>Changer le mot de passe de connexion</h3><p>Protégez votre compte ${esc(brandName())} avec un nouveau mot de passe.</p></div></div>
     <div class="pw-form-fields">
-    <label class="pw-label" for="lpOld">Current password</label>
-    ${pwFieldHtml('lpOld', 'Enter old password')}
-    <label class="pw-label" for="lpNew">New password</label>
-    ${pwFieldHtml('lpNew', 'Enter new password')}
-    <label class="pw-label" for="lpNew2">Confirm new password</label>
-    ${pwFieldHtml('lpNew2', 'Re-enter new password')}
+    <label class="pw-label" for="lpOld">Mot de passe actuel</label>
+    ${pwFieldHtml('lpOld', 'Entrez l\'ancien mot de passe')}
+    <label class="pw-label" for="lpNew">Nouveau mot de passe</label>
+    ${pwFieldHtml('lpNew', 'Entrez le nouveau mot de passe')}
+    <label class="pw-label" for="lpNew2">Confirmez le nouveau mot de passe</label>
+    ${pwFieldHtml('lpNew2', 'Saisissez à nouveau le nouveau mot de passe')}
     </div>
-    <button class="primary-button" id="lpSaveBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.06em;" onclick="submitLoginPasswordChange()">SAVE LOGIN PASSWORD</button>
+    <button class="primary-button" id="lpSaveBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.06em;" onclick="submitLoginPasswordChange()">ENREGISTRER LE MOT DE PASSE</button>
   </div>`);
 };
 window.submitLoginPasswordChange = async function(){
   const oldPass = $('lpOld').value;
   const newPass = $('lpNew').value;
   const confirm = $('lpNew2').value;
-  if (!oldPass) return notify('Enter your current login password.');
-  if (!newPass || newPass.length < 6) return notify('Your new password must be at least 6 characters.');
-  if (newPass !== confirm) return notify('The two new passwords do not match.');
-  if (newPass === oldPass) return notify('Your new password must be different from the old one.');
+  if (!oldPass) return notify('Entrez votre mot de passe de connexion actuel.');
+  if (!newPass || newPass.length < 6) return notify('Votre nouveau mot de passe doit comporter au moins 6 caractères.');
+  if (newPass !== confirm) return notify('Les deux nouveaux mots de passe ne correspondent pas.');
+  if (newPass === oldPass) return notify('Votre nouveau mot de passe doit être différent de l\'ancien.');
   const btn = $('lpSaveBtn');
-  btn.disabled = true; btn.textContent = 'SAVING…';
+  btn.disabled = true; btn.textContent = 'ENREGISTREMENT…';
   try {
     await window.fbChangePassword(phoneToEmail((STATE.account || {}).phone), oldPass, newPass);
-    btn.disabled = false; btn.textContent = 'SAVE LOGIN PASSWORD';
+    btn.disabled = false; btn.textContent = 'ENREGISTRER LE MOT DE PASSE';
     closeSheet({ fromAction: true });
-    notify('Login password changed');
+    notify('Mot de passe de connexion modifié');
   } catch (e) {
-    btn.disabled = false; btn.textContent = 'SAVE LOGIN PASSWORD';
+    btn.disabled = false; btn.textContent = 'ENREGISTRER LE MOT DE PASSE';
     // fbErrMsg's wrong-credential copy names the phone number, which only
     // makes sense on the login screen -- here the only thing that can be
     // wrong is the old password itself.
     const code = e && e.code || '';
     notify(code === 'auth/invalid-credential' || code === 'auth/wrong-password'
-      ? 'That is not your current login password.'
+      ? 'Ce n\'est pas votre mot de passe de connexion actuel.'
       : fbErrMsg(e));
   }
 };
@@ -5521,31 +5522,31 @@ window.submitLoginPasswordChange = async function(){
 // used 5 -- server.js validates the same length on /account/transaction-pin/change.
 window.openChangeTradePasswordSheet = function(){
   openSheet('Trade Password', `<div class="reveal-in" style="padding-top:22px;">
-    <p class="pw-note">Your trade password is your 6-digit PIN used to confirm cash outs and other sensitive actions.</p>
-    <div class="pw-head"><span class="bar"></span><span>Old Trade Password</span></div>
-    ${pwFieldHtml('tpOld', 'Enter old 6-digit PIN', true)}
-    <div class="pw-head"><span class="bar"></span><span>New Trade Password</span></div>
-    ${pwFieldHtml('tpNew', 'Enter new 6-digit PIN', true)}
-    <div class="pw-head"><span class="bar"></span><span>Confirm New Password</span></div>
-    ${pwFieldHtml('tpNew2', 'Re-enter new 6-digit PIN', true)}
-    <button class="primary-button" id="tpSaveBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.06em;" onclick="submitTradePasswordChange()">SAVE TRADE PASSWORD</button>
+    <p class="pw-note">Votre mot de passe de transaction est le code à 6 chiffres qui confirme vos retraits et autres opérations sensibles.</p>
+    <div class="pw-head"><span class="bar"></span><span>Ancien mot de passe de transaction</span></div>
+    ${pwFieldHtml('tpOld', 'Entrez l\'ancien code à 6 chiffres', true)}
+    <div class="pw-head"><span class="bar"></span><span>Nouveau mot de passe de transaction</span></div>
+    ${pwFieldHtml('tpNew', 'Entrez le nouveau code à 6 chiffres', true)}
+    <div class="pw-head"><span class="bar"></span><span>Confirmez le nouveau mot de passe</span></div>
+    ${pwFieldHtml('tpNew2', 'Saisissez à nouveau le nouveau code à 6 chiffres', true)}
+    <button class="primary-button" id="tpSaveBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.06em;" onclick="submitTradePasswordChange()">ENREGISTRER LE MOT DE PASSE DE TRANSACTION</button>
   </div>`);
 };
 window.submitTradePasswordChange = async function(){
   const oldPin = $('tpOld').value.trim();
   const newPin = $('tpNew').value.trim();
   const confirm = $('tpNew2').value.trim();
-  if (!/^\d{6}$/.test(oldPin)) return notify('Enter your current 6-digit trade password.');
-  if (!/^\d{6}$/.test(newPin)) return notify('Your new trade password must be exactly 6 digits.');
-  if (newPin !== confirm) return notify('The two new trade passwords do not match.');
-  if (newPin === oldPin) return notify('Your new trade password must be different from the old one.');
+  if (!/^\d{6}$/.test(oldPin)) return notify('Entrez votre mot de passe de transaction actuel à 6 chiffres.');
+  if (!/^\d{6}$/.test(newPin)) return notify('Votre nouveau mot de passe de transaction doit comporter exactement 6 chiffres.');
+  if (newPin !== confirm) return notify('Les deux nouveaux mots de passe de transaction ne correspondent pas.');
+  if (newPin === oldPin) return notify('Votre nouveau mot de passe de transaction doit être différent de l\'ancien.');
   const btn = $('tpSaveBtn');
-  btn.disabled = true; btn.textContent = 'SAVING…';
+  btn.disabled = true; btn.textContent = 'ENREGISTREMENT…';
   const r = await post('/account/transaction-pin/change', { oldPin, newPin });
-  btn.disabled = false; btn.textContent = 'SAVE TRADE PASSWORD';
-  if (r.status !== 'success') return notify(r.message || 'Could not change your trade password.');
+  btn.disabled = false; btn.textContent = 'ENREGISTRER LE MOT DE PASSE DE TRANSACTION';
+  if (r.status !== 'success') return notify(r.message || 'Impossible de changer votre mot de passe de transaction.');
   closeSheet({ fromAction: true });
-  notify('Trade password changed');
+  notify('Mot de passe de transaction modifié');
 };
 
 // ── TREASURE CHEST (Chest.dc.html / ChestSuccess.dc.html) ──
@@ -5555,11 +5556,11 @@ window.submitTradePasswordChange = async function(){
 window.openChestSheet = function(){
   openSheet('Gift Codes', `<div class="reveal-in gift-code-stage">
     <div class="gift-code-mark" aria-hidden="true">${GIFT_CODE_REFERENCE_SVG}</div>
-    <h2>Redeem Gift Code</h2>
-    <p class="sub">Enter a valid gift code to add its reward to your balance.</p>
+    <h2>Utiliser un code cadeau</h2>
+    <p class="sub">Saisissez un code cadeau valide pour ajouter sa récompense à votre solde.</p>
     <div style="width:100%;">
-      <div class="key-field"><input id="chestKey" type="text" placeholder="Enter gift code" maxlength="14" autocapitalize="off" autocomplete="off" spellcheck="false"></div>
-      <button class="primary-button" id="chestOpenBtn" style="width:100%;height:54px;padding:0;font-size:16px;letter-spacing:.06em;" onclick="submitChestKey()">REDEEM CODE</button>
+      <div class="key-field"><input id="chestKey" type="text" placeholder="Saisissez le code cadeau" maxlength="14" autocapitalize="off" autocomplete="off" spellcheck="false"></div>
+      <button class="primary-button" id="chestOpenBtn" style="width:100%;height:54px;padding:0;font-size:16px;letter-spacing:.06em;" onclick="submitChestKey()">UTILISER LE CODE</button>
     </div>
   </div>`);
 };
@@ -5570,12 +5571,12 @@ window.submitChestKey = async function(){
   const raw = ($('chestKey').value || '').trim();
   // Owner named these two exactly: "so on 'please enter the treasure chest
   // key', 'wrong treasure chest password'."
-  if (!raw) return notify('Please enter a gift code');
+  if (!raw) return notify('Veuillez saisir un code cadeau');
   const btn = $('chestOpenBtn');
-  btn.disabled = true; btn.textContent = 'REDEEMING…';
+  btn.disabled = true; btn.textContent = 'UTILISATION…';
   const r = await post('/redeem', { code: raw });
-  btn.disabled = false; btn.textContent = 'REDEEM CODE';
-  if (r.status !== 'success') return notify(r.message || 'That gift code could not be redeemed.');
+  btn.disabled = false; btn.textContent = 'UTILISER LE CODE';
+  if (r.status !== 'success') return notify(r.message || 'Ce code cadeau n\'a pas pu être utilisé.');
   // Owner: "why does the congratulations card delay to appear when one has
   // claimed treasure code." Because it used to wait on TWO more round trips
   // after the redeem itself -- /account and the transactions cache -- purely
@@ -5599,7 +5600,7 @@ window.submitChestKey = async function(){
   // amount/live-counting balance/COLLECT, showChestWin() and friends) is
   // gone -- a redeemed code is now just this one toast, the same notify()
   // every other quick confirmation in this app already uses.
-  notify('Giftcode redeemed successfully ✓');
+  notify('Code cadeau utilisé avec succès ✓');
   // Now catch the app up in the background.
   refreshAfterWin();
 };
@@ -5723,9 +5724,22 @@ function maybeAnnounceOnEntry(){
   if (isAnyOverlayOpen()) return;
   maybeShowAnnouncement();
 }
+// A sheet's `title` is also its IDENTITY (the live refresh asks "is the Wallet sheet still open?"), so the
+// callers keep passing the short internal name and only what is PRINTED in the header is French.
+var SHEET_LABELS = {
+  'All Referrals': 'Tous les filleuls', 'Wallet': 'Portefeuille', 'Transaction Statement': 'Historique du solde',
+  'Messages': 'Messages', 'Security Settings': 'Paramètres de sécurité', 'Trade Password': 'Mot de passe de transaction',
+  'Gift Codes': 'Codes cadeaux', 'Info': 'Infos', 'Support': 'Assistance', 'Help Centre': "Centre d'aide",
+  'Rules and Regulations': 'Règles et conditions', 'Daily Check-in': 'Pointage quotidien', 'Recharge': 'Recharge', 'Withdraw': 'Retrait'
+};
+function sheetLabel(title){
+  const s = String(title == null ? '' : title);
+  if (SHEET_LABELS[s]) return SHEET_LABELS[s];
+  return s.indexOf('About ') === 0 ? 'À propos de ' + s.slice(6) : s;
+}
 function openSheet(title, bodyHtml){
   dismissNotify();
-  $('sheetTitle').textContent = title;
+  $('sheetTitle').textContent = sheetLabel(title);
   $('sheetBody').innerHTML = bodyHtml;
   // Withdraw's empty-state "Add withdrawal account" link opens Withdrawal
   // Accounts FROM WITHIN the already-open Withdraw sheet -- both render into
@@ -5813,7 +5827,7 @@ window.openSupportGroup = function(){
   // Owner: Support on Home takes the member straight to the group he put in the admin panel.
   const s = STATE.settings || {};
   const url = String(s.telegramGroup || s.whatsappGroup || s.supportTelegram || '').trim();
-  if (!url) return notify('Support group is not set up yet. Please try again later.');
+  if (!url) return notify('Le groupe d\'assistance n\'est pas encore configuré. Veuillez réessayer plus tard.');
   const w = window.open(url, '_blank', 'noopener');
   if (!w) window.location.href = url;
 };
@@ -5839,12 +5853,12 @@ function supportRowHtml(kind, icon, title, sub, href){
 window.openSupportSheet = function(){
   const s = STATE.settings || {};
   const rows = [];
-  if (s.whatsappGroup) rows.push(supportRowHtml('whatsapp', ICONS.whatsapp, 'WhatsApp Channel', 'Chat with us', s.whatsappGroup));
-  if (s.telegramGroup) rows.push(supportRowHtml('telegram', ICONS.telegram, 'Telegram Group', 'Join our group', s.telegramGroup));
-  if (s.supportTelegram) rows.push(supportRowHtml('telegram', ICONS.telegram, 'Telegram Customer Service', 'Chat with an agent', s.supportTelegram));
+  if (s.whatsappGroup) rows.push(supportRowHtml('whatsapp', ICONS.whatsapp, 'Chaîne WhatsApp', 'Discutez avec nous', s.whatsappGroup));
+  if (s.telegramGroup) rows.push(supportRowHtml('telegram', ICONS.telegram, 'Groupe Telegram', 'Rejoignez notre groupe', s.telegramGroup));
+  if (s.supportTelegram) rows.push(supportRowHtml('telegram', ICONS.telegram, 'Service client Telegram', 'Discutez avec un conseiller', s.supportTelegram));
   openSheet('Support', `<div class="reveal-in">
-    ${rows.length ? rows.join('') : `<p style="line-height:1.6;color:var(--snow-muted);">${esc(t('Contact support for help with your account.'))}</p>`}
-    ${s.supportHours ? `<div class="support-hours-card"><span class="support-hours-icon">${ICONS.clock}</span><span class="support-row-txt"><span class="t1">Support hours</span><span class="t2">${esc(s.supportHours)}</span></span></div>` : ''}
+    ${rows.length ? rows.join('') : `<p style="line-height:1.6;color:var(--snow-muted);">${esc(t('Contactez l\'assistance pour toute question sur votre compte.'))}</p>`}
+    ${s.supportHours ? `<div class="support-hours-card"><span class="support-hours-icon">${ICONS.clock}</span><span class="support-row-txt"><span class="t1">Horaires de l'assistance</span><span class="t2">${esc(s.supportHours)}</span></span></div>` : ''}
   </div>`);
 };
 // Help Centre banner + the two support links are lazy-fetched only when
@@ -5859,14 +5873,14 @@ window.openHelpSheet = async function(){
   // with the same "leave blank to hide its button" copy -- but nothing here
   // ever read either field, so filling them in silently did nothing. Wired
   // in the same way as the Telegram links right below.
-  const links = (s.telegramGroup ? `<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;" href="${esc(s.telegramGroup)}" target="_blank" rel="noopener">Telegram Group</a>` : '')
-    + (s.supportTelegram ? `<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;background:var(--snow-ink);" href="${esc(s.supportTelegram)}" target="_blank" rel="noopener">Customer Service</a>` : '')
-    + (s.whatsappGroup ? `<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;background:var(--snow-green);" href="${esc(s.whatsappGroup)}" target="_blank" rel="noopener">WhatsApp Group</a>` : '')
-    + (s.whatsappContact ? `<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;background:var(--snow-green-deep);" href="${esc(s.whatsappContact)}" target="_blank" rel="noopener">WhatsApp Support</a>` : '');
+  const links = (s.telegramGroup ? `<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;" href="${esc(s.telegramGroup)}" target="_blank" rel="noopener">Groupe Telegram</a>` : '')
+    + (s.supportTelegram ? `<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;background:var(--snow-ink);" href="${esc(s.supportTelegram)}" target="_blank" rel="noopener">Service client</a>` : '')
+    + (s.whatsappGroup ? `<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;background:var(--snow-green);" href="${esc(s.whatsappGroup)}" target="_blank" rel="noopener">Groupe WhatsApp</a>` : '')
+    + (s.whatsappContact ? `<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;background:var(--snow-green-deep);" href="${esc(s.whatsappContact)}" target="_blank" rel="noopener">Assistance WhatsApp</a>` : '');
   openSheet('Help Centre', `<div class="reveal-in">
     <div id="helpBannerWrap"></div>
     ${links ? `<div style="display:flex;flex-direction:column;gap:10px;margin-top:16px;">${links}</div>` : ''}
-    <p style="white-space:pre-line;line-height:1.6;color:var(--snow-muted);margin-top:18px;font-size:13px;">${esc(s.supportHours ? 'Support hours: ' + s.supportHours : 'Contact support for help with your account.')}</p>
+    <p style="white-space:pre-line;line-height:1.6;color:var(--snow-muted);margin-top:18px;font-size:13px;">${esc(s.supportHours ? `Heures d'assistance : ${s.supportHours}` : 'Contactez l\'assistance pour toute question sur votre compte.')}</p>
   </div>`);
   const r = await api('/public/help-banner');
   const wrap = $('helpBannerWrap');
@@ -5899,8 +5913,7 @@ function revealWordsHtml(escapedText){
 // and words I placed show animation").
 let _aboutScrollObserver = null;
 function articleLoadingHtml(){
-  return '<div class="article-loading"><div class="article-ring-wrap">' + MINI_RING_LOADER
-    + '<span class="ls-percent article-percent" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">0</span></div></div>';
+  return `<div class="article-loading"><div class="article-ring-wrap">${MINI_RING_LOADER}<span class="ls-percent article-percent" role="progressbar" aria-label="Chargement" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">0</span></div></div>`;
 }
 function startArticleProgress(article){
   const value = article.querySelector('.article-percent');
@@ -5920,7 +5933,7 @@ function startArticleProgress(article){
 }
 window.openAboutSheet = async function(){
   const s = STATE.settings || {};
-  openSheet('About ' + brandName(), `<div id="aboutArticle" class="reveal-in">${articleLoadingHtml()}</div>`);
+  openSheet(`À propos de ${brandName()}`, `<div id="aboutArticle" class="reveal-in">${articleLoadingHtml()}</div>`);
   const article = $('aboutArticle');
   const finishLoading = startArticleProgress(article);
   const r = await api('/public/about-content');
@@ -5929,7 +5942,7 @@ window.openAboutSheet = async function(){
   const wrap = $('aboutArticle');
   if (wrap !== article) return; // sheet was closed or replaced before this resolved
   const blocks = (r.status === 'success' && Array.isArray(r.blocks) && r.blocks.length) ? r.blocks
-    : [{ type: 'text', text: s.aboutText || (brandName() + ' lets you invest in a range of products with daily income and a 3-level referral program.') }];
+    : [{ type: 'text', text: s.aboutText || (`${brandName()} vous permet d’investir dans une gamme de produits avec un revenu quotidien et un programme de parrainage à 3 niveaux.`) }];
   wrap.innerHTML = blocks.map(b => b.type === 'image'
     ? `<div class="scroll-reveal about-image about-block"><img src="${esc(b.image)}" style="width:100%;display:block;border-radius:0;" alt=""></div>`
     : `<div class="scroll-reveal about-block"><p style="white-space:pre-line;line-height:1.7;color:rgba(255,255,255,.90);">${revealWordsHtml(esc(b.text))}</p></div>`
@@ -5955,7 +5968,7 @@ window.openRulesSheet = async function(){
   await new Promise(resolve => setTimeout(resolve, 100));
   const wrap = $('rulesArticle');
   if (wrap !== article) return;
-  const fallback = s.rulesText || ('Minimum recharge ' + fmtUGX(s.minDeposit) + '. Minimum withdraw ' + fmtUGX(s.minWithdraw) + ', a ' + withdrawalFeePct(s) + '% fee applies. Referral commission is paid once, after the first confirmed recharge: Level 1 ' + (s.commL1 ?? 30) + '%, Level 2 ' + (s.commL2 ?? 3) + '%, Level 3 ' + (s.commL3 ?? 2) + '%.');
+  const fallback = s.rulesText || (`Recharge minimum ${fmtUGX(s.minDeposit)}. Retrait minimum ${fmtUGX(s.minWithdraw)}, des frais de ${withdrawalFeePct(s)} % s'appliquent. La commission de parrainage est versée une seule fois, après la première recharge confirmée : niveau 1 ${s.commL1 ?? 30} %, niveau 2 ${s.commL2 ?? 3} %, niveau 3 ${s.commL3 ?? 2} %.`);
   const blocks = (r.status === 'success' && Array.isArray(r.blocks) && r.blocks.length) ? r.blocks
     : [{ type: 'text', text: fallback }];
   wrap.innerHTML = blocks.map(b => b.type === 'image'
@@ -6001,12 +6014,12 @@ window.openCheckinSheet = function(){
   const checkinStyle = STATE.checkinBanner ? ` style="--checkin-bg:url('${esc(STATE.checkinBanner)}')"` : '';
   openSheet('Daily Check-in', `<div class="reveal-in">
     <div class="checkin-panel"${checkinStyle}>
-      <div class="checkin-kicker">Total amount earned</div>
+      <div class="checkin-kicker">Total des gains</div>
       <div class="checkin-total mono">${esc(fmtUGX(totalAmount))}</div>
       <div class="checkin-copy">${onCooldown
-        ? `You have checked in today. Your next check-in opens at midnight.`
-        : `Check in once each day to earn ${fmtUGX(bonus)}.`}</div>
-      <button class="primary-button checkin-action" id="checkinBtn" ${onCooldown ? `data-checkin-next="${nextAt}" disabled` : ''} onclick="submitCheckin()">${onCooldown ? 'Checked in today' : 'Check In &middot; ' + fmtUGX(bonus)}</button>
+        ? `Vous avez déjà pointé aujourd'hui. Le prochain pointage ouvre à minuit.`
+        : `Pointez une fois par jour pour gagner ${fmtUGX(bonus)}.`}</div>
+      <button class="primary-button checkin-action" id="checkinBtn" ${onCooldown ? `data-checkin-next="${nextAt}" disabled` : ''} onclick="submitCheckin()">${onCooldown ? 'Déjà pointé aujourd\'hui' : `Pointage · ${fmtUGX(bonus)}`}</button>
     </div>
   </div>`);
   if (onCooldown) startCheckinCountdown();
@@ -6027,9 +6040,9 @@ function startCheckinCountdown(){
     btn.removeAttribute('data-checkin-next');
     btn.disabled = false;
     const bonus = Number(STATE.settings && STATE.settings.dailyCheckin) || 0;
-    btn.innerHTML = 'Check In &middot; ' + fmtUGX(bonus);
+    btn.innerHTML = `Pointage · ${fmtUGX(bonus)}`;
     const copy = document.querySelector('.checkin-copy');
-    if (copy) copy.textContent = 'Check in once each day to earn ' + fmtUGX(bonus) + '.';
+    if (copy) copy.textContent = `Pointez une fois par jour pour gagner ${fmtUGX(bonus)}.`;
     return;
   }
   _checkinCountdownTimer = setTimeout(() => {
@@ -6041,13 +6054,13 @@ window.submitCheckin = async function(){
   const btn = $('checkinBtn');
   if (!btn || btn.disabled) return;
   const label = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Checking in…';
+  btn.disabled = true; btn.textContent = 'Pointage en cours…';
   const r = await post('/checkin', {});
   if (r.status !== 'success') {
     btn.disabled = false; btn.textContent = label;
-    return notify(r.message || 'Could not check in');
+    return notify(r.message || 'Impossible de pointer');
   }
-  notify(t('Check-in successful ✓'));
+  notify(t('Pointage réussi ✓'));
   const acc = await api('/account');
   if (acc.status === 'success') STATE.account = acc.account;
   // Same stale-Records fix Round 72 applied to deposit/withdraw --
@@ -6091,7 +6104,7 @@ function cleanDesc(d){ return d || ''; }
 // only deposit path: one screen, no method choice to make.
 window.openDepositSheet = function(){
   const s = STATE.settings || {};
-  if (s.depositAvailable === false) return notify('Recharges are not available right now.');
+  if (s.depositAvailable === false) return notify('Les recharges ne sont pas disponibles pour le moment.');
   openDepositFormSheet();
 };
 var _depChosenAmount = 0;
@@ -6150,9 +6163,9 @@ function openDepositFormSheet(){
   const manualOn = s.manualPay === true;
   // Owner: "we are using USDT and manual" -- Bank / Wallet (when the admin has added payment numbers) and USDT only.
   const methodTabs = [];
-  if (manualOn) methodTabs.push(['mm', 'Bank / Wallet']);
+  if (manualOn) methodTabs.push(['mm', 'Banque / Portefeuille']);
   if (usdtOn) methodTabs.push(['usdt', 'USDT (TRC20)']);
-  if (!methodTabs.length) methodTabs.push(['mm', 'Bank / Wallet']);
+  if (!methodTabs.length) methodTabs.push(['mm', 'Banque / Portefeuille']);
   _depMethod = methodTabs[0][0];
   const tabsHtml = methodTabs.length > 1
     ? `<div class="dep-method-tabs" id="depMethodRow">
@@ -6161,83 +6174,83 @@ function openDepositFormSheet(){
   openSheet('Recharge', `<div class="reveal-in" style="padding-top:18px;">
     ${tabsHtml}
     <div id="depMmPanel" style="${_depMethod === 'mm' ? '' : 'display:none;'}">
-    <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
+    <div class="dep-sec"><span class="bar"></span><span>Choisissez le montant</span></div>
     <div class="dep-amt"><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minDeposit) || 0}" oninput="syncDepositQuickAmt()"></div>
     <div class="dep-chips" id="depChips">${depositChipsHtml(s, 'depAmount')}</div>
 
-    ${manualOn ? '' : `<div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Payment Phone</span></div>
+    ${manualOn ? '' : `<div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Téléphone de paiement</span></div>
     <div class="dep-phone">
       <span class="prefix">${esc(dialPlus())}</span>
-      <input id="depPhone" type="tel" inputmode="numeric" placeholder="Your payment number (${esc(phoneHintBody())})" value="${esc(defaultPhone)}" oninput="sanitizePhoneInput(this)">
+      <input id="depPhone" type="tel" inputmode="numeric" placeholder="Votre numéro de paiement (${esc(phoneHintBody())})" value="${esc(defaultPhone)}" oninput="sanitizePhoneInput(this)">
     </div>
-    <div class="dep-hint">Phone number must start with 0 and be ${localLen() + 1} digits</div>`}
+    <div class="dep-hint">Le numéro de téléphone doit commencer par 0 et compter ${localLen() + 1} chiffres</div>`}
 
-    <button class="primary-button" id="depSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="submitDeposit()">Confirm Recharge</button>
+    <button class="primary-button" id="depSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="submitDeposit()">Confirmer la recharge</button>
 
     <div class="dep-instr deposit-guide">
-      <h3>How to add funds</h3>
+      <h3>Comment ajouter des fonds</h3>
       <ol class="deposit-steps">
-        ${manualOn ? `<li><b>Choose your amount</b><span>Enter at least ${fmtUGX(s.minDeposit)}.</span></li>
-        <li><b>Pay to the account shown</b><span>Tap Confirm Recharge, pick a bank or wallet, copy the account and pay from your own app.</span></li>` : `<li><b>Choose your amount</b><span>Enter at least ${fmtUGX(s.minDeposit)} and the mobile money number to charge.</span></li>
-        <li><b>Approve on your phone</b><span>Tap Confirm Recharge, then approve the payment prompt using your mobile money PIN on your phone.</span></li>`}
-        <li><b>Follow the payment status</b><span>Wait for confirmation. This checks itself automatically. If money leaves your phone but the balance has not updated, keep the transaction reference and contact Customer Support.</span></li>
+        ${manualOn ? `<li><b>Choisissez votre montant</b><span>Saisissez au moins ${fmtUGX(s.minDeposit)}.</span></li>
+        <li><b>Payez sur le compte indiqué</b><span>Touchez « Confirmer la recharge », choisissez une banque ou un portefeuille, copiez le compte et payez depuis votre propre application.</span></li>` : `<li><b>Choisissez votre montant</b><span>Saisissez au moins ${fmtUGX(s.minDeposit)} et le numéro Mobile Money à débiter.</span></li>
+        <li><b>Validez sur votre téléphone</b><span>Touchez « Confirmer la recharge », puis validez la demande de paiement avec le code PIN de votre Mobile Money sur votre téléphone.</span></li>`}
+        <li><b>Suivez l'état du paiement</b><span>Attendez la confirmation. Elle se vérifie automatiquement. Si l'argent a quitté votre téléphone mais que le solde n'est pas à jour, conservez la référence de la transaction et contactez le service client.</span></li>
       </ol>
     </div>
     </div>
 
     <div id="depUsdtPanel" style="${_depMethod === 'usdt' ? '' : 'display:none;'}">
-      <div class="dep-sec"><span class="bar"></span><span>Amount (USDT)</span></div>
+      <div class="dep-sec"><span class="bar"></span><span>Montant (USDT)</span></div>
       <div class="dep-amt"><input id="usdtAmt" type="number" step="0.01" inputmode="decimal" placeholder="0" oninput="updateUsdtConversion()"></div>
-      <div class="dep-hint">1 USDT = ${fmtUGX(Number(s.usdtRate) || 0)} &middot; you will receive <b id="usdtUgxPreview">${fmtUGX(0)}</b></div>
+      <div class="dep-hint">1 USDT = ${fmtUGX(Number(s.usdtRate) || 0)} · vous recevrez <b id="usdtUgxPreview">${fmtUGX(0)}</b></div>
 
-      <button class="primary-button" id="usdtIntentBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0 8px;" onclick="doUsdtIntent()">Get payment amount</button>
+      <button class="primary-button" id="usdtIntentBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0 8px;" onclick="doUsdtIntent()">Obtenir le montant à payer</button>
 
       <div id="usdtPayBox" style="display:none;">
-        <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Send exactly this amount</span></div>
+        <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Envoyez exactement ce montant</span></div>
         <div class="dep-phone" style="height:auto;padding:12px 0;">
           <span id="usdtExactDisplay" style="font-size:22px;font-weight:800;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;flex:1;"></span>
-          <button type="button" class="secondary-button" style="height:34px;padding:0 14px;font-size:12.5px;flex-shrink:0;" onclick="copyUsdtExact()">Copy</button>
+          <button type="button" class="secondary-button" style="height:34px;padding:0 14px;font-size:12.5px;flex-shrink:0;" onclick="copyUsdtExact()">Copier</button>
         </div>
-        <div class="dep-hint">Send every digit, exactly. A different amount cannot be credited automatically. <span id="usdtExpiryHint"></span></div>
+        <div class="dep-hint">Envoyez chaque chiffre à l'identique. Un montant différent ne peut pas être crédité automatiquement. <span id="usdtExpiryHint"></span></div>
 
-        <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>To this address (TRC20 only)</span></div>
+        <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>À cette adresse (TRC20 uniquement)</span></div>
         <div class="dep-phone" style="height:auto;padding:12px 0;">
           <span id="usdtAddrDisplay" style="word-break:break-all;font-size:12.5px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;letter-spacing:.2px;flex:1;">${esc(s.usdtWalletAddress || '')}</span>
-          <button type="button" class="secondary-button" style="height:34px;padding:0 14px;font-size:12.5px;flex-shrink:0;" onclick="copyUsdtAddress()">Copy</button>
+          <button type="button" class="secondary-button" style="height:34px;padding:0 14px;font-size:12.5px;flex-shrink:0;" onclick="copyUsdtAddress()">Copier</button>
         </div>
-        <div class="dep-hint">TRC20 (Tron) network only &mdash; any other network permanently loses the funds.</div>
+        <div class="dep-hint">Réseau TRC20 (Tron) uniquement — tout autre réseau entraîne la perte définitive des fonds.</div>
 
-        <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Transaction Hash (TXID)</span></div>
+        <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Hash de transaction (TXID)</span></div>
         <div class="dep-phone">
-          <input id="usdtTxid" type="text" placeholder="Paste your transaction hash" style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;">
+          <input id="usdtTxid" type="text" placeholder="Collez votre hash de transaction" style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;">
         </div>
 
-        <button class="primary-button" id="usdtGoBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="doUsdtDeposit()">Submit USDT Payment</button>
+        <button class="primary-button" id="usdtGoBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="doUsdtDeposit()">Envoyer le paiement USDT</button>
       </div>
 
       <div class="dep-instr deposit-guide">
-        <h3>How USDT recharges work</h3>
+        <h3>Comment fonctionnent les recharges USDT</h3>
         <ol class="deposit-steps">
-          <li><b>Get your payment amount</b><span>Minimum ${fmtUGX(s.minDeposit)}${Number(s.usdtRate) > 0 ? ` (about ${(Number(s.minDeposit) / Number(s.usdtRate)).toFixed(2)} USDT)` : ''}. Enter it and tap Get payment amount. You are given an exact amount with extra digits that belong only to you.</span></li>
-          <li><b>Send exactly that amount</b><span>On the TRC20 (Tron) network only, to the address shown. Then copy the TXID from your wallet app, paste it here and tap Submit.</span></li>
-          <li><b>Wait for verification</b><span>Most payments confirm within a minute, automatically. If yours is still pending, reopen Transaction Statement later to check.</span></li>
+          <li><b>Obtenez votre montant à payer</b><span>Minimum ${fmtUGX(s.minDeposit)}${Number(s.usdtRate) > 0 ? ` (environ ${(Number(s.minDeposit) / Number(s.usdtRate)).toFixed(2)} USDT)` : ''}. Saisissez-le et touchez « Obtenir le montant à payer ». Vous recevez un montant exact avec des chiffres supplémentaires qui vous sont propres.</span></li>
+          <li><b>Envoyez exactement ce montant</b><span>Uniquement sur le réseau TRC20 (Tron), vers l'adresse indiquée. Copiez ensuite le TXID depuis votre application de portefeuille, collez-le ici et touchez « Envoyer ».</span></li>
+          <li><b>Attendez la vérification</b><span>La plupart des paiements sont confirmés en moins d'une minute, automatiquement. Si le vôtre est encore en attente, rouvrez l'Historique du solde plus tard pour vérifier.</span></li>
         </ol>
       </div>
     </div>
 
     <div id="depCardPanel" style="display:none;">
-      <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
+      <div class="dep-sec"><span class="bar"></span><span>Choisissez le montant</span></div>
       <div class="dep-amt"><input id="cardAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minDeposit) || 0}" oninput="syncCardQuickAmt()"></div>
       <div class="dep-chips" id="cardChips">${depositChipsHtml(s, 'cardAmount')}</div>
 
-      <button class="primary-button" id="cardGoBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="doCardDeposit()">Pay with Card</button>
+      <button class="primary-button" id="cardGoBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="doCardDeposit()">Payer par carte</button>
 
       <div class="dep-instr deposit-guide">
-        <h3>How card payments work</h3>
+        <h3>Comment fonctionnent les paiements par carte</h3>
         <ol class="deposit-steps">
-          <li><b>Enter your amount</b><span>At least ${fmtUGX(s.minDeposit)}.</span></li>
-          <li><b>Pay on the secure card page</b><span>Tap Pay with Card and enter your card details on MarzPay's own payment page.</span></li>
-          <li><b>Return to the app</b><span>Your balance updates automatically once the payment is confirmed.</span></li>
+          <li><b>Saisissez votre montant</b><span>Au moins ${fmtUGX(s.minDeposit)}.</span></li>
+          <li><b>Payez sur la page de carte sécurisée</b><span>Touchez « Payer par carte » et saisissez les informations de votre carte sur la page de paiement de MarzPay.</span></li>
+          <li><b>Retourner à l'application</b><span>Votre solde se met à jour automatiquement dès que le paiement est confirmé.</span></li>
         </ol>
       </div>
     </div>
@@ -6265,15 +6278,15 @@ window.doCardDeposit = async function(){
   const btn = $('cardGoBtn');
   if (!btn || btn.disabled) return;
   const amount = parseMoneyInput(($('cardAmount') || {}).value);
-  if (!amount || amount <= 0) return notify('Enter the amount you want to add');
+  if (!amount || amount <= 0) return notify('Saisissez le montant que vous souhaitez ajouter');
   const s = STATE.settings || {};
-  if (amount < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
+  if (amount < (Number(s.minDeposit) || 0)) return notify(`Le montant minimum est de ${fmtUGX(s.minDeposit)}`);
   const label = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Starting…';
+  btn.disabled = true; btn.textContent = 'Démarrage…';
   const r = await post('/deposit/card/submit', { amount: amount });
   if (r.status !== 'success' || !r.redirectUrl) {
     btn.disabled = false; btn.textContent = label;
-    return notify(r.message || 'Could not start the card payment');
+    return notify(r.message || 'Impossible de lancer le paiement par carte');
   }
   try { localStorage.setItem(CARD_DEPOSIT_STORAGE_KEY, r.depositId); } catch (e) {}
   location.href = r.redirectUrl;
@@ -6305,7 +6318,7 @@ async function resumePendingCardDeposit(){
         clearInterval(timer);
         try { localStorage.removeItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) {}
         fireConfetti();
-        notify('Card payment completed! Credited to your balance.');
+        notify('Paiement par carte effectué ! Votre solde a été crédité.');
         await refreshTransactionsCache();
         if (STATE.page === 'home') renderHome();
         return;
@@ -6313,7 +6326,7 @@ async function resumePendingCardDeposit(){
       if (r.status === 'success' && r.state === 'failed') {
         clearInterval(timer);
         try { localStorage.removeItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) {}
-        notify(r.message || 'The card payment did not complete.');
+        notify(r.message || 'Le paiement par carte n\'a pas abouti.');
         return;
       }
     } catch (e) {}
@@ -6353,47 +6366,47 @@ window.doUsdtIntent = async function(){
   const btn = $('usdtIntentBtn');
   if (!btn || btn.disabled) return;
   const amtUsdt = parseFloat(($('usdtAmt') || {}).value);
-  if (!amtUsdt || amtUsdt <= 0) return notify('Enter the USDT amount you want to send');
+  if (!amtUsdt || amtUsdt <= 0) return notify('Saisissez le montant en USDT que vous souhaitez envoyer');
   const amtUgx = Math.round(amtUsdt * (Number(s.usdtRate) || 0));
-  if (amtUgx < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
+  if (amtUgx < (Number(s.minDeposit) || 0)) return notify(`Le montant minimum est de ${fmtUGX(s.minDeposit)}`);
   const label = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Getting your amount…';
+  btn.disabled = true; btn.textContent = 'Obtention de votre montant…';
   const r = await post('/deposit/usdt/intent', { amountUsdt: amtUsdt });
   btn.disabled = false; btn.textContent = label;
-  if (r.status !== 'success') return notify(r.message || 'Could not get your payment amount');
+  if (r.status !== 'success') return notify(r.message || 'Impossible d\'obtenir votre montant à payer');
   _usdtIntent = { id: r.intentId, exact: r.exactAmount, base: Math.round(amtUsdt * 100) / 100, address: r.walletAddress, expiresAt: r.expiresAt };
   const ex = $('usdtExactDisplay'); if (ex) ex.textContent = r.exactAmount + ' USDT';
   const ad = $('usdtAddrDisplay'); if (ad && r.walletAddress) ad.textContent = r.walletAddress;
   const mins = Math.max(1, Math.round((Number(r.expiresAt) - Date.now()) / 60000));
-  const hint = $('usdtExpiryHint'); if (hint) hint.textContent = 'This amount is reserved for you for about ' + mins + ' minutes.';
+  const hint = $('usdtExpiryHint'); if (hint) hint.textContent = 'Ce montant est réservé pour vous pendant environ ' + mins + ' minutes.';
   const box = $('usdtPayBox'); if (box) box.style.display = 'block';
 };
 window.doUsdtDeposit = async function(){
   const s = STATE.settings || {};
   const btn = $('usdtGoBtn');
   if (!btn || btn.disabled) return;
-  if (!_usdtIntent) return notify('Tap Get payment amount first');
+  if (!_usdtIntent) return notify('Touchez d\'abord « Obtenir le montant à payer »');
   const txid = ($('usdtTxid') || {}).value.trim();
-  if (!txid) return notify('Enter the transaction hash (TXID)');
+  if (!txid) return notify('Saisissez le hash de transaction (TXID)');
   const label = btn.textContent;
   // The server itself checks the transaction a few times before answering
   // (see resolveUsdtDeposit server-side) -- this button legitimately takes
   // a few seconds, which "Checking payment…" makes honest rather than just
   // a generic spinner.
-  btn.disabled = true; btn.textContent = 'Checking payment…';
+  btn.disabled = true; btn.textContent = 'Vérification du paiement…';
   const r = await post('/deposit/usdt/submit', { intentId: _usdtIntent.id, txid: txid });
   btn.disabled = false; btn.textContent = label;
-  if (r.status !== 'success') return notify(r.message || 'Could not submit your recharge');
+  if (r.status !== 'success') return notify(r.message || 'Impossible d\'envoyer votre recharge');
 
   if (r.state === 'rejected') {
     // The hash stays as typed so the member can see what was declined.
-    return notify(r.message || 'Payment declined.');
+    return notify(r.message || 'Paiement refusé.');
   }
 
   if (r.state === 'matched') {
     _usdtIntent = null;
     fireConfetti();
-    notify('Payment completed! Credited to your balance.');
+    notify('Paiement effectué ! Votre solde a été crédité.');
     closeSheet({ fromAction: true });
     await refreshTransactionsCache();
     if (STATE.page === 'home') renderHome();
@@ -6404,7 +6417,7 @@ window.doUsdtDeposit = async function(){
   // slower confirmation still ends with a clear result. If it's somehow
   // still open after this, the server keeps retrying on its own (up to 15
   // minutes) regardless of whether anyone is watching.
-  notify(r.message || 'Submitted. Verifying on-chain…');
+  notify(r.message || 'Envoyé. Vérification sur la blockchain…');
   pollUsdtDepositStatus(r.depositId);
 };
 var _usdtPollTimer = null;
@@ -6417,14 +6430,14 @@ function pollUsdtDepositStatus(depositId){
     if (r.status === 'success' && r.state === 'matched') {
       clearInterval(_usdtPollTimer); _usdtPollTimer = null;
       fireConfetti();
-      notify('Payment completed! Credited to your balance.');
+      notify('Paiement effectué ! Votre solde a été crédité.');
       await refreshTransactionsCache();
       if (STATE.page === 'home') renderHome();
       return;
     }
     if (r.status === 'success' && r.state === 'rejected') {
       clearInterval(_usdtPollTimer); _usdtPollTimer = null;
-      notify(r.message || 'Payment declined.');
+      notify(r.message || 'Paiement refusé.');
       return;
     }
     if (attempts >= 6) { clearInterval(_usdtPollTimer); _usdtPollTimer = null; } // server keeps retrying regardless; stop bothering the member
@@ -6555,29 +6568,29 @@ async function applyDepositStatusResult(r){
 // moment would be backwards.
 function setDepButtons(showVerify, showClose){
   const v = $('depVerifyBtn'), c = $('depStatusCloseBtn');
-  if (v) { v.style.display = showVerify ? 'block' : 'none'; v.disabled = false; v.textContent = 'Verify'; }
+  if (v) { v.style.display = showVerify ? 'block' : 'none'; v.disabled = false; v.textContent = 'Vérifier'; }
   if (c) c.style.display = showClose ? 'block' : 'none';
 }
 window.verifyDepositNow = async function(){
   const btn = $('depVerifyBtn');
   if (!_depActiveDepositId || _depPollDone || !btn || btn.disabled) return;
-  btn.disabled = true; btn.textContent = 'Checking…';
+  btn.disabled = true; btn.textContent = 'Vérification…';
   const settled = await applyDepositStatusResult(await depositStatusCheck(_depActiveDepositId));
   if (settled) return;                       // setDep* already reset the buttons
-  notify('Not confirmed yet. Approve the payment prompt on your phone, then tap Verify again.');
+  notify('Pas encore confirmé. Approuvez la demande de paiement sur votre téléphone, puis appuyez de nouveau sur Vérifier.');
   // The cooldown runs from the ANSWER, not the tap, so a slow provider does
   // not let taps queue up behind it.
   setTimeout(() => {
     if (_depPollDone) return;
     const b = $('depVerifyBtn');
-    if (b) { b.disabled = false; b.textContent = 'Verify'; }
+    if (b) { b.disabled = false; b.textContent = 'Vérifier'; }
   }, DEP_VERIFY_COOLDOWN_MS);
 };
 function setDepositStatusPending(amount, phone, network){
   $('depStatusIcon').className = 'dep-status-icon';
   // Dedicated Petro rings replace the payment provider's old loader artwork.
   $('depStatusIcon').innerHTML = DEPOSIT_POLL_SPIN;
-  $('depStatusTitle').textContent = 'Processing your recharge';
+  $('depStatusTitle').textContent = 'Traitement de votre recharge';
   // Owner asked for the specifics shown here, not a generic message --
   // the actual number the prompt was sent to and the actual amount.
   const displayPhone = cleanPhone(phone) || (dialPlus() + String(phone || '').replace(/\D/g, ''));
@@ -6594,7 +6607,7 @@ function setDepositStatusPending(amount, phone, network){
   // network selector from PAY A's own form (the gateway detects it
   // instead), so `network` is no longer reliably known here -- show both
   // codes rather than guessing.
-  const ussd = network === 'Airtel Money' ? '*185#' : (network === 'MTN Mobile Money' ? '*165#' : '*165# (MTN) or *185# (Airtel)');
+  const ussd = network === 'Airtel Money' ? '*185#' : (network === 'MTN Mobile Money' ? '*165#' : '*165# (MTN) ou *185# (Airtel)');
   _depPendingAmount = Number(amount) || 0;
   // Owner's own four steps, verbatim. Numbered because they are a sequence
   // with one thing for the member to DO in the middle of it -- the previous
@@ -6604,21 +6617,7 @@ function setDepositStatusPending(amount, phone, network){
   // esc() on both interpolations: the amount is ours, but the phone number is
   // whatever was typed into the form, and this is innerHTML now.
   $('depStatusBody').innerHTML =
-    '<ol class="pay-steps">'
-    + '<li>A payment request for ' + esc(fmtUGX(amount)) + ' has been sent to ' + esc(displayPhone) + '.</li>'
-    + '<li>Check your phone for the payment prompt.</li>'
-    + '<li>Approve the payment to complete your recharge.</li>'
-    + '<li>Your balance will be updated automatically once the payment is confirmed.</li>'
-    + '</ol>'
-    // Kept from the earlier round, and deliberately NOT dropped when the four
-    // steps replaced the old paragraph. Owner, when it was added: "put another
-    // statement, that dial *165# to approve, this is just a fallback bro
-    // because a payment prompt can come or it may fail and one may dial *165#
-    // so he see pending approval." The push prompt genuinely does fail to
-    // arrive sometimes -- a real MoMo gap, not something this app causes --
-    // and without this a member is left staring at step 2 with nothing to do.
-    + '<p class="pay-note">If the prompt does not come up, dial ' + esc(ussd)
-    + ' on that phone to find and approve the pending payment yourself.</p>';
+    `<ol class="pay-steps"><li>Une demande de paiement de ${esc(fmtUGX(amount))} a été envoyée à ${esc(displayPhone)}.</li><li>Vérifiez votre téléphone pour la demande de paiement.</li><li>Approuvez le paiement pour terminer votre recharge.</li><li>Votre solde sera mis à jour automatiquement dès la confirmation du paiement.</li></ol><p class="pay-note">Si la demande n'apparaît pas, composez ${esc(ussd)} sur ce téléphone pour retrouver et valider vous-même le paiement en attente.</p>`;
   // Owner: "remove verify button, so this is automatic verification" -- the
   // autopoll (pollDepositStatus() below) already checks on its own; a manual
   // Verify tap next to it was a second way to do the same thing, not a
@@ -6732,15 +6731,15 @@ function setDepositStatusSuccess(){
   // Owner: "let me think that on payment success it says congratulations
   // payment has been received {added to your wallet} redirecting back home
   // in 5 seconds or you can say so back the button should be available."
-  $('depStatusTitle').textContent = 'Congratulations! 🎉';
+  $('depStatusTitle').textContent = 'Félicitations ! 🎉';
   // Names the actual figure when it is known (it always is on the automatic
   // path, since the pending state set it moments earlier) and falls back to
   // wording that reads properly without one -- the manual-deposit path lands
   // here from handleManualDepositStatusResult() without ever showing pending.
   // brandName(), not the literal: the app's name is admin-settable.
   const amountLine = _depPendingAmount
-    ? 'Payment received — ' + esc(fmtUGX(_depPendingAmount)) + ' has been added to your wallet.'
-    : 'Payment received — your recharge has been added to your ' + esc(brandName()) + ' wallet.';
+    ? 'Paiement reçu — ' + esc(fmtUGX(_depPendingAmount)) + ' ont été ajoutés à votre portefeuille.'
+    : 'Paiement reçu — votre recharge a été ajoutée à votre portefeuille ' + esc(brandName()) + '.';
   $('depStatusBody').innerHTML = '<p>' + amountLine + '</p><p class="pay-note" id="depRedirectCountdown"></p>';
   // Close doubles as "Back to Home" here -- available immediately so a
   // member who does not want to wait the 5 seconds out can leave right
@@ -6748,12 +6747,12 @@ function setDepositStatusSuccess(){
   // available"). The countdown auto-fires the identical action if they
   // don't tap it first.
   const c = $('depStatusCloseBtn');
-  if (c) c.textContent = 'Back to Home';
+  if (c) c.textContent = 'Retour à l\'accueil';
   setDepButtons(false, true);
   let secondsLeft = 5;
   const tick = () => {
     const el = $('depRedirectCountdown');
-    if (el) el.textContent = 'Returning to Home in ' + secondsLeft + '…';
+    if (el) el.textContent = 'Retour à l\'accueil dans ' + secondsLeft + '…';
     if (secondsLeft <= 0) {
       if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
       closeDepositStatusModal();
@@ -6775,7 +6774,7 @@ function setDepositStatusFailed(msg){
   // only the mark inside changed, matching image 2's outlined style over
   // image 3's solid-filled one, for visual consistency with that sibling.
   $('depStatusIcon').innerHTML = '<svg viewBox="0 0 120 120" fill="none" aria-hidden="true"><circle cx="60" cy="60" r="50" fill="var(--snow-wine-soft)" stroke="var(--snow-wine)" stroke-width="4"/><line x1="60" y1="34" x2="60" y2="70" stroke="var(--snow-wine)" stroke-width="9" stroke-linecap="round"/><circle cx="60" cy="86" r="5.5" fill="var(--snow-wine)"/></svg>';
-  $('depStatusTitle').textContent = 'Payment not completed';
+  $('depStatusTitle').textContent = 'Paiement non terminé';
   // Owner asked for "due to insufficient funds" here -- checked against
   // MarzPay's own integration guide first rather than guessing at a field
   // name: a collection that fails after being accepted carries no reason at
@@ -6787,21 +6786,21 @@ function setDepositStatusFailed(msg){
   // `msg` is server-supplied on the normal path; this fallback only fires
   // for a purely client-side failure that never reached the server at all.
   $('depStatusBody').innerHTML = '<p>' + esc(msg
-    || 'This recharge did not go through. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Your ' + brandName() + ' balance has not changed.') + '</p>';
+    || `Cette recharge n'a pas abouti. Cela peut arriver si vous n'avez pas validé la demande à temps, si vous l'avez annulée ou si votre solde était insuffisant. Votre solde ${brandName()} n'a pas changé.`) + '</p>';
   // Undoes setDepositStatusSuccess()'s own "Back to Home" relabel -- this
   // button means plain Close here, on a modal a later deposit attempt can
   // reuse without a fresh page load in between.
-  const cf = $('depStatusCloseBtn'); if (cf) cf.textContent = 'Close';
+  const cf = $('depStatusCloseBtn'); if (cf) cf.textContent = 'Fermer';
   setDepButtons(false, true);
 }
 function setDepositStatusUnknown(){
   $('depStatusIcon').className = 'dep-status-icon';
   $('depStatusIcon').innerHTML = DEPOSIT_POLL_SPIN;
-  $('depStatusTitle').textContent = 'Still waiting for the provider';
-  $('depStatusBody').innerHTML = '<p>The payment has not been confirmed yet, and nothing is lost. '
-    + 'If it goes through, your balance updates on its own automatically, '
-    + 'or look under Transaction Statement later to check.</p>';
-  const cu = $('depStatusCloseBtn'); if (cu) cu.textContent = 'Close';
+  $('depStatusTitle').textContent = 'Toujours en attente d\'une réponse';
+  $('depStatusBody').innerHTML = '<p>Le paiement n\'a pas encore été confirmé, et rien n\'est perdu. '
+    + 'S\'il aboutit, votre solde se met à jour automatiquement, '
+    + 'ou consultez l\'Historique du solde plus tard pour vérifier.</p>';
+  const cu = $('depStatusCloseBtn'); if (cu) cu.textContent = 'Fermer';
   // Verify removed here too (see setDepositStatusPending's own comment) --
   // this is the same automatic wait, just past the autopoll's own 60s
   // budget. Close is the only control: a way off the screen, not a way to
@@ -6813,8 +6812,8 @@ window.submitDeposit = async function(){
   if (!submitBtn || submitBtn.disabled || !$('depAmount')) return;
   const amount = parseMoneyInput($('depAmount').value);
   if ((STATE.settings || {}).manualPay === true) {
-    if (!amount || amount <= 0) return notify('Enter a valid amount');
-    if (amount < (Number((STATE.settings || {}).minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX((STATE.settings || {}).minDeposit));
+    if (!amount || amount <= 0) return notify('Entrez un montant valide');
+    if (amount < (Number((STATE.settings || {}).minDeposit) || 0)) return notify(`Le montant minimum est de ${fmtUGX((STATE.settings || {}).minDeposit)}`);
     return openManualPayFlow(amount);
   }
   if (!$('depPhone')) return;
@@ -6832,7 +6831,7 @@ window.submitDeposit = async function(){
   // cleanPhone() is the SAME rule the server applies, so what is accepted
   // here and what is accepted there cannot drift apart.
   const phone = cleanPhone($('depPhone').value);
-  if (!amount || amount <= 0) return notify('Enter a valid amount');
+  if (!amount || amount <= 0) return notify('Entrez un montant valide');
   // Card (doCardDeposit()) and USDT (doUsdtDeposit()) both already check
   // this client-side before ever hitting the network; Mobile Money was the
   // one rail still relying entirely on the server's own rejection, which
@@ -6840,9 +6839,9 @@ window.submitDeposit = async function(){
   // before the member found out, instead of failing instantly like the
   // other two.
   const s = STATE.settings || {};
-  if (amount < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
-  if (!phone) return notify('Enter the mobile money number to charge.');
-  submitBtn.disabled = true; submitBtn.textContent = 'Sending request…';
+  if (amount < (Number(s.minDeposit) || 0)) return notify(`Le montant minimum est de ${fmtUGX(s.minDeposit)}`);
+  if (!phone) return notify('Entrez le numéro mobile money à débiter.');
+  submitBtn.disabled = true; submitBtn.textContent = 'Envoi de la demande…';
   let r;
   try {
     // No network field on this form (Round 145) -- the gateway detects it
@@ -6854,10 +6853,10 @@ window.submitDeposit = async function(){
     // match whatever submitBtn actually reads at rest (see the sheet's own
     // button above), or a member whose recharge failed is left looking at a
     // button that silently renamed itself.
-    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Recharge';
+    submitBtn.disabled = false; submitBtn.textContent = 'Confirmer la recharge';
   }
   if (r && r.stale) return;
-  if (!r || r.status !== 'success') return notify((r && r.message) || 'Could not start recharge');
+  if (!r || r.status !== 'success') return notify((r && r.message) || 'Impossible de démarrer la recharge');
   // Same stale-Records fix as submitWithdraw() -- /deposit/marzpay already
   // wrote a "Processing" ledger row server-side by this point, refresh the
   // cache now so it's actually there the next time Records opens.
@@ -6921,7 +6920,7 @@ function mpShowLoading(){
   _mp.stage = 'load';
   const el = mpRoot();
   el.className = 'show dark';
-  el.innerHTML = '<div class="mpf-load"><svg class="mpf-ring" width="36" height="36" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" fill="none" stroke="#1870f8" stroke-width="4" stroke-dasharray="39.3 55" transform="rotate(30 18 18)"/></svg><div class="mpf-loadtxt">loading...</div></div>';
+  el.innerHTML = '<div class="mpf-load"><svg class="mpf-ring" width="36" height="36" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" fill="none" stroke="#1870f8" stroke-width="4" stroke-dasharray="39.3 55" transform="rotate(30 18 18)"/></svg><div class="mpf-loadtxt">chargement…</div></div>';
   document.body.classList.add('mp-open');
   applyLanguage();
 }
@@ -6931,12 +6930,7 @@ function mpShowChoose(){
   el.className = 'show';
   const rows = _mp.channels.map((c, i) => '<button type="button" class="mpf-row" onclick="mpPick(' + i + ')">' + mpLogoHtml(c, 'mpf-logo') +
     '<span class="mpf-rname" data-no-i18n>' + esc(c.name) + '</span><svg class="mpf-chev" width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="#bbb" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5 7.5 7.5l-6 6"/></svg></button>').join('');
-  el.innerHTML = '<div class="mpf-choose">' +
-    '<div class="mpf-ohead"><span class="mpf-olab">Order Amount</span><span class="mpf-oval" data-no-i18n>' + esc(mpMoney(_mp.amount)) + '</span></div>' +
-    '<div class="mpf-pick">Please choose payment</div>' +
-    '<div class="mpf-rows">' + rows + '</div>' +
-    '<div class="mpf-remind">' + MP_ICON_WARN + '<span>Friendly reminder: Please use the corresponding bank to complete the transfer.</span><span>Please do not use interbank transfers from other banks to avoid delays and inconvenience.</span><span>Thank you for your understanding!</span></div>' +
-    '</div>';
+  el.innerHTML = `<div class="mpf-choose"><div class="mpf-ohead"><span class="mpf-olab">Montant de la commande</span><span class="mpf-oval" data-no-i18n>${esc(mpMoney(_mp.amount))}</span></div><div class="mpf-pick">Veuillez choisir le paiement</div><div class="mpf-rows">${rows}</div><div class="mpf-remind">${MP_ICON_WARN}<span>Rappel : veuillez utiliser la banque correspondante pour effectuer le virement.</span><span>Veuillez ne pas utiliser de virements interbancaires depuis d'autres banques afin d'éviter retards et désagréments.</span><span>Merci de votre compréhension !</span></div></div>`;
   document.body.classList.add('mp-open');
   applyLanguage();
 }
@@ -6952,7 +6946,7 @@ window.mpPick = async function(i){
   finally { _mp.busy = false; }
   if (!_mp.stage) return;
   if (!r || r.stale) { mpShowChoose(); return; }
-  if (r.status !== 'success') { mpShowChoose(); return mpToast(r.message || 'Could not start recharge'); }
+  if (r.status !== 'success') { mpShowChoose(); return mpToast(r.message || 'Impossible de démarrer la recharge'); }
   _mp.order = r;
   history.pushState({ mp: 'pay' }, '', ''); _mp.pushed++;
   mpShowPay();
@@ -6967,29 +6961,8 @@ function mpShowPay(){
   const ph = isWallet
     ? 'Dear AMIR You have transferred ETB 5.00 to MASFIN FTINAFU (2510****3268) on 01/02/2026 13:07:25. Your transaction number is DA39J9GAMN. The service fee is ETB 0.87 and 15% VAT on the service fee is ETB 0.13. Your current E-Money Account balance is ETB 1300.22. To download your payment information please click this link: https://transactioninfo.ethiotelecom.et/receipt/DA39J9GAMN.'
     : 'https://mbreciept.cbe.com.et/v2-hfHCxFT8tBhc0zxe95aa\n\nhttps://apps.cbe.com.et:100/?id=FT25512S26V825101122';
-  const phHead = isWallet ? '' : t('Paste the confirmation message here, or enter the code (FT or v2-):') + '\n\n';
-  el.innerHTML = '<div class="mpf-pay">' +
-    '<div class="mpf-head">' + mpLogoHtml(ch, 'mpf-hlogo') + '<div class="mpf-clock"><span>Order Remaining</span><b id="mpM1"></b><b id="mpM2"></b><span>Min</span><b id="mpS1"></b><b id="mpS2"></b><span>Sec</span></div></div>' +
-    '<div class="mpf-card">' +
-      '<div class="mpf-step"><b>Step 1</b><span>Copy account for payment</span></div>' +
-      '<div class="mpf-box">' +
-        '<div class="mpf-amt"><span class="mpf-l1">Order Amount</span><b data-no-i18n>' + esc(mpMoney(o.amount)) + '</b></div>' +
-        '<div class="mpf-k">Payment Channel</div>' +
-        '<div class="mpf-v"><b data-no-i18n>' + esc(ch.name) + '</b><button type="button" class="mpf-pill" onclick="mpSwitch()">switch</button></div>' +
-        '<div class="mpf-k">Account Name</div>' +
-        '<div class="mpf-v"><b data-no-i18n>' + esc(o.accountName) + '</b><button type="button" class="mpf-pill" onclick="mpCopy(\'name\')">copy</button></div>' +
-        '<div class="mpf-k">Account Number</div>' +
-        '<div class="mpf-v"><b data-no-i18n>' + esc(o.accountNumber) + '</b><button type="button" class="mpf-pill" onclick="mpCopy(\'number\')">copy</button></div>' +
-      '</div>' +
-      '<div class="mpf-help"><p>After the transfer is complete → check the SMS. The code starts with: "v2-" or "FT"</p>' +
-        '<p>' + MP_ICON_DIAMOND + '<span>v2-hf = enter the 23-character code</span></p>' +
-        '<p>' + MP_ICON_DIAMOND + '<span>FT = enter the 12-character code</span></p>' +
-        '<p>' + MP_ICON_DIAMOND + '<span>Telebirr = 10 characters only</span></p></div>' +
-      '<div class="mpf-step2"><b>Step 2</b><span>Paste payment SMS or enter v2- or FT</span></div>' +
-      '<textarea id="mpSms" class="mpf-ta" data-no-i18n rows="6" maxlength="2000" spellcheck="false" autocomplete="off" placeholder="' + esc(phHead + ph) + '"></textarea>' +
-      '<button type="button" class="mpf-submit" id="mpSubmit" onclick="mpSubmit()">Submit</button>' +
-      '<div class="mpf-note">' + MP_ICON_WARN + '<span>Do not save the account number! It changes in real time. Otherwise the transfer will fail.</span></div>' +
-    '</div></div>';
+  const phHead = isWallet ? '' : t('Collez ici le message de confirmation, ou saisissez le code (FT ou v2-) :') + '\n\n';
+  el.innerHTML = `<div class="mpf-pay"><div class="mpf-head">${mpLogoHtml(ch, 'mpf-hlogo')}<div class="mpf-clock"><span>Temps restant</span><b id="mpM1"></b><b id="mpM2"></b><span>Min</span><b id="mpS1"></b><b id="mpS2"></b><span>Sec</span></div></div><div class="mpf-card"><div class="mpf-step"><b>Étape 1</b><span>Copier le compte pour le paiement</span></div><div class="mpf-box"><div class="mpf-amt"><span class="mpf-l1">Montant de la commande</span><b data-no-i18n>${esc(mpMoney(o.amount))}</b></div><div class="mpf-k">Moyen de paiement</div><div class="mpf-v"><b data-no-i18n>${esc(ch.name)}</b><button type="button" class="mpf-pill" onclick="mpSwitch()">changer</button></div><div class="mpf-k">Nom du compte</div><div class="mpf-v"><b data-no-i18n>${esc(o.accountName)}</b><button type="button" class="mpf-pill" onclick="mpCopy('name')">copier</button></div><div class="mpf-k">Numéro de compte</div><div class="mpf-v"><b data-no-i18n>${esc(o.accountNumber)}</b><button type="button" class="mpf-pill" onclick="mpCopy('number')">copier</button></div></div><div class="mpf-help"><p>Une fois le virement effectué → consultez le SMS. Le code commence par : « v2- » ou « FT »</p><p>${MP_ICON_DIAMOND}<span>v2-hf = saisissez le code de 23 caractères</span></p><p>${MP_ICON_DIAMOND}<span>FT = saisissez le code de 12 caractères</span></p><p>${MP_ICON_DIAMOND}<span>Telebirr = 10 caractères uniquement</span></p></div><div class="mpf-step2"><b>Étape 2</b><span>Collez le SMS de paiement ou saisissez v2- ou FT</span></div><textarea id="mpSms" class="mpf-ta" data-no-i18n rows="6" maxlength="2000" spellcheck="false" autocomplete="off" placeholder="${esc(phHead + ph)}"></textarea><button type="button" class="mpf-submit" id="mpSubmit" onclick="mpSubmit()">Envoyer</button><div class="mpf-note">${MP_ICON_WARN}<span>N'enregistrez pas le numéro de compte ! Il change en temps réel. Sinon le virement échouera.</span></div></div></div>`;
   document.body.classList.add('mp-open');
   mpTick();
   mpStopTimer(); _mp.timer = setInterval(mpTick, 1000);
@@ -7002,7 +6975,7 @@ function mpTick(){
   const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
   set('mpM1', String(Math.floor(m / 10))); set('mpM2', String(m % 10));
   set('mpS1', String(Math.floor(sec / 10))); set('mpS2', String(sec % 10));
-  if (left <= 0) { mpStopTimer(); mpToast('This order has expired. Please start again.'); setTimeout(() => window.mpClose(), 900); }
+  if (left <= 0) { mpStopTimer(); mpToast('Cette commande a expiré. Veuillez recommencer.'); setTimeout(() => window.mpClose(), 900); }
 }
 window.mpSwitch = function(){ if (_mp.pushed > 0) history.back(); else mpShowChoose(); };
 window.mpCopy = async function(what){
@@ -7012,26 +6985,26 @@ window.mpCopy = async function(what){
   try { await navigator.clipboard.writeText(String(text)); ok = true; } catch (_) {
     try {
       const ta = document.createElement('textarea'); ta.value = String(text); ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
-      document.body.appendChild(ta); ta.select(); ok = document.execCommand('copy'); ta.remove();
+      document.body.appendChild(ta); ta.select(); ok = document.execCommand('copier'); ta.remove();
     } catch (_e) {}
   }
-  mpToast(ok ? (what === 'name' ? 'Name Copied' : 'Copied.') : 'Could not copy');
+  mpToast(ok ? (what === 'name' ? 'Nom copié' : 'Copié.') : 'Copie impossible');
 };
 window.mpSubmit = async function(){
   const o = _mp.order, ta = $('mpSms'), btn = $('mpSubmit');
   if (!o || !ta || !btn || btn.disabled) return;
   const sms = ta.value.trim();
-  if (!sms) return mpToast('please enter the correct transfer sms');
+  if (!sms) return mpToast('veuillez saisir le bon SMS de virement');
   btn.disabled = true; btn.classList.add('busy');
   let r;
   try { r = await post('/deposit/manual/submit', { depositId: o.depositId, sms }); }
   finally { if ($('mpSubmit') === btn) { btn.disabled = false; btn.classList.remove('busy'); } }
   if (!r || r.stale) return;
-  if (r.status !== 'success') return mpToast(r.message || 'Could not submit your recharge. Please try again.');
+  if (r.status !== 'success') return mpToast(r.message || 'Impossible d\'envoyer votre recharge. Veuillez réessayer.');
   refreshTransactionsCache().catch(() => {});
   window.mpClose();
   try { if (_openSheetTitle === 'Recharge') closeSheet({ fromAction: true }); } catch (_) {}
-  notify(r.message || 'Submitted. Our team is checking your payment.');
+  notify(r.message || 'Envoyé. Notre équipe vérifie votre paiement.');
 };
 window.openManualPayFlow = async function(amount){
   _mp.amount = Number(amount) || 0; _mp.order = null; _mp.channels = [];
@@ -7044,7 +7017,7 @@ window.openManualPayFlow = async function(amount){
   if (_mp.stage !== 'load') return;
   if (!r || r.status !== 'success' || !Array.isArray(r.channels) || !r.channels.length) {
     window.mpClose();
-    return notify('Recharges are not available right now.');
+    return notify('Les recharges ne sont pas disponibles pour le moment.');
   }
   _mp.channels = r.channels;
   mpShowChoose();
@@ -7177,8 +7150,8 @@ function withdrawWindow(s){
 }
 function withdrawHoursLine(s){
   const w = withdrawWindow(s);
-  if (!w.enabled) return 'Withdraw can be requested at any time of day.';
-  return `Withdraw time: ${esc(w.from)} to ${esc(w.to)}.`;
+  if (!w.enabled) return 'Le retrait peut être demandé à toute heure du jour.';
+  return `Heures de retrait : de ${esc(w.from)} à ${esc(w.to)}.`;
 }
 // The wallet card, plus a "Switch wallet" picker when more than one saved
 // wallet exists (owner: "make when one can add multiple banks") -- a
@@ -7193,14 +7166,14 @@ function witWalletBlockHtml(s){
   const w = witSelectedWallet();
   const switcher = accounts.length > 1 ? `
     <div class="prov-pick" id="witWalletPick">
-      <button class="btn-bind" type="button" style="margin:0 0 10px;" onclick="toggleWitWalletPicker()">Switch wallet</button>
+      <button class="btn-bind" type="button" style="margin:0 0 10px;" onclick="toggleWitWalletPicker()">Changer de portefeuille</button>
       <div class="prov-list" id="witWalletList">
         ${accounts.map(a => `<button type="button" class="prov-opt${w && a.id === w.id ? ' on' : ''}" onclick="selectWitWallet('${esc(a.id)}')">${esc(walletDestDisplay(a))} — ${esc(String(a.network || '').replace(/\s*(Mobile )?Money$/i, ''))}</button>`).join('')}
       </div>
     </div>` : '';
   return `<div id="witWallet">${walletCardHtml(w)}</div>
     ${switcher}
-    <button id="witBindBtn" class="btn-bind" type="button" onclick="openWalletSheet()">${accounts.length ? 'Manage Wallets' : 'Bind Wallet'}</button>`;
+    <button id="witBindBtn" class="btn-bind" type="button" onclick="openWalletSheet()">${accounts.length ? 'Gérer les portefeuilles' : 'Associer le portefeuille'}</button>`;
 }
 window.toggleWitWalletPicker = function(){
   const box = $('witWalletPick');
@@ -7230,7 +7203,7 @@ function paintWithdrawSheet(s){
     <div id="witWalletBlock">${witWalletBlockHtml(s)}</div>
 
     <div class="wit-bal">
-      <div class="lbl">Available Balance</div>
+      <div class="lbl">Solde disponible</div>
       <div class="val">${fmtUGX(balance)}</div>
     </div>
     <div class="wit-amt">
@@ -7238,18 +7211,18 @@ function paintWithdrawSheet(s){
       <input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minWithdraw) || 0}" oninput="syncWithdrawReceiveAmt()">
     </div>
 
-    <div class="wit-fee">Fee: ${fee}%</div>
-    <div class="form-hint" id="witReceiveHint" style="margin:0 0 8px;display:none;">You'll receive: <strong id="witReceiveAmt">${fmtUGX(0)}</strong></div>
+    <div class="wit-fee">Frais : ${fee} %</div>
+    <div class="form-hint" id="witReceiveHint" style="margin:0 0 8px;display:none;">Vous recevrez : <strong id="witReceiveAmt">${fmtUGX(0)}</strong></div>
 
-    <button class="primary-button" id="witSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:14px 0 22px;" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Confirm Withdraw</button>
+    <button class="primary-button" id="witSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:14px 0 22px;" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Confirmer le retrait</button>
 
     <div class="wit-instr withdrawal-guide">
-      <h3>Before you withdraw</h3>
+      <h3>Avant de retirer</h3>
       <dl>
-        <div><dt>Receiving account</dt><dd>Check the name and ${w && !isMobileMoneyNetwork(w.network) ? 'bank account number' : 'mobile money number'} above. Your payout goes to this linked wallet.</dd></div>
-        <div><dt>Amount to request</dt><dd>Minimum ${fmtUGX(s.minWithdraw)}${Number(s.maxWithdraw) > 0 ? `; maximum ${fmtUGX(s.maxWithdraw)}` : ''}. Review the fee and the amount you will receive before confirming.${Number(s.withdrawMultiple) > 0 ? ` Use a multiple of ${fmtUGX(s.withdrawMultiple)}.` : ''}</dd></div>
-        <div><dt>Availability</dt><dd>${withdrawHoursLine(s)}${Number(s.maxWithdrawalsPerDay) > 0 ? ` Up to ${Number(s.maxWithdrawalsPerDay)} requests per day.` : ''}</dd></div>
-        <div><dt>After submitting</dt><dd>Follow the payout in Transaction Statement → Withdrawals. Wait for a pending request to finish before submitting another.</dd></div>
+        <div><dt>Compte de réception</dt><dd>Vérifiez le nom et ${w && !isMobileMoneyNetwork(w.network) ? 'numéro de compte bancaire' : 'numéro Mobile Money'} ci-dessus. Votre retrait est versé sur ce portefeuille lié.</dd></div>
+        <div><dt>Montant à demander</dt><dd>Minimum ${fmtUGX(s.minWithdraw)}${Number(s.maxWithdraw) > 0 ? `; maximum ${fmtUGX(s.maxWithdraw)}` : ''}. Vérifiez les frais et le montant que vous recevrez avant de confirmer.${Number(s.withdrawMultiple) > 0 ? ` Utilisez un multiple de ${fmtUGX(s.withdrawMultiple)}.` : ''}</dd></div>
+        <div><dt>Disponibilité</dt><dd>${withdrawHoursLine(s)}${Number(s.maxWithdrawalsPerDay) > 0 ? ` Jusqu'à ${Number(s.maxWithdrawalsPerDay)} demandes par jour.` : ''}</dd></div>
+        <div><dt>Après l'envoi</dt><dd>Suivez le retrait dans Historique du solde → Retraits. Attendez qu'une demande en attente soit terminée avant d'en envoyer une autre.</dd></div>
       </dl>
     </div>
   </div>`;
@@ -7302,13 +7275,13 @@ window.submitWithdraw = async function(){
   // several now that Petro allows saving more than one (see
   // witSelectedWallet()'s own comment).
   const acct = witSelectedWallet();
-  if (!amount || amount <= 0) return notify('Enter a valid amount.');
+  if (!amount || amount <= 0) return notify('Entrez un montant valide.');
   // Mirrors the server's rule so the member is told BEFORE a round trip.
   // The server checks it again -- this is a courtesy, not the enforcement.
   const wMult = Math.max(0, Math.floor(Number((STATE.settings || {}).withdrawMultiple) || 0));
   if (wMult > 0 && amount % wMult !== 0) {
     const low = Math.floor(amount / wMult) * wMult, high = low + wMult;
-    return notify(`Withdraw must be a multiple of ${fmtUGX(wMult)}. Try ${fmtUGX(low || high)} or ${fmtUGX(high)}.`);
+    return notify(`Le retrait doit être un multiple de ${fmtUGX(wMult)}. Essayez ${fmtUGX(low || high)} ou ${fmtUGX(high)}.`);
   }
   // Owner: "I want a notify to appear when one tries to press confirm
   // cashout but when he hasn't saved a bank." Confirm Cash Out used to be a
@@ -7316,19 +7289,19 @@ window.submitWithdraw = async function(){
   // button swallows a tap with zero feedback, so the member saw nothing at
   // all. It's tappable unconditionally now (see paintWithdrawSheet()); this
   // check is what actually tells them why nothing happened.
-  if (!acct) return notify('Please add a payout wallet before withdrawing.');
+  if (!acct) return notify('Veuillez ajouter un portefeuille de retrait avant de retirer.');
   // Same courtesy for the hours: told here so the member is not asked to
   // wait on a request the server will refuse anyway.
   const win = withdrawWindow(STATE.settings || {});
   if (win.enabled && !win.open)
-    return notify(`Withdraw is open from ${win.from} to ${win.to}. Please come back then.`);
+    return notify(`Le retrait est ouvert de ${win.from} à ${win.to}. Merci de revenir à ce moment-là.`);
   _withdrawSubmitting = true;
-  submitBtn.disabled = true; submitBtn.textContent = 'Submitting…';
+  submitBtn.disabled = true; submitBtn.textContent = 'Envoi…';
   let r;
   try { r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone }); }
   finally {
     _withdrawSubmitting = false;
-    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Withdraw';
+    submitBtn.disabled = false; submitBtn.textContent = 'Confirmer le retrait';
     // A background /bank/list landing mid-request can have repainted the
     // wallet block (see openWithdrawSheet()) and left a DIFFERENT button
     // element in the DOM -- disabled state is only ever about an in-flight
@@ -7337,7 +7310,7 @@ window.submitWithdraw = async function(){
     if (current && current !== submitBtn) current.disabled = false;
   }
   if (r.stale) return;
-  if (r.status !== 'success') return notify(r.message || 'Could not request withdrawal.');
+  if (r.status !== 'success') return notify(r.message || 'Impossible de demander le retrait.');
   // Owner: "why when l withdrawal the value still remains???"
   // Because nothing here refreshed it. The SERVER debits immediately --
   // /withdraw/request does walletBalance: increment(-amt) before it answers --
@@ -7362,8 +7335,8 @@ window.submitWithdraw = async function(){
   // On OK, not before: the card carries the amount they will actually receive,
   // and yanking the screen out from under it while they are still reading is
   // how that number gets missed.
-  notify(`Withdraw of ${fmtUGXCents(amount)} is processing. You will receive `
-    + `${fmtUGXCents(net)} after the ${pct}% charge.`,
+  notify(`Le retrait de ${fmtUGXCents(amount)} est en cours. Vous recevrez `
+    + `${fmtUGXCents(net)} après les frais de ${pct} %.`,
     () => openBalanceRecordSheet('withdraw'));
   if (_openSheetTitle === 'Withdraw' && $('witSubmitBtn') === submitBtn) closeSheet({ fromAction: true });
   refreshAfterWithdraw();
@@ -7393,35 +7366,35 @@ window.openInvestConfirm = function(tierKey, btn){
   if (!p || (btn && btn.disabled)) return;
   const fig = planFigures(p);
   $('confirmSheet').innerHTML = `
-    <h3>Confirm Investment</h3>
-    <p class="confirm-sub">Review this asset before investing.</p>
-    <div class="confirm-row"><span>Asset</span><b class="mono">${esc(p.name || 'Asset')}</b></div>
-    <div class="confirm-row"><span>Cost</span><b class="mono">${fmtUGX(Number(p.price) || 0)}</b></div>
-    <div class="confirm-row"><span>Term</span><b>${fig.cycle} Days</b></div>
-    <div class="confirm-row"><span>Daily Yield</span><b class="mono">${fmtUGX(fig.daily)}</b></div>
-    <div class="confirm-row"><span>Expected Return</span><b class="mono">${fmtUGX(fig.expected)}</b></div>
-    <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;">Buy Asset</button>
-    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Cancel</button>`;
+    <h3>Confirmer l'investissement</h3>
+    <p class="confirm-sub">Consultez cet actif avant d'investir.</p>
+    <div class="confirm-row"><span>Actif</span><b class="mono">${esc(p.name || 'Actif')}</b></div>
+    <div class="confirm-row"><span>Coût</span><b class="mono">${fmtUGX(Number(p.price) || 0)}</b></div>
+    <div class="confirm-row"><span>Durée</span><b>${fig.cycle} jours</b></div>
+    <div class="confirm-row"><span>Rendement quotidien</span><b class="mono">${fmtUGX(fig.daily)}</b></div>
+    <div class="confirm-row"><span>Rendement attendu</span><b class="mono">${fmtUGX(fig.expected)}</b></div>
+    <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;">Acheter l'actif</button>
+    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Annuler</button>`;
   const actionBtn = $('confirmActionBtn');
   actionBtn.onclick = async () => {
     if (actionBtn.disabled) return;
-    actionBtn.disabled = true; actionBtn.textContent = 'Buying…';
+    actionBtn.disabled = true; actionBtn.textContent = 'Achat en cours…';
     const result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey }) });
     if (result.status !== 'success') {
-      actionBtn.disabled = false; actionBtn.textContent = 'Buy Asset';
+      actionBtn.disabled = false; actionBtn.textContent = 'Acheter l\'actif';
       const short = result.code === 'INSUFFICIENT_BALANCE' || /^Need .*, have /.test(String(result.message || ''));
       if (short) {
         closeConfirm();
-        notify('Insufficient balance, redirecting to recharge…', () => openDepositSheet());
+        notify('Solde insuffisant, redirection vers la recharge…', () => openDepositSheet());
         setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1800);
         return;
       }
-      notify(result.message || 'Could not complete investment');
+      notify(result.message || 'Impossible de finaliser l\'investissement');
       return;
     }
     closeConfirm();
     showPage('home');
-    notify(`${p.name} is now running. See it in My Assets below Daily Check-in.`);
+    notify(`${p.name} est maintenant actif. Retrouvez-le dans Mes actifs, sous Pointage quotidien.`);
   };
   $('confirmBg').classList.add('show');
   lockBodyScroll();
@@ -7434,23 +7407,23 @@ function openSimpleConfirm(title, body, onConfirm){
   $('confirmSheet').innerHTML = `
     <h3>${esc(title)}</h3>
     <p class="confirm-sub" style="margin:0 0 14px;">${esc(body)}</p>
-    <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;">Confirm</button>
-    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Cancel</button>`;
+    <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;">Confirmer</button>
+    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Annuler</button>`;
   const actionBtn = $('confirmActionBtn');
   actionBtn.onclick = async () => {
     if (actionBtn.disabled) return;
-    actionBtn.disabled = true; actionBtn.textContent = 'Working…';
+    actionBtn.disabled = true; actionBtn.textContent = 'En cours…';
     try {
       const ok = await onConfirm();
       if (ok) { closeConfirm(); return; }
     } catch (_) {
-      notify('Could not complete that action. Please try again.');
+      notify('Impossible d\'effectuer cette action. Veuillez réessayer.');
     } finally {
       // A successful action closes the dialog. Only restore this exact button
       // if this same dialog is still open (a new dialog may already exist).
       if ($('confirmBg').classList.contains('show') && $('confirmActionBtn') === actionBtn) {
         actionBtn.disabled = false;
-        actionBtn.textContent = 'Confirm';
+        actionBtn.textContent = 'Confirmer';
       }
     }
   };
@@ -7483,7 +7456,7 @@ window.addEventListener('appinstalled', () => { window._installPrompt = null; })
 // directly -- no screen in between -- and the 'downloadbg' image slot, its
 // admin upload UI, and this function are gone, not just unlinked.
 window.promptInstallApp = async function(){
-  if (!window._installPrompt) { notify('Already installed, or your browser doesn\'t support installing ' + brandName() + '.'); return; }
+  if (!window._installPrompt) { notify(`Déjà installée, ou votre navigateur ne permet pas d'installer ${brandName()}.`); return; }
   window._installPrompt.prompt();
   await window._installPrompt.userChoice.catch(() => {});
   window._installPrompt = null;
@@ -7543,6 +7516,5 @@ paintRegionChrome();
 // into the language it was left in instead of showing English until
 // /public/settings lands. The observer is started first so anything the boot
 // path renders is translated as it appears, not after a visible flash.
-startI18nObserver();
 applyRegionLanguages();
 var _bootPromise = boot();

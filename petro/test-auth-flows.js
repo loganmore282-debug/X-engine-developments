@@ -104,19 +104,19 @@ const toasts = w => { const t = []; w.notify = m => t.push(FR2EN.get(String(m)) 
   {
     const dom = load(), w = dom.window; await sleep(20);
     const f = e => w.fbErrMsg(e);
-    eq(f({ code: 'auth/invalid-credential' }), 'Incorrect phone number or password.');
-    eq(f({ code: 'auth/wrong-password' }), 'Incorrect phone number or password.');
-    eq(f({ code: 'auth/user-not-found' }), 'No account found for that number.');
-    eq(f({ code: 'auth/email-already-in-use' }), 'An account with that number already exists.');
-    eq(f({ code: 'auth/too-many-requests' }), 'Too many attempts. Try again shortly.');
-    ok(/Check your connection/.test(f({ code: 'auth/network-request-failed', message: 'Firebase: Error (auth/network-request-failed).' })), 'network failure is explained');
-    ok(/disabled/.test(f({ code: 'auth/user-disabled' })), 'disabled account is explained');
+    eq(f({ code: 'auth/invalid-credential' }), 'Numéro de téléphone ou mot de passe incorrect.');
+    eq(f({ code: 'auth/wrong-password' }), 'Numéro de téléphone ou mot de passe incorrect.');
+    eq(f({ code: 'auth/user-not-found' }), 'Aucun compte trouvé pour ce numéro.');
+    eq(f({ code: 'auth/email-already-in-use' }), 'Un compte avec ce numéro existe déjà.');
+    eq(f({ code: 'auth/too-many-requests' }), 'Trop de tentatives. Réessayez sous peu.');
+    ok(/Vérifiez votre connexion/.test(f({ code: 'auth/network-request-failed', message: 'Firebase: Error (auth/network-request-failed).' })), 'network failure is explained');
+    ok(/désactivé/.test(f({ code: 'auth/user-disabled' })), 'disabled account is explained');
     for (const code of ['auth/internal-error', 'auth/quota-exceeded', 'auth/operation-not-allowed', 'auth/invalid-api-key'])
-      ok(/temporarily unavailable/.test(f({ code })), code + ' reads as a temporary outage');
+      ok(/temporairement indisponible/.test(f({ code })), code + ' reads as a temporary outage');
     for (const e of [{ code: 'auth/something-new', message: 'Firebase: Error (auth/something-new).' }, { message: 'Firebase: Error (auth/x).' }])
       ok(!/Firebase|auth\//.test(f(e)), 'raw Firebase text never reaches a member: ' + f(e));
-    eq(f({ message: 'Sign-in is not available right now.' }), 'Sign-in is not available right now.', 'our own messages pass through');
-    eq(f(null), 'Something went wrong. Try again.');
+    eq(f({ message: 'La connexion n\'est pas disponible pour le moment.' }), 'La connexion n\'est pas disponible pour le moment.', 'our own messages pass through');
+    eq(f(null), 'Une erreur s\'est produite. Réessayez.');
     await closeSoon(dom);
   }
 
@@ -132,7 +132,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(FR2EN.get(String(m)) 
     ok(/Could not load the sign-in service|Impossible de charger le service de connexion/.test($(w, 'notifyMsg').textContent) || t.some(m => /Could not load the sign-in service|Impossible de charger le service de connexion/.test(m)), 'watchdog says what is wrong');
     $(w, 'loginPhone').value = '0771234567'; $(w, 'loginPassword').value = 'secret1';
     t.length = 0; await w.doLogin();
-    eq(t.length, 1); ok(/not available right now/.test(t[0]) && !/not a function/.test(t[0]), 'login says so instead of throwing: ' + t[0]);
+    eq(t.length, 1); ok(/n'est pas disponible pour le moment/.test(t[0]) && !/not a function/.test(t[0]), 'login says so instead of throwing: ' + t[0]);
     eq($(w, 'loginBtn').disabled, false, 'login button usable again');
     ok(/^(Log In|Connexion)$/.test($(w, 'loginBtn').textContent), 'login button label');
     $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1'; $(w, 'regPassword2').value = 'secret1'; $(w, 'regReferral').value = 'abc';
@@ -222,9 +222,9 @@ const toasts = w => { const t = []; w.notify = m => t.push(FR2EN.get(String(m)) 
     }
     await closeSoon(dom);
   }
-  await ghostScenario({ status: 400, body: { status: 'error', code: 'OTP_REQUIRED', message: 'Please verify your phone number first.' } }, /sign-up was not finished.*Verify your number/, true);
-  await ghostScenario({ status: 400, body: { status: 'error', code: 'REFERRAL_REQUIRED', message: 'A referral code is required to sign up. Ask the person who invited you for theirs.' } }, /referral code is required.*Complete your sign-up/, true);
-  await ghostScenario({ status: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } }, /does not exist.*Complete your sign-up/, true);
+  await ghostScenario({ status: 400, body: { status: 'error', code: 'OTP_REQUIRED', message: 'Please verify your phone number first.' } }, /inscription n'est pas terminée.*Vérifiez votre numéro/, true);
+  await ghostScenario({ status: 400, body: { status: 'error', code: 'REFERRAL_REQUIRED', message: 'A referral code is required to sign up. Ask the person who invited you for theirs.' } }, /(code de parrainage est nécessaire|referral code is required).*Terminez votre inscription/, true);
+  await ghostScenario({ status: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } }, /(n'existe pas|does not exist).*Terminez votre inscription/, true);
   await ghostScenario({ status: 500, body: { status: 'error', message: 'Could not complete your registration right now' } }, /Could not complete your registration/, false);
 
   // ─── 5. Sessions that change under a boot never sign the member out ───

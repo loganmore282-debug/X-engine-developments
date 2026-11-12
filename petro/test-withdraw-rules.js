@@ -288,7 +288,7 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
     r = await run(st, REQ);
     ck(r.code === 400 && r.replied.code === 'WITHDRAW_PENDING',
        `a ${status} withdrawal blocks the next (${r.code} ${r.replied && r.replied.code})`);
-    ck(/already have a withdrawal/i.test((r.replied || {}).message || ''),
+    ck(/déjà un retrait/i.test((r.replied || {}).message || ''),
        `  and says why: ${(r.replied || {}).message}`);
     ck(st.wits.length === 1 && st.user.walletBalance === 100000,
        '  nothing written, nothing debited');
@@ -311,7 +311,7 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   r = await run(st, REQ);
   ck(r.code === 400 && r.replied.code === 'WINDOW_CLOSED',
      `21:00 EAT is refused (${r.code} ${r.replied && r.replied.code})`);
-  ck(/09:00 to 17:00/.test((r.replied || {}).message || ''),
+  ck(/09:00 à 17:00/.test((r.replied || {}).message || ''),
      `  naming the hours, 24-hour: ${(r.replied || {}).message}`);
   ck(st.user.walletBalance === 100000, '  and nothing is debited');
 
@@ -337,7 +337,7 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   ck(r.code === 200, `a refunded (declined) request today does not use the allowance (${r.code} ${r.replied && r.replied.message})`);
   st = fresh({ settings: { maxWithdrawalsPerDay: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: '15/01/2026' }] });
   r = await run(st, REQ);
-  ck(r.code === 400 && /limit of 1/.test((r.replied || {}).message || ''), `a paid one today still does (${r.code})`);
+  ck(r.code === 400 && /limite du jour de 1/.test((r.replied || {}).message || ''), `a paid one today still does (${r.code})`);
 
   console.log('\n— the app no longer promises hours nobody keeps —');
   const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');

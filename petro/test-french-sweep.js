@@ -9,7 +9,7 @@ const SETTINGS={minDeposit:300,minWithdraw:200,withdrawFeePct:15,withdrawMultipl
 const PRODUCTS=[{key:'p1',name:'Asset-1',price:3000,cycle:150,expectedReturn:90000,dailyPayout:600,image:'',active:true,spinCount:2,open:true},{key:'p2',name:'Asset-2',price:9000,cycle:150,expectedReturn:270000,dailyPayout:1800,image:'',active:true,comingSoon:true,open:false,openMode:'soon'}];
 const INV=[{id:'i1',tierKey:'p1',tierName:'Asset-1',assetKey:'p1',assetName:'Asset-1',amount:3000,expectedReturn:90000,payoutsMade:4,payoutsTotal:150,paidOut:2400,status:'running',createdAt:'2026-09-10T18:13:00Z'},{id:'i2',tierKey:'p2',tierName:'Asset-2',amount:9000,expectedReturn:270000,payoutsMade:150,payoutsTotal:150,paidOut:270000,status:'matured',createdAt:'2026-03-01T09:00:00Z'}];
 const TX=[{id:'t1',type:'deposit',amount:5000,status:'completed',description:'Deposit: Paid',date:'12/09/2026',time:'14:02'},{id:'t2',type:'withdraw',amount:-2000,status:'pending',description:'Withdrawal: Processing',date:'13/09/2026',time:'09:41'},{id:'t3',type:'withdraw',amount:-2000,status:'failed',description:'Withdrawal: Rejected',date:'13/09/2026',time:'10:02'},{id:'t4',type:'turntable',amount:70,status:'completed',description:'Turntable win',date:'14/09/2026',time:'07:15'},{id:'t5',type:'welcome_bonus',amount:700,status:'completed',description:'Welcome Bonus',date:'01/09/2026',time:'08:00'},{id:'t6',type:'commission',amount:810,status:'completed',description:'Level 1 Commission',date:'02/09/2026',time:'11:20'},{id:'t7',type:'cashback',amount:600,status:'completed',description:'Daily cashback',date:'14/09/2026',time:'00:05'},{id:'t8',type:'invest',amount:-3000,status:'completed',description:'Bought Asset-1',date:'10/09/2026',time:'18:13'}];
-const MSG=[{id:'m1',title:'Welcome',body:'Thanks for joining.',createdAt:'2026-09-01T08:00:00Z',read:false}];
+const MSG=[{id:'m1',title:'Bienvenue',body:'Merci de nous avoir rejoints.',createdAt:'2026-09-01T08:00:00Z',read:false}];
 const WALLET=[{id:'w1',provider:'CBE Birr',accountNumber:'0707070707',accountName:'Abebe K',isDefault:true}];
 const ROUTES={'/public/settings':{status:'success',region:REGION,settings:SETTINGS},'/public/products':{status:'success',products:PRODUCTS},'/public/activity-feed':{status:'success',feed:[{kind:'deposit',phone:'251****4417',amount:3000},{kind:'withdraw',phone:'251****9022',amount:2500}]},
 '/account':{status:'success',account:ACCOUNT,region:REGION},'/investments':{status:'success',investments:INV},'/transactions':{status:'success',transactions:TX,truncated:false},'/messages':{status:'success',messages:MSG},'/bank/list':{status:'success',accounts:WALLET},'/bank/supported-banks':{status:'success',banks:['CBE Birr','Telebirr']},
@@ -53,7 +53,7 @@ const STEPS=[
 ['manual-pay-wallet',"STATE.settings.manualPay=true;openManualPayFlow(550);await new Promise(r=>setTimeout(r,900));await mpPick(1);await new Promise(r=>setTimeout(r,500))"],
 ['manual-toast-empty',"STATE.settings.manualPay=true;openManualPayFlow(550);await new Promise(r=>setTimeout(r,900));await mpPick(0);await new Promise(r=>setTimeout(r,500));await mpSubmit();"],
 ['manual-toast-copy',"STATE.settings.manualPay=true;openManualPayFlow(550);await new Promise(r=>setTimeout(r,900));await mpPick(0);await new Promise(r=>setTimeout(r,500));await mpCopy('name');"],
-['lang',"openLangPicker()"],['invest-confirm',"openInvestConfirm('p1')"],['notify',"notify('Network error. Try again.')"],['confirm',"openSimpleConfirm('Confirm','Enter a valid amount.',()=>{})"],
+['lang',"openLangPicker()"],['invest-confirm',"openInvestConfirm('p1')"],['notify',"notify('Erreur de réseau. Réessayez.')"],['confirm',"openSimpleConfirm('Confirmer','Saisissez un montant valide.',()=>{})"],
 ['deposit-status',"openDepositStatusModal(500,'0707070707','')"],['info',"openInfoSheet('about')"],
 ];
 const found=new Map(), errs=[];
@@ -80,7 +80,7 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  const SAME=new Set(['Petro','Min','Sec','Messages','Total','Recharge','Recharges','Mobile Money','USDT (TRC20)','Step 1','Step 2','copy','Account']);
  const EN=new Set(LANG_ROWS.filter(r=>r[3]&&r[3]!=='='&&!SAME.has(r[0])).map(r=>r[0]));
  const ENW=/(?<![\p{L}])(the|your|you|and|please|with|could|enter|from|this|that|have|will|are|was|can|again|before|after|not|try|tap|confirm|cancel|submit|failed|success|loading|wallet balance|withdrawal|deposit|invest|password|referral|network error|something went wrong)(?![\p{L}])/iu;
- const ALLOWED=/PETRO|Petro|Money|X{3,}|MarzPay|USDT|TRC20|TXID|MTN|Airtel|Orange|Moov|Telebirr|CBE|Commercial Bank of Ethiopia|Asset-\d|https?:\/\/\S+|Welcome to the app\.|Thanks for joining\.|Welcome\b|XOF|PIN|SMS|APP|OTP|Tron|\bID\b|FT|v2-hf?|Dear AMIR[^]*/g;
+ const ALLOWED=/PETRO|Petro|Money|X{3,}|MarzPay|USDT|TRC20|TXID|MTN|Airtel|Orange|Moov|Telebirr|CBE|Commercial Bank of Ethiopia|Asset-\d|https?:\/\/\S+|Welcome to the app\.|Merci de nous avoir rejoints\.|Welcome\b|XOF|PIN|SMS|APP|OTP|Tron|\bID\b|FT|v2-hf?|Dear AMIR[^]*/g;
  const bad=[];for(const [k,sc] of found){const kind=k.split('|')[0];const t=k.split('|').slice(1).join('|');if(kind==='placeholder'&&/^(Dear AMIR|https?:)/.test(t))continue;
   const left=t.replace(ALLOWED,' ');
   if(EN.has(t.trim())||ENW.test(left))bad.push(t+'   <'+[...sc].slice(0,2).join(',')+'>');}

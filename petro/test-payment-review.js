@@ -46,9 +46,9 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
   let r = await save(Array.from({ length: 9 }, (_, i) => '07000000' + (10 + i)), '0770000099');
   eq([r.code, r.added], [200, 1], 'the 10th account is accepted');
   r = await save(Array.from({ length: 10 }, (_, i) => '07000000' + (10 + i)), '0770000099');
-  ok(r.code === 400 && /up to 10/.test(r.body.message) && r.added === 0, 'the 11th is refused: ' + r.body.message);
+  ok(r.code === 400 && /jusqu'à 10/.test(r.body.message) && r.added === 0, 'the 11th is refused: ' + r.body.message);
   r = await save(Array.from({ length: 10 }, (_, i) => '07000000' + (10 + i)), '0700000010');
-  ok(r.code === 400 && /already saved/.test(r.body.message), 'a duplicate still gets the duplicate message');
+  ok(r.code === 400 && /déjà enregistré/.test(r.body.message), 'a duplicate still gets the duplicate message');
 
   // 2b. owner: "on bind bank use these only: Commercial Bank of Ethiopia, Telebirr"
   r = await save([], '1000809418239', 'Commercial Bank of Ethiopia'); eq([r.code, r.added], [200, 1], 'the bank is accepted with a plain account number');

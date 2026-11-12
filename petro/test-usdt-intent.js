@@ -23,13 +23,13 @@ const cut = (a, b) => { const i = src.indexOf(a), j = src.indexOf(b, i + 1); ass
   let v = await mk([ev(EXACT, NOW + 5000)])('t', WALLET, 25, { exactMicros: EXACT, notBeforeMs: NOW });
   ok(v.verified && v.onChainAmount === 25.000417, 'exact amount, sent after the request: verified');
   v = await mk([ev(EXACT + 1, NOW + 5000)])('t', WALLET, 25, { exactMicros: EXACT, notBeforeMs: NOW });
-  ok(!v.verified && v.conclusive && /exact amount/.test(v.reason) && /25\.000417/.test(v.reason), 'one micro more is not a match: ' + v.reason);
+  ok(!v.verified && v.conclusive && /montant exact/.test(v.reason) && /25\.000417/.test(v.reason), 'one micro more is not a match: ' + v.reason);
   v = await mk([ev(EXACT - 1, NOW + 5000)])('t', WALLET, 25, { exactMicros: EXACT, notBeforeMs: NOW });
   ok(!v.verified && v.conclusive, 'one micro less is not a match');
   v = await mk([ev(25_000_000, NOW + 5000)])('t', WALLET, 25, { exactMicros: EXACT, notBeforeMs: NOW });
   ok(!v.verified && v.conclusive, 'the plain amount without the unique tail is not a match (this is what an old public payment looks like)');
   v = await mk([ev(EXACT, NOW - 60_000)])('t', WALLET, 25, { exactMicros: EXACT, notBeforeMs: NOW });
-  ok(!v.verified && v.conclusive && /before the payment request/.test(v.reason), 'a transfer older than the request is refused');
+  ok(!v.verified && v.conclusive && /avant la demande de paiement/.test(v.reason), 'a transfer older than the request is refused');
   v = await mk([ev(EXACT, undefined)])('t', WALLET, 25, { exactMicros: EXACT, notBeforeMs: NOW });
   ok(!v.verified && !v.conclusive, 'no block time: not credited, but not declined either (retry)');
   v = await mk([ev(5, NOW), ev(EXACT, NOW + 1000)])('t', WALLET, 25, { exactMicros: EXACT, notBeforeMs: NOW });
@@ -91,7 +91,7 @@ const cut = (a, b) => { const i = src.indexOf(a), j = src.indexOf(b, i + 1); ass
   eq(store.get('30000007').userId, 'b', 'by exactly one new holder'); rnd = saved;
   // validation
   r = await call('u', { amountUsdt: 'x' }); eq(r.code, 400, 'junk amount');
-  r = await call('u', { amountUsdt: 1 }); ok(r.code === 400 && /Minimum/.test(r.body.message), 'below the minimum');
+  r = await call('u', { amountUsdt: 1 }); ok(r.code === 400 && /minimum/i.test(r.body.message), 'below the minimum');
   r = await call('banned', { amountUsdt: 25 }); eq(r.code, 403, 'suspended member');
   settings = { ...settings, usdtEnabled: false }; r = await call('u', { amountUsdt: 25 }); eq(r.code, 400, 'switched off');
   settings = { ...settings, usdtEnabled: true, usdtWalletAddress: '' }; r = await call('u', { amountUsdt: 25 }); eq(r.code, 400, 'no wallet configured');

@@ -23,7 +23,7 @@ const res = () => ({ code: 200, body: null, status(c) { this.code = c; return th
   r = await send('bank'); ok(r.code === 503 && r.body.code === 'OTP_DISABLED', 'bank: codes are off');
   // ...but reset goes ahead (it reaches the SMS-provider check, which is unset in this test)
   // Owner: "remove OTPs" -- no SMS codes at all now; a forgotten password is reset by Support.
-  r = await send('reset'); ok(r.body.code === 'OTP_DISABLED' && /contact Support/i.test(r.body.message), 'reset: no SMS code is sent; the member is told to contact Support (' + JSON.stringify(r.body) + ')');
+  r = await send('reset'); ok(r.body.code === 'OTP_DISABLED' && /contacter l'assistance/i.test(r.body.message), 'reset: no SMS code is sent; the member is told to contact Support (' + JSON.stringify(r.body) + ')');
   // switch on: unchanged
   settings = { otpVerificationEnabled: true }; r = await send('register'); ok(r.body.code !== 'OTP_DISABLED', 'switch on: register proceeds');
   // reset confirm still requires a ticket with the switch off

@@ -306,7 +306,7 @@ function armBarrier(state, n) {
   ck(st.spins.every(s => s.used === true), 'both product spins are now burnt');
   const fourth = await spin(api, st);
   ck(fourth.code === 400, `a fourth spin is refused (${fourth.code})`);
-  ck(/no spins left/i.test((fourth.body || {}).message || ''),
+  ck(/plus aucun tour/i.test((fourth.body || {}).message || ''),
      `and says so (${(fourth.body || {}).message})`);
   // Nothing was lost or double-paid: the wallet moved by exactly the sum.
   const expected = 10000 + rewards.reduce((a, b) => a + b, 0);
