@@ -2858,6 +2858,35 @@ function applyAdminBrandName(name){
 // Owner: "put Wave only in all". Each entry is one Wave payment: the link the member's "Ouvrir l'application pour payer" button
 // opens and/or the QR picture shown on the QR tab. The pages use Wave's own icon, so there is no logo to upload.
 let _payRows = [], _payEdit = null, _payQr = undefined;
+// The picture Wave gives is often a big poster (1 MB or more). It is shrunk here until it fits what the server keeps (about 450 KB), staying a
+// sharp PNG when that fits and falling back to a JPEG when it does not. A small picture is kept exactly as it is.
+function fileToQrPicture(file){
+  const LIMIT = 480000;   // characters of the picture as text; the server accepts up to 614400
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read the picture'));
+    reader.onload = () => {
+      const original = String(reader.result);
+      if (file.size <= 300 * 1024 && /^data:image\/(png|jpeg);base64,/.test(original) && original.length <= LIMIT) return resolve(original);
+      const img = new Image();
+      img.onerror = () => reject(new Error('That file is not a picture the browser can read'));
+      img.onload = () => {
+        const tries = [[1000, 'png'], [900, 'png'], [800, 'png'], [900, 'jpeg', .92], [800, 'jpeg', .9], [700, 'jpeg', .88], [600, 'jpeg', .85], [500, 'jpeg', .8]];
+        for (const [maxSide, kind, q] of tries) {
+          const k = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+          const w = Math.max(1, Math.round(img.naturalWidth * k)), h = Math.max(1, Math.round(img.naturalHeight * k));
+          const c = document.createElement('canvas'); c.width = w; c.height = h;
+          const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.imageSmoothingQuality = 'high'; x.drawImage(img, 0, 0, w, h);
+          const out = kind === 'png' ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', q);
+          if (out.length <= LIMIT) return resolve(out);
+        }
+        reject(new Error('That QR picture is too detailed to shrink. Use a simpler picture.'));
+      };
+      img.src = original;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 // Same rule as the server: https on wave.com only, so a link pointing members at another site cannot be saved by mistake or by a thief.
 function adminWaveLinkOk(v){
   try { const u = new URL(String(v || '').trim()), h = u.hostname.toLowerCase(); return u.protocol === 'https:' && !u.username && !u.password && !u.port && (h === 'wave.com' || h.endsWith('.wave.com')); }
@@ -2882,8 +2911,8 @@ function drawPayNumbers(){
         <div style="flex:1;min-width:0;font-size:12px">${qrNow ? 'QR picture ready' : '<span class="muted">No QR picture yet</span>'}</div>
         ${qrNow ? '<button class="btn danger sm" id="pcQrClear" type="button">Remove QR</button>' : ''}
       </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload QR picture<input type="file" id="pcQrFile" accept="image/png,image/jpeg" hidden></label>
-      <p class="muted" style="margin:6px 0 0;font-size:12px">The QR picture you get from Wave, shown as it is on the QR tab (PNG or JPEG, up to about 400 KB). Members must enter the transaction ID after paying; you approve the claim under Recharges.</p>
+      <label class="btn block file-btn" style="margin-top:10px">Upload QR picture<input type="file" id="pcQrFile" accept="image/png,image/jpeg,image/webp" hidden></label>
+      <p class="muted" style="margin:6px 0 0;font-size:12px">The QR picture you get from Wave, shown as it is on the QR tab (PNG or JPEG; a big picture is shrunk for you). Members must enter the transaction ID after paying; you approve the claim under Recharges.</p>
       <div class="row" style="margin-top:10px;align-items:end">
         <div><label>Order (smaller first)</label><input id="pcOrder" type="number" min="0" max="999" value="${esc(e.order != null ? e.order : _payRows.length)}"></div>
         <div><label style="display:flex;align-items:center;gap:8px;margin-top:22px"><input id="pcActive" type="checkbox" style="width:auto"${e.active === false ? '' : ' checked'}> Show to members</label></div>
@@ -2921,12 +2950,9 @@ function drawPayNumbers(){
   if (qrFile) qrFile.addEventListener('change', async ev => {
     const f = ev.target.files[0]; if (!f) return; ev.target.value = '';
     keepPayForm();
-    if (f.size > 420 * 1024) return toast('That QR picture is too large (up to about 400 KB).', 'err');
-    if (!/^image\/(png|jpeg)$/.test(f.type)) return toast('Upload the QR as a PNG or JPEG picture.', 'err');
-    const reader = new FileReader();
-    reader.onload = () => { _payQr = String(reader.result); toast('QR picture ready', 'ok'); drawPayNumbers(); };
-    reader.onerror = () => toast('Could not read the picture', 'err');
-    reader.readAsDataURL(f);
+    if (!/^image\/(png|jpeg|webp)$/.test(f.type)) return toast('Upload the QR as a PNG or JPEG picture.', 'err');
+    try { _payQr = await fileToQrPicture(f); } catch (e) { return toast(e && e.message ? e.message : 'Could not read the picture', 'err'); }
+    toast('QR picture ready', 'ok'); drawPayNumbers();
   });
   const qrClr = $('pcQrClear'); if (qrClr) qrClr.onclick = () => { keepPayForm(); _payQr = ''; drawPayNumbers(); };
   const save = $('pcSave');
@@ -4636,7 +4662,7 @@ const ADMIN_LANG_ROWS = [
   ['No QR picture yet', '', '', 'Pas encore d’image QR', '', ''],
   ['Remove QR', '', '', 'Retirer le QR', '', ''],
   ['Upload QR picture', '', '', 'Téléverser l’image QR', '', ''],
-  ['The QR picture you get from Wave, shown as it is on the “Scanner le code QR” tab (PNG or JPEG, up to about 400 KB). Members must enter the transaction ID after paying; you approve the claim under Recharges.', '', '', 'L’image QR fournie par Wave, affichée telle quelle dans l’onglet « Scanner le code QR » (PNG ou JPEG, environ 400 Ko au maximum). Les membres doivent saisir l’ID de transaction après le paiement ; vous approuvez la demande sous Recharges.', '', ''],
+  ['The QR picture you get from Wave, shown as it is on the “Scanner le code QR” tab (PNG or JPEG; a big picture is shrunk for you). Members must enter the transaction ID after paying; you approve the claim under Recharges.', '', '', 'L’image QR fournie par Wave, affichée telle quelle dans l’onglet « Scanner le code QR » (PNG ou JPEG ; une grande image est réduite pour vous). Les membres doivent saisir l’ID de transaction après le paiement ; vous approuvez la demande sous Recharges.', '', ''],
   ['That QR picture is too large (up to about 400 KB).', '', '', 'Cette image QR est trop grande (environ 400 Ko au maximum).', '', ''],
   ['Could not read the picture', '', '', 'Impossible de lire l’image', '', ''],
   ['Members recharge with Wave. Add your Wave payment link and/or QR picture here. They see the Wave pages, pay from their own Wave app and send you their wallet number (and the transaction ID on the QR page). You check that the money arrived and approve it under Recharges.', '', '', 'Les membres rechargent avec Wave. Ajoutez ici votre lien de paiement Wave et/ou votre image QR. Ils voient les pages Wave, paient depuis leur propre application Wave et vous envoient leur numéro de portefeuille (et l’identifiant de transaction sur la page QR). Vous vérifiez que l’argent est arrivé et vous l’approuvez dans Recharges.', '', ''],
@@ -4645,11 +4671,13 @@ const ADMIN_LANG_ROWS = [
   ['Payment link', '', '', 'Lien de paiement', '', ''],
   ['No Wave payment yet. Until you add one, members cannot recharge.', '', '', 'Aucun paiement Wave pour l’instant. Tant que vous n’en ajoutez pas, les membres ne peuvent pas recharger.', '', ''],
   ['Delete this Wave payment? Members will no longer see it.', '', '', 'Supprimer ce paiement Wave ? Les membres ne le verront plus.', '', ''],
-  ['The QR picture you get from Wave, shown as it is on the QR tab (PNG or JPEG, up to about 400 KB). Members must enter the transaction ID after paying; you approve the claim under Recharges.', '', '', 'L’image QR fournie par Wave, affichée telle quelle dans l’onglet QR (PNG ou JPEG, environ 400 Ko au maximum). Les membres doivent saisir l’identifiant de transaction après avoir payé ; vous approuvez la demande dans Recharges.', '', ''],
+  ['The QR picture you get from Wave, shown as it is on the QR tab (PNG or JPEG; a big picture is shrunk for you). Members must enter the transaction ID after paying; you approve the claim under Recharges.', '', '', 'L’image QR fournie par Wave, affichée telle quelle dans l’onglet QR (PNG ou JPEG ; une grande image est réduite pour vous). Les membres doivent saisir l’identifiant de transaction après avoir payé ; vous approuvez la demande dans Recharges.', '', ''],
   ['The payment link must be a secure https:// link on wave.com (for example https://pay.wave.com/m/...).', '', '', 'Le lien de paiement doit être un lien sécurisé https:// sur wave.com (par exemple https://pay.wave.com/m/...).', '', ''],
   ['Upload the QR as a PNG or JPEG picture.', '', '', 'Téléversez le QR sous forme d’image PNG ou JPEG.', '', ''],
   ['Only secure links on wave.com are accepted, so nobody can point your members to another site.', '', '', 'Seuls les liens sécurisés sur wave.com sont acceptés, afin que personne ne puisse envoyer vos membres vers un autre site.', '', ''],
   ['That QR picture is not valid or is too large. Upload a smaller PNG or JPEG.', '', '', 'Cette image QR n’est pas valide ou est trop grande. Téléversez un PNG ou JPEG plus petit.', '', ''],
+  ['That file is not a picture the browser can read', '', '', 'Ce fichier n’est pas une image lisible par le navigateur.', '', ''],
+  ['That QR picture is too detailed to shrink. Use a simpler picture.', '', '', 'Cette image QR est trop détaillée pour être réduite. Utilisez une image plus simple.', '', ''],
 ];
 const ADMIN_LANG_PATTERNS = [
   ['Prices, payouts, spins and the opening schedule are saved for {0} — the country in the switch at the top. Names, photos and order are shared by every country.', 'Ebbeeyi, okusasula, okukyusa n\'enteekateeka y\'okuggulawo bitereka ku {0} — eggwanga eriri mu kakyusa waggulu. Amannya, ebifaananyi n\'entegeka bigabanibwa amawanga gonna.', 'Bei, malipo, mizunguko na ratiba ya kufungua huhifadhiwa kwa {0} — nchi iliyo kwenye kibadilishi hapo juu. Majina, picha na mpangilio hushirikiwa na kila nchi.', 'Les prix, les versements, les tours et l\'horaire d\'ouverture sont enregistrés pour {0} — le pays du sélecteur en haut. Les noms, les photos et l\'ordre sont partagés par tous les pays.', 'Ibiciro, kwishyura, inzunguruka na gahunda yo gufungura bibikwa kuri {0} — igihugu kiri mu guhitamo haruguru. Amazina, amafoto n\'urutonde bisangirwa n\'ibihugu byose.', 'Ebiihendo, okushashura, okuzunguka n\'entebekanisa y\'okwigura nibibikwa aha {0} — eihanga eriri omu kacwamu haiguru. Amaziina, ebishushani n\'entebekanisa nibigabanwa amahanga goona.'],

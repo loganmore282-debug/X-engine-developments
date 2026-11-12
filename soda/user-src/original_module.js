@@ -6251,7 +6251,7 @@ function wvBodyHtml(){
   }
   const tx = _wv.txId;
   return '<div class="wv-info" onclick="wvSheet(\'qr\')"><span class="wv-i">i</span><span>' + wvt('howQr') + '</span></div>'
-    + '<img class="wv-qr" alt="" src="' + esc(wvSafeQr(o.qrImage)) + '">'
+    + '<img class="wv-qr" alt="" onload="if(this.naturalHeight>this.naturalWidth*1.15)this.classList.add(\'tall\')" src="' + esc(wvSafeQr(o.qrImage)) + '">'
     + '<div class="wv-info wv-info2" style="cursor:default"><span class="wv-i">i</span><span>' + wvt('qrInfo') + '</span></div>'
     + '<div class="wv-tx' + (tx ? ' has' : '') + '" id="wvTx">' + WV_SVG.receipt + '<div class="wv-fin"><label for="wvTxIn">' + wvt('txLabel') + '</label><input id="wvTxIn" type="text" autocomplete="off" maxlength="60" value="' + esc(tx) + '" oninput="wvTxIn(this)" onfocus="wvTxFocus(1)" onblur="wvTxFocus(0)"></div><span class="wv-bang">!</span></div>'
     + '<div id="wvTxMsg">' + wvTxHint() + '</div>'
