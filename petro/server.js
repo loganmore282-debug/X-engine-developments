@@ -7333,7 +7333,7 @@ app.post('/bank/save', async (req, res) => {
   const rawNetwork = String(req.body.network || '').trim();
   if (!holder || !rawNetwork) return res.status(400).json({ status: 'error', message: 'Remplissez tous les champs' });
   if (!Object.prototype.hasOwnProperty.call(PAYOUT_ACCOUNT_TYPES, rawNetwork))
-    return res.status(400).json({ status: 'error', message: 'Choose Commercial Bank of Ethiopia or Telebirr.' });
+    return res.status(400).json({ status: 'error', message: 'Choisissez Commercial Bank of Ethiopia ou Telebirr.' });
   const isMobileMoney = PAYOUT_ACCOUNT_TYPES[rawNetwork] === 'wallet';
   // Owner: "so some bank account exceed character limit so no capping of
   // characters please" -- cleanPhone() enforces this region's phone SHAPE

@@ -52,7 +52,7 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
 
   // 2b. owner: "on bind bank use these only: Commercial Bank of Ethiopia, Telebirr"
   r = await save([], '1000809418239', 'Commercial Bank of Ethiopia'); eq([r.code, r.added], [200, 1], 'the bank is accepted with a plain account number');
-  for (const other of ['MTN Mobile Money', 'Airtel Money', 'CBE Birr', 'Stanbic Bank', '']) { r = await save([], '0912345678', other); ok(r.code === 400 && r.added === 0 && (other === '' || /Commercial Bank of Ethiopia or Telebirr/.test(r.body.message)), 'refused: ' + (other || '(empty)')); }
+  for (const other of ['MTN Mobile Money', 'Airtel Money', 'CBE Birr', 'Stanbic Bank', '']) { r = await save([], '0912345678', other); ok(r.code === 400 && r.added === 0 && (other === '' || /Commercial Bank of Ethiopia (or|ou) Telebirr/.test(r.body.message)), 'refused: ' + (other || '(empty)')); }
   ok(/PAYOUT_PROVIDERS = \['Commercial Bank of Ethiopia', 'Telebirr'\]/.test(fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8')), 'the app offers exactly these two');
   // 3. sweep
   const sweep = fn('sweepEphemeralState');
