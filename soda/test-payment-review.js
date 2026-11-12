@@ -30,8 +30,8 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
 
   // 2. one payout wallet per member: saving edits it in place
   ok(/const MAX_SAVED_PAYOUT_ACCOUNTS = 1;/.test(src), 'one wallet per member');
-  async function save(existing, phone) {
-    const rows = existing.map((p, i) => ({ id: 'b' + i, userId: 'u1', phone: p, holder: 'OLD', network: 'Telebirr' }));
+  async function save(existing, phone, network = 'Wave') {
+    const rows = existing.map((p, i) => ({ id: 'b' + i, userId: 'u1', phone: p, holder: 'OLD', network: 'Wave' }));
     const log = { added: 0, updated: [], deleted: [] }; let code = 200, body;
     const mkDoc = r => ({ id: r.id, data: () => r, ref: { update: async u => { log.updated.push([r.id, u]); }, delete: async () => { log.deleted.push(r.id); } } });
     const chain = (list, f = []) => ({ where: (k, o, v) => chain(list, [...f, [k, v]]), limit: () => chain(list, f),
@@ -40,10 +40,10 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
     let handler; const app = { post: (p, h) => { if (p === '/bank/save') handler = h; } };
     const i = src.indexOf('const MAX_SAVED_PAYOUT_ACCOUNTS'), j = src.indexOf("app.get('/bank/list'");
     new Function('textOf', 'app', 'db', 'verifyAuth', 'stripHtml', 'PAYOUT_ACCOUNT_TYPES', 'NETWORK_NAMES', 'cleanPhone', 'badPhoneMessage', 'getSettings', 'getSupportedBanks', 'consumeOtpTicket', 'marzValidateBankAccount', 'marzUserMsg', 'withLock', 'FieldValue', 'console',
-      src.slice(i, j))(v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''), app, db, async () => 'u1', s => String(s || '').trim(), { 'Telebirr': 'wallet', 'Commercial Bank of Ethiopia': 'bank' }, new Set(['Telebirr']), p => String(p).replace(/\D/g, ''), () => 'bad phone',
+      src.slice(i, j))(v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''), app, db, async () => 'u1', s => String(s || '').trim(), { 'Wave': 'wallet' }, new Set(['Wave']), p => String(p).replace(/\D/g, ''), () => 'bad phone',
       async () => ({ otpVerificationEnabled: false }), async () => [], async () => true, async () => ({}), () => '', (k, g) => g(), { serverTimestamp: () => 1 }, console);
     const res = { status(c) { code = c; return this; }, json(b) { body = b; return this; } };
-    await handler({ body: { holder: 'A B', network: 'Telebirr', phone } }, res); return { code, body, ...log };
+    await handler({ body: { holder: 'A B', network, phone } }, res); return { code, body, ...log };
   }
   let r = await save([], '0770000099');
   eq([r.code, r.added, r.updated.length], [200, 1, 0], 'the first wallet is added');
@@ -55,6 +55,9 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
   r = await save(['0770000099'], '0770000099');
   eq([r.code, r.added, r.updated.length], [200, 0, 1], 'saving the same number again just updates the holder');
 
+  // 2b. owner: "put Wave only in all" -- the payout account is a Wave wallet and nothing else
+  for (const other of ['Telebirr', 'Commercial Bank of Ethiopia', 'MTN Mobile Money', 'Airtel Money', 'CBE Birr', 'Stanbic Bank', '']) { r = await save([], '0912345678', other); ok(r.code === 400 && r.added === 0 && (other === '' || /Wave/.test(r.body.message)), 'refused: ' + (other || '(empty)')); }
+  ok(/PAYOUT_PROVIDERS = \['Wave'\]/.test(fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8')), 'the app offers exactly Wave');
   // 3. sweep
   const sweep = fn('sweepEphemeralState');
   ok(/_depCreateDebounce/.test(sweep) && !/_usdtSubmitDebounce|_cardSubmitDebounce/.test(sweep), 'the deposit debounce map is swept and the removed USDT and card maps are gone');

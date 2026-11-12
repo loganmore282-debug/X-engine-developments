@@ -7,8 +7,8 @@ const assert = require('node:assert/strict'); let checks = 0; const ok = (c, m) 
 const ROOT = path.join(__dirname, 'admin');
 const SERVER = (fs.readFileSync(path.join(__dirname, 'admin-src/index.html'), 'utf8').match(/const SERVER = '([^']+)'/) || [])[1];
 const DEPS = [
-  { id: 'd1', userId: 'u1', accountPhone: '+251912345678', referralCode: 'ABC123', method: 'manual', status: 'review', amount: 550, ref: 'M1', network: 'Telebirr Wallet', assignedName: 'Chala', assignedNumber: '0962499914', pastedSms: 'Dear AMIR You have transferred ETB 550.00. Your transaction number is DA39J9GAMN.', pastedSmsTxId: 'DA39J9GAMN', pastedSmsAmount: 550, pastedSmsAmountMatches: true, createdAt: Date.now() },
-  { id: 'd2', userId: 'u2', accountPhone: '+251922222222', method: 'manual', status: 'pending', amount: 300, ref: 'M2', network: 'Commercial Bank of Ethiopia', assignedNumber: '1000809418239', createdAt: Date.now() },
+  { id: 'd1', userId: 'u1', accountPhone: '+251912345678', referralCode: 'ABC123', method: 'manual', status: 'review', amount: 550, ref: 'M1', network: 'Wave', walletNumber: '0769968158', pastedSms: 'Wave - portefeuille 0769968158 - ID de transaction DA39J9GAMN', pastedSmsTxId: 'DA39J9GAMN', pastedSmsAmount: 550, pastedSmsAmountMatches: true, createdAt: Date.now() },
+  { id: 'd2', userId: 'u2', accountPhone: '+251922222222', method: 'manual', status: 'pending', amount: 300, ref: 'M2', network: 'Wave', createdAt: Date.now() },
   { id: 'd3', userId: 'u3', accountPhone: '+251933333333', method: 'usdt', status: 'awaiting_verification', amount: 1200, ref: 'U1', txid: 'a'.repeat(64), createdAt: Date.now() },
   { id: 'd4', userId: 'u4', accountPhone: '+251944444444', method: 'manual', status: 'matched', amount: 900, ref: 'M4', createdAt: Date.now() },
   { id: 'd5', userId: 'u5', accountPhone: '+251955555555', method: 'manual', status: 'failed', failureReason: 'Rejected by admin', amount: 700, ref: 'M5', createdAt: Date.now() },
@@ -39,7 +39,7 @@ const srv = http.createServer((q, r) => { let f = path.join(ROOT, q.url.split('?
     await page.click('#settingsTab'); await page.waitForSelector('#saveRates'); await page.waitForTimeout(500);
     const set = await page.textContent('#content');
     ok(!/MarzPay|PesaJet|OTP|Card recharges|Recharge gateway|Save payment method/i.test(set), 'settings has no gateway, card or OTP controls');
-    ok(/Payment Numbers/.test(set), 'settings points to Payment Numbers');
+    ok(/Wave payments/.test(set), 'settings points to Wave payments');
     // recharges
     await page.click('[data-tab="deposits"]'); await page.waitForSelector('#depRows .dep-card');
     ok(!/Sync payments|MarzPay|PesaJet|Force-credit|Force credit/i.test(await page.textContent('#content')), 'Recharges has no sync button, no gateway names, no "Force-credit"');
@@ -48,7 +48,7 @@ const srv = http.createServer((q, r) => { let f = path.join(ROOT, q.url.split('?
     ok(await page.$eval('[data-df="review"]', e => e.classList.contains('active')), 'it opens on To approve');
     const cards = await page.$$eval('#depRows .dep-card', els => els.map(e => e.innerText));
     ok(cards.length === 2, 'two claims are waiting for approval');
-    const manual = cards.find(c => /Telebirr/.test(c));
+    const manual = cards.find(c => /Wave/.test(c));
     ok(/To approve/.test(manual), 'the claim shows its status badge');
     ok(/payment message from the member/i.test(manual) && /DA39J9GAMN/.test(manual) && /matches the order/.test(manual), 'it shows the message the member sent, the code and the amount check');
     ok(/Approve/.test(manual) && /Reject/.test(manual), 'with Approve and Reject buttons');
