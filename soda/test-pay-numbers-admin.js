@@ -9,7 +9,7 @@ const ROOT = path.join(__dirname, 'admin');
 const SERVER = (fs.readFileSync(path.join(__dirname, 'admin-src/index.html'), 'utf8').match(/const SERVER = '([^']+)'/) || [])[1];
 ok(SERVER, 'panel API origin found');
 const store = [];          // what the stubbed server holds
-const saved = [];          // every save body the panel sent
+let cap413Hits = 0; const saved = [];          // every save body the panel sent
 const srv = http.createServer((q, r) => {
   let f = path.join(ROOT, q.url.split('?')[0]); if (f.endsWith('/')) f += 'index.html';
   fs.readFile(f, (e, d) => { if (e) { r.statusCode = 404; return r.end(); } r.setHeader('content-type', f.endsWith('.html') ? 'text/html' : f.endsWith('.js') ? 'text/javascript' : 'application/octet-stream'); r.end(d); });
@@ -26,6 +26,7 @@ const srv = http.createServer((q, r) => {
       if (p === '/admin/check-key') return send({ status: 'success', token: 'tok', username: 'owner', role: 'owner' });
       if (p === '/admin/pay-channels/list') return send({ status: 'success', channels: store });
       if (p === '/admin/pay-channels/save') {
+        if (globalThis.__cap413 && body.qrImage && body.qrImage.length > 200000) { cap413Hits++; return send({ status: 'error', message: 'La requête est trop volumineuse' }); }
         saved.push(body);
         const at = body.id ? store.findIndex(c => c.id === body.id) : -1;
         if (at >= 0) { store[at] = { ...store[at], ...body }; return send({ status: 'success', id: body.id }); }
@@ -75,11 +76,14 @@ const srv = http.createServer((q, r) => {
     const bigFile = path.join(require('os').tmpdir(), 'wave-big-test.png'); fs.writeFileSync(bigFile, Buffer.from(bigUrl.split(',')[1], 'base64'));
     ok(fs.statSync(bigFile).size > 1000 * 1024, 'the test poster is over 1 MB (' + fs.statSync(bigFile).size + ' bytes)');
     await page.click('[data-pc-edit]'); await page.waitForSelector('#pcQrFile', { state: 'attached' });
+    globalThis.__cap413 = true;   // a server that still has the small request cap
     await page.setInputFiles('#pcQrFile', bigFile);
     await page.waitForFunction(() => /QR picture ready/.test(document.getElementById('content').textContent), null, { timeout: 15000 });
     await page.click('#pcSave'); await page.waitForSelector('[data-pcid]');
     const last = saved[saved.length - 1];
     ok(/^data:image\/(png|jpeg);base64,/.test(last.qrImage) && last.qrImage.length <= 480000, 'a poster over 1 MB is shrunk to fit (' + last.qrImage.length + ' characters)');
+    ok(cap413Hits === 1 && last.qrImage.length <= 200000, 'when the server says "too large" the panel sends a lighter copy once and it is saved (' + last.qrImage.length + ' characters)');
+    globalThis.__cap413 = false;
     // delete
     page.once('dialog', d => d.accept());
     await page.click('[data-pc-del]'); await page.waitForSelector('text=No Wave payment yet');
