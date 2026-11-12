@@ -127,6 +127,15 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  await page.fill('#wvTxIn','wave abc-12');ok((await page.inputValue('#wvTxIn'))==='waveabc-12','spaces are dropped from the ID');
  {const v=await page.evaluate(()=>{const i=document.getElementById('wvTxIn'),b=document.getElementById('wvTx').getBoundingClientRect(),r=i.getBoundingClientRect();return {op:getComputedStyle(i).opacity,col:getComputedStyle(i).color,inside:r.top>=b.top&&r.bottom<=b.bottom&&r.left>=b.left&&r.right<=b.right,h:r.height};});ok(v.op==='1'&&v.inside&&v.h>10,'the typed ID is visible inside its box (opacity '+v.op+')');}
  ok(!(await page.$('#wvTx.err')),'typing clears the red box');
+ // rubbing the whole ID out: red box, the "required" line and the word shakes sideways; typing again brings the hint back
+ await page.fill('#wvTxIn','');
+ ok(await page.$('#wvTx.err'),'deleting the whole ID turns the box red at once');
+ ok(await page.$('#wvTx.shk'),'and the word Numéro de transaction shakes');
+ ok((await page.evaluate(()=>getComputedStyle(document.querySelector('#wvTx .wv-fin label')).animationName))==='wvshk','with the sideways shake animation');
+ ok(/Le numéro de transaction est requis/.test(await page.textContent('#wvTxMsg')),'and the required line appears');
+ await page.fill('#wvTxIn','waveabc-12');
+ ok(!(await page.$('#wvTx.err'))&&/relevé de transfert/.test(await page.textContent('#wvTxMsg')),'typing again clears it and brings the hint back');
+ ok((await page.evaluate(()=>{const e=document.getElementById('mpFlow');return Math.abs(parseFloat(e.style.zoom||'1')-Math.max(.75,Math.min(1.5,innerWidth/411)))<.01;})),'the pages are scaled to the phone width');
  await page.evaluate(()=>{wvCheckTx();});await page.waitForTimeout(2200);
  const sub=posts.find(p=>p[0]==='submit');ok(sub&&sub[1].depositId==='d1'&&sub[1].txId==='waveabc-12'&&sub[1].wallet==='0769968158','the claim carries the order, the ID and the wallet');
  ok(!(await page.$('#mpFlow.show')),'the pages close after sending');

@@ -1476,21 +1476,23 @@ body.mp-open{overflow:hidden;}
 .wv-res svg{width:20px;height:20px;}
 .wv-res.on{background:#ee9b59;cursor:pointer;box-shadow:0 2px 5px rgba(0,0,0,.2);}
 .wv-qr{display:block;width:257.5px;height:auto;margin:26px auto 0;border-radius:16px;}
-.wv-qr.tall{width:min(100%,330px);}
 .wv-info2{margin-top:26.6px;}
-.wv-tx{display:flex;align-items:center;height:42.3px;margin-top:17.6px;border:1px solid #cfcfcf;border-radius:4px;background:#fff;padding:0 12px 0 13px;position:relative;}
-.wv-tx svg{flex:0 0 auto;width:19px;height:19px;}
-.wv-tx .wv-fin{margin-left:12px;}
-.wv-tx.f{border:2px solid #222;padding-left:12px;}
-.wv-tx.err{border:2px solid #b0021e;}
-.wv-tx .wv-fin label{font-size:16px;color:#444;}
-.wv-tx .wv-fin input{color:#444;caret-color:#222;font:400 16px/20px Roboto,system-ui,sans-serif;bottom:3px;height:20px;opacity:1;}
-.wv-tx.f .wv-fin label,.wv-tx.has .wv-fin label{top:2px;font-size:11px;line-height:13px;}
-.wv-tx .wv-bang{position:absolute;right:12px;top:50%;margin-top:-10px;width:20px;height:20px;border-radius:50%;background:#c40a2a;color:#fff;display:none;place-items:center;font:700 13px/1 Roboto,sans-serif;}
+.wv-tx{display:flex;align-items:center;height:42.8px;margin-top:17.6px;border:1px solid #cfcfcf;border-radius:4.5px;background:#fff;padding:0 0 0 15.3px;position:relative;}
+.wv-tx svg{flex:0 0 auto;width:18.8px;height:21px;}
+.wv-tx .wv-fin{margin:0 40px 0 10.8px;}
+.wv-tx.f{border:1.7px solid #222;padding-left:14.6px;}
+.wv-tx.err{border:2px solid #a8112a;padding-left:14.3px;}
+.wv-tx .wv-fin label{font-size:15px;font-weight:500;color:#555;}
+.wv-tx .wv-fin input{color:#222;caret-color:#222;font:400 15px/20px Roboto,system-ui,sans-serif;bottom:4.3px;height:20px;opacity:1;}
+.wv-tx .wv-fin input::placeholder{color:#666;opacity:1;}
+.wv-tx.f .wv-fin label,.wv-tx.has .wv-fin label,.wv-tx.err .wv-fin label{top:2.6px;transform:none;font-size:11.4px;line-height:13px;font-weight:500;}
+.wv-tx .wv-bang{position:absolute;right:13px;top:50%;margin-top:-10px;width:20px;height:20px;border-radius:50%;background:#c40a2a;color:#fff;display:none;place-items:center;font:700 13px/1 Roboto,sans-serif;}
 .wv-tx.err .wv-bang{display:grid;}
-.wv-txh{display:flex;align-items:flex-start;gap:8px;margin:16px 0 0 14px;font-size:13.9px;line-height:14px;color:#999;}
-.wv-txh .wv-i{width:12px;height:12px;flex-basis:12px;font-size:9px;margin-top:1px;}
-.wv-txe{margin:11px 0 0 14px;font-size:13.9px;line-height:14px;color:#b0021e;}
+.wv-txh{display:flex;align-items:center;gap:9.1px;margin:12.2px 0 0 14.3px;font-size:12.8px;line-height:18.8px;color:#999;padding-right:14px;}
+.wv-txh .wv-i{width:12.6px;height:12.6px;flex-basis:12.6px;font-size:9px;margin-top:0;}
+.wv-txe{margin:7.3px 0 0 12.6px;font-size:11.7px;line-height:14px;color:#b0021e;}
+.wv-tx.shk .wv-fin label{animation:wvshk .42s ease-in-out;}
+@keyframes wvshk{0%,100%{translate:0 0;}15%{translate:-7px 0;}35%{translate:6px 0;}55%{translate:-5px 0;}75%{translate:3px 0;}}
 .wv-save{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:55.8px;margin-top:27.5px;border:0;border-radius:2px;background:#4caf50;color:#fff;font:700 21px/1 Roboto,system-ui,sans-serif;box-shadow:0 8px 20px rgba(76,175,80,.3);cursor:pointer;}
 .wv-save svg{width:20px;height:20px;}
 .wv-savet{margin:17.8px 0 0;text-align:center;font-size:13.9px;line-height:16px;color:#8d8d8d;}

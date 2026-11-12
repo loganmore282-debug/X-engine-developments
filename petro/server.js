@@ -181,7 +181,7 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // route once, before that route was added here too.
 // /admin/app-icon/set carries TWO PNGs (512 and 192) in one body, so it
 // needs the image parser even though each one on its own is small.
-const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/petro-image/set', '/admin/app-icon/set']);
+const IMAGE_BODY_ROUTES = new Set(['/admin/pay-channels/save', '/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/petro-image/set', '/admin/app-icon/set']);
 const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set', '/admin/rules-content/set']);
 // PesaJet signs the RAW REQUEST PAYLOAD -- their dashboard says so in as many
 // words ("computing an HMAC-SHA256 digest of the raw request payload using

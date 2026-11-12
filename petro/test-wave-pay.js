@@ -140,6 +140,7 @@ const QR = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAA
   chRow.qrImage = keepQ; api.dropPayChannelsCache();
   // wiring in the source
   const full = fs.readFileSync(__dirname + '/server.js', 'utf8');
+  ok(/IMAGE_BODY_ROUTES = new Set\(\['\/admin\/pay-channels\/save'/.test(full), 'saving a Wave payment may carry a picture (the 64 KB body cap gave "La requête est trop volumineuse")');
   ok(!/wavePay/.test(full), 'there is no separate switch: Wave is the only way to recharge');
   ok(!/Telebirr|Commercial Bank|Ethiopia/i.test(block), 'no Ethiopian payment wording is left in the recharge code');
   ok(/PAYOUT_ACCOUNT_TYPES = Object\.freeze\(\{ 'Wave': 'wallet' \}\)/.test(full), 'payout accounts: Wave only');
