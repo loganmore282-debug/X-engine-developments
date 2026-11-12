@@ -2757,12 +2757,12 @@ function applyAdminBrandName(name){
 // so system will remove background so that they fit perfectly". Each entry is one row on the member's
 // "Please choose payment" page. The logo goes through fileToLogoPng(): the background connected to the
 // picture edge is cleared and the picture is cropped tight, so it sits perfectly inside the round frame.
-let _payRows = [], _payEdit = null, _payLogo = undefined;
+let _payRows = [], _payEdit = null, _payLogo = undefined, _payQr = undefined;
 async function renderPayNumbers(){
   const r = await api('/admin/pay-channels/list', {});
   if (staleTab('paynumbers')) return;
   _payRows = (r && r.channels) || [];
-  _payEdit = null; _payLogo = undefined;
+  _payEdit = null; _payLogo = undefined; _payQr = undefined;
   drawPayNumbers();
 }
 function payLogoBox(src, size){
@@ -2774,17 +2774,28 @@ function payLogoBox(src, size){
 function drawPayNumbers(){
   const e = _payEdit;
   const logoNow = e ? (_payLogo === undefined ? (e.logo || '') : _payLogo) : '';
+  const qrNow = e ? (_payQr === undefined ? (e.qrImage || '') : _payQr) : '';
+  const isWave = !!e && e.kind === 'wave';
   const form = e ? `
     <div class="panel-card">
       <h3 style="margin:0 0 10px;font-size:15px">${e.id ? 'Edit payment number' : 'Add payment number'}</h3>
       <div class="row">
         <div><label>Name members see</label><input id="pcName" maxlength="60" value="${esc(e.name || '')}" placeholder="Commercial Bank of Ethiopia"></div>
-        <div><label>Type</label><select id="pcKind"><option value="bank"${e.kind !== 'wallet' ? ' selected' : ''}>Bank</option><option value="wallet"${e.kind === 'wallet' ? ' selected' : ''}>Wallet (Telebirr)</option></select></div>
+        <div><label>Type</label><select id="pcKind"><option value="bank"${e.kind !== 'wallet' && e.kind !== 'wave' ? ' selected' : ''}>Bank</option><option value="wallet"${e.kind === 'wallet' ? ' selected' : ''}>Wallet (Telebirr)</option><option value="wave"${e.kind === 'wave' ? ' selected' : ''}>Wave (link + QR)</option></select></div>
       </div>
+      ${isWave ? `
+      <div style="margin-top:8px"><label>Payment link (opened by &ldquo;Ouvrir l&rsquo;application pour payer&rdquo;)</label><input id="pcLink" maxlength="480" value="${esc(e.payLink || '')}" placeholder="https://pay.wave.com/m/..."></div>
+      <div class="banner-row" style="margin-top:10px">
+        ${qrNow ? `<img src="${esc(qrNow)}" alt="" style="width:64px;height:auto;border-radius:8px;flex-shrink:0">` : ''}
+        <div style="flex:1;min-width:0;font-size:12px">${qrNow ? 'QR picture ready' : '<span class="muted">No QR picture yet</span>'}</div>
+        ${qrNow ? '<button class="btn danger sm" id="pcQrClear" type="button">Remove QR</button>' : ''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload QR picture<input type="file" id="pcQrFile" accept="image/png,image/jpeg" hidden></label>
+      <p class="muted" style="margin:6px 0 0;font-size:12px">The QR picture you get from Wave, shown as it is on the &ldquo;Scanner le code QR&rdquo; tab (PNG or JPEG, up to about 400 KB). Members must enter the transaction ID after paying; you approve the claim under Recharges.</p>` : `
       <div class="row" style="margin-top:8px">
         <div><label>Account name</label><input id="pcAccName" maxlength="80" value="${esc(e.accountName || '')}" placeholder="Ashenafi"></div>
         <div><label>Account number</label><input id="pcAccNo" maxlength="40" value="${esc(e.accountNumber || '')}" placeholder="1000809418239"></div>
-      </div>
+      </div>`}
       <div class="banner-row" style="margin-top:10px">
         ${payLogoBox(logoNow, 52)}
         <div style="flex:1;min-width:0;font-size:12px">${logoNow ? 'Logo ready (background removed)' : '<span class="muted">No logo yet</span>'}</div>
@@ -2809,14 +2820,15 @@ function drawPayNumbers(){
           ${payLogoBox(c.logo, 44)}
           <div style="flex:1;min-width:0;font-size:13px">
             <b data-no-i18n>${esc(c.name)}</b> <span class="pill-tag ${c.active === false ? 't-bad' : 't-ok'}" style="font-size:10px">${c.active === false ? 'Hidden' : 'Showing'}</span>
-            <div class="muted" style="font-size:12px" data-no-i18n>${esc(c.accountName)} &middot; ${esc(c.accountNumber)} &middot; ${c.kind === 'wallet' ? 'Wallet' : 'Bank'}</div>
+            <div class="muted" style="font-size:12px" data-no-i18n>${c.kind === 'wave' ? 'Wave &middot; ' + (c.payLink ? 'link' : 'no link') + ' &middot; ' + (c.qrImage ? 'QR' : 'no QR') : esc(c.accountName) + ' &middot; ' + esc(c.accountNumber) + ' &middot; ' + (c.kind === 'wallet' ? 'Wallet' : 'Bank')}</div>
           </div>
           <button class="btn ghost sm" data-pc-edit="${esc(c.id)}" type="button">Edit</button>
           <button class="btn danger sm" data-pc-del="${esc(c.id)}" type="button">Delete</button>
         </div>`).join('') : '<p class="muted" style="margin:0">No payment numbers yet. Until you add one, members cannot recharge by bank or wallet.</p>'}
     </div>`;
-  const add = $('pcAdd'); if (add) add.onclick = () => { _payEdit = { active: true, kind: 'bank' }; _payLogo = undefined; drawPayNumbers(); };
-  $('content').querySelectorAll('[data-pc-edit]').forEach(b => b.onclick = () => { _payEdit = _payRows.find(r => r.id === b.dataset.pcEdit) || null; _payLogo = undefined; drawPayNumbers(); });
+  const add = $('pcAdd'); if (add) add.onclick = () => { _payEdit = { active: true, kind: 'wave' }; _payLogo = undefined; _payQr = undefined; drawPayNumbers(); };
+  $('content').querySelectorAll('[data-pc-edit]').forEach(b => b.onclick = () => { _payEdit = _payRows.find(r => r.id === b.dataset.pcEdit) || null; _payLogo = undefined; _payQr = undefined; drawPayNumbers(); });
+  const kindSel = $('pcKind'); if (kindSel) kindSel.onchange = () => { keepPayForm(); drawPayNumbers(); };
   $('content').querySelectorAll('[data-pc-del]').forEach(b => b.onclick = async () => {
     const row = _payRows.find(r => r.id === b.dataset.pcDel); if (!row) return;
     if (!window.confirm('Delete "' + row.name + '"? Members will no longer see it.')) return;
@@ -2825,7 +2837,18 @@ function drawPayNumbers(){
     toast(d.status === 'success' ? 'Deleted' : (d.message || 'Could not delete'), d.status === 'success' ? 'ok' : 'err');
     renderPayNumbers();
   });
-  const cancel = $('pcCancel'); if (cancel) cancel.onclick = () => { _payEdit = null; _payLogo = undefined; drawPayNumbers(); };
+  const cancel = $('pcCancel'); if (cancel) cancel.onclick = () => { _payEdit = null; _payLogo = undefined; _payQr = undefined; drawPayNumbers(); };
+  const qrFile = $('pcQrFile');
+  if (qrFile) qrFile.addEventListener('change', async ev => {
+    const f = ev.target.files[0]; if (!f) return; ev.target.value = '';
+    keepPayForm();
+    if (f.size > 420 * 1024) return toast('That QR picture is too large (up to about 400 KB).', 'err');
+    const reader = new FileReader();
+    reader.onload = () => { _payQr = String(reader.result); toast('QR picture ready', 'ok'); drawPayNumbers(); };
+    reader.onerror = () => toast('Could not read the picture', 'err');
+    reader.readAsDataURL(f);
+  });
+  const qrClr = $('pcQrClear'); if (qrClr) qrClr.onclick = () => { keepPayForm(); _payQr = ''; drawPayNumbers(); };
   const file = $('pcLogoFile');
   if (file) file.addEventListener('change', async ev => {
     const f = ev.target.files[0]; if (!f) return; ev.target.value = '';
@@ -2843,7 +2866,9 @@ function drawPayNumbers(){
   if (save) save.onclick = async () => {
     keepPayForm();
     const body = { id: _payEdit.id, name: _payEdit.name, kind: _payEdit.kind, accountName: _payEdit.accountName, accountNumber: _payEdit.accountNumber, order: _payEdit.order, active: _payEdit.active };
+    if (_payEdit.kind === 'wave') body.payLink = _payEdit.payLink || '';
     if (_payLogo !== undefined) body.logo = _payLogo;
+    if (_payQr !== undefined) body.qrImage = _payQr;
     save.disabled = true;
     const d = await api('/admin/pay-channels/save', body);
     toast(d.status === 'success' ? 'Saved' : (d.message || 'Could not save'), d.status === 'success' ? 'ok' : 'err');
@@ -2854,7 +2879,7 @@ function drawPayNumbers(){
 function keepPayForm(){
   if (!_payEdit || !$('pcName')) return;
   _payEdit = Object.assign({}, _payEdit, {
-    name: $('pcName').value, kind: $('pcKind').value, accountName: $('pcAccName').value, accountNumber: $('pcAccNo').value,
+    name: $('pcName').value, kind: $('pcKind').value, accountName: $('pcAccName') ? $('pcAccName').value : _payEdit.accountName, accountNumber: $('pcAccNo') ? $('pcAccNo').value : _payEdit.accountNumber, payLink: $('pcLink') ? $('pcLink').value : _payEdit.payLink,
     order: $('pcOrder').value === '' ? undefined : Number($('pcOrder').value), active: $('pcActive').checked,
   });
 }
@@ -4484,6 +4509,16 @@ const ADMIN_LANG_ROWS = [
   ['No blocks yet, add a text block or an image below.', '', '', 'Aucun bloc pour l’instant, ajoutez un bloc de texte ou d’image ci-dessous.', '', ''],
   ['Image', '', '', '=', '', ''],
   ['Text', '', '', 'Texte', '', ''],
+  // ── English + French coverage round (owner: the admin panel must be fully switchable to French) ──
+  ['Wave (link + QR)', '', '', 'Wave (lien + QR)', '', ''],
+  ['Payment link (opened by “Ouvrir l’application pour payer”)', '', '', 'Lien de paiement (ouvert par « Ouvrir l’application pour payer »)', '', ''],
+  ['QR picture ready', '', '', 'Image QR prête', '', ''],
+  ['No QR picture yet', '', '', 'Pas encore d’image QR', '', ''],
+  ['Remove QR', '', '', 'Retirer le QR', '', ''],
+  ['Upload QR picture', '', '', 'Téléverser l’image QR', '', ''],
+  ['The QR picture you get from Wave, shown as it is on the “Scanner le code QR” tab (PNG or JPEG, up to about 400 KB). Members must enter the transaction ID after paying; you approve the claim under Recharges.', '', '', 'L’image QR fournie par Wave, affichée telle quelle dans l’onglet « Scanner le code QR » (PNG ou JPEG, environ 400 Ko au maximum). Les membres doivent saisir l’ID de transaction après le paiement ; vous approuvez la demande sous Recharges.', '', ''],
+  ['That QR picture is too large (up to about 400 KB).', '', '', 'Cette image QR est trop grande (environ 400 Ko au maximum).', '', ''],
+  ['Could not read the picture', '', '', 'Impossible de lire l’image', '', ''],
 ];
 const ADMIN_LANG_PATTERNS = [
   ['Prices, payouts, spins and the opening schedule are saved for {0} — the country in the switch at the top. Names, photos and order are shared by every country.', 'Ebbeeyi, okusasula, okukyusa n\'enteekateeka y\'okuggulawo bitereka ku {0} — eggwanga eriri mu kakyusa waggulu. Amannya, ebifaananyi n\'entegeka bigabanibwa amawanga gonna.', 'Bei, malipo, mizunguko na ratiba ya kufungua huhifadhiwa kwa {0} — nchi iliyo kwenye kibadilishi hapo juu. Majina, picha na mpangilio hushirikiwa na kila nchi.', 'Les prix, les versements, les tours et l\'horaire d\'ouverture sont enregistrés pour {0} — le pays du sélecteur en haut. Les noms, les photos et l\'ordre sont partagés par tous les pays.', 'Ibiciro, kwishyura, inzunguruka na gahunda yo gufungura bibikwa kuri {0} — igihugu kiri mu guhitamo haruguru. Amazina, amafoto n\'urutonde bisangirwa n\'ibihugu byose.', 'Ebiihendo, okushashura, okuzunguka n\'entebekanisa y\'okwigura nibibikwa aha {0} — eihanga eriri omu kacwamu haiguru. Amaziina, ebishushani n\'entebekanisa nibigabanwa amahanga goona.'],
