@@ -121,6 +121,7 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  await page.evaluate(()=>wvCheckTx());ok(await page.$('#wvTx.err'),'an empty ID turns the box red');ok(/Le numéro de transaction est requis/.test(await page.textContent('#wvTxMsg')),'transaction number required message');
  const subs0=posts.filter(p=>p[0]==='submit').length;ok(subs0===0,'nothing sent yet');
  await page.fill('#wvTxIn','wave abc-12');ok((await page.inputValue('#wvTxIn'))==='waveabc-12','spaces are dropped from the ID');
+ {const v=await page.evaluate(()=>{const i=document.getElementById('wvTxIn'),b=document.getElementById('wvTx').getBoundingClientRect(),r=i.getBoundingClientRect();return {op:getComputedStyle(i).opacity,col:getComputedStyle(i).color,inside:r.top>=b.top&&r.bottom<=b.bottom&&r.left>=b.left&&r.right<=b.right,h:r.height};});ok(v.op==='1'&&v.inside&&v.h>10,'the typed ID is visible inside its box (opacity '+v.op+')');}
  ok(!(await page.$('#wvTx.err')),'typing clears the red box');
  await page.evaluate(()=>{wvCheckTx();});await page.waitForTimeout(2200);
  const sub=posts.find(p=>p[0]==='submit');ok(sub&&sub[1].depositId==='d1'&&sub[1].txId==='waveabc-12'&&sub[1].wallet==='0769968158','the claim carries the order, the ID and the wallet');
