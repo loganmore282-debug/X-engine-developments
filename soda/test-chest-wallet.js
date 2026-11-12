@@ -20,31 +20,31 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 (async () => {
   await new Promise(r => setTimeout(r, 30));
   // Wallet: one saved row is shown, prefilled, with no delete control anywhere.
-  w.eval('STATE.bankAccounts=[{id:"b1",network:"Telebirr",phone:"251969968158",holder:"Jane Doe"}]');
+  w.eval('STATE.bankAccounts=[{id:"b1",network:"Telebirr",phone:"2250969968158",holder:"Jane Doe"}]');
   w.eval('openSheet("Wallet","");renderWalletSheet()');
   ok(d.querySelectorAll('.v-wal-row').length === 1, 'exactly one wallet row');
   ok(!d.querySelector('.v-wal-row button') && !/deleteWallet|Delete wallet/.test(d.getElementById('sheetBody').innerHTML), 'no delete / bin control');
   ok(d.getElementById('walProvider').value === 'Telebirr' && d.getElementById('walPhone').value === '0969968158' && d.getElementById('walHolder').value === 'JANE DOE', 'the form edits the saved wallet in place');
-  ok(d.getElementById('walEditHead').textContent === 'Edit Wallet', 'heading is Edit Wallet');
+  ok(d.getElementById('walEditHead').textContent === 'Modifier le portefeuille', 'heading is Edit Wallet');
   ok(typeof w.deleteWallet === 'undefined', 'deleteWallet is gone');
   w.eval('STATE.bankAccounts=[];openSheet("Wallet","");renderWalletSheet()');
-  ok(d.getElementById('walEditHead').textContent === 'Bind Wallet' && !d.querySelector('.v-wal-row'), 'no wallet yet: Bind Wallet, no rows');
+  ok(d.getElementById('walEditHead').textContent === 'Associer le portefeuille' && !d.querySelector('.v-wal-row'), 'no wallet yet: Bind Wallet, no rows');
   // Treasure Chest: the owner's words only.
   w.openChestSheet();
   const t = d.getElementById('sheetBody').textContent.replace(/\s+/g, ' ').trim();
-  ok(d.getElementById('sheetTitle').textContent === 'TREASURE CHEST', 'title');
-  ok(t === 'MYSTERY TREASURE Enter your key to unlock the reward UNLOCK TREASURE', 'only the screenshot words: ' + t);
-  ok(d.getElementById('chestKey').placeholder === 'Enter treasure chest key', 'key placeholder');
+  ok(d.getElementById('sheetTitle').textContent === 'COFFRE AU TRÉSOR', 'title');
+  ok(t === 'TRÉSOR MYSTÈRE Entrez votre clé pour débloquer la récompense DÉBLOQUER LE TRÉSOR', 'only the screenshot words: ' + t);
+  ok(d.getElementById('chestKey').placeholder === 'Entrez la clé du coffre au trésor', 'key placeholder');
   ok(d.querySelector('.v-chest-keyic svg'), 'key icon');
   w.submitChestKey();
-  ok(/Please enter the treasure chest key/.test(d.getElementById('notifyMsg').textContent), 'empty key message');
+  ok(/Veuillez saisir la clé du coffre au trésor/.test(d.getElementById('notifyMsg').textContent), 'empty key message');
   // Server: one wallet, edited in place; chest messages.
   ok(/MAX_SAVED_PAYOUT_ACCOUNTS = 1/.test(server), 'server keeps one wallet');
-  ok(/Wrong treasure chest password/.test(server) && /Please enter the treasure chest key/.test(server), 'server chest messages');
-  ok(/function showChestWin\(reward, balance(, after)?\)/.test(source) && /Congratulations!/.test(source) && /You won/.test(source) && /New Balance: /.test(source) && />COLLECT</.test(source), 'claiming a gift code opens the Congratulations card (You won, amount, New Balance, COLLECT)');
+  ok(/Mot de passe du coffre au trésor incorrect/.test(server) && /Veuillez saisir la clé du coffre au trésor/.test(server), 'server chest messages');
+  ok(/function showChestWin\(reward, balance(, after)?\)/.test(source) && /Félicitations !/.test(source) && /Vous avez gagné/.test(source) && /Nouveau solde : /.test(source) && />RÉCUPÉRER</.test(source), 'claiming a gift code opens the Congratulations card (You won, amount, New Balance, COLLECT)');
 ok(!/notify\('Giftcode redeemed successfully'\)/.test(source), 'the plain toast no longer replaces the card');
-ok(/class="v-phone-in" id="depPhone" type="tel"/.test(source) && !/id="depPhone" type="hidden"/.test(source) && /placeholder="Phone Number"/.test(source), 'the Deposit page has a visible Phone Number field (registered number filled in, any other number allowed)');
-ok(/for="walPhone">Account Number<\/label>/.test(source) && !/for="walPhone">Phone Number/.test(source), 'the wallet number field is labelled Account Number');
+ok(/class="v-phone-in" id="depPhone" type="tel"/.test(source) && !/id="depPhone" type="hidden"/.test(source) && /placeholder="Numéro de téléphone"/.test(source), 'the Deposit page has a visible Phone Number field (registered number filled in, any other number allowed)');
+ok(/for="walPhone">Numéro de compte<\/label>/.test(source) && !/for="walPhone">Numéro de téléphone/.test(source), 'the wallet number field is labelled Account Number');
 ok(/\{4,64\}/.test(server) && !/\{4,34\}/.test(server), 'bank account numbers are not capped at 34 characters');
 ok(/STATE\.supportedBanks && STATE\.supportedBanks\.length/.test(source), 'an empty bank list is not kept, so the wallet asks again next time');
 console.log(`PASS: one wallet and treasure chest (${n} checks${built ? ', built bundle' : ''})`); process.exit(0);

@@ -31,11 +31,12 @@ var API_BASE = '/k7x2';
 // The values below are Uganda's, and they are also what an offline first
 // paint uses -- so a cold start with no network still formats money and
 // validates a phone number the way it always did.
-var REGION = { key: 'et', name: 'Ethiopia', currency: 'ETB', dialCode: '251', localLength: 9, prefixes: ['9','7'], utcOffsetMin: 180, isDefault: true, languages: ['en','am'], defaultLang: 'en' };
-// What a member READS in front of an amount: the symbol Br for ETB (the code
-// stays ETB everywhere it is stored or sent), the plain code for anything else.
-function cur(){ const c = String((REGION && REGION.currency) || 'ETB').toUpperCase(); return c === 'ETB' ? 'Br' : c; }
-function regionName(){ const n = (REGION && REGION.name) || 'Ethiopia'; return typeof t === 'function' ? t(n) : n; }
+var REGION = { key: 'ci', name: "Côte d'Ivoire", currency: 'XOF', dialCode: '225', localLength: 10, prefixes: ['01','05','07'], utcOffsetMin: 0, isDefault: true, languages: ['fr'], defaultLang: 'fr' };
+// What a member READS in front of an amount: the currency code (XOF).
+function cur(){ return String((REGION && REGION.currency) || 'XOF').toUpperCase(); }
+// Côte d'Ivoire numbers START WITH the 0 (01 / 05 / 07 + 8 digits), so the 0 is part of the number and is never stripped.
+function keepsLeadZero(){ const p = regionPrefixes(); return p.length > 0 && p.every(x => String(x).startsWith('0')); }
+function regionName(){ const n = (REGION && REGION.name) || "Côte d'Ivoire"; return typeof t === 'function' ? t(n) : n; }
 // "7XXXXXXXX" for Uganda -- the region's first allowed prefix padded out to
 // its local length, used in the placeholders that show the shape to type.
 function phoneHintBody(){
@@ -43,7 +44,7 @@ function phoneHintBody(){
   const lead = pfx.length ? pfx[0] : '';
   return lead + 'X'.repeat(Math.max(0, localLen() - lead.length));
 }
-function dial(){ return (REGION && REGION.dialCode) || '251'; }
+function dial(){ return (REGION && REGION.dialCode) || '225'; }
 function dialPlus(){ return '+' + dial(); }
 function localLen(){ return Number(REGION && REGION.localLength) || 9; }
 function regionPrefixes(){ return (REGION && Array.isArray(REGION.prefixes) ? REGION.prefixes.filter(Boolean) : []); }
@@ -130,6 +131,9 @@ var LANGS = [
   { code: 'am',  name: 'Amharic',     native: '\u12a0\u121b\u122d\u129b' },
 ];
 var LANG_CODES = LANGS.map(l => l.code);
+// THE APP IS WRITTEN IN FRENCH (owner: "I don't want auto translation, I want it to be in French, all of it, no English").
+// There is no runtime translation any more: every string in this file, in index.html and in the server's messages IS the
+// French text. 'en' below only means "leave the text alone" -- t() returns what it is given and the DOM sweep is off.
 var LANG = 'en';
 // What this country allows, from the region. Until the region lands it is
 // English alone -- one option is not a choice, so the button stays hidden
@@ -190,8 +194,8 @@ var LANG_ROWS = [
   ['Wallet', 'Ensawo', 'Pochi', 'Portefeuille', 'Umufuka', 'Ensaho', 'የገንዘብ ቦርሳ'],
   ['Messages', 'Obubaka', 'Ujumbe', '=', 'Ubutumwa', 'Obutumwa', 'መልዕክቶች'],
   ['Transaction Statement', 'Ebiwandiiko bya Ssente', 'Rekodi ya Salio', 'Historique du solde', 'Amateka y\'amafaranga', 'Ebihandiiko bya Sente', 'የግብይት መግለጫ'],
-  ['Rules and Regulations', '', '', '', '', '', 'ደንቦችና መመሪያዎች'],
-  ['Login successful ✓', '', '', '', '', '', 'መግባት ተሳክቷል ✓'],
+  ['Rules and Regulations', '', '', 'Règles et conditions', '', '', 'ደንቦችና መመሪያዎች'],
+  ['Login successful ✓', '', '', 'Connexion réussie ✓', '', '', 'መግባት ተሳክቷል ✓'],
   ['Login Password', 'Ekisumuluzo ky\'Okuyingira', 'Nenosiri la Kuingia', 'Mot de passe de connexion', 'Ijambobanga ryo kwinjira', 'Ekisumuruzo ky\'Okutaaha', 'የመግቢያ የይለፍ ቃል'],
   ['Trade Password', 'Ekisumuluzo ky\'Okusuubula', 'Nenosiri la Malipo', 'Mot de passe de transaction', 'Ijambobanga ry\'ubucuruzi', 'Ekisumuruzo ky\'Okushuubura', 'የግብይት የይለፍ ቃል'],
   ['Download APP', 'Tikka APP', 'Pakua APP', 'T\u00e9l\u00e9charger l\'application', 'Kuramo APP', 'Tikka APP', 'መተግበሪያውን አውርድ'],
@@ -484,416 +488,416 @@ var LANG_ROWS = [
   ['just deposited', 'yaakateekamu ssente', 'ameweka pesa hivi punde', 'vient de recharger', 'aherutse kubitsa', 'yaahingwire kuteeramu sente', 'አሁን ገቢ አደረገ'],
   ['just withdrew', 'yaakaggyamu ssente', 'ametoa pesa hivi punde', 'vient de retirer', 'aherutse kubikuza', 'yaahingwire kwihamu sente', 'አሁን ገንዘብ አወጣ'],
   // ── Strings on the CURRENT screens that had no row in any language; Amharic only for now (other cells blank = English). ──
-  ['or', '', '', '', '', '', 'ወይም'],
-  ['Asset', '', '', '', '', '', 'ንብረት'],
-  ['Assets', '', '', '', '', '', 'ንብረቶች'],
-  ['Availability', '', '', '', '', '', 'ተገኝነት'],
-  ['Claim', '', '', '', '', '', 'ጠይቅ'],
-  ['Claimed', '', '', '', '', '', 'ተጠይቋል'],
-  ['Connecting…', '', '', '', '', '', 'በመገናኘት ላይ…'],
-  ['Cost', '', '', '', '', '', 'ወጪ'],
-  ['Earnings', '', '', '', '', '', 'ገቢዎች'],
-  ['Income', '', '', '', '', '', 'ገቢ'],
-  ['Info', '', '', '', '', '', 'መረጃ'],
-  ['Invested', '', '', '', '', '', 'ኢንቨስት የተደረገ'],
-  ['Invite', '', '', '', '', '', 'ጋብዝ'],
-  ['Network', '', '', '', '', '', 'አውታረ መረብ'],
+  ['or', '', '', 'ou', '', '', 'ወይም'],
+  ['Asset', '', '', 'Actif', '', '', 'ንብረት'],
+  ['Assets', '', '', 'Actifs', '', '', 'ንብረቶች'],
+  ['Availability', '', '', 'Disponibilité', '', '', 'ተገኝነት'],
+  ['Claim', '', '', 'Réclamer', '', '', 'ጠይቅ'],
+  ['Claimed', '', '', 'Réclamé', '', '', 'ተጠይቋል'],
+  ['Connecting…', '', '', 'Connexion en cours…', '', '', 'በመገናኘት ላይ…'],
+  ['Cost', '', '', 'Coût', '', '', 'ወጪ'],
+  ['Earnings', '', '', 'Gains', '', '', 'ገቢዎች'],
+  ['Income', '', '', 'Revenus', '', '', 'ገቢ'],
+  ['Info', '', '', 'Infos', '', '', 'መረጃ'],
+  ['Invested', '', '', 'Investi', '', '', 'ኢንቨስት የተደረገ'],
+  ['Invite', '', '', 'Inviter', '', '', 'ጋብዝ'],
+  ['Network', '', '', 'Réseau', '', '', 'አውታረ መረብ'],
   ['Soda', '', '', '', '', '', '='],
-  ['Profile', '', '', '', '', '', 'መገለጫ'],
+  ['Profile', '', '', 'Profil', '', '', 'መገለጫ'],
   ['Recharges', '', '', '', '', '', 'ሂሳብ መሙላቶች'],
-  ['Register', '', '', '', '', '', 'ተመዝገብ'],
-  ['Sending…', '', '', '', '', '', 'በመላክ ላይ…'],
-  ['Support', '', '', '', '', '', 'ድጋፍ'],
-  ['Term', '', '', '', '', '', 'ጊዜ'],
-  ['Withdrawals', '', '', '', '', '', 'ገንዘብ ማውጣቶች'],
-  ['6-digit code', '', '', '', '', '', 'ባለ 6 አሃዝ ኮድ'],
-  ['Account holder', '', '', '', '', '', 'የመለያ ባለቤት'],
-  ['After submitting', '', '', '', '', '', 'ከላኩ በኋላ'],
-  ['All Referrals', '', '', '', '', '', 'ሁሉም ግብዣዎች'],
-  ['Amount (USDT)', '', '', '', '', '', 'መጠን (USDT)'],
-  ['Buy Product', '', '', '', '', '', 'ምርት ግዛ'],
-  ['Check In', '', '', '', '', '', 'ተመዝግበህ ግባ'],
-  ['Confirm Investment', '', '', '', '', '', 'ኢንቨስትመንቱን አረጋግጥ'],
-  ['Confirm Recharge', '', '', '', '', '', 'ሂሳብ መሙላቱን አረጋግጥ'],
-  ['Cumulative Earnings', '', '', '', '', '', 'ጠቅላላ ድምር ገቢ'],
-  ['Current password', '', '', '', '', '', 'አሁን ያለው የይለፍ ቃል'],
-  ['Daily Yield', '', '', '', '', '', 'ዕለታዊ ትርፍ'],
-  ['Download App', '', '', '', '', '', 'መተግበሪያውን አውርድ'],
-  ['Download Statement', '', '', '', '', '', 'መግለጫውን አውርድ'],
-  ['Expected Return', '', '', '', '', '', 'የሚጠበቅ ተመላሽ'],
-  ['Forgot Password?', '', '', '', '', '', 'የይለፍ ቃል ረሱ?'],
-  ['Gift box', '', '', '', '', '', 'የስጦታ ሣጥን'],
-  ['Gift Codes', '', '', '', '', '', 'የስጦታ ኮዶች'],
-  ['Invitation code', '', '', '', '', '', 'የግብዣ ኮድ'],
-  ['Invitation link', '', '', '', '', '', 'የግብዣ አገናኝ'],
-  ['Loading statement…', '', '', '', '', '', 'መግለጫውን በመጫን ላይ…'],
-  ['My Assets', '', '', '', '', '', 'የእኔ ንብረቶች'],
-  ['New password', '', '', '', '', '', 'አዲስ የይለፍ ቃል'],
-  ['Payout Wallet', '', '', '', '', '', 'የክፍያ ቦርሳ'],
-  ['Processing payment', '', '', '', '', '', 'ክፍያ በመከናወን ላይ'],
-  ['Receiving account', '', '', '', '', '', 'ተቀባይ መለያ'],
-  ['Recharge tasks', '', '', '', '', '', 'የሂሳብ መሙላት ተግባራት'],
-  ['REDEEM CODE', '', '', '', '', '', 'ኮዱን ተጠቀም'],
-  ['Referral earnings', '', '', '', '', '', 'የግብዣ ገቢዎች'],
-  ['Referral tasks', '', '', '', '', '', 'የግብዣ ተግባራት'],
-  ['Resend code', '', '', '', '', '', 'ኮዱን እንደገና ላክ'],
-  ['Reset Password', '', '', '', '', '', 'የይለፍ ቃል ዳግም አስጀምር'],
-  ['Resetting password…', '', '', '', '', '', 'የይለፍ ቃል ዳግም በማስጀመር ላይ…'],
-  ['Security Settings', '', '', '', '', '', 'የደህንነት ቅንብሮች'],
-  ['Send Code', '', '', '', '', '', 'ኮድ ላክ'],
-  ['Support hours', '', '', '', '', '', 'የድጋፍ ሰዓቶች'],
-  ['Switch wallet', '', '', '', '', '', 'ቦርሳ ቀይር'],
-  ['Task Center', '', '', '', '', '', 'የተግባር ማዕከል'],
-  ['Total Recharges', '', '', '', '', '', 'ጠቅላላ ሂሳብ መሙላቶች'],
-  ['Total Withdrawals', '', '', '', '', '', 'ጠቅላላ ገንዘብ ማውጣቶች'],
-  ['Verifying code…', '', '', '', '', '', 'ኮዱን በማረጋገጥ ላይ…'],
-  ['View team', '', '', '', '', '', 'ቡድኑን ይመልከቱ'],
-  ['Welcome back', '', '', '', '', '', 'እንኳን ደህና ተመለሱ'],
-  ['WhatsApp Channel', '', '', '', '', '', 'የዋትስአፕ ቻናል'],
-  ['Account holder name', '', '', '', '', '', 'የመለያ ባለቤት ስም'],
-  ['Amount to request', '', '', '', '', '', 'የሚጠየቅ መጠን'],
-  ['Before you withdraw', '', '', '', '', '', 'ገንዘብ ከማውጣትዎ በፊት'],
-  ['Choose your amount', '', '', '', '', '', 'መጠንዎን ይምረጡ'],
-  ['Confirm new password', '', '', '', '', '', 'አዲሱን የይለፍ ቃል አረጋግጥ'],
-  ['Confirm your password', '', '', '', '', '', 'የይለፍ ቃልዎን ያረጋግጡ'],
-  ['Copy invitation code', '', '', '', '', '', 'የግብዣ ኮድ ቅዳ'],
-  ['Copy invitation link', '', '', '', '', '', 'የግብዣ አገናኝ ቅዳ'],
-  ['Create a password', '', '', '', '', '', 'የይለፍ ቃል ይፍጠሩ'],
-  ['Create New Account', '', '', '', '', '', 'አዲስ መለያ ይፍጠሩ'],
-  ['Delete payout wallet', '', '', '', '', '', 'የክፍያ ቦርሳ ሰርዝ'],
-  ['End of statement', '', '', '', '', '', 'የመግለጫው መጨረሻ'],
-  ['Enter gift code', '', '', '', '', '', 'የስጦታ ኮድ ያስገቡ'],
-  ['Enter verification code', '', '', '', '', '', 'የማረጋገጫ ኮድ ያስገቡ'],
-  ['Enter your amount', '', '', '', '', '', 'መጠንዎን ያስገቡ'],
-  ['Enter your password', '', '', '', '', '', 'የይለፍ ቃልዎን ያስገቡ'],
-  ['Get payment amount', '', '', '', '', '', 'የክፍያ መጠን ያግኙ'],
-  ['Minimum amount is', '', '', '', '', '', 'ዝቅተኛው መጠን'],
-  ['No products yet.', '', '', '', '', '', 'እስካሁን ምርት የለም።'],
-  ['Pay with Card', '', '', '', '', '', 'በካርድ ክፈል'],
-  ['Redeem Gift Code', '', '', '', '', '', 'የስጦታ ኮድ ተጠቀም'],
-  ['Reset your password', '', '', '', '', '', 'የይለፍ ቃልዎን ዳግም ያስጀምሩ'],
-  ['Submit USDT Payment', '', '', '', '', '', 'የUSDT ክፍያ ላክ'],
-  ['Total amount earned', '', '', '', '', '', 'ጠቅላላ የተገኘ መጠን'],
-  ['Total Wallet Balance', '', '', '', '', '', 'ጠቅላላ የቦርሳ ቀሪ ሂሳብ'],
-  ['Transaction Hash (TXID)', '', '', '', '', '', 'የግብይት ሃሽ (TXID)'],
-  ['Wait for verification', '', '', '', '', '', 'ማረጋገጫውን ይጠብቁ'],
-  ['Approve on your phone', '', '', '', '', '', 'በስልክዎ ላይ ያጽድቁ'],
-  ['Back to Log In', '', '', '', '', '', 'ወደ መግቢያ ተመለስ'],
-  ['Create your Soda account', '', '', '', '', '', 'የፔትሮ መለያዎን ይፍጠሩ'],
-  ['Earn from team progress', '', '', '', '', '', 'ከቡድን እድገት ያግኙ'],
-  ['Enter invitation code (optional)', '', '', '', '', '', 'የግብዣ ኮድ ያስገቡ (አማራጭ)'],
-  ['Enter your phone number', '', '', '', '', '', 'ስልክ ቁጥርዎን ያስገቡ'],
-  ['Follow the payment status', '', '', '', '', '', 'የክፍያውን ሁኔታ ይከታተሉ'],
-  ['Get your payment amount', '', '', '', '', '', 'የክፍያ መጠንዎን ያግኙ'],
-  ['Giftcode redeemed successfully ✓', '', '', '', '', '', 'የስጦታ ኮዱ በተሳካ ሁኔታ ተጠቅሟል ✓'],
-  ['How card payments work', '', '', '', '', '', 'የካርድ ክፍያ እንዴት እንደሚሰራ'],
-  ['How to add funds', '', '', '', '', '', 'ገንዘብ እንዴት እንደሚጨምሩ'],
-  ['How USDT recharges work', '', '', '', '', '', 'የUSDT ሂሳብ መሙላት እንዴት እንደሚሰራ'],
-  ['Paste your transaction hash', '', '', '', '', '', 'የግብይት ሃሽዎን ይለጥፉ'],
-  ['Return to the app', '', '', '', '', '', 'ወደ መተግበሪያው ይመለሱ'],
-  ['Select network or bank', '', '', '', '', '', 'አውታረ መረብ ወይም ባንክ ይምረጡ'],
-  ['Send exactly that amount', '', '', '', '', '', 'በትክክል ያንን መጠን ይላኩ'],
-  ['Send exactly this amount', '', '', '', '', '', 'በትክክል ይህን መጠን ይላኩ'],
-  ['Show or hide earnings', '', '', '', '', '', 'ገቢዎችን አሳይ ወይም ደብቅ'],
-  ['Could not load your products.', '', '', '', '', '', 'ምርቶችዎን መጫን አልተቻለም።'],
-  ['Enter the transaction hash (TXID)', '', '', '', '', '', 'የግብይት ሃሹን (TXID) ያስገቡ'],
-  ['Insufficient balance, redirecting to recharge…', '', '', '', '', '', 'ቀሪ ሂሳብዎ በቂ አይደለም፣ ወደ ሂሳብ መሙላት በመሄድ ላይ…'],
-  ['No transactions in this category.', '', '', '', '', '', 'በዚህ ምድብ ውስጥ ግብይት የለም።'],
-  ['Password reset. Please log in.', '', '', '', '', '', 'የይለፍ ቃል ዳግም ተጀምሯል። እባክዎ ይግቡ።'],
-  ['Please enter a gift code', '', '', '', '', '', 'እባክዎ የስጦታ ኮድ ያስገቡ'],
-  ['Review this product before investing.', '', '', '', '', '', 'ኢንቨስት ከማድረግዎ በፊት ይህን ምርት ይመልከቱ።'],
-  ['Showing your most recent transactions', '', '', '', '', '', 'የቅርብ ጊዜ ግብይቶችዎን በማሳየት ላይ'],
-  ['Tap Get payment amount first', '', '', '', '', '', 'መጀመሪያ «የክፍያ መጠን ያግኙ» ን ይንኩ'],
-  ['To this address (TRC20 only)', '', '', '', '', '', 'ወደ ይህ አድራሻ (TRC20 ብቻ)'],
-  ['Create your account to get started.', '', '', '', '', '', 'ለመጀመር መለያዎን ይፍጠሩ።'],
-  ['Enter a valid bank account number.', '', '', '', '', '', 'ትክክለኛ የባንክ ሂሳብ ቁጥር ያስገቡ።'],
-  ['Pay on the secure card page', '', '', '', '', '', 'በአስተማማኝ የካርድ ገጽ ላይ ይክፈሉ'],
-  ['Payment completed! Credited to your balance.', '', '', '', '', '', 'ክፍያው ተጠናቋል! ቀሪ ሂሳብዎ ላይ ተጨምሯል።'],
-  ['Card payment completed! Credited to your balance.', '', '', '', '', '', 'የካርድ ክፍያው ተጠናቋል! ቀሪ ሂሳብዎ ላይ ተጨምሯል።'],
-  ['Enter the amount you want to add', '', '', '', '', '', 'ለመጨመር የሚፈልጉትን መጠን ያስገቡ'],
-  ['Please add a payout wallet before withdrawing.', '', '', '', '', '', 'ገንዘብ ከማውጣትዎ በፊት እባክዎ የክፍያ ቦርሳ ይጨምሩ።'],
-  ['Already installed, or your browser doesn\'t support installing', '', '', '', '', '', 'አስቀድሞ ተጭኗል፣ ወይም አሳሽዎ መጫንን አይደግፍም'],
-  ['Could not complete that action. Please try again.', '', '', '', '', '', 'ያንን ተግባር ማጠናቀቅ አልተቻለም። እባክዎ እንደገና ይሞክሩ።'],
-  ['Enter the 6-digit code sent to your phone.', '', '', '', '', '', 'ወደ ስልክዎ የተላከውን ባለ 6 አሃዝ ኮድ ያስገቡ።'],
-  ['Enter the USDT amount you want to send', '', '', '', '', '', 'ለመላክ የሚፈልጉትን የUSDT መጠን ያስገቡ'],
-  ['Log in to your Soda account to continue.', '', '', '', '', '', 'ለመቀጠል ወደ ፔትሮ መለያዎ ይግቡ።'],
-  ['No investments yet. Browse Products to get started.', '', '', '', '', '', 'እስካሁን ኢንቨስትመንት የለም። ለመጀመር ንብረቶችን ይመልከቱ።'],
-  ['Please sign in again to download your statement.', '', '', '', '', '', 'መግለጫዎን ለማውረድ እባክዎ እንደገና ይግቡ።'],
-  ['Could not verify your login session. Please try again.', '', '', '', '', '', 'የመግቢያ ክፍለ ጊዜዎን ማረጋገጥ አልተቻለም። እባክዎ እንደገና ይሞክሩ።'],
-  ['Your balance updates automatically once the payment is confirmed.', '', '', '', '', '', 'ክፍያው ከተረጋገጠ በኋላ ቀሪ ሂሳብዎ በራስ-ሰር ይሻሻላል።'],
-  ['Check in daily to receive rewards and grow your earnings!', '', '', '', '', '', 'ሽልማቶችን ለመቀበል እና ገቢዎን ለማሳደግ በየቀኑ ተመዝግበው ይግቡ!'],
-  ['Could not open your account. Please try logging in again.', '', '', '', '', '', 'መለያዎን መክፈት አልተቻለም። እባክዎ እንደገና ለመግባት ይሞክሩ።'],
-  ['Follow the steps below to regain access to your account.', '', '', '', '', '', 'መለያዎን መልሰው ለማግኘት ከታች ያሉትን ደረጃዎች ይከተሉ።'],
-  ['Verification code sent. It can take a moment to arrive.', '', '', '', '', '', 'የማረጋገጫ ኮድ ተልኳል። ለመድረስ ትንሽ ጊዜ ሊወስድ ይችላል።'],
-  ['Could not reach the server. Check your connection and try again.', '', '', '', '', '', 'አገልጋዩን ማግኘት አልተቻለም። ግንኙነትዎን ያረጋግጡና እንደገና ይሞክሩ።'],
-  ['Send every digit, exactly. A different amount cannot be credited automatically.', '', '', '', '', '', 'እያንዳንዱን አሃዝ በትክክል ይላኩ። የተለየ መጠን በራስ-ሰር ሊመዘገብ አይችልም።'],
-  ['Support group is not set up yet. Please try again later.', '', '', '', '', '', 'የድጋፍ ቡድን እስካሁን አልተዘጋጀም። እባክዎ ቆይተው እንደገና ይሞክሩ።'],
-  ['Enter a valid gift code to add its reward to your balance.', '', '', '', '', '', 'ሽልማቱን ወደ ቀሪ ሂሳብዎ ለመጨመር ትክክለኛ የስጦታ ኮድ ያስገቡ።'],
-  ['TRC20 (Tron) network only — any other network permanently loses the funds.', '', '', '', '', '', 'TRC20 (ትሮን) አውታረ መረብ ብቻ — ሌላ ማንኛውም አውታረ መረብ ገንዘቡን እስከመጨረሻው ያጠፋል።'],
-  ['Could not load the sign-in service. Check your connection, then reload the app.', '', '', '', '', '', 'የመግቢያ አገልግሎቱን መጫን አልተቻለም። ግንኙነትዎን ያረጋግጡና መተግበሪያውን እንደገና ይጫኑ።'],
-  ['Tap Pay with Card and enter your card details on MarzPay\'s own payment page.', '', '', '', '', '', '«በካርድ ክፈል» ን ይንኩና የካርድ ዝርዝሮችዎን በMarzPay የራሱ የክፍያ ገጽ ላይ ያስገቡ።'],
-  ['Tap Confirm Recharge, then approve the payment prompt using your mobile money PIN on your phone.', '', '', '', '', '', '«ሂሳብ መሙላቱን አረጋግጥ» ን ይንኩና በስልክዎ ላይ የሞባይል ገንዘብ ፒንዎን በመጠቀም የክፍያ ጥያቄውን ያጽድቁ።'],
-  ['Your trade password is your 6-digit PIN used to confirm cash outs and other sensitive actions.', '', '', '', '', '', 'የግብይት የይለፍ ቃልዎ ገንዘብ ማውጣትንና ሌሎች ወሳኝ ተግባራትን ለማረጋገጥ የሚጠቀሙበት ባለ 6 አሃዝ ፒን ነው።'],
-  ['Referral tasks unlock only after your direct Level 1 referral recharges. Every completed task is claimable once.', '', '', '', '', '', 'የግብዣ ተግባራት የሚከፈቱት የእርስዎ ቀጥተኛ ደረጃ 1 ግብዣ ሂሳብ ከሞላ በኋላ ብቻ ነው። እያንዳንዱ የተጠናቀቀ ተግባር አንድ ጊዜ ብቻ መጠየቅ ይቻላል።'],
-  ['Follow the payout in Transaction Statement → Withdrawals. Wait for a pending request to finish before submitting another.', '', '', '', '', '', 'ክፍያውን በ«የግብይት መግለጫ → ገንዘብ ማውጣቶች» ውስጥ ይከታተሉ። ሌላ ከመላክዎ በፊት በመጠባበቅ ላይ ያለው ጥያቄ እስኪጠናቀቅ ይጠብቁ።'],
-  ['Most payments confirm within a minute, automatically. If yours is still pending, reopen Transaction Statement later to check.', '', '', '', '', '', 'አብዛኞቹ ክፍያዎች በራስ-ሰር በአንድ ደቂቃ ውስጥ ይረጋገጣሉ። የእርስዎ አሁንም በመጠባበቅ ላይ ከሆነ ለመፈተሽ ቆይተው «የግብይት መግለጫ» ን እንደገና ይክፈቱ።'],
-  ['On the TRC20 (Tron) network only, to the address shown. Then copy the TXID from your wallet app, paste it here and tap Submit.', '', '', '', '', '', 'በTRC20 (ትሮን) አውታረ መረብ ብቻ፣ ወደሚታየው አድራሻ። ከዚያ TXID ን ከቦርሳ መተግበሪያዎ ቅዱና እዚህ ለጥፈው «ላክ» ን ይንኩ።'],
-  ['Return', '', '', '', '', '', 'ተመላሽ'],
-  ['Finished', '', '', '', '', '', 'ተጠናቋል'],
-  ['Team recharge', '', '', '', '', '', 'የቡድን ሂሳብ መሙላት'],
-  ['Level 1 active referrals', '', '', '', '', '', 'ደረጃ 1 ንቁ ግብዣዎች'],
-  ['Bind bank card', '', '', '', '', '', 'የባንክ ካርድ አስር'],
-  ['Redeem Gift', '', '', '', '', '', 'ስጦታ ተጠቀም'],
-  ['About Us', '', '', '', '', '', 'ስለ እኛ'],
+  ['Register', '', '', 'S\'inscrire', '', '', 'ተመዝገብ'],
+  ['Sending…', '', '', 'Envoi en cours…', '', '', 'በመላክ ላይ…'],
+  ['Support', '', '', 'Assistance', '', '', 'ድጋፍ'],
+  ['Term', '', '', 'Durée', '', '', 'ጊዜ'],
+  ['Withdrawals', '', '', 'Retraits', '', '', 'ገንዘብ ማውጣቶች'],
+  ['6-digit code', '', '', 'Code à 6 chiffres', '', '', 'ባለ 6 አሃዝ ኮድ'],
+  ['Account holder', '', '', 'Titulaire du compte', '', '', 'የመለያ ባለቤት'],
+  ['After submitting', '', '', 'Après l\'envoi', '', '', 'ከላኩ በኋላ'],
+  ['All Referrals', '', '', 'Tous les filleuls', '', '', 'ሁሉም ግብዣዎች'],
+  ['Amount (USDT)', '', '', 'Montant (USDT)', '', '', 'መጠን (USDT)'],
+  ['Buy Product', '', '', 'Acheter le produit', '', '', 'ምርት ግዛ'],
+  ['Check In', '', '', 'Pointer', '', '', 'ተመዝግበህ ግባ'],
+  ['Confirm Investment', '', '', 'Confirmer l\'investissement', '', '', 'ኢንቨስትመንቱን አረጋግጥ'],
+  ['Confirm Recharge', '', '', 'Confirmer la recharge', '', '', 'ሂሳብ መሙላቱን አረጋግጥ'],
+  ['Cumulative Earnings', '', '', 'Gains cumulés', '', '', 'ጠቅላላ ድምር ገቢ'],
+  ['Current password', '', '', 'Mot de passe actuel', '', '', 'አሁን ያለው የይለፍ ቃል'],
+  ['Daily Yield', '', '', 'Rendement quotidien', '', '', 'ዕለታዊ ትርፍ'],
+  ['Download App', '', '', 'Télécharger l\'application', '', '', 'መተግበሪያውን አውርድ'],
+  ['Download Statement', '', '', 'Télécharger le relevé', '', '', 'መግለጫውን አውርድ'],
+  ['Expected Return', '', '', 'Rendement attendu', '', '', 'የሚጠበቅ ተመላሽ'],
+  ['Forgot Password?', '', '', 'Mot de passe oublié ?', '', '', 'የይለፍ ቃል ረሱ?'],
+  ['Gift box', '', '', 'Coffret cadeau', '', '', 'የስጦታ ሣጥን'],
+  ['Gift Codes', '', '', 'Codes cadeaux', '', '', 'የስጦታ ኮዶች'],
+  ['Invitation code', '', '', 'Code d\'invitation', '', '', 'የግብዣ ኮድ'],
+  ['Invitation link', '', '', 'Lien d\'invitation', '', '', 'የግብዣ አገናኝ'],
+  ['Loading statement…', '', '', 'Chargement du relevé…', '', '', 'መግለጫውን በመጫን ላይ…'],
+  ['My Assets', '', '', 'Mes actifs', '', '', 'የእኔ ንብረቶች'],
+  ['New password', '', '', 'Nouveau mot de passe', '', '', 'አዲስ የይለፍ ቃል'],
+  ['Payout Wallet', '', '', 'Portefeuille de retrait', '', '', 'የክፍያ ቦርሳ'],
+  ['Processing payment', '', '', 'Traitement du paiement', '', '', 'ክፍያ በመከናወን ላይ'],
+  ['Receiving account', '', '', 'Compte de réception', '', '', 'ተቀባይ መለያ'],
+  ['Recharge tasks', '', '', 'Tâches de recharge', '', '', 'የሂሳብ መሙላት ተግባራት'],
+  ['REDEEM CODE', '', '', 'UTILISER LE CODE', '', '', 'ኮዱን ተጠቀም'],
+  ['Referral earnings', '', '', 'Gains de parrainage', '', '', 'የግብዣ ገቢዎች'],
+  ['Referral tasks', '', '', 'Tâches de parrainage', '', '', 'የግብዣ ተግባራት'],
+  ['Resend code', '', '', 'Renvoyer le code', '', '', 'ኮዱን እንደገና ላክ'],
+  ['Reset Password', '', '', 'Réinitialiser le mot de passe', '', '', 'የይለፍ ቃል ዳግም አስጀምር'],
+  ['Resetting password…', '', '', 'Réinitialisation du mot de passe…', '', '', 'የይለፍ ቃል ዳግም በማስጀመር ላይ…'],
+  ['Security Settings', '', '', 'Paramètres de sécurité', '', '', 'የደህንነት ቅንብሮች'],
+  ['Send Code', '', '', 'Envoyer le code', '', '', 'ኮድ ላክ'],
+  ['Support hours', '', '', 'Horaires de l\'assistance', '', '', 'የድጋፍ ሰዓቶች'],
+  ['Switch wallet', '', '', 'Changer de portefeuille', '', '', 'ቦርሳ ቀይር'],
+  ['Task Center', '', '', 'Centre des tâches', '', '', 'የተግባር ማዕከል'],
+  ['Total Recharges', '', '', 'Total des recharges', '', '', 'ጠቅላላ ሂሳብ መሙላቶች'],
+  ['Total Withdrawals', '', '', 'Total des retraits', '', '', 'ጠቅላላ ገንዘብ ማውጣቶች'],
+  ['Verifying code…', '', '', 'Vérification du code…', '', '', 'ኮዱን በማረጋገጥ ላይ…'],
+  ['View team', '', '', 'Voir l\'équipe', '', '', 'ቡድኑን ይመልከቱ'],
+  ['Welcome back', '', '', 'Bon retour', '', '', 'እንኳን ደህና ተመለሱ'],
+  ['WhatsApp Channel', '', '', 'Chaîne WhatsApp', '', '', 'የዋትስአፕ ቻናል'],
+  ['Account holder name', '', '', 'Nom du titulaire du compte', '', '', 'የመለያ ባለቤት ስም'],
+  ['Amount to request', '', '', 'Montant à demander', '', '', 'የሚጠየቅ መጠን'],
+  ['Before you withdraw', '', '', 'Avant de retirer', '', '', 'ገንዘብ ከማውጣትዎ በፊት'],
+  ['Choose your amount', '', '', 'Choisissez votre montant', '', '', 'መጠንዎን ይምረጡ'],
+  ['Confirm new password', '', '', 'Confirmez le nouveau mot de passe', '', '', 'አዲሱን የይለፍ ቃል አረጋግጥ'],
+  ['Confirm your password', '', '', 'Confirmez votre mot de passe', '', '', 'የይለፍ ቃልዎን ያረጋግጡ'],
+  ['Copy invitation code', '', '', 'Copier le code d\'invitation', '', '', 'የግብዣ ኮድ ቅዳ'],
+  ['Copy invitation link', '', '', 'Copier le lien d\'invitation', '', '', 'የግብዣ አገናኝ ቅዳ'],
+  ['Create a password', '', '', 'Créez un mot de passe', '', '', 'የይለፍ ቃል ይፍጠሩ'],
+  ['Create New Account', '', '', 'Créer un nouveau compte', '', '', 'አዲስ መለያ ይፍጠሩ'],
+  ['Delete payout wallet', '', '', 'Supprimer le portefeuille de retrait', '', '', 'የክፍያ ቦርሳ ሰርዝ'],
+  ['End of statement', '', '', 'Fin du relevé', '', '', 'የመግለጫው መጨረሻ'],
+  ['Enter gift code', '', '', 'Saisissez le code cadeau', '', '', 'የስጦታ ኮድ ያስገቡ'],
+  ['Enter verification code', '', '', 'Saisissez le code de vérification', '', '', 'የማረጋገጫ ኮድ ያስገቡ'],
+  ['Enter your amount', '', '', 'Saisissez votre montant', '', '', 'መጠንዎን ያስገቡ'],
+  ['Enter your password', '', '', 'Saisissez votre mot de passe', '', '', 'የይለፍ ቃልዎን ያስገቡ'],
+  ['Get payment amount', '', '', 'Obtenir le montant à payer', '', '', 'የክፍያ መጠን ያግኙ'],
+  ['Minimum amount is', '', '', 'Le montant minimum est de', '', '', 'ዝቅተኛው መጠን'],
+  ['No products yet.', '', '', 'Aucun produit pour l\'instant.', '', '', 'እስካሁን ምርት የለም።'],
+  ['Pay with Card', '', '', 'Payer par carte', '', '', 'በካርድ ክፈል'],
+  ['Redeem Gift Code', '', '', 'Utiliser un code cadeau', '', '', 'የስጦታ ኮድ ተጠቀም'],
+  ['Reset your password', '', '', 'Réinitialisez votre mot de passe', '', '', 'የይለፍ ቃልዎን ዳግም ያስጀምሩ'],
+  ['Submit USDT Payment', '', '', 'Envoyer le paiement USDT', '', '', 'የUSDT ክፍያ ላክ'],
+  ['Total amount earned', '', '', 'Total des gains', '', '', 'ጠቅላላ የተገኘ መጠን'],
+  ['Total Wallet Balance', '', '', 'Solde total du portefeuille', '', '', 'ጠቅላላ የቦርሳ ቀሪ ሂሳብ'],
+  ['Transaction Hash (TXID)', '', '', 'Hash de transaction (TXID)', '', '', 'የግብይት ሃሽ (TXID)'],
+  ['Wait for verification', '', '', 'Attendez la vérification', '', '', 'ማረጋገጫውን ይጠብቁ'],
+  ['Approve on your phone', '', '', 'Validez sur votre téléphone', '', '', 'በስልክዎ ላይ ያጽድቁ'],
+  ['Back to Log In', '', '', 'Retour à la connexion', '', '', 'ወደ መግቢያ ተመለስ'],
+  ['Create your Soda account', '', '', 'Créez votre compte Soda', '', '', 'የፔትሮ መለያዎን ይፍጠሩ'],
+  ['Earn from team progress', '', '', 'Gagnez grâce à la progression de l\'équipe', '', '', 'ከቡድን እድገት ያግኙ'],
+  ['Enter invitation code (optional)', '', '', 'Saisissez le code d\'invitation (facultatif)', '', '', 'የግብዣ ኮድ ያስገቡ (አማራጭ)'],
+  ['Enter your phone number', '', '', 'Saisissez votre numéro de téléphone', '', '', 'ስልክ ቁጥርዎን ያስገቡ'],
+  ['Follow the payment status', '', '', 'Suivez l\'état du paiement', '', '', 'የክፍያውን ሁኔታ ይከታተሉ'],
+  ['Get your payment amount', '', '', 'Obtenez votre montant à payer', '', '', 'የክፍያ መጠንዎን ያግኙ'],
+  ['Giftcode redeemed successfully ✓', '', '', 'Code cadeau utilisé avec succès ✓', '', '', 'የስጦታ ኮዱ በተሳካ ሁኔታ ተጠቅሟል ✓'],
+  ['How card payments work', '', '', 'Comment fonctionnent les paiements par carte', '', '', 'የካርድ ክፍያ እንዴት እንደሚሰራ'],
+  ['How to add funds', '', '', 'Comment ajouter des fonds', '', '', 'ገንዘብ እንዴት እንደሚጨምሩ'],
+  ['How USDT recharges work', '', '', 'Comment fonctionnent les recharges USDT', '', '', 'የUSDT ሂሳብ መሙላት እንዴት እንደሚሰራ'],
+  ['Paste your transaction hash', '', '', 'Collez votre hash de transaction', '', '', 'የግብይት ሃሽዎን ይለጥፉ'],
+  ['Return to the app', '', '', 'Retourner à l\'application', '', '', 'ወደ መተግበሪያው ይመለሱ'],
+  ['Select network or bank', '', '', 'Choisissez un réseau ou une banque', '', '', 'አውታረ መረብ ወይም ባንክ ይምረጡ'],
+  ['Send exactly that amount', '', '', 'Envoyez exactement ce montant', '', '', 'በትክክል ያንን መጠን ይላኩ'],
+  ['Send exactly this amount', '', '', 'Envoyez exactement ce montant', '', '', 'በትክክል ይህን መጠን ይላኩ'],
+  ['Show or hide earnings', '', '', 'Afficher ou masquer les gains', '', '', 'ገቢዎችን አሳይ ወይም ደብቅ'],
+  ['Could not load your products.', '', '', 'Impossible de charger vos produits.', '', '', 'ምርቶችዎን መጫን አልተቻለም።'],
+  ['Enter the transaction hash (TXID)', '', '', 'Saisissez le hash de transaction (TXID)', '', '', 'የግብይት ሃሹን (TXID) ያስገቡ'],
+  ['Insufficient balance, redirecting to recharge…', '', '', 'Solde insuffisant, redirection vers la recharge…', '', '', 'ቀሪ ሂሳብዎ በቂ አይደለም፣ ወደ ሂሳብ መሙላት በመሄድ ላይ…'],
+  ['No transactions in this category.', '', '', 'Aucune transaction dans cette catégorie.', '', '', 'በዚህ ምድብ ውስጥ ግብይት የለም።'],
+  ['Password reset. Please log in.', '', '', 'Mot de passe réinitialisé. Veuillez vous connecter.', '', '', 'የይለፍ ቃል ዳግም ተጀምሯል። እባክዎ ይግቡ።'],
+  ['Please enter a gift code', '', '', 'Veuillez saisir un code cadeau', '', '', 'እባክዎ የስጦታ ኮድ ያስገቡ'],
+  ['Review this product before investing.', '', '', 'Consultez ce produit avant d\'investir.', '', '', 'ኢንቨስት ከማድረግዎ በፊት ይህን ምርት ይመልከቱ።'],
+  ['Showing your most recent transactions', '', '', 'Vos transactions les plus récentes', '', '', 'የቅርብ ጊዜ ግብይቶችዎን በማሳየት ላይ'],
+  ['Tap Get payment amount first', '', '', 'Touchez d\'abord « Obtenir le montant à payer »', '', '', 'መጀመሪያ «የክፍያ መጠን ያግኙ» ን ይንኩ'],
+  ['To this address (TRC20 only)', '', '', 'À cette adresse (TRC20 uniquement)', '', '', 'ወደ ይህ አድራሻ (TRC20 ብቻ)'],
+  ['Create your account to get started.', '', '', 'Créez votre compte pour commencer.', '', '', 'ለመጀመር መለያዎን ይፍጠሩ።'],
+  ['Enter a valid bank account number.', '', '', 'Saisissez un numéro de compte bancaire valide.', '', '', 'ትክክለኛ የባንክ ሂሳብ ቁጥር ያስገቡ።'],
+  ['Pay on the secure card page', '', '', 'Payez sur la page de carte sécurisée', '', '', 'በአስተማማኝ የካርድ ገጽ ላይ ይክፈሉ'],
+  ['Payment completed! Credited to your balance.', '', '', 'Paiement effectué ! Votre solde a été crédité.', '', '', 'ክፍያው ተጠናቋል! ቀሪ ሂሳብዎ ላይ ተጨምሯል።'],
+  ['Card payment completed! Credited to your balance.', '', '', 'Paiement par carte effectué ! Votre solde a été crédité.', '', '', 'የካርድ ክፍያው ተጠናቋል! ቀሪ ሂሳብዎ ላይ ተጨምሯል።'],
+  ['Enter the amount you want to add', '', '', 'Saisissez le montant que vous souhaitez ajouter', '', '', 'ለመጨመር የሚፈልጉትን መጠን ያስገቡ'],
+  ['Please add a payout wallet before withdrawing.', '', '', 'Veuillez ajouter un portefeuille de retrait avant de retirer.', '', '', 'ገንዘብ ከማውጣትዎ በፊት እባክዎ የክፍያ ቦርሳ ይጨምሩ።'],
+  ['Already installed, or your browser doesn\'t support installing', '', '', 'Déjà installée, ou votre navigateur ne permet pas l\'installation', '', '', 'አስቀድሞ ተጭኗል፣ ወይም አሳሽዎ መጫንን አይደግፍም'],
+  ['Could not complete that action. Please try again.', '', '', 'Impossible d\'effectuer cette action. Veuillez réessayer.', '', '', 'ያንን ተግባር ማጠናቀቅ አልተቻለም። እባክዎ እንደገና ይሞክሩ።'],
+  ['Enter the 6-digit code sent to your phone.', '', '', 'Saisissez le code à 6 chiffres envoyé sur votre téléphone.', '', '', 'ወደ ስልክዎ የተላከውን ባለ 6 አሃዝ ኮድ ያስገቡ።'],
+  ['Enter the USDT amount you want to send', '', '', 'Saisissez le montant en USDT que vous souhaitez envoyer', '', '', 'ለመላክ የሚፈልጉትን የUSDT መጠን ያስገቡ'],
+  ['Log in to your Soda account to continue.', '', '', 'Connectez-vous à votre compte Soda pour continuer.', '', '', 'ለመቀጠል ወደ ፔትሮ መለያዎ ይግቡ።'],
+  ['No investments yet. Browse Products to get started.', '', '', 'Aucun investissement pour l\'instant. Parcourez les produits pour commencer.', '', '', 'እስካሁን ኢንቨስትመንት የለም። ለመጀመር ንብረቶችን ይመልከቱ።'],
+  ['Please sign in again to download your statement.', '', '', 'Veuillez vous reconnecter pour télécharger votre relevé.', '', '', 'መግለጫዎን ለማውረድ እባክዎ እንደገና ይግቡ።'],
+  ['Could not verify your login session. Please try again.', '', '', 'Impossible de vérifier votre session. Veuillez réessayer.', '', '', 'የመግቢያ ክፍለ ጊዜዎን ማረጋገጥ አልተቻለም። እባክዎ እንደገና ይሞክሩ።'],
+  ['Your balance updates automatically once the payment is confirmed.', '', '', 'Votre solde se met à jour automatiquement dès que le paiement est confirmé.', '', '', 'ክፍያው ከተረጋገጠ በኋላ ቀሪ ሂሳብዎ በራስ-ሰር ይሻሻላል።'],
+  ['Check in daily to receive rewards and grow your earnings!', '', '', 'Pointez chaque jour pour recevoir des récompenses et faire grandir vos gains !', '', '', 'ሽልማቶችን ለመቀበል እና ገቢዎን ለማሳደግ በየቀኑ ተመዝግበው ይግቡ!'],
+  ['Could not open your account. Please try logging in again.', '', '', 'Impossible d\'ouvrir votre compte. Veuillez vous reconnecter.', '', '', 'መለያዎን መክፈት አልተቻለም። እባክዎ እንደገና ለመግባት ይሞክሩ።'],
+  ['Follow the steps below to regain access to your account.', '', '', 'Suivez les étapes ci-dessous pour retrouver l\'accès à votre compte.', '', '', 'መለያዎን መልሰው ለማግኘት ከታች ያሉትን ደረጃዎች ይከተሉ።'],
+  ['Verification code sent. It can take a moment to arrive.', '', '', 'Code de vérification envoyé. Son arrivée peut prendre un instant.', '', '', 'የማረጋገጫ ኮድ ተልኳል። ለመድረስ ትንሽ ጊዜ ሊወስድ ይችላል።'],
+  ['Could not reach the server. Check your connection and try again.', '', '', 'Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.', '', '', 'አገልጋዩን ማግኘት አልተቻለም። ግንኙነትዎን ያረጋግጡና እንደገና ይሞክሩ።'],
+  ['Send every digit, exactly. A different amount cannot be credited automatically.', '', '', 'Envoyez chaque chiffre à l\'identique. Un montant différent ne peut pas être crédité automatiquement.', '', '', 'እያንዳንዱን አሃዝ በትክክል ይላኩ። የተለየ መጠን በራስ-ሰር ሊመዘገብ አይችልም።'],
+  ['Support group is not set up yet. Please try again later.', '', '', 'Le groupe d\'assistance n\'est pas encore configuré. Veuillez réessayer plus tard.', '', '', 'የድጋፍ ቡድን እስካሁን አልተዘጋጀም። እባክዎ ቆይተው እንደገና ይሞክሩ።'],
+  ['Enter a valid gift code to add its reward to your balance.', '', '', 'Saisissez un code cadeau valide pour ajouter sa récompense à votre solde.', '', '', 'ሽልማቱን ወደ ቀሪ ሂሳብዎ ለመጨመር ትክክለኛ የስጦታ ኮድ ያስገቡ።'],
+  ['TRC20 (Tron) network only — any other network permanently loses the funds.', '', '', 'Réseau TRC20 (Tron) uniquement — tout autre réseau entraîne la perte définitive des fonds.', '', '', 'TRC20 (ትሮን) አውታረ መረብ ብቻ — ሌላ ማንኛውም አውታረ መረብ ገንዘቡን እስከመጨረሻው ያጠፋል።'],
+  ['Could not load the sign-in service. Check your connection, then reload the app.', '', '', 'Impossible de charger le service de connexion. Vérifiez votre connexion, puis rechargez l\'application.', '', '', 'የመግቢያ አገልግሎቱን መጫን አልተቻለም። ግንኙነትዎን ያረጋግጡና መተግበሪያውን እንደገና ይጫኑ።'],
+  ['Tap Pay with Card and enter your card details on MarzPay\'s own payment page.', '', '', 'Touchez « Payer par carte » et saisissez les informations de votre carte sur la page de paiement de MarzPay.', '', '', '«በካርድ ክፈል» ን ይንኩና የካርድ ዝርዝሮችዎን በMarzPay የራሱ የክፍያ ገጽ ላይ ያስገቡ።'],
+  ['Tap Confirm Recharge, then approve the payment prompt using your mobile money PIN on your phone.', '', '', 'Touchez « Confirmer la recharge », puis validez la demande de paiement avec le code PIN de votre Mobile Money sur votre téléphone.', '', '', '«ሂሳብ መሙላቱን አረጋግጥ» ን ይንኩና በስልክዎ ላይ የሞባይል ገንዘብ ፒንዎን በመጠቀም የክፍያ ጥያቄውን ያጽድቁ።'],
+  ['Your trade password is your 6-digit PIN used to confirm cash outs and other sensitive actions.', '', '', 'Votre mot de passe de transaction est le code à 6 chiffres qui confirme vos retraits et autres opérations sensibles.', '', '', 'የግብይት የይለፍ ቃልዎ ገንዘብ ማውጣትንና ሌሎች ወሳኝ ተግባራትን ለማረጋገጥ የሚጠቀሙበት ባለ 6 አሃዝ ፒን ነው።'],
+  ['Referral tasks unlock only after your direct Level 1 referral recharges. Every completed task is claimable once.', '', '', 'Les tâches de parrainage ne se débloquent qu\'après la recharge de votre filleul direct de niveau 1. Chaque tâche terminée ne peut être réclamée qu\'une fois.', '', '', 'የግብዣ ተግባራት የሚከፈቱት የእርስዎ ቀጥተኛ ደረጃ 1 ግብዣ ሂሳብ ከሞላ በኋላ ብቻ ነው። እያንዳንዱ የተጠናቀቀ ተግባር አንድ ጊዜ ብቻ መጠየቅ ይቻላል።'],
+  ['Follow the payout in Transaction Statement → Withdrawals. Wait for a pending request to finish before submitting another.', '', '', 'Suivez le retrait dans Historique du solde → Retraits. Attendez qu\'une demande en attente soit terminée avant d\'en envoyer une autre.', '', '', 'ክፍያውን በ«የግብይት መግለጫ → ገንዘብ ማውጣቶች» ውስጥ ይከታተሉ። ሌላ ከመላክዎ በፊት በመጠባበቅ ላይ ያለው ጥያቄ እስኪጠናቀቅ ይጠብቁ።'],
+  ['Most payments confirm within a minute, automatically. If yours is still pending, reopen Transaction Statement later to check.', '', '', 'La plupart des paiements sont confirmés en moins d\'une minute, automatiquement. Si le vôtre est encore en attente, rouvrez l\'Historique du solde plus tard pour vérifier.', '', '', 'አብዛኞቹ ክፍያዎች በራስ-ሰር በአንድ ደቂቃ ውስጥ ይረጋገጣሉ። የእርስዎ አሁንም በመጠባበቅ ላይ ከሆነ ለመፈተሽ ቆይተው «የግብይት መግለጫ» ን እንደገና ይክፈቱ።'],
+  ['On the TRC20 (Tron) network only, to the address shown. Then copy the TXID from your wallet app, paste it here and tap Submit.', '', '', 'Uniquement sur le réseau TRC20 (Tron), vers l\'adresse indiquée. Copiez ensuite le TXID depuis votre application de portefeuille, collez-le ici et touchez « Envoyer ».', '', '', 'በTRC20 (ትሮን) አውታረ መረብ ብቻ፣ ወደሚታየው አድራሻ። ከዚያ TXID ን ከቦርሳ መተግበሪያዎ ቅዱና እዚህ ለጥፈው «ላክ» ን ይንኩ።'],
+  ['Return', '', '', 'Retour', '', '', 'ተመላሽ'],
+  ['Finished', '', '', 'Terminé', '', '', 'ተጠናቋል'],
+  ['Team recharge', '', '', 'Recharge de l\'équipe', '', '', 'የቡድን ሂሳብ መሙላት'],
+  ['Level 1 active referrals', '', '', 'Filleuls actifs de niveau 1', '', '', 'ደረጃ 1 ንቁ ግብዣዎች'],
+  ['Bind bank card', '', '', 'Lier une carte bancaire', '', '', 'የባንክ ካርድ አስር'],
+  ['Redeem Gift', '', '', 'Utiliser un cadeau', '', '', 'ስጦታ ተጠቀም'],
+  ['About Us', '', '', 'À propos de nous', '', '', 'ስለ እኛ'],
   ['Mobile Money', '', '', '', '', '', 'የሞባይል ገንዘብ'],
   ['USDT (TRC20)', '', '', '', '', '', '='],
-  ['Wait for confirmation. This checks itself automatically. If money leaves your phone but the balance has not updated, keep the transaction reference and contact Customer Support.', '', '', '', '', '', 'ማረጋገጫውን ይጠብቁ። ይህ በራሱ ይፈተሻል። ገንዘቡ ከስልክዎ ወጥቶ ቀሪ ሂሳብዎ ካልተሻሻለ የግብይቱን ማመሳከሪያ ያስቀምጡና የደንበኞች አገልግሎትን ያነጋግሩ።'],
-  ['Manage Wallets', '', '', '', '', '', 'ቦርሳዎችን አስተዳድር'],
-  ['Check the name and bank account number above. Your payout goes to this linked wallet.', '', '', '', '', '', 'ከላይ ያለውን ስም እና የባንክ ሂሳብ ቁጥር ያረጋግጡ። ክፍያዎ ወደዚህ የተያያዘ ቦርሳ ይሄዳል።'],
-  ['+ Add another wallet', '', '', '', '', '', '+ ሌላ ቦርሳ ጨምር'],
-  ['Phone number', '', '', '', '', '', 'ስልክ ቁጥር'],
-  ['Reward', '', '', '', '', '', 'ሽልማት'],
-  ['Welcome Bonus', '', '', '', '', '', 'የእንኳን ደህና መጡ ጉርሻ'],
-  ['Referral Commission', '', '', '', '', '', 'የግብዣ ኮሚሽን'],
-  ['Daily Income', '', '', '', '', '', 'ዕለታዊ ገቢ'],
-  ['Inactive', '', '', '', '', '', 'ንቁ ያልሆነ'],
-  ['If the prompt does not come up, dial *165# (MTN) or *185# (Airtel) on that phone to find and approve the pending payment yourself.', '', '', '', '', '', 'ጥያቄው ካልመጣ፣ በዚያ ስልክ ላይ *165# (MTN) ወይም *185# (Airtel) ይደውሉና በመጠባበቅ ላይ ያለውን ክፍያ እራስዎ ይፈልጉና ያጽድቁ።'],
-  ['Too many requests. Slow down.', '', '', '', '', '', 'ብዙ ጥያቄዎች። እባክዎ ይቀንሱ።'],
-  ['Too many requests from this network. Slow down.', '', '', '', '', '', 'ከዚህ አውታረ መረብ ብዙ ጥያቄዎች። እባክዎ ይቀንሱ።'],
-  ['Too many requests.', '', '', '', '', '', 'ብዙ ጥያቄዎች።'],
-  ['Too many attempts. Try again in a minute.', '', '', '', '', '', 'ብዙ ሙከራዎች። ከአንድ ደቂቃ በኋላ እንደገና ይሞክሩ።'],
-  ['Session service unavailable. Try again.', '', '', '', '', '', 'የክፍለ ጊዜ አገልግሎት አይገኝም። እንደገና ይሞክሩ።'],
-  ['Too many requests. Please wait a moment and try again.', '', '', '', '', '', 'ብዙ ጥያቄዎች። እባክዎ ትንሽ ይጠብቁና እንደገና ይሞክሩ።'],
-  ['We could not check your sign-in just now. Please try again in a moment.', '', '', '', '', '', 'አሁን መግባትዎን ማረጋገጥ አልቻልንም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'],
-  ['This address does not serve the app. Please open the correct Soda link.', '', '', '', '', '', 'ይህ አድራሻ መተግበሪያውን አያገለግልም። እባክዎ ትክክለኛውን የፔትሮ አገናኝ ይክፈቱ።'],
-  ['Unauthorized', '', '', '', '', '', 'ፈቃድ የለም'],
-  ['Account suspended. Contact customer service.', '', '', '', '', '', 'መለያው ታግዷል። የደንበኞች አገልግሎትን ያነጋግሩ።'],
-  ['Could not load your team', '', '', '', '', '', 'ቡድንዎን መጫን አልተቻለም'],
-  ['User not found', '', '', '', '', '', 'ተጠቃሚው አልተገኘም'],
-  ['Could not load team stats', '', '', '', '', '', 'የቡድን ስታቲስቲክስን መጫን አልተቻለም'],
-  ['Please sign in again', '', '', '', '', '', 'እባክዎ እንደገና ይግቡ'],
-  ['Unknown task category', '', '', '', '', '', 'ያልታወቀ የተግባር ምድብ'],
-  ['Unknown milestone', '', '', '', '', '', 'ያልታወቀ ደረጃ'],
-  ['Your progress changed just now. Please try again.', '', '', '', '', '', 'እድገትዎ አሁን ተለውጧል። እባክዎ እንደገና ይሞክሩ።'],
-  ['Already claimed', '', '', '', '', '', 'አስቀድሞ ተጠይቋል'],
-  ['Could not claim that reward right now', '', '', '', '', '', 'አሁን ያንን ሽልማት መጠየቅ አልተቻለም'],
-  ['Sign in with your Soda phone account.', '', '', '', '', '', 'በፔትሮ የስልክ መለያዎ ይግቡ።'],
-  ['Could not create your profile', '', '', '', '', '', 'መገለጫዎን መፍጠር አልተቻለም'],
-  ['That referral code does not exist.', '', '', '', '', '', 'ያ የግብዣ ኮድ የለም።'],
-  ['You cannot use your own referral code.', '', '', '', '', '', 'የራስዎን የግብዣ ኮድ መጠቀም አይችሉም።'],
-  ['That referral code is no longer active.', '', '', '', '', '', 'ያ የግብዣ ኮድ ከአሁን በኋላ ንቁ አይደለም።'],
-  ['This referral code is unavailable. Ask for an Ethiopia referral code.', '', '', '', '', '', 'ይህ የግብዣ ኮድ አይገኝም። የኢትዮጵያ የግብዣ ኮድ ይጠይቁ።'],
-  ['Verification codes are turned off right now.', '', '', '', '', '', 'የማረጋገጫ ኮዶች አሁን ጠፍተዋል።'],
-  ['Your account has no valid phone number on file. Contact support.', '', '', '', '', '', 'በመለያዎ ላይ ትክክለኛ ስልክ ቁጥር የለም። ድጋፍን ያነጋግሩ።'],
-  ['An account with this phone number already exists.', '', '', '', '', '', 'በዚህ ስልክ ቁጥር መለያ አስቀድሞ አለ።'],
-  ['No account found with this phone number.', '', '', '', '', '', 'በዚህ ስልክ ቁጥር ምንም መለያ አልተገኘም።'],
-  ['SMS verification is not available right now. Try again later.', '', '', '', '', '', 'የኤስኤምኤስ ማረጋገጫ አሁን አይገኝም። ቆይተው እንደገና ይሞክሩ።'],
-  ['Too many verification codes requested for this number today. Try again tomorrow.', '', '', '', '', '', 'ለዚህ ቁጥር ዛሬ ብዙ የማረጋገጫ ኮዶች ተጠይቀዋል። ነገ እንደገና ይሞክሩ።'],
-  ['We could not send the code just now. Please try again in a moment.', '', '', '', '', '', 'አሁን ኮዱን መላክ አልቻልንም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'],
-  ['Enter the 6-digit verification code.', '', '', '', '', '', 'ባለ 6 አሃዝ የማረጋገጫ ኮዱን ያስገቡ።'],
-  ['Invalid or expired code. Request a new one.', '', '', '', '', '', 'ልክ ያልሆነ ወይም ጊዜው ያለፈበት ኮድ። አዲስ ይጠይቁ።'],
-  ['This code has already been used.', '', '', '', '', '', 'ይህ ኮድ አስቀድሞ ጥቅም ላይ ውሏል።'],
-  ['This code has expired. Request a new one.', '', '', '', '', '', 'የዚህ ኮድ ጊዜ አልፏል። አዲስ ይጠይቁ።'],
-  ['Too many incorrect attempts. Request a new code.', '', '', '', '', '', 'ብዙ የተሳሳቱ ሙከራዎች። አዲስ ኮድ ይጠይቁ።'],
-  ['Code unavailable. Request a new code.', '', '', '', '', '', 'ኮዱ አይገኝም። አዲስ ኮድ ይጠይቁ።'],
-  ['Incorrect code.', '', '', '', '', '', 'የተሳሳተ ኮድ።'],
-  ['Verification changed. Please try again.', '', '', '', '', '', 'ማረጋገጫው ተለውጧል። እባክዎ እንደገና ይሞክሩ።'],
-  ['Could not verify the code right now', '', '', '', '', '', 'አሁን ኮዱን ማረጋገጥ አልተቻለም'],
-  ['Please verify your phone number first.', '', '', '', '', '', 'እባክዎ መጀመሪያ ስልክ ቁጥርዎን ያረጋግጡ።'],
-  ['Password reset. You can now sign in.', '', '', '', '', '', 'የይለፍ ቃል ዳግም ተጀምሯል። አሁን መግባት ይችላሉ።'],
-  ['Could not reset your password right now', '', '', '', '', '', 'አሁን የይለፍ ቃልዎን ዳግም ማስጀመር አልተቻለም'],
-  ['Could not complete your registration right now', '', '', '', '', '', 'አሁን ምዝገባዎን ማጠናቀቅ አልተቻለም'],
-  ['Please finish signing up and verify your phone.', '', '', '', '', '', 'እባክዎ ምዝገባዎን ያጠናቅቁና ስልክዎን ያረጋግጡ።'],
-  ['Already checked in today. Come back after midnight.', '', '', '', '', '', 'ዛሬ አስቀድመው ተመዝግበዋል። ከእኩለ ሌሊት በኋላ ተመልሰው ይምጡ።'],
-  ['Check-in failed', '', '', '', '', '', 'ተመዝግቦ መግባት አልተሳካም'],
-  ['Could not load the turntable', '', '', '', '', '', 'የዕድል መንኮራኩሩን መጫን አልተቻለም'],
-  ['The turntable is not available right now.', '', '', '', '', '', 'የዕድል መንኮራኩሩ አሁን አይገኝም።'],
-  ['That spin was already used. Come back after midnight for your free daily spin.', '', '', '', '', '', 'ያ ዙር አስቀድሞ ጥቅም ላይ ውሏል። ለነጻ ዕለታዊ ዙርዎ ከእኩለ ሌሊት በኋላ ተመልሰው ይምጡ።'],
-  ['No spins left. Come back after midnight for your free daily spin.', '', '', '', '', '', 'ምንም ዙር የለም። ለነጻ ዕለታዊ ዙርዎ ከእኩለ ሌሊት በኋላ ተመልሰው ይምጡ።'],
-  ['That spin was already used.', '', '', '', '', '', 'ያ ዙር አስቀድሞ ጥቅም ላይ ውሏል።'],
-  ['The spin could not be completed. Your balance is unchanged.', '', '', '', '', '', 'ዙሩን ማጠናቀቅ አልተቻለም። ቀሪ ሂሳብዎ አልተቀየረም።'],
-  ['Unknown product', '', '', '', '', '', 'ያልታወቀ ምርት'],
-  ['This product is not open right now.', '', '', '', '', '', 'ይህ ምርት አሁን ክፍት አይደለም።'],
-  ['Invalid amount', '', '', '', '', '', 'ልክ ያልሆነ መጠን'],
-  ['This account is currently being processed. Try again shortly.', '', '', '', '', '', 'ይህ መለያ በአሁኑ ጊዜ በመከናወን ላይ ነው። ትንሽ ቆይተው እንደገና ይሞክሩ።'],
-  ['Finish signing up before topping up.', '', '', '', '', '', 'ሂሳብ ከመሙላትዎ በፊት ምዝገባዎን ያጠናቅቁ።'],
-  ['Finish signing up before recharging.', '', '', '', '', '', 'ሂሳብ ከመሙላትዎ በፊት ምዝገባዎን ያጠናቅቁ።'],
-  ['A recharge is already being processed. Please wait a moment.', '', '', '', '', '', 'ሂሳብ መሙላት አስቀድሞ በመከናወን ላይ ነው። እባክዎ ትንሽ ይጠብቁ።'],
-  ['Payment initiated. Check your phone.', '', '', '', '', '', 'ክፍያው ተጀምሯል። ስልክዎን ይመልከቱ።'],
-  ['USDT recharges are not available right now.', '', '', '', '', '', 'የUSDT ሂሳብ መሙላት አሁን አይገኝም።'],
-  ['USDT recharges are not configured yet. Please try again later.', '', '', '', '', '', 'የUSDT ሂሳብ መሙላት እስካሁን አልተዘጋጀም። እባክዎ ቆይተው እንደገና ይሞክሩ።'],
-  ['Enter a valid USDT amount', '', '', '', '', '', 'ትክክለኛ የUSDT መጠን ያስገቡ'],
-  ['Please wait a moment.', '', '', '', '', '', 'እባክዎ ትንሽ ይጠብቁ።'],
-  ['You already have open USDT requests. Use one of them, or wait for it to expire.', '', '', '', '', '', 'አስቀድሞ ክፍት የUSDT ጥያቄዎች አሉዎት። አንዱን ይጠቀሙ ወይም እስኪያበቃ ይጠብቁ።'],
-  ['Could not reserve an amount right now. Please try again in a moment.', '', '', '', '', '', 'አሁን መጠን ማስያዝ አልተቻለም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'],
-  ['Could not create your payment request. Please try again.', '', '', '', '', '', 'የክፍያ ጥያቄዎን መፍጠር አልተቻለም። እባክዎ እንደገና ይሞክሩ።'],
-  ['Start a new USDT recharge to get your exact payment amount first.', '', '', '', '', '', 'መጀመሪያ ትክክለኛውን የክፍያ መጠንዎን ለማግኘት አዲስ የUSDT ሂሳብ መሙላት ይጀምሩ።'],
-  ['Payment request not found. Start a new USDT recharge.', '', '', '', '', '', 'የክፍያ ጥያቄው አልተገኘም። አዲስ የUSDT ሂሳብ መሙላት ይጀምሩ።'],
-  ['Enter a valid transaction hash (TXID)', '', '', '', '', '', 'ትክክለኛ የግብይት ሃሽ (TXID) ያስገቡ'],
-  ['A transaction was already submitted for this payment request.', '', '', '', '', '', 'ለዚህ የክፍያ ጥያቄ ግብይት አስቀድሞ ተልኳል።'],
-  ['A recharge is already being submitted. Please wait a moment.', '', '', '', '', '', 'ሂሳብ መሙላት አስቀድሞ በመላክ ላይ ነው። እባክዎ ትንሽ ይጠብቁ።'],
-  ['This transaction was already credited.', '', '', '', '', '', 'ይህ ግብይት አስቀድሞ ተመዝግቧል።'],
-  ['This transaction hash has already been used.', '', '', '', '', '', 'ይህ የግብይት ሃሽ አስቀድሞ ጥቅም ላይ ውሏል።'],
-  ['This transaction was already submitted and is being verified.', '', '', '', '', '', 'ይህ ግብይት አስቀድሞ ተልኮ በመረጋገጥ ላይ ነው።'],
-  ['This transaction hash has already been submitted.', '', '', '', '', '', 'ይህ የግብይት ሃሽ አስቀድሞ ተልኳል።'],
-  ['Payment completed! Credited to your wallet.', '', '', '', '', '', 'ክፍያው ተጠናቋል! ቦርሳዎ ላይ ተጨምሯል።'],
-  ['Submitted. Verifying on-chain — this can take a minute.', '', '', '', '', '', 'ተልኳል። በብሎክቼይን ላይ በማረጋገጥ ላይ — አንድ ደቂቃ ሊወስድ ይችላል።'],
-  ['Submitted. Verifying on-chain…', '', '', '', '', '', 'ተልኳል። በብሎክቼይን ላይ በማረጋገጥ ላይ…'],
-  ['Could not submit your recharge. Please try again.', '', '', '', '', '', 'ሂሳብ መሙላትዎን መላክ አልተቻለም። እባክዎ እንደገና ይሞክሩ።'],
-  ['Could not submit your recharge', '', '', '', '', '', 'ሂሳብ መሙላትዎን መላክ አልተቻለም'],
-  ['Recharge not found', '', '', '', '', '', 'ሂሳብ መሙላቱ አልተገኘም'],
-  ['Could not check payment status', '', '', '', '', '', 'የክፍያውን ሁኔታ ማረጋገጥ አልተቻለም'],
-  ['Card payments are not available right now.', '', '', '', '', '', 'የካርድ ክፍያ አሁን አይገኝም።'],
-  ['Could not start the card payment. Please try again.', '', '', '', '', '', 'የካርድ ክፍያውን መጀመር አልተቻለም። እባክዎ እንደገና ይሞክሩ።'],
-  ['Could not start the card payment', '', '', '', '', '', 'የካርድ ክፍያውን መጀመር አልተቻለም'],
-  ['Card payment could not be started. Please try again.', '', '', '', '', '', 'የካርድ ክፍያው ሊጀመር አልቻለም። እባክዎ እንደገና ይሞክሩ።'],
-  ['The card payment did not complete.', '', '', '', '', '', 'የካርድ ክፍያው አልተጠናቀቀም።'],
-  ['Could not get your payment amount', '', '', '', '', '', 'የክፍያ መጠንዎን ማግኘት አልተቻለም'],
-  ['Payment declined.', '', '', '', '', '', 'ክፍያው ተቀባይነት አላገኘም።'],
-  ['Account not found', '', '', '', '', '', 'መለያው አልተገኘም'],
-  ['No Trade Password is set on this account.', '', '', '', '', '', 'በዚህ መለያ ላይ የግብይት የይለፍ ቃል አልተዘጋጀም።'],
-  ['A withdrawal is already being processed. Please wait a moment.', '', '', '', '', '', 'ገንዘብ ማውጣት አስቀድሞ በመከናወን ላይ ነው። እባክዎ ትንሽ ይጠብቁ።'],
-  ['Bind a withdrawal account first.', '', '', '', '', '', 'መጀመሪያ የገንዘብ ማውጫ መለያ ያስሩ።'],
-  ['That withdrawal account isn\'t saved to your profile. Bind it first, then try again.', '', '', '', '', '', 'ያ የገንዘብ ማውጫ መለያ በመገለጫዎ ላይ አልተቀመጠም። መጀመሪያ ያስሩት፣ ከዚያ እንደገና ይሞክሩ።'],
-  ['Withdrawal requested, processing now', '', '', '', '', '', 'ገንዘብ ማውጣት ተጠይቋል፣ አሁን በመከናወን ላይ ነው'],
-  ['Your withdrawal request is being checked. Check Transaction Statement before submitting again.', '', '', '', '', '', 'የገንዘብ ማውጫ ጥያቄዎ በመመርመር ላይ ነው። እንደገና ከመላክዎ በፊት «የግብይት መግለጫ» ን ይመልከቱ።'],
-  ['Withdrawal not found', '', '', '', '', '', 'ገንዘብ ማውጣቱ አልተገኘም'],
-  ['Could not process the payout. Please retry shortly.', '', '', '', '', '', 'ክፍያውን ማከናወን አልተቻለም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'],
-  ['Fill in all fields', '', '', '', '', '', 'ሁሉንም መስኮች ይሙሉ'],
-  ['Enter a valid bank account number', '', '', '', '', '', 'ትክክለኛ የባንክ ሂሳብ ቁጥር ያስገቡ'],
-  ['That bank is not currently supported. Pick one from the list.', '', '', '', '', '', 'ያ ባንክ በአሁኑ ጊዜ አይደገፍም። ከዝርዝሩ አንዱን ይምረጡ።'],
-  ['Please verify with the code sent to your phone first.', '', '', '', '', '', 'እባክዎ መጀመሪያ ወደ ስልክዎ በተላከው ኮድ ያረጋግጡ።'],
-  ['Could not verify this account right now. Please try again in a moment.', '', '', '', '', '', 'አሁን ይህን መለያ ማረጋገጥ አልተቻለም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'],
-  ['This account is already saved as a withdrawal account.', '', '', '', '', '', 'ይህ መለያ አስቀድሞ እንደ ገንዘብ ማውጫ መለያ ተቀምጧል።'],
-  ['Could not save the withdrawal account', '', '', '', '', '', 'የገንዘብ ማውጫ መለያውን ማስቀመጥ አልተቻለም'],
-  ['Could not load withdrawal accounts', '', '', '', '', '', 'የገንዘብ ማውጫ መለያዎችን መጫን አልተቻለም'],
-  ['Could not remove the withdrawal account', '', '', '', '', '', 'የገንዘብ ማውጫ መለያውን ማስወገድ አልተቻለም'],
-  ['New trade password must be 6 digits.', '', '', '', '', '', 'አዲሱ የግብይት የይለፍ ቃል 6 አሃዞች መሆን አለበት።'],
-  ['That PIN is too easy to guess. Choose 6 digits that are not all the same.', '', '', '', '', '', 'ያ ፒን ለመገመት በጣም ቀላል ነው። ሁሉም ተመሳሳይ ያልሆኑ 6 አሃዞችን ይምረጡ።'],
-  ['Could not change your PIN', '', '', '', '', '', 'ፒንዎን መቀየር አልተቻለም'],
-  ['Enter a gift code', '', '', '', '', '', 'የስጦታ ኮድ ያስገቡ'],
-  ['Wrong treasure chest password', '', '', '', '', '', 'የተሳሳተ የሀብት ሣጥን የይለፍ ቃል'],
-  ['This code is no longer active', '', '', '', '', '', 'ይህ ኮድ ከአሁን በኋላ ንቁ አይደለም'],
-  ['This code has expired', '', '', '', '', '', 'የዚህ ኮድ ጊዜ አልፏል'],
-  ['You\'ve already used this code', '', '', '', '', '', 'ይህን ኮድ አስቀድመው ተጠቅመዋል'],
-  ['This code has reached its usage limit', '', '', '', '', '', 'ይህ ኮድ የአጠቃቀም ገደቡ ላይ ደርሷል'],
-  ['Could not redeem this code', '', '', '', '', '', 'ይህን ኮድ መጠቀም አልተቻለም'],
-  ['That gift code could not be redeemed.', '', '', '', '', '', 'ያ የስጦታ ኮድ ሊጠቀም አልቻለም።'],
-  ['Could not load your records', '', '', '', '', '', 'መዝገቦችዎን መጫን አልተቻለም'],
-  ['Account suspended.', '', '', '', '', '', 'መለያው ታግዷል።'],
-  ['Could not generate your statement right now.', '', '', '', '', '', 'አሁን መግለጫዎን ማዘጋጀት አልተቻለም።'],
-  ['Could not load recharge history', '', '', '', '', '', 'የሂሳብ መሙላት ታሪክን መጫን አልተቻለም'],
-  ['Could not load withdrawal history', '', '', '', '', '', 'የገንዘብ ማውጣት ታሪክን መጫን አልተቻለም'],
-  ['Could not load your messages', '', '', '', '', '', 'መልዕክቶችዎን መጫን አልተቻለም'],
-  ['Could not update this message', '', '', '', '', '', 'ይህን መልዕክት ማዘመን አልተቻለም'],
-  ['Session expired. Log in again.', '', '', '', '', '', 'የክፍለ ጊዜው አብቅቷል። እንደገና ይግቡ።'],
-  ['Session expired. Sign in again.', '', '', '', '', '', 'የክፍለ ጊዜው አብቅቷል። እንደገና ይግቡ።'],
-  ['Something went wrong', '', '', '', '', '', 'የሆነ ችግር ተፈጥሯል'],
-  ['Request is too large', '', '', '', '', '', 'ጥያቄው በጣም ትልቅ ነው'],
-  ['Your session ended. Please log in again. If this repeats, check automatic date and time on your phone.', '', '', '', '', '', 'የክፍለ ጊዜዎ አብቅቷል። እባክዎ እንደገና ይግቡ። ይህ ከተደጋገመ በስልክዎ ላይ ራስ-ሰር ቀንና ሰዓት ያረጋግጡ።'],
-  ['Could not send the code', '', '', '', '', '', 'ኮዱን መላክ አልተቻለም'],
-  ['Please tap Send Code first.', '', '', '', '', '', 'እባክዎ መጀመሪያ «ኮድ ላክ» ን ይንኩ።'],
-  ['Enter the 6-digit verification code sent to your phone.', '', '', '', '', '', 'ወደ ስልክዎ የተላከውን ባለ 6 አሃዝ የማረጋገጫ ኮድ ያስገቡ።'],
-  ['The two passwords do not match.', '', '', '', '', '', 'ሁለቱ የይለፍ ቃላት አይመሳሰሉም።'],
-  ['Sign-up is not available right now. Check your connection and try again.', '', '', '', '', '', 'ምዝገባ አሁን አይገኝም። ግንኙነትዎን ያረጋግጡና እንደገና ይሞክሩ።'],
-  ['A new code was sent. Enter the latest code.', '', '', '', '', '', 'አዲስ ኮድ ተልኳል። የቅርብ ጊዜውን ኮድ ያስገቡ።'],
-  ['Incorrect verification code.', '', '', '', '', '', 'የተሳሳተ የማረጋገጫ ኮድ።'],
-  ['Could not reset your password', '', '', '', '', '', 'የይለፍ ቃልዎን ዳግም ማስጀመር አልተቻለም'],
-  ['Could not claim that reward', '', '', '', '', '', 'ያንን ሽልማት መጠየቅ አልተቻለም'],
-  ['Reward added to your wallet', '', '', '', '', '', 'ሽልማቱ ቦርሳዎ ላይ ተጨምሯል'],
-  ['Could not send a verification code.', '', '', '', '', '', 'የማረጋገጫ ኮድ መላክ አልተቻለም።'],
-  ['Could not remove the wallet.', '', '', '', '', '', 'ቦርሳውን ማስወገድ አልተቻለም።'],
-  ['Could not complete investment', '', '', '', '', '', 'ኢንቨስትመንቱን ማጠናቀቅ አልተቻለም'],
-  ['Wallet balance', '', '', '', '', '', 'የቦርሳ ቀሪ ሂሳብ'],
-  ['Airtel, or one bank', '', '', '', '', '', '='],
-  ['Ethiopia', '', '', '', '', '', 'ኢትዮጵያ'],
-  ['Incorrect phone number or password.', '', '', '', '', '', 'የተሳሳተ ስልክ ቁጥር ወይም የይለፍ ቃል።'],
-  ['No account found for that number.', '', '', '', '', '', 'ለዚያ ቁጥር ምንም መለያ አልተገኘም።'],
-  ['An account with that number already exists.', '', '', '', '', '', 'በዚያ ቁጥር መለያ አስቀድሞ አለ።'],
-  ['Too many attempts. Try again shortly.', '', '', '', '', '', 'ብዙ ሙከራዎች። ትንሽ ቆይተው እንደገና ይሞክሩ።'],
-  ['Could not reach the sign-in service. Check your connection and try again.', '', '', '', '', '', 'የመግቢያ አገልግሎቱን ማግኘት አልተቻለም። ግንኙነትዎን ያረጋግጡና እንደገና ይሞክሩ።'],
-  ['This account has been disabled. Contact support.', '', '', '', '', '', 'ይህ መለያ ተሰናክሏል። ድጋፍን ያነጋግሩ።'],
-  ['Enter a valid mobile number.', '', '', '', '', '', 'ትክክለኛ የሞባይል ቁጥር ያስገቡ።'],
-  ['Sign-in is temporarily unavailable. Please try again shortly.', '', '', '', '', '', 'መግቢያ ለጊዜው አይገኝም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'],
-  ['Something went wrong. Try again.', '', '', '', '', '', 'የሆነ ችግር ተፈጥሯል። እንደገና ይሞክሩ።'],
-  ['The payment has not been confirmed yet, and nothing is lost. If it goes through, your balance updates on its own automatically, or look under Transaction Statement later to check.', '', '', '', '', '', 'ክፍያው እስካሁን አልተረጋገጠም፣ እና ምንም አልጠፋም። ከተሳካ ቀሪ ሂሳብዎ በራሱ በራስ-ሰር ይሻሻላል፣ ወይም ለመፈተሽ ቆይተው በ«የግብይት መግለጫ» ስር ይመልከቱ።'],
-  ['Bank / Wallet', '', '', '', '', '', 'ባንክ / ቦርሳ'],
-  ['Pay to the account shown', '', '', '', '', '', 'ወደሚታየው መለያ ይክፈሉ'],
-  ['Tap Confirm Recharge, pick a bank or wallet, copy the account and pay from your own app.', '', '', '', '', '', '«ሂሳብ መሙላቱን አረጋግጥ» ን ይንኩ፣ ባንክ ወይም ቦርሳ ይምረጡ፣ መለያውን ገልብጠው ከራስዎ መተግበሪያ ይክፈሉ።'],
-  ['Order Amount', '', '', '', '', '', 'የትዕዛዝ መጠን'],
-  ['Please choose payment', '', '', '', '', '', 'እባክዎ የመክፈያ ዘዴ ይምረጡ'],
-  ['Friendly reminder: Please use the corresponding bank to complete the transfer.', '', '', '', '', '', 'ወዳጃዊ ማስታወሻ፡ ዝውውሩን ለማጠናቀቅ እባክዎ ተመሳሳይ ባንክ ይጠቀሙ።'],
-  ['Please do not use interbank transfers from other banks to avoid delays and inconvenience.', '', '', '', '', '', 'መዘግየትና ችግር እንዳይፈጠር እባክዎ ከሌሎች ባንኮች የባንክ-ለባንክ ዝውውር አይጠቀሙ።'],
-  ['Thank you for your understanding!', '', '', '', '', '', 'ስለተረዱን እናመሰግናለን!'],
-  ['loading...', '', '', '', '', '', 'በመጫን ላይ...'],
-  ['Order Remaining', '', '', '', '', '', 'ቀሪ የትዕዛዝ ጊዜ'],
+  ['Wait for confirmation. This checks itself automatically. If money leaves your phone but the balance has not updated, keep the transaction reference and contact Customer Support.', '', '', 'Attendez la confirmation. Elle se vérifie automatiquement. Si l\'argent a quitté votre téléphone mais que le solde n\'est pas à jour, conservez la référence de la transaction et contactez le service client.', '', '', 'ማረጋገጫውን ይጠብቁ። ይህ በራሱ ይፈተሻል። ገንዘቡ ከስልክዎ ወጥቶ ቀሪ ሂሳብዎ ካልተሻሻለ የግብይቱን ማመሳከሪያ ያስቀምጡና የደንበኞች አገልግሎትን ያነጋግሩ።'],
+  ['Manage Wallets', '', '', 'Gérer les portefeuilles', '', '', 'ቦርሳዎችን አስተዳድር'],
+  ['Check the name and bank account number above. Your payout goes to this linked wallet.', '', '', 'Vérifiez le nom et le numéro de compte bancaire ci-dessus. Votre retrait est versé sur ce portefeuille lié.', '', '', 'ከላይ ያለውን ስም እና የባንክ ሂሳብ ቁጥር ያረጋግጡ። ክፍያዎ ወደዚህ የተያያዘ ቦርሳ ይሄዳል።'],
+  ['+ Add another wallet', '', '', '+ Ajouter un autre portefeuille', '', '', '+ ሌላ ቦርሳ ጨምር'],
+  ['Phone number', '', '', 'Numéro de téléphone', '', '', 'ስልክ ቁጥር'],
+  ['Reward', '', '', 'Récompense', '', '', 'ሽልማት'],
+  ['Welcome Bonus', '', '', 'Bonus de bienvenue', '', '', 'የእንኳን ደህና መጡ ጉርሻ'],
+  ['Referral Commission', '', '', 'Commission de parrainage', '', '', 'የግብዣ ኮሚሽን'],
+  ['Daily Income', '', '', 'Revenu quotidien', '', '', 'ዕለታዊ ገቢ'],
+  ['Inactive', '', '', 'Inactif', '', '', 'ንቁ ያልሆነ'],
+  ['If the prompt does not come up, dial *165# (MTN) or *185# (Airtel) on that phone to find and approve the pending payment yourself.', '', '', 'Si la demande n\'apparaît pas, composez *165# (MTN) ou *185# (Airtel) sur ce téléphone pour retrouver et valider vous-même le paiement en attente.', '', '', 'ጥያቄው ካልመጣ፣ በዚያ ስልክ ላይ *165# (MTN) ወይም *185# (Airtel) ይደውሉና በመጠባበቅ ላይ ያለውን ክፍያ እራስዎ ይፈልጉና ያጽድቁ።'],
+  ['Too many requests. Slow down.', '', '', 'Trop de requêtes. Ralentissez.', '', '', 'ብዙ ጥያቄዎች። እባክዎ ይቀንሱ።'],
+  ['Too many requests from this network. Slow down.', '', '', 'Trop de requêtes depuis ce réseau. Ralentissez.', '', '', 'ከዚህ አውታረ መረብ ብዙ ጥያቄዎች። እባክዎ ይቀንሱ።'],
+  ['Too many requests.', '', '', 'Trop de requêtes.', '', '', 'ብዙ ጥያቄዎች።'],
+  ['Too many attempts. Try again in a minute.', '', '', 'Trop de tentatives. Réessayez dans une minute.', '', '', 'ብዙ ሙከራዎች። ከአንድ ደቂቃ በኋላ እንደገና ይሞክሩ።'],
+  ['Session service unavailable. Try again.', '', '', 'Service de session indisponible. Réessayez.', '', '', 'የክፍለ ጊዜ አገልግሎት አይገኝም። እንደገና ይሞክሩ።'],
+  ['Too many requests. Please wait a moment and try again.', '', '', 'Trop de requêtes. Patientez un instant puis réessayez.', '', '', 'ብዙ ጥያቄዎች። እባክዎ ትንሽ ይጠብቁና እንደገና ይሞክሩ።'],
+  ['We could not check your sign-in just now. Please try again in a moment.', '', '', 'Nous n\'avons pas pu vérifier votre connexion à l\'instant. Veuillez réessayer dans un moment.', '', '', 'አሁን መግባትዎን ማረጋገጥ አልቻልንም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'],
+  ['This address does not serve the app. Please open the correct Soda link.', '', '', 'Cette adresse ne sert pas l\'application. Veuillez ouvrir le bon lien Soda.', '', '', 'ይህ አድራሻ መተግበሪያውን አያገለግልም። እባክዎ ትክክለኛውን የፔትሮ አገናኝ ይክፈቱ።'],
+  ['Unauthorized', '', '', 'Non autorisé', '', '', 'ፈቃድ የለም'],
+  ['Account suspended. Contact customer service.', '', '', 'Compte suspendu. Contactez le service client.', '', '', 'መለያው ታግዷል። የደንበኞች አገልግሎትን ያነጋግሩ።'],
+  ['Could not load your team', '', '', 'Impossible de charger votre équipe', '', '', 'ቡድንዎን መጫን አልተቻለም'],
+  ['User not found', '', '', 'Utilisateur introuvable', '', '', 'ተጠቃሚው አልተገኘም'],
+  ['Could not load team stats', '', '', 'Impossible de charger les statistiques de l\'équipe', '', '', 'የቡድን ስታቲስቲክስን መጫን አልተቻለም'],
+  ['Please sign in again', '', '', 'Veuillez vous reconnecter', '', '', 'እባክዎ እንደገና ይግቡ'],
+  ['Unknown task category', '', '', 'Catégorie de tâche inconnue', '', '', 'ያልታወቀ የተግባር ምድብ'],
+  ['Unknown milestone', '', '', 'Palier inconnu', '', '', 'ያልታወቀ ደረጃ'],
+  ['Your progress changed just now. Please try again.', '', '', 'Votre progression vient de changer. Veuillez réessayer.', '', '', 'እድገትዎ አሁን ተለውጧል። እባክዎ እንደገና ይሞክሩ።'],
+  ['Already claimed', '', '', 'Déjà réclamé', '', '', 'አስቀድሞ ተጠይቋል'],
+  ['Could not claim that reward right now', '', '', 'Impossible de réclamer cette récompense pour le moment', '', '', 'አሁን ያንን ሽልማት መጠየቅ አልተቻለም'],
+  ['Sign in with your Soda phone account.', '', '', 'Connectez-vous avec votre compte téléphone Soda.', '', '', 'በፔትሮ የስልክ መለያዎ ይግቡ።'],
+  ['Could not create your profile', '', '', 'Impossible de créer votre profil', '', '', 'መገለጫዎን መፍጠር አልተቻለም'],
+  ['That referral code does not exist.', '', '', 'Ce code de parrainage n\'existe pas.', '', '', 'ያ የግብዣ ኮድ የለም።'],
+  ['You cannot use your own referral code.', '', '', 'Vous ne pouvez pas utiliser votre propre code de parrainage.', '', '', 'የራስዎን የግብዣ ኮድ መጠቀም አይችሉም።'],
+  ['That referral code is no longer active.', '', '', 'Ce code de parrainage n\'est plus actif.', '', '', 'ያ የግብዣ ኮድ ከአሁን በኋላ ንቁ አይደለም።'],
+  ['This referral code is unavailable. Ask for an Ethiopia referral code.', '', '', 'Ce code de parrainage n\'est pas disponible. Demandez un code de parrainage de Côte d\'Ivoire.', '', '', 'ይህ የግብዣ ኮድ አይገኝም። የኢትዮጵያ የግብዣ ኮድ ይጠይቁ።'],
+  ['Verification codes are turned off right now.', '', '', 'Les codes de vérification sont désactivés pour le moment.', '', '', 'የማረጋገጫ ኮዶች አሁን ጠፍተዋል።'],
+  ['Your account has no valid phone number on file. Contact support.', '', '', 'Votre compte n\'a aucun numéro de téléphone valide enregistré. Contactez l\'assistance.', '', '', 'በመለያዎ ላይ ትክክለኛ ስልክ ቁጥር የለም። ድጋፍን ያነጋግሩ።'],
+  ['An account with this phone number already exists.', '', '', 'Un compte avec ce numéro de téléphone existe déjà.', '', '', 'በዚህ ስልክ ቁጥር መለያ አስቀድሞ አለ።'],
+  ['No account found with this phone number.', '', '', 'Aucun compte trouvé avec ce numéro de téléphone.', '', '', 'በዚህ ስልክ ቁጥር ምንም መለያ አልተገኘም።'],
+  ['SMS verification is not available right now. Try again later.', '', '', 'La vérification par SMS n\'est pas disponible pour le moment. Réessayez plus tard.', '', '', 'የኤስኤምኤስ ማረጋገጫ አሁን አይገኝም። ቆይተው እንደገና ይሞክሩ።'],
+  ['Too many verification codes requested for this number today. Try again tomorrow.', '', '', 'Trop de codes de vérification demandés pour ce numéro aujourd\'hui. Réessayez demain.', '', '', 'ለዚህ ቁጥር ዛሬ ብዙ የማረጋገጫ ኮዶች ተጠይቀዋል። ነገ እንደገና ይሞክሩ።'],
+  ['We could not send the code just now. Please try again in a moment.', '', '', 'Nous n\'avons pas pu envoyer le code à l\'instant. Veuillez réessayer dans un moment.', '', '', 'አሁን ኮዱን መላክ አልቻልንም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'],
+  ['Enter the 6-digit verification code.', '', '', 'Saisissez le code de vérification à 6 chiffres.', '', '', 'ባለ 6 አሃዝ የማረጋገጫ ኮዱን ያስገቡ።'],
+  ['Invalid or expired code. Request a new one.', '', '', 'Code invalide ou expiré. Demandez-en un nouveau.', '', '', 'ልክ ያልሆነ ወይም ጊዜው ያለፈበት ኮድ። አዲስ ይጠይቁ።'],
+  ['This code has already been used.', '', '', 'Ce code a déjà été utilisé.', '', '', 'ይህ ኮድ አስቀድሞ ጥቅም ላይ ውሏል።'],
+  ['This code has expired. Request a new one.', '', '', 'Ce code a expiré. Demandez-en un nouveau.', '', '', 'የዚህ ኮድ ጊዜ አልፏል። አዲስ ይጠይቁ።'],
+  ['Too many incorrect attempts. Request a new code.', '', '', 'Trop de tentatives incorrectes. Demandez un nouveau code.', '', '', 'ብዙ የተሳሳቱ ሙከራዎች። አዲስ ኮድ ይጠይቁ።'],
+  ['Code unavailable. Request a new code.', '', '', 'Code indisponible. Demandez un nouveau code.', '', '', 'ኮዱ አይገኝም። አዲስ ኮድ ይጠይቁ።'],
+  ['Incorrect code.', '', '', 'Code incorrect.', '', '', 'የተሳሳተ ኮድ።'],
+  ['Verification changed. Please try again.', '', '', 'La vérification a changé. Veuillez réessayer.', '', '', 'ማረጋገጫው ተለውጧል። እባክዎ እንደገና ይሞክሩ።'],
+  ['Could not verify the code right now', '', '', 'Impossible de vérifier le code pour le moment', '', '', 'አሁን ኮዱን ማረጋገጥ አልተቻለም'],
+  ['Please verify your phone number first.', '', '', 'Veuillez d\'abord vérifier votre numéro de téléphone.', '', '', 'እባክዎ መጀመሪያ ስልክ ቁጥርዎን ያረጋግጡ።'],
+  ['Password reset. You can now sign in.', '', '', 'Mot de passe réinitialisé. Vous pouvez maintenant vous connecter.', '', '', 'የይለፍ ቃል ዳግም ተጀምሯል። አሁን መግባት ይችላሉ።'],
+  ['Could not reset your password right now', '', '', 'Impossible de réinitialiser votre mot de passe pour le moment', '', '', 'አሁን የይለፍ ቃልዎን ዳግም ማስጀመር አልተቻለም'],
+  ['Could not complete your registration right now', '', '', 'Impossible de finaliser votre inscription pour le moment', '', '', 'አሁን ምዝገባዎን ማጠናቀቅ አልተቻለም'],
+  ['Please finish signing up and verify your phone.', '', '', 'Veuillez terminer votre inscription et vérifier votre téléphone.', '', '', 'እባክዎ ምዝገባዎን ያጠናቅቁና ስልክዎን ያረጋግጡ።'],
+  ['Already checked in today. Come back after midnight.', '', '', 'Vous avez déjà pointé aujourd\'hui. Revenez après minuit.', '', '', 'ዛሬ አስቀድመው ተመዝግበዋል። ከእኩለ ሌሊት በኋላ ተመልሰው ይምጡ።'],
+  ['Check-in failed', '', '', 'Échec du pointage', '', '', 'ተመዝግቦ መግባት አልተሳካም'],
+  ['Could not load the turntable', '', '', 'Impossible de charger la roue', '', '', 'የዕድል መንኮራኩሩን መጫን አልተቻለም'],
+  ['The turntable is not available right now.', '', '', 'La roue n\'est pas disponible pour le moment.', '', '', 'የዕድል መንኮራኩሩ አሁን አይገኝም።'],
+  ['That spin was already used. Come back after midnight for your free daily spin.', '', '', 'Ce tour a déjà été utilisé. Revenez après minuit pour votre tour gratuit du jour.', '', '', 'ያ ዙር አስቀድሞ ጥቅም ላይ ውሏል። ለነጻ ዕለታዊ ዙርዎ ከእኩለ ሌሊት በኋላ ተመልሰው ይምጡ።'],
+  ['No spins left. Come back after midnight for your free daily spin.', '', '', 'Plus aucun tour. Revenez après minuit pour votre tour gratuit du jour.', '', '', 'ምንም ዙር የለም። ለነጻ ዕለታዊ ዙርዎ ከእኩለ ሌሊት በኋላ ተመልሰው ይምጡ።'],
+  ['That spin was already used.', '', '', 'Ce tour a déjà été utilisé.', '', '', 'ያ ዙር አስቀድሞ ጥቅም ላይ ውሏል።'],
+  ['The spin could not be completed. Your balance is unchanged.', '', '', 'Le tour n\'a pas pu être terminé. Votre solde est inchangé.', '', '', 'ዙሩን ማጠናቀቅ አልተቻለም። ቀሪ ሂሳብዎ አልተቀየረም።'],
+  ['Unknown product', '', '', 'Produit inconnu', '', '', 'ያልታወቀ ምርት'],
+  ['This product is not open right now.', '', '', 'Ce produit n\'est pas ouvert pour le moment.', '', '', 'ይህ ምርት አሁን ክፍት አይደለም።'],
+  ['Invalid amount', '', '', 'Montant invalide', '', '', 'ልክ ያልሆነ መጠን'],
+  ['This account is currently being processed. Try again shortly.', '', '', 'Ce compte est en cours de traitement. Réessayez sous peu.', '', '', 'ይህ መለያ በአሁኑ ጊዜ በመከናወን ላይ ነው። ትንሽ ቆይተው እንደገና ይሞክሩ።'],
+  ['Finish signing up before topping up.', '', '', 'Terminez votre inscription avant de recharger.', '', '', 'ሂሳብ ከመሙላትዎ በፊት ምዝገባዎን ያጠናቅቁ።'],
+  ['Finish signing up before recharging.', '', '', 'Terminez votre inscription avant de recharger.', '', '', 'ሂሳብ ከመሙላትዎ በፊት ምዝገባዎን ያጠናቅቁ።'],
+  ['A recharge is already being processed. Please wait a moment.', '', '', 'Une recharge est déjà en cours de traitement. Veuillez patienter un instant.', '', '', 'ሂሳብ መሙላት አስቀድሞ በመከናወን ላይ ነው። እባክዎ ትንሽ ይጠብቁ።'],
+  ['Payment initiated. Check your phone.', '', '', 'Paiement lancé. Vérifiez votre téléphone.', '', '', 'ክፍያው ተጀምሯል። ስልክዎን ይመልከቱ።'],
+  ['USDT recharges are not available right now.', '', '', 'Les recharges USDT ne sont pas disponibles pour le moment.', '', '', 'የUSDT ሂሳብ መሙላት አሁን አይገኝም።'],
+  ['USDT recharges are not configured yet. Please try again later.', '', '', 'Les recharges USDT ne sont pas encore configurées. Veuillez réessayer plus tard.', '', '', 'የUSDT ሂሳብ መሙላት እስካሁን አልተዘጋጀም። እባክዎ ቆይተው እንደገና ይሞክሩ።'],
+  ['Enter a valid USDT amount', '', '', 'Saisissez un montant USDT valide', '', '', 'ትክክለኛ የUSDT መጠን ያስገቡ'],
+  ['Please wait a moment.', '', '', 'Veuillez patienter un instant.', '', '', 'እባክዎ ትንሽ ይጠብቁ።'],
+  ['You already have open USDT requests. Use one of them, or wait for it to expire.', '', '', 'Vous avez déjà des demandes USDT ouvertes. Utilisez-en une, ou attendez qu\'elle expire.', '', '', 'አስቀድሞ ክፍት የUSDT ጥያቄዎች አሉዎት። አንዱን ይጠቀሙ ወይም እስኪያበቃ ይጠብቁ።'],
+  ['Could not reserve an amount right now. Please try again in a moment.', '', '', 'Impossible de réserver un montant pour le moment. Veuillez réessayer dans un instant.', '', '', 'አሁን መጠን ማስያዝ አልተቻለም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'],
+  ['Could not create your payment request. Please try again.', '', '', 'Impossible de créer votre demande de paiement. Veuillez réessayer.', '', '', 'የክፍያ ጥያቄዎን መፍጠር አልተቻለም። እባክዎ እንደገና ይሞክሩ።'],
+  ['Start a new USDT recharge to get your exact payment amount first.', '', '', 'Lancez d\'abord une nouvelle recharge USDT pour obtenir votre montant exact à payer.', '', '', 'መጀመሪያ ትክክለኛውን የክፍያ መጠንዎን ለማግኘት አዲስ የUSDT ሂሳብ መሙላት ይጀምሩ።'],
+  ['Payment request not found. Start a new USDT recharge.', '', '', 'Demande de paiement introuvable. Lancez une nouvelle recharge USDT.', '', '', 'የክፍያ ጥያቄው አልተገኘም። አዲስ የUSDT ሂሳብ መሙላት ይጀምሩ።'],
+  ['Enter a valid transaction hash (TXID)', '', '', 'Saisissez un hash de transaction (TXID) valide', '', '', 'ትክክለኛ የግብይት ሃሽ (TXID) ያስገቡ'],
+  ['A transaction was already submitted for this payment request.', '', '', 'Une transaction a déjà été envoyée pour cette demande de paiement.', '', '', 'ለዚህ የክፍያ ጥያቄ ግብይት አስቀድሞ ተልኳል።'],
+  ['A recharge is already being submitted. Please wait a moment.', '', '', 'Une recharge est déjà en cours d\'envoi. Veuillez patienter un instant.', '', '', 'ሂሳብ መሙላት አስቀድሞ በመላክ ላይ ነው። እባክዎ ትንሽ ይጠብቁ።'],
+  ['This transaction was already credited.', '', '', 'Cette transaction a déjà été créditée.', '', '', 'ይህ ግብይት አስቀድሞ ተመዝግቧል።'],
+  ['This transaction hash has already been used.', '', '', 'Ce hash de transaction a déjà été utilisé.', '', '', 'ይህ የግብይት ሃሽ አስቀድሞ ጥቅም ላይ ውሏል።'],
+  ['This transaction was already submitted and is being verified.', '', '', 'Cette transaction a déjà été envoyée et est en cours de vérification.', '', '', 'ይህ ግብይት አስቀድሞ ተልኮ በመረጋገጥ ላይ ነው።'],
+  ['This transaction hash has already been submitted.', '', '', 'Ce hash de transaction a déjà été envoyé.', '', '', 'ይህ የግብይት ሃሽ አስቀድሞ ተልኳል።'],
+  ['Payment completed! Credited to your wallet.', '', '', 'Paiement effectué ! Votre portefeuille a été crédité.', '', '', 'ክፍያው ተጠናቋል! ቦርሳዎ ላይ ተጨምሯል።'],
+  ['Submitted. Verifying on-chain — this can take a minute.', '', '', 'Envoyé. Vérification sur la blockchain — cela peut prendre une minute.', '', '', 'ተልኳል። በብሎክቼይን ላይ በማረጋገጥ ላይ — አንድ ደቂቃ ሊወስድ ይችላል።'],
+  ['Submitted. Verifying on-chain…', '', '', 'Envoyé. Vérification sur la blockchain…', '', '', 'ተልኳል። በብሎክቼይን ላይ በማረጋገጥ ላይ…'],
+  ['Could not submit your recharge. Please try again.', '', '', 'Impossible d\'envoyer votre recharge. Veuillez réessayer.', '', '', 'ሂሳብ መሙላትዎን መላክ አልተቻለም። እባክዎ እንደገና ይሞክሩ።'],
+  ['Could not submit your recharge', '', '', 'Impossible d\'envoyer votre recharge', '', '', 'ሂሳብ መሙላትዎን መላክ አልተቻለም'],
+  ['Recharge not found', '', '', 'Recharge introuvable', '', '', 'ሂሳብ መሙላቱ አልተገኘም'],
+  ['Could not check payment status', '', '', 'Impossible de vérifier l\'état du paiement', '', '', 'የክፍያውን ሁኔታ ማረጋገጥ አልተቻለም'],
+  ['Card payments are not available right now.', '', '', 'Les paiements par carte ne sont pas disponibles pour le moment.', '', '', 'የካርድ ክፍያ አሁን አይገኝም።'],
+  ['Could not start the card payment. Please try again.', '', '', 'Impossible de lancer le paiement par carte. Veuillez réessayer.', '', '', 'የካርድ ክፍያውን መጀመር አልተቻለም። እባክዎ እንደገና ይሞክሩ።'],
+  ['Could not start the card payment', '', '', 'Impossible de lancer le paiement par carte', '', '', 'የካርድ ክፍያውን መጀመር አልተቻለም'],
+  ['Card payment could not be started. Please try again.', '', '', 'Le paiement par carte n\'a pas pu être lancé. Veuillez réessayer.', '', '', 'የካርድ ክፍያው ሊጀመር አልቻለም። እባክዎ እንደገና ይሞክሩ።'],
+  ['The card payment did not complete.', '', '', 'Le paiement par carte n\'a pas abouti.', '', '', 'የካርድ ክፍያው አልተጠናቀቀም።'],
+  ['Could not get your payment amount', '', '', 'Impossible d\'obtenir votre montant à payer', '', '', 'የክፍያ መጠንዎን ማግኘት አልተቻለም'],
+  ['Payment declined.', '', '', 'Paiement refusé.', '', '', 'ክፍያው ተቀባይነት አላገኘም።'],
+  ['Account not found', '', '', 'Compte introuvable', '', '', 'መለያው አልተገኘም'],
+  ['No Trade Password is set on this account.', '', '', 'Aucun mot de passe de transaction n\'est défini sur ce compte.', '', '', 'በዚህ መለያ ላይ የግብይት የይለፍ ቃል አልተዘጋጀም።'],
+  ['A withdrawal is already being processed. Please wait a moment.', '', '', 'Un retrait est déjà en cours de traitement. Veuillez patienter un instant.', '', '', 'ገንዘብ ማውጣት አስቀድሞ በመከናወን ላይ ነው። እባክዎ ትንሽ ይጠብቁ።'],
+  ['Bind a withdrawal account first.', '', '', 'Liez d\'abord un compte de retrait.', '', '', 'መጀመሪያ የገንዘብ ማውጫ መለያ ያስሩ።'],
+  ['That withdrawal account isn\'t saved to your profile. Bind it first, then try again.', '', '', 'Ce compte de retrait n\'est pas enregistré sur votre profil. Liez-le d\'abord, puis réessayez.', '', '', 'ያ የገንዘብ ማውጫ መለያ በመገለጫዎ ላይ አልተቀመጠም። መጀመሪያ ያስሩት፣ ከዚያ እንደገና ይሞክሩ።'],
+  ['Withdrawal requested, processing now', '', '', 'Retrait demandé, traitement en cours', '', '', 'ገንዘብ ማውጣት ተጠይቋል፣ አሁን በመከናወን ላይ ነው'],
+  ['Your withdrawal request is being checked. Check Transaction Statement before submitting again.', '', '', 'Votre demande de retrait est en cours de vérification. Consultez l\'Historique du solde avant d\'en envoyer une autre.', '', '', 'የገንዘብ ማውጫ ጥያቄዎ በመመርመር ላይ ነው። እንደገና ከመላክዎ በፊት «የግብይት መግለጫ» ን ይመልከቱ።'],
+  ['Withdrawal not found', '', '', 'Retrait introuvable', '', '', 'ገንዘብ ማውጣቱ አልተገኘም'],
+  ['Could not process the payout. Please retry shortly.', '', '', 'Impossible de traiter le retrait. Veuillez réessayer sous peu.', '', '', 'ክፍያውን ማከናወን አልተቻለም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'],
+  ['Fill in all fields', '', '', 'Remplissez tous les champs', '', '', 'ሁሉንም መስኮች ይሙሉ'],
+  ['Enter a valid bank account number', '', '', 'Saisissez un numéro de compte bancaire valide', '', '', 'ትክክለኛ የባንክ ሂሳብ ቁጥር ያስገቡ'],
+  ['That bank is not currently supported. Pick one from the list.', '', '', 'Cette banque n\'est pas prise en charge actuellement. Choisissez-en une dans la liste.', '', '', 'ያ ባንክ በአሁኑ ጊዜ አይደገፍም። ከዝርዝሩ አንዱን ይምረጡ።'],
+  ['Please verify with the code sent to your phone first.', '', '', 'Veuillez d\'abord vérifier avec le code envoyé sur votre téléphone.', '', '', 'እባክዎ መጀመሪያ ወደ ስልክዎ በተላከው ኮድ ያረጋግጡ።'],
+  ['Could not verify this account right now. Please try again in a moment.', '', '', 'Impossible de vérifier ce compte pour le moment. Veuillez réessayer dans un instant.', '', '', 'አሁን ይህን መለያ ማረጋገጥ አልተቻለም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'],
+  ['This account is already saved as a withdrawal account.', '', '', 'Ce compte est déjà enregistré comme compte de retrait.', '', '', 'ይህ መለያ አስቀድሞ እንደ ገንዘብ ማውጫ መለያ ተቀምጧል።'],
+  ['Could not save the withdrawal account', '', '', 'Impossible d\'enregistrer le compte de retrait', '', '', 'የገንዘብ ማውጫ መለያውን ማስቀመጥ አልተቻለም'],
+  ['Could not load withdrawal accounts', '', '', 'Impossible de charger les comptes de retrait', '', '', 'የገንዘብ ማውጫ መለያዎችን መጫን አልተቻለም'],
+  ['Could not remove the withdrawal account', '', '', 'Impossible de supprimer le compte de retrait', '', '', 'የገንዘብ ማውጫ መለያውን ማስወገድ አልተቻለም'],
+  ['New trade password must be 6 digits.', '', '', 'Le nouveau mot de passe de transaction doit comporter 6 chiffres.', '', '', 'አዲሱ የግብይት የይለፍ ቃል 6 አሃዞች መሆን አለበት።'],
+  ['That PIN is too easy to guess. Choose 6 digits that are not all the same.', '', '', 'Ce code PIN est trop facile à deviner. Choisissez 6 chiffres qui ne sont pas tous identiques.', '', '', 'ያ ፒን ለመገመት በጣም ቀላል ነው። ሁሉም ተመሳሳይ ያልሆኑ 6 አሃዞችን ይምረጡ።'],
+  ['Could not change your PIN', '', '', 'Impossible de modifier votre code PIN', '', '', 'ፒንዎን መቀየር አልተቻለም'],
+  ['Enter a gift code', '', '', 'Saisissez un code cadeau', '', '', 'የስጦታ ኮድ ያስገቡ'],
+  ['Wrong treasure chest password', '', '', 'Mot de passe du coffre au trésor incorrect', '', '', 'የተሳሳተ የሀብት ሣጥን የይለፍ ቃል'],
+  ['This code is no longer active', '', '', 'Ce code n\'est plus actif', '', '', 'ይህ ኮድ ከአሁን በኋላ ንቁ አይደለም'],
+  ['This code has expired', '', '', 'Ce code a expiré', '', '', 'የዚህ ኮድ ጊዜ አልፏል'],
+  ['You\'ve already used this code', '', '', 'Vous avez déjà utilisé ce code', '', '', 'ይህን ኮድ አስቀድመው ተጠቅመዋል'],
+  ['This code has reached its usage limit', '', '', 'Ce code a atteint sa limite d\'utilisation', '', '', 'ይህ ኮድ የአጠቃቀም ገደቡ ላይ ደርሷል'],
+  ['Could not redeem this code', '', '', 'Impossible d\'utiliser ce code', '', '', 'ይህን ኮድ መጠቀም አልተቻለም'],
+  ['That gift code could not be redeemed.', '', '', 'Ce code cadeau n\'a pas pu être utilisé.', '', '', 'ያ የስጦታ ኮድ ሊጠቀም አልቻለም።'],
+  ['Could not load your records', '', '', 'Impossible de charger vos historiques', '', '', 'መዝገቦችዎን መጫን አልተቻለም'],
+  ['Account suspended.', '', '', 'Compte suspendu.', '', '', 'መለያው ታግዷል።'],
+  ['Could not generate your statement right now.', '', '', 'Impossible de générer votre relevé pour le moment.', '', '', 'አሁን መግለጫዎን ማዘጋጀት አልተቻለም።'],
+  ['Could not load recharge history', '', '', 'Impossible de charger l\'historique des recharges', '', '', 'የሂሳብ መሙላት ታሪክን መጫን አልተቻለም'],
+  ['Could not load withdrawal history', '', '', 'Impossible de charger l\'historique des retraits', '', '', 'የገንዘብ ማውጣት ታሪክን መጫን አልተቻለም'],
+  ['Could not load your messages', '', '', 'Impossible de charger vos messages', '', '', 'መልዕክቶችዎን መጫን አልተቻለም'],
+  ['Could not update this message', '', '', 'Impossible de mettre à jour ce message', '', '', 'ይህን መልዕክት ማዘመን አልተቻለም'],
+  ['Session expired. Log in again.', '', '', 'Session expirée. Reconnectez-vous.', '', '', 'የክፍለ ጊዜው አብቅቷል። እንደገና ይግቡ።'],
+  ['Session expired. Sign in again.', '', '', 'Session expirée. Reconnectez-vous.', '', '', 'የክፍለ ጊዜው አብቅቷል። እንደገና ይግቡ።'],
+  ['Something went wrong', '', '', 'Une erreur s\'est produite', '', '', 'የሆነ ችግር ተፈጥሯል'],
+  ['Request is too large', '', '', 'La requête est trop volumineuse', '', '', 'ጥያቄው በጣም ትልቅ ነው'],
+  ['Your session ended. Please log in again. If this repeats, check automatic date and time on your phone.', '', '', 'Votre session a pris fin. Veuillez vous reconnecter. Si cela se répète, vérifiez la date et l\'heure automatiques de votre téléphone.', '', '', 'የክፍለ ጊዜዎ አብቅቷል። እባክዎ እንደገና ይግቡ። ይህ ከተደጋገመ በስልክዎ ላይ ራስ-ሰር ቀንና ሰዓት ያረጋግጡ።'],
+  ['Could not send the code', '', '', 'Impossible d\'envoyer le code', '', '', 'ኮዱን መላክ አልተቻለም'],
+  ['Please tap Send Code first.', '', '', 'Veuillez d\'abord toucher « Envoyer le code ».', '', '', 'እባክዎ መጀመሪያ «ኮድ ላክ» ን ይንኩ።'],
+  ['Enter the 6-digit verification code sent to your phone.', '', '', 'Saisissez le code de vérification à 6 chiffres envoyé sur votre téléphone.', '', '', 'ወደ ስልክዎ የተላከውን ባለ 6 አሃዝ የማረጋገጫ ኮድ ያስገቡ።'],
+  ['The two passwords do not match.', '', '', 'Les deux mots de passe ne correspondent pas.', '', '', 'ሁለቱ የይለፍ ቃላት አይመሳሰሉም።'],
+  ['Sign-up is not available right now. Check your connection and try again.', '', '', 'L\'inscription n\'est pas disponible pour le moment. Vérifiez votre connexion et réessayez.', '', '', 'ምዝገባ አሁን አይገኝም። ግንኙነትዎን ያረጋግጡና እንደገና ይሞክሩ።'],
+  ['A new code was sent. Enter the latest code.', '', '', 'Un nouveau code a été envoyé. Saisissez le dernier code.', '', '', 'አዲስ ኮድ ተልኳል። የቅርብ ጊዜውን ኮድ ያስገቡ።'],
+  ['Incorrect verification code.', '', '', 'Code de vérification incorrect.', '', '', 'የተሳሳተ የማረጋገጫ ኮድ።'],
+  ['Could not reset your password', '', '', 'Impossible de réinitialiser votre mot de passe', '', '', 'የይለፍ ቃልዎን ዳግም ማስጀመር አልተቻለም'],
+  ['Could not claim that reward', '', '', 'Impossible de réclamer cette récompense', '', '', 'ያንን ሽልማት መጠየቅ አልተቻለም'],
+  ['Reward added to your wallet', '', '', 'Récompense ajoutée à votre portefeuille', '', '', 'ሽልማቱ ቦርሳዎ ላይ ተጨምሯል'],
+  ['Could not send a verification code.', '', '', 'Impossible d\'envoyer un code de vérification.', '', '', 'የማረጋገጫ ኮድ መላክ አልተቻለም።'],
+  ['Could not remove the wallet.', '', '', 'Impossible de supprimer le portefeuille.', '', '', 'ቦርሳውን ማስወገድ አልተቻለም።'],
+  ['Could not complete investment', '', '', 'Impossible de finaliser l\'investissement', '', '', 'ኢንቨስትመንቱን ማጠናቀቅ አልተቻለም'],
+  ['Wallet balance', '', '', 'Solde du portefeuille', '', '', 'የቦርሳ ቀሪ ሂሳብ'],
+  ['Airtel, or one bank', '', '', 'Airtel, ou une banque', '', '', '='],
+  ['Ethiopia', '', '', 'Côte d\'Ivoire', '', '', 'ኢትዮጵያ'],
+  ['Incorrect phone number or password.', '', '', 'Numéro de téléphone ou mot de passe incorrect.', '', '', 'የተሳሳተ ስልክ ቁጥር ወይም የይለፍ ቃል።'],
+  ['No account found for that number.', '', '', 'Aucun compte trouvé pour ce numéro.', '', '', 'ለዚያ ቁጥር ምንም መለያ አልተገኘም።'],
+  ['An account with that number already exists.', '', '', 'Un compte avec ce numéro existe déjà.', '', '', 'በዚያ ቁጥር መለያ አስቀድሞ አለ።'],
+  ['Too many attempts. Try again shortly.', '', '', 'Trop de tentatives. Réessayez sous peu.', '', '', 'ብዙ ሙከራዎች። ትንሽ ቆይተው እንደገና ይሞክሩ።'],
+  ['Could not reach the sign-in service. Check your connection and try again.', '', '', 'Impossible de joindre le service de connexion. Vérifiez votre connexion et réessayez.', '', '', 'የመግቢያ አገልግሎቱን ማግኘት አልተቻለም። ግንኙነትዎን ያረጋግጡና እንደገና ይሞክሩ።'],
+  ['This account has been disabled. Contact support.', '', '', 'Ce compte a été désactivé. Contactez l\'assistance.', '', '', 'ይህ መለያ ተሰናክሏል። ድጋፍን ያነጋግሩ።'],
+  ['Enter a valid mobile number.', '', '', 'Saisissez un numéro de mobile valide.', '', '', 'ትክክለኛ የሞባይል ቁጥር ያስገቡ።'],
+  ['Sign-in is temporarily unavailable. Please try again shortly.', '', '', 'La connexion est temporairement indisponible. Veuillez réessayer sous peu.', '', '', 'መግቢያ ለጊዜው አይገኝም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'],
+  ['Something went wrong. Try again.', '', '', 'Une erreur s\'est produite. Réessayez.', '', '', 'የሆነ ችግር ተፈጥሯል። እንደገና ይሞክሩ።'],
+  ['The payment has not been confirmed yet, and nothing is lost. If it goes through, your balance updates on its own automatically, or look under Transaction Statement later to check.', '', '', 'Le paiement n\'a pas encore été confirmé, et rien n\'est perdu. S\'il aboutit, votre solde se met à jour automatiquement, ou consultez l\'Historique du solde plus tard pour vérifier.', '', '', 'ክፍያው እስካሁን አልተረጋገጠም፣ እና ምንም አልጠፋም። ከተሳካ ቀሪ ሂሳብዎ በራሱ በራስ-ሰር ይሻሻላል፣ ወይም ለመፈተሽ ቆይተው በ«የግብይት መግለጫ» ስር ይመልከቱ።'],
+  ['Bank / Wallet', '', '', 'Banque / Portefeuille', '', '', 'ባንክ / ቦርሳ'],
+  ['Pay to the account shown', '', '', 'Payez sur le compte indiqué', '', '', 'ወደሚታየው መለያ ይክፈሉ'],
+  ['Tap Confirm Recharge, pick a bank or wallet, copy the account and pay from your own app.', '', '', 'Touchez « Confirmer la recharge », choisissez une banque ou un portefeuille, copiez le compte et payez depuis votre propre application.', '', '', '«ሂሳብ መሙላቱን አረጋግጥ» ን ይንኩ፣ ባንክ ወይም ቦርሳ ይምረጡ፣ መለያውን ገልብጠው ከራስዎ መተግበሪያ ይክፈሉ።'],
+  ['Order Amount', '', '', 'Montant de la commande', '', '', 'የትዕዛዝ መጠን'],
+  ['Please choose payment', '', '', 'Veuillez choisir le paiement', '', '', 'እባክዎ የመክፈያ ዘዴ ይምረጡ'],
+  ['Friendly reminder: Please use the corresponding bank to complete the transfer.', '', '', 'Rappel : veuillez utiliser la banque correspondante pour effectuer le virement.', '', '', 'ወዳጃዊ ማስታወሻ፡ ዝውውሩን ለማጠናቀቅ እባክዎ ተመሳሳይ ባንክ ይጠቀሙ።'],
+  ['Please do not use interbank transfers from other banks to avoid delays and inconvenience.', '', '', 'Veuillez ne pas utiliser de virements interbancaires depuis d\'autres banques afin d\'éviter retards et désagréments.', '', '', 'መዘግየትና ችግር እንዳይፈጠር እባክዎ ከሌሎች ባንኮች የባንክ-ለባንክ ዝውውር አይጠቀሙ።'],
+  ['Thank you for your understanding!', '', '', 'Merci de votre compréhension !', '', '', 'ስለተረዱን እናመሰግናለን!'],
+  ['loading...', '', '', 'chargement…', '', '', 'በመጫን ላይ...'],
+  ['Order Remaining', '', '', 'Temps restant', '', '', 'ቀሪ የትዕዛዝ ጊዜ'],
   ['Min', '', '', '', '', '', 'ደቂቃ'],
   ['Sec', '', '', '', '', '', 'ሰከንድ'],
-  ['Step 1', '', '', '', '', '', 'ደረጃ 1'],
-  ['Copy account for payment', '', '', '', '', '', 'ለክፍያ መለያውን ቅዳ'],
-  ['Payment Channel', '', '', '', '', '', 'የክፍያ መንገድ'],
-  ['Account Name', '', '', '', '', '', 'የመለያ ስም'],
-  ['Account Number', '', '', '', '', '', 'የመለያ ቁጥር'],
-  ['switch', '', '', '', '', '', 'ቀይር'],
-  ['copy', '', '', '', '', '', 'ቅዳ'],
-  ['After the transfer is complete → check the SMS. The code starts with: "v2-" or "FT"', '', '', '', '', '', 'ዝውውሩ ከተጠናቀቀ በኋላ → ኤስኤምኤስን ይመልከቱ። ኮዱ የሚጀምረው በ "v2-" ወይም "FT" ነው'],
-  ['v2-hf = enter the 23-character code', '', '', '', '', '', 'v2-hf = ባለ 23 ቁምፍ ኮዱን ያስገቡ'],
-  ['FT = enter the 12-character code', '', '', '', '', '', 'FT = ባለ 12 ቁምፍ ኮዱን ያስገቡ'],
-  ['Telebirr = 10 characters only', '', '', '', '', '', 'ቴሌብር = 10 ቁምፍ ብቻ'],
-  ['Step 2', '', '', '', '', '', 'ደረጃ 2'],
-  ['Paste payment SMS or enter v2- or FT', '', '', '', '', '', 'የክፍያ ኤስኤምኤስ ይለጥፉ ወይም v2- ወይም FT ያስገቡ'],
-  ['Paste the confirmation message here, or enter the code (FT or v2-):', '', '', '', '', '', 'የማረጋገጫ መልዕክቱን እዚህ ይለጥፉ፣ ወይም ኮዱን ያስገቡ (FT ወይም v2-)፡'],
-  ['Do not save the account number! It changes in real time. Otherwise the transfer will fail.', '', '', '', '', '', 'የመለያ ቁጥሩን አያስቀምጡ! በእውነተኛ ጊዜ ይቀየራል። ካልሆነ ዝውውሩ አይሳካም።'],
-  ['Name Copied', '', '', '', '', '', 'ስሙ ተቀድቷል'],
-  ['Copied.', '', '', '', '', '', 'ተቀድቷል።'],
-  ['please enter the correct transfer sms', '', '', '', '', '', 'እባክዎ ትክክለኛውን የዝውውር ኤስኤምኤስ ያስገቡ'],
-  ['This order has expired. Please start again.', '', '', '', '', '', 'የዚህ ትዕዛዝ ጊዜ አብቅቷል። እባክዎ እንደገና ይጀምሩ።'],
-  ['Submitted. Our team is checking your payment.', '', '', '', '', '', 'ተልኳል። ቡድናችን ክፍያዎን በመፈተሽ ላይ ነው።'],
-  ['This recharge is no longer open. Start a new one.', '', '', '', '', '', 'ይህ ሂሳብ መሙላት ከአሁን በኋላ ክፍት አይደለም። አዲስ ይጀምሩ።'],
-  ['Could not load payment options', '', '', '', '', '', 'የክፍያ አማራጮችን መጫን አልተቻለም'],
-  ['To reset your password, please contact Support. They will set a new one for you.', '', '', '', '', '', 'የይለፍ ቃልዎን ለመቀየር እባክዎ ድጋፍን ያነጋግሩ። አዲስ ይሰጡዎታል።'],
-  ['Forgot your password?', '', '', '', '', '', 'የይለፍ ቃልዎን ረሱ?'],
-  ['We will help you get back in.', '', '', '', '', '', 'ተመልሰው እንዲገቡ እንረዳዎታለን።'],
-  ['Please contact Support to reset your password.', '', '', '', '', '', 'የይለፍ ቃልዎን ለመቀየር እባክዎ ድጋፍን ያነጋግሩ።'],
+  ['Step 1', '', '', 'Étape 1', '', '', 'ደረጃ 1'],
+  ['Copy account for payment', '', '', 'Copier le compte pour le paiement', '', '', 'ለክፍያ መለያውን ቅዳ'],
+  ['Payment Channel', '', '', 'Moyen de paiement', '', '', 'የክፍያ መንገድ'],
+  ['Account Name', '', '', 'Nom du compte', '', '', 'የመለያ ስም'],
+  ['Account Number', '', '', 'Numéro de compte', '', '', 'የመለያ ቁጥር'],
+  ['switch', '', '', 'changer', '', '', 'ቀይር'],
+  ['copy', '', '', 'copier', '', '', 'ቅዳ'],
+  ['After the transfer is complete → check the SMS. The code starts with: "v2-" or "FT"', '', '', 'Une fois le virement effectué → consultez le SMS. Le code commence par : « v2- » ou « FT »', '', '', 'ዝውውሩ ከተጠናቀቀ በኋላ → ኤስኤምኤስን ይመልከቱ። ኮዱ የሚጀምረው በ "v2-" ወይም "FT" ነው'],
+  ['v2-hf = enter the 23-character code', '', '', 'v2-hf = saisissez le code de 23 caractères', '', '', 'v2-hf = ባለ 23 ቁምፍ ኮዱን ያስገቡ'],
+  ['FT = enter the 12-character code', '', '', 'FT = saisissez le code de 12 caractères', '', '', 'FT = ባለ 12 ቁምፍ ኮዱን ያስገቡ'],
+  ['Telebirr = 10 characters only', '', '', 'Telebirr = 10 caractères uniquement', '', '', 'ቴሌብር = 10 ቁምፍ ብቻ'],
+  ['Step 2', '', '', 'Étape 2', '', '', 'ደረጃ 2'],
+  ['Paste payment SMS or enter v2- or FT', '', '', 'Collez le SMS de paiement ou saisissez v2- ou FT', '', '', 'የክፍያ ኤስኤምኤስ ይለጥፉ ወይም v2- ወይም FT ያስገቡ'],
+  ['Paste the confirmation message here, or enter the code (FT or v2-):', '', '', 'Collez ici le message de confirmation, ou saisissez le code (FT ou v2-) :', '', '', 'የማረጋገጫ መልዕክቱን እዚህ ይለጥፉ፣ ወይም ኮዱን ያስገቡ (FT ወይም v2-)፡'],
+  ['Do not save the account number! It changes in real time. Otherwise the transfer will fail.', '', '', 'N\'enregistrez pas le numéro de compte ! Il change en temps réel. Sinon le virement échouera.', '', '', 'የመለያ ቁጥሩን አያስቀምጡ! በእውነተኛ ጊዜ ይቀየራል። ካልሆነ ዝውውሩ አይሳካም።'],
+  ['Name Copied', '', '', 'Nom copié', '', '', 'ስሙ ተቀድቷል'],
+  ['Copied.', '', '', 'Copié.', '', '', 'ተቀድቷል።'],
+  ['please enter the correct transfer sms', '', '', 'veuillez saisir le bon SMS de virement', '', '', 'እባክዎ ትክክለኛውን የዝውውር ኤስኤምኤስ ያስገቡ'],
+  ['This order has expired. Please start again.', '', '', 'Cette commande a expiré. Veuillez recommencer.', '', '', 'የዚህ ትዕዛዝ ጊዜ አብቅቷል። እባክዎ እንደገና ይጀምሩ።'],
+  ['Submitted. Our team is checking your payment.', '', '', 'Envoyé. Notre équipe vérifie votre paiement.', '', '', 'ተልኳል። ቡድናችን ክፍያዎን በመፈተሽ ላይ ነው።'],
+  ['This recharge is no longer open. Start a new one.', '', '', 'Cette recharge n\'est plus ouverte. Lancez-en une nouvelle.', '', '', 'ይህ ሂሳብ መሙላት ከአሁን በኋላ ክፍት አይደለም። አዲስ ይጀምሩ።'],
+  ['Could not load payment options', '', '', 'Impossible de charger les options de paiement', '', '', 'የክፍያ አማራጮችን መጫን አልተቻለም'],
+  ['To reset your password, please contact Support. They will set a new one for you.', '', '', 'Pour réinitialiser votre mot de passe, veuillez contacter l\'assistance. Elle en définira un nouveau pour vous.', '', '', 'የይለፍ ቃልዎን ለመቀየር እባክዎ ድጋፍን ያነጋግሩ። አዲስ ይሰጡዎታል።'],
+  ['Forgot your password?', '', '', 'Mot de passe oublié ?', '', '', 'የይለፍ ቃልዎን ረሱ?'],
+  ['We will help you get back in.', '', '', 'Nous vous aiderons à retrouver l\'accès.', '', '', 'ተመልሰው እንዲገቡ እንረዳዎታለን።'],
+  ['Please contact Support to reset your password.', '', '', 'Veuillez contacter l\'assistance pour réinitialiser votre mot de passe.', '', '', 'የይለፍ ቃልዎን ለመቀየር እባክዎ ድጋፍን ያነጋግሩ።'],
   ['Could not start deposit', 'Tetusobodde kutandika kuteeka ssente', 'Imeshindwa kuanza kuweka pesa', 'Impossible de démarrer la recharge', 'Ntibyashobotse gutangira kubitsa', 'Tikibaasiikire kutandika kuta sente', 'ሂሳብ መሙላትን መጀመር አልተቻለም'],
-  ['Login', '', '', '', '', '', 'ግባ'],
-  ['Login Password (at least 10 characters)', '', '', '', '', '', 'የመግቢያ የይለፍ ቃል (ቢያንስ 10 ቁምፊዎች)'],
-  ['Invitation Code', '', '', '', '', '', 'የግብዣ ኮድ'],
+  ['Login', '', '', 'Connexion', '', '', 'ግባ'],
+  ['Login Password (at least 10 characters)', '', '', 'Mot de passe de connexion (10 caractères minimum)', '', '', 'የመግቢያ የይለፍ ቃል (ቢያንስ 10 ቁምፊዎች)'],
+  ['Invitation Code', '', '', 'Code d\'invitation', '', '', 'የግብዣ ኮድ'],
   ['PAY-B', '', '', '', '', '', 'ክፍያ-ለ'],
   ['PAY-C', '', '', '', '', '', 'ክፍያ-ሐ'],
-  ['If the deposit is not received, please contact Support.', '', '', '', '', '', 'ተቀማጩ ካልደረሰ እባክዎ ድጋፍን ያነጋግሩ።'],
-  ['Phone Number', '', '', '', '', '', 'ስልክ ቁጥር'],
-  ['AVAILABLE BALANCE', '', '', '', '', '', 'ያለ ቀሪ ሂሳብ'],
+  ['If the deposit is not received, please contact Support.', '', '', 'Si le dépôt n\'est pas reçu, veuillez contacter l\'assistance.', '', '', 'ተቀማጩ ካልደረሰ እባክዎ ድጋፍን ያነጋግሩ።'],
+  ['Phone Number', '', '', 'Numéro de téléphone', '', '', 'ስልክ ቁጥር'],
+  ['AVAILABLE BALANCE', '', '', 'SOLDE DISPONIBLE', '', '', 'ያለ ቀሪ ሂሳብ'],
   ['MOBILE MONEY', '', '', '', '', '', 'ሞባይል ገንዘብ'],
-  ['ACCOUNT HOLDER', '', '', '', '', '', 'የሂሳብ ባለቤት'],
-  ['One cash-out at a time. Wait for a pending request to finish before the next.', '', '', '', '', '', 'በአንድ ጊዜ አንድ ወጪ ብቻ። ቀጣዩን ከመጠየቅዎ በፊት በመጠባበቅ ላይ ያለው ጥያቄ እስኪጠናቀቅ ይጠብቁ።'],
-  ['Type wallet provider to search', '', '', '', '', '', 'ለመፈለግ የቦርሳ አቅራቢ ይጻፉ'],
-  ['Account number', '', '', '', '', '', 'የሂሳብ ቁጥር'],
-  ['Balance Record', '', '', '', '', '', 'የሂሳብ መዝገብ'],
-  ['CURRENT BALANCE', '', '', '', '', '', 'የአሁኑ ቀሪ ሂሳብ'],
+  ['ACCOUNT HOLDER', '', '', 'TITULAIRE DU COMPTE', '', '', 'የሂሳብ ባለቤት'],
+  ['One cash-out at a time. Wait for a pending request to finish before the next.', '', '', 'Un retrait à la fois. Attendez qu\'une demande en attente soit terminée avant la suivante.', '', '', 'በአንድ ጊዜ አንድ ወጪ ብቻ። ቀጣዩን ከመጠየቅዎ በፊት በመጠባበቅ ላይ ያለው ጥያቄ እስኪጠናቀቅ ይጠብቁ።'],
+  ['Type wallet provider to search', '', '', 'Saisissez l\'opérateur du portefeuille pour rechercher', '', '', 'ለመፈለግ የቦርሳ አቅራቢ ይጻፉ'],
+  ['Account number', '', '', 'Numéro de compte', '', '', 'የሂሳብ ቁጥር'],
+  ['Balance Record', '', '', 'Historique du solde', '', '', 'የሂሳብ መዝገብ'],
+  ['CURRENT BALANCE', '', '', 'SOLDE ACTUEL', '', '', 'የአሁኑ ቀሪ ሂሳብ'],
   ['Fruit', '', '', '', '', '', 'ፍራፍሬ'],
-  ['Deposit: Paid', '', '', '', '', '', 'ተቀማጭ፦ ተከፍሏል'],
-  ['Processing Payment', '', '', '', '', '', 'ክፍያ በሂደት ላይ'],
-  ['Turntable win', '', '', '', '', '', 'የመሽከርከሪያ ድል'],
-  ['Level 1 Commission', '', '', '', '', '', 'የደረጃ 1 ኮሚሽን'],
-  ['Daily Earnings', '', '', '', '', '', 'ዕለታዊ ገቢ'],
-  ['Load More', '', '', '', '', '', 'ተጨማሪ ጫን'],
-  ['Change Login Password', '', '', '', '', '', 'የመግቢያ የይለፍ ቃል ቀይር'],
-  ['Old Password', '', '', '', '', '', 'የድሮ የይለፍ ቃል'],
-  ['New Password', '', '', '', '', '', 'አዲስ የይለፍ ቃል'],
-  ['Change Password', '', '', '', '', '', 'የይለፍ ቃል ቀይር'],
-  ['Enter new password (at least 10 characters)', '', '', '', '', '', 'አዲስ የይለፍ ቃል ያስገቡ (ቢያንስ 10 ቁምፊዎች)'],
-  ['Change Trade Password', '', '', '', '', '', 'የንግድ የይለፍ ቃል ቀይር'],
-  ['Enter new password (6 digits)', '', '', '', '', '', 'አዲስ የይለፍ ቃል ያስገቡ (6 አሃዞች)'],
-  ['MYSTERY TREASURE', '', '', '', '', '', 'ሚስጥራዊ ሀብት'],
-  ['UNLOCK TREASURE', '', '', '', '', '', 'ሀብቱን ክፈት'],
-  ['Team deposits', '', '', '', '', '', 'የቡድን ተቀማጮች'],
-  ['Referrals', '', '', '', '', '', 'ሪፈራሎች'],
-  ['Deposits', '', '', '', '', '', 'ተቀማጮች'],
-  ['No tasks yet.', '', '', '', '', '', 'እስካሁን ተግባር የለም።'],
-  ['Product', '', '', '', '', '', 'ምርት'],
-  ['Processing your deposit', '', '', '', '', '', 'ተቀማጭዎን በማስኬድ ላይ'],
-  ['Approve the payment to complete your deposit.', '', '', '', '', '', 'ተቀማጭዎን ለማጠናቀቅ ክፍያውን ያጽድቁ።'],
+  ['Deposit: Paid', '', '', 'Dépôt : payé', '', '', 'ተቀማጭ፦ ተከፍሏል'],
+  ['Processing Payment', '', '', 'Paiement en cours', '', '', 'ክፍያ በሂደት ላይ'],
+  ['Turntable win', '', '', 'Gain de la roue', '', '', 'የመሽከርከሪያ ድል'],
+  ['Level 1 Commission', '', '', 'Commission de niveau 1', '', '', 'የደረጃ 1 ኮሚሽን'],
+  ['Daily Earnings', '', '', 'Gains quotidiens', '', '', 'ዕለታዊ ገቢ'],
+  ['Load More', '', '', 'Voir plus', '', '', 'ተጨማሪ ጫን'],
+  ['Change Login Password', '', '', 'Changer le mot de passe de connexion', '', '', 'የመግቢያ የይለፍ ቃል ቀይር'],
+  ['Old Password', '', '', 'Ancien mot de passe', '', '', 'የድሮ የይለፍ ቃል'],
+  ['New Password', '', '', 'Nouveau mot de passe', '', '', 'አዲስ የይለፍ ቃል'],
+  ['Change Password', '', '', 'Changer le mot de passe', '', '', 'የይለፍ ቃል ቀይር'],
+  ['Enter new password (at least 10 characters)', '', '', 'Saisissez le nouveau mot de passe (10 caractères minimum)', '', '', 'አዲስ የይለፍ ቃል ያስገቡ (ቢያንስ 10 ቁምፊዎች)'],
+  ['Change Trade Password', '', '', 'Changer le mot de passe de transaction', '', '', 'የንግድ የይለፍ ቃል ቀይር'],
+  ['Enter new password (6 digits)', '', '', 'Saisissez le nouveau mot de passe (6 chiffres)', '', '', 'አዲስ የይለፍ ቃል ያስገቡ (6 አሃዞች)'],
+  ['MYSTERY TREASURE', '', '', 'TRÉSOR MYSTÈRE', '', '', 'ሚስጥራዊ ሀብት'],
+  ['UNLOCK TREASURE', '', '', 'DÉBLOQUER LE TRÉSOR', '', '', 'ሀብቱን ክፈት'],
+  ['Team deposits', '', '', 'Dépôts de l\'équipe', '', '', 'የቡድን ተቀማጮች'],
+  ['Referrals', '', '', 'Parrainages', '', '', 'ሪፈራሎች'],
+  ['Deposits', '', '', 'Dépôts', '', '', 'ተቀማጮች'],
+  ['No tasks yet.', '', '', 'Aucune tâche pour l\'instant.', '', '', 'እስካሁን ተግባር የለም።'],
+  ['Product', '', '', 'Produit', '', '', 'ምርት'],
+  ['Processing your deposit', '', '', 'Traitement de votre dépôt', '', '', 'ተቀማጭዎን በማስኬድ ላይ'],
+  ['Approve the payment to complete your deposit.', '', '', 'Validez le paiement pour finaliser votre dépôt.', '', '', 'ተቀማጭዎን ለማጠናቀቅ ክፍያውን ያጽድቁ።'],
 ];
 // ── SENTENCES WITH A FIGURE SPLICED INTO THEM ──
 // The table above matches a WHOLE string, which by construction can never
@@ -952,47 +956,47 @@ var LANG_PATTERNS = [
   ['Withdraw of {0} is processing. You will receive {1} after the {2}% charge.', 'Okuggyamu {0} kukolebwako. Ojja kufuna {1} oluvannyuma lw\'ossente z\'obuweereza eza {2}%.', 'Kutoa {0} kunashughulikiwa. Utapokea {1} baada ya ada ya {2}%.', 'Le retrait de {0} est en cours. Vous recevrez {1} après les frais de {2} %.', 'Kubikuza {0} birimo gutunganywa. Uzabona {1} nyuma y\'amafaranga ya serivisi ya {2}%.', 'Okwihamu {0} nikukorwaho. Noija kutunga {1} bwanyima ya sente z\'obuheereza eza {2}%.', 'የ{0} ገንዘብ ማውጣት በመከናወን ላይ ነው። ከ{2}% ክፍያ በኋላ {1} ይቀበላሉ።'],
   ['{0} is now running. You will find it under My Products.', '{0} kitandise. Ojja kukisanga mu Byamaguzi Byange.', '{0} sasa inaendelea. Utaipata chini ya Bidhaa Zangu.', '{0} est maintenant actif. Vous le trouverez dans Mes produits.', '{0} ubu birakora. Uzabisanga muri Ibicuruzwa Byanjye.', '{0} kitandikire. Noija kukishanga omu Byamaguzi Byangye.', '{0} አሁን እየሰራ ነው። በ«የእኔ ምርቶች» ስር ያገኙታል።'],
   ['Already installed, or your browser doesn\'t support installing {0}.', 'Eteekeddwawo dda, oba browser yo teteeka {0}.', 'Tayari imesakinishwa, au kivinjari chako hakiruhusu kusakinisha {0}.', 'Déjà installée, ou votre navigateur ne permet pas d\'installer {0}.', 'Yamaze gushyirwaho, cyangwa mushakisha wawe ntiyemera gushyiraho {0}.', 'Eteirweho, nari browser yaawe teine bushoboorozi bw\'okuteeraho {0}.', 'አስቀድሞ ተጭኗል፣ ወይም አሳሽዎ {0} መጫንን አይደግፍም።'],
-  ['{0} paid', '', '', '', '', '', '{0} ተከፍሏል'],
-  ['{0} Days', '', '', '', '', '', '{0} ቀናት'],
-  ['Progress: {0} / {1}', '', '', '', '', '', 'እድገት፡ {0} / {1}'],
-  ['Enter at least {0} and the mobile money number to charge.', '', '', '', '', '', 'ቢያንስ {0} እና የሚከፈልበትን የሞባይል ገንዘብ ቁጥር ያስገቡ።'],
-  ['At least {0}.', '', '', '', '', '', 'ቢያንስ {0}።'],
-  ['1 USDT = {0} · you will receive', '', '', '', '', '', '1 USDT = {0} · የሚቀበሉት'],
-  ['Minimum {0} (about {1} USDT). Enter it and tap Get payment amount. You are given an exact amount with extra digits that belong only to you.', '', '', '', '', '', 'ዝቅተኛው {0} (ወደ {1} USDT)። ያስገቡትና «የክፍያ መጠን ያግኙ» ን ይንኩ። የእርስዎ ብቻ የሆኑ ተጨማሪ አሃዞች ያሉት ትክክለኛ መጠን ይሰጥዎታል።'],
-  ['Minimum {0}. Review the fee and the amount you will receive before confirming. Use a multiple of {1}.', '', '', '', '', '', 'ዝቅተኛው {0}። ከማረጋገጥዎ በፊት ክፍያውን እና የሚቀበሉትን መጠን ይመልከቱ። የ{1} ብዜት ይጠቀሙ።'],
-  ['Protect your {0} account with a new password.', '', '', '', '', '', '{0} መለያዎን በአዲስ የይለፍ ቃል ይጠብቁ።'],
-  ['Check in once each day to earn {0}.', '', '', '', '', '', '{0} ለማግኘት በየቀኑ አንድ ጊዜ ተመዝግበው ይግቡ።'],
-  ['Minimum recharge {0}. Minimum withdraw {1}, a {2}% fee applies. Referral commission is paid once, after the first confirmed recharge: Level 1 {3}%, Level 2 {4}%, Level 3 {5}%.', '', '', '', '', '', 'ዝቅተኛ ሂሳብ መሙላት {0}። ዝቅተኛ ገንዘብ ማውጣት {1}፣ {2}% ክፍያ ይከፈላል። የግብዣ ኮሚሽን የሚከፈለው ከመጀመሪያው የተረጋገጠ ሂሳብ መሙላት በኋላ አንድ ጊዜ ነው፡ ደረጃ 1 {3}%፣ ደረጃ 2 {4}%፣ ደረጃ 3 {5}%።'],
-  ['{0} Jan {1} at {2}', '', '', '', '', '', '{0} ጃንዋሪ {1}፣ {2}'],
-  ['{0} Feb {1} at {2}', '', '', '', '', '', '{0} ፌብሩዋሪ {1}፣ {2}'],
-  ['{0} Mar {1} at {2}', '', '', '', '', '', '{0} ማርች {1}፣ {2}'],
-  ['{0} Apr {1} at {2}', '', '', '', '', '', '{0} ኤፕሪል {1}፣ {2}'],
-  ['{0} May {1} at {2}', '', '', '', '', '', '{0} ሜይ {1}፣ {2}'],
-  ['{0} Jun {1} at {2}', '', '', '', '', '', '{0} ጁን {1}፣ {2}'],
-  ['{0} Jul {1} at {2}', '', '', '', '', '', '{0} ጁላይ {1}፣ {2}'],
-  ['{0} Aug {1} at {2}', '', '', '', '', '', '{0} ኦገስት {1}፣ {2}'],
-  ['{0} Sep {1} at {2}', '', '', '', '', '', '{0} ሴፕቴምበር {1}፣ {2}'],
-  ['{0} Oct {1} at {2}', '', '', '', '', '', '{0} ኦክቶበር {1}፣ {2}'],
-  ['{0} Nov {1} at {2}', '', '', '', '', '', '{0} ኖቬምበር {1}፣ {2}'],
-  ['{0} Dec {1} at {2}', '', '', '', '', '', '{0} ዲሴምበር {1}፣ {2}'],
-  ['Term {0} Days', '', '', '', '', '', 'ጊዜ {0} ቀናት'],
-  ['You need {0} to claim this, you have {1}.', '', '', '', '', '', 'ይህን ለመጠየቅ {0} ያስፈልግዎታል፣ ያለዎት {1} ነው።'],
-  ['Bought {0} for {1}', '', '', '', '', '', '{0} በ{1} ተገዝቷል'],
-  ['Amount is too large (max {0}).', '', '', '', '', '', 'መጠኑ በጣም ትልቅ ነው (ከፍተኛ {0})።'],
-  ['Minimum amount is {0}', '', '', '', '', '', 'ዝቅተኛው መጠን {0} ነው'],
-  ['Minimum amount is {0} (about {1} USDT)', '', '', '', '', '', 'ዝቅተኛው መጠን {0} ነው (ወደ {1} USDT)'],
-  ['Too many wrong Trade Password attempts. Try again in {0} minute{1}.', '', '', '', '', '', 'ብዙ የተሳሳቱ የግብይት የይለፍ ቃል ሙከራዎች። ከ{0} ደቂቃ{1} በኋላ እንደገና ይሞክሩ።'],
-  ['Minimum withdraw is {0}', '', '', '', '', '', 'ዝቅተኛው የገንዘብ ማውጫ {0} ነው'],
-  ['You can save up to {0} withdrawal accounts. Remove one first.', '', '', '', '', '', 'እስከ {0} የገንዘብ ማውጫ መለያዎች ማስቀመጥ ይችላሉ። መጀመሪያ አንዱን ያስወግዱ።'],
-  ['Check the name and {0} above. Your payout goes to this linked wallet.', '', '', '', '', '', 'ከላይ ያለውን ስም እና {0} ያረጋግጡ። ክፍያዎ ወደዚህ የተያያዘ ቦርሳ ይሄዳል።'],
-  ['{0} is now running. See it in My Assets below Daily Check-in.', '', '', '', '', '', '{0} አሁን እየሰራ ነው። ከዕለታዊ ተመዝግቦ መግባት በታች ባለው «የእኔ ንብረቶች» ውስጥ ይመልከቱት።'],
-  ['Enter a valid {0} mobile number.', '', '', '', '', '', 'ትክክለኛ የ{0} የሞባይል ቁጥር ያስገቡ።'],
-  ['If the prompt does not come up, dial {0} on that phone to find and approve the pending payment yourself.', '', '', '', '', '', 'ጥያቄው ካልመጣ፣ በዚያ ስልክ ላይ {0} ይደውሉና በመጠባበቅ ላይ ያለውን ክፍያ እራስዎ ይፈልጉና ያጽድቁ።'],
-  ['This recharge did not go through. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Your {0} balance has not changed.', '', '', '', '', '', 'ይህ ሂሳብ መሙላት አልተሳካም። ጥያቄውን በጊዜ ካላጸደቁ፣ ከሰረዙት፣ ወይም በቂ ገንዘብ ከሌለዎት ይህ ሊከሰት ይችላል። የ{0} ቀሪ ሂሳብዎ አልተቀየረም።'],
-  ['Enter at least {0}.', '', '', '', '', '', 'ቢያንስ {0} ያስገቡ።'],
-  ['Withdrawal amounts should be between {0} and your available balance, in multiples of {1}.', '', '', '', '', '', 'የመውጫ መጠን ከ{0} እስከ ያለዎት ቀሪ ሂሳብ ድረስ፣ በ{1} ብዜት መሆን አለበት።'],
-  ['Withdrawal time: {0} - {1}.', '', '', '', '', '', 'የመውጫ ሰዓት፦ {0} - {1}።'],
-  ['Bought {0}', '', '', '', '', '', 'ተገዝቷል {0}'],
+  ['{0} paid', '', '', '{0} payé', '', '', '{0} ተከፍሏል'],
+  ['{0} Days', '', '', '{0} jours', '', '', '{0} ቀናት'],
+  ['Progress: {0} / {1}', '', '', 'Progression : {0} / {1}', '', '', 'እድገት፡ {0} / {1}'],
+  ['Enter at least {0} and the mobile money number to charge.', '', '', 'Saisissez au moins {0} et le numéro Mobile Money à débiter.', '', '', 'ቢያንስ {0} እና የሚከፈልበትን የሞባይል ገንዘብ ቁጥር ያስገቡ።'],
+  ['At least {0}.', '', '', 'Au moins {0}.', '', '', 'ቢያንስ {0}።'],
+  ['1 USDT = {0} · you will receive', '', '', '1 USDT = {0} · vous recevrez', '', '', '1 USDT = {0} · የሚቀበሉት'],
+  ['Minimum {0} (about {1} USDT). Enter it and tap Get payment amount. You are given an exact amount with extra digits that belong only to you.', '', '', 'Minimum {0} (environ {1} USDT). Saisissez-le et touchez « Obtenir le montant à payer ». Vous recevez un montant exact avec des chiffres supplémentaires qui vous sont propres.', '', '', 'ዝቅተኛው {0} (ወደ {1} USDT)። ያስገቡትና «የክፍያ መጠን ያግኙ» ን ይንኩ። የእርስዎ ብቻ የሆኑ ተጨማሪ አሃዞች ያሉት ትክክለኛ መጠን ይሰጥዎታል።'],
+  ['Minimum {0}. Review the fee and the amount you will receive before confirming. Use a multiple of {1}.', '', '', 'Minimum {0}. Vérifiez les frais et le montant que vous recevrez avant de confirmer. Utilisez un multiple de {1}.', '', '', 'ዝቅተኛው {0}። ከማረጋገጥዎ በፊት ክፍያውን እና የሚቀበሉትን መጠን ይመልከቱ። የ{1} ብዜት ይጠቀሙ።'],
+  ['Protect your {0} account with a new password.', '', '', 'Protégez votre compte {0} avec un nouveau mot de passe.', '', '', '{0} መለያዎን በአዲስ የይለፍ ቃል ይጠብቁ።'],
+  ['Check in once each day to earn {0}.', '', '', 'Pointez une fois par jour pour gagner {0}.', '', '', '{0} ለማግኘት በየቀኑ አንድ ጊዜ ተመዝግበው ይግቡ።'],
+  ['Minimum recharge {0}. Minimum withdraw {1}, a {2}% fee applies. Referral commission is paid once, after the first confirmed recharge: Level 1 {3}%, Level 2 {4}%, Level 3 {5}%.', '', '', 'Recharge minimum {0}. Retrait minimum {1}, des frais de {2} % s\'appliquent. La commission de parrainage est versée une seule fois, après la première recharge confirmée : niveau 1 {3} %, niveau 2 {4} %, niveau 3 {5} %.', '', '', 'ዝቅተኛ ሂሳብ መሙላት {0}። ዝቅተኛ ገንዘብ ማውጣት {1}፣ {2}% ክፍያ ይከፈላል። የግብዣ ኮሚሽን የሚከፈለው ከመጀመሪያው የተረጋገጠ ሂሳብ መሙላት በኋላ አንድ ጊዜ ነው፡ ደረጃ 1 {3}%፣ ደረጃ 2 {4}%፣ ደረጃ 3 {5}%።'],
+  ['{0} Jan {1} at {2}', '', '', '{0} janv. {1} à {2}', '', '', '{0} ጃንዋሪ {1}፣ {2}'],
+  ['{0} Feb {1} at {2}', '', '', '{0} févr. {1} à {2}', '', '', '{0} ፌብሩዋሪ {1}፣ {2}'],
+  ['{0} Mar {1} at {2}', '', '', '{0} mars {1} à {2}', '', '', '{0} ማርች {1}፣ {2}'],
+  ['{0} Apr {1} at {2}', '', '', '{0} avr. {1} à {2}', '', '', '{0} ኤፕሪል {1}፣ {2}'],
+  ['{0} May {1} at {2}', '', '', '{0} mai {1} à {2}', '', '', '{0} ሜይ {1}፣ {2}'],
+  ['{0} Jun {1} at {2}', '', '', '{0} juin {1} à {2}', '', '', '{0} ጁን {1}፣ {2}'],
+  ['{0} Jul {1} at {2}', '', '', '{0} juil. {1} à {2}', '', '', '{0} ጁላይ {1}፣ {2}'],
+  ['{0} Aug {1} at {2}', '', '', '{0} août {1} à {2}', '', '', '{0} ኦገስት {1}፣ {2}'],
+  ['{0} Sep {1} at {2}', '', '', '{0} sept. {1} à {2}', '', '', '{0} ሴፕቴምበር {1}፣ {2}'],
+  ['{0} Oct {1} at {2}', '', '', '{0} oct. {1} à {2}', '', '', '{0} ኦክቶበር {1}፣ {2}'],
+  ['{0} Nov {1} at {2}', '', '', '{0} nov. {1} à {2}', '', '', '{0} ኖቬምበር {1}፣ {2}'],
+  ['{0} Dec {1} at {2}', '', '', '{0} déc. {1} à {2}', '', '', '{0} ዲሴምበር {1}፣ {2}'],
+  ['Term {0} Days', '', '', 'Durée {0} jours', '', '', 'ጊዜ {0} ቀናት'],
+  ['You need {0} to claim this, you have {1}.', '', '', 'Il vous faut {0} pour réclamer ceci, vous avez {1}.', '', '', 'ይህን ለመጠየቅ {0} ያስፈልግዎታል፣ ያለዎት {1} ነው።'],
+  ['Bought {0} for {1}', '', '', '{0} acheté pour {1}', '', '', '{0} በ{1} ተገዝቷል'],
+  ['Amount is too large (max {0}).', '', '', 'Le montant est trop élevé (max. {0}).', '', '', 'መጠኑ በጣም ትልቅ ነው (ከፍተኛ {0})።'],
+  ['Minimum amount is {0}', '', '', 'Le montant minimum est de {0}', '', '', 'ዝቅተኛው መጠን {0} ነው'],
+  ['Minimum amount is {0} (about {1} USDT)', '', '', 'Le montant minimum est de {0} (environ {1} USDT)', '', '', 'ዝቅተኛው መጠን {0} ነው (ወደ {1} USDT)'],
+  ['Too many wrong Trade Password attempts. Try again in {0} minute{1}.', '', '', 'Trop de tentatives erronées du mot de passe de transaction. Réessayez dans {0} minute{1}.', '', '', 'ብዙ የተሳሳቱ የግብይት የይለፍ ቃል ሙከራዎች። ከ{0} ደቂቃ{1} በኋላ እንደገና ይሞክሩ።'],
+  ['Minimum withdraw is {0}', '', '', 'Le retrait minimum est de {0}', '', '', 'ዝቅተኛው የገንዘብ ማውጫ {0} ነው'],
+  ['You can save up to {0} withdrawal accounts. Remove one first.', '', '', 'Vous pouvez enregistrer jusqu\'à {0} comptes de retrait. Supprimez-en un d\'abord.', '', '', 'እስከ {0} የገንዘብ ማውጫ መለያዎች ማስቀመጥ ይችላሉ። መጀመሪያ አንዱን ያስወግዱ።'],
+  ['Check the name and {0} above. Your payout goes to this linked wallet.', '', '', 'Vérifiez le nom et {0} ci-dessus. Votre retrait est versé sur ce portefeuille lié.', '', '', 'ከላይ ያለውን ስም እና {0} ያረጋግጡ። ክፍያዎ ወደዚህ የተያያዘ ቦርሳ ይሄዳል።'],
+  ['{0} is now running. See it in My Assets below Daily Check-in.', '', '', '{0} est maintenant actif. Retrouvez-le dans Mes actifs, sous Pointage quotidien.', '', '', '{0} አሁን እየሰራ ነው። ከዕለታዊ ተመዝግቦ መግባት በታች ባለው «የእኔ ንብረቶች» ውስጥ ይመልከቱት።'],
+  ['Enter a valid {0} mobile number.', '', '', 'Saisissez un numéro de mobile {0} valide.', '', '', 'ትክክለኛ የ{0} የሞባይል ቁጥር ያስገቡ።'],
+  ['If the prompt does not come up, dial {0} on that phone to find and approve the pending payment yourself.', '', '', 'Si la demande n\'apparaît pas, composez {0} sur ce téléphone pour retrouver et valider vous-même le paiement en attente.', '', '', 'ጥያቄው ካልመጣ፣ በዚያ ስልክ ላይ {0} ይደውሉና በመጠባበቅ ላይ ያለውን ክፍያ እራስዎ ይፈልጉና ያጽድቁ።'],
+  ['This recharge did not go through. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Your {0} balance has not changed.', '', '', 'Cette recharge n\'a pas abouti. Cela peut arriver si vous n\'avez pas validé la demande à temps, si vous l\'avez annulée ou si votre solde était insuffisant. Votre solde {0} n\'a pas changé.', '', '', 'ይህ ሂሳብ መሙላት አልተሳካም። ጥያቄውን በጊዜ ካላጸደቁ፣ ከሰረዙት፣ ወይም በቂ ገንዘብ ከሌለዎት ይህ ሊከሰት ይችላል። የ{0} ቀሪ ሂሳብዎ አልተቀየረም።'],
+  ['Enter at least {0}.', '', '', 'Saisissez au moins {0}.', '', '', 'ቢያንስ {0} ያስገቡ።'],
+  ['Withdrawal amounts should be between {0} and your available balance, in multiples of {1}.', '', '', 'Les montants de retrait doivent être compris entre {0} et votre solde disponible, par multiples de {1}.', '', '', 'የመውጫ መጠን ከ{0} እስከ ያለዎት ቀሪ ሂሳብ ድረስ፣ በ{1} ብዜት መሆን አለበት።'],
+  ['Withdrawal time: {0} - {1}.', '', '', 'Heures de retrait : {0} - {1}.', '', '', 'የመውጫ ሰዓት፦ {0} - {1}።'],
+  ['Bought {0}', '', '', '{0} acheté', '', '', 'ተገዝቷል {0}'],
 ];
 // ==== I18N TABLE: SHARED WITH THE ADMIN PANEL - END ====
 // ==== I18N ENGINE: SHARED WITH THE ADMIN PANEL - BEGIN ====
@@ -1344,6 +1348,8 @@ try {
 // Soda-specific loader treatment -- the replacement loader shows a plain
 // numeric percentage only, which needs no translation at all.
 function applyLanguage(){
+  paintLangButton();
+  return;
   try {
     translateTree(document.body);
     const btn = $('langBtnLabel');
@@ -1380,6 +1386,8 @@ function resolveLang(){
   return allowed[0] || 'en';
 }
 function applyRegionLanguages(){
+  LANG_ALLOWED = ['en']; LANG = 'en'; paintLangButton();
+  return;
   const list = (REGION && Array.isArray(REGION.languages) ? REGION.languages : [])
     .map(c => String(c || '').toLowerCase()).filter(c => LANG_CODES.includes(c));
   LANG_ALLOWED = list.length ? list.filter((c, i) => list.indexOf(c) === i) : ['en'];
@@ -1428,8 +1436,8 @@ function openLangPicker(){
   // data-no-i18n on the whole sheet: every name in it is already written in
   // its own language and must never be put through the table.
   bg.innerHTML = `<div class="lang-sheet">
-    <div class="lang-head"><b>${esc(t('Language'))}</b>
-      <button class="lang-x" onclick="closeLangPicker()" aria-label="Close">
+    <div class="lang-head"><b>${esc(t('Langue'))}</b>
+      <button class="lang-x" onclick="closeLangPicker()" aria-label="Fermer">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
@@ -1615,7 +1623,7 @@ function sanitizePhoneInput(el){
   let digits = el.value.replace(/\D/g, '');
   const len = localLen(), d = dial();
   if (digits.startsWith(d) && digits.length > len) digits = digits.slice(d.length);
-  digits = digits.replace(/^0+/, '');
+  if (keepsLeadZero()) digits = digits.replace(/^00+/, '0'); else digits = digits.replace(/^0+/, '');
   if (digits.length > len) digits = digits.slice(0, len);
   if (el.value !== digits) el.value = digits;
 }
@@ -1666,7 +1674,7 @@ var _memberSession = window.createSodaIdleSession('soda_member_session', functio
   // NOT permanently disable Chrome's autofill-then-submit convenience the
   // way a deliberate "Log Out" tap does.
   window.doLogout({ auto: true }).catch(() => {});
-  notify(window._sessionFailureMessage || 'Your session ended. Please log in again. If this repeats, check automatic date and time on your phone.');
+  notify(window._sessionFailureMessage || 'Votre session a pris fin. Veuillez vous reconnecter. Si cela se répète, vérifiez la date et l\'heure automatiques de votre téléphone.');
   window._sessionFailureMessage = '';
 }, () => post('/auth/session/activity', {}));
 var _apiPending = new Map();
@@ -1695,7 +1703,7 @@ async function apiRequest(path, opts){
   // below), so gating them here would discard that legitimate boot data
   // every single page load.
   const isPublicCall = path.indexOf('/public/') === 0;
-  if (!isPublicCall && STATE.user && path !== '/auth/session/logout' && !_memberSession.check()) return { status:'error', message:'Session expired. Log in again.' };
+  if (!isPublicCall && STATE.user && path !== '/auth/session/logout' && !_memberSession.check()) return { status:'error', message:'Session expirée. Reconnectez-vous.' };
   const startEpoch = STATE.authEpoch;
   // ── Content-Type ONLY WHEN THERE IS A BODY ──
   // MEASURED (test-boot-speed.py, against a real cross-origin server):
@@ -1730,7 +1738,7 @@ async function apiRequest(path, opts){
         const token = await Promise.race([
           window.fbAuth.currentUser.getIdToken(),
           new Promise((_, reject) => {
-            tokenAbort = () => reject(new Error('Authentication request timed out'));
+            tokenAbort = () => reject(new Error('La demande d\'authentification a expiré'));
             if (controller.signal.aborted) tokenAbort();
             else controller.signal.addEventListener('abort', tokenAbort, { once: true });
           })
@@ -1743,15 +1751,15 @@ async function apiRequest(path, opts){
     const resp = await fetch(API_BASE + path, Object.assign({}, opts, { headers, signal: controller.signal }));
     data = await resp.json();
     if (resp.status === 401 && !isPublicCall && STATE.authEpoch === startEpoch && STATE.user) {
-      window._sessionFailureMessage = 'Your login session was rejected. Please log in again. If this continues, contact support.';
+      window._sessionFailureMessage = 'Votre session de connexion a été refusée. Veuillez vous reconnecter. Si cela continue, contactez l\'assistance.';
       _memberSession.expire();
     }
-    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid response');
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Réponse invalide');
   } catch (e) {
     if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', stale: true, message: 'Session changed' };
     return { status: 'error', message: controller.signal.aborted
-      ? 'Request timed out. Check Transaction Statement before trying a payment again.'
-      : 'Could not reach the server. Check your connection and try again.' };
+      ? 'La requête a expiré. Consultez l\'Historique du solde avant de tenter un nouveau paiement.'
+      : 'Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.' };
   } finally {
     clearTimeout(timeout);
     if (opts.signal) opts.signal.removeEventListener('abort', abort);
@@ -1798,8 +1806,8 @@ function showHostParked(msg){
   box.setAttribute('style', 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--snow-canvas,#fbf1e8);');
   box.innerHTML = `<div style="max-width:340px;text-align:center;">
     <div style="font-size:26px;font-weight:800;margin-bottom:12px;">${esc(brandName())}</div>
-    <div style="font-size:16px;line-height:1.55;color:var(--snow-ink,#1a1310);">${esc(msg || 'This address does not serve the app.')}</div>
-    ${host ? `<div style="font-size:13px;margin-top:14px;color:var(--snow-muted,#8c7f76);">You opened <b>${esc(host)}</b>.</div>` : ''}
+    <div style="font-size:16px;line-height:1.55;color:var(--snow-ink,#1a1310);">${esc(msg || 'Cette adresse ne sert pas l\'application.')}</div>
+    ${host ? `<div style="font-size:13px;margin-top:14px;color:var(--snow-muted,#8c7f76);">Vous avez ouvert <b>${esc(host)}</b>.</div>` : ''}
   </div>`;
   document.body.appendChild(box);
 }
@@ -1813,7 +1821,8 @@ function localDigits(raw){
   const d = dial(), len = localLen();
   const s = String(raw||'').replace(/\D/g,'');
   if (s.startsWith(d) && s.length === d.length + len) return s.slice(d.length);
-  if (s.startsWith('0') && s.length === len + 1) return s.slice(1);
+  const pf = regionPrefixes(), keepsZero = pf.length > 0 && pf.every(x => String(x).startsWith('0'));
+  if (!keepsZero && s.startsWith('0') && s.length === len + 1) return s.slice(1);
   if (s.length === len) return s;
   return null;
 }
@@ -1838,7 +1847,8 @@ function phoneToEmail(phone){
   return loginAddressFor(phone, true);
 }
 function loginAddressFor(phone, bare){
-  const local = localDigits(phone) || String(phone).replace(/\D/g,'').replace(/^0+/, '');
+  const pf = regionPrefixes(), keepsZero = pf.length > 0 && pf.every(x => String(x).startsWith('0'));
+  const local = localDigits(phone) || (keepsZero ? String(phone).replace(/\D/g,'') : String(phone).replace(/\D/g,'').replace(/^0+/, ''));
   return (bare ? local : dial() + local) + '@soda-platform.com';
 }
 // Every address this number could have been registered under, most likely
@@ -1899,24 +1909,24 @@ function setBtnLoading(id, loading, label, busy){
 }
 function fbErrMsg(e){
   const code = e && e.code || '';
-  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') return 'Incorrect phone number or password.';
-  if (code === 'auth/user-not-found') return 'No account found for that number.';
-  if (code === 'auth/email-already-in-use') return 'An account with that number already exists.';
-  if (code === 'auth/weak-password') return 'Password must be at least 10 characters.';
-  if (code === 'auth/common-password') return 'That password is too easy to guess. Choose a different one, for example a few letters and numbers that only you know.';
-  if (code === 'auth/too-many-requests') return 'Too many attempts. Try again shortly.';
+  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') return 'Numéro de téléphone ou mot de passe incorrect.';
+  if (code === 'auth/user-not-found') return 'Aucun compte trouvé pour ce numéro.';
+  if (code === 'auth/email-already-in-use') return 'Un compte avec ce numéro existe déjà.';
+  if (code === 'auth/weak-password') return 'Le mot de passe doit comporter au moins 10 caractères.';
+  if (code === 'auth/common-password') return 'Ce mot de passe est trop facile à deviner. Choisissez-en un autre, par exemple quelques lettres et chiffres que vous seul connaissez.';
+  if (code === 'auth/too-many-requests') return 'Trop de tentatives. Réessayez sous peu.';
   // A weak connection is the commonest real failure here, and without these
   // the member was shown Firebase's own developer text, e.g.
   // "Firebase: Error (auth/network-request-failed)."
-  if (code === 'auth/network-request-failed' || code === 'auth/timeout') return 'Could not reach the sign-in service. Check your connection and try again.';
-  if (code === 'auth/user-disabled') return 'This account has been disabled. Contact support.';
-  if (code === 'auth/invalid-email') return 'Enter a valid mobile number.';
+  if (code === 'auth/network-request-failed' || code === 'auth/timeout') return 'Impossible de joindre le service de connexion. Vérifiez votre connexion et réessayez.';
+  if (code === 'auth/user-disabled') return 'Ce compte a été désactivé. Contactez l\'assistance.';
+  if (code === 'auth/invalid-email') return 'Saisissez un numéro de mobile valide.';
   if (code === 'auth/operation-not-allowed' || code === 'auth/internal-error' || code === 'auth/quota-exceeded' || code === 'auth/app-not-authorized' || code === 'auth/invalid-api-key')
-    return 'Sign-in is temporarily unavailable. Please try again shortly.';
+    return 'La connexion est temporairement indisponible. Veuillez réessayer sous peu.';
   const msg = e && e.message;
   // Any other Firebase code, or its "Firebase: ..." wording, is not for members.
-  if (code.indexOf('auth/') === 0 || /^Firebase:/i.test(msg || '')) return 'Something went wrong. Try again.';
-  return msg ? msg : 'Something went wrong. Try again.';
+  if (code.indexOf('auth/') === 0 || /^Firebase:/i.test(msg || '')) return 'Une erreur s\'est produite. Réessayez.';
+  return msg ? msg : 'Une erreur s\'est produite. Réessayez.';
 }
 // ── THE SIGN-IN SERVICE MAY NOT BE THERE ──
 // Firebase is a separate <script type="module"> that imports from gstatic
@@ -1946,7 +1956,7 @@ setTimeout(function(){
   try {
     hideLoadingScreen();
     if ($('app').style.display === 'none') $('authScreen').style.display = '';
-    notify('Could not load the sign-in service. Check your connection, then reload the app.');
+    notify('Impossible de charger le service de connexion. Vérifiez votre connexion, puis rechargez l\'application.');
   } catch (_) {}
 }, Number(window._FIREBASE_WATCHDOG_MS) || 15000);
 // ── SAVED-CREDENTIAL AUTO SIGN-IN ──
@@ -1981,15 +1991,15 @@ window.doLogin = async function(){
   if (window._logoutPromise) await window._logoutPromise;
   const phone = cleanPhone($('loginPhone').value);
   const pass = $('loginPassword').value;
-  if (!phone) return notify('Enter a valid ' + regionName() + ' mobile number.');
-  if (!pass) return notify('Enter your password.');
-  setBtnLoading('loginBtn', true, 'Log In', 'Logging in…');
+  if (!phone) return notify(`Saisissez un numéro de mobile ${regionName()} valide.`);
+  if (!pass) return notify('Entrez votre mot de passe.');
+  setBtnLoading('loginBtn', true, 'Connexion', 'Connexion en cours…');
   window._pendingLoginSuccess = true;
   try {
     // Tries this region's address, then the other shape for the same region
     // -- see loginAddressCandidates(). The LAST error is the one reported, so
     // a genuinely wrong password still reads as a wrong password.
-    if (!(await firebaseReady(8000, 'fbSignIn'))) throw new Error('Sign-in is not available right now. Check your connection and try again.');
+    if (!(await firebaseReady(8000, 'fbSignIn'))) throw new Error('La connexion n\'est pas disponible pour le moment. Vérifiez votre connexion et réessayez.');
     const tries = loginAddressCandidates(phone);
     let email = tries[0], lastErr = null;
     for (const cand of tries) {
@@ -2015,12 +2025,12 @@ window.doLogin = async function(){
   catch (e) {
     window._pendingLoginSuccess = false;
     notify(fbErrMsg(e));
-    setBtnLoading('loginBtn', false, 'Log In');
+    setBtnLoading('loginBtn', false, 'Connexion');
   }
   } finally {
     window._loginInProgress = false;
     if (!window._suppressAutofillLogin) window._autofillLoginTried = false;
-    setBtnLoading('loginBtn', false, 'Log In');
+    setBtnLoading('loginBtn', false, 'Connexion');
   }
 };
 // ── SIGN UP: phone -> OTP -> password -> confirm password ──
@@ -2052,27 +2062,27 @@ window.doRegister = async function(){
   // whether that's the link's code, untouched, or something typed by hand.
   // Soda makes it REQUIRED (Snow allowed skipping it) -- see CLAUDE.md.
   const referral = $('regReferral').value.trim();
-  if (!phone) return regError('Enter a valid ' + regionName() + ' mobile number.');
-  if (!pass || pass.length < 10) return regError('Password must be at least 10 characters.');
-  if (pass !== pass2) return regError('The two passwords do not match.');
-  if (!/^\d{6}$/.test(tradePin)) return regError('Trade Password must be exactly 6 digits.');
+  if (!phone) return regError(`Saisissez un numéro de mobile ${regionName()} valide.`);
+  if (!pass || pass.length < 10) return regError('Le mot de passe doit comporter au moins 10 caractères.');
+  if (pass !== pass2) return regError('Les deux mots de passe ne correspondent pas.');
+  if (!/^\d{6}$/.test(tradePin)) return regError('Le mot de passe de transaction doit comporter exactement 6 chiffres.');
   // Required or not is the SERVER's call (settings.referralRequired), which
   // already accounts for the founder case: on a platform with no members yet
   // there is no code in existence to type, so the first account is let
   // through. Hard-coding "always required" here made the app impossible to
   // sign up to at all on day one.
   if (!referral && referralIsRequired())
-    return regError('A referral code is required to sign up. Ask the person who invited you for theirs.');
+    return regError('Un code de parrainage est nécessaire pour s\'inscrire. Demandez le sien à la personne qui vous a invité.');
   regError('');
   // See firebaseReady(): without the sign-in service there is nothing to
   // create the account with, and the code below would only throw at the member.
   if (!(window.fbCreateUser && window.fbAuth)) {
-    setBtnLoading('regBtn', true, 'Sign Up', 'Connecting…');
+    setBtnLoading('regBtn', true, 'S\'inscrire', 'Connexion en cours…');
     const ready = await firebaseReady(8000, 'fbCreateUser');
-    setBtnLoading('regBtn', false, 'Sign Up');
-    if (!ready) return regError('Sign-up is not available right now. Check your connection and try again.');
+    setBtnLoading('regBtn', false, 'S\'inscrire');
+    if (!ready) return regError('L\'inscription n\'est pas disponible pour le moment. Vérifiez votre connexion et réessayez.');
   }
-  setBtnLoading('regBtn', true, 'Sign Up', 'Creating your account…');
+  setBtnLoading('regBtn', true, 'S\'inscrire', 'Création de votre compte…');
   STATE.refCode = referral;
   window._pendingRegPin = tradePin;
   window._pendingRegPhone = phone;
@@ -2124,7 +2134,7 @@ window.doRegister = async function(){
     // /register call, and a "Registration successful" toast on a plain login.
     window._pendingRegPin = ''; window._pendingRegPhone = '';
     regError(fbErrMsg(e));
-    setBtnLoading('regBtn', false, 'Sign Up');
+    setBtnLoading('regBtn', false, 'S\'inscrire');
   }
 };
 // ── FORGOT PASSWORD: phone -> OTP -> new password, one screen ──
@@ -2612,7 +2622,7 @@ function referralIsRequired(){
 // to discover it by being rejected. Runs whenever the auth screen paints.
 function updateReferralFieldHint(){
   const input = $('regReferral');
-  if (input) input.placeholder = 'Invitation Code';
+  if (input) input.placeholder = 'Code d\'invitation';
 }
 
 // Owner: "let's establish a timer ie like saying snow opening in
@@ -2687,10 +2697,10 @@ function handleMemberAuth(user){
 }
 function onMemberAuth(user){
   handleMemberAuth(user).catch(() => {
-    notify('Could not open your account. Please try logging in again.');
+    notify('Impossible d\'ouvrir votre compte. Veuillez vous reconnecter.');
     hideLoadingScreen();
     $('authScreen').style.display = '';
-    setBtnLoading('loginBtn', false, 'Log In');
+    setBtnLoading('loginBtn', false, 'Connexion');
   });
 }
 window.addEventListener('snow-auth', ev => onMemberAuth(ev.detail));
@@ -2716,7 +2726,7 @@ async function processMemberAuth(user){
       if (!_memberSession.begin(user.uid + ':' + started, started, false)) return;
       try { sessionStorage.removeItem('soda_relogin_required'); } catch (_) {}
     } catch (_) {
-      notify('Could not verify your login session. Please try again.');
+      notify('Impossible de vérifier votre session. Veuillez réessayer.');
       await window.doLogout({ auto: true }); return;
     }
   } else { _memberSession.clear(); clearCachedState(); }
@@ -2733,8 +2743,8 @@ async function processMemberAuth(user){
     hideLoadingScreen();
     $('app').style.display = 'none';
     $('authScreen').style.display = '';
-    setBtnLoading('loginBtn', false, 'Log In');
-    setBtnLoading('regBtn', false, 'Sign Up');
+    setBtnLoading('loginBtn', false, 'Connexion');
+    setBtnLoading('regBtn', false, 'S\'inscrire');
     // Sign Up needs to know whether a referral code is required BEFORE
     // anyone submits, and boot() (which normally loads settings) only runs
     // after sign-in. Without this the screen would fall back to "required"
@@ -2848,7 +2858,7 @@ async function enterApp(){
   resetAuthScreen();
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
-  if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Login successful ✓')); }
+  if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Connexion réussie ✓')); }
   refreshAppDataInBackground(uid);
 }
 // Shared by both bootFromNetwork() branches below -- retries /register,
@@ -2872,7 +2882,7 @@ async function registerCurrentUser(pin, phone){
   // doRegister()'s email-already-in-use branch, which signs them in and
   // finishes this same registration with the corrected code.
   if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode && !referralIsRequired()) {
-    notify(reg.message || t('That referral code is invalid. Continuing without it.'));
+    notify(reg.message || t('Ce code de parrainage est invalide. Nous continuons sans lui.'));
     STATE.refCode = '';
     reg = await post('/register', { referralCode: '', pin: pin || '', phone: phone || '' });
   }
@@ -2891,9 +2901,9 @@ var SIGNUP_UNFINISHED_CODES = ['REFERRAL_REQUIRED', 'BAD_REFERRAL', 'BAD_REFERRA
 async function abandonUnfinishedSignup(reg){
   hideLoadingScreen();
   if (SIGNUP_UNFINISHED_CODES.indexOf(reg.code) === -1) {
-    notify(reg.message || 'Could not complete registration');
+    notify(reg.message || 'Impossible de finaliser l\'inscription');
     $('authScreen').style.display = '';
-    setBtnLoading('regBtn', false, 'Sign Up');
+    setBtnLoading('regBtn', false, 'S\'inscrire');
     return;
   }
   const local = localDigits(String((STATE.user && STATE.user.email) || '').split('@')[0]);
@@ -2901,10 +2911,10 @@ async function abandonUnfinishedSignup(reg){
   await window.fbSignOut();
   $('authScreen').style.display = '';
   showAuthTab('register');
-  if (local && $('regPhone')) $('regPhone').value = '0' + local;
+  if (local && $('regPhone')) $('regPhone').value = (keepsLeadZero() ? '' : '0') + local;
   if ($('regReferral') && STATE.refCode) $('regReferral').value = STATE.refCode;
-  setBtnLoading('regBtn', false, 'Sign Up');
-  notify((reg.message || 'Your sign-up was not finished.') + ' Complete your sign-up below.');
+  setBtnLoading('regBtn', false, 'S\'inscrire');
+  notify((reg.message || 'Votre inscription n\'est pas terminée.') + ' Terminez votre inscription ci-dessous.');
 }
 async function bootFromNetwork(uid){
   // _pendingRegPhone identifies a signup started in this tab; it works
@@ -2934,9 +2944,9 @@ async function bootFromNetwork(uid){
     if (reg.stale || !STATE.user || STATE.user.uid !== uid) return;
     if (reg.status !== 'success' && reg.status !== 'already_done') {
       hideLoadingScreen();
-      notify(reg.message || 'Could not complete registration');
+      notify(reg.message || 'Impossible de finaliser l\'inscription');
       $('authScreen').style.display = '';
-      setBtnLoading('regBtn', false, 'Sign Up');
+      setBtnLoading('regBtn', false, 'S\'inscrire');
       return;
     }
     window._pendingRegPin = ''; window._pendingRegPhone = '';
@@ -2965,13 +2975,13 @@ async function bootFromNetwork(uid){
     // (A login the member just typed still signs out below, so a retry is clean.)
     hideLoadingScreen();
     $('authScreen').style.display = '';
-    notify('Could not reach the server. Check your connection and try again.');
+    notify('Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.');
     return;
   }
   if (r.status === 'error') {
     hideLoadingScreen();
     if (r.code === 'BANNED') { notify(r.message); await window.fbSignOut(); return; }
-    notify(r.message || 'Could not load your account');
+    notify(r.message || 'Impossible de charger votre compte');
     await window.fbSignOut();
     return;
   }
@@ -3002,8 +3012,8 @@ async function bootFromNetwork(uid){
   resetAuthScreen();
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
-  if (signupFlow) { window._pendingLoginSuccess = false; notify(t('Registration successful ✓')); }
-  else if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Login successful ✓')); }
+  if (signupFlow) { window._pendingLoginSuccess = false; notify(t('Inscription réussie ✓')); }
+  else if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Connexion réussie ✓')); }
   // The invite-address pool, fetched behind the app rather than in front of
   // it, so even the FIRST open of the Referral screen has an address ready
   // and costs no round trip. Tiny (a few hostnames), un-awaited, and a
@@ -3362,7 +3372,7 @@ async function liveRefreshVisible(){
       STATE.products = pr.products;
       if (!_openSheetTitle && STATE.page === 'home' && liveChanged('products', pr.products) && $('homeProducts')) {
         const list = (STATE.products || []).filter(p => p.active !== false);
-        $('homeProducts').innerHTML = list.length ? list.map(vProductCardHtml).join('') : '<div class="v-empty">No products yet.</div>';
+        $('homeProducts').innerHTML = list.length ? list.map(vProductCardHtml).join('') : '<div class="v-empty">Aucun produit pour l\'instant.</div>';
         startProductCountdowns();
       }
     } else ok = false;
@@ -3529,8 +3539,8 @@ function maybeShowAnnouncement(){
   sheet.innerHTML = `
     <img class="v-ann-img" src="${esc(STATE.announcementImage)}" alt="">
     <div class="v-ann-btns">
-      ${link ? `<a class="v-ann-join" href="${esc(link)}" target="_blank" rel="noopener" onclick="closeAnnouncement()">Join Channel</a>` : ''}
-      <button class="v-ann-close" type="button" onclick="closeAnnouncement()">Close</button>
+      ${link ? `<a class="v-ann-join" href="${esc(link)}" target="_blank" rel="noopener" onclick="closeAnnouncement()">Rejoindre le canal</a>` : ''}
+      <button class="v-ann-close" type="button" onclick="closeAnnouncement()">Fermer</button>
     </div>`;
   bg.classList.add('show');
   lockBodyScroll(); dlgOpened();
@@ -3669,9 +3679,9 @@ function vProductCardHtml(p){
     <div class="v-card-b">
       <div class="v-card-img${p.image ? ' has-img' : ''}">${img}${Number(p.buyLimit) > 0 ? `<em class="v-badge">${vOwnedCount(p.key)}/${Number(p.buyLimit)}</em>` : ''}</div>
       <dl class="v-rows">
-        <div><dt>Price</dt><dd>${esc(vMoney(p.price))}</dd></div>
-        <div><dt>Days</dt><dd>${cycle}</dd></div>
-        <div><dt>Daily</dt><dd>${esc(vMoney(daily))}</dd></div>
+        <div><dt>Prix</dt><dd>${esc(vMoney(p.price))}</dd></div>
+        <div><dt>Jours</dt><dd>${cycle}</dd></div>
+        <div><dt>Quotidien</dt><dd>${esc(vMoney(daily))}</dd></div>
         <div><dt>Total</dt><dd>${esc(vMoney(expected))}</dd></div>
       </dl>
     </div>
@@ -3683,14 +3693,14 @@ function vProductCardHtml(p){
 // disabled button, the glow is for the one that can be bought.
 function vBuyHtml(p){
   const limit = Number(p.buyLimit) || 0;
-  if (limit > 0 && vOwnedCount(p.key) >= limit) return '<button class="v-buy" disabled><span>BUY NOW</span></button>';
+  if (limit > 0 && vOwnedCount(p.key) >= limit) return '<button class="v-buy" disabled><span>ACHETER</span></button>';
   const open = p.isOpen !== false && !p.comingSoon;
-  if (open) return `<button class="v-buy" onclick="openInvestConfirm('${esc(p.key)}',this)"><span>BUY NOW</span></button>`;
+  if (open) return `<button class="v-buy" onclick="openInvestConfirm('${esc(p.key)}',this)"><span>ACHETER</span></button>`;
   const at = Number(p.opensAt) || 0;
   // Not `disabled`: a disabled button swallows the tap, and the owner's screen
   // shows the "Coming soon, please wait" dialog when it is tapped.
-  if (!at || p.openMode === 'soon' || p.comingSoon) return '<button class="v-buy v-soon" onclick="notify(\'Coming soon, please wait\')"><span>COMING SOON</span></button>';
-  return `<button class="v-buy v-soon" onclick="notify('Coming soon, please wait')" data-opens-at="${at}">Coming soon in ${fmtCountdown(at - Date.now())}</button>`;
+  if (!at || p.openMode === 'soon' || p.comingSoon) return '<button class="v-buy v-soon" onclick="notify(\'Bientôt disponible, veuillez patienter\')"><span>BIENTÔT</span></button>';
+  return `<button class="v-buy v-soon" onclick="notify('Bientôt disponible, veuillez patienter')" data-opens-at="${at}">Bientôt disponible dans ${fmtCountdown(at - Date.now())}</button>`;
 }
 function vBannerHtml(){
   const st = STATE.settings || {};
@@ -3702,18 +3712,18 @@ function paintHome(){
   const st = STATE.settings || {};
   // A product the admin switched off (Active unticked) is not offered on Home; owners still see it on Income.
   const products = (STATE.products || []).filter(p => p.active !== false);
-  const ticker = String(st.tickerText || 'All product earnings will be automatically added to your app balance at midnight 00:00.');
+  const ticker = String(st.tickerText || 'Tous les gains des produits sont ajoutés automatiquement à votre solde à minuit 00:00.');
   const html = `
 <div class="v-page v-home">
   ${vBannerHtml()}
   <div class="v-quick">
-    <button onclick="openDepositSheet()"><span class="v-ic">${VI.bottleDown}</span><b>Deposit</b></button>
-    <button onclick="openWithdrawSheet()"><span class="v-ic">${VI.bottleUp}</span><b>Withdraw</b></button>
-    <button onclick="openHelpDialog('Help')"><span class="v-ic">${VI.headset}</span><b>Help Me</b></button>
-    <button onclick="openChestSheet()"><span class="v-ic">${VI.bottleRing}</span><b>Gift Code</b></button>
+    <button onclick="openDepositSheet()"><span class="v-ic">${VI.bottleDown}</span><b>Dépôt</b></button>
+    <button onclick="openWithdrawSheet()"><span class="v-ic">${VI.bottleUp}</span><b>Retrait</b></button>
+    <button onclick="openHelpDialog('Aide')"><span class="v-ic">${VI.headset}</span><b>Aide</b></button>
+    <button onclick="openChestSheet()"><span class="v-ic">${VI.bottleRing}</span><b>Code cadeau</b></button>
   </div>
   <div class="v-ticker"><span class="v-ticker-ic">${VI.megaphone}</span><div class="v-ticker-win"><span class="v-ticker-txt">${esc(ticker)}</span></div></div>
-  <div id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">No products yet.</div>' : '')}</div>
+  <div id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">Aucun produit pour l\'instant.</div>' : '')}</div>
 </div>`;
   $('pageHost').innerHTML = html;
   startHomeCarousel();
@@ -3781,8 +3791,8 @@ function startProductCountdowns(){
     let due = false;
     nodes.forEach(el => {
       const left = Number(el.getAttribute('data-opens-at')) - Date.now();
-      if (left <= 0) { due = true; el.textContent = 'Opening…'; return; }
-      el.textContent = 'Coming soon in ' + fmtCountdown(left);
+      if (left <= 0) { due = true; el.textContent = 'Ouverture…'; return; }
+      el.textContent = 'Bientôt disponible dans ' + fmtCountdown(left);
     });
     if (due) {
       clearInterval(_openCountdownTimer); _openCountdownTimer = null;
@@ -3823,7 +3833,7 @@ async function renderAssets(){
 function vOwnedCardHtml(inv){
   const st = planStats(inv);
   const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
-  const name = inv.tierLabel || p.name || 'Product';
+  const name = inv.tierLabel || p.name || 'Produit';
   const initial = esc(String(name || '?').trim()[0] || '?');
   // Fenced: the picture lives in a fixed-size frame (see .v-owned .v-card-img) and is scaled to fit
   // inside it, so its shape or load time can never move the figures or spill over the card.
@@ -3838,16 +3848,16 @@ function vOwnedCardHtml(inv){
     <h3 class="v-card-h">${esc(name)}</h3>
     ${inv.granted ? '<i class="v-ribbon"><b>GIFT</b></i>' : ''}
     <div class="v-card-b">
-      <div class="v-card-img${p.image ? ' v-fence' : ''}">${img}<em class="v-badge">${st.matured ? 'Completed' : 'Earning'}</em></div>
+      <div class="v-card-img${p.image ? ' v-fence' : ''}">${img}<em class="v-badge">${st.matured ? 'Terminé' : 'En cours'}</em></div>
       <div class="v-side">
         <dl class="v-rows">
-          <div><dt>Price</dt><dd>${esc(vMoney(st.amount))}</dd></div>
-          <div><dt>Days</dt><dd>${st.total}</dd></div>
-          <div><dt>Daily</dt><dd>${esc(vMoney(st.daily))}</dd></div>
+          <div><dt>Prix</dt><dd>${esc(vMoney(st.amount))}</dd></div>
+          <div><dt>Jours</dt><dd>${st.total}</dd></div>
+          <div><dt>Quotidien</dt><dd>${esc(vMoney(st.daily))}</dd></div>
           <div><dt>Total</dt><dd>${esc(vMoney(st.expected))}</dd></div>
         </dl>
         <div class="v-dates">
-          <div><span>Purchase</span><b>${two(startMs)}</b></div>
+          <div><span>Achat</span><b>${two(startMs)}</b></div>
           <div><span>Expire</span><b>${two(endMs)}</b></div>
         </div>
       </div>
@@ -3870,8 +3880,8 @@ function paintAssets(){
   const html = `
 <div class="v-page v-income">
   ${vBannerHtml()}
-  <div class="v-total"><span>Total Earnings</span><b id="incomeTotal">${esc(vMoney2(a.totalEarned))}</b></div>
-  <div id="ownedAssets">${owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty">No products yet.</div>'}</div>
+  <div class="v-total"><span>Gains totaux</span><b id="incomeTotal">${esc(vMoney2(a.totalEarned))}</b></div>
+  <div id="ownedAssets">${owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty">Aucun produit pour l\'instant.</div>'}</div>
 </div>`;
   $('pageHost').innerHTML = html;
   startHomeCarousel();
@@ -3914,7 +3924,7 @@ function shareOrigin(){
 }
 // ── MY ASSETS investment helpers ──
 var _investmentsLoadFailed = false;
-var MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var MONTHS_SHORT = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
 function fmtDay(value){
   if (!value) return '—';
   const d = new Date(typeof value === 'number' ? value : String(value));
@@ -3925,7 +3935,7 @@ function fmtDay(value){
   // getters are LOCAL, so a member in Kampala sees the moment they tapped
   // Buy, not the UTC instant the server wrote down.
   const t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
-  return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' at ' + t;
+  return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' à ' + t;
 }
 // Deposit result marks, traced from the owner's two pictures (green tick badge, red cross badge).
 var PAY_OK_ART = 'M316.5 694.5C292.9 692.3 268.0 687.5 246.5 680.9C233.9 677.0 210.0 668.0 210.0 667.1C210.0 666.7 209.1 666.4 207.9 666.3C204.1 666.0 170.5 647.8 156.5 638.4C-27.6 515.5 -53.7 256.8 102.4 101.7C239.3 -34.4 458.9 -33.7 595.3 103.3C601.7 109.8 607.0 115.4 607.0 115.8C607.0 116.2 603.0 118.9 598.1 121.7L589.2 126.8L578.3 116.1C417.3 -42.0 151.0 3.9 53.4 206.5C-40.2 400.9 78.7 632.9 291.0 669.9C317.8 674.6 360.4 676.1 383.5 673.2C488.4 659.9 575.7 603.8 628.7 515.5C647.9 483.6 665.7 436.2 669.6 406.9C670.0 404.2 670.7 402.0 671.2 402.0C671.7 402.0 671.8 401.5 671.5 401.0C671.2 400.4 671.7 394.2 672.6 387.2C674.8 371.7 675.1 327.9 673.2 312.5C667.0 263.5 652.8 220.9 628.9 180.8L622.9 170.6L630.3 163.2L637.8 155.9L640.3 159.2C648.7 170.3 665.9 204.8 673.9 226.1C683.0 250.6 691.8 286.1 692.3 300.2C692.4 303.4 692.8 306.0 693.1 306.0C693.4 306.0 694.2 312.9 694.8 321.2C711.2 535.8 530.6 714.0 316.5 694.5ZM334.0 645.3C299.1 642.8 272.5 637.4 244.5 627.0C113.2 578.2 33.9 444.8 53.5 305.7C71.8 175.7 174.8 72.5 305.0 53.6C394.8 40.5 489.0 70.3 551.9 131.6L563.5 142.9L550.0 152.2C481.4 199.6 411.8 266.8 340.6 354.0C334.1 362.0 328.4 368.9 328.0 369.3C327.6 369.8 302.7 357.8 272.6 342.8L217.9 315.5L208.7 315.5C194.1 315.5 183.9 321.6 177.3 334.2C174.8 338.9 174.5 340.6 174.5 349.0C174.5 363.3 175.4 364.8 203.0 395.0C267.6 465.8 311.7 506.8 335.4 518.1C354.3 527.1 376.0 523.7 390.3 509.7C398.6 501.6 396.2 505.5 444.8 418.5C484.5 347.4 528.4 280.5 565.5 234.5C579.5 217.1 600.1 194.0 601.6 194.0C604.3 194.0 619.1 223.3 626.9 244.4C667.7 353.9 641.1 475.0 558.1 558.1C518.1 598.1 471.5 624.4 417.7 637.5C393.3 643.4 356.0 646.9 334.0 645.3ZM350.0 501.6C330.0 495.8 285.8 455.4 218.1 381.1C198.2 359.3 194.0 353.7 194.0 349.3C194.0 346.0 198.2 338.9 201.1 337.5C208.4 333.7 208.5 333.8 273.0 366.0L332.9 396.0L343.2 383.2C432.1 272.6 514.0 196.0 596.0 146.8C615.1 135.3 618.5 133.7 620.8 134.9C625.9 137.6 624.8 139.5 607.2 157.5C534.7 231.3 488.3 297.9 404.5 448.5C384.6 484.2 383.1 486.8 378.4 492.6C371.7 500.8 360.0 504.5 350.0 501.6Z';
@@ -4058,7 +4068,7 @@ function playStatusIcon(box, kind){
   } catch (e) { box.innerHTML = still; drawn(); }
 }
 // Waiting for the payment: a dot travels from the phone to the wallet (nothing rotates).
-var DEPOSIT_POLL_FLOW = '<div class="dep-flow" role="img" aria-label="Processing payment">'
+var DEPOSIT_POLL_FLOW = '<div class="dep-flow" role="img" aria-label="Traitement du paiement">'
   + '<span class="dep-flow-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.5 18.5h3"/></svg></span>'
   + '<span class="dep-flow-track"><i></i><i></i><i></i><i></i></span>'
   + '<span class="dep-flow-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6.8A2.3 2.3 0 0 1 6.3 4.5H17v3.5"/><rect x="3" y="7.5" width="18" height="12.5" rx="2.6"/><path d="M16 13.8h5"/></svg></span>'
@@ -4097,7 +4107,7 @@ function planStats(inv){
 function myAssetRowHtml(inv){
   const st = planStats(inv);
   const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
-  const name = inv.tierLabel || p.name || 'Product';
+  const name = inv.tierLabel || p.name || 'Produit';
   const initial = esc(String(name || '?').trim()[0] || '?');
   const thumb = p.image
     ? `<img src="${esc(p.image)}" alt="" onerror="this.outerHTML='&lt;span&gt;${initial}&lt;/span&gt;'">`
@@ -4111,26 +4121,26 @@ function myAssetRowHtml(inv){
         <div class="mar-name">${esc(name)}</div>
         <div class="mar-date">${esc(fmtDay(inv.createdAt))}</div>
       </div>
-      <span class="mar-status">${st.matured ? 'Completed' : 'Ongoing'}</span>
+      <span class="mar-status">${st.matured ? 'Terminé' : 'En cours'}</span>
     </div>
     <div class="mar-values">
-      <div><span>Invested</span><b class="mono">${fmtUGXCents(st.amount)}</b></div>
-      <div><span>Earned</span><b class="mono">${fmtUGXCents(st.earned)}</b></div>
-      <div><span>${st.matured ? 'Return' : 'Daily'}</span><b class="mono">${fmtUGXCents(st.matured ? st.expected : st.daily)}</b></div>
+      <div><span>Investi</span><b class="mono">${fmtUGXCents(st.amount)}</b></div>
+      <div><span>Gagné</span><b class="mono">${fmtUGXCents(st.earned)}</b></div>
+      <div><span>${st.matured ? 'Retour' : 'Quotidien'}</span><b class="mono">${fmtUGXCents(st.matured ? st.expected : st.daily)}</b></div>
     </div>
     <div class="mar-progress"><i style="width:${progress}%"></i></div>
     <div class="mar-foot">
-      <span>${st.matured ? 'Finished' : `Day ${st.made} of ${st.total}`}</span>
-      <span>${st.matured ? fmtUGXCents(st.expected) + ' paid' : fmtUGXCents(st.remaining) + ' remaining'}</span>
+      <span>${st.matured ? 'Terminé' : `Jour ${st.made} sur ${st.total}`}</span>
+      <span>${st.matured ? `${fmtUGXCents(st.expected)} payé` : fmtUGXCents(st.remaining) + ' restant'}</span>
     </div>
   </div>`;
 }
 function myAssetsInnerHtml(){
   const investments = (STATE.investments || []).filter(i => i.status === 'active' || i.status === 'matured');
   if (!Array.isArray(STATE.investments) && _investmentsLoadFailed) {
-    return '<div class="my-assets-empty">Could not load your products.</div>';
+    return '<div class="my-assets-empty">Impossible de charger vos produits.</div>';
   }
-  if (!investments.length) return '<div class="my-assets-empty">No investments yet. Browse Products to get started.</div>';
+  if (!investments.length) return '<div class="my-assets-empty">Aucun investissement pour l\'instant. Parcourez les produits pour commencer.</div>';
   return '<div class="my-assets-list">' + investments.map(myAssetRowHtml).join('') + '</div>';
 }
 function paintMyAssetsInner(){
@@ -4171,7 +4181,7 @@ window.switchTeamLevel = async function(level){
 function teamLoadingHtml(){ return '<div class="list-loading">' + NAV_LOADER + '</div>'; }
 // The small "Loading..." word shown inside a page while its data arrives (same word and
 // font as the start-up loader, bouncing a little).
-var NAV_LOADER = '<span class="nav-loading">Loading...</span>';
+var NAV_LOADER = '<span class="nav-loading">Chargement...</span>';
 function maskPhone(phone){
   // "706****1455": the first three and last four digits of the local number
   // (country code and leading zero dropped), enough to recognise your own
@@ -4209,12 +4219,12 @@ function renderTeamMembers(level){
   const members = STATE.teamMembers[level] || [];
   const box = $('teamMembersBox');
   if (!box) return;
-  if (!STATE.teamMembers[level] && _teamMembersFailed[level]) { box.innerHTML = '<div class="v-empty" onclick="switchTeamLevel(' + level + ')">Could not load your team</div>'; return; }
-  if (!members.length) { box.innerHTML = '<div class="v-empty">No members at this level yet.</div>'; return; }
+  if (!STATE.teamMembers[level] && _teamMembersFailed[level]) { box.innerHTML = `<div class="v-empty" onclick="switchTeamLevel(${level})">Impossible de charger votre équipe</div>`; return; }
+  if (!members.length) { box.innerHTML = '<div class="v-empty">Aucun membre à ce niveau pour l\'instant.</div>'; return; }
   box.innerHTML = members.map(m => `
   <div class="v-member">
     <div class="v-member-top"><span class="v-mphone">${esc(m.phoneMasked || maskPhone(m.phone))}</span><b>${esc(vMoney2(m.invested))}</b></div>
-    <div class="v-member-join">Joined ${esc(joinedStamp(m.createdAt))}</div>
+    <div class="v-member-join">Inscrit le ${esc(joinedStamp(m.createdAt))}</div>
   </div>`).join('');
 }
 // ── TASK CENTER (opened from the Team page) ──
@@ -4235,25 +4245,25 @@ function taskCardHtml(m, isNext){
   const target = isDep ? vMoney(tgt) : String(tgt);
   const progress = isDep ? vMoney(shown) + ' / ' + vMoney(tgt) : shown + ' / ' + tgt;
   const btn = m.claimed
-    ? `<button type="button" class="v-tk-btn done" disabled>${VI.tick}<span>Claimed</span></button>`
+    ? `<button type="button" class="v-tk-btn done" disabled>${VI.tick}<span>Réclamé</span></button>`
     : m.achieved
-      ? `<button type="button" class="v-tk-btn go" onclick="claimTask('${esc(m.type)}','${esc(m.id)}',this)"><span>Claim</span></button>`
-      : `<button type="button" class="v-tk-btn" onclick="taskNotReached('${esc(m.type)}')"><span>Claim</span></button>`;
+      ? `<button type="button" class="v-tk-btn go" onclick="claimTask('${esc(m.type)}','${esc(m.id)}',this)"><span>Réclamer</span></button>`
+      : `<button type="button" class="v-tk-btn" onclick="taskNotReached('${esc(m.type)}')"><span>Réclamer</span></button>`;
   return `<article class="v-tk-card ${state}">
     <div class="v-tk-top">
       <span class="v-tk-medal">${m.claimed ? VI.tick : VI.gift}</span>
-      <div class="v-tk-tgt"><b class="${vFit(target, 10, 13)}">${esc(target)}</b><span>${isDep ? 'Team deposits' : 'Level 1 active referrals'}</span></div>
+      <div class="v-tk-tgt"><b class="${vFit(target, 10, 13)}">${esc(target)}</b><span>${isDep ? 'Dépôts de l\'équipe' : 'Filleuls actifs de niveau 1'}</span></div>
       <span class="v-tk-reward ${vFit(vMoney(m.reward), 11, 13)}">${esc(vMoney(m.reward))}</span>
     </div>
     <div class="v-tk-bar"><i style="width:${pct}%"></i></div>
-    <div class="v-tk-foot"><span>Progress: ${esc(progress)}</span>${btn}</div>
+    <div class="v-tk-foot"><span>Progression : ${esc(progress)}</span>${btn}</div>
   </article>`;
 }
 // The cards of the open tab (the page and the tab switch both use it).
 function taskListInnerHtml(){
   const list = taskLists()[_taskTab];
   const nextIdx = list.findIndex(m => !m.claimed && !m.achieved);
-  return list.length ? list.map((m, i) => taskCardHtml(m, i === nextIdx)).join('') : '<div class="v-empty">No tasks yet.</div>';
+  return list.length ? list.map((m, i) => taskCardHtml(m, i === nextIdx)).join('') : '<div class="v-empty">Aucune tâche pour l\'instant.</div>';
 }
 function taskCenterHtml(){
   const t = STATE.teamStats || {};
@@ -4263,17 +4273,17 @@ function taskCenterHtml(){
   return `<div class="v-tk reveal-in">
     <div class="v-tk-hero">
       <span class="v-tk-trophy">${VI.trophy}</span>
-      <div class="v-tk-stat"><b>${Number(t.l1ActiveCount) || 0}</b><span>Level 1 active referrals</span></div>
+      <div class="v-tk-stat"><b>${Number(t.l1ActiveCount) || 0}</b><span>Filleuls actifs de niveau 1</span></div>
       <i></i>
-      <div class="v-tk-stat"><b class="${vFit(vMoney(t.teamDeposits), 10, 13)}">${esc(vMoney(t.teamDeposits))}</b><span>Team deposits</span></div>
+      <div class="v-tk-stat"><b class="${vFit(vMoney(t.teamDeposits), 10, 13)}">${esc(vMoney(t.teamDeposits))}</b><span>Dépôts de l'équipe</span></div>
     </div>
-    <div class="v-tk-tabs" data-tab="${tab}"><i class="v-tk-pill" aria-hidden="true"></i>${tabBtn('count', 'Referrals')}${tabBtn('deposit', 'Deposits')}</div>
+    <div class="v-tk-tabs" data-tab="${tab}"><i class="v-tk-pill" aria-hidden="true"></i>${tabBtn('count', 'Parrainages')}${tabBtn('deposit', 'Dépôts')}</div>
     <div class="v-tk-list" id="tkList">${taskListInnerHtml()}</div>
   </div>`;
 }
 function paintTaskCenter(){
   const b = $('tkBody'); if (!b) return;
-  if (_taskFailed && !(STATE.teamStats && STATE.teamStats.milestones)) { _taskShowsFailure = true; b.innerHTML = '<div class="v-empty" onclick="refreshTaskCenter()">Could not load your team</div>'; return; }
+  if (_taskFailed && !(STATE.teamStats && STATE.teamStats.milestones)) { _taskShowsFailure = true; b.innerHTML = '<div class="v-empty" onclick="refreshTaskCenter()">Impossible de charger votre équipe</div>'; return; }
   _taskShowsFailure = false;
   b.innerHTML = taskCenterHtml();
 }
@@ -4338,12 +4348,12 @@ window.openTaskCenter = async function(){
 // Tapping Claim on a task that is not reached yet says so (a disabled button would swallow the tap), with a nudge on what to do.
 window.taskNotReached = function(type){
   notify(type === 'deposit'
-    ? 'Deposit target not reached. Keep growing your team and encourage them to deposit.'
-    : 'Referral target not reached. Share your invite link to bring in more members.');
+    ? 'Objectif de dépôt non atteint. Continuez à agrandir votre équipe et encouragez-la à déposer.'
+    : 'Objectif de parrainage non atteint. Partagez votre lien d\'invitation pour accueillir plus de membres.');
 };
 window.claimTask = async function(type, id, btn){
   if (_taskBusy) return;
-  _taskBusy = true; if (btn) { btn.disabled = true; btn.textContent = 'Claiming…'; }
+  _taskBusy = true; if (btn) { btn.disabled = true; btn.textContent = 'Réclamation…'; }
   let r;
   try { r = await post('/team/task/claim', { type, id }); } finally { _taskBusy = false; }
   if (r.status === 'success') {
@@ -4359,7 +4369,7 @@ window.claimTask = async function(type, id, btn){
     return;
   }
   // Not claimable after all (already taken, progress changed, task removed): say so and show the true state.
-  notify(r.message || 'Could not claim that reward');
+  notify(r.message || 'Impossible de réclamer cette récompense');
   await refreshTaskCenter();
   if (_openSheetTitle === 'Task Center') paintTaskCenter();
 };
@@ -4383,26 +4393,26 @@ function paintNetwork(){
   _activeTeamLevel = level;
   const levels = [1, 2, 3].map(n => `
     <button class="v-level${level === n ? ' on' : ''}" data-level="${n}" onclick="switchTeamLevel(${n})">
-      <span class="v-lv-l"><b>Level ${n}</b><small>${team['l' + n] || 0} Members</small></span>
-      <span class="v-lv-r"><small>Rate</small><i>${rates['l' + n] != null ? rates['l' + n] : 0}%</i></span>
+      <span class="v-lv-l"><b>Niveau ${n}</b><small>${team['l' + n] || 0} membres</small></span>
+      <span class="v-lv-r"><small>Taux</small><i>${rates['l' + n] != null ? rates['l' + n] : 0}%</i></span>
       <span class="v-lv-sep"></span>
       <span class="v-lv-c"><small>Commission</small><b class="${vFit(vMoney2(lc['l' + n]), 12, 17)}">${esc(vMoney2(lc['l' + n]))}</b></span>
     </button>`).join('');
   const html = `
 <div class="v-page v-team">
   <div class="v-tcard">
-    <div class="v-tcard-top"><span class="v-tc-ic">${VI.people}</span><span class="v-tc-lbl">Total Team</span><b class="v-tc-num">${Number(t.totalTeam) || 0}</b></div>
+    <div class="v-tcard-top"><span class="v-tc-ic">${VI.people}</span><span class="v-tc-lbl">Équipe totale</span><b class="v-tc-num">${Number(t.totalTeam) || 0}</b></div>
     <div class="v-tc-line"></div>
     <div class="v-tc-money ${vFit(vMoney2(t.teamDeposits), 16, 22)}">${esc(vMoney2(t.teamDeposits))}</div>
-    <div class="v-tc-cap">Purchase</div>
+    <div class="v-tc-cap">Achat</div>
   </div>
   <div class="v-share">
-    <div class="v-share-l">Share URL</div>
-    <div class="v-share-box"><span class="v-share-url">${esc(link || '—')}</span><button type="button" onclick="copyText('${esc(link)}')" aria-label="Copy invite link">${VI.copy}</button></div>
-    <button class="v-btn" type="button" onclick="copyText('${esc(link)}')">Copy Invite Link</button>
+    <div class="v-share-l">Partager le lien</div>
+    <div class="v-share-box"><span class="v-share-url">${esc(link || '—')}</span><button type="button" onclick="copyText('${esc(link)}')" aria-label="Copier le lien d\'invitation">${VI.copy}</button></div>
+    <button class="v-btn" type="button" onclick="copyText('${esc(link)}')">Copier le lien d'invitation</button>
   </div>
   <button class="v-task-btn" type="button" onclick="openTaskCenter()">
-    <span class="v-task-ic">${VI.trophy}</span><b>Task Center</b>
+    <span class="v-task-ic">${VI.trophy}</span><b>Centre des tâches</b>
     <em id="tkBadge" style="${taskReadyCount() ? '' : 'display:none'}">${taskReadyCount()}</em>
     <span class="v-task-go">${VI.chev}</span>
   </button>
@@ -4473,7 +4483,7 @@ function flashCopiedOne(btn){
   // and leave the control permanently stuck on it.
   if (btn._copyRevert) clearTimeout(btn._copyRevert);
   else btn._copyBefore = btn.innerHTML;
-  btn.innerHTML = isIconBtn ? COPY_TICK : 'Copied';
+  btn.innerHTML = isIconBtn ? COPY_TICK : 'Copié';
   btn.classList.add('copied');
   btn._copyRevert = setTimeout(() => {
     btn.innerHTML = btn._copyBefore;
@@ -4501,12 +4511,12 @@ function flashCopied(btn){
   for (let i = 0; i < all.length; i++) flashCopiedOne(all[i]);
 }
 function writeClipboard(text, btn){
-  if (!navigator.clipboard) return notify('Could not copy');
+  if (!navigator.clipboard) return notify('Copie impossible');
   navigator.clipboard.writeText(text)
     .then(() => flashCopied(btn))
     // A failure has nothing visible to show for itself, so it still needs
     // saying -- and that is exactly what the alert card is for.
-    .catch(() => notify('Could not copy'));
+    .catch(() => notify('Copie impossible'));
 }
 // The button is taken from the event rather than passed in by every call site:
 // the markup already routes through onclick, so `this` is the control that was
@@ -4561,27 +4571,27 @@ async function renderAccount(){
       <div class="v-me-id"><div class="v-me-phone">${esc(localDigits(a.phone) || walletLocalPhone(a.phone) || formatPhoneDisplay(a.phone))}</div><span class="v-vip">VIP ${Number(a.vipLevel) || 0}</span></div>
     </div>
     <div class="v-me-line"></div>
-    <div class="v-me-lbl">TOTAL BALANCE</div>
+    <div class="v-me-lbl">SOLDE TOTAL</div>
     <div class="v-me-bal" id="myBalance">${esc(vMoney2(a.walletBalance))}</div>
     <div class="v-me-btns">
-      <button class="v-me-dep" onclick="openDepositSheet()"><span class="v-ic">${VI.bottleDown}</span>Deposit</button>
-      <button class="v-me-wit" onclick="openWithdrawSheet()"><span class="v-ic">${VI.bottleUp}</span>Withdraw</button>
+      <button class="v-me-dep" onclick="openDepositSheet()"><span class="v-ic">${VI.bottleDown}</span>Dépôt</button>
+      <button class="v-me-wit" onclick="openWithdrawSheet()"><span class="v-ic">${VI.bottleUp}</span>Retrait</button>
     </div>
   </div>
-  <div class="v-sec"><span class="bar"></span><h2>Account</h2><i></i></div>
+  <div class="v-sec"><span class="bar"></span><h2>Compte</h2><i></i></div>
   <div class="v-tiles">
-    ${vTileHtml(VI.bottleWallet, 'Wallet', 'openWalletSheet()')}
+    ${vTileHtml(VI.bottleWallet, 'Portefeuille', 'openWalletSheet()')}
     ${vTileHtml(VI.bottleChat, 'Messages', 'openMessagesSheet()', 'gold')}
-    ${vTileHtml(VI.clipboard, 'Details', "openTransactionStatement('income')", 'gold')}
+    ${vTileHtml(VI.clipboard, 'Détails', "openTransactionStatement('income')", 'gold')}
     ${vTileHtml(VI.download, 'APP', 'promptInstallApp()')}
   </div>
-  <div class="v-sec"><span class="bar"></span><h2>Security</h2><i></i></div>
+  <div class="v-sec"><span class="bar"></span><h2>Sécurité</h2><i></i></div>
   <div class="v-tiles">
-    ${vTileHtml(VI.bottleLock, 'Login Password', 'openChangeLoginPasswordSheet()')}
-    ${vTileHtml(VI.bottleKey, 'Trade Password', 'openChangeTradePasswordSheet()')}
+    ${vTileHtml(VI.bottleLock, 'Mot de passe de connexion', 'openChangeLoginPasswordSheet()')}
+    ${vTileHtml(VI.bottleKey, 'Mot de passe de transaction', 'openChangeTradePasswordSheet()')}
   </div>
-  <button class="v-wide" onclick="openHelpDialog('Help Me')"><span class="v-ic">${VI.headset}</span>Help Me</button>
-  <button class="v-logout" onclick="doLogout()"><span class="v-ic">${VI.logout}</span>Log Out</button>
+  <button class="v-wide" onclick="openHelpDialog('Aide')"><span class="v-ic">${VI.headset}</span>Aide</button>
+  <button class="v-logout" onclick="doLogout()"><span class="v-ic">${VI.logout}</span>Déconnexion</button>
 </div>`;
   $('pageHost').innerHTML = html;
 }
@@ -4594,9 +4604,10 @@ function formatPhoneDisplay(phone){
   let d = String(phone || '').replace(/\D/g, '');
   if (!d) return '';
   const dc = dial();
-  if (d.slice(0, dc.length) === dc) d = d.slice(dc.length);
-  d = d.replace(/^0+/, '');
-  const groups = d.length === 9 ? d.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3') : d;
+  if (d.slice(0, dc.length) === dc && d.length > localLen()) d = d.slice(dc.length);
+  if (!keepsLeadZero()) d = d.replace(/^0+/, '');
+  const groups = d.length === 9 ? d.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')
+    : d.length === 10 ? d.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, '$1 $2 $3 $4 $5') : d;
   return dialPlus() + ' ' + groups;
 }
 
@@ -4646,8 +4657,8 @@ function vWalletCardHtml(w){
   return `<div class="v-wcard">
     <div class="v-wcard-top"><b>${esc(provider)}</b><span class="v-wcard-ic">${VI.bottle}</span></div>
     <div class="v-chip-art" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-    <div class="v-wcard-num">${w ? esc(walletDestDisplay(w)) : 'No wallet linked'}</div>
-    <div class="v-wcard-l">ACCOUNT HOLDER</div>
+    <div class="v-wcard-num">${w ? esc(walletDestDisplay(w)) : 'Aucun portefeuille lié'}</div>
+    <div class="v-wcard-l">TITULAIRE DU COMPTE</div>
     <div class="v-wcard-n">${w ? esc(String(w.holder || '').toUpperCase()) : '—'}</div>
   </div>`;
 }
@@ -4655,7 +4666,8 @@ function walletCardHtml(w){ return vWalletCardHtml(w); }
 function walletLocalPhone(phone){
   let d = String(phone || '').replace(/\D/g, '');
   const dc = dial();
-  if (d.slice(0, dc.length) === dc) d = d.slice(dc.length);
+  if (d.slice(0, dc.length) === dc && d.length > localLen()) d = d.slice(dc.length);
+  if (keepsLeadZero()) return d;
   d = d.replace(/^0+/, '');
   return d ? '0' + d : '';
 }
@@ -4684,7 +4696,7 @@ function applyWalDestKind(nowBank){
   dest.type = nowBank ? 'text' : 'tel';
   dest.inputMode = nowBank ? 'text' : 'numeric';
   dest.autocomplete = nowBank ? 'off' : 'tel';
-  dest.placeholder = nowBank ? 'Account number' : phoneHintBody();
+  dest.placeholder = nowBank ? 'Numéro de compte' : phoneHintBody();
 }
 function prefillWallet(){
   const w = currentWallet(); if (!w) return;
@@ -4697,7 +4709,7 @@ function prefillWallet(){
 // Only the card, the heading and the "Your Wallet" rows: the typed fields are never touched.
 function paintWalletParts(){
   const card = $('walCardBox'); if (card) card.innerHTML = vWalletCardHtml(currentWallet());
-  const head = $('walEditHead'); if (head) head.textContent = currentWallet() ? 'Edit Wallet' : 'Bind Wallet';
+  const head = $('walEditHead'); if (head) head.textContent = currentWallet() ? 'Modifier le portefeuille' : 'Associer le portefeuille';
   const rows = $('walRows'); if (rows) rows.innerHTML = walRowsHtml();
   const own = $('walYours'); if (own) own.style.display = (STATE.bankAccounts || []).length ? '' : 'none';
   prefillWallet();
@@ -4707,21 +4719,21 @@ function renderWalletSheet(){
   $('sheetBody').innerHTML = `<div class="v-form reveal-in">
     <div id="walCardBox">${vWalletCardHtml(w)}</div>
     <div class="v-edit">
-      <div class="v-sec" style="margin-top:2px"><span class="bar"></span><h2 id="walEditHead">${w ? 'Edit Wallet' : 'Bind Wallet'}</h2></div>
+      <div class="v-sec" style="margin-top:2px"><span class="bar"></span><h2 id="walEditHead">${w ? 'Modifier le portefeuille' : 'Associer le portefeuille'}</h2></div>
       <div id="walFormGroup">
-        <label class="v-flabel" for="walProvider">Wallet Provider</label>
+        <label class="v-flabel" for="walProvider">Opérateur du portefeuille</label>
         <div class="prov-pick" id="walProviderPick">
-          <div class="v-uline prov-input"><input id="walProvider" type="text" autocomplete="off" placeholder="Type wallet provider to search" oninput="filterProviders()" onfocus="openProviderList()"></div>
+          <div class="v-uline prov-input"><input id="walProvider" type="text" autocomplete="off" placeholder="Saisissez l'opérateur du portefeuille pour rechercher" oninput="filterProviders()" onfocus="openProviderList()"></div>
           <div class="prov-list" id="walProviderList">${walProviderOptionsHtml()}</div>
         </div>
-        <label class="v-flabel" for="walPhone">Account Number</label>
+        <label class="v-flabel" for="walPhone">Numéro de compte</label>
         <div class="v-uline"><input id="walPhone" type="tel" inputmode="numeric" autocomplete="tel" enterkeyhint="next" placeholder="${esc(phoneHintBody())}" oninput="handleWalDestInput(this)"></div>
-        <label class="v-flabel" for="walHolder">Account Holder Name</label>
+        <label class="v-flabel" for="walHolder">Nom du titulaire du compte</label>
         <div class="v-uline"><input id="walHolder" type="text" maxlength="60" autocomplete="name" enterkeyhint="done" value="${w ? esc(String(w.holder || '').toUpperCase()) : ''}"></div>
-        <div class="v-two"><button class="v-ghost" type="button" onclick="closeSheet()">Cancel</button><button class="v-solid" id="walSaveBtn" type="button" onclick="submitWallet()">Submit</button></div>
+        <div class="v-two"><button class="v-ghost" type="button" onclick="closeSheet()">Annuler</button><button class="v-solid" id="walSaveBtn" type="button" onclick="submitWallet()">Envoyer</button></div>
       </div>
       <div id="walYours" style="${(STATE.bankAccounts || []).length ? '' : 'display:none'}">
-        <h3 class="v-yours">Your Wallet</h3>
+        <h3 class="v-yours">Votre portefeuille</h3>
         <div id="walRows">${walRowsHtml()}</div>
       </div>
     </div>
@@ -4770,23 +4782,23 @@ window.submitWallet = async function(){
   const network = walNetwork();
   const phone = $('walPhone').value;
   const holder = $('walHolder').value.trim();
-  if (!network) return notify('Select your wallet provider.');
+  if (!network) return notify('Choisissez l\'opérateur de votre portefeuille.');
   // Mobile money keeps its own digit-count check; a bank account number is
   // never phone-shaped, so it only needs to be present and a plausible
   // length -- never capped tighter than that (see handleWalDestInput()'s
   // own comment for why), the server does the real validation against
   // MarzPay before this is ever saved.
   if (isMobileMoneyNetwork(network)) {
-    if (String(phone).replace(/\D/g, '').length < 9) return notify('Enter a valid wallet account number.');
+    if (String(phone).replace(/\D/g, '').length < 9) return notify('Entrez un numéro de compte de portefeuille valide.');
   } else if (String(phone).trim().length < 4) {
-    return notify('Enter a valid bank account number.');
+    return notify('Saisissez un numéro de compte bancaire valide.');
   }
-  if (!holder) return notify('Enter the account holder name.');
+  if (!holder) return notify('Entrez le nom du titulaire du compte.');
   const btn = $('walSaveBtn');
-  btn.disabled = true; btn.textContent = 'Saving…';
+  btn.disabled = true; btn.textContent = 'Enregistrement…';
   const r = await post('/bank/save', { holder, network, phone });
-  btn.disabled = false; btn.textContent = 'Submit';
-  if (r.status !== 'success') return notify(r.message || 'Could not save your wallet.');
+  btn.disabled = false; btn.textContent = 'Envoyer';
+  if (r.status !== 'success') return notify(r.message || 'Impossible d\'enregistrer votre portefeuille.');
   return finishWalletSave();
 };
 // Tail of a successful /bank/save.
@@ -4794,7 +4806,7 @@ async function finishWalletSave(){
   // One wallet only: /bank/save edits it in place, so just re-read and show it.
   const fresh = await api('/bank/list');
   STATE.bankAccounts = fresh.status === 'success' ? fresh.accounts : (STATE.bankAccounts || []);
-  notify('Wallet saved');
+  notify('Portefeuille enregistré');
   if (_openSheetTitle === 'Wallet') renderWalletSheet();
 }
 // ── NOTIFY DIALOG (Notify.dc.html) ──
@@ -4847,9 +4859,9 @@ window.openHelpDialog = function(title){
     : `<button class="v-help-b" type="button" onclick="notify('No ${label.toLowerCase()} link is set yet.')">${VI.plane}<span>${label}</span></button>`;
   $('helpCard').innerHTML = `
     <span class="v-help-ic">${VI.headset}</span>
-    <h3>${esc(title || 'Help')}</h3>
-    <div class="v-help-btns">${btn(s.telegramGroup || s.telegramChannel, 'Channel')}${btn(s.supportTelegram, 'Service')}</div>
-    <button class="v-help-close" type="button" onclick="closeHelpDialog()">Close</button>`;
+    <h3>${esc(title || 'Aide')}</h3>
+    <div class="v-help-btns">${btn(s.telegramGroup || s.telegramChannel, 'Canal')}${btn(s.supportTelegram, 'Service')}</div>
+    <button class="v-help-close" type="button" onclick="closeHelpDialog()">Fermer</button>`;
   $('helpBg').classList.add('show');
   lockBodyScroll(); dlgOpened();
 };
@@ -4874,20 +4886,20 @@ function statementCategoryMatch(cat, t){
   return true;
 }
 function statementDescription(t){
-  if (t.type === 'deposit') return 'Deposit';
-  if (t.type === 'withdraw') return 'Withdraw';
-  if (t.type === 'cashback') return 'Daily Earnings';
-  if (t.type === 'commission') return 'Referral Commission';
-  if (t.type === 'promocode') return 'Gift Code';
-  if (t.type === 'checkin') return 'Check-in Reward';
-  if (t.type === 'welcome_bonus') return 'Welcome Bonus';
-  if (t.type === 'team_reward') return 'Team Reward';
-  if (t.type === 'mission_salary') return 'Mission Salary';
-  if (t.type === 'mission_deposit_reward') return 'Mission Reward';
-  if (STATEMENT_TURNTABLE_TYPES.has(t.type)) return 'Turntable';
-  if (t.type === 'admin_credit') return 'Deposit';
-  if (t.type === 'invest' || t.type === 'investment') return 'Purchase';
-  if (t.type === 'investment_refund') return 'Refund';
+  if (t.type === 'deposit') return 'Dépôt';
+  if (t.type === 'withdraw') return 'Retrait';
+  if (t.type === 'cashback') return 'Gains quotidiens';
+  if (t.type === 'commission') return 'Commission de parrainage';
+  if (t.type === 'promocode') return 'Code cadeau';
+  if (t.type === 'checkin') return 'Récompense de pointage';
+  if (t.type === 'welcome_bonus') return 'Bonus de bienvenue';
+  if (t.type === 'team_reward') return 'Récompense d\'équipe';
+  if (t.type === 'mission_salary') return 'Salaire de mission';
+  if (t.type === 'mission_deposit_reward') return 'Récompense de mission';
+  if (STATEMENT_TURNTABLE_TYPES.has(t.type)) return 'La Roue';
+  if (t.type === 'admin_credit') return 'Dépôt';
+  if (t.type === 'invest' || t.type === 'investment') return 'Achat';
+  if (t.type === 'investment_refund') return 'Remboursement';
   return 'Transaction';
 }
 // The pill under a row: orange while it is still moving, green once paid,
@@ -4897,9 +4909,9 @@ function statementChip(t){
   // The words in a free-text description only describe a deposit or a withdrawal; on a credit or a gift they are the admin's note.
   const describes = t.type === 'deposit' || t.type === 'withdraw';
   const raw = String(t.status || '').toLowerCase() + (describes ? ' ' + String(t.description || '').toLowerCase() : '');
-  if (/fail|declin|reject|cancel|error/.test(raw)) return { text: 'Failed', cls: 'bad' };
-  if (/pend|process|await|initiating|creating|sending/.test(raw)) return { text: t.type === 'deposit' ? 'Pending Deposit' : t.type === 'withdraw' ? 'Processing Payment' : 'Pending', cls: 'wait' };
-  if (t.type === 'withdraw') return { text: 'Paid', cls: 'ok' };
+  if (/fail|declin|reject|cancel|error/.test(raw)) return { text: 'Échoué', cls: 'bad' };
+  if (/pend|process|await|initiating|creating|sending/.test(raw)) return { text: t.type === 'deposit' ? 'Dépôt en attente' : t.type === 'withdraw' ? 'Paiement en cours' : 'En attente', cls: 'wait' };
+  if (t.type === 'withdraw') return { text: 'Payé', cls: 'ok' };
   return null;
 }
 function statementDate(t){
@@ -4921,7 +4933,7 @@ function renderStatement(){
   const body = $('statementBody');
   if (!body) return;
   const all = (STATE.transactions || []).filter(t => statementCategoryMatch(_statementCat, t));
-  if (!all.length) { body.innerHTML = '<div class="v-empty">No records yet.</div>'; return; }
+  if (!all.length) { body.innerHTML = '<div class="v-empty">Aucun enregistrement pour l\'instant.</div>'; return; }
   const rows = all.slice(0, _statementShown);
   // The Load More button always sits under the list (as on the owner's Balance Record, even with two rows): it shows the next ten, or, when
   // everything held is already on screen, asks the server again for anything newer or older.
@@ -4938,7 +4950,7 @@ function renderStatement(){
         <div class="v-rmid"><b>${esc(title)}</b><small>${esc(statementDate(t))}</small>${line}</div>
         <span class="v-ramt ${amt < 0 ? 'out' : 'in'}">${esc(statementAmountText(t))}</span>
       </article>`;
-  }).join('') + (more ? '<div class="v-more"><button type="button" onclick="statementLoadMore()">Load More</button></div>' : '');
+  }).join('') + (more ? '<div class="v-more"><button type="button" onclick="statementLoadMore()">Voir plus</button></div>' : '');
 }
 var _statementMoreBusy = false;
 window.statementLoadMore = async function(){
@@ -4968,9 +4980,9 @@ window.openTransactionStatement = async function(cat){
   const hadCache = Array.isArray(STATE.transactions);
   const bal = (STATE.account && STATE.account.walletBalance) || 0;
   openSheet('Balance Record', `
-    <div class="v-recbal"><span>CURRENT BALANCE</span><b id="recBalance">${esc(vMoney2(bal))}</b></div>
+    <div class="v-recbal"><span>SOLDE ACTUEL</span><b id="recBalance">${esc(vMoney2(bal))}</b></div>
     <div class="v-rectabs" id="statementTabs">
-      ${[['all','All'],['deposit','Deposit'],['withdraw','Withdraw'],['turntable','Turntable'],['fruit','Fruit']].map(([k, l]) => `<button data-cat="${k}" class="${_statementCat === k ? 'on' : ''}" onclick="switchStatementCategory('${k}')">${l}</button>`).join('')}
+      ${[['all','Tout'],['deposit','Dépôt'],['withdraw','Retrait'],['turntable','La Roue'],['fruit','Fruit']].map(([k, l]) => `<button data-cat="${k}" class="${_statementCat === k ? 'on' : ''}" onclick="switchStatementCategory('${k}')">${l}</button>`).join('')}
     </div>
     <div id="statementBody"></div>`);
   $('sheetBg').classList.add('v-rec-page');
@@ -5013,7 +5025,7 @@ function renderMessagesList(){
   const box = $('msgBody');
   if (!box) return;
   const list = STATE.messages || [];
-  if (!list.length) { box.innerHTML = `<div class="v-nomsg"><span>${VI.bottle}</span><p>No messages</p></div>`; return; }
+  if (!list.length) { box.innerHTML = `<div class="v-nomsg"><span>${VI.bottle}</span><p>Aucun message</p></div>`; return; }
   box.innerHTML = '<div class="reveal-in">' + list.map((m, i) => `
     <button class="msg-row${m.read ? ' read' : ''}" onclick="openMessageDetail(${i})">
       <span class="av">${VI.bottle}</span>
@@ -5030,7 +5042,7 @@ window.openMessageDetail = async function(index){
   const m = (STATE.messages || [])[index];
   if (!m) return;
   $('msgDetail').innerHTML = `
-    <button class="xbtn" onclick="closeMessageDetail()" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+    <button class="xbtn" onclick="closeMessageDetail()" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
     <div class="head">
       <div class="av">${VI.bottle}</div>
       <div>
@@ -5082,35 +5094,35 @@ function vPwBox(id, placeholder, pin){
 }
 window.openChangeLoginPasswordSheet = function(){
   openSheet('Change Login Password', `<div class="v-form reveal-in"><div class="v-edit">
-    <label class="v-flabel" for="lpOld">Old Password</label>${vPwBox('lpOld', 'Enter old password')}
-    <label class="v-flabel" for="lpNew">New Password</label>${vPwBox('lpNew', 'Enter new password (at least 10 characters)')}
-    <label class="v-flabel" for="lpNew2">Confirm New Password</label>${vPwBox('lpNew2', 'Confirm new password')}
-    <button class="v-cta" id="lpSaveBtn" onclick="submitLoginPasswordChange()">Change Password</button>
+    <label class="v-flabel" for="lpOld">Ancien mot de passe</label>${vPwBox('lpOld', 'Entrez l\'ancien mot de passe')}
+    <label class="v-flabel" for="lpNew">Nouveau mot de passe</label>${vPwBox('lpNew', 'Saisissez le nouveau mot de passe (10 caractères minimum)')}
+    <label class="v-flabel" for="lpNew2">Confirmez le nouveau mot de passe</label>${vPwBox('lpNew2', 'Confirmez le nouveau mot de passe')}
+    <button class="v-cta" id="lpSaveBtn" onclick="submitLoginPasswordChange()">Changer le mot de passe</button>
   </div></div>`);
 };
 window.submitLoginPasswordChange = async function(){
   const oldPass = $('lpOld').value;
   const newPass = $('lpNew').value;
   const confirm = $('lpNew2').value;
-  if (!oldPass) return notify('Enter your current login password.');
-  if (!newPass || newPass.length < 10) return notify('Your new password must be at least 10 characters.');
-  if (newPass !== confirm) return notify('The two new passwords do not match.');
-  if (newPass === oldPass) return notify('Your new password must be different from the old one.');
+  if (!oldPass) return notify('Entrez votre mot de passe de connexion actuel.');
+  if (!newPass || newPass.length < 10) return notify('Votre nouveau mot de passe doit comporter au moins 10 caractères.');
+  if (newPass !== confirm) return notify('Les deux nouveaux mots de passe ne correspondent pas.');
+  if (newPass === oldPass) return notify('Votre nouveau mot de passe doit être différent de l\'ancien.');
   const btn = $('lpSaveBtn');
-  btn.disabled = true; btn.textContent = 'Saving…';
+  btn.disabled = true; btn.textContent = 'Enregistrement…';
   try {
     await window.fbChangePassword(phoneToEmail((STATE.account || {}).phone), oldPass, newPass);
-    btn.disabled = false; btn.textContent = 'Change Password';
+    btn.disabled = false; btn.textContent = 'Changer le mot de passe';
     closeSheet({ fromAction: true });
-    notify('Login password changed');
+    notify('Mot de passe de connexion modifié');
   } catch (e) {
-    btn.disabled = false; btn.textContent = 'Change Password';
+    btn.disabled = false; btn.textContent = 'Changer le mot de passe';
     // fbErrMsg's wrong-credential copy names the phone number, which only
     // makes sense on the login screen -- here the only thing that can be
     // wrong is the old password itself.
     const code = e && e.code || '';
     notify(code === 'auth/invalid-credential' || code === 'auth/wrong-password'
-      ? 'That is not your current login password.'
+      ? 'Ce n\'est pas votre mot de passe de connexion actuel.'
       : fbErrMsg(e));
   }
 };
@@ -5122,10 +5134,10 @@ window.openChangeTradePasswordSheet = function(){
   // An account with no Trade Password yet is asked only for the new one.
   const first = (STATE.account || {}).hasTradePin === false;
   openSheet('Change Trade Password', `<div class="v-form reveal-in"><div class="v-edit">
-    ${first ? '' : `<label class="v-flabel" for="tpOld">Old Password</label>${vPwBox('tpOld', 'Enter old password', true)}`}
-    <label class="v-flabel" for="tpNew">New Password</label>${vPwBox('tpNew', 'Enter new password (6 digits)', true)}
-    <label class="v-flabel" for="tpNew2">Confirm New Password</label>${vPwBox('tpNew2', 'Confirm new password', true)}
-    <button class="v-cta" id="tpSaveBtn" onclick="submitTradePasswordChange()">Change Password</button>
+    ${first ? '' : `<label class="v-flabel" for="tpOld">Ancien mot de passe</label>${vPwBox('tpOld', 'Entrez l\'ancien mot de passe', true)}`}
+    <label class="v-flabel" for="tpNew">Nouveau mot de passe</label>${vPwBox('tpNew', 'Saisissez le nouveau mot de passe (6 chiffres)', true)}
+    <label class="v-flabel" for="tpNew2">Confirmez le nouveau mot de passe</label>${vPwBox('tpNew2', 'Confirmez le nouveau mot de passe', true)}
+    <button class="v-cta" id="tpSaveBtn" onclick="submitTradePasswordChange()">Changer le mot de passe</button>
   </div></div>`);
 };
 window.submitTradePasswordChange = async function(){
@@ -5133,18 +5145,18 @@ window.submitTradePasswordChange = async function(){
   const oldPin = first ? '' : $('tpOld').value.trim();
   const newPin = $('tpNew').value.trim();
   const confirm = $('tpNew2').value.trim();
-  if (!first && !/^\d{6}$/.test(oldPin)) return notify('Enter your current 6-digit trade password.');
-  if (!/^\d{6}$/.test(newPin)) return notify('Your new trade password must be exactly 6 digits.');
-  if (newPin !== confirm) return notify('The two new trade passwords do not match.');
-  if (!first && newPin === oldPin) return notify('Your new trade password must be different from the old one.');
+  if (!first && !/^\d{6}$/.test(oldPin)) return notify('Entrez votre mot de passe de transaction actuel à 6 chiffres.');
+  if (!/^\d{6}$/.test(newPin)) return notify('Votre nouveau mot de passe de transaction doit comporter exactement 6 chiffres.');
+  if (newPin !== confirm) return notify('Les deux nouveaux mots de passe de transaction ne correspondent pas.');
+  if (!first && newPin === oldPin) return notify('Votre nouveau mot de passe de transaction doit être différent de l\'ancien.');
   const btn = $('tpSaveBtn');
-  btn.disabled = true; btn.textContent = 'Saving…';
+  btn.disabled = true; btn.textContent = 'Enregistrement…';
   const r = await post('/account/transaction-pin/change', first ? { newPin } : { oldPin, newPin });
-  btn.disabled = false; btn.textContent = 'Change Password';
-  if (r.status !== 'success') return notify(r.message || 'Could not change your trade password.');
+  btn.disabled = false; btn.textContent = 'Changer le mot de passe';
+  if (r.status !== 'success') return notify(r.message || 'Impossible de changer votre mot de passe de transaction.');
   if (STATE.account) STATE.account.hasTradePin = true;
   closeSheet({ fromAction: true });
-  notify(first ? 'Trade password saved' : 'Trade password changed');
+  notify(first ? 'Mot de passe de transaction enregistré' : 'Mot de passe de transaction modifié');
 };
 
 // ── TREASURE CHEST (Chest.dc.html / ChestSuccess.dc.html) ──
@@ -5157,10 +5169,10 @@ window.openChestSheet = function(){
     : `<span class="v-chest-ic">${VI.bottle}</span>`;
   openSheet('TREASURE CHEST', `<div class="v-chest reveal-in">
     <div class="v-chest-ring"><div class="v-chest-disc">${pic}</div></div>
-    <h2>MYSTERY TREASURE</h2>
-    <p>Enter your key to unlock the reward</p>
-    <div class="v-chest-key"><span class="v-chest-keyic">${VI.key}</span><input id="chestKey" type="text" placeholder="Enter treasure chest key" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
-    <button class="v-chest-go" id="chestOpenBtn" type="button" onclick="submitChestKey()">UNLOCK TREASURE</button>
+    <h2>TRÉSOR MYSTÈRE</h2>
+    <p>Entrez votre clé pour débloquer la récompense</p>
+    <div class="v-chest-key"><span class="v-chest-keyic">${VI.key}</span><input id="chestKey" type="text" placeholder="Entrez la clé du coffre au trésor" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
+    <button class="v-chest-go" id="chestOpenBtn" type="button" onclick="submitChestKey()">DÉBLOQUER LE TRÉSOR</button>
   </div>`);
 };
 window.submitChestKey = async function(){
@@ -5170,12 +5182,12 @@ window.submitChestKey = async function(){
   const raw = ($('chestKey').value || '').trim();
   // Owner named these two exactly: "so on 'please enter the treasure chest
   // key', 'wrong treasure chest password'."
-  if (!raw) return notify('Please enter the treasure chest key');
+  if (!raw) return notify('Veuillez saisir la clé du coffre au trésor');
   const btn = $('chestOpenBtn');
-  btn.disabled = true; btn.textContent = 'UNLOCKING…';
+  btn.disabled = true; btn.textContent = 'DÉBLOCAGE…';
   const r = await post('/redeem', { code: raw });
-  btn.disabled = false; btn.textContent = 'UNLOCK TREASURE';
-  if (r.status !== 'success') return notify(r.message || 'Wrong treasure chest password');
+  btn.disabled = false; btn.textContent = 'DÉBLOQUER LE TRÉSOR';
+  if (r.status !== 'success') return notify(r.message || 'Mot de passe du coffre au trésor incorrect');
   // Owner: "why does the congratulations card delay to appear when one has
   // claimed treasure code." Because it used to wait on TWO more round trips
   // after the redeem itself -- /account and the transactions cache -- purely
@@ -5207,11 +5219,11 @@ function showChestWin(reward, balance, after){
   bg.innerHTML = `
     <div class="v-win-card" role="dialog" aria-modal="true">
       <span class="v-win-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="9" width="17" height="11.5" rx="2"/><path d="M2.5 9h19v-3.2h-19z"/><path d="M12 5.8v14.7"/><path d="M12 5.8C10.2 5.8 8.4 5 8.4 3.6 8.4 2.5 9.4 2 10.4 2.4c1.1.5 1.6 1.9 1.6 3.4zM12 5.8c1.8 0 3.6-.8 3.6-2.2 0-1.1-1-1.6-2-1.2-1.1.5-1.6 1.9-1.6 3.4z"/></svg></span>
-      <h2>Congratulations!</h2>
-      <p class="v-win-sub">You won</p>
+      <h2>Félicitations !</h2>
+      <p class="v-win-sub">Vous avez gagné</p>
       <div class="v-win-amt">${esc(vMoney2(reward))}</div>
-      <p class="v-win-bal">New Balance: ${esc(vMoney2(balance))}</p>
-      <button type="button" class="v-win-btn" onclick="collectChestWin()">COLLECT</button>
+      <p class="v-win-bal">Nouveau solde : ${esc(vMoney2(balance))}</p>
+      <button type="button" class="v-win-btn" onclick="collectChestWin()">RÉCUPÉRER</button>
     </div>`;
   document.body.appendChild(bg);
   requestAnimationFrame(() => bg.classList.add('show'));
@@ -5351,10 +5363,18 @@ function maybeAnnounceOnEntry(){
   if (isAnyOverlayOpen()) return;
   maybeShowAnnouncement();
 }
+// A sheet's `title` is also its IDENTITY (the live refresh asks "is the Wallet sheet still open?"), so the
+// callers keep passing the short internal name and only what is PRINTED in the header is French.
+var SHEET_LABELS = {
+  'Balance Record': 'Historique du solde', 'Change Login Password': 'Changer le mot de passe de connexion',
+  'Change Trade Password': 'Changer le mot de passe de transaction', 'Deposit': 'Dépôt', 'Messages': 'Messages',
+  'TREASURE CHEST': 'COFFRE AU TRÉSOR', 'Task Center': 'Centre des tâches', 'Wallet': 'Portefeuille', 'Withdraw': 'Retrait'
+};
+function sheetLabel(title){ const s = String(title == null ? '' : title); return SHEET_LABELS[s] || s; }
 function openSheet(title, bodyHtml){
   dismissNotify();
   $('sheetBg').classList.remove('v-rec-page');
-  $('sheetTitle').textContent = title;
+  $('sheetTitle').textContent = sheetLabel(title);
   $('sheetBody').innerHTML = bodyHtml;
   // Withdraw's empty-state "Add withdrawal account" link opens Withdrawal
   // Accounts FROM WITHIN the already-open Withdraw sheet -- both render into
@@ -5521,7 +5541,31 @@ function recordsRowAmount(t){
   return Number(t.amount) || 0;
 }
 
-function cleanDesc(d){ return d || ''; }
+// Transaction descriptions are written to the database by the server in English (data, not interface text), so the app turns
+// the known ones into French when it prints them. Anything it does not know is shown as stored.
+function cleanDesc(d){
+  const s = String(d || '').trim();
+  if (!s) return '';
+  const STATUS = { success: 'réussi', paid: 'payé', processing: 'en cours', pending: 'en attente', sending: 'envoi en cours', failed: 'échoué', rejected: 'rejeté', declined: 'refusé', completed: 'terminé', processed: 'traité' };
+  let m;
+  if ((m = /^(Deposit|Withdrawal): ([A-Za-z ]+?)(?: \((.*)\))?$/.exec(s))) {
+    const w = STATUS[m[2].toLowerCase()];
+    if (w) return (m[1] === 'Deposit' ? 'Dépôt' : 'Retrait') + ' : ' + w + (m[3] ? ' (' + m[3] + ')' : '');
+  }
+  if (s === 'Withdrawal') return 'Retrait';
+  if (s === 'Turntable win') return 'Gain de la roue';
+  if (s === 'Welcome Bonus' || s === 'Welcome gift') return 'Bonus de bienvenue';
+  if (s === 'Balance adjustment') return 'Ajustement du solde';
+  if ((m = /^Level (\d) (?:Commission|reward)$/.exec(s))) return 'Commission de niveau ' + m[1];
+  if ((m = /^Gift code redeemed: (.*)$/.exec(s))) return 'Code cadeau utilisé : ' + m[1];
+  if ((m = /^Refund: (.*)$/.exec(s))) return 'Remboursement : ' + m[1];
+  if ((m = /^Daily check-in, day (\d+)$/.exec(s))) return 'Pointage quotidien, jour ' + m[1];
+  if ((m = /^Task Center: whole team deposits (.*)$/.exec(s))) return 'Centre des tâches : dépôts de toute l\'équipe ' + m[1];
+  if ((m = /^Task Center: (\d+) active referrals$/.exec(s))) return 'Centre des tâches : ' + m[1] + ' filleuls actifs';
+  if ((m = /^(.*) activated$/.exec(s))) return m[1] + ' activé';
+  if ((m = /^(.*) daily cashback$/.exec(s))) return m[1] + ' — gain quotidien';
+  return s;
+}
 
 // Manual (admin-number, SMS-matched) deposit collection -- PAY B, and the
 // PAY A/PAY B choice screen itself -- was removed outright per owner
@@ -5530,7 +5574,7 @@ function cleanDesc(d){ return d || ''; }
 // only deposit path: one screen, no method choice to make.
 window.openDepositSheet = function(){
   const s = STATE.settings || {};
-  if (s.depositAvailable === false) return notify('Deposits are not available right now.');
+  if (s.depositAvailable === false) return notify('Les dépôts ne sont pas disponibles pour le moment.');
   openDepositFormSheet();
 };
 var _depChosenAmount = 0;
@@ -5546,24 +5590,24 @@ function openDepositFormSheet(){
   const manualOn = s.manualPay === true;
   const min = Number(s.minDeposit) || 0;
   openSheet('Deposit', `<div class="v-form">
-    <div class="v-sec"><span class="bar"></span><h2>Select Amount</h2></div>
+    <div class="v-sec"><span class="bar"></span><h2>Choisissez le montant</h2></div>
     <div class="v-chips" id="depChips">${depositChipsHtml(s, 'depAmount')}</div>
-    <input class="v-amount" id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[\s,]/g,'');syncDepositQuickAmt()" autocomplete="off">
- ${manualOn ? '' : `<input class="v-phone-in" id="depPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="Phone Number" value="${esc(defaultPhone)}" oninput="sanitizePhoneInput(this)">
-    <div class="v-sec"><span class="bar"></span><h2>Select Payment Method</h2></div>
+    <input class="v-amount" id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[s,]/g,'');syncDepositQuickAmt()" autocomplete="off">
+ ${manualOn ? '' : `<input class="v-phone-in" id="depPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="Numéro de téléphone" value="${esc(defaultPhone)}" oninput="sanitizePhoneInput(this)">
+    <div class="v-sec"><span class="bar"></span><h2>Choisissez le mode de paiement</h2></div>
     <div class="v-pays" id="depPays">
-      <button type="button" class="on" onclick="pickPayLabel(this)">PAY-A</button>
+      <button type="button" class="on" onclick="pickPayLabel(this)">PAYER-A</button>
       <button type="button" onclick="pickPayLabel(this)">PAY-B</button>
       <button type="button" onclick="pickPayLabel(this)">PAY-C</button>
     </div>`}
-    <button class="v-cta" id="depSubmitBtn" onclick="submitDeposit()">Confirm Deposit</button>
+    <button class="v-cta" id="depSubmitBtn" onclick="submitDeposit()">Confirmer le dépôt</button>
     <div class="v-info">
-      <h3>Deposit Instructions</h3>
+      <h3>Instructions de dépôt</h3>
       <ol>
-        <li>Recharge time: 7*24 hours.</li>
-        <li>If the deposit is not received, please contact Support.</li>
-        <li>Minimum deposit amount: ${esc(cur())} ${vGroup(min)}</li>
-        <li>Please do not save old account recharge.</li>
+        <li>Recharge disponible 24 h/24, 7 j/7.</li>
+        <li>Si le dépôt n'est pas reçu, veuillez contacter l'assistance.</li>
+        <li>Montant minimum de recharge : ${esc(cur())} ${vGroup(min)}</li>
+        <li>N'utilisez pas un ancien compte pour la recharge.</li>
       </ol>
     </div>
   </div>`);
@@ -5618,7 +5662,7 @@ async function resumePendingCardDeposit(){
       if (r.status === 'success' && r.state === 'matched') {
         clearInterval(timer);
         try { localStorage.removeItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) {}
-              notify('Card payment completed! Credited to your balance.');
+              notify('Paiement par carte effectué ! Votre solde a été crédité.');
         await refreshTransactionsCache();
         if (STATE.page === 'home') renderHome();
         return;
@@ -5626,7 +5670,7 @@ async function resumePendingCardDeposit(){
       if (r.status === 'success' && r.state === 'failed') {
         clearInterval(timer);
         try { localStorage.removeItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) {}
-        notify(r.message || 'The card payment did not complete.');
+        notify(r.message || 'Le paiement par carte n\'a pas abouti.');
         return;
       }
     } catch (e) {}
@@ -5776,29 +5820,29 @@ async function applyDepositStatusResult(r){
 // moment would be backwards.
 function setDepButtons(showVerify, showClose){
   const v = $('depVerifyBtn'), c = $('depStatusCloseBtn');
-  if (v) { v.style.display = showVerify ? 'block' : 'none'; v.disabled = false; v.textContent = 'Verify'; }
+  if (v) { v.style.display = showVerify ? 'block' : 'none'; v.disabled = false; v.textContent = 'Vérifier'; }
   if (c) { c.style.display = showClose ? 'block' : 'none'; c.setAttribute('onclick', 'closeDepositStatusModal(' + (c.textContent === 'Back to Home') + ')'); }
 }
 window.verifyDepositNow = async function(){
   const btn = $('depVerifyBtn');
   if (!_depActiveDepositId || _depPollDone || !btn || btn.disabled) return;
-  btn.disabled = true; btn.textContent = 'Checking…';
+  btn.disabled = true; btn.textContent = 'Vérification…';
   const settled = await applyDepositStatusResult(await depositStatusCheck(_depActiveDepositId));
   if (settled) return;                       // setDep* already reset the buttons
-  notify('Not confirmed yet. Approve the payment prompt on your phone, then tap Verify again.');
+  notify('Pas encore confirmé. Approuvez la demande de paiement sur votre téléphone, puis appuyez de nouveau sur Vérifier.');
   // The cooldown runs from the ANSWER, not the tap, so a slow provider does
   // not let taps queue up behind it.
   setTimeout(() => {
     if (_depPollDone) return;
     const b = $('depVerifyBtn');
-    if (b) { b.disabled = false; b.textContent = 'Verify'; }
+    if (b) { b.disabled = false; b.textContent = 'Vérifier'; }
   }, DEP_VERIFY_COOLDOWN_MS);
 };
 function setDepositStatusPending(amount, phone, network){
   if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }   // an old success countdown must not close this new page
   $('depStatusIcon').className = 'dep-status-icon';
   $('depStatusIcon').innerHTML = DEPOSIT_POLL_FLOW;
-  $('depStatusTitle').textContent = 'Processing your deposit';
+  $('depStatusTitle').textContent = 'Traitement de votre dépôt';
   // Owner asked for the specifics shown here, not a generic message --
   // the actual number the prompt was sent to and the actual amount.
   const displayPhone = cleanPhone(phone) || (dialPlus() + String(phone || '').replace(/\D/g, ''));
@@ -5815,7 +5859,7 @@ function setDepositStatusPending(amount, phone, network){
   // network selector from PAY A's own form (the gateway detects it
   // instead), so `network` is no longer reliably known here -- show both
   // codes rather than guessing.
-  const ussd = network === 'Airtel Money' ? '*185#' : (network === 'MTN Mobile Money' ? '*165#' : '*165# (MTN) or *185# (Airtel)');
+  const ussd = network === 'Airtel Money' ? '*185#' : (network === 'MTN Mobile Money' ? '*165#' : '*165# (MTN) ou *185# (Airtel)');
   _depPendingAmount = Number(amount) || 0;
   // Owner's own four steps, verbatim. Numbered because they are a sequence
   // with one thing for the member to DO in the middle of it -- the previous
@@ -5825,21 +5869,7 @@ function setDepositStatusPending(amount, phone, network){
   // esc() on both interpolations: the amount is ours, but the phone number is
   // whatever was typed into the form, and this is innerHTML now.
   $('depStatusBody').innerHTML =
-    '<ol class="pay-steps">'
-    + '<li>A payment request for ' + esc(fmtUGX(amount)) + ' has been sent to ' + esc(displayPhone) + '.</li>'
-    + '<li>Check your phone for the payment prompt.</li>'
-    + '<li>Approve the payment to complete your deposit.</li>'
-    + '<li>Your balance will be updated automatically once the payment is confirmed.</li>'
-    + '</ol>'
-    // Kept from the earlier round, and deliberately NOT dropped when the four
-    // steps replaced the old paragraph. Owner, when it was added: "put another
-    // statement, that dial *165# to approve, this is just a fallback bro
-    // because a payment prompt can come or it may fail and one may dial *165#
-    // so he see pending approval." The push prompt genuinely does fail to
-    // arrive sometimes -- a real MoMo gap, not something this app causes --
-    // and without this a member is left staring at step 2 with nothing to do.
-    + '<p class="pay-note">If the prompt does not come up, dial ' + esc(ussd)
-    + ' on that phone to find and approve the pending payment yourself.</p>';
+    `<ol class="pay-steps"><li>Une demande de paiement de ${esc(fmtUGX(amount))} a été envoyée à ${esc(displayPhone)}.</li><li>Vérifiez votre téléphone pour la demande de paiement.</li><li>Validez le paiement pour finaliser votre dépôt.</li><li>Votre solde sera mis à jour automatiquement dès la confirmation du paiement.</li></ol><p class="pay-note">Si la demande n'apparaît pas, composez ${esc(ussd)} sur ce téléphone pour retrouver et valider vous-même le paiement en attente.</p>`;
   // Owner: "remove verify button, so this is automatic verification" -- the
   // autopoll (pollDepositStatus() below) already checks on its own; a manual
   // Verify tap next to it was a second way to do the same thing, not a
@@ -5856,15 +5886,15 @@ function setDepositStatusSuccess(){
   // Owner: "let me think that on payment success it says congratulations
   // payment has been received {added to your wallet} redirecting back home
   // in 5 seconds or you can say so back the button should be available."
-  $('depStatusTitle').textContent = 'Congratulations!';
+  $('depStatusTitle').textContent = 'Félicitations !';
   // Names the actual figure when it is known (it always is on the automatic
   // path, since the pending state set it moments earlier) and falls back to
   // wording that reads properly without one -- the manual-deposit path lands
   // here from handleManualDepositStatusResult() without ever showing pending.
   // brandName(), not the literal: the app's name is admin-settable.
   const amountLine = _depPendingAmount
-    ? 'Payment received — ' + esc(fmtUGX(_depPendingAmount)) + ' has been added to your wallet.'
-    : 'Payment received — your deposit has been added to your ' + esc(brandName()) + ' wallet.';
+    ? 'Paiement reçu — ' + esc(fmtUGX(_depPendingAmount)) + ' ont été ajoutés à votre portefeuille.'
+    : 'Paiement reçu — votre dépôt a été ajouté à votre portefeuille ' + esc(brandName()) + '.';
   $('depStatusBody').innerHTML = '<p>' + amountLine + '</p><p class="pay-note" id="depRedirectCountdown"></p>';
   // Close doubles as "Back to Home" here -- available immediately so a
   // member who does not want to wait the 5 seconds out can leave right
@@ -5872,12 +5902,12 @@ function setDepositStatusSuccess(){
   // available"). The countdown auto-fires the identical action if they
   // don't tap it first.
   const c = $('depStatusCloseBtn');
-  if (c) c.textContent = 'Back to Home';
+  if (c) c.textContent = 'Retour à l\'accueil';
   setDepButtons(false, true);
   let secondsLeft = 5;
   const tick = () => {
     const el = $('depRedirectCountdown');
-    if (el) el.textContent = 'Returning to Home in ' + secondsLeft + '…';
+    if (el) el.textContent = 'Retour à l\'accueil dans ' + secondsLeft + '…';
     if (secondsLeft <= 0) {
       if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
       closeDepositStatusModal(true);
@@ -5899,7 +5929,7 @@ function setDepositStatusFailed(msg){
   // only the mark inside changed, matching image 2's outlined style over
   // image 3's solid-filled one, for visual consistency with that sibling.
   playStatusIcon($('depStatusIcon'), 'fail');
-  $('depStatusTitle').textContent = 'Payment not completed';
+  $('depStatusTitle').textContent = 'Paiement non terminé';
   // Owner asked for "due to insufficient funds" here -- checked against
   // MarzPay's own integration guide first rather than guessing at a field
   // name: a collection that fails after being accepted carries no reason at
@@ -5911,21 +5941,21 @@ function setDepositStatusFailed(msg){
   // `msg` is server-supplied on the normal path; this fallback only fires
   // for a purely client-side failure that never reached the server at all.
   $('depStatusBody').innerHTML = '<p>' + esc(msg
-    || 'This deposit did not go through. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Your ' + brandName() + ' balance has not changed.') + '</p>';
+    || 'Ce dépôt n\'a pas abouti. Cela peut arriver si vous n\'avez pas validé la demande à temps, si vous l\'avez annulée ou si votre solde était insuffisant. Votre solde ' + brandName() + ' n\'a pas changé.') + '</p>';
   // Undoes setDepositStatusSuccess()'s own "Back to Home" relabel -- this
   // button means plain Close here, on a modal a later deposit attempt can
   // reuse without a fresh page load in between.
-  const cf = $('depStatusCloseBtn'); if (cf) cf.textContent = 'Close';
+  const cf = $('depStatusCloseBtn'); if (cf) cf.textContent = 'Fermer';
   setDepButtons(false, true);
 }
 function setDepositStatusUnknown(){
   $('depStatusIcon').className = 'dep-status-icon';
   $('depStatusIcon').innerHTML = DEPOSIT_POLL_FLOW;
-  $('depStatusTitle').textContent = 'Still waiting for the provider';
-  $('depStatusBody').innerHTML = '<p>The payment has not been confirmed yet, and nothing is lost. '
-    + 'If it goes through, your balance updates on its own automatically, '
-    + 'or look under Transaction Statement later to check.</p>';
-  const cu = $('depStatusCloseBtn'); if (cu) cu.textContent = 'Close';
+  $('depStatusTitle').textContent = 'Toujours en attente d\'une réponse';
+  $('depStatusBody').innerHTML = '<p>Le paiement n\'a pas encore été confirmé, et rien n\'est perdu. '
+    + 'S\'il aboutit, votre solde se met à jour automatiquement, '
+    + 'ou consultez l\'Historique du solde plus tard pour vérifier.</p>';
+  const cu = $('depStatusCloseBtn'); if (cu) cu.textContent = 'Fermer';
   // Verify removed here too (see setDepositStatusPending's own comment) --
   // this is the same automatic wait, just past the autopoll's own 60s
   // budget. Close is the only control: a way off the screen, not a way to
@@ -5943,7 +5973,7 @@ window.openManualPayFlow = async function(amount){
   if (_mp.stage !== 'load') return;
   if (!r || r.status !== 'success' || !Array.isArray(r.channels) || !r.channels.length) {
     window.mpClose();
-    return notify('Recharges are not available right now.');
+    return notify('Les recharges ne sont pas disponibles pour le moment.');
   }
   _mp.channels = r.channels;
   mpShowChoose();
@@ -5953,8 +5983,8 @@ window.submitDeposit = async function(){
   if (!submitBtn || submitBtn.disabled || !$('depAmount')) return;
   const amount = parseMoneyInput($('depAmount').value);
   if ((STATE.settings || {}).manualPay === true) {
-    if (!amount || amount <= 0) return notify('Enter a valid amount');
-    if (amount < (Number((STATE.settings || {}).minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX((STATE.settings || {}).minDeposit));
+    if (!amount || amount <= 0) return notify('Entrez un montant valide');
+    if (amount < (Number((STATE.settings || {}).minDeposit) || 0)) return notify(`Le montant minimum est de ${fmtUGX((STATE.settings || {}).minDeposit)}`);
     return openManualPayFlow(amount);
   }
   if (!$('depPhone')) return;
@@ -5972,7 +6002,7 @@ window.submitDeposit = async function(){
   // cleanPhone() is the SAME rule the server applies, so what is accepted
   // here and what is accepted there cannot drift apart.
   const phone = cleanPhone($('depPhone').value);
-  if (!amount || amount <= 0) return notify('Enter a valid amount');
+  if (!amount || amount <= 0) return notify('Entrez un montant valide');
   // Card (doCardDeposit()) and USDT (doUsdtDeposit()) both already check
   // this client-side before ever hitting the network; Mobile Money was the
   // one rail still relying entirely on the server's own rejection, which
@@ -5980,9 +6010,9 @@ window.submitDeposit = async function(){
   // before the member found out, instead of failing instantly like the
   // other two.
   const s = STATE.settings || {};
-  if (amount < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
-  if (!phone) return notify('Enter a valid ' + regionName() + ' mobile number.');
-  submitBtn.disabled = true; submitBtn.textContent = 'Sending request…';
+  if (amount < (Number(s.minDeposit) || 0)) return notify(`Le montant minimum est de ${fmtUGX(s.minDeposit)}`);
+  if (!phone) return notify(`Saisissez un numéro de mobile ${regionName()} valide.`);
+  submitBtn.disabled = true; submitBtn.textContent = 'Envoi de la demande…';
   let r;
   try {
     // No network field on this form (Round 145) -- the gateway detects it
@@ -5994,10 +6024,10 @@ window.submitDeposit = async function(){
     // match whatever submitBtn actually reads at rest (see the sheet's own
     // button above), or a member whose recharge failed is left looking at a
     // button that silently renamed itself.
-    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Deposit';
+    submitBtn.disabled = false; submitBtn.textContent = 'Confirmer le dépôt';
   }
   if (r && r.stale) return;
-  if (!r || r.status !== 'success') return notify((r && r.message) || 'Could not start deposit');
+  if (!r || r.status !== 'success') return notify((r && r.message) || 'Impossible de démarrer la recharge');
   // Same stale-Records fix as submitWithdraw() -- /deposit/marzpay already
   // wrote a "Processing" ledger row server-side by this point, refresh the
   // cache now so it's actually there the next time Records opens.
@@ -6061,7 +6091,7 @@ function mpShowLoading(){
   _mp.stage = 'load';
   const el = mpRoot();
   el.className = 'show dark';
-  el.innerHTML = '<div class="mpf-load"><svg class="mpf-ring" width="36" height="36" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" fill="none" stroke="#1870f8" stroke-width="4" stroke-dasharray="39.3 55" transform="rotate(30 18 18)"/></svg><div class="mpf-loadtxt">loading...</div></div>';
+  el.innerHTML = '<div class="mpf-load"><svg class="mpf-ring" width="36" height="36" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" fill="none" stroke="#1870f8" stroke-width="4" stroke-dasharray="39.3 55" transform="rotate(30 18 18)"/></svg><div class="mpf-loadtxt">chargement…</div></div>';
   document.body.classList.add('mp-open');
   applyLanguage();
 }
@@ -6071,12 +6101,7 @@ function mpShowChoose(){
   el.className = 'show';
   const rows = _mp.channels.map((c, i) => '<button type="button" class="mpf-row" onclick="mpPick(' + i + ')">' + mpLogoHtml(c, 'mpf-logo') +
     '<span class="mpf-rname" data-no-i18n>' + esc(c.name) + '</span><svg class="mpf-chev" width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="#bbb" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5 7.5 7.5l-6 6"/></svg></button>').join('');
-  el.innerHTML = '<div class="mpf-choose">' +
-    '<div class="mpf-ohead"><span class="mpf-olab">Order Amount</span><span class="mpf-oval" data-no-i18n>' + esc(mpMoney(_mp.amount)) + '</span></div>' +
-    '<div class="mpf-pick">Please choose payment</div>' +
-    '<div class="mpf-rows">' + rows + '</div>' +
-    '<div class="mpf-remind">' + MP_ICON_WARN + '<span>Friendly reminder: Please use the corresponding bank to complete the transfer.</span><span>Please do not use interbank transfers from other banks to avoid delays and inconvenience.</span><span>Thank you for your understanding!</span></div>' +
-    '</div>';
+  el.innerHTML = `<div class="mpf-choose"><div class="mpf-ohead"><span class="mpf-olab">Montant de la commande</span><span class="mpf-oval" data-no-i18n>${esc(mpMoney(_mp.amount))}</span></div><div class="mpf-pick">Veuillez choisir le paiement</div><div class="mpf-rows">${rows}</div><div class="mpf-remind">${MP_ICON_WARN}<span>Rappel : veuillez utiliser la banque correspondante pour effectuer le virement.</span><span>Veuillez ne pas utiliser de virements interbancaires depuis d'autres banques afin d'éviter retards et désagréments.</span><span>Merci de votre compréhension !</span></div></div>`;
   document.body.classList.add('mp-open');
   applyLanguage();
 }
@@ -6092,7 +6117,7 @@ window.mpPick = async function(i){
   finally { _mp.busy = false; }
   if (!_mp.stage) return;
   if (!r || r.stale) { mpShowChoose(); return; }
-  if (r.status !== 'success') { mpShowChoose(); return mpToast(r.message || 'Could not start recharge'); }
+  if (r.status !== 'success') { mpShowChoose(); return mpToast(r.message || 'Impossible de démarrer la recharge'); }
   _mp.order = r;
   history.pushState({ mp: 'pay' }, '', ''); _mp.pushed++;
   mpShowPay();
@@ -6107,30 +6132,8 @@ function mpShowPay(){
   const ph = isWallet
     ? 'Dear AMIR You have transferred ETB 5.00 to MASFIN FTINAFU (2510****3268) on 01/02/2026 13:07:25. Your transaction number is DA39J9GAMN. The service fee is ETB 0.87 and 15% VAT on the service fee is ETB 0.13. Your current E-Money Account balance is ETB 1300.22. To download your payment information please click this link: https://transactioninfo.ethiotelecom.et/receipt/DA39J9GAMN.'
     : 'https://mbreciept.cbe.com.et/v2-hfHCxFT8tBhc0zxe95aa\n\nhttps://apps.cbe.com.et:100/?id=FT25512S26V825101122';
-  const phHead = isWallet ? '' : 'ማስረጃ ማገናኛውን እዚህ ለጥፉ፣ ወይም ኮዱን ያስገቡ (FT ወይም v2-):\n\n';
-  el.innerHTML = '<div class="mpf-pay">' +
-    '<div class="mpf-head">' + mpLogoHtml(ch, 'mpf-hlogo') + '<div class="mpf-clock"><span>Order Remaining</span><b id="mpM1"></b><b id="mpM2"></b><span>Min</span><b id="mpS1"></b><b id="mpS2"></b><span>Sec</span></div></div>' +
-    '<div class="mpf-card">' +
-      '<div class="mpf-step"><b>Step 1</b><span>Copy account for payment</span></div>' +
-      '<div class="mpf-box">' +
-        '<div class="mpf-amt"><span class="mpf-l1">Order Amount</span><b data-no-i18n>' + esc(mpMoney(o.amount)) + '</b></div>' +
-        '<div class="mpf-k">Payment Channel</div>' +
-        '<div class="mpf-v"><b data-no-i18n>' + esc(ch.name) + '</b><button type="button" class="mpf-pill" onclick="mpSwitch()">switch</button></div>' +
-        '<div class="mpf-k">Account Name</div>' +
-        '<div class="mpf-v"><b data-no-i18n>' + esc(o.accountName) + '</b><button type="button" class="mpf-pill" onclick="mpCopy(\'name\')">copy</button></div>' +
-        '<div class="mpf-k">Account Number</div>' +
-        '<div class="mpf-v"><b data-no-i18n>' + esc(o.accountNumber) + '</b><button type="button" class="mpf-pill" onclick="mpCopy(\'number\')">copy</button></div>' +
-      '</div>' +
-      // Owner (his screenshots): the instructions, the box's first line and the warning are always in Amharic, whatever language the app is in.
-      '<div class="mpf-help" data-no-i18n lang="am"><p>ግብይት ከተጠናቀቀ → ኤስኤምኤስ ይመልከቱ ኮድ ይጀምራል በ፡ "v2-" ወይም "FT"</p>' +
-        '<p>' + MP_ICON_DIAMOND + '<span>v2-hf = 23 አሃዝ ኮድ ያስገቡ</span></p>' +
-        '<p>' + MP_ICON_DIAMOND + '<span>FT = 12 አሃዝ ኮድ ያስገቡ</span></p>' +
-        '<p>' + MP_ICON_DIAMOND + '<span>ቴሌብር = 10 አሃዝ ብቻ ፣ ፊደል አይፈትሹ</span></p></div>' +
-      '<div class="mpf-step2"><b>Step 2</b><span>Paste payment SMS or enter v2- or FT</span></div>' +
-      '<textarea id="mpSms" class="mpf-ta" data-no-i18n rows="6" maxlength="2000" spellcheck="false" autocomplete="off" placeholder="' + esc(phHead + ph) + '"></textarea>' +
-      '<button type="button" class="mpf-submit" id="mpSubmit" onclick="mpSubmit()">Submit</button>' +
-      '<div class="mpf-note" data-no-i18n lang="am">' + MP_ICON_WARN + '<span>የመለያ ቁጥር አታስቀምጡ! በእውነተኛ ሰዓት ይቀየራል። አለበለዚያ፡ ማስተላለፍ አይሳካም።</span></div>' +
-    '</div></div>';
+  const phHead = isWallet ? '' : 'Collez ici le message de confirmation, ou saisissez le code (FT ou v2-) :\n\n';
+  el.innerHTML = `<div class="mpf-pay"><div class="mpf-head">${mpLogoHtml(ch, 'mpf-hlogo')}<div class="mpf-clock"><span>Temps restant</span><b id="mpM1"></b><b id="mpM2"></b><span>Min</span><b id="mpS1"></b><b id="mpS2"></b><span>Sec</span></div></div><div class="mpf-card"><div class="mpf-step"><b>Étape 1</b><span>Copier le compte pour le paiement</span></div><div class="mpf-box"><div class="mpf-amt"><span class="mpf-l1">Montant de la commande</span><b data-no-i18n>${esc(mpMoney(o.amount))}</b></div><div class="mpf-k">Moyen de paiement</div><div class="mpf-v"><b data-no-i18n>${esc(ch.name)}</b><button type="button" class="mpf-pill" onclick="mpSwitch()">changer</button></div><div class="mpf-k">Nom du compte</div><div class="mpf-v"><b data-no-i18n>${esc(o.accountName)}</b><button type="button" class="mpf-pill" onclick="mpCopy('name')">copier</button></div><div class="mpf-k">Numéro de compte</div><div class="mpf-v"><b data-no-i18n>${esc(o.accountNumber)}</b><button type="button" class="mpf-pill" onclick="mpCopy('number')">copier</button></div></div><div class="mpf-help" data-no-i18n lang="fr"><p>Une fois le virement effectué → consultez le SMS. Le code commence par : « v2- » ou « FT »</p><p>${MP_ICON_DIAMOND}<span>v2-hf = saisissez le code de 23 caractères</span></p><p>${MP_ICON_DIAMOND}<span>FT = saisissez le code de 12 caractères</span></p><p>${MP_ICON_DIAMOND}<span>Telebirr = 10 caractères uniquement, sans lettres</span></p></div><div class="mpf-step2"><b>Étape 2</b><span>Collez le SMS de paiement ou saisissez v2- ou FT</span></div><textarea id="mpSms" class="mpf-ta" data-no-i18n rows="6" maxlength="2000" spellcheck="false" autocomplete="off" placeholder="${esc(phHead + ph)}"></textarea><button type="button" class="mpf-submit" id="mpSubmit" onclick="mpSubmit()">Envoyer</button><div class="mpf-note" data-no-i18n lang="am">${MP_ICON_WARN}<span>የመለያ ቁጥር አታስቀምጡ! በእውነተኛ ሰዓት ይቀየራል። አለበለዚያ፡ ማስተላለፍ አይሳካም።</span></div></div></div>`;
   document.body.classList.add('mp-open');
   mpTick();
   mpStopTimer(); _mp.timer = setInterval(mpTick, 1000);
@@ -6143,7 +6146,7 @@ function mpTick(){
   const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
   set('mpM1', String(Math.floor(m / 10))); set('mpM2', String(m % 10));
   set('mpS1', String(Math.floor(sec / 10))); set('mpS2', String(sec % 10));
-  if (left <= 0) { mpStopTimer(); mpToast('This order has expired. Please start again.'); setTimeout(() => window.mpClose(), 900); }
+  if (left <= 0) { mpStopTimer(); mpToast('Cette commande a expiré. Veuillez recommencer.'); setTimeout(() => window.mpClose(), 900); }
 }
 window.mpSwitch = function(){ if (_mp.pushed > 0) history.back(); else mpShowChoose(); };
 window.mpCopy = async function(what){
@@ -6153,26 +6156,26 @@ window.mpCopy = async function(what){
   try { await navigator.clipboard.writeText(String(text)); ok = true; } catch (_) {
     try {
       const ta = document.createElement('textarea'); ta.value = String(text); ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
-      document.body.appendChild(ta); ta.select(); ok = document.execCommand('copy'); ta.remove();
+      document.body.appendChild(ta); ta.select(); ok = document.execCommand('copier'); ta.remove();
     } catch (_e) {}
   }
-  mpToast(ok ? (what === 'name' ? 'Name Copied' : 'Copied.') : 'Could not copy');
+  mpToast(ok ? (what === 'name' ? 'Nom copié' : 'Copié.') : 'Copie impossible');
 };
 window.mpSubmit = async function(){
   const o = _mp.order, ta = $('mpSms'), btn = $('mpSubmit');
   if (!o || !ta || !btn || btn.disabled) return;
   const sms = ta.value.trim();
-  if (!sms) return mpToast('please enter the correct transfer sms');
+  if (!sms) return mpToast('veuillez saisir le bon SMS de virement');
   btn.disabled = true; btn.classList.add('busy');
   let r;
   try { r = await post('/deposit/manual/submit', { depositId: o.depositId, sms }); }
   finally { if ($('mpSubmit') === btn) { btn.disabled = false; btn.classList.remove('busy'); } }
   if (!r || r.stale) return;
-  if (r.status !== 'success') return mpToast(r.message || 'Could not submit your recharge. Please try again.');
+  if (r.status !== 'success') return mpToast(r.message || 'Impossible d\'envoyer votre recharge. Veuillez réessayer.');
   refreshTransactionsCache().catch(() => {});
   window.mpClose();
   try { if (_openSheetTitle === 'Recharge') closeSheet({ fromAction: true }); } catch (_) {}
-  notify(r.message || 'Submitted. Our team is checking your payment.');
+  notify(r.message || 'Envoyé. Notre équipe vérifie votre paiement.');
 };
 window.openManualPayFlow = async function(amount){
   _mp.amount = Number(amount) || 0; _mp.order = null; _mp.channels = [];
@@ -6185,7 +6188,7 @@ window.openManualPayFlow = async function(amount){
   if (_mp.stage !== 'load') return;
   if (!r || r.status !== 'success' || !Array.isArray(r.channels) || !r.channels.length) {
     window.mpClose();
-    return notify('Recharges are not available right now.');
+    return notify('Les recharges ne sont pas disponibles pour le moment.');
   }
   _mp.channels = r.channels;
   mpShowChoose();
@@ -6327,7 +6330,7 @@ function withdrawWindow(s){
 function witWalletBlockHtml(s){
   const w = witSelectedWallet();
   return `<div id="witWallet">${walletCardHtml(w)}</div>
-    <button id="witBindBtn" class="v-bind" type="button" onclick="openWalletSheet()">Bind Wallet</button>`;
+    <button id="witBindBtn" class="v-bind" type="button" onclick="openWalletSheet()">Associer le portefeuille</button>`;
 }
 // Withdraw.dc.html. Replaces the form inherited from Snow: a tinted balance
 // card, a UGX-prefixed amount field, the bound wallet shown as the same
@@ -6343,22 +6346,22 @@ function paintWithdrawSheet(s){
   // An unrestricted member has no daily number either (the server skips it for them).
   const perDay = (STATE.account && STATE.account.withdrawAnytime) ? 0 : (Number(s.maxWithdrawalsPerDay) || 0);
   $('sheetBody').innerHTML = `<div class="v-form">
-    <div class="v-bal"><span>AVAILABLE BALANCE</span><b id="witBalance">${esc(vMoney2(balance))}</b></div>
-    <div class="v-amtrow"><span>${esc(cur())}</span><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0.00" oninput="this.value=this.value.replace(/[\s,]/g,'');syncWithdrawReceiveAmt()" autocomplete="off"></div>
-    <div class="v-sec"><span class="bar"></span><h2>Withdrawal Wallet</h2></div>
+    <div class="v-bal"><span>SOLDE DISPONIBLE</span><b id="witBalance">${esc(vMoney2(balance))}</b></div>
+    <div class="v-amtrow"><span>${esc(cur())}</span><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0.00" oninput="this.value=this.value.replace(/[s,]/g,'');syncWithdrawReceiveAmt()" autocomplete="off"></div>
+    <div class="v-sec"><span class="bar"></span><h2>Portefeuille de retrait</h2></div>
     <div id="witWalletBlock">${witWalletBlockHtml(s)}</div>
-    <div class="v-sec"><span class="bar"></span><h2>Trade Password</h2></div>
+    <div class="v-sec"><span class="bar"></span><h2>Mot de passe de transaction</h2></div>
  
-    <div class="v-pin"><input id="witPin" type="text" inputmode="numeric" maxlength="6" placeholder="Enter trade password" autocomplete="off"></div>
-    <div class="v-fee">Fee: ${fee}%</div>
-    <button class="v-cta fade" id="witSubmitBtn" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Confirm Withdraw</button>
+    <div class="v-pin"><input id="witPin" type="text" inputmode="numeric" maxlength="6" placeholder="Entrez le mot de passe de transaction" autocomplete="off"></div>
+    <div class="v-fee">Frais : ${fee} %</div>
+    <button class="v-cta fade" id="witSubmitBtn" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Confirmer le retrait</button>
     <div class="v-info">
-      <h3>Withdrawal Instructions</h3>
+      <h3>Instructions de retrait</h3>
       <ol>
-        <li>Fee: ${fee}%</li>
-        <li>Withdrawal amounts should be between ${vGroup(min)}${max ? ' and ' + vGroup(max) : ' and your available balance'}${mult ? ', in multiples of ' + vGroup(mult) : ''}.</li>
-        <li>${perDay ? 'You can make up to ' + perDay + ' withdrawals per day.' : 'One cash-out at a time. Wait for a pending request to finish before the next.'}</li>
-        <li>${win.enabled ? 'Withdrawal time: ' + esc(secs(win.from)) + ' - ' + esc(secs(win.to)) + '.' : 'Withdrawals can be requested at any time of day.'}</li>
+        <li>Frais : ${fee} %</li>
+        <li>Les montants de retrait doivent être compris entre ${vGroup(min)}${max ? ' et ' + vGroup(max) : ' et votre solde disponible'}${mult ? ', par multiples de ' + vGroup(mult) : ''}.</li>
+        <li>${perDay ? 'Vous pouvez faire jusqu\'à ' + perDay + ' retraits par jour.' : 'Un retrait à la fois. Attendez qu\'une demande en attente soit terminée avant la suivante.'}</li>
+        <li>${win.enabled ? `Heures de retrait : ${esc(secs(win.from))} - ${esc(secs(win.to))}.` : 'Les retraits peuvent être demandés à toute heure du jour.'}</li>
       </ol>
     </div>
   </div>`;
@@ -6402,16 +6405,16 @@ window.submitWithdraw = async function(){
   // several now that Soda allows saving more than one (see
   // witSelectedWallet()'s own comment).
   const acct = witSelectedWallet();
-  if (!amount || amount <= 0) return notify('Enter a valid amount.');
+  if (!amount || amount <= 0) return notify('Entrez un montant valide.');
   // Mirrors the server's rule so the member is told BEFORE a round trip.
   // The server checks it again -- this is a courtesy, not the enforcement.
   const wMult = Math.max(0, Math.floor(Number((STATE.settings || {}).withdrawMultiple) || 0));
   const wMin = Number((STATE.settings || {}).minWithdraw) || 0;
   // The minimum is checked first, as the server does, so the suggestions below can never be amounts under it.
-  if (wMin > 0 && amount < wMin) return notify(`Minimum withdraw is ${fmtUGX(wMin)}.`);
+  if (wMin > 0 && amount < wMin) return notify(`Le retrait minimum est de ${fmtUGX(wMin)}.`);
   if (wMult > 0 && amount % wMult !== 0) {
     const low = Math.floor(amount / wMult) * wMult, high = low + wMult;
-    return notify(`Withdraw must be a multiple of ${fmtUGX(wMult)}. Try ${fmtUGX(low || high)} or ${fmtUGX(high)}.`);
+    return notify(`Le retrait doit être un multiple de ${fmtUGX(wMult)}. Essayez ${fmtUGX(low || high)} ou ${fmtUGX(high)}.`);
   }
   // Owner: "I want a notify to appear when one tries to press confirm
   // cashout but when he hasn't saved a bank." Confirm Cash Out used to be a
@@ -6419,22 +6422,22 @@ window.submitWithdraw = async function(){
   // button swallows a tap with zero feedback, so the member saw nothing at
   // all. It's tappable unconditionally now (see paintWithdrawSheet()); this
   // check is what actually tells them why nothing happened.
-  if (!acct) return notify('Please add a payout wallet before withdrawing.');
+  if (!acct) return notify('Veuillez ajouter un portefeuille de retrait avant de retirer.');
   // Same courtesy for the hours: told here so the member is not asked to
   // wait on a request the server will refuse anyway.
   const win = withdrawWindow(STATE.settings || {});
   if (win.enabled && !win.open && !(STATE.account && STATE.account.withdrawAnytime))
-    return notify(`Withdraw is open from ${win.from} to ${win.to}. Please come back then.`);
+    return notify(`Le retrait est ouvert de ${win.from} à ${win.to}. Merci de revenir à ce moment-là.`);
   const witPin = $('witPin') ? $('witPin').value.trim() : '';
-  if (!/^\d{6}$/.test(witPin)) return notify('Enter your 6-digit Trade Password.');
+  if (!/^\d{6}$/.test(witPin)) return notify('Entrez votre mot de passe de transaction à 6 chiffres.');
   _withdrawSubmitting = true;
-  submitBtn.disabled = true; submitBtn.textContent = 'Submitting…';
+  submitBtn.disabled = true; submitBtn.textContent = 'Envoi…';
   let r;
   try { r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone, pin: witPin }); }
   finally {
     if ($('witPin')) $('witPin').value = '';
     _withdrawSubmitting = false;
-    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Withdraw';
+    submitBtn.disabled = false; submitBtn.textContent = 'Confirmer le retrait';
     // A background /bank/list landing mid-request can have repainted the
     // wallet block (see openWithdrawSheet()) and left a DIFFERENT button
     // element in the DOM -- disabled state is only ever about an in-flight
@@ -6443,7 +6446,7 @@ window.submitWithdraw = async function(){
     if (current && current !== submitBtn) current.disabled = false;
   }
   if (r.stale) return;
-  if (r.status !== 'success') return notify(r.message || 'Could not request withdrawal.');
+  if (r.status !== 'success') return notify(r.message || 'Impossible de demander le retrait.');
   // Owner: "why when l withdrawal the value still remains???"
   // Because nothing here refreshed it. The SERVER debits immediately --
   // /withdraw/request does walletBalance: increment(-amt) before it answers --
@@ -6468,8 +6471,8 @@ window.submitWithdraw = async function(){
   // On OK, not before: the card carries the amount they will actually receive,
   // and yanking the screen out from under it while they are still reading is
   // how that number gets missed.
-  notify(`Withdraw of ${fmtUGXCents(amount)} is processing. You will receive `
-    + `${fmtUGXCents(net)} after the ${pct}% charge.`,
+  notify(`Le retrait de ${fmtUGXCents(amount)} est en cours. Vous recevrez `
+    + `${fmtUGXCents(net)} après les frais de ${pct} %.`,
     () => openBalanceRecordSheet('withdraw'));
   if (_openSheetTitle === 'Withdraw' && $('witSubmitBtn') === submitBtn) closeSheet({ fromAction: true });
   refreshAfterWithdraw();
@@ -6499,39 +6502,39 @@ window.openInvestConfirm = function(tierKey, btn){
   if (!p || (btn && btn.disabled)) return;
   const fig = planFigures(p);
   $('confirmSheet').innerHTML = `
-    <h3>Confirm Investment</h3>
-    <p class="confirm-sub">Review this product before investing.</p>
-    <div class="confirm-row"><span>Product</span><b class="mono">${esc(p.name || 'Product')}</b></div>
-    <div class="confirm-row"><span>Cost</span><b class="mono">${fmtUGX(Number(p.price) || 0)}</b></div>
-    <div class="confirm-row"><span>Term</span><b>${fig.cycle} Days</b></div>
-    <div class="confirm-row"><span>Daily Yield</span><b class="mono">${fmtUGX(fig.daily)}</b></div>
-    <div class="confirm-row"><span>Expected Return</span><b class="mono">${fmtUGX(fig.expected)}</b></div>
-    <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;">Buy Product</button>
-    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Cancel</button>`;
+    <h3>Confirmer l'investissement</h3>
+    <p class="confirm-sub">Consultez ce produit avant d'investir.</p>
+    <div class="confirm-row"><span>Produit</span><b class="mono">${esc(p.name || 'Produit')}</b></div>
+    <div class="confirm-row"><span>Coût</span><b class="mono">${fmtUGX(Number(p.price) || 0)}</b></div>
+    <div class="confirm-row"><span>Durée</span><b>${fig.cycle} jours</b></div>
+    <div class="confirm-row"><span>Rendement quotidien</span><b class="mono">${fmtUGX(fig.daily)}</b></div>
+    <div class="confirm-row"><span>Rendement attendu</span><b class="mono">${fmtUGX(fig.expected)}</b></div>
+    <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;">Acheter le produit</button>
+    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Annuler</button>`;
   const actionBtn = $('confirmActionBtn');
   // A double tap on BUY NOW lands its second tap where this button appears: it is dead for the first 600 ms so nothing is bought unseen.
   actionBtn.disabled = true;
-  setTimeout(() => { if (actionBtn.isConnected && actionBtn.textContent === 'Buy Product') actionBtn.disabled = false; }, 600);
+  setTimeout(() => { if (actionBtn.isConnected && actionBtn.textContent === 'Acheter le produit') actionBtn.disabled = false; }, 600);
   actionBtn.onclick = async () => {
     if (actionBtn.disabled) return;
-    actionBtn.disabled = true; actionBtn.textContent = 'Buying…';
+    actionBtn.disabled = true; actionBtn.textContent = 'Achat en cours…';
     const result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey, expectedPrice: Number(p.price) || 0 }) });
     if (result.status === 'error' && result.code === 'PRICE_CHANGED') { try { refreshCatalogNow(); } catch (_) {} }
     if (result.status !== 'success') {
-      actionBtn.disabled = false; actionBtn.textContent = 'Buy Product';
+      actionBtn.disabled = false; actionBtn.textContent = 'Acheter le produit';
       const short = result.code === 'INSUFFICIENT_BALANCE' || /^Need .*, have /.test(String(result.message || ''));
       if (short) {
         closeConfirm();
-        notify('Insufficient balance, redirecting to deposit...', () => openDepositSheet());
+        notify('Solde insuffisant, redirection vers le dépôt...', () => openDepositSheet());
         setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1800);
         return;
       }
-      notify(result.message || 'Could not complete investment');
+      notify(result.message || 'Impossible de finaliser l\'investissement');
       return;
     }
     closeConfirm();
     showPage('home');
-    notify(`${p.name} is now running. See it under Income.`);
+    notify(`${p.name} est maintenant actif. Retrouvez-le dans Revenus.`);
   };
   $('confirmBg').classList.add('show');
   lockBodyScroll(); dlgOpened();
@@ -6562,7 +6565,7 @@ window.addEventListener('appinstalled', () => { window._installPrompt = null; })
 // directly -- no screen in between -- and the 'downloadbg' image slot, its
 // admin upload UI, and this function are gone, not just unlinked.
 window.promptInstallApp = async function(){
-  if (!window._installPrompt) { notify('Already installed, or your browser doesn\'t support installing ' + brandName() + '.'); return; }
+  if (!window._installPrompt) { notify(`Déjà installée, ou votre navigateur ne permet pas d'installer ${brandName()}.`); return; }
   window._installPrompt.prompt();
   const choice = await window._installPrompt.userChoice.catch(() => null);
   window._installPrompt = null;
@@ -6575,7 +6578,7 @@ window.openDownloadDialog = function(){
   if (!bg) {
     bg = document.createElement('div');
     bg.id = 'dlBg'; bg.className = 'v-dl-bg';
-    bg.innerHTML = '<div class="v-dl-card"><h3>Download</h3><p>The app has been downloaded, please go to the browser to check and install it.</p><button type="button" onclick="closeDownloadDialog()">Confirm</button></div>';
+    bg.innerHTML = '<div class="v-dl-card"><h3>Télécharger</h3><p>L\'application a été téléchargée, ouvrez le navigateur pour la vérifier et l\'installer.</p><button type="button" onclick="closeDownloadDialog()">Confirmer</button></div>';
     document.body.appendChild(bg);
   }
   bg.classList.add('show'); dlgOpened();
@@ -6636,6 +6639,5 @@ paintRegionChrome();
 // into the language it was left in instead of showing English until
 // /public/settings lands. The observer is started first so anything the boot
 // path renders is translated as it appears, not after a visible flash.
-startI18nObserver();
 applyRegionLanguages();
 var _bootPromise = boot();

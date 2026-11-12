@@ -39,9 +39,9 @@ function load(panel){
   w.enterApp=async()=>{await tick();if(w.fbAuth.currentUser){w.eval('STATE.account={phone:"fixture"}');w.document.getElementById('app').style.display='';}};
   w.fbSignIn=async()=>{w.fbAuth.currentUser=account;w.dispatchEvent(new w.CustomEvent('snow-auth',{detail:account}));return {user:account}};
   const phone=w.document.getElementById('loginPhone'),pass=w.document.getElementById('loginPassword'),btn=w.document.getElementById('loginBtn');
-  phone.value='770000000';pass.value='fixture-password';
+  phone.value='0707070707';pass.value='fixture-password';
   await w.doLogin();await tick();
-  assert.equal(phone.value,'770000000',mode+' retains phone');assert.equal(btn.disabled,false);
+  assert.equal(phone.value,'0707070707',mode+' retains phone');assert.equal(btn.disabled,false);
   if(mode==='normal'||mode==='clock-skew'){assert.equal(out,0);assert.equal(w.document.getElementById('app').style.display,'');}
   else {assert(out>0);assert.equal(pass.value,'');assert(notes.length>0);assert.equal(w.document.getElementById('authScreen').style.display,'');}
   dom.window.close();
@@ -57,15 +57,15 @@ function load(panel){
  phone.value='77000000';pass.value='fixture-password';
  const autofill=()=>{const e=new w.Event('animationstart',{bubbles:true});e.animationName='onAutoFillStart';phone.dispatchEvent(e);};
  autofill();await new Promise(r=>setTimeout(r,190));assert.equal(attempts,0);assert.equal(notes.length,0,'partial autofill does not show invalid-number error');
- phone.value='770000000';autofill();await new Promise(r=>setTimeout(r,190));assert.equal(attempts,1);assert.equal(boots,1);
+ phone.value='0707070707';autofill();await new Promise(r=>setTimeout(r,190));assert.equal(attempts,1);assert.equal(boots,1);
  await w.doLogin();assert.equal(attempts,2);assert.equal(boots,2,'same-user retry reopens account after failed boot');
  assert.equal(w.document.getElementById('loginBtn').disabled,false);
  // Delayed browser sign-out cleanup cannot erase a newly selected number/password.
  let release;w.PasswordCredential=function(){};
  Object.defineProperty(w.navigator,'credentials',{value:{get(){},store(){},preventSilentAccess:()=>new Promise(r=>{release=r})},configurable:true});
  w.fbSignOut=async()=>{w.fbAuth.currentUser=null;w.dispatchEvent(new w.CustomEvent('snow-auth',{detail:null}));};
- const leaving=w.doLogout({auto:true});await tick();phone.value='780000000';pass.value='new-fixture-password';release();await leaving;
- assert.equal(phone.value,'780000000');assert.equal(pass.value,'new-fixture-password');
+ const leaving=w.doLogout({auto:true});await tick();phone.value='0505050505';pass.value='new-fixture-password';release();await leaving;
+ assert.equal(phone.value,'0505050505');assert.equal(pass.value,'new-fixture-password');
  await tick();dom.window.close();
  console.log('PASS: login clock skew, rejected sessions, token failures, retained phone, retry button, delayed autofill, same-user retry and delayed logout cleanup');
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -41,7 +41,7 @@ function build(db, ctx) {
     'verifyAuth', 'verifyAdmin', 'verifyOwner', 'logAdminAction', 'uniqueRef', 'nowStr', 'newStatementId', '_userBeingDeleted',
     block + '\nreturn { extractManualRef, extractManualAmount, sweepManualOrders, activePayChannels, dropPayChannelsCache };');
   const api = mk(app, db, ctx, { serverTimestamp: () => SERVER_TS }, v => (v && v.getTime ? v.getTime() : 0), () => 'et', 1e9,
-    n => 'Br ' + n, v => Number(v), async () => ({ minDeposit: 300 }),
+    n => 'XOF ' + n, v => Number(v), async () => ({ minDeposit: 300 }),
     async () => ctx.user, () => ctx.admin, () => ctx.owner, () => {}, async l => l + (++ctx.refN), () => ({ date: '01/01/2026', time: '10:00' }), () => 'S' + (++ctx.refN), new Set());
   return { handlers, api };
 }
@@ -123,7 +123,7 @@ const LOGO = 'data:image/png;base64,iVBORw0KGgo=';
   const bal = () => db.col('users').get('u1').walletBalance + ':' + db.col('users').get('u1').totalDeposited;
   const before = bal();
   r = await call(H['POST /deposit/manual/submit'], { depositId: o1.depositId, sms: 'I paid' });
-  eq([r.code, r.body.message], [400, 'please enter the correct transfer sms'], 'text without a code is refused with the owner\'s wording');
+  eq([r.code, r.body.message], [400, 'veuillez saisir le bon SMS de virement'], 'text without a code is refused with the owner\'s wording');
   r = await call(H['POST /deposit/manual/submit'], { depositId: 'missing', sms: 'FT25512S26V8' }); eq(r.code, 404, 'unknown order');
   ctx.user = 'u2'; r = await call(H['POST /deposit/manual/submit'], { depositId: o1.depositId, sms: 'FT25512S26V8' }); eq(r.code, 404, 'somebody else\'s order'); ctx.user = 'u1';
   const realNow = Date.now; Date.now = () => realNow() + 10000;

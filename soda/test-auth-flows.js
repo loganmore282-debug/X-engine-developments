@@ -94,7 +94,10 @@ function fakeServer(w, handle) {
   return calls;
 }
 const okAccount = { status: 'success', account: { phone: '+256771234567', walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0, team: { l1: 0, l2: 0, l3: 0, commission: 0 } }, region: {} };
-const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t; };
+// The app is French (Côte d'Ivoire): a notice arrives already translated. Map it back to the English source sentence so the
+// assertions below keep describing WHAT was said rather than which language it was said in.
+const FR2EN = (() => { const src = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8'); const a = src.indexOf('var LANG_ROWS = ['), b = src.indexOf('// ==== I18N TABLE: SHARED WITH THE ADMIN PANEL - END'); const { LANG_ROWS, LANG_PATTERNS } = new Function(src.slice(a, b) + ';return {LANG_ROWS, LANG_PATTERNS}')(); const m = new Map(); for (const r of [...LANG_ROWS, ...LANG_PATTERNS]) if (r[3] && r[3] !== '=') m.set(r[3], r[0]); return m; })();
+const toasts = w => { const t = []; w.notify = m => t.push(FR2EN.get(String(m)) || String(m)); return t; };
 
 (async () => {
   // ─── 0. Auth screens use the approved blue frosted-card design ───
@@ -106,8 +109,8 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     const server = fs.readFileSync(__dirname + '/server.js', 'utf8');
     ok(/rgba\(255,255,255,calc\(var\(--auth-card-opacity,\.78\)/.test(html), 'auth card tint stays adjustable');
     ok(/backdrop-filter:blur\(var\(--auth-card-blur,18px\)\)/.test(html), 'auth card blur stays adjustable');
-    ok(html.includes('id="authHeroBg"') && html.includes('id="loginHeading">Login'), 'login uses the full-screen uploaded image and reference heading');
-    ok(html.includes('id="registerHeading">Sign Up'), 'registration uses the reference heading');
+    ok(html.includes('id="authHeroBg"') && html.includes('id="loginHeading">Connexion'), 'login uses the full-screen uploaded image and reference heading');
+    ok(html.includes('id="registerHeading">S\'inscrire'), 'registration uses the reference heading');
     ok(html.includes('id="regTradePin"') && !html.includes('id="regOtpRow"') && !html.includes('id="regOtp"'), 'registration matches screenshot fields and has no OTP field');
     ok(!html.includes('id="lsPercent"') && !html.includes('class="ring-loader"'), 'startup loading animation is removed');
     ok(admin.includes('id="authCardOp"') && admin.includes('id="authCardBlur"'), 'admin exposes card opacity and blur controls');
@@ -123,7 +126,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     eq(w.document.documentElement.style.getPropertyValue('--auth-card-blur'), '3px', 'card blur reaches the glass layer');
     ok(w.document.querySelectorAll('.va-card svg').length >= 4, 'auth card icons remain inline SVGs');
     ok(!/Forgot Password\?|forgotPane|togglePw|af-eye|doForgot/.test(html), 'no Forgot Password and no password eye (owner screenshots)');
-    ok(html.includes('id="rememberMe"') && html.includes('Remember me'), 'Remember me checkbox is on the login card');
+    ok(html.includes('id="rememberMe"') && html.includes('Se souvenir de moi'), 'Remember me checkbox is on the login card');
     ok(!/id="[a-z]+BrandFallback"|>P<\/span>/.test(html), 'no placeholder letter on the auth screens');
     await closeSoon(dom);
   }
@@ -133,19 +136,19 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
   {
     const dom = load(), w = dom.window; await sleep(20);
     const f = e => w.fbErrMsg(e);
-    eq(f({ code: 'auth/invalid-credential' }), 'Incorrect phone number or password.');
-    eq(f({ code: 'auth/wrong-password' }), 'Incorrect phone number or password.');
-    eq(f({ code: 'auth/user-not-found' }), 'No account found for that number.');
-    eq(f({ code: 'auth/email-already-in-use' }), 'An account with that number already exists.');
-    eq(f({ code: 'auth/too-many-requests' }), 'Too many attempts. Try again shortly.');
-    ok(/Check your connection/.test(f({ code: 'auth/network-request-failed', message: 'Firebase: Error (auth/network-request-failed).' })), 'network failure is explained');
-    ok(/disabled/.test(f({ code: 'auth/user-disabled' })), 'disabled account is explained');
+    eq(f({ code: 'auth/invalid-credential' }), 'Numéro de téléphone ou mot de passe incorrect.');
+    eq(f({ code: 'auth/wrong-password' }), 'Numéro de téléphone ou mot de passe incorrect.');
+    eq(f({ code: 'auth/user-not-found' }), 'Aucun compte trouvé pour ce numéro.');
+    eq(f({ code: 'auth/email-already-in-use' }), 'Un compte avec ce numéro existe déjà.');
+    eq(f({ code: 'auth/too-many-requests' }), 'Trop de tentatives. Réessayez sous peu.');
+    ok(/Vérifiez votre connexion/.test(f({ code: 'auth/network-request-failed', message: 'Firebase: Error (auth/network-request-failed).' })), 'network failure is explained');
+    ok(/désactivé/.test(f({ code: 'auth/user-disabled' })), 'disabled account is explained');
     for (const code of ['auth/internal-error', 'auth/quota-exceeded', 'auth/operation-not-allowed', 'auth/invalid-api-key'])
-      ok(/temporarily unavailable/.test(f({ code })), code + ' reads as a temporary outage');
+      ok(/temporairement indisponible/.test(f({ code })), code + ' reads as a temporary outage');
     for (const e of [{ code: 'auth/something-new', message: 'Firebase: Error (auth/something-new).' }, { message: 'Firebase: Error (auth/x).' }])
       ok(!/Firebase|auth\//.test(f(e)), 'raw Firebase text never reaches a member: ' + f(e));
     eq(f({ message: 'Sign-in is not available right now.' }), 'Sign-in is not available right now.', 'our own messages pass through');
-    eq(f(null), 'Something went wrong. Try again.');
+    eq(f(null), 'Une erreur s\'est produite. Réessayez.');
     await closeSoon(dom);
   }
 
@@ -161,20 +164,20 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     ok(/Could not load the sign-in service/.test($(w, 'notifyMsg').textContent) || t.some(m => /Could not load the sign-in service/.test(m)), 'watchdog says what is wrong');
     $(w, 'loginPhone').value = '0771234567'; $(w, 'loginPassword').value = 'secret1secret1';
     t.length = 0; await w.doLogin();
-    eq(t.length, 1); ok(/not available right now/.test(t[0]) && !/not a function/.test(t[0]), 'login says so instead of throwing: ' + t[0]);
+    eq(t.length, 1); ok(/n'est pas disponible pour le moment/.test(t[0]) && !/not a function/.test(t[0]), 'login says so instead of throwing: ' + t[0]);
     eq($(w, 'loginBtn').disabled, false, 'login button usable again');
-    eq($(w, 'loginBtn').textContent, 'Log In');
+    eq($(w, 'loginBtn').textContent, 'Connexion');
     $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; $(w, 'regReferral').value = 'abc';
     w._settings = { otpVerificationEnabled: false, referralRequired: false }; w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:false}');
     t.length = 0; await w.doRegister();
     ok(t.length === 1 && /not available right now/.test(t[0]), 'sign-up says so too: ' + t[0]);
-    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Sign Up');
+    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'S\'inscrire');
     await closeSoon(dom);
   }
   {
     // Firebase arriving LATE (slow network) is waited for, not failed.
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; w._FIREBASE_READY_MS = 2000; }), w = dom.window; await sleep(20);
-    const t = toasts(w); const accounts = { '771234567@soda-platform.com': { pass: 'secret1secret1', uid: 'u1' } };
+    const t = toasts(w); const accounts = { '0771234567@soda-platform.com': { pass: 'secret1secret1', uid: 'u1' } };
     fakeServer(w, async p => p === '/account' ? { status: 200, body: okAccount } : null);
     $(w, 'loginPhone').value = '0771234567'; $(w, 'loginPassword').value = 'secret1secret1';
     setTimeout(() => fakeFirebase(w, accounts, false), 300);
@@ -194,7 +197,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
 
   // ─── 3. Login: every outcome ends in "app open" or "login screen + message" ───
   trace('section 3');
-  const phone = '0771234567', email = '771234567@soda-platform.com';
+  const phone = '0771234567', email = '0771234567@soda-platform.com';
   async function loginScenario(setup, { expectOpen, expectMsg, expectSignOut = null }) {
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
     const t = toasts(w);
@@ -205,7 +208,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     $(w, 'loginPhone').value = phone; $(w, 'loginPassword').value = setup.pass || 'secret1secret1';
     await w.doLogin(); await sleep(60);
     eq($(w, 'loginBtn').disabled, false, 'login button usable again');
-    eq($(w, 'loginBtn').textContent, 'Log In');
+    eq($(w, 'loginBtn').textContent, 'Connexion');
     eq(shown(w, 'loadingScreen'), false, 'no stuck spinner');
     if (expectOpen) { eq(shown(w, 'app'), true, 'app open'); eq(shown(w, 'authScreen'), false); ok(t.some(m => /Login successful/.test(m)), 'says it worked'); }
     else { eq(shown(w, 'app'), false, 'app not open'); eq(shown(w, 'authScreen'), true, 'login screen showing'); ok(t.some(m => expectMsg.test(m)), 'tells the member why: ' + JSON.stringify(t)); }
@@ -214,19 +217,19 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     await closeSoon(dom);
   }
   await loginScenario({}, { expectOpen: true });
-  await loginScenario({ pass: 'wrong' }, { expectOpen: false, expectMsg: /Incorrect phone number or password/ });
+  await loginScenario({ pass: 'wrong' }, { expectOpen: false, expectMsg: /Incorrect phone number or password|Numéro de téléphone ou mot de passe incorrect/ });
   await loginScenario({ fb: { code: 'auth/network-request-failed' } }, { expectOpen: false, expectMsg: /Check your connection/ });
   await loginScenario({ fb: { code: 'auth/user-disabled' } }, { expectOpen: false, expectMsg: /disabled/ });
   await loginScenario({ fb: { code: 'auth/too-many-requests' } }, { expectOpen: false, expectMsg: /Too many attempts/ });
   await loginScenario({ fb: { code: 'auth/internal-error' } }, { expectOpen: false, expectMsg: /temporarily unavailable/ });
-  await loginScenario({ server: async p => p === '/account' ? { status: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } } : null },
-    { expectOpen: false, expectMsg: /suspended/, expectSignOut: true });
+  await loginScenario({ server: async p => p === '/account' ? { status: 403, body: { status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' } } : null },
+    { expectOpen: false, expectMsg: /suspended|suspendu/, expectSignOut: true });
   await loginScenario({ server: async p => p === '/account' ? { throws: true } : null },
-    { expectOpen: false, expectMsg: /Could not reach the server/, expectSignOut: true });
-  await loginScenario({ server: async p => p === '/account' ? { status: 503, body: { status: 'error', code: 'AUTH_UNAVAILABLE', message: 'We could not check your sign-in just now. Please try again in a moment.' } } : null },
-    { expectOpen: false, expectMsg: /try again in a moment/, expectSignOut: true });
-  await loginScenario({ server: async p => p === '/account' ? { status: 500, body: { status: 'error', message: 'Could not load your account' } } : null },
-    { expectOpen: false, expectMsg: /Could not load your account/, expectSignOut: true });
+    { expectOpen: false, expectMsg: /Could not reach the server|joindre le serveur/, expectSignOut: true });
+  await loginScenario({ server: async p => p === '/account' ? { status: 503, body: { status: 'error', code: 'AUTH_UNAVAILABLE', message: 'Nous n\'avons pas pu vérifier votre connexion à l\'instant. Veuillez réessayer dans un moment.' } } : null },
+    { expectOpen: false, expectMsg: /try again in a moment|réessayer dans un/, expectSignOut: true });
+  await loginScenario({ server: async p => p === '/account' ? { status: 500, body: { status: 'error', message: 'Impossible de charger votre compte' } } : null },
+    { expectOpen: false, expectMsg: /Could not load your account|Impossible de charger votre compte/, expectSignOut: true });
 
   // ─── 4. Sign-up that never finished (ghost account) is guided, not stranded ───
   trace('section 4');
@@ -235,7 +238,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     const t = toasts(w);
     const accounts = { [email]: { pass: 'secret1secret1', uid: 'g1' } };
     const log = fakeFirebase(w, accounts); await sleep(30);
-    fakeServer(w, async p => p === '/account' ? { status: 404, body: { status: 'error', code: 'NOT_FOUND', message: 'User not found' } }
+    fakeServer(w, async p => p === '/account' ? { status: 404, body: { status: 'error', code: 'NOT_FOUND', message: 'Utilisateur introuvable' } }
       : p === '/register' ? regReply : null);
     $(w, 'loginPhone').value = phone; $(w, 'loginPassword').value = 'secret1secret1';
     await w.doLogin(); await sleep(80);
@@ -251,9 +254,9 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     }
     await closeSoon(dom);
   }
-  await ghostScenario({ status: 400, body: { status: 'error', code: 'REFERRAL_REQUIRED', message: 'A referral code is required to sign up. Ask the person who invited you for theirs.' } }, /referral code is required.*Complete your sign-up/, true);
-  await ghostScenario({ status: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } }, /does not exist.*Complete your sign-up/, true);
-  await ghostScenario({ status: 500, body: { status: 'error', message: 'Could not complete your registration right now' } }, /Could not complete your registration/, false);
+  await ghostScenario({ status: 400, body: { status: 'error', code: 'REFERRAL_REQUIRED', message: 'Un code de parrainage est nécessaire pour s\'inscrire. Demandez le sien à la personne qui vous a invité.' } }, /(referral code is required|code de parrainage est nécessaire).*(Complete your sign-up|Terminez votre inscription)/, true);
+  await ghostScenario({ status: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'Ce code de parrainage n\'existe pas.' } }, /(does not exist|n'existe pas).*(Complete your sign-up|Terminez votre inscription)/, true);
+  await ghostScenario({ status: 500, body: { status: 'error', message: 'Impossible de finaliser votre inscription pour le moment' } }, /Could not complete your registration|finaliser votre inscription/, false);
 
   // ─── 5. Sessions that change under a boot never sign the member out ───
   trace('section 5');
@@ -295,7 +298,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     await w.doRegister();
     eq(w.eval('window._pendingRegPhone'), '', 'a failed sign-up stages nothing for the next sign-in');
     ok(t.length === 1 && /Check your connection/.test(t[0]) && !/Firebase/.test(t[0]), 'friendly message: ' + t[0]);
-    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Sign Up');
+    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'S\'inscrire');
     await closeSoon(dom);
   }
   {
@@ -308,8 +311,8 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:true}');
     let profile = false, registers = 0;
     fakeServer(w, async (p, b) => {
-      if (p === '/register') { registers++; if (b.referralCode !== 'GOODCODE') return { status: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } }; profile = true; return { status: 200, body: { status: 'success' } }; }
-      if (p === '/account') return profile ? { status: 200, body: okAccount } : { status: 404, body: { status: 'error', code: 'NOT_FOUND', message: 'User not found' } };
+      if (p === '/register') { registers++; if (b.referralCode !== 'GOODCODE') return { status: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'Ce code de parrainage n\'existe pas.' } }; profile = true; return { status: 200, body: { status: 'success' } }; }
+      if (p === '/account') return profile ? { status: 200, body: okAccount } : { status: 404, body: { status: 'error', code: 'NOT_FOUND', message: 'Utilisateur introuvable' } };
       return null;
     });
     $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; $(w, 'regReferral').value = 'WRONG';
@@ -357,11 +360,11 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     const through = (h, rq, rs) => new Promise(done => h(rq, rs, done));
     // the session store could not be read: the 401 is rewritten to a 503
     let rq = { headers: {}, path: '/account', _authTransient: true }, rs = res(), h = hook();
-    rs.status(401); await through(h, rq, rs); rs.json({ status: 'error', message: 'Unauthorized' });
+    rs.status(401); await through(h, rq, rs); rs.json({ status: 'error', message: 'Non autorisé' });
     eq(rs.statusCode, 503, 'answered 503, so the app does not end the session'); eq(rs.body.code, 'AUTH_UNAVAILABLE');
     ok(!/401|expired|rejected/i.test(rs.body.message), 'message does not say logged out');
     // a genuinely invalid session stays a plain 401, other statuses are left alone
-    rs = res(); await through(h, { headers: {}, path: '/x' }, rs); rs.status(401); rs.json({ status: 'error', message: 'Unauthorized' }); eq(rs.statusCode, 401, 'ordinary 401 untouched');
+    rs = res(); await through(h, { headers: {}, path: '/x' }, rs); rs.status(401); rs.json({ status: 'error', message: 'Non autorisé' }); eq(rs.statusCode, 401, 'ordinary 401 untouched');
     rs = res(); await through(h, { headers: {}, path: '/x', _authTransient: true }, rs); rs.status(400); rs.json({ status: 'error', message: 'Bad input' }); eq(rs.statusCode, 400); eq(rs.body.message, 'Bad input');
     // logout always answers, whether or not the session record still exists
     for (const noDoc of [false, true]) {

@@ -21,7 +21,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   await new Promise(r => setTimeout(r, 30));
   w.eval("STATE.page='network'; STATE.account={referralCode:'ABCD'}; STATE.teamStats={referralCode:'ABCD',commRates:{l1:20,l2:5,l3:1},team:{l1:1,l2:0,l3:0},totalTeam:1,teamDeposits:0,levelCommission:{}}");
   let calls = 0, mode = 'ok', people = [{ id: 'a', phone: '0771234567', invested: 0, createdAt: null }];
-  w.api = async () => { calls++; return mode === 'ok' ? { status: 'success', members: people } : { status: 'error', message: 'Could not load your team' }; };
+  w.api = async () => { calls++; return mode === 'ok' ? { status: 'success', members: people } : { status: 'error', message: 'Impossible de charger votre équipe' }; };
   w.eval('paintNetwork()'); await new Promise(r => setTimeout(r, 20));
   const box = () => d.getElementById('teamMembersBox').textContent.replace(/\s+/g, ' ').trim();
   ok(d.querySelectorAll('.v-member').length === 1 && calls === 1, 'first open fetches and shows the member');
@@ -38,10 +38,10 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   // a level never loaded and failing shows the retry line, not "No members at this level yet"
   w.eval('STATE.teamMembers={1:null,2:null,3:null}; _teamMembersAt = {}; _teamMembersFailed = {}');
   await w.switchTeamLevel(2);
-  ok(box() === 'Could not load your team' && !/No members/.test(box()), 'a failed first load says it could not load, not "No members": ' + box());
+  ok(box() === 'Impossible de charger votre équipe' && !/No members/.test(box()), 'a failed first load says it could not load, not "No members": ' + box());
   mode = 'ok'; people = [];
   await w.switchTeamLevel(2);
-  ok(/No members at this level yet/.test(box()), 'a real empty level still says so');
+  ok(/Aucun membre à ce niveau/.test(box()), 'a real empty level still says so');
   // server: the cards read the live team
   ok(/team: \{ l1: n1, l2: n2, l3: n3 \}/.test(server) && /async function wholeTeamStats/.test(server), 'server /team/stats reads live level counts');
   console.log('test-team: ' + n + ' checks passed' + (built ? ' (built)' : ''));

@@ -7,7 +7,7 @@ const html = fs.readFileSync(__dirname + (built ? '/user/index.html' : '/user-sr
 const server = fs.readFileSync(__dirname + '/server.js', 'utf8');
 const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
-ok(/<span class="ld-txt"[^>]*>Loading\.\.\.<\/span>/.test(html), 'the loader says "Loading..."');
+ok(/<span class="ld-txt"[^>]*>Chargement\.\.\.<\/span>/.test(html), 'the loader says "Chargement..."');
 ok(/#loadingScreen \.ld-bg\{[^}]*url\('\/k7x2\/public\/loader-image'\)[^}]*opacity:var\(--ld-op,1\)[^}]*filter:blur\(var\(--ld-blur,0px\)\)/.test(html) && /id="ldBg"/.test(html), 'the loader background is the admin picture, on its own layer with the admin opacity and blur (never on the word)');
 ok(/@keyframes ldBounce\{.*translateY\(-34px\)/.test(html) && /animation:ldBounce/.test(html), 'the word bounces in its original 34 px area');
 ok((html.match(/ld-txt[^{]*\{[^}]*animation:/g) || []).length === 2, 'one bounce animation (plus its reduced-motion off switch), nothing else');
@@ -19,13 +19,13 @@ ok(/'profilelogo', 'loaderbg', 'linkpreview'\]/.test(server) && /app\.get\('\/pu
 ok(/id="loaderBgFile"/.test(admin) && /wireSodaImageSlot\('loaderbg'/.test(admin), 'admin can upload and remove it');
 const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
 ok(!/type="password"/.test(html + mod), 'no masked password field anywhere: what a member types stays visible');
-ok(!/toggleWitPin|toggleStyle|aria-label="Show password"/.test(html + mod), 'no show/hide eye');
+ok(!/toggleWitPin|toggleStyle|aria-label="Afficher le mot de passe"/.test(html + mod), 'no show/hide eye');
 ok(!/walOtpGroup|confirmWalletOtp|bankOtpRequired/.test(mod), 'saving a wallet has no OTP step');
 ok(!/id="sOtpVerification"|id="sBankOtp"|id="sAnnEnabled"|id="sReturnMult"/.test(admin), 'admin no longer shows the OTP, announcement-switch and return-multiple settings');
 ok(/setTimeout\(startArtwork, 8000\)/.test(mod) && !/_artPromise = Promise\.all\(\[ api\('\/public\/announcement-image'\), api\('\/public\/soda-images'\) \]\)\n/.test(mod.split('async function boot()')[1].split('async function')[0]), 'pictures are fetched after the loading screen, not beside the account request');
 ok(/const s = await pSettings;/.test(mod) && !/Promise\.all\(\[ pSettings, pProducts, pBanner \]\)/.test(mod), 'the loading screen waits for the settings only, not for the asset pictures or the banner');
 ok(!/fileToLogoPng|background connected to the image edge/.test(admin) && /wireSodaImageSlot\('logo', 'brandLogoFile'/.test(admin), 'the brand logo is uploaded as it is (no background removal)');
-ok(/var NAV_LOADER = '<span class="nav-loading">Loading\.\.\.<\/span>'/.test(mod) && /\.nav-loading\{[^}]*font-size:15px[^}]*letter-spacing:\.03em/.test(html) && !/MINI_RING_LOADER|mini-ring-loader|ringSweep/.test(html + mod), 'pages show a small "Loading..." word while data arrives, no ring spinner is left');
+ok(/var NAV_LOADER = '<span class="nav-loading">Chargement\.\.\.<\/span>'/.test(mod) && /\.nav-loading\{[^}]*font-size:15px[^}]*letter-spacing:\.03em/.test(html) && !/MINI_RING_LOADER|mini-ring-loader|ringSweep/.test(html + mod), 'pages show a small "Loading..." word while data arrives, no ring spinner is left');
 ok((mod.match(/NAV_LOADER/g) || []).length >= 6, 'Income, Team, Team members, Balance Record and Messages all use it');
 ok(/showAuthTab\('login'\);\n  stopLiveRefresh\(\);/.test(mod), 'signing out always lands on Login, not on a Sign Up form left open');
 ok(/\.v-ann-img\{[^}]*object-fit:contain[^}]*\}/.test(html) && !/\.v-ann-img\{[^}]*object-fit:cover/.test(html), 'the announcement picture is shown whole (contain), never cropped');

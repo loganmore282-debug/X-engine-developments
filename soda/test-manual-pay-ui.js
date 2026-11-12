@@ -5,13 +5,13 @@ const { chromium } = require('playwright'); const http=require('http'),fs=requir
 const assert=require('node:assert/strict');let checks=0;const ok=(c,m)=>{checks++;assert.ok(c,m);};const near=(v,t,tol,m)=>ok(Math.abs(v-t)<=tol,m+' (got '+v+', want '+t+' +-'+tol+')');
 const ROOT=path.join(__dirname,'user'), LANGC='en';
 const API=(fs.readFileSync(path.join(__dirname,'user-src/original_module.js'),'utf8').match(/API_BASE\s*=\s*'([^']+)'/)||[])[1];
-const REGION={key:'et',name:'Ethiopia',currency:'ETB',dialCode:'251',localLength:9,prefixes:['9','7'],utcOffsetMin:180,isDefault:true,languages:['en','am'],defaultLang:'en',usesBareLocal:true};
+const REGION={key:'et',name:'Côte d\'Ivoire',currency:'ETB',dialCode:'251',localLength:9,prefixes:['9','7'],utcOffsetMin:180,isDefault:true,languages:['en','am'],defaultLang:'en',usesBareLocal:true};
 const ACCOUNT={phone:'0912345678',walletBalance:12850,totalDeposited:20000,totalEarned:3100,totalWithdrawn:2000,totalInvested:12000,checkinStreak:3,lastCheckinAt:null,referralCode:'ET7Q4X',publicId:'00042',registrationDone:true,spins:2,team:{l1:2,l2:1,l3:0,commission:420},region:REGION};
-const SETTINGS={minDeposit:300,minWithdraw:200,withdrawFeePct:15,withdrawMultiple:50,commL1:27,commL2:2,commL3:1,annEnabled:false,annTitle:'Welcome',annBody:'Welcome to the app.',depositPayAEnabled:true,openingCountdownEnabled:false,maintenanceMode:false,dailyCheckin:50,turntableEnabled:true,brandName:'Soda',withdrawWindowEnabled:true,withdrawOpenFrom:'06:00',withdrawOpenTo:'17:00',usdtRate:120,cardEnabled:true,usdtEnabled:true,manualPay:true,depositAvailable:true};
+const SETTINGS={minDeposit:300,minWithdraw:200,withdrawFeePct:15,withdrawMultiple:50,commL1:27,commL2:2,commL3:1,annEnabled:false,annTitle:'Bienvenue',annBody:'Welcome to the app.',depositPayAEnabled:true,openingCountdownEnabled:false,maintenanceMode:false,dailyCheckin:50,turntableEnabled:true,brandName:'Soda',withdrawWindowEnabled:true,withdrawOpenFrom:'06:00',withdrawOpenTo:'17:00',usdtRate:120,cardEnabled:true,usdtEnabled:true,manualPay:true,depositAvailable:true};
 const PRODUCTS=[{key:'p1',name:'Asset-1',price:3000,cycle:150,expectedReturn:90000,dailyPayout:600,image:'',active:true,spinCount:2,open:true},{key:'p2',name:'Asset-2',price:9000,cycle:150,expectedReturn:270000,dailyPayout:1800,image:'',active:true,comingSoon:true,open:false,openMode:'soon'}];
 const INV=[{id:'i1',tierKey:'p1',tierName:'Asset-1',assetKey:'p1',assetName:'Asset-1',amount:3000,expectedReturn:90000,payoutsMade:4,payoutsTotal:150,paidOut:2400,status:'running',createdAt:'2026-09-10T18:13:00Z'},{id:'i2',tierKey:'p2',tierName:'Asset-2',amount:9000,expectedReturn:270000,payoutsMade:150,payoutsTotal:150,paidOut:270000,status:'matured',createdAt:'2026-03-01T09:00:00Z'}];
-const TX=[{id:'t1',type:'deposit',amount:5000,status:'completed',description:'Deposit: Paid',date:'12/09/2026',time:'14:02'},{id:'t2',type:'withdraw',amount:-2000,status:'pending',description:'Withdrawal: Processing',date:'13/09/2026',time:'09:41'},{id:'t3',type:'withdraw',amount:-2000,status:'failed',description:'Withdrawal: Rejected',date:'13/09/2026',time:'10:02'},{id:'t4',type:'turntable',amount:70,status:'completed',description:'Turntable win',date:'14/09/2026',time:'07:15'},{id:'t5',type:'welcome_bonus',amount:700,status:'completed',description:'Welcome Bonus',date:'01/09/2026',time:'08:00'},{id:'t6',type:'commission',amount:810,status:'completed',description:'Level 1 Commission',date:'02/09/2026',time:'11:20'},{id:'t7',type:'cashback',amount:600,status:'completed',description:'Daily cashback',date:'14/09/2026',time:'00:05'},{id:'t8',type:'invest',amount:-3000,status:'completed',description:'Bought Asset-1',date:'10/09/2026',time:'18:13'}];
-const MSG=[{id:'m1',title:'Welcome',body:'Thanks for joining.',createdAt:'2026-09-01T08:00:00Z',read:false}];
+const TX=[{id:'t1',type:'deposit',amount:5000,status:'completed',description:'Dépôt : payé',date:'12/09/2026',time:'14:02'},{id:'t2',type:'withdraw',amount:-2000,status:'pending',description:'Withdrawal: Processing',date:'13/09/2026',time:'09:41'},{id:'t3',type:'withdraw',amount:-2000,status:'failed',description:'Withdrawal: Rejected',date:'13/09/2026',time:'10:02'},{id:'t4',type:'turntable',amount:70,status:'completed',description:'Gain de la roue',date:'14/09/2026',time:'07:15'},{id:'t5',type:'welcome_bonus',amount:700,status:'completed',description:'Bonus de bienvenue',date:'01/09/2026',time:'08:00'},{id:'t6',type:'commission',amount:810,status:'completed',description:'Commission de niveau 1',date:'02/09/2026',time:'11:20'},{id:'t7',type:'cashback',amount:600,status:'completed',description:'Daily cashback',date:'14/09/2026',time:'00:05'},{id:'t8',type:'invest',amount:-3000,status:'completed',description:'Bought Asset-1',date:'10/09/2026',time:'18:13'}];
+const MSG=[{id:'m1',title:'Bienvenue',body:'Thanks for joining.',createdAt:'2026-09-01T08:00:00Z',read:false}];
 const WALLET=[{id:'w1',provider:'CBE Birr',accountNumber:'0912345678',accountName:'Abebe K',isDefault:true}];
 const ROUTES={'/public/settings':{status:'success',region:REGION,settings:SETTINGS},'/public/products':{status:'success',products:PRODUCTS},'/public/activity-feed':{status:'success',feed:[{kind:'deposit',phone:'251****4417',amount:3000},{kind:'withdraw',phone:'251****9022',amount:2500}]},
 '/account':{status:'success',account:ACCOUNT,region:REGION},'/investments':{status:'success',investments:INV},'/transactions':{status:'success',transactions:TX,truncated:false},'/messages':{status:'success',messages:MSG},'/bank/list':{status:'success',accounts:WALLET},'/bank/supported-banks':{status:'success',banks:['CBE Birr','Telebirr']},
@@ -31,7 +31,7 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  const page=await ctx.newPage();const errs=[];page.on('pageerror',e=>errs.push(String(e)));
  await page.route('**'+API+'/**',async r=>{const u=new URL(r.request().url());
   if(u.pathname.endsWith('/deposit/manual/order')){const body=JSON.parse(r.request().postData()||'{}');posts.push(['order',body]);const ch=CH.find(c=>c.id===body.channelId);return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'success',depositId:'d1',reference:'M1',amount:body.amount,expiresAt:Date.now()+(29*60+47)*1000,channel:ch,accountName:ch.id==='c1'?'Ashenafi':'Chala',accountNumber:ch.id==='c1'?'1000809418239':'0962499914'})});}
-  if(u.pathname.endsWith('/deposit/manual/submit')){const body=JSON.parse(r.request().postData()||'{}');posts.push(['submit',body]);return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'success',state:'review',message:'Submitted. Our team is checking your payment.'})});}
+  if(u.pathname.endsWith('/deposit/manual/submit')){const body=JSON.parse(r.request().postData()||'{}');posts.push(['submit',body]);return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'success',state:'review',message:'Envoyé. Notre équipe vérifie votre paiement.'})});}
   const k=Object.keys(ROUTES).find(k=>u.pathname.endsWith(k));r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(k?ROUTES[k]:{status:'success'})});});
  await page.route('https://fonts.googleapis.com/**',r=>r.fulfill({status:200,contentType:'text/css',body:''}));
  await page.addInitScript(()=>{try{localStorage.setItem('soda_auth_session',JSON.stringify({token:'tok',uid:'u1',authTime:Math.floor(Date.now()/1000),expiresAt:Date.now()+36e5,email:'912345678@soda-platform.com'}));}catch(e){}});
@@ -51,9 +51,9 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  await page.fill('#depAmount','100');await page.evaluate(()=>{submitDeposit();});await page.waitForTimeout(100);
  ok(!(await page.$('#mpFlow.show')),'below the minimum does not open the payment pages');
  await page.fill('#depAmount','550');await page.evaluate(()=>{submitDeposit();});await page.waitForTimeout(120);
- // 2. loading page: the blue ring and the word "loading..."
+ // 2. loading page: the blue ring and the word "chargement…"
  ok(await page.$('#mpFlow.dark .mpf-ring circle[stroke="#1870f8"]'),'loading page shows the blue ring');
- ok((await page.textContent('.mpf-loadtxt'))==='loading...','and the word loading...');
+ ok((await page.textContent('.mpf-loadtxt'))==='chargement…','and the word loading...');
  const ring=await box('.mpf-ring'),txt=await box('.mpf-loadtxt');
  near(ring.y+ring.h/2,164,3,'ring centre height');near(txt.y+txt.h/2,210,3,'loading text centre height');
  // 3. choose page
@@ -63,7 +63,7 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  near(r1.y,121,2.5,'first payment row top');near(r1.h,63.5,1,'payment row height');near(r2.y-r1.y,63.5,1,'row pitch');
  near((await box('.mpf-logo')).w,37.7,0.6,'logo circle size');
  near((await box('.mpf-remind')).y,259,3,'reminder box top');
- ok((await page.textContent('.mpf-oval')).trim()==='Br 550.00','amount shown as Br with two decimals');
+ ok((await page.textContent('.mpf-oval')).trim()==='XOF 550.00','amount shown as Br with two decimals');
  // 4. payment page
  await page.click('.mpf-row >> nth=0');await page.waitForSelector('.mpf-pay',{timeout:5000});
  ok(posts.find(p=>p[0]==='order'&&p[1].amount===550&&p[1].channelId==='c1'),'order requested for the chosen channel');
@@ -81,7 +81,7 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  ok((await page.textContent('.mpf-v b >> nth=2')).trim()==='1000809418239','account number shown');
  // 5. empty submit -> the owner's toast
  await page.evaluate(()=>mpSubmit());await page.waitForTimeout(150);
- ok((await page.textContent('#mpToast'))==='please enter the correct transfer sms','empty paste shows the toast');
+ ok((await page.textContent('#mpToast'))==='veuillez saisir le bon SMS de virement','empty paste shows the toast');
  ok(!posts.find(p=>p[0]==='submit'),'and nothing is sent');
  // 6. switch goes back to the choose page, and the SAME order moves
  await page.click('.mpf-pill >> nth=0');await page.waitForSelector('.mpf-row',{timeout:3000});
