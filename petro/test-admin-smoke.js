@@ -29,7 +29,7 @@ setTimeout(async () => {
     dom.window.document.getElementById('keyInput').value = 'test-key';
     dom.window.document.getElementById('loginBtn').click();
     await new Promise(resolve => setTimeout(resolve, 100));
-    assert.match(dom.window.document.getElementById('content').textContent, /XOF 12,345/);
+    assert.match(dom.window.document.getElementById('content').textContent, /FCFA 12,345/);
     console.log('Admin initializes with its language list and no country switch: pass');
   } catch (e) { console.error(e); process.exitCode = 1; }
   finally { dom.window.close(); }

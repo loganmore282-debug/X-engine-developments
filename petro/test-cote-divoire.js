@@ -30,7 +30,7 @@ for (const [raw, want] of [['0707070707', '+2250707070707'], ['+2250707070707', 
 assert.equal(S.phoneToEmail('0707070707'), '0707070707@petro-platform.com');
 assert.equal(S.phoneToEmail('+2250707070707'), '0707070707@petro-platform.com');
 assert.equal(S.phoneFormatHint().local, '01XXXXXXXX'); assert.equal(S.phoneFormatHint().intl, '+22501XXXXXXXX');
-assert.equal(S.fmtMoney(12500), 'XOF 12,500'); assert.equal(S.fmtMoney(5, 'XOF'), 'XOF 5'); assert.equal(S.currencyLabel('xof'), 'XOF');
+assert.equal(S.fmtMoney(12500), 'FCFA 12,500'); assert.equal(S.fmtMoney(5, 'XOF'), 'FCFA 5'); assert.equal(S.currencyLabel('xof'), 'FCFA');
 assert.doesNotMatch(server, /'ETB'\)/, 'no ETB fallback left in a currency label');
 // ── member app ──
 assert.match(member, /var REGION = \{ key: 'ci', name: "Côte d'Ivoire", currency: 'XOF', dialCode: '225', localLength: 10, prefixes: \['01','05','07'\]/);
@@ -59,5 +59,5 @@ assert.deepEqual(unexpected, [], 'rows with no French: ' + unexpected.join(' | '
 assert.ok(withFr >= 700, 'French covers the table (' + withFr + ' rows)');
 // ── admin panel: amounts are CFA francs ──
 assert.match(panel, /ADMIN_REGIONS = \[\{ key: 'ci', name: "Côte d'Ivoire", currency: 'XOF' \}\]/);
-assert.match(panel, /function adminCur\(\)\{ return 'XOF'; \}/);
+assert.match(panel, /function adminCur\(\)\{ return 'FCFA'; \}/);
 console.log("PASS: Côte d'Ivoire (+225, XOF, French only): " + withFr + ' French rows');

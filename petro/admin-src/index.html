@@ -720,7 +720,7 @@ function fileToSquarePng(file, size){
 let _toastT=null;
 function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('div'); t.id='adToast'; document.body.appendChild(t);} t.className='toast'+(kind?' '+kind:''); t.textContent=msg; clearTimeout(_toastT); _toastT=setTimeout(()=>t.remove(),3000); }
 
-// All amounts in this panel are CFA francs (XOF, printed as XOF).
+// All amounts in this panel are CFA francs (FCFA, printed as FCFA).
 const ADMIN_REGIONS = [{ key: 'ci', name: "Côte d'Ivoire", currency: 'XOF' }];
 const ADMIN_REGION = 'ci';
 function regionByKeyAdmin(){ return ADMIN_REGIONS[0]; }
@@ -750,8 +750,8 @@ function dayLong(i){ return (ADMIN_DAYS[LANG] || ADMIN_DAYS.en)[i]; }
   window.prompt = (m, d) => _p(t(String(m)), typeof d === 'string' ? t(d) : d);
   window.alert = m => _a(t(String(m)));
 })();
-function curOf(){ return 'XOF'; }
-function adminCur(){ return 'XOF'; }
+function curOf(){ return 'FCFA'; }
+function adminCur(){ return 'FCFA'; }
 var _adminPending = new Map();
 function api(path, body, method){
   if (body || (method && method !== 'GET')) return adminRequest(path, body, method);
@@ -3189,7 +3189,7 @@ async function renderSettings(){
       <div class="switch-row"><span><b>Enable USDT recharges</b> <span class="muted">(shows the option in the app)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sUsdtEnabled" ${s.usdtEnabled?'checked':''} style="width:auto"></label></div>
       <label>Receiving wallet address (TRC20)</label><input id="sUsdtAddr" value="${esc(v('usdtWalletAddress',''))}" placeholder="T...">
-      <label>Exchange rate (XOF per 1 USDT)</label><input id="sUsdtRate" type="number" step="1" min="0" value="${v('usdtRate',0)}" placeholder="e.g. 600">
+      <label>Exchange rate (FCFA per 1 USDT)</label><input id="sUsdtRate" type="number" step="1" min="0" value="${v('usdtRate',0)}" placeholder="e.g. 600">
       <button class="btn block" id="saveUsdt" style="margin-top:10px">Save crypto recharge settings</button>
     </div>
 
@@ -3965,7 +3965,7 @@ const ADMIN_LANG_ROWS = [
   ['e.g. New assets are live', '', '', 'ex. : De nouveaux actifs sont disponibles', '', ''],
   ['Energy for a Better Tomorrow', '', '', 'L’énergie pour un meilleur demain', '', ''],
   ['Erase every member and everything that belongs to them — wallets, recharges, withdrawals, plans, records and their sign-in accounts — so the app starts clean. Your settings, assets, banners, About and Rules, payment numbers, admin accounts and messages are kept. There is no undo.', '', '', 'Efface chaque membre et tout ce qui lui appartient — portefeuilles, recharges, retraits, plans, historiques et comptes de connexion — pour que l’application reparte à zéro. Vos paramètres, actifs, bannières, pages À propos et Règles, numéros de paiement, comptes admin et messages sont conservés. Impossible d’annuler.', '', ''],
-  ['Exchange rate (XOF per 1 USDT)', '', '', 'Taux de change (XOF pour 1 USDT)', '', ''],
+  ['Exchange rate (FCFA per 1 USDT)', '', '', 'Taux de change (FCFA pour 1 USDT)', '', ''],
   ['Free for the member: nothing is taken from their wallet. It runs like a bought asset and pays its full return.', '', '', 'Gratuit pour le membre : rien n’est prélevé sur son portefeuille. Il fonctionne comme un actif acheté et verse son rendement complet.', '', ''],
   ['Give an asset', '', '', 'Offrir un actif', '', ''],
   ['Home\'s Support tile opens this address directly in the member\'s mail app. Account > Support shows it alongside the WhatsApp link and the working hours below.', '', '', 'La tuile Assistance de l’Accueil ouvre cette adresse directement dans l’application de messagerie du membre. Compte > Assistance l’affiche avec le lien WhatsApp et les horaires ci-dessous.', '', ''],
@@ -3973,8 +3973,8 @@ const ADMIN_LANG_ROWS = [
   ['Inner pages background opacity (%)', '', '', 'Opacité de l’arrière-plan des pages intérieures (%)', '', ''],
   ['Leave ON — the first-ever account is always let through.', '', '', 'Laissez activé — le tout premier compte est toujours accepté.', '', ''],
   ['Make unrestricted by withdrawal time', '', '', 'Retirer la limite des heures de retrait', '', ''],
-  ['Max reward (XOF)', '', '', 'Récompense maximale (XOF)', '', ''],
-  ['Min reward (XOF)', '', '', 'Récompense minimale (XOF)', '', ''],
+  ['Max reward (FCFA)', '', '', 'Récompense maximale (FCFA)', '', ''],
+  ['Min reward (FCFA)', '', '', 'Récompense minimale (FCFA)', '', ''],
   ['Members pay with Wave (set up under Wave payments) or send USDT. When a member sends the payment details, it appears under To approve. Check that the money really arrived, then tap Approuver to add it to their wallet — or Refuser.', '', '', 'Les membres paient avec Wave (configuré dans « Paiements Wave ») ou envoient des USDT. Quand un membre envoie les détails du paiement, il apparaît sous « À approuver ». Vérifiez que l’argent est bien arrivé, puis touchez Approuver pour l’ajouter à son portefeuille — ou Refuser.', '', ''],
   ['Members pay with Wave (set up under Wave payments) or send USDT. When a member sends the payment details, it appears under To approve. Check that the money really arrived, then tap Approve to add it to their wallet — or Reject.', '', '', 'Les membres paient avec Wave (configuré dans « Paiements Wave ») ou envoient des USDT. Quand un membre envoie les détails du paiement, il apparaît sous « À approuver ». Vérifiez que l’argent est bien arrivé, puis touchez Approuver pour l’ajouter à son portefeuille — ou Refuser.', '', ''],
   ['Min recharge', '', '', 'Recharge minimale', '', ''],
