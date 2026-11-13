@@ -9,7 +9,8 @@ It inherits Cookie's whole history below: where it says "Cookie", read Beer. Coo
 ## The colours (decided by the owner, keep them)
 - **Main colour = khaki `#a29060`** (the first picture): title bars, headers, cards' accents, tabs, nav pill, login background (`--ck-auth`), loader. Text that used to be the
   blue is a darker khaki (`#5e5332`-ish) so it stays readable on white.
-- **Buttons = amber** (from the beer picture, `#e3992f -> #c86715 -> #983e10`): Login / Create Account, Buy now, Pay, Confirm, Withdraw / Deposit action buttons,
+- **Buttons = the beer picture itself** (owner: "I wanted buttons to look exactly like this"): the droplet photo is the background of every button (`--bt-img`, a base64 JPEG in the last block of `user-src/index.html`, white text with a dark shadow). Before that they were a flat amber
+  gradient. The old amber variables `--bt-grad` / `--bt-solid` remain for the admin panel. (Original note:) **Buttons = amber** (from the beer picture, `#e3992f -> #c86715 -> #983e10`): Login / Create Account, Buy now, Pay, Confirm, Withdraw / Deposit action buttons,
   copy buttons, the active pay-method pill. Variables `--bt-grad` and `--bt-solid` (end of the member app's last `<style>`, and the admin's first one).
 - How it was done (so it can be redone if Cookie's design changes): `tools` are not kept; the rule was "every blue in `user-src/index.html`, `user-src/original_module.js` and
   `admin-src/index.html` is mapped to the khaki hue with the same lightness, and the rules of the button classes (`.va-btn .v-btn .v-solid .v-cta .v-buy .ck-pay .ck-confirm
@@ -58,7 +59,7 @@ Port plan: Soda 3001/8090/8091, Mint 3002/8092/8093, Cookie 3003/8094/8095, Pota
 
 ## Status
 1. (done) Copied from Cookie, renamed to Beer, ports 3007/8102/8103, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path `Hq4vN8rt`.
-2. (done) Khaki + amber colours, mug icon, link preview, caches `beer-shell-v4` / `beer-admin-shell-v3`. `npm run test:audit` passes.
+2. (done) Khaki + amber colours, mug icon, link preview, caches `beer-shell-v5` / `beer-admin-shell-v3`. `npm run test:audit` passes.
 3. (waiting on owner) Atlas user `beerapp` + connection string, VPS first-setup (the command in "One-time backend setup" with `beer`), domain, payment keys. Nothing of Beer is on the VPS yet.
 
 ## Rules the owner has decided (keep these)
