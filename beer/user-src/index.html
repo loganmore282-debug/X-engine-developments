@@ -2427,6 +2427,10 @@ body{background-attachment:fixed;}
 .ck-my svg[fill="currentColor"]{fill:url(#beerPat);}
 .ck-my svg[stroke="currentColor"],.ck-my svg [stroke="currentColor"]{stroke:url(#beerPat);}
 .navitem::before{background:var(--bt-img) center/cover no-repeat !important;}
+/* The balance board of the My page is the beer picture too, with white figures that keep a dark shadow so they stay readable on the bright droplets. */
+.ck-balcard{background:var(--bt-img) center/cover no-repeat !important;box-shadow:0 12px 26px -14px rgba(120,50,10,.75) !important;}
+.ck-balcard b,.ck-balcard span{color:#fff;text-shadow:0 1px 3px rgba(50,15,0,.85),0 0 2px rgba(50,15,0,.6);}
+.ck-balcard>div+div::before{background:rgba(255,255,255,.7);}
 </style>
 
 <script data-beer-idle>
