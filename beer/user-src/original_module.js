@@ -1363,11 +1363,11 @@ function showHostParked(msg){
   const host = (typeof location !== 'undefined' && location.hostname) || '';
   const box = document.createElement('div');
   box.id = 'hostParked';
-  box.setAttribute('style', 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--snow-canvas,#fbf1e8);');
+  box.setAttribute('style', 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--snow-canvas,#988753);');
   box.innerHTML = `<div style="max-width:340px;text-align:center;">
     <div style="font-size:26px;font-weight:800;margin-bottom:12px;">${esc(brandName())}</div>
-    <div style="font-size:16px;line-height:1.55;color:var(--snow-ink,#1a1310);">${esc(msg || 'This address does not serve the app.')}</div>
-    ${host ? `<div style="font-size:13px;margin-top:14px;color:var(--snow-muted,#8c7f76);">You opened <b>${esc(host)}</b>.</div>` : ''}
+    <div style="font-size:16px;line-height:1.55;color:var(--snow-ink,#2c1105);">${esc(msg || 'This address does not serve the app.')}</div>
+    ${host ? `<div style="font-size:13px;margin-top:14px;color:var(--snow-muted,#4d2a14);">You opened <b>${esc(host)}</b>.</div>` : ''}
   </div>`;
   document.body.appendChild(box);
 }

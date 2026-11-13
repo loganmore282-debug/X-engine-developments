@@ -10,7 +10,7 @@ const screen = html.slice(html.indexOf('<div id="maintScreen"'), html.indexOf('<
 ok(/<h1 class="mt-title">System Under Maintenance<\/h1>/.test(screen) && /id="maintMsg">We are upgrading our system\. Please try again in 30 minutes\.<\/p>/.test(screen), 'the title and the sentence are the recording\'s');
 ok(/<svg class="mt-icon"/.test(screen) && /stroke="#ae975d"/.test(screen) && /<animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="4s" repeatCount="indefinite"\/>/.test(screen), 'the blue mark turns once every 4 seconds');
 ok(!/prefers-reduced-motion[^{]*\{[^}]*mt-/.test(html), 'it plays on every phone');
-ok(/#maintScreen\{position:fixed;inset:0;z-index:600;display:none[^}]*background:#f9f8f5/.test(html) && /\.mt-title\{[^}]*font-size:26px[^}]*color:#4f442a/.test(html) && /\.mt-msg\{[^}]*font-size:15\.43px[^}]*color:#55565b/.test(html), 'the page colour, the title and the sentence are measured from the recording');
+ok(/#maintScreen\{position:fixed;inset:0;z-index:600;display:none[^}]*background:#a29060/.test(html) && /\.mt-title\{[^}]*font-size:26px[^}]*color:#2c1105/.test(html) && /\.mt-msg\{[^}]*font-size:15\.43px[^}]*color:#4d2a14/.test(html), 'the page colour, the title and the sentence are measured from the recording');
 ok(!/mt-art|mtSpin|mtScan|mt-bug/.test(html), 'the old illustration is gone');
 // the wait, in words
 const tree = acorn.parse(mod, { ecmaVersion: 'latest', sourceType: 'script', allowReturnOutsideFunction: true });
