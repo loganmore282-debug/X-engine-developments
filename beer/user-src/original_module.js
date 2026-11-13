@@ -2022,7 +2022,6 @@ function applyBootArtwork(ai, ci){
   STATE.announcementImage = (ai && ai.status === 'success' && ai.image) ? ai.image : null;
   STATE.brandLogo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
   STATE.profileLogo = (ci.status === 'success' && ci.profilelogo) ? ci.profilelogo : null;
-  STATE.teamHero = (ci.status === 'success' && ci.teamhero) ? ci.teamhero : null;
   STATE.myHero = (ci.status === 'success' && ci.myhero) ? ci.myhero : null;
   STATE.rulesHero = (ci.status === 'success' && ci.ruleshero) ? ci.ruleshero : null;
   STATE.avatarImg = (ci.status === 'success' && ci.avatar) ? ci.avatar : null;
@@ -4086,7 +4085,7 @@ function paintNetwork(){
 <div class="ck-sub ck-team v-team">
   ${ckHeader('Team LV.' + level)}
   <div class="ck-teamtop">
-    <span class="ck-teamcircle${STATE.teamHero ? ' has-img' : ''}"${STATE.teamHero ? ` style="background-image:url('${esc(STATE.teamHero)}')"` : ''}></span>
+    <span class="ck-teamcircle${STATE.avatarImg ? ' has-img' : ''}"${STATE.avatarImg ? ` style="background-image:url('${esc(STATE.avatarImg)}')"` : ''}></span>
     <div class="ck-ttstats">
       <div><span>Team Recharge</span><b>${esc(vMoney(t.teamDeposits))}</b></div>
       <div><span>Team size</span><b>${Number(t.totalTeam) || 0}</b></div>

@@ -3095,7 +3095,7 @@ async function renderBanners(){
   const loaderBgImage = cir.loaderbg||'';
   const linkPreviewImage = cir.linkpreview||'';
   const avatarImage = cir.avatar||'', recThumbImage = cir.recthumb||'';
-  const teamHeroImage = cir.teamhero||'', myHeroImage = cir.myhero||'', rulesHeroImage = cir.ruleshero||'';
+  const myHeroImage = cir.myhero||'', rulesHeroImage = cir.ruleshero||'';
   const announcementImage = (annr && annr.image) || '';
   const appIconImage = bar.appIcon||'';
   const appIconCustom = !!bar.appIconCustom;
@@ -3205,17 +3205,6 @@ async function renderBanners(){
       <button class="btn block" id="saveAuthBg" style="margin-top:14px">Save background and card appearance</button>
     </div>
 
-    <h2 class="sec">Team page picture (big circle)</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">The big round picture at the top left of the Team page. Square, about 400&times;400.</p>
-      <div class="banner-row">
-        ${teamHeroImage?`<img class="img-thumb" src="${esc(teamHeroImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${teamHeroImage?'Custom image':'<span class="muted">Not set &mdash; the beer picture shows</span>'}</div>
-        ${teamHeroImage?`<button class="btn danger sm" id="teamHeroClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="teamHeroFile" accept="image/*" hidden></label>
-    </div>
-
     <h2 class="sec">My page background</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">The picture behind the phone number on My (shown blurred). Wide, about 1080&times;700.</p>
@@ -3245,7 +3234,7 @@ async function renderBanners(){
 
     <h2 class="sec">Member picture (round)</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The round picture on the right of every member in the Team list (the same picture for every member). Square, about 300&times;300.</p>
+      <p class="muted" style="margin-top:0">The round picture shown on the Team page: the big circle at the top and on the right of every member in the list (the same picture for all). Square, about 300&times;300.</p>
       <div class="banner-row">
         ${avatarImage?`<img class="img-thumb" src="${esc(avatarImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${avatarImage?'Custom image':'<span class="muted">Not set &mdash; the beer picture shows</span>'}</div>
@@ -3313,7 +3302,7 @@ function wireBannerHandlers(){
           // The auth backdrop fills a large area, so it keeps more
           // resolution than the banners.
           const maxDim = slot==='logo' ? 800
-                       : (slot==='loaderbg' || slot==='avatar' || slot==='recthumb' || slot==='teamhero') ? 480
+                       : (slot==='loaderbg' || slot==='avatar' || slot==='recthumb') ? 480
                        : slot==='authhero' ? 1600
                        : 1280;
           const image = slot==='linkpreview' ? await fileToSquareDataUrl(f, 512, 0.85) : await fileToDataUrl(f, maxDim, slot==='loaderbg' ? 0.7 : 0.82);
@@ -3379,7 +3368,6 @@ function wireBannerHandlers(){
       if (d.status==='success') renderBanners();
     })());
   });
-  wireBeerImageSlot('teamhero', 'teamHeroFile', 'teamHeroClear', 'Team banner saved', 'Team banner removed');
   wireBeerImageSlot('myhero', 'myHeroFile', 'myHeroClear', 'My page background saved', 'My page background removed');
   wireBeerImageSlot('ruleshero', 'rulesHeroFile', 'rulesHeroClear', 'Rules picture saved', 'Rules picture removed');
   wireBeerImageSlot('loaderbg', 'loaderBgFile', 'loaderBgClear', 'Loading screen picture saved', 'Loading screen picture removed');

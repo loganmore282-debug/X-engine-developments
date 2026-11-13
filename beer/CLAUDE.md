@@ -71,9 +71,11 @@ Beer is an ETHIOPIA app now: region `et` (+251, nine digits starting 9 or 7), cu
 
 - The Share page has no banner and no admin upload for one (slot `sharehero` removed from server, app and admin).
 
+- The Team page has no banner upload either (slot `teamhero` removed): its big circle and every member's round picture both come from the one admin 'Member picture' (`avatar`), the beer picture when none is uploaded.
+
 ## Status
 1. (done) Copied from Cookie, renamed to Beer, ports 3007/8102/8103, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path `Hq4vN8rt`.
-2. (done) Khaki + amber colours, mug icon, link preview, caches `beer-shell-v19` / `beer-admin-shell-v6`. `npm run test:audit` passes.
+2. (done) Khaki + amber colours, mug icon, link preview, caches `beer-shell-v20` / `beer-admin-shell-v7`. `npm run test:audit` passes.
 3. (done by owner) GitHub webhook `http://179.198.197.114:8102/k7x2/deploy/webhook` (push event, branch claude/beer-build) auto-deploys the VPS; a webhook only reacts to pushes made AFTER it was added. (waiting on owner) Atlas user `beerapp` + connection string, VPS first-setup (the command in "One-time backend setup" with `beer`), domain, payment keys. Nothing of Beer is on the VPS yet.
 
 ## Rules the owner has decided (keep these)
