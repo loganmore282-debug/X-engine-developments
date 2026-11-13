@@ -36,6 +36,11 @@ The five tab icons are filled with the same droplet photo as the buttons: one hi
 - Install dev tools with `npm install --include=dev` (acorn, jsdom, javascript-obfuscator are needed by the tests/build).
 - `node set-brand.js "Name"` renames the app everywhere again if the name ever changes.
 
+## Before giving anything to the owner (he said so, firmly)
+1. `npm run test:audit` must pass.
+2. `npm run test:live` must pass: it drives the real app in a real browser with real taps (login, Buy + confirm and the purchase really happens, every tab, Deposit -> Pay -> payment pages, Withdraw, personal info, wallet, language, Share QR) and fails on any script error. Run it after EVERY change, not only after big ones.
+3. Look at the screenshots it saves. Never delete CSS, animations or rules the owner did not ask to remove.
+
 ## Hosting (same Hostinger VPS as Soda, Mint, Cookie, Potato, Chocolate and Smart AI, completely separate)
 | | Cookie | Beer |
 |---|---|---|
@@ -73,13 +78,13 @@ Beer is an ETHIOPIA app now: region `et` (+251, nine digits starting 9 or 7), cu
 
 - The Team page has no banner upload either (slot `teamhero` removed): its big circle and every member's round picture both come from the one admin 'Member picture' (`avatar`), the beer picture when none is uploaded.
 
-- **Beer picture enhanced (cache v21):** the owner's 578x296 beer photo is the only source; `--bt-img` is now a 1300 px version (median-filtered to remove JPEG blocks, Lanczos upscale, mild unsharp, contrast +7%, colour +8%) and the nav-icon pattern `#beerPat` a 260 px copy of it. Do not re-encode the already enhanced copy again. CSS cleaned: 287 unreachable rules, 5 unused keyframes and 39 unused custom properties removed from `user-src/index.html` (all 21 pages compared before/after).
+- **Beer picture enhanced (cache v21):** the owner's 578x296 beer photo is the only source; `--bt-img` is now a 1300 px version (median-filtered to remove JPEG blocks, Lanczos upscale, mild unsharp, contrast +7%, colour +8%) and the nav-icon pattern `#beerPat` a 260 px copy of it. Do not re-encode the already enhanced copy again. **The automatic CSS 'dead rule' cleanup was REVERTED (cache v23): it deleted the `.confirm-bg` rules (the Buy confirm dialog drew itself 2700 px down the page, so Buy froze), animations (ckPop, ckSheetIn, toastIn ...) and other rules the app really needs, because those rules are reached by id or in ways a word search cannot see. NEVER delete CSS automatically.**
 
 - **Amharic (cache v22):** second language of the Ethiopia app. `LANGS` has `am`; the region's `languages` is `['en','am']` (server `DEFAULT_REGION` and the app's `REGION`); every row of `LANG_ROWS`/`LANG_PATTERNS` has a 7th cell (Amharic) - words came from Petro's dictionary (`/tmp/claude-0/am`, 696 phrases) plus Beer-specific ones typed by hand (Team, Share, Deposit pages). Fonts: Noto Sans Ethiopic is loaded from Google Fonts and named in the body font stack (Nyala / Abyssinica as fallbacks). A new screen string reads English until a row (English first, 7 cells, empty cells fall back) is added. Test: `test-amharic.js`.
 
 ## Status
 1. (done) Copied from Cookie, renamed to Beer, ports 3007/8102/8103, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path `Hq4vN8rt`.
-2. (done) Khaki + amber colours, mug icon, link preview, caches `beer-shell-v22` / `beer-admin-shell-v8`. `npm run test:audit` passes.
+2. (done) Khaki + amber colours, mug icon, link preview, caches `beer-shell-v23` / `beer-admin-shell-v8`. `npm run test:audit` passes.
 3. (done by owner) GitHub webhook `http://179.198.197.114:8102/k7x2/deploy/webhook` (push event, branch claude/beer-build) auto-deploys the VPS; a webhook only reacts to pushes made AFTER it was added. (waiting on owner) Atlas user `beerapp` + connection string, VPS first-setup (the command in "One-time backend setup" with `beer`), domain, payment keys. Nothing of Beer is on the VPS yet.
 
 ## Rules the owner has decided (keep these)
