@@ -17,7 +17,6 @@ const cap = require('./captcha.js'); const realVerify = cap.verify; cap.verify =
 const totp = require('./totp.js'), first = require('./test-helpers/twofa-first-version.js');   // `first` = the first version's own lock and unlock code, copied as it shipped
 const realNow = Date.now; let skew = 0; Date.now = () => realNow() + skew; const advance = (steps) => { skew += (steps || 1) * 30000; };   // the server shares this clock: a new 30-second step without waiting
 const realLog = console.log; console.log = () => {}; console.warn = () => {}; console.error = () => {};
-process.env.POTATO_REGION = 'ug';   // this test drives the Uganda payment gateways (Ethiopia has none: its recharges are manual)
 require('./server.js');
 const base = 'http://127.0.0.1:' + PORT;
 const J = async (m, p, b, tok, adm) => { const r = await fetch(base + p, { method: m, headers: Object.assign({ 'content-type': 'application/json' }, tok ? { authorization: 'Bearer ' + tok } : {}, adm ? { authorization: 'Bearer tf-admin-key-123456' } : {}), body: b ? JSON.stringify(b) : undefined }); let j = {}; try { j = await r.json(); } catch (_) {} return { s: r.status, j }; };
@@ -30,11 +29,11 @@ async function member() {
   await J('POST', '/register', { pin: '123456', referralCode: '' }, su.j.token);
   const prods = (await J('GET', '/public/products')).j.products.filter(p => p.price > 0).sort((a, b) => a.price - b.price);
   await J('POST', '/invest/create', { tierKey: prods[0].key }, su.j.token);
-  const bank = '07716' + String(70000 + phoneN * 13); await J('POST', '/bank/save', { holder: 'Two Step', network: 'MTN Mobile Money', phone: bank }, su.j.token);
+  const bank = '07716' + String(70000 + phoneN * 13); await J('POST', '/bank/save', { holder: 'Two Step', network: 'Telebirr', phone: bank }, su.j.token);
   return { tok: su.j.token, uid: su.j.uid, bank, phone };
 }
 const user = id => fm.__stores.users.get(id), W = () => fm.__stores.withdrawals;
-const wdraw = (m, body) => J('POST', '/withdraw/request', Object.assign({ amount: 20000, network: 'MTN Mobile Money', phone: m.bank, pin: '123456' }, body || {}), m.tok);
+const wdraw = (m, body) => J('POST', '/withdraw/request', Object.assign({ amount: 20000, network: 'Telebirr', phone: m.bank, pin: '123456' }, body || {}), m.tok);
 const rowsOf = m => [...W().values()].filter(w => w.userId === m.uid);
 const settle = async m => { for (const w of rowsOf(m)) if (w.status === 'pending') await J('POST', '/admin/withdraw/reject', { withdrawalId: w._id || [...W().entries()].find(([, v]) => v === w)[0] }, null, true); };
 const codeNow = (secret, offsetSteps) => totp.codeAt(secret, Date.now() + (offsetSteps || 0) * 30000);

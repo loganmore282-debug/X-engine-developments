@@ -34,12 +34,12 @@ var API_BASE = '/k7x2';
 var REGION = { key: 'et', name: 'Ethiopia', currency: 'ETB', currencySymbol: 'Br', dialCode: '251', localLength: 9, localLengths: [9], prefixes: ['9', '7'], utcOffsetMin: 180, isDefault: true };
 // What a member READS in front of an amount: the symbol (Br for ETB); the code stays ETB underneath.
 function cur(){ return (REGION && (REGION.currencySymbol || REGION.currency)) || 'Br'; }
-// "7XXXXXXXX" for Uganda -- the region's first allowed prefix padded out to
+// "9XXXXXXXX": the region's first allowed prefix padded out to
 // its local length, used in the placeholders that show the shape to type.
 function dial(){ return (REGION && REGION.dialCode) || '251'; }
 function dialPlus(){ return '+' + dial(); }
 function localLen(){ return Number(REGION && REGION.localLength) || 9; }
-// Every length a number may have in this region (9 for Uganda, 9 or 10 for Nigeria), longest last.
+// Every length a number may have in this region (9 in Ethiopia), longest last.
 function localLens(){
   const l = REGION && Array.isArray(REGION.localLengths) && REGION.localLengths.length ? REGION.localLengths : [localLen()];
   return l.map(Number).filter(n => n > 0).sort((a, b) => a - b);
@@ -49,7 +49,7 @@ function phoneLenWords(){ const l = localLens(); return l.length > 1 ? l.slice(0
 function regionPrefixes(){ return (REGION && Array.isArray(REGION.prefixes) ? REGION.prefixes.filter(Boolean) : []); }
 // Applied from whichever response carried a region block. Only the fields
 // the server actually sent are taken, so a server that is one deploy behind
-// (no region in its replies at all) leaves Uganda's defaults standing
+// (no region in its replies at all) leaves Ethiopia's defaults standing
 // instead of blanking the currency.
 function applyRegion(r){
   paintRegionChrome();
@@ -57,9 +57,9 @@ function applyRegion(r){
 // The bits of the SIGN-IN screen that name a country. Repainted from here,
 // because the region arrives from the network AFTER that screen is already
 // on display -- and the two dialling-code chips were static "+256" in the
-// markup with nothing ever updating them, so every country's address showed
-// Uganda's code. Reported: "why when you tap the other country domain,
-// still returns the 256 on login and register".
+// markup with nothing ever updating them, so every address showed
+// the same code. Reported: "why when you tap the other country domain,
+// still returns the wrong code on login and register".
 //
 // That was worse than a cosmetic slip: the chip is the ONLY thing telling a
 // member which country the address he opened belongs to, so an address
@@ -85,7 +85,7 @@ function paintRegionChrome(){
   } catch(_){}
 }
 // The last region this device saw, restored before the first paint so a
-// returning member never sees Uganda's currency flash on a Kenyan phone
+// returning member never sees the wrong currency flash
 // while /public/settings is still in flight.
 
 // Thousands commas and the decimal point are written here, never left to the phone's own locale (an older phone browser without full
@@ -429,10 +429,7 @@ function localDigits(raw){
 // The synthetic address this account signs in to Firebase with. It MUST
 // produce exactly the same string as phoneToEmail() in server.js, or a
 // member would create one account and then log in looking for another.
-// Uganda keeps the bare local digits it has always used, so no existing
-// login changes; every other region carries its dialling code, because the
-// same local number exists in more than one country and the bare digits
-// alone would put a Kenyan inside a Ugandan's account.
+// Ethiopia uses the bare local digits as the login address.
 // The login address for a number, in THIS region's shape. Must match
 // server.js's phoneToEmail() exactly, character for character -- they are
 // two implementations of one string, and a disagreement means a member
@@ -460,7 +457,7 @@ function loginAddressFor(phone, bare){
 //
 // So sign-in tries the other shape too. Deliberately only the two shapes for
 // THIS region -- never another country's -- so it cannot become a way to
-// sign in to a Kenyan account on the Ugandan site.
+// sign in to another country's account.
 function loginAddressCandidates(phone){
   // One address is enough now: the server reduces whatever it is given
   // (national or international shape) to the same canonical number, so there
@@ -2000,7 +1997,7 @@ function replayPageIn(){
 }
 window.navigatePage = function(name){
   dismissNotify();
-  if (STATE.page === name && !document.querySelector('.sheet-bg.show,#msgDetailBg.show,#depStatusBg.show')) return;
+  if (STATE.page === name && !document.querySelector('.sheet-bg.show,#msgDetailBg.show')) return;
   return showPage(name);
 };
 window.showPage = async function(name){
@@ -2020,19 +2017,6 @@ window.showPage = async function(name){
   // Owner: "when in this message and you tap nav icons, the message screen
   // still persists to go away unless you click on X mark."
   //
-  // The recharge status page (.pay-page) is a full-screen task state with
-  // the bottom nav hidden while it is open. Keep its teardown here anyway so
-  // any programmatic tab change also dismisses the overlay cleanly.
-  //
-  // Unlike the other two it owns NO history entry (openDepositStatusModal
-  // does not pushState), so it must not be counted in `spent` below --
-  // retiring an entry it never pushed would walk the member off the app's
-  // first entry and drop them out of the app.
-  //
-  // Closing the page does NOT stop the poll, deliberately: a payment is still
-  // in flight at the provider, pollDepositStatus() keeps running and still
-  // refreshes Records when it settles.
-  //
   // Other overlays cover the full viewport too, so a tab change cannot be
   // triggered from underneath them.
   //
@@ -2044,13 +2028,7 @@ window.showPage = async function(name){
   // popstate that finds everything already closed and does nothing.
   const detailOpen = !!($('msgDetailBg') && $('msgDetailBg').classList.contains('show'));
   const sheetOpen = !!document.querySelector('.sheet-bg.show');
-  const payOpen = !!($('depStatusBg') && $('depStatusBg').classList.contains('show'));
   if (detailOpen) $('msgDetailBg').classList.remove('show');
-  if (payOpen) {
-    $('depStatusBg').classList.remove('show');
-    document.body.classList.remove('deposit-status-open');
-    unlockBodyScroll();
-  }
   // Owner: "some notifies take long to go away even when you've clicked in
   // another category, it still keep showing." notify()'s own 3.6s timer only
   // ever gets reset by ANOTHER notify() call -- switching tabs never touched
@@ -2168,7 +2146,6 @@ async function renderHome(){
   const shownProducts = homeSignature();
   const hadProductList = !!STATE.products;
   paintHome();
-  if (_depStartNext === null) ptPrefetchDepositStart();
   const [accR, invR, prR] = await Promise.all([ api('/account'), api('/investments'), api('/public/products') ]);
   if (accR.status === 'success') STATE.account = accR.account;
   if (prR.status === 'success' && Array.isArray(prR.products)) { STATE.products = prR.products; _productsLoadFailed = false; }
@@ -2528,7 +2505,7 @@ function vOwnedCardHtml(inv){
     <div class="pt-run-mat"><span>Maturity ${pct}%</span><b>${st.daysLeft} days left</b></div>
   </article>`;
 }
-// "Today's Income": what was paid into the wallet as earnings since 00:00 of the region's own day (Uganda: UTC+3).
+// "Today's Income": what was paid into the wallet as earnings since 00:00 of the region's own day (Ethiopia: UTC+3).
 var PT_EARN_TYPES = ['cashback'];   // Orders' Today's / Total Income count ONLY what the products paid (daily earnings), never gift codes, commission, rewards   // every source that adds to Total Income (server EARNING_TX_TYPES)
 function ptRegionOffsetMs(){ return (Number(REGION && REGION.utcOffsetMin) || 0) * 60000; }
 // Total Income on Orders: what the products have paid so far (the Reward of every product the member owns), not the wallet's all-sources total.
@@ -3194,8 +3171,8 @@ function paintAccountFailed(){
   <button type="button" class="pt-logout" onclick="doLogout()">Log Out</button>
 </div>`;
 }
-// "+256 742 730 382" -- the shape the mockups show, from whatever the
-// server stored (0742730382 / 256742730382 / +256742730382 all normalise).
+// "+251 911 234 567" -- the shape the mockups show, from whatever the
+// server stored (0911234567 / 251911234567 / +251911234567 all normalise).
 // The dialling code is the region's; the 3-3-3 grouping is applied only to
 // a 9-digit local number, so a country with a different length gets its
 // digits printed whole rather than half-grouped.
@@ -3209,12 +3186,10 @@ function formatPhoneDisplay(phone){
   return dialPlus() + ' ' + groups;
 }
 
-// Short names the Wallet page shows ("MTN", "Airtel"); the server still gets the full provider name.
-function walShort(n){ n = String(n || ''); return n === 'MTN Mobile Money' ? 'MTN' : n === 'Airtel Money' ? 'Airtel' : n; }
-// Owner: "make potato ... Ethiopia plus the other previous payment pages and models": a withdrawal account is a Commercial Bank of Ethiopia account number or a
-// Telebirr wallet (a phone number). MTN / Airtel are still read as wallets so an account saved before the change displays.
-function walProviders(){ return (REGION && REGION.key === 'et') ? ['Commercial Bank of Ethiopia', 'Telebirr'] : ['MTN Mobile Money', 'Airtel Money']; }
-function isMobileMoneyNetwork(network){ return network === 'Telebirr' || network === 'MTN Mobile Money' || network === 'Airtel Money'; }
+// Withdrawal accounts: Commercial Bank of Ethiopia (a bank account number) and Telebirr (a wallet: a phone number).
+function walShort(n){ return String(n || ''); }
+function walProviders(){ return ['Commercial Bank of Ethiopia', 'Telebirr']; }
+function isMobileMoneyNetwork(network){ return network === 'Telebirr'; }
 function walFull(label){
   const t = String(label || '').trim().toLowerCase();
   if (!t) return '';
@@ -3993,15 +3968,9 @@ function isAnyOverlayOpen(){
     || ($('msgDetailBg') && $('msgDetailBg').classList.contains('show'))
     || ($('notifyBg') && $('notifyBg').classList.contains('show'))
     || ($('confirmBg') && $('confirmBg').classList.contains('show'))
-    // The recharge result modal (Round 82) came after this guard was first
-    // written and was never added to it -- it is exactly the kind of thing
-    // the announcement must never land on top of, since it carries the
-    // outcome of a payment the member is waiting on.
-    || ($('depStatusBg') && $('depStatusBg').classList.contains('show'))
     // The announcement dialog itself, now that it's real again -- so a
     // second trigger (e.g. Withdraw closing right after Deposit already
     // opened it) can't stack a second announcement on top of the first.
-    || ($('depStatusBg') && $('depStatusBg').classList.contains('show'))
     || ($('annBg') && $('annBg').classList.contains('show')));
 }
 // Owner: "when you logout and login again, the system freezes and no
@@ -4034,7 +4003,6 @@ function isAnyOverlayOpen(){
 function isScrollLockOverlayOpen(){
   return !!(_openSheetTitle
     || ($('confirmBg') && $('confirmBg').classList.contains('show'))
-    || ($('depStatusBg') && $('depStatusBg').classList.contains('show'))
     || ($('annBg') && $('annBg').classList.contains('show')));
 }
 
@@ -4149,13 +4117,11 @@ window.closeSheet = function(opts){
 var _dlgIgnorePop = false, _dlgFromPop = false, _dlgCleanTimer = null;
 function anyDialogOpen(){
   return !!(($('confirmBg') && $('confirmBg').classList.contains('show'))
-    || ($('annBg') && $('annBg').classList.contains('show'))
-    // The payment status page owns a history entry too: without it here, one Back left the page showing and the next left the app mid-payment.
-    || ($('depStatusBg') && $('depStatusBg').classList.contains('show')));
+    || ($('annBg') && $('annBg').classList.contains('show')));
 }
 function _dlgIgnore(){ _dlgIgnorePop = true; setTimeout(() => { _dlgIgnorePop = false; }, 700); }
 function resetOverlayState(){
-  document.body.classList.remove('deposit-status-open', 'sheet-open');
+  document.body.classList.remove('sheet-open');
   // A session that ends (or a logout) takes every popup with it: the Buy confirm, Help, announcement, download and the win card used to stay
   // on top of the Login screen (the win card even showed the previous member's New Balance).
   ['confirmBg', 'annBg'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
@@ -4163,8 +4129,7 @@ function resetOverlayState(){
   const gw = $('ptWinBg'); if (gw) gw.remove();            // the Gift Code win card (it shows the New Balance)
   const pin = $('pinBg'); if (pin) pin.classList.remove('show');   // the Trade Password dialog
   const tp = $('totpBg'); if (tp) tp.classList.remove('show');     // the authenticator code dialog
-  _openSheetTitle = null; _depActiveDepositId = null; _withdrawSubmitting = false;
-  if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
+  _openSheetTitle = null; _withdrawSubmitting = false;
 }
 function dlgOpened(){
   if (_dlgCleanTimer) { clearTimeout(_dlgCleanTimer); _dlgCleanTimer = null; }
@@ -4184,12 +4149,6 @@ function closeTopDialog(){
   try {
     if ($('confirmBg') && $('confirmBg').classList.contains('show')) closeConfirm();
     else if ($('annBg') && $('annBg').classList.contains('show')) closeAnnouncement();
-    else if ($('depStatusBg') && $('depStatusBg').classList.contains('show')) {
-      // The payment status page: Back is Cancel (the payment itself carries on at the provider; the member can still be credited later). The first
-      // moments are different: the Deposit sheet that was just closed takes its own history entry away with a popstate that lands HERE, and that one must
-      // not cancel the page that has only just opened, so it only puts the page's own entry back.
-      if (Date.now() - _depOpenedAt < 1500) dlgOpened(); else cancelDepositStatus();
-    }
   } finally { _dlgFromPop = false; }
 }
 // A tap on the edge of a text box (its padding or the currency sign beside the figure) focuses the box's input too.
@@ -4268,41 +4227,23 @@ function recordsRowAmount(t){
   return Number(t.amount) || 0;
 }
 
-// Manual (admin-number, SMS-matched) deposit collection -- PAY B, and the
-// PAY A/PAY B choice screen itself -- was removed outright per owner
-// instruction ("remove option for payment methods, remove manual payment
-// in the whole codes... remove them all"). Automatic recharge is now the
-// only deposit path: one screen, no method choice to make.
-// The pay button that is selected when the page opens comes from the SERVER, which hands the buttons out in turn so every method is used equally.
-// The answer is fetched ahead of time and kept for the next visit (opening never waits for the network); with none yet, a random button.
-var _depStartNext = null, _depStartBusy = false;
-function ptPrefetchDepositStart(){
-  if (_depStartBusy) return;
-  _depStartBusy = true;
-  api('/deposit/start').then(r => { if (r && r.status === 'success' && Number.isInteger(r.start)) _depStartNext = r.start; }).catch(() => {}).then(() => { _depStartBusy = false; });
-}
+// Recharge: the amount goes to the bank / Telebirr payment pages (see the MANUAL BANK / WALLET RECHARGE section below).
 window.openDepositSheet = function(){
   const s = STATE.settings || {};
   if (s.depositAvailable === false) return notify('Deposits are not available right now.');
-  const start = _depStartNext; _depStartNext = null;
-  openDepositFormSheet(start);
-  ptPrefetchDepositStart();
+  openDepositFormSheet();
 };
 var _depChosenAmount = 0;
-function openDepositFormSheet(start){
+function openDepositFormSheet(){
   const s = STATE.settings || {};
   const min = Number(s.minDeposit) || 0;
   const chipAmts = Array.from(new Set((STATE.products || []).map(p => Number(p.price) || 0).filter(p => p >= min && p > 0))).sort((a, b) => a - b).slice(0, 6);
   _depChosenAmount = chipAmts.length ? chipAmts[0] : 0;
-  // The admin's list: "Pay-B, Pay-A, Pay-D, Pay-C". Which one is on when the page opens is the server's turn-taking pick (a * the admin may still have typed is ignored).
-  const names = String(s.depositMethodNames || 'Pay-B, Pay-A, Pay-D, Pay-C').split(',').map(x => x.replace(/\*+$/, '').trim()).filter(Boolean);
-  const startOn = Number.isInteger(start) && start >= 0 ? start % names.length : Math.floor(Math.random() * names.length);
   const note = t => `<div class="pt-note">${t}</div>`;
   openSheet('Deposit', `<div class="pt-dep">
     <div class="pt-chips" id="depChips">${chipAmts.map(a => `<button type="button" class="dep-chip pt-chip${a === _depChosenAmount ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a})">${a}</button>`).join('')}</div>
     <div class="pt-avail">Available:<b>${esc(vMoney2((STATE.account || {}).walletBalance))}</b></div>
     <div class="pt-amt"><span>${esc(cur())}</span><input id="depAmount" type="text" inputmode="numeric" maxlength="9" value="${_depChosenAmount || ''}" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');syncDepositQuickAmt()" name="pt_amount" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore></div>
-    <div class="pt-meths" id="depPays">${names.map((n, i) => `<button type="button" class="${i === startOn ? 'on' : ''}" onclick="pickPayLabel(this)">${ptIconHtml('payicon', '', 'pt-payic')}<span>${esc(brandName())} ${esc(n)}</span></button>`).join('')}</div>
     <button class="pt-pay" id="depSubmitBtn" type="button" onclick="submitDeposit()">Pay <b id="depPayAmt">${esc(numGroup(_depChosenAmount, true))}</b></button>
     <div class="pt-notes">
       ${note('Minimum deposit amount: ' + esc(cur()) + ' ' + esc(numGroup(min, false)))}
@@ -4311,8 +4252,6 @@ function openDepositFormSheet(start){
       ${note('Please do not transfer to any account not designated by the platform')}
     </div>
   </div>`);
-  // With the bank / Telebirr numbers set up, the Pay button goes to the manual payment pages: the gateway pay buttons would only mislead.
-  if (s.manualPay === true) { const m = $('depPays'); if (m) m.style.display = 'none'; }
   ptCountPay();
 }
 // The Pay button's amount always RUNS to its new figure (live, like Cookie's): from 0 when Deposit opens, and from what it shows to the new amount whenever one is
@@ -4336,11 +4275,6 @@ function ptCountPay(){
   el._cv = 0; el.textContent = numGroup(0, true);
   ptPayTo(_depChosenAmount, 1000);
 }
-// The Deposit page shows the admin's pay buttons (up to six); tapping one selects it (only one is on at a time), and the page opens with the one marked * (the first if none).
-window.pickPayLabel = function(btn){
-  const box = $('depPays');
-  if (box) box.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
-};
 window.pickDepositAmount = function(amt){
   const el = $('depAmount');
   if (el) el.value = amt;
@@ -4356,231 +4290,6 @@ function syncDepositQuickAmt(){
   const chips = $('depChips');
   if (chips) chips.querySelectorAll('.dep-chip').forEach(btn => btn.classList.toggle('sel', Number(btn.dataset.amt) === val));
 }
-// Live deposit-status modal -- reuses the .chest-modal-bg/.chest-modal dark/
-// centered/thin pop-up convention. Opens the instant a recharge is accepted
-// and updates in place as pollDepositStatus() resolves, instead of just a
-// toast + silent background poll. No outside-tap-to-close while pending
-// (a real operation is in flight); the Close button only appears once
-// resolved (or once the poll gives up), matching the app's own established
-// pattern of only offering Close on a settled dialog state.
-var _depOpenedAt = 0, _depPendingSlot = 0;
-// "Change Number" on the waiting page: pay from another number. A NEW request for the same amount (through the same pay button) goes to that number and
-// the page follows it; the first request is not cancelled (a prompt already on the first phone can still be approved, and would credit as well).
-window.openDepositChangeNumber = function(){
-  $('depChgRow').style.display = 'none'; $('depChgBox').style.display = '';
-  $('depChgDial').textContent = dialPlus(); $('depChgErr').textContent = '';
-  const i = $('depChgPhone'); i.value = ''; setTimeout(() => { try { i.focus(); } catch (_) {} }, 60);
-};
-window.closeDepositChangeNumber = function(){ if ($('depChgBox')) $('depChgBox').style.display = 'none'; if ($('depChgRow')) $('depChgRow').style.display = ''; };
-window.submitDepositNewNumber = async function(){
-  const btn = $('depChgGo'), err = $('depChgErr');
-  if (!btn || btn.disabled) return;
-  const phone = cleanPhone($('depChgPhone').value);
-  if (!phone) { err.textContent = 'Enter a valid ' + phoneLenWords() + ' digit phone number'; return; }
-  if (!_depPendingAmount) return;
-  btn.disabled = true; btn.textContent = 'Sending...'; err.textContent = '';
-  const r = await post('/deposit/marzpay', { amount: _depPendingAmount, slot: _depPendingSlot, phone });
-  btn.disabled = false; btn.textContent = 'Send prompt';
-  if (r && r.stale) return;
-  if (!r || r.status !== 'success') { err.textContent = (r && r.message) || 'Could not send the prompt. Try again.'; return; }
-  refreshTransactionsCache().catch(() => {});
-  setDepositStatusPending(_depPendingAmount, phone, r.reference);   // the page follows the new request; its poll replaces the old one
-  pollDepositStatus(r.depositId);
-};
-window.openDepositStatusModal = function(amount, phone, reference){
-  _depOpenedAt = Date.now();
-  setDepositStatusPending(amount, phone, reference);
-  $('depStatusBg').classList.add('show');
-  document.body.classList.add('deposit-status-open');
-  lockBodyScroll();
-  // Back closes this page (see closeTopDialog) instead of leaving the app. When the deposit sheet's own history entry is still being
-  // taken away (closeSheet called history.back() a moment ago), the popstate for that does the push (closeTopDialog); pushing here too
-  // would be popped by that same back() and leave a stale sheet entry behind. A timer makes sure an entry exists either way.
-  if (!(history.state && history.state.sheet)) dlgOpened();
-  setTimeout(() => { if ($('depStatusBg') && $('depStatusBg').classList.contains('show') && !(history.state && history.state.dlg)) dlgOpened(); }, 700);
-};
-// Cancel (or Back): stop watching and leave. The payment itself is NOT cancelled: if the member approves it later the server still credits it, and
-// Transaction Statement shows it as Processing until then.
-window.cancelDepositStatus = function(){
-  _depPollDone = true; _depActiveDepositId = null;
-  closeDepositStatusModal();
-  refreshTransactionsCache().catch(() => {});
-};
-window.copyDepositRef = function(){
-  const ref = ($('depStatusRef') || {}).textContent || '', btn = document.querySelector('.cp-row button');
-  try { if (navigator.clipboard) navigator.clipboard.writeText(ref).catch(() => {}); } catch (_) {}
-  if (btn) { btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); }
-};
-window.closeDepositStatusModal = function(goHome){
-  // Cancels the success screen's own auto-redirect countdown if the member
-  // taps Close/Back before it fires on its own -- otherwise the timer would
-  // still be alive and try to close (or navigate) a modal that is already
-  // closed, moments later.
-  if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
-  $('depStatusBg').classList.remove('show');
-  document.body.classList.remove('deposit-status-open');
-  unlockBodyScroll();
-  dlgClosed();
-  if (goHome === true && STATE.page !== 'home') { try { navigatePage('home'); } catch (_) {} }
-};
-// ── ONE STATUS REQUEST AT A TIME ──
-// Owner: "add a button saying verify, so one can tap it but it should not
-// stop autopolling, also they should not call at the same time to strike api
-// of payment provider."
-//
-// /deposit/marzpay/status makes the server ask the payment provider about
-// this transaction, so two of them firing together is two hits on the
-// provider for one answer -- and the manual Verify tap is, by design, most
-// likely to happen exactly while the 3s autopoll is mid-request.
-//
-// This is a single-flight, not a mutex: a caller arriving while a request is
-// already out gets the SAME promise back rather than being refused or made to
-// start a second one. So the member's tap is never ignored (they still get an
-// answer, the one already on its way), the autopoll is never interrupted, and
-// the provider is never asked twice at once. It also means both callers may
-// resolve on the same response, which is why applyDepositStatusResult() below
-// has to be idempotent.
-var _depStatusInflight = null;
-var _depActiveDepositId = null;
-var _depPollDone = false;
-var _depPendingAmount = 0;
-// Long enough that hammering the button cannot turn into a burst of provider
-// calls, short enough that a member watching the screen can re-check when the
-// prompt actually lands on their phone.
-var DEP_VERIFY_COOLDOWN_MS = 2500;
-function depositStatusCheck(depositId){
-  if (_depStatusInflight) return _depStatusInflight;
-  // post() resolves to {status:'error'} rather than rejecting (see api()), so
-  // this promise never rejects and the finally always clears the slot.
-  _depStatusInflight = post('/deposit/marzpay/status', { depositId })
-    .finally(() => { _depStatusInflight = null; });
-  return _depStatusInflight;
-}
-// The autopoll's own request: asks the server to HOLD the answer for a few seconds while it is watching the payment (server.js waitDepositSettled),
-// so "paid" arrives the moment PesaJet confirms instead of at the next tick. Deliberately NOT shared with depositStatusCheck(): a Verify tap must
-// never be made to wait behind a held request. A server that does not hold simply answers at once and the loop's own pacing takes over.
-var DEP_HOLD_MS = 8000;
-function depositStatusHold(depositId){
-  return post('/deposit/marzpay/status', { depositId, waitMs: DEP_HOLD_MS });
-}
-// The single place that decides what a status response MEANS, shared by the
-// autopoll and the Verify button so the two can never disagree about the same
-// payload. Returns true once the deposit has settled.
-async function applyDepositStatusResult(r){
-  if (_depPollDone) return true;
-  if (!r || r.status !== 'success') return false;
-  if (r.state === 'matched') {
-    _depPollDone = true;
-    setDepositStatusSuccess();
-    await refreshTransactionsCache();
-    if (STATE.page === 'home') renderHome();
-    return true;
-  }
-  if (r.state === 'failed') {
-    _depPollDone = true;
-    setDepositStatusFailed(r.message);
-    await refreshTransactionsCache();
-    return true;
-  }
-  return false;
-}
-// The waiting page, laid out like ChocoMCC's. One icon, one title, one coloured message line and one big button whose job changes with the state:
-// Verify Payment while waiting, Back to Home once paid. Cancel (or Close, once it has failed) leaves the page.
-var _depAttempt = 0;
-var DEP_ICON = {
-  wait: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.4"/><path d="M11 18h2"/></svg>',
-  ok: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
-  bad: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5v7.2"/><path d="M12 17.3v.2"/></svg>',
-};
-function setDepIcon(kind){
-  const ic = $('depStatusIcon'); if (!ic) return;
-  ic.className = 'cp-ic' + (kind === 'ok' ? ' ok pop' : kind === 'bad' ? ' bad pop' : '');
-  ic.innerHTML = DEP_ICON[kind] || DEP_ICON.wait;
-}
-function setDepMsg(kind, text){
-  const el = $('depStatusMsg'); if (!el) return;
-  el.className = 'cp-msg' + (kind === 'matched' ? ' ok' : kind === 'failed' ? ' bad' : '');
-  el.textContent = text;
-}
-function setDepAttempt(){ const el = $('depStatusAttempt'); if (el) el.textContent = _depAttempt ? 'Auto-verifying… (attempt ' + _depAttempt + '/' + DEP_POLL_MAX + ')' : ''; }
-// The big button: spinning "Verifying…" while a check is out, "Verify Payment" otherwise.
-function setDepVerifying(on){
-  const b = $('depVerifyBtn'), spin = $('depVerifySpin'), label = $('depVerifyLabel');
-  if (b) b.disabled = !!on;
-  if (spin) spin.style.display = on ? 'inline-flex' : 'none';
-  if (label && !_depPollDone) label.textContent = on ? 'Verifying…' : 'Verify Payment';
-}
-function setDepMainButton(label, onclick){
-  const b = $('depVerifyBtn'); if (!b) return;
-  b.style.display = onclick ? '' : 'none'; b.disabled = false; b.onclick = onclick || null;
-  if ($('depVerifySpin')) $('depVerifySpin').style.display = 'none';
-  if ($('depVerifyLabel')) $('depVerifyLabel').textContent = label;
-}
-function hideDepChange(){ if ($('depChgRow')) $('depChgRow').style.display = 'none'; if ($('depChgBox')) $('depChgBox').style.display = 'none'; }
-function setDepCancel(text){ const row = $('depCancelRow'); if (row) { row.style.display = text ? '' : 'none'; if (text && row.firstChild) row.firstChild.textContent = text; } }
-window.verifyDepositNow = async function(){
-  const btn = $('depVerifyBtn');
-  if (!_depActiveDepositId || _depPollDone || !btn || btn.disabled) return;
-  setDepVerifying(true);
-  const settled = await applyDepositStatusResult(await depositStatusCheck(_depActiveDepositId));
-  if (settled) return;                       // setDepositStatus* already reset the button
-  // The cooldown runs from the ANSWER, not the tap, so a slow provider does not let taps queue up behind it.
-  setTimeout(() => { if (!_depPollDone) setDepVerifying(false); }, DEP_VERIFY_COOLDOWN_MS);
-  notify('Still pending. Approve the payment prompt on your phone, then tap Verify Payment again.');
-};
-function setDepositStatusPending(amount, phone, reference){
-  if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }   // an old success countdown must not close this new page
-  const displayPhone = cleanPhone(phone) || (dialPlus() + String(phone || '').replace(/\D/g, ''));
-  _depPendingAmount = Number(amount) || 0;
-  _depAttempt = 0;
-  setDepIcon('wait');
-  $('depStatusTitle').textContent = 'Payment Initiated Successfully!';
-  $('depStatusPhone').textContent = 'You will receive a payment prompt for ' + fmtUGX(amount) + ' on ' + displayPhone + ' shortly.';
-  $('depStatusSteps').style.display = '';
-  // The push prompt genuinely does fail to arrive sometimes (a real mobile-money gap), so the way out is spelled out: dialling the network's own menu shows the
-  // same pending request. *165# is MTN's, *185# is Airtel's; the gateway detects the network itself, so both are given.
-  $('depStatusTip').textContent = 'No prompt? Dial *165# (MTN) or *185# (Airtel) on that phone to find and approve the pending payment yourself.';
-  $('depStatusRef').textContent = reference || '';
-  setDepMsg('pending', 'Payment initiated. Check your phone.');
-  setDepAttempt();
-  setDepMainButton('Verify Payment', window.verifyDepositNow);
-  setDepCancel('Cancel');
-  closeDepositChangeNumber();
-}
-var _depSuccessRedirectTimer = null;
-function setDepositStatusSuccess(){
-  setDepIcon('ok');
-  $('depStatusTitle').textContent = 'Payment Successful!';
-  $('depStatusPhone').textContent = _depPendingAmount ? fmtUGX(_depPendingAmount) + ' has been added to your wallet.' : 'Your wallet has been credited.';
-  $('depStatusSteps').style.display = 'none';
-  $('depStatusTip').textContent = '';
-  setDepMsg('matched', 'Payment confirmed. Funds added to your wallet.');
-  _depAttempt = 0; setDepAttempt();
-  // No countdown and no automatic redirect: the page stays until the member taps Back to Home (or the back arrow).
-  setDepMainButton('Back to Home', function(){ closeDepositStatusModal(true); });
-  setDepCancel('');
-  hideDepChange();
-}
-function setDepositStatusFailed(msg){
-  setDepIcon('bad');
-  $('depStatusTitle').textContent = 'Payment Not Completed';
-  $('depStatusPhone').textContent = 'Nothing was added to your wallet.';
-  $('depStatusSteps').style.display = 'none';
-  $('depStatusTip').textContent = '';
-  // Naming ONE specific cause would be a fabricated claim: the provider's failed-collection reply carries no reason, so the server's own wording is shown
-  // (it lists the plausible causes without asserting which one it was); the fallback only fires for a failure that never reached the server.
-  setDepMsg('failed', msg || 'This deposit did not go through. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds.');
-  _depAttempt = 0; setDepAttempt();
-  setDepMainButton('Try Again', function(){ closeDepositStatusModal(); openDepositSheet(); });
-  setDepCancel('Close');
-  hideDepChange();
-}
-function setDepositStatusUnknown(){
-  setDepMsg('failed', "We couldn't confirm this payment automatically. Tap Verify Payment or contact support. If it goes through, your balance still updates on its own.");
-  _depAttempt = 0; setDepAttempt();
-  setDepVerifying(false);
-}
-// The "Processing payment..." cover: the whole screen (bottom bar and floating pictures too) dims and blurs, a ring turns above the words.
 function ptProcessing(on){
   let el = $('ptProcBg');
   if (on && !el) { el = document.createElement('div'); el.id = 'ptProcBg'; el.className = 'mg-redirect'; el.innerHTML = '<span class="spin"></span><p>Processing payment...</p>'; document.body.appendChild(el); }
@@ -4776,109 +4485,9 @@ window.submitDeposit = async function(){
     if (amount < (Number((STATE.settings || {}).minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX((STATE.settings || {}).minDeposit));
     return openManualPayFlow(amount);
   }
-  // Owner: "why when one didn't put number, it just continues to poll ... l
-  // tried to leave not putting number and clicked confirm deposit but it
-  // didn't reject it just continued to go to poll page."
-  //
-  // The amount was validated here and the phone simply was not, so an empty
-  // field went to the server, which fell back to the account's own registered
-  // number, created a real deposit and answered success -- so the app went
-  // happily on to the poll page for a payment prompt the member never asked
-  // for. It also produced the broken "+256" with no digits on that screen,
-  // because the display fell back to a bare country code.
-  //
-  // cleanPhone() is the SAME rule the server applies, so what is accepted
-  // here and what is accepted there cannot drift apart.
-  // The payment prompt goes to the member's own registered number (the server uses it when none is sent).
-  // The member types the number he pays from (the prompt is sent to it); it is checked with the same rule the server applies.
   if (!amount || amount <= 0) return notify('Enter a valid amount');
-  // A below-minimum amount is refused here, before any round trip.
-  const s = STATE.settings || {};
-  if (amount < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
-  submitBtn.disabled = true; submitBtn.textContent = 'Loading...';
-  ptProcessing(true);
-  // Which pay button is on: its position tells the server which gateway the admin put behind it (kept for "Change Number" on the waiting page).
-  const onBtn = document.querySelector('#depPays button.on'), slot = onBtn ? Array.prototype.indexOf.call(onBtn.parentNode.children, onBtn) : 0;
-  _depPendingSlot = slot;
-  let r;
-  try {
-    // No network field on this form (Round 145) -- the gateway detects it
-    // from the phone number itself; server.js already treats `network` as
-    // optional here.
-    // Which pay button is on: its position tells the server which gateway the admin put behind it.
-    r = await post('/deposit/marzpay', { amount, slot });
-  } finally {
-    // Restores the button's resting label after a failed attempt -- must
-    // match whatever submitBtn actually reads at rest (see the sheet's own
-    // button above), or a member whose recharge failed is left looking at a
-    // button that silently renamed itself.
-    submitBtn.disabled = false; submitBtn.innerHTML = 'Pay <b id="depPayAmt">' + esc(numGroup(amount, true)) + '</b>';
-    ptProcessing(false);
-  }
-  if (r && r.stale) return;
-  if (!r || r.status !== 'success') return notify((r && r.message) || 'Could not start deposit');
-  // Same stale-Records fix as submitWithdraw() -- /deposit/marzpay already
-  // wrote a "Processing" ledger row server-side by this point, refresh the
-  // cache now so it's actually there the next time Records opens.
-  refreshTransactionsCache().catch(() => {});
-  if ($('depSubmitBtn') === submitBtn && _openSheetTitle === 'Deposit') closeSheet({ fromAction: true });
-  openDepositStatusModal(amount, localDigits((STATE.account || {}).phone || ''), r.reference);
-  pollDepositStatus(r.depositId);
+  notify('Recharge is not available right now.');
 };
-// Owner: "callback speed is low, so try to make the system solid and faster
-// validation on payments."
-//
-// The old loop slept a flat 3s BEFORE its first check, so even a member who
-// approved the prompt instantly watched a screen that said nothing for three
-// seconds -- and every later tick was 3s too. Two changes, and neither asks
-// the provider for more than it needs:
-//
-//   * the FIRST check is at 1.2s. That is the case worth optimising: the
-//     member had the prompt open and approved it immediately.
-//   * later checks are 1.5s apart (owner, 2026-10-08; was 2.5s, the cadence PesaJet's own SDK
-//     uses in pollUntilComplete.
-//
-// The 60-second budget is unchanged -- 24 ticks at the new spacing is the same
-// wall-clock window, so nothing gives up on a payment any sooner than before.
-var DEP_POLL_FIRST_MS = 1000;
-var DEP_POLL_EVERY_MS = 1500;     // faster than ChocoMCC's 3 s on purpose (owner: validation must be fast); a payment the server is watching answers the moment it settles (the request is held)
-var DEP_POLL_MAX = 120;           // attempts shown as "attempt N/120"
-async function pollDepositStatus(depositId){
-  _depActiveDepositId = depositId;
-  _depPollDone = false;
-  _depAttempt = 0;
-  await new Promise(r => setTimeout(r, DEP_POLL_FIRST_MS));
-  while (_depAttempt < DEP_POLL_MAX) {
-    const tickStart = Date.now();
-    // A Verify tap or Cancel may have settled it between ticks -- stop rather than firing another provider call for an answer already in hand.
-    if (_depPollDone) return;
-    // Superseded: the member backed out of this recharge and started another one, so a newer poll owns the screen now.
-    if (_depActiveDepositId !== depositId) return;
-    _depAttempt++; setDepAttempt();
-    const r = await depositStatusHold(depositId);
-    if (_depPollDone) return;
-    if (_depActiveDepositId !== depositId) return;
-    if (await applyDepositStatusResult(r)) return;
-    // Answered at once (nothing to hold on, or an error): pace the next ask. A held answer already took its time.
-    const spent = Date.now() - tickStart;
-    if (spent < DEP_POLL_EVERY_MS) await new Promise(r2 => setTimeout(r2, DEP_POLL_EVERY_MS - spent));
-  }
-  // Giving up is the autopoll ending its own budget, not the payment being over -- _depPollDone stays false on purpose so Verify Payment keeps working.
-  if (!_depPollDone) { setDepositStatusUnknown(); slowDepositWatch(depositId); }
-}
-// The fast poll gives up after 70 s but the server keeps watching a payment for 2 minutes and the reconciler for longer: keep asking every few
-// seconds for 3 more minutes so a payment approved late still turns the page into its result (Success or Failed) instead of staying on "Still waiting".
-async function slowDepositWatch(depositId){
-  const until = Date.now() + 180000;
-  while (Date.now() < until) {
-    await new Promise(r => setTimeout(r, 4000));
-    if (_depPollDone || _depActiveDepositId !== depositId) return;
-    if (!$('depStatusBg') || !$('depStatusBg').classList.contains('show')) continue;
-    const r = await depositStatusHold(depositId);
-    if (_depPollDone || _depActiveDepositId !== depositId) return;
-    if (await applyDepositStatusResult(r)) return;
-  }
-}
 
 // Cache-first: STATE.bankAccounts is prefetched at login. Deliberately does
 // NOT quietly repaint once the background re-fetch lands (unlike Home/Team/

@@ -150,7 +150,7 @@ async function serverTests() {
   let u = await unreg({ token: 'T1', rotated: true }, 'T1'); ok(u.store.has('T1') && u.store.get('T1').retiredAt, 'rotation keeps the record, retired');
   u = await unreg({ token: 'T1' }, 'T1'); ok(!u.store.has('T1'), 'switching notifications off deletes it at once');
   // ── quick-approve ──
-  const qaSrc = slice('const quickApproveLimiter', "app.post('/admin/withdraw/verify'");
+  const qaSrc = slice('const quickApproveLimiter', "app.post('/bank/save'");
   function quickApprove(dbSeed) {
     const handlers = {}; const calls = { core: [], audit: [] };
     const app = { post: (p, ...a) => { handlers[p] = a[a.length - 1]; } };

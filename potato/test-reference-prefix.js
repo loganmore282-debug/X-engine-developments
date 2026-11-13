@@ -9,7 +9,6 @@ for (const good of ['S', 'potato', 'Potato', 'POTATO2', 'a1b2c3d4e5f6', ' potato
 for (const bad of ['', '  ', '2potato', 'so da', 'potato-', 'potato_', 'sóda', 'a1b2c3d4e5f6g', '<b>', "s'; drop", null, undefined, 12]) eq(fn(bad), '', 'refused: ' + JSON.stringify(bad));
 ok(/referencePrefix: 'S'/.test(src), 'the default stays S, so nothing changes until the owner edits it');
 ok(/stampRef\(letter\)[\s\S]{0,200}letter \+ d\.getUTCFullYear/.test(src), 'the reference is still prefix + date/time + 4 random digits');
-ok(src.includes("const ref = await uniqueRef(await mobileMoneyRefPrefix());\n    const marzReference"), 'new mobile-money recharges use the chosen start');
 ok(src.includes("const ref = await uniqueRef(await mobileMoneyRefPrefix());\n    // This adapter has no real multi-document rollback."), 'new withdrawals use the chosen start');
 ok(/'referencePrefix' in updates[\s\S]{0,400}status\(400\)/.test(src), 'the settings save refuses an invalid start');
 ok(/id="sRefPrefix"/.test(admin) && /referencePrefix:\$\('sRefPrefix'\)\.value\.trim\(\)/.test(admin), 'the admin panel has the field and sends it');

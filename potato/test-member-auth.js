@@ -193,17 +193,15 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
   {
     const phoneSrc = cut('const POTATO_REGIONS = {', 'function currentRegionKey()') + 'function currentRegionKey(){}\n' + cut('function localDigits(raw, region) {', '// Synthetic login email') + cut('function cleanPhone(raw, region) {', '// The two shapes a number may be typed in');
     const was = process.env.POTATO_REGION;
-    process.env.POTATO_REGION = 'ng';
-    { const ng = new Function('process', phoneSrc + '\nreturn cleanPhone;')(process);   // Potato's own country: Nigeria, 9 or 10 digits
-      eq(ng('0769968158'), '+234769968158', 'Nigeria: a leading 0 and 9 digits'); eq(ng('8012345678'), '+2348012345678', 'Nigeria: 10 digits'); eq(ng('+234 801 234 5678'), '+2348012345678', 'Nigeria: international form');
-      eq(ng('12345'), null, 'junk is not a number'); eq(ng('080123456789'), null, 'too long is not a number'); }
-    process.env.POTATO_REGION = 'ug';
+    { const et = new Function('process', phoneSrc + '\nreturn cleanPhone;')(process);   // Potato's own country: Ethiopia, 9 digits starting 9 or 7
+      eq(et('0911234567'), '+251911234567', 'Ethiopia: a leading 0 and 9 digits'); eq(et('911234567'), '+251911234567', 'Ethiopia: 9 digits'); eq(et('+251 91 123 4567'), '+251911234567', 'Ethiopia: international form');
+      eq(et('12345'), null, 'junk is not a number'); eq(et('09112345678'), null, 'too long is not a number'); eq(et('0511234567'), null, 'a number that does not start 9 or 7 is refused'); }
     const real = new Function('process', phoneSrc + '\nreturn cleanPhone;')(process);
-    const forms = ['771234567@potato-platform.com'.split('@')[0], '256771234567', '0771234567', '+256771234567', '07 71 23 45 67'];
+    const forms = ['771234567@potato-platform.com'.split('@')[0], '251771234567', '0771234567', '+251771234567', '07 71 23 45 67'];
     eq(new Set(forms.map(x => real(x))).size, 1, 'the national, international and bare forms are one number: ' + forms.map(x => real(x)).join(' '));
-    eq(real('771234567'), '+256771234567'); eq(real('12345'), null, 'junk is not a number'); eq(real(''), null);
+    eq(real('771234567'), '+251771234567'); eq(real('12345'), null, 'junk is not a number'); eq(real(''), null);
     eq(real('0771234567; drop'), null, 'text around a number makes it not a number (it used to be read as 0771234567)');
-    eq(real('(+256) 771-234.567'), '+256771234567', 'spaces, dashes, dots, brackets and a leading + are still fine');
+    eq(real('(+251) 771-234.567'), '+251771234567', 'spaces, dashes, dots, brackets and a leading + are still fine');
     if (was === undefined) delete process.env.POTATO_REGION; else process.env.POTATO_REGION = was;
   }
   // wiring

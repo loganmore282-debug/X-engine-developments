@@ -10,7 +10,6 @@ Module._resolveFilename = function (req, ...a) { return req === 'mongodb' ? path
 const PORT = 3800 + Math.floor(Math.random() * 90);
 process.env.PORT = String(PORT); process.env.MONGODB_URI = 'mongodb://fake/potato'; process.env.ADMIN_KEY = 'e2e-admin-key-123456'; process.env.NODE_ENV = 'development';
 const realLog = console.log; console.log = () => {}; console.warn = () => {};
-process.env.POTATO_REGION = 'ug';   // this test drives the Uganda payment gateways (Ethiopia has none: its recharges are manual)
 require('./server.js');
 const base = 'http://127.0.0.1:' + PORT;
 const J = async (m, p, b, tok, adm) => {
@@ -72,13 +71,13 @@ async function member() {
 
   // ---- bank cards
   const C = await member();
-  const save = (phone, net = 'MTN Mobile Money') => J('POST', '/bank/save', { holder: 'Test Holder', network: net, phone }, C.tok);
+  const save = (phone, net = 'Telebirr') => J('POST', '/bank/save', { holder: 'Test Holder', network: net, phone }, C.tok);
   const p1 = ph(), p2 = ph(), p3 = ph(), p4 = ph(), p5 = ph(), p6 = ph();
   r = await save(p1, 'Stanbic Bank'); ok(r.s === 400, 'a bank name is refused: Bank Name is MTN or Airtel only', r.j);
   r = await J('POST', '/bank/supported-banks', {}, C.tok); ok(r.s === 404, 'there is no bank list route any more', r.s);
   r = await save(p1); ok(r.j.status === 'success', 'first card saved', r.j);
   r = await save(p1); ok(r.s === 409 && r.j.code === 'CARD_EXISTS', 'the same card again is refused', r.j);
-  r = await save(p2, 'Airtel Money'); ok(r.j.status === 'success', 'second card saved', r.j);
+  r = await save(p2, 'Telebirr'); ok(r.j.status === 'success', 'second card saved', r.j);
   let list = (await J('GET', '/bank/list', null, C.tok)).j.accounts;
   ok(list.length === 2 && list.filter(x => x.isDefault).length === 1 && list.find(x => x.isDefault).phone.endsWith(p1.slice(1)), 'two cards, the first one is the active card', list);
   const second = list.find(x => !x.isDefault);
@@ -87,11 +86,11 @@ async function member() {
   ok(list.filter(x => x.isDefault).length === 1 && list.find(x => x.isDefault).id === second.id, 'exactly one active card after the change', list);
   const other = await member();
   r = await J('POST', '/bank/select', { id: second.id }, other.tok); ok(r.s === 404, "another member's card cannot be selected", r.j);
-  r = await J('POST', '/bank/save', { holder: 'Thief', network: 'MTN Mobile Money', phone: p1 }, other.tok); ok(r.s === 409 && r.j.code === 'WALLET_TAKEN', 'a number another member holds cannot be saved', r.j);
+  r = await J('POST', '/bank/save', { holder: 'Thief', network: 'Telebirr', phone: p1 }, other.tok); ok(r.s === 409 && r.j.code === 'WALLET_TAKEN', 'a number another member holds cannot be saved', r.j);
   for (const p of [p3, p4, p5]) { r = await save(p); ok(r.j.status === 'success', 'card saved ' + p, r.j); }
   r = await save(p6); ok(r.s === 400 && r.j.code === 'CARD_LIMIT', 'a sixth card is refused', r.j);
   // a withdrawal goes to a saved card only
-  const pay = await J('POST', '/withdraw/request', { amount: 20000, network: 'MTN Mobile Money', phone: ph(), pin: '123456' }, C.tok);
+  const pay = await J('POST', '/withdraw/request', { amount: 20000, network: 'Telebirr', phone: ph(), pin: '123456' }, C.tok);
   ok(pay.j.status !== 'success', 'a withdrawal to a number that is not a saved card is refused', pay.j);
 
   // ---- About page: cleaned HTML, public
@@ -108,10 +107,7 @@ async function member() {
   r = await J('POST', '/admin/settings/update', { settings: { depositMethodNames: ' Pay-A, <b>Pay-B</b>,, Pay-C,Pay-D,Pay-E,Pay-F,Pay-G ', myBannerOpacity: 60, myBannerBlur: 12 } }, null, true);
   ok(r.j.status === 'success', 'settings saved', r.j);
   const st = (await J('GET', '/public/settings')).j.settings || {};
-  ok(typeof st.depositMethodNames === 'string' && st.depositMethodNames.split(', ').length === 6 && !/[<>]/.test(st.depositMethodNames), 'deposit buttons: at most six names, no markup', st.depositMethodNames);
   ok(st.myBannerOpacity === 60 && st.myBannerBlur === 12, 'My banner opacity and blur are saved and public', [st.myBannerOpacity, st.myBannerBlur]);
-  r = await J('POST', '/admin/settings/update', { settings: { depositMethodNames: ' , ' } }, null, true);
-  ok(((await J('GET', '/public/settings')).j.settings || {}).depositMethodNames === 'Pay-B, Pay-A, Pay-D, Pay-C', 'an empty list falls back to the default four buttons');
   await J('POST', '/admin/settings/update', { settings: { giftCodeHint: '  Type the <b>code</b> ' } }, null, true);
   ok(((await J('GET', '/public/settings')).j.settings || {}).giftCodeHint === 'Type the bcode/b', 'the Gift Code hint is saved from the admin, without tags');
   await J('POST', '/admin/settings/update', { settings: { shareMessage: '  Invest with {app} <now>  ' } }, null, true);
@@ -140,9 +136,7 @@ async function member() {
     { const m = rd('user-src/original_module.js'), c = rd('user-src/index.html');
       ok(/\.pt-home \.mg-track img\{[^}]*opacity:0;transition:opacity \.5s ease/.test(c) && /\.pt-home \.mg-track img\.on\{opacity:1/.test(c) && /\.pt-home \.home-banner>img\{[^}]*object-fit:cover/.test(c) && !/touchstart/.test(m.slice(m.indexOf('function startHomeCarousel'), m.indexOf('function startHomeCarousel') + 900)), 'Home banner slides cross-fade, fill the whole frame and cannot be swiped');
       ok(/\.pt-home \.mg-dots\{[^}]*left:50%/.test(c) && /\.mg-dots i\.on\{[^}]*width:12\.7px/.test(c.replace(/\.pt-home /g, '')) || /12\.7px/.test(c), 'the banner dots are bubbles: small translucent circles and a white pill for the current one');
-      ok(/function ptProcessing/.test(m) && /Processing payment\.\.\./.test(m) && /\.mg-redirect\{[^}]*position:fixed;inset:0[^}]*backdrop-filter:blur/.test(c) && /submitBtn\.textContent = 'Loading\.\.\.'/.test(m), 'a deposit dims and blurs the whole screen with a red ring and "Processing payment..." while the Pay button reads Loading...');
       ok(/promocode: '\\ud83c\\udf8f'/.test(m) && /deposit: '\\ud83d\\udce5'/.test(m) && /withdraw: '\\ud83d\\udce4'/.test(m) && /promocode'\) return 'Treasure Chest'/.test(m) && /text: t\.type === 'deposit' \? 'Pending Deposit'/.test(m) && /\.pt-rec \.m em\.wait\{color:#ab7b34/.test(c) && /\.pt-rec \.a\.out\{color:#d0605f/.test(c), 'Balance Detail records use the icons, words and colours of the screenshots (Deposit, Treasure Chest, Withdraw; Pending Deposit / Other / Paid)'); }
-    ok(/ptIconHtml\('payicon'/.test(rd('user-src/original_module.js')), 'every deposit pay button shows that one icon');
     { const m = rd('user-src/original_module.js'), c = rd('user-src/index.html');
       ok(!/\.pa-hero\{[^}]*transition/.test(c) && !/classList\.toggle\('tall'/.test(m) && /sc\.scrollTop = invited \? 0 : PA_REST/.test(m), 'the banner never changes height or animates; the page rests 66.6 px down, an invitation link at the top');
       ok(/#loadingScreen \.ld-pct\{[^}]*color:#ffb2b8;font:700 11\.8px\/14px 'Noto Serif',serif/.test(c) && /#loadingScreen \.ld-name\{[^}]*'Noto Serif',serif/.test(c), 'the Loading... N% line and the app name on the loading screen are both the serif of the owner\'s phone');

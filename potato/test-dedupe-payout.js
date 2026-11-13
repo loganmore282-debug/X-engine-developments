@@ -11,7 +11,6 @@ process.env.PORT = String(BACK); process.env.MONGODB_URI = 'mongodb://fake/app';
 process.env.POTATO_SECRETS_DIR = fs.mkdtempSync(path.join(require('os').tmpdir(), 'po-dd-'));
 const realLog = console.log; console.log = () => {}; console.warn = () => {}; console.error = () => {};
 const fm = require(path.join(__dirname, 'test-helpers', 'fake-mongodb.js'));
-process.env.POTATO_REGION = 'ug';   // this test drives the Uganda payment gateways (Ethiopia has none: its recharges are manual)
 require(path.join(__dirname, 'server.js'));
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; realLog('  ok   - ' + m); } else { fail++; realLog('  FAIL - ' + m); } };
@@ -28,13 +27,13 @@ const J = async (m, p, b, tok, adm) => { const r = await fetch(base + p, { metho
   const ban = fm.__stores.bankAccounts || (fm.__stores.bankAccounts = new Map());
   const put = (id, userId, phone, network, ms, isDefault) => ban.set(id, { _id: id, userId, holder: 'H ' + id, network, phone, isDefault, createdAt: new Date(ms) });
   // 0781112223: B saved it first, then A (later) and C (latest); A also keeps a card of their own and it was A's active card
-  put('b1', B.uid, '+256781112223', 'MTN Mobile Money', 1000, true);
-  put('a1', A.uid, '+256781112223', 'MTN Mobile Money', 2000, true);
-  put('a2', A.uid, '+256709990001', 'Airtel Money', 3000, false);
-  put('c1', C.uid, '+256781112223', 'Airtel Money', 4000, true);
-  put('c2', C.uid, '+256709990002', 'MTN Mobile Money', 5000, false);
+  put('b1', B.uid, '+251781112223', 'Telebirr', 1000, true);
+  put('a1', A.uid, '+251781112223', 'Telebirr', 2000, true);
+  put('a2', A.uid, '+251709990001', 'Telebirr', 3000, false);
+  put('c1', C.uid, '+251781112223', 'Telebirr', 4000, true);
+  put('c2', C.uid, '+251709990002', 'Telebirr', 5000, false);
   // a number only one member holds is left alone
-  put('b2', B.uid, '+256709990003', 'MTN Mobile Money', 6000, false);
+  put('b2', B.uid, '+251709990003', 'Telebirr', 6000, false);
   const r0 = await J('POST', '/admin/payout-numbers/dedupe', {}, null, false); ok(r0.s === 401, 'without the owner key nothing happens');
   const r = await J('POST', '/admin/payout-numbers/dedupe', {}, null, true);
   ok(r.s === 200 && r.j.removed === 2, 'the owner run removes exactly the two later copies (' + (r.j && r.j.removed) + ')');
@@ -45,7 +44,7 @@ const J = async (m, p, b, tok, adm) => { const r = await fetch(base + p, { metho
   ok(log && log.meta.removed.length === 2 && log.meta.removed.every(x => x.keptBy === B.uid), 'what was removed is written to the audit log');
   const r2 = await J('POST', '/admin/payout-numbers/dedupe', {}, null, true); ok(r2.s === 200 && r2.j.removed === 0, 'running it again removes nothing');
   // and a late save of the freed number is still refused while B holds it
-  const sv = await J('POST', '/bank/save', { holder: 'Late', network: 'MTN Mobile Money', phone: '0781112223' }, A.token);
+  const sv = await J('POST', '/bank/save', { holder: 'Late', network: 'Telebirr', phone: '0781112223' }, A.token);
   ok(sv.s === 409 && sv.j.code === 'WALLET_TAKEN', 'the number stays B\'s: a new save by another member is refused');
   realLog(fail ? 'FAIL: dedupe shared payout numbers (' + pass + ' ok, ' + fail + ' failed)' : 'PASS: dedupe shared payout numbers (' + pass + ' checks)');
   process.exit(fail ? 1 : 0);

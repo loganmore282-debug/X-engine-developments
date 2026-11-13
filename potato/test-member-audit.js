@@ -21,7 +21,7 @@ for(const s of d.scripts){
 }
 const tick=()=>new Promise(r=>setTimeout(r,5));
 function deferred(){let resolve;const promise=new Promise(r=>{resolve=r});return {promise,resolve}}
-function setState(){w.eval('STATE.page="home"; STATE.account={walletBalance:50000,totalEarned:100,totalDeposited:20000,totalWithdrawn:5000}; STATE.settings={minDeposit:15000,minWithdraw:5000,withdrawFeePct:0,weekendWithdrawBlock:false,requireTwofaToWithdraw:false}; STATE.investments=[]; STATE.bankAccounts=[{id:"wallet",network:"MTN Mobile Money",phone:"256771234567",holder:"Test Member"}];')}
+function setState(){w.eval('STATE.page="home"; STATE.account={walletBalance:50000,totalEarned:100,totalDeposited:20000,totalWithdrawn:5000}; STATE.settings={minDeposit:15000,minWithdraw:5000,withdrawFeePct:0,weekendWithdrawBlock:false,requireTwofaToWithdraw:false}; STATE.investments=[]; STATE.bankAccounts=[{id:"wallet",network:"Telebirr",phone:"256771234567",holder:"Test Member"}];')}
 async function main(){
   await tick();setState();
   const request=w.api, originalFetch=w.fetch;
@@ -87,13 +87,13 @@ async function main(){
   const opened=w.openWithdrawSheet();
   const input=d.querySelector('#witAmount');input.value='15,000';input.focus();w.syncWithdrawReceiveAmt();
   assert.match(d.querySelector('#witGoAmt').textContent,/15,000/,'the Withdraw button shows the typed amount');
-  bank.resolve({status:'success',accounts:[{id:'wallet',network:'MTN Mobile Money',phone:'256771234567',holder:'Test Member'}]});await opened;
+  bank.resolve({status:'success',accounts:[{id:'wallet',network:'Telebirr',phone:'251771234567',holder:'Test Member'}]});await opened;
   assert.equal(d.querySelector('#witAmount'),input);assert.equal(input.value,'15,000');
   assert.match(d.querySelector('.pt-wfee').textContent,/Fee: 0%/);assert(!d.querySelector('#witPin'),'the Trade Password is asked in a small dialog, not on the page');
   const stale=deferred();w.api=()=>stale.promise;const previous=w.openWithdrawSheet();
-  w.api=async()=>({status:'success',accounts:[{id:'new',network:'Airtel Money',phone:'256751234567',holder:'Current Wallet'}]});
+  w.api=async()=>({status:'success',accounts:[{id:'new',network:'Telebirr',phone:'251751234567',holder:'Current Wallet'}]});
   await w.openWithdrawSheet();
-  stale.resolve({status:'success',accounts:[{id:'old',phone:'256701111111'}]});await previous;
+  stale.resolve({status:'success',accounts:[{id:'old',phone:'251701111111'}]});await previous;
   assert.match(d.querySelector('#witWalletBlock').textContent,/Current Wallet/i,'late request must not replace a new screen');
   { // COMPULSORY Google Authenticator: rule on and nothing set up -> Withdraw sends nothing, asks for no Trade Password, says why, then opens the set-up page
     let sent=0;const realPost=w.post,realNotify=w.notify,realApi=w.api,realAsk=w.askAuthCode,realRefresh=w.refreshAfterWithdraw,notes=[];
@@ -110,7 +110,7 @@ async function main(){
     assert.match(d.querySelector('#sheetBody').textContent,/Google Authenticator is required/);assert.match(d.querySelector('#sheetBody').textContent,/before you can withdraw/);
     // the owner's switch OFF: a member who set it up is NOT asked for a code, and nothing about it is sent
     w.eval('STATE.account.twofaEnabled=true;STATE.settings.requireTwofaToWithdraw=false');
-    w.api=async()=>({status:'success',accounts:[{id:'wallet',network:'MTN Mobile Money',phone:'256771234567',holder:'Test Member'}]});
+    w.api=async()=>({status:'success',accounts:[{id:'wallet',network:'Telebirr',phone:'251771234567',holder:'Test Member'}]});
     await w.openWithdrawSheet();d.querySelector('#witAmount').value='5000';notes.length=0;
     let asked=0,bodies=[];w.askAuthCode=async()=>{asked++;return '123456'};
     w.post=(path,body)=>{sent++;bodies.push(body);return Promise.resolve({status:'success',net:4250})};
@@ -144,69 +144,15 @@ async function main(){
   payment.resolve({status:'success',net:5000});await first;
   assert(d.querySelector('#lpOld'),'late withdrawal response must not close another form');
   w.openDepositSheet();assert.equal(d.querySelectorAll('.pt-note').length,4,'four deposit notes');
-  assert.match(d.querySelector('.pt-notes').textContent,/Minimum deposit amount: Br 15,000/);assert.equal(d.querySelectorAll('#depPays button').length,4,'four default methods');assert.equal(d.querySelectorAll('#depPays button.on').length,1,'exactly one method is selected when the page opens');w._depStartNext=2;w.openDepositSheet();assert.match(d.querySelector('#depPays button.on').textContent.trim(),/Pay-D$/,"the server's pick is the one selected");
+  assert.match(d.querySelector('.pt-notes').textContent,/Minimum deposit amount: Br 15,000/);assert.equal(d.querySelectorAll('#depPays').length,0,'no gateway pay buttons exist any more');
   d.querySelector('#depAmount').value='15000';assert(!d.querySelector('#depPhone'),'Deposit has no phone box: the request goes to the member\'s own number');
-  const deposit=deferred();posts=0;w.post=()=>{posts++;return deposit.promise};
-  const sending=w.submitDeposit();await w.submitDeposit();assert.equal(posts,1);
-  w.openChangeLoginPasswordSheet();
-  deposit.resolve({status:'error',message:'Test request rejected'});await sending;
-  assert(d.querySelector('#lpOld'),'deposit cleanup must tolerate the original button being removed');
-  assert.equal(d.querySelector('#depRedirect'),null,'removed redirect overlay stays absent after a rejected deposit');
-  { // the payment waiting page (ChocoMCC's layout): initiated -> attempts counted -> paid
-    let statusCalls=0;
-    let depBodies=[];
-    w.post=(path,body)=>{ if(path==='/deposit/marzpay'){depBodies.push(body);return Promise.resolve({status:'success',depositId:'d'+depBodies.length,reference:depBodies.length===1?'REF123':'REF456'});}
-      if(path==='/deposit/marzpay/status'){statusCalls++;return Promise.resolve(statusCalls<3?{status:'success',state:'pending'}:{status:'success',state:'matched'});}
-      return Promise.resolve({status:'success'}); };
-    w.refreshTransactionsCache=async()=>{};w.DEP_POLL_FIRST_MS=5;w.DEP_POLL_EVERY_MS=10;
+  { // Deposit goes to the bank / Telebirr pages: the amount is checked first, nothing is posted by the sheet itself
+    w.STATE.settings=Object.assign({},w.STATE.settings,{manualPay:true,depositAvailable:true});
+    let opened=null;w.openManualPayFlow=async amt=>{opened=amt;};
     w.closeSheet&&w.closeSheet();w.openDepositSheet();d.querySelector('#depAmount').value='15000';
     await w.submitDeposit();
-    assert.match(d.querySelector('#depStatusTitle').textContent,/Payment Initiated Successfully!/,'the page opens as "Payment Initiated Successfully!"');
-    assert.equal(d.querySelector('#depStatusRef').textContent,'REF123','the transaction reference is shown');
-    assert.equal(d.querySelector('#depVerifyLabel').textContent,'Verify Payment','the big button is Verify Payment');
-    assert(d.querySelector('#depCancelRow').style.display!=='none','Cancel is offered while waiting');
-    // Change Number: pay from another number (a NEW request for the same amount through the same button)
-    assert(d.querySelector('#depChgRow').textContent.trim()==='Change Number','an underlined Change Number link sits under the tip');
-    w.openDepositChangeNumber();assert.equal(d.querySelector('#depChgBox').style.display,'','tapping it opens the number box');
-    d.querySelector('#depChgPhone').value='12';await w.submitDepositNewNumber();
-    assert.match(d.querySelector('#depChgErr').textContent,/valid/,'a short number is refused on the spot');assert.equal(depBodies.length,1,'and nothing is sent');
-    d.querySelector('#depChgPhone').value='0770123456';await w.submitDepositNewNumber();
-    assert.equal(depBodies.length,2,'a valid number sends a second request');assert.equal(depBodies[1].phone,'+251770123456','to that number');assert.equal(depBodies[1].amount,depBodies[0].amount,'for the same amount');assert.equal(depBodies[1].slot,depBodies[0].slot,'through the same pay button');
-    assert.equal(d.querySelector('#depStatusRef').textContent,'REF456','the page follows the new request');assert.match(d.querySelector('#depStatusPhone').textContent,/\+251770123456/,'and shows the new number');assert.equal(d.querySelector('#depChgBox').style.display,'none','the number box closes');
-    await new Promise(r=>setTimeout(r,120));
-    assert.match(d.querySelector('#depStatusTitle').textContent,/Payment Successful!/,'a matched payment turns the page into "Payment Successful!"');
-    assert.equal(d.querySelector('#depVerifyLabel').textContent,'Back to Home','and the button becomes Back to Home');
-    assert.equal(d.querySelector('#depStatusAttempt').textContent,'','the attempt counter is cleared once paid');
-    assert(statusCalls>=3,'it kept asking until paid');assert.equal(d.querySelector('#depChgRow').style.display,'none','Change Number is gone once paid');
-    w.cancelDepositStatus();
-    assert(!d.querySelector('#depStatusBg').classList.contains('show'),'Cancel / Back leaves the page');
-  }
-  { // Verify Payment by hand (the automatic check held back so only the button asks)
-    let calls=0, answer='pending'; const gate=deferred(); const notes=[];
-    w.notify=(m)=>{notes.push(m);};
-    w.post=(path)=>{ if(path==='/deposit/marzpay') return Promise.resolve({status:'success',depositId:'v1',reference:'REFV'});
-      if(path==='/deposit/marzpay/status'){calls++;return gate.promise.then(()=>({status:'success',state:answer}));}
-      return Promise.resolve({status:'success'}); };
-    w.DEP_POLL_FIRST_MS=60000;w.DEP_VERIFY_COOLDOWN_MS=30;
-    w.closeDepositStatusModal();w.openDepositSheet();d.querySelector('#depAmount').value='15000';await w.submitDeposit();
-    const btn=d.querySelector('#depVerifyBtn');
-    assert.equal(d.querySelector('#depVerifyLabel').textContent,'Verify Payment');
-    const t1=w.verifyDepositNow();const t2=w.verifyDepositNow();           // a second tap while the first is out
-    assert.equal(d.querySelector('#depVerifyLabel').textContent,'Verifying…','the button says Verifying… while the check is out');assert(btn.disabled,'and cannot be tapped again');
-    assert.equal(d.querySelector('#depVerifySpin').style.display,'inline-flex','with its spinner');
-    gate.resolve();await t1;await t2;
-    assert.equal(calls,1,'two quick taps are ONE request to the server');
-    assert(notes.some(m=>/Still pending/.test(m)),'a payment not yet confirmed says Still pending');
-    await new Promise(r=>setTimeout(r,60));
-    assert.equal(d.querySelector('#depVerifyLabel').textContent,'Verify Payment','the button comes back after its short pause');assert(!btn.disabled);
-    answer='matched';await w.verifyDepositNow();
-    assert.match(d.querySelector('#depStatusTitle').textContent,/Payment Successful!/,'Verify Payment on a paid payment shows Payment Successful!');
-    assert.equal(d.querySelector('#depVerifyLabel').textContent,'Back to Home');
-    // and a failed one
-    w.closeDepositStatusModal();w.openDepositSheet();d.querySelector('#depAmount').value='15000';await w.submitDeposit();
-    answer='failed';await w.verifyDepositNow();
-    assert.match(d.querySelector('#depStatusTitle').textContent,/Payment Not Completed/,'Verify Payment on a failed payment shows Payment Not Completed');
-    w.cancelDepositStatus();
+    assert.equal(opened,15000,'Pay opens the bank / Telebirr payment pages with the typed amount');
+    assert(!d.querySelector('#depStatusBg'),'the old waiting page is gone');
   }
   { // Home does not redraw itself when nothing changed (a redraw restarts the icon pop, the banner and the Buy glow)
     w.showPage&&0;w.STATE.page='home';w.paintHome();const first=d.querySelector('.pt-quick button');assert(first,'Home is painted');

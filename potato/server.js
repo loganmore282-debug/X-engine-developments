@@ -50,7 +50,7 @@ app.use(helmet({
 
 // ── RATE LIMITERS ──
 // Money endpoints are keyed per signed-in member (a hash of the session
-// token), not shared IP -- Ugandan carrier-NAT puts many real users behind
+// token), not shared IP -- carrier-NAT puts many real users behind
 // one IP. The token is random, never decoded; an invalid one just gets its
 // own bucket, and ipOnlyLimiter below caps what a fake-token flood can do.
 function rlKeyByUser(req) {
@@ -91,7 +91,7 @@ const healthLimiter = rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders
 // 400/min-per-user budget, the SAME shared budget apiLimiter-protected money
 // routes below also draw from, so a member's own background polling could
 // have started rate-limiting their own withdraw/invest taps. And since
-// Ugandan mobile carriers NAT many real members behind one IP (see
+// Mobile carriers NAT many real members behind one IP (see
 // ipOnlyLimiter's own comment above), a couple of concurrently-open sessions
 // on the same carrier IP could approach ipOnlyLimiter's 900/min ceiling from
 // polling alone too. Either would silently produce exactly the "stale data"
@@ -170,7 +170,7 @@ app.use('/admin/', async (req, _res, next) => {
   next();
 });
 // These routes move or pay real money, so they get the strict 60/min per-user cap rather than only the 400/min global one.
-['/withdraw/request', '/invest/create', '/deposit/marzpay', '/bank/save', '/register',
+['/withdraw/request', '/invest/create', '/deposit/manual/submit', '/bank/save', '/register',
  '/account/transaction-pin/change', '/redeem']
   .forEach(p => app.use(p, apiLimiter));
 // ── BODY PARSING ──
@@ -193,15 +193,8 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // needs the image parser even though each one on its own is small.
 const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/potato-image/set', '/admin/app-icon/set', '/admin/messages/save', '/admin/pay-channels/save']);
 const HUGE_JSON_ROUTES = new Set(['/admin/about-html/set']);
-// PesaJet signs the RAW REQUEST PAYLOAD -- their dashboard says so in as many
-// words ("computing an HMAC-SHA256 digest of the raw request payload using
-// this secret"). A digest over a re-serialised object is NOT the same bytes,
-// so the raw buffer has to be kept before the JSON parser consumes it.
-//
-// Scoped to the one webhook path rather than set on the shared parser: this
-// holds a copy of every body it sees, and there is no reason to do that for
-// every request in the app.
-const RAW_BODY_ROUTES = new Set(['/pesajet/webhook', '/tavupay/webhook', '/lworxpay/webhook', '/obpay/webhook', '/deploy/webhook']);
+// The GitHub deploy webhook is signed over the RAW request payload, so the raw buffer is kept for that one path only.
+const RAW_BODY_ROUTES = new Set(['/deploy/webhook']);
 const keepRawBody = (req, res, buf) => { if (RAW_BODY_ROUTES.has(req.path)) req.rawBody = buf; };
 const rawJsonParser = express.json({ limit: '1mb', verify: keepRawBody });   // GitHub's push payload (up to 20 commits with file lists) is larger than 64 kB
 app.use((req, res, next) => (RAW_BODY_ROUTES.has(req.path) ? rawJsonParser : HUGE_JSON_ROUTES.has(req.path) ? hugeJsonParser : IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
@@ -428,45 +421,19 @@ const { connectMongo, db, FieldValue, pingDb, writeVersions } = require('./db');
 
 // ── CONFIG ──
 const ADMIN_KEY   = process.env.ADMIN_KEY   || '';
-// This server's own public address, which is what MarzPay is told to call
-// back on (PesaJet's webhook URL is dashboard-configured instead -- see the
-// PESAJET section below). Set explicitly in secrets.local.js on the VPS --
-// unlike a PaaS, a plain VPS has no platform env var to fall back to, so if
-// this is ever unset, `callbackUrl`/`notifyUrl` is simply OMITTED from every
-// payment request. The deposit would still be created and the prompt would
-// still reach the phone, but nothing would ever call back -- the reconciler
-// and the member's own poll would cover for it, so the only symptom is money
-// taking minutes instead of seconds to appear.
 // The domain whose random subdomains carry invite links (deploy/set-wildcard.sh saves it as SHARE_DOMAIN): https://tg9s.<domain>/#/inviteRegister?invitecode=CODE.
 // Empty = invite links keep the address the app is open on.
 const SHARE_DOMAIN = (() => {
   const d = String(process.env.SHARE_DOMAIN || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^\*\./, '').replace(/\/.*$/, '');
   return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d) ? d : '';
 })();
-const PUBLIC_URL  = (() => {
-  let u = (process.env.PUBLIC_URL || '').trim().replace(/\/$/, '');
-  if (u && !u.startsWith('http')) u = 'https://' + u;
-  if (!u) console.warn('WARNING: PUBLIC_URL is not set, so MarzPay is never told where to send payment callbacks and every MarzPay deposit/payout waits for the 30-second sweep. Set it to https://<app host>/k7x2 in the secrets file.');
-  return u;
-})();
-const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
-const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64-encoded credentials
-const MARZ_TIMEOUT = 20000;
-
-// Potato runs for ONE country: Ethiopia (+251, birr; owner: "make potato currency be ETB and country code Ethiopia", the same change Petro
-// had). Mobile numbers are +251 then 9 digits starting 9 (Ethio Telecom) or 7 (Safaricom Ethiopia). The currency CODE stays ETB in storage and
-// in anything sent to a payment provider; what a member READS is the symbol Br (currencySymbol / currencyLabel()). POTATO_REGION=ug / ng
-// switches the same code back to Uganda or Nigeria; kept only because they are built and tested. Historical accounts with another currency
-// remain in storage for review, but cannot transact.
+// Potato runs for ONE country: Ethiopia (+251, birr). Mobile numbers are +251 then 9 digits starting 9 (Ethio Telecom) or 7 (Safaricom Ethiopia). The
+// currency CODE stays ETB in storage; what a member READS is the symbol Br (currencySymbol / currencyLabel()). There is no other region.
 const POTATO_REGIONS = {
   et: { key: 'et', name: 'Ethiopia', currency: 'ETB', currencySymbol: 'Br', dialCode: '251', localLength: 9, localLengths: [9], prefixes: ['9', '7'], utcOffsetMin: 180,
         active: true, isDefault: true },
-  ng: { key: 'ng', name: 'Nigeria', currency: 'NGN', currencySymbol: '\u20a6', dialCode: '234', localLength: 10, localLengths: [9, 10], prefixes: [], utcOffsetMin: 60,
-        active: true, isDefault: true },
-  ug: { key: 'ug', name: 'Uganda', currency: 'UGX', currencySymbol: 'UGX', dialCode: '256', localLength: 9, localLengths: [9], prefixes: ['7'], utcOffsetMin: 180,
-        active: true, isDefault: true },
 };
-const DEFAULT_REGION_KEY = POTATO_REGIONS[String(process.env.POTATO_REGION || '').toLowerCase()] ? String(process.env.POTATO_REGION).toLowerCase() : 'et';
+const DEFAULT_REGION_KEY = 'et';
 const DEFAULT_REGION = Object.freeze(POTATO_REGIONS[DEFAULT_REGION_KEY]);
 let _mainAllowedHosts = [];
 let _baseDomain = 'potato-platform.com';
@@ -504,9 +471,6 @@ function requestHost(req) {
 function currentRegion() { return DEFAULT_REGION; }
 function currentRegionKey() { return DEFAULT_REGION_KEY; }
 app.use(async (req, res, next) => {
-  // A payment callback is answered at once: it must never wait behind a settings read (a slow database would push its answer past the gateway's timeout).
-  if (req.path === '/tavupay/webhook' || req.path === '/lworxpay/webhook' || req.path === '/obpay/webhook') return next();
-  if (req.path === '/deposit/callback' || req.path === '/withdraw/callback' || req.path === '/pesajet/webhook') return next();
   await getSettings();
   next();
 });
@@ -526,7 +490,7 @@ app.use(async (req, res, next) => {
 // thing.
 //
 // GUARD_EXEMPT is honoured for the same reason the maintenance gate honours
-// it: those are gateway webhooks, the SMS forwarder and the health check,
+// it: those are the deploy webhook, the SMS forwarder and the health check,
 // reporting money that has already moved. None of them arrives with a
 // browser Origin anyway, but a domain rule must never be the thing that
 // loses a payment.
@@ -541,7 +505,7 @@ app.use((req, res, next) => {
 
 // ── MAINTENANCE GATE ──
 const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/redeem', '/salary', '/gifts', '/app'];
-const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/pesajet/webhook', '/tavupay/webhook', '/lworxpay/webhook', '/obpay/webhook']);
+const GUARD_EXEMPT = new Set(['/', '/health']);
 // The platform's name, as the owner last set it in Admin -> Settings. Every
 // server-side string that names the app goes through here rather than
 // spelling it out, so renaming the app is one field and not a code change.
@@ -595,13 +559,6 @@ const DEFAULT_SETTINGS = {
   // back. With no image set these do nothing at all.
   // The My page banner (Admin > Banners > My page banner): 100 = as uploaded, 0 blur = sharp.
   myBannerOpacity: 100, myBannerBlur: 0,
-  // The names under the Deposit page's method buttons, comma separated; each shows after the app name ("Potato Pay-A"). The first one is chosen at first.
-  depositMethodNames: 'Pay-B, Pay-A, Pay-D, Pay-C',
-  // The gateway behind each of those buttons, in the SAME order (Pay-B = TavuPay, Pay-A = PesaJet, Pay-D = LworxPay, Pay-C = OBPay). The admin can
-  // change or rotate them; a member only ever sends the button's position. Never sent to the app.
-  depositGateways: 'tavupay, pesajet, lworxpay, obpay',
-  // LworxPay's collection endpoint: 'standard' = POST /collect (the customer pays 4 % on top of the amount) | 'stanbic' = POST /collect-stanbic (free for the customer).
-  lworxCollect: 'standard',
   giftCodeHint: 'Enter gift code (T-XXXX)',
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   shareMessage: 'Join me on {app}',
@@ -666,11 +623,6 @@ const DEFAULT_SETTINGS = {
   // nobody has set yet.
   // What every NEW mobile-money recharge / withdrawal reference starts with (potato2610111048053568). Admin > Settings; existing references never change.
   referencePrefix: 'S',
-  // AUTOMATIC WITHDRAWALS (Admin > Settings > Withdrawals). Off by default. Requests always arrive as 'pending' as usual; only while this is
-  // ON does the server pay them by itself, each one after its OWN random wait of autoApproveMinSec..autoApproveMaxSec seconds (so payouts do not
-  // leave in one burst or on a fixed rhythm). It uses exactly the same processWithdrawalCore as the manual Send button. autoApproveMaxAmount:
-  // 0 = no limit; a nonzero value leaves anything above it for manual review. autoApproveEnabledAt is stamped by the server when the switch is turned on.
-  autoApproveWithdrawalsEnabled: false, autoApproveMinSec: 10, autoApproveMaxSec: 60, autoApproveMaxAmount: 0, autoApproveEnabledAt: 0,
   supportTelegram: '', telegramGroup: '',
   // Owner: "l would like to also to edit the app name potato, so make it when
   // it can be editable everywhere." The platform's own name, previously
@@ -694,18 +646,6 @@ const DEFAULT_SETTINGS = {
   // rather than a settings field, same reasoning as the Home/Help Centre
   // banners: a base64 image doesn't belong bloating the /public/settings
   // payload every client fetches on every boot.
-  depositMethod: 'marzpay',
-  // Owner, after the first version tied payouts to depositMethod: "yeah it
-  // can also work and vice versa" -- so the two directions are separable.
-  // 'follow' keeps the original behaviour (payouts do whatever deposits do,
-  // which is what most setups want and what everyone is already on);
-  // 'marzpay'/'pesajet'/'manual' pin the payout side independently. This is
-  // the WITHDRAWAL side's own manual mode (an admin sending a payout by
-  // hand, real safety fallback for a region no gateway reaches) -- a
-  // completely different feature from the removed manual DEPOSIT flow
-  // above, deliberately left untouched. Resolved by withdrawProvider()/
-  // payoutIsManual() -- never read this field raw.
-  withdrawMethod: 'follow',
 };
 // Daily Cashback × 150 = Total Return = Investment × 30, per tier — every
 // figure below is stamped explicitly rather than derived, matching the
@@ -726,8 +666,6 @@ async function getSettings() {
     const snap = await db.collection('settings').doc('main').get();
     const stored = snap.exists ? snap.data() : {};
     _settingsCache = Object.assign({}, DEFAULT_SETTINGS, stored);
-    // The very first default was one button, "Pay-A"; an install that still holds exactly that was never changed by the admin, so it gets the four buttons.
-    if (String(_settingsCache.depositMethodNames).trim() === 'Pay-A') _settingsCache.depositMethodNames = DEFAULT_SETTINGS.depositMethodNames;
     _mainAllowedHosts = sanitizeAllowedOrigins(stored.allowedOrigins).hosts || [];
     refreshHostPolicy(_settingsCache);
     _settingsCacheTs = Date.now();
@@ -738,107 +676,6 @@ async function getSettings() {
     return _settingsCache || DEFAULT_SETTINGS;
   }
 }
-// Normalizes a raw stored depositMethod/withdrawMethod value to one of
-// 'marzpay' | 'pesajet' | 'manual'. 'automatic' is a legacy literal (still
-// possibly sitting in an already-deployed database) and is treated
-// as a permanent alias for 'marzpay', so nothing needs to migrate. Anything
-// unrecognized (a stale/corrupted value) also falls back to 'marzpay' --
-// the historical default -- rather than silently landing on 'manual',
-// which would divert real money to admin-managed numbers nobody expects.
-function normalizeProviderValue(v) {
-  if (v === 'pesajet' || v === 'tavupay' || v === 'manual') return v;
-  return 'marzpay';
-}
-// The single place that decides which real payment path a DEPOSIT uses.
-// Reading depositMethod raw anywhere else is a bug waiting to happen.
-function depositProvider(sett) {
-  return normalizeProviderValue(sett && sett.depositMethod);
-}
-// Resolves the automatic GATEWAY (marzpay vs pesajet) deposits should use --
-// deliberately distinct from depositProvider() above, which withdrawals'
-// own 'follow' mode still reads raw. A legacy depositMethod:'manual' value
-// (from before manual deposit collection was removed) must never leak
-// through here as an "automatic" gateway -- it falls back to MarzPay, the
-// historical default, same as every other unrecognized value.
-function depositAutomaticProvider(sett) {
-  const p = depositProvider(sett);
-  return (p === 'pesajet' || p === 'tavupay') ? p : 'marzpay';
-}
-// The single place that decides which real payment path a WITHDRAWAL
-// (payout) uses. 'follow' defers to depositProvider() -- everything else
-// ('marzpay'/'pesajet'/'manual', or the legacy 'automatic' alias) pins the
-// payout side independently of the deposit side.
-// Potato accepts Uganda mobile money only.
-const MARZPAY_MARKETS = Object.freeze({
-  '256': { code: 'UG', currency: 'UGX' },
-});
-// The market a region belongs to, or null if MarzPay does not serve it.
-function marzMarket(region) {
-  const r = region || currentRegion();
-  return MARZPAY_MARKETS[String((r && r.dialCode) || '').replace(/\D/g, '')] || null;
-}
-
-// Both configured automatic gateways are limited to Uganda.
-const GATEWAY_DIAL_CODES = Object.freeze({
-  marzpay: Object.keys(MARZPAY_MARKETS),
-  pesajet: ['256'],
-  tavupay: ['256'],
-  lworxpay: ['256'],
-  obpay: ['256'],
-});
-function gatewayServesDial(gateway, dial) {
-  const allowed = GATEWAY_DIAL_CODES[gateway];
-  // 'manual' -- and anything not listed -- is admin-run, so it works anywhere.
-  if (!allowed) return true;
-  return allowed.includes(String(dial == null ? '' : dial).replace(/\D/g, ''));
-}
-function gatewayServesRegion(gateway, region) {
-  const r = region || currentRegion();
-  return gatewayServesDial(gateway, r && r.dialCode);
-}
-// Is automatic recharge genuinely usable here? Manual (admin-number,
-// SMS-matched) deposits were removed outright per owner instruction --
-// automatic is now the only deposit path, so this is just "does a gateway
-// reach this country" (the PAY A/PAY B enable toggle this used to also
-// check is gone). Served to the app as the RESOLVED answer, the same way
-// payoutManual already is, so the member never
-// meets a payment method that cannot work.
-// The gateway a Deposit-page BUTTON uses: the button's position (the app sends it as `slot`) picks an entry from the admin's depositGateways list.
-// No slot (an older app), or a button with no entry, falls back to the single recharge gateway. LworxPay and OBPay are listed so the admin can
-// assign them; a gateway that is not in DEPOSIT_GATEWAYS_READY cannot take a payment (none is left out now).
-const DEPOSIT_GATEWAYS = Object.freeze(['pesajet', 'tavupay', 'lworxpay', 'obpay', 'marzpay']);
-const DEPOSIT_GATEWAYS_READY = new Set(['pesajet', 'tavupay', 'lworxpay', 'obpay', 'marzpay']);
-function depositGatewayList(sett) {
-  return String((sett && sett.depositGateways) || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean).map(x => DEPOSIT_GATEWAYS.includes(x) ? x : '');
-}
-function depositProviderForSlot(sett, slot) {
-  const n = typeof slot === 'number' ? slot : (typeof slot === 'string' && /^\d{1,2}$/.test(slot) ? Number(slot) : NaN);
-  const list = depositGatewayList(sett);
-  if (Number.isInteger(n) && n >= 0 && n < list.length && list[n]) return list[n];
-  return depositAutomaticProvider(sett);
-}
-function payAAvailable(sett, region) {
-  return gatewayServesRegion(depositAutomaticProvider(sett), region);
-}
-function withdrawProvider(sett, region) {
-  const w = (sett && sett.withdrawMethod) || 'follow';
-  // 'rotate' = every automatic gateway in turn (see PAYOUT_ROTATION); tavupay / obpay can also be pinned on their own. LworxPay no longer sends payouts (owner): a
-  // setting still saved as 'lworxpay' is read as 'rotate' (never as MarzPay, which is what an unknown value would fall back to).
-  const pinned = (w === 'rotate' || w === 'lworxpay' ) ? 'rotate' : (w === 'tavupay' || w === 'obpay') ? w : null;
-  let chosen = pinned || (w === 'follow' ? depositProvider(sett) : normalizeProviderValue(w));
-  // TavuPay collects recharges only: payouts are not wired to it, so a payout that would "follow" a TavuPay recharge goes through
-  // MarzPay, the historical default, exactly as before.
-  if (chosen === 'tavupay' && !pinned) chosen = 'marzpay';
-  // A gateway that cannot reach this country's numbers must never be handed a
-  // payout. Falling back to manual leaves the money with a human, which is the
-  // only correct answer until a gateway for that country exists -- the
-  // alternative is a real payout attempted against a provider that either
-  // refuses it or, worse, accepts a number it should not.
-  if (chosen !== 'manual' && !gatewayServesRegion(chosen === 'rotate' ? 'pesajet' : chosen, region)) return 'manual';
-  return chosen;
-}
-function payoutIsManual(sett, region) { return withdrawProvider(sett, region) === 'manual'; }
-
 let _productsCache = null, _productsCacheTs = 0;
 async function getProductsRaw() {
   if (Date.now() - _productsCacheTs < 60 * 1000 && _productsCache) return _productsCache;
@@ -1101,16 +938,16 @@ function fmtMoney(n, currency) {
   const v = Number(n) || 0;
   const hasCents = Math.round(v * 100) % 100 !== 0;
   const cur = currencyLabel(currency || currentRegion().currency || 'ETB');
-  // Grouping only -- 'en-UG' is a digit-grouping locale here, not a
+  // Grouping only -- 'en-US' is a digit-grouping locale here, not a
   // currency, so the same "1,234,567" shape is right for every region and
   // the label in front of it is what changes.
-  return cur + ' ' + v.toLocaleString('en-UG', hasCents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});
+  return cur + ' ' + v.toLocaleString('en-US', hasCents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});
 }
 // Rounds to the nearest UGX cent (2 decimal places). Used by gift codes and reporting math.
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 // Cut the text first: the tag-stripping pattern is quadratic on a long run of '<' with no '>', so an unbounded string could freeze the one-process server.
 function stripHtml(s) { return String(s || '').slice(0, 5000).replace(/<[^>]*>/g, '').trim(); }
-// The region's own wall clock. Kampala (UTC+3) for Uganda, and whatever
+// The region's own wall clock. Addis Ababa (UTC+3) for Ethiopia, and whatever
 // utcOffsetMin the admin set for any other country -- a withdraw window of
 // "09:00 to 17:00" has to mean nine in the morning where the member lives,
 // not nine in Kampala. Named eatNow() still because every caller and every
@@ -1183,10 +1020,10 @@ function eatNextMidnight(ts) {
   const dayStart = Math.floor((ts + tzOffMs()) / 86400000) * 86400000;
   return dayStart + 86400000 - tzOffMs();
 }
-// ── Cashback timing: Uganda MIDNIGHT (00:00), not 24 hours after purchase ──
+// ── Cashback timing: Ethiopia MIDNIGHT (00:00), not 24 hours after purchase ──
 // The k-th payment (k = 1..total) is due at the first local midnight AFTER the purchase, plus (k-1) days. A product bought
 // at 15:00 therefore pays at 00:00 the next night, then every night at 00:00, `total` payments in all; the last one
-// is the maturity payment. Uganda has no daylight saving, so the day length is a constant 86,400,000 ms.
+// is the maturity payment. Ethiopia has no daylight saving, so the day length is a constant 86,400,000 ms.
 // Every midnight pays: there is no weekend rest.
 function payoutDueAtMs(createdMs, k) {
   return eatNextMidnight(createdMs) + (Math.max(1, k) - 1) * 86400000;
@@ -1216,7 +1053,7 @@ function eatParts(ts) {
 function localDigits(raw, region) {
   const r = region || currentRegion();
   const dial = String(r.dialCode || '251');
-  // A region may allow more than one length (Nigeria: 9 or 10 digits); `localLength` alone is the one-length case.
+  // A region may allow more than one length (some countries allow 9 or 10 digits); `localLength` alone is the one-length case.
   const lens = (Array.isArray(r.localLengths) && r.localLengths.length ? r.localLengths : [r.localLength || 9]).map(Number).filter(n => n > 0);
   const s = String(raw || '').replace(/\D/g, '');
   if (s.startsWith(dial) && lens.some(l => s.length === dial.length + l)) return s.slice(dial.length);
@@ -1229,9 +1066,9 @@ function localDigits(raw, region) {
 // snow-platform.com).
 //
 // MULTI-REGION: the same local number exists in more than one country
-// (0712345678 is a real number in both Uganda and Kenya), so once there is a
+// (the same local digits can exist in more than one country), so once there is a
 // second region the local digits alone are no longer a unique account name --
-// a Kenyan signing up would land straight inside a Ugandan member's Firebase
+// a member of another country would land straight inside another member's Firebase
 // account. Every region except the founding one therefore carries its
 // dialling code in the email. Uganda keeps the bare-digits form it has
 // always had, so no existing member's login changes, and it cannot collide
@@ -1265,8 +1102,8 @@ function phoneToEmail(phone, region) {
   const local = localDigits(phone, r) || String(phone).replace(/\D/g, '').replace(/^0+/, '');
   return (regionUsesBareLocal(r) ? local : String(r.dialCode || '') + local) + '@potato-platform.com';
 }
-// STRICT on purpose — for Uganda every real mobile number is 256 + exactly 9
-// digits starting with 7, and each other region declares its own length and
+// STRICT on purpose — for Ethiopia every real mobile number is 251 + exactly 9
+// digits starting with 9 or 7, and each other region declares its own length and
 // allowed leading digits in the admin panel. Rejects anything that doesn't
 // reduce to exactly that, so a garbled/wrong-country number never reaches a
 // payment provider.
@@ -1306,7 +1143,7 @@ function cleanPhone(raw, region) {
   return '+' + String(r.dialCode || '') + local;
 }
 // The two shapes a number may be typed in, spelled out for THIS region, so
-// "use the format 07XXXXXXXX or +2567XXXXXXXX" is right in Uganda and right
+// "use the format 09XXXXXXXX or +2519XXXXXXXX" is right in Ethiopia and right
 // everywhere else without a second sentence to maintain.
 function phoneFormatHint(region) {
   const r = region || currentRegion();
@@ -1359,15 +1196,12 @@ function depositSenderPhone(body, accountPhone, keys) {
   return fallback ? { phone: fallback }
                   : { error: 'Enter a valid mobile-money phone number.' };
 }
-// Withdrawal ("Bind bank card") accounts: owner: "make potato ... Ethiopia plus the other previous payment pages and models" -- the same two as Petro had:
-// Commercial Bank of Ethiopia (a bank account number) and Telebirr (a wallet: a +251 phone number). MTN / Airtel stay in NETWORK_NAMES only so an account saved
-// before the change keeps being read as mobile money.
-// (Uganda / Nigeria builds, POTATO_REGION=ug|ng, keep MTN / Airtel as before.)
-const ET_PAYOUT = DEFAULT_REGION_KEY === 'et';
-const PAYOUT_ACCOUNT_TYPES = Object.freeze(ET_PAYOUT ? { 'Commercial Bank of Ethiopia': 'bank', 'Telebirr': 'wallet' } : { 'MTN Mobile Money': 'wallet', 'Airtel Money': 'wallet' });
-const NETWORK_NAMES = new Set(ET_PAYOUT ? ['Telebirr', 'MTN Mobile Money', 'Airtel Money'] : ['MTN Mobile Money', 'Airtel Money']);
+// Withdrawal ("Bind bank card") accounts: Commercial Bank of Ethiopia (a bank account number) and Telebirr (a wallet: a +251 phone number). The admin pays
+// each one by hand and marks it paid.
+const PAYOUT_ACCOUNT_TYPES = Object.freeze({ 'Commercial Bank of Ethiopia': 'bank', 'Telebirr': 'wallet' });
+const NETWORK_NAMES = new Set(['Telebirr']);
 const ALL_PAYOUT_NETWORKS = new Set([...NETWORK_NAMES, 'Commercial Bank of Ethiopia']);
-const PAYOUT_CHOICE_MSG = ET_PAYOUT ? 'Choose Commercial Bank of Ethiopia or Telebirr.' : 'Choose MTN or Airtel.';
+const PAYOUT_CHOICE_MSG = 'Choose Commercial Bank of Ethiopia or Telebirr.';
 function isBankNetwork(network) { return PAYOUT_ACCOUNT_TYPES[String(network || '')] === 'bank'; }
 const MAX_MONEY_AMOUNT = 999_999_999;
 function finiteMoney(v) {
@@ -1921,23 +1755,17 @@ function logSecurityEvent(userId, type, meta) {
     .catch(e => console.error('logSecurityEvent error:', e.message));
 }
 async function markDepositFailed(depRef, userId, reason, via) {
-  try { return await _markDepositFailedNow(depRef, userId, reason, via); }
-  finally {
-    if (typeof _notifyDeposit === 'function') _notifyDeposit(depRef.id);   // wake a held status request (see waitDepositSettled)
-    // The member may try again at once: a failed payment is not an "already being processed" one and must not count as an abusive attempt.
-    if (userId) { _depCreateDebounce.delete(userId); const a = _depAttempts.get(userId); if (a && a.length) a.pop(); }
-  }   // wake a held status request (see waitDepositSettled)
+  return await _markDepositFailedNow(depRef, userId, reason, via);
 }
 async function _markDepositFailedNow(depRef, userId, reason, via) {
   // subagent-audit-caught HIGH bug: this used to overwrite status:'failed'
   // unconditionally, with no check that the deposit hadn't already been
   // credited by a DIFFERENT in-flight check (the client poll, the webhook,
-  // and the reconciler each independently ask MarzPay for a live status,
-  // and mobile-money providers can genuinely flip an initial timeout/expiry
-  // into a later approval). If one path already credited the deposit
+  // and the reconciler can each run at once, and an admin can credit by
+  // hand a moment after a rejection). If one path already credited the deposit
   // (status:'matched') right before a second, stale FAILED verdict from
   // another path landed here, this would silently flip it back to
-  // 'failed' -- /deposit/marzpay/status then reports "Failed" forever
+  // 'failed' -- the recharge then reads "Failed" forever
   // (its own guard short-circuits once status is 'failed', never
   // rechecking), and an admin who trusts that and clicks force-credit
   // would credit the wallet a SECOND time (force-credit's only guard,
@@ -1965,7 +1793,7 @@ async function _markDepositFailedNow(depRef, userId, reason, via) {
     // lock as the status flip so the two can never straddle a concurrent
     // credit landing in between.
     //
-    // Flip the ledger row created up front (see /deposit/marzpay) from
+    // Flip the ledger row created up front (see /deposit/manual/submit) from
     // "Processing" to "Failed" too, same as creditDeposit() does for a
     // successful match -- otherwise a failed deposit is stuck showing
     // "Processing" in Records forever. Also zero the row's `amount` --
@@ -1999,1171 +1827,6 @@ async function _markDepositFailedNow(depRef, userId, reason, via) {
     return false;
   }
   return true;
-}
-
-// ── MARZPAY (mobile money collect/send) ──
-const PROVIDER_BUSY_MSG = 'The payment provider is busy right now. Please try again in a moment.';
-// Owner asked for "due to insufficient funds" on this exact screen. Checked
-// against MarzPay's own integration guide (docs/marzpay-integration-guide.pdf,
-// sections 5.5/11.5/12) before wording this: a collection that moves past
-// "processing" into "failed"/"cancelled" -- via GET /collect-money/{uuid} or
-// the collection.failed webhook -- carries only that terminal status, no
-// reason field anywhere in the documented transaction/collection/webhook
-// shapes. MarzPay's only documented per-transaction reason
-// (INSUFFICIENT_BALANCE, an error_code in section 12.2) belongs to the
-// error envelope a bad /collect-money REQUEST gets back immediately --
-// already surfaced separately via marzUserMsg() at submission time (see
-// "Could not start the payment"/"Could not start the card payment"), and it
-// describes the BUSINESS's own MarzPay wallet running low, not a customer's
-// mobile money balance. There is no live data source for "why" a customer's
-// own payment failed once MarzPay accepted it and sent the prompt -- stating
-// a specific cause here would be a guess, not a fact (this app's own
-// standing rule, see setDepositStatusFailed()'s comment). Lists the real
-// possibilities instead of asserting one.
-const DEPOSIT_FAILED_MSG = 'This payment was not completed. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Please try again.';
-function marzUserMsg(mp, fallback) {
-  const raw = mp && [mp.message, mp.data?.message, mp.error, mp.data?.error].find(v => typeof v === 'string' && v.trim());   // only ever a string reaches a member
-  if ((mp && (mp.providerDown || mp.error_code === 'DATABASE_ERROR')) ||
-      /database error|internal server|server error|unexpected error|try again|temporarily|timeout|timed out|gateway|unavailable|bad gateway/i.test(String(raw || '')))
-    return PROVIDER_BUSY_MSG;
-  return raw || fallback || PROVIDER_BUSY_MSG;
-}
-async function _marzParse(resp) {
-  let data;
-  try { data = await resp.json(); }
-  catch (_) { return { status: 'error', providerDown: true, message: 'Invalid response from payment gateway' }; }
-  if (!data || typeof data !== 'object' || Array.isArray(data))
-    return { status: 'error', providerDown: true, message: 'Invalid response from payment gateway' };
-  if (resp.status >= 500 || [408, 409, 429].includes(resp.status)) data.providerDown = true;
-  if (resp.ok && typeof data.status !== 'string') data.providerDown = true;
-  if (!resp.ok && !data.status) data.status = 'error';
-  return data;
-}
-// The body both money-movement calls share. `country` was hardcoded 'UG' here
-// -- correct while Uganda was the only market, and the one line that had to
-// change for any other. It is REQUIRED by the API (guide §5.3), and it is what
-// selects the wallet: currency alone cannot, since XOF and XAF each cover three
-// markets.
-//
-// `reference` is already a crypto.randomUUID() at both call sites, which is
-// the UUID v4 the field requires.
-//
-// Refuses rather than guesses when the region is not a MarzPay market. A body
-// with no `country` would be rejected by the API anyway; a body with the WRONG
-// country would move real money in the wrong market, which is worse than a
-// refusal. gatewayServesRegion() stops this being reachable in the first
-// place, so this is the belt to that braces.
-function marzMoneyBody({ amount, phone, reference, description, region }) {
-  const market = marzMarket(region);
-  if (!market) return null;
-  const body = {
-    amount: Number(amount),
-    phone_number: phone,
-    country: market.code,
-    reference,
-    description: description || 'Mobile Money',
-  };
-  // Only where the market genuinely has more than one wallet -- the docs ask
-  // for it on DRC and nowhere else, and sending a currency for a
-  // single-wallet market would be inventing a parameter value.
-  if (market.currencies) body.currency = market.currency;
-  return body;
-}
-function marzNoMarket(region) {
-  const r = region || currentRegion();
-  return { status: 'error', message:
-    `MarzPay does not serve ${(r && r.name) || 'this country'} (+${(r && r.dialCode) || '?'})` };
-}
-async function marzCollect({ amount, phone, reference, description, callbackUrl, region }) {
-  const payload = marzMoneyBody({ amount, phone, reference, description, region });
-  if (!payload) return marzNoMarket(region);
-  if (callbackUrl) payload.callback_url = callbackUrl;
-  const resp = await fetch(`${MARZPAY_BASE}/collect-money`, {
-    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
-    headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  return _marzParse(resp);
-}
-async function marzSendMoney({ amount, phone, reference, description, callbackUrl, region }) {
-  const payload = marzMoneyBody({ amount, phone, reference, description, region });
-  if (!payload) return marzNoMarket(region);
-  if (callbackUrl) payload.callback_url = callbackUrl;
-  const resp = await fetch(`${MARZPAY_BASE}/send-money`, {
-    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
-    headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  return _marzParse(resp);
-}
-// Owner: "let us put on dashboard so as it checks marzpy available
-// balance." GET /balance -- confirmed against MarzPay's own official
-// JS SDK (marzpay-js on npm, published by MarzPay's own maintainer),
-// whose real BalanceAPI.getBalance() implementation calls this exact
-// path (the README's shorter accounts.getBalance() example doesn't
-// actually exist as working code in that same package -- the executable
-// BalanceAPI class is what's trustworthy here, not a doc-comment).
-// Response shape per that SDK's own JSDoc examples:
-// { data: { account: { balance: { raw, formatted, currency },
-// status: { account_status } } } }. Extracted defensively (several
-// plausible field paths tried, same "don't trust one exact shape"
-// defensiveness _marzExtractTx already uses for this same provider) since
-// this is a live external call whose exact envelope was verified against
-// SDK source, not MarzPay's own docs page directly.
-function _marzExtractBalance(d) {
-  const acct = d?.data?.account || d?.account || d?.data || d || {};
-  const bal = acct.balance;
-  const raw = (bal && typeof bal === 'object') ? (bal.raw ?? bal.amount ?? bal.value) : bal;
-  const formatted = (bal && typeof bal === 'object') ? bal.formatted : undefined;
-  const currency = (bal && typeof bal === 'object' && bal.currency) || acct.currency || 'UGX';
-  const accountStatus = acct.status?.account_status || acct.account_status || null;
-  return { amount: finiteMoney(raw), formatted: formatted || null, currency, accountStatus };
-}
-// Balances are PER COUNTRY WALLET, so the country has to be named or this
-// reads whichever wallet the API defaults to -- which on a multi-market
-// account is a figure for the wrong country presented as this one's. For DRC
-// the currency picks between its CDF and USD wallets.
-// Note the guide states this endpoint "requires IP whitelist"; a 401/403 here
-// with the money paths working is that, not a bad key.
-async function marzGetBalance(region) {
-  const market = marzMarket(region);
-  if (!market) return marzNoMarket(region);
-  const q = new URLSearchParams({ country: market.code });
-  if (market.currencies) q.set('currency', market.currency);
-  const resp = await fetch(`${MARZPAY_BASE}/balance?${q}`, {
-    signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
-  });
-  const d = await _marzParse(resp);
-  if (d.status === 'error') return d;
-  return { status: 'success', currency: market.currency, ..._marzExtractBalance(d) };
-}
-function _marzExtractTx(d) {
-  const tx = d?.data?.transaction || d?.transaction || d?.data || d || {};
-  const rawStatus = tx.status || tx.state || tx.transaction_status || tx.payment_status || (tx === d && !SUCCESS_STATUSES.has(String(d?.status || '').toLowerCase()) ? d?.status : '') || '';   // the reply envelope's own "success" is not the payment's status
-  // Speculative, checked against MarzPay's own integration guide afterward
-  // (docs/marzpay-integration-guide.pdf) rather than assumed correct:
-  // neither the collection-status response (5.5) nor the webhook payloads
-  // (11.5) document a reason field anywhere on a failed/cancelled
-  // collection -- only a terminal status. Kept anyway as a genuinely
-  // harmless forward-compatible read (costs nothing if MarzPay ever adds
-  // one; marzDepositFailureMsg() below already falls back safely when it's
-  // absent, which per the docs is every real case today).
-  const message = tx.message || tx.reason || tx.status_reason || tx.failure_reason ||
-    d?.message || d?.data?.message || null;
-  return {
-    status: String(rawStatus).toLowerCase(),
-    reference: tx.reference || tx.transaction_reference || null,
-    message,
-  };
-}
-// The real reason a MarzPay collection failed, on the rare/undocumented
-// chance MarzPay ever actually supplies one on tx.message -- reuses
-// marzUserMsg()'s own filter so an infrastructure complaint ("gateway
-// timeout", "database error") never leaks to a member as if it were
-// something about THEIR payment. Falls back to DEPOSIT_FAILED_MSG's own
-// honest, cause-agnostic wording otherwise -- confirmed against MarzPay's
-// own docs to be the normal case for every failed/cancelled collection,
-// not a gap in this function.
-function marzDepositFailureMsg(tx) {
-  return marzUserMsg({ message: tx && tx.message }, DEPOSIT_FAILED_MSG);
-}
-async function _marzFetchTxStatus(path, uuid, label, opts) {
-  // `fast`: for a member who is watching the screen (their next check is 2.5 s away and is itself the retry): one short attempt, no
-  // fallback. The patient version (2 attempts + a fallback, up to 20 s each) is for the background reconciler.
-  const fast = !!(opts && opts.fast);
-  const attempts = fast ? 1 : 2, timeoutMs = fast ? 7000 : MARZ_TIMEOUT;
-  let lastErr = null;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      const resp = await fetch(`${MARZPAY_BASE}${path}`, {
-        signal: AbortSignal.timeout(timeoutMs), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
-      });
-      const d = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        console.error(`${label}(${uuid}) attempt ${attempt}: HTTP ${resp.status}`, JSON.stringify(d).slice(0, 300));
-        lastErr = new Error(`HTTP ${resp.status}`);
-      } else {
-        return _marzExtractTx(d);
-      }
-    } catch (e) { lastErr = e; console.error(`${label}(${uuid}) attempt ${attempt} failed:`, e.message); }
-    if (attempt < attempts) await new Promise(r => setTimeout(r, 350));
-  }
-  if (fast) return { status: '', reference: null };
-  // MarzPay's docs list GET /transactions/{uuid} as a documented fallback
-  // "when webhooks are delayed" — one extra try before giving up.
-  try {
-    const resp = await fetch(`${MARZPAY_BASE}/transactions/${uuid}`, {
-      signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
-    });
-    const d = await resp.json().catch(() => ({}));
-    if (resp.ok) {
-      const parsed = _marzExtractTx(d);
-      if (parsed.status) return parsed;
-    }
-  } catch (e) { console.error(`${label}(${uuid}) /transactions fallback failed:`, e.message); }
-  console.error(`${label}(${uuid}): gave up after 2 attempts + fallback, last error:`, lastErr && lastErr.message);
-  return { status: '', reference: null };
-}
-async function marzGetCollectTx(uuid, opts) { return _marzFetchTxStatus(`/collect-money/${uuid}`, uuid, 'marzGetCollectTx', opts); }
-async function marzGetSendTx(uuid)    { return _marzFetchTxStatus(`/send-money/${uuid}`,    uuid, 'marzGetSendTx'); }
-async function marzGetSendStatus(uuid) { return (await marzGetSendTx(uuid)).status; }
-const SUCCESS_STATUSES = new Set(['success', 'successful', 'completed']);
-const FAILED_STATUSES  = new Set(['failed', 'declined', 'cancelled', 'canceled', 'rejected', 'expired']);
-function marzEventTypeFallback(eventType) {
-  const e = String(eventType || '');
-  if (e === 'success' || /\.completed$/.test(e)) return 'completed';
-  if (e === 'failure' || /\.(failed|cancelled|canceled)$/.test(e)) return 'failed';
-  return '';
-}
-
-// ── PESAJET (mobile money collect/disburse -- a 2nd automatic gateway
-// alongside MarzPay) ──
-// Owner: "l would like also to introduce in a new gateway for Uganda
-// https://pay.pesajet.com/docs".
-//
-// THE CONTRACT IS RECORDED IN docs/pesajet-api.md. It was taken from
-// PesaJet's own published SDK (@pesajet/sdk@1.0.2 on npm) because
-// pay.pesajet.com is refused by this environment's egress proxy -- that is
-// the same contract the SDK speaks, so endpoints, headers, field names and
-// status values are authoritative. Anything the SDK does not exercise is
-// listed there as an open question instead of being guessed at here.
-//
-// Three shape differences from MarzPay, each of which changes how this is
-// wired:
-//   * ONE endpoint for both directions -- POST /payments with
-//     type:'COLLECTION' or type:'DISBURSEMENT'. There is no separate
-//     send-money path to mirror.
-//   * NO per-request callback URL. MarzPay takes one in the
-//     body; PesaJet's webhook URL is set once in their dashboard, so
-//     PUBLIC_URL plays no part below and the OWNER HAS TO SET IT THERE or
-//     resolution falls back entirely to the member's own status poll and the
-//     reconciler. Both of those already work, so a missing webhook is slow
-//     rather than broken -- which is why this is not treated as fatal.
-//   * THREE terminal statuses, not two: COMPLETED, FAILED and EXPIRED.
-//     EXPIRED means the member never approved the prompt, the commonest real
-//     outcome on mobile money. It resolves as a failure -- FAILED_STATUSES
-//     already contains 'expired' -- but it earns its own wording, because
-//     "you did not approve it in time" and "the payment failed" send a member
-//     to two different places.
-const PESAJET_BASE = (process.env.PESAJET_BASE_URL || 'https://payments.pesajet.com/api/v1').replace(/\/+$/, '');
-const PESAJET_KEY = (process.env.PESAJET_API_KEY || '').trim();
-const PESAJET_WEBHOOK_SECRET = process.env.PESAJET_WEBHOOK_SECRET || '';
-// TWO timeouts, because the two call shapes have opposite needs.
-//
-// Creating a payment is a one-off that raises a prompt on a phone; 20s is what
-// MarzPay already allows and is worth waiting for.
-//
-// READING a status is polled every couple of seconds while a member watches
-// the screen, and the SDK's blanket 30s default is actively harmful there: one
-// slow read stalls the whole poll behind it, and pesajetGetTx's retry made the
-// worst case 60 seconds of a screen saying nothing. A read that has not
-// answered in 7s is better abandoned -- the next poll IS the retry.
-const PESAJET_TIMEOUT = 20000;
-const PESAJET_READ_TIMEOUT = 7000;
-function pesajetConfigured() { return !!PESAJET_KEY; }
-// E.164 with a leading '+', which is what PesaJet wants and what cleanPhone()
-// already produces. Kept anyway, and shaped exactly like the SDK's own
-// formatPhoneNumber, so a legacy document holding a bare local number cannot
-// quietly send a malformed msisdn to a live gateway.
-function pesajetPhone(raw) {
-  let s = String(raw || '').replace(/[\s-]/g, '');
-  if (!s) return '';
-  if (s.startsWith('0')) return '+256' + s.slice(1);
-  if (s.startsWith('256')) return '+' + s;
-  if (!s.startsWith('+')) return '+' + s;
-  return s;
-}
-// PesaJet's `provider` is OPTIONAL, and that is load-bearing here: its own
-// SDK says 073 spans both networks and returns null rather than guessing, so
-// sending a wrong operator is worse than sending none. Potato stores the
-// network as NETWORK_NAMES ('MTN Mobile Money' / 'Airtel Money') when the
-// member picked one; when it did not, this returns null and the field is
-// omitted from the payload so PesaJet resolves it itself.
-//
-// NOTE the prefix lists differ: PesaJet's SDK maps 77/78/76/79/39 -> mtn and
-// 70/75/74 -> airtel, while Potato's own UGANDA_MOBILE_PREFIXES does not carry
-// 39. Deliberately NOT reconciled by widening Potato's list -- that list
-// governs which numbers this platform accepts at all, and quietly admitting a
-// new prefix because a payment provider happens to recognise it is a
-// different decision from this one. The stored network wins where there is
-// one; only the fallback consults prefixes.
-function pesajetProviderFor(network, phone) {
-  if (network === 'MTN Mobile Money') return 'mtn';
-  if (network === 'Airtel Money') return 'airtel';
-  const local = String(phone || '').replace(/^\+?256/, '').replace(/^0/, '');
-  if (/^(77|78|76|79|39)\d{7}$/.test(local)) return 'mtn';
-  if (/^(70|75|74)\d{7}$/.test(local)) return 'airtel';
-  return null;
-}
-// Every call in one place. Returns a plain object rather than throwing, the
-// same shape _marzParse() settles on, so the callers below read the same way
-// as the MarzPay ones: { ok, data, httpStatus, providerDown }.
-//
-// `providerDown` is the distinction that matters on a money path: "PesaJet
-// said no" and "we could not reach PesaJet" must never be collapsed, because
-// the first is safe to report as a failure and the second is ambiguous and
-// must leave the row alone for the reconciler.
-async function _pesajetRequest(path, { method = 'GET', body, idempotencyKey, timeoutMs } = {}) {
-  const headers = { 'X-API-Key': PESAJET_KEY };
-  if (body) headers['Content-Type'] = 'application/json';
-  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
-  let resp;
-  try {
-    resp = await fetch(`${PESAJET_BASE}${path}`, {
-      method, headers,
-      body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(timeoutMs || PESAJET_TIMEOUT),
-    });
-  } catch (e) {
-    return { ok: false, providerDown: true, httpStatus: 0, data: { message: e.message } };
-  }
-  const text = await resp.text().catch(() => '');
-  let data;
-  try { data = text ? JSON.parse(text) : {}; }
-  catch (_) { data = { message: text }; }
-  // PesaJet's documented error body NESTS everything under `error`:
-  //   { error: { code, message, details, timestamp, requestId } }
-  // while their SDK's own error type is flat. Reading `data.message ||
-  // data.error` off the documented shape hands back the error OBJECT, which
-  // reaches a member as "[object Object]" on a failed recharge. Flattened
-  // here, once, so every caller sees one shape whichever the API sends.
-  if (data && typeof data === 'object' && data.error && typeof data.error === 'object') {
-    const e = data.error;
-    data = { message: e.message, errorCode: e.code, details: e.details,
-             requestId: e.requestId, raw: data };
-  }
-  // Their own error table says to log this when contacting support.
-  if (!resp.ok && data && data.requestId) {
-    console.error(`pesajet ${method} ${path}: HTTP ${resp.status} requestId=${data.requestId}`);
-  }
-  // A 5xx or a 408/429 is the gateway struggling, not a verdict on this
-  // payment -- same treatment as a thrown network error.
-  const down = resp.status >= 500 || resp.status === 408 || resp.status === 429;
-  // 409 is neither. Their error table's own instruction for a conflict is
-  // "reuse the original response", i.e. the transaction ALREADY EXISTS --
-  // handled by the caller, never as a refusal.
-  return { ok: resp.ok, providerDown: !resp.ok && down, conflict: resp.status === 409,
-           httpStatus: resp.status, data };
-}
-async function pesajetCreate({ type, amount, phone, network, reference, description, idempotencyKey }) {
-  const payload = {
-    type: type === 'DISBURSEMENT' ? 'DISBURSEMENT' : 'COLLECTION',
-    amount: Number(amount),
-    currency: 'UGX',
-    phoneNumber: pesajetPhone(phone),
-    reference: String(reference || ''),
-    description: description || 'Mobile Money',
-  };
-  const provider = pesajetProviderFor(network, phone);
-  if (provider) payload.provider = provider;
-  // Sent BOTH ways on purpose. PesaJet's SDK puts the idempotency key in an
-  // `Idempotency-Key` header; their own REST example puts an `idempotencyKey`
-  // field in the body ("Use a unique idempotency key when retrying requests to
-  // prevent duplicate payments"). Which one their API actually reads is not
-  // stated anywhere, and the cost of guessing wrong is a DUPLICATE PAYMENT on
-  // a retry -- so send both and let whichever they honour do its job.
-  if (idempotencyKey) payload.idempotencyKey = idempotencyKey;
-  const r = await _pesajetRequest('/payments', { method: 'POST', body: payload, idempotencyKey });
-  if (!r.conflict) return r;
-  // A 409 IS NOT A REFUSAL, and treating it as one is how a live payment gets
-  // marked failed. PesaJet's own error table says of a conflict: "Reuse the
-  // original response for an idempotency conflict" -- the transaction already
-  // exists, so the prompt may be ringing on the member's phone right now, or
-  // a payout may already be on its way.
-  const hit = await pesajetFindByReference(payload.reference, { sinceMs: Date.now() - 6 * 3600 * 1000 });
-  if (hit.found && hit.transactionId) {
-    return { ok: true, providerDown: false, conflict: true, recovered: true, httpStatus: 200,
-             data: { transactionId: hit.transactionId,
-                     status: (hit.status || 'pending').toUpperCase(),
-                     reference: payload.reference } };
-  }
-  // Could not recover the id. The only safe reading left is "in flight": the
-  // caller then leaves a deposit pending for the reconciler and does not hand
-  // a payout back for a retry that would pay twice.
-  console.error('PesaJet 409 and the transaction could not be found by reference:', payload.reference);
-  return { ...r, providerDown: true };
-}
-async function pesajetCollect(opts)  { return pesajetCreate({ ...opts, type: 'COLLECTION' }); }
-async function pesajetDisburse(opts) { return pesajetCreate({ ...opts, type: 'DISBURSEMENT' }); }
-// The independent re-read every credit decision here is made from. Two
-// attempts with a short backoff, the same shape _marzFetchTxStatus() uses,
-// because a single transient failure must not read as "not paid".
-// `attempts` is 1 on the paths a member is waiting on -- their own status
-// poll comes back in a couple of seconds and IS the retry, so retrying inside
-// one request only doubles how long the screen says nothing. The webhook and
-// the reconciler, where nobody is watching, keep the second attempt because
-// there a transient blip really would mean waiting for the next 30s tick.
-// Find a transaction we have NO id for, by our own reference.
-//
-// This closes a real hole. If a create call is accepted by PesaJet but its
-// response is lost in flight (a timeout at our end), the deposit row has no
-// `pesajetTxId` -- and every resolver here reads by that id, so nothing could
-// ever check it again. The member's money may have left their phone and this
-// platform would never credit it. Until PesaJet documented a LIST endpoint
-// there was nothing to look such a row up with; now there is.
-//
-// It uses ONLY the six parameters their endpoint reference lists
-// (page/limit/status/provider/startDate/endDate). There is no `reference`
-// filter among them, so the window is narrowed with the documented startDate
-// and our own reference is matched here. Inventing a seventh parameter would
-// be the same mistake as inventing a balance path.
-const PESAJET_FIND_LIMIT = 100;   // rows per page asked for
-const PESAJET_FIND_PAGES = 4;     // at most 400 rows scanned per lookup
-// How the reconciler rations those lookups. A lookup costs up to three calls,
-// so a handful per 30s tick; younger than the minimum age the member's own
-// status poll owns the row, and older than the window there is nothing left
-// to page.
-const PESAJET_LOST_PER_TICK = 5;
-const PESAJET_LOST_MIN_AGE_MS = 10 * 60 * 1000;
-const PESAJET_LOST_WINDOW_MS = 6 * 3600 * 1000;
-async function pesajetFindByReference(reference, { sinceMs } = {}) {
-  const ref = String(reference || '');
-  if (!ref) return { found: false, complete: false, providerDown: false };
-  // A minute of slack either side of our own timestamp: their clock is not
-  // ours, and a row missed by a second would read as "never existed".
-  const since = sinceMs ? new Date(sinceMs - 60000).toISOString() : null;
-  for (let page = 1; page <= PESAJET_FIND_PAGES; page++) {
-    const qs = new URLSearchParams({ page: String(page), limit: String(PESAJET_FIND_LIMIT) });
-    if (since) qs.set('startDate', since);
-    const r = await _pesajetRequest(`/payments?${qs.toString()}`, { timeoutMs: PESAJET_READ_TIMEOUT });
-    if (!r.ok) return { found: false, complete: false, providerDown: !!r.providerDown, httpStatus: r.httpStatus };
-    const body = r.data || {};
-    const rows = Array.isArray(body) ? body
-      : Array.isArray(body.data) ? body.data
-      : Array.isArray(body.transactions) ? body.transactions
-      : Array.isArray(body.payments) ? body.payments : null;
-    // The list envelope is not documented, only its parameters are. If it is
-    // not recognisably a list, say so rather than reading "no rows" -- an
-    // unrecognised shape must never become evidence that a payment does not
-    // exist, because that evidence is what licenses failing a deposit below.
-    if (!rows) {
-      console.error('pesajetFindByReference: unrecognised list envelope', JSON.stringify(body).slice(0, 200));
-      return { found: false, complete: false, providerDown: false, unreadable: true };
-    }
-    const hit = rows.find(t => t && String(t.reference || '') === ref);
-    if (hit) return { found: true, complete: true, providerDown: false,
-                      transactionId: hit.transactionId || null,
-                      status: String(hit.status || '').toLowerCase() };
-    // Only an EMPTY page proves the window was fully seen. A short page used to be taken as the end, but if PesaJet caps `limit` below what we
-    // ask for, page 1 looks short while more rows exist, and "not found" would then license failing a deposit that was really paid.
-    if (rows.length === 0) return { found: false, complete: true, providerDown: false };
-  }
-  return { found: false, complete: false, providerDown: false };
-}
-async function pesajetGetTx(transactionId, { attempts = 2 } = {}) {
-  let last = null;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    const r = await _pesajetRequest(`/payments/${encodeURIComponent(transactionId)}`,
-      { timeoutMs: PESAJET_READ_TIMEOUT });
-    if (r.ok) {
-      const t = r.data?.data || r.data || {};
-      return {
-        status: String(t.status || '').toLowerCase(),
-        reference: t.reference || null,
-        transactionId: t.transactionId || transactionId,
-        failureReason: t.failureReason || null,
-        providerDown: false,
-      };
-    }
-    // A 404 is an answer, not an outage: this id is unknown to PesaJet.
-    if (!r.providerDown) {
-      console.error(`pesajetGetTx(${transactionId}): HTTP ${r.httpStatus}`, JSON.stringify(r.data).slice(0, 300));
-      return { status: '', reference: null, transactionId, failureReason: null, providerDown: false, notFound: r.httpStatus === 404 };
-    }
-    last = r;
-    console.error(`pesajetGetTx(${transactionId}) attempt ${attempt}: gateway unavailable (HTTP ${r.httpStatus})`);
-    if (attempt < attempts) await new Promise(r2 => setTimeout(r2, 350));
-  }
-  return { status: '', reference: null, transactionId, failureReason: null, providerDown: true, httpStatus: last && last.httpStatus };
-}
-// ── Fast confirmation of a PesaJet recharge ─────────────────────────────────
-// Before: the member's phone asked the server every 1.5 s and ONLY THEN did the server ask PesaJet, so every step stacked up (phone network,
-// then the server's own trip to PesaJet, then the next tick). Now the SERVER watches each pending PesaJet recharge itself, once a second, from the
-// moment PesaJet has accepted it, and credits it the instant PesaJet says COMPLETED (or marks it failed). The phone's poll then only reads the
-// database (one cheap read), so it can ask every second without hitting PesaJet at all. Webhook, watcher, the member's poll and the periodic
-// reconciler all end in the same creditDeposit()/markDepositFailed(), which are single-writer locked, so nothing can credit twice.
-// Capped, and a watcher that stops (cap, restart, 2 minutes) simply hands over to the old poll-driven check, which still works on its own.
-const PESAJET_WATCH_EVERY_MS = 700, PESAJET_WATCH_BUDGET_MS = 120000, PESAJET_WATCH_MAX = 20;
-// PesaJet publishes no rate limit but says to answer a 429 with "exponential backoff and jitter", and its own SDK polls every 2.5 s. So: with many
-// watchers the cadence stretches (about 8 asks per second in total, however many members are paying), and a gateway that is struggling (5xx, 429,
-// timeout) is asked less and less often instead of being hammered.
-const PESAJET_WATCH_SPREAD_MS = 125, PESAJET_WATCH_BACKOFF_MS = 1000, PESAJET_WATCH_BACKOFF_MAX_MS = 8000;
-const _pesajetWatchers = new Map();   // depositId -> time of its last PesaJet check
-let _pesajetSleep = ms => new Promise(r => setTimeout(r, ms));
-function pesajetWatcherFresh(depositId, maxAgeMs = 3500) {
-  const last = _pesajetWatchers.get(depositId);
-  return last !== undefined && Date.now() - last < maxAgeMs;
-}
-// Long-poll: the member's status request can be HELD for a few seconds and is answered the instant the deposit settles (webhook, watcher, anyone),
-// instead of waiting for the phone's next poll tick. _notifyDeposit() is called at the end of creditDeposit() and markDepositFailed().
-const _depWaiters = new Map();        // depositId -> Set of resolve functions
-function _notifyDeposit(depositId) {
-  const set = _depWaiters.get(depositId); if (!set) return;
-  _depWaiters.delete(depositId); for (const fn of set) fn();
-}
-function waitDepositSettled(depositId, ms) {
-  return new Promise(resolve => {
-    let done = false; const set = _depWaiters.get(depositId) || new Set(); _depWaiters.set(depositId, set);
-    const finish = () => { if (done) return; done = true; clearTimeout(timer); set.delete(finish); if (!set.size && _depWaiters.get(depositId) === set) _depWaiters.delete(depositId); resolve(); };
-    const timer = setTimeout(finish, ms); set.add(finish);
-  });
-}
-function watchPesajetDeposit(depositId) {
-  if (!depositId || _pesajetWatchers.has(depositId) || _pesajetWatchers.size >= PESAJET_WATCH_MAX) return;
-  _pesajetWatchers.set(depositId, Date.now());
-  (async () => {
-    try {
-      const began = Date.now();
-      let down = 0;                                  // consecutive "gateway unavailable" answers
-      while (Date.now() - began < PESAJET_WATCH_BUDGET_MS) {
-        const backoff = down ? Math.min(PESAJET_WATCH_BACKOFF_MAX_MS, PESAJET_WATCH_BACKOFF_MS * 2 ** (down - 1)) * (0.75 + Math.random() * 0.5) : 0;
-        await _pesajetSleep(Math.max(PESAJET_WATCH_EVERY_MS, _pesajetWatchers.size * PESAJET_WATCH_SPREAD_MS) + backoff);
-        const snap = await db.collection('pendingDeposits').doc(depositId).get();
-        if (!snap.exists) return;
-        const dep = snap.data();
-        if (dep.status !== 'pending' && dep.status !== 'initiating') return;   // a webhook, a poll or the reconciler already settled it
-        if (!dep.pesajetTxId) continue;
-        const t = await pesajetGetTx(dep.pesajetTxId, { attempts: 1 });
-        _pesajetWatchers.set(depositId, Date.now());
-        if (t.providerDown) { down++; continue; }
-        down = 0;
-        const realStatus = pesajetStatusLabel(t.status);
-        if (realStatus === 'success') { await creditDeposit(snap, 'server watcher'); return; }
-        if (realStatus === 'failed') { await markDepositFailed(snap.ref, dep.userId, pesajetFailureMsg(t.status)); return; }
-      }
-    } catch (e) {
-      console.error('PesaJet watcher (' + depositId + '):', e.message);
-    } finally {
-      _pesajetWatchers.delete(depositId);
-    }
-  })();
-}
-// PesaJet's status -> the three words the rest of this file already speaks
-// ('success'/'failed'/'processing'), so the deposit and withdrawal branches
-// below read identically whichever gateway is in use. PENDING and
-// PROCESSING are both still in flight; EXPIRED is terminal and counts as a
-// failure.
-function pesajetStatusLabel(status) {
-  const s = String(status || '').toLowerCase();
-  if (s === 'completed') return 'success';
-  if (s === 'failed' || s === 'expired') return 'failed';
-  if (s === 'pending' || s === 'processing') return 'processing';
-  return '';
-}
-// Only EXPIRED gets its own sentence. A member whose prompt timed out has not
-// had a payment go wrong -- they have not answered it yet -- and telling them
-// it failed sends them looking for a fault that is not there.
-function pesajetFailureMsg(status) {
-  return String(status || '').toLowerCase() === 'expired'
-    ? 'The payment request timed out before it was approved on the phone. Nothing was taken. Start a new recharge to try again.'
-    : DEPOSIT_FAILED_MSG;
-}
-function pesajetUserMsg(r, fallback) {
-  if (r && r.providerDown) return PROVIDER_BUSY_MSG;
-  const d = (r && r.data) || {};
-  // Only ever a STRING reaches a member. The documented error body nests an
-  // object under `error`, and handing that straight back printed
-  // "[object Object]" in front of somebody whose recharge had just failed.
-  let raw = [d.message, d.error].find(v => typeof v === 'string' && v.trim()) || '';
-  // A provider's own wording about keys / auth, or a whole error page, never reaches a member.
-  if (raw.length > 200 || /api[ _-]?key|secret|unauthori[sz]ed|forbidden|whitelist|<html|<!doctype/i.test(raw)) { console.warn('PesaJet message hidden from the member:', raw.slice(0, 300)); return PROVIDER_BUSY_MSG; }
-  if (/internal|server error|unavailable|timeout|timed out|try again|temporarily|gateway/i.test(raw))
-    return PROVIDER_BUSY_MSG;
-  return raw || fallback || PROVIDER_BUSY_MSG;
-}
-// HMAC-SHA256, hex, over the payload with its own `signature` field removed,
-// exactly as PesaJet's SDK computes it. The signature may arrive in the
-// x-webhook-signature header or inside the body; both are accepted, the
-// header first.
-//
-// TWO THINGS TO KNOW, and they are why this is a filter and never the
-// authority:
-//   * the digest is over a RE-SERIALISED object, not over the raw request
-//     body, so it depends on JSON key order surviving parse -> stringify.
-//     Node preserves insertion order for string keys so it normally matches,
-//     but a proxy that reorders or re-encodes would break it through no
-//     fault of ours.
-//   * with no secret configured there is nothing to verify against.
-// In both cases the callback still does its job, because the callback never
-// credits anything on the webhook's word -- it re-reads
-// GET /payments/{transactionId} and acts on THAT. A failed or impossible
-// verification downgrades the webhook to a hint; it does not invent one.
-function pesajetVerifyWebhook(body, headerSig, rawBody) {
-  if (!PESAJET_WEBHOOK_SECRET) return { verified: false, reason: 'no-secret' };
-  const obj = (body && typeof body === 'object') ? body : {};
-  const sig = String(headerSig || obj.signature || '');
-  if (!sig) return { verified: false, reason: 'no-signature' };
-  // TWO candidate digests, and accepting either is deliberate.
-  //
-  // PesaJet's DASHBOARD says the signature is an HMAC of the "raw request
-  // payload". Their own published SDK computes it over
-  // JSON.stringify(payload minus its `signature` field) -- which is a
-  // different byte string whenever the raw body has any different spacing or
-  // key order, i.e. in general. The two sources disagree, and only one of
-  // them is what their servers actually send.
-  //
-  // This is not a weakening: both candidates are HMAC-SHA256 over data
-  // derived from THIS request under the same secret, so forging either still
-  // requires the secret. What accepting both buys is that the integration
-  // works whichever of the two PesaJet really does, instead of silently
-  // 401-ing every live webhook until somebody reads the bytes. The raw form
-  // is tried first because it is what the dashboard states.
-  const { signature: _omit, ...clean } = obj;
-  const candidates = [];
-  if (rawBody && rawBody.length) candidates.push(rawBody);
-  candidates.push(Buffer.from(JSON.stringify(clean), 'utf8'));
-  const expected = candidates.map(buf => crypto.createHmac('sha256', PESAJET_WEBHOOK_SECRET)
-    .update(buf).digest('hex'));
-  const b = Buffer.from(sig, 'utf8');
-  for (const exp of expected) {
-    const a = Buffer.from(exp, 'utf8');
-    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return { verified: true, reason: 'ok' };
-  }
-  // A signature that was present and did not verify is a 'mismatch' WHATEVER
-  // the reason -- a wrong length, a wrong digest, or neither candidate
-  // matching are the same event to whoever has to act on it. An earlier
-  // version reported a wrong digest as 'checked', which the route treats as
-  // "could not verify, carry on as a hint" rather than as the forgery it is:
-  // no money could have moved wrongly (the re-read still governs every
-  // credit) but a forged call would have been answered 200 instead of 401
-  // with nothing flagging it. Caught by test-pesajet.js.
-  return { verified: false, reason: 'mismatch' };
-}
-
-// ═══════════════════════════════════════════
-// TAVUPAY (recharges only)
-// ═══════════════════════════════════════════
-// Contract: https://docs.tavupay.lat/developers (read from the owner's saved copy, October 2026). This environment cannot reach that host,
-// so everything below follows the document and nothing has been run against the live gateway. The places where the document disagrees with
-// itself are handled defensively and listed here so they are not forgotten:
-//   * One endpoint for both directions: POST /v1/payments {type:'collection', phone, amount, idempotencyKey, description, callback}; the reply
-//     is {ok, message, reference}. Acceptance is NOT settlement: the row stays pending until a confirmation arrives.
-//   * Auth is two headers, X-API-Key and X-API-Secret (never a Bearer token). The caller's IPv4 must be on the TavuPay IP whitelist, so every
-//     call is forced onto IPv4 (a VPS that also has IPv6 would otherwise call from an address nobody whitelisted).
-//   * Status is read with GET /v1/payments?reference=<reference>. The docs mark that endpoint "not available in the current API" in one place
-//     and tell merchants to use it in another, so a refusal of it (404/405/501, or a 401/403) is treated as "cannot re-check", never as a
-//     verdict on the payment.
-//   * The webhook is signed: X-TAVUPAY-Signature = HMAC-SHA256 (hex) of the RAW body with the API secret. Elsewhere the docs say no signing secret
-//     is needed. A valid signature is proof the call came from TavuPay (only they and we know the secret) and settles the payment by itself; an
-//     absent or wrong signature makes the call a HINT only: we then re-read the payment and credit only what that read says.
-//   * Nothing is ever credited from an amount the gateway reports: the wallet gets OUR stored amount, and only if the gateway's figure agrees
-//     with it (equal, or equal once its fee is taken off). A disagreement parks the row in Needs Review for a person.
-const TAVUPAY_BASE = (process.env.TAVUPAY_BASE_URL || 'https://api.tavupay.lat/v1').replace(/\/+$/, '');
-const TAVUPAY_KEY = (process.env.TAVUPAY_API_KEY || '').trim();
-const TAVUPAY_SECRET = (process.env.TAVUPAY_API_SECRET || '').trim();
-const TAVUPAY_TIMEOUT = 20000, TAVUPAY_READ_TIMEOUT = 7000;
-function tavupayConfigured() { return !!(TAVUPAY_KEY && TAVUPAY_SECRET); }
-// The address TavuPay posts confirmations to. Normally saved once in the TavuPay dashboard (Merchant Settings / Webhooks); this optional secret
-// (TAVUPAY_CALLBACK_URL, the same secret address) is also sent with each request, which the document requires if none is saved there.
-function tavupayHookUrl() { return String(process.env.TAVUPAY_CALLBACK_URL || '').trim(); }
-// One HTTPS call, forced onto IPv4 (see the whitelist note above). Replaceable in tests.
-let _tavupayHttp = function tavupayHttps(method, urlStr, headers, bodyStr, timeoutMs) {
-  const https = require('node:https');
-  return new Promise((resolve, reject) => {
-    const u = new URL(urlStr);
-    const req = https.request({ method, hostname: u.hostname, port: u.port || 443, path: u.pathname + u.search, headers, family: 4, timeout: timeoutMs }, resp => {
-      const chunks = []; let size = 0;
-      resp.on('data', c => { size += c.length; if (size > 1_000_000) { req.destroy(new Error('reply too large')); return; } chunks.push(c); });
-      resp.on('end', () => resolve({ status: resp.statusCode || 0, text: Buffer.concat(chunks).toString('utf8') }));
-      resp.on('error', reject);
-    });
-    req.on('timeout', () => req.destroy(new Error('timed out')));
-    req.on('error', reject);
-    if (bodyStr) req.write(bodyStr);
-    req.end();
-  });
-};
-async function _tavupayRequest(path, { method = 'GET', body, timeoutMs } = {}) {
-  if (!tavupayConfigured()) return { ok: false, providerDown: false, notConfigured: true, httpStatus: 0, data: { message: 'TavuPay is not set up on the server yet.' } };
-  const headers = { 'X-API-Key': TAVUPAY_KEY, 'X-API-Secret': TAVUPAY_SECRET, 'Accept': 'application/json' };
-  let bodyStr;
-  if (body) { bodyStr = JSON.stringify(body); headers['Content-Type'] = 'application/json'; headers['Content-Length'] = Buffer.byteLength(bodyStr); }
-  let r;
-  try { r = await _tavupayHttp(method, TAVUPAY_BASE + path, headers, bodyStr, timeoutMs || TAVUPAY_TIMEOUT); }
-  catch (e) { return { ok: false, providerDown: true, httpStatus: 0, data: { message: e.message } }; }
-  let data;
-  try { data = r.text ? JSON.parse(r.text) : {}; } catch (_) { data = { message: String(r.text || '').slice(0, 300) }; }
-  if (!data || typeof data !== 'object') data = { message: String(data) };
-  const good = r.status >= 200 && r.status < 300;
-  // 5xx, 408 and 429 are the gateway struggling, not a verdict on this payment.
-  const down = !good && (r.status >= 500 || r.status === 408 || r.status === 429);
-  if (good && data.ok === false) return { ok: false, providerDown: false, httpStatus: r.status, data };
-  return { ok: good, providerDown: down, httpStatus: r.status, data };
-}
-// TavuPay's words -> the three this file speaks. INDETERMINATE is "not known yet": never a failure (the docs say check again before retrying).
-const TAVUPAY_OK_WORDS = new Set(['successful', 'succeeded', 'success', 'completed', 'complete', 'paid', 'confirmed']);
-const TAVUPAY_BAD_WORDS = new Set(['failed', 'declined', 'cancelled', 'canceled', 'expired', 'rejected', 'timeout', 'timed_out', 'error']);
-function tavupayStatusLabel(t) {
-  const s = String((t && (t.transactionStatus || t.status)) || '').trim().toLowerCase();
-  if (TAVUPAY_BAD_WORDS.has(s)) return 'failed';
-  if (TAVUPAY_OK_WORDS.has(s)) return 'success';
-  if (!s && t && t.success === true) return 'success';
-  if (s) return 'processing';
-  return '';
-}
-// 8-64 letters, digits, underscores or hyphens (the document's rule): a deposit's own id (24 hex characters) qualifies. Phones go out as '+256...' (pesajetPhone).
-function tavupayIdempotencyKey(depositId) {
-  const k = String(depositId || '');
-  return /^[A-Za-z0-9_-]{8,64}$/.test(k) ? k : '';
-}
-async function tavupayCollect({ amount, phone, description, idempotencyKey, callback }) {
-  const payload = { type: 'collection', phone: pesajetPhone(phone), amount: Math.round(Number(amount)) };
-  const key = tavupayIdempotencyKey(idempotencyKey);
-  if (key) payload.idempotencyKey = key;
-  if (description) payload.description = String(description).slice(0, 200);
-  if (callback && /^https:\/\//i.test(callback)) payload.callback = callback;
-  return _tavupayRequest('/payments', { method: 'POST', body: payload });
-}
-// Re-read one payment by TavuPay's own reference. `unavailable` = the gateway would not answer this question (so the caller must NOT conclude
-// anything about the payment); `providerDown` = it is struggling right now.
-async function tavupayGetTx(reference, { attempts = 2 } = {}) {
-  const none = { status: '', amount: NaN, fee: 0, providerDown: false, unavailable: false, reference: reference || null };
-  if (!reference) return { ...none, unavailable: true };
-  let last = null;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    const r = await _tavupayRequest('/payments?reference=' + encodeURIComponent(reference), { timeoutMs: TAVUPAY_READ_TIMEOUT });
-    if (r.ok) {
-      let t = r.data || {};
-      if (t.data && typeof t.data === 'object' && !Array.isArray(t.data)) t = t.data;
-      else if (Array.isArray(t.data)) t = t.data.find(x => x && (x.reference === reference || x.transactionReference === reference)) || {};
-      return { ...none, status: tavupayStatusLabel(t), rawStatus: String(t.status || t.transactionStatus || ''), amount: Number(t.amount), fee: Number(t.fee) || 0, reference: t.reference || reference };
-    }
-    if (!r.providerDown) {
-      if (r.httpStatus === 401 || r.httpStatus === 403) console.error(`TavuPay read refused (HTTP ${r.httpStatus}): ${JSON.stringify(r.data).slice(0, 200)} -- check the API key/secret and that this server's IPv4 is on the TavuPay whitelist`);
-      return { ...none, unavailable: true, httpStatus: r.httpStatus };
-    }
-    last = r;
-    if (attempt < attempts) await new Promise(r2 => setTimeout(r2, 350));
-  }
-  return { ...none, providerDown: true, httpStatus: last && last.httpStatus };
-}
-// What a member is told when TavuPay refuses to start a payment. Credential / whitelist problems are the owner's to fix and are logged, never shown.
-function tavupayUserMsg(r, fallback) {
-  if (!r || r.providerDown) return PROVIDER_BUSY_MSG;
-  if (r.notConfigured || r.httpStatus === 401 || r.httpStatus === 403) {
-    console.error(`TavuPay refused the payment request (HTTP ${r.httpStatus || 0}): ${JSON.stringify(r.data || {}).slice(0, 300)} -- check TAVUPAY_API_KEY / TAVUPAY_API_SECRET and the IP whitelist`);
-    return PROVIDER_BUSY_MSG;
-  }
-  const d = r.data || {};
-  const raw = [d.message, d.error].find(v => typeof v === 'string' && v.trim()) || '';
-  if (/internal|server error|unavailable|timeout|timed out|try again|temporarily|gateway|api key|secret|whitelist/i.test(raw)) return PROVIDER_BUSY_MSG;
-  return raw || fallback || PROVIDER_BUSY_MSG;
-}
-// Does the gateway's figure agree with what we asked for? Equal, or equal once its fee is taken off. No figure reported = the status decides.
-function tavupayAmountOk(dep, reported, fee) {
-  const got = Number(reported);
-  if (!Number.isFinite(got) || got <= 0) return true;
-  const want = Number(dep && dep.amount) || 0;
-  const f = Number(fee) || 0;
-  // TavuPay reports what the CUSTOMER paid, which can include its own charge (a 32,000 recharge shows as 32,640 with a 640 charge), and a webhook may
-  // not carry the fee at all. The wallet is paid OUR stored amount either way, so a payment of the amount or MORE (up to 10 %, at least 500) is
-  // right; only a payment of LESS than the recharge is parked for review.
-  if (got >= want - 0.5 && got - want <= Math.max(want * 0.1, 500)) return true;
-  return Math.abs(got - want) < 0.5 || (f > 0 && Math.abs(got - f - want) < 0.5);
-}
-// Settle one deposit from a result {status, amount, fee}. The wallet is paid OUR stored amount, and only when the figures agree.
-async function tavupayApply(doc, t, source) {
-  const dep = doc.data();
-  if (t.status === 'success') {
-    if (!tavupayAmountOk(dep, t.amount, t.fee)) {
-      console.error(`TAVUPAY AMOUNT MISMATCH dep=${doc.id} asked=${dep.amount} reported=${t.amount} fee=${t.fee} -- parked for review, NOT credited`);
-      await withLock('dep:' + doc.id, async () => {
-        const fresh = await doc.ref.get();
-        if (fresh.exists && ['pending', 'initiating'].includes(fresh.data().status))
-          await doc.ref.update({ status: 'review', reviewReason: `TavuPay reports ${t.amount} for a recharge of ${dep.amount}. Check TavuPay; Force-credit only if the right amount was paid.`, tavupayReported: { amount: Number(t.amount) || 0, fee: Number(t.fee) || 0 } });
-      }).catch(() => {});
-      return 'review';
-    }
-    await creditDeposit(doc, source);
-    return 'success';
-  }
-  if (t.status === 'failed') { await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG, `${source || 'tavupay'}: TavuPay said ${t.rawStatus || 'failed'}`); return 'failed'; }
-  return 'pending';
-}
-// The server watches each TavuPay recharge itself from the moment it is accepted and credits it the moment TavuPay says so, like the PesaJet
-// watcher (same settle path: single-writer locked, so a webhook, this watcher, the member's poll and the reconciler can never credit twice).
-// Gentler than PesaJet's: TavuPay publishes no rate limit, so one question every 2 s per payment and at most 20 payments watched. A gateway that
-// will not answer this question at all ends the watch at once (the webhook and the reconciler remain).
-const TAVUPAY_WATCH_EVERY_MS = 2000, TAVUPAY_WATCH_BUDGET_MS = 120000, TAVUPAY_WATCH_MAX = 20;
-const _tavupayWatchers = new Map();
-function tavupayWatcherFresh(depositId, maxAgeMs = 5000) {
-  const last = _tavupayWatchers.get(depositId);
-  return last !== undefined && Date.now() - last < maxAgeMs;
-}
-function watchTavupayDeposit(depositId) {
-  if (!depositId || _tavupayWatchers.has(depositId) || _tavupayWatchers.size >= TAVUPAY_WATCH_MAX) return;
-  _tavupayWatchers.set(depositId, Date.now());
-  (async () => {
-    try {
-      const began = Date.now();
-      let down = 0;
-      while (Date.now() - began < TAVUPAY_WATCH_BUDGET_MS) {
-        const backoff = down ? Math.min(8000, 1000 * 2 ** (down - 1)) * (0.75 + Math.random() * 0.5) : 0;
-        await new Promise(r => setTimeout(r, TAVUPAY_WATCH_EVERY_MS + backoff));
-        const snap = await db.collection('pendingDeposits').doc(depositId).get();
-        if (!snap.exists) return;
-        const dep = snap.data();
-        if (dep.status !== 'pending' && dep.status !== 'initiating') return;
-        if (!dep.tavupayRef) continue;
-        const t = await tavupayGetTx(dep.tavupayRef, { attempts: 1 });
-        _tavupayWatchers.set(depositId, Date.now());
-        if (t.unavailable) return;
-        if (t.providerDown) { down++; continue; }
-        down = 0;
-        if (t.status === 'success' || t.status === 'failed') { await tavupayApply(snap, t, 'server watcher'); return; }
-      }
-    } catch (e) { console.error('TavuPay watcher (' + depositId + '):', e.message); }
-    finally { _tavupayWatchers.delete(depositId); }
-  })();
-}
-// HMAC-SHA256 (hex) of the RAW request body with the API secret. `verified:false` with reason 'mismatch' means a signature WAS sent and is wrong.
-function tavupayVerifyWebhook(headerSig, rawBody) {
-  if (!TAVUPAY_SECRET) return { verified: false, reason: 'no-secret' };
-  const sig = String(headerSig || '').trim().replace(/^sha256=/i, '').toLowerCase();
-  if (!sig) return { verified: false, reason: 'no-signature' };
-  if (!rawBody || !rawBody.length) return { verified: false, reason: 'no-body' };
-  const exp = crypto.createHmac('sha256', TAVUPAY_SECRET).update(rawBody).digest('hex');
-  const a = Buffer.from(exp, 'utf8'), b = Buffer.from(sig, 'utf8');
-  return a.length === b.length && crypto.timingSafeEqual(a, b) ? { verified: true, reason: 'ok' } : { verified: false, reason: 'mismatch' };
-}
-// The webhook shape is documented two ways (flat: event, reference, type, amount, phone, status; and nested under `data` with
-// transactionReference / transactionExternalReference), so every place a reference could be is read and each is tried against our own rows.
-function tavupayWebhookFields(body) {
-  const b = (body && typeof body === 'object') ? body : {};
-  const d = (b.data && typeof b.data === 'object') ? b.data : {};
-  const candidates = [];
-  for (const v of [b.reference, d.reference, d.transactionReference, d.transactionExternalReference, b.transactionReference, b.idempotencyKey, d.idempotencyKey, b.externalReference, d.externalReference]) {
-    const x = String(v == null ? '' : v).trim();
-    if (x && x.length <= 80 && !candidates.includes(x)) candidates.push(x);
-  }
-  const event = String(b.event || '').toLowerCase();
-  let label = '';
-  if (/(^|[._-])(not[._-]?|un)(success|succeeded|completed|paid)/.test(event) || /fail/.test(event)) label = 'failed'; else if (/(success|succeeded|completed|paid)($|[._-])/.test(event)) label = 'success';
-  else label = tavupayStatusLabel({ status: d.transactionStatus || d.status || b.status, success: d.success !== undefined ? d.success : b.success });
-  const type = String(b.type || d.type || '').toLowerCase();
-  const isPayout = event.startsWith('transfer') || /disburs|transfer|withdraw/.test(type) || /DEBIT/i.test(String(d.transactionEntryGeneralType || ''));
-  return { event, candidates, label, isPayout, amount: Number(d.amount !== undefined ? d.amount : b.amount), fee: Number(d.fee !== undefined ? d.fee : b.fee) || 0 };
-}
-async function tavupayFindDeposit(candidates) {
-  for (const c of candidates) {
-    let q = await db.collection('pendingDeposits').where('tavupayRef', '==', c).limit(1).get();
-    if (q.empty) q = await db.collection('pendingDeposits').where('ref', '==', c).limit(1).get();
-    if (!q.empty && q.docs[0].data().provider === 'tavupay') return q.docs[0];
-    if (/^[A-Za-z0-9_-]{8,64}$/.test(c)) {
-      const byId = await db.collection('pendingDeposits').doc(c).get();
-      if (byId.exists && byId.data().provider === 'tavupay') return byId;
-    }
-  }
-  return null;
-}
-async function tavupayWebhookWork(body, verified) {
-  try {
-    const wh = tavupayWebhookFields(body);
-    if (wh.event === 'ping') return;
-    if (wh.isPayout) { await payGwPayoutWebhookWork('tavupay', wh.candidates); return; }
-    const doc = await tavupayFindDeposit(wh.candidates);
-    if (!doc) return;
-    const dep = doc.data();
-    // A recharge already closed as failed (or parked for review) is still settled when the provider says it was PAID: a wrong "failed" must not be final.
-    const reopen = (dep.status === 'failed' || dep.status === 'review') && wh.label === 'success';
-    if (dep.status !== 'pending' && dep.status !== 'initiating' && !reopen) return;
-    // A SIGNED webhook settles the payment by itself; an unsigned or wrongly signed one is only a hint and the payment is re-read.
-    if (verified && (wh.label === 'success' || wh.label === 'failed')) {
-      await tavupayApply(doc, { status: wh.label, amount: wh.amount, fee: wh.fee }, 'TavuPay webhook');
-      return;
-    }
-    if (!dep.tavupayRef) return;
-    const t = await tavupayGetTx(dep.tavupayRef);
-    if (t.providerDown || t.unavailable) return;     // unverifiable: the member's poll and the reconciler retry
-    await tavupayApply(doc, t, 'TavuPay webhook');
-  } catch (e) { console.error('TavuPay webhook error (already acked):', e.message); }
-}
-async function tavupayWebhookOpen(body) {
-  const wh = tavupayWebhookFields(body);
-  if (wh.isPayout) return payGwPayoutWebhookOpen('tavupay', wh.candidates);
-  const doc = await tavupayFindDeposit(wh.candidates);
-  return !!doc && ['pending', 'initiating', 'failed', 'review'].includes(doc.data().status);
-}
-
-// ═══════════════════════════════════════════
-// LWORXPAY and OBPAY (recharges; the Pay-D and Pay-C buttons)
-// ═══════════════════════════════════════════
-// Contracts: "LWORX API" (https://www.lworx-pay.com/api/v1) and the "ObPay API" (https://obpay.online/api/public/v1), both read from the owner's saved
-// copy of their documents (October 2026). This environment cannot reach either host, so nothing here has run against a live gateway. What each
-// document says, and what this code does about it:
-//   LworxPay  * `Authorization: Bearer <key>`; the server's IP may have to be on their whitelist (IP_NOT_ALLOWED), so calls go out over IPv4.
-//             * POST /collect (the default, setting lworxCollect 'standard': the customer pays the amount + 4 %, the wallet gets the full amount) or
-//               POST /collect-stanbic ('stanbic': free, the customer pays exactly the amount; admin toggle) {amount, phone, reference, callback_url,
-//               webhook_secret}. `reference` = our deposit id (unique per attempt).
-//             * Answers success:true + data.transaction_id + status "pending": acceptance is NOT payment. 504 GATEWAY_TIMEOUT means the prompt may
-//               have been sent (we keep the row pending); 503 GATEWAY_UNAVAILABLE is documented as safe to retry (the row is failed, no prompt).
-//             * GET /status?reference= -> data.status pending | completed | failed | cancelled | refunded | pending_approval.
-//             * Webhook payment.success / payment.failed, header X-LworxPay-Signature = HMAC-SHA256 hex of the RAW body with the secret we sent as
-//               `webhook_secret` (LWORXPAY_WEBHOOK_SECRET, or derived from the API key when none is set). A signed call settles by itself; an
-//               unsigned one is a hint and the payment is re-read. 60 calls a minute per key: every status read goes through one pacer.
-//   ObPay     * `Authorization: Bearer sk_live_...`; no IP whitelist.
-//             * POST /collect {amount, currency, phone_number, customer_name, customer_email, reference <= 40 chars, callback_url}. Every refusal
-//               is HTTP 200 with success:false, so `success` is checked, never the status code alone. customer_name and customer_email are required
-//               by ObPay and members have neither: a fixed placeholder name and an address on the reserved .invalid domain are sent.
-//             * prompt_sent:false means the customer must finish on a web page (checkout_url); the app has no such step, so it is failed at once.
-//             * GET /transactions/{reference} re-checks the network live -> status pending | success | failed. Their document says to ALWAYS call it
-//               before delivering goods, even after a callback: so a webhook (header X-ObPay-Signature, HMAC-SHA256 hex of the raw body with the
-//               whsec_ secret) only triggers that read, and the wallet is credited from the READ, never from the webhook alone. 90 calls a minute.
-//   Both      * The wallet is always paid OUR stored amount, and only when the gateway's figure agrees (a different figure parks the row in Needs
-//               Review); a read that cannot be answered is "cannot tell", never a verdict.
-const GW_TIMEOUT = 20000, GW_READ_TIMEOUT = 7000;
-function makePacer(gapMs) { let next = 0; return async () => { const now = Date.now(), at = Math.max(now, next); next = at + gapMs; if (at > now) await new Promise(r => setTimeout(r, at - now)); }; }
-const LWORX_BASE = (process.env.LWORXPAY_BASE_URL || 'https://www.lworx-pay.com/api/v1').replace(/\/+$/, '');
-const LWORX_KEY = (process.env.LWORXPAY_API_KEY || '').trim();
-const LWORX_HOOK_SECRET = (process.env.LWORXPAY_WEBHOOK_SECRET || '').trim() || (LWORX_KEY ? crypto.createHmac('sha256', LWORX_KEY).update('potato-lworxpay-callback').digest('hex') : '');
-const OBPAY_BASE = (process.env.OBPAY_BASE_URL || 'https://obpay.online/api/public/v1').replace(/\/+$/, '');
-const OBPAY_KEY = (process.env.OBPAY_SECRET_KEY || '').trim();
-const OBPAY_HOOK_SECRET = (process.env.OBPAY_WEBHOOK_SECRET || '').trim();
-const _lworxPace = makePacer(Number(process.env.LWORXPAY_READ_GAP_MS) >= 0 && process.env.LWORXPAY_READ_GAP_MS !== undefined ? Number(process.env.LWORXPAY_READ_GAP_MS) : 1300);   // <= 46 reads a minute
-const _obpayPace = makePacer(Number(process.env.OBPAY_READ_GAP_MS) >= 0 && process.env.OBPAY_READ_GAP_MS !== undefined ? Number(process.env.OBPAY_READ_GAP_MS) : 800);      // <= 75 reads a minute
-const GATEWAY_DEFS = {
-  lworxpay: { name: 'LworxPay', base: LWORX_BASE, configured: () => !!LWORX_KEY, headers: () => ({ Authorization: 'Bearer ' + LWORX_KEY }), pace: _lworxPace, callback: () => String(process.env.LWORXPAY_CALLBACK_URL || '').trim(), watchEvery: Number(process.env.GATEWAY_WATCH_MS) || 5000, watchMax: 5 },
-  obpay: { name: 'ObPay', base: OBPAY_BASE, configured: () => !!OBPAY_KEY, headers: () => ({ Authorization: 'Bearer ' + OBPAY_KEY }), pace: _obpayPace, callback: () => String(process.env.OBPAY_CALLBACK_URL || '').trim(), watchEvery: Number(process.env.GATEWAY_WATCH_MS) || 4000, watchMax: 6 },
-};
-const GATEWAY_WATCH_BUDGET_MS = 120000;
-// The error of a reply: LworxPay nests {error:{code,message}}, ObPay sends a plain string.
-function gwError(data) {
-  const e = data && data.error;
-  if (e && typeof e === 'object') return { code: String(e.code || ''), message: typeof e.message === 'string' ? e.message : '' };
-  return { code: '', message: typeof e === 'string' ? e : (typeof (data && data.message) === 'string' ? data.message : '') };
-}
-async function _gwRequest(provider, path, { method = 'GET', body, timeoutMs, paced } = {}) {
-  const g = GATEWAY_DEFS[provider];
-  if (!g.configured()) return { ok: false, providerDown: false, notConfigured: true, httpStatus: 0, data: { message: g.name + ' is not set up on the server yet.' } };
-  if (paced) await g.pace();
-  const headers = Object.assign({ Accept: 'application/json' }, g.headers());
-  let bodyStr;
-  if (body) { bodyStr = JSON.stringify(body); headers['Content-Type'] = 'application/json'; headers['Content-Length'] = Buffer.byteLength(bodyStr); }
-  let r;
-  try { r = await _tavupayHttp(method, g.base + path, headers, bodyStr, timeoutMs || GW_TIMEOUT); }
-  catch (e) { return { ok: false, providerDown: true, httpStatus: 0, data: { message: e.message } }; }
-  let data;
-  try { data = r.text ? JSON.parse(r.text) : {}; } catch (_) { data = { message: String(r.text || '').slice(0, 300) }; }
-  if (!data || typeof data !== 'object') data = { message: String(data) };
-  const good = r.status >= 200 && r.status < 300;
-  const down = !good && (r.status >= 500 || r.status === 408 || r.status === 429);
-  // Both gateways wrap every answer in {success: true|false}; a 2xx with success:false is a refusal, not an acceptance.
-  if (good && data.success === false) return { ok: false, providerDown: false, httpStatus: r.status, data };
-  return { ok: good, providerDown: down, httpStatus: r.status, data };
-}
-// The gateways' words -> the three this file speaks ('success' | 'failed' | 'processing', '' = no word at all).
-const GW_STATUS_WORDS = {
-  lworxpay: { success: ['completed'], failed: ['failed', 'cancelled', 'canceled', 'refunded'], processing: ['pending', 'pending_approval'] },
-  obpay: { success: ['success'], failed: ['failed'], processing: ['pending'] },
-};
-function gwStatusLabel(provider, raw) {
-  const s = String(raw == null ? '' : raw).trim().toLowerCase(), w = GW_STATUS_WORDS[provider];
-  if (!s) return '';
-  if (w.failed.includes(s)) return 'failed';
-  if (w.success.includes(s)) return 'success';
-  return 'processing';
-}
-function lworxPhone(raw) { return pesajetPhone(raw).replace(/^\+/, ''); }
-async function lworxCollect({ amount, phone, reference, callback, mode }) {
-  const payload = { amount: Math.round(Number(amount)), phone: lworxPhone(phone), reference: String(reference) };
-  if (callback && /^https:\/\//i.test(callback)) { payload.callback_url = callback; if (LWORX_HOOK_SECRET) payload.webhook_secret = LWORX_HOOK_SECRET; }
-  return _gwRequest('lworxpay', mode === 'stanbic' ? '/collect-stanbic' : '/collect', { method: 'POST', body: payload });
-}
-async function obpayCollect({ amount, phone, reference, callback, description, name }) {
-  const payload = { amount: Math.round(Number(amount)), currency: 'UGX', phone_number: lworxPhone(phone), customer_name: String(name || 'Member').slice(0, 60), customer_email: 'customer@member.invalid', reference: String(reference).slice(0, 40) };
-  if (callback && /^https:\/\//i.test(callback)) payload.callback_url = callback;
-  if (description) payload.description = String(description).slice(0, 100);
-  return _gwRequest('obpay', '/collect', { method: 'POST', body: payload });
-}
-// Re-read one recharge by OUR reference (the deposit id). `unavailable` = the gateway would not answer this question (so nothing may be
-// concluded); `providerDown` = it is struggling right now.
-async function gatewayGetTx(provider, reference, { attempts = 2 } = {}) {
-  const none = { status: '', rawStatus: '', amount: NaN, fee: 0, providerDown: false, unavailable: false, reference: reference || null };
-  if (!reference) return { ...none, unavailable: true };
-  const path = provider === 'lworxpay' ? '/status?reference=' + encodeURIComponent(reference) : '/transactions/' + encodeURIComponent(reference);
-  let last = null;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    const r = await _gwRequest(provider, path, { timeoutMs: GW_READ_TIMEOUT, paced: true });
-    if (r.ok) {
-      const t = (r.data && typeof r.data.data === 'object' && r.data.data) || {};
-      const raw = String(t.status || '');
-      return { ...none, status: gwStatusLabel(provider, raw), rawStatus: raw, amount: Number(t.amount), fee: Number(provider === 'obpay' ? t.fee_amount : t.fee) || 0 };
-    }
-    if (!r.providerDown) {
-      if (r.httpStatus === 401 || r.httpStatus === 403) console.error(`${GATEWAY_DEFS[provider].name} read refused (HTTP ${r.httpStatus}): ${JSON.stringify(r.data).slice(0, 200)} -- check the key${provider === 'lworxpay' ? ' and that this server\'s IP is on the LworxPay whitelist' : ''}`);
-      return { ...none, unavailable: true, httpStatus: r.httpStatus };
-    }
-    last = r;
-    if (attempt < attempts) await new Promise(r2 => setTimeout(r2, 350));
-  }
-  return { ...none, providerDown: true, httpStatus: last && last.httpStatus };
-}
-// What a MEMBER is told when a gateway refuses to start a payment. Key / whitelist / account problems are the owner's to fix: logged, never shown.
-const GW_OWNER_CODES = new Set(['AUTHENTICATION_FAILED', 'IP_NOT_ALLOWED', 'ACCOUNT_SUSPENDED', 'DEPOSIT_DISABLED', 'DEPOSITS_BLOCKED', 'KYC_REQUIRED', 'RATE_LIMITED']);
-function gatewayUserMsg(provider, r, fallback) {
-  const name = GATEWAY_DEFS[provider].name, e = gwError(r && r.data);
-  if (!r || r.providerDown) return PROVIDER_BUSY_MSG;
-  if (r.notConfigured || r.httpStatus === 401 || r.httpStatus === 403 || r.httpStatus === 429 || GW_OWNER_CODES.has(e.code)) {
-    console.error(`${name} refused the payment request (HTTP ${r.httpStatus || 0}${e.code ? ' ' + e.code : ''}): ${JSON.stringify(r.data || {}).slice(0, 300)} -- check the key, the account and the IP whitelist`);
-    return PROVIDER_BUSY_MSG;
-  }
-  if (e.code === 'INVALID_PHONE') return 'Enter a valid MTN or Airtel number.';
-  if (e.code === 'INVALID_AMOUNT') return 'This amount is below the minimum for this payment method.';
-  const raw = e.message;
-  if (/internal|server error|unavailable|timeout|timed out|try again|temporarily|gateway|api key|secret|whitelist|token/i.test(raw)) return PROVIDER_BUSY_MSG;
-  return (raw && raw.length <= 140 ? raw : '') || fallback || PROVIDER_BUSY_MSG;
-}
-// Settle one recharge from a result {status, amount}. The wallet is paid OUR stored amount, and only when the gateway's figure agrees.
-function gatewayAmountOk(dep, reported) {
-  const got = Number(reported);
-  if (!Number.isFinite(got) || got <= 0) return true;
-  return Math.abs(got - (Number(dep && dep.amount) || 0)) < 0.5;
-}
-async function gatewayApply(provider, doc, t, source) {
-  const name = GATEWAY_DEFS[provider].name, dep = doc.data();
-  if (t.status === 'success') {
-    if (!gatewayAmountOk(dep, t.amount)) {
-      console.error(`${name.toUpperCase()} AMOUNT MISMATCH dep=${doc.id} asked=${dep.amount} reported=${t.amount} -- parked for review, NOT credited`);
-      await withLock('dep:' + doc.id, async () => {
-        const fresh = await doc.ref.get();
-        if (fresh.exists && ['pending', 'initiating'].includes(fresh.data().status))
-          await doc.ref.update({ status: 'review', reviewReason: `${name} reports ${t.amount} for a recharge of ${dep.amount}. Check ${name}; Force-credit only if the right amount was paid.` });
-      }).catch(() => {});
-      return 'review';
-    }
-    await creditDeposit(doc, source);
-    return 'success';
-  }
-  if (t.status === 'failed') { await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG, `${source || name}: ${name} said ${t.rawStatus || 'failed'}`); return 'failed'; }
-  return 'pending';
-}
-// The server watches each of these recharges itself from the moment it is accepted (same settle path as every other gateway: single-writer locked, so
-// a webhook, this watcher, the member's poll and the reconciler can never credit twice). Slow on purpose: both gateways have a per-minute limit.
-const _gatewayWatchers = { lworxpay: new Map(), obpay: new Map() };
-function gatewayWatcherFresh(provider, depositId, maxAgeMs) {
-  const m = _gatewayWatchers[provider]; if (!m) return false;
-  const last = m.get(depositId);
-  return last !== undefined && Date.now() - last < (maxAgeMs || GATEWAY_DEFS[provider].watchEvery * 2 + 2000);
-}
-function watchGatewayDeposit(provider, depositId) {
-  const m = _gatewayWatchers[provider], g = GATEWAY_DEFS[provider];
-  if (!depositId || !m || m.has(depositId) || m.size >= g.watchMax) return;
-  m.set(depositId, Date.now());
-  (async () => {
-    try {
-      const began = Date.now();
-      let down = 0;
-      while (Date.now() - began < GATEWAY_WATCH_BUDGET_MS) {
-        const backoff = down ? Math.min(10000, 1000 * 2 ** (down - 1)) * (0.75 + Math.random() * 0.5) : 0;
-        await new Promise(r => setTimeout(r, g.watchEvery + backoff));
-        const snap = await db.collection('pendingDeposits').doc(depositId).get();
-        if (!snap.exists) return;
-        const dep = snap.data();
-        if (dep.status !== 'pending' && dep.status !== 'initiating') return;
-        if (!dep[provider + 'Ref']) continue;
-        const t = await gatewayGetTx(provider, dep[provider + 'Ref'], { attempts: 1 });
-        m.set(depositId, Date.now());
-        if (t.unavailable) return;
-        if (t.providerDown) { down++; continue; }
-        down = 0;
-        if (t.status === 'success' || t.status === 'failed') { await gatewayApply(provider, snap, t, 'server watcher'); return; }
-      }
-    } catch (e) { console.error(g.name + ' watcher (' + depositId + '):', e.message); }
-    finally { m.delete(depositId); }
-  })();
-}
-// Start one recharge at LworxPay / ObPay. Runs AFTER the member has been answered (the row is already 'initiating').
-async function gatewayCollectStart(provider, { depRef, userId, amt, phone }) {
-  const g = GATEWAY_DEFS[provider];
-  let r;
-  try {
-    r = provider === 'lworxpay'
-      ? await lworxCollect({ amount: amt, phone, reference: depRef.id, callback: g.callback(), mode: (await getSettings()).lworxCollect })
-      : await obpayCollect({ amount: amt, phone, reference: depRef.id, callback: g.callback(), description: 'Deposit', name: brandName(await getSettings()) + ' member' });
-  } catch (netErr) { console.error(g.name + ' collect network error (dep ' + depRef.id + '):', netErr.message); return; }
-  if (!r.ok) {
-    console.error(g.name + ' collect rejected:', r.httpStatus, JSON.stringify(r.data).slice(0, 300));
-    // A gateway that is merely BUSY (5xx, a lost reply) has not refused this payment: it may be live on the phone, so the row stays pending.
-    // LworxPay's 503 GATEWAY_UNAVAILABLE is documented as "safe to retry": nothing was sent, so that one is failed.
-    const clean = !r.providerDown || gwError(r.data).code === 'GATEWAY_UNAVAILABLE';
-    if (clean) await markDepositFailed(depRef, userId, gatewayUserMsg(provider, r.providerDown ? { ...r, providerDown: false, notConfigured: false } : r, 'Could not start the payment'), 'start refused by ' + g.name + ': HTTP ' + r.httpStatus + ' ' + JSON.stringify(r.data || {}).slice(0, 100));
-    return;
-  }
-  const d = (r.data && typeof r.data.data === 'object' && r.data.data) || {};
-  if (provider === 'obpay' && d.prompt_sent === false) {
-    await markDepositFailed(depRef, userId, 'We could not send the payment prompt to your phone. Please try again or choose another payment method.');
-    return;
-  }
-  const txId = String((provider === 'lworxpay' ? d.transaction_id : d.reference) || '').trim() || null;
-  const fields = { [provider + 'Ref']: depRef.id, [provider + 'TxId']: txId, [provider + 'AcceptedAtMs']: Date.now() };
-  await withLock('dep:' + depRef.id, async () => {
-    const fresh = await depRef.get();
-    if (fresh.exists && fresh.data().status === 'initiating') await depRef.update({ status: 'pending', ...fields });
-    else await depRef.update(fields).catch(() => {});
-  });
-  watchGatewayDeposit(provider, depRef.id);
-}
-function gatewayVerifyWebhook(provider, headerSig, rawBody) {
-  const secret = provider === 'lworxpay' ? LWORX_HOOK_SECRET : OBPAY_HOOK_SECRET;
-  if (!secret) return { verified: false, reason: 'no-secret' };
-  const sig = String(headerSig || '').trim().replace(/^sha256=/i, '').toLowerCase();
-  if (!sig) return { verified: false, reason: 'no-signature' };
-  if (!rawBody || !rawBody.length) return { verified: false, reason: 'no-body' };
-  const a = Buffer.from(crypto.createHmac('sha256', secret).update(rawBody).digest('hex'), 'utf8'), b = Buffer.from(sig, 'utf8');
-  return a.length === b.length && crypto.timingSafeEqual(a, b) ? { verified: true, reason: 'ok' } : { verified: false, reason: 'mismatch' };
-}
-// Both gateways send {event, data:{reference, ...}}. Only COLLECTION events are about recharges (payout.* / bill.* are ignored).
-function gatewayWebhookFields(provider, body) {
-  const b = (body && typeof body === 'object') ? body : {}, d = (b.data && typeof b.data === 'object') ? b.data : {};
-  const event = String(b.event || '').toLowerCase();
-  const prefix = provider === 'lworxpay' ? 'payment.' : 'collection.';
-  const isCollection = event.startsWith(prefix);
-  const isPayout = event.startsWith('payout.');
-  let label = '';
-  if (/success$/.test(event)) label = 'success'; else if (/failed$/.test(event)) label = 'failed';
-  const refs = [];
-  for (const v of [d.reference, d.merchant_reference, b.reference]) { const x = String(v == null ? '' : v).trim(); if (x && x.length <= 80 && !refs.includes(x)) refs.push(x); }
-  return { event, isCollection, isPayout, label, refs, txId: String(d.transaction_id || '').trim(), amount: Number(d.amount) };
-}
-async function gatewayFindDeposit(provider, wh) {
-  for (const c of wh.refs) {
-    if (/^[A-Za-z0-9_-]{8,64}$/.test(c)) {
-      const byId = await db.collection('pendingDeposits').doc(c).get();
-      if (byId.exists && byId.data().provider === provider) return byId;
-    }
-  }
-  if (wh.txId) {
-    const q = await db.collection('pendingDeposits').where(provider + 'TxId', '==', wh.txId).limit(1).get();
-    if (!q.empty && q.docs[0].data().provider === provider) return q.docs[0];
-  }
-  return null;
-}
-async function gatewayWebhookWork(provider, body, verified) {
-  try {
-    const wh = gatewayWebhookFields(provider, body);
-    if (wh.isPayout) { await payGwPayoutWebhookWork(provider, wh.refs.concat(wh.txId ? [wh.txId] : [])); return; }
-    if (!wh.isCollection) return;
-    const doc = await gatewayFindDeposit(provider, wh);
-    if (!doc) return;
-    const dep = doc.data();
-    const reopen = (dep.status === 'failed' || dep.status === 'review') && wh.label === 'success';   // a wrong "failed" must not be final
-    if (dep.status !== 'pending' && dep.status !== 'initiating' && !reopen) return;
-    // LworxPay: a SIGNED call settles by itself. ObPay: its own document says to read the transaction before delivering anything, even after a
-    // callback, so for ObPay the webhook only triggers that read. An unsigned LworxPay call is a hint and is re-read too.
-    if (provider === 'lworxpay' && verified && (wh.label === 'success' || wh.label === 'failed')) {
-      await gatewayApply(provider, doc, { status: wh.label, amount: wh.amount }, 'LworxPay webhook');
-      return;
-    }
-    const t = await gatewayGetTx(provider, doc.id);
-    if (t.providerDown || t.unavailable) return;       // unverifiable: the watcher, the member's poll and the reconciler retry
-    await gatewayApply(provider, doc, t, GATEWAY_DEFS[provider].name + ' webhook');
-  } catch (e) { console.error(GATEWAY_DEFS[provider].name + ' webhook error (already acked):', e.message); }
-}
-async function gatewayWebhookOpen(provider, body) {
-  const wh0 = gatewayWebhookFields(provider, body);
-  if (wh0.isPayout) return payGwPayoutWebhookOpen(provider, wh0.refs.concat(wh0.txId ? [wh0.txId] : []));
-  const doc = await gatewayFindDeposit(provider, gatewayWebhookFields(provider, body));
-  return !!doc && ['pending', 'initiating', 'failed', 'review'].includes(doc.data().status);
 }
 
 // ── DAILY CASHBACK AT 00:00 (settle-on-read + a 1s background sweep) ──
@@ -3718,7 +2381,7 @@ app.get('/health', async (_req, res) => {
 // a human running the same three commands over SSH every time.
 //
 // Authenticated the same way GitHub's own docs recommend, and the same
-// pattern PesaJet's webhook above already uses in this file: HMAC-SHA256
+// pattern GitHub's own docs recommend: HMAC-SHA256
 // over the RAW request body (see RAW_BODY_ROUTES / keepRawBody), checked
 // with a constant-time compare. Nothing from the request is ever
 // interpolated into a shell command either -- every command below is a
@@ -3828,7 +2491,7 @@ app.get('/public/settings', async (req, res) => {
     // automatic cap), the payment-rail choice, the reference prefix and the host policy.
     const rest = {};
     for (const k of Object.keys(rest0)) {
-      if (/^autoApprove/.test(k) || ['depositMethod', 'depositGateways', 'lworxCollect', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain', 'linkPreviewTitle', 'linkPreviewText'].includes(k)) continue;
+      if (['referencePrefix', 'parkedHosts', 'baseDomain', 'linkPreviewTitle', 'linkPreviewText'].includes(k)) continue;
       rest[k] = rest0[k];
     }
     // Revalidated every time (no max-age): maintenance mode, the opening
@@ -3840,18 +2503,8 @@ app.get('/public/settings', async (req, res) => {
       ...rest,
       maintenanceMsg: s.maintenanceMode ? maintenanceMsg : '',
       shareDomain: SHARE_DOMAIN,
-      payoutManual: payoutIsManual(s),
-      // RESOLVED, not a raw setting: deposits are only real if a gateway can
-      // actually reach this country's phone numbers. Sending an unresolved
-      // flag would show a Kenyan member a recharge option that fails at the
-      // provider every time -- the app reads this field directly
-      // (`s.depositAvailable !== false`), so resolving it here is what hides
-      // deposits rather than asking the app to know about gateways. (Named
-      // depositPayAEnabled before manual deposit collection -- PAY B -- was
-      // removed outright; renamed since "PAY A" no longer means anything
-      // once there is no PAY B to contrast it with.)
       manualPay: manualPayOn,
-      depositAvailable: manualPayOn || payAAvailable(s),
+      depositAvailable: manualPayOn,
     // How many countries this platform runs in. The app only uses it to add
     // "if you signed up on another country's site, sign in there" to a
     // failed login -- an account belongs to one region and its synthetic
@@ -4263,7 +2916,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
       // working". Two regions sharing a currency have no arithmetic problem,
       // which is the only thing this rule was ever protecting.
       if (String(refDoc.data().regionKey || DEFAULT_REGION_KEY) !== DEFAULT_REGION_KEY)
-        return refuse({ code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'This referral code is unavailable. Ask for a Uganda referral code.' } });
+        return refuse({ code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'This referral code is unavailable. Ask for an Ethiopia referral code.' } });
       referrerId = refDoc.id;
     }
 
@@ -4574,272 +3227,8 @@ app.get('/investments', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// DEPOSIT (MarzPay collect-money)
+// DEPOSIT (the manual bank / Telebirr recharge is further down; this part only credits)
 // ═══════════════════════════════════════════
-// Which pay button is selected when a member opens the Deposit page: NOT fixed, the server hands the buttons out in turn (one counter for every
-// member and every visit), so over time every method is offered, and so used, equally. The app asks ahead of time (one call per visit, the answer is
-// kept for the NEXT visit), so opening the page never waits for it. The member can still tap any button.
-let _depositRotation = Math.floor(Math.random() * 6);
-app.get('/deposit/start', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  const sett = await getSettings();
-  const count = String(sett.depositMethodNames || '').split(',').map(x => x.trim()).filter(Boolean).length || 1;
-  _depositRotation = (_depositRotation + 1) % 1000000;
-  res.json({ status: 'success', start: _depositRotation % count });
-});
-const _depCreateDebounce = new Map();
-app.post('/deposit/marzpay', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  const amt = paymentAmount(req.body.amount);
-  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
-  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
-  try {
-    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
-    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before topping up.' });
-    const provider = depositProviderForSlot(sett, req.body.slot);
-    if (!DEPOSIT_GATEWAYS_READY.has(provider))
-      return res.status(400).json({ status: 'error', code: 'GATEWAY_SOON', message: 'This payment method is not available right now. Please choose another one.' });
-    // The gateway has to be able to reach THIS country's phone numbers. Every
-    // automatic gateway here is Uganda-only (see GATEWAY_DIAL_CODES), and a
-    // new region inherits Uganda's settings, so without this a Kenyan deposit
-    // is created and handed to MarzPay with a +254 number. Refused BEFORE any
-    // pendingDeposit is written and before the debounce and abuse counters, so
-    // a misconfiguration cannot leave rows behind or ban anybody. The message
-    // names the country, because the person who has to fix this is the admin.
-    if (!gatewayServesRegion(provider, currentRegion())) {
-      return res.status(400).json({
-        status: 'error', code: 'GATEWAY_REGION',
-        message: 'Automatic recharge is not available in ' + (currentRegion().name || 'this country') + ' yet.',
-      });
-    }
-
-    // Validate BEFORE touching the debounce/abuse-attempt counters below --
-    // a below-minimum amount or a missing phone number must never consume a
-    // debounce slot or count toward the auto-ban threshold. Before this fix
-    // EVERY call reached those counters first regardless of outcome, so a
-    // member who simply typed too little then immediately retried with the
-    // real minimum hit a false "already being processed" (the failed
-    // attempt had already claimed the debounce window on a deposit that was
-    // never actually created), and a couple more retries after that could
-    // rack up enough recorded "attempts" to trip the 5-in-a-minute auto-ban
-    // -- getting suspended for nothing more than fumbling the minimum
-    // amount. Owner: "when you try to deposit with little amount, it says
-    // minimum deposit is 30k, when you try again deposit with that very
-    // minimum amount, it says deposit is already being processed!!, when
-    // you try again once more it says account suspended."
-    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
-    const _ph = depositSenderPhone(req.body, uSnap.data().phone, ['phone']);
-    if (_ph.error) return res.status(400).json({ status: 'error', message: _ph.error });
-    const phone = _ph.phone;
-
-    // subagent-audit-caught: the debounce check must run BEFORE
-    // recordDepositAttempt() too, not just the amount/phone validation
-    // above -- otherwise a request that's rejected ONLY by the 7s debounce
-    // (nothing wrong with it, just too soon after the last one) still
-    // counted as an "attempt" toward the 5-in-a-minute auto-ban, leaving
-    // the exact false-ban chain this function's own comment above claims
-    // to have closed still reachable through the debounce path alone: one
-    // real deposit that's slow to confirm, followed by a few impatient
-    // resubmits that each get bounced by the debounce, could still add up
-    // to 5 recorded "attempts" and trip the ban.
-    const lastDep = _depCreateDebounce.get(userId) || 0;
-    if (Date.now() - lastDep < 7000)
-      return res.status(429).json({ status: 'error', message: 'A recharge is already being processed. Please wait a moment.' });
-
-    // Too many attempts in a minute with none completed: slow the member down, never ban them. A member whose payments keep failing (a wrong
-    // number, the gateway down, a provider that refuses) used to be banned by this on the fifth tap.
-    const attemptCount = recordDepositAttempt(userId);
-    if (attemptCount >= 5 && !depositSucceededRecently(userId)) {
-      logSecurityEvent(userId, 'deposit_attempts', { count: attemptCount });
-      return res.status(429).json({ status: 'error', message: 'Too many deposit attempts. Please wait a minute and try again.' });
-    }
-    _depCreateDebounce.set(userId, Date.now());
-
-    const ref = await uniqueRef(await mobileMoneyRefPrefix());
-    const marzReference = crypto.randomUUID();
-    const { date, time } = nowStr();
-    const depRef = db.collection('pendingDeposits').doc();
-    const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
-    await depRef.set({
-      userId, phone, network, amount: amt, ref, marzReference, status: 'initiating', provider,
-      // Which country's money this is, stamped once so the admin lists can
-      // label the figure correctly without a user lookup per row.
-      regionKey: currentRegionKey(),
-      date, time, createdAt: FieldValue.serverTimestamp()
-    });
-    // ANSWER FIRST. Owner: "sometimes a prompt may come when the screen is
-    // just redirecting to payment page, so it is slow to redirect."
-    //
-    // The member is staring at "Redirecting to payment..." until this line
-    // runs, and everything before it is a round trip to Atlas they are paying
-    // for. The only write the next screen actually needs is the pendingDeposits
-    // doc, which is already written above -- the ledger row below is
-    // bookkeeping for the Records screen, which nobody is looking at in this
-    // second, and creditDeposit()'s own find-or-create covers it if it fails.
-    // Moving it after the response took a whole Mongo round trip out of the
-    // redirect.
-    res.json({ status: 'success', depositId: depRef.id, reference: ref, message: 'Payment initiated. Check your phone.' });
-    // The Records row. Written AFTER the response now (see the note above)
-    // -- still awaited, so the provider call below cannot race ahead of it,
-    // just no longer in front of the member's redirect.
-    // Owner: "deposits are not recorded why" -- withdrawals have always
-    // shown up in Records immediately, as "Processing", the instant they're
-    // requested; deposits used to only get a ledger row once fully
-    // credited, so anything still pending (or that failed at the provider)
-    // was invisible the whole time. Mirrors withdrawal's own
-    // create-now/finalize-later row exactly, keyed on depositId instead of
-    // withdrawalId. Awaited (unlike a fire-and-forget write) so the row is
-    // guaranteed to exist by the time the response reaches the client and
-    // Records is checked -- "recorded immediately" has to mean immediately,
-    // not "eventually, if a later read happens to lose the race." No
-    // compensating rollback needed if this write itself fails (unlike
-    // withdrawal, no money has moved yet at this point) --
-    // creditDeposit()'s own find-or-create step below covers that case.
-    await db.collection('transactions').add({
-      // displayAmount is a separate, never-zeroed copy of the real amount --
-      // markDepositFailed() zeroes `amount` itself (see its own comment) so
-      // the walletBalance/totalDeposited integrity math stays honest, but
-      // Records' own amount column reads THIS field so a failed deposit
-      // still shows what was actually attempted instead of "+UGX 0".
-      userId, statementId: newStatementId(), type: 'deposit', description: `Deposit: Processing (${fmtMoney(amt)})`,
-      amount: amt, displayAmount: amt, status: 'pending', date, time, ref, depositId: depRef.id, createdAt: FieldValue.serverTimestamp()
-    }).catch(e => console.error(`Deposit ledger row create failed for dep=${depRef.id}:`, e.message));
-
-    if (provider === 'pesajet') {
-      // PesaJet branch -- same "claim as pending, let the webhook / the
-      // member's own poll / the reconciler resolve it" shape as the two
-      // below. The IDEMPOTENCY ANCHOR is the deposit's own doc id: a genuine
-      // retry of this same deposit sends the identical Idempotency-Key, so
-      // PesaJet's own de-duplication is what prevents a second prompt, not a
-      // loop in here. `reference` is our human-readable ref, which is what
-      // comes back on the webhook and lets a row be found without trusting
-      // any id the caller supplied.
-      let pj;
-      try {
-        pj = await pesajetCollect({
-          amount: amt, phone, network, reference: ref, description: 'Mobile Money',
-          idempotencyKey: depRef.id,
-        });
-      } catch (netErr) {
-        // Unreachable in practice (_pesajetRequest never throws), kept so a
-        // future change to it cannot turn an exception into an unhandled
-        // rejection on a money path.
-        console.error('PesaJet collect network error (dep ' + depRef.id + '):', netErr.message);
-        return;
-      }
-      if (!pj.ok) {
-        console.error('PesaJet collect rejected:', pj.httpStatus, JSON.stringify(pj.data).slice(0, 300));
-        // A gateway that is merely BUSY has not refused this payment. Failing
-        // the deposit here would tell a member their recharge failed when
-        // PesaJet may never have seen it -- leave it pending for the
-        // reconciler, exactly as the network-error path above does.
-        if (!pj.providerDown) await markDepositFailed(depRef, userId, pesajetUserMsg(pj, 'Could not start the payment'));
-        return;
-      }
-      const tx = pj.data?.data || pj.data || {};
-      const pesajetTxId = tx.transactionId || null;
-      // Same claim-race protection as the other two branches: a webhook that
-      // raced ahead and already credited this exact deposit must never be
-      // reverted to 'pending' by this later write.
-      await withLock('dep:' + depRef.id, async () => {
-        const fresh = await depRef.get();
-        if (fresh.exists && fresh.data().status === 'initiating') {
-          await depRef.update({ status: 'pending', pesajetTxId, pesajetAcceptedAtMs: Date.now() });
-        } else {
-          await depRef.update({ pesajetTxId, pesajetAcceptedAtMs: Date.now() }).catch(() => {});
-        }
-      });
-      if (pesajetTxId) watchPesajetDeposit(depRef.id);   // credit the moment PesaJet confirms (see the note at watchPesajetDeposit)
-      return;
-    }
-
-    if (provider === 'tavupay') {
-      // TavuPay branch -- same claim-as-pending shape as PesaJet. The deposit's own id is the idempotency key, so a genuine retry cannot raise a
-      // second prompt; our `ref` rides in the description so the payment can be recognised on the gateway's side. Nothing is credited here:
-      // the signed webhook, the watcher, the member's poll or the reconciler settle it.
-      let tv;
-      try {
-        tv = await tavupayCollect({
-          amount: amt, phone, description: 'Deposit ' + ref, idempotencyKey: depRef.id,
-          callback: tavupayHookUrl() || undefined,
-        });
-      } catch (netErr) {
-        console.error('TavuPay collect network error (dep ' + depRef.id + '):', netErr.message);
-        return;
-      }
-      if (!tv.ok) {
-        console.error('TavuPay collect rejected:', tv.httpStatus, JSON.stringify(tv.data).slice(0, 300));
-        // A gateway that is merely BUSY has not refused this payment: leave the row pending rather than tell a member it failed.
-        if (!tv.providerDown) await markDepositFailed(depRef, userId, tavupayUserMsg(tv, 'Could not start the payment'), 'start refused by TavuPay: HTTP ' + tv.httpStatus + ' ' + JSON.stringify(tv.data || {}).slice(0, 100));
-        return;
-      }
-      const tavupayRef = String((tv.data && (tv.data.reference || (tv.data.data && tv.data.data.reference))) || '').trim() || null;
-      await withLock('dep:' + depRef.id, async () => {
-        const fresh = await depRef.get();
-        if (fresh.exists && fresh.data().status === 'initiating') {
-          await depRef.update({ status: 'pending', tavupayRef, tavupayAcceptedAtMs: Date.now() });
-        } else {
-          await depRef.update({ tavupayRef, tavupayAcceptedAtMs: Date.now() }).catch(() => {});
-        }
-      });
-      if (tavupayRef) watchTavupayDeposit(depRef.id);
-      else console.error('TavuPay accepted dep ' + depRef.id + ' but sent no reference: only the webhook can settle it');
-      return;
-    }
-
-    if (provider === 'lworxpay' || provider === 'obpay') {
-      // LworxPay / ObPay -- same claim-as-pending shape as TavuPay: the deposit id is the reference, nothing is credited here, the signed webhook,
-      // the watcher, the member's poll or the reconciler settle it. See the module note above gatewayCollectStart.
-      await gatewayCollectStart(provider, { depRef, userId, amt, phone });
-      return;
-    }
-
-    let mpData;
-    try {
-      mpData = await marzCollect({
-        amount: amt, phone, reference: marzReference, description: 'Mobile Money',
-        callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined
-      });
-    } catch (netErr) {
-      console.error('MarzPay collect-money network error (ref ' + ref + '):', netErr.message);
-      return;
-    }
-    if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
-      console.error('MarzPay collect-money rejected:', JSON.stringify(mpData));
-      // A gateway that is merely BUSY (5xx, timeout, bad reply) has not refused this payment: it may already be live on the member's phone.
-      // Failing the row would hide a payment that then goes through; leave it for the reconciler, as the network-error path above does.
-      if (!mpData.providerDown) await markDepositFailed(depRef, userId, marzUserMsg(mpData, 'Could not start the payment'));
-      return;
-    }
-    const marzTxUuid = mpData.data?.transaction?.uuid || null;
-    // subagent-audit-caught: this used to overwrite `status` unconditionally
-    // -- if a webhook raced ahead (via the webhookUuid fallback path, see
-    // /deposit/callback) and already credited this exact deposit
-    // (status:'matched') before this write landed, it would silently revert
-    // status back to 'pending'. The next poll/reconciler check would then
-    // see an uncredited-looking deposit and call creditDeposit() again,
-    // crediting the wallet a second time. Locked + re-checked the same way
-    // creditDeposit()/markDepositFailed() claim before acting, so whichever
-    // outcome (credited vs. this "still initiating, now pending") lands
-    // first wins permanently.
-    await withLock('dep:' + depRef.id, async () => {
-      const fresh = await depRef.get();
-      if (fresh.exists && fresh.data().status === 'initiating') {
-        await depRef.update({ status: 'pending', marzTxUuid });
-      } else {
-        await depRef.update({ marzTxUuid }).catch(() => {});
-      }
-    });
-  } catch (e) {
-    console.error('Deposit error:', e.message);
-    if (!res.headersSent) res.status(500).json({ status: 'error', message: PROVIDER_BUSY_MSG });
-  }
-});
 const _creditingDeposits = new Set();
 // A deposit is only genuinely DONE once the wallet was actually credited --
 // status alone reaching 'matched' is not enough, because CLAIM-BEFORE-CREDIT
@@ -4850,14 +3239,13 @@ const _creditingDeposits = new Set();
 // /admin/deposit/force-credit's own guard, both short-circuited on status
 // alone and never retried the actual credit.
 function depositFullyCredited(d) { return d.status === 'matched' && !d.needsManualCredit; }
-// Credited from a gateway webhook, a status poll, a forwarded SMS or an
+// Credited from an approved manual order, a forwarded SMS or an
 // admin's hand -- most of which arrive with no region of their own. The
 // description stamped on the member's ledger row carries the amount, so it
 // is written in the DEPOSITOR's currency.
 async function creditDeposit(depDoc, source) {
   const userId = depDoc && depDoc.data() && depDoc.data().userId;
   const credited = await _creditDepositNow(depDoc, source);
-  if (typeof _notifyDeposit === 'function') _notifyDeposit(depDoc.id);   // wake a held status request (see waitDepositSettled)
   // Only a deposit made under the old rule (first-deposit reward, `commissionBasis: 'deposit'`) can still owe a commission; every newer deposit
   // pays nothing, so the extra database read is skipped.
   if (credited && depDoc && depDoc.data() && depDoc.data().commissionBasis === 'deposit') await creditDepositReferralCommission(depDoc.id, userId).catch(e => console.error('Deposit commission error:', e.message));
@@ -5014,11 +3402,10 @@ async function _creditDepositNow(depDoc, source) {
     // retried webhook/poll must never fire a duplicate push for the same money.
     if (justCredited) {
       markDepositAttemptSucceeded(dep.userId);
-      // One timing line per real credit, so the pm2 log shows where any delay is: how long after the member submitted it, how long after the
-      // gateway accepted it, and which path (webhook / server watcher / the member's poll / the reconciler) got there first.
+      // One timing line per real credit, so the pm2 log shows how long after the member submitted it the money landed.
       try {
-        const made = tsMillis(dep.createdAt), acc = Number(dep.pesajetAcceptedAtMs) || 0;
-        console.log(`Deposit ${dep.ref || depDoc.id} (${dep.provider || '?'}) credited` + (made ? ` ${((Date.now() - made) / 1000).toFixed(1)}s after it was submitted` : '') + (acc ? `, ${((Date.now() - acc) / 1000).toFixed(1)}s after PesaJet accepted it` : '') + ` -- confirmed by: ${source || 'other'}`);
+        const made = tsMillis(dep.createdAt);
+        console.log(`Deposit ${dep.ref || depDoc.id} (${dep.provider || 'manual'}) credited` + (made ? ` ${((Date.now() - made) / 1000).toFixed(1)}s after it was submitted` : ''));
       } catch (_) {}
       // Names the member so the alert is useful on a lock screen; the lookup is
       // best-effort and never delays or blocks the credit that already happened.
@@ -5031,203 +3418,8 @@ async function _creditDepositNow(depDoc, source) {
   } finally { _creditingDeposits.delete(depDoc.id); }
 }
 
-app.post('/deposit/marzpay/status', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    let depSnap = await db.collection('pendingDeposits').doc(String(req.body.depositId || '')).get();
-    if (!depSnap.exists || depSnap.data().userId !== userId)
-      return res.status(404).json({ status: 'error', message: 'Recharge not found' });
-    let dep = depSnap.data();
-    // The app's autopoll asks us to HOLD the answer (waitMs) while the server's own watcher is on this PesaJet payment, so the member is told the
-    // moment it settles rather than at the phone's next tick. Never for the Verify button (no waitMs) and never longer than 9 s.
-    const holdMs = Math.min(Math.max(parseInt(req.body.waitMs, 10) || 0, 0), 9000);
-    if (holdMs > 0 && dep.provider === 'pesajet' && (dep.status === 'pending' || dep.status === 'initiating') && pesajetWatcherFresh(depSnap.id)) {
-      await waitDepositSettled(depSnap.id, holdMs);
-      depSnap = await db.collection('pendingDeposits').doc(depSnap.id).get();
-      if (!depSnap.exists) return res.status(404).json({ status: 'error', message: 'Recharge not found' });
-      dep = depSnap.data();
-    }
-    // The same hold for a TavuPay recharge that the server's own watcher is on.
-    if (holdMs > 0 && dep.provider === 'tavupay' && (dep.status === 'pending' || dep.status === 'initiating') && tavupayWatcherFresh(depSnap.id)) {
-      await waitDepositSettled(depSnap.id, holdMs);
-      depSnap = await db.collection('pendingDeposits').doc(depSnap.id).get();
-      if (!depSnap.exists) return res.status(404).json({ status: 'error', message: 'Recharge not found' });
-      dep = depSnap.data();
-    }
-    // The same hold for a LworxPay / ObPay recharge that the server's own watcher is on.
-    if (holdMs > 0 && GATEWAY_DEFS[dep.provider] && (dep.status === 'pending' || dep.status === 'initiating') && gatewayWatcherFresh(dep.provider, depSnap.id)) {
-      await waitDepositSettled(depSnap.id, holdMs);
-      depSnap = await db.collection('pendingDeposits').doc(depSnap.id).get();
-      if (!depSnap.exists) return res.status(404).json({ status: 'error', message: 'Recharge not found' });
-      dep = depSnap.data();
-    }
-    if (dep.status === 'matched') {
-      // Best-effort self-heal: if a prior credit attempt got the status to
-      // 'matched' but failed to actually pay the wallet (needsManualCredit),
-      // retry it here so the user's own poll loop -- which normally stops
-      // the instant it sees 'matched' -- has a real chance to fix this
-      // without needing an admin to notice first. Never let a retry failure
-      // here turn into an error response; the deposit did genuinely match
-      // at the gateway, the periodic reconciler keeps retrying regardless.
-      if (dep.needsManualCredit) await creditDeposit(depSnap).catch(() => {});
-      return res.json({ status: 'success', state: 'matched' });
-    }
-    if (dep.status === 'failed')  return res.json({ status: 'success', state: 'failed', message: dep.failureReason });
-    // PesaJet: the same self-healing re-check MarzPay's own branch below does,
-    // so a
-    // slow or lost webhook resolves the moment the member looks at the status
-    // screen. Its webhook URL is dashboard-configured rather than sent per
-    // request (see the module note), so this poll is doing more of the work
-    // here than it does for the other two gateways -- not less.
-    if (dep.provider === 'tavupay') {
-      if (!dep.tavupayRef) return res.json({ status: 'success', state: 'pending' });
-      if (tavupayWatcherFresh(depSnap.id)) return res.json({ status: 'success', state: 'pending' });
-      const t = await tavupayGetTx(dep.tavupayRef, { attempts: 1 });
-      if (t.providerDown || t.unavailable) return res.json({ status: 'success', state: 'pending' });
-      if (t.status === 'success' || t.status === 'failed') {
-        const out = await tavupayApply(depSnap, t, "member's poll");
-        if (out === 'success') return res.json({ status: 'success', state: 'matched' });
-        if (out === 'failed') {
-          const again = await db.collection('pendingDeposits').doc(depSnap.id).get();
-          if (again.exists && again.data().status === 'matched') return res.json({ status: 'success', state: 'matched' });
-          return res.json({ status: 'success', state: 'failed', message: DEPOSIT_FAILED_MSG });
-        }
-      }
-      return res.json({ status: 'success', state: 'pending' });
-    }
-    if (GATEWAY_DEFS[dep.provider]) {
-      const gp = dep.provider;
-      if (!dep[gp + 'Ref']) return res.json({ status: 'success', state: 'pending' });
-      if (gatewayWatcherFresh(gp, depSnap.id)) return res.json({ status: 'success', state: 'pending' });
-      const t = await gatewayGetTx(gp, dep[gp + 'Ref'], { attempts: 1 });
-      if (t.providerDown || t.unavailable) return res.json({ status: 'success', state: 'pending' });
-      if (t.status === 'success' || t.status === 'failed') {
-        const out = await gatewayApply(gp, depSnap, t, "member's poll");
-        if (out === 'success') return res.json({ status: 'success', state: 'matched' });
-        if (out === 'failed') {
-          const again = await db.collection('pendingDeposits').doc(depSnap.id).get();
-          if (again.exists && again.data().status === 'matched') return res.json({ status: 'success', state: 'matched' });
-          return res.json({ status: 'success', state: 'failed', message: DEPOSIT_FAILED_MSG });
-        }
-      }
-      return res.json({ status: 'success', state: 'pending' });
-    }
-    if (dep.provider === 'pesajet') {
-      if (!dep.pesajetTxId) return res.json({ status: 'success', state: 'pending' });
-      // The server's own watcher is already asking PesaJet every second: this poll only reports what the database says (already read above).
-      if (pesajetWatcherFresh(depSnap.id)) return res.json({ status: 'success', state: 'pending' });
-      // One attempt: a member is watching this, and their next poll is 2.5s
-      // away and is itself the retry.
-      const t = await pesajetGetTx(dep.pesajetTxId, { attempts: 1 });
-      if (t.providerDown) return res.json({ status: 'success', state: 'pending' });
-      const realStatus = pesajetStatusLabel(t.status);
-      if (realStatus === 'success') { await creditDeposit(depSnap, "member's poll"); return res.json({ status: 'success', state: 'matched' }); }
-      if (realStatus === 'failed') {
-        const msg = pesajetFailureMsg(t.status);
-        const reallyFailed = await markDepositFailed(depSnap.ref, userId, msg);
-        if (!reallyFailed) return res.json({ status: 'success', state: 'matched' });
-        return res.json({ status: 'success', state: 'failed', message: msg });
-      }
-      return res.json({ status: 'success', state: 'pending' });
-    }
-    if (!dep.marzTxUuid) return res.json({ status: 'success', state: 'pending' });
-    const marzTx = await marzGetCollectTx(dep.marzTxUuid, { fast: true });
-    if (SUCCESS_STATUSES.has(marzTx.status)) { await creditDeposit(depSnap, "member's poll"); return res.json({ status: 'success', state: 'matched' }); }
-    if (FAILED_STATUSES.has(marzTx.status)) {
-      // Own test-caught bug: markDepositFailed() can now correctly no-op
-      // (returns false) when this exact deposit was already credited by a
-      // DIFFERENT in-flight check that won the race -- reporting "failed"
-      // here regardless, as this used to, would show a member "Deposit
-      // failed" for money that genuinely landed moments earlier. Report
-      // what actually happened instead.
-      const failMsg = marzDepositFailureMsg(marzTx);
-      const reallyFailed = await markDepositFailed(depSnap.ref, userId, failMsg);
-      if (!reallyFailed) return res.json({ status: 'success', state: 'matched' });
-      return res.json({ status: 'success', state: 'failed', message: failMsg });
-    }
-    res.json({ status: 'success', state: 'pending' });
-  } catch (e) {
-    console.error('Deposit status error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not check payment status' });
-  }
-});
-// ── MARZPAY DEPOSIT WEBHOOK ──
-// MarzPay webhook. Never trusts the claimed status alone — crediting only
-// ever happens after an independent live re-check confirms it, and a uuid
-// this endpoint didn't itself capture is only trusted once that check's own
-// reported `reference` is confirmed to match this exact deposit.
-// A callback is answered 200 at once (the gateway must not wait), and the work then runs after the answer. If that first pass cannot confirm what the
-// callback claims (the gateway's own status read still lags its webhook, the row's gateway id is not stored yet, a read failed) the gateway will NOT
-// retry, because it was told 200: the payment would wait for the 30 s sweep. So when a callback claims a FINAL status and the row is still open after the
-// first pass, the same work is repeated 1, 3, 8 and 20 seconds later (every pass is idempotent: it only acts on a row that is still pending).
-function retryCallbackWork(label, work, stillOpen, claimsFinal) {
-  if (!claimsFinal) return;
-  const delays = [1000, 3000, 8000, 20000]; let i = 0;
-  const next = () => {
-    if (i >= delays.length) return;
-    setTimeout(async () => {
-      try { await work(); if (await stillOpen()) next(); } catch (e) { console.error(label + ' retry error:', e.message); }
-    }, delays[i++]);
-  };
-  stillOpen().then(open => { if (open) next(); }).catch(() => {});
-}
-function marzCallbackRawStatus(body) {
-  let st = String(body.data?.transaction?.status || body.transaction?.status || body.data?.status || body.status || '').toLowerCase();
-  if (!st) st = marzEventTypeFallback(body.event_type);
-  return st;
-}
-async function marzDepositCallbackWork(body) {
-  try {
-    const reference = body.data?.reference || body.reference || body.data?.transaction?.reference || body.transaction?.reference;
-    if (!reference) return;
-    const rawStatus = marzCallbackRawStatus(body);
-    const isSuccess = SUCCESS_STATUSES.has(rawStatus);
-    const isFailed  = FAILED_STATUSES.has(rawStatus);
-    if (!isSuccess && !isFailed) return;
-    const depSnap = await db.collection('pendingDeposits').where('marzReference', '==', reference).limit(1).get();
-    if (depSnap.empty) return;
-    const doc = depSnap.docs[0];
-    const dep = doc.data();
-    if (dep.status !== 'pending' && dep.status !== 'initiating') return;
-    const webhookUuid = body.data?.transaction?.uuid || body.transaction?.uuid || body.data?.uuid || null;
-    let uuid = dep.marzTxUuid;
-    let tx = null;
-    if (uuid) {
-      tx = await marzGetCollectTx(uuid);
-    } else if (webhookUuid) {
-      const candidate = await marzGetCollectTx(webhookUuid);
-      if (candidate.reference && candidate.reference === dep.marzReference) {
-        uuid = webhookUuid; tx = candidate;
-        doc.ref.update({ marzTxUuid: uuid }).catch(() => {});
-      }
-    }
-    if (!uuid || !tx) return;
-    if (isSuccess) {
-      if (!SUCCESS_STATUSES.has(tx.status)) return;
-      await creditDeposit(doc, 'MarzPay callback');
-    } else if (isFailed) {
-      if (!FAILED_STATUSES.has(tx.status)) return;
-      await markDepositFailed(doc.ref, dep.userId, marzDepositFailureMsg(tx));
-    }
-  } catch (e) { console.error('Deposit callback error:', e.message); }
-}
-async function marzDepositCallbackOpen(body) {
-  const reference = body.data?.reference || body.reference || body.data?.transaction?.reference || body.transaction?.reference;
-  if (!reference) return false;
-  const q = await db.collection('pendingDeposits').where('marzReference', '==', reference).limit(1).get();
-  return !q.empty && ['pending', 'initiating'].includes(q.docs[0].data().status);
-}
-app.post('/deposit/callback', async (req, res) => {
-  res.status(200).json({ status: 'ok' });
-  const body = req.body || {};
-  const st = marzCallbackRawStatus(body);
-  console.log(`MarzPay deposit callback: ${st || body.event_type || 'no status'} ${body.data?.reference || body.reference || body.transaction?.reference || '?'}`);
-  await marzDepositCallbackWork(body);
-  retryCallbackWork('MarzPay deposit callback', () => marzDepositCallbackWork(body), () => marzDepositCallbackOpen(body), SUCCESS_STATUSES.has(st) || FAILED_STATUSES.has(st));
-});
 // ═══════════════════════════════════════════
-// WITHDRAWAL (MarzPay send-money, mobile money only)
+// WITHDRAWAL (paid by hand by the admin: Commercial Bank of Ethiopia or Telebirr)
 // ═══════════════════════════════════════════
 const _withdrawInFlight = new Set();
 const _witRequestInFlight = new Set();
@@ -5792,15 +3984,7 @@ async function markWithdrawalProcessed(witRef, userId) {
     const fresh = await witRef.get();
     if (!fresh.exists) return;
     const status = fresh.data().status;
-    // Codex-caught real bug (2nd money-flow audit): a withdrawal stuck at
-    // 'sending' (the post-send-money write that would normally flip it to
-    // 'processing' itself failed after MarzPay already accepted/sent the
-    // payout -- see processWithdrawalCore's own comment) could never reach
-    // 'processed' through this function, since it only ever accepted a
-    // 'processing' starting state. /withdraw/callback's own webhook-uuid
-    // fallback path (which independently re-verifies against MarzPay before
-    // ever calling here) is exactly the self-heal for that stuck state --
-    // widened to also accept 'sending' so that self-heal can actually land.
+    // A row left on 'sending' by an older build can still be settled here, so 'sending' is accepted as well as 'processing'.
     if (status !== 'processing' && status !== 'sending') return;
     await witRef.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() });
     didTransition = true;
@@ -5824,196 +4008,8 @@ async function markWithdrawalProcessed(witRef, userId) {
 // belongs to the MEMBER. The region is switched to theirs as soon as the
 // withdrawal document names them.
 // ═══════════════════════════════════════════
-// PAYOUTS THROUGH ALL FOUR GATEWAYS, IN TURN
+// SEND (mark as paid): the admin pays the member by hand from the bank or Telebirr app, then records it here.
 // ═══════════════════════════════════════════
-// Owner: "let the server use all four for withdrawals, not picking one; if one fails the server tries another." Admin > Settings > Withdrawals >
-// "All gateways in turn" (withdrawMethod 'rotate'): each new withdrawal starts on the NEXT gateway of PesaJet, TavuPay, ObPay (an even
-// round robin), and when a gateway CLEANLY refuses (it answered and said no: low balance, bad key, not whitelisted, a number it will not pay) the
-// withdrawal is handed to the next one at once. A gateway that refused is skipped for 5 minutes so the next withdrawals do not queue behind it.
-// MONEY SAFETY (unchanged): a lost reply is AMBIGUOUS -- the row stays on 'sending' and is NEVER handed to another gateway (that could pay twice);
-// only a clean refusal moves on. Every attempt uses the withdrawal id as the reference / idempotency key.
-// The three newer gateways store the same three fields: payGw (which one), payGwRef (our reference = the withdrawal id), payGwTxId (theirs).
-// Contracts, from the owner's saved documents: LworxPay POST /payout {amount, phone, reference, callback_url}; ObPay POST /payouts {amount, currency,
-// phone_number, customer_name, reference, callback_url}; TavuPay POST /payments {type:'disbursement', ...} (PesaJet's and MarzPay's are unchanged).
-// LworxPay is NOT in the circle (owner: remove it from processing withdrawals). It still receives recharges, and its adapter below can still READ a payout that was
-// sent through it earlier, so those finish; it is never asked to send a new one.
-const PAYOUT_ROTATION = Object.freeze(['pesajet', 'tavupay', 'obpay']);
-const PAYOUT_NAMES = Object.freeze({ pesajet: 'PesaJet', marzpay: 'MarzPay', tavupay: 'TavuPay', lworxpay: 'LworxPay', obpay: 'ObPay' });
-const PAYOUT_PAUSE_MS = 5 * 60 * 1000;
-const _payoutPausedUntil = new Map();
-let _payoutTurn = Math.floor(Math.random() * 1000);
-function payoutGatewayConfigured(p) {
-  if (p === 'pesajet') return pesajetConfigured();
-  if (p === 'tavupay') return tavupayConfigured();
-  if (GATEWAY_DEFS[p]) return GATEWAY_DEFS[p].configured();
-  return p === 'marzpay';
-}
-// The gateways to try for ONE withdrawal, in order: the next in the round robin first, then the rest; gateways that refused in the last 5 minutes go last.
-function payoutRotationOrder(region) {
-  const ready = PAYOUT_ROTATION.filter(p => payoutGatewayConfigured(p) && gatewayServesRegion(p, region));
-  if (!ready.length) return [];
-  const now = Date.now();
-  const live = ready.filter(p => (_payoutPausedUntil.get(p) || 0) <= now), paused = ready.filter(p => !live.includes(p));
-  const start = live.length ? (_payoutTurn++) % live.length : 0;
-  return live.slice(start).concat(live.slice(0, start), paused);
-}
-// A payout (type 'disbursement'). The withdrawal's own id is the idempotency key, so a retry of the same withdrawal is the same payout at TavuPay.
-async function tavupayDisburse({ amount, phone, description, idempotencyKey }) {
-  const payload = { type: 'disbursement', phone: pesajetPhone(phone), amount: Math.round(Number(amount)) };
-  const key = tavupayIdempotencyKey(idempotencyKey);
-  if (key) payload.idempotencyKey = key;
-  if (description) payload.description = String(description).slice(0, 200);
-  return _tavupayRequest('/payments', { method: 'POST', body: payload });
-}
-// What an ADMIN is told when a gateway refuses a payout (a member never sees this): the owner can fix a key, a whitelist, KYC or an empty balance.
-function payoutRefusalMsg(provider, r) {
-  const name = PAYOUT_NAMES[provider] || 'The payment provider';
-  if (!r || r.notConfigured) return `${name} is not set up on the server yet.`;
-  const d = r.data || {}, e = provider === 'tavupay' ? { code: '', message: [d.message, d.error].find(v => typeof v === 'string' && v.trim()) || '' } : gwError(d);
-  if (r.httpStatus === 401 || r.httpStatus === 403 || /^(AUTHENTICATION_FAILED|IP_NOT_ALLOWED|KYC_REQUIRED|ACCOUNT_COOLDOWN|WITHDRAWAL_DISABLED|WITHDRAWALS_BLOCKED)$/.test(e.code)) {
-    console.error(`${name} refused a payout (HTTP ${r.httpStatus} ${e.code}): ${JSON.stringify(d).slice(0, 300)} -- check the key, the IP whitelist, KYC approval and the account status`);
-    return `${name} refused the request (check its key, the IP whitelist and that the account is approved to send payouts).`;
-  }
-  if (e.code === 'INSUFFICIENT_BALANCE' || /insufficient/i.test(e.message)) return `${name} has too little balance to send this payout (top up its wallet).`;
-  return e.message ? `${name} said: ${String(e.message).slice(0, 160)}.` : `${name} could not send this payout right now.`;
-}
-const PAYOUT_ADAPTERS = {
-  tavupay: {
-    async send({ wit, id }) {
-      const r = await tavupayDisburse({ amount: wit.net, phone: wit.phone, description: 'Withdrawal', idempotencyKey: id });
-      const d = (r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : (r.data || {});
-      return { r, txId: String(d.reference || (r.data && r.data.reference) || '').trim() || null };
-    },
-    read: w => tavupayGetTx(w.payGwTxId, { attempts: 1 }),
-  },
-  lworxpay: {
-    // No send(): LworxPay does not send payouts any more (owner). Only the read below stays, so a payout it already took still settles.
-    read: w => gatewayGetTx('lworxpay', w.payGwRef, { attempts: 1 }),
-  },
-  obpay: {
-    async send({ wit, id }) {
-      const body = { amount: Math.round(Number(wit.net)), currency: 'UGX', phone_number: lworxPhone(wit.phone), customer_name: String(wit.holder || 'Member').slice(0, 60), reference: id, description: 'Withdrawal' };
-      const cb = GATEWAY_DEFS.obpay.callback(); if (cb && /^https:\/\//i.test(cb)) body.callback_url = cb;
-      const r = await _gwRequest('obpay', '/payouts', { method: 'POST', body });
-      const d = (r.data && typeof r.data.data === 'object' && r.data.data) || {};
-      return { r, txId: String(d.reference || '').trim() || id };
-    },
-    read: w => gatewayGetTx('obpay', w.payGwRef, { attempts: 1 }),
-  },
-};
-// Settle one payout from a verdict ('success' | 'failed') that came from the gateway ITSELF (a live read of our reference / its id, never a bare webhook body).
-async function payGwApplyPayout(doc, label, { amount } = {}) {
-  const wit = doc.data();
-  if (wit.status !== 'processing' && wit.status !== 'sending') return 'ignored';
-  if (label === 'success') {
-    const got = Number(amount);
-    if (Number.isFinite(got) && got > 0 && Math.abs(got - Number(wit.net)) >= 0.5)
-      console.error(`${(PAYOUT_NAMES[wit.payGw] || 'GATEWAY').toUpperCase()} PAYOUT AMOUNT DIFFERS withdrawal=${doc.id} net=${wit.net} reported=${got} -- recorded as paid (the money left); check the provider`);
-    if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
-    return 'success';
-  }
-  if (label === 'failed') {
-    const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the payment provider', ['processing', 'sending']);
-    if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
-    return 'failed';
-  }
-  return 'pending';
-}
-// A payout webhook of any of the three (TavuPay transfer.*, LworxPay / ObPay payout.*) only says "look": the payout is re-read at the gateway and only
-// that answer counts, so a forged call can settle nothing.
-async function payGwFindWithdrawal(provider, candidates) {
-  for (const c of candidates) {
-    if (/^[A-Za-z0-9_-]{8,64}$/.test(c)) {
-      const byId = await db.collection('withdrawals').doc(c).get();
-      if (byId.exists && byId.data().payGw === provider) return byId;
-    }
-    const q = await db.collection('withdrawals').where('payGwTxId', '==', c).limit(1).get();
-    if (!q.empty && q.docs[0].data().payGw === provider) return q.docs[0];
-  }
-  return null;
-}
-async function payGwPayoutWebhookWork(provider, candidates) {
-  const doc = await payGwFindWithdrawal(provider, candidates);
-  if (!doc) return;
-  const wit = doc.data();
-  if (wit.status !== 'processing' && wit.status !== 'sending') return;
-  const ad = PAYOUT_ADAPTERS[provider];
-  if (provider === 'tavupay' && !wit.payGwTxId) return;
-  const t = await ad.read(wit);
-  if (t.providerDown || t.unavailable) return;
-  // TavuPay: a read of a payout still on 'sending' is not enough to REFUND it (it may not be the same payout); success is always safe to record.
-  if (provider === 'tavupay' && t.status === 'failed' && wit.status === 'sending') return;
-  if (t.status === 'success' || t.status === 'failed') await payGwApplyPayout(doc, t.status, { amount: t.amount });
-}
-async function payGwPayoutWebhookOpen(provider, candidates) {
-  const doc = await payGwFindWithdrawal(provider, candidates);
-  return !!doc && ['processing', 'sending'].includes(doc.data().status);
-}
-// Accepted payouts that are still 'processing' are read at their gateway; a payout left on 'sending' by a lost reply is looked up by OUR reference
-// (LworxPay / ObPay can do that): a verdict or an in-flight payout moves it on (counted once), and a gateway that has NO such payout hands it back to
-// Pending, since it was never taken. TavuPay has no lookup by our reference, so its 'sending' rows wait for its webhook or for a person.
-async function reconcileGatewayPayouts() {
-  let settled = 0;
-  try {
-    const snap = await db.collection('withdrawals').where('status', '==', 'processing').where('payGwTxId', '>', '').orderBy('createdAt', 'asc').limit(20).get();
-    for (const doc of snap.docs) {
-      const w = doc.data(), ad = PAYOUT_ADAPTERS[w.payGw];
-      if (!ad) continue;
-      const t = await ad.read(w);
-      if (t.providerDown || t.unavailable) continue;
-      const out = await payGwApplyPayout(doc, t.status, { amount: t.amount });
-      if (out === 'success' || out === 'failed') settled++;
-    }
-    const lost = await db.collection('withdrawals').where('status', '==', 'sending').where('payGwRef', '>', '').orderBy('createdAt', 'asc').limit(20).get();
-    for (const doc of lost.docs) {
-      const w = doc.data();
-      if (w.payGw !== 'lworxpay' && w.payGw !== 'obpay') continue;
-      const sentMs = tsMillis(w.sendingAt) || tsMillis(w.createdAt);
-      if (_withdrawInFlight.has(doc.id) || !sentMs || Date.now() - sentMs < SENDING_RECOVER_AFTER_MS) continue;
-      const t = await PAYOUT_ADAPTERS[w.payGw].read(w);
-      if (t.providerDown) continue;
-      _withdrawInFlight.add(doc.id);
-      try {
-        if (t.unavailable) {
-          if (t.httpStatus === 404) {
-            await doc.ref.updateIf({ status: 'sending' }, { status: 'pending', sendingReference: null, payGw: null, payGwRef: null, payGwTxId: null, sendingBy: null, sendingAt: null });
-            console.log(`${PAYOUT_NAMES[w.payGw]} has no record of payout ${doc.id}: handed back to pending`);
-          }
-          continue;
-        }
-        if (t.status === 'success' || t.status === 'failed' || t.status === 'processing') {
-          await withLock('bal:' + w.userId, async () => {
-            await doc.ref.update({ payGwTxId: w.payGwTxId || w.payGwRef });
-            const claimed = await doc.ref.updateIf({ status: 'sending' }, { status: 'processing', processedBy: w.sendingBy || 'recovered', processedAt: FieldValue.serverTimestamp() });
-            if (!claimed) return;
-            await db.collection('users').doc(w.userId).update({ totalWithdrawn: FieldValue.increment(w.net) }).catch(e => console.error(`MONEY-SAFETY: totalWithdrawn increment failed for recovered withdrawal ${doc.id}:`, e.message));
-          });
-          try { const tx = await db.collection('transactions').where('withdrawalId', '==', doc.id).limit(1).get(); if (!tx.empty) await tx.docs[0].ref.updateIf({ status: 'pending' }, { status: 'processing' }); } catch (_) {}
-          const fresh = await doc.ref.get();
-          if (fresh.exists && t.status !== 'processing') { await payGwApplyPayout(fresh, t.status, { amount: t.amount }); settled++; }
-        }
-      } catch (e) { console.error('Gateway payout recovery error:', e.message); }
-      finally { _withdrawInFlight.delete(doc.id); }
-    }
-    await watchRejectedLworxPayouts();
-  } catch (e) { console.error('Reconcile gateway payouts error:', e.message); }
-  return settled;
-}
-// A LworxPay payout the owner rejected while it was pending is looked at every 30 minutes for 14 days: if LworxPay completes it after all, the member has been refunded AND
-// paid, so the row is flagged (paidAfterReject) for the admin panel and the log. Nothing is changed on the member's money automatically.
-async function watchRejectedLworxPayouts() {
-  const snap = await db.collection('withdrawals').where('rejectedWhilePending', '==', true).limit(30).get();
-  for (const doc of snap.docs) {
-    const w = doc.data(), now = Date.now();
-    if (w.paidAfterReject || w.payGw !== 'lworxpay' || now - (Number(w.rejectedAtMs) || 0) > 14 * 24 * 3600 * 1000 || now - (Number(w.lateCheckedAtMs) || 0) < 30 * 60 * 1000) continue;
-    await doc.ref.update({ lateCheckedAtMs: now }).catch(() => {});
-    const t = await PAYOUT_ADAPTERS.lworxpay.read(w).catch(() => null);
-    if (t && t.status === 'success') {
-      console.error(`MONEY: LworxPay COMPLETED payout ${doc.id} (${w.net}) that was rejected and refunded -- the member was paid twice; collect it back`);
-      await doc.ref.update({ paidAfterReject: true, paidAfterRejectAtMs: now }).catch(() => {});
-    }
-  }
-}
 async function processWithdrawalCore(withdrawalId, processedBy) {
   try {
     const pre = await db.collection('withdrawals').doc(withdrawalId).get();
@@ -6035,21 +4031,15 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
     const wit = witSnap.data();
     if (wit.status !== 'pending') return { code: 400, body: { status: 'error', message: `Cannot send, the status is '${wit.status}'` } };
 
-    // Owner: "when/if manual payment is switched also withdrawals are
-    // manual, so it is approved manually when manual payment is toggled."
-    // The same Settings toggle that puts DEPOSITS on admin payment numbers
-    // also takes MarzPay out of the payout path: the admin sends the money
-    // by hand from their own mobile-money account and then records that
-    // here. So this call must never contact MarzPay -- it only writes down
-    // a payment that has ALREADY happened outside the system.
+    // Every payout is made by hand: the admin sends the money from their own bank or Telebirr account and then records that here.
+    // So this call never contacts any payment provider -- it only writes down a payment that has ALREADY happened outside the system.
     //
     // Everything after the status flip is identical to the sandbox path
     // just below (straight to 'processed', totalWithdrawn incremented once,
     // ledger row finalised), because the shape is the same: a payout that
     // is already final by the time we hear about it, with no 'processing'
     // stage to wait on and nothing for the reconcilers to poll.
-    const settNow = await getSettings();
-    if (payoutIsManual(settNow)) {
+    {
       // Atomic conditional flip, not read-then-write: this is the one place
       // a repeat call could double-count totalWithdrawn, and the status
       // check above ran outside any lock. updateIf only matches while the
@@ -6078,214 +4068,6 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       };
     }
 
-    // A suspended member's pending request is not paid by an automatic send
-    // (one tap on a notification could otherwise pay someone who was banned
-    // after asking). The admin can still Reject (refunds) or unban and send.
-    // Recording a payout already made by hand (manual mode, above) is unaffected.
-    const owner = await db.collection('users').doc(wit.userId).get();
-    if (owner.exists && owner.data().status === 'banned')
-      return { code: 409, body: { status: 'error', message: 'This member is suspended, so the payout was not sent. Reject it to refund them, or unban the account first.' } };
-
-    // One attempt through ONE gateway. A CLEAN refusal returns `clean: true` (the row is already back on Pending), so 'rotate' can offer the same
-    // withdrawal to the next gateway; a sent payout and an ambiguous (lost-reply) one never carry it, so they are never handed on.
-    const attemptVia = async (chosen) => {
-    if (chosen === 'pesajet') {
-      // PesaJet payout. The three rules that matter are:
-      //   * the outbound identifier is written BEFORE the provider is ever
-      //     called, so a later write failure can never leave a real payout
-      //     unrecorded;
-      //   * a network exception is AMBIGUOUS -- never revert to 'pending',
-      //     which would invite a retry that double-pays;
-      //   * acceptance is not completion. PesaJet answers PENDING and
-      //     resolves asynchronously, so this lands on 'processing'.
-      // The withdrawal's own doc id is the Idempotency-Key, so a genuine
-      // retry of the same withdrawal is de-duplicated by PesaJet rather than
-      // by anything in here.
-      const sendingMarker = withdrawalId;
-      const sendingClaimed = await witRef.updateIf({ status: 'pending' }, { status: 'sending', sendingReference: sendingMarker, pesajetRef: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
-      if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Withdrawal status changed. Refresh the list.' } };
-      const pj = await pesajetDisburse({
-        amount: wit.net, phone: wit.phone, network: wit.network,
-        reference: sendingMarker, description: 'Withdrawal',
-        idempotencyKey: withdrawalId,
-      });
-      // 429 is PesaJet answering 'too many requests': it did NOT take the payout, so it is a clean refusal (handled below), not a lost reply.
-      if (pj.providerDown && pj.httpStatus !== 429) {
-        console.error('PesaJet disbursement unreachable (ambiguous, NOT reverting to pending):', pj.httpStatus, JSON.stringify(pj.data).slice(0, 200));
-        return { code: 500, body: { status: 'error', message: 'Lost contact with PesaJet mid-request. We cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly.', sendingReference: sendingMarker } };
-      }
-      if (!pj.ok) {
-        // A clean refusal -- PesaJet answered and said no, so nothing was
-        // sent and the row is safe to hand back to Pending.
-        await witRef.updateIf({ status: 'sending', sendingReference: sendingMarker }, { status: 'pending', sendingReference: null, pesajetRef: null, pesajetTxId: null, sendingBy: null, sendingAt: null }).catch(() => {});
-        return { code: 400, clean: true, body: { status: 'error', message: pesajetUserMsg(pj, 'PesaJet could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') } };
-      }
-      const tx = pj.data?.data || pj.data || {};
-      const pesajetTxId = tx.transactionId || null;
-      if (!pesajetTxId) {
-        // PesaJet answered OK but gave no transaction id to follow. Without it nothing could ever check or settle this payout, so it stays on
-        // 'sending' (not processing) and resolveSendingPesajetPayouts() finds it by our reference within a couple of minutes.
-        console.error(`PesaJet accepted withdrawal ${withdrawalId} but returned no transaction id; left on 'sending' for the reference lookup`);
-        return { code: 500, body: { status: 'error', message: 'PesaJet accepted the payout but did not return its id. It stays on "Sending" and is checked automatically in a few minutes; do not reject it.' } };
-      }
-      await withLock('bal:' + wit.userId, async () => {
-        await witRef.update({ pesajetRef: sendingMarker, pesajetTxId });
-        const claimed = await witRef.updateIf({ status: 'sending' }, { status: 'processing', processedBy, processedAt: FieldValue.serverTimestamp() });
-        if (!claimed) return;
-        try {
-          await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
-        } catch (twErr) {
-          console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER withdrawal ${withdrawalId} was marked sent via PesaJet — user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
-        }
-      });
-      try {
-        const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
-        if (!txSnap.empty) await txSnap.docs[0].ref.updateIf({ status: 'pending' }, { status: 'processing' });
-      } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
-      return {
-        code: 200,
-        body: { status: 'success', sandbox: false, message: `Sending ${fmtMoney(wit.net)} to ${wit.phone}` },
-        meta: { amount: wit.net, dest: wit.phone, userId: wit.userId },
-      };
-    }
-
-    if (PAYOUT_ADAPTERS[chosen] && PAYOUT_ADAPTERS[chosen].send) {
-      // TavuPay / ObPay payout -- the PesaJet branch above with each gateway's own request. The withdrawal id is written first as our
-      // reference (and is the idempotency key / unique reference sent); a lost reply is ambiguous and the row stays on 'sending'; acceptance lands
-      // on 'processing' and the gateway's webhook (a hint) or the reconciler's live read finishes it. See payGwApplyPayout.
-      const ad = PAYOUT_ADAPTERS[chosen], gname = PAYOUT_NAMES[chosen];
-      const sendingMarker = withdrawalId;
-      const sendingClaimed = await witRef.updateIf({ status: 'pending' }, { status: 'sending', sendingReference: sendingMarker, payGw: chosen, payGwRef: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
-      if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Withdrawal status changed. Refresh the list.' } };
-      const sent = await ad.send({ wit, id: withdrawalId });
-      const gr = sent.r;
-      // 429 means the gateway did NOT take the payout (a clean refusal, handled below); any other busy answer or a lost reply is ambiguous.
-      if (gr.providerDown && gr.httpStatus !== 429) {
-        console.error(`${gname} payout unreachable (ambiguous, NOT reverting to pending):`, gr.httpStatus, JSON.stringify(gr.data).slice(0, 200));
-        return { code: 500, body: { status: 'error', message: `Lost contact with ${gname} mid-request. We cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly. Check the ${gname} dashboard before rejecting it.`, sendingReference: sendingMarker } };
-      }
-      if (!gr.ok) {
-        console.error(`${gname} payout refused:`, gr.httpStatus, JSON.stringify(gr.data).slice(0, 300));
-        await witRef.updateIf({ status: 'sending', sendingReference: sendingMarker }, { status: 'pending', sendingReference: null, payGw: null, payGwRef: null, payGwTxId: null, sendingBy: null, sendingAt: null }).catch(() => {});
-        return { code: 400, clean: true, body: { status: 'error', message: payoutRefusalMsg(chosen, gr) + ' The withdrawal stays pending and untouched.' } };
-      }
-      if (!sent.txId) {
-        console.error(`${gname} accepted withdrawal ${withdrawalId} but returned no reference; left on 'sending'`);
-        return { code: 500, body: { status: 'error', message: `${gname} accepted the payout but did not return its reference. It stays on "Sending"; do not reject it before checking the ${gname} dashboard.` } };
-      }
-      await withLock('bal:' + wit.userId, async () => {
-        await witRef.update({ payGwRef: sendingMarker, payGwTxId: sent.txId });
-        const claimed = await witRef.updateIf({ status: 'sending' }, { status: 'processing', processedBy, processedAt: FieldValue.serverTimestamp() });
-        if (!claimed) return;
-        try {
-          await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
-        } catch (twErr) {
-          console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER withdrawal ${withdrawalId} was marked sent via ${gname} — user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
-        }
-      });
-      try {
-        const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
-        if (!txSnap.empty) await txSnap.docs[0].ref.updateIf({ status: 'pending' }, { status: 'processing' });
-      } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
-      return {
-        code: 200,
-        body: { status: 'success', sandbox: false, message: `Sending ${fmtMoney(wit.net)} to ${wit.phone} via ${gname}` },
-        meta: { amount: wit.net, dest: wit.phone, userId: wit.userId },
-      };
-    }
-
-    // Anything that is not MarzPay and has no sender above (LworxPay, which no longer sends payouts) must never fall through to MarzPay's send below.
-    if (chosen !== 'marzpay') return { code: 400, body: { status: 'error', message: (PAYOUT_NAMES[chosen] || 'This gateway') + ' does not send payouts. Choose another payout method in Settings.' } };
-
-    const sendingMarker = crypto.randomUUID();
-    // Codex-caught real bug (2nd money-flow audit): marzReference -- the
-    // field /withdraw/callback actually looks withdrawals up by -- used to
-    // only get written in the POST-success update further down. If MarzPay
-    // genuinely accepted and sent the payout but that later write then
-    // failed (a transient DB error), the withdrawal was stuck at 'sending'
-    // with no marzReference recorded anywhere -- the callback could never
-    // find it (empty query), and /admin/withdraw/verify (see its own
-    // updated comment below) would wrongly read "no gateway reference,
-    // nothing was sent" even though the money may have already gone out.
-    // Mirrors the deposit side's own already-correct pattern (marzReference
-    // is set at deposit CREATION, before ever calling MarzPay) -- writing it
-    // here, before the call, means it's always persisted regardless of
-    // whether any later write in this function fails.
-    const sendingClaimed = await witRef.updateIf({ status: 'pending' }, { status: 'sending', sendingReference: sendingMarker, marzReference: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
-    if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Withdrawal status changed. Refresh the list.' } };
-
-    let mpData, ambiguous = false;
-    try {
-      mpData = await marzSendMoney({
-        amount: wit.net, phone: wit.phone, reference: sendingMarker, description: 'Withdrawal',
-        callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
-      });
-    } catch (netErr) {
-      // A network exception here is ambiguous, not a clean rejection — we
-      // genuinely don't know if MarzPay received it. Never revert to
-      // 'pending' (that would invite a retry that could double-pay); leave
-      // it at 'sending' for the admin to check on MarzPay's own dashboard.
-      console.error('MarzPay send-money network error (ambiguous, NOT reverting to pending):', netErr.message);
-      ambiguous = true;
-      mpData = { status: 'error', providerDown: true, message: netErr.message };
-    }
-    if (ambiguous || mpData.providerDown) {
-      return { code: 500, body: { status: 'error', message: 'Lost contact with MarzPay mid-request. We cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly.', sendingReference: sendingMarker } };
-    }
-    if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
-      await witRef.updateIf({ status: 'sending', sendingReference: sendingMarker }, { status: 'pending', sendingReference: null, marzReference: null, sendingBy: null, sendingAt: null }).catch(() => {});
-      return { code: 400, clean: true, body: { status: 'error', message: marzUserMsg(mpData, 'MarzPay could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') } };
-    }
-    const sandbox = mpData.status === 'sandbox';
-    const updateFields = { status: sandbox ? 'processed' : 'processing', processedBy, processedAt: FieldValue.serverTimestamp(), marzReference: sendingMarker, marzTxUuid: mpData.data?.transaction?.uuid || null };
-    // subagent-audit-caught real bug: every OTHER totalWithdrawn mutation
-    // (declineWithdrawalAndRefund, /admin/user/repair-ledger -- see its own
-    // comment claiming "every withdrawal status transition that touches
-    // totalWithdrawn ... is serialized through this exact lock key") takes
-    // out bal:<userId> first. This "send" transition was the one place that
-    // comment was wrong about -- it never actually locked, so a
-    // repair-ledger run racing a send here could land its absolute-overwrite
-    // BETWEEN this increment's read and write, silently losing or double-
-    // counting this withdrawal's net amount in totalWithdrawn. No lock is
-    // already held here (verified: neither /admin/withdraw/process nor
-    // autoApproveWithdrawalsTick, the only two callers, holds bal:<userId>
-    // before this point), so this can't deadlock.
-    await withLock('bal:' + wit.userId, async () => {
-      await witRef.update({ marzReference: sendingMarker, ...(updateFields.marzTxUuid ? { marzTxUuid: updateFields.marzTxUuid } : {}) });
-      const claimed = await witRef.updateIf({ status: 'sending' }, updateFields);
-      if (!claimed) return;
-      try {
-        await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
-      } catch (twErr) {
-        console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER withdrawal ${withdrawalId} was marked sent — user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
-      }
-    });
-    if (sandbox) await finalizeWithdrawalTransactionRecord(withdrawalId, 'processed');
-    else {
-      try {
-        const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
-        if (!txSnap.empty) await txSnap.docs[0].ref.updateIf({ status: 'pending' }, { status: 'processing' });
-      } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
-    }
-    return {
-      code: 200,
-      body: { status: 'success', sandbox, message: sandbox ? `Sandbox: withdrawal marked complete, ${fmtMoney(wit.net)} to ${wit.phone}` : `Sending ${fmtMoney(wit.net)} to ${wit.phone}` },
-      meta: { amount: wit.net, dest: wit.phone, userId: wit.userId }
-    };
-    };   // end of attemptVia
-    const mode = withdrawProvider(settNow);
-    const chain = mode === 'rotate' ? payoutRotationOrder() : [mode];
-    if (!chain.length) return { code: 400, body: { status: 'error', message: 'No automatic payout gateway is set up on the server yet (PesaJet, TavuPay or ObPay). The withdrawal stays pending and untouched.' } };
-    const refusals = [];
-    for (let i = 0; i < chain.length; i++) {
-      const result = await attemptVia(chain[i]);
-      // Sent, ambiguous (lost reply), changed under us -- or a single pinned gateway: exactly as before. Only a clean refusal in 'rotate' moves on.
-      if (!(result && result.clean) || mode !== 'rotate') return result;
-      _payoutPausedUntil.set(chain[i], Date.now() + PAYOUT_PAUSE_MS);
-      refusals.push((PAYOUT_NAMES[chain[i]] || chain[i]) + ': ' + String((result.body && result.body.message) || '').replace(/\s*The withdrawal stays pending and untouched\.?.*$/s, ''));
-      console.warn(`Payout via ${chain[i]} was refused for withdrawal ${withdrawalId}; ${chain[i + 1] ? 'trying ' + chain[i + 1] : 'no gateway left'}`);
-    }
-    return { code: 400, body: { status: 'error', message: 'Every payout gateway refused this withdrawal (' + refusals.join(' | ') + '). It stays pending and untouched; try again shortly.' } };
   } catch (e) {
     console.error('Process withdrawal error:', e.message);
     return { code: 500, body: { status: 'error', message: e.message } };
@@ -6300,10 +4082,6 @@ app.post('/admin/withdraw/process', async (req, res) => {
   // literal string 'owner' regardless of which real staff account actually
   // clicked Send, so the "processed by X" line the admin UI already shows
   // was never telling the truth once more than one admin existed.
-  // The panel says which mode it is showing ("Send via PesaJet" or "Mark as paid"). If the owner switched mode since, the label is stale and the
-  // click would do the opposite of what it says (record a payout as paid without sending, or send when the person meant to record).
-  if (typeof req.body.expectManual === 'boolean' && req.body.expectManual !== payoutIsManual(await getSettings()))
-    return res.status(409).json({ status: 'error', message: 'The payment mode was changed. Refresh the Withdrawals page and try again.' });
   const result = await processWithdrawalCore(withdrawalId, req.adminUser?.username || 'owner');
   if (result.code === 200) logAdminAction(req, 'withdrawal_processed', { withdrawalId, ...result.meta });
   res.status(result.code).json(result.body);
@@ -6362,339 +4140,10 @@ app.post('/admin/withdraw/quick-approve', quickApproveLimiter, async (req, res) 
     res.status(500).json({ status: 'error', message: 'Could not approve right now. Open the admin panel to check.' });
   }
 });
-app.post('/admin/withdraw/verify', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const withdrawalId = String(req.body.withdrawalId || '');
-  if (!withdrawalId) return res.status(400).json({ status: 'error', message: 'withdrawalId required' });
-  try {
-    const snap = await db.collection('withdrawals').doc(withdrawalId).get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
-    const w = snap.data();
-    // A payout the admin sent by hand (manual mode) has no MarzPay record at
-    // all, by design. Without this branch it falls into "no gateway
-    // reference, nothing was sent" below -- which reads as though the member
-    // was never paid and invites rejecting a withdrawal that WAS paid,
-    // refunding them on top of real money that already left an admin phone.
-    if (w.payoutMethod === 'manual') {
-      return res.json({
-        status: 'success', ourStatus: w.status, marzStatus: 'manual',
-        message: `This payout was sent by hand, not through MarzPay, so there is nothing to verify here${w.processedBy ? ' (recorded by ' + w.processedBy + ')' : ''}. Check the mobile-money record on the admin phone that sent it. Do NOT reject it unless you have confirmed there that no money went out.`,
-      });
-    }
-    // A PesaJet-routed payout likewise has neither marzReference nor
-    // marzTxUuid, so without this branch Verify would report "no gateway
-    // reference, nothing was sent" about a payout that may well have gone
-    // out -- the single most dangerous wrong answer this screen can give,
-    // because it invites a reject that refunds the member on top of real
-    // money.
-    if (w.pesajetRef) {
-      if (!w.pesajetTxId) {
-        // The id was never saved: look the payout up by OUR reference. Found = remember its id and carry on with the normal check below.
-        const f = await pesajetFindByReference(w.pesajetRef, { sinceMs: tsMillis(w.createdAt) }).catch(() => null);
-        if (f && f.found && f.transactionId) { w.pesajetTxId = f.transactionId; await snap.ref.update({ pesajetTxId: f.transactionId }).catch(() => {}); }
-      }
-      if (!w.pesajetTxId) {
-        return res.json({
-          status: 'success', ourStatus: w.status, marzStatus: 'unverifiable',
-          message: `A send attempt WAS made via PesaJet (reference: ${w.pesajetRef}) but we never recorded a PesaJet transaction id to check against -- this does NOT mean nothing was sent. Check PesaJet's own dashboard for that reference before rejecting; rejecting a payout that already went out will refund the member on top of it.`,
-        });
-      }
-      const t = await pesajetGetTx(w.pesajetTxId);
-      if (t.providerDown) {
-        return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'unverifiable', message: `A send attempt WAS made via PesaJet (transaction ${w.pesajetTxId}) but PesaJet did not respond just now. Try Verify again in a moment -- this does NOT mean nothing was sent.` });
-      }
-      const realStatus = pesajetStatusLabel(t.status);
-      let pjMessage;
-      if (realStatus === 'success') pjMessage = `PesaJet confirms this payout was SENT (status: ${t.status}).`;
-      else if (realStatus === 'failed') pjMessage = `PesaJet says this payout ${t.status === 'expired' ? 'EXPIRED before it was collected' : 'FAILED'} (status: ${t.status})${t.failureReason ? ' — ' + t.failureReason : ''}.`;
-      else if (realStatus === 'processing') pjMessage = `PesaJet still has this payout in flight (status: ${t.status}). Not finished, not failed.`;
-      else pjMessage = `PesaJet reports status: ${t.status || 'unknown'}.`;
-      return res.json({ status: 'success', ourStatus: w.status, marzStatus: t.status || 'unknown', message: pjMessage });
-    }
-    // TavuPay / LworxPay / ObPay payouts (payGw): read live at that gateway, by its own id (TavuPay) or by OUR reference (LworxPay, ObPay).
-    if (w.payGw && PAYOUT_ADAPTERS[w.payGw]) {
-      const gname = PAYOUT_NAMES[w.payGw];
-      if (w.payGw === 'tavupay' && !w.payGwTxId) {
-        return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'unverifiable', message: `A send attempt WAS made via TavuPay (reference: ${w.payGwRef}) but we never recorded TavuPay's own reference to check against -- this does NOT mean nothing was sent. Check the TavuPay dashboard before rejecting; rejecting a payout that already went out refunds the member on top of it.` });
-      }
-      const t = await PAYOUT_ADAPTERS[w.payGw].read(w);
-      if (t.providerDown || (t.unavailable && t.httpStatus !== 404)) {
-        return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'unverifiable', message: `A send attempt WAS made via ${gname} but it would not tell us the result just now. Try Verify again in a moment -- this does NOT mean nothing was sent.` });
-      }
-      if (t.unavailable) return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'no_record', message: `${gname} has no record of this payout, so nothing was sent through it.` });
-      let gMessage;
-      if (t.status === 'success') gMessage = `${gname} confirms this payout was SENT.`;
-      else if (t.status === 'failed') gMessage = `${gname} says this payout FAILED (status: ${t.rawStatus || 'failed'}).`;
-      else if (t.status === 'processing') gMessage = `${gname} still has this payout in flight (status: ${t.rawStatus || 'pending'}). Not finished, not failed.`;
-      else gMessage = `${gname} reports status: ${t.rawStatus || 'unknown'}.`;
-      return res.json({ status: 'success', ourStatus: w.status, marzStatus: t.rawStatus || t.status || 'unknown', message: gMessage });
-    }
-    if (!w.marzTxUuid) {
-      // Codex-caught real bug (2nd money-flow audit): this used to claim
-      // "nothing was sent" from a bare missing marzTxUuid alone -- but
-      // marzTxUuid is MarzPay's own transaction id, only known once their
-      // response (or a later webhook) is received; marzReference is OUR OWN
-      // outgoing reference, set BEFORE ever calling MarzPay (see
-      // processWithdrawalCore's own comment). A withdrawal can genuinely
-      // have marzReference set with marzTxUuid still missing -- MarzPay was
-      // actually called, we just don't have their own id to check MarzPay's
-      // status API against (there is no lookup-by-reference call available).
-      // Claiming "nothing was sent" in that case is false and, if the owner
-      // acts on it by rejecting, refunds a member on top of a payout that
-      // may have already gone out. Only say "nothing was sent" when there's
-      // no record of an attempt at all.
-      if (!w.marzReference) {
-        return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'no_reference', message: 'This payout never reached MarzPay (no gateway reference). Nothing was sent.' });
-      }
-      return res.json({
-        status: 'success', ourStatus: w.status, marzStatus: 'unverifiable',
-        message: `A send attempt WAS made (our reference: ${w.marzReference}) but we have no MarzPay transaction id to check against -- this does NOT mean nothing was sent. Check MarzPay's own dashboard for that reference before rejecting; rejecting a payout that already went out will refund the member on top of it.`,
-      });
-    }
-    const marzStatus = await marzGetSendStatus(w.marzTxUuid);
-    const sent = SUCCESS_STATUSES.has(marzStatus);
-    const failed = FAILED_STATUSES.has(marzStatus);
-    let message;
-    if (!marzStatus) message = 'MarzPay did not respond just now. Try Verify again in a moment.';
-    else if (sent && w.status !== 'processed') message = `MarzPay says this payout was SENT, but our record is "${w.status}". Check the recipient before doing anything else.`;
-    else if (sent) message = 'MarzPay confirms the payout was SENT and our record already shows it processed.';
-    else if (failed) message = `MarzPay says this payout FAILED (status: ${marzStatus}).`;
-    else message = `MarzPay reports status: ${marzStatus || 'unknown'}.`;
-    res.json({ status: 'success', ourStatus: w.status, marzStatus: marzStatus || 'unknown', message });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-async function marzWithdrawCallbackWork(body) {
-  try {
-    const reference = body.data?.reference || body.reference || body.data?.transaction?.reference || body.transaction?.reference;
-    if (!reference) return;
-    const rawStatus = marzCallbackRawStatus(body);
-    const isSuccess = SUCCESS_STATUSES.has(rawStatus);
-    const isFailed  = FAILED_STATUSES.has(rawStatus);
-    if (!isSuccess && !isFailed) return;
-    let witSnap = await db.collection('withdrawals').where('marzReference', '==', reference).limit(1).get();
-    // For a payout MarzPay's own `reference` is its UUID and OUR reference arrives as provider_reference (guide 7.1.1 / 11.6).
-    const ourRef = body.data?.transaction?.provider_reference || body.transaction?.provider_reference;
-    if (witSnap.empty && ourRef && ourRef !== reference) witSnap = await db.collection('withdrawals').where('marzReference', '==', ourRef).limit(1).get();
-    if (witSnap.empty) return;
-    const doc = witSnap.docs[0];
-    const wit = doc.data();
-    // Codex-caught real bug (2nd money-flow audit): a withdrawal stuck at
-    // 'sending' (see markWithdrawalProcessed's own comment) used to be
-    // invisible to this callback entirely -- widened to let it through for
-    // the SUCCESS branch (a genuine success is always safe to recognize),
-    // but the FAILED branch below still explicitly refuses to act on a
-    // 'sending' row (see its own guard) -- auto-declining/refunding an
-    // ambiguous "we don't know if it was sent" withdrawal from an
-    // unauthenticated webhook is exactly the risk this codebase already
-    // treats as admin-only, confirm-on-MarzPay's-dashboard-first territory.
-    if (wit.status !== 'processing' && wit.status !== 'sending') return;
-    const webhookUuid = body.data?.transaction?.uuid || body.transaction?.uuid || body.data?.uuid || null;
-    if (isSuccess) {
-      // Real bug fixed: this endpoint has no webhook signature/secret check
-      // (unlike a call WE make outward to MarzPay with our own key, an
-      // inbound POST here is just whatever hit the URL) -- the live re-check
-      // against MarzPay's own API is what actually makes this safe to act
-      // on, not the webhook body itself. If there's no uuid to check against
-      // AT ALL (neither our own record's marzTxUuid nor one on the webhook),
-      // there is nothing to verify the claim against, so this leaves the
-      // withdrawal untouched -- same "refuse rather than trust an
-      // unverifiable claim" posture /deposit/callback already uses.
-      // Recoverable by hand via /admin/withdraw/verify + /admin/withdraw/reject
-      // if MarzPay's dashboard confirms it wasn't actually sent.
-      const uuidForCheck = wit.marzTxUuid || webhookUuid;
-      if (!uuidForCheck) return;
-      const liveStatus = await marzGetSendStatus(uuidForCheck);
-      // Codex-caught real bug (2nd money-flow audit): this used to give an
-      // INCONCLUSIVE live check (MarzPay briefly down/timed out, so
-      // liveStatus is '') the same benefit of the doubt as a genuinely
-      // already-trusted uuid, on the reasoning that "our own uuid is
-      // already known-real." But that reasoning only justifies not BLOCKING
-      // on an inconclusive check -- it does NOT justify marking the
-      // withdrawal processed on the unauthenticated webhook's bare claim
-      // when the live check confirmed nothing at all. An attacker who
-      // somehow learned this withdrawal's unguessable marzReference could
-      // send a fabricated success webhook timed to a MarzPay outage and
-      // have it accepted. Always require an EXPLICIT confirmed success --
-      // an inconclusive check now just leaves the withdrawal untouched for
-      // the next webhook retry, reconciler tick, or user poll to confirm
-      // for real, never blocking a genuine payout, just deferring
-      // recognition of it.
-      if (!SUCCESS_STATUSES.has(liveStatus)) return;
-      // Codex-caught real bug (2nd money-flow audit): this used to persist
-      // the WEBHOOK's own claimed uuid unconditionally, even when we
-      // already had our OWN trusted uuid and verified THAT one -- silently
-      // overwriting a known-good, independently-captured value with an
-      // unverified one from an unauthenticated request. Only ever adopt the
-      // webhook's uuid when we didn't already have our own (i.e. it's the
-      // exact one that was just verified above, not a bystander value).
-      if (!wit.marzTxUuid && webhookUuid) doc.ref.update({ marzTxUuid: webhookUuid }).catch(() => {});
-      if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
-    } else if (isFailed) {
-      // A 'sending' withdrawal is genuinely ambiguous (see
-      // processWithdrawalCore's own comment) -- never auto-decline/refund
-      // one from this unauthenticated, automated path. Only
-      // /admin/withdraw/reject (a human, after checking MarzPay's own
-      // dashboard) is allowed to resolve a 'sending' row as failed.
-      if (wit.status === 'sending') return;
-      let uuid = wit.marzTxUuid, tx = null;
-      if (uuid) tx = await marzGetSendTx(uuid);
-      else if (webhookUuid) {
-        const candidate = await marzGetSendTx(webhookUuid);
-        if (candidate.reference && candidate.reference === wit.marzReference) { uuid = webhookUuid; tx = candidate; doc.ref.update({ marzTxUuid: uuid }).catch(() => {}); }
-      }
-      if (!uuid || !tx || !FAILED_STATUSES.has(tx.status)) return;
-      // subagent-audit-caught: same guard as /withdraw/marzpay/status --
-      // `declined` must gate this call, or a decline-race loser permanently
-      // overwrites the winner's correct ledger row with a stale label.
-      const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the mobile-money provider', ['processing']);
-      if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
-    }
-  } catch (e) { console.error('Withdraw callback error:', e.message); }
-}
-async function marzWithdrawCallbackOpen(body) {
-  const reference = body.data?.reference || body.reference || body.data?.transaction?.reference || body.transaction?.reference;
-  if (!reference) return false;
-  const ourRef = body.data?.transaction?.provider_reference || body.transaction?.provider_reference;
-  for (const r of [reference, ourRef]) {
-    if (!r) continue;
-    const q = await db.collection('withdrawals').where('marzReference', '==', r).limit(1).get();
-    if (!q.empty) return ['processing', 'sending'].includes(q.docs[0].data().status);
-  }
-  return false;
-}
-app.post('/withdraw/callback', async (req, res) => {
-  res.status(200).json({ status: 'ok' });
-  const body = req.body || {};
-  const st = marzCallbackRawStatus(body);
-  console.log(`MarzPay payout callback: ${st || body.event_type || 'no status'} ${body.data?.reference || body.reference || body.transaction?.reference || '?'}`);
-  await marzWithdrawCallbackWork(body);
-  retryCallbackWork('MarzPay payout callback', () => marzWithdrawCallbackWork(body), () => marzWithdrawCallbackOpen(body), SUCCESS_STATUSES.has(st) || FAILED_STATUSES.has(st));
-});
-// ── THE PESAJET WEBHOOK -- ONE ENDPOINT FOR BOTH DIRECTIONS ──
-// PesaJet's dashboard has a SINGLE "Webhook Destination URL" field. Two
-// routes (one per direction, as MarzPay has) cannot both be
-// registered there, so half the notifications would never arrive -- and the
-// half that went missing would be invisible, because the reconciler quietly
-// covers for it. One endpoint, dispatched on which of our own collections
-// the event's `reference` belongs to.
-//
-// Same discipline as the other two gateways, and the rules that matter:
-//   * THE PAYLOAD IS A HINT, NEVER THE AUTHORITY. The signature is verified
-//     and a forgery is refused, and the decision still comes from re-reading
-//     GET /payments/{transactionId} -- using the id WE stored, never one out
-//     of the body, or anyone reaching this URL could point it at somebody
-//     else's completed transaction.
-//   * PesaJet requires 200 WITHIN 30 SECONDS ("Return 200 OK within 30
-//     seconds", their dashboard). The re-read is two attempts with a 30s
-//     timeout each, so it can outlast that on a bad day. The ack therefore
-//     goes out FIRST and the work happens after -- exactly as
-//     /deposit/callback has always done for MarzPay. A webhook PesaJet
-//     thinks timed out gets retried, which is only safe because every path
-//     below is idempotent.
-//   * A 'sending' payout is genuinely ambiguous (a network error mid-send).
-//     A success may be recognised from it -- a genuine success is always safe
-//     -- but a failure may NEVER be auto-declined and refunded from this
-//     unauthenticated automated path. Only a human, via
-//     /admin/withdraw/reject after checking PesaJet's own dashboard, resolves
-//     one. Refunding a payout that actually went out pays the member twice.
-async function pesajetWebhookWork(body) {
-  try {
-    if (body.event === 'ping') return;                 // a delivery test
-    const reference = String(body.reference || '');
-    if (!reference) return;
-    // A deposit's reference is its own human-readable `ref`; a payout's is the
-    // withdrawal's doc id. Looked up in that order, and never by anything the
-    // caller could have invented.
-    const depQ = await db.collection('pendingDeposits').where('ref', '==', reference).limit(1).get();
-    if (!depQ.empty) {
-      const doc = depQ.docs[0], dep = doc.data();
-      if (dep.provider !== 'pesajet') return;
-      if (dep.status !== 'pending' && dep.status !== 'initiating') return;
-      if (!dep.pesajetTxId) return;
-      const t = await pesajetGetTx(dep.pesajetTxId);
-      if (t.providerDown) return;   // unverifiable -- the reconciler and the member's own poll both retry
-      const realStatus = pesajetStatusLabel(t.status);
-      if (realStatus === 'success') await creditDeposit(doc, 'PesaJet webhook');
-      else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, pesajetFailureMsg(t.status));
-      return;
-    }
-    const witDoc = await db.collection('withdrawals').doc(reference).get();
-    if (!witDoc.exists) return;
-    const wit = witDoc.data();
-    if (wit.pesajetRef !== reference) return;          // not a PesaJet-routed payout
-    if (wit.status !== 'processing' && wit.status !== 'sending') return;
-    if (!wit.pesajetTxId) return;
-    const t = await pesajetGetTx(wit.pesajetTxId);
-    if (t.providerDown) return;
-    const realStatus = pesajetStatusLabel(t.status);
-    if (realStatus === 'success') {
-      if (await markWithdrawalProcessed(witDoc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(witDoc.id, 'processed');
-    } else if (realStatus === 'failed') {
-      if (wit.status === 'sending') return;            // ambiguous -- admin-only resolution, see the note above
-      const { declined, refunded } = await declineWithdrawalAndRefund(witDoc.ref, wit.userId, 'Payout failed at the payment provider', ['processing']);
-      if (declined) await finalizeWithdrawalTransactionRecord(witDoc.id, 'declined', refunded);
-    }
-    // 'processing' -- genuinely not finished yet, nothing to do
-  } catch (e) {
-    console.error('PesaJet webhook error (already acked):', e.message);
-  }
-}
-async function pesajetWebhookOpen(body) {
-  const reference = String(body.reference || '');
-  if (!reference) return false;
-  const q = await db.collection('pendingDeposits').where('ref', '==', reference).limit(1).get();
-  if (!q.empty) return ['pending', 'initiating'].includes(q.docs[0].data().status);
-  const w = await db.collection('withdrawals').doc(reference).get();
-  return w.exists && ['processing', 'sending'].includes(w.data().status);
-}
-app.post('/pesajet/webhook', async (req, res) => {
-  const body = req.body || {};
-  const check = pesajetVerifyWebhook(body, req.get('x-webhook-signature'), req.rawBody);
-  // A signature that is present and wrong is the one case worth refusing
-  // loudly: it is either a forgery or a misconfigured secret, and both want
-  // an operator's attention. Answered BEFORE the ack below, since a refusal
-  // is not an acknowledgement.
-  if (!check.verified && check.reason === 'mismatch') {
-    console.error('PesaJet webhook: signature mismatch, refused.');
-    return res.status(401).json({ status: 'error', message: 'Invalid signature' });
-  }
-  res.status(200).json({ received: true });
-  // Everything past here runs after the ack. Nothing may throw out of it.
-  console.log(`PesaJet webhook: ${body.event || body.status || '?'} ${body.reference || '?'}`);
-  await pesajetWebhookWork(body);
-  const claimsFinal = /completed|failed|expired/i.test(String(body.event || '')) || ['completed', 'failed', 'expired'].includes(String(body.status || '').toLowerCase());
-  retryCallbackWork('PesaJet webhook', () => pesajetWebhookWork(body), () => pesajetWebhookOpen(body), claimsFinal);
-});
-// TavuPay webhook (recharges). Answered 202 as the document recommends, before any work. A wrong signature is NOT refused: the document is
-// inconsistent about signing, so a call we cannot verify is simply treated as a hint and the payment is re-read before anything is credited.
-app.post('/tavupay/webhook', async (req, res) => {
-  const body = req.body || {};
-  const check = tavupayVerifyWebhook(req.get('x-tavupay-signature'), req.rawBody);
-  if (check.reason === 'mismatch') console.error('TavuPay webhook: signature did not verify, treated as a hint only.');
-  res.status(202).json({ received: true });
-  const wh = tavupayWebhookFields(body);
-  console.log(`TavuPay webhook: ${wh.event || '?'} ${wh.candidates[0] || '?'}${check.verified ? ' (signed)' : ''}`);
-  await tavupayWebhookWork(body, check.verified);
-  retryCallbackWork('TavuPay webhook', () => tavupayWebhookWork(body, check.verified), () => tavupayWebhookOpen(body), wh.label === 'success' || wh.label === 'failed');
-});
-// LworxPay / ObPay webhooks (recharges). Answered 200 at once, before any work (ObPay wants a reply within 8 seconds and retries three times).
-// A signature that does not verify is not refused: the call is only a hint and the payment is re-read before anything is credited.
-for (const [gwKey, hdr] of [['lworxpay', 'x-lworxpay-signature'], ['obpay', 'x-obpay-signature']]) {
-  app.post('/' + gwKey + '/webhook', async (req, res) => {
-    const body = req.body || {};
-    const check = gatewayVerifyWebhook(gwKey, req.get(hdr), req.rawBody);
-    if (check.reason === 'mismatch') console.error(GATEWAY_DEFS[gwKey].name + ' webhook: signature did not verify, treated as a hint only.');
-    res.status(200).json({ received: true });
-    const wh = gatewayWebhookFields(gwKey, body);
-    console.log(`${GATEWAY_DEFS[gwKey].name} webhook: ${wh.event || '?'} ${wh.refs[0] || '?'}${check.verified ? ' (signed)' : ''}`);
-    await gatewayWebhookWork(gwKey, body, check.verified);
-    retryCallbackWork(GATEWAY_DEFS[gwKey].name + ' webhook', () => gatewayWebhookWork(gwKey, body, check.verified), () => gatewayWebhookOpen(gwKey, body), (wh.isCollection || wh.isPayout) && (wh.label === 'success' || wh.label === 'failed'));
-  });
-}
 // ═══════════════════════════════════════════
 // WITHDRAWAL ACCOUNTS (mobile money + bank)
 // ═══════════════════════════════════════════
-// WITHDRAWAL ACCOUNTS: MTN Mobile Money or Airtel Money numbers only, up to five per member, the first saved is the active one.
+// WITHDRAWAL ACCOUNTS: Commercial Bank of Ethiopia or Telebirr only, up to five per member, the first saved is the active one.
 const BANK_CARD_LIMIT = 5;
 app.post('/bank/save', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -7559,7 +5008,6 @@ const SETTINGS_CRITICAL_RANGES = {
   withdrawFeePct: [0, 100], minWithdraw: [0, MAX_MONEY_AMOUNT], minDeposit: [0, MAX_MONEY_AMOUNT],
   welcomeBonus: [0, MAX_MONEY_AMOUNT], commL1: [0, 100], commL2: [0, 100], commL3: [0, 100],
   maxWithdrawalsPerDay: [0, 1000],
-  autoApproveMinSec: [0, 86400], autoApproveMaxSec: [0, 86400], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
   // 0 = not scheduled; upper bound is a plain sanity cap (year 2100), not a
   // real business constraint -- an admin fat-fingering a date shouldn't be
   // able to silently store something outside "any date anyone would ever
@@ -7576,7 +5024,7 @@ const SETTINGS_CRITICAL_RANGES = {
   myBannerOpacity: [0, 100], myBannerBlur: [0, 40], appClaimAmount: [0, MAX_MONEY_AMOUNT],
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'requireTwofaToWithdraw', 'autoApproveWithdrawalsEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'requireTwofaToWithdraw', 'withdrawWindowEnabled', 'blockRootDomain'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -7667,18 +5115,6 @@ app.post('/admin/settings/update', async (req, res) => {
       const hint = String(updates.giftCodeHint == null ? '' : updates.giftCodeHint).replace(/[<>]/g, '').trim().slice(0, 40);
       updates.giftCodeHint = hint || DEFAULT_SETTINGS.giftCodeHint;
     }
-    if ('depositMethodNames' in updates) {
-      const names = String(updates.depositMethodNames == null ? '' : updates.depositMethodNames).split(',').map(x => x.replace(/[<>*]/g, '').trim().slice(0, 20)).filter(Boolean).slice(0, 6);
-      updates.depositMethodNames = names.length ? names.join(', ') : DEFAULT_SETTINGS.depositMethodNames;
-    }
-    if ('lworxCollect' in updates && !['standard', 'stanbic'].includes(updates.lworxCollect))
-      return res.status(400).json({ status: 'error', message: `lworxCollect must be 'standard' or 'stanbic'` });
-    if ('depositGateways' in updates) {
-      const list = String(updates.depositGateways == null ? '' : updates.depositGateways).split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
-      if (list.length > 6 || list.some(x => !DEPOSIT_GATEWAYS.includes(x)))
-        return res.status(400).json({ status: 'error', message: `depositGateways must list up to 6 of ${DEPOSIT_GATEWAYS.join(', ')}` });
-      updates.depositGateways = list.length ? list.join(', ') : DEFAULT_SETTINGS.depositGateways;
-    }
     if ('brandName' in updates) {
       const name = String(updates.brandName == null ? '' : updates.brandName).trim();
       if (!name) return res.status(400).json({ status: 'error', message: 'App name cannot be blank.' });
@@ -7686,35 +5122,12 @@ app.post('/admin/settings/update', async (req, res) => {
       if (/[<>]/.test(name)) return res.status(400).json({ status: 'error', message: 'App name cannot contain < or >.' });
       updates.brandName = name;
     }
-    // Automatic withdrawals: the wait is a range, so the top cannot be below the bottom (checked against what is stored when only one is sent),
-    // and the moment the switch goes from off to on is remembered so waits already counted before it was switched on do not fire all at once.
-    delete updates.autoApproveEnabledAt;
-    if (['autoApproveMinSec', 'autoApproveMaxSec', 'autoApproveWithdrawalsEnabled'].some(k => k in updates)) {
-      const prev = await getSettings();
-      const lo = 'autoApproveMinSec' in updates ? updates.autoApproveMinSec : Number(prev.autoApproveMinSec);
-      const hi = 'autoApproveMaxSec' in updates ? updates.autoApproveMaxSec : Number(prev.autoApproveMaxSec);
-      if (hi < lo) return res.status(400).json({ status: 'error', message: 'The longest wait cannot be shorter than the shortest wait.' });
-      if (updates.autoApproveWithdrawalsEnabled === true && !prev.autoApproveWithdrawalsEnabled) updates.autoApproveEnabledAt = Date.now();
-    }
-    // Start of every new payment reference. Refused rather than repaired, so what the owner types is exactly what appears at the gateway.
+    // Start of every new payment reference. Refused rather than repaired, so what the owner types is exactly what appears on the reference.
     if ('referencePrefix' in updates) {
       const px = sanitizeRefPrefix(updates.referencePrefix);
       if (!px) return res.status(400).json({ status: 'error', message: 'The reference start must be 1 to 12 letters or digits and begin with a letter, e.g. potato' });
       updates.referencePrefix = px;
     }
-    // 'automatic' is deliberately NOT accepted here anymore (Round 102) --
-    // it's still recognized when READING an already-stored legacy value
-    // (normalizeProviderValue()), but nothing should ever WRITE it again
-    // now that 'marzpay'/'pesajet' are the real, distinct canonical values.
-    // 'manual' is likewise no longer accepted here -- manual deposit
-    // collection was removed outright, so this field only ever picks the
-    // automatic GATEWAY now. An already-stored legacy 'manual' value is
-    // still read correctly (depositAutomaticProvider()'s own fallback to
-    // MarzPay) -- it just can never be WRITTEN again going forward.
-    if ('depositMethod' in updates && !['marzpay', 'pesajet', 'tavupay'].includes(updates.depositMethod))
-      return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay', 'pesajet' or 'tavupay'` });
-    if ('withdrawMethod' in updates && !['follow', 'marzpay', 'pesajet', 'tavupay', 'obpay', 'rotate', 'manual'].includes(updates.withdrawMethod))
-      return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'rotate', 'marzpay', 'pesajet', 'tavupay', 'obpay' or 'manual'` });
     // The link-preview words: plain text only, trimmed and capped (Telegram shows about this much).
     for (const [key, max] of [['linkPreviewTitle', 70], ['linkPreviewText', 260]]) {
       if (!(key in updates)) continue;
@@ -8921,9 +6334,9 @@ app.post('/admin/user/delete', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     // Codex-caught real bug: this used to delete every pendingDeposits row
     // with status != 'matched', which also swept up 'initiating'/'pending'
-    // deposits that are genuinely still in flight at MarzPay -- not
-    // resolved yet, not a dead end. If MarzPay later confirmed the
-    // collection (webhook, or the client's own status poll) after this ran,
+    // deposits that are genuinely still in flight -- not
+    // resolved yet, not a dead end. If the recharge was approved
+    // after this ran,
     // the lookup by deposit id would find nothing (row deleted), so
     // creditDeposit() could never run -- and even if it somehow could,
     // there'd be no user doc left to credit into. Real collected money,
@@ -9116,7 +6529,7 @@ app.post('/admin/ban', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) { res.status(adminFailCode(e)).json({ status: 'error', message: e.message }); }
 });
-// Groups already-processed rows by calendar day (Kampala time, matching
+// Groups already-processed rows by calendar day (Addis Ababa time, matching
 // eatDayKey everywhere else) for the admin "Processed per day" charts.
 // `rows` must already be filtered to only the processed ones.
 function groupProcessedByDay(rows, timestampField, amountField = 'amount') {
@@ -9413,62 +6826,12 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     rows.length = 0; rows.push(...scoped);
     rows.forEach(w => { w.accountPhone = phones[w.userId] || ''; w.referralCode = refCodes[w.userId] || ''; counts[w.status] = (counts[w.status] || 0) + 1; });
     const { processedByDay, processedAmount } = groupProcessedByDay(rows.filter(w => w.status === 'processed'), 'processedAt', 'net');
-    // The tab needs to know which real payout path is active -- it changes
-    // what the approve button does/says and what it must warn the admin
-    // about. Sent with the list so the tab doesn't need a second round trip
-    // just to label a button. 'marzpay' | 'pesajet' | 'manual'.
     // Subagent-audit-caught: same missing-truncated-flag gap as the deposits
     // list above, fixed the same way.
     const truncated = snap.docs.length >= 5000 || unresolvedSnap.docs.length >= 5000;
-    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, payoutMode: withdrawProvider(sett), autoWithdrawals: !!sett.autoApproveWithdrawalsEnabled && !payoutIsManual(sett), autoLimit: Number(sett.autoApproveMaxAmount) || 0, truncated, regionKey: want || 'all' });
+    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, truncated, regionKey: want || 'all' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-// Reject refunds the member, so it must never run on a payout that may be live at the gateway. Pending rows were never sent. For every other row the
-// gateway is asked first (PesaJet by transaction id, or by our reference when the id was never recorded; MarzPay by uuid).
-// Only a final failed/expired answer, or PesaJet reporting that it has no such payment at all, allows the refund.
-async function payoutRejectGuard(witId, w, opts) {
-  if (w.status === 'pending') return null;
-  const busy = (what) => ({ code: 503, message: `${what} could not be reached to confirm this payout. Try again in a moment.` });
-  const live = (what, st) => ({ code: 409, message: `${what} reports this payout as ${st || 'unknown'}, so it cannot be rejected. Wait for the final result.` });
-  const FINAL_FAIL = ['failed', 'expired', 'cancelled', 'canceled', 'declined'];
-  if (w.pesajetTxId || w.pesajetRef) {
-    if (w.pesajetTxId) {
-      const t = await pesajetGetTx(w.pesajetTxId);
-      if (t.providerDown) return busy('PesaJet');
-      if (!t.notFound && !FINAL_FAIL.includes(t.status)) return live('PesaJet', t.status);
-      return null;
-    }
-    const f = await pesajetFindByReference(w.pesajetRef, { sinceMs: tsMillis(w.createdAt) });
-    if (f.providerDown || (!f.found && !f.complete)) return { code: 503, message: 'PesaJet could not confirm whether this payout was sent (no transaction id was saved). Try again in a moment, or check PesaJet\'s own dashboard first.' };
-    if (f.found && !FINAL_FAIL.includes(f.status)) return live('PesaJet', f.status);
-    return null;
-  }
-  // LworxPay no longer sends payouts (owner), so a payout of its that is stuck pending can be rejected -- once the owner has confirmed it. A payout it reports as
-  // COMPLETED went out and is never rejectable. Anything else (pending, waiting for approval, unreachable, no record) needs the owner's explicit OK, because it might still
-  // be paid later; rejecting then refunds the member now, and the row is watched afterwards (see watchRejectedLworxPayouts).
-  if (w.payGw === 'lworxpay') {
-    const t = await PAYOUT_ADAPTERS.lworxpay.read(w).catch(() => ({ providerDown: true }));
-    if (t.status === 'success') return { code: 409, message: 'LworxPay says this payout was SENT (completed), so it cannot be rejected. Nothing was refunded.' };
-    if (t.status === 'failed') return null;
-    if (opts && opts.confirmPending) return null;
-    const what = t.providerDown || (t.unavailable && t.httpStatus !== 404) ? 'could not be asked about this payout just now' : t.unavailable ? 'has no record of this payout' : `shows this payout as ${t.rawStatus || t.status || 'pending'} (not completed)`;
-    return { code: 409, needsConfirm: true, message: `LworxPay ${what}. Rejecting refunds the member now. If LworxPay still completes it later, the member is paid twice, so cancel it in the LworxPay dashboard too. If it does get paid, this row will be flagged.` };
-  }
-  if (w.payGw && PAYOUT_ADAPTERS[w.payGw]) {
-    const gname = PAYOUT_NAMES[w.payGw];
-    if (w.payGw === 'tavupay' && !w.payGwTxId) return { code: 503, message: 'TavuPay cannot confirm this payout from here (its reference was never saved). Check the TavuPay dashboard first; rejecting a payout that already went out refunds the member on top of it.' };
-    const t = await PAYOUT_ADAPTERS[w.payGw].read(w);
-    if (t.providerDown || (t.unavailable && t.httpStatus !== 404)) return busy(gname);
-    if (t.unavailable) return null;                       // the gateway has no such payout: nothing was sent
-    return t.status === 'failed' ? null : live(gname, t.rawStatus || t.status);
-  }
-  if (w.marzTxUuid) {
-    const st = await marzGetSendStatus(w.marzTxUuid);
-    if (!st) return busy('MarzPay');
-    return FAILED_STATUSES.has(st) ? null : live('MarzPay', st);
-  }
-  return null;
-}
 app.post('/admin/withdraw/reject', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const witId = String(req.body.withdrawalId || '');
@@ -9479,28 +6842,11 @@ app.post('/admin/withdraw/reject', async (req, res) => {
     const snap = await ref.get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
     const w = snap.data();
-    // Codex-caught real bug: 'sending' (a MarzPay network error mid-request
-    // -- genuinely ambiguous whether the payout went out, see
-    // processWithdrawalCore's own comment) was never an accepted status
-    // here, and nothing else in the codebase ever resolves it either --
-    // once a withdrawal landed on 'sending' it was permanently stuck, with
-    // literally no code path able to move it anywhere else. This is exactly
-    // the recovery action that comment describes ("leave it at 'sending'
-    // for the admin to check on MarzPay's own dashboard") but the button to
-    // actually do it never existed. Only use this for a 'sending' row after
-    // manually confirming on MarzPay's dashboard that it was NOT actually
-    // sent -- if MarzPay's dashboard shows it WAS sent, take no action here
-    // (the payout already happened; rejecting would refund on top of it).
     if (w.status !== 'pending' && w.status !== 'processing' && w.status !== 'sending') return res.status(400).json({ status: 'error', message: `Cannot reject, the status is '${w.status}'` });
-    // A payout the gateway may already have must be asked about first: rejecting (= refunding) a payout that then completes pays the member twice.
-    const blocked = await payoutRejectGuard(witId, w, { confirmPending: req.body.confirmPending === true });
-    if (blocked) return res.status(blocked.code).json({ status: 'error', message: blocked.message, ...(blocked.needsConfirm ? { needsConfirm: true } : {}) });
     const { declined, refunded } = await declineWithdrawalAndRefund(ref, w.userId, stripHtml(textOf(req.body.reason)).slice(0, 200) || 'Rejected by admin', ['pending', 'processing', 'sending'], req.adminUser?.username || 'owner');
     if (!declined) return res.status(409).json({ status: 'error', message: 'Withdrawal status changed before this could be applied. Refresh and try again.' });
     await finalizeWithdrawalTransactionRecord(witId, 'declined', refunded);
-    // A LworxPay payout rejected while it was still pending is watched afterwards: if LworxPay completes it anyway, the row is flagged (paidAfterReject).
-    if (w.payGw === 'lworxpay') await ref.update({ rejectedWhilePending: true, rejectedAtMs: Date.now() }).catch(() => {});
-    logAdminAction(req, 'withdrawal_rejected', { withdrawalId: witId, refunded, ...(w.payGw === 'lworxpay' ? { lworxpay: true } : {}) });
+    logAdminAction(req, 'withdrawal_rejected', { withdrawalId: witId, refunded });
     res.json({ status: 'success', message: refunded ? 'Withdrawal rejected and refunded' : 'Withdrawal rejected, refund is pending and will complete shortly' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
   finally { _withdrawInFlight.delete(witId); }
@@ -9570,144 +6916,6 @@ app.get('/admin/stats', async (req, res) => {
       }
     });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-// Owner: "let us put on dashboard so as it checks marzpy available
-// balance." A real, live check of MarzPay's own float -- how much money
-// is actually sitting in the account MarzPay pays withdrawals FROM --
-// distinct from walletTotal above (members' own balances, this
-// platform's liability) or any DB figure. verifyAdmin, not verifyOwner --
-// same visibility level as the rest of Dashboard, which staff already see.
-app.get('/admin/marzpay/balance', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  if (!MARZPAY_KEY) return res.status(400).json({ status: 'error', message: 'MarzPay is not configured on this server (no MARZPAY_KEY set).' });
-  try {
-    const region = DEFAULT_REGION;
-    const d = await marzGetBalance(region);
-    if (d.status !== 'success') return res.status(502).json({ status: 'error', message: marzUserMsg(d, 'Could not reach MarzPay') });
-    res.json({ status: 'success', amount: d.amount, formatted: d.formatted, currency: d.currency, accountStatus: d.accountStatus });
-  } catch (e) {
-    console.error('MarzPay balance check failed:', e.message);
-    res.status(502).json({ status: 'error', message: PROVIDER_BUSY_MSG });
-  }
-});
-// ── WHAT HAS GONE THROUGH PESAJET ──
-// Owner: "l also want to see the balance of jetpay just like we were doing on
-// marz."
-//
-// PESAJET PUBLISHES NO BALANCE ENDPOINT. Both of their official SDKs --
-// @pesajet/sdk on npm and pesajet on PyPI -- expose exactly three calls:
-// create a payment, read a payment, preview a fee. There is no float, wallet
-// or balance call in either, and their REST docs show none. MarzPay's own
-// card exists because MarzPay's SDK really does call GET /balance; guessing a
-// path here would be inventing API surface on a money provider, which this
-// file does not do.
-//
-// So this answers the question a balance is actually asked for -- "how much
-// has gone in and out through this gateway" -- from POTATO'S OWN RECORDS,
-// which are exact for what we sent and received. It is NOT their float: it
-// cannot see settlements to a bank account, their fees, or anything moved
-// outside Potato, and the panel says so in those words rather than letting a
-// number imply more than it knows.
-//
-// The moment PesaJet give us a balance path this becomes a real reading and
-// the card keeps its place. That is open question 4 in docs/pesajet-api.md.
-//
-// A high ceiling rather than no ceiling, for the reason /admin/stats records:
-// this pulls whole collections into Node memory on a shared Atlas tier, and
-// the dashboard re-polls every 30 seconds. Past it the reply says so rather
-// than quietly calling a partial total complete. Named at module scope so the
-// test can shrink it and actually reach the truncated case.
-const PESAJET_SUMMARY_SCAN = 200000;
-app.get('/admin/pesajet/summary', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const [depSnap, witSnap, sett] = await Promise.all([
-      db.collection('pendingDeposits').where('provider', '==', 'pesajet').limit(PESAJET_SUMMARY_SCAN).get(),
-      db.collection('withdrawals').where('pesajetRef', '>', '').limit(PESAJET_SUMMARY_SCAN).get(),
-      getSettings(),
-    ]);
-    const truncated = depSnap.size >= PESAJET_SUMMARY_SCAN || witSnap.size >= PESAJET_SUMMARY_SCAN;
-    const zero = () => ({ collected: 0, collectedCount: 0, paidOut: 0, paidOutCount: 0,
-                          pendingIn: 0, pendingInCount: 0, pendingOut: 0, pendingOutCount: 0 });
-    const summary = Object.assign({ regionKey: DEFAULT_REGION_KEY, currency: DEFAULT_REGION.currency }, zero());
-    for (const d of depSnap.docs) {
-      const row = d.data();
-      const amt = finiteMoney(row.displayAmount != null ? row.displayAmount : row.amount);
-      const b = summary;
-      // depositFullyCredited() is the same test the rest of this file uses for
-      // "this deposit really landed" -- status alone is not enough, because
-      // claim-before-credit can leave 'matched' with the wallet write unfinished.
-      if (depositFullyCredited(row)) { b.collected += amt; b.collectedCount++; }
-      else if (row.status === 'pending' || row.status === 'initiating') { b.pendingIn += amt; b.pendingInCount++; }
-    }
-    for (const w of witSnap.docs) {
-      const row = w.data();
-      const amt = finiteMoney(row.net != null ? row.net : row.amount);
-      const b = summary;
-      if (row.status === 'processed') { b.paidOut += amt; b.paidOutCount++; }
-      else if (row.status === 'processing' || row.status === 'sending') { b.pendingOut += amt; b.pendingOutCount++; }
-    }
-    summary.net = round2(summary.collected - summary.paidOut);
-    res.json({
-      status: 'success', truncated, regions: [summary],
-      configured: pesajetConfigured(),
-      // Whether this gateway is actually in the path right now, so the panel
-      // can keep the card out of the way of an operator who does not use it.
-      selected: depositProvider(sett) === 'pesajet' || withdrawProvider(sett) === 'pesajet',
-      // Said here rather than only in the panel, so an operator reading the
-      // raw response is not misled either.
-      note: 'Potato\'s own record of money moved through PesaJet. PesaJet publishes no balance endpoint, so this is not the float in their account.',
-    });
-  } catch (e) {
-    console.error('PesaJet summary error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not read the PesaJet summary' });
-  }
-});
-// The same "money moved" card for the OTHER recharge gateways (TavuPay, LworxPay, ObPay): Potato's own record of what came in through each (they only
-// take recharges here), plus the gateway's own balance where it has a balance call (LworxPay /balance, ObPay /balance; TavuPay has none documented).
-// One read of each gateway's recharges, then the live balances in parallel with a short wait and a 30 s memory, so the dashboard's 30 s refresh never
-// hammers a gateway's per-minute limit.
-const _gwBalanceCache = {};
-async function gatewayBalance(provider) {
-  const hit = _gwBalanceCache[provider];
-  if (hit && Date.now() - hit.at < 30000) return hit.value;
-  let value = null;
-  if (provider === 'lworxpay' || provider === 'obpay') {
-    const r = await _gwRequest(provider, '/balance', { timeoutMs: GW_READ_TIMEOUT, paced: true });
-    const d = (r.ok && r.data && typeof r.data.data === 'object' && r.data.data) || null;
-    const amount = d ? Number(provider === 'lworxpay' ? d.balance : d.net) : NaN;
-    value = Number.isFinite(amount) ? { amount: round2(amount) } : { error: r.notConfigured ? 'No key is set on the server yet.' : 'Could not read their balance right now.' };
-  }
-  _gwBalanceCache[provider] = { at: Date.now(), value };
-  return value;
-}
-app.get('/admin/gateways/summary', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const sett = await getSettings();
-    const keys = ['tavupay', 'lworxpay', 'obpay'];
-    const snaps = await Promise.all(keys.map(k => db.collection('pendingDeposits').where('provider', '==', k).limit(PESAJET_SUMMARY_SCAN).get()));
-    const balances = await Promise.all(keys.map(k => Promise.race([gatewayBalance(k), new Promise(r => setTimeout(() => r({ error: 'Could not read their balance right now.' }), 8000))]).catch(() => ({ error: 'Could not read their balance right now.' }))));
-    const chosen = depositGatewayList(sett);
-    let truncated = false;
-    const gateways = keys.map((k, i) => {
-      const g = { key: k, name: k === 'tavupay' ? 'TavuPay' : GATEWAY_DEFS[k].name, collected: 0, collectedCount: 0, pendingIn: 0, pendingInCount: 0, failedCount: 0,
-        configured: k === 'tavupay' ? tavupayConfigured() : GATEWAY_DEFS[k].configured(), selected: chosen.includes(k) || depositProvider(sett) === k, balance: balances[i] || null, regionKey: DEFAULT_REGION_KEY };
-      if (snaps[i].size >= PESAJET_SUMMARY_SCAN) truncated = true;
-      for (const d of snaps[i].docs) {
-        const row = d.data(), amt = finiteMoney(row.displayAmount != null ? row.displayAmount : row.amount);
-        if (depositFullyCredited(row)) { g.collected += amt; g.collectedCount++; }
-        else if (row.status === 'pending' || row.status === 'initiating') { g.pendingIn += amt; g.pendingInCount++; }
-        else if (row.status === 'failed') g.failedCount++;
-      }
-      g.collected = round2(g.collected); g.pendingIn = round2(g.pendingIn);
-      return g;
-    });
-    res.json({ status: 'success', truncated, gateways });
-  } catch (e) {
-    console.error('Gateway summary error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not read the gateway summaries' });
-  }
 });
 app.post('/admin/transactions/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -9927,7 +7135,7 @@ function bandOf(h) {
   if (h >= 17 && h < 21) return 'evening';
   return 'night';
 }
-// Read-only schedule math mirrors settlement's cumulative rounding. Each instalment falls at Uganda midnight (00:00),
+// Read-only schedule math mirrors settlement's cumulative rounding. Each instalment falls at Ethiopia midnight (00:00),
 // the first one at the first midnight after purchase (see payoutDueAtMs). `created` below is the anchor that makes
 // "created + k days" equal the k-th payment's instant, so the rest of the maths reads the same as before.
 function analyticsContractDay(inv, start, end, now) {
@@ -10671,230 +7879,20 @@ app.use((err, _req, res, _next) => {
 });
 
 // ── RECONCILERS ──
-async function inChunks(items, size, fn) {
-  for (let i = 0; i < items.length; i += size) await Promise.all(items.slice(i, i + size).map(it => fn(it).catch(e => console.error('Reconcile row error:', e.message))));
-}
+// Recharges are credited by hand-checked bank / Telebirr orders (see the manual block), so the only thing left to heal here is a credit
+// that was claimed but whose wallet write failed (needsManualCredit): retried every tick so it never waits for the member to come back.
 async function reconcilePendingDeposits() {
   let settled = 0;
   try {
-    // subagent-audit-caught: this used to scan only 'pending' -- a deposit
-    // that never made it past 'initiating' (its own follow-up write that
-    // records marzTxUuid, right after marzCollect() succeeded at the
-    // provider, itself hit a transient failure) was invisible to this
-    // sweep entirely. Widened to also pick up 'initiating' rows; still a
-    // no-op for one that genuinely has no marzTxUuid recorded (nothing to
-    // check MarzPay's status with) -- that narrow residual case still
-    // relies on an inbound webhook or a human admin noticing it in
-    // /admin/deposits/list, same as before, but it's no longer invisible
-    // in Records (Round 58's up-front ledger row still shows "Processing").
-    // Codex-caught real bug (2nd money-flow audit): this used to fetch the
-    // oldest 50 pending/initiating rows regardless of whether they had a
-    // usable marzTxUuid, then just `continue` past the ones that didn't --
-    // but that only skips PROCESSING them, it doesn't stop them from
-    // occupying a query slot. If 50+ old rows ever permanently lack a uuid
-    // (nothing else ever sets one for them -- see the comment above), this
-    // query would return the SAME stuck 50 every single tick forever,
-    // starving any genuinely newer, actually-reconcilable row that sits
-    // beyond that fixed window. `.where('marzTxUuid','>','')` uses a real,
-    // already-supported comparison operator (unlike `$ne`, MongoDB's range
-    // operators correctly exclude documents where the field is missing OR
-    // null) to only ever select rows this loop can actually do something
-    // with -- nothing lost, since a uuid-less row was never actionable here
-    // anyway, just no longer able to block newer ones.
-    const snap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('marzTxUuid', '>', '').orderBy('createdAt', 'asc').limit(50).get();
-    // Five rows at a time: each check is a patient gateway read (up to 20 s), done one after another a slow MarzPay held up everything behind it.
-    await inChunks(snap.docs, 5, async (doc) => {
-      const dep = doc.data();
-      if (!dep.marzTxUuid) return;
-      const marzTx = await marzGetCollectTx(dep.marzTxUuid);
-      if (SUCCESS_STATUSES.has(marzTx.status)) { await creditDeposit(doc, 'reconciler'); settled++; }
-      else if (FAILED_STATUSES.has(marzTx.status)) await markDepositFailed(doc.ref, dep.userId, marzDepositFailureMsg(marzTx));
-    });
-    // PesaJet's own pending/initiating deposits. This sweep matters MORE for
-    // this gateway than for the other two: PesaJet's webhook URL is
-    // configured in their dashboard rather than sent per request, so until
-    // the owner sets it there this loop and the member's own status poll are
-    // the ONLY things that resolve a deposit. Same posture regardless --
-    // never trust anything but our own live re-check.
-    //
-    // Excluded by `pesajetTxId > ''` for the same starvation reason spelled
-    // out for the two loops above: a row whose create call never returned a
-    // transaction id can never be checked, and without the exclusion 50 of
-    // those would reselect themselves every tick forever and starve genuinely
-    // pending newer ones.
-    const pjSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'pesajet').where('pesajetTxId', '>', '').orderBy('createdAt', 'asc').limit(50).get();
-    await inChunks(pjSnap.docs, 5, async (doc) => {
-      const dep = doc.data();
-      const t = await pesajetGetTx(dep.pesajetTxId);
-      if (t.providerDown) return;
-      const realStatus = pesajetStatusLabel(t.status);
-      if (realStatus === 'success') { await creditDeposit(doc, 'reconciler'); settled++; }
-      else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, pesajetFailureMsg(t.status));
-    });
-    // ...and the rows the sweep above deliberately cannot touch: PesaJet
-    // deposits with NO transaction id, because the create response was lost
-    // while PesaJet may well have accepted it. Nothing could ever check these
-    // and they sat pending forever -- the worst shape a money row can be in,
-    // since the member's money may have left and no path here would credit
-    // it. Their LIST endpoint is what makes them findable, by our own
-    // reference.
-    //
-    // Ordered DESCENDING, unlike every other sweep here: a row is only
-    // recoverable while it is still inside the window we can page, so the
-    // recent ones are the ones worth spending calls on. Older ones age out
-    // rather than starving the young ones, which is the same starvation the
-    // `pesajetTxId > ''` exclusion above exists to avoid.
-    const pjLostSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'pesajet').where('pesajetTxId', '==', null).orderBy('createdAt', 'desc').limit(60).get();
-    let lookedUp = 0;
-    for (const doc of pjLostSnap.docs) {
-      if (lookedUp >= PESAJET_LOST_PER_TICK) break;
-      const dep = doc.data();
-      if (dep.pesajetTxId) continue;                       // the sweep above owns it
-      const madeMs = tsMillis(dep.createdAt);
-      if (!madeMs) continue;
-      const age = Date.now() - madeMs;
-      // Young rows belong to the member's own status poll; older than the
-      // window is past what a lookup can see.
-      if (age < PESAJET_LOST_MIN_AGE_MS || age > PESAJET_LOST_WINDOW_MS) continue;
-      lookedUp++;
-      const hit = await pesajetFindByReference(dep.ref || doc.id, { sinceMs: madeMs });
-      if (hit.providerDown || hit.unreadable) continue;
-      if (hit.found && hit.transactionId) {
-        await doc.ref.update({ pesajetTxId: hit.transactionId }).catch(() => {});
-        const realStatus = pesajetStatusLabel(hit.status);
-        if (realStatus === 'success') { await creditDeposit(doc, 'reconciler'); settled++; }
-        else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, pesajetFailureMsg(hit.status));
-        continue;
-      }
-      // Failed ONLY on a window scanned right to its end. PesaJet has no
-      // record of this reference, so no prompt was ever raised and nothing
-      // can have been taken. Anything less certain -- a short read, an
-      // unreadable envelope, a gateway blip -- leaves the row pending, which
-      // is the outcome that cannot cost anybody money.
-      if (hit.complete) await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
-    }
-    // TavuPay's pending deposits: re-read each by its TavuPay reference. A gateway that will not answer the question leaves the row alone.
-    const tvSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'tavupay').orderBy('createdAt', 'asc').limit(50).get();
-    await inChunks(tvSnap.docs.filter(d => d.data().tavupayRef), 5, async (doc) => {
-      const t = await tavupayGetTx(doc.data().tavupayRef);
-      if (t.providerDown || t.unavailable) return;
-      const out = await tavupayApply(doc, t, 'reconciler');
-      if (out === 'success') settled++;
-    });
-    // LworxPay / ObPay pending deposits: re-read each by our reference. A gateway that will not answer the question leaves the row alone.
-    for (const gp of Object.keys(GATEWAY_DEFS)) {
-      const gSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', gp).orderBy('createdAt', 'asc').limit(30).get();
-      // Only rows the fast paths are NOT already on (no watcher is on them), a few per pass. All status reads of a gateway share ONE
-      // pacer (its per-minute limit), so a long list here would otherwise make a member's own check wait behind it.
-      const dueRows = gSnap.docs.filter(d => d.data()[gp + 'Ref'] && !gatewayWatcherFresh(gp, d.id)).slice(0, 10);
-      await inChunks(dueRows, 3, async (doc) => {
-        const t = await gatewayGetTx(gp, doc.data()[gp + 'Ref']);
-        if (t.providerDown || t.unavailable) return;
-        const out = await gatewayApply(gp, doc, t, 'reconciler');
-        if (out === 'success') settled++;
-      });
-    }
-    // Deposits stuck 'matched' with needsManualCredit:true (the wallet write
-    // itself failed after status already claimed the credit) never show up
-    // in the 'pending' scan above -- retry them here every tick regardless
-    // of whether any user is actively polling, so a stuck credit heals on
-    // its own even if the user never reopens the deposit screen.
     const stuckSnap = await db.collection('pendingDeposits').where('needsManualCredit', '==', true).limit(50).get();
     for (const doc of stuckSnap.docs) { if (await creditDeposit(doc).catch(() => false)) settled++; }
   } catch (e) { console.error('Reconcile deposits error:', e.message); }
   return settled;
 }
-// A PesaJet payout can sit on 'sending' with no transaction id: the reply was lost (5xx/timeout) or came without an id. PesaJet may or may not have it.
-// After 2 minutes it is looked up by OUR reference (the withdrawal id): found = remember its id and move to 'processing' exactly as a normal accepted send
-// does (totalWithdrawn counted once), after which the usual webhook/reconciler settles it; a completely scanned window with no such payment = PesaJet never
-// took it, so it goes back to 'pending' (the idempotency key is the withdrawal id, so a retry cannot double-pay); anything less certain is left alone.
-const SENDING_RECOVER_AFTER_MS = 2 * 60 * 1000, SENDING_RECOVER_PER_TICK = 5;
-async function resolveSendingPesajetPayouts() {
-  const snap = await db.collection('withdrawals').where('status', '==', 'sending').where('pesajetRef', '>', '').orderBy('createdAt', 'asc').limit(30).get();
-  let looked = 0;
-  for (const doc of snap.docs) {
-    if (looked >= SENDING_RECOVER_PER_TICK) break;
-    const w = doc.data();
-    if (w.pesajetTxId || _withdrawInFlight.has(doc.id)) continue;
-    const sentMs = tsMillis(w.sendingAt) || tsMillis(w.createdAt);
-    if (!sentMs || Date.now() - sentMs < SENDING_RECOVER_AFTER_MS) continue;
-    looked++;
-    const f = await pesajetFindByReference(w.pesajetRef, { sinceMs: tsMillis(w.createdAt) }).catch(() => null);
-    if (!f || f.providerDown || f.unreadable) continue;
-    _withdrawInFlight.add(doc.id);
-    try {
-      if (f.found && f.transactionId) {
-        await withLock('bal:' + w.userId, async () => {
-          await doc.ref.update({ pesajetTxId: f.transactionId });
-          const claimed = await doc.ref.updateIf({ status: 'sending', pesajetTxId: f.transactionId }, { status: 'processing', processedBy: w.sendingBy || 'recovered', processedAt: FieldValue.serverTimestamp() });
-          if (!claimed) return;
-          await db.collection('users').doc(w.userId).update({ totalWithdrawn: FieldValue.increment(w.net) }).catch(e => console.error(`MONEY-SAFETY: totalWithdrawn increment failed for recovered withdrawal ${doc.id}:`, e.message));
-        });
-        try { const tx = await db.collection('transactions').where('withdrawalId', '==', doc.id).limit(1).get(); if (!tx.empty) await tx.docs[0].ref.updateIf({ status: 'pending' }, { status: 'processing' }); } catch (_) {}
-        console.log(`Recovered PesaJet payout ${doc.id}: found at PesaJet as ${f.transactionId} (${f.status})`);
-      } else if (f.complete) {
-        await doc.ref.updateIf({ status: 'sending', pesajetTxId: null }, { status: 'pending', sendingReference: null, pesajetRef: null, pesajetTxId: null, sendingBy: null, sendingAt: null });
-        console.log(`PesaJet has no record of payout ${doc.id}: handed back to pending`);
-      }
-    } catch (e) { console.error('Sending recovery error:', e.message); }
-    finally { _withdrawInFlight.delete(doc.id); }
-  }
-}
 async function reconcilePendingWithdrawals() {
-  let settled = 0;
-  try {
-    await reconcileWithdrawalCreations();
-    await resolveSendingPesajetPayouts();
-    settled += await reconcileGatewayPayouts();
-    // Codex-caught real bug (2nd money-flow audit): same starvation risk as
-    // reconcilePendingDeposits() above -- see its own comment for the full
-    // reasoning. A `processing` row with no marzTxUuid was never
-    // actionable by this loop anyway (the `continue` below), so excluding
-    // it from the query only removes wasted/blocking slots, not capability.
-    const snap = await db.collection('withdrawals').where('status', '==', 'processing').where('marzTxUuid', '>', '').orderBy('createdAt', 'asc').limit(50).get();
-    for (const doc of snap.docs) {
-      const wit = doc.data();
-      if (!wit.marzTxUuid) continue;
-      const marzStatus = await marzGetSendStatus(wit.marzTxUuid);
-      if (SUCCESS_STATUSES.has(marzStatus)) {
-        if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
-        settled++;
-      } else if (FAILED_STATUSES.has(marzStatus)) {
-        // subagent-audit-caught: same `declined` guard as the other two
-        // decline-then-finalize call sites -- required here too, since this
-        // reconciler tick is exactly the kind of independent live-status
-        // check that can race the webhook or a client poll.
-        const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the mobile-money provider', ['processing']);
-        if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
-        settled++;
-      }
-    }
-    // PesaJet's own outstanding disbursements -- same starvation-avoiding
-    // `.where(field,'>','')` shape and the same independent re-check the
-    // webhook route uses. Deliberately scans 'processing' ONLY, not
-    // 'sending': a 'sending' row is ambiguous (we never learned whether the
-    // send landed) and resolving one as failed from an automated path would
-    // refund a member on top of money that may already have gone out. That
-    // stays a human decision in /admin/withdraw/reject, exactly as it is for
-    // the other two gateways.
-    const pjSnap = await db.collection('withdrawals').where('status', '==', 'processing').where('pesajetTxId', '>', '').orderBy('createdAt', 'asc').limit(50).get();
-    for (const doc of pjSnap.docs) {
-      const wit = doc.data();
-      if (!wit.pesajetTxId) continue;
-      const t = await pesajetGetTx(wit.pesajetTxId);
-      if (t.providerDown) continue;
-      const realStatus = pesajetStatusLabel(t.status);
-      if (realStatus === 'success') {
-        if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
-        settled++;
-      } else if (realStatus === 'failed') {
-        const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the payment provider', ['processing']);
-        if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
-        settled++;
-      }
-    }
-  } catch (e) { console.error('Reconcile withdrawals error:', e.message); }
-  return settled;
+  // Payouts are made by hand, so nothing is waiting on a provider; only a request that was cut off while being created is healed here.
+  try { await reconcileWithdrawalCreations(); } catch (e) { console.error('Reconcile withdrawals error:', e.message); }
+  return 0;
 }
 // Withdrawals left 'declined' with refundPending:true -- the wallet-side
 // refund itself failed after the decline was already committed (see
@@ -11006,7 +8004,7 @@ async function reconcileCashback() {
 // 12 at a time: with a database round trip of ~23 ms a payment (about 5 sequential database operations) takes ~115 ms, so 12 workers give ~100 payments a
 // second, which is about where Atlas Flex's 500 operations a second begins to throttle (8 workers could not reach it). Each payment still runs under its own lock.
 const CASHBACK_PARALLEL = 12;
-// A one-shot timer aimed at the next Uganda midnight starts a sweep the moment 00:00 arrives (the 0.5 s tick would
+// A one-shot timer aimed at the next Ethiopia midnight starts a sweep the moment 00:00 arrives (the 0.5 s tick would
 // anyway, at most half a second later; this just removes that wait). Re-armed after every firing.
 function armMidnightSweep() {
   const wait = Math.max(20, eatNextMidnight(Date.now()) - Date.now() + 50);
@@ -11099,269 +8097,20 @@ async function migratePayoutsToMidnightOnce() {
   await marker.set({ at: new Date(), moved: n });
   return n;
 }
-// ── STUCK RECHARGES: ask the payment provider what really happened ──
-// Owner: recharges sat on "Needs Review" and the Sync button never cleared them. Two kinds of row were invisible to every sweep: rows parked as
-// 'review' (the sweeps only read pending/initiating), and LworxPay / ObPay rows whose start reply was lost (no <provider>Ref was ever saved, so the
-// sweep had nothing to ask with). Those gateways are asked by OUR reference (the deposit id), which always exists, so every one of these can be read.
-// Settling goes through the same locked paths as a webhook (gatewayApply -> creditDeposit / markDepositFailed), so a late webhook, the member's poll
-// and this can never credit twice; a row already credited is never touched. 'failed' is only concluded when the provider says so, or answers "no such
-// payment" (HTTP 404) for a row that is parked or older than 30 minutes (the payment prompt never existed, so nothing was taken). A failed row can still
-// be Force-credited if money did land.
-const STUCK_SYNC_COOLDOWN_MS = 5 * 60 * 1000, STUCK_SYNC_MAX_AGE_MS = 7 * 24 * 3600 * 1000, STUCK_NO_RECORD_AFTER_MS = 30 * 60 * 1000;
-const STUCK_PROVIDER_NAMES = { pesajet: 'PesaJet', tavupay: 'TavuPay', lworxpay: 'LworxPay', obpay: 'ObPay', marzpay: 'MarzPay' };
-async function syncOneDeposit(doc) {
-  const dep = doc.data(), p = dep.provider || 'marzpay', name = STUCK_PROVIDER_NAMES[p] || 'The payment provider';
-  const ageMs = Date.now() - (tsMillis(dep.createdAt) || Date.now());
-  if (depositFullyCredited(dep)) return { outcome: 'already', message: 'Already credited' };
-  if (dep.status === 'rejected') return { outcome: 'already', message: 'Already rejected' };
-  if (dep.status === 'failed') return recheckFailedDeposit(doc);
-  if (dep.method === 'manual') return { outcome: 'skipped', message: 'Manual recharges are approved or rejected by hand' };
-  const waiting = message => ({ outcome: 'waiting', message });
-  const failed = async (why) => { await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG); return { outcome: 'failed', message: why }; };
-  const credited = async () => {
-    const again = await doc.ref.get();
-    return again.exists && depositFullyCredited(again.data()) ? { outcome: 'credited', message: name + ' confirmed the payment; the wallet was credited' } : waiting('The payment is confirmed but the wallet credit did not finish; it will be retried');
-  };
-  const noRecordOk = dep.status === 'review' || ageMs > STUCK_NO_RECORD_AFTER_MS;
-  if (GATEWAY_DEFS[p]) {
-    const t = await gatewayGetTx(p, dep[p + 'Ref'] || doc.id);
-    if (t.providerDown) return waiting(name + ' is not answering right now');
-    if (t.unavailable) {
-      if (t.httpStatus === 404 && noRecordOk) return failed(name + ' has no record of this payment, so no money was taken');
-      return waiting(name + ' would not answer for this payment' + (t.httpStatus ? ' (HTTP ' + t.httpStatus + ')' : ''));
-    }
-    if (t.status === 'success' || t.status === 'failed') {
-      const out = await gatewayApply(p, doc, t, 'admin sync');
-      if (out === 'success') return credited();
-      if (out === 'failed') return { outcome: 'failed', message: name + ' says the payment failed' };
-      if (out === 'review') return { outcome: 'review', message: name + ' reports a different amount; check it, then Force-credit only if the right amount was paid' };
-    }
-    return waiting(t.rawStatus ? name + ' says: ' + t.rawStatus : name + ' has not decided yet');
-  }
-  if (p === 'tavupay') {
-    if (!dep.tavupayRef) return waiting('No TavuPay reference was ever saved for this payment; check TavuPay by hand');
-    const t = await tavupayGetTx(dep.tavupayRef);
-    if (t.providerDown || t.unavailable) return waiting(name + ' would not answer for this payment');
-    const out = await tavupayApply(doc, t, 'admin sync');
-    if (out === 'success') return credited();
-    if (out === 'failed') return { outcome: 'failed', message: name + ' says the payment failed' };
-    if (out === 'review') return { outcome: 'review', message: name + ' reports a different amount; check it, then Force-credit only if the right amount was paid' };
-    return waiting(name + ' has not decided yet');
-  }
-  if (p === 'pesajet') {
-    let status = '';
-    if (dep.pesajetTxId) {
-      const t = await pesajetGetTx(dep.pesajetTxId);
-      if (t.providerDown) return waiting(name + ' is not answering right now');
-      status = t.status;
-    } else {
-      const hit = await pesajetFindByReference(dep.ref || doc.id, { sinceMs: tsMillis(dep.createdAt) });
-      if (hit.providerDown || hit.unreadable) return waiting(name + ' is not answering right now');
-      if (!hit.found || !hit.transactionId) return hit.complete && noRecordOk ? failed(name + ' has no record of this payment, so no money was taken') : waiting(name + ' could not be searched fully; try again');
-      await doc.ref.update({ pesajetTxId: hit.transactionId }).catch(() => {});
-      status = hit.status;
-    }
-    const real = pesajetStatusLabel(status);
-    if (real === 'success') { await creditDeposit(doc, 'admin sync'); return credited(); }
-    if (real === 'failed') { await markDepositFailed(doc.ref, dep.userId, pesajetFailureMsg(status)); return { outcome: 'failed', message: name + ' says the payment failed' }; }
-    return waiting(name + ' has not decided yet');
-  }
-  if (!dep.marzTxUuid) return waiting('No MarzPay reference was ever saved for this payment; check MarzPay by hand');
-  const marzTx = await marzGetCollectTx(dep.marzTxUuid);
-  if (SUCCESS_STATUSES.has(marzTx.status)) { await creditDeposit(doc, 'admin sync'); return credited(); }
-  if (FAILED_STATUSES.has(marzTx.status)) { await markDepositFailed(doc.ref, dep.userId, marzDepositFailureMsg(marzTx)); return { outcome: 'failed', message: name + ' says the payment failed' }; }
-  return waiting(name + ' has not decided yet');
-}
-// One row, locked against a second sync of the same row, with the answer written on it so the admin list can show what was found.
-// What the provider says about a recharge, by every id we may hold (LworxPay / ObPay: by OUR deposit id). {status:'success'|'failed'|'processing'|'', amount, fee}
-async function providerVerdictForDeposit(doc) {
-  const dep = doc.data(), p = dep.provider || 'marzpay';
-  if (GATEWAY_DEFS[p]) return gatewayGetTx(p, dep[p + 'Ref'] || doc.id, { attempts: 1 });
-  if (p === 'tavupay') return dep.tavupayRef ? tavupayGetTx(dep.tavupayRef, { attempts: 1 }) : { status: '', unavailable: true };
-  if (p === 'pesajet') {
-    if (!dep.pesajetTxId) return { status: '', unavailable: true };
-    const t = await pesajetGetTx(dep.pesajetTxId, { attempts: 1 });
-    return t.providerDown ? { providerDown: true } : { status: pesajetStatusLabel(t.status), amount: NaN, rawStatus: t.status };
-  }
-  if (!dep.marzTxUuid) return { status: '', unavailable: true };
-  const m = await marzGetCollectTx(dep.marzTxUuid);
-  return { status: SUCCESS_STATUSES.has(m.status) ? 'success' : FAILED_STATUSES.has(m.status) ? 'failed' : 'processing', amount: NaN, rawStatus: m.status };
-}
-// A recharge we closed as FAILED is asked about again: the provider is the authority, and mobile money does flip an early "failed" (a timeout, a slow
-// approval, a wrong first read) into a payment that went through. Only SUCCESS acts: it credits (the same locked, once-only path as everywhere), or
-// parks the row for review if the provider's amount differs. Anything else leaves it failed. Never touches a row that is not 'failed'.
-async function recheckFailedDeposit(doc) {
-  const dep = doc.data(), p = dep.provider || 'marzpay', name = STUCK_PROVIDER_NAMES[p] || 'The payment provider';
-  if (dep.status !== 'failed' || dep.method === 'manual') return { outcome: 'skipped', message: 'Nothing to re-check' };
-  const t = await providerVerdictForDeposit(doc);
-  await doc.ref.update({ recheckedAtMs: Date.now() }).catch(() => {});
-  if (t.providerDown) return { outcome: 'waiting', message: name + ' is not answering right now' };
-  if (t.unavailable) return { outcome: 'stillfailed', message: dep.tavupayRef || dep[p + 'Ref'] || dep.pesajetTxId || dep.marzTxUuid ? name + ' would not answer for this payment' : 'No ' + name + ' reference was ever saved for this payment, so it cannot be looked up: if ' + name + ' shows it as paid, use Force-credit' };
-  if (t.status !== 'success') return { outcome: 'stillfailed', message: name + ' still says: ' + (t.rawStatus || t.status || 'not paid') };
-  const amountOk = p === 'tavupay' ? tavupayAmountOk(dep, t.amount, t.fee) : gatewayAmountOk(dep, t.amount);
-  if (!amountOk) {
-    await withLock('dep:' + doc.id, async () => {
-      const fresh = await doc.ref.get();
-      if (fresh.exists && fresh.data().status === 'failed') await doc.ref.update({ status: 'review', reviewReason: `${name} says this recharge was PAID but reports ${t.amount} for a recharge of ${dep.amount}. Check ${name}; Force-credit only if the right amount was paid.` });
-    }).catch(() => {});
-    return { outcome: 'review', message: name + ' says it was paid but with a different amount; moved to Needs Review' };
-  }
-  console.warn(`RECHECK: recharge ${doc.id} was marked failed (${dep.failedVia || 'unknown path'}) but ${name} says it was PAID -- crediting`);
-  await creditDeposit(doc, 're-check of a failed recharge');
-  const again = await doc.ref.get();
-  return again.exists && depositFullyCredited(again.data())
-    ? { outcome: 'credited', message: name + ' says this was PAID (it had been marked failed); the wallet was credited' }
-    : { outcome: 'waiting', message: 'Paid at ' + name + ' but the wallet credit did not finish; it will be retried' };
-}
-const _syncingDeposits = new Set();
-async function syncDepositById(depositId) {
-  const snap = await db.collection('pendingDeposits').doc(depositId).get();
-  if (!snap.exists) return { outcome: 'missing', message: 'Recharge not found' };
-  if (_syncingDeposits.has(depositId)) return { outcome: 'waiting', message: 'Already being checked' };
-  _syncingDeposits.add(depositId);
-  try {
-    const r = await syncOneDeposit(snap);
-    if (r.outcome === 'waiting' || r.outcome === 'review' || r.outcome === 'stillfailed') await snap.ref.update({ syncedAtMs: Date.now(), syncNote: String(r.message).slice(0, 240) }).catch(() => {});
-    return r;
-  } catch (e) {
-    console.error('Deposit sync error (' + depositId + '):', e.message);
-    return { outcome: 'waiting', message: 'Could not check: ' + e.message };
-  } finally { _syncingDeposits.delete(depositId); }
-}
-async function resolveStuckDeposits({ force = false, limit = 10 } = {}) {
-  const out = { credited: 0, failed: 0, waiting: 0, checked: 0 };
-  try {
-    const snap = await db.collection('pendingDeposits').where('status', 'in', ['review', 'pending', 'initiating', 'failed']).orderBy('createdAt', 'desc').limit(300).get();
-    const now = Date.now();
-    const rows = snap.docs.filter(d => {
-      const x = d.data(), age = now - (tsMillis(x.createdAt) || now);
-      if (x.method === 'manual' || age > STUCK_SYNC_MAX_AGE_MS) return false;
-      // A failed recharge is re-asked every 10 minutes for its first 2 hours, then hourly (up to 7 days): a wrong "failed" gets corrected, a real one costs little.
-      if (x.status === 'failed') return force || now - (Number(x.recheckedAtMs) || 0) >= (age < 2 * 3600 * 1000 ? 10 * 60 * 1000 : 3600 * 1000);
-      if (!force && now - (Number(x.syncedAtMs) || 0) < STUCK_SYNC_COOLDOWN_MS) return false;
-      if (x.status === 'review') return true;
-      // pending/initiating rows that the normal sweeps CAN read are theirs; these are the ones they cannot (a gateway row whose start reply was lost).
-      return !!GATEWAY_DEFS[x.provider] && !x[x.provider + 'Ref'] && age > 3 * 60 * 1000;
-    }).slice(0, limit);
-    await inChunks(rows, 3, async (doc) => {
-      const r = await syncDepositById(doc.id);
-      out.checked++;
-      if (r.outcome === 'credited') out.credited++; else if (r.outcome === 'failed') out.failed++; else if (r.outcome === 'waiting' || r.outcome === 'review') out.waiting++;
-    });
-  } catch (e) { console.error('Resolve stuck deposits error:', e.message); }
-  return out;
-}
-// A MarzPay payment that never got a gateway id (the start reply was lost, or the server restarted during it) has nothing to poll. If no webhook
-// settled it within 30 minutes it is parked as 'review' so it shows in the admin Deposits list (Needs Review) for a person to check at MarzPay and
-// Force-credit; it is never marked failed here, because the member may have paid.
-const LOST_MARZ_REVIEW_AFTER_MS = 30 * 60 * 1000;
-async function parkLostMarzDeposits() {
-  const cutoff = new Date(Date.now() - LOST_MARZ_REVIEW_AFTER_MS);
-  const snap = await db.collection('pendingDeposits').where('status', 'in', ['initiating', 'pending']).where('createdAt', '<=', cutoff).orderBy('createdAt', 'asc').limit(50).get();
-  for (const doc of snap.docs) {
-    const d = doc.data();
-    if (d.marzTxUuid || d.pesajetTxId || d.method === 'manual') continue;
-    // A TavuPay row that has its reference is still being settled by the webhook / reconciler; it is parked only after 6 hours.
-    if (d.provider === 'tavupay' && d.tavupayRef && Date.now() - tsMillis(d.createdAt) < 6 * 3600 * 1000) continue;
-    if (GATEWAY_DEFS[d.provider] && d[d.provider + 'Ref'] && Date.now() - tsMillis(d.createdAt) < 6 * 3600 * 1000) continue;
-    // PesaJet rows are looked up by the reconciler for 6 hours; after that no lookup can see them any more, so they are parked too.
-    if (d.provider === 'pesajet' && Date.now() - tsMillis(d.createdAt) < PESAJET_LOST_WINDOW_MS + 10 * 60 * 1000) continue;
-    await withLock('dep:' + doc.id, async () => {
-      const fresh = await doc.ref.get();
-      const f = fresh.exists ? fresh.data() : null;
-      if (!f || !['initiating', 'pending'].includes(f.status) || f.marzTxUuid) return;
-      await doc.ref.update({ status: 'review', reviewReason: 'No confirmation from the payment provider reached us. Check the provider; Force-credit only if it was paid.' });
-    }).catch(() => {});
-  }
-}
 let _reconcilerRunning = false;
 function runReconciler() {
-  if (_reconcilerRunning) return;   // a slow gateway must not let passes pile up on top of each other
+  if (_reconcilerRunning) return;   // a slow pass must not let passes pile up on top of each other
   _reconcilerRunning = true;
-  // Deposits and withdrawals are settled side by side: a slow gateway on one must not hold the other back.
   Promise.allSettled([
-    reconcilePendingDeposits().then(() => resolveStuckDeposits()).then(parkLostMarzDeposits),
+    reconcilePendingDeposits(),
     reconcilePendingWithdrawals().then(reconcileStuckWithdrawalRefunds),
   ]).then(() => reconcileCommissions()).catch(() => {}).finally(() => { _reconcilerRunning = false; });
 }
-// AUTOMATIC WITHDRAWALS. Owner-toggleable (Admin > Settings): while ON, every still-pending withdrawal is sent by the server after its OWN random
-// wait of autoApproveMinSec..autoApproveMaxSec seconds. The wait is picked once per withdrawal and written on it (autoSendAt), so a restart does not
-// change it and several requests do not leave together. Shares processWithdrawalCore with the manual "Send" button, so it is exactly as safe and
-// idempotent. A wait chosen before the switch was last turned on (autoSendAt < autoApproveEnabledAt) is thrown away and picked again.
-// Requests are never held back: they appear as pending the moment they are made, whether this is on or off.
-let _autoTickRunning = false;
-function autoApproveDelayMs(sett) {
-  const lo = Math.max(0, Number(sett.autoApproveMinSec) || 0), hi = Math.max(lo, Number(sett.autoApproveMaxSec) || 0);
-  return Math.round((lo + Math.random() * (hi - lo)) * 1000);
-}
-async function autoApproveWithdrawalsTick() {
-  if (_autoTickRunning) return;
-  _autoTickRunning = true;
-  try {
-    const sett = await getSettings();
-    if (!sett.autoApproveWithdrawalsEnabled) return;
-    // In manual mode a payout only exists once a human has actually sent the
-    // money from an admin phone. Auto-approving here would mark withdrawals
-    // paid, credit totalWithdrawn and close their ledger rows when nobody
-    // sent anything -- a member would see "Success" for money that never
-    // left. The toggle stays where the owner set it and simply does nothing
-    // while manual mode is on, rather than being silently rewritten.
-    if (payoutIsManual(sett)) return;
-    const cap = Number(sett.autoApproveMaxAmount) || 0;
-    const since = Number(sett.autoApproveEnabledAt) || 0;
-    // Filter before limiting: over-cap rows must not occupy every slot forever.
-    let eligible = db.collection('withdrawals').where('status', '==', 'pending').where('autoHold', '!=', true);   // held rows must not fill the window
-    if (cap > 0) eligible = eligible.where('amount', '<=', cap);
-    const snap = await eligible.orderBy('createdAt', 'asc').limit(200).get();
-    const now = Date.now();
-    for (const doc of snap.docs) {
-      const wit = doc.data();
-      if (cap > 0 && wit.amount > cap) continue; // above the safety cap -- left for manual review
-      let due = Number(wit.autoSendAt) || 0;
-      if (!due || due < since) {
-        due = now + autoApproveDelayMs(sett);
-        await db.collection('withdrawals').doc(doc.id).update({ autoSendAt: due }).catch(e => console.error('Auto-send time not saved:', e.message));
-      }
-      if (due > now) continue;
-      if (wit.autoHold) continue;   // five failed automatic attempts: left for a person (Send / Reject)
-      const out = await processWithdrawalCore(doc.id, 'auto-approve').catch(e => { console.error('Auto-approve error:', e.message); return { code: 500 }; });
-      if (out && out.code >= 400) {
-        // The gateway refused or was unreachable: do not ask again every second. Wait longer each time, and after 5 tries leave it for a person.
-        const tries = (Number(wit.autoAttempts) || 0) + 1;
-        console.error(`Auto-send of withdrawal ${doc.id} failed (try ${tries}): ${(out.body && out.body.message) || out.code}`);
-        await db.collection('withdrawals').doc(doc.id).update(tries >= 5 ? { autoAttempts: tries, autoHold: true } : { autoAttempts: tries, autoSendAt: Date.now() + 60000 * tries }).catch(() => {});
-      }
-    }
-  } catch (e) { console.error('Auto-approve tick error:', e.message); }
-  finally { _autoTickRunning = false; }
-}
-app.get('/admin/payments/sync', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const [depSettled, witSettled] = await Promise.all([reconcilePendingDeposits(), reconcilePendingWithdrawals()]);
-    // Then the rows no sweep could read (Needs Review, and gateway recharges whose start reply was lost): asked at the provider right now.
-    const stuck = await resolveStuckDeposits({ force: true, limit: 40 });
-    res.json({ status: 'success', depositsSettled: depSettled + stuck.credited, depositsFailed: stuck.failed, depositsStillWaiting: stuck.waiting, withdrawalsSettled: witSettled });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-// One recharge, asked at its provider right now: credited if paid, closed as failed if not, or told why it is still undecided.
-app.post('/admin/deposit/sync', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const depositId = String(req.body.depositId || '').slice(0, 80);
-  if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
-  try {
-    const r = await syncDepositById(depositId);
-    if (r.outcome === 'credited') logAdminAction(req, 'deposit_synced_credited', { depositId });
-    res.json({ status: r.outcome === 'missing' ? 'error' : 'success', outcome: r.outcome, message: r.message });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-
 // ── IN-MEMORY STATE SWEEPER ──
 function sweepEphemeralState() {
   const now = Date.now();
   const dropStale = (map, maxAgeMs) => { for (const [k, ts] of map) if (now - ts > maxAgeMs) map.delete(k); };
   try {
-    dropStale(_depCreateDebounce, 5 * 60 * 1000);
     dropStale(_adminCreditDebounce, 5 * 60 * 1000);
     dropStale(_adminDebitDebounce, 5 * 60 * 1000);
     dropStale(_depAttemptsSucceededAt, 60 * 1000);
@@ -11418,7 +8167,6 @@ connectMongo(MONGODB_URI)
     startRewardRepair();
     migratePayoutsToMidnightOnce().then(n => { if (n) console.log(`Moved ${n} running investments to the midnight payout schedule`); }).catch(e => console.error('Midnight schedule migration:', e.message)).then(() => backfillNextPayoutAt()).then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); armMidnightSweep(); });
     dedupeSharedPayoutNumbers('start-up').catch(e => console.error('Shared payout number clean-up:', e.message));
-    setInterval(autoApproveWithdrawalsTick, 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
     setInterval(sweepManualOrders, 5 * 60 * 1000);
     setInterval(reconcileBlockedCommissions, 5 * 60 * 1000);

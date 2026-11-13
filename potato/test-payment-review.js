@@ -22,9 +22,7 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
       fn('_processWithdrawalNow') + '\nreturn _processWithdrawalNow;')(db, new Set(), async () => ({}), () => manual, { serverTimestamp: () => 1, increment: n => n }, (k, g) => g(), async () => {}, n => n, () => false, require('node:crypto'), () => '', console);
     return f('w1', 'boss').then(r => ({ r, calls }));
   }
-  let t = await payout({ banned: true, manual: false });
-  eq(t.r.code, 409, 'banned member: automatic payout refused'); ok(/suspended/.test(t.r.body.message), 'and says why'); eq(t.calls.length, 0, 'nothing claimed or sent');
-  t = await payout({ banned: true, manual: true });
+  let t = await payout({ banned: true, manual: true });
   eq(t.r.code, 200, 'manual mark-as-paid for an already-made payment still records'); eq(t.calls[0][1], 'processed');
   // (an active member in automatic mode proceeds past the guard to the gateway code, covered by the existing payout tests)
 
@@ -74,6 +72,5 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
 
   // 3. sweep
   const sweep = fn('sweepEphemeralState');
-  ok(/_depCreateDebounce/.test(sweep) && !/_usdtSubmitDebounce|_cardSubmitDebounce/.test(sweep), 'the deposit debounce map is swept and the removed USDT and card maps are gone');
   console.log(`PASS: payment review fixes (${checks} checks)`); process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

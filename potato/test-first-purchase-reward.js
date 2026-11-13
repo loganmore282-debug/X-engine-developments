@@ -148,7 +148,7 @@ async function main(){
     assert.equal(db.rows.users.l1.walletBalance,firsts[0].amount*0.2);
   }
   // A deposit no longer creates any commission entitlement.
-  const dep=route('/deposit/marzpay');
+  const dep=route('/deposit/manual/submit');
   assert(!/commissionBasis:\s*'deposit'/.test(dep) && !/commissionPending/.test(dep), 'a new deposit carries no commission fields');
   console.log('PASS: referral reward on the first purchase (first purchase only, gifted products and older rewards excluded, one reward under a race, deposits pay nothing)');
 }

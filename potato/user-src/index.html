@@ -1027,7 +1027,6 @@ body.sheet-open .sheet-bg{bottom:0;}
 /* Deposit poll and its brief handoff are dedicated full-screen states. They
    use the app's light paper surface and brand-colored motion, with no bottom
    navigation behind them. */
-body.deposit-status-open .bottom-nav{display:none;}
 /* Owner: "the deposit poll screen is very ugly, showing a background white
    and the page is very not matching with current page." Real gap, not a
    design opinion -- .pay-page is its own class, so it never picked up the
@@ -1201,8 +1200,8 @@ body{color:var(--mg-ink);font-family:var(--mg-sans);}
 @media (prefers-reduced-motion:reduce){#pageHost.mg-enter{animation:none;}}
 @keyframes mgSheetIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
 
-.sheet-bg.show,.pay-page.show,#msgDetailBg.show,#depStatusBg.show{animation:mgSheetIn .3s ease-out;}
-@media (prefers-reduced-motion:reduce){.sheet-bg.show,.pay-page.show,#msgDetailBg.show,#depStatusBg.show{animation:none;}}
+.sheet-bg.show,.pay-page.show,#msgDetailBg.show{animation:mgSheetIn .3s ease-out;}
+@media (prefers-reduced-motion:reduce){.sheet-bg.show,.pay-page.show,#msgDetailBg.show{animation:none;}}
 body.sheet-open .bottom-nav{display:flex;}
 
 /* ── sheet header: pink serif bar, green back square ── */
@@ -1651,7 +1650,6 @@ body.sheet-open .sheet-bg{bottom:var(--nav-h);}
 .pay-page{background:var(--mg-bg);}
 .pay-page::before{display:none;}
 .sheet-head.pay-head{height:65px;box-sizing:border-box;padding:0 21px;background:transparent;}
-body.deposit-status-open .sheet-bg{bottom:0;}
 
 /* Loading word inside pages */
 .mg-loadtxt{display:inline-block;color:#b4b8bf;font:400 13.5px/1.2 var(--mg-sans);letter-spacing:.02em;}
@@ -1704,54 +1702,7 @@ html,body,.sheet-bg,#msgDetailBg{scrollbar-width:none !important;}
 @keyframes mgAnnFade{from{opacity:0;}to{opacity:1;}}
 @media (prefers-reduced-motion:reduce){.ann-bg,.ann-sheet,.ann-sheet .mg-ann-img,.ann-sheet .mg-ann-x,.ann-sheet h2,.ann-sheet .mg-ann-join{transition:none !important;animation:none !important;}
 }
-/* Deposit waiting page, laid out like ChocoMCC's (card with icon / title / steps, reference + Copy, message line, Verify Payment, Cancel, attempt counter). */
-#depStatusBg .cp-body{flex:1;overflow-y:auto;padding:14px 16px 34px;-webkit-overflow-scrolling:touch;}
-.cp-card{background:#fffefe;border:1px solid #f3d4d3;border-radius:20px;box-shadow:0 14px 30px -24px rgba(200,30,30,.4);padding:24px 20px 20px;text-align:center;}
-.cp-ic{width:52px;height:52px;border-radius:16px;background:#e5231d;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
-.cp-ic svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
-.cp-ic.ok{background:#24cf83;}
-.cp-ic.ok svg{width:28px;height:28px;stroke-width:2.6;}
-.cp-ic.bad{background:#d33a3a;}
-.cp-ic.pop{animation:plPop .45s cubic-bezier(.34,1.56,.64,1);}
 @keyframes plPop{0%{transform:scale(.6);opacity:0;}100%{transform:scale(1);opacity:1;}}
-.cp-card h3{margin:0;font:700 19px/1.3 Roboto,sans-serif;color:#14304f;}
-.cp-sub{margin:6px 0 0;font:400 13.5px/1.5 Roboto,sans-serif;color:#8795a8;}
-.cp-steps{list-style:none;margin:16px 0 0;padding:0;text-align:left;}
-.cp-steps li{position:relative;padding:6px 0 6px 22px;font:600 12.5px/1.5 Roboto,sans-serif;color:#5b6b80;}
-.cp-steps li::before{content:'';position:absolute;left:2px;top:13px;width:6px;height:6px;border-radius:50%;background:#e5231d;}
-.cp-tip{margin:12px 0 0;padding:10px 12px;border-radius:12px;background:#fdf3f3;color:#8a5a5a;font:500 12px/1.5 Roboto,sans-serif;text-align:left;}
-.cp-tip:empty{display:none;}
-.cp-chg{margin:10px 2px 0 0;text-align:right;}
-.cp-chg span{font:500 13px/1.2 Roboto,sans-serif;color:#c4121e;text-decoration:underline;cursor:pointer;}
-.cp-chgbox{margin:12px 0 0;padding:12px 12px 14px;border:1px solid #f3d4d3;border-radius:14px;background:#fffefe;text-align:left;}
-.cp-phone{display:flex;align-items:center;gap:8px;height:46px;box-sizing:border-box;padding:0 12px;border:.7px solid #e3b4bd;border-radius:10px;}
-.cp-phone:focus-within{border-color:#dba6b0;box-shadow:0 0 0 2px rgba(229,125,148,.26);}
-.cp-phone b{flex:0 0 auto;font:700 14px/1 Roboto,sans-serif;color:#e0241f;}
-.cp-phone input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:700 15px/1 Roboto,sans-serif;color:#263048;-webkit-appearance:none;appearance:none;}
-.cp-chgerr{margin-top:8px;font:500 12px/1.4 Roboto,sans-serif;color:#c62648;}
-.cp-chgerr:empty{display:none;}
-.cp-chgbtns{display:flex;gap:10px;margin-top:12px;}
-.cp-chgbtns button{height:42px;border-radius:12px;font:700 14px/1 Roboto,sans-serif;}
-.cp-chgbtns .go{flex:1;border:0;background:#e5231d;color:#fff;}
-.cp-chgbtns .go:disabled{opacity:.65;}
-.cp-chgbtns .back{flex:0 0 84px;border:1px solid #f3d4d3;background:#fdecec;color:#7a4a49;}
-.cp-ref{margin:14px 0 0;background:#fffefe;border:1px solid #f3d4d3;border-radius:16px;padding:14px 16px;}
-.cp-k{margin-bottom:6px;font:700 11px/1.2 Roboto,sans-serif;letter-spacing:.04em;color:#8795a8;}
-.cp-row{display:flex;align-items:center;gap:10px;}
-.cp-row span{flex:1;font:700 12.5px/1.4 Roboto,sans-serif;color:#14304f;word-break:break-all;}
-.cp-row button{flex:0 0 auto;border:0;border-radius:10px;background:#14304f;color:#fff;padding:8px 14px;font:700 12px/1 Roboto,sans-serif;}
-.cp-msg{margin:14px 0 0;border-radius:16px;padding:14px 16px;font:600 12.5px/1.5 Roboto,sans-serif;background:#fdf0e1;color:#a85f12;}
-.cp-msg.ok{background:#e3f7ee;color:#0c8a55;}
-.cp-msg.bad{background:#fde8ea;color:#c62648;}
-.cp-verify{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:50px;margin-top:16px;border:0;border-radius:14px;background:#e5231d;color:#fff;font:700 16px/1 Roboto,sans-serif;letter-spacing:.2px;}
-.cp-verify:disabled{opacity:.65;}
-.cp-spin{display:none;animation:cpSpin .9s linear infinite;}
-.cp-spin svg{display:block;}
-@keyframes cpSpin{to{transform:rotate(360deg);}}
-.cp-cancel{text-align:center;margin-top:14px;}
-.cp-cancel span{font:400 13.5px/1.2 Roboto,sans-serif;color:#8795a8;text-decoration:underline;cursor:pointer;}
-.cp-attempt{text-align:center;margin-top:8px;font:400 11.5px/1.4 Roboto,sans-serif;color:#8795a8;}
-@media (prefers-reduced-motion:reduce){.cp-spin,.cp-ic.pop{animation:none;}}
 /* Sign Up: a typed invitation code shows in capitals (the placeholder keeps its own case) */
 #regReferral:not(:placeholder-shown){text-transform:uppercase;}
 
@@ -2096,11 +2047,6 @@ body[data-sheet="gifts"] .pt-fl-chest,body[data-sheet="download"] .pt-fl-app{dis
 .pt-amt{position:relative;display:flex;align-items:center;margin:11px 14px 0 14px;height:64.3px;padding:0 14px;box-sizing:border-box;border:1.4px solid #dc9ea4;border-radius:11.5px;background:#fff;box-shadow:0 8px 16px -10px rgba(150,70,80,.35);}
 .pt-amt span{flex:0 0 auto;margin-right:11px;font:700 14px/1 Roboto,sans-serif;color:#cb2924;}
 .pt-amt input{flex:1;min-width:0;height:39.3px;padding:0 14px;box-sizing:border-box;border:1.2px solid #e3e5ea;border-radius:4.8px;background:#fff;font:700 17px/38px Roboto,sans-serif;color:#bd2f2a;outline:none;}
-.pt-meths{margin-top:29px;}
-.pt-meths button{display:block;width:100%;height:49.3px;margin:0 0 10.4px;border:1.7px solid #cc5a50;border-radius:25px;background:#fff;color:#c0574c;font:700 13.8px/46px Roboto,sans-serif;cursor:pointer;padding:0;}
-.pt-meths button{display:flex;align-items:center;justify-content:center;gap:8.7px;}
-.pt-meths .pt-payic{width:23.5px;height:23.5px;border-radius:50%;object-fit:cover;flex:0 0 23.5px;}
-.pt-meths button.on{background:#e5231d;border-color:#e5231d;color:#fff;}
 .pt-pay{display:block;width:100%;height:41px;margin-top:14.3px;border:0;border-radius:21px;background:linear-gradient(105deg,#e5231d 0,#ef7a78 62%,#fbd9d9 100%);color:#fff;font:500 17.4px/41px Roboto,sans-serif;letter-spacing:.5px;box-shadow:0 10px 16px -8px rgba(110,90,150,.45);cursor:pointer;}
 .pt-pay b{font-weight:500;}
 .pt-pay:disabled{opacity:1;background:#eef0f6;color:#fff;box-shadow:0 8px 14px -8px rgba(110,110,150,.45);}
@@ -2863,52 +2809,6 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
   <div class="notify-card">
     <span class="notify-ic err" id="notifyIc"></span>
     <div class="notify-msg" id="notifyMsg"></div>
-  </div>
-</div>
-
-<!-- Owner: "include nav arrow '<', and its title space, on that payment page."
-     Reuses .sheet-head verbatim so this header IS the app's header, not a
-     lookalike -- same red background, same 24px chevron, same centred
-     title (the gradient chevron this comment used to describe was
-     Potato's own cyan-to-blue -- fixed to a plain white stroke above, along
-     with every other .sheet-head, since they all share one rule).
-     #depStatusBody is a DIV, not a <p>: the pending state renders an <ol>
-     of steps, and an <ol> inside a <p> is invalid and gets reparented by
-     the browser, which drops the list out of the card entirely. -->
-<div class="pay-page" id="depStatusBg">
-  <div class="sheet-head">
-    <button class="back" onclick="cancelDepositStatus()" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-    <h2>Deposit</h2>
-  </div>
-  <!-- The payment waiting page, laid out like ChocoMCC's: a card (icon, title, where the prompt went, three steps), the transaction reference with Copy, a coloured
-       message line, Verify Payment, Cancel and the attempt counter. -->
-  <div class="cp-body">
-    <div class="cp-card">
-      <div class="cp-ic" id="depStatusIcon"></div>
-      <h3 id="depStatusTitle">Payment Initiated Successfully!</h3>
-      <p class="cp-sub" id="depStatusPhone"></p>
-      <ul class="cp-steps" id="depStatusSteps">
-        <li>Check your phone for the payment request</li>
-        <li>Enter your mobile-money PIN to confirm</li>
-        <li>We'll verify the payment automatically</li>
-      </ul>
-      <p class="cp-tip" id="depStatusTip"></p>
-      <div class="cp-chg" id="depChgRow"><span onclick="openDepositChangeNumber()">Change Number</span></div>
-      <div class="cp-chgbox" id="depChgBox" style="display:none;">
-        <div class="cp-k">PAY FROM ANOTHER NUMBER</div>
-        <div class="cp-phone"><b id="depChgDial">+251</b><input id="depChgPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="off" maxlength="14" oninput="sanitizePhoneInput(this)"></div>
-        <div class="cp-chgerr" id="depChgErr" role="alert"></div>
-        <div class="cp-chgbtns"><button type="button" class="go" id="depChgGo" onclick="submitDepositNewNumber()">Send prompt</button><button type="button" class="back" onclick="closeDepositChangeNumber()">Back</button></div>
-      </div>
-    </div>
-    <div class="cp-ref">
-      <div class="cp-k">TRANSACTION REFERENCE</div>
-      <div class="cp-row"><span id="depStatusRef"></span><button type="button" onclick="copyDepositRef()">Copy</button></div>
-    </div>
-    <div class="cp-msg" id="depStatusMsg">Payment initiated. Check your phone.</div>
-    <button class="cp-verify" id="depVerifyBtn" type="button" onclick="verifyDepositNow()"><span class="cp-spin" id="depVerifySpin"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span><span id="depVerifyLabel">Verify Payment</span></button>
-    <div class="cp-cancel" id="depCancelRow"><span onclick="cancelDepositStatus()">Cancel</span></div>
-    <div class="cp-attempt" id="depStatusAttempt"></div>
   </div>
 </div>
 

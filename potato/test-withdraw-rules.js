@@ -196,7 +196,7 @@ function run(state, body) {
     sendAdminPush: async () => {},
     sendWithdrawalSmsAlert: async () => {},
     logAdminAction: () => {},
-    NETWORK_NAMES: new Set(['MTN Mobile Money', 'Airtel Money']),
+    NETWORK_NAMES: new Set(['Telebirr']),
     MAX_MONEY_AMOUNT: 100000000,
     _witRequestInFlight: new Set(),
     _userBeingDeleted: new Set(),
@@ -264,11 +264,11 @@ function fresh(extra = {}) {
                 requireInvestToWithdraw: false, requireTwofaToWithdraw: false, maxWithdrawalsPerDay: 0,
                 withdrawWindowEnabled: false, ...(extra.settings || {}) },
     user: { walletBalance: 100000, totalInvested: 50000, status: 'active' },
-    banks: [{ id: 'b1', userId: 'u1', network: 'MTN Mobile Money', phone: '0770000001', holder: 'A B' }],
+    banks: [{ id: 'b1', userId: 'u1', network: 'Telebirr', phone: '0770000001', holder: 'A B' }],
     wits: extra.wits || [], tx: [], seq: 0, now: Date.now(),
   };
 }
-const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', pin: '123456' };
+const REQ = { amount: 10000, network: 'Telebirr', phone: '0770000001', pin: '123456' };
 
 (async () => {
   let st = fresh();

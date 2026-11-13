@@ -18,9 +18,8 @@ for (const ex of ['S62BV', 'GST3V']) ok([...ex].every(ch => REFERRAL_CHARS.inclu
 ok(/referralCodeLower: codeLower/.test(src) && /where\('referralCodeLower', '==', lower\)/.test(src), 'a code typed in any case is found (lower-case twin)');
 ok(/String\(code\)\.toUpperCase\(\)/.test(mod), 'the invite link carries the code in capitals');
 // deposit page
-const form = mod.slice(mod.indexOf('function openDepositFormSheet'), mod.indexOf('window.pickPayLabel'));
+const form = mod.slice(mod.indexOf('function openDepositFormSheet'), mod.indexOf('window.pickDepositAmount'));
 ok(form.indexOf('id="depAmount"') > 0 && !/depPhone/.test(form), 'the Deposit page has the amount box and no phone box (the owner\'s screens have none)');
-const sub = mod.slice(mod.indexOf('window.submitDeposit = '), mod.indexOf('window.submitDeposit = ') + 4000);
-ok(!/depPhone/.test(sub) && !/if \(!phone\)/.test(sub), 'no typed number is required: the payment request goes to the member\'s own number');
-ok(/post\('\/deposit\/marzpay', \{ amount, slot \}\)/.test(sub), 'only the amount and the pay button position are sent with the deposit');
+const sub = mod.slice(mod.indexOf('window.submitDeposit = '), mod.indexOf('window.submitDeposit = ') + 1500);
+ok(!/depPhone/.test(sub) && !/if \(!phone\)/.test(sub), 'no typed number is required to start a recharge');
 console.log('PASS: referral code format and deposit phone box (' + n + ' checks)');

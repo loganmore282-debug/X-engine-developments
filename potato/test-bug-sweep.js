@@ -10,15 +10,11 @@ const server = rd('server.js'), admin = rd('admin-src/index.html'), mod = rd('us
   const t = Date.now(); ctx.f('<'.repeat(200000)); ok(Date.now() - t < 400, 'a huge run of "<" no longer freezes the process (' + (Date.now() - t) + ' ms)');
   ok(ctx.f('<b>Ann</b>') === 'Ann', 'tags are still stripped'); }
 ok(/app\.set\('case sensitive routing', true\)/.test(server), 'routes are case-sensitive (/Withdraw/request must not skip the maintenance gate)');
-ok(/if \(!mpData\.providerDown\) await markDepositFailed/.test(server), 'a busy MarzPay does not mark a possibly-live payment as failed');
 ok(/!\(user\.data\(\)\.creditedDepositIds \|\| \[\]\)\.length && !user\.data\(\)\.firstReferralDepositId/.test(server) && !/finiteMoney\(user\.data\(\)\.totalDeposited\) === 0/.test(server), 'the referrer\'s first-deposit commission is not used up by an admin credit');
 ok(/withLock\('redeem:' \+ raw\.toLowerCase\(\)\.replace\(\/\[\^a-z0-9\]\/g, ''\)/.test(server), 'one gift code has one lock whatever spelling is typed');
 ok(/round2\(bal\) < liveTier\.price/.test(server) && /round2\(bal\) < amt/.test(server) && /\$gte: amt - 0\.005/.test(server), 'a wallet a hair under a whole amount (cents) is not refused');
 { const g = server.indexOf('async function payoutRejectGuard'), i = server.indexOf("app.post('/admin/withdraw/reject'"), j = server.indexOf("declineWithdrawalAndRefund(ref, w.userId", i);
-  const guard = server.slice(g, i); ok(g > 0 && /pesajetGetTx\(w\.pesajetTxId\)/.test(guard) && /pesajetFindByReference\(w\.pesajetRef/.test(guard) && /marzGetSendStatus\(w\.marzTxUuid\)/.test(guard), 'rejecting a payout the gateway may already have asks the gateway first (PesaJet by id or reference, MarzPay by uuid)');
-  ok(/payoutRejectGuard\(witId, w(, \{ confirmPending: req\.body\.confirmPending === true \})?\)/.test(server.slice(i, j)), 'the reject route uses that guard before any refund');
   ok(/stripHtml\(textOf\(req\.body\.reason\)\)/.test(server.slice(j, j + 400)), 'the rejection reason typed by the admin is kept'); }
-ok(/provider_reference/.test(server), 'the MarzPay payout webhook also matches our reference sent as provider_reference');
 
 // admin panel
 ok(/_retIsTruth/.test(admin) && /multiplier:_retIsTruth\?'':\$\('pMult'\)\.value/.test(admin), 'a typed total payout is saved as typed (not rounded through the 2-decimal multiplier)');
@@ -53,17 +49,7 @@ const dbs = rd('db.js'); ok(/\['memberSessions', \{ expiresAt: 1 \}, \{ expireAf
 ok(/\['pendingDeposits', \{ createdAt: -1 \}\]/.test(dbs) && /\['withdrawals',     \{ createdAt: -1 \}\]/.test(dbs) && /\['transactions',    \{ createdAt: -1 \}\]/.test(dbs), 'the admin lists have a createdAt index');
 for (const f of ['user/sw.js', 'admin/sw.js']) ok(/if \(resp && resp\.ok\)/.test(rd(f)), f + ' never stores a failed answer in the cache');
 // runtime-tester findings: stuck PesaJet payouts, automatic mode starvation, lost deposits
-ok(/pj\.providerDown && pj\.httpStatus !== 429/.test(server), 'PesaJet 429 on a payout is a clean refusal (row back to Pending), not "lost contact"');
-ok(/PesaJet accepted withdrawal \$\{withdrawalId\} but returned no transaction id/.test(server), 'an accepted payout without an id stays on Sending instead of Processing with nothing to follow');
-ok(/async function resolveSendingPesajetPayouts/.test(server) && /await resolveSendingPesajetPayouts\(\);/.test(server) && /status: 'sending', pesajetTxId: null/.test(server), 'a PesaJet payout stuck on Sending is looked up by our reference: adopted when found, handed back to Pending when PesaJet has no record');
-ok(/where\('autoHold', '!=', true\)/.test(server), 'held rows cannot fill the automatic-mode window');
-ok(/where\('provider', '==', 'pesajet'\)\.where\('pesajetTxId', '==', null\)/.test(server) && /PESAJET_LOST_WINDOW_MS \+ 10 \* 60 \* 1000/.test(server), 'the lost-deposit lookup only reads rows without an id, and PesaJet rows older than the lookup window are parked for review');
 // callbacks (webhooks)
-ok(/function retryCallbackWork\(/.test(server) && /const delays = \[1000, 3000, 8000, 20000\]/.test(server) && /async function pesajetWebhookWork\(body\)/.test(server) && /async function marzDepositCallbackWork\(body\)/.test(server) && /async function marzWithdrawCallbackWork\(body\)/.test(server), 'a callback that claims a final status is re-checked 1, 3, 8 and 20 s later if the first pass could not confirm it (all three handlers)');
-ok(/req\.path === '\/deposit\/callback' \|\| req\.path === '\/withdraw\/callback' \|\| req\.path === '\/pesajet\/webhook'\) return next\(\);\s*await getSettings/.test(server), 'callbacks never wait behind a settings read');
-ok(/WARNING: PUBLIC_URL is not set/.test(server), 'a missing PUBLIC_URL is warned about at start-up');
-ok(/creditDeposit\(doc, 'MarzPay callback'\)/.test(server) && /creditDeposit\(depSnap, \"member's poll\"\)/.test(server), 'MarzPay credits are labelled in the timing log');
-ok(/async function inChunks\(/.test(server) && /Promise\.allSettled\(\[\s*reconcilePendingDeposits\(\)/.test(server), 'the reconciler checks five rows at a time and settles deposits and withdrawals side by side');
 // nginx: callbacks get their own wide rate zone, no user-agent wall on the hook host, 308 instead of 301
 { const g = require('child_process').execFileSync('node', ['deploy/make-nginx.js', 'prod', 'a.example.com', 'Tq5m8zr', 'b.example.com'], { encoding: 'utf8', env: { ...process.env, POTATO_HOOK_TOKEN: '0123456789abcdef0123456789abcdef', POTATO_HOOK_HOST: 'h.example.com' } });
   ok(/zone=potato_hook:10m rate=50r\/s/.test(g) && (g.match(/limit_req zone=potato_hook burst=300 nodelay/g) || []).length >= 3, 'payment callbacks (hook host, MarzPay deposit and payout) use their own wide rate zone, not the shared 20/s one');
