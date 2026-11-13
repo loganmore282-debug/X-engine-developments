@@ -17,6 +17,7 @@ const cap = require('./captcha.js'); const realVerify = cap.verify; cap.verify =
 const totp = require('./totp.js'), first = require('./test-helpers/twofa-first-version.js');   // `first` = the first version's own lock and unlock code, copied as it shipped
 const realNow = Date.now; let skew = 0; Date.now = () => realNow() + skew; const advance = (steps) => { skew += (steps || 1) * 30000; };   // the server shares this clock: a new 30-second step without waiting
 const realLog = console.log; console.log = () => {}; console.warn = () => {}; console.error = () => {};
+process.env.POTATO_REGION = 'ug';   // this test drives the Uganda payment gateways (Ethiopia has none: its recharges are manual)
 require('./server.js');
 const base = 'http://127.0.0.1:' + PORT;
 const J = async (m, p, b, tok, adm) => { const r = await fetch(base + p, { method: m, headers: Object.assign({ 'content-type': 'application/json' }, tok ? { authorization: 'Bearer ' + tok } : {}, adm ? { authorization: 'Bearer tf-admin-key-123456' } : {}), body: b ? JSON.stringify(b) : undefined }); let j = {}; try { j = await r.json(); } catch (_) {} return { s: r.status, j }; };

@@ -46,8 +46,8 @@ async function main(){
   assert.match(d.querySelector('#homeProducts').textContent,/Test Asset|No products available|Failed to load products/,'Home lists the catalogue (or says it could not load it)');
   w.eval('STATE.products=[{key:"a1",name:"Test Asset",price:15000,cycle:30,expectedReturn:45000,dailyPayout:1500,isOpen:true}]');w.paintHome();
   assert.match(d.querySelector('.pt-card h3').textContent,/Test Asset/,'the product name sits above its figures');
-  assert.match(d.querySelector('.pt-grid').textContent,/Price\s*UGX 15,000/,'prices read UGX 15,000');
-  assert.match(d.querySelector('.pt-grid').textContent,/Total\s*UGX 45,000/,'the total is the full cashback');
+  assert.match(d.querySelector('.pt-grid').textContent,/Price\s*Br 15,000/,'prices read Br 15,000');
+  assert.match(d.querySelector('.pt-grid').textContent,/Total\s*Br 45,000/,'the total is the full cashback');
   assert.deepEqual([...d.querySelectorAll('.pt-quick button')].map(e=>e.textContent),['Recharge','Withdraw','Service','Channel'],'Home has Recharge, Withdraw, Service and Channel');
   assert(d.querySelector('#ptFloats'),'the floating chest and APP images live on every page');
   assert.equal(d.querySelectorAll('.bottom-nav .navitem').length,5,'five tabs');
@@ -55,7 +55,7 @@ async function main(){
   const originalBanner=d.querySelector('.home-banner');await w.liveRefreshVisible();
   assert.equal(d.querySelector('.home-banner'),originalBanner,'balance refresh must not rebuild Home');
   w.eval('STATE.page="assets"');w.eval('STATE.investments=[{status:"active",tierKey:"a1",tierLabel:"Test Asset",amount:15000,payoutsTotal:30,payoutsMade:3,dailyPayout:1500,expectedReturn:45000,paidOut:4500,createdAt:new Date().toISOString()},{status:"active",tierKey:"a1",tierLabel:"Gifted",amount:0,payoutsTotal:30,payoutsMade:1,dailyPayout:1500,expectedReturn:45000,paidOut:0,createdAt:new Date().toISOString(),granted:true}]');w.paintAssets();
-  assert.match(d.querySelector('.pt-cd h2').textContent,/Earnings Countdown/);assert.equal(d.querySelector('#incomeTotal').textContent,w.eval('ptMoneyPlain(ptProductIncome())'),'Total Income is what the products paid');assert.match(d.querySelector('#incomeTotal').textContent,/^UGX \d+\.\d\d$/,'without thousands commas');
+  assert.match(d.querySelector('.pt-cd h2').textContent,/Earnings Countdown/);assert.equal(d.querySelector('#incomeTotal').textContent,w.eval('ptMoneyPlain(ptProductIncome())'),'Total Income is what the products paid');assert.match(d.querySelector('#incomeTotal').textContent,/^Br \d+\.\d\d$/,'without thousands commas');
   assert.equal(d.querySelectorAll('#ownedAssets .pt-run').length,2,'Income lists every owned product');
   assert.equal(d.querySelectorAll('#ownedAssets .pt-run-mat').length,2,'each owned card shows its maturity bar');
   w.eval('STATE.page="account"');await w.renderAccount();
@@ -144,7 +144,7 @@ async function main(){
   payment.resolve({status:'success',net:5000});await first;
   assert(d.querySelector('#lpOld'),'late withdrawal response must not close another form');
   w.openDepositSheet();assert.equal(d.querySelectorAll('.pt-note').length,4,'four deposit notes');
-  assert.match(d.querySelector('.pt-notes').textContent,/Minimum deposit amount: UGX 15,000/);assert.equal(d.querySelectorAll('#depPays button').length,4,'four default methods');assert.equal(d.querySelectorAll('#depPays button.on').length,1,'exactly one method is selected when the page opens');w._depStartNext=2;w.openDepositSheet();assert.match(d.querySelector('#depPays button.on').textContent.trim(),/Pay-D$/,"the server's pick is the one selected");
+  assert.match(d.querySelector('.pt-notes').textContent,/Minimum deposit amount: Br 15,000/);assert.equal(d.querySelectorAll('#depPays button').length,4,'four default methods');assert.equal(d.querySelectorAll('#depPays button.on').length,1,'exactly one method is selected when the page opens');w._depStartNext=2;w.openDepositSheet();assert.match(d.querySelector('#depPays button.on').textContent.trim(),/Pay-D$/,"the server's pick is the one selected");
   d.querySelector('#depAmount').value='15000';assert(!d.querySelector('#depPhone'),'Deposit has no phone box: the request goes to the member\'s own number');
   const deposit=deferred();posts=0;w.post=()=>{posts++;return deposit.promise};
   const sending=w.submitDeposit();await w.submitDeposit();assert.equal(posts,1);
@@ -171,8 +171,8 @@ async function main(){
     d.querySelector('#depChgPhone').value='12';await w.submitDepositNewNumber();
     assert.match(d.querySelector('#depChgErr').textContent,/valid/,'a short number is refused on the spot');assert.equal(depBodies.length,1,'and nothing is sent');
     d.querySelector('#depChgPhone').value='0770123456';await w.submitDepositNewNumber();
-    assert.equal(depBodies.length,2,'a valid number sends a second request');assert.equal(depBodies[1].phone,'+256770123456','to that number');assert.equal(depBodies[1].amount,depBodies[0].amount,'for the same amount');assert.equal(depBodies[1].slot,depBodies[0].slot,'through the same pay button');
-    assert.equal(d.querySelector('#depStatusRef').textContent,'REF456','the page follows the new request');assert.match(d.querySelector('#depStatusPhone').textContent,/\+256770123456/,'and shows the new number');assert.equal(d.querySelector('#depChgBox').style.display,'none','the number box closes');
+    assert.equal(depBodies.length,2,'a valid number sends a second request');assert.equal(depBodies[1].phone,'+251770123456','to that number');assert.equal(depBodies[1].amount,depBodies[0].amount,'for the same amount');assert.equal(depBodies[1].slot,depBodies[0].slot,'through the same pay button');
+    assert.equal(d.querySelector('#depStatusRef').textContent,'REF456','the page follows the new request');assert.match(d.querySelector('#depStatusPhone').textContent,/\+251770123456/,'and shows the new number');assert.equal(d.querySelector('#depChgBox').style.display,'none','the number box closes');
     await new Promise(r=>setTimeout(r,120));
     assert.match(d.querySelector('#depStatusTitle').textContent,/Payment Successful!/,'a matched payment turns the page into "Payment Successful!"');
     assert.equal(d.querySelector('#depVerifyLabel').textContent,'Back to Home','and the button becomes Back to Home');

@@ -29,6 +29,7 @@ const slice = (a, b) => src.slice(src.indexOf(a), src.indexOf(b));
 // and a region come with it. Uganda is pinned here because every case below
 // is a Ugandan number -- the region layer itself is covered by
 // test-regions.js.
+const DEFAULT_REGION_KEY = 'ug';
 const currentRegion = () => ({ key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256', localLength: 9, prefixes: ['7'], utcOffsetMin: 180, isDefault: true });
 eval(slice('function localDigits(raw, region)', 'const NETWORK_NAMES'));
 

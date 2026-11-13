@@ -10,6 +10,7 @@ Module._resolveFilename = function (req, ...a) { return req === 'mongodb' ? path
 const PORT = 3800 + Math.floor(Math.random() * 90);
 process.env.PORT = String(PORT); process.env.MONGODB_URI = 'mongodb://fake/potato'; process.env.ADMIN_KEY = 'e2e-admin-key-123456'; process.env.NODE_ENV = 'development';
 const realLog = console.log; console.log = () => {}; console.warn = () => {};
+process.env.POTATO_REGION = 'ug';   // this test drives the Uganda payment gateways (Ethiopia has none: its recharges are manual)
 require('./server.js');
 const base = 'http://127.0.0.1:' + PORT;
 const J = async (m, p, b, tok, adm) => {

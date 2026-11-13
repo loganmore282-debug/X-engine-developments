@@ -15,7 +15,7 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
 (async () => {
   // 1. payout guard
   function payout({ banned, manual }) {
-    const wit = { userId: 'u1', status: 'pending', network: 'MTN Mobile Money', phone: '0770', net: 8500, amount: 10000, holder: 'A' };
+    const wit = { userId: 'u1', status: 'pending', network: 'Telebirr', phone: '0770', net: 8500, amount: 10000, holder: 'A' };
     const calls = []; const witRef = { get: async () => ({ exists: true, data: () => ({ ...wit }) }), updateIf: async (f, p) => { calls.push(['updateIf', p.status]); return true; }, update: async () => {} };
     const db = { collection: n => n === 'withdrawals' ? { doc: () => witRef } : { doc: () => ({ get: async () => ({ exists: true, data: () => ({ status: banned ? 'banned' : 'active' }) }), update: async () => {} }) } };
     const f = new Function('db', '_withdrawInFlight', 'getSettings', 'payoutIsManual', 'FieldValue', 'withLock', 'finalizeWithdrawalTransactionRecord', 'fmtMoney', 'isBankNetwork', 'crypto', 'marzUserMsg', 'console',
@@ -30,8 +30,8 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
 
   // 2. up to five cards per member: the first saved is the active one, a repeat is refused
   ok(/const BANK_CARD_LIMIT = 5;/.test(src), 'five cards per member');
-  async function save(existing, phone, others = []) {
-    const rows = existing.map((p, i) => ({ id: 'b' + i, userId: 'u1', phone: p, holder: 'OLD', network: 'MTN Mobile Money' })).concat(others.map((p, i) => ({ id: 'o' + i, userId: 'u2', phone: p, holder: 'OTHER', network: 'MTN Mobile Money' })));
+  async function save(existing, phone, others = [], network) {
+    const rows = existing.map((p, i) => ({ id: 'b' + i, userId: 'u1', phone: p, holder: 'OLD', network: 'Telebirr' })).concat(others.map((p, i) => ({ id: 'o' + i, userId: 'u2', phone: p, holder: 'OTHER', network: 'Telebirr' })));
     const log = { added: 0, addedRows: [], updated: [], deleted: [] }; let code = 200, body;
     const mkDoc = r => ({ id: r.id, data: () => r, ref: { update: async u => { log.updated.push([r.id, u]); }, delete: async () => { log.deleted.push(r.id); } } });
     const chain = (list, f = []) => ({ where: (k, o, v) => chain(list, [...f, [k, v]]), limit: () => chain(list, f),
@@ -39,11 +39,11 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
     const db = { collection: n => n === 'bankAccounts' ? { ...chain(rows), add: async row => { log.added++; log.addedRows.push(row); } } : { doc: () => ({ get: async () => ({ exists: true, data: () => ({ phone: '0700000000', status: 'active' }) }) }) } };
     let handler; const app = { post: (p, h) => { if (p === '/bank/save') handler = h; } };
     const i = src.indexOf('const BANK_CARD_LIMIT'), j = src.indexOf("app.get('/bank/list'");
-    new Function('textOf', 'app', 'db', 'verifyAuth', 'stripHtml', 'NETWORK_NAMES', 'cleanPhone', 'badPhoneMessage', 'getSettings', 'getSupportedBanks', 'consumeOtpTicket', 'marzValidateBankAccount', 'marzUserMsg', 'withLock', 'FieldValue', 'console',
-      src.slice(i, j))(v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''), app, db, async () => 'u1', s => String(s || '').trim(), new Set(['MTN Mobile Money']), p => String(p).replace(/\D/g, ''), () => 'bad phone',
+    new Function('textOf', 'app', 'db', 'verifyAuth', 'stripHtml', 'PAYOUT_ACCOUNT_TYPES', 'NETWORK_NAMES', 'ALL_PAYOUT_NETWORKS', 'PAYOUT_CHOICE_MSG', 'cleanPhone', 'badPhoneMessage', 'getSettings', 'getSupportedBanks', 'consumeOtpTicket', 'marzValidateBankAccount', 'marzUserMsg', 'withLock', 'FieldValue', 'console',
+      src.slice(i, j))(v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''), app, db, async () => 'u1', s => String(s || '').trim(), { 'Commercial Bank of Ethiopia': 'bank', 'Telebirr': 'wallet' }, new Set(['Telebirr']), new Set(['Telebirr', 'Commercial Bank of Ethiopia']), 'Choose Commercial Bank of Ethiopia or Telebirr.', p => String(p).replace(/\D/g, ''), () => 'bad phone',
       async () => ({ otpVerificationEnabled: false }), async () => [], async () => true, async () => ({}), () => '', (k, g) => g(), { serverTimestamp: () => 1 }, console);
     const res = { status(c) { code = c; return this; }, json(b) { body = b; return this; } };
-    await handler({ body: { holder: 'A B', network: 'MTN Mobile Money', phone } }, res); return { code, body, ...log };
+    await handler({ body: { holder: 'A B', network: network === undefined ? 'Telebirr' : network, phone } }, res); return { code, body, ...log };
   }
   let r = await save([], '0770000099');
   eq([r.code, r.added, r.updated.length], [200, 1, 0], 'the first card is added');
@@ -54,6 +54,11 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
   r = await save(['0770000099'], '0770000099');
   eq([r.code, r.added, r.updated.length], [409, 0, 0], 'saving a number the member already holds is refused');
   ok(r.body.code === 'CARD_EXISTS', 'with its own code');
+  // owner: "make potato ... Ethiopia plus the other previous payment pages and models": a withdrawal account is Commercial Bank of Ethiopia or Telebirr only
+  r = await save([], '1000809418239', [], 'Commercial Bank of Ethiopia'); eq([r.code, r.added], [200, 1], 'a Commercial Bank of Ethiopia account number is accepted as it is');
+  r = await save([], 'AB', [], 'Commercial Bank of Ethiopia'); ok(r.code === 400 && r.added === 0, 'a bank account number that is too short is refused');
+  r = await save([], '10008-0941', [], 'Commercial Bank of Ethiopia'); ok(r.code === 400 && r.added === 0, 'a bank account number with a dash is refused');
+  for (const other of ['MTN Mobile Money', 'Airtel Money', 'CBE Birr', 'Stanbic Bank', '']) { r = await save([], '0912345678', [], other); ok(r.code === 400 && r.added === 0, 'refused: ' + (other || '(empty)')); }
   r = await save(['0700000010', '0700000011', '0700000012', '0700000013', '0700000014'], '0770000099');
   eq([r.code, r.added], [400, 0], 'a sixth card is refused');
   ok(r.body.code === 'CARD_LIMIT', 'with its own code');

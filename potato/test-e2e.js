@@ -13,6 +13,7 @@ process.env.PORT = String(PORT); process.env.MONGODB_URI = 'mongodb://fake/potat
 // The captcha picture's answer never leaves the server, so this test run accepts 0000 (the real check is covered by test-captcha.js).
 const cap = require('./captcha.js'); const realVerify = cap.verify; cap.verify = (id, code) => code === '0000' ? true : realVerify(id, code);
 const realLog = console.log; console.log = () => {}; const realWarn = console.warn; console.warn = () => {};
+process.env.POTATO_REGION = 'ug';   // this test drives the Uganda payment gateways (Ethiopia has none: its recharges are manual)
 require('./server.js');
 const base = 'http://127.0.0.1:' + PORT;
 const J = async (m, p, b, tok, adm) => { const r = await fetch(base + p, { method: m, headers: Object.assign({ 'content-type': 'application/json' }, tok ? { authorization: 'Bearer ' + tok } : {}, adm ? { authorization: 'Bearer e2e-admin-key-123456' } : {}), body: b ? JSON.stringify(b) : undefined }); let j = {}; try { j = await r.json(); } catch (_) {} return { s: r.status, j }; };

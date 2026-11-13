@@ -11,6 +11,7 @@ process.env.PORT = String(BACK); process.env.MONGODB_URI = 'mongodb://fake/app';
 process.env.POTATO_SECRETS_DIR = fs.mkdtempSync(path.join(require('os').tmpdir(), 'po-dd-'));
 const realLog = console.log; console.log = () => {}; console.warn = () => {}; console.error = () => {};
 const fm = require(path.join(__dirname, 'test-helpers', 'fake-mongodb.js'));
+process.env.POTATO_REGION = 'ug';   // this test drives the Uganda payment gateways (Ethiopia has none: its recharges are manual)
 require(path.join(__dirname, 'server.js'));
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; realLog('  ok   - ' + m); } else { fail++; realLog('  FAIL - ' + m); } };

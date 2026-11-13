@@ -59,12 +59,12 @@ for (const s of d.scripts) {
   ok([...d.querySelectorAll('.bottom-nav .lbl')].map(e => e.textContent).join() === 'Home,Income,Myteam,Share,My', 'tab names: Home, Income, Myteam, Share, My');
   ok(calls.includes('/salary/status'), 'the Myteam page reads the salary status');
   const cards = [...d.querySelectorAll('.pt-tier')];
-  ok(cards.length === 3 && /Tier 1/.test(cards[0].textContent) && /\+UGX 2,000/.test(cards[0].textContent) && /UGX 500,000/.test(cards[0].textContent), 'one card per tier with its reward and threshold');
-  ok(/UGX 500,000 \/ UGX 500,000/.test(cards[0].querySelector('.pt-tn').textContent) && /UGX 700,000 \/ UGX 1,000,000/.test(cards[1].querySelector('.pt-tn').textContent), 'the progress line shows the team total against the threshold');
+  ok(cards.length === 3 && /Tier 1/.test(cards[0].textContent) && /\+Br 2,000/.test(cards[0].textContent) && /Br 500,000/.test(cards[0].textContent), 'one card per tier with its reward and threshold');
+  ok(/Br 500,000 \/ Br 500,000/.test(cards[0].querySelector('.pt-tn').textContent) && /Br 700,000 \/ Br 1,000,000/.test(cards[1].querySelector('.pt-tn').textContent), 'the progress line shows the team total against the threshold');
   ok(cards[0].querySelector('.pt-rbtn.go') && !cards[1].querySelector('.pt-rbtn.go') && cards[1].querySelector('.pt-rbtn').textContent === 'Share to Unlock', 'a reached tier shows Claim, an unreached one Share to Unlock');
   w.claimSalary(d.querySelector('.pt-rbtn.go'), 's0'); await new Promise(r => setTimeout(r, 40));
   ok(calls.includes('/salary/claim {"tierId":"s0"}'), 'Claim names its tier');
-  ok(/UGX 2,000 added to your wallet/.test(d.getElementById('notifyMsg').textContent), 'the member is told what was paid');
+  ok(/Br 2,000 added to your wallet/.test(d.getElementById('notifyMsg').textContent), 'the member is told what was paid');
   ok(w.eval('STATE.account.walletBalance') === 9000 && w.eval('STATE.salary.tiers[0].claimed') === true, 'the wallet figure and the tier\'s claimed mark are updated');
   const after = [...d.querySelectorAll('.pt-tier')];
   ok(after[0].querySelector('.pt-rbtn.done') && after[0].querySelector('.pt-rbtn').textContent === 'Claimed' && !after[0].querySelector('.pt-rbtn.go'), 'a claimed tier reads Claimed and offers no Claim');

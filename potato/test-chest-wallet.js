@@ -20,18 +20,18 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 (async () => {
   await new Promise(r => setTimeout(r, 30));
   // Bank Cards: the dark card shows the active card, the others are listed under "Other Cards", and there is no delete control anywhere.
-  w.eval('STATE.bankAccounts=[{id:"b1",network:"MTN Mobile Money",phone:"256769968158",holder:"Jane Doe",isDefault:true}]');
+  w.eval('STATE.bankAccounts=[{id:"b1",network:"Telebirr",phone:"251969968158",holder:"Jane Doe",isDefault:true}]');
   w.eval('openSheet("Bank Cards","");renderWalletSheet()');
-  ok(d.querySelectorAll('#walCardBox .pt-bcard').length === 1 && /MTN Mobile Money/.test(d.querySelector('.pt-bcard').textContent) && /JANE DOE/.test(d.querySelector('.pt-bcard').textContent), 'the active card shows the provider and holder');
-  ok(/0769 9681 58/.test(d.querySelector('.pt-bcard').textContent), 'the number is shown in groups of four');
+  ok(d.querySelectorAll('#walCardBox .pt-bcard').length === 1 && /Telebirr/.test(d.querySelector('.pt-bcard').textContent) && /JANE DOE/.test(d.querySelector('.pt-bcard').textContent), 'the active card shows the provider and holder');
+  ok(/0969 6815 8|0969 9681 58/.test(d.querySelector('.pt-bcard').textContent), 'the number is shown in groups of four');
   ok(!/deleteWallet|Delete wallet/.test(d.getElementById('sheetBody').innerHTML) && typeof w.deleteWallet === 'undefined', 'no delete / bin control');
   ok(!d.querySelector('.pt-ocard') && d.getElementById('walCount').textContent === '1/5', 'one card: no other cards, the counter says 1/5');
-  w.eval('STATE.bankAccounts.push({id:"b2",network:"Airtel Money",phone:"256759968158",holder:"Bogere Med"});paintWalletParts()');
-  ok(d.querySelectorAll('.pt-ocard').length === 1 && /0759 \*\*\*\* 8158/.test(d.querySelector('.pt-ocard').textContent) && /BOGERE MED/.test(d.querySelector('.pt-ocard').textContent) && d.getElementById('walCount').textContent === '2/5', 'a second card is listed under Other Cards and the counter says 2/5');
+  w.eval('STATE.bankAccounts.push({id:"b2",network:"Telebirr",phone:"251959968158",holder:"Bogere Med"});paintWalletParts()');
+  ok(d.querySelectorAll('.pt-ocard').length === 1 && /0959 \*\*\*\* 8158/.test(d.querySelector('.pt-ocard').textContent) && /BOGERE MED/.test(d.querySelector('.pt-ocard').textContent) && d.getElementById('walCount').textContent === '2/5', 'a second card is listed under Other Cards and the counter says 2/5');
   w.eval('STATE.bankAccounts=[];openSheet("Bank Cards","");renderWalletSheet()');
   ok(/No bank cards yet/.test(d.querySelector('.pt-bcard').textContent) && /Fill the form below to add one/.test(d.querySelector('.pt-bcard').textContent), 'no card yet: the empty message');
   ok(d.getElementById('walProvider').placeholder === 'Type to search bank' && d.getElementById('walPhone').placeholder === 'Enter card number' && d.getElementById('walHolder').placeholder === 'Cardholder name' && d.getElementById('walSaveBtn').textContent === 'Save Card', 'the form words come from the screenshots');
-  ok([...d.querySelectorAll('#walProviderList .prov-opt')].map(e => e.textContent).join() === 'MTN,Airtel', 'Bank Name offers MTN and Airtel, nothing else');
+  ok([...d.querySelectorAll('#walProviderList .prov-opt')].map(e => e.textContent).join() === 'Commercial Bank of Ethiopia,Telebirr', 'Bank Name offers Commercial Bank of Ethiopia and Telebirr, nothing else');
   await w.submitWallet();
   ok(/Please fill in all fields/.test(d.getElementById('notifyMsg').textContent), 'an empty form is refused with the screenshot words');
   w.closeNotify();

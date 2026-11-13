@@ -339,6 +339,7 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
         <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="settings" id="settingsTab">Settings</button>
         <button class="tab" data-tab="banners" id="bannersTab">Banners</button>
+        <button class="tab hidden" data-tab="paynumbers" id="payNumbersTab">Payment Numbers</button>
         <button class="tab hidden" data-tab="admins" id="adminsTab">Admins</button>
         <button class="tab hidden" data-tab="auditlog" id="auditLogTab">Activity Log</button>
       </div>
@@ -392,7 +393,7 @@ const $ = id => document.getElementById(id);
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 // Owner: "l am trying to saved them in admin panel but they change to
 // +2567..." -- cleanPhone() server-side always normalizes a saved payment
-// number to canonical +256XXXXXXXXX before storing. This is DISPLAY-ONLY,
+// number to canonical +251XXXXXXXXX before storing. This is DISPLAY-ONLY,
 // applied wherever the admin panel shows a saved number back, so a number
 // typed as "07XXXXXXXX" doesn't visibly "change" after saving.
 async function copyText(str, btn, msg){
@@ -715,13 +716,13 @@ function fileToSquarePng(file, size){
 let _toastT=null;
 function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('div'); t.id='adToast'; document.body.appendChild(t);} t.className='toast'+(kind?' '+kind:''); t.textContent=msg; clearTimeout(_toastT); _toastT=setTimeout(()=>t.remove(),3000); }
 
-// All amounts in this panel are Ugandan shillings.
-const ADMIN_REGIONS = [{ key: 'ug', name: 'Uganda', currency: 'UGX' }];
+// All amounts in this panel are Ethiopian birr (ETB, printed as Br).
+const ADMIN_REGIONS = [{ key: 'et', name: 'Ethiopia', currency: 'ETB' }];
 const ADMIN_REGION = 'ug';
 function regionByKeyAdmin(){ return ADMIN_REGIONS[0]; }
 function adminOneRegion(){ return 'ug'; }
-function curOf(){ return 'UGX'; }
-function adminCur(){ return 'UGX'; }
+function curOf(){ return 'Br'; }
+function adminCur(){ return 'Br'; }
 var _adminPending = new Map();
 function api(path, body, method){
   if (body || (method && method !== 'GET')) return adminRequest(path, body, method);
@@ -793,9 +794,9 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
     if (wanted && VALID_TABS.has(wanted)) { lastTab = wanted; history.replaceState(null, '', location.pathname); }
   } catch (_) {}
   const isOwner = SESSION_ROLE === 'owner';
-  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'bannersTab', 'promocodesTab']
+  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'bannersTab', 'promocodesTab', 'payNumbersTab']
     .forEach(id => $(id).classList.toggle('hidden', !isOwner));
-  if (!isOwner && ['products', 'settings', 'banners', 'promocodes', 'admins', 'auditlog'].includes(lastTab)) lastTab = 'dashboard';
+  if (!isOwner && ['products', 'settings', 'banners', 'promocodes', 'paynumbers', 'admins', 'auditlog'].includes(lastTab)) lastTab = 'dashboard';
   // The country list is needed before anything renders: every money figure
   // in this panel is labelled from it (see ugx()/curOf()), and the region
   // picker on Settings and Products is built from it. Failure is silent and
@@ -1068,7 +1069,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('mess
 });
 
 // ── TABS ──
-const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','messages','transactions','referrals','settings','banners','admins','auditlog']);
+const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','messages','transactions','referrals','settings','banners','paynumbers','admins','auditlog']);
 let _tab='dashboard', _tabSequence=0;
 function staleTab(name){ return _tab !== name; }
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{ if (_tab !== t.dataset.tab) switchTab(t.dataset.tab); }));
@@ -1087,7 +1088,7 @@ function switchTab(name){
   const spinnerTimer = setTimeout(() => { if (sequence === _tabSequence && c.innerHTML === before) c.innerHTML=spinnerHtml(); }, 120);
   const fn = ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
      products:renderProducts, promocodes:renderPromoCodes, messages:renderMessages, transactions:renderTransactions,
-     referrals:renderReferrals, settings:renderSettings, banners:renderBanners, admins:renderAdmins, auditlog:renderAuditLog }[name]);
+     referrals:renderReferrals, settings:renderSettings, banners:renderBanners, paynumbers:renderPayNumbers, admins:renderAdmins, auditlog:renderAuditLog }[name]);
   // The switch lives in the topbar, OUTSIDE #content, so a tab render can
   // never take it with it -- which is why this no longer waits for the tab
   // to paint. Only the note under the tabs depends on which tab is open, and
@@ -1352,7 +1353,7 @@ function paintPesajetSummary(pj){
     return;
   }
   box.innerHTML = regions.map(b => `
-    ${regions.length>1?`<h3 class="sec" style="margin:10px 0 6px;font-size:14px">${esc('Uganda')}</h3>`:''}
+    ${regions.length>1?`<h3 class="sec" style="margin:10px 0 6px;font-size:14px">${esc('Ethiopia')}</h3>`:''}
     <div class="cards">
       <div class="stat"><div class="n">${ugx(b.collected, b.regionKey)}</div><div class="l">Collected</div></div>
       <div class="stat"><div class="n">${ugx(b.paidOut, b.regionKey)}</div><div class="l">Paid out</div></div>
@@ -1500,7 +1501,7 @@ async function renderAnalytics(silent){
     <div class="seg">${[7,30,90].map(d=>`<button class="${_anPeriod===d?'on':''}" data-per="${d}">${d} days</button>`).join('')}</div>
     <div class="panel-card">
       <div class="row" style="align-items:center;gap:12px;flex-wrap:wrap"><h2 class="sec" style="margin:0;flex:1">Transactions for a day</h2><label class="muted">Select day <input id="analytics-day" type="date" value="${esc(selected.day||a.today)}" style="padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)"></label><button id="analytics-today" class="btn">Today</button></div>
-      <p class="muted" style="margin:8px 0 12px">Uganda time (EAT). Completed amounts use recorded credit or payout times; older records without these times use the request date. Open requests show what is still outstanding now from requests created on the selected date. Arrival times are unconfirmed.</p>
+      <p class="muted" style="margin:8px 0 12px">Ethiopia time (EAT). Completed amounts use recorded credit or payout times; older records without these times use the request date. Open requests show what is still outstanding now from requests created on the selected date. Arrival times are unconfirmed.</p>
       <div class="cards">
         <div class="stat"><div class="n" style="color:var(--ok)">${ugx(selected.depositsCompletedAmount)}</div><div class="l">Deposits credited (${selected.depositsCompletedCount||0})</div></div>
         <div class="stat"><div class="n" style="color:var(--danger)">${ugx(selected.withdrawalsCompletedAmount)}</div><div class="l">Withdrawals paid (${selected.withdrawalsCompletedCount||0})</div></div>
@@ -1600,7 +1601,7 @@ async function renderAnalytics(silent){
 
 // ── USERS ──
 let _users=[];
-function phoneCore(p){ let n=String(p||'').replace(/\D/g,''); if(n.startsWith('256')) n=n.slice(3); n=n.replace(/^0+/,''); return n; }
+function phoneCore(p){ let n=String(p||'').replace(/\D/g,''); if(n.startsWith('251')) n=n.slice(3); n=n.replace(/^0+/,''); return n; }
 async function renderUsers(){
   const r = await api('/admin/users');
   if(staleTab('users')) return;
@@ -1844,7 +1845,7 @@ function makePdf(){
 }
 function pdfMoney(n){ return Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 function pdfDay(ms){ if (!ms) return '-'; const d = new Date(Number(ms) + 3 * 3600 * 1000); const p = x => String(x).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`; }
-function pdfStamp(){ const d = new Date(Date.now() + 3 * 3600 * 1000); const p = x => String(x).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} (Uganda time)`; }
+function pdfStamp(){ const d = new Date(Date.now() + 3 * 3600 * 1000); const p = x => String(x).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} (Ethiopia time)`; }
 function chainPdfBlob(r){
   const pdf = makePdf(), M = 36, W = pdf.W, H = pdf.H, BOT = H - 40;
   const INK = [0.1, 0.12, 0.2], MUTED = [0.45, 0.5, 0.6], BLUE = [0.09, 0.22, 0.72], LINE = [0.82, 0.85, 0.93], HEAD = [0.92, 0.94, 0.99], GOOD = [0.1, 0.55, 0.3], BAD = [0.8, 0.15, 0.2];
@@ -1891,9 +1892,9 @@ function chainPdfBlob(r){
   const colW = (W - 2 * M) / 4;
   [['Phone', u.phone || '-'], ['Referral code', u.referralCode || 'not set'], ['Status', String(u.status || 'active')], ['Joined', pdfDay(u.createdAt)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 30;
-  [['Referred by', u.referredByPhone || 'nobody (this is a root account)'], ['Wallet balance', 'UGX ' + pdfMoney(u.walletBalance)], ['Total deposited', 'UGX ' + pdfMoney(u.totalDeposited)], ['Total invested', 'UGX ' + pdfMoney(u.totalInvested)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
+  [['Referred by', u.referredByPhone || 'nobody (this is a root account)'], ['Wallet balance', 'Br ' + pdfMoney(u.walletBalance)], ['Total deposited', 'Br ' + pdfMoney(u.totalDeposited)], ['Total invested', 'Br ' + pdfMoney(u.totalInvested)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 30;
-  [['Total withdrawn', 'UGX ' + pdfMoney(u.totalWithdrawn)], ['Total earned (all sources)', 'UGX ' + pdfMoney(u.totalEarned)], ['Team members (all levels)', pdfMoney(downline.length) + (r.downlineTruncated ? '+' : '')], ["Team's recharges (L1-L3)", 'UGX ' + pdfMoney(r.teamDeposits)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
+  [['Total withdrawn', 'Br ' + pdfMoney(u.totalWithdrawn)], ['Total earned (all sources)', 'Br ' + pdfMoney(u.totalEarned)], ['Team members (all levels)', pdfMoney(downline.length) + (r.downlineTruncated ? '+' : '')], ["Team's recharges (L1-L3)", 'Br ' + pdfMoney(r.teamDeposits)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 34;
   if (r.cycleDetected || r.downlineCycleDetected) { pdf.text(M, y, 'Warning: a cycle was found in the referral data; the walk stopped early.', 9, true, 'l', BAD); y += 16; }
   // 2. Team by level
@@ -1902,7 +1903,7 @@ function chainPdfBlob(r){
   const lvRows = levels.map(agg);
   if (lvRows.length) {
     const tot = { _bold: true, _lv: 'Total', n: downline.length, banned: lvRows.reduce((s, x) => s + x.banned, 0), dep: lvRows.reduce((s, x) => s + x.dep, 0), inv: lvRows.reduce((s, x) => s + x.inv, 0), wd: lvRows.reduce((s, x) => s + x.wd, 0), earn: lvRows.reduce((s, x) => s + x.earn, 0), payers: lvRows.reduce((s, x) => s + x.payers, 0) };
-    heading('2. Team by level', 'figures are the members\' own lifetime totals, in UGX');
+    heading('2. Team by level', 'figures are the members\' own lifetime totals, in Br');
     table([
       { h: 'Level', w: 70, k: x => x._lv === 'Total' ? 'Total' : 'Level ' + x._lv }, { h: 'Members', w: 70, r: 1, k: x => pdfMoney(x.n) }, { h: 'Have deposited', w: 90, r: 1, k: x => pdfMoney(x.payers) },
       { h: 'Banned', w: 60, r: 1, k: x => pdfMoney(x.banned) }, { h: 'Deposited', w: 105, r: 1, k: x => pdfMoney(x.dep) }, { h: 'Invested', w: 105, r: 1, k: x => pdfMoney(x.inv) },
@@ -1937,7 +1938,7 @@ function chainPdfBlob(r){
     need(60);
     pdf.rect(M, y - 2, W - 2 * M, 17, [0.85, 0.9, 1]);
     pdf.text(M + 6, y + 1.5, `Level ${lv}  -  ${pdfMoney(rows.length)} member${rows.length === 1 ? '' : 's'}`, 9.5, true, 'l', BLUE);
-    pdf.text(W - M - 6, y + 2, `deposited ${pdfMoney(a.dep)}   invested ${pdfMoney(a.inv)}   (UGX)`, 8.5, false, 'r', INK);
+    pdf.text(W - M - 6, y + 2, `deposited ${pdfMoney(a.dep)}   invested ${pdfMoney(a.inv)}   (Br)`, 8.5, false, 'r', INK);
     y += 21;
     table(dcols, rows);
   });
@@ -2046,7 +2047,7 @@ async function openUser(uid){
       <div style="flex:2"><input id="pwNew" type="text" placeholder="New password (min 6 chars)"></div>
       <button class="btn sky sm" id="pwBtn" title="Set a new login password for this user">Reset password</button>
     </div>
-    <label style="margin-top:14px">Correct phone number ${u.phone && !/^\+2567\d{8}$/.test(u.phone)?'<span class="pill-tag t-warn" style="margin-left:6px">Looks malformed</span>':''}</label>
+    <label style="margin-top:14px">Correct phone number ${u.phone && !/^\+251[97]\d{8}$/.test(u.phone)?'<span class="pill-tag t-warn" style="margin-left:6px">Looks malformed</span>':''}</label>
     <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">Only fixes their profile phone (search/display/referral matching) -- they still log in exactly how they always have.</div>
     <div class="row">
       <div style="flex:2"><input id="phoneFix" type="text" placeholder="07XXXXXXXX"></div>
@@ -2670,7 +2671,7 @@ function editProduct(p, order){
     <div class="switch-row"><span><b>Upcoming</b> <span class="muted">(shown, but not buyable — no clock)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="pSoon" ${p.comingSoon?'checked':''} style="width:auto"></label></div>
     <div class="muted" style="margin:14px 0 6px"><b>Opening schedule</b> — leave blank for always open.
-      Upcoming above overrides both. Times are Uganda time.</div>
+      Upcoming above overrides both. Times are Ethiopia time.</div>
     <label>Opens at (one-off) — shows a countdown until then, open for good after</label>
     <input id="pOpenAt" type="datetime-local" value="${p.openAt?openAtToField(p.openAt):''}">
     <div class="row2">
@@ -2747,7 +2748,7 @@ function editProduct(p, order){
       expectedReturn:$('pRet').value, multiplier:_retIsTruth?'':$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, vip:$('pVip').value, orderGift:$('pGift').value, order:$('pOrder').value,
       image, active:$('pActive').checked, comingSoon:$('pSoon').checked,
       // datetime-local has no zone, so the browser reads it as local time --
-      // which for the owner IS Uganda time. Sent as epoch ms so the server
+      // which for the owner IS Ethiopia time. Sent as epoch ms so the server
       // never has to guess a zone.
       openAt: $('pOpenAt').value ? fieldToOpenAt($('pOpenAt').value) : '',
       openFrom: $('pOpenFrom').value, openTo: $('pOpenTo').value };
@@ -2804,7 +2805,7 @@ async function renderMessages(){
       <div class="panel-card" style="margin-bottom:10px">
         <div style="font-weight:700">${esc(m.title||'')}</div>
         <div class="muted" style="font-size:11.5px;margin:2px 0 6px">${esc(m.id)} &middot; ${esc(m.date||'')} ${esc(m.time||'')}${ADMIN_REGIONS.length>1
-          ? ' &middot; ' + (!m.regionKey || m.regionKey==='all' ? 'every country' : esc('Uganda'))
+          ? ' &middot; ' + (!m.regionKey || m.regionKey==='all' ? 'every country' : esc('Ethiopia'))
           : ''}</div>
         <div style="font-size:13px;white-space:pre-line">${esc(m.body||'')}</div>
         ${m.image?`<img class="img-thumb" src="${esc(m.image)}" style="margin-top:8px;max-width:160px" alt="">`:''}
@@ -2893,7 +2894,7 @@ async function renderPromoCodes(){
       const cCur = c.regionKey && c.regionKey !== 'all' ? c.regionKey : undefined;
       const rewardCol = c.minReward===c.maxReward ? ugx(c.minReward, cCur) : `${ugx(c.minReward, cCur)} – ${ugx(c.maxReward, cCur)}`;
       const claimedCol = c.uses ? `<b>${ugx(c.totalClaimed, cCur)}</b>` : '<span class="muted">Not claimed yet</span>';
-      return `<tr><td><b class="mono">${esc(String(c.code||'').toUpperCase())}</b> <button class="btn sm ghost" data-copy="${esc(String(c.code||'').toUpperCase())}" title="Copy code">Copy</button>${c.buyersOnly?' <span class="pill-tag t-ok" title="Only members who have bought a product can claim this code">Buyers only</span>':''}</td><td>${rewardCol}</td>${ADMIN_REGIONS.length>1?`<td>${c.regionKey==='all'?'<span class="muted">All countries</span>':esc('Uganda')}</td>`:''}<td>${c.uses||0} / ${c.maxUses||'∞'}</td>
+      return `<tr><td><b class="mono">${esc(String(c.code||'').toUpperCase())}</b> <button class="btn sm ghost" data-copy="${esc(String(c.code||'').toUpperCase())}" title="Copy code">Copy</button>${c.buyersOnly?' <span class="pill-tag t-ok" title="Only members who have bought a product can claim this code">Buyers only</span>':''}</td><td>${rewardCol}</td>${ADMIN_REGIONS.length>1?`<td>${c.regionKey==='all'?'<span class="muted">All countries</span>':esc('Ethiopia')}</td>`:''}<td>${c.uses||0} / ${c.maxUses||'∞'}</td>
       <td>${claimedCol}</td>
       <td><span class="pill-tag ${statusClass}">${statusLabel}</span></td>
       <td>${c.expiresAt?fdate(c.expiresAt):'<span class="muted">Never</span>'}</td>
@@ -3172,6 +3173,111 @@ function applyAdminBrandName(name){
 // sharing renderSettings()'s, same self-contained pattern every other tab
 // already uses -- one extra round of these 4 small fetches on switching
 // tabs, in exchange for not threading one function's closure across two.
+// ── PAYMENT NUMBERS (bank / wallet accounts members pay into) ──
+// Owner: "make when l can put payment numbers from admin panel ... make when l can upload the logos,
+// so system will remove background so that they fit perfectly". Each entry is one row on the member's
+// "Please choose payment" page. The logo goes through fileToCutoutPng(): the background connected to the
+// picture edge is cleared and the picture is cropped tight, so it sits perfectly inside the round frame.
+let _payRows = [], _payEdit = null, _payLogo = undefined;
+async function renderPayNumbers(){
+  const r = await api('/admin/pay-channels/list', {});
+  if (staleTab('paynumbers')) return;
+  _payRows = (r && r.channels) || [];
+  _payEdit = null; _payLogo = undefined;
+  drawPayNumbers();
+}
+function payLogoBox(src, size){
+  size = size || 44;
+  return src
+    ? `<div style="width:${size}px;height:${size}px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;border:1px solid var(--line);background:#fff"><img src="${esc(src)}" alt="" style="max-width:76%;max-height:76%;object-fit:contain"></div>`
+    : `<div style="width:${size}px;height:${size}px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;border:1px dashed var(--line);color:var(--muted,#888);font-size:11px">No logo</div>`;
+}
+function drawPayNumbers(){
+  const e = _payEdit;
+  const logoNow = e ? (_payLogo === undefined ? (e.logo || '') : _payLogo) : '';
+  const form = e ? `
+    <div class="panel-card">
+      <h3 style="margin:0 0 10px;font-size:15px">${e.id ? 'Edit payment number' : 'Add payment number'}</h3>
+      <div class="row">
+        <div><label>Name members see</label><input id="pcName" maxlength="60" value="${esc(e.name || '')}" placeholder="Commercial Bank of Ethiopia"></div>
+        <div><label>Type</label><select id="pcKind"><option value="bank"${e.kind !== 'wallet' ? ' selected' : ''}>Bank</option><option value="wallet"${e.kind === 'wallet' ? ' selected' : ''}>Wallet (Telebirr)</option></select></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div><label>Account name</label><input id="pcAccName" maxlength="80" value="${esc(e.accountName || '')}" placeholder="Ashenafi"></div>
+        <div><label>Account number</label><input id="pcAccNo" maxlength="40" value="${esc(e.accountNumber || '')}" placeholder="1000809418239"></div>
+      </div>
+      <div class="banner-row" style="margin-top:10px">
+        ${payLogoBox(logoNow, 52)}
+        <div style="flex:1;min-width:0;font-size:12px">${logoNow ? 'Logo ready (background removed)' : '<span class="muted">No logo yet</span>'}</div>
+        ${logoNow ? '<button class="btn danger sm" id="pcLogoClear" type="button">Remove logo</button>' : ''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload logo<input type="file" id="pcLogoFile" accept="image/*" hidden></label>
+      <p class="muted" style="margin:6px 0 0;font-size:12px">Upload the logo as it is. The system clears the background around it and crops it so it fits the round frame.</p>
+      <div class="row" style="margin-top:10px;align-items:end">
+        <div><label>Order (smaller first)</label><input id="pcOrder" type="number" min="0" max="999" value="${esc(e.order != null ? e.order : _payRows.length)}"></div>
+        <div><label style="display:flex;align-items:center;gap:8px;margin-top:22px"><input id="pcActive" type="checkbox" style="width:auto"${e.active === false ? '' : ' checked'}> Show to members</label></div>
+      </div>
+      <div class="row" style="margin-top:14px"><button class="btn block" id="pcSave" type="button">Save</button><button class="btn ghost block" id="pcCancel" type="button">Cancel</button></div>
+    </div>` : '';
+  $('content').innerHTML = `
+    <h2 class="sec">Payment numbers</h2>
+    <p class="muted" style="margin:0 0 12px">These are the accounts members pay into on the recharge page (a bank account, a Telebirr wallet and so on). Each one appears as a row under &ldquo;Please choose payment&rdquo; with its logo. A member who taps <b>switch</b> goes back to this list.</p>
+    ${form}
+    ${e ? '' : '<button class="btn block" id="pcAdd" type="button" style="margin-bottom:14px">Add payment number</button>'}
+    <div class="panel-card">
+      ${_payRows.length ? _payRows.map(c => `
+        <div class="banner-row" data-pcid="${esc(c.id)}">
+          ${payLogoBox(c.logo, 44)}
+          <div style="flex:1;min-width:0;font-size:13px">
+            <b data-no-i18n>${esc(c.name)}</b> <span class="pill-tag ${c.active === false ? 't-bad' : 't-ok'}" style="font-size:10px">${c.active === false ? 'Hidden' : 'Showing'}</span>
+            <div class="muted" style="font-size:12px" data-no-i18n>${esc(c.accountName)} &middot; ${esc(c.accountNumber)} &middot; ${c.kind === 'wallet' ? 'Wallet' : 'Bank'}</div>
+          </div>
+          <button class="btn ghost sm" data-pc-edit="${esc(c.id)}" type="button">Edit</button>
+          <button class="btn danger sm" data-pc-del="${esc(c.id)}" type="button">Delete</button>
+        </div>`).join('') : '<p class="muted" style="margin:0">No payment numbers yet. Until you add one, members cannot recharge by bank or wallet.</p>'}
+    </div>`;
+  const add = $('pcAdd'); if (add) add.onclick = () => { _payEdit = { active: true, kind: 'bank' }; _payLogo = undefined; drawPayNumbers(); };
+  $('content').querySelectorAll('[data-pc-edit]').forEach(b => b.onclick = () => { _payEdit = _payRows.find(r => r.id === b.dataset.pcEdit) || null; _payLogo = undefined; drawPayNumbers(); });
+  $('content').querySelectorAll('[data-pc-del]').forEach(b => b.onclick = async () => {
+    const row = _payRows.find(r => r.id === b.dataset.pcDel); if (!row) return;
+    if (!window.confirm('Delete "' + row.name + '"? Members will no longer see it.')) return;
+    b.disabled = true;
+    const d = await api('/admin/pay-channels/delete', { id: row.id });
+    toast(d.status === 'success' ? 'Deleted' : (d.message || 'Could not delete'), d.status === 'success' ? 'ok' : 'err');
+    renderPayNumbers();
+  });
+  const cancel = $('pcCancel'); if (cancel) cancel.onclick = () => { _payEdit = null; _payLogo = undefined; drawPayNumbers(); };
+  const file = $('pcLogoFile');
+  if (file) file.addEventListener('change', async ev => {
+    const f = ev.target.files[0]; if (!f) return; ev.target.value = '';
+    keepPayForm();
+    try {
+      toast('Processing logo…', 'ok');
+      _payLogo = await fileToCutoutPng(f, 256);
+      toast('Logo ready (background removed)', 'ok');
+      drawPayNumbers();
+    } catch (err) { toast(err.message || 'Could not process the logo', 'err'); }
+  });
+  const clr = $('pcLogoClear'); if (clr) clr.onclick = () => { keepPayForm(); _payLogo = ''; drawPayNumbers(); };
+  const save = $('pcSave');
+  if (save) save.onclick = async () => {
+    keepPayForm();
+    const body = { id: _payEdit.id, name: _payEdit.name, kind: _payEdit.kind, accountName: _payEdit.accountName, accountNumber: _payEdit.accountNumber, order: _payEdit.order, active: _payEdit.active };
+    if (_payLogo !== undefined) body.logo = _payLogo;
+    save.disabled = true;
+    const d = await api('/admin/pay-channels/save', body);
+    toast(d.status === 'success' ? 'Saved' : (d.message || 'Could not save'), d.status === 'success' ? 'ok' : 'err');
+    if (d.status === 'success') renderPayNumbers(); else save.disabled = false;
+  };
+}
+// Copies what is typed in the form back into the entry being edited, so a redraw (after choosing a logo) keeps it.
+function keepPayForm(){
+  if (!_payEdit || !$('pcName')) return;
+  _payEdit = Object.assign({}, _payEdit, {
+    name: $('pcName').value, kind: $('pcKind').value, accountName: $('pcAccName').value, accountNumber: $('pcAccNo').value,
+    order: $('pcOrder').value === '' ? undefined : Number($('pcOrder').value), active: $('pcActive').checked,
+  });
+}
 async function renderBanners(){
   const [r, br, cir, bar, annr] = await Promise.all([
     api('/admin/settings'), api('/admin/banner'), api('/admin/potato-images'), api('/admin/brand-assets'), api('/admin/announcement-image')
@@ -3610,7 +3716,7 @@ async function renderSettings(){
       <div class="row" style="margin-top:6px">
         <div><label>Shortest wait (seconds)</label><input id="sAutoMin" type="number" min="0" max="86400" step="1" value="${v('autoApproveMinSec',10)}"></div>
         <div><label>Longest wait (seconds)</label><input id="sAutoMax" type="number" min="0" max="86400" step="1" value="${v('autoApproveMaxSec',60)}"></div>
-        <div><label>Automatic up to (UGX, 0 = no limit)</label><input id="sAutoCap" type="number" min="0" step="1" value="${v('autoApproveMaxAmount',0)}"></div>
+        <div><label>Automatic up to (Br, 0 = no limit)</label><input id="sAutoCap" type="number" min="0" step="1" value="${v('autoApproveMaxAmount',0)}"></div>
       </div>
       <p class="muted" id="autoWitNote" style="margin:6px 0 0"></p>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Leave ON &mdash; the first-ever account is always let through.</p>

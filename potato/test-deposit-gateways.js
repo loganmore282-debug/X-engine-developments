@@ -12,6 +12,7 @@ const PORT = 3700 + Math.floor(Math.random() * 90);
 process.env.PORT = String(PORT); process.env.MONGODB_URI = 'mongodb://fake/potato'; process.env.ADMIN_KEY = 'e2e-admin-key-123456'; process.env.NODE_ENV = 'development';
 const cap = require('./captcha.js'); const realVerify = cap.verify; cap.verify = (id, code) => code === '0000' ? true : realVerify(id, code);
 const realLog = console.log; console.log = () => {}; console.warn = () => {}; const realErr = console.error; console.error = () => {};
+process.env.POTATO_REGION = 'ug';   // this test drives the Uganda payment gateways (Ethiopia has none: its recharges are manual)
 require('./server.js');
 const base = 'http://127.0.0.1:' + PORT;
 const J = async (m, p, b, tok, adm) => { const r = await fetch(base + p, { method: m, headers: Object.assign({ 'content-type': 'application/json' }, tok ? { authorization: 'Bearer ' + tok } : {}, adm ? { authorization: 'Bearer e2e-admin-key-123456' } : {}), body: b ? JSON.stringify(b) : undefined }); let j = {}; try { j = await r.json(); } catch (_) {} return { s: r.status, j }; };
