@@ -2606,6 +2606,10 @@ html:has(#mpFlow.show.dark){background:#826786;}
 .mpf-note{margin-top:11.4px;padding:12px 11px;border-radius:8px;background:#f9ecec;color:#c45f5f;font-size:12.2px;line-height:14.2px;}
 #mpToast{position:fixed;left:50%;top:48%;z-index:9600;max-width:218px;padding:11px 17px;border-radius:10px;background:rgba(74,74,74,.96);color:#fff;font:400 15px/1.35 Roboto,'Noto Sans Ethiopic',system-ui,sans-serif;word-break:break-all;opacity:0;pointer-events:none;transform:translate(-50%,-50%);transition:opacity .18s ease;}
 #mpToast.show{opacity:1;}
+/* Transition of flow: an uploaded picture melts into what lies under it instead of ending in a hard edge. */
+#authHeroBg{-webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 55%,rgba(0,0,0,.55) 78%,transparent 100%);mask-image:linear-gradient(to bottom,#000 0%,#000 55%,rgba(0,0,0,.55) 78%,transparent 100%);}
+.ck-me::after{display:block !important;height:110px !important;background:linear-gradient(180deg,rgba(162,144,96,0) 0%,rgba(162,144,96,.55) 55%,#a29060 100%) !important;z-index:1;}
+.ck-hero.has-img::after{display:block !important;height:60% !important;background:linear-gradient(180deg,rgba(162,144,96,0),#a29060) !important;}
 </style>
 
 <script data-beer-idle>

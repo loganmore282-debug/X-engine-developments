@@ -67,9 +67,11 @@ Beer is an ETHIOPIA app now: region `et` (+251, nine digits starting 9 or 7), cu
 - The payment pages are Potato's, coloured with the two Beer colours (khaki page/cards, beer picture for the pay-page background, buttons and clock boxes). CSS block `MANUAL BANK / WALLET PAYMENT PAGES` at the end of `user-src/index.html`.
 - Test: `test-ethiopia.js` (real server on the fake MongoDB in `test-helpers/`): region, order/resume/new order, SMS parsing, duplicate transfer refused, approve credits once, withdrawal accounts.
 
+- **Transition of flow (owner):** an uploaded picture never ends in a hard edge. Login/Create Account: `#authHeroBg` has a bottom mask so the uploaded image melts into the beer picture under it; My page: `.ck-me::after` fades the hero into the khaki page. Do not set `display:none` on those fades.
+
 ## Status
 1. (done) Copied from Cookie, renamed to Beer, ports 3007/8102/8103, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path `Hq4vN8rt`.
-2. (done) Khaki + amber colours, mug icon, link preview, caches `beer-shell-v17` / `beer-admin-shell-v5`. `npm run test:audit` passes.
+2. (done) Khaki + amber colours, mug icon, link preview, caches `beer-shell-v18` / `beer-admin-shell-v5`. `npm run test:audit` passes.
 3. (done by owner) GitHub webhook `http://179.198.197.114:8102/k7x2/deploy/webhook` (push event, branch claude/beer-build) auto-deploys the VPS; a webhook only reacts to pushes made AFTER it was added. (waiting on owner) Atlas user `beerapp` + connection string, VPS first-setup (the command in "One-time backend setup" with `beer`), domain, payment keys. Nothing of Beer is on the VPS yet.
 
 ## Rules the owner has decided (keep these)
