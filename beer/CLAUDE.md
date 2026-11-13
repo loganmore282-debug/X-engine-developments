@@ -24,6 +24,9 @@ There is ONE kind of product now. The Home and Income pages have no "Daily Incom
 the server treats every product as `category: 'income'` (a product that costs nothing is never offered or bought; `/invest/create` has no "sold out" task branch;
 admin "Give product" always counts as a real purchase). Tests `test-task-products.js` and `test-income-categories.js` were deleted. Caches: user v4, admin v3.
 
+## Bottom-bar icons use the beer picture too (owner: "let svg also take same, those navigation svgs should be that colour like buttons")
+The five tab icons are filled with the same droplet photo as the buttons: one hidden SVG pattern `#beerPat` (a 200 px copy of the picture) sits above `#app` in `user-src/index.html`, and the last CSS block fills every `fill="currentColor"` / `stroke="currentColor"` icon of `.navitem .nav-ic` with it. The open tab's icon is full strength on a light cream pill; the others are the same picture faded and half grey. Cache v6.
+
 ## Where things are (all under `beer/`)
 - `server.js` (backend, MongoDB only, no Firebase), `db.js`, `session-policy.js`, `service-account.js`, `totp.js`
 - `user-src/` (member app: `index.html`, `original_module.js`) -> `node build-core.js` -> `user/`
@@ -59,7 +62,7 @@ Port plan: Soda 3001/8090/8091, Mint 3002/8092/8093, Cookie 3003/8094/8095, Pota
 
 ## Status
 1. (done) Copied from Cookie, renamed to Beer, ports 3007/8102/8103, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path `Hq4vN8rt`.
-2. (done) Khaki + amber colours, mug icon, link preview, caches `beer-shell-v5` / `beer-admin-shell-v3`. `npm run test:audit` passes.
+2. (done) Khaki + amber colours, mug icon, link preview, caches `beer-shell-v6` / `beer-admin-shell-v3`. `npm run test:audit` passes.
 3. (waiting on owner) Atlas user `beerapp` + connection string, VPS first-setup (the command in "One-time backend setup" with `beer`), domain, payment keys. Nothing of Beer is on the VPS yet.
 
 ## Rules the owner has decided (keep these)
