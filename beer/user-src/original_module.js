@@ -4012,12 +4012,12 @@ function renderTeamMembers(level){
     const bought = Number(m.invested) > 0;
     return `
   <div class="ck-mem">
-    <span class="ck-mem-av${STATE.avatarImg ? ' has-img' : ''}"${pic}></span>
     <div class="ck-mem-body">
-      <div class="ck-mem-top"><b>Mobile： ${esc(m.phoneRef || m.phoneMasked || maskPhone(m.phone))}</b>${bought ? '<em>Purchased</em>' : ''}</div>
-      <div class="ck-mem-mid"><span class="${bought ? 'g' : ''}">Deposit： ${esc(ckNum(m.deposited))}</span><span class="${Number(m.withdrawn) > 0 ? 'r' : ''}">Withdraw： ${esc(ckNum(m.withdrawn))}</span></div>
+      <div class="ck-mem-top"><b>Mobile： ${esc(m.phoneRef || m.phoneMasked || maskPhone(m.phone))}</b></div>
+      <div class="ck-mem-mid"><span class="${bought ? 'g' : ''}">Recharge： ${esc(ckNum(m.deposited))}</span><span class="${Number(m.withdrawn) > 0 ? 'r' : ''}">Withdraw： ${esc(ckNum(m.withdrawn))}</span></div>
       <div class="ck-mem-time">Time : ${esc(ckStamp(m.createdAt))}</div>
     </div>
+    <span class="ck-mem-av${STATE.avatarImg ? ' has-img' : ''}"${pic}></span>
   </div>`;
   }).join('');
 }
@@ -4079,10 +4079,12 @@ function paintNetwork(){
   const html = `
 <div class="ck-sub ck-team v-team">
   ${ckHeader('Team LV.' + level)}
-  ${ckHero(STATE.teamHero || STATE.homeBanner, 'ck-hero-team')}
-  <div class="ck-stats">
-    <div><span>Deposit</span><b>${esc(vMoney(t.teamDeposits))}</b></div>
-    <div><span>Team size</span><b>${Number(t.totalTeam) || 0}</b></div>
+  <div class="ck-teamtop">
+    <span class="ck-teamcircle${STATE.teamHero ? ' has-img' : ''}"${STATE.teamHero ? ` style="background-image:url('${esc(STATE.teamHero)}')"` : ''}></span>
+    <div class="ck-ttstats">
+      <div><span>Team Recharge</span><b>${esc(vMoney(t.teamDeposits))}</b></div>
+      <div><span>Team size</span><b>${Number(t.totalTeam) || 0}</b></div>
+    </div>
   </div>
   <div class="ck-lvtabs" style="--i:${level - 1}"><i class="ck-lvpill"></i>${tabs}</div>
   <div id="teamMembersBox"></div>

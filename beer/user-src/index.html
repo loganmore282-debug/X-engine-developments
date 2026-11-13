@@ -2457,12 +2457,12 @@ html,body,#app,.wrap{background:#a29060 !important;color:#2c1105;}
 /* Everything that was blue in Cookie is the beer picture; the khaki stays only where Cookie was white. */
 .va-screen{background:var(--bt-img) center/cover no-repeat !important;}
 .home-banner,.home-banner.v-banner-empty,#pageHost .home-banner.v-banner-empty,#pageHost .home-banner:not(:has(img)){background:var(--bt-img) center/cover no-repeat !important;}
-.v-card-img,#pageHost .v-card-img,#pageHost .v-card.v-flat .v-card-img,#pageHost .v-owned .v-card-img.has-img,#pageHost .v-owned .v-card-img.v-fence,.ck-oc-img,.ck-rule-img{background:var(--bt-img) center/cover no-repeat !important;}
+.v-card-img,#pageHost .v-card-img,#pageHost .v-card.v-flat .v-card-img,#pageHost .v-owned .v-card-img.has-img,#pageHost .v-owned .v-card-img.v-fence,.ck-oc-img{background:var(--bt-img) center/cover no-repeat !important;}
 .v-badge,#pageHost .v-badge,.v-ribbon::before{background:var(--bt-img) center/cover no-repeat !important;}
 .v-tcard,.ck-stats>div,.ck-lvtabs,.ck-rule,.ck-langcard button.on{background:var(--bt-img) center/cover no-repeat !important;}
-.ck-income .v-total,.ck-share,.ck-sub.ck-share,.ck-hero,.ck-me,.ck-me.has-img,#pageHost .ck-me{background:var(--bt-img) center/cover no-repeat !important;}
-.v-avatar,.ck-mem-av,.msg-row .av,.msg-detail .av,.v-card-h,.v-tile-ic:not(.gold),.v-rav.out{background:var(--bt-img) center/cover no-repeat !important;}
-#loadingScreen,#loadingScreen .ld-bg,.auth-screen-v2,.va-rem input:checked{background:var(--bt-img) center/cover no-repeat !important;}
+.ck-income .v-total,.ck-share,.ck-sub.ck-share,.ck-me,.ck-me.has-img,#pageHost .ck-me{background:var(--bt-img) center/cover no-repeat !important;}
+.v-avatar,.msg-row .av,.msg-detail .av,.v-card-h,.v-tile-ic:not(.gold),.v-rav.out{background:var(--bt-img) center/cover no-repeat !important;}
+#loadingScreen,.auth-screen-v2,.va-rem input:checked{background:var(--bt-img) center/cover no-repeat !important;}
 #loadingScreen .ld-bar i,.dep-flow-track i,.v-sec .bar,.mar-progress i{background:var(--bt-img) center/cover no-repeat !important;}
 #payScreen .pg-pay,#payScreen .pg-head{background:var(--bt-img) center/cover no-repeat !important;}
 .va-screen::after,.ck-hero.has-img::after,.ck-me::after{display:none !important;}
@@ -2484,6 +2484,26 @@ html,body,#app,.wrap{background:#a29060 !important;color:#2c1105;}
 .navitem.active .nav-ic{background:var(--bt-img) center/cover no-repeat !important;box-shadow:0 5px 12px -5px rgba(60,20,0,.6) !important;}
 .navitem.active .nav-ic svg [fill="currentColor"]{fill:#fff !important;}
 .navitem.active .nav-ic svg[stroke="currentColor"],.navitem.active .nav-ic svg [stroke="currentColor"]{stroke:#fff !important;}
+/* Pictures uploaded from the admin sit on top (inline style wins); the beer picture shows only when nothing is uploaded. */
+#pageHost .ck-hero,#pageHost .ck-rule-img,#pageHost .ck-mem-av,#pageHost .ck-teamcircle{background:var(--bt-img) center/cover no-repeat;}
+#loadingScreen .ld-bg{background-color:#a29060;background-image:var(--bt-img);background-size:cover;background-position:center;}
+/* Team page, laid out like the owner's picture: big circle + Team Recharge / Team size, level tabs, one card per member with a round picture on the right. */
+.ck-teamtop{display:flex;align-items:center;gap:22px;padding:22px 20px 20px;}
+.ck-teamcircle{flex:0 0 114px;width:114px;height:114px;border-radius:50%;box-shadow:0 8px 18px -10px rgba(40,15,0,.6);}
+.ck-ttstats{flex:1;min-width:0;display:flex;flex-direction:column;gap:14px;text-align:right;}
+.ck-ttstats>div{display:flex;flex-direction:column;gap:3px;padding-bottom:8px;border-bottom:1px solid rgba(60,35,5,.28);}
+.ck-ttstats span{font-size:13.5px;line-height:18px;color:#4d2a14;}
+.ck-ttstats b{font-size:21px;line-height:27px;font-weight:700;color:#5a1f08;word-break:break-word;}
+.ck-team .ck-lvtabs{margin-top:0;}
+.ck-team #teamMembersBox{padding:14px 0 0;}
+.ck-team .ck-mem{display:flex;align-items:center;gap:12px;min-height:0;margin:0 0 14px;padding:12px 14px 12px 14px;border-radius:12px;}
+.ck-team .ck-mem-body{flex:1;min-width:0;padding:0;font-size:13px;line-height:22px;}
+.ck-team .ck-mem-top{height:auto;padding-bottom:6px;margin-bottom:2px;}
+.ck-team .ck-mem-top b{font-size:14.5px;font-weight:700;color:#2c1105;}
+.ck-team .ck-mem-mid{display:flex;justify-content:space-between;gap:10px;margin-top:2px;}
+.ck-team .ck-mem-av{order:2;flex:0 0 70px;width:70px;height:70px;border-radius:50%;}
+#loadingScreen .ld-pct{color:#fff !important;}
+#loadingScreen .ld-bar{background:rgba(255,255,255,.28) !important;}
 </style>
 
 <script data-beer-idle>
