@@ -63,7 +63,7 @@ Port plan: Soda 3001/8090/8091, Mint 3002/8092/8093, Cookie 3003/8094/8095, Pota
 ## Status
 1. (done) Copied from Cookie, renamed to Beer, ports 3007/8102/8103, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path `Hq4vN8rt`.
 2. (done) Khaki + amber colours, mug icon, link preview, caches `beer-shell-v15` / `beer-admin-shell-v4`. `npm run test:audit` passes.
-3. (waiting on owner) Atlas user `beerapp` + connection string, VPS first-setup (the command in "One-time backend setup" with `beer`), domain, payment keys. Nothing of Beer is on the VPS yet.
+3. (done by owner) GitHub webhook `http://179.198.197.114:8102/k7x2/deploy/webhook` (push event, branch claude/beer-build) auto-deploys the VPS; a webhook only reacts to pushes made AFTER it was added. (waiting on owner) Atlas user `beerapp` + connection string, VPS first-setup (the command in "One-time backend setup" with `beer`), domain, payment keys. Nothing of Beer is on the VPS yet.
 
 ## Rules the owner has decided (keep these)
 - **Referral reward = the referred member's FIRST PURCHASE** (not the first deposit). Level 1 / 2 / 3 are paid once, as a percentage of that
