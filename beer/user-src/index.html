@@ -2422,6 +2422,11 @@ body{background-attachment:fixed;}
 .navitem.active .nav-ic svg{opacity:1;filter:none;}
 /* The open tab's pill is a light cream so the beer-picture icon stands out on it. */
 .navitem.active .nav-ic{background:linear-gradient(135deg,#fffdf6 0%,#efe4c2 100%) !important;box-shadow:0 5px 12px -5px rgba(110,80,20,.55) !important;}
+/* The My page's icons (menu rows, arrows, the avatar) and the little bar that marks the open tab are the beer picture as well. */
+.ck-my svg [fill="currentColor"]{fill:url(#beerPat);}
+.ck-my svg[fill="currentColor"]{fill:url(#beerPat);}
+.ck-my svg[stroke="currentColor"],.ck-my svg [stroke="currentColor"]{stroke:url(#beerPat);}
+.navitem::before{background:var(--bt-img) center/cover no-repeat !important;}
 </style>
 
 <script data-beer-idle>
