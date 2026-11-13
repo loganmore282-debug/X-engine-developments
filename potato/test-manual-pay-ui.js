@@ -73,6 +73,8 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  ok(t0!==await page.evaluate(()=>document.getElementById('mpS2').textContent),'the seconds tick');
  ok((await page.textContent('.mpf-v b >> nth=1')).trim()==='Ashenafi','account name shown');
  ok((await page.textContent('.mpf-v b >> nth=2')).trim()==='1000809418239','account number shown');
+ ok(await page.evaluate(()=>getComputedStyle(document.querySelector('.bottom-nav')).visibility==='hidden'),'the bottom bar cannot show through the payment pages (it used to appear on a hard scroll)');
+ ok(await page.evaluate(()=>document.getElementById('mpFlow').getBoundingClientRect().height>=window.innerHeight-1),'the payment pages are as tall as the screen');
  // 5. empty submit -> the owner's toast
  await page.evaluate(()=>mpSubmit());await page.waitForTimeout(150);
  ok((await page.textContent('#mpToast'))==='please enter the correct transfer sms','empty paste shows the toast');

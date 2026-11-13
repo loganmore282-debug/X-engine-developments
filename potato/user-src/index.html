@@ -2412,6 +2412,13 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 #mpFlow.dark{background:linear-gradient(180deg,#1f224f 0%,#826786 100%);background-attachment:fixed;}
 #mpFlow *{box-sizing:border-box;}
 body.mp-open{overflow:hidden;}
+/* While the payment pages are open nothing of the app may show through: when the phone's address bar slides away on a hard scroll the screen grows past the page, and the
+   bottom bar (and the Home page under it) used to appear in that strip. The bar and the app are hidden, the pages are as tall as the real screen, and the strip is the page colour. */
+body.mp-open .bottom-nav,body.mp-open #app{visibility:hidden !important;}
+#mpFlow{height:100vh;overscroll-behavior:contain;}
+@supports (height:100dvh){#mpFlow{height:100dvh;}}
+html:has(#mpFlow.show){background:#fff;}
+html:has(#mpFlow.show.dark){background:#826786;}
 .mpf-load{position:absolute;left:0;right:0;top:146px;display:flex;flex-direction:column;align-items:center;}
 .mpf-ring{margin-left:-17px;animation:mpfspin .9s linear infinite;}
 @keyframes mpfspin{to{transform:rotate(360deg);}}
