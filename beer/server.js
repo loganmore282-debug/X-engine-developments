@@ -461,7 +461,7 @@ const DEFAULT_REGION_KEY = 'et';
 const DEFAULT_REGION = Object.freeze({
   key: 'et', name: 'Ethiopia', currency: 'ETB', currencySymbol: 'Br', dialCode: '251',
   localLength: 9, prefixes: ['9', '7'], utcOffsetMin: 180,
-  active: true, isDefault: true, languages: ['en'], defaultLang: 'en',
+  active: true, isDefault: true, languages: ['en', 'am'], defaultLang: 'en',
 });
 let _mainAllowedHosts = [];
 let _baseDomain = 'beer-platform.com';
