@@ -204,11 +204,6 @@ async function main(){
     assert.equal(commissions(db).length,3,'and never twice');
   }
   {
-    // a task product is never bought
-    const {db,buy}=setup();
-    const r=await buy('buyer','silver');assert.equal(r.code,400);assert.equal(r.body.code,'SOLD_OUT');assert.equal(db.rows.users.buyer.walletBalance,500000);
-  }
-  {
     // not enough money: no reward, no investment
     const input=seed();input.users.buyer.walletBalance=1000;
     const {db,buy}=setup(input);

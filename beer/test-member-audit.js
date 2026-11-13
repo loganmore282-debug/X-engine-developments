@@ -53,7 +53,7 @@ async function main(){
   const originalBanner=d.querySelector('.home-banner');await w.liveRefreshVisible();
   assert.equal(d.querySelector('.home-banner'),originalBanner,'balance refresh must not rebuild Home');
   w.eval('STATE.page="assets"');w.eval('STATE.investments=[{status:"active",tierKey:"a1",tierLabel:"Test Asset",amount:15000,payoutsTotal:30,payoutsMade:3,dailyPayout:1500,expectedReturn:45000,paidOut:4500,createdAt:new Date().toISOString()},{status:"active",tierKey:"a1",tierLabel:"Gifted",amount:15000,category:"income",payoutsTotal:30,payoutsMade:1,dailyPayout:1500,expectedReturn:45000,paidOut:0,createdAt:new Date().toISOString(),granted:true}]');w.paintAssets();
-  assert.equal(d.querySelectorAll('.ck-inc-tabs button').length,2,'Income has the two tabs Daily Income and Daily wage');
+  assert.equal(d.querySelectorAll('.ck-tabs').length,0,'there is one kind of product, so no Daily Income / Daily wage tabs');
   assert.equal(d.querySelectorAll('#ownedAssets .ck-oc').length,2,'Income lists every running product');
   assert.match(d.querySelector('#ownedAssets .ck-oc').textContent,/Running/);assert.match(d.querySelector('#ownedAssets .ck-oc').textContent,/Settlement countdown/);
   assert.equal(d.querySelectorAll('#ownedAssets [data-pay-at]').length,2,'each running card counts down to its next payment');

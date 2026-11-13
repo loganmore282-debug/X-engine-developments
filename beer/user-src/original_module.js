@@ -3032,7 +3032,7 @@ async function liveRefreshVisible(){
     if (pr.status === 'success') {
       STATE.products = pr.products;
       if (!_openSheetTitle && STATE.page === 'home' && liveChanged('products', pr.products) && $('homeProducts')) {
-        // The same list as the page itself: only the products of the tab that is open (Daily income or Daily wage).
+        // The same list as the page itself.
         const list = homeTabProducts();
         $('homeProducts').innerHTML = list.length ? list.map(vProductCardHtml).join('') : '<div class="v-empty">NO DATA</div>';
         startProductCountdowns();
@@ -3147,9 +3147,6 @@ window.showPage = async function(name){
   if (name === 'products') name = 'home';
   else if (name === 'catalog') name = 'assets';
   else if (name === 'team' || name === 'referral') { name = 'network'; }
-  // Daily income is always the first view of Home and of Income: coming from another tab never keeps Daily wage.
-  if (name === 'home' && prevPage !== 'home') STATE.homeTab = 'income';
-  if (name === 'assets' && prevPage !== 'assets') STATE.incomeTab = 'income';
   STATE.page = name;
   window.scrollTo(0, 0);   // every tab opens at its top, not wherever the previous one was scrolled
   updateNavIcons();
@@ -3392,7 +3389,7 @@ function vProductCardHtml(p){
   return `
   <article class="v-card">
     <div class="v-card-b">
-      <div class="v-card-img${p.image ? ' has-img' : ''}">${img}${(limit > 0 || ckIsWage(p)) ? `<em class="v-badge">Times ${vOwnedCount(p.key)}/${limit}</em>` : ''}<span class="v-pname">${esc(p.name || '')}</span></div>
+      <div class="v-card-img${p.image ? ' has-img' : ''}">${img}${limit > 0 ? `<em class="v-badge">Times ${vOwnedCount(p.key)}/${limit}</em>` : ''}<span class="v-pname">${esc(p.name || '')}</span></div>
       <dl class="v-rows${[ckMoney(p.price), ckMoney(daily), ckMoney(expected)].some(v => v.length > 11) ? ' tight' : ''}">
         ${ckRow('Price', ckMoney(p.price))}
         ${ckRow('Daily profit', ckMoney(daily))}
@@ -3446,22 +3443,11 @@ function openServiceLink(){
   else notify('The service link has not been set yet.');
 }
 window.openServiceLink = openServiceLink;
-// Leaving the app and coming back lands on Daily income again, never on Daily wage.
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) return;
-  if (STATE.homeTab === 'wage') { STATE.homeTab = 'income'; if (STATE.page === 'home' && $('pageHost') && $('pageHost').querySelector('.v-home')) paintHome(); }
-  if (STATE.incomeTab === 'wage') { STATE.incomeTab = 'income'; if (STATE.page === 'assets' && $('pageHost') && $('pageHost').querySelector('.ck-income')) paintAssets(); }
-});
-// A task product (Daily wage) is one saved as such, or any product that costs nothing.
+// The products offered on Home: the ones the admin left on, and never a free one (every product has a price).
 function homeTabProducts(){
-  const tab = STATE.homeTab === 'wage' ? 'wage' : 'income';
-  return (STATE.products || []).filter(p => p.active !== false && (ckIsWage(p) ? 'wage' : 'income') === tab);
+  return (STATE.products || []).filter(p => p.active !== false && Number(p.price) > 0);
 }
-function ckIsWage(p){ return !!p && (p.category === 'wage' || Number(p.price) === 0); }
-function setHomeTab(t){ STATE.homeTab = t === 'wage' ? 'wage' : 'income'; if (STATE.page === 'home') paintHome(); }
-window.setHomeTab = setHomeTab;
 function paintHome(){
-  const tab = STATE.homeTab === 'wage' ? 'wage' : 'income';
   // A product the admin switched off (Active unticked) is not offered on Home; owners still see it on Income.
   const products = homeTabProducts();
   const html = `
@@ -3472,10 +3458,6 @@ function paintHome(){
     <button onclick="openWithdrawSheet()"><span class="ck-ic" style="--c:#f9ab2d">${CK_ICONS.withdraw}</span><b>Withdraw</b></button>
     <button onclick="openServiceLink()"><span class="ck-ic" style="--c:#c8b481">${CK_ICONS.service}</span><b>Service</b></button>
     <button onclick="openGroupLink()"><span class="ck-ic" style="--c:#cbb888">${CK_ICONS.group}</span><b>Group</b></button>
-  </div>
-  <div class="ck-tabs" role="tablist">
-    <button type="button" role="tab" class="${tab === 'income' ? 'on' : ''}" onclick="setHomeTab('income')">Daily Income</button>
-    <button type="button" role="tab" class="${tab === 'wage' ? 'on' : ''}" onclick="setHomeTab('wage')">Daily wage</button>
   </div>
   <div id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">NO DATA</div>' : '')}</div>
 </div>`;
@@ -3616,7 +3598,7 @@ function vOwnedCardHtml(inv){
         ${ckRow('Days', String(st.total))}
         ${ckRow('Total profit', ckMoney(st.expected))}
       </dl>
-      <div class="ck-oc-img${p.image ? ' has-img' : ''}">${img}${invCategory(inv) === 'wage' && !st.matured ? '<i class="ck-oc-wmul"></i>' : ''}<em class="ck-oc-st${st.matured ? ' done' : ''}${invCategory(inv) === 'wage' ? ' ck-oc-wst' : ''}">${st.matured ? 'Completed' : 'Running'}${invCategory(inv) === 'wage' ? '<br>Free' : ''}</em><span class="ck-oc-name">${esc(name)}</span></div>
+      <div class="ck-oc-img${p.image ? ' has-img' : ''}">${img}<em class="ck-oc-st${st.matured ? ' done' : ''}">${st.matured ? 'Completed' : 'Running'}</em><span class="ck-oc-name">${esc(name)}</span></div>
     </div>
     ${st.matured ? '' : `<div class="ck-oc-cd"><span>Settlement countdown</span><b data-pay-at="${nextPayoutMs(inv)}">${fmtCountdown(nextPayoutMs(inv) - ckNow(), true)}</b></div>`}
   </article>`;
@@ -3653,7 +3635,6 @@ function startIncomeCountdowns(){
 }
 // Coming back to the app: the timers were frozen while it was away, so the figure is corrected at once.
 document.addEventListener('visibilitychange', () => { if (!document.hidden && _incTimer && STATE.page === 'assets') { clearTimeout(_incTimer); startIncomeCountdowns(); } });
-window.setIncomeTab = function(t){ STATE.incomeTab = t === 'wage' ? 'wage' : 'income'; if (STATE.page === 'assets') paintAssets(); };
 function statementStampMs(ms){
   const d = new Date(ms);
   if (isNaN(d.getTime())) return '—';
@@ -3662,22 +3643,15 @@ function statementStampMs(ms){
 }
 // The Income tab a plan lives in is decided by the plan itself (stamped when it was bought or activated; an older plan is read from what it
 // cost: a task product costs nothing), never by the product's current settings, so it cannot move if the admin edits or removes the product.
-function invCategory(i){ return i && (i.category === 'wage' || i.category === 'income') ? i.category : ((Number(i && i.amount) || 0) === 0 ? 'wage' : 'income'); }
 function paintAssets(){
-  const tab = STATE.incomeTab === 'wage' ? 'wage' : 'income';
   // Running products first, newest first inside each group; the id is the last tie-break so the order never shuffles between refreshes.
-  const owned = (STATE.investments || []).filter(i => (i.status === 'active' || i.status === 'matured')
-    && invCategory(i) === tab).sort((x, y) =>
+  const owned = (STATE.investments || []).filter(i => i.status === 'active' || i.status === 'matured').sort((x, y) =>
     (x.status === 'active' ? 0 : 1) - (y.status === 'active' ? 0 : 1)
     || (new Date(y.createdAt || 0).getTime() || 0) - (new Date(x.createdAt || 0).getTime() || 0)
     || String(x.id || '').localeCompare(String(y.id || '')));
   const html = `
 <div class="ck-sub ck-income v-income">
   ${ckHeader('Income')}
-  <div class="ck-tabs ck-inc-tabs" role="tablist">
-    <button type="button" role="tab" class="${tab === 'income' ? 'on' : ''}" onclick="setIncomeTab('income')">Daily Income</button>
-    <button type="button" role="tab" class="${tab === 'wage' ? 'on' : ''}" onclick="setIncomeTab('wage')">Daily wage</button>
-  </div>
   <div class="ck-inc-list" id="ownedAssets">${owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty ck-nodata">NO DATA</div>'}</div>
 </div>`;
   $('pageHost').innerHTML = html;
@@ -6328,7 +6302,6 @@ window.openInvestConfirm = function(tierKey, btn){
         setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1800);
         return;
       }
-      // A task product (Daily wage) is never bought: the server answers sold out, and the dialog closes with that notice.
       if (result.code === 'SOLD_OUT') closeConfirm();
       notify(result.message || 'Could not complete investment');
       return;

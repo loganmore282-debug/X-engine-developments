@@ -870,8 +870,8 @@ async function getProductsRaw() {
     const touchedKeys = new Set(saved.map(p => p.key));
     const merged = saved.filter(p => !p.deleted)
       .concat(DEFAULT_PRODUCTS.filter(p => !touchedKeys.has(p.key)));
-    // The category is never left to chance: a product saved as a task product is Daily wage, and so is any product that costs nothing.
-    merged.forEach(p => { p.category = (p.category === 'wage' || Number(p.price) === 0) ? 'wage' : 'income'; });
+    // There is one kind of product (Daily income): the old Daily wage / task products are gone, and a free product is never offered.
+    for (let i = merged.length - 1; i >= 0; i--) { if (!(Number(merged[i].price) > 0)) merged.splice(i, 1); else merged[i].category = 'income'; }
     merged.sort((a, b) => (a.order || 0) - (b.order || 0) || (a.price || 0) - (b.price || 0));
     _productsCache = merged;
   } catch (_) { _productsCache = _productsCache || DEFAULT_PRODUCTS.slice(); }
@@ -4387,8 +4387,6 @@ app.post('/invest/create', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const tier = await getProductByKey(req.body.tierKey);
   if (!tier) return res.status(400).json({ status: 'error', message: 'Unknown product' });
-  // Task products ("Daily wage") are activated for a member by the admin, never bought: a purchase attempt is always answered "sold out".
-  if (tier.category === 'wage') return res.status(400).json({ status: 'error', code: 'SOLD_OUT', message: 'The product has been sold out' });
   if (tier.active === false || !productOpenState(tier, Date.now()).open)
     return res.status(400).json({ status: 'error', message: 'This product is not open right now.' });
   try {
@@ -4532,9 +4530,7 @@ app.get('/investments', async (req, res) => {
     const investments = snap.docs.map(d => {
       const data = d.data();
       const live = byKey.get(data.tierKey);
-      // Which Income tab it lives in is a fact about THIS plan, fixed when it was bought or activated: a bought product is Daily income, a
-      // task product the admin activated is Daily wage (a plan with no stamp is read from its own price: a task product costs nothing).
-      return { id: d.id, ...data, category: data.category === 'wage' || data.category === 'income' ? data.category : ((Number(data.amount) || 0) === 0 ? 'wage' : 'income'), tierLabel: (live && live.name) || data.tierLabel };
+      return { id: d.id, ...data, category: 'income', tierLabel: (live && live.name) || data.tierLabel };
     });
     // serverNow lets the app run its settlement countdown on the server's clock, not on a phone clock that may be minutes out.
     res.json({ status: 'success', investments, serverNow: Date.now() });
@@ -7136,12 +7132,11 @@ function sanitizeProductInput(p, fallbackOrder, out) {
   if (p?.name != null && typeof p.name !== 'string') return refuse('Name', 'must be text');
   const name = String(p?.name || '').trim().slice(0, 100);
   if (!name) return refuse('Name', 'cannot be blank');
-  // A task product ("Daily wage") costs nothing: the admin activates it for a member. It is never bought, so its price is 0 and it never needs a multiplier.
-  const category = p?.category === 'wage' ? 'wage' : 'income';
+  const category = 'income';
   if (!plain(p?.price)) return refuse('Price', 'must be a number');
   const priceRaw = Number(p?.price);
   const price = Math.round(priceRaw);
-  const minPrice = category === 'wage' ? 0 : 1;
+  const minPrice = 1;
   if (!Number.isFinite(price) || price < minPrice || price > MAX_MONEY_AMOUNT)
     return refuse('Price', `must be a number between ${minPrice} and ${MAX_MONEY_AMOUNT}`);
   if (priceRaw !== price) return refuse('Price', 'must be a whole number of shillings');
@@ -7228,8 +7223,6 @@ function sanitizeProductInput(p, fallbackOrder, out) {
   // Without these the purchase would quietly fall back to the built-in
   // x30 over 150 days and promise the member a payout nobody chose.
   if (cycle == null) return refuse('Cycle (days)', 'is required');
-  if (category === 'wage') multiplier = null;   // price 0 x anything is 0: a task product always carries its own total payout
-  if (category === 'wage' && expectedReturn == null) return refuse('Total payout', 'is required for a task product');
   if (multiplier == null && expectedReturn == null) return refuse('Multiplier (×)', 'or the total payout is required');
   // The payout the member is promised must be a real amount: at least 1 shilling and inside the same ceiling as a typed total.
   const promised = multiplier != null ? Math.round(price * multiplier) : expectedReturn;
@@ -7250,7 +7243,6 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     vip = Number(p.vip);
     if (!Number.isInteger(vip) || vip < 0 || vip > 100) return refuse('VIP level', 'must be a whole number from 0 to 100');
   }
-  if (category === 'wage') vip = 0;               // a task product gives no VIP level
   return { key, name, category, price, cycle, expectedReturn, multiplier, buyLimit, vip, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
 }
 // `?region=ke` hands the editor that region's view of every product -- its
@@ -7692,8 +7684,7 @@ app.post('/admin/user/grant-asset', async (req, res) => {
       if (!u.exists) throw new Error('User not found');
       if (u.data().status === 'banned') throw new Error('This account is suspended. Unban it before giving a product.');
       const price = Number(tier.price) || 0;
-      const isTask = tier.category === 'wage';
-      if (!(price > 0) && !isTask) throw new Error('This product has no price set');
+      if (!(price > 0)) throw new Error('This product has no price set');
       const cycle = Number(tier.cycle) || sett.cycleDays;
       const expectedReturn = productExpectedReturn(tier, sett);
       const { date, time } = nowStr();
@@ -7701,14 +7692,13 @@ app.post('/admin/user/grant-asset', async (req, res) => {
         userId, tierKey: tier.key, tierLabel: tier.name, amount: price, cycle, expectedReturn,
         status: 'active', payoutFirstAt: new Date(Date.now() + 86400000), nextPayoutAt: new Date(Date.now() + 86400000), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
         isFirstInvestment: false, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
-        category: isTask ? 'wage' : 'income', granted: true, grantedBy: (req.adminUser && req.adminUser.username) || 'owner', requestId,
+        category: 'income', granted: true, grantedBy: (req.adminUser && req.adminUser.username) || 'owner', requestId,
         date, time, createdAt: FieldValue.serverTimestamp()
       });
       if (!created) { alreadyGiven = true; return; }
       // The plan exists first: if anything below fails, the worst case is a
       // total that is short by this plan, which "Recalculate totals" repairs.
-      // A free task product must not count as a first purchase (that would unlock withdrawals that need a bought product).
-      if (!isTask) await uRef.update({ totalInvested: FieldValue.increment(price), firstInvestmentDone: true });
+      await uRef.update({ totalInvested: FieldValue.increment(price), firstInvestmentDone: true });
       await db.collection('transactions').doc('grant-asset:' + invId).createIfAbsent({
         userId, statementId: newStatementId(), type: 'investment', description: `${tier.name} activated`, amount: 0,
         status: 'success', date, time, investmentId: invId, createdAt: FieldValue.serverTimestamp()
