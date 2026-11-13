@@ -1426,6 +1426,7 @@ async function enterApp(){
   $('app').style.display = '';
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
+  setTimeout(() => { try { window.resumeManualPay(); } catch (_) {} }, 1200);   // back on the payment pages where they left off
   if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; }   // a typed login opens Home with no "Login successful" notice (owner)
   refreshAppDataInBackground(uid);
 }
@@ -1606,6 +1607,7 @@ async function bootFromNetwork(uid){
   $('app').style.display = '';
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
+  setTimeout(() => { try { window.resumeManualPay(); } catch (_) {} }, 1200);   // back on the payment pages where they left off
   if (signupFlow) { window._pendingLoginSuccess = false; notify('Registration successful ✓'); }
   else if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; }   // no "Login successful" notice (owner)
   // The invite-address pool, fetched behind the app rather than in front of
@@ -4130,6 +4132,7 @@ function resetOverlayState(){
   const pin = $('pinBg'); if (pin) pin.classList.remove('show');   // the Trade Password dialog
   const tp = $('totpBg'); if (tp) tp.classList.remove('show');     // the authenticator code dialog
   _openSheetTitle = null; _withdrawSubmitting = false;
+  try { if (_mp.stage) { const k = localStorage.getItem(MP_RESUME_KEY); mpCloseRoot(); _mp.pushed = 0; if (k) localStorage.setItem(MP_RESUME_KEY, k); } } catch (_) {}   // the payment pages go with the session; where the member was is kept for the next sign-in
 }
 function dlgOpened(){
   if (_dlgCleanTimer) { clearTimeout(_dlgCleanTimer); _dlgCleanTimer = null; }
@@ -4302,6 +4305,21 @@ function ptProcessing(on){
 //   3. the payment page: Step 1 copy the account, Step 2 paste the payment SMS, a 30 minute clock.
 // "switch" goes back to page 2. Nothing is credited here: the claim goes to the admin Recharges tab.
 var _mp = { amount: 0, channels: [], order: null, stage: '', pushed: 0, timer: 0, ignorePop: false, busy: false, toastT: 0 };
+// ── Coming back: the page the member is on (choose payment, or the pay page with its order and the SMS typed so far) is remembered, so when the
+// phone sends the app away to fetch the payment SMS and the browser then reloads it, the pages load and put the member back exactly there.
+// Cleared when the pages are closed, the SMS is sent or the order runs out.
+var MP_RESUME_KEY = 'mp_resume';
+function mpForget(){ try { localStorage.removeItem(MP_RESUME_KEY); } catch (_) {} }
+function mpSave(sms){
+  try {
+    if (_mp.stage !== 'pay' && _mp.stage !== 'choose') return;
+    const o = _mp.order; let draft = typeof sms === 'string' ? sms : String((($('mpSms') || {}).value) || '');
+    if (typeof sms !== 'string' && !draft) { try { draft = String((JSON.parse(localStorage.getItem(MP_RESUME_KEY) || 'null') || {}).sms || ''); } catch (_) {} }
+    localStorage.setItem(MP_RESUME_KEY, JSON.stringify({ u: STATE.user && STATE.user.uid || '', amount: _mp.amount, stage: _mp.stage, depositId: o && o.depositId || '',
+      exp: o ? Number(o.expiresAt) : 0, chId: o && o.channel && o.channel.id || '', sms: draft.slice(0, 2000), at: Date.now() }));
+  } catch (_) {}
+}
+window.mpSaveSms = function(v){ mpSave(String(v == null ? '' : v)); };
 function mpMoney(n){ return cur() + ' ' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 var MP_ICON_WARN = '<svg class="mpf-warn-ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4L12 3.5Z"/><path d="M12 10v4.6M12 17.2v.2"/></svg>';
 var MP_ICON_DIAMOND = '<svg class="mpf-dia" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 22 12 12 22 2 12 12 2Z" fill="#2f8ff5"/><path d="M12 2 22 12H2L12 2Z" fill="#7cc0ff"/></svg>';
@@ -4334,6 +4352,7 @@ function mpCloseRoot(){
   if (el) { el.classList.remove('show'); el.innerHTML = ''; }
   document.body.classList.remove('mp-open');
   _mp.stage = ''; _mp.order = null;
+  mpForget();
 }
 // Closes the pages and unwinds the history entries this flow pushed.
 window.mpClose = function(){
@@ -4366,6 +4385,7 @@ function mpShowChoose(){
     '<div class="mpf-remind">' + MP_ICON_WARN + '<span>Friendly reminder: Please use the corresponding bank to complete the transfer.</span><span>Please do not use interbank transfers from other banks to avoid delays and inconvenience.</span><span>Thank you for your understanding!</span></div>' +
     '</div>';
   document.body.classList.add('mp-open');
+  mpSave();
 }
 function _mpStageSet(st){ _mp.stage = st; if (st !== 'pay') mpStopTimer(); }
 window.mpPick = async function(i){
@@ -4413,13 +4433,14 @@ function mpShowPay(){
         '<p>' + MP_ICON_DIAMOND + '<span>FT = enter the 12-character code</span></p>' +
         '<p>' + MP_ICON_DIAMOND + '<span>Telebirr = 10 characters only</span></p></div>' +
       '<div class="mpf-step2"><b>Step 2</b><span>Paste payment SMS or enter v2- or FT</span></div>' +
-      '<textarea id="mpSms" class="mpf-ta" data-no-i18n rows="6" maxlength="2000" spellcheck="false" autocomplete="off" placeholder="' + esc(phHead + ph) + '"></textarea>' +
+      '<textarea id="mpSms" class="mpf-ta" data-no-i18n rows="6" maxlength="2000" spellcheck="false" autocomplete="off" oninput="mpSaveSms(this.value)" placeholder="' + esc(phHead + ph) + '"></textarea>' +
       '<button type="button" class="mpf-submit" id="mpSubmit" onclick="mpSubmit()">Submit</button>' +
       '<div class="mpf-note">' + MP_ICON_WARN + '<span>Do not save the account number! It changes in real time. Otherwise the transfer will fail.</span></div>' +
     '</div></div>';
   document.body.classList.add('mp-open');
   mpTick();
   mpStopTimer(); _mp.timer = setInterval(mpTick, 1000);
+  mpSave();
 }
 function mpTick(){
   const o = _mp.order; if (!o || _mp.stage !== 'pay') return mpStopTimer();
@@ -4474,6 +4495,42 @@ window.openManualPayFlow = async function(amount){
   }
   _mp.channels = r.channels;
   mpShowChoose();
+};
+var _mpResuming = false;
+window.resumeManualPay = async function(){
+  if (_mpResuming || _mp.stage) return;
+  let st = null; try { st = JSON.parse(localStorage.getItem(MP_RESUME_KEY) || 'null'); } catch (_) {}
+  if (!st || !(Number(st.amount) > 0)) return;
+  const me = STATE.user && STATE.user.uid || '';
+  const live = st.stage !== 'pay' || Number(st.exp) > Date.now() + 5000;
+  if ((st.u || '') !== me || !live || Date.now() - Number(st.at || 0) > 40 * 60 * 1000) return mpForget();   // another member's pages are never shown
+  if ((STATE.settings || {}).manualPay !== true) return;
+  _mpResuming = true;
+  try {
+    _mp.amount = Number(st.amount) || 0; _mp.order = null; _mp.channels = [];
+    history.pushState({ mp: 'choose' }, '', ''); _mp.pushed = 1;
+    mpShowLoading();
+    const t0 = Date.now();
+    const r = await api('/public/pay-channels');
+    const wait = 450 - (Date.now() - t0); if (wait > 0) await new Promise(res => setTimeout(res, wait));
+    if (_mp.stage !== 'load') return;
+    if (!r || r.status !== 'success' || !Array.isArray(r.channels) || !r.channels.length) { window.mpClose(); return; }
+    _mp.channels = r.channels;
+    const ch = st.stage === 'pay' && st.depositId ? r.channels.find(c => c.id === st.chId) : null;
+    if (ch) {
+      // The same order again (the server keeps the member's open order and its clock), so the 30 minutes carry on where they were.
+      const o = await post('/deposit/manual/order', { amount: _mp.amount, channelId: ch.id, depositId: st.depositId });
+      if (_mp.stage !== 'load') return;
+      if (o && o.status === 'success') {
+        _mp.order = o;
+        history.pushState({ mp: 'pay' }, '', ''); _mp.pushed++;
+        mpShowPay();
+        const ta = $('mpSms'); if (ta && st.sms) ta.value = String(st.sms);
+        return;
+      }
+    }
+    mpShowChoose();
+  } finally { _mpResuming = false; }
 };
 window.submitDeposit = async function(){
   const submitBtn = $('depSubmitBtn');
