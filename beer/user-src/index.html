@@ -2504,6 +2504,31 @@ html,body,#app,.wrap{background:#a29060 !important;color:#2c1105;}
 .ck-team .ck-mem-av{order:2;flex:0 0 70px;width:70px;height:70px;border-radius:50%;}
 #loadingScreen .ld-pct{color:#fff !important;}
 #loadingScreen .ld-bar{background:rgba(255,255,255,.28) !important;}
+/* Share page, laid out like the owner's picture: round-cornered card (My QR code, big code, dashed cut with two notches, server-drawn QR, link + Copy), then the commission panel with three Level rows. */
+.ck-sub.ck-sh2{background:var(--bt-img) center/cover no-repeat fixed !important;position:relative;overflow:hidden;padding-bottom:40px;}
+.ck-sh2::before{content:'';position:absolute;left:8px;top:48px;width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.85);box-shadow:20px -8px 0 -1px rgba(255,255,255,.85),-1px 20px 0 0 rgba(255,255,255,.85),-1px 40px 0 0 rgba(255,255,255,.85),9px 12px 0 -3px rgba(255,255,255,.5);pointer-events:none;}
+.ck-sh2::after{content:'';position:absolute;right:-70px;top:44px;width:140px;height:140px;border-radius:50%;border:14px solid rgba(255,235,200,.3);pointer-events:none;}
+.ck-sh2>*{position:relative;z-index:1;}
+.ck-sc{position:relative;margin:22px 15px 0;padding:20px 14px 16px;border-radius:18px;background:#b3a47c;color:#2c1105;box-shadow:0 14px 28px -18px rgba(30,10,0,.7);text-align:center;}
+.ck-sc-title{font-size:17.5px;line-height:24px;color:#4d2a14;}
+.ck-sc-code{margin-top:20px;font-size:41px;line-height:48px;font-weight:700;letter-spacing:0;color:#2c1105;word-break:break-all;}
+.ck-sc-cut{position:relative;height:0;margin:20px 22px 0;border-top:1.5px dashed rgba(60,35,5,.4);}
+.ck-sc-cut i{position:absolute;top:-8.5px;width:17px;height:17px;border-radius:50%;background:var(--bt-img) center/cover no-repeat fixed;}
+.ck-sc-cut i:first-child{left:-30px;}
+.ck-sc-cut i:last-child{right:-30px;}
+.ck-sc-qr{margin:20px auto 0;width:154px;height:154px;}
+.ck-sc-qr img{display:block;width:154px;height:154px;border-radius:6px;}
+.ck-sc .ck-copyrow{margin:18px 0 0;padding:10px 10px 10px 14px;border-radius:12px;background:#988753;display:flex;align-items:center;gap:10px;text-align:left;}
+.ck-sc .ck-url{flex:1;min-width:0;font-size:12.6px;line-height:20px;color:#2c1105;word-break:break-all;}
+.ck-sc .copy-ic{flex:0 0 60px;height:37px;border-radius:9px;font-size:15px;}
+.ck-sp{margin:10px 15px 0;background:#b3a47c;}
+.ck-sp-note{margin:0;padding:22px 16px 24px;text-align:center;font:400 15.5px/24px Roboto,'Segoe UI',system-ui,sans-serif;color:#2c1105;}
+.ck-sp .ck-lvtable{display:block;margin:0;padding:0;background:none;}
+.ck-sp .ck-lvtable div{display:flex;justify-content:space-between;align-items:center;height:38px;padding:0 15px;font:400 15.5px/1 Roboto,'Segoe UI',system-ui,sans-serif;color:#2c1105;background:#a49563 !important;}
+.ck-sp .ck-lvtable div:nth-child(2){background:#b3a47c !important;}
+.ck-sc{box-shadow:none !important;-webkit-mask:radial-gradient(circle 8.5px at 0 132px,#0000 97%,#000) ,radial-gradient(circle 8.5px at 100% 132px,#0000 97%,#000);-webkit-mask-composite:source-in;mask:radial-gradient(circle 8.5px at 0 132px,#0000 97%,#000),radial-gradient(circle 8.5px at 100% 132px,#0000 97%,#000);mask-composite:intersect;}
+.ck-sc-cut i{display:none !important;}
+.ck-sc .ck-url{font-weight:400 !important;white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
 </style>
 
 <script data-beer-idle>

@@ -4055,15 +4055,21 @@ function paintShare(){
   const a = STATE.account || {};
   const code = a.referralCode || t.referralCode || '';
   const link = shareLinkFor(code);
+  const total = [1, 2, 3].reduce((n, i) => n + (Number(rates['l' + i]) || 0), 0);
+  const qr = link ? `${API_BASE}/share/qr?text=${encodeURIComponent(link)}` : '';
   $('pageHost').innerHTML = `
-<div class="ck-sub ck-share">
+<div class="ck-sub ck-share ck-sh2">
   ${ckHeader('Share')}
-  ${ckHero(STATE.shareHero, 'ck-hero-share')}
-  <div class="ck-sharecard">
+  <div class="ck-sc">
+    <div class="ck-sc-title">My QR code</div>
+    <div class="ck-sc-code" onclick="copyText('${esc(code)}')">${esc(code || '—')}</div>
+    <div class="ck-sc-cut"><i></i><i></i></div>
+    <div class="ck-sc-qr">${qr ? `<img src="${esc(qr)}" alt="My QR code" width="154" height="154">` : ''}</div>
     <div class="ck-copyrow"><span class="ck-url">${esc(link || '—')}</span><button type="button" class="copy-ic" data-copy-group="share-link" onclick="copyShareLink(this)">Copy</button></div>
-    <div class="ck-copyrow"><span class="ck-code">${esc(code || '—')}</span><button type="button" class="copy-ic" data-copy-group="share-code" onclick="copyText('${esc(code)}')">Copy</button></div>
-    <p class="ck-note">Share your referral link on social media platforms like Facebook, TikTok, and WhatsApp groups to earn money from home. Commissions can be withdrawn at any time</p>
-    <div class="ck-lvtable">${[1, 2, 3].map(n => `<div><b>LV - ${n}</b><b>${rates['l' + n] != null ? rates['l' + n] : 0}%</b></div>`).join('')}</div>
+  </div>
+  <div class="ck-sp">
+    <p class="ck-sp-note">Copy the promotion link, form a team, and get a ${total}% purchase commission</p>
+    <div class="ck-lvtable">${[1, 2, 3].map(n => `<div><span>Level ${n}</span><span>${rates['l' + n] != null ? rates['l' + n] : 0}%</span></div>`).join('')}</div>
   </div>
 </div>`;
 }

@@ -3654,6 +3654,20 @@ app.get('/public/announcement-image', async (req, res) => {
   try { publicJson(req, res, { status: 'success', image: await getAnnouncementImage() }, IMAGE_CACHE); }
   catch (e) { { console.error('Public route error:', req.path, e.message); res.status(500).json({ status: 'error', message: 'Could not load this right now. Please try again.' }); }; }
 });
+// The Share page's QR code, drawn by the server (so no app needs a QR library): GET /share/qr?text=<the invitation link>.
+// Only an http(s) address up to 400 characters is drawn, so this cannot be used to make a QR code of arbitrary text.
+// Dark wine modules on a light khaki tile; the answer is a small SVG that never changes for the same text, so it is cached for a day.
+const QRCode = require('qrcode');
+app.get('/share/qr', async (req, res) => {
+  const text = typeof req.query.text === 'string' ? req.query.text.trim() : '';
+  if (!text || text.length > 400 || !/^https?:\/\/[^\s<>"']+$/i.test(text)) return res.status(400).json({ status: 'error', message: 'Not a link.' });
+  try {
+    const svg = await QRCode.toString(text, { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#2c1105', light: '#d9cfae' } });
+    res.set('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(svg);
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not draw the QR code.' }); }
+});
 // The start-up loader's background, served as a real image (not JSON) so the
 // browser can paint it from its own cache in the first frame of the next
 // launch. stale-while-revalidate: it is painted from the cache at once and
