@@ -1,5 +1,5 @@
 'use strict';
-// Random 4-character member addresses: SHARE_DOMAIN on the server, a fresh label on every Share open in the app, and the deploy script.
+// Short invite links: https://app.<SHARE_DOMAIN>/code=<code> (one fixed address, no random labels), SHARE_DOMAIN on the server, the nginx rule and the deploy scripts.
 const { chromium } = require('playwright'); const http = require('http'), fs = require('fs'), path = require('path');
 const assert = require('node:assert/strict'); let checks = 0; const ok = (c, m) => { checks++; assert.ok(c, m); };
 const ROOT = path.join(__dirname, 'user');
@@ -29,20 +29,30 @@ const srv = http.createServer((q, r) => { let f = path.join(ROOT, q.url.split('?
     await page.goto('https://h6re.petro-cchnug.com/index.html', { waitUntil: 'commit' }); await page.waitForTimeout(3200);
     const r = await page.evaluate(() => {
       STATE.settings = Object.assign({}, STATE.settings, { shareDomain: 'petro-cchnug.com' });
-      const seen = new Set(), bad = [];
-      for (let i = 0; i < 3000; i++) { const o = shareOrigin(); const m = /^https:\/\/([a-z0-9]{4})\.petro-cchnug\.com$/.exec(o); if (!m) { bad.push(o); continue; } if (/^\d{4}$/.test(m[1]) || m[1] === 'qumx') bad.push(o); seen.add(m[1]); }
+      const bad = [], seen = new Set(); for (let i = 0; i < 50; i++) { const o = shareOrigin(); seen.add(o); if (o !== 'https://app.petro-cchnug.com') bad.push(o); }
       STATE.settings.shareDomain = '';
       const none = shareOrigin();
       STATE.settings.shareDomain = 'other-domain.com';
       const other = shareOrigin();
       return { bad: bad.slice(0, 3), distinct: seen.size, none, other, here: location.origin };
     });
-    ok(r.bad.length === 0, 'every address is https://xxxx.petro-cchnug.com with four letters or digits, never all digits, never qumx (' + r.bad.join(',') + ')');
-    ok(r.distinct > 2000, 'addresses are random: ' + r.distinct + ' different out of 3000');
+    ok(r.bad.length === 0 && r.distinct === 1, 'the invite address is always https://app.petro-cchnug.com (' + r.bad.join(',') + ')');
     ok(r.none === r.here, 'no domain set: the link keeps the address the app is open on');
     ok(r.other === r.here, 'app open on another domain: link keeps that address');
     ok(errs.length === 0, 'no page errors: ' + errs.join(' | '));
-    console.log('PASS: random 4-character member addresses (' + checks + ' checks)');
+    const modSrc = fs.readFileSync(path.join(__dirname, 'user-src/original_module.js'), 'utf8');
+    ok(/const link = code \? `\$\{shareOrigin\(\)\}\/code=\$\{encodeURIComponent\(code\)\}` : ''/.test(modSrc), 'the copied link is <address>/code=<code>');
+    ok(!/share\.html\?v=\$\{/.test(modSrc), 'the long share.html?v=...&code=... link is no longer built');
+    const cap = (pathname, search) => new Function('location', 'URLSearchParams', 'STATE', '$', modSrc.slice(modSrc.indexOf('function captureReferralFromUrl(){'), modSrc.indexOf('// Whether Sign Up demands a referral code.')) + ';captureReferralFromUrl();return STATE.refCode || null;')({ pathname, search: search || '', hash: '' }, URLSearchParams, {}, () => ({ value: '', style: {} }));
+    ok(cap('/code=qbnt7kcf') === 'qbnt7kcf', 'the app reads the code off /code=qbnt7kcf');
+    ok(cap('/refCode=AbC123') === 'AbC123', 'older /refCode= links still work');
+    ok(cap('/share.html', '?v=1&code=Zz9') === 'Zz9', 'older share.html?code= links still work');
+    const ng = fs.readFileSync(path.join(__dirname, 'deploy/nginx-petro.conf.template'), 'utf8');
+    ok(/location \^~ \/code= \{[^}]*try_files \$petro_bot_html \/index\.html/.test(ng), 'nginx answers /code=... with the member app (preview crawlers get the empty page)');
+    const sl = fs.readFileSync(path.join(__dirname, 'deploy/short-links.sh'), 'utf8');
+    ok(/location \\\^~ \/code=/.test(sl) && /nginx -t/.test(sl) && /before-shortlinks/.test(sl), 'deploy/short-links.sh patches the live nginx files with a rollback');
+    ok(/\(app\|\[a-z0-9\]\{4\}\)/.test(sh), 'the random-address file also accepts app.<domain>');
+    console.log('PASS: short invite links /code= (' + checks + ' checks)');
   } catch (e) { failed = e; }
   await b.close(); srv.close(); if (failed) { console.error(failed); process.exitCode = 1; }
 });

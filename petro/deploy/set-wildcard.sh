@@ -64,7 +64,7 @@ echo "     certificate ready; certbot renews it by itself (it uses the same toke
 echo "4/4  nginx, the server, and the old app. address"
 # The member-app block of the template, made for any 4-character name (api. and qumx. have exact names of their own, which nginx always prefers).
 awk '/^# .* app\.PETRO_DOMAIN ->/{on=1} /^# .* qumx\.PETRO_DOMAIN ->/{on=0} on' "$TEMPLATE" \
-  | sed -e "s#server_name app\.PETRO_DOMAIN;#server_name \"~^[a-z0-9]{4}\\\\.${DOM//./\\\\.}\$\";#" \
+  | sed -e "s#server_name app\.PETRO_DOMAIN;#server_name \"~^(app|[a-z0-9]{4})\\\\.${DOM//./\\\\.}\$\";#" \
         -e "s#PETRO_DOMAIN#$DOM#g" \
         -e "s#listen 443 ssl http2;#listen 443 ssl http2;\n    ssl_certificate $CERT/fullchain.pem;\n    ssl_certificate_key $CERT/privkey.pem;#" > "$WILD.new"
 grep -q 'server_name "~' "$WILD.new" || { echo "     !! could not build the nginx file from the template."; rm -f "$WILD.new"; exit 1; }
@@ -73,7 +73,7 @@ cat > "$WILD" <<EOT
 server {
     listen 80;
     listen [::]:80;
-    server_name "~^[a-z0-9]{4}\\.${DOM//./\\.}\$";
+    server_name "~^(app|[a-z0-9]{4})\\.${DOM//./\\.}\$";
     location /.well-known/acme-challenge/ { root /var/www/certbot; }
     location / { return 308 https://\$host\$request_uri; }
 }

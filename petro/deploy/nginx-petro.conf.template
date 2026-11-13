@@ -228,6 +228,13 @@ server {
         rewrite ^ /index.html break;
     }
 
+    # The short invite link: <origin>/code=<code> (owner: "let it just have https://app.PETRO_DOMAIN/code=qbnt7kcf"). Same page as the app; the app reads the code
+    # off the path. A preview crawler gets the empty page, exactly like /share.html.
+    location ^~ /code= {
+        try_files $petro_bot_html /index.html;
+        add_header Cache-Control "no-cache";
+    }
+
     # index.html / sw.js / manifest.json revalidate on every load (a new
     # build must be picked up immediately -- phones sitting on a stale
     # cached shell is this project's single most recurring complaint).

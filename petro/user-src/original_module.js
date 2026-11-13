@@ -2898,7 +2898,7 @@ function captureReferralFromUrl(){
     // on purpose: links already sent to real people are out of our hands and
     // must not start failing.
     if (!ref) {
-      const m = /\/refCode=([^/?#]+)/.exec(location.pathname);
+      const m = /\/(?:ref)?[cC]ode=([^/?#]+)/.exec(location.pathname);   // the short form <origin>/code=<code>, and the older <origin>/refCode=<code>
       if (m) { try { ref = decodeURIComponent(m[1]); } catch (_) { ref = m[1]; } }
     }
     // The CURRENT shared form (owner: "l wanted my link to look like
@@ -4249,11 +4249,13 @@ function shareLabel(){
   if (/^\d+$/.test(out)) out = letters[shareRand(letters.length)] + out.slice(1);   // never all digits
   return SHARE_LABEL_RESERVED.indexOf(out) >= 0 ? shareLabel() : out;
 }
+// Invite links use ONE fixed address, the app's own (https://app.<domain>), and the short form <origin>/code=<code> (owner: "let it just have
+// https://app.petro-cchnug.com/code=qbnt7kcf, so the path will be shortened"). The random 4-letter addresses are no longer handed out.
 function shareOrigin(){
   const d = String((STATE.settings || {}).shareDomain || '').toLowerCase();
   const h = location.hostname.toLowerCase();
   if (!d || location.protocol !== 'https:' || !(h === d || h.endsWith('.' + d))) return location.origin;
-  return 'https://' + shareLabel() + '.' + d;
+  return 'https://app.' + d;
 }
 // ── MY ASSETS investment helpers ──
 var _investmentsLoadFailed = false;
@@ -4524,7 +4526,7 @@ function paintNetwork(){
   // itself, its only job is making each rendered link a slightly different
   // URL so a link-preview cache (WhatsApp, Telegram, etc.) can't quietly
   // reuse a stale preview from an earlier share.
-  const link = code ? `${shareOrigin()}/share.html?v=${Math.floor(Date.now() / 1000)}&code=${encodeURIComponent(code)}` : '';
+  const link = code ? `${shareOrigin()}/code=${encodeURIComponent(code)}` : '';
   const earnText = _earningsHidden ? cur() + ' ••••••' : fmtUGX(Number(t.teamCommission) || 0);
   const html = `
 <div class="member-page-title">Réseau</div>
