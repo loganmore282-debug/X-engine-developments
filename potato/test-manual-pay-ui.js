@@ -79,11 +79,11 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  await page.evaluate(()=>mpSubmit());await page.waitForTimeout(150);
  ok((await page.textContent('#mpToast'))==='please enter the correct transfer sms','empty paste shows the toast');
  ok(!posts.find(p=>p[0]==='submit'),'and nothing is sent');
- // 6. switch goes back to the choose page, and the SAME order moves
+ // 6. switch goes back to the choose page, and the pick starts a NEW order
  await page.click('.mpf-pill >> nth=0');await page.waitForSelector('.mpf-row',{timeout:3000});
  ok(!(await page.$('.mpf-pay')),'switch returns to the choose page');
  await page.click('.mpf-row >> nth=1');await page.waitForSelector('.mpf-pay',{timeout:5000});
- const o2=posts.filter(p=>p[0]==='order')[1][1];ok(o2.channelId==='c2'&&o2.depositId==='d1','the second order call carries the same depositId');
+ const o2=posts.filter(p=>p[0]==='order')[1][1];ok(o2.channelId==='c2'&&o2.depositId===undefined&&!o2.resume,'switching asks for a NEW order (no old order id, not a resume)');
  ok((await page.textContent('.mpf-v b >> nth=2')).trim()==='0962499914','the other account is shown');
  ok((await page.getAttribute('.mpf-ta','placeholder')).includes('Dear AMIR'),'wallet page shows the SMS example');
  // 6b. gone to fetch the SMS and the browser reloads the app: the pay page, the same order and the typed text come back
@@ -96,7 +96,7 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  await page.waitForSelector('.mpf-pay',{timeout:9000});
  ok((fs.readFileSync(path.join(__dirname,'user-src/original_module.js'),'utf8').match(/resumeManualPay\(\)/g)||[]).length>=2,'both app entries put the member back on the payment pages');
  ok(await page.inputValue('.mpf-ta')==='Your transaction number is DA39','after a reload the SMS box has what was typed');
- const ro=posts.filter(p=>p[0]==='order').slice(nOrders)[0];ok(ro&&ro[1].depositId==='d1'&&ro[1].channelId==='c2'&&ro[1].amount===550,'the same order and channel are asked for again');
+ const ro=posts.filter(p=>p[0]==='order').slice(nOrders)[0];ok(ro&&ro[1].depositId==='d1'&&ro[1].resume===true&&ro[1].channelId==='c2'&&ro[1].amount===550,'the same order and channel are asked for again (resume)');
  ok((await page.textContent('.mpf-v b >> nth=2')).trim()==='0962499914','and the same account is shown');
  // 7. real submit
  await page.fill('.mpf-ta','Your transaction number is DA39J9GAMN');await page.evaluate(()=>mpSubmit());await page.waitForTimeout(500);

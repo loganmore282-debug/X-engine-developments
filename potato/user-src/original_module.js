@@ -4395,7 +4395,8 @@ window.mpPick = async function(i){
   _mp.busy = true;
   mpShowLoading();
   let r;
-  try { r = await post('/deposit/manual/order', { amount: _mp.amount, channelId: ch.id, depositId: _mp.order ? _mp.order.depositId : undefined }); }
+  // every pick (also switching to another address) is a NEW order with a fresh 30 minute clock
+  try { r = await post('/deposit/manual/order', { amount: _mp.amount, channelId: ch.id }); }
   finally { _mp.busy = false; }
   if (!_mp.stage) return;
   if (!r || r.stale) { mpShowChoose(); return; }
@@ -4518,8 +4519,8 @@ window.resumeManualPay = async function(){
     _mp.channels = r.channels;
     const ch = st.stage === 'pay' && st.depositId ? r.channels.find(c => c.id === st.chId) : null;
     if (ch) {
-      // The same order again (the server keeps the member's open order and its clock), so the 30 minutes carry on where they were.
-      const o = await post('/deposit/manual/order', { amount: _mp.amount, channelId: ch.id, depositId: st.depositId });
+      // The same order again (resume: the server hands back only the member's still-open order and its clock), so the 30 minutes carry on where they were.
+      const o = await post('/deposit/manual/order', { amount: _mp.amount, channelId: ch.id, depositId: st.depositId, resume: true });
       if (_mp.stage !== 'load') return;
       if (o && o.status === 'success') {
         _mp.order = o;

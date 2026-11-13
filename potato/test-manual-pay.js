@@ -107,17 +107,32 @@ const LOGO = 'data:image/png;base64,iVBORw0KGgo=';
   r = await call(H['POST /deposit/manual/order'], { amount: 550, channelId: c3 }); eq(r.code, 400, 'a hidden channel cannot be ordered');
   ctx.user = 'ban'; r = await call(H['POST /deposit/manual/order'], { amount: 550, channelId: c1 }); eq(r.code, 403, 'a banned member is refused'); ctx.user = 'u1';
   r = await call(H['POST /deposit/manual/order'], { amount: 550, channelId: c1 });
-  eq(r.code, 200, 'order created'); const o1 = r.body;
+  eq(r.code, 200, 'order created'); let o1 = r.body;
   eq([o1.accountName, o1.accountNumber, o1.channel.name], ['Ashenafi', '1000809418239', 'Commercial Bank of Ethiopia'], 'the account to pay is returned');
   ok(o1.expiresAt - Date.now() > 29 * 60 * 1000 && o1.expiresAt - Date.now() <= 30 * 60 * 1000, 'thirty minute clock');
   const dep1 = db.col('pendingDeposits').get(o1.depositId);
   eq([dep1.status, dep1.method, dep1.amount, dep1.userId], ['pending', 'manual', 550, 'u1'], 'a pending manual order is stored');
+  const realNow = Date.now;
+  // switching to another payment address is a NEW order with a fresh thirty minute clock; the old unsent one is closed
+  Date.now = () => realNow() + 60000; api.dropPayChannelsCache();
   r = await call(H['POST /deposit/manual/order'], { amount: 550, channelId: c2, depositId: o1.depositId });
-  eq(r.body.depositId, o1.depositId, 'switching moves the SAME order');
-  eq([r.body.accountNumber, r.body.expiresAt, r.body.reference], ['0962499914', o1.expiresAt, o1.reference], 'new account, same clock and reference');
-  eq(db.col('pendingDeposits').size, 1, 'still exactly one order');
+  ok(r.body.depositId !== o1.depositId && r.body.reference !== o1.reference, 'switching starts a NEW order');
+  eq([r.code, r.body.accountNumber], [200, '0962499914'], 'with the other account ' + JSON.stringify(r.body));
+  ok(r.body.expiresAt - o1.expiresAt >= 59000, 'and its clock starts over (a fresh thirty minutes)');
+  eq(db.col('pendingDeposits').get(o1.depositId).status, 'failed', 'the old unsent order is closed');
+  eq([...db.col('pendingDeposits').values()].filter(d => d.status === 'pending').length, 1, 'a member never has two open orders');
+  const sw = r.body;
+  // coming back after leaving: the SAME open order, same clock
+  r = await call(H['POST /deposit/manual/order'], { amount: 550, channelId: c2, depositId: sw.depositId, resume: true });
+  eq([r.body.depositId, r.body.expiresAt], [sw.depositId, sw.expiresAt], 'resume hands back the same order and the same clock');
+  r = await call(H['POST /deposit/manual/order'], { amount: 550, channelId: c2, depositId: o1.depositId, resume: true });
+  eq([r.code, r.body.code], [409, 'ORDER_GONE'], 'a closed order cannot be resumed');
+  Date.now = realNow; api.dropPayChannelsCache();
   r = await call(H['POST /deposit/manual/order'], { amount: 700, channelId: c2 });
-  eq([r.body.depositId, db.col('pendingDeposits').get(o1.depositId).amount], [o1.depositId, 700], 'a member never has two open orders; the amount follows the latest');
+  ok(r.body.depositId !== sw.depositId, 'opening the pages again is a new order too');
+  eq(db.col('pendingDeposits').get(sw.depositId).status, 'failed', 'and the previous one is closed');
+  o1 = r.body;
+  eq(db.col('pendingDeposits').get(o1.depositId).amount, 700, 'the new order carries the latest amount');
 
   // ── member: claim ──
   const bal = () => db.col('users').get('u1').walletBalance + ':' + db.col('users').get('u1').totalDeposited;
@@ -126,7 +141,7 @@ const LOGO = 'data:image/png;base64,iVBORw0KGgo=';
   eq([r.code, r.body.message], [400, 'please enter the correct transfer sms'], 'text without a code is refused with the owner\'s wording');
   r = await call(H['POST /deposit/manual/submit'], { depositId: 'missing', sms: 'FT25512S26V8' }); eq(r.code, 404, 'unknown order');
   ctx.user = 'u2'; r = await call(H['POST /deposit/manual/submit'], { depositId: o1.depositId, sms: 'FT25512S26V8' }); eq(r.code, 404, 'somebody else\'s order'); ctx.user = 'u1';
-  const realNow = Date.now; Date.now = () => realNow() + 10000;
+  Date.now = () => realNow() + 10000;
   r = await call(H['POST /deposit/manual/submit'], { depositId: o1.depositId, sms: 'Dear AMIR You have transferred ETB 700.00 to X. Your transaction number is DA39J9GAMN. Done' });
   eq([r.code, r.body.state], [200, 'review'], 'a Telebirr SMS is accepted for review');
   const dep = db.col('pendingDeposits').get(o1.depositId);

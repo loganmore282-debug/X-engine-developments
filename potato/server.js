@@ -6751,7 +6751,12 @@ app.post('/deposit/manual/order', async (req, res) => {
     const openSnap = await db.collection('pendingDeposits').where('userId', '==', userId).where('status', '==', 'pending').get();
     const open = openSnap.docs.filter(d => d.data().method === 'manual' && !d.data().pastedSms && (tsMillis(d.data().expiresAt) || 0) > now);
     let depRef, ref, expiresMs;
-    const mine = open.find(d => d.id === String(req.body.depositId || '')) || open[0];
+    // Owner: "even after switching another payment address it uses the same time, it doesn't start over to a new order time". Opening the payment pages, or
+    // switching to another payment address, always starts a NEW order with a fresh 30 minute clock. Only coming back to the pages after leaving
+    // (resume) picks up the SAME still-open order again. Older unsent orders of this member are closed so they do not pile up.
+    const mine = req.body.resume === true && req.body.depositId ? open.find(d => d.id === String(req.body.depositId)) : null;
+    if (req.body.resume === true && !mine) return res.status(409).json({ status: 'error', code: 'ORDER_GONE', message: 'This order is no longer open.' });
+    for (const o of open) if (!mine || o.id !== mine.id) await o.ref.updateIf({ status: 'pending' }, { status: 'failed', failureReason: 'Replaced by a newer payment order' }).catch(() => {});
     const channelFields = { network: ch.name, channelId: ch.id, channelKind: ch.kind === 'wallet' ? 'wallet' : 'bank', assignedNumber: ch.accountNumber, assignedName: ch.accountName };
     if (mine) {
       depRef = mine.ref; ref = mine.data().ref; expiresMs = tsMillis(mine.data().expiresAt);
