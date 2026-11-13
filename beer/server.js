@@ -962,7 +962,7 @@ async function getHelpBanner() {
 // no longer its own screen with a backdrop; Account's new Download App row
 // (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
 // prompt directly, in user-src/original_module.js -- see its own comment.
-const BEER_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner', 'profilelogo', 'loaderbg', 'teamhero', 'sharehero', 'myhero', 'ruleshero', 'avatar', 'recthumb', 'linkpreview'];
+const BEER_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner', 'profilelogo', 'loaderbg', 'teamhero', 'myhero', 'ruleshero', 'avatar', 'recthumb', 'linkpreview'];
 const _beerImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getBeerImage(slot) {
@@ -3752,8 +3752,8 @@ app.get('/public/beer-images', async (req, res) => {
       getBeerImage('authhero'), getBeerImage('banner2'),
       getBeerImage('banner3'), getBeerImage('checkinbanner'), getBeerImage('profilelogo'),
     ]);
-    const [teamhero, sharehero, myhero, ruleshero, avatar, recthumb] = await Promise.all(['teamhero', 'sharehero', 'myhero', 'ruleshero', 'avatar', 'recthumb'].map(k => getBeerImage(k)));
-    publicJson(req, res, { status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, teamhero, sharehero, myhero, ruleshero, avatar, recthumb }, IMAGE_CACHE);
+    const [teamhero, myhero, ruleshero, avatar, recthumb] = await Promise.all(['teamhero', 'myhero', 'ruleshero', 'avatar', 'recthumb'].map(k => getBeerImage(k)));
+    publicJson(req, res, { status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, teamhero, myhero, ruleshero, avatar, recthumb }, IMAGE_CACHE);
   } catch (e) { { console.error('Public route error:', req.path, e.message); res.status(500).json({ status: 'error', message: 'Could not load this right now. Please try again.' }); }; }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -6999,8 +6999,8 @@ app.get('/admin/beer-images', async (req, res) => {
       getBeerImage('authhero'), getBeerImage('banner2'),
       getBeerImage('banner3'), getBeerImage('checkinbanner'), getBeerImage('profilelogo'), getBeerImage('loaderbg'),
     ]);
-    const [teamhero, sharehero, myhero, ruleshero, avatar, recthumb, linkpreview] = await Promise.all(['teamhero', 'sharehero', 'myhero', 'ruleshero', 'avatar', 'recthumb', 'linkpreview'].map(k => getBeerImage(k)));
-    res.json({ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, loaderbg, teamhero, sharehero, myhero, ruleshero, avatar, recthumb, linkpreview });
+    const [teamhero, myhero, ruleshero, avatar, recthumb, linkpreview] = await Promise.all(['teamhero', 'myhero', 'ruleshero', 'avatar', 'recthumb', 'linkpreview'].map(k => getBeerImage(k)));
+    res.json({ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, loaderbg, teamhero, myhero, ruleshero, avatar, recthumb, linkpreview });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/beer-image/set', async (req, res) => {

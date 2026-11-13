@@ -2023,7 +2023,6 @@ function applyBootArtwork(ai, ci){
   STATE.brandLogo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
   STATE.profileLogo = (ci.status === 'success' && ci.profilelogo) ? ci.profilelogo : null;
   STATE.teamHero = (ci.status === 'success' && ci.teamhero) ? ci.teamhero : null;
-  STATE.shareHero = (ci.status === 'success' && ci.sharehero) ? ci.sharehero : null;
   STATE.myHero = (ci.status === 'success' && ci.myhero) ? ci.myhero : null;
   STATE.rulesHero = (ci.status === 'success' && ci.ruleshero) ? ci.ruleshero : null;
   STATE.avatarImg = (ci.status === 'success' && ci.avatar) ? ci.avatar : null;

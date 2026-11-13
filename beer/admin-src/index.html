@@ -3095,7 +3095,7 @@ async function renderBanners(){
   const loaderBgImage = cir.loaderbg||'';
   const linkPreviewImage = cir.linkpreview||'';
   const avatarImage = cir.avatar||'', recThumbImage = cir.recthumb||'';
-  const teamHeroImage = cir.teamhero||'', shareHeroImage = cir.sharehero||'', myHeroImage = cir.myhero||'', rulesHeroImage = cir.ruleshero||'';
+  const teamHeroImage = cir.teamhero||'', myHeroImage = cir.myhero||'', rulesHeroImage = cir.ruleshero||'';
   const announcementImage = (annr && annr.image) || '';
   const appIconImage = bar.appIcon||'';
   const appIconCustom = !!bar.appIconCustom;
@@ -3214,17 +3214,6 @@ async function renderBanners(){
         ${teamHeroImage?`<button class="btn danger sm" id="teamHeroClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="teamHeroFile" accept="image/*" hidden></label>
-    </div>
-
-    <h2 class="sec">Share page banner</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">The picture under the Share title. Wide, about 1080&times;540. Without one the page is plain blue.</p>
-      <div class="banner-row">
-        ${shareHeroImage?`<img class="img-thumb" src="${esc(shareHeroImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${shareHeroImage?'Custom image':'<span class="muted">Not set</span>'}</div>
-        ${shareHeroImage?`<button class="btn danger sm" id="shareHeroClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="shareHeroFile" accept="image/*" hidden></label>
     </div>
 
     <h2 class="sec">My page background</h2>
@@ -3391,7 +3380,6 @@ function wireBannerHandlers(){
     })());
   });
   wireBeerImageSlot('teamhero', 'teamHeroFile', 'teamHeroClear', 'Team banner saved', 'Team banner removed');
-  wireBeerImageSlot('sharehero', 'shareHeroFile', 'shareHeroClear', 'Share banner saved', 'Share banner removed');
   wireBeerImageSlot('myhero', 'myHeroFile', 'myHeroClear', 'My page background saved', 'My page background removed');
   wireBeerImageSlot('ruleshero', 'rulesHeroFile', 'rulesHeroClear', 'Rules picture saved', 'Rules picture removed');
   wireBeerImageSlot('loaderbg', 'loaderBgFile', 'loaderBgClear', 'Loading screen picture saved', 'Loading screen picture removed');
