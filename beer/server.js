@@ -198,7 +198,7 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // route once, before that route was added here too.
 // /admin/app-icon/set carries TWO PNGs (512 and 192) in one body, so it
 // needs the image parser even though each one on its own is small.
-const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/beer-image/set', '/admin/app-icon/set']);
+const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/beer-image/set', '/admin/app-icon/set', '/admin/pay-channels/save']);
 const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set', '/admin/rules-content/set']);
 // PesaJet signs the RAW REQUEST PAYLOAD -- their dashboard says so in as many
 // words ("computing an HMAC-SHA256 digest of the raw request payload using
@@ -454,12 +454,13 @@ const MARZ_TIMEOUT = 20000;
 const MARZSMS_BASE = 'https://sms.wearemarz.com/api/v1';
 const MARZSMS_KEY  = process.env.MARZSMS_KEY || '';
 
-// Uganda is the only supported currency and phone market. Historical accounts
+// Beer runs for ONE country: Ethiopia (+251, birr). Mobile numbers are +251 then 9 digits starting 9 (Ethio Telecom) or 7 (Safaricom Ethiopia).
+// The currency CODE stays ETB in storage; what a member READS is the symbol Br (currencySymbol / currencyLabel()). Historical accounts
 // with another currency remain in storage for review, but cannot transact.
-const DEFAULT_REGION_KEY = 'ug';
+const DEFAULT_REGION_KEY = 'et';
 const DEFAULT_REGION = Object.freeze({
-  key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256',
-  localLength: 9, prefixes: ['7'], utcOffsetMin: 180,
+  key: 'et', name: 'Ethiopia', currency: 'ETB', currencySymbol: 'Br', dialCode: '251',
+  localLength: 9, prefixes: ['9', '7'], utcOffsetMin: 180,
   active: true, isDefault: true, languages: ['en'], defaultLang: 'en',
 });
 let _mainAllowedHosts = [];
@@ -1140,16 +1141,21 @@ async function getAboutContent() {
 // transactions, because those are written inside their own region's context
 // (request-scoped for anything they do themselves, withUserRegion() for
 // maturity payouts and referral commissions).
+// What a person READS in front of an amount: ETB is written Br (the stored/sent code stays ETB); every other code is printed as it is.
+function currencyLabel(code) {
+  const c = String(code || '').toUpperCase();
+  return c === 'ETB' ? 'Br' : c;
+}
 function fmtMoney(n, currency) {
   const v = Number(n) || 0;
   const hasCents = Math.round(v * 100) % 100 !== 0;
-  const cur = currency || currentRegion().currency || 'UGX';
+  const cur = currencyLabel(currency || currentRegion().currency || 'ETB');
   // Grouping only -- 'en-UG' is a digit-grouping locale here, not a
   // currency, so the same "1,234,567" shape is right for every region and
   // the label in front of it is what changes.
-  return cur + ' ' + v.toLocaleString('en-UG', hasCents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});
+  return cur + ' ' + v.toLocaleString('en-US', hasCents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});
 }
-// Rounds to the nearest UGX cent (2 decimal places). Used by gift codes, the spin
+// Rounds to the nearest cent (2 decimal places). Used by gift codes, the spin
 // wheel/turntable and reporting math.
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 // Cut the text first: the tag-stripping pattern is quadratic on a long run of '<' with no '>', so an unbounded string could freeze the one-process server.
@@ -1503,7 +1509,10 @@ function depositSenderPhone(body, accountPhone, keys) {
   return fallback ? { phone: fallback }
                   : { error: 'Enter a valid mobile-money phone number.' };
 }
-const NETWORK_NAMES = new Set(['MTN Mobile Money', 'Airtel Money']);
+// Withdrawal ("Wallet card") accounts: Commercial Bank of Ethiopia (a bank account number) and Telebirr (a wallet: a +251 phone number). MTN / Airtel stay in
+// NETWORK_NAMES only so an account saved before the change keeps being read as mobile money.
+const PAYOUT_ACCOUNT_TYPES = Object.freeze({ 'Commercial Bank of Ethiopia': 'bank', 'Telebirr': 'wallet' });
+const NETWORK_NAMES = new Set(['Telebirr', 'MTN Mobile Money', 'Airtel Money']);
 const MAX_MONEY_AMOUNT = 999_999_999;
 // The most spins one purchase can ever grant. Used in TWO places that must
 // agree: sanitizeProductInput() refuses a bigger number at save time, and
@@ -3403,7 +3412,7 @@ app.post('/deploy/webhook', (req, res) => {
 function publicRegionView(r) {
   const reg = r || currentRegion();
   return {
-    key: reg.key, name: reg.name, currency: reg.currency, dialCode: reg.dialCode,
+    key: reg.key, name: reg.name, currency: reg.currency, currencySymbol: reg.currencySymbol || reg.currency, dialCode: reg.dialCode,
     localLength: reg.localLength, prefixes: (reg.prefixes || []).slice(),
     utcOffsetMin: reg.utcOffsetMin, isDefault: !!reg.isDefault,
     // Which languages this country's sign-in screen may offer, and which one
@@ -3437,6 +3446,8 @@ app.get('/public/settings', async (req, res) => {
     // Revalidated every time (no max-age): maintenance mode, the opening
     // countdown and every rate have to take effect on the next launch, not a
     // minute later. The ETag still removes the bytes when nothing changed.
+    // Manual recharge (bank / Telebirr numbers the owner typed into the admin panel): on as soon as there is at least one.
+    const manualPayOn = (await activePayChannels()).length > 0;
     publicJson(req, res, { status: 'success', settings: {
       ...rest,
       maintenanceMsg: s.maintenanceMode ? maintenanceMsg : '',
@@ -3450,7 +3461,8 @@ app.get('/public/settings', async (req, res) => {
       // depositPayAEnabled before manual deposit collection -- PAY B -- was
       // removed outright; renamed since "PAY A" no longer means anything
       // once there is no PAY B to contrast it with.)
-      depositAvailable: payAAvailable(s),
+      manualPay: manualPayOn,
+      depositAvailable: manualPayOn || payAAvailable(s),
       depositHotMethod: await getHotDepositMethod(),
       shareDomain: SHARE_DOMAIN,
     // How many countries this platform runs in. The app only uses it to add
@@ -3833,7 +3845,7 @@ async function completeRegistrationCore(userId, referralCode, phone) {
       // working". Two regions sharing a currency have no arithmetic problem,
       // which is the only thing this rule was ever protecting.
       if (String(refDoc.data().regionKey || DEFAULT_REGION_KEY) !== DEFAULT_REGION_KEY)
-        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'This referral code is unavailable. Ask for a Uganda referral code.' } };
+        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'This referral code is unavailable. Ask for a valid referral code.' } };
       referrerId = refDoc.id;
     }
 
@@ -6279,7 +6291,9 @@ app.post('/bank/save', async (req, res) => {
   if (!holder || !rawNetwork) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
   // A holder name is a name: at most 60 characters and at least one letter (a 300-character or all-digit holder broke the Wallet card).
   if (holder.length > 60 || !/\p{L}/u.test(holder)) return res.status(400).json({ status: 'error', message: 'Enter the account holder name (letters, up to 60 characters).' });
-  const isMobileMoney = NETWORK_NAMES.has(rawNetwork);
+  // Bank Name is Commercial Bank of Ethiopia or Telebirr, nothing else: any other name is refused.
+  if (!Object.prototype.hasOwnProperty.call(PAYOUT_ACCOUNT_TYPES, rawNetwork)) return res.status(400).json({ status: 'error', message: 'Choose Commercial Bank of Ethiopia or Telebirr.' });
+  const isMobileMoney = PAYOUT_ACCOUNT_TYPES[rawNetwork] === 'wallet';
   // Owner: "so some bank account exceed character limit so no capping of
   // characters please" -- cleanPhone() enforces this region's phone SHAPE
   // (exact digit count, dial code), which is correct for MTN/Airtel but
@@ -6293,14 +6307,13 @@ app.post('/bank/save', async (req, res) => {
     destValue = cleanPhone(textOf(req.body.phone));
     if (!destValue) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
   } else {
-    destValue = String(req.body.phone || req.body.accountNumber || '').replace(/\s+/g, '').trim();
-    if (!/^[A-Za-z0-9]{4,64}$/.test(destValue)) return res.status(400).json({ status: 'error', message: 'Enter a valid bank account number' });
+    destValue = String(textOf(req.body.phone) || textOf(req.body.accountNumber) || '').replace(/\s+/g, '').trim();
+    if (!/^[A-Za-z0-9]{4,64}$/.test(destValue)) return res.status(400).json({ status: 'error', message: 'Enter a valid bank account number.' });
     // Validated against the SAME live/cached list #bank/supported-banks
     // serves -- a bank name the picker never offered has no business
     // reaching MarzPay's own bank-transfer create call, where an unknown
     // code is what its docs describe as UNSUPPORTED/UNKNOWN BANK.
-    const banks = await getSupportedBanks();
-    if (!banks.some(b => b.name === rawNetwork)) return res.status(400).json({ status: 'error', message: 'That bank is not currently supported. Pick one from the list.' });
+    // (Commercial Bank of Ethiopia is paid by hand by the admin, so there is no gateway list to check it against.)
   }
   try {
     const uSnap = await db.collection('users').doc(userId).get();
@@ -6317,8 +6330,8 @@ app.post('/bank/save', async (req, res) => {
     // entry rather than silently overwritten, since a shared/company
     // account can legitimately have a different registered name.
     let verifiedHolder = holder;
-    if (!isMobileMoney) {
-      // marzValidateBankAccount() now handles its own network errors and
+    if (false) {
+      // (Uganda gateway check, unused in Ethiopia.) marzValidateBankAccount() now handles its own network errors and
       // one transient-failure retry internally (never throws) -- providerDown
       // is the one signal to check for either case.
       const v = await marzValidateBankAccount(rawNetwork, destValue);
@@ -6831,7 +6844,7 @@ app.post('/admin/settings/update', async (req, res) => {
     if ('strictRegionHosts' in updates || 'rotateEntry' in updates)
       return res.status(400).json({ status: 'error', message: 'Country address options have been retired.' });
     if (req.body.region && req.body.region !== DEFAULT_REGION_KEY)
-      return res.status(400).json({ status: 'error', message: 'Only Uganda settings are supported.' });
+      return res.status(400).json({ status: 'error', message: 'Only Ethiopia settings are supported.' });
     for (const [key, [min, max]] of Object.entries(SETTINGS_CRITICAL_RANGES)) {
       if (!(key in updates)) continue;
       const n = Number(updates[key]);
@@ -7316,7 +7329,7 @@ app.post('/admin/products/save', async (req, res) => {
   try {
     const list = Array.isArray(req.body.products) ? req.body.products : [];
     if (req.body.region && req.body.region !== DEFAULT_REGION_KEY)
-      return res.status(400).json({ status: 'error', message: 'Only Uganda products are supported.' });
+      return res.status(400).json({ status: 'error', message: 'Only Ethiopia products are supported.' });
     const sanitized = [];
     // Owner: "make sure all 2 asset name fields are editable" -- Key is no
     // longer locked once an asset exists, so a save can now be a RENAME
@@ -8185,16 +8198,16 @@ app.post('/admin/debit', async (req, res) => {
 // number of a level 2 or level 3 stranger is never sent to a phone at all.
 function maskDownlinePhone(phone) {
   let d = String(phone || '').replace(/\D/g, '');
-  if (d.startsWith('256')) d = d.slice(3);
+  if (d.startsWith(DEFAULT_REGION.dialCode)) d = d.slice(DEFAULT_REGION.dialCode.length);
   d = d.replace(/^0+/, '');
   return d.length < 7 ? '' : d.slice(0, 3) + '****' + d.slice(-4);
 }
-// The Team list prints a member as "256****884259": the dialling code, four stars, and the last six digits.
+// The Team list prints a member as "251****884259": the dialling code, four stars, and the last six digits.
 function maskTeamPhone(phone) {
   let d = String(phone || '').replace(/\D/g, '');
-  if (d.startsWith('256')) d = d.slice(3);
+  if (d.startsWith(DEFAULT_REGION.dialCode)) d = d.slice(DEFAULT_REGION.dialCode.length);
   d = d.replace(/^0+/, '');
-  return d.length < 7 ? '' : '256****' + d.slice(-6);
+  return d.length < 7 ? '' : DEFAULT_REGION.dialCode + '****' + d.slice(-6);
 }
 // An admin action aimed at something that does not exist is a "not found", not a server error.
 const adminFailCode = e => /matched no document|not found/i.test(String((e && e.message) || '')) ? 404 : 500;
@@ -8274,6 +8287,217 @@ app.post('/admin/deposits/list', async (req, res) => {
     res.json({ status: 'success', deposits: rows, counts, total: rows.length, processedByDay, processedAmount, truncated, regionKey: want || 'all' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// ── MANUAL BANK / WALLET RECHARGE (Ethiopia) ──
+// Owner: payment numbers (a bank account, a Telebirr wallet ...) are typed into
+// the admin panel with a logo. A member picks one, is shown the account to pay
+// for 30 minutes, pays from their own bank/wallet app, then pastes the SMS or
+// receipt code. The claim goes to the admin Recharges tab (status 'review')
+// where it is approved with Force-credit (creditDeposit() is the only thing
+// that ever moves money) or rejected. Nothing here credits a wallet.
+const PAY_CHANNEL_KINDS = ['bank', 'wallet'];
+const MANUAL_ORDER_MS = 30 * 60 * 1000;
+const MAX_PAY_CHANNELS = 20;
+const MAX_PAY_LOGO_CHARS = 220 * 1024;
+let _payChannelsCache = null;
+async function readPayChannels() {
+  const now = Date.now();
+  if (_payChannelsCache && now - _payChannelsCache.at < 10000) return _payChannelsCache.rows;
+  const snap = await db.collection('payChannels').get();
+  const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0) || (tsMillis(a.createdAt) || 0) - (tsMillis(b.createdAt) || 0));
+  _payChannelsCache = { at: now, rows };
+  return rows;
+}
+function dropPayChannelsCache() { _payChannelsCache = null; }
+async function activePayChannels() {
+  try { return (await readPayChannels()).filter(c => c.active !== false && c.accountNumber); }
+  catch (_) { return []; }
+}
+function payChannelPublic(c) {
+  return { id: c.id, name: c.name, kind: c.kind === 'wallet' ? 'wallet' : 'bank', logo: c.logo || '' };
+}
+function cleanPayText(v, max) { return String(v == null ? '' : v).replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max); }
+app.get('/public/pay-channels', async (req, res) => {
+  try {
+    const rows = await activePayChannels();
+    res.set('Cache-Control', 'no-store');
+    res.json({ status: 'success', channels: rows.map(payChannelPublic) });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load payment options' }); }
+});
+app.post('/admin/pay-channels/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { dropPayChannelsCache(); res.json({ status: 'success', channels: await readPayChannels() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load payment numbers' }); }
+});
+app.post('/admin/pay-channels/save', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const b = req.body || {};
+    const name = cleanPayText(b.name, 60);
+    const accountName = cleanPayText(b.accountName, 80);
+    const accountNumber = cleanPayText(b.accountNumber, 40).replace(/\s+/g, '');
+    if (!name) return res.status(400).json({ status: 'error', message: 'Enter the payment name (for example Commercial Bank of Ethiopia).' });
+    if (!accountName) return res.status(400).json({ status: 'error', message: 'Enter the account name.' });
+    if (!/^[0-9A-Za-z+\-]{4,40}$/.test(accountNumber)) return res.status(400).json({ status: 'error', message: 'Enter a valid account number.' });
+    const kind = PAY_CHANNEL_KINDS.includes(b.kind) ? b.kind : 'bank';
+    const rows = await readPayChannels();
+    const id = b.id ? String(b.id) : '';
+    const existing = id ? rows.find(r => r.id === id) : null;
+    if (id && !existing) return res.status(404).json({ status: 'error', message: 'That payment number no longer exists.' });
+    if (!existing && rows.length >= MAX_PAY_CHANNELS) return res.status(400).json({ status: 'error', message: `You can keep up to ${MAX_PAY_CHANNELS} payment numbers. Remove one first.` });
+    // logo: undefined/null = keep, '' = remove, a PNG data URI = replace.
+    let logo = existing ? (existing.logo || '') : '';
+    if (typeof b.logo === 'string') {
+      if (b.logo === '') logo = '';
+      else if (/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(b.logo) && b.logo.length <= MAX_PAY_LOGO_CHARS) logo = b.logo;
+      else return res.status(400).json({ status: 'error', message: 'That logo is not valid or is too large. Upload a smaller image.' });
+    }
+    const doc = {
+      name, kind, accountName, accountNumber, logo, active: b.active !== false,
+      order: Number.isFinite(Number(b.order)) ? Math.max(0, Math.min(999, Math.round(Number(b.order)))) : (existing ? Number(existing.order) || 0 : rows.length),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    const ref = existing ? db.collection('payChannels').doc(existing.id) : db.collection('payChannels').doc();
+    if (existing) await ref.update(doc); else await ref.set({ ...doc, createdAt: FieldValue.serverTimestamp() });
+    dropPayChannelsCache();
+    logAdminAction(req, 'pay_channel_saved', { id: ref.id, name, kind, active: doc.active });
+    res.json({ status: 'success', id: ref.id });
+  } catch (e) { console.error('pay-channels save:', e.message); res.status(500).json({ status: 'error', message: 'Could not save this payment number' }); }
+});
+app.post('/admin/pay-channels/delete', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const id = String((req.body || {}).id || '');
+    if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
+    const ref = db.collection('payChannels').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'That payment number no longer exists.' });
+    await ref.delete();
+    dropPayChannelsCache();
+    logAdminAction(req, 'pay_channel_deleted', { id, name: snap.data().name });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove this payment number' }); }
+});
+// Creates (or re-points) the member's one open order and returns the account to pay.
+// `depositId` is sent back by "switch": the same order moves to another channel and keeps its clock.
+app.post('/deposit/manual/order', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const amt = paymentAmount(req.body.amount);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
+  try {
+    const [uSnap, sett, channels] = await Promise.all([db.collection('users').doc(userId).get(), getSettings(), activePayChannels()]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
+    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before topping up.' });
+    if (!channels.length) return res.status(400).json({ status: 'error', message: 'Recharges are not available right now.' });
+    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
+    const ch = channels.find(c => c.id === String(req.body.channelId || ''));
+    if (!ch) return res.status(400).json({ status: 'error', message: 'Please select a payment method' });
+    const now = Date.now();
+    const openSnap = await db.collection('pendingDeposits').where('userId', '==', userId).where('status', '==', 'pending').get();
+    const open = openSnap.docs.filter(d => d.data().method === 'manual' && !d.data().pastedSms && (tsMillis(d.data().expiresAt) || 0) > now);
+    let depRef, ref, expiresMs;
+    // Owner: "even after switching another payment address it uses the same time, it doesn't start over to a new order time". Opening the payment pages, or
+    // switching to another payment address, always starts a NEW order with a fresh 30 minute clock. Only coming back to the pages after leaving
+    // (resume) picks up the SAME still-open order again. Older unsent orders of this member are closed so they do not pile up.
+    const mine = req.body.resume === true && req.body.depositId ? open.find(d => d.id === String(req.body.depositId)) : null;
+    if (req.body.resume === true && !mine) return res.status(409).json({ status: 'error', code: 'ORDER_GONE', message: 'This order is no longer open.' });
+    for (const o of open) if (!mine || o.id !== mine.id) await o.ref.updateIf({ status: 'pending' }, { status: 'failed', failureReason: 'Replaced by a newer payment order' }).catch(() => {});
+    const channelFields = { network: ch.name, channelId: ch.id, channelKind: ch.kind === 'wallet' ? 'wallet' : 'bank', assignedNumber: ch.accountNumber, assignedName: ch.accountName };
+    if (mine) {
+      depRef = mine.ref; ref = mine.data().ref; expiresMs = tsMillis(mine.data().expiresAt);
+      await depRef.update({ ...channelFields, amount: amt });
+    } else {
+      ref = await uniqueRef('M');
+      const { date, time } = nowStr();
+      depRef = db.collection('pendingDeposits').doc();
+      expiresMs = now + MANUAL_ORDER_MS;
+      await depRef.set({
+        userId, method: 'manual', provider: 'manual', amount: amt, ref, status: 'pending', ...channelFields,
+        commissionBasis: 'deposit', commissionPending: true, commissionPaidLevels: [],
+        regionKey: currentRegionKey(), date, time,
+        expiresAt: new Date(expiresMs), createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+    res.json({ status: 'success', depositId: depRef.id, reference: ref, amount: amt, expiresAt: expiresMs,
+      channel: payChannelPublic(ch), accountName: ch.accountName, accountNumber: ch.accountNumber });
+  } catch (e) { console.error('manual order:', e.message); res.status(500).json({ status: 'error', message: 'Could not start recharge' }); }
+});
+// What a pasted SMS / receipt is allowed to be. CBE receipts carry "v2-..." (23 characters) or an
+// "FT" reference (12 characters, sometimes followed by 8 account digits); Telebirr's
+// transaction number is exactly 10 letters/digits. Anything else is refused up front.
+function extractManualRef(text) {
+  const t = String(text || '');
+  let m = /v2-[A-Za-z0-9]{6,40}/i.exec(t);
+  if (m) return { ref: m[0].toLowerCase(), kind: 'cbe-v2' };
+  m = /\bFT[0-9A-Z]{10,22}\b/i.exec(t);
+  if (m) return { ref: m[0].toUpperCase().slice(0, 12), kind: 'cbe-ft' };
+  m = /transaction number is\s+([A-Z0-9]{10})\b/i.exec(t) || /receipt\/([A-Z0-9]{10})\b/i.exec(t);
+  if (m) return { ref: m[1].toUpperCase(), kind: 'telebirr' };
+  m = /^\s*([A-Z0-9]{10})\s*$/i.exec(t);
+  if (m && /[A-Z]/i.test(m[1]) && /\d/.test(m[1])) return { ref: m[1].toUpperCase(), kind: 'telebirr' };
+  return null;
+}
+function extractManualAmount(text) {
+  const m = /(?:transferred|sent|debited(?: with)?|paid)\s*(?:ETB|Br|birr)?\s*([\d,]+(?:\.\d+)?)/i.exec(String(text || '')) || /ETB\s*([\d,]+(?:\.\d+)?)/i.exec(String(text || ''));
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+const _manualSubmitDebounce = new Map();
+app.post('/deposit/manual/submit', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const sms = String((req.body || {}).sms || '').trim().slice(0, 2000);
+    const found = extractManualRef(sms);
+    if (!found) return res.status(400).json({ status: 'error', code: 'BAD_SMS', message: 'please enter the correct transfer sms' });
+    const last = _manualSubmitDebounce.get(userId) || 0;
+    if (Date.now() - last < 3000) return res.status(429).json({ status: 'error', message: 'Please wait a moment.' });
+    _manualSubmitDebounce.set(userId, Date.now());
+    const depRef = db.collection('pendingDeposits').doc(String(req.body.depositId || '_'));
+    const snap = await depRef.get();
+    if (!snap.exists || snap.data().userId !== userId || snap.data().method !== 'manual')
+      return res.status(404).json({ status: 'error', message: 'Recharge not found' });
+    const dep = snap.data();
+    if (dep.status === 'review') return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
+    if (dep.status !== 'pending') return res.status(400).json({ status: 'error', message: 'This recharge is no longer open. Start a new one.' });
+    // A real transfer can back ONE open or credited claim, by anyone.
+    const dupSnap = await db.collection('pendingDeposits').where('pastedSmsTxId', '==', found.ref).get();
+    if (dupSnap.docs.some(d => d.id !== snap.id && d.data().status !== 'failed'))
+      return res.status(409).json({ status: 'error', message: 'This transaction hash has already been submitted.' });
+    const smsAmount = extractManualAmount(sms);
+    const updated = await depRef.updateIf({ status: 'pending' }, {
+      status: 'review', reviewReason: 'Waiting for the admin to check the payment message',
+      pastedSms: sms, pastedAt: FieldValue.serverTimestamp(), pastedSmsTxId: found.ref, pastedSmsKind: found.kind, pastedSmsParsed: true,
+      ...(smsAmount != null ? { pastedSmsAmount: smsAmount, pastedSmsAmountMatches: Math.abs(smsAmount - Number(dep.amount)) < 0.01 } : {}),
+    });
+    if (!updated) return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
+    const { date, time } = nowStr();
+    await db.collection('transactions').add({
+      userId, statementId: newStatementId(), type: 'deposit', description: `Deposit: Processing (${fmtMoney(dep.amount)})`,
+      amount: dep.amount, displayAmount: dep.amount, status: 'pending', date, time, ref: dep.ref, depositId: snap.id, createdAt: FieldValue.serverTimestamp()
+    }).catch(e => console.error(`Manual deposit ledger row create failed for dep=${snap.id}:`, e.message));
+    res.json({ status: 'success', state: 'review', depositId: snap.id, reference: dep.ref, message: 'Submitted. Our team is checking your payment.' });
+  } catch (e) { console.error('manual submit:', e.message); res.status(500).json({ status: 'error', message: 'Could not submit your recharge. Please try again.' }); }
+});
+// An order nobody paid for is closed after the clock (30 min) plus a grace of 30.
+async function sweepManualOrders() {
+  try {
+    const snap = await db.collection('pendingDeposits').where('status', '==', 'pending').limit(200).get();
+    const cut = Date.now() - 30 * 60 * 1000;
+    for (const d of snap.docs) {
+      const x = d.data();
+      if (x.method !== 'manual' || x.pastedSms) continue;
+      if ((tsMillis(x.expiresAt) || 0) > cut) continue;
+      await d.ref.updateIf({ status: 'pending' }, { status: 'failed', failureReason: 'The payment order expired' }).catch(() => {});
+    }
+  } catch (e) { console.error('sweepManualOrders:', e.message); }
+}
+// END MANUAL BANK / WALLET RECHARGE
 app.post('/admin/deposit/force-credit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const depositId = String((req.body && req.body.depositId) || '').trim();
@@ -8512,7 +8736,7 @@ app.get('/admin/pesajet/summary', async (req, res) => {
     const truncated = depSnap.size >= PESAJET_SUMMARY_SCAN || witSnap.size >= PESAJET_SUMMARY_SCAN;
     const zero = () => ({ collected: 0, collectedCount: 0, paidOut: 0, paidOutCount: 0,
                           pendingIn: 0, pendingInCount: 0, pendingOut: 0, pendingOutCount: 0 });
-    const summary = Object.assign({ regionKey: 'ug', currency: 'UGX' }, zero());
+    const summary = Object.assign({ regionKey: 'et', currency: 'ETB' }, zero());
     for (const d of depSnap.docs) {
       const row = d.data();
       const amt = finiteMoney(row.displayAmount != null ? row.displayAmount : row.amount);
@@ -10100,6 +10324,7 @@ connectMongo(MONGODB_URI)
     migratePayoutsToMidnightOnce().then(n => { if (n) console.log(`Moved ${n} running investments to the midnight payout schedule`); }).catch(e => console.error('Midnight schedule migration:', e.message)).then(() => backfillNextPayoutAt()).then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); armMidnightSweep(); });
     setInterval(autoApproveWithdrawalsTick, 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
+    setInterval(sweepManualOrders, 5 * 60 * 1000);
     setInterval(reconcileBlockedCommissions, 5 * 60 * 1000);
   })
   .catch(e => { console.error('Mongo connection failed:', e.message); process.exit(1); });

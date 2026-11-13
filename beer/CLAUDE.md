@@ -60,9 +60,16 @@ Port plan: Soda 3001/8090/8091, Mint 3002/8092/8093, Cookie 3003/8094/8095, Pota
 
 5. **Temporary preview by IP (no domain needed):** `bash /srv/beer-src/beer/deploy/preview.sh on` serves the member app at `http://<vps ip>:8102/` and the hidden admin panel at `http://<vps ip>:8102/Hq4vN8rt/` (one nginx file `beer-preview.conf`, firewall port 8102, plain HTTP -- design work only, never real members or money). `preview.sh off` removes it; `update-vps.sh` removes it automatically when a domain is set up. New design reaches the VPS with `deploy/quick-update.sh`.
 
+## Ethiopia (owner: "change to Br Ethiopia, also the payment page that of Ethiopia like in Potato")
+Beer is an ETHIOPIA app now: region `et` (+251, nine digits starting 9 or 7), currency code ETB written **Br** (`currencyLabel()` on the server, `cur()` in the app reads `REGION.currencySymbol`), admin panel labels Br.
+- **Recharge** = bank / Telebirr payment numbers, ported from Potato: admin tab **Payment Numbers** (name, Bank or Wallet, account name, account number, logo with background cut out) -> `/admin/pay-channels/*`; members: Deposit -> amount -> Pay -> pages "Please choose payment" -> pay page (copy account, 30 minute clock, paste the SMS) -> `/deposit/manual/order` + `/deposit/manual/submit` -> the claim sits in admin **Deposits** (status review) where **Force-credit** approves it (the only thing that credits money). Picking/switching an address makes a NEW order with a fresh clock; coming back after leaving (`resumeManualPay`, localStorage `mp_resume`) resumes the same open order. `settings.manualPay` is true as soon as one payment number exists. The old Uganda gateway code (MarzPay, PesaJet) is still in the file but no screen reaches it.
+- **Withdrawal accounts** (Wallet page): Telebirr (+251 phone) and Commercial Bank of Ethiopia (account number, 4-64 letters/digits, no gateway check); MTN/Airtel only remain so old rows are still read. Payouts are manual (the gateways do not serve +251, so `payoutManual` is true).
+- The payment pages are Potato's, coloured with the two Beer colours (khaki page/cards, beer picture for the pay-page background, buttons and clock boxes). CSS block `MANUAL BANK / WALLET PAYMENT PAGES` at the end of `user-src/index.html`.
+- Test: `test-ethiopia.js` (real server on the fake MongoDB in `test-helpers/`): region, order/resume/new order, SMS parsing, duplicate transfer refused, approve credits once, withdrawal accounts.
+
 ## Status
 1. (done) Copied from Cookie, renamed to Beer, ports 3007/8102/8103, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path `Hq4vN8rt`.
-2. (done) Khaki + amber colours, mug icon, link preview, caches `beer-shell-v16` / `beer-admin-shell-v4`. `npm run test:audit` passes.
+2. (done) Khaki + amber colours, mug icon, link preview, caches `beer-shell-v17` / `beer-admin-shell-v5`. `npm run test:audit` passes.
 3. (done by owner) GitHub webhook `http://179.198.197.114:8102/k7x2/deploy/webhook` (push event, branch claude/beer-build) auto-deploys the VPS; a webhook only reacts to pushes made AFTER it was added. (waiting on owner) Atlas user `beerapp` + connection string, VPS first-setup (the command in "One-time backend setup" with `beer`), domain, payment keys. Nothing of Beer is on the VPS yet.
 
 ## Rules the owner has decided (keep these)

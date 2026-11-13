@@ -757,9 +757,9 @@ async function finish() {
       db: { collection: name => q(name) },
       verifyAdmin: () => true,
       getSettings: async () => settings,
-      adminUserRegions: async () => ({ u1: 'ug', u2: 'ug' }),
-      rowRegionKey: (row, map) => row.regionKey || map[row.userId] || 'ug',
-      regionByKey: () => ({ currency: 'UGX' }),
+      adminUserRegions: async () => ({ u1: 'et', u2: 'et' }),
+      rowRegionKey: (row, map) => row.regionKey || map[row.userId] || 'et',
+      regionByKey: () => ({ currency: 'ETB' }),
       // The real one: status alone is not enough, because claim-before-credit
       // can leave 'matched' with the wallet write unfinished.
       depositFullyCredited: r => r.status === 'success' && !!r.creditedAt,
@@ -781,7 +781,7 @@ async function finish() {
       return out;
     };
     const all = await run(null);
-    const ug = all.regions.find(r => r.regionKey === 'ug');
+    const ug = all.regions.find(r => r.regionKey === 'et');
     ck(ug && ug.collected === 30000 && ug.collectedCount === 1,
        'only a deposit that really landed counts as collected');
     ck(ug && ug.pendingIn === 50000 && ug.pendingInCount === 1,
@@ -791,7 +791,7 @@ async function finish() {
     ck(ug && ug.pendingOut === 8500 && ug.pendingOutCount === 1,
        "and a payout still sending is 'still sending', not paid");
     ck(ug && ug.net === 13000, 'net is collected minus paid out');
-    ck(all.regions.length === 1 && ug.currency === 'UGX', 'the summary uses one UGX bucket');
+    ck(all.regions.length === 1 && ug.currency === 'ETB', 'the summary uses one ETB bucket');
     ck(all.selected === true,
        'selected says the gateway really is in the payment path');
     ck(/not the float/.test(all.note || ''),

@@ -28,12 +28,12 @@ var API_BASE = '/k7x2';
 // rules). Nothing here is ever sent back up; the server re-derives it on
 // every request. See the REGIONS section in server.js.
 //
-// The values below are Uganda's, and they are also what an offline first
+// The values below are Ethiopia's, and they are also what an offline first
 // paint uses -- so a cold start with no network still formats money and
 // validates a phone number the way it always did.
-var REGION = { key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256', localLength: 9, prefixes: ['7'], utcOffsetMin: 180, isDefault: true, languages: ['en'], defaultLang: 'en' };
-function cur(){ return (REGION && REGION.currency) || 'UGX'; }
-function regionName(){ return (REGION && REGION.name) || 'Uganda'; }
+var REGION = { key: 'et', name: 'Ethiopia', currency: 'ETB', currencySymbol: 'Br', dialCode: '251', localLength: 9, prefixes: ['9', '7'], utcOffsetMin: 180, isDefault: true, languages: ['en'], defaultLang: 'en' };
+function cur(){ return (REGION && (REGION.currencySymbol || REGION.currency)) || 'Br'; }
+function regionName(){ return (REGION && REGION.name) || 'Ethiopia'; }
 // "7XXXXXXXX" for Uganda -- the region's first allowed prefix padded out to
 // its local length, used in the placeholders that show the shape to type.
 function phoneHintBody(){
@@ -41,7 +41,7 @@ function phoneHintBody(){
   const lead = pfx.length ? pfx[0] : '';
   return lead + 'X'.repeat(Math.max(0, localLen() - lead.length));
 }
-function dial(){ return (REGION && REGION.dialCode) || '256'; }
+function dial(){ return (REGION && REGION.dialCode) || '251'; }
 function dialPlus(){ return '+' + dial(); }
 function localLen(){ return Number(REGION && REGION.localLength) || 9; }
 function regionPrefixes(){ return (REGION && Array.isArray(REGION.prefixes) ? REGION.prefixes.filter(Boolean) : []); }
@@ -2491,6 +2491,7 @@ async function enterApp(){
   // returned to the app to see resolved (they closed the tab, lost signal,
   // whatever) picks back up here on the NEXT open, however long that is.
   resumePendingCardDeposit();
+  setTimeout(() => { try { window.resumeManualPay(); } catch (_) {} }, 1200);   // back on the payment pages where they left off
   const uid = STATE.user && STATE.user.uid;
   const cached = loadCachedState(uid);
   if (!cached) return bootFromNetwork(uid);
@@ -4356,7 +4357,8 @@ function formatPhoneDisplay(phone){
 
 // Short names the Wallet page shows ("MTN", "Airtel"); the server still gets the full provider name.
 function walShort(n){ n = String(n || ''); return n === 'MTN Mobile Money' ? 'MTN' : n === 'Airtel Money' ? 'Airtel' : n; }
-function walProviders(){ return ['MTN Mobile Money', 'Airtel Money'].concat(STATE.supportedBanks || []).sort((x, y) => walShort(x).localeCompare(walShort(y))); }
+// Withdrawal accounts: Commercial Bank of Ethiopia (a bank account number) and Telebirr (a wallet: the member's +251 phone number).
+function walProviders(){ return ['Commercial Bank of Ethiopia', 'Telebirr']; }
 function walFull(label){
   const t = String(label || '').trim().toLowerCase();
   if (!t) return '';
@@ -4388,7 +4390,7 @@ function currentWallet(){ return (STATE.bankAccounts || [])[0] || null; }
 // MarzPay's own live list) at the moment it was bound. No client-side list
 // membership check needed to tell the two apart; this one distinction is
 // definitional, not a lookup.
-function isMobileMoneyNetwork(network){ return network === 'MTN Mobile Money' || network === 'Airtel Money'; }
+function isMobileMoneyNetwork(network){ return network === 'Telebirr' || network === 'MTN Mobile Money' || network === 'Airtel Money'; }
 function maskedTail(phone){
   const d = String(phone || '').replace(/\D/g, '');
   return d ? '****' + d.slice(-4) : '****';
@@ -5243,9 +5245,6 @@ function openDepositFormSheet(){
       <div class="ck-balrow"><span>Available：</span><b>${esc(cur())}</b><i id="depBalance">${esc(numGroup(0, true))}</i></div>
       <label class="ck-amtbox"><b>${esc(cur())}</b><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Please enter the Deposit amount" oninput="this.value=this.value.replace(/[\\s,]/g,'');syncDepositQuickAmt()" autocomplete="off"></label>
     </div>
-    <div class="ck-card ck-pays" id="depPays">
-      ${['C'].map((k, i) => `<button type="button" data-m="${k}" class="${i === 0 ? 'on' : ''}${k === hotKey ? ' hot' : ''}" onclick="pickPayLabel(this)">${k === hotKey ? hot : ''}<span>${esc(brandName())} Pay -${k}</span></button>`).join('')}
-    </div>
     <button class="ck-pay" id="depSubmitBtn" type="button" onclick="submitDeposit()">Pay 0</button>
     <div class="ck-notes">
       <p class="b">The minimum deposit amount is ${esc(cur())} ${esc(ckNum(min))}</p>
@@ -5635,6 +5634,241 @@ function ckPayLoading(btn, on, label){
     btn.disabled = false; btn.classList.remove('ck-pay-ld'); btn.textContent = label; btn._v = parseMoneyInput(label);
   }
 }
+// ── MANUAL BANK / WALLET RECHARGE PAGES (Ethiopia) ──
+// Owner's three screens, built to his screenshots (412 css px wide, 2.625 device px per css px):
+//   1. a "loading..." page with a blue ring while the payment page is prepared,
+//   2. "Please choose payment" -- the payment numbers the admin typed in (with logos),
+//   3. the payment page: Step 1 copy the account, Step 2 paste the payment SMS, a 30 minute clock.
+// "switch" goes back to page 2. Nothing is credited here: the claim goes to the admin Recharges tab.
+var _mp = { amount: 0, channels: [], order: null, stage: '', pushed: 0, timer: 0, ignorePop: false, busy: false, toastT: 0 };
+// ── Coming back: the page the member is on (choose payment, or the pay page with its order and the SMS typed so far) is remembered, so when the
+// phone sends the app away to fetch the payment SMS and the browser then reloads it, the pages load and put the member back exactly there.
+// Cleared when the pages are closed, the SMS is sent or the order runs out.
+var MP_RESUME_KEY = 'mp_resume';
+function mpForget(){ try { localStorage.removeItem(MP_RESUME_KEY); } catch (_) {} }
+function mpSave(sms){
+  try {
+    if (_mp.stage !== 'pay' && _mp.stage !== 'choose') return;
+    const o = _mp.order; let draft = typeof sms === 'string' ? sms : String((($('mpSms') || {}).value) || '');
+    if (typeof sms !== 'string' && !draft) { try { draft = String((JSON.parse(localStorage.getItem(MP_RESUME_KEY) || 'null') || {}).sms || ''); } catch (_) {} }
+    localStorage.setItem(MP_RESUME_KEY, JSON.stringify({ u: STATE.user && STATE.user.uid || '', amount: _mp.amount, stage: _mp.stage, depositId: o && o.depositId || '',
+      exp: o ? Number(o.expiresAt) : 0, chId: o && o.channel && o.channel.id || '', sms: draft.slice(0, 2000), at: Date.now() }));
+  } catch (_) {}
+}
+window.mpSaveSms = function(v){ mpSave(String(v == null ? '' : v)); };
+function mpMoney(n){ return cur() + ' ' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+var MP_ICON_WARN = '<svg class="mpf-warn-ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4L12 3.5Z"/><path d="M12 10v4.6M12 17.2v.2"/></svg>';
+var MP_ICON_DIAMOND = '<svg class="mpf-dia" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 22 12 12 22 2 12 12 2Z" fill="#2f8ff5"/><path d="M12 2 22 12H2L12 2Z" fill="#7cc0ff"/></svg>';
+function mpRoot(){
+  let el = $('mpFlow');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'mpFlow';
+    document.body.appendChild(el);
+  }
+  return el;
+}
+function mpLogoHtml(ch, cls){
+  if (ch && ch.logo) return '<img class="' + cls + '" alt="" src="' + esc(ch.logo) + '">';
+  const letter = esc(String((ch && ch.name) || '?').trim().charAt(0).toUpperCase());
+  return '<span class="' + cls + ' mpf-noimg" aria-hidden="true">' + letter + '</span>';
+}
+function mpToast(msg){
+  let el = $('mpToast');
+  if (!el) { el = document.createElement('div'); el.id = 'mpToast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+  el.textContent = String(msg == null ? '' : msg);
+  el.classList.add('show');
+  clearTimeout(_mp.toastT);
+  _mp.toastT = setTimeout(() => el.classList.remove('show'), 1800);
+}
+function mpStopTimer(){ if (_mp.timer) { clearInterval(_mp.timer); _mp.timer = 0; } }
+function mpCloseRoot(){
+  mpStopTimer();
+  const el = $('mpFlow');
+  if (el) { el.classList.remove('show'); el.innerHTML = ''; }
+  document.body.classList.remove('mp-open');
+  _mp.stage = ''; _mp.order = null;
+  mpForget();
+}
+// Closes the pages and unwinds the history entries this flow pushed.
+window.mpClose = function(){
+  const n = _mp.pushed; _mp.pushed = 0;
+  mpCloseRoot();
+  if (n > 0) { _mp.ignorePop = true; try { history.go(-n); } catch(_){} setTimeout(() => { _mp.ignorePop = false; }, 400); }
+};
+window.addEventListener('popstate', () => {
+  if (_mp.ignorePop || !_mp.stage) return;
+  if (_mp.stage === 'pay') { _mp.pushed = Math.max(0, _mp.pushed - 1); mpShowChoose(); return; }
+  _mp.pushed = 0; mpCloseRoot();
+});
+function mpShowLoading(){
+  _mp.stage = 'load';
+  const el = mpRoot();
+  el.className = 'show dark';
+  el.innerHTML = '<div class="mpf-load"><svg class="mpf-ring" width="36" height="36" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" fill="none" stroke="#1870f8" stroke-width="4" stroke-dasharray="39.3 55" transform="rotate(30 18 18)"/></svg><div class="mpf-loadtxt">loading...</div></div>';
+  document.body.classList.add('mp-open');
+}
+function mpShowChoose(){
+  _mpStageSet('choose');
+  const el = mpRoot();
+  el.className = 'show';
+  const rows = _mp.channels.map((c, i) => '<button type="button" class="mpf-row" onclick="mpPick(' + i + ')">' + mpLogoHtml(c, 'mpf-logo') +
+    '<span class="mpf-rname" data-no-i18n>' + esc(c.name) + '</span><svg class="mpf-chev" width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="#bbb" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5 7.5 7.5l-6 6"/></svg></button>').join('');
+  el.innerHTML = '<div class="mpf-choose">' +
+    '<div class="mpf-ohead"><span class="mpf-olab">Order Amount</span><span class="mpf-oval" data-no-i18n>' + esc(mpMoney(_mp.amount)) + '</span></div>' +
+    '<div class="mpf-pick">Please choose payment</div>' +
+    '<div class="mpf-rows">' + rows + '</div>' +
+    '<div class="mpf-remind">' + MP_ICON_WARN + '<span>Friendly reminder: Please use the corresponding bank to complete the transfer.</span><span>Please do not use interbank transfers from other banks to avoid delays and inconvenience.</span><span>Thank you for your understanding!</span></div>' +
+    '</div>';
+  document.body.classList.add('mp-open');
+  mpSave();
+}
+function _mpStageSet(st){ _mp.stage = st; if (st !== 'pay') mpStopTimer(); }
+window.mpPick = async function(i){
+  if (_mp.busy) return;
+  const ch = _mp.channels[i];
+  if (!ch) return;
+  _mp.busy = true;
+  mpShowLoading();
+  let r;
+  // every pick (also switching to another address) is a NEW order with a fresh 30 minute clock
+  try { r = await post('/deposit/manual/order', { amount: _mp.amount, channelId: ch.id }); }
+  finally { _mp.busy = false; }
+  if (!_mp.stage) return;
+  if (!r || r.stale) { mpShowChoose(); return; }
+  if (r.status !== 'success') { mpShowChoose(); return mpToast(r.message || 'Could not start recharge'); }
+  _mp.order = r;
+  history.pushState({ mp: 'pay' }, '', ''); _mp.pushed++;
+  mpShowPay();
+};
+function mpShowPay(){
+  const o = _mp.order; if (!o) return mpShowChoose();
+  const ch = o.channel || {};
+  _mpStageSet('pay');
+  const el = mpRoot();
+  el.className = 'show dark';
+  const isWallet = ch.kind === 'wallet';
+  const ph = isWallet
+    ? 'Dear AMIR You have transferred ETB 5.00 to MASFIN FTINAFU (2510****3268) on 01/02/2026 13:07:25. Your transaction number is DA39J9GAMN. The service fee is ETB 0.87 and 15% VAT on the service fee is ETB 0.13. Your current E-Money Account balance is ETB 1300.22. To download your payment information please click this link: https://transactioninfo.ethiotelecom.et/receipt/DA39J9GAMN.'
+    : 'https://mbreciept.cbe.com.et/v2-hfHCxFT8tBhc0zxe95aa\n\nhttps://apps.cbe.com.et:100/?id=FT25512S26V825101122';
+  const phHead = isWallet ? '' : 'Paste the confirmation message here, or enter the code (FT or v2-):\n\n';
+  el.innerHTML = '<div class="mpf-pay">' +
+    '<div class="mpf-head">' + mpLogoHtml(ch, 'mpf-hlogo') + '<div class="mpf-clock"><span>Order Remaining</span><b id="mpM1"></b><b id="mpM2"></b><span>Min</span><b id="mpS1"></b><b id="mpS2"></b><span>Sec</span></div></div>' +
+    '<div class="mpf-card">' +
+      '<div class="mpf-step"><b>Step 1</b><span>Copy account for payment</span></div>' +
+      '<div class="mpf-box">' +
+        '<div class="mpf-amt"><span class="mpf-l1">Order Amount</span><b data-no-i18n>' + esc(mpMoney(o.amount)) + '</b></div>' +
+        '<div class="mpf-k">Payment Channel</div>' +
+        '<div class="mpf-v"><b data-no-i18n>' + esc(ch.name) + '</b><button type="button" class="mpf-pill" onclick="mpSwitch()">switch</button></div>' +
+        '<div class="mpf-k">Account Name</div>' +
+        '<div class="mpf-v"><b data-no-i18n>' + esc(o.accountName) + '</b><button type="button" class="mpf-pill" onclick="mpCopy(\'name\')">copy</button></div>' +
+        '<div class="mpf-k">Account Number</div>' +
+        '<div class="mpf-v"><b data-no-i18n>' + esc(o.accountNumber) + '</b><button type="button" class="mpf-pill" onclick="mpCopy(\'number\')">copy</button></div>' +
+      '</div>' +
+      '<div class="mpf-help"><p>After the transfer is complete → check the SMS. The code starts with: "v2-" or "FT"</p>' +
+        '<p>' + MP_ICON_DIAMOND + '<span>v2-hf = enter the 23-character code</span></p>' +
+        '<p>' + MP_ICON_DIAMOND + '<span>FT = enter the 12-character code</span></p>' +
+        '<p>' + MP_ICON_DIAMOND + '<span>Telebirr = 10 characters only</span></p></div>' +
+      '<div class="mpf-step2"><b>Step 2</b><span>Paste payment SMS or enter v2- or FT</span></div>' +
+      '<textarea id="mpSms" class="mpf-ta" data-no-i18n rows="6" maxlength="2000" spellcheck="false" autocomplete="off" oninput="mpSaveSms(this.value)" placeholder="' + esc(phHead + ph) + '"></textarea>' +
+      '<button type="button" class="mpf-submit" id="mpSubmit" onclick="mpSubmit()">Submit</button>' +
+      '<div class="mpf-note">' + MP_ICON_WARN + '<span>Do not save the account number! It changes in real time. Otherwise the transfer will fail.</span></div>' +
+    '</div></div>';
+  document.body.classList.add('mp-open');
+  mpTick();
+  mpStopTimer(); _mp.timer = setInterval(mpTick, 1000);
+  mpSave();
+}
+function mpTick(){
+  const o = _mp.order; if (!o || _mp.stage !== 'pay') return mpStopTimer();
+  const left = Math.max(0, Math.floor((Number(o.expiresAt) - Date.now()) / 1000));
+  const m = Math.floor(left / 60), sec = left % 60;
+  const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+  set('mpM1', String(Math.floor(m / 10))); set('mpM2', String(m % 10));
+  set('mpS1', String(Math.floor(sec / 10))); set('mpS2', String(sec % 10));
+  if (left <= 0) { mpStopTimer(); mpToast('This order has expired. Please start again.'); setTimeout(() => window.mpClose(), 900); }
+}
+window.mpSwitch = function(){ if (_mp.pushed > 0) history.back(); else mpShowChoose(); };
+window.mpCopy = async function(what){
+  const o = _mp.order; if (!o) return;
+  const text = what === 'name' ? o.accountName : o.accountNumber;
+  let ok = false;
+  try { await navigator.clipboard.writeText(String(text)); ok = true; } catch (_) {
+    try {
+      const ta = document.createElement('textarea'); ta.value = String(text); ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+      document.body.appendChild(ta); ta.select(); ok = document.execCommand('copy'); ta.remove();
+    } catch (_e) {}
+  }
+  mpToast(ok ? (what === 'name' ? 'Name Copied' : 'Copied.') : 'Could not copy');
+};
+window.mpSubmit = async function(){
+  const o = _mp.order, ta = $('mpSms'), btn = $('mpSubmit');
+  if (!o || !ta || !btn || btn.disabled) return;
+  const sms = ta.value.trim();
+  if (!sms) return mpToast('please enter the correct transfer sms');
+  btn.disabled = true; btn.classList.add('busy');
+  let r;
+  try { r = await post('/deposit/manual/submit', { depositId: o.depositId, sms }); }
+  finally { if ($('mpSubmit') === btn) { btn.disabled = false; btn.classList.remove('busy'); } }
+  if (!r || r.stale) return;
+  if (r.status !== 'success') return mpToast(r.message || 'Could not submit your recharge. Please try again.');
+  refreshTransactionsCache().catch(() => {});
+  window.mpClose();
+  try { if (_openSheetTitle === 'Deposit') closeSheet({ fromAction: true }); } catch (_) {}
+  notify(r.message || 'Submitted. Our team is checking your payment.');
+};
+window.openManualPayFlow = async function(amount){
+  _mp.amount = Number(amount) || 0; _mp.order = null; _mp.channels = [];
+  history.pushState({ mp: 'choose' }, '', ''); _mp.pushed = 1;
+  mpShowLoading();
+  const t0 = Date.now();
+  const r = await api('/public/pay-channels');
+  // The ring is shown for a beat even when the answer is instant, so the page does not flash.
+  const wait = 450 - (Date.now() - t0); if (wait > 0) await new Promise(res => setTimeout(res, wait));
+  if (_mp.stage !== 'load') return;
+  if (!r || r.status !== 'success' || !Array.isArray(r.channels) || !r.channels.length) {
+    window.mpClose();
+    return notify('Recharges are not available right now.');
+  }
+  _mp.channels = r.channels;
+  mpShowChoose();
+};
+var _mpResuming = false;
+window.resumeManualPay = async function(){
+  if (_mpResuming || _mp.stage) return;
+  let st = null; try { st = JSON.parse(localStorage.getItem(MP_RESUME_KEY) || 'null'); } catch (_) {}
+  if (!st || !(Number(st.amount) > 0)) return;
+  const me = STATE.user && STATE.user.uid || '';
+  const live = st.stage !== 'pay' || Number(st.exp) > Date.now() + 5000;
+  if ((st.u || '') !== me || !live || Date.now() - Number(st.at || 0) > 40 * 60 * 1000) return mpForget();   // another member's pages are never shown
+  if ((STATE.settings || {}).manualPay !== true) return;
+  _mpResuming = true;
+  try {
+    _mp.amount = Number(st.amount) || 0; _mp.order = null; _mp.channels = [];
+    history.pushState({ mp: 'choose' }, '', ''); _mp.pushed = 1;
+    mpShowLoading();
+    const t0 = Date.now();
+    const r = await api('/public/pay-channels');
+    const wait = 450 - (Date.now() - t0); if (wait > 0) await new Promise(res => setTimeout(res, wait));
+    if (_mp.stage !== 'load') return;
+    if (!r || r.status !== 'success' || !Array.isArray(r.channels) || !r.channels.length) { window.mpClose(); return; }
+    _mp.channels = r.channels;
+    const ch = st.stage === 'pay' && st.depositId ? r.channels.find(c => c.id === st.chId) : null;
+    if (ch) {
+      // The same order again (resume: the server hands back only the member's still-open order and its clock), so the 30 minutes carry on where they were.
+      const o = await post('/deposit/manual/order', { amount: _mp.amount, channelId: ch.id, depositId: st.depositId, resume: true });
+      if (_mp.stage !== 'load') return;
+      if (o && o.status === 'success') {
+        _mp.order = o;
+        history.pushState({ mp: 'pay' }, '', ''); _mp.pushed++;
+        mpShowPay();
+        const ta = $('mpSms'); if (ta && st.sms) ta.value = String(st.sms);
+        return;
+      }
+    }
+    mpShowChoose();
+  } finally { _mpResuming = false; }
+};
 window.submitDeposit = async function(){
   const submitBtn = $('depSubmitBtn');
   if (!submitBtn || submitBtn.disabled || !$('depAmount')) return;
@@ -5643,6 +5877,14 @@ window.submitDeposit = async function(){
   // The minimum is checked here first so a short amount fails at once; the server checks it again.
   const s = STATE.settings || {};
   if (amount < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
+  // Manual recharge (the bank / Telebirr numbers the owner added in the admin panel): the amount goes straight to the payment pages.
+  if (s.manualPay === true) return openManualPayFlow(amount);
+  return notify('Recharge is not available right now.');
+};
+window.submitDepositGateway = async function(){
+  const submitBtn = $('depSubmitBtn');
+  const amount = parseMoneyInput($('depAmount').value);
+  const s = STATE.settings || {};
   const picked = document.querySelector('#depPays button.on'), method = picked ? picked.dataset.m : '';
   // Pay makes an ORDER on the server (the amount is fixed there) and the member goes on to the payment page, /payment/<order number>. The button
   // turns grey with "Loading" and the loading box shows until the server has made it.

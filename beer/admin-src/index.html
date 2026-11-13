@@ -378,6 +378,7 @@ window.createBeerIdleSession = function(key, onExpire, onActivity){
         <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="settings" id="settingsTab">Settings</button>
         <button class="tab" data-tab="banners" id="bannersTab">Banners</button>
+        <button class="tab hidden" data-tab="paynumbers" id="payNumbersTab">Payment Numbers</button>
         <button class="tab hidden" data-tab="admins" id="adminsTab">Admins</button>
         <button class="tab hidden" data-tab="auditlog" id="auditLogTab">Activity Log</button>
       </div>
@@ -459,11 +460,11 @@ function btnBusyHtml(text){ return '<span class="verify-spin" style="margin-righ
 // The second argument is a REGION KEY, for rows that carry one (deposits,
 // withdrawals, members). Left off, it labels in the currency of whichever
 // region the panel is currently editing -- which for a single-region
-// platform is Uganda, exactly as before.
+// platform is Ethiopia, exactly as before.
 function ugx(n, regionKey){
   const v = Number(n)||0;
   const hasCents = Math.round(v*100)%100 !== 0;
-  return curOf(regionKey) + ' ' + v.toLocaleString('en-UG', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
+  return curOf(regionKey) + ' ' + v.toLocaleString('en-US', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
 }
 // Mirrors server.js's own normalizeProviderValue() -- 'automatic' is a
 // legacy literal a value could still be if this database predates the
@@ -641,8 +642,8 @@ function fileToSquarePng(file, size){
 let _toastT=null;
 function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('div'); t.id='adToast'; document.body.appendChild(t);} t.className='toast'+(kind?' '+kind:''); t.textContent=msg; clearTimeout(_toastT); _toastT=setTimeout(()=>t.remove(),3000); }
 
-// All amounts in this panel are Ugandan shillings.
-const ADMIN_REGIONS = [{ key: 'ug', name: 'Uganda', currency: 'UGX' }];
+// All amounts in this panel are Ethiopian birr.
+const ADMIN_REGIONS = [{ key: 'et', name: 'Ethiopia', currency: 'ETB' }];
 const ADMIN_REGION = 'ug';
 function regionByKeyAdmin(){ return ADMIN_REGIONS[0]; }
 function adminOneRegion(){ return 'ug'; }
@@ -654,8 +655,147 @@ const ADMIN_LANGS = [
   { code:'rw', name:'Kinyarwanda', native:'Ikinyarwanda' },
   { code:'nyn', name:'Runyankole', native:'Runyankore' },
 ];
-function curOf(){ return 'UGX'; }
-function adminCur(){ return 'UGX'; }
+function curOf(){ return 'Br'; }
+function adminCur(){ return 'Br'; }
+// ── ICON CUT-OUT ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// The owner uploads an icon on whatever background it came with (flat colour, a soft gradient, a photo-style backdrop) and the panel takes
+// the background away and crops the picture tight to what is left, so the app can place and animate it with no box around it.
+//   1. A picture that already has real transparency is only cropped.
+//   2. Otherwise the background is found from the picture's own border: a flood fill starts at every border pixel that looks like the border's
+//      typical colour and spreads to a neighbour only while that neighbour stays close to the pixel it came from (a gradient is followed, an
+//      icon edge stops it) and not too far from the colour it started with.
+//   3. The edge is softened: each pixel next to the removed area gets an alpha from how far it is from the background colour, and its colour is
+//      pulled away from the background (so no white halo is left around the icon).
+//   4. The result is cropped to the pixels that remain, exactly (no margin), because the app's motion is measured against this box.
+// Pure function over RGBA bytes (no canvas), so it is tested directly in test-icon-cutout.js.
+function potatoCutout(src, w, h){
+  const N=w*h, data=new Uint8ClampedArray(src);
+  let clear=0; for(let i=3;i<data.length;i+=4) if(data[i]<250) clear++;
+  const hasAlpha = clear > N*0.02;
+  const A=new Uint8ClampedArray(N);               // final alpha
+  if(hasAlpha){
+    for(let i=0;i<N;i++) A[i]=data[i*4+3];
+  } else {
+    // border colour = per-channel median of the outer ring (2 px)
+    const ring=[]; const ringW=Math.min(2,Math.floor(Math.min(w,h)/4)||1);
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){ if(x<ringW||y<ringW||x>=w-ringW||y>=h-ringW) ring.push((y*w+x)*4); }
+    const med=c=>{ const v=ring.map(o=>data[o+c]).sort((a,b)=>a-b); return v[v.length>>1]; };
+    const bg=[med(0),med(1),med(2)];
+    const dist=(o,r,g,b)=>Math.sqrt((data[o]-r)**2+(data[o+1]-g)**2+(data[o+2]-b)**2);
+    // how mixed the border is decides how forgiving the fill is
+    let sum=0; for(const o of ring) sum+=dist(o,bg[0],bg[1],bg[2]);
+    const spread=sum/ring.length;
+    const STEP=10+Math.min(14,spread*0.6);          // largest jump between neighbours the fill follows
+    const FAR=34+Math.min(60,spread*2.2);           // largest distance from the border colour the fill goes to
+    const removed=new Uint8Array(N); const queue=new Int32Array(N); let qh=0, qt=0;
+    const push=(idx)=>{ if(!removed[idx]){ removed[idx]=1; queue[qt++]=idx; } };
+    for(const o of ring){ const idx=o/4; if(dist(o,bg[0],bg[1],bg[2])<=FAR*0.8) push(idx); }
+    while(qh<qt){
+      const idx=queue[qh++], x=idx%w, y=(idx/w)|0, o=idx*4;
+      const nb=[x>0?idx-1:-1, x<w-1?idx+1:-1, y>0?idx-w:-1, y<h-1?idx+w:-1];
+      for(const n of nb){
+        if(n<0||removed[n]) continue; const no=n*4;
+        const step=Math.sqrt((data[no]-data[o])**2+(data[no+1]-data[o+1])**2+(data[no+2]-data[o+2])**2);
+        if(step<=STEP && dist(no,bg[0],bg[1],bg[2])<=FAR) push(n);
+      }
+    }
+    // alpha: kept pixels 255, removed 0. Kept pixels within 2 px of the removed area are the antialiased rim: each is a mix of the icon's colour
+    // and the background, so its alpha is how much of the way it is from the background colour to the nearby solid icon colour, and its colour
+    // becomes that solid colour (this is what leaves no white halo).
+    for(let i=0;i<N;i++) A[i]=removed[i]?0:255;
+    const soft=new Uint8ClampedArray(A);
+    const near=new Uint8Array(N);                     // 1 = kept pixel within 2 px of the removed area
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const idx=y*w+x; if(removed[idx]) continue;
+      let t=false;
+      for(let dy=-2;dy<=2&&!t;dy++) for(let dx=-2;dx<=2;dx++){ const xx=x+dx, yy=y+dy; if(xx<0||yy<0||xx>=w||yy>=h) continue; if(removed[yy*w+xx]){ t=true; break; } }
+      if(t) near[idx]=1;
+    }
+    const fgOf=(x,y)=>{                               // mean colour of the solid (not rim) kept pixels around (x,y)
+      for(let rad=3;rad<=6;rad+=3){
+        let r=0,g=0,b=0,c=0;
+        for(let dy=-rad;dy<=rad;dy++) for(let dx=-rad;dx<=rad;dx++){ const xx=x+dx, yy=y+dy; if(xx<0||yy<0||xx>=w||yy>=h) continue; const k=yy*w+xx; if(removed[k]||near[k]) continue; r+=data[k*4]; g+=data[k*4+1]; b+=data[k*4+2]; c++; }
+        if(c) return [r/c,g/c,b/c];
+      }
+      return null;
+    };
+    const snap=new Uint8ClampedArray(data);           // read the untouched colours while writing the cleaned ones
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const idx=y*w+x; if(!near[idx]) continue;
+      const o=idx*4, fg=fgOf(x,y);
+      if(!fg){ continue; }
+      const vx=fg[0]-bg[0], vy=fg[1]-bg[1], vz=fg[2]-bg[2], len2=vx*vx+vy*vy+vz*vz;
+      if(len2<64) continue;                           // icon colour too close to the background to tell a rim from the icon
+      let a=((snap[o]-bg[0])*vx+(snap[o+1]-bg[1])*vy+(snap[o+2]-bg[2])*vz)/len2;
+      a=Math.max(0,Math.min(1,a));
+      if(a<0.04){ soft[idx]=0; continue; }
+      soft[idx]=Math.round(a*255);
+      data[o]=Math.round(fg[0]); data[o+1]=Math.round(fg[1]); data[o+2]=Math.round(fg[2]);
+    }
+    A.set(soft);
+    // any stray specks left behind (a few pixels that are neither background nor part of the icon) are dropped: keep only the largest piece
+    const seen=new Uint8Array(N); let bestSize=0, bestIdx=-1;
+    const stack=new Int32Array(N);
+    for(let i=0;i<N;i++){
+      if(A[i]<=8||seen[i]) continue; let sp=0, size=0; stack[sp++]=i; seen[i]=1;
+      while(sp){ const idx=stack[--sp]; size++; const x=idx%w, y=(idx/w)|0;
+        for(const n of [x>0?idx-1:-1, x<w-1?idx+1:-1, y>0?idx-w:-1, y<h-1?idx+w:-1]){ if(n>=0&&!seen[n]&&A[n]>8){ seen[n]=1; stack[sp++]=n; } } }
+      if(size>bestSize){ bestSize=size; bestIdx=i; }
+    }
+    if(bestIdx>=0){
+      // pieces are kept when they are a real part of the picture (at least 2% of the biggest piece), so an icon made of several parts survives
+      const keep=new Uint8Array(N); const sizes=[]; const seen2=new Uint8Array(N);
+      for(let i=0;i<N;i++){
+        if(A[i]<=8||seen2[i]) continue; const members=[]; let sp=0; stack[sp++]=i; seen2[i]=1;
+        while(sp){ const idx=stack[--sp]; members.push(idx); const x=idx%w, y=(idx/w)|0;
+          for(const n of [x>0?idx-1:-1, x<w-1?idx+1:-1, y>0?idx-w:-1, y<h-1?idx+w:-1]){ if(n>=0&&!seen2[n]&&A[n]>8){ seen2[n]=1; stack[sp++]=n; } } }
+        sizes.push(members);
+      }
+      for(const m of sizes) if(m.length>=bestSize*0.02) for(const idx of m) keep[idx]=1;
+      for(let i=0;i<N;i++) if(!keep[i]) A[i]=0;
+    }
+  }
+  // crop exactly to what is visible
+  let x0=w, y0=h, x1=-1, y1=-1;
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ if(A[y*w+x]>8){ if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; } }
+  if(x1<0) return { data:new Uint8ClampedArray(4), w:1, h:1, empty:true };
+  const cw=x1-x0+1, ch=y1-y0+1, out=new Uint8ClampedArray(cw*ch*4);
+  for(let y=0;y<ch;y++) for(let x=0;x<cw;x++){
+    const si=(y+y0)*w+(x+x0), di=(y*cw+x)*4;
+    out[di]=data[si*4]; out[di+1]=data[si*4+1]; out[di+2]=data[si*4+2]; out[di+3]=A[si];
+  }
+  return { data:out, w:cw, h:ch, empty:false };
+}
+// An uploaded file -> a transparent, tightly cropped PNG data URL (longest side at most `maxDim`).
+function fileToCutoutPng(file, maxDim){
+  return new Promise((resolve,reject)=>{
+    if(!file) return reject(new Error('No file'));
+    if(!/^image\//.test(file.type||guessMimeFromName(file.name))) return reject(new Error('Please choose an image file'));
+    const fr=new FileReader();
+    fr.onerror=()=>reject(new Error('Could not read the file'));
+    fr.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('That image could not be loaded'));
+      img.onload=()=>{
+        const iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height;
+        if(!iw||!ih) return reject(new Error('That image could not be loaded'));
+        const s=Math.min(1, maxDim/Math.max(iw,ih));
+        const w=Math.max(1,Math.round(iw*s)), h=Math.max(1,Math.round(ih*s));
+        const c=document.createElement('canvas'); c.width=w; c.height=h;
+        const ctx=c.getContext('2d'); ctx.imageSmoothingQuality='high'; ctx.drawImage(img,0,0,w,h);
+        let id; try{ id=ctx.getImageData(0,0,w,h); }catch(e){ return reject(new Error('Could not process the image')); }
+        const r=potatoCutout(id.data,w,h);
+        if(r.empty) return reject(new Error('Nothing was left after removing the background. Try a picture whose background differs from the icon.'));
+        const o=document.createElement('canvas'); o.width=r.w; o.height=r.h;
+        o.getContext('2d').putImageData(new ImageData(r.data,r.w,r.h),0,0);
+        try{ resolve(o.toDataURL('image/png')); }catch(e){ reject(new Error('Could not process the image')); }
+      };
+      img.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
 var _adminPending = new Map();
 function api(path, body, method){
   if (body || (method && method !== 'GET')) return adminRequest(path, body, method);
@@ -727,13 +867,13 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
     if (wanted && VALID_TABS.has(wanted)) { lastTab = wanted; history.replaceState(null, '', location.pathname); }
   } catch (_) {}
   const isOwner = SESSION_ROLE === 'owner';
-  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'bannersTab']
+  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'bannersTab', 'payNumbersTab']
     .forEach(id => $(id).classList.toggle('hidden', !isOwner));
-  if (!isOwner && ['products', 'settings', 'banners', 'admins', 'auditlog'].includes(lastTab)) lastTab = 'dashboard';
+  if (!isOwner && ['products', 'settings', 'banners', 'paynumbers', 'admins', 'auditlog'].includes(lastTab)) lastTab = 'dashboard';
   // The country list is needed before anything renders: every money figure
   // in this panel is labelled from it (see ugx()/curOf()), and the region
   // picker on Settings and Products is built from it. Failure is silent and
-  // leaves Uganda standing, which is what a single-region platform is.
+  // leaves Ethiopia standing, which is what a single-region platform is.
   switchTab(lastTab);
   refreshBadges(); startLive();
   if (window._adminInstallPrompt) $('installBtn').classList.remove('hidden');
@@ -989,7 +1129,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('mess
 });
 
 // ── TABS ──
-const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','messages','transactions','referrals','settings','banners','admins','auditlog']);
+const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','messages','transactions','referrals','settings','banners','paynumbers','admins','auditlog']);
 let _tab='dashboard', _tabSequence=0;
 function staleTab(name){ return _tab !== name; }
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{ if (_tab !== t.dataset.tab) switchTab(t.dataset.tab); }));
@@ -1003,7 +1143,7 @@ function switchTab(name){
   const spinnerTimer = setTimeout(() => { if (sequence === _tabSequence) c.innerHTML=spinnerHtml(); }, 120);
   const fn = ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
      products:renderProducts, messages:renderMessages, transactions:renderTransactions,
-     referrals:renderReferrals, settings:renderSettings, banners:renderBanners, admins:renderAdmins, auditlog:renderAuditLog }[name]);
+     referrals:renderReferrals, settings:renderSettings, banners:renderBanners, paynumbers:renderPayNumbers, admins:renderAdmins, auditlog:renderAuditLog }[name]);
   // The switch lives in the topbar, OUTSIDE #content, so a tab render can
   // never take it with it -- which is why this no longer waits for the tab
   // to paint. Only the note under the tabs depends on which tab is open, and
@@ -1206,7 +1346,7 @@ function paintPesajetSummary(pj){
     return;
   }
   box.innerHTML = regions.map(b => `
-    ${regions.length>1?`<h3 class="sec" style="margin:10px 0 6px;font-size:14px">${esc('Uganda')}</h3>`:''}
+    ${regions.length>1?`<h3 class="sec" style="margin:10px 0 6px;font-size:14px">${esc('Ethiopia')}</h3>`:''}
     <div class="cards">
       <div class="stat"><div class="n">${ugx(b.collected, b.regionKey)}</div><div class="l">Collected</div></div>
       <div class="stat"><div class="n">${ugx(b.paidOut, b.regionKey)}</div><div class="l">Paid out</div></div>
@@ -1349,7 +1489,7 @@ async function renderAnalytics(silent){
     <div class="seg">${[7,30,90].map(d=>`<button class="${_anPeriod===d?'on':''}" data-per="${d}">${d} days</button>`).join('')}</div>
     <div class="panel-card">
       <div class="row" style="align-items:center;gap:12px;flex-wrap:wrap"><h2 class="sec" style="margin:0;flex:1">Transactions for a day</h2><label class="muted">Select day <input id="analytics-day" type="date" value="${esc(selected.day||a.today)}" style="padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text)"></label><button id="analytics-today" class="btn">Today</button></div>
-      <p class="muted" style="margin:8px 0 12px">Uganda time (EAT). Completed amounts use recorded credit or payout times; older records without these times use the request date. Open requests show what is still outstanding now from requests created on the selected date. Arrival times are unconfirmed.</p>
+      <p class="muted" style="margin:8px 0 12px">Ethiopia time (EAT). Completed amounts use recorded credit or payout times; older records without these times use the request date. Open requests show what is still outstanding now from requests created on the selected date. Arrival times are unconfirmed.</p>
       <div class="cards">
         <div class="stat"><div class="n" style="color:var(--ok)">${ugx(selected.depositsCompletedAmount)}</div><div class="l">Deposits credited (${selected.depositsCompletedCount||0})</div></div>
         <div class="stat"><div class="n" style="color:var(--danger)">${ugx(selected.withdrawalsCompletedAmount)}</div><div class="l">Withdrawals paid (${selected.withdrawalsCompletedCount||0})</div></div>
@@ -1358,7 +1498,7 @@ async function renderAnalytics(silent){
       </div>
     </div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Cashback schedule for ${esc(selected.day||a.today)}</h2>
-      <p class="muted">Saved purchase terms, paid every 24 hours from the purchase (a member's first purchase pays its first cashback at once; products bought before this rule are paid at midnight 00:00 Uganda time), with the same rounding as settlement. Scheduled cashback is credited to wallets; members decide when to withdraw. Future purchases and deposits are unknown.</p>
+      <p class="muted">Saved purchase terms, paid every 24 hours from the purchase (a member's first purchase pays its first cashback at once; products bought before this rule are paid at midnight 00:00 Ethiopia time), with the same rounding as settlement. Scheduled cashback is credited to wallets; members decide when to withdraw. Future purchases and deposits are unknown.</p>
       <div class="cards">
         <div class="stat"><div class="n">${ugx(schedule.scheduledAmount)}</div><div class="l">Contract cashback scheduled for this day</div></div>
         <div class="stat"><div class="n">${ugx(schedule.unpaidAmount)}</div><div class="l">This day's cashback still unpaid (eligible accounts)</div></div>
@@ -1651,7 +1791,7 @@ function makePdf(){
 }
 function pdfMoney(n){ return Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 function pdfDay(ms){ if (!ms) return '-'; const d = new Date(Number(ms) + 3 * 3600 * 1000); const p = x => String(x).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`; }
-function pdfStamp(){ const d = new Date(Date.now() + 3 * 3600 * 1000); const p = x => String(x).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} (Uganda time)`; }
+function pdfStamp(){ const d = new Date(Date.now() + 3 * 3600 * 1000); const p = x => String(x).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} (Ethiopia time)`; }
 function chainPdfBlob(r){
   const pdf = makePdf(), M = 36, W = pdf.W, H = pdf.H, BOT = H - 40;
   const INK = [0.1, 0.12, 0.2], MUTED = [0.45, 0.5, 0.6], BLUE = [0.09, 0.22, 0.72], LINE = [0.82, 0.85, 0.93], HEAD = [0.92, 0.94, 0.99], GOOD = [0.1, 0.55, 0.3], BAD = [0.8, 0.15, 0.2];
@@ -1698,9 +1838,9 @@ function chainPdfBlob(r){
   const colW = (W - 2 * M) / 4;
   [['Phone', u.phone || '-'], ['Referral code', u.referralCode || 'not set'], ['Status', String(u.status || 'active')], ['Joined', pdfDay(u.createdAt)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 30;
-  [['Referred by', u.referredByPhone || 'nobody (this is a root account)'], ['Wallet balance', 'UGX ' + pdfMoney(u.walletBalance)], ['Total deposited', 'UGX ' + pdfMoney(u.totalDeposited)], ['Total invested', 'UGX ' + pdfMoney(u.totalInvested)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
+  [['Referred by', u.referredByPhone || 'nobody (this is a root account)'], ['Wallet balance', 'Br ' + pdfMoney(u.walletBalance)], ['Total deposited', 'Br ' + pdfMoney(u.totalDeposited)], ['Total invested', 'Br ' + pdfMoney(u.totalInvested)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 30;
-  [['Total withdrawn', 'UGX ' + pdfMoney(u.totalWithdrawn)], ['Total earned (all sources)', 'UGX ' + pdfMoney(u.totalEarned)], ['Team members (all levels)', pdfMoney(downline.length) + (r.downlineTruncated ? '+' : '')], ["Team's recharges (L1-L3)", 'UGX ' + pdfMoney(r.teamDeposits)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
+  [['Total withdrawn', 'Br ' + pdfMoney(u.totalWithdrawn)], ['Total earned (all sources)', 'Br ' + pdfMoney(u.totalEarned)], ['Team members (all levels)', pdfMoney(downline.length) + (r.downlineTruncated ? '+' : '')], ["Team's recharges (L1-L3)", 'Br ' + pdfMoney(r.teamDeposits)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 34;
   if (r.cycleDetected || r.downlineCycleDetected) { pdf.text(M, y, 'Warning: a cycle was found in the referral data; the walk stopped early.', 9, true, 'l', BAD); y += 16; }
   // 2. Team by level
@@ -1709,7 +1849,7 @@ function chainPdfBlob(r){
   const lvRows = levels.map(agg);
   if (lvRows.length) {
     const tot = { _bold: true, _lv: 'Total', n: downline.length, banned: lvRows.reduce((s, x) => s + x.banned, 0), dep: lvRows.reduce((s, x) => s + x.dep, 0), inv: lvRows.reduce((s, x) => s + x.inv, 0), wd: lvRows.reduce((s, x) => s + x.wd, 0), earn: lvRows.reduce((s, x) => s + x.earn, 0), payers: lvRows.reduce((s, x) => s + x.payers, 0) };
-    heading('2. Team by level', 'figures are the members\' own lifetime totals, in UGX');
+    heading('2. Team by level', 'figures are the members\' own lifetime totals, in Br');
     table([
       { h: 'Level', w: 70, k: x => x._lv === 'Total' ? 'Total' : 'Level ' + x._lv }, { h: 'Members', w: 70, r: 1, k: x => pdfMoney(x.n) }, { h: 'Have deposited', w: 90, r: 1, k: x => pdfMoney(x.payers) },
       { h: 'Banned', w: 60, r: 1, k: x => pdfMoney(x.banned) }, { h: 'Deposited', w: 105, r: 1, k: x => pdfMoney(x.dep) }, { h: 'Invested', w: 105, r: 1, k: x => pdfMoney(x.inv) },
@@ -1719,7 +1859,7 @@ function chainPdfBlob(r){
   // 3. Commission
   if (r.commission) {
     heading('3. Commission this member earned from the team', `${pdfMoney(r.commission.count)} commission payment${r.commission.count === 1 ? '' : 's'}`);
-    table([{ h: 'Level 1', w: 100, r: 1, k: x => pdfMoney(x.l1) }, { h: 'Level 2', w: 100, r: 1, k: x => pdfMoney(x.l2) }, { h: 'Level 3', w: 100, r: 1, k: x => pdfMoney(x.l3) }, { h: 'Total (UGX)', w: 120, r: 1, k: x => pdfMoney(x.total) }], [r.commission], { zebra: false });
+    table([{ h: 'Level 1', w: 100, r: 1, k: x => pdfMoney(x.l1) }, { h: 'Level 2', w: 100, r: 1, k: x => pdfMoney(x.l2) }, { h: 'Level 3', w: 100, r: 1, k: x => pdfMoney(x.l3) }, { h: 'Total (Br)', w: 120, r: 1, k: x => pdfMoney(x.total) }], [r.commission], { zebra: false });
   }
   // 4. Upline
   heading('4. Upline (direct referrer to root)', `${(r.upline || []).length} link${(r.upline || []).length === 1 ? '' : 's'}`);
@@ -1744,7 +1884,7 @@ function chainPdfBlob(r){
     need(60);
     pdf.rect(M, y - 2, W - 2 * M, 17, [0.85, 0.9, 1]);
     pdf.text(M + 6, y + 1.5, `Level ${lv}  -  ${pdfMoney(rows.length)} member${rows.length === 1 ? '' : 's'}`, 9.5, true, 'l', BLUE);
-    pdf.text(W - M - 6, y + 2, `deposited ${pdfMoney(a.dep)}   invested ${pdfMoney(a.inv)}   (UGX)`, 8.5, false, 'r', INK);
+    pdf.text(W - M - 6, y + 2, `deposited ${pdfMoney(a.dep)}   invested ${pdfMoney(a.inv)}   (Br)`, 8.5, false, 'r', INK);
     y += 21;
     table(dcols, rows);
   });
@@ -2077,14 +2217,13 @@ async function renderDeposits(){
     <tbody>${dRows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
-      <button class="btn sm ghost" id="depSync">Sync payments</button></div>
-    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time — through the automatic gateway (MarzPay or PesaJet). A stuck deposit can be force-credited once you've verified the money landed.</p>
+      </div>
+    <p class="muted" style="margin:0 0 12px">Every recharge order, all time. Approve a recharge (Force-credit) only after you have seen the money land in your bank or Telebirr.</p>
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_deps.length+' recharges only. The platform has more history than this list can currently display.</div>':''}
     ${depProcChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}</button>`).join('')}</div>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Paid from</th><th>Method</th><th>Amount</th><th>Ref</th><th>Status</th><th></th></tr></thead><tbody id="depRows"></tbody></table></div>`;
-  $('depSync').addEventListener('click', ()=>syncMarzPay($('depSync'), renderDeposits));
   $('depSearch').addEventListener('input', drawDeps);
   document.querySelectorAll('[data-df]').forEach(b=>b.addEventListener('click',()=>{ _depFilter=b.dataset.df; drawDeps(); document.querySelectorAll('[data-df]').forEach(x=>x.classList.toggle('active',x.dataset.df===_depFilter)); }));
   drawDeps();
@@ -2428,7 +2567,7 @@ function editProduct(p, order, cat){
     ${task?'':`    <div class="switch-row"><span><b>Upcoming</b> <span class="muted">(shown, but not buyable — no clock)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="pSoon" ${p.comingSoon?'checked':''} style="width:auto"></label></div>
     <div class="muted" style="margin:14px 0 6px"><b>Opening schedule</b> — leave blank for always open.
-      Upcoming above overrides both. Times are Uganda time.</div>
+      Upcoming above overrides both. Times are Ethiopia time.</div>
     <label>Opens at (one-off) — shows a countdown until then, open for good after</label>
     <input id="pOpenAt" type="datetime-local" value="${p.openAt?new Date(Number(p.openAt)+3*3600000).toISOString().slice(0,16):''}">
     <div class="row2">
@@ -2506,9 +2645,9 @@ function editProduct(p, order, cat){
       category: task?'wage':'income',
       image, active:$('pActive').checked, comingSoon:$('pSoon').checked,
       // datetime-local has no zone, so the browser reads it as local time --
-      // which for the owner IS Uganda time. Sent as epoch ms so the server
+      // which for the owner IS Ethiopia time. Sent as epoch ms so the server
       // never has to guess a zone.
-      openAt: $('pOpenAt').value ? Date.parse($('pOpenAt').value+':00+03:00') : '',   // the box says Uganda time (UTC+3), whatever this browser's own zone is
+      openAt: $('pOpenAt').value ? Date.parse($('pOpenAt').value+':00+03:00') : '',   // the box says Ethiopia time (UTC+3), whatever this browser's own zone is
       openFrom: $('pOpenFrom').value, openTo: $('pOpenTo').value };
     // A deliberate rename (the admin actually changed the Key box) -- tells
     // the server to move the document, not create a second one alongside
@@ -2561,7 +2700,7 @@ async function renderMessages(){
       <div class="panel-card" style="margin-bottom:10px">
         <div style="font-weight:700">${esc(m.title||'')}</div>
         <div class="muted" style="font-size:11.5px;margin:2px 0 6px">${esc(m.id)} &middot; ${esc(m.date||'')} ${esc(m.time||'')}${ADMIN_REGIONS.length>1
-          ? ' &middot; ' + (!m.regionKey || m.regionKey==='all' ? 'every country' : esc('Uganda'))
+          ? ' &middot; ' + (!m.regionKey || m.regionKey==='all' ? 'every country' : esc('Ethiopia'))
           : ''}</div>
         <div style="font-size:13px;white-space:pre-line">${esc(m.body||'')}</div>
         <div style="margin-top:10px;display:flex;gap:8px">
@@ -2841,6 +2980,106 @@ function applyAdminBrandName(name){
 // sharing renderSettings()'s, same self-contained pattern every other tab
 // already uses -- one extra round of these 4 small fetches on switching
 // tabs, in exchange for not threading one function's closure across two.
+let _payRows = [], _payEdit = null, _payLogo = undefined;
+async function renderPayNumbers(){
+  const r = await api('/admin/pay-channels/list', {});
+  if (staleTab('paynumbers')) return;
+  _payRows = (r && r.channels) || [];
+  _payEdit = null; _payLogo = undefined;
+  drawPayNumbers();
+}
+function payLogoBox(src, size){
+  size = size || 44;
+  return src
+    ? `<div style="width:${size}px;height:${size}px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;border:1px solid var(--line);background:#fff"><img src="${esc(src)}" alt="" style="max-width:76%;max-height:76%;object-fit:contain"></div>`
+    : `<div style="width:${size}px;height:${size}px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;border:1px dashed var(--line);color:var(--muted,#888);font-size:11px">No logo</div>`;
+}
+function drawPayNumbers(){
+  const e = _payEdit;
+  const logoNow = e ? (_payLogo === undefined ? (e.logo || '') : _payLogo) : '';
+  const form = e ? `
+    <div class="panel-card">
+      <h3 style="margin:0 0 10px;font-size:15px">${e.id ? 'Edit payment number' : 'Add payment number'}</h3>
+      <div class="row">
+        <div><label>Name members see</label><input id="pcName" maxlength="60" value="${esc(e.name || '')}" placeholder="Commercial Bank of Ethiopia"></div>
+        <div><label>Type</label><select id="pcKind"><option value="bank"${e.kind !== 'wallet' ? ' selected' : ''}>Bank</option><option value="wallet"${e.kind === 'wallet' ? ' selected' : ''}>Wallet (Telebirr)</option></select></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div><label>Account name</label><input id="pcAccName" maxlength="80" value="${esc(e.accountName || '')}" placeholder="Ashenafi"></div>
+        <div><label>Account number</label><input id="pcAccNo" maxlength="40" value="${esc(e.accountNumber || '')}" placeholder="1000809418239"></div>
+      </div>
+      <div class="banner-row" style="margin-top:10px">
+        ${payLogoBox(logoNow, 52)}
+        <div style="flex:1;min-width:0;font-size:12px">${logoNow ? 'Logo ready (background removed)' : '<span class="muted">No logo yet</span>'}</div>
+        ${logoNow ? '<button class="btn danger sm" id="pcLogoClear" type="button">Remove logo</button>' : ''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload logo<input type="file" id="pcLogoFile" accept="image/*" hidden></label>
+      <p class="muted" style="margin:6px 0 0;font-size:12px">Upload the logo as it is. The system clears the background around it and crops it so it fits the round frame.</p>
+      <div class="row" style="margin-top:10px;align-items:end">
+        <div><label>Order (smaller first)</label><input id="pcOrder" type="number" min="0" max="999" value="${esc(e.order != null ? e.order : _payRows.length)}"></div>
+        <div><label style="display:flex;align-items:center;gap:8px;margin-top:22px"><input id="pcActive" type="checkbox" style="width:auto"${e.active === false ? '' : ' checked'}> Show to members</label></div>
+      </div>
+      <div class="row" style="margin-top:14px"><button class="btn block" id="pcSave" type="button">Save</button><button class="btn ghost block" id="pcCancel" type="button">Cancel</button></div>
+    </div>` : '';
+  $('content').innerHTML = `
+    <h2 class="sec">Payment numbers</h2>
+    <p class="muted" style="margin:0 0 12px">These are the accounts members pay into on the recharge page (a bank account, a Telebirr wallet and so on). Each one appears as a row under &ldquo;Please choose payment&rdquo; with its logo. A member who taps <b>switch</b> goes back to this list.</p>
+    ${form}
+    ${e ? '' : '<button class="btn block" id="pcAdd" type="button" style="margin-bottom:14px">Add payment number</button>'}
+    <div class="panel-card">
+      ${_payRows.length ? _payRows.map(c => `
+        <div class="banner-row" data-pcid="${esc(c.id)}">
+          ${payLogoBox(c.logo, 44)}
+          <div style="flex:1;min-width:0;font-size:13px">
+            <b data-no-i18n>${esc(c.name)}</b> <span class="pill-tag ${c.active === false ? 't-bad' : 't-ok'}" style="font-size:10px">${c.active === false ? 'Hidden' : 'Showing'}</span>
+            <div class="muted" style="font-size:12px" data-no-i18n>${esc(c.accountName)} &middot; ${esc(c.accountNumber)} &middot; ${c.kind === 'wallet' ? 'Wallet' : 'Bank'}</div>
+          </div>
+          <button class="btn ghost sm" data-pc-edit="${esc(c.id)}" type="button">Edit</button>
+          <button class="btn danger sm" data-pc-del="${esc(c.id)}" type="button">Delete</button>
+        </div>`).join('') : '<p class="muted" style="margin:0">No payment numbers yet. Until you add one, members cannot recharge by bank or wallet.</p>'}
+    </div>`;
+  const add = $('pcAdd'); if (add) add.onclick = () => { _payEdit = { active: true, kind: 'bank' }; _payLogo = undefined; drawPayNumbers(); };
+  $('content').querySelectorAll('[data-pc-edit]').forEach(b => b.onclick = () => { _payEdit = _payRows.find(r => r.id === b.dataset.pcEdit) || null; _payLogo = undefined; drawPayNumbers(); });
+  $('content').querySelectorAll('[data-pc-del]').forEach(b => b.onclick = async () => {
+    const row = _payRows.find(r => r.id === b.dataset.pcDel); if (!row) return;
+    if (!window.confirm('Delete "' + row.name + '"? Members will no longer see it.')) return;
+    b.disabled = true;
+    const d = await api('/admin/pay-channels/delete', { id: row.id });
+    toast(d.status === 'success' ? 'Deleted' : (d.message || 'Could not delete'), d.status === 'success' ? 'ok' : 'err');
+    renderPayNumbers();
+  });
+  const cancel = $('pcCancel'); if (cancel) cancel.onclick = () => { _payEdit = null; _payLogo = undefined; drawPayNumbers(); };
+  const file = $('pcLogoFile');
+  if (file) file.addEventListener('change', async ev => {
+    const f = ev.target.files[0]; if (!f) return; ev.target.value = '';
+    keepPayForm();
+    try {
+      toast('Processing logo…', 'ok');
+      _payLogo = await fileToCutoutPng(f, 256);
+      toast('Logo ready (background removed)', 'ok');
+      drawPayNumbers();
+    } catch (err) { toast(err.message || 'Could not process the logo', 'err'); }
+  });
+  const clr = $('pcLogoClear'); if (clr) clr.onclick = () => { keepPayForm(); _payLogo = ''; drawPayNumbers(); };
+  const save = $('pcSave');
+  if (save) save.onclick = async () => {
+    keepPayForm();
+    const body = { id: _payEdit.id, name: _payEdit.name, kind: _payEdit.kind, accountName: _payEdit.accountName, accountNumber: _payEdit.accountNumber, order: _payEdit.order, active: _payEdit.active };
+    if (_payLogo !== undefined) body.logo = _payLogo;
+    save.disabled = true;
+    const d = await api('/admin/pay-channels/save', body);
+    toast(d.status === 'success' ? 'Saved' : (d.message || 'Could not save'), d.status === 'success' ? 'ok' : 'err');
+    if (d.status === 'success') renderPayNumbers(); else save.disabled = false;
+  };
+}
+// Copies what is typed in the form back into the entry being edited, so a redraw (after choosing a logo) keeps it.
+function keepPayForm(){
+  if (!_payEdit || !$('pcName')) return;
+  _payEdit = Object.assign({}, _payEdit, {
+    name: $('pcName').value, kind: $('pcKind').value, accountName: $('pcAccName').value, accountNumber: $('pcAccNo').value,
+    order: $('pcOrder').value === '' ? undefined : Number($('pcOrder').value), active: $('pcActive').checked,
+  });
+}
 async function renderBanners(){
   const [r, br, cir, bar, annr] = await Promise.all([
     api('/admin/settings'), api('/admin/banner'), api('/admin/beer-images'), api('/admin/brand-assets'), api('/admin/announcement-image')
@@ -3256,7 +3495,7 @@ async function renderSettings(){
            is 24-hour. Owner: "withdrawal time has problems, is it in 24hrs or,
            please make sure every withdrawal time is reading very well on each
            country". -->
-      <p class="muted" style="margin:6px 0 0">Uganda time. Members can withdraw only between these two times, for example 6:00 AM to 4:00 PM. One withdrawal at a time per member, always.</p>
+      <p class="muted" style="margin:6px 0 0">Ethiopia time. Members can withdraw only between these two times, for example 6:00 AM to 4:00 PM. One withdrawal at a time per member, always.</p>
       <p class="muted" id="witNow" style="margin:6px 0 0;font-weight:600"></p>
       <!-- Automatic withdrawals: requests still arrive as Pending; only while this is ON does the VPS send each one after its own random wait. -->
       <div class="switch-row" style="margin-top:14px"><span><b>Automatic withdrawals</b> <span class="muted">(the VPS sends them; requests still arrive as Pending)</span></span>
@@ -3264,7 +3503,7 @@ async function renderSettings(){
       <div class="row" style="margin-top:6px">
         <div><label>Shortest wait (seconds)</label><input id="sAutoMin" type="number" min="0" max="86400" step="1" value="${v('autoApproveMinSec',10)}"></div>
         <div><label>Longest wait (seconds)</label><input id="sAutoMax" type="number" min="0" max="86400" step="1" value="${v('autoApproveMaxSec',60)}"></div>
-        <div><label>Automatic up to (UGX, 0 = no limit)</label><input id="sAutoCap" type="number" min="0" step="1" value="${v('autoApproveMaxAmount',0)}"></div>
+        <div><label>Automatic up to (Br, 0 = no limit)</label><input id="sAutoCap" type="number" min="0" step="1" value="${v('autoApproveMaxAmount',0)}"></div>
       </div>
       <p class="muted" id="autoWitNote" style="margin:6px 0 0"></p>
       <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app for users)</span></span>
@@ -3322,7 +3561,7 @@ async function renderSettings(){
       ? `Saved. Recharges: ${PROVIDER_LABEL[normalizeProv(gateway)]}. Payouts: ${PROVIDER_LABEL[normalizeProv(payoutProv)]}.`
       : (d.message||'Failed'), d.status==='success'?'ok':'err');
   });
-  // Says plainly, from the two times typed above, whether withdrawing is open at this moment (Uganda time, the same clock the server uses).
+  // Says plainly, from the two times typed above, whether withdrawing is open at this moment (Ethiopia time, the same clock the server uses).
   function refreshWitNow(){
     const el=$('witNow'); if(!el) return;
     const on=$('sWitWindow')&&$('sWitWindow').checked, f=$('sWitFrom').value, t=$('sWitTo').value;
@@ -3330,10 +3569,10 @@ async function renderSettings(){
     const d=new Date(Date.now()+3*3600000), now=d.getUTCHours()*60+d.getUTCMinutes(), a=m(f), b=m(t);
     const clock=String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');
     const dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getUTCDay()];
-    if(!on){ el.textContent='Right now it is '+dayName+' '+clock+' Uganda time. The hours switch is off: members can withdraw at any hour.'; return; }
+    if(!on){ el.textContent='Right now it is '+dayName+' '+clock+' Ethiopia time. The hours switch is off: members can withdraw at any hour.'; return; }
     if(a==null||b==null||a===b){ el.textContent='Pick two different times.'; return; }
     const open=a<b?(now>=a&&now<b):(now>=a||now<b);
-    el.textContent='Right now it is '+dayName+' '+clock+' Uganda time: withdrawing is '+(open?'OPEN.':'CLOSED.');
+    el.textContent='Right now it is '+dayName+' '+clock+' Ethiopia time: withdrawing is '+(open?'OPEN.':'CLOSED.');
   }
   const refreshAutoNote=()=>{
     const on=$('sAutoWit').checked, lo=$('sAutoMin').value.trim(), hi=$('sAutoMax').value.trim(), cap=+$('sAutoCap').value||0, n=$('autoWitNote');
@@ -3603,8 +3842,8 @@ const ADMIN_LANG_ROWS = [
   ['Generate codes', 'Kola koodi', 'Tengeneza misimbo', 'Générer des codes', 'Gukora kode', 'Hanga koodi'],
   ['How many', 'Mmeka', 'Ngapi', 'Combien', 'Zingahe', 'Ningahe'],
   ['Reward range', 'Ekigero ky\'empeera', 'Kiwango cha zawadi', 'Fourchette de récompense', 'Urwego rw\'ibihembo', 'Ekigyero ky\'empeera'],
-  ['Min reward (UGX)', 'Empeera esinga obutono (UGX)', 'Zawadi ndogo (UGX)', 'Récompense minimale (UGX)', 'Igihembo gito (UGX)', 'Empeera erikukira obukye (UGX)'],
-  ['Max reward (UGX)', 'Empeera esinga obunene (UGX)', 'Zawadi kubwa (UGX)', 'Récompense maximale (UGX)', 'Igihembo kinini (UGX)', 'Empeera erikukira obwingi (UGX)'],
+  ['Min reward (Br)', 'Empeera esinga obutono (Br)', 'Zawadi ndogo (Br)', 'Récompense minimale (Br)', 'Igihembo gito (Br)', 'Empeera erikukira obukye (Br)'],
+  ['Max reward (Br)', 'Empeera esinga obunene (Br)', 'Zawadi kubwa (Br)', 'Récompense maximale (Br)', 'Igihembo kinini (Br)', 'Empeera erikukira obwingi (Br)'],
   ['Max uses per code (optional)', 'Emirundi egisinga buli koodi (si kya buwaze)', 'Matumizi mengi kwa msimbo (si lazima)', 'Utilisations max par code (facultatif)', 'Inshuro ntarengwa kuri buri kode (ntabwo ari itegeko)', 'Emirundi erikukira aha buri koodi (tikya buriijo)'],
   ['Expires after (seconds, optional)', 'Kiggwaako oluvannyuma (obutundutundu, si kya buwaze)', 'Inaisha baada ya (sekunde, si lazima)', 'Expire après (secondes, facultatif)', 'Birangira nyuma ya (amasegonda, ntabwo ari itegeko)', 'Nikihwaho bwanyima ya (obucweka, tikya buriijo)'],
   ['e.g. 30 for a flash code', 'okugeza 30 ku koodi ey\'akaseera', 'mfano 30 kwa msimbo wa haraka', 'ex. 30 pour un code éclair', 'urugero 30 kuri kode y\'igihe gito', 'nk\'okugyera 30 aha koodi y\'akaanya'],
@@ -3641,8 +3880,8 @@ const ADMIN_LANG_ROWS = [
   ['Save auto-approve settings', 'Tereka entegeka y\'okukkiriza okw\'obwetwaze', 'Hifadhi mipangilio ya idhini otomatiki', 'Enregistrer les paramètres d\'approbation automatique', 'Bika igenamiterere ryo kwemeza kwikora', 'Biika entebeekanisa y\'okwikiriza kwonka'],
   ['Turntable (spin wheel)', 'Nnamuziga (eddiba erizunguluka)', 'Gurudumu (la kuzungusha)', 'Roue (tourner)', 'Uruziga (ruzunguruka)', 'Orupiira (orurikuzengurutsa)'],
   ['Daily free spin', 'Okuzungusa okwa buli lunaku okw\'obwereere', 'Mzungusho bure wa kila siku', 'Tour gratuit quotidien', 'Kuzunguza k\'ubuntu kwa buri munsi', 'Okuzengurutsa kwa buri izooba okwa busha'],
-  ['Minimum win (UGX)', 'Okuwangula okusinga obutono (UGX)', 'Ushindi mdogo (UGX)', 'Gain minimum (UGX)', 'Gutsinda guto (UGX)', 'Okusingura okurikukira obukye (UGX)'],
-  ['Maximum win (UGX)', 'Okuwangula okusinga obunene (UGX)', 'Ushindi mkubwa (UGX)', 'Gain maximum (UGX)', 'Gutsinda kunini (UGX)', 'Okusingura okurikukira obwingi (UGX)'],
+  ['Minimum win (Br)', 'Okuwangula okusinga obutono (Br)', 'Ushindi mdogo (Br)', 'Gain minimum (Br)', 'Gutsinda guto (Br)', 'Okusingura okurikukira obukye (Br)'],
+  ['Maximum win (Br)', 'Okuwangula okusinga obunene (Br)', 'Ushindi mkubwa (Br)', 'Gain maximum (Br)', 'Gutsinda kunini (Br)', 'Okusingura okurikukira obwingi (Br)'],
   ['Spins earned by buying products', 'Okuzungusa okufunibwa mu kugula ebyamaguzi', 'Mizungusho inayopatikana kwa kununua bidhaa', 'Tours gagnés en achetant des produits', 'Kuzunguza kuboneka mu kugura ibicuruzwa', 'Okuzengurutsa okurikutungwa omu kugura ebyamaguzi'],
   ['Save turntable settings', 'Tereka entegeka ya nnamuziga', 'Hifadhi mipangilio ya gurudumu', 'Enregistrer les paramètres de la roue', 'Bika igenamiterere ry\'uruziga', 'Biika entebeekanisa y\'orupiira'],
   ['Maintenance mode', 'Embeera y\'okuddaabiriza', 'Hali ya matengenezo', 'Mode maintenance', 'Uburyo bwo gusana', 'Embeera y\'okugyerurura'],

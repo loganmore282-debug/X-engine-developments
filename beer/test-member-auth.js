@@ -181,11 +181,11 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
   {
     const phoneSrc = cut('const DEFAULT_REGION_KEY', 'function currentRegionKey()') + 'function currentRegionKey(){}\n' + cut('function localDigits(raw, region) {', '// Synthetic login email') + cut('function cleanPhone(raw, region) {', '// The two shapes a number may be typed in');
     const real = new Function(phoneSrc + '\nreturn cleanPhone;')();
-    const forms = ['771234567@beer-platform.com'.split('@')[0], '256771234567', '0771234567', '+256771234567', '07 71 23 45 67'];
+    const forms = ['771234567@beer-platform.com'.split('@')[0], '251771234567', '0771234567', '+251771234567', '07 71 23 45 67'];
     eq(new Set(forms.map(x => real(x))).size, 1, 'the national, international and bare forms are one number: ' + forms.map(x => real(x)).join(' '));
-    eq(real('771234567'), '+256771234567'); eq(real('12345'), null, 'junk is not a number'); eq(real(''), null);
+    eq(real('771234567'), '+251771234567'); eq(real('12345'), null, 'junk is not a number'); eq(real(''), null);
     eq(real('0771234567; drop'), null, 'text around a number makes it not a number (it used to be read as 0771234567)');
-    eq(real('(+256) 771-234.567'), '+256771234567', 'spaces, dashes, dots, brackets and a leading + are still fine');
+    eq(real('(+251) 771-234.567'), '+251771234567', 'spaces, dashes, dots, brackets and a leading + are still fine');
   }
   // wiring
   ok(!/admin\.auth\(\)/.test(src), 'no Firebase Auth call is left in the server');

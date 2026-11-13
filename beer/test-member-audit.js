@@ -46,7 +46,7 @@ async function main(){
   assert.match(d.querySelector('#homeProducts').textContent,/Test Asset|NO DATA/,'Home lists the catalogue');
   w.eval('STATE.products=[{key:"a1",name:"Test Asset",price:15000,cycle:30,expectedReturn:45000,dailyPayout:1500,isOpen:true}]');w.paintHome();
   assert.match(d.querySelector('.v-card-img').textContent,/Test Asset/,'a product with no picture shows its name in the picture frame');
-  assert.match(d.querySelector('.v-rows').textContent,/UGX 15000/,'prices read as on the owner screens: the currency, a space, the plain number');
+  assert.match(d.querySelector('.v-rows').textContent,/Br 15000/,'prices read as on the owner screens: the currency, a space, the plain number');
   assert.equal(d.querySelectorAll('.v-quick button').length,4,'Home has Deposit, Withdraw, Service and Group');
   assert.equal(d.querySelectorAll('.bottom-nav .navitem').length,5,'five tabs: Home, Income, Team, Share, My');
   assert.deepEqual([...d.querySelectorAll('.bottom-nav .lbl')].map(e=>e.textContent),['Home','Income','Team','Share','My']);
@@ -89,10 +89,10 @@ async function main(){
   payment.resolve({status:'success',net:5000});await first;
   assert(d.querySelector('#lpOld'),'late withdrawal response must not close another form');
   w.openDepositSheet();assert.equal(d.querySelectorAll('.ck-notes p').length,5);
-  assert.match(d.querySelector('.ck-notes').textContent,/The minimum deposit amount is UGX 15000/);assert.equal(d.querySelectorAll('#depPays button').length,1,'only Pay -C');assert.match(d.querySelector('#depPays button').textContent,/Pay -C$/);
+  assert.match(d.querySelector('.ck-notes').textContent,/The minimum deposit amount is Br 15000/);assert.equal(d.querySelectorAll('#depPays button').length,0,'Ethiopia: no gateway pill, the payment is chosen on the next page');
   d.querySelector('#depAmount').value='15000';
   const deposit=deferred();posts=0;w.post=()=>{posts++;return deposit.promise};
-  const sending=w.submitDeposit();await w.submitDeposit();assert.equal(posts,1);
+  const sending=w.submitDeposit();await w.submitDeposit();assert.equal(posts,0,'Ethiopia: with no payment numbers set, Pay starts nothing (no gateway order is made)');
   w.openChangeLoginPasswordSheet();
   deposit.resolve({status:'error',message:'Test request rejected'});await sending;
   assert(d.querySelector('#lpOld'),'deposit cleanup must tolerate the original button being removed');
