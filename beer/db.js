@@ -128,30 +128,16 @@ async function ensureIndexes() {
     ['transactions',    { referralDepositId: 1, commissionLevel: 1 }],
     ['transactions',    { userId: 1, type: 1, giftCode: 1 }],
     ['transactions',    { userId: 1, type: 1, milestone: 1 }],
-    ['transactions',    { marzReference: 1 }],
     ['transactions',    { ref: 1 }],
     ['transactions',    { userId: 1, createdAt: -1 }],
     ['purchaseIntents', { status: 1 }],
     ['withdrawals',     { userId: 1 }],
     ['withdrawals',     { status: 1 }],
-    ['withdrawals',     { marzReference: 1 }],
-    ['withdrawals',     { marzTxUuid: 1 }],
     ['withdrawals',     { ref: 1 }],
     ['withdrawals',     { userId: 1, createdAt: -1 }],
     ['withdrawals',     { userId: 1, date: 1 }],
     ['withdrawals',     { userId: 1, network: 1, phone: 1 }],
-    ['withdrawals',     { pesajetRef: 1 }],
     ['withdrawals',     { status: 1, createdAt: 1 }],
-    // Round 106 -- reconcilePendingWithdrawals()'s real query shape (status
-    // + marzTxUuid + createdAt), mirroring the exact compound indexes
-    // pendingDeposits already got in Round 104 for the identical
-    // starvation-avoidance fix on the deposit side.
-    ['withdrawals',     { status: 1, marzTxUuid: 1, createdAt: 1 }],
-    // Bank transfer payout rail -- reconcilePendingWithdrawals()'s bank-
-    // transfer sweep query shape (status + isBankTransfer + marzReference
-    // + createdAt), same starvation-avoiding compound-index pattern as the
-    // send-money one immediately above.
-    ['withdrawals',     { status: 1, isBankTransfer: 1, marzReference: 1, createdAt: 1 }],
     ['pendingDeposits', { userId: 1 }],
     ['authAccounts', { uid: 1 }], // member login: lookup by uid (password change/reset, registration)
     ['memberSessions', { uid: 1 }], // revoke every session of one member
@@ -163,18 +149,12 @@ async function ensureIndexes() {
     ['withdrawals',     { createdAt: -1 }],
     ['transactions',    { createdAt: -1 }],
     ['messages',        { createdAt: -1 }],
-    ['pendingDeposits', { marzReference: 1 }],
     ['pendingDeposits', { status: 1 }],
-    ['pendingDeposits', { provider: 1, status: 1, createdAt: 1 }], // reconcilePendingDeposits()'s PesaJet sweep
     ['pendingDeposits', { ref: 1 }],
     ['pendingDeposits', { txid: 1 }],
     ['pendingDeposits', { userId: 1, createdAt: -1 }],
     ['pendingDeposits', { status: 1, createdAt: 1 }],
     ['pendingDeposits', { needsManualCredit: 1 }],
-    // Round 104 -- reconcilePendingDeposits()'s actual MarzPay query shape
-    // (status in [...], marzTxUuid>'', orderBy createdAt), not fully covered
-    // by the specs above.
-    ['pendingDeposits', { status: 1, marzTxUuid: 1, createdAt: 1 }],
     ['withdrawals',     { refundPending: 1 }],
     ['products',        { key: 1 }],
     ['bankAccounts',    { userId: 1 }],
@@ -218,11 +198,6 @@ async function ensureIndexes() {
     //   referralCodeLower -- findUserByReferralCode() takes the FIRST match,
     //     so two users sharing a code sends one person's L1/L2/L3 commission
     //     to the other. Real money, silently misrouted, very hard to notice.
-    //   marzReference (deposits + withdrawals) -- /deposit/callback and
-    //     /withdraw/callback locate the row by reference with .limit(1). A
-    //     duplicate reference means a webhook can resolve to the WRONG money
-    //     row. The live provider re-check limits the blast radius; it does not
-    //     make picking the wrong row safe.
     //   publicId -- the account number members read out to support.
     //   codeLower (promoCodes) -- one gift code redeemable as two.
     //
@@ -233,8 +208,7 @@ async function ensureIndexes() {
     // The partial filter is also what makes them correct rather than merely
     // strict: a unique index over a field that is ABSENT on many documents
     // would treat every one of those as the same null and reject the second
-    // one. Manual deposits legitimately have no marzReference; accounts
-    // predating the field have no publicId. Restricting each index to
+    // one. Accounts predating a field (for example publicId) do not have it. Restricting each index to
     // documents where the field is actually a string means it constrains only
     // the rows it is meant to constrain.
     ['users', { referralCodeLower: 1 }, { unique: true, name: 'referralCodeLower_unique',
@@ -243,18 +217,6 @@ async function ensureIndexes() {
       partialFilterExpression: { publicId: { $type: 'string' } } }],
     ['promoCodes', { codeLower: 1 }, { unique: true, name: 'codeLower_unique',
       partialFilterExpression: { codeLower: { $type: 'string' } } }],
-    ['pendingDeposits', { marzReference: 1 }, { unique: true, name: 'marzReference_unique',
-      partialFilterExpression: { marzReference: { $type: 'string' } } }],
-    ['withdrawals', { marzReference: 1 }, { unique: true, name: 'marzReference_unique',
-      partialFilterExpression: { marzReference: { $type: 'string' } } }],
-    // PesaJet's own transaction id, on both sides. The partial filter is not
-    // optional: without it a unique index treats every document MISSING the
-    // field as sharing one null and rejects the second, which would block
-    // manual deposits and MarzPay payouts outright.
-    ['pendingDeposits', { pesajetTxId: 1 }, { unique: true, name: 'pesajetTxId_unique',
-      partialFilterExpression: { pesajetTxId: { $type: 'string' } } }],
-    ['withdrawals', { pesajetTxId: 1 }, { unique: true, name: 'pesajetTxId_unique',
-      partialFilterExpression: { pesajetTxId: { $type: 'string' } } }],
   ];
   // Built in small parallel batches, not strictly one at a time -- was
   // sequential because a shared M0 cluster had very little real

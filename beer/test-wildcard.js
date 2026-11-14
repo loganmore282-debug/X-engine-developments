@@ -39,7 +39,7 @@ assert.ok(/listen 443 ssl http2;[\s\S]*?ssl_certificate \/etc\/letsencrypt\/live
 assert.ok(/server_name app\.mydomain\.com;/.test(w) && /server_name a1b2c3\.mydomain\.com;/.test(w), 'named hosts stay');
 const wildBlock = w.slice(w.lastIndexOf('listen 443 ssl'));
 assert.ok(/location \^~ \/k7x2\/admin\//.test(wildBlock), 'the admin API is not reachable on a random address');
-assert.ok(/location ~ "\^\/payment\/\[0-9\]\{8,14\}\/\?\$"/.test(wildBlock) && /location = \/h5\//.test(wildBlock), 'payment pages and invite links work on a random address');
+assert.ok(/location = \/h5\//.test(wildBlock), 'invite links work on a random address');
 assert.ok(!/\*\.mydomain/.test(gen(['prod', 'app.mydomain.com', 'Hq4vN8rt', 'a1b2c3.mydomain.com'])), 'no wildcard unless asked');
 assert.throws(() => gen(['dev', 'Hq4vN8rt', '--wild=mydomain.com']), 'wildcard is for prod only');
 // the VPS scripts: valid shell, wired together
@@ -50,13 +50,11 @@ assert.ok(/--wild="\$WILD_DOMAIN"/.test(upd) && /beer-wild\/fullchain\.pem|WILD_
 assert.ok(/--cert-name beer-wild/.test(sw) && /hostinger-dns\.js/.test(sw) && /--manual-auth-hook/.test(sw) && /SHARE_DOMAIN/.test(sw) && /set-domain\.sh/.test(sw) && /\*\.\$DOM/.test(sw), 'set-wildcard.sh: DNS record, wildcard certificate, SHARE_DOMAIN, nginx');
 // show-links.sh prints the four values from a (fake) server directory
 { const d = fs.mkdtempSync(require('node:os').tmpdir() + '/sl-'); fs.writeFileSync(d + '/app-host', 'app.example.org'); fs.writeFileSync(d + '/admin-host', 'a1b2c3.example.org');
-  fs.writeFileSync(d + '/secrets.local.js', 'module.exports.DEPLOY_WEBHOOK_SECRET = "sec123";'); fs.writeFileSync(d + '/hook-token', 'abcdef0123456789');
+  fs.writeFileSync(d + '/secrets.local.js', 'module.exports.DEPLOY_WEBHOOK_SECRET = "sec123";');
   const out = cp.execFileSync('bash', [__dirname + '/deploy/show-links.sh', 'all'], { encoding: 'utf8', env: { ...process.env, BEER_SECRETS_DIR: d } });
-  assert.ok(/https:\/\/app\.example\.org\/\n/.test(out) && /https:\/\/a1b2c3\.example\.org\/Hq4vN8rt\//.test(out) && /Payload URL : https:\/\/app\.example\.org\/k7x2\/deploy\/webhook/.test(out) && /Secret      : sec123/.test(out) && /\/k7x2\/h-abcdef0123456789\/pesajet/.test(out), 'show-links prints app, admin, GitHub webhook and PesaJet webhook');
+  assert.ok(/https:\/\/app\.example\.org\/\n/.test(out) && /https:\/\/a1b2c3\.example\.org\/Hq4vN8rt\//.test(out) && /Payload URL : https:\/\/app\.example\.org\/k7x2\/deploy\/webhook/.test(out) && /Secret      : sec123/.test(out), 'show-links prints app, admin and the GitHub webhook');
   fs.rmSync(d, { recursive: true, force: true }); }
-// the payment phone box does not trigger the browser's saved-password sheet
-assert.ok(/id="pgPhone" name="pg_msisdn" type="text"[^>]*autocomplete="off"/.test(src) && /function pgLockPasswordBoxes/.test(src), 'no password prompt on the phone box');
-console.log('PASS: random invite addresses (new every time, wildcard nginx + certificate, scripts) and no password prompt on the payment phone box');
+console.log('PASS: random invite addresses (new every time, wildcard nginx + certificate, scripts)');
 
 // Hostinger DNS helper, against a fake of Hostinger's API: it changes ONE name+type per call and sends the token as a Bearer header
 (async () => {

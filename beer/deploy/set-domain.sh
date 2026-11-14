@@ -47,7 +47,6 @@ mkdir -p "$(dirname "$APP_HOST_FILE")"
 (umask 077; printf '%s' "$APP" > "$APP_HOST_FILE")
 echo; echo "Setting up nginx and HTTPS for $APP and $ADMIN ..."
 if bash "$BEER/deploy/update-vps.sh" > /tmp/beer.domain-update.log 2>&1 && grep -q "^DONE\." /tmp/beer.domain-update.log; then
-  BEER_SECRET_VALUE="https://$APP/k7x2" node "$BEER/deploy/set-secret.js" PUBLIC_URL >/dev/null
   (cd "$BEER/deploy" && pm2 reload ecosystem.config.js --only beer-server --update-env 2>&1 | tail -1)
   sleep 4
   echo; echo "DONE."

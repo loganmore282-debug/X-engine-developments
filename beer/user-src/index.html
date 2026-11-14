@@ -2824,8 +2824,6 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
   <div class="og-sub">We're getting ready. Come back once the countdown ends.</div>
 </div>
 
-<div id="payScreen" aria-hidden="true"><div class="pg-ptr" id="pgPtr" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4.5a7.5 7.5 0 1 0 7.5 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M12 1.2l3.6 3.3L12 7.8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="pg-wrap" id="pgBody"></div></div>
-
 <div id="maintScreen" role="alert">
   <div class="mt-wrap">
     <svg class="mt-icon" viewBox="-110.7 -110.7 221.4 221.4" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -2967,32 +2965,6 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
   <div class="notify-card" onclick="closeNotify()">
     <span class="notify-ic err" id="notifyIc"></span>
     <div class="notify-msg" id="notifyMsg"></div>
-  </div>
-</div>
-
-<!-- Owner: "include nav arrow '<', and its title space, on that payment page."
-     Reuses .sheet-head verbatim so this header IS the app's header, not a
-     lookalike -- same red background, same 24px chevron, same centred
-     title (the gradient chevron this comment used to describe was
-     Beer's own cyan-to-blue -- fixed to a plain white stroke above, along
-     with every other .sheet-head, since they all share one rule).
-     #depStatusBody is a DIV, not a <p>: the pending state renders an <ol>
-     of steps, and an <ol> inside a <p> is invalid and gets reparented by
-     the browser, which drops the list out of the card entirely. -->
-<div class="pay-page" id="depStatusBg">
-  <div class="sheet-head pay-head">
-    <button class="back" onclick="closeDepositStatusModal()" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#25262b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-  </div>
-  <div class="pay-body">
-    <div class="pay-card">
-      <div class="dep-status-icon" id="depStatusIcon"></div>
-      <h3 id="depStatusTitle">Processing your deposit</h3>
-      <div id="depStatusBody"></div>
-      <div class="pay-actions">
-        <button class="secondary-button" id="depVerifyBtn" style="display:none;" onclick="verifyDepositNow()">Verify</button>
-        <button class="primary-button" id="depStatusCloseBtn" style="display:none;" onclick="closeDepositStatusModal()">Close</button>
-      </div>
-    </div>
   </div>
 </div>
 

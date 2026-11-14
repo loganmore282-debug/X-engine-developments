@@ -38,9 +38,6 @@ for (const [col, field] of [
   ['users', 'referralCodeLower'],
   ['users', 'publicId'],
   ['promoCodes', 'codeLower'],
-  ['pendingDeposits', 'marzReference'],
-  ['withdrawals', 'marzReference'],
-  ['withdrawals', 'lipaOutTradeNo'],
 ]) {
   const spec = uniques.find(s => s[0] === col && Object.keys(s[1]).length === 1 && s[1][field] === 1);
   check(!!spec, `${col}.${field} is unique`);
@@ -48,8 +45,7 @@ for (const [col, field] of [
   const opts = spec[2];
   // Without the partial filter a unique index treats every document MISSING
   // the field as sharing one null value and rejects the second such document
-  // -- which would block manual deposits (no marzReference) and pre-publicId
-  // accounts outright. The filter is not a nicety; it is what makes the index
+  // -- which would block pre-publicId accounts outright. The filter is not a nicety; it is what makes the index
   // safe to add to a live collection.
   check(!!opts.partialFilterExpression, `${col}.${field} is partial, so absent values are not treated as duplicates`);
   check(opts.partialFilterExpression && JSON.stringify(opts.partialFilterExpression[field]) === '{"$type":"string"}',

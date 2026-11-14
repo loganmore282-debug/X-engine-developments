@@ -38,7 +38,7 @@ done
 
 echo "==> Syncing backend (server.js, db.js, service-account.js, package files)"
 rsync -az --delete \
-  "$BEER_DIR/server.js" "$BEER_DIR/db.js" "$BEER_DIR/service-account.js" "$BEER_DIR/pay-seal.js" "$BEER_DIR/security-guard.js" "$BEER_DIR/session-policy.js" "$BEER_DIR/totp.js" \
+  "$BEER_DIR/server.js" "$BEER_DIR/db.js" "$BEER_DIR/service-account.js" "$BEER_DIR/security-guard.js" "$BEER_DIR/session-policy.js" "$BEER_DIR/totp.js" \
   "$BEER_DIR/package.json" "$BEER_DIR/package-lock.json" \
   "$BEER_VPS_HOST:$BEER_VPS_PATH/"
 

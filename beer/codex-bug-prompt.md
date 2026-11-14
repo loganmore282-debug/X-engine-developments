@@ -19,7 +19,7 @@ HARD RULES (money safety, do not regress)
 1. MongoDB M0 has NO ACID transactions. `runTransaction` does not lock. Anything that credits or debits money must use the in-process lock (`withLock`, `_creditingDeposits`, `_creditingPayouts`, `_completingWithdrawals`), atomic `updateIf` / `FieldValue.increment`, and idempotency tokens (`creditedDepositIds`, `debitedWithdrawalIds`, `creditedCommissionKeys`). pm2 runs a single instance, so in-process locks are valid.
 2. Withdrawals require the 6-digit Trade Password (`transactionPinHash`, `pinCheck` lock: 5 failures per 15 minutes). Do not weaken this.
 3. Member sessions are random 32-byte hex tokens in `memberSessions`, not JWTs. Admin sessions are in `adminSessions`.
-4. Never commit secrets. They live only in environment variables (`MONGODB_URI`, `ADMIN_KEY`, `MARZPAY_KEY`, and others). Do not print or log them.
+4. Never commit secrets. They live only in environment variables (`MONGODB_URI`, `ADMIN_KEY`, and others). Do not print or log them.
 5. USDT and card deposit features are gated off by default. Keep them off.
 6. Do not add emoji, abbreviations in money ("UGX 23,000", never "23k"), or new invented wording to the UI. Do not change the design (royal blue `#1739b8`, Roboto font, SVG icons only).
 

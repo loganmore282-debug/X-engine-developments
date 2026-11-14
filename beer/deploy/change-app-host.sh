@@ -49,8 +49,6 @@ printf '%s' "$LIST" > "$ALSO_FILE"; chmod 600 "$ALSO_FILE"
 
 if bash "$BEER/deploy/update-vps.sh" > /tmp/beer.host-update.log 2>&1 && grep -q "^DONE\." /tmp/beer.host-update.log; then
   grep -E "not pointing|Check the A record" /tmp/beer.host-update.log
-  # callbacks the server sends to payment gateways follow the new address
-  BEER_SECRET_VALUE="https://$NEW/k7x2" node "$BEER/deploy/set-secret.js" PUBLIC_URL
   (cd "$BEER/deploy" && pm2 reload ecosystem.config.js --update-env 2>&1 | tail -1); sleep 4
   h1=$(curl -s -m 10 "https://$NEW/k7x2/health" || true); h2=$(curl -s -m 10 -o /dev/null -w '%{http_code}' "https://$CUR/k7x2/health" || true)
   echo; echo "NEW address  https://$NEW/   health: $h1"

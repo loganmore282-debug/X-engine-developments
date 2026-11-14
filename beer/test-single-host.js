@@ -111,24 +111,10 @@ function boot(file, scope) {
   const del2 = await a.activate(['beer-admin-shell-v1', curA, curU, 'beer-brand-v1']);
   eq(del2, ['beer-admin-shell-v1'], "the admin worker clears only its own old caches, never the member app's");
   const r = a.fetchEvent('https://h.example/k7x2/admin/stats'); eq(r.responded, 1, 'the panel passes /k7x2 straight to the network');
-  { // secret PesaJet webhook address
-    const g = (env, ...a) => require('child_process').execFileSync('node', ['deploy/make-nginx.js', ...a], { encoding: 'utf8', env: { ...process.env, ...env } });
-    const base = g({ BEER_HOOK_TOKEN: '' }, 'prod', 'example.com', 'Hq4vN8rt', 'adm.example.com');
-    ok(!/h-[a-z0-9]{16}/.test(base) && !/pesajet\/webhook \{ return 404/.test(base.slice(0, base.indexOf('server_name adm.example.com'))), 'no token: no secret webhook address, and the member host does not close the plain one (the admin host always does)');
-    const T = 'abcdef0123456789abcd';
-    const tok = g({ BEER_HOOK_TOKEN: T }, 'prod', 'example.com', 'Hq4vN8rt', 'adm.example.com');
-    ok(tok.includes('location = /k7x2/h-' + T + '/pesajet {') && tok.includes('rewrite ^ /pesajet/webhook break;'), 'token: the secret address maps to Node /pesajet/webhook');
-    ok(tok.includes('location ^~ /k7x2/pesajet/webhook { return 404; }'), 'token: the plain webhook address (and everything under it) answers 404');
-    eq(tok.split('/h-' + T + '/pesajet').length - 1, 1, 'token: the secret address is in the member block only, not on the admin host');
-    eq(tok.replace(/    # secret PesaJet webhook address[\s\S]*?location \^~ \/k7x2\/pesajet\/webhook \{ return 404; \}\n/, ''), base, 'token: nothing else in the file changes');
-    const hh = g({ BEER_HOOK_TOKEN: T, BEER_HOOK_HOST: 'hook.example.com' }, 'prod', 'example.com', 'Hq4vN8rt', 'adm.example.com');
-    ok(/server_name hook\.example\.com;/.test(hh) && hh.includes('location = /h-' + T + '/pesajet {') && hh.includes('location / { return 404; }'), 'hook host: its own block serves only the secret address, everything else 404');
-    ok(!hh.includes('/k7x2/h-' + T), 'hook host: the member host no longer carries the secret address');
-    ok(hh.includes('location ^~ /k7x2/pesajet/webhook { return 404; }'), 'hook host: the plain address is still closed on the member host');
-    eq(hh.split('server_name ').length - 1, 3, 'hook host: member, admin and hook blocks');
-    let r2 = false; try { g({ BEER_HOOK_HOST: 'hook.example.com' }, 'prod', 'example.com', 'Hq4vN8rt'); } catch (e) { r2 = true; } ok(r2, 'a hook host without a token is refused');
-    let r3 = false; try { g({ BEER_HOOK_TOKEN: T, BEER_HOOK_HOST: 'bad host' }, 'prod', 'example.com', 'Hq4vN8rt'); } catch (e) { r3 = true; } ok(r3, 'a malformed hook host is refused');
-    let refused = false; try { g({ BEER_HOOK_TOKEN: 'Bad Token!' }, 'prod', 'example.com', 'Hq4vN8rt'); } catch (e) { refused = true; } ok(refused, 'a malformed token is refused');
+  { // no payment-gateway addresses any more: only the one /k7x2/ API location serves everything (the GitHub deploy hook included)
+    const out = require('child_process').execFileSync('node', ['deploy/make-nginx.js', 'prod', 'example.com', 'Hq4vN8rt', 'adm.example.com'], { encoding: 'utf8' });
+    ok(!/pesajet|marzpay|beer_hook|\/deposit\/callback|\/withdraw\/callback|\/payment\//i.test(out), 'the generated nginx file has no gateway callback, hook zone or payment page address');
+    ok(/location \/k7x2\/ \{/.test(out), 'the API location is still there');
   }
   console.log(`PASS: one host for app, API and admin (${n} checks)`); process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

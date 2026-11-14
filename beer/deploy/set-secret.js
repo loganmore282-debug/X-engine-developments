@@ -1,12 +1,12 @@
 'use strict';
 // Saves ONE secret into the VPS secrets file without it ever appearing on screen, in the shell history or in a chat.
-//   node deploy/set-secret.js PESAJET_API_KEY      (then paste the value, nothing is shown as you type, press Enter)
-// Non-interactive form for values that are not secret (used by deploy/change-app-host.sh):  BEER_SECRET_VALUE=... node deploy/set-secret.js PUBLIC_URL
+//   node deploy/set-secret.js SECRET_NAME      (then paste the value, nothing is shown as you type, press Enter)
+// Non-interactive form:  BEER_SECRET_VALUE=... node deploy/set-secret.js SECRET_NAME   (used by deploy/show-links.sh for the GitHub webhook secret)
 const fs = require('fs'), readline = require('readline');
 const FILE = process.env.BEER_SECRETS_FILE || '/srv/beer-secrets/secrets.local.js';
 const name = process.argv[2] || '';
 const ALLOWED = /^[A-Z][A-Z0-9_]{2,60}$/;
-if (!ALLOWED.test(name)) { console.error('Give the secret\'s name in capitals, e.g. PESAJET_API_KEY'); process.exit(1); }
+if (!ALLOWED.test(name)) { console.error('Give the secret\'s name in capitals, e.g. DEPLOY_WEBHOOK_SECRET'); process.exit(1); }
 let cur; try { cur = fs.readFileSync(FILE, 'utf8'); } catch (e) { console.error('Cannot find the secrets file ' + FILE); process.exit(1); }
 const save = value => {
   const lineRe = new RegExp('^module\\.exports\\.' + name + '\\s*=.*$\\n?', 'gm');

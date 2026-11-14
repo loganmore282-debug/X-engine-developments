@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run as root:  bash /srv/beer-src/beer/deploy/set-secret.sh PESAJET_API_KEY
+# Run as root:  bash /srv/beer-src/beer/deploy/set-secret.sh SECRET_NAME
 set -u
 BEER=${BEER_DIR:-/srv/beer-src/beer}
 node "$BEER/deploy/set-secret.js" "$@" || exit $?

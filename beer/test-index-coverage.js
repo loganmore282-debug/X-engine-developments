@@ -12,7 +12,6 @@ const required = [
   ['transactions','userId: 1, type: 1, milestone: 1'],
   ['withdrawals','userId: 1, date: 1'],
   ['withdrawals','userId: 1, network: 1, phone: 1'],
-  ['withdrawals','pesajetRef: 1'],
   ['pendingDeposits','txid: 1'],
   ['turntableSpins','investmentId: 1'],
   ['turntableSpins','userId: 1, used: 1, createdAt: 1'],

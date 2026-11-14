@@ -125,7 +125,7 @@ async function serverTests() {
   let u = await unreg({ token: 'T1', rotated: true }, 'T1'); ok(u.store.has('T1') && u.store.get('T1').retiredAt, 'rotation keeps the record, retired');
   u = await unreg({ token: 'T1' }, 'T1'); ok(!u.store.has('T1'), 'switching notifications off deletes it at once');
   // ── quick-approve ──
-  const qaSrc = slice('const quickApproveLimiter', "app.post('/admin/withdraw/verify'");
+  const qaSrc = slice('const quickApproveLimiter', 'const MAX_SAVED_PAYOUT_ACCOUNTS');
   function quickApprove(dbSeed) {
     const handlers = {}; const calls = { core: [], audit: [] };
     const app = { post: (p, ...a) => { handlers[p] = a[a.length - 1]; } };
@@ -140,14 +140,11 @@ async function serverTests() {
     staff: { role: 'staff', username: 'clerk' }, staffSecret: { role: 'staff', quickApproveSecret: 'SS', username: 'boss' }, demoted: { role: 'owner', quickApproveSecret: 'D', username: 'ex' }, gone: { role: 'owner', quickApproveSecret: 'G', username: 'ghost' }, off: { role: 'owner', quickApproveSecret: 'O', username: 'off' } },
     adminUsers: { boss: { role: 'owner', active: true }, ex: { role: 'staff', active: true }, off: { role: 'owner', active: false } } };
   let q = quickApprove(seed);
+  // Every payout is sent by hand, so a lock-screen Approve must never record one as paid: a valid device is told so (409) and nothing is processed.
   let res = await q.call({ withdrawalId: 'W9', pushToken: 'good', secret: 'S3CRET' });
-  eq(res.code, 200); eq(q.calls.core, [['W9', 'boss (notification)']], 'goes through the same processWithdrawalCore as the Send button, named for the person');
-  eq([q.calls.audit[0][1], q.calls.audit[0][2].via, q.calls.audit[0][0].username], ['withdrawal_processed', 'push', 'boss'], 'audit-logged as a push approval by that admin');
-  q = quickApprove(seed); res = await q.call({ withdrawalId: 'W9', pushToken: 'key', secret: 'KS' }); eq(res.code, 200, 'master-key owner device works without an adminUsers row');
-  q = quickApprove(seed); res = await q.call({ withdrawalId: 'W9', pushToken: 'masterSession', secret: 'MS' }); eq(res.code, 200, "the owner signed in with the master key (session name 'owner', no adminUsers row) is accepted");
-  // manual payout mode: Approve from the notification would only RECORD the withdrawal as paid, so it is refused and nothing is processed
-  globalThis.__manualPayout = true; q = quickApprove(seed); res = await q.call({ withdrawalId: 'W9', pushToken: 'good', secret: 'S3CRET' });
-  eq(res.code, 409, 'manual payout mode: the notification Approve is refused'); eq(res.body.code, 'MANUAL_MODE'); eq(q.calls.core.length, 0, 'and nothing was processed'); globalThis.__manualPayout = false;
+  eq([res.code, res.body.code], [409, 'MANUAL_MODE'], 'a valid owner device is refused: payouts are sent by hand'); eq(q.calls.core.length, 0, 'nothing was processed'); eq(q.calls.audit.length, 0, 'nothing was logged as paid');
+  q = quickApprove(seed); res = await q.call({ withdrawalId: 'W9', pushToken: 'key', secret: 'KS' }); eq(res.code, 409, 'master-key owner device: same answer');
+  q = quickApprove(seed); res = await q.call({ withdrawalId: 'W9', pushToken: 'masterSession', secret: 'MS' }); eq(res.code, 409, "the owner signed in with the master key: same answer");
   const denied = async (body, why) => { const x = quickApprove(seed); const r2 = await x.call(body); eq(r2.code, r2.code === 400 ? 400 : 401, why); eq(x.calls.core.length, 0, why + ': nothing was paid'); return r2; };
   const why = async (body, code, m) => { const r2 = await denied(body, m); eq(r2.body.code, code, m + ' says why'); ok(r2.body.message.length > 40 && !/^Unauthorized$/.test(r2.body.message), m + ': a message the owner can act on'); };
   await why({ withdrawalId: 'W9', pushToken: 'nope', secret: 'S3CRET' }, 'DEVICE_NOT_REGISTERED', 'unknown/rotated device');
@@ -169,13 +166,13 @@ async function serverTests() {
   // a token the browser rotated is retired, not deleted: an alert delivered before the rotation still works for 48h, then it does not
   const hrs = h => new Date(Date.now() - h * 3600 * 1000).toISOString();
   const rseed = { adminPushTokens: { fresh: { role: 'owner', quickApproveSecret: 'F', username: 'owner-key', retiredAt: hrs(2) }, stale: { role: 'owner', quickApproveSecret: 'T', username: 'owner-key', retiredAt: hrs(60) } }, adminUsers: {} };
-  q = quickApprove(rseed); res = await q.call({ withdrawalId: 'W9', pushToken: 'fresh', secret: 'F' }); eq(res.code, 200, 'an alert delivered before the token rotated still approves (retired 2h ago)');
+  q = quickApprove(rseed); res = await q.call({ withdrawalId: 'W9', pushToken: 'fresh', secret: 'F' }); eq(res.code, 409, 'an alert delivered before the token rotated is still recognised (retired 2h ago)');
   q = quickApprove(rseed); res = await q.call({ withdrawalId: 'W9', pushToken: 'stale', secret: 'T' }); eq([res.code, res.body.code], [401, 'DEVICE_NOT_REGISTERED'], 'but not after the grace period'); eq(q.calls.core.length, 0);
   // an unexpected failure never leaks details
   const bad = quickApprove(seed); bad.db.collection = () => { throw new Error('secret internal detail'); };
   res = await bad.call({ withdrawalId: 'W9', pushToken: 'good', secret: 'S3CRET' }); eq(res.code, 500); ok(!/internal detail/.test(res.body.message), 'no internals in the error');
-  // the call site: only a NEW withdrawal asks for the button; deposits do not
-  ok(/sendAdminPush\('New withdrawal request'[^\n]*\{ quickApprove: offerQuickApprove \}\)/.test(src) && /offerQuickApprove = !payoutIsManual\(await getSettings\(\)\)/.test(src), 'new-withdrawal alert requests the Approve button (only when payouts are automatic)');
+  // the call site: a new withdrawal alert never offers the Approve button (payouts are manual); deposits do not either
+  ok(/sendAdminPush\('New withdrawal request'[^\n]*\{ quickApprove: false \}\)/.test(src), 'new-withdrawal alert does not request the Approve button');
   ok(!/sendAdminPush\('Deposit completed'[^\n]*quickApprove/.test(src), 'deposit alerts never do');
 }
 

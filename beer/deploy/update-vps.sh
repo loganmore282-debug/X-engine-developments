@@ -44,12 +44,6 @@ if [ -s "$WILD_FILE" ] && [ -f "$WILD_CERT_DIR/fullchain.pem" ] && [ -f "$WILD_C
   WILD_DOMAIN=$(tr -d '[:space:]' < "$WILD_FILE"); export BEER_WILD_CERT_DIR="$WILD_CERT_DIR"; echo "    random addresses: *.$WILD_DOMAIN"
 fi
 
-# Secret PesaJet webhook address: the token lives only on this server (made by deploy/make-hook-url.sh), never in git.
-HOOK_FILE=${BEER_HOOK_FILE:-/srv/beer-secrets/hook-token}
-HOOK_HOST_FILE=${BEER_HOOK_HOST_FILE:-/srv/beer-secrets/hook-host}
-if [ -s "$HOOK_FILE" ]; then BEER_HOOK_TOKEN=$(tr -d '[:space:]' < "$HOOK_FILE"); export BEER_HOOK_TOKEN; echo "    (secret PesaJet webhook address is ON)"; fi
-if [ -s "$HOOK_FILE" ] && [ -s "$HOOK_HOST_FILE" ]; then BEER_HOOK_HOST=$(tr -d '[:space:]' < "$HOOK_HOST_FILE"); export BEER_HOOK_HOST; echo "    (webhook-only host: $BEER_HOOK_HOST)"; fi
-
 # The temporary IP preview (deploy/preview.sh) defines the same rate-limit names, so it must go before the real file is written.
 # Both are kept aside first and put back if this run fails, so "nothing was changed on the live site" is true.
 PRE_CONF=/etc/nginx/conf.d/beer-preview.conf; PRE_BAK=/tmp/beer.preview.keep
@@ -82,7 +76,7 @@ MYIP=$(curl -4 -sf --max-time 8 https://ifconfig.me || true); printf '%s' "$MYIP
 [ -n "$MYIP" ] || MYIP=$(curl -4 -s --max-time 8 https://icanhazip.com | tr -d '[:space:]' || true)
 [ -n "$MYIP" ] || MYIP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
 CERT_ARGS=(); SKIPPED=""
-for H in "$APP_HOST" "$ADMIN_HOST" ${ALSO_HOSTS//,/ } ${BEER_HOOK_HOST:-}; do
+for H in "$APP_HOST" "$ADMIN_HOST" ${ALSO_HOSTS//,/ }; do
   [ -n "$H" ] || continue
   HIP=$(getent ahostsv4 "$H" 2>/dev/null | awk '{print $1; exit}')
   if [ -n "$MYIP" ] && [ "$HIP" = "$MYIP" ]; then CERT_ARGS+=(-d "$H"); else SKIPPED="$SKIPPED $H(${HIP:-no record})"; fi
@@ -98,7 +92,7 @@ fi
 # DNS record is deleted. Names the certificate has but we no longer serve are removed by re-issuing it for exactly the wanted names.
 CERT_NAME=${BEER_CERT_NAME:-$APP_HOST}
 HAVE=$(certbot certificates --cert-name "$CERT_NAME" 2>/dev/null | sed -n 's/^ *Domains: //p' | head -1)
-WANT=" $APP_HOST $ADMIN_HOST ${ALSO_HOSTS//,/ } ${BEER_HOOK_HOST:-} "
+WANT=" $APP_HOST $ADMIN_HOST ${ALSO_HOSTS//,/ } "
 EXTRA=""; for H in $HAVE; do case "$WANT" in *" $H "*) ;; *) EXTRA="$EXTRA $H" ;; esac; done
 if [ -n "$EXTRA" ] && [ "${#CERT_ARGS[@]}" -gt 0 ]; then
   echo "    removing no-longer-served names from the certificate:$EXTRA"

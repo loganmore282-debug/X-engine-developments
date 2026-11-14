@@ -1223,7 +1223,7 @@ function applyBrandName(){
   if (!known) return;   // nothing to say yet; leave the blanks blank
   document.querySelectorAll('[data-brandmark]').forEach(el => { el.innerHTML = brandWordmarkHtml(); });
   document.querySelectorAll('.home-brand-title').forEach(el => { el.textContent = known; });
-  try { document.title = pgOpen() ? known + ' Pay' : known; } catch (_) {}
+  try { document.title = known; } catch (_) {}
   // Remember it for the next launch. This is the whole fix for "on start up
   // loader it was still saying beer": the loading screen paints long before
   // /public/settings answers, so the only way it can show the right name is
@@ -2333,7 +2333,6 @@ function withTimeout(promise, ms){
   return Promise.race([ promise, new Promise(resolve => setTimeout(resolve, ms)) ]);
 }
 function captureReferralFromUrl(){
-  try { const pm = /^\/payment\/(\d{8,14})\/?$/.exec(location.pathname); if (pm) window._payOrderNo = pm[1]; } catch (_) {}
   try {
     // Referral links are now shared as ".../#pages/register/?ref=CODE"
     // (Round 116) -- everything after "#" is the URL fragment, which
@@ -2624,10 +2623,6 @@ async function enterApp(){
   // session's SPA-level logout left stuck (the exact "freezes, no
   // scrolling" report this round root-caused).
   unlockBodyScroll();
-  // Fire-and-forget, both branches below: a card deposit the member never
-  // returned to the app to see resolved (they closed the tab, lost signal,
-  // whatever) picks back up here on the NEXT open, however long that is.
-  resumePendingCardDeposit();
   setTimeout(() => { try { window.resumeManualPay(); } catch (_) {} }, 1200);   // back on the payment pages where they left off
   const uid = STATE.user && STATE.user.uid;
   const cached = loadCachedState(uid);
@@ -2658,7 +2653,6 @@ async function enterApp(){
   hideLoadingScreen();
   $('app').style.display = '';
   showPage(STATE.page || 'home');
-  ckOpenPendingPayment();
   maybeAnnounceOnEntry();
   window._pendingLoginSuccess = false;   // signing in says nothing: the Home page simply opens
   ckAuthBoxEnd();
@@ -2806,7 +2800,6 @@ async function bootFromNetwork(uid){
   hideLoadingScreen();
   $('app').style.display = '';
   showPage(STATE.page || 'home');
-  ckOpenPendingPayment();
   maybeAnnounceOnEntry();
   ckAuthBoxEnd();
   if (signupFlow) { window._pendingLoginSuccess = false; ckSuccessToast('Success'); }
@@ -4492,8 +4485,8 @@ function formatPhoneDisplay(phone){
   return dialPlus() + ' ' + groups;
 }
 
-// Short names the Wallet page shows ("MTN", "Airtel"); the server still gets the full provider name.
-function walShort(n){ n = String(n || ''); return n === 'MTN Mobile Money' ? 'MTN' : n === 'Airtel Money' ? 'Airtel' : n; }
+// The name the Wallet page shows for a provider (the same as the full name the server gets).
+function walShort(n){ return String(n || ''); }
 // Withdrawal accounts: Commercial Bank of Ethiopia (a bank account number) and Telebirr (a wallet: the member's +251 phone number).
 function walProviders(){ return ['Commercial Bank of Ethiopia', 'Telebirr']; }
 function walFull(label){
@@ -4507,27 +4500,14 @@ window.openWalletSheet = async function(){
   renderWalletSheet();
   { const h2 = document.querySelector('#sheetBg .sheet-head h2'); if (h2) h2.textContent = 'Bind Wallet Address'; }
   $('sheetBg').classList.add('ck-bind-page');
-  // The provider list only widens once the bank list lands; the form is never repainted under the member's finger.
-  // An empty answer (the bank list could not be fetched) is not kept, so the next visit asks again.
-  if (!(STATE.supportedBanks && STATE.supportedBanks.length)) {
-    api('/bank/supported-banks').then(br => {
-      if (br.status === 'success' && Array.isArray(br.banks) && br.banks.length) STATE.supportedBanks = br.banks;
-      const list = $('walProviderList');
-      if (_openSheetTitle === 'Wallet' && list) list.innerHTML = walProviderOptionsHtml();
-    }).catch(() => {});
-  }
   const r = await api('/bank/list');
   if (r.status === 'success') STATE.bankAccounts = r.accounts;
   else if (!Array.isArray(STATE.bankAccounts)) STATE.bankAccounts = [];
   if (_openSheetTitle === 'Wallet') paintWalletParts();
 };
 function currentWallet(){ return (STATE.bankAccounts || [])[0] || null; }
-// The only two mobile-money names this app has ever offered -- anything
-// else in a `network` field is a bank name, validated as real (against
-// MarzPay's own live list) at the moment it was bound. No client-side list
-// membership check needed to tell the two apart; this one distinction is
-// definitional, not a lookup.
-function isMobileMoneyNetwork(network){ return network === 'Telebirr' || network === 'MTN Mobile Money' || network === 'Airtel Money'; }
+// Telebirr is the one wallet (a phone number); anything else in a `network` field is a bank name with an account number.
+function isMobileMoneyNetwork(network){ return network === 'Telebirr'; }
 function maskedTail(phone){
   const d = String(phone || '').replace(/\D/g, '');
   return d ? '****' + d.slice(-4) : '****';
@@ -4553,8 +4533,8 @@ function walletLocalPhone(phone){
 // national-trunk zero back on -- correct for a mobile money number, but it
 // would mangle a genuine bank account number (which is not read as "a
 // phone number missing its leading 0"). A bound bank account's `phone`
-// field already holds exactly what the member entered and MarzPay
-// validated, unaltered -- shown as-is.
+// field already holds exactly what the member entered,
+// unaltered -- shown as-is.
 function walletDestDisplay(w){
   if (!w) return '';
   return isMobileMoneyNetwork(w.network) ? walletLocalPhone(w.phone) : String(w.phone || '');
@@ -4666,8 +4646,8 @@ window.submitWallet = async function(){
   // Mobile money keeps its own digit-count check; a bank account number is
   // never phone-shaped, so it only needs to be present and a plausible
   // length -- never capped tighter than that (see handleWalDestInput()'s
-  // own comment for why), the server does the real validation against
-  // MarzPay before this is ever saved.
+  // own comment for why), the server does the real validation
+  // before this is ever saved.
   if (isMobileMoneyNetwork(network)) {
     if (String(phone).replace(/\D/g, '').length < 9) return notify('Enter a valid wallet account number.');
   } else if (String(phone).trim().length < 4) {
@@ -5236,11 +5216,8 @@ function resetOverlayState(){
   // A session that ends (or a logout) takes every popup with it: the Buy confirm, Help, announcement, download and the win card used to stay
   // on top of the Login screen (the win card even showed the previous member's New Balance).
   ['confirmBg', 'helpBg', 'annBg', 'payScreen'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
-  // The payment page goes with them: its countdown stops, its polls stop, and the password boxes it switched off come back (otherwise the Login
-  // screen's password box stayed disabled after a session ended while the payment page was open).
-  try { if (typeof _pg !== 'undefined') { _pg.token++; } pgStopTimer(); pgLockPasswordBoxes(false); document.title = brandName(); if (/^\/payment\//.test(location.pathname)) history.replaceState(history.state, '', '/'); } catch (_) {}
-  _openSheetTitle = null; _depActiveDepositId = null; _withdrawSubmitting = false;
-  if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
+  try { document.title = brandName(); } catch (_) {}
+  _openSheetTitle = null; _withdrawSubmitting = false;
 }
 function dlgOpened(){
   if (_dlgCleanTimer) { clearTimeout(_dlgCleanTimer); _dlgCleanTimer = null; }
@@ -5258,16 +5235,9 @@ function dlgClosed(){
 function closeTopDialog(){
   _dlgFromPop = true;
   try {
-    if ($('payScreen') && $('payScreen').classList.contains('show')) { if (_pg.view === 'form' || _pg.view === 'initiated' || _pg.view === 'unknown' || _pg.view === 'failed' || _pg.view === 'gone' || _pg.view === 'done') closePaymentPage(); else dlgOpened(); }
-    else if ($('helpBg') && $('helpBg').classList.contains('show')) closeHelpDialog();
+    if ($('helpBg') && $('helpBg').classList.contains('show')) closeHelpDialog();
     else if ($('confirmBg') && $('confirmBg').classList.contains('show')) closeConfirm();
     else if ($('annBg') && $('annBg').classList.contains('show')) closeAnnouncement();
-    else if ($('depStatusBg') && $('depStatusBg').classList.contains('show')) {
-      // The payment status page: Back closes it once it has an answer (its Close button is showing). While the payment is still being
-      // checked Back stays on the page (a real operation is in flight, as the page's own comment says), instead of walking out of the app.
-      const cb = $('depStatusCloseBtn');
-      if (cb && cb.style.display === 'block') closeDepositStatusModal(); else dlgOpened();
-    }
   } finally { _dlgFromPop = false; }
 }
 // A tap on the edge of a text box (its padding or the currency sign beside the figure) focuses the box's input too.
@@ -5394,107 +5364,6 @@ function openDepositFormSheet(){
   $('sheetBg').classList.add('ck-dep-page');
   { const b = $('depBalance'); if (b) { b._v = 0; ckTween(b, Number(bal) || 0, v => numGroup(v, true), ckBalanceMs()); } }
 }
-// PAY-A / PAY-B / PAY-C are one gateway, three labels: the choice is only
-// the highlight, nothing else reads it.
-window.pickPayLabel = function(btn){
-  const box = $('depPays');
-  if (box) box.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
-};
-var _cardChosenAmount = 0;
-window.syncCardQuickAmt = function(){
-  const val = parseMoneyInput(($('cardAmount') || {}).value);
-  _cardChosenAmount = val;
-  const chips = $('cardChips');
-  if (chips) chips.querySelectorAll('.dep-chip').forEach(btn => btn.classList.toggle('sel', Number(btn.dataset.amt) === val));
-};
-// Owner: cards go through MarzPay's own hosted gateway, so this leaves the
-// app entirely (window.location.href, a full navigation -- there is no
-// modal/iframe checkout to stay inside). Unlike Mobile Money, the app
-// itself is gone from memory the instant that navigation happens, so
-// _depActiveDepositId-style in-memory tracking (the pattern the Mobile
-// Money status modal uses) cannot survive it -- the pending deposit id has
-// to be written somewhere that outlives a full page reload. localStorage
-// is that place; resumePendingCardDeposit() (called from enterApp() on
-// every app open) is what picks it back up once the member returns from
-// MarzPay's page, however many minutes or app-relaunches later that is.
-var CARD_DEPOSIT_STORAGE_KEY = 'beer_pending_card_deposit';
-// Called once per app open (see enterApp()). Fire-and-forget: nothing else
-// on screen depends on this resolving, and a member with no pending card
-// payment (the overwhelming common case) pays for one harmless, near-instant
-// localStorage read and nothing more.
-async function resumePendingCardDeposit(){
-  let depositId;
-  try { depositId = localStorage.getItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) { return; }
-  if (!depositId) return;
-  // Used to be a single check-and-forget: if the webhook had not landed in
-  // the exact instant the member reopened the app, they saw nothing until
-  // the NEXT full app open. Poll for a short window instead, same shape and
-  // cadence as pollUsdtDepositStatus() -- a webhook landing a few seconds
-  // late (the common case; it is a real network round trip on MarzPay's
-  // side) now still surfaces here instead of silently waiting for a restart.
-  var attempts = 0;
-  var timer = setInterval(async function(){
-    attempts++;
-    try {
-      // Same status route Mobile Money already polls -- it resolves purely
-      // off dep.marzTxUuid/dep.status, never anything MoMo-specific, so a
-      // card deposit's own row is invisible to it by nothing more than
-      // coincidence of shape, not a special case that had to be added.
-      const r = await post('/deposit/marzpay/status', { depositId: depositId });
-      if (r.status === 'success' && r.state === 'matched') {
-        clearInterval(timer);
-        try { localStorage.removeItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) {}
-              notify('Card payment completed! Credited to your balance.');
-        await refreshTransactionsCache();
-        if (STATE.page === 'home') renderHome();
-        return;
-      }
-      if (r.status === 'success' && r.state === 'failed') {
-        clearInterval(timer);
-        try { localStorage.removeItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) {}
-        notify(r.message || 'The card payment did not complete.');
-        return;
-      }
-    } catch (e) {}
-    // Still pending after 6 tries (~30s): leave the key in place. The next
-    // full app open re-runs this same check, and the server-side
-    // reconcilePendingDeposits() sweep keeps retrying independently of
-    // whether the member is even looking at the app -- never declared
-    // failed just because it has not resolved within this one window.
-    if (attempts >= 6) clearInterval(timer);
-  }, 5000);
-}
-// The chip values still come from the live product prices (owner: "juck put
-// quick amounts basing on products prices"), so they stay correct when
-// products are repriced, only the chip's LOOK follows the mockup now.
-//
-// inputId picks which panel these chips belong to: Mobile Money's #depChips
-// feeds #depAmount, Card's #cardChips feeds #cardAmount. A tap used to
-// always write into #depAmount regardless of which panel was actually
-// open, so tapping a quick amount on the Card tab silently updated the
-// OTHER, hidden field and did nothing visible on screen. Each chip now
-// carries its own target, and _chosenAmountFor()/pickDepositAmount() below
-// route to the right field/chip-group instead of assuming Mobile Money.
-function depositChipsHtml(s, inputId){
-  const amounts = Array.from(new Set((STATE.products || [])
-    .map(p => Number(p.price) || 0)
-    .filter(p => p >= (Number(s.minDeposit) || 0))))
-    .sort((a, b) => a - b)
-    .slice(0, 6);
-  const chosen = _chosenAmountFor(inputId);
-  return amounts.map(a =>
-    `<button type="button" class="dep-chip${a === chosen ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a},'${inputId}')">${numGroup(a, false)}</button>`
-  ).join('');
-}
-function _chosenAmountFor(inputId){
-  return inputId === 'cardAmount' ? _cardChosenAmount : _depChosenAmount;
-}
-window.pickDepositAmount = function(amt, inputId){
-  const el = $(inputId || 'depAmount');
-  if (el) el.value = amt;
-  if (inputId === 'cardAmount') syncCardQuickAmt();
-  else syncDepositQuickAmt();
-};
 function syncDepositQuickAmt(){
   // Deposit.dc.html's own chip grid (#depChips/.dep-chip) is the only chip
   // row left. The second branch here highlighted the older .quick-amt row on
@@ -5505,271 +5374,6 @@ function syncDepositQuickAmt(){
   if (payBtn && !payBtn.disabled) ckTween(payBtn, val > 0 ? val : 0, v => 'Pay ' + numGroup(Math.round(v), false), ckBalanceMs());
   const chips = $('depChips');
   if (chips) chips.querySelectorAll('.dep-chip').forEach(btn => btn.classList.toggle('sel', Number(btn.dataset.amt) === val));
-}
-// Live deposit-status modal -- reuses the .chest-modal-bg/.chest-modal dark/
-// centered/thin pop-up convention. Opens the instant a recharge is accepted
-// and updates in place as pollDepositStatus() resolves, instead of just a
-// toast + silent background poll. No outside-tap-to-close while pending
-// (a real operation is in flight); the Close button only appears once
-// resolved (or once the poll gives up), matching the app's own established
-// pattern of only offering Close on a settled dialog state.
-window.openDepositStatusModal = function(amount, phone, network){
-  setDepositStatusPending(amount, phone, network);
-  $('depStatusBg').classList.add('show');
-  document.body.classList.add('deposit-status-open');
-  lockBodyScroll();
-  // Back closes this page (see closeTopDialog) instead of leaving the app. When the deposit sheet's own history entry is still being
-  // taken away (closeSheet called history.back() a moment ago), the popstate for that does the push (closeTopDialog); pushing here too
-  // would be popped by that same back() and leave a stale sheet entry behind. A timer makes sure an entry exists either way.
-  if (!(history.state && history.state.sheet)) dlgOpened();
-  setTimeout(() => { if ($('depStatusBg') && $('depStatusBg').classList.contains('show') && !(history.state && history.state.dlg)) dlgOpened(); }, 700);
-};
-window.closeDepositStatusModal = function(goHome){
-  // Cancels the success screen's own auto-redirect countdown if the member
-  // taps Close/Back before it fires on its own -- otherwise the timer would
-  // still be alive and try to close (or navigate) a modal that is already
-  // closed, moments later.
-  if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
-  $('depStatusBg').classList.remove('show');
-  document.body.classList.remove('deposit-status-open');
-  unlockBodyScroll();
-  dlgClosed();
-  if (goHome === true && STATE.page !== 'home') { try { navigatePage('home'); } catch (_) {} }
-};
-// ── ONE STATUS REQUEST AT A TIME ──
-// Owner: "add a button saying verify, so one can tap it but it should not
-// stop autopolling, also they should not call at the same time to strike api
-// of payment provider."
-//
-// /deposit/marzpay/status makes the server ask the payment provider about
-// this transaction, so two of them firing together is two hits on the
-// provider for one answer -- and the manual Verify tap is, by design, most
-// likely to happen exactly while the 3s autopoll is mid-request.
-//
-// This is a single-flight, not a mutex: a caller arriving while a request is
-// already out gets the SAME promise back rather than being refused or made to
-// start a second one. So the member's tap is never ignored (they still get an
-// answer, the one already on its way), the autopoll is never interrupted, and
-// the provider is never asked twice at once. It also means both callers may
-// resolve on the same response, which is why applyDepositStatusResult() below
-// has to be idempotent.
-var _depStatusInflight = null;
-var _depActiveDepositId = null;
-var _depPollDone = false;
-var _depPendingAmount = 0;
-// Long enough that hammering the button cannot turn into a burst of provider
-// calls, short enough that a member watching the screen can re-check when the
-// prompt actually lands on their phone.
-var DEP_VERIFY_COOLDOWN_MS = 2500;
-function depositStatusCheck(depositId){
-  if (_depStatusInflight) return _depStatusInflight;
-  // post() resolves to {status:'error'} rather than rejecting (see api()), so
-  // this promise never rejects and the finally always clears the slot.
-  _depStatusInflight = post('/deposit/marzpay/status', { depositId })
-    .finally(() => { _depStatusInflight = null; });
-  return _depStatusInflight;
-}
-// The autopoll's own request: asks the server to HOLD the answer for a few seconds while it is watching the payment (server.js waitDepositSettled),
-// so "paid" arrives the moment PesaJet confirms instead of at the next tick. Deliberately NOT shared with depositStatusCheck(): a Verify tap must
-// never be made to wait behind a held request. A server that does not hold simply answers at once and the loop's own pacing takes over.
-var DEP_HOLD_MS = 8000;
-function depositStatusHold(depositId){
-  return post('/deposit/marzpay/status', { depositId, waitMs: DEP_HOLD_MS });
-}
-// The single place that decides what a status response MEANS, shared by the
-// autopoll and the Verify button so the two can never disagree about the same
-// payload. Returns true once the deposit has settled.
-async function applyDepositStatusResult(r){
-  if (_depPollDone) return true;
-  if (!r || r.status !== 'success') return false;
-  if (r.state === 'matched') {
-    _depPollDone = true;
-    setDepositStatusSuccess();
-    await refreshTransactionsCache();
-    if (STATE.page === 'home') renderHome();
-    return true;
-  }
-  if (r.state === 'failed') {
-    _depPollDone = true;
-    setDepositStatusFailed(r.message);
-    await refreshTransactionsCache();
-    return true;
-  }
-  return false;
-}
-// Which of the two buttons the current state offers. Verify stays available
-// in the "still processing" state as well as while pending -- that state is
-// the autopoll giving up on its 60s budget, NOT the payment being over, so
-// taking the one control that can still resolve it away at exactly that
-// moment would be backwards.
-function setDepButtons(showVerify, showClose){
-  const v = $('depVerifyBtn'), c = $('depStatusCloseBtn');
-  if (v) { v.style.display = showVerify ? 'block' : 'none'; v.disabled = false; v.textContent = 'Verify'; }
-  if (c) { c.style.display = showClose ? 'block' : 'none'; c.setAttribute('onclick', 'closeDepositStatusModal(' + (c.textContent === 'Back to Home') + ')'); }
-}
-window.verifyDepositNow = async function(){
-  const btn = $('depVerifyBtn');
-  if (!_depActiveDepositId || _depPollDone || !btn || btn.disabled) return;
-  btn.disabled = true; btn.textContent = 'Checking…';
-  const settled = await applyDepositStatusResult(await depositStatusCheck(_depActiveDepositId));
-  if (settled) return;                       // setDep* already reset the buttons
-  notify('Not confirmed yet. Approve the payment prompt on your phone, then tap Verify again.');
-  // The cooldown runs from the ANSWER, not the tap, so a slow provider does
-  // not let taps queue up behind it.
-  setTimeout(() => {
-    if (_depPollDone) return;
-    const b = $('depVerifyBtn');
-    if (b) { b.disabled = false; b.textContent = 'Verify'; }
-  }, DEP_VERIFY_COOLDOWN_MS);
-};
-function setDepositStatusPending(amount, phone, network){
-  if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }   // an old success countdown must not close this new page
-  $('depStatusIcon').className = 'dep-status-icon';
-  $('depStatusIcon').innerHTML = DEPOSIT_POLL_FLOW;
-  $('depStatusTitle').textContent = 'Processing your deposit';
-  // Owner asked for the specifics shown here, not a generic message --
-  // the actual number the prompt was sent to and the actual amount.
-  const displayPhone = cleanPhone(phone) || (dialPlus() + String(phone || '').replace(/\D/g, ''));
-  // Owner: "put another statement, that dial *165# to approve, this is
-  // just a fallback bro because a payment prompt can come or it may fail
-  // and one may dial *165# so he see pending approval" -- the USSD push
-  // prompt itself can fail to arrive (a real, common MoMo gap, not
-  // specific to this app), so a member staring at a prompt that never
-  // shows up needs a way out other than waiting. Dialling the network's
-  // own money menu surfaces the same pending collection request for
-  // manual approval there instead. Network-specific -- *165# is MTN
-  // Mobile Money's own menu, *185# is Airtel Money's; showing the wrong
-  // one would send a member down a dead end. Round 145 dropped the
-  // network selector from PAY A's own form (the gateway detects it
-  // instead), so `network` is no longer reliably known here -- show both
-  // codes rather than guessing.
-  const ussd = network === 'Airtel Money' ? '*185#' : (network === 'MTN Mobile Money' ? '*165#' : '*165# (MTN) or *185# (Airtel)');
-  _depPendingAmount = Number(amount) || 0;
-  // Owner's own four steps, verbatim. Numbered because they are a sequence
-  // with one thing for the member to DO in the middle of it -- the previous
-  // single paragraph buried "approve it on your phone" mid-sentence between
-  // two facts, which is the one line that actually needed to be found.
-  //
-  // esc() on both interpolations: the amount is ours, but the phone number is
-  // whatever was typed into the form, and this is innerHTML now.
-  $('depStatusBody').innerHTML =
-    '<ol class="pay-steps">'
-    + '<li>A payment request for ' + esc(fmtUGX(amount)) + ' has been sent to ' + esc(displayPhone) + '.</li>'
-    + '<li>Check your phone for the payment prompt.</li>'
-    + '<li>Approve the payment to complete your deposit.</li>'
-    + '<li>Your balance will be updated automatically once the payment is confirmed.</li>'
-    + '</ol>'
-    // Kept from the earlier round, and deliberately NOT dropped when the four
-    // steps replaced the old paragraph. Owner, when it was added: "put another
-    // statement, that dial *165# to approve, this is just a fallback bro
-    // because a payment prompt can come or it may fail and one may dial *165#
-    // so he see pending approval." The push prompt genuinely does fail to
-    // arrive sometimes -- a real MoMo gap, not something this app causes --
-    // and without this a member is left staring at step 2 with nothing to do.
-    + '<p class="pay-note">If the prompt does not come up, dial ' + esc(ussd)
-    + ' on that phone to find and approve the pending payment yourself.</p>';
-  // Owner: "remove verify button, so this is automatic verification" -- the
-  // autopoll (pollDepositStatus() below) already checks on its own; a manual
-  // Verify tap next to it was a second way to do the same thing, not a
-  // needed one. Neither button shows while pending now -- purely automatic,
-  // nothing for the member to do but wait.
-  setDepButtons(false, false);
-}
-// (Confetti and sparkles were removed on the owner's request: success is shown by the tick drawing itself, see playStatusIcon.)
-var _depSuccessRedirectTimer = null;
-function setDepositStatusSuccess(){
-  $('depStatusIcon').className = 'dep-status-icon success';
-  // The owner's own artwork, cut out of the images he supplied.
-  playStatusIcon($('depStatusIcon'), 'ok');
-  // Owner: "let me think that on payment success it says congratulations
-  // payment has been received {added to your wallet} redirecting back home
-  // in 5 seconds or you can say so back the button should be available."
-  $('depStatusTitle').textContent = 'Congratulations!';
-  // Names the actual figure when it is known (it always is on the automatic
-  // path, since the pending state set it moments earlier) and falls back to
-  // wording that reads properly without one -- the manual-deposit path lands
-  // here from handleManualDepositStatusResult() without ever showing pending.
-  // brandName(), not the literal: the app's name is admin-settable.
-  const amountLine = _depPendingAmount
-    ? 'Payment received — ' + esc(fmtUGX(_depPendingAmount)) + ' has been added to your wallet.'
-    : 'Payment received — your deposit has been added to your ' + esc(brandName()) + ' wallet.';
-  $('depStatusBody').innerHTML = '<p>' + amountLine + '</p><p class="pay-note" id="depRedirectCountdown"></p>';
-  // Close doubles as "Back to Home" here -- available immediately so a
-  // member who does not want to wait the 5 seconds out can leave right
-  // away, exactly as asked ("or you can say so back the button should be
-  // available"). The countdown auto-fires the identical action if they
-  // don't tap it first.
-  const c = $('depStatusCloseBtn');
-  if (c) c.textContent = 'Back to Home';
-  setDepButtons(false, true);
-  let secondsLeft = 5;
-  const tick = () => {
-    const el = $('depRedirectCountdown');
-    if (el) el.textContent = 'Returning to Home in ' + secondsLeft + '…';
-    if (secondsLeft <= 0) {
-      if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
-      closeDepositStatusModal(true);
-      return;
-    }
-    secondsLeft--;
-  };
-  if (_depSuccessRedirectTimer) clearInterval(_depSuccessRedirectTimer);
-  tick();
-  _depSuccessRedirectTimer = setInterval(() => { if (!document.hidden) tick(); }, 1000);   // the countdown waits while the app is in the background
-}
-function setDepositStatusFailed(msg){
-  $('depStatusIcon').className = 'dep-status-icon failed';
-  // Owner sent two reference icon styles for this state and said "pick any
-  // of the 2, I said signs not words" -- an exclamation mark, not the X this
-  // used to draw. Kept the same soft-fill-circle-plus-stroke treatment
-  // setDepositStatusSuccess()'s own checkmark right above already uses
-  // (same --snow-wine-soft/--snow-wine tokens this circle already had) --
-  // only the mark inside changed, matching image 2's outlined style over
-  // image 3's solid-filled one, for visual consistency with that sibling.
-  playStatusIcon($('depStatusIcon'), 'fail');
-  $('depStatusTitle').textContent = 'Payment not completed';
-  // Owner asked for "due to insufficient funds" here -- checked against
-  // MarzPay's own integration guide first rather than guessing at a field
-  // name: a collection that fails after being accepted carries no reason at
-  // all in MarzPay's documented response/webhook shapes, only a terminal
-  // status (see server.js's DEPOSIT_FAILED_MSG, and its own long comment,
-  // for the full citation). Naming ONE specific cause here would be a
-  // fabricated claim this app has no way to know is true -- this instead
-  // lists the real, plausible causes without asserting which one it was.
-  // `msg` is server-supplied on the normal path; this fallback only fires
-  // for a purely client-side failure that never reached the server at all.
-  $('depStatusBody').innerHTML = '<p>' + esc(msg
-    || 'This deposit did not go through. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Your ' + brandName() + ' balance has not changed.') + '</p>';
-  // Undoes setDepositStatusSuccess()'s own "Back to Home" relabel -- this
-  // button means plain Close here, on a modal a later deposit attempt can
-  // reuse without a fresh page load in between.
-  const cf = $('depStatusCloseBtn'); if (cf) cf.textContent = 'Close';
-  setDepButtons(false, true);
-}
-function setDepositStatusUnknown(){
-  $('depStatusIcon').className = 'dep-status-icon';
-  $('depStatusIcon').innerHTML = DEPOSIT_POLL_FLOW;
-  $('depStatusTitle').textContent = 'Still waiting for the provider';
-  $('depStatusBody').innerHTML = '<p>The payment has not been confirmed yet, and nothing is lost. '
-    + 'If it goes through, your balance updates on its own automatically, '
-    + 'or look under Transaction Statement later to check.</p>';
-  const cu = $('depStatusCloseBtn'); if (cu) cu.textContent = 'Close';
-  // Verify removed here too (see setDepositStatusPending's own comment) --
-  // this is the same automatic wait, just past the autopoll's own 60s
-  // budget. Close is the only control: a way off the screen, not a way to
-  // ask again by hand.
-  setDepButtons(false, true);
-}
-// The grey "Loading" state of a Pay button (a 12-spoke spinner and the word), restored to its own label afterwards.
-function ckPayLoading(btn, on, label){
-  if (!btn) return;
-  if (on) {
-    if (btn._raf) { cancelAnimationFrame(btn._raf); btn._raf = 0; }   // a count-up still running must not write its figure over "Loading"
-    btn.disabled = true; btn.classList.add('ck-pay-ld');
-    btn.innerHTML = '<svg class="ck-pay-sp" viewBox="0 0 24 24" aria-hidden="true">' + Array.from({ length: 12 }, (_, i) => `<line x1="12" y1="2.6" x2="12" y2="7.2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" opacity="${(0.16 + 0.84 * (i + 1) / 12).toFixed(2)}" transform="rotate(${i * 30} 12 12)"/>`).join('') + '</svg>Loading';
-  } else {
-    btn.disabled = false; btn.classList.remove('ck-pay-ld'); btn.textContent = label; btn._v = parseMoneyInput(label);
-  }
 }
 // ── MANUAL BANK / WALLET RECHARGE PAGES (Ethiopia) ──
 // Owner's three screens, built to his screenshots (412 css px wide, 2.625 device px per css px):
@@ -6018,399 +5622,6 @@ window.submitDeposit = async function(){
   if (s.manualPay === true) return openManualPayFlow(amount);
   return notify('Recharge is not available right now.');
 };
-window.submitDepositGateway = async function(){
-  const submitBtn = $('depSubmitBtn');
-  const amount = parseMoneyInput($('depAmount').value);
-  const s = STATE.settings || {};
-  const picked = document.querySelector('#depPays button.on'), method = picked ? picked.dataset.m : '';
-  // Pay makes an ORDER on the server (the amount is fixed there) and the member goes on to the payment page, /payment/<order number>. The button
-  // turns grey with "Loading" and the loading box shows until the server has made it.
-  ckPayLoading(submitBtn, true);
-  ckLoadBegin();
-  const seq = window._sheetSeq;   // which sheet this tap belongs to
-  let r, leaving = false;
-  try {
-    r = await post('/deposit/order/create', { amount, method });
-    // The member backed out while the order was being made: stay where they are.
-    leaving = !!(r && !r.stale && r.status === 'success' && r.orderNo && $('depSubmitBtn') === submitBtn && _openSheetTitle === 'Deposit' && window._sheetSeq === seq);
-  } finally {
-    // Going to the payment page is a real redirect (the browser loads /payment/<order number>), so the loading box and the grey button stay up
-    // until the browser takes over, as on any redirect link.
-    if (!leaving) { ckLoadEnd(); ckPayLoading(submitBtn, false, 'Pay ' + numGroup(amount, false)); }
-  }
-  if (r && r.stale) return;
-  if (!r || r.status !== 'success' || !r.orderNo) return notify((r && r.message) || 'Could not start the payment');
-  if (!leaving) return;
-  const no = r.orderNo;
-  redirectTo('/payment/' + no, true, () => { ckLoadEnd(); ckPayLoading(submitBtn, false, 'Pay ' + numGroup(amount, false)); closeSheet({ fromAction: true }); openPaymentPage(no); });
-};
-// A real browser navigation (the address bar loads the new page, the tab shows its loading bar) instead of the app swapping screens by itself.
-// `keepBack` true = a new history entry (Back returns to where the member was); false = the current entry is replaced, so Back never returns to the page that redirected. If the browser refuses (it should
-// not), the app opens the page itself.
-function redirectTo(path, keepBack, fallback){
-  try { if (keepBack) location.assign(path); else location.replace(path); }
-  catch (_) { try { if (typeof fallback === 'function') fallback(); } catch (_) {} }
-}
-// ── THE PAYMENT PAGE: /payment/<order number> ──
-// Pay on Deposit makes an order on the server (the amount is fixed there) and lands here. The amount cannot be edited; the member gives the phone
-// number the prompt goes to and the provider, taps Pay, and the page waits (a real status read every 1.5 s) for the provider's answer. On success the
-// "Success" tick box shows and the app goes back to Home by itself.
-var _pg = { no: '', order: null, view: '', depositId: '', reference: '', token: 0 };
-// Chrome offers "Use saved password?" on any phone-looking box when the page also holds a password box (the sign-in and change-password boxes sit
-// in the same document). While the payment page is open those password boxes are switched off, so there is nothing to pair the phone box with.
-function pgLockPasswordBoxes(on){
-  try {
-    if (on) document.querySelectorAll('input[type=password]').forEach(i => { if (!i.disabled && !$('payScreen').contains(i)) { i.disabled = true; i.setAttribute('data-pg-off', '1'); } });
-    else document.querySelectorAll('input[data-pg-off]').forEach(i => { i.disabled = false; i.removeAttribute('data-pg-off'); });
-  } catch (_) {}
-}
-function pgOpen(){ const el = $('payScreen'); return !!(el && el.classList.contains('show')); }
-// "Pay" is part of the page's name and is fixed; the brand in front of it is the admin's name for the app, so "Beer Pay" becomes "<new name> Pay" everywhere here.
-function pgBrand(){ return esc(brandName()) + ' Pay'; }
-function pgTitle(){ return brandName() + ' Pay'; }
-function pgMoney(n){ return esc(cur()) + ' ' + numGroup(Number(n) || 0, false); }
-function pgFrame(inner, timer){
-  return `<div class="pg-brand">${pgBrand()}</div>
-  <div class="pg-card">
-    <div class="pg-head"><span class="pg-sub">${pgBrand()}</span><h1>Payment</h1>${timer ? `<div class="pg-time" id="pgTimer" aria-label="Time left to pay">${PG_CLOCK}<b id="pgTimerTxt">10:00</b></div>` : ''}</div>
-    <div class="pg-body">${inner}</div>
-  </div>
-  <p class="pg-foot">Powered by ${pgBrand()} &middot; ${esc(regionName())}</p>`;
-}
-function pgFormHtml(o){
-  return pgFrame(`
-    <label class="pg-l" for="pgAmount">Amount (${esc(cur())})</label>
-    <input class="pg-in pg-locked" id="pgAmount" type="text" value="${esc(String(o.amount))}" readonly tabindex="-1" aria-readonly="true">
-    <label class="pg-l" for="pgPhone">Phone Number</label>
-    <input class="pg-in" id="pgPhone" name="pg_msisdn" type="text" inputmode="numeric" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-form-type="other" placeholder="e.g. 0700 000 000" value="" required oninput="this.value=this.value.replace(/[^0-9+ ]/g,'')">
-    <label class="pg-l" for="pgNet">Mobile Money Provider</label>
-    <div class="pg-sel"><select class="pg-in" id="pgNet" required><option value="" selected disabled hidden>Select provider</option><option value="MTN Mobile Money">MTN Mobile Money</option><option value="Airtel Money">Airtel Money</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="pg-sum">
-      <div><span>Subtotal</span><span>${pgMoney(o.amount)}</span></div>
-      <div><span>Processing fee</span><span>+${pgMoney(0)}</span></div>
-      <div class="pg-tot"><span>Total to pay</span><b>${pgMoney(o.amount)}</b></div>
-    </div>
-    <p class="pg-err" id="pgErr" role="alert"></p>
-    <button class="pg-pay" id="pgPayBtn" type="button" onclick="pgPay()">Pay ${pgMoney(o.amount)}</button>
-    <p class="pg-note">You will receive a mobile money prompt to confirm the payment.<br>Secured by ${pgBrand()}</p>`, true);
-}
-function pgCenterHtml(icon, title, text, extra){
-  return `<div class="pg-center">${icon}<h2>${esc(title)}</h2><p class="pg-msg">${esc(text)}</p>${extra || ''}</div>`;
-}
-var PG_CHECK = '<span class="pg-ico"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="14.5" fill="none" stroke="#1ed67a" stroke-width="3.4"/><path d="M17.5 24.5l4.8 4.8 8.7-9.8" fill="none" stroke="#1ed67a" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
-var PG_CROSS = '<span class="pg-ico pg-bad"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="14.5" fill="none" stroke="#ff5d73" stroke-width="3.4"/><path d="M18.5 18.5l11 11M29.5 18.5l-11 11" fill="none" stroke="#ff5d73" stroke-width="3.4" stroke-linecap="round"/></svg></span>';
-// The clock is alive: the minute hand goes round every 4 seconds and the hour hand every 48 (SVG's own animation, so it moves the same on every phone and
-// needs no script). Used for the countdown corner and for "Awaiting mobile money approval".
-var PG_CLOCK = '<svg class="pg-clk" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path class="pg-hh" d="M12 12V8.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="48s" repeatCount="indefinite"/></path><path class="pg-hm" d="M12 12V6.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="4s" repeatCount="indefinite"/></path><circle cx="12" cy="12" r="1.3" fill="currentColor"/></svg>';
-function pgRefLine(){ const r = String(_pg.reference || ''); return r ? `<p class="pg-ref">Ref: ${esc(r.length > 20 ? r.slice(0, 18) + '…' : r)}</p>` : ''; }
-// The 10-minute window to pay, counted on the server's clock down to the order's own end time. Only the form shows it; at 0:00 the page closes the order.
-var _pgTick = 0;
-function pgStopTimer(){ if (_pgTick) { clearInterval(_pgTick); _pgTick = 0; } }
-function pgStartTimer(expiresAt, token){
-  pgStopTimer();
-  const draw = () => {
-    if (token !== _pg.token || _pg.view !== 'form') return pgStopTimer();
-    const left = Math.max(0, Math.ceil((Number(expiresAt) - Date.now()) / 1000));
-    const box = $('pgTimer'), t = $('pgTimerTxt');
-    if (t) t.textContent = String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0');
-    if (box) box.classList.toggle('pg-low', left <= 60);
-    if (left <= 0) {
-      if (document.querySelector('#pgPayBtn.pg-busy')) return;   // Pay is in flight: the payment is being started, do not close the page under it
-      pgStopTimer(); pgShowGone('This payment has expired. Please start again from Deposit.');
-    }
-  };
-  draw(); _pgTick = setInterval(draw, 1000);
-}
-function pgSet(view, html){
-  pgStopTimer();
-  if (_pgSwapTimer) { clearTimeout(_pgSwapTimer); _pgSwapTimer = 0; }
-  _pg.view = view;
-  const body = $('pgBody'); if (body) body.innerHTML = html;
-  const el = $('payScreen'); if (el) el.scrollTop = 0;
-}
-// The loader that takes the tick's place two seconds after "Payment Initiated!": twelve blades, the newest one dark and the rest fading out behind it, turning in 12 steps.
-var PG_SPINNER = '<span class="pg-ico pg-spinner"><svg viewBox="-24 -24 48 48" aria-hidden="true"><g class="pg-sp"><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(0)" fill="#fff" fill-opacity="1.00" stroke="#fff" stroke-opacity="1.00" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(30)" fill="#fff" fill-opacity="0.12" stroke="#fff" stroke-opacity="0.12" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(60)" fill="#fff" fill-opacity="0.20" stroke="#fff" stroke-opacity="0.20" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(90)" fill="#fff" fill-opacity="0.28" stroke="#fff" stroke-opacity="0.28" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(120)" fill="#fff" fill-opacity="0.36" stroke="#fff" stroke-opacity="0.36" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(150)" fill="#fff" fill-opacity="0.44" stroke="#fff" stroke-opacity="0.44" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(180)" fill="#fff" fill-opacity="0.52" stroke="#fff" stroke-opacity="0.52" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(210)" fill="#fff" fill-opacity="0.60" stroke="#fff" stroke-opacity="0.60" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(240)" fill="#fff" fill-opacity="0.68" stroke="#fff" stroke-opacity="0.68" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(270)" fill="#fff" fill-opacity="0.76" stroke="#fff" stroke-opacity="0.76" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(300)" fill="#fff" fill-opacity="0.84" stroke="#fff" stroke-opacity="0.84" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(330)" fill="#fff" fill-opacity="0.92" stroke="#fff" stroke-opacity="0.92" stroke-width="1.6" stroke-linejoin="round"/></g></svg></span>';
-var _pgSwapTimer = 0;
-function pgShowInitiated(){
-  pgSet('initiated', pgCenterHtml(PG_CHECK, 'Payment Initiated!', 'Check your phone for a prompt from your mobile money provider. Approve it to complete the payment.', pgRefLine() + `<p class="pg-wait">${PG_CLOCK}<span>Awaiting mobile money approval</span></p><p class="pg-auto">Your payment is detected automatically. You do not need to refresh or press anything.</p>`));
-  const tok = _pg.token;
-  _pgSwapTimer = setTimeout(() => {
-    _pgSwapTimer = 0;
-    if (tok !== _pg.token || _pg.view !== 'initiated') return;
-    const ico = document.querySelector('#pgBody .pg-center > .pg-ico'); if (!ico) return;
-    ico.outerHTML = PG_SPINNER;
-  }, 2000);
-}
-function pgShowUnknown(){
-  pgSet('unknown', pgCenterHtml(PG_CHECK, 'Still waiting', 'The payment has not been confirmed yet and nothing is lost. If you approve it, your balance updates on its own; you can also look in Records later.', pgRefLine() + `<button class="pg-pay pg-small" type="button" onclick="pgHome()">Back to Home</button>`));
-}
-function pgShowFailed(msg){
-  pgSet('failed', pgCenterHtml(PG_CROSS, 'Payment failed', msg || 'The payment did not go through. Nothing was taken from you.', `<button class="pg-pay pg-small" type="button" onclick="pgAgain()">Try again</button><button class="pg-ghost" type="button" onclick="pgHome()">Back to Home</button>`));
-}
-function pgShowGone(msg){
-  pgSet('gone', pgCenterHtml(PG_CROSS, 'Payment not available', msg || 'This payment link is not available.', `<button class="pg-pay pg-small" type="button" onclick="pgHome()">Back to Home</button>`));
-}
-// The page owns one history entry (like the other full-screen dialogs) so Back closes it instead of leaving the app, and the address bar shows
-// /payment/<order number> while it is open.
-function pgSyncUrl(no){
-  const set = () => { try { if (pgOpen() && history.state && history.state.dlg) history.replaceState({ dlg: 1 }, '', '/payment/' + no); } catch (_) {} };
-  [30, 500, 800, 1300].forEach(ms => setTimeout(set, ms));
-}
-window.openPaymentPage = async function(orderNo, fromAddress){
-  const no = String(orderNo || '').trim();
-  if (!/^\d{8,14}$/.test(no)) return;
-  const el = $('payScreen'); if (!el) return;
-  const token = ++_pg.token;
-  _pg = { no, order: null, view: 'loading', depositId: '', reference: '', token };
-  pgSet('loading', '');
-  el.classList.add('show'); el.setAttribute('aria-hidden', 'false');
-  try { document.title = pgTitle(); } catch (_) {}
-  pgLockPasswordBoxes(true);
-  lockBodyScroll();
-  if (fromAddress) { try { history.replaceState({}, '', '/'); } catch (_) {} }
-  if (!(history.state && history.state.sheet)) dlgOpened();
-  setTimeout(() => { if (pgOpen() && !(history.state && history.state.dlg)) dlgOpened(); }, 700);
-  pgSyncUrl(no);
-  ckExpectLoad();
-  await pgLoadOrder(no, token);
-};
-// Reads the order and shows whatever state it is in (the form, "initiated", failed, expired). Shared by opening the page and by pull-down-to-refresh.
-async function pgLoadOrder(no, token){
-  const r = await api('/deposit/order/' + encodeURIComponent(no));
-  if (token !== _pg.token || !pgOpen()) return;
-  if (r.status !== 'success' || !r.order) return pgShowGone(r.status === 'error' && r.code === 'ORDER_NOT_FOUND' ? 'This payment link is not available.' : (r.message || 'Could not load this payment. Check your connection and try again.'));
-  const o = r.order; _pg.order = o;
-  // The time left comes as a duration from the server and is counted on THIS phone's clock, so a phone whose clock is wrong still counts correctly.
-  o.expiresAtLocal = Date.now() + (Number(o.msLeft) >= 0 ? Number(o.msLeft) : Math.max(0, Number(o.expiresAt || 0) - ckNow()));
-  if (o.depositId) {            // opened again after Pay was tapped (a refresh): carry on waiting for the same payment
-    _pg.depositId = o.depositId; _pg.reference = o.reference || '';
-    pgShowInitiated(); pgPoll(o.depositId, token); return;
-  }
-  if (o.state !== 'created') return pgShowGone(o.state === 'expired' || o.state === 'replaced' ? 'This payment has expired. Please start again from Deposit.' : 'This payment is not available.');
-  pgSet('form', pgFormHtml(o));
-  const d = _pg.draft; _pg.draft = null;      // what was typed before a pull-down refresh comes back
-  if (d) { const ph = $('pgPhone'), nt = $('pgNet'); if (ph && d.phone) ph.value = d.phone; if (nt && d.net) nt.value = d.net; }
-  pgStartTimer(o.expiresAtLocal, token);
-}
-// ── PULL DOWN TO REFRESH (the payment page is an address, so it behaves like a page: pull down at the top to read it again) ──
-// The page's state is read again from the server (the form with its fresh countdown, or the payment's progress); nothing typed is lost and no
-// history entry is added. Works only at the very top of the page, past 64 px of pull, on touch phones.
-var _ptr = { y0: 0, on: false, pull: 0, busy: false };
-function ptrPaint(px, spinning){
-  const el = $('pgPtr'); if (!el) return;
-  el.style.transform = 'translate(-50%,' + (px - 46) + 'px) rotate(' + (spinning ? 0 : px * 4) + 'deg)';
-  el.style.opacity = px > 4 || spinning ? '1' : '0';
-  el.classList.toggle('pg-spin', !!spinning);
-}
-window.pgRefresh = async function(){
-  if (!pgOpen() || !_pg.no || _pg.view === 'loading' || _pg.view === 'done') return;
-  if (document.querySelector('#pgPayBtn.pg-busy')) return;   // a Pay is in flight: reloading now would drop its answer and re-enable the button
-  const ph = $('pgPhone'), nt = $('pgNet');
-  _pg.draft = (_pg.view === 'form' && ph) ? { phone: ph.value, net: nt ? nt.value : '' } : null;
-  const token = ++_pg.token, began = Date.now();
-  try { await pgLoadOrder(_pg.no, token); } catch (_) {}
-  const left = 600 - (Date.now() - began); if (left > 0) await new Promise(r => setTimeout(r, left));   // the spinner is always seen
-};
-(function(){
-  const scr = () => $('payScreen');
-  document.addEventListener('touchstart', e => {
-    const s = scr(); if (!s || !s.classList.contains('show') || _ptr.busy || !e.touches || e.touches.length !== 1) return;
-    if (!s.contains(e.target) || s.scrollTop > 0) return;
-    _ptr.y0 = e.touches[0].clientY; _ptr.on = true; _ptr.pull = 0;
-  }, { passive: true });
-  document.addEventListener('touchmove', e => {
-    if (!_ptr.on) return;
-    const s = scr(), dy = e.touches[0].clientY - _ptr.y0;
-    if (!s || dy <= 0 || s.scrollTop > 0) { _ptr.on = false; _ptr.pull = 0; ptrPaint(0, false); return; }
-    _ptr.pull = Math.min(96, dy * 0.5); ptrPaint(_ptr.pull, false);
-    if (e.cancelable) e.preventDefault();
-  }, { passive: false });
-  const end = async () => {
-    if (!_ptr.on) return; _ptr.on = false;
-    if (_ptr.pull >= 32 && !_ptr.busy) {                  // 32 px of drawn pull = 64 px of finger travel
-      _ptr.busy = true; ptrPaint(46, true);
-      try { await window.pgRefresh(); } finally { _ptr.busy = false; ptrPaint(0, false); }
-    } else ptrPaint(0, false);
-    _ptr.pull = 0;
-  };
-  document.addEventListener('touchend', end, { passive: true });
-  document.addEventListener('touchcancel', end, { passive: true });
-})();
-window.closePaymentPage = function(){
-  if (!pgOpen()) return;
-  _pg.token++; pgStopTimer();
-  const el = $('payScreen'); el.classList.remove('show'); el.setAttribute('aria-hidden', 'true');
-  try { document.title = brandName(); } catch (_) {}
-  pgLockPasswordBoxes(false);
-  if (!isScrollLockOverlayOpen()) unlockBodyScroll();
-  dlgClosed();
-};
-window.pgHome = function(){ redirectTo('/', false, () => { closePaymentPage(); try { navigatePage('home'); } catch (_) {} }); };
-window.pgAgain = function(){ closePaymentPage(); setTimeout(() => { try { openDepositSheet(); } catch (_) {} }, 450); };
-// The payment request is sealed before it leaves the phone (the server's pay-seal.js opens it): ECDH P-256 with a fresh key for every payment, an
-// AES-256-GCM box around the order number, phone and provider, a time stamp and a one-time random number. The answer comes back sealed with the same
-// key. The browser only offers this on HTTPS; on the plain-HTTP design preview it goes the ordinary way.
-function pgB64u(u8){ let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
-function pgUnB64u(t){ const s = atob(String(t).replace(/-/g, '+').replace(/_/g, '/')); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
-async function pgSealedPost(path, body, again){
-  const w = window, sub = w.crypto && w.crypto.subtle;
-  if (!sub || w.isSecureContext === false) return post(path, body);
-  const k = await api('/pay/key');
-  if (!k || k.status !== 'success' || !k.jwk) return (k && k.status === 'error') ? k : { status: 'error', message: 'Could not start the payment. Please try again.' };
-  const enc = new TextEncoder();
-  const server = await sub.importKey('jwk', k.jwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
-  const mine = await sub.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
-  const aes = await sub.importKey('raw', await sub.digest('SHA-256', await sub.deriveBits({ name: 'ECDH', public: server }, mine.privateKey, 256)), 'AES-GCM', false, ['encrypt', 'decrypt']);
-  const epk = pgB64u(new Uint8Array(await sub.exportKey('raw', mine.publicKey)));
-  const iv = w.crypto.getRandomValues(new Uint8Array(12)), nonce = pgB64u(w.crypto.getRandomValues(new Uint8Array(18)));
-  const ct = new Uint8Array(await sub.encrypt({ name: 'AES-GCM', iv, additionalData: enc.encode(k.kid + '.' + epk) }, aes, enc.encode(JSON.stringify(Object.assign({ ts: ckNow(), nonce }, body)))));
-  const r = await post(path, { sealed: { kid: k.kid, epk, iv: pgB64u(iv), ct: pgB64u(ct) } });
-  if (r && r.code === 'SEAL_KEY' && !again) return pgSealedPost(path, body, true);   // the server restarted and has a new key
-  if (r && r.sealed) {
-    try {
-      const plain = await sub.decrypt({ name: 'AES-GCM', iv: pgUnB64u(r.sealed.iv), additionalData: enc.encode(k.kid + '.res') }, aes, pgUnB64u(r.sealed.ct));
-      return JSON.parse(new TextDecoder().decode(plain));
-    } catch (_) { return { status: 'error', message: 'Could not read the answer. Check Records before trying again.' }; }
-  }
-  return r;
-}
-window.pgPay = async function(){
-  const btn = $('pgPayBtn'); if (!btn || btn.disabled || _pg.view !== 'form') return;
-  const err = $('pgErr'); if (err) err.textContent = '';
-  const phoneBox = $('pgPhone');
-  // An empty box gets the browser's own "Please fill out this field." bubble, as the design shows.
-  if (phoneBox && !String(phoneBox.value).trim()) { phoneBox.focus(); if (phoneBox.reportValidity) phoneBox.reportValidity(); return; }
-  const phone = cleanPhone((phoneBox || {}).value);
-  if (!phone) { if (err) err.textContent = 'Enter a valid ' + regionName() + ' mobile number.'; return; }
-  // No provider is picked for the member: an untouched box gets the browser's own "Please select an item in the list." bubble.
-  const netBox = $('pgNet');
-  if (netBox && !netBox.value) { netBox.focus(); if (netBox.reportValidity) netBox.reportValidity(); return; }
-  const network = (netBox || {}).value || '';
-  const token = _pg.token, label = btn.textContent;
-  btn.disabled = true; btn.classList.add('pg-busy');
-  btn.innerHTML = '<span class="pg-ring"></span>Processing…';
-  let r;
-  try { r = await pgSealedPost('/deposit/marzpay', { orderNo: _pg.no, phone, network }); }
-  catch (_) { r = null; }
-  if (token !== _pg.token || !pgOpen()) return;
-  if (!r || r.status !== 'success') {
-    if (r && (r.code === 'ORDER_EXPIRED' || r.code === 'ORDER_NOT_FOUND')) return pgShowGone(r.message);
-    btn.disabled = false; btn.classList.remove('pg-busy'); btn.textContent = label;
-    if (err) err.textContent = (r && r.message) || 'Could not start the payment. Please try again.';
-    return;
-  }
-  _pg.depositId = r.depositId; _pg.reference = r.reference || '';
-  refreshTransactionsCache().catch(() => {});
-  pgShowInitiated();
-  pgPoll(r.depositId, token);
-};
-// One status read at a time (the same single-flight read the old status page used), a first check at 1 s, then every 1.5 s for 70 s, then every
-// 4 s for 3 more minutes: a payment approved late still turns the page into its result.
-async function pgPoll(depositId, token){
-  const began = Date.now();
-  await new Promise(r => setTimeout(r, DEP_POLL_FIRST_MS));
-  while (Date.now() - began < 70000) {
-    const t0 = Date.now();
-    if (token !== _pg.token || !pgOpen()) return;
-    const r = await depositStatusHold(depositId);
-    if (token !== _pg.token || !pgOpen()) return;
-    if (await pgApply(r, token)) return;
-    const spent = Date.now() - t0;
-    if (spent < DEP_POLL_EVERY_MS) await new Promise(r2 => setTimeout(r2, DEP_POLL_EVERY_MS - spent));
-  }
-  if (token !== _pg.token || !pgOpen()) return;
-  pgShowUnknown();
-  const until = Date.now() + 180000;
-  while (Date.now() < until) {
-    await new Promise(r => setTimeout(r, 4000));
-    if (token !== _pg.token || !pgOpen()) return;
-    const r = await depositStatusHold(depositId);
-    if (token !== _pg.token || !pgOpen()) return;
-    if (await pgApply(r, token)) return;
-  }
-}
-async function pgApply(r, token){
-  if (!r || r.status !== 'success') return false;
-  if (r.state === 'matched') {
-    refreshTransactionsCache().catch(() => {});
-    _pg.token++; _pg.view = 'done';    // the poll loops stop; the page stays up for the moment below
-    ckSuccessToast('Success');
-    setTimeout(() => { if (pgOpen()) pgHome(); }, 2200);
-    return true;
-  }
-  if (r.state === 'failed') { refreshTransactionsCache().catch(() => {}); pgShowFailed(r.message); return true; }
-  return false;
-}
-// A payment page address opened directly (/payment/<order number>, e.g. after a refresh or from a saved link): the app signs the member in first,
-// then shows that order.
-function ckOpenPendingPayment(){
-  const no = window._payOrderNo; if (!no) return false;
-  window._payOrderNo = '';
-  openPaymentPage(no, true);
-  return true;
-}
-// Owner: "callback speed is low, so try to make the system solid and faster
-// validation on payments."
-//
-// The old loop slept a flat 3s BEFORE its first check, so even a member who
-// approved the prompt instantly watched a screen that said nothing for three
-// seconds -- and every later tick was 3s too. Two changes, and neither asks
-// the provider for more than it needs:
-//
-//   * the FIRST check is at 1.2s. That is the case worth optimising: the
-//     member had the prompt open and approved it immediately.
-//   * later checks are 1.5s apart (owner, 2026-10-08; was 2.5s, the cadence PesaJet's own SDK
-//     uses in pollUntilComplete.
-//
-// The 60-second budget is unchanged -- 24 ticks at the new spacing is the same
-// wall-clock window, so nothing gives up on a payment any sooner than before.
-var DEP_POLL_FIRST_MS = 700;
-var DEP_POLL_EVERY_MS = 1000;
-async function pollDepositStatus(depositId){
-  _depActiveDepositId = depositId;
-  _depPollDone = false;
-  // Ticks are 1.5 s apart MEASURED FROM THE START OF EACH TICK (a slow answer no longer pushes the next check further away), and the
-  // budget is 70 s of the wall clock, not 24 ticks however long each took.
-  const began = Date.now();
-  await new Promise(r => setTimeout(r, DEP_POLL_FIRST_MS));
-  while (Date.now() - began < 70000) {
-    const tickStart = Date.now();
-    // A Verify tap may have settled it between ticks -- stop rather than
-    // firing another provider call for an answer already in hand.
-    if (_depPollDone) return;
-    // Superseded: the member backed out of this recharge and started another
-    // one, so a newer poll owns the screen now. Without this, THIS loop would
-    // keep running for its full 60s and write deposit A's result over deposit
-    // B's page -- and, worse than the old code, would set the shared
-    // _depPollDone and stop B's loop as well. Same shape as the bug already
-    // documented on the manual-pay poll.
-    if (_depActiveDepositId !== depositId) return;
-    const r = await depositStatusHold(depositId);
-    if (_depPollDone) return;
-    if (_depActiveDepositId !== depositId) return;
-    if (await applyDepositStatusResult(r)) return;
-    // Answered at once (nothing to hold on, or an error): pace the next ask. A held answer already took its time.
-    const spent = Date.now() - tickStart;
-    if (spent < DEP_POLL_EVERY_MS) await new Promise(r2 => setTimeout(r2, DEP_POLL_EVERY_MS - spent));
-  }
-  // Ending the loop is the autopoll giving up on its own ~60s budget, not the
-  // payment being over -- _depPollDone stays false on purpose so Verify keeps
-  // working on this deposit afterwards.
-  if (!_depPollDone) { setDepositStatusUnknown(); slowDepositWatch(depositId); }
-}
-// The fast poll gives up after 70 s but the server keeps watching a payment for 2 minutes and the reconciler for longer: keep asking every few
-// seconds for 3 more minutes so a payment approved late still turns the page into its result (Success or Failed) instead of staying on "Still waiting".
-async function slowDepositWatch(depositId){
-  const until = Date.now() + 180000;
-  while (Date.now() < until) {
-    await new Promise(r => setTimeout(r, 4000));
-    if (_depPollDone || _depActiveDepositId !== depositId) return;
-    if (!$('depStatusBg') || !$('depStatusBg').classList.contains('show')) continue;
-    const r = await depositStatusHold(depositId);
-    if (_depPollDone || _depActiveDepositId !== depositId) return;
-    if (await applyDepositStatusResult(r)) return;
-  }
-}
 
 // Cache-first: STATE.bankAccounts is prefetched at login. Deliberately does
 // NOT quietly repaint once the background re-fetch lands (unlike Home/Team/
@@ -6543,7 +5754,7 @@ window.syncWithdrawReceiveAmt = function(){
 // mid-view). The side effect nobody had hit until now: nothing ever
 // refreshed STATE.transactions the moment a NEW ledger row was actually
 // created server-side (withdraw/deposit both write one immediately, see
-// server.js's own /withdraw/request and /deposit/marzpay) -- so opening
+// server.js's own /withdraw/request and the manual recharge routes) -- so opening
 // Records right after submitting a withdrawal painted the STALE cached
 // list, missing the just-created "Processing" row entirely, and even a
 // second open could still miss it depending on exactly when the FIRST

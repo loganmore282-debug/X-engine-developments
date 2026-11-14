@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # Shows Beer's addresses and webhook values, read from this server (nothing is changed except: a GitHub webhook secret is made if there is none yet).
-#   bash /srv/beer-src/beer/deploy/show-links.sh            all four
+#   bash /srv/beer-src/beer/deploy/show-links.sh            all three
 #   bash /srv/beer-src/beer/deploy/show-links.sh app        the member app address
 #   bash /srv/beer-src/beer/deploy/show-links.sh admin      the hidden admin address
 #   bash /srv/beer-src/beer/deploy/show-links.sh github     GitHub webhook: Payload URL, content type and Secret
-#   bash /srv/beer-src/beer/deploy/show-links.sh pesajet    PesaJet webhook URL
-# The secret and the PesaJet address are private: do not post or screenshot them.
+# The GitHub secret is private: do not post or screenshot it.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BEER=${BEER_DIR:-$(dirname "$HERE")}
@@ -33,18 +32,8 @@ github() {
   echo "  Secret      : $S"
   echo "  Events      : Just the push event"
 }
-pesajet() {
-  local T HH
-  T=$(rd "${BEER_HOOK_FILE:-$SECRETS/hook-token}"); HH=$(rd "${BEER_HOOK_HOST_FILE:-$SECRETS/hook-host}")
-  if [ -n "$T" ]; then
-    if [ -n "$HH" ]; then echo "PesaJet webhook URL: https://$HH/h-$T/pesajet"; else echo "PesaJet webhook URL: https://$APP/k7x2/h-$T/pesajet"; fi
-  else
-    echo "PesaJet webhook URL (the plain one): https://$APP/k7x2/pesajet/webhook"
-    echo "  For a secret address instead, run:  bash $BEER/deploy/make-hook-url.sh"
-  fi
-}
 case "$want" in
-  app) app ;; admin) admin ;; github) github ;; pesajet) pesajet ;;
-  all) app; admin; echo; github; echo; pesajet ;;
-  *) echo "usage: show-links.sh [app|admin|github|pesajet|all]"; exit 1 ;;
+  app) app ;; admin) admin ;; github) github ;;
+  all) app; admin; echo; github ;;
+  *) echo "usage: show-links.sh [app|admin|github|all]"; exit 1 ;;
 esac
