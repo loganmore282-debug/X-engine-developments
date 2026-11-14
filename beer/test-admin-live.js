@@ -12,7 +12,7 @@ process.env.COOKIE_SECRETS_DIR = fs.mkdtempSync(path.join(require('os').tmpdir()
 const L = console.log; console.log = () => {}; console.warn = () => {}; console.error = () => {};
 require(path.join(D, 'server.js'));
 const sleep = ms => new Promise(r => setTimeout(r, ms)), base = 'http://127.0.0.1:' + BACK;
-const J = async (m, p, b, tok, adm) => { const r = await fetch(base + p, { method: m, headers: Object.assign({ 'content-type': 'application/json' }, tok ? { authorization: 'Bearer ' + tok } : {}, adm ? { 'x-admin-key': process.env.ADMIN_KEY } : {}), body: b ? JSON.stringify(b) : undefined }); return { s: r.status, j: await r.json().catch(() => ({})) }; };
+const J = async (m, p, b, tok, adm) => { const r = await fetch(base + p, { method: m, headers: Object.assign({ 'content-type': 'application/json' }, tok ? { authorization: 'Bearer ' + tok } : {}, adm ? { authorization: 'Bearer ' + process.env.ADMIN_KEY } : {}), body: b ? JSON.stringify(b) : undefined }); return { s: r.status, j: await r.json().catch(() => ({})) }; };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg' };
 const front = http.createServer((req, res) => {
   if (req.url.startsWith('/k7x2/')) { const p = http.request({ host: '127.0.0.1', port: BACK, path: req.url.slice(5), method: req.method, headers: Object.assign({}, req.headers, { host: '127.0.0.1:' + BACK }) }, r => { res.writeHead(r.statusCode, r.headers); r.pipe(res); }); p.on('error', () => { res.writeHead(502); res.end(); }); req.pipe(p); return; }
@@ -57,6 +57,19 @@ const results = []; const check = (name, ok, extra) => { results.push([ok, name,
   check('the pending withdrawal row has a Mark as paid button and a Reject button', !!proc && !!rej && /Mark as paid/.test(await proc.innerText()), wr.s + ' ' + JSON.stringify(wr.j).slice(0, 80));
   if (proc) { page.once('dialog', d => d.accept()); await proc.click(); await sleep(1500);
     const st = [...fm.__stores.withdrawals.values()][0] || {}; check('Mark as paid really records it as processed (by hand)', st.status === 'processed' && st.payoutMethod === 'manual', st.status + ' ' + st.payoutMethod); }
+  // Team bonuses: added by hand in Settings, amounts in Br
+  await page.click('[data-tab="settings"]'); await page.waitForFunction(() => { const b = document.getElementById('bonusRows'); return b && !/Loading/.test(b.innerText); }, null, { timeout: 15000 });
+  await page.click('#bonusAdd');
+  const bt = await page.evaluate(() => document.querySelector('#saveBonuses').closest('.panel-card').innerText);
+  check('Settings has a Team bonuses card that talks in Br', /Team recharge target \(Br\)/.test(bt) && /Reward \(Br\)/.test(bt) && !/₦|UGX|Naira|NGN/i.test(bt), bt.slice(0, 200).replace(/\s+/g, ' '));
+  await page.fill('#bonusRows .bt-target', '50000'); await page.fill('#bonusRows .bt-reward', '1500'); await page.click('#bonusAdd'); await page.fill('#bonusRows .bonus-row:nth-child(2) .bt-target', '150000'); await page.fill('#bonusRows .bonus-row:nth-child(2) .bt-reward', '3500');
+  await page.click('#saveBonuses'); await sleep(1500);
+  const saved = await J('GET', '/admin/bonuses', undefined, null, true);
+  check('Save team bonuses stores both rows', saved.j.bonuses && saved.j.bonuses.length === 2 && saved.j.bonuses[0].target === 50000 && saved.j.bonuses[1].reward === 3500, JSON.stringify(saved.j).slice(0, 160));
+  await page.click('#bonusRows .bonus-row:nth-child(1) .bt-del'); await page.click('#saveBonuses'); await sleep(1300);
+  check('Remove then save drops the row', (await J('GET', '/admin/bonuses', undefined, null, true)).j.bonuses.length === 1);
+  await page.fill('#bonusRows .bt-target', '12.5'); await page.click('#saveBonuses'); await sleep(900);
+  check('a decimal target is refused and nothing changes', (await J('GET', '/admin/bonuses', undefined, null, true)).j.bonuses[0].target === 150000);
   // settings + dashboard + deposits: no provider words
   for (const t of ['settings', 'dashboard', 'deposits']) { await page.click('[data-tab="' + t + '"]'); await sleep(1400);
     const tx = await page.evaluate(() => document.getElementById('content').innerText);

@@ -3361,6 +3361,14 @@ async function renderSettings(){
       <button class="btn block" id="saveRates">Save rates</button>
     </div>
 
+    <h2 class="sec">Team bonuses</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">Shown to members under Home &rarr; Bonus. A member claims a bonus once, when their whole team (levels 1 to 3) has recharged the target in total. Whole numbers, in ${adminCur()}. Rows are kept in order of target.</p>
+      <div id="bonusRows"><p class="muted">Loading&hellip;</p></div>
+      <div class="row" style="margin:8px 0"><button class="btn ghost sm" id="bonusAdd" type="button">Add a bonus</button></div>
+      <button class="btn block" id="saveBonuses">Save team bonuses</button>
+    </div>
+
     <h2 class="sec">Support contacts</h2>
     <div class="panel-card">
       <label>Telegram group</label><input id="spTgGroup" value="${esc(v('telegramGroup',''))}" placeholder="https://t.me/yourgroup">
@@ -3421,6 +3429,22 @@ async function renderSettings(){
       maintenanceMinutes:Math.max(1,Math.min(10080,Math.round(+$('sMaintMin').value||30))),
     };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  // Team bonuses: one row per bonus (target the whole team must recharge, reward paid once). A row keeps its id, so editing it never lets a member claim twice.
+  const bonusRowHtml=(b)=>`<div class="row bonus-row" data-id="${esc(b.id||'')}" style="align-items:flex-end;gap:8px;margin-bottom:8px">
+      <div style="flex:1"><label>Team recharge target (${adminCur()})</label><input class="bt-target" type="number" min="1" step="1" value="${esc(b.target||'')}" inputmode="numeric"></div>
+      <div style="flex:1"><label>Reward (${adminCur()})</label><input class="bt-reward" type="number" min="1" step="1" value="${esc(b.reward||'')}" inputmode="numeric"></div>
+      <button class="btn danger sm bt-del" type="button">Remove</button></div>`;
+  const bonusWire=()=>document.querySelectorAll('.bt-del').forEach(b=>{ b.onclick=()=>b.closest('.bonus-row').remove(); });
+  api('/admin/bonuses').then(r=>{ const box=$('bonusRows'); if(!box || box.querySelector('.bonus-row')) return;
+    box.innerHTML = r.status==='success' ? ((r.bonuses||[]).map(bonusRowHtml).join('') || '<p class="muted" id="bonusNone">No bonuses yet. Tap Add a bonus.</p>') : '<p class="muted">Could not load the bonuses.</p>'; bonusWire(); });
+  $('bonusAdd').addEventListener('click',()=>{ const none=$('bonusNone'); if(none) none.remove(); $('bonusRows').insertAdjacentHTML('beforeend', bonusRowHtml({})); bonusWire(); });
+  $('saveBonuses').addEventListener('click', async()=>{
+    const rows=[...document.querySelectorAll('#bonusRows .bonus-row')].map(r=>({ id:r.dataset.id, target:r.querySelector('.bt-target').value.trim(), reward:r.querySelector('.bt-reward').value.trim() }));
+    if(rows.some(r=>!/^\d+$/.test(r.target)||!/^\d+$/.test(r.reward))){ toast('Every target and reward must be a whole number.','err'); return; }
+    const d=await api('/admin/bonuses/save', { bonuses: rows.map(r=>({ id:r.id, target:+r.target, reward:+r.reward })) });
+    toast(d.status==='success'?'Team bonuses saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'){ $('bonusRows').innerHTML=(d.bonuses||[]).map(bonusRowHtml).join('') || '<p class="muted" id="bonusNone">No bonuses yet. Tap Add a bonus.</p>'; bonusWire(); }
   });
   $('saveSupport').addEventListener('click', async()=>{
     const upd = { supportTelegram:$('spTg').value.trim(), telegramGroup:$('spTgGroup').value.trim() };

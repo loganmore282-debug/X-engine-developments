@@ -136,3 +136,13 @@ What is left: recharge = manual bank/Telebirr orders (admin Payment Numbers, the
 or **Reject** (refund).
 Bug hunt after it (HTTP, money, auth, layout, operations; scripts were throw-away): the Buy confirm text no longer breaks in the middle of a word (`.ck-prompt-msg` used
 `word-break:break-all`, now `overflow-wrap:anywhere`). No money, HTTP or layout bug was found.
+
+## Bonus (Home > Bonus, 2026-11-14)
+Owner's screenshots: a **Bonus** icon (white gift box on the beer picture) sits on Home BETWEEN Withdraw and Service (five tiles: Deposit, Withdraw, Bonus, Service, Group);
+it opens a page "Bonus" with the banner "Invite friends to join by sharing investment links..." and cards "Team Bonus-N" (reward on the picture, **Share** button -> Share page,
+"Complete tasks to earn Br X", progress pill "current / target" that becomes **Claim**, then **Claimed**). All amounts are Br (`cur()` in the app, `adminCur()` in admin).
+- Rows are added by the owner in **Admin > Settings > Team bonuses** (target the whole team must recharge, reward); stored in `settings.teamBonuses` with `bonusIdByTarget`
+  (a deleted bonus typed again gets its old id back, so nobody can claim twice). The default list is EMPTY (the page says NO DATA until rows are added).
+- Progress = `wholeTeamStats(userId).deposits` (levels 1-3, banned members left out). Server: `GET /bonus/list`, `POST /bonus/claim` (one at a time per member, progress re-read,
+  atomic `updateIf` on `creditedBonusKeys`, ledger row type `team_reward`), `GET /admin/bonuses`, `POST /admin/bonuses/save` (owner only). `/admin/settings/update` ignores the two keys.
+- Tests: `test-team-bonus.js` (38 checks), the Bonus steps of `test-live.js`, the Settings steps of `test-admin-live.js`. Amharic words are in the member i18n table.

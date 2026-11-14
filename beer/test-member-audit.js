@@ -47,7 +47,7 @@ async function main(){
   w.eval('STATE.products=[{key:"a1",name:"Test Asset",price:15000,cycle:30,expectedReturn:45000,dailyPayout:1500,isOpen:true}]');w.paintHome();
   assert.match(d.querySelector('.v-card-img').textContent,/Test Asset/,'a product with no picture shows its name in the picture frame');
   assert.match(d.querySelector('.v-rows').textContent,/Br 15000/,'prices read as on the owner screens: the currency, a space, the plain number');
-  assert.equal(d.querySelectorAll('.v-quick button').length,4,'Home has Deposit, Withdraw, Service and Group');
+  assert.deepEqual([...d.querySelectorAll('.v-quick button b')].map(e=>e.textContent),['Deposit','Withdraw','Bonus','Service','Group'],'Home has Deposit, Withdraw, Bonus, Service and Group in that order');
   assert.equal(d.querySelectorAll('.bottom-nav .navitem').length,5,'five tabs: Home, Income, Team, Share, My');
   assert.deepEqual([...d.querySelectorAll('.bottom-nav .lbl')].map(e=>e.textContent),['Home','Income','Team','Share','My']);
   const originalBanner=d.querySelector('.home-banner');await w.liveRefreshVisible();

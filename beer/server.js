@@ -174,7 +174,7 @@ app.use('/admin/', async (req, _res, next) => {
 // '/turntable/spin' belongs here because it
 // pays real money on an unauthenticated-body POST, so it gets the strict
 // 60/min per-user cap rather than only the 400/min global one.
-['/withdraw/request', '/invest/create', '/deposit/manual/order', '/deposit/manual/submit', '/bank/save', '/register',
+['/withdraw/request', '/invest/create', '/bonus/claim', '/deposit/manual/order', '/deposit/manual/submit', '/bank/save', '/register',
  '/redeem', '/turntable/spin']
   .forEach(p => app.use(p, apiLimiter));
 // ── BODY PARSING ──
@@ -642,6 +642,9 @@ const DEFAULT_SETTINGS = {
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   // What every NEW mobile-money recharge / withdrawal reference starts with (beer2610111048053568). Admin > Settings; existing references never change.
   referencePrefix: 'S',
+  // TEAM BONUSES (Home > Bonus): a one-time reward when the member's WHOLE team (levels 1 to 3) has recharged a cumulative amount. The owner adds the rows in
+  // Admin > Settings > Team bonuses; every amount is in the country's own currency (Br). Each row keeps its `id` for good, so an edit never lets anyone claim twice.
+  teamBonuses: [], bonusIdByTarget: {},
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', supportEmail: '',
   rulesText: '', aboutText: '',
   // Owner: "l would like to also to edit the app name beer, so make it when
@@ -2135,6 +2138,121 @@ async function _payReferralCommissionNow(investmentId, buyerId, amount, basis = 
   });
 }
 
+// ── TEAM BONUS (Home > Bonus) ──
+// Progress = what the member's whole team (levels 1-3, banned members left out) has recharged in total, read live from the referral links. Reaching a target
+// lets the member claim its reward ONCE. A claim is money-safe the same way a recharge credit is: one claim at a time per member, the progress is re-read
+// here (the app's own figure is never trusted), and the credit, the "already claimed" token and the totals land in ONE atomic user update, so a double tap,
+// two phones or a retry after a crash can never pay the same bonus twice. The ledger row (type team_reward) is written, or repaired, afterwards.
+const BONUS_MAX_ROWS = 50;
+function sanitizeBonusRows(rows, history) {
+  if (!Array.isArray(rows)) return { error: 'Send a list of bonuses.' };
+  if (rows.length > BONUS_MAX_ROWS) return { error: `At most ${BONUS_MAX_ROWS} bonuses.` };
+  const out = [], targets = new Set();
+  for (const r of rows) {
+    const target = Number(r && r.target), reward = Number(r && r.reward);
+    if (!Number.isInteger(target) || target < 1 || target > MAX_MONEY_AMOUNT) return { error: `Every team recharge target must be a whole number from 1 to ${MAX_MONEY_AMOUNT}.` };
+    if (!Number.isInteger(reward) || reward < 1 || reward > MAX_MONEY_AMOUNT) return { error: `Every reward must be a whole number from 1 to ${MAX_MONEY_AMOUNT}.` };
+    if (targets.has(target)) return { error: `Two bonuses have the same target (${target}).` };
+    targets.add(target);
+    out.push({ id: String((r && r.id) || ''), target, reward });
+  }
+  // A row keeps the id it has. A row without a usable id gets back the id its target ever had (`history`), so deleting a bonus and typing it again cannot turn it
+  // into a new, claimable one; only a target that never existed gets a fresh id.
+  const used = new Set();
+  for (const r of out) { if (/^[a-z0-9]{1,16}$/.test(r.id) && !used.has(r.id)) used.add(r.id); else r.id = ''; }
+  for (const r of out) {
+    if (r.id) continue;
+    const old = history && history[String(r.target)];
+    if (typeof old === 'string' && /^[a-z0-9]{1,16}$/.test(old) && !used.has(old)) r.id = old;
+    else { do { r.id = 'b' + crypto.randomBytes(4).toString('hex'); } while (used.has(r.id)); }
+    used.add(r.id);
+  }
+  out.sort((x, y) => x.target - y.target);
+  return { rows: out };
+}
+function bonusRows(rows) {
+  const ok = (Array.isArray(rows) ? rows : []).filter(r => r && typeof r.id === 'string' && Number(r.target) > 0 && Number(r.reward) > 0);
+  return sanitizeBonusRows(ok).rows || [];
+}
+app.get('/bonus/list', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const [uSnap, sett, team] = await Promise.all([db.collection('users').doc(userId).get(), getSettings(), wholeTeamStats(userId)]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const u = uSnap.data();
+    if (u.status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    const claimed = new Set(u.creditedBonusKeys || []);
+    const bonuses = bonusRows(sett.teamBonuses).map((b, i) => ({ id: b.id, n: i + 1, target: b.target, reward: b.reward,
+      current: Math.min(team.deposits, b.target), achieved: team.deposits >= b.target, claimed: claimed.has('bonus:' + b.id) }));
+    res.json({ status: 'success', teamDeposits: team.deposits, bonuses });
+  } catch (e) {
+    console.error('Bonus list error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not load the bonuses' });
+  }
+});
+app.post('/bonus/claim', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const id = String(req.body.id || '').slice(0, 40);
+  if (!id) return res.status(400).json({ status: 'error', message: 'Unknown bonus' });
+  try {
+    const sett = await getSettings();
+    const rows = bonusRows(sett.teamBonuses), idx = rows.findIndex(r => r.id === id), row = rows[idx];
+    if (!row) return res.status(400).json({ status: 'error', code: 'BONUS_GONE', message: 'This bonus is no longer available.' });
+    const key = 'bonus:' + row.id;
+    const out = await withLock('bonusclaim:' + userId, async () => {
+      const uRef = db.collection('users').doc(userId);
+      const first = await uRef.get();
+      if (!first.exists) return { code: 404, body: { status: 'error', message: 'User not found' } };
+      if (first.data().status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
+      const { date, time } = nowStr();
+      const ledger = () => db.collection('transactions').doc(`team-bonus:${userId}:${row.id}`).createIfAbsent({
+        userId, statementId: newStatementId(), type: 'team_reward', description: `Team Bonus-${idx + 1}: team recharge ${fmtMoney(row.target)}`,
+        amount: row.reward, bonusKey: key, status: 'success', date, time, createdAt: FieldValue.serverTimestamp(),
+      });
+      if ((first.data().creditedBonusKeys || []).includes(key)) {
+        await ledger();   // repairs a ledger row a crash left behind; never pays again
+        return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'Already claimed' } };
+      }
+      const have = (await wholeTeamStats(userId)).deposits;
+      if (have < row.target) return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: `Your team has recharged ${fmtMoney(have)}. You need ${fmtMoney(row.target)} to claim this.` } };
+      let balance = 0, applied = false;
+      await withLock('bal:' + userId, async () => {
+        applied = await uRef.updateIf({ creditedBonusKeys: { $ne: key }, status: { $ne: 'banned' } }, {
+          walletBalance: FieldValue.increment(row.reward), totalEarned: FieldValue.increment(row.reward), creditedBonusKeys: FieldValue.arrayUnion(key),
+        });
+        const after = await uRef.get();
+        balance = round2(Number(after.exists && after.data().walletBalance) || 0);
+      });
+      if (!applied) return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'Already claimed' } };
+      // The money is already in the wallet: if only the history row fails to write, still say success (a retry repairs the row).
+      try { await ledger(); } catch (_) { try { await ledger(); } catch (e2) { console.error('Team bonus ledger row failed (credit applied, a retry repairs it):', e2.message); } }
+      return { code: 200, body: { status: 'success', amount: row.reward, walletBalance: balance, message: `${fmtMoney(row.reward)} added to your wallet` } };
+    });
+    res.status(out.code).json(out.body);
+  } catch (e) { console.error('Bonus claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that bonus right now' }); }
+});
+app.get('/admin/bonuses', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', bonuses: bonusRows((await getSettings()).teamBonuses) }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the bonuses' }); }
+});
+app.post('/admin/bonuses/save', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const stored = await getSettings();
+    // Every target's id is remembered for good (a removed bonus keeps its id on record), so the same target typed again later is the same bonus.
+    const hist = Object.assign({}, stored.bonusIdByTarget); for (const r of bonusRows(stored.teamBonuses)) hist[String(r.target)] = r.id;
+    const r = sanitizeBonusRows(req.body && req.body.bonuses, hist);
+    if (r.error) return res.status(400).json({ status: 'error', message: r.error });
+    const remember = Object.assign({}, hist); for (const b of r.rows) remember[String(b.target)] = b.id;
+    await db.collection('settings').doc('main').set({ teamBonuses: r.rows, bonusIdByTarget: remember }, { merge: true });
+    _settingsCacheTs = 0;
+    logAdminAction(req, 'team_bonuses_saved', { count: r.rows.length });
+    res.json({ status: 'success', bonuses: r.rows });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the bonuses' }); }
+});
 // ═══════════════════════════════════════════
 // TEAM
 // ═══════════════════════════════════════════
@@ -2364,7 +2482,7 @@ app.get('/public/settings', async (req, res) => {
     // automatic cap), the payment-rail choice, the reference prefix and the host policy.
     const rest = {};
     for (const k of Object.keys(rest0)) {
-      if (['referencePrefix', 'parkedHosts', 'baseDomain', 'linkPreviewTitle', 'linkPreviewText'].includes(k)) continue;
+      if (['teamBonuses', 'bonusIdByTarget', 'referencePrefix', 'parkedHosts', 'baseDomain', 'linkPreviewTitle', 'linkPreviewText'].includes(k)) continue;
       rest[k] = rest0[k];
     }
     // Revalidated every time (no max-age): maintenance mode, the opening
@@ -4619,6 +4737,7 @@ app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const updates = req.body.settings || {};
+    delete updates.teamBonuses; delete updates.bonusIdByTarget;   // only /admin/bonuses/save may change them (it checks every row)
     if ('strictRegionHosts' in updates || 'rotateEntry' in updates)
       return res.status(400).json({ status: 'error', message: 'Country address options have been retired.' });
     if (req.body.region && req.body.region !== DEFAULT_REGION_KEY)

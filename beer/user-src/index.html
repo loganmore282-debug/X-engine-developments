@@ -2239,8 +2239,8 @@ body{background-attachment:fixed;}
 .ck-balcard>div+div::before{background:rgba(255,255,255,.7);}
 .ck-prompt-ok,.ck-prompt-no,.ck-bindbtn,.ck-bd-tabs button.on,.ck-seg button.on{background:var(--bt-img) center/cover no-repeat !important;color:#fff !important;text-shadow:0 1px 2px rgba(60,20,0,.7);}
 /* The Service (customer service) and Group (Telegram group) buttons of Home are the beer picture too. */
-.ck-quick button:nth-child(3) .ck-ic,.ck-quick button:nth-child(4) .ck-ic{background:var(--bt-img) center/cover no-repeat !important;box-shadow:0 5px 12px -3px rgba(150,60,10,.6) !important;}
-.ck-quick button:nth-child(3) .ck-ic svg,.ck-quick button:nth-child(4) .ck-ic svg{filter:drop-shadow(0 1px 1.5px rgba(50,15,0,.7));}/* Every page header bar (tab pages, opened pages, payment page) is the beer picture, like the buttons. */
+.ck-quick button:nth-child(3) .ck-ic,.ck-quick button:nth-child(4) .ck-ic,.ck-quick button:nth-child(5) .ck-ic{background:var(--bt-img) center/cover no-repeat !important;box-shadow:0 5px 12px -3px rgba(150,60,10,.6) !important;}
+.ck-quick button:nth-child(3) .ck-ic svg,.ck-quick button:nth-child(4) .ck-ic svg,.ck-quick button:nth-child(5) .ck-ic svg{filter:drop-shadow(0 1px 1.5px rgba(50,15,0,.7));}/* Every page header bar (tab pages, opened pages, payment page) is the beer picture, like the buttons. */
 .ck-hd,.sheet-head{background:var(--bt-img) center/cover no-repeat !important;}.ck-hd h1,.sheet-head h2{text-shadow:0 1px 2px rgba(50,15,0,.6);}
 /* Two colours only: the couch khaki is every surface (page, cards, rows, inputs, bars), the beer picture is every accent. Text is the dark wine of the picture. */
 :root{--v-bg:#a29060;--v-tint:#988753;--v-line:rgba(60,35,5,.22);--v-ink:#2c1105;--v-label:#4d2a14;--v-muted:#4d2a14;--ck-bg1:#a29060;--ck-bg2:#a29060;--ck-card:#b3a47c;--ck-ink:#2c1105;--snow-canvas:#a29060;}
@@ -2412,6 +2412,24 @@ html:has(#mpFlow.show.dark){background:#826786;}
 #authHeroBg{-webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 55%,rgba(0,0,0,.55) 78%,transparent 100%);mask-image:linear-gradient(to bottom,#000 0%,#000 55%,rgba(0,0,0,.55) 78%,transparent 100%);}
 .ck-me::after{display:block !important;height:110px !important;background:linear-gradient(180deg,rgba(162,144,96,0) 0%,rgba(162,144,96,.55) 55%,#a29060 100%) !important;z-index:1;}
 .ck-hero.has-img::after{display:block !important;height:60% !important;background:linear-gradient(180deg,rgba(162,144,96,0),#a29060) !important;}
+
+/* ── Bonus page (Home > Bonus): team bonuses as cards -- the reward on the beer picture, a khaki card, a khaki progress pill. ── */
+.sheet-bg.ck-bonus-page{background:#a29060;}
+.ck-bonus-page #sheetBody{padding:0;max-width:none;}
+.bn-wrap{padding:14px 14px 26px;}
+.bn-banner{border-radius:12px;padding:20px 16px;margin:0 0 14px;background:var(--bt-img) center/cover no-repeat;color:#fff;font-size:15.5px;line-height:23px;font-weight:500;text-shadow:0 1px 3px rgba(40,10,0,.75);}
+.bn-card{display:flex;align-items:stretch;margin:0 0 12px;border-radius:12px;overflow:hidden;background:#b3a47c;box-shadow:0 6px 18px -12px rgba(60,40,10,.5);}
+.bn-amt{flex:0 0 auto;min-width:86px;max-width:46%;padding:0 12px;display:flex;align-items:center;justify-content:center;background:var(--bt-img) center/cover no-repeat;color:#fff;font-size:24px;font-weight:500;text-shadow:0 1px 3px rgba(40,10,0,.75);word-break:break-all;text-align:center;}
+.bn-body{flex:1;min-width:0;padding:14px 14px 14px 16px;display:flex;flex-direction:column;gap:9px;}
+.bn-row{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.bn-title{font-size:18px;font-weight:700;color:#2c1105;min-width:0;}
+.bn-share{flex:none;border:0;border-radius:6px;padding:6px 16px;background:var(--bt-img) center/cover no-repeat;color:#fff;font:inherit;font-size:14px;text-shadow:0 1px 2px rgba(40,10,0,.7);cursor:pointer;}
+.bn-sub{font-size:13.5px;color:#4d2a14;}
+.bn-sub b{color:#5a1f08;font-weight:700;}
+.bn-prog{border-radius:16px;padding:8px 16px;background:#988753;color:#2c1105;font-size:14px;}
+.bn-prog.bn-done{text-align:center;color:#5a1f08;font-weight:700;}
+.bn-claim{border:0;border-radius:16px;padding:9px 16px;background:var(--bt-img) center/cover no-repeat;color:#fff;font:inherit;font-size:15px;font-weight:700;text-shadow:0 1px 2px rgba(40,10,0,.7);cursor:pointer;}
+.bn-claim:disabled{opacity:.6;}
 </style>
 
 <script data-beer-idle>

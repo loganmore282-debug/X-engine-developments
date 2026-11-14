@@ -26,6 +26,10 @@ const results = []; const check = (name, ok, extra) => { results.push([ok, name,
   await J('POST', '/admin/pay-channels/save', { name: 'Commercial Bank of Ethiopia', kind: 'bank', accountName: 'Test Owner', accountNumber: '1000809418239', order: 0 }, null, true);
   const su = await J('POST', '/auth/signup', { phone: '0911223344', password: 'secret12' }); await J('POST', '/register', { pin: '123456', referralCode: '' }, su.j.token);
   let uid; for (const [id] of fm.__stores.users) uid = id; fm.__stores.users.get(uid).walletBalance = 500000;
+  // a team for the Bonus page: a second member under the first one, who has recharged 60,000; two bonuses added the way the owner does in the admin panel
+  { const code = fm.__stores.users.get(uid).referralCode; const s2 = await J('POST', '/auth/signup', { phone: '0922334455', password: 'secret12' }); await J('POST', '/register', { pin: '123456', referralCode: code }, s2.j.token);
+    for (const [id, u] of fm.__stores.users) if (id !== uid && String(u.phone).endsWith('922334455')) u.totalDeposited = 60000;
+    await J('POST', '/admin/bonuses/save', { bonuses: [{ target: 50000, reward: 1500 }, { target: 150000, reward: 3500 }] }, null, true); }
   await new Promise(r => front.listen(FRONT, '127.0.0.1', r));
   const { chromium } = require('playwright'); const br = await chromium.launch();
   const ctx = await br.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
@@ -63,6 +67,23 @@ const results = []; const check = (name, ok, extra) => { results.push([ok, name,
     check('tab ' + n + ' opens by tapping', active === nav, 'active=' + active);
   }
   { const x = await page.$('.ck-ann-x'); if (x) { await x.tap(); await sleep(900); } }   // the welcome dialog comes back with Home
+  // 2b. Bonus: its icon sits between Withdraw and Service; the page shows the owner's bonuses in Br; a reached one can be claimed, once
+  const labels = await page.$$eval('.ck-quick button b', els => els.map(e => e.textContent.trim()));
+  check('Home buttons are Deposit, Withdraw, Bonus, Service, Group in that order', JSON.stringify(labels) === '["Deposit","Withdraw","Bonus","Service","Group"]', labels.join());
+  await page.screenshot({ path: OUT + '/1b-home-bonus-icon.png' });
+  const wallet0 = await page.evaluate(async () => (await api('/account')).account.walletBalance);
+  await page.tap('.ck-quick button:nth-child(3)'); await sleep(1700);
+  const cards = await page.evaluate(() => [...document.querySelectorAll('.bn-card')].map(c => c.innerText.replace(/\s+/g, ' ')));
+  await page.screenshot({ path: OUT + '/1c-bonus-page.png' });
+  check('Bonus page lists the two bonuses in Br, named Team Bonus-1 and Team Bonus-2', cards.length === 2 && /Team Bonus-1/.test(cards[0]) && /Br 1500/.test(cards[0]) && /Team Bonus-2/.test(cards[1]) && /Br 3500/.test(cards[1]) && /0? ?\/? ?150000|60000 \/ 150000/.test(cards[1]) && !/₦|UGX|NGN|Naira/i.test(cards.join('')), cards.join(' | '));
+  check('the bonus not yet reached shows its progress, the reached one offers Claim', /60000 \/ 150000/.test(cards[1]) && !!(await page.$('.bn-card:nth-child(1) .bn-claim')) && !(await page.$('.bn-card:nth-child(2) .bn-claim')));
+  await page.tap('.bn-card:nth-child(1) .bn-claim'); await sleep(2200);
+  const wallet1 = await page.evaluate(async () => (await api('/account')).account.walletBalance);
+  check('claiming pays the reward once and the card turns to Claimed', wallet1 - wallet0 === 1500 && /Claimed/.test(await page.evaluate(() => document.querySelector('.bn-card:nth-child(1)').innerText)), 'wallet ' + wallet0 + ' -> ' + wallet1);
+  await page.tap('.bn-card:nth-child(2) .bn-share'); await sleep(1200);
+  check('the Share button of a card opens the Share page', await page.evaluate(() => (document.querySelector('.navitem.active') || {}).dataset.nav === 'share'));
+  await page.tap('.navitem[data-nav="home"]'); await sleep(1800);
+  { const x = await page.$('.ann-bg.show .ck-ann-x'); if (x) { await x.tap(); await sleep(900); } }
   // 3. deposit flow
   await page.tap('.ck-quick button:nth-child(1)'); await sleep(1400);
   check('Deposit page opens', await page.evaluate(() => !!document.getElementById('depAmount')));
@@ -74,6 +95,7 @@ const results = []; const check = (name, ok, extra) => { results.push([ok, name,
   await page.evaluate(() => mpClose()); await sleep(600);
   // 4. withdraw page opens
   await page.evaluate(() => { try { closeSheet(); } catch (e) {} }); await sleep(500);
+  await page.evaluate(() => { try { closeAnnouncement(); } catch (e) {} }); await sleep(500);   // the welcome dialog can come back when the Deposit page closes
   await page.tap('.ck-quick button:nth-child(2)'); await sleep(1400);
   check('Withdraw page opens', await page.evaluate(() => !!document.getElementById('witAmount')));
   await page.screenshot({ path: OUT + '/5-withdraw.png' });
@@ -100,4 +122,4 @@ const results = []; const check = (name, ok, extra) => { results.push([ok, name,
   check('no script errors during the whole run', errs.length === 0, errs.join(' | ').slice(0, 300));
   const bad = results.filter(r => !r[0]).length; L(bad ? 'LIVE TEST: ' + bad + ' FAILED' : 'LIVE TEST: ALL PASSED');
   await br.close(); process.exit(bad ? 1 : 0);
-})().catch(e => { L('FAIL crash', e.message); process.exit(1); });
+})().catch(e => { L('FAIL crash', String(e.message).split('\n')[0] + ' @ ' + ((String(e.stack).match(/test-live.js:\d+/) || [''])[0])); process.exit(1); });
