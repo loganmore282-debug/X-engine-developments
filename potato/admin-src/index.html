@@ -1953,6 +1953,13 @@ async function openUser(uid){
       <div style="flex:2"><input id="pwNew" type="text" placeholder="New password (min 6 chars)"></div>
       <button class="btn sky sm" id="pwBtn" title="Set a new login password for this user">Reset password</button>
     </div>
+    <label style="margin-top:14px">Show password <span class="pill-tag t-warn" style="margin-left:6px">Owner only</span></label>
+    <div class="row">
+      <div style="flex:2"><input id="pwShown" type="text" readonly placeholder="Hidden" autocomplete="off" spellcheck="false"></div>
+      <button class="btn sky sm" id="pwShowBtn" title="Read this member's password">Show password</button>
+      <button class="btn ghost sm" id="pwCopyBtn" style="display:none">Copy</button>
+    </div>
+    <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">Only the owner can see this, and every look is written to the activity log. It hides again after 20 seconds.</div>
     <label style="margin-top:14px">Correct phone number ${u.phone && !/^\+251[97]\d{8}$/.test(u.phone)?'<span class="pill-tag t-warn" style="margin-left:6px">Looks malformed</span>':''}</label>
     <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">Only fixes their profile phone (search/display/referral matching) -- they still log in exactly how they always have.</div>
     <div class="row">
@@ -2080,6 +2087,18 @@ async function openUser(uid){
     if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); } else { b.disabled=false; b.textContent=lbl; }
   });
   $('banBtn')?.addEventListener('click', async()=>{ const action=u.status==='banned'?'unban':'ban'; if(action==='ban' && !confirm(`Suspend ${u.phone}? This immediately blocks their deposits, withdrawals, purchases, and cashback.`)) return; const d=await api('/admin/ban',{userId:uid,action}); toast(d.status==='success'?('User '+action+'ned'):(d.message||'Failed'), d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); } });
+  { let pwTimer=null; const hidePw=()=>{ clearTimeout(pwTimer); const i=$('pwShown'); if(i) i.value=''; const c=$('pwCopyBtn'); if(c) c.style.display='none'; };
+    $('pwShowBtn')?.addEventListener('click', async()=>{
+      if(!confirm(`Show the password of ${u.phone}? This look is written to the activity log.`)) return;
+      const b=$('pwShowBtn'); b.disabled=true; b.textContent='Reading…';
+      const d=await api('/admin/user/password',{userId:uid});
+      b.disabled=false; b.textContent='Show password';
+      if(d.status!=='success') return toast(d.message||'Failed','err');
+      if(!d.available) return toast(d.message||'This password is not stored yet','err');
+      $('pwShown').value=d.password; $('pwCopyBtn').style.display=''; clearTimeout(pwTimer); pwTimer=setTimeout(hidePw,20000);
+    });
+    $('pwCopyBtn')?.addEventListener('click', async()=>{ try{ await navigator.clipboard.writeText($('pwShown').value); toast('Copied','ok'); }catch(_){ $('pwShown').select(); toast('Press copy on your keyboard','ok'); } });
+  }
   $('pwBtn')?.addEventListener('click', async()=>{
     const np=$('pwNew').value.trim();
     if(np.length<6) return toast('New password must be at least 6 characters','err');

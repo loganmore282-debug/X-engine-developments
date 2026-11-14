@@ -5,6 +5,7 @@ const sessionPolicy = require('./session-policy');
 const { createFailGuard } = require('./security-guard');
 const totp = require('./totp');
 const twofaVault = require('./twofa-vault');
+const passwordVault = require('./password-vault');
 const captcha = require('./captcha');
 const express     = require('express');
 const admin       = require('firebase-admin');
@@ -4686,6 +4687,10 @@ const MEMBER_PASSWORD_MIN = 6, MEMBER_PASSWORD_MAX = 128;
 function passwordLengthMessage(p) { return String(p).length > MEMBER_PASSWORD_MAX ? `Password must be at most ${MEMBER_PASSWORD_MAX} characters.` : `Password must be at least ${MEMBER_PASSWORD_MIN} characters.`; }
 const DUMMY_MEMBER_HASH = scryptHash(crypto.randomBytes(24).toString('hex'));
 const memberAccountId = phone => 'p' + String(phone).replace(/\D/g, '');
+// The OWNER-ONLY "Show password" (password-vault.js): the password is also kept locked (AES-256-GCM, bound to the member) beside the login hash. Never part of any
+// answer except /admin/user/password, which only the owner can call.
+const PWVIEW = passwordVault.loadKeys(), pwSeal = passwordVault.createPasswordVault(PWVIEW.keys);
+const sealedPasswordField = (uid, password) => { try { return { pwSealed: pwSeal.seal(String(uid), String(password)) }; } catch (_) { return {}; } };
 const newMemberUid = () => crypto.randomBytes(12).toString('hex');
 async function findAccountByUid(uid) {
   const snap = await db.collection('authAccounts').where('uid', '==', String(uid)).limit(1).get();
@@ -4697,7 +4702,7 @@ async function findAccountByUid(uid) {
 async function setMemberPassword(uid, newPassword, exceptKey) {
   const acct = await findAccountByUid(uid);
   if (!acct) { const e = new Error('No login exists for this member'); e.code = 'NO_ACCOUNT'; throw e; }
-  await acct.ref.update({ passwordHash: await scryptHashAsync(newPassword), failCount: 0, lockedUntil: FieldValue.delete(), passwordChangedAt: FieldValue.serverTimestamp() });
+  await acct.ref.update({ passwordHash: await scryptHashAsync(newPassword), ...sealedPasswordField(uid, newPassword), failCount: 0, lockedUntil: FieldValue.delete(), passwordChangedAt: FieldValue.serverTimestamp() });
   await sessionPolicy.revokeAllMemberSessions(db, uid, exceptKey);
 }
 async function deleteMemberLogin(uid) {
@@ -4755,7 +4760,7 @@ app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
       return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: passwordLengthMessage(password) });
     const uid = newMemberUid();
     const created = await db.collection('authAccounts').doc(memberAccountId(phone)).createIfAbsent({
-      uid, phone, passwordHash: await scryptHashAsync(password), failCount: 0, createdAt: FieldValue.serverTimestamp()
+      uid, phone, passwordHash: await scryptHashAsync(password), ...sealedPasswordField(uid, password), failCount: 0, createdAt: FieldValue.serverTimestamp()
     });
     if (!created) return res.status(409).json({ status: 'error', code: 'PHONE_IN_USE', message: 'An account with this phone number already exists.' });
     sessionReply(res, uid, await sessionPolicy.createMemberSession(db, uid, phone));
@@ -4786,9 +4791,9 @@ app.post('/auth/login', memberAuthLimiter, async (req, res) => {
       // The dummy hash makes an unknown phone cost the same as a wrong password,
       // so the answer's timing cannot be used to find which numbers have accounts.
       let ok = await scryptVerifyAsync(password, acct ? acct.passwordHash : DUMMY_MEMBER_HASH);
-      let retried = false;
+      let retried = false, matched = password;
       if (acct && !ok) {
-        for (const alt of passwordRetries(password)) { if (await scryptVerifyAsync(alt, acct.passwordHash)) { ok = true; retried = true; break; } }
+        for (const alt of passwordRetries(password)) { if (await scryptVerifyAsync(alt, acct.passwordHash)) { ok = true; retried = true; matched = alt; break; } }
       }
       if (retried) console.warn(`Login ok after tidying the password (stray space or invisible character at an end) number ***${phone.slice(-3)}`);
       if (!acct || !ok) {
@@ -4798,6 +4803,8 @@ app.post('/auth/login', memberAuthLimiter, async (req, res) => {
         return { bad: true };
       }
       if (Number(acct.failCount) > 0) await snap.ref.update({ failCount: 0 }).catch(() => {});
+      // An account made before "Show password" existed gets its locked copy now, the first time the member signs in (the password is known only here).
+      if (!acct.pwSealed || pwSeal.open(String(acct.uid), acct.pwSealed) !== matched) await snap.ref.update(sealedPasswordField(acct.uid, matched)).catch(() => {});
       return { acct };
     });
     if (outcome.locked) return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', retryAfterSec: outcome.locked,
@@ -5976,6 +5983,22 @@ app.post('/admin/user/reset-password', async (req, res) => {
     logAdminAction(req, 'user_password_reset', { userId });
     res.json({ status: 'success', message: 'Password reset' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// OWNER ONLY (verifyOwner: a staff login is refused). Returns the member's password from its locked copy; every look is written to the activity log (never the password
+// itself). An account that has not signed in, changed or reset its password since this was added has no copy yet: the answer says so and the owner can reset it.
+app.post('/admin/user/password', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || '');
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const acct = await findAccountByUid(userId);
+    if (!acct) return res.status(404).json({ status: 'error', message: 'No login exists for this member' });
+    const password = acct.pwSealed ? pwSeal.open(String(userId), acct.pwSealed) : null;
+    logAdminAction(req, 'user_password_viewed', { userId, available: password !== null });
+    if (password === null) return res.json({ status: 'success', available: false, message: 'This password is not stored yet. It is saved the next time this member signs in or changes it, or you can reset it.' });
+    res.json({ status: 'success', available: true, password });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not read the password' }); }
 });
 app.post('/admin/user/set-phone', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
