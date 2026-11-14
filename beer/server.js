@@ -2149,7 +2149,8 @@ function sanitizeBonusRows(rows, history) {
   if (rows.length > BONUS_MAX_ROWS) return { error: `At most ${BONUS_MAX_ROWS} bonuses.` };
   const out = [], targets = new Set();
   for (const r of rows) {
-    const target = Number(r && r.target), reward = Number(r && r.reward);
+    // Only a plain number or a string of digits: Number() alone would also read [5], '0x10' or '1e3' as amounts.
+    const target = strictAdminAmount(r && r.target), reward = strictAdminAmount(r && r.reward);
     if (!Number.isInteger(target) || target < 1 || target > MAX_MONEY_AMOUNT) return { error: `Every team recharge target must be a whole number from 1 to ${MAX_MONEY_AMOUNT}.` };
     if (!Number.isInteger(reward) || reward < 1 || reward > MAX_MONEY_AMOUNT) return { error: `Every reward must be a whole number from 1 to ${MAX_MONEY_AMOUNT}.` };
     if (targets.has(target)) return { error: `Two bonuses have the same target (${target}).` };

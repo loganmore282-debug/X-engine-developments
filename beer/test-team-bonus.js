@@ -58,5 +58,8 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); }; const eq = (a, b, m) 
   r = await J('POST', '/admin/ban', { userId: B.uid, action: 'ban', reason: 't' }, null, true); l = await J('GET', '/bonus/list', undefined, A.tok);
   ok(l.j.teamDeposits === 125000, 'a banned member in the team is not counted');
   r = await J('POST', '/admin/ban', { userId: A.uid, action: 'ban', reason: 't' }, null, true); r = await J('POST', '/bonus/claim', { id: bonus1 }, A.tok); ok(r.s >= 400, 'a banned member cannot claim');
+  // odd number formats are refused, not quietly read as amounts
+  for (const t of [[5], '0x10', '1e3', true]) { r = await J('POST', '/admin/bonuses/save', { bonuses: [{ target: t, reward: 1 }] }, null, true); eq(r.s, 400, 'a target written as ' + JSON.stringify(t) + ' is refused'); }
+  r = await J('POST', '/admin/bonuses/save', { bonuses: [{ target: '70000', reward: '900' }] }, null, true); eq([r.s, r.j.bonuses[0].target, r.j.bonuses[0].reward], [200, 70000, 900], 'digits typed as text are still accepted');
   L(`PASS: team bonuses (${n} checks)`); process.exit(0);
 })().catch(e => { L('FAIL', e.stack || e); process.exit(1); });

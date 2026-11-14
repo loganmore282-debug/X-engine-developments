@@ -533,6 +533,7 @@ var LANG_ROWS = [
   ['Total profit', '', '', '', '', '', 'ጠቅላላ ትርፍ'],
   ['Buy now', '', '', '', '', '', 'አሁን ይግዙ'],
   ['Share', '', '', '', '', '', 'አጋራ'],
+  ['My', '', '', '', '', '', 'የእኔ'],
   ['Welcome to the Beer App', '', '', '', '', '', 'ወደ Beer መተግበሪያ እንኳን ደህና መጡ'],
   ['Daily income, daily withdrawal', '', '', '', '', '', 'ዕለታዊ ገቢ፣ ዕለታዊ ወጪ'],
   ['Earnings every 24 hours', '', '', '', '', '', 'በየ24 ሰዓቱ ገቢ'],
@@ -4652,7 +4653,7 @@ function statementDescription(t){
   if (t.type === 'promocode') return 'Gift Code';
   if (t.type === 'checkin') return 'Check-in Reward';
   if (t.type === 'welcome_bonus') return 'Welcome Bonus';
-  if (t.type === 'team_reward') return 'Team Reward';
+  if (t.type === 'team_reward') return 'Team Bonus';
   if (t.type === 'mission_salary') return 'Mission Salary';
   if (t.type === 'mission_deposit_reward') return 'Mission Reward';
   if (STATEMENT_TURNTABLE_TYPES.has(t.type)) return 'Turntable';
