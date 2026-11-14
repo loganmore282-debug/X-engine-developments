@@ -1276,7 +1276,7 @@ var STATE = { user: null, account: null, settings: null, products: null, investm
 try { window._suppressAutofillLogin = sessionStorage.getItem('beer_relogin_required') === '1'; } catch (_) {}
 var _memberSession = window.createBeerIdleSession('beer_member_session', function(){
   window._triedAutoSignIn = true;
-  document.querySelectorAll('.sheet-bg.show,.modal-bg.show,.pay-page.show,#msgDetailBg.show').forEach(el => el.classList.remove('show'));
+  document.querySelectorAll('.sheet-bg.show,.modal-bg.show,#msgDetailBg.show').forEach(el => el.classList.remove('show'));
   unlockBodyScroll();
   resetOverlayState();
   hideLoadingScreen();
@@ -3207,7 +3207,7 @@ document.addEventListener('visibilitychange', () => {
 });
 window.navigatePage = function(name){
   dismissNotify();
-  if (STATE.page === name && !document.querySelector('.sheet-bg.show,#msgDetailBg.show,#depStatusBg.show')) return;
+  if (STATE.page === name && !document.querySelector('.sheet-bg.show,#msgDetailBg.show')) return;
   return showPage(name);
 };
 window.showPage = async function(name){
@@ -3227,37 +3227,11 @@ window.showPage = async function(name){
   // Owner: "when in this message and you tap nav icons, the message screen
   // still persists to go away unless you click on X mark."
   //
-  // The recharge status page (.pay-page) is a full-screen task state with
-  // the bottom nav hidden while it is open. Keep its teardown here anyway so
-  // any programmatic tab change also dismisses the overlay cleanly.
-  //
-  // Unlike the other two it owns NO history entry (openDepositStatusModal
-  // does not pushState), so it must not be counted in `spent` below --
-  // retiring an entry it never pushed would walk the member off the app's
-  // first entry and drop them out of the app.
-  //
-  // Closing the page does NOT stop the poll, deliberately: a payment is still
-  // in flight at the provider, pollDepositStatus() keeps running and still
-  // refreshes Records when it settles.
-  //
-  // Other overlays cover the full viewport too, so a tab change cannot be
-  // triggered from underneath them.
-  //
-  // Both overlays own a history entry, and they must be unwound with ONE
-  // history call: two history.back()s in a single tick is the exact race this
-  // file has already been bitten by (see openManualPayOverlay's note on a
-  // pushState racing a still-pending back). So closeSheet is told to leave
-  // history alone and a single go(-n) retires both entries, firing one
-  // popstate that finds everything already closed and does nothing.
+  // If both are open they must be unwound with ONE history call (two history.back()s in a single tick race): closeSheet is told to leave
+  // history alone and a single go(-n) retires both entries.
   const detailOpen = !!($('msgDetailBg') && $('msgDetailBg').classList.contains('show'));
   const sheetOpen = !!document.querySelector('.sheet-bg.show');
-  const payOpen = !!($('depStatusBg') && $('depStatusBg').classList.contains('show'));
   if (detailOpen) $('msgDetailBg').classList.remove('show');
-  if (payOpen) {
-    $('depStatusBg').classList.remove('show');
-    document.body.classList.remove('deposit-status-open');
-    unlockBodyScroll();
-  }
   // Owner: "some notifies take long to go away even when you've clicked in
   // another category, it still keep showing." notify()'s own 3.6s timer only
   // ever gets reset by ANOTHER notify() call -- switching tabs never touched
@@ -3271,8 +3245,6 @@ window.showPage = async function(name){
   // ALSO force a navigation neither the toast nor the tap asked for.
   dismissNotify();
   if (sheetOpen && typeof closeSheet === 'function') closeSheet({ navigating: true, keepHistory: true });
-  // payOpen is deliberately absent from this count -- it pushes no history
-  // entry, so including it would retire someone else's.
   const spent = (detailOpen ? 1 : 0) + (sheetOpen ? 1 : 0);
   if (spent) history.go(-spent);
   if (name === 'products') name = 'home';
@@ -3849,142 +3821,6 @@ function fmtDay(value){
   const t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
   return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' at ' + t;
 }
-// Deposit result marks, traced from the owner's two pictures (green tick badge, red cross badge).
-var PAY_OK_ART = 'M316.5 694.5C292.9 692.3 268.0 687.5 246.5 680.9C233.9 677.0 210.0 668.0 210.0 667.1C210.0 666.7 209.1 666.4 207.9 666.3C204.1 666.0 170.5 647.8 156.5 638.4C-27.6 515.5 -53.7 256.8 102.4 101.7C239.3 -34.4 458.9 -33.7 595.3 103.3C601.7 109.8 607.0 115.4 607.0 115.8C607.0 116.2 603.0 118.9 598.1 121.7L589.2 126.8L578.3 116.1C417.3 -42.0 151.0 3.9 53.4 206.5C-40.2 400.9 78.7 632.9 291.0 669.9C317.8 674.6 360.4 676.1 383.5 673.2C488.4 659.9 575.7 603.8 628.7 515.5C647.9 483.6 665.7 436.2 669.6 406.9C670.0 404.2 670.7 402.0 671.2 402.0C671.7 402.0 671.8 401.5 671.5 401.0C671.2 400.4 671.7 394.2 672.6 387.2C674.8 371.7 675.1 327.9 673.2 312.5C667.0 263.5 652.8 220.9 628.9 180.8L622.9 170.6L630.3 163.2L637.8 155.9L640.3 159.2C648.7 170.3 665.9 204.8 673.9 226.1C683.0 250.6 691.8 286.1 692.3 300.2C692.4 303.4 692.8 306.0 693.1 306.0C693.4 306.0 694.2 312.9 694.8 321.2C711.2 535.8 530.6 714.0 316.5 694.5ZM334.0 645.3C299.1 642.8 272.5 637.4 244.5 627.0C113.2 578.2 33.9 444.8 53.5 305.7C71.8 175.7 174.8 72.5 305.0 53.6C394.8 40.5 489.0 70.3 551.9 131.6L563.5 142.9L550.0 152.2C481.4 199.6 411.8 266.8 340.6 354.0C334.1 362.0 328.4 368.9 328.0 369.3C327.6 369.8 302.7 357.8 272.6 342.8L217.9 315.5L208.7 315.5C194.1 315.5 183.9 321.6 177.3 334.2C174.8 338.9 174.5 340.6 174.5 349.0C174.5 363.3 175.4 364.8 203.0 395.0C267.6 465.8 311.7 506.8 335.4 518.1C354.3 527.1 376.0 523.7 390.3 509.7C398.6 501.6 396.2 505.5 444.8 418.5C484.5 347.4 528.4 280.5 565.5 234.5C579.5 217.1 600.1 194.0 601.6 194.0C604.3 194.0 619.1 223.3 626.9 244.4C667.7 353.9 641.1 475.0 558.1 558.1C518.1 598.1 471.5 624.4 417.7 637.5C393.3 643.4 356.0 646.9 334.0 645.3ZM350.0 501.6C330.0 495.8 285.8 455.4 218.1 381.1C198.2 359.3 194.0 353.7 194.0 349.3C194.0 346.0 198.2 338.9 201.1 337.5C208.4 333.7 208.5 333.8 273.0 366.0L332.9 396.0L343.2 383.2C432.1 272.6 514.0 196.0 596.0 146.8C615.1 135.3 618.5 133.7 620.8 134.9C625.9 137.6 624.8 139.5 607.2 157.5C534.7 231.3 488.3 297.9 404.5 448.5C384.6 484.2 383.1 486.8 378.4 492.6C371.7 500.8 360.0 504.5 350.0 501.6Z';
-var PAY_OK_STATIC = '<svg viewBox="0 0 696 696" aria-hidden="true"><circle cx="348" cy="348" r="348" fill="#fff"/><path fill="#42af3c" fill-rule="evenodd" d="' + PAY_OK_ART + '"/></svg>';
-var PAY_FAIL_STATIC = '<svg viewBox="0 0 313 313" aria-hidden="true"><circle cx="156.5" cy="156.5" r="156.5" fill="#ea2c2c"/><g fill="#fff"><rect x="81.5" y="141.5" width="150" height="30" rx="7" transform="rotate(45 156.5 156.5)"/><rect x="81.5" y="141.5" width="150" height="30" rx="7" transform="rotate(-45 156.5 156.5)"/></g></svg>';
-// The owner's tick and cross DRAW THEMSELVES on the deposit result page (ring runs round clockwise, the disc pops in, the tick is written
-// from its left end to its tip; the cross: the disc pops in, then one bar after the other). They are drawn on a <canvas> with plain
-// compositing, NOT with CSS-animated SVG masks: animated masks are not repainted reliably by every phone's browser (iPhones, older Android
-// browsers) and the mark simply did not appear there. A canvas works the same on every phone. Checked frame by frame against the SVG-mask
-// version it replaced: 32 moments each, at most 0.011 % of the pixels differ (edge smoothing). The artwork is the owner's, untouched.
-// When the animation ends (or can never run: no canvas, a hidden tab, an error) the mark is replaced by the plain finished SVG above,
-// which has no masks and no animation, so the final picture is always correct. It plays even when the phone asks for reduced motion:
-// it is a 1.5 second status mark, and the owner wants it everywhere.
-var DR_GREEN = '#42af3c', DR_RED = '#ea2c2c';
-var DR_TICK = [[212, 352], [362, 486], [625, 148]];
-var DR_TICK_LEN = Math.sqrt(150 * 150 + 134 * 134) + Math.sqrt(263 * 263 + 338 * 338);
-function drBezier(x1, y1, x2, y2) {            // CSS cubic-bezier(x1,y1,x2,y2) as a function of time 0..1
-  var cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx, cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
-  return function (t) {
-    if (t <= 0) return 0; if (t >= 1) return 1;
-    var s = t, i, x, d;
-    for (i = 0; i < 8; i++) { x = ((ax * s + bx) * s + cx) * s - t; d = (3 * ax * s + 2 * bx) * s + cx; if (Math.abs(x) < 1e-6 || Math.abs(d) < 1e-6) break; s -= x / d; }
-    if (s < 0 || s > 1) { var lo = 0, hi = 1; s = t; for (i = 0; i < 24; i++) { x = ((ax * s + bx) * s + cx) * s; if (x < t) lo = s; else hi = s; s = (lo + hi) / 2; } }
-    return ((ay * s + by) * s + cy) * s;
-  };
-}
-var DR_E_RING = drBezier(.5, 0, .25, 1), DR_E_TICK = drBezier(.4, 0, .2, 1), DR_E_POP = drBezier(.2, .9, .3, 1.15), DR_E_OUT = drBezier(0, 0, .58, 1);
-function drClamp(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
-function drTickPath(c) { c.beginPath(); c.moveTo(212, 352); c.lineTo(362, 486); c.lineTo(625, 148); }
-function drCanvasKit(size) {
-  function mk() { var c = document.createElement('canvas'); c.width = c.height = size; return c; }
-  return { size: size, S: size / 696, L: mk(), M: mk(), G: mk() };
-}
-function drClear(c, size, S) { c.setTransform(1, 0, 0, 1, 0, 0); c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1; c.setLineDash([]); c.clearRect(0, 0, size, size); c.setTransform(S, 0, 0, S, 0, 0); }
-// the artwork, seen only through a mask drawn by `maskFn` (white = shown, destination-out = hidden)
-function drMasked(kit, art, maskFn) {
-  var L = kit.L.getContext('2d'), M = kit.M.getContext('2d');
-  drClear(L, kit.size, kit.S); L.fillStyle = DR_GREEN; L.fill(art, 'evenodd');
-  drClear(M, kit.size, kit.S); maskFn(M);
-  L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'destination-in'; L.drawImage(kit.M, 0, 0); L.globalCompositeOperation = 'source-over';
-  return kit.L;
-}
-function drOkFrame(kit, art, main, t) {
-  var S = kit.S, size = kit.size, G = kit.G.getContext('2d'), L = kit.L.getContext('2d'), M = kit.M.getContext('2d');
-  drClear(main, size, S); main.fillStyle = '#fff'; main.beginPath(); main.arc(348, 348, 348, 0, 6.2831853); main.fill();
-  var p1 = DR_E_RING(drClamp(t / 600)), p2 = DR_E_TICK(drClamp((t - 1000) / 500)), q = DR_E_POP(drClamp((t - 550) / 400));
-  // 1. the ring, clockwise from the top, with the tick's place left out
-  if (p1 > 0) {
-    var C = 6.2831853 * 345;
-    main.setTransform(1, 0, 0, 1, 0, 0);
-    main.drawImage(drMasked(kit, art, function (m) {
-      m.lineWidth = 110; m.strokeStyle = '#fff'; m.setLineDash([p1 * C, C * 3]); m.beginPath(); m.arc(348, 348, 345, -1.5707963, 4.712389, false); m.stroke(); m.setLineDash([]);
-      m.globalCompositeOperation = 'destination-out'; m.lineWidth = 200; m.lineCap = 'round'; m.lineJoin = 'round'; drTickPath(m); m.stroke();
-    }), 0, 0);
-  }
-  // 2. the disc pops in, its tick still hidden under a green cover that is wiped away along the tick
-  if (t >= 550) {
-    drClear(G, size, S);
-    G.setTransform(1, 0, 0, 1, 0, 0);
-    G.drawImage(drMasked(kit, art, function (m) { m.fillStyle = '#fff'; m.beginPath(); m.arc(348, 348, 300, 0, 6.2831853); m.fill(); }), 0, 0);
-    drClear(L, size, S); L.save(); L.beginPath(); L.arc(348, 348, 296, 0, 6.2831853); L.clip();
-    L.strokeStyle = DR_GREEN; L.lineWidth = 200; L.lineCap = 'round'; L.lineJoin = 'round'; drTickPath(L); L.stroke(); L.restore();
-    drClear(M, size, S); M.fillStyle = '#fff'; M.fillRect(0, 0, 696, 696);
-    if (p2 > 0) { M.globalCompositeOperation = 'destination-out'; M.lineWidth = 210; M.lineCap = 'round'; M.lineJoin = 'round'; M.setLineDash([p2 * DR_TICK_LEN, DR_TICK_LEN * 3]); drTickPath(M); M.stroke(); M.setLineDash([]); }
-    L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'destination-in'; L.drawImage(kit.M, 0, 0); L.globalCompositeOperation = 'source-over';
-    G.setTransform(1, 0, 0, 1, 0, 0); G.drawImage(kit.L, 0, 0);
-    main.setTransform(S, 0, 0, S, 0, 0); main.save(); main.globalAlpha = drClamp(q); main.translate(348, 348); main.scale(.6 + .4 * q, .6 + .4 * q); main.translate(-348, -348);
-    main.drawImage(kit.G, 0, 0, 696, 696); main.restore();
-  }
-  // 3. the tip of the tick that leaves the disc
-  if (p2 > 0) {
-    main.setTransform(1, 0, 0, 1, 0, 0);
-    main.drawImage(drMasked(kit, art, function (m) {
-      m.strokeStyle = '#fff'; m.lineWidth = 210; m.lineCap = 'round'; m.lineJoin = 'round'; m.setLineDash([p2 * DR_TICK_LEN, DR_TICK_LEN * 3]); drTickPath(m); m.stroke(); m.setLineDash([]);
-      m.globalCompositeOperation = 'destination-out'; m.beginPath(); m.arc(348, 348, 297, 0, 6.2831853); m.fill();
-    }), 0, 0);
-  }
-}
-function drBar(c, deg) {                         // the owner's white bar: 150 x 30, corner radius 7, turned about the disc's centre
-  c.save(); c.translate(156.5, 156.5); c.rotate(deg * Math.PI / 180); c.translate(-156.5, -156.5);
-  var x = 81.5, y = 141.5, w = 150, h = 30, r = 7; c.beginPath(); c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.arcTo(x + w, y, x + w, y + r, r); c.lineTo(x + w, y + h - r); c.arcTo(x + w, y + h, x + w - r, y + h, r);
-  c.lineTo(x + r, y + h); c.arcTo(x, y + h, x, y + h - r, r); c.lineTo(x, y + r); c.arcTo(x, y, x + r, y, r); c.closePath(); c.fillStyle = '#fff'; c.fill(); c.restore();
-}
-function drFailFrame(kit, main, t) {
-  var size = kit.size, S = kit.S, L = kit.L.getContext('2d'), M = kit.M.getContext('2d');
-  drClear(main, size, S);
-  var q = DR_E_POP(drClamp(t / 400));
-  main.save(); main.globalAlpha = drClamp(q); main.translate(156.5, 156.5); main.scale(.6 + .4 * q, .6 + .4 * q); main.translate(-156.5, -156.5);
-  main.fillStyle = DR_RED; main.beginPath(); main.arc(156.5, 156.5, 156.5, 0, 6.2831853); main.fill(); main.restore();
-  var bars = [[45, 95, 95, 218, 218, drClamp((t - 450) / 260)], [-45, 95, 218, 218, 95, drClamp((t - 720) / 260)]];
-  for (var i = 0; i < 2; i++) {
-    var b = bars[i], p = DR_E_OUT(b[5]); if (p <= 0) continue;
-    drClear(L, size, S); drBar(L, b[0]);
-    drClear(M, size, S); M.strokeStyle = '#fff'; M.lineWidth = 46; var Ln = Math.sqrt((b[3] - b[1]) * (b[3] - b[1]) + (b[4] - b[2]) * (b[4] - b[2])); M.setLineDash([p * Ln, Ln * 3]); M.beginPath(); M.moveTo(b[1], b[2]); M.lineTo(b[3], b[4]); M.stroke(); M.setLineDash([]);
-    L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'destination-in'; L.drawImage(kit.M, 0, 0); L.globalCompositeOperation = 'source-over';
-    main.setTransform(1, 0, 0, 1, 0, 0); main.drawImage(kit.L, 0, 0);
-  }
-}
-var _drToken = 0;
-// A failed payment: once the cross has been drawn it shakes and the phone buzzes (once per drawing).
-function failShake(box, tok){
-  if (tok !== _drToken || !box.classList) return;
-  box.classList.remove('dep-shake'); void box.offsetWidth; box.classList.add('dep-shake');
-  try { if (navigator.vibrate) navigator.vibrate([90, 50, 90, 50, 160]); } catch (e) {}
-}
-function playStatusIcon(box, kind){
-  var tok = ++_drToken, ok = kind === 'ok', still = ok ? PAY_OK_STATIC : PAY_FAIL_STATIC, END = ok ? 1560 : 1000, shook = false;
-  box.classList.remove('dep-shake');
-  function drawn(){ if (!ok && !shook) { shook = true; failShake(box, tok); } }
-  function finish(){ if (tok === _drToken && box.firstChild && box.firstChild.tagName === 'CANVAS') box.innerHTML = still; drawn(); }
-  try {
-    if (typeof Path2D !== 'function') { box.innerHTML = still; drawn(); return; }
-    var dpr = Math.min(window.devicePixelRatio || 1, 3), size = Math.round(120 * dpr);   // the mark is 120 CSS pixels (see .dep-status-icon>canvas)
-    var cv = document.createElement('canvas'); cv.width = cv.height = size; cv.className = 'dr-canvas'; cv.setAttribute('aria-hidden', 'true');
-    var main = cv.getContext('2d'), kit = drCanvasKit(size), art = ok ? new Path2D(PAY_OK_ART) : null;
-    if (!ok) kit.S = size / 313;
-    if (ok) drOkFrame(kit, art, main, 0); else drFailFrame(kit, main, 0);
-    box.innerHTML = ''; box.appendChild(cv);
-    var t0 = null;
-    var step = function(now){
-      if (tok !== _drToken || cv.parentNode !== box) return;
-      if (t0 === null) t0 = now;
-      var t = now - t0;
-      if (t >= END) { finish(); return; }
-      try { if (ok) drOkFrame(kit, art, main, t); else drFailFrame(kit, main, t); } catch (e) { finish(); return; }
-      requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-    setTimeout(finish, END + 1500);
-  } catch (e) { box.innerHTML = still; drawn(); }
-}
-// Waiting for the payment: a dot travels from the phone to the wallet (nothing rotates).
-var DEPOSIT_POLL_FLOW = '<div class="dep-flow" role="img" aria-label="Processing payment">'
-  + '<span class="dep-flow-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.5 18.5h3"/></svg></span>'
-  + '<span class="dep-flow-track"><i></i><i></i><i></i><i></i></span>'
-  + '<span class="dep-flow-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6.8A2.3 2.3 0 0 1 6.3 4.5H17v3.5"/><rect x="3" y="7.5" width="18" height="12.5" rx="2.6"/><path d="M16 13.8h5"/></svg></span>'
-  + '</div>';
 // Every figure this screen shows about one plan, worked out in one place so
 // the summary band and the row can never disagree.
 function planStats(inv){
@@ -5062,19 +4898,12 @@ var _openSheetTitle = null;
 function vGroup(n){ const x = Number(n); return Number.isFinite(x) ? numGroup(x, false) : String(n); }
 function isAnyOverlayOpen(){
   return !!(_openSheetTitle
-    || ($('payScreen') && $('payScreen').classList.contains('show'))
     || ($('msgDetailBg') && $('msgDetailBg').classList.contains('show'))
     || ($('notifyBg') && $('notifyBg').classList.contains('show'))
     || ($('confirmBg') && $('confirmBg').classList.contains('show'))
-    // The recharge result modal (Round 82) came after this guard was first
-    // written and was never added to it -- it is exactly the kind of thing
-    // the announcement must never land on top of, since it carries the
-    // outcome of a payment the member is waiting on.
-    || ($('depStatusBg') && $('depStatusBg').classList.contains('show'))
     // The announcement dialog itself, now that it's real again -- so a
     // second trigger (e.g. Withdraw closing right after Deposit already
     // opened it) can't stack a second announcement on top of the first.
-    || ($('depStatusBg') && $('depStatusBg').classList.contains('show'))
     || ($('annBg') && $('annBg').classList.contains('show')));
 }
 // Owner: "when you logout and login again, the system freezes and no
@@ -5107,7 +4936,6 @@ function isAnyOverlayOpen(){
 function isScrollLockOverlayOpen(){
   return !!(_openSheetTitle
     || ($('confirmBg') && $('confirmBg').classList.contains('show'))
-    || ($('depStatusBg') && $('depStatusBg').classList.contains('show'))
     || ($('annBg') && $('annBg').classList.contains('show')));
 }
 
@@ -5203,19 +5031,16 @@ window.closeSheet = function(opts){
 // dialog is skipped over by the popstate handler below, so Back never "does nothing".
 var _dlgIgnorePop = false, _dlgFromPop = false, _dlgCleanTimer = null;
 function anyDialogOpen(){
-  return !!(($('payScreen') && $('payScreen').classList.contains('show'))
-    || ($('helpBg') && $('helpBg').classList.contains('show'))
+  return !!(($('helpBg') && $('helpBg').classList.contains('show'))
     || ($('confirmBg') && $('confirmBg').classList.contains('show'))
-    || ($('annBg') && $('annBg').classList.contains('show'))
-    // The payment status page owns a history entry too: without it here, one Back left the page showing and the next left the app mid-payment.
-    || ($('depStatusBg') && $('depStatusBg').classList.contains('show')));
+    || ($('annBg') && $('annBg').classList.contains('show')));
 }
 function _dlgIgnore(){ _dlgIgnorePop = true; setTimeout(() => { _dlgIgnorePop = false; }, 700); }
 function resetOverlayState(){
-  document.body.classList.remove('deposit-status-open', 'sheet-open');
+  document.body.classList.remove('sheet-open');
   // A session that ends (or a logout) takes every popup with it: the Buy confirm, Help, announcement, download and the win card used to stay
   // on top of the Login screen (the win card even showed the previous member's New Balance).
-  ['confirmBg', 'helpBg', 'annBg', 'payScreen'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
+  ['confirmBg', 'helpBg', 'annBg'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
   try { document.title = brandName(); } catch (_) {}
   _openSheetTitle = null; _withdrawSubmitting = false;
 }

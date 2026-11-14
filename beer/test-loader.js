@@ -34,8 +34,6 @@ ok(/\.v-card-img,#pageHost \.v-card\.v-flat \.v-card-img\{[^}]*flex:0 0 146px/.t
 ok(/<script data-beer-loader>/.test(html) && /localStorage\.getItem\(KEY\)/.test(html) && /bg\.style\.backgroundImage = layer\(kept\)/.test(html) && /window\._beerLoaderStart = Date\.now\(\)/.test(html), 'the kept loading picture is painted inline on the first frame, before any network request');
 ok(/fetch\('\/k7x2\/public\/loader-image', \{ cache: 'no-cache' \}\)/.test(html) && /localStorage\.setItem\(KEY, u\)/.test(html), 'and refreshed in the background for the next visit');
 ok(/var LOADER_MIN_MS = 2500/.test(mod) && /function hideLoadingScreen\(\)/.test(mod) && !/\$\('loadingScreen'\)\.style\.display = 'none'/.test(mod), 'the loading screen stays for 2.5 seconds before the page opens, through one function');
-ok(/var PAY_OK_ART = '/.test(mod) && /var PAY_OK_STATIC = '<svg viewBox="0 0 696 696"/.test(mod) && /var PAY_FAIL_STATIC = '<svg viewBox="0 0 313 313"/.test(mod) && /function playStatusIcon\(box, kind\)/.test(mod) && !/PAY_OK_SVG|PAY_FAIL_SVG/.test(mod + html), 'the owner\'s tick and cross art stays in the app (playStatusIcon, plain finished SVGs as the end state)');
-ok(/var DEPOSIT_POLL_FLOW = /.test(mod) && !/dep-poll|pspin|DEPOSIT_POLL_SPIN|depPollRotate/.test(html + mod), 'the phone-to-wallet dots art stays; the rotating rings and orbiting chips are gone');
 ok(!/Congratulations! \u{1F389}|🎉/u.test(mod), 'no emoji in the success title');
 ok(/loaderBgOpacity: \[0, 100\], loaderBgBlur: \[0, 40\]/.test(server) && /'X-Loader-Opacity'/.test(server) && /'X-Loader-Blur'/.test(server), 'the server limits the loader opacity 0-100 and blur 0-40 and sends them with the picture');
 ok(/id="loaderBgFile"/.test(admin) && /wireBeerImageSlot\('loaderbg'/.test(admin), 'admin can upload and remove the round loader picture');
@@ -45,26 +43,5 @@ ok(/window\._beerAuthFired = true;\s*window\.dispatchEvent\(new CustomEvent\('sn
 ok(/window\.addEventListener\('snow-auth', ev => onMemberAuth\(ev\.detail\)\);[\s\S]{0,700}if \(window\._beerAuthFired && window\.fbAuth\) onMemberAuth\(window\.fbAuth\.currentUser\);/.test(mod), 'and the app picks that announcement up itself when its own code unpacks later (otherwise the loading screen stays for ever)');
 ok(/function waitForBootSettings\(ms\)/.test(mod) && !/withTimeout\(_bootPromise, 6000\)/.test(mod), 'the settings are waited for once in total (6 s from page start), not once per start-up step');
 ok(!/fireConfetti|confettiCanvas/.test(mod + html), 'no confetti or sparkles anywhere: success is the tick drawing itself');
-ok(/function drOkFrame\(/.test(mod) && /function drFailFrame\(/.test(mod) && /requestAnimationFrame\(step\)/.test(mod) && !/<mask|mask="url/.test(mod.slice(mod.indexOf('var PAY_OK_ART'), mod.indexOf('function playStatusIcon'))) && !/@keyframes drDraw|\.draw-ok|\.draw-fail/.test(html), 'the tick and cross are drawn on a canvas, not with CSS-animated SVG masks (those are not repainted by every phone), and no mask animation CSS is left');
-ok(/#42af3c/.test(mod) && /M316\.5 694\.5C292\.9 692\.3/.test(mod) && /<rect x="81\.5" y="141\.5" width="150" height="30" rx="7" transform="rotate\(45 156\.5 156\.5\)"/.test(mod), 'and the artwork itself is the owner\'s traced tick and cross, untouched (masks only reveal it)');
 ok(!/\.notify-ic svg (circle|path)\{[^}]*animation/.test(html), 'the notice cards keep their plain icons (only the deposit result tick and cross animate)');
-ok(/It plays even when the phone asks for reduced motion/.test(mod) && !/prefers-reduced-motion[^{]*\{[^}]*dep-status-icon/.test(html), 'the draw plays on phones that ask for reduced motion too (the owner wants it everywhere)');
-{ // failed deposit: the cross shakes and the phone buzzes once it is drawn; success never does
-  const vm = require('vm');
-  const a = mod.indexOf('var _drToken = 0;'), b = mod.indexOf('// Waiting for the payment: a dot travels');
-  const buzz = [];
-  const mkBox = () => { const cl = new Set(); return { firstChild: null, offsetWidth: 1, classList: { add: c => cl.add(c), remove: c => cl.delete(c), has: c => cl.has(c) }, set innerHTML(v) { this._h = v; }, get innerHTML() { return this._h || ''; } }; };
-  const ctx = { PAY_OK_STATIC: '<svg ok/>', PAY_FAIL_STATIC: '<svg fail/>', navigator: { vibrate: p => { buzz.push(p); return true; } }, setTimeout: () => 0 };
-  vm.createContext(ctx); vm.runInContext(mod.slice(a, b), ctx);   // no Path2D here: the plain finished mark is drawn at once
-  const bad = mkBox(), good = mkBox();
-  ctx.playStatusIcon(bad, 'fail');
-  ok(buzz.length === 1 && Array.isArray(buzz[0]) && buzz[0].length >= 3 && bad.classList.has('dep-shake'), 'a failed deposit: the cross shakes and the phone vibrates once');
-  ctx.playStatusIcon(good, 'ok');
-  ok(buzz.length === 1 && !good.classList.has('dep-shake'), 'a successful deposit never shakes or vibrates');
-  ctx.playStatusIcon(bad, 'fail');
-  ok(buzz.length === 2 && bad.classList.has('dep-shake'), 'a second failure shakes and vibrates again');
-  ctx.navigator.vibrate = undefined; ctx.playStatusIcon(mkBox(), 'fail');
-  ok(true, 'a phone with no vibration support just shakes (no error)');
-  ok(/\.dep-status-icon\.dep-shake\{animation:depShake/.test(html) && /@keyframes depShake/.test(html), 'the shake animation exists in the page CSS');
-}
 console.log(`PASS: loader and page bottom (${n} checks${built ? ', built bundle' : ''})`);

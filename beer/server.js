@@ -50,7 +50,6 @@ app.use(helmet({
 // own bucket, and ipOnlyLimiter below caps what a fake-token flood can do.
 // The address a rate limit or lock is counted against. An IPv6 customer owns a whole /64 (billions of addresses), so counting every address separately
 // let one host dodge every per-address limit and lock; IPv6 is counted per /64, IPv4 (and IPv4-mapped IPv6) per address.
-function logSafe(v) { return String(v == null ? '?' : v).replace(/[^\x20-\x7e]/g, '?').slice(0, 64); }   // a callback body is untrusted: no newline may forge a log line
 function ipKey(ip) {
   ip = String(ip || '').split('%')[0].toLowerCase();
   const m = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(ip);
@@ -6271,11 +6270,10 @@ app.post('/admin/deposit/force-credit', async (req, res) => {
 app.post('/admin/withdrawals/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [snap, unresolvedSnap, usersSnap, sett] = await Promise.all([
+    const [snap, unresolvedSnap, usersSnap] = await Promise.all([
       db.collection('withdrawals').orderBy('createdAt', 'desc').limit(5000).get(),
       db.collection('withdrawals').where('status', 'in', ['pending', 'sending', 'processing']).limit(5000).get(),
       db.collection('users').get(),
-      getSettings(),
     ]);
     const phones = {}; const refCodes = {};
     usersSnap.forEach(u => { phones[u.id] = u.data().phone || ''; refCodes[u.id] = u.data().referralCode || ''; });
@@ -6292,14 +6290,10 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     rows.length = 0; rows.push(...scoped);
     rows.forEach(w => { w.accountPhone = phones[w.userId] || ''; w.referralCode = refCodes[w.userId] || ''; counts[w.status] = (counts[w.status] || 0) + 1; });
     const { processedByDay, processedAmount } = groupProcessedByDay(rows.filter(w => w.status === 'processed'), 'processedAt', 'net');
-    // The tab needs to know which real payout path is active -- it changes
-    // what the approve button does/says and what it must warn the admin
-    // about. Sent with the list so the tab doesn't need a second round trip
-    // just to label a button.
     // Subagent-audit-caught: same missing-truncated-flag gap as the deposits
     // list above, fixed the same way.
     const truncated = snap.docs.length >= 5000 || unresolvedSnap.docs.length >= 5000;
-    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, payoutMode: 'manual', autoWithdrawals: false, autoLimit: 0, truncated, regionKey: want || 'all' });
+    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, truncated, regionKey: want || 'all' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/withdraw/reject', async (req, res) => {

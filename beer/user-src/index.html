@@ -1126,141 +1126,18 @@ body.sheet-open .sheet-bg{bottom:0;}
 .v-ann-btns{display:flex;gap:12px;width:100%;flex:0 0 auto;}
 .v-ann-join,.v-ann-close{flex:1;height:41px;border-radius:12px;font:inherit;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;text-decoration:none;cursor:pointer;}
 .v-ann-join{background:var(--bt-grad);color:#fff;border:1.5px solid transparent;}
-.v-ann-close{background:#b3a47c;color:#5a1f08;border:1.5px solid var(--v-blue);}
-/* Deposit poll and its brief handoff are dedicated full-screen states. They
-   use the app's light paper surface and brand-colored motion, with no bottom
-   navigation behind them. */
-body.deposit-status-open .bottom-nav{display:none;}
-/* Owner: "the deposit poll screen is very ugly, showing a background white
-   and the page is very not matching with current page." Real gap, not a
-   design opinion -- .pay-page is its own class, so it never picked up the
-   refinery-wallpaper + dark-glass treatment .sheet-bg/.sheet-head/.sheet-body
-   got everywhere else. Its header already looked right (it reuses
-   .sheet-head verbatim), which is exactly what made the plain white body
-   underneath it read as broken rather than unfinished. Matched here to the
-   same pattern, not a new one: same ::before wallpaper .sheet-bg uses, same
-   glass-panel numbers .sheet-body uses. */
-/* A column now, not a centred box: the page has a real header (back chevron
-   + title) pinned at the top, and .pay-body takes the remaining height and
-   centres the card inside THAT. Centring the card in the whole page instead
-   would push it visibly below centre by half the header's height. */
-.pay-page{position:fixed;left:0;right:0;top:0;bottom:0;
-  background:#1d130f;z-index:310;display:none;
-  flex-direction:column;overflow-y:auto;transform:translateZ(0);will-change:transform;
-  isolation:isolate;}
-/* Owner: "change the payment polling screen the background image should
-   not show up there so full page should be like blurred." The refinery
-   photo (var(--auth-hero-img)) was still painting here underneath the
-   solid #1d130f fallback above -- isolation:isolate on .pay-page puts this
-   ::before INSIDE its own stacking context, where it paints above the
-   element's own background regardless of z-index:-1, so the fallback
-   color was never actually visible; the photo was.
-
-   First fix dropped the photo entirely for a flat rgba backdrop -- wrong
-   in a different way, per the owner's very next round: ".pay-card sits on
-   this via its own backdrop-filter:blur(9px) (the exact "in-built blur"
-   mechanism the Home stat cards use, background:rgba(20,12,8,.46) +
-   blur(9px) -- see .home-stat), and a flat rgba backdrop gives that
-   blur nothing real to blur, so the card lost the frosted-glass depth it
-   has everywhere else. Kept here instead: the photo stays, blurred with a
-   real CSS filter (not backdrop-filter -- there is nothing BEHIND this
-   fixed, full-viewport ::before for backdrop-filter to blur; filter blurs
-   its own rendered content, including its own background-image). inset
-   is overscanned past the viewport edge so the blur radius never reveals
-   a blank strip at the boundary -- a standard trick for filter:blur() on
-   an edge-to-edge layer. */
-.pay-page::before{
-  content:'';
-  position:fixed;
-  inset:-40px;
-  z-index:-1;
-  pointer-events:none;
-  background:
-    linear-gradient(180deg,rgba(12,7,4,.58) 0%,rgba(12,7,4,.72) 100%),
-    var(--auth-hero-img);
-  background-size:cover,cover;
-  background-position:center center,center center;
-  background-repeat:no-repeat,no-repeat;
-  filter:blur(16px);
-}
-.pay-page.show{display:flex;}
-/* Owner: "when I scroll that page down harder it shows that" (the product page's BUY NOW card peeking out from under the payment screen).
+.v-ann-close{background:#b3a47c;color:#5a1f08;border:1.5px solid var(--v-blue);}/* Owner: "when I scroll that page down harder it shows that" (the product page's BUY NOW card peeking out from under the payment screen).
    On a phone browser a drag that the full-screen page does not use falls through to the DOCUMENT behind it; the address bar then slides away,
    the visible area grows, and a fixed layer sized for the old, shorter area leaves a strip at the bottom where the page underneath shows. While a
    full-page screen is open the document behind it must simply not scroll, and the screen must not pass its own overscroll on. */
-html:has(.pay-page.show),body:has(.pay-page.show),
 html:has(.sheet-bg.show),body:has(.sheet-bg.show){overflow:hidden;}
-.pay-page{overscroll-behavior:none;}
-/* Owner: "l told you to remove that stuff bro, l nolonger need that
-   header on payment polling page" -- removing the <h2> text (an earlier
-   round) still left the full .sheet-head BAR: padding, border-bottom,
-   solid background, the works, just with nothing written in it -- still
-   very much "that stuff." Stripped down to a floating, transparent back
-   button with no bar chrome at all, sitting directly over the blurred
-   backdrop like the rest of this page now does. Position stays sticky
-   (inherited from .sheet-head) so it stays reachable if the card's own
-   content ever needs to scroll. */
-.sheet-head.pay-head{background:transparent;border-bottom:0;box-shadow:none;padding:14px 16px 0;-webkit-backdrop-filter:none;backdrop-filter:none;}
-/* "The card should be raised up" -- .pay-body used to CENTER the card in
-   whatever height was left under the header bar; removing that bar's
-   own padding/height above freed up room, but centering in a now-taller
-   box does not by itself read as "raised" the way flex-start does.
-   Pushed toward the top instead, with just enough top padding that it
-   does not sit flush under the floating back button. */
-.pay-body{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:8px 26px 26px;}
-.pay-card{width:100%;max-width:340px;text-align:center;
-  padding:28px 22px 26px;border-radius:var(--r-card);
-  border:1px solid rgba(255,255,255,.14);
-  background:rgba(20,12,8,.46);
-  box-shadow:0 16px 34px -20px rgba(0,0,0,.72);
-  -webkit-backdrop-filter:blur(9px);
-  backdrop-filter:blur(9px);}
-.pay-card h3{font-size:23px;font-weight:800;color:#fff;margin:0 0 10px;}
-.pay-card p{font-size:15px;line-height:1.6;color:rgba(255,255,255,.62);font-weight:500;margin:0;}
-/* The pending state is a numbered list of what is happening and what the
-   member has to do, so it is LEFT-aligned inside an otherwise centred card --
-   centred list items with numbers hanging off them are hard to scan, and the
-   numbers stop lining up with each other entirely. */
-.pay-steps{margin:0;padding:0 0 0 24px;text-align:left;font-size:15px;
-  line-height:1.6;color:rgba(255,255,255,.62);font-weight:500;}
-.pay-steps li{margin:0 0 11px;padding-left:3px;}
-.pay-steps li:last-child{margin-bottom:0;}
-.pay-steps li::marker{color:var(--snow-wine);font-weight:700;}
-/* The USSD fallback. Deliberately NOT a fifth numbered step: the four steps
-   are what happens normally, and this is the way out of the one common
-   failure (the mobile-money prompt never arriving). Quieter and smaller so
-   it reads as a footnote rather than another instruction to follow. */
-.pay-note{margin:16px 0 0;font-size:13.5px;line-height:1.55;
-  color:rgba(255,255,255,.5);text-align:left;}
-.pay-actions{margin-top:22px;display:flex;flex-direction:column;gap:11px;}
-.pay-actions button{width:100%;padding:15px 0;font-size:16px;}
-/* No disc behind it any more -- the mark IS the artwork. Sized here so the
-   orbiting chips and the two result marks share one footprint and the page
-   does not jump as the poll resolves. */
-.dep-status-icon{width:auto;min-height:120px;margin:0 auto 24px;display:flex;align-items:center;justify-content:center;}
-.dep-status-icon>svg{width:120px;height:120px;display:block;}
-/* The owner's own green tick and red cross (deposit result page only) draw themselves on a canvas (see playStatusIcon in the app code). */
-.dep-status-icon>canvas{width:120px;height:120px;display:block;}
-.dep-status-icon.dep-shake{animation:depShake .62s cubic-bezier(.36,.07,.19,.97) both;}
-@keyframes depShake{10%,90%{transform:translateX(-3px) rotate(-1deg)}20%,80%{transform:translateX(6px) rotate(2deg)}30%,50%,70%{transform:translateX(-10px) rotate(-3deg)}40%,60%{transform:translateX(10px) rotate(3deg)}}
 
-/* Waiting for the payment: a coin-dot travels from the phone to the wallet (nothing rotates). */
-.dep-flow{display:flex;align-items:center;justify-content:center;gap:12px;width:240px;max-width:100%;}
-.dep-flow-ic{width:48px;height:48px;border-radius:14px;background:#988753;color:#5a1f08;display:flex;align-items:center;justify-content:center;flex:none;}
-.dep-flow-ic svg{width:27px;height:27px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
-.dep-flow-track{position:relative;flex:1;height:12px;}
-.dep-flow-track i{position:absolute;left:0;top:0;width:12px;height:12px;border-radius:50%;background:var(--v-blue);opacity:0;animation:depFlow 1.8s ease-in-out infinite;}
-.dep-flow-track i:nth-child(2){animation-delay:.45s;}
-.dep-flow-track i:nth-child(3){animation-delay:.9s;}
-.dep-flow-track i:nth-child(4){animation-delay:1.35s;}
-@keyframes depFlow{0%{left:0;opacity:0;transform:scale(.6);}18%{opacity:1;transform:scale(1);}82%{opacity:1;transform:scale(1);}100%{left:calc(100% - 12px);opacity:0;transform:scale(.6);}}
-@media (prefers-reduced-motion:reduce){.dep-flow-track i{animation:none;opacity:.55;}.dep-flow-track i:nth-child(1){left:0;}.dep-flow-track i:nth-child(2){left:33%;}.dep-flow-track i:nth-child(3){left:66%;}.dep-flow-track i:nth-child(4){left:calc(100% - 12px);}}
+
 
 .list-loading{padding:34px 4px;display:flex;justify-content:center;align-items:center;}
 .nav-loading{display:inline-block;color:var(--v-blue,#5a1f08);font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:15px;font-weight:700;letter-spacing:.03em;animation:navBounce .9s cubic-bezier(.28,.84,.42,1) infinite;}
 @keyframes navBounce{0%,100%{transform:translateY(0);animation-timing-function:cubic-bezier(.55,.06,.68,.19);}50%{transform:translateY(-8px);animation-timing-function:cubic-bezier(.22,.61,.36,1);}}
 @media (prefers-reduced-motion:reduce){.nav-loading{animation:none;}}
-@media(prefers-reduced-motion:reduce){}
 .list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:15px;}
 
 /* Real content fades/lifts into place once it's ready -- no shimmer
@@ -1512,7 +1389,6 @@ body.sheet-open .bottom-nav{display:flex;}
 /* ── secondary pages (Deposit, Withdraw, Balance Record, Wallet ...) ── */
 .sheet-bg{background:var(--v-bg);bottom:var(--nav-h);}
 body.sheet-open .sheet-bg{bottom:var(--nav-h);}
-body.deposit-status-open .sheet-bg{bottom:0;}
 .sheet-head{background:#988753;border-bottom:1px solid rgba(60,35,5,.22);padding:0 15px 0 14px;min-height:66.5px;box-shadow:0 8px 18px -18px rgba(106,90,50,.5);}
 .sheet-head h2{color:var(--v-ink);font-size:17px;font-weight:700;letter-spacing:1.7px;white-space:nowrap;margin-right:22px;padding-left:0;}
 .sheet-head .back{border:0;background:transparent;width:30px;height:36px;color:var(--v-ink);}
@@ -1624,16 +1500,6 @@ body.deposit-status-open .sheet-bg{bottom:0;}
 /* ── pages that keep their old markup, brought into the same look ── */
 .confirm-sheet h3{color:#5a1f08;}
 .confirm-sheet .secondary-button{background:#988753;color:#5a1f08;}
-
-/* payment-status page + small dialogs in the same light look */
-.pay-page{background:var(--v-bg);}
-.pay-page::before{display:none;}
-.pay-card{background:#b3a47c;border:1.5px solid rgba(60,35,5,.22);box-shadow:0 18px 34px -24px rgba(106,90,50,.55);-webkit-backdrop-filter:none;backdrop-filter:none;border-radius:24px;}
-.pay-card h3{color:var(--v-ink);}
-.pay-card p,.pay-steps{color:#5a1f08;}
-.pay-note{color:#5a1f08;}
-.pay-steps li::marker{color:#5a1f08;}
-.sheet-head.pay-head .back svg path{stroke:var(--v-ink)!important;}
 .chest-modal{background:#b3a47c;color:var(--v-ink);border:1.5px solid #37301e;border-radius:18px;}
 .chest-modal p{color:#5a1f08;}
 .msg-row{gap:11px;align-items:center;padding:12px 14px;border-radius:14px;border:1px solid rgba(60,35,5,.22);border-left-width:1px;background:#b3a47c;}
@@ -1872,13 +1738,11 @@ body{background-attachment:fixed;}
 .ck-lvtable div{display:flex;align-items:center;justify-content:space-between;height:41.2px;padding:0 17.5px;background:#988753;font:700 18px/1 var(--ck-serif);color:#5a1f08;}
 .ck-lvtable div:nth-child(2){background:#dfd5bd;}
 /* ── Sheets (Deposit, Withdraw, Wallet, Records ...) share the blue title bar ── */
-.sheet-bg{background:linear-gradient(180deg,#988753 0%,#988753 100%);}
-.sheet-head,.sheet-head.pay-head{position:sticky;top:0;display:flex;align-items:center;justify-content:center;height:44px;min-height:44px;padding:0;gap:0;background:var(--ck-blue);border:0;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;}
+.sheet-bg{background:linear-gradient(180deg,#988753 0%,#988753 100%);}.sheet-head{position:sticky;top:0;display:flex;align-items:center;justify-content:center;height:44px;min-height:44px;padding:0;gap:0;background:var(--ck-blue);border:0;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;}
 .sheet-head h2{margin:0;padding:0 46px;flex:1;text-align:center;font-size:16.8px;font-weight:700;letter-spacing:0;color:#fff;position:relative;top:-1.2px;}
 .sheet-head .back{position:absolute;left:0;top:0;width:44px;height:44px;padding:0 0 0 6.9px;border:0;background:none;color:#fff;display:flex;align-items:center;justify-content:flex-start;}
 .sheet-head .back svg{width:23.6px;height:23.6px;margin-top:-8px;}
-.sheet-head .back svg path{stroke-width:1.5!important;}
-.sheet-head .back svg path,.sheet-head.pay-head .back svg path{stroke:#fff!important;}
+.sheet-head .back svg path{stroke-width:1.5!important;}.sheet-head .back svg path{stroke:#fff!important;}
 /* ── Income ── */
 .ck-income,.ck-my{background:transparent;}
 .ck-income .v-page{padding:12px 15px 8px;}
@@ -1989,7 +1853,7 @@ body{background-attachment:fixed;}
 .confirm-bg{background:rgba(0,0,0,.5) !important;-webkit-backdrop-filter:none !important;backdrop-filter:none !important;}
 .confirm-sheet.ck-prompt{max-width:304px;padding:0;border-radius:6px;background:#b3a47c;box-shadow:none;text-align:center;overflow:hidden;font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
 .ck-prompt h3{margin:18px 0 0;font-size:18px;line-height:22px;font-weight:400;color:#2c1105;}
-.ck-prompt-msg{margin:28px 26px 20px;font-size:15.5px;line-height:21px;color:#4d2a14;word-break:break-all;}
+.ck-prompt-msg{margin:28px 26px 20px;font-size:15.5px;line-height:21px;color:#4d2a14;overflow-wrap:anywhere;}
 .ck-prompt-btns{display:flex;height:48px;border-top:1px solid rgba(60,35,5,.22);}
 .ck-prompt-btns button{flex:1;border:0;background:#b3a47c;font:400 18px/48px Roboto,'Segoe UI',system-ui,sans-serif;color:#2c1105;cursor:pointer;}
 .ck-prompt-btns button+button{border-left:1px solid rgba(60,35,5,.22);color:#5a1f08;}
@@ -2131,8 +1995,7 @@ body{background-attachment:fixed;}
 @keyframes ckSheetIn{from{opacity:0;transform:translateX(26px);}to{opacity:1;transform:none;}}
 @keyframes ckFadeIn{from{opacity:0;}to{opacity:1;}}
 @keyframes ckSlideUp{from{transform:translateY(100%);}to{transform:none;}}
-@keyframes ckPop{0%{transform:scale(.55);opacity:.4;}60%{transform:scale(1.08);opacity:1;}100%{transform:scale(1);}}
-.pay-page.show,.msg-detail-bg.show{animation:ckFadeIn .25s ease-out both;}
+@keyframes ckPop{0%{transform:scale(.55);opacity:.4;}60%{transform:scale(1.08);opacity:1;}100%{transform:scale(1);}}.msg-detail-bg.show{animation:ckFadeIn .25s ease-out both;}
 /* Switching between Login and Create Account: the screen and its picture stay still; the form's own lines rise in one after another */
 .va-pane .va-card>*{animation:ckPageIn .3s cubic-bezier(.2,.8,.3,1) backwards;}
 .va-pane .va-card>:nth-child(2){animation-delay:70ms;}
@@ -2147,7 +2010,7 @@ body{background-attachment:fixed;}
 .ck-langpop{animation:ckFadeIn .2s ease-out both;}
 .ck-langcard{animation:ckSlideUp .28s cubic-bezier(.22,1,.36,1) both;}
 #loadingScreen.ld-out{opacity:0;transition:opacity .3s ease-out;}
-@media (prefers-reduced-motion:reduce){#pageHost .ck-rise,#sheetBody .ck-rise,.sheet-bg.show,.pay-page.show,.msg-detail-bg.show,.va-pane .va-card>*,#app,.ck-langpop,.ck-langcard,.navitem.active .nav-ic{animation:none !important;}}
+@media (prefers-reduced-motion:reduce){#pageHost .ck-rise,#sheetBody .ck-rise,.sheet-bg.show,.msg-detail-bg.show,.va-pane .va-card>*,#app,.ck-langpop,.ck-langcard,.navitem.active .nav-ic{animation:none !important;}}
 /* ── Loading box, "No more data" box (measured from the owner's screen recordings) ── */
 /* ── Sheets only fade in; the tab pill grows from a dot; the Team level pill slides ── */
 .sheet-bg.show{animation:ckFadeIn .12s ease-out both;}
@@ -2345,66 +2208,9 @@ body{background-attachment:fixed;}
 #maintScreen .mt-icon{display:block;width:80px;height:80px;margin:0 auto 24.3px;overflow:visible;}
 #maintScreen .mt-title{margin:0 0 15.7px;font-size:26px;line-height:32px;font-weight:700;color:#2c1105;}
 #maintScreen .mt-msg{margin:0;font-size:15.43px;line-height:25.15px;font-weight:400;color:#4d2a14;}
-
-/* ── The payment page (/payment/<order number>): dark purple, built from the owner's screenshots ── */
-#payScreen{position:fixed;inset:0;z-index:620;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;background:linear-gradient(135deg,#15120c 0%,#302917 50%,#12100a 100%);color:#fff;font-family:'DM Sans','Roboto',system-ui,sans-serif;}
-#payScreen.show{display:block;}
 /* A long unbroken word (a link in a message title or body, the About text) wraps inside its card instead of running off the screen */
 .msg-row .t1,.msg-detail h2,.msg-detail .content,.ck-about,.ck-msgbody{overflow-wrap:anywhere;min-width:0;}
-#payScreen{overscroll-behavior-y:contain;}
-#payScreen .pg-ptr{position:fixed;left:50%;top:0;z-index:5;width:38px;height:38px;margin:0;border-radius:50%;background:#483f28;border:1px solid rgba(255,255,255,.18);color:#f5f1e9;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transform:translate(-50%,-46px);box-shadow:0 6px 18px rgba(0,0,0,.4);}
-#payScreen .pg-ptr svg{width:22px;height:22px;}
-#payScreen .pg-ptr.pg-spin svg{animation:ckLdSpin .8s linear infinite;}
-#payScreen .pg-wrap{min-height:100%;box-sizing:border-box;padding:46px 16px 24px;display:flex;flex-direction:column;align-items:center;}
-#payScreen .pg-brand{margin:0 0 18px;font-size:24px;line-height:30px;font-weight:700;letter-spacing:.01em;color:#fff;text-align:center;}
-#payScreen .pg-card{width:100%;max-width:340px;border:1px solid rgba(255,255,255,.13);border-radius:22px;overflow:hidden;background:linear-gradient(180deg,#2f291b 0%,#1e1a11 100%);box-shadow:0 20px 60px rgba(0,0,0,.45);}
-#payScreen .pg-head{padding:16px 20px 14px;background:linear-gradient(135deg,#554a2d 0%,#5d5131 55%,#4b4127 100%);border-bottom:1px solid rgba(255,255,255,.12);}
-#payScreen .pg-sub{display:block;margin-bottom:7px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.62);}
-#payScreen .pg-head h1{margin:0;font-size:20px;line-height:25px;font-weight:700;color:#fff;}
-#payScreen .pg-head{position:relative;}
-#payScreen .pg-time{position:absolute;top:13px;right:14px;display:flex;align-items:center;gap:5px;height:26px;padding:0 10px 0 8px;border-radius:13px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);color:#f5f1e9;font:700 13px 'DM Sans','Roboto',sans-serif;font-variant-numeric:tabular-nums;}
-#payScreen .pg-time .pg-clk{width:14px;height:14px;}
-#payScreen .pg-time b{font-weight:700;letter-spacing:.02em;}
-#payScreen .pg-time.pg-low{background:rgba(255,93,115,.16);border-color:rgba(255,93,115,.45);color:#ff8a9b;}
-#payScreen .pg-body{padding:18px 20px 18px;}
-#payScreen .pg-l{display:block;margin:0 0 6px;font-size:12.5px;line-height:16px;font-weight:600;color:#5a1f08;}
-#payScreen .pg-in{display:block;width:100%;height:42px;margin:0 0 14px;padding:0 14px;box-sizing:border-box;border:1px solid #756848;border-radius:12px;background:linear-gradient(180deg,#584e35 0%,#4a422c 100%);color:#fff;font:400 15px 'DM Sans','Roboto',sans-serif;outline:0;-webkit-appearance:none;appearance:none;}
-#payScreen .pg-in::placeholder{color:#5a1f08;}
-#payScreen .pg-in:focus{border-color:#c4b07d;box-shadow:0 0 0 3px rgba(196,176,125,.38);}
-#payScreen .pg-locked{color:#f5f1e9;cursor:default;}
-#payScreen .pg-sel{position:relative;}
-#payScreen .pg-sel select{padding-right:38px;}
-#payScreen .pg-sel select:invalid{color:#5a1f08;}
-#payScreen .pg-sel svg{position:absolute;right:13px;top:11px;width:20px;height:20px;color:#5a1f08;pointer-events:none;}
-#payScreen .pg-sel option{background:#443c28;color:#fff;}
-#payScreen .pg-sum{margin:0 0 14px;padding:10px 15px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(255,255,255,.035);}
-#payScreen .pg-sum>div{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px;color:#5a1f08;}
-#payScreen .pg-sum .pg-tot{margin-top:5px;padding-top:10px;border-top:1px solid rgba(255,255,255,.14);font-size:15px;font-weight:700;color:#fff;}
-#payScreen .pg-sum .pg-tot b{color:#b7f23f;font-weight:700;}
-#payScreen .pg-err{min-height:0;margin:0 0 10px;font-size:12.5px;line-height:17px;color:#ff7b8d;}
-#payScreen .pg-err:empty{display:none;}
-#payScreen .pg-pay{display:flex;align-items:center;justify-content:center;width:100%;height:44px;border:0;border-radius:14px;background:#bca56c;color:#fff;font:700 15px 'DM Sans','Roboto',sans-serif;cursor:pointer;box-shadow:0 10px 26px -6px rgba(188,165,108,.55);}
-#payScreen .pg-pay.pg-busy,#payScreen .pg-pay:disabled{background:#887546;color:#cec2a4;cursor:default;box-shadow:0 10px 26px -10px rgba(136,117,70,.5);}
-#payScreen .pg-ring{width:17px;height:17px;margin-right:10px;box-sizing:border-box;border:2.6px solid rgba(255,255,255,.35);border-top-color:transparent;border-radius:50%;animation:ckLdSpin .8s linear infinite;}
-#payScreen .pg-note{margin:14px 0 0;font-size:11.5px;line-height:17px;text-align:center;color:#5a1f08;}
-#payScreen .pg-foot{margin:18px 0 0;font-size:12.5px;text-align:center;color:#5a1f08;}
-#payScreen .pg-center{flex:1;width:100%;max-width:320px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding-bottom:70px;}
-#payScreen .pg-ico{display:flex;align-items:center;justify-content:center;width:56px;height:56px;margin-bottom:20px;border-radius:50%;background:#2e2818;border:1px solid rgba(30,214,122,.16);}
-#payScreen .pg-ico svg{width:38px;height:38px;}
-#payScreen .pg-ico.pg-spinner{background:none;border:0;}
-#payScreen .pg-ico.pg-spinner svg{width:62px;height:62px;flex:0 0 auto;overflow:visible;}
-#payScreen .pg-sp{transform-origin:0 0;animation:pgSpin 1s steps(12,end) infinite;will-change:transform;}
-@keyframes pgSpin{to{transform:rotate(360deg);}}
-@media (prefers-reduced-motion:reduce){#payScreen .pg-sp{animation-duration:3s;}}
-#payScreen .pg-ico.pg-bad{background:#2a1424;border-color:rgba(255,93,115,.2);}
-#payScreen .pg-center h2{margin:0 0 10px;font-size:22px;line-height:28px;font-weight:700;color:#fff;}
-#payScreen .pg-msg{margin:0 0 18px;font-size:14.5px;line-height:21px;color:#5a1f08;}
-#payScreen .pg-ref{margin:0 0 16px;font:400 12.5px/18px ui-monospace,Menlo,Consolas,monospace;letter-spacing:.04em;color:#5a1f08;}
-#payScreen .pg-auto{margin:14px auto 0;max-width:300px;font-size:12.5px;line-height:18px;color:#5a1f08;text-align:center;}
-#payScreen .pg-wait{display:flex;align-items:center;justify-content:center;gap:9px;margin:0;font-size:13.5px;color:#5a1f08;}
-#payScreen .pg-clk{width:18px;height:18px;}
-#payScreen .pg-small{width:auto;min-width:190px;padding:0 28px;margin-top:6px;}
-#payScreen .pg-ghost{margin-top:14px;border:0;background:none;color:#5a1f08;font:500 13.5px 'DM Sans','Roboto',sans-serif;cursor:pointer;}
+
 
 /* Beer colours: the main colour is khaki (first picture), buttons are amber (second picture: the beer). */
 :root{--bt-grad:linear-gradient(135deg,#e3992f 0%,#c86715 52%,#983e10 100%);--bt-solid:#c86715;--bt-shadow:rgba(200,103,21,.45);}
@@ -2434,10 +2240,8 @@ body{background-attachment:fixed;}
 .ck-prompt-ok,.ck-prompt-no,.ck-bindbtn,.ck-bd-tabs button.on,.ck-seg button.on{background:var(--bt-img) center/cover no-repeat !important;color:#fff !important;text-shadow:0 1px 2px rgba(60,20,0,.7);}
 /* The Service (customer service) and Group (Telegram group) buttons of Home are the beer picture too. */
 .ck-quick button:nth-child(3) .ck-ic,.ck-quick button:nth-child(4) .ck-ic{background:var(--bt-img) center/cover no-repeat !important;box-shadow:0 5px 12px -3px rgba(150,60,10,.6) !important;}
-.ck-quick button:nth-child(3) .ck-ic svg,.ck-quick button:nth-child(4) .ck-ic svg{filter:drop-shadow(0 1px 1.5px rgba(50,15,0,.7));}
-/* Every page header bar (tab pages, opened pages, payment page) is the beer picture, like the buttons. */
-.ck-hd,.sheet-head,.sheet-head.pay-head,#payScreen .pg-head{background:var(--bt-img) center/cover no-repeat !important;}
-.ck-hd h1,.sheet-head h2,#payScreen .pg-head h1{text-shadow:0 1px 2px rgba(50,15,0,.6);}
+.ck-quick button:nth-child(3) .ck-ic svg,.ck-quick button:nth-child(4) .ck-ic svg{filter:drop-shadow(0 1px 1.5px rgba(50,15,0,.7));}/* Every page header bar (tab pages, opened pages, payment page) is the beer picture, like the buttons. */
+.ck-hd,.sheet-head{background:var(--bt-img) center/cover no-repeat !important;}.ck-hd h1,.sheet-head h2{text-shadow:0 1px 2px rgba(50,15,0,.6);}
 /* Two colours only: the couch khaki is every surface (page, cards, rows, inputs, bars), the beer picture is every accent. Text is the dark wine of the picture. */
 :root{--v-bg:#a29060;--v-tint:#988753;--v-line:rgba(60,35,5,.22);--v-ink:#2c1105;--v-label:#4d2a14;--v-muted:#4d2a14;--ck-bg1:#a29060;--ck-bg2:#a29060;--ck-card:#b3a47c;--ck-ink:#2c1105;--snow-canvas:#a29060;}
 html,body,#app,.wrap{background:#a29060 !important;color:#2c1105;}
@@ -2462,9 +2266,7 @@ html,body,#app,.wrap{background:#a29060 !important;color:#2c1105;}
 .v-tcard,.ck-stats>div,.ck-lvtabs,.ck-rule,.ck-langcard button.on{background:var(--bt-img) center/cover no-repeat !important;}
 .ck-income .v-total,.ck-share,.ck-sub.ck-share,.ck-me,.ck-me.has-img,#pageHost .ck-me{background:var(--bt-img) center/cover no-repeat !important;}
 .v-avatar,.msg-row .av,.msg-detail .av,.v-card-h,.v-tile-ic:not(.gold),.v-rav.out{background:var(--bt-img) center/cover no-repeat !important;}
-#loadingScreen,.auth-screen-v2,.va-rem input:checked{background:var(--bt-img) center/cover no-repeat !important;}
-#loadingScreen .ld-bar i,.dep-flow-track i,.v-sec .bar,.mar-progress i{background:var(--bt-img) center/cover no-repeat !important;}
-#payScreen .pg-pay,#payScreen .pg-head{background:var(--bt-img) center/cover no-repeat !important;}
+#loadingScreen,.auth-screen-v2,.va-rem input:checked{background:var(--bt-img) center/cover no-repeat !important;}#loadingScreen .ld-bar i,.v-sec .bar,.mar-progress i{background:var(--bt-img) center/cover no-repeat !important;}
 .va-screen::after,.ck-hero.has-img::after,.ck-me::after{display:none !important;}
 .ck-authlogo{background:url('/k7x2/public/loader-image') center/cover no-repeat,var(--bt-img) center/cover no-repeat !important;}
 .ck-share{min-height:100vh;}

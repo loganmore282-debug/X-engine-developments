@@ -71,7 +71,7 @@ async function connectMongo(uri) {
   _client.on('serverHeartbeatFailed', e => console.warn('Mongo heartbeat failed:', e && e.failure && e.failure.message));
   _client.on('close', () => console.warn('Mongo connection closed'));
   console.log(`MongoDB connected (${dbName})`);
-  ensureIndexes().catch(e => console.warn('Index build warning:', e.message));
+  ensureIndexes().catch(e => console.warn('Index build warning:', e.message)).then(removeGatewayLeftovers).catch(e => console.warn('Gateway leftovers cleanup warning:', e.message));
   return _mdb;
 }
 
@@ -79,6 +79,37 @@ async function connectMongo(uri) {
 // one, MongoDB does a full collection scan on every request for it. Fired in
 // the background (not awaited by connectMongo) so a slow first-time build on
 // an already-large collection never delays startup.
+// ONE-TIME CLEAN-UP of what the removed Uganda payment gateways (MarzPay, PesaJet) left in an older database: their fields on withdrawals / deposits /
+// ledger rows, their settings (recharge gateway, withdrawal method, automatic withdrawals) and their indexes. Nothing in the app reads any of it any more.
+// A marker row makes it run once; every step is skipped quietly if this database cannot do it, and it never touches a money field.
+const GATEWAY_ROW_FIELDS = ['marzReference', 'marzTxUuid', 'marzStatus', 'pesajetRef', 'pesajetTxId', 'pesajetAcceptedAtMs', 'isBankTransfer', 'autoSendAt', 'autoHold', 'autoAttempts', 'lipaOutTradeNo'];
+const GATEWAY_SETTING_FIELDS = ['depositMethod', 'withdrawMethod', 'autoApproveWithdrawalsEnabled', 'autoApproveMinSec', 'autoApproveMaxSec', 'autoApproveMaxAmount', 'autoApproveEnabledAt'];
+async function removeGatewayLeftovers(mdb = _mdb) {
+  if (!mdb || typeof mdb.collection !== 'function') return;
+  const meta = mdb.collection('meta');
+  if (await meta.findOne({ _id: 'gatewayLeftoversRemoved' })) return;
+  const step = async fn => { try { await fn(); } catch (e) { if (!/not a function|undefined|ns not found|index not found/i.test(String(e && e.message))) console.warn('Gateway cleanup step:', e && e.message); } };
+  for (const col of ['withdrawals', 'pendingDeposits', 'transactions']) {
+    await step(async () => {
+      const c = mdb.collection(col);
+      const unset = Object.fromEntries(GATEWAY_ROW_FIELDS.map(k => [k, '']));
+      await c.updateMany({ $or: GATEWAY_ROW_FIELDS.map(k => ({ [k]: { $exists: true } })) }, { $unset: unset });
+    });
+    await step(async () => {
+      const c = mdb.collection(col);
+      for (const ix of await c.indexes()) {
+        const keys = Object.keys(ix.key || {});
+        if (ix.name !== '_id_' && (keys.some(k => GATEWAY_ROW_FIELDS.includes(k)) || (col === 'pendingDeposits' && keys.join() === 'provider,status,createdAt'))) await c.dropIndex(ix.name);
+      }
+    });
+  }
+  await step(async () => {
+    await mdb.collection('pendingDeposits').updateMany({ provider: { $in: ['marzpay', 'pesajet', 'automatic'] } }, { $unset: { provider: '' } });
+    await mdb.collection('settings').updateOne({ _id: 'main' }, { $unset: Object.fromEntries(GATEWAY_SETTING_FIELDS.map(k => [k, ''])) });
+  });
+  await step(async () => { await meta.updateOne({ _id: 'gatewayLeftoversRemoved' }, { $set: { at: new Date() } }, { upsert: true }); });
+}
+
 async function ensureIndexes() {
   const specs = [
     // Every OTP send/verify for register, reset, and the phone-existence
@@ -582,4 +613,4 @@ const db = {
   },
 };
 
-module.exports = { connectMongo, db, FieldValue, Timestamp, pingDb };
+module.exports = { connectMongo, db, FieldValue, Timestamp, pingDb, removeGatewayLeftovers };

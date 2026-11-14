@@ -124,9 +124,15 @@ Beer is an ETHIOPIA app now: region `et` (+251, nine digits starting 9 or 7), cu
 - **Admin can remove a member's saved withdrawal account** (same as Mint): member panel > Saved withdrawal accounts has a red Remove button per account (owner only) -> `POST /admin/user/remove-bank-account` {userId, accountId}: deletes that `bankAccounts` row under the `bank-save:<userId>` lock, refuses another member's account (404), audit `bank_account_removed`; withdrawals already requested are untouched. Test: `test-admin-remove-bank.js`. Admin cache v151. Server change: redeploy.
 
 ## Uganda payment gateways removed (2026-11-14)
-Owner: "it is still having Uganda payment methods and withdrawals, remove them completely". Gone from server, member app, admin, deploy scripts, tests and docs:
-MarzPay, PesaJet (deposits, payouts, webhooks, reconcilers, balance/summary cards, hook-token nginx address, `pay-seal.js`, card/mobile-money payment page,
-MTN/Airtel names, automatic withdrawals, Recharge-gateway and Withdrawal-method settings, the `depositMethod`/`withdrawMethod`/`autoApprove*` settings).
+Owner: "it is still having Uganda payment methods and withdrawals, remove them completely", then "remove" the CSS, the tick/cross art and the old database fields too.
+Gone from server, member app, admin, deploy scripts, tests and docs: MarzPay, PesaJet (deposits, payouts, webhooks, reconcilers, balance/summary cards, hook-token
+nginx address, `pay-seal.js`, card/mobile-money payment page and status polling, the tick/cross and phone-to-wallet art, MTN/Airtel names, automatic withdrawals,
+Recharge-gateway and Withdrawal-method settings, `depositMethod`/`withdrawMethod`/`autoApprove*`). The CSS of those pages (`#payScreen`, `.pg-*`, `.pay-page`,
+`.dep-flow*`, `.dep-status-icon`, their keyframes) was removed with a selector-targeted tool (comments are stripped before splitting selectors: an apostrophe in a
+comment once made it drop an unrelated scroll-lock rule), checked by pixel-comparing screenshots before and after (identical).
+Old database leftovers are removed ONCE at start-up by `removeGatewayLeftovers()` in `db.js` (marker row `meta/gatewayLeftoversRemoved`): gateway fields on withdrawals /
+deposits / ledger rows, the gateway settings and the gateway indexes. Test: `test-gateway-cleanup.js`.
 What is left: recharge = manual bank/Telebirr orders (admin Payment Numbers, then admin Deposits > Force-credit); withdrawals = request -> admin **Mark as paid**
-or **Reject** (refund). Old database fields such as `marzReference` may still exist on old rows and are simply ignored. Unused CSS of the removed payment pages
-was left in place on purpose (owner rule: never delete CSS/animations unasked).
+or **Reject** (refund).
+Bug hunt after it (HTTP, money, auth, layout, operations; scripts were throw-away): the Buy confirm text no longer breaks in the middle of a word (`.ck-prompt-msg` used
+`word-break:break-all`, now `overflow-wrap:anywhere`). No money, HTTP or layout bug was found.
