@@ -5060,7 +5060,7 @@ function openSheet(title, bodyHtml){
 // Backing out of Deposit or Withdraw onto Home reloads Home (the loading box, which really reads the account, investments and products),
 // then the announcement dialog opens after the loading box, as it does on a tab change or a login.
 function homeAfterSheet(title){
-  if (title !== 'Deposit' && title !== 'Withdraw') return;
+  if (title !== 'Deposit' && title !== 'Withdraw' && title !== 'Bonus') return;
   if (STATE.page !== 'home' || isAnyOverlayOpen()) return;
   ckExpectLoad();
   renderHome();

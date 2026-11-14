@@ -80,6 +80,12 @@ const results = []; const check = (name, ok, extra) => { results.push([ok, name,
   await page.tap('.bn-card:nth-child(1) .bn-claim'); await sleep(2200);
   const wallet1 = await page.evaluate(async () => (await api('/account')).account.walletBalance);
   check('claiming pays the reward once and the card turns to Claimed', wallet1 - wallet0 === 1500 && /Claimed/.test(await page.evaluate(() => document.querySelector('.bn-card:nth-child(1)').innerText)), 'wallet ' + wallet0 + ' -> ' + wallet1);
+  // going back from Bonus brings the loading box and the welcome dialog again, exactly as after Deposit and Withdraw
+  await page.tap('#sheetBg .back'); await sleep(2800);
+  check('backing out of Bonus shows the welcome dialog again', await page.evaluate(() => !!document.querySelector('.ann-bg.show')));
+  await page.screenshot({ path: OUT + '/1d-after-bonus-back.png' });
+  await page.evaluate(() => { try { closeAnnouncement(); } catch (e) {} }); await sleep(600);
+  await page.tap('.ck-quick button:nth-child(3)'); await sleep(1700);
   await page.tap('.bn-card:nth-child(2) .bn-share'); await sleep(1200);
   check('the Share button of a card opens the Share page', await page.evaluate(() => (document.querySelector('.navitem.active') || {}).dataset.nav === 'share'));
   await page.tap('.navitem[data-nav="home"]'); await sleep(1800);
