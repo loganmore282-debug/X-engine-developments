@@ -71,7 +71,7 @@ async function connectMongo(uri) {
   _client.on('serverHeartbeatFailed', e => console.warn('Mongo heartbeat failed:', e && e.failure && e.failure.message));
   _client.on('close', () => console.warn('Mongo connection closed'));
   console.log(`MongoDB connected (${dbName})`);
-  ensureIndexes().catch(e => console.warn('Index build warning:', e.message)).then(() => removePasswordCopies()).catch(e => console.warn('Password-copy clean-up warning:', e.message));
+  ensureIndexes().catch(e => console.warn('Index build warning:', e.message));
   return _mdb;
 }
 
@@ -79,18 +79,6 @@ async function connectMongo(uri) {
 // one, MongoDB does a full collection scan on every request for it. Fired in
 // the background (not awaited by connectMongo) so a slow first-time build on
 // an already-large collection never delays startup.
-// ONE-TIME CLEAN-UP: for a short while a locked second copy of each member's password (`pwSealed`, for an owner-only "Show password" button) was saved next to the login
-// hash. The feature is gone, so every such copy is removed. Only the login hash remains. A marker row makes this run once; it is skipped quietly on a database that
-// cannot do it, and it touches nothing but that one field.
-async function removePasswordCopies(mdb = _mdb) {
-  if (!mdb || typeof mdb.collection !== 'function') return;
-  const meta = mdb.collection('meta');
-  if (await meta.findOne({ _id: 'passwordCopiesRemoved' })) return;
-  try { await mdb.collection('authAccounts').updateMany({ pwSealed: { $exists: true } }, { $unset: { pwSealed: '' } }); }
-  catch (e) { if (!/not a function|undefined|ns not found/i.test(String(e && e.message))) console.warn('Password-copy clean-up step:', e && e.message); return; }
-  try { await meta.updateOne({ _id: 'passwordCopiesRemoved' }, { $set: { at: new Date() } }, { upsert: true }); } catch (_) {}
-}
-
 async function ensureIndexes() {
   const specs = [
     // Every OTP send/verify for register, reset, and the phone-existence
@@ -650,4 +638,4 @@ const db = {
   },
 };
 
-module.exports = { connectMongo, db, FieldValue, Timestamp, pingDb, writeVersions, removePasswordCopies };
+module.exports = { connectMongo, db, FieldValue, Timestamp, pingDb, writeVersions };
