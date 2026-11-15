@@ -131,11 +131,11 @@ say "2/7  DNS timer (so that the switch takes minutes, not hours)"
 grep -rhoE '(^|[[:space:]{;])server_name[[:space:]]+[^;]+' /etc/nginx/conf.d /etc/nginx/sites-enabled 2>/dev/null | sed -E 's/^.*server_name[[:space:]]+//' | tr -s ' \t' '\n\n' | grep '\.' | grep -v '^\*' | grep -vE '^[0-9.]+$' | sort -u > "$HOSTS"
 note "web addresses served here: $(wc -l < "$HOSTS")"
 DNSM plan | grep -v '^MAXTTL=' | sed 's/^/    /'
-if [ -z "$(st_get TTL_AT)" ]; then
+if [ -z "$(st_get TTL_AT)" ] || [ "$(st_get MAXTTL)" = 0 ]; then
   OUT=$(DNSM ttl); rc=$?; echo "$OUT" | grep -E '^(timer|zones)' | sed 's/^/    /'
   MAXTTL=$(echo "$OUT" | sed -n 's/^MAXTTL=//p' | tail -1)
   if [ $rc = 1 ]; then warn "could not lower the DNS timer (the move still works, but the switch may take longer to reach everyone)"; st_set TTL_AT "$(date +%s)"; st_set MAXTTL "${MAXTTL:-14400}"
-  else st_set TTL_AT "$(date +%s)"; st_set MAXTTL "${MAXTTL:-0}"; fi
+  elif echo "$OUT" | grep -q '^timer '; then st_set TTL_AT "$(date +%s)"; st_set MAXTTL "${MAXTTL:-0}"; fi
   if echo "$OUT" | grep -q '^timer '; then note "timer lowered to 300 seconds (it was up to ${MAXTTL:-0} seconds, so members who looked the address up before may keep the old answer that long)"; else note "no DNS record to lower (the DNS is not at Hostinger, or no token was found): the DNS must be changed by hand at the switch"; fi
 else note "timer already lowered earlier"; fi
 
@@ -236,8 +236,15 @@ else note "the DNS timer has run out: the switch will reach everyone within minu
 echo
 echo "    The switch stops the apps here and starts them on $NEW. Members cannot use the apps for a few minutes. It undoes itself if an app does not come up."
 [ -t 0 ] || { echo "(not an interactive terminal: stopping here)"; exit 0; }
-A=$(ask "    Type  SWITCH  to move now, or just press Enter to stop here: ")
-[ "$A" = SWITCH ] || { echo; echo "Stopped before the switch. Nothing changed for your members. Run the same command again when you want to switch."; exit 0; }
+WORD=SWITCH
+if [ "${NCH:-0}" = 0 ]; then
+  echo
+  warn "NO DNS RECORD WAS FOUND TO MOVE. If you switch now, the apps stop here and start there, but the addresses keep pointing at THIS server: your members cannot open the apps until you change the DNS by hand."
+  warn "Do not switch yet. Tell Claude what this says. (Only if you will change every record by hand right after, type SWITCHANYWAY.)"
+  WORD=SWITCHANYWAY
+fi
+A=$(ask "    Type  $WORD  to move now, or just press Enter to stop here: ")
+[ "$A" = "$WORD" ] || { echo; echo "Stopped before the switch. Nothing changed for your members. Run the same command again when you want to switch."; exit 0; }
 
 # =====================================================================  the switch
 say "7/7  Switching"

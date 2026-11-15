@@ -45,7 +45,7 @@ async function findZones(list) {
     for (const c of candidates(h)) {
       if (dead.has(c)) continue;
       for (const t of tokens) {
-        try { const z = await call(t, 'GET', c); found.set(c, { token: t, items: items(z) }); ok = true; break; }
+        try { const its = items(await call(t, 'GET', c)); if (!its.length) continue; found.set(c, { token: t, items: its }); ok = true; break; }   // Hostinger answers "OK, 0 records" for a name that is not a zone: that is not a domain
         catch (e) { if (e.status === 429) { await sleep(3000); } }
       }
       if (ok) break; dead.add(c);
