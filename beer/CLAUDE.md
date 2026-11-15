@@ -165,3 +165,14 @@ admin-src, build and deploy scripts). What was wrong and is fixed (tests: `test-
   price error no longer says "shillings"; index on `pendingDeposits.pastedSmsTxId`; activity-log labels for the newer actions; "Total cashed out" label in the audit.
 Looked at and deliberately left: the 4-hour member session and its phone-clock check (a wrong phone clock signs the member out with a message about date and time);
 login lock per network (40 wrong tries in 10 minutes); `withdrawMultiple` 0 by default.
+
+## Moving all apps to a new server (Hostinger -> Contabo, 2026-11-15)
+One command, run as root on the OLD server: `bash /srv/beer-src/beer/deploy/move/migrate.sh NEW_ADDRESS` (extra words: `back` undo, `finish` remove the key, `status`).
+Files in `beer/deploy/move/`: `1-report.sh` (read-only inventory), `migrate.sh` (the whole move), `dns-move.js` (Hostinger A records old -> new, backup file for undo),
+`pm2-list.js`, `mongo-check.js`. It runs inside `screen -S migrate`, logs to `/root/migrate.log`, keeps state in `/root/.migrate-state`.
+Order: key to the new server (password once) -> lower DNS timer to 300 s -> install node (exact same version), pm2 (same version), nginx, certbot, ufw, fail2ban there ->
+rsync /srv, /etc/nginx, /etc/letsencrypt, ssh deploy key, pm2 dump, cron, ufw rules, fail2ban, own services -> check nginx -t and MongoDB reachability per app (Atlas must allow the new IP) ->
+asks `SWITCH` -> stops the apps here by name, final sync, `pm2 resurrect` there, health check per app (rolls back by itself), host check through the new server, DNS switch.
+The same app never runs on both servers (in-process money locks). After the switch the old server has cron and pm2-root disabled so a reboot cannot revive the apps.
+Tested in a container against a chroot "new server" (first copy, Atlas-unreachable stop, switch, crash rollback, back, finish); NOT yet run on the real servers.
+Hand work after the switch: Petro's GitHub webhook points at the old IP (`http://IP:3000/deploy/webhook`), payment-gateway IP allow-lists, Atlas Network Access (add new, remove old later).
