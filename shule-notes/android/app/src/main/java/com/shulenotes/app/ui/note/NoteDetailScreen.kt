@@ -42,7 +42,12 @@ fun NoteDetailScreen(
         },
         floatingActionButton = {
             if (note.hasAiContext) {
-                ExtendedFloatingActionButton(onClick = onAskAi, icon = { Icon(Icons.Filled.Chat, contentDescription = null) }, text = { Text("Ask AI") })
+                ExtendedFloatingActionButton(
+                    onClick = onAskAi,
+                    // Material hides the text from screen readers and expects the icon to carry the label.
+                    icon = { Icon(Icons.Filled.Chat, contentDescription = "Ask AI") },
+                    text = { Text("Ask AI") },
+                )
             }
         },
     ) { padding ->

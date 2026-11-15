@@ -46,7 +46,9 @@ readable message.
 ### Backend (`backend/`)
 - `server.js` — Express app: self-rolled auth (scrypt-hashed passwords + random session
   tokens, stored **hashed**, never raw — `auth.js`), subjects/notes CRUD, PDF upload with
-  text extraction (`pdf.js`, via `pdf-parse`), and the AI endpoint (`claude.js`).
+  text extraction (`pdf.js`, via `pdfjs-dist` directly -- NOT `pdf-parse`, whose bundled
+  2018 pdf.js failed at random with "bad XRef entry" on valid PDFs; needs Node 20+), and
+  the AI endpoint (`claude.js`).
 - Auth is self-rolled and MongoDB-backed, **not Firebase** — the owner's explicit choice
   for this project (unlike Voltra/Chipz, which use Firebase Auth). Sessions are a random
   32-byte token; only its SHA-256 hash is stored, with a Mongo TTL index doing expiry so
@@ -83,7 +85,7 @@ readable message.
   a real feature to add deliberately, not to fake with a shared secret.
 - Tests: `test-auth.js`, `test-claude.js`, `test-pdf.js`, `test-server-helpers.js` — all
   run the REAL functions (password hashing, session lifecycle, the AI daily quota, PDF
-  text extraction, Claude error classification) against stubbed Mongo/pdf-parse, never a
+  text extraction on a real generated PDF, Claude error classification) against stubbed Mongo, never a
   real database or a real Claude API call. Run with `npm test` (or `node test-*.js`
   individually) before any backend change is considered done. No real MongoDB server is
   available in the Claude session's sandbox, so every test stubs `./db` via

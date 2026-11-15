@@ -45,7 +45,7 @@ fun LoginScreen(
             verticalArrangement = Arrangement.Center,
         ) {
             Text("Shule Notes", style = MaterialTheme.typography.headlineMedium)
-            Text("Notes, papers and revision -- with an AI helper.", style = MaterialTheme.typography.bodyMedium)
+            Text("Notes, papers and revision, with an AI helper.", style = MaterialTheme.typography.bodyMedium)
 
             androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(24.dp))
 

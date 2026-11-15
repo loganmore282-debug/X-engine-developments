@@ -131,7 +131,7 @@ def walk():
     shot("app-04-one-subject")
 
     tap(wait_for("Photosynthesis", prefix=True))
-    wait_for("Ask AI")
+    wait_for("Back")
     wait_gone("Opening document…")
     time.sleep(4)
     shot("app-05-reading-a-document")

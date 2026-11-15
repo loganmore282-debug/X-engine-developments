@@ -185,7 +185,7 @@ app.post('/ai/ask', requireAuth, aiLimiter, async (req, res) => {
     catch (_) { return res.status(400).json({ status: 'error', message: 'Invalid noteId' }); }
     if (!note || note.active === false) return res.status(404).json({ status: 'error', message: 'Note not found' });
     if (!note.extractedText) {
-      return res.status(400).json({ status: 'error', message: 'This document has no readable text (likely a scanned image) -- AI cannot read it.' });
+      return res.status(400).json({ status: 'error', message: 'This document has no readable text (it is likely a scanned image), so the AI helper cannot read it.' });
     }
 
     const allowed = await consumeAiQuota(req.userId);
@@ -268,7 +268,7 @@ app.post('/admin/notes/upload', upload.single('file'), async (req, res) => {
     const result = await getDb().collection('notes').insertOne(doc);
     res.json({
       status: 'success', id: String(result.insertedId),
-      warning: extracted.text ? null : 'No text could be read from this PDF -- it may be a scanned image. The AI helper will not work for this note.',
+      warning: extracted.text ? null : 'No text could be read from this PDF. It may be a scanned image. The AI helper will not work for this note.',
     });
   } catch (e) {
     console.error('note upload error:', e.message);
