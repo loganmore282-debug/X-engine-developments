@@ -370,7 +370,7 @@ window.createBeerIdleSession = function(key, onExpire, onActivity){
         <button class="tab active" data-tab="dashboard">Dashboard</button>
         <button class="tab" data-tab="analytics">Analytics</button>
         <button class="tab" data-tab="users">Users</button>
-        <button class="tab" data-tab="deposits">Deposits</button>
+        <button class="tab" data-tab="deposits">Deposits <span class="badge-n hidden" id="dBadge"></span></button>
         <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
         <button class="tab" data-tab="products" id="productsTab">Products</button>
         <button class="tab" data-tab="messages" id="messagesTab">Messages</button>
@@ -1155,6 +1155,9 @@ async function refreshBadges(){
   const s = await api('/admin/badges');
   if(s.status==='success' && s.pendingWithdrawals>0){ $('wBadge').textContent=s.pendingWithdrawals; $('wBadge').classList.remove('hidden'); }
   else $('wBadge').classList.add('hidden');
+  // recharges whose payment message is waiting for Approve or Reject
+  if(s.status==='success' && s.reviewDeposits>0){ $('dBadge').textContent=s.reviewDeposits; $('dBadge').classList.remove('hidden'); }
+  else $('dBadge').classList.add('hidden');
 }
 
 // ── LIVE AUTO-REFRESH ──
@@ -1520,7 +1523,7 @@ async function renderAnalytics(silent){
 
 // ── USERS ──
 let _users=[];
-function phoneCore(p){ let n=String(p||'').replace(/\D/g,''); if(n.startsWith('256')) n=n.slice(3); n=n.replace(/^0+/,''); return n; }
+function phoneCore(p){ let n=String(p||'').replace(/\D/g,''); if(n.startsWith('251') && n.length>9) n=n.slice(3); n=n.replace(/^0+/,''); return n; }   // 251 = Ethiopia's code (this read 256, Uganda's, so a number typed with +251 was compared with the code still on it)
 async function renderUsers(){
   const r = await api('/admin/users');
   if(staleTab('users')) return;
@@ -1575,7 +1578,7 @@ async function renderUsers(){
       const mismatches = d.mismatches||[];
       const alerts = d.alerts||[];
       const total = mismatches.length + alerts.length;
-      const FIELD_LABEL = { walletBalance:'Wallet balance', totalDeposited:'Total topped up', totalEarned:'Total earned', totalInvested:'Total invested' };
+      const FIELD_LABEL = { walletBalance:'Wallet balance', totalDeposited:'Total topped up', totalEarned:'Total earned', totalInvested:'Total invested', totalWithdrawn:'Total cashed out' };
       const ALERT_LABEL = { duplicate_credit:'Duplicate recharge credit', negative_balance:'Negative balance', registration_incomplete:'Registration never completed' };
       // Codex-caught real bug (round 2, still true for walletBalance only):
       // "Recalculate totals" rewrites totalDeposited/totalEarned/
@@ -1925,10 +1928,10 @@ async function openUser(uid){
       <div style="flex:2"><input id="pwNew" type="text" placeholder="New password"></div>
       <button class="btn sky sm" id="pwBtn" title="Set a new login password for this user">Reset password</button>
     </div>
-    <label style="margin-top:14px">Correct phone number ${u.phone && !/^\+2567\d{8}$/.test(u.phone)?'<span class="pill-tag t-warn" style="margin-left:6px">Looks malformed</span>':''}</label>
+    <label style="margin-top:14px">Correct phone number ${u.phone && !/^\+251[97]\d{8}$/.test(u.phone)?'<span class="pill-tag t-warn" style="margin-left:6px">Looks malformed</span>':''}</label>
     <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">This CHANGES the number they log in with (their old number stops working) and signs them out everywhere. Tell them the new number.</div>
     <div class="row">
-      <div style="flex:2"><input id="phoneFix" type="text" placeholder="07XXXXXXXX"></div>
+      <div style="flex:2"><input id="phoneFix" type="text" placeholder="09XXXXXXXX"></div>
       <button class="btn sky sm" id="phoneFixBtn">Save phone</button>
     </div>
     ${u.registrationDone===false?`<label style="margin-top:14px">Complete registration</label>
@@ -2108,7 +2111,7 @@ function loadFailed(r, what){
   return true;
 }
 const DEP_GROUPS = { pending: ['initiating','pending','awaiting_verification'], review: ['review'], matched: ['matched'], failed: ['failed','rejected'] };
-let _deps=[], _depFilter='pending';
+let _deps=[], _depFilter='review';   // opens on the recharges that wait for Approve or Reject (the number on the tab), not on orders still without a payment message
 // A deposit whose payment succeeded but whose wallet credit failed is stored as 'matched' with needsManualCredit: it is NOT paid yet, so it belongs
 // under Pending with a Force-credit button, never under Successful.
 const depNotCredited = d => d.status==='matched' && d.needsManualCredit===true && d.walletCredited!==true;
@@ -2163,6 +2166,8 @@ function drawDeps(){
     let actions = '';
     if (SESSION_ROLE === 'owner' && stuck) {
       actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`;
+      // A recharge still waiting (order made, or payment message in review) can also be rejected: a wrong or made-up message must not stay "Needs Review" for good.
+      if (d.status==='review' || d.status==='pending') actions += ` <button class="btn danger sm" data-dep-reject="${esc(d.id)}">Reject</button>`;
     }
     const methodLabel = isManual
       ? `Manual<br><span class="muted" style="font-size:11px" data-no-i18n>${esc(d.network||'')} · ${esc(d.assignedNumber||'')}</span>`
@@ -2225,7 +2230,13 @@ function drawDeps(){
     e.stopPropagation();
     if(!confirm('Credit this deposit? Only do this if you have verified the money actually landed.'))return;
     b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/force-credit',{depositId:b.dataset.force});
-    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
+    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits(); refreshBadges();
+  }));
+  document.querySelectorAll('[data-dep-reject]').forEach(b=>b.addEventListener('click',async(e)=>{
+    e.stopPropagation();
+    if(!confirm('Reject this recharge? Do this only when the money did NOT arrive. Nothing is credited to the member.'))return;
+    b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/reject',{depositId:b.dataset.depReject});
+    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits(); refreshBadges();
   }));
 }
 // Live-refresh counterpart to renderDeposits() -- see quietRefreshUsers()
@@ -2697,6 +2708,11 @@ const AUDIT_LABELS = {
   product_deleted:'Product deleted', products_cleared:'All products cleared', products_synced:'Product pricing synced to defaults',
   deposit_force_credited:'Recharge force-credited', giftcode_generated:'Gift codes generated', giftcode_deactivated:'Gift code deactivated',
   totals_recounted:'Totals recalculated',
+  deposit_rejected:'Recharge rejected', team_bonuses_saved:'Team bonuses saved', pay_channel_saved:'Payment number saved', pay_channel_deleted:'Payment number deleted',
+  product_removed:'Product removed from a member', asset_grant:'Product given to a member', bank_account_removed:'Withdrawal account removed',
+  user_withdraw_anytime:'Withdrawal limits changed for a member', starter_assets_added:'Starter products added', wallet_repaired:'Wallet repaired',
+  beer_image_set:'Picture changed', beer_image_cleared:'Picture removed', app_icon_set:'App icon changed', app_icon_cleared:'App icon reset',
+  message_saved:'Message posted', message_deleted:'Message deleted',
 };
 async function renderAuditLog(){
   const r = await api('/admin/audit-log');
@@ -2981,7 +2997,7 @@ async function renderBanners(){
   $('content').innerHTML = `
     <h2 class="sec">Home banner</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Home tab's top banner &mdash; a 3-slide carousel with dots.</p>
+      <p class="muted" style="margin-top:0">Home tab's top banner &mdash; the first of the two Home banners.</p>
       <div class="banner-row">
         ${bannerImage?`<img class="img-thumb" src="${esc(bannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${bannerImage?'Custom image':'<span class="muted">Default artwork</span>'}</div>

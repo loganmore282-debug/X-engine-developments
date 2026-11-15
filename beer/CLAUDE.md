@@ -146,3 +146,22 @@ it opens a page "Bonus" with the banner "Invite friends to join by sharing inves
 - Progress = `wholeTeamStats(userId).deposits` (levels 1-3, banned members left out). Server: `GET /bonus/list`, `POST /bonus/claim` (one at a time per member, progress re-read,
   atomic `updateIf` on `creditedBonusKeys`, ledger row type `team_reward`), `GET /admin/bonuses`, `POST /admin/bonuses/save` (owner only). `/admin/settings/update` ignores the two keys.
 - Tests: `test-team-bonus.js` (38 checks), the Bonus steps of `test-live.js`, the Settings steps of `test-admin-live.js`. Amharic words are in the member i18n table.
+
+## Full line-by-line bug read (2026-11-15, owner: "all bugs in all the files in beer check all")
+Every running file was read (server.js, db.js, session-policy/security-guard/totp/service-account, user-src module + shell, both service workers, guard,
+admin-src, build and deploy scripts). What was wrong and is fixed (tests: `test-bugread-fixes.js`, `test-deposit-reject.js`, both in `npm run test:audit`):
+- **Recharges could never be rejected.** A recharge in review could only be approved, so a fake payment message stayed "Needs Review" for good. New
+  `POST /admin/deposit/reject` (owner only, same `dep:` lock as `creditDeposit`, so Approve and Reject never both win): order -> `failed`, the member's record ->
+  "Deposit: Failed" with amount 0. A wrong rejection can still be approved with Force-credit (the record is restored). Admin: **Reject** button on review/pending rows.
+- **No alert for a waiting recharge.** `/deposit/manual/submit` now sends an admin push ("Recharge to check"), `/admin/badges` returns `reviewDeposits`, the
+  Deposits tab has a number badge (`#dBadge`) and opens on **Needs Review**.
+- **Admin team report (PDF/modal) split commission by the wrong level**: `commissionLevel` is stored 0,1,2; `/admin/user/referral-chain` read 1,2,3 (Level 1
+  earnings were missing, Level 2 shown as Level 1).
+- **Member payment page countdown used the phone's clock** against the server's `expiresAt` (a phone with a wrong clock saw every order expired): `mpTick` and the
+  resume check now use `ckNow()`.
+- **Admin member window flagged every Ethiopian number "Looks malformed"** (the check was Uganda's `+2567…`); the phone box placeholder and the search helper
+  (`phoneCore`) were Uganda's too.
+- Smaller: `/bonus` is now in `MAINTENANCE_BLOCK`; deleting a member logs their real wallet (`walletBalance`, it read a field that does not exist); product
+  price error no longer says "shillings"; index on `pendingDeposits.pastedSmsTxId`; activity-log labels for the newer actions; "Total cashed out" label in the audit.
+Looked at and deliberately left: the 4-hour member session and its phone-clock check (a wrong phone clock signs the member out with a message about date and time);
+login lock per network (40 wrong tries in 10 minutes); `withdrawMultiple` 0 by default.

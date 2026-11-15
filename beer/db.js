@@ -183,6 +183,7 @@ async function ensureIndexes() {
     ['pendingDeposits', { status: 1 }],
     ['pendingDeposits', { ref: 1 }],
     ['pendingDeposits', { txid: 1 }],
+    ['pendingDeposits', { pastedSmsTxId: 1 }],   // /deposit/manual/submit looks for an already-used payment message on every submit
     ['pendingDeposits', { userId: 1, createdAt: -1 }],
     ['pendingDeposits', { status: 1, createdAt: 1 }],
     ['pendingDeposits', { needsManualCredit: 1 }],

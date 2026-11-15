@@ -499,7 +499,7 @@ app.use((req, res, next) => {
 });
 
 // ── MAINTENANCE GATE ──
-const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/redeem', '/turntable'];
+const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/bonus', '/redeem', '/turntable'];
 const GUARD_EXEMPT = new Set(['/', '/health']);
 // The platform's name, as the owner last set it in Admin -> Settings. Every
 // server-side string that names the app goes through here rather than
@@ -5041,7 +5041,7 @@ function sanitizeProductInput(p, fallbackOrder, out) {
   const minPrice = 1;
   if (!Number.isFinite(price) || price < minPrice || price > MAX_MONEY_AMOUNT)
     return refuse('Price', `must be a number between ${minPrice} and ${MAX_MONEY_AMOUNT}`);
-  if (priceRaw !== price) return refuse('Price', 'must be a whole number of shillings');
+  if (priceRaw !== price) return refuse('Price', 'must be a whole number');
   let cycle = null;
   if (p?.cycle != null && p.cycle !== '') {
     cycle = plain(p.cycle) ? Number(p.cycle) : NaN;
@@ -5927,7 +5927,7 @@ app.post('/admin/user/delete', async (req, res) => {
     const openWitSnap = await db.collection('withdrawals').where('userId', '==', userId).where('status', 'in', ['creating', 'pending', 'sending', 'processing']).limit(1).get();
     if (!openWitSnap.empty) return res.status(409).json({ status: 'error', message: 'This account has a withdrawal still waiting. Finish or reject it first, then delete the account.' });
     const parentId = uSnap.data().referredBy || null;
-    const walletAtDelete = Number(uSnap.data().balance) || 0;
+    const walletAtDelete = Number(uSnap.data().walletBalance) || 0;
     await withLock('referrer-guard:' + userId, async () => {
       const childSnap = await db.collection('users').where('referredBy', '==', userId).get();
       await Promise.all(childSnap.docs.map(d => d.ref.update({ referredBy: parentId })));
@@ -6356,6 +6356,8 @@ app.post('/deposit/manual/submit', async (req, res) => {
       userId, statementId: newStatementId(), type: 'deposit', description: `Deposit: Processing (${fmtMoney(dep.amount)})`,
       amount: dep.amount, displayAmount: dep.amount, status: 'pending', date, time, ref: dep.ref, depositId: snap.id, createdAt: FieldValue.serverTimestamp()
     }).catch(e => console.error(`Manual deposit ledger row create failed for dep=${snap.id}:`, e.message));
+    // Every recharge is approved by hand, so the admins are told the moment one is waiting (it used to be visible only by opening the Deposits tab).
+    sendAdminPush('Recharge to check', `${fmtMoney(dep.amount)} via ${dep.network || 'manual payment'}: open Deposits to approve or reject`, { type: 'deposit', depositId: snap.id }).catch(() => {});
     res.json({ status: 'success', state: 'review', depositId: snap.id, reference: dep.ref, message: 'Submitted. Our team is checking your payment.' });
   } catch (e) { console.error('manual submit:', e.message); res.status(500).json({ status: 'error', message: 'Could not submit your recharge. Please try again.' }); }
 });
@@ -6386,6 +6388,40 @@ app.post('/admin/deposit/force-credit', async (req, res) => {
     logAdminAction(req, 'deposit_force_credited', { depositId, amount: snap.data().amount });
     res.json({ status: 'success', message: `Force-credited ${fmtMoney(snap.data().amount)} to the user` });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Reject a recharge the owner has looked at and found no money for (a wrong or made-up payment message). Without this a recharge in
+// review could only ever be approved: a fake one stayed "Needs Review" for good and kept the Recharges badge lit. Nothing was credited,
+// so nothing is taken back: the order is marked failed, and the member's "Processing" record becomes "Failed". A recharge whose money
+// already reached the wallet is refused. The same lock creditDeposit() takes means Approve and Reject can never both win.
+app.post('/admin/deposit/reject', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const depositId = String((req.body && req.body.depositId) || '').trim();
+  if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
+  const reason = stripHtml(textOf(req.body && req.body.reason)).slice(0, 200) || 'Rejected: the payment was not found';
+  try {
+    const out = await withLock('dep:' + depositId, async () => {
+      const ref = db.collection('pendingDeposits').doc(depositId);
+      const snap = await ref.get();
+      if (!snap.exists) return { code: 404, message: 'Recharge not found' };
+      const d = snap.data();
+      if (d.status === 'matched' || d.walletCredited) return { code: 400, message: 'This recharge was already credited, so it cannot be rejected.' };
+      if (d.status === 'failed') return { code: 200, message: 'Already rejected', already: true };
+      if (d.status !== 'review' && d.status !== 'pending') return { code: 400, message: `Cannot reject, the status is '${d.status}'` };
+      const done = await ref.updateIf({ status: d.status, walletCredited: { $ne: true } }, {
+        status: 'failed', failureReason: reason, rejectedBy: req.adminUser?.username || 'owner', rejectedAt: FieldValue.serverTimestamp(),
+      });
+      if (!done) return { code: 409, message: 'This recharge changed before it could be rejected. Refresh and try again.' };
+      try {
+        const txSnap = await db.collection('transactions').where('depositId', '==', depositId).limit(5).get();
+        await Promise.all(txSnap.docs.filter(t => t.data().status !== 'success').map(t => t.ref.update({
+          status: 'failed', description: `Deposit: Failed (${fmtMoney(d.amount)})`, amount: 0, displayAmount: Number(d.amount) || 0,
+        })));
+      } catch (e) { console.warn('Rejected recharge: its record could not be updated (the order itself is rejected):', e.message); }
+      return { code: 200, message: 'Recharge rejected', amount: d.amount, userId: d.userId };
+    });
+    if (out.code === 200 && !out.already) logAdminAction(req, 'deposit_rejected', { depositId, amount: out.amount, userId: out.userId, reason });
+    res.status(out.code).json({ status: out.code === 200 ? 'success' : 'error', message: out.message });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not reject this recharge' }); }
 });
 app.post('/admin/withdrawals/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -6660,7 +6696,8 @@ app.post('/admin/user/referral-chain', async (req, res) => {
       cs.forEach(d => {
         const t = d.data(), amt = finiteMoney(t.amount), lv = Number(t.commissionLevel);
         commission.total += amt; commission.count++;
-        if (lv === 1) commission.l1 += amt; else if (lv === 2) commission.l2 += amt; else if (lv === 3) commission.l3 += amt;
+        // commissionLevel is stored 0, 1, 2 for Level 1, 2, 3 (see _payReferralCommissionNow and /team/stats)
+        if (lv === 0) commission.l1 += amt; else if (lv === 1) commission.l2 += amt; else if (lv === 2) commission.l3 += amt;
       });
     } catch (_) { /* the report still prints without it */ }
     const upPhone = upline.length ? upline[0].phone : '';
@@ -6681,7 +6718,8 @@ app.get('/admin/badges', async (req, res) => {
       db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).limit(5000).get(),
       db.collection('withdrawals').where('status', '==', 'pending').limit(5000).get(),
     ]);
-    res.json({ status: 'success', pendingDeposits: pendingDep.size, pendingWithdrawals: pendingWit.size });
+    // reviewDeposits: recharges whose payment message is in and that wait for Approve or Reject (the number on the Deposits tab)
+    res.json({ status: 'success', pendingDeposits: pendingDep.size, reviewDeposits: pendingDep.docs.filter(d => d.data().status === 'review').length, pendingWithdrawals: pendingWit.size });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Owner: "also all analytics were removed, see space8 analytics are not

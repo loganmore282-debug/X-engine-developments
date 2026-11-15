@@ -74,6 +74,24 @@ const results = []; const check = (name, ok, extra) => { results.push([ok, name,
   for (const t of ['settings', 'dashboard', 'deposits']) { await page.click('[data-tab="' + t + '"]'); await sleep(1400);
     const tx = await page.evaluate(() => document.getElementById('content').innerText);
     check(t + ' page names no payment gateway', !/marz|pesajet|gateway|mtn|airtel|automatic withdrawals/i.test(tx)); }
+  // Recharges waiting for review: the Deposits tab shows a number, opens on Needs Review, and a real tap on Reject fails the recharge without paying anything
+  { const chs = (await J('POST', '/admin/pay-channels/list', {}, null, true)).j.channels || [];
+    const od = await J('POST', '/deposit/manual/order', { amount: 10000, channelId: chs[0] && chs[0].id }, su.j.token);
+    const sb = await J('POST', '/deposit/manual/submit', { depositId: od.j.depositId, sms: 'Your transaction number is QW12ER34TY you have sent ETB 10,000.00' }, su.j.token);
+    const walletBefore = fm.__stores.users.get(uid).walletBalance;
+    page.once('dialog', d => d.accept());
+    await page.click('#refreshBtn'); await sleep(1500);
+    const badge = await page.evaluate(() => { const b = document.getElementById('dBadge'); return b && !b.classList.contains('hidden') ? b.textContent.trim() : ''; });
+    check('the Deposits tab shows the number of recharges waiting for review', badge === '1', 'order ' + od.s + ' submit ' + sb.s + ' badge "' + badge + '"');
+    await page.click('[data-tab="deposits"]'); await page.waitForSelector('#depRows', { timeout: 15000 }); await sleep(800);
+    const active = await page.evaluate(() => { const b = document.querySelector('[data-df].active'); return b ? b.dataset.df : ''; });
+    const rejBtn = await page.$('[data-dep-reject]');
+    check('Deposits opens on Needs Review with a Reject button beside Force-credit', active === 'review' && !!rejBtn && !!(await page.$('[data-force]')), 'active ' + active);
+    if (rejBtn) { await rejBtn.click(); await sleep(1800); }
+    const dep = fm.__stores.pendingDeposits.get(od.j.depositId) || {};
+    check('Reject fails the recharge and credits nothing', dep.status === 'failed' && fm.__stores.users.get(uid).walletBalance === walletBefore, dep.status + ' ' + (fm.__stores.users.get(uid).walletBalance - walletBefore));
+    const badge2 = await page.evaluate(() => { const b = document.getElementById('dBadge'); return b && !b.classList.contains('hidden') ? b.textContent.trim() : ''; });
+    check('the number on the Deposits tab clears after the reject', badge2 === '', 'badge "' + badge2 + '"'); }
   check('no script errors during the whole run', errs.length === 0, errs.slice(0, 2).join(' | '));
   await br.close(); const bad = results.filter(r => !r[0]);
   L(bad.length ? 'ADMIN LIVE TEST: ' + bad.length + ' FAILED' : 'ADMIN LIVE TEST: ALL PASSED'); process.exit(bad.length ? 1 : 0);

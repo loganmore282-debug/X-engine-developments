@@ -5405,7 +5405,9 @@ function mpShowPay(){
 }
 function mpTick(){
   const o = _mp.order; if (!o || _mp.stage !== 'pay') return mpStopTimer();
-  const left = Math.max(0, Math.floor((Number(o.expiresAt) - Date.now()) / 1000));
+  // The order's end is a time on the SERVER's clock, so it is measured against the server's clock (ckNow()). Measured against a phone whose own
+  // clock runs ahead, every order looked expired the moment it opened and the member could never reach the payment page.
+  const left = Math.max(0, Math.floor((Number(o.expiresAt) - ckNow()) / 1000));
   const m = Math.floor(left / 60), sec = left % 60;
   const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
   set('mpM1', String(Math.floor(m / 10))); set('mpM2', String(m % 10));
@@ -5463,7 +5465,7 @@ window.resumeManualPay = async function(){
   let st = null; try { st = JSON.parse(localStorage.getItem(MP_RESUME_KEY) || 'null'); } catch (_) {}
   if (!st || !(Number(st.amount) > 0)) return;
   const me = STATE.user && STATE.user.uid || '';
-  const live = st.stage !== 'pay' || Number(st.exp) > Date.now() + 5000;
+  const live = st.stage !== 'pay' || Number(st.exp) > ckNow() + 5000;
   if ((st.u || '') !== me || !live || Date.now() - Number(st.at || 0) > 40 * 60 * 1000) return mpForget();   // another member's pages are never shown
   if ((STATE.settings || {}).manualPay !== true) return;
   _mpResuming = true;
