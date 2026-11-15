@@ -655,3 +655,38 @@ never see them), "treasure code" -> "gift code". What the Banners tab keeps: see
 ## Words changed by the owner: subordinates, Recharge, Withdraw, and the referral steps
 - "members" of a team level are now **subordinates** (Team overview rows, the level page title, its empty line and count line). **Add Funds is Recharge** (Home button, the page title, its button, the "Tap Recharge" step, toasts) and **Cash Out is Withdraw** (Home button, page title, the "Request Withdrawal" button, "How withdrawals work", the "Withdraw to ..." row, toasts and the minimum-withdrawal line). Related words follow: Topups -> Recharges, Cash Outs -> Withdrawals (Ledger tabs and the Me figure label), "No recharges yet", "No withdrawals yet", the live feed reads "recharged" / "withdrew", the server's two list errors say recharges / withdrawals. The admin panel keeps its own words.
 - "How referrals work" (Share page) is the owner's four plain lines (unique link to register users under your account; commission when a registered subordinate buys an AI Robot; three levels of direct, second-tier, third-tier subordinates; commissions credited automatically and immediately to the wallet balance), with NO bold or highlighted words. Tests: `test-smartai-app.js` (labels, the four lines, nothing bold), `test-team.js`, `test-page-loader.js`. Member cache v89.
+
+
+## Payment pages = the owner's two-step gold page (2026-11-15) -- READ before touching deposits
+**Owner's order (with two screen recordings and nine screenshots of a GOPAY-branded checkout):** "In smart ai use this payment page, where is the gopay image put ai image, also make when I can upload
+image, background gets removed and sits there, use that specific colour and animations in the screenshot, build exactly ... on the recharge page one taps/selects amount and then continues here, so
+remove number and networks ... payment numbers will be uploaded from the admin panel, don't forget payment orders are fresh just like you see on Potato ... timer is 15 minutes."
+- **Flow.** Add Funds (`ovDeposit`) asks ONLY the amount (+ quick amounts) and has one button, Continue (`continueDeposit()`); no network, no number any more. Page 1 `ovGpPick` (`gpOpenPick`, `gpPickNet`, `gpConfirm`): AI logo,
+  "Payment Amount: UGX 20000" (plain digits, as in the screenshots), MTN / Airtel cards (gold border + tick corner), the number the member pays FROM (+256, stored `senderPhone`), pink warning strip, gold Confirm.
+  Confirm -> `POST /deposit/manual/order` -> page 2 `ovGpPay` (`gpOpenPay`): black header with flowing lines (`gpHeadArt`, SVG made in JS) + "Transaction expires later" ribbon + 15-minute clock in six boxes
+  (`gpTick`, 250 ms, phone clock corrected by `serverNow`), white card with four steps joined by a dashed line: COPY & PAY (amount, the admin's number + name with copy buttons: "Successful replication"),
+  Payment completed? (Amount paid + Refresh, poll every 7 s while visible), Your payment account (tap = "Copied."), Payment reminder (MTN: *165#, Airtel: *185#, the numbers filled in).
+  "Get results faster!": the member pastes the payment SMS (`POST /deposit/manual/submit`); a message with no readable ID answers `NEED_TXN_ID` and the page shows the Transaction ID box + the beige "Get results"
+  button (Airtel recording). Notices are the page's OWN (`gpToast`: centre dark box / "Copied." pill, `gpLoading`: the "Loading..." box), the finished/expired card is `gpDone` (reuses `tickHtml` / `crossHtml` and the
+  admin tick / cross icons). Colours measured from his screenshots (all inside the CSS block between `PAYMENT PAGES` and `END PAYMENT PAGES`; `test-icons-builtin.js` leaves that block out of its red check):
+  gold `#d98225`, Confirm gradient `#f4cc7a -> #d98f2f`, Refresh / Submit orange `#e58608`, page 1 backdrop `#060606 -> #323232 -> #4c4c4c`, pink strip `#faeeee`, grey boxes `#f5f5f5`.
+- **Logo.** Icon slot `paylogo` (server `SMARTAI_ICON_SLOTS`, admin `SMARTAI_ICON_BUILTIN` / `LABELS`, built-in `user/icons/paylogo.webp` = the AI robot). Uploaded in Admin > Payment Numbers (own card) or Banners > Icons; the
+  browser removes the background (`fileToCutoutPng`) and saves a transparent PNG. Both pages use `<img data-icon="paylogo">`.
+- **Server** (block `MANUAL MOBILE-MONEY RECHARGE`, ported from Beer / Potato's Ethiopia block and made Uganda / MTN / Airtel): collection `payChannels` (network MTN|Airtel, name, number `07XXXXXXXX`, active, order),
+  `/admin/pay-channels/list|save|delete` (save + delete owner only), `GET /public/pay-channels` (only WHICH networks, never numbers), `POST /deposit/manual/order` (a NEW order every time: older unsent orders of the
+  member are closed `failed`, a new reference, `MANUAL_ORDER_MS` = 15 min; the admin's numbers of that network are handed out in turn; `resume:true` + `depositId` returns the SAME open order and clock, 409 `ORDER_GONE`
+  otherwise), `POST /deposit/manual/submit` (`extractManualRef`: MTN `ID :30212345057`, Airtel `Txn ID MP241115.1234.A12345`, or a bare ID; one real transfer backs ONE claim; status `review`; admins get a push),
+  `POST /deposit/manual/status` (pending / review / matched / failed / expired for the Refresh button), `POST /admin/deposit/reject` (owner), `sweepManualOrders` every 5 min (an unpaid order closes 15 min after its clock),
+  `/admin/badges` has `reviewDeposits`. `/public/settings` -> `manualPay` / `depositAvailable` are true once the admin has added a number (before: gateway availability). **Nothing here credits a wallet**:
+  the admin approves under Deposits > Needs Review with Force-credit (`creditDeposit` stays the only crediting path) or Rejects.
+- **Admin.** Owner-only tab "Payment Numbers" (network, number, account name, order, show/hide), Deposits tab Reject button + Needs Review badge (`dBadge`), audit labels.
+- **Resume.** `localStorage` key `smartai_gp_resume` (uid, depositId, amount, network, payer number, time) written at Confirm, cleared when paid / failed / expired / submitted; `enterApp` calls `gpResume()` after 1.2 s
+  (same order, same clock, page 2 again). Phone Back leaves the pages without closing the order (`gpLeave`).
+- **Removed from the member app:** the old gateway status page (`ovDepositStatus`, `openDepositStatus`, polling, the particle canvas `payFx`, `showPayLoader`), the network cards and number box of Add Funds, the gateway-button
+  rotation call (`refreshDepositSlot`). The gateway ROUTES (`/deposit/marzpay`, `/deposit/start`, webhooks, PesaJet / TavuPay watchers) stay in `server.js`, unused by the app; their client-side test checks were removed.
+- **Tests.** `test-manual-pay.js` (79 checks: SMS parsing, admin numbers, fresh orders + rotation + resume, status, submit, reject, sweep, nothing credits), `test-smartai-app.js` step 7b (the whole flow in a real browser against
+  the real server: numbers, Continue, page 1 notices, page 2, clock, copy, Refresh, SMS submit, admin Force-credit, tick card, wallet), `test-smartai-ui.js` (fourteen full-page screens), `test-icons-builtin.js` (27 slots).
+  Caches: member `smartai-shell-v90`, admin `smartai-admin-shell-v33`.
+- **Open / not built:** no SMS forwarder (an automatic match of the admin phone's received-money SMS) -- every claim is approved by the admin by hand, so "Get results faster" means "send the proof now". Ask before building it.
+- **Hosting note (2026-11-15):** the VPS apps were moved from Hostinger to Contabo (`161.97.98.107`, see `beer/CLAUDE.md` "Moving all apps to a new server"). Dev ports 8100 / 8101 and the GitHub webhook address
+  (`http://<ip>:8100/k7x2/deploy/webhook`) hold the SERVER ADDRESS: update the webhook to the new address when the old server is switched off.

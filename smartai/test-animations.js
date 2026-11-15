@@ -187,12 +187,13 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   await p.evaluate(() => { STATE.checkinStreak = 5; STATE.lastCheckin = '01/01/2020'; renderCheckin(); });
   ok(await p.evaluate(() => document.querySelectorAll('#calGrid .cal-d.done').length === 0 && [...document.querySelectorAll('#calGrid .cal-d')].findIndex(e => e.classList.contains('today')) === 0), 'a missed day sends the calendar back to day 1');
   // the tick and the cross on the payment pages
-  await p.evaluate(() => { openOverlay('depositStatus'); showDepositSuccess(); }); await sleep(120);
-  ok(await p.evaluate(() => { const ic = document.getElementById('depStatusIc'); return ic.className === 'pay-status-ic anim' && !!ic.querySelector('.ok-check') && getComputedStyle(ic.querySelector('.ok-disc')).animationName === 'anPop'; }), 'a successful payment shows the animated green tick');
-  await p.evaluate(() => { _depConfirmed = false; showDepositFailed(); }); await sleep(120);
-  ok(await p.evaluate(() => { const ic = document.getElementById('depStatusIc'); return !!ic.querySelector('.no-x') && /Not Completed/.test(document.getElementById('depStatusTitle').textContent); }), 'a failed payment shows the animated red cross and "Payment Not Completed"');
-  await p.evaluate(png => { STATE_ICONS = { tick: png, cross: png }; showDepositSuccess(); }, png);
-  ok(await p.evaluate(() => !!document.querySelector('#depStatusIc img') && !document.querySelector('#depStatusIc .ok-check')), 'a picture uploaded for the tick stands still in its place');
+  await p.evaluate(() => { gpDialog('tick', 'Payment Successful!', 'Your wallet has been credited.'); }); await sleep(150);
+  ok(await p.evaluate(() => { const pic = document.getElementById('gpDonePic'); return document.getElementById('gpDone').classList.contains('show') && !!pic.querySelector('.ok-check') && getComputedStyle(pic.querySelector('.ok-disc')).animationName === 'anPop'; }), 'a successful payment shows the animated green tick');
+  await p.evaluate(() => { gpDialog('cross', 'Payment Not Completed', 'x'); }); await sleep(150);
+  ok(await p.evaluate(() => !!document.querySelector('#gpDonePic .no-x') && /Not Completed/.test(document.getElementById('gpDoneT').textContent)), 'a failed payment shows the animated red cross and "Payment Not Completed"');
+  await p.evaluate(png => { STATE_ICONS = { tick: png, cross: png }; gpDialog('tick', 'Payment Successful!', 'x'); }, png);
+  ok(await p.evaluate(() => !!document.querySelector('#gpDonePic img') && !document.querySelector('#gpDonePic .ok-check')), 'a picture uploaded for the tick stands still in its place');
+  await p.evaluate(() => { document.getElementById('gpDone').classList.remove('show'); });
   await p.evaluate(() => { STATE_ICONS = {}; closeOverlay(); });
   await p.evaluate(() => switchTab('shop')); await sleep(80);
   ok(await p.evaluate(() => Math.round(document.getElementById('shopBanner').getBoundingClientRect().height) === 104), 'the AI Robots header (My AI robots / Accrued earnings) is 104 px high');

@@ -190,17 +190,51 @@ async function member(ref) {
   const dr = await J('GET', '/deposits', null, MEtok);
   ok(dr.s === 200 && Array.isArray(dr.j.deposits), '/deposits answers');
 
-  // ---- 7b. the payment page plays the owner's second animation in place of the old phone picture; the tick comes back once it is paid ----
-  await ev(() => openDepositStatus('dep-anim-test', 'S2611090000000001', '0771234567')); await sleep(700);
-  const dl = await ev(() => { const ic = document.getElementById('depStatusIc'), s = ic.querySelector('svg.dl'); return { cls: ic.className, svg: !!s, n: s ? s.children.length : 0, css: Math.round(ic.getBoundingClientRect().width), fill: s ? getComputedStyle(s.children[0]).fill : '', orb: !!document.getElementById('payOrbCv'), phone: /<rect x="7" y="2"/.test(ic.innerHTML) }; });
-  ok(dl.cls === 'pay-status-ic dots' && dl.svg && dl.n === 12 && dl.css === 104 && !dl.orb && !dl.phone, 'while a payment is being checked the page shows the app\'s dotted loader (12 dots, 104 px), not the orb or the phone: ' + JSON.stringify(dl));
-  const shots = []; for (let i = 0; i < 5; i++) { shots.push(await ev(() => [...document.querySelectorAll('#depStatusIc svg.dl circle')].map(c => c.getAttribute('cx')).join())); await sleep(130); }
-  ok(new Set(shots).size >= 3, 'the dots are moving');
-  const pf = await ev(() => { const cv = document.getElementById('payFx'), r = cv.getBoundingClientRect(), o = document.getElementById('ovDepositStatus'); return { fixed: getComputedStyle(cv).position, full: Math.round(r.width) === window.innerWidth && Math.round(r.height) === window.innerHeight, dark: getComputedStyle(o).backgroundImage.indexOf('gradient') >= 0 }; });
-  ok(pf.fixed === 'fixed' && pf.full && pf.dark, 'the payment page is the full-page dark particle field (a canvas as big as the screen behind the words)');
-  const pw = []; for (let i = 0; i < 4; i++) { pw.push(await ev(() => document.getElementById('payFx').toDataURL())); await sleep(250); }
-  ok(new Set(pw).size >= 3 && pw.every(u => u.length > 5000), 'and the particles on it are painted and moving');
-  await ev(() => { stopDepositPoll(); closeOverlay(); }); await sleep(300);
+  // ---- 7b. Add Funds asks only the amount; Continue opens the two payment pages (the owner's gold design) with the admin's own numbers; the tick comes back once it is paid ----
+  ok((await J('POST', '/admin/pay-channels/save', { network: 'MTN', accountName: 'RUTH NABIRTE', accountNumber: '0772095482' }, null, true)).s === 200, 'the admin adds an MTN payment number');
+  ok((await J('POST', '/admin/pay-channels/save', { network: 'Airtel', accountName: 'WAKUNGA JAMES', accountNumber: '0747833143' }, null, true)).s === 200, 'and an Airtel one');
+  ok((await J('GET', '/public/settings')).j.settings.depositAvailable === true, 'a recharge is possible once a payment number exists');
+  await ev(() => syncPublicConfig()); await sleep(600);
+  await ev(() => openOverlay('deposit')); await sleep(700);
+  ok(await ev(() => !document.getElementById('depNetworkRow') && !document.getElementById('depPhone') && document.getElementById('depGoBtn').textContent === 'Continue'), 'Add Funds has only the amount and Continue (no network, no number)');
+  await ev(() => { document.getElementById('depAmt').value = '30000'; continueDeposit(); }); await sleep(900);
+  const gpToastText = () => ev(() => document.getElementById('gpToast').textContent);
+  const gp1 = await ev(() => { const o = document.getElementById('ovGpPick'), card = document.querySelector('.gp-card1'), logo = document.querySelector('#ovGpPick .gp-logo1'); return { on: o.classList.contains('show'), amt: document.getElementById('gpAmt1').textContent, icon: logo.getAttribute('data-icon'), src: logo.getAttribute('src'), grad: /gradient/.test(getComputedStyle(o).backgroundImage), card: getComputedStyle(card).backgroundColor, btn: getComputedStyle(document.getElementById('gpConfirm')).backgroundImage.includes('gradient') }; });
+  ok(gp1.on && gp1.amt === '30000' && gp1.icon === 'paylogo' && /paylogo/.test(gp1.src) && gp1.grad && gp1.card === 'rgb(255, 255, 255)' && gp1.btn, 'Continue opens page 1: the AI logo (the admin slot), the amount, a white card on the dark backdrop, the gold Confirm: ' + JSON.stringify(gp1));
+  await ev(() => gpConfirm()); await sleep(300);
+  ok(await gpToastText() === 'Please select a payment method', 'Confirm with no network says "Please select a payment method"');
+  await ev(() => gpPickNet('MTN')); await ev(() => gpConfirm()); await sleep(300);
+  ok(await gpToastText() === 'Please enter payment account number', 'with no number: "Please enter payment account number"');
+  await ev(() => { document.getElementById('gpPhone').value = '12345'; gpConfirm(); }); await sleep(300);
+  ok(await gpToastText() === 'The mobile phone number format is incorrect', 'with a bad number: "The mobile phone number format is incorrect"');
+  ok(await ev(() => document.getElementById('gpM_MTN').classList.contains('on') && !document.getElementById('gpM_Airtel').classList.contains('on')), 'the chosen network card is marked (gold border, tick corner)');
+  await ev(() => { document.getElementById('gpPhone').value = '0769968158'; gpConfirm(); }); await sleep(1400);
+  const gp2 = await ev(() => ({ on: document.getElementById('ovGpPay').classList.contains('show'), net: document.getElementById('gpNetName').textContent, lab: document.getElementById('gpAcctLab').textContent, acct: document.getElementById('gpAcct').textContent, name: document.getElementById('gpName').textContent,
+    amt: document.getElementById('gpAmt2').textContent, mine: document.getElementById('gpMine').textContent, timer: [...document.querySelectorAll('#gpTimer i')].map(i => i.textContent).join(''), copies: document.querySelectorAll('#ovGpPay .gp-cp svg').length,
+    steps: document.getElementById('gpSteps').textContent, icons: document.querySelectorAll('#ovGpPay .gp-ic svg').length, art: document.querySelectorAll('#gpArt path').length > 20, logo: document.querySelector('#ovGpPay .gp-logo2').getAttribute('data-icon') }));
+  ok(gp2.on && gp2.net === 'MTN' && gp2.lab === 'MTN Account:' && gp2.acct === '0772095482' && gp2.name === 'RUTH NABIRTE' && gp2.amt === '30000' && gp2.mine === '0769968158', 'Confirm opens page 2 with the admin\'s MTN number, the name, the amount and the paying number: ' + JSON.stringify(gp2));
+  ok(/^001[45]/.test(gp2.timer) && gp2.copies === 2 && /\*165#/.test(gp2.steps) && gp2.icons === 4 && gp2.art && gp2.logo === 'paylogo', 'the clock starts at 15 minutes, two copy buttons, the MTN how-to (*165#), four step icons, the header lines and the logo: ' + JSON.stringify({ t: gp2.timer, c: gp2.copies, i: gp2.icons }));
+  await sleep(1300);
+  ok(await ev(() => [...document.querySelectorAll('#gpTimer i')].map(i => i.textContent).join('')) !== gp2.timer, 'the clock is counting down');
+  await ev(() => document.getElementById('gpName').nextElementSibling.click()); await sleep(300);
+  ok(/Successful replication|Could not copy/.test(await gpToastText()), 'the copy button answers with its own notice');
+  await ev(() => gpRefresh()); await sleep(900);
+  ok(/not received yet/i.test(await gpToastText()) && await ev(() => document.getElementById('gpPaidN').textContent) === '0', 'Refresh before paying: nothing paid yet');
+  await ev(() => gpSend()); await sleep(300);
+  ok(await gpToastText() === 'Please enter payment SMS', 'Submit with nothing typed says "Please enter payment SMS"');
+  const depId = await ev(() => _gp.order.depositId);
+  await ev(() => { document.getElementById('gpSms').value = 'You have sent UGX 30,000 to RUTH NABIRTE, 256772095482 on 2026-11-15 12:30:00, fee: 0. Reason: x. New balance: UGX 1,000. ID :30212345057.'; gpSend(); }); await sleep(1200);
+  ok(await ev(() => document.getElementById('gpSentMsg').style.display !== 'none' && document.getElementById('gpSms').readOnly), 'a readable SMS is submitted and the page says the team is checking');
+  ok((await J('POST', '/admin/deposits/list', {}, null, true)).j.deposits.some(d => d.id === depId && d.status === 'review' && d.pastedSmsTxId === '30212345057' && d.pastedSmsAmountMatches === true), 'the admin sees it under Needs Review with the transaction ID and the amount check');
+  const walletBefore = await ev(() => STATE.balance);
+  ok(await ev(async () => { await refreshFromServer(); return STATE.balance; }) === walletBefore, 'nothing was credited by submitting');
+  ok((await J('POST', '/admin/deposit/force-credit', { depositId: depId }, null, true)).s === 200, 'the admin approves it (Force-credit)');
+  await ev(() => { _gp.submitted = false; gpRefresh(); }); await sleep(2200);
+  ok(await ev(() => document.getElementById('gpPaidN').textContent === '30000' && document.getElementById('gpPaid').classList.contains('ok')), 'Refresh now shows Amount paid UGX 30000 in gold');
+  ok(await ev(() => document.getElementById('gpDone').classList.contains('show') && /ok-check/.test(document.getElementById('gpDonePic').innerHTML)), 'and the green tick card (the owner\'s animated tick) comes up');
+  await ev(() => gpFinish()); await sleep(1200);
+  ok(await ev(() => STATE.balance) === walletBefore + 30000 && !await ev(() => _gpActive), 'OK closes the pages and the wallet shows the credit');
+  await ev(() => { gpLeave(); closeOverlay(); }); await sleep(300);
   await ev(() => openOverlay('deposit')); await sleep(600);
   ok(await ev(() => { const li = document.querySelector('#ovDeposit .pay-steps li'); const c = getComputedStyle(li).color.match(/\d+/g).map(Number); return c[0] < 120 && c[1] < 140; }), 'on Add Funds the Deposit procedure steps are dark and readable on their light box (not white)');
   await ev(() => closeOverlay()); await sleep(300);
@@ -217,11 +251,6 @@ async function member(ref) {
   await J('POST', '/admin/settings/update', { settings: { pageParticles: false } }, null, true);
   await ev(() => syncPublicConfig()); await sleep(900);
   ok(await ev(() => !document.body.classList.contains('pf-on') && getComputedStyle(document.getElementById('pfBg')).display === 'none'), 'switched off again, the usual light pages are back');
-  await ev(() => openDepositStatus('dep-anim-test2', 'S2611090000000002', '0771234567')); await sleep(500);
-  await ev(() => showDepositSuccess()); await sleep(200);
-  ok(await ev(() => document.getElementById('depStatusIc').className === 'pay-status-ic anim' && !document.querySelector('#depStatusIc svg.dl') && /ok-check/.test(document.getElementById('depStatusIc').innerHTML)), 'once the payment is confirmed the dots give way to the green tick (the owner\'s animated tick)');
-  ok(await ev(() => !document.querySelector('#depStatusIc svg.dl')), 'and the dots are gone');
-  await ev(() => { stopDepositPoll(); closeOverlay(); }); await sleep(200);
 
   // ---- 8. the Me page is ChocoMCC's: its tiles, its two UGX coins, its Security page, and nothing that is not in ChocoMCC ----
   await ev(() => switchTab('account')); await sleep(600);

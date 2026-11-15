@@ -218,19 +218,7 @@
   .field input:focus{border-color:var(--caramel);}
   .field .ic{position:absolute;left:16px;top:50%;transform:translateY(-50%);opacity:.65;color:var(--cocoa-soft);display:flex;}
   .phone-prefix{position:absolute;left:44px;top:50%;transform:translateY(-50%);font-size:15px;font-weight:700;color:var(--cocoa-soft);pointer-events:none;}
-  #fPhone,#depPhone{padding-left:84px;}
-  .net-card-row{display:flex;gap:12px;margin-bottom:14px;}
-  .net-card{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
-    padding:14px 10px;border-radius:16px;border:1.5px solid var(--line);background:var(--card);cursor:pointer;}
-  .net-card img{width:56px;height:56px;object-fit:cover;border-radius:14px;display:block;box-shadow:0 3px 8px rgba(11,42,91,.18);}
-  .net-card span.net-lbl{font-size:13px;font-weight:800;color:var(--cocoa);}
-  .net-card.active{border-color:var(--caramel);background:var(--caramel-pale);}
-  .net-card .net-check{display:none;position:absolute;bottom:-6px;right:-6px;width:24px;height:24px;border-radius:50%;
-    background:var(--caramel);color:#fff;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(11,42,91,.3);}
-  .net-card.active .net-check{display:flex;animation:calTick .3s cubic-bezier(.2,1.7,.4,1) both;}
-  @media (prefers-reduced-motion:reduce){span.net-check{animation:none !important;}}
-  /* the same tick as the check-in calendar: a real heavy check mark character, white */
-  .net-card .net-check::after{content:"\2713\FE0E";font:900 14px/1 system-ui,"Segoe UI Symbol","Noto Sans Symbols2",sans-serif;color:#fff;}
+  #fPhone{padding-left:84px;}
   .auth-tag{display:inline-block;color:var(--mint);font-weight:800;font-size:11.5px;
     text-transform:uppercase;margin-bottom:14px;letter-spacing:.6px;}
 
@@ -513,7 +501,6 @@
   .prod-ribbon{position:absolute;top:12px;right:12px;background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;
     font-size:10.5px;font-weight:800;padding:5px 11px;border-radius:999px;letter-spacing:.3px;box-shadow:0 4px 10px -2px rgba(13,95,210,.5);}
 
-  .link-box{background:var(--cream-deep);border:1.5px dashed var(--caramel);border-radius:14px;padding:14px 16px;margin:14px var(--gut);}
   /* Support page icons: Telegram and WhatsApp app icons that pop big, settle, dip twice and shrink back, one 2.67 s loop measured off the recordings. */
   .sup-ic{display:block;width:100%;height:100%;animation:supPop 2.667s linear infinite;animation-delay:var(--d,0s);}
   .sup-ic svg{display:block;width:100%;height:100%;}
@@ -535,27 +522,148 @@
   .link-boxed{padding:10px 10px 10px 14px;background:var(--cream);border:1.5px dashed var(--caramel);border-radius:16px;}
   .link-row span{flex:1;font-size:12.5px;font-weight:700;color:var(--cocoa-soft);}
 
-  /* The whole payment page is the dark particle field (full page, fixed behind the words; makeParticleField draws it), with the cards sitting on it. */
-  #ovDepositStatus{background:radial-gradient(130% 90% at 50% 108%,#0c3f9c 0%,#071b56 42%,#040b26 100%);color:#fff;}
-  .pay-fx{position:fixed;inset:0;width:100%;height:100%;display:block;pointer-events:none;}
-  #ovDepositStatus>:not(.pay-fx){position:relative;z-index:1;}
-  #ovDepositStatus .link-box{background:rgba(255,255,255,.07);border-color:rgba(130,190,255,.6);color:#fff;}
-  #ovDepositStatus .link-row,#ovDepositStatus #depStatusRef{color:#fff;}
-  #ovDepositStatus .link-box .muted{color:rgba(205,222,255,.85);}
-  #ovDepositStatus .info-box{border:1px solid rgba(130,190,255,.3);}
-  #ovDepositStatus .muted{color:rgba(205,222,255,.8);}
-  .pay-status-card{margin:16px var(--gut);padding:22px 20px 10px;text-align:center;color:#fff;}
-  .pay-status-ic{width:52px;height:52px;border-radius:16px;background:var(--mint);color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
-  .pay-status-ic.dots{width:104px;height:104px;border-radius:0;background:none;margin-bottom:10px;}
-  .pay-status-ic.dots svg.dl{width:100%;height:100%;}
-  .pay-status-ic.dots svg.dl circle{fill:#63b8ff;filter:drop-shadow(0 0 5px rgba(90,170,255,.95));}
-  .pay-status-card h3{font-size:17px;color:#fff;text-shadow:0 0 16px rgba(90,170,255,.6);}
-  .pay-status-card .muted{color:rgba(205,222,255,.85);}
   .pay-steps{list-style:none;margin:16px 0 0;padding:0;text-align:left;}
   .pay-steps li{position:relative;padding:6px 0 6px 22px;font-size:12.5px;color:var(--cocoa-soft);font-weight:600;}
-  .pay-status-card .pay-steps li{color:rgba(226,237,255,.93);}
   .pay-steps li::before{content:"";position:absolute;left:2px;top:13px;width:6px;height:6px;border-radius:50%;background:var(--mint);}
-  .pay-status-card .pay-steps li::before{background:#59b6ff;box-shadow:0 0 8px 2px rgba(89,182,255,.8);}
+  /* ====================== PAYMENT PAGES (the owner's screenshots and recordings of the two-step payment page) ======================
+     Gold and amber on black and white, NOT the app's blue: the owner asked for "that specific colour and animations". Measured from his screenshots (411 px wide phone):
+     page 1 = a white card on a black-to-grey backdrop (method cards, number box, pink warning strip, gold Confirm pill); page 2 = a black header with flowing lines, the
+     15-minute timer in boxes, and a white card with four steps joined by a dashed line (COPY & PAY, Payment completed?, Your payment account, Payment reminder).
+     The picture at the top of both pages is the admin's "Payment page logo" (icon slot paylogo, background removed on upload), the AI robot until one is uploaded. */
+  .gp-ov{z-index:90;font-family:Roboto,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;-webkit-tap-highlight-color:transparent;}
+  .gp-ov.show{animation:gpFade .32s ease both;}
+  @keyframes gpFade{from{opacity:0}to{opacity:1}}
+  @keyframes gpRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @keyframes gpSpin{to{transform:rotate(360deg)}}
+  #ovGpPick{background:linear-gradient(180deg,#060606 0,#0f0f0f 6%,#323232 12%,#474747 50%,#4c4c4c 100%);}
+  #ovGpPick .gp-wrap{min-height:100%;padding:calc(99px + env(safe-area-inset-top,0px)) 21px 36px;box-sizing:border-box;}
+  .gp-card1{background:#fff;border-radius:18px;padding:30px 22px 22px;box-shadow:0 14px 34px rgba(0,0,0,.4);overflow:hidden;}
+  .gp-logo1{display:block;width:56px;height:56px;margin:0 auto 34px;object-fit:contain;}
+  .gp-t{font-size:15px;line-height:19px;font-weight:500;color:#535353;margin:0;}
+  .gp-amt-line{margin-top:26px;font-size:15px;font-weight:500;color:#535353;display:flex;align-items:baseline;gap:5px;}
+  .gp-amt-line b{font-weight:500;color:#d98225;font-size:16.6px;}
+  .gp-amt-line b small{font-size:13px;font-weight:500;margin-right:4px;}
+  .gp-sel-t{margin-top:30px;font-size:15px;font-weight:500;color:#7a756f;}
+  .gp-methods{display:flex;justify-content:center;gap:14px;margin-top:20px;}
+  .gp-m{position:relative;width:97px;height:76px;border-radius:9px;border:1px solid #ccc;background:#fff;box-shadow:0 3px 9px rgba(0,0,0,.09);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:0;color:#6e6a65;
+    transition:border-color .22s ease,background .22s ease,box-shadow .22s ease,transform .12s ease;overflow:hidden;}
+  .gp-m:active{transform:scale(.97);}
+  .gp-m img{width:28px;height:28px;object-fit:cover;display:block;}
+  .gp-m span.gp-ml{font-size:14px;font-weight:500;}
+  .gp-m .gp-tri{position:absolute;right:0;bottom:0;width:23px;height:23px;background:#daaa58;clip-path:polygon(100% 0,100% 100%,0 100%);transform:scale(0);transform-origin:100% 100%;transition:transform .24s cubic-bezier(.2,1.5,.4,1);}
+  .gp-m .gp-tri svg{position:absolute;right:2px;bottom:2px;width:11px;height:11px;}
+  .gp-m.on{border-color:#c5ac84;background:#fff6ef;box-shadow:0 4px 12px rgba(217,147,51,.28);}
+  .gp-m.on .gp-tri{transform:scale(1);}
+  .gp-numbox{margin-top:22px;height:43px;border:1px solid #a9a9a9;border-radius:11px;display:flex;align-items:center;padding:0 12px;box-sizing:border-box;transition:border-color .2s ease,box-shadow .2s ease;background:#fff;}
+  .gp-numbox:focus-within{border-color:#d98f2f;box-shadow:0 0 0 3px rgba(217,143,47,.16);}
+  .gp-numbox b{font-size:13px;font-weight:500;color:#d4832a;margin-right:14px;flex:none;}
+  .gp-numbox input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:14px;color:#111;padding:0;height:100%;font-family:inherit;}
+  .gp-numbox input::placeholder{color:#b9b9b9;font-size:12px;}
+  .gp-warn{margin:17px -22px 0;background:#faeeee;padding:9px 22px 9px 20px;display:flex;align-items:center;gap:9px;color:#ca6364;font-size:10.7px;line-height:15.8px;}
+  .gp-warn i{flex:none;width:15px;height:15px;border-radius:50%;background:rgba(226,84,83,.18);display:grid;place-items:center;color:#e25453;}
+  .gp-warn i svg{width:9px;height:9px;}
+  .gp-btn{display:flex;align-items:center;justify-content:center;gap:8px;margin:17px auto 0;border:0;border-radius:30px;color:#fff;font-weight:500;font-family:inherit;letter-spacing:.2px;
+    background:linear-gradient(180deg,#f4cc7a 0%,#e8b25a 52%,#d98f2f 100%);box-shadow:0 5px 12px rgba(217,143,47,.38),inset 0 1px 0 rgba(255,255,255,.35);
+    transition:transform .12s ease,filter .2s ease,opacity .2s ease;position:relative;overflow:hidden;}
+  .gp-btn:active{transform:scale(.97);filter:brightness(.95);}
+  .gp-btn[disabled]{opacity:.55;pointer-events:none;}
+  .gp-btn::after{content:'';position:absolute;top:0;left:-60%;width:45%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.4),transparent);transform:skewX(-18deg);animation:gpShine 3.6s ease-in-out infinite;}
+  @keyframes gpShine{0%,55%{left:-60%}100%{left:130%}}
+  #gpConfirm{width:180px;height:47px;font-size:15px;}
+  #gpConfirm svg{width:19px;height:19px;}
+  /* ---- page 2 ---- */
+  #ovGpPay{background:#f2f2f2;}
+  .gp-head{position:relative;height:160px;overflow:hidden;background:linear-gradient(180deg,#010101 0%,#12110f 28%,#191919 47%,#2e2d29 72%,#4a4745 100%);}
+  .gp-head svg.gp-art{position:absolute;inset:0;width:100%;height:100%;}
+  .gp-logo2{position:absolute;left:30px;top:calc(22px + env(safe-area-inset-top,0px));width:46px;height:46px;object-fit:contain;z-index:2;}
+  .gp-ribbon{position:absolute;right:0;top:calc(14px + env(safe-area-inset-top,0px));height:18px;padding:0 22px 0 18px;display:flex;align-items:center;z-index:2;color:#e6e6e6;font-size:10.2px;letter-spacing:.2px;
+    background:linear-gradient(90deg,rgba(255,255,255,.07),rgba(255,255,255,.2) 38%,rgba(255,255,255,.17));clip-path:polygon(0 0,100% 0,100% 100%,5px 100%);}
+  .gp-timer{position:absolute;right:15px;top:calc(40px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:0;z-index:2;color:#fff;}
+  .gp-timer i{font-style:normal;display:block;width:13.6px;height:14.6px;margin-left:2px;border:1px solid rgba(255,255,255,.85);border-radius:3px;background:rgba(0,0,0,.35);font-size:10.4px;line-height:13px;text-align:center;font-weight:400;font-variant-numeric:tabular-nums;}
+  .gp-timer i:first-child{margin-left:0;}
+  .gp-timer em{font-style:normal;margin:0 7px;font-size:10px;color:rgba(255,255,255,.8);}
+  .gp-timer.low i{border-color:#f0a94a;color:#ffd9a0;}
+  .gp-card2{position:relative;margin:-67px 11px 0;background:#fff;border-radius:21px;padding:8px 14px 22px 11px;box-shadow:0 8px 26px rgba(0,0,0,.12);animation:gpRise .42s ease both;}
+  .gp-step{position:relative;padding:14px 0 6px 53px;}
+  .gp-step:not(:last-of-type)::before{content:'';position:absolute;left:26px;top:52px;bottom:-6px;border-left:1.6px dashed #9c9fa4;}
+  .gp-ic{position:absolute;left:9px;top:12px;width:34px;height:34px;border-radius:50%;background:#e9ecf2;display:grid;place-items:center;}
+  .gp-ic svg{width:16px;height:16px;display:block;}
+  .gp-h{font-size:14px;line-height:20px;color:#313131;font-weight:400;margin:0;letter-spacing:.1px;}
+  .gp-sub{font-size:11px;line-height:15px;color:#8c8c8c;margin:1px 0 0;}
+  .gp-sub b{font-size:15.5px;font-weight:500;color:#e32f2e;}
+  .gp-box{background:#f5f5f5;border-radius:13px;padding:14px 16px;margin-top:11px;}
+  .gp-lab{font-size:11px;color:#868686;margin:0;line-height:14px;}
+  .gp-money{font-size:13px;color:#e4860a;display:flex;align-items:baseline;gap:6px;margin-top:2px;}
+  .gp-money b{font-size:22.5px;font-weight:500;line-height:28px;}
+  .gp-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:2px;}
+  .gp-big{font-size:22px;font-weight:500;color:#e58608;line-height:30px;letter-spacing:.3px;word-break:break-all;}
+  .gp-big.nm{font-size:20px;text-transform:uppercase;}
+  .gp-cp{flex:none;width:30px;height:30px;border:0;background:transparent;display:grid;place-items:center;border-radius:8px;transition:background .15s ease,transform .12s ease;}
+  .gp-cp svg{width:21px;height:21px;}
+  .gp-cp:active{background:rgba(0,0,0,.07);transform:scale(.9);}
+  .gp-lab+.gp-row,.gp-row+.gp-lab{margin-top:8px;}
+  .gp-paid{display:flex;align-items:center;justify-content:space-between;}
+  .gp-paid .l{font-size:12px;color:#333;font-weight:500;}
+  .gp-paidv{display:flex;align-items:baseline;gap:5px;color:#cacaca;margin-top:3px;transition:color .4s ease;}
+  .gp-paidv small{font-size:13px;}
+  .gp-paidv b{font-size:21px;font-weight:500;}
+  .gp-paidv.ok{color:#e58608;}
+  .gp-refresh{width:85px;height:26px;border:0;border-radius:14px;background:#e58608;color:#fff;font-size:12.4px;font-weight:500;font-family:inherit;box-shadow:0 3px 8px rgba(229,134,8,.35);transition:transform .12s ease,filter .2s ease;}
+  .gp-refresh:active{transform:scale(.95);filter:brightness(.94);}
+  .gp-refresh[disabled]{opacity:.6;}
+  .gp-hr{height:1px;background:#ccc;margin:9px 0 6px;border:0;}
+  .gp-note{font-size:9.7px;line-height:12.6px;color:#979797;margin:0;}
+  .gp-faster{font-size:14.6px;font-weight:500;color:#dd8710;margin:14px 0 2px;}
+  .gp-fill{font-size:11px;font-weight:500;color:#313131;margin:0 0 6px;}
+  .gp-ta{width:100%;height:139px;box-sizing:border-box;border:1.5px solid #ccc;border-radius:12px;background:#fff;padding:9px 11px;font-size:11.4px;line-height:19px;color:#000;font-family:inherit;resize:none;outline:0;display:block;transition:border-color .2s ease,box-shadow .2s ease;}
+  .gp-ta::placeholder{color:#b4b4b4;}
+  .gp-ta:focus{border-color:#e58608;box-shadow:0 0 0 3px rgba(229,134,8,.13);}
+  .gp-lose{font-size:10.4px;line-height:13.5px;color:#333;font-weight:500;margin:7px 0 0;}
+  .gp-lose i{font-style:normal;color:#d0021b;}
+  .gp-idrow{margin-top:10px;animation:gpRise .3s ease both;}
+  .gp-idrow label{display:block;font-size:11px;color:#313131;font-weight:500;margin-bottom:5px;}
+  .gp-id{width:100%;box-sizing:border-box;height:38px;border:1.5px solid #ddd;border-radius:11px;background:#fff;padding:0 11px;font-size:13px;color:#e0870f;font-family:inherit;outline:0;transition:border-color .2s ease,box-shadow .2s ease;}
+  .gp-id::placeholder{color:#e0870f;opacity:.9;}
+  .gp-id:focus{border-color:#e58608;box-shadow:0 0 0 3px rgba(229,134,8,.13);}
+  #gpSubmit{width:161px;height:36.5px;font-size:14px;font-weight:600;margin:14px auto 4px;background:#e58608;box-shadow:0 4px 10px rgba(229,134,8,.4),inset 0 1px 0 rgba(255,255,255,.25);justify-content:space-between;padding:0 7px 0 38px;}
+  #gpSubmit i{width:21px;height:21px;border-radius:50%;background:rgba(0,0,0,.2);display:grid;place-items:center;flex:none;}
+  #gpSubmit i svg{width:11px;height:11px;}
+  #gpSubmit span{flex:1;text-align:center;margin-left:-14px;}
+  #gpGet{width:100%;height:36px;font-size:13.5px;font-weight:500;margin:14px 0 2px;background:linear-gradient(180deg,#ebd1a0 0%,#e2c18c 50%,#d4b179 100%);color:#865b24;box-shadow:inset 0 1px 0 rgba(255,255,255,.4);}
+  #gpGet::after{display:none;}
+  #gpGet svg{width:16px;height:16px;}
+  .gp-acct{font-size:17px;color:#000;line-height:24px;margin:0;word-break:break-all;}
+  .gp-how{font-size:11px;line-height:16px;color:#8b8b8b;margin:0 0 9px;}
+  .gp-how b{font-weight:400;color:#ba524f;}
+  .gp-steps{margin:0;padding:0;list-style:none;font-size:10px;line-height:16.2px;color:#8b8b8b;}
+  .gp-steps li{margin:0;}
+  .gp-steps li b{font-weight:400;color:#b15653;}
+  .gp-steps li.gap{margin-top:9px;}
+  .gp-fine{height:16px;}
+  .gp-sentmsg{font-size:11px;line-height:15px;color:#b86f0a;font-weight:500;margin:10px 0 0;}
+  #gpFaster.sent .gp-ta{background:#fafafa;color:#777;}
+  .gp-done .c .pic svg{overflow:visible;}
+  .gp-cp svg,.gp-btn svg{display:block;}
+  /* ---- notices: the dark message box, the small "Copied." pill, and the Loading box ---- */
+  .gp-toast{position:fixed;left:50%;top:47%;z-index:120;max-width:70%;transform:translate(-50%,-50%) scale(.94);opacity:0;pointer-events:none;transition:opacity .22s ease,transform .22s ease;
+    background:rgba(64,64,64,.93);color:#fff;border-radius:9px;padding:12px 16px;font:400 15.5px/22px Roboto,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;text-align:center;box-shadow:0 6px 22px rgba(0,0,0,.3);}
+  .gp-toast.pill{border-radius:26px;padding:9px 18px;background:rgba(112,112,112,.95);font-size:14px;line-height:20px;}
+  .gp-toast.show{opacity:1;transform:translate(-50%,-50%) scale(1);}
+  .gp-loading{position:fixed;left:50%;top:47%;z-index:121;width:112px;height:106px;transform:translate(-50%,-50%) scale(.94);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;
+    background:rgba(64,64,64,.92);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#fff;font:400 13.5px/18px Roboto,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;box-shadow:0 6px 22px rgba(0,0,0,.3);}
+  .gp-loading.show{opacity:1;transform:translate(-50%,-50%) scale(1);}
+  .gp-loading i{width:30px;height:30px;border-radius:50%;border:2.6px solid rgba(255,255,255,.28);border-top-color:#fff;animation:gpSpin .8s linear infinite;}
+  /* ---- the order ran out / the payment landed: a dark card over the page ---- */
+  .gp-done{position:fixed;inset:0;z-index:119;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:30px;}
+  .gp-done.show{display:flex;animation:gpFade .25s ease both;}
+  .gp-done .c{background:#fff;border-radius:18px;padding:26px 22px 20px;width:100%;max-width:320px;text-align:center;box-shadow:0 16px 40px rgba(0,0,0,.4);animation:gpRise .35s ease both;}
+  .gp-done .c .pic{width:84px;height:84px;margin:0 auto 12px;}
+  .gp-done .c .pic svg,.gp-done .c .pic img{width:100%;height:100%;}
+  .gp-done .c h3{margin:0 0 6px;font-size:17px;font-weight:600;color:#313131;}
+  .gp-done .c p{margin:0 0 16px;font-size:12.5px;line-height:18px;color:#8c8c8c;}
+  #gpDoneBtn{width:170px;height:42px;font-size:14.5px;margin:0 auto;}
+  @media (prefers-reduced-motion:reduce){.gp-ov.show,.gp-card2,.gp-idrow,.gp-btn::after{animation:none !important;}}
+  /* ====================== END PAYMENT PAGES ====================== */
 
   .tm-card{margin:12px var(--gut) 0;padding:16px;background:var(--card);border-radius:20px;box-shadow:var(--shadow);}
   .tm-over{padding-bottom:6px;}
@@ -789,8 +897,6 @@
 .gs-balloon::after{content:"";position:absolute;left:50%;top:100%;width:1.5px;height:46px;background:rgba(255,255,255,.6);}
 @keyframes gsUp{0%{transform:translateY(0);}100%{transform:translateY(-118vh) translateX(var(--sway));}}
 /* success tick and failed cross of the payment pages: green / red disc that grows, a halo behind it, the mark drawn in (the owner's recordings) */
-.pay-status-ic.anim{background:none;width:108px;height:108px;border-radius:0;color:inherit;}
-.pay-status-ic.anim svg{width:100%;height:100%;display:block;overflow:visible;}
 .an-pop{transform-box:fill-box;transform-origin:center;}
 .ok-disc{animation:anPop .27s cubic-bezier(.16,1,.3,1) both;}
 .ok-halo{animation:anHalo .3s cubic-bezier(.16,1,.3,1) .08s both;}
@@ -1248,63 +1354,87 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <span class="flabel">Amount (UGX)</span>
       <input class="famt" id="depAmt" type="number" inputmode="numeric" placeholder="0" oninput="capAmountInput(this)">
       <div class="quick-amt-row" id="quickAmts"></div>
-      <span class="flabel">Choose network</span>
-      <div class="net-card-row" id="depNetworkRow">
-        <button type="button" class="net-card" data-net="MTN Mobile Money" onclick="selectDepNetwork('MTN Mobile Money')">
-          <img src="/icons/mtn-logo.jpg" alt="MTN"><span class="net-lbl">MTN</span>
-          <span class="net-check" aria-hidden="true"></span>
-        </button>
-        <button type="button" class="net-card" data-net="Airtel Money" onclick="selectDepNetwork('Airtel Money')">
-          <img src="/icons/airtel-logo.jpg" alt="Airtel"><span class="net-lbl">Airtel</span>
-          <span class="net-check" aria-hidden="true"></span>
-        </button>
-      </div>
-      <span class="flabel">Mobile-money number to pay from</span>
-      <div class="field" style="margin-bottom:14px">
-        <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 10.5c1.2 2.6 3.4 4.8 6 6l1.8-1.8c.3-.3.7-.4 1-.3 1 .3 2.1.5 3.2.5.6 0 1 .4 1 1v2.7c0 .6-.4 1-1 1C10.7 19.6 4.4 13.3 4.4 5.5c0-.6.4-1 1-1H8c.6 0 1 .4 1 1 0 1.1.2 2.2.5 3.2.1.4 0 .8-.3 1L6.5 10.5z"/></svg></span>
-        <span class="phone-prefix">+256</span>
-        <input id="depPhone" type="tel" placeholder="123456789" maxlength="14">
-      </div>
-      <button class="btn btn-primary btn-block" id="depGoBtn" onclick="doDeposit()">Recharge</button>
+      <button class="btn btn-primary btn-block" id="depGoBtn" onclick="continueDeposit()">Continue</button>
     </div>
     <div class="info-box" style="background:var(--cream-deep);color:var(--cocoa-soft)">
       <b class="bar-title" style="color:var(--cocoa);display:block;margin-bottom:2px;font-size:12.5px">Deposit procedure</b>
       <ul class="pay-steps" style="margin-top:6px">
-        <li>Enter the amount you want to add</li>
-        <li>Choose your mobile-money network</li>
-        <li>Enter the number you're paying from</li>
-        <li>Tap Recharge, then confirm the prompt on your phone</li>
-        <li>Your wallet updates automatically once confirmed</li>
+        <li>Enter or tap the amount you want to add</li>
+        <li>Tap Continue, choose MTN or Airtel and type the number you pay from</li>
+        <li>Send the money to the account shown, within 15 minutes</li>
+        <li>Paste the payment SMS (or the transaction ID) and tap Submit</li>
+        <li>Your wallet is credited once the payment is confirmed</li>
       </ul>
     </div>
   </div>
 
-  <div class="overlay" id="ovDepositStatus">
-    <canvas class="pay-fx" id="payFx" aria-hidden="true"></canvas>
-    <div class="ov-top"><button class="ov-back" onclick="cancelDepositStatus()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Recharge</div></div>
-    <div class="pay-status-card">
-      <div class="pay-status-ic" id="depStatusIc"></div>
-      <h3 id="depStatusTitle">Payment Initiated Successfully!</h3>
-      <p class="muted" id="depStatusPhone" style="font-size:13.5px;margin-top:6px"></p>
-      <ul class="pay-steps" id="depStatusSteps">
-        <li>Check your phone for the payment request</li>
-        <li>Enter your mobile-money PIN to confirm</li>
-        <li>We'll verify the payment automatically</li>
-      </ul>
+  <!-- PAYMENT PAGES: page 1 picks MTN / Airtel and the paying number, page 2 shows the account to pay (see the PAYMENT PAGES block in original_module.js) -->
+  <div class="overlay gp-ov" id="ovGpPick">
+    <div class="gp-wrap"><div class="gp-card1">
+      <img class="gp-logo1" data-icon="paylogo" src="/icons/paylogo.webp" alt="">
+      <p class="gp-t">Please fill in your payment method and the actual payment account you will use to make the payment.</p>
+      <div class="gp-amt-line">Payment Amount: <b><small>UGX</small><span id="gpAmt1">0</span></b></div>
+      <div class="gp-sel-t">Please select a payment method</div>
+      <div class="gp-methods">
+        <button type="button" class="gp-m" id="gpM_MTN" onclick="gpPickNet('MTN')"><img src="/icons/mtn-logo.jpg" alt=""><span class="gp-ml">MTN</span><i class="gp-tri"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></i></button>
+        <button type="button" class="gp-m" id="gpM_Airtel" onclick="gpPickNet('Airtel')"><img src="/icons/airtel-logo.jpg" alt=""><span class="gp-ml">Airtel</span><i class="gp-tri"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></i></button>
+      </div>
+      <div class="gp-numbox"><b>+256</b><input id="gpPhone" type="tel" inputmode="numeric" maxlength="13" autocomplete="off" placeholder="Please enter your actual payment account"></div>
+      <div class="gp-warn"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M12 6v8M12 18.2v.1"/></svg></i><span>Please fill in your payment account accurately,<br>incorrect filling may result in the loss of the transferred funds.</span></div>
+      <button type="button" class="gp-btn" id="gpConfirm" onclick="gpConfirm()"><span>Confirm</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    </div></div>
+  </div>
+
+  <div class="overlay gp-ov" id="ovGpPay">
+    <div class="gp-head">
+      <svg class="gp-art" id="gpArt" aria-hidden="true"></svg>
+      <img class="gp-logo2" data-icon="paylogo" src="/icons/paylogo.webp" alt="">
+      <div class="gp-ribbon">Transaction expires later</div>
+      <div class="gp-timer" id="gpTimer"><i>0</i><i>0</i><em>:</em><i>1</i><i>5</i><em>:</em><i>0</i><i>0</i></div>
     </div>
-    <div class="link-box">
-      <div class="muted" style="font-size:11px;font-weight:700;margin-bottom:6px">TRANSACTION REFERENCE</div>
-      <div class="link-row"><span id="depStatusRef" style="word-break:break-all"></span><button class="btn btn-dark btn-sm" onclick="copyDepositRef()">Copy</button></div>
+    <div class="gp-card2">
+      <section class="gp-step"><span class="gp-ic" data-gp="card"></span>
+        <h4 class="gp-h">COPY &amp; PAY</h4>
+        <p class="gp-sub">Copy this <b id="gpNetName">MTN</b> account and make payment</p>
+        <div class="gp-box">
+          <p class="gp-lab">Total Amount:</p>
+          <div class="gp-money"><span>UGX</span><b id="gpAmt2">0</b></div>
+          <p class="gp-lab" id="gpAcctLab" style="margin-top:12px">MTN Account:</p>
+          <div class="gp-row"><span class="gp-big" id="gpAcct"></span><button type="button" class="gp-cp" onclick="gpCopyId('gpAcct')" aria-label="Copy the account number" data-gp="copy"></button></div>
+          <p class="gp-lab" style="margin-top:12px">Account Name:</p>
+          <div class="gp-row"><span class="gp-big nm" id="gpName"></span><button type="button" class="gp-cp" onclick="gpCopyId('gpName')" aria-label="Copy the account name" data-gp="copy"></button></div>
+        </div>
+      </section>
+      <section class="gp-step"><span class="gp-ic" data-gp="refresh"></span>
+        <h4 class="gp-h">Payment completed?</h4>
+        <p class="gp-sub">Click <b>"Refresh"</b> to check if it is successful</p>
+        <div class="gp-box">
+          <div class="gp-paid"><span class="l">Amount paid:</span></div>
+          <div class="gp-row" style="margin-top:0"><div class="gp-paidv" id="gpPaid"><small>UGX</small><b id="gpPaidN">0</b></div><button type="button" class="gp-refresh" id="gpRefresh" onclick="gpRefresh()">Refresh</button></div>
+          <hr class="gp-hr">
+          <p class="gp-note">The payment is expected to be successful in 2-10 minutes.<br>Click to refresh the results.</p>
+          <div id="gpFaster">
+            <p class="gp-faster">Get results faster!</p>
+            <p class="gp-fill">Fill in the payment SMS or transaction ID</p>
+            <textarea class="gp-ta" id="gpSms" maxlength="2000" autocomplete="off" spellcheck="false" placeholder="You have sent UGX xxx to xxx xxx, 256xxxxx9263 on 0000-00-00 00:00:00, fee: 0. Reason: Testing. New balance: xxx. ID :302xxxxx057."></textarea>
+            <div class="gp-idrow" id="gpIdRow" style="display:none"><label for="gpId">Transaction ID:</label><input class="gp-id" id="gpId" maxlength="60" autocomplete="off" spellcheck="false" placeholder="Xxxxxxxx"></div>
+            <p class="gp-lose" id="gpLose"><i>*</i>Filling in the wrong payment SMS/transaction ID will result in payment loss.</p>
+            <button type="button" class="gp-btn" id="gpSubmit" onclick="gpSend()"><span>Submit</span><i data-gp="chev"></i></button>
+            <p class="gp-sentmsg" id="gpSentMsg" style="display:none">Submitted. Our team is checking your payment. Tap Refresh to see the result.</p>
+          </div>
+        </div>
+      </section>
+      <section class="gp-step"><span class="gp-ic" data-gp="person"></span>
+        <h4 class="gp-h">Your payment account:</h4>
+        <div class="gp-box" style="cursor:pointer" onclick="gpCopy($('gpMine').textContent,'Copied.',true)"><p class="gp-acct" id="gpMine"></p></div>
+      </section>
+      <section class="gp-step"><span class="gp-ic" data-gp="bulb"></span>
+        <h4 class="gp-h">Payment reminder</h4>
+        <div class="gp-box"><p class="gp-how" id="gpHow"></p><ul class="gp-steps" id="gpSteps"></ul></div>
+      </section>
+      <button type="button" class="gp-btn" id="gpGet" onclick="gpSend()" style="display:none"><span>Get results</span><span data-gp="swoosh" style="width:16px;height:16px;display:inline-block"></span></button>
     </div>
-    <div class="info-box" id="depStatusMsg" style="background:rgba(40,120,255,.22);color:#d3e6ff">Payment initiated. Check your phone.</div>
-    <div style="padding:0 var(--gut)">
-      <button class="btn btn-primary btn-block" id="depVerifyBtn" onclick="manualVerifyDeposit()">
-        <span class="verify-spin" id="depVerifySpin" style="display:none"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>
-        <span id="depVerifyLabel">Verify Payment</span>
-      </button>
-      <div style="text-align:center;margin-top:14px" id="depCancelRow"><span class="muted" onclick="cancelDepositStatus()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Cancel</span></div>
-      <div style="text-align:center;margin-top:8px;font-size:11.5px" class="muted" id="depStatusAttempt"></div>
-    </div>
+    <div class="gp-fine"></div>
   </div>
 
   <div class="overlay" id="ovWithdraw">
@@ -1522,6 +1652,9 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
 </div>
 
 <div class="toast-bg" id="toastBg"><div class="toast" id="toast"></div></div>
+<div class="gp-toast" id="gpToast" role="status"></div>
+<div class="gp-loading" id="gpLoading" role="status"><i></i><span>Loading...</span></div>
+<div class="gp-done" id="gpDone"><div class="c"><div class="pic" id="gpDonePic"></div><h3 id="gpDoneT"></h3><p id="gpDoneP"></p><button type="button" class="gp-btn" id="gpDoneBtn" onclick="gpFinish()"><span>OK</span></button></div></div>
 
 <script type="module">
   // Smart AI's own sign-in. No Firebase: passwords and sessions live in our

@@ -19,8 +19,8 @@ ok(/referralCodeLower: codeLower/.test(src) && /where\('referralCodeLower', '=='
 ok(/String\(code\)\.toUpperCase\(\)/.test(mod), 'the invite link carries the code in capitals');
 // deposit page (ChocoMCC's: the amount, the network and the number the member pays FROM, which may be a different number from the account's)
 const page = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
-ok(page.indexOf('id="depAmt"') > 0 && page.indexOf('id="depPhone"') > 0 && page.indexOf('id="depNetworkRow"') > 0, 'the Deposit page has the amount box, the network and the number to pay from');
-const sub = mod.slice(mod.indexOf('async function doDeposit'), mod.indexOf('async function doDeposit') + 2500);
-ok(/if \(!\$\('depPhone'\)\.value\.trim\(\)\)/.test(sub) && /localDigits\(\$\('depPhone'\)\.value\)/.test(sub), 'the number to pay from is asked for and checked');
-ok(/phone: '\+256' \+ local/.test(sub) && /network: _depNetwork/.test(sub) && /body\.slot = _depSlot/.test(sub), 'the payment request carries the typed number, the network and the pay button position');
+ok(page.indexOf('id="depAmt"') > 0 && page.indexOf('id="depPhone"') < 0 && page.indexOf('id="depNetworkRow"') < 0 && page.indexOf('id="gpPhone"') > 0 && page.indexOf('id="gpM_MTN"') > 0, 'Add Funds has only the amount box; the network and the number to pay from are asked on payment page 1');
+const sub = mod.slice(mod.indexOf('async function gpConfirm'), mod.indexOf('async function gpConfirm') + 1500);
+ok(/\$\('gpPhone'\)\.value\.trim\(\)/.test(sub) && /localDigits\(raw\)/.test(sub), 'the number to pay from is asked for and checked');
+ok(/phone: '\+256' \+ local/.test(sub) && /network: _gp\.network/.test(sub) && /\/deposit\/manual\/order/.test(sub), 'the payment request carries the typed number and the network to the order route');
 console.log('PASS: referral code format and deposit phone box (' + n + ' checks)');

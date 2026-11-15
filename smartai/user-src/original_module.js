@@ -582,7 +582,6 @@ function overlayTask(name){
   else if (name === 'bindbank') again = renderBankList;
   else if (name === 'withdraw') again = renderWitBankBox;
   else if (name === 'support' || name === 'rules') return liveConfig(15000).then(function(){ if (STATE && epoch === _authEpoch) renderStaticPages(); });
-  else if (name === 'deposit') again = refreshDepositSlot;
   if (!again) return null;
   return liveData(8000).then(function(){ if (STATE && epoch === _authEpoch && _ovName === name) again(); });
 }
@@ -848,7 +847,7 @@ async function logout(opts){
     STATE = null; _appEntered = false;
     clearCachedState();
     _recordsLoaded = { accrued: true, topups: false, cashouts: false }; _recordsFailed = { topups: false, cashouts: false }; _dataFailed = {};
-    stopActivityFeed(); stopAccountPoll(); stopDepositPoll();
+    stopActivityFeed(); stopAccountPoll(); gpLeave();
     closeOverlay(); closeAllSheets();
     $('app').style.display = 'none';
     $('authScreen').style.display = 'flex';
@@ -879,7 +878,7 @@ function enterApp(){
   startAccountPoll();
   updateDownloadTileVisibility();
   syncArtwork();
-  refreshDepositSlot();
+  setTimeout(gpResume, 1200);   // an unfinished payment order comes back (same order, same clock)
   hideLoadingScreen();
   maybeShowAnnouncement();
 }
@@ -1086,7 +1085,7 @@ function makeParticleField(cv, opt){
     at: function(t){ draw(t); }     // draws one picture at time t (seconds); used by the tests
   };
 }
-var _annField = null, _payField = null, _scrollLocked = false, _lockY = 0;
+var _annField = null, _scrollLocked = false, _lockY = 0;
 // While any popup is open the page behind it cannot be scrolled (the body is pinned where it was and put back when the last popup closes).
 function syncScrollLock(){
   var open = !!document.querySelector('.modal-bg.show');
@@ -1884,6 +1883,7 @@ function openOverlay(name){
   navVeil(true, rt || overlayTask(name));
 }
 function closeOverlay(){
+  if (_gpActive) gpLeave();
   if (!_ovOpen) { hideOverlays(); return; }
   _ovOpen = false;
   navVeil(false);
@@ -1892,6 +1892,7 @@ function closeOverlay(){
   try { if (history.state && history.state.ov) history.back(); } catch (e) {}
 }
 window.addEventListener('popstate', function(){
+  if (_gpActive) gpLeave();
   if (document.querySelector('.modal-bg.show:not(#giftRevealBg)')) closeAllSheets();
   if (_ovOpen) { _ovOpen = false; navVeil(false); hideOverlays(); if (_lastTab === 'account') countMyBalances(); }
 });
@@ -1998,17 +1999,7 @@ async function buyProduct(btn, key){
   }
 }
 
-/* ====================== DEPOSIT ====================== */
-var _depNetwork = null, _depSlot = null;
-// Which pay button is used is NOT fixed: the server hands them out in turn (one counter for every member and visit), so over time every method is used
-// equally. The answer is asked for ahead of time and kept for the NEXT deposit, so opening the page never waits for it.
-function refreshDepositSlot(){
-  api('/deposit/start').then(function(r){ if (r && r.status === 'success' && typeof r.start === 'number') _depSlot = r.start; }).catch(function(){});
-}
-function selectDepNetwork(name){
-  _depNetwork = name;
-  document.querySelectorAll('#depNetworkRow .net-card').forEach(function(b){ b.classList.toggle('active', b.dataset.net === name); });
-}
+/* ====================== DEPOSIT (Add Funds asks only the amount; the payment pages below do the rest) ====================== */
 // Quick amounts: the minimum, then the prices of the robots (the usual first deposits), kept to six.
 function renderQuickAmounts(){
   var min = Number(getSettings().minDeposit) || 0;
@@ -2019,63 +2010,12 @@ function renderQuickAmounts(){
   $('quickAmts').innerHTML = out.slice(0, 6).map(function(n){ return '<button type="button" class="quick-amt-chip" data-amt="' + n + '" onclick="$(\'depAmt\').value=this.dataset.amt">' + ugx(n) + '</button>'; }).join('');
 }
 function prepareDeposit(){
-  // The number paying is one the member types himself every time: a deposit can come from a different number than the one the account was made with.
-  $('depPhone').value = '';
-  _depNetwork = null;
-  document.querySelectorAll('#depNetworkRow .net-card').forEach(function(b){ b.classList.remove('active'); });
-  var min = getSettings().minDeposit;
-  $('depMin').textContent = ugx(min);
+  $('depMin').textContent = ugx(getSettings().minDeposit);
   renderQuickAmounts();
-  refreshDepositSlot();
 }
 // Money amount boxes cannot be left to type() alone: a number input has no real upper bound, and a 20-digit figure would overflow every sum below.
 function capAmountInput(el){ if (el.value.length > 10) el.value = el.value.slice(0, 10); }
-async function doDeposit(){
-  var amt = parseInt($('depAmt').value, 10);
-  var sett = getSettings();
-  if (!amt || amt < sett.minDeposit) { toast('Minimum amount is ' + ugx(sett.minDeposit)); return; }
-  if (!_depNetwork) { toast('Choose MTN or Airtel'); return; }
-  var local = localDigits($('depPhone').value);
-  if (!$('depPhone').value.trim()) { toast('Enter the mobile-money number to pay from'); return; }
-  if (!local) { toast('Enter a valid Uganda mobile number (07XXXXXXXX)'); return; }
-  var btn = $('depGoBtn'), label = btn.textContent;
-  if (btn.disabled) return;
-  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
-  var body = { amount: amt, phone: '+256' + local, network: _depNetwork };
-  if (typeof _depSlot === 'number') body.slot = _depSlot;
-  var r = await api('/deposit/marzpay', body);
-  btn.disabled = false; btn.textContent = label;
-  if (r.stale) return;
-  if (r.status !== 'success') { toast(r.message || 'Could not start the payment'); return; }
-  $('depAmt').value = '';
-  refreshDepositSlot();   // the next deposit uses the next method in turn
-  openDepositStatus(r.depositId, r.reference, '0' + local);
-}
 
-/* ====================== THE PAYMENT PAGE LOADER ======================
-   While a payment is being checked the page shows the app's own dotted loader (the same dots as every page loader; animTick() moves it) in bright blue, big, over the full-page
-   particle field. The field stops when the page is left. */
-function showPayLoader(){
-  var ic = $('depStatusIc'); if (!ic) return;
-  ic.className = 'pay-status-ic dots';
-  ic.innerHTML = dlMarkup();
-  ic.setAttribute('role', 'img'); ic.setAttribute('aria-label', 'Checking your payment');
-  if (!_payField) _payField = makeParticleField($('payFx'), { horizon: 0.12, dim: 0.55, alive: function(){ var o = $('ovDepositStatus'); return !!(o && o.classList.contains('show')); } });
-  _payField.start();
-}
-function releasePayLoader(){ if (_payField) _payField.stop(); }
-
-/* ====================== DEPOSIT STATUS (checks the payment by itself) ====================== */
-// The first check comes 1 s after the page opens, then every 1.5 s (PesaJet's own SDK cadence); the server holds an automatic check for up to DEP_HOLD_MS while its own watcher is
-// on the payment, so a settled payment shows at once. The Verify button never waits behind a held request. After DEP_POLL_MAX checks the page says so (Verify still works).
-var DEP_POLL_FIRST_MS = 1000;
-var DEP_POLL_EVERY_MS = 1500;
-var DEP_POLL_MAX = 120;
-var DEP_HOLD_MS = 8000;
-function depositStatusHold(depositId){ return api('/deposit/marzpay/status', { depositId: depositId, waitMs: DEP_HOLD_MS }); }
-function depositStatusCheck(depositId){ return api('/deposit/marzpay/status', { depositId: depositId }); }
-var _depPollTimer = null, _depFirstTimer = null, _depPollAttempt = 0, _depPollId = null, _depConfirmed = false, _depPollChecking = false;
-/* The picture shown while a payment is being checked is the app's dotted loader (see THE PAYMENT PAGE LOADER); the tick shows once it is paid. */
 // The success tick and the failed cross (the owner's recordings, redrawn): a disc grows, a faint halo follows, the mark is drawn in.
 // Disc radius 182, halo 300 (x1.65); check stroke 0.163 of the disc, X stroke 0.145; times measured at 60 pictures a second.
 function tickHtml(){
@@ -2084,110 +2024,254 @@ function tickHtml(){
 function crossHtml(){
   return '<svg viewBox="-310 -310 620 620" aria-hidden="true"><circle class="an-pop no-halo" r="303" fill="rgba(254,30,61,.15)"/><circle class="an-pop no-disc" r="187" fill="#fe1e3d"/><path class="no-x" d="M-51 -51L51 51M51 -51L-51 51" fill="none" stroke="#111" stroke-width="27" stroke-linecap="round"/></svg>';
 }
-var _depIcSuccess = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
-function stopDepositPoll(){ clearInterval(_depPollTimer); clearTimeout(_depFirstTimer); _depPollTimer = null; _depFirstTimer = null; _depPollId = null; }
-function openDepositStatus(depositId, reference, phone){
-  _depPollId = depositId; _depPollAttempt = 0; _depConfirmed = false;
-  showPayLoader();
-  $('depStatusTitle').textContent = 'Payment Initiated Successfully!';
-  $('depStatusPhone').textContent = 'You will receive a payment prompt on ' + phone + ' shortly.';
-  $('depStatusSteps').style.display = '';
-  $('depStatusRef').textContent = reference;
-  setDepStatusMsg('pending', 'Payment initiated. Check your phone.');
-  $('depStatusAttempt').textContent = '';
-  $('depCancelRow').style.display = '';
-  $('depVerifyBtn').onclick = manualVerifyDeposit;
-  setVerifySpinning(false);
-  openOverlay('depositStatus');
-  clearInterval(_depPollTimer); clearTimeout(_depFirstTimer);
-  _depFirstTimer = setTimeout(pollDepositStatus, DEP_POLL_FIRST_MS);
-  _depPollTimer = setInterval(pollDepositStatus, DEP_POLL_EVERY_MS);
-}
-function showDepositSuccess(){
-  _depConfirmed = true;
-  $('depStatusIc').removeAttribute('role'); $('depStatusIc').removeAttribute('aria-label');
-  $('depStatusIc').className = 'pay-status-ic anim';
-  $('depStatusIc').innerHTML = customIcon('tick') ? '<img src="' + esc(customIcon('tick')) + '" alt="" style="width:100%;height:100%;object-fit:contain">' : tickHtml();
-  $('depStatusTitle').textContent = 'Payment Successful!';
-  $('depStatusPhone').textContent = 'Your wallet has been credited.';
-  $('depStatusSteps').style.display = 'none';
-  $('depStatusAttempt').textContent = '';
-  $('depCancelRow').style.display = 'none';
-  $('depVerifyLabel').textContent = 'Continue to Dashboard';
-  var btn = $('depVerifyBtn');
-  btn.disabled = false;
-  btn.onclick = function(){ closeOverlay(); switchTab('home'); renderAll(); };
-}
-function showDepositFailed(){
-  $('depStatusIc').removeAttribute('role'); $('depStatusIc').removeAttribute('aria-label');
-  $('depStatusIc').className = 'pay-status-ic anim';
-  $('depStatusIc').innerHTML = customIcon('cross') ? '<img src="' + esc(customIcon('cross')) + '" alt="" style="width:100%;height:100%;object-fit:contain">' : crossHtml();
-  $('depStatusTitle').textContent = 'Payment Not Completed';
-  $('depStatusSteps').style.display = 'none';
-}
-function setDepStatusMsg(kind, text){
-  var el = $('depStatusMsg');
-  el.textContent = text;
-  el.style.background = kind === 'matched' ? 'rgba(46,204,113,.2)' : kind === 'failed' ? 'rgba(255,90,110,.2)' : 'rgba(40,120,255,.22)';
-  el.style.color = kind === 'matched' ? '#8dffbd' : kind === 'failed' ? '#ffa3b0' : '#d3e6ff';
-}
-function setVerifySpinning(on){
-  var spin = $('depVerifySpin'), label = $('depVerifyLabel');
-  if (spin) spin.style.display = on ? 'inline-flex' : 'none';
-  if (label && !_depConfirmed) label.textContent = on ? 'Verifying…' : 'Verify Payment';
-}
-// _depPollChecking stops the automatic check and a tap on Verify Payment from running at the same instant. (Crediting is idempotent on the server either
-// way; this only avoids two answers landing back to back and flickering the message.)
-async function pollDepositStatus(manual){
-  if (!_depPollId || _depPollChecking) return;
-  _depPollChecking = true;
-  var btn = $('depVerifyBtn');
-  if (btn) btn.disabled = true;
-  setVerifySpinning(true);
-  try {
-    _depPollAttempt++;
-    var attEl = $('depStatusAttempt');
-    if (attEl) attEl.textContent = 'Auto-verifying… (attempt ' + _depPollAttempt + '/' + DEP_POLL_MAX + ')';
-    var r = await (manual === true ? depositStatusCheck(_depPollId) : depositStatusHold(_depPollId));
-    if (r.stale || !STATE) return;
-    if (r.status === 'success') {
-      if (r.state === 'matched') {
-        clearInterval(_depPollTimer); _depPollTimer = null;
-        setDepStatusMsg('matched', 'Payment confirmed. Funds added to your wallet.');
-        showDepositSuccess();
-        if (manual === true) toast('Successful. Funds added to your wallet');
-        await refreshFromServer(); renderAll();
-        return;
-      }
-      if (r.state === 'failed') {
-        clearInterval(_depPollTimer); _depPollTimer = null;
-        setDepStatusMsg('failed', r.message || 'Payment was not completed.');
-        showDepositFailed();
-        if (manual === true) toast('Declined: ' + (r.message || 'payment was not completed'));
-        return;
-      }
-      if (manual === true) toast('Still pending, check your phone for the prompt');
-    } else if (manual === true) {
-      toast(r.message || 'Could not check the payment status right now');
-    }
-    if (_depPollAttempt >= DEP_POLL_MAX) {
-      clearInterval(_depPollTimer); _depPollTimer = null;
-      setDepStatusMsg('failed', "We couldn't confirm this payment automatically. Tap Verify Payment or contact support.");
-    }
-  } finally {
-    _depPollChecking = false;
-    var b2 = $('depVerifyBtn'); if (b2) b2.disabled = false;
-    setVerifySpinning(false);
-  }
-}
-function manualVerifyDeposit(){ pollDepositStatus(true); }
-function cancelDepositStatus(){ stopDepositPoll(); releasePayLoader(); closeOverlay(); if (STATE) renderAll(); }
-function copyDepositRef(){ copyText($('depStatusRef').textContent, 'Reference copied'); }
 // The clipboard may be missing (an old browser, an insecure address): say so instead of claiming it worked.
 function copyText(text, okMsg){
   if (!text) return;
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function(){ toast(okMsg || 'Copied'); }).catch(function(){ toast('Could not copy'); });
   else toast('Could not copy');
+}
+
+/* ====================== PAYMENT PAGES (two steps, the admin's own MTN / Airtel numbers) ======================
+   Add Funds only asks the amount. Continue opens page 1 (pick MTN or Airtel, type the number the payment is made from); Confirm asks the server for a NEW order
+   (/deposit/manual/order: one of the admin's numbers of that network, 15 minutes, a new reference every time) and page 2 shows the account to pay, the clock, the
+   Refresh check, the SMS / transaction ID box and the how-to. Coming back to the app with an unfinished order shows page 2 again with the SAME order and clock
+   (resume). Nothing here credits a wallet: the admin approves the claim (Deposits -> Needs Review) and the page then shows the amount paid. */
+var _gp = { amount: 0, network: '', order: null, skew: 0, expMs: 0, timer: null, poll: null, busy: false, needId: false, submitted: false, finished: false };
+var _gpActive = false, _gpToastT = null, _gpLoadN = 0, _gpDigits = '';
+var GP_KEY = 'smartai_gp_resume';
+var GP_ORDER_MS = 15 * 60 * 1000;
+var GP_ICONS = {
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
+  warn: '<svg viewBox="0 0 24 24" fill="none" stroke="#e25453" stroke-width="3.2" stroke-linecap="round"><path d="M12 6v8M12 18.2v.1"/></svg>',
+  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  chev: '<svg viewBox="0 0 24 24" fill="none" stroke="#ffe3bd" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
+  card: '<svg viewBox="0 0 24 24" fill="#728395"><path d="M4.2 4.5h15.6A2.2 2.2 0 0122 6.7V8H2V6.7A2.2 2.2 0 014.2 4.5zM2 10h20v7.3a2.2 2.2 0 01-2.2 2.2H4.2A2.2 2.2 0 012 17.3zm13.2 4.4a1 1 0 000 2h2.6a1 1 0 000-2z"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="#728395" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 01-14.2 5M4 12a8 8 0 0114.2-5"/><path d="M19 3v4.4h-4.4M5 21v-4.4h4.4"/></svg>',
+  person: '<svg viewBox="0 0 24 24" fill="#728395"><path d="M4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2zm4.6 3.2a2.3 2.3 0 100 4.6 2.3 2.3 0 000-4.6zM4.4 16.6h8.4c0-1.7-1.9-2.8-4.2-2.8s-4.2 1.1-4.2 2.8zM14.4 9h5v1.5h-5zm0 3h5v1.5h-5z" fill-rule="evenodd"/></svg>',
+  bulb: '<svg viewBox="0 0 24 24" fill="#728395"><path d="M12 2.5a6.4 6.4 0 00-3.7 11.6c.6.5.9 1.1.9 1.8v.6h5.6v-.6c0-.7.3-1.3.9-1.8A6.4 6.4 0 0012 2.5zM9.4 18.6h5.2v1.2a1.2 1.2 0 01-1.2 1.2h-2.8a1.2 1.2 0 01-1.2-1.2z"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="#6f675a" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="8.2" y="8.2" width="12.3" height="12.3" rx="2.6" fill="#f5f5f5"/><path d="M15.6 12.4v5.4M12.9 15.1h5.4"/><path d="M15.2 5.6V5a2.2 2.2 0 00-2.2-2.2H5A2.2 2.2 0 002.8 5v8A2.2 2.2 0 005 15.2h.6"/></svg>',
+  swoosh: '<svg viewBox="0 0 24 24" fill="none" stroke="#f7ead2" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17L17 7M9.5 7H17v7.5"/></svg>'
+};
+function gpHeadArt(){
+  // The flowing lines of the header (measured on the owner's screenshot): three wide swooping curves and a band of fine wavy lines in the lower half.
+  var s = '', i;
+  s += '<path d="M-30 150C70 24 190 4 300 56S420 120 450 96" fill="none" stroke="rgba(196,176,138,.17)" stroke-width="1.3"/>';
+  s += '<path d="M-30 168C90 40 210 18 320 70S430 130 460 110" fill="none" stroke="rgba(196,176,138,.12)" stroke-width="1"/>';
+  s += '<path d="M120 -10C170 40 250 52 330 20S430 -6 450 8" fill="none" stroke="rgba(196,176,138,.1)" stroke-width="1"/>';
+  for (i = 0; i < 30; i++) {
+    var y = 84 + i * 3.1, a = 12 + (i % 6) * 2.3;
+    s += '<path d="M-20 ' + (y + a).toFixed(1) + 'C90 ' + (y - a * 1.6).toFixed(1) + ' 210 ' + (y + a * 1.4).toFixed(1) + ' 300 ' + (y - a * 0.4).toFixed(1) + 'S410 ' + (y + a * 0.6).toFixed(1) + ' 440 ' + (y - a * 0.8).toFixed(1) + '" fill="none" stroke="rgba(255,255,255,' + (0.045 + (i % 3) * 0.018).toFixed(3) + ')" stroke-width=".7"/>';
+  }
+  document.querySelectorAll('[data-gp]').forEach(function(n){ if (!n.firstChild && GP_ICONS[n.dataset.gp]) n.innerHTML = GP_ICONS[n.dataset.gp]; });
+  var el = $('gpArt');
+  if (el && !el.firstChild) { el.setAttribute('viewBox', '0 0 411 166'); el.setAttribute('preserveAspectRatio', 'none'); el.innerHTML = s; }
+}
+function gpNow(){ return Date.now() + (_gp.skew || 0); }
+/* ---- notices ---- */
+function gpToast(msg, pill){
+  var el = $('gpToast'); if (!el) return;
+  el.textContent = msg; el.className = 'gp-toast' + (pill ? ' pill' : '');
+  void el.offsetWidth; el.classList.add('show');
+  clearTimeout(_gpToastT); _gpToastT = setTimeout(function(){ el.classList.remove('show'); }, pill ? 1500 : 2300);
+}
+function gpLoading(on){
+  _gpLoadN = Math.max(0, _gpLoadN + (on ? 1 : -1));
+  var el = $('gpLoading'); if (el) el.classList.toggle('show', _gpLoadN > 0);
+}
+function gpCopyFallback(text){
+  try {
+    var t = document.createElement('textarea');
+    t.value = text; t.setAttribute('readonly', ''); t.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px';
+    document.body.appendChild(t); t.select(); t.setSelectionRange(0, t.value.length);
+    var ok = document.execCommand('copy'); document.body.removeChild(t); return !!ok;
+  } catch (e) { return false; }
+}
+// The clipboard API only exists on a secure address; the older way still works on the preview address, so both are tried.
+function gpCopy(text, msg, pill){
+  text = String(text || ''); if (!text) return;
+  var ok = function(){ gpToast(msg || 'Copied.', pill); };
+  var bad = function(){ if (gpCopyFallback(text)) ok(); else gpToast('Could not copy'); };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(ok, bad); else bad();
+}
+function gpCopyId(id){ var el = $(id); if (el) gpCopy(el.textContent, 'Successful replication'); }
+/* ---- showing a page ---- */
+function gpShow(id){
+  hideOverlays();
+  var el = $(id); if (!el) return;
+  el.scrollTop = 0; el.classList.add('show');
+  try { if (_ovOpen) history.replaceState({ ov: id }, ''); else history.pushState({ ov: id }, ''); } catch (e) {}
+  _ovOpen = true; _ovName = id; _gpActive = true;
+}
+// Leaving the pages for any reason (phone Back, sign-out, a finished order): the clock and the check stop; the order stays open on the server for a resume.
+function gpLeave(){
+  _gpActive = false;
+  clearInterval(_gp.timer); clearInterval(_gp.poll); _gp.timer = null; _gp.poll = null; _gp.busy = false;
+  var d = $('gpDone'); if (d) d.classList.remove('show');
+  _gpLoadN = 0; var l = $('gpLoading'); if (l) l.classList.remove('show');
+}
+function gpFinish(){
+  gpLeave();
+  if (_ovOpen) closeOverlay();
+  if (STATE) { refreshFromServer().then(function(){ if (STATE) renderAll(); }).catch(function(){}); }
+}
+/* ---- Add Funds -> page 1 ---- */
+function continueDeposit(){
+  var amt = parseInt($('depAmt').value, 10), sett = getSettings();
+  if (!amt || amt < sett.minDeposit) { toast('Minimum amount is ' + ugx(sett.minDeposit)); return; }
+  if (sett.depositAvailable === false) { toast('Recharges are not available right now'); return; }
+  gpOpenPick(amt);
+}
+function gpOpenPick(amt){
+  _gp.amount = amt; _gp.network = ''; _gp.busy = false;
+  $('gpAmt1').textContent = String(amt);
+  $('gpPhone').value = '';
+  ['MTN', 'Airtel'].forEach(function(n){ var b = $('gpM_' + n); if (b) { b.classList.remove('on'); b.style.opacity = ''; b.dataset.off = ''; } });
+  $('gpConfirm').disabled = false;
+  gpShow('ovGpPick');
+  // Which networks the admin has a number for (a network with none is greyed and says so when tapped).
+  api('/public/pay-channels').then(function(r){
+    if (!r || r.status !== 'success' || !Array.isArray(r.networks)) return;
+    ['MTN', 'Airtel'].forEach(function(n){ var b = $('gpM_' + n); if (b && r.networks.indexOf(n) < 0) { b.style.opacity = '.4'; b.dataset.off = '1'; } });
+  }).catch(function(){});
+}
+function gpPickNet(n){
+  var b = $('gpM_' + n);
+  if (b && b.dataset.off === '1') { gpToast(n + ' is not available right now'); return; }
+  _gp.network = n;
+  ['MTN', 'Airtel'].forEach(function(x){ var e = $('gpM_' + x); if (e) e.classList.toggle('on', x === n); });
+}
+async function gpConfirm(){
+  if (_gp.busy) return;
+  if (!_gp.network) { gpToast('Please select a payment method'); return; }
+  var raw = $('gpPhone').value.trim();
+  if (!raw) { gpToast('Please enter payment account number'); return; }
+  var local = localDigits(raw);
+  if (!local) { gpToast('The mobile phone number format is incorrect'); return; }
+  _gp.busy = true; $('gpConfirm').disabled = true; gpLoading(true);
+  var r = await api('/deposit/manual/order', { amount: _gp.amount, network: _gp.network, phone: '+256' + local });
+  gpLoading(false); _gp.busy = false; $('gpConfirm').disabled = false;
+  if (r.stale || !_gpActive) return;
+  if (r.status !== 'success') { gpToast(r.message || 'Could not start the payment'); return; }
+  $('depAmt').value = '';
+  gpSave(r);
+  gpOpenPay(r);
+}
+/* ---- page 2 ---- */
+function gpOpenPay(o){
+  _gp.order = o; _gp.amount = Number(o.amount) || 0; _gp.network = o.network;
+  _gp.skew = (Number(o.serverNow) || Date.now()) - Date.now(); _gp.expMs = Number(o.expiresAt) || (gpNow() + GP_ORDER_MS);
+  _gp.needId = false; _gp.submitted = false; _gp.finished = false; _gp.busy = false;
+  var net = String(o.network || 'MTN'), NET = net.toUpperCase(), amt = String(Math.round(_gp.amount));
+  gpHeadArt();
+  $('gpNetName').textContent = NET;
+  $('gpAcctLab').textContent = NET + ' Account:';
+  $('gpAmt2').textContent = amt;
+  $('gpAcct').textContent = o.accountNumber || '';
+  $('gpName').textContent = o.accountName || '';
+  $('gpMine').textContent = o.payerPhone || '';
+  $('gpHow').innerHTML = 'How to transfer using （<b>' + esc(NET) + ' to ' + esc(NET) + '</b>）';
+  var acct = esc(o.accountNumber || ''), steps = net === 'Airtel'
+    ? ['1: Dial <b>*185#</b>', '2: Select <b>1</b> Send money', '3: Select <b>1</b> Airtel Number', '4: Enter Airtel Number <b>' + acct + '</b>', '5: Enter Reason', '6: Enter Amount <b>' + amt + '</b>', '7: Enter your <b>PIN</b> code']
+    : ['1: Dial <b>*165#</b>', '2: Select <b>1</b> Send Money', '3: Select <b>1</b> Mobile User', '4: Enter number <b>' + acct + '</b>', '5: Enter Amount <b>' + amt + '</b>', '6: Enter Reason', '7: Enter your <b>PIN</b> code'];
+  $('gpSteps').innerHTML = steps.map(function(t, i){ return '<li' + (i === 1 ? ' class="gap"' : '') + '>' + t + '</li>'; }).join('');
+  var paid = $('gpPaid'); paid.className = 'gp-paidv'; $('gpPaidN').textContent = '0';
+  $('gpSms').value = ''; $('gpSms').readOnly = false; $('gpId').value = '';
+  $('gpFaster').style.display = ''; $('gpIdRow').style.display = 'none'; $('gpLose').style.display = ''; $('gpSubmit').style.display = ''; $('gpGet').style.display = 'none';
+  $('gpFaster').classList.remove('sent'); $('gpSentMsg').style.display = 'none';
+  $('gpDone').classList.remove('show');
+  gpShow('ovGpPay');
+  gpTick();
+  clearInterval(_gp.timer); clearInterval(_gp.poll);
+  _gp.timer = setInterval(gpTick, 250);
+  _gp.poll = setInterval(function(){ if (!document.hidden) gpCheck(false); }, 7000);
+}
+function gpTick(){
+  var rem = _gp.expMs - gpNow(); if (rem < 0) rem = 0;
+  var s = Math.floor(rem / 1000), hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
+  var txt = (hh < 10 ? '0' : '') + hh + (mm < 10 ? '0' : '') + mm + (ss < 10 ? '0' : '') + ss;
+  if (txt !== _gpDigits) {
+    _gpDigits = txt;
+    var el = $('gpTimer'), cells = el ? el.querySelectorAll('i') : [];
+    for (var i = 0; i < cells.length && i < 6; i++) cells[i].textContent = txt.charAt(i);
+    if (el) el.classList.toggle('low', rem > 0 && rem < 120000);
+  }
+  if (rem <= 0 && !_gp.submitted && !_gp.finished) gpExpired();
+}
+function gpExpired(){
+  _gp.finished = true; clearInterval(_gp.timer); clearInterval(_gp.poll); gpClearResume();
+  gpDialog('cross', 'Order expired', 'This payment order has run out of time. If you already paid, contact customer service with your transaction ID; otherwise start a new recharge.');
+}
+function gpDialog(kind, title, text){
+  var pic = kind === 'tick' ? (customIcon('tick') ? '<img src="' + esc(customIcon('tick')) + '" alt="">' : tickHtml()) : (customIcon('cross') ? '<img src="' + esc(customIcon('cross')) + '" alt="">' : crossHtml());
+  $('gpDonePic').innerHTML = pic; $('gpDoneT').textContent = title; $('gpDoneP').textContent = text;
+  $('gpDone').classList.add('show');
+}
+/* ---- Refresh: where is this order now? ---- */
+async function gpCheck(manual){
+  if (!_gp.order || _gp.finished || _gp.busy) return;
+  if (manual) { _gp.busy = true; $('gpRefresh').disabled = true; gpLoading(true); }
+  var r;
+  try { r = await api('/deposit/manual/status', { depositId: _gp.order.depositId }); }
+  finally { if (manual) { gpLoading(false); _gp.busy = false; $('gpRefresh').disabled = false; } }
+  if (!r || r.stale || !_gpActive || !_gp.order || _gp.finished) return;
+  if (r.status !== 'success') { if (manual) gpToast(r.message || 'Could not check the payment right now'); return; }
+  if (r.state === 'matched') {
+    _gp.finished = true; clearInterval(_gp.timer); clearInterval(_gp.poll); gpClearResume();
+    $('gpPaidN').textContent = String(Math.round(r.amountPaid || _gp.amount)); $('gpPaid').classList.add('ok');
+    setTimeout(function(){ gpDialog('tick', 'Payment Successful!', 'Your wallet has been credited.'); }, 650);
+    return;
+  }
+  if (r.state === 'failed') {
+    _gp.finished = true; clearInterval(_gp.timer); clearInterval(_gp.poll); gpClearResume();
+    gpDialog('cross', 'Payment Not Completed', r.message || 'This payment was not completed.');
+    return;
+  }
+  if (r.state === 'review') { if (!_gp.submitted) gpSent(false); if (manual) gpToast('Your payment is being checked'); return; }
+  if (r.state === 'expired' && !_gp.submitted) { gpExpired(); return; }
+  if (manual) gpToast('Payment not received yet. Please try again shortly.');
+}
+function gpRefresh(){ gpCheck(true); }
+/* ---- the SMS / transaction ID ---- */
+function gpSent(withToast){
+  _gp.submitted = true; gpClearResume();
+  $('gpSms').readOnly = true; $('gpIdRow').style.display = 'none'; $('gpLose').style.display = 'none'; $('gpSubmit').style.display = 'none'; $('gpGet').style.display = 'none';
+  $('gpFaster').classList.add('sent'); $('gpSentMsg').style.display = '';
+  if (withToast) gpToast('Submitted. Our team is checking your payment.');
+}
+function gpNeedId(){
+  _gp.needId = true;
+  $('gpIdRow').style.display = ''; $('gpLose').style.display = 'none'; $('gpSubmit').style.display = 'none'; $('gpGet').style.display = '';
+}
+async function gpSend(){
+  if (!_gp.order || _gp.busy || _gp.finished) return;
+  var sms = $('gpSms').value.trim(), txn = _gp.needId ? $('gpId').value.trim() : '';
+  if (!_gp.needId && !sms) { gpToast('Please enter payment SMS'); return; }
+  if (_gp.needId && !txn) { gpToast('Please enter the transaction ID'); return; }
+  _gp.busy = true; gpLoading(true);
+  var r;
+  try { r = await api('/deposit/manual/submit', { depositId: _gp.order.depositId, sms: sms, txnId: txn }); }
+  finally { gpLoading(false); _gp.busy = false; }
+  if (!r || r.stale || !_gpActive) return;
+  if (r.status === 'success') { gpSent(true); return; }
+  if (r.code === 'NEED_TXN_ID' && !_gp.needId) { gpNeedId(); return; }
+  gpToast(r.message || 'Could not submit. Please try again');
+}
+/* ---- coming back to an unfinished order ---- */
+function gpSave(o){
+  if (!STATE || !o) return;
+  try { localStorage.setItem(GP_KEY, JSON.stringify({ uid: STATE.uid, depositId: o.depositId, amount: o.amount, network: o.network, phone: o.payerPhone, at: Date.now() })); } catch (e) {}
+}
+function gpClearResume(){ try { localStorage.removeItem(GP_KEY); } catch (e) {} }
+async function gpResume(){
+  if (!STATE || _ovOpen) return;
+  var st = null;
+  try { st = JSON.parse(localStorage.getItem(GP_KEY) || 'null'); } catch (e) {}
+  if (!st) return;
+  if (st.uid !== STATE.uid || Date.now() - st.at > GP_ORDER_MS + 120000) { if (st.uid === STATE.uid) gpClearResume(); return; }
+  var r = await api('/deposit/manual/order', { amount: st.amount, network: st.network, phone: st.phone, depositId: st.depositId, resume: true });
+  if (!r || r.stale || !STATE) return;
+  if (r.status === 'success') { if (!_ovOpen) gpOpenPay(r); return; }
+  if (r.code === 'ORDER_GONE') gpClearResume();
 }
 
 /* ====================== CASH OUT ====================== */

@@ -569,20 +569,7 @@ async function finish() {
     ck(iLedger > iResp,
        'but the Records ledger row is NOT -- it no longer sits in front of the redirect');
   }
-  // 4. The client poll: the first check used to be a flat 3s after the screen
-  //    opened, which is the whole of "it is slow" for a member who approved
-  //    the prompt at once.
-  {
-    const first = num(app, /var DEP_POLL_FIRST_MS = (\d+);/, 'DEP_POLL_FIRST_MS');
-    const every = num(app, /var DEP_POLL_EVERY_MS = (\d+);/, 'DEP_POLL_EVERY_MS');
-    ck(first <= 1500, `the first status check is ${first}ms after the screen opens`);
-    ck(every <= 2500, `and later ones every ${every}ms, PesaJet's own SDK cadence`);
-    // The loop gives up after DEP_POLL_MAX attempts (the page shows "attempt N/120"), each at least `every` ms apart.
-    const budget = num(app, /var DEP_POLL_MAX = (\d+);/, 'DEP_POLL_MAX') * every;
-    ck(budget >= 55000,
-       `and the giving-up budget is still about a minute (${Math.round(budget / 1000)}s) -- ` +
-       'faster polling must not mean giving up on a payment sooner');
-  }
+  // 4. (the client poll of a gateway deposit went with the old payment status page: the member app now uses the admin's own numbers, see test-manual-pay.js)
   // 5. Retrying a create must not raise a second prompt. Their REST example
   //    puts the key in the BODY and their SDK puts it in a HEADER; which one
   //    is honoured is documented nowhere, and guessing wrong costs a

@@ -327,7 +327,7 @@ window.createSmartAIIdleSession = function(key, onExpire, onActivity){
         <button class="tab active" data-tab="dashboard">Dashboard</button>
         <button class="tab" data-tab="analytics">Analytics</button>
         <button class="tab" data-tab="users">Users</button>
-        <button class="tab" data-tab="deposits">Deposits</button>
+        <button class="tab" data-tab="deposits">Deposits <span class="badge-n hidden" id="dBadge"></span></button>
         <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
         <button class="tab" data-tab="products" id="productsTab">Products</button>
         <button class="tab" data-tab="promocodes" id="promocodesTab">Gift Codes</button>
@@ -335,6 +335,7 @@ window.createSmartAIIdleSession = function(key, onExpire, onActivity){
         <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="settings" id="settingsTab">Settings</button>
         <button class="tab" data-tab="banners" id="bannersTab">Banners</button>
+        <button class="tab hidden" data-tab="paynumbers" id="payNumbersTab">Payment Numbers</button>
         <button class="tab hidden" data-tab="admins" id="adminsTab">Admins</button>
         <button class="tab hidden" data-tab="auditlog" id="auditLogTab">Activity Log</button>
       </div>
@@ -665,8 +666,8 @@ function smartaiCutout(src, w, h){
 }
 // The icon slots (same names as SMARTAI_ICON_SLOTS in server.js). Add a name here AND in server.js to get a new upload box.
 // Slots that already have a built-in blue picture in the app (user/icons/); an upload here replaces it, Remove brings it back.
-const SMARTAI_ICON_BUILTIN = ['home', 'robots', 'income', 'share', 'teamnav', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout', 'level1', 'level2', 'level3', 'loader', 'giftbox', 'giftopen', 'tick', 'cross'];
-const SMARTAI_ICON_LABELS = { home:'Home tab', robots:'AI Robots tab, My AI robots and the robot picture', income:'Rewards tab', share:'Share tab and Share page picture', teamnav:'Team tab and Team page picture', my:'Me tab', deposit:'Add Funds button (Home)', withdraw:'Cash Out button (Home) and the Cash Outs figure', gift:'Rewards Hub button, gift code and the reward reveal', support:'Support button (Home and Me)', ledger:'Ledger (Me)', team:'My Team (Me)', payout:'Payout Account (Me)', security:'Security (Me)', about:'About Us (Me)', rules:'Terms & Rules (Me)', download:'Download App (Me)', signout:'Sign Out (Me)', level1:'Level 1 medal (Team page)', level2:'Level 2 medal (Team page)', level3:'Level 3 medal (Team page)', loader:'Page loader (the dots)', giftbox:'Gift box (Rewards page)', giftopen:'Opened gift with coins (when a code is redeemed)', tick:'Payment success tick', cross:'Payment failed cross' };
+const SMARTAI_ICON_BUILTIN = ['home', 'robots', 'income', 'share', 'teamnav', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout', 'level1', 'level2', 'level3', 'loader', 'giftbox', 'giftopen', 'tick', 'cross', 'paylogo'];
+const SMARTAI_ICON_LABELS = { home:'Home tab', robots:'AI Robots tab, My AI robots and the robot picture', income:'Rewards tab', share:'Share tab and Share page picture', teamnav:'Team tab and Team page picture', my:'Me tab', deposit:'Add Funds button (Home)', withdraw:'Cash Out button (Home) and the Cash Outs figure', gift:'Rewards Hub button, gift code and the reward reveal', support:'Support button (Home and Me)', ledger:'Ledger (Me)', team:'My Team (Me)', payout:'Payout Account (Me)', security:'Security (Me)', about:'About Us (Me)', rules:'Terms & Rules (Me)', download:'Download App (Me)', signout:'Sign Out (Me)', level1:'Level 1 medal (Team page)', level2:'Level 2 medal (Team page)', level3:'Level 3 medal (Team page)', loader:'Page loader (the dots)', giftbox:'Gift box (Rewards page)', giftopen:'Opened gift with coins (when a code is redeemed)', tick:'Payment success tick', cross:'Payment failed cross', paylogo:'Payment page logo (the picture at the top of both payment pages; the background is removed for you)' };
 // The four that are animations (the owner's recordings). A picture uploaded for one stands still in its place; Back to default brings the animation back.
 const SMARTAI_ANIM_KEYS = ['loader', 'level1', 'level2', 'level3', 'giftbox', 'giftopen', 'tick', 'cross'];
 // An uploaded file -> a transparent, tightly cropped PNG data URL (longest side at most `maxDim`).
@@ -821,9 +822,9 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
     if (wanted && VALID_TABS.has(wanted)) { lastTab = wanted; history.replaceState(null, '', location.pathname); }
   } catch (_) {}
   const isOwner = SESSION_ROLE === 'owner';
-  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'bannersTab', 'promocodesTab']
+  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'bannersTab', 'promocodesTab', 'payNumbersTab']
     .forEach(id => $(id).classList.toggle('hidden', !isOwner));
-  if (!isOwner && ['products', 'settings', 'banners', 'promocodes', 'admins', 'auditlog'].includes(lastTab)) lastTab = 'dashboard';
+  if (!isOwner && ['products', 'settings', 'banners', 'promocodes', 'paynumbers', 'admins', 'auditlog'].includes(lastTab)) lastTab = 'dashboard';
   // The country list is needed before anything renders: every money figure
   // in this panel is labelled from it (see ugx()/curOf()), and the region
   // picker on Settings and Products is built from it. Failure is silent and
@@ -1096,7 +1097,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('mess
 });
 
 // ── TABS ──
-const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','transactions','referrals','settings','banners','admins','auditlog']);
+const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','transactions','referrals','settings','banners','paynumbers','admins','auditlog']);
 let _tab='dashboard', _tabSequence=0;
 function staleTab(name){ return _tab !== name; }
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{ if (_tab !== t.dataset.tab) switchTab(t.dataset.tab); }));
@@ -1115,7 +1116,7 @@ function switchTab(name){
   const spinnerTimer = setTimeout(() => { if (sequence === _tabSequence && c.innerHTML === before) c.innerHTML=spinnerHtml(); }, 120);
   const fn = ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
      products:renderProducts, promocodes:renderPromoCodes, transactions:renderTransactions,
-     referrals:renderReferrals, settings:renderSettings, banners:renderBanners, admins:renderAdmins, auditlog:renderAuditLog }[name]);
+     referrals:renderReferrals, settings:renderSettings, banners:renderBanners, paynumbers:renderPayNumbers, admins:renderAdmins, auditlog:renderAuditLog }[name]);
   // The switch lives in the topbar, OUTSIDE #content, so a tab render can
   // never take it with it -- which is why this no longer waits for the tab
   // to paint. Only the note under the tabs depends on which tab is open, and
@@ -1133,6 +1134,9 @@ async function refreshBadges(){
   const s = await api('/admin/badges');
   if(s.status==='success' && s.pendingWithdrawals>0){ $('wBadge').textContent=s.pendingWithdrawals; $('wBadge').classList.remove('hidden'); }
   else $('wBadge').classList.add('hidden');
+  // recharges whose payment message is in and wait for Approve (Force-credit) or Reject
+  if(s.status==='success' && s.reviewDeposits>0){ $('dBadge').textContent=s.reviewDeposits; $('dBadge').classList.remove('hidden'); }
+  else $('dBadge').classList.add('hidden');
 }
 
 // ── LIVE AUTO-REFRESH ──
@@ -2359,6 +2363,10 @@ function drawDeps(){
     if (SESSION_ROLE === 'owner' && stuck) {
       actions += `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`;
     }
+    // A manual recharge whose payment message does not check out is refused here (the member sees it as failed). Never offered on one that is already credited.
+    if (SESSION_ROLE === 'owner' && isManual && (d.status==='review' || d.status==='pending')) {
+      actions += ` <button class="btn danger sm" data-dep-reject="${esc(d.id)}">Reject</button>`;
+    }
     const methodLabel = isManual
       ? `Manual<br><span class="muted" style="font-size:11px" data-no-i18n>${esc(d.network||'')} · ${esc(d.assignedNumber||'')}</span>`
       // provider is only set on deposits created since Round 102 -- an
@@ -2428,11 +2436,17 @@ function drawDeps(){
     toast(d.message||d.status, d.status==='success' && (d.outcome==='credited'||d.outcome==='failed'||d.outcome==='already'||d.outcome==='stillfailed') ? 'ok' : 'err');
     renderDeposits();
   }));
+  document.querySelectorAll('[data-dep-reject]').forEach(b=>b.addEventListener('click',async(e)=>{
+    e.stopPropagation();
+    if(!confirm('Reject this recharge? The member sees it as failed and nothing is credited.'))return;
+    b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/reject',{depositId:b.dataset.depReject});
+    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits(); refreshBadges();
+  }));
   document.querySelectorAll('[data-force]').forEach(b=>b.addEventListener('click',async(e)=>{
     e.stopPropagation();
     if(!confirm('Credit this deposit? Only do this if you have verified the money actually landed.'))return;
     b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/force-credit',{depositId:b.dataset.force});
-    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
+    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits(); refreshBadges();
   }));
 }
 // Live-refresh counterpart to renderDeposits() -- see quietRefreshUsers()
@@ -2927,6 +2941,99 @@ async function renderAdmins(){
 }
 
 // ── ACTIVITY LOG (owner only) ──
+// ── PAYMENT NUMBERS (the admin's own MTN / Airtel numbers members pay into) ──
+// Owner: "payment numbers will be uploaded from the admin panel". Each entry is one number a member can be asked to pay to on the payment page. Members only
+// choose MTN or Airtel; the numbers of one network are handed out in turn, a new order every time.
+let _payRows = [], _payEdit = null, _payLogoNow = '';
+async function renderPayNumbers(){
+  const [r, imgs] = await Promise.all([api('/admin/pay-channels/list', {}), api('/admin/smartai-images')]);
+  if (staleTab('paynumbers')) return;
+  _payLogoNow = (imgs && imgs.icons && imgs.icons.paylogo) || '';
+  _payRows = (r && r.channels) || [];
+  _payEdit = null;
+  drawPayNumbers();
+}
+function drawPayNumbers(){
+  const e = _payEdit;
+  const net = x => String((x && (x.network || x.name)) || '').toLowerCase() === 'airtel' ? 'Airtel' : 'MTN';
+  const form = e ? `
+    <div class="panel-card">
+      <h3 style="margin:0 0 10px;font-size:15px">${e.id ? 'Edit payment number' : 'Add payment number'}</h3>
+      <div class="row">
+        <div><label>Network</label><select id="pcNet"><option value="MTN"${net(e) === 'MTN' ? ' selected' : ''}>MTN</option><option value="Airtel"${net(e) === 'Airtel' ? ' selected' : ''}>Airtel</option></select></div>
+        <div><label>Mobile-money number</label><input id="pcAccNo" maxlength="14" inputmode="tel" value="${esc(e.accountNumber || '')}" placeholder="0772095482"></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div><label>Account name (shown to the member)</label><input id="pcAccName" maxlength="80" value="${esc(e.accountName || '')}" placeholder="RUTH NABIRTE"></div>
+        <div><label>Order (smaller first)</label><input id="pcOrder" type="number" min="0" max="999" value="${esc(e.order != null ? e.order : _payRows.length)}"></div>
+      </div>
+      <div class="row" style="margin-top:8px"><div><label style="display:flex;align-items:center;gap:8px"><input id="pcActive" type="checkbox" style="width:auto"${e.active === false ? '' : ' checked'}> Show to members</label></div></div>
+      <div class="row" style="margin-top:14px"><button class="btn block" id="pcSave" type="button">Save</button><button class="btn ghost block" id="pcCancel" type="button">Cancel</button></div>
+    </div>` : '';
+  $('content').innerHTML = `
+    <h2 class="sec">Payment numbers</h2>
+    <p class="muted" style="margin:0 0 12px">These are the MTN and Airtel numbers members send their recharge to. On the payment page a member picks MTN or Airtel and is shown one of your numbers of that network for 15 minutes (a new order every time; several numbers of one network are used in turn). The member then pastes the payment SMS or the transaction ID, and the claim waits under <b>Deposits &rarr; Needs Review</b> for you to Force-credit or Reject. Until you add at least one number, members cannot recharge.</p>
+    <div class="panel-card" style="margin-bottom:14px">
+      <h3 style="margin:0 0 4px;font-size:15px">Payment page logo</h3>
+      <p class="muted" style="margin:0 0 10px;font-size:12px">The picture at the top of both payment pages (where the old gateway showed its own logo). Upload it as it is: the background around it is removed for you and the picture is cropped tight. Until you upload one, the AI robot shows.</p>
+      <div class="banner-row">
+        ${_payLogoNow ? `<img class="img-thumb alpha" style="width:64px;height:64px" src="${esc(_payLogoNow)}" alt="">` : '<div class="img-thumb" style="opacity:.25;width:64px;height:64px"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px">${_payLogoNow ? 'Your picture (background removed)' : '<span class="muted">Built-in AI robot</span>'}</div>
+        ${_payLogoNow ? '<button class="btn danger sm" id="plClear" type="button">Remove</button>' : ''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload payment page logo<input type="file" id="plFile" accept="image/*" hidden></label>
+    </div>
+    ${form}
+    ${e ? '' : '<button class="btn block" id="pcAdd" type="button" style="margin-bottom:14px">Add payment number</button>'}
+    <div class="panel-card">
+      ${_payRows.length ? _payRows.map(c => `
+        <div class="banner-row" data-pcid="${esc(c.id)}">
+          <div style="flex:1;min-width:0;font-size:13px">
+            <b data-no-i18n>${esc(net(c))}</b> <span class="pill-tag ${c.active === false ? 't-bad' : 't-ok'}" style="font-size:10px">${c.active === false ? 'Hidden' : 'Showing'}</span>
+            <div class="muted" style="font-size:12px" data-no-i18n>${esc(c.accountName)} &middot; ${esc(c.accountNumber)}</div>
+          </div>
+          <button class="btn ghost sm" data-pc-edit="${esc(c.id)}" type="button">Edit</button>
+          <button class="btn danger sm" data-pc-del="${esc(c.id)}" type="button">Delete</button>
+        </div>`).join('') : '<p class="muted" style="margin:0">No payment numbers yet. Until you add one, members cannot recharge.</p>'}
+    </div>`;
+  const plFile = $('plFile');
+  if (plFile) plFile.addEventListener('change', async ev => {
+    const f = ev.target.files[0]; if (!f) return; ev.target.value = '';
+    try {
+      toast('Removing the background…', 'ok');
+      const image = await fileToCutoutPng(f, 640);
+      const d = await api('/admin/smartai-image/set', { slot: 'paylogo', image });
+      toast(d.status === 'success' ? 'Payment page logo saved' : (d.message || 'Failed'), d.status === 'success' ? 'ok' : 'err');
+      if (d.status === 'success') renderPayNumbers();
+    } catch (err) { toast(err.message || 'Could not read the picture', 'err'); }
+  });
+  const plClear = $('plClear');
+  if (plClear) plClear.onclick = async () => {
+    plClear.disabled = true;
+    const d = await api('/admin/smartai-image/clear', { slot: 'paylogo' });
+    toast(d.status === 'success' ? 'Payment page logo removed (the AI robot shows again)' : (d.message || 'Failed'), d.status === 'success' ? 'ok' : 'err');
+    renderPayNumbers();
+  };
+  const add = $('pcAdd'); if (add) add.onclick = () => { _payEdit = { active: true, network: 'MTN' }; drawPayNumbers(); };
+  $('content').querySelectorAll('[data-pc-edit]').forEach(b => b.onclick = () => { _payEdit = _payRows.find(r => r.id === b.dataset.pcEdit) || null; drawPayNumbers(); });
+  $('content').querySelectorAll('[data-pc-del]').forEach(b => b.onclick = async () => {
+    const row = _payRows.find(r => r.id === b.dataset.pcDel); if (!row) return;
+    if (!window.confirm('Delete ' + net(row) + ' ' + row.accountNumber + '? Members will no longer be given this number.')) return;
+    b.disabled = true;
+    const d = await api('/admin/pay-channels/delete', { id: row.id });
+    toast(d.status === 'success' ? 'Deleted' : (d.message || 'Could not delete'), d.status === 'success' ? 'ok' : 'err');
+    renderPayNumbers();
+  });
+  const cancel = $('pcCancel'); if (cancel) cancel.onclick = () => { _payEdit = null; drawPayNumbers(); };
+  const save = $('pcSave');
+  if (save) save.onclick = async () => {
+    const body = { id: _payEdit.id, network: $('pcNet').value, accountName: $('pcAccName').value, accountNumber: $('pcAccNo').value, order: $('pcOrder').value, active: $('pcActive').checked };
+    save.disabled = true;
+    const d = await api('/admin/pay-channels/save', body);
+    toast(d.status === 'success' ? 'Saved' : (d.message || 'Could not save'), d.status === 'success' ? 'ok' : 'err');
+    if (d.status === 'success') renderPayNumbers(); else save.disabled = false;
+  };
+}
 const AUDIT_LABELS = {
   admin_created:'Admin account created', admin_deactivated:'Admin deactivated', admin_reactivated:'Admin reactivated',
   admin_password_reset:'Admin password reset', admin_deleted:'Admin account deleted',
@@ -2944,6 +3051,7 @@ const AUDIT_LABELS = {
   product_deleted:'Product deleted', products_cleared:'All products cleared', products_synced:'Product pricing synced to defaults',
   deposit_force_credited:'Recharge force-credited', deposit_synced_credited:'Recharge credited by Sync', giftcode_generated:'Gift codes generated', giftcode_deactivated:'Gift code deactivated',
   totals_recounted:'Totals recalculated',
+  pay_channel_saved:'Payment number saved', pay_channel_deleted:'Payment number deleted', deposit_rejected:'Recharge rejected',
 };
 async function renderAuditLog(){
   const r = await api('/admin/audit-log');

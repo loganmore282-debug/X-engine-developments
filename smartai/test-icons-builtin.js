@@ -15,7 +15,7 @@ const serverSlots = list(server, /const SMARTAI_ICON_SLOTS = \[([^\]]*)\]/);
 const adminBuiltin = list(admin, /const SMARTAI_ICON_BUILTIN = \[([^\]]*)\]/);
 const labelBlock = (admin.match(/const SMARTAI_ICON_LABELS = \{([\s\S]*?)\};/) || [, ''])[1];
 const adminLabels = [...labelBlock.matchAll(/(?:^|[,{\s])([a-z0-9]+):\s*'/g)].map(m => m[1]);
-ok(serverSlots.length === 26 && new Set(serverSlots).size === 26, 'the server knows 26 icon slots (18 pictures + 8 animations: loader, 3 medals, gift box, opened gift, tick, cross) (' + serverSlots.length + ')');
+ok(serverSlots.length === 27 && new Set(serverSlots).size === 27, 'the server knows 27 icon slots (the payment page logo is the newest) (18 pictures + 8 animations: loader, 3 medals, gift box, opened gift, tick, cross) (' + serverSlots.length + ')');
 ok(JSON.stringify(serverSlots) === JSON.stringify(adminBuiltin), 'the admin panel lists the same slots, in the same order, as having a built-in picture');
 ok(serverSlots.every(s => adminLabels.includes(s)) && adminLabels.length === serverSlots.length, 'and gives every slot a plain label (' + adminLabels.length + ')');
 ok(/Icons must be PNG pictures with a transparent background/.test(server), 'the server takes only PNG pictures for an icon slot');
@@ -84,7 +84,11 @@ function hsl(r, g, b) {
   if (mx !== mn) { const d = mx - mn; s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn); h = mx === r ? ((g - b) / d + (g < b ? 6 : 0)) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; }
   return { h, s, l };
 }
-const noComments = css.replace(/\/\*[\s\S]*?\*\//g, m => ' '.repeat(m.length)).replace(/<!--[\s\S]*?-->/g, m => ' '.repeat(m.length));
+// The owner's two payment pages (his gold / amber screenshots) have their own colours, measured from his pictures: they sit between two markers and are checked on their own below.
+const gpA = css.indexOf('/* ====================== PAYMENT PAGES'), gpB = css.indexOf('/* ====================== END PAYMENT PAGES');
+const gpCss = gpA >= 0 && gpB > gpA ? css.slice(gpA, gpB) : '';
+const cssNoGp = gpCss ? css.slice(0, gpA) + css.slice(gpB) : css;
+const noComments = cssNoGp.replace(/\/\*[\s\S]*?\*\//g, m => ' '.repeat(m.length)).replace(/<!--[\s\S]*?-->/g, m => ' '.repeat(m.length));
 const reds = new Set();
 const tok = /#([0-9a-fA-F]{6})\b|#([0-9a-fA-F]{3})\b|rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*[\d.]+\s*)?\)/g;
 let m;
@@ -97,7 +101,8 @@ while ((m = tok.exec(noComments))) {
 }
 const ERROR_REDS = new Set(['#c23b4b', '#f8dee1', '#9c2c3a', 'rgba(194,59,75,.5)']);   // --berry, --berry-pale and the danger button
 const strays = [...reds].filter(c => !ERROR_REDS.has(c));
-ok(strays.length === 0, 'the only reds in the CSS are the error / failure colours (a stray one would be a pasted ChocoMCC red)' + (strays.length ? ' -> ' + strays.join(' | ') : ''));
+ok(gpCss.length > 2000 && /#d98225/i.test(gpCss) && /#e58608/i.test(gpCss) && /#f4cc7a/i.test(gpCss), 'the payment pages have the owner\'s gold / amber colours (Confirm gradient, amounts, Refresh orange)');
+ok(strays.length === 0, 'the only reds in the CSS (outside the owner\'s payment pages) are the error / failure colours (a stray one would be a pasted ChocoMCC red)' + (strays.length ? ' -> ' + strays.join(' | ') : ''));
 ok(/--caramel:#137AEF/i.test(css) && /--cream:#EEF4FF/i.test(css) && /--caramel-deep:#0D5FD2/i.test(css), 'the brand colours are the blues of the icons');
 ok(/<meta name="theme-color" content="#(?:EEF4FF|137AEF|0964CD)"/i.test(css), 'the phone\'s address bar is blue or white too');
 

@@ -71,8 +71,8 @@ ok(!/\bUGX\s*\d+(?:\.\d+)?\s*[kKmM]\b|\b\d+(?:\.\d+)?\s*[kK]\b(?!g|m|b)/.test(vi
 // ---- only ChocoMCC's things (owner: "use only things of ChocoMCC, do not introduce anything without my consent") ----
 const tiles = [...pageHtml.matchAll(/<div class="menu-tile-lbl"[^>]*>([^<]+)<\/div>/g)].map(m => m[1].replace(/&amp;/g, '&'));
 ok(JSON.stringify(tiles) === JSON.stringify(['My AI robots', 'Ledger', 'My Team', 'Payout Account', 'Security', 'About Us', 'Terms & Rules', 'Support', 'Download App', 'Sign Out']), 'the Me page has exactly ChocoMCC\'s ten tiles, in its order: ' + tiles.join(', '));
-const overlayIds = [...pageHtml.matchAll(/<div class="overlay" id="(ov[A-Za-z]+)"/g)].map(m => m[1]).sort();
-ok(JSON.stringify(overlayIds) === JSON.stringify(['ovAbout', 'ovBindbank', 'ovChangepass', 'ovDeposit', 'ovDepositStatus', 'ovEarnings', 'ovMychoc', 'ovRecords', 'ovRules', 'ovSupport', 'ovTaskcenter', 'ovTeamlevel', 'ovWithdraw'].sort()), 'the full-page screens are exactly ChocoMCC\'s thirteen: ' + overlayIds.join(', '));
+const overlayIds = [...pageHtml.matchAll(/<div class="overlay(?: gp-ov)?" id="(ov[A-Za-z]+)"/g)].map(m => m[1]).sort();
+ok(JSON.stringify(overlayIds) === JSON.stringify(['ovAbout', 'ovBindbank', 'ovChangepass', 'ovDeposit', 'ovEarnings', 'ovGpPay', 'ovGpPick', 'ovMychoc', 'ovRecords', 'ovRules', 'ovSupport', 'ovTaskcenter', 'ovTeamlevel', 'ovWithdraw'].sort()), 'the full-page screens are ChocoMCC\'s twelve plus the owner\'s two payment pages (the old payment status page is gone): ' + overlayIds.join(', '));
 const serverSrc = fs.readFileSync(__dirname + '/server.js', 'utf8'), adminSrc = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8').replace(/base64,[A-Za-z0-9+\/=]{200,}/g, 'base64,...');   // (the panel's embedded font and pictures are not words)
 ok(!/authenticator|twofa|2fa|totp/i.test(pageHtml + mod), 'no Google Authenticator anywhere in the member app');
 ok(!/twofa|2fa|Google Authenticator/i.test(serverSrc + adminSrc), 'no Google Authenticator in the server or the admin panel (the admin LOGIN keeps its own optional 6-digit code, as in Potato, Mint and Chocolate)');

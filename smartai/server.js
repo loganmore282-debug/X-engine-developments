@@ -168,7 +168,7 @@ app.use('/admin/', async (req, _res, next) => {
   next();
 });
 // These routes move or pay real money, so they get the strict 60/min per-user cap rather than only the 400/min global one.
-['/withdraw/request', '/invest/create', '/deposit/marzpay', '/bank/save', '/register',
+['/withdraw/request', '/invest/create', '/deposit/marzpay', '/deposit/manual/order', '/deposit/manual/submit', '/bank/save', '/register',
  '/account/transaction-pin/change', '/redeem']
   .forEach(p => app.use(p, apiLimiter));
 // ── BODY PARSING ──
@@ -884,7 +884,7 @@ async function getHomeBanner() {
 // Transparent cut-out ICONS the owner uploads in the admin panel (Banners > Icons); the panel removes each picture's background and crops it
 // tight before saving, so these are always PNGs. To add an icon, add its name here AND its label in admin-src (SMARTAI_ICON_LABELS).
 // The last eight are the owner's ANIMATIONS (the three Team-page level medals, the dots loader, the gift box, the opened gift, the payment tick and cross): a picture uploaded for one stands still in its place, Remove ("Back to default") brings the animation back.
-const SMARTAI_ICON_SLOTS = ['home', 'robots', 'income', 'share', 'teamnav', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout', 'level1', 'level2', 'level3', 'loader', 'giftbox', 'giftopen', 'tick', 'cross'];
+const SMARTAI_ICON_SLOTS = ['home', 'robots', 'income', 'share', 'teamnav', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout', 'level1', 'level2', 'level3', 'loader', 'giftbox', 'giftopen', 'tick', 'cross', 'paylogo'];
 // The pictures members get (all of these go to /public/smartai-images; linkpreview is the Telegram preview's own and is only read by the admin and that page).
 const SMARTAI_BANNER_SLOTS = ['authhero', 'authlogo', 'profilelogo', 'teambanner', 'mybanner', 'aboutbanner',
   'shopbanner', 'depositbanner', 'withdrawbanner', 'supportbanner', 'recordsbanner', 'bindbankbanner'];
@@ -3803,6 +3803,7 @@ app.get('/public/settings', async (req, res) => {
     // no reason to hand every member's phone the list of domains that can
     // reach this backend, so it is dropped here alongside maintenanceMsg.
     const { maintenanceMsg, allowedOrigins, ...rest0 } = s;
+    const manualPayOn = (await activePayChannels()).length > 0;   // money in = the admin's own MTN / Airtel numbers (see MANUAL MOBILE-MONEY RECHARGE)
     // Operator settings the app never reads stay on the server: the automatic-withdrawal limits (a member could keep a request just under the
     // automatic cap), the payment-rail choice, the reference prefix and the host policy.
     const rest = {};
@@ -3827,7 +3828,8 @@ app.get('/public/settings', async (req, res) => {
       // depositPayAEnabled before manual deposit collection -- PAY B -- was
       // removed outright; renamed since "PAY A" no longer means anything
       // once there is no PAY B to contrast it with.)
-      depositAvailable: payAAvailable(s),
+      manualPay: manualPayOn,
+      depositAvailable: manualPayOn,
     // How many countries this platform runs in. The app only uses it to add
     // "if you signed up on another country's site, sign in there" to a
     // failed login -- an account belongs to one region and its synthetic
@@ -6658,6 +6660,279 @@ async function memberRecords(uid, collection, pick) {
 const _depositView = r => ({ ref: r.ref || '', amount: r.amount, network: r.network || '', phone: r.phone || '', status: r.status || '', failureReason: r.status === 'failed' ? (r.failureReason || '') : '', date: r.date || '', time: r.time || '', createdAt: r.createdAt || null });
 const _withdrawalView = r => ({ ref: r.ref || '', amount: r.amount, fee: r.fee, net: r.net, holder: r.holder || '', network: r.network || '', phone: r.phone || '', status: r.status || '',
   failureReason: (r.status === 'declined' || r.status === 'rejected') ? (r.failureReason || r.rejectReason || '') : '', date: r.date || '', time: r.time || '', createdAt: r.createdAt || null });
+// ── MANUAL MOBILE-MONEY RECHARGE (the admin's own MTN / Airtel numbers) ──
+// Owner: "payment numbers will be uploaded from the admin panel ... payment orders are fresh, just like Potato". The admin types the numbers members pay to
+// (network MTN or Airtel, the number, the account name). A member taps an amount, picks MTN or Airtel and types the number they will pay FROM; the server shows
+// one of the admin's numbers of that network for 15 minutes. Opening the pages or picking a network is ALWAYS a new order with a fresh clock and a new reference
+// (the member's older unsent orders are closed); only coming back to the pages (resume: true) picks the SAME still-open order up again. The member pays from the
+// phone and then pastes the payment SMS (or just the transaction ID). The claim goes to the admin Deposits tab (status 'review') where Force-credit approves it
+// or Reject refuses it. Nothing in this block credits a wallet: creditDeposit() stays the only thing that ever moves money.
+const PAY_NETWORKS = ['MTN', 'Airtel'];
+const MANUAL_ORDER_MS = 15 * 60 * 1000;
+const MAX_PAY_CHANNELS = 30;
+let _payChannelsCache = null;
+async function readPayChannels() {
+  const now = Date.now();
+  if (_payChannelsCache && now - _payChannelsCache.at < 10000) return _payChannelsCache.rows;
+  const snap = await db.collection('payChannels').get();
+  const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0) || (tsMillis(a.createdAt) || 0) - (tsMillis(b.createdAt) || 0));
+  _payChannelsCache = { at: now, rows };
+  return rows;
+}
+function dropPayChannelsCache() { _payChannelsCache = null; }
+async function activePayChannels() {
+  try { return (await readPayChannels()).filter(c => c.active !== false && c.accountNumber && payNetworkOf(c.network || c.name)); }
+  catch (_) { return []; }
+}
+function payNetworkOf(v) { const s = String(v == null ? '' : v).trim().toLowerCase(); return s === 'mtn' ? 'MTN' : s === 'airtel' ? 'Airtel' : ''; }
+function cleanPayText(v, max) { return String(v == null ? '' : v).replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max); }
+// The members only learn WHICH networks can be paid with; the numbers themselves are shown only inside an order.
+app.get('/public/pay-channels', async (req, res) => {
+  try {
+    const rows = await activePayChannels();
+    const nets = PAY_NETWORKS.filter(n => rows.some(c => payNetworkOf(c.network || c.name) === n));
+    res.set('Cache-Control', 'no-store');
+    res.json({ status: 'success', networks: nets });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load payment options' }); }
+});
+app.post('/admin/pay-channels/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { dropPayChannelsCache(); res.json({ status: 'success', channels: await readPayChannels() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load payment numbers' }); }
+});
+app.post('/admin/pay-channels/save', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const b = req.body || {};
+    const network = payNetworkOf(b.network);
+    const accountName = cleanPayText(b.accountName, 80);
+    const local = localDigits(b.accountNumber);
+    if (!network) return res.status(400).json({ status: 'error', message: 'Choose the network: MTN or Airtel.' });
+    if (!accountName) return res.status(400).json({ status: 'error', message: 'Enter the account name (the name the mobile-money number is registered in).' });
+    if (!local) return res.status(400).json({ status: 'error', message: 'Enter a valid Uganda mobile number (07XXXXXXXX).' });
+    const accountNumber = '0' + local;
+    const rows = await readPayChannels();
+    const id = b.id ? String(b.id) : '';
+    const existing = id ? rows.find(r => r.id === id) : null;
+    if (id && !existing) return res.status(404).json({ status: 'error', message: 'That payment number no longer exists.' });
+    if (!existing && rows.length >= MAX_PAY_CHANNELS) return res.status(400).json({ status: 'error', message: `You can keep up to ${MAX_PAY_CHANNELS} payment numbers. Remove one first.` });
+    if (rows.some(r => r.id !== id && r.accountNumber === accountNumber && payNetworkOf(r.network || r.name) === network)) return res.status(400).json({ status: 'error', message: 'This number is already in the list.' });
+    const doc = {
+      network, name: network, kind: 'wallet', accountName, accountNumber, active: b.active !== false,
+      order: Number.isFinite(Number(b.order)) ? Math.max(0, Math.min(999, Math.round(Number(b.order)))) : (existing ? Number(existing.order) || 0 : rows.length),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    const ref = existing ? db.collection('payChannels').doc(existing.id) : db.collection('payChannels').doc();
+    if (existing) await ref.update(doc); else await ref.set({ ...doc, createdAt: FieldValue.serverTimestamp() });
+    dropPayChannelsCache();
+    logAdminAction(req, 'pay_channel_saved', { id: ref.id, network, active: doc.active });
+    res.json({ status: 'success', id: ref.id });
+  } catch (e) { console.error('pay-channels save:', e.message); res.status(500).json({ status: 'error', message: 'Could not save this payment number' }); }
+});
+app.post('/admin/pay-channels/delete', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const id = String((req.body || {}).id || '');
+    if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
+    const ref = db.collection('payChannels').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'That payment number no longer exists.' });
+    await ref.delete();
+    dropPayChannelsCache();
+    logAdminAction(req, 'pay_channel_deleted', { id, network: snap.data().network || snap.data().name });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove this payment number' }); }
+});
+// The admin's numbers of one network are handed out in turn, so the load is shared and no number is used twice in a row while another is free.
+const _payRotation = { MTN: 0, Airtel: 0 };
+function pickPayChannel(channels, network) {
+  const list = channels.filter(c => payNetworkOf(c.network || c.name) === network);
+  if (!list.length) return null;
+  const c = list[_payRotation[network] % list.length];
+  _payRotation[network] = (_payRotation[network] + 1) % 1000000;
+  return c;
+}
+// Creates a NEW order (fresh clock) and returns the account to pay, or, with resume:true and the open order's depositId, returns that same order again.
+app.post('/deposit/manual/order', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const amt = paymentAmount(req.body.amount);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
+  const network = payNetworkOf(req.body.network);
+  if (!network) return res.status(400).json({ status: 'error', message: 'Please select a payment method' });
+  const payerLocal = localDigits(req.body.phone);
+  if (!payerLocal) return res.status(400).json({ status: 'error', code: 'BAD_PHONE', message: 'The mobile phone number format is incorrect' });
+  try {
+    const [uSnap, sett, channels] = await Promise.all([db.collection('users').doc(userId).get(), getSettings(), activePayChannels()]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
+    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before topping up.' });
+    if (!channels.length) return res.status(400).json({ status: 'error', message: 'Recharges are not available right now.' });
+    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
+    const now = Date.now();
+    const openSnap = await db.collection('pendingDeposits').where('userId', '==', userId).where('status', '==', 'pending').get();
+    const open = openSnap.docs.filter(d => d.data().method === 'manual' && !d.data().pastedSms && (tsMillis(d.data().expiresAt) || 0) > now);
+    const mine = req.body.resume === true && req.body.depositId ? open.find(d => d.id === String(req.body.depositId)) : null;
+    if (req.body.resume === true && !mine) return res.status(409).json({ status: 'error', code: 'ORDER_GONE', message: 'This order is no longer open.' });
+    let depRef, ref, expiresMs, fields;
+    if (mine) {
+      depRef = mine.ref; ref = mine.data().ref; expiresMs = tsMillis(mine.data().expiresAt);
+      fields = { network: mine.data().network, assignedNumber: mine.data().assignedNumber, assignedName: mine.data().assignedName, amount: mine.data().amount, payerPhone: mine.data().senderPhone };
+    } else {
+      const ch = pickPayChannel(channels, network);
+      if (!ch) return res.status(400).json({ status: 'error', message: `${network} payments are not available right now. Please choose another method.` });
+      // Older unsent orders of this member are closed so they do not pile up.
+      for (const o of open) await o.ref.updateIf({ status: 'pending' }, { status: 'failed', failureReason: 'Replaced by a newer payment order' }).catch(() => {});
+      ref = await uniqueRef('M');
+      const { date, time } = nowStr();
+      depRef = db.collection('pendingDeposits').doc();
+      expiresMs = now + MANUAL_ORDER_MS;
+      await depRef.set({
+        userId, method: 'manual', provider: 'manual', amount: amt, ref, status: 'pending',
+        network, channelId: ch.id, channelKind: 'wallet', assignedNumber: ch.accountNumber, assignedName: ch.accountName, senderPhone: '+256' + payerLocal,
+        commissionBasis: 'deposit', commissionPending: true, commissionPaidLevels: [],
+        regionKey: currentRegionKey(), date, time,
+        expiresAt: new Date(expiresMs), createdAt: FieldValue.serverTimestamp(),
+      });
+      fields = { network, assignedNumber: ch.accountNumber, assignedName: ch.accountName, amount: amt, payerPhone: '+256' + payerLocal };
+    }
+    res.json({ status: 'success', depositId: depRef.id, reference: ref, amount: fields.amount, expiresAt: expiresMs, serverNow: now,
+      network: fields.network, accountNumber: fields.assignedNumber, accountName: fields.assignedName, payerPhone: '0' + localDigits(fields.payerPhone) });
+  } catch (e) { console.error('manual order:', e.message); res.status(500).json({ status: 'error', message: 'Could not start recharge' }); }
+});
+// What a pasted SMS / transaction ID is allowed to be. MTN's message ends "ID :30212345057." (9 to 14 digits); Airtel's carries a "Txn ID" / "Transaction ID" such as
+// MP241115.1234.A12345 (letters, digits and dots, 8 to 24 characters). A bare ID typed on its own must hold a digit. Anything else is refused up front.
+function extractManualRef(text) {
+  const t = String(text || '');
+  let m = /\b(?:Financial\s+)?(?:Transaction\s+)?ID\s*[:：]?\s*(\d{9,14})\b/i.exec(t);
+  if (m) return { ref: m[1], kind: 'mtn' };
+  m = /\b(?:Txn|Trans(?:action)?|TID|Ref(?:erence)?)\.?\s*(?:ID|No\.?|Number)?\s*[:：#]?\s*([A-Z0-9][A-Z0-9.\-]{7,23})\b/i.exec(t);
+  if (m && /\d/.test(m[1])) return { ref: m[1].toUpperCase(), kind: 'airtel' };
+  m = /^\s*([A-Z0-9][A-Z0-9.\-]{7,23})\s*$/i.exec(t);
+  if (m && /\d/.test(m[1])) return { ref: /^\d+$/.test(m[1]) ? m[1] : m[1].toUpperCase(), kind: /^\d+$/.test(m[1]) ? 'mtn' : 'airtel' };
+  return null;
+}
+function extractManualAmount(text) {
+  const m = /(?:sent|paid|transferred|debited(?: with)?)\s*(?:UGX|USh|Shs?)?\s*([\d,]+(?:\.\d+)?)/i.exec(String(text || '')) || /UGX\s*([\d,]+(?:\.\d+)?)/i.exec(String(text || ''));
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+const _manualSubmitDebounce = new Map();
+app.post('/deposit/manual/submit', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const sms = String((req.body || {}).sms || '').trim().slice(0, 2000);
+    const txn = String((req.body || {}).txnId || '').trim().slice(0, 60);
+    if (!sms && !txn) return res.status(400).json({ status: 'error', code: 'EMPTY_SMS', message: 'Please enter payment SMS' });
+    // The pasted message is read first; when it holds no readable ID the member is asked for the transaction ID by itself (the Airtel page's second box).
+    let found = sms ? extractManualRef(sms) : null;
+    if (!found && txn) {
+      found = extractManualRef(txn);
+      if (!found) return res.status(400).json({ status: 'error', code: 'BAD_TXN', message: 'Please enter the correct transaction ID' });
+    }
+    if (!found) return res.status(400).json({ status: 'error', code: 'NEED_TXN_ID', message: 'We could not read the transaction ID in the message. Enter the transaction ID' });
+    const last = _manualSubmitDebounce.get(userId) || 0;
+    if (Date.now() - last < 3000) return res.status(429).json({ status: 'error', message: 'Please wait a moment.' });
+    _manualSubmitDebounce.set(userId, Date.now());
+    if (_manualSubmitDebounce.size > 20000) for (const [k, t] of _manualSubmitDebounce) if (Date.now() - t > 60000) _manualSubmitDebounce.delete(k);
+    const depRef = db.collection('pendingDeposits').doc(String(req.body.depositId || '_'));
+    const snap = await depRef.get();
+    if (!snap.exists || snap.data().userId !== userId || snap.data().method !== 'manual')
+      return res.status(404).json({ status: 'error', message: 'Recharge not found' });
+    const dep = snap.data();
+    if (dep.status === 'review') return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
+    if (dep.status !== 'pending') return res.status(400).json({ status: 'error', message: 'This recharge is no longer open. Start a new one.' });
+    // A real transfer can back ONE open or credited claim, by anyone.
+    const dupSnap = await db.collection('pendingDeposits').where('pastedSmsTxId', '==', found.ref).get();
+    if (dupSnap.docs.some(d => d.id !== snap.id && d.data().status !== 'failed'))
+      return res.status(409).json({ status: 'error', message: 'This transaction ID has already been submitted.' });
+    const smsAmount = sms ? extractManualAmount(sms) : null;
+    const toDigits = String(dep.assignedNumber || '').replace(/\D/g, '').slice(-9);
+    const updated = await depRef.updateIf({ status: 'pending' }, {
+      status: 'review', reviewReason: 'Waiting for the admin to check the payment message',
+      pastedSms: sms || ('Transaction ID: ' + found.ref), pastedAt: FieldValue.serverTimestamp(), pastedSmsTxId: found.ref, pastedSmsKind: found.kind, pastedSmsParsed: true,
+      ...(smsAmount != null ? { pastedSmsAmount: smsAmount, pastedSmsAmountMatches: Math.abs(smsAmount - Number(dep.amount)) < 0.01 } : {}),
+      ...(sms && toDigits ? { pastedSmsToMatches: sms.replace(/\D/g, '').includes(toDigits) } : {}),
+    });
+    if (!updated) return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
+    const { date, time } = nowStr();
+    await db.collection('transactions').add({
+      userId, statementId: newStatementId(), type: 'deposit', description: `Deposit: Processing (${fmtMoney(dep.amount)})`,
+      amount: dep.amount, displayAmount: dep.amount, status: 'pending', date, time, ref: dep.ref, depositId: snap.id, createdAt: FieldValue.serverTimestamp()
+    }).catch(e => console.error(`Manual deposit ledger row create failed for dep=${snap.id}:`, e.message));
+    // Every recharge is approved by hand, so the admins are told the moment one is waiting.
+    sendAdminPush('Recharge to check', `${fmtMoney(dep.amount)} via ${dep.network || 'mobile money'}: open Deposits to approve or reject`, { type: 'deposit', depositId: snap.id }).catch(() => {});
+    res.json({ status: 'success', state: 'review', depositId: snap.id, reference: dep.ref, message: 'Submitted. Our team is checking your payment.' });
+  } catch (e) { console.error('manual submit:', e.message); res.status(500).json({ status: 'error', message: 'Could not submit your recharge. Please try again.' }); }
+});
+// The Refresh button of the payment page: where is this order now? (pending = nothing seen yet, review = the message is with the admin, matched = credited,
+// failed = refused or replaced, expired = the 15 minutes ran out unpaid.) Read-only.
+app.post('/deposit/manual/status', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const snap = await db.collection('pendingDeposits').doc(String((req.body || {}).depositId || '_')).get();
+    if (!snap.exists || snap.data().userId !== userId || snap.data().method !== 'manual') return res.status(404).json({ status: 'error', message: 'Recharge not found' });
+    const d = snap.data(), exp = tsMillis(d.expiresAt) || 0;
+    let state = 'pending';
+    if (depositFullyCredited(d)) state = 'matched';
+    else if (d.status === 'failed') state = 'failed';
+    else if (d.status === 'review') state = 'review';
+    else if (exp && Date.now() > exp) state = 'expired';
+    res.set('Cache-Control', 'no-store');
+    res.json({ status: 'success', state, amount: Number(d.amount) || 0, amountPaid: state === 'matched' ? Number(d.amount) || 0 : 0, expiresAt: exp, serverNow: Date.now(),
+      message: state === 'failed' ? String(d.failureReason || 'This payment was not completed.') : '' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not check the payment right now' }); }
+});
+// An order nobody paid for is closed after the clock (15 min) plus a grace of 15.
+async function sweepManualOrders() {
+  try {
+    const snap = await db.collection('pendingDeposits').where('status', '==', 'pending').limit(200).get();
+    const cut = Date.now() - 15 * 60 * 1000;
+    for (const d of snap.docs) {
+      const x = d.data();
+      if (x.method !== 'manual' || x.pastedSms) continue;
+      if ((tsMillis(x.expiresAt) || 0) > cut) continue;
+      await d.ref.updateIf({ status: 'pending' }, { status: 'failed', failureReason: 'The payment order expired' }).catch(() => {});
+    }
+  } catch (e) { console.error('sweepManualOrders:', e.message); }
+}
+app.post('/admin/deposit/reject', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const depositId = String((req.body && req.body.depositId) || '').trim();
+  if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
+  const reason = stripHtml(textOf(req.body && req.body.reason)).slice(0, 200) || 'Rejected: the payment was not found';
+  try {
+    const out = await withLock('dep:' + depositId, async () => {
+      const ref = db.collection('pendingDeposits').doc(depositId);
+      const snap = await ref.get();
+      if (!snap.exists) return { code: 404, message: 'Recharge not found' };
+      const d = snap.data();
+      if (d.status === 'matched' || d.walletCredited) return { code: 400, message: 'This recharge was already credited, so it cannot be rejected.' };
+      if (d.status === 'failed') return { code: 200, message: 'Already rejected', already: true };
+      if (d.status !== 'review' && d.status !== 'pending') return { code: 400, message: `Cannot reject, the status is '${d.status}'` };
+      const done = await ref.updateIf({ status: d.status, walletCredited: { $ne: true } }, {
+        status: 'failed', failureReason: reason, rejectedBy: req.adminUser?.username || 'owner', rejectedAt: FieldValue.serverTimestamp(),
+      });
+      if (!done) return { code: 409, message: 'This recharge changed before it could be rejected. Refresh and try again.' };
+      try {
+        const txSnap = await db.collection('transactions').where('depositId', '==', depositId).limit(5).get();
+        await Promise.all(txSnap.docs.filter(t => t.data().status !== 'success').map(t => t.ref.update({
+          status: 'failed', description: `Deposit: Failed (${fmtMoney(d.amount)})`, amount: 0, displayAmount: Number(d.amount) || 0,
+        })));
+      } catch (e) { console.warn('Rejected recharge: its record could not be updated (the order itself is rejected):', e.message); }
+      return { code: 200, message: 'Recharge rejected', amount: d.amount, userId: d.userId };
+    });
+    if (out.code === 200 && !out.already) logAdminAction(req, 'deposit_rejected', { depositId, amount: out.amount, userId: out.userId, reason });
+    res.status(out.code).json({ status: out.code === 200 ? 'success' : 'error', message: out.message });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not reject this recharge' }); }
+});
+// END MANUAL MOBILE-MONEY RECHARGE
 app.get('/deposits', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -9318,7 +9593,8 @@ app.get('/admin/badges', async (req, res) => {
       db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).limit(5000).get(),
       db.collection('withdrawals').where('status', '==', 'pending').limit(5000).get(),
     ]);
-    res.json({ status: 'success', pendingDeposits: pendingDep.size, pendingWithdrawals: pendingWit.size });
+    // reviewDeposits: recharges whose payment message is in and that wait for Approve or Reject (the number on the Deposits tab)
+    res.json({ status: 'success', pendingDeposits: pendingDep.size, reviewDeposits: pendingDep.docs.filter(d => d.data().status === 'review').length, pendingWithdrawals: pendingWit.size });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Owner: "also all analytics were removed, see space8 analytics are not
@@ -10837,5 +11113,6 @@ connectMongo(MONGODB_URI)
     setInterval(autoApproveWithdrawalsTick, 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
     setInterval(reconcileBlockedCommissions, 5 * 60 * 1000);
+    setInterval(sweepManualOrders, 5 * 60 * 1000);
   })
   .catch(e => { console.error('Mongo connection failed:', e.message); process.exit(1); });
