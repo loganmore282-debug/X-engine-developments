@@ -15,10 +15,12 @@ const opt = {}; for (let i = 0; i < args.length; i += 2) opt[args[i].replace(/^-
 const die = (m) => { console.error(m); process.exit(1); };
 const IP = /^\d{1,3}(\.\d{1,3}){3}$/;
 const OLD = opt.old, NEW = opt.new;
-if (!['plan', 'ttl', 'switch', 'back', 'verify'].includes(mode)) die('modes: plan | ttl | switch | back | verify');
+if (!['plan', 'ttl', 'switch', 'back', 'verify', 'show'].includes(mode)) die('modes: plan | ttl | switch | back | verify');
 if (!IP.test(OLD || '') || !IP.test(NEW || '')) die('need --old IP and --new IP');
 const hosts = fs.existsSync(opt.hosts || '') ? fs.readFileSync(opt.hosts, 'utf8').split(/\s+/).map(s => s.trim().toLowerCase()).filter(h => h && !h.startsWith('*') && h.includes('.')) : [];
-const tokens = [...new Set(String(opt.tokens || '').split(',').filter(f => f && fs.existsSync(f)).map(f => fs.readFileSync(f, 'utf8').replace(/\s+/g, '')).filter(Boolean))];
+// without --tokens: every Hostinger token file the apps keep (root only, never printed)
+const glob = () => { const out = []; try { for (const d of fs.readdirSync('/srv')) { for (const f of ['/srv/' + d + '/hostinger.token']) if (fs.existsSync(f)) out.push(f); try { for (const a of fs.readdirSync('/srv/' + d)) { const f2 = '/srv/' + d + '/' + a + '/deploy/hostinger.token'; if (fs.existsSync(f2)) out.push(f2); } } catch (e) {} } } catch (e) {} return out.join(','); };
+const tokens = [...new Set(String(opt.tokens || glob()).split(',').filter(f => f && fs.existsSync(f)).map(f => fs.readFileSync(f, 'utf8').replace(/\s+/g, '')).filter(Boolean))];
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 async function call(token, method, zone, body) {
@@ -59,6 +61,17 @@ async function findZones(list) {
     let bad = 0;
     for (const h of hosts) { const a = await R.resolve4(h).catch(() => []); const ok = a.length && a.every(x => x === NEW); if (!ok) bad++; console.log((ok ? 'NEW   ' : 'OTHER ') + h + ' -> ' + (a.join(', ') || 'no answer')); }
     console.log(bad ? bad + ' address(es) still answer with the old (or another) address: public resolvers keep an answer until its timer ends. Run this again later.' : 'every address answers with the new server');
+    return;
+  }
+  if (mode === 'show') {   // diagnostics: what does Hostinger really answer? (record contents are addresses, no secrets)
+    console.log('token files found: ' + tokens.length + '   hosts: ' + hosts.length);
+    const { found, lost } = tokens.length ? await findZones(hosts) : { found: new Map(), lost: hosts };
+    for (const [zone, z] of found) {
+      console.log('zone ' + zone + ': ' + z.items.length + ' records');
+      for (const it of z.items.filter(x => ['A', 'AAAA', 'CNAME'].includes(x.type)).slice(0, 8)) console.log('   ' + JSON.stringify({ name: it.name, type: it.type, ttl: it.ttl, records: it.records }));
+    }
+    for (const h of lost) console.log('no zone found at Hostinger for ' + h);
+    for (const t of tokens.slice(0, 1)) { try { const z = await call(t, 'GET', (hosts[0] || 'x.y').split('.').slice(-2).join('.')); console.log('raw shape: ' + JSON.stringify(Array.isArray(z) ? z.slice(0, 1) : Object.keys(z || {}))); } catch (e) { console.log('first zone call: ' + e.message); } }
     return;
   }
   if (!tokens.length) { console.log('No Hostinger token found: DNS must be changed by hand (see the list below).'); }
