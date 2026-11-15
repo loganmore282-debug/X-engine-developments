@@ -74,7 +74,7 @@ echo "Move  $OLDIP (old, this server)  ->  $NEW (new)        $(date '+%Y-%m-%d %
 
 # =====================================================================  bridge: old server -> new server while DNS answers are still old
 BR=/root/.migrate-bridge.pids
-unbridge() { if [ -f "$BR" ]; then while read -r p; do [ -n "$p" ] && kill -TERM -- "-$p" 2>/dev/null; done < "$BR"; rm -f "$BR"; fi; }
+unbridge() { pkill -f 'migrate-bridge-loop' 2>/dev/null; sleep 1; pkill -f 'ssh -N -o ExitOnForwardFailure=yes' 2>/dev/null; rm -f "$BR"; return 0; }   # the loops first (so nothing restarts), then their tunnels
 if [ "$MODE" = unbridge ]; then unbridge; echo "The forwarding is stopped."; exit 0; fi
 if [ "$MODE" = bridge ]; then
   [ "$(st_get SWITCHED)" = yes ] || fail "the switch was not done yet: nothing to bridge."
@@ -84,7 +84,7 @@ if [ "$MODE" = bridge ]; then
   say "Forwarding visitors that still arrive at this old server to the new one"
   for p in $PORTS; do
     if ss -ltnH 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$p\$"; then warn "port $p is in use here: skipped (is an app running here?)"; continue; fi
-    setsid bash -c "while true; do ssh -N -o ExitOnForwardFailure=yes $SSHOPTS -L 127.0.0.1:$p:127.0.0.1:$p root@$NEW; sleep 3; done" >/dev/null 2>&1 &
+    setsid bash -c ": migrate-bridge-loop; while true; do ssh -N -o ExitOnForwardFailure=yes $SSHOPTS -L 127.0.0.1:$p:127.0.0.1:$p root@$NEW; sleep 3; done" >/dev/null 2>&1 &
     echo $! >> "$BR"
   done
   sleep 5
