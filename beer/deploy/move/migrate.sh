@@ -47,7 +47,7 @@ say()  { printf '\n==> %s\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
 warn() { printf '    !! %s\n' "$*"; }
 fail() { printf '\n!! %s\n' "$*"; exit 1; }
-ask()  { local a; printf '%s' "$1" >/dev/tty; IFS= read -r a </dev/tty; printf '%s' "$a"; }
+ask()  { local a; printf '%s' "$1" >/dev/tty; IFS= read -r a </dev/tty; printf '%s' "$a" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]'; }   # spaces and letter case ignored (phone keyboards add a space after a word)
 asks() { local a; printf '%s' "$1" >/dev/tty; IFS= read -r -s a </dev/tty; printf '\n' >/dev/tty; printf '%s' "$a"; }
 st_get() { sed -n "s/^$1=//p" "$STATE" 2>/dev/null | tail -1; }
 st_set() { (umask 077; touch "$STATE"; { grep -v "^$1=" "$STATE" 2>/dev/null; printf '%s=%s\n' "$1" "$2"; } > "$STATE.t"; mv "$STATE.t" "$STATE"); }
@@ -110,7 +110,7 @@ command -v rsync >/dev/null && command -v sshpass >/dev/null || fail "could not 
 if ! R true 2>/dev/null; then
   note "the new server needs its root password once (the one you chose when ordering; nothing is shown as you type)"
   for try in 1 2 3; do
-    SSHPASS=$(asks "    Root password of $NEW: "); export SSHPASS
+    SSHPASS=$(asks "    Root password of $NEW: " | tr -d '\r\n'); export SSHPASS
     sshpass -e ssh -p "${MIGRATE_SSH_PORT:-22}" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KNOWN" -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=20 \
       "root@$NEW" 'umask 077; mkdir -p ~/.ssh; cat >> ~/.ssh/authorized_keys' < "$KEY.pub"; rc=$?
     unset SSHPASS
@@ -224,6 +224,10 @@ OLDPORTS=$(ss -ltnH 2>/dev/null | awk '{n=split($4,a,":"); print a[n]}' | sort -
 note "everything is copied and checked. The apps are still running here, and NOT started there."
 
 say "6/7  Ready to switch"
+PLAN=$(DNSM plan 2>&1)
+NCH=$(echo "$PLAN" | grep -c '^would change'); NMAN=$(echo "$PLAN" | grep -cE '^  [a-z0-9]')
+note "DNS: $NCH record(s) at Hostinger will be moved to $NEW by this script automatically."
+[ "$NMAN" -gt 0 ] && { warn "DNS: $NMAN address(es) are NOT at Hostinger (or have no token). You must change them by hand at the switch:"; echo "$PLAN" | grep -E '^  [a-z0-9]' | sed 's/^/        /'; }
 T0=$(st_get TTL_AT); MT=$(st_get MAXTTL); LEFT=$(( ${T0:-0} + ${MT:-0} - $(date +%s) ))
 if [ "$LEFT" -gt 60 ]; then
   warn "the old DNS timer is still running for about $(( LEFT / 60 )) more minutes (until $(date -d "@$(( $(date +%s) + LEFT ))" '+%H:%M')). If you switch now, members whose phone still remembers the old address cannot open the app until then."
