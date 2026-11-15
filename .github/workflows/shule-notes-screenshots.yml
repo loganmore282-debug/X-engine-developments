@@ -15,6 +15,11 @@ on:
 permissions:
   contents: write
 
+# One run at a time: two runs would publish over each other's pictures.
+concurrency:
+  group: shule-notes-screenshots
+  cancel-in-progress: true
+
 jobs:
   screenshots:
     runs-on: ubuntu-latest

@@ -101,7 +101,7 @@ def type_into(index, text):
 def tidy_status_bar():
     adb("shell", "settings", "put", "global", "sysui_demo_allowed", "1", check=False)
     for extra in (["enter"], ["clock", "-e", "hhmm", "0900"], ["battery", "-e", "level", "100", "-e", "plugged", "false"],
-                  ["network", "-e", "wifi", "show", "-e", "level", "4"], ["notifications", "-e", "visible", "false"]):
+                  ["network", "-e", "mobile", "hide"], ["network", "-e", "wifi", "show", "-e", "level", "4", "-e", "fully", "true"], ["notifications", "-e", "visible", "false"]):
         adb("shell", "am", "broadcast", "-a", "com.android.systemui.demo", "-e", "command", *extra, check=False)
 
 

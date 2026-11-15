@@ -99,26 +99,45 @@ it at the real backend before using it for real.
 
 ### Android app (`android/`)
 - Kotlin + Jetpack Compose, Material 3. Package `com.shulenotes.app`.
-- `data/` — Retrofit (`ApiService`/`ApiClient`) + a DataStore-backed `TokenStore`. The
-  auth token is read **synchronously** by an OkHttp interceptor from an in-memory
-  `SessionHolder` object (an interceptor cannot suspend to read DataStore), kept in sync
-  by `TokenStore.saveToken`/`clearToken`/`primeSessionHolder` (called once at app start).
-- `ui/note/PdfDocument.kt` + `PdfPagesView.kt` — the PDF viewer uses the **platform's own
-  `android.graphics.pdf.PdfRenderer`** (API 21+), not a third-party PDF library. Keeps the
-  APK smaller and avoids a dependency whose exact current Maven coordinates could not be
-  verified from this sandbox. Pages render lazily as they scroll into view.
-- `ui/chat/` — the "Ask AI" screen for a note. Keeps the last 8 turns of chat and resends
-  them with every question (the server has no memory between requests) — capped so a long
-  chat session doesn't grow the request, and the Claude bill, without bound.
-- Gradle baseline (AGP 8.5.2, Kotlin 2.0.21, compileSdk 34, minSdk 24, targetSdk 34, JDK
-  17) matches this repo's own `xengine-app/`, which is proven to build successfully in
-  this account's CI — chosen deliberately to minimize the risk of an unverifiable
-  dependency mismatch, since this project's own CI run is the only compile check it gets
-  before the owner opens it in Android Studio.
-- `app/build.gradle.kts`'s `API_BASE_URL` build config field currently points at
-  `10.0.2.2:4000` for debug builds (the Android emulator's alias for the host machine's
-  `localhost`) and a placeholder for release — **edit both to the real VPS URL** before
-  building a release APK or testing against a real phone on the same network as the VPS.
+- **The owner rejected the first, default-styled version as unprofessional.** The design
+  below is deliberate; keep new screens to the same standard and check them on the
+  emulator screenshots, not just by compiling.
+- **Identity** (`ui/theme/`): green primary with amber for anything AI, warm paper
+  background, white cards with a hairline border (no shadows), light AND dark schemes.
+  Poppins (bundled, OFL licence in `android/licenses/`) for headings, titles and buttons;
+  the system font for body text. App icon = white open book with an amber spark on a green
+  gradient (adaptive icon; the same mark is the in-app logo and the launch screen).
+- **Screens:** `ui/auth/` sign in and create account; `ui/main/` one screen with bottom
+  tabs Home (greeting, search, subject chips, note cards), Saved (bookmarks, stored on the
+  phone only) and Profile (privacy policy, log out, delete account); `ui/note/` the reader;
+  `ui/chat/` the AI helper. Shared pieces live in `ui/components/`.
+- Each subject's colour comes from its position in the admin's subject order
+  (`SubjectTint.kt`), so the first six subjects never share one.
+- `LibraryViewModel` loads the whole library once and filters by subject and search on the
+  phone. `NoteCache` lets the reader and chat show a note's title without refetching.
+- `data/` — Retrofit (`ApiService`/`ApiClient`) + `SessionStore` (DataStore: token, name,
+  bookmarks). The token is read **synchronously** by an OkHttp interceptor from the
+  in-memory `SessionHolder` (an interceptor cannot suspend). A 401 on a signed-in request
+  sets `SessionHolder.expired`, and the nav graph signs the user out. That is why
+  `/auth/delete-account` answers a wrong password with 403, not 401.
+- **Reader** (`PdfDocument.kt`, `PdfPagesView.kt`): the platform's own `PdfRenderer`, no
+  PDF library. Pinch or double-tap zoom WIDENS the pages and re-renders them at higher
+  resolution instead of magnifying a bitmap. Two-finger gestures are read in the Initial
+  pointer pass so the list cannot steal them. Downloaded PDFs are kept in the cache
+  directory and reused (a note's file never changes), so reopening is instant.
+- Gradle baseline: AGP 8.5.2, Kotlin 2.0.21, compileSdk/targetSdk 34, minSdk 24, JDK 17.
+- `API_BASE_URL` in `app/build.gradle.kts` points at `10.0.2.2:4000` for debug builds (the
+  emulator's alias for the host) and a placeholder for release. `src/debug/` allows plain
+  HTTP for debug builds only. The privacy policy link is `API_BASE_URL + /privacy`.
+
+### Not done yet for a Play Store upload
+- **Target API level:** still 34. Google Play requires new apps to target a recent Android
+  version; check the current requirement and raise compileSdk/targetSdk (needs a newer
+  AGP and Gradle) before uploading.
+- **Release build:** not minified and never run. Turn on R8 (`isMinifyEnabled`) with keep
+  rules for the Gson models in `data/`, and walk that build on the emulator too.
+- **AI answers:** never exercised against the real Claude API (no key in CI).
+- No password reset (no SMS or email provider wired up).
 
 ## Deployment (owner does this manually)
 
