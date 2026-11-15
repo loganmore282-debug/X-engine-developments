@@ -35,7 +35,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.shulenotes.app.BuildConfig
-import com.shulenotes.app.ui.components.ErrorBanner
 import com.shulenotes.app.ui.components.PrimaryButton
 import com.shulenotes.app.ui.components.ShuleTextField
 
@@ -54,19 +53,17 @@ fun RegisterScreen(viewModel: AuthViewModel, onRegistered: () -> Unit, onGoToLog
     }
 
     AuthFrame(onBack = onGoToLogin) {
-        Text("Create your account", style = MaterialTheme.typography.headlineMedium)
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "Notes, past papers and an AI study helper, all in one place.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        AuthHeader(
+            logoSize = 84.dp,
+            title = "Create your account",
+            subtitle = "Notes, past papers and an AI study helper.",
         )
-        Spacer(Modifier.height(28.dp))
 
         ShuleTextField(
             value = name,
-            onValueChange = { name = it; viewModel.clearError() },
+            onValueChange = { name = it; viewModel.clearNameError() },
             label = "Full name",
+            error = viewModel.nameError,
             leadingIcon = Icons.Outlined.Person,
             enabled = !viewModel.isLoading,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next),
@@ -74,8 +71,9 @@ fun RegisterScreen(viewModel: AuthViewModel, onRegistered: () -> Unit, onGoToLog
         Spacer(Modifier.height(14.dp))
         ShuleTextField(
             value = phone,
-            onValueChange = { phone = it; viewModel.clearError() },
+            onValueChange = { phone = it; viewModel.clearPhoneError() },
             label = "Phone number",
+            error = viewModel.phoneError,
             leadingIcon = Icons.Outlined.Phone,
             enabled = !viewModel.isLoading,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Next),
@@ -83,8 +81,9 @@ fun RegisterScreen(viewModel: AuthViewModel, onRegistered: () -> Unit, onGoToLog
         Spacer(Modifier.height(14.dp))
         ShuleTextField(
             value = password,
-            onValueChange = { password = it; viewModel.clearError() },
+            onValueChange = { password = it; viewModel.clearPasswordError() },
             label = "Password",
+            error = viewModel.passwordError,
             leadingIcon = Icons.Outlined.Lock,
             isPassword = true,
             supportingText = "At least 6 characters",
@@ -93,12 +92,7 @@ fun RegisterScreen(viewModel: AuthViewModel, onRegistered: () -> Unit, onGoToLog
             keyboardActions = KeyboardActions(onDone = { submit() }),
         )
 
-        viewModel.errorMessage?.let {
-            Spacer(Modifier.height(10.dp))
-            ErrorBanner(it)
-        }
-
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(14.dp))
         PrimaryButton(text = "Create account", loadingText = "Creating your account…", loading = viewModel.isLoading, onClick = submit)
 
         Spacer(Modifier.height(14.dp))

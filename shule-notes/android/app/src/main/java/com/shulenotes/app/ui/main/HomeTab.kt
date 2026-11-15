@@ -44,7 +44,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.shulenotes.app.ui.components.Avatar
-import com.shulenotes.app.ui.components.ErrorBanner
 import com.shulenotes.app.ui.components.StateMessage
 import com.shulenotes.app.ui.components.subjectTint
 
@@ -193,11 +192,6 @@ fun HomeTab(
                     )
                 }
                 else -> {
-                    if (error != null) {
-                        item(key = "refresh-error") {
-                            ErrorBanner(error, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp))
-                        }
-                    }
                     items(visible, key = { it.id }) { note ->
                         NoteCard(
                             note = note,

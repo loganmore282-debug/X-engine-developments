@@ -105,11 +105,22 @@ it at the real backend before using it for real.
 - **The owner rejected the first, default-styled version as unprofessional.** The design
   below is deliberate; keep new screens to the same standard and check them on the
   emulator screenshots, not just by compiling.
-- **Identity** (`ui/theme/`): green primary with amber for anything AI, warm paper
-  background, white cards with a hairline border (no shadows), light AND dark schemes.
-  Poppins (bundled, OFL licence in `android/licenses/`) for headings, titles and buttons;
-  the system font for body text. App icon = white open book with an amber spark on a green
-  gradient (adaptive icon; the same mark is the in-app logo and the launch screen).
+- **Identity** (`ui/theme/`): green primary, the logo's teal as tertiary, amber for
+  anything AI, warm paper background, white cards with a hairline border, light AND dark
+  schemes. Poppins (bundled, OFL licence in `android/licenses/`) for headings, titles and
+  buttons; the system font for body text.
+- **Logo:** the owner supplied it (`android/branding/logo-source.png`: graduation cap on a
+  notebook with "SN"). He asked for its dark blue to be green, so
+  `branding/make_logo_assets.py` recolours it, removes the white background and writes
+  the in-app mark, the launcher icon and the launch-screen icon. Re-run it if the logo
+  changes; do not hand-edit the generated PNGs. On the sign-in screens the logo sits
+  centred at the top with the "ShuleNotes" wordmark under it (owner's request).
+- **Messages to the user** (the owner rejected an inline coloured error box as dated):
+  a mistake in one field is shown UNDER that field with a red outline
+  (`ShuleTextField(error = ...)`); everything else -- wrong password, no connection,
+  "Added to Saved" -- is a floating card that slides down from the top and leaves by
+  itself (`Notifier` / `NotifierHost` in `ui/components/Notifier.kt`). Do not add inline
+  banners.
 - **Screens:** `ui/auth/` sign in and create account; `ui/main/` one screen with bottom
   tabs Home (greeting, search, subject chips, note cards), Saved (bookmarks, stored on the
   phone only) and Profile (privacy policy, log out, delete account); `ui/note/` the reader;
@@ -175,9 +186,5 @@ Android release signing keys live only with the owner, never in this repo.
 - No password-reset flow (self-rolled auth has no email/SMS provider wired up yet).
 - No Nginx/systemd config checked in — the VPS web-server setup is standard and
   deliberately left to the owner's own preferred approach.
-- No app icon beyond a placeholder vector drawable (`android/app/src/main/res/drawable/ic_launcher.xml`) —
-  replace with real artwork before a Play Store listing.
-- No offline mode — a note's PDF is downloaded fresh each time it's opened (cached only
-  for the duration it stays in the app's cache directory).
 - Admin panel has no pagination on the notes list (fine at the scale of one school's
   worth of notes; would need it at a much larger library size).

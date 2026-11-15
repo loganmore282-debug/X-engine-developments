@@ -136,13 +136,10 @@ fun ProfileTab(
                         label = "Password",
                         leadingIcon = Icons.Outlined.Lock,
                         isPassword = true,
+                        error = viewModel.deleteAccountError,
                         enabled = !viewModel.isDeletingAccount,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     )
-                    viewModel.deleteAccountError?.let {
-                        Spacer(Modifier.height(8.dp))
-                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    }
                 }
             },
             confirmButton = {

@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.shulenotes.app.ShuleApp
 import com.shulenotes.app.data.NoteCache
 import com.shulenotes.app.ui.components.StateMessage
+import com.shulenotes.app.ui.main.notifySaved
 import com.shulenotes.app.ui.main.pagesLabel
 import kotlinx.coroutines.launch
 
@@ -86,7 +87,7 @@ fun NoteDetailScreen(noteId: String, viewModel: NoteViewModel, onBack: () -> Uni
                     }
                 },
                 actions = {
-                    IconButton(onClick = { scope.launch { ShuleApp.session.toggleSaved(noteId) } }) {
+                    IconButton(onClick = { scope.launch { notifySaved(ShuleApp.session.toggleSaved(noteId)) } }) {
                         Icon(
                             imageVector = if (saved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                             contentDescription = if (saved) "Remove from saved" else "Save note",

@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.shulenotes.app.data.SessionHolder
+import com.shulenotes.app.ui.components.NotifierHost
 import com.shulenotes.app.ui.nav.Routes
 import com.shulenotes.app.ui.nav.ShuleNavGraph
 import com.shulenotes.app.ui.theme.ShuleNotesTheme
@@ -37,6 +38,7 @@ class MainActivity : ComponentActivity() {
             ShuleNotesTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     startDestination?.let { ShuleNavGraph(startDestination = it) }
+                    NotifierHost()
                 }
             }
         }

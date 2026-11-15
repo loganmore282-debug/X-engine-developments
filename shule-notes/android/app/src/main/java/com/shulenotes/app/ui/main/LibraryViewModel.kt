@@ -11,8 +11,13 @@ import com.shulenotes.app.data.Note
 import com.shulenotes.app.data.NoteCache
 import com.shulenotes.app.data.Subject
 import com.shulenotes.app.data.serverMessage
+import com.shulenotes.app.ui.components.Notifier
 import kotlinx.coroutines.launch
 import java.io.IOException
+
+fun notifySaved(nowSaved: Boolean) {
+    if (nowSaved) Notifier.success("Added to Saved") else Notifier.info("Removed from Saved")
+}
 
 // Backs the three main tabs. The whole library is loaded once and filtered
 // on the phone, so switching subject or typing a search is instant.
@@ -54,14 +59,20 @@ class LibraryViewModel : ViewModel() {
                 NoteCache.put(loadedNotes)
                 if (loadedSubjects.none { it.id == selectedSubjectId }) selectedSubjectId = null
             } catch (e: IOException) {
-                errorMessage = "No connection. Check your internet and try again."
+                loadFailed("No connection. Check your internet and try again.")
             } catch (e: Exception) {
-                errorMessage = e.serverMessage() ?: "Something went wrong loading your notes."
+                loadFailed(e.serverMessage() ?: "Something went wrong loading your notes.")
             } finally {
                 isLoading = false
                 isRefreshing = false
             }
         }
+    }
+
+    // With nothing on screen the failure fills the screen with a retry button;
+    // when notes are already showing, a passing notice is enough.
+    private fun loadFailed(message: String) {
+        if (notes.isEmpty()) errorMessage = message else Notifier.error(message)
     }
 
     fun selectSubject(subjectId: String?) { selectedSubjectId = subjectId }
@@ -83,7 +94,7 @@ class LibraryViewModel : ViewModel() {
     fun subjectName(subjectId: String?): String? = subjects.firstOrNull { it.id == subjectId }?.name
 
     fun toggleSaved(noteId: String) {
-        viewModelScope.launch { ShuleApp.session.toggleSaved(noteId) }
+        viewModelScope.launch { notifySaved(ShuleApp.session.toggleSaved(noteId)) }
     }
 
     fun logout(onDone: () -> Unit) {
@@ -101,7 +112,7 @@ class LibraryViewModel : ViewModel() {
     fun deleteAccount(password: String, onDone: () -> Unit) {
         if (isDeletingAccount) return
         if (password.isBlank()) {
-            deleteAccountError = "Enter your password to confirm."
+            deleteAccountError = "Enter your password"
             return
         }
         viewModelScope.launch {
@@ -112,8 +123,9 @@ class LibraryViewModel : ViewModel() {
                 ShuleApp.session.clear()
                 NoteCache.clear()
                 onDone()
+                Notifier.success("Your account has been deleted")
             } catch (e: IOException) {
-                deleteAccountError = "No connection. Check your internet and try again."
+                deleteAccountError = "No connection. Try again."
             } catch (e: Exception) {
                 deleteAccountError = e.serverMessage() ?: "We could not delete the account. Please try again."
             } finally {

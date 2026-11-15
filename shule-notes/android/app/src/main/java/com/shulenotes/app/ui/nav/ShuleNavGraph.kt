@@ -14,6 +14,7 @@ import com.shulenotes.app.data.SessionHolder
 import com.shulenotes.app.ui.auth.LoginScreen
 import com.shulenotes.app.ui.auth.RegisterScreen
 import com.shulenotes.app.ui.chat.AiChatScreen
+import com.shulenotes.app.ui.components.Notifier
 import com.shulenotes.app.ui.main.MainScreen
 import com.shulenotes.app.ui.note.NoteDetailScreen
 
@@ -39,6 +40,7 @@ fun ShuleNavGraph(startDestination: String) {
             NoteCache.clear()
             SessionHolder.expired.value = false
             toLogin()
+            Notifier.info("Please sign in again")
         }
     }
 

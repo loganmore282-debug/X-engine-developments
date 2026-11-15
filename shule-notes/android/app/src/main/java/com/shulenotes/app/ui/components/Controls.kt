@@ -15,7 +15,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -77,13 +76,16 @@ fun ShuleTextField(
     modifier: Modifier = Modifier,
     isPassword: Boolean = false,
     supportingText: String? = null,
+    // Non-null marks the field as wrong; non-empty text is shown under it.
+    error: String? = null,
     enabled: Boolean = true,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
 ) {
     var visible by rememberSaveable { mutableStateOf(false) }
-    val supporting: (@Composable () -> Unit)? = if (supportingText != null) {
-        { Text(supportingText) }
+    val below = error?.takeIf { it.isNotEmpty() } ?: supportingText
+    val supporting: (@Composable () -> Unit)? = if (below != null) {
+        { Text(below) }
     } else {
         null
     }
@@ -106,6 +108,7 @@ fun ShuleTextField(
         leadingIcon = { Icon(leadingIcon, contentDescription = null) },
         trailingIcon = trailing,
         supportingText = supporting,
+        isError = error != null,
         singleLine = true,
         enabled = enabled,
         visualTransformation = if (isPassword && !visible) PasswordVisualTransformation() else VisualTransformation.None,
@@ -116,26 +119,11 @@ fun ShuleTextField(
             focusedContainerColor = MaterialTheme.colorScheme.surface,
             unfocusedContainerColor = MaterialTheme.colorScheme.surface,
             disabledContainerColor = MaterialTheme.colorScheme.surface,
+            errorContainerColor = MaterialTheme.colorScheme.surface,
             unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
         ),
         modifier = modifier.fillMaxWidth(),
     )
-}
-
-@Composable
-fun ErrorBanner(message: String, modifier: Modifier = Modifier) {
-    Surface(
-        color = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        shape = RoundedCornerShape(14.dp),
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.ErrorOutline, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
-            Text(message, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
 }
 
 // One shape for every "nothing to show" moment: empty lists, failed loads.

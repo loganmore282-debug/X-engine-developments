@@ -4,8 +4,6 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 
-val BrandGradient = listOf(Color(0xFF238A62), Color(0xFF0E4A35))
-
 // Screens sit on `background`; cards, sheets and bars sit on `surface`.
 val LightColors = lightColorScheme(
     primary = Color(0xFF17694B),
@@ -16,6 +14,8 @@ val LightColors = lightColorScheme(
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFFFE9BD),
     onSecondaryContainer = Color(0xFF3D2A00),
+    tertiary = Color(0xFF0FAE9A),
+    onTertiary = Color.White,
     background = Color(0xFFF7F5F0),
     onBackground = Color(0xFF1B1C1A),
     surface = Color.White,
@@ -45,6 +45,8 @@ val DarkColors = darkColorScheme(
     onSecondary = Color(0xFF402D00),
     secondaryContainer = Color(0xFF5B4300),
     onSecondaryContainer = Color(0xFFFFE9BD),
+    tertiary = Color(0xFF3CE0C6),
+    onTertiary = Color(0xFF00382F),
     background = Color(0xFF101412),
     onBackground = Color(0xFFE1E3DE),
     surface = Color(0xFF1A1F1C),

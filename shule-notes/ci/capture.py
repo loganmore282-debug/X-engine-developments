@@ -125,6 +125,11 @@ def walk():
     time.sleep(1)
     shot("app-01-sign-in")
 
+    tap(wait_for("Sign in"))
+    wait_for("Enter your phone number")
+    wait_for("Enter your password")
+    shot("app-01b-empty-fields")
+
     tap(wait_for("Create an account"))
     wait_for("Create your account")
     type_into(0, "Amina Nakato")
@@ -151,6 +156,7 @@ def walk():
     wait_for("Photosynthesis", prefix=True)
 
     tap(wait_for("Save note"))
+    shot("app-05b-added-to-saved-message")
     wait_for("Remove from saved")
     tap(wait_for("Saved"))
     wait_for("Notes you bookmarked on this phone")
@@ -227,7 +233,7 @@ def walk():
     type_into(1, "wrongpass")
     tap(wait_for("Sign in"))
     wait_for("Incorrect phone number or password")
-    shot("check-wrong-password")
+    shot("app-15-wrong-password-message")
 
     # The same number written with its country code must reach the same account.
     clear_field(0)

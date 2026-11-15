@@ -1,4 +1,3 @@
-<!-- Android 7 (API 24-25) has no adaptive icons; it gets the same mark as a plain drawable. -->
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@drawable/ic_launcher_legacy" />
-</layer-list>
+<!-- Android 7 (API 24-25) has no adaptive icons; it gets the mark on a white rounded square. -->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@mipmap/ic_launcher_legacy" />

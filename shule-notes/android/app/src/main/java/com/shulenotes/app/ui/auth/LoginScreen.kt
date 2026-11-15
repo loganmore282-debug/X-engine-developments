@@ -36,11 +36,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.shulenotes.app.ui.components.ErrorBanner
 import com.shulenotes.app.ui.components.LogoMark
 import com.shulenotes.app.ui.components.PrimaryButton
 import com.shulenotes.app.ui.components.ShuleTextField
+import com.shulenotes.app.ui.components.Wordmark
 
 // Shared frame for the sign-in and sign-up screens: scrolls, and keeps the
 // focused field above the keyboard.
@@ -59,12 +61,31 @@ fun AuthFrame(onBack: (() -> Unit)? = null, content: @Composable ColumnScope.() 
             IconButton(onClick = onBack, modifier = Modifier.padding(top = 4.dp).offset(x = (-12).dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
-            Spacer(Modifier.height(12.dp))
         } else {
-            Spacer(Modifier.height(64.dp))
+            Spacer(Modifier.height(40.dp))
         }
         content()
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+// Logo in the middle at the top, then the screen's title and one line under it.
+@Composable
+fun AuthHeader(logoSize: Dp, title: String, subtitle: String) {
+    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        LogoMark(size = logoSize)
+        Spacer(Modifier.height(10.dp))
+        Wordmark(fontSize = 26)
+        Spacer(Modifier.height(24.dp))
+        Text(title, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(28.dp))
     }
 }
 
@@ -79,21 +100,13 @@ fun LoginScreen(viewModel: AuthViewModel, onLoggedIn: () -> Unit, onGoToRegister
     }
 
     AuthFrame {
-        LogoMark(size = 68.dp)
-        Spacer(Modifier.height(28.dp))
-        Text("Welcome back", style = MaterialTheme.typography.headlineMedium)
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "Sign in to carry on studying with Shule Notes.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(32.dp))
+        AuthHeader(logoSize = 112.dp, title = "Welcome back", subtitle = "Sign in to carry on studying.")
 
         ShuleTextField(
             value = phone,
-            onValueChange = { phone = it; viewModel.clearError() },
+            onValueChange = { phone = it; viewModel.clearPhoneError() },
             label = "Phone number",
+            error = viewModel.phoneError,
             leadingIcon = Icons.Outlined.Phone,
             enabled = !viewModel.isLoading,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Next),
@@ -101,19 +114,15 @@ fun LoginScreen(viewModel: AuthViewModel, onLoggedIn: () -> Unit, onGoToRegister
         Spacer(Modifier.height(14.dp))
         ShuleTextField(
             value = password,
-            onValueChange = { password = it; viewModel.clearError() },
+            onValueChange = { password = it; viewModel.clearPasswordError() },
             label = "Password",
+            error = viewModel.passwordError,
             leadingIcon = Icons.Outlined.Lock,
             isPassword = true,
             enabled = !viewModel.isLoading,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { submit() }),
         )
-
-        viewModel.errorMessage?.let {
-            Spacer(Modifier.height(14.dp))
-            ErrorBanner(it)
-        }
 
         Spacer(Modifier.height(24.dp))
         PrimaryButton(text = "Sign in", loadingText = "Signing in…", loading = viewModel.isLoading, onClick = submit)

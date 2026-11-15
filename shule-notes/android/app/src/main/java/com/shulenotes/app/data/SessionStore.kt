@@ -44,11 +44,15 @@ class SessionStore(private val context: Context) {
         SessionHolder.token = context.dataStore.data.first()[TOKEN_KEY]
     }
 
-    suspend fun toggleSaved(noteId: String) {
+    // Returns true when the note is saved after the call, false when it was removed.
+    suspend fun toggleSaved(noteId: String): Boolean {
+        var nowSaved = false
         context.dataStore.edit {
             val current = it[SAVED_KEY] ?: emptySet()
-            it[SAVED_KEY] = if (noteId in current) current - noteId else current + noteId
+            nowSaved = noteId !in current
+            it[SAVED_KEY] = if (nowSaved) current + noteId else current - noteId
         }
+        return nowSaved
     }
 }
 
