@@ -226,9 +226,12 @@ def walk():
     type_into(0, "0772123456")
     type_into(1, "wrongpass")
     tap(wait_for("Sign in"))
-    wait_for("Incorrect phone/email or password")
+    wait_for("Incorrect phone number or password")
     shot("check-wrong-password")
 
+    # The same number written with its country code must reach the same account.
+    clear_field(0)
+    type_into(0, "+256772123456")
     clear_field(1)
     type_into(1, "study2026")
     tap(wait_for("Sign in"))
@@ -243,7 +246,7 @@ def walk():
     type_into(0, "0772123456")
     type_into(1, "study2026")
     tap(wait_for("Sign in"))
-    wait_for("Incorrect phone/email or password")
+    wait_for("Incorrect phone number or password")
     shot("check-deleted-account-cannot-sign-in")
 
 

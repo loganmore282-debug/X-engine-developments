@@ -29,7 +29,7 @@ class SessionStore(private val context: Context) {
         context.dataStore.edit {
             it[TOKEN_KEY] = token
             it[NAME_KEY] = user?.name.orEmpty()
-            it[CONTACT_KEY] = user?.phone ?: user?.email ?: ""
+            it[CONTACT_KEY] = user?.phone.orEmpty()
         }
         SessionHolder.token = token
     }

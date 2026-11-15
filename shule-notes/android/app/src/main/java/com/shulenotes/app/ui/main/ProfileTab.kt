@@ -113,7 +113,7 @@ fun ProfileTab(
         AlertDialog(
             onDismissRequest = { confirmLogout = false },
             title = { Text("Log out?") },
-            text = { Text("You will need your phone number or email and your password to sign in again.") },
+            text = { Text("You will need your phone number and password to sign in again.") },
             confirmButton = {
                 TextButton(onClick = { confirmLogout = false; viewModel.logout(onSignedOut) }) { Text("Log out") }
             },

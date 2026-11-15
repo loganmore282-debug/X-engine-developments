@@ -20,7 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -70,12 +70,12 @@ fun AuthFrame(onBack: (() -> Unit)? = null, content: @Composable ColumnScope.() 
 
 @Composable
 fun LoginScreen(viewModel: AuthViewModel, onLoggedIn: () -> Unit, onGoToRegister: () -> Unit) {
-    var identifier by rememberSaveable { mutableStateOf("") }
+    var phone by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     val focus = LocalFocusManager.current
     val submit = {
         focus.clearFocus()
-        viewModel.login(identifier, password, onLoggedIn)
+        viewModel.login(phone, password, onLoggedIn)
     }
 
     AuthFrame {
@@ -91,12 +91,12 @@ fun LoginScreen(viewModel: AuthViewModel, onLoggedIn: () -> Unit, onGoToRegister
         Spacer(Modifier.height(32.dp))
 
         ShuleTextField(
-            value = identifier,
-            onValueChange = { identifier = it; viewModel.clearError() },
-            label = "Phone number or email",
-            leadingIcon = Icons.Outlined.Person,
+            value = phone,
+            onValueChange = { phone = it; viewModel.clearError() },
+            label = "Phone number",
+            leadingIcon = Icons.Outlined.Phone,
             enabled = !viewModel.isLoading,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Next),
         )
         Spacer(Modifier.height(14.dp))
         ShuleTextField(

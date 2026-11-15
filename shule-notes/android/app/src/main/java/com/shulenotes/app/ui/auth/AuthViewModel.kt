@@ -20,13 +20,13 @@ class AuthViewModel : ViewModel() {
 
     fun clearError() { errorMessage = null }
 
-    fun login(identifier: String, password: String, onSuccess: () -> Unit) {
-        if (identifier.isBlank() || password.isBlank()) {
-            errorMessage = "Enter your phone number or email, and your password."
+    fun login(phone: String, password: String, onSuccess: () -> Unit) {
+        if (phone.isBlank() || password.isBlank()) {
+            errorMessage = "Enter your phone number and your password."
             return
         }
         submit("We could not sign you in. Please try again.", onSuccess) {
-            ApiClient.service.login(mapOf("identifier" to identifier.trim(), "password" to password))
+            ApiClient.service.login(mapOf("phone" to phone.trim(), "password" to password))
         }
     }
 

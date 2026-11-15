@@ -42,7 +42,7 @@ const server = require('./server.js');
 
 console.log('— publicUser / publicNote never leak internal fields —');
 {
-  const u = server.publicUser({ _id: 'u1', name: 'Asha', phone: '0700000000', email: null, passwordHash: 'should-never-appear' });
+  const u = server.publicUser({ _id: 'u1', name: 'Asha', phone: '0700000000', passwordHash: 'should-never-appear' });
   ck(u.id === 'u1' && u.name === 'Asha' && u.phone === '0700000000', 'the public shape carries what a client needs');
   ck(JSON.stringify(u).indexOf('passwordHash') === -1 && JSON.stringify(u).indexOf('never-appear') === -1,
      'and the password hash is never present in it, even by accident');
@@ -52,6 +52,18 @@ console.log('— publicUser / publicNote never leak internal fields —');
   ck(JSON.stringify(n).indexOf('secret-uuid') === -1, 'the real server-side file NAME is never exposed to the client (only /notes/:id/file serves it)');
   const n2 = server.publicNote({ _id: 'n2', title: 'Scanned Notes', extractedText: '' });
   ck(n2.hasAiContext === false, 'a note with no extracted text (a scan) correctly reports AI is unavailable');
+}
+
+console.log('\n— one stored form per phone number —');
+{
+  const n = server.normalizePhone;
+  ck(n('0772123456') === '0772123456', 'a local number is kept as typed');
+  ck(n('+256772123456') === '0772123456' && n('256 772 123 456') === '0772123456', 'the same number with a country code matches it');
+  ck(n('772123456') === '0772123456', 'so does the number typed without its leading 0');
+  ck(n('0772-123 456') === '0772123456', 'spaces and dashes are ignored');
+  ck(n('+254712345678') === '0712345678' && n('+255712345678') === '0712345678', 'Kenyan and Tanzanian country codes are handled the same way');
+  ck(server.isValidPhone(n('0772123456')) && !server.isValidPhone(n('12345')) && !server.isValidPhone(n('amina@example.com')) && !server.isValidPhone(n('')),
+     'a number that is too short, an email address, or nothing at all is refused');
 }
 
 console.log('\n— the AI daily quota actually caps spend —');

@@ -33,12 +33,12 @@ function privacyPage({ appName, supportEmail, updated }) {
 <p>${app} lets students read notes, past papers and revision material, and ask an AI helper questions about the document they are reading. This page explains what information the app collects and what happens to it.</p>
 <h2>What we collect</h2>
 <ul>
-  <li><strong>Account details:</strong> your name, your phone number or email address, and your password. The password is stored only in a scrambled (hashed) form that we cannot read.</li>
+  <li><strong>Account details:</strong> your name, your phone number, and your password. The password is stored only in a scrambled (hashed) form that we cannot read.</li>
   <li><strong>AI helper usage:</strong> how many questions you ask each day, so that the daily limit can be applied.</li>
 </ul>
 <p>The app does not collect your location, contacts, photos or files, and it contains no advertising or tracking software.</p>
 <h2>The AI helper</h2>
-<p>When you ask a question, the question, your recent questions in the same chat and the text of the document you have open are sent to Anthropic, the company that provides the Claude AI model, so that an answer can be produced. Your name, phone number and email address are not sent. We do not keep a copy of your questions or the answers on our servers.</p>
+<p>When you ask a question, the question, your recent questions in the same chat and the text of the document you have open are sent to Anthropic, the company that provides the Claude AI model, so that an answer can be produced. Your name and phone number are not sent. We do not keep a copy of your questions or the answers on our servers.</p>
 <h2>How we use your information</h2>
 <p>Only to sign you in, to show you the study material, and to operate the AI helper. We do not sell your information or share it with anyone else, except where the law requires it.</p>
 <h2>Saved notes</h2>
@@ -62,9 +62,9 @@ function accountDeletionPage({ appName, supportEmail }) {
   <li>Choose <strong>Delete account</strong> and enter your password to confirm.</li>
 </ol>
 <h2>What is deleted</h2>
-<p>Your name, phone number or email address, your password, your sign-in sessions and your AI helper usage records are permanently deleted straight away. Nothing is kept.</p>
+<p>Your name, your phone number, your password, your sign-in sessions and your AI helper usage records are permanently deleted straight away. Nothing is kept.</p>
 <h2>Cannot sign in?</h2>
-<p>${contactLine(supportEmail)} Tell us the phone number or email address the account was created with and we will delete it for you.</p>`);
+<p>${contactLine(supportEmail)} Tell us the phone number the account was created with and we will delete it for you.</p>`);
 }
 
 module.exports = { privacyPage, accountDeletionPage };

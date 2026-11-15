@@ -49,6 +49,9 @@ readable message.
   text extraction (`pdf.js`, via `pdfjs-dist` directly -- NOT `pdf-parse`, whose bundled
   2018 pdf.js failed at random with "bad XRef entry" on valid PDFs; needs Node 20+), and
   the AI endpoint (`claude.js`).
+- **Accounts are name + phone number + password only. No email anywhere** (the owner asked
+  for this). `normalizePhone()` in `server.js` stores one form per number, so 0772123456,
+  772123456 and +256772123456 all reach the same account.
 - Auth is self-rolled and MongoDB-backed, **not Firebase** — the owner's explicit choice
   for this project (unlike Voltra/Chipz, which use Firebase Auth). Sessions are a random
   32-byte token; only its SHA-256 hash is stored, with a Mongo TTL index doing expiry so

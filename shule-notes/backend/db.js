@@ -1,5 +1,5 @@
 // Mongo connection + the indexes this app relies on for correctness, not
-// just speed: unique indexes on phone/email (so two accounts can never claim
+// just speed: a unique index on phone (so two accounts can never claim
 // the same login), and a TTL index on sessions (expired tokens are deleted
 // by MongoDB itself rather than trusted to a `now < expiresAt` check at
 // every call site forever).
@@ -27,13 +27,9 @@ async function connect() {
 }
 
 async function ensureIndexes() {
-  // partialFilterExpression: a user signing up with only a phone (no email)
-  // must not collide with every other phone-only user on a shared null.
+  // Accounts are identified by phone number only.
   await db.collection('users').createIndex(
     { phone: 1 }, { unique: true, partialFilterExpression: { phone: { $type: 'string' } } }
-  );
-  await db.collection('users').createIndex(
-    { email: 1 }, { unique: true, partialFilterExpression: { email: { $type: 'string' } } }
   );
   await db.collection('sessions').createIndex({ tokenHash: 1 }, { unique: true });
   await db.collection('sessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });

@@ -40,8 +40,22 @@ function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// One stored form per number, so someone who signs up as 0772 123 456 can
+// sign in as +256772123456. A full East African number (254/255/256 + nine
+// digits) is stored the way it is dialled locally, with a leading 0.
+function normalizePhone(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (/^25[456]\d{9}$/.test(digits)) return '0' + digits.slice(3);
+  if (/^[1-9]\d{8}$/.test(digits)) return '0' + digits;
+  return digits;
+}
+
+function isValidPhone(phone) {
+  return /^\d{9,15}$/.test(phone);
+}
+
 function publicUser(u) {
-  return { id: String(u._id), name: u.name || '', phone: u.phone || null, email: u.email || null };
+  return { id: String(u._id), name: u.name || '', phone: u.phone || null };
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────
@@ -50,27 +64,26 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeade
 app.post('/auth/register', authLimiter, async (req, res) => {
   try {
     const name = String(req.body.name || '').trim().slice(0, 80);
-    const phone = req.body.phone ? String(req.body.phone).trim().slice(0, 20) : null;
-    const email = req.body.email ? String(req.body.email).trim().toLowerCase().slice(0, 120) : null;
+    const phone = normalizePhone(req.body.phone);
     const password = String(req.body.password || '');
     if (!name) return res.status(400).json({ status: 'error', message: 'Name is required' });
-    if (!phone && !email) return res.status(400).json({ status: 'error', message: 'A phone number or email is required' });
+    if (!isValidPhone(phone)) return res.status(400).json({ status: 'error', message: 'Enter a valid phone number' });
     if (password.length < 6) return res.status(400).json({ status: 'error', message: 'Password must be at least 6 characters' });
 
     const db = getDb();
     const doc = {
-      name, phone, email, passwordHash: hashPassword(password),
+      name, phone, passwordHash: hashPassword(password),
       status: 'active', createdAt: new Date(),
     };
     let result;
     try {
       result = await db.collection('users').insertOne(doc);
     } catch (e) {
-      if (e && e.code === 11000) return res.status(409).json({ status: 'error', message: 'An account with that phone or email already exists' });
+      if (e && e.code === 11000) return res.status(409).json({ status: 'error', message: 'An account with that phone number already exists. Sign in instead.' });
       throw e;
     }
     const { token } = await createSession(String(result.insertedId));
-    res.json({ status: 'success', token, user: publicUser({ _id: result.insertedId, name, phone, email }) });
+    res.json({ status: 'success', token, user: publicUser({ _id: result.insertedId, name, phone }) });
   } catch (e) {
     console.error('register error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not create the account right now' });
@@ -79,17 +92,17 @@ app.post('/auth/register', authLimiter, async (req, res) => {
 
 app.post('/auth/login', authLimiter, async (req, res) => {
   try {
-    const identifier = String(req.body.identifier || req.body.phone || req.body.email || '').trim().toLowerCase();
+    const phone = normalizePhone(req.body.phone);
     const password = String(req.body.password || '');
-    if (!identifier || !password) return res.status(400).json({ status: 'error', message: 'Enter your phone/email and password' });
+    if (!phone || !password) return res.status(400).json({ status: 'error', message: 'Enter your phone number and password' });
 
     const db = getDb();
-    const user = await db.collection('users').findOne({ $or: [{ phone: identifier }, { email: identifier }] });
+    const user = await db.collection('users').findOne({ phone });
     // A dummy hash so a nonexistent account costs the same time as a wrong
     // password -- a login attempt must not reveal which account exists.
     const DUMMY = '0000000000000000000000000000000:0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
     const ok = verifyPassword(password, user ? user.passwordHash : DUMMY);
-    if (!user || !ok) return res.status(401).json({ status: 'error', message: 'Incorrect phone/email or password' });
+    if (!user || !ok) return res.status(401).json({ status: 'error', message: 'Incorrect phone number or password' });
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'This account has been suspended' });
 
     const { token } = await createSession(String(user._id));
@@ -357,4 +370,4 @@ if (require.main === module) {
   start().catch((e) => { console.error('Failed to start:', e); process.exit(1); });
 }
 
-module.exports = { app, todayKey, publicUser, publicNote, consumeAiQuota, deleteAccount, AI_DAILY_LIMIT };
+module.exports = { app, todayKey, normalizePhone, isValidPhone, publicUser, publicNote, consumeAiQuota, deleteAccount, AI_DAILY_LIMIT };
