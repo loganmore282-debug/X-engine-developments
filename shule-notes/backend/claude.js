@@ -14,6 +14,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const client = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
 
 const MODEL = process.env.AI_MODEL || 'claude-sonnet-5-5';
+const EFFORT = process.env.AI_EFFORT === undefined ? 'low' : process.env.AI_EFFORT;
 const MAX_QUESTION_LEN = 2000;
 const MAX_DOCUMENT_CHARS = 400000; // keeps a single huge PDF from blowing the context window
 
@@ -39,24 +40,40 @@ async function askAboutDocument({ documentText, noteTitle, question, history }) 
   const q = String(question || '').trim().slice(0, MAX_QUESTION_LEN);
   if (!q) throw new Error('question is required');
   const messages = [...(Array.isArray(history) ? history : []), { role: 'user', content: q }];
-  const response = await client.messages.create({
+  const request = {
     model: MODEL,
-    max_tokens: 2048,
+    // The current models think before answering and that thinking counts
+    // towards this limit, so it is set well above the length of an answer.
+    max_tokens: 8000,
     system: buildSystem(documentText, noteTitle),
     messages,
-  });
-  const textBlock = response.content.find((b) => b.type === 'text');
-  return {
-    answer: textBlock ? textBlock.text : '',
-    usage: response.usage,
-    model: response.model,
   };
+  // Low effort keeps a short question-and-answer fast and cheap.
+  if (EFFORT) request.output_config = { effort: EFFORT };
+  const response = await client.messages.create(request);
+  if (response.stop_reason === 'refusal') throw new AiNoAnswerError('declined');
+  const answer = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+  if (!answer) throw new AiNoAnswerError('empty');
+  return { answer, usage: response.usage, model: response.model };
+}
+
+// The request succeeded but there is nothing to show the student.
+class AiNoAnswerError extends Error {
+  constructor(reason) {
+    super('no answer: ' + reason);
+    this.reason = reason;
+  }
 }
 
 // Most-specific-first, per the SDK's own typed exception chain -- never
 // string-match an error message. Mapped to what the route needs: a safe
 // member-facing sentence, and whether retrying makes any sense at all.
 function classifyClaudeError(err) {
+  if (err instanceof AiNoAnswerError) {
+    return err.reason === 'declined'
+      ? { status: 422, message: 'The AI helper cannot answer that question. Try asking about what is in this document.' }
+      : { status: 502, message: 'The AI helper could not finish its answer. Try asking a shorter question.' };
+  }
   if (err instanceof Anthropic.RateLimitError) {
     return { status: 503, message: 'The AI helper is busy right now. Try again in a moment.' };
   }
@@ -79,4 +96,4 @@ function classifyClaudeError(err) {
   return { status: 500, message: 'Something went wrong answering that question.' };
 }
 
-module.exports = { askAboutDocument, classifyClaudeError, MODEL };
+module.exports = { askAboutDocument, classifyClaudeError, AiNoAnswerError, MODEL };

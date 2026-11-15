@@ -8,7 +8,7 @@
 'use strict';
 process.env.ANTHROPIC_API_KEY = 'sk-ant-test-not-a-real-key';
 const Anthropic = require('@anthropic-ai/sdk');
-const { classifyClaudeError, MODEL } = require('./claude');
+const { askAboutDocument, classifyClaudeError, AiNoAnswerError, MODEL } = require('./claude');
 
 let bad = 0;
 const ck = (ok, label) => { if (!ok) bad++; console.log((ok ? 'PASS  ' : 'FAIL  ') + label); };
@@ -49,5 +49,38 @@ console.log('\n— model is configurable, not hardcoded to the priciest default 
 ck(typeof MODEL === 'string' && MODEL.length > 0, 'a model id is set');
 ck(MODEL !== 'claude-opus-5-5', 'the default is NOT Anthropic\'s own priciest default -- deliberately chosen for a free, high-volume student app (override with AI_MODEL)');
 
-console.log(bad ? `\n${bad} check(s) FAILED` : '\nall claude.js checks pass');
-process.exit(bad ? 1 : 0);
+(async () => {
+  console.log('\n— the request that is sent, and what comes back, with the network call replaced —');
+  // Only the HTTP call is replaced; askAboutDocument() itself runs for real.
+  const proto = Object.getPrototypeOf(new Anthropic().messages);
+  let sent = null;
+  let reply = null;
+  proto.create = async (request) => { sent = request; return reply; };
+
+  reply = {
+    stop_reason: 'end_turn', model: 'm', usage: {},
+    content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: 'Plants need light, ' }, { type: 'text', text: 'water and carbon dioxide.\n' }],
+  };
+  const ok = await askAboutDocument({
+    documentText: 'DOC TEXT', noteTitle: 'Photosynthesis', question: '  What do plants need?  ',
+    history: [{ role: 'user', content: 'earlier question' }, { role: 'assistant', content: 'earlier answer' }],
+  });
+  ck(ok.answer === 'Plants need light, water and carbon dioxide.', 'every text block is joined into one trimmed answer, and thinking blocks are left out');
+  ck(sent.max_tokens >= 4000, 'the output limit leaves room for the model to think before it answers');
+  ck(sent.output_config && sent.output_config.effort === 'low', 'low effort is requested by default');
+  ck(sent.system[0].cache_control && sent.system[0].text.includes('DOC TEXT'), 'the document rides in a cached system block');
+  ck(sent.messages.length === 3 && sent.messages[2].content === 'What do plants need?', 'earlier turns are kept and the trimmed question is sent last, once');
+
+  reply = { stop_reason: 'refusal', content: [], usage: {} };
+  let declined = null;
+  try { await askAboutDocument({ documentText: 'x', question: 'q' }); } catch (e) { declined = e; }
+  ck(declined instanceof AiNoAnswerError && classifyClaudeError(declined).status === 422, 'a declined question is reported as such, not as an empty success');
+
+  reply = { stop_reason: 'max_tokens', content: [{ type: 'thinking', thinking: '' }], usage: {} };
+  let empty = null;
+  try { await askAboutDocument({ documentText: 'x', question: 'q' }); } catch (e) { empty = e; }
+  ck(empty instanceof AiNoAnswerError && classifyClaudeError(empty).status === 502, 'a reply with no answer text is an error the student is told about');
+
+  console.log(bad ? `\n${bad} check(s) FAILED` : '\nall claude.js checks pass');
+  process.exit(bad ? 1 : 0);
+})();
