@@ -1,0 +1,116 @@
+name: Shule Notes Screenshots
+
+# Runs the whole product for real -- backend on MongoDB, the admin panel in
+# Chrome, the debug APK on an Android emulator -- and publishes a screenshot
+# of every page. This is the only place the Android app is actually run,
+# since Claude's own sandbox has no Android SDK or emulator.
+on:
+  push:
+    branches: [ "claude/space8-rename-frontend-rebuild-juurd7" ]
+    paths:
+      - "shule-notes/**"
+      - ".github/workflows/shule-notes-screenshots.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    env:
+      ADMIN_KEY: ci-admin-key
+      SCREENS: ${{ github.workspace }}/screens
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Start the backend
+        working-directory: shule-notes/backend
+        env:
+          MONGODB_URI: mongodb://localhost:27017/shule
+          ANTHROPIC_API_KEY: not-a-real-key
+          ALLOWED_ORIGINS: http://localhost:8080
+        run: |
+          mkdir -p "$SCREENS"
+          npm ci
+          npm test
+          nohup node server.js > "$SCREENS/backend.log" 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:4000/health > /dev/null && break; sleep 1; done
+          curl -sf http://localhost:4000/health
+
+      - name: Photograph the admin panel while uploading the sample notes
+        run: |
+          pip install reportlab
+          python3 shule-notes/ci/make_sample_pdfs.py "$RUNNER_TEMP/pdfs"
+          (cd shule-notes/admin && nohup python3 -m http.server 8080 > /dev/null 2>&1 &)
+          mkdir "$RUNNER_TEMP/pw" && (cd "$RUNNER_TEMP/pw" && npm init -y > /dev/null && npm install playwright-core@1.49.1)
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" PW_CHANNEL=chrome node shule-notes/ci/admin_capture.js "$RUNNER_TEMP/pdfs" "$SCREENS"
+
+      - name: Install required Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build debug APK
+        working-directory: shule-notes/android
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Photograph the app on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: python3 shule-notes/ci/capture.py shule-notes/android/app/build/outputs/apk/debug/app-debug.apk "$SCREENS"
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shule-notes-screens
+          path: screens/
+
+      - name: Publish screenshots to a Release
+        if: always()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: shule-notes-screens
+          name: Shule Notes screenshots
+          body: "Screenshots of the Shule Notes admin panel and Android app, taken automatically from a real run (backend + MongoDB + emulator) with sample notes."
+          files: screens/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

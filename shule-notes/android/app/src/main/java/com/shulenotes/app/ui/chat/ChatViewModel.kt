@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.shulenotes.app.data.AskRequest
 import com.shulenotes.app.data.ApiClient
 import com.shulenotes.app.data.ChatTurn
+import com.shulenotes.app.data.serverMessage
 import kotlinx.coroutines.launch
 import java.io.IOException
 
@@ -28,14 +29,16 @@ class ChatViewModel(private val noteId: String) : ViewModel() {
     fun ask(question: String) {
         val q = question.trim()
         if (q.isBlank() || isSending) return
+        // Taken before the new question is added: the server appends the
+        // question itself, so including it here would send it twice.
+        val history = messages
+            .filter { !it.isError }
+            .takeLast(MAX_HISTORY)
+            .map { ChatTurn(it.role, it.content) }
         messages = messages + DisplayMessage("user", q)
         isSending = true
         viewModelScope.launch {
             try {
-                val history = messages
-                    .filter { !it.isError }
-                    .takeLast(MAX_HISTORY)
-                    .map { ChatTurn(it.role, it.content) }
                 val res = ApiClient.service.askAi(AskRequest(noteId = noteId, question = q, history = history))
                 if (res.status == "success" && res.answer != null) {
                     messages = messages + DisplayMessage("assistant", res.answer)
@@ -45,7 +48,7 @@ class ChatViewModel(private val noteId: String) : ViewModel() {
             } catch (e: IOException) {
                 messages = messages + DisplayMessage("assistant", "Could not reach the AI helper. Check your connection.", isError = true)
             } catch (e: Exception) {
-                messages = messages + DisplayMessage("assistant", "Something went wrong answering that.", isError = true)
+                messages = messages + DisplayMessage("assistant", e.serverMessage() ?: "Something went wrong answering that.", isError = true)
             } finally {
                 isSending = false
             }

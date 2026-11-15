@@ -6,7 +6,8 @@ open. Content is uploaded only by the owner, via a web admin panel.
 
 **Repo / branch:** `loganmore282-debug/x-engine-developments` — same multi-project repo
 as `chipz/`, `voltra/`, `snow/`, etc. This project's code lives under **`shule-notes/`**,
-on its own dedicated branch: **`claude/shule-notes-build`**.
+on branch **`claude/space8-rename-frontend-rebuild-juurd7`** (it started on
+`claude/shule-notes-build`, which is now behind).
 
 ## Architecture — three parts
 
@@ -24,13 +25,23 @@ Android SDK and cannot download one** (`dl.google.com` is blocked by the environ
 network policy) — so Claude cannot compile this project locally the way it runs `node
 test-*.js` for every other project here. **GitHub Actions is the verification loop
 instead**: `.github/workflows/build-shule-notes-apk.yml` builds a real debug APK with the
-real Android SDK on every push to `claude/shule-notes-build` that touches
+real Android SDK on every push to the project branch that touches
 `shule-notes/android/**`, and publishes it to a GitHub Release (tag `shule-notes-app`) as
 a direct-download APK — useful both as Claude's own compile-check and as a way for the
 owner to get an installable build without opening Android Studio. **After any Android
 code change, check that workflow run before calling the change done** — writing
 syntactically plausible Kotlin is not the same guarantee as every other test in this repo,
 which is actually executed before being called passing.
+
+### Seeing the app actually run (`ci/` + `shule-notes-screenshots.yml`)
+`.github/workflows/shule-notes-screenshots.yml` is the only place the product runs end to
+end: it starts the backend against a real MongoDB, drives the admin panel in Chrome
+(`ci/admin_capture.js` signs in, creates subjects and uploads the sample PDFs from
+`ci/make_sample_pdfs.py`), then installs the debug APK on an emulator and walks through it
+(`ci/capture.py`: register, browse, filter, open a PDF, Ask AI, log out, wrong password).
+Screenshots land on the GitHub Release tagged `shule-notes-screens`. There is no Claude API
+key in CI, so a real AI answer is NOT exercised there -- only that a failed answer shows a
+readable message.
 
 ### Backend (`backend/`)
 - `server.js` — Express app: self-rolled auth (scrypt-hashed passwords + random session

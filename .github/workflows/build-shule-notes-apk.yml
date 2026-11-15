@@ -2,7 +2,7 @@ name: Build Shule Notes APK
 
 on:
   push:
-    branches: [ "claude/shule-notes-build" ]
+    branches: [ "claude/shule-notes-build", "claude/space8-rename-frontend-rebuild-juurd7" ]
     paths:
       - "shule-notes/android/**"
       - ".github/workflows/build-shule-notes-apk.yml"

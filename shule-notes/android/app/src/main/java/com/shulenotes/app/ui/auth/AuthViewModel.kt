@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shulenotes.app.data.ApiClient
 import com.shulenotes.app.data.TokenStore
+import com.shulenotes.app.data.serverMessage
 import kotlinx.coroutines.launch
 import java.io.IOException
 
@@ -38,7 +39,7 @@ class AuthViewModel : ViewModel() {
             } catch (e: IOException) {
                 errorMessage = "Could not reach the server. Check your connection and try again."
             } catch (e: Exception) {
-                errorMessage = "Something went wrong. Please try again."
+                errorMessage = e.serverMessage() ?: "Something went wrong. Please try again."
             } finally {
                 isLoading = false
             }
@@ -65,7 +66,7 @@ class AuthViewModel : ViewModel() {
             } catch (e: IOException) {
                 errorMessage = "Could not reach the server. Check your connection and try again."
             } catch (e: Exception) {
-                errorMessage = "Something went wrong. Please try again."
+                errorMessage = e.serverMessage() ?: "Something went wrong. Please try again."
             } finally {
                 isLoading = false
             }

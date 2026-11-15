@@ -122,7 +122,7 @@ private fun NoteCard(note: Note, onClick: () -> Unit) {
                     Text(note.description, style = MaterialTheme.typography.bodySmall, maxLines = 2)
                 }
                 val meta = buildString {
-                    if (note.pageCount > 0) append("${note.pageCount} pages")
+                    if (note.pageCount > 0) append(if (note.pageCount == 1) "1 page" else "${note.pageCount} pages")
                     if (note.classLevel != null) {
                         if (isNotEmpty()) append(" · ")
                         append(note.classLevel)
