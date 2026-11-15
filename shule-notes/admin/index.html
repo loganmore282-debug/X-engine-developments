@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shule Notes Admin</title>
+<style>
+  :root{--ink:#1a1310;--paper:#f7f5f2;--card:#fff;--muted:#7a716b;--line:#e4ddd5;
+    --brand:#1d6f4f;--brand-ink:#0f4a32;--danger:#c23b3b;--r:12px;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--paper);color:var(--ink)}
+  .wrap{max-width:920px;margin:0 auto;padding:24px 16px 80px}
+  h1{font-size:22px;margin:0 0 4px}
+  h2{font-size:17px;margin:0 0 10px}
+  .muted{color:var(--muted);font-size:13px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:16px}
+  input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;margin-bottom:10px;font-family:inherit}
+  textarea{min-height:70px;resize:vertical}
+  label{font-size:12.5px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px}
+  button{cursor:pointer;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600}
+  .btn{background:var(--brand);color:#fff}
+  .btn:hover{background:var(--brand-ink)}
+  .btn.ghost{background:transparent;color:var(--brand);border:1px solid var(--brand)}
+  .btn.danger{background:var(--danger);color:#fff}
+  .btn.sm{padding:6px 10px;font-size:12.5px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .row > *{flex:1;min-width:140px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.02em}
+  .tabs{display:flex;gap:8px;margin-bottom:16px}
+  .tab{padding:8px 14px;border-radius:999px;background:var(--card);border:1px solid var(--line);cursor:pointer;font-size:13.5px;font-weight:600}
+  .tab.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}
+  .pill.ok{background:#e4f3ea;color:var(--brand-ink)}
+  .pill.warn{background:#fdecea;color:var(--danger)}
+  #loginScreen{max-width:360px;margin:80px auto}
+  .hidden{display:none !important}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#222;color:#fff;
+    padding:10px 18px;border-radius:999px;font-size:13.5px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:50}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div id="loginScreen" class="wrap">
+  <div class="card">
+    <h1>Shule Notes</h1>
+    <p class="muted">Admin panel</p>
+    <label>Admin key</label>
+    <input id="loginKey" type="password" placeholder="Enter the admin key">
+    <button class="btn" id="loginBtn" style="width:100%">Sign in</button>
+  </div>
+</div>
+
+<div id="app" class="wrap hidden">
+  <div class="row" style="align-items:center;margin-bottom:16px">
+    <div><h1 style="margin-bottom:0">Shule Notes</h1><p class="muted" style="margin:0">Admin panel</p></div>
+    <div style="flex:0;text-align:right"><button class="btn ghost sm" id="logoutBtn">Log out</button></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="notes">Notes</div>
+    <div class="tab" data-tab="subjects">Subjects</div>
+  </div>
+
+  <div id="notesTab">
+    <div class="card">
+      <h2>Upload a note</h2>
+      <div class="row">
+        <div><label>Title</label><input id="nTitle" placeholder="e.g. Biology Form 3 - Cells"></div>
+        <div><label>Subject</label><select id="nSubject"><option value="">(none)</option></select></div>
+      </div>
+      <div class="row">
+        <div><label>Class / level</label><input id="nClass" placeholder="e.g. Form 3"></div>
+        <div><label>PDF file</label><input id="nFile" type="file" accept="application/pdf"></div>
+      </div>
+      <label>Description</label>
+      <textarea id="nDesc" placeholder="What this document covers"></textarea>
+      <button class="btn" id="nUpload">Upload</button>
+      <span id="nUploadStatus" class="muted" style="margin-left:10px"></span>
+    </div>
+    <div class="card">
+      <h2>All notes</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Title</th><th>Subject</th><th>Pages</th><th>AI</th><th>Status</th><th></th></tr></thead>
+          <tbody id="notesRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="subjectsTab" class="hidden">
+    <div class="card">
+      <h2>Add a subject</h2>
+      <div class="row">
+        <div><label>Name</label><input id="sName" placeholder="e.g. Biology"></div>
+        <div><label>Class / level (optional)</label><input id="sClass" placeholder="e.g. Form 3"></div>
+        <div><label>Order</label><input id="sOrder" type="number" value="0"></div>
+      </div>
+      <button class="btn" id="sSave">Save subject</button>
+    </div>
+    <div class="card">
+      <h2>All subjects</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Class</th><th>Order</th><th></th></tr></thead>
+        <tbody id="subjectsRows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const API = localStorage.getItem('shule_api_base') || window.SHULE_API_BASE || 'http://localhost:4000';
+const KEY_STORE = 'shule_admin_key';
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
+
+async function api(path, opts){
+  opts = opts || {};
+  const headers = Object.assign({ 'x-admin-key': localStorage.getItem(KEY_STORE) || '' }, opts.headers || {});
+  let body = opts.body;
+  if (body && !(body instanceof FormData)) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(body); }
+  const res = await fetch(API + path, { method: opts.method || (body ? 'POST' : 'GET'), headers, body });
+  let data;
+  try { data = await res.json(); } catch (_) { data = { status: 'error', message: 'Server did not return JSON (is the backend URL correct?)' }; }
+  return data;
+}
+
+// ── auth ──
+document.getElementById('loginBtn').addEventListener('click', async () => {
+  const key = document.getElementById('loginKey').value.trim();
+  if (!key) return;
+  localStorage.setItem(KEY_STORE, key);
+  const r = await api('/admin/check-key', { method: 'POST' });
+  if (r.status === 'success') { enterApp(); }
+  else { toast(r.message || 'Wrong key'); localStorage.removeItem(KEY_STORE); }
+});
+document.getElementById('logoutBtn').addEventListener('click', () => {
+  localStorage.removeItem(KEY_STORE);
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+});
+
+function enterApp(){
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  loadSubjects();
+  loadNotes();
+}
+
+// ── tabs ──
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  document.getElementById('notesTab').classList.toggle('hidden', t.dataset.tab !== 'notes');
+  document.getElementById('subjectsTab').classList.toggle('hidden', t.dataset.tab !== 'subjects');
+}));
+
+// ── subjects ──
+let SUBJECTS = [];
+async function loadSubjects(){
+  const r = await api('/admin/subjects/list', { method: 'POST' });
+  if (r.status !== 'success') return toast(r.message || 'Could not load subjects');
+  SUBJECTS = r.subjects;
+  document.getElementById('subjectsRows').innerHTML = SUBJECTS.length ? SUBJECTS.map(s => `
+    <tr><td>${esc(s.name)}</td><td>${esc(s.classLevel||'')}</td><td>${s.order}</td>
+    <td><button class="btn danger sm" data-del-subject="${esc(s.id)}">Delete</button></td></tr>
+  `).join('') : '<tr><td colspan="4" class="muted">No subjects yet</td></tr>';
+  document.getElementById('nSubject').innerHTML = '<option value="">(none)</option>' +
+    SUBJECTS.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+  document.querySelectorAll('[data-del-subject]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Delete this subject? Notes under it are not deleted, just left unassigned.')) return;
+    await api('/admin/subjects/delete', { method: 'POST', body: { id: b.dataset.delSubject } });
+    loadSubjects();
+  }));
+}
+document.getElementById('sSave').addEventListener('click', async () => {
+  const name = document.getElementById('sName').value.trim();
+  if (!name) return toast('Name is required');
+  const r = await api('/admin/subjects/save', { method: 'POST', body: {
+    name, classLevel: document.getElementById('sClass').value.trim(), order: Number(document.getElementById('sOrder').value) || 0,
+  }});
+  if (r.status === 'success') { toast('Saved'); document.getElementById('sName').value=''; loadSubjects(); }
+  else toast(r.message || 'Could not save');
+});
+
+// ── notes ──
+function subjectName(id){ const s = SUBJECTS.find(x => x.id === id); return s ? s.name : '—'; }
+async function loadNotes(){
+  const r = await api('/admin/notes/list', { method: 'POST' });
+  if (r.status !== 'success') return toast(r.message || 'Could not load notes');
+  document.getElementById('notesRows').innerHTML = r.notes.length ? r.notes.map(n => `
+    <tr>
+      <td>${esc(n.title)}${n.description ? `<br><span class="muted">${esc(n.description)}</span>` : ''}</td>
+      <td>${esc(subjectName(n.subjectId))}</td>
+      <td>${n.pageCount || '—'}</td>
+      <td>${n.hasAiContext ? '<span class="pill ok">Ready</span>' : '<span class="pill warn">No text</span>'}</td>
+      <td>${n.active ? '<span class="pill ok">Active</span>' : '<span class="pill warn">Hidden</span>'}</td>
+      <td>
+        <button class="btn ghost sm" data-toggle="${esc(n.id)}" data-active="${n.active}">${n.active ? 'Hide' : 'Show'}</button>
+        <button class="btn danger sm" data-del-note="${esc(n.id)}">Delete</button>
+      </td>
+    </tr>
+  `).join('') : '<tr><td colspan="6" class="muted">No notes uploaded yet</td></tr>';
+  document.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', async () => {
+    await api('/admin/notes/update', { method: 'POST', body: { id: b.dataset.toggle, active: b.dataset.active !== 'true' } });
+    loadNotes();
+  }));
+  document.querySelectorAll('[data-del-note]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Delete this note and its PDF file permanently?')) return;
+    await api('/admin/notes/delete', { method: 'POST', body: { id: b.dataset.delNote } });
+    loadNotes();
+  }));
+}
+document.getElementById('nUpload').addEventListener('click', async () => {
+  const title = document.getElementById('nTitle').value.trim();
+  const file = document.getElementById('nFile').files[0];
+  if (!title) return toast('Title is required');
+  if (!file) return toast('Choose a PDF file');
+  const fd = new FormData();
+  fd.append('title', title);
+  fd.append('description', document.getElementById('nDesc').value.trim());
+  fd.append('subjectId', document.getElementById('nSubject').value);
+  fd.append('classLevel', document.getElementById('nClass').value.trim());
+  fd.append('file', file);
+  const statusEl = document.getElementById('nUploadStatus');
+  statusEl.textContent = 'Uploading…';
+  const r = await api('/admin/notes/upload', { method: 'POST', body: fd });
+  statusEl.textContent = '';
+  if (r.status === 'success') {
+    toast(r.warning || 'Uploaded');
+    document.getElementById('nTitle').value = '';
+    document.getElementById('nDesc').value = '';
+    document.getElementById('nFile').value = '';
+    loadNotes();
+  } else toast(r.message || 'Upload failed');
+});
+
+// ── boot ──
+if (localStorage.getItem(KEY_STORE)) {
+  api('/admin/check-key', { method: 'POST' }).then(r => { if (r.status === 'success') enterApp(); });
+}
+</script>
+</body>
+</html>

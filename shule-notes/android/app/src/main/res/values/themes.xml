@@ -1,0 +1,10 @@
+<resources>
+    <!-- Only governs the window background before Compose content draws --
+         all real theming (colors, typography) lives in Kotlin via
+         MaterialTheme in ui/theme/Theme.kt. Extends the platform's own base
+         theme so this app needs no classic (non-Compose) Material library. -->
+    <style name="Theme.ShuleNotes" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/brand_paper</item>
+        <item name="android:statusBarColor">@color/brand_green</item>
+    </style>
+</resources>
