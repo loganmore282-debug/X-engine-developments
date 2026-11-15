@@ -5,6 +5,8 @@
 #   bash /srv/beer-src/beer/deploy/move/migrate.sh NEW_SERVER_ADDRESS back       undo: apps and DNS go back to this old server
 #   bash /srv/beer-src/beer/deploy/move/migrate.sh NEW_SERVER_ADDRESS finish     when all is well for some days: removes this server's key from the new one
 #   bash /srv/beer-src/beer/deploy/move/migrate.sh NEW_SERVER_ADDRESS status     where things stand
+#   bash /srv/beer-src/beer/deploy/move/migrate.sh NEW_SERVER_ADDRESS bridge     after the switch: this old server forwards visitors who still arrive here (old DNS answers) to the new server
+#   bash /srv/beer-src/beer/deploy/move/migrate.sh NEW_SERVER_ADDRESS unbridge   stops that forwarding
 #
 # What it does, in order. Until the question "SWITCH" nothing changes for your members (this server keeps serving as normal):
 #   1 connects to the new server (password once, then a key)           2 lowers the DNS timer so the switch is quick
@@ -20,7 +22,7 @@ NEW="${1:-}"; MODE="${2:-move}"
 usage() { echo "Usage:  bash $0 NEW_SERVER_ADDRESS [back|finish|status]     (e.g.  bash $0 161.97.98.107)"; exit 1; }
 [ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }
 printf '%s' "$NEW" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || usage
-case "$MODE" in move|back|finish|status) ;; *) usage ;; esac
+case "$MODE" in move|back|finish|status|bridge|unbridge) ;; *) usage ;; esac
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SELF="$HERE/$(basename "${BASH_SOURCE[0]}")"
 
@@ -70,6 +72,27 @@ bad_code() { case "$1" in 000|5??) return 0 ;; *) return 1 ;; esac; }
 
 echo "Move  $OLDIP (old, this server)  ->  $NEW (new)        $(date '+%Y-%m-%d %H:%M')"
 
+# =====================================================================  bridge: old server -> new server while DNS answers are still old
+BR=/root/.migrate-bridge.pids
+unbridge() { if [ -f "$BR" ]; then while read -r p; do [ -n "$p" ] && kill -TERM -- "-$p" 2>/dev/null; done < "$BR"; rm -f "$BR"; fi; }
+if [ "$MODE" = unbridge ]; then unbridge; echo "The forwarding is stopped."; exit 0; fi
+if [ "$MODE" = bridge ]; then
+  [ "$(st_get SWITCHED)" = yes ] || fail "the switch was not done yet: nothing to bridge."
+  unbridge; WHERE=new
+  PORTS=$(pm2apps | awk -F'|' '$2=="online" && $3!=""{print $3}' | sort -un)
+  [ -n "$PORTS" ] || fail "no app with a known port is running on the new server."
+  say "Forwarding visitors that still arrive at this old server to the new one"
+  for p in $PORTS; do
+    if ss -ltnH 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$p\$"; then warn "port $p is in use here: skipped (is an app running here?)"; continue; fi
+    setsid bash -c "while true; do ssh -N -o ExitOnForwardFailure=yes $SSHOPTS -L 127.0.0.1:$p:127.0.0.1:$p root@$NEW; sleep 3; done" >/dev/null 2>&1 &
+    echo $! >> "$BR"
+  done
+  sleep 5
+  for p in $PORTS; do c=$(curl -s -o /dev/null -m 6 -w '%{http_code}' "http://127.0.0.1:$p/health"); note "port $p here -> new server: ${c:-no answer}"; done
+  echo; echo "Done. Visitors with an old DNS answer now reach the new server through this one. Stop it when the DNS has spread (a few hours):   bash $SELF $NEW unbridge"
+  exit 0
+fi
+
 # =====================================================================  status / finish
 if [ "$MODE" = status ]; then
   say "State"; cat "$STATE" 2>/dev/null | sed 's/^/    /' || note "(nothing yet)"
@@ -78,7 +101,7 @@ if [ "$MODE" = status ]; then
   exit 0
 fi
 if [ "$MODE" = finish ]; then
-  R "sed -i '/migrate-from-old/d' /root/.ssh/authorized_keys" && note "this server's key is removed from $NEW" || warn "could not remove the key"
+  unbridge; R "sed -i '/migrate-from-old/d' /root/.ssh/authorized_keys" && note "this server's key is removed from $NEW" || warn "could not remove the key"
   st_set FINISHED yes; echo "Done. Cancel the old server at the provider only when you are sure you do not need it (keep it a few days)."; exit 0
 fi
 
@@ -86,6 +109,7 @@ fi
 if [ "$MODE" = back ]; then
   say "Putting everything back on this old server"
   [ "$(st_get SWITCHED)" = yes ] || fail "the switch was never done (nothing to undo)."
+  unbridge
   ONLINE=$(st_get ONLINE)
   WHERE=new; for n in $ONLINE; do R "pm2 stop $n >/dev/null 2>&1"; done; R "systemctl disable pm2-root >/dev/null 2>&1"; note "apps stopped on $NEW (and they will not start by themselves there)"
   systemctl enable --now cron >/dev/null 2>&1; systemctl enable pm2-root >/dev/null 2>&1
