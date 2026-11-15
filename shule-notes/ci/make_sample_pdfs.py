@@ -35,11 +35,79 @@ DOCS = {
             "light intensity, carbon dioxide concentration or temperature. Raising a limiting "
             "factor increases the rate until another factor becomes limiting.",
         ]),
+        ("The two stages", [
+            "The light-dependent stage happens in the grana of the chloroplast. Light energy splits water "
+            "into hydrogen and oxygen; the oxygen is released as a waste product.",
+            "The light-independent stage happens in the stroma. The hydrogen is combined with carbon "
+            "dioxide to build glucose, using energy captured in the first stage.",
+        ]),
+        ("What the plant does with glucose", [
+            "* Releases energy from it in respiration.",
+            "* Stores it as starch in leaves, roots and seeds.",
+            "* Builds cellulose for cell walls.",
+            "* Combines it with nitrates from the soil to make proteins.",
+            "* Converts it to oils, which are stored in seeds.",
+        ]),
+        ("Why photosynthesis matters", [
+            "Photosynthesis is the start of almost every food chain: plants are producers, and all "
+            "consumers depend on them directly or indirectly. It also keeps the balance of gases in the "
+            "air, removing carbon dioxide and releasing the oxygen that living things need for respiration.",
+        ]),
         ("Testing a leaf for starch", [
             "1. Boil the leaf in water to kill it and soften the cell walls.",
             "2. Boil it in ethanol, using a water bath, to remove the chlorophyll.",
             "3. Rinse it in warm water to soften it again.",
             "4. Add iodine solution. A blue-black colour shows that starch is present.",
+        ]),
+        ("Showing that light is needed", [
+            "1. Keep a potted plant in the dark for 48 hours so that it uses up its starch.",
+            "2. Cover part of one leaf on both sides with a strip of black paper.",
+            "3. Leave the plant in bright light for about six hours.",
+            "4. Test the leaf for starch. Only the uncovered parts turn blue-black, which shows that "
+            "light is needed for photosynthesis.",
+        ]),
+        ("Revision questions", [
+            "1. Write the word equation for photosynthesis.",
+            "2. Name the pigment that absorbs light, and say where it is found.",
+            "3. Explain why a leaf is boiled in ethanol during the starch test.",
+            "4. A farmer grows tomatoes in a greenhouse. Suggest two ways of raising the rate of photosynthesis.",
+            "5. Describe an experiment to show that carbon dioxide is needed for photosynthesis.",
+        ]),
+    ]),
+    "acids.pdf": ("Acids, Bases and Salts", "Senior 2 Chemistry notes", [
+        ("Acids", [
+            "An acid is a substance that releases hydrogen ions when it dissolves in water. Acids taste "
+            "sour, turn blue litmus paper red and have a pH below 7.",
+            "Common examples are hydrochloric acid, sulphuric acid and nitric acid.",
+        ]),
+        ("Bases and alkalis", [
+            "A base is a substance that neutralises an acid. A base that dissolves in water is called an "
+            "alkali. Alkalis turn red litmus paper blue and have a pH above 7.",
+            "Common examples are sodium hydroxide, potassium hydroxide and calcium hydroxide.",
+        ]),
+        ("Neutralisation", [
+            "When an acid reacts with a base, a salt and water are formed. This is called neutralisation.",
+            "Example: hydrochloric acid + sodium hydroxide gives sodium chloride + water.",
+        ]),
+        ("The pH scale", [
+            "The pH scale runs from 0 to 14. A pH of 7 is neutral. The lower the number below 7, the "
+            "stronger the acid; the higher the number above 7, the stronger the alkali.",
+        ]),
+    ]),
+    "energy.pdf": ("Work, Energy and Power", "Senior 2 Physics notes", [
+        ("Work", [
+            "Work is done when a force moves an object in the direction of the force. Work done = force "
+            "multiplied by distance moved. It is measured in joules.",
+            "Example: a force of 50 N moving a box 4 m does 200 J of work.",
+        ]),
+        ("Energy", [
+            "Energy is the ability to do work. Kinetic energy is the energy of a moving object. Potential "
+            "energy is stored energy, for example in an object raised above the ground.",
+            "Energy cannot be created or destroyed. It can only change from one form to another.",
+        ]),
+        ("Power", [
+            "Power is the rate of doing work. Power = work done divided by time taken. It is measured in watts.",
+            "Example: 600 J of work done in 20 s is a power of 30 W.",
         ]),
     ]),
     "quadratics.pdf": ("Quadratic Equations", "Senior 3 Mathematics worked examples", [
@@ -92,6 +160,11 @@ DOCS = {
 
 def build(path, title, subtitle, sections):
     styles = getSampleStyleSheet()
+    for name in ("BodyText", "Italic"):
+        styles[name].fontSize = 12
+        styles[name].leading = 17
+    styles["Heading2"].fontSize = 15
+    styles["Heading2"].spaceBefore = 14
     story = [Paragraph(title, styles["Title"]), Paragraph(subtitle, styles["Italic"]), Spacer(1, 0.6 * cm)]
     for heading, lines in sections:
         story.append(Paragraph(heading, styles["Heading2"]))

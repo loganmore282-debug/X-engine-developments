@@ -19,7 +19,9 @@ object ApiClient {
         } else {
             chain.request()
         }
-        chain.proceed(request)
+        val response = chain.proceed(request)
+        if (token != null && response.code == 401) SessionHolder.expired.value = true
+        response
     }
 
     private val logging = HttpLoggingInterceptor().apply {

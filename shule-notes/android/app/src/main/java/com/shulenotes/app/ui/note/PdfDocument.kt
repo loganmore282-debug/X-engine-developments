@@ -6,22 +6,31 @@ import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import java.io.File
 
-// Wraps the platform's own PdfRenderer (API 21+) -- no third-party PDF
-// library, which keeps the APK smaller and avoids depending on an AAR whose
-// exact current Maven coordinates this environment cannot verify.
-//
-// PdfRenderer only lets ONE page be open at a time and is not safe to call
-// concurrently from multiple threads -- @Synchronized serializes renderPage()
-// calls, which is enough here since the UI only ever renders one visible
-// page at a time anyway.
+// Wraps the platform's own PdfRenderer, so the app needs no third-party PDF
+// library. PdfRenderer allows only ONE open page at a time and is not
+// thread-safe, so every use of it here is @Synchronized.
 class PdfDocument(file: File) {
     private val fileDescriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
     private val renderer = PdfRenderer(fileDescriptor)
+    private var closed = false
 
-    val pageCount: Int get() = renderer.pageCount
+    val pageCount: Int = renderer.pageCount
 
+    // Width divided by height for each page, read once up front so the reader
+    // can lay every page out at its final size before it has been drawn.
+    val aspectRatios: FloatArray = FloatArray(pageCount) { index ->
+        val page = renderer.openPage(index)
+        try {
+            if (page.height > 0) page.width.toFloat() / page.height else 0.707f
+        } finally {
+            page.close()
+        }
+    }
+
+    // Null once the document has been closed (the reader was left mid-render).
     @Synchronized
-    fun renderPage(index: Int, widthPx: Int): Bitmap {
+    fun renderPage(index: Int, widthPx: Int): Bitmap? {
+        if (closed) return null
         val page = renderer.openPage(index)
         try {
             val safeWidth = widthPx.coerceAtLeast(1)
@@ -35,7 +44,10 @@ class PdfDocument(file: File) {
         }
     }
 
+    @Synchronized
     fun close() {
+        if (closed) return
+        closed = true
         renderer.close()
         fileDescriptor.close()
     }

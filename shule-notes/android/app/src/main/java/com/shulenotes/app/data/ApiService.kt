@@ -18,6 +18,9 @@ interface ApiService {
     @POST("auth/logout")
     suspend fun logout(): SimpleResponse
 
+    @POST("auth/delete-account")
+    suspend fun deleteAccount(@Body body: Map<String, String>): SimpleResponse
+
     @GET("subjects")
     suspend fun subjects(): SubjectsResponse
 

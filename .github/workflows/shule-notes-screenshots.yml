@@ -104,6 +104,14 @@ jobs:
           name: shule-notes-screens
           path: screens/
 
+      # Otherwise pictures from an older run, under names this run no longer
+      # produces, would sit next to the new ones.
+      - name: Remove the previous run's screenshots
+        if: always()
+        run: gh release delete shule-notes-screens --yes --cleanup-tag || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Publish screenshots to a Release
         if: always()
         uses: softprops/action-gh-release@v2

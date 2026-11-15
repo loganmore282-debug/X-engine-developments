@@ -1,0 +1,66 @@
+package com.shulenotes.app.ui.theme
+
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.graphics.Color
+
+val BrandGradient = listOf(Color(0xFF238A62), Color(0xFF0E4A35))
+
+// Screens sit on `background`; cards, sheets and bars sit on `surface`.
+val LightColors = lightColorScheme(
+    primary = Color(0xFF17694B),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFD5F0E2),
+    onPrimaryContainer = Color(0xFF0A3626),
+    secondary = Color(0xFF8A5A00),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFFFE9BD),
+    onSecondaryContainer = Color(0xFF3D2A00),
+    background = Color(0xFFF7F5F0),
+    onBackground = Color(0xFF1B1C1A),
+    surface = Color.White,
+    onSurface = Color(0xFF1B1C1A),
+    surfaceVariant = Color(0xFFE6E8E0),
+    onSurfaceVariant = Color(0xFF596059),
+    surfaceDim = Color(0xFFE9E6DE),
+    surfaceContainerLowest = Color.White,
+    surfaceContainerLow = Color(0xFFFBFAF6),
+    surfaceContainer = Color(0xFFF3F1EB),
+    surfaceContainerHigh = Color(0xFFEEECE5),
+    surfaceContainerHighest = Color(0xFFE8E5DD),
+    outline = Color(0xFF7B817A),
+    outlineVariant = Color(0xFFDCDDD5),
+    error = Color(0xFFB3261E),
+    onError = Color.White,
+    errorContainer = Color(0xFFFCE5E2),
+    onErrorContainer = Color(0xFF5C1410),
+)
+
+val DarkColors = darkColorScheme(
+    primary = Color(0xFF7CD3AA),
+    onPrimary = Color(0xFF003825),
+    primaryContainer = Color(0xFF0F5139),
+    onPrimaryContainer = Color(0xFFB9EED4),
+    secondary = Color(0xFFF5BF57),
+    onSecondary = Color(0xFF402D00),
+    secondaryContainer = Color(0xFF5B4300),
+    onSecondaryContainer = Color(0xFFFFE9BD),
+    background = Color(0xFF101412),
+    onBackground = Color(0xFFE1E3DE),
+    surface = Color(0xFF1A1F1C),
+    onSurface = Color(0xFFE1E3DE),
+    surfaceVariant = Color(0xFF3F4943),
+    onSurfaceVariant = Color(0xFFBFC9C1),
+    surfaceDim = Color(0xFF0A0D0B),
+    surfaceContainerLowest = Color(0xFF0B0F0D),
+    surfaceContainerLow = Color(0xFF181C1A),
+    surfaceContainer = Color(0xFF1C211E),
+    surfaceContainerHigh = Color(0xFF262B28),
+    surfaceContainerHighest = Color(0xFF313633),
+    outline = Color(0xFF89938C),
+    outlineVariant = Color(0xFF39413C),
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6),
+)

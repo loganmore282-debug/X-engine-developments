@@ -5,8 +5,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.shulenotes.app.ShuleApp
 import com.shulenotes.app.data.ApiClient
-import com.shulenotes.app.data.TokenStore
+import com.shulenotes.app.data.AuthResponse
 import com.shulenotes.app.data.serverMessage
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -19,54 +20,45 @@ class AuthViewModel : ViewModel() {
 
     fun clearError() { errorMessage = null }
 
-    fun login(identifier: String, password: String, tokenStore: TokenStore, onSuccess: () -> Unit) {
+    fun login(identifier: String, password: String, onSuccess: () -> Unit) {
         if (identifier.isBlank() || password.isBlank()) {
-            errorMessage = "Enter your phone/email and password"
+            errorMessage = "Enter your phone number or email, and your password."
             return
         }
-        viewModelScope.launch {
-            isLoading = true
-            errorMessage = null
-            try {
-                val res = ApiClient.service.login(mapOf("identifier" to identifier, "password" to password))
-                val token = res.token
-                if (res.status == "success" && token != null) {
-                    tokenStore.saveToken(token)
-                    onSuccess()
-                } else {
-                    errorMessage = res.message ?: "Could not sign in"
-                }
-            } catch (e: IOException) {
-                errorMessage = "Could not reach the server. Check your connection and try again."
-            } catch (e: Exception) {
-                errorMessage = e.serverMessage() ?: "Something went wrong. Please try again."
-            } finally {
-                isLoading = false
-            }
+        submit("We could not sign you in. Please try again.", onSuccess) {
+            ApiClient.service.login(mapOf("identifier" to identifier.trim(), "password" to password))
         }
     }
 
-    fun register(name: String, phone: String, password: String, tokenStore: TokenStore, onSuccess: () -> Unit) {
-        if (name.isBlank() || phone.isBlank() || password.length < 6) {
-            errorMessage = "Fill in your name, phone number, and a password of at least 6 characters"
-            return
+    fun register(name: String, phone: String, password: String, onSuccess: () -> Unit) {
+        when {
+            name.isBlank() -> { errorMessage = "Enter your full name."; return }
+            phone.isBlank() -> { errorMessage = "Enter your phone number."; return }
+            password.length < 6 -> { errorMessage = "Choose a password with at least 6 characters."; return }
         }
+        submit("We could not create your account. Please try again.", onSuccess) {
+            ApiClient.service.register(mapOf("name" to name.trim(), "phone" to phone.trim(), "password" to password))
+        }
+    }
+
+    private fun submit(fallback: String, onSuccess: () -> Unit, call: suspend () -> AuthResponse) {
+        if (isLoading) return
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
             try {
-                val res = ApiClient.service.register(mapOf("name" to name, "phone" to phone, "password" to password))
+                val res = call()
                 val token = res.token
                 if (res.status == "success" && token != null) {
-                    tokenStore.saveToken(token)
+                    ShuleApp.session.saveSession(token, res.user)
                     onSuccess()
                 } else {
-                    errorMessage = res.message ?: "Could not create the account"
+                    errorMessage = res.message ?: fallback
                 }
             } catch (e: IOException) {
-                errorMessage = "Could not reach the server. Check your connection and try again."
+                errorMessage = "No connection. Check your internet and try again."
             } catch (e: Exception) {
-                errorMessage = e.serverMessage() ?: "Something went wrong. Please try again."
+                errorMessage = e.serverMessage() ?: fallback
             } finally {
                 isLoading = false
             }

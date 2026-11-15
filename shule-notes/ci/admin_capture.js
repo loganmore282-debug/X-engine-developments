@@ -11,9 +11,12 @@ const ADMIN_KEY = process.env.ADMIN_KEY;
 const PDF_DIR = process.argv[2];
 const OUT = process.argv[3];
 
-const SUBJECTS = [['Biology', 1], ['Mathematics', 2], ['Physics', 3]];
+const SUBJECTS = [['Biology', 1], ['Mathematics', 2], ['Physics', 3], ['Chemistry', 4]];
+// Uploaded oldest first; the app lists the newest first.
 const NOTES = [
+  ['Work, Energy and Power', 'Physics', 'Senior 2', 'energy.pdf', 'Definitions, formulas and worked examples.'],
   ['Cell Structure – Practice Questions', 'Biology', 'Senior 1', 'cells.pdf', 'Short-answer practice questions on plant and animal cells.'],
+  ['Acids, Bases and Salts', 'Chemistry', 'Senior 2', 'acids.pdf', 'Acids, alkalis, neutralisation and the pH scale.'],
   ["Newton's Laws of Motion – Revision", 'Physics', 'Senior 3', 'newton.pdf', 'The three laws, with a worked force calculation.'],
   ['Quadratic Equations – Worked Examples', 'Mathematics', 'Senior 3', 'quadratics.pdf', 'Factorising and the quadratic formula, with practice questions.'],
   ['Photosynthesis', 'Biology', 'Senior 2', 'photosynthesis.pdf', 'How plants make food: the equation, leaf adaptations, limiting factors and the starch test.'],

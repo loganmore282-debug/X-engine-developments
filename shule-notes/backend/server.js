@@ -15,6 +15,7 @@ const { hashPassword, verifyPassword, createSession, resolveSession, destroySess
 const { verifyAdmin } = require('./admin-auth');
 const { extractPdfText } = require('./pdf');
 const { askAboutDocument, classifyClaudeError } = require('./claude');
+const { privacyPage, accountDeletionPage } = require('./legal');
 
 const PORT = process.env.PORT || 4000;
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
@@ -103,6 +104,33 @@ app.post('/auth/logout', requireAuth, async (req, res) => {
   await destroySession(bearerToken(req));
   res.json({ status: 'success' });
 });
+
+// Google Play requires in-app account deletion for any app with sign-up.
+app.post('/auth/delete-account', authLimiter, requireAuth, async (req, res) => {
+  try {
+    const result = await deleteAccount(req.userId, String(req.body.password || ''));
+    if (!result.ok) return res.status(result.status).json({ status: 'error', message: result.message });
+    res.json({ status: 'success' });
+  } catch (e) {
+    console.error('delete-account error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not delete the account right now' });
+  }
+});
+
+async function deleteAccount(userId, password) {
+  const db = getDb();
+  let user = null;
+  try { user = await db.collection('users').findOne({ _id: new ObjectId(userId) }); } catch (_) { user = null; }
+  if (!user) return { ok: false, status: 404, message: 'Account not found' };
+  // 403, not 401: the app treats 401 as "your session expired" and signs out.
+  if (!verifyPassword(password, user.passwordHash)) return { ok: false, status: 403, message: 'Incorrect password' };
+  // Sessions first: if a later step fails, the account still exists and the
+  // member can retry, rather than being deleted but still signed in.
+  await db.collection('sessions').deleteMany({ userId });
+  await db.collection('aiUsage').deleteMany({ userId });
+  await db.collection('users').deleteOne({ _id: user._id });
+  return { ok: true };
+}
 
 app.get('/auth/me', requireAuth, async (req, res) => {
   const user = await getDb().collection('users').findOne({ _id: new ObjectId(req.userId) });
@@ -310,6 +338,14 @@ app.post('/admin/notes/delete', async (req, res) => {
   res.json({ status: 'success' });
 });
 
+const LEGAL = {
+  appName: process.env.APP_NAME || 'Shule Notes',
+  supportEmail: process.env.SUPPORT_EMAIL || '',
+  updated: process.env.PRIVACY_UPDATED || '15 November 2026',
+};
+app.get('/privacy', (req, res) => res.type('html').send(privacyPage(LEGAL)));
+app.get('/account-deletion', (req, res) => res.type('html').send(accountDeletionPage(LEGAL)));
+
 app.get('/health', (req, res) => res.json({ status: 'success', time: new Date().toISOString() }));
 
 async function start() {
@@ -321,4 +357,4 @@ if (require.main === module) {
   start().catch((e) => { console.error('Failed to start:', e); process.exit(1); });
 }
 
-module.exports = { app, todayKey, publicUser, publicNote, consumeAiQuota, AI_DAILY_LIMIT };
+module.exports = { app, todayKey, publicUser, publicNote, consumeAiQuota, deleteAccount, AI_DAILY_LIMIT };

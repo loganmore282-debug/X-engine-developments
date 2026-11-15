@@ -15,7 +15,12 @@ const store = { aiUsage: [] };
 function fakeDb() {
   return {
     collection(name) {
+      const rows = () => (store[name] = store[name] || []);
+      const matches = (q) => (d) => Object.keys(q).every((k) => String(d[k]) === String(q[k]));
       return {
+        findOne: async (q) => rows().find(matches(q)) || null,
+        deleteOne: async (q) => { const i = rows().findIndex(matches(q)); if (i >= 0) rows().splice(i, 1); },
+        deleteMany: async (q) => { store[name] = rows().filter((d) => !matches(q)(d)); },
         findOneAndUpdate: async (q, update, opts) => {
           store[name] = store[name] || [];
           let row = store[name].find((d) => Object.keys(q).every((k) => d[k] === q[k]));
@@ -64,6 +69,34 @@ console.log('\n— the AI daily quota actually caps spend —');
   // out forever after their first day's limit.
   const row = store.aiUsage.find((r) => r.userId === 'student-1');
   ck(!!row && row.date === server.todayKey(), 'the quota row is keyed on today\'s date, not a fixed id');
+
+  console.log('\n— deleting an account removes everything about it, and only with the right password —');
+  {
+    const { hashPassword } = require('./auth');
+    const id = '65f0a1b2c3d4e5f6a7b8c9d0';
+    const other = '65f0a1b2c3d4e5f6a7b8c9d1';
+    store.users = [
+      { _id: id, name: 'Asha', passwordHash: hashPassword('right-password') },
+      { _id: other, name: 'Brian', passwordHash: hashPassword('another-password') },
+    ];
+    store.sessions = [{ userId: id, tokenHash: 'a' }, { userId: id, tokenHash: 'b' }, { userId: other, tokenHash: 'c' }];
+    store.aiUsage.push({ userId: id, date: '2026-01-01', count: 3 }, { userId: other, date: '2026-01-01', count: 1 });
+
+    const wrong = await server.deleteAccount(id, 'wrong-password');
+    ck(wrong.ok === false && wrong.status === 403, 'a wrong password is refused with 403 (401 would sign the app out)');
+    ck(store.users.length === 2 && store.sessions.length === 3, 'and nothing is deleted');
+
+    const right = await server.deleteAccount(id, 'right-password');
+    ck(right.ok === true, 'the right password deletes the account');
+    ck(!store.users.some((u) => u._id === id), 'the user record is gone');
+    ck(!store.sessions.some((r) => r.userId === id), 'every sign-in session is gone');
+    ck(!store.aiUsage.some((r) => r.userId === id), 'the AI usage records are gone');
+    ck(store.users.some((u) => u._id === other) && store.sessions.some((r) => r.userId === other) && store.aiUsage.some((r) => r.userId === other),
+       'another member\'s data is untouched');
+
+    const again = await server.deleteAccount(id, 'right-password');
+    ck(again.ok === false && again.status === 404, 'deleting an account that no longer exists reports 404');
+  }
 
   console.log(bad ? `\n${bad} check(s) FAILED` : '\nall server-helper checks pass');
   process.exit(bad ? 1 : 0);

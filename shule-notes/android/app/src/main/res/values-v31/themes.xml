@@ -1,0 +1,8 @@
+<resources>
+    <!-- Android 12+ shows its own launch screen: the mark on brand green. -->
+    <style name="Theme.ShuleNotes" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:windowSplashScreenBackground">@color/brand_green</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+    </style>
+</resources>

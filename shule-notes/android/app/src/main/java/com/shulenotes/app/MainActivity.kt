@@ -7,44 +7,36 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.lifecycleScope
-import com.shulenotes.app.data.TokenStore
+import com.shulenotes.app.data.SessionHolder
+import com.shulenotes.app.ui.nav.Routes
 import com.shulenotes.app.ui.nav.ShuleNavGraph
 import com.shulenotes.app.ui.theme.ShuleNotesTheme
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val tokenStore = TokenStore(applicationContext)
-
         setContent {
             var startDestination by remember { mutableStateOf<String?>(null) }
 
-            // SessionHolder (read synchronously by every network request) must
-            // be primed from disk BEFORE the nav graph decides whether the
-            // member is already signed in -- otherwise the very first screen
-            // after a cold start could flash the login screen for someone who
-            // is already logged in, or call an authenticated endpoint with no
-            // token attached yet.
-            androidx.compose.runtime.LaunchedEffect(Unit) {
-                tokenStore.primeSessionHolder()
-                startDestination = if (com.shulenotes.app.data.SessionHolder.token != null) "home" else "login"
+            // The saved sign-in is read from disk BEFORE the first screen is
+            // chosen, so someone already signed in never sees the sign-in
+            // screen flash, and no request goes out without its token.
+            LaunchedEffect(Unit) {
+                ShuleApp.session.primeSessionHolder()
+                startDestination = if (SessionHolder.token != null) Routes.MAIN else Routes.LOGIN
             }
 
             ShuleNotesTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    val dest = startDestination
-                    if (dest != null) {
-                        ShuleNavGraph(tokenStore = tokenStore, startDestination = dest)
-                    }
+                    startDestination?.let { ShuleNavGraph(startDestination = it) }
                 }
             }
         }

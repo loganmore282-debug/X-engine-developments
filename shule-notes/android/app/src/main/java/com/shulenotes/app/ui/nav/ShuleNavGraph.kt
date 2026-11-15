@@ -1,113 +1,81 @@
 package com.shulenotes.app.ui.nav
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
-import com.shulenotes.app.data.Note
-import com.shulenotes.app.data.TokenStore
-import com.shulenotes.app.ui.auth.AuthViewModel
+import com.shulenotes.app.ShuleApp
+import com.shulenotes.app.data.NoteCache
+import com.shulenotes.app.data.SessionHolder
 import com.shulenotes.app.ui.auth.LoginScreen
 import com.shulenotes.app.ui.auth.RegisterScreen
 import com.shulenotes.app.ui.chat.AiChatScreen
-import com.shulenotes.app.ui.home.HomeScreen
-import com.shulenotes.app.ui.home.HomeViewModel
+import com.shulenotes.app.ui.main.MainScreen
 import com.shulenotes.app.ui.note.NoteDetailScreen
-import com.shulenotes.app.ui.note.NoteViewModel
-import kotlinx.coroutines.launch
-import java.net.URLDecoder
-import java.net.URLEncoder
 
-private object Routes {
+object Routes {
     const val LOGIN = "login"
     const val REGISTER = "register"
-    const val HOME = "home"
-    const val NOTE_DETAIL = "note/{noteId}/{noteTitle}/{hasAi}"
-    const val CHAT = "chat/{noteId}/{noteTitle}"
+    const val MAIN = "main"
+    const val NOTE = "note/{noteId}"
+    const val CHAT = "chat/{noteId}"
 }
 
-private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
-private fun dec(s: String) = URLDecoder.decode(s, "UTF-8")
-
 @Composable
-fun ShuleNavGraph(tokenStore: TokenStore, startDestination: String) {
-    val navController: NavHostController = rememberNavController()
+fun ShuleNavGraph(startDestination: String) {
+    val navController = rememberNavController()
+    val toMain = { navController.navigate(Routes.MAIN) { popUpTo(0) } }
+    val toLogin = { navController.navigate(Routes.LOGIN) { popUpTo(0) } }
+
+    // The server rejected the saved sign-in (it expired, or the account is gone).
+    val expired by SessionHolder.expired.collectAsState()
+    LaunchedEffect(expired) {
+        if (expired) {
+            ShuleApp.session.clear()
+            NoteCache.clear()
+            SessionHolder.expired.value = false
+            toLogin()
+        }
+    }
 
     NavHost(navController = navController, startDestination = startDestination) {
         composable(Routes.LOGIN) {
-            val vm: AuthViewModel = viewModel()
             LoginScreen(
-                viewModel = vm,
-                tokenStore = tokenStore,
-                onLoggedIn = {
-                    navController.navigate(Routes.HOME) { popUpTo(0) }
-                },
-                onGoToRegister = { navController.navigate(Routes.REGISTER) },
+                viewModel = viewModel(),
+                onLoggedIn = toMain,
+                onGoToRegister = { navController.navigate(Routes.REGISTER) { launchSingleTop = true } },
             )
         }
         composable(Routes.REGISTER) {
-            val vm: AuthViewModel = viewModel()
             RegisterScreen(
-                viewModel = vm,
-                tokenStore = tokenStore,
-                onRegistered = {
-                    navController.navigate(Routes.HOME) { popUpTo(0) }
-                },
+                viewModel = viewModel(),
+                onRegistered = toMain,
                 onGoToLogin = { navController.popBackStack() },
             )
         }
-        composable(Routes.HOME) {
-            val vm: HomeViewModel = viewModel()
-            val scope = rememberCoroutineScope()
-            HomeScreen(
-                viewModel = vm,
-                onOpenNote = { note: Note ->
-                    navController.navigate("note/${enc(note.id)}/${enc(note.title)}/${note.hasAiContext}")
-                },
-                onLogout = {
-                    scope.launch { tokenStore.clearToken() }
-                    navController.navigate(Routes.LOGIN) { popUpTo(0) }
-                },
+        composable(Routes.MAIN) {
+            MainScreen(
+                viewModel = viewModel(),
+                onOpenNote = { noteId -> navController.navigate("note/$noteId") { launchSingleTop = true } },
+                onSignedOut = toLogin,
             )
         }
-        composable(
-            route = Routes.NOTE_DETAIL,
-            arguments = listOf(
-                navArgument("noteId") { type = NavType.StringType },
-                navArgument("noteTitle") { type = NavType.StringType },
-                navArgument("hasAi") { type = NavType.BoolType },
-            ),
-        ) { backStackEntry ->
-            val noteId = backStackEntry.arguments?.getString("noteId").orEmpty()
-            val noteTitle = dec(backStackEntry.arguments?.getString("noteTitle").orEmpty())
-            val hasAi = backStackEntry.arguments?.getBoolean("hasAi") ?: false
-            val note = Note(
-                id = noteId, subjectId = null, title = noteTitle, description = null,
-                classLevel = null, pageCount = 0, fileSize = 0, uploadedAt = null, hasAiContext = hasAi,
-            )
-            val vm: NoteViewModel = viewModel()
+        composable(Routes.NOTE) { entry ->
+            val noteId = entry.arguments?.getString("noteId").orEmpty()
             NoteDetailScreen(
-                note = note,
-                viewModel = vm,
+                noteId = noteId,
+                viewModel = viewModel(),
                 onBack = { navController.popBackStack() },
-                onAskAi = { navController.navigate("chat/${enc(noteId)}/${enc(noteTitle)}") },
+                onAskAi = { navController.navigate("chat/$noteId") { launchSingleTop = true } },
             )
         }
-        composable(
-            route = Routes.CHAT,
-            arguments = listOf(
-                navArgument("noteId") { type = NavType.StringType },
-                navArgument("noteTitle") { type = NavType.StringType },
-            ),
-        ) { backStackEntry ->
-            val noteId = backStackEntry.arguments?.getString("noteId").orEmpty()
-            val noteTitle = dec(backStackEntry.arguments?.getString("noteTitle").orEmpty())
-            AiChatScreen(noteId = noteId, noteTitle = noteTitle, onBack = { navController.popBackStack() })
+        composable(Routes.CHAT) { entry ->
+            val noteId = entry.arguments?.getString("noteId").orEmpty()
+            AiChatScreen(noteId = noteId, onBack = { navController.popBackStack() })
         }
     }
 }

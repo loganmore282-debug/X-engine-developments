@@ -105,15 +105,27 @@ def tidy_status_bar():
         adb("shell", "am", "broadcast", "-a", "com.android.systemui.demo", "-e", "command", *extra, check=False)
 
 
+def clear_field(index, length=24):
+    tap(fields()[index])
+    adb("shell", "input", "keyevent", "123")
+    adb("shell", "input", "keyevent", *["67"] * length)
+
+
+def night(on):
+    adb("shell", "cmd", "uimode", "night", "yes" if on else "no")
+    time.sleep(4)
+
+
 def walk():
     adb("install", "-r", APK, timeout=600)
     tidy_status_bar()
     adb("shell", "am", "start", "-n", f"{PKG}/.MainActivity")
 
     wait_for("Sign in")
+    time.sleep(1)
     shot("app-01-sign-in")
 
-    tap(wait_for("New here? Create an account"))
+    tap(wait_for("Create an account"))
     wait_for("Create your account")
     type_into(0, "Amina Nakato")
     type_into(1, "0772123456")
@@ -129,18 +141,50 @@ def walk():
     wait_gone("Quadratic Equations", prefix=True)
     time.sleep(1)
     shot("app-04-one-subject")
+    tap(wait_for("All"))
+    wait_for("Quadratic Equations", prefix=True)
 
+    type_into(0, "newton")
+    wait_gone("Photosynthesis", prefix=True)
+    shot("app-05-search")
+    tap(wait_for("Clear search"))
+    wait_for("Photosynthesis", prefix=True)
+
+    tap(wait_for("Save note"))
+    wait_for("Remove from saved")
+    tap(wait_for("Saved"))
+    wait_for("Notes you bookmarked on this phone")
+    wait_for("Photosynthesis", prefix=True)
+    shot("app-06-saved")
+
+    tap(wait_for("Profile"))
+    wait_for("Delete account")
+    shot("app-07-profile")
+
+    tap(wait_for("Home"))
     tap(wait_for("Photosynthesis", prefix=True))
     wait_for("Back")
     wait_gone("Opening document…")
+    wait_for("Ask AI")
     time.sleep(4)
-    shot("app-05-reading-a-document")
+    shot("app-08-reading-a-document")
+
+    adb("shell", "input", "swipe", "540", "1700", "540", "500", "400")
+    time.sleep(3)
+    shot("app-09-further-down-the-document")
+
+    # Two taps 0.1s apart, started together because each `input` takes longer than that to start.
+    adb("shell", "input tap 540 1100 & sleep 0.1; input tap 540 1100; wait")
+    time.sleep(4)
+    shot("app-10-zoomed-in")
+    adb("shell", "input tap 540 1100 & sleep 0.1; input tap 540 1100; wait")
+    time.sleep(3)
 
     tap(wait_for("Ask AI"))
-    wait_for("Ask a question about this document to get started.")
-    shot("app-06-ask-ai")
+    wait_for("Summarise this document")
+    shot("app-11-ask-ai")
     type_into(0, "What does a plant need for photosynthesis?")
-    shot("app-07-question-typed")
+    shot("app-12-question-typed")
 
     # No real Claude key exists in CI, so this only checks that a failed
     # answer shows a readable message instead of crashing.
@@ -151,13 +195,56 @@ def walk():
     adb("shell", "input", "keyevent", "4")
     time.sleep(1)
     adb("shell", "input", "keyevent", "4")
+    wait_for("Home")
+
+    night(True)
+    wait_for("Photosynthesis", prefix=True)
+    shot("app-13-home-dark")
+    tap(wait_for("Photosynthesis", prefix=True))
+    wait_for("Ask AI")
+    time.sleep(4)
+    shot("app-14-reading-dark")
+    adb("shell", "input", "keyevent", "4")
+    wait_for("Home")
+    night(False)
+
+    tap(wait_for("Profile"))
+    tap(wait_for("Delete account"))
+    wait_for("Delete your account?")
+    type_into(0, "not-my-password")
+    tap(wait_for("Delete account"))
+    wait_for("Incorrect password")
+    shot("check-delete-account-wrong-password")
+    tap(wait_for("Cancel"))
+
     tap(wait_for("Log out"))
-    wait_for("Sign in")
+    wait_for("Log out?")
+    shot("check-log-out-dialog")
+    tap(wait_for("Log out"))
+    wait_for("Welcome back")
+
     type_into(0, "0772123456")
     type_into(1, "wrongpass")
     tap(wait_for("Sign in"))
-    time.sleep(4)
+    wait_for("Incorrect phone/email or password")
     shot("check-wrong-password")
+
+    clear_field(1)
+    type_into(1, "study2026")
+    tap(wait_for("Sign in"))
+    wait_for("Photosynthesis", prefix=True)
+
+    tap(wait_for("Profile"))
+    tap(wait_for("Delete account"))
+    wait_for("Delete your account?")
+    type_into(0, "study2026")
+    tap(wait_for("Delete account"))
+    wait_for("Welcome back")
+    type_into(0, "0772123456")
+    type_into(1, "study2026")
+    tap(wait_for("Sign in"))
+    wait_for("Incorrect phone/email or password")
+    shot("check-deleted-account-cannot-sign-in")
 
 
 OUT.mkdir(parents=True, exist_ok=True)
