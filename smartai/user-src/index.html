@@ -576,24 +576,25 @@
   .gp-amt-line b{font-weight:500;color:#d98225;font-size:16.6px;}
   .gp-amt-line b small{font-size:13px;font-weight:500;margin-right:4px;}
   .gp-sel-t{margin-top:30px;font-size:15px;font-weight:500;color:#7a756f;}
-  .gp-methods{display:flex;justify-content:center;gap:14px;margin-top:20px;}
-  .gp-m{position:relative;width:97px;height:76px;border-radius:9px;border:1px solid #ccc;background:#fff;box-shadow:0 3px 9px rgba(0,0,0,.09);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:0;color:#6e6a65;
+  .gp-methods{display:flex;justify-content:center;gap:13px;margin-top:14px;}
+  .gp-m{position:relative;width:92px;height:72px;border-radius:9px;border:1px solid #ccc;background:#fff;box-shadow:0 3px 9px rgba(0,0,0,.09);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:12.8px;padding:6.6px 0 0;color:#6e6a65;
     transition:border-color .22s ease,background .22s ease,box-shadow .22s ease,transform .12s ease;overflow:hidden;}
   .gp-m:active{transform:scale(.97);}
-  .gp-m img{width:28px;height:28px;object-fit:cover;display:block;}
-  .gp-m span.gp-ml{font-size:14px;font-weight:500;}
+  .gp-m img{width:29px;height:29px;object-fit:contain;display:block;mix-blend-mode:multiply;}
+  .gp-m span.gp-ml{font-size:12.5px;line-height:15px;font-weight:500;}
   .gp-m .gp-tri{position:absolute;right:0;bottom:0;width:23px;height:23px;background:#daaa58;clip-path:polygon(100% 0,100% 100%,0 100%);transform:scale(0);transform-origin:100% 100%;transition:transform .24s cubic-bezier(.2,1.5,.4,1);}
   .gp-m .gp-tri svg{position:absolute;right:2px;bottom:2px;width:11px;height:11px;}
   .gp-m.on{border-color:#c5ac84;background:#fff6ef;box-shadow:0 4px 12px rgba(217,147,51,.28);}
   .gp-m.on .gp-tri{transform:scale(1);}
-  .gp-numbox{margin-top:22px;height:43px;border:1px solid #a9a9a9;border-radius:11px;display:flex;align-items:center;padding:0 12px;box-sizing:border-box;transition:border-color .2s ease,box-shadow .2s ease;background:#fff;}
+  .gp-numbox{margin-top:20px;height:41px;border:1px solid #a9a9a9;border-radius:11px;display:flex;align-items:center;padding:0 12px;box-sizing:border-box;transition:border-color .2s ease,box-shadow .2s ease;background:#fff;}
   .gp-numbox:focus-within{border-color:#d98f2f;box-shadow:0 0 0 3px rgba(217,143,47,.16);}
   .gp-numbox b{font-size:13px;font-weight:500;color:#d4832a;margin-right:14px;flex:none;}
   .gp-numbox input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:14px;color:#111;padding:0;height:100%;font-family:inherit;}
   .gp-numbox input::placeholder{color:#b9b9b9;font-size:12px;}
-  .gp-warn{margin:17px -22px 0;background:#faeeee;padding:9px 22px 9px 20px;display:flex;align-items:center;gap:9px;color:#ca6364;font-size:10.7px;line-height:15.8px;}
-  .gp-warn i{flex:none;width:15px;height:15px;border-radius:50%;background:rgba(226,84,83,.18);display:grid;place-items:center;color:#e25453;}
-  .gp-warn i svg{width:9px;height:9px;}
+  .gp-warn{margin:15.5px -22px 0;background:#faeeee;padding:10px 4px 10px 20px;display:flex;align-items:center;gap:4px;color:#ca6364;font-size:clamp(8px,calc(3.07vw - 1.45px),10.9px);line-height:14.6px;}
+  .gp-warn span{white-space:nowrap;}
+  .gp-warn i{flex:none;width:14px;height:14px;border-radius:50%;background:rgba(235,90,90,.34);display:grid;place-items:center;color:#e0413f;}
+  .gp-warn i svg{width:13px;height:13px;display:block;}
   .gp-btn{display:flex;align-items:center;justify-content:center;gap:8px;margin:17px auto 0;border:0;border-radius:30px;color:#fff;font-weight:500;font-family:inherit;letter-spacing:.2px;
     background:linear-gradient(180deg,#f4cc7a 0%,#e8b25a 52%,#d98f2f 100%);box-shadow:0 5px 12px rgba(217,143,47,.38),inset 0 1px 0 rgba(255,255,255,.35);
     transition:transform .12s ease,filter .2s ease,opacity .2s ease;position:relative;overflow:hidden;}
@@ -1402,11 +1403,11 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <div class="gp-amt-line">Payment Amount: <b><small>UGX</small><span id="gpAmt1">0</span></b></div>
       <div class="gp-sel-t">Please select a payment method</div>
       <div class="gp-methods">
-        <button type="button" class="gp-m" id="gpM_MTN" onclick="gpPickNet('MTN')"><img src="/icons/mtn-logo.jpg" alt=""><span class="gp-ml">MTN</span><i class="gp-tri"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></i></button>
-        <button type="button" class="gp-m" id="gpM_Airtel" onclick="gpPickNet('Airtel')"><img src="/icons/airtel-logo.jpg" alt=""><span class="gp-ml">Airtel</span><i class="gp-tri"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></i></button>
+        <button type="button" class="gp-m" id="gpM_MTN" onclick="gpPickNet('MTN')"><img src="/icons/momo-logo.webp" alt=""><span class="gp-ml">MTN</span><i class="gp-tri"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></i></button>
+        <button type="button" class="gp-m" id="gpM_Airtel" onclick="gpPickNet('Airtel')"><img src="/icons/airtel-money-logo.webp" alt=""><span class="gp-ml">Airtel</span><i class="gp-tri"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></i></button>
       </div>
       <div class="gp-numbox"><b>+256</b><input id="gpPhone" type="tel" inputmode="numeric" maxlength="13" autocomplete="off" placeholder="Please enter your actual payment account"></div>
-      <div class="gp-warn"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M12 6v8M12 18.2v.1"/></svg></i><span>Please fill in your payment account accurately,<br>incorrect filling may result in the loss of the transferred funds.</span></div>
+      <div class="gp-warn"><i><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="10.4" y="4.6" width="3.2" height="10.2" rx="1.6"/><circle cx="12" cy="18.7" r="1.9"/></svg></i><span>Please fill in your payment account accurately,<br>incorrect filling may result in the loss of the transferred funds.</span></div>
       <button type="button" class="gp-btn" id="gpConfirm" onclick="gpConfirm()"><span>Confirm</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
     </div></div>
   </div>
