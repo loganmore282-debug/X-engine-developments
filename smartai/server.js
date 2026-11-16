@@ -8175,6 +8175,24 @@ app.post('/admin/products/add-starters', async (req, res) => {
     res.json({ status: 'success', created });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not add the starter products' }); }
 });
+// "Number VIP levels": one tap gives the products VIP 1, 2, 3 ... up to the last one, in the arrangement the list and the app show (position first, then price), so the owner never types them.
+// A deleted product is skipped. A member's VIP follows the products they own, so every member's level updates at once (the cache is dropped).
+app.post('/admin/products/number-vips', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    _productsCacheTs = 0;
+    const list = (await getProductsRaw()).filter(p => !p.deleted);
+    let changed = 0;
+    for (let i = 0; i < list.length; i++) {
+      if (Number(list[i].vip) === i + 1) continue;
+      await db.collection('products').doc(list[i].key).set({ vip: i + 1 }, { merge: true });
+      changed++;
+    }
+    _productsCacheTs = 0; _vipCache.clear();
+    logAdminAction(req, 'products_vip_numbered', { total: list.length, changed });
+    res.json({ status: 'success', total: list.length, changed, order: list.map((p, i) => ({ key: p.key, name: p.name, vip: i + 1 })) });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not number the VIP levels' }); }
+});
 app.get('/admin/products', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try { res.json({ status: 'success', products: await getProducts() }); }

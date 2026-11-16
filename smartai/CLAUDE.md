@@ -718,3 +718,7 @@ smooth modern flip, a reward is shown when tapped: a product or earnings; I set 
   of the robots a card may give (none ticked = earnings only). Defaults: on, any recharge, UGX 500 to 5,000, 10 %, no robots, everybody.
 - Left in place on purpose: `/checkin`, `/redeem` (gift codes), the admin gift-code tab and the check-in settings (unused by the app now; the Ledger still shows old Daily reward / Gift code rows).
 - Tests: `test-lucky.js` (server block against a mock db, 31 checks), the Lucky E2E in `test-smartai-app.js` (7c), the board checks in `test-animations.js`.
+
+## Number VIP levels (2026-11-16, admin v37)
+Admin > Products has a **Number VIP levels** button: `POST /admin/products/number-vips` (owner only) gives the non-deleted products VIP 1, 2, 3 ... in the arrangement the list shows (position `order`, then price), writes only
+the ones that differ, drops the VIP cache (so members' levels follow at once) and logs `products_vip_numbered`. Moving products around and tapping again renumbers them. `test-vip-number.js`.
