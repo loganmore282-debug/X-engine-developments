@@ -2121,29 +2121,22 @@ var GP_KEY = 'smartai_gp_resume';
 var GP_ORDER_MS = 15 * 60 * 1000;
 var GP_ICONS = {
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
-  warn: '<svg viewBox="0 0 24 24" fill="none" stroke="#e25453" stroke-width="3.2" stroke-linecap="round"><path d="M12 6v8M12 18.2v.1"/></svg>',
+  warn: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="10.4" y="4.6" width="3.2" height="10.2" rx="1.6"/><circle cx="12" cy="18.7" r="1.9"/></svg>',
   arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
-  chev: '<svg viewBox="0 0 24 24" fill="none" stroke="#ffe3bd" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
-  card: '<svg viewBox="0 0 24 24" fill="#728395"><path d="M4.2 4.5h15.6A2.2 2.2 0 0122 6.7V8H2V6.7A2.2 2.2 0 014.2 4.5zM2 10h20v7.3a2.2 2.2 0 01-2.2 2.2H4.2A2.2 2.2 0 012 17.3zm13.2 4.4a1 1 0 000 2h2.6a1 1 0 000-2z"/></svg>',
-  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="#728395" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 01-14.2 5M4 12a8 8 0 0114.2-5"/><path d="M19 3v4.4h-4.4M5 21v-4.4h4.4"/></svg>',
-  person: '<svg viewBox="0 0 24 24" fill="#728395"><path d="M4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2zm4.6 3.2a2.3 2.3 0 100 4.6 2.3 2.3 0 000-4.6zM4.4 16.6h8.4c0-1.7-1.9-2.8-4.2-2.8s-4.2 1.1-4.2 2.8zM14.4 9h5v1.5h-5zm0 3h5v1.5h-5z" fill-rule="evenodd"/></svg>',
-  bulb: '<svg viewBox="0 0 24 24" fill="#728395"><path d="M12 2.5a6.4 6.4 0 00-3.7 11.6c.6.5.9 1.1.9 1.8v.6h5.6v-.6c0-.7.3-1.3.9-1.8A6.4 6.4 0 0012 2.5zM9.4 18.6h5.2v1.2a1.2 1.2 0 01-1.2 1.2h-2.8a1.2 1.2 0 01-1.2-1.2z"/></svg>',
-  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="#6f675a" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="8.2" y="8.2" width="12.3" height="12.3" rx="2.6" fill="#f5f5f5"/><path d="M15.6 12.4v5.4M12.9 15.1h5.4"/><path d="M15.2 5.6V5a2.2 2.2 0 00-2.2-2.2H5A2.2 2.2 0 002.8 5v8A2.2 2.2 0 005 15.2h.6"/></svg>',
+  // The Submit arrow: a darker disc with a light chevron (the owner's screenshot: disc 55 px, chevron 3.8 px, on a 229,134,8 button).
+  chev: '<svg viewBox="0 0 55 55" aria-hidden="true"><circle cx="27.5" cy="27.5" r="27.5" fill="rgba(0,0,0,.157)"/><path d="M21.75 14.5L34.35 27.1L21.75 39.5" fill="none" stroke="#efb468" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  // The four step pictures, drawn on a 90 x 90 grid = the 90 px disc of the owner's screenshots (all #6f849f on #ebecf0).
+  card: '<svg viewBox="0 0 90 90" aria-hidden="true"><g fill="#6f849f"><rect x="24.4" y="25.6" width="41.6" height="10" rx="2"/><rect x="24.4" y="38.6" width="41.6" height="25" rx="2.5"/></g><rect x="49.4" y="54.4" width="12.2" height="3" rx="1.5" fill="#ebecf0"/></svg>',
+  refresh: '<svg viewBox="0 0 90 90" aria-hidden="true"><circle cx="45" cy="44.6" r="26" fill="#6f849f"/><path d="M53.2 34.8A12.8 12.8 0 1 0 53.2 54.4" fill="none" stroke="#ebecf0" stroke-width="3" stroke-linecap="round"/><path d="M47 40.5H58.5V30" fill="none" stroke="#ebecf0" stroke-width="3" stroke-linejoin="miter"/></svg>',
+  person: '<svg viewBox="0 0 90 90" aria-hidden="true"><rect x="19" y="24" width="42" height="35.4" rx="3.5" fill="#6f849f"/><rect x="27" y="33" width="11" height="3.6" rx="1.8" fill="#ebecf0"/><rect x="27" y="42.6" width="11" height="4" rx="2" fill="#ebecf0"/><g fill="#6f849f" stroke="#ebecf0" stroke-width="2.4" paint-order="stroke"><circle cx="56" cy="38" r="8.8"/><path d="M38 59.4C38 51.5 46 49 56 49S74 51.5 74 59.4Z"/></g></svg>',
+  bulb: '<svg viewBox="0 0 90 90" aria-hidden="true"><g fill="#6f849f"><circle cx="45" cy="44" r="17"/><rect x="37" y="63" width="16" height="3.4" rx="1.7"/><rect x="41" y="69" width="8" height="3.6" rx="1.8"/><rect x="42.3" y="17.4" width="5.4" height="7.2" rx="2.7"/><rect x="16.9" y="39.4" width="9" height="4.4" rx="2.2"/><rect x="64.1" y="39.4" width="9" height="4.4" rx="2.2"/><rect x="22.5" y="25.4" width="9" height="4.4" rx="2.2" transform="rotate(42 27 27.6)"/><rect x="58.1" y="25.4" width="9" height="4.4" rx="2.2" transform="rotate(-42 62.6 27.6)"/></g></svg>',
+  // The copy picture: a square with a plus in front of a second one (the owner's screenshot, 80 px grid, #70675e, 4.6 px line).
+  copy: '<svg viewBox="0 0 80 80" fill="none" stroke="#70675e" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M56.9 18.8V17Q56.9 11.9 51.8 11.9H18.2Q13.1 11.9 13.1 17V50Q13.1 55 18.2 55H19.4"/><rect x="25.1" y="23.1" width="40" height="40" rx="7"/><path d="M36.5 43.1H54.1M45 34.9V52.3"/></svg>',
   swoosh: '<svg viewBox="0 0 24 24" fill="none" stroke="#f7ead2" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17L17 7M9.5 7H17v7.5"/></svg>'
 };
 function gpHeadArt(){
-  // The flowing lines of the header (measured on the owner's screenshot): three wide swooping curves and a band of fine wavy lines in the lower half.
-  var s = '', i;
-  s += '<path d="M-30 150C70 24 190 4 300 56S420 120 450 96" fill="none" stroke="rgba(196,176,138,.17)" stroke-width="1.3"/>';
-  s += '<path d="M-30 168C90 40 210 18 320 70S430 130 460 110" fill="none" stroke="rgba(196,176,138,.12)" stroke-width="1"/>';
-  s += '<path d="M120 -10C170 40 250 52 330 20S430 -6 450 8" fill="none" stroke="rgba(196,176,138,.1)" stroke-width="1"/>';
-  for (i = 0; i < 30; i++) {
-    var y = 84 + i * 3.1, a = 12 + (i % 6) * 2.3;
-    s += '<path d="M-20 ' + (y + a).toFixed(1) + 'C90 ' + (y - a * 1.6).toFixed(1) + ' 210 ' + (y + a * 1.4).toFixed(1) + ' 300 ' + (y - a * 0.4).toFixed(1) + 'S410 ' + (y + a * 0.6).toFixed(1) + ' 440 ' + (y - a * 0.8).toFixed(1) + '" fill="none" stroke="rgba(255,255,255,' + (0.045 + (i % 3) * 0.018).toFixed(3) + ')" stroke-width=".7"/>';
-  }
+  // The header's flowing lines are the picture /icons/gp-head.webp (cut from the owner's screenshot); only the small pictures are filled in here.
   document.querySelectorAll('[data-gp]').forEach(function(n){ if (!n.firstChild && GP_ICONS[n.dataset.gp]) n.innerHTML = GP_ICONS[n.dataset.gp]; });
-  var el = $('gpArt');
-  if (el && !el.firstChild) { el.setAttribute('viewBox', '0 0 411 166'); el.setAttribute('preserveAspectRatio', 'none'); el.innerHTML = s; }
 }
 function gpNow(){ return Date.now() + (_gp.skew || 0); }
 /* ---- notices ---- */
@@ -2240,7 +2233,7 @@ function gpPickNet(n){
 }
 async function gpConfirm(){
   if (_gp.busy) return;
-  if (!_gp.network) { gpToast('Please select a payment method'); return; }
+  if (!_gp.network) { gpToast('Please select the operator first'); return; }
   var raw = $('gpPhone').value.trim();
   if (!raw) { gpToast('Please enter payment account number'); return; }
   var local = localDigits(raw);

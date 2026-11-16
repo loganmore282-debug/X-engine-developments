@@ -6802,6 +6802,13 @@ async function activePayChannels() {
   try { return (await readPayChannels()).filter(c => c.active !== false && c.accountNumber && payNetworkOf(c.network || c.name)); }
   catch (_) { return []; }
 }
+// Which network a Uganda number belongs to, by its first three digits (the owner's list): MTN 076, 077, 078, 079; Airtel 070, 073, 074, 075.
+// Anything else (an unlisted prefix) says nothing about the network.
+const MTN_PREFIXES = ['076', '077', '078', '079'], AIRTEL_PREFIXES = ['070', '073', '074', '075'];
+function networkOfNumber(local9) {
+  const p = '0' + String(local9 || '').replace(/\D/g, '').slice(0, 2);
+  return MTN_PREFIXES.includes(p) ? 'MTN' : AIRTEL_PREFIXES.includes(p) ? 'Airtel' : '';
+}
 function payNetworkOf(v) { const s = String(v == null ? '' : v).trim().toLowerCase(); return s === 'mtn' ? 'MTN' : s === 'airtel' ? 'Airtel' : ''; }
 function cleanPayText(v, max) { return String(v == null ? '' : v).replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max); }
 // The members only learn WHICH networks can be paid with; the numbers themselves are shown only inside an order.
@@ -6877,7 +6884,7 @@ app.post('/deposit/manual/order', async (req, res) => {
   const amt = paymentAmount(req.body.amount);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
   if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
-  const network = payNetworkOf(req.body.network);
+  let network = payNetworkOf(req.body.network);
   if (!network) return res.status(400).json({ status: 'error', message: 'Please select a payment method' });
   const payerLocal = localDigits(req.body.phone);
   if (!payerLocal) return res.status(400).json({ status: 'error', code: 'BAD_PHONE', message: 'The mobile phone number format is incorrect' });
@@ -6899,6 +6906,10 @@ app.post('/deposit/manual/order', async (req, res) => {
       depRef = mine.ref; ref = mine.data().ref; expiresMs = tsMillis(mine.data().expiresAt);
       fields = { network: mine.data().network, assignedNumber: mine.data().assignedNumber, assignedName: mine.data().assignedName, amount: mine.data().amount, payerPhone: mine.data().senderPhone };
     } else {
+      // The number the member pays FROM decides the account shown: a member who taps MTN but types an Airtel number is shown the Airtel account (and the other way
+      // round), so the money stays inside one network. A number with no known prefix, or a network the admin has no number for, keeps the network that was tapped.
+      const byNumber = networkOfNumber(payerLocal);
+      if (byNumber && byNumber !== network && channels.some(c => payNetworkOf(c.network || c.name) === byNumber)) network = byNumber;
       const ch = pickPayChannel(channels, network);
       if (!ch) return res.status(400).json({ status: 'error', message: `${network} payments are not available right now. Please choose another method.` });
       // Older unsent orders of this member are closed so they do not pile up.

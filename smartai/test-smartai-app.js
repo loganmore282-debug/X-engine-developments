@@ -200,7 +200,7 @@ async function member(ref) {
   const gp1 = await ev(() => { const o = document.getElementById('ovGpPick'), card = document.querySelector('.gp-card1'), logo = document.querySelector('#ovGpPick .gp-logo1'); return { on: o.classList.contains('show'), amt: document.getElementById('gpAmt1').textContent, icon: logo.getAttribute('data-icon'), src: logo.getAttribute('src'), grad: /gradient/.test(getComputedStyle(o).backgroundImage), card: getComputedStyle(card).backgroundColor, btn: getComputedStyle(document.getElementById('gpConfirm')).backgroundImage.includes('gradient') }; });
   ok(gp1.on && gp1.amt === '30000' && gp1.icon === 'paylogo' && /paylogo/.test(gp1.src) && gp1.grad && gp1.card === 'rgb(255, 255, 255)' && gp1.btn, 'Continue opens page 1: the AI logo (the admin slot), the amount, a white card on the dark backdrop, the gold Confirm: ' + JSON.stringify(gp1));
   await ev(() => gpConfirm()); await sleep(300);
-  ok(await gpToastText() === 'Please select a payment method', 'Confirm with no network says "Please select a payment method"');
+  ok(await gpToastText() === 'Please select the operator first', 'Confirm with no network says "Please select the operator first"');
   await ev(() => gpPickNet('MTN')); await ev(() => gpConfirm()); await sleep(300);
   ok(await gpToastText() === 'Please enter payment account number', 'with no number: "Please enter payment account number"');
   await ev(() => { document.getElementById('gpPhone').value = '12345'; gpConfirm(); }); await sleep(300);
@@ -209,7 +209,7 @@ async function member(ref) {
   await ev(() => { document.getElementById('gpPhone').value = '0769968158'; gpConfirm(); }); await sleep(1400);
   const gp2 = await ev(() => ({ on: document.getElementById('ovGpPay').classList.contains('show'), net: document.getElementById('gpNetName').textContent, lab: document.getElementById('gpAcctLab').textContent, acct: document.getElementById('gpAcct').textContent, name: document.getElementById('gpName').textContent,
     amt: document.getElementById('gpAmt2').textContent, mine: document.getElementById('gpMine').textContent, timer: [...document.querySelectorAll('#gpTimer i')].map(i => i.textContent).join(''), copies: document.querySelectorAll('#ovGpPay .gp-cp svg').length,
-    steps: document.getElementById('gpSteps').textContent, icons: document.querySelectorAll('#ovGpPay .gp-ic svg').length, art: document.querySelectorAll('#gpArt path').length > 20, logo: document.querySelector('#ovGpPay .gp-logo2').getAttribute('data-icon') }));
+    steps: document.getElementById('gpSteps').textContent, icons: document.querySelectorAll('#ovGpPay .gp-ic svg').length, art: /gp-head\.webp/.test(getComputedStyle(document.querySelector('#ovGpPay .gp-head')).backgroundImage), logo: document.querySelector('#ovGpPay .gp-logo2').getAttribute('data-icon') }));
   ok(gp2.on && gp2.net === 'MTN' && gp2.lab === 'MTN Account:' && gp2.acct === '0772095482' && gp2.name === 'RUTH NABIRTE' && gp2.amt === '30000' && gp2.mine === '0769968158', 'Confirm opens page 2 with the admin\'s MTN number, the name, the amount and the paying number: ' + JSON.stringify(gp2));
   ok(/^001[45]/.test(gp2.timer) && gp2.copies === 2 && /\*165#/.test(gp2.steps) && gp2.icons === 4 && gp2.art && gp2.logo === 'paylogo', 'the clock starts at 15 minutes, two copy buttons, the MTN how-to (*165#), four step icons, the header lines and the logo: ' + JSON.stringify({ t: gp2.timer, c: gp2.copies, i: gp2.icons }));
   await sleep(1300);

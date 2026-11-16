@@ -47,7 +47,7 @@ function build(db, ctx) {
   const mk = new Function('app', 'db', 'ctx', 'FieldValue', 'tsMillis', 'currentRegionKey', 'MAX_MONEY_AMOUNT', 'fmtMoney', 'paymentAmount', 'getSettings',
     'verifyAuth', 'verifyAdmin', 'verifyOwner', 'logAdminAction', 'uniqueRef', 'nowStr', 'newStatementId', '_userBeingDeleted', 'localDigits', 'sendAdminPush',
     'depositFullyCredited', 'stripHtml', 'textOf', 'withLock',
-    block + '\nreturn { extractManualRef, extractManualAmount, sweepManualOrders, activePayChannels, dropPayChannelsCache, MANUAL_ORDER_MS };');
+    block + '\nreturn { networkOfNumber, extractManualRef, extractManualAmount, sweepManualOrders, activePayChannels, dropPayChannelsCache, MANUAL_ORDER_MS };');
   const localDigits = raw => { let s = String(raw || '').replace(/\D/g, ''); if (s.startsWith('256') && s.length === 12) s = s.slice(3); else if (s.startsWith('0') && s.length === 10) s = s.slice(1); return /^7\d{8}$/.test(s) ? s : null; };
   const api = mk(app, db, ctx, { serverTimestamp: () => SERVER_TS }, v => (v && v.getTime ? v.getTime() : 0), () => 'ug', 1e9,
     n => 'UGX ' + n, v => Number(v), async () => ({ minDeposit: 5000 }),
@@ -127,8 +127,14 @@ async function call(h, body, opts = {}) {
   ok(o2.depositId !== o1.depositId && o2.reference !== o1.reference && o2.accountNumber !== o1.accountNumber, 'a second order is a NEW order with a new reference, and the next MTN number is used (turn by turn)');
   eq(db.col('pendingDeposits').get(o1.depositId).status, 'failed', 'the older unsent order is closed');
   ok(o2.expiresAt >= o1.expiresAt && o2.expiresAt - Date.now() > 14.9 * 60000, 'and the new one has its own fresh 15-minute clock');
-  r = await order({ network: 'Airtel' }); const o3 = r.body;
-  eq(o3.accountNumber, '0747833143', 'an Airtel order gets the Airtel number');
+  r = await order({ network: 'Airtel', phone: '0741234567' }); let o3 = r.body;
+  eq(o3.accountNumber, '0747833143', 'an Airtel order from an Airtel number gets the Airtel number');
+  // the number the member pays FROM decides the account: MTN prefixes 076 077 078 079, Airtel 070 073 074 075
+  for (const [tap, num, want, why] of [['MTN', '0741234567', 'Airtel', 'MTN tapped but an Airtel number (074)'], ['Airtel', '0769968158', 'MTN', 'Airtel tapped but an MTN number (076)'], ['MTN', '0701234567', 'Airtel', '070 is Airtel'], ['MTN', '0731234567', 'Airtel', '073 is Airtel'], ['MTN', '0751234567', 'Airtel', '075 is Airtel'], ['Airtel', '0771234567', 'MTN', '077 is MTN'], ['Airtel', '0781234567', 'MTN', '078 is MTN'], ['Airtel', '0791234567', 'MTN', '079 is MTN'], ['Airtel', '0711234567', 'Airtel', 'an unlisted prefix (071) keeps the network that was tapped'], ['MTN', '0721234567', 'MTN', 'an unlisted prefix (072) keeps the network that was tapped']]) {
+    const x = (await order({ network: tap, phone: num })).body; eq(x.network, want, why + ': the order is for ' + want); ok(want === 'Airtel' ? x.accountNumber === '0747833143' : x.accountNumber !== '0747833143', why + ': the account shown is a ' + want + ' number');
+  }
+  ok(typeof api.networkOfNumber === 'function' && api.networkOfNumber('769968158') === 'MTN' && api.networkOfNumber('741234567') === 'Airtel' && api.networkOfNumber('711234567') === '', 'networkOfNumber reads the first three digits');
+  r = await order({ network: 'Airtel', phone: '0741234567' }); o3 = r.body;   // the loop above closed the earlier open order: start a fresh one
   r = await order({ network: 'Airtel', depositId: o3.depositId, resume: true });
   eq([r.code, r.body.depositId, r.body.expiresAt, r.body.accountNumber], [200, o3.depositId, o3.expiresAt, o3.accountNumber], 'coming back (resume) returns the SAME order and the SAME clock');
   r = await order({ depositId: 'nope', resume: true }); eq([r.code, r.body.code], [409, 'ORDER_GONE'], 'resuming an order that is gone says so');
