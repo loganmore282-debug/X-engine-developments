@@ -65,4 +65,23 @@ ok(/async function inChunks\(/.test(server) && /Promise\.allSettled\(\[\s*reconc
 ok(/return 308 https:/.test(rd('deploy/update-vps.sh')), 'update-vps.sh turns certbot\'s 301 into 308 so a POST callback keeps its body when it is redirected');
 ok(/maxretry = 3/.test(rd('deploy/fail2ban/smartai.local').slice(rd('deploy/fail2ban/smartai.local').indexOf('[smartai-badua]'), rd('deploy/fail2ban/smartai.local').indexOf('[smartai-adminlogin]'))), 'one odd sender name no longer bans an address for a day');
 ok(!/capError|regCapErr|regCaptcha|captchaId/.test(mod + fs.readFileSync(__dirname + '/user-src/index.html', 'utf8')), 'Create Account has no captcha box or line (the owner\'s screens have none)');
+// November sweep: an async route that throws must answer (not hang), ids are text, one transfer backs one claim, exact payout timers survive a restart
+{ const a = server.indexOf('function guardRoute(h) {'), b = server.indexOf("for (const m of ['get', 'post', 'put', 'delete', 'use', 'all'])");
+  ok(a > 0 && b > a, 'guardRoute found');
+  const ctx = { console: { error() {} } }; vm.createContext(ctx); vm.runInContext(server.slice(a, b) + ';this.g=guardRoute;', ctx);
+  const res = { headersSent: false, code: 0, body: null, status(c) { this.code = c; return this; }, json(x) { this.body = x; this.headersSent = true; } };
+  const h = ctx.g(async () => { throw new Error('boom'); });
+  h({ method: 'POST', path: '/x' }, res, () => {});
+  setTimeout(() => { assert.ok(res.code === 500 && res.body && res.body.status === 'error', 'a throwing async route answers 500 instead of hanging'); }, 30);
+  const res2 = { headersSent: true, status() { throw new Error('must not answer twice'); } };
+  ctx.g(async () => { throw new Error('late'); })({ method: 'POST', path: '/hook' }, res2, () => {});
+  let nextErr = null; ctx.g(() => { throw new Error('sync'); })({}, res, e => { nextErr = e; }); ok(nextErr && nextErr.message === 'sync', 'a synchronous throw goes to the error handler');
+  ok(ctx.g((a1, b1, c1, d1) => {}).length === 4, 'an error handler (4 arguments) is left as it is');
+  ok(ctx.g(h) === h, 'a route is wrapped once'); }
+ok((server.match(/const userId = typeof req\.body\.userId === 'string' \? req\.body\.userId : '';/g) || []).length === 2 && /const depositId = typeof req\.body\.depositId === 'string' \? req\.body\.depositId : '';/.test(server), 'admin credit, debit and force-credit take ids only as text');
+ok(/withLock\('manualtx:' \+ found\.ref, async \(\) => \{\s+const dupSnap/.test(server), 'the same transaction ID cannot be claimed twice at the same instant');
+ok(/where\('status', '==', 'pending'\)\.where\('method', '==', 'manual'\)\.limit\(1000\)/.test(server), 'the expiry sweep reads manual orders only');
+ok(/where\('userId', '==', uid\)\.orderBy\('createdAt', 'desc'\)\.limit\(200\)/.test(server), "a member's records are the newest ones");
+ok(/if \(tsMillis\(inv\.createdAt\)\) armPayoutAt\(payoutDueAtMs\(createdMs, made \+ 1\)\);/.test(server), 'a product seen before it is due gets its exact timer (after a restart too)');
+ok(/if \(r\.stale \|\| !STATE\) \{ _lk\.busy = false; card\.classList\.remove\('lift'\); \$\('lkGrid'\)\.classList\.remove\('busy'\); return; \}/.test(mod), 'a raffle card is put back when the flip is dropped');
 console.log(`PASS: bug sweep fixes (${n} checks)`);

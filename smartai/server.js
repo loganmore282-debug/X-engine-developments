@@ -3208,6 +3208,9 @@ async function _settleDueInvestmentNow(doc) {
     if (tsMillis(inv.createdAt) && !(tsMillis(inv.nextPayoutAt) > Date.now())) {
       doc.ref.update({ nextPayoutAt: new Date(payoutDueAtMs(createdMs, made + 1)) }).catch(() => {});
     }
+    // Seen but not due yet (the full pass, which is also the first pass after a restart): aim the exact timer at its due instant, so a restart
+    // does not leave payments to the half-second sweep.
+    if (tsMillis(inv.createdAt)) armPayoutAt(payoutDueAtMs(createdMs, made + 1));
     return false;
   }
   if (_creditingPayouts.has(doc.id)) return false;
