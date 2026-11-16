@@ -24,7 +24,7 @@ const lib = new Function('crypto', `const _scrypt = (password, salt) => new Prom
   ok(/Promise\.all\(\[\s*db\.collection\('users'\)\.doc\(userId\)\.get\(\), getSettings\(\), wholeTeamStats\(userId\),/.test(server), '/team/stats reads everything together');
   // 3. payout sweep
   ok(/where\('nextPayoutAt', '<=', new Date\(\)\)/.test(server) && /_lastFullCashbackSweep > 5 \* 60 \* 1000/.test(server) && /status: 1, nextPayoutAt: 1/.test(db), 'the 0.5 s sweep reads only due investments, with a full pass every 5 minutes as a safety net');
-  ok(/nextPayoutAt: willComplete \|\| !createdMs \? null/.test(server) && (server.match(/nextPayoutAt: new Date\(payoutDueAtMs\(Date\.now\(\), 1\)\)/g) || []).length === 3, 'new, given and Lucky Cards investments get 24 hours after purchase as their payout time');
+  ok(/nextPayoutAt: willComplete \|\| !createdMs \? null/.test(server) && (server.match(/nextPayoutAt: new Date\(payoutDueAtMs\(boughtAt\.getTime\(\), 1\)\)/g) || []).length === 3, 'new, given and Lucky Cards investments get 24 hours after purchase as their payout time');
   // 4. nginx + node
   ok(/gzip on;/.test(nginx) && /application\/json/.test(nginx) && /upstream smartai_node/.test(nginx) && /keepalive 32;/.test(nginx) && /proxy_set_header Connection ""/.test(nginx), 'nginx compresses and keeps connections to Node open');
   ok(/keepAliveTimeout = 65 \* 1000/.test(server), 'Node keeps those connections longer than nginx does');

@@ -88,7 +88,7 @@ async function buy(limit, owned) {
     : n === 'investments' ? { ...q(investments), doc: () => ({ id: 'new', set: async d => { investments.push(d); }, delete: async () => {} }) }
     : { add: async () => ({}) } };
   new Function('app', 'db', 'verifyAuth', 'getProductByKey', 'productOpenState', 'getSettings', 'withLock', 'productExpectedReturn', 'FieldValue', 'nowStr', 'newStatementId', 'fmtMoney', 'grantTurntableSpins', 'console', 'eatNextMidnight', 'payoutDueAtMs', 'investmentMaturityMs',
-    'const _vipCache = new Map(); const round2 = n => Math.round((Number(n) || 0) * 100) / 100;\n' + invRoute)(app, db, async () => 'u1', async () => tier, () => ({ open: true }), async () => ({ cycleDays: 30 }), (_k, fn) => fn(), () => 30000,
+    'const _vipCache = new Map(); const armPayoutAt = () => {}; const round2 = n => Math.round((Number(n) || 0) * 100) / 100;\n' + invRoute)(app, db, async () => 'u1', async () => tier, () => ({ open: true }), async () => ({ cycleDays: 30 }), (_k, fn) => fn(), () => 30000,
     { increment: n => ({ __inc: n }), serverTimestamp: () => 0 }, () => ({ date: 'd', time: 't' }), () => 's', n => String(n), () => {}, console, ts => (Math.floor((ts + 10800000) / 86400000) + 1) * 86400000 - 10800000, ts => (Math.floor((ts + 10800000) / 86400000) + 1) * 86400000 - 10800000, (createdMs, total) => createdMs + total * 86400000);
   let code = 200, body; const res = { status: c => { code = c; return res; }, json: b => { body = b; } };
   await handler({ headers: {}, body: { tierKey: 'a1' } }, res);

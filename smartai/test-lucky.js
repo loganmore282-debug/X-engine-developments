@@ -35,7 +35,7 @@ function build(db, ctx) {
   const locks = new Map();
   const withLock = async (key, fn) => { while (locks.get(key)) await locks.get(key); let done; locks.set(key, new Promise(r => { done = r; })); try { return await fn(); } finally { locks.delete(key); done(); } };
   const mk = new Function('app', 'db', 'crypto', 'FieldValue', 'getSettings', 'getProducts', 'verifyAuth', 'withLock', 'memberVipLevel', 'nowStr', 'newStatementId', 'productExpectedReturn', 'payoutDueAtMs', '_vipCache',
-    block + '\nreturn { luckyCfg, luckyRollAmount, luckyView };');
+    'const armPayoutAt = () => {};\n' + block + '\nreturn { luckyCfg, luckyRollAmount, luckyView };');
   const api = mk(app, db, crypto, { increment: n => ({ __inc: true, n }), serverTimestamp: () => 'ts' }, async () => ctx.sett, async () => ctx.products, async () => ctx.user, withLock,
     async () => ctx.vip, () => ({ date: '01-01-2026', time: '10:00' }), () => 'S1', p => (Number(p.price) || 0) * 3, () => Date.now() + 86400000, new Map());
   return { H: handlers, api };

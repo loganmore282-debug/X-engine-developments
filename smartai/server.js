@@ -3270,6 +3270,7 @@ async function _settleDueInvestmentNow(doc) {
           status: willComplete ? 'matured' : 'active',
           nextPayoutAt: willComplete || !createdMs ? null : new Date(payoutDueAtMs(createdMs, newMade + 1)),
         });
+        if (!willComplete && createdMs) armPayoutAt(payoutDueAtMs(createdMs, newMade + 1));
       });
       if (payoutBlocked) return;
       paid = true;
@@ -4444,12 +4445,14 @@ app.post('/invest/create', async (req, res) => {
       // landing mid-transaction can never be silently overwritten.
       await uRef.update({ walletBalance: FieldValue.increment(-liveTier.price), totalInvested: FieldValue.increment(liveTier.price), firstInvestmentDone: true, ...(isFirstInvestment ? { firstPurchaseDone: true } : {}) });
       const { date, time } = nowStr();
+      const boughtAt = new Date();   // ONE instant for the purchase: createdAt and the first payout time are both read from it, to the millisecond
+      armPayoutAt(boughtAt.getTime() + 86400000);
       try {
         await invRef.set({
           userId, tierKey: liveTier.key, tierLabel: liveTier.name, amount: liveTier.price, cycle, expectedReturn,
-          status: 'active', nextPayoutAt: new Date(payoutDueAtMs(Date.now(), 1)), dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+          status: 'active', nextPayoutAt: new Date(payoutDueAtMs(boughtAt.getTime(), 1)), dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
           isFirstInvestment, commissionBasis: 'investment', commissionPaidLevels: [], commissionPending: isFirstInvestment,
-          date, time, createdAt: FieldValue.serverTimestamp()
+          date, time, createdAt: boughtAt
         });
         await db.collection('transactions').add({
           userId, statementId: newStatementId(), type: 'investment', description: `Bought ${liveTier.name}`, amount: -liveTier.price,
@@ -6603,11 +6606,13 @@ async function luckyGrantProduct(uid, tier, flipId, sett) {
   const price = Number(tier.price) || 0, cycle = Number(tier.cycle) || 150, expectedReturn = productExpectedReturn(tier, sett);
   const { date, time } = nowStr();
   const uRef = db.collection('users').doc(uid);
+  const boughtAt = new Date();   // ONE instant for the purchase: createdAt and the first payout time are both read from it, to the millisecond
+  armPayoutAt(boughtAt.getTime() + 86400000);
   const created = await invRef.createIfAbsent({
     userId: uid, tierKey: tier.key, tierLabel: tier.name, amount: price, cycle, expectedReturn,
-    status: 'active', nextPayoutAt: new Date(payoutDueAtMs(Date.now(), 1)), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+    status: 'active', nextPayoutAt: new Date(payoutDueAtMs(boughtAt.getTime(), 1)), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
     isFirstInvestment: false, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
-    granted: true, grantedBy: 'lucky-cards', luckyFlipId: flipId, date, time, createdAt: FieldValue.serverTimestamp()
+    granted: true, grantedBy: 'lucky-cards', luckyFlipId: flipId, date, time, createdAt: boughtAt
   });
   if (!created) return false;
   await uRef.update({ totalInvested: FieldValue.increment(price), firstInvestmentDone: true });
@@ -8654,12 +8659,14 @@ app.post('/admin/user/grant-asset', async (req, res) => {
       const cycle = Number(tier.cycle) || 150;
       const expectedReturn = productExpectedReturn(tier, sett);
       const { date, time } = nowStr();
+      const boughtAt = new Date();   // ONE instant for the purchase: createdAt and the first payout time are both read from it, to the millisecond
+      armPayoutAt(boughtAt.getTime() + 86400000);
       const created = await invRef.createIfAbsent({
         userId, tierKey: tier.key, tierLabel: tier.name, amount: price, cycle, expectedReturn,
-        status: 'active', nextPayoutAt: new Date(payoutDueAtMs(Date.now(), 1)), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+        status: 'active', nextPayoutAt: new Date(payoutDueAtMs(boughtAt.getTime(), 1)), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
         isFirstInvestment: false, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
         granted: true, grantedBy: (req.adminUser && req.adminUser.username) || 'owner', requestId,
-        date, time, createdAt: FieldValue.serverTimestamp()
+        date, time, createdAt: boughtAt
       });
       if (!created) { alreadyGiven = true; return; }
       // The plan exists first: if anything below fails, the worst case is a
@@ -10794,12 +10801,24 @@ async function reconcileBlockedCommissions() {
   } catch (e) { console.error('Reconcile blocked commissions error:', e.message); }
 }
 let _sweepingCashback = false, _lastFullCashbackSweep = 0;
+// A payment is due EXACTLY 24 hours after the purchase, to the millisecond (15:02:34.217 -> 15:02:34.217 the next day). The 0.5 s sweep is only
+// the safety net: every purchase and every payment also aims a one-shot timer at the next due instant, so the sweep starts the moment it falls due.
+const _payoutTimers = new Map();
+function armPayoutAt(dueMs) {
+  const wait = dueMs - Date.now();
+  if (!(wait < 2147000000)) return;   // not within setTimeout's range (never the case for a 24-hour step)
+  if (_payoutTimers.has(dueMs)) return;
+  const t = setTimeout(() => { _payoutTimers.delete(dueMs); reconcileCashback(); }, Math.max(0, wait) + 3);   // +3 ms: a timer may fire a hair early, and the sweep must see it as due
+  if (t.unref) t.unref();
+  _payoutTimers.set(dueMs, t);
+}
 // Every 0.5 s only the investments whose next payout time has come are looked at (a handful), instead of
 // reading every running investment twice a second. A full pass still runs every 5 minutes as a safety net
 // for any investment without a `nextPayoutAt`; settleInvestmentIfDue() does the real due-date arithmetic
 // either way, so a wrong or missing `nextPayoutAt` can only delay a payout, never cause a wrong one.
+let _sweepAgain = false;
 async function reconcileCashback() {
-  if (_sweepingCashback) return;
+  if (_sweepingCashback) { _sweepAgain = true; return; }   // a sweep is running: run once more the moment it ends, so no due payment waits for the next tick
   _sweepingCashback = true;
   try {
     const full = Date.now() - _lastFullCashbackSweep > 5 * 60 * 1000;
@@ -10822,7 +10841,7 @@ async function reconcileCashback() {
     // once instead of waiting for the next 0.5 s tick, so the last member is paid seconds after the first, not minutes.
     if (!full && snap.docs.length >= 1000) setImmediate(reconcileCashback);
   } catch (e) { console.error('Reconcile cashback error:', e.message); }
-  finally { _sweepingCashback = false; }
+  finally { _sweepingCashback = false; if (_sweepAgain) { _sweepAgain = false; setImmediate(reconcileCashback); } }
 }
 // Pays due investments a few at a time (each one still settles under its own payout lock, and the wallet credit under
 // the member's balance lock, so two products of one member simply queue; nothing here can pay twice).

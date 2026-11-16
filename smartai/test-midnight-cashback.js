@@ -15,6 +15,9 @@ for (const off of [180, 60]) {   // Uganda (UTC+3) and Nigeria (UTC+1)
   ok(c.payoutDueAtMs(buy, 3) === local(2026, 10, 29, 15, 2, 7), 'the third payment is three days after the purchase');
   const late = local(2026, 10, 26, 23, 59, 59, 500);
   ok(c.payoutDueAtMs(late, 1) === local(2026, 10, 27, 23, 59, 59, 500), 'bought just before 00:00 -> still paid 24 hours later, not at midnight');
+  const exact = local(2026, 10, 26, 15, 2, 34, 217);
+  ok(c.payoutDueAtMs(exact, 1) === local(2026, 10, 27, 15, 2, 34, 217) && c.payoutDueAtMs(exact, 8) === local(2026, 11, 3, 15, 2, 34, 217), 'bought at 15:02:34.217 -> paid at exactly 15:02:34.217 every day, to the millisecond');
+  ok(c.payoutsDueCount(exact, local(2026, 10, 27, 15, 2, 34, 216), 8) === 0 && c.payoutsDueCount(exact, local(2026, 10, 27, 15, 2, 34, 217), 8) === 1, 'not due one millisecond early, due on the millisecond');
   const total = 8;
   ok(c.payoutsDueCount(buy, local(2026, 10, 27, 15, 2, 6, 999), total) === 0, 'nothing is due one millisecond before 24 hours');
   ok(c.payoutsDueCount(buy, local(2026, 10, 27, 0, 0, 0), total) === 0, 'midnight pays nothing');
@@ -35,4 +38,6 @@ ok(/const payoutKey = `\$\{doc\.id\}:\$\{newMade\}`;/.test(server) && /creditedP
 ok(/setInterval\(reconcileCashback, 500\)/.test(server) && !/armMidnightSweep/.test(server), 'the sweep runs every half second; there is no midnight timer');
 // The member app does not draw a countdown any more (ChocoMCC's pages); it still notes the server's own clock (X-Server-Time) for the cash-out hours.
 ok(/X-Server-Time/.test(mod) && /X-Server-Time/.test(server) && /exposedHeaders: \['X-Server-Time'\]/.test(server), 'the server sends its clock on every reply and the app reads it');
+ok((server.match(/const boughtAt = new Date\(\);/g) || []).length === 3 && (server.match(/createdAt: boughtAt/g) || []).length === 3 && (server.match(/payoutDueAtMs\(boughtAt\.getTime\(\), 1\)/g) || []).length === 3, 'every purchase path stamps createdAt and the first payout time from ONE instant');
+ok((server.match(/armPayoutAt\(boughtAt\.getTime\(\) \+ 86400000\)/g) || []).length === 3 && /armPayoutAt\(payoutDueAtMs\(createdMs, newMade \+ 1\)\)/.test(server) && /_sweepAgain/.test(server), 'a one-shot timer is aimed at each exact due instant, and an overlapping sweep re-runs at once');
 console.log('PASS: daily cashback every 24 hours (' + n + ' checks)');
