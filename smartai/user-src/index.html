@@ -218,6 +218,12 @@
   .field input:focus{border-color:var(--caramel);}
   .field .ic{position:absolute;left:16px;top:50%;transform:translateY(-50%);opacity:.65;color:var(--cocoa-soft);display:flex;}
   .phone-prefix{position:absolute;left:44px;top:50%;transform:translateY(-50%);font-size:15px;font-weight:700;color:var(--cocoa-soft);pointer-events:none;}
+  /* Choose network (Payout Account): two small cards side by side, a 56 px logo over its name. */
+  .net-card-row{display:flex;gap:12px;margin-bottom:14px;}
+  .net-card{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+    padding:14px 10px;border-radius:16px;border:1.5px solid var(--line);background:var(--card);cursor:pointer;}
+  .net-card img{width:56px;height:56px;object-fit:cover;border-radius:14px;display:block;box-shadow:0 3px 8px rgba(11,42,91,.18);}
+  .net-card span.net-lbl{font-size:13px;font-weight:800;color:var(--cocoa);}
   #fPhone{padding-left:84px;}
 
   /* ---------- App shell ---------- */
