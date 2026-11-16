@@ -189,7 +189,7 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // /admin/app-icon/set carries TWO PNGs (512 and 192) in one body, so it
 // needs the image parser even though each one on its own is small.
 const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/smartai-image/set', '/admin/app-icon/set']);
-const HUGE_JSON_ROUTES = new Set(['/admin/about-html/set']);
+const HUGE_JSON_ROUTES = new Set(['/admin/about-html/set', '/admin/guide/set']);
 // PesaJet signs the RAW REQUEST PAYLOAD -- their dashboard says so in as many
 // words ("computing an HMAC-SHA256 digest of the raw request payload using
 // this secret"). A digest over a re-serialised object is NOT the same bytes,
@@ -654,6 +654,7 @@ const DEFAULT_SETTINGS = {
   supportTelegram: '', telegramGroup: '',
   // The welcome announcement dialog (ChocoMCC's): a switch, a title and a body of text; its picture is the 'announcement' banner, its two buttons are the WhatsApp and Telegram group links below.
   pageParticles: false,   // true = the dark particle background fills every page of the app (Admin > Banners > Animations)
+  guideOn: false, guideVer: 0,   // the "Download guide PDF" button on the welcome dialog; guideVer = when the guide was last saved (0 = none yet)
   annEnabled: false, annTitle: '', annBody: '',   // the text may hold :fire: style tokens, which the app draws as the owner's animated emojis (see ANN_EMOJI in the app)
   // Daily check-in (Rewards tab): the CALENDAR pays a rising ladder over a 30-day cycle (day 1 = first amount, day 9 = the first again, ...; a missed day starts over at day 1).
   // `checkinLadder` empty = every day pays the flat `dailyCheckin`; both empty / 0 = the card is off. The streak and the day are the member's own.
@@ -7631,7 +7632,7 @@ const SETTINGS_CRITICAL_RANGES = {
   myBannerOpacity: [0, 100], myBannerBlur: [0, 40],
   navIconSize: [14, 48], homeIconSize: [20, 64], meIconSize: [20, 64],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'withdrawWindowEnabled', 'blockRootDomain', 'luckyOn'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'withdrawWindowEnabled', 'blockRootDomain', 'luckyOn', 'guideOn'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -7833,6 +7834,60 @@ app.post('/admin/about-html/set', async (req, res) => {
     logAdminAction(req, 'about_html_set', { length: html.length });
     res.json({ status: 'success', html });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the About page' }); }
+});
+/* ====================== GUIDE PDF ======================
+   The owner writes a guide in the admin (a title and blocks: heading, text, picture, new page). It is stored as data in content/guide; the member's app fetches it when "Download guide PDF"
+   is tapped on the welcome dialog and writes the PDF itself on the phone (so nothing heavy runs here). Pictures arrive from the admin already shrunk to JPEG. */
+const GUIDE_MAX_BLOCKS = 300, GUIDE_MAX_IMG_CHARS = 1_300_000, GUIDE_MAX_TOTAL_CHARS = 7_000_000;
+function cleanGuide(raw) {
+  const plain = (v, max) => String(v == null ? '' : v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').replace(/\r\n?/g, '\n').slice(0, max);
+  const title = plain(raw && raw.title, 80).replace(/\s+/g, ' ').trim();
+  const blocks = [];
+  let total = 0;
+  for (const b of (raw && Array.isArray(raw.blocks) ? raw.blocks : []).slice(0, GUIDE_MAX_BLOCKS)) {
+    const t = b && b.t;
+    if (t === 'h' || t === 'p') {
+      const text = plain(b.text, t === 'h' ? 200 : 8000).replace(t === 'h' ? /\s+/g : /[ \t]+\n/g, t === 'h' ? ' ' : '\n').trim();
+      if (text) { blocks.push({ t, text }); total += text.length; }
+    } else if (t === 'img') {
+      const image = String(b.image || '');
+      if (!/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > GUIDE_MAX_IMG_CHARS) return { error: 'One picture is not a valid JPEG or is too large. Pictures are shrunk automatically; try another one.' };
+      blocks.push({ t, image, caption: plain(b.caption, 200).replace(/\s+/g, ' ').trim() }); total += image.length;
+    } else if (t === 'pb') blocks.push({ t });
+    if (total > GUIDE_MAX_TOTAL_CHARS) return { error: 'The guide is too big (more than about 5 MB of pictures). Remove or shrink some pictures.' };
+  }
+  return { title, blocks };
+}
+let _guideCache = null, _guideCacheVer = -1;
+app.get('/admin/guide', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { const snap = await db.collection('content').doc('guide').get(); const d = snap.exists ? snap.data() : {}; res.json({ status: 'success', title: d.title || '', blocks: Array.isArray(d.blocks) ? d.blocks : [] }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the guide' }); }
+});
+app.post('/admin/guide/set', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const g = cleanGuide(req.body);
+  if (g.error) return res.status(400).json({ status: 'error', message: g.error });
+  try {
+    await db.collection('content').doc('guide').set({ title: g.title, blocks: g.blocks });
+    // guideVer is when it was saved (0 = no guide): the app shows the button only for a guide that exists, and keeps its copy per version.
+    await db.collection('settings').doc('main').set({ guideVer: g.blocks.length ? Date.now() : 0 }, { merge: true });
+    _settingsCacheTs = 0; _guideCache = null; _guideCacheVer = -1;
+    logAdminAction(req, 'guide_saved', { blocks: g.blocks.length, pictures: g.blocks.filter(b => b.t === 'img').length });
+    res.json({ status: 'success', blocks: g.blocks.length });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the guide' }); }
+});
+app.get('/public/guide', async (req, res) => {
+  try {
+    const sett = await getSettings();
+    if (sett.guideOn !== true || !(Number(sett.guideVer) > 0)) return res.status(404).json({ status: 'error', message: 'There is no guide right now' });
+    if (!_guideCache || _guideCacheVer !== Number(sett.guideVer)) {
+      const snap = await db.collection('content').doc('guide').get(); const d = snap.exists ? snap.data() : {};
+      _guideCache = { status: 'success', ver: Number(sett.guideVer), title: d.title || '', blocks: Array.isArray(d.blocks) ? d.blocks : [] }; _guideCacheVer = Number(sett.guideVer);
+    }
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(_guideCache);
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the guide' }); }
 });
 app.get('/admin/smartai-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });

@@ -13,7 +13,7 @@ var DEFAULT_SETTINGS = {
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   salaryTiers: [], depositMethodNames: '', brandName: '', shareMessage: 'Join me on {app}', shareDomain: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', whatsappGroup: '', whatsappContact: '',
-  rulesText: '', annEnabled: false, annTitle: '', annBody: '', pageParticles: false, homeBannerTitle: '', homeBannerText: '', myBannerOpacity: 100, myBannerBlur: 0, navIconSize: 26, homeIconSize: 34, meIconSize: 36, giftCodeHint: 'Enter gift code'
+  rulesText: '', guideOn: false, guideVer: 0, annEnabled: false, annTitle: '', annBody: '', pageParticles: false, homeBannerTitle: '', homeBannerText: '', myBannerOpacity: 100, myBannerBlur: 0, navIconSize: 26, homeIconSize: 34, meIconSize: 36, giftCodeHint: 'Enter gift code'
 };
 var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
 // Filled by syncPublicConfig() from the admin's products; the last copy this device saw is read first so the very first paint is already right.
@@ -1074,6 +1074,9 @@ async function maybeShowAnnouncement(immediateShake){
   tgRow.innerHTML = btns;
   tgRow.style.display = btns ? 'flex' : 'none';
   $('annDivider').style.display = btns ? 'block' : 'none';
+  // The owner's guide (Admin > Banners > Guide PDF): its button sits under the text and the group buttons.
+  var gRow = $('annGuideRow'), gOn = s.guideOn === true && Number(s.guideVer) > 0;
+  if (gRow) { gRow.style.display = gOn ? 'block' : 'none'; if (gOn) $('annGuideBtn').innerHTML = GUIDE_DL_ICON + '<span>Download ' + esc(brandName()) + ' guide PDF</span>'; }
   if (immediateShake) tgRow.querySelectorAll('.tg-pill,.wa-pill').forEach(function(el){ el.style.animationDelay = '-2.4s, -2.4s'; });
   $('announcementBg').classList.add('show');
   if (!_annField) _annField = makeParticleField($('annFx'), { horizon: 0.1, dim: 0.5, alive: function(){ return $('announcementBg').classList.contains('show'); } });
@@ -1081,7 +1084,148 @@ async function maybeShowAnnouncement(immediateShake){
   startAnnEmoji();
 }
 document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && $('announcementBg') && $('announcementBg').classList.contains('show')) dismissAnnouncement(); });
+var GUIDE_DL_ICON = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5v11M7.5 10.2L12 14.7l4.5-4.5M4.5 19.5h15"/></svg>';
 function dismissAnnouncement(){ $('announcementBg').classList.remove('show'); }
+
+/* ====================== GUIDE PDF (the button on the welcome dialog) ======================
+   The owner's guide (a title and blocks: heading / text / picture / new page, written in Admin > Banners > Guide PDF) is fetched when the member taps "Download guide PDF" and the PDF is
+   written HERE on the phone: no library (the app loads no outside scripts), A4 portrait, Helvetica and Helvetica-Bold, wrapped text, bullets, JPEG pictures stored as they are
+   (DCTDecode), page numbers. Text goes out as Latin-1 (WinAnsi): accents are kept, emoji and symbols the font cannot draw are dropped. */
+var GPDF_W_REG = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
+var GPDF_W_BOLD = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
+function gpdfClean(s){
+  return String(s == null ? '' : s).replace(/[\u2013\u2014]/g, '-').replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/\u2026/g, '...').replace(/[\u2022\u00b7\u25cf]/g, '-')
+    .replace(/\u00a0/g, ' ').replace(/\t/g, '    ').replace(/[^\n\x20-\x7e\xa1-\xff]/g, '');
+}
+function gpdfW(s, size, bold){ var w = bold ? GPDF_W_BOLD : GPDF_W_REG, t = 0; for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); t += c >= 32 && c <= 126 ? w[c - 32] : 556; } return t * size / 1000; }
+function gpdfWrap(text, size, bold, maxW){
+  var out = [], paras = gpdfClean(text).split('\n');
+  paras.forEach(function(p){
+    if (!p.trim()) { out.push(''); return; }
+    var lead = '', m = /^(\s*(?:-|\*|\d+[.)])\s+)/.exec(p);
+    var indent = 0; if (m) { lead = m[1].replace(/\s+$/, '') + ' '; p = p.slice(m[1].length); indent = gpdfW(lead, size, bold); }
+    var words = p.split(/\s+/).filter(Boolean), line = '', first = true;
+    words.forEach(function(w){
+      while (gpdfW(w, size, bold) > maxW - (first ? 0 : indent)) { var cut = w.length - 1; while (cut > 1 && gpdfW(w.slice(0, cut), size, bold) > maxW - (first ? 0 : indent)) cut--; if (line) { out.push({ s: line, lead: first ? lead : '', ind: first ? 0 : indent }); line = ''; first = false; } out.push({ s: w.slice(0, cut), lead: first ? lead : '', ind: first ? 0 : indent }); first = false; w = w.slice(cut); }
+      var tryLine = line ? line + ' ' + w : w;
+      if (line && gpdfW(tryLine, size, bold) > maxW - (first ? indent : indent)) { out.push({ s: line, lead: first ? lead : '', ind: first ? 0 : indent }); first = false; line = w; } else line = tryLine;
+    });
+    out.push({ s: line, lead: first ? lead : '', ind: first ? 0 : indent });
+  });
+  return out;
+}
+function gpdfJpegInfo(b64){
+  var bin = atob(b64), n = bin.length, bytes = new Uint8Array(n);
+  for (var i = 0; i < n; i++) bytes[i] = bin.charCodeAt(i);
+  var p = 2, w = 0, h = 0, comps = 3;
+  while (p + 9 < n) {
+    if (bytes[p] !== 0xFF) { p++; continue; }
+    var mk = bytes[p + 1];
+    if (mk >= 0xC0 && mk <= 0xCF && mk !== 0xC4 && mk !== 0xC8 && mk !== 0xCC) { h = bytes[p + 5] * 256 + bytes[p + 6]; w = bytes[p + 7] * 256 + bytes[p + 8]; comps = bytes[p + 9]; break; }
+    p += 2 + (bytes[p + 2] * 256 + bytes[p + 3]);
+  }
+  return { bytes: bytes, w: w, h: h, comps: comps };
+}
+// doc = { title, blocks: [{t:'h'|'p'|'img'|'pb', text, image(data URL), caption}] }  ->  Uint8Array of the PDF file
+function buildGuidePdf(doc, appName){
+  var W = 595, H = 842, M = 48, CW = W - 2 * M, BOTTOM = H - 56;
+  var pages = [], cur = null, y = 0, images = [];
+  var num = function(n){ return (Math.round(n * 100) / 100).toString(); };
+  var esc = function(s){ return s.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)'); };
+  function newPage(){ cur = { ops: [], imgs: [] }; pages.push(cur); y = M; }
+  function text(x, top, str, size, bold, col){ if (!str) return; col = col || [0.1, 0.12, 0.2]; cur.ops.push('BT /' + (bold ? 'F2' : 'F1') + ' ' + num(size) + ' Tf ' + num(col[0]) + ' ' + num(col[1]) + ' ' + num(col[2]) + ' rg ' + num(x) + ' ' + num(H - top - size * 0.85) + ' Td (' + esc(str) + ') Tj ET'); }
+  function rule(top, col, width){ cur.ops.push(num(col[0]) + ' ' + num(col[1]) + ' ' + num(col[2]) + ' RG ' + num(width) + ' w ' + num(M) + ' ' + num(H - top) + ' m ' + num(M + CW) + ' ' + num(H - top) + ' l S'); }
+  function need(h){ if (y + h > BOTTOM) newPage(); }
+  newPage();
+  var title = gpdfClean(doc.title || '').trim() || (gpdfClean(appName) + ' guide');
+  gpdfWrap(title, 26, true, CW).forEach(function(l){ if (l === '') return; text(M, y, l.s, 26, true, [0.05, 0.25, 0.65]); y += 32; });
+  rule(y + 2, [0.16, 0.45, 0.9], 2.5); y += 22;
+  (doc.blocks || []).forEach(function(b){
+    if (b.t === 'pb') { newPage(); return; }
+    if (b.t === 'h') {
+      var hl = gpdfWrap(b.text, 16, true, CW).filter(function(l){ return l !== ''; });
+      need(hl.length * 21 + 22); y += 10;
+      hl.forEach(function(l){ text(M, y, l.s, 16, true, [0.05, 0.2, 0.55]); y += 21; });
+      y += 4;
+    } else if (b.t === 'p') {
+      var lines = gpdfWrap(b.text, 11, false, CW);
+      lines.forEach(function(l){
+        if (l === '') { y += 7; return; }
+        need(16);
+        if (l.lead) text(M, y, l.lead, 11, false); text(M + (l.lead ? gpdfW(l.lead, 11, false) : l.ind), y, l.s, 11, false);
+        y += 15.5;
+      });
+      y += 6;
+    } else if (b.t === 'img') {
+      var m = /^data:image\/jpeg;base64,(.+)$/.exec(String(b.image || '')); if (!m) return;
+      var info = gpdfJpegInfo(m[1]); if (!info.w || !info.h) return;
+      var iw = Math.min(CW, info.w * 0.75), ih = iw * info.h / info.w, maxH = BOTTOM - M - 30;
+      if (ih > maxH) { ih = maxH; iw = ih * info.w / info.h; }
+      var cap = gpdfClean(b.caption || '').replace(/\n/g, ' ').trim();
+      need(ih + (cap ? 24 : 12));
+      images.push(info); var idx = images.length - 1; cur.imgs.push(idx);
+      cur.ops.push('q ' + num(iw) + ' 0 0 ' + num(ih) + ' ' + num(M + (CW - iw) / 2) + ' ' + num(H - y - ih) + ' cm /Im' + idx + ' Do Q');
+      y += ih + 6;
+      if (cap) { var cw = gpdfW(cap, 9, false); text(M + Math.max(0, (CW - cw) / 2), y, cap, 9, false, [0.4, 0.43, 0.5]); y += 15; }
+      y += 8;
+    }
+  });
+  pages.forEach(function(pg, i){ var label = gpdfClean(appName) + '   -   Page ' + (i + 1) + ' of ' + pages.length; var cur0 = cur; cur = pg; text(M + (CW - gpdfW(label, 9, false)) / 2, H - 34, label, 9, false, [0.45, 0.48, 0.55]); cur = cur0; });
+  // ---- the file
+  var chunks = [], offsets = [], len = 0;
+  var enc = function(s){ var u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i) & 255; return u; };
+  var put = function(u){ if (typeof u === 'string') u = enc(u); chunks.push(u); len += u.length; };
+  var nImg = images.length, firstPage = 5 + nImg;
+  var objs = [];   // each entry: a string, or { dict, data }
+  objs.push('<< /Type /Catalog /Pages 2 0 R >>');
+  objs.push('<< /Type /Pages /Kids [' + pages.map(function(_, i){ return (firstPage + i * 2) + ' 0 R'; }).join(' ') + '] /Count ' + pages.length + ' >>');
+  objs.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+  objs.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+  images.forEach(function(im){ objs.push({ dict: '<< /Type /XObject /Subtype /Image /Width ' + im.w + ' /Height ' + im.h + ' /ColorSpace ' + (im.comps === 1 ? '/DeviceGray' : im.comps === 4 ? '/DeviceCMYK' : '/DeviceRGB') + ' /BitsPerComponent 8 /Filter /DCTDecode /Length ' + im.bytes.length + ' >>', data: im.bytes }); });
+  pages.forEach(function(pg, i){
+    var xo = pg.imgs.length ? ' /XObject << ' + pg.imgs.map(function(k){ return '/Im' + k + ' ' + (5 + k) + ' 0 R'; }).join(' ') + ' >>' : '';
+    var stream = pg.ops.join('\n');
+    objs.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + W + ' ' + H + '] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>' + xo + ' >> /Contents ' + (firstPage + i * 2 + 1) + ' 0 R >>');
+    objs.push('<< /Length ' + stream.length + ' >>\nstream\n' + stream + '\nendstream');
+  });
+  objs.push('<< /Title (' + esc(title) + ') /Producer (' + esc(gpdfClean(appName)) + ') >>');
+  put('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n');
+  objs.forEach(function(o, i){
+    offsets.push(len);
+    if (typeof o === 'string') put((i + 1) + ' 0 obj\n' + o + '\nendobj\n');
+    else { put((i + 1) + ' 0 obj\n' + o.dict + '\nstream\n'); put(o.data); put('\nendstream\nendobj\n'); }
+  });
+  var xref = len;
+  put('xref\n0 ' + (objs.length + 1) + '\n0000000000 65535 f \n');
+  offsets.forEach(function(o){ put(String(o).padStart(10, '0') + ' 00000 n \n'); });
+  put('trailer\n<< /Size ' + (objs.length + 1) + ' /Root 1 0 R /Info ' + objs.length + ' 0 R >>\nstartxref\n' + xref + '\n%%EOF');
+  var out = new Uint8Array(len), at = 0; chunks.forEach(function(c){ out.set(c, at); at += c.length; });
+  return out;
+}
+var _guideDoc = null, _guideBusy = false;
+async function downloadGuide(btn){
+  if (_guideBusy) return;
+  _guideBusy = true;
+  var label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = btnBusyHtml('Preparing the guide…'); }
+  try {
+    var ver = Number(getSettings().guideVer) || 0;
+    if (!_guideDoc || _guideDoc.ver !== ver) {
+      var r = await api('/public/guide');
+      if (r.stale) return;
+      if (r.status !== 'success' || !r.blocks) { toast(r.message || 'The guide is not available right now'); return; }
+      _guideDoc = r;
+    }
+    var pdf = buildGuidePdf(_guideDoc, brandName());
+    var blob = new Blob([pdf], { type: 'application/pdf' });
+    var url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = (brandName() + ' guide.pdf').replace(/[^A-Za-z0-9._ -]/g, '').replace(/\s+/g, '-'); a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 4000);
+    toast('Guide downloaded');
+  } catch (e) { toast('Could not make the guide. Try again'); }
+  finally { _guideBusy = false; if (btn) { btn.disabled = false; btn.innerHTML = label; } }
+}
 
 /* ====================== INSTALL AS AN APP ====================== */
 // The browser fires this ahead of time so the real install prompt can be shown from our own button, not the address bar's small icon.

@@ -302,6 +302,27 @@ async function member(ref) {
   ok(await ev(() => document.querySelectorAll('#lkGrid .lk-card.flip').length) === 9, 'and the board stays as it was');
   await ev(() => { _lk.revealed = false; lkResetIfDone(); }); await ev(() => { lkAgain(); });
   const lw1 = await ev(() => STATE.balance); void lw1;
+
+  // ---- 7d. the guide: written in the admin, a "Download guide PDF" button on the welcome dialog, a real PDF on the phone ----
+  const JPG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAAAAAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCAAQABgDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAYF/8QAFhABAQEAAAAAAAAAAAAAAAAAABRh/8QAFgEBAQEAAAAAAAAAAAAAAAAAAAUG/8QAFREBAQAAAAAAAAAAAAAAAAAAABT/2gAMAwEAAhEDEQA/AMm/S/U1fpfrVUIU6lv0TV+hQTv/2Q==';
+  ok((await J('POST', '/admin/guide/set', { title: 'Welcome guide', blocks: [{ t: 'img', image: 'data:image/png;base64,AAAA' }] }, null, true)).s === 400, 'the server refuses a picture that is not a JPEG');
+  ok((await J('GET', '/public/guide')).s === 404, 'with no guide and the switch off there is no public guide');
+  const gs = await J('POST', '/admin/guide/set', { title: 'Welcome guide', blocks: [{ t: 'h', text: 'Step one' }, { t: 'p', text: 'Tap Add Funds.\n- pick MTN or Airtel' }, { t: 'img', image: JPG, caption: 'The screen' }, { t: 'pb' }, { t: 'h', text: 'Step two' }] }, null, true);
+  ok(gs.s === 200 && gs.j.blocks === 5, 'the owner saves a guide of five blocks (heading, text, picture, new page, heading)');
+  ok((await J('GET', '/admin/guide', null, null, true)).j.blocks.length === 5, 'the admin reads it back');
+  ok((await J('POST', '/admin/settings/update', { settings: { guideOn: true } }, null, true)).s === 200, 'the guide switch is on (the welcome dialog is already on from the set-up)');
+  await sleep(1300); await ev(async () => { await syncPublicConfig(); });
+  const pg = await J('GET', '/public/guide'); ok(pg.s === 200 && pg.j.blocks.length === 5 && pg.j.title === 'Welcome guide', 'members can read the guide (' + (pg.j.blocks || []).length + ' blocks)');
+  await ev(() => { closeOverlay(); switchTab('home'); }); await sleep(400);
+  await ev(async () => { dismissAnnouncement(); await maybeShowAnnouncement(false); }); await sleep(900);
+  const gb = await ev(() => { const r = document.getElementById('annGuideRow'), b = document.getElementById('annGuideBtn'); return { row: getComputedStyle(r).display, txt: b.textContent.trim(), icon: !!b.querySelector('svg'), after: r.previousElementSibling && r.previousElementSibling.id }; });
+  ok(gb.row === 'block' && /^Download .+ guide PDF$/.test(gb.txt) && gb.icon && gb.after === 'annTgRow', 'the welcome dialog shows "Download <app name> guide PDF" with a download icon under the text: ' + JSON.stringify(gb));
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 15000 }), page.click('#annGuideBtn')]);
+  const pdfPath = require('node:path').join(require('node:os').tmpdir(), 'smartai-guide-test.pdf'); await dl.saveAs(pdfPath);
+  const pdfTxt = require('node:fs').readFileSync(pdfPath, 'latin1');
+  ok(/\.pdf$/i.test(dl.suggestedFilename()) && pdfTxt.startsWith('%PDF-1.4') && pdfTxt.trimEnd().endsWith('%%EOF') && /\/DCTDecode/.test(pdfTxt) && /Step one/.test(pdfTxt) && /Step two/.test(pdfTxt) && /\/Count 2 /.test(pdfTxt) && /Page 1 of 2/.test(pdfTxt), 'the tap downloads a real PDF: two pages, both headings, the text, the picture (' + dl.suggestedFilename() + ', ' + pdfTxt.length + ' bytes)');
+  await ev(() => dismissAnnouncement());
+  await J('POST', '/admin/settings/update', { settings: { guideOn: false } }, null, true);
   await ev(() => { gpLeave(); stopDepositPoll(); releasePayLoader(); closeOverlay(); }); await sleep(300);
   await ev(() => openOverlay('deposit')); await sleep(600);
   ok(await ev(() => { const li = document.querySelector('#ovDeposit .pay-steps li'); const c = getComputedStyle(li).color.match(/\d+/g).map(Number); return c[0] < 120 && c[1] < 140; }), 'on Add Funds the Deposit procedure steps are dark and readable on their light box (not white)');

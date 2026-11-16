@@ -751,3 +751,14 @@ a stopwatch-in-hand illustration (SVG, drawn from the screenshot) and "The trans
   The stream is `text/event-stream` with `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`, so the compressor and nginx do not buffer it (no nginx change needed). While it is up the poll runs every 20 s
   instead of 8 s; if it drops the app reconnects (1.5 s, backing off to 15 s). The stream is closed while the app is in the background. Tests: `test-smartai-app.js` (7b: the page's own check is switched off and
   only the stream can make it notice the approval).
+
+## Guide PDF button on the welcome dialog (2026-11-16, member v114, admin v39)
+Owner: a "Download <app> guide PDF" button under the welcome dialog; he writes the guide in the admin (text + pictures) and members get it as a PDF with the pictures in it.
+- **Admin** (Banners > "Guide PDF (button on the welcome dialog)", `wireGuide` / `drawGuide`): a switch (`guideOn`), a title and blocks: Heading, Text, Picture (+ caption), New page, each movable up/down and removable.
+  A picture is shrunk in the browser to a JPEG (<= 1100 px wide, ~0.9 MB). Saved with `POST /admin/guide/set` (owner; body limit 13 MB route, content limit ~5 MB of pictures; JPEG-only, 300 blocks max, text cleaned) into
+  `content/guide`; it also stamps `settings.guideVer = Date.now()` (0 when empty). `GET /admin/guide` reads it back.
+- **Server**: `GET /public/guide` (no login) returns {title, blocks, ver} only while `guideOn` is true and `guideVer > 0` (404 otherwise); cached in memory per version, `Cache-Control: public, max-age=60`.
+- **Member app**: the dialog (`#annGuideRow`, `#annGuideBtn`) shows "Download <brandName> guide PDF" under the group buttons when `guideOn` and `guideVer > 0`. A tap runs `downloadGuide()`: fetch the guide (kept per version),
+  `buildGuidePdf(doc, appName)` writes the PDF ON THE PHONE (no library, no server work): A4 portrait, Helvetica / Helvetica-Bold with the measured width tables, wrapped text, bullets ("- ", "1."), headings, JPEGs stored as
+  they are (DCTDecode), captions, page breaks, "<app> - Page n of N" footer; Latin-1 text is kept, emoji / symbols dropped. Then a blob download `<App>-guide.pdf`. Tested with a real browser download in `test-smartai-app.js` (7d) and
+  checked with pdfinfo / pdftotext / pdftoppm.
