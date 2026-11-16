@@ -12,7 +12,7 @@ var DEFAULT_SETTINGS = {
   commL1: 27, commL2: 2, commL3: 1, checkinLadder: [100, 200, 300, 500, 600, 700, 800, 1000], dailyCheckin: 250, maxWithdrawalsPerDay: 2,
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   salaryTiers: [], depositMethodNames: '', brandName: '', shareMessage: 'Join me on {app}', shareDomain: '',
-  supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', whatsappGroup: '', whatsappContact: '',
+  supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', whatsappGroup: '', whatsappContact: '', signupJoin: 'auto',
   rulesText: '', guideOn: false, guideVer: 0, guidePdfVer: 0, guidePdfName: '', annEnabled: false, annTitle: '', annBody: '', pageParticles: false, homeBannerTitle: '', homeBannerText: '', myBannerOpacity: 100, myBannerBlur: 0, navIconSize: 26, homeIconSize: 34, meIconSize: 36, giftCodeHint: 'Enter gift code'
 };
 var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
@@ -667,7 +667,9 @@ $('authGo').onclick = async function(){
       await refreshFromServer();
       toast('Registration successful ✓');
       enterApp();
-      maybeOfferInstallAfterSignup();
+      // A member who has just CREATED the account (not one who signs in later) is sent once to the community link the admin chose; coming back, the app is just as they left it.
+      var joinUrl = regR.status === 'success' ? signupJoinUrl() : '';
+      if (joinUrl) sendToCommunity(joinUrl); else maybeOfferInstallAfterSignup();
     } else {
       cred = await window.fbSignIn(email, pass);
       _authEpoch++;
@@ -1288,6 +1290,19 @@ async function doInstallApp(){
   updateDownloadTileVisibility();
 }
 // Offered once, right after a sign-up: "download now or later", never forced.
+// The link a new member is sent to: the admin's choice (Settings > Support contacts), or with 'auto' the first one that is set: WhatsApp group, Telegram group, Telegram channel.
+function signupJoinUrl(){
+  var s = getSettings(), pick = String(s.signupJoin || 'auto');
+  if (pick === 'off') return '';
+  var order = pick === 'auto' ? ['whatsappGroup', 'telegramGroup', 'telegramChannel'] : [pick];
+  for (var i = 0; i < order.length; i++) { var u = safeUrl(s[order[i]]); if (u) return u; }
+  return '';
+}
+// Goes there by moving this page itself (a new window opened after the sign-up's waiting would be blocked by the browser); a moment is given to read the welcome first.
+function sendToCommunity(url){
+  toast('Taking you to our community…');
+  setTimeout(function(){ try { window.location.href = url; } catch (e) { window.open(url, '_blank'); } }, 1100);
+}
 function maybeOfferInstallAfterSignup(){
   if (isStandalone()) return;
   try { if (STATE && STATE.uid && localStorage.getItem('smartai_install_dismissed_' + STATE.uid)) return; } catch (e) {}

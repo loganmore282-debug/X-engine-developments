@@ -3806,6 +3806,8 @@ async function renderSettings(){
       <label>Telegram channel</label><input id="spTgChannel" value="${esc(v('telegramChannel',''))}" placeholder="https://t.me/yourchannel">
       <label>WhatsApp group</label><input id="spWaGroup" value="${esc(v('whatsappGroup',''))}" placeholder="https://chat.whatsapp.com/...">
       <label>WhatsApp contact</label><input id="spWaContact" value="${esc(v('whatsappContact',''))}" placeholder="https://wa.me/256700000000">
+      <label>After sign-up, send a NEW member to <span class="muted">(once, right after they register; the next time they sign in the app opens as normal)</span></label>
+      <select id="spJoin">${[['auto','Automatic: the first link set above (WhatsApp group, then Telegram group, then Telegram channel)'],['whatsappGroup','WhatsApp group'],['telegramGroup','Telegram group'],['telegramChannel','Telegram channel'],['off','Nowhere']].map(o=>`<option value="${o[0]}" ${v('signupJoin','auto')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>
       <label>Support hours</label><input id="spHours" maxlength="40" value="${esc(v('supportHours',''))}" placeholder="8am &ndash; 9pm">
       <label>Terms &amp; Rules (the page members open from Me)</label>
       <textarea id="spRules" rows="8" maxlength="20000" placeholder="Write the rules members must follow. A blank line starts a new paragraph.">${esc(v('rulesText',''))}</textarea>
@@ -3907,7 +3909,7 @@ async function renderSettings(){
     toast(d.status==='success'?'Lucky Cards saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveSupport').addEventListener('click', async()=>{
-    const upd = { supportTelegram:$('spTg').value.trim(), telegramGroup:$('spTgGroup').value.trim(), telegramChannel:$('spTgChannel').value.trim(), whatsappGroup:$('spWaGroup').value.trim(), whatsappContact:$('spWaContact').value.trim(), supportHours:$('spHours').value.trim(), rulesText:$('spRules').value };
+    const upd = { supportTelegram:$('spTg').value.trim(), telegramGroup:$('spTgGroup').value.trim(), telegramChannel:$('spTgChannel').value.trim(), whatsappGroup:$('spWaGroup').value.trim(), whatsappContact:$('spWaContact').value.trim(), supportHours:$('spHours').value.trim(), signupJoin:$('spJoin').value, rulesText:$('spRules').value };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   // ── Task Center tiers editor: one table of team total / one-time reward, each row keeps its id so edits never re-pay a claimed tier ──

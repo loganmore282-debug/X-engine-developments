@@ -39,7 +39,7 @@ async function member(ref) {
 (async () => {
   for (let i = 0; i < 60; i++) { try { const h = await fetch(base + '/health'); if (h.ok) break; } catch (_) {} await sleep(250); }
   await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 7000, withdrawMethod: 'manual', withdrawOpenFrom: '00:00', withdrawOpenTo: '23:59', dailyCheckin: 250, minWithdraw: 8000, minDeposit: 30000,
-    supportTelegram: 'https://t.me/help_acct', telegramGroup: 'https://t.me/grp_acct', whatsappGroup: 'https://chat.whatsapp.com/abc123', annEnabled: true, annTitle: 'Big news :fire:', annBody: 'First line :tick: done.\nSecond line :fire::robot: and :nope: <b>x</b>.\n\nNew paragraph.', rulesText: 'Be honest.\n\nOne account each.', supportHours: '9am – 6pm' } }, null, true);
+    supportTelegram: 'https://t.me/help_acct', telegramGroup: 'https://t.me/grp_acct', whatsappGroup: 'https://chat.whatsapp.com/abc123', signupJoin: 'off', annEnabled: true, annTitle: 'Big news :fire:', annBody: 'First line :tick: done.\nSecond line :fire::robot: and :nope: <b>x</b>.\n\nNew paragraph.', rulesText: 'Be honest.\n\nOne account each.', supportHours: '9am – 6pm' } }, null, true);
   await J('POST', '/admin/salary/save', { tiers: [{ id: 'sx1', target: 20000, reward: 1500 }, { id: 'sx2', target: 9000000, reward: 9000 }] }, null, true);
   await J('POST', '/admin/products/add-starters', {}, null, true);
   const prods = (await J('GET', '/public/products')).j.products.filter(p => p.price > 0).sort((a, b) => a.price - b.price);

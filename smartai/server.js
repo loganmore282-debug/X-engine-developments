@@ -683,6 +683,7 @@ const DEFAULT_SETTINGS = {
   dailyCheckin: 250,
   // More support links (Telegram channel, WhatsApp group and contact), the support hours, and the Terms & Rules text shown in the app. All plain text; a link must be http(s).
   telegramChannel: '', whatsappGroup: '', whatsappContact: '', supportHours: '', rulesText: '',
+  signupJoin: 'auto',   // where a NEW member is sent once, right after signing up: auto (the first link set: WhatsApp group, Telegram group, Telegram channel), whatsappGroup, telegramGroup, telegramChannel or off
   // Owner: "l would like to also to edit the app name smartai, so make it when
   // it can be editable everywhere." The platform's own name, previously
   // written into about a dozen strings across the client by hand. It has a
@@ -8014,6 +8015,7 @@ app.post('/admin/settings/update', async (req, res) => {
     }
     if ('homeBannerTitle' in updates) updates.homeBannerTitle = String(updates.homeBannerTitle == null ? '' : updates.homeBannerTitle).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
     if ('homeBannerText' in updates) updates.homeBannerText = String(updates.homeBannerText == null ? '' : updates.homeBannerText).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+    if ('signupJoin' in updates && !['auto', 'whatsappGroup', 'telegramGroup', 'telegramChannel', 'off'].includes(updates.signupJoin)) updates.signupJoin = 'auto';
     // Plain text shown in the app: the hours under Support (one short line) and the Terms & Rules page (capped; the app writes it as text, never as markup).
     if ('supportHours' in updates) updates.supportHours = String(updates.supportHours == null ? '' : updates.supportHours).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
     if ('rulesText' in updates) updates.rulesText = String(updates.rulesText == null ? '' : updates.rulesText).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f<>]/g, '').replace(/\r\n?/g, '\n').trim().slice(0, 20000);
