@@ -244,8 +244,17 @@ async function member(ref) {
   await ev(() => pollDepositStatus(true)); await sleep(1200);
   const still = await ev(() => ({ t: document.getElementById('depStatusTitle').textContent, dl: !!document.querySelector('#depStatusIc svg.dl'), lab: document.getElementById('depVerifyLabel').textContent, ov: document.getElementById('ovDepositStatus').classList.contains('show') }));
   ok(still.t === 'Your payment is under review' && still.dl, 'Check Status while it is still under review keeps the page as it is: ' + JSON.stringify(still));
+  // REAL TIME: the page's own 5-second check is switched off, so only the live line from the server can make it notice the approval
+  ok(await ev(() => _live.run && _live.looping), 'the app holds the live line to the server while it is open');
+  await ev(() => { clearInterval(_depPollTimer); _depPollTimer = null; clearTimeout(_depFirstTimer); });
+  const liveStream = await (async () => { const ac = new AbortController(); const r = await fetch(base + '/live', { headers: { Authorization: 'Bearer ' + MEtok }, signal: ac.signal }).catch(() => null); return { ac, r }; })();
+  ok(liveStream.r && liveStream.r.status === 200 && /text\/event-stream/.test(liveStream.r.headers.get('content-type')) && /no-transform/.test(liveStream.r.headers.get('cache-control')) && liveStream.r.headers.get('x-accel-buffering') === 'no', 'GET /live is an event stream that nginx and the compressor leave alone (no-transform, no buffering)');
+  const lrd = liveStream.r.body.getReader(), ldec = new TextDecoder(); let lgot = ''; let lpend = null; const lpull = async (ms) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (!lpend) lpend = lrd.read().then(x => { lpend = null; return x; }); const x = await Promise.race([lpend, sleep(300).then(() => ({ timeout: true }))]); if (x && x.value) lgot += ldec.decode(x.value); if (/"k":"(user|recharge)"/.test(lgot)) return; } };
+  await lpull(1500); ok(/"hello"/.test(lgot), 'the stream opens with a hello line');
   ok((await J('POST', '/admin/deposit/force-credit', { depositId: depId }, null, true)).s === 200, 'the admin approves it (Force-credit)');
-  await ev(() => pollDepositStatus(true)); await sleep(1600);
+  await lpull(3000); ok(/"k":"(user|recharge)"/.test(lgot), 'the server wrote a change line down the stream at once (' + lgot.replace(/\n/g, ' ').slice(0, 120) + ')');
+  liveStream.ac.abort();
+  await sleep(1800);
   ok(await ev(() => document.getElementById('depStatusIc').className === 'pay-status-ic anim' && !document.querySelector('#depStatusIc svg.dl') && /ok-check/.test(document.getElementById('depStatusIc').innerHTML) && document.getElementById('depStatusTitle').textContent === 'Payment Successful!'), 'once approved the dots give way to the green tick and "Payment Successful!"');
   ok(await ev(() => document.getElementById('depVerifyLabel').textContent) === 'Continue to Dashboard', 'with a Continue to Dashboard button');
   await ev(() => document.getElementById('depVerifyBtn').click()); await sleep(900);

@@ -1549,12 +1549,71 @@ async function runAccountPoll(){
     }
   } catch (e) {}
   _accountPollRunning = false;
+  if (_live.again) { _live.again = false; setTimeout(runAccountPoll, 0); return; }
   scheduleAccountPoll();
 }
-function startAccountPoll(){ scheduleAccountPoll(); }
-function stopAccountPoll(){ clearTimeout(_accountPollTimer); _accountPollTimer = null; }
+function startAccountPoll(){ scheduleAccountPoll(); liveStart(); }
+function stopAccountPoll(){ clearTimeout(_accountPollTimer); _accountPollTimer = null; liveStop(); }
 document.addEventListener('visibilitychange', function(){
   if (!document.hidden && STATE) runAccountPoll();   // catch up the moment the app is brought back to the front
+});
+
+/* ====================== REAL TIME (the live channel) ======================
+   One open line to the server (GET /live, a stream the server writes a short line into whenever something of THIS member's changes: wallet, a recharge, a cash-out). Each line makes the app
+   look again at once (the same refresh the 8-second poll does), and, if the payment-under-review page or the pay page is open, check that order right away. While the line is up the
+   poll only runs every 20 s as a safety net; if the line drops it reconnects by itself (1.5 s, then slower) and the 8-second poll covers the gap. Closed while the app is in the background. */
+var _live = { run: false, looping: false, token: 0, epoch: -1, ctl: null, backoff: 1500, kick: null, again: false };
+function liveStart(){
+  if (!STATE) return;
+  _live.run = true;
+  if (!_live.looping || _live.epoch !== _authEpoch) liveLoop();   // a new sign-in starts its own line even if the old one is still closing
+}
+function liveStop(){
+  _live.run = false; clearTimeout(_live.kick);
+  try { if (_live.ctl) _live.ctl.abort(); } catch (e) {}
+  ACCOUNT_POLL_MS = 8000;
+}
+function liveKick(){
+  clearTimeout(_live.kick);
+  _live.kick = setTimeout(function(){
+    if (!STATE || document.hidden) return;
+    if (_accountPollRunning) _live.again = true; else runAccountPoll();
+    var st = $('ovDepositStatus'); if (st && st.classList.contains('show') && typeof pollDepositStatus === 'function') pollDepositStatus();
+    if (_gpActive && _gp.order && !_gp.finished) gpCheck(false);
+  }, 120);
+}
+async function liveLoop(){
+  _live.looping = true; _live.epoch = _authEpoch;
+  var epoch = _authEpoch, token = ++_live.token;
+  while (_live.run && STATE && epoch === _authEpoch && token === _live.token) {
+    try {
+      if (document.hidden) { await new Promise(function(r){ setTimeout(r, 1200); }); continue; }
+      var user = window.fbAuth && window.fbAuth.currentUser; if (!user) break;
+      var tok = ''; try { tok = await user.getIdToken(); } catch (e) {}
+      if (!tok) throw new Error('no token');
+      _live.ctl = new AbortController();
+      var resp = await fetch(API_BASE + '/live', { headers: { 'Authorization': 'Bearer ' + tok }, signal: _live.ctl.signal, cache: 'no-store' });
+      if (resp.status === 401) break;
+      if (!resp.ok || !resp.body) throw new Error('live ' + resp.status);
+      _live.backoff = 1500; ACCOUNT_POLL_MS = 20000;
+      var rd = resp.body.getReader(), dec = new TextDecoder(), buf = '';
+      for (;;) {
+        var r = await rd.read(); if (r.done) break;
+        buf += dec.decode(r.value, { stream: true });
+        var parts = buf.split('\n\n'); buf = parts.pop();
+        for (var i = 0; i < parts.length; i++) if (parts[i].indexOf('data:') >= 0 && parts[i].indexOf('"hello"') < 0) liveKick();
+      }
+    } catch (e) {}
+    ACCOUNT_POLL_MS = 8000;
+    if (!_live.run || epoch !== _authEpoch || token !== _live.token) break;
+    await new Promise(function(r){ setTimeout(r, _live.backoff); });
+    _live.backoff = Math.min(15000, Math.round(_live.backoff * 1.7));
+  }
+  if (token === _live.token) _live.looping = false;
+}
+document.addEventListener('visibilitychange', function(){
+  if (document.hidden) { try { if (_live.ctl) _live.ctl.abort(); } catch (e) {} }
+  else if (STATE && _live.run && !_live.looping) liveLoop();
 });
 
 /* ====================== LEDGER — Accrued (income) / Topups (deposits) / Cash Outs (withdrawals) ====================== */

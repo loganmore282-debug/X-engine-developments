@@ -423,7 +423,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 } else console.warn('Admin push alerts: off -- FIREBASE_SERVICE_ACCOUNT is not set');
 
 // ── MONGODB ──
-const { connectMongo, db, FieldValue, pingDb, writeVersions } = require('./db');
+const { connectMongo, db, FieldValue, pingDb, writeVersions, changes: dbChanges } = require('./db');
 
 // ── CONFIG ──
 const ADMIN_KEY   = process.env.ADMIN_KEY   || '';
@@ -6477,6 +6477,50 @@ function checkinAmountFor(sett, streak) {
   const pos = (Math.max(1, Math.floor(Number(streak) || 1)) - 1) % 30;
   return ladder[pos % ladder.length];
 }
+/* ====================== LIVE CHANNEL (real time) ======================
+   One long-lived GET /live per open app (sent with the same Bearer token as every other call). Whenever the database changes something that belongs to that member -- their wallet or
+   profile, a recharge of theirs (approved, rejected, matched), a cash-out of theirs -- the server writes one short event down that connection and the app refreshes AT ONCE instead of on
+   its next 8-second poll. The events carry no data (the app asks /account as usual, so nothing new can leak): they only say "look again". Each member gets at most one event per 0.7 s,
+   at most 3 connections are kept per member (the oldest is closed), a heartbeat every 20 s keeps phones' proxies from closing an idle line, and the app's own polling stays as the safety net. */
+const _liveConns = new Map();                         // uid -> Set(res)
+const _liveLast = new Map(), _liveTimers = new Map(); // uid -> last send ms / a pending trailing send
+const LIVE_MAX_TOTAL = 6000, LIVE_PER_USER = 3, LIVE_MIN_GAP_MS = 700;
+function liveSend(uid, kind) {
+  const set = _liveConns.get(uid); if (!set || !set.size) return;
+  const now = Date.now(), gap = now - (_liveLast.get(uid) || 0);
+  if (gap < LIVE_MIN_GAP_MS) {
+    if (!_liveTimers.has(uid)) _liveTimers.set(uid, setTimeout(() => { _liveTimers.delete(uid); liveSend(uid, kind); }, LIVE_MIN_GAP_MS - gap));
+    return;
+  }
+  _liveLast.set(uid, now);
+  const line = 'data: {"k":"' + String(kind || 'user').replace(/[^a-z]/gi, '').slice(0, 20) + '"}\n\n';
+  for (const r of set) { try { r.write(line); } catch (_) {} }
+}
+if (dbChanges && typeof dbChanges.on === 'function') {
+  dbChanges.on('write', (col, id) => {
+    if (!_liveConns.size || !id) return;
+    if (col === 'users') return liveSend(String(id), 'user');
+    if (col === 'pendingDeposits' || col === 'withdrawals') {
+      db.collection(col).doc(String(id)).get().then(snap => { const uid = snap.exists && snap.data().userId; if (uid) liveSend(String(uid), col === 'withdrawals' ? 'cashout' : 'recharge'); }).catch(() => {});
+    }
+  });
+}
+app.get('/live', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  let total = 0; for (const s of _liveConns.values()) total += s.size;
+  if (total >= LIVE_MAX_TOTAL) return res.status(503).json({ status: 'error', message: 'Busy, the app keeps checking by itself' });
+  res.status(200);
+  res.set({ 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
+  if (res.flushHeaders) res.flushHeaders();
+  let set = _liveConns.get(uid); if (!set) { set = new Set(); _liveConns.set(uid, set); }
+  while (set.size >= LIVE_PER_USER) { const oldest = set.values().next().value; set.delete(oldest); try { oldest.end(); } catch (_) {} }
+  set.add(res);
+  res.write('retry: 3000\ndata: {"k":"hello"}\n\n');
+  const beat = setInterval(() => { try { res.write(': \n\n'); } catch (_) {} }, 20000);
+  const done = () => { clearInterval(beat); const s = _liveConns.get(uid); if (s) { s.delete(res); if (!s.size) _liveConns.delete(uid); } };
+  req.on('close', done); res.on('error', done);
+});
 app.post('/checkin', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });

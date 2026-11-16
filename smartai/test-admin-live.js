@@ -9,7 +9,7 @@ const ROOT = path.join(__dirname, 'admin');
 const srv = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8'), dbsrc = fs.readFileSync(path.join(__dirname, 'db.js'), 'utf8');
 ok(/app\.get\('\/admin\/live', \(req, res\) => \{/.test(srv) && /writeVersions\(ADMIN_LIVE_COLLECTIONS\)/.test(srv), 'the server has /admin/live and it reads no database');
 ok(!/'adminSessions'|'memberSessions'/.test(srv.slice(srv.indexOf('const ADMIN_LIVE_COLLECTIONS'), srv.indexOf("app.get('/admin/live'"))), 'session collections (touched by every request) are not watched');
-ok((dbsrc.match(/bumpWrite\(this\._col\)/g) || []).length >= 6 && /module\.exports = \{[^}]*writeVersions/.test(dbsrc), 'every write path in db.js raises its collection counter');
+ok((dbsrc.match(/bumpWrite\(this\._col, /g) || []).length >= 6 && /module\.exports = \{[^}]*writeVersions/.test(dbsrc), 'every write path in db.js raises its collection counter');
 ok(/req\.path === '\/live' \? adminLiveLimiter/.test(srv), 'the one-second check has its own rate allowance');
 const s2 = fs.readFileSync(path.join(__dirname, 'admin-src/index.html'), 'utf8');
 ok(!/cm-spinner|cmSpin/.test(s2) && /function spinnerHtml\(\)\{ return '<div class="ld-dots"/.test(s2) && /function dlCircles/.test(s2) && /svg\.dl circle\{fill:#137aef/.test(s2), 'the loader is the same blue dots loader as the member app');

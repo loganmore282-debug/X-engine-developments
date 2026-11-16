@@ -741,3 +741,13 @@ From the owner's recording (a Telegram sticker) and screenshot. `showBuyHint(key
 fade in 0-0.35, hand glides in 0.6-1.0, three taps at 1.1 / 1.3 / 1.6-1.8 (button goes pale pink and presses down, the hand turns orange, white sparks), hand leaves 1.9-2.3, ghost fade (opacity, lift, blur) 2.4-3.3,
 then the element removes itself. Measured off the video at 10 fps. Skipped under prefers-reduced-motion. The pay page's clock reaching 0 (`gpExpired`) now shows `#gpExpired`: a white 24px card on a 70% black screen,
 a stopwatch-in-hand illustration (SVG, drawn from the screenshot) and "The transaction has expired"; a tap closes it and opens Add Funds.
+
+## Real time: the live channel + server speed-up (2026-11-16, member v111)
+- `deploy/speed-up.sh` (run once as root on the VPS): BBR + fq, TCP Fast Open and bigger buffers (`/etc/sysctl.d/99-smartai-speed.conf`), nginx 4096 connections / 65535 open files, Brotli next to gzip. Rolls
+  itself back if nginx fails its test. Measured on the Contabo VPS: first byte 0.70 s -> 0.50 s.
+- **Live channel** (db.js `changes` emitter + server.js `GET /live` + the member app's `liveStart/liveLoop`): every successful DB write announces (collection, id). server.js turns a write to `users/<uid>`, or to a
+  `pendingDeposits` / `withdrawals` doc of that member, into one short line (`data: {"k":"user"}`) down that member's open stream; the app then refreshes at once (the same refresh as the poll) and, if the payment-under-review
+  or pay page is open, checks that order immediately. No data travels in the line (the app asks /account as before). Limits: 1 event per member per 0.7 s, 3 streams per member, 6000 in all, heartbeat every 20 s.
+  The stream is `text/event-stream` with `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`, so the compressor and nginx do not buffer it (no nginx change needed). While it is up the poll runs every 20 s
+  instead of 8 s; if it drops the app reconnects (1.5 s, backing off to 15 s). The stream is closed while the app is in the background. Tests: `test-smartai-app.js` (7b: the page's own check is switched off and
+  only the stream can make it notice the approval).
