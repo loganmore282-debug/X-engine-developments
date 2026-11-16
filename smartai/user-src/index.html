@@ -1733,8 +1733,13 @@ if ('serviceWorker' in navigator) {
     // controllerchange for a page that is ALREADY the newest code -- reloading
     // there would just be a pointless flash on someone's first open.
     var hadController = !!navigator.serviceWorker.controller;
+    // THE DOUBLE START-UP LOADER: every deploy installs a new worker a moment after the page opens, and that fired this reload, so the app loaded completely and then loaded
+    // AGAIN. A page that was opened in the last minute was fetched from the network just now (navigations are network-first in sw.js), so it already IS the newest code: no reload.
+    // A page that has been open longer (the app left running or in the background) still reloads, once, when the new worker takes over.
+    var bootAt = Date.now();
     function applyUpdate() {
       if (reloading || !hadController) return;
+      if (Date.now() - bootAt < 60000) return;
       if (window.__moneyCallsInFlight > 0) { pending = true; return; }
       reloading = true;
       location.reload();
