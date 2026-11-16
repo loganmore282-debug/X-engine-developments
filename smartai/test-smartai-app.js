@@ -218,8 +218,13 @@ async function member(ref) {
   ok(await ev(() => [...document.querySelectorAll('#gpTimer i')].map(i => i.textContent).join('')) !== gp2.timer, 'the clock is counting down');
   await ev(() => document.getElementById('gpName').nextElementSibling.click()); await sleep(300);
   ok(/Successful replication|Could not copy/.test(await gpToastText()), 'the copy button answers with its own notice');
-  await ev(() => gpRefresh()); await sleep(900);
-  ok(/not received yet/i.test(await gpToastText()) && await ev(() => document.getElementById('gpPaidN').textContent) === '0', 'Refresh before paying: nothing paid yet');
+  ok(await ev(() => getComputedStyle(document.getElementById('gpFaster')).display === 'none' && getComputedStyle(document.getElementById('gpSms')).display !== undefined && document.getElementById('gpFaster').offsetHeight === 0), 'the SMS / transaction ID block is NOT on the page at first');
+  await sleep(2600);
+  await ev(() => gpRefresh()); await sleep(300);
+  ok(await ev(() => document.getElementById('gpLoading').classList.contains('show')), 'Refresh shows the Loading box');
+  await sleep(1300);
+  ok(await ev(() => getComputedStyle(document.getElementById('gpFaster')).display !== 'none' && document.getElementById('gpFaster').offsetHeight > 100 && _gp.revealed === true), 'after Refresh the "Get results faster!" block slides in');
+  ok(!/not received/i.test(await gpToastText()) && await ev(() => document.getElementById('gpPaidN').textContent) === '0' && await ev(() => !document.getElementById('gpToast').classList.contains('show')), 'and Refresh says nothing more when nothing is paid (only Loading, as in the recording)');
   await ev(() => gpSend()); await sleep(300);
   ok(await gpToastText() === 'Please enter payment SMS', 'Submit with nothing typed says "Please enter payment SMS"');
   const depId = await ev(() => _gp.order.depositId);

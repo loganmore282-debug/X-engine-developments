@@ -686,7 +686,11 @@ remove number and networks ... payment numbers will be uploaded from the admin p
   rotation call (`refreshDepositSlot`). The gateway ROUTES (`/deposit/marzpay`, `/deposit/start`, webhooks, PesaJet / TavuPay watchers) stay in `server.js`, unused by the app; their client-side test checks were removed.
 - **Tests.** `test-manual-pay.js` (79 checks: SMS parsing, admin numbers, fresh orders + rotation + resume, status, submit, reject, sweep, nothing credits), `test-smartai-app.js` step 7b (the whole flow in a real browser against
   the real server: numbers, Continue, page 1 notices, page 2, clock, copy, Refresh, SMS submit, admin Force-credit, tick card, wallet), `test-smartai-ui.js` (fourteen full-page screens), `test-icons-builtin.js` (27 slots).
-  Caches: member `smartai-shell-v90`, admin `smartai-admin-shell-v33`.
+  Caches: member `smartai-shell-v91`, admin `smartai-admin-shell-v33`.
 - **Open / not built:** no SMS forwarder (an automatic match of the admin phone's received-money SMS) -- every claim is approved by the admin by hand, so "Get results faster" means "send the proof now". Ask before building it.
 - **Hosting note (2026-11-15):** the VPS apps were moved from Hostinger to Contabo (`161.97.98.107`, see `beer/CLAUDE.md` "Moving all apps to a new server"). Dev ports 8100 / 8101 and the GitHub webhook address
   (`http://<ip>:8100/k7x2/deploy/webhook`) hold the SERVER ADDRESS: update the webhook to the new address when the old server is switched off.
+- **Corrections after the owner re-checked his recordings (2026-11-16)** -- "see when I tap Refresh that message input area should come, also they have an appearing animation": the "Get results faster!" block (SMS box, red note, Submit) is NOT on page 2 at first;
+  it slides in (height + fade, 0.5 s, `gpReveal`) after the FIRST tap on Refresh (a Loading box, nothing else is said when nothing is paid; the page scrolls to it only if it is below the screen). Page change: Confirm dims page 1 with the
+  Loading box, page 2 cross-fades in as an EMPTY skeleton (labels only, class `gp-skel`) while Loading is still up, then the values pop in (`gp-pop`). "Copied." sits on the box that was tapped (`gpToast(msg, true, anchor)`), every other
+  notice in the middle. The Loading box is 130 x 130 and stays at least 0.8 s. Member cache v91.

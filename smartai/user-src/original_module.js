@@ -2068,15 +2068,23 @@ function gpHeadArt(){
 }
 function gpNow(){ return Date.now() + (_gp.skew || 0); }
 /* ---- notices ---- */
-function gpToast(msg, pill){
+function gpToast(msg, pill, anchor){
   var el = $('gpToast'); if (!el) return;
   el.textContent = msg; el.className = 'gp-toast' + (pill ? ' pill' : '');
+  // "Copied." sits on the box that was tapped (centred across, at that box's height); every other notice is in the middle of the screen.
+  if (pill && anchor && anchor.getBoundingClientRect) { var r = anchor.getBoundingClientRect(); el.style.top = Math.round(r.top + r.height / 2) + 'px'; } else el.style.top = '';
   void el.offsetWidth; el.classList.add('show');
   clearTimeout(_gpToastT); _gpToastT = setTimeout(function(){ el.classList.remove('show'); }, pill ? 1500 : 2300);
 }
+// The Loading box stays up for at least 0.8 s, however fast the server answers (in the recordings it is always seen for a moment).
+var _gpLoadAt = 0, _gpLoadHide = null;
 function gpLoading(on){
   _gpLoadN = Math.max(0, _gpLoadN + (on ? 1 : -1));
-  var el = $('gpLoading'); if (el) el.classList.toggle('show', _gpLoadN > 0);
+  var el = $('gpLoading'); if (!el) return;
+  clearTimeout(_gpLoadHide);
+  if (_gpLoadN > 0) { if (!el.classList.contains('show')) _gpLoadAt = Date.now(); el.classList.add('show'); return; }
+  var wait = Math.max(0, 800 - (Date.now() - _gpLoadAt));
+  _gpLoadHide = setTimeout(function(){ if (_gpLoadN === 0) el.classList.remove('show'); }, wait);
 }
 function gpCopyFallback(text){
   try {
@@ -2087,17 +2095,19 @@ function gpCopyFallback(text){
   } catch (e) { return false; }
 }
 // The clipboard API only exists on a secure address; the older way still works on the preview address, so both are tried.
-function gpCopy(text, msg, pill){
+function gpCopy(text, msg, pill, anchor){
   text = String(text || ''); if (!text) return;
-  var ok = function(){ gpToast(msg || 'Copied.', pill); };
+  var ok = function(){ gpToast(msg || 'Copied.', pill, anchor); };
   var bad = function(){ if (gpCopyFallback(text)) ok(); else gpToast('Could not copy'); };
   if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(ok, bad); else bad();
 }
 function gpCopyId(id){ var el = $(id); if (el) gpCopy(el.textContent, 'Successful replication'); }
 /* ---- showing a page ---- */
-function gpShow(id){
-  hideOverlays();
+function gpShow(id, over){
+  var prev = over ? document.querySelector('.overlay.show') : null;
+  if (!over) hideOverlays(); else document.querySelectorAll('.overlay.show').forEach(function(o){ if (o !== prev) o.classList.remove('show'); });
   var el = $(id); if (!el) return;
+  if (prev && prev !== el) setTimeout(function(){ if (prev !== el) prev.classList.remove('show'); }, 360);
   el.scrollTop = 0; el.classList.add('show');
   try { if (_ovOpen) history.replaceState({ ov: id }, ''); else history.pushState({ ov: id }, ''); } catch (e) {}
   _ovOpen = true; _ovName = id; _gpActive = true;
@@ -2105,9 +2115,9 @@ function gpShow(id){
 // Leaving the pages for any reason (phone Back, sign-out, a finished order): the clock and the check stop; the order stays open on the server for a resume.
 function gpLeave(){
   _gpActive = false;
-  clearInterval(_gp.timer); clearInterval(_gp.poll); _gp.timer = null; _gp.poll = null; _gp.busy = false;
+  clearInterval(_gp.timer); clearInterval(_gp.poll); clearTimeout(_gp.skelT); _gp.timer = null; _gp.poll = null; _gp.busy = false;
   var d = $('gpDone'); if (d) d.classList.remove('show');
-  _gpLoadN = 0; var l = $('gpLoading'); if (l) l.classList.remove('show');
+  _gpLoadN = 0; clearTimeout(_gpLoadHide); var l = $('gpLoading'); if (l) l.classList.remove('show');
 }
 function gpFinish(){
   gpLeave();
@@ -2126,7 +2136,7 @@ function gpOpenPick(amt){
   $('gpAmt1').textContent = String(amt);
   $('gpPhone').value = '';
   ['MTN', 'Airtel'].forEach(function(n){ var b = $('gpM_' + n); if (b) { b.classList.remove('on'); b.style.opacity = ''; b.dataset.off = ''; } });
-  $('gpConfirm').disabled = false;
+  $('gpConfirm').disabled = false; $('ovGpPick').classList.remove('busy');
   gpShow('ovGpPick');
   // Which networks the admin has a number for (a network with none is greyed and says so when tapped).
   api('/public/pay-channels').then(function(r){
@@ -2147,17 +2157,20 @@ async function gpConfirm(){
   if (!raw) { gpToast('Please enter payment account number'); return; }
   var local = localDigits(raw);
   if (!local) { gpToast('The mobile phone number format is incorrect'); return; }
-  _gp.busy = true; $('gpConfirm').disabled = true; gpLoading(true);
+  _gp.busy = true; $('gpConfirm').disabled = true; $('ovGpPick').classList.add('busy'); gpLoading(true);
   var r = await api('/deposit/manual/order', { amount: _gp.amount, network: _gp.network, phone: '+256' + local });
-  gpLoading(false); _gp.busy = false; $('gpConfirm').disabled = false;
-  if (r.stale || !_gpActive) return;
-  if (r.status !== 'success') { gpToast(r.message || 'Could not start the payment'); return; }
+  _gp.busy = false;
+  if (r.stale || !_gpActive || r.status !== 'success') {
+    gpLoading(false); $('gpConfirm').disabled = false; $('ovGpPick').classList.remove('busy');
+    if (!r.stale && _gpActive) gpToast(r.message || 'Could not start the payment');
+    return;
+  }
   $('depAmt').value = '';
   gpSave(r);
-  gpOpenPay(r);
+  gpOpenPay(r, true);   // page 2 fades in as an empty skeleton while the Loading box is still up, then the values fill in
 }
 /* ---- page 2 ---- */
-function gpOpenPay(o){
+function gpOpenPay(o, skeleton){
   _gp.order = o; _gp.amount = Number(o.amount) || 0; _gp.network = o.network;
   _gp.skew = (Number(o.serverNow) || Date.now()) - Date.now(); _gp.expMs = Number(o.expiresAt) || (gpNow() + GP_ORDER_MS);
   _gp.needId = false; _gp.submitted = false; _gp.finished = false; _gp.busy = false;
@@ -2176,10 +2189,24 @@ function gpOpenPay(o){
   $('gpSteps').innerHTML = steps.map(function(t, i){ return '<li' + (i === 1 ? ' class="gap"' : '') + '>' + t + '</li>'; }).join('');
   var paid = $('gpPaid'); paid.className = 'gp-paidv'; $('gpPaidN').textContent = '0';
   $('gpSms').value = ''; $('gpSms').readOnly = false; $('gpId').value = '';
-  $('gpFaster').style.display = ''; $('gpIdRow').style.display = 'none'; $('gpLose').style.display = ''; $('gpSubmit').style.display = ''; $('gpGet').style.display = 'none';
-  $('gpFaster').classList.remove('sent'); $('gpSentMsg').style.display = 'none';
+  // "Get results faster" is NOT on the page at first: it slides in after the first tap on Refresh (gpReveal)
+  _gp.revealed = false;
+  var fs = $('gpFaster'); fs.style.display = 'none'; fs.style.maxHeight = ''; fs.style.opacity = ''; fs.style.overflow = ''; fs.style.transition = '';
+  $('gpIdRow').style.display = 'none'; $('gpLose').style.display = ''; $('gpSubmit').style.display = ''; $('gpGet').style.display = 'none';
+  fs.classList.remove('sent'); $('gpSentMsg').style.display = 'none';
   $('gpDone').classList.remove('show');
-  gpShow('ovGpPay');
+  var ov = $('ovGpPay');
+  ov.classList.remove('gp-pop');
+  if (skeleton) {
+    ov.classList.add('gp-skel');
+    gpShow('ovGpPay', true);
+    clearTimeout(_gp.skelT);
+    _gp.skelT = setTimeout(function(){
+      ov.classList.remove('gp-skel'); ov.classList.add('gp-pop');
+      gpLoading(false); var b = $('gpConfirm'); if (b) b.disabled = false; $('ovGpPick').classList.remove('busy');
+      setTimeout(function(){ ov.classList.remove('gp-pop'); }, 900);
+    }, 520);
+  } else { ov.classList.remove('gp-skel'); gpShow('ovGpPay'); }
   gpTick();
   clearInterval(_gp.timer); clearInterval(_gp.poll);
   _gp.timer = setInterval(gpTick, 250);
@@ -2206,6 +2233,26 @@ function gpDialog(kind, title, text){
   $('gpDonePic').innerHTML = pic; $('gpDoneT').textContent = title; $('gpDoneP').textContent = text;
   $('gpDone').classList.add('show');
 }
+/* ---- the SMS / transaction ID block slides in after the first Refresh (the owner's recording), and the page scrolls to it only if it is below the screen ---- */
+function gpReveal(){
+  if (_gp.revealed) return; _gp.revealed = true;
+  var el = $('gpFaster'); if (!el) return;
+  el.style.display = '';
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion:reduce)').matches;
+  if (!reduce) {
+    var h = el.scrollHeight;
+    el.style.overflow = 'hidden'; el.style.maxHeight = '0px'; el.style.opacity = '0'; el.style.transition = 'none';
+    void el.offsetHeight;
+    el.style.transition = 'max-height .5s cubic-bezier(.22,.8,.3,1), opacity .45s ease .08s';
+    el.style.maxHeight = h + 'px'; el.style.opacity = '1';
+    setTimeout(function(){ el.style.maxHeight = ''; el.style.overflow = ''; el.style.transition = ''; el.style.opacity = ''; }, 650);
+  }
+  setTimeout(function(){
+    var b = $('gpSubmit'); if (!b || b.style.display === 'none') b = $('gpSms');
+    var r = b.getBoundingClientRect();
+    if (r.bottom > window.innerHeight - 8) { try { b.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { b.scrollIntoView(); } }
+  }, reduce ? 0 : 560);
+}
 /* ---- Refresh: where is this order now? ---- */
 async function gpCheck(manual){
   if (!_gp.order || _gp.finished || _gp.busy) return;
@@ -2226,9 +2273,9 @@ async function gpCheck(manual){
     gpDialog('cross', 'Payment Not Completed', r.message || 'This payment was not completed.');
     return;
   }
-  if (r.state === 'review') { if (!_gp.submitted) gpSent(false); if (manual) gpToast('Your payment is being checked'); return; }
+  if (r.state === 'review') { _gp.revealed = true; $('gpFaster').style.display = ''; if (!_gp.submitted) gpSent(false); return; }
   if (r.state === 'expired' && !_gp.submitted) { gpExpired(); return; }
-  if (manual) gpToast('Payment not received yet. Please try again shortly.');
+  if (manual) gpReveal();   // nothing paid yet: no message, the box just slides in (as in the recording)
 }
 function gpRefresh(){ gpCheck(true); }
 /* ---- the SMS / transaction ID ---- */

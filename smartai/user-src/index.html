@@ -649,10 +649,10 @@
     background:rgba(64,64,64,.93);color:#fff;border-radius:9px;padding:12px 16px;font:400 15.5px/22px Roboto,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;text-align:center;box-shadow:0 6px 22px rgba(0,0,0,.3);}
   .gp-toast.pill{border-radius:26px;padding:9px 18px;background:rgba(112,112,112,.95);font-size:14px;line-height:20px;}
   .gp-toast.show{opacity:1;transform:translate(-50%,-50%) scale(1);}
-  .gp-loading{position:fixed;left:50%;top:47%;z-index:121;width:112px;height:106px;transform:translate(-50%,-50%) scale(.94);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;
+  .gp-loading{position:fixed;left:50%;top:47%;z-index:121;width:130px;height:130px;transform:translate(-50%,-50%) scale(.94);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;
     background:rgba(64,64,64,.92);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#fff;font:400 13.5px/18px Roboto,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;box-shadow:0 6px 22px rgba(0,0,0,.3);}
   .gp-loading.show{opacity:1;transform:translate(-50%,-50%) scale(1);}
-  .gp-loading i{width:30px;height:30px;border-radius:50%;border:2.6px solid rgba(255,255,255,.28);border-top-color:#fff;animation:gpSpin .8s linear infinite;}
+  .gp-loading i{width:34px;height:34px;border-radius:50%;border:2.6px solid rgba(255,255,255,.28);border-top-color:#fff;animation:gpSpin .8s linear infinite;}
   /* ---- the order ran out / the payment landed: a dark card over the page ---- */
   .gp-done{position:fixed;inset:0;z-index:119;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:30px;}
   .gp-done.show{display:flex;animation:gpFade .25s ease both;}
@@ -662,7 +662,16 @@
   .gp-done .c h3{margin:0 0 6px;font-size:17px;font-weight:600;color:#313131;}
   .gp-done .c p{margin:0 0 16px;font-size:12.5px;line-height:18px;color:#8c8c8c;}
   #gpDoneBtn{width:170px;height:42px;font-size:14.5px;margin:0 auto;}
-  @media (prefers-reduced-motion:reduce){.gp-ov.show,.gp-card2,.gp-idrow,.gp-btn::after{animation:none !important;}}
+  /* the empty page 2 shown for a moment while the order loads (labels only, no values yet), then everything fills in */
+  .gp-skel .gp-skel-hide{display:none !important;}
+  .gp-skel #gpAmt2,.gp-skel #gpAcct{visibility:hidden;}
+  .gp-pop .gp-step>*:not(.gp-ic){animation:gpRise .42s ease both;}
+  .gp-pop .gp-step:nth-of-type(2)>*:not(.gp-ic){animation-delay:.06s;}
+  .gp-pop .gp-step:nth-of-type(3)>*:not(.gp-ic){animation-delay:.12s;}
+  .gp-pop .gp-step:nth-of-type(4)>*:not(.gp-ic){animation-delay:.18s;}
+  #ovGpPick.busy .gp-card1{opacity:.8;filter:saturate(.8);transition:opacity .3s ease,filter .3s ease;}
+  #ovGpPick .gp-card1{transition:opacity .3s ease,filter .3s ease;}
+  @media (prefers-reduced-motion:reduce){.gp-ov.show,.gp-card2,.gp-idrow,.gp-btn::after,.gp-pop .gp-step>*{animation:none !important;}}
   /* ====================== END PAYMENT PAGES ====================== */
 
   .tm-card{margin:12px var(--gut) 0;padding:16px;background:var(--card);border-radius:20px;box-shadow:var(--shadow);}
@@ -1395,25 +1404,25 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
     <div class="gp-card2">
       <section class="gp-step"><span class="gp-ic" data-gp="card"></span>
         <h4 class="gp-h">COPY &amp; PAY</h4>
-        <p class="gp-sub">Copy this <b id="gpNetName">MTN</b> account and make payment</p>
+        <p class="gp-sub gp-skel-hide">Copy this <b id="gpNetName">MTN</b> account and make payment</p>
         <div class="gp-box">
           <p class="gp-lab">Total Amount:</p>
           <div class="gp-money"><span>UGX</span><b id="gpAmt2">0</b></div>
           <p class="gp-lab" id="gpAcctLab" style="margin-top:12px">MTN Account:</p>
           <div class="gp-row"><span class="gp-big" id="gpAcct"></span><button type="button" class="gp-cp" onclick="gpCopyId('gpAcct')" aria-label="Copy the account number" data-gp="copy"></button></div>
-          <p class="gp-lab" style="margin-top:12px">Account Name:</p>
-          <div class="gp-row"><span class="gp-big nm" id="gpName"></span><button type="button" class="gp-cp" onclick="gpCopyId('gpName')" aria-label="Copy the account name" data-gp="copy"></button></div>
+          <p class="gp-lab gp-skel-hide" style="margin-top:12px">Account Name:</p>
+          <div class="gp-row gp-skel-hide"><span class="gp-big nm" id="gpName"></span><button type="button" class="gp-cp" onclick="gpCopyId('gpName')" aria-label="Copy the account name" data-gp="copy"></button></div>
         </div>
       </section>
       <section class="gp-step"><span class="gp-ic" data-gp="refresh"></span>
         <h4 class="gp-h">Payment completed?</h4>
-        <p class="gp-sub">Click <b>"Refresh"</b> to check if it is successful</p>
+        <p class="gp-sub gp-skel-hide">Click <b>"Refresh"</b> to check if it is successful</p>
         <div class="gp-box">
           <div class="gp-paid"><span class="l">Amount paid:</span></div>
-          <div class="gp-row" style="margin-top:0"><div class="gp-paidv" id="gpPaid"><small>UGX</small><b id="gpPaidN">0</b></div><button type="button" class="gp-refresh" id="gpRefresh" onclick="gpRefresh()">Refresh</button></div>
+          <div class="gp-row gp-skel-hide" style="margin-top:0"><div class="gp-paidv" id="gpPaid"><small>UGX</small><b id="gpPaidN">0</b></div><button type="button" class="gp-refresh" id="gpRefresh" onclick="gpRefresh()">Refresh</button></div>
           <hr class="gp-hr">
-          <p class="gp-note">The payment is expected to be successful in 2-10 minutes.<br>Click to refresh the results.</p>
-          <div id="gpFaster">
+          <p class="gp-note gp-skel-hide">The payment is expected to be successful in 2-10 minutes.<br>Click to refresh the results.</p>
+          <div id="gpFaster" style="display:none">
             <p class="gp-faster">Get results faster!</p>
             <p class="gp-fill">Fill in the payment SMS or transaction ID</p>
             <textarea class="gp-ta" id="gpSms" maxlength="2000" autocomplete="off" spellcheck="false" placeholder="You have sent UGX xxx to xxx xxx, 256xxxxx9263 on 0000-00-00 00:00:00, fee: 0. Reason: Testing. New balance: xxx. ID :302xxxxx057."></textarea>
@@ -1426,9 +1435,9 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       </section>
       <section class="gp-step"><span class="gp-ic" data-gp="person"></span>
         <h4 class="gp-h">Your payment account:</h4>
-        <div class="gp-box" style="cursor:pointer" onclick="gpCopy($('gpMine').textContent,'Copied.',true)"><p class="gp-acct" id="gpMine"></p></div>
+        <div class="gp-box gp-skel-hide" id="gpMineBox" style="cursor:pointer" onclick="gpCopy($('gpMine').textContent,'Copied.',true,this)"><p class="gp-acct" id="gpMine"></p></div>
       </section>
-      <section class="gp-step"><span class="gp-ic" data-gp="bulb"></span>
+      <section class="gp-step gp-skel-hide"><span class="gp-ic" data-gp="bulb"></span>
         <h4 class="gp-h">Payment reminder</h4>
         <div class="gp-box"><p class="gp-how" id="gpHow"></p><ul class="gp-steps" id="gpSteps"></ul></div>
       </section>
