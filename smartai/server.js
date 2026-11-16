@@ -325,7 +325,7 @@ function corsHostAllowed(host) {
 // one place, to a 503 the app reads as "try again" rather than "logged out".
 // Routes need no changes, and nothing is touched unless _decodeAuth() flagged
 // this exact request.
-// The server's clock on every reply (milliseconds since 1970): the app's countdown to the 00:00 settlement follows the SERVER's time, not the phone's.
+// The server's clock on every reply (milliseconds since 1970): the app's clock-based checks follow the SERVER's time, not the phone's.
 app.use((req, res, next) => { if (typeof res.setHeader === 'function') res.setHeader('X-Server-Time', String(Date.now())); next(); });
 app.use((req, res, next) => {
   const send = res.json.bind(res);
@@ -352,7 +352,7 @@ app.use(cors({
     } catch (_) {}
     cb(null, false);
   },
-  exposedHeaders: ['X-Server-Time'],   // the app reads the server's clock from it, so the Orders countdown to 00:00 is right even on a phone whose own clock is wrong
+  exposedHeaders: ['X-Server-Time'],   // the app reads the server's clock from it, so the cash-out hours are right even on a phone whose own clock is wrong
   // ── WHY maxAge IS SET ──
   // A preflight is a whole extra round trip, and Chromium caches one for
   // only FIVE SECONDS by default -- so every POST paid for two requests,
@@ -1177,23 +1177,21 @@ function eatNextMidnight(ts) {
   const dayStart = Math.floor((ts + tzOffMs()) / 86400000) * 86400000;
   return dayStart + 86400000 - tzOffMs();
 }
-// ── Cashback timing: Uganda MIDNIGHT (00:00), not 24 hours after purchase ──
-// The k-th payment (k = 1..total) is due at the first local midnight AFTER the purchase, plus (k-1) days. A product bought
-// at 15:00 therefore pays at 00:00 the next night, then every night at 00:00, `total` payments in all; the last one
-// is the maturity payment. Uganda has no daylight saving, so the day length is a constant 86,400,000 ms.
-// Every midnight pays: there is no weekend rest.
+// ── Cashback timing: every 24 HOURS from the moment of purchase (not at midnight) ──
+// The k-th payment (k = 1..total) is due exactly k x 24 hours after the purchase. A product bought at 15:02:07 pays at 15:02:07
+// the next day, then every 24 hours, `total` payments in all; the last one is the maturity payment. A day is a constant
+// 86,400,000 ms (no daylight saving). Every day pays: there is no weekend rest.
 function payoutDueAtMs(createdMs, k) {
-  return eatNextMidnight(createdMs) + (Math.max(1, k) - 1) * 86400000;
+  return createdMs + Math.max(1, k) * 86400000;
 }
 function payoutsDueCount(createdMs, now, total) {
-  const first = eatNextMidnight(createdMs);
-  if (now < first) return 0;
-  return Math.min(total, Math.floor((now - first) / 86400000) + 1);
+  if (now < createdMs + 86400000) return 0;
+  return Math.min(total, Math.floor((now - createdMs) / 86400000));
 }
 // The instants of the first `total` payments, in one pass (analytics asks for every contract).
 function payoutInstants(createdMs, total) {
-  const first = eatNextMidnight(createdMs), out = [];
-  for (let i = 0; i < total; i++) out.push(first + i * 86400000);
+  const out = [];
+  for (let i = 1; i <= total; i++) out.push(createdMs + i * 86400000);
   return out;
 }
 function eatParts(ts) {
@@ -3151,12 +3149,12 @@ async function gatewayWebhookOpen(provider, body) {
   return !!doc && ['pending', 'initiating', 'failed', 'review'].includes(doc.data().status);
 }
 
-// ── DAILY CASHBACK AT 00:00 (settle-on-read + a 1s background sweep) ──
-// Owner: "all daily cashback settled at midnight, 00:00 exactly". Each product pays expectedReturn / cycle days, one payment at every
-// local midnight (the region's own 00:00; the first one at the first midnight AFTER the purchase), using cumulative-target allocation
+// ── DAILY CASHBACK EVERY 24 HOURS (settle-on-read + a 0.5s background sweep) ──
+// Owner: earnings come every 24 hours from the purchase, not at midnight. Each product pays expectedReturn / cycle days, one payment
+// every 24 hours (the first one 24 hours after the purchase), using cumulative-target allocation
 // (round(expectedReturn * paymentsDue / total)) so the payments always add up to EXACTLY expectedReturn on the last one, for any ratio.
 // A product that is behind (a restart, a deploy) is caught up one payment at a time, each under its own token `<investmentId>:<k>`.
-// The sweep is aimed at the next midnight (`nextPayoutAt`).
+// The sweep is aimed at the next due instant (`nextPayoutAt`).
 const _creditingPayouts = new Set();
 // Maturity payouts run from the reconciler, outside any request, so they
 // have no region of their own -- and the description they stamp on the
@@ -3185,7 +3183,7 @@ async function _settleDueInvestmentNow(doc) {
   const createdMs = tsMillis(inv.createdAt) || Date.now();
   const dueCount = payoutsDueCount(createdMs, Date.now(), total) - made;
   if (dueCount <= 0) {
-    // Nothing is due, yet the sweep's hint says it is (a purchase a few milliseconds either side of 00:00, or a row
+    // Nothing is due, yet the sweep's hint says it is (a purchase a few milliseconds before its due instant, or a row
     // with no hint): put the hint at the real due time, or this product is re-read every 0.5 s until then.
     if (tsMillis(inv.createdAt) && !(tsMillis(inv.nextPayoutAt) > Date.now())) {
       doc.ref.update({ nextPayoutAt: new Date(payoutDueAtMs(createdMs, made + 1)) }).catch(() => {});
@@ -9754,9 +9752,8 @@ function bandOf(h) {
   if (h >= 17 && h < 21) return 'evening';
   return 'night';
 }
-// Read-only schedule math mirrors settlement's cumulative rounding. Each instalment falls at Uganda midnight (00:00),
-// the first one at the first midnight after purchase (see payoutDueAtMs). `created` below is the anchor that makes
-// "created + k days" equal the k-th payment's instant, so the rest of the maths reads the same as before.
+// Read-only schedule math mirrors settlement's cumulative rounding. Each instalment falls 24 hours after the last one,
+// the first one 24 hours after purchase (see payoutDueAtMs).
 function analyticsContractDay(inv, start, end, now) {
   const created0 = tsMillis(inv.createdAt);
   const total = Number(inv.payoutsTotal);
@@ -9767,7 +9764,7 @@ function analyticsContractDay(inv, start, end, now) {
       !Number.isFinite(expected) || expected < 0 || !Number.isInteger(made) ||
       made < 0 || made > total || !Number.isFinite(paid) || paid < 0) return null;
   const target = n => Math.round(expected * n / total);
-  // t[k-1] is the instant of the k-th payment (every local midnight).
+  // t[k-1] is the instant of the k-th payment (every 24 hours).
   const t = payoutInstants(created0, total);
   let first = 1, last = 0, due = 0;
   while (first <= total && t[first - 1] < start) first++;      // first payment at or after `start`
@@ -9997,7 +9994,7 @@ app.post('/admin/analytics', async (req, res) => {
     });
     activeInvestors = activeMemberIds.size;
     // PLANS: active plans, when they close, and which products are bought most. Active plans come from the active scan, "most purchased" from every
-    // active or finished purchase held (the newest 10,000). A plan's last payment falls at the `payoutsTotal`-th midnight after it was bought.
+    // active or finished purchase held (the newest 10,000). A plan's last payment falls `payoutsTotal` x 24 hours after it was bought.
     const plans = { active: { count: 0, invested: 0, expected: 0, remaining: 0, dueNow: 0 }, mostPurchased: [], maturities: [], nextMaturing: [] };
     {
       const byProduct = Object.create(null), byDay = new Map(), upcoming = [];
@@ -10013,7 +10010,7 @@ app.post('/admin/analytics', async (req, res) => {
         const amount = finiteMoney(inv.amount), expected = finiteMoney(inv.expectedReturn), remaining = Math.max(0, expected - finiteMoney(inv.paidOut));
         plans.active.count++; plans.active.invested += amount; plans.active.expected += expected; plans.active.remaining += remaining;
         if (!created || !Number.isInteger(total) || total <= 0) return;
-        const at = payoutDueAtMs(created, total);   // the last payment, at midnight
+        const at = payoutDueAtMs(created, total);   // the last payment, 24 hours x total after the purchase
         if (at <= nowMs) plans.active.dueNow++;
         const day = eatDayKey(new Date(Math.max(at, nowMs)));
         const g = byDay.get(day) || { day, count: 0, invested: 0, cashback: 0 };
@@ -10815,13 +10812,13 @@ async function reconcileCashback() {
     let oldestDue = Infinity;
     for (const d of snap.docs) { const t = tsMillis(d.data().nextPayoutAt); if (t && t <= sweepStart && t < oldestDue) oldestDue = t; }
     const paid = await settleMany(snap.docs);
-    // One line per sweep that really paid something, so the pm2 log shows how punctual the payouts are (at 00:00 this is the whole story).
+    // One line per sweep that really paid something, so the pm2 log shows how punctual the payouts are (this is the whole story).
     try {
       if (paid > 0 && oldestDue !== Infinity) {
         console.log(`Cashback sweep: paid ${paid} payment(s) in ${((Date.now() - sweepStart) / 1000).toFixed(1)}s; the oldest was due ${((sweepStart - oldestDue) / 1000).toFixed(1)}s before the sweep began, the last was paid ${((Date.now() - oldestDue) / 1000).toFixed(1)}s after its due time`);
       }
     } catch (_) {}
-    // At 00:00 EVERY running product falls due in the same second. A full page means more are waiting: carry on at
+    // Many running products can fall due in the same second. A full page means more are waiting: carry on at
     // once instead of waiting for the next 0.5 s tick, so the last member is paid seconds after the first, not minutes.
     if (!full && snap.docs.length >= 1000) setImmediate(reconcileCashback);
   } catch (e) { console.error('Reconcile cashback error:', e.message); }
@@ -10832,13 +10829,6 @@ async function reconcileCashback() {
 // 12 at a time: with a database round trip of ~23 ms a payment (about 5 sequential database operations) takes ~115 ms, so 12 workers give ~100 payments a
 // second, which is about where Atlas Flex's 500 operations a second begins to throttle (8 workers could not reach it). Each payment still runs under its own lock.
 const CASHBACK_PARALLEL = 12;
-// A one-shot timer aimed at the next Uganda midnight starts a sweep the moment 00:00 arrives (the 0.5 s tick would
-// anyway, at most half a second later; this just removes that wait). Re-armed after every firing.
-function armMidnightSweep() {
-  const wait = Math.max(20, eatNextMidnight(Date.now()) - Date.now() + 50);
-  const t = setTimeout(() => { reconcileCashback(); armMidnightSweep(); }, wait);
-  if (t.unref) t.unref();
-}
 async function settleMany(docs) {
   let next = 0, paid = 0;
   const worker = async () => {
@@ -10862,8 +10852,8 @@ async function backfillNextPayoutAt() {
   }
   return n;
 }
-// One-time move to the daily-midnight schedule: running investments may carry a `nextPayoutAt` aimed at the closing time (the older locked-cashback
-// rule); it is recomputed so the 0.5 s sweep picks each one up at its next midnight. Settlement itself never depended on it (it re-derives what is
+// One-time move to the 24-hour schedule: running investments may carry a `nextPayoutAt` aimed at the closing time (the older locked-cashback
+// rule); it is recomputed so the 0.5 s sweep picks each one up when its next 24 hours are over. Settlement itself never depended on it (it re-derives what is
 // due from the purchase time), so this only keeps payments on time.
 // ONE PAYOUT NUMBER, ONE MEMBER, for numbers saved BEFORE that rule existed (owner: "let the server delete the number which was created later"):
 // where two or more members hold the same wallet number, the member who saved it FIRST keeps it and the others' copies are deleted. A row with no
@@ -10912,8 +10902,8 @@ app.post('/admin/payout-numbers/dedupe', async (req, res) => {
   try { const removed = await dedupeSharedPayoutNumbers('owner'); logAdminAction(req, 'payout_numbers_dedupe', { removed: removed.length }); res.json({ status: 'success', removed: removed.length, details: removed }); }
   catch (e) { res.status(500).json({ status: 'error', message: 'Could not check the payout numbers' }); }
 });
-async function migratePayoutsToMidnightOnce() {
-  const marker = db.collection('meta').doc('payoutDailyMidnight');
+async function migratePayoutsTo24hOnce() {
+  const marker = db.collection('meta').doc('payoutDaily24h');
   if ((await marker.get()).exists) return 0;
   const snap = await db.collection('investments').where('status', '==', 'active').limit(20000).get();
   let n = 0;
@@ -11242,7 +11232,7 @@ connectMongo(MONGODB_URI)
     // not a full-ledger scan) -- worth knowing on the M0 free tier, not
     // expected to be a real problem at Snow's current scale.
     startRewardRepair();
-    migratePayoutsToMidnightOnce().then(n => { if (n) console.log(`Moved ${n} running investments to the midnight payout schedule`); }).catch(e => console.error('Midnight schedule migration:', e.message)).then(() => backfillNextPayoutAt()).then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); armMidnightSweep(); });
+    migratePayoutsTo24hOnce().then(n => { if (n) console.log(`Moved ${n} running investments to the 24-hour payout schedule`); }).catch(e => console.error('24-hour schedule migration:', e.message)).then(() => backfillNextPayoutAt()).then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); });
     dedupeSharedPayoutNumbers('start-up').catch(e => console.error('Shared payout number clean-up:', e.message));
     setInterval(autoApproveWithdrawalsTick, 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);

@@ -23,7 +23,7 @@ async function member(pass, pin, ref) { const su = await J('POST', '/auth/signup
   await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 500000 } }, null, true);
   const A = await member('secret12', '123456', ''); const B = await member('secret34', '123456', A.reg.referralCode);
   const prods = (await J('GET', '/public/products')).j.products.filter(p => p.price > 0).sort((a, b) => a.price - b.price); const p1 = prods[0];
-  // ---- daily cashback at 00:00
+  // ---- daily cashback every 24 hours
   const buy = await J('POST', '/invest/create', { tierKey: p1.key }, B.tok); ok(buy.j.status === 'success', 'B buys ' + p1.name + ' (' + p1.price + ', ' + p1.cycle + ' days)', buy.j);
   const acct = async tok => (await J('GET', '/account', null, tok)).j.account;
   { // the Team page's Purchase tile is what the level BOUGHT (not what it recharged), the member row shows the same, and numbers are hidden as 769****67
@@ -32,14 +32,13 @@ async function member(pass, pin, ref) { const su = await J('POST', '/auth/signup
     ok(tm.members && tm.members[0] && tm.members[0].invested === p1.price && /^\d{3}\*{4}\d{2,3}$/.test(tm.members[0].phoneMasked), 'the member row shows the amount bought and a number like 769****67', tm);
   }
   const w0 = (await acct(B.tok)).walletBalance;
-  await sleep(2500); ok((await acct(B.tok)).walletBalance === w0, 'nothing is paid before the first 00:00');
+  await sleep(2500); ok((await acct(B.tok)).walletBalance === w0, 'nothing is paid before the first 24 hours are over');
   const inv = [...fm.__stores.investments.values()].find(i => i.userId === B.uid); ok(inv && inv.status === 'active', 'investment is active');
-  const off = 180 * 60000, lastMidnight = Math.floor((Date.now() + off) / 86400000) * 86400000 - off;   // the most recent local 00:00 (Uganda)
-  inv.createdAt = new Date(lastMidnight - 3600000); inv.nextPayoutAt = new Date(lastMidnight);   // bought an hour before that midnight: exactly ONE payment is due
+  inv.createdAt = new Date(Date.now() - 86400000 - 1500); inv.nextPayoutAt = new Date(Date.now() - 1500);   // bought 24 hours and a moment ago: exactly ONE payment is due
   await sleep(3500);
   const w1 = (await acct(B.tok)).walletBalance; const one = Math.round(inv.expectedReturn / inv.payoutsTotal);
-  ok(Math.round(w1 - w0) === one && inv.payoutsMade === 1, 'one payment (a ' + inv.payoutsTotal + 'th of the return) lands at the midnight: +' + (w1 - w0) + ' expected ' + one);
-  await sleep(2500); ok((await acct(B.tok)).walletBalance === w1, 'and not again until the next midnight');
+  ok(Math.round(w1 - w0) === one && inv.payoutsMade === 1, 'one payment (a ' + inv.payoutsTotal + 'th of the return) lands 24 hours after the purchase: +' + (w1 - w0) + ' expected ' + one);
+  await sleep(2500); ok((await acct(B.tok)).walletBalance === w1, 'and not again until 24 hours later');
   inv.createdAt = new Date(Date.now() - (inv.payoutsTotal * 86400000 + 5000)); inv.nextPayoutAt = new Date(Date.now() - 1000);
   await sleep(3500);
   const w2 = (await acct(B.tok)).walletBalance; ok(Math.round(w2 - w0) === Math.round(inv.expectedReturn), 'the days that were missed are paid at once and the payments add up to the whole return: +' + (w2 - w0) + ' expected ' + inv.expectedReturn);
@@ -77,5 +76,5 @@ async function member(pass, pin, ref) { const su = await J('POST', '/auth/signup
     ok(ids.every(i => /^[1-9]\d{4}$/.test(String(i))), 'ids are five digits');
     const ua = [...fm.__stores.users.values()].find(u => u.referralCode === A2.reg.referralCode); ok(ua.teamL1Count === N2, "the referrer's Level 1 count is exactly 40: " + ua.teamL1Count);
   }
-  realLog(fails ? fails + ' FAILED' : 'PASS: end-to-end on the real server (sign-up, referral, login, first-purchase commission, daily cashback at 00:00, treasure codes, analytics, withdrawal, concurrent sign-ups)'); process.exit(fails ? 1 : 0);
+  realLog(fails ? fails + ' FAILED' : 'PASS: end-to-end on the real server (sign-up, referral, login, first-purchase commission, daily cashback every 24 hours, treasure codes, analytics, withdrawal, concurrent sign-ups)'); process.exit(fails ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

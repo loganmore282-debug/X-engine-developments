@@ -1583,7 +1583,7 @@ function renderShop(){
   syncSweepPhase($('shopGrid'));
 }
 function investmentStats(){
-  // Settlement is done by the server (a payment at 00:00 every day); this only reshapes what refreshFromServer() stored.
+  // Settlement is done by the server (a payment every 24 hours); this only reshapes what refreshFromServer() stored.
   return (STATE.investments || []).map(function(inv){ return { inv: inv, daysElapsed: inv.daysElapsed, cycleDays: inv.cycleDays, accrued: inv.accrued, matured: inv.matured }; });
 }
 function productByKey(key){ return PRODUCTS.filter(function(p){ return p.key === key; })[0]; }
