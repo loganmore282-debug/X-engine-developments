@@ -1442,18 +1442,25 @@ function genGiftCode() {
 }
 // One flat block, no dashes -- the previous round's own reasoning for
 // referral codes (spoken aloud more often than typed) still holds; a
-// dash in a code someone is reading out over a phone call is one more
-// thing to mishear ("dash" vs "hyphen" vs a pause). Owner: capital letters and numbers, 5 characters, e.g. S62BV, GST3V. The unambiguous alphabet (no
-// I, L, O, 0, 1) in capitals: 31^5 = 28.6 million codes. A code typed in any case still finds its owner (referralCodeLower), and members who already
-// have an older (longer, lowercase) code keep it: it still works as a link and as a typed code.
-const REFERRAL_CHARS = GIFTCODE_UPPER;
-const REFERRAL_LENGTH = 5;
+// dash in a code someone is reading out over a phone call is one more thing to mishear ("dash" vs "hyphen" vs a pause). Owner: referral codes are 6 characters,
+// capital letters and digits, letter-digit-letter-digit-letter-digit, e.g. K9P4M2, X7W8R3, V4N6T9, H8Q2Z5, B3J7Y4. Letters are consonants only (no vowels, so no
+// word can form, and no L or S that look like 1 and 5), digits are 2-9 (no 0 or 1): 19 x 8 per position pair, (19 x 8)^3 = 3.5 million codes. A code typed in any
+// case still finds its owner (referralCodeLower). Members who had an older code are moved to the new format by migrateReferralCodesOnce(); their OLD code is kept in
+// legacyReferralCodeLower and still finds them, so every link already shared keeps working.
+const REFERRAL_LETTERS = 'BCDFGHJKMNPQRTVWXYZ', REFERRAL_DIGITS = '23456789';
+const REFERRAL_CHARS = REFERRAL_LETTERS + REFERRAL_DIGITS;
+const REFERRAL_LENGTH = 6;
+const REFERRAL_FORMAT = /^(?:[BCDFGHJKMNPQRTVWXYZ][2-9]){3}$/;
 function randFromAlphabet(alphabet, n) {
   let s = '';
   for (let i = 0; i < n; i++) s += alphabet[crypto.randomInt(alphabet.length)];
   return s;
 }
-function randCode(n = REFERRAL_LENGTH) { return randFromAlphabet(REFERRAL_CHARS, n); }
+function randCode(n = REFERRAL_LENGTH) {
+  let s = '';
+  for (let i = 0; i < n; i++) s += randFromAlphabet(i % 2 === 0 ? REFERRAL_LETTERS : REFERRAL_DIGITS, 1);
+  return s;
+}
 // Finds the owner of a referral code, ignoring case. Safe precisely because
 // generateUniqueReferralCode() below refuses to issue two codes whose
 // lowercase forms match -- so at most one user can ever answer to a given
@@ -1468,7 +1475,10 @@ async function findUserByReferralCode(code) {
   if (!exact.empty) return exact.docs[0];
   const lower = raw.toLowerCase();
   const byLower = await db.collection('users').where('referralCodeLower', '==', lower).limit(1).get();
-  return byLower.empty ? null : byLower.docs[0];
+  if (!byLower.empty) return byLower.docs[0];
+  // A code the member had BEFORE the 6-character format: still theirs, so a link or a code written down earlier keeps working.
+  const old = await db.collection('users').where('legacyReferralCodeLower', '==', lower).limit(1).get();
+  return old.empty ? null : old.docs[0];
 }
 async function generateUniqueGiftCode() {
   return withLock('giftcode-gen', async () => {
@@ -1486,16 +1496,17 @@ async function generateUniqueReferralCode(userId) {
   return withLock('referral-code-gen', async () => {
     const tryClaim = async (code) => {
       const codeLower = code.toLowerCase();
-      const [exact, byLower] = await Promise.all([
+      const [exact, byLower, byOld] = await Promise.all([
         db.collection('users').where('referralCode', '==', code).limit(1).get(),
         db.collection('users').where('referralCodeLower', '==', codeLower).limit(1).get(),
+        db.collection('users').where('legacyReferralCodeLower', '==', codeLower).limit(1).get(),
       ]);
-      if (!exact.empty || !byLower.empty) return null;
+      if (!exact.empty || !byLower.empty || !byOld.empty) return null;
       await db.collection('users').doc(userId).update({ referralCode: code, referralCodeLower: codeLower });
       return code;
     };
-    // No length-escalation fallback: every new referral code is 5 characters, always. The space (31^5, about 28.6 million) is crowded only
-    // after millions of members, so a few collisions are simply drawn again; 50 in a row would mean something is actually broken, and that
+    // No length-escalation fallback: every new referral code is 6 characters, always. The space (about 3.5 million) is crowded only
+    // after hundreds of thousands of members, so a few collisions are simply drawn again; 50 in a row would mean something is actually broken, and that
     // case throws rather than silently handing out a longer code.
     for (let attempt = 0; attempt < 50; attempt++) {
       const claimed = await tryClaim(randCode(REFERRAL_LENGTH));
@@ -10999,6 +11010,25 @@ app.post('/admin/payout-numbers/dedupe', async (req, res) => {
   try { const removed = await dedupeSharedPayoutNumbers('owner'); logAdminAction(req, 'payout_numbers_dedupe', { removed: removed.length }); res.json({ status: 'success', removed: removed.length, details: removed }); }
   catch (e) { res.status(500).json({ status: 'error', message: 'Could not check the payout numbers' }); }
 });
+// One-time, automatic: every member whose referral code is not in the new 6-character format is given a new one; the old code is kept as legacyReferralCodeLower so it
+// still finds them. Safe to run again (a member already in the new format is skipped; the marker is written only when everyone is done).
+async function migrateReferralCodesOnce() {
+  const marker = db.collection('meta').doc('referralCode6');
+  if ((await marker.get()).exists) return 0;
+  const snap = await db.collection('users').get();
+  let n = 0;
+  for (const d of snap.docs) {
+    const u = d.data(), old = typeof u.referralCode === 'string' ? u.referralCode : '';
+    if (!old || REFERRAL_FORMAT.test(old)) continue;
+    try {
+      await d.ref.update({ legacyReferralCodeLower: old.toLowerCase() });
+      await generateUniqueReferralCode(d.id);
+      n++;
+    } catch (e) { console.error('Referral code migration, member ' + d.id + ':', e.message); }
+  }
+  await marker.set({ at: new Date(), moved: n });
+  return n;
+}
 async function migratePayoutsTo24hOnce() {
   const marker = db.collection('meta').doc('payoutDaily24h');
   if ((await marker.get()).exists) return 0;
@@ -11329,6 +11359,7 @@ connectMongo(MONGODB_URI)
     // not a full-ledger scan) -- worth knowing on the M0 free tier, not
     // expected to be a real problem at Snow's current scale.
     startRewardRepair();
+    migrateReferralCodesOnce().then(n => { if (n) console.log(`Gave ${n} members a 6-character referral code`); }).catch(e => console.error('Referral code migration:', e.message));
     migratePayoutsTo24hOnce().then(n => { if (n) console.log(`Moved ${n} running investments to the 24-hour payout schedule`); }).catch(e => console.error('24-hour schedule migration:', e.message)).then(() => backfillNextPayoutAt()).then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); });
     dedupeSharedPayoutNumbers('start-up').catch(e => console.error('Shared payout number clean-up:', e.message));
     setInterval(autoApproveWithdrawalsTick, 1000);

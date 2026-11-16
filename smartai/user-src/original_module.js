@@ -2643,7 +2643,7 @@ async function doWithdraw(){
 }
 
 /* ====================== INVITE CODE FIELD ====================== */
-// A referral code is 5 capital letters / digits (S62BV). Whatever is typed (lower case, spaces, dashes) is turned into capitals and cut to that length as it goes in.
+// A referral code is 6 capital letters / digits (K9P4M2). Whatever is typed (lower case, spaces, dashes) is turned into capitals and cut to that length as it goes in.
 function capsCode(el, max){
   if (!el) return;
   el.addEventListener('input', function(){
@@ -2651,7 +2651,7 @@ function capsCode(el, max){
     if (v !== el.value) el.value = v;
   });
 }
-capsCode($('fCode'), 5);
+capsCode($('fCode'), 6);
 /* ====================== LUCKY CARDS (Rewards tab) ======================
    Nine cards face down (the AI robots on their backs). Every credited recharge gives one chance; a tap on a card sends ONE request (/lucky/flip): the server draws and pays the prize
    (earnings, or an AI robot the admin listed) and returns it with what the other eight cards would have held. The tapped card lifts and turns over to show the prize, then the

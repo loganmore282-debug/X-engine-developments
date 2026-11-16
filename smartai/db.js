@@ -91,6 +91,7 @@ async function ensureIndexes() {
     ['users',           { referredBy: 1 }],
     ['users',           { referralCode: 1 }],
     ['users',           { referralCodeLower: 1 }],
+    ['users',           { legacyReferralCodeLower: 1 }],   // the referral code a member had before the 6-character format still finds them
     ['users',           { usernameLower: 1 }],
     ['users',           { registrationDone: 1 }],
     ['users',           { phone: 1, registrationDone: 1 }],

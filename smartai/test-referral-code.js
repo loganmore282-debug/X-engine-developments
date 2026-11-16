@@ -1,5 +1,5 @@
 'use strict';
-// Referral codes are 5 characters of capital letters and numbers (S62BV, GST3V); a code typed in any case still finds its owner.
+// Referral codes are 6 characters, capital letters and numbers in the pattern letter-digit x3 (K9P4M2, X7W8R3); a code typed in any case still finds its owner.
 // The Deposit page has a phone-number box (the number the member pays from) right after the amount box, and it is required and sent.
 const fs = require('fs'), crypto = require('crypto');
 const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
@@ -8,13 +8,14 @@ const cut = (a, b) => src.slice(src.indexOf(a), src.indexOf(b));
 let n = 0; const ok = (c, m) => { n++; if (!c) { console.error('FAIL: ' + m); process.exit(1); } };
 const GIFTCODE_UPPER = 'abcdefghjkmnpqrstuvwxyz23456789'.toUpperCase();
 const { randCode, REFERRAL_CHARS, REFERRAL_LENGTH } = new Function('crypto', 'GIFTCODE_UPPER',
-  cut('const REFERRAL_CHARS', 'async function findUserByReferralCode') + '\nreturn { randCode, REFERRAL_CHARS, REFERRAL_LENGTH };')(crypto, GIFTCODE_UPPER);
-ok(REFERRAL_LENGTH === 5, 'referral codes are 5 characters');
+  cut('const REFERRAL_LETTERS', 'async function findUserByReferralCode') + '\nreturn { randCode, REFERRAL_CHARS, REFERRAL_LENGTH };')(crypto, GIFTCODE_UPPER);
+ok(REFERRAL_LENGTH === 6, 'referral codes are 6 characters');
 const codes = Array.from({ length: 20000 }, () => randCode());
-ok(codes.every(c => /^[A-Z0-9]{5}$/.test(c)), 'every code is 5 capital letters / numbers');
+ok(codes.every(c => /^(?:[A-Z][0-9]){3}$/.test(c)), 'every code is letter-digit-letter-digit-letter-digit in capitals');
 ok(codes.some(c => /[A-Z]/.test(c)) && codes.some(c => /[0-9]/.test(c)), 'both letters and numbers occur');
-ok(codes.every(c => !/[ILO01]/.test(c)), 'no I, L, O, 0 or 1 (unambiguous)');
-for (const ex of ['S62BV', 'GST3V']) ok([...ex].every(ch => REFERRAL_CHARS.includes(ch)), 'the owner\'s example ' + ex + ' is a code this generator could produce');
+ok(codes.every(c => !/[AEIOULS01]/.test(c)), 'no vowels, L, S, 0 or 1 (no words, nothing that looks like another character)');
+for (const ex of ['K9P4M2', 'X7W8R3', 'V4N6T9', 'H8Q2Z5', 'B3J7Y4']) ok(/^(?:[BCDFGHJKMNPQRTVWXYZ][2-9]){3}$/.test(ex), 'the owner\'s example ' + ex + ' is a code this generator could produce');
+ok(new Set(codes).size > 19900, 'codes spread out (20,000 drawn, ' + new Set(codes).size + ' different)');
 ok(/referralCodeLower: codeLower/.test(src) && /where\('referralCodeLower', '==', lower\)/.test(src), 'a code typed in any case is found (lower-case twin)');
 ok(/String\(code\)\.toUpperCase\(\)/.test(mod), 'the invite link carries the code in capitals');
 // deposit page (ChocoMCC's: the amount, the network and the number the member pays FROM, which may be a different number from the account's)

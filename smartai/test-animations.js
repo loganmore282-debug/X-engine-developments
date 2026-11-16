@@ -135,9 +135,9 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   const lkf = await p.evaluate(() => { const c = document.querySelectorAll('#lkGrid .lk-card')[4]; c.querySelector('.lk-front').innerHTML = lkFront({ kind: 'cash', amount: 2300 }, true); c.classList.add('flip', 'win'); return new Promise(r => setTimeout(() => r({ tr: getComputedStyle(c.querySelector('.lk-in')).transform, gold: getComputedStyle(c.querySelector('.lk-front')).backgroundImage.indexOf('gradient') >= 0, fx: getComputedStyle(c.querySelector('.lk-fx')).animationName, text: c.querySelector('.lk-front').textContent }), 1100)); });
   ok(lkf.tr !== 'none' && lkf.gold && lkf.fx === 'lkFx' && /UGX 2,300/.test(lkf.text), 'a turned winner card shows its prize on a gold face with a glow: ' + JSON.stringify(lkf));
   await p.evaluate(() => { document.querySelectorAll('#lkGrid .lk-card').forEach(c => c.classList.remove('flip', 'win')); });
-  // a referral code is capitals and 5 characters
+  // a referral code is capitals and 6 characters
   const caps = await p.evaluate(() => { const r = document.getElementById('fCode'); r.value = 'ab-c d9z8'; r.dispatchEvent(new Event('input', { bubbles: true })); const out = { ref: r.value, rUp: getComputedStyle(r).textTransform }; r.value = ''; return out; });
-  ok(caps.ref === 'ABCD9' && caps.rUp === 'uppercase', 'a referral code is capitals and 5 characters (' + caps.ref + ')');
+  ok(caps.ref === 'ABCD9Z' && caps.rUp === 'uppercase', 'a referral code is capitals and 6 characters (' + caps.ref + ')');
   // the tick and the cross on the payment pages
   await p.evaluate(() => { gpDialog('tick', 'Payment Successful!', 'Your wallet has been credited.'); }); await sleep(150);
   ok(await p.evaluate(() => { const pic = document.getElementById('gpDonePic'); return document.getElementById('gpDone').classList.contains('show') && !!pic.querySelector('.ok-check') && getComputedStyle(pic.querySelector('.ok-disc')).animationName === 'anPop'; }), 'a successful payment shows the animated green tick');
