@@ -566,7 +566,7 @@ function roundIconCorners(ctx, size){
 //      pulled away from the background (so no white halo is left around the icon).
 //   4. The result is cropped to the pixels that remain, exactly (no margin), because the app's motion is measured against this box.
 // Pure function over RGBA bytes (no canvas), so it is tested directly in test-icon-cutout.js.
-function smartaiCutout(src, w, h){
+function smartaiCutout(src, w, h, opts){
   const N=w*h, data=new Uint8ClampedArray(src);
   let clear=0; for(let i=3;i<data.length;i+=4) if(data[i]<250) clear++;
   const hasAlpha = clear > N*0.02;
@@ -653,6 +653,24 @@ function smartaiCutout(src, w, h){
       for(let i=0;i<N;i++) if(!keep[i]) A[i]=0;
     }
   }
+  // opts.whites (the payment page logo): EVERY white or near-white pixel goes, also the ones enclosed inside the picture (a white eye, a white plate), softly
+  // (fully clear from 240 up, fading in from 200), then stray specks are dropped. Coloured light pixels (light blue, cream) keep their colour: only low-saturation ones go.
+  if(opts && opts.whites){
+    for(let i=0;i<N;i++){
+      if(A[i]===0) continue; const o=i*4, mn=Math.min(data[o],data[o+1],data[o+2]), mx=Math.max(data[o],data[o+1],data[o+2]);
+      if(mx>0 && (mx-mn)/mx>0.12) continue;
+      const t=Math.max(0,Math.min(1,(mn-200)/40));
+      if(t>0) A[i]=Math.round(A[i]*(1-t));
+    }
+    const seenW=new Uint8Array(N), stackW=new Int32Array(N), pieces=[]; let biggest=0;
+    for(let i=0;i<N;i++){
+      if(A[i]<=8||seenW[i]) continue; const m=[]; let sp=0; stackW[sp++]=i; seenW[i]=1;
+      while(sp){ const idx=stackW[--sp]; m.push(idx); const x=idx%w, y=(idx/w)|0;
+        for(const n of [x>0?idx-1:-1, x<w-1?idx+1:-1, y>0?idx-w:-1, y<h-1?idx+w:-1]){ if(n>=0&&!seenW[n]&&A[n]>8){ seenW[n]=1; stackW[sp++]=n; } } }
+      pieces.push(m); if(m.length>biggest) biggest=m.length;
+    }
+    for(const m of pieces) if(m.length<biggest*0.02) for(const idx of m) A[idx]=0;
+  }
   // crop exactly to what is visible
   let x0=w, y0=h, x1=-1, y1=-1;
   for(let y=0;y<h;y++) for(let x=0;x<w;x++){ if(A[y*w+x]>8){ if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; } }
@@ -671,7 +689,7 @@ const SMARTAI_ICON_LABELS = { home:'Home tab', robots:'AI Robots tab, My AI robo
 // The four that are animations (the owner's recordings). A picture uploaded for one stands still in its place; Back to default brings the animation back.
 const SMARTAI_ANIM_KEYS = ['loader', 'level1', 'level2', 'level3', 'tick', 'cross'];
 // An uploaded file -> a transparent, tightly cropped PNG data URL (longest side at most `maxDim`).
-function fileToCutoutPng(file, maxDim){
+function fileToCutoutPng(file, maxDim, opts){
   return new Promise((resolve,reject)=>{
     if(!file) return reject(new Error('No file'));
     if(!/^image\//.test(file.type||guessMimeFromName(file.name))) return reject(new Error('Please choose an image file'));
@@ -688,7 +706,7 @@ function fileToCutoutPng(file, maxDim){
         const c=document.createElement('canvas'); c.width=w; c.height=h;
         const ctx=c.getContext('2d'); ctx.imageSmoothingQuality='high'; ctx.drawImage(img,0,0,w,h);
         let id; try{ id=ctx.getImageData(0,0,w,h); }catch(e){ return reject(new Error('Could not process the image')); }
-        const r=smartaiCutout(id.data,w,h);
+        const r=smartaiCutout(id.data,w,h,opts);
         if(r.empty) return reject(new Error('Nothing was left after removing the background. Try a picture whose background differs from the icon.'));
         const o=document.createElement('canvas'); o.width=r.w; o.height=r.h;
         o.getContext('2d').putImageData(new ImageData(r.data,r.w,r.h),0,0);
@@ -2975,10 +2993,10 @@ function drawPayNumbers(){
     <p class="muted" style="margin:0 0 12px">These are the MTN and Airtel numbers members send their recharge to. On the payment page a member picks MTN or Airtel and is shown one of your numbers of that network for 15 minutes (a new order every time; several numbers of one network are used in turn). The member then pastes the payment SMS or the transaction ID, and the claim waits under <b>Deposits &rarr; Needs Review</b> for you to Force-credit or Reject. Until you add at least one number, members cannot recharge.</p>
     <div class="panel-card" style="margin-bottom:14px">
       <h3 style="margin:0 0 4px;font-size:15px">Payment page logo</h3>
-      <p class="muted" style="margin:0 0 10px;font-size:12px">The picture at the top of both payment pages (where the old gateway showed its own logo). Upload it as it is: the background around it is removed for you and the picture is cropped tight. Until you upload one, the AI robot shows.</p>
+      <p class="muted" style="margin:0 0 10px;font-size:12px">The picture at the top of both payment pages (where the old gateway showed its own logo). Upload it as it is: the background around it AND every white inside it are removed for you, and the picture is cropped tight. Until you upload one, the AI robot shows.</p>
       <div class="banner-row">
         ${_payLogoNow ? `<img class="img-thumb alpha" style="width:64px;height:64px" src="${esc(_payLogoNow)}" alt="">` : '<div class="img-thumb" style="opacity:.25;width:64px;height:64px"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px">${_payLogoNow ? 'Your picture (background removed)' : '<span class="muted">Built-in AI robot</span>'}</div>
+        <div style="flex:1;min-width:0;font-size:12px">${_payLogoNow ? 'Your picture (background and whites removed)' : '<span class="muted">Built-in AI robot</span>'}</div>
         ${_payLogoNow ? '<button class="btn danger sm" id="plClear" type="button">Remove</button>' : ''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload payment page logo<input type="file" id="plFile" accept="image/*" hidden></label>
@@ -3000,8 +3018,8 @@ function drawPayNumbers(){
   if (plFile) plFile.addEventListener('change', async ev => {
     const f = ev.target.files[0]; if (!f) return; ev.target.value = '';
     try {
-      toast('Removing the background…', 'ok');
-      const image = await fileToCutoutPng(f, 640);
+      toast('Removing the background and the whites…', 'ok');
+      const image = await fileToCutoutPng(f, 640, { whites: true });
       const d = await api('/admin/smartai-image/set', { slot: 'paylogo', image });
       toast(d.status === 'success' ? 'Payment page logo saved' : (d.message || 'Failed'), d.status === 'success' ? 'ok' : 'err');
       if (d.status === 'success') renderPayNumbers();

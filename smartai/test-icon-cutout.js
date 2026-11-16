@@ -58,4 +58,15 @@ const alphaAt = (r, x, y) => r.data[(y * r.w + x) * 4 + 3];
 ok(/fileToCutoutPng\(f, 640\)/.test(admin) && /iconFile_\$\{k\}/.test(admin) && /SMARTAI_ICON_LABELS = \{ home:/.test(admin), 'the Icons box is on the Banners tab');
 const srv = fs.readFileSync(__dirname + '/server.js', 'utf8');
 ok(/SMARTAI_ICON_SLOTS = \['home'/.test(srv) && /Icons must be PNG pictures/.test(srv), 'the server knows the icon slots and only takes PNGs for them');
+
+// 6. the payment page logo (opts.whites): the white background AND the whites inside go; coloured light pixels stay; specks are dropped
+{ const w = 160, h = 160, d = canvas(w, h, [255, 255, 255]); disc(d, w, 80, 80, 60, [30, 90, 200]); disc(d, w, 80, 80, 20, [255, 255, 255]); disc(d, w, 52, 60, 8, [248, 250, 252]); disc(d, w, 110, 100, 10, [190, 225, 255]);
+  const r = smartaiCutout(d, w, h, { whites: true }); const at = (x, y) => r.data[(Math.round(y - (80 - 60)) * r.w + Math.round(x - (80 - 60))) * 4 + 3];
+  ok(!r.empty && alphaAt(r, 0, 0) === 0, 'whites mode: the white background is gone');
+  ok(at(80, 80) === 0, 'whites mode: the white centre inside the picture is gone too');
+  ok(at(52, 60) === 0, 'whites mode: an off-white spot inside is gone');
+  ok(at(110, 100) === 255 && r.data[((100 - 20) * r.w + (110 - 20)) * 4 + 2] > 240, 'whites mode: a light BLUE spot keeps its colour and stays solid');
+  ok(at(80, 38) === 255, 'whites mode: the coloured body stays solid');
+  const plain = smartaiCutout(d, w, h); ok(plain.data[((80 - 20) * plain.w + (80 - 20)) * 4 + 3] === 255, 'the normal mode still keeps an enclosed white centre'); }
+
 console.log('PASS: icon cut-out (' + n + ' checks)');

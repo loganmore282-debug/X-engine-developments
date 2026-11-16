@@ -1870,11 +1870,11 @@ function renderQuickAmounts(){
   var seen = {}, out = [];
   amounts.sort(function(a, b){ return a - b; }).forEach(function(n){ if (n > 0 && !seen[n]) { seen[n] = 1; out.push(n); } });
   if (out.length < 3) [2, 5, 10].forEach(function(m){ if (min * m > 0 && !seen[min * m]) { seen[min * m] = 1; out.push(min * m); } });
-  var tri = '<i class="gp-tri"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></i>';
+  var tri = '<span class="net-check" aria-hidden="true"></span>';
   $('quickAmts').innerHTML = out.slice(0, 6).map(function(n){ return '<button type="button" class="quick-amt-chip" data-amt="' + n + '" onclick="$(\'depAmt\').value=this.dataset.amt;markQuickAmt()">' + ugx(n) + tri + '</button>'; }).join('');
   markQuickAmt();
 }
-// The chip whose amount is in the box wears the same gold corner tick as the chosen network card (it springs in); typing another figure takes it off.
+// The chip whose amount is in the box wears the blue round tick the network cards used to have (it pops in); typing another figure takes it off.
 function markQuickAmt(){
   var v = String(parseInt($('depAmt').value, 10) || ''), chips = document.querySelectorAll('#quickAmts .quick-amt-chip');
   for (var i = 0; i < chips.length; i++) chips[i].classList.toggle('on', chips[i].dataset.amt === v);
