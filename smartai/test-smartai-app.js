@@ -129,6 +129,8 @@ async function member(ref) {
   ok(await ev(() => { const r = document.querySelector('#lkGrid .lk-card:nth-child(5)').getBoundingClientRect(), el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!(el && el.closest('.lk-card')); }), 'and 0.6 s later the cards take taps again');
   await page.click('#lkGrid .lk-card:nth-child(1)'); await sleep(500);
   ok(/Recharge to get a chance/.test(await toastText()) && await ev(() => document.querySelectorAll('#lkGrid .lk-card.flip').length) === 0, 'tapping a card with no chance says to recharge and turns nothing over');
+  await sleep(1100);
+  ok(await ev(() => document.querySelectorAll('#lkGrid .shake-x').length) === 0, 'the shake marker is gone once the shake has finished, so going away and coming back to Raffle never replays it');
   const before = await ev(() => STATE.balance);
   ok((await J('POST', '/checkin', {}, MEtok)).s === 200, 'the check-in endpoint still pays (API)');
   ok((await J('POST', '/checkin', {}, MEtok)).j.code === 'ALREADY_CHECKED_IN', 'a second check-in the same day is refused by the server');

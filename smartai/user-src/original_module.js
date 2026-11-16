@@ -2334,6 +2334,8 @@ function shakeVibrate(){
     el.classList.remove('shake-x');
     void el.offsetWidth;
     el.classList.add('shake-x');
+    // The marker is taken off when the shake ends: left on, the browser replays the shake every time the page holding it is shown again (the Raffle card shook again after going away and coming back).
+    (function(node){ var off = function(){ node.classList.remove('shake-x'); node.removeEventListener('animationend', off); }; node.addEventListener('animationend', off); setTimeout(off, 900); })(el);
   }
   if (navigator.vibrate) navigator.vibrate([60, 40, 60]);
 }
