@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Puts a bought domain on Smart AI: nginx, the HTTPS certificate and the payment callback address, in one command.
-#   bash /srv/smartai-src/smartai/deploy/set-domain.sh yourdomain.com
-# The member app goes on  app.yourdomain.com  and the hidden admin panel on a random-looking address (shown at the end).
+#   bash /srv/smartai-src/smartai/deploy/set-domain.sh yourdomain.com          the member app goes STRAIGHT on  yourdomain.com  (no subdomain)
+#   bash /srv/smartai-src/smartai/deploy/set-domain.sh yourdomain.com app      (optional second word: a subdomain instead, here app.yourdomain.com)
+# The hidden admin panel is on a random-looking address (shown at the end; members never see it).
 # FIRST add two DNS "A" records at the place the domain is managed, both pointing to this server (the command prints them, and changes
-# NOTHING until they exist):   app   and   the admin label it shows.      Nothing here touches Soda or Cookie.
+# NOTHING until they exist): one for the bare domain (name @) and one for the admin label it shows.      Nothing here touches Soda or Cookie.
 set -u
 [ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,9 +22,14 @@ if [ -z "$RAW" ]; then
 fi
 DOM=$(printf '%s' "$RAW" | tr 'A-Z' 'a-z' | sed -E 's#^https?://##; s#/.*$##; s#^www\.##')
 printf '%s' "$DOM" | grep -Eq '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$' || { echo "Not understood: $RAW   (write it like  yourdomain.com)"; exit 1; }
-LABEL=${2:-app}
-printf '%s' "$LABEL" | grep -Eq '^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$' || { echo "The first word must be letters/digits, e.g.  app"; exit 1; }
-APP="$LABEL.$DOM"
+LABEL=${2:-@}
+case "$LABEL" in @|-|bare|none|straight) LABEL="" ;; esac
+if [ -n "$LABEL" ]; then
+  printf '%s' "$LABEL" | grep -Eq '^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$' || { echo "The second word must be letters/digits, e.g.  app   (leave it out to use the bare domain)"; exit 1; }
+  APP="$LABEL.$DOM"
+else
+  APP="$DOM"                                   # the member app straight on the bare domain
+fi
 CURADMIN=""; [ -s "$ADMIN_HOST_FILE" ] && CURADMIN=$(tr -d '[:space:]' < "$ADMIN_HOST_FILE")
 case "$CURADMIN" in *".$DOM") ADMIN=$CURADMIN ;; *) ADMIN="${SMARTAI_ADMIN_LABEL:-$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-6)}.$DOM" ;; esac
 # The admin address is chosen once and remembered, so the DNS record you add is the one the next run expects.
@@ -34,9 +40,9 @@ MYIP=$(curl -4 -s --max-time 8 https://ifconfig.me || true)
 [ -n "$MYIP" ] || MYIP=$(curl -4 -s --max-time 8 https://icanhazip.com | tr -d '[:space:]' || true)
 echo "This server's address: ${MYIP:-unknown}"
 echo; echo "DNS records needed at your domain's DNS page (type A, pointing to ${MYIP:-this server}):"
-echo "    Name: ${APP%%.$DOM}        (that is $APP)"
+if [ "$APP" = "$DOM" ]; then echo "    Name: @            (that is $APP, the bare domain itself)"; else echo "    Name: ${APP%%.$DOM}        (that is $APP)"; fi
 echo "    Name: ${ADMIN%%.$DOM}      (that is $ADMIN, the hidden admin address)"
-echo "    No record is needed for the bare domain or www."
+if [ "$APP" = "$DOM" ]; then echo "    (optional: a record named www too, if you want www.$DOM to work; it is not needed)"; else echo "    No record is needed for the bare domain or www."; fi
 MISSING=""
 for H in "$APP" "$ADMIN"; do
   HIP=$(getent ahostsv4 "$H" 2>/dev/null | awk '{print $1; exit}')

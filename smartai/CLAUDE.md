@@ -722,3 +722,9 @@ smooth modern flip, a reward is shown when tapped: a product or earnings; I set 
 ## Number VIP levels (2026-11-16, admin v37)
 Admin > Products has a **Number VIP levels** button: `POST /admin/products/number-vips` (owner only) gives the non-deleted products VIP 1, 2, 3 ... in the arrangement the list shows (position `order`, then price), writes only
 the ones that differ, drops the VIP cache (so members' levels follow at once) and logs `products_vip_numbered`. Moving products around and tapping again renumbers them. `test-vip-number.js`.
+
+## The domain smartai-hub.site, used straight (2026-11-16)
+Owner: "I don't want subdomain, I need it straight." `deploy/set-domain.sh smartai-hub.site` now puts the member app on the **bare domain** (no `app.`); a second word (`... app`) still gives a subdomain.
+The hidden admin panel stays on its own random label (`xxxxxx.smartai-hub.site`, chosen once and remembered, shown at the end). DNS: an A record named `@` and one for that label, both to the server's IP.
+`https://smartai-hub.site` and `https://www.smartai-hub.site` are in `CORS_ALLOWED_ORIGINS`. `baseDomain` / `blockRootDomain` in the settings still name smartai-platform.com, so the new bare domain is NOT parked.
+Then: GitHub webhook payload URL -> `https://smartai-hub.site/k7x2/deploy/webhook`; `make-hook-url.sh` for the secret payment-callback address; members reinstall the PWA from the new address.

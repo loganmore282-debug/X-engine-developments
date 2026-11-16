@@ -221,6 +221,8 @@ app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 // this copy -- it has no business reaching Smart AI's database.
 const CORS_ALLOWED_ORIGINS = new Set([
   'https://smartai-platform.com', 'https://www.smartai-platform.com',
+  // Owner, 2026-11-16: the domain he bought for Smart AI, used STRAIGHT (the bare domain, no app. in front); www. is allowed too in case he points it here.
+  'https://smartai-hub.site', 'https://www.smartai-hub.site',
   // The real domain the owner actually bought (2026-09-29). app./qumx.
   // are the two frontend subdomains nginx-smartai.conf.template serves;
   // api. itself never needs to be in this list (a same-origin API call
