@@ -317,7 +317,7 @@ async function _syncArtwork(){
 // The pictures of the app are the owner's built-in icon pack (/icons/<name>.webp); a picture uploaded in Admin > Banners > Icons for the same name replaces it.
 var STATE_ICONS = {};
 // ICON_VER: raise it whenever a built-in picture in user/icons/ is replaced, so a phone that kept the old file under the same address fetches the new one.
-var ICON_VER = '70';
+var ICON_VER = '71';
 function iconUrl(name){ return (STATE_ICONS && STATE_ICONS[name]) || '/icons/' + name + '.webp?v=' + ICON_VER; }
 function customIcon(name){ return (STATE_ICONS && STATE_ICONS[name]) || ''; }
 function paintIcons(){
