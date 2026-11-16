@@ -425,7 +425,12 @@
      instead of squeezing every chip narrower. */
   .quick-amt-row{display:flex;flex-wrap:wrap;gap:8px;margin:-6px 0 14px;}
   .quick-amt-chip{flex:1 1 28%;min-width:0;padding:10px 4px;border-radius:12px;border:1.5px solid var(--line);background:var(--cream);color:var(--cocoa-soft);font-weight:700;font-size:12.5px;}
+  .quick-amt-chip{position:relative;overflow:hidden;transition:border-color .2s,background .2s,box-shadow .2s,transform .1s;}
   .quick-amt-chip:active{transform:scale(.97);}
+  .quick-amt-chip.on{border-color:#c5ac84;background:#fff6ef;box-shadow:0 4px 12px rgba(217,147,51,.28);}
+  .quick-amt-chip .gp-tri{position:absolute;right:0;bottom:0;width:23px;height:23px;background:#daaa58;clip-path:polygon(100% 0,100% 100%,0 100%);transform:scale(0);transform-origin:100% 100%;transition:transform .24s cubic-bezier(.2,1.5,.4,1);}
+  .quick-amt-chip .gp-tri svg{position:absolute;right:2px;bottom:2px;width:11px;height:11px;}
+  .quick-amt-chip.on .gp-tri{transform:scale(1);}
   .famt:focus{border-color:var(--caramel);}
   .calc-row{display:flex;justify-content:space-between;font-size:13px;padding:9px 0;border-bottom:1px dashed var(--line);}
   .calc-row:last-child{border-bottom:none;font-weight:800;font-size:14.5px;}
@@ -884,6 +889,7 @@
 .lk-card.dim .lk-front{filter:saturate(.55) brightness(.93);opacity:.85;}
 .lk-card:active:not(.flip):not(.lift) .lk-in{transform:scale(.96);transition-duration:.15s;}
 .lk-grid.busy .lk-card:not(.lift):not(.flip){opacity:.78;}
+.lk-grid.settle .lk-card{pointer-events:none;}
 .lk-grid.locked .lk-card,.lk-grid.idle .lk-card:not(.flip){filter:grayscale(.45) brightness(.9);}
 .lk-grid.idle .lk-mark,.lk-grid.locked .lk-mark{animation:none;opacity:.75;}
 .lk-burst{position:absolute;left:50%;top:50%;width:0;height:0;pointer-events:none;z-index:5;}
@@ -1308,7 +1314,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
     <div class="info-box">Minimum deposit <b id="depMin">UGX 0</b>. Funds are added to your wallet once your mobile-money payment is confirmed.</div>
     <div class="form-card">
       <span class="flabel">Amount (UGX)</span>
-      <input class="famt" id="depAmt" type="number" inputmode="numeric" placeholder="0" oninput="capAmountInput(this)">
+      <input class="famt" id="depAmt" type="number" inputmode="numeric" placeholder="0" oninput="capAmountInput(this);markQuickAmt()">
       <div class="quick-amt-row" id="quickAmts"></div>
       <button class="btn btn-primary btn-block" id="depGoBtn" onclick="continueDeposit()">Continue</button>
     </div>

@@ -120,6 +120,13 @@ async function member(ref) {
   const lk0 = await ev(() => ({ cards: document.querySelectorAll('#lkGrid .lk-card').length, backs: [...document.querySelectorAll('#lkGrid .lk-bimg')].every(i => /robots/.test(i.getAttribute('src'))), checkin: !!document.getElementById('checkinBtn') || !!document.getElementById('calGrid'),
     gift: !!document.getElementById('giftBoxBtn') || !!document.getElementById('giftRevealBg') || /Gift Code/.test(document.getElementById('viewRewards').textContent), ch: document.getElementById('lkChances').textContent, rech: getComputedStyle(document.getElementById('lkRecharge')).display }));
   ok(lk0.cards === 9 && lk0.backs && !lk0.checkin && !lk0.gift && lk0.ch === '0' && lk0.rech !== 'none', 'Rewards shows nine face-down cards with the AI robot on their backs, no check-in and no gift code, and a Recharge button while there is no chance: ' + JSON.stringify(lk0));
+  // the tap that opened the page must not reach the card that appears under the finger (the Home Raffle button sits where a card is)
+  await ev(() => { switchTab('shop'); }); await sleep(300);
+  const ghost = await ev(() => { switchTab('rewards'); const r = document.querySelector('#lkGrid .lk-card:nth-child(5)').getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, el = document.elementFromPoint(x, y);
+    const card = document.querySelector('#lkGrid .lk-card:nth-child(5)'); card.click(); return { onCard: !!(el && el.closest && el.closest('.lk-card')), shook: card.classList.contains('shake-x'), toast: document.getElementById('toast').className }; });
+  ok(!ghost.onCard && !ghost.shook, 'right after the Raffle page opens, a tap landing on a card does nothing (no shake): ' + JSON.stringify(ghost));
+  await sleep(800);
+  ok(await ev(() => { const r = document.querySelector('#lkGrid .lk-card:nth-child(5)').getBoundingClientRect(), el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!(el && el.closest('.lk-card')); }), 'and 0.6 s later the cards take taps again');
   await page.click('#lkGrid .lk-card:nth-child(1)'); await sleep(500);
   ok(/Recharge to get a chance/.test(await toastText()) && await ev(() => document.querySelectorAll('#lkGrid .lk-card.flip').length) === 0, 'tapping a card with no chance says to recharge and turns nothing over');
   const before = await ev(() => STATE.balance);
@@ -190,6 +197,10 @@ async function member(ref) {
   await ev(() => syncPublicConfig()); await sleep(600);
   await ev(() => openOverlay('deposit')); await sleep(700);
   ok(await ev(() => !document.getElementById('depNetworkRow') && !document.getElementById('depPhone') && document.getElementById('depGoBtn').textContent === 'Continue'), 'Add Funds has only the amount and Continue (no network, no number)');
+  const qa = await ev(() => { const chips = [...document.querySelectorAll('#quickAmts .quick-amt-chip')]; chips[1].click(); const c = chips[1], t = c.querySelector('.gp-tri'); return new Promise(r => setTimeout(() => r({ n: chips.length, on: chips.filter(x => x.classList.contains('on')).length, val: document.getElementById('depAmt').value === c.dataset.amt, scale: getComputedStyle(t).transform, tri: getComputedStyle(t).backgroundColor, dur: getComputedStyle(t).transitionDuration, other: getComputedStyle(chips[0].querySelector('.gp-tri')).transform }), 400)); });
+  ok(qa.n >= 3 && qa.on === 1 && qa.val && /matrix\(1, 0, 0, 1/.test(qa.scale) && qa.tri === 'rgb(218, 170, 88)' && qa.dur === '0.24s' && /matrix\(0, 0, 0, 0/.test(qa.other), 'tapping an amount fills the box and marks it with the gold corner tick (the one on the network card), the others stay unmarked: ' + JSON.stringify(qa));
+  await ev(() => { const i = document.getElementById('depAmt'); i.value = '12345'; i.dispatchEvent(new Event('input', { bubbles: true })); });
+  ok(await ev(() => document.querySelectorAll('#quickAmts .quick-amt-chip.on').length) === 0, 'typing another figure takes the tick off');
   await ev(() => { document.getElementById('depAmt').value = '30000'; continueDeposit(); }); await sleep(900);
   const gpToastText = () => ev(() => document.getElementById('gpToast').textContent);
   const gp1 = await ev(() => { const o = document.getElementById('ovGpPick'), card = document.querySelector('.gp-card1'), logo = document.querySelector('#ovGpPick .gp-logo1'); return { on: o.classList.contains('show'), amt: document.getElementById('gpAmt1').textContent, icon: logo.getAttribute('data-icon'), src: logo.getAttribute('src'), grad: /gradient/.test(getComputedStyle(o).backgroundImage), card: getComputedStyle(card).backgroundColor, btn: getComputedStyle(document.getElementById('gpConfirm')).backgroundImage.includes('gradient') }; });

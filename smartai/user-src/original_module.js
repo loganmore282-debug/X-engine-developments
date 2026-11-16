@@ -1703,6 +1703,7 @@ function switchTab(name){
   if (tapped) { tapped.classList.remove('tab-tapped'); void tapped.offsetWidth; tapped.classList.add('tab-tapped'); }
   hideOverlays(); _ovOpen = false;
   window.scrollTo(0, 0);
+  if (name === 'rewards') lkSettle();
   if (name === 'rewards' && _lastTab !== 'rewards' && typeof lkResetIfDone === 'function') lkResetIfDone();
   if (STATE && (name === 'rewards' || name === 'team' || name === 'share' || name === 'home')) renderAll();
   if (name === 'account' && STATE && _lastTab !== 'account') countMyBalances();
@@ -1869,7 +1870,14 @@ function renderQuickAmounts(){
   var seen = {}, out = [];
   amounts.sort(function(a, b){ return a - b; }).forEach(function(n){ if (n > 0 && !seen[n]) { seen[n] = 1; out.push(n); } });
   if (out.length < 3) [2, 5, 10].forEach(function(m){ if (min * m > 0 && !seen[min * m]) { seen[min * m] = 1; out.push(min * m); } });
-  $('quickAmts').innerHTML = out.slice(0, 6).map(function(n){ return '<button type="button" class="quick-amt-chip" data-amt="' + n + '" onclick="$(\'depAmt\').value=this.dataset.amt">' + ugx(n) + '</button>'; }).join('');
+  var tri = '<i class="gp-tri"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></i>';
+  $('quickAmts').innerHTML = out.slice(0, 6).map(function(n){ return '<button type="button" class="quick-amt-chip" data-amt="' + n + '" onclick="$(\'depAmt\').value=this.dataset.amt;markQuickAmt()">' + ugx(n) + tri + '</button>'; }).join('');
+  markQuickAmt();
+}
+// The chip whose amount is in the box wears the same gold corner tick as the chosen network card (it springs in); typing another figure takes it off.
+function markQuickAmt(){
+  var v = String(parseInt($('depAmt').value, 10) || ''), chips = document.querySelectorAll('#quickAmts .quick-amt-chip');
+  for (var i = 0; i < chips.length; i++) chips[i].classList.toggle('on', chips[i].dataset.amt === v);
 }
 function prepareDeposit(){
   $('depMin').textContent = ugx(getSettings().minDeposit);
@@ -2448,6 +2456,12 @@ var LK_CARDS = 9;
 var _lk = { built: false, busy: false, revealed: false, timers: [] };
 var LK_STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.5 6.1 6.6.5-5 4.3 1.6 6.4L12 16.4 6.3 19.9l1.6-6.4-5-4.3 6.6-.5z" fill="currentColor"/></svg>';
 function lkInfo(){ return (STATE && STATE.lucky) || { on: false, vip: 0, chances: 0, minVip: 0, minAmount: 0, maxAmount: 0, hasProducts: false }; }
+// The Raffle page opens under the finger that tapped the Home button (or the tab): that tap's click must not land on the card that appears there and shake it. The cards ignore touches for 0.6 s.
+function lkSettle(){
+  var g = $('lkGrid'); if (!g) return;
+  _lk.enterAt = Date.now(); g.classList.add('settle');
+  clearTimeout(_lk.settleT); _lk.settleT = setTimeout(function(){ g.classList.remove('settle'); }, 600);
+}
 function lkLater(fn, ms){ var t = setTimeout(fn, ms); _lk.timers.push(t); return t; }
 function lkClearTimers(){ _lk.timers.forEach(clearTimeout); _lk.timers = []; }
 function lkBuild(){
@@ -2509,7 +2523,7 @@ function lkSparks(card){
 }
 async function lkTap(i){
   var l = lkInfo(), cards = $('lkGrid').children, card = cards[i];
-  if (_lk.busy) return;
+  if (_lk.busy || Date.now() - (_lk.enterAt || 0) < 600) return;
   if (_lk.revealed) { toast('Tap Flip again for another card'); return; }
   if (l.on === false) { toast('Lucky Cards are not available right now'); shakeVibrate(card); return; }
   if (l.minVip > 0 && l.vip < l.minVip) { toast('Reach VIP ' + l.minVip + ' to open your cards'); shakeVibrate(card); return; }
