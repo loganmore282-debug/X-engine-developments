@@ -173,7 +173,7 @@
   .auth-mark{position:relative;width:64px;height:64px;border-radius:20px;background:#fff;border:1px solid var(--line);
     display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-lg);margin-bottom:18px;}
   .auth-title{font-size:28px;margin-bottom:6px;}
-  .auth-sub{color:var(--cocoa-faint);font-size:14.5px;margin-bottom:28px;line-height:1.5;}
+  .auth-sub{color:var(--cocoa-faint);font-size:14.5px;margin-bottom:20px;line-height:1.5;}
   /* Each auth field is its own separate curved, floating box -- same
      .field style used everywhere else in the app (Add Funds, Bind Bank
      Card, etc.) instead of one merged card with row dividers. */
@@ -330,6 +330,21 @@
   body.pf-on .auth-switch-btn{border-color:rgba(150,200,255,.45);color:#cfe0fb;}
   body.pf-on .auth-switch-btn b{color:#8fcaff;}
   body.pf-on .auth-err{background:rgba(255,90,110,.2);color:#ffb3bd;}
+  /* The hero picture melts into the animated field (no straight edge where it ends), and the form sits higher. */
+  body.pf-on .auth-banner{height:206px;margin-bottom:-92px;-webkit-mask-image:linear-gradient(180deg,#000 0%,#000 56%,transparent 100%);mask-image:linear-gradient(180deg,#000 0%,#000 56%,transparent 100%);}
+  body.pf-on .auth-banner::after{background:linear-gradient(160deg,rgba(19,122,239,.32),rgba(11,42,91,.38) 70%);}
+  .auth-card .field{margin-bottom:11px;}
+  /* Opening the screen and switching between Sign In and Create Account: the words and the fields flow in one after another. */
+  @keyframes authIn{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
+  .auth-in .auth-title,.auth-in .auth-sub,.auth-in .auth-card .field,.auth-in .auth-btn,.auth-in .auth-switch-btn{animation:authIn .5s cubic-bezier(.22,.8,.3,1) both;animation-delay:var(--ad,0s);}
+  .auth-in .auth-card .field:nth-child(1){--ad:.08s;}
+  .auth-in .auth-card .field:nth-child(2){--ad:.12s;}
+  .auth-in .auth-card .field:nth-child(3){--ad:.16s;}
+  .auth-in .auth-card .field:nth-child(4){--ad:.2s;}
+  .auth-in .auth-card .field:nth-child(5){--ad:.24s;}
+  .auth-in .auth-btn{--ad:.28s;}
+  .auth-in .auth-switch-btn{--ad:.32s;}
+  @media (prefers-reduced-motion:reduce){#authScreen.auth-in .auth-title,#authScreen.auth-in .auth-sub,#authScreen.auth-in .auth-card .field,#authScreen.auth-in .auth-btn,#authScreen.auth-in .auth-switch-btn{animation:none;}}
   /* Every page has a compact blue curved header like Potato's: a plain white chevron at the left and the page name centred in white. */
   .ov-top{position:relative;z-index:6;height:calc(52px + env(safe-area-inset-top,0px));margin-bottom:12px;background:radial-gradient(circle at 90% 10%,rgba(255,255,255,.16) 0,rgba(255,255,255,0) 40%),linear-gradient(135deg,#2b88f3,#0a4fc6);border-radius:0 0 24px 24px;box-shadow:0 10px 22px -14px rgba(11,42,91,.6);}
   .ov-back{position:absolute;left:6px;top:calc(env(safe-area-inset-top,0px) + 4px);width:44px;height:44px;border:none;background:none;color:#fff;display:flex;align-items:center;justify-content:center;}

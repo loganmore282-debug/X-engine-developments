@@ -576,6 +576,7 @@ function setAuthMode(mode){
   $('authErr').style.display = 'none';
   $('authGo').textContent = reg ? 'Create Account' : 'Continue';
   paintAuthArt();
+  var scr = $('authScreen'); if (scr) { scr.classList.remove('auth-in'); void scr.offsetWidth; scr.classList.add('auth-in'); }   // the words and fields flow in one after another
 }
 // A shared invitation link: .../share.html?v=<stamp>&code=<CODE>, .../#/inviteRegister?invitecode=<CODE>, .../?ref=<CODE>, .../refCode=<CODE>. All of them
 // land on Create Account with the code already filled in. A referral code is case-sensitive on the server, so it is never changed.
