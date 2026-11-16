@@ -329,22 +329,11 @@
   body.pf-on .auth-card .phone-prefix{color:#e6efff;}
   body.pf-on .auth-switch-btn{border-color:rgba(150,200,255,.45);color:#cfe0fb;}
   body.pf-on .auth-switch-btn b{color:#8fcaff;}
-  body.pf-on .auth-err{background:rgba(255,90,110,.2);color:#ffb3bd;}
+  body.pf-on .auth-err{background:rgba(194,59,75,.5);color:#fff;}
   /* The hero picture melts into the animated field (no straight edge where it ends), and the form sits higher. */
   body.pf-on .auth-banner{height:206px;margin-bottom:-92px;-webkit-mask-image:linear-gradient(180deg,#000 0%,#000 56%,transparent 100%);mask-image:linear-gradient(180deg,#000 0%,#000 56%,transparent 100%);}
   body.pf-on .auth-banner::after{background:linear-gradient(160deg,rgba(19,122,239,.32),rgba(11,42,91,.38) 70%);}
   .auth-card .field{margin-bottom:11px;}
-  /* Opening the screen and switching between Sign In and Create Account: the words and the fields flow in one after another. */
-  @keyframes authIn{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
-  .auth-in .auth-title,.auth-in .auth-sub,.auth-in .auth-card .field,.auth-in .auth-btn,.auth-in .auth-switch-btn{animation:authIn .5s cubic-bezier(.22,.8,.3,1) both;animation-delay:var(--ad,0s);}
-  .auth-in .auth-card .field:nth-child(1){--ad:.08s;}
-  .auth-in .auth-card .field:nth-child(2){--ad:.12s;}
-  .auth-in .auth-card .field:nth-child(3){--ad:.16s;}
-  .auth-in .auth-card .field:nth-child(4){--ad:.2s;}
-  .auth-in .auth-card .field:nth-child(5){--ad:.24s;}
-  .auth-in .auth-btn{--ad:.28s;}
-  .auth-in .auth-switch-btn{--ad:.32s;}
-  @media (prefers-reduced-motion:reduce){#authScreen.auth-in .auth-title,#authScreen.auth-in .auth-sub,#authScreen.auth-in .auth-card .field,#authScreen.auth-in .auth-btn,#authScreen.auth-in .auth-switch-btn{animation:none;}}
   /* Every page has a compact blue curved header like Potato's: a plain white chevron at the left and the page name centred in white. */
   .ov-top{position:relative;z-index:6;height:calc(52px + env(safe-area-inset-top,0px));margin-bottom:12px;background:radial-gradient(circle at 90% 10%,rgba(255,255,255,.16) 0,rgba(255,255,255,0) 40%),linear-gradient(135deg,#2b88f3,#0a4fc6);border-radius:0 0 24px 24px;box-shadow:0 10px 22px -14px rgba(11,42,91,.6);}
   .ov-back{position:absolute;left:6px;top:calc(env(safe-area-inset-top,0px) + 4px);width:44px;height:44px;border:none;background:none;color:#fff;display:flex;align-items:center;justify-content:center;}
@@ -1174,10 +1163,6 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
         <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="12" r="4"/><path d="M11 12h10M16.5 12v3M19.5 12v3"/></svg></span>
         <input id="fPassConfirm" placeholder="Confirm password" type="password" autocomplete="new-password">
       </div>
-      <div id="regPinField" class="field" style="display:none">
-        <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg></span>
-        <input id="fPin" placeholder="Trade Password (6 digits)" type="password" inputmode="numeric" maxlength="6" autocomplete="off">
-      </div>
       <div id="regCodeField" class="field" style="display:none">
         <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a5 5 0 007 0l2-2a5 5 0 00-7-7l-1 1"/><path d="M14 10a5 5 0 00-7 0l-2 2a5 5 0 007 7l1-1"/></svg></span>
         <input id="fCode" placeholder="Invitation code (optional)" autocomplete="off" autocapitalize="characters" spellcheck="false" style="text-transform:uppercase;letter-spacing:1.5px;font-weight:800">
@@ -1473,7 +1458,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
         <h4>How withdrawals work</h4>
         <div class="howto-step"><span class="howto-num">1</span><p>Bind your mobile-money account under <b>Me &rarr; Payout Account</b>.</p></div>
         <div class="howto-step"><span class="howto-num">2</span><p>Enter the amount you want and tap Request Withdrawal.</p></div>
-        <div class="howto-step"><span class="howto-num">3</span><p>Enter your 6-digit Trade Password to confirm. Never share it with anyone, not even &ldquo;customer service&rdquo;.</p></div>
+        <div class="howto-step"><span class="howto-num">3</span><p>Check the amount and the number it is going to, then confirm.</p></div>
         <div class="howto-step"><span class="howto-num">4</span><p>Your request is processed and the amount after the service fee is sent to your mobile-money number.</p></div>
         <div class="howto-step"><span class="howto-num">5</span><p>Track the status any time under <b>Me &rarr; Ledger &rarr; Withdrawals</b>.</p></div>
       </div>
@@ -1532,10 +1517,9 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   <div class="overlay" id="ovBindbank">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Payout Account</div></div>
     <div class="photo-banner" id="bindbankBanner"></div>
-    <div class="info-box">Save the mobile-money account you want withdrawals sent to. You can bind up to 5 and tap the one to use. Every withdrawal asks for your Trade Password.</div>
+    <div class="info-box">Save the mobile-money account you want withdrawals sent to. You can bind up to 5 and tap the one to use.</div>
     <div id="bankList" style="padding:0 var(--gut)"></div>
     <div style="padding:6px var(--gut) 20px"><button class="btn btn-primary btn-block" onclick="openNetworkPicker()">+ Bind a new account</button></div>
-    <div style="text-align:center;padding:0 var(--gut) 20px"><span class="muted" onclick="openChangeTradePin()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Change Trade Password</span></div>
   </div>
 
   <div class="overlay" id="ovChangepass">
@@ -1589,35 +1573,6 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
         </div>
         <button class="btn btn-primary btn-block" id="npSaveBtn" onclick="saveBankAccount()">Save account</button>
       </div>
-    </div>
-  </div>
-
-  <div class="modal-bg" id="tradePinBg" onclick="if(event.target===this) tradePinCancel()">
-    <div class="modal-sheet" style="text-align:center">
-      <h3 id="tradePinTitle">Trade Password</h3>
-      <p class="muted" style="font-size:13.5px;margin-bottom:10px" id="tradePinSub"></p>
-      <p style="font-size:12.5px;color:var(--berry);min-height:16px;margin-bottom:4px;display:none" id="tradePinErr"></p>
-      <div class="form-card" style="margin:0 0 14px;padding:16px">
-        <input class="famt" id="tradePinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="off" style="text-align:center;letter-spacing:10px;font-size:22px" onkeydown="if(event.key==='Enter'){tradePinSubmit();}">
-      </div>
-      <button class="btn btn-primary btn-block" id="tradePinOk" onclick="tradePinSubmit()">Confirm</button>
-      <div style="text-align:center;margin-top:14px"><span class="muted" id="tradePinNo" onclick="tradePinCancel()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Cancel</span></div>
-    </div>
-  </div>
-
-  <div class="modal-bg" id="changePinBg" onclick="if(event.target===this) closeChangeTradePin()">
-    <div class="modal-sheet" style="text-align:center">
-      <h3>Change Trade Password</h3>
-      <p class="muted" style="font-size:13.5px;margin-bottom:10px">Enter your current Trade Password, then choose a new 6-digit one.</p>
-      <p style="font-size:12.5px;color:var(--berry);min-height:16px;margin-bottom:4px;display:none" id="changePinErr"></p>
-      <div class="form-card" style="margin:0 0 14px;padding:16px">
-        <span class="flabel">Current Trade Password</span>
-        <input class="famt" id="cpOldPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="off" style="text-align:center;letter-spacing:8px;font-size:20px;margin-bottom:14px">
-        <span class="flabel">New Trade Password</span>
-        <input class="famt" id="cpNewPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="off" style="text-align:center;letter-spacing:8px;font-size:20px">
-      </div>
-      <button class="btn btn-primary btn-block" id="cpSubmitBtn" onclick="doChangeTradePin()">Update Trade Password</button>
-      <div style="text-align:center;margin-top:14px"><span class="muted" onclick="closeChangeTradePin()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Cancel</span></div>
     </div>
   </div>
 

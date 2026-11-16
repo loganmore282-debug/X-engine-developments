@@ -176,11 +176,6 @@ function run(state, body) {
     verifyAuth: async () => 'u1',
     withLock: (_k, fn) => fn(),
     getSettings: async () => state.settings,
-    // Stands in for the real pinCheck (proved separately in test-trade-pin.js): only
-    // '123456' is the member's Trade Password, and 'LOCK!' simulates a locked account.
-    pinCheck: async (_u, pin) => pin === 'LOCK!' ? { ok: false, code: 'LOCKED', message: 'Too many wrong Trade Password attempts.' }
-      : pin === '123456' ? { ok: true }
-      : { ok: false, code: /^\d{6}$/.test(String(pin || '')) ? 'WRONG_PIN' : 'INVALID_PIN', message: 'Incorrect Trade Password.' },
     cleanPhone: p => String(p || '').replace(/\D/g, '') || '',
     uniqueRef: async () => 'S1',
     mobileMoneyRefPrefix: async () => 'S',
@@ -234,7 +229,7 @@ function run(state, body) {
     } },
   };
   const fn = new Function('sandbox', `
-    const { console, crypto, verifyAuth, withLock, getSettings, pinCheck, cleanPhone,
+    const { console, crypto, verifyAuth, withLock, getSettings, cleanPhone,
             uniqueRef, mobileMoneyRefPrefix, textOf, nowStr, fmtMoney, logSecurityEvent, sendAdminPush,
             sendWithdrawalSmsAlert, NETWORK_NAMES, MAX_MONEY_AMOUNT,
             _witRequestInFlight, _userBeingDeleted, FieldValue, db,
@@ -289,12 +284,11 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   await st.recover(st.wits[0].id);
   ck(st.wits[0].status === 'pending' && st.tx.length === 1 && st.user.walletBalance === 90000,
      'recovery creates one ledger row without a second debit');
-  console.log('\n— the Trade Password gates the withdrawal on the server —');
-  for (const [label, pin, code, http] of [['missing', undefined, 'INVALID_PIN', 400], ['wrong', '654321', 'WRONG_PIN', 400], ['too short', '1234', 'INVALID_PIN', 400], ['locked account', 'LOCK!', 'LOCKED', 429]]) {
+  console.log('\n— no Trade Password is asked: the withdrawal goes through without a PIN —');
+  for (const [label, pin] of [['no', undefined], ['a made-up', '654321'], ['a short', '1234']]) {
     st = fresh();
     r = await run(st, { ...REQ, pin });
-    ck(r.code === http && r.replied.code === code, `a ${label} Trade Password is refused (${r.code} ${r.replied && r.replied.code})`);
-    ck(st.wits.length === 0 && st.user.walletBalance === 100000 && st.tx.length === 0, '  and nothing is written or debited');
+    ck(r.code === 200 && st.wits.length === 1 && st.user.walletBalance === 90000, `a request with ${label} PIN is not refused for it (${r.code}); the wallet is debited once`);
   }
   st = fresh();
   r = await run(st, { ...REQ, amount: '10000garbage' });

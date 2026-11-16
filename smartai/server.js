@@ -168,8 +168,7 @@ app.use('/admin/', async (req, _res, next) => {
   next();
 });
 // These routes move or pay real money, so they get the strict 60/min per-user cap rather than only the 400/min global one.
-['/withdraw/request', '/invest/create', '/lucky/flip', '/deposit/marzpay', '/deposit/manual/order', '/deposit/manual/submit', '/bank/save', '/register',
- '/account/transaction-pin/change', '/redeem']
+['/withdraw/request', '/invest/create', '/lucky/flip', '/deposit/marzpay', '/deposit/manual/order', '/deposit/manual/submit', '/bank/save', '/register', '/redeem']
   .forEach(p => app.use(p, apiLimiter));
 // ── BODY PARSING ──
 // A tight 64kb cap by default; admin routes that carry a base64 product
@@ -4118,11 +4117,6 @@ app.get('/public/about-content', async (_req, res) => {
 // ═══════════════════════════════════════════
 // REGISTRATION / ACCOUNT
 // ═══════════════════════════════════════════
-// A 6-digit trade password, per Smart AI's registration spec (Snow used 5) —
-// rejects the weakest shape
-// (all-same-digit) whenever a NEW PIN is being chosen, never when an
-// existing one is being verified.
-function isWeakPin(pin) { return /^(\d)\1{5}$/.test(String(pin || '')); }
 
 // `regionKey` is stamped here, ONCE, from the region that owns the hostname
 // the account was created on, and is never written again. Everything the
@@ -4177,16 +4171,10 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     if (userData.registrationDone)
       return { code: 200, body: { status: 'already_done', referralCode: userData.referralCode || null } };
 
-    // Registration saves the six-digit Trade Password as a server-side
-    // scrypt hash. It is never returned to the client.
-    const tradePin = String(pin || '');
-    if (!/^\d{6}$/.test(tradePin))
-      return { code: 400, body: { status: 'error', code: 'INVALID_TRADE_PIN', message: 'Trade Password must be exactly 6 digits.' } };
     const code = String(referralCode || '').trim();
     let referrerId = null;
-    // Speed: the slow pieces start TOGETHER instead of one after another -- the Trade Password hash (CPU), this member's own referral code and
-    // account number (database), and the look-up of the referrer's code (database). Only what the answer needs is awaited, where it is needed.
-    const pinHash = scryptHashAsync(tradePin); pinHash.catch(() => {});
+    // Speed: the slow pieces start TOGETHER instead of one after another -- this member's own referral code and account number (database), and the look-up
+    // of the referrer's code (database). Only what the answer needs is awaited, where it is needed.
     const idsPromise = Promise.all([generateUniqueReferralCode(userId), nextRandomPublicId()]); idsPromise.catch(() => {});
     const refLookup = code ? findUserByReferralCode(code) : null; if (refLookup) refLookup.catch(() => {});
     // A sign-up that stops here must not use up the account number it just claimed: give it back (best effort).
@@ -4241,7 +4229,6 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
         registrationDone: true, referralCode: myRefCode, publicId: myPublicId,
         walletBalance: FieldValue.increment(WELCOME),
       };
-      if (/^\d{6}$/.test(tradePin)) update.transactionPinHash = await pinHash;
       if (referrerId) update.referredBy = referrerId;
       // The user's own doc is written FIRST, in one atomic single-document
       // update — a crash right after this leaves the member fully and
@@ -4296,17 +4283,6 @@ app.post('/register', async (req, res) => {
   try {
     const phone = auth.phone;
     if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
-    // Skip the ticket check on a retry of an ALREADY-completed registration
-    // (network drop after success, client resubmits) -- completeRegistrationCore
-    // is idempotent for that case on its own (registrationDone short-circuit
-    // below), and the ticket from the original successful call is already
-    // consumed, so requiring it again would fail a registration that in fact
-    // already succeeded.
-    const already = await db.collection('users').doc(userId).get();
-    if (!already.exists || !already.data().registrationDone) {
-      const tradePin = textOf(req.body.pin);
-      if (!/^\d{6}$/.test(tradePin)) return res.status(400).json({ status: 'error', code: 'INVALID_TRADE_PIN', message: 'Trade Password must be exactly 6 digits.' });
-    }
     const result = await completeRegistrationCore(userId, textOf(req.body.referralCode), textOf(req.body.pin), phone);
     const { referrerId, ...memberBody } = result.body;
     res.status(result.code).json(memberBody);
@@ -4375,7 +4351,7 @@ app.get('/account', async (req, res) => {
       phone: u.phone, walletBalance: round2(u.walletBalance), totalDeposited: u.totalDeposited || 0,
       totalEarned: round2(u.totalEarned), totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
-      hasTradePin: !!u.transactionPinHash, vipLevel, withdrawAnytime: u.withdrawAnytime === true,
+      vipLevel, withdrawAnytime: u.withdrawAnytime === true,
       checkinStreak: u.checkinStreak || 0, lastCheckin: u.lastCheckin || null,
       lucky: await luckyView(u, vipLevel),
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
@@ -5201,41 +5177,6 @@ app.post('/deposit/callback', async (req, res) => {
 // ═══════════════════════════════════════════
 const _withdrawInFlight = new Set();
 const _witRequestInFlight = new Set();
-// The Trade Password set at registration is the ONLY PIN in Smart AI -- it
-// gates every actual money-moving withdrawal request. It no longer gates
-// binding/removing a withdrawal account (owner, Round 39: "remove pin
-// putting here, only it will be on Withdrawals") -- saving/removing a
-// payout destination doesn't move money by itself, see /bank/save and
-// /bank/delete for that change.
-const PIN_LOCK_MS = 15 * 60 * 1000;
-const PIN_MAX_FAILS = 5;
-async function pinCheck(userId, pin0) {
-  const pin = textOf(pin0);
-  if (!/^\d{6}$/.test(pin))
-    return { ok: false, code: 'INVALID_PIN', message: 'Enter your 6-digit Trade Password.' };
-  return withLock('pin:' + userId, async () => {
-    const uRef = db.collection('users').doc(userId);
-    const snap = await uRef.get();
-    if (!snap.exists) return { ok: false, code: 'NOT_FOUND', message: 'Account not found' };
-    const u = snap.data();
-    const now = Date.now();
-    if (u.pinLockedUntil && tsMillis(u.pinLockedUntil) > now) {
-      const mins = Math.ceil((tsMillis(u.pinLockedUntil) - now) / 60000);
-      return { ok: false, code: 'LOCKED', message: `Too many wrong Trade Password attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` };
-    }
-    if (!u.transactionPinHash) return { ok: false, code: 'NO_PIN', message: 'No Trade Password is set on this account.' };
-    if (!(await scryptVerifyAsync(pin, u.transactionPinHash))) {
-      const fails = (u.pinFailCount || 0) + 1;
-      const update = { pinFailCount: fails };
-      let locked = false;
-      if (fails >= PIN_MAX_FAILS) { update.pinLockedUntil = new Date(now + PIN_LOCK_MS); update.pinFailCount = 0; locked = true; }
-      await uRef.update(update);
-      return { ok: false, code: locked ? 'LOCKED' : 'WRONG_PIN', message: locked ? `Too many wrong Trade Password attempts. Try again in ${PIN_LOCK_MS / 60000} minutes.` : 'Incorrect Trade Password.' };
-    }
-    await uRef.update({ pinFailCount: 0 });
-    return { ok: true };
-  });
-}
 // Caller holds bal:<userId>. A restart can finish a charged request, but
 // must never charge an unconfirmed request on the member's behalf.
 async function finishWithdrawalCreation(witRef, userId) {
@@ -5291,14 +5232,6 @@ app.post('/withdraw/request', async (req, res) => {
       return res.status(400).json({ status: 'error', code: 'WINDOW_CLOSED',
         message: `Withdraw is open from ${win.from} to ${win.to}. Please come back then.` });
     if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum withdraw is ${fmtMoney(sett.minWithdraw)}` });
-    // Trade Password gate. The six-digit Trade Password chosen at sign-up is asked
-    // on the Withdraw screen and checked HERE, before anything is charged:
-    // pinCheck() verifies the scrypt hash and locks the account for 15 minutes
-    // after 5 wrong tries (a 6-digit code has only a million values, so the
-    // lock is what makes it a real gate). The app's own check is a courtesy.
-    const pinResult = await pinCheck(userId, req.body.pin);
-    if (!pinResult.ok)
-      return res.status(pinResult.code === 'LOCKED' ? 429 : 400).json({ status: 'error', code: pinResult.code, message: pinResult.message });
     const boundSnap = await db.collection('bankAccounts')
       .where('userId', '==', userId).where('network', '==', rawNetwork).where('phone', '==', destValue).limit(1).get();
     if (boundSnap.empty)
@@ -6508,28 +6441,6 @@ app.get('/bank/list', async (req, res) => {
     const snap = await db.collection('bankAccounts').where('userId', '==', userId).get();
     res.json({ status: 'success', accounts: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load withdrawal accounts' }); }
-});
-app.post('/account/transaction-pin/change', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const newPin = String(req.body.newPin || '');
-  if (!/^\d{6}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'New trade password must be 6 digits.' });
-  if (isWeakPin(newPin)) return res.status(400).json({ status: 'error', message: 'That PIN is too easy to guess. Choose 6 digits that are not all the same.' });
-  try {
-    // subagent-audit-caught: was missing the banned check every sibling
-    // account-mutating route has.
-    const uSnap = await db.collection('users').doc(userId).get();
-    if (uSnap.exists && uSnap.data().status === 'banned')
-      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    // A member who has no Trade Password yet (an account made before it existed) sets the first one
-    // here without an old one; once one exists, changing it always needs the old one.
-    if (uSnap.exists && uSnap.data().transactionPinHash) {
-      const check = await pinCheck(userId, req.body.oldPin);
-      if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });
-    }
-    await db.collection('users').doc(userId).update({ transactionPinHash: await scryptHashAsync(newPin), pinFailCount: 0, pinLockedUntil: null });
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not change your PIN' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -8464,8 +8375,7 @@ app.post('/admin/user/detail', async (req, res) => {
       db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
     ]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    // transactionPinHash never leaves this server, even to an admin --
-    // hasPayoutPin is the boolean the admin UI actually needs.
+    // A Trade Password hash left on an old account (the feature was removed) never leaves this server, even to an admin.
     const { transactionPinHash, ...userSafe } = uSnap.data();
     const earnedBreakdown = {};
     EARNING_TX_TYPES.forEach(t => { earnedBreakdown[t] = 0; });
@@ -8474,7 +8384,7 @@ app.post('/admin/user/detail', async (req, res) => {
       if (EARNING_TX_TYPES.includes(t.type)) earnedBreakdown[t.type] += finiteMoney(t.amount);
     });
     res.json({
-      status: 'success', user: { id: uSnap.id, ...userSafe, hasPayoutPin: !!transactionPinHash },
+      status: 'success', user: { id: uSnap.id, ...userSafe },
       investments: invSnap.docs.map(d => ({ id: d.id, ...d.data() })),
       transactions: txSnap.docs.map(d => ({ id: d.id, ...d.data() })),
       withdrawals: witSnap.docs.map(d => ({ id: d.id, ...d.data() })),
@@ -8486,33 +8396,8 @@ app.post('/admin/user/detail', async (req, res) => {
     });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-// Sets a NEW PIN chosen by the admin -- never clears transactionPinHash to
-// null. Codex-caught real bug: Snow has no auto-setup-on-first-use PIN path
-// (see the comment above PIN_LOCK_MS) -- pinCheck() unconditionally rejects
-// a null hash as NO_PIN, and /account/transaction-pin/change always
-// requires the OLD pin to match first. Clearing the hash to null would have
-// permanently locked the member out of ever setting a replacement PIN
-// themselves (can't withdraw, can't add/remove a payout account). Same
-// pattern as /admin/user/reset-password: the admin types the new value,
-// which they then relay to the member.
-app.post('/admin/user/reset-payout-pin', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const userId = String(req.body.userId || '');
-  const newPin = String(req.body.newPin || '');
-  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
-  if (!/^\d{6}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'New trade password must be 6 digits.' });
-  if (isWeakPin(newPin)) return res.status(400).json({ status: 'error', message: 'That PIN is too easy to guess. Choose 6 digits that are not all the same.' });
-  try {
-    const ref = db.collection('users').doc(userId);
-    const snap = await ref.get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    await ref.update({ transactionPinHash: scryptHash(newPin), pinFailCount: 0, pinLockedUntil: null });
-    logAdminAction(req, 'user_pin_reset', { userId });
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
 // Owner: make one member "unrestricted by withdrawal time": they can request a withdrawal at any hour even when the withdrawal hours are
-// switched on in Settings, and the daily number of withdrawals does not stop them. Everything else (minimum, fee, Trade Password, one at a time) still applies.
+// switched on in Settings, and the daily number of withdrawals does not stop them. Everything else (minimum, fee, one at a time) still applies.
 app.post('/admin/user/withdraw-anytime', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = String(req.body.userId || '');

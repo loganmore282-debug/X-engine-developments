@@ -1,6 +1,6 @@
 /* Smart AI member app.
    The pages are ChocoMCC's (Home, AI Robots, Rewards, Team, Me and their full-screen sheets) in blue and white with the owner's icons,
-   running on Smart AI's own server: its sign-in (/auth/*), 6-digit Trade Password, deposits, withdrawals and rewards. */
+   running on Smart AI's own server: its sign-in (/auth/*), deposits, withdrawals and rewards. */
 // The server answers under /k7x2 on the page's own host (nginx strips the prefix). No domain is baked in, so a new host never needs a rebuild.
 var API_BASE = '/k7x2';
 var BRAND_CACHE_KEY = 'smartai_brand_name';
@@ -212,7 +212,6 @@ async function refreshFromServer(){
     STATE.totalInvested = a.totalInvested || 0;
     STATE.lucky = a.lucky || { on: false, vip: 0, chances: 0, minVip: 0, minAmount: 0, maxAmount: 0, hasProducts: false };
     STATE.referralCode = a.referralCode || STATE.referralCode;
-    STATE.hasTradePin = a.hasTradePin === true;
     STATE.withdrawAnytime = a.withdrawAnytime === true;
     STATE.team = a.team || STATE.team;
   } else if (accR.code === 'MAINTENANCE' || accR.code === 'BANNED' || accR.code === 'HOST_PARKED') {
@@ -515,7 +514,7 @@ function freshState(uid, phone){
     uid: uid, phone: phone || '', referralCode: '',
     balance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0,
     lucky: { on: false, vip: 0, chances: 0, minVip: 0, minAmount: 0, maxAmount: 0, hasProducts: false }, team: { l1: 0, l2: 0, l3: 0, commission: 0 },
-    hasTradePin: false, withdrawAnytime: false,
+    withdrawAnytime: false,
     investments: [], transactions: [], bankAccounts: [], depositRecords: null, withdrawalRecords: null, salary: null,
     ok: { inv: false, bank: false, tx: false }   // which of those three lists has really come from the server (see waitForData)
   };
@@ -567,16 +566,14 @@ function setAuthMode(mode){
   authMode = mode;
   var reg = mode === 'register';
   $('regPassConfirmField').style.display = reg ? 'block' : 'none';
-  $('regPinField').style.display = reg ? 'block' : 'none';
   $('regCodeField').style.display = reg ? 'block' : 'none';
-  $('fPassConfirm').value = ''; $('fPin').value = '';
+  $('fPassConfirm').value = '';
   $('authTitle').textContent = reg ? 'Create your account' : 'Welcome to ' + brandName();
   $('authSub').textContent = reg ? 'Join and start putting AI robots to work for you.' : 'Sign in to see what your AI robots have earned today.';
   $('authSwitchBtn').innerHTML = reg ? 'Already a member? <b>Sign In</b>' : 'New here? <b>Create Account</b>';
   $('authErr').style.display = 'none';
   $('authGo').textContent = reg ? 'Create Account' : 'Continue';
   paintAuthArt();
-  var scr = $('authScreen'); if (scr) { scr.classList.remove('auth-in'); void scr.offsetWidth; scr.classList.add('auth-in'); }   // the words and fields flow in one after another
 }
 // A shared invitation link: .../share.html?v=<stamp>&code=<CODE>, .../#/inviteRegister?invitecode=<CODE>, .../?ref=<CODE>, .../refCode=<CODE>. All of them
 // land on Create Account with the code already filled in. A referral code is case-sensitive on the server, so it is never changed.
@@ -613,13 +610,13 @@ function authErrMsg(e){
   if (code === 'auth/invalid-email') return 'Enter a valid mobile number (07XXXXXXXX).';
   return (e && e.message && code.indexOf('auth/') !== 0) ? e.message : 'Something went wrong, try again.';
 }
-// Finishes a sign-up that has an account but no profile yet (the Trade Password, the invitation code and the welcome gift are added here).
-async function registerProfile(ref, pin, phone){
-  var r = await api('/register', { referralCode: ref, pin: pin, phone: phone }, 'POST', true);
+// Finishes a sign-up that has an account but no profile yet (the invitation code and the welcome gift are added here).
+async function registerProfile(ref, phone){
+  var r = await api('/register', { referralCode: ref, phone: phone }, 'POST', true);
   // The invitation code is optional: a wrong one is dropped and the sign-up carries on without an upline.
   if (r.status === 'error' && r.code === 'BAD_REFERRAL' && ref) {
     toast(r.message || 'That invitation code is not valid. Continuing without it.');
-    r = await api('/register', { referralCode: '', pin: pin, phone: phone }, 'POST', true);
+    r = await api('/register', { referralCode: '', phone: phone }, 'POST', true);
   }
   return r;
 }
@@ -632,11 +629,9 @@ $('authGo').onclick = async function(){
   if (!$('fPhone').value.trim() || !pass) { toast('Enter your phone and password'); return; }
   if (!local) { toast('Enter a valid Uganda mobile number (07XXXXXXXX)'); shakeVibrate($('fPhone')); return; }
   if (pass.length < 6) { toast('Password must be at least 6 characters'); return; }
-  var ref = '', pin = '';
+  var ref = '';
   if (authMode === 'register') {
     if (pass !== $('fPassConfirm').value) { toast('Passwords do not match'); return; }
-    pin = $('fPin').value.trim();
-    if (!/^\d{6}$/.test(pin)) { toast('Trade Password must be exactly 6 digits'); shakeVibrate($('fPin')); return; }
     ref = $('fCode').value.trim();
   }
   if (!window.fbSignIn) { toast('Still connecting, try again in a moment'); return; }
@@ -661,7 +656,7 @@ $('authGo').onclick = async function(){
       }
       _authEpoch++;
       STATE = freshState(cred.user.uid, local);
-      var regR = await registerProfile(ref, pin, local);
+      var regR = await registerProfile(ref, local);
       if (regR.status !== 'success' && regR.status !== 'already_done') {
         try { await window.fbSignOut(); } catch (e3) {}
         STATE = null; _authEpoch++;
@@ -1147,34 +1142,9 @@ function maybeOfferInstallAfterSignup(){
 }
 
 /* ====================== SMALL DIALOGS ======================
-   The Trade Password is asked in a small dialog when a member cashes out (or changes a payout setting). It resolves
-   with the typed text, or null when the member cancels. */
+   Closing every small sheet at once (sign-out, the phone's Back button). */
 function closeAllSheets(){
-  ['networkPickerBg', 'tradePinBg', 'installSheetBg', 'announcementBg', 'changePinBg'].forEach(function(id){ var el = $(id); if (el) el.classList.remove('show'); });
-  if (_pinResolve) { var r = _pinResolve; _pinResolve = null; r(null); }
-}
-var _pinResolve = null;
-function askTradePin(title, sub, err){
-  return new Promise(function(resolve){
-    if (_pinResolve) { var prev = _pinResolve; _pinResolve = null; prev(null); }
-    _pinResolve = resolve;
-    $('tradePinTitle').textContent = title || 'Trade Password';
-    $('tradePinSub').textContent = sub || 'Enter your 6-digit Trade Password to continue.';
-    var errEl = $('tradePinErr'); errEl.textContent = err || ''; errEl.style.display = err ? '' : 'none';
-    var inp = $('tradePinInput'); inp.value = '';
-    $('tradePinBg').classList.add('show');
-    setTimeout(function(){ try { inp.focus(); } catch (e) {} }, 60);
-  });
-}
-function tradePinSubmit(){
-  var inp = $('tradePinInput'), v = inp.value.trim();
-  if (!/^\d{6}$/.test(v)) { shakeVibrate(inp); return; }
-  $('tradePinBg').classList.remove('show');
-  if (_pinResolve) { var r = _pinResolve; _pinResolve = null; r(v); }
-}
-function tradePinCancel(){
-  $('tradePinBg').classList.remove('show');
-  if (_pinResolve) { var r = _pinResolve; _pinResolve = null; r(null); }
+  ['networkPickerBg', 'installSheetBg', 'announcementBg'].forEach(function(id){ var el = $(id); if (el) el.classList.remove('show'); });
 }
 
 /* ====================== PICTURES ======================
@@ -2395,14 +2365,12 @@ async function doWithdraw(){
   if (!card) { toast('Bind a mobile-money account first'); goBindBank(true); return; }
   var win = withdrawWindow(sett);
   if (win.enabled && !win.open && !STATE.withdrawAnytime) { toast('Withdraw is open from ' + win.from + ' to ' + win.to + '. Please come back then.'); return; }
-  var pin = await askTradePin('Trade Password', 'Enter your 6-digit Trade Password to withdraw ' + ugx(amt) + '.');
-  if (pin === null) return;
   var btn = $('witGoBtn'), label = btn.textContent;
   _withdrawBusy = true;
   btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
   var r;
   try {
-    r = await api('/withdraw/request', { amount: amt, network: card.network, phone: card.phone, pin: pin });
+    r = await api('/withdraw/request', { amount: amt, network: card.network, phone: card.phone });
   } finally {
     _withdrawBusy = false;
     btn.disabled = false; btn.textContent = label;
@@ -2418,27 +2386,6 @@ async function doWithdraw(){
   closeOverlay(); renderAll();
   toast('Withdrawal submitted successfully');
   refreshFromServer().then(function(){ if (STATE) renderAll(); });
-}
-
-/* ====================== TRADE PASSWORD ====================== */
-function openChangeTradePin(){
-  $('cpOldPin').value = ''; $('cpNewPin').value = '';
-  $('changePinErr').style.display = 'none';
-  $('changePinBg').classList.add('show');
-}
-function closeChangeTradePin(){ $('changePinBg').classList.remove('show'); }
-async function doChangeTradePin(){
-  var oldPin = $('cpOldPin').value.trim(), newPin = $('cpNewPin').value.trim();
-  var errEl = $('changePinErr');
-  if (!/^\d{6}$/.test(oldPin) || !/^\d{6}$/.test(newPin)) { errEl.textContent = 'Both Trade Passwords must be exactly 6 digits.'; errEl.style.display = ''; return; }
-  var btn = $('cpSubmitBtn'), label = btn.textContent;
-  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
-  var r = await api('/account/transaction-pin/change', { oldPin: oldPin, newPin: newPin });
-  btn.disabled = false; btn.textContent = label;
-  if (r.stale) return;
-  if (r.status !== 'success') { errEl.textContent = r.message || 'Could not change the Trade Password'; errEl.style.display = ''; return; }
-  closeChangeTradePin();
-  toast('Trade Password updated');
 }
 
 /* ====================== INVITE CODE FIELD ====================== */

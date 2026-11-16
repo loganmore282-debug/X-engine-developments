@@ -1,6 +1,6 @@
 'use strict';
 // The Smart AI member app (ChocoMCC's pages in blue and white) driven in a real phone-sized Chromium against the REAL server.js on the in-memory
-// database: sign up from an invitation link, log out and in, buy, daily check-in, gift code, payout cards, a cash-out with the Trade Password, the Me page
+// database: sign up from an invitation link, log out and in, buy, daily check-in, gift code, payout cards, a cash-out, the Me page
 // (ChocoMCC's tiles and its two UGX coins, nothing else), team and Task Center, the ledger lists, a session the server ended, and the Back button.
 //   node test-smartai-app.js
 const path = require('path'), Module = require('module'), http = require('http'), fs = require('fs');
@@ -65,14 +65,13 @@ async function member(ref) {
   await page.goto(url + '#/inviteRegister?invitecode=' + A.code, { waitUntil: 'domcontentloaded' });
   ok(await until(() => document.getElementById('authScreen').style.display === 'flex' && document.getElementById('authTitle').textContent.length > 0), 'a signed-out visitor sees the sign-in screen');
   ok(await ev(() => document.getElementById('authTitle').textContent) === 'Create your account' && await ev(() => document.getElementById('fCode').value) === await Promise.resolve(A.code), 'an invitation link opens Create Account with the code already typed');
-  ok(await ev(() => ['regPassConfirmField', 'regPinField', 'regCodeField'].every(i => document.getElementById(i).style.display === 'block')), 'Create Account shows confirm password, the 6-digit Trade Password and the invitation code');
-  await page.fill('#fPhone', asLocal(newPhone)); await page.fill('#fPass', 'secret12'); await page.fill('#fPassConfirm', 'different'); await page.fill('#fPin', '123456');
+  ok(await ev(() => ['regPassConfirmField', 'regCodeField'].every(i => document.getElementById(i).style.display === 'block')), 'Create Account shows confirm password and the invitation code, and no Trade Password');
+  await page.fill('#fPhone', asLocal(newPhone)); await page.fill('#fPass', 'secret12'); await page.fill('#fPassConfirm', 'different');
   await page.click('#authGo'); await sleep(250);
   ok(/do not match/i.test(await toastText()) && !await appOpen(), 'two different passwords are refused on the phone');
-  await page.fill('#fPassConfirm', 'secret12'); await page.fill('#fPin', '12ab');
-  await page.click('#authGo'); await sleep(250);
-  ok(/6 digits/i.test(await toastText()) && !await appOpen(), 'a Trade Password that is not 6 digits is refused');
-  await page.fill('#fPin', '123456'); await page.fill('#fPhone', '12345');
+  await page.fill('#fPassConfirm', 'secret12');
+  ok(await ev(() => !document.getElementById('fPin') && !/Trade Password/i.test(document.getElementById('authScreen').innerText)), 'there is no Trade Password box on Create Account');
+  await page.fill('#fPhone', '12345');
   await page.click('#authGo'); await sleep(250);
   ok(/valid Uganda mobile/i.test(await toastText()) && !await appOpen(), 'a number that is not a Uganda mobile is refused');
   await page.fill('#fPhone', asLocal(newPhone));
@@ -160,23 +159,16 @@ async function member(ref) {
   await ev(id => pickBankAccount(id), await ev(() => STATE.bankAccounts.filter(b => b.network === 'MTN Mobile Money')[0].id)); await sleep(900);
   await ev(() => closeOverlay());
 
-  // ---- 7. cash out: the Trade Password, then the money moves ----
+  // ---- 7. cash out: no Trade Password, the money moves ----
   await ev(() => openOverlay('withdraw')); await sleep(400);
   await page.fill('#witAmt', '20000'); await sleep(200);
   ok(await ev(() => document.getElementById('witFee').textContent) === 'UGX 3,000' && await ev(() => document.getElementById('witNet').textContent) === 'UGX 17,000', 'the fee and what the member receives follow the setting (15%)');
   await page.fill('#witAmt', '500'); await page.click('#witGoBtn'); await sleep(300);
   ok(/Minimum withdrawal/.test(await toastText()), 'an amount under the minimum is refused on the phone');
-  const balBeforeWrong = await ev(() => STATE.balance);
-  // wrong Trade Password
-  await page.fill('#witAmt', '20000'); await page.click('#witGoBtn'); await until(() => document.getElementById('tradePinBg').classList.contains('show'), null, 4000);
-  ok(!await ev(() => /authenticator|2-step|backup code/i.test(document.body.innerText)), 'only the Trade Password is asked (no second code)');
-  await page.fill('#tradePinInput', '111111'); await page.click('#tradePinOk'); await sleep(1500);
-  ok(/Incorrect Trade Password/i.test(await toastText()) && await ev(() => STATE.balance) === balBeforeWrong, 'a wrong Trade Password takes nothing');
-  // right Trade Password
   const balBefore = await ev(() => STATE.balance);
-  await page.click('#witGoBtn'); await until(() => document.getElementById('tradePinBg').classList.contains('show'), null, 4000);
-  await page.fill('#tradePinInput', '123456'); await page.click('#tradePinOk');
-  ok(await until(() => /Withdrawal submitted successfully/.test(document.getElementById('toast').textContent), null, 10000), 'a cash-out with the Trade Password is submitted');
+  await page.fill('#witAmt', '20000'); await page.click('#witGoBtn');
+  ok(await ev(() => !document.getElementById('tradePinBg')), 'no Trade Password is asked');
+  ok(await until(() => /Withdrawal submitted successfully/.test(document.getElementById('toast').textContent), null, 10000), 'a cash-out is submitted straight away');
   await sleep(1500);
   ok(await ev(() => STATE.balance) === balBefore - 20000 && !await shown('ovWithdraw'), 'the wallet is debited and the page closes');
   const wl = await J('GET', '/withdrawals', null, MEtok);
@@ -311,7 +303,7 @@ async function member(ref) {
   ok(await shown('ovChangepass') && await ev(() => !!document.getElementById('pwCur') && !!document.getElementById('pwNew2')), 'Security opens the change-password page (current, new, confirm), as in ChocoMCC');
   await ev(() => closeOverlay());
   await ev(() => goBindBank(false)); await sleep(300);
-  ok(/Change Trade Password/.test(await ev(() => document.getElementById('ovBindbank').textContent)), 'Payout Account has the Change Trade Password link');
+  ok(!/Trade Password/i.test(await ev(() => document.getElementById('ovBindbank').textContent)), 'Payout Account has no Trade Password link');
   await ev(() => closeOverlay());
   ok(!await ev(() => /Google Authenticator|authenticator|Order Gifts|Messages|Download App reward/i.test(document.getElementById('app').innerText) || document.getElementById('app').innerHTML.indexOf('ovAuthenticator') !== -1 || document.getElementById('app').innerHTML.indexOf('ovMessages') !== -1 || document.getElementById('app').innerHTML.indexOf('ovGifts') !== -1), 'nothing from Potato is in the app: no Google Authenticator, no Messages, no Order Gifts, no app reward');
   ok((await J('GET', '/messages', null, MEtok)).s === 404 && (await J('GET', '/gifts/list', null, MEtok)).s === 404 && (await J('POST', '/app/claim', {}, MEtok)).s === 404 && (await J('GET', '/account/2fa/status', null, MEtok)).s === 404, 'and the server has no such routes either');

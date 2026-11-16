@@ -114,15 +114,15 @@ const userByPhone = phone => [...fm.__stores.users.values()].find(u => String(u.
   { const t = await fresh(), page = t.page; const phone = ph(); let regCalls = 0, fail1 = true;
     await page.route('**/k7x2/register', r => { regCalls++; if (fail1) return r.abort(); r.continue(); });
     await page.click('#authSwitchBtn');
-    ok(await t.until(() => document.getElementById('regPinField').style.display === 'block'), 'Create Account opens from the sign-in screen');
-    await page.fill('#fPhone', asLocal(phone)); await page.fill('#fPass', 'secret12'); await page.fill('#fPassConfirm', 'secret12'); await page.fill('#fPin', '246810');
+    ok(await t.until(() => document.getElementById('regPassConfirmField').style.display === 'block'), 'Create Account opens from the sign-in screen');
+    await page.fill('#fPhone', asLocal(phone)); await page.fill('#fPass', 'secret12'); await page.fill('#fPassConfirm', 'secret12');
     await page.click('#authGo');
     // (the profile step is safe to repeat, so the app asks up to three times, 0 / 2.5 / 6 s apart, before it gives up)
     ok(await t.until(() => /Could not|try again|connection/i.test(document.getElementById('toast').textContent) || document.getElementById('authErr').style.display !== 'none', null, 16000) && regCalls === 3, 'the profile step failing is asked three times and then says so (' + regCalls + ' asks)');
     const b = await settled(t); ok(!b.disabled && b.text === 'Create Account' && !await t.appOpen(), 'and the sign-up button is ready to try again');
     ok(!!userByPhone(phone) === false || (userByPhone(phone) || {}).registrationDone !== true, 'the account is not marked finished on the server');
     fail1 = false; await sleep(2700);
-    await page.fill('#fPassConfirm', 'secret12'); await page.fill('#fPin', '246810');
+    await page.fill('#fPassConfirm', 'secret12');
     await page.click('#authGo');
     ok(await t.until(() => document.getElementById('app').style.display === 'block', null, 10000), 'trying again with the same number and password finishes the sign-up and opens the app');
     const u = userByPhone(phone);
@@ -132,7 +132,7 @@ const userByPhone = phone => [...fm.__stores.users.values()].find(u => String(u.
   // ---- 5. a wrong invitation code does not stop a sign-up ----
   { const t = await fresh('#/inviteRegister?invitecode=ZZZZ99'), page = t.page; const phone = ph();
     ok(await t.mode() === 'Create your account' && await page.evaluate(() => document.getElementById('fCode').value) === 'ZZZZ99', 'an invitation link fills the code in');
-    await page.fill('#fPhone', asLocal(phone)); await page.fill('#fPass', 'secret12'); await page.fill('#fPassConfirm', 'secret12'); await page.fill('#fPin', '135790');
+    await page.fill('#fPhone', asLocal(phone)); await page.fill('#fPass', 'secret12'); await page.fill('#fPassConfirm', 'secret12');
     await page.click('#authGo');
     ok(await t.until(() => document.getElementById('app').style.display === 'block', null, 10000), 'a code nobody owns is dropped and the account is made without an upline');
     ok(!!userByPhone(phone) && userByPhone(phone).registrationDone !== false, 'the account exists and is finished');
@@ -140,10 +140,10 @@ const userByPhone = phone => [...fm.__stores.users.values()].find(u => String(u.
 
   // ---- 6. Create Account with a number that already has an account ----
   { const t = await fresh('#/inviteRegister?invitecode=ABCDEF'), page = t.page;
-    await page.fill('#fPhone', asLocal(M1.phone)); await page.fill('#fPass', 'not-their-password'); await page.fill('#fPassConfirm', 'not-their-password'); await page.fill('#fPin', '123123');
+    await page.fill('#fPhone', asLocal(M1.phone)); await page.fill('#fPass', 'not-their-password'); await page.fill('#fPassConfirm', 'not-their-password');
     await page.click('#authGo');
     ok(await t.until(() => /already has an account/.test(document.getElementById('toast').textContent)), 'someone else\'s number: it says the number already has an account');
-    ok(await t.until(() => document.getElementById('regPinField').style.display === 'none') && await page.evaluate(() => document.getElementById('fPass').value) === '' && !await t.appOpen(), 'and the screen switches to Sign In with the password box emptied');
+    ok(await t.until(() => document.getElementById('regPassConfirmField').style.display === 'none') && await page.evaluate(() => document.getElementById('fPass').value) === '' && !await t.appOpen(), 'and the screen switches to Sign In with the password box emptied');
     await t.ctx.close(); }
 
   // ---- 7. an account whose sign-up was never finished ----
@@ -151,8 +151,8 @@ const userByPhone = phone => [...fm.__stores.users.values()].find(u => String(u.
     const t = await fresh(), page = t.page;
     await t.login(phone, 'secret12');
     ok(await t.until(() => /sign-up was not finished/i.test(document.getElementById('toast').textContent)), 'signing in to an unfinished account says the sign-up was not finished');
-    ok(await t.until(() => document.getElementById('regPinField').style.display === 'block') && !await t.appOpen(), 'and Create Account opens by itself');
-    await page.fill('#fPassConfirm', 'secret12'); await page.fill('#fPin', '121212'); await page.click('#authGo');
+    ok(await t.until(() => document.getElementById('regPassConfirmField').style.display === 'block') && !await t.appOpen(), 'and Create Account opens by itself');
+    await page.fill('#fPassConfirm', 'secret12'); await page.click('#authGo');
     ok(await t.until(() => document.getElementById('app').style.display === 'block', null, 10000), 'finishing it there opens the app');
     await t.ctx.close(); }
 

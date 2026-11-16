@@ -66,7 +66,7 @@ async function member(pass, pin, ref) { const su = await J('POST', '/auth/signup
   const W1 = (await acct(B.tok)).walletBalance; ok(Math.round(W0 - W1) === 20000, 'the wallet is debited 20,000 at once: ' + W0 + ' -> ' + W1);
   const wlist = [...fm.__stores.withdrawals.values()].filter(w => w.userId === B.uid); ok(wlist.length === 1 && wlist[0].status === 'pending', 'one pending request exists', wlist.map(w => w.status));
   const wr2 = await J('POST', '/withdraw/request', { amount: 20000, network: 'MTN Mobile Money', phone: '0771234567', pin: '123456' }, B.tok); ok(wr2.j.status !== 'success', 'a second request while one is open is refused', wr2.j);
-  const wrBad = await J('POST', '/withdraw/request', { amount: 20000, network: 'MTN Mobile Money', phone: '0771234567', pin: '000000' }, N.tok); ok(wrBad.j.status !== 'success', 'a wrong Trade Password / unbound account cannot withdraw', wrBad.j);
+  const wrBad = await J('POST', '/withdraw/request', { amount: 20000, network: 'MTN Mobile Money', phone: '0771234567', pin: '000000' }, N.tok); ok(wrBad.j.status !== 'success', 'an unbound account cannot withdraw', wrBad.j);
   // ---- 40 simultaneous registrations
   {
     const A2 = await member('secret12', '123456', ''); const N2 = 40;

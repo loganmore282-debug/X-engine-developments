@@ -1,5 +1,5 @@
 'use strict';
-// Sign-up speed: the Trade Password hash, the member's own referral code / account number and the referrer's look-up run TOGETHER, and a sign-up that
+// Sign-up speed: the member's own referral code / account number and the referrer's look-up run TOGETHER, and a sign-up that
 // is refused gives its claimed account number back. Runs the real completeRegistrationCore against a mock database.
 const fs = require('fs'), vm = require('vm'), assert = require('assert'), acorn = require('acorn');
 const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
@@ -33,8 +33,8 @@ function setup(users, publicIds) {
     order.length = 0; const t0 = Date.now();
     const r = await c.completeRegistrationCore('new1', 'XYZ12', '123456', '256700000001');
     ok(r.code === 200 && r.body.status === 'success', 'a valid sign-up succeeds');
-    ok(order.slice(0, 3).sort().join() === 'hash,lookup,refcode', 'the hash, the referral-code look-up and the member\'s own code all start before any of them finishes (' + order.join(',') + ')');
-    ok(rows.users.new1.transactionPinHash === 'h:123456' && rows.users.new1.referralCode === 'ABCDE' && /^[1-9]\d{4}$/.test(rows.users.new1.publicId), 'the member gets the hash, their own code and a random account number');
+    ok(order.slice(0, 2).sort().join() === 'lookup,refcode', 'the referral-code look-up and the member\'s own code both start before any of them finishes (' + order.join(',') + ')');
+    ok(rows.users.new1.transactionPinHash === undefined && rows.users.new1.referralCode === 'ABCDE' && /^[1-9]\d{4}$/.test(rows.users.new1.publicId), 'the member gets no Trade Password hash, their own code and a random account number');
     ok(rows.users.new1.walletBalance === 7000 && rows.users.new1.referredBy === 'ref1', 'welcome gift and the referrer are recorded');
     ok(Object.keys(rows.publicIds).length === 1, 'one account number claimed');
   }

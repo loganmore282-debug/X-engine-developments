@@ -728,3 +728,9 @@ Owner: "I don't want subdomain, I need it straight." `deploy/set-domain.sh smart
 The hidden admin panel stays on its own random label (`xxxxxx.smartai-hub.site`, chosen once and remembered, shown at the end). DNS: an A record named `@` and one for that label, both to the server's IP.
 `https://smartai-hub.site` and `https://www.smartai-hub.site` are in `CORS_ALLOWED_ORIGINS`. `baseDomain` / `blockRootDomain` in the settings still name smartai-platform.com, so the new bare domain is NOT parked.
 Then: GitHub webhook payload URL -> `https://smartai-hub.site/k7x2/deploy/webhook`; `make-hook-url.sh` for the secret payment-callback address; members reinstall the PWA from the new address.
+
+## The Trade Password was removed (2026-11-16, member v106, admin v38)
+Owner: "remove stuffs of trade password". Gone from everywhere: the Create Account box, the PIN dialog on Cash Out, the "Change Trade Password" link and sheet on Payout Account, `pinCheck` and the
+PIN gate on `/withdraw/request`, `/account/transaction-pin/change`, the admin "Set PIN" / "Trade Password" section and `/admin/user/reset-payout-pin`, the PIN box when an admin completes a registration.
+`/register` no longer needs or stores a PIN (an old `pin` field in a request is ignored; old `transactionPinHash` values stay in old rows and are never sent anywhere). A withdrawal now needs only the signed-in
+session, a bound payout account and the usual rules. `test-trade-pin.js` was deleted. Also removed the sign-in flow-in animation (not asked for); the banner fade and the higher form stay.
