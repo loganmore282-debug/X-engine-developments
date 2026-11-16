@@ -734,3 +734,10 @@ Owner: "remove stuffs of trade password". Gone from everywhere: the Create Accou
 PIN gate on `/withdraw/request`, `/account/transaction-pin/change`, the admin "Set PIN" / "Trade Password" section and `/admin/user/reset-payout-pin`, the PIN box when an admin completes a registration.
 `/register` no longer needs or stores a PIN (an old `pin` field in a request is ignored; old `transactionPinHash` values stay in old rows and are never sent anywhere). A withdrawal now needs only the signed-in
 session, a bound payout account and the usual rules. `test-trade-pin.js` was deleted. Also removed the sign-in flow-in animation (not asked for); the banner fade and the higher form stay.
+
+## The BUY sticker and "The transaction has expired" (2026-11-16, member v109)
+From the owner's recording (a Telegram sticker) and screenshot. `showBuyHint(key)` (original_module.js, `.buy-hint` / `.bh-*` CSS, one SVG string `_bhHTML`): after a tap on a robot in Home's Featured strip,
+`goToShopProduct` opens AI Robots, glides to that card and 1.2 s later a BUY sticker (red 3D button on two light-blue cards) appears in the blank space right of the robot picture. One 3.3 s timeline:
+fade in 0-0.35, hand glides in 0.6-1.0, three taps at 1.1 / 1.3 / 1.6-1.8 (button goes pale pink and presses down, the hand turns orange, white sparks), hand leaves 1.9-2.3, ghost fade (opacity, lift, blur) 2.4-3.3,
+then the element removes itself. Measured off the video at 10 fps. Skipped under prefers-reduced-motion. The pay page's clock reaching 0 (`gpExpired`) now shows `#gpExpired`: a white 24px card on a 70% black screen,
+a stopwatch-in-hand illustration (SVG, drawn from the screenshot) and "The transaction has expired"; a tap closes it and opens Add Funds.

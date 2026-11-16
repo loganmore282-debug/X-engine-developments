@@ -251,6 +251,25 @@ async function member(ref) {
   await ev(() => document.getElementById('depVerifyBtn').click()); await sleep(900);
   ok(await ev(() => STATE.balance) === walletBefore + 30000 && !await ev(() => document.getElementById('ovDepositStatus').classList.contains('show')), 'it closes the page and the wallet shows the credit');
 
+  // ---- 7b2. the pay page's clock running out shows "The transaction has expired" (the owner's recording); a tap goes back to Add Funds; the BUY sticker plays once beside the robot ----
+  ok(await ev(() => !!document.getElementById('gpExpired') && /The transaction has expired/.test(document.getElementById('gpExpired').textContent)), 'the expired dialog exists with "The transaction has expired"');
+  await ev(() => { _gp.finished = false; _gp.order = { depositId: 'x' }; _gpActive = true; gpExpired(); });
+  const ex = await ev(() => { const e = document.getElementById('gpExpired'), c = e.querySelector('.c'); return { show: e.classList.contains('show'), bg: getComputedStyle(e).backgroundColor, card: getComputedStyle(c).backgroundColor, rad: getComputedStyle(c).borderRadius, fin: _gp.finished }; });
+  ok(await ev(() => !!document.querySelector('#gpExpired svg.ge-svg')) && ex.show && ex.bg === 'rgba(0, 0, 0, 0.7)' && ex.card === 'rgb(255, 255, 255)' && ex.rad === '24px' && ex.fin, 'the clock running out opens it: a white card on the dark screen: ' + JSON.stringify(ex));
+  await ev(() => document.getElementById('gpExpired').click()); await sleep(700);
+  ok(await ev(() => !document.getElementById('gpExpired').classList.contains('show') && document.getElementById('ovDeposit').classList.contains('show')), 'a tap closes it and opens Add Funds for a new recharge');
+  await ev(() => { closeOverlay(); });
+  await ev(() => { document.getElementById('shopGrid').insertAdjacentHTML('beforeend', '<div class="prod-card" id="prodCard-zz"><div class="prod-img-wrap"></div></div>'); showBuyHint('zz'); });
+  const bhs = await ev(() => ({ n: document.querySelectorAll('.buy-hint').length, w: Math.round(document.querySelector('.buy-hint').getBoundingClientRect().width), parent: document.querySelector('.buy-hint').parentNode.className, an: getComputedStyle(document.querySelector('.buy-hint')).animationName, dur: getComputedStyle(document.querySelector('.buy-hint')).animationDuration, hand: !!document.querySelector('.buy-hint .bh-hand'), sparks: document.querySelectorAll('.buy-hint .bh-sp').length, pe: getComputedStyle(document.querySelector('.buy-hint')).pointerEvents }));
+  ok(bhs.n === 1 && bhs.parent === 'prod-img-wrap' && bhs.an === 'bhGhost' && bhs.dur === '3.3s' && bhs.hand && bhs.sparks === 3 && bhs.pe === 'none', 'the BUY sticker appears inside the card\'s picture area, plays once (3.3 s), has the hand and three sparks and never blocks a tap: ' + JSON.stringify(bhs));
+  await sleep(3700);
+  ok(await ev(() => document.querySelectorAll('.buy-hint').length) === 0, 'and it removes itself after the ghost fade');
+  await ev(() => { var z = document.getElementById('prodCard-zz'); if (z) z.remove(); });
+  await ev(() => { switchTab('home'); }); await sleep(300); await ev(() => dismissAnnouncement && dismissAnnouncement());
+  await ev((k) => goToShopProduct(k), P1.key); await sleep(2300);
+  ok(await ev((k) => !!document.querySelector('#prodCard-' + k + ' .buy-hint') && _lastTab === 'shop', P1.key), 'tapping a robot on Home opens AI Robots, glides to its card and the BUY sticker plays on that card');
+  await sleep(2000);
+
   // ---- 7c. Lucky Cards: the credited recharge gave one chance; the VIP gate; a flip pays the admin's amount; the board turns over ----
   ok((await J('GET', '/account', null, MEtok)).j.account.lucky.chances === 1, 'the credited recharge gave exactly one Lucky Cards chance');
   ok((await J('POST', '/admin/settings/update', { settings: { luckyMinAmount: 1000, luckyMaxAmount: 1000, luckyProductPct: 0, luckyMinVip: 99 } }, null, true)).s === 200, 'the admin sets the range to exactly UGX 1,000 and "VIP 99 and above" to flip');

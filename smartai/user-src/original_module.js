@@ -1683,6 +1683,16 @@ function switchTab(name){
   if (enteringHomeFromElsewhere) maybeShowAnnouncement(true);
   _lastTab = name;
 }
+var _bhHTML = '<svg class="bh-svg" viewBox="70 40 520 380" aria-hidden="true"><g class="bh-bob"> <path d="M100 112Q100 100 112 100L505 100L560 148V395Q560 408 546 408H150L100 366Z" fill="#b3e0ff" stroke="#5b95c8" stroke-width="8" stroke-linejoin="round"/> <path d="M98 112V358Q98 368 110 368H495Q505 368 505 358V122Q505 112 495 112Z" fill="#eaf6ff" stroke="#5b95c8" stroke-width="6" stroke-linejoin="round"/> <g class="bh-ext"><path d="M83 70Q83 55 98 55H415L452 82Q462 90 462 104V318Q462 336 444 336H110Q83 336 83 310Z" fill="#b30f27" stroke="#70081b" stroke-width="5" stroke-linejoin="round"/><path d="M415 58L450 84V316L415 296Z" fill="#c9132c"/></g> <g class="bh-face">  <rect x="83" y="55" width="332" height="240" rx="13" fill="#e5102b" stroke="#70081b" stroke-width="5"/>  <rect x="113" y="82" width="284" height="180" rx="10" fill="#fd2a3d"/>  <g class="bh-pressed"><rect x="83" y="55" width="332" height="240" rx="13" fill="#ff3d5e" stroke="#7a0a22" stroke-width="5"/><rect x="108" y="76" width="282" height="190" rx="12" fill="#ff7f90"/></g>  <text x="252" y="214" text-anchor="middle" font-family="\'Open Sans\',\'Segoe UI\',Roboto,Arial,sans-serif" font-weight="800" font-size="138" fill="#fff" textLength="267" lengthAdjust="spacingAndGlyphs">BUY</text> </g></g><g class="bh-sp bh-s1"><path d="M252 36V58M130 150H112" stroke="#fff" stroke-width="6" stroke-linecap="round"/></g><g class="bh-sp bh-s2"><path d="M104 40L120 56M424 44L440 58" stroke="#fff" stroke-width="6" stroke-linecap="round"/></g><g class="bh-sp bh-s3"><path d="M82 176H62M164 36L170 54M100 330L112 312" stroke="#fff" stroke-width="6" stroke-linecap="round"/></g><g class="bh-hand"><g transform="translate(-22 -5)"> <path class="bh-hy" d="M293 168C280 166 268 178 272 192L305 285C280 285 268 305 280 322C290 335 315 340 330 345L360 378C375 388 410 386 430 372C465 350 485 330 490 300C492 280 485 255 470 232C462 214 445 206 432 214C428 205 412 198 403 208C395 200 380 198 372 212L355 245L315 185C310 172 300 166 293 168Z" fill="#ffe01b" stroke="#f08a00" stroke-width="6" stroke-linejoin="round"/> <path class="bh-ho" d="M293 168C280 166 268 178 272 192L305 285C280 285 268 305 280 322C290 335 315 340 330 345L360 378C375 388 410 386 430 372C465 350 485 330 490 300C492 280 485 255 470 232C462 214 445 206 432 214C428 205 412 198 403 208C395 200 380 198 372 212L355 245L315 185C310 172 300 166 293 168Z" fill="#ffa500" stroke="#d66a00" stroke-width="6" stroke-linejoin="round"/> <path d="M372 218L392 268M404 212L417 262M433 218L446 255M318 290L336 333" fill="none" stroke="#f08a00" stroke-width="5" stroke-linecap="round"/></g></g></svg>';
+// The sticker sits in the blank space to the right of the robot on that card; it plays once (3.3 s) and removes itself.
+function showBuyHint(key){
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion:reduce)').matches) return;
+  var card = $('prodCard-' + key); if (!card || card.classList.contains('is-soldout')) return;
+  var wrap = card.querySelector('.prod-img-wrap'); if (!wrap) return;
+  var old = document.querySelector('.buy-hint'); if (old && old.parentNode) old.parentNode.removeChild(old);
+  var d = document.createElement('div'); d.className = 'buy-hint'; d.innerHTML = _bhHTML; wrap.appendChild(d);
+  setTimeout(function(){ if (d.parentNode) d.parentNode.removeChild(d); }, 3500);
+}
 // The Featured strip on Home: go to AI Robots and scroll straight to that robot's own card.
 function goToShopProduct(key){
   switchTab('shop');
@@ -1693,6 +1703,7 @@ function goToShopProduct(key){
   afterVeil(function(){
     go(true);
     setTimeout(function(){ if (!near()) go(false); }, 1100);
+    setTimeout(function(){ showBuyHint(key); }, 1200);   // once the card has landed, the BUY sticker taps three times beside the robot
   });
 }
 // One full-screen page at a time. The phone's Back button closes it (one history entry, replaced when one page opens another) instead of leaving the app.
@@ -1958,6 +1969,7 @@ function gpLeave(){
   _gpActive = false;
   clearInterval(_gp.timer); clearInterval(_gp.poll); clearTimeout(_gp.skelT); clearTimeout(_gp.toStatusT); _gp.timer = null; _gp.poll = null; _gp.busy = false;
   var d = $('gpDone'); if (d) d.classList.remove('show');
+  var ex = $('gpExpired'); if (ex) ex.classList.remove('show');
   _gpLoadN = 0; clearTimeout(_gpLoadHide); var l = $('gpLoading'); if (l) l.classList.remove('show');
 }
 function gpFinish(){
@@ -2065,9 +2077,16 @@ function gpTick(){
   }
   if (rem <= 0 && !_gp.submitted && !_gp.finished) gpExpired();
 }
+var _geHTML = '<svg class="ge-svg" viewBox="285 575 500 450" aria-hidden="true"><defs><linearGradient id="geArc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f5dd9b" stop-opacity="0"/><stop offset=".45" stop-color="#f2d27f" stop-opacity=".9"/><stop offset="1" stop-color="#f5dd9b" stop-opacity="0"/></linearGradient><linearGradient id="gePap" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fde9df"/><stop offset=".6" stop-color="#f9c9b6"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient><linearGradient id="geHand" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fdd2c2"/><stop offset="1" stop-color="#f6a592"/></linearGradient><linearGradient id="geCuff" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a9dcf6"/><stop offset="1" stop-color="#78bfee"/></linearGradient><radialGradient id="geFace" cx=".45" cy=".4" r=".7"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#f6e6e6"/></radialGradient><linearGradient id="geRed" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5d55"/><stop offset="1" stop-color="#d81f1f"/></linearGradient></defs><path d="M470 592A212 212 0 0 1 565 1012" fill="none" stroke="url(#geArc)" stroke-width="4" stroke-linecap="round"/><path d="M300 848Q300 832 325 838L480 862L598 884Q604 924 562 944Q520 954 470 946Q415 938 398 962V1008Q402 1024 430 1022L560 1016" fill="url(#gePap)"/><path d="M500 718L656 750L612 802L522 792Z" fill="#fdeae0"/><path d="M356 864L440 890M520 748L604 770M508 790L580 812" stroke="#ecbaa9" stroke-width="7" stroke-linecap="round" opacity=".75"/><path d="M292 745H340Q362 758 362 800V842Q330 836 306 816Q292 792 292 745Z" fill="url(#geCuff)"/><path d="M322 742Q306 684 346 644Q392 616 432 634Q458 652 448 690L470 700L500 704Q522 710 526 732Q530 760 508 776Q530 792 526 812Q516 842 482 842L402 844Q332 832 322 742Z" fill="url(#geHand)"/><path d="M500 704Q522 710 526 732M508 776Q530 792 526 812" fill="none" stroke="#eaa08c" stroke-width="3" opacity=".6"/><circle cx="432" cy="764" r="74" fill="url(#geRed)"/><circle cx="432" cy="764" r="53" fill="url(#geFace)"/><circle cx="432" cy="764" r="53" fill="none" stroke="#f0d6d6" stroke-width="3"/><circle cx="432" cy="669" r="14" fill="none" stroke="#e24444" stroke-width="7"/><rect x="424" y="680" width="16" height="14" rx="3" fill="#d92b2b"/><path d="M432 764L407 736" stroke="#2c2c2c" stroke-width="7" stroke-linecap="round"/><path d="M432 764L456 722" stroke="#e53935" stroke-width="3.5" stroke-linecap="round"/><circle cx="432" cy="764" r="8" fill="#fff" stroke="#222" stroke-width="4"/><path d="M498 704Q522 706 528 730Q532 758 510 774" fill="none" stroke="url(#geHand)" stroke-width="26" stroke-linecap="round"/><path d="M512 776Q534 792 528 814Q518 840 486 842" fill="none" stroke="url(#geHand)" stroke-width="26" stroke-linecap="round"/><path d="M470 818Q505 826 490 842" fill="none" stroke="url(#geHand)" stroke-width="26" stroke-linecap="round"/><path d="M581 666L605 642M604 688L641 678M597 711L618 719" stroke="#22a0f0" stroke-width="13" stroke-linecap="round"/></svg>';
 function gpExpired(){
   _gp.finished = true; clearInterval(_gp.timer); clearInterval(_gp.poll); gpClearResume();
-  gpDialog('cross', 'Order expired', 'This payment order has run out of time. If you already paid, contact customer service with your transaction ID; otherwise start a new recharge.');
+  var art = $('geArt'); if (art && !art.firstChild) art.innerHTML = _geHTML;
+  var e = $('gpExpired'); if (e) e.classList.add('show');   // "The transaction has expired" (the owner's recording)
+}
+// A tap anywhere on it closes it and goes back to Add Funds to start a new recharge.
+function gpExpiredClose(){
+  var e = $('gpExpired'); if (e) e.classList.remove('show');
+  gpLeave(); openOverlay('deposit');
 }
 function gpDialog(kind, title, text){
   var pic = kind === 'tick' ? (customIcon('tick') ? '<img src="' + esc(customIcon('tick')) + '" alt="">' : tickHtml()) : (customIcon('cross') ? '<img src="' + esc(customIcon('cross')) + '" alt="">' : crossHtml());
