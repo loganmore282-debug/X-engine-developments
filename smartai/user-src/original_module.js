@@ -2707,7 +2707,7 @@ async function lkTap(i){
   var r = await api('/lucky/flip', {});
   var wait = 560 - (Date.now() - t0);
   if (wait > 0) await new Promise(function(ok){ setTimeout(ok, wait); });
-  if (r.stale || !STATE) { _lk.busy = false; return; }
+  if (r.stale || !STATE) { _lk.busy = false; card.classList.remove('lift'); $('lkGrid').classList.remove('busy'); return; }
   if (r.status !== 'success') {
     card.classList.remove('lift'); $('lkGrid').classList.remove('busy'); _lk.busy = false;
     toast(r.message || 'Could not open the card');

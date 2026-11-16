@@ -21,6 +21,26 @@ process.on('unhandledRejection', (reason) => console.error('Unhandled rejection:
 process.on('uncaughtException',  (err)    => { console.error('Uncaught exception:', err); process.exit(1); });
 
 const app = express();
+// A route that is `async` and throws before it has answered would leave the caller waiting for ever (Express 4 does not look at the promise a route
+// returns). Every route and middleware registered below is wrapped once, here: an error that escapes is logged with its route and the caller gets a
+// plain 500; if the answer was already sent (a webhook acknowledged first) it is only logged.
+function guardRoute(h) {
+  if (typeof h !== 'function' || h.length > 3 || h.__guarded) return h;
+  const g = function (req, res, next) {
+    let r;
+    try { r = h.call(this, req, res, next); } catch (e) { return next(e); }
+    if (r && typeof r.catch === 'function') r.catch(e => {
+      console.error('Route error:', req.method, req.path, e && e.message);
+      if (!res.headersSent) { try { res.status(500).json({ status: 'error', message: 'Something went wrong. Please try again.' }); } catch (_) {} }
+    });
+  };
+  g.__guarded = true;
+  return g;
+}
+for (const m of ['get', 'post', 'put', 'delete', 'use', 'all']) {
+  const orig = app[m].bind(app);
+  app[m] = (...args) => orig(...args.map(x => Array.isArray(x) ? x.map(guardRoute) : guardRoute(x)));
+}
 // /Withdraw/request must not reach /withdraw/request: the maintenance gate, the nginx walls and fail2ban all match paths case-sensitively.
 app.set('case sensitive routing', true);
 app.set('trust proxy', 1);
@@ -6734,7 +6754,7 @@ app.get('/public/activity-feed', async (_req, res) => {
 // The member's own top-ups and cash-outs INCLUDING the ones still waiting or declined (the general ledger only gets a row once money has moved).
 // Only the fields the Ledger shows are sent: the rows also hold gateway references and internal notes that never leave the server.
 async function memberRecords(uid, collection, pick) {
-  const snap = await db.collection(collection).where('userId', '==', uid).limit(200).get();
+  const snap = await db.collection(collection).where('userId', '==', uid).orderBy('createdAt', 'desc').limit(200).get();
   const list = snap.docs.map(d => ({ id: d.id, ...pick(d.data()) }));
   list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
   return list.slice(0, 100);
@@ -6929,18 +6949,22 @@ app.post('/deposit/manual/submit', async (req, res) => {
     const dep = snap.data();
     if (dep.status === 'review') return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
     if (dep.status !== 'pending') return res.status(400).json({ status: 'error', message: 'This recharge is no longer open. Start a new one.' });
-    // A real transfer can back ONE open or credited claim, by anyone.
-    const dupSnap = await db.collection('pendingDeposits').where('pastedSmsTxId', '==', found.ref).get();
-    if (dupSnap.docs.some(d => d.id !== snap.id && d.data().status !== 'failed'))
-      return res.status(409).json({ status: 'error', message: 'This transaction ID has already been submitted.' });
+    // A real transfer can back ONE open or credited claim, by anyone. The look-up and the claim run under one lock on the transaction ID, so two members
+    // sending the same ID in the same instant cannot both get through.
     const smsAmount = sms ? extractManualAmount(sms) : null;
     const toDigits = String(dep.assignedNumber || '').replace(/\D/g, '').slice(-9);
-    const updated = await depRef.updateIf({ status: 'pending' }, {
-      status: 'review', reviewReason: 'Waiting for the admin to check the payment message',
-      pastedSms: sms || ('Transaction ID: ' + found.ref), pastedAt: FieldValue.serverTimestamp(), pastedSmsTxId: found.ref, pastedSmsKind: found.kind, pastedSmsParsed: true,
-      ...(smsAmount != null ? { pastedSmsAmount: smsAmount, pastedSmsAmountMatches: Math.abs(smsAmount - Number(dep.amount)) < 0.01 } : {}),
-      ...(sms && toDigits ? { pastedSmsToMatches: sms.replace(/\D/g, '').includes(toDigits) } : {}),
+    const claim = await withLock('manualtx:' + found.ref, async () => {
+      const dupSnap = await db.collection('pendingDeposits').where('pastedSmsTxId', '==', found.ref).get();
+      if (dupSnap.docs.some(d => d.id !== snap.id && d.data().status !== 'failed')) return 'dup';
+      return (await depRef.updateIf({ status: 'pending' }, {
+        status: 'review', reviewReason: 'Waiting for the admin to check the payment message',
+        pastedSms: sms || ('Transaction ID: ' + found.ref), pastedAt: FieldValue.serverTimestamp(), pastedSmsTxId: found.ref, pastedSmsKind: found.kind, pastedSmsParsed: true,
+        ...(smsAmount != null ? { pastedSmsAmount: smsAmount, pastedSmsAmountMatches: Math.abs(smsAmount - Number(dep.amount)) < 0.01 } : {}),
+        ...(sms && toDigits ? { pastedSmsToMatches: sms.replace(/\D/g, '').includes(toDigits) } : {}),
+      })) ? 'ok' : 'gone';
     });
+    if (claim === 'dup') return res.status(409).json({ status: 'error', message: 'This transaction ID has already been submitted.' });
+    const updated = claim === 'ok';
     if (!updated) return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
     const { date, time } = nowStr();
     await db.collection('transactions').add({
@@ -6974,7 +6998,7 @@ app.post('/deposit/manual/status', async (req, res) => {
 // An order nobody paid for is closed after the clock (15 min) plus a grace of 15.
 async function sweepManualOrders() {
   try {
-    const snap = await db.collection('pendingDeposits').where('status', '==', 'pending').limit(200).get();
+    const snap = await db.collection('pendingDeposits').where('status', '==', 'pending').where('method', '==', 'manual').limit(1000).get();
     const cut = Date.now() - 15 * 60 * 1000;
     for (const d of snap.docs) {
       const x = d.data();
@@ -9065,7 +9089,8 @@ const _adminCreditDebounce = new Map();
 const _adminDebitDebounce = new Map();
 app.post('/admin/deposit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { userId, amount, note } = req.body;
+  const { amount, note } = req.body;
+  const userId = typeof req.body.userId === 'string' ? req.body.userId : '';   // an id is text, never an object (a database operator must not reach a look-up)
   const amt = Math.round(parseFloat(amount || 0));
   if (!userId || !Number.isFinite(amt) || amt <= 0 || amt > MAX_MONEY_AMOUNT)
     return res.status(400).json({ status: 'error', message: `userId and a valid amount (1 - ${fmtMoney(MAX_MONEY_AMOUNT)}) required` });
@@ -9096,7 +9121,8 @@ app.post('/admin/deposit', async (req, res) => {
 });
 app.post('/admin/debit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { userId, amount, note } = req.body;
+  const { amount, note } = req.body;
+  const userId = typeof req.body.userId === 'string' ? req.body.userId : '';   // an id is text, never an object (a database operator must not reach a look-up)
   const amt = Math.round(Math.abs(parseFloat(amount || 0)));
   if (!userId || !Number.isFinite(amt) || amt <= 0 || amt > MAX_MONEY_AMOUNT)
     return res.status(400).json({ status: 'error', message: `userId and a valid amount (1 - ${fmtMoney(MAX_MONEY_AMOUNT)}) required` });
@@ -9208,7 +9234,7 @@ app.post('/admin/deposits/list', async (req, res) => {
 });
 app.post('/admin/deposit/force-credit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { depositId } = req.body;
+  const depositId = typeof req.body.depositId === 'string' ? req.body.depositId : '';
   if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
   try {
     const snap = await db.collection('pendingDeposits').doc(depositId).get();
