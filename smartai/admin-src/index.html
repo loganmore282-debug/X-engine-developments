@@ -3260,7 +3260,7 @@ const PICTURE_SLOTS = [
     saved:'Payout Account banner saved', cleared:'Payout Account banner removed' },
 ];
 // ── Guide PDF editor: a title and blocks (heading / text / picture / new page); saved as data, the member's app writes the PDF ──
-let _guide = { title:'', blocks:[] };
+let _guide = { title:'', blocks:[], pdf:null };
 function guideBytes(){ return _guide.blocks.reduce((n,b)=>n+(b.image?b.image.length:0),0); }
 function guideNote(){ const n=$('guideNote'); if(n){ const mb=(guideBytes()/1048576).toFixed(1); n.textContent = `${_guide.blocks.length} block${_guide.blocks.length===1?'':'s'}, pictures ${mb} MB of 5 MB.`; n.style.color = guideBytes()>7000000?'var(--bad,#e25453)':''; } }
 function drawGuide(){
@@ -3297,9 +3297,29 @@ function fileToGuideJpeg(file){
       }; img.src=fr.result; }; fr.readAsDataURL(file);
   });
 }
+function drawGuidePdf(){
+  const i=$('guidePdfInfo'), d=$('guidePdfDel'), p=_guide.pdf; if(!i) return;
+  i.innerHTML = p ? `Uploaded: <b>${esc(p.name)}</b> (${(p.size/1048576).toFixed(2)} MB). This is what members download.` : 'No PDF uploaded. Members get the guide built from the blocks below.';
+  d.style.display = p ? '' : 'none';
+}
+function fileToBase64(file){
+  return new Promise((resolve,reject)=>{ const fr=new FileReader(); fr.onerror=()=>reject(new Error('Could not read the file')); fr.onload=()=>resolve(String(fr.result||'')); fr.readAsDataURL(file); });
+}
 function wireGuide(){
   const box=$('guideBlocks'); if(!box) return;
-  drawGuide();
+  drawGuide(); drawGuidePdf();
+  $('guidePdfFile').addEventListener('change', async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return;
+    if(!/\.pdf$/i.test(f.name) && f.type!=='application/pdf') return toast('Please choose a PDF file','err');
+    if(f.size>8*1024*1024) return toast('That PDF is bigger than 8 MB. Make it smaller and try again.','err');
+    const lbl=$('guidePdfPick'); lbl.style.opacity='.6'; lbl.style.pointerEvents='none';
+    try{ toast('Uploading the PDF…','ok'); const data=await fileToBase64(f); const d=await api('/admin/guide/pdf/set',{ name:f.name, pdf:data });
+      if(d.status==='success'){ _guide.pdf={ name:d.name, size:d.size }; drawGuidePdf(); toast($('guideOn').checked?'PDF uploaded. Members download it now.':'PDF uploaded. Switch on "Show the Download guide PDF button" above and tap Save guide.','ok'); }
+      else toast(d.message||'Could not upload the PDF','err');
+    }catch(err){ toast(err.message||'Could not upload the PDF','err'); }
+    lbl.style.opacity=''; lbl.style.pointerEvents='';
+  });
+  $('guidePdfDel').addEventListener('click', async()=>{ if(!confirm('Remove the uploaded PDF? Members will get the guide built from the blocks below instead.')) return;
+    const d=await api('/admin/guide/pdf/clear',{}); if(d.status==='success'){ _guide.pdf=null; drawGuidePdf(); toast('PDF removed','ok'); } else toast(d.message||'Could not remove the PDF','err'); });
   document.querySelectorAll('[data-gadd]').forEach(b=>b.addEventListener('click',()=>{ const t=b.dataset.gadd; if(_guide.blocks.length>=300) return toast('That is the most blocks one guide can hold (300).','err'); _guide.blocks.push(t==='pb'?{t}:{t,text:''}); drawGuide(); const els=box.querySelectorAll('[data-gtext]'); if(els.length&&t!=='pb') els[els.length-1].focus(); }));
   $('guideAddImg').addEventListener('change', async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return;
     try{ toast('Shrinking the picture…','ok'); const image=await fileToGuideJpeg(f); _guide.blocks.push({t:'img',image,caption:''}); drawGuide(); }catch(err){ toast(err.message||'Could not use that picture','err'); } });
@@ -3346,7 +3366,7 @@ async function renderBanners(){
     </div>`;
   };
   const guideRes = await api('/admin/guide'); if (guideRes.status!=='success'){ loadFailed(guideRes,'the guide'); return; }
-  _guide = { title: guideRes.title||'', blocks: Array.isArray(guideRes.blocks)?guideRes.blocks:[] };
+  _guide = { title: guideRes.title||'', blocks: Array.isArray(guideRes.blocks)?guideRes.blocks:[], pdf: guideRes.pdf||null };
   const aboutHtmlRes = await api('/admin/about-html'); if (aboutHtmlRes.status!=='success'){ loadFailed(aboutHtmlRes,'the About page'); return; }   // an empty box here would blank the page on Save
   const aboutHtmlText = aboutHtmlRes.html||'';
   const announcementImage = (annr && annr.image) || '';
@@ -3425,6 +3445,15 @@ async function renderBanners(){
       <p class="muted" style="margin-top:0">Write a guide here with a title, headings, text and pictures. Members then see a <b>Download ${esc(v('brandName','Smart AI'))} guide PDF</b> button at the bottom of the welcome dialog, and tap it to get your guide as a PDF with your text and pictures in the order you set. The pictures are shrunk automatically.</p>
       <div class="switch-row"><span><b>Show the Download guide PDF button</b> <span class="muted">(needs the welcome dialog switched on above)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="guideOn" ${v('guideOn',false)===true?'checked':''} style="width:auto"></label></div>
+      <div class="panel-card" style="margin:0 0 12px;padding:12px">
+        <div class="muted" style="font-size:11.5px;font-weight:700;margin-bottom:4px">YOUR OWN PDF</div>
+        <p class="muted" style="margin:0 0 8px;font-size:12.5px">Already have the guide as a PDF? Upload it (up to 8 MB). Members then download <b>this exact file</b>, and the title and blocks below are not used until you remove it.</p>
+        <div id="guidePdfInfo" class="muted" style="margin-bottom:8px;font-size:13px"></div>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <label class="btn sm file-btn" style="margin:0" id="guidePdfPick">Upload PDF<input type="file" id="guidePdfFile" accept="application/pdf,.pdf" hidden></label>
+          <button class="btn sm danger" type="button" id="guidePdfDel" style="display:none">Remove PDF</button>
+        </div>
+      </div>
       <label>Guide title <span class="muted">(shown at the top of the first page)</span></label>
       <input id="guideTitle" maxlength="80" value="${esc(_guide.title)}" placeholder="${esc(v('brandName','Smart AI'))} guide">
       <div id="guideBlocks" style="margin-top:10px"></div>

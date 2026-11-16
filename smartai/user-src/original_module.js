@@ -13,7 +13,7 @@ var DEFAULT_SETTINGS = {
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   salaryTiers: [], depositMethodNames: '', brandName: '', shareMessage: 'Join me on {app}', shareDomain: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', whatsappGroup: '', whatsappContact: '',
-  rulesText: '', guideOn: false, guideVer: 0, annEnabled: false, annTitle: '', annBody: '', pageParticles: false, homeBannerTitle: '', homeBannerText: '', myBannerOpacity: 100, myBannerBlur: 0, navIconSize: 26, homeIconSize: 34, meIconSize: 36, giftCodeHint: 'Enter gift code'
+  rulesText: '', guideOn: false, guideVer: 0, guidePdfVer: 0, guidePdfName: '', annEnabled: false, annTitle: '', annBody: '', pageParticles: false, homeBannerTitle: '', homeBannerText: '', myBannerOpacity: 100, myBannerBlur: 0, navIconSize: 26, homeIconSize: 34, meIconSize: 36, giftCodeHint: 'Enter gift code'
 };
 var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
 // Filled by syncPublicConfig() from the admin's products; the last copy this device saw is read first so the very first paint is already right.
@@ -1209,17 +1209,26 @@ async function downloadGuide(btn){
   var label = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = btnBusyHtml('Preparing the guide…'); }
   try {
-    var ver = Number(getSettings().guideVer) || 0;
-    if (!_guideDoc || _guideDoc.ver !== ver) {
-      var r = await api('/public/guide');
-      if (r.stale) return;
-      if (r.status !== 'success' || !r.blocks) { toast(r.message || 'The guide is not available right now'); return; }
-      _guideDoc = r;
+    var gs = getSettings(), ver = Number(gs.guideVer) || 0, blob, fileName = (brandName() + ' guide.pdf');
+    if (Number(gs.guidePdfVer) > 0) {
+      // The owner uploaded a finished PDF in the admin: it is saved exactly as it is.
+      var resp = await fetch(API_BASE + '/public/guide.pdf?v=' + Number(gs.guidePdfVer), { cache: 'no-store' });
+      if (!resp.ok) { toast('The guide is not available right now'); return; }
+      blob = await resp.blob();
+      if (!blob.size) { toast('The guide is not available right now'); return; }
+      blob = new Blob([blob], { type: 'application/pdf' });
+      if (gs.guidePdfName) fileName = String(gs.guidePdfName);
+    } else {
+      if (!_guideDoc || _guideDoc.ver !== ver) {
+        var r = await api('/public/guide');
+        if (r.stale) return;
+        if (r.status !== 'success' || !r.blocks) { toast(r.message || 'The guide is not available right now'); return; }
+        _guideDoc = r;
+      }
+      blob = new Blob([buildGuidePdf(_guideDoc, brandName())], { type: 'application/pdf' });
     }
-    var pdf = buildGuidePdf(_guideDoc, brandName());
-    var blob = new Blob([pdf], { type: 'application/pdf' });
     var url = URL.createObjectURL(blob), a = document.createElement('a');
-    a.href = url; a.download = (brandName() + ' guide.pdf').replace(/[^A-Za-z0-9._ -]/g, '').replace(/\s+/g, '-'); a.style.display = 'none';
+    a.href = url; a.download = fileName.replace(/[^A-Za-z0-9._ -]/g, '').replace(/\s+/g, '-'); a.style.display = 'none';
     document.body.appendChild(a); a.click();
     setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 4000);
     toast('Guide downloaded');

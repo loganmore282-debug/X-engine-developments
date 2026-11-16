@@ -321,6 +321,25 @@ async function member(ref) {
   const pdfPath = require('node:path').join(require('node:os').tmpdir(), 'smartai-guide-test.pdf'); await dl.saveAs(pdfPath);
   const pdfTxt = require('node:fs').readFileSync(pdfPath, 'latin1');
   ok(/\.pdf$/i.test(dl.suggestedFilename()) && pdfTxt.startsWith('%PDF-1.4') && pdfTxt.trimEnd().endsWith('%%EOF') && /\/DCTDecode/.test(pdfTxt) && /Step one/.test(pdfTxt) && /Step two/.test(pdfTxt) && /\/Count 2 /.test(pdfTxt) && /Page 1 of 2/.test(pdfTxt), 'the tap downloads a real PDF: two pages, both headings, the text, the picture (' + dl.suggestedFilename() + ', ' + pdfTxt.length + ' bytes)');
+  // the owner's OWN PDF: uploaded in the admin, downloaded by members exactly as it is
+  await ev(() => dismissAnnouncement());
+  const ownPdf = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n% OWNER-OWN-PDF-MARK ' + 'x'.repeat(200), 'latin1');
+  ok((await J('POST', '/admin/guide/pdf/set', { name: 'a.pdf', pdf: Buffer.from('<html>not a pdf</html>' + 'x'.repeat(200)).toString('base64') }, null, true)).s === 400, 'a file that is not a PDF is refused');
+  ok((await J('POST', '/admin/guide/pdf/set', { name: 'a.pdf', pdf: Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(8 * 1024 * 1024 + 10)]).toString('base64') }, null, true)).s === 400, 'a PDF over 8 MB is refused');
+  const up = await J('POST', '/admin/guide/pdf/set', { name: 'My Guide (final).pdf', pdf: 'data:application/pdf;base64,' + ownPdf.toString('base64') }, null, true);
+  ok(up.s === 200 && up.j.size === ownPdf.length && /\.pdf$/.test(up.j.name), 'the owner uploads a PDF: ' + JSON.stringify(up.j));
+  ok((await J('GET', '/admin/guide', null, null, true)).j.pdf.size === ownPdf.length, 'the admin sees the uploaded PDF');
+  await J('POST', '/admin/settings/update', { settings: { guideOn: true } }, null, true);
+  const pubRes = await fetch(base + '/public/guide.pdf'); const pubBuf = Buffer.from(await pubRes.arrayBuffer());
+  ok(pubRes.status === 200 && /application\/pdf/.test(pubRes.headers.get('content-type')) && pubBuf.equals(ownPdf), 'members get the uploaded file byte for byte');
+  await ev(async () => { await syncPublicConfig(); }); await sleep(600);
+  await ev(async () => { dismissAnnouncement(); await maybeShowAnnouncement(false); }); await sleep(900);
+  const [dl2] = await Promise.all([page.waitForEvent('download', { timeout: 15000 }), page.click('#annGuideBtn')]);
+  const p2 = require('node:path').join(require('node:os').tmpdir(), 'smartai-guide-own.pdf'); await dl2.saveAs(p2);
+  ok(require('node:fs').readFileSync(p2).equals(ownPdf) && /\.pdf$/i.test(dl2.suggestedFilename()), 'tapping the button saves the owner\'s own PDF unchanged (' + dl2.suggestedFilename() + ')');
+  await J('POST', '/admin/guide/set', { title: '', blocks: [] }, null, true);
+  ok((await fetch(base + '/public/guide.pdf')).status === 200, 'saving the empty blocks does not hide an uploaded PDF');
+  ok((await J('POST', '/admin/guide/pdf/clear', {}, null, true)).s === 200 && (await fetch(base + '/public/guide.pdf')).status === 404, 'removing the PDF takes it away');
   await ev(() => dismissAnnouncement());
   await J('POST', '/admin/settings/update', { settings: { guideOn: false } }, null, true);
   await ev(() => { gpLeave(); stopDepositPoll(); releasePayLoader(); closeOverlay(); }); await sleep(300);

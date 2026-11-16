@@ -209,7 +209,7 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // /admin/app-icon/set carries TWO PNGs (512 and 192) in one body, so it
 // needs the image parser even though each one on its own is small.
 const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/smartai-image/set', '/admin/app-icon/set']);
-const HUGE_JSON_ROUTES = new Set(['/admin/about-html/set', '/admin/guide/set']);
+const HUGE_JSON_ROUTES = new Set(['/admin/about-html/set', '/admin/guide/set', '/admin/guide/pdf/set']);
 // PesaJet signs the RAW REQUEST PAYLOAD -- their dashboard says so in as many
 // words ("computing an HMAC-SHA256 digest of the raw request payload using
 // this secret"). A digest over a re-serialised object is NOT the same bytes,
@@ -674,6 +674,7 @@ const DEFAULT_SETTINGS = {
   supportTelegram: '', telegramGroup: '',
   // The welcome announcement dialog (ChocoMCC's): a switch, a title and a body of text; its picture is the 'announcement' banner, its two buttons are the WhatsApp and Telegram group links below.
   pageParticles: false,   // true = the dark particle background fills every page of the app (Admin > Banners > Animations)
+  guidePdfVer: 0, guidePdfName: '',   // an uploaded PDF (content/guidePdf) that members download as it is, instead of the one built from the blocks; 0 = none
   guideOn: false, guideVer: 0,   // the "Download guide PDF" button on the welcome dialog; guideVer = when the guide was last saved (0 = none yet)
   annEnabled: false, annTitle: '', annBody: '',   // the text may hold :fire: style tokens, which the app draws as the owner's animated emojis (see ANN_EMOJI in the app)
   // Daily check-in (Rewards tab): the CALENDAR pays a rising ladder over a 30-day cycle (day 1 = first amount, day 9 = the first again, ...; a missed day starts over at day 1).
@@ -7891,7 +7892,8 @@ function cleanGuide(raw) {
 let _guideCache = null, _guideCacheVer = -1;
 app.get('/admin/guide', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try { const snap = await db.collection('content').doc('guide').get(); const d = snap.exists ? snap.data() : {}; res.json({ status: 'success', title: d.title || '', blocks: Array.isArray(d.blocks) ? d.blocks : [] }); }
+  try { const snap = await db.collection('content').doc('guide').get(); const d = snap.exists ? snap.data() : {}; const ps = await db.collection('content').doc('guidePdf').get(); const pd = ps.exists ? ps.data() : null;
+    res.json({ status: 'success', title: d.title || '', blocks: Array.isArray(d.blocks) ? d.blocks : [], pdf: pd && pd.data ? { name: pd.name || 'guide.pdf', size: Number(pd.size) || 0 } : null }); }
   catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the guide' }); }
 });
 app.post('/admin/guide/set', async (req, res) => {
@@ -7901,11 +7903,58 @@ app.post('/admin/guide/set', async (req, res) => {
   try {
     await db.collection('content').doc('guide').set({ title: g.title, blocks: g.blocks });
     // guideVer is when it was saved (0 = no guide): the app shows the button only for a guide that exists, and keeps its copy per version.
-    await db.collection('settings').doc('main').set({ guideVer: g.blocks.length ? Date.now() : 0 }, { merge: true });
+    const pdfNow = await db.collection('content').doc('guidePdf').get();   // an uploaded PDF counts as a guide too: saving empty blocks must not hide the button
+    await db.collection('settings').doc('main').set({ guideVer: (g.blocks.length || (pdfNow.exists && pdfNow.data().data)) ? Date.now() : 0 }, { merge: true });
     _settingsCacheTs = 0; _guideCache = null; _guideCacheVer = -1;
     logAdminAction(req, 'guide_saved', { blocks: g.blocks.length, pictures: g.blocks.filter(b => b.t === 'img').length });
     res.json({ status: 'success', blocks: g.blocks.length });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the guide' }); }
+});
+// ── The owner's own PDF: uploaded here and handed to members exactly as it is (no rebuilding). Up to 8 MB; it must really be a PDF (starts with %PDF-). ──
+const GUIDE_PDF_MAX = 8 * 1024 * 1024;
+let _guidePdfCache = null;   // { ver, name, buf }
+app.post('/admin/guide/pdf/set', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const raw = typeof (req.body || {}).pdf === 'string' ? req.body.pdf : '';
+  const b64 = raw.replace(/^data:application\/pdf;base64,/i, '').replace(/\s+/g, '');
+  if (!b64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return res.status(400).json({ status: 'error', message: 'That is not a PDF file.' });
+  const buf = Buffer.from(b64, 'base64');
+  if (buf.length > GUIDE_PDF_MAX) return res.status(400).json({ status: 'error', message: 'That PDF is bigger than 8 MB. Make it smaller and try again.' });
+  if (buf.length < 100 || buf.slice(0, 5).toString('latin1') !== '%PDF-') return res.status(400).json({ status: 'error', message: 'That is not a PDF file.' });
+  const name = (String((req.body || {}).name || 'guide.pdf').replace(/[^A-Za-z0-9._ -]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'guide.pdf').replace(/(\.pdf)?$/i, '.pdf');
+  try {
+    const ver = Date.now();
+    await db.collection('content').doc('guidePdf').set({ name, size: buf.length, data: buf.toString('base64'), ver });
+    await db.collection('settings').doc('main').set({ guidePdfVer: ver, guidePdfName: name, guideVer: ver }, { merge: true });
+    _settingsCacheTs = 0; _guidePdfCache = null;
+    logAdminAction(req, 'guide_pdf_uploaded', { name, bytes: buf.length });
+    res.json({ status: 'success', name, size: buf.length });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the PDF' }); }
+});
+app.post('/admin/guide/pdf/clear', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    await db.collection('content').doc('guidePdf').delete();
+    const g = await db.collection('content').doc('guide').get();
+    const hasBlocks = g.exists && Array.isArray(g.data().blocks) && g.data().blocks.length > 0;
+    await db.collection('settings').doc('main').set({ guidePdfVer: 0, guidePdfName: '', guideVer: hasBlocks ? Date.now() : 0 }, { merge: true });
+    _settingsCacheTs = 0; _guidePdfCache = null; _guideCache = null; _guideCacheVer = -1;
+    logAdminAction(req, 'guide_pdf_removed', {});
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove the PDF' }); }
+});
+app.get('/public/guide.pdf', async (req, res) => {
+  try {
+    const sett = await getSettings(), ver = Number(sett.guidePdfVer) || 0;
+    if (sett.guideOn !== true || !(ver > 0)) return res.status(404).json({ status: 'error', message: 'There is no guide right now' });
+    if (!_guidePdfCache || _guidePdfCache.ver !== ver) {
+      const snap = await db.collection('content').doc('guidePdf').get();
+      if (!snap.exists || !snap.data().data) return res.status(404).json({ status: 'error', message: 'There is no guide right now' });
+      _guidePdfCache = { ver, name: snap.data().name || 'guide.pdf', buf: Buffer.from(snap.data().data, 'base64') };
+    }
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Length': String(_guidePdfCache.buf.length), 'Content-Disposition': 'attachment; filename="' + _guidePdfCache.name.replace(/"/g, '') + '"', 'Cache-Control': 'public, max-age=60', 'X-Content-Type-Options': 'nosniff' });
+    res.end(_guidePdfCache.buf);
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the guide' }); }
 });
 app.get('/public/guide', async (req, res) => {
   try {
