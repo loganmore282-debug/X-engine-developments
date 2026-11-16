@@ -2873,7 +2873,7 @@ async function openTeamLevel(level){
 /* ====================== NOTICES ====================== */
 function toast(msg){
   var bg = $('toastBg'); $('toast').textContent = msg; bg.classList.add('show');
-  clearTimeout(window._tTimer); window._tTimer = setTimeout(function(){ bg.classList.remove('show'); }, 2600);
+  clearTimeout(window._tTimer); window._tTimer = setTimeout(function(){ bg.classList.remove('show'); }, 2000);   // shown for 2 seconds, then it fades away
 }
 
 /* ====================== START ====================== */
