@@ -961,6 +961,75 @@ const BRAND_ASSET_SLOTS = {
   'app-icon-192': { mime: 'image/png',  w: 192,  h: 192, max: 300 * 1024, file: 'icon-192.png' },
 };
 const _brandAssetCache = {}, _bundledAssetCache = {};
+// ── The launcher's ROUND icon ──
+// An installed app's icon is cut to the phone's own shape (a circle on many phones) ONLY when the manifest says it is `maskable`. An icon listed as `any` is shown
+// whole, as a square sitting inside a white shape: "the app icon is not round". The maskable one is made here from the app icon itself (the owner's upload or the
+// stock one), so a new upload follows automatically: the picture is scaled to 74% and the border is filled by stretching its own edge pixels outwards (the icon is a
+// full-bleed picture, so there is no seam), which keeps the robot inside the safe circle the launcher keeps. Plain Node (zlib): 8-bit, not interlaced, RGB or RGBA.
+function pngDecodeRGBA(buf) {
+  if (!buf || buf.length < 33 || buf.readUInt32BE(0) !== 0x89504e47) return null;
+  let off = 8, w = 0, h = 0, depth = 0, ctype = 0, interlace = 0; const idat = [];
+  while (off + 8 <= buf.length) {
+    const len = buf.readUInt32BE(off), type = buf.toString('ascii', off + 4, off + 8), data = buf.slice(off + 8, off + 8 + len);
+    if (type === 'IHDR') { w = data.readUInt32BE(0); h = data.readUInt32BE(4); depth = data[8]; ctype = data[9]; interlace = data[12]; }
+    else if (type === 'IDAT') idat.push(data);
+    else if (type === 'IEND') break;
+    off += 12 + len;
+  }
+  if (!w || !h || w > 4096 || h > 4096 || depth !== 8 || interlace !== 0 || (ctype !== 2 && ctype !== 6)) return null;
+  const bpp = ctype === 6 ? 4 : 3, stride = w * bpp;
+  let raw; try { raw = require('zlib').inflateSync(Buffer.concat(idat)); } catch (_) { return null; }
+  if (raw.length < (stride + 1) * h) return null;
+  const px = Buffer.alloc(w * h * 4), prev = Buffer.alloc(stride), cur = Buffer.alloc(stride);
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)], row = raw.slice(y * (stride + 1) + 1, (y + 1) * (stride + 1));
+    for (let i = 0; i < stride; i++) {
+      const a = i >= bpp ? cur[i - bpp] : 0, b = prev[i], c = i >= bpp ? prev[i - bpp] : 0;
+      let v = row[i];
+      if (f === 1) v += a; else if (f === 2) v += b; else if (f === 3) v += (a + b) >> 1;
+      else if (f === 4) { const pa = Math.abs(b - c), pb = Math.abs(a - c), pc = Math.abs(a + b - 2 * c); v += (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c); }
+      cur[i] = v & 255;
+    }
+    for (let x = 0; x < w; x++) { const o = (y * w + x) * 4; px[o] = cur[x * bpp]; px[o + 1] = cur[x * bpp + 1]; px[o + 2] = cur[x * bpp + 2]; px[o + 3] = bpp === 4 ? cur[x * bpp + 3] : 255; }
+    cur.copy(prev);
+  }
+  return { w, h, px };
+}
+function pngEncodeRGBA(w, h, px) {
+  const zlib = require('zlib'), raw = Buffer.alloc((w * 4 + 1) * h);
+  for (let y = 0; y < h; y++) { raw[y * (w * 4 + 1)] = 0; px.copy(raw, y * (w * 4 + 1) + 1, y * w * 4, (y + 1) * w * 4); }
+  const crcT = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crcT[n] = c >>> 0; }
+  const crc = b => { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = crcT[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type, 'ascii'), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 6;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
+}
+function makeMaskablePng(buf, scale) {
+  const img = pngDecodeRGBA(buf); if (!img) return null;
+  const k = scale || 0.74, W = img.w, H = img.h, iw = Math.round(W * k), ih = Math.round(H * k), out = Buffer.alloc(W * H * 4);
+  // the picture shrunk to iw x ih by averaging (area sampling), read with the coordinates clamped to its edges: outside it the edge pixels simply continue
+  const sample = (x, y) => {
+    const cx = Math.min(iw - 1, Math.max(0, x)), cy = Math.min(ih - 1, Math.max(0, y));
+    const x0 = Math.floor(cx * W / iw), x1 = Math.max(x0 + 1, Math.floor((cx + 1) * W / iw)), y0 = Math.floor(cy * H / ih), y1 = Math.max(y0 + 1, Math.floor((cy + 1) * H / ih));
+    let r = 0, g = 0, b = 0, a = 0, n = 0;
+    for (let yy = y0; yy < y1 && yy < H; yy++) for (let xx = x0; xx < x1 && xx < W; xx++) { const o = (yy * W + xx) * 4; r += img.px[o]; g += img.px[o + 1]; b += img.px[o + 2]; a += img.px[o + 3]; n++; }
+    return [r / n, g / n, b / n, a / n];
+  };
+  const ox = Math.round((W - iw) / 2), oy = Math.round((H - ih) / 2);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const v = sample(x - ox, y - oy), o = (y * W + x) * 4; out[o] = v[0]; out[o + 1] = v[1]; out[o + 2] = v[2]; out[o + 3] = 255; }
+  return pngEncodeRGBA(W, H, out);
+}
+let _maskableCache = null;
+async function getMaskableIcon() {
+  const base = await getBrandAsset('app-icon-512');
+  if (!base || !base.buf) return null;
+  if (_maskableCache && _maskableCache.version === base.version) return _maskableCache.a;
+  const png = makeMaskablePng(base.buf);
+  // an icon this reader cannot decode (an unusual PNG) is handed out as it is: still a valid icon, only not padded
+  const a = { buf: png || base.buf, mime: 'image/png', version: base.version + (png ? '-m' : '') };
+  _maskableCache = { version: base.version, a };
+  return a;
+}
 // The icon that ships inside the static build, read off disk. smartai-server's
 // rootDir is `smartai/`, so `user/icon-512.png` is right there beside this
 // file. It exists so the manifest's icon URL ALWAYS resolves to a real PNG:
@@ -4081,6 +4150,18 @@ function serveBrandAsset(slot) {
 }
 app.get('/public/app-icon-512.png', serveBrandAsset('app-icon-512'));
 app.get('/public/app-icon-192.png', serveBrandAsset('app-icon-192'));
+app.get('/public/app-icon-maskable-512.png', async (req, res) => {
+  try {
+    const a = await getMaskableIcon();
+    if (!a) return res.status(404).end();
+    const etag = '"ba-maskable-' + a.version + '"';
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin'); res.set('Cache-Control', 'public, max-age=300, must-revalidate'); res.set('ETag', etag); res.set('Content-Type', 'image/png');
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.set('Content-Length', String(a.buf.length));
+    if (req.method === 'HEAD') return res.end();
+    res.end(a.buf);
+  } catch (e) { res.status(500).end(); }
+});
 // Prefetched in boot()'s own Promise.all alongside /public/banner, so it's
 // ready with zero added visible latency by the time the announcement dialog
 // itself checks STATE.settings and decides to show (same reasoning as the
