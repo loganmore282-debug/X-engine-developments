@@ -1602,8 +1602,8 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   <div class="overlay" id="ovTaskcenter">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">VIP Tasks</div></div>
     <div class="uline-tabs" style="margin-bottom:10px">
-      <button class="uline-tab active" data-vt="team" onclick="setVipTab('team')">Team rewards</button>
-      <button class="uline-tab" data-vt="agent" onclick="setVipTab('agent')">Agent rewards</button>
+      <button class="uline-tab active" data-vt="team" onclick="setVipTab('team',true)">Team rewards</button>
+      <button class="uline-tab" data-vt="agent" onclick="setVipTab('agent',true)">Agent rewards</button>
     </div>
     <div id="vtTeam">
       <p class="tk-lead">Your team&rsquo;s purchases (all 3 levels) unlock rewards. Each reward can be claimed once.</p>

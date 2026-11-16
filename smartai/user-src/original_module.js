@@ -1454,8 +1454,11 @@ function renderTierCard(t, total){
 /* VIP Tasks: two lists. Team rewards (each tier claimed once, from the team's purchases) and Agent rewards (a monthly salary for keeping a number of
    ACTIVE subordinates: members invited directly who have an AI robot running; the admin names each agent level). Everything shown is what the server answered. */
 var _vipTab = 'team';
-function setVipTab(name){
+function setVipTab(name, tapped){
+  var was = _vipTab;
   _vipTab = name === 'agent' ? 'agent' : 'team';
+  // A tap on the other tab brings up the app's dots over the page, exactly like going to another page: the lists are asked for afresh behind them and the dots lift when the answer is on screen.
+  if (tapped && _vipTab !== was) navVeil(true, vipRefresh());
   document.querySelectorAll('.uline-tab[data-vt]').forEach(function(b){ b.classList.toggle('active', b.dataset.vt === _vipTab); });
   var a = $('vtTeam'), g = $('vtAgent');
   if (a) a.style.display = _vipTab === 'team' ? '' : 'none';
@@ -1495,19 +1498,25 @@ function renderAgentList(r){
   if (!r || r.status !== 'success' || !Array.isArray(r.levels)) { box.innerHTML = '<div class="empty">' + esc((r && r.message) || 'Could not load the agent rewards. Try again.') + '</div>'; return; }
   box.innerHTML = r.levels.length ? (renderAgentSummary(r) + r.levels.map(function(l){ return renderAgentLevel(l, r); }).join('')) : '<div class="empty">No agent rewards are set up yet.</div>';
 }
+// Asks the server for both lists and paints them (no spinner of its own: the caller shows the dots or the ring).
+async function vipRefresh(){
+  var box = $('taskCenterList');
+  if (!box) return;
+  var rs = await Promise.all([api('/salary/status'), api('/agent/status')]);
+  var r = rs[0], ag = rs[1];
+  if (r.stale || ag.stale || !STATE) return;
+  STATE.agent = ag;
+  renderAgentList(ag);
+  if (r.status !== 'success' || !Array.isArray(r.tiers)) { box.innerHTML = '<div class="empty">' + esc((r && r.message) || 'Could not load the team rewards. Try again.') + '</div>'; return; }
+  STATE.salary = r;
+  box.innerHTML = r.tiers.length ? r.tiers.map(function(t){ return renderTierCard(t, Number(r.total) || 0); }).join('') : '<div class="empty">No rewards are set up yet.</div>';
+}
 async function loadTaskCenter(){
   var box = $('taskCenterList'), abox = $('agentList');
   if (!box) return;
   setVipTab(_vipTab);
   box.innerHTML = spinnerHtml(); if (abox) abox.innerHTML = spinnerHtml();
-  var rs = await Promise.all([api('/salary/status'), api('/agent/status')]);
-  var r = rs[0], ag = rs[1];
-  if (r.stale || ag.stale) return;
-  if (STATE) STATE.agent = ag;
-  renderAgentList(ag);
-  if (r.status !== 'success' || !Array.isArray(r.tiers)) { box.innerHTML = '<div class="empty">' + esc((r && r.message) || 'Could not load the team rewards. Try again.') + '</div>'; return; }
-  STATE.salary = r;
-  box.innerHTML = r.tiers.length ? r.tiers.map(function(t){ return renderTierCard(t, Number(r.total) || 0); }).join('') : '<div class="empty">No rewards are set up yet.</div>';
+  await vipRefresh();
 }
 async function claimAgent(btn){
   if (!btn || btn.disabled) return;
