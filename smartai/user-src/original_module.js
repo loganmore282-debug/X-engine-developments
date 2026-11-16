@@ -210,6 +210,7 @@ async function refreshFromServer(){
     STATE.balance = Number(a.walletBalance) || 0; STATE.totalDeposited = a.totalDeposited || 0;
     STATE.totalEarned = a.totalEarned || 0; STATE.totalWithdrawn = a.totalWithdrawn || 0;
     STATE.totalInvested = a.totalInvested || 0;
+    STATE.vip = Number(a.vipLevel) || 0;
     STATE.lucky = a.lucky || { on: false, vip: 0, chances: 0, minVip: 0, minAmount: 0, maxAmount: 0, hasProducts: false };
     STATE.referralCode = a.referralCode || STATE.referralCode;
     STATE.withdrawAnytime = a.withdrawAnytime === true;
@@ -1410,12 +1411,26 @@ function renderAll(){
   $('teamComm').textContent = ugx(s.team.commission);
   $('commL1Pct').textContent = sett.commL1 + '%'; $('commL2Pct').textContent = sett.commL2 + '%'; $('commL3Pct').textContent = sett.commL3 + '%';
   renderLucky();
+  paintVip(false);
   renderMeRows();
   renderFeatured(); renderTicker(); renderShop(); renderRecords();
 }
 // The Me page: the Download App tile follows whether the app is already installed.
 function renderMeRows(){
   updateDownloadTileVisibility();
+}
+// The VIP bar under the number card: filled up to the member's level (VIP 0 = empty; the full bar is the highest VIP level the admin has set). animate = fill it from empty (the Me tab opening).
+function paintVip(animate){
+  var bar = $('vipBar'); if (!bar || !STATE) return;
+  var vip = Math.max(0, Math.floor(Number(STATE.vip) || 0)), max = vip;
+  for (var i = 0; i < PRODUCTS.length; i++) max = Math.max(max, Math.floor(Number(PRODUCTS[i].vip) || 0));
+  if (max < 1) { bar.style.display = 'none'; return; }
+  bar.style.display = '';
+  $('vipBadge').textContent = 'VIP ' + vip;
+  var tr = $('vipTrack'), fill = $('vipFill'), pct = Math.min(100, vip / max * 100);
+  tr.setAttribute('aria-valuemax', String(max)); tr.setAttribute('aria-valuenow', String(vip));
+  if (animate) { fill.style.transition = 'none'; fill.style.width = '0%'; void fill.offsetWidth; fill.style.transition = ''; }
+  fill.style.width = pct.toFixed(2) + '%';
 }
 
 /* ====================== TASK CENTER (team reward tiers) ======================
@@ -1889,7 +1904,7 @@ function switchTab(name){
   if (name === 'rewards') lkSettle();
   if (name === 'rewards' && _lastTab !== 'rewards' && typeof lkResetIfDone === 'function') lkResetIfDone();
   if (STATE && (name === 'rewards' || name === 'team' || name === 'share' || name === 'home')) renderAll();
-  if (name === 'account' && STATE && _lastTab !== 'account') countMyBalances();
+  if (name === 'account' && STATE && _lastTab !== 'account') { countMyBalances(); paintVip(true); }
   if (name === 'team') medalPreload();
   // Coming back to Home from another tab shows the announcement again (its buttons shaking straight away).
   if (enteringHomeFromElsewhere) maybeShowAnnouncement(true);
@@ -2194,9 +2209,19 @@ function continueDeposit(){
   var amt = parseInt($('depAmt').value, 10), sett = getSettings();
   if (!amt || amt < sett.minDeposit) { toast('Minimum amount is ' + ugx(sett.minDeposit)); return; }
   if (sett.depositAvailable === false) { toast('Recharges are not available right now'); return; }
-  gpOpenPick(amt);
+  if (_gpEntering) return;
+  // The dots come up over Add Funds while the payment page is asked for (the networks the admin has numbers for); the page opens under them and they lift.
+  _gpEntering = true;
+  var epoch = _authEpoch, ask = api('/public/pay-channels');
+  navVeil(true, ask);
+  ask.then(function(r){
+    _gpEntering = false;
+    if (!STATE || epoch !== _authEpoch) return;
+    gpOpenPick(amt, r);
+  }, function(){ _gpEntering = false; });
 }
-function gpOpenPick(amt){
+var _gpEntering = false;
+function gpOpenPick(amt, channels){
   _gp.amount = amt; _gp.network = ''; _gp.busy = false;
   $('gpAmt1').textContent = String(amt);
   $('gpPhone').value = '';
@@ -2204,10 +2229,8 @@ function gpOpenPick(amt){
   $('gpConfirm').disabled = false; $('ovGpPick').classList.remove('busy');
   gpShow('ovGpPick');
   // Which networks the admin has a number for (a network with none is greyed and says so when tapped).
-  api('/public/pay-channels').then(function(r){
-    if (!r || r.status !== 'success' || !Array.isArray(r.networks)) return;
-    ['MTN', 'Airtel'].forEach(function(n){ var b = $('gpM_' + n); if (b && r.networks.indexOf(n) < 0) { b.style.opacity = '.4'; b.dataset.off = '1'; } });
-  }).catch(function(){});
+  var r = channels;
+  if (r && r.status === 'success' && Array.isArray(r.networks)) ['MTN', 'Airtel'].forEach(function(n){ var b = $('gpM_' + n); if (b && r.networks.indexOf(n) < 0) { b.style.opacity = '.4'; b.dataset.off = '1'; } });
 }
 function gpPickNet(n){
   var b = $('gpM_' + n);

@@ -518,6 +518,13 @@
   .acct-icon{width:46px;height:46px;border-radius:14px;background:#fff;overflow:hidden;
     display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
   .acct-num{font-size:16px;font-weight:800;}
+  /* VIP level bar inside the number card, under the number (the card keeps its size): filled up to the member's level, full at the highest VIP level. */
+  .acct-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px;}
+  .vip-bar{display:flex;align-items:center;gap:9px;}
+  .vip-badge{font-size:11.5px;font-weight:900;letter-spacing:.3px;white-space:nowrap;line-height:1;}
+  .vip-track{position:relative;flex:1;min-width:0;height:5px;border-radius:999px;background:rgba(255,255,255,.14);overflow:hidden;}
+  .vip-fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;background:linear-gradient(90deg,#2f7bff,#4fd1ff);transition:width .9s cubic-bezier(.22,.8,.3,1);}
+  @media (prefers-reduced-motion:reduce){.vip-track>.vip-fill{transition:none;}}
 
 
   /* ---------- Shop ribbon badges ---------- */
@@ -1316,7 +1323,13 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
         <div class="art-host" id="accountBanner"></div>
         <div class="acct-card">
           <div class="acct-icon" id="acctIcon"></div>
-          <div class="acct-num" id="acctPhone">—</div>
+          <div class="acct-info">
+            <div class="acct-num" id="acctPhone">—</div>
+            <div class="vip-bar" id="vipBar" style="display:none">
+              <span class="vip-badge" id="vipBadge">VIP 0</span>
+              <div class="vip-track" id="vipTrack" role="progressbar" aria-label="VIP level" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0"><i class="vip-fill" id="vipFill"></i></div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="cards" style="margin:0 var(--gut) 18px">
