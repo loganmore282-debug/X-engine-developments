@@ -1084,7 +1084,7 @@ async function maybeShowAnnouncement(immediateShake){
   startAnnEmoji();
 }
 document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && $('announcementBg') && $('announcementBg').classList.contains('show')) dismissAnnouncement(); });
-var GUIDE_DL_ICON = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5v11M7.5 10.2L12 14.7l4.5-4.5M4.5 19.5h15"/></svg>';
+var GUIDE_DL_ICON = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.7V14.6M6.9 10.2L12 15.1L17.1 10.2"/><path d="M3.1 14.5V18.4Q3.1 20.8 5.5 20.8H18.5Q20.9 20.8 20.9 18.4V14.5"/></svg>';   // the owner's download icon: arrow into an open tray
 function dismissAnnouncement(){ $('announcementBg').classList.remove('show'); }
 
 /* ====================== GUIDE PDF (the button on the welcome dialog) ======================
