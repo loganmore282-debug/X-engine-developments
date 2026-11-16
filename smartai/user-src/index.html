@@ -316,6 +316,20 @@
   body.pf-on .uline-tab.active{color:#fff;border-bottom-color:#8fcaff;}
   body.pf-on .tk-lead{color:#cfe0fb;}
   html.pf-on{background:#040b26 radial-gradient(130% 90% at 50% 108%,#0c3f9c 0%,#071b56 42%,#040b26 100%) fixed;}
+  /* Sign in and Sign up on the particle field: no white page, the animated field shows through the whole screen; the fields are frosted glass and the words are white. */
+  body.pf-on #authScreen{background:transparent;}
+  body.pf-on .auth-mark{background:none;border:0;box-shadow:none;}
+  body.pf-on .auth-title{color:#fff;text-shadow:0 0 18px rgba(90,170,255,.55);}
+  body.pf-on .auth-sub{color:#cfe0fb;}
+  body.pf-on .auth-card .field input{background:rgba(255,255,255,.09);border-color:rgba(150,200,255,.4);color:#fff;}
+  body.pf-on .auth-card .field input::placeholder{color:rgba(205,222,255,.72);}
+  body.pf-on .auth-card .field input:focus{border-color:#8fcaff;box-shadow:0 0 0 3px rgba(90,170,255,.25);}
+  body.pf-on .auth-card .field input:-webkit-autofill{-webkit-box-shadow:0 0 0 100px #0d2f6e inset;-webkit-text-fill-color:#fff;caret-color:#fff;}
+  body.pf-on .auth-card .field .ic{color:#cfe0fb;opacity:.9;}
+  body.pf-on .auth-card .phone-prefix{color:#e6efff;}
+  body.pf-on .auth-switch-btn{border-color:rgba(150,200,255,.45);color:#cfe0fb;}
+  body.pf-on .auth-switch-btn b{color:#8fcaff;}
+  body.pf-on .auth-err{background:rgba(255,90,110,.2);color:#ffb3bd;}
   /* Every page has a compact blue curved header like Potato's: a plain white chevron at the left and the page name centred in white. */
   .ov-top{position:relative;z-index:6;height:calc(52px + env(safe-area-inset-top,0px));margin-bottom:12px;background:radial-gradient(circle at 90% 10%,rgba(255,255,255,.16) 0,rgba(255,255,255,0) 40%),linear-gradient(135deg,#2b88f3,#0a4fc6);border-radius:0 0 24px 24px;box-shadow:0 10px 22px -14px rgba(11,42,91,.6);}
   .ov-back{position:absolute;left:6px;top:calc(env(safe-area-inset-top,0px) + 4px);width:44px;height:44px;border:none;background:none;color:#fff;display:flex;align-items:center;justify-content:center;}
