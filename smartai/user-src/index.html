@@ -672,6 +672,28 @@
   #ovGpPick.busy .gp-card1{opacity:.8;filter:saturate(.8);transition:opacity .3s ease,filter .3s ease;}
   #ovGpPick .gp-card1{transition:opacity .3s ease,filter .3s ease;}
   @media (prefers-reduced-motion:reduce){.gp-ov.show,.gp-card2,.gp-idrow,.gp-btn::after,.gp-pop .gp-step>*{animation:none !important;}}
+  
+  .link-box{background:var(--cream-deep);border:1.5px dashed var(--caramel);border-radius:14px;padding:14px 16px;margin:14px var(--gut);}
+  /* The whole payment page is the dark particle field (full page, fixed behind the words; makeParticleField draws it), with the cards sitting on it. */
+  #ovDepositStatus{background:radial-gradient(130% 90% at 50% 108%,#0c3f9c 0%,#071b56 42%,#040b26 100%);color:#fff;}
+  .pay-fx{position:fixed;inset:0;width:100%;height:100%;display:block;pointer-events:none;}
+  #ovDepositStatus>:not(.pay-fx){position:relative;z-index:1;}
+  #ovDepositStatus .link-box{background:rgba(255,255,255,.07);border-color:rgba(130,190,255,.6);color:#fff;}
+  #ovDepositStatus .link-row,#ovDepositStatus #depStatusRef{color:#fff;}
+  #ovDepositStatus .link-box .muted{color:rgba(205,222,255,.85);}
+  #ovDepositStatus .info-box{border:1px solid rgba(130,190,255,.3);}
+  #ovDepositStatus .muted{color:rgba(205,222,255,.8);}
+  .pay-status-card{margin:16px var(--gut);padding:22px 20px 10px;text-align:center;color:#fff;}
+  .pay-status-ic{width:52px;height:52px;border-radius:16px;background:var(--mint);color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
+  .pay-status-ic.dots{width:104px;height:104px;border-radius:0;background:none;margin-bottom:10px;}
+  .pay-status-ic.dots svg.dl{width:100%;height:100%;}
+  .pay-status-ic.dots svg.dl circle{fill:#63b8ff;filter:drop-shadow(0 0 5px rgba(90,170,255,.95));}
+  .pay-status-card h3{font-size:17px;color:#fff;text-shadow:0 0 16px rgba(90,170,255,.6);}
+  .pay-status-card .muted{color:rgba(205,222,255,.85);}
+  .pay-status-card .pay-steps li{color:rgba(226,237,255,.93);}
+  .pay-status-card .pay-steps li::before{background:#59b6ff;box-shadow:0 0 8px 2px rgba(89,182,255,.8);}
+.pay-status-ic.anim{background:none;width:108px;height:108px;border-radius:0;color:inherit;}
+.pay-status-ic.anim svg{width:100%;height:100%;display:block;overflow:visible;}
   /* ====================== END PAYMENT PAGES ====================== */
 
   .tm-card{margin:12px var(--gut) 0;padding:16px;background:var(--card);border-radius:20px;box-shadow:var(--shadow);}
@@ -1392,6 +1414,34 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <div class="gp-warn"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M12 6v8M12 18.2v.1"/></svg></i><span>Please fill in your payment account accurately,<br>incorrect filling may result in the loss of the transferred funds.</span></div>
       <button type="button" class="gp-btn" id="gpConfirm" onclick="gpConfirm()"><span>Confirm</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
     </div></div>
+  </div>
+
+  <div class="overlay" id="ovDepositStatus">
+    <canvas class="pay-fx" id="payFx" aria-hidden="true"></canvas>
+    <div class="ov-top"><button class="ov-back" onclick="cancelDepositStatus()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Recharge</div></div>
+    <div class="pay-status-card">
+      <div class="pay-status-ic" id="depStatusIc"></div>
+      <h3 id="depStatusTitle">Your payment is under review</h3>
+      <p class="muted" id="depStatusPhone" style="font-size:13.5px;margin-top:6px"></p>
+      <ul class="pay-steps" id="depStatusSteps">
+        <li>We received your payment message</li>
+        <li>Our team is matching it with the money received</li>
+        <li>Your wallet is credited the moment it is confirmed</li>
+      </ul>
+    </div>
+    <div class="link-box">
+      <div class="muted" style="font-size:11px;font-weight:700;margin-bottom:6px">TRANSACTION REFERENCE</div>
+      <div class="link-row"><span id="depStatusRef" style="word-break:break-all"></span><button class="btn btn-dark btn-sm" onclick="copyDepositRef()">Copy</button></div>
+    </div>
+    <div class="info-box" id="depStatusMsg" style="background:rgba(40,120,255,.22);color:#d3e6ff">Under review. This page updates by itself.</div>
+    <div style="padding:0 var(--gut)">
+      <button class="btn btn-primary btn-block" id="depVerifyBtn" onclick="manualVerifyDeposit()">
+        <span class="verify-spin" id="depVerifySpin" style="display:none"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>
+        <span id="depVerifyLabel">Check Status</span>
+      </button>
+      <div style="text-align:center;margin-top:14px" id="depCancelRow"><span class="muted" onclick="cancelDepositStatus()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Close</span></div>
+      <div style="text-align:center;margin-top:8px;font-size:11.5px" class="muted" id="depStatusAttempt"></div>
+    </div>
   </div>
 
   <div class="overlay gp-ov" id="ovGpPay">

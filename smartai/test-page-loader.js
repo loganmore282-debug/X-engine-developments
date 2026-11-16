@@ -27,7 +27,7 @@ const src = read('user-src/original_module.js'), html = read('user-src/index.htm
 ok(/function spinnerHtml\(\)/.test(src) && /svg\.dl\{/.test(html) && /function dlCircles/.test(src) && !/cmSpinRotate/.test(html), 'the dots loader (the owner\'s recording, in blue) is in the app and the ring is gone');
 ok(!/orbHtml|orbTick|orbLoad|orb-free|orb-ld|orb-wrap/.test(src + html), 'the glass-orb page loader is gone from the app (the payment page keeps its own animation)');
 ok(!fs.existsSync(path.join(__dirname, 'user', 'anim', 'orb-free.webp')), 'and its sheet is not shipped any more');
-ok(!/payOrb|PayOrb/.test(src) && !fs.existsSync(path.join(__dirname, 'user', 'anim', 'pay-orb.webp')) && !/showPayLoader|ovDepositStatus/.test(src), 'the orb is gone and so is the old payment status page (the payment pages have their own Loading box)');
+ok(!/payOrb|PayOrb/.test(src) && !fs.existsSync(path.join(__dirname, 'user', 'anim', 'pay-orb.webp')) && /function showPayLoader/.test(src) && /ovDepositStatus/.test(read('user-src/index.html')), 'the orb is gone; the payment status page (after Submit) shows the dotted loader');
 ok(/function btnBusyHtml\(/.test(src) && /\.verify-spin\{/.test(html), 'a busy BUTTON keeps its own small turning icon');
 ok((src.match(/spinnerHtml\(\)/g) || []).length >= 8, 'every page that waits uses the ring (About Us, Ledger, My Team, Task Center, My Products, Accrued earnings, Payout Account, the robot lists)');
 if (process.argv.includes('--built')) { const built = read('user/index.html'); ok(/svg\.dl\{/.test(built) && !/orb-ld/.test(built), 'the built page carries the dots loader styles'); }

@@ -847,7 +847,7 @@ async function logout(opts){
     STATE = null; _appEntered = false;
     clearCachedState();
     _recordsLoaded = { accrued: true, topups: false, cashouts: false }; _recordsFailed = { topups: false, cashouts: false }; _dataFailed = {};
-    stopActivityFeed(); stopAccountPoll(); gpLeave();
+    stopActivityFeed(); stopAccountPoll(); gpLeave(); stopDepositPoll(); releasePayLoader();
     closeOverlay(); closeAllSheets();
     $('app').style.display = 'none';
     $('authScreen').style.display = 'flex';
@@ -2115,7 +2115,7 @@ function gpShow(id, over){
 // Leaving the pages for any reason (phone Back, sign-out, a finished order): the clock and the check stop; the order stays open on the server for a resume.
 function gpLeave(){
   _gpActive = false;
-  clearInterval(_gp.timer); clearInterval(_gp.poll); clearTimeout(_gp.skelT); _gp.timer = null; _gp.poll = null; _gp.busy = false;
+  clearInterval(_gp.timer); clearInterval(_gp.poll); clearTimeout(_gp.skelT); clearTimeout(_gp.toStatusT); _gp.timer = null; _gp.poll = null; _gp.busy = false;
   var d = $('gpDone'); if (d) d.classList.remove('show');
   _gpLoadN = 0; clearTimeout(_gpLoadHide); var l = $('gpLoading'); if (l) l.classList.remove('show');
 }
@@ -2284,6 +2284,7 @@ function gpSent(withToast){
   $('gpSms').readOnly = true; $('gpIdRow').style.display = 'none'; $('gpLose').style.display = 'none'; $('gpSubmit').style.display = 'none'; $('gpGet').style.display = 'none';
   $('gpFaster').classList.add('sent'); $('gpSentMsg').style.display = '';
   if (withToast) gpToast('Submitted. Our team is checking your payment.');
+  clearTimeout(_gp.toStatusT); _gp.toStatusT = setTimeout(gpToStatus, withToast ? 1900 : 600);
 }
 function gpNeedId(){
   _gp.needId = true;
@@ -2319,6 +2320,136 @@ async function gpResume(){
   if (!r || r.stale || !STATE) return;
   if (r.status === 'success') { if (!_ovOpen) gpOpenPay(r); return; }
   if (r.code === 'ORDER_GONE') gpClearResume();
+}
+
+/* ====================== PAYMENT UNDER REVIEW (the page after Submit) ======================
+   After the SMS / transaction ID is sent the pay page says the team is working, then hands over to this page: the app's dotted loader in bright blue over the full-page
+   particle field, "Your payment is under review", and a check of the order every few seconds. The admin's approval shows the animated tick (wallet credited), a rejection
+   or an expired order shows the animated cross. The field stops when the page is left. */
+var _payField = null;
+function showPayLoader(){
+  var ic = $('depStatusIc'); if (!ic) return;
+  ic.className = 'pay-status-ic dots';
+  ic.innerHTML = dlMarkup();
+  ic.setAttribute('role', 'img'); ic.setAttribute('aria-label', 'Your payment is under review');
+  if (!_payField) _payField = makeParticleField($('payFx'), { horizon: 0.12, dim: 0.55, alive: function(){ var o = $('ovDepositStatus'); return !!(o && o.classList.contains('show')); } });
+  _payField.start();
+}
+function releasePayLoader(){ if (_payField) _payField.stop(); }
+var DEP_POLL_FIRST_MS = 1500;
+var DEP_POLL_EVERY_MS = 5000;
+var DEP_POLL_MAX = 720;
+var _depPollTimer = null, _depFirstTimer = null, _depPollAttempt = 0, _depPollId = null, _depConfirmed = false, _depPollChecking = false;
+function stopDepositPoll(){ clearInterval(_depPollTimer); clearTimeout(_depFirstTimer); _depPollTimer = null; _depFirstTimer = null; _depPollId = null; }
+function openDepositStatus(depositId, reference, amount){
+  _depPollId = depositId; _depPollAttempt = 0; _depConfirmed = false;
+  showPayLoader();
+  $('depStatusTitle').textContent = 'Your payment is under review';
+  $('depStatusPhone').textContent = 'Our team is checking your payment of ' + ugx(amount) + '. Your wallet is credited as soon as it is confirmed.';
+  $('depStatusSteps').style.display = '';
+  $('depStatusRef').textContent = reference || '';
+  setDepStatusMsg('pending', 'Under review. This page updates by itself.');
+  $('depStatusAttempt').textContent = '';
+  $('depCancelRow').style.display = '';
+  $('depVerifyLabel').textContent = 'Check Status';
+  $('depVerifyBtn').onclick = manualVerifyDeposit;
+  setVerifySpinning(false);
+  openOverlay('depositStatus');
+  clearInterval(_depPollTimer); clearTimeout(_depFirstTimer);
+  _depFirstTimer = setTimeout(pollDepositStatus, DEP_POLL_FIRST_MS);
+  _depPollTimer = setInterval(pollDepositStatus, DEP_POLL_EVERY_MS);
+}
+function showDepositSuccess(){
+  _depConfirmed = true;
+  $('depStatusIc').removeAttribute('role'); $('depStatusIc').removeAttribute('aria-label');
+  $('depStatusIc').className = 'pay-status-ic anim';
+  $('depStatusIc').innerHTML = customIcon('tick') ? '<img src="' + esc(customIcon('tick')) + '" alt="" style="width:100%;height:100%;object-fit:contain">' : tickHtml();
+  $('depStatusTitle').textContent = 'Payment Successful!';
+  $('depStatusPhone').textContent = 'Your wallet has been credited.';
+  $('depStatusSteps').style.display = 'none';
+  $('depStatusAttempt').textContent = '';
+  $('depCancelRow').style.display = 'none';
+  $('depVerifyLabel').textContent = 'Continue to Dashboard';
+  var btn = $('depVerifyBtn');
+  btn.disabled = false;
+  btn.onclick = function(){ releasePayLoader(); closeOverlay(); switchTab('home'); renderAll(); };
+}
+function showDepositFailed(reason){
+  $('depStatusIc').removeAttribute('role'); $('depStatusIc').removeAttribute('aria-label');
+  $('depStatusIc').className = 'pay-status-ic anim';
+  $('depStatusIc').innerHTML = customIcon('cross') ? '<img src="' + esc(customIcon('cross')) + '" alt="" style="width:100%;height:100%;object-fit:contain">' : crossHtml();
+  $('depStatusTitle').textContent = 'Payment Not Completed';
+  $('depStatusPhone').textContent = reason || 'This payment was not completed.';
+  $('depStatusSteps').style.display = 'none';
+  $('depCancelRow').style.display = 'none';
+  $('depVerifyLabel').textContent = 'Back to Dashboard';
+  var btn = $('depVerifyBtn');
+  btn.disabled = false;
+  btn.onclick = function(){ releasePayLoader(); closeOverlay(); renderAll(); };
+}
+function setDepStatusMsg(kind, text){
+  var el = $('depStatusMsg');
+  el.textContent = text;
+  el.style.background = kind === 'matched' ? 'rgba(46,204,113,.2)' : kind === 'failed' ? 'rgba(255,90,110,.2)' : 'rgba(40,120,255,.22)';
+  el.style.color = kind === 'matched' ? '#8dffbd' : kind === 'failed' ? '#ffa3b0' : '#d3e6ff';
+}
+function setVerifySpinning(on){
+  var spin = $('depVerifySpin'), label = $('depVerifyLabel');
+  if (spin) spin.style.display = on ? 'inline-flex' : 'none';
+  if (label && !_depConfirmed && $('depStatusTitle').textContent === 'Your payment is under review') label.textContent = on ? 'Checking…' : 'Check Status';
+}
+// _depPollChecking stops the automatic check and a tap on Check Status from running at the same instant.
+async function pollDepositStatus(manual){
+  if (!_depPollId || _depPollChecking) return;
+  var ov = $('ovDepositStatus');
+  if (!ov || !ov.classList.contains('show')) { stopDepositPoll(); releasePayLoader(); return; }   // the page was left (Back): the check stops
+  _depPollChecking = true;
+  var btn = $('depVerifyBtn');
+  if (btn && manual === true) btn.disabled = true;
+  if (manual === true) setVerifySpinning(true);
+  try {
+    _depPollAttempt++;
+    var r = await api('/deposit/manual/status', { depositId: _depPollId });
+    if (!r || r.stale || !STATE || !_depPollId) return;
+    if (r.status === 'success') {
+      if (r.state === 'matched') {
+        clearInterval(_depPollTimer); _depPollTimer = null;
+        setDepStatusMsg('matched', 'Payment confirmed. Funds added to your wallet.');
+        showDepositSuccess();
+        await refreshFromServer(); renderAll();
+        return;
+      }
+      if (r.state === 'failed' || r.state === 'expired') {
+        clearInterval(_depPollTimer); _depPollTimer = null;
+        var why = r.state === 'expired' ? 'The payment order expired.' : (r.message || 'This payment was not completed.');
+        setDepStatusMsg('failed', why);
+        showDepositFailed(why);
+        return;
+      }
+      if (manual === true) toast('Still under review. Our team is checking your payment');
+    } else if (manual === true) {
+      toast(r.message || 'Could not check the payment right now');
+    }
+    if (_depPollAttempt >= DEP_POLL_MAX) {
+      clearInterval(_depPollTimer); _depPollTimer = null;
+      setDepStatusMsg('pending', 'Still under review. Your wallet is credited as soon as it is confirmed. Tap Check Status or contact support.');
+    }
+  } finally {
+    _depPollChecking = false;
+    var b2 = $('depVerifyBtn'); if (b2) b2.disabled = false;
+    setVerifySpinning(false);
+  }
+}
+function manualVerifyDeposit(){ pollDepositStatus(true); }
+function cancelDepositStatus(){ stopDepositPoll(); releasePayLoader(); closeOverlay(); if (STATE) renderAll(); }
+function copyDepositRef(){ copyText($('depStatusRef').textContent, 'Reference copied'); }
+// After Submit: the pay page says the team is working, then this page takes over (at once when the order was found already under review on coming back).
+function gpToStatus(){
+  var o = _gp.order;
+  if (!o || !_gpActive) return;
+  var amt = _gp.amount || o.amount;
+  gpLeave();
+  openDepositStatus(o.depositId, o.reference, amt);
 }
 
 /* ====================== CASH OUT ====================== */

@@ -194,7 +194,14 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
   await p.evaluate(png => { STATE_ICONS = { tick: png, cross: png }; gpDialog('tick', 'Payment Successful!', 'x'); }, png);
   ok(await p.evaluate(() => !!document.querySelector('#gpDonePic img') && !document.querySelector('#gpDonePic .ok-check')), 'a picture uploaded for the tick stands still in its place');
   await p.evaluate(() => { document.getElementById('gpDone').classList.remove('show'); });
-  await p.evaluate(() => { STATE_ICONS = {}; closeOverlay(); });
+  // the payment-under-review page (after Submit): the same tick and cross, in its own place
+  await p.evaluate(() => { STATE_ICONS = {}; openOverlay('depositStatus'); showDepositSuccess(); }); await sleep(150);
+  ok(await p.evaluate(() => { const ic = document.getElementById('depStatusIc'); return ic.className === 'pay-status-ic anim' && !!ic.querySelector('.ok-check') && getComputedStyle(ic.querySelector('.ok-disc')).animationName === 'anPop' && /Successful/.test(document.getElementById('depStatusTitle').textContent); }), 'the under-review page shows the animated green tick once the payment is confirmed');
+  await p.evaluate(() => { _depConfirmed = false; showDepositFailed('Rejected'); }); await sleep(150);
+  ok(await p.evaluate(() => { const ic = document.getElementById('depStatusIc'); return !!ic.querySelector('.no-x') && /Not Completed/.test(document.getElementById('depStatusTitle').textContent) && document.getElementById('depStatusPhone').textContent === 'Rejected'; }), 'and the animated red cross with the reason when the payment is rejected');
+  await p.evaluate(png => { STATE_ICONS = { tick: png, cross: png }; showDepositSuccess(); }, png);
+  ok(await p.evaluate(() => !!document.querySelector('#depStatusIc img') && !document.querySelector('#depStatusIc .ok-check')), 'a picture uploaded for the tick stands still in its place on that page too');
+  await p.evaluate(() => { STATE_ICONS = {}; stopDepositPoll(); releasePayLoader(); closeOverlay(); });
   await p.evaluate(() => switchTab('shop')); await sleep(80);
   ok(await p.evaluate(() => Math.round(document.getElementById('shopBanner').getBoundingClientRect().height) === 104), 'the AI Robots header (My AI robots / Accrued earnings) is 104 px high');
   // every page change shows the dots

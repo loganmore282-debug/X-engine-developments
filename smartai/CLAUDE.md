@@ -694,3 +694,11 @@ remove number and networks ... payment numbers will be uploaded from the admin p
   it slides in (height + fade, 0.5 s, `gpReveal`) after the FIRST tap on Refresh (a Loading box, nothing else is said when nothing is paid; the page scrolls to it only if it is below the screen). Page change: Confirm dims page 1 with the
   Loading box, page 2 cross-fades in as an EMPTY skeleton (labels only, class `gp-skel`) while Loading is still up, then the values pop in (`gp-pop`). "Copied." sits on the box that was tapped (`gpToast(msg, true, anchor)`), every other
   notice in the middle. The Loading box is 130 x 130 and stays at least 0.8 s. Member cache v91.
+
+## After Submit: "team is checking", then the payment-under-review page (2026-11-16, member v92)
+- Submit shows the notice "Submitted. Our team is checking your payment.", then (1.9 s later; 0.6 s when an order is found already under review on coming back) `gpToStatus()` hands over to the restored
+  payment status page `ovDepositStatus`: the dotted loader in bright blue on the full-page dark particle field (`payFx`, `makeParticleField`), "Your payment is under review", the order reference, Check Status, Close.
+- It checks `/deposit/manual/status` every 5 s (`pollDepositStatus`, first check after 1.5 s; stops when the page is left). `matched` -> the animated green tick, "Payment Successful!", Continue to Dashboard
+  (wallet refreshed); `failed` / `expired` -> the animated red cross with the reason, Back to Dashboard. The admin's own tick / cross pictures (Icons slots) replace the drawn ones.
+- Function names are the old gateway page's (`openDepositStatus(depositId, reference, amount)`, `showPayLoader`, `showDepositSuccess`, `showDepositFailed(reason)`, `stopDepositPoll`), so tests find them.
+  The page-2 `gpDone` card is still used for the (rare) case the order turns `matched` / `failed` while page 2 is open.

@@ -233,13 +233,26 @@ async function member(ref) {
   ok((await J('POST', '/admin/deposits/list', {}, null, true)).j.deposits.some(d => d.id === depId && d.status === 'review' && d.pastedSmsTxId === '30212345057' && d.pastedSmsAmountMatches === true), 'the admin sees it under Needs Review with the transaction ID and the amount check');
   const walletBefore = await ev(() => STATE.balance);
   ok(await ev(async () => { await refreshFromServer(); return STATE.balance; }) === walletBefore, 'nothing was credited by submitting');
+  ok(await gpToastText() === 'Submitted. Our team is checking your payment.', 'the notice says the team is checking the payment');
+  await sleep(1800);
+  const st = await ev(() => { const ic = document.getElementById('depStatusIc'), s = ic.querySelector('svg.dl'), o = document.getElementById('ovDepositStatus'); return { on: o.classList.contains('show'), gp: document.getElementById('ovGpPay').classList.contains('show'), title: document.getElementById('depStatusTitle').textContent, cls: ic.className, n: s ? s.children.length : 0, css: Math.round(ic.getBoundingClientRect().width), ref: document.getElementById('depStatusRef').textContent, dark: getComputedStyle(o).backgroundImage.indexOf('gradient') >= 0 }; });
+  ok(st.on && !st.gp && st.title === 'Your payment is under review' && st.cls === 'pay-status-ic dots' && st.n === 12 && st.css === 104 && /^[A-Z]\d{6,}/.test(st.ref) && st.dark, 'after the notice the page goes to the payment status page: "Your payment is under review" with the dotted loader on the dark field: ' + JSON.stringify(st));
+  const shots = []; for (let i = 0; i < 5; i++) { shots.push(await ev(() => [...document.querySelectorAll('#depStatusIc svg.dl circle')].map(c => c.getAttribute('cx')).join())); await sleep(130); }
+  ok(new Set(shots).size >= 3, 'the dots are moving');
+  const pf = await ev(() => { const cv = document.getElementById('payFx'), r = cv.getBoundingClientRect(); return { fixed: getComputedStyle(cv).position, full: Math.round(r.width) === window.innerWidth && Math.round(r.height) === window.innerHeight }; });
+  ok(pf.fixed === 'fixed' && pf.full, 'the status page has the full-page particle canvas behind the words');
+  const pw = []; for (let i = 0; i < 4; i++) { pw.push(await ev(() => document.getElementById('payFx').toDataURL())); await sleep(250); }
+  ok(new Set(pw).size >= 3 && pw.every(u => u.length > 5000), 'and the particles on it are painted and moving');
+  await ev(() => pollDepositStatus(true)); await sleep(1200);
+  const still = await ev(() => ({ t: document.getElementById('depStatusTitle').textContent, dl: !!document.querySelector('#depStatusIc svg.dl'), lab: document.getElementById('depVerifyLabel').textContent, ov: document.getElementById('ovDepositStatus').classList.contains('show') }));
+  ok(still.t === 'Your payment is under review' && still.dl, 'Check Status while it is still under review keeps the page as it is: ' + JSON.stringify(still));
   ok((await J('POST', '/admin/deposit/force-credit', { depositId: depId }, null, true)).s === 200, 'the admin approves it (Force-credit)');
-  await ev(() => { _gp.submitted = false; gpRefresh(); }); await sleep(2200);
-  ok(await ev(() => document.getElementById('gpPaidN').textContent === '30000' && document.getElementById('gpPaid').classList.contains('ok')), 'Refresh now shows Amount paid UGX 30000 in gold');
-  ok(await ev(() => document.getElementById('gpDone').classList.contains('show') && /ok-check/.test(document.getElementById('gpDonePic').innerHTML)), 'and the green tick card (the owner\'s animated tick) comes up');
-  await ev(() => gpFinish()); await sleep(1200);
-  ok(await ev(() => STATE.balance) === walletBefore + 30000 && !await ev(() => _gpActive), 'OK closes the pages and the wallet shows the credit');
-  await ev(() => { gpLeave(); closeOverlay(); }); await sleep(300);
+  await ev(() => pollDepositStatus(true)); await sleep(1600);
+  ok(await ev(() => document.getElementById('depStatusIc').className === 'pay-status-ic anim' && !document.querySelector('#depStatusIc svg.dl') && /ok-check/.test(document.getElementById('depStatusIc').innerHTML) && document.getElementById('depStatusTitle').textContent === 'Payment Successful!'), 'once approved the dots give way to the green tick and "Payment Successful!"');
+  ok(await ev(() => document.getElementById('depVerifyLabel').textContent) === 'Continue to Dashboard', 'with a Continue to Dashboard button');
+  await ev(() => document.getElementById('depVerifyBtn').click()); await sleep(900);
+  ok(await ev(() => STATE.balance) === walletBefore + 30000 && !await ev(() => document.getElementById('ovDepositStatus').classList.contains('show')), 'it closes the page and the wallet shows the credit');
+  await ev(() => { gpLeave(); stopDepositPoll(); releasePayLoader(); closeOverlay(); }); await sleep(300);
   await ev(() => openOverlay('deposit')); await sleep(600);
   ok(await ev(() => { const li = document.querySelector('#ovDeposit .pay-steps li'); const c = getComputedStyle(li).color.match(/\d+/g).map(Number); return c[0] < 120 && c[1] < 140; }), 'on Add Funds the Deposit procedure steps are dark and readable on their light box (not white)');
   await ev(() => closeOverlay()); await sleep(300);
