@@ -188,7 +188,7 @@ app.use('/admin/', async (req, _res, next) => {
   next();
 });
 // These routes move or pay real money, so they get the strict 60/min per-user cap rather than only the 400/min global one.
-['/withdraw/request', '/invest/create', '/lucky/flip', '/deposit/marzpay', '/deposit/manual/order', '/deposit/manual/submit', '/bank/save', '/register', '/redeem']
+['/withdraw/request', '/invest/create', '/lucky/flip', '/deposit/marzpay', '/deposit/manual/order', '/deposit/manual/submit', '/bank/save', '/register', '/redeem', '/agent/claim']
   .forEach(p => app.use(p, apiLimiter));
 // ── BODY PARSING ──
 // A tight 64kb cap by default; admin routes that carry a base64 product
@@ -555,7 +555,7 @@ app.use((req, res, next) => {
 });
 
 // ── MAINTENANCE GATE ──
-const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/redeem', '/salary', '/checkin'];
+const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/redeem', '/salary', '/checkin', '/agent'];
 const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/pesajet/webhook', '/tavupay/webhook', '/lworxpay/webhook', '/obpay/webhook']);
 // The platform's name, as the owner last set it in Admin -> Settings. Every
 // server-side string that names the app goes through here rather than
@@ -3746,6 +3746,148 @@ app.post('/salary/claim', async (req, res) => {
     res.status(out.code).json(out.body);
   } catch (e) { console.error('Reward claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim the reward right now' }); }
 });
+// ═══════════════════════════════════════════
+// AGENT REWARDS (VIP Tasks > Agent rewards): a monthly salary for holding a number of ACTIVE subordinates
+// ═══════════════════════════════════════════
+// Owner: "agent rewards ... monthly salary when one fulfils a number of active subordinates ... plus agent name per level I create". The admin
+// types the levels (a name, how many active subordinates it needs, the monthly salary). An ACTIVE SUBORDINATE is a member this member invited
+// directly (Level 1) who is not suspended and has at least one AI robot RUNNING right now (counted live, never stored, so it cannot drift).
+// The member's agent level is the HIGHEST level they reach; its salary can be claimed once every 30 days (the next claim opens 30 days after
+// the last one, so two claims can never sit either side of a month's end). Money-safe like a Team reward: one claim at a time per member, the
+// count is re-read here, and the credit, the claim's token and the next date land in ONE atomic user update (a double tap, two phones or a
+// retry cannot pay twice); the ledger row is keyed by the same token.
+const AGENT_MAX_LEVELS = 30, AGENT_MAX_SUBS = 100000, AGENT_PERIOD_MS = 30 * 86400000;
+function cleanAgentName(v) { return stripHtml(textOf(v)).replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40); }
+function sanitizeAgentLevels(rows, history) {
+  if (!Array.isArray(rows)) return { error: 'Agent levels: send a list of levels.' };
+  if (rows.length > AGENT_MAX_LEVELS) return { error: `Agent levels: at most ${AGENT_MAX_LEVELS} levels.` };
+  const out = [], targets = new Set();
+  for (const r of rows) {
+    const name = cleanAgentName(r && r.name), target = Number(r && r.target), salary = Number(r && r.salary);
+    if (!name) return { error: 'Agent levels: every level needs a name.' };
+    if (!Number.isInteger(target) || target < 1 || target > AGENT_MAX_SUBS) return { error: `Agent levels: the number of active subordinates must be a whole number from 1 to ${AGENT_MAX_SUBS}.` };
+    if (!Number.isInteger(salary) || salary < 1 || salary > MAX_MONEY_AMOUNT) return { error: `Agent levels: every monthly salary must be a whole number from 1 to ${MAX_MONEY_AMOUNT}.` };
+    if (targets.has(target)) return { error: `Agent levels: two levels need the same number of active subordinates (${target}).` };
+    targets.add(target);
+    out.push({ id: String((r && r.id) || ''), name, target, salary });
+  }
+  // A level keeps its id when its numbers or its name are edited; a level typed again for a target that existed before gets that target's old id.
+  const used = new Set();
+  for (const r of out) { if (/^[a-z0-9]{1,16}$/.test(r.id) && !used.has(r.id)) used.add(r.id); else r.id = ''; }
+  for (const r of out) {
+    if (r.id) continue;
+    const old = history && history[String(r.target)];
+    if (typeof old === 'string' && /^[a-z0-9]{1,16}$/.test(old) && !used.has(old)) r.id = old;
+    else { do { r.id = 'a' + crypto.randomBytes(4).toString('hex'); } while (used.has(r.id)); }
+    used.add(r.id);
+  }
+  out.sort((x, y) => x.target - y.target);
+  return { rows: out };
+}
+// What the app and the claim route read: the stored list, with anything malformed left out.
+function agentLevels(sett) {
+  const ok = (Array.isArray(sett && sett.agentLevels) ? sett.agentLevels : []).filter(r => r && typeof r.id === 'string' && cleanAgentName(r.name) && Number(r.target) > 0 && Number(r.salary) > 0);
+  return sanitizeAgentLevels(ok).rows || [];
+}
+function agentLevelFor(levels, n) { let t = null; for (const x of levels) if (n >= x.target) t = x; return t; }
+// How many of this member's direct (Level 1) subordinates are active: not suspended, sign-up finished, and at least one robot running now.
+async function activeSubordinates(userId) {
+  const subs = await db.collection('users').where('referredBy', '==', userId).get();
+  const ids = [];
+  subs.forEach(d => { const v = d.data(); if (d.id !== userId && v.status !== 'banned' && v.registrationDone !== false) ids.push(d.id); });
+  const active = new Set();
+  for (let i = 0; i < ids.length; i += 100) {
+    const snap = await db.collection('investments').where('userId', 'in', ids.slice(i, i + 100)).where('status', '==', 'active').get();
+    snap.forEach(d => active.add(d.data().userId));
+  }
+  return { direct: ids.length, active: active.size };
+}
+async function agentView(userId, u) {
+  const [sett, subs] = await Promise.all([getSettings(), activeSubordinates(userId)]);
+  const levels = agentLevels(sett), level = agentLevelFor(levels, subs.active);
+  const nextAt = tsMillis(u && u.agentSalaryNextAt) || 0, now = Date.now();
+  return { levels, level, active: subs.active, direct: subs.direct, nextAt, canClaim: !!level && now >= nextAt };
+}
+app.get('/agent/status', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const uSnap = await db.collection('users').doc(userId).get();
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const u = uSnap.data();
+    if (u.status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    const v = await agentView(userId, u);
+    res.set('Cache-Control', 'no-store');
+    res.json({ status: 'success', active: v.active, direct: v.direct, levelId: v.level ? v.level.id : null, levelName: v.level ? v.level.name : '', salary: v.level ? v.level.salary : 0,
+      canClaim: v.canClaim, nextAt: v.nextAt, serverNow: Date.now(), periodDays: AGENT_PERIOD_MS / 86400000,
+      levels: v.levels.map(l => ({ id: l.id, name: l.name, target: l.target, salary: l.salary, reached: v.active >= l.target })) });
+  } catch (e) { console.error('Agent status error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the agent rewards' }); }
+});
+app.post('/agent/claim', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const out = await withLock('agent:' + userId, async () => {
+      const uRef = db.collection('users').doc(userId);
+      const first = await uRef.get();
+      if (!first.exists) return { code: 404, body: { status: 'error', message: 'User not found' } };
+      const u = first.data();
+      if (u.status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
+      if (u.registrationDone === false) return { code: 409, body: { status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up first.' } };
+      const v = await agentView(userId, u);
+      if (!v.level) {
+        const lowest = v.levels[0];
+        return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: lowest ? `You need ${lowest.target} active subordinates to become ${lowest.name}. You have ${v.active}.` : 'Agent rewards are not set up yet.' } };
+      }
+      const now = Date.now();
+      if (now < v.nextAt) return { code: 400, body: { status: 'error', code: 'TOO_SOON', nextAt: v.nextAt, message: 'You have already taken this month\'s salary. The next one opens 30 days after it.' } };
+      // The claim's token: the date this claim became due ("first" for the very first one). Two requests reading the same account build the same token,
+      // and only one of them can write it.
+      const key = v.nextAt ? String(v.nextAt) : 'first', level = v.level, nextAt = now + AGENT_PERIOD_MS;
+      let balance = 0, applied = false;
+      await withLock('bal:' + userId, async () => {
+        applied = await uRef.updateIf({ agentSalaryKeys: { $ne: key }, status: { $ne: 'banned' } }, {
+          walletBalance: FieldValue.increment(level.salary), totalEarned: FieldValue.increment(level.salary),
+          agentSalaryKeys: FieldValue.arrayUnion(key), agentSalaryNextAt: new Date(nextAt), agentLevelPaid: level.id,
+        });
+        const after = await uRef.get();
+        balance = round2(Number(after.exists && after.data().walletBalance) || 0);
+      });
+      if (!applied) return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'This salary was already paid.' } };
+      const { date, time } = nowStr();
+      const ledger = () => db.collection('transactions').doc(`agent:${userId}:${key}`).createIfAbsent({
+        userId, statementId: newStatementId(), type: 'agent_salary', description: `${level.name} monthly salary`,
+        amount: level.salary, agentLevel: level.id, activeSubordinates: v.active, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+      try { await ledger(); }
+      catch (e1) { try { await ledger(); } catch (e2) { console.error('Agent salary ledger row failed (credit is applied):', e2.message); } }
+      return { code: 200, body: { status: 'success', amount: level.salary, levelId: level.id, levelName: level.name, nextAt, walletBalance: balance, message: `${fmtMoney(level.salary)} ${level.name} salary added to your wallet` } };
+    });
+    res.status(out.code).json(out.body);
+  } catch (e) { console.error('Agent claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not pay the salary right now' }); }
+});
+app.get('/admin/agent-levels', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', levels: agentLevels(await getSettings()) }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the agent levels' }); }
+});
+app.post('/admin/agent-levels/save', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const mainSnap = await db.collection('settings').doc('main').get();
+    const stored = Object.assign({}, DEFAULT_SETTINGS, mainSnap.exists ? mainSnap.data() : {});
+    const seed = Object.assign({}, stored.agentIdByTarget);
+    for (const r of agentLevels(stored)) seed[String(r.target)] = r.id;
+    const out = sanitizeAgentLevels(req.body && req.body.levels, seed);
+    if (out.error) return res.status(400).json({ status: 'error', message: out.error });
+    const ids = Object.assign({}, seed);
+    for (const r of out.rows) { for (const k of Object.keys(ids)) if (ids[k] === r.id && k !== String(r.target)) delete ids[k]; ids[String(r.target)] = r.id; }
+    await db.collection('settings').doc('main').set({ agentLevels: out.rows, agentIdByTarget: ids }, { merge: true });
+    _settingsCacheTs = 0;
+    logAdminAction(req, 'agent_levels_saved', { levels: out.rows.length });
+    res.json({ status: 'success', levels: out.rows });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the agent levels' }); }
+});
 // ONE-TIME, at start-up (marker meta/rewardClaimOnceV2): writes down, for each member, the tiers they were REALLY paid for, from the ledger and nothing
 // else, and REPLACES what is on the account. This also repairs the first version of this migration, which trusted `salaryTierReward` (set by merely
 // opening the old Reward tab) and so showed unpaid tiers as Claimed. A tier counts as claimed when (a) a 'Team reward' ledger row names it (a claim
@@ -3917,7 +4059,7 @@ app.get('/public/settings', async (req, res) => {
     // automatic cap), the payment-rail choice, the reference prefix and the host policy.
     const rest = {};
     for (const k of Object.keys(rest0)) {
-      if (/^autoApprove/.test(k) || ['depositMethod', 'depositGateways', 'lworxCollect', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain', 'linkPreviewTitle', 'linkPreviewText'].includes(k)) continue;
+      if (/^autoApprove/.test(k) || ['depositMethod', 'depositGateways', 'lworxCollect', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain', 'linkPreviewTitle', 'linkPreviewText', 'agentLevels', 'agentIdByTarget'].includes(k)) continue;
       rest[k] = rest0[k];
     }
     // Revalidated every time (no max-age): maintenance mode, the opening
@@ -10482,7 +10624,7 @@ app.get('/admin/integrity', async (req, res) => {
 // earned" label is a real misnomer -- this field is cashback PLUS
 // referral commission PLUS gift-code/team-reward
 // bonuses, all folded into one number.
-const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'mission_salary', 'mission_deposit_reward', 'checkin', 'lucky_card'];
+const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'mission_salary', 'mission_deposit_reward', 'checkin', 'lucky_card', 'agent_salary'];
 async function computeUserRealTotals(userId) {
   const [txSnap, invSnap, witSnap] = await Promise.all([
     db.collection('transactions').where('userId', '==', userId).limit(50000).get(),

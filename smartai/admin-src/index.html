@@ -457,7 +457,7 @@ const TX_LABELS = {
   deposit: 'Recharge', withdraw: 'Withdraw', commission: 'Commission', team_reward: 'Team reward',
   cashback: 'Product cashback', investment: 'Product purchase',
   promocode: 'Gift code redeemed', admin_credit: 'Credit', admin_debit: 'Adjustment',
-  welcome_bonus: 'Welcome bonus', mission_salary: 'Team reward', checkin: 'Daily check-in', lucky_card: 'Lucky card reward', mission_deposit_reward: 'Team reward',
+  welcome_bonus: 'Welcome bonus', mission_salary: 'Team reward', agent_salary: 'Agent salary', checkin: 'Daily check-in', lucky_card: 'Lucky card reward', mission_deposit_reward: 'Team reward',
   deposit_reversal: 'Recharge reversed (fraud)',
   investment_refund: 'Product refund',
 };
@@ -3812,11 +3812,18 @@ async function renderSettings(){
       <button class="btn block" id="saveSupport">Save support contacts</button>
     </div>
 
-    <h2 class="sec">Task Center tiers</h2>
+    <h2 class="sec">VIP Tasks: Team rewards</h2>
     <div class="panel-card" id="taskCard">
-      <p class="muted" style="margin-top:0">The Task Center on the Rewards tab. A member's team total (everything levels 1 to 3 have bought) decides which tiers are reached. Each reached tier can be claimed ONCE per member, for good: its button then reads Claimed and never comes back. Changing the numbers of a tier never lets a member claim it again.</p>
+      <p class="muted" style="margin-top:0">The Team rewards list of VIP Tasks. A member's team total (everything levels 1 to 3 have bought) decides which tiers are reached. Each reached tier can be claimed ONCE per member, for good: its button then reads Claimed and never comes back. Changing the numbers of a tier never lets a member claim it again.</p>
       <div id="taskEditor">${spinnerHtml()}</div>
-      <button class="btn block" id="saveTasks" style="margin-top:12px" disabled>Save Task Center tiers</button>
+      <button class="btn block" id="saveTasks" style="margin-top:12px" disabled>Save Team rewards</button>
+    </div>
+
+    <h2 class="sec">VIP Tasks: Agent rewards</h2>
+    <div class="panel-card" id="agentCard">
+      <p class="muted" style="margin-top:0">The Agent rewards list of VIP Tasks: a <b>monthly salary</b> for members who keep a number of <b>active subordinates</b>. Give each level its agent name, the number of active subordinates it needs and the salary. An active subordinate is a member the agent invited directly (Level 1) who has at least one AI robot running now. A member holds the highest level they reach and can claim that level's salary once every 30 days. With no levels here, members see no agent rewards.</p>
+      <div id="agentEditor">${spinnerHtml()}</div>
+      <button class="btn block" id="saveAgents" style="margin-top:12px" disabled>Save Agent rewards</button>
     </div>
 
     <h2 class="sec">App name</h2>
@@ -3922,7 +3929,7 @@ async function renderSettings(){
     .map(r=>({ id:r.id, target:Number(r.target), reward:Number(r.reward) }));
   api('/admin/salary').then(d=>{
     const box=$('taskEditor'); if(!box) return;
-    if(d.status!=='success'){ box.textContent=d.message||'Could not load the Task Center tiers'; return; }
+    if(d.status!=='success'){ box.textContent=d.message||'Could not load the Team rewards'; return; }
     box.classList.remove('muted');
     box.innerHTML=taskTableHtml(d.tiers||[]);
     box.querySelectorAll('.task-table').forEach(wireTaskTable);
@@ -3932,8 +3939,40 @@ async function renderSettings(){
     const b=$('saveTasks'); if(b.disabled) return; b.disabled=true;
     const d=await api('/admin/salary/save',{ tiers:readTaskTable() });
     b.disabled=false;
-    toast(d.status==='success'?'Task Center tiers saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    toast(d.status==='success'?'Team rewards saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success'){ const box=$('taskEditor'); box.innerHTML=taskTableHtml(d.tiers); box.querySelectorAll('.task-table').forEach(wireTaskTable); }
+  });
+  // ── Agent rewards editor: agent name / active subordinates needed / monthly salary; a level keeps its id when it is edited ──
+  const agentRowHtml=(r)=>`<div class="agent-row" data-id="${esc(r.id||'')}" style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+      <input type="text" maxlength="40" class="ag-name" value="${esc(r.name||'')}" placeholder="Agent name" style="flex:1.4;margin:0;min-width:0">
+      <input type="number" min="1" step="1" class="ag-target" value="${r.target||''}" placeholder="Active" style="flex:.8;margin:0;min-width:0">
+      <input type="number" min="1" step="1" class="ag-salary" value="${r.salary||''}" placeholder="Salary" style="flex:1;margin:0;min-width:0">
+      <button class="btn sm danger ag-del" type="button" aria-label="Remove" style="flex:0 0 auto">&times;</button></div>`;
+  const agentTableHtml=(rows)=>`<div class="agent-table" style="margin-bottom:16px">
+      <div style="display:flex;gap:8px;margin-bottom:4px"><span class="muted" style="flex:1.4;font-size:11.5px">Agent name</span><span class="muted" style="flex:.8;font-size:11.5px">Active subordinates</span><span class="muted" style="flex:1;font-size:11.5px">Monthly salary (${adminCur()})</span><span style="width:44px"></span></div>
+      <div class="agent-rows">${rows.map(agentRowHtml).join('')}</div>
+      <button class="btn sm ghost ag-add" type="button">+ Add agent level</button></div>`;
+  const wireAgentTable=(box)=>{
+    box.querySelectorAll('.ag-del').forEach(b=>b.onclick=()=>b.closest('.agent-row').remove());
+    box.querySelector('.ag-add').onclick=()=>{ const w=document.createElement('div'); w.innerHTML=agentRowHtml({}); const row=w.firstElementChild; box.querySelector('.agent-rows').appendChild(row); row.querySelector('.ag-del').onclick=()=>row.remove(); row.querySelector('.ag-name').focus(); };
+  };
+  const readAgentTable=()=>[...document.querySelectorAll('.agent-table .agent-row')]
+    .map(r=>({ id:r.dataset.id||'', name:r.querySelector('.ag-name').value.trim(), target:r.querySelector('.ag-target').value.trim(), salary:r.querySelector('.ag-salary').value.trim() }))
+    .filter(r=>r.name!==''||r.target!==''||r.salary!=='')
+    .map(r=>({ id:r.id, name:r.name, target:Number(r.target), salary:Number(r.salary) }));
+  api('/admin/agent-levels').then(d=>{
+    const box=$('agentEditor'); if(!box) return;
+    if(d.status!=='success'){ box.textContent=d.message||'Could not load the Agent rewards'; return; }
+    box.innerHTML=agentTableHtml(d.levels||[]);
+    box.querySelectorAll('.agent-table').forEach(wireAgentTable);
+    $('saveAgents').disabled=false;
+  });
+  $('saveAgents').addEventListener('click', async()=>{
+    const b=$('saveAgents'); if(b.disabled) return; b.disabled=true;
+    const d=await api('/admin/agent-levels/save',{ levels:readAgentTable() });
+    b.disabled=false;
+    toast(d.status==='success'?'Agent rewards saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'){ const box=$('agentEditor'); box.innerHTML=agentTableHtml(d.levels); box.querySelectorAll('.agent-table').forEach(wireAgentTable); }
   });
   $('saveBrandName').addEventListener('click', async()=>{
     const name = $('brandNameInput').value.trim();

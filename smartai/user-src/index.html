@@ -763,6 +763,8 @@
   .tk-pill{width:100%;padding:13px;border:0;border-radius:14px;background:var(--cream-deep);color:var(--cocoa-faint);font:inherit;font-size:13.5px;font-weight:800;}
   .tk-pill.is-ready{background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;}
   .tk-pill.is-done{background:var(--mint-pale);color:var(--mint);}
+  .tk-card.ag-mine{border-color:var(--caramel);box-shadow:0 0 0 2px rgba(46,125,255,.14),var(--shadow);}
+  .tk-tag{margin-left:auto;font-size:11px;font-weight:800;color:var(--caramel-deep);background:var(--caramel-pale);border-radius:999px;padding:4px 10px;}
   .comm-tile b{display:block;font-size:19px;color:var(--caramel-deep);}
   .comm-tile span{font-size:10.5px;color:var(--cocoa-faint);font-weight:700;}
 
@@ -1292,7 +1294,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
         <div class="comm-tile"><span class="medal" data-medal="3" role="img" aria-label="Level 3"></span><b id="commL3Pct">0%</b><span>LEVEL 3</span></div>
       </div>
       <div class="tm-card tm-over">
-      <div class="tm-head"><h3>Team overview</h3><button type="button" class="tm-task-link" onclick="openOverlay('taskcenter')">Task Center <span style="font-size:16px;line-height:1">&rsaquo;</span></button></div>
+      <div class="tm-head"><h3>Team overview</h3><button type="button" class="tm-task-link" onclick="openOverlay('taskcenter')">VIP Tasks <span style="font-size:16px;line-height:1">&rsaquo;</span></button></div>
       <div>
         <div class="kv" style="cursor:pointer" onclick="openTeamLevel(1)"><span>Level 1 subordinates</span><span style="display:flex;align-items:center"><b id="teamL1">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
         <div class="kv" style="cursor:pointer" onclick="openTeamLevel(2)"><span>Level 2 subordinates</span><span style="display:flex;align-items:center"><b id="teamL2">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
@@ -1598,9 +1600,19 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
   </div>
 
   <div class="overlay" id="ovTaskcenter">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Task Center</div></div>
-    <p class="tk-lead">Your team&rsquo;s purchases (all 3 levels) unlock rewards. Each reward can be claimed once.</p>
-    <div id="taskCenterList"></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">VIP Tasks</div></div>
+    <div class="uline-tabs" style="margin-bottom:10px">
+      <button class="uline-tab active" data-vt="team" onclick="setVipTab('team')">Team rewards</button>
+      <button class="uline-tab" data-vt="agent" onclick="setVipTab('agent')">Agent rewards</button>
+    </div>
+    <div id="vtTeam">
+      <p class="tk-lead">Your team&rsquo;s purchases (all 3 levels) unlock rewards. Each reward can be claimed once.</p>
+      <div id="taskCenterList"></div>
+    </div>
+    <div id="vtAgent" style="display:none">
+      <p class="tk-lead">Keep active subordinates to become an agent and earn a monthly salary. An active subordinate is a member you invited who has an AI robot running. The salary of your agent level can be claimed once every 30 days.</p>
+      <div id="agentList"></div>
+    </div>
     <div style="height:14px"></div>
   </div>
 

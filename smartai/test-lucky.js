@@ -11,7 +11,7 @@ const block = src.slice(a, b);
 ok(/'\/withdraw\/request', '\/invest\/create', '\/lucky\/flip'/.test(src), 'a flip has the strict per-member rate limit');
 ok(/const chance = lk\.on && depAmount >= lk\.minDeposit \? \{ luckyChances: FieldValue\.increment\(1\) \} : \{\};/.test(src) && /creditedDepositIds: FieldValue\.arrayUnion\(depDoc\.id\), \.\.\.referral, \.\.\.chance/.test(src),
   'the chance is written in the SAME atomic update as the recharge credit (so a retry can never give a second one)');
-ok(/'mission_deposit_reward', 'checkin', 'lucky_card'\]/.test(src), 'the integrity audit counts a Lucky Cards prize as earnings');
+ok(/'mission_deposit_reward', 'checkin', 'lucky_card'(?:, '[a-z_]+')*\]/.test(src), 'the integrity audit counts a Lucky Cards prize as earnings');
 
 const INC = { __inc: true };
 function makeDb() {

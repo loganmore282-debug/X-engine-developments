@@ -170,7 +170,7 @@ async function _apiRaw(path, body, method, retry){
       if (!isPublic && epoch !== _authEpoch) return { status: 'error', stale: true, message: 'Session changed' };
       if (i === attempts - 1) {
         // A call that moves money may have reached the server even though the answer never came back: never say "try again" for those.
-        var movesMoney = /^\/(deposit|invest|withdraw|redeem|salary\/claim|checkin|lucky)/.test(path);
+        var movesMoney = /^\/(deposit|invest|withdraw|redeem|salary\/claim|agent\/claim|checkin|lucky)/.test(path);
         return { status: 'error', message: ctl.signal.aborted ? 'The request took too long. Check Records before trying a payment again.' : (movesMoney ? 'The connection dropped. Check Records before trying again, in case it went through.' : 'Could not reach the server. Check your connection and try again.') };
       }
     }
@@ -1451,15 +1451,80 @@ function renderTierCard(t, total){
       '<button type="button" class="tk-pill ' + pillClass + '"' + (clickable ? ' data-tier="' + esc(t.id) + '" onclick="claimTier(this)"' : ' disabled') + '>' + pillLabel + '</button>' +
     '</div>';
 }
+/* VIP Tasks: two lists. Team rewards (each tier claimed once, from the team's purchases) and Agent rewards (a monthly salary for keeping a number of
+   ACTIVE subordinates: members invited directly who have an AI robot running; the admin names each agent level). Everything shown is what the server answered. */
+var _vipTab = 'team';
+function setVipTab(name){
+  _vipTab = name === 'agent' ? 'agent' : 'team';
+  document.querySelectorAll('.uline-tab[data-vt]').forEach(function(b){ b.classList.toggle('active', b.dataset.vt === _vipTab); });
+  var a = $('vtTeam'), g = $('vtAgent');
+  if (a) a.style.display = _vipTab === 'team' ? '' : 'none';
+  if (g) g.style.display = _vipTab === 'agent' ? '' : 'none';
+}
+var TK_ICON_AGENT = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.4"/><path d="M2.8 19.5c.5-3.4 3-5.3 6.2-5.3s5.7 1.9 6.2 5.3"/><path d="M16 5.2a3.2 3.2 0 010 6M18.2 14.7c1.7.7 2.8 2.3 3 4.8"/></svg>';
+function agentDate(ms){
+  var d = new Date(ms + 3 * 3600000), m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return d.getUTCDate() + ' ' + m[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+}
+function renderAgentSummary(r){
+  var has = !!r.levelId, first = r.levels[0];
+  var waiting = has && !r.canClaim, label, cls = '', click = '';
+  if (has && r.canClaim) { label = 'Claim ' + ugx(r.salary); cls = 'is-ready'; click = ' onclick="claimAgent(this)"'; }
+  else if (waiting) label = 'Next salary on ' + agentDate(r.nextAt);
+  else label = first ? ('Reach ' + first.target + ' active subordinate' + (first.target === 1 ? '' : 's')) : 'Not available yet';
+  return '<div class="tk-card">' +
+      '<div class="tk-head"><div class="tk-ic tk-ic-dep">' + TK_ICON_AGENT + '</div><div class="tk-type">Your agent level</div></div>' +
+      '<div class="tk-desc">' + (has ? ('You are <b>' + esc(r.levelName) + '</b>. Monthly salary: <em>' + ugx(r.salary) + '</em>') : 'You are not an agent yet. Invite members and help them start an AI robot.') + '</div>' +
+      '<div class="tk-stats"><div><b>' + (Number(r.active) || 0) + '</b><span>Active subordinates</span></div><div><b>' + (Number(r.direct) || 0) + '</b><span>Invited</span></div><div><b>' + (has ? ugx(r.salary) : ugx(0)) + '</b><span>Monthly salary</span></div></div>' +
+      '<button type="button" class="tk-pill ' + cls + '"' + (click || ' disabled') + '>' + esc(label) + '</button>' +
+    '</div>';
+}
+function renderAgentLevel(l, r){
+  var active = Number(r.active) || 0, current = Math.min(active, l.target);
+  var pct = l.target > 0 ? Math.min(100, Math.floor(current / l.target * 100)) : 0, mine = r.levelId === l.id;
+  return '<div class="tk-card' + (mine ? ' ag-mine' : '') + '">' +
+      '<div class="tk-head"><div class="tk-ic tk-ic-dep">' + TK_ICON_AGENT + '</div><div class="tk-type">' + esc(l.name) + '</div>' + (mine ? '<span class="tk-tag">Your level</span>' : '') + '</div>' +
+      '<div class="tk-desc">Keep <b>' + l.target + '</b> active subordinate' + (l.target === 1 ? '' : 's') + ' to earn: <em>' + ugx(l.salary) + '</em> every month</div>' +
+      '<div class="tk-bar"><div class="tk-bar-fill' + (l.reached ? ' is-done' : '') + '" style="width:' + pct + '%"></div></div>' +
+      '<div class="tk-stats"><div><b>' + current + '</b><span>Current</span></div><div><b>' + l.target + '</b><span>Target</span></div><div><b>' + pct + '%</b><span>Progress</span></div></div>' +
+      '<button type="button" class="tk-pill ' + (l.reached ? 'is-done' : '') + '" disabled>' + (l.reached ? 'Reached' : 'In Progress') + '</button>' +
+    '</div>';
+}
+function renderAgentList(r){
+  var box = $('agentList'); if (!box) return;
+  if (!r || r.status !== 'success' || !Array.isArray(r.levels)) { box.innerHTML = '<div class="empty">' + esc((r && r.message) || 'Could not load the agent rewards. Try again.') + '</div>'; return; }
+  box.innerHTML = r.levels.length ? (renderAgentSummary(r) + r.levels.map(function(l){ return renderAgentLevel(l, r); }).join('')) : '<div class="empty">No agent rewards are set up yet.</div>';
+}
 async function loadTaskCenter(){
-  var box = $('taskCenterList');
+  var box = $('taskCenterList'), abox = $('agentList');
   if (!box) return;
-  box.innerHTML = spinnerHtml();
-  var r = await api('/salary/status');
-  if (r.stale) return;
-  if (r.status !== 'success' || !Array.isArray(r.tiers)) { box.innerHTML = '<div class="empty">' + esc((r && r.message) || 'Could not load the Task Center. Try again.') + '</div>'; return; }
+  setVipTab(_vipTab);
+  box.innerHTML = spinnerHtml(); if (abox) abox.innerHTML = spinnerHtml();
+  var rs = await Promise.all([api('/salary/status'), api('/agent/status')]);
+  var r = rs[0], ag = rs[1];
+  if (r.stale || ag.stale) return;
+  if (STATE) STATE.agent = ag;
+  renderAgentList(ag);
+  if (r.status !== 'success' || !Array.isArray(r.tiers)) { box.innerHTML = '<div class="empty">' + esc((r && r.message) || 'Could not load the team rewards. Try again.') + '</div>'; return; }
   STATE.salary = r;
   box.innerHTML = r.tiers.length ? r.tiers.map(function(t){ return renderTierCard(t, Number(r.total) || 0); }).join('') : '<div class="empty">No rewards are set up yet.</div>';
+}
+async function claimAgent(btn){
+  if (!btn || btn.disabled) return;
+  var label = btn.textContent;
+  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
+  var r = await api('/agent/claim', {});
+  if (r.stale) return;
+  if (r.status !== 'success') {
+    toast(r.message || 'Could not pay the salary');
+    btn.disabled = false; btn.textContent = label;
+    await loadTaskCenter();
+    return;
+  }
+  toast(r.message || 'Salary added to your wallet');
+  await refreshFromServer();
+  renderAll();
+  await loadTaskCenter();
 }
 async function claimTier(btn){
   var id = btn && btn.getAttribute('data-tier');
@@ -1788,8 +1853,8 @@ document.addEventListener('visibilitychange', function(){
 var _recordsTab = 'accrued';
 var _recordsLoaded = { accrued: true, topups: false, cashouts: false }, _recordsFailed = { topups: false, cashouts: false };
 // The kinds of ledger row that are money coming IN as earnings (the Accrued tab). A top-up is in Topups and a cash-out is in Cash Outs.
-var INCOME_TYPES = ['cashback', 'checkin', 'lucky_card', 'commission', 'mission_salary', 'promocode', 'welcome_bonus', 'admin_credit', 'investment_refund'];
-var REC_TYPE_LABEL = { cashback: 'AI robot income', checkin: 'Daily reward', lucky_card: 'Lucky card reward', commission: 'Referral commission', mission_salary: 'Task Center reward', promocode: 'Gift code',
+var INCOME_TYPES = ['cashback', 'checkin', 'lucky_card', 'commission', 'mission_salary', 'agent_salary', 'promocode', 'welcome_bonus', 'admin_credit', 'investment_refund'];
+var REC_TYPE_LABEL = { cashback: 'AI robot income', checkin: 'Daily reward', lucky_card: 'Lucky card reward', commission: 'Referral commission', mission_salary: 'Team reward', agent_salary: 'Agent salary', promocode: 'Gift code',
   welcome_bonus: 'Welcome gift', admin_credit: 'Account credit', investment_refund: 'Product refund' };
 function recStatusInfo(s){
   s = String(s || 'success').toLowerCase();
