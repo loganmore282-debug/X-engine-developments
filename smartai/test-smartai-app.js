@@ -115,31 +115,23 @@ async function member(ref) {
   ok(await ev(() => document.querySelectorAll('#mychocList .choc-hold-card').length) === 1 && /0 \/ \d+ days/.test(await ev(() => document.getElementById('mychocList').textContent)), 'My Products lists it with its day counter');
   await ev(() => closeOverlay());
 
-  // ---- 4. daily check-in ----
-  await ev(() => switchTab('rewards')); await sleep(300);
+  // ---- 4. the Rewards tab is Lucky Cards (no check-in, no gift code box any more; the server still accepts both, checked here by API) ----
+  await ev(() => switchTab('rewards')); await sleep(400);
+  const lk0 = await ev(() => ({ cards: document.querySelectorAll('#lkGrid .lk-card').length, backs: [...document.querySelectorAll('#lkGrid .lk-bimg')].every(i => /robots/.test(i.getAttribute('src'))), checkin: !!document.getElementById('checkinBtn') || !!document.getElementById('calGrid'),
+    gift: !!document.getElementById('giftBoxBtn') || !!document.getElementById('giftRevealBg') || /Gift Code/.test(document.getElementById('viewRewards').textContent), ch: document.getElementById('lkChances').textContent, rech: getComputedStyle(document.getElementById('lkRecharge')).display }));
+  ok(lk0.cards === 9 && lk0.backs && !lk0.checkin && !lk0.gift && lk0.ch === '0' && lk0.rech !== 'none', 'Rewards shows nine face-down cards with the AI robot on their backs, no check-in and no gift code, and a Recharge button while there is no chance: ' + JSON.stringify(lk0));
+  await page.click('#lkGrid .lk-card:nth-child(1)'); await sleep(500);
+  ok(/Recharge to get a chance/.test(await toastText()) && await ev(() => document.querySelectorAll('#lkGrid .lk-card.flip').length) === 0, 'tapping a card with no chance says to recharge and turns nothing over');
   const before = await ev(() => STATE.balance);
-  await page.click('#checkinBtn'); await sleep(1500);
-  ok(await ev(() => STATE.balance) === before + 100 && await ev(() => STATE.checkinStreak) === 1, 'Check in pays the first day of the calendar (UGX 100) and starts the streak');
-  ok(await ev(() => document.getElementById('checkinBtn').disabled) === true && /Claimed today/.test(await ev(() => document.getElementById('checkinBtn').textContent)), 'the button then reads Claimed today');
-  const again = await J('POST', '/checkin', {}, MEtok);
-  ok(again.s === 400 && again.j.code === 'ALREADY_CHECKED_IN', 'a second check-in the same day is refused by the server');
+  ok((await J('POST', '/checkin', {}, MEtok)).s === 200, 'the check-in endpoint still pays (API)');
+  ok((await J('POST', '/checkin', {}, MEtok)).j.code === 'ALREADY_CHECKED_IN', 'a second check-in the same day is refused by the server');
   const dbl = await Promise.all([1, 2, 3].map(() => J('POST', '/checkin', {}, A.tok)));
   ok(dbl.filter(r => r.s === 200).length === 1, 'three check-ins at the same instant pay once');
-
-  // ---- 5. gift code ----
   const gen = await J('POST', '/admin/promocodes/generate', { minReward: 3000, maxReward: 3000, maxUses: 5 }, null, true);
-  const code = gen.j.code; const bal0 = await ev(() => STATE.balance);
-  await page.click('#giftBoxBtn'); await sleep(450);   // tapping the gift opens the popup with the code field
-  await page.fill('#giftCodeInput', code); await page.click('#redeemBtn');
-  ok(await until(() => document.getElementById('giftStage').classList.contains('gs-burst'), null, 8000), 'a right gift code bursts the gift open');
-  await until(() => /3,000/.test(document.getElementById('giftRevealAmount').textContent), null, 8000);   // the gift spins about a second, then bursts and the figure counts up
-  ok(/3,000/.test(await ev(() => document.getElementById('giftRevealAmount').textContent)) && await ev(() => STATE.balance) === bal0 + 3000, 'the reveal counts up to the real reward and the wallet has it');
-  await ev(() => closeGiftReveal());
-  await page.click('#giftBoxBtn'); await sleep(450); await page.fill('#giftCodeInput', code); await page.click('#redeemBtn'); await sleep(1500);
-  ok(!await ev(() => document.getElementById('giftStage').classList.contains('gs-burst')) && (await toastText()).length > 0 && await ev(() => STATE.balance) === bal0 + 3000, 'the same code again pays nothing and says why');
-  await page.fill('#giftCodeInput', 'WRONGWRONG'); await page.click('#redeemBtn'); await sleep(1500);
-  ok(!await ev(() => document.getElementById('giftStage').classList.contains('gs-burst')), 'a wrong code opens nothing');
-  await ev(() => closeGiftReveal());
+  const code = gen.j.code;
+  ok((await J('POST', '/redeem', { code }, MEtok)).s === 200 && (await J('POST', '/redeem', { code }, MEtok)).s === 400, 'a gift code pays once (API)');
+  await ev(async () => { await refreshFromServer(); }); 
+  ok(await ev(() => STATE.balance) === before + 100 + 3000, 'the wallet holds the check-in and the gift code');
 
   // ---- 6. payout accounts ----
   await ev(() => goBindBank(false)); await sleep(300);
@@ -165,11 +157,12 @@ async function member(ref) {
   ok(await ev(() => document.getElementById('witFee').textContent) === 'UGX 3,000' && await ev(() => document.getElementById('witNet').textContent) === 'UGX 17,000', 'the fee and what the member receives follow the setting (15%)');
   await page.fill('#witAmt', '500'); await page.click('#witGoBtn'); await sleep(300);
   ok(/Minimum withdrawal/.test(await toastText()), 'an amount under the minimum is refused on the phone');
+  const balBeforeWrong = await ev(() => STATE.balance);
   // wrong Trade Password
   await page.fill('#witAmt', '20000'); await page.click('#witGoBtn'); await until(() => document.getElementById('tradePinBg').classList.contains('show'), null, 4000);
   ok(!await ev(() => /authenticator|2-step|backup code/i.test(document.body.innerText)), 'only the Trade Password is asked (no second code)');
   await page.fill('#tradePinInput', '111111'); await page.click('#tradePinOk'); await sleep(1500);
-  ok(/Incorrect Trade Password/i.test(await toastText()) && await ev(() => STATE.balance) === bal0 + 3000, 'a wrong Trade Password takes nothing');
+  ok(/Incorrect Trade Password/i.test(await toastText()) && await ev(() => STATE.balance) === balBeforeWrong, 'a wrong Trade Password takes nothing');
   // right Trade Password
   const balBefore = await ev(() => STATE.balance);
   await page.click('#witGoBtn'); await until(() => document.getElementById('tradePinBg').classList.contains('show'), null, 4000);
@@ -185,7 +178,7 @@ async function member(ref) {
   ok(/No recharges yet/.test(await ev(() => document.getElementById('recordsList').textContent)), 'Ledger > Recharges is empty for a member who has not paid by mobile money');
   await ev(() => setRecordsTab('accrued')); await sleep(500);
   const accrued = await ev(() => document.getElementById('recordsList').textContent);
-  ok(/Daily reward/.test(accrued) && /Welcome gift/.test(accrued) && /Gift code/.test(accrued), 'Ledger > Accrued lists the daily reward, the welcome gift and the gift code');
+  ok(/Daily reward/.test(accrued) && /Welcome gift/.test(accrued) && /Gift code/.test(accrued), 'Ledger > Accrued still lists the daily reward, the welcome gift and the gift code rows');
   await ev(() => closeOverlay());
   const dr = await J('GET', '/deposits', null, MEtok);
   ok(dr.s === 200 && Array.isArray(dr.j.deposits), '/deposits answers');
@@ -252,6 +245,30 @@ async function member(ref) {
   ok(await ev(() => document.getElementById('depVerifyLabel').textContent) === 'Continue to Dashboard', 'with a Continue to Dashboard button');
   await ev(() => document.getElementById('depVerifyBtn').click()); await sleep(900);
   ok(await ev(() => STATE.balance) === walletBefore + 30000 && !await ev(() => document.getElementById('ovDepositStatus').classList.contains('show')), 'it closes the page and the wallet shows the credit');
+
+  // ---- 7c. Lucky Cards: the credited recharge gave one chance; the VIP gate; a flip pays the admin's amount; the board turns over ----
+  ok((await J('GET', '/account', null, MEtok)).j.account.lucky.chances === 1, 'the credited recharge gave exactly one Lucky Cards chance');
+  ok((await J('POST', '/admin/settings/update', { settings: { luckyMinAmount: 1000, luckyMaxAmount: 1000, luckyProductPct: 0, luckyMinVip: 99 } }, null, true)).s === 200, 'the admin sets the range to exactly UGX 1,000 and "VIP 99 and above" to flip');
+  await ev(() => { _lastTab = 'home'; switchTab('rewards'); }); await ev(async () => { await refreshFromServer(); renderAll(); }); await sleep(500);
+  ok(await ev(() => document.getElementById('lkChances').textContent) === '1' && /VIP 99/.test(await ev(() => document.getElementById('lkNote').textContent)), 'Rewards shows 1 chance and says VIP 99 is needed');
+  await page.click('#lkGrid .lk-card:nth-child(5)'); await sleep(500);
+  ok(/Reach VIP 99/.test(await toastText()) && await ev(() => document.querySelectorAll('#lkGrid .lk-card.flip').length) === 0, 'below the VIP level a tap turns nothing over');
+  ok((await J('POST', '/lucky/flip', {}, MEtok)).j.code === 'VIP_REQUIRED', 'and the server refuses it too');
+  ok((await J('POST', '/admin/settings/update', { settings: { luckyMinVip: 0 } }, null, true)).s === 200, 'the admin lowers the level to 0');
+  await sleep(1200); await ev(async () => { await refreshFromServer(); renderAll(); });
+  const lw0 = await ev(() => STATE.balance);
+  await page.click('#lkGrid .lk-card:nth-child(5)'); await sleep(900);
+  const mid = await ev(() => ({ flipped: document.querySelectorAll('#lkGrid .lk-card.flip').length, win: document.querySelectorAll('#lkGrid .lk-card.win').length }));
+  ok(mid.win === 1, 'the tapped card turns over first (the winner, gold)');
+  await sleep(2600);
+  const lk1 = await ev(() => ({ flipped: document.querySelectorAll('#lkGrid .lk-card.flip').length, dim: document.querySelectorAll('#lkGrid .lk-card.dim').length, win: document.querySelector('#lkGrid .lk-card.win .lk-front').textContent, wallet: STATE.balance,
+    ch: document.getElementById('lkChances').textContent, again: document.getElementById('lkAgain').textContent, shown: document.getElementById('lkResult').classList.contains('show'), note: document.getElementById('lkNote').textContent, backface: getComputedStyle(document.querySelector('#lkGrid .lk-face')).backfaceVisibility }));
+  ok(lk1.flipped === 9 && lk1.dim === 8 && /1,000/.test(lk1.win) && lk1.wallet === lw0 + 1000 && lk1.ch === '0' && /Recharge for another chance/.test(lk1.again) && lk1.shown && /won UGX 1,000/.test(lk1.note) && lk1.backface === 'hidden',
+    'one tap: all nine cards are turned over (eight dimmed), the winner shows UGX 1,000, the wallet has it, the chance is spent and the page offers another recharge: ' + JSON.stringify(lk1));
+  ok((await J('POST', '/lucky/flip', {}, MEtok)).j.code === 'NO_CHANCE', 'a second flip with no chance is refused');
+  ok(await ev(() => document.querySelectorAll('#lkGrid .lk-card.flip').length) === 9, 'and the board stays as it was');
+  await ev(() => { _lk.revealed = false; lkResetIfDone(); }); await ev(() => { lkAgain(); });
+  const lw1 = await ev(() => STATE.balance); void lw1;
   await ev(() => { gpLeave(); stopDepositPoll(); releasePayLoader(); closeOverlay(); }); await sleep(300);
   await ev(() => openOverlay('deposit')); await sleep(600);
   ok(await ev(() => { const li = document.querySelector('#ovDeposit .pay-steps li'); const c = getComputedStyle(li).color.match(/\d+/g).map(Number); return c[0] < 120 && c[1] < 140; }), 'on Add Funds the Deposit procedure steps are dark and readable on their light box (not white)');

@@ -15,7 +15,7 @@ const serverSlots = list(server, /const SMARTAI_ICON_SLOTS = \[([^\]]*)\]/);
 const adminBuiltin = list(admin, /const SMARTAI_ICON_BUILTIN = \[([^\]]*)\]/);
 const labelBlock = (admin.match(/const SMARTAI_ICON_LABELS = \{([\s\S]*?)\};/) || [, ''])[1];
 const adminLabels = [...labelBlock.matchAll(/(?:^|[,{\s])([a-z0-9]+):\s*'/g)].map(m => m[1]);
-ok(serverSlots.length === 27 && new Set(serverSlots).size === 27, 'the server knows 27 icon slots (the payment page logo is the newest) (18 pictures + 8 animations: loader, 3 medals, gift box, opened gift, tick, cross) (' + serverSlots.length + ')');
+ok(serverSlots.length === 25 && new Set(serverSlots).size === 25, 'the server knows 25 icon slots (the payment page logo is the newest) (18 pictures + 6 animations: loader, 3 medals, tick, cross) (' + serverSlots.length + ')');
 ok(JSON.stringify(serverSlots) === JSON.stringify(adminBuiltin), 'the admin panel lists the same slots, in the same order, as having a built-in picture');
 ok(serverSlots.every(s => adminLabels.includes(s)) && adminLabels.length === serverSlots.length, 'and gives every slot a plain label (' + adminLabels.length + ')');
 ok(/Icons must be PNG pictures with a transparent background/.test(server), 'the server takes only PNG pictures for an icon slot');

@@ -83,7 +83,7 @@ function context(db, extra={}) {
     console:{log(){},warn(){},error(){}}, AbortSignal,
     app:{post:(p,fn) => routes.set(p,fn)},
     _withdrawInFlight:new Set(), _lockTails:new Map(),
-    getSettings:async() => ({}), payoutIsManual:() => false, isBankNetwork:() => false,
+    getSettings:async() => ({}), luckyCfg:() => ({ on: false, minDeposit: 0 }), payoutIsManual:() => false, isBankNetwork:() => false,
     withdrawProvider:() => 'marzpay', fmtMoney:n => 'UGX ' + n,
     PUBLIC_URL:'https://invalid.example', MARZPAY_BASE:'https://invalid.example',
     NETWORK_NAMES:new Set(['MTN Mobile Money', 'Airtel Money']),

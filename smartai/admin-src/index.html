@@ -457,7 +457,7 @@ const TX_LABELS = {
   deposit: 'Recharge', withdraw: 'Withdraw', commission: 'Commission', team_reward: 'Team reward',
   cashback: 'Product cashback', investment: 'Product purchase',
   promocode: 'Gift code redeemed', admin_credit: 'Credit', admin_debit: 'Adjustment',
-  welcome_bonus: 'Welcome bonus', mission_salary: 'Team reward', checkin: 'Daily check-in', mission_deposit_reward: 'Team reward',
+  welcome_bonus: 'Welcome bonus', mission_salary: 'Team reward', checkin: 'Daily check-in', lucky_card: 'Lucky card reward', mission_deposit_reward: 'Team reward',
   deposit_reversal: 'Recharge reversed (fraud)',
   investment_refund: 'Product refund',
 };
@@ -666,10 +666,10 @@ function smartaiCutout(src, w, h){
 }
 // The icon slots (same names as SMARTAI_ICON_SLOTS in server.js). Add a name here AND in server.js to get a new upload box.
 // Slots that already have a built-in blue picture in the app (user/icons/); an upload here replaces it, Remove brings it back.
-const SMARTAI_ICON_BUILTIN = ['home', 'robots', 'income', 'share', 'teamnav', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout', 'level1', 'level2', 'level3', 'loader', 'giftbox', 'giftopen', 'tick', 'cross', 'paylogo'];
-const SMARTAI_ICON_LABELS = { home:'Home tab', robots:'AI Robots tab, My AI robots and the robot picture', income:'Rewards tab', share:'Share tab and Share page picture', teamnav:'Team tab and Team page picture', my:'Me tab', deposit:'Add Funds button (Home)', withdraw:'Cash Out button (Home) and the Cash Outs figure', gift:'Rewards Hub button, gift code and the reward reveal', support:'Support button (Home and Me)', ledger:'Ledger (Me)', team:'My Team (Me)', payout:'Payout Account (Me)', security:'Security (Me)', about:'About Us (Me)', rules:'Terms & Rules (Me)', download:'Download App (Me)', signout:'Sign Out (Me)', level1:'Level 1 medal (Team page)', level2:'Level 2 medal (Team page)', level3:'Level 3 medal (Team page)', loader:'Page loader (the dots)', giftbox:'Gift box (Rewards page)', giftopen:'Opened gift with coins (when a code is redeemed)', tick:'Payment success tick', cross:'Payment failed cross', paylogo:'Payment page logo (the picture at the top of both payment pages; the background is removed for you)' };
+const SMARTAI_ICON_BUILTIN = ['home', 'robots', 'income', 'share', 'teamnav', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout', 'level1', 'level2', 'level3', 'loader', 'tick', 'cross', 'paylogo'];
+const SMARTAI_ICON_LABELS = { home:'Home tab', robots:'AI Robots tab, My AI robots and the robot picture', income:'Rewards tab', share:'Share tab and Share page picture', teamnav:'Team tab and Team page picture', my:'Me tab', deposit:'Add Funds button (Home)', withdraw:'Cash Out button (Home) and the Cash Outs figure', gift:'Rewards Hub button (Home)', support:'Support button (Home and Me)', ledger:'Ledger (Me)', team:'My Team (Me)', payout:'Payout Account (Me)', security:'Security (Me)', about:'About Us (Me)', rules:'Terms & Rules (Me)', download:'Download App (Me)', signout:'Sign Out (Me)', level1:'Level 1 medal (Team page)', level2:'Level 2 medal (Team page)', level3:'Level 3 medal (Team page)', loader:'Page loader (the dots)', tick:'Payment success tick', cross:'Payment failed cross', paylogo:'Payment page logo (the picture at the top of both payment pages; the background is removed for you)' };
 // The four that are animations (the owner's recordings). A picture uploaded for one stands still in its place; Back to default brings the animation back.
-const SMARTAI_ANIM_KEYS = ['loader', 'level1', 'level2', 'level3', 'giftbox', 'giftopen', 'tick', 'cross'];
+const SMARTAI_ANIM_KEYS = ['loader', 'level1', 'level2', 'level3', 'tick', 'cross'];
 // An uploaded file -> a transparent, tightly cropped PNG data URL (longest side at most `maxDim`).
 function fileToCutoutPng(file, maxDim){
   return new Promise((resolve,reject)=>{
@@ -3558,7 +3558,7 @@ async function renderSettings(){
   // Image/banner uploads all moved to their own tab, see renderBanners() --
   // this fetch only needs what Rates/Payments/Support/App name/About
   // actually render now.
-  const [r] = await Promise.all([ api('/admin/settings') ]);
+  const [r, prodR] = await Promise.all([ api('/admin/settings'), api('/admin/products').catch(()=>({})) ]);
   if(staleTab('settings')) return;
   // A failed read must NOT show default boxes: Save would then overwrite the real settings (maintenance, allowed domains, rates) with them.
   if(r.status!=='success'){ loadFailed(r,'settings'); return; }
@@ -3566,6 +3566,8 @@ async function renderSettings(){
   if(s.regionOffsetMin!=null) REGION_OFF_MIN = Number(s.regionOffsetMin) || 0;
   applyAdminBrandName(s.brandName);
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
+  const luckyList = ((prodR&&prodR.products)||[]).filter(p=>!p.deleted).sort((a,b)=>(a.order||0)-(b.order||0)||(a.price||0)-(b.price||0));
+  const luckyPicked = new Set(Array.isArray(s.luckyProducts)?s.luckyProducts:[]);
   $('content').innerHTML = `
     ${ADMIN_REGIONS.length > 1 ? `<p class="muted" style="margin:0 0 12px;font-size:12px">Rates and payment methods apply to <b>${esc(regionByKeyAdmin(adminOneRegion()).name)}</b> above; the app name, domain list and images apply everywhere.</p>` : ''}
     <h2 class="sec">Rates &amp; limits${ADMIN_REGIONS.length > 1 ? ' &middot; ' + esc(regionByKeyAdmin().name) : ''}</h2>
@@ -3616,6 +3618,26 @@ async function renderSettings(){
       <textarea id="sAllowedOrigins" rows="4" placeholder="smartai-platform.com&#10;www.smartai-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Only these domains may reach the backend &mdash; one per line, include www. smartai-platform.com and this VPS's own address are always allowed.</p>
       <button class="btn block" id="saveRates">Save rates</button>
+    </div>
+
+    <h2 class="sec">Lucky Cards (Rewards tab)</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin:0 0 10px;font-size:12px">Every credited recharge gives the member one chance to flip a card on the 3 x 3 board. A card pays earnings (a whole amount between your lowest and highest) or, now and then, one of the AI robots you tick below.</p>
+      <div class="switch-row"><span><b>Lucky Cards on</b> <span class="muted">(off = the board is shown but nobody can flip)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="lkOn" ${s.luckyOn!==false?'checked':''} style="width:auto"></label></div>
+      <div class="row" style="margin-top:8px">
+        <div><label>Recharge needed for a chance (${adminCur()}, 0 = any recharge)</label><input id="lkMinDep" type="number" min="0" step="1" value="${v('luckyMinDeposit',0)}"></div>
+        <div><label>Who can flip: lowest VIP level (0 = everybody)</label><input id="lkMinVip" type="number" min="0" max="100" step="1" value="${v('luckyMinVip',0)}"></div>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <div><label>Lowest earnings a card can give (${adminCur()})</label><input id="lkMin" type="number" min="0" step="1" value="${v('luckyMinAmount',500)}"></div>
+        <div><label>Highest earnings a card can give (${adminCur()})</label><input id="lkMax" type="number" min="0" step="1" value="${v('luckyMaxAmount',5000)}"></div>
+        <div><label>Chance a card is a robot (%)</label><input id="lkPct" type="number" min="0" max="100" step="1" value="${v('luckyProductPct',10)}"></div>
+      </div>
+      <label style="margin-top:10px">AI robots a card may give</label>
+      <div id="lkProducts" style="max-height:220px;overflow:auto;border:1px solid var(--line,#2a3550);border-radius:10px;padding:6px 10px">${luckyList.length?luckyList.map(p=>`<label style="width:auto;display:flex;align-items:center;gap:10px;margin:6px 0"><input type="checkbox" class="lk-prod" value="${esc(p.key)}" ${luckyPicked.has(p.key)?'checked':''} style="width:auto"><span>${esc(p.name||p.label||p.key)} <span class="muted">VIP ${p.vip||0} &middot; ${ugx(p.price)}</span></span></label>`).join(''):'<span class="muted">No products yet. Add products first.</span>'}</div>
+      <p class="muted" style="margin:6px 0 0;font-size:12px">Tick none and every card pays earnings only. A member below the lowest VIP level keeps the chances they earn and can flip them once they reach it.</p>
+      <button class="btn block" id="saveLucky">Save Lucky Cards</button>
     </div>
 
     <h2 class="sec">Payments</h2>
@@ -3783,6 +3805,14 @@ async function renderSettings(){
       maintenanceMsg:$('sMaintMsg').value.trim(),
     };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('saveLucky').addEventListener('click', async()=>{
+    for(const id of ['lkMinDep','lkMinVip','lkMin','lkMax','lkPct']){ if(!/^\d+$/.test($(id).value.trim())){ toast('Type a whole number in every Lucky Cards box (0 is allowed).','err'); $(id).focus(); return; } }
+    if(+$('lkMin').value > +$('lkMax').value){ toast('The lowest earnings cannot be higher than the highest.','err'); $('lkMin').focus(); return; }
+    const picked=[...document.querySelectorAll('.lk-prod:checked')].map(x=>x.value);
+    if(+$('lkPct').value>0 && !picked.length && !confirm('The robot chance is above 0 but no robot is ticked, so every card will pay earnings only. Save anyway?')) return;
+    const d=await api('/admin/settings/update', { settings: { luckyOn:$('lkOn').checked, luckyMinDeposit:+$('lkMinDep').value, luckyMinVip:+$('lkMinVip').value, luckyMinAmount:+$('lkMin').value, luckyMaxAmount:+$('lkMax').value, luckyProductPct:+$('lkPct').value, luckyProducts:picked } });
+    toast(d.status==='success'?'Lucky Cards saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveSupport').addEventListener('click', async()=>{
     const upd = { supportTelegram:$('spTg').value.trim(), telegramGroup:$('spTgGroup').value.trim(), telegramChannel:$('spTgChannel').value.trim(), whatsappGroup:$('spWaGroup').value.trim(), whatsappContact:$('spWaContact').value.trim(), supportHours:$('spHours').value.trim(), rulesText:$('spRules').value };

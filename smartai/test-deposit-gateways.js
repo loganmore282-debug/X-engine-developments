@@ -64,7 +64,7 @@ const deps = () => [...fm.__stores.pendingDeposits.values()];
   const admin = fs.readFileSync(path.join(root, 'admin-src/index.html'), 'utf8'), app = fs.readFileSync(path.join(root, 'user-src/original_module.js'), 'utf8');
   ok(/id="depGwRotate"/.test(admin) && /depositGateways: _depGws\.join/.test(admin) && /'lworxpay','LworxPay'/.test(admin) && /'obpay','ObPay'/.test(admin), 'the admin has a gateway picker per button and a Rotate button');
   // (the member app no longer picks a gateway button: money in is the admin's own MTN / Airtel numbers, see test-manual-pay.js; the server keeps /deposit/start and the gateway routes)
-  ok(/btnBusyHtml\('Opening…'\)/.test(app), 'the Redeem button says Opening... while it works');
+  ok(/function renderLucky\(\)/.test(app) && !/redeemGiftCode/.test(app), 'the Rewards tab is the Lucky Cards board (the gift code box is gone)');
   realLog(fails ? fails + ' FAILED' : 'PASS: deposit buttons -> gateways (' + n + ' checks)');
   process.exit(fails ? 1 : 0);
 })().catch(e => { realErr(e); process.exit(2); });

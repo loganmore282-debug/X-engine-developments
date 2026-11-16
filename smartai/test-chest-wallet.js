@@ -13,10 +13,10 @@ ok(/const BANK_CARD_LIMIT = 5;/.test(server) && /app\.post\('\/bank\/select'/.te
 ok(/Wrong treasure chest password/.test(server) && /Please enter the treasure chest key/.test(server), 'server chest messages');
 ok(!/bank-transfer|getSupportedBanks|marzValidateBankAccount/.test(server) && !/supportedBanks/.test(source), 'the bank-transfer rail is gone: the payout account is an MTN or Airtel wallet only');
 
-// The app: Gift Code, payout cards and the claim dialogs use the app's own wording.
-ok(/id="giftCodeInput"/.test(fs.readFileSync(__dirname + '/user-src/index.html', 'utf8')) && /async function redeemGiftCode\(\)/.test(source), 'the Gift Code page has its box and its redeem function');
-ok(/Enter a code/.test(source) && /btnBusyHtml\('Opening…'\)/.test(source), 'an empty code says so, and the button reads Opening… while the server answers');
-ok(/function showGiftReveal\(amount\)/.test(source) && /function closeGiftReveal\(\)/.test(source), 'a redeemed code opens the treasure-chest reveal');
+// The app: the gift code box is gone from the Rewards tab; payout cards and the claim dialogs use the app's own wording.
+ok(!/id="giftCodeInput"/.test(fs.readFileSync(__dirname + '/user-src/index.html', 'utf8')) && !/redeemGiftCode|showGiftReveal|closeGiftReveal/.test(source) && /app\.post\('\/redeem'/.test(server), 'the Rewards tab has no gift code box any more (the Lucky Cards board took its place); the server keeps /redeem');
+
+
 
 // About: the admin's article is cleaned again on the phone.
 {

@@ -702,3 +702,19 @@ remove number and networks ... payment numbers will be uploaded from the admin p
   (wallet refreshed); `failed` / `expired` -> the animated red cross with the reason, Back to Dashboard. The admin's own tick / cross pictures (Icons slots) replace the drawn ones.
 - Function names are the old gateway page's (`openDepositStatus(depositId, reference, amount)`, `showPayLoader`, `showDepositSuccess`, `showDepositFailed(reason)`, `stopDepositPoll`), so tests find them.
   The page-2 `gpDone` card is still used for the (rare) case the order turns `matched` / `failed` while page 2 is open.
+
+## Rewards tab = Lucky Cards (2026-11-16, member v93, admin v34)
+Owner: "remove check-in and gift code on the Rewards tab, so Rewards will be a raffle: whenever one makes a deposit he gets a chance to flip the cards, 9 cards (3 x 3), the AI robots image behind,
+smooth modern flip, a reward is shown when tapped: a product or earnings; I set the range of products, the highest and lowest amount, and who can claim (VIP 3 and above ...)."
+- **Member app**: the check-in calendar, the gift-code box, the gift SVG / opening stage and their CSS, JS and admin picture slots (`giftbox`, `giftopen`) are GONE. `#viewRewards` is the board (`renderLucky`, `lkTap`,
+  `lkReveal`, `lkAgain` in original_module.js; `.lk-*` CSS in index.html). Card back = the `robots` icon (admin slot) with a diagonal shine and a pulsing star; front = UGX coin + amount (count-up) or the robot
+  picture + name. A tap lifts the card (0.35 s), sends ONE request, then turns it over (0.85 s 3D, gold glow + sparks on the winner), then the other eight turn over in a ripple, dimmed (what they would have held; never
+  paid). Then "Flip again (n left)" or "Recharge for another chance". Locked states: off, below the VIP level (chances are kept), no chance (Recharge button).
+- **Server**: `luckyChances` on the user doc. +1 for every credited recharge of at least `luckyMinDeposit`, written in the SAME atomic `updateIf` as the wallet credit in `_creditDepositNow` (so a retry never gives a
+  second one; admin Force-credit of a manual recharge counts, an admin "Credit" does not). `POST /lucky/flip` (verified token, rate-limited, `lucky:<uid>` lock): draws first, takes the chance atomically
+  (`updateIf luckyChances > 0`), pays (wallet + `totalEarned`, ledger row type `lucky_card`; or an active granted investment `lucky-<flipId>` like admin grant-asset, no commission), and hands the chance back if the payout fails.
+  `/account` returns `lucky: { on, vip, chances, minVip, minAmount, maxAmount, hasProducts }` (no product list is exposed).
+- **Admin** (Settings > Lucky Cards): on/off, recharge needed for a chance (0 = any), lowest VIP to flip, lowest / highest earnings (whole numbers; hundreds when the range is wide), % chance a card is a robot, tick-list
+  of the robots a card may give (none ticked = earnings only). Defaults: on, any recharge, UGX 500 to 5,000, 10 %, no robots, everybody.
+- Left in place on purpose: `/checkin`, `/redeem` (gift codes), the admin gift-code tab and the check-in settings (unused by the app now; the Ledger still shows old Daily reward / Gift code rows).
+- Tests: `test-lucky.js` (server block against a mock db, 31 checks), the Lucky E2E in `test-smartai-app.js` (7c), the board checks in `test-animations.js`.

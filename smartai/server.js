@@ -168,7 +168,7 @@ app.use('/admin/', async (req, _res, next) => {
   next();
 });
 // These routes move or pay real money, so they get the strict 60/min per-user cap rather than only the 400/min global one.
-['/withdraw/request', '/invest/create', '/deposit/marzpay', '/deposit/manual/order', '/deposit/manual/submit', '/bank/save', '/register',
+['/withdraw/request', '/invest/create', '/lucky/flip', '/deposit/marzpay', '/deposit/manual/order', '/deposit/manual/submit', '/bank/save', '/register',
  '/account/transaction-pin/change', '/redeem']
   .forEach(p => app.use(p, apiLimiter));
 // ── BODY PARSING ──
@@ -590,6 +590,10 @@ const DEFAULT_SETTINGS = {
   // Icon sizes in pixels: bottom navigation, the four Home actions, the Me page tiles (the box around each icon follows the icon).
   navIconSize: 26, homeIconSize: 34, meIconSize: 36,
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
+  // Lucky Cards (Rewards tab): every credited recharge of at least luckyMinDeposit (0 = any amount) gives the member one flip of a 3 x 3 card board. A flip pays either
+  // earnings (a whole amount between luckyMinAmount and luckyMaxAmount) or, luckyProductPct percent of the time, one of the products in luckyProducts (keys; none = earnings only).
+  // luckyMinVip: the lowest VIP level allowed to flip (0 = everybody); a member below it keeps the chances they earned.
+  luckyOn: true, luckyMinDeposit: 0, luckyMinAmount: 500, luckyMaxAmount: 5000, luckyMinVip: 0, luckyProductPct: 10, luckyProducts: [],
   shareMessage: 'Join me on {app}',
   // What Telegram shows when a link to the app is pasted (title and text; the picture is the 'linkpreview' image). Empty = the app's own defaults.
   linkPreviewTitle: '', linkPreviewText: '',
@@ -884,7 +888,7 @@ async function getHomeBanner() {
 // Transparent cut-out ICONS the owner uploads in the admin panel (Banners > Icons); the panel removes each picture's background and crops it
 // tight before saving, so these are always PNGs. To add an icon, add its name here AND its label in admin-src (SMARTAI_ICON_LABELS).
 // The last eight are the owner's ANIMATIONS (the three Team-page level medals, the dots loader, the gift box, the opened gift, the payment tick and cross): a picture uploaded for one stands still in its place, Remove ("Back to default") brings the animation back.
-const SMARTAI_ICON_SLOTS = ['home', 'robots', 'income', 'share', 'teamnav', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout', 'level1', 'level2', 'level3', 'loader', 'giftbox', 'giftopen', 'tick', 'cross', 'paylogo'];
+const SMARTAI_ICON_SLOTS = ['home', 'robots', 'income', 'share', 'teamnav', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout', 'level1', 'level2', 'level3', 'loader', 'tick', 'cross', 'paylogo'];
 // The pictures members get (all of these go to /public/smartai-images; linkpreview is the Telegram preview's own and is only read by the admin and that page).
 const SMARTAI_BANNER_SLOTS = ['authhero', 'authlogo', 'profilelogo', 'teambanner', 'mybanner', 'aboutbanner',
   'shopbanner', 'depositbanner', 'withdrawbanner', 'supportbanner', 'recordsbanner', 'bindbankbanner'];
@@ -4371,6 +4375,7 @@ app.get('/account', async (req, res) => {
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
       hasTradePin: !!u.transactionPinHash, vipLevel, withdrawAnytime: u.withdrawAnytime === true,
       checkinStreak: u.checkinStreak || 0, lastCheckin: u.lastCheckin || null,
+      lucky: await luckyView(u, vipLevel),
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
     // The member's OWN region, which the middleware has already put in
     // force for this request. The app re-reads its currency, dialling code
@@ -4884,9 +4889,12 @@ async function _creditDepositNow(depDoc, source) {
               });
               if (!alreadyQualified) referral.firstReferralDepositId = depDoc.id;
             }
+            // One Lucky Cards chance per credited recharge, written in the SAME atomic update as the wallet credit (so a retry can never give a second one).
+            const lk = luckyCfg(await getSettings());
+            const chance = lk.on && depAmount >= lk.minDeposit ? { luckyChances: FieldValue.increment(1) } : {};
             return userRef.updateIf({ creditedDepositIds: { $ne: depDoc.id } }, {
               walletBalance: FieldValue.increment(depAmount), totalDeposited: FieldValue.increment(depAmount),
-              creditedDepositIds: FieldValue.arrayUnion(depDoc.id), ...referral,
+              creditedDepositIds: FieldValue.arrayUnion(depDoc.id), ...referral, ...chance,
             });
           });
           if (!applied) {
@@ -6600,6 +6608,119 @@ app.post('/checkin', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Check-in failed' });
   }
 });
+/* ====================== LUCKY CARDS (Rewards tab) ======================
+   A credited recharge gives one chance (see _creditDepositNow). A flip spends one chance and pays what the server drew: earnings (a whole amount in the admin's range) or, a set
+   share of the time, one of the products the admin listed. The member only ever sends "flip"; the card they tapped is just where the prize is shown. The other eight cards
+   come back as what they would have held (a show, never paid). The chance is taken first (atomic, only while one is left) and handed back if the prize cannot be paid. */
+const LUCKY_CARDS = 9;
+function luckyCfg(sett) {
+  const n = (v, d) => { const x = Number(v); return Number.isFinite(x) && x >= 0 ? Math.round(x) : d; };
+  const lo = n(sett.luckyMinAmount, 500), hi = n(sett.luckyMaxAmount, 5000);
+  return {
+    on: sett.luckyOn !== false, minDeposit: n(sett.luckyMinDeposit, 0), minAmount: Math.min(lo, hi), maxAmount: Math.max(lo, hi),
+    minVip: n(sett.luckyMinVip, 0), productPct: Math.min(100, n(sett.luckyProductPct, 10)),
+    productKeys: Array.isArray(sett.luckyProducts) ? sett.luckyProducts.map(String) : [],
+  };
+}
+// Whole amounts; in steps of 100 once the range is wide, so a prize reads like a prize (UGX 2,300, not UGX 2,317).
+function luckyRollAmount(cfg) {
+  const lo = cfg.minAmount, hi = cfg.maxAmount;
+  if (hi <= lo) return lo;
+  const step = hi - lo >= 1000 ? 100 : 1;
+  return Math.min(hi, lo + crypto.randomInt(0, Math.floor((hi - lo) / step) + 1) * step);
+}
+async function luckyPrizeProducts(cfg) {
+  if (!cfg.productKeys.length) return [];
+  const list = await getProducts();
+  const byKey = new Map(list.filter(p => !p.deleted && Number(p.price) > 0).map(p => [p.key, p]));
+  return cfg.productKeys.map(k => byKey.get(k)).filter(Boolean);
+}
+const luckyProductView = p => ({ kind: 'robot', key: p.key, name: p.name, image: p.image || '', price: Number(p.price) || 0 });
+async function luckyView(u, vip) {
+  try {
+    const cfg = luckyCfg(await getSettings());
+    return { on: cfg.on, vip: Number(vip) || 0, chances: Math.max(0, Math.floor(Number(u.luckyChances) || 0)), minVip: cfg.minVip, minAmount: cfg.minAmount, maxAmount: cfg.maxAmount, hasProducts: cfg.productPct > 0 && (await luckyPrizeProducts(cfg)).length > 0 };
+  } catch (_) { return { on: false, chances: 0, minVip: 0, minAmount: 0, maxAmount: 0, hasProducts: false }; }
+}
+async function luckyGrantProduct(uid, tier, flipId, sett) {
+  const invRef = db.collection('investments').doc('lucky-' + flipId);
+  const price = Number(tier.price) || 0, cycle = Number(tier.cycle) || 150, expectedReturn = productExpectedReturn(tier, sett);
+  const { date, time } = nowStr();
+  const uRef = db.collection('users').doc(uid);
+  const created = await invRef.createIfAbsent({
+    userId: uid, tierKey: tier.key, tierLabel: tier.name, amount: price, cycle, expectedReturn,
+    status: 'active', nextPayoutAt: new Date(payoutDueAtMs(Date.now(), 1)), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+    isFirstInvestment: false, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
+    granted: true, grantedBy: 'lucky-cards', luckyFlipId: flipId, date, time, createdAt: FieldValue.serverTimestamp()
+  });
+  if (!created) return false;
+  await uRef.update({ totalInvested: FieldValue.increment(price), firstInvestmentDone: true });
+  await db.collection('transactions').doc('lucky-asset:' + flipId).createIfAbsent({
+    userId: uid, statementId: newStatementId(), type: 'investment', description: `${tier.name} won in Lucky Cards`, amount: 0,
+    status: 'success', date, time, investmentId: invRef.id, createdAt: FieldValue.serverTimestamp()
+  }).catch(e => console.warn('lucky ledger row failed (robot is active):', e.message));
+  _vipCache.delete(uid);
+  return true;
+}
+app.post('/lucky/flip', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const out = await withLock('lucky:' + uid, async () => {
+      const sett = await getSettings(), cfg = luckyCfg(sett);
+      if (!cfg.on) return { code: 400, body: { status: 'error', code: 'LUCKY_OFF', message: 'Lucky Cards are not available right now.' } };
+      const ref = db.collection('users').doc(uid);
+      const snap = await ref.get();
+      if (!snap.exists) return { code: 404, body: { status: 'error', code: 'NOT_FOUND', message: 'User not found' } };
+      const u = snap.data();
+      if (u.status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
+      if (u.registrationDone === false) return { code: 409, body: { status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up first.' } };
+      if (cfg.minVip > 0 && (await memberVipLevel(uid)) < cfg.minVip)
+        return { code: 403, body: { status: 'error', code: 'VIP_REQUIRED', message: `Reach VIP ${cfg.minVip} to open your cards.` } };
+      if ((Number(u.luckyChances) || 0) < 1) return { code: 400, body: { status: 'error', code: 'NO_CHANCE', message: 'You have no chance left. Recharge to get one.' } };
+      // 1. what the card holds (drawn before anything is spent)
+      const pool = cfg.productPct > 0 ? await luckyPrizeProducts(cfg) : [];
+      const wantsRobot = pool.length > 0 && crypto.randomInt(0, 100) < cfg.productPct;
+      const tier = wantsRobot ? pool[crypto.randomInt(0, pool.length)] : null;
+      const cash = tier ? 0 : luckyRollAmount(cfg);
+      if (!tier && !(cash > 0)) return { code: 400, body: { status: 'error', code: 'LUCKY_UNSET', message: 'Lucky Cards are not ready yet.' } };
+      // 2. the chance is taken (atomic: only while one is left)
+      const taken = await withLock('bal:' + uid, () => ref.updateIf({ luckyChances: { $gt: 0 }, status: { $ne: 'banned' } }, { luckyChances: FieldValue.increment(-1) }));
+      if (!taken) return { code: 400, body: { status: 'error', code: 'NO_CHANCE', message: 'You have no chance left. Recharge to get one.' } };
+      const flipId = uid.slice(0, 12) + '-' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
+      const { date, time } = nowStr();
+      // 3. the prize is paid; if that fails the chance goes back
+      try {
+        if (tier) {
+          if (!(await luckyGrantProduct(uid, tier, flipId, sett))) throw new Error('product not created');
+        } else {
+          const paid = await withLock('bal:' + uid, () => ref.updateIf({ status: { $ne: 'banned' } }, { walletBalance: FieldValue.increment(cash), totalEarned: FieldValue.increment(cash) }));
+          if (!paid) throw new Error('wallet not credited');
+          const row = () => db.collection('transactions').doc('lucky:' + flipId).createIfAbsent({
+            userId: uid, statementId: newStatementId(), type: 'lucky_card', description: 'Lucky card reward',
+            amount: cash, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
+          try { await row(); } catch (e1) { try { await row(); } catch (e2) { console.error('Lucky ledger row failed (credit is applied):', e2.message); } }
+        }
+      } catch (e) {
+        await withLock('bal:' + uid, () => ref.update({ luckyChances: FieldValue.increment(1) })).catch(err => console.error('LUCKY CHANCE NOT RETURNED', uid, err.message));
+        console.error('Lucky flip failed (chance returned):', e.message);
+        return { code: 500, body: { status: 'error', message: 'Could not open the card. Your chance is still there.' } };
+      }
+      db.collection('luckyFlips').doc(flipId).set({ userId: uid, kind: tier ? 'robot' : 'cash', amount: cash, tierKey: tier ? tier.key : '', tierName: tier ? tier.name : '', date, time, createdAt: FieldValue.serverTimestamp() }).catch(() => {});
+      // 4. what the other eight cards would have held (never paid)
+      const others = [];
+      for (let i = 0; i < LUCKY_CARDS - 1; i++) {
+        others.push(pool.length && crypto.randomInt(0, 100) < Math.max(cfg.productPct, 12) ? luckyProductView(pool[crypto.randomInt(0, pool.length)]) : { kind: 'cash', amount: luckyRollAmount(cfg) });
+      }
+      const left = Math.max(0, (Number(u.luckyChances) || 0) - 1);
+      return { code: 200, body: { status: 'success', prize: tier ? luckyProductView(tier) : { kind: 'cash', amount: cash }, others, chances: left } };
+    });
+    res.status(out.code).json(out.body);
+  } catch (e) {
+    console.error('Lucky flip error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not open the card' });
+  }
+});
 // The live-activity strip on Home. Simulated on purpose and the same for everybody (made here, cached, refreshed every ~25 s): it is not the member's
 // own money and not a list of real people. Both floors follow the admin's minimums, so a row can never be below what the app itself allows.
 const _DEPOSIT_LADDER = [10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000, 50000, 60000, 70000, 80000, 90000, 100000, 120000, 150000, 180000, 200000, 250000,
@@ -7549,10 +7670,11 @@ const SETTINGS_CRITICAL_RANGES = {
   maxWithdrawalsPerDay: [0, 1000],
   autoApproveMinSec: [0, 86400], autoApproveMaxSec: [0, 86400], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
   dailyCheckin: [0, MAX_MONEY_AMOUNT],
+  luckyMinDeposit: [0, MAX_MONEY_AMOUNT], luckyMinAmount: [0, MAX_MONEY_AMOUNT], luckyMaxAmount: [0, MAX_MONEY_AMOUNT], luckyMinVip: [0, 100], luckyProductPct: [0, 100],
   myBannerOpacity: [0, 100], myBannerBlur: [0, 40],
   navIconSize: [14, 48], homeIconSize: [20, 64], meIconSize: [20, 64],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'withdrawWindowEnabled', 'blockRootDomain', 'luckyOn'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -7634,6 +7756,14 @@ app.post('/admin/settings/update', async (req, res) => {
       const t = 'withdrawOpenTo' in updates ? updates.withdrawOpenTo : null;
       if (f != null && t != null && f === t)
         return res.status(400).json({ status: 'error', message: 'Withdraw opening and closing times cannot be the same.' });
+    }
+    if ('luckyProducts' in updates) {
+      const raw = Array.isArray(updates.luckyProducts) ? updates.luckyProducts : String(updates.luckyProducts || '').split(',');
+      updates.luckyProducts = Array.from(new Set(raw.map(x => String(x == null ? '' : x).replace(/[<>]/g, '').trim().slice(0, 60)).filter(Boolean))).slice(0, 100);
+    }
+    {
+      const lo = 'luckyMinAmount' in updates ? updates.luckyMinAmount : null, hi = 'luckyMaxAmount' in updates ? updates.luckyMaxAmount : null;
+      if (lo != null && hi != null && lo > hi) return res.status(400).json({ status: 'error', message: 'The lowest Lucky Cards amount cannot be higher than the highest.' });
     }
     if ('shareMessage' in updates) {
       const words = String(updates.shareMessage == null ? '' : updates.shareMessage).replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 200);
@@ -10163,7 +10293,7 @@ app.get('/admin/integrity', async (req, res) => {
 // earned" label is a real misnomer -- this field is cashback PLUS
 // referral commission PLUS gift-code/team-reward
 // bonuses, all folded into one number.
-const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'mission_salary', 'mission_deposit_reward', 'checkin'];
+const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'mission_salary', 'mission_deposit_reward', 'checkin', 'lucky_card'];
 async function computeUserRealTotals(userId) {
   const [txSnap, invSnap, witSnap] = await Promise.all([
     db.collection('transactions').where('userId', '==', userId).limit(50000).get(),

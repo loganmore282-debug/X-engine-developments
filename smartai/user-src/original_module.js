@@ -170,7 +170,7 @@ async function _apiRaw(path, body, method, retry){
       if (!isPublic && epoch !== _authEpoch) return { status: 'error', stale: true, message: 'Session changed' };
       if (i === attempts - 1) {
         // A call that moves money may have reached the server even though the answer never came back: never say "try again" for those.
-        var movesMoney = /^\/(deposit|invest|withdraw|redeem|salary\/claim|checkin)/.test(path);
+        var movesMoney = /^\/(deposit|invest|withdraw|redeem|salary\/claim|checkin|lucky)/.test(path);
         return { status: 'error', message: ctl.signal.aborted ? 'The request took too long. Check Records before trying a payment again.' : (movesMoney ? 'The connection dropped. Check Records before trying again, in case it went through.' : 'Could not reach the server. Check your connection and try again.') };
       }
     }
@@ -210,7 +210,7 @@ async function refreshFromServer(){
     STATE.balance = Number(a.walletBalance) || 0; STATE.totalDeposited = a.totalDeposited || 0;
     STATE.totalEarned = a.totalEarned || 0; STATE.totalWithdrawn = a.totalWithdrawn || 0;
     STATE.totalInvested = a.totalInvested || 0;
-    STATE.checkinStreak = a.checkinStreak || 0; STATE.lastCheckin = a.lastCheckin || null;
+    STATE.lucky = a.lucky || { on: false, vip: 0, chances: 0, minVip: 0, minAmount: 0, maxAmount: 0, hasProducts: false };
     STATE.referralCode = a.referralCode || STATE.referralCode;
     STATE.hasTradePin = a.hasTradePin === true;
     STATE.withdrawAnytime = a.withdrawAnytime === true;
@@ -322,7 +322,6 @@ function iconUrl(name){ return (STATE_ICONS && STATE_ICONS[name]) || '/icons/' +
 function customIcon(name){ return (STATE_ICONS && STATE_ICONS[name]) || ''; }
 function paintIcons(){
   paintMedals();
-  paintGift();
   document.querySelectorAll('img[data-icon]').forEach(function(img){
     var name = img.getAttribute('data-icon'), u = iconUrl(name);
     if (img.getAttribute('src') !== u) {
@@ -407,115 +406,14 @@ function medalPose(el, tick){
   var cell = tl[tick % tl.length];
   el.style.backgroundPosition = ((cell % 10) / 9 * 100).toFixed(3) + '% ' + (Math.floor(cell / 10) / 8 * 100).toFixed(3) + '%';
 }
-// The gift (an inline SVG; the gradients live once in the page, #gbL ...): sharp at any size. Its idle loop copies the original recording: the whole box squashes fat with its walls bowed out, snaps tall with the walls pinched in, then the lid lifts over a yellow glow as if the box were about to burst. Every wall is a polygon re-drawn each frame through gbWarp(), so the walls really bend. The opened box with its coins is a picture (gift-open.webp).
-var GB_PARTS = [
-  // [lid?, closed subpaths, fill / stroke attributes]
-  [0, [[[38,100],[100,124],[100,182],[38,158]]], 'fill="url(#gbL)"'],
-  [0, [[[100,124],[162,100],[162,158],[100,182]]], 'fill="url(#gbR)"'],
-  [0, [[[62,109.3],[78,115.5],[78,173.5],[62,167.3]]], 'fill="url(#gbRib)"'],
-  [0, [[[122,115.5],[138,109.3],[138,167.3],[122,173.5]]], 'fill="url(#gbRibD)"'],
-  [0, [[[44,106],[53,109.5],[53,153],[44,149.5]]], 'fill="#fff" opacity=".28"'],
-  [0, [[[38,100],[100,124],[162,100]], [[38,100],[38,158],[100,182],[162,158],[162,100]], [[100,124],[100,182]]], 'fill="none" stroke="#1c63c4" stroke-width="1.6" stroke-linejoin="round" opacity=".75" data-open="1"'],
-  [0, [[[38,100],[100,76],[162,100],[100,124]]], 'class="gb-slit" fill="url(#gbGlow)"'],
-  [1, [[[34,77],[100,102],[100,126],[34,101]]], 'fill="url(#gbL)"'],
-  [1, [[[100,102],[166,77],[166,101],[100,126]]], 'fill="url(#gbR)"'],
-  [1, [[[62,87.6],[78,93.7],[78,117.7],[62,111.6]]], 'fill="url(#gbRib)"'],
-  [1, [[[122,93.7],[138,87.6],[138,111.6],[122,117.7]]], 'fill="url(#gbRibD)"'],
-  [1, [[[100,52],[166,77],[100,102],[34,77]]], 'fill="url(#gbT)"'],
-  [1, [[[62,87.6],[78,93.7],[144,68.7],[128,62.6]]], 'fill="url(#gbRib)"'],
-  [1, [[[122,93.7],[138,87.6],[72,62.6],[56,68.7]]], 'fill="url(#gbRib)"'],
-  [1, [[[56,70],[96,55.5],[126,66.5],[110,74]]], 'fill="#fff" opacity=".22"'],
-  [1, [[[34,77],[100,102],[166,77]], [[34,77],[34,101],[100,126],[166,101],[166,77]], [[100,102],[100,126]], [[34,77],[100,52],[166,77]]], 'fill="none" stroke="#1c63c4" stroke-width="1.6" stroke-linejoin="round" opacity=".75" data-open="1"'],
-  [1, [[[40,82],[47,84.6],[47,98],[40,95.4]]], 'fill="#fff" opacity=".3"']
-];
-var GB_BOW = '<path d="M100 76C86 42 52 40 54 62C56 78 86 82 100 76Z" fill="url(#gbRib)" stroke="#d98600" stroke-width="1.6"/><path d="M100 76C114 42 148 40 146 62C144 78 114 82 100 76Z" fill="url(#gbRibD)" stroke="#d98600" stroke-width="1.6"/><path d="M92 69C82 54 66 52 66 62C68 70 84 74 92 69Z" fill="#7a4a00" opacity=".55"/><path d="M108 69C118 54 134 52 134 62C132 70 116 74 108 69Z" fill="#7a4a00" opacity=".55"/><path d="M90 60C80 50 66 51 64 58" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".55"/><circle cx="100" cy="76" r="10" fill="url(#gbRib)" stroke="#d98600" stroke-width="1.6"/><path d="M94 73a8 8 0 0 1 8-3" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" opacity=".7"/>';
-// Poses read off the recording (t = share of the 0.433 s loop): s = height (1 = normal), b = how far the walls bow out (negative = pinched in), lift = how far the lid is up.
-var GB_KEYS = [
-  [0,.90,11,0],[.04,1,1,0],[.08,1,0,0],[.12,1.07,-6,0],[.20,1.08,-7,0],[.24,1.05,-4,6],[.30,1.04,-3,22],[.40,1.02,-2,24],
-  [.50,1,0,22],[.55,1,0,12],[.58,1,0,0],[.62,1,0,0],[.66,.97,3,0],[.74,.94,6,0],[.85,.91,10,0],[1,.90,11,0]
-];
-function gbPose(t){
-  var k = GB_KEYS, i = 1;
-  while (i < k.length - 1 && t > k[i][0]) i++;
-  var a = k[i - 1], c = k[i], f = c[0] > a[0] ? (t - a[0]) / (c[0] - a[0]) : 1;
-  f = f * f * (3 - 2 * f);
-  return { s: a[1] + (c[1] - a[1]) * f, b: a[2] + (c[2] - a[2]) * f, lift: a[3] + (c[3] - a[3]) * f };
-}
-// One point of the box through a pose: squash/stretch about the floor, walls bowed by a sine over the height, a fatter box when short and a slimmer one when tall.
-function gbWarp(x, y, o, lid){
-  var tt = Math.min(1, Math.max(0, (182 - y) / 130)), w = o.s < 1 ? 1 + (1 - o.s) * 0.9 : 1 - (o.s - 1) * 0.5;
-  return [100 + (x - 100) * w + o.b * ((x - 100) / 66) * Math.sin(Math.PI * tt), 182 - (182 - y) * o.s - (lid ? o.lift : 0)];
-}
-function gbPath(subs, o, lid, open){
-  var d = '', si, pi, n, p, q, e, pts;
-  for (si = 0; si < subs.length; si++) {
-    pts = subs[si]; d += 'M';
-    for (pi = 0; pi < pts.length; pi++) {
-      p = pts[pi]; q = pts[(pi + 1) % pts.length];
-      if (open && pi === pts.length - 1) { e = gbWarp(p[0], p[1], o, lid); d += e[0].toFixed(1) + ' ' + e[1].toFixed(1); break; }
-      for (n = 0; n < 6; n++) { e = gbWarp(p[0] + (q[0] - p[0]) * n / 6, p[1] + (q[1] - p[1]) * n / 6, o, lid); d += e[0].toFixed(1) + ' ' + e[1].toFixed(1) + 'L'; }
-    }
-    d = d.replace(/L$/, '') + (open ? '' : 'Z');
-  }
-  return d;
-}
-function gbSvg(t){
-  var o = gbPose(t), body = '', lid = '', i, P, d;
-  for (i = 0; i < GB_PARTS.length; i++) {
-    P = GB_PARTS[i]; d = gbPath(P[1], o, P[0], /data-open/.test(P[2]));
-    (P[0] ? (lid += '<path d="' + d + '" ' + P[2] + '/>') : (body += '<path d="' + d + '" ' + P[2] + '/>'));
-  }
-  return '<svg class="gb" viewBox="0 0 200 210" aria-hidden="true"><ellipse class="gb-sh" cx="100" cy="190" rx="66" ry="11" fill="rgba(8,40,110,.28)"/><g class="gb-body">' + body + '</g><g class="gb-lid">' + lid + '<g class="gb-bow">' + GB_BOW + '</g></g></svg>';
-}
-// Redraws one gift at time t: every wall path in the order the markup lists them, the glow under the lifted lid, the bow riding on the lid, and the shadow.
-function gbDraw(svg, t, pose){
-  var o = pose || gbPose(t), paths = svg.querySelectorAll('.gb-body > path, .gb-lid > path'), i, P, w = o.s < 1 ? 1 + (1 - o.s) * 0.9 : 1 - (o.s - 1) * 0.5;
-  for (i = 0; i < GB_PARTS.length && i < paths.length; i++) {
-    P = GB_PARTS[i]; paths[i].setAttribute('d', gbPath(P[1], o, P[0], /data-open/.test(P[2])));
-    if (paths[i].classList.contains('gb-slit')) paths[i].style.opacity = Math.min(1, o.lift / 8).toFixed(2);
-  }
-  var bow = svg.querySelector('.gb-bow'), by = 182 - 106 * o.s - o.lift;
-  if (bow) bow.setAttribute('transform', 'translate(100 ' + by.toFixed(1) + ') scale(' + w.toFixed(3) + ' ' + o.s.toFixed(3) + ') translate(-100 -76)');
-  var sh = svg.querySelector('.gb-sh'); if (sh) sh.setAttribute('rx', (66 * w).toFixed(1));
-}
-// The claim: while the code is checked the box shakes and SWELLS (walls bulging more and more, the lid rattling); when the answer is yes it BANGS (puffs up fat, the lid blown
-// off) and the opened box takes its place. _giftPhaseAt = when the stage entered that phase.
-var _giftPhaseAt = 0;
-function gbSwellPose(ms){
-  var p = Math.min(1, ms / 1100), e = p * p * (3 - 2 * p), sh = Math.sin(ms / 22) * (0.4 + 2.2 * e);
-  return { s: 1 + 0.16 * e + 0.012 * sh, b: 4 + 20 * e + sh, lift: 1 + 6 * e * Math.abs(Math.sin(ms / 45)) };
-}
-function gbBangPose(ms){
-  var p = Math.min(1, ms / 260), e = 1 - Math.pow(1 - p, 3);
-  return { s: 1.16 + 0.26 * e, b: 24 + 14 * e, lift: 8 + 70 * e };
-}
-var GB_SVG = gbSvg(0.5);
-function giftPreload(){ var c = customIcon('giftopen'); if (c) { var op = new Image(); op.src = c; } }
-function paintGift(){
-  var custom = customIcon('giftbox');
-  document.querySelectorAll('.gbox').forEach(function(el){
-    // A picture uploaded in Admin > Banners > Animations stands still in place of the gift; Back to default brings the animation.
-    if (custom) { el.classList.add('custom'); el.innerHTML = ''; el.style.backgroundImage = 'url("' + String(custom).replace(/"/g, '%22') + '")'; return; }
-    el.classList.remove('custom'); el.style.backgroundImage = '';
-    if (!el.firstChild) el.innerHTML = GB_SVG;
-  });
-  // The opened box is vector too; a picture uploaded for it in the admin replaces it, Back to default brings the vector back.
-  var cu = document.querySelector('.go-custom'), cv = document.querySelector('.gs-open svg.go'), cust = customIcon('giftopen');
-  if (cu && cv) { if (cust) cu.setAttribute('src', cust); else cu.removeAttribute('src'); cu.hidden = !cust; cv.style.display = cust ? 'none' : ''; cv.parentNode.classList.toggle('custom-open', !!cust); }
-}
 var _animLast = -1;
 function animTick(){
-  var dls = document.querySelectorAll('svg.dl'), meds = document.querySelectorAll('.medal.live'), gbs = document.querySelectorAll('.gbox svg.gb'), n = dls.length + meds.length + gbs.length;
+  var dls = document.querySelectorAll('svg.dl'), meds = document.querySelectorAll('.medal.live'), n = dls.length + meds.length;
   if (n && !document.hidden) {
     var now = Date.now(), c, i, j, ch;
     if (dls.length) {
       c = dlCircles((now % 2000) / 1000);
       for (i = 0; i < dls.length; i++) { ch = dls[i].children; for (j = 0; j < 12; j++) { ch[j].setAttribute('cx', c[j][0].toFixed(1)); ch[j].setAttribute('cy', c[j][1].toFixed(1)); ch[j].setAttribute('r', c[j][2].toFixed(1)); } }
-    }
-    for (i = 0; i < gbs.length; i++) {
-      if (!gbs[i].getBoundingClientRect().width) continue;
-      var stg = gbs[i].closest('.gs'), ph = stg && stg.classList.contains('gs-opening') ? gbSwellPose(now - _giftPhaseAt) : stg && stg.classList.contains('gs-bang') ? gbBangPose(now - _giftPhaseAt) : null;
-      gbDraw(gbs[i], (now % 433) / 433, ph);
     }
     var tick = Math.floor((now % 3000) / (1000 / 30));
     if (meds.length && tick !== _animLast) {
@@ -616,7 +514,7 @@ function freshState(uid, phone){
   return {
     uid: uid, phone: phone || '', referralCode: '',
     balance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0,
-    checkinStreak: 0, lastCheckin: null, team: { l1: 0, l2: 0, l3: 0, commission: 0 },
+    lucky: { on: false, vip: 0, chances: 0, minVip: 0, minAmount: 0, maxAmount: 0, hasProducts: false }, team: { l1: 0, l2: 0, l3: 0, commission: 0 },
     hasTradePin: false, withdrawAnytime: false,
     investments: [], transactions: [], bankAccounts: [], depositRecords: null, withdrawalRecords: null, salary: null,
     ok: { inv: false, bank: false, tx: false }   // which of those three lists has really come from the server (see waitForData)
@@ -874,7 +772,6 @@ function enterApp(){
   applyBrandName();
   startActivityFeed();
   setTimeout(medalPreload, 700);
-  setTimeout(giftPreload, 900);
   startAccountPoll();
   updateDownloadTileVisibility();
   syncArtwork();
@@ -1388,44 +1285,9 @@ function renderAll(){
   $('teamL1').textContent = s.team.l1; $('teamL2').textContent = s.team.l2; $('teamL3').textContent = s.team.l3;
   $('teamComm').textContent = ugx(s.team.commission);
   $('commL1Pct').textContent = sett.commL1 + '%'; $('commL2Pct').textContent = sett.commL2 + '%'; $('commL3Pct').textContent = sett.commL3 + '%';
-  renderCheckin();
+  renderLucky();
   renderMeRows();
   renderFeatured(); renderTicker(); renderShop(); renderRecords();
-}
-// The daily reward card (Rewards tab).
-// The daily check-in CALENDAR: 30 days, the ladder of amounts along it (Admin > Settings > Daily check-in calendar; empty = one flat amount). A claimed day is filled
-// blue, the day the next tap pays is outlined and pulses. Day 31 starts the cycle again, and a missed day sends the run back to day 1 (the server decides; this only draws it).
-function cleanLadder(v){ return (Array.isArray(v) ? v : []).map(Number).filter(function(n){ return isFinite(n) && n >= 1; }).slice(0, 30); }
-function serverYesterdayKey(){
-  var d = new Date(Date.now() + 3 * 3600000 - 86400000), p = function(n){ return String(n).padStart(2, '0'); };
-  return p(d.getUTCMonth() + 1) + '/' + p(d.getUTCDate()) + '/' + d.getUTCFullYear();
-}
-var _calToday = 0, _calPop = 0;   // the day a claim would pay now / the day just claimed (its tick pops)
-function renderCheckin(){
-  var s = STATE, sett = getSettings(), ladder = cleanLadder(sett.checkinLadder), flat = Math.round(Number(sett.dailyCheckin) || 0);
-  var card = $('checkinCard'); if (card) card.style.display = (ladder.length || flat > 0) ? '' : 'none';
-  var amtFor = function(day){ return ladder.length ? ladder[(day - 1) % ladder.length] : flat; };
-  var done = s.lastCheckin === serverTodayKey();
-  var alive = s.checkinStreak > 0 && (done || s.lastCheckin === serverYesterdayKey());
-  var cyclePos = alive ? ((s.checkinStreak - 1) % 30) + 1 : 0;           // days of this cycle already claimed
-  var claimed = done ? cyclePos : (cyclePos === 30 ? 0 : cyclePos);        // day 31 = day 1 of the next cycle
-  var todayPos = done ? 0 : claimed + 1;
-  _calToday = todayPos;
-  var btn = $('checkinBtn');
-  if (!btn.dataset.busy) {
-    btn.innerHTML = done ? '<span class="tick-txt">\u2713\uFE0E</span> Claimed today' : ('Check in for ' + ugx(amtFor(todayPos)));
-    btn.disabled = done; btn.style.opacity = done ? '.55' : '1';
-  }
-  $('streakNum').textContent = alive ? s.checkinStreak : 0;
-  var cells = '';
-  for (var i = 1; i <= 30; i++) {
-    cells += '<div class="cal-d' + (i <= claimed ? ' done' : '') + (i === _calPop && i <= claimed ? ' pop' : '') + (i === todayPos ? ' today' : '') + '"><span class="cal-n">' + i + '</span><span class="cal-a">' + String(amtFor(i)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '</span></div>';
-  }
-  $('calGrid').innerHTML = cells;
-  _calPop = 0;   // the tick pops once, on the render right after a claim
-  var nextDay = done ? (cyclePos % 30) + 1 : todayPos;
-  $('streakCycleLabel').textContent = done ? ('Day ' + cyclePos + ' claimed. Tomorrow pays ' + ugx(amtFor(nextDay))) : (claimed > 0 ? ('Today is day ' + todayPos + ' of 30: ' + ugx(amtFor(todayPos))) : ('Start your run today: ' + ugx(amtFor(1))));
-  var gc = $('giftCodeInput'); if (gc) gc.placeholder = getSettings().giftCodeHint || 'Enter gift code';
 }
 // The Me page: the Download App tile follows whether the app is already installed.
 function renderMeRows(){
@@ -1728,8 +1590,8 @@ document.addEventListener('visibilitychange', function(){
 var _recordsTab = 'accrued';
 var _recordsLoaded = { accrued: true, topups: false, cashouts: false }, _recordsFailed = { topups: false, cashouts: false };
 // The kinds of ledger row that are money coming IN as earnings (the Accrued tab). A top-up is in Topups and a cash-out is in Cash Outs.
-var INCOME_TYPES = ['cashback', 'checkin', 'commission', 'mission_salary', 'promocode', 'welcome_bonus', 'admin_credit', 'investment_refund'];
-var REC_TYPE_LABEL = { cashback: 'AI robot income', checkin: 'Daily reward', commission: 'Referral commission', mission_salary: 'Task Center reward', promocode: 'Gift code',
+var INCOME_TYPES = ['cashback', 'checkin', 'lucky_card', 'commission', 'mission_salary', 'promocode', 'welcome_bonus', 'admin_credit', 'investment_refund'];
+var REC_TYPE_LABEL = { cashback: 'AI robot income', checkin: 'Daily reward', lucky_card: 'Lucky card reward', commission: 'Referral commission', mission_salary: 'Task Center reward', promocode: 'Gift code',
   welcome_bonus: 'Welcome gift', admin_credit: 'Account credit', investment_refund: 'Product refund' };
 function recStatusInfo(s){
   s = String(s || 'success').toLowerCase();
@@ -1841,10 +1703,10 @@ function switchTab(name){
   if (tapped) { tapped.classList.remove('tab-tapped'); void tapped.offsetWidth; tapped.classList.add('tab-tapped'); }
   hideOverlays(); _ovOpen = false;
   window.scrollTo(0, 0);
+  if (name === 'rewards' && _lastTab !== 'rewards' && typeof lkResetIfDone === 'function') lkResetIfDone();
   if (STATE && (name === 'rewards' || name === 'team' || name === 'share' || name === 'home')) renderAll();
   if (name === 'account' && STATE && _lastTab !== 'account') countMyBalances();
   if (name === 'team') medalPreload();
-  if (name === 'rewards') giftPreload();
   // Coming back to Home from another tab shows the announcement again (its buttons shaking straight away).
   if (enteringHomeFromElsewhere) maybeShowAnnouncement(true);
   _lastTab = name;
@@ -1893,7 +1755,7 @@ function closeOverlay(){
 }
 window.addEventListener('popstate', function(){
   if (_gpActive) gpLeave();
-  if (document.querySelector('.modal-bg.show:not(#giftRevealBg)')) closeAllSheets();
+  if (document.querySelector('.modal-bg.show')) closeAllSheets();
   if (_ovOpen) { _ovOpen = false; navVeil(false); hideOverlays(); if (_lastTab === 'account') countMyBalances(); }
 });
 
@@ -2417,6 +2279,8 @@ async function pollDepositStatus(manual){
         setDepStatusMsg('matched', 'Payment confirmed. Funds added to your wallet.');
         showDepositSuccess();
         await refreshFromServer(); renderAll();
+        var lkn = lkInfo();
+        if (lkn.on && lkn.chances > 0 && !lkLocked(lkn)) $('depStatusPhone').textContent = 'Your wallet has been credited. You also earned a chance on Lucky Cards.';
         return;
       }
       if (r.state === 'failed' || r.state === 'expired') {
@@ -2566,27 +2430,8 @@ async function doChangeTradePin(){
   toast('Trade Password updated');
 }
 
-/* ====================== DAILY REWARD, GIFT CODE ====================== */
-async function doCheckin(){
-  var btn = $('checkinBtn');
-  if (btn) { if (btn.disabled || btn.dataset.busy) return; btn.disabled = true; btn.dataset.busy = '1'; btn.innerHTML = btnBusyHtml('Please wait…'); }
-  try {
-    var r = await api('/checkin', {});
-    if (r.stale) return;
-    if (r.status !== 'success') { toast(r.message || 'Check-in failed'); return; }
-    _calPop = _calToday;
-    await refreshFromServer();
-    toast('Checked in successfully ✓');
-  } catch (e) {
-  } finally {
-    if (btn) { delete btn.dataset.busy; btn.disabled = false; }
-    if (STATE) renderAll();
-  }
-}
-// The gift: tapping it (or Open gift) with a code typed shows the stage -- the page blurs, spoke rings turn, the gift spins with glitter while the code is checked --
-// and a right code bursts the gift open: a coin rises, coins and ribbon bits fly, balloons float up, and the figure counts up to the real amount.
-// Codes are written the way the owner's other app writes them: a referral code is 5 capital letters / digits (S62BV), a gift code 10 (25LVI2IRLX). Whatever is typed or pasted
-// (lower case, spaces, dashes) is turned into capitals and cut to that length as it goes in.
+/* ====================== INVITE CODE FIELD ====================== */
+// A referral code is 5 capital letters / digits (S62BV). Whatever is typed (lower case, spaces, dashes) is turned into capitals and cut to that length as it goes in.
 function capsCode(el, max){
   if (!el) return;
   el.addEventListener('input', function(){
@@ -2595,106 +2440,134 @@ function capsCode(el, max){
   });
 }
 capsCode($('fCode'), 5);
-capsCode($('giftCodeInput'), 10);
-function tapGiftBox(){ openGiftStage(); }
-async function redeemGiftCode(){
-  var raw = $('giftCodeInput').value.trim().toUpperCase();
-  if (!$('giftRevealBg').classList.contains('show')) openGiftStage();
-  if (!raw) { toast('Enter a code'); shakeVibrate($('giftCodeInput')); return; }
-  var btn = $('redeemBtn'), label = btn ? btn.textContent : '', st = $('giftStage');
-  if (btn) { if (btn.disabled) return; btn.disabled = true; btn.innerHTML = btnBusyHtml('Opening…'); }
-  var openedAt = Date.now();
-  st.className = 'gs gs-opening';   // the card goes, the gift shakes and swells while the code is checked
-  _giftPhaseAt = Date.now();
-  try {
-    var r = await api('/redeem', { code: raw });
-    if (r.stale) { closeGiftReveal(); return; }
-    if (r.status !== 'success') { st.className = 'gs gs-ask'; toast(r.message || "That code isn't valid"); shakeVibrate($('giftCodeInput')); return; }
-    $('giftCodeInput').value = '';
-    await refreshFromServer();
-    renderAll();
-    var wait = GIFT_OPEN_MS - (Date.now() - openedAt);   // the spin is seen for a moment even when the answer is quick
-    if (wait > 0) await new Promise(function(res){ setTimeout(res, wait); });
-    showGiftReveal(r.reward != null ? r.reward : r.amount);
-  } catch (e) {
-    st.className = 'gs gs-ask';
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = label; }
+/* ====================== LUCKY CARDS (Rewards tab) ======================
+   Nine cards face down (the AI robots on their backs). Every credited recharge gives one chance; a tap on a card sends ONE request (/lucky/flip): the server draws and pays the prize
+   (earnings, or an AI robot the admin listed) and returns it with what the other eight cards would have held. The tapped card lifts and turns over to show the prize, then the
+   other eight turn over in a ripple, dimmed. The board is built once; renders only change the words, never the faces, so a turned card is never reset under the member's finger. */
+var LK_CARDS = 9;
+var _lk = { built: false, busy: false, revealed: false, timers: [] };
+var LK_STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.5 6.1 6.6.5-5 4.3 1.6 6.4L12 16.4 6.3 19.9l1.6-6.4-5-4.3 6.6-.5z" fill="currentColor"/></svg>';
+function lkInfo(){ return (STATE && STATE.lucky) || { on: false, vip: 0, chances: 0, minVip: 0, minAmount: 0, maxAmount: 0, hasProducts: false }; }
+function lkLater(fn, ms){ var t = setTimeout(fn, ms); _lk.timers.push(t); return t; }
+function lkClearTimers(){ _lk.timers.forEach(clearTimeout); _lk.timers = []; }
+function lkBuild(){
+  var g = $('lkGrid'); if (!g || _lk.built) return;
+  _lk.built = true;
+  var h = '';
+  for (var i = 0; i < LK_CARDS; i++) {
+    h += '<button type="button" class="lk-card" data-i="' + i + '" aria-label="Card ' + (i + 1) + '" style="--d:' + (((i % 3) + Math.floor(i / 3)) * 0.35).toFixed(2) + 's" onclick="lkTap(' + i + ')"><span class="lk-in">' +
+      '<span class="lk-face lk-back"><img class="lk-bimg" src="" alt=""><i class="lk-sheen"></i><i class="lk-mark">' + LK_STAR + '</i></span>' +
+      '<span class="lk-face lk-front"></span></span></button>';
   }
+  g.innerHTML = h;
 }
-var GIFT_OPEN_MS = 1100;
-var _giftCountRaf = null;
-function giftStageReset(){
-  var bg = $('giftRevealBg'), st = $('giftStage');
-  st.className = 'gs gs-ask';
-  $('gsLabel').textContent = 'Opening your gift…';
-  $('giftRevealAmount').textContent = ugx(0);
-  $('gsGlitter').innerHTML = ''; $('gsConfetti').innerHTML = '';
-  st.querySelectorAll('.gs-balloon').forEach(function(b){ b.remove(); });
-  if (_giftCountRaf) { cancelAnimationFrame(_giftCountRaf); _giftCountRaf = null; }
-  // glitter around the gift while it spins
-  var g = '', i;
-  for (i = 0; i < 16; i++) {
-    var a = Math.random() * 6.283, rad = 70 + Math.random() * 62;
-    g += '<i style="left:' + (135 + Math.cos(a) * rad - 3).toFixed(0) + 'px;top:' + (135 + Math.sin(a) * rad - 3).toFixed(0) + 'px;animation-delay:' + (Math.random() * 1.1).toFixed(2) + 's;animation-duration:' + (0.8 + Math.random() * 0.7).toFixed(2) + 's"></i>';
+function lkLocked(l){ return l.on === false || (l.minVip > 0 && l.vip < l.minVip); }
+function renderLucky(){
+  var g = $('lkGrid'); if (!g) return;
+  lkBuild();
+  var l = lkInfo(), src = iconUrl('robots');
+  g.querySelectorAll('.lk-bimg').forEach(function(im){ if (im.getAttribute('src') !== src) im.setAttribute('src', src); });
+  $('lkChances').textContent = String(l.chances || 0); $('lkChLbl').textContent = (l.chances || 0) === 1 ? 'Chance' : 'Chances';
+  $('lkChip').classList.toggle('on', l.chances > 0 && !lkLocked(l));
+  var rt = document.querySelector('.tab[data-tab="rewards"]'); if (rt) rt.classList.toggle('has-chance', l.chances > 0 && !lkLocked(l));
+  var win = 'Win ' + ugx(l.minAmount) + (l.maxAmount > l.minAmount ? ' to ' + ugx(l.maxAmount) : '') + (l.hasProducts ? ' or an AI robot' : '');
+  $('lkRange').textContent = l.on === false ? '' : win;
+  var note;
+  if (l.on === false) note = 'Lucky Cards are paused right now.';
+  else if (l.minVip > 0 && l.vip < l.minVip) note = 'Reach VIP ' + l.minVip + ' to open your cards. Every chance you earn is kept for you.';
+  else if (l.chances > 0) note = l.chances === 1 ? 'You have 1 chance. Pick a card.' : 'You have ' + l.chances + ' chances. Pick a card.';
+  else note = 'Recharge to earn a chance, then flip any card.';
+  if (!_lk.revealed && !_lk.busy) $('lkNote').textContent = note;
+  g.classList.toggle('locked', lkLocked(l) && !_lk.revealed);
+  g.classList.toggle('idle', !(l.chances > 0) && !_lk.revealed);
+  var rb = $('lkRecharge'); if (rb) rb.style.display = (!_lk.revealed && l.on !== false && !(l.chances > 0)) ? '' : 'none';
+}
+function lkFront(p, win){
+  if (p.kind === 'robot') return '<span class="lk-fx"></span><img class="lk-rimg" src="' + esc(p.image || iconUrl('robots')) + '" alt=""><b class="lk-nm">' + esc(p.name) + '</b><small>AI robot</small>';
+  var t = ugx(p.amount);
+  return '<span class="lk-fx"></span><svg class="lk-coin" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18" fill="url(#lkGold)" stroke="#d98600" stroke-width="2"/><circle cx="20" cy="20" r="12.5" fill="none" stroke="#fff3b8" stroke-width="1.6"/><text x="20" y="25.6" text-anchor="middle" font-size="15" font-weight="900" fill="#b36b00" font-family="system-ui,sans-serif">U</text></svg><b class="lk-amt' + (t.length > 10 ? ' long' : '') + '" data-to="' + Math.round(p.amount) + '">' + t + '</b><small>Earnings</small>';
+}
+function lkCountUp(el){
+  var to = Number(el.getAttribute('data-to')) || 0; if (!to) return;
+  var start = null, dur = 800;
+  function step(ts){
+    if (start === null) start = ts;
+    var k = Math.min(1, (ts - start) / dur), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = ugx(Math.round(to * e));
+    if (k < 1 && el.isConnected) requestAnimationFrame(step); else el.textContent = ugx(to);
   }
-  $('gsGlitter').innerHTML = g;
-  giftPreload(); paintGift();
-  return bg;
+  el.textContent = ugx(0); requestAnimationFrame(step);
 }
-// Tapping the gift: the popup with the gift behind it and the code field; "Open gift" starts the opening.
-function openGiftStage(){
-  var bg = giftStageReset();
-  bg.classList.add('show');
-  if (navigator.vibrate) navigator.vibrate(20);
-  setTimeout(function(){ var i = $('giftCodeInput'); if (bg.classList.contains('show') && $('giftStage').classList.contains('gs-ask')) { try { i.focus(); } catch (e) {} } }, 380);
+function lkSparks(card){
+  var h = '<i class="lk-ring"></i>';
+  for (var i = 0; i < 16; i++) {
+    var a = (i / 16) * Math.PI * 2 + Math.random() * 0.3, d = 54 + Math.random() * 42;
+    h += '<i class="lk-sp" style="--dx:' + Math.round(Math.cos(a) * d) + 'px;--dy:' + Math.round(Math.sin(a) * d) + 'px;--s:' + (0.6 + Math.random() * 0.9).toFixed(2) + ';animation-delay:' + Math.round(Math.random() * 120) + 'ms"></i>';
+  }
+  var box = document.createElement('span'); box.className = 'lk-burst'; box.innerHTML = h; card.appendChild(box);
+  setTimeout(function(){ if (box.parentNode) box.parentNode.removeChild(box); }, 1300);
 }
-function showGiftReveal(amount){
-  amount = Number(amount) || 0;
-  var bg = $('giftRevealBg'), st = $('giftStage');
-  if (!bg.classList.contains('show')) giftStageReset();
-  bg.classList.add('show');
-  // First the bang (the swollen box puffs up and its lid is blown off), then the opened box with its coins.
-  if (st.classList.contains('gs-opening')) {
-    st.className = 'gs gs-bang'; _giftPhaseAt = Date.now();
-    if (navigator.vibrate) navigator.vibrate(40);
-    setTimeout(function(){ if (bg.classList.contains('show')) burstReveal(amount); }, 280);
+async function lkTap(i){
+  var l = lkInfo(), cards = $('lkGrid').children, card = cards[i];
+  if (_lk.busy) return;
+  if (_lk.revealed) { toast('Tap Flip again for another card'); return; }
+  if (l.on === false) { toast('Lucky Cards are not available right now'); shakeVibrate(card); return; }
+  if (l.minVip > 0 && l.vip < l.minVip) { toast('Reach VIP ' + l.minVip + ' to open your cards'); shakeVibrate(card); return; }
+  if (!(l.chances > 0)) { toast('Recharge to get a chance to flip a card'); shakeVibrate(card); return; }
+  _lk.busy = true;
+  $('lkGrid').classList.add('busy'); card.classList.add('lift');
+  if (navigator.vibrate) navigator.vibrate(18);
+  var t0 = Date.now();
+  var r = await api('/lucky/flip', {});
+  var wait = 560 - (Date.now() - t0);
+  if (wait > 0) await new Promise(function(ok){ setTimeout(ok, wait); });
+  if (r.stale || !STATE) { _lk.busy = false; return; }
+  if (r.status !== 'success') {
+    card.classList.remove('lift'); $('lkGrid').classList.remove('busy'); _lk.busy = false;
+    toast(r.message || 'Could not open the card');
+    shakeVibrate(card);
+    if (r.code === 'NO_CHANCE' || r.code === 'VIP_REQUIRED' || r.code === 'LUCKY_OFF') refreshFromServer().then(function(){ if (STATE) renderAll(); }).catch(function(){});
     return;
   }
-  burstReveal(amount);
+  lkReveal(i, r);
 }
-function burstReveal(amount){
-  var st = $('giftStage');
-  st.className = 'gs gs-burst';
-  $('gsLabel').textContent = 'You got';
-  // The burst, replayed each time: ribbon bits and little coins fly out, balloons float up.
-  var c = '', i, cols = ['#7cc4ff', '#2b8bf6', '#ffffff', '#b5dcff', '#137aef'];
-  for (i = 0; i < 30; i++) {
-    var a = (i / 30) * 6.283 + Math.random() * 0.4, d = 90 + Math.random() * 120, coin = i % 3 !== 0;
-    c += '<i class="' + (coin ? 'c' : 'r') + '" style="--dx:' + (Math.cos(a) * d).toFixed(0) + 'px;--dy:' + (Math.sin(a) * d * 0.9 - 40).toFixed(0) + 'px;--rot:' + ((Math.random() - 0.5) * 900).toFixed(0) + 'deg;--cc:' + cols[i % cols.length] + ';animation-delay:' + (0.1 + Math.random() * 0.25).toFixed(2) + 's"></i>';
+function lkReveal(i, r){
+  var cards = $('lkGrid').children, k = 0, j;
+  _lk.revealed = true;
+  for (j = 0; j < cards.length; j++) cards[j].querySelector('.lk-front').innerHTML = lkFront(j === i ? r.prize : (r.others[k++] || r.prize), j === i);
+  var winCard = cards[i];
+  winCard.classList.add('flip', 'win');
+  if (navigator.vibrate) navigator.vibrate([30, 40, 60]);
+  lkLater(function(){ lkSparks(winCard); var a = winCard.querySelector('.lk-amt'); if (a) lkCountUp(a); }, 380);
+  var order = 0;
+  for (j = 0; j < cards.length; j++) {
+    if (j === i) continue;
+    (function(c, n){ lkLater(function(){ c.classList.add('flip', 'dim'); }, 760 + n * 70); })(cards[j], order++);
   }
-  $('gsConfetti').innerHTML = c;
-  [['16%', '#7cc4ff', 0.15], ['46%', '#2b8bf6', 0.4], ['78%', '#b5dcff', 0.0]].forEach(function(b, k){
-    var el = document.createElement('span'); el.className = 'gs-balloon';
-    el.style.cssText = 'left:' + b[0] + ';--bc:' + b[1] + ';--sway:' + ((k - 1) * 26) + 'px;animation-delay:' + b[2] + 's';
-    st.appendChild(el);
-  });
-  if (navigator.vibrate) navigator.vibrate([40, 30, 40, 30, 90]);
-  if (_giftCountRaf) cancelAnimationFrame(_giftCountRaf);
-  var start = null, duration = 900, amountEl = $('giftRevealAmount');
-  amountEl.textContent = ugx(0);
-  function step(ts){
-    if (!start) start = ts;
-    var p = Math.min(1, (ts - start) / duration), eased = 1 - Math.pow(1 - p, 3);
-    amountEl.textContent = ugx(Math.round(amount * eased * 100) / 100);
-    if (p < 1) _giftCountRaf = requestAnimationFrame(step); else amountEl.textContent = ugx(amount);
-  }
-  _giftCountRaf = requestAnimationFrame(step);
+  if (STATE && STATE.lucky) STATE.lucky.chances = Number(r.chances) || 0;
+  lkLater(function(){
+    var p = r.prize, left = Number(r.chances) || 0;
+    $('lkNote').innerHTML = p.kind === 'robot' ? ('You won <b>' + esc(p.name) + '</b>. It is now in My AI robots.') : ('You won <b>' + ugx(p.amount) + '</b>. It is in your wallet.');
+    $('lkResult').className = 'lk-result show';
+    $('lkAgain').textContent = left > 0 ? 'Flip again (' + left + ' left)' : 'Recharge for another chance';
+    $('lkAgain').onclick = left > 0 ? lkAgain : function(){ lkAgain(); openOverlay('deposit'); };
+    _lk.busy = false; $('lkGrid').classList.remove('busy');
+    refreshFromServer().then(function(){ if (STATE) { if (STATE.lucky && _lk.revealed) STATE.lucky.chances = left; renderAll(); } }).catch(function(){});
+  }, 760 + 8 * 70 + 760);
 }
-function closeGiftReveal(){
-  $('giftRevealBg').classList.remove('show');
-  if (_giftCountRaf) { cancelAnimationFrame(_giftCountRaf); _giftCountRaf = null; }
+function lkAgain(){
+  if (_lk.busy) return;
+  lkClearTimers();
+  var cards = $('lkGrid').children, n = 0;
+  for (var j = 0; j < cards.length; j++) { (function(c, d){ setTimeout(function(){ c.classList.remove('flip', 'dim', 'win', 'lift'); }, d); })(cards[j], n++ * 45); }
+  $('lkResult').className = 'lk-result';
+  setTimeout(function(){
+    for (var j2 = 0; j2 < cards.length; j2++) cards[j2].querySelector('.lk-front').innerHTML = '';
+    _lk.revealed = false; renderLucky();
+  }, 460 + cards.length * 45);
 }
+// Coming back to the Rewards tab after a finished round starts a fresh board.
+function lkResetIfDone(){ if (_lk.revealed && !_lk.busy) { var cards = $('lkGrid').children; for (var j = 0; j < cards.length; j++) { cards[j].classList.remove('flip', 'dim', 'win', 'lift'); cards[j].querySelector('.lk-front').innerHTML = ''; } $('lkResult').className = 'lk-result'; _lk.revealed = false; renderLucky(); } }
 
 /* ====================== TEAM, SHARE ====================== */
 // Invite links carry a code that only means something on this app: .../#/inviteRegister?invitecode=CODE. With a wildcard domain set up on the

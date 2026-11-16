@@ -219,8 +219,6 @@
   .field .ic{position:absolute;left:16px;top:50%;transform:translateY(-50%);opacity:.65;color:var(--cocoa-soft);display:flex;}
   .phone-prefix{position:absolute;left:44px;top:50%;transform:translateY(-50%);font-size:15px;font-weight:700;color:var(--cocoa-soft);pointer-events:none;}
   #fPhone{padding-left:84px;}
-  .auth-tag{display:inline-block;color:var(--mint);font-weight:800;font-size:11.5px;
-    text-transform:uppercase;margin-bottom:14px;letter-spacing:.6px;}
 
   /* ---------- App shell ---------- */
   #app{display:none;}
@@ -281,7 +279,8 @@
     padding:4px 8px calc(4px + env(safe-area-inset-bottom,0px));z-index:40;}
   .tab{flex:1;text-align:center;padding:5px 4px 4px;border:none;background:none;color:#C7AF9B;border-radius:14px;font-size:10px;font-weight:700;line-height:1.2;}
   .tab.active{background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;}
-  .tab .ti{display:block;margin:0 auto 1px;}
+  .tab .ti{display:block;margin:0 auto 1px;position:relative;width:max-content;}
+  .tab.has-chance .ti::after{content:"";position:absolute;top:-1px;right:-5px;width:10px;height:10px;border-radius:50%;background:#ffcf55;border:2px solid #0b2a5b;box-shadow:0 0 8px rgba(255,207,85,.9);}
   .tab .ti img{width:var(--nav-ic,26px);height:var(--nav-ic,26px);display:block;object-fit:contain;margin:0 auto;transition:transform .15s ease;}
   .tab.active .ti img{transform:scale(1.1);}
 
@@ -310,7 +309,7 @@
   body.pf-on .overlay{background:transparent;}
   body.pf-on.ov-open #viewHome,body.pf-on.ov-open #viewShop,body.pf-on.ov-open #viewRewards,body.pf-on.ov-open #viewShare,body.pf-on.ov-open #viewTeam,body.pf-on.ov-open #viewAccount,body.pf-on.ov-open .tabbar{visibility:hidden;}
   body.pf-on .nav-veil{background:rgba(5,14,44,.94);}
-  body.pf-on .sec-head h3,body.pf-on .empty,body.pf-on .streak-cycle-label,body.pf-on #supportLinks .kv,body.pf-on #ovBindbank .muted{color:#fff;}
+  body.pf-on .sec-head h3,body.pf-on .empty,body.pf-on #supportLinks .kv,body.pf-on #ovBindbank .muted{color:#fff;}
   body.pf-on #rulesBody,body.pf-on .about-html{color:#e6efff !important;}
   body.pf-on .sec-head a{color:#8fcaff;}
   body.pf-on .uline-tab{color:#b4cbef;}
@@ -740,7 +739,6 @@
 
   /* 30 dots, sized down from the old 7-dot row (9px/7px gap) so a full
      30-day cycle still fits on one line instead of wrapping messily. */
-  .streak-cycle-label{text-align:center;font-size:12.5px;font-weight:700;color:var(--cocoa-faint);margin:2px 0 16px;}
 
   .empty{text-align:center;padding:40px 20px;color:var(--cocoa-faint);font-size:13.5px;}
   /* Opens from the centre of the screen (a real popup, not a bottom sheet) —
@@ -757,14 +755,6 @@
      past its bottom edge. */
   .modal-wrap{position:relative;width:100%;max-width:440px;margin:0 auto;}
   .modal-wrap .modal-sheet{width:100%;max-width:none;margin:0;}
-  /* Gift-code redeem reveal — a treasure chest pops in, then keeps shaking
-     in place (matching the owner's reference GIF) while gold light bursts
-     upward from it and coin sparks fly outward, and the reward figure
-     counts up from 0 (driven by showGiftReveal() in JS) instead of just
-     appearing, so claiming a code feels like a live reveal rather than a
-     static toast. A real device vibration fires alongside it too. */
-  .gift-reveal-label{color:var(--cocoa-faint);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;}
-  .gift-reveal-amount{font-size:32px;font-weight:900;color:var(--mint);margin-bottom:20px;}
   /* Announcement popup — rounded like the cards and tabs (24 px sheet, 14 px buttons), and
      kept compact: small header band, tight paragraph spacing (own .ann-p
      class instead of the About/Rules pages' spacious nl2p blank-line
@@ -837,96 +827,10 @@
   .choc-hold-item b{display:block;font-size:13.5px;}
 
 
-/* ---- Rewards page, the gift animations and the success / failed icons (the owner's recordings; see the notes in CLAUDE.md) ---- */
-.rw-card{margin:14px var(--gut);background:var(--card);border-radius:22px;box-shadow:var(--shadow);padding:20px 18px;text-align:center;}
-.rw-title{font-size:19px;margin:0;}
-.rw-sub{font-size:13px;color:var(--cocoa-faint);margin:6px 0 14px;line-height:1.45;}
-.rw-gbtn:active .gbox{transform:scale(.95);}
-/* the gift: see below */
-.gbox{display:block;width:100%;height:100%;background:no-repeat center/contain;transition:transform .12s ease;}
-/* the gift (drawn as SVG so it is sharp at any size; the motion is the recording's 0.433 s loop: the box squashes and stretches, the lid lifts over a yellow glow, the bow pops) */
-.gbox svg.gb{width:100%;height:100%;display:block;overflow:visible;}
-.gb-slit{filter:drop-shadow(0 0 5px #ffe45c);}
-/* the stage: a blurred page, rotating spoke rings, the gift (spinning with glitter while it opens), then the burst with a coin */
-.gs-bg{padding:0;z-index:160;}
-.gs-bg.show{background:rgba(8,32,92,.46);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);}
-.gs{position:relative;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;color:#fff;}
-.gs-spokes{position:absolute;left:50%;top:40%;width:var(--d);height:var(--d);margin:calc(var(--d) / -2) 0 0 calc(var(--d) / -2);pointer-events:none;will-change:transform;animation:gsSpin 18s linear infinite;filter:drop-shadow(0 0 6px rgba(255,190,40,.45));}
-.gs-spokes svg,.gs-rays svg{display:block;width:100%;height:100%;overflow:visible;}
-.gs-a{--d:min(124vw,520px);}
-.gs-b{--d:min(92vw,380px);animation:gsSpin 11s linear infinite reverse;}
-@keyframes gsSpin{to{transform:rotate(360deg);}}
-.gs-main{position:relative;width:270px;height:270px;perspective:700px;flex:0 0 auto;}
-.gs-box{position:absolute;left:50%;top:50%;width:230px;height:230px;margin:-115px 0 0 -115px;filter:saturate(1.1) drop-shadow(0 14px 16px rgba(3,20,70,.45));}
-.gs-open{position:absolute;left:50%;top:50%;width:230px;height:230px;margin:-115px 0 0 -115px;display:none;filter:saturate(1.15) drop-shadow(0 0 16px rgba(255,214,90,.8)) drop-shadow(0 14px 16px rgba(3,20,70,.45));}
-.gs-open svg.go,.gs-open .go-custom{display:block;width:100%;height:100%;overflow:visible;}
-.gs-open .go-custom{object-fit:contain;}
-.gs-open .go-custom[hidden]{display:none;}
-/* the four flaps of the opened box unfold with a little overshoot, the coins heap up */
-.gs-burst .gf{animation:goFlap .55s cubic-bezier(.2,1.6,.3,1) both;}
-.gf-bl,.gf-br{transform-box:fill-box;transform-origin:50% 100%;}
-.gf-fl,.gf-fr{transform-box:fill-box;transform-origin:50% 0;}
-.gs-burst .go-heap{transform-box:fill-box;transform-origin:50% 100%;animation:goHeap .7s cubic-bezier(.2,1.4,.3,1) .12s both;}
-@keyframes goFlap{0%{transform:scale(1,.04);opacity:.2;}100%{transform:scale(1,1);opacity:1;}}
-@keyframes goHeap{0%{transform:scale(.4);opacity:0;}100%{transform:scale(1);opacity:1;}}
-.gs-coin{position:absolute;left:50%;top:50%;width:92px;height:92px;margin:-46px 0 0 -46px;display:none;filter:drop-shadow(0 6px 12px rgba(120,70,0,.5));}
-.gs-coin svg{display:block;width:100%;height:100%;}
-.gs-rays{position:absolute;left:50%;top:36%;width:340px;height:340px;margin:-170px 0 0 -170px;opacity:0;pointer-events:none;}
-.gs-flash{position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px 0 0 -30px;border-radius:50%;border:5px solid rgba(255,255,255,.9);opacity:0;pointer-events:none;}
-.gs-glitter,.gs-confetti{position:absolute;inset:0;pointer-events:none;}
-.gs-glitter i{position:absolute;width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 8px 2px rgba(190,225,255,.95);opacity:0;animation:gsTwinkle 1.1s ease-in-out infinite;}
-@keyframes gsTwinkle{0%,100%{opacity:0;transform:scale(.2);}50%{opacity:1;transform:scale(1.1);}}
-.gs-text{position:relative;z-index:2;text-align:center;min-height:86px;margin-top:6px;text-shadow:0 2px 10px rgba(0,30,100,.7);}
-.gs .gift-reveal-label{color:#dcebff;}
-.gs .gift-reveal-amount{color:#fff;text-shadow:0 2px 14px rgba(0,40,120,.6);margin-bottom:0;}
-.gs-opening .gift-reveal-amount,.gs-opening .gs-btn,.gs-bang .gift-reveal-amount,.gs-bang .gs-btn{visibility:hidden;}
-.gs-ask .gs-text,.gs-ask .gs-btn{display:none;}
-.gs-opening .gs-card,.gs-bang .gs-card,.gs-burst .gs-card{display:none;}
-.gs-bang .gs-flash{animation:gsFlash .5s ease-out both;}
-.gs-ask .gs-x{display:flex;}
-.gs-x{display:none;position:absolute;top:16px;right:16px;z-index:3;width:42px;height:42px;border-radius:50%;border:0;background:rgba(255,255,255,.22);color:#fff;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);}
-/* the popup with the code field: the gift sits behind it, its top half above the card */
-.gs-ask .gs-main{margin-bottom:-92px;}
-.gs-ask .gs-box{animation:gsFloat 2.6s ease-in-out infinite;}
-@keyframes gsFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-8px);}}
-.gs-card{position:relative;z-index:2;width:min(88vw,340px);background:rgba(255,255,255,.96);border-radius:24px;padding:18px 16px 16px;box-shadow:0 24px 50px -14px rgba(0,30,110,.55),0 0 0 1.5px rgba(255,214,110,.7);color:var(--cocoa);text-align:center;}
-.gs-card-title{font-size:15px;font-weight:800;margin-bottom:10px;}
-.gs-input{font-size:16px;font-weight:800;padding:13px;margin-bottom:10px;text-transform:uppercase;text-align:center;letter-spacing:2px;}
-.gs-input::placeholder{font-weight:700;letter-spacing:.4px;text-transform:none;}
-.gs-btn{position:relative;z-index:2;min-width:190px;margin-top:10px;}
-/* the burst */
-.gs-burst .gs-box{display:none;}
-.gs-burst .gs-open{display:block;animation:gsPop .6s cubic-bezier(.2,1.5,.3,1) both;}
-.gs-burst .gs-flash{animation:gsFlash .7s ease-out both;}
-.gs-burst .gs-rays{animation:gsRays 2.4s ease-out both,gsSpin 16s linear infinite;}
-.gs-burst .gs-open.custom-open + .gs-coin{display:block;animation:gsCoinUp 1.1s cubic-bezier(.2,.9,.25,1) .1s both,gsBob 2.2s ease-in-out 1.2s infinite;}   /* a picture uploaded for the opened box keeps the rising coin; the vector box has its own coin INSIDE it */
-/* the vector box's own show: the big coin pops out of the box, spins and settles standing in the heap; a band of light sweeps over the box; glints twinkle; a gold halo pulses behind it */
-.go-bigcoin,.go-bigspin{transform-box:fill-box;transform-origin:50% 50%;}
-.gs-burst .go-bigcoin{animation:goCoinOut 1.6s cubic-bezier(.3,.8,.35,1) .15s both;}
-.gs-burst .go-bigspin{animation:goCoinSpin 1.3s ease-in-out .25s both;}
-.go-glint{animation:goGlint 2.6s ease-in-out 1.9s infinite;}
-.go-shine{animation:goShine 2.8s ease-in-out .7s infinite;}
-.go-tw{opacity:0;transform-box:fill-box;transform-origin:50% 50%;animation:goTw 1.5s ease-in-out infinite;}
-.gs-burst .gs-main::before{content:"";position:absolute;left:50%;top:50%;width:340px;height:340px;margin:-170px 0 0 -170px;border-radius:50%;background:radial-gradient(circle,rgba(255,240,160,.9) 0,rgba(255,205,70,.42) 34%,rgba(255,200,60,0) 68%);animation:gsHalo 2.2s ease-in-out infinite;pointer-events:none;}
-@keyframes goCoinOut{0%{transform:translateY(34px) scale(.3);opacity:0;}10%{opacity:1;}42%{transform:translateY(-66px) scale(1.18);}70%{transform:translateY(3px) scale(1);}82%{transform:translateY(-6px) scale(1);}100%{transform:translateY(0) scale(1);}}
-@keyframes goCoinSpin{0%{transform:scaleX(1);}20%{transform:scaleX(-1);}40%{transform:scaleX(1);}60%{transform:scaleX(-1);}80%{transform:scaleX(.92);}100%{transform:scaleX(1);}}
-@keyframes goGlint{0%{transform:translateX(0);opacity:0;}15%{opacity:1;}60%{transform:translateX(56px);opacity:1;}100%{transform:translateX(56px);opacity:0;}}
-@keyframes goShine{0%{transform:translateX(0);}55%,100%{transform:translateX(290px);}}
-@keyframes goTw{0%,100%{opacity:0;transform:scale(.2);}50%{opacity:1;transform:scale(1.25);}}
-@keyframes gsHalo{0%,100%{opacity:.55;transform:scale(.92);}50%{opacity:1;transform:scale(1.06);}}
-@media (prefers-reduced-motion:reduce){rect.go-glint,rect.go-shine,circle.go-tw,.gs.gs-burst .gs-main::before{animation:none;}}
-@keyframes gsPop{0%{transform:scale(1.25);opacity:0;}40%{opacity:1;}100%{transform:scale(1);opacity:1;}}
-@keyframes gsFlash{0%{transform:scale(.4);opacity:1;}100%{transform:scale(7);opacity:0;}}
-@keyframes gsRays{0%{opacity:0;transform:scale(.4);}25%{opacity:1;}100%{opacity:.5;transform:scale(1);}}
-@keyframes gsCoinUp{0%{transform:translateY(46px) scale(.25) rotateY(0);opacity:0;}15%{opacity:1;}60%{transform:translateY(-92px) scale(1.2) rotateY(540deg);}100%{transform:translateY(-74px) scale(1) rotateY(720deg);}}
-@keyframes gsBob{0%,100%{transform:translateY(-74px) scale(1);}50%{transform:translateY(-84px) scale(1.04);}}
-.gs-confetti i{position:absolute;left:50%;top:46%;opacity:0;animation:gsConf 1.5s cubic-bezier(.15,.7,.3,1) both;}
-.gs-confetti i.c{width:11px;height:11px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff2a8,#ffc21f 60%,#d98a00);box-shadow:0 0 0 1.5px #c97d00 inset;}
-.gs-confetti i.r{width:8px;height:15px;border-radius:2px;background:var(--cc,#7cc4ff);}
-@keyframes gsConf{0%{transform:translate(0,0) rotate(0);opacity:1;}70%{opacity:1;}100%{transform:translate(var(--dx),var(--dy)) rotate(var(--rot));opacity:0;}}
-.gs-balloon{position:absolute;bottom:-70px;width:34px;height:42px;border-radius:50% 50% 48% 48%;background:radial-gradient(circle at 35% 30%,#fff 0,var(--bc) 38%);opacity:.92;animation:gsUp 3.2s ease-out both;}
-.gs-balloon::after{content:"";position:absolute;left:50%;top:100%;width:1.5px;height:46px;background:rgba(255,255,255,.6);}
-@keyframes gsUp{0%{transform:translateY(0);}100%{transform:translateY(-118vh) translateX(var(--sway));}}
+/* ---- the success / failed icons (the owner's recordings; see the notes in CLAUDE.md) ---- */
+@keyframes anDraw{to{stroke-dashoffset:0;}}
+@keyframes anFade{from{opacity:0;}to{opacity:1;}}
+@keyframes anSpring{0%{transform:scale(.6);opacity:0;}20%{opacity:1;}60%{transform:scale(1.1);}100%{transform:scale(1);opacity:1;}}
 /* success tick and failed cross of the payment pages: green / red disc that grows, a halo behind it, the mark drawn in (the owner's recordings) */
 .an-pop{transform-box:fill-box;transform-origin:center;}
 .ok-disc{animation:anPop .27s cubic-bezier(.16,1,.3,1) both;}
@@ -937,39 +841,65 @@
 .no-x{opacity:0;animation:anFade .12s linear .12s forwards;}
 @keyframes anPop{0%{transform:scale(0);}100%{transform:scale(1);}}
 @keyframes anHalo{0%{transform:scale(0);opacity:0;}30%{opacity:1;}100%{transform:scale(1);opacity:1;}}
-@keyframes anDraw{to{stroke-dashoffset:0;}}
-@keyframes anFade{from{opacity:0;}to{opacity:1;}}
-@keyframes anSpring{0%{transform:scale(.6);opacity:0;}20%{opacity:1;}60%{transform:scale(1.1);}100%{transform:scale(1);opacity:1;}}
 
 
-/* the gift on the Rewards page: shining, sharp edges, glints */
-.rw-gift{padding-top:18px;}
-.rw-gbtn{position:relative;display:block;margin:0 auto 4px;padding:0;border:0;background:none;width:196px;height:196px;}
-.rw-gbtn::before{content:"";position:absolute;left:50%;top:54%;width:230px;height:230px;margin:-115px 0 0 -115px;border-radius:50%;background:radial-gradient(circle,rgba(120,190,255,.55) 0,rgba(120,190,255,.2) 42%,transparent 70%);animation:gbGlow 2.4s ease-in-out infinite;pointer-events:none;}
-@keyframes gbGlow{0%,100%{transform:scale(.92);opacity:.75;}50%{transform:scale(1.08);opacity:1;}}
-.rw-gbtn .gbox{position:relative;filter:saturate(1.1) drop-shadow(0 12px 12px rgba(19,90,200,.35));}
-.gl{position:absolute;width:9px;height:9px;border-radius:50%;background:#fff;box-shadow:0 0 10px 3px rgba(190,225,255,.95),0 0 18px 6px rgba(255,225,130,.5);opacity:0;animation:gsTwinkle 1.9s ease-in-out infinite;pointer-events:none;}
-.g1{left:14%;top:30%;animation-delay:0s;}.g2{left:80%;top:22%;animation-delay:.5s;}.g3{left:70%;top:62%;animation-delay:1.1s;}.g4{left:22%;top:68%;animation-delay:.8s;}.g5{left:48%;top:10%;animation-delay:1.4s;}
-/* the daily check-in calendar: 30 days, the ladder along it */
-.cal-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:12px 0 10px;}
-.cal-d{position:relative;border-radius:12px;background:var(--cream);padding:6px 0 7px;border:1.5px solid transparent;}
-.cal-n{display:block;font-size:9.5px;font-weight:800;color:var(--cocoa-faint);letter-spacing:.3px;}
-.cal-a{display:block;font-size:11.5px;font-weight:900;color:var(--cocoa);margin-top:1px;}
-.cal-d.done{background:linear-gradient(150deg,var(--caramel),var(--caramel-deep));}
-.cal-d.done .cal-n,.cal-d.done .cal-a{color:#fff;}
-.tick-txt{font:900 1.05em/1 system-ui,"Segoe UI Symbol","Noto Sans Symbols2",sans-serif;}
-.cal-d.done::after{content:"\2713\FE0E";position:absolute;right:4px;top:2px;font:900 13px/1 system-ui,"Segoe UI Symbol","Noto Sans Symbols2",sans-serif;color:#fff;}
-.cal-d.today{border-color:var(--caramel);background:#fff;box-shadow:0 0 0 3px rgba(19,122,239,.18);}
-/* today's box breathes a soft blue glow (an outline layer that only fades in and out, so scrolling stays smooth); a claim pops the tick and fills the box solid blue */
-.cal-d.today::after{content:"";position:absolute;inset:-3px;border-radius:15px;box-shadow:0 0 0 2px rgba(19,122,239,.6),0 0 12px rgba(19,122,239,.4);opacity:.12;pointer-events:none;animation:calGlow 2.5s ease-in-out infinite;}
-.cal-d.done.pop::after{animation:calTick .3s cubic-bezier(.2,1.7,.4,1) both;}
-.cal-d.done.pop::before{content:"";position:absolute;inset:-1.5px;border-radius:inherit;background:#fff;z-index:1;pointer-events:none;animation:calFill .3s ease-out .04s forwards;}
-.cal-d.done.pop .cal-n,.cal-d.done.pop .cal-a{position:relative;z-index:2;}
-@keyframes calGlow{0%,100%{opacity:.12;}50%{opacity:1;}}
-@keyframes calTick{0%{transform:scale(0);opacity:0;}60%{transform:scale(1.4);opacity:1;}100%{transform:scale(1);opacity:1;}}
-@keyframes calFill{from{opacity:1;}to{opacity:0;}}
-@media (prefers-reduced-motion:reduce){.cal-grid .cal-d.today::after{animation:none;opacity:.6;}.cal-grid .cal-d.done.pop::after{animation:none;}.cal-grid .cal-d.done.pop::before{display:none;}}
-.cal-d.today .cal-n{color:var(--caramel-deep);}
+/* ---- Lucky Cards (Rewards tab): nine cards, the AI robots on their backs, a smooth 3D turn, a gold burst on the winner ---- */
+.lk-wrap{margin:14px var(--gut) 0;}
+.lk-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;}
+.lk-title h2{font-size:22px;margin:0;}
+.lk-title p{font-size:12.5px;color:var(--cocoa-faint);margin:3px 0 0;font-weight:600;line-height:1.35;}
+.lk-chip{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:7px 13px 7px 10px;border-radius:999px;background:var(--card);box-shadow:var(--shadow);color:var(--cocoa-faint);font-weight:800;font-size:11.5px;transition:background .3s,color .3s;}
+.lk-chip svg{width:19px;height:19px;color:#9aa8bd;}
+.lk-chip b{font-size:16px;color:var(--cocoa);}
+.lk-chip.on{background:linear-gradient(135deg,#2b88f3,#0a4fc6);color:#dcebff;}
+.lk-chip.on b{color:#fff;}
+.lk-chip.on svg{color:#ffd978;}
+.lk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;}
+.lk-card{position:relative;aspect-ratio:3/4;padding:0;border:0;background:none;-webkit-tap-highlight-color:transparent;perspective:700px;cursor:pointer;}
+.lk-card.win,.lk-card.lift{z-index:4;}
+.lk-in{position:absolute;inset:0;transform-style:preserve-3d;-webkit-transform-style:preserve-3d;transition:transform .85s cubic-bezier(.3,1.35,.45,1);will-change:transform;}
+.lk-face{position:absolute;inset:0;border-radius:16px;overflow:hidden;backface-visibility:hidden;-webkit-backface-visibility:hidden;}
+.lk-back{background:linear-gradient(160deg,#1c4fa8,#0a2260 70%);box-shadow:0 12px 22px -12px rgba(10,40,110,.75),inset 0 0 0 1.5px rgba(160,205,255,.55);}
+.lk-back::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,20,60,.04) 30%,rgba(6,20,60,.6));z-index:1;}
+.lk-bimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.94;}
+.lk-sheen{position:absolute;top:-20%;bottom:-20%;left:-60%;width:46%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.4),transparent);transform:skewX(-18deg);animation:lkSheen 3.8s ease-in-out var(--d,0s) infinite;z-index:2;}
+@keyframes lkSheen{0%,58%{left:-60%;opacity:0;}64%{opacity:1;}100%{left:135%;opacity:0;}}
+.lk-mark{position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;background:rgba(255,255,255,.16);border:1.5px solid rgba(255,255,255,.6);display:flex;align-items:center;justify-content:center;color:#fff;z-index:3;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);animation:lkMark 2.6s ease-in-out var(--d,0s) infinite;}
+.lk-mark svg{width:18px;height:18px;display:block;}
+@keyframes lkMark{0%,100%{transform:scale(1);box-shadow:0 0 10px rgba(150,200,255,.45);}50%{transform:scale(1.12);box-shadow:0 0 22px rgba(170,215,255,.9);}}
+.lk-front{transform:rotateY(180deg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px 6px;text-align:center;background:linear-gradient(165deg,#fff,#e4efff);box-shadow:inset 0 0 0 1.5px rgba(120,170,240,.55);color:#0a2260;}
+.lk-front small{font-size:9.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#6f83a8;}
+.lk-coin{width:34px;height:34px;object-fit:contain;}
+.lk-amt{font-size:14.5px;font-weight:900;line-height:1.1;}
+.lk-amt.long{font-size:12px;}
+.lk-rimg{width:58%;aspect-ratio:1;object-fit:contain;}
+.lk-nm{font-size:11.5px;font-weight:800;line-height:1.15;max-height:2.3em;overflow:hidden;}
+.lk-fx{position:absolute;inset:0;pointer-events:none;}
+.lk-card.win .lk-front{background:linear-gradient(165deg,#fffbe8,#ffe9a6);box-shadow:inset 0 0 0 2px #ffcf55,0 0 26px rgba(255,196,60,.75);}
+.lk-card.win .lk-fx{background:radial-gradient(circle at 50% 28%,rgba(255,255,255,.95),rgba(255,255,255,0) 62%);animation:lkFx 1.5s ease-out both;}
+@keyframes lkFx{0%{opacity:0;}25%{opacity:1;}100%{opacity:.35;}}
+.lk-card.flip .lk-in{transform:rotateY(180deg);}
+.lk-card.lift:not(.flip) .lk-in{transform:translateY(-8px) scale(1.07);transition:transform .35s cubic-bezier(.2,1.4,.4,1);}
+.lk-card.win.flip .lk-in{transform:rotateY(180deg) scale(1.07);}
+.lk-card.dim .lk-front{filter:saturate(.55) brightness(.93);opacity:.85;}
+.lk-card:active:not(.flip):not(.lift) .lk-in{transform:scale(.96);transition-duration:.15s;}
+.lk-grid.busy .lk-card:not(.lift):not(.flip){opacity:.78;}
+.lk-grid.locked .lk-card,.lk-grid.idle .lk-card:not(.flip){filter:grayscale(.45) brightness(.9);}
+.lk-grid.idle .lk-mark,.lk-grid.locked .lk-mark{animation:none;opacity:.75;}
+.lk-burst{position:absolute;left:50%;top:50%;width:0;height:0;pointer-events:none;z-index:5;}
+.lk-sp{position:absolute;left:-4px;top:-4px;width:8px;height:8px;border-radius:50%;background:#ffd978;box-shadow:0 0 8px 2px rgba(255,200,80,.9);opacity:0;animation:lkSp .9s cubic-bezier(.2,.8,.3,1) forwards;}
+@keyframes lkSp{0%{transform:translate(0,0) scale(.2);opacity:1;}100%{transform:translate(var(--dx),var(--dy)) scale(var(--s));opacity:0;}}
+.lk-ring{position:absolute;left:-30px;top:-30px;width:60px;height:60px;border-radius:50%;border:3px solid rgba(255,214,110,.9);opacity:0;animation:lkRing .8s ease-out forwards;}
+@keyframes lkRing{0%{transform:scale(.3);opacity:.9;}100%{transform:scale(2.6);opacity:0;}}
+.lk-note{text-align:center;font-size:13.5px;font-weight:600;color:var(--cocoa-faint);margin:18px 4px 12px;min-height:20px;line-height:1.45;}
+.lk-note b{color:var(--cocoa);}
+.lk-result{display:none;}
+.lk-result.show{display:block;animation:lkRise .4s ease both;}
+@keyframes lkRise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+.lk-rech{margin-bottom:14px;}
+body.pf-on .lk-title h2,body.pf-on .lk-note b{color:#fff;}
+body.pf-on .lk-title p,body.pf-on .lk-note{color:#cfe0fb;}
+@media (prefers-reduced-motion:reduce){.lk-sheen,.lk-mark{animation:none;}.lk-card .lk-in{transition-duration:.01s;}}
 
 /* ---- Smart AI additions: art banners ---- */
 .art-host{position:absolute;inset:0;overflow:hidden;}
@@ -1309,23 +1239,18 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <div style="height:14px"></div>
     </div>
 
-    <!-- REWARDS -->
+    <!-- REWARDS: Lucky Cards -->
     <div id="viewRewards" style="display:none">
-      <div class="rw-card rw-gift">
-        <button type="button" class="rw-gbtn" id="giftBoxBtn" onclick="tapGiftBox()" aria-label="Open the gift">
-          <span class="gbox" data-gift="idle" role="img" aria-label="Gift"></span>
-          <i class="gl g1"></i><i class="gl g2"></i><i class="gl g3"></i><i class="gl g4"></i><i class="gl g5"></i>
-        </button>
-        <h2 class="rw-title">Gift Code</h2>
-        <p class="rw-sub">Tap the gift, enter your code and open it.</p>
-      </div>
-      <div class="rw-card rw-daily" id="checkinCard">
-        <span class="auth-tag">Daily Check-in</span>
-        <h2 class="rw-title" style="margin-top:8px">Check in every day, earn more</h2>
-        <p class="rw-sub">Each day of your run pays a little more. Miss a day and the calendar starts again at day 1. <b>Streak: <span id="streakNum">0</span></b></p>
-        <div class="cal-grid" id="calGrid"></div>
-        <div class="streak-cycle-label" id="streakCycleLabel"></div>
-        <button class="btn btn-primary btn-block" id="checkinBtn" onclick="doCheckin()">Check in</button>
+      <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="lkGold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe98a"/><stop offset="1" stop-color="#f2a900"/></linearGradient></defs></svg>
+      <div class="lk-wrap">
+        <div class="lk-head">
+          <div class="lk-title"><h2>Lucky Cards</h2><p id="lkRange"></p></div>
+          <div class="lk-chip" id="lkChip"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 7.2A2.2 2.2 0 015.2 5h13.6A2.2 2.2 0 0121 7.2v2.1a2.7 2.7 0 000 5.4v2.1a2.2 2.2 0 01-2.2 2.2H5.2A2.2 2.2 0 013 16.8v-2.1a2.7 2.7 0 000-5.4zm8.2 1.4l.9 1.9 2.1.3-1.5 1.5.4 2.1-1.9-1-1.9 1 .4-2.1-1.5-1.5 2.1-.3z" fill-rule="evenodd"/></svg><b id="lkChances">0</b><span id="lkChLbl">Chances</span></div>
+        </div>
+        <div class="lk-grid idle" id="lkGrid"></div>
+        <p class="lk-note" id="lkNote"></p>
+        <div class="lk-result" id="lkResult"><button type="button" class="btn btn-primary btn-block" id="lkAgain">Flip again</button></div>
+        <button type="button" class="btn btn-primary btn-block lk-rech" id="lkRecharge" onclick="openOverlay('deposit')" style="display:none">Recharge for a chance</button>
       </div>
       <div style="height:14px"></div>
     </div>
@@ -1670,34 +1595,6 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <div style="text-align:center;margin-top:14px"><span class="muted" onclick="dismissInstallSheet()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Maybe later</span></div>
     </div>
   </div>
-
-  <div class="modal-bg gs-bg" id="giftRevealBg">
-    <div class="gs gs-ask" id="giftStage">
-      <button type="button" class="gs-x" id="gsX" onclick="closeGiftReveal()" aria-label="Close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      <div class="gs-spokes gs-a"><svg viewBox="-100 -100 200 200" aria-hidden="true" shape-rendering="geometricPrecision"><defs><radialGradient id="gsGa" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="100"><stop offset="0.3" stop-color="#fff0b0" stop-opacity="1"/><stop offset="0.55" stop-color="#ffc93d" stop-opacity="0.95"/><stop offset="1" stop-color="#ff9d00" stop-opacity="0"/></radialGradient><radialGradient id="gsGa2" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="100"><stop offset="0.3" stop-color="#fff6c8" stop-opacity="0.95"/><stop offset="0.6" stop-color="#ffe27a" stop-opacity="0.7"/><stop offset="1" stop-color="#ffd04a" stop-opacity="0"/></radialGradient></defs><path d="M-2.02 -33.94L-2.62 -99.97L2.62 -99.97L2.02 -33.94Z" fill="url(#gsGa)"/><path d="M6.84 -33.31L23.34 -97.24L28.40 -95.88L10.73 -32.26Z" fill="url(#gsGa)"/><path d="M15.22 -30.40L47.72 -87.88L52.25 -85.26L18.72 -28.38Z" fill="url(#gsGa)"/><path d="M22.57 -25.43L68.84 -72.54L72.54 -68.84L25.43 -22.57Z" fill="url(#gsGa)"/><path d="M28.38 -18.72L85.26 -52.25L87.88 -47.72L30.40 -15.22Z" fill="url(#gsGa)"/><path d="M32.26 -10.73L95.88 -28.40L97.24 -23.34L33.31 -6.84Z" fill="url(#gsGa)"/><path d="M33.94 -2.02L99.97 -2.62L99.97 2.62L33.94 2.02Z" fill="url(#gsGa)"/><path d="M33.31 6.84L97.24 23.34L95.88 28.40L32.26 10.73Z" fill="url(#gsGa)"/><path d="M30.40 15.22L87.88 47.72L85.26 52.25L28.38 18.72Z" fill="url(#gsGa)"/><path d="M25.43 22.57L72.54 68.84L68.84 72.54L22.57 25.43Z" fill="url(#gsGa)"/><path d="M18.72 28.38L52.25 85.26L47.72 87.88L15.22 30.40Z" fill="url(#gsGa)"/><path d="M10.73 32.26L28.40 95.88L23.34 97.24L6.84 33.31Z" fill="url(#gsGa)"/><path d="M2.02 33.94L2.62 99.97L-2.62 99.97L-2.02 33.94Z" fill="url(#gsGa)"/><path d="M-6.84 33.31L-23.34 97.24L-28.40 95.88L-10.73 32.26Z" fill="url(#gsGa)"/><path d="M-15.22 30.40L-47.72 87.88L-52.25 85.26L-18.72 28.38Z" fill="url(#gsGa)"/><path d="M-22.57 25.43L-68.84 72.54L-72.54 68.84L-25.43 22.57Z" fill="url(#gsGa)"/><path d="M-28.38 18.72L-85.26 52.25L-87.88 47.72L-30.40 15.22Z" fill="url(#gsGa)"/><path d="M-32.26 10.73L-95.88 28.40L-97.24 23.34L-33.31 6.84Z" fill="url(#gsGa)"/><path d="M-33.94 2.02L-99.97 2.62L-99.97 -2.62L-33.94 -2.02Z" fill="url(#gsGa)"/><path d="M-33.31 -6.84L-97.24 -23.34L-95.88 -28.40L-32.26 -10.73Z" fill="url(#gsGa)"/><path d="M-30.40 -15.22L-87.88 -47.72L-85.26 -52.25L-28.38 -18.72Z" fill="url(#gsGa)"/><path d="M-25.43 -22.57L-72.54 -68.84L-68.84 -72.54L-22.57 -25.43Z" fill="url(#gsGa)"/><path d="M-18.72 -28.38L-52.25 -85.26L-47.72 -87.88L-15.22 -30.40Z" fill="url(#gsGa)"/><path d="M-10.73 -32.26L-28.40 -95.88L-23.34 -97.24L-6.84 -33.31Z" fill="url(#gsGa)"/><path d="M3.44 -33.83L8.40 -71.51L10.39 -71.25L5.44 -33.56Z" fill="url(#gsGa2)"/><path d="M12.07 -31.78L26.62 -66.90L28.48 -66.13L13.94 -31.01Z" fill="url(#gsGa2)"/><path d="M19.89 -27.58L43.03 -57.73L44.62 -56.50L21.49 -26.35Z" fill="url(#gsGa2)"/><path d="M26.35 -21.49L56.50 -44.62L57.73 -43.03L27.58 -19.89Z" fill="url(#gsGa2)"/><path d="M31.01 -13.94L66.13 -28.48L66.90 -26.62L31.78 -12.07Z" fill="url(#gsGa2)"/><path d="M33.56 -5.44L71.25 -10.39L71.51 -8.40L33.83 -3.44Z" fill="url(#gsGa2)"/><path d="M33.83 3.44L71.51 8.40L71.25 10.39L33.56 5.44Z" fill="url(#gsGa2)"/><path d="M31.78 12.07L66.90 26.62L66.13 28.48L31.01 13.94Z" fill="url(#gsGa2)"/><path d="M27.58 19.89L57.73 43.03L56.50 44.62L26.35 21.49Z" fill="url(#gsGa2)"/><path d="M21.49 26.35L44.62 56.50L43.03 57.73L19.89 27.58Z" fill="url(#gsGa2)"/><path d="M13.94 31.01L28.48 66.13L26.62 66.90L12.07 31.78Z" fill="url(#gsGa2)"/><path d="M5.44 33.56L10.39 71.25L8.40 71.51L3.44 33.83Z" fill="url(#gsGa2)"/><path d="M-3.44 33.83L-8.40 71.51L-10.39 71.25L-5.44 33.56Z" fill="url(#gsGa2)"/><path d="M-12.07 31.78L-26.62 66.90L-28.48 66.13L-13.94 31.01Z" fill="url(#gsGa2)"/><path d="M-19.89 27.58L-43.03 57.73L-44.62 56.50L-21.49 26.35Z" fill="url(#gsGa2)"/><path d="M-26.35 21.49L-56.50 44.62L-57.73 43.03L-27.58 19.89Z" fill="url(#gsGa2)"/><path d="M-31.01 13.94L-66.13 28.48L-66.90 26.62L-31.78 12.07Z" fill="url(#gsGa2)"/><path d="M-33.56 5.44L-71.25 10.39L-71.51 8.40L-33.83 3.44Z" fill="url(#gsGa2)"/><path d="M-33.83 -3.44L-71.51 -8.40L-71.25 -10.39L-33.56 -5.44Z" fill="url(#gsGa2)"/><path d="M-31.78 -12.07L-66.90 -26.62L-66.13 -28.48L-31.01 -13.94Z" fill="url(#gsGa2)"/><path d="M-27.58 -19.89L-57.73 -43.03L-56.50 -44.62L-26.35 -21.49Z" fill="url(#gsGa2)"/><path d="M-21.49 -26.35L-44.62 -56.50L-43.03 -57.73L-19.89 -27.58Z" fill="url(#gsGa2)"/><path d="M-13.94 -31.01L-28.48 -66.13L-26.62 -66.90L-12.07 -31.78Z" fill="url(#gsGa2)"/><path d="M-5.44 -33.56L-10.39 -71.25L-8.40 -71.51L-3.44 -33.83Z" fill="url(#gsGa2)"/><circle r="33" fill="none" stroke="#ffd45a" stroke-opacity=".28" stroke-width="5"/><circle r="33" fill="none" stroke="#ffe48a" stroke-width="1.4"/></svg></div>
-      <div class="gs-spokes gs-b"><svg viewBox="-100 -100 200 200" aria-hidden="true" shape-rendering="geometricPrecision"><defs><radialGradient id="gsGb" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="100"><stop offset="0.34" stop-color="#fff7cf" stop-opacity="0.9"/><stop offset="0.7" stop-color="#ffe27a" stop-opacity="0.5"/><stop offset="1" stop-color="#ffd04a" stop-opacity="0"/></radialGradient></defs><path d="M-0.57 -36.00L-0.79 -100.00L0.79 -100.00L0.57 -36.00Z" fill="url(#gsGb)"/><path d="M3.20 -35.86L9.67 -99.53L11.23 -99.37L4.32 -35.74Z" fill="url(#gsGb)"/><path d="M6.93 -35.33L20.02 -97.98L21.56 -97.65L8.04 -35.09Z" fill="url(#gsGb)"/><path d="M10.59 -34.41L30.15 -95.35L31.65 -94.86L11.66 -34.06Z" fill="url(#gsGb)"/><path d="M14.12 -33.11L39.95 -91.67L41.39 -91.03L15.16 -32.65Z" fill="url(#gsGb)"/><path d="M17.51 -31.46L49.32 -86.99L50.68 -86.21L18.49 -30.89Z" fill="url(#gsGb)"/><path d="M20.70 -29.45L58.14 -81.36L59.41 -80.44L21.62 -28.79Z" fill="url(#gsGb)"/><path d="M23.67 -27.13L66.33 -74.84L67.49 -73.79L24.51 -26.37Z" fill="url(#gsGb)"/><path d="M26.37 -24.51L73.79 -67.49L74.84 -66.33L27.13 -23.67Z" fill="url(#gsGb)"/><path d="M28.79 -21.62L80.44 -59.41L81.36 -58.14L29.45 -20.70Z" fill="url(#gsGb)"/><path d="M30.89 -18.49L86.21 -50.68L86.99 -49.32L31.46 -17.51Z" fill="url(#gsGb)"/><path d="M32.65 -15.16L91.03 -41.39L91.67 -39.95L33.11 -14.12Z" fill="url(#gsGb)"/><path d="M34.06 -11.66L94.86 -31.65L95.35 -30.15L34.41 -10.59Z" fill="url(#gsGb)"/><path d="M35.09 -8.04L97.65 -21.56L97.98 -20.02L35.33 -6.93Z" fill="url(#gsGb)"/><path d="M35.74 -4.32L99.37 -11.23L99.53 -9.67L35.86 -3.20Z" fill="url(#gsGb)"/><path d="M36.00 -0.57L100.00 -0.79L100.00 0.79L36.00 0.57Z" fill="url(#gsGb)"/><path d="M35.86 3.20L99.53 9.67L99.37 11.23L35.74 4.32Z" fill="url(#gsGb)"/><path d="M35.33 6.93L97.98 20.02L97.65 21.56L35.09 8.04Z" fill="url(#gsGb)"/><path d="M34.41 10.59L95.35 30.15L94.86 31.65L34.06 11.66Z" fill="url(#gsGb)"/><path d="M33.11 14.12L91.67 39.95L91.03 41.39L32.65 15.16Z" fill="url(#gsGb)"/><path d="M31.46 17.51L86.99 49.32L86.21 50.68L30.89 18.49Z" fill="url(#gsGb)"/><path d="M29.45 20.70L81.36 58.14L80.44 59.41L28.79 21.62Z" fill="url(#gsGb)"/><path d="M27.13 23.67L74.84 66.33L73.79 67.49L26.37 24.51Z" fill="url(#gsGb)"/><path d="M24.51 26.37L67.49 73.79L66.33 74.84L23.67 27.13Z" fill="url(#gsGb)"/><path d="M21.62 28.79L59.41 80.44L58.14 81.36L20.70 29.45Z" fill="url(#gsGb)"/><path d="M18.49 30.89L50.68 86.21L49.32 86.99L17.51 31.46Z" fill="url(#gsGb)"/><path d="M15.16 32.65L41.39 91.03L39.95 91.67L14.12 33.11Z" fill="url(#gsGb)"/><path d="M11.66 34.06L31.65 94.86L30.15 95.35L10.59 34.41Z" fill="url(#gsGb)"/><path d="M8.04 35.09L21.56 97.65L20.02 97.98L6.93 35.33Z" fill="url(#gsGb)"/><path d="M4.32 35.74L11.23 99.37L9.67 99.53L3.20 35.86Z" fill="url(#gsGb)"/><path d="M0.57 36.00L0.79 100.00L-0.79 100.00L-0.57 36.00Z" fill="url(#gsGb)"/><path d="M-3.20 35.86L-9.67 99.53L-11.23 99.37L-4.32 35.74Z" fill="url(#gsGb)"/><path d="M-6.93 35.33L-20.02 97.98L-21.56 97.65L-8.04 35.09Z" fill="url(#gsGb)"/><path d="M-10.59 34.41L-30.15 95.35L-31.65 94.86L-11.66 34.06Z" fill="url(#gsGb)"/><path d="M-14.12 33.11L-39.95 91.67L-41.39 91.03L-15.16 32.65Z" fill="url(#gsGb)"/><path d="M-17.51 31.46L-49.32 86.99L-50.68 86.21L-18.49 30.89Z" fill="url(#gsGb)"/><path d="M-20.70 29.45L-58.14 81.36L-59.41 80.44L-21.62 28.79Z" fill="url(#gsGb)"/><path d="M-23.67 27.13L-66.33 74.84L-67.49 73.79L-24.51 26.37Z" fill="url(#gsGb)"/><path d="M-26.37 24.51L-73.79 67.49L-74.84 66.33L-27.13 23.67Z" fill="url(#gsGb)"/><path d="M-28.79 21.62L-80.44 59.41L-81.36 58.14L-29.45 20.70Z" fill="url(#gsGb)"/><path d="M-30.89 18.49L-86.21 50.68L-86.99 49.32L-31.46 17.51Z" fill="url(#gsGb)"/><path d="M-32.65 15.16L-91.03 41.39L-91.67 39.95L-33.11 14.12Z" fill="url(#gsGb)"/><path d="M-34.06 11.66L-94.86 31.65L-95.35 30.15L-34.41 10.59Z" fill="url(#gsGb)"/><path d="M-35.09 8.04L-97.65 21.56L-97.98 20.02L-35.33 6.93Z" fill="url(#gsGb)"/><path d="M-35.74 4.32L-99.37 11.23L-99.53 9.67L-35.86 3.20Z" fill="url(#gsGb)"/><path d="M-36.00 0.57L-100.00 0.79L-100.00 -0.79L-36.00 -0.57Z" fill="url(#gsGb)"/><path d="M-35.86 -3.20L-99.53 -9.67L-99.37 -11.23L-35.74 -4.32Z" fill="url(#gsGb)"/><path d="M-35.33 -6.93L-97.98 -20.02L-97.65 -21.56L-35.09 -8.04Z" fill="url(#gsGb)"/><path d="M-34.41 -10.59L-95.35 -30.15L-94.86 -31.65L-34.06 -11.66Z" fill="url(#gsGb)"/><path d="M-33.11 -14.12L-91.67 -39.95L-91.03 -41.39L-32.65 -15.16Z" fill="url(#gsGb)"/><path d="M-31.46 -17.51L-86.99 -49.32L-86.21 -50.68L-30.89 -18.49Z" fill="url(#gsGb)"/><path d="M-29.45 -20.70L-81.36 -58.14L-80.44 -59.41L-28.79 -21.62Z" fill="url(#gsGb)"/><path d="M-27.13 -23.67L-74.84 -66.33L-73.79 -67.49L-26.37 -24.51Z" fill="url(#gsGb)"/><path d="M-24.51 -26.37L-67.49 -73.79L-66.33 -74.84L-23.67 -27.13Z" fill="url(#gsGb)"/><path d="M-21.62 -28.79L-59.41 -80.44L-58.14 -81.36L-20.70 -29.45Z" fill="url(#gsGb)"/><path d="M-18.49 -30.89L-50.68 -86.21L-49.32 -86.99L-17.51 -31.46Z" fill="url(#gsGb)"/><path d="M-15.16 -32.65L-41.39 -91.03L-39.95 -91.67L-14.12 -33.11Z" fill="url(#gsGb)"/><path d="M-11.66 -34.06L-31.65 -94.86L-30.15 -95.35L-10.59 -34.41Z" fill="url(#gsGb)"/><path d="M-8.04 -35.09L-21.56 -97.65L-20.02 -97.98L-6.93 -35.33Z" fill="url(#gsGb)"/><path d="M-4.32 -35.74L-11.23 -99.37L-9.67 -99.53L-3.20 -35.86Z" fill="url(#gsGb)"/></svg></div>
-      <div class="gs-main">
-        <div class="gs-rays"><svg viewBox="-100 -100 200 200" aria-hidden="true" shape-rendering="geometricPrecision"><defs><radialGradient id="gsGr" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="100"><stop offset="0" stop-color="#fff6c8" stop-opacity="0.95"/><stop offset="0.45" stop-color="#ffe27a" stop-opacity="0.6"/><stop offset="1" stop-color="#ffd04a" stop-opacity="0"/></radialGradient></defs><path d="M-0.44 -5.98L-2.09 -99.98L2.09 -99.98L0.44 -5.98Z" fill="url(#gsGr)"/><path d="M1.63 -5.77L32.23 -94.66L36.16 -93.23L2.46 -5.47Z" fill="url(#gsGr)"/><path d="M3.51 -4.87L62.66 -77.93L65.87 -75.24L4.18 -4.30Z" fill="url(#gsGr)"/><path d="M4.96 -3.37L85.54 -51.80L87.63 -48.18L5.40 -2.61Z" fill="url(#gsGr)"/><path d="M5.82 -1.47L98.10 -19.42L98.82 -15.30L5.97 -0.61Z" fill="url(#gsGr)"/><path d="M5.97 0.61L98.82 15.30L98.10 19.42L5.82 1.47Z" fill="url(#gsGr)"/><path d="M5.40 2.61L87.63 48.18L85.54 51.80L4.96 3.37Z" fill="url(#gsGr)"/><path d="M4.18 4.30L65.87 75.24L62.66 77.93L3.51 4.87Z" fill="url(#gsGr)"/><path d="M2.46 5.47L36.16 93.23L32.23 94.66L1.63 5.77Z" fill="url(#gsGr)"/><path d="M0.44 5.98L2.09 99.98L-2.09 99.98L-0.44 5.98Z" fill="url(#gsGr)"/><path d="M-1.63 5.77L-32.23 94.66L-36.16 93.23L-2.46 5.47Z" fill="url(#gsGr)"/><path d="M-3.51 4.87L-62.66 77.93L-65.87 75.24L-4.18 4.30Z" fill="url(#gsGr)"/><path d="M-4.96 3.37L-85.54 51.80L-87.63 48.18L-5.40 2.61Z" fill="url(#gsGr)"/><path d="M-5.82 1.47L-98.10 19.42L-98.82 15.30L-5.97 0.61Z" fill="url(#gsGr)"/><path d="M-5.97 -0.61L-98.82 -15.30L-98.10 -19.42L-5.82 -1.47Z" fill="url(#gsGr)"/><path d="M-5.40 -2.61L-87.63 -48.18L-85.54 -51.80L-4.96 -3.37Z" fill="url(#gsGr)"/><path d="M-4.18 -4.30L-65.87 -75.24L-62.66 -77.93L-3.51 -4.87Z" fill="url(#gsGr)"/><path d="M-2.46 -5.47L-36.16 -93.23L-32.23 -94.66L-1.63 -5.77Z" fill="url(#gsGr)"/></svg></div>
-        <div class="gs-flash"></div>
-        <span class="gbox gs-box" data-gift="idle"></span>
-        <span class="gs-open"><svg class="go" viewBox="0 0 200 210" aria-hidden="true"><defs><linearGradient id="goShineG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".9"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient><clipPath id="goBodyClip"><path d="M38 100L100 76L162 100L100 124Z"/><path d="M38 100L100 124L100 182L38 158Z"/><path d="M100 124L162 100L162 158L100 182Z"/><path d="M38 100L100 124L86 150L24 126Z"/><path d="M100 124L162 100L176 126L114 150Z"/><path d="M38 100L100 76L84 38L22 62Z"/><path d="M100 76L162 100L178 62L116 38Z"/></clipPath><clipPath id="goCoinClip"><circle r="17.6"/></clipPath><linearGradient id="goCoinG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff0a0"/><stop offset=".5" stop-color="#ffc728"/><stop offset="1" stop-color="#e48f00"/></linearGradient></defs><ellipse class="go-sh" cx="100" cy="190" rx="66" ry="11" fill="rgba(8,40,110,.28)"/><g class="gf gf-bl"><path d="M38 100L100 76L84 38L22 62Z" fill="url(#gbFl)" stroke="#1c63c4" stroke-width="1.6" stroke-linejoin="round"/><path d="M59.7 91.6L78.3 84.4L62.3 46.4L43.7 53.6Z" fill="url(#gbRib)" /></g><g class="gf gf-br"><path d="M100 76L162 100L178 62L116 38Z" fill="url(#gbFl)" stroke="#1c63c4" stroke-width="1.6" stroke-linejoin="round"/><path d="M121.7 83.4L140.3 90.6L156.3 52.6L137.7 45.4Z" fill="url(#gbRibD)" /></g><path d="M38 100L100 76L162 100L100 124Z" fill="url(#gbIn)" /><path d="M38 100L100 76L162 100L100 97Z" fill="#2f86e0" opacity=".5"/><g class="go-heap"><ellipse cx="94" cy="82.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="80.5" y="80" width="27" height="2.6" fill="#d9920c"/><ellipse cx="94" cy="80" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="94" cy="80" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M84.55 78.64Q89.275 74.22 95.35 74.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="106" cy="82.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="92.5" y="80" width="27" height="2.6" fill="#d9920c"/><ellipse cx="106" cy="80" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="106" cy="80" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M96.55 78.64Q101.275 74.22 107.35 74.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="86" cy="88.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="72.5" y="86" width="27" height="2.6" fill="#d9920c"/><ellipse cx="86" cy="86" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="86" cy="86" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M76.55 84.64Q81.275 80.22 87.35 80.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="100" cy="88.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="86.5" y="86" width="27" height="2.6" fill="#d9920c"/><ellipse cx="100" cy="86" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="100" cy="86" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M90.55 84.64Q95.275 80.22 101.35 80.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="114" cy="88.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="100.5" y="86" width="27" height="2.6" fill="#d9920c"/><ellipse cx="114" cy="86" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="114" cy="86" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M104.55 84.64Q109.275 80.22 115.35 80.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="78" cy="94.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="64.5" y="92" width="27" height="2.6" fill="#d9920c"/><ellipse cx="78" cy="92" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="78" cy="92" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M68.55 90.64Q73.275 86.22 79.35 86.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="92" cy="94.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="78.5" y="92" width="27" height="2.6" fill="#d9920c"/><ellipse cx="92" cy="92" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="92" cy="92" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M82.55 90.64Q87.275 86.22 93.35 86.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="108" cy="94.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="94.5" y="92" width="27" height="2.6" fill="#d9920c"/><ellipse cx="108" cy="92" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="108" cy="92" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M98.55 90.64Q103.275 86.22 109.35 86.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="122" cy="94.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="108.5" y="92" width="27" height="2.6" fill="#d9920c"/><ellipse cx="122" cy="92" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="122" cy="92" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M112.55 90.64Q117.275 86.22 123.35 86.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="70" cy="101.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="56.5" y="99" width="27" height="2.6" fill="#d9920c"/><ellipse cx="70" cy="99" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="70" cy="99" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M60.55 97.64Q65.275 93.22 71.35 93.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="84" cy="101.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="70.5" y="99" width="27" height="2.6" fill="#d9920c"/><ellipse cx="84" cy="99" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="84" cy="99" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M74.55 97.64Q79.275 93.22 85.35 93.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="100" cy="101.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="86.5" y="99" width="27" height="2.6" fill="#d9920c"/><ellipse cx="100" cy="99" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="100" cy="99" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M90.55 97.64Q95.275 93.22 101.35 93.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="116" cy="101.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="102.5" y="99" width="27" height="2.6" fill="#d9920c"/><ellipse cx="116" cy="99" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="116" cy="99" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M106.55 97.64Q111.275 93.22 117.35 93.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="130" cy="101.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="116.5" y="99" width="27" height="2.6" fill="#d9920c"/><ellipse cx="130" cy="99" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="130" cy="99" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M120.55 97.64Q125.275 93.22 131.35 93.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="62" cy="108.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="48.5" y="106" width="27" height="2.6" fill="#d9920c"/><ellipse cx="62" cy="106" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="62" cy="106" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M52.55 104.64Q57.275 100.22 63.35 100.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="78" cy="108.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="64.5" y="106" width="27" height="2.6" fill="#d9920c"/><ellipse cx="78" cy="106" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="78" cy="106" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M68.55 104.64Q73.275 100.22 79.35 100.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="94" cy="108.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="80.5" y="106" width="27" height="2.6" fill="#d9920c"/><ellipse cx="94" cy="106" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="94" cy="106" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M84.55 104.64Q89.275 100.22 95.35 100.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="110" cy="108.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="96.5" y="106" width="27" height="2.6" fill="#d9920c"/><ellipse cx="110" cy="106" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="110" cy="106" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M100.55 104.64Q105.275 100.22 111.35 100.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="126" cy="108.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="112.5" y="106" width="27" height="2.6" fill="#d9920c"/><ellipse cx="126" cy="106" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="126" cy="106" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M116.55 104.64Q121.275 100.22 127.35 100.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/><ellipse cx="140" cy="108.6" rx="13.5" ry="6.8" fill="#b8710a"/><rect x="126.5" y="106" width="27" height="2.6" fill="#d9920c"/><ellipse cx="140" cy="106" rx="13.5" ry="6.8" fill="url(#gbCoin)" stroke="#b8710a" stroke-width=".9"/><ellipse cx="140" cy="106" rx="9.18" ry="4.624" fill="none" stroke="#fff0a0" stroke-width=".8" opacity=".85"/><path d="M130.55 104.64Q135.275 100.22 141.35 100.56" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" opacity=".8"/></g><g transform="translate(100 99)"><g class="go-bigcoin"><g class="go-bigspin"><circle r="19" fill="#c67700"/><circle r="17.6" fill="url(#goCoinG)"/><circle r="14.2" fill="none" stroke="#e39a00" stroke-width="1.4"/><circle r="13.2" fill="none" stroke="#fff3b8" stroke-width=".6" opacity=".8"/><text y="3" text-anchor="middle" font-size="7.6" font-weight="900" fill="#b36a00" font-family="Inter,Roboto,Arial,sans-serif">UGX</text><path d="M-12.2 -9a15.4 15.4 0 0 1 14.6 -10.5" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".55"/><g clip-path="url(#goCoinClip)"><g transform="rotate(25)"><rect class="go-glint" x="-26" y="-30" width="6" height="60" fill="url(#goShineG)"/></g></g></g></g></g><path d="M38 100L100 124L100 182L38 158Z" fill="url(#gbL)" /><path d="M100 124L162 100L162 158L100 182Z" fill="url(#gbR)" /><path d="M62 109.3L78 115.5L78 173.5L62 167.3Z" fill="url(#gbRib)" /><path d="M122 115.5L138 109.3L138 167.3L122 173.5Z" fill="url(#gbRibD)" /><path d="M44 106L53 109.5L53 153L44 149.5Z" fill="#fff" opacity=".28"/><path d="M100 124V182M38 100V158L100 182L162 158V100" fill="none" stroke="#1c63c4" stroke-width="1.6" stroke-linejoin="round" opacity=".75"/><g class="gf gf-fl"><path d="M38 100L100 124L86 150L24 126Z" fill="url(#gbFl)" stroke="#1c63c4" stroke-width="1.6" stroke-linejoin="round"/><path d="M59.7 108.4L78.3 115.6L64.3 141.6L45.7 134.4Z" fill="url(#gbRib)" /></g><g class="gf gf-fr"><path d="M100 124L162 100L176 126L114 150Z" fill="url(#gbFl)" stroke="#1c63c4" stroke-width="1.6" stroke-linejoin="round"/><path d="M121.7 115.6L140.3 108.4L154.3 134.4L135.7 141.6Z" fill="url(#gbRibD)" /></g><g clip-path="url(#goBodyClip)"><g transform="rotate(18 100 105)"><rect class="go-shine" x="-50" y="20" width="30" height="190" fill="url(#goShineG)"/></g></g><circle class="go-tw" cx="46" cy="72" r="2" fill="#fff" style="animation-delay:0.9s"/><circle class="go-tw" cx="154" cy="64" r="2" fill="#fff" style="animation-delay:1.25s"/><circle class="go-tw" cx="100" cy="28" r="2" fill="#fff" style="animation-delay:1.6s"/><circle class="go-tw" cx="26" cy="118" r="2" fill="#fff" style="animation-delay:1.95s"/><circle class="go-tw" cx="176" cy="120" r="2" fill="#fff" style="animation-delay:1.1s"/><circle class="go-tw" cx="124" cy="50" r="2" fill="#fff" style="animation-delay:1.45s"/><circle class="go-tw" cx="74" cy="44" r="2" fill="#fff" style="animation-delay:1.8s"/><circle class="go-tw" cx="142" cy="92" r="2" fill="#fff" style="animation-delay:2.15s"/><circle class="go-tw" cx="58" cy="150" r="2" fill="#fff" style="animation-delay:1.35s"/><circle class="go-tw" cx="150" cy="150" r="2" fill="#fff" style="animation-delay:1.7s"/></svg><img class="go-custom" alt="" hidden></span>
-        <span class="gs-coin"><svg viewBox="-50 -50 100 100" aria-hidden="true"><defs><linearGradient id="gsCoinG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe98a"/><stop offset=".5" stop-color="#ffc728"/><stop offset="1" stop-color="#e48f00"/></linearGradient></defs><circle r="47" fill="#c67700"/><circle r="43.5" fill="url(#gsCoinG)"/><circle r="35" fill="none" stroke="#e39a00" stroke-width="3.5"/><circle r="32.5" fill="none" stroke="#fff3b8" stroke-width="1.4" opacity=".8"/><text y="7.5" text-anchor="middle" font-size="19" font-weight="900" fill="#b36a00" font-family="Inter,Roboto,Arial,sans-serif">UGX</text><path d="M-30 -22a38 38 0 0 1 36 -26" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".55"/></svg></span>
-        <div class="gs-glitter" id="gsGlitter"></div>
-        <div class="gs-confetti" id="gsConfetti"></div>
-      </div>
-      <div class="gs-card" id="gsCard">
-        <div class="gs-card-title">Enter your gift code</div>
-        <input class="famt gs-input" id="giftCodeInput" placeholder="Enter gift code" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text">
-        <button class="btn btn-primary btn-block" id="redeemBtn" onclick="redeemGiftCode()">Open gift</button>
-      </div>
-      <div class="gs-text">
-        <div class="gift-reveal-label" id="gsLabel">Opening your gift…</div>
-        <div class="gift-reveal-amount" id="giftRevealAmount">UGX 0</div>
-      </div>
-      <button class="btn btn-primary gs-btn" id="gsBtn" onclick="closeGiftReveal()">Awesome!</button>
-    </div>
-  </div>
-
 </div>
 
 <!-- LOCKOUT (maintenance / banned) — full-screen, not dismissible, covers everything underneath -->

@@ -88,7 +88,7 @@ function setup(input = seed()) {
     activeL1Count:async()=>5, wholeTeamDeposits:async()=>250000
   });
   vm.runInContext('const _lockTails=new Map(); const _creditingDeposits=new Set();\n' + [
-    'withLock','finiteMoney','depositFullyCredited','creditReferralCommission','creditDepositReferralCommission','_payReferralCommissionNow','creditDeposit','_creditDepositNow'
+    'withLock','luckyCfg','finiteMoney','depositFullyCredited','creditReferralCommission','creditDepositReferralCommission','_payReferralCommissionNow','creditDeposit','_creditDepositNow'
   ].map(fn).join('\n'), c);
   return {c, db, routes};
 }
