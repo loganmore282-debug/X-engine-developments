@@ -456,9 +456,9 @@
 
   /* Every notify (check-in, gift code, sign-in, errors, etc.) opens from the centre of the screen. */
   .toast-bg{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;pointer-events:none;padding:20px;}
-  /* A notice is a round, see-through slate pill that fades in and out like a ghost. It never dims the page and never takes a touch: everything behind it stays usable. */
-  .toast{background:rgba(96,110,118,.86);color:#fff;padding:11px 22px;max-width:320px;text-align:center;pointer-events:none;user-select:none;-webkit-user-select:none;
-    border-radius:28px;font-size:13.5px;font-weight:700;line-height:1.4;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
+  /* A notice is a small, softly curved, see-through slate label that fades in and out like a ghost. It never dims the page and never takes a touch: everything behind it stays usable. */
+  .toast{background:rgba(96,110,118,.86);color:#fff;padding:7px 14px;max-width:250px;text-align:center;pointer-events:none;user-select:none;-webkit-user-select:none;
+    border-radius:12px;font-size:12.5px;font-weight:700;line-height:1.35;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
     opacity:0;transform:translateY(8px) scale(.96);filter:blur(2px);transition:opacity .5s ease,transform .5s ease,filter .5s ease;}
   .toast-bg.show .toast{opacity:1;transform:none;filter:none;}
 

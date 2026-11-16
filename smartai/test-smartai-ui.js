@@ -102,7 +102,7 @@ ok(money(1234.5) === 'UGX 1,234.50' && money(null) === 'UGX 0' && money('abc') =
 // ---- the toast ----
 ok(/function toast\(msg\)\{[\s\S]*?setTimeout\(function\(\)\{ bg\.classList\.remove\('show'\); \}, 2000\)/.test(mod), 'a notice closes by itself after 2 seconds');
 ok(/\.toast-bg\{[^}]*pointer-events:none/.test(html) && /\.toast\{[^}]*pointer-events:none/.test(html) && !/\.toast-bg\.show[^{]*\{[^}]*(?:pointer-events:(?:auto|all)|background)/.test(html), 'and never blocks a tap on the page behind it, and never dims it');
-ok(/\.toast\{[^}]*background:rgba\(96,110,118,\.86\)[^}]*border-radius:28px[^}]*transition:opacity \.5s/.test(html), 'a notice is a round, see-through slate pill that fades in and out');
+ok(/\.toast\{[^}]*background:rgba\(96,110,118,\.86\)[^}]*border-radius:12px[^}]*transition:opacity \.5s/.test(html), 'a notice is a small, softly curved, see-through slate label that fades in and out');
 
 // ---- no dialog of the browser's own ("179.198.197.114:8100 says Sign out?") ----
 {
