@@ -741,7 +741,7 @@ async function logout(opts){
       return fetch(API_BASE + '/auth/session/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + t }, signal: ac.signal });
     }).catch(function(){});
     _authEpoch++;
-    STATE = null; _appEntered = false; _agentMe = null; _agentMeAt = 0;
+    STATE = null; _appEntered = false; _agentMe = null; _agentMeAt = 0; _cc.unread = {}; _cc.msgs = []; _cc.agent = null; _cc.seq = 0; _cc.cfg = null; _cc.key = null; _cc.regFor = '';
     clearCachedState();
     _recordsLoaded = { accrued: true, topups: false, cashouts: false }; _recordsFailed = { topups: false, cashouts: false }; _dataFailed = {};
     stopActivityFeed(); stopAccountPoll(); gpLeave(); stopDepositPoll(); releasePayLoader();
@@ -822,7 +822,7 @@ function onFbAuthChanged(user){
       if (cached) { renderAll(); renderStaticPages(); } else enterApp();
     });
   } else if (!user) {
-    STATE = null; _appEntered = false; _agentMe = null; _agentMeAt = 0;
+    STATE = null; _appEntered = false; _agentMe = null; _agentMeAt = 0; _cc.unread = {}; _cc.msgs = []; _cc.agent = null; _cc.seq = 0; _cc.cfg = null; _cc.key = null; _cc.regFor = '';
     clearCachedState();
     showAuthScreen();
   }
@@ -914,7 +914,7 @@ var CHAT = (function(){
 /* ====================== CUSTOMER SERVICE CHAT (end-to-end encrypted) ======================
    The Support page lists the customer-service profiles the admin set up (a photo and a name each). Tapping one opens a chat with it. Every message is locked on this phone
    (see CHAT above) for the admin panel and for this phone only; the server just carries it. Ticks: one = sent, two = delivered (the panel was online after it), blue = read. */
-var _cc = { cfg: null, cfgAt: 0, key: null, regFor: '', agent: null, msgs: [], after: 0, timer: null, sumTimer: null, adminReadAt: 0, adminSeenAt: 0, online: false, unread: {}, sig: '', busy: false };
+var _cc = { cfg: null, cfgAt: 0, key: null, regFor: '', agent: null, msgs: [], after: 0, seq: 0, looping: false, adminReadAt: 0, adminSeenAt: 0, online: false, unread: {}, sig: '', busy: false };
 function chatInitial(n){ var t = String(n || '').trim(); return esc(t ? t.charAt(0).toUpperCase() : '?'); }
 function chatPhoto(a){ return a && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/]+=*$/.test(a.photo || '') ? a.photo : ''; }
 function chatAvatar(a){ var p = chatPhoto(a); return p ? '<img src="' + p + '" alt="">' : '<span class="ch-ini">' + chatInitial(a && a.name) + '</span>'; }
@@ -936,21 +936,18 @@ function paintChatAgents(){
   }).join('');
 }
 async function chatSummary(){
-  if (!STATE) return;
+  if (!STATE) return null;
   var r = await api('/chat/summary', null, 'GET', false);
-  if (!r || r.stale || r.status !== 'success') return;
+  if (!r || r.stale || r.status !== 'success') return null;
   _cc.unread = r.unread || {};
+  if (!_cc.seq) _cc.seq = r.seq;
   if (_cc.cfg) _cc.cfg.online = !!r.online;
   paintChatAgents();
+  return r;
 }
 function chatSupportOpen(){
   chatLoadConfig(true).then(chatSummary);
-  clearInterval(_cc.sumTimer);
-  _cc.sumTimer = setInterval(function(){
-    var el = $('ovSupport');
-    if (!el || !el.classList.contains('show') || document.hidden) { if (!el || !el.classList.contains('show')) { clearInterval(_cc.sumTimer); _cc.sumTimer = null; } return; }
-    chatLoadConfig(true).then(chatSummary);
-  }, 25000);
+  chatLoop();
 }
 // This phone's key pair, made once and kept on the phone; its public half is registered so the admin panel can lock replies for it.
 async function chatKey(){
@@ -999,33 +996,74 @@ function chatState(){
   el.textContent = _cc.online ? 'Online' : 'Offline';
   el.className = _cc.online ? 'on' : '';
 }
+async function chatDecrypt(m){
+  var k = await chatKey();
+  try { var pt = await CHAT.open(m, STATE.uid + '|' + m.from + '|' + m.agentId, k.kid, k.priv); return pt == null ? null : String((JSON.parse(pt) || {}).t || ''); } catch (e) { return null; }
+}
+// Loads the conversation (everything on opening it; afterwards only what is newer than the last message seen).
 async function chatPoll(){
   var ag = _cc.agent; if (!ag || !STATE) return;
   var r = await api('/chat/history?agentId=' + encodeURIComponent(ag.id) + '&after=' + _cc.after, null, 'GET', false);
   if (!r || r.stale || r.status !== 'success' || _cc.agent !== ag) return;
-  var k = await chatKey(), fresh = false, gotAdmin = false;
+  var fresh = false, gotAdmin = false;
   for (var i = 0; i < r.messages.length; i++) {
     var m = r.messages[i];
     _cc.after = Math.max(_cc.after, m.at);
     if (_cc.msgs.some(function(x){ return x.id === m.id; })) continue;
-    var text = null;
-    try { var pt = await CHAT.open(m, STATE.uid + '|' + m.from + '|' + m.agentId, k.kid, k.priv); text = pt == null ? null : String((JSON.parse(pt) || {}).t || ''); } catch (e) { text = null; }
-    _cc.msgs.push({ id: m.id, from: m.from, text: text, at: m.at }); fresh = true; if (m.from === 'admin') gotAdmin = true;
+    _cc.msgs.push({ id: m.id, from: m.from, text: await chatDecrypt(m), at: m.at }); fresh = true; if (m.from === 'admin') gotAdmin = true;
   }
-  _cc.msgs.sort(function(a, b){ return a.at - b.at; });
+  _cc.msgs.sort(function(a, b){ return a.at - b.at || (a.id < b.id ? -1 : 1); });
   var sig = r.adminReadAt + '|' + r.adminSeenAt + '|' + r.online + '|' + _cc.msgs.length;
-  _cc.adminReadAt = r.adminReadAt; _cc.adminSeenAt = r.adminSeenAt; _cc.online = r.online; chatState();
+  _cc.adminReadAt = Math.max(_cc.adminReadAt, r.adminReadAt); _cc.adminSeenAt = Math.max(_cc.adminSeenAt, r.adminSeenAt); _cc.online = r.online; chatState();
   if (fresh || sig !== _cc.sig) { _cc.sig = sig; chatRender(fresh); }
   if (gotAdmin) api('/chat/read', { agentId: ag.id });
 }
-function chatSchedule(){
-  clearTimeout(_cc.timer); _cc.timer = null;
-  var el = $('ovChat');
-  if (!_cc.agent || !el || !el.classList.contains('show')) return;
-  _cc.timer = setTimeout(async function(){
-    if (!document.hidden) { try { await chatPoll(); } catch (e) {} }
-    chatSchedule();
-  }, 2500);
+function chatShown(id){ var el = $(id); return !!el && el.classList.contains('show'); }
+function chatSleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+// LIVE DELIVERY. While Support or a chat is open, ONE request to the server stays open; the server answers it the instant something happens for this member (the reply
+// itself, the chat being read, the panel coming online), the answer is applied on the spot and the request is made again. No timer, nothing fetched twice.
+async function chatLoop(){
+  if (_cc.looping) return;
+  _cc.looping = true;
+  var fails = 0;
+  try {
+    while (STATE && (chatShown('ovChat') || chatShown('ovSupport'))) {
+      if (document.hidden) { await chatSleep(800); continue; }
+      var me = STATE.uid;
+      if (!_cc.seq) { await chatSummary(); if (!_cc.seq) { fails++; await chatSleep(Math.min(6000, 700 * fails)); } continue; }
+      var r = await api('/chat/wait?seq=' + _cc.seq, null, 'GET', false);
+      if (!STATE || STATE.uid !== me) break;
+      if (!r || r.stale || r.status !== 'success') { fails++; await chatSleep(Math.min(6000, 700 * fails)); continue; }
+      fails = 0; _cc.seq = r.seq;
+      if (r.reset) { await chatResync(); continue; }
+      await chatApply(r);
+    }
+  } finally { _cc.looping = false; }
+}
+async function chatResync(){
+  await Promise.all([chatLoadConfig(true), chatSummary(), _cc.agent ? chatPoll() : null]);
+}
+async function chatApply(r){
+  var redraw = false, fresh = false, unreadChanged = false, open = !!_cc.agent && chatShown('ovChat');
+  if (r.online !== undefined) { if (_cc.online !== r.online) { _cc.online = r.online; chatState(); } if (_cc.cfg) _cc.cfg.online = r.online; unreadChanged = true; }
+  if (r.adminSeenAt > _cc.adminSeenAt) { _cc.adminSeenAt = r.adminSeenAt; redraw = true; }
+  for (var i = 0; i < r.events.length; i++) {
+    var e = r.events[i];
+    if (e.kind === 'adminRead') { if (e.at > _cc.adminReadAt) { _cc.adminReadAt = e.at; redraw = true; } }
+    else if (e.kind === 'msg' && e.msg && e.msg.from === 'admin') {
+      var m = e.msg;
+      if (open && m.agentId === _cc.agent.id) {
+        _cc.after = Math.max(_cc.after, m.at);
+        if (!_cc.msgs.some(function(x){ return x.id === m.id; })) {
+          _cc.msgs.push({ id: m.id, from: 'admin', text: await chatDecrypt(m), at: m.at });
+          _cc.msgs.sort(function(a, b){ return a.at - b.at || (a.id < b.id ? -1 : 1); });
+          redraw = fresh = true; api('/chat/read', { agentId: m.agentId });
+        }
+      } else { _cc.unread[m.agentId] = (Number(_cc.unread[m.agentId]) || 0) + 1; unreadChanged = true; }
+    }
+  }
+  if (redraw && open) { _cc.sig = ''; chatRender(fresh); }
+  if (unreadChanged && chatShown('ovSupport')) paintChatAgents();
 }
 async function chatOpen(agentId){
   if (!STATE) return;
@@ -1033,11 +1071,11 @@ async function chatOpen(agentId){
   if (!a) return;
   _cc.agent = a; _cc.msgs = []; _cc.after = 0; _cc.sig = ''; _cc.adminReadAt = 0; _cc.adminSeenAt = 0;
   $('chatAv').innerHTML = chatAvatar(a); $('chatName').textContent = a.name; $('chatList').innerHTML = ''; $('chatInput').value = ''; chatGrow(); chatState();
-  openOverlay('chat'); chatFit();
-  try { await chatLoadConfig(true); await chatRegister(); await chatPoll(); } catch (e) {}
-  if (_cc.agent === a) { chatRender(true); api('/chat/read', { agentId: a.id }); delete _cc.unread[a.id]; chatSchedule(); }
+  openOverlay('chat'); chatFit(); chatLoop();
+  try { await Promise.all([chatLoadConfig(true), chatRegister(), chatPoll()]); } catch (e) {}
+  if (_cc.agent === a) { chatRender(true); api('/chat/read', { agentId: a.id }); delete _cc.unread[a.id]; }
 }
-function chatBack(){ _cc.agent = null; clearTimeout(_cc.timer); openOverlay('support'); }
+function chatBack(){ _cc.agent = null; openOverlay('support'); }
 function chatGrow(){ var t = $('chatInput'); if (!t) return; t.style.height = 'auto'; var h = t.scrollHeight; t.style.height = h > 44 ? Math.min(h, 112) + 'px' : ''; }
 // The page sits above the keyboard: it follows the visible part of the screen.
 function chatFit(){
@@ -1063,12 +1101,14 @@ async function chatSend(){
     _cc.msgs = _cc.msgs.filter(function(x){ return x !== tmp; });
     if (!_cc.msgs.some(function(x){ return x.id === r.id; })) _cc.msgs.push({ id: r.id, from: 'member', text: text, at: r.at });
     _cc.after = Math.max(_cc.after, r.at - 1);
+    if (r.delivered) _cc.adminSeenAt = Math.max(_cc.adminSeenAt, r.at);   // the panel is open: two ticks at once
   } catch (e) {
     _cc.msgs = _cc.msgs.filter(function(x){ return x !== tmp; }); inp.value = text; chatGrow();
     toast(e && e.message ? e.message : 'Could not send. Try again.');
   } finally { _cc.busy = false; }
   _cc.sig = ''; chatRender(true);
 }
+document.addEventListener('visibilitychange', function(){ if (!document.hidden && STATE && (chatShown('ovChat') || chatShown('ovSupport'))) { chatResync(); chatLoop(); } });
 document.addEventListener('click', function(e){
   var b = e.target.closest && e.target.closest('.sup-ag');
   if (b) chatOpen(b.getAttribute('data-ag'));

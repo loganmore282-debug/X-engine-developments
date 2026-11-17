@@ -9,7 +9,7 @@ const origResolve = Module._resolveFilename;
 Module._resolveFilename = function (req, ...a) { return req === 'mongodb' ? path.join(__dirname, 'test-helpers', 'fake-mongodb.js') : origResolve.call(this, req, ...a); };
 const BACK = 4100 + Math.floor(Math.random() * 300), FRONT = 4450 + Math.floor(Math.random() * 200), ADMINP = 4700 + Math.floor(Math.random() * 200);
 const AK = 'chat-e2e-admin-key-123456';
-process.env.PORT = String(BACK); process.env.MONGODB_URI = 'mongodb://fake/app'; process.env.ADMIN_KEY = AK; process.env.NODE_ENV = 'development';
+process.env.CHAT_WAIT_MS = '1200'; process.env.PORT = String(BACK); process.env.MONGODB_URI = 'mongodb://fake/app'; process.env.ADMIN_KEY = AK; process.env.NODE_ENV = 'development';
 process.env.POTATO_SECRETS_DIR = fs.mkdtempSync(path.join(require('os').tmpdir(), 'sa-chat-'));
 const realLog = console.log, serverErrors = [];
 console.log = () => {}; console.warn = () => {}; console.error = (...a) => { serverErrors.push(a.map(x => (x && x.message) || String(x)).join(' ').slice(0, 300)); };
@@ -107,6 +107,40 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   let td = (await J('GET', '/admin/chat/thread?userId=' + uid, null, null, true)).j; const replyAt = td.messages.find(m => m.from === 'admin').at;
   ok(td.memberReadAt >= replyAt && td.memberSeenAt >= replyAt, 'the panel sees its reply as delivered and read (the two blue ticks)', { r: td.memberReadAt, s: td.memberSeenAt, at: replyAt });
   r = await J('POST', '/admin/chat/send', Object.assign({}, env, { userId: 'nobody-here' }), null, true); ok(r.s === 404, 'a reply to a member with no chat is refused');
+  // ---- live delivery: an open request is answered the instant something happens
+  const getJ = async (p, tk, adm) => { const r2 = await fetch(base + p, { headers: { authorization: 'Bearer ' + (adm ? AK : tk) } }); return r2.json(); };
+  let sm = await J('GET', '/chat/summary', null, tok); const seq0 = sm.j.seq;
+  ok(Number.isFinite(seq0) && seq0 > 1e12, 'the member gets a position number to wait from');
+  let w0 = Date.now(); const waitP = getJ('/chat/wait?seq=' + seq0, tok); await sleep(200);
+  env = await seal('Live reply one', uid + '|admin|' + A1, mkeys.map(k => ({ kid: k.kid, jwk: k.jwk })).concat([{ kid: adminPair.kid, jwk: adminPair.pub }])); env.userId = uid; env.agentId = A1;
+  let t0 = Date.now(); r = await J('POST', '/admin/chat/send', env, null, true); const live = await waitP;
+  ok(live.events.length === 1 && live.events[0].kind === 'msg' && live.events[0].msg.from === 'admin' && live.events[0].msg.agentId === A1 && Date.now() - t0 < 400, 'a waiting phone is answered AT ONCE with the reply itself (no second request)', { ms: Date.now() - t0, ev: live.events.map(e => e.kind) });
+  ok(JSON.parse(await CHAT.open(live.events[0].msg, uid + '|admin|' + A1, mk.kid, mk.priv)).t === 'Live reply one', 'and that message opens with the phone\'s key');
+  ok(r.j.delivered === true, 'the panel is told it was delivered the moment it was sent (the phone was waiting)');
+  w0 = Date.now(); const none = await getJ('/chat/wait?seq=' + live.seq, tok);
+  ok(none.events.length === 0 && Date.now() - w0 >= 1000 && Date.now() - w0 < 2500, 'with nothing to report the request is held, then ends quietly and is simply made again', Date.now() - w0);
+  const reset = await getJ('/chat/wait?seq=5', tok); ok(reset.reset === true && reset.seq > seq0 - 1, 'a position older than the server remembers (a restart) is told to reload');
+  const am = await getJ('/admin/chat/summary', null, true); const aWait = getJ('/admin/chat/wait?seq=' + am.seq, null, true); await sleep(150);
+  env = await seal('Member live one', uid + '|member|' + A1, [{ kid: adminPair.kid, jwk: adminPair.pub }, { kid: mk.kid, jwk: mk.pub }]); env.agentId = A1; t0 = Date.now(); r = await J('POST', '/chat/send', env, tok);
+  const aLive = await aWait; const ev = aLive.events.find(e => e.kind === 'msg');
+  ok(ev && ev.uid === uid && ev.msg.from === 'member' && ev.who && ev.who.phone.endsWith(phone.slice(1)) && Date.now() - t0 < 400, 'the panel\'s open request is answered at once with the member\'s message and who sent it', { ms: Date.now() - t0 });
+  ok(r.j.delivered === true, 'the member is told "delivered" at once because the panel is open');
+  // the panel opening the chat wakes the member's waiting phone (the blue ticks)
+  let seq1 = (await J('GET', '/chat/summary', null, tok)).j.seq; const rdWait = getJ('/chat/wait?seq=' + seq1, tok); await sleep(150);
+  await J('POST', '/admin/chat/read', { userId: uid }, null, true); const rd = await rdWait;
+  ok(rd.events.some(e => e.kind === 'adminRead' && e.at > 0), 'opening the chat in the panel reaches the member\'s phone at once (the blue ticks)');
+  // a few tabs at most: the oldest open request is released
+  const many = [0, 1, 2, 3, 4].map(() => getJ('/chat/wait?seq=' + rd.seq, tok)); await sleep(300);
+  const released = await Promise.race([many[0], sleep(900).then(() => null)]);
+  ok(released && released.events.length === 0, 'more than three open requests from one member: the oldest is released');
+  await Promise.all(many);
+  // long conversations: the NEWEST messages come back, not the oldest 300
+  const bigUser = (await J('POST', '/auth/signup', { phone: '0779998888', password: 'secret12' })); await J('POST', '/register', { pin: '123456', referralCode: '' }, bigUser.j.token);
+  const store = fm.__stores.chatMessages; for (let i = 0; i < 350; i++) store.set('big' + i, { threadId: bigUser.j.uid, agentId: A1, from: i % 2 ? 'admin' : 'member', iv: 'AAAAAAAAAAAAAAAA', ct: 'A'.repeat(30), wraps: [], at: 1000000 + i });
+  h = await J('GET', '/chat/history?agentId=' + A1, null, bigUser.j.token);
+  ok(h.j.messages.length === 300 && h.j.messages[299].at === 1000349 && h.j.messages[0].at === 1000050, 'a long conversation returns the newest 300 messages (not the oldest)', { n: h.j.messages.length, last: h.j.messages[h.j.messages.length - 1] && h.j.messages[h.j.messages.length - 1].at });
+  h = await J('GET', '/chat/history?agentId=' + A1 + '&after=1000349', null, bigUser.j.token); ok(h.j.messages.length === 1 && h.j.messages[0].at === 1000349, 'asking for what is newer includes the last message itself (nothing sent in the same millisecond is ever lost)');
+  r = await J('POST', '/admin/chat/send', Object.assign({}, env, { userId: uid, agentId: 'gone-agent' }), null, true); ok(r.s === 400, 'a reply under a profile that no longer exists is refused with a clear message');
   // ---- limits and safety
   let last; for (let i = 0; i < 22; i++) { const e2 = await seal('x' + i, uid + '|member|' + A1, [{ kid: adminPair.kid, jwk: adminPair.pub }]); e2.agentId = A1; last = await J('POST', '/chat/send', e2, tok); if (last.s === 429) break; }
   ok(last.s === 429, 'sending more than 20 messages a minute is slowed down');
@@ -160,19 +194,22 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   ok(await mp.evaluate(() => { const b = document.querySelector('#supAgents .sup-ag'); return !!b && b.textContent.includes('Sarah') && !!b.querySelector('img') && b.querySelector('.sup-ag-dot').classList.contains('on'); }), 'member: Support shows Sarah\'s picture and name, with the green online dot (the admin panel is open)');
   await mp.click('#supAgents .sup-ag'); await until(mp, () => document.getElementById('ovChat').classList.contains('show'));
   ok(await mp.evaluate(() => document.getElementById('chatName').textContent === 'Sarah' && /end-to-end encrypted/.test(document.getElementById('chatBody').textContent)), 'member: the chat page opens, says it is end-to-end encrypted');
-  await mp.fill('#chatInput', 'Hello Sarah, my withdrawal is pending'); await mp.click('#chatSend');
+  const tSend = Date.now(); await mp.fill('#chatInput', 'Hello Sarah, my withdrawal is pending'); await mp.click('#chatSend');
   ok(await until(mp, () => document.querySelectorAll('#chatList .cm.me').length === 1 && !document.querySelector('#chatList .cm-tk[viewBox] circle')), 'member: the message appears, then its clock turns into a tick');
   // -- the admin sees it, with a notice
   ok(await until(ap, () => { const b = document.getElementById('cBadge'); return b && !b.classList.contains('hidden') && b.textContent === '1'; }, null, 15000), 'admin: the Chat tab shows a red 1');
+  const msAdmin = Date.now() - tSend; realLog('         member -> admin: the red 1 showed ' + msAdmin + ' ms after tapping Send');
+  ok(msAdmin < 2500, 'admin: the notice came within 2.5 seconds of the member tapping Send (' + msAdmin + ' ms)');
   await until(ap, () => document.querySelectorAll('#chThreads .ch-row').length === 1, null, 12000);
   ok(await ap.evaluate(() => { const r = document.querySelector('#chThreads .ch-row'); return r.classList.contains('unr') && /Hello Sarah, my withdrawal is pending/.test(r.textContent) && /via Sarah/.test(r.textContent) && !!r.querySelector('.ch-n'); }), 'admin: the inbox row shows the member, the opened message, "via Sarah" and an unread count');
   const memberTicks = () => mp.evaluate(() => { const t = document.querySelector('#chatList .cm.me .cm-tk'); return t ? (t.classList.contains('rd') ? 'read' : (t.querySelectorAll('path').length && t.innerHTML.indexOf('M7.2') > 0 ? 'delivered' : 'sent')) : 'none'; });
-  await sleep(3500); ok(['delivered'].includes(await memberTicks()), 'member: two grey ticks once the admin panel has it (delivered), not blue yet', await memberTicks());
+  ok(await until(mp, () => { const t = document.querySelector('#chatList .cm.me .cm-tk'); return !!t && t.innerHTML.indexOf('M7.2') > 0 && !t.classList.contains('rd'); }, null, 5000), 'member: two grey ticks as soon as the admin panel has it (delivered), not blue yet', await memberTicks());
   await ap.click('#chThreads .ch-row'); await until(ap, () => document.querySelectorAll('#chMsgs .ch-m').length === 1);
   ok(await ap.evaluate(() => /Hello Sarah, my withdrawal is pending/.test(document.getElementById('chMsgs').textContent)), 'admin: opening the thread decrypts the message (only here)');
-  await sleep(3500); ok(await memberTicks() === 'read', 'member: the ticks turn blue when the admin opens the chat (read)', await memberTicks());
-  await ap.fill('#chInput', 'Hi, I am checking it for you now.'); await ap.click('#chSend');
+  ok(await until(mp, () => { const t = document.querySelector('#chatList .cm.me .cm-tk'); return !!t && t.classList.contains('rd'); }, null, 5000), 'member: the ticks turn blue when the admin opens the chat (read)', await memberTicks());
+  const tRep = Date.now(); await ap.fill('#chInput', 'Hi, I am checking it for you now.'); await ap.click('#chSend');
   ok(await until(mp, () => document.querySelectorAll('#chatList .cm.ag').length === 1, null, 12000) && await mp.evaluate(() => /checking it for you now/.test(document.querySelector('#chatList .cm.ag').textContent)), 'member: the reply arrives within seconds, under Sarah, decrypted on the phone');
+  const msMember = Date.now() - tRep; realLog('         admin -> member: the reply showed ' + msMember + ' ms after the admin tapped Send'); ok(msMember < 2500, 'member: the reply arrived within 2.5 seconds (' + msMember + ' ms)');
   await sleep(500); ok(await ap.evaluate(() => document.querySelectorAll('#chMsgs .ch-m.me .ch-tk').length === 1), 'admin: its own reply carries ticks');
   // -- the backup of the key
   await ap.click('[data-tab="chat"]'); await sleep(900);

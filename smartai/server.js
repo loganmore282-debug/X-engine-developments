@@ -6984,8 +6984,10 @@ const _withdrawalView = r => ({ ref: r.ref || '', amount: r.amount, fee: r.fee, 
 // public key that may read it: the admin panel's key, the member's own device key(s) (so the sender can read their own message again). The server holds
 // only PUBLIC keys. It does see who wrote, to which profile, when, and how large the message is. `wraps` carry no secret: without a private key they open nothing.
 const CHAT_MAX_AGENTS = 12, CHAT_MAX_CT = 6000, CHAT_MAX_WRAPS = 8, CHAT_MAX_KEYS = 3, CHAT_PAGE = 300, CHAT_ONLINE_MS = 45000;
+// How long a "wait" request is held open for news (see LIVE DELIVERY below). Under a minute, the web server's own limit; the apps' request timers are longer.
+const CHAT_WAIT_MS = Number(process.env.CHAT_WAIT_MS) || 22000;
 const CHAT_B64 = /^[A-Za-z0-9+/]+={0,2}$/, CHAT_B64U = /^[A-Za-z0-9_-]{43}$/, CHAT_IV = /^[A-Za-z0-9+/]{16}$/, CHAT_KID = /^[0-9a-f]{16}$/;
-const _chat = { adminAt: 0, agents: null, agentsAt: 0, seenWrite: new Map(), sendLog: new Map(), pushAt: new Map() };
+const _chat = { adminAt: 0, agents: null, agentsAt: 0, seenWrite: new Map(), sendLog: new Map(), pushAt: new Map(), users: new Map() };
 // A key id is the first 16 hex characters of SHA-256 of "x.y" of the public key: the server recomputes it, so nobody can register a key under another's id.
 function chatJwk(j) {
   if (!j || typeof j !== 'object' || j.kty !== 'EC' || j.crv !== 'P-256' || !CHAT_B64U.test(String(j.x || '')) || !CHAT_B64U.test(String(j.y || ''))) return null;
@@ -7005,8 +7007,54 @@ function chatEnvelope(b) {
   }
   return { iv, ct, wraps };
 }
-function chatTouchAdmin() { _chat.adminAt = Date.now(); }
-function chatAdminOnline() { return Date.now() - _chat.adminAt < CHAT_ONLINE_MS; }
+// ---- LIVE DELIVERY ----
+// A message reaches the other side the instant it is stored: the app keeps one request OPEN ("wait") and the server answers it the moment something happens for that
+// side, carrying the message itself, so nothing is polled and nothing is fetched twice. Every event gets a rising number (seq); a side that asks "anything after N?"
+// is answered at once from the recent events, or parked until there is one (or CHAT_WAIT_MS passes, when it simply asks again). A side that has been away longer than the
+// recent events reach (or the server restarted: numbers start above every earlier one) is told to reload its list. One server process only, like the locks.
+const _cx = { seq: Date.now() * 1000, base: 0, floor: 0, ring: [], mw: new Map(), aw: new Set(), seen: new Map() };
+_cx.base = _cx.floor = _cx.seq;
+function chatMemberLive(uid) { const s = _cx.mw.get(uid); return !!(s && s.size); }
+function chatAdminLive() { return _cx.aw.size > 0; }
+function chatAdminOnline() { return chatAdminLive() || Date.now() - _chat.adminAt < CHAT_ONLINE_MS; }
+function chatAdminSeenAt() { return chatAdminLive() ? Date.now() : _chat.adminAt; }
+function chatMemberSeenAt(uid, dbAt) { return Math.max(Number(dbAt) || 0, _cx.seen.get(uid) || 0, chatMemberLive(uid) ? Date.now() : 0); }
+function chatEmit(ev) {
+  ev.seq = ++_cx.seq; _cx.ring.push(ev);
+  if (_cx.ring.length > 3000) { const gone = _cx.ring.splice(0, 1000); _cx.floor = gone[gone.length - 1].seq; }   // anyone behind this must reload
+  if (ev.kind === 'adminSeen') { for (const set of _cx.mw.values()) for (const w of [...set]) w.fire(); }
+  else if (ev.uid) { const set = _cx.mw.get(ev.uid); if (set) for (const w of [...set]) w.fire(); }
+  for (const w of [..._cx.aw]) w.fire();
+}
+// The admin side coming online (after being away) tells every member's waiting phone, so their "sent" ticks become "delivered" at once.
+function chatTouchAdmin() {
+  const was = chatAdminOnline(); _chat.adminAt = Date.now();
+  if (!was) chatEmit({ kind: 'adminSeen', at: _chat.adminAt });
+}
+// Holds the request until an event for this side arrives (pick says which events matter), then answers with them. since < base: the side is told to reload.
+function chatPark(res, since, pick, bucket, extra) {   // bucket = { add(w), del(w) }
+  const reply = (evs, reset) => { res.set('Cache-Control', 'no-store'); res.json(Object.assign({ status: 'success', seq: _cx.seq, events: evs }, reset ? { reset: true } : {}, extra())); };
+  if (since < _cx.floor) { reply([], true); return; }
+  const have = () => { const out = []; for (let i = _cx.ring.length - 1; i >= 0 && _cx.ring[i].seq > since; i--) if (pick(_cx.ring[i])) out.push(_cx.ring[i]); return out.reverse(); };
+  const now = have();
+  if (now.length) { reply(now); return; }
+  let done = false, timer = null;
+  const end = evs => { if (done) return; done = true; clearTimeout(timer); bucket.del(w); reply(evs); };
+  const w = { fire: () => { const e = have(); if (e.length) end(e); }, cancel: () => end([]) };
+  timer = setTimeout(() => end([]), CHAT_WAIT_MS);
+  res.on('close', () => { if (!done) { done = true; clearTimeout(timer); bucket.del(w); } });
+  bucket.add(w);
+}
+function chatNoteMemberSeen(uid) {
+  const now = Date.now(), before = _cx.seen.get(uid) || 0;
+  _cx.seen.set(uid, now);
+  if (now - before > 30000) chatEmit({ kind: 'memberSeen', uid, at: now });   // back after a while: the panel's "delivered" ticks
+  if (now - (_chat.seenWrite.get(uid) || 0) < 4000) return;
+  _chat.seenWrite.set(uid, now);
+  if (_chat.seenWrite.size > 20000) for (const [k, t] of _chat.seenWrite) if (now - t > 60000) _chat.seenWrite.delete(k);
+  if (_cx.seen.size > 20000) for (const [k, t] of _cx.seen) if (now - t > 600000) _cx.seen.delete(k);
+  db.collection('chatThreads').doc(uid).update({ memberSeenAt: now }).catch(() => {});
+}
 async function chatAgents(fresh) {
   if (!fresh && _chat.agents && Date.now() - _chat.agentsAt < 15000) return _chat.agents;
   const snap = await db.collection('chatAgents').get();
@@ -7019,14 +7067,6 @@ async function chatAdminKey() {
   if (!s.exists) return null;
   const jwk = chatJwk(s.data().jwk);
   return jwk ? { kid: chatKidOf(jwk), jwk } : null;
-}
-// Members' reads and their polls: a message is DELIVERED once the other side has asked for the list after it was sent, READ once they opened the chat.
-function chatNoteMemberSeen(uid) {
-  const now = Date.now();
-  if (now - (_chat.seenWrite.get(uid) || 0) < 4000) return;
-  _chat.seenWrite.set(uid, now);
-  if (_chat.seenWrite.size > 20000) for (const [k, t] of _chat.seenWrite) if (now - t > 60000) _chat.seenWrite.delete(k);
-  db.collection('chatThreads').doc(uid).update({ memberSeenAt: now }).catch(() => {});
 }
 const chatMsgOut = d => { const v = d.data(); return { id: d.id, from: v.from, agentId: v.agentId, iv: v.iv, ct: v.ct, wraps: v.wraps, at: v.at }; };
 
@@ -7055,6 +7095,17 @@ app.post('/chat/key', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) { console.error('chat key:', e.message); res.status(500).json({ status: 'error', message: 'Could not save' }); }
 });
+// The sender's own account facts, remembered for half a minute so a message does not wait for a database read of the user first.
+async function chatUser(uid) {
+  const c = _chat.users.get(uid);
+  if (c && Date.now() - c.at < 30000) return c;
+  const s = await db.collection('users').doc(uid).get();
+  if (!s.exists) return null;
+  const u = s.data(), v = { at: Date.now(), status: u.status || '', phone: String(u.phone || ''), publicId: String(u.publicId || '') };
+  _chat.users.set(uid, v);
+  if (_chat.users.size > 5000) for (const [k, x] of _chat.users) if (Date.now() - x.at > 60000) _chat.users.delete(k);
+  return v;
+}
 app.post('/chat/send', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
@@ -7065,55 +7116,70 @@ app.post('/chat/send', async (req, res) => {
     if (log.length >= 20) return res.status(429).json({ status: 'error', message: 'You are sending too fast. Wait a moment.' });
     log.push(now); _chat.sendLog.set(uid, log);
     if (_chat.sendLog.size > 20000) for (const [k, v] of _chat.sendLog) if (!v.length || now - v[v.length - 1] > 60000) _chat.sendLog.delete(k);
-    const agents = await chatAgents(), agent = agents.find(a => a.id === agentId);
+    const [agents, u] = await Promise.all([chatAgents(), chatUser(uid)]);
+    const agent = agents.find(a => a.id === agentId);
     if (!agent) return res.status(404).json({ status: 'error', message: 'This customer service profile is no longer available.' });
-    const uSnap = await db.collection('users').doc(uid).get();
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    const u = uSnap.data();
+    if (!u) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (u.status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     const msg = { threadId: uid, agentId, from: 'member', iv: env.iv, ct: env.ct, wraps: env.wraps, at: now };
-    const added = await db.collection('chatMessages').add(msg);
-    await withLock('chat:' + uid, async () => {
+    _cx.seen.set(uid, now);
+    // The message is stored and the thread updated TOGETHER (not one after the other); the panel is told the instant the message is stored.
+    const addP = db.collection('chatMessages').add(msg).then(a => {
+      chatEmit({ kind: 'msg', uid, who: { phone: u.phone, publicId: u.publicId }, msg: { id: a.id, from: 'member', agentId, iv: env.iv, ct: env.ct, wraps: env.wraps, at: now } });
+      return a;
+    });
+    const thrP = withLock('chat:' + uid, async () => {
       const ref = db.collection('chatThreads').doc(uid), s = await ref.get();
-      const meta = { userId: uid, phone: String(u.phone || ''), publicId: String(u.publicId || ''), lastAt: now, lastFrom: 'member', lastAgentId: agentId, last: { from: 'member', iv: env.iv, ct: env.ct, wraps: env.wraps, at: now }, memberSeenAt: now };
+      const meta = { userId: uid, phone: u.phone, publicId: u.publicId, lastAt: now, lastFrom: 'member', lastAgentId: agentId, last: { from: 'member', iv: env.iv, ct: env.ct, wraps: env.wraps, at: now }, memberSeenAt: now };
       if (s.exists) await ref.update(Object.assign(meta, { unreadAdmin: FieldValue.increment(1) }));
       else await ref.set(Object.assign(meta, { unreadAdmin: 1, adminReadAt: 0, memberReadMap: {}, createdAt: now }));
     });
-    // The panel is told, without a word of the message (it is encrypted; the notice says only that someone wrote).
-    if (now - (_chat.pushAt.get(uid) || 0) > 20000) {
+    const [added] = await Promise.all([addP, thrP]);
+    // The phone alert carries no word of the message (it is encrypted; the notice says only that someone wrote). A panel that is open already has it.
+    if (!chatAdminLive() && now - (_chat.pushAt.get(uid) || 0) > 20000) {
       _chat.pushAt.set(uid, now);
+      if (_chat.pushAt.size > 5000) for (const [k, t] of _chat.pushAt) if (now - t > 120000) _chat.pushAt.delete(k);
       sendAdminPush('New customer message', `${agent.name}: a member${u.publicId ? ' (ID ' + u.publicId + ')' : ''} wrote to you. Open Chat.`, { type: 'chat', userId: uid }).catch(() => {});
     }
-    res.json({ status: 'success', id: added.id, at: now });
+    res.json({ status: 'success', id: added.id, at: now, delivered: chatAdminOnline() });
   } catch (e) { console.error('chat send:', e.message); res.status(500).json({ status: 'error', message: 'Could not send. Try again.' }); }
 });
+// The newest messages of a conversation, oldest first. With `after`, everything from that moment on (inclusive: two messages in the same millisecond are never lost, the apps drop repeats by id).
+async function chatMessages(threadId, agentId, after) {
+  let q = db.collection('chatMessages').where('threadId', '==', threadId);
+  if (agentId) q = q.where('agentId', '==', agentId);
+  if (after > 0) { const snap = await q.where('at', '>=', after).orderBy('at', 'asc').limit(CHAT_PAGE).get(); return snap.docs.map(chatMsgOut); }
+  const snap = await q.orderBy('at', 'desc').limit(CHAT_PAGE).get();
+  return snap.docs.map(chatMsgOut).reverse();
+}
 app.get('/chat/history', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   try {
     const agentId = String(req.query.agentId || ''), after = Number(req.query.after) || 0;
     if (!agentId) return res.status(400).json({ status: 'error', message: 'Choose a profile' });
-    const snap = await db.collection('chatMessages').where('threadId', '==', uid).where('agentId', '==', agentId).orderBy('at', 'asc').limit(CHAT_PAGE).get();
-    const rows = snap.docs.map(chatMsgOut).filter(m => m.at > after);
-    const tSnap = await db.collection('chatThreads').doc(uid).get();
+    const seq = _cx.seq;   // taken BEFORE the read: whatever happens after it still arrives by "wait"
+    const [rows, tSnap] = await Promise.all([chatMessages(uid, agentId, after), db.collection('chatThreads').doc(uid).get()]);
     const t = tSnap.exists ? tSnap.data() : {};
     chatNoteMemberSeen(uid);
     res.set('Cache-Control', 'no-store');
-    res.json({ status: 'success', messages: rows, adminReadAt: Number(t.adminReadAt) || 0, adminSeenAt: _chat.adminAt, online: chatAdminOnline(), now: Date.now() });
+    res.json({ status: 'success', messages: rows, adminReadAt: Number(t.adminReadAt) || 0, adminSeenAt: chatAdminSeenAt(), online: chatAdminOnline(), now: Date.now(), seq });
   } catch (e) { console.error('chat history:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the chat' }); }
 });
 app.post('/chat/read', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   try {
-    const agentId = String((req.body || {}).agentId || '').slice(0, 40);
+    const agentId = String((req.body || {}).agentId || '').slice(0, 40), now = Date.now();
     await withLock('chat:' + uid, async () => {
       const ref = db.collection('chatThreads').doc(uid), s = await ref.get();
       if (!s.exists) return;
       const map = Object.assign({}, s.data().memberReadMap || {});
-      if (agentId) map[agentId] = Date.now();
-      await ref.update({ memberReadMap: map, memberSeenAt: Date.now() });
+      if (agentId) map[agentId] = now;
+      await ref.update({ memberReadMap: map, memberSeenAt: now });
     });
+    _cx.seen.set(uid, now);
+    chatEmit({ kind: 'memberRead', uid, agentId, at: now });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save' }); }
 });
@@ -7121,6 +7187,7 @@ app.get('/chat/summary', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   try {
+    const seq = _cx.seq;
     const tSnap = await db.collection('chatThreads').doc(uid).get();
     const unread = {};
     if (tSnap.exists) {
@@ -7130,8 +7197,21 @@ app.get('/chat/summary', async (req, res) => {
       chatNoteMemberSeen(uid);
     }
     res.set('Cache-Control', 'no-store');
-    res.json({ status: 'success', unread, online: chatAdminOnline() });
+    res.json({ status: 'success', unread, online: chatAdminOnline(), seq });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load' }); }
+});
+// The member's open request: answered the moment the panel replies, reads the chat, or comes online.
+app.get('/chat/wait', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const since = Number(req.query.seq) || 0;
+  chatNoteMemberSeen(uid);
+  const bucket = {
+    add: w => { const set = _cx.mw.get(uid) || new Set(); _cx.mw.set(uid, set); set.add(w); while (set.size > 3) { const old = set.values().next().value; set.delete(old); old.cancel(); } },   // one phone, a few tabs at most
+    del: w => { const set = _cx.mw.get(uid); if (set) { set.delete(w); if (!set.size) _cx.mw.delete(uid); } },
+  };
+  chatPark(res, since, e => e.kind === 'adminSeen' || (e.uid === uid && ((e.kind === 'msg' && e.msg.from === 'admin') || e.kind === 'adminRead')), bucket,
+    () => ({ online: chatAdminOnline(), adminSeenAt: chatAdminSeenAt() }));
 });
 
 // ---- admin panel ----
@@ -7139,11 +7219,12 @@ app.get('/admin/chat/summary', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     chatTouchAdmin();
+    const seq = _cx.seq;
     const snap = await db.collection('chatThreads').where('unreadAdmin', '>', 0).limit(500).get();
     let unread = 0, latestAt = 0, latestUser = '';
     snap.docs.forEach(d => { const v = d.data(); unread += Number(v.unreadAdmin) || 0; if ((v.lastAt || 0) > latestAt) { latestAt = v.lastAt; latestUser = d.id; } });
     res.set('Cache-Control', 'no-store');
-    res.json({ status: 'success', unread, threads: snap.size, latestAt, latestUser });
+    res.json({ status: 'success', unread, threads: snap.size, latestAt, latestUser, seq });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load' }); }
 });
 app.get('/admin/chat/threads', async (req, res) => {
@@ -7152,7 +7233,7 @@ app.get('/admin/chat/threads', async (req, res) => {
     chatTouchAdmin();
     const [snap, agents] = await Promise.all([db.collection('chatThreads').orderBy('lastAt', 'desc').limit(300).get(), chatAgents()]);
     const now = Date.now();
-    const threads = snap.docs.map(d => { const v = d.data(); return { userId: d.id, phone: v.phone || '', publicId: v.publicId || '', lastAt: v.lastAt || 0, lastFrom: v.lastFrom || '', lastAgentId: v.lastAgentId || '', unread: Number(v.unreadAdmin) || 0, memberOnline: now - (Number(v.memberSeenAt) || 0) < CHAT_ONLINE_MS, last: v.last || null }; });
+    const threads = snap.docs.map(d => { const v = d.data(); return { userId: d.id, phone: v.phone || '', publicId: v.publicId || '', lastAt: v.lastAt || 0, lastFrom: v.lastFrom || '', lastAgentId: v.lastAgentId || '', unread: Number(v.unreadAdmin) || 0, memberOnline: now - chatMemberSeenAt(d.id, v.memberSeenAt) < CHAT_ONLINE_MS, last: v.last || null }; });
     res.set('Cache-Control', 'no-store');
     res.json({ status: 'success', threads, agents: agents.map(a => ({ id: a.id, name: a.name })), now });
   } catch (e) { console.error('chat threads:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the chats' }); }
@@ -7163,16 +7244,12 @@ app.get('/admin/chat/thread', async (req, res) => {
     chatTouchAdmin();
     const userId = String(req.query.userId || '').slice(0, 80), after = Number(req.query.after) || 0;
     if (!userId) return res.status(400).json({ status: 'error', message: 'Missing member' });
-    const [tSnap, mSnap, kSnap] = await Promise.all([
-      db.collection('chatThreads').doc(userId).get(),
-      db.collection('chatMessages').where('threadId', '==', userId).orderBy('at', 'asc').limit(CHAT_PAGE).get(),
-      db.collection('chatMembers').doc(userId).get(),
-    ]);
+    const [tSnap, rows, kSnap] = await Promise.all([db.collection('chatThreads').doc(userId).get(), chatMessages(userId, '', after), db.collection('chatMembers').doc(userId).get()]);
     if (!tSnap.exists) return res.status(404).json({ status: 'error', message: 'No chat with this member' });
-    const t = tSnap.data(), now = Date.now();
+    const t = tSnap.data(), now = Date.now(), seen = chatMemberSeenAt(userId, t.memberSeenAt);
     res.set('Cache-Control', 'no-store');
-    res.json({ status: 'success', messages: mSnap.docs.map(chatMsgOut).filter(m => m.at > after), memberKeys: (kSnap.exists && kSnap.data().keys || []).map(k => ({ kid: k.kid, jwk: k.jwk })),
-      memberReadAt: Math.max(0, ...Object.values(t.memberReadMap || {}).map(Number)), memberSeenAt: Number(t.memberSeenAt) || 0, memberOnline: now - (Number(t.memberSeenAt) || 0) < CHAT_ONLINE_MS,
+    res.json({ status: 'success', messages: rows, memberKeys: (kSnap.exists && kSnap.data().keys || []).map(k => ({ kid: k.kid, jwk: k.jwk })),
+      memberReadAt: Math.max(0, ...Object.values(t.memberReadMap || {}).map(Number)), memberSeenAt: seen, memberOnline: now - seen < CHAT_ONLINE_MS,
       lastAgentId: t.lastAgentId || '', phone: t.phone || '', publicId: t.publicId || '', memberReadMap: t.memberReadMap || {}, now });
   } catch (e) { console.error('chat thread:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the chat' }); }
 });
@@ -7181,28 +7258,45 @@ app.post('/admin/chat/send', async (req, res) => {
   try {
     const userId = String((req.body || {}).userId || '').slice(0, 80), agentId = String((req.body || {}).agentId || ''), env = chatEnvelope(req.body);
     if (!userId || !env) return res.status(400).json({ status: 'error', message: 'Could not send' });
-    const tSnap = await db.collection('chatThreads').doc(userId).get();
+    const [tSnap, agents] = await Promise.all([db.collection('chatThreads').doc(userId).get(), chatAgents()]);
     if (!tSnap.exists) return res.status(404).json({ status: 'error', message: 'No chat with this member' });
-    const now = Date.now(), by = String((req.adminUser && req.adminUser.username) || 'owner').slice(0, 40);
-    const added = await db.collection('chatMessages').add({ threadId: userId, agentId, from: 'admin', by, iv: env.iv, ct: env.ct, wraps: env.wraps, at: now });
-    await withLock('chat:' + userId, async () => {
-      await db.collection('chatThreads').doc(userId).update({ lastAt: now, lastFrom: 'admin', lastAgentId: agentId, last: { from: 'admin', iv: env.iv, ct: env.ct, wraps: env.wraps, at: now }, adminReadAt: now, unreadAdmin: 0 });
+    if (!agents.some(a => a.id === agentId)) return res.status(400).json({ status: 'error', message: 'That profile no longer exists. Pick another one to reply as.' });
+    const now = Date.now(), by = String((req.adminUser && req.adminUser.username) || 'owner').slice(0, 40), delivered = chatMemberLive(userId);
+    if (delivered) _cx.seen.set(userId, now);
+    const addP = db.collection('chatMessages').add({ threadId: userId, agentId, from: 'admin', by, iv: env.iv, ct: env.ct, wraps: env.wraps, at: now }).then(a => {
+      chatEmit({ kind: 'msg', uid: userId, msg: { id: a.id, from: 'admin', agentId, iv: env.iv, ct: env.ct, wraps: env.wraps, at: now }, delivered });
+      return a;
     });
+    const thrP = withLock('chat:' + userId, () => db.collection('chatThreads').doc(userId).update(Object.assign(
+      { lastAt: now, lastFrom: 'admin', lastAgentId: agentId, last: { from: 'admin', iv: env.iv, ct: env.ct, wraps: env.wraps, at: now }, adminReadAt: now, unreadAdmin: 0 }, delivered ? { memberSeenAt: now } : {})));
+    const [added] = await Promise.all([addP, thrP]);
     chatTouchAdmin();
-    res.json({ status: 'success', id: added.id, at: now });
+    res.json({ status: 'success', id: added.id, at: now, delivered });
   } catch (e) { console.error('chat admin send:', e.message); res.status(500).json({ status: 'error', message: 'Could not send' }); }
 });
 app.post('/admin/chat/read', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const userId = String((req.body || {}).userId || '').slice(0, 80);
+    const userId = String((req.body || {}).userId || '').slice(0, 80), now = Date.now();
     await withLock('chat:' + userId, async () => {
       const ref = db.collection('chatThreads').doc(userId), s = await ref.get();
-      if (s.exists) await ref.update({ adminReadAt: Date.now(), unreadAdmin: 0 });
+      if (s.exists) await ref.update({ adminReadAt: now, unreadAdmin: 0 });
     });
     chatTouchAdmin();
+    chatEmit({ kind: 'adminRead', uid: userId, at: now });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save' }); }
+});
+// The panel's open request: answered the moment a member writes, reads a reply, or comes back.
+app.get('/admin/chat/wait', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const since = Number(req.query.seq) || 0;
+  const bucket = {
+    add: w => { chatTouchAdmin(); _cx.aw.add(w); while (_cx.aw.size > 10) { const old = _cx.aw.values().next().value; _cx.aw.delete(old); old.cancel(); } },
+    del: w => { _cx.aw.delete(w); _chat.adminAt = Date.now(); },   // leaving counts as "seen just now": online for another 45 seconds
+  };
+  chatTouchAdmin();
+  chatPark(res, since, () => true, bucket, () => ({}));
 });
 // The panel's public key. Made once, in the owner's browser (the private half never leaves it); replacing it makes older messages unreadable, so it must be asked for.
 app.get('/admin/chat/key', async (req, res) => {

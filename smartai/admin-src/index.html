@@ -3055,7 +3055,7 @@ var CHAT = (function(){
    One inbox: every member's messages are ONE thread whichever profile they tapped; the reply goes back under the profile they wrote to (or another you pick).
    The words are opened here and only here: this browser holds the private key (made once, backed up with a password you choose); the server only ever sees ciphertext. */
 const CH_KEY_STORE = 'smartai_chat_admin_key_v1';
-let _ch = { key: null, serverKey: null, agents: [], threads: [], sel: null, meta: null, msgs: [], after: 0, filter: 'all', cache: new Map(), pollT: null, listT: null, notifyT: null, edit: null, busy: false, unread: 0, latestSeen: 0, sig: '' };
+let _ch = { key: null, serverKey: null, agents: [], threads: [], sel: null, meta: null, msgs: [], after: 0, filter: 'all', cache: new Map(), pollT: null, listT: null, notifyT: null, edit: null, busy: false, unread: 0, latestSeen: 0, sig: '', seq: 0, looping: false };
 function chLoadKey(){ try { const k = JSON.parse(localStorage.getItem(CH_KEY_STORE) || 'null'); return k && k.kid && k.pub && k.priv ? k : null; } catch (_) { return null; } }
 function chSaveKey(k){ try { localStorage.setItem(CH_KEY_STORE, JSON.stringify(k)); } catch (_) {} }
 function chReady(){ return !!(_ch.key && _ch.serverKey && _ch.key.kid === _ch.serverKey.kid); }
@@ -3228,8 +3228,9 @@ async function chSelect(userId){
   _ch.sel = userId; _ch.msgs = []; _ch.after = 0; _ch.meta = null; _ch.sig = '';
   const g = $('chGrid'); if (g) g.classList.add('open');
   chDrawThreads(); $('chView').innerHTML = spinnerHtml();
+  const readP = api('/admin/chat/read', { userId });
   await chPollThread(true);
-  api('/admin/chat/read', { userId }).then(() => { const t = _ch.threads.find(x => x.userId === userId); if (t) { t.unread = 0; chDrawThreads(); } chSummaryNow(); });
+  readP.then(() => { const t = _ch.threads.find(x => x.userId === userId); if (t) { t.unread = 0; chDrawThreads(); } chSummaryNow(); });
 }
 async function chPollThread(first){
   const uid = _ch.sel; if (!uid || _tab !== 'chat' || !chReady()) return;
@@ -3284,36 +3285,89 @@ async function chSendReply(){
     env.userId = uid; env.agentId = agentId;
     const d = await api('/admin/chat/send', env);
     if (d.status !== 'success') throw new Error(d.message || 'Could not send');
-    inp.value = ''; _ch.msgs.push({ id: d.id, from: 'admin', agentId, at: d.at, text }); _ch.after = Math.max(_ch.after, d.at - 1); _ch.sig = '';
+    inp.value = ''; if (!_ch.msgs.some(x => x.id === d.id)) _ch.msgs.push({ id: d.id, from: 'admin', agentId, at: d.at, text }); _ch.after = Math.max(_ch.after, d.at - 1); _ch.sig = '';
+    if (d.delivered) m.memberSeenAt = Math.max(m.memberSeenAt || 0, d.at);   // the member's phone is open: two ticks at once
     const t = _ch.threads.find(x => x.userId === uid); if (t) { t.lastFrom = 'admin'; t.lastAt = d.at; t.unread = 0; t.preview = text; t.lastAgentId = agentId; }
     chDrawThread(true); chDrawThreads();
   } catch (e) { toast(e.message || 'Could not send', 'err'); }
   finally { _ch.busy = false; const b = $('chSend'); if (b) b.disabled = false; }
 }
+// Everything arrives live (see the open request below); these slow refreshes only keep the online dots honest.
 function chStartPolling(){
   clearInterval(_ch.pollT); clearInterval(_ch.listT);
-  _ch.pollT = setInterval(() => { if (_tab !== 'chat') { clearInterval(_ch.pollT); clearInterval(_ch.listT); return; } if (!document.hidden) chPollThread(); }, 3000);
-  _ch.listT = setInterval(() => { if (_tab === 'chat' && !document.hidden) chRefreshList(); }, 4000);
+  _ch.pollT = setInterval(() => { if (_tab !== 'chat') { clearInterval(_ch.pollT); clearInterval(_ch.listT); return; } if (!document.hidden) chPollThread(); }, 20000);
+  _ch.listT = setInterval(() => { if (_tab === 'chat' && !document.hidden) chRefreshList(); }, 30000);
 }
-// A notice wherever you are in the panel: the Chat tab's red count, a toast for a new message, the count in the page title. (A phone alert also goes out when push is on.)
+// LIVE DELIVERY. From the moment you sign in ONE request stays open to the server; it is answered the instant a member writes (or reads a reply, or comes back), the
+// message itself comes with the answer and is opened on the spot, and the request is made again. The Chat tab's red count, the toast and the page-title count follow at once;
+// a phone alert also goes out when push is on. Having this request open is also what shows the profiles as "online" to members.
+function chSetBadge(n){
+  _ch.unread = n;
+  const b = $('cBadge');
+  if (b) { if (n > 0) { b.textContent = n > 99 ? '99+' : n; b.classList.remove('hidden'); } else b.classList.add('hidden'); }
+  document.title = (n > 0 ? '(' + n + ') ' : '') + document.title.replace(/^\(\d+\)\s*/, '');
+}
 async function chSummaryNow(){
   if (!SESSION_TOKEN) return;
   const d = await api('/admin/chat/summary');
   if (d.status !== 'success') return;
-  const b = $('cBadge');
-  if (b) { if (d.unread > 0) { b.textContent = d.unread > 99 ? '99+' : d.unread; b.classList.remove('hidden'); } else b.classList.add('hidden'); }
-  document.title = (d.unread > 0 ? '(' + d.unread + ') ' : '') + document.title.replace(/^\(\d+\)\s*/, '');
-  if (d.latestAt > _ch.latestSeen) {
-    if (_ch.latestSeen && d.unread > _ch.unread && !(_tab === 'chat' && _ch.sel === d.latestUser)) toast('New message from a member. Open Chat.', 'ok');
-    _ch.latestSeen = d.latestAt;
+  chSetBadge(d.unread);
+  if (!_ch.seq) _ch.seq = d.seq;
+  _ch.latestSeen = Math.max(_ch.latestSeen, d.latestAt);
+}
+const chSleep = ms => new Promise(r => setTimeout(r, ms));
+async function chApplyEvents(evs){
+  let toast_ = false, listDirty = false, redraw = false, stick = false, readNow = null;
+  for (const e of evs) {
+    if (e.kind === 'msg') {
+      const m = e.msg, mine = m.from === 'admin', open = _tab === 'chat' && _ch.sel === e.uid && !!_ch.meta;
+      if (!mine) { toast_ = true; if (!(open)) chSetBadge(_ch.unread + 1); }
+      if (_tab === 'chat' && chReady()) {
+        const t = _ch.threads.find(x => x.userId === e.uid);
+        if (!t) listDirty = true;
+        else {
+          t.lastAt = m.at; t.lastFrom = m.from; t.lastAgentId = m.agentId; t.last = { from: m.from, iv: m.iv, ct: m.ct, wraps: m.wraps, at: m.at };
+          t.preview = await chOpenText(m, e.uid); _ch.cache.set(e.uid + ':' + m.at, t.preview); if (!mine && !open) t.unread++;
+          _ch.threads.sort((a, b) => b.lastAt - a.lastAt);
+        }
+        if (open && !_ch.msgs.some(x => x.id === m.id)) {
+          _ch.msgs.push({ id: m.id, from: m.from, agentId: m.agentId, at: m.at, text: await chOpenText(m, e.uid) }); _ch.msgs.sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : 1));
+          _ch.after = Math.max(_ch.after, m.at); redraw = stick = true; if (!mine) readNow = e.uid;
+          if (mine && e.delivered) _ch.meta.memberSeenAt = Math.max(_ch.meta.memberSeenAt || 0, m.at);
+        }
+        if (open && !mine) _ch.meta.memberOnline = true;
+        chDrawThreads();
+      }
+    } else if ((e.kind === 'memberRead' || e.kind === 'memberSeen') && _tab === 'chat' && _ch.sel === e.uid && _ch.meta) {
+      if (e.kind === 'memberRead') _ch.meta.memberReadAt = Math.max(_ch.meta.memberReadAt || 0, e.at);
+      _ch.meta.memberSeenAt = Math.max(_ch.meta.memberSeenAt || 0, e.at); _ch.meta.memberOnline = true; redraw = true;
+    } else if (e.kind === 'adminRead') { chSummaryNow(); }
   }
-  _ch.unread = d.unread;
+  if (readNow) api('/admin/chat/read', { userId: readNow });
+  if (redraw) chDrawThread(stick);
+  if (listDirty) chRefreshList();
+  if (toast_) {
+    chSummaryNow();
+    if (!(_tab === 'chat' && _ch.sel && !document.hidden)) toast('New message from a member. Open Chat.', 'ok');
+  }
 }
-function chatNotifyStart(){
-  if (_ch.notifyT) return;
-  chSummaryNow();
-  _ch.notifyT = setInterval(() => { if (!SESSION_TOKEN) { clearInterval(_ch.notifyT); _ch.notifyT = null; return; } if (!document.hidden) chSummaryNow(); }, 8000);
+async function chWaitLoop(){
+  if (_ch.looping) return;
+  _ch.looping = true; let fails = 0;
+  try {
+    while (SESSION_TOKEN) {
+      const tok = SESSION_TOKEN;
+      if (!_ch.seq) { await chSummaryNow(); if (!_ch.seq) { fails++; await chSleep(Math.min(8000, 800 * fails)); } continue; }
+      const d = await api('/admin/chat/wait?seq=' + _ch.seq);
+      if (!SESSION_TOKEN || tok !== SESSION_TOKEN) break;
+      if (d.status !== 'success') { fails++; await chSleep(Math.min(8000, 800 * fails)); continue; }
+      fails = 0; _ch.seq = d.seq;
+      if (d.reset) { await chSummaryNow(); if (_tab === 'chat') chRefreshList(); continue; }
+      await chApplyEvents(d.events);
+    }
+  } finally { _ch.looping = false; }
 }
+function chatNotifyStart(){ chWaitLoop(); }
 
 async function renderPayNumbers(){
   const [r, imgs] = await Promise.all([api('/admin/pay-channels/list', {}), api('/admin/smartai-images')]);
