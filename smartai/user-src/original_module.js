@@ -2232,7 +2232,7 @@ var REC_TYPE_LABEL = { cashback: 'AI robot income', checkin: 'Daily reward', luc
 function recStatusInfo(s){
   s = String(s || 'success').toLowerCase();
   if (['success', 'matched', 'processed'].indexOf(s) !== -1) return { label: 'Completed', cls: 'ok' };
-  if (s === 'awaiting_verification') return { label: 'Pending Review', cls: 'proc' };
+  if (s === 'awaiting_verification' || s === 'review') return { label: 'Pending Review', cls: 'proc' };
   if (['initiating', 'pending', 'processing', 'creating', 'sending'].indexOf(s) !== -1) return { label: 'Settling', cls: 'proc' };
   if (['failed', 'declined', 'cancelled', 'rejected', 'expired'].indexOf(s) !== -1) return { label: 'Declined', cls: 'bad' };
   return { label: s.charAt(0).toUpperCase() + s.slice(1), cls: 'mut' };

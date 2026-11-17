@@ -6969,7 +6969,8 @@ async function memberRecords(uid, collection, pick) {
   list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
   return list.slice(0, 100);
 }
-const _depositView = r => ({ ref: r.ref || '', amount: r.amount, network: r.network || '', phone: r.phone || '', status: r.status || '', failureReason: r.status === 'failed' ? (r.failureReason || '') : '', date: r.date || '', time: r.time || '', createdAt: r.createdAt || null });
+const _depositView = r => ({ ref: r.ref || '', amount: r.amount, network: r.network || '', phone: r.phone || r.senderPhone || '',   // a manual recharge keeps the number paid FROM as senderPhone
+  status: r.status || '', failureReason: r.status === 'failed' ? (r.failureReason || '') : '', date: r.date || '', time: r.time || '', createdAt: r.createdAt || null });
 const _withdrawalView = r => ({ ref: r.ref || '', amount: r.amount, fee: r.fee, net: r.net, holder: r.holder || '', network: r.network || '', phone: r.phone || '', status: r.status || '',
   failureReason: (r.status === 'declined' || r.status === 'rejected') ? (r.failureReason || r.rejectReason || '') : '', date: r.date || '', time: r.time || '', createdAt: r.createdAt || null });
 // ═══════════════════════════════════════════════════════════════════════════════════════════

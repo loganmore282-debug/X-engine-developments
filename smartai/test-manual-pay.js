@@ -200,5 +200,9 @@ async function call(h, body, opts = {}) {
   { const app = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8'); const g = app.slice(app.indexOf('async function gpSend()'), app.indexOf('/* ---- coming back to an unfinished order ---- */'));
     eq([/r\.code === 'USED'\) await new Promise/.test(g), /if \(r\.code === 'USED'\) return;/.test(g), /Math\.max\(0, 1500 - \(Date\.now\(\) - t0\)\)/.test(g)], [true, true, true], 'a used message or ID: the button loads for at least a moment, then stops without any notice');
     eq(g.indexOf("if (r.code === 'USED') return;") < g.indexOf("gpToast(r.message"), true, 'and the notice for other failures is never reached'); }
+  // the Ledger's recharge card: a manual recharge shows the number it was paid FROM, and "review" reads like the other waiting state
+  { const srv = fs.readFileSync(__dirname + '/server.js', 'utf8'), cli = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
+    eq(/_depositView = r => \(\{[^\n]*phone: r\.phone \|\| r\.senderPhone \|\| ''/.test(srv), true, 'a manual recharge in the list carries the number it was paid from (it was blank)');
+    eq(/s === 'awaiting_verification' \|\| s === 'review'\) return \{ label: 'Pending Review'/.test(cli), true, 'a recharge waiting for the admin reads "Pending Review"'); }
   console.log(`test-manual-pay: ${checks} checks passed`);
 })().catch(e => { console.error('FAIL', e.message); process.exit(1); });
