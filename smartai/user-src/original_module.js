@@ -741,7 +741,7 @@ async function logout(opts){
       return fetch(API_BASE + '/auth/session/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + t }, signal: ac.signal });
     }).catch(function(){});
     _authEpoch++;
-    STATE = null; _appEntered = false;
+    STATE = null; _appEntered = false; _agentMe = null; _agentMeAt = 0;
     clearCachedState();
     _recordsLoaded = { accrued: true, topups: false, cashouts: false }; _recordsFailed = { topups: false, cashouts: false }; _dataFailed = {};
     stopActivityFeed(); stopAccountPoll(); gpLeave(); stopDepositPoll(); releasePayLoader();
@@ -771,6 +771,7 @@ function enterApp(){
   applyBrandName();
   startActivityFeed();
   setTimeout(medalPreload, 700);
+  setTimeout(refreshAgentMe, 1500);
   startAccountPoll();
   updateDownloadTileVisibility();
   syncArtwork();
@@ -821,7 +822,7 @@ function onFbAuthChanged(user){
       if (cached) { renderAll(); renderStaticPages(); } else enterApp();
     });
   } else if (!user) {
-    STATE = null; _appEntered = false;
+    STATE = null; _appEntered = false; _agentMe = null; _agentMeAt = 0;
     clearCachedState();
     showAuthScreen();
   }
@@ -1427,6 +1428,7 @@ function renderAll(){
   $('commL1Pct').textContent = sett.commL1 + '%'; $('commL2Pct').textContent = sett.commL2 + '%'; $('commL3Pct').textContent = sett.commL3 + '%';
   renderLucky();
   paintVip(false);
+  paintAgentMe();
   renderMeRows();
   renderFeatured(); renderTicker(); renderShop(); renderRecords();
 }
@@ -1446,6 +1448,99 @@ function paintVip(animate){
   tr.setAttribute('aria-valuemax', String(max)); tr.setAttribute('aria-valuenow', String(vip));
   if (animate) { fill.style.transition = 'none'; fill.style.width = '0%'; void fill.offsetWidth; fill.style.transition = ''; }
   fill.style.width = pct.toFixed(2) + '%';
+}
+
+/* ====================== AGENT BADGES ======================
+   Six live (animated) verified badges, one per agent level in the order the levels are listed (blue, red, gold, pink, black, green; a seventh level starts over at blue).
+   Drawn as inline SVG and moved with SVG animation, so nothing is downloaded and nothing needs a script to keep running. */
+var AGENT_BADGES = ['blue', 'red', 'gold', 'pink', 'black', 'green'], _bdgN = 0;
+function bdgWave(a, phi, b, psi){   // a 10-lobed edge (a = lobe depth), pulled toward a rounded square by b
+  var p = [], N = 80, R = 44;
+  for (var i = 0; i < N; i++) { var t = i / N * Math.PI * 2, r = R * (1 + a * Math.cos(10 * t + phi) + b * Math.cos(4 * t + psi)); p.push((50 + r * Math.cos(t)).toFixed(2) + ',' + (50 + r * Math.sin(t)).toFixed(2)); }
+  return 'M' + p.join('L') + 'Z';
+}
+// One looping animation: pts = [[seconds, value], ...] over a loop of D seconds; the first and last values hold to the loop's ends.
+function bdgAnim(tag, attr, D, pts, extra){
+  var p = pts.slice();
+  if (p[0][0] > 0) p.unshift([0, p[0][1]]);
+  if (p[p.length - 1][0] < D) p.push([D, p[p.length - 1][1]]);
+  var kt = p.map(function(x){ return +(x[0] / D).toFixed(4); }).join(';'), vs = p.map(function(x){ return x[1]; }).join(';');
+  var sp = []; for (var i = 1; i < p.length; i++) sp.push('.4 0 .2 1');
+  return '<' + tag + ' attributeName="' + attr + '" ' + (extra || '') + ' values="' + vs + '" keyTimes="' + kt + '" calcMode="spline" keySplines="' + sp.join(';') + '" dur="' + D + 's" repeatCount="indefinite"/>';
+}
+function bdgShow(D, a, b, c, d){ return bdgAnim('animate', 'opacity', D, [[a, 0], [b, 1], [c, 1], [d, 0]]); }   // fades in from a to b, out from c to d
+function bdgPlus(x, y, D, dot, on, off, gone){   // a + sign that starts as a dot and ends as four dots flying outwards; on = 0 means it is already showing when the loop begins
+  var first = on <= 0;
+  var c = '<g transform="translate(' + x + ' ' + y + ')"><circle r="1.6" fill="#fff" opacity="0">' + (first ? bdgAnim('animate', 'opacity', D, [[dot, 0], [dot + .03, 1]]) : bdgShow(D, dot, dot + .04, on - .04, on)) + '</circle>' +
+    '<g opacity="' + (first ? 1 : 0) + '">' + (first ? bdgAnim('animate', 'opacity', D, [[0, 1], [off, 1], [off + .05, 0]]) + bdgAnim('animateTransform', 'transform', D, [[0, '1'], [off, '1'], [off + .05, '1.1']], 'type="scale"') :
+      bdgShow(D, on - .06, on, off, off + .05) + bdgAnim('animateTransform', 'transform', D, [[on - .06, '.3'], [on, '1'], [off, '1'], [off + .05, '1.1']], 'type="scale"')) +
+    '<rect x="-1.7" y="-8" width="3.4" height="16" rx="1.7" fill="#fff"/><rect x="-8" y="-1.7" width="16" height="3.4" rx="1.7" fill="#fff"/></g>' +
+    '<g opacity="0">' + bdgShow(D, off, off + .04, off + .1, gone);
+  [[0, -1], [1, 0], [0, 1], [-1, 0]].forEach(function(v){ c += '<circle r="1.3" cx="0" cy="0" fill="#fff">' + bdgAnim('animateTransform', 'transform', D, [[off, '0 0'], [gone, (v[0] * 9) + ' ' + (v[1] * 9)]], 'type="translate"') + '</circle>'; });
+  return c + '</g></g>';
+}
+function bdgStar(x, y, D, on, off){   // a four-pointed twinkle
+  return '<g transform="translate(' + x + ' ' + y + ')"><g opacity="0">' + bdgShow(D, on, on + .12, off - .15, off) + bdgAnim('animateTransform', 'transform', D, [[on, '0'], [on + .12, '1'], [(on + off) / 2, '1.25'], [off - .15, '1'], [off, '0']], 'type="scale"') +
+    '<path d="M0,-10 C1.4,-3.4 3.4,-1.4 10,0 C3.4,1.4 1.4,3.4 0,10 C-1.4,3.4 -3.4,1.4 -10,0 C-3.4,-1.4 -1.4,-3.4 0,-10Z" fill="#fff"/></g></g>';
+}
+function bdgShine(id, D, a, b, ang, fromTo, soft){   // white bars sweeping across, clipped to the badge
+  var s = fromTo === 'rev' ? [[a, 80], [b, -80]] : [[a, -80], [b, 80]];
+  return '<g clip-path="url(#' + id + 'c)"><g transform="rotate(' + ang + ' 50 50)"><g>' + bdgAnim('animateTransform', 'transform', D, s.map(function(q){ return [q[0], '0 ' + q[1]]; }), 'type="translate"') +
+    '<rect x="-40" y="41" width="180" height="16" fill="#fff" opacity="' + (soft ? .75 : .92) + '"/><rect x="-40" y="60" width="180" height="6" fill="#fff" opacity=".5"/><rect x="-40" y="34" width="180" height="4" fill="#fff" opacity=".35"/></g></g></g>';
+}
+function agentBadgeSvg(idx){
+  var kind = AGENT_BADGES[((idx % 6) + 6) % 6], id = 'bd' + (++_bdgN), still = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var W0 = bdgWave(.085, 0, 0, 0), W1 = bdgWave(.085, .5, 0, 0), W2 = bdgWave(.08, -.35, 0, 0), SQ = bdgWave(.02, 0, .06, Math.PI), SQ2 = bdgWave(.03, .3, .045, Math.PI);
+  var defs = '', body = '', chk = '<path d="M30 51 L43 64 L70 35" fill="none" stroke="CHK" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"/>', fill, chkCol = '#fff', D, shape, extra = '', checkG;
+  if (kind === 'blue' || kind === 'red' || kind === 'pink' || kind === 'gold') {
+    var gold = kind === 'gold';
+    D = gold ? 3 : 1.5;
+    var plan = gold ? [[0, SQ], [.25, SQ], [.45, W0], [.65, W1], [.85, W2], [1.05, SQ2], [1.25, SQ]] : [[0, W0], [.3, SQ], [.55, W1], [.8, W2], [1.05, SQ2], [1.3, W0]];
+    if (kind === 'blue') fill = '#62b3ee';
+    else if (kind === 'red') fill = '#ff2324';
+    else if (kind === 'gold') { fill = 'url(#' + id + 'g)'; chkCol = '#1e1e1e'; defs += '<linearGradient id="' + id + 'g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e99d32"/><stop offset=".78" stop-color="#eca238"/><stop offset="1" stop-color="#f7d28c"/></linearGradient>'; }
+    else { fill = 'url(#' + id + 'g)'; defs += '<linearGradient id="' + id + 'g" gradientUnits="userSpaceOnUse" x1="8" y1="92" x2="92" y2="8">' + (still ? '' : '<animateTransform attributeName="gradientTransform" type="rotate" values="0 50 50;360 50 50" dur="3s" repeatCount="indefinite"/>') + '<stop offset="0" stop-color="#b01fa8"/><stop offset=".55" stop-color="#e050dc"/><stop offset="1" stop-color="#ff73ff"/></linearGradient>'; }
+    shape = '<path fill="' + fill + '" d="' + plan[0][1] + '">' + (still ? '' : bdgAnim('animate', 'd', D, plan)) + '</path>';
+    if (gold) { defs += '<clipPath id="' + id + 'c"><path d="' + SQ + '"/></clipPath>'; extra = still ? '' : bdgShine(id, D, 1.85, 2.75, 45, 'rev', true); }
+    var pulse = kind === 'red' && !still ? bdgAnim('animateTransform', 'transform', D, [[0, '1'], [.3, '.72'], [.6, '1.12'], [.9, '.8'], [1.2, '1.12'], [1.5, '1']], 'type="scale"') : '';
+    checkG = '<g transform="translate(50 50)"><g>' + pulse + '<g transform="translate(-50 -50)">' + chk.replace('CHK', chkCol) + '</g></g></g>';
+    body = shape + extra + checkG;
+  } else {
+    var black = kind === 'black', col = black ? '#000' : '#2bfe00', A = '<rect x="19" y="19" width="62" height="62" rx="7.5" fill="' + col + '"', B = A + ' transform="rotate(45 50 50)"';
+    D = black ? 3 : 6;
+    if (black) body = '<g>' + (still ? '' : bdgAnim('animateTransform', 'transform', D, [[1.45, '0 50 50'], [1.75, '-14 50 50'], [2.1, '9 50 50'], [2.4, '0 50 50']], 'type="rotate"')) + A + '/>' + B + '/></g>';
+    else body = A + '>' + (still ? '' : bdgAnim('animateTransform', 'transform', D, [[.93, '0 50 50'], [2, '90 50 50']], 'type="rotate"')) + '</rect>' + B + '>' + (still ? '' : bdgAnim('animateTransform', 'transform', D, [[.93, '45 50 50'], [2, '-45 50 50']], 'type="rotate"')) + '</rect>';
+    defs += '<clipPath id="' + id + 'c"><rect x="19" y="19" width="62" height="62" rx="7.5"/><rect x="19" y="19" width="62" height="62" rx="7.5" transform="rotate(45 50 50)"/></clipPath>';
+    body += chk.replace('CHK', '#fff');
+    if (!still) body += black ?
+      bdgShine(id, D, 1.45, 2.45, -45, 'fwd', false) + bdgPlus(86, 14, D, 2.87, 0, .33, .6) + bdgPlus(8, 52, D, .65, .8, 1.15, 1.4) + bdgPlus(14, 14, D, 2, 2.13, 2.6, 2.8) :
+      bdgStar(12, 16, D, 1.45, 2.1) + bdgStar(85, 14, D, 2.1, 3.1) + bdgShine(id, D, 2.45, 3.45, -45, 'fwd', true);
+  }
+  return '<svg class="bdg" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><defs>' + defs + '</defs>' + body + '</svg>';
+}
+
+// The member's own agent level, on the number card of Me: the live badge on the corner of the profile picture and the level's name at the right end of the number row.
+var _agentMe = null, _agentMeAt = 0, _agentMeBusy = false;
+function setAgentMe(r){
+  var idx = -1;
+  if (r && r.levelId && Array.isArray(r.levels)) for (var i = 0; i < r.levels.length; i++) if (r.levels[i].id === r.levelId) idx = i;
+  _agentMeAt = Date.now();
+  _agentMe = idx >= 0 && STATE ? { uid: STATE.uid, idx: idx, name: String(r.levelName || r.levels[idx].name || '') } : null;
+  paintAgentMe();
+}
+function paintAgentMe(){
+  var slot = $('acctBadge'), nm = $('acctAgent'); if (!slot || !nm) return;
+  var me = _agentMe && STATE && _agentMe.uid === STATE.uid ? _agentMe : null, sig = me ? me.idx + '|' + me.name : '';
+  if (slot.getAttribute('data-sig') === sig) return;   // the same level: no repaint, so the animation is not restarted
+  slot.setAttribute('data-sig', sig);
+  slot.innerHTML = me ? agentBadgeSvg(me.idx) : '';
+  nm.textContent = me ? me.name : '';
+  nm.style.display = me ? '' : 'none';
+}
+async function refreshAgentMe(force){
+  if (!STATE || _agentMeBusy || (!force && Date.now() - _agentMeAt < 90000)) return;
+  _agentMeBusy = true;
+  try { var r = await api('/agent/status'); if (!r.stale && r.status === 'success' && STATE) setAgentMe(r); } catch (e) {} finally { _agentMeBusy = false; }
 }
 
 /* ====================== TASK CENTER (team reward tiers) ======================
@@ -1485,23 +1580,24 @@ function agentDate(ms){
   return d.getUTCDate() + ' ' + m[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
 }
 function renderAgentSummary(r){
-  var has = !!r.levelId, first = r.levels[0];
+  var has = !!r.levelId, first = r.levels[0], mineIdx = -1;
+  if (has) for (var q = 0; q < r.levels.length; q++) if (r.levels[q].id === r.levelId) mineIdx = q;
   var waiting = has && !r.canClaim, label, cls = '', click = '';
   if (has && r.canClaim) { label = 'Claim ' + ugx(r.salary); cls = 'is-ready'; click = ' onclick="claimAgent(this)"'; }
   else if (waiting) label = 'Next salary on ' + agentDate(r.nextAt);
   else label = first ? ('Reach ' + first.target + ' active subordinate' + (first.target === 1 ? '' : 's')) : 'Not available yet';
   return '<div class="tk-card">' +
-      '<div class="tk-head"><div class="tk-ic tk-ic-dep">' + TK_ICON_AGENT + '</div><div class="tk-type">Your agent level</div></div>' +
+      '<div class="tk-head"><div class="tk-ic tk-ic-dep">' + TK_ICON_AGENT + '</div><div class="tk-type">Your agent level</div>' + (mineIdx >= 0 ? '<span class="tk-badge">' + agentBadgeSvg(mineIdx) + '</span>' : '') + '</div>' +
       '<div class="tk-desc">' + (has ? ('You are <b>' + esc(r.levelName) + '</b>. Monthly salary: <em>' + ugx(r.salary) + '</em>') : 'You are not an agent yet. Invite members and help them start an AI robot.') + '</div>' +
       '<div class="tk-stats"><div><b>' + (Number(r.active) || 0) + '</b><span>Active subordinates</span></div><div><b>' + (Number(r.direct) || 0) + '</b><span>Invited</span></div><div><b>' + (has ? ugx(r.salary) : ugx(0)) + '</b><span>Monthly salary</span></div></div>' +
       '<button type="button" class="tk-pill ' + cls + '"' + (click || ' disabled') + '>' + esc(label) + '</button>' +
     '</div>';
 }
-function renderAgentLevel(l, r){
+function renderAgentLevel(l, r, idx){
   var active = Number(r.active) || 0, current = Math.min(active, l.target);
   var pct = l.target > 0 ? Math.min(100, Math.floor(current / l.target * 100)) : 0, mine = r.levelId === l.id;
   return '<div class="tk-card' + (mine ? ' ag-mine' : '') + '">' +
-      '<div class="tk-head"><div class="tk-ic tk-ic-dep">' + TK_ICON_AGENT + '</div><div class="tk-type">' + esc(l.name) + '</div>' + (mine ? '<span class="tk-tag">Your level</span>' : '') + '</div>' +
+      '<div class="tk-head"><div class="tk-ic tk-ic-dep">' + TK_ICON_AGENT + '</div><div class="tk-type">' + esc(l.name) + '</div>' + (mine ? '<span class="tk-tag">Your level</span>' : '') + '<span class="tk-badge">' + agentBadgeSvg(idx) + '</span></div>' +
       '<div class="tk-desc">Keep <b>' + l.target + '</b> active subordinate' + (l.target === 1 ? '' : 's') + ' to earn: <em>' + ugx(l.salary) + '</em> every month</div>' +
       '<div class="tk-bar"><div class="tk-bar-fill' + (l.reached ? ' is-done' : '') + '" style="width:' + pct + '%"></div></div>' +
       '<div class="tk-stats"><div><b>' + current + '</b><span>Current</span></div><div><b>' + l.target + '</b><span>Target</span></div><div><b>' + pct + '%</b><span>Progress</span></div></div>' +
@@ -1511,7 +1607,7 @@ function renderAgentLevel(l, r){
 function renderAgentList(r){
   var box = $('agentList'); if (!box) return;
   if (!r || r.status !== 'success' || !Array.isArray(r.levels)) { box.innerHTML = '<div class="empty">' + esc((r && r.message) || 'Could not load the agent rewards. Try again.') + '</div>'; return; }
-  box.innerHTML = r.levels.length ? (renderAgentSummary(r) + r.levels.map(function(l){ return renderAgentLevel(l, r); }).join('')) : '<div class="empty">No agent rewards are set up yet.</div>';
+  box.innerHTML = r.levels.length ? (renderAgentSummary(r) + r.levels.map(function(l, i){ return renderAgentLevel(l, r, i); }).join('')) : '<div class="empty">No agent rewards are set up yet.</div>';
 }
 // Asks the server for both lists and paints them (no spinner of its own: the caller shows the dots or the ring).
 async function vipRefresh(){
@@ -1521,6 +1617,7 @@ async function vipRefresh(){
   var r = rs[0], ag = rs[1];
   if (r.stale || ag.stale || !STATE) return;
   STATE.agent = ag;
+  setAgentMe(ag);
   renderAgentList(ag);
   if (r.status !== 'success' || !Array.isArray(r.tiers)) { box.innerHTML = '<div class="empty">' + esc((r && r.message) || 'Could not load the team rewards. Try again.') + '</div>'; return; }
   STATE.salary = r;
@@ -1993,7 +2090,7 @@ function switchTab(name){
   if (name === 'rewards') lkSettle();
   if (name === 'rewards' && _lastTab !== 'rewards' && typeof lkResetIfDone === 'function') lkResetIfDone();
   if (STATE && (name === 'rewards' || name === 'team' || name === 'share' || name === 'home')) renderAll();
-  if (name === 'account' && STATE && _lastTab !== 'account') { countMyBalances(); paintVip(true); }
+  if (name === 'account' && STATE && _lastTab !== 'account') { countMyBalances(); paintVip(true); refreshAgentMe(); }
   if (name === 'team') medalPreload();
   // Coming back to Home from another tab shows the announcement again (its buttons shaking straight away).
   if (enteringHomeFromElsewhere) maybeShowAnnouncement(true);

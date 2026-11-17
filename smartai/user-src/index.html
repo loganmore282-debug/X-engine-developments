@@ -519,6 +519,14 @@
   .acct-icon{width:46px;height:46px;border-radius:14px;background:#fff;overflow:hidden;
     display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
   .acct-num{font-size:16px;font-weight:800;}
+  .acct-av{position:relative;flex:0 0 auto;}   /* the profile picture and, on its lower-right corner, the live agent badge */
+  .acct-badge{position:absolute;right:-8px;bottom:-8px;width:26px;height:26px;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,.45));}
+  .acct-badge:empty{display:none}
+  .acct-numrow{display:flex;align-items:center;gap:10px;min-width:0;}
+  .acct-agent{margin-left:auto;max-width:48%;font-size:12px;font-weight:800;color:#fff;background:rgba(255,255,255,.16);border-radius:999px;padding:3px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bdg{display:block;width:100%;height:100%;overflow:visible;}
+  .tk-badge{width:30px;height:30px;flex:0 0 auto;margin-left:auto;}   /* the live agent badge at the right end of an agent card's title row */
+  .tk-tag+.tk-badge{margin-left:8px;}
   /* VIP level bar inside the number card, under the number (the card keeps its size): filled up to the member's level, full at the highest VIP level. */
   .acct-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px;}
   .vip-bar{display:flex;align-items:center;gap:9px;}
@@ -1325,9 +1333,9 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
       <div class="acct-cover">
         <div class="art-host" id="accountBanner"></div>
         <div class="acct-card">
-          <div class="acct-icon" id="acctIcon"></div>
+          <div class="acct-av"><div class="acct-icon" id="acctIcon"></div><span class="acct-badge" id="acctBadge"></span></div>
           <div class="acct-info">
-            <div class="acct-num" id="acctPhone">—</div>
+            <div class="acct-numrow"><div class="acct-num" id="acctPhone">—</div><span class="acct-agent" id="acctAgent" style="display:none"></span></div>
             <div class="vip-bar" id="vipBar" style="display:none">
               <span class="vip-badge" id="vipBadge">VIP 0</span>
               <div class="vip-track" id="vipTrack" role="progressbar" aria-label="VIP level" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0"><i class="vip-fill" id="vipFill"></i></div>
