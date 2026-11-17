@@ -1349,7 +1349,7 @@ function paintArt(){
     var t = (sett.homeBannerTitle || '').trim(), x = (sett.homeBannerText || '').trim();
     hb.innerHTML = artHtml(ART.home, 'robots') + ((t || x) ? ('<div class="pb-tint pb-text">' + (t ? '<b class="pb-tint-title">' + esc(t) + '</b>' : '') + (x ? '<span>' + esc(x) + '</span>' : '') + '</div>') : '');
   }
-  var av = $('acctIcon'); if (av) av.innerHTML = '<img' + (ART.profilelogo ? '' : ' data-icon="robots"') + ' src="' + esc(ART.profilelogo || iconUrl('robots')) + '" alt="">';
+  var av = $('acctIcon'); if (av) av.innerHTML = profileIconHtml();
   paintAuthArt();
   paintIcons();
 }
@@ -2931,6 +2931,10 @@ async function refreshTeamStats(){
   renderAll();
 }
 // Tapping Level 1 / 2 / 3 opens that level's members, walked fresh on the server (never just the number already on screen).
+// The robot picture shown as a member's profile icon (the one on the number card of Me, or the admin's own upload).
+function profileIconHtml(){
+  return '<img' + (ART.profilelogo ? '' : ' data-icon="robots"') + ' src="' + esc(ART.profilelogo || iconUrl('robots')) + '" alt="">';
+}
 async function openTeamLevel(level){
   openOverlay('teamlevel');
   $('teamLevelTitle').textContent = 'Level ' + level + ' subordinates';
@@ -2945,7 +2949,7 @@ async function openTeamLevel(level){
     var display = m.phoneMasked || m.phone || 'Not set';
     var joined = tsMs(m.createdAt) ? new Date(tsMs(m.createdAt)).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Unknown';
     var invested = Number(m.invested) || 0;
-    return '<div class="flat-row"><div class="flat-avatar' + (invested > 0 ? ' on' : '') + '">' + esc(String(display).replace(/\D/g, '').slice(-2) || '··') + '</div>' +
+    return '<div class="flat-row"><div class="flat-avatar">' + profileIconHtml() + '</div>' +
       '<div class="flat-main"><b>' + esc(display) + '</b><span>Joined ' + esc(joined) + '</span></div>' +
       '<div class="flat-amt' + (invested > 0 ? ' pos' : ' zero') + '">' + ugx(invested) + '</div></div>';
   }).join('');
