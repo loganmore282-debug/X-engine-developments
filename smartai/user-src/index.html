@@ -413,7 +413,7 @@
   .rec-card{margin:0 var(--gut) 12px;padding:14px 16px;border-radius:16px;background:var(--cream-deep);}
   .rec-card:last-child{margin-bottom:0;}
   .rec-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-bottom:10px;border-bottom:1.5px dashed var(--caramel);}
-  .rec-ref{font-size:13.5px;font-weight:800;color:var(--cocoa);word-break:break-all;}
+  .rec-ref{font-size:13.5px;font-weight:800;color:var(--cocoa);white-space:nowrap;min-width:0;}   /* a 24-character id always stays on ONE line */
   .rec-st{flex-shrink:0;font-size:12px;font-weight:800;}
   .rec-st.ok{color:var(--mint);}
   .rec-st.proc{color:var(--caramel-deep);}
@@ -1435,7 +1435,7 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
     </div>
     <div class="link-box">
       <div class="muted" style="font-size:11px;font-weight:700;margin-bottom:6px">TRANSACTION REFERENCE</div>
-      <div class="link-row"><span id="depStatusRef" style="word-break:break-all"></span><button class="btn btn-dark btn-sm" onclick="copyDepositRef()">Copy</button></div>
+      <div class="link-row"><span id="depStatusRef" style="white-space:nowrap;min-width:0;font-size:clamp(11px,3.6vw,15px);letter-spacing:.2px"></span><button class="btn btn-dark btn-sm" onclick="copyDepositRef()">Copy</button></div>
     </div>
     <div class="info-box" id="depStatusMsg" style="background:rgba(40,120,255,.22);color:#d3e6ff">Under review. This page updates by itself.</div>
     <div style="padding:0 var(--gut)">

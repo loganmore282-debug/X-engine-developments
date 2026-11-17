@@ -430,6 +430,13 @@ let pushAdminWhy = 'The server has no push key: FIREBASE_SERVICE_ACCOUNT is not 
 // The Firebase project the admin panel gets its device tokens from. The push
 // key must belong to the SAME project, or every alert is refused.
 const PUSH_PROJECT = 'chnpetrol';
+// No push key in Smart AI's own secrets file: bring over the one a sibling app on this VPS already has for the same Firebase project (once; see push-key.js).
+if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+  try {
+    const got = require('./push-key').borrowPushKey({ ownFile: process.env.SMARTAI_SECRETS_FILE || '/srv/smartai-secrets/secrets.local.js', project: PUSH_PROJECT });
+    if (got) { process.env.FIREBASE_SERVICE_ACCOUNT = got.value; console.log('Admin push key: taken from ' + got.from + (got.saved ? ' and saved in the Smart AI secrets file' : ' (could not be saved; it will be taken again next start)')); }
+  } catch (e) { console.warn('Admin push key: could not look for one (' + e.message + ')'); }
+}
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   try {
     const { sa: pushSa, fatal: pushFatal } = require('./service-account').loadServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -664,8 +671,6 @@ const DEFAULT_SETTINGS = {
   //
   // Off by default: a fresh install must not lock withdraw behind hours
   // nobody has set yet.
-  // What every NEW mobile-money recharge / withdrawal reference starts with (smartai2610111048053568). Admin > Settings; existing references never change.
-  referencePrefix: 'S',
   // AUTOMATIC WITHDRAWALS (Admin > Settings > Withdrawals). Off by default. Requests always arrive as 'pending' as usual; only while this is
   // ON does the server pay them by itself, each one after its OWN random wait of autoApproveMinSec..autoApproveMaxSec seconds (so payouts do not
   // leave in one burst or on a fixed rhythm). It uses exactly the same processWithdrawalCore as the manual Send button. autoApproveMaxAmount:
@@ -1211,47 +1216,21 @@ function nowStr() {
     time: pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds())
   };
 }
-// Public member-facing transaction reference. Format:
-// B2 + YYMMDDHHMMSS + 4 digits, for example B2609220514561788.
-// New rows receive a cryptographically-random suffix server-side. Older
-// ledger rows predate this field, so /transactions derives the SAME stable
-// B2 reference from the immutable transaction document id instead of
-// inventing a different id on every read.
-function statementStamp(ts) {
-  const ms = tsMillis(ts) || Date.now();
-  const d = new Date(ms + tzOffMs());
-  const pad = n => String(n).padStart(2, '0');
-  return String(d.getUTCFullYear()).slice(-2)
-    + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate())
-    + pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + pad(d.getUTCSeconds());
-}
-function newStatementId() {
-  return 'B2' + statementStamp(Date.now()) + String(crypto.randomInt(0, 10000)).padStart(4, '0');
-}
+// Public member-facing transaction id: 24 characters, digits and lowercase letters alternating (e.g. 4a5f6e7d8c9b0a1f2e3d4c5b), drawn from the operating
+// system's cryptographic random generator, so it can neither be guessed nor worked out from the time or from any other id.
+// Older ledger rows have no such id, so /transactions derives the SAME stable one from the row's immutable document id (a hash of it), instead
+// of inventing a different id on every read. An id an older version stored in another shape is shown in this shape too.
+const TXN_ID_RE = /^(?:\d[a-f]){12}$/;
+// Digits and letters ALTERNATE evenly (digit, letter, digit, letter ... twelve of each, like 4a5f6e7d8c9b0a1f2e3d4c5b): every digit is 0-9 and every letter a-f, each
+// drawn with crypto.randomInt (no bias), so the id never clumps into a run of digits or of letters. 60 choices per pair, 12 pairs: about 71 bits.
+function newTxnId() { let t = ''; for (let i = 0; i < 12; i++) t += crypto.randomInt(10) + 'abcdef'[crypto.randomInt(6)]; return t; }
+function newStatementId() { return newTxnId(); }
 function statementIdFor(doc) {
   const row = doc.data() || {};
-  if (/^B2\d{16}$/.test(String(row.statementId || ''))) return row.statementId;
-  const digest = crypto.createHash('sha256').update(String(doc.id)).digest();
-  const suffix = String(digest.readUInt32BE(0) % 10000).padStart(4, '0');
-  let stamp = '';
-  const createdMs = tsMillis(row.createdAt);
-  if (createdMs) {
-    stamp = statementStamp(row.createdAt);
-  } else {
-    // Some very old ledger rows predate createdAt but still carry the
-    // immutable MM/DD/YYYY + HH:MM:SS fields. Use them so their public
-    // statement reference remains stable instead of borrowing "now".
-    const dm = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(row.date || ''));
-    const tm = /^(\d{2}):(\d{2}):(\d{2})/.exec(String(row.time || ''));
-    if (dm && tm) stamp = dm[3].slice(-2) + dm[1] + dm[2] + tm[1] + tm[2] + tm[3];
-  }
-  if (!stamp) {
-    // Last-resort stable numeric segment for malformed legacy rows.
-    const a = digest.readUInt32BE(4).toString().padStart(10, '0').slice(-10);
-    const b = String(digest.readUInt16BE(8) % 100).padStart(2, '0');
-    stamp = a + b;
-  }
-  return 'B2' + stamp + suffix;
+  if (TXN_ID_RE.test(String(row.statementId || ''))) return row.statementId;
+  const h = crypto.createHash('sha256').update('txn:' + String(doc.id)).digest();
+  let t = ''; for (let i = 0; i < 12; i++) t += (h[i] % 10) + 'abcdef'[h[12 + i] % 6];
+  return t;
 }
 function tsMillis(v) {
   if (!v) return 0;
@@ -1608,30 +1587,17 @@ async function nextRandomPublicId() {
     throw new Error('Could not assign a public id');
   });
 }
-function stampRef(letter) {
-  const d = eatNow();
-  const pad = (n, l = 2) => String(n).padStart(l, '0');
-  return letter + d.getUTCFullYear().toString().slice(2) + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate())
-    + pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + pad(d.getUTCSeconds()) + pad(crypto.randomInt(10000), 4);
-}
-async function uniqueRef(letter) {
+// A payment reference (a recharge or a withdrawal) is the same kind of id as above, nothing else.
+async function uniqueRef() {
   for (let i = 0; i < 10; i++) {
-    const ref = stampRef(letter);
+    const ref = newTxnId();
     const [inDep, inWit] = await Promise.all([
       db.collection('pendingDeposits').where('ref', '==', ref).limit(1).get(),
       db.collection('withdrawals').where('ref', '==', ref).limit(1).get(),
     ]);
     if (inDep.empty && inWit.empty) return ref;
   }
-  return letter + Date.now() + crypto.randomInt(1000);
-}
-// The owner-chosen start of a payment reference: 1-12 letters/digits, starting with a letter. '' = not acceptable (the caller falls back to 'S').
-function sanitizeRefPrefix(v) {
-  const t = String(v == null ? '' : v).trim();
-  return /^[A-Za-z][A-Za-z0-9]{0,11}$/.test(t) ? t : '';
-}
-async function mobileMoneyRefPrefix() {
-  try { return sanitizeRefPrefix((await getSettings()).referencePrefix) || 'S'; } catch (_) { return 'S'; }
+  return newTxnId();
 }
 // DAILY SALARY tiers: a list of (target team total, reward per day) rows, kept in the settings (defaults above, edited in
 // Admin > Settings > Daily Salary). Same row rules the old Task Center lists had: whole numbers, one row per target, a stable id.
@@ -4862,7 +4828,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     }
     _depCreateDebounce.set(userId, Date.now());
 
-    const ref = await uniqueRef(await mobileMoneyRefPrefix());
+    const ref = await uniqueRef();
     const marzReference = crypto.randomUUID();
     const { date, time } = nowStr();
     const depRef = db.collection('pendingDeposits').doc();
@@ -5505,7 +5471,7 @@ app.post('/withdraw/request', async (req, res) => {
     const fee = Math.round(amt * feePct / 100);
     const net = amt - fee;
     if (net <= 0) throw new Error('Withdraw amount is too small after fees.');
-    const ref = await uniqueRef(await mobileMoneyRefPrefix());
+    const ref = await uniqueRef();
     // This adapter has no real multi-document rollback. Persist the request
     // first, then charge once with a durable token that recovery can inspect.
     await withLock('bal:' + userId, async () => {
@@ -7143,7 +7109,7 @@ app.post('/deposit/manual/order', async (req, res) => {
       if (!ch) return res.status(400).json({ status: 'error', message: `${network} payments are not available right now. Please choose another method.` });
       // Older unsent orders of this member are closed so they do not pile up.
       for (const o of open) await o.ref.updateIf({ status: 'pending' }, { status: 'failed', failureReason: 'Replaced by a newer payment order' }).catch(() => {});
-      ref = await uniqueRef('M');
+      ref = await uniqueRef();
       const { date, time } = nowStr();
       depRef = db.collection('pendingDeposits').doc();
       expiresMs = now + MANUAL_ORDER_MS;
@@ -8053,12 +8019,7 @@ app.post('/admin/settings/update', async (req, res) => {
       if (hi < lo) return res.status(400).json({ status: 'error', message: 'The longest wait cannot be shorter than the shortest wait.' });
       if (updates.autoApproveWithdrawalsEnabled === true && !prev.autoApproveWithdrawalsEnabled) updates.autoApproveEnabledAt = Date.now();
     }
-    // Start of every new payment reference. Refused rather than repaired, so what the owner types is exactly what appears at the gateway.
-    if ('referencePrefix' in updates) {
-      const px = sanitizeRefPrefix(updates.referencePrefix);
-      if (!px) return res.status(400).json({ status: 'error', message: 'The reference start must be 1 to 12 letters or digits and begin with a letter, e.g. smartai' });
-      updates.referencePrefix = px;
-    }
+    delete updates.referencePrefix;   // retired: payment references are fully random now
     // 'automatic' is deliberately NOT accepted here anymore (Round 102) --
     // it's still recognized when READING an already-stored legacy value
     // (normalizeProviderValue()), but nothing should ever WRITE it again

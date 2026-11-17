@@ -178,7 +178,6 @@ function run(state, body) {
     getSettings: async () => state.settings,
     cleanPhone: p => String(p || '').replace(/\D/g, '') || '',
     uniqueRef: async () => 'S1',
-    mobileMoneyRefPrefix: async () => 'S',
     textOf: v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''),
     nowStr: () => ({ date: '15/01/2026', time: '12:00' }),
     fmtMoney: n => 'UGX ' + Number(n).toLocaleString('en-US'),
@@ -230,7 +229,7 @@ function run(state, body) {
   };
   const fn = new Function('sandbox', `
     const { console, crypto, verifyAuth, withLock, getSettings, cleanPhone,
-            uniqueRef, mobileMoneyRefPrefix, textOf, nowStr, fmtMoney, logSecurityEvent, sendAdminPush,
+            uniqueRef, textOf, nowStr, fmtMoney, logSecurityEvent, sendAdminPush,
             sendWithdrawalSmsAlert, NETWORK_NAMES, MAX_MONEY_AMOUNT,
             _witRequestInFlight, _userBeingDeleted, FieldValue, db,
             withdrawWindowState, currentRegionKey, DEFAULT_REGION_KEY, withUserRegion } = sandbox;
@@ -238,7 +237,7 @@ function run(state, body) {
     const tsMillis = n => Number(n) || 0;
     const tzOffMs = () => 180 * 60000;
     const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
-    ${fnSource('statementStamp')}
+    ${fnSource('newTxnId')}
     ${fnSource('newStatementId')}
     ${fnSource('paymentAmount')}
     ${fnSource('finishWithdrawalCreation')}
