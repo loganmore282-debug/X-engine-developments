@@ -81,6 +81,11 @@ async function connectMongo(uri) {
 // an already-large collection never delays startup.
 async function ensureIndexes() {
   const specs = [
+    // The customer-service chat: a member's messages in order (all profiles, and one profile), and the admin's inbox ordering / unread count.
+    ['chatMessages', { threadId: 1, at: 1 }, { name: 'chatMsg_thread_at' }],
+    ['chatMessages', { threadId: 1, agentId: 1, at: 1 }, { name: 'chatMsg_thread_agent_at' }],
+    ['chatThreads', { lastAt: -1 }, { name: 'chatThread_lastAt' }],
+    ['chatThreads', { unreadAdmin: 1 }, { name: 'chatThread_unread' }],
     // Every OTP send/verify for register, reset, and the phone-existence
     // check inside each (server.js's /auth/otp/send, /auth/reset/confirm)
     // filters users by phone with no other field ahead of it -- without this,

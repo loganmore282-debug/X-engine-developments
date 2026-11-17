@@ -866,6 +866,218 @@ function renderStaticPages(){
   rows += '<div class="kv" style="margin:0 20px"><span>Support hours</span><b>' + esc(s.supportHours || '8am – 9pm') + '</b></div>';
   $('supportLinks').innerHTML = rows;
 }
+/* CHATCRYPTO BEGIN (the same text in the member app and in the admin panel; test-chat-e2e.js compares the two copies) */
+var CHAT = (function(){
+  var enc = new TextEncoder(), dec = new TextDecoder(), S = crypto.subtle, EC = { name: 'ECDH', namedCurve: 'P-256' };
+  function b64(buf){ var a = new Uint8Array(buf), s = ''; for (var i = 0; i < a.length; i += 8192) s += String.fromCharCode.apply(null, a.subarray(i, i + 8192)); return btoa(s); }
+  function unb64(t){ var s = atob(t), a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+  function pubOf(j){ return { kty: 'EC', crv: 'P-256', x: j.x, y: j.y }; }
+  async function kidOf(jwk){
+    var h = new Uint8Array(await S.digest('SHA-256', enc.encode(jwk.x + '.' + jwk.y))), out = '';
+    for (var i = 0; i < 8; i++) out += ('0' + h[i].toString(16)).slice(-2);
+    return out;
+  }
+  // A key pair: kid names it, pub is shared with the server, priv stays on this device.
+  async function newPair(){
+    var kp = await S.generateKey(EC, true, ['deriveBits']), pub = pubOf(await S.exportKey('jwk', kp.publicKey)), priv = await S.exportKey('jwk', kp.privateKey);
+    return { kid: await kidOf(pub), pub: pub, priv: priv };
+  }
+  // The key that locks one message's own key: the ECDH secret of (private, public), stretched with HKDF.
+  async function wrapKey(privKey, pubJwk){
+    var bits = await S.deriveBits({ name: 'ECDH', public: await S.importKey('jwk', pubOf(pubJwk), EC, false, []) }, privKey, 256);
+    var base = await S.importKey('raw', bits, 'HKDF', false, ['deriveKey']);
+    return S.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: enc.encode('smartai-chat-v1') }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  // Encrypts text for every recipient ([{kid, jwk}]); ad (thread|from|profile) is bound into the ciphertext so a message cannot be moved to another conversation.
+  async function seal(text, ad, recipients){
+    var k = await S.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']), iv = crypto.getRandomValues(new Uint8Array(12));
+    var ct = await S.encrypt({ name: 'AES-GCM', iv: iv, additionalData: enc.encode(ad) }, k, enc.encode(text)), raw = await S.exportKey('raw', k), wraps = [];
+    for (var i = 0; i < recipients.length; i++) {
+      var eph = await S.generateKey(EC, true, ['deriveBits']), wk = await wrapKey(eph.privateKey, recipients[i].jwk), wiv = crypto.getRandomValues(new Uint8Array(12));
+      var ek = await S.encrypt({ name: 'AES-GCM', iv: wiv }, wk, raw), epk = pubOf(await S.exportKey('jwk', eph.publicKey));
+      wraps.push({ kid: recipients[i].kid, epk: { x: epk.x, y: epk.y }, iv: b64(wiv), ek: b64(ek) });
+    }
+    return { iv: b64(iv), ct: b64(ct), wraps: wraps };
+  }
+  // Opens a message with this device's private key (kid names it); null when the message was not locked for this key.
+  async function open(msg, ad, kid, privJwk){
+    var w = null; for (var i = 0; i < msg.wraps.length; i++) if (msg.wraps[i].kid === kid) w = msg.wraps[i];
+    if (!w) return null;
+    var wk = await wrapKey(await S.importKey('jwk', privJwk, EC, false, ['deriveBits']), w.epk);
+    var raw = await S.decrypt({ name: 'AES-GCM', iv: unb64(w.iv) }, wk, unb64(w.ek)), k = await S.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+    return dec.decode(await S.decrypt({ name: 'AES-GCM', iv: unb64(msg.iv), additionalData: enc.encode(ad) }, k, unb64(msg.ct)));
+  }
+  return { newPair: newPair, kidOf: kidOf, seal: seal, open: open, b64: b64, unb64: unb64 };
+})();
+/* CHATCRYPTO END */
+
+/* ====================== CUSTOMER SERVICE CHAT (end-to-end encrypted) ======================
+   The Support page lists the customer-service profiles the admin set up (a photo and a name each). Tapping one opens a chat with it. Every message is locked on this phone
+   (see CHAT above) for the admin panel and for this phone only; the server just carries it. Ticks: one = sent, two = delivered (the panel was online after it), blue = read. */
+var _cc = { cfg: null, cfgAt: 0, key: null, regFor: '', agent: null, msgs: [], after: 0, timer: null, sumTimer: null, adminReadAt: 0, adminSeenAt: 0, online: false, unread: {}, sig: '', busy: false };
+function chatInitial(n){ var t = String(n || '').trim(); return esc(t ? t.charAt(0).toUpperCase() : '?'); }
+function chatPhoto(a){ return a && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/]+=*$/.test(a.photo || '') ? a.photo : ''; }
+function chatAvatar(a){ var p = chatPhoto(a); return p ? '<img src="' + p + '" alt="">' : '<span class="ch-ini">' + chatInitial(a && a.name) + '</span>'; }
+async function chatLoadConfig(force){
+  if (!force && _cc.cfg && Date.now() - _cc.cfgAt < 20000) { paintChatAgents(); return; }
+  var r = await api('/public/chat-config', null, 'GET', false);
+  if (r && r.status === 'success' && Array.isArray(r.agents)) { _cc.cfg = r; _cc.cfgAt = Date.now(); _cc.online = !!r.online; }
+  paintChatAgents();
+}
+// The row of profiles under the support hours: photo, a green dot while someone is online, a red count of unread replies, the name underneath.
+function paintChatAgents(){
+  var box = $('supAgents'); if (!box) return;
+  var ag = (_cc.cfg && _cc.cfg.agents) || [];
+  if (!ag.length) { box.innerHTML = ''; return; }
+  var on = !!(_cc.cfg && _cc.cfg.online);
+  box.innerHTML = ag.map(function(a){
+    var n = Number(_cc.unread[a.id]) || 0;
+    return '<button type="button" class="sup-ag" data-ag="' + esc(a.id) + '"><span class="sup-ag-pic">' + chatAvatar(a) + '<i class="sup-ag-dot' + (on ? ' on' : '') + '"></i>' + (n ? '<b class="sup-ag-n">' + (n > 9 ? '9+' : n) + '</b>' : '') + '</span><span class="sup-ag-name">' + esc(a.name) + '</span></button>';
+  }).join('');
+}
+async function chatSummary(){
+  if (!STATE) return;
+  var r = await api('/chat/summary', null, 'GET', false);
+  if (!r || r.stale || r.status !== 'success') return;
+  _cc.unread = r.unread || {};
+  if (_cc.cfg) _cc.cfg.online = !!r.online;
+  paintChatAgents();
+}
+function chatSupportOpen(){
+  chatLoadConfig(true).then(chatSummary);
+  clearInterval(_cc.sumTimer);
+  _cc.sumTimer = setInterval(function(){
+    var el = $('ovSupport');
+    if (!el || !el.classList.contains('show') || document.hidden) { if (!el || !el.classList.contains('show')) { clearInterval(_cc.sumTimer); _cc.sumTimer = null; } return; }
+    chatLoadConfig(true).then(chatSummary);
+  }, 25000);
+}
+// This phone's key pair, made once and kept on the phone; its public half is registered so the admin panel can lock replies for it.
+async function chatKey(){
+  if (_cc.key && _cc.key.uid === STATE.uid) return _cc.key;
+  var k = null, name = 'sa_chat_' + STATE.uid;
+  try { k = JSON.parse(localStorage.getItem(name) || 'null'); } catch (e) {}
+  if (!k || !k.kid || !k.priv || !k.pub) {
+    var p = await CHAT.newPair(); k = { kid: p.kid, pub: p.pub, priv: p.priv };
+    try { localStorage.setItem(name, JSON.stringify(k)); } catch (e) {}
+  }
+  k.uid = STATE.uid; _cc.key = k; return k;
+}
+async function chatRegister(){
+  var k = await chatKey(), tag = STATE.uid + ':' + k.kid;
+  if (_cc.regFor === tag) return true;
+  var r = await api('/chat/key', { kid: k.kid, jwk: k.pub });
+  if (r && r.status === 'success') { _cc.regFor = tag; return true; }
+  return false;
+}
+function chatTick(st){
+  if (st === 'pend') return '<svg class="cm-tk" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v3.3l2 1.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+  var one = '<path d="M2.5 8.6l3.2 3.2L12.6 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>';
+  var two = '<path d="M1.2 8.6l3.2 3.2L11 4.6M7.2 11.2l.6.6L14.8 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>';
+  return '<svg class="cm-tk' + (st === 'read' ? ' rd' : '') + '" viewBox="0 0 16 16" aria-hidden="true">' + (st === 'sent' ? one : two) + '</svg>';
+}
+function chatDay(ms){
+  var d = new Date(ms), t = new Date(), y = new Date(Date.now() - 86400000);
+  if (d.toDateString() === t.toDateString()) return 'Today';
+  if (d.toDateString() === y.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+function chatRender(stick){
+  var box = $('chatList'), body = $('chatBody'); if (!box) return;
+  var near = body.scrollHeight - body.scrollTop - body.clientHeight < 90, html = '', last = '';
+  _cc.msgs.forEach(function(m){
+    var day = chatDay(m.at); if (day !== last) { html += '<div class="cm-day"><span>' + esc(day) + '</span></div>'; last = day; }
+    var me = m.from === 'member', st = m.pending ? 'pend' : (m.at <= _cc.adminReadAt ? 'read' : (m.at <= _cc.adminSeenAt ? 'dlv' : 'sent'));
+    var hm = new Date(m.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    html += '<div class="cm ' + (me ? 'me' : 'ag') + '"><div class="cm-b' + (m.text == null ? ' cm-lock' : '') + '">' + (m.text == null ? 'This message cannot be opened on this phone.' : esc(m.text)) + '<span class="cm-t">' + hm + (me ? chatTick(st) : '') + '</span></div></div>';
+  });
+  box.innerHTML = html;
+  if (stick || near) body.scrollTop = body.scrollHeight;
+}
+function chatState(){
+  var el = $('chatState'); if (!el) return;
+  el.textContent = _cc.online ? 'Online' : 'Offline';
+  el.className = _cc.online ? 'on' : '';
+}
+async function chatPoll(){
+  var ag = _cc.agent; if (!ag || !STATE) return;
+  var r = await api('/chat/history?agentId=' + encodeURIComponent(ag.id) + '&after=' + _cc.after, null, 'GET', false);
+  if (!r || r.stale || r.status !== 'success' || _cc.agent !== ag) return;
+  var k = await chatKey(), fresh = false, gotAdmin = false;
+  for (var i = 0; i < r.messages.length; i++) {
+    var m = r.messages[i];
+    _cc.after = Math.max(_cc.after, m.at);
+    if (_cc.msgs.some(function(x){ return x.id === m.id; })) continue;
+    var text = null;
+    try { var pt = await CHAT.open(m, STATE.uid + '|' + m.from + '|' + m.agentId, k.kid, k.priv); text = pt == null ? null : String((JSON.parse(pt) || {}).t || ''); } catch (e) { text = null; }
+    _cc.msgs.push({ id: m.id, from: m.from, text: text, at: m.at }); fresh = true; if (m.from === 'admin') gotAdmin = true;
+  }
+  _cc.msgs.sort(function(a, b){ return a.at - b.at; });
+  var sig = r.adminReadAt + '|' + r.adminSeenAt + '|' + r.online + '|' + _cc.msgs.length;
+  _cc.adminReadAt = r.adminReadAt; _cc.adminSeenAt = r.adminSeenAt; _cc.online = r.online; chatState();
+  if (fresh || sig !== _cc.sig) { _cc.sig = sig; chatRender(fresh); }
+  if (gotAdmin) api('/chat/read', { agentId: ag.id });
+}
+function chatSchedule(){
+  clearTimeout(_cc.timer); _cc.timer = null;
+  var el = $('ovChat');
+  if (!_cc.agent || !el || !el.classList.contains('show')) return;
+  _cc.timer = setTimeout(async function(){
+    if (!document.hidden) { try { await chatPoll(); } catch (e) {} }
+    chatSchedule();
+  }, 2500);
+}
+async function chatOpen(agentId){
+  if (!STATE) return;
+  var a = ((_cc.cfg && _cc.cfg.agents) || []).filter(function(x){ return x.id === agentId; })[0];
+  if (!a) return;
+  _cc.agent = a; _cc.msgs = []; _cc.after = 0; _cc.sig = ''; _cc.adminReadAt = 0; _cc.adminSeenAt = 0;
+  $('chatAv').innerHTML = chatAvatar(a); $('chatName').textContent = a.name; $('chatList').innerHTML = ''; $('chatInput').value = ''; chatGrow(); chatState();
+  openOverlay('chat'); chatFit();
+  try { await chatLoadConfig(true); await chatRegister(); await chatPoll(); } catch (e) {}
+  if (_cc.agent === a) { chatRender(true); api('/chat/read', { agentId: a.id }); delete _cc.unread[a.id]; chatSchedule(); }
+}
+function chatBack(){ _cc.agent = null; clearTimeout(_cc.timer); openOverlay('support'); }
+function chatGrow(){ var t = $('chatInput'); if (!t) return; t.style.height = 'auto'; var h = t.scrollHeight; t.style.height = h > 44 ? Math.min(h, 112) + 'px' : ''; }
+// The page sits above the keyboard: it follows the visible part of the screen.
+function chatFit(){
+  var el = $('ovChat'), vv = window.visualViewport; if (!el) return;
+  if (vv && el.classList.contains('show')) { el.style.height = vv.height + 'px'; el.style.top = vv.offsetTop + 'px'; el.style.bottom = 'auto'; }
+  else { el.style.height = ''; el.style.top = ''; el.style.bottom = ''; }
+  var b = $('chatBody'); if (b && el.classList.contains('show')) b.scrollTop = b.scrollHeight;
+}
+if (window.visualViewport) { window.visualViewport.addEventListener('resize', chatFit); window.visualViewport.addEventListener('scroll', chatFit); }
+async function chatSend(){
+  var inp = $('chatInput'), text = inp.value.trim();
+  if (!text || _cc.busy || !_cc.agent || !STATE) return;
+  if (!_cc.cfg || !_cc.cfg.adminKey) { toast('Chat is not available yet.'); return; }
+  var ag = _cc.agent, tmp = { id: 'tmp' + Date.now(), from: 'member', text: text, at: Date.now(), pending: true };
+  _cc.busy = true; inp.value = ''; chatGrow(); _cc.msgs.push(tmp); chatRender(true);
+  try {
+    var k = await chatKey();
+    if (!(await chatRegister())) throw new Error('Could not send. Check your connection.');
+    var env = await CHAT.seal(JSON.stringify({ t: text }), STATE.uid + '|member|' + ag.id, [{ kid: _cc.cfg.adminKey.kid, jwk: _cc.cfg.adminKey.jwk }, { kid: k.kid, jwk: k.pub }]);
+    env.agentId = ag.id;
+    var r = await api('/chat/send', env);
+    if (!r || r.status !== 'success') throw new Error((r && r.message) || 'Could not send. Try again.');
+    _cc.msgs = _cc.msgs.filter(function(x){ return x !== tmp; });
+    if (!_cc.msgs.some(function(x){ return x.id === r.id; })) _cc.msgs.push({ id: r.id, from: 'member', text: text, at: r.at });
+    _cc.after = Math.max(_cc.after, r.at - 1);
+  } catch (e) {
+    _cc.msgs = _cc.msgs.filter(function(x){ return x !== tmp; }); inp.value = text; chatGrow();
+    toast(e && e.message ? e.message : 'Could not send. Try again.');
+  } finally { _cc.busy = false; }
+  _cc.sig = ''; chatRender(true);
+}
+document.addEventListener('click', function(e){
+  var b = e.target.closest && e.target.closest('.sup-ag');
+  if (b) chatOpen(b.getAttribute('data-ag'));
+});
+document.addEventListener('keydown', function(e){
+  if (e.target && e.target.id === 'chatInput' && e.key === 'Enter' && !e.shiftKey && !('ontouchstart' in window)) { e.preventDefault(); chatSend(); }
+});
+document.addEventListener('input', function(e){ if (e.target && e.target.id === 'chatInput') chatGrow(); });
+
 document.addEventListener('click', function(e){
   var el = e.target.closest && e.target.closest('[data-open-url]');
   if (el) { e.preventDefault(); openLink(el.getAttribute('data-open-url')); }
@@ -2138,6 +2350,7 @@ function openOverlay(name){
   if (name === 'mychoc') renderMyRobots();
   if (name === 'earnings') renderEarnings();
   if (name === 'deposit') prepareDeposit();
+  if (name === 'support') chatSupportOpen();
   navVeil(true, rt || overlayTask(name));
 }
 function closeOverlay(){
@@ -2570,10 +2783,15 @@ async function gpSend(){
   if (!_gp.needId && !sms) { gpToast('Please enter payment SMS'); return; }
   if (_gp.needId && !txn) { gpToast('Please enter the transaction ID'); return; }
   _gp.busy = true; gpLoading(true);
-  var r;
-  try { r = await api('/deposit/manual/submit', { depositId: _gp.order.depositId, sms: sms, txnId: txn }); }
+  var r, t0 = Date.now();
+  try {
+    r = await api('/deposit/manual/submit', { depositId: _gp.order.depositId, sms: sms, txnId: txn });
+    // A message or ID that was already used does nothing at all: the Submit button loads for a moment, then simply stops (no notice, no change on the page).
+    if (r && r.code === 'USED') await new Promise(function(ok){ setTimeout(ok, Math.max(0, 1500 - (Date.now() - t0))); });
+  }
   finally { gpLoading(false); _gp.busy = false; }
   if (!r || r.stale || !_gpActive) return;
+  if (r.code === 'USED') return;
   if (r.status === 'success') { gpSent(true); return; }
   if (r.code === 'NEED_TXN_ID' && !_gp.needId) { gpNeedId(); return; }
   gpToast(r.message || 'Could not submit. Please try again');

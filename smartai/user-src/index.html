@@ -308,11 +308,53 @@
   .overlay.show{display:block;}
   /* "Particle background on every page" (Admin > Banners > Animations): the dark particle field fills the whole app. The pages' light backdrop gives way to it, the banners fade into
      it, the white cards stay as they are, and the words that sit straight on the backdrop turn white. Switched off, none of this applies. */
+  /* ---- customer service: the profile row on Support and the chat page (the particle field behind it when it is on, the same dark blue when it is off) ---- */
+  .sup-agents{display:grid;grid-template-columns:repeat(3,1fr);gap:22px 8px;padding:26px var(--gut) 30px;}
+  .sup-agents:empty{display:none}
+  .sup-ag{display:flex;flex-direction:column;align-items:center;gap:9px;background:none;border:0;padding:0;font-family:inherit;color:var(--cocoa);cursor:pointer;min-width:0;-webkit-tap-highlight-color:transparent;}
+  .sup-ag-pic{position:relative;width:78px;height:78px;border-radius:50%;display:block;}
+  .sup-ag-pic img,.sup-ag-pic .ch-ini{width:100%;height:100%;border-radius:50%;object-fit:cover;display:flex;align-items:center;justify-content:center;border:2px solid rgba(143,202,255,.55);box-shadow:0 4px 16px rgba(10,60,160,.45);background:linear-gradient(145deg,#2b88f3,#0a4fc2);font-size:30px;font-weight:800;color:#fff;box-sizing:border-box;}
+  .sup-ag-dot{position:absolute;right:3px;bottom:3px;width:15px;height:15px;border-radius:50%;background:#8a97b4;border:2.5px solid #0a2a6b;box-sizing:border-box;}
+  .sup-ag-dot.on{background:#27d36b;box-shadow:0 0 0 0 rgba(39,211,107,.6);animation:supAgPulse 1.8s ease-out infinite;}
+  @keyframes supAgPulse{0%{box-shadow:0 0 0 0 rgba(39,211,107,.55)}70%{box-shadow:0 0 0 7px rgba(39,211,107,0)}100%{box-shadow:0 0 0 0 rgba(39,211,107,0)}}
+  body.pf-on .sup-ag{color:#fff;}
+  .sup-ag-n{position:absolute;right:-3px;top:-3px;min-width:21px;height:21px;padding:0 5px;border-radius:11px;background:var(--berry);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid #0a2a6b;box-sizing:border-box;}
+  .sup-ag-name{font-size:13.5px;font-weight:700;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  #ovChat{background:radial-gradient(130% 90% at 50% 108%,#0c3f9c 0%,#071b56 42%,#040b26 100%);overflow:hidden;}
+  #ovChat.show{display:flex;flex-direction:column;}
+  .chat-top{margin-bottom:0;flex:0 0 auto;display:flex;align-items:center;}
+  .chat-top .ov-back{position:static;margin:0 4px 0 8px;flex:0 0 auto;}
+  .chat-who{display:flex;align-items:center;gap:10px;min-width:0;color:#fff;}
+  .chat-av{width:36px;height:36px;border-radius:50%;overflow:hidden;flex:0 0 auto;background:#fff2;display:flex;}
+  .chat-av img,.chat-av .ch-ini{width:100%;height:100%;object-fit:cover;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;}
+  .chat-id{display:flex;flex-direction:column;min-width:0;line-height:1.15;}
+  .chat-id b{font-size:15.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .chat-id small{font-size:11.5px;font-weight:600;opacity:.85;}
+  .chat-id small.on{color:#9bffc4;opacity:1;}
+  .chat-body{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;padding:12px var(--gut) 10px;-webkit-overflow-scrolling:touch;}
+  .chat-e2e{display:flex;gap:7px;align-items:flex-start;justify-content:center;text-align:center;font-size:11.5px;line-height:1.4;color:#cfe0fb;background:rgba(255,255,255,.1);border-radius:12px;padding:8px 12px;margin:0 auto 12px;max-width:340px;}
+  .chat-e2e svg{flex:0 0 auto;margin-top:1px;}
+  .cm{display:flex;margin:3px 0;}
+  .cm.me{justify-content:flex-end}
+  .cm-b{max-width:80%;padding:8px 11px 6px;border-radius:16px;font-size:14.5px;line-height:1.38;white-space:pre-wrap;word-break:break-word;position:relative;}
+  .cm.me .cm-b{background:linear-gradient(160deg,#2a86f2,#1259d4);color:#fff;border-bottom-right-radius:5px;}
+  .cm.ag .cm-b{background:#fff;color:#0c2a63;border-bottom-left-radius:5px;}
+  .cm-b.cm-lock{font-style:italic;opacity:.8;}
+  .cm-t{display:inline-flex;align-items:center;gap:3px;float:right;margin:7px 0 -1px 10px;font-size:10.5px;opacity:.75;line-height:1;}
+  .cm-tk{width:15px;height:15px;display:block;}
+  .cm-tk.rd{color:#7ff0ff;}
+  .cm.me .cm-t{opacity:.9}
+  .cm-day{text-align:center;margin:12px 0 8px;}
+  .cm-day span{display:inline-block;font-size:11.5px;font-weight:700;color:#cfe0fb;background:rgba(255,255,255,.12);border-radius:999px;padding:3px 11px;}
+  .chat-bar{flex:0 0 auto;display:flex;align-items:flex-end;gap:9px;padding:9px var(--gut) calc(9px + env(safe-area-inset-bottom,0px));background:rgba(6,18,60,.72);border-top:1px solid rgba(143,202,255,.18);}
+  .chat-bar textarea{flex:1;min-width:0;resize:none;border:0;border-radius:20px;padding:10px 15px;font:inherit;font-size:15px;line-height:1.35;max-height:112px;min-height:44px;box-sizing:border-box;background:#fff;color:#0c2a63;outline:none;}
+  .chat-send{flex:0 0 auto;width:44px;height:44px;border-radius:50%;border:0;background:linear-gradient(160deg,#2a86f2,#1259d4);color:#fff;display:flex;align-items:center;justify-content:center;}
   .pf-bg{position:fixed;inset:0;width:100%;height:100%;display:none;z-index:-1;pointer-events:none;}
   body.pf-on{--flow:#061638;background:none;}
   body.pf-on .pf-bg{display:block;}
   body.pf-on #root{background:transparent;}
   body.pf-on .overlay{background:transparent;}
+  body.pf-on #ovChat{background:transparent;}
   body.pf-on.ov-open #viewHome,body.pf-on.ov-open #viewShop,body.pf-on.ov-open #viewRewards,body.pf-on.ov-open #viewShare,body.pf-on.ov-open #viewTeam,body.pf-on.ov-open #viewAccount,body.pf-on.ov-open .tabbar{visibility:hidden;}
   body.pf-on .nav-veil{background:rgba(5,14,44,.94);}
   body.pf-on .sec-head h3,body.pf-on .empty,body.pf-on #supportLinks .kv,body.pf-on #ovBindbank .muted{color:#fff;}
@@ -1526,6 +1568,17 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Support</div></div>
     <div class="photo-banner" id="supportBanner"></div>
     <div style="padding:6px var(--gut)" id="supportLinks"></div>
+    <div class="sup-agents" id="supAgents"></div>
+  </div>
+
+  <div class="overlay" id="ovChat">
+    <div class="ov-top chat-top"><button class="ov-back" onclick="chatBack()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div class="chat-who"><span class="chat-av" id="chatAv"></span><span class="chat-id"><b id="chatName"></b><small id="chatState"></small></span></div></div>
+    <div class="chat-body" id="chatBody">
+      <div class="chat-e2e"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7"/></svg>Messages are end-to-end encrypted. Only you and customer service can read them.</div>
+      <div id="chatList"></div>
+    </div>
+    <div class="chat-bar"><textarea id="chatInput" rows="1" maxlength="1000" placeholder="Type a message" autocomplete="off"></textarea><button type="button" class="chat-send" id="chatSend" onclick="chatSend()" aria-label="Send"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3L10.5 13.5M21 3l-7 18-3.5-7.5L3 10l18-7z"/></svg></button></div>
   </div>
 
   <div class="overlay" id="ovAbout">

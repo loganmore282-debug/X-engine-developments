@@ -6972,6 +6972,297 @@ async function memberRecords(uid, collection, pick) {
 const _depositView = r => ({ ref: r.ref || '', amount: r.amount, network: r.network || '', phone: r.phone || '', status: r.status || '', failureReason: r.status === 'failed' ? (r.failureReason || '') : '', date: r.date || '', time: r.time || '', createdAt: r.createdAt || null });
 const _withdrawalView = r => ({ ref: r.ref || '', amount: r.amount, fee: r.fee, net: r.net, holder: r.holder || '', network: r.network || '', phone: r.phone || '', status: r.status || '',
   failureReason: (r.status === 'declined' || r.status === 'rejected') ? (r.failureReason || r.rejectReason || '') : '', date: r.date || '', time: r.time || '', createdAt: r.createdAt || null });
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// CUSTOMER SERVICE CHAT, END-TO-END ENCRYPTED
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// Owner: customer-service profiles (a photo and a name each, added and deleted in the admin panel) on the Support page; a member taps one and chats; every
+// message lands in ONE thread per member in the admin panel whichever profile was tapped, and the reply goes back to that member under the profile they
+// wrote to; ticks (sent, delivered, read), online, and a notice in the panel when a member writes.
+//
+// WHAT THE SERVER CAN AND CANNOT SEE. The words are encrypted on the member's phone and opened only in the admin panel (and back): the server keeps and passes on
+// ciphertext it cannot read. Each message has its own random AES-GCM key; that key is wrapped (ECDH P-256 + HKDF, a fresh one-time key pair per wrap) for every
+// public key that may read it: the admin panel's key, the member's own device key(s) (so the sender can read their own message again). The server holds
+// only PUBLIC keys. It does see who wrote, to which profile, when, and how large the message is. `wraps` carry no secret: without a private key they open nothing.
+const CHAT_MAX_AGENTS = 12, CHAT_MAX_CT = 6000, CHAT_MAX_WRAPS = 8, CHAT_MAX_KEYS = 3, CHAT_PAGE = 300, CHAT_ONLINE_MS = 45000;
+const CHAT_B64 = /^[A-Za-z0-9+/]+={0,2}$/, CHAT_B64U = /^[A-Za-z0-9_-]{43}$/, CHAT_IV = /^[A-Za-z0-9+/]{16}$/, CHAT_KID = /^[0-9a-f]{16}$/;
+const _chat = { adminAt: 0, agents: null, agentsAt: 0, seenWrite: new Map(), sendLog: new Map(), pushAt: new Map() };
+// A key id is the first 16 hex characters of SHA-256 of "x.y" of the public key: the server recomputes it, so nobody can register a key under another's id.
+function chatJwk(j) {
+  if (!j || typeof j !== 'object' || j.kty !== 'EC' || j.crv !== 'P-256' || !CHAT_B64U.test(String(j.x || '')) || !CHAT_B64U.test(String(j.y || ''))) return null;
+  return { kty: 'EC', crv: 'P-256', x: j.x, y: j.y };
+}
+function chatKidOf(jwk) { return crypto.createHash('sha256').update(jwk.x + '.' + jwk.y).digest('hex').slice(0, 16); }
+function chatEnvelope(b) {
+  if (!b || typeof b !== 'object') return null;
+  const iv = String(b.iv || ''), ct = String(b.ct || '');
+  if (!CHAT_IV.test(iv) || ct.length < 24 || ct.length > CHAT_MAX_CT || !CHAT_B64.test(ct)) return null;
+  if (!Array.isArray(b.wraps) || !b.wraps.length || b.wraps.length > CHAT_MAX_WRAPS) return null;
+  const wraps = [];
+  for (const w of b.wraps) {
+    const epk = chatJwk(Object.assign({ kty: 'EC', crv: 'P-256' }, w && w.epk));
+    if (!w || !CHAT_KID.test(String(w.kid || '')) || !epk || !CHAT_IV.test(String(w.iv || '')) || !CHAT_B64.test(String(w.ek || '')) || String(w.ek).length > 120) return null;
+    wraps.push({ kid: w.kid, epk: { x: epk.x, y: epk.y }, iv: w.iv, ek: w.ek });
+  }
+  return { iv, ct, wraps };
+}
+function chatTouchAdmin() { _chat.adminAt = Date.now(); }
+function chatAdminOnline() { return Date.now() - _chat.adminAt < CHAT_ONLINE_MS; }
+async function chatAgents(fresh) {
+  if (!fresh && _chat.agents && Date.now() - _chat.agentsAt < 15000) return _chat.agents;
+  const snap = await db.collection('chatAgents').get();
+  _chat.agents = snap.docs.map(d => ({ id: d.id, name: String(d.data().name || ''), photo: String(d.data().photo || ''), order: Number(d.data().order) || 0 })).sort((a, b) => a.order - b.order);
+  _chat.agentsAt = Date.now();
+  return _chat.agents;
+}
+async function chatAdminKey() {
+  const s = await db.collection('meta').doc('chatKey').get();
+  if (!s.exists) return null;
+  const jwk = chatJwk(s.data().jwk);
+  return jwk ? { kid: chatKidOf(jwk), jwk } : null;
+}
+// Members' reads and their polls: a message is DELIVERED once the other side has asked for the list after it was sent, READ once they opened the chat.
+function chatNoteMemberSeen(uid) {
+  const now = Date.now();
+  if (now - (_chat.seenWrite.get(uid) || 0) < 4000) return;
+  _chat.seenWrite.set(uid, now);
+  if (_chat.seenWrite.size > 20000) for (const [k, t] of _chat.seenWrite) if (now - t > 60000) _chat.seenWrite.delete(k);
+  db.collection('chatThreads').doc(uid).update({ memberSeenAt: now }).catch(() => {});
+}
+const chatMsgOut = d => { const v = d.data(); return { id: d.id, from: v.from, agentId: v.agentId, iv: v.iv, ct: v.ct, wraps: v.wraps, at: v.at }; };
+
+// ---- public: the profiles, the admin panel's public key, whether someone is there ----
+app.get('/public/chat-config', async (_req, res) => {
+  try {
+    const [agents, key] = await Promise.all([chatAgents(), chatAdminKey()]);
+    res.set('Cache-Control', 'no-store');
+    res.json({ status: 'success', agents: agents.map(a => ({ id: a.id, name: a.name, photo: a.photo })), adminKey: key, online: chatAdminOnline() });
+  } catch (e) { console.error('chat config:', e.message); res.status(500).json({ status: 'error', message: 'Could not load support' }); }
+});
+
+// ---- member ----
+app.post('/chat/key', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const jwk = chatJwk(req.body && req.body.jwk), kid = jwk && chatKidOf(jwk);
+    if (!jwk || kid !== String((req.body || {}).kid || '')) return res.status(400).json({ status: 'error', message: 'Bad key' });
+    await withLock('chatkey:' + uid, async () => {
+      const ref = db.collection('chatMembers').doc(uid), s = await ref.get();
+      const keys = (s.exists && Array.isArray(s.data().keys) ? s.data().keys : []).filter(k => k && k.kid !== kid);
+      keys.unshift({ kid, jwk, at: Date.now() });
+      await ref.set({ keys: keys.slice(0, CHAT_MAX_KEYS) });
+    });
+    res.json({ status: 'success' });
+  } catch (e) { console.error('chat key:', e.message); res.status(500).json({ status: 'error', message: 'Could not save' }); }
+});
+app.post('/chat/send', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const env = chatEnvelope(req.body), agentId = String((req.body || {}).agentId || '');
+    if (!env) return res.status(400).json({ status: 'error', message: 'Could not send' });
+    const now = Date.now(), log = (_chat.sendLog.get(uid) || []).filter(t => now - t < 60000);
+    if (log.length >= 20) return res.status(429).json({ status: 'error', message: 'You are sending too fast. Wait a moment.' });
+    log.push(now); _chat.sendLog.set(uid, log);
+    if (_chat.sendLog.size > 20000) for (const [k, v] of _chat.sendLog) if (!v.length || now - v[v.length - 1] > 60000) _chat.sendLog.delete(k);
+    const agents = await chatAgents(), agent = agents.find(a => a.id === agentId);
+    if (!agent) return res.status(404).json({ status: 'error', message: 'This customer service profile is no longer available.' });
+    const uSnap = await db.collection('users').doc(uid).get();
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const u = uSnap.data();
+    if (u.status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    const msg = { threadId: uid, agentId, from: 'member', iv: env.iv, ct: env.ct, wraps: env.wraps, at: now };
+    const added = await db.collection('chatMessages').add(msg);
+    await withLock('chat:' + uid, async () => {
+      const ref = db.collection('chatThreads').doc(uid), s = await ref.get();
+      const meta = { userId: uid, phone: String(u.phone || ''), publicId: String(u.publicId || ''), lastAt: now, lastFrom: 'member', lastAgentId: agentId, last: { from: 'member', iv: env.iv, ct: env.ct, wraps: env.wraps, at: now }, memberSeenAt: now };
+      if (s.exists) await ref.update(Object.assign(meta, { unreadAdmin: FieldValue.increment(1) }));
+      else await ref.set(Object.assign(meta, { unreadAdmin: 1, adminReadAt: 0, memberReadMap: {}, createdAt: now }));
+    });
+    // The panel is told, without a word of the message (it is encrypted; the notice says only that someone wrote).
+    if (now - (_chat.pushAt.get(uid) || 0) > 20000) {
+      _chat.pushAt.set(uid, now);
+      sendAdminPush('New customer message', `${agent.name}: a member${u.publicId ? ' (ID ' + u.publicId + ')' : ''} wrote to you. Open Chat.`, { type: 'chat', userId: uid }).catch(() => {});
+    }
+    res.json({ status: 'success', id: added.id, at: now });
+  } catch (e) { console.error('chat send:', e.message); res.status(500).json({ status: 'error', message: 'Could not send. Try again.' }); }
+});
+app.get('/chat/history', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const agentId = String(req.query.agentId || ''), after = Number(req.query.after) || 0;
+    if (!agentId) return res.status(400).json({ status: 'error', message: 'Choose a profile' });
+    const snap = await db.collection('chatMessages').where('threadId', '==', uid).where('agentId', '==', agentId).orderBy('at', 'asc').limit(CHAT_PAGE).get();
+    const rows = snap.docs.map(chatMsgOut).filter(m => m.at > after);
+    const tSnap = await db.collection('chatThreads').doc(uid).get();
+    const t = tSnap.exists ? tSnap.data() : {};
+    chatNoteMemberSeen(uid);
+    res.set('Cache-Control', 'no-store');
+    res.json({ status: 'success', messages: rows, adminReadAt: Number(t.adminReadAt) || 0, adminSeenAt: _chat.adminAt, online: chatAdminOnline(), now: Date.now() });
+  } catch (e) { console.error('chat history:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the chat' }); }
+});
+app.post('/chat/read', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const agentId = String((req.body || {}).agentId || '').slice(0, 40);
+    await withLock('chat:' + uid, async () => {
+      const ref = db.collection('chatThreads').doc(uid), s = await ref.get();
+      if (!s.exists) return;
+      const map = Object.assign({}, s.data().memberReadMap || {});
+      if (agentId) map[agentId] = Date.now();
+      await ref.update({ memberReadMap: map, memberSeenAt: Date.now() });
+    });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save' }); }
+});
+app.get('/chat/summary', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const tSnap = await db.collection('chatThreads').doc(uid).get();
+    const unread = {};
+    if (tSnap.exists) {
+      const map = tSnap.data().memberReadMap || {};
+      const snap = await db.collection('chatMessages').where('threadId', '==', uid).orderBy('at', 'desc').limit(120).get();
+      snap.docs.forEach(d => { const v = d.data(); if (v.from === 'admin' && v.at > (Number(map[v.agentId]) || 0)) unread[v.agentId] = (unread[v.agentId] || 0) + 1; });
+      chatNoteMemberSeen(uid);
+    }
+    res.set('Cache-Control', 'no-store');
+    res.json({ status: 'success', unread, online: chatAdminOnline() });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load' }); }
+});
+
+// ---- admin panel ----
+app.get('/admin/chat/summary', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    chatTouchAdmin();
+    const snap = await db.collection('chatThreads').where('unreadAdmin', '>', 0).limit(500).get();
+    let unread = 0, latestAt = 0, latestUser = '';
+    snap.docs.forEach(d => { const v = d.data(); unread += Number(v.unreadAdmin) || 0; if ((v.lastAt || 0) > latestAt) { latestAt = v.lastAt; latestUser = d.id; } });
+    res.set('Cache-Control', 'no-store');
+    res.json({ status: 'success', unread, threads: snap.size, latestAt, latestUser });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load' }); }
+});
+app.get('/admin/chat/threads', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    chatTouchAdmin();
+    const [snap, agents] = await Promise.all([db.collection('chatThreads').orderBy('lastAt', 'desc').limit(300).get(), chatAgents()]);
+    const now = Date.now();
+    const threads = snap.docs.map(d => { const v = d.data(); return { userId: d.id, phone: v.phone || '', publicId: v.publicId || '', lastAt: v.lastAt || 0, lastFrom: v.lastFrom || '', lastAgentId: v.lastAgentId || '', unread: Number(v.unreadAdmin) || 0, memberOnline: now - (Number(v.memberSeenAt) || 0) < CHAT_ONLINE_MS, last: v.last || null }; });
+    res.set('Cache-Control', 'no-store');
+    res.json({ status: 'success', threads, agents: agents.map(a => ({ id: a.id, name: a.name })), now });
+  } catch (e) { console.error('chat threads:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the chats' }); }
+});
+app.get('/admin/chat/thread', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    chatTouchAdmin();
+    const userId = String(req.query.userId || '').slice(0, 80), after = Number(req.query.after) || 0;
+    if (!userId) return res.status(400).json({ status: 'error', message: 'Missing member' });
+    const [tSnap, mSnap, kSnap] = await Promise.all([
+      db.collection('chatThreads').doc(userId).get(),
+      db.collection('chatMessages').where('threadId', '==', userId).orderBy('at', 'asc').limit(CHAT_PAGE).get(),
+      db.collection('chatMembers').doc(userId).get(),
+    ]);
+    if (!tSnap.exists) return res.status(404).json({ status: 'error', message: 'No chat with this member' });
+    const t = tSnap.data(), now = Date.now();
+    res.set('Cache-Control', 'no-store');
+    res.json({ status: 'success', messages: mSnap.docs.map(chatMsgOut).filter(m => m.at > after), memberKeys: (kSnap.exists && kSnap.data().keys || []).map(k => ({ kid: k.kid, jwk: k.jwk })),
+      memberReadAt: Math.max(0, ...Object.values(t.memberReadMap || {}).map(Number)), memberSeenAt: Number(t.memberSeenAt) || 0, memberOnline: now - (Number(t.memberSeenAt) || 0) < CHAT_ONLINE_MS,
+      lastAgentId: t.lastAgentId || '', phone: t.phone || '', publicId: t.publicId || '', memberReadMap: t.memberReadMap || {}, now });
+  } catch (e) { console.error('chat thread:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the chat' }); }
+});
+app.post('/admin/chat/send', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const userId = String((req.body || {}).userId || '').slice(0, 80), agentId = String((req.body || {}).agentId || ''), env = chatEnvelope(req.body);
+    if (!userId || !env) return res.status(400).json({ status: 'error', message: 'Could not send' });
+    const tSnap = await db.collection('chatThreads').doc(userId).get();
+    if (!tSnap.exists) return res.status(404).json({ status: 'error', message: 'No chat with this member' });
+    const now = Date.now(), by = String((req.adminUser && req.adminUser.username) || 'owner').slice(0, 40);
+    const added = await db.collection('chatMessages').add({ threadId: userId, agentId, from: 'admin', by, iv: env.iv, ct: env.ct, wraps: env.wraps, at: now });
+    await withLock('chat:' + userId, async () => {
+      await db.collection('chatThreads').doc(userId).update({ lastAt: now, lastFrom: 'admin', lastAgentId: agentId, last: { from: 'admin', iv: env.iv, ct: env.ct, wraps: env.wraps, at: now }, adminReadAt: now, unreadAdmin: 0 });
+    });
+    chatTouchAdmin();
+    res.json({ status: 'success', id: added.id, at: now });
+  } catch (e) { console.error('chat admin send:', e.message); res.status(500).json({ status: 'error', message: 'Could not send' }); }
+});
+app.post('/admin/chat/read', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const userId = String((req.body || {}).userId || '').slice(0, 80);
+    await withLock('chat:' + userId, async () => {
+      const ref = db.collection('chatThreads').doc(userId), s = await ref.get();
+      if (s.exists) await ref.update({ adminReadAt: Date.now(), unreadAdmin: 0 });
+    });
+    chatTouchAdmin();
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save' }); }
+});
+// The panel's public key. Made once, in the owner's browser (the private half never leaves it); replacing it makes older messages unreadable, so it must be asked for.
+app.get('/admin/chat/key', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', key: await chatAdminKey() }); } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load' }); }
+});
+app.post('/admin/chat/key', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const jwk = chatJwk(req.body && req.body.jwk), kid = jwk && chatKidOf(jwk);
+    if (!jwk || kid !== String((req.body || {}).kid || '')) return res.status(400).json({ status: 'error', message: 'Bad key' });
+    const cur = await chatAdminKey();
+    if (cur && cur.kid !== kid && req.body.replace !== true) return res.status(409).json({ status: 'error', code: 'KEY_EXISTS', message: 'A chat key already exists. Restore it from your backup, or replace it (older messages become unreadable).' });
+    await db.collection('meta').doc('chatKey').set({ jwk, at: Date.now() });
+    logAdminAction(req, 'chat_key_set', { kid, replaced: !!cur && cur.kid !== kid });
+    res.json({ status: 'success', kid });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save' }); }
+});
+// The profiles: owner only.
+const CHAT_PHOTO = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+app.get('/admin/chat/agents', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', agents: await chatAgents(true) }); } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load' }); }
+});
+app.post('/admin/chat/agent/save', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const b = req.body || {}, name = cleanAgentName(b.name).slice(0, 30), id = String(b.id || '');
+    if (!name) return res.status(400).json({ status: 'error', message: 'Give the profile a name.' });
+    const photo = b.photo == null ? null : String(b.photo);
+    if (photo !== null && photo !== '' && (!CHAT_PHOTO.test(photo) || photo.length > 90000)) return res.status(400).json({ status: 'error', message: 'Use a smaller picture (PNG, JPG or WebP).' });
+    const list = await chatAgents(true);
+    let doc;
+    if (id) {
+      const cur = list.find(a => a.id === id);
+      if (!cur) return res.status(404).json({ status: 'error', message: 'That profile no longer exists.' });
+      doc = db.collection('chatAgents').doc(id);
+      await doc.update(Object.assign({ name }, photo === null ? {} : { photo }));
+    } else {
+      if (list.length >= CHAT_MAX_AGENTS) return res.status(400).json({ status: 'error', message: `At most ${CHAT_MAX_AGENTS} profiles.` });
+      doc = db.collection('chatAgents').doc(crypto.randomBytes(4).toString('hex'));
+      await doc.set({ name, photo: photo || '', order: Date.now(), createdAt: Date.now() });
+    }
+    _chat.agentsAt = 0;
+    logAdminAction(req, 'chat_agent_saved', { id: doc.id, name });
+    res.json({ status: 'success', agents: await chatAgents(true) });
+  } catch (e) { console.error('chat agent save:', e.message); res.status(500).json({ status: 'error', message: 'Could not save the profile' }); }
+});
+app.post('/admin/chat/agent/delete', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const id = String((req.body || {}).id || '');
+    if (!id) return res.status(400).json({ status: 'error', message: 'Missing profile' });
+    await db.collection('chatAgents').doc(id).delete();
+    _chat.agentsAt = 0;
+    logAdminAction(req, 'chat_agent_deleted', { id });
+    res.json({ status: 'success', agents: await chatAgents(true) });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not delete the profile' }); }
+});
+
 // ── MANUAL MOBILE-MONEY RECHARGE (the admin's own MTN / Airtel numbers) ──
 // Owner: "payment numbers will be uploaded from the admin panel ... payment orders are fresh, just like Potato". The admin types the numbers members pay to
 // (network MTN or Airtel, the number, the account name). A member taps an amount, picks MTN or Airtel and types the number they will pay FROM; the server shows
@@ -7184,7 +7475,8 @@ app.post('/deposit/manual/submit', async (req, res) => {
         ...(sms && toDigits ? { pastedSmsToMatches: sms.replace(/\D/g, '').includes(toDigits) } : {}),
       })) ? 'ok' : 'gone';
     });
-    if (claim === 'dup') return res.status(409).json({ status: 'error', message: 'This transaction ID has already been submitted.' });
+    // An ID or message that was already used: the app shows nothing for it (the Submit button just loads and stops), so the code is all it needs.
+    if (claim === 'dup') return res.status(409).json({ status: 'error', code: 'USED', message: 'This transaction ID has already been submitted.' });
     const updated = claim === 'ok';
     if (!updated) return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
     const { date, time } = nowStr();
@@ -9318,6 +9610,11 @@ app.post('/admin/user/delete', async (req, res) => {
       ...secSnap.docs.map(d => d.ref.delete()),
       ...depSnap.docs.map(d => d.ref.delete()),
     ]);
+    // The member's customer-service chat goes with the account (their messages, their chat keys and the admin's thread of them).
+    try {
+      const chatSnap = await db.collection('chatMessages').where('threadId', '==', userId).get();
+      await Promise.all([...chatSnap.docs.map(d => d.ref.delete()), db.collection('chatThreads').doc(userId).delete(), db.collection('chatMembers').doc(userId).delete()]);
+    } catch (e) { console.warn('Chat cleanup for a deleted member failed:', e.message); }
     await db.collection('users').doc(userId).delete();
     try { await deleteMemberLogin(userId); } catch (_) {}
     // Codex-caught real bug: recomputeTeamCounts(parentId) alone only fixes

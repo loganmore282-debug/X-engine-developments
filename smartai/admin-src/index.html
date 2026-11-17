@@ -189,6 +189,57 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .img-picker-actions{display:flex;flex-direction:column;gap:8px}
   .file-btn{display:inline-flex;align-items:center;justify-content:center;text-align:center}
   .banner-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line2)}
+  /* ---- Chat tab ---- */
+  .ch-av{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:34px;height:34px;border-radius:50%;background:linear-gradient(145deg,#2b88f3,#0a4fc2);color:#fff;font-weight:800;font-size:14px;overflow:visible;}
+  .ch-av img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;}
+  .ch-av.md{width:42px;height:42px;background:#e4eefc;color:var(--gold-deep);}
+  .ch-av.lg{width:44px;height:44px;font-size:17px}
+  .ch-av.xl{width:64px;height:64px;font-size:24px}
+  .ch-dot{position:absolute;right:-1px;bottom:-1px;width:12px;height:12px;border-radius:50%;background:#27c46b;border:2px solid #fff;box-sizing:border-box;}
+  .ch-tools>summary{cursor:pointer;font-weight:800;font-size:14.5px;list-style:none;}
+  .ch-tools>summary::-webkit-details-marker{display:none}
+  .chat-grid{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:14px;align-items:start;}
+  .ch-filter{display:flex;gap:8px;margin-bottom:10px;}
+  .ch-pill{border:1px solid var(--line);background:var(--card);color:var(--sub);border-radius:999px;padding:6px 14px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+  .ch-pill.active{background:var(--gold);color:#fff;border-color:var(--gold);}
+  .ch-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;border-radius:12px;padding:10px;font:inherit;color:var(--ink);cursor:pointer;}
+  .ch-row:hover{background:var(--bg)}
+  .ch-row.sel{background:#e0ecff}
+  .ch-row.unr .ch-prev{font-weight:800;color:var(--ink)}
+  .ch-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
+  .ch-main b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ch-main b small{font-weight:600;color:var(--sub);font-size:11.5px;}
+  .ch-prev{font-size:12.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ch-via{font-size:11px;color:var(--gold-deep);font-weight:700;}
+  .ch-side{display:flex;flex-direction:column;align-items:flex-end;gap:5px;font-size:11px;color:var(--sub);flex:0 0 auto;}
+  .ch-n{min-width:20px;height:20px;border-radius:10px;padding:0 6px;background:var(--danger);color:#fff;font-size:11.5px;display:flex;align-items:center;justify-content:center;}
+  .ch-conv{padding:0;overflow:hidden;margin-bottom:0}
+  .ch-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);}
+  .ch-back{display:none}
+  .ch-msgs{height:min(56vh,520px);overflow-y:auto;padding:12px 14px;background:linear-gradient(180deg,#f4f8ff,#eaf1ff);}
+  .ch-m{display:flex;margin:4px 0}
+  .ch-m.me{justify-content:flex-end}
+  .ch-b{max-width:78%;padding:7px 11px 6px;border-radius:14px;font-size:14px;line-height:1.38;white-space:pre-wrap;word-break:break-word;}
+  .ch-m.ag .ch-b{background:#fff;border:1px solid var(--line);border-bottom-left-radius:4px;}
+  .ch-m.me .ch-b{background:linear-gradient(160deg,#2a86f2,#1259d4);color:#fff;border-bottom-right-radius:4px;}
+  .ch-b.lock{font-style:italic;opacity:.75}
+  .ch-as{display:block;font-size:10.5px;font-weight:800;opacity:.7;margin-bottom:2px;}
+  .ch-t{display:inline-flex;align-items:center;gap:3px;float:right;margin:6px 0 -1px 10px;font-size:10.5px;opacity:.75;}
+  .ch-tk{width:15px;height:15px;display:block}
+  .ch-tk.rd{color:#7ff0ff}
+  .ch-day{text-align:center;margin:10px 0 6px}
+  .ch-day span{font-size:11.5px;font-weight:700;color:var(--sub);background:#fff;border:1px solid var(--line);border-radius:999px;padding:2px 11px;}
+  .ch-reply{padding:10px 14px 14px;border-top:1px solid var(--line);}
+  .ch-reply select{margin-left:6px;width:auto;display:inline-block;padding:5px 8px}
+  .ch-bar{display:flex;gap:8px;align-items:flex-end;margin-top:8px}
+  .ch-bar textarea{flex:1;min-width:0;resize:none;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font:inherit;font-size:14px;max-height:120px;}
+  .ch-empty{display:flex;align-items:center;justify-content:center;min-height:240px;}
+  @media (max-width:820px){
+    .chat-grid{grid-template-columns:1fr}
+    .chat-grid.open .chat-list-col{display:none}
+    .chat-grid:not(.open) .chat-view-col{display:none}
+    .ch-back{display:inline-block}
+  }
 
   /* modal */
   .modal-root{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -329,6 +380,7 @@ window.createSmartAIIdleSession = function(key, onExpire, onActivity){
         <button class="tab" data-tab="users">Users</button>
         <button class="tab" data-tab="deposits">Deposits <span class="badge-n hidden" id="dBadge"></span></button>
         <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
+        <button class="tab" data-tab="chat" id="chatTab">Chat <span class="badge-n hidden" id="cBadge"></span></button>
         <button class="tab" data-tab="products" id="productsTab">Products</button>
         <button class="tab" data-tab="promocodes" id="promocodesTab">Gift Codes</button>
         <button class="tab" data-tab="transactions">Transactions</button>
@@ -848,7 +900,7 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
   // picker on Settings and Products is built from it. Failure is silent and
   // leaves Uganda standing, which is what a single-region platform is.
   switchTab(lastTab);
-  refreshBadges(); startLive();
+  refreshBadges(); startLive(); chatNotifyStart();
   if (window._adminInstallPrompt) $('installBtn').classList.remove('hidden');
   resyncPushToken();
   // The app's name, for the topbar and the tab title. Fetched here rather
@@ -1134,7 +1186,7 @@ function switchTab(name){
   const spinnerTimer = setTimeout(() => { if (sequence === _tabSequence && c.innerHTML === before) c.innerHTML=spinnerHtml(); }, 120);
   const fn = ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
      products:renderProducts, promocodes:renderPromoCodes, transactions:renderTransactions,
-     referrals:renderReferrals, settings:renderSettings, banners:renderBanners, paynumbers:renderPayNumbers, admins:renderAdmins, auditlog:renderAuditLog }[name]);
+     referrals:renderReferrals, chat:renderChat, settings:renderSettings, banners:renderBanners, paynumbers:renderPayNumbers, admins:renderAdmins, auditlog:renderAuditLog }[name]);
   // The switch lives in the topbar, OUTSIDE #content, so a tab render can
   // never take it with it -- which is why this no longer waits for the tab
   // to paint. Only the note under the tabs depends on which tab is open, and
@@ -2954,6 +3006,315 @@ async function renderAdmins(){
 // Owner: "payment numbers will be uploaded from the admin panel". Each entry is one number a member can be asked to pay to on the payment page. Members only
 // choose MTN or Airtel; the numbers of one network are handed out in turn, a new order every time.
 let _payRows = [], _payEdit = null, _payLogoNow = '';
+/* CHATCRYPTO BEGIN (the same text in the member app and in the admin panel; test-chat-e2e.js compares the two copies) */
+var CHAT = (function(){
+  var enc = new TextEncoder(), dec = new TextDecoder(), S = crypto.subtle, EC = { name: 'ECDH', namedCurve: 'P-256' };
+  function b64(buf){ var a = new Uint8Array(buf), s = ''; for (var i = 0; i < a.length; i += 8192) s += String.fromCharCode.apply(null, a.subarray(i, i + 8192)); return btoa(s); }
+  function unb64(t){ var s = atob(t), a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+  function pubOf(j){ return { kty: 'EC', crv: 'P-256', x: j.x, y: j.y }; }
+  async function kidOf(jwk){
+    var h = new Uint8Array(await S.digest('SHA-256', enc.encode(jwk.x + '.' + jwk.y))), out = '';
+    for (var i = 0; i < 8; i++) out += ('0' + h[i].toString(16)).slice(-2);
+    return out;
+  }
+  // A key pair: kid names it, pub is shared with the server, priv stays on this device.
+  async function newPair(){
+    var kp = await S.generateKey(EC, true, ['deriveBits']), pub = pubOf(await S.exportKey('jwk', kp.publicKey)), priv = await S.exportKey('jwk', kp.privateKey);
+    return { kid: await kidOf(pub), pub: pub, priv: priv };
+  }
+  // The key that locks one message's own key: the ECDH secret of (private, public), stretched with HKDF.
+  async function wrapKey(privKey, pubJwk){
+    var bits = await S.deriveBits({ name: 'ECDH', public: await S.importKey('jwk', pubOf(pubJwk), EC, false, []) }, privKey, 256);
+    var base = await S.importKey('raw', bits, 'HKDF', false, ['deriveKey']);
+    return S.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: enc.encode('smartai-chat-v1') }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  // Encrypts text for every recipient ([{kid, jwk}]); ad (thread|from|profile) is bound into the ciphertext so a message cannot be moved to another conversation.
+  async function seal(text, ad, recipients){
+    var k = await S.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']), iv = crypto.getRandomValues(new Uint8Array(12));
+    var ct = await S.encrypt({ name: 'AES-GCM', iv: iv, additionalData: enc.encode(ad) }, k, enc.encode(text)), raw = await S.exportKey('raw', k), wraps = [];
+    for (var i = 0; i < recipients.length; i++) {
+      var eph = await S.generateKey(EC, true, ['deriveBits']), wk = await wrapKey(eph.privateKey, recipients[i].jwk), wiv = crypto.getRandomValues(new Uint8Array(12));
+      var ek = await S.encrypt({ name: 'AES-GCM', iv: wiv }, wk, raw), epk = pubOf(await S.exportKey('jwk', eph.publicKey));
+      wraps.push({ kid: recipients[i].kid, epk: { x: epk.x, y: epk.y }, iv: b64(wiv), ek: b64(ek) });
+    }
+    return { iv: b64(iv), ct: b64(ct), wraps: wraps };
+  }
+  // Opens a message with this device's private key (kid names it); null when the message was not locked for this key.
+  async function open(msg, ad, kid, privJwk){
+    var w = null; for (var i = 0; i < msg.wraps.length; i++) if (msg.wraps[i].kid === kid) w = msg.wraps[i];
+    if (!w) return null;
+    var wk = await wrapKey(await S.importKey('jwk', privJwk, EC, false, ['deriveBits']), w.epk);
+    var raw = await S.decrypt({ name: 'AES-GCM', iv: unb64(w.iv) }, wk, unb64(w.ek)), k = await S.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+    return dec.decode(await S.decrypt({ name: 'AES-GCM', iv: unb64(msg.iv), additionalData: enc.encode(ad) }, k, unb64(msg.ct)));
+  }
+  return { newPair: newPair, kidOf: kidOf, seal: seal, open: open, b64: b64, unb64: unb64 };
+})();
+/* CHATCRYPTO END */
+
+/* ====================== CHAT: customer service, end-to-end encrypted ======================
+   One inbox: every member's messages are ONE thread whichever profile they tapped; the reply goes back under the profile they wrote to (or another you pick).
+   The words are opened here and only here: this browser holds the private key (made once, backed up with a password you choose); the server only ever sees ciphertext. */
+const CH_KEY_STORE = 'smartai_chat_admin_key_v1';
+let _ch = { key: null, serverKey: null, agents: [], threads: [], sel: null, meta: null, msgs: [], after: 0, filter: 'all', cache: new Map(), pollT: null, listT: null, notifyT: null, edit: null, busy: false, unread: 0, latestSeen: 0, sig: '' };
+function chLoadKey(){ try { const k = JSON.parse(localStorage.getItem(CH_KEY_STORE) || 'null'); return k && k.kid && k.pub && k.priv ? k : null; } catch (_) { return null; } }
+function chSaveKey(k){ try { localStorage.setItem(CH_KEY_STORE, JSON.stringify(k)); } catch (_) {} }
+function chReady(){ return !!(_ch.key && _ch.serverKey && _ch.key.kid === _ch.serverKey.kid); }
+function chTime(ms){
+  const d = new Date(ms), t = new Date();
+  if (d.toDateString() === t.toDateString()) return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+function chAgentName(id){ const a = _ch.agents.find(x => x.id === id); return a ? a.name : 'Customer service'; }
+function chPhoto(a){ return a && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/]+=*$/.test(a.photo || '') ? a.photo : ''; }
+function chAv(a, cls){ const p = chPhoto(a); return `<span class="ch-av ${cls || ''}">${p ? `<img src="${p}" alt="">` : esc((a && a.name || '?').trim().charAt(0).toUpperCase() || '?')}</span>`; }
+const CH_TICK_ONE = '<path d="M2.5 8.6l3.2 3.2L12.6 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>';
+const CH_TICK_TWO = '<path d="M1.2 8.6l3.2 3.2L11 4.6M7.2 11.2l.6.6L14.8 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>';
+function chTick(st){ return `<svg class="ch-tk${st === 'read' ? ' rd' : ''}" viewBox="0 0 16 16" aria-hidden="true">${st === 'sent' ? CH_TICK_ONE : CH_TICK_TWO}</svg>`; }
+
+async function renderChat(){
+  const [k, a] = await Promise.all([api('/admin/chat/key'), api('/admin/chat/agents')]);
+  if (staleTab('chat')) return;
+  _ch.serverKey = (k && k.key) || null; _ch.agents = (a && a.agents) || []; _ch.key = chLoadKey();
+  drawChat();
+  if (chReady()) { chStartPolling(); chRefreshList(); }
+}
+function drawChat(){
+  const owner = SESSION_ROLE === 'owner';
+  let html = '<h2 class="sec">Chat</h2>';
+  if (!_ch.serverKey) {
+    html += owner ? `<div class="panel-card"><h3 style="margin:0 0 6px;font-size:15px">Turn on encrypted chat</h3>
+      <p class="muted" style="margin:0 0 12px">This makes the key that opens members' messages. It stays in THIS browser; the server only gets the public half, so it can never read a message. After this, add your customer-service profiles and download a backup of the key.</p>
+      <button class="btn" id="chMake" type="button">Create the chat key</button></div>` : '<div class="panel-card"><p class="muted" style="margin:0">Chat is not turned on yet. The owner has to create the chat key first.</p></div>';
+  } else if (!chReady()) {
+    html += `<div class="panel-card"><h3 style="margin:0 0 6px;font-size:15px">This browser does not have the chat key</h3>
+      <p class="muted" style="margin:0 0 12px">Restore it from the backup file you downloaded, with the password you chose.</p>
+      <div class="row"><div><label>Backup file</label><input type="file" id="chRestoreFile" accept="application/json,.json"></div><div><label>Password</label><input type="password" id="chRestorePass" autocomplete="off"></div></div>
+      <div class="row" style="margin-top:12px"><button class="btn" id="chRestore" type="button">Restore the key</button>${owner ? '<button class="btn ghost" id="chReplace" type="button">Make a new key instead</button>' : ''}</div>
+      ${owner ? '<p class="muted" style="margin:10px 0 0;font-size:12px">A new key cannot open the old messages. Members can still write to you and everything new is readable.</p>' : ''}</div>`;
+  } else {
+    html += chToolsHtml(owner) + chInboxHtml();
+  }
+  $('content').innerHTML = html;
+  chWire(owner);
+  if (chReady()) { chDrawThreads(); chDrawThread(); }
+}
+function chToolsHtml(owner){
+  const e = _ch.edit;
+  const agentRows = _ch.agents.length ? _ch.agents.map(a => `<div class="banner-row">${chAv(a, 'lg')}<div style="flex:1;min-width:0"><b data-no-i18n>${esc(a.name)}</b></div>${owner ? `<button class="btn ghost sm" data-ch-edit="${esc(a.id)}" type="button">Edit</button><button class="btn danger sm" data-ch-del="${esc(a.id)}" type="button">Delete</button>` : ''}</div>`).join('') : '<p class="muted" style="margin:0">No profiles yet. Members see none until you add one.</p>';
+  const form = owner ? (e ? `<div class="panel-card" style="margin:12px 0 0;background:var(--bg)"><h3 style="margin:0 0 10px;font-size:14px">${e.id ? 'Edit profile' : 'Add a profile'}</h3>
+      <div class="banner-row" style="border:0">${chAv({ name: e.name || '?', photo: e.photo }, 'xl')}<div style="flex:1;min-width:0"><label>Name (shown under the picture)</label><input id="chAgName" maxlength="30" value="${esc(e.name || '')}" placeholder="Sarah"></div></div>
+      <label class="btn ghost block file-btn" style="margin-top:10px">${e.photo ? 'Change the picture' : 'Upload a picture'}<input type="file" id="chAgFile" accept="image/*" hidden></label>
+      <div class="row" style="margin-top:12px"><button class="btn block" id="chAgSave" type="button">Save</button><button class="btn ghost block" id="chAgCancel" type="button">Cancel</button></div></div>`
+    : '<button class="btn block" id="chAgAdd" type="button" style="margin-top:12px">Add a profile</button>') : '';
+  return `<details class="panel-card ch-tools"><summary>Customer-service profiles <span class="muted">(${_ch.agents.length})</span></summary><div style="margin-top:10px">${agentRows}${form}</div></details>
+    <details class="panel-card ch-tools"><summary>Chat key and backup</summary><div style="margin-top:10px">
+      <p class="muted" style="margin:0 0 10px;font-size:12.5px">Key <b data-no-i18n>${esc(_ch.key.kid)}</b>. It lives in this browser only. Download a backup and keep it safe: without it, clearing this browser's data (or using another device) makes the messages unreadable.</p>
+      <div class="row"><button class="btn" id="chBackup" type="button">Download a backup</button></div></div></details>`;
+}
+function chInboxHtml(){
+  return `<div class="chat-grid" id="chGrid"><div class="chat-list-col"><div class="ch-filter"><button type="button" class="ch-pill active" data-ch-f="all">All</button><button type="button" class="ch-pill" data-ch-f="unread">Unread <span id="chUnreadN"></span></button></div><div id="chThreads" class="panel-card" style="padding:6px"></div></div>
+    <div class="chat-view-col" id="chView"></div></div>`;
+}
+function chWire(owner){
+  const mk = $('chMake'); if (mk) mk.onclick = chCreateKey;
+  const rs = $('chRestore'); if (rs) rs.onclick = chRestoreKey;
+  const rp = $('chReplace'); if (rp) rp.onclick = () => { if (confirm('Make a NEW chat key? Messages sent before it can no longer be opened by anyone.')) chCreateKey(true); };
+  const bk = $('chBackup'); if (bk) bk.onclick = chBackupKey;
+  const add = $('chAgAdd'); if (add) add.onclick = () => { _ch.edit = { name: '', photo: '' }; keepToolsOpen(); };
+  const cancel = $('chAgCancel'); if (cancel) cancel.onclick = () => { _ch.edit = null; keepToolsOpen(); };
+  $('content').querySelectorAll('[data-ch-edit]').forEach(b => b.onclick = () => { const a = _ch.agents.find(x => x.id === b.dataset.chEdit); if (a) { _ch.edit = { id: a.id, name: a.name, photo: a.photo }; keepToolsOpen(); } });
+  $('content').querySelectorAll('[data-ch-del]').forEach(b => b.onclick = async () => {
+    const a = _ch.agents.find(x => x.id === b.dataset.chDel); if (!a || !confirm('Delete the profile "' + a.name + '"? Members stop seeing it. Their earlier messages stay in the inbox.')) return;
+    b.disabled = true; const d = await api('/admin/chat/agent/delete', { id: a.id });
+    toast(d.status === 'success' ? 'Profile deleted' : (d.message || 'Failed'), d.status === 'success' ? 'ok' : 'err');
+    if (d.status === 'success') { _ch.agents = d.agents; keepToolsOpen(); }
+  });
+  const file = $('chAgFile'); if (file) file.onchange = async ev => {
+    const f = ev.target.files[0]; if (!f) return; ev.target.value = '';
+    try { _ch.edit.name = $('chAgName').value; _ch.edit.photo = await chAvatarFile(f); keepToolsOpen(); } catch (err) { toast(err.message || 'Could not read the picture', 'err'); }
+  };
+  const save = $('chAgSave'); if (save) save.onclick = async () => {
+    const name = $('chAgName').value.trim(); if (!name) return toast('Give the profile a name', 'err');
+    save.disabled = true;
+    const d = await api('/admin/chat/agent/save', { id: _ch.edit.id || '', name, photo: _ch.edit.photo == null ? '' : _ch.edit.photo });
+    toast(d.status === 'success' ? 'Profile saved' : (d.message || 'Failed'), d.status === 'success' ? 'ok' : 'err');
+    if (d.status === 'success') { _ch.agents = d.agents; _ch.edit = null; keepToolsOpen(); } else save.disabled = false;
+  };
+  $('content').querySelectorAll('[data-ch-f]').forEach(b => b.onclick = () => { _ch.filter = b.dataset.chF; $('content').querySelectorAll('[data-ch-f]').forEach(x => x.classList.toggle('active', x === b)); chDrawThreads(); });
+}
+// Redraws the page but keeps the profile box open (it was being worked in).
+function keepToolsOpen(){ drawChat(); const d = $('content').querySelector('details.ch-tools'); if (d) d.open = true; }
+// A square, centre-cropped picture of 192 x 192 as a small JPEG (white behind any see-through part).
+function chAvatarFile(file){
+  return new Promise((ok, no) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const s = Math.min(img.naturalWidth, img.naturalHeight), cv = document.createElement('canvas'); cv.width = cv.height = 192;
+      const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 192, 192);
+      g.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, 192, 192);
+      URL.revokeObjectURL(url); ok(cv.toDataURL('image/jpeg', 0.86));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); no(new Error('That file is not a picture')); };
+    img.src = url;
+  });
+}
+async function chCreateKey(replace){
+  const pair = await CHAT.newPair();
+  const d = await api('/admin/chat/key', { kid: pair.kid, jwk: pair.pub, replace: replace === true });
+  if (d.status !== 'success') return toast(d.message || 'Could not create the key', 'err');
+  chSaveKey({ kid: pair.kid, pub: pair.pub, priv: pair.priv });
+  toast('Chat key created. Download a backup now.', 'ok'); renderChat();
+}
+async function chPassKey(pass, salt){
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 250000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function chBackupKey(){
+  const pass = prompt('Choose a password for the backup (you will need it to restore the key). At least 8 characters.');
+  if (pass == null) return;
+  if (pass.length < 8) return toast('Use at least 8 characters', 'err');
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await chPassKey(pass, salt), new TextEncoder().encode(JSON.stringify(_ch.key)));
+  const blob = new Blob([JSON.stringify({ v: 1, kid: _ch.key.kid, salt: CHAT.b64(salt), iv: CHAT.b64(iv), ct: CHAT.b64(ct) })], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'smartai-chat-key-backup.json'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast('Backup downloaded. Keep the file and the password safe.', 'ok');
+}
+async function chRestoreKey(){
+  const f = $('chRestoreFile').files[0], pass = $('chRestorePass').value;
+  if (!f || !pass) return toast('Choose the backup file and type its password', 'err');
+  try {
+    const j = JSON.parse(await f.text());
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: CHAT.unb64(j.iv) }, await chPassKey(pass, CHAT.unb64(j.salt)), CHAT.unb64(j.ct));
+    const k = JSON.parse(new TextDecoder().decode(pt));
+    if (!k || !k.kid || !k.pub || !k.priv) throw new Error('bad');
+    if (!_ch.serverKey || k.kid !== _ch.serverKey.kid) return toast('This backup is for an older key, not the one in use now.', 'err');
+    chSaveKey(k); toast('Key restored', 'ok'); renderChat();
+  } catch (_) { toast('Wrong password or not a backup file', 'err'); }
+}
+
+// ---- inbox ----
+async function chOpenText(m, userId){   // m: {iv, ct, wraps, from, agentId, at}
+  try {
+    const pt = await CHAT.open(m, userId + '|' + m.from + '|' + m.agentId, _ch.key.kid, _ch.key.priv);
+    return pt == null ? null : String((JSON.parse(pt) || {}).t || '');
+  } catch (_) { return null; }
+}
+async function chRefreshList(){
+  if (_tab !== 'chat' || !chReady()) return;
+  const d = await api('/admin/chat/threads');
+  if (d.status !== 'success' || _tab !== 'chat') return;
+  _ch.agents = d.agents.map(a => Object.assign({}, _ch.agents.find(x => x.id === a.id) || {}, a));
+  for (const t of d.threads) {
+    const ck = t.userId + ':' + (t.last && t.last.at);
+    if (t.last && !_ch.cache.has(ck)) _ch.cache.set(ck, await chOpenText({ iv: t.last.iv, ct: t.last.ct, wraps: t.last.wraps, from: t.last.from, agentId: t.lastAgentId }, t.userId));
+    t.preview = t.last ? _ch.cache.get(ck) : '';
+  }
+  _ch.threads = d.threads; chDrawThreads();
+}
+function chDrawThreads(){
+  const box = $('chThreads'); if (!box) return;
+  const un = _ch.threads.filter(t => t.unread > 0).length; if ($('chUnreadN')) $('chUnreadN').textContent = un ? '(' + un + ')' : '';
+  const list = _ch.filter === 'unread' ? _ch.threads.filter(t => t.unread > 0) : _ch.threads;
+  box.innerHTML = list.length ? list.map(t => `<button type="button" class="ch-row${t.userId === _ch.sel ? ' sel' : ''}${t.unread ? ' unr' : ''}" data-ch-t="${esc(t.userId)}">
+      <span class="ch-av md"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c.6-3.6 3.5-5.4 7.2-5.4s6.6 1.8 7.2 5.4"/></svg>${t.memberOnline ? '<i class="ch-dot"></i>' : ''}</span>
+      <span class="ch-main"><b data-no-i18n>${esc(t.publicId ? 'ID ' + t.publicId : t.phone)} <small>${esc(t.phone)}</small></b>
+        <span class="ch-prev">${t.lastFrom === 'admin' ? 'You: ' : ''}${t.preview == null ? '<i>Message not readable with this key</i>' : esc(String(t.preview).slice(0, 80))}</span>
+        <span class="ch-via">via ${esc(chAgentName(t.lastAgentId))}</span></span>
+      <span class="ch-side"><span>${esc(chTime(t.lastAt))}</span>${t.unread ? `<b class="ch-n">${t.unread > 99 ? '99+' : t.unread}</b>` : ''}</span></button>`).join('')
+    : `<p class="muted" style="margin:14px">${_ch.filter === 'unread' ? 'Nothing unread.' : 'No chats yet. When a member writes to one of your profiles it appears here.'}</p>`;
+  box.querySelectorAll('[data-ch-t]').forEach(b => b.onclick = () => chSelect(b.dataset.chT));
+}
+async function chSelect(userId){
+  _ch.sel = userId; _ch.msgs = []; _ch.after = 0; _ch.meta = null; _ch.sig = '';
+  const g = $('chGrid'); if (g) g.classList.add('open');
+  chDrawThreads(); $('chView').innerHTML = spinnerHtml();
+  await chPollThread(true);
+  api('/admin/chat/read', { userId }).then(() => { const t = _ch.threads.find(x => x.userId === userId); if (t) { t.unread = 0; chDrawThreads(); } chSummaryNow(); });
+}
+async function chPollThread(first){
+  const uid = _ch.sel; if (!uid || _tab !== 'chat' || !chReady()) return;
+  const d = await api('/admin/chat/thread?userId=' + encodeURIComponent(uid) + '&after=' + _ch.after);
+  if (uid !== _ch.sel || d.status !== 'success') { if (first && d.status !== 'success') $('chView').innerHTML = `<div class="panel-card"><p class="muted" style="margin:0">${esc(d.message || 'Could not open this chat')}</p></div>`; return; }
+  let gotMember = false;
+  for (const m of d.messages) {
+    _ch.after = Math.max(_ch.after, m.at);
+    if (_ch.msgs.some(x => x.id === m.id)) continue;
+    _ch.msgs.push({ id: m.id, from: m.from, agentId: m.agentId, at: m.at, text: await chOpenText(m, uid) }); if (m.from === 'member') gotMember = true;
+  }
+  _ch.msgs.sort((a, b) => a.at - b.at);
+  _ch.meta = d;
+  const sig = d.memberReadAt + '|' + d.memberSeenAt + '|' + d.memberOnline + '|' + _ch.msgs.length;
+  if (first || gotMember || sig !== _ch.sig) { _ch.sig = sig; chDrawThread(first || gotMember); }
+  if (gotMember && !first) api('/admin/chat/read', { userId: uid });
+}
+function chDrawThread(stick){
+  const view = $('chView'); if (!view) return;
+  if (!_ch.sel || !_ch.meta) { if (!_ch.sel) view.innerHTML = '<div class="panel-card ch-empty"><p class="muted" style="margin:0">Choose a chat on the left.</p></div>'; return; }
+  const m = _ch.meta, reply = ($('chReplyAs') && $('chReplyAs').value) || (_ch.agents.some(a => a.id === m.lastAgentId) ? m.lastAgentId : (_ch.agents[0] && _ch.agents[0].id) || m.lastAgentId);
+  const prevInput = $('chInput') ? $('chInput').value : '';
+  const body = $('chMsgs'), near = body ? body.scrollHeight - body.scrollTop - body.clientHeight < 90 : true;
+  let list = '', day = '';
+  _ch.msgs.forEach(x => {
+    const d = new Date(x.at).toDateString(); if (d !== day) { day = d; list += `<div class="ch-day"><span>${esc(new Date(x.at).toDateString() === new Date().toDateString() ? 'Today' : new Date(x.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))}</span></div>`; }
+    const me = x.from === 'admin', st = x.at <= m.memberReadAt ? 'read' : (x.at <= m.memberSeenAt ? 'dlv' : 'sent');
+    list += `<div class="ch-m ${me ? 'me' : 'ag'}"><div class="ch-b${x.text == null ? ' lock' : ''}">${me ? `<small class="ch-as">${esc(chAgentName(x.agentId))}</small>` : `<small class="ch-as">to ${esc(chAgentName(x.agentId))}</small>`}${x.text == null ? 'Cannot be opened with this key' : esc(x.text)}<span class="ch-t">${esc(new Date(x.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }))}${me ? chTick(st) : ''}</span></div></div>`;
+  });
+  view.innerHTML = `<div class="panel-card ch-conv"><div class="ch-head"><button class="btn ghost sm ch-back" id="chBack" type="button">&larr; Back</button>
+      <span class="ch-av md"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c.6-3.6 3.5-5.4 7.2-5.4s6.6 1.8 7.2 5.4"/></svg>${m.memberOnline ? '<i class="ch-dot"></i>' : ''}</span>
+      <div style="flex:1;min-width:0"><b data-no-i18n>${esc(m.publicId ? 'ID ' + m.publicId : m.phone)}</b><div class="muted" style="font-size:12px" data-no-i18n>${esc(m.phone)} &middot; ${m.memberOnline ? '<span style="color:var(--ok);font-weight:700">online</span>' : 'offline'}</div></div></div>
+    <div class="ch-msgs" id="chMsgs">${list}</div>
+    <div class="ch-reply"><label class="muted" style="font-size:12px">Reply as <select id="chReplyAs">${(_ch.agents.length ? _ch.agents : [{ id: m.lastAgentId, name: 'Customer service' }]).map(a => `<option value="${esc(a.id)}"${a.id === reply ? ' selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
+      <div class="ch-bar"><textarea id="chInput" rows="1" maxlength="1000" placeholder="Write a reply"></textarea><button class="btn" id="chSend" type="button">Send</button></div></div></div>`;
+  $('chInput').value = prevInput; chGrowInput();
+  const mb = $('chMsgs'); if (stick || near) mb.scrollTop = mb.scrollHeight;
+  $('chBack').onclick = () => { _ch.sel = null; _ch.meta = null; const g = $('chGrid'); if (g) g.classList.remove('open'); chDrawThreads(); chDrawThread(); };
+  $('chSend').onclick = chSendReply;
+  $('chInput').oninput = chGrowInput;
+  $('chInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chSendReply(); } };
+}
+function chGrowInput(){ const t = $('chInput'); if (!t) return; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px'; }
+async function chSendReply(){
+  const inp = $('chInput'), text = inp.value.trim(), uid = _ch.sel, m = _ch.meta;
+  if (!text || _ch.busy || !uid || !m) return;
+  if (!m.memberKeys || !m.memberKeys.length) return toast('This member has no chat key yet. They need to open the chat once.', 'err');
+  _ch.busy = true; $('chSend').disabled = true;
+  try {
+    const agentId = $('chReplyAs').value || m.lastAgentId;
+    const env = await CHAT.seal(JSON.stringify({ t: text }), uid + '|admin|' + agentId, m.memberKeys.map(k => ({ kid: k.kid, jwk: k.jwk })).concat([{ kid: _ch.key.kid, jwk: _ch.key.pub }]));
+    env.userId = uid; env.agentId = agentId;
+    const d = await api('/admin/chat/send', env);
+    if (d.status !== 'success') throw new Error(d.message || 'Could not send');
+    inp.value = ''; _ch.msgs.push({ id: d.id, from: 'admin', agentId, at: d.at, text }); _ch.after = Math.max(_ch.after, d.at - 1); _ch.sig = '';
+    const t = _ch.threads.find(x => x.userId === uid); if (t) { t.lastFrom = 'admin'; t.lastAt = d.at; t.unread = 0; t.preview = text; t.lastAgentId = agentId; }
+    chDrawThread(true); chDrawThreads();
+  } catch (e) { toast(e.message || 'Could not send', 'err'); }
+  finally { _ch.busy = false; const b = $('chSend'); if (b) b.disabled = false; }
+}
+function chStartPolling(){
+  clearInterval(_ch.pollT); clearInterval(_ch.listT);
+  _ch.pollT = setInterval(() => { if (_tab !== 'chat') { clearInterval(_ch.pollT); clearInterval(_ch.listT); return; } if (!document.hidden) chPollThread(); }, 3000);
+  _ch.listT = setInterval(() => { if (_tab === 'chat' && !document.hidden) chRefreshList(); }, 4000);
+}
+// A notice wherever you are in the panel: the Chat tab's red count, a toast for a new message, the count in the page title. (A phone alert also goes out when push is on.)
+async function chSummaryNow(){
+  if (!SESSION_TOKEN) return;
+  const d = await api('/admin/chat/summary');
+  if (d.status !== 'success') return;
+  const b = $('cBadge');
+  if (b) { if (d.unread > 0) { b.textContent = d.unread > 99 ? '99+' : d.unread; b.classList.remove('hidden'); } else b.classList.add('hidden'); }
+  document.title = (d.unread > 0 ? '(' + d.unread + ') ' : '') + document.title.replace(/^\(\d+\)\s*/, '');
+  if (d.latestAt > _ch.latestSeen) {
+    if (_ch.latestSeen && d.unread > _ch.unread && !(_tab === 'chat' && _ch.sel === d.latestUser)) toast('New message from a member. Open Chat.', 'ok');
+    _ch.latestSeen = d.latestAt;
+  }
+  _ch.unread = d.unread;
+}
+function chatNotifyStart(){
+  if (_ch.notifyT) return;
+  chSummaryNow();
+  _ch.notifyT = setInterval(() => { if (!SESSION_TOKEN) { clearInterval(_ch.notifyT); _ch.notifyT = null; return; } if (!document.hidden) chSummaryNow(); }, 8000);
+}
+
 async function renderPayNumbers(){
   const [r, imgs] = await Promise.all([api('/admin/pay-channels/list', {}), api('/admin/smartai-images')]);
   if (staleTab('paynumbers')) return;

@@ -172,7 +172,7 @@ async function call(h, body, opts = {}) {
   ctx.user = 'u2'; r = await call(H['POST /deposit/manual/order'], { amount: 20000, network: 'Airtel', phone: '0600000000' }); eq(r.code, 400, '(a bad number is refused for member two)');
   r = await call(H['POST /deposit/manual/order'], { amount: 20000, network: 'Airtel', phone: '0741234567' }); const o4 = r.body;
   await new Promise(r2 => setTimeout(r2, 3100));
-  r = await call(H['POST /deposit/manual/submit'], { depositId: o4.depositId, sms }); eq(r.code, 409, 'one transfer can back ONE claim, by anyone');
+  r = await call(H['POST /deposit/manual/submit'], { depositId: o4.depositId, sms }); eq([r.code, r.body.code], [409, 'USED'], 'one transfer can back ONE claim, by anyone (the code tells the app to stay silent)');
   await new Promise(r2 => setTimeout(r2, 3100));
   r = await call(H['POST /deposit/manual/submit'], { depositId: o3.depositId, sms }); eq(r.code, 404, 'and another member cannot submit onto my order');
 
@@ -196,5 +196,9 @@ async function call(h, body, opts = {}) {
   await api.sweepManualOrders();
   eq(db.col('pendingDeposits').get(fresh.depositId).status, 'failed', 'an unpaid order is closed 15 minutes after its clock');
   eq(db.col('pendingDeposits').get(sent.depositId).status, 'pending', 'one with a message sent is never swept');
+  // the app: a used message or ID does nothing but load for a moment, then stops (no notice, no change)
+  { const app = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8'); const g = app.slice(app.indexOf('async function gpSend()'), app.indexOf('/* ---- coming back to an unfinished order ---- */'));
+    eq([/r\.code === 'USED'\) await new Promise/.test(g), /if \(r\.code === 'USED'\) return;/.test(g), /Math\.max\(0, 1500 - \(Date\.now\(\) - t0\)\)/.test(g)], [true, true, true], 'a used message or ID: the button loads for at least a moment, then stops without any notice');
+    eq(g.indexOf("if (r.code === 'USED') return;") < g.indexOf("gpToast(r.message"), true, 'and the notice for other failures is never reached'); }
   console.log(`test-manual-pay: ${checks} checks passed`);
 })().catch(e => { console.error('FAIL', e.message); process.exit(1); });
