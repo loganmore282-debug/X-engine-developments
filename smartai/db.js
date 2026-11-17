@@ -86,6 +86,7 @@ async function ensureIndexes() {
     ['chatMessages', { threadId: 1, agentId: 1, at: 1 }, { name: 'chatMsg_thread_agent_at' }],
     ['chatThreads', { lastAt: -1 }, { name: 'chatThread_lastAt' }],
     ['chatThreads', { unreadAdmin: 1 }, { name: 'chatThread_unread' }],
+    ['chatBlobs', { uid: 1 }, { name: 'chatBlob_uid' }],
     // Every OTP send/verify for register, reset, and the phone-existence
     // check inside each (server.js's /auth/otp/send, /auth/reset/confirm)
     // filters users by phone with no other field ahead of it -- without this,

@@ -741,7 +741,7 @@ async function logout(opts){
       return fetch(API_BASE + '/auth/session/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + t }, signal: ac.signal });
     }).catch(function(){});
     _authEpoch++;
-    STATE = null; _appEntered = false; _agentMe = null; _agentMeAt = 0; _cc.unread = {}; _cc.msgs = []; _cc.agent = null; _cc.seq = 0; _cc.cfg = null; _cc.key = null; _cc.regFor = '';
+    STATE = null; _appEntered = false; _agentMe = null; _agentMeAt = 0; _cc.unread = {}; _cc.msgs = []; _cc.agent = null; _cc.seq = 0; _cc.cfg = null; _cc.key = null; _cc.regFor = ''; _cc.imgs = {}; _cc.warm = {}; _cc.typing = false;
     clearCachedState();
     _recordsLoaded = { accrued: true, topups: false, cashouts: false }; _recordsFailed = { topups: false, cashouts: false }; _dataFailed = {};
     stopActivityFeed(); stopAccountPoll(); gpLeave(); stopDepositPoll(); releasePayLoader();
@@ -822,7 +822,7 @@ function onFbAuthChanged(user){
       if (cached) { renderAll(); renderStaticPages(); } else enterApp();
     });
   } else if (!user) {
-    STATE = null; _appEntered = false; _agentMe = null; _agentMeAt = 0; _cc.unread = {}; _cc.msgs = []; _cc.agent = null; _cc.seq = 0; _cc.cfg = null; _cc.key = null; _cc.regFor = '';
+    STATE = null; _appEntered = false; _agentMe = null; _agentMeAt = 0; _cc.unread = {}; _cc.msgs = []; _cc.agent = null; _cc.seq = 0; _cc.cfg = null; _cc.key = null; _cc.regFor = ''; _cc.imgs = {}; _cc.warm = {}; _cc.typing = false;
     clearCachedState();
     showAuthScreen();
   }
@@ -907,14 +907,56 @@ var CHAT = (function(){
     var raw = await S.decrypt({ name: 'AES-GCM', iv: unb64(w.iv) }, wk, unb64(w.ek)), k = await S.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
     return dec.decode(await S.decrypt({ name: 'AES-GCM', iv: unb64(msg.iv), additionalData: enc.encode(ad) }, k, unb64(msg.ct)));
   }
-  return { newPair: newPair, kidOf: kidOf, seal: seal, open: open, b64: b64, unb64: unb64 };
+  // PICTURES. A picture is locked with its OWN key; that key travels inside the encrypted message, and the server keeps only the locked bytes.
+  async function sealBlob(bytes){
+    var k = await S.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']), iv = crypto.getRandomValues(new Uint8Array(12));
+    var ct = new Uint8Array(await S.encrypt({ name: 'AES-GCM', iv: iv }, k, bytes));
+    return { ct: ct, key: b64(await S.exportKey('raw', k)), iv: b64(iv) };
+  }
+  async function openBlob(ct, keyB64, ivB64){
+    var k = await S.importKey('raw', unb64(keyB64), 'AES-GCM', false, ['decrypt']);
+    return new Uint8Array(await S.decrypt({ name: 'AES-GCM', iv: unb64(ivB64) }, k, ct));
+  }
+  function loadImage(file){
+    return new Promise(function(ok, no){
+      var url = URL.createObjectURL(file), im = new Image();
+      im.onload = function(){ URL.revokeObjectURL(url); ok(im); };
+      im.onerror = function(){ URL.revokeObjectURL(url); no(new Error('That file is not a picture')); };
+      im.src = url;
+    });
+  }
+  function canvasBlob(cv, type, q){ return new Promise(function(ok){ cv.toBlob(ok, type, q); }); }
+  // Makes a picture SMALL before it leaves the phone: the long side at most 1280 px, WebP (JPEG where the browser cannot make WebP) and under about 230 KB, plus a tiny
+  // 32 px preview that sits inside the message and shows (blurred) the instant the chat opens, before the picture itself has arrived.
+  async function shrink(file){
+    var im = await loadImage(file), W = im.naturalWidth, H = im.naturalHeight;
+    if (!W || !H) throw new Error('That file is not a picture');
+    var best = null, side = 1280;
+    for (var pass = 0; pass < 4; pass++) {
+      var sc = Math.min(1, side / Math.max(W, H)), w = Math.max(1, Math.round(W * sc)), h = Math.max(1, Math.round(H * sc));
+      var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      var g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(im, 0, 0, w, h);
+      var q = 0.76 - pass * 0.09, mime = 'image/webp', blob = await canvasBlob(cv, mime, q);
+      if (!blob || blob.type !== 'image/webp') { mime = 'image/jpeg'; blob = await canvasBlob(cv, mime, q); }
+      best = { blob: blob, w: w, h: h, mime: mime };
+      if (blob.size <= 230000) break;
+      side = Math.round(side * 0.78);
+    }
+    var tw = W >= H ? 32 : Math.max(8, Math.round(32 * W / H)), th = H > W ? 32 : Math.max(8, Math.round(32 * H / W));
+    var tc = document.createElement('canvas'); tc.width = tw; tc.height = th; tc.getContext('2d').drawImage(im, 0, 0, tw, th);
+    return { bytes: new Uint8Array(await best.blob.arrayBuffer()), w: best.w, h: best.h, mime: best.mime, thumb: tc.toDataURL('image/jpeg', 0.5) };
+  }
+  return { newPair: newPair, kidOf: kidOf, seal: seal, open: open, b64: b64, unb64: unb64, sealBlob: sealBlob, openBlob: openBlob, shrink: shrink };
 })();
 /* CHATCRYPTO END */
 
 /* ====================== CUSTOMER SERVICE CHAT (end-to-end encrypted) ======================
    The Support page lists the customer-service profiles the admin set up (a photo and a name each). Tapping one opens a chat with it. Every message is locked on this phone
-   (see CHAT above) for the admin panel and for this phone only; the server just carries it. Ticks: one = sent, two = delivered (the panel was online after it), blue = read. */
-var _cc = { cfg: null, cfgAt: 0, key: null, regFor: '', agent: null, msgs: [], after: 0, seq: 0, looping: false, adminReadAt: 0, adminSeenAt: 0, online: false, unread: {}, sig: '', busy: false };
+   (see CHAT above) for the admin panel and for this phone only; the server just carries it. Ticks: one = sent, two = delivered (the panel was online after it), blue = read.
+   FAST: a chat opens at once from this phone's own copy of the (still locked) messages and then asks the server only for what is newer; a profile is warmed up the moment it
+   is pressed; pictures are shrunk before they leave the phone, locked, and shown as a blurred preview (inside the message) until the picture itself arrives. */
+var _cc = { cfg: null, cfgAt: 0, key: null, regFor: '', agent: null, msgs: [], after: 0, seq: 0, looping: false, adminReadAt: 0, adminSeenAt: 0, online: false, unread: {}, sig: '', busy: false,
+  typing: false, typingT: null, typeSent: 0, tsig: 'null', imgs: {}, warm: {}, saveT: null };
 function chatInitial(n){ var t = String(n || '').trim(); return esc(t ? t.charAt(0).toUpperCase() : '?'); }
 function chatPhoto(a){ return a && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/]+=*$/.test(a.photo || '') ? a.photo : ''; }
 function chatAvatar(a){ var p = chatPhoto(a); return p ? '<img src="' + p + '" alt="">' : '<span class="ch-ini">' + chatInitial(a && a.name) + '</span>'; }
@@ -967,6 +1009,19 @@ async function chatRegister(){
   if (r && r.status === 'success') { _cc.regFor = tag; return true; }
   return false;
 }
+// ---- this phone's own copy of the conversation: the messages exactly as the server holds them (LOCKED), opened with this phone's key on every start ----
+function chatCacheName(ag){ return 'sa_chatc_' + STATE.uid + '_' + ag; }
+function chatCacheRead(ag){
+  try { var c = JSON.parse(localStorage.getItem(chatCacheName(ag)) || 'null'); return c && Array.isArray(c.m) ? c : { m: [], rd: 0, sn: 0 }; } catch (e) { return { m: [], rd: 0, sn: 0 }; }
+}
+function chatCacheWrite(ag, c){ try { localStorage.setItem(chatCacheName(ag), JSON.stringify(c)); } catch (e) {} }
+function chatCacheSoon(){
+  clearTimeout(_cc.saveT);
+  _cc.saveT = setTimeout(function(){
+    var ag = _cc.agent; if (!ag || !STATE) return;
+    chatCacheWrite(ag.id, { m: _cc.msgs.filter(function(x){ return x.raw && !x.pending; }).slice(-60).map(function(x){ return x.raw; }), rd: _cc.adminReadAt, sn: _cc.adminSeenAt });
+  }, 400);
+}
 function chatTick(st){
   if (st === 'pend') return '<svg class="cm-tk" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v3.3l2 1.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
   var one = '<path d="M2.5 8.6l3.2 3.2L12.6 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>';
@@ -979,6 +1034,13 @@ function chatDay(ms){
   if (d.toDateString() === y.toDateString()) return 'Yesterday';
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
+// A picture inside a bubble: its own shape from the start (so nothing jumps), the blurred 32 px preview behind it, the picture itself once it has arrived.
+var CHAT_THUMB = /^data:image\/(jpeg|webp|png);base64,[A-Za-z0-9+\/]+=*$/;
+function chatImgHtml(m){
+  var i = m.img, got = _cc.imgs[i.id], url = (got && got.url) || i.local || '';
+  var w = Math.max(1, Number(i.w) || 4), h = Math.max(1, Number(i.h) || 3), th = CHAT_THUMB.test(i.th || '') ? i.th : '';
+  return '<div class="cm-img' + (url ? ' ready' : '') + '" style="aspect-ratio:' + w + ' / ' + h + (th ? ';background-image:url(' + th + ')' : '') + '" data-bid="' + esc(i.id || '') + '">' + (url ? '<img src="' + url + '" alt="">' : '') + (m.pending ? '<i class="cm-spin"></i>' : '') + '</div>';
+}
 function chatRender(stick){
   var box = $('chatList'), body = $('chatBody'); if (!box) return;
   var near = body.scrollHeight - body.scrollTop - body.clientHeight < 90, html = '', last = '';
@@ -986,42 +1048,72 @@ function chatRender(stick){
     var day = chatDay(m.at); if (day !== last) { html += '<div class="cm-day"><span>' + esc(day) + '</span></div>'; last = day; }
     var me = m.from === 'member', st = m.pending ? 'pend' : (m.at <= _cc.adminReadAt ? 'read' : (m.at <= _cc.adminSeenAt ? 'dlv' : 'sent'));
     var hm = new Date(m.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    html += '<div class="cm ' + (me ? 'me' : 'ag') + '"><div class="cm-b' + (m.text == null ? ' cm-lock' : '') + '">' + (m.text == null ? 'This message cannot be opened on this phone.' : esc(m.text)) + '<span class="cm-t">' + hm + (me ? chatTick(st) : '') + '</span></div></div>';
+    var inner = m.text == null && !m.img ? 'This message cannot be opened on this phone.' : ((m.img ? chatImgHtml(m) : '') + (m.text ? '<div class="cm-tx">' + esc(m.text) + '</div>' : ''));
+    html += '<div class="cm ' + (me ? 'me' : 'ag') + '"><div class="cm-b' + (m.text == null && !m.img ? ' cm-lock' : '') + (m.img ? ' has-img' : '') + '">' + inner + '<span class="cm-t">' + hm + (me ? chatTick(st) : '') + '</span></div></div>';
   });
+  if (_cc.typing) html += '<div class="cm ag"><div class="cm-b cm-typ" aria-label="typing"><i></i><i></i><i></i></div></div>';
   box.innerHTML = html;
   if (stick || near) body.scrollTop = body.scrollHeight;
+  chatLoadImages();
 }
 function chatState(){
   var el = $('chatState'); if (!el) return;
-  el.textContent = _cc.online ? 'Online' : 'Offline';
-  el.className = _cc.online ? 'on' : '';
+  el.textContent = _cc.typing ? 'typing…' : (_cc.online ? 'Online' : 'Offline');
+  el.className = _cc.typing || _cc.online ? 'on' : '';
 }
-async function chatDecrypt(m){
+// "typing…": shown while the panel says so, and gone 5.5 s after the last word from it (or the moment its message arrives).
+function chatSetTyping(on){
+  clearTimeout(_cc.typingT); _cc.typingT = null;
+  var was = _cc.typing; _cc.typing = !!on;
+  if (on) _cc.typingT = setTimeout(function(){ chatSetTyping(false); }, 5500);
+  if (was !== _cc.typing) { chatState(); if (chatShown('ovChat')) chatRender(false); }
+}
+function chatTypingPing(){
+  var inp = $('chatInput'), ag = _cc.agent; if (!inp || !ag || !STATE || !inp.value.trim()) return;
+  if (Date.now() - _cc.typeSent < 2500) return;
+  _cc.typeSent = Date.now(); api('/chat/typing', { agentId: ag.id, typing: true });
+}
+// A message as the phone shows it: its words and, when it carries one, the picture's details.
+async function chatOpenMsg(m){
   var k = await chatKey();
-  try { var pt = await CHAT.open(m, STATE.uid + '|' + m.from + '|' + m.agentId, k.kid, k.priv); return pt == null ? null : String((JSON.parse(pt) || {}).t || ''); } catch (e) { return null; }
+  try {
+    var pt = await CHAT.open(m, STATE.uid + '|' + m.from + '|' + m.agentId, k.kid, k.priv);
+    if (pt == null) return { text: null, img: null };
+    var o = JSON.parse(pt) || {}, i = o.i && typeof o.i === 'object' && /^[0-9a-f]{24}$/.test(String(o.i.id || '')) ? { id: o.i.id, k: String(o.i.k || ''), v: String(o.i.v || ''), w: Number(o.i.w) || 0, h: Number(o.i.h) || 0, m: String(o.i.m || 'image/webp'), th: String(o.i.th || '') } : null;
+    return { text: String(o.t || ''), img: i };
+  } catch (e) { return { text: null, img: null }; }
+}
+function chatOwn(m, k){ return { id: m.id, from: m.from, agentId: m.agentId, at: m.at, iv: m.iv, ct: m.ct, wraps: (m.wraps || []).filter(function(w){ return w.kid === k.kid; }) }; }
+async function chatAdd(m, k){
+  if (_cc.msgs.some(function(x){ return x.id === m.id; })) return false;
+  var o = await chatOpenMsg(m);
+  _cc.msgs.push({ id: m.id, from: m.from, text: o.text, img: o.img, at: m.at, raw: chatOwn(m, k) });
+  return true;
 }
 // Loads the conversation (everything on opening it; afterwards only what is newer than the last message seen).
 async function chatPoll(){
   var ag = _cc.agent; if (!ag || !STATE) return;
-  var r = await api('/chat/history?agentId=' + encodeURIComponent(ag.id) + '&after=' + _cc.after, null, 'GET', false);
+  var k = await chatKey();
+  var r = await api('/chat/history?agentId=' + encodeURIComponent(ag.id) + '&after=' + _cc.after + '&kid=' + k.kid, null, 'GET', false);
   if (!r || r.stale || r.status !== 'success' || _cc.agent !== ag) return;
   var fresh = false, gotAdmin = false;
+  var opened = await Promise.all(r.messages.map(function(m){ return _cc.msgs.some(function(x){ return x.id === m.id; }) ? null : chatOpenMsg(m); }));
   for (var i = 0; i < r.messages.length; i++) {
     var m = r.messages[i];
     _cc.after = Math.max(_cc.after, m.at);
-    if (_cc.msgs.some(function(x){ return x.id === m.id; })) continue;
-    _cc.msgs.push({ id: m.id, from: m.from, text: await chatDecrypt(m), at: m.at }); fresh = true; if (m.from === 'admin') gotAdmin = true;
+    if (!opened[i] || _cc.msgs.some(function(x){ return x.id === m.id; })) continue;
+    _cc.msgs.push({ id: m.id, from: m.from, text: opened[i].text, img: opened[i].img, at: m.at, raw: chatOwn(m, k) }); fresh = true; if (m.from === 'admin') gotAdmin = true;
   }
   _cc.msgs.sort(function(a, b){ return a.at - b.at || (a.id < b.id ? -1 : 1); });
   var sig = r.adminReadAt + '|' + r.adminSeenAt + '|' + r.online + '|' + _cc.msgs.length;
   _cc.adminReadAt = Math.max(_cc.adminReadAt, r.adminReadAt); _cc.adminSeenAt = Math.max(_cc.adminSeenAt, r.adminSeenAt); _cc.online = r.online; chatState();
-  if (fresh || sig !== _cc.sig) { _cc.sig = sig; chatRender(fresh); }
+  if (fresh || sig !== _cc.sig) { _cc.sig = sig; chatRender(fresh); chatCacheSoon(); }
   if (gotAdmin) api('/chat/read', { agentId: ag.id });
 }
 function chatShown(id){ var el = $(id); return !!el && el.classList.contains('show'); }
 function chatSleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
 // LIVE DELIVERY. While Support or a chat is open, ONE request to the server stays open; the server answers it the instant something happens for this member (the reply
-// itself, the chat being read, the panel coming online), the answer is applied on the spot and the request is made again. No timer, nothing fetched twice.
+// itself, the chat being read, the panel typing or coming online), the answer is applied on the spot and the request is made again. No timer, nothing fetched twice.
 async function chatLoop(){
   if (_cc.looping) return;
   _cc.looping = true;
@@ -1031,10 +1123,10 @@ async function chatLoop(){
       if (document.hidden) { await chatSleep(800); continue; }
       var me = STATE.uid;
       if (!_cc.seq) { await chatSummary(); if (!_cc.seq) { fails++; await chatSleep(Math.min(6000, 700 * fails)); } continue; }
-      var r = await api('/chat/wait?seq=' + _cc.seq, null, 'GET', false);
+      var r = await api('/chat/wait?seq=' + _cc.seq + '&ts=' + encodeURIComponent(_cc.tsig), null, 'GET', false);
       if (!STATE || STATE.uid !== me) break;
       if (!r || r.stale || r.status !== 'success') { fails++; await chatSleep(Math.min(6000, 700 * fails)); continue; }
-      fails = 0; _cc.seq = r.seq;
+      fails = 0; _cc.seq = r.seq; _cc.tsig = JSON.stringify(r.typing === undefined ? null : r.typing);
       if (r.reset) { await chatResync(); continue; }
       await chatApply(r);
     }
@@ -1044,7 +1136,7 @@ async function chatResync(){
   await Promise.all([chatLoadConfig(true), chatSummary(), _cc.agent ? chatPoll() : null]);
 }
 async function chatApply(r){
-  var redraw = false, fresh = false, unreadChanged = false, open = !!_cc.agent && chatShown('ovChat');
+  var redraw = false, fresh = false, unreadChanged = false, open = !!_cc.agent && chatShown('ovChat'), k = await chatKey();
   if (r.online !== undefined) { if (_cc.online !== r.online) { _cc.online = r.online; chatState(); } if (_cc.cfg) _cc.cfg.online = r.online; unreadChanged = true; }
   if (r.adminSeenAt > _cc.adminSeenAt) { _cc.adminSeenAt = r.adminSeenAt; redraw = true; }
   for (var i = 0; i < r.events.length; i++) {
@@ -1054,28 +1146,131 @@ async function chatApply(r){
       var m = e.msg;
       if (open && m.agentId === _cc.agent.id) {
         _cc.after = Math.max(_cc.after, m.at);
-        if (!_cc.msgs.some(function(x){ return x.id === m.id; })) {
-          _cc.msgs.push({ id: m.id, from: 'admin', text: await chatDecrypt(m), at: m.at });
-          _cc.msgs.sort(function(a, b){ return a.at - b.at || (a.id < b.id ? -1 : 1); });
-          redraw = fresh = true; api('/chat/read', { agentId: m.agentId });
-        }
+        if (await chatAdd(m, k)) { _cc.msgs.sort(function(a, b){ return a.at - b.at || (a.id < b.id ? -1 : 1); }); redraw = fresh = true; api('/chat/read', { agentId: m.agentId }); chatSetTyping(false); }
       } else { _cc.unread[m.agentId] = (Number(_cc.unread[m.agentId]) || 0) + 1; unreadChanged = true; }
     }
   }
-  if (redraw && open) { _cc.sig = ''; chatRender(fresh); }
+  if (r.typing !== undefined) chatSetTyping(!!(r.typing && open && _cc.agent && r.typing.agentId === _cc.agent.id));
+  if (redraw && open) { _cc.sig = ''; chatRender(fresh); chatCacheSoon(); }
   if (unreadChanged && chatShown('ovSupport')) paintChatAgents();
+}
+// ---- pictures: fetched, opened with the key inside the message, shown; newest first, three at a time, each only once ----
+async function chatToken(){
+  var user = window.fbAuth && window.fbAuth.currentUser, tok = '';
+  if (user) { try { tok = await user.getIdToken(); } catch (e) {} }
+  return tok;
+}
+async function chatFetchImage(i){
+  var got = _cc.imgs[i.id];
+  if (got && got.url) return got.url;
+  if (got && got.p) return got.p;
+  var p = (async function(){
+    var tok = await chatToken();
+    var resp = await fetch(API_BASE + '/chat/blob/' + i.id, { headers: { 'Authorization': 'Bearer ' + tok }, cache: 'force-cache' });
+    if (!resp.ok) throw new Error('missing');
+    var plain = await CHAT.openBlob(new Uint8Array(await resp.arrayBuffer()), i.k, i.v);
+    var url = URL.createObjectURL(new Blob([plain], { type: /^image\/(webp|jpeg|png)$/.test(i.m) ? i.m : 'image/webp' }));
+    _cc.imgs[i.id] = { url: url }; return url;
+  })();
+  _cc.imgs[i.id] = { p: p };
+  p.catch(function(){ if (_cc.imgs[i.id] && _cc.imgs[i.id].p === p) delete _cc.imgs[i.id]; });
+  return p;
+}
+function chatPaintImage(id, url){
+  var els = document.querySelectorAll('#chatList .cm-img[data-bid="' + id + '"]');
+  for (var n = 0; n < els.length; n++) if (!els[n].querySelector('img')) { var im = document.createElement('img'); im.alt = ''; im.src = url; els[n].appendChild(im); els[n].classList.add('ready'); }
+}
+async function chatLoadImages(){
+  var todo = _cc.msgs.filter(function(m){ return m.img && m.img.k && !(_cc.imgs[m.img.id] && _cc.imgs[m.img.id].url) && !m.pending; }).reverse(), slots = 3;
+  async function worker(){
+    while (todo.length) {
+      var m = todo.shift();
+      try { var url = await chatFetchImage(m.img); chatPaintImage(m.img.id, url); } catch (e) {}
+    }
+  }
+  var ws = []; for (var w = 0; w < slots; w++) ws.push(worker());
+  await Promise.all(ws);
+}
+function chatViewer(url){
+  var v = $('chatViewer'); if (!v || !url) return;
+  v.innerHTML = '<img src="' + url + '" alt="">'; v.classList.add('show');
+}
+async function chatUpload(bytes){
+  var tok = await chatToken(), ctl = new AbortController(), timer = setTimeout(function(){ ctl.abort(); }, 60000);
+  try {
+    var resp = await fetch(API_BASE + '/chat/blob', { method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/octet-stream' }, body: bytes, signal: ctl.signal });
+    var d = await resp.json();
+    if (!d || d.status !== 'success') throw new Error((d && d.message) || 'Could not send the picture.');
+    return d;
+  } finally { clearTimeout(timer); }
+}
+async function chatSendImage(file){
+  var inp = $('chatInput'), ag = _cc.agent;
+  if (!file || !ag || !STATE || _cc.busy) return;
+  if (!/^image\//.test(file.type || '')) { toast('Choose a picture.'); return; }
+  if (!_cc.cfg || !_cc.cfg.adminKey) { toast('Chat is not available yet.'); return; }
+  var caption = (inp.value || '').trim().slice(0, 300), local = URL.createObjectURL(file);
+  var tmp = { id: 'tmp' + Date.now(), from: 'member', text: caption, at: Date.now(), pending: true, img: { id: 'tmp', w: 0, h: 0, th: '', local: local } };
+  _cc.busy = true; inp.value = ''; chatGrow(); _cc.msgs.push(tmp); chatRender(true);
+  try {
+    var sh = await CHAT.shrink(file);
+    tmp.img.w = sh.w; tmp.img.h = sh.h; tmp.img.th = sh.thumb; chatRender(false);
+    var sealed = await CHAT.sealBlob(sh.bytes), k = await chatKey();
+    var results = await Promise.all([chatUpload(sealed.ct), chatRegister()]);
+    var up = results[0];
+    var info = { id: up.id, k: sealed.key, v: sealed.iv, w: sh.w, h: sh.h, m: sh.mime, th: sh.thumb };
+    var env = await CHAT.seal(JSON.stringify({ t: caption, i: info }), STATE.uid + '|member|' + ag.id, [{ kid: _cc.cfg.adminKey.kid, jwk: _cc.cfg.adminKey.jwk }, { kid: k.kid, jwk: k.pub }]);
+    env.agentId = ag.id;
+    var r = await api('/chat/send', env);
+    if (!r || r.status !== 'success') throw new Error((r && r.message) || 'Could not send. Try again.');
+    _cc.imgs[up.id] = { url: local };   // our own picture is already here: nothing to download
+    _cc.msgs = _cc.msgs.filter(function(x){ return x !== tmp; });
+    if (!_cc.msgs.some(function(x){ return x.id === r.id; })) _cc.msgs.push({ id: r.id, from: 'member', text: caption, img: info, at: r.at, raw: { id: r.id, from: 'member', agentId: ag.id, at: r.at, iv: env.iv, ct: env.ct, wraps: env.wraps.filter(function(w){ return w.kid === k.kid; }) } });
+    _cc.after = Math.max(_cc.after, r.at - 1);
+    if (r.delivered) _cc.adminSeenAt = Math.max(_cc.adminSeenAt, r.at);
+  } catch (e) {
+    _cc.msgs = _cc.msgs.filter(function(x){ return x !== tmp; }); inp.value = caption; chatGrow();
+    toast(e && e.message ? e.message : 'Could not send the picture.');
+  } finally { _cc.busy = false; }
+  _cc.sig = ''; _cc.typeSent = 0; chatRender(true); chatCacheSoon();
+}
+// A profile pressed: its newest messages are fetched at once, in the background, so the page has them the instant it opens.
+async function chatWarm(agentId){
+  if (!STATE || (_cc.warm[agentId] && Date.now() - _cc.warm[agentId] < 4000)) return;
+  _cc.warm[agentId] = Date.now();
+  try {
+    var k = await chatKey(), c = chatCacheRead(agentId), after = c.m.reduce(function(a, x){ return Math.max(a, x.at); }, 0);
+    var r = await api('/chat/history?agentId=' + encodeURIComponent(agentId) + '&after=' + after + '&kid=' + k.kid, null, 'GET', false);
+    if (!r || r.stale || r.status !== 'success' || !r.messages.length) return;
+    var have = {}; c.m.forEach(function(x){ have[x.id] = 1; });
+    r.messages.forEach(function(m){ if (!have[m.id]) c.m.push(chatOwn(m, k)); });
+    c.m.sort(function(a, b){ return a.at - b.at; }); c.m = c.m.slice(-60); c.rd = Math.max(c.rd || 0, r.adminReadAt); c.sn = Math.max(c.sn || 0, r.adminSeenAt);
+    chatCacheWrite(agentId, c);
+  } catch (e) {}
 }
 async function chatOpen(agentId){
   if (!STATE) return;
   var a = ((_cc.cfg && _cc.cfg.agents) || []).filter(function(x){ return x.id === agentId; })[0];
   if (!a) return;
-  _cc.agent = a; _cc.msgs = []; _cc.after = 0; _cc.sig = ''; _cc.adminReadAt = 0; _cc.adminSeenAt = 0;
+  _cc.agent = a; _cc.msgs = []; _cc.after = 0; _cc.sig = ''; _cc.adminReadAt = 0; _cc.adminSeenAt = 0; chatSetTyping(false);
   $('chatAv').innerHTML = chatAvatar(a); $('chatName').textContent = a.name; $('chatList').innerHTML = ''; $('chatInput').value = ''; chatGrow(); chatState();
-  openOverlay('chat'); chatFit(); chatLoop();
-  try { await Promise.all([chatLoadConfig(true), chatRegister(), chatPoll()]); } catch (e) {}
+  openOverlay('chat', true); chatFit(); chatLoop();
+  // 1) at once, from this phone's own copy (opened with this phone's key; nothing waits for the network)
+  try {
+    var k = await chatKey(), c = chatCacheRead(a.id);
+    if (_cc.agent === a && c.m.length) {
+      var opened = await Promise.all(c.m.map(chatOpenMsg));
+      c.m.forEach(function(m, n){ _cc.msgs.push({ id: m.id, from: m.from, text: opened[n].text, img: opened[n].img, at: m.at, raw: m }); _cc.after = Math.max(_cc.after, m.at); });
+      _cc.adminReadAt = c.rd || 0; _cc.adminSeenAt = c.sn || 0;
+      if (_cc.agent === a) chatRender(true);
+    }
+  } catch (e) {}
+  // 2) the server: only what is newer than that
+  try { await Promise.all([chatLoadConfig(true), chatPoll()]); } catch (e) {}
+  chatRegister();
   if (_cc.agent === a) { chatRender(true); api('/chat/read', { agentId: a.id }); delete _cc.unread[a.id]; }
 }
-function chatBack(){ _cc.agent = null; openOverlay('support'); }
+function chatBack(){ _cc.agent = null; chatSetTyping(false); openOverlay('support', true); }
 function chatGrow(){ var t = $('chatInput'); if (!t) return; t.style.height = 'auto'; var h = t.scrollHeight; t.style.height = h > 44 ? Math.min(h, 112) + 'px' : ''; }
 // The page sits above the keyboard: it follows the visible part of the screen.
 function chatFit(){
@@ -1099,24 +1294,32 @@ async function chatSend(){
     var r = await api('/chat/send', env);
     if (!r || r.status !== 'success') throw new Error((r && r.message) || 'Could not send. Try again.');
     _cc.msgs = _cc.msgs.filter(function(x){ return x !== tmp; });
-    if (!_cc.msgs.some(function(x){ return x.id === r.id; })) _cc.msgs.push({ id: r.id, from: 'member', text: text, at: r.at });
+    if (!_cc.msgs.some(function(x){ return x.id === r.id; })) _cc.msgs.push({ id: r.id, from: 'member', text: text, img: null, at: r.at, raw: { id: r.id, from: 'member', agentId: ag.id, at: r.at, iv: env.iv, ct: env.ct, wraps: env.wraps.filter(function(w){ return w.kid === k.kid; }) } });
     _cc.after = Math.max(_cc.after, r.at - 1);
     if (r.delivered) _cc.adminSeenAt = Math.max(_cc.adminSeenAt, r.at);   // the panel is open: two ticks at once
   } catch (e) {
     _cc.msgs = _cc.msgs.filter(function(x){ return x !== tmp; }); inp.value = text; chatGrow();
     toast(e && e.message ? e.message : 'Could not send. Try again.');
   } finally { _cc.busy = false; }
-  _cc.sig = ''; chatRender(true);
+  _cc.sig = ''; _cc.typeSent = 0; chatRender(true); chatCacheSoon();
 }
-document.addEventListener('visibilitychange', function(){ if (!document.hidden && STATE && (chatShown('ovChat') || chatShown('ovSupport'))) { chatResync(); chatLoop(); } });
+document.addEventListener('pointerdown', function(e){
+  var b = e.target.closest && e.target.closest('.sup-ag');
+  if (b) chatWarm(b.getAttribute('data-ag'));
+});
 document.addEventListener('click', function(e){
   var b = e.target.closest && e.target.closest('.sup-ag');
-  if (b) chatOpen(b.getAttribute('data-ag'));
+  if (b) { chatOpen(b.getAttribute('data-ag')); return; }
+  var im = e.target.closest && e.target.closest('#chatList .cm-img.ready');
+  if (im) { var pic = im.querySelector('img'); if (pic) chatViewer(pic.src); return; }
+  if (e.target.closest && e.target.closest('#chatViewer')) { $('chatViewer').classList.remove('show'); $('chatViewer').innerHTML = ''; }
 });
+document.addEventListener('visibilitychange', function(){ if (!document.hidden && STATE && (chatShown('ovChat') || chatShown('ovSupport'))) { chatResync(); chatLoop(); } });
 document.addEventListener('keydown', function(e){
   if (e.target && e.target.id === 'chatInput' && e.key === 'Enter' && !e.shiftKey && !('ontouchstart' in window)) { e.preventDefault(); chatSend(); }
 });
-document.addEventListener('input', function(e){ if (e.target && e.target.id === 'chatInput') chatGrow(); });
+document.addEventListener('input', function(e){ if (e.target && e.target.id === 'chatInput') { chatGrow(); chatTypingPing(); } });
+document.addEventListener('change', function(e){ if (e.target && e.target.id === 'chatFile') { var f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) chatSendImage(f); } });
 
 document.addEventListener('click', function(e){
   var el = e.target.closest && e.target.closest('[data-open-url]');
@@ -2374,7 +2577,7 @@ function goToShopProduct(key){
 // One full-screen page at a time. The phone's Back button closes it (one history entry, replaced when one page opens another) instead of leaving the app.
 var _ovOpen = false, _ovName = '';
 function hideOverlays(){ document.querySelectorAll('.overlay').forEach(function(o){ o.classList.remove('show'); }); }
-function openOverlay(name){
+function openOverlay(name, noVeil){
   var el = $('ov' + name.charAt(0).toUpperCase() + name.slice(1));
   if (!el) return;
   _ovName = name;
@@ -2391,7 +2594,7 @@ function openOverlay(name){
   if (name === 'earnings') renderEarnings();
   if (name === 'deposit') prepareDeposit();
   if (name === 'support') chatSupportOpen();
-  navVeil(true, rt || overlayTask(name));
+  if (!noVeil) navVeil(true, rt || overlayTask(name));   // the chat pages open with no dots: they paint from the phone's own copy
 }
 function closeOverlay(){
   if (_gpActive) gpLeave();

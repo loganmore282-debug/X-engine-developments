@@ -73,7 +73,7 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   r = await J('POST', '/chat/send', Object.assign({}, env, { agentId: 'nope' }), tok); ok(r.s === 404, 'a message to a profile that does not exist is refused');
   r = await J('POST', '/chat/send', Object.assign({}, env, { ct: 'AAAA' }), tok); ok(r.s === 400, 'a malformed message is refused');
   r = await J('POST', '/chat/send', Object.assign({}, env, { wraps: [] }), tok); ok(r.s === 400, 'a message locked for no key is refused');
-  r = await J('POST', '/chat/send', Object.assign({}, env, { ct: 'A'.repeat(7000) }), tok); ok(r.s === 400, 'an oversized message is refused');
+  r = await J('POST', '/chat/send', Object.assign({}, env, { ct: 'A'.repeat(10000) }), tok); ok(r.s === 400, 'an oversized message is refused');
   r = await J('POST', '/chat/send', env); ok(r.s === 401, 'a message needs a signed-in member');
   // ---- the admin inbox
   r = await J('GET', '/admin/chat/summary', null, null, true); ok(r.j.unread === 1 && r.j.threads === 1 && r.j.latestUser === uid, 'the panel is told: one unread message', r.j);
@@ -141,6 +141,37 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   ok(h.j.messages.length === 300 && h.j.messages[299].at === 1000349 && h.j.messages[0].at === 1000050, 'a long conversation returns the newest 300 messages (not the oldest)', { n: h.j.messages.length, last: h.j.messages[h.j.messages.length - 1] && h.j.messages[h.j.messages.length - 1].at });
   h = await J('GET', '/chat/history?agentId=' + A1 + '&after=1000349', null, bigUser.j.token); ok(h.j.messages.length === 1 && h.j.messages[0].at === 1000349, 'asking for what is newer includes the last message itself (nothing sent in the same millisecond is ever lost)');
   r = await J('POST', '/admin/chat/send', Object.assign({}, env, { userId: uid, agentId: 'gone-agent' }), null, true); ok(r.s === 400, 'a reply under a profile that no longer exists is refused with a clear message');
+  // ---- "typing...": never stored, woken at once to the other side, ended by a message
+  const mwait = (tk, seq) => getJ('/chat/wait?seq=' + seq, tk), awaitA = seq => getJ('/admin/chat/wait?seq=' + seq, null, true);
+  let sq = (await J('GET', '/admin/chat/summary', null, null, true)).j.seq; let aw2 = awaitA(sq); await sleep(150);
+  let tt = Date.now(); await J('POST', '/chat/typing', { agentId: A1, typing: true }, tok); let ty = await aw2;
+  ok(Array.isArray(ty.typing) && ty.typing.some(x => x.userId === uid && x.agentId === A1) && Date.now() - tt < 400, 'a member typing is told to the panel at once (no message stored)', { ms: Date.now() - tt, typing: ty.typing });
+  ok(!JSON.stringify([...fm.__stores.chatMessages.values()]).includes('typing'), 'and nothing about it is kept');
+  sq = (await J('GET', '/chat/summary', null, tok)).j.seq; let mw2 = mwait(tok, sq); await sleep(150);
+  tt = Date.now(); await J('POST', '/admin/chat/typing', { userId: uid, agentId: A1, typing: true }, null, true); ty = await mw2;
+  ok(ty.typing && ty.typing.agentId === A1 && Date.now() - tt < 400, 'the panel typing reaches the member\'s waiting phone at once, naming the profile', { ms: Date.now() - tt, typing: ty.typing });
+  r = await J('GET', '/chat/wait?seq=' + ty.seq, null, tok).catch(() => null);
+  env = await seal('stops typing now', uid + '|admin|' + A1, mkeys.map(k => ({ kid: k.kid, jwk: k.jwk })).concat([{ kid: adminPair.kid, jwk: adminPair.pub }])); env.userId = uid; env.agentId = A1; await J('POST', '/admin/chat/send', env, null, true);
+  ty = await getJ('/chat/wait?seq=' + (ty.seq + 999999999), tok); ok(!ty.typing, 'sending a message ends "typing…"');
+  // ---- pictures: locked bytes, owner or admin only
+  const raw = crypto.getRandomValues(new Uint8Array(60000)); const sealedPic = await CHAT.sealBlob(raw);
+  const up = async (path, bytes, tk, adm, ctype) => { const r2 = await fetch(base + path, { method: 'POST', headers: { 'content-type': ctype || 'application/octet-stream', authorization: 'Bearer ' + (adm ? AK : tk) }, body: bytes }); let j2 = null; try { j2 = await r2.json(); } catch (_) {} return { s: r2.status, j: j2 }; };
+  let u1 = await up('/chat/blob', sealedPic.ct, tok); ok(u1.j.status === 'success' && /^[0-9a-f]{24}$/.test(u1.j.id) && u1.j.size === sealedPic.ct.length, 'the member uploads a picture (locked bytes only)', u1);
+  const dl = await fetch(base + '/chat/blob/' + u1.j.id, { headers: { authorization: 'Bearer ' + tok } }); const dlb = new Uint8Array(await dl.arrayBuffer());
+  ok(dl.status === 200 && /immutable/.test(dl.headers.get('cache-control') || '') && dlb.length === sealedPic.ct.length, 'it comes back byte for byte, told to be kept by the phone for good (never downloaded twice)');
+  ok(Buffer.compare(Buffer.from(await CHAT.openBlob(dlb, sealedPic.key, sealedPic.iv)), Buffer.from(raw)) === 0, 'and opens, with the key that travels inside the message, to the very same picture');
+  ok(Buffer.from([...fm.__stores.chatBlobs.values()][0].data, 'base64').compare(Buffer.from(sealedPic.ct)) === 0 && !Buffer.from([...fm.__stores.chatBlobs.values()][0].data, 'base64').includes(Buffer.from(raw.slice(100, 140))), 'the server holds only the locked bytes: the picture is not in its database');
+  const dlA = await fetch(base + '/admin/chat/blob/' + u1.j.id, { headers: { authorization: 'Bearer ' + AK } }); ok(dlA.status === 200, 'the admin panel can fetch it');
+  const other3 = await J('POST', '/auth/signup', { phone: '0778881111', password: 'secret12' }); await J('POST', '/register', { pin: '123456', referralCode: '' }, other3.j.token);
+  const dlO = await fetch(base + '/chat/blob/' + u1.j.id, { headers: { authorization: 'Bearer ' + other3.j.token } }); ok(dlO.status === 404, 'another member cannot fetch it (404)');
+  ok((await fetch(base + '/chat/blob/' + u1.j.id)).status === 401 && (await fetch(base + '/admin/chat/blob/' + u1.j.id)).status === 401, 'nobody without a sign-in can');
+  ok((await fetch(base + '/chat/blob/../../etc', { headers: { authorization: 'Bearer ' + tok } })).status === 404 && (await fetch(base + '/chat/blob/zzzz', { headers: { authorization: 'Bearer ' + tok } })).status === 404, 'a made-up id is a plain 404');
+  u1 = await up('/chat/blob', new Uint8Array(700 * 1024), tok); ok(u1.s === 400, 'a picture over 600 KB is refused (the app sends far smaller ones)');
+  u1 = await up('/chat/blob', new Uint8Array(5), tok); ok(u1.s === 400, 'an empty or tiny upload is refused');
+  u1 = await up('/chat/blob', sealedPic.ct, null); ok(u1.s === 401, 'an upload needs a signed-in member');
+  u1 = await up('/admin/chat/blob?userId=' + uid, sealedPic.ct, null, true); ok(u1.j && u1.j.status === 'success', 'the admin uploads a picture for a member who has a chat');
+  u1 = await up('/admin/chat/blob?userId=nobody', sealedPic.ct, null, true); ok(u1.s === 404, 'but not for a member with no chat');
+  h = await J('GET', '/chat/history?agentId=' + A1 + '&kid=' + mk.kid, null, tok); ok(h.j.messages.length > 0 && h.j.messages.every(m => m.wraps.length === 1 && m.wraps[0].kid === mk.kid), 'asking with a key id sends only the lock for that key (half the bytes)');
   // ---- limits and safety
   let last; for (let i = 0; i < 22; i++) { const e2 = await seal('x' + i, uid + '|member|' + A1, [{ kid: adminPair.kid, jwk: adminPair.pub }]); e2.agentId = A1; last = await J('POST', '/chat/send', e2, tok); if (last.s === 429) break; }
   ok(last.s === 429, 'sending more than 20 messages a minute is slowed down');
@@ -211,6 +242,37 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   ok(await until(mp, () => document.querySelectorAll('#chatList .cm.ag').length === 1, null, 12000) && await mp.evaluate(() => /checking it for you now/.test(document.querySelector('#chatList .cm.ag').textContent)), 'member: the reply arrives within seconds, under Sarah, decrypted on the phone');
   const msMember = Date.now() - tRep; realLog('         admin -> member: the reply showed ' + msMember + ' ms after the admin tapped Send'); ok(msMember < 2500, 'member: the reply arrived within 2.5 seconds (' + msMember + ' ms)');
   await sleep(500); ok(await ap.evaluate(() => document.querySelectorAll('#chMsgs .ch-m.me .ch-tk').length === 1), 'admin: its own reply carries ticks');
+  // -- typing, pictures and the speed of opening a chat
+  await mp.fill('#chatInput', 'typ'); await mp.type('#chatInput', 'ing'); 
+  ok(await until(ap, () => /typing/.test(document.querySelector('.ch-head').innerText), null, 4000), 'admin: "typing…" shows in the conversation while the member types');
+  ok(await until(ap, () => /typing/.test(document.querySelector('#chThreads .ch-row') ? document.querySelector('#chThreads .ch-row').innerText : ''), null, 4000), 'admin: and in the inbox row');
+  await mp.fill('#chatInput', '');
+  await ap.fill('#chInput', 'wr'); await ap.type('#chInput', 'iting');
+  ok(await until(mp, () => /typing/.test(document.getElementById('chatState').textContent) && !!document.querySelector('#chatList .cm-typ'), null, 4000), 'member: "typing…" under the name and the three dots in the chat while the panel types');
+  await ap.fill('#chInput', ''); await ap.fill('#chInput', 'Here is the picture you asked for'); await ap.click('#chSend');
+  ok(await until(mp, () => !document.querySelector('#chatList .cm-typ') && document.getElementById('chatState').textContent !== 'typing…', null, 4000), 'member: the dots go the moment the message arrives');
+  // a big photo from the member
+  const photo = fs.readFileSync('/tmp/claude-0/test-photo.jpg'); const tPic = Date.now();
+  await mp.setInputFiles('#chatFile', { name: 'photo.jpg', mimeType: 'image/jpeg', buffer: photo });
+  ok(await until(mp, () => !!document.querySelector('#chatList .cm.me .cm-img'), null, 3000), 'member: the picture shows in the chat the moment it is chosen (spinner while it uploads)');
+  ok(await until(ap, () => { const im = document.querySelector('#chMsgs .ch-img img'); return !!im && im.naturalWidth > 0; }, null, 8000), 'admin: the picture arrives, is opened with the key inside the message and shows');
+  realLog('         photo ' + Math.round(photo.length / 1024) + ' KB chosen -> shown in the admin panel ' + (Date.now() - tPic) + ' ms later');
+  const blobs = [...fm.__stores.chatBlobs.values()].filter(b => b.by === 'member').slice(-1)[0];
+  ok(blobs && blobs.size < 320 * 1024 && blobs.size < photo.length, 'the picture was made small before leaving the phone (' + (photo.length >> 10) + ' KB -> ' + (blobs.size >> 10) + ' KB)');
+  const dims = await ap.evaluate(() => { const im = document.querySelector('#chMsgs .ch-img img'); return [im.naturalWidth, im.naturalHeight]; }); ok(Math.max(...dims) <= 1280 && Math.max(...dims) >= 1000 && Math.abs(dims[0] / dims[1] - 4 / 3) < 0.02, 'long side at most 1280 px, shape kept (' + dims.join(' x ') + ')');
+  ok(await ap.evaluate(() => { const b = document.querySelector('#chMsgs .ch-img'); return /data:image\/jpeg/.test(b.style.backgroundImage); }), 'admin: the blurred preview sits behind it (inside the encrypted message)');
+  // the admin answers with a picture
+  const tBack = Date.now(); await ap.setInputFiles('#chFile', { name: 'reply.jpg', mimeType: 'image/jpeg', buffer: photo });
+  ok(await until(mp, () => { const im = document.querySelector('#chatList .cm.ag .cm-img img'); return !!im && im.naturalWidth > 0; }, null, 8000), 'member: the admin\'s picture arrives and shows');
+  realLog('         admin picture -> shown on the phone ' + (Date.now() - tBack) + ' ms later');
+  // tap to enlarge
+  await mp.click('#chatList .cm.ag .cm-img'); ok(await mp.evaluate(() => document.getElementById('chatViewer').classList.contains('show') && !!document.querySelector('#chatViewer img')), 'member: tapping a picture opens it full screen'); await mp.click('#chatViewer');
+  // opening again is instant (this phone's own copy)
+  await mp.evaluate(() => chatBack()); await sleep(300);
+  const tOpen = await mp.evaluate(() => new Promise(res => { const t0 = performance.now(); chatOpen(_cc.cfg.agents[0].id); const iv = setInterval(() => { if (document.querySelectorAll('#chatList .cm').length >= 3) { clearInterval(iv); res(Math.round(performance.now() - t0)); } }, 5); setTimeout(() => { clearInterval(iv); res(-1); }, 3000); }));
+  realLog('         reopening the chat: messages on screen after ' + tOpen + ' ms');
+  ok(tOpen >= 0 && tOpen < 400, 'member: reopening a chat paints the conversation within 400 ms (from the phone\'s own copy, no waiting for the network): ' + tOpen + ' ms');
+  ok(await mp.evaluate(() => !document.getElementById('navVeil').classList.contains('on')), 'member: and with no loading dots');
   // -- the backup of the key
   await ap.click('[data-tab="chat"]'); await sleep(900);
   ok(await ap.evaluate(() => !!document.getElementById('chBackup')), 'admin: the key backup button is there');

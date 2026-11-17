@@ -6984,7 +6984,7 @@ const _withdrawalView = r => ({ ref: r.ref || '', amount: r.amount, fee: r.fee, 
 // ciphertext it cannot read. Each message has its own random AES-GCM key; that key is wrapped (ECDH P-256 + HKDF, a fresh one-time key pair per wrap) for every
 // public key that may read it: the admin panel's key, the member's own device key(s) (so the sender can read their own message again). The server holds
 // only PUBLIC keys. It does see who wrote, to which profile, when, and how large the message is. `wraps` carry no secret: without a private key they open nothing.
-const CHAT_MAX_AGENTS = 12, CHAT_MAX_CT = 6000, CHAT_MAX_WRAPS = 8, CHAT_MAX_KEYS = 3, CHAT_PAGE = 300, CHAT_ONLINE_MS = 45000;
+const CHAT_MAX_AGENTS = 12, CHAT_MAX_CT = 9000, CHAT_MAX_WRAPS = 8, CHAT_MAX_KEYS = 3, CHAT_PAGE = 300, CHAT_ONLINE_MS = 45000;
 // How long a "wait" request is held open for news (see LIVE DELIVERY below). Under a minute, the web server's own limit; the apps' request timers are longer.
 const CHAT_WAIT_MS = Number(process.env.CHAT_WAIT_MS) || 22000;
 const CHAT_B64 = /^[A-Za-z0-9+/]+={0,2}$/, CHAT_B64U = /^[A-Za-z0-9_-]{43}$/, CHAT_IV = /^[A-Za-z0-9+/]{16}$/, CHAT_KID = /^[0-9a-f]{16}$/;
@@ -7013,7 +7013,7 @@ function chatEnvelope(b) {
 // side, carrying the message itself, so nothing is polled and nothing is fetched twice. Every event gets a rising number (seq); a side that asks "anything after N?"
 // is answered at once from the recent events, or parked until there is one (or CHAT_WAIT_MS passes, when it simply asks again). A side that has been away longer than the
 // recent events reach (or the server restarted: numbers start above every earlier one) is told to reload its list. One server process only, like the locks.
-const _cx = { seq: Date.now() * 1000, base: 0, floor: 0, ring: [], mw: new Map(), aw: new Set(), seen: new Map() };
+const _cx = { seq: Date.now() * 1000, base: 0, floor: 0, ring: [], mw: new Map(), aw: new Set(), seen: new Map(), typing: new Map() };
 _cx.base = _cx.floor = _cx.seq;
 function chatMemberLive(uid) { const s = _cx.mw.get(uid); return !!(s && s.size); }
 function chatAdminLive() { return _cx.aw.size > 0; }
@@ -7021,11 +7021,29 @@ function chatAdminOnline() { return chatAdminLive() || Date.now() - _chat.adminA
 function chatAdminSeenAt() { return chatAdminLive() ? Date.now() : _chat.adminAt; }
 function chatMemberSeenAt(uid, dbAt) { return Math.max(Number(dbAt) || 0, _cx.seen.get(uid) || 0, chatMemberLive(uid) ? Date.now() : 0); }
 function chatEmit(ev) {
+  if (ev.kind === 'msg' && ev.msg) { const t = _cx.typing.get(ev.uid); if (t) { delete t[ev.msg.from === 'admin' ? 'admin' : 'member']; if (!t.admin && !t.member) _cx.typing.delete(ev.uid); } }   // sending ends "typing"
   ev.seq = ++_cx.seq; _cx.ring.push(ev);
   if (_cx.ring.length > 3000) { const gone = _cx.ring.splice(0, 1000); _cx.floor = gone[gone.length - 1].seq; }   // anyone behind this must reload
   if (ev.kind === 'adminSeen') { for (const set of _cx.mw.values()) for (const w of [...set]) w.fire(); }
   else if (ev.uid) { const set = _cx.mw.get(ev.uid); if (set) for (const w of [...set]) w.fire(); }
   for (const w of [..._cx.aw]) w.fire();
+}
+// "typing...": a short-lived fact, never stored. Each ping lasts 5 seconds; the other side's open request is woken at once to learn of it, and the answer carries
+// who is typing right now. Nothing is kept for a side that is not connected.
+const CHAT_TYPING_MS = 5000;
+function chatTypingFor(side, uid) {   // side 'member': is the panel typing to this member? side 'admin': which members are typing to the panel?
+  const now = Date.now();
+  if (side === 'member') { const t = (_cx.typing.get(uid) || {}).admin; return t && now - t.at < CHAT_TYPING_MS ? { agentId: t.agentId } : null; }
+  const out = []; for (const [id, t] of _cx.typing) if (t.member && now - t.member.at < CHAT_TYPING_MS) out.push({ userId: id, agentId: t.member.agentId });
+  return out;
+}
+function chatSetTyping(uid, from, agentId, on) {
+  const t = _cx.typing.get(uid) || {};
+  if (on) t[from] = { at: Date.now(), agentId: String(agentId || '').slice(0, 40) }; else delete t[from];
+  if (t.admin || t.member) _cx.typing.set(uid, t); else _cx.typing.delete(uid);
+  if (_cx.typing.size > 5000) for (const [k, v] of _cx.typing) if ((!v.member || Date.now() - v.member.at > 60000) && (!v.admin || Date.now() - v.admin.at > 60000)) _cx.typing.delete(k);
+  if (from === 'member') { for (const w of [..._cx.aw]) w.fire(true); }
+  else { const set = _cx.mw.get(uid); if (set) for (const w of [...set]) w.fire(true); }
 }
 // The admin side coming online (after being away) tells every member's waiting phone, so their "sent" ticks become "delivered" at once.
 function chatTouchAdmin() {
@@ -7033,15 +7051,16 @@ function chatTouchAdmin() {
   if (!was) chatEmit({ kind: 'adminSeen', at: _chat.adminAt });
 }
 // Holds the request until an event for this side arrives (pick says which events matter), then answers with them. since < base: the side is told to reload.
-function chatPark(res, since, pick, bucket, extra) {   // bucket = { add(w), del(w) }
+function chatPark(res, since, pick, bucket, extra, clientSig) {   // bucket = { add(w), del(w) }; clientSig = the "typing" answer the caller last saw
   const reply = (evs, reset) => { res.set('Cache-Control', 'no-store'); res.json(Object.assign({ status: 'success', seq: _cx.seq, events: evs }, reset ? { reset: true } : {}, extra())); };
   if (since < _cx.floor) { reply([], true); return; }
   const have = () => { const out = []; for (let i = _cx.ring.length - 1; i >= 0 && _cx.ring[i].seq > since; i--) if (pick(_cx.ring[i])) out.push(_cx.ring[i]); return out.reverse(); };
   const now = have();
-  if (now.length) { reply(now); return; }
+  // A "typing" ping that arrived while the caller was between two requests must not be lost: if what is happening now differs from what the caller last saw, answer at once.
+  if (now.length || (clientSig !== undefined && clientSig !== JSON.stringify(extra().typing))) { reply(now); return; }
   let done = false, timer = null;
   const end = evs => { if (done) return; done = true; clearTimeout(timer); bucket.del(w); reply(evs); };
-  const w = { fire: () => { const e = have(); if (e.length) end(e); }, cancel: () => end([]) };
+  const w = { fire: force => { const e = have(); if (e.length || force === true) end(e); }, cancel: () => end([]) };
   timer = setTimeout(() => end([]), CHAT_WAIT_MS);
   res.on('close', () => { if (!done) { done = true; clearTimeout(timer); bucket.del(w); } });
   bucket.add(w);
@@ -7069,7 +7088,8 @@ async function chatAdminKey() {
   const jwk = chatJwk(s.data().jwk);
   return jwk ? { kid: chatKidOf(jwk), jwk } : null;
 }
-const chatMsgOut = d => { const v = d.data(); return { id: d.id, from: v.from, agentId: v.agentId, iv: v.iv, ct: v.ct, wraps: v.wraps, at: v.at }; };
+// With a key id (kid) only the lock for THAT key is sent (half the bytes); without one, all of them.
+const chatMsgOut = (d, kid) => { const v = d.data(); const mine = kid ? (v.wraps || []).filter(w => w.kid === kid) : null; return { id: d.id, from: v.from, agentId: v.agentId, iv: v.iv, ct: v.ct, wraps: mine && mine.length ? mine : v.wraps, at: v.at }; };
 
 // ---- public: the profiles, the admin panel's public key, whether someone is there ----
 app.get('/public/chat-config', async (_req, res) => {
@@ -7146,12 +7166,12 @@ app.post('/chat/send', async (req, res) => {
   } catch (e) { console.error('chat send:', e.message); res.status(500).json({ status: 'error', message: 'Could not send. Try again.' }); }
 });
 // The newest messages of a conversation, oldest first. With `after`, everything from that moment on (inclusive: two messages in the same millisecond are never lost, the apps drop repeats by id).
-async function chatMessages(threadId, agentId, after) {
+async function chatMessages(threadId, agentId, after, kid) {
   let q = db.collection('chatMessages').where('threadId', '==', threadId);
   if (agentId) q = q.where('agentId', '==', agentId);
-  if (after > 0) { const snap = await q.where('at', '>=', after).orderBy('at', 'asc').limit(CHAT_PAGE).get(); return snap.docs.map(chatMsgOut); }
+  if (after > 0) { const snap = await q.where('at', '>=', after).orderBy('at', 'asc').limit(CHAT_PAGE).get(); return snap.docs.map(d => chatMsgOut(d, kid)); }
   const snap = await q.orderBy('at', 'desc').limit(CHAT_PAGE).get();
-  return snap.docs.map(chatMsgOut).reverse();
+  return snap.docs.map(d => chatMsgOut(d, kid)).reverse();
 }
 app.get('/chat/history', async (req, res) => {
   const uid = await verifyAuth(req);
@@ -7160,7 +7180,7 @@ app.get('/chat/history', async (req, res) => {
     const agentId = String(req.query.agentId || ''), after = Number(req.query.after) || 0;
     if (!agentId) return res.status(400).json({ status: 'error', message: 'Choose a profile' });
     const seq = _cx.seq;   // taken BEFORE the read: whatever happens after it still arrives by "wait"
-    const [rows, tSnap] = await Promise.all([chatMessages(uid, agentId, after), db.collection('chatThreads').doc(uid).get()]);
+    const [rows, tSnap] = await Promise.all([chatMessages(uid, agentId, after, String(req.query.kid || '')), db.collection('chatThreads').doc(uid).get()]);
     const t = tSnap.exists ? tSnap.data() : {};
     chatNoteMemberSeen(uid);
     res.set('Cache-Control', 'no-store');
@@ -7212,7 +7232,50 @@ app.get('/chat/wait', async (req, res) => {
     del: w => { const set = _cx.mw.get(uid); if (set) { set.delete(w); if (!set.size) _cx.mw.delete(uid); } },
   };
   chatPark(res, since, e => e.kind === 'adminSeen' || (e.uid === uid && ((e.kind === 'msg' && e.msg.from === 'admin') || e.kind === 'adminRead')), bucket,
-    () => ({ online: chatAdminOnline(), adminSeenAt: chatAdminSeenAt() }));
+    () => ({ online: chatAdminOnline(), adminSeenAt: chatAdminSeenAt(), typing: chatTypingFor('member', uid) }), req.query.ts === undefined ? undefined : String(req.query.ts));
+});
+
+app.post('/chat/typing', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const b = req.body || {}, last = (_cx.typing.get(uid) || {}).member;
+  if (!last || Date.now() - last.at > 1000 || b.typing === false) chatSetTyping(uid, 'member', b.agentId, b.typing !== false);
+  res.json({ status: 'success' });
+});
+// ---- pictures ----
+// A picture is locked on the sender's device with its own key (the key travels inside the encrypted message), and the server keeps only the locked bytes: it can neither see
+// the picture nor tell what it is. Anyone who has the id still needs to be the member it belongs to, or an admin, to fetch it.
+const CHAT_BLOB_MAX = 600 * 1024, chatBlobParser = express.raw({ type: () => true, limit: '1mb' });
+const _chatBlobLog = new Map();
+async function chatStoreBlob(req, res, owner, by) {
+  const buf = req.body;
+  if (!Buffer.isBuffer(buf) || buf.length < 32 || buf.length > CHAT_BLOB_MAX) return res.status(400).json({ status: 'error', message: 'That picture is too large. Choose a smaller one.' });
+  const now = Date.now(), log = (_chatBlobLog.get(by + ':' + owner) || []).filter(t => now - t < 3600000);
+  if (log.length >= 40) return res.status(429).json({ status: 'error', message: 'Too many pictures. Try again later.' });
+  log.push(now); _chatBlobLog.set(by + ':' + owner, log);
+  if (_chatBlobLog.size > 5000) for (const [k, v] of _chatBlobLog) if (!v.length || now - v[v.length - 1] > 3600000) _chatBlobLog.delete(k);
+  const id = crypto.randomBytes(12).toString('hex');
+  await db.collection('chatBlobs').doc(id).set({ uid: owner, by, size: buf.length, data: buf.toString('base64'), at: now });
+  res.json({ status: 'success', id, size: buf.length });
+}
+async function chatSendBlob(res, id, owner) {
+  if (!/^[0-9a-f]{24}$/.test(String(id || ''))) return res.status(404).json({ status: 'error', message: 'Not found' });
+  const s = await db.collection('chatBlobs').doc(id).get();
+  if (!s.exists || (owner && s.data().uid !== owner)) return res.status(404).json({ status: 'error', message: 'Not found' });
+  res.set({ 'Content-Type': 'application/octet-stream', 'Cache-Control': 'private, max-age=31536000, immutable' });
+  res.send(Buffer.from(s.data().data, 'base64'));
+}
+app.post('/chat/blob', chatBlobParser, async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const u = await chatUser(uid);
+  if (!u || u.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended. Contact customer service.' });
+  await chatStoreBlob(req, res, uid, 'member');
+});
+app.get('/chat/blob/:id', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  await chatSendBlob(res, req.params.id, uid);
 });
 
 // ---- admin panel ----
@@ -7245,7 +7308,7 @@ app.get('/admin/chat/thread', async (req, res) => {
     chatTouchAdmin();
     const userId = String(req.query.userId || '').slice(0, 80), after = Number(req.query.after) || 0;
     if (!userId) return res.status(400).json({ status: 'error', message: 'Missing member' });
-    const [tSnap, rows, kSnap] = await Promise.all([db.collection('chatThreads').doc(userId).get(), chatMessages(userId, '', after), db.collection('chatMembers').doc(userId).get()]);
+    const [tSnap, rows, kSnap] = await Promise.all([db.collection('chatThreads').doc(userId).get(), chatMessages(userId, '', after, String(req.query.kid || '')), db.collection('chatMembers').doc(userId).get()]);
     if (!tSnap.exists) return res.status(404).json({ status: 'error', message: 'No chat with this member' });
     const t = tSnap.data(), now = Date.now(), seen = chatMemberSeenAt(userId, t.memberSeenAt);
     res.set('Cache-Control', 'no-store');
@@ -7297,7 +7360,24 @@ app.get('/admin/chat/wait', async (req, res) => {
     del: w => { _cx.aw.delete(w); _chat.adminAt = Date.now(); },   // leaving counts as "seen just now": online for another 45 seconds
   };
   chatTouchAdmin();
-  chatPark(res, since, () => true, bucket, () => ({}));
+  chatPark(res, since, () => true, bucket, () => ({ typing: chatTypingFor('admin') }), req.query.ts === undefined ? undefined : String(req.query.ts));
+});
+app.post('/admin/chat/typing', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const b = req.body || {}, userId = String(b.userId || '').slice(0, 80);
+  if (userId) { const last = (_cx.typing.get(userId) || {}).admin; if (!last || Date.now() - last.at > 1000 || b.typing === false) chatSetTyping(userId, 'admin', b.agentId, b.typing !== false); chatTouchAdmin(); }
+  res.json({ status: 'success' });
+});
+app.post('/admin/chat/blob', chatBlobParser, async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.query.userId || '').slice(0, 80);
+  const t = userId ? await db.collection('chatThreads').doc(userId).get() : null;
+  if (!t || !t.exists) return res.status(404).json({ status: 'error', message: 'No chat with this member' });
+  await chatStoreBlob(req, res, userId, 'admin');
+});
+app.get('/admin/chat/blob/:id', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  await chatSendBlob(res, req.params.id, '');
 });
 // The panel's public key. Made once, in the owner's browser (the private half never leaves it); replacing it makes older messages unreadable, so it must be asked for.
 app.get('/admin/chat/key', async (req, res) => {
@@ -9708,7 +9788,8 @@ app.post('/admin/user/delete', async (req, res) => {
     // The member's customer-service chat goes with the account (their messages, their chat keys and the admin's thread of them).
     try {
       const chatSnap = await db.collection('chatMessages').where('threadId', '==', userId).get();
-      await Promise.all([...chatSnap.docs.map(d => d.ref.delete()), db.collection('chatThreads').doc(userId).delete(), db.collection('chatMembers').doc(userId).delete()]);
+      const blobSnap = await db.collection('chatBlobs').where('uid', '==', userId).get();
+      await Promise.all([...chatSnap.docs.map(d => d.ref.delete()), ...blobSnap.docs.map(d => d.ref.delete()), db.collection('chatThreads').doc(userId).delete(), db.collection('chatMembers').doc(userId).delete()]);
     } catch (e) { console.warn('Chat cleanup for a deleted member failed:', e.message); }
     await db.collection('users').doc(userId).delete();
     try { await deleteMemberLogin(userId); } catch (_) {}

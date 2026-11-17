@@ -233,6 +233,20 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .ch-reply select{margin-left:6px;width:auto;display:inline-block;padding:5px 8px}
   .ch-bar{display:flex;gap:8px;align-items:flex-end;margin-top:8px}
   .ch-bar textarea{flex:1;min-width:0;resize:none;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font:inherit;font-size:14px;max-height:120px;}
+  .ch-m .ch-tx{display:inline}
+  .ch-b.has-img{padding:4px 4px 6px}
+  .ch-b.has-img .ch-tx{display:block;padding:6px 7px 0}
+  .ch-img{position:relative;width:min(260px,70vw);border-radius:10px;overflow:hidden;background-color:#27479a;background-size:cover;background-position:center;isolation:isolate;cursor:zoom-in;}
+  .ch-img::before{content:'';position:absolute;inset:-10px;background:inherit;filter:blur(9px);z-index:-1;}
+  .ch-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;animation:chFade .22s both;}
+  .ch-spin{position:absolute;left:50%;top:50%;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;border:3px solid rgba(255,255,255,.4);border-top-color:#fff;animation:chSpin .8s linear infinite;}
+  @keyframes chFade{from{opacity:0}to{opacity:1}}
+  @keyframes chSpin{to{transform:rotate(360deg)}}
+  .ch-typing{color:var(--ok);font-weight:700;font-style:normal}
+  .ch-attach{padding:9px 11px;display:inline-flex;align-items:center;cursor:pointer}
+  .ch-viewer{position:fixed;inset:0;z-index:9999;background:rgba(5,12,32,.92);display:none;align-items:center;justify-content:center;cursor:zoom-out}
+  .ch-viewer.show{display:flex}
+  .ch-viewer img{max-width:96vw;max-height:96vh;object-fit:contain}
   .ch-empty{display:flex;align-items:center;justify-content:center;min-height:240px;}
   @media (max-width:820px){
     .chat-grid{grid-template-columns:1fr}
@@ -3047,7 +3061,46 @@ var CHAT = (function(){
     var raw = await S.decrypt({ name: 'AES-GCM', iv: unb64(w.iv) }, wk, unb64(w.ek)), k = await S.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
     return dec.decode(await S.decrypt({ name: 'AES-GCM', iv: unb64(msg.iv), additionalData: enc.encode(ad) }, k, unb64(msg.ct)));
   }
-  return { newPair: newPair, kidOf: kidOf, seal: seal, open: open, b64: b64, unb64: unb64 };
+  // PICTURES. A picture is locked with its OWN key; that key travels inside the encrypted message, and the server keeps only the locked bytes.
+  async function sealBlob(bytes){
+    var k = await S.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']), iv = crypto.getRandomValues(new Uint8Array(12));
+    var ct = new Uint8Array(await S.encrypt({ name: 'AES-GCM', iv: iv }, k, bytes));
+    return { ct: ct, key: b64(await S.exportKey('raw', k)), iv: b64(iv) };
+  }
+  async function openBlob(ct, keyB64, ivB64){
+    var k = await S.importKey('raw', unb64(keyB64), 'AES-GCM', false, ['decrypt']);
+    return new Uint8Array(await S.decrypt({ name: 'AES-GCM', iv: unb64(ivB64) }, k, ct));
+  }
+  function loadImage(file){
+    return new Promise(function(ok, no){
+      var url = URL.createObjectURL(file), im = new Image();
+      im.onload = function(){ URL.revokeObjectURL(url); ok(im); };
+      im.onerror = function(){ URL.revokeObjectURL(url); no(new Error('That file is not a picture')); };
+      im.src = url;
+    });
+  }
+  function canvasBlob(cv, type, q){ return new Promise(function(ok){ cv.toBlob(ok, type, q); }); }
+  // Makes a picture SMALL before it leaves the phone: the long side at most 1280 px, WebP (JPEG where the browser cannot make WebP) and under about 230 KB, plus a tiny
+  // 32 px preview that sits inside the message and shows (blurred) the instant the chat opens, before the picture itself has arrived.
+  async function shrink(file){
+    var im = await loadImage(file), W = im.naturalWidth, H = im.naturalHeight;
+    if (!W || !H) throw new Error('That file is not a picture');
+    var best = null, side = 1280;
+    for (var pass = 0; pass < 4; pass++) {
+      var sc = Math.min(1, side / Math.max(W, H)), w = Math.max(1, Math.round(W * sc)), h = Math.max(1, Math.round(H * sc));
+      var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      var g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(im, 0, 0, w, h);
+      var q = 0.76 - pass * 0.09, mime = 'image/webp', blob = await canvasBlob(cv, mime, q);
+      if (!blob || blob.type !== 'image/webp') { mime = 'image/jpeg'; blob = await canvasBlob(cv, mime, q); }
+      best = { blob: blob, w: w, h: h, mime: mime };
+      if (blob.size <= 230000) break;
+      side = Math.round(side * 0.78);
+    }
+    var tw = W >= H ? 32 : Math.max(8, Math.round(32 * W / H)), th = H > W ? 32 : Math.max(8, Math.round(32 * H / W));
+    var tc = document.createElement('canvas'); tc.width = tw; tc.height = th; tc.getContext('2d').drawImage(im, 0, 0, tw, th);
+    return { bytes: new Uint8Array(await best.blob.arrayBuffer()), w: best.w, h: best.h, mime: best.mime, thumb: tc.toDataURL('image/jpeg', 0.5) };
+  }
+  return { newPair: newPair, kidOf: kidOf, seal: seal, open: open, b64: b64, unb64: unb64, sealBlob: sealBlob, openBlob: openBlob, shrink: shrink };
 })();
 /* CHATCRYPTO END */
 
@@ -3055,7 +3108,7 @@ var CHAT = (function(){
    One inbox: every member's messages are ONE thread whichever profile they tapped; the reply goes back under the profile they wrote to (or another you pick).
    The words are opened here and only here: this browser holds the private key (made once, backed up with a password you choose); the server only ever sees ciphertext. */
 const CH_KEY_STORE = 'smartai_chat_admin_key_v1';
-let _ch = { key: null, serverKey: null, agents: [], threads: [], sel: null, meta: null, msgs: [], after: 0, filter: 'all', cache: new Map(), pollT: null, listT: null, notifyT: null, edit: null, busy: false, unread: 0, latestSeen: 0, sig: '', seq: 0, looping: false };
+let _ch = { key: null, serverKey: null, agents: [], threads: [], sel: null, meta: null, msgs: [], after: 0, filter: 'all', cache: new Map(), pollT: null, listT: null, notifyT: null, edit: null, busy: false, unread: 0, latestSeen: 0, sig: '', seq: 0, looping: false, typing: {}, typeSent: 0, tsig: '[]', imgs: {} };
 function chLoadKey(){ try { const k = JSON.parse(localStorage.getItem(CH_KEY_STORE) || 'null'); return k && k.kid && k.pub && k.priv ? k : null; } catch (_) { return null; } }
 function chSaveKey(k){ try { localStorage.setItem(CH_KEY_STORE, JSON.stringify(k)); } catch (_) {} }
 function chReady(){ return !!(_ch.key && _ch.serverKey && _ch.key.kid === _ch.serverKey.kid); }
@@ -3193,11 +3246,17 @@ async function chRestoreKey(){
 }
 
 // ---- inbox ----
-async function chOpenText(m, userId){   // m: {iv, ct, wraps, from, agentId, at}
+async function chOpen(m, userId){   // m: {iv, ct, wraps, from, agentId, at}  ->  { text, img }
   try {
     const pt = await CHAT.open(m, userId + '|' + m.from + '|' + m.agentId, _ch.key.kid, _ch.key.priv);
-    return pt == null ? null : String((JSON.parse(pt) || {}).t || '');
-  } catch (_) { return null; }
+    if (pt == null) return { text: null, img: null };
+    const o = JSON.parse(pt) || {}, i = o.i && typeof o.i === 'object' && /^[0-9a-f]{24}$/.test(String(o.i.id || '')) ? { id: o.i.id, k: String(o.i.k || ''), v: String(o.i.v || ''), w: Number(o.i.w) || 0, h: Number(o.i.h) || 0, m: String(o.i.m || 'image/webp'), th: String(o.i.th || '') } : null;
+    return { text: String(o.t || ''), img: i };
+  } catch (_) { return { text: null, img: null }; }
+}
+async function chOpenText(m, userId){   // the one line shown in the inbox
+  const o = await chOpen(m, userId);
+  return o.text == null && !o.img ? null : (o.img ? (o.text ? 'Photo: ' + o.text : 'Photo') : o.text);
 }
 async function chRefreshList(){
   if (_tab !== 'chat' || !chReady()) return;
@@ -3218,7 +3277,7 @@ function chDrawThreads(){
   box.innerHTML = list.length ? list.map(t => `<button type="button" class="ch-row${t.userId === _ch.sel ? ' sel' : ''}${t.unread ? ' unr' : ''}" data-ch-t="${esc(t.userId)}">
       <span class="ch-av md"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c.6-3.6 3.5-5.4 7.2-5.4s6.6 1.8 7.2 5.4"/></svg>${t.memberOnline ? '<i class="ch-dot"></i>' : ''}</span>
       <span class="ch-main"><b data-no-i18n>${esc(t.publicId ? 'ID ' + t.publicId : t.phone)} <small>${esc(t.phone)}</small></b>
-        <span class="ch-prev">${t.lastFrom === 'admin' ? 'You: ' : ''}${t.preview == null ? '<i>Message not readable with this key</i>' : esc(String(t.preview).slice(0, 80))}</span>
+        <span class="ch-prev">${chTyping(t.userId) ? '<i class="ch-typing">typing…</i>' : (t.lastFrom === 'admin' ? 'You: ' : '') + (t.preview == null ? '<i>Message not readable with this key</i>' : esc(String(t.preview).slice(0, 80)))}</span>
         <span class="ch-via">via ${esc(chAgentName(t.lastAgentId))}</span></span>
       <span class="ch-side"><span>${esc(chTime(t.lastAt))}</span>${t.unread ? `<b class="ch-n">${t.unread > 99 ? '99+' : t.unread}</b>` : ''}</span></button>`).join('')
     : `<p class="muted" style="margin:14px">${_ch.filter === 'unread' ? 'Nothing unread.' : 'No chats yet. When a member writes to one of your profiles it appears here.'}</p>`;
@@ -3234,13 +3293,13 @@ async function chSelect(userId){
 }
 async function chPollThread(first){
   const uid = _ch.sel; if (!uid || _tab !== 'chat' || !chReady()) return;
-  const d = await api('/admin/chat/thread?userId=' + encodeURIComponent(uid) + '&after=' + _ch.after);
+  const d = await api('/admin/chat/thread?userId=' + encodeURIComponent(uid) + '&after=' + _ch.after + '&kid=' + _ch.key.kid);
   if (uid !== _ch.sel || d.status !== 'success') { if (first && d.status !== 'success') $('chView').innerHTML = `<div class="panel-card"><p class="muted" style="margin:0">${esc(d.message || 'Could not open this chat')}</p></div>`; return; }
   let gotMember = false;
   for (const m of d.messages) {
     _ch.after = Math.max(_ch.after, m.at);
     if (_ch.msgs.some(x => x.id === m.id)) continue;
-    _ch.msgs.push({ id: m.id, from: m.from, agentId: m.agentId, at: m.at, text: await chOpenText(m, uid) }); if (m.from === 'member') gotMember = true;
+    const o = await chOpen(m, uid); _ch.msgs.push({ id: m.id, from: m.from, agentId: m.agentId, at: m.at, text: o.text, img: o.img }); if (m.from === 'member') gotMember = true;
   }
   _ch.msgs.sort((a, b) => a.at - b.at);
   _ch.meta = d;
@@ -3258,22 +3317,110 @@ function chDrawThread(stick){
   _ch.msgs.forEach(x => {
     const d = new Date(x.at).toDateString(); if (d !== day) { day = d; list += `<div class="ch-day"><span>${esc(new Date(x.at).toDateString() === new Date().toDateString() ? 'Today' : new Date(x.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))}</span></div>`; }
     const me = x.from === 'admin', st = x.at <= m.memberReadAt ? 'read' : (x.at <= m.memberSeenAt ? 'dlv' : 'sent');
-    list += `<div class="ch-m ${me ? 'me' : 'ag'}"><div class="ch-b${x.text == null ? ' lock' : ''}">${me ? `<small class="ch-as">${esc(chAgentName(x.agentId))}</small>` : `<small class="ch-as">to ${esc(chAgentName(x.agentId))}</small>`}${x.text == null ? 'Cannot be opened with this key' : esc(x.text)}<span class="ch-t">${esc(new Date(x.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }))}${me ? chTick(st) : ''}</span></div></div>`;
+    const noRead = x.text == null && !x.img;
+    list += `<div class="ch-m ${me ? 'me' : 'ag'}"><div class="ch-b${noRead ? ' lock' : ''}${x.img ? ' has-img' : ''}">${me ? `<small class="ch-as">${esc(chAgentName(x.agentId))}</small>` : `<small class="ch-as">to ${esc(chAgentName(x.agentId))}</small>`}${noRead ? 'Cannot be opened with this key' : (x.img ? chImgHtml(x) : '') + (x.text ? `<span class="ch-tx">${esc(x.text)}</span>` : '')}<span class="ch-t">${esc(new Date(x.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }))}${me ? chTick(st) : ''}</span></div></div>`;
   });
   view.innerHTML = `<div class="panel-card ch-conv"><div class="ch-head"><button class="btn ghost sm ch-back" id="chBack" type="button">&larr; Back</button>
       <span class="ch-av md"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c.6-3.6 3.5-5.4 7.2-5.4s6.6 1.8 7.2 5.4"/></svg>${m.memberOnline ? '<i class="ch-dot"></i>' : ''}</span>
-      <div style="flex:1;min-width:0"><b data-no-i18n>${esc(m.publicId ? 'ID ' + m.publicId : m.phone)}</b><div class="muted" style="font-size:12px" data-no-i18n>${esc(m.phone)} &middot; ${m.memberOnline ? '<span style="color:var(--ok);font-weight:700">online</span>' : 'offline'}</div></div></div>
+      <div style="flex:1;min-width:0"><b data-no-i18n>${esc(m.publicId ? 'ID ' + m.publicId : m.phone)}</b><div class="muted" style="font-size:12px" data-no-i18n>${esc(m.phone)} &middot; ${chTyping(_ch.sel) ? '<span style="color:var(--ok);font-weight:700">typing…</span>' : (m.memberOnline ? '<span style="color:var(--ok);font-weight:700">online</span>' : 'offline')}</div></div></div>
     <div class="ch-msgs" id="chMsgs">${list}</div>
     <div class="ch-reply"><label class="muted" style="font-size:12px">Reply as <select id="chReplyAs">${(_ch.agents.length ? _ch.agents : [{ id: m.lastAgentId, name: 'Customer service' }]).map(a => `<option value="${esc(a.id)}"${a.id === reply ? ' selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
-      <div class="ch-bar"><textarea id="chInput" rows="1" maxlength="1000" placeholder="Write a reply"></textarea><button class="btn" id="chSend" type="button">Send</button></div></div></div>`;
+      <div class="ch-bar"><label class="btn ghost ch-attach" title="Send a picture"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.7"/><path d="M4 17.5l4.6-4.4 3.4 3.2 3-2.8 5 4.4"/></svg><input type="file" id="chFile" accept="image/*" hidden></label><textarea id="chInput" rows="1" maxlength="1000" placeholder="Write a reply"></textarea><button class="btn" id="chSend" type="button">Send</button></div></div></div>`;
   $('chInput').value = prevInput; chGrowInput();
   const mb = $('chMsgs'); if (stick || near) mb.scrollTop = mb.scrollHeight;
   $('chBack').onclick = () => { _ch.sel = null; _ch.meta = null; const g = $('chGrid'); if (g) g.classList.remove('open'); chDrawThreads(); chDrawThread(); };
   $('chSend').onclick = chSendReply;
-  $('chInput').oninput = chGrowInput;
+  $('chInput').oninput = () => { chGrowInput(); chTypingPing(); };
+  $('chFile').onchange = ev => { const f = ev.target.files[0]; ev.target.value = ''; if (f) chSendImage(f); };
+  chLoadImages();
   $('chInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chSendReply(); } };
 }
 function chGrowInput(){ const t = $('chInput'); if (!t) return; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px'; }
+// ---- "typing…": from the member's phone (arrives with the open request), and from here ----
+function chTyping(uid){ return !!(_ch.typing[uid] && Date.now() - _ch.typing[uid] < 5500); }
+function chSetTyping(list){
+  const now = Date.now(), before = JSON.stringify(Object.keys(_ch.typing).filter(chTyping).sort());
+  for (const k of Object.keys(_ch.typing)) if (!list.some(x => x.userId === k)) delete _ch.typing[k];
+  list.forEach(x => { _ch.typing[x.userId] = now; });
+  if (JSON.stringify(Object.keys(_ch.typing).filter(chTyping).sort()) !== before) { chDrawThreads(); if (_ch.sel && _ch.meta) chDrawThread(false); }
+  clearTimeout(_ch.typingT); if (list.length) _ch.typingT = setTimeout(() => { chSetTyping([]); }, 5600);
+}
+function chTypingPing(){
+  const inp = $('chInput'), uid = _ch.sel; if (!inp || !uid || !inp.value.trim() || Date.now() - _ch.typeSent < 2500) return;
+  _ch.typeSent = Date.now(); api('/admin/chat/typing', { userId: uid, agentId: ($('chReplyAs') && $('chReplyAs').value) || '', typing: true });
+}
+// ---- pictures: shown as a blurred preview at once, the picture itself fetched and opened here (newest first) ----
+const CH_THUMB = /^data:image\/(jpeg|webp|png);base64,[A-Za-z0-9+\/]+=*$/;
+function chImgHtml(x){
+  const i = x.img, got = _ch.imgs[i.id], url = (got && got.url) || i.local || '', w = Math.max(1, Number(i.w) || 4), h = Math.max(1, Number(i.h) || 3), th = CH_THUMB.test(i.th || '') ? i.th : '';
+  return `<div class="ch-img${url ? ' ready' : ''}" style="aspect-ratio:${w} / ${h}${th ? ';background-image:url(' + th + ')' : ''}" data-bid="${esc(i.id || '')}">${url ? `<img src="${url}" alt="">` : ''}${x.pending ? '<i class="ch-spin"></i>' : ''}</div>`;
+}
+async function chFetchImage(i){
+  const got = _ch.imgs[i.id];
+  if (got && got.url) return got.url;
+  if (got && got.p) return got.p;
+  const p = (async () => {
+    const r = await fetch(SERVER + '/admin/chat/blob/' + i.id, { headers: { Authorization: 'Bearer ' + SESSION_TOKEN }, cache: 'force-cache' });
+    if (!r.ok) throw new Error('missing');
+    const plain = await CHAT.openBlob(new Uint8Array(await r.arrayBuffer()), i.k, i.v);
+    const url = URL.createObjectURL(new Blob([plain], { type: /^image\/(webp|jpeg|png)$/.test(i.m) ? i.m : 'image/webp' }));
+    _ch.imgs[i.id] = { url }; return url;
+  })();
+  _ch.imgs[i.id] = { p };
+  p.catch(() => { if (_ch.imgs[i.id] && _ch.imgs[i.id].p === p) delete _ch.imgs[i.id]; });
+  return p;
+}
+async function chLoadImages(){
+  const todo = _ch.msgs.filter(x => x.img && x.img.k && !x.pending && !(_ch.imgs[x.img.id] && _ch.imgs[x.img.id].url)).reverse();
+  const worker = async () => {
+    while (todo.length) {
+      const x = todo.shift();
+      try {
+        const url = await chFetchImage(x.img);
+        document.querySelectorAll('#chMsgs .ch-img[data-bid="' + x.img.id + '"]').forEach(el => { if (!el.querySelector('img')) { const im = document.createElement('img'); im.alt = ''; im.src = url; el.appendChild(im); el.classList.add('ready'); } });
+      } catch (_) {}
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+}
+function chViewer(url){
+  let v = $('chViewer'); if (!v) { v = document.createElement('div'); v.id = 'chViewer'; v.className = 'ch-viewer'; v.onclick = () => { v.classList.remove('show'); v.innerHTML = ''; }; document.body.appendChild(v); }
+  v.innerHTML = '<img src="' + url + '" alt="">'; v.classList.add('show');
+}
+document.addEventListener('click', e => { const im = e.target.closest && e.target.closest('#chMsgs .ch-img.ready'); if (im) { const pic = im.querySelector('img'); if (pic) chViewer(pic.src); } });
+async function chUpload(uid, bytes){
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 60000);
+  try {
+    const r = await fetch(SERVER + '/admin/chat/blob?userId=' + encodeURIComponent(uid), { method: 'POST', headers: { Authorization: 'Bearer ' + SESSION_TOKEN, 'Content-Type': 'application/octet-stream' }, body: bytes, signal: ctl.signal });
+    const d = await r.json(); if (d.status !== 'success') throw new Error(d.message || 'Could not upload the picture'); return d;
+  } finally { clearTimeout(timer); }
+}
+async function chSendImage(file){
+  const inp = $('chInput'), uid = _ch.sel, m = _ch.meta;
+  if (!file || _ch.busy || !uid || !m) return;
+  if (!/^image\//.test(file.type || '')) return toast('Choose a picture', 'err');
+  if (!m.memberKeys || !m.memberKeys.length) return toast('This member has no chat key yet. They need to open the chat once.', 'err');
+  const agentId = $('chReplyAs').value || m.lastAgentId, caption = (inp.value || '').trim().slice(0, 300), local = URL.createObjectURL(file);
+  const tmp = { id: 'tmp' + Date.now(), from: 'admin', agentId, at: Date.now(), text: caption, pending: true, img: { id: 'tmp', w: 0, h: 0, th: '', local } };
+  _ch.busy = true; inp.value = ''; chGrowInput(); _ch.msgs.push(tmp); chDrawThread(true);
+  try {
+    const sh = await CHAT.shrink(file); tmp.img.w = sh.w; tmp.img.h = sh.h; tmp.img.th = sh.thumb; chDrawThread(false);
+    const sealed = await CHAT.sealBlob(sh.bytes), up = await chUpload(uid, sealed.ct);
+    const info = { id: up.id, k: sealed.key, v: sealed.iv, w: sh.w, h: sh.h, m: sh.mime, th: sh.thumb };
+    const env = await CHAT.seal(JSON.stringify({ t: caption, i: info }), uid + '|admin|' + agentId, m.memberKeys.map(k => ({ kid: k.kid, jwk: k.jwk })).concat([{ kid: _ch.key.kid, jwk: _ch.key.pub }]));
+    env.userId = uid; env.agentId = agentId;
+    const d = await api('/admin/chat/send', env);
+    if (d.status !== 'success') throw new Error(d.message || 'Could not send');
+    _ch.imgs[up.id] = { url: local };
+    _ch.msgs = _ch.msgs.filter(x => x !== tmp);
+    if (!_ch.msgs.some(x => x.id === d.id)) _ch.msgs.push({ id: d.id, from: 'admin', agentId, at: d.at, text: caption, img: info });
+    _ch.after = Math.max(_ch.after, d.at - 1); _ch.sig = '';
+    if (d.delivered) m.memberSeenAt = Math.max(m.memberSeenAt || 0, d.at);
+    const t = _ch.threads.find(x => x.userId === uid); if (t) { t.lastFrom = 'admin'; t.lastAt = d.at; t.unread = 0; t.preview = caption ? 'Photo: ' + caption : 'Photo'; t.lastAgentId = agentId; }
+  } catch (e) { _ch.msgs = _ch.msgs.filter(x => x !== tmp); inp.value = caption; toast(e.message || 'Could not send the picture', 'err'); }
+  finally { _ch.busy = false; }
+  chDrawThread(true); chDrawThreads();
+}
 async function chSendReply(){
   const inp = $('chInput'), text = inp.value.trim(), uid = _ch.sel, m = _ch.meta;
   if (!text || _ch.busy || !uid || !m) return;
@@ -3285,7 +3432,7 @@ async function chSendReply(){
     env.userId = uid; env.agentId = agentId;
     const d = await api('/admin/chat/send', env);
     if (d.status !== 'success') throw new Error(d.message || 'Could not send');
-    inp.value = ''; if (!_ch.msgs.some(x => x.id === d.id)) _ch.msgs.push({ id: d.id, from: 'admin', agentId, at: d.at, text }); _ch.after = Math.max(_ch.after, d.at - 1); _ch.sig = '';
+    inp.value = ''; _ch.typeSent = 0; if (!_ch.msgs.some(x => x.id === d.id)) _ch.msgs.push({ id: d.id, from: 'admin', agentId, at: d.at, text, img: null }); _ch.after = Math.max(_ch.after, d.at - 1); _ch.sig = '';
     if (d.delivered) m.memberSeenAt = Math.max(m.memberSeenAt || 0, d.at);   // the member's phone is open: two ticks at once
     const t = _ch.threads.find(x => x.userId === uid); if (t) { t.lastFrom = 'admin'; t.lastAt = d.at; t.unread = 0; t.preview = text; t.lastAgentId = agentId; }
     chDrawThread(true); chDrawThreads();
@@ -3331,7 +3478,7 @@ async function chApplyEvents(evs){
           _ch.threads.sort((a, b) => b.lastAt - a.lastAt);
         }
         if (open && !_ch.msgs.some(x => x.id === m.id)) {
-          _ch.msgs.push({ id: m.id, from: m.from, agentId: m.agentId, at: m.at, text: await chOpenText(m, e.uid) }); _ch.msgs.sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : 1));
+          const o = await chOpen(m, e.uid); _ch.msgs.push({ id: m.id, from: m.from, agentId: m.agentId, at: m.at, text: o.text, img: o.img }); _ch.msgs.sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : 1));
           _ch.after = Math.max(_ch.after, m.at); redraw = stick = true; if (!mine) readNow = e.uid;
           if (mine && e.delivered) _ch.meta.memberSeenAt = Math.max(_ch.meta.memberSeenAt || 0, m.at);
         }
@@ -3358,10 +3505,11 @@ async function chWaitLoop(){
     while (SESSION_TOKEN) {
       const tok = SESSION_TOKEN;
       if (!_ch.seq) { await chSummaryNow(); if (!_ch.seq) { fails++; await chSleep(Math.min(8000, 800 * fails)); } continue; }
-      const d = await api('/admin/chat/wait?seq=' + _ch.seq);
+      const d = await api('/admin/chat/wait?seq=' + _ch.seq + '&ts=' + encodeURIComponent(_ch.tsig));
       if (!SESSION_TOKEN || tok !== SESSION_TOKEN) break;
       if (d.status !== 'success') { fails++; await chSleep(Math.min(8000, 800 * fails)); continue; }
       fails = 0; _ch.seq = d.seq;
+      if (Array.isArray(d.typing)) { _ch.tsig = JSON.stringify(d.typing); chSetTyping(d.typing); }
       if (d.reset) { await chSummaryNow(); if (_tab === 'chat') chRefreshList(); continue; }
       await chApplyEvents(d.events);
     }
