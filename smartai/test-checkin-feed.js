@@ -115,10 +115,18 @@ const eatDate = () => { const d = new Date(Date.now() + 3 * 3600000), p = n => S
   ok(feed.filter(f => f.kind === 'deposit').every(f => f.amount >= st.minDeposit) && feed.filter(f => f.kind === 'withdraw').every(f => f.amount >= st.minWithdraw && f.amount % 5000 === 0), 'no row is below what the app itself allows (minimum top-up ' + st.minDeposit + ', minimum cash-out ' + st.minWithdraw + ')');
   const again = (await J('GET', '/public/activity-feed')).j.feed;
   ok(JSON.stringify(again) === JSON.stringify(feed), 'everybody sees the same strip for a while (it is made once and kept)');
+  // outside the withdrawal window only recharges are shown, and the window opening again brings the cash-outs back
+  { const hm = ms => { const d = new Date(ms + 3 * 3600000); return String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0'); };
+    await J('POST', '/admin/settings/update', { settings: { withdrawWindowEnabled: true, withdrawOpenFrom: hm(Date.now() + 2 * 3600000), withdrawOpenTo: hm(Date.now() + 3 * 3600000) } }, null, true);
+    const closed = (await J('GET', '/public/activity-feed')).j.feed || [];
+    ok(closed.length > 0 && closed.every(f => f.kind === 'deposit'), 'outside the withdrawal window the strip shows recharges only', closed.slice(0, 3));
+    await J('POST', '/admin/settings/update', { settings: { withdrawWindowEnabled: false } }, null, true);
+    const open = (await J('GET', '/public/activity-feed')).j.feed || [];
+    ok(open.some(f => f.kind === 'withdraw') && open.some(f => f.kind === 'deposit'), 'inside the window (or with no window) it shows both again', open.length); }
   // the maker itself, with strict minimums
   { const src = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
     const a = src.indexOf('const _DEPOSIT_LADDER'), b = src.indexOf('let _activityFeed');
-    const ctx = vm.createContext({ Math, Set, Array, Number, getSettings: async () => ({ minDeposit: 600000, minWithdraw: 250000 }), getProducts: async () => [{ price: 1500000 }, { price: 40000, deleted: true }, { price: 0 }] });
+    const ctx = vm.createContext({ Math, Set, Array, Number, withdrawWindowState: () => ({ open: true }), getSettings: async () => ({ minDeposit: 600000, minWithdraw: 250000 }), getProducts: async () => [{ price: 1500000 }, { price: 40000, deleted: true }, { price: 0 }] });
     vm.runInContext(src.slice(a, b) + '\nthis.build = buildActivityFeed;', ctx);
     const rowsHi = await ctx.build();
     ok(rowsHi.length === 18 && rowsHi.filter(x => x.kind === 'deposit').every(x => x.amount >= 600000) && rowsHi.filter(x => x.kind === 'withdraw').every(x => x.amount >= 250000 && x.amount <= 500000), 'raise the admin minimums and the strip follows them', rowsHi.slice(0, 4));

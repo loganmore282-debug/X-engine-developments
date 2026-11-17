@@ -6956,6 +6956,7 @@ function activityMaskedMsisdn(used) {
 async function buildActivityFeed() {
   const sett = await getSettings();
   const minDep = Number(sett.minDeposit) || 0, minWit = Number(sett.minWithdraw) || 0;
+  const withdrawOpen = withdrawWindowState(sett, Date.now()).open;
   let depositPool = _DEPOSIT_LADDER.slice();
   try {
     const prices = (await getProducts()).filter(p => !p.deleted).map(p => Number(p.price)).filter(n => n > 0);
@@ -6969,7 +6970,8 @@ async function buildActivityFeed() {
   if (!withdrawPool.length) withdrawPool.push(minWit || 5000);
   const rows = [], used = new Set();
   for (let i = 0; i < 18; i++) {
-    const kind = Math.random() < 0.6 ? 'deposit' : 'withdraw';
+    // Outside the withdrawal window only recharges are shown (nobody can cash out then), so none are made.
+    const kind = (!withdrawOpen || Math.random() < 0.6) ? 'deposit' : 'withdraw';
     const pool = kind === 'deposit' ? depositPool : withdrawPool;
     rows.push({ kind, phone: activityMaskedMsisdn(used), amount: pool[Math.floor(Math.random() * pool.length)] });
   }
@@ -6988,7 +6990,10 @@ app.get('/public/activity-feed', async (_req, res) => {
       .catch(e => console.error('Activity feed error:', e.message)).finally(() => { _activityBuilding = false; });
   }
   res.set('Cache-Control', 'no-store');
-  res.json({ status: 'success', feed: _activityFeed });
+  // The saved feed can be up to 25 s old: if the withdrawal window has closed since it was made, its cash-out rows are left out now.
+  let feed = _activityFeed;
+  try { if (!withdrawWindowState(await getSettings(), Date.now()).open) feed = feed.filter(r => r.kind !== 'withdraw'); } catch (_) {}
+  res.json({ status: 'success', feed });
 });
 // The member's own top-ups and cash-outs INCLUDING the ones still waiting or declined (the general ledger only gets a row once money has moved).
 // Only the fields the Ledger shows are sent: the rows also hold gateway references and internal notes that never leave the server.
