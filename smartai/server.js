@@ -7070,12 +7070,13 @@ app.post('/chat/key', async (req, res) => {
   } catch (e) { console.error('chat key:', e.message); res.status(500).json({ status: 'error', message: 'Could not save' }); }
 });
 // The sender's own account facts, remembered for half a minute so a message does not wait for a database read of the user first.
+const CHAT_RESTRICTED_MSG = 'Customer service has turned off sending messages on your account. You can still read replies.';
 async function chatUser(uid) {
   const c = _chat.users.get(uid);
   if (c && Date.now() - c.at < 30000) return c;
   const s = await db.collection('users').doc(uid).get();
   if (!s.exists) return null;
-  const u = s.data(), v = { at: Date.now(), status: u.status || '', phone: String(u.phone || ''), publicId: String(u.publicId || '') };
+  const u = s.data(), v = { at: Date.now(), status: u.status || '', phone: String(u.phone || ''), publicId: String(u.publicId || ''), restricted: u.chatRestricted === true };
   _chat.users.set(uid, v);
   if (_chat.users.size > 5000) for (const [k, x] of _chat.users) if (Date.now() - x.at > 60000) _chat.users.delete(k);
   return v;
@@ -7095,6 +7096,7 @@ app.post('/chat/send', async (req, res) => {
     if (!agent) return res.status(404).json({ status: 'error', message: 'This customer service profile is no longer available.' });
     if (!u) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (u.status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    if (u.restricted) return res.status(403).json({ status: 'error', code: 'CHAT_RESTRICTED', message: CHAT_RESTRICTED_MSG });
     const msg = { threadId: uid, agentId, from: 'member', iv: env.iv, ct: env.ct, wraps: env.wraps, at: now };
     _cx.seen.set(uid, now);
     // The message is stored and the thread updated TOGETHER (not one after the other); the panel is told the instant the message is stored.
@@ -7133,11 +7135,11 @@ app.get('/chat/history', async (req, res) => {
     const agentId = String(req.query.agentId || ''), after = Number(req.query.after) || 0;
     if (!agentId) return res.status(400).json({ status: 'error', message: 'Choose a profile' });
     const seq = _cx.seq;   // taken BEFORE the read: whatever happens after it still arrives by "wait"
-    const [rows, tSnap] = await Promise.all([chatMessages(uid, agentId, after, String(req.query.kid || '')), db.collection('chatThreads').doc(uid).get()]);
+    const [rows, tSnap, hu] = await Promise.all([chatMessages(uid, agentId, after, String(req.query.kid || '')), db.collection('chatThreads').doc(uid).get(), chatUser(uid)]);
     const t = tSnap.exists ? tSnap.data() : {};
     chatNoteMemberSeen(uid);
     res.set('Cache-Control', 'no-store');
-    res.json({ status: 'success', messages: rows, adminReadAt: Number(t.adminReadAt) || 0, adminSeenAt: chatAdminSeenAt(), online: chatAdminOnline(), now: Date.now(), seq });
+    res.json({ status: 'success', messages: rows, adminReadAt: Number(t.adminReadAt) || 0, adminSeenAt: chatAdminSeenAt(), online: chatAdminOnline(), restricted: !!(hu && hu.restricted), now: Date.now(), seq });
   } catch (e) { console.error('chat history:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the chat' }); }
 });
 app.post('/chat/read', async (req, res) => {
@@ -7162,7 +7164,7 @@ app.get('/chat/summary', async (req, res) => {
   if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   try {
     const seq = _cx.seq;
-    const tSnap = await db.collection('chatThreads').doc(uid).get();
+    const [tSnap, su] = await Promise.all([db.collection('chatThreads').doc(uid).get(), chatUser(uid)]);
     const unread = {};
     if (tSnap.exists) {
       const map = tSnap.data().memberReadMap || {};
@@ -7171,7 +7173,7 @@ app.get('/chat/summary', async (req, res) => {
       chatNoteMemberSeen(uid);
     }
     res.set('Cache-Control', 'no-store');
-    res.json({ status: 'success', unread, online: chatAdminOnline(), seq });
+    res.json({ status: 'success', unread, online: chatAdminOnline(), restricted: !!(su && su.restricted), seq });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load' }); }
 });
 // The member's open request: answered the moment the panel replies, reads the chat, or comes online.
@@ -7180,18 +7182,20 @@ app.get('/chat/wait', async (req, res) => {
   if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const since = Number(req.query.seq) || 0;
   chatNoteMemberSeen(uid);
+  await chatUser(uid).catch(() => null);   // keeps the account facts warm: the answer below reports the restriction as it is when the answer is sent
   const bucket = {
     add: w => { const set = _cx.mw.get(uid) || new Set(); _cx.mw.set(uid, set); set.add(w); while (set.size > 3) { const old = set.values().next().value; set.delete(old); old.cancel(); } },   // one phone, a few tabs at most
     del: w => { const set = _cx.mw.get(uid); if (set) { set.delete(w); if (!set.size) _cx.mw.delete(uid); } },
   };
-  chatPark(res, since, e => e.kind === 'adminSeen' || (e.uid === uid && ((e.kind === 'msg' && e.msg.from === 'admin') || e.kind === 'adminRead')), bucket,
-    () => ({ online: chatAdminOnline(), adminSeenAt: chatAdminSeenAt(), typing: chatTypingFor('member', uid) }), req.query.ts === undefined ? undefined : String(req.query.ts));
+  chatPark(res, since, e => e.kind === 'adminSeen' || (e.uid === uid && ((e.kind === 'msg' && e.msg.from === 'admin') || e.kind === 'adminRead' || e.kind === 'restrict')), bucket,
+    () => { const c = _chat.users.get(uid); return { online: chatAdminOnline(), adminSeenAt: chatAdminSeenAt(), typing: chatTypingFor('member', uid), restricted: c ? !!c.restricted : undefined }; }, req.query.ts === undefined ? undefined : String(req.query.ts));
 });
 
 app.post('/chat/typing', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  const b = req.body || {}, last = (_cx.typing.get(uid) || {}).member;
+  const b = req.body || {}, last = (_cx.typing.get(uid) || {}).member, tu = await chatUser(uid);
+  if (tu && tu.restricted) return res.json({ status: 'success' });   // a restricted member cannot send, so nothing is shown as "typing"
   if (!last || Date.now() - last.at > 1000 || b.typing === false) chatSetTyping(uid, 'member', b.agentId, b.typing !== false);
   res.json({ status: 'success' });
 });
@@ -7223,6 +7227,7 @@ app.post('/chat/blob', chatBlobParser, async (req, res) => {
   if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const u = await chatUser(uid);
   if (!u || u.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended. Contact customer service.' });
+  if (u.restricted) return res.status(403).json({ status: 'error', code: 'CHAT_RESTRICTED', message: CHAT_RESTRICTED_MSG });
   await chatStoreBlob(req, res, uid, 'member');
 });
 app.get('/chat/blob/:id', async (req, res) => {
@@ -7250,7 +7255,7 @@ app.get('/admin/chat/threads', async (req, res) => {
     chatTouchAdmin();
     const [snap, agents] = await Promise.all([db.collection('chatThreads').orderBy('lastAt', 'desc').limit(300).get(), chatAgents()]);
     const now = Date.now();
-    const threads = snap.docs.map(d => { const v = d.data(); return { userId: d.id, phone: v.phone || '', publicId: v.publicId || '', lastAt: v.lastAt || 0, lastFrom: v.lastFrom || '', lastAgentId: v.lastAgentId || '', unread: Number(v.unreadAdmin) || 0, memberOnline: now - chatMemberSeenAt(d.id, v.memberSeenAt) < CHAT_ONLINE_MS, last: v.last || null }; });
+    const threads = snap.docs.map(d => { const v = d.data(); return { userId: d.id, phone: v.phone || '', publicId: v.publicId || '', lastAt: v.lastAt || 0, lastFrom: v.lastFrom || '', lastAgentId: v.lastAgentId || '', unread: Number(v.unreadAdmin) || 0, restricted: v.restricted === true, memberOnline: now - chatMemberSeenAt(d.id, v.memberSeenAt) < CHAT_ONLINE_MS, last: v.last || null }; });
     res.set('Cache-Control', 'no-store');
     res.json({ status: 'success', threads, agents: agents.map(a => ({ id: a.id, name: a.name })), now });
   } catch (e) { console.error('chat threads:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the chats' }); }
@@ -7261,14 +7266,31 @@ app.get('/admin/chat/thread', async (req, res) => {
     chatTouchAdmin();
     const userId = String(req.query.userId || '').slice(0, 80), after = Number(req.query.after) || 0;
     if (!userId) return res.status(400).json({ status: 'error', message: 'Missing member' });
-    const [tSnap, rows, kSnap] = await Promise.all([db.collection('chatThreads').doc(userId).get(), chatMessages(userId, '', after, String(req.query.kid || '')), db.collection('chatMembers').doc(userId).get()]);
+    const [tSnap, rows, kSnap, uSnap] = await Promise.all([db.collection('chatThreads').doc(userId).get(), chatMessages(userId, '', after, String(req.query.kid || '')), db.collection('chatMembers').doc(userId).get(), db.collection('users').doc(userId).get()]);
     if (!tSnap.exists) return res.status(404).json({ status: 'error', message: 'No chat with this member' });
     const t = tSnap.data(), now = Date.now(), seen = chatMemberSeenAt(userId, t.memberSeenAt);
     res.set('Cache-Control', 'no-store');
     res.json({ status: 'success', messages: rows, memberKeys: (kSnap.exists && kSnap.data().keys || []).map(k => ({ kid: k.kid, jwk: k.jwk })),
       memberReadAt: Math.max(0, ...Object.values(t.memberReadMap || {}).map(Number)), memberSeenAt: seen, memberOnline: now - seen < CHAT_ONLINE_MS,
-      lastAgentId: t.lastAgentId || '', phone: t.phone || '', publicId: t.publicId || '', memberReadMap: t.memberReadMap || {}, now });
+      lastAgentId: t.lastAgentId || '', phone: t.phone || '', publicId: t.publicId || '', memberReadMap: t.memberReadMap || {}, restricted: !!(uSnap.exists && uSnap.data().chatRestricted === true), now });
   } catch (e) { console.error('chat thread:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the chat' }); }
+});
+// Stops (or allows again) a member's sending in the chat. They keep reading replies; nothing is deleted. Kept on the account (chatRestricted) and mirrored on the chat thread for the inbox.
+app.post('/admin/chat/restrict', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const userId = String((req.body || {}).userId || '').slice(0, 80), on = (req.body || {}).restricted === true;
+    if (!userId) return res.status(400).json({ status: 'error', message: 'Missing member' });
+    const uRef = db.collection('users').doc(userId), uSnap = await uRef.get();
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    await uRef.update({ chatRestricted: on });
+    const tRef = db.collection('chatThreads').doc(userId), tSnap = await tRef.get();
+    if (tSnap.exists) await tRef.update({ restricted: on });
+    const c = _chat.users.get(userId); if (c) c.restricted = on; else _chat.users.delete(userId);
+    chatEmit({ kind: 'restrict', uid: userId, restricted: on });
+    console.log(`chat ${on ? 'restricted' : 'allowed'}: ${userId} by ${String((req.adminUser && req.adminUser.username) || 'owner').slice(0, 40)}`);
+    res.json({ status: 'success', restricted: on });
+  } catch (e) { console.error('chat restrict:', e.message); res.status(500).json({ status: 'error', message: 'Could not save' }); }
 });
 app.post('/admin/chat/send', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });

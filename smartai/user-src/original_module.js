@@ -741,7 +741,7 @@ async function logout(opts){
       return fetch(API_BASE + '/auth/session/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + t }, signal: ac.signal });
     }).catch(function(){});
     _authEpoch++;
-    STATE = null; _appEntered = false; _agentMe = null; _agentMeAt = 0; _cc.unread = {}; _cc.msgs = []; _cc.agent = null; _cc.seq = 0; _cc.cfg = null; _cc.key = null; _cc.regFor = ''; _cc.imgs = {}; _cc.warm = {}; _cc.typing = false;
+    STATE = null; _appEntered = false; _agentMe = null; _agentMeAt = 0; _cc.unread = {}; _cc.msgs = []; _cc.agent = null; _cc.seq = 0; _cc.cfg = null; _cc.key = null; _cc.regFor = ''; _cc.imgs = {}; _cc.warm = {}; _cc.typing = false; _cc.restricted = false;
     clearCachedState();
     _recordsLoaded = { accrued: true, topups: false, cashouts: false }; _recordsFailed = { topups: false, cashouts: false }; _dataFailed = {};
     stopActivityFeed(); stopAccountPoll(); gpLeave(); stopDepositPoll(); releasePayLoader();
@@ -822,7 +822,7 @@ function onFbAuthChanged(user){
       if (cached) { renderAll(); renderStaticPages(); } else enterApp();
     });
   } else if (!user) {
-    STATE = null; _appEntered = false; _agentMe = null; _agentMeAt = 0; _cc.unread = {}; _cc.msgs = []; _cc.agent = null; _cc.seq = 0; _cc.cfg = null; _cc.key = null; _cc.regFor = ''; _cc.imgs = {}; _cc.warm = {}; _cc.typing = false;
+    STATE = null; _appEntered = false; _agentMe = null; _agentMeAt = 0; _cc.unread = {}; _cc.msgs = []; _cc.agent = null; _cc.seq = 0; _cc.cfg = null; _cc.key = null; _cc.regFor = ''; _cc.imgs = {}; _cc.warm = {}; _cc.typing = false; _cc.restricted = false;
     clearCachedState();
     showAuthScreen();
   }
@@ -984,6 +984,7 @@ async function chatSummary(){
   _cc.unread = r.unread || {};
   if (!_cc.seq) _cc.seq = r.seq;
   if (_cc.cfg) _cc.cfg.online = !!r.online;
+  if (typeof r.restricted === 'boolean') chatSetRestricted(r.restricted);
   paintChatAgents();
   return r;
 }
@@ -1084,6 +1085,15 @@ function chatRender(stick){
   if (stick || near) body.scrollTop = body.scrollHeight;
   chatLoadImages();
 }
+// Customer service can turn off a member's sending (they still read replies): the bar then says so instead of the text box.
+var CHAT_LOCK_RE = /turned off sending messages/;
+function chatPaintLock(){ var bar = $('chatBar'); if (bar) bar.classList.toggle('restricted', !!_cc.restricted); }
+function chatSetRestricted(on){
+  on = !!on; if (_cc.restricted === on) return;
+  _cc.restricted = on; chatPaintLock();
+  if (on) chatVnStop(true);
+}
+function chatErr(e, dflt){ var m = e && e.message ? e.message : dflt; if (CHAT_LOCK_RE.test(m)) chatSetRestricted(true); return m; }
 function chatState(){
   var el = $('chatState'); if (!el) return;
   el.textContent = _cc.typing ? 'typing…' : (_cc.online ? 'Online' : 'Offline');
@@ -1135,7 +1145,7 @@ async function chatPoll(){
   }
   _cc.msgs.sort(function(a, b){ return a.at - b.at || (a.id < b.id ? -1 : 1); });
   var sig = r.adminReadAt + '|' + r.adminSeenAt + '|' + r.online + '|' + _cc.msgs.length;
-  _cc.adminReadAt = Math.max(_cc.adminReadAt, r.adminReadAt); _cc.adminSeenAt = Math.max(_cc.adminSeenAt, r.adminSeenAt); _cc.online = r.online; chatState();
+  _cc.adminReadAt = Math.max(_cc.adminReadAt, r.adminReadAt); _cc.adminSeenAt = Math.max(_cc.adminSeenAt, r.adminSeenAt); _cc.online = r.online; chatState(); chatSetRestricted(r.restricted);
   if (fresh || sig !== _cc.sig) { _cc.sig = sig; chatRender(fresh); chatCacheSoon(); }
   if (gotAdmin) api('/chat/read', { agentId: ag.id });
 }
@@ -1179,6 +1189,7 @@ async function chatApply(r){
       } else { _cc.unread[m.agentId] = (Number(_cc.unread[m.agentId]) || 0) + 1; unreadChanged = true; }
     }
   }
+  if (typeof r.restricted === 'boolean') chatSetRestricted(r.restricted);
   if (r.typing !== undefined) chatSetTyping(!!(r.typing && open && _cc.agent && r.typing.agentId === _cc.agent.id));
   if (redraw && open) { _cc.sig = ''; chatRender(fresh); chatCacheSoon(); }
   if (unreadChanged && chatShown('ovSupport')) paintChatAgents();
@@ -1266,7 +1277,7 @@ async function chatSendImage(file){
     if (r.delivered) _cc.adminSeenAt = Math.max(_cc.adminSeenAt, r.at);
   } catch (e) {
     _cc.msgs = _cc.msgs.filter(function(x){ return x !== tmp; }); inp.value = caption; chatGrow();
-    toast(e && e.message ? e.message : 'Could not send the picture.');
+    toast(chatErr(e, 'Could not send the picture.'));
   } finally { _cc.busy = false; }
   _cc.sig = ''; _cc.typeSent = 0; chatRender(true); chatCacheSoon();
 }
@@ -1282,7 +1293,7 @@ function chatVnMime(){
 }
 function chatVnFmt(s){ s = Math.max(0, Math.round(Number(s) || 0)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
 async function chatVnStart(){
-  if (_vn.rec || _cc.busy || !_cc.agent || !STATE) return;
+  if (_vn.rec || _cc.busy || _cc.restricted || !_cc.agent || !STATE) return;
   if (!_cc.cfg || !_cc.cfg.adminKey) { toast('Chat is not available yet.'); return; }
   var mime = chatVnMime();
   if (!mime || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { toast('This phone cannot record a voice note.'); return; }
@@ -1340,7 +1351,7 @@ async function chatSendVoice(blob, secs, mt, ag){
     if (r.delivered) _cc.adminSeenAt = Math.max(_cc.adminSeenAt, r.at);
   } catch (e) {
     _cc.msgs = _cc.msgs.filter(function(x){ return x !== tmp; });
-    toast(e && e.message ? e.message : 'Could not send the voice note.');
+    toast(chatErr(e, 'Could not send the voice note.'));
   } finally { _cc.busy = false; }
   _cc.sig = ''; chatRender(true); chatCacheSoon();
 }
@@ -1401,7 +1412,7 @@ async function chatOpen(agentId){
   if (!STATE) return;
   var a = ((_cc.cfg && _cc.cfg.agents) || []).filter(function(x){ return x.id === agentId; })[0];
   if (!a) return;
-  _cc.agent = a; _cc.msgs = []; _cc.after = 0; _cc.sig = ''; _cc.adminReadAt = 0; _cc.adminSeenAt = 0; chatSetTyping(false);
+  _cc.agent = a; _cc.msgs = []; _cc.after = 0; _cc.sig = ''; _cc.adminReadAt = 0; _cc.adminSeenAt = 0; chatSetTyping(false); chatPaintLock();
   $('chatAv').innerHTML = chatAvatar(a); $('chatName').textContent = a.name; $('chatList').innerHTML = ''; $('chatInput').value = ''; chatGrow(); chatState();
   openOverlay('chat', true); chatFit(); chatLoop();
   // 1) at once, from this phone's own copy (opened with this phone's key; nothing waits for the network)
@@ -1448,7 +1459,7 @@ async function chatSend(){
     if (r.delivered) _cc.adminSeenAt = Math.max(_cc.adminSeenAt, r.at);   // the panel is open: two ticks at once
   } catch (e) {
     _cc.msgs = _cc.msgs.filter(function(x){ return x !== tmp; }); inp.value = text; chatGrow();
-    toast(e && e.message ? e.message : 'Could not send. Try again.');
+    toast(chatErr(e, 'Could not send. Try again.'));
   } finally { _cc.busy = false; }
   _cc.sig = ''; _cc.typeSent = 0; chatRender(true); chatCacheSoon();
 }

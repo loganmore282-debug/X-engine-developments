@@ -183,6 +183,25 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   const su3 = await J('POST', '/auth/signup', { phone: '0775556666', password: 'secret12' }); await J('POST', '/register', { pin: '123456', referralCode: '' }, su3.j.token);
   env = await seal('hello', su3.j.uid + '|member|' + A2, [{ kid: adminPair.kid, jwk: adminPair.pub }]); env.agentId = A2; r = await J('POST', '/chat/send', env, su3.j.token); ok(r.s === 404, 'and can no longer write to it');
   r = await J('GET', '/admin/chat/thread?userId=' + uid, null, null, true); ok(r.j.messages.some(m => m.agentId === A2), 'but what was said to it stays in the panel');
+  // ---- restricting a member: they cannot send (message, picture, voice), still read, and it can be undone (a fresh member: the earlier ones used up their sending allowance)
+  const suR = await J('POST', '/auth/signup', { phone: '0775550000', password: 'secret12' }); await J('POST', '/register', { pin: '123456', referralCode: '' }, suR.j.token);
+  const tokR = suR.j.token, uidR = suR.j.uid;
+  const first = await seal('first', uidR + '|member|' + A1, [{ kid: adminPair.kid, jwk: adminPair.pub }, { kid: mk.kid, jwk: mk.pub }]); first.agentId = A1;
+  r = await J('POST', '/chat/send', first, tokR); ok(r.j.status === 'success', 'a new member writes first (so there is a chat)', r.j);
+  r = await J('POST', '/admin/chat/restrict', { userId: uidR, restricted: true }); ok(r.s === 401, 'restricting needs the admin key');
+  r = await J('POST', '/admin/chat/restrict', { userId: 'nobody', restricted: true }, null, true); ok(r.s === 404, 'restricting a member that does not exist is refused');
+  r = await J('POST', '/admin/chat/restrict', { userId: uidR, restricted: true }, null, true); ok(r.j.status === 'success' && r.j.restricted === true, 'the panel restricts the member', r.j);
+  const renv = await seal('can I write?', uidR + '|member|' + A1, [{ kid: adminPair.kid, jwk: adminPair.pub }, { kid: mk.kid, jwk: mk.pub }]); renv.agentId = A1;
+  r = await J('POST', '/chat/send', renv, tokR); ok(r.s === 403 && r.j.code === 'CHAT_RESTRICTED' && /turned off sending messages/.test(r.j.message), 'a restricted member\'s message is refused with a clear reason', r.j);
+  const nR = fm.__stores.chatMessages.size; r = await J('POST', '/chat/send', renv, tokR); ok(fm.__stores.chatMessages.size === nR, 'and nothing was stored');
+  u1 = await up('/chat/blob', sealedPic.ct, tokR); ok(u1.s === 403 && u1.j.code === 'CHAT_RESTRICTED', 'a restricted member cannot upload a picture or voice note either');
+  r = await J('GET', '/chat/history?agentId=' + A1 + '&kid=' + mk.kid, null, tokR); ok(r.j.status === 'success' && r.j.restricted === true && r.j.messages.length > 0, 'they can still read the conversation, and are told they are restricted');
+  r = await J('GET', '/chat/summary', null, tokR); ok(r.j.restricted === true, 'the summary says so too');
+  r = await J('GET', '/admin/chat/thread?userId=' + uidR + '&kid=' + adminPair.kid, null, null, true); ok(r.j.restricted === true, 'the panel\'s conversation view says so');
+  r = await J('GET', '/admin/chat/threads', null, null, true); ok(r.j.threads.find(x => x.userId === uidR).restricted === true, 'and so does the inbox row');
+  r = await J('POST', '/admin/chat/restrict', { userId: uidR, restricted: false }, null, true); ok(r.j.restricted === false, 'the panel allows the member again');
+  r = await J('POST', '/chat/send', renv, tokR); ok(r.j.status === 'success', 'and the message now goes through', r.j);
+  r = await J('GET', '/admin/chat/threads', null, null, true); ok(r.j.threads.find(x => x.userId === uidR).restricted === false, 'the inbox row is back to normal');
   // ---- deleting the account removes the chat
   r = await J('POST', '/admin/user/delete', { userId: uid }, null, true);
   ok([...fm.__stores.chatMessages.values()].filter(m => m.threadId === uid).length === 0 && !fm.__stores.chatThreads.has(uid) && !fm.__stores.chatMembers.has(uid), 'deleting the member\'s account deletes their chat, their thread and their keys', r.j);
@@ -333,6 +352,16 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   // typing text swaps the mic for the send button
   await mp.fill('#chatInput', 'hello'); ok(await mp.evaluate(() => getComputedStyle(document.getElementById('chatSend')).display !== 'none' && getComputedStyle(document.getElementById('chatMic')).display === 'none'), 'member: with text typed the send button shows instead of the mic');
   await mp.fill('#chatInput', ''); ok(await mp.evaluate(() => getComputedStyle(document.getElementById('chatMic')).display !== 'none' && getComputedStyle(document.getElementById('chatSend')).display === 'none'), 'member: with nothing typed the mic shows');
+  // -- restricting from the panel, live on the phone; and the member's details open from the chat header
+  await ap.click('#chWhoBtn'); ok(await until(ap, () => { const m = document.getElementById('modalRoot'); return !m.classList.contains('hidden') && /0773334444|773334444/.test(m.innerText); }, null, 6000), 'admin: tapping the member\'s profile opens their full details (the same as in the Users tab)');
+  ok(await ap.evaluate(() => /Wallet|Balance|Invested|Team|Recharge/i.test(document.getElementById('modalRoot').innerText)), 'admin: with the account figures in it');
+  await ap.evaluate(() => { const m = document.getElementById('modalRoot'); m.classList.add('hidden'); m.innerHTML = ''; });
+  await ap.click('#chRestrict');
+  ok(await until(mp, () => document.getElementById('chatBar').classList.contains('restricted') && getComputedStyle(document.getElementById('chatLock')).display !== 'none' && getComputedStyle(document.getElementById('chatInput')).display === 'none', null, 5000), 'member: the moment the panel restricts, the text box is replaced by the notice (live)');
+  ok(await until(ap, () => /cannot send/.test(document.querySelector('.ch-head').innerText) && /Allow messages/.test(document.getElementById('chRestrict').textContent), null, 4000), 'admin: the conversation shows "cannot send" and the button becomes "Allow messages"');
+  ok(await until(ap, () => /cannot send/.test(document.querySelector('#chThreads .ch-row').innerText), null, 4000), 'admin: the inbox row says "cannot send"');
+  await ap.click('#chRestrict');
+  ok(await until(mp, () => !document.getElementById('chatBar').classList.contains('restricted') && getComputedStyle(document.getElementById('chatInput')).display !== 'none', null, 5000), 'member: allowed again, the text box is back at once');
   // the microphone must not be blocked by the page's own security headers (it was: "microphone=()" made the phone refuse without even asking)
   const hh = await fetch(base + '/health'); ok(/microphone=\(self\)/.test(hh.headers.get('permissions-policy') || ''), 'server header lets this app use the microphone (and only this app)', { h: hh.headers.get('permissions-policy') });
   const ng = require('child_process').execFileSync('node', [path.join(__dirname, 'deploy/make-nginx.js'), 'dev', 'ADMINPATH'], { encoding: 'utf8' });

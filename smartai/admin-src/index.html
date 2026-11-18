@@ -210,6 +210,12 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .ch-main b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .ch-main b small{font-weight:600;color:var(--sub);font-size:11.5px;}
   .ch-prev{font-size:12.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ch-rs{color:var(--danger);}
+  .ch-who{display:flex;align-items:center;gap:10px;flex:1;min-width:0;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:left;}
+  .ch-who:hover b{text-decoration:underline;}
+  .ch-who-t{display:block;min-width:0;}
+  .ch-who-t b{display:block;}
+  .ch-who-s{display:block;font-size:12px;}
   .ch-via{font-size:11px;color:var(--gold-deep);font-weight:700;}
   .ch-side{display:flex;flex-direction:column;align-items:flex-end;gap:5px;font-size:11px;color:var(--sub);flex:0 0 auto;}
   .ch-n{min-width:20px;height:20px;border-radius:10px;padding:0 6px;background:var(--danger);color:#fff;font-size:11.5px;display:flex;align-items:center;justify-content:center;}
@@ -3272,7 +3278,7 @@ function chDrawThreads(){
       <span class="ch-av md"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c.6-3.6 3.5-5.4 7.2-5.4s6.6 1.8 7.2 5.4"/></svg>${t.memberOnline ? '<i class="ch-dot"></i>' : ''}</span>
       <span class="ch-main"><b data-no-i18n>${esc(t.publicId ? 'ID ' + t.publicId : t.phone)} <small>${esc(t.phone)}</small></b>
         <span class="ch-prev">${chTyping(t.userId) ? '<i class="ch-typing">typing…</i>' : (t.lastFrom === 'admin' ? 'You: ' : '') + (t.preview == null ? '<i>Message not readable with this key</i>' : esc(String(t.preview).slice(0, 80)))}</span>
-        <span class="ch-via">via ${esc(chAgentName(t.lastAgentId))}</span></span>
+        <span class="ch-via">via ${esc(chAgentName(t.lastAgentId))}${t.restricted ? ' &middot; <b class="ch-rs">cannot send</b>' : ''}</span></span>
       <span class="ch-side"><span>${esc(chTime(t.lastAt))}</span>${t.unread ? `<b class="ch-n">${t.unread > 99 ? '99+' : t.unread}</b>` : ''}</span></button>`).join('')
     : `<p class="muted" style="margin:14px">${_ch.filter === 'unread' ? 'Nothing unread.' : 'No chats yet. When a member writes to one of your profiles it appears here.'}</p>`;
   box.querySelectorAll('[data-ch-t]').forEach(b => b.onclick = () => chSelect(b.dataset.chT));
@@ -3333,13 +3339,15 @@ function chDrawThread(stick){
   if (view.getAttribute('data-uid') !== _ch.sel || !$('chMsgs')) {
     view.setAttribute('data-uid', _ch.sel);
     view.innerHTML = `<div class="panel-card ch-conv"><div class="ch-head"><button class="btn ghost sm ch-back" id="chBack" type="button">&larr; Back</button>
-      <span class="ch-av md"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c.6-3.6 3.5-5.4 7.2-5.4s6.6 1.8 7.2 5.4"/></svg><i class="ch-dot" id="chDot" hidden></i></span>
-      <div style="flex:1;min-width:0"><b data-no-i18n id="chWho"></b><div class="muted" style="font-size:12px" data-no-i18n id="chSub"></div></div></div>
+      <button type="button" class="ch-who" id="chWhoBtn" title="Open this member's details" aria-label="Open this member's details"><span class="ch-av md"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c.6-3.6 3.5-5.4 7.2-5.4s6.6 1.8 7.2 5.4"/></svg><i class="ch-dot" id="chDot" hidden></i></span>
+      <span class="ch-who-t"><b data-no-i18n id="chWho"></b><span class="muted ch-who-s" data-no-i18n id="chSub"></span></span></button>
+      <button class="btn danger sm" id="chRestrict" type="button">Restrict</button></div>
     <div class="ch-msgs" id="chMsgs"></div>
     <div class="ch-reply"><label class="muted" style="font-size:12px">Reply as <select id="chReplyAs"></select></label>
       <div class="ch-bar"><label class="btn ghost ch-attach" title="Send a picture"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.7"/><path d="M4 17.5l4.6-4.4 3.4 3.2 3-2.8 5 4.4"/></svg><input type="file" id="chFile" accept="image/*" hidden></label><button class="btn ghost ch-attach" id="chMic" type="button" title="Record a voice note" aria-label="Record a voice note"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11.5" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"/></svg></button><textarea id="chInput" rows="1" maxlength="1000" placeholder="Write a reply"></textarea><button class="btn" id="chSend" type="button">Send</button><div class="ch-rec" id="chRec"><i class="ch-rec-dot"></i><b id="chRecT">0:00</b><span class="muted" style="flex:1">Recording</span><button class="btn ghost sm" id="chRecX" type="button">Cancel</button><button class="btn sm" id="chRecOk" type="button">Send</button></div></div></div></div>`;
     $('chBack').onclick = () => { chVnStop(true); chVoiceStop(); _ch.sel = null; _ch.meta = null; const g = $('chGrid'); if (g) g.classList.remove('open'); chDrawThreads(); chDrawThread(); };
     $('chSend').onclick = chSendReply;
+    $('chWhoBtn').onclick = () => openUser(_ch.sel); $('chRestrict').onclick = chToggleRestrict;
     $('chMic').onclick = chVnStart; $('chRecX').onclick = () => chVnStop(true); $('chRecOk').onclick = () => chVnStop(false);
     $('chInput').oninput = () => { chGrowInput(); chTypingPing(); };
     $('chFile').onchange = ev => { const f = ev.target.files[0]; ev.target.value = ''; if (f) chSendImage(f); };
@@ -3348,9 +3356,11 @@ function chDrawThread(stick){
   }
   // header: who, online dot, and the line under the name
   $('chWho').textContent = m.publicId ? 'ID ' + m.publicId : m.phone;
-  const sub = esc(m.phone) + ' &middot; ' + (chTyping(_ch.sel) ? '<span style="color:var(--ok);font-weight:700">typing…</span>' : (m.memberOnline ? '<span style="color:var(--ok);font-weight:700">online</span>' : 'offline'));
+  const sub = esc(m.phone) + (m.restricted ? ' &middot; <span style="color:var(--danger);font-weight:700">cannot send</span>' : '') + ' &middot; ' + (chTyping(_ch.sel) ? '<span style="color:var(--ok);font-weight:700">typing…</span>' : (m.memberOnline ? '<span style="color:var(--ok);font-weight:700">online</span>' : 'offline'));
   if ($('chSub').getAttribute('data-h') !== sub) { $('chSub').innerHTML = sub; $('chSub').setAttribute('data-h', sub); }
   $('chDot').hidden = !m.memberOnline;
+  $('chRestrict').textContent = m.restricted ? 'Allow messages' : 'Restrict'; $('chRestrict').className = 'btn sm' + (m.restricted ? '' : ' danger');
+  $('chRestrict').title = m.restricted ? 'This member cannot send messages. Tap to let them write again.' : 'Stop this member from sending messages (they can still read replies)';
   // "Reply as": the options are rewritten only when the list of customer-service profiles changed, and the choice made is kept
   const sel = $('chReplyAs'), opts = (_ch.agents.length ? _ch.agents : [{ id: m.lastAgentId, name: 'Customer service' }]), osig = opts.map(a => a.id + ':' + a.name).join('|');
   if (sel.getAttribute('data-o') !== osig) {
@@ -3373,6 +3383,18 @@ function chDrawThread(stick){
   chPatch($('chMsgs'), items);
   if (stick || near) $('chMsgs').scrollTop = $('chMsgs').scrollHeight;
   chLoadImages();
+}
+async function chToggleRestrict(){
+  const uid = _ch.sel, m = _ch.meta; if (!uid || !m) return;
+  const on = !m.restricted;
+  if (on && !confirm('Stop this member from sending messages? They can still read your replies.')) return;
+  const b = $('chRestrict'); if (b) b.disabled = true;
+  const d = await api('/admin/chat/restrict', { userId: uid, restricted: on });
+  if (b) b.disabled = false;
+  if (d.status !== 'success') return toast(d.message || 'Could not save', 'err');
+  m.restricted = on; const t = _ch.threads.find(x => x.userId === uid); if (t) t.restricted = on;
+  toast(on ? 'This member can no longer send messages' : 'This member can send messages again', 'ok');
+  chDrawThread(false); chDrawThreads();
 }
 function chGrowInput(){ const t = $('chInput'); if (!t) return; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px'; }
 // ---- "typing…": from the member's phone (arrives with the open request), and from here ----
