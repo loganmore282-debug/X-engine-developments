@@ -9811,9 +9811,9 @@ app.post('/admin/debit', async (req, res) => {
       const bal = uSnap.data().walletBalance || 0;
       if (amt > bal) throw new Error(`Cannot debit ${fmtMoney(amt)}, this wallet only holds ${fmtMoney(bal)}`);
       newBal = bal - amt;
-      // What is taken back also comes off the member's own "Topped up" figure (and so off the team's deposit totals); depositApplied says this row already did it.
-      t.update(uRef, { walletBalance: FieldValue.increment(-amt), totalDeposited: FieldValue.increment(-amt) });
-      t.set(db.collection('transactions').doc(), { userId, statementId: newStatementId(), type: 'admin_debit', description: note || 'Balance adjustment', amount: -amt, status: 'success', depositApplied: true, date, time, createdAt: FieldValue.serverTimestamp() });
+      // Only the wallet changes: "Topped up" (totalDeposited) is what the member recharged and a debit does not undo a recharge.
+      t.update(uRef, { walletBalance: FieldValue.increment(-amt) });
+      t.set(db.collection('transactions').doc(), { userId, statementId: newStatementId(), type: 'admin_debit', description: note || 'Balance adjustment', amount: -amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
     }));
     logAdminAction(req, 'manual_debit', { userId, amount: amt, note });
     res.json({ status: 'success', message: `Removed ${fmtMoney(amt)}. New balance ${fmtMoney(newBal)}`, newBalance: newBal });
@@ -10055,12 +10055,11 @@ app.get('/admin/stats', async (req, res) => {
     // which is the same bargain /admin/transactions/list and
     // /admin/referrals/list already strike in this file.
     const STATS_SCAN_LIMIT = 200000;
-    const [usersSnap, depSnap, witSnap, invSnap, debitSnap] = await Promise.all([
+    const [usersSnap, depSnap, witSnap, invSnap] = await Promise.all([
       db.collection('users').limit(STATS_SCAN_LIMIT).get(),
       db.collection('pendingDeposits').where('status', '==', 'matched').limit(STATS_SCAN_LIMIT).get(),
       db.collection('withdrawals').where('status', '==', 'processed').limit(STATS_SCAN_LIMIT).get(),
       db.collection('investments').limit(STATS_SCAN_LIMIT).get(),
-      db.collection('transactions').where('type', '==', 'admin_debit').limit(STATS_SCAN_LIMIT).get(),
     ]);
     let totalUsers = 0, activeUsers = 0, bannedUsers = 0, walletTotal = 0;
     usersSnap.forEach(d => {
@@ -10071,9 +10070,7 @@ app.get('/admin/stats', async (req, res) => {
     });
     let depositAmount = 0;
     depSnap.forEach(d => { if (depositFullyCredited(d.data())) depositAmount += finiteMoney(d.data().amount); });   // a matched row whose wallet credit is still stuck is not topped up yet
-    // What the owner takes back with the Debit button comes off the total in full (owner: "debiting can't reduce total topped up ... make sure it subtracts fully which I debited").
-    debitSnap.forEach(d => { const v = d.data(); if (v.status === 'success') depositAmount += finiteMoney(v.amount); });   // a debit row's amount is negative
-    depositAmount = Math.max(0, depositAmount);
+    // A debit (the Debit button) only takes money out of a wallet: it is NOT a recharge undone, so it never changes this total (owner: "debiting reduces the total topup, why, huge bug").
     let withdrawAmount = 0;
     witSnap.forEach(d => { withdrawAmount += finiteMoney(d.data().net); });
     let investedAmount = 0, activeInvestments = 0;
@@ -10093,7 +10090,7 @@ app.get('/admin/stats', async (req, res) => {
     // Judged on the RAW reads, before the country filter: the ceiling was hit
     // or it was not, and calling one country's share of a capped scan
     // "complete" would be the very lie the cap is being flagged for.
-    const truncated = [usersSnap, depSnap, witSnap, invSnap, debitSnap, pendDepSnap, pendWitSnap]
+    const truncated = [usersSnap, depSnap, witSnap, invSnap, pendDepSnap, pendWitSnap]
       .some(snap => snap.docs.length >= STATS_SCAN_LIMIT);
     res.json({
       status: 'success', truncated,
@@ -11017,7 +11014,7 @@ async function computeUserRealTotals(userId) {
     // deposit_reversal carries a negative amount (a manual correction row)
     // and must be included here or a later "Recalculate totals" run would
     // silently wipe the correction back out.
-    if (t.type === 'deposit' || t.type === 'admin_credit' || t.type === 'deposit_reversal' || t.type === 'admin_debit') deposited += walletLedgerAmount(t);
+    if (t.type === 'deposit' || t.type === 'admin_credit' || t.type === 'deposit_reversal') deposited += walletLedgerAmount(t);
     else if (EARNING_TX_TYPES.includes(t.type)) earned += finiteMoney(t.amount);
   });
   let invested = 0;
@@ -11050,7 +11047,7 @@ async function computeRealTotals() {
     const row = totals[t.userId] || (totals[t.userId] = { deposited: 0, earned: 0 });
     // deposit_reversal carries a negative amount (a manual correction row)
     // and must be included here for the same reason as computeUserRealTotals().
-    if (t.type === 'deposit' || t.type === 'admin_credit' || t.type === 'deposit_reversal' || t.type === 'admin_debit') row.deposited += walletLedgerAmount(t);
+    if (t.type === 'deposit' || t.type === 'admin_credit' || t.type === 'deposit_reversal') row.deposited += walletLedgerAmount(t);
     // Every income source that credits totalEarned live must be summed
     // here too, or a "Recalculate totals" run silently wipes it back to
     // zero — cashback/commission/team_reward (Task Center)/promocode
@@ -11671,29 +11668,27 @@ async function migrateReferralCodesOnce() {
   await marker.set({ at: new Date(), moved: n });
   return n;
 }
-// One time, at start-up: debits made before a debit reduced a member's own "Topped up" figure are taken off it now (which corrects the team deposit totals, they add
-// the members' figures up). Each debit row is stamped (depositApplied) as it is taken off, so nothing is ever taken off twice; debits made from now on are stamped when
-// they are made. The wallet is not touched.
-async function migrateDebitsToToppedUpOnce() {
-  const marker = db.collection('meta').doc('debitToppedUp');
+// One time, at start-up: puts back what an earlier version of this server wrongly took off members' "Topped up" figures when the owner used the Debit button (a debit
+// only takes money out of the wallet; it does not undo a recharge). Every debit row stamped depositApplied is added back to that member's figure and unstamped, so
+// nothing is added twice. The wallet is not touched. (Team deposit totals add the members' figures up, so they come right with it.)
+async function revertDebitsFromToppedUpOnce() {
+  const marker = db.collection('meta').doc('debitToppedUpReverted');
   if ((await marker.get()).exists) return 0;
   const snap = await db.collection('transactions').where('type', '==', 'admin_debit').limit(50000).get();
   let n = 0;
   for (const d of snap.docs) {
     const x = d.data();
-    if (x.depositApplied === true || x.status !== 'success' || !x.userId) continue;
-    const amt = Math.abs(finiteMoney(x.amount)); if (!amt) continue;
+    if (x.depositApplied !== true || !x.userId) continue;
+    const amt = Math.abs(finiteMoney(x.amount));
     try {
       await withLock('bal:' + x.userId, async () => {
+        await d.ref.update({ depositApplied: false });
         const uRef = db.collection('users').doc(x.userId);
-        if (!(await uRef.get()).exists) return;
-        await d.ref.update({ depositApplied: true });
-        await uRef.update({ totalDeposited: FieldValue.increment(-amt) });
-        n++;
+        if (amt && (await uRef.get()).exists) { await uRef.update({ totalDeposited: FieldValue.increment(amt) }); n++; }
       });
-    } catch (e) { console.error('Debit migration, row ' + d.id + ':', e.message); }
+    } catch (e) { console.error('Debit revert, row ' + d.id + ':', e.message); }
   }
-  await marker.set({ at: new Date(), moved: n });
+  await marker.set({ at: new Date(), restored: n });
   return n;
 }
 async function migratePayoutsTo24hOnce() {
@@ -12028,7 +12023,7 @@ connectMongo(MONGODB_URI)
     startRewardRepair();
     migrateReferralCodesOnce().then(n => { if (n) console.log(`Gave ${n} members a 6-character referral code`); }).catch(e => console.error('Referral code migration:', e.message));
     purgeLockedChatOnce().then(n => { if (n) console.log(`Deleted ${n} locked chat messages from the time chat had keys`); }).catch(e => console.error('Locked chat purge:', e.message));
-    migrateDebitsToToppedUpOnce().then(n => { if (n) console.log(`Took ${n} earlier debits off the members' Topped up figures`); }).catch(e => console.error('Debit migration:', e.message));
+    revertDebitsFromToppedUpOnce().then(n => { if (n) console.log(`Put ${n} debits back onto the members' Topped up figures`); }).catch(e => console.error('Debit revert:', e.message));
     migratePayoutsTo24hOnce().then(n => { if (n) console.log(`Moved ${n} running investments to the 24-hour payout schedule`); }).catch(e => console.error('24-hour schedule migration:', e.message)).then(() => backfillNextPayoutAt()).then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); });
     dedupeSharedPayoutNumbers('start-up').catch(e => console.error('Shared payout number clean-up:', e.message));
     setInterval(autoApproveWithdrawalsTick, 1000);
