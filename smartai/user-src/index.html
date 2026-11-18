@@ -1737,6 +1737,21 @@ window.smartaiKeep = (function(){ try { var k = '__smartai_probe'; localStorage.
     </div>
   </div>
 
+  <div class="modal-bg" id="micSheetBg" onclick="if(event.target===this) chatMicClose()">
+    <div class="modal-sheet" style="text-align:center">
+      <div style="width:64px;height:64px;border-radius:50%;background:var(--cream-deep);margin:4px auto 14px;display:flex;align-items:center;justify-content:center"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11.5" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"/></svg></div>
+      <h3 style="margin-bottom:6px">Turn on the microphone</h3>
+      <p class="muted" id="micSheetWhy" style="font-size:13.5px;margin-bottom:14px"></p>
+      <div id="micSheetSteps" style="text-align:left;background:var(--cream-deep);border-radius:14px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--cocoa-soft);line-height:1.6">
+        <b>1.</b> Press and hold the <span data-brandname>Smart AI</span> icon on your home screen, then tap <b>App info</b> (or the <b>i</b>).<br>
+        <b>2.</b> Tap <b>Permissions</b>, then <b>Microphone</b>, then <b>Allow</b>.<br>
+        <b>3.</b> Come back here and press the button below.<br>
+        <span class="muted">Using Chrome instead? Menu &#8942; &rsaquo; Settings &rsaquo; Site settings &rsaquo; Microphone &rsaquo; this site &rsaquo; Allow.</span>
+      </div>
+      <button class="btn btn-primary btn-block" id="micTryBtn" onclick="chatMicTry()">I turned it on, try again</button>
+      <div style="text-align:center;margin-top:14px"><span class="muted" onclick="chatMicClose()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Not now</span></div>
+    </div>
+  </div>
   <div class="modal-bg" id="installSheetBg" onclick="if(event.target===this) dismissInstallSheet()">
     <div class="modal-sheet" style="text-align:center">
       <img src="/icon-192.png" alt="" style="width:72px;height:72px;border-radius:20px;box-shadow:var(--shadow-lg);margin:4px auto 16px">

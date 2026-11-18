@@ -1215,14 +1215,37 @@ function chatVnMime(){
   return '';
 }
 function chatVnFmt(s){ s = Math.max(0, Math.round(Number(s) || 0)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+// The phone's microphone permission for this app: 'granted', 'prompt' (not asked yet), 'denied' (switched off: the phone will not ask again) or 'unknown'.
+async function chatMicState(){
+  try { var q = await navigator.permissions.query({ name: 'microphone' }); return q.state; } catch (e) { return 'unknown'; }
+}
+// Shown when the microphone is switched off for this app: what to press, and a button that tries again.
+function chatMicSheet(){
+  var inApp = /; wv\)|FBAN|FBAV|Instagram|Telegram|Line\/|MicroMessenger/i.test(navigator.userAgent || '');
+  $('micSheetWhy').textContent = inApp ? 'You opened this inside another app (Telegram, WhatsApp...). That browser cannot ask for the microphone. Open the link in Chrome, or install the app to your home screen.' : 'Your phone has the microphone switched off for this app, so it cannot ask again. Turn it on once:';
+  $('micSheetSteps').style.display = inApp ? 'none' : 'block';
+  $('micSheetBg').classList.add('show');
+}
+function chatMicClose(){ var el = $('micSheetBg'); if (el) el.classList.remove('show'); }
+function chatMicTry(){ chatMicClose(); chatVnStart(); }
 async function chatVnStart(){
   if (_vn.rec || _cc.busy || _cc.restricted || !_cc.agent || !STATE) return;
   if (!_cc.cfg) { toast('Chat is not available yet.'); return; }
   var mime = chatVnMime();
   if (!mime || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { toast('This phone cannot record a voice note.'); return; }
   var stream, rec;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
-  catch (e) { var nm = e && e.name; toast(nm === 'NotFoundError' ? 'No microphone was found on this phone.' : (nm === 'NotReadableError' ? 'The microphone is being used by another app.' : 'Allow the microphone for this app (phone settings > Permissions) to send a voice note.')); return; }
+  var pp = document.permissionsPolicy || document.featurePolicy;
+  if (pp && pp.allowsFeature && !pp.allowsFeature('microphone')) { toast('The microphone is switched off in this page\'s own settings. Close the app fully and open it again.'); return; }   // the page was loaded with an old security header
+  if (await chatMicState() === 'denied') { chatMicSheet(); return; }   // switched off for this app: asking again shows nothing, so say how to turn it on
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }   // the phone's own "Allow microphone?" question appears here
+  catch (e) {
+    var nm = e && e.name;
+    if (nm === 'NotFoundError') toast('No microphone was found on this phone.');
+    else if (nm === 'NotReadableError') toast('The microphone is being used by another app.');
+    else if (nm === 'SecurityError' || await chatMicState() === 'denied') chatMicSheet();
+    else toast('Tap the microphone again and press Allow when your phone asks.');
+    return;
+  }
   if (_vn.rec || !_cc.agent) { stream.getTracks().forEach(function(t){ t.stop(); }); return; }
   try { rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 24000 }); }
   catch (e) { stream.getTracks().forEach(function(t){ t.stop(); }); toast('This phone cannot record a voice note.'); return; }
@@ -1845,7 +1868,7 @@ function maybeOfferInstallAfterSignup(){
 /* ====================== SMALL DIALOGS ======================
    Closing every small sheet at once (sign-out, the phone's Back button). */
 function closeAllSheets(){
-  ['networkPickerBg', 'installSheetBg', 'announcementBg'].forEach(function(id){ var el = $(id); if (el) el.classList.remove('show'); });
+  ['networkPickerBg', 'installSheetBg', 'announcementBg', 'micSheetBg'].forEach(function(id){ var el = $(id); if (el) el.classList.remove('show'); });
 }
 
 /* ====================== PICTURES ======================

@@ -370,6 +370,14 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   ok(await until(ap, () => /cannot send/.test(document.querySelector('#chThreads .ch-row').innerText), null, 4000), 'admin: the inbox row says "cannot send"');
   await ap.click('#chRestrict');
   ok(await until(mp, () => !document.getElementById('chatBar').classList.contains('restricted') && getComputedStyle(document.getElementById('chatInput')).display !== 'none', null, 5000), 'member: allowed again, the text box is back at once');
+  // microphone switched off for the app: asking again shows nothing, so the app explains how to turn it on, and "try again" works once it is on
+  await mp.evaluate(() => { window.__q = navigator.permissions.query.bind(navigator.permissions); navigator.permissions.query = async () => ({ state: 'denied' }); });
+  await mp.click('#chatMic');
+  ok(await until(mp, () => document.getElementById('micSheetBg').classList.contains('show') && /Permissions/.test(document.getElementById('micSheetSteps').innerText) && !document.getElementById('chatBar').classList.contains('recording'), null, 3000), 'member: with the microphone switched off, a sheet says exactly how to turn it on (no silent failure)');
+  await mp.evaluate(() => { navigator.permissions.query = window.__q; });
+  await mp.click('#micTryBtn');
+  ok(await until(mp, () => document.getElementById('chatBar').classList.contains('recording') && !document.getElementById('micSheetBg').classList.contains('show'), null, 3000), 'member: "I turned it on, try again" closes the sheet and starts recording');
+  await mp.click('#chatRec .chat-attach'); await sleep(300);
   // the microphone must not be blocked by the page's own security headers (it was: "microphone=()" made the phone refuse without even asking)
   const hh = await fetch(base + '/health'); ok(/microphone=\(self\)/.test(hh.headers.get('permissions-policy') || ''), 'server header lets this app use the microphone (and only this app)', { h: hh.headers.get('permissions-policy') });
   const ng = require('child_process').execFileSync('node', [path.join(__dirname, 'deploy/make-nginx.js'), 'dev', 'ADMINPATH'], { encoding: 'utf8' });
