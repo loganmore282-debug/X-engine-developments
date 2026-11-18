@@ -6927,40 +6927,46 @@ const _depositView = r => ({ ref: r.ref || '', amount: r.amount, network: r.netw
 const _withdrawalView = r => ({ ref: r.ref || '', amount: r.amount, fee: r.fee, net: r.net, holder: r.holder || '', network: r.network || '', phone: r.phone || '', status: r.status || '',
   failureReason: (r.status === 'declined' || r.status === 'rejected') ? (r.failureReason || r.rejectReason || '') : '', date: r.date || '', time: r.time || '', createdAt: r.createdAt || null });
 // ═══════════════════════════════════════════════════════════════════════════════════════════
-// CUSTOMER SERVICE CHAT, END-TO-END ENCRYPTED
-// ═══════════════════════════════════════════════════════════════════════════════════════════
+// CUSTOMER SERVICE CHAT
+// ══════════════════════════════════════════════════════════════════════════════════�
 // Owner: customer-service profiles (a photo and a name each, added and deleted in the admin panel) on the Support page; a member taps one and chats; every
 // message lands in ONE thread per member in the admin panel whichever profile was tapped, and the reply goes back to that member under the profile they
 // wrote to; ticks (sent, delivered, read), online, and a notice in the panel when a member writes.
 //
-// WHAT THE SERVER CAN AND CANNOT SEE. The words are encrypted on the member's phone and opened only in the admin panel (and back): the server keeps and passes on
-// ciphertext it cannot read. Each message has its own random AES-GCM key; that key is wrapped (ECDH P-256 + HKDF, a fresh one-time key pair per wrap) for every
-// public key that may read it: the admin panel's key, the member's own device key(s) (so the sender can read their own message again). The server holds
-// only PUBLIC keys. It does see who wrote, to which profile, when, and how large the message is. `wraps` carry no secret: without a private key they open nothing.
-const CHAT_MAX_AGENTS = 12, CHAT_MAX_CT = 9000, CHAT_MAX_WRAPS = 8, CHAT_MAX_KEYS = 3, CHAT_PAGE = 300, CHAT_ONLINE_MS = 45000;
+// NO KEYS (owner: "remove things of keys, let every device send and view messages so long as it is own"). A message is plain text (and a picture or voice note,
+// each a plain file kept as bytes) stored against the member's account, so it can be read and written from ANY device signed in to that account, and from the admin
+// panel in any browser, with nothing to set up, back up or restore. Travels over HTTPS only. (An earlier version locked every message on the sender's phone; the
+// messages and files of that time stay in the database but cannot be shown, and are listed as "earlier message".)
+const CHAT_MAX_AGENTS = 12, CHAT_TEXT_MAX = 1000, CHAT_PAGE = 300, CHAT_ONLINE_MS = 45000;
 // How long a "wait" request is held open for news (see LIVE DELIVERY below). Under a minute, the web server's own limit; the apps' request timers are longer.
 const CHAT_WAIT_MS = Number(process.env.CHAT_WAIT_MS) || 22000;
-const CHAT_B64 = /^[A-Za-z0-9+/]+={0,2}$/, CHAT_B64U = /^[A-Za-z0-9_-]{43}$/, CHAT_IV = /^[A-Za-z0-9+/]{16}$/, CHAT_KID = /^[0-9a-f]{16}$/;
+const CHAT_THUMB = /^data:image\/(jpeg|webp|png);base64,[A-Za-z0-9+\/]+={0,2}$/;
 const _chat = { adminAt: 0, agents: null, agentsAt: 0, seenWrite: new Map(), sendLog: new Map(), pushAt: new Map(), users: new Map() };
-// A key id is the first 16 hex characters of SHA-256 of "x.y" of the public key: the server recomputes it, so nobody can register a key under another's id.
-function chatJwk(j) {
-  if (!j || typeof j !== 'object' || j.kty !== 'EC' || j.crv !== 'P-256' || !CHAT_B64U.test(String(j.x || '')) || !CHAT_B64U.test(String(j.y || ''))) return null;
-  return { kty: 'EC', crv: 'P-256', x: j.x, y: j.y };
-}
-function chatKidOf(jwk) { return crypto.createHash('sha256').update(jwk.x + '.' + jwk.y).digest('hex').slice(0, 16); }
-function chatEnvelope(b) {
+// What a member or the panel may send: some text, a picture and/or a voice note (the file itself is uploaded first, see "pictures and voice notes"). Rebuilt field by
+// field, so only known, checked things are ever stored; anything else is dropped.
+function chatBody(b) {
   if (!b || typeof b !== 'object') return null;
-  const iv = String(b.iv || ''), ct = String(b.ct || '');
-  if (!CHAT_IV.test(iv) || ct.length < 24 || ct.length > CHAT_MAX_CT || !CHAT_B64.test(ct)) return null;
-  if (!Array.isArray(b.wraps) || !b.wraps.length || b.wraps.length > CHAT_MAX_WRAPS) return null;
-  const wraps = [];
-  for (const w of b.wraps) {
-    const epk = chatJwk(Object.assign({ kty: 'EC', crv: 'P-256' }, w && w.epk));
-    if (!w || !CHAT_KID.test(String(w.kid || '')) || !epk || !CHAT_IV.test(String(w.iv || '')) || !CHAT_B64.test(String(w.ek || '')) || String(w.ek).length > 120) return null;
-    wraps.push({ kid: w.kid, epk: { x: epk.x, y: epk.y }, iv: w.iv, ek: w.ek });
+  const text = typeof b.text === 'string' ? b.text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').replace(/\r\n?/g, '\n').trim().slice(0, CHAT_TEXT_MAX) : '';
+  let img = null, voice = null;
+  const i = b.img;
+  if (i && typeof i === 'object') {
+    if (!/^[0-9a-f]{24}$/.test(String(i.id || '')) || !/^image\/(webp|jpeg|png)$/.test(String(i.m || ''))) return null;
+    const w = Math.round(Number(i.w)), h = Math.round(Number(i.h)), th = String(i.th || '');
+    if (!(w >= 1 && w <= 4000 && h >= 1 && h <= 4000) || (th && (th.length > 8000 || !CHAT_THUMB.test(th)))) return null;
+    img = { id: i.id, w, h, m: i.m, th };
   }
-  return { iv, ct, wraps };
+  const a = b.voice;
+  if (a && typeof a === 'object') {
+    if (!/^[0-9a-f]{24}$/.test(String(a.id || '')) || !/^audio\/(webm|ogg|mp4|mpeg|aac)$/.test(String(a.m || ''))) return null;
+    const d = Math.round(Number(a.d));
+    if (!(d >= 0 && d <= 300)) return null;
+    voice = { id: a.id, d, m: a.m };
+  }
+  if (!text && !img && !voice) return null;
+  return { text, img, voice };
 }
+// The one line the panel's inbox shows for a conversation.
+const chatPreview = c => (c.voice ? 'Voice note' : (c.img ? (c.text ? 'Photo: ' + c.text : 'Photo') : c.text)).slice(0, 90);
 // ---- LIVE DELIVERY ----
 // A message reaches the other side the instant it is stored: the app keeps one request OPEN ("wait") and the server answers it the moment something happens for that
 // side, carrying the message itself, so nothing is polled and nothing is fetched twice. Every event gets a rising number (seq); a side that asks "anything after N?"
@@ -7035,40 +7041,18 @@ async function chatAgents(fresh) {
   _chat.agentsAt = Date.now();
   return _chat.agents;
 }
-async function chatAdminKey() {
-  const s = await db.collection('meta').doc('chatKey').get();
-  if (!s.exists) return null;
-  const jwk = chatJwk(s.data().jwk);
-  return jwk ? { kid: chatKidOf(jwk), jwk } : null;
-}
-// With a key id (kid) only the lock for THAT key is sent (half the bytes); without one, all of them.
-const chatMsgOut = (d, kid) => { const v = d.data(); const mine = kid ? (v.wraps || []).filter(w => w.kid === kid) : null; return { id: d.id, from: v.from, agentId: v.agentId, iv: v.iv, ct: v.ct, wraps: mine && mine.length ? mine : v.wraps, at: v.at }; };
+const chatMsgOut = d => { const v = d.data(); return { id: d.id, from: v.from, agentId: v.agentId, text: typeof v.text === 'string' ? v.text : null, img: v.img || null, voice: v.voice || null, legacy: v.text === undefined && !v.img && !v.voice, at: v.at }; };
 
-// ---- public: the profiles, the admin panel's public key, whether someone is there ----
+// ---- public: the profiles and whether someone is there ----
 app.get('/public/chat-config', async (_req, res) => {
   try {
-    const [agents, key] = await Promise.all([chatAgents(), chatAdminKey()]);
+    const agents = await chatAgents();
     res.set('Cache-Control', 'no-store');
-    res.json({ status: 'success', agents: agents.map(a => ({ id: a.id, name: a.name, photo: a.photo })), adminKey: key, online: chatAdminOnline() });
+    res.json({ status: 'success', agents: agents.map(a => ({ id: a.id, name: a.name, photo: a.photo })), online: chatAdminOnline() });
   } catch (e) { console.error('chat config:', e.message); res.status(500).json({ status: 'error', message: 'Could not load support' }); }
 });
 
 // ---- member ----
-app.post('/chat/key', async (req, res) => {
-  const uid = await verifyAuth(req);
-  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  try {
-    const jwk = chatJwk(req.body && req.body.jwk), kid = jwk && chatKidOf(jwk);
-    if (!jwk || kid !== String((req.body || {}).kid || '')) return res.status(400).json({ status: 'error', message: 'Bad key' });
-    await withLock('chatkey:' + uid, async () => {
-      const ref = db.collection('chatMembers').doc(uid), s = await ref.get();
-      const keys = (s.exists && Array.isArray(s.data().keys) ? s.data().keys : []).filter(k => k && k.kid !== kid);
-      keys.unshift({ kid, jwk, at: Date.now() });
-      await ref.set({ keys: keys.slice(0, CHAT_MAX_KEYS) });
-    });
-    res.json({ status: 'success' });
-  } catch (e) { console.error('chat key:', e.message); res.status(500).json({ status: 'error', message: 'Could not save' }); }
-});
 // The sender's own account facts, remembered for half a minute so a message does not wait for a database read of the user first.
 const CHAT_RESTRICTED_MSG = 'Customer service has turned off sending messages on your account. You can still read replies.';
 async function chatUser(uid) {
@@ -7085,7 +7069,7 @@ app.post('/chat/send', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   try {
-    const env = chatEnvelope(req.body), agentId = String((req.body || {}).agentId || '');
+    const env = chatBody(req.body), agentId = String((req.body || {}).agentId || '');
     if (!env) return res.status(400).json({ status: 'error', message: 'Could not send' });
     const now = Date.now(), log = (_chat.sendLog.get(uid) || []).filter(t => now - t < 60000);
     if (log.length >= 20) return res.status(429).json({ status: 'error', message: 'You are sending too fast. Wait a moment.' });
@@ -7097,21 +7081,21 @@ app.post('/chat/send', async (req, res) => {
     if (!u) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (u.status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     if (u.restricted) return res.status(403).json({ status: 'error', code: 'CHAT_RESTRICTED', message: CHAT_RESTRICTED_MSG });
-    const msg = { threadId: uid, agentId, from: 'member', iv: env.iv, ct: env.ct, wraps: env.wraps, at: now };
+    const msg = { threadId: uid, agentId, from: 'member', text: env.text, img: env.img, voice: env.voice, at: now };
     _cx.seen.set(uid, now);
     // The message is stored and the thread updated TOGETHER (not one after the other); the panel is told the instant the message is stored.
     const addP = db.collection('chatMessages').add(msg).then(a => {
-      chatEmit({ kind: 'msg', uid, who: { phone: u.phone, publicId: u.publicId }, msg: { id: a.id, from: 'member', agentId, iv: env.iv, ct: env.ct, wraps: env.wraps, at: now } });
+      chatEmit({ kind: 'msg', uid, who: { phone: u.phone, publicId: u.publicId }, msg: { id: a.id, from: 'member', agentId, text: env.text, img: env.img, voice: env.voice, at: now } });
       return a;
     });
     const thrP = withLock('chat:' + uid, async () => {
       const ref = db.collection('chatThreads').doc(uid), s = await ref.get();
-      const meta = { userId: uid, phone: u.phone, publicId: u.publicId, lastAt: now, lastFrom: 'member', lastAgentId: agentId, last: { from: 'member', iv: env.iv, ct: env.ct, wraps: env.wraps, at: now }, memberSeenAt: now };
+      const meta = { userId: uid, phone: u.phone, publicId: u.publicId, lastAt: now, lastFrom: 'member', lastAgentId: agentId, preview: chatPreview(env), memberSeenAt: now };
       if (s.exists) await ref.update(Object.assign(meta, { unreadAdmin: FieldValue.increment(1) }));
       else await ref.set(Object.assign(meta, { unreadAdmin: 1, adminReadAt: 0, memberReadMap: {}, createdAt: now }));
     });
     const [added] = await Promise.all([addP, thrP]);
-    // The phone alert carries no word of the message (it is encrypted; the notice says only that someone wrote). A panel that is open already has it.
+    // The phone alert carries no word of the message (the notice says only that someone wrote). A panel that is open already has it.
     if (!chatAdminLive() && now - (_chat.pushAt.get(uid) || 0) > 20000) {
       _chat.pushAt.set(uid, now);
       if (_chat.pushAt.size > 5000) for (const [k, t] of _chat.pushAt) if (now - t > 120000) _chat.pushAt.delete(k);
@@ -7121,12 +7105,12 @@ app.post('/chat/send', async (req, res) => {
   } catch (e) { console.error('chat send:', e.message); res.status(500).json({ status: 'error', message: 'Could not send. Try again.' }); }
 });
 // The newest messages of a conversation, oldest first. With `after`, everything from that moment on (inclusive: two messages in the same millisecond are never lost, the apps drop repeats by id).
-async function chatMessages(threadId, agentId, after, kid) {
+async function chatMessages(threadId, agentId, after) {
   let q = db.collection('chatMessages').where('threadId', '==', threadId);
   if (agentId) q = q.where('agentId', '==', agentId);
-  if (after > 0) { const snap = await q.where('at', '>=', after).orderBy('at', 'asc').limit(CHAT_PAGE).get(); return snap.docs.map(d => chatMsgOut(d, kid)); }
+  if (after > 0) { const snap = await q.where('at', '>=', after).orderBy('at', 'asc').limit(CHAT_PAGE).get(); return snap.docs.map(chatMsgOut); }
   const snap = await q.orderBy('at', 'desc').limit(CHAT_PAGE).get();
-  return snap.docs.map(d => chatMsgOut(d, kid)).reverse();
+  return snap.docs.map(chatMsgOut).reverse();
 }
 app.get('/chat/history', async (req, res) => {
   const uid = await verifyAuth(req);
@@ -7135,7 +7119,7 @@ app.get('/chat/history', async (req, res) => {
     const agentId = String(req.query.agentId || ''), after = Number(req.query.after) || 0;
     if (!agentId) return res.status(400).json({ status: 'error', message: 'Choose a profile' });
     const seq = _cx.seq;   // taken BEFORE the read: whatever happens after it still arrives by "wait"
-    const [rows, tSnap, hu] = await Promise.all([chatMessages(uid, agentId, after, String(req.query.kid || '')), db.collection('chatThreads').doc(uid).get(), chatUser(uid)]);
+    const [rows, tSnap, hu] = await Promise.all([chatMessages(uid, agentId, after), db.collection('chatThreads').doc(uid).get(), chatUser(uid)]);
     const t = tSnap.exists ? tSnap.data() : {};
     chatNoteMemberSeen(uid);
     res.set('Cache-Control', 'no-store');
@@ -7187,7 +7171,7 @@ app.get('/chat/wait', async (req, res) => {
     add: w => { const set = _cx.mw.get(uid) || new Set(); _cx.mw.set(uid, set); set.add(w); while (set.size > 3) { const old = set.values().next().value; set.delete(old); old.cancel(); } },   // one phone, a few tabs at most
     del: w => { const set = _cx.mw.get(uid); if (set) { set.delete(w); if (!set.size) _cx.mw.delete(uid); } },
   };
-  chatPark(res, since, e => e.kind === 'adminSeen' || (e.uid === uid && ((e.kind === 'msg' && e.msg.from === 'admin') || e.kind === 'adminRead' || e.kind === 'restrict')), bucket,
+  chatPark(res, since, e => e.kind === 'adminSeen' || (e.uid === uid && (e.kind === 'msg' || e.kind === 'adminRead' || e.kind === 'restrict')), bucket,   // a message of this member's own, written on another phone, reaches this one too
     () => { const c = _chat.users.get(uid); return { online: chatAdminOnline(), adminSeenAt: chatAdminSeenAt(), typing: chatTypingFor('member', uid), restricted: c ? !!c.restricted : undefined }; }, req.query.ts === undefined ? undefined : String(req.query.ts));
 });
 
@@ -7199,9 +7183,8 @@ app.post('/chat/typing', async (req, res) => {
   if (!last || Date.now() - last.at > 1000 || b.typing === false) chatSetTyping(uid, 'member', b.agentId, b.typing !== false);
   res.json({ status: 'success' });
 });
-// ---- pictures and voice notes (both are locked on the sender's device and stored the same way) ----
-// A picture is locked on the sender's device with its own key (the key travels inside the encrypted message), and the server keeps only the locked bytes: it can neither see
-// the picture nor tell what it is. Anyone who has the id still needs to be the member it belongs to, or an admin, to fetch it.
+// ---- pictures and voice notes (both are plain files, uploaded first and then named in the message) ----
+// The server keeps the bytes as they come. Whoever has the id still needs to be the member it belongs to, or an admin, to fetch it.
 const CHAT_BLOB_MAX = 600 * 1024, chatBlobParser = express.raw({ type: () => true, limit: '1mb' });
 const _chatBlobLog = new Map();
 async function chatStoreBlob(req, res, owner, by) {
@@ -7255,7 +7238,7 @@ app.get('/admin/chat/threads', async (req, res) => {
     chatTouchAdmin();
     const [snap, agents] = await Promise.all([db.collection('chatThreads').orderBy('lastAt', 'desc').limit(300).get(), chatAgents()]);
     const now = Date.now();
-    const threads = snap.docs.map(d => { const v = d.data(); return { userId: d.id, phone: v.phone || '', publicId: v.publicId || '', lastAt: v.lastAt || 0, lastFrom: v.lastFrom || '', lastAgentId: v.lastAgentId || '', unread: Number(v.unreadAdmin) || 0, restricted: v.restricted === true, memberOnline: now - chatMemberSeenAt(d.id, v.memberSeenAt) < CHAT_ONLINE_MS, last: v.last || null }; });
+    const threads = snap.docs.map(d => { const v = d.data(); return { userId: d.id, phone: v.phone || '', publicId: v.publicId || '', lastAt: v.lastAt || 0, lastFrom: v.lastFrom || '', lastAgentId: v.lastAgentId || '', unread: Number(v.unreadAdmin) || 0, restricted: v.restricted === true, memberOnline: now - chatMemberSeenAt(d.id, v.memberSeenAt) < CHAT_ONLINE_MS, preview: typeof v.preview === 'string' ? v.preview : null }; });
     res.set('Cache-Control', 'no-store');
     res.json({ status: 'success', threads, agents: agents.map(a => ({ id: a.id, name: a.name })), now });
   } catch (e) { console.error('chat threads:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the chats' }); }
@@ -7266,11 +7249,11 @@ app.get('/admin/chat/thread', async (req, res) => {
     chatTouchAdmin();
     const userId = String(req.query.userId || '').slice(0, 80), after = Number(req.query.after) || 0;
     if (!userId) return res.status(400).json({ status: 'error', message: 'Missing member' });
-    const [tSnap, rows, kSnap, uSnap] = await Promise.all([db.collection('chatThreads').doc(userId).get(), chatMessages(userId, '', after, String(req.query.kid || '')), db.collection('chatMembers').doc(userId).get(), db.collection('users').doc(userId).get()]);
+    const [tSnap, rows, uSnap] = await Promise.all([db.collection('chatThreads').doc(userId).get(), chatMessages(userId, '', after), db.collection('users').doc(userId).get()]);
     if (!tSnap.exists) return res.status(404).json({ status: 'error', message: 'No chat with this member' });
     const t = tSnap.data(), now = Date.now(), seen = chatMemberSeenAt(userId, t.memberSeenAt);
     res.set('Cache-Control', 'no-store');
-    res.json({ status: 'success', messages: rows, memberKeys: (kSnap.exists && kSnap.data().keys || []).map(k => ({ kid: k.kid, jwk: k.jwk })),
+    res.json({ status: 'success', messages: rows,
       memberReadAt: Math.max(0, ...Object.values(t.memberReadMap || {}).map(Number)), memberSeenAt: seen, memberOnline: now - seen < CHAT_ONLINE_MS,
       lastAgentId: t.lastAgentId || '', phone: t.phone || '', publicId: t.publicId || '', memberReadMap: t.memberReadMap || {}, restricted: !!(uSnap.exists && uSnap.data().chatRestricted === true), now });
   } catch (e) { console.error('chat thread:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the chat' }); }
@@ -7295,19 +7278,19 @@ app.post('/admin/chat/restrict', async (req, res) => {
 app.post('/admin/chat/send', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const userId = String((req.body || {}).userId || '').slice(0, 80), agentId = String((req.body || {}).agentId || ''), env = chatEnvelope(req.body);
+    const userId = String((req.body || {}).userId || '').slice(0, 80), agentId = String((req.body || {}).agentId || ''), env = chatBody(req.body);
     if (!userId || !env) return res.status(400).json({ status: 'error', message: 'Could not send' });
     const [tSnap, agents] = await Promise.all([db.collection('chatThreads').doc(userId).get(), chatAgents()]);
     if (!tSnap.exists) return res.status(404).json({ status: 'error', message: 'No chat with this member' });
     if (!agents.some(a => a.id === agentId)) return res.status(400).json({ status: 'error', message: 'That profile no longer exists. Pick another one to reply as.' });
     const now = Date.now(), by = String((req.adminUser && req.adminUser.username) || 'owner').slice(0, 40), delivered = chatMemberLive(userId);
     if (delivered) _cx.seen.set(userId, now);
-    const addP = db.collection('chatMessages').add({ threadId: userId, agentId, from: 'admin', by, iv: env.iv, ct: env.ct, wraps: env.wraps, at: now }).then(a => {
-      chatEmit({ kind: 'msg', uid: userId, msg: { id: a.id, from: 'admin', agentId, iv: env.iv, ct: env.ct, wraps: env.wraps, at: now }, delivered });
+    const addP = db.collection('chatMessages').add({ threadId: userId, agentId, from: 'admin', by, text: env.text, img: env.img, voice: env.voice, at: now }).then(a => {
+      chatEmit({ kind: 'msg', uid: userId, msg: { id: a.id, from: 'admin', agentId, text: env.text, img: env.img, voice: env.voice, at: now }, delivered });
       return a;
     });
     const thrP = withLock('chat:' + userId, () => db.collection('chatThreads').doc(userId).update(Object.assign(
-      { lastAt: now, lastFrom: 'admin', lastAgentId: agentId, last: { from: 'admin', iv: env.iv, ct: env.ct, wraps: env.wraps, at: now }, adminReadAt: now, unreadAdmin: 0 }, delivered ? { memberSeenAt: now } : {})));
+      { lastAt: now, lastFrom: 'admin', lastAgentId: agentId, preview: chatPreview(env), adminReadAt: now, unreadAdmin: 0 }, delivered ? { memberSeenAt: now } : {})));
     const [added] = await Promise.all([addP, thrP]);
     chatTouchAdmin();
     res.json({ status: 'success', id: added.id, at: now, delivered });
@@ -7353,23 +7336,6 @@ app.post('/admin/chat/blob', chatBlobParser, async (req, res) => {
 app.get('/admin/chat/blob/:id', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   await chatSendBlob(res, req.params.id, '');
-});
-// The panel's public key. Made once, in the owner's browser (the private half never leaves it); replacing it makes older messages unreadable, so it must be asked for.
-app.get('/admin/chat/key', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try { res.json({ status: 'success', key: await chatAdminKey() }); } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load' }); }
-});
-app.post('/admin/chat/key', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const jwk = chatJwk(req.body && req.body.jwk), kid = jwk && chatKidOf(jwk);
-    if (!jwk || kid !== String((req.body || {}).kid || '')) return res.status(400).json({ status: 'error', message: 'Bad key' });
-    const cur = await chatAdminKey();
-    if (cur && cur.kid !== kid && req.body.replace !== true) return res.status(409).json({ status: 'error', code: 'KEY_EXISTS', message: 'A chat key already exists. Restore it from your backup, or replace it (older messages become unreadable).' });
-    await db.collection('meta').doc('chatKey').set({ jwk, at: Date.now() });
-    logAdminAction(req, 'chat_key_set', { kid, replaced: !!cur && cur.kid !== kid });
-    res.json({ status: 'success', kid });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save' }); }
 });
 // The profiles: owner only.
 const CHAT_PHOTO = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;

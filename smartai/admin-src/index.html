@@ -3019,57 +3019,8 @@ async function renderAdmins(){
 // Owner: "payment numbers will be uploaded from the admin panel". Each entry is one number a member can be asked to pay to on the payment page. Members only
 // choose MTN or Airtel; the numbers of one network are handed out in turn, a new order every time.
 let _payRows = [], _payEdit = null, _payLogoNow = '';
-/* CHATCRYPTO BEGIN (the same text in the member app and in the admin panel; test-chat-e2e.js compares the two copies) */
+/* CHATIMG BEGIN (the same text in the member app and in the admin panel; test-chat-e2e.js compares the two copies) */
 var CHAT = (function(){
-  var enc = new TextEncoder(), dec = new TextDecoder(), S = crypto.subtle, EC = { name: 'ECDH', namedCurve: 'P-256' };
-  function b64(buf){ var a = new Uint8Array(buf), s = ''; for (var i = 0; i < a.length; i += 8192) s += String.fromCharCode.apply(null, a.subarray(i, i + 8192)); return btoa(s); }
-  function unb64(t){ var s = atob(t), a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
-  function pubOf(j){ return { kty: 'EC', crv: 'P-256', x: j.x, y: j.y }; }
-  async function kidOf(jwk){
-    var h = new Uint8Array(await S.digest('SHA-256', enc.encode(jwk.x + '.' + jwk.y))), out = '';
-    for (var i = 0; i < 8; i++) out += ('0' + h[i].toString(16)).slice(-2);
-    return out;
-  }
-  // A key pair: kid names it, pub is shared with the server, priv stays on this device.
-  async function newPair(){
-    var kp = await S.generateKey(EC, true, ['deriveBits']), pub = pubOf(await S.exportKey('jwk', kp.publicKey)), priv = await S.exportKey('jwk', kp.privateKey);
-    return { kid: await kidOf(pub), pub: pub, priv: priv };
-  }
-  // The key that locks one message's own key: the ECDH secret of (private, public), stretched with HKDF.
-  async function wrapKey(privKey, pubJwk){
-    var bits = await S.deriveBits({ name: 'ECDH', public: await S.importKey('jwk', pubOf(pubJwk), EC, false, []) }, privKey, 256);
-    var base = await S.importKey('raw', bits, 'HKDF', false, ['deriveKey']);
-    return S.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: enc.encode('smartai-chat-v1') }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-  }
-  // Encrypts text for every recipient ([{kid, jwk}]); ad (thread|from|profile) is bound into the ciphertext so a message cannot be moved to another conversation.
-  async function seal(text, ad, recipients){
-    var k = await S.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']), iv = crypto.getRandomValues(new Uint8Array(12));
-    var ct = await S.encrypt({ name: 'AES-GCM', iv: iv, additionalData: enc.encode(ad) }, k, enc.encode(text)), raw = await S.exportKey('raw', k), wraps = [];
-    for (var i = 0; i < recipients.length; i++) {
-      var eph = await S.generateKey(EC, true, ['deriveBits']), wk = await wrapKey(eph.privateKey, recipients[i].jwk), wiv = crypto.getRandomValues(new Uint8Array(12));
-      var ek = await S.encrypt({ name: 'AES-GCM', iv: wiv }, wk, raw), epk = pubOf(await S.exportKey('jwk', eph.publicKey));
-      wraps.push({ kid: recipients[i].kid, epk: { x: epk.x, y: epk.y }, iv: b64(wiv), ek: b64(ek) });
-    }
-    return { iv: b64(iv), ct: b64(ct), wraps: wraps };
-  }
-  // Opens a message with this device's private key (kid names it); null when the message was not locked for this key.
-  async function open(msg, ad, kid, privJwk){
-    var w = null; for (var i = 0; i < msg.wraps.length; i++) if (msg.wraps[i].kid === kid) w = msg.wraps[i];
-    if (!w) return null;
-    var wk = await wrapKey(await S.importKey('jwk', privJwk, EC, false, ['deriveBits']), w.epk);
-    var raw = await S.decrypt({ name: 'AES-GCM', iv: unb64(w.iv) }, wk, unb64(w.ek)), k = await S.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
-    return dec.decode(await S.decrypt({ name: 'AES-GCM', iv: unb64(msg.iv), additionalData: enc.encode(ad) }, k, unb64(msg.ct)));
-  }
-  // PICTURES. A picture is locked with its OWN key; that key travels inside the encrypted message, and the server keeps only the locked bytes.
-  async function sealBlob(bytes){
-    var k = await S.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']), iv = crypto.getRandomValues(new Uint8Array(12));
-    var ct = new Uint8Array(await S.encrypt({ name: 'AES-GCM', iv: iv }, k, bytes));
-    return { ct: ct, key: b64(await S.exportKey('raw', k)), iv: b64(iv) };
-  }
-  async function openBlob(ct, keyB64, ivB64){
-    var k = await S.importKey('raw', unb64(keyB64), 'AES-GCM', false, ['decrypt']);
-    return new Uint8Array(await S.decrypt({ name: 'AES-GCM', iv: unb64(ivB64) }, k, ct));
-  }
   function loadImage(file){
     return new Promise(function(ok, no){
       var url = URL.createObjectURL(file), im = new Image();
@@ -3099,18 +3050,14 @@ var CHAT = (function(){
     var tc = document.createElement('canvas'); tc.width = tw; tc.height = th; tc.getContext('2d').drawImage(im, 0, 0, tw, th);
     return { bytes: new Uint8Array(await best.blob.arrayBuffer()), w: best.w, h: best.h, mime: best.mime, thumb: tc.toDataURL('image/jpeg', 0.5) };
   }
-  return { newPair: newPair, kidOf: kidOf, seal: seal, open: open, b64: b64, unb64: unb64, sealBlob: sealBlob, openBlob: openBlob, shrink: shrink };
+  return { shrink: shrink };
 })();
-/* CHATCRYPTO END */
+/* CHATIMG END */
 
-/* ====================== CHAT: customer service, end-to-end encrypted ======================
+/* ====================== CHAT: customer service ======================
    One inbox: every member's messages are ONE thread whichever profile they tapped; the reply goes back under the profile they wrote to (or another you pick).
-   The words are opened here and only here: this browser holds the private key (made once, backed up with a password you choose); the server only ever sees ciphertext. */
-const CH_KEY_STORE = 'smartai_chat_admin_key_v1';
-let _ch = { key: null, serverKey: null, agents: [], threads: [], sel: null, meta: null, msgs: [], after: 0, filter: 'all', cache: new Map(), pollT: null, listT: null, notifyT: null, edit: null, busy: false, unread: 0, latestSeen: 0, sig: '', seq: 0, looping: false, typing: {}, typeSent: 0, tsig: '[]', imgs: {} };
-function chLoadKey(){ try { const k = JSON.parse(localStorage.getItem(CH_KEY_STORE) || 'null'); return k && k.kid && k.pub && k.priv ? k : null; } catch (_) { return null; } }
-function chSaveKey(k){ try { localStorage.setItem(CH_KEY_STORE, JSON.stringify(k)); } catch (_) {} }
-function chReady(){ return !!(_ch.key && _ch.serverKey && _ch.key.kid === _ch.serverKey.kid); }
+   Messages are plain text kept on the member's account (no keys), so this inbox opens the same in any browser. */
+let _ch = { agents: [], threads: [], sel: null, meta: null, msgs: [], after: 0, filter: 'all', cache: new Map(), pollT: null, listT: null, notifyT: null, edit: null, busy: false, unread: 0, latestSeen: 0, sig: '', seq: 0, looping: false, typing: {}, typeSent: 0, tsig: '[]', imgs: {} };
 function chTime(ms){
   const d = new Date(ms), t = new Date();
   if (d.toDateString() === t.toDateString()) return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -3124,31 +3071,18 @@ const CH_TICK_TWO = '<path d="M1.2 8.6l3.2 3.2L11 4.6M7.2 11.2l.6.6L14.8 4.6" fi
 function chTick(st){ return `<svg class="ch-tk${st === 'read' ? ' rd' : ''}" viewBox="0 0 16 16" aria-hidden="true">${st === 'sent' ? CH_TICK_ONE : CH_TICK_TWO}</svg>`; }
 
 async function renderChat(){
-  const [k, a] = await Promise.all([api('/admin/chat/key'), api('/admin/chat/agents')]);
+  try { localStorage.removeItem('smartai_chat_admin_key_v1'); } catch (_) {}   // the old private key of the time when chat had keys
+  const a = await api('/admin/chat/agents');
   if (staleTab('chat')) return;
-  _ch.serverKey = (k && k.key) || null; _ch.agents = (a && a.agents) || []; _ch.key = chLoadKey();
+  _ch.agents = (a && a.agents) || [];
   drawChat();
-  if (chReady()) { chStartPolling(); chRefreshList(); }
+  chStartPolling(); chRefreshList();
 }
 function drawChat(){
   const owner = SESSION_ROLE === 'owner';
-  let html = '<h2 class="sec">Chat</h2>';
-  if (!_ch.serverKey) {
-    html += owner ? `<div class="panel-card"><h3 style="margin:0 0 6px;font-size:15px">Turn on encrypted chat</h3>
-      <p class="muted" style="margin:0 0 12px">This makes the key that opens members' messages. It stays in THIS browser; the server only gets the public half, so it can never read a message. After this, add your customer-service profiles and download a backup of the key.</p>
-      <button class="btn" id="chMake" type="button">Create the chat key</button></div>` : '<div class="panel-card"><p class="muted" style="margin:0">Chat is not turned on yet. The owner has to create the chat key first.</p></div>';
-  } else if (!chReady()) {
-    html += `<div class="panel-card"><h3 style="margin:0 0 6px;font-size:15px">This browser does not have the chat key</h3>
-      <p class="muted" style="margin:0 0 12px">Restore it from the backup file you downloaded, with the password you chose.</p>
-      <div class="row"><div><label>Backup file</label><input type="file" id="chRestoreFile" accept="application/json,.json"></div><div><label>Password</label><input type="password" id="chRestorePass" autocomplete="off"></div></div>
-      <div class="row" style="margin-top:12px"><button class="btn" id="chRestore" type="button">Restore the key</button>${owner ? '<button class="btn ghost" id="chReplace" type="button">Make a new key instead</button>' : ''}</div>
-      ${owner ? '<p class="muted" style="margin:10px 0 0;font-size:12px">A new key cannot open the old messages. Members can still write to you and everything new is readable.</p>' : ''}</div>`;
-  } else {
-    html += chToolsHtml(owner) + chInboxHtml();
-  }
-  $('content').innerHTML = html;
+  $('content').innerHTML = '<h2 class="sec">Chat</h2>' + chToolsHtml(owner) + chInboxHtml();
   chWire(owner);
-  if (chReady()) { chDrawThreads(); chDrawThread(); }
+  chDrawThreads(); chDrawThread();
 }
 function chToolsHtml(owner){
   const e = _ch.edit;
@@ -3158,20 +3092,13 @@ function chToolsHtml(owner){
       <label class="btn ghost block file-btn" style="margin-top:10px">${e.photo ? 'Change the picture' : 'Upload a picture'}<input type="file" id="chAgFile" accept="image/*" hidden></label>
       <div class="row" style="margin-top:12px"><button class="btn block" id="chAgSave" type="button">Save</button><button class="btn ghost block" id="chAgCancel" type="button">Cancel</button></div></div>`
     : '<button class="btn block" id="chAgAdd" type="button" style="margin-top:12px">Add a profile</button>') : '';
-  return `<details class="panel-card ch-tools"><summary>Customer-service profiles <span class="muted">(${_ch.agents.length})</span></summary><div style="margin-top:10px">${agentRows}${form}</div></details>
-    <details class="panel-card ch-tools"><summary>Chat key and backup</summary><div style="margin-top:10px">
-      <p class="muted" style="margin:0 0 10px;font-size:12.5px">Key <b data-no-i18n>${esc(_ch.key.kid)}</b>. It lives in this browser only. Download a backup and keep it safe: without it, clearing this browser's data (or using another device) makes the messages unreadable.</p>
-      <div class="row"><button class="btn" id="chBackup" type="button">Download a backup</button></div></div></details>`;
+  return `<details class="panel-card ch-tools"><summary>Customer-service profiles <span class="muted">(${_ch.agents.length})</span></summary><div style="margin-top:10px">${agentRows}${form}</div></details>`;
 }
 function chInboxHtml(){
   return `<div class="chat-grid" id="chGrid"><div class="chat-list-col"><div class="ch-filter"><button type="button" class="ch-pill active" data-ch-f="all">All</button><button type="button" class="ch-pill" data-ch-f="unread">Unread <span id="chUnreadN"></span></button></div><div id="chThreads" class="panel-card" style="padding:6px"></div></div>
     <div class="chat-view-col" id="chView"></div></div>`;
 }
 function chWire(owner){
-  const mk = $('chMake'); if (mk) mk.onclick = chCreateKey;
-  const rs = $('chRestore'); if (rs) rs.onclick = chRestoreKey;
-  const rp = $('chReplace'); if (rp) rp.onclick = () => { if (confirm('Make a NEW chat key? Messages sent before it can no longer be opened by anyone.')) chCreateKey(true); };
-  const bk = $('chBackup'); if (bk) bk.onclick = chBackupKey;
   const add = $('chAgAdd'); if (add) add.onclick = () => { _ch.edit = { name: '', photo: '' }; keepToolsOpen(); };
   const cancel = $('chAgCancel'); if (cancel) cancel.onclick = () => { _ch.edit = null; keepToolsOpen(); };
   $('content').querySelectorAll('[data-ch-edit]').forEach(b => b.onclick = () => { const a = _ch.agents.find(x => x.id === b.dataset.chEdit); if (a) { _ch.edit = { id: a.id, name: a.name, photo: a.photo }; keepToolsOpen(); } });
@@ -3210,64 +3137,16 @@ function chAvatarFile(file){
     img.src = url;
   });
 }
-async function chCreateKey(replace){
-  const pair = await CHAT.newPair();
-  const d = await api('/admin/chat/key', { kid: pair.kid, jwk: pair.pub, replace: replace === true });
-  if (d.status !== 'success') return toast(d.message || 'Could not create the key', 'err');
-  chSaveKey({ kid: pair.kid, pub: pair.pub, priv: pair.priv });
-  toast('Chat key created. Download a backup now.', 'ok'); renderChat();
-}
-async function chPassKey(pass, salt){
-  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
-  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 250000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-}
-async function chBackupKey(){
-  const pass = prompt('Choose a password for the backup (you will need it to restore the key). At least 8 characters.');
-  if (pass == null) return;
-  if (pass.length < 8) return toast('Use at least 8 characters', 'err');
-  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await chPassKey(pass, salt), new TextEncoder().encode(JSON.stringify(_ch.key)));
-  const blob = new Blob([JSON.stringify({ v: 1, kid: _ch.key.kid, salt: CHAT.b64(salt), iv: CHAT.b64(iv), ct: CHAT.b64(ct) })], { type: 'application/json' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'smartai-chat-key-backup.json'; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast('Backup downloaded. Keep the file and the password safe.', 'ok');
-}
-async function chRestoreKey(){
-  const f = $('chRestoreFile').files[0], pass = $('chRestorePass').value;
-  if (!f || !pass) return toast('Choose the backup file and type its password', 'err');
-  try {
-    const j = JSON.parse(await f.text());
-    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: CHAT.unb64(j.iv) }, await chPassKey(pass, CHAT.unb64(j.salt)), CHAT.unb64(j.ct));
-    const k = JSON.parse(new TextDecoder().decode(pt));
-    if (!k || !k.kid || !k.pub || !k.priv) throw new Error('bad');
-    if (!_ch.serverKey || k.kid !== _ch.serverKey.kid) return toast('This backup is for an older key, not the one in use now.', 'err');
-    chSaveKey(k); toast('Key restored', 'ok'); renderChat();
-  } catch (_) { toast('Wrong password or not a backup file', 'err'); }
-}
-
 // ---- inbox ----
-async function chOpen(m, userId){   // m: {iv, ct, wraps, from, agentId, at}  ->  { text, img, voice }
-  try {
-    const pt = await CHAT.open(m, userId + '|' + m.from + '|' + m.agentId, _ch.key.kid, _ch.key.priv);
-    if (pt == null) return { text: null, img: null, voice: null };
-    const o = JSON.parse(pt) || {}, i = o.i && typeof o.i === 'object' && /^[0-9a-f]{24}$/.test(String(o.i.id || '')) ? { id: o.i.id, k: String(o.i.k || ''), v: String(o.i.v || ''), w: Number(o.i.w) || 0, h: Number(o.i.h) || 0, m: String(o.i.m || 'image/webp'), th: String(o.i.th || '') } : null;
-    const a = o.a && typeof o.a === 'object' && /^[0-9a-f]{24}$/.test(String(o.a.id || '')) ? { id: o.a.id, k: String(o.a.k || ''), v: String(o.a.v || ''), d: Math.min(300, Math.max(0, Number(o.a.d) || 0)), m: /^audio\/(webm|ogg|mp4|mpeg|aac)$/.test(String(o.a.m || '')) ? o.a.m : 'audio/webm' } : null;
-    return { text: String(o.t || ''), img: i, voice: a };
-  } catch (_) { return { text: null, img: null, voice: null }; }
-}
-async function chOpenText(m, userId){   // the one line shown in the inbox
-  const o = await chOpen(m, userId);
-  return o.text == null && !o.img && !o.voice ? null : (o.voice ? 'Voice note' : (o.img ? (o.text ? 'Photo: ' + o.text : 'Photo') : o.text));
-}
+// A message as the server sends it: { id, from, agentId, text, img, voice, at }. One from before chat had no keys (legacy) cannot be shown: text, img and voice are all empty.
+function chEntry(m){ return { id: m.id, from: m.from, agentId: m.agentId, at: m.at, text: typeof m.text === 'string' ? m.text : null, img: m.img || null, voice: m.voice || null }; }
+// The one line shown in the inbox for a message.
+function chPreviewOf(m){ return m.voice ? 'Voice note' : (m.img ? (m.text ? 'Photo: ' + m.text : 'Photo') : (typeof m.text === 'string' ? m.text : null)); }
 async function chRefreshList(){
-  if (_tab !== 'chat' || !chReady()) return;
+  if (_tab !== 'chat') return;
   const d = await api('/admin/chat/threads');
   if (d.status !== 'success' || _tab !== 'chat') return;
   _ch.agents = d.agents.map(a => Object.assign({}, _ch.agents.find(x => x.id === a.id) || {}, a));
-  for (const t of d.threads) {
-    const ck = t.userId + ':' + (t.last && t.last.at);
-    if (t.last && !_ch.cache.has(ck)) _ch.cache.set(ck, await chOpenText({ iv: t.last.iv, ct: t.last.ct, wraps: t.last.wraps, from: t.last.from, agentId: t.lastAgentId }, t.userId));
-    t.preview = t.last ? _ch.cache.get(ck) : '';
-  }
   _ch.threads = d.threads; chDrawThreads();
 }
 function chDrawThreads(){
@@ -3277,7 +3156,7 @@ function chDrawThreads(){
   box.innerHTML = list.length ? list.map(t => `<button type="button" class="ch-row${t.userId === _ch.sel ? ' sel' : ''}${t.unread ? ' unr' : ''}" data-ch-t="${esc(t.userId)}">
       <span class="ch-av md"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c.6-3.6 3.5-5.4 7.2-5.4s6.6 1.8 7.2 5.4"/></svg>${t.memberOnline ? '<i class="ch-dot"></i>' : ''}</span>
       <span class="ch-main"><b data-no-i18n>${esc(t.publicId ? 'ID ' + t.publicId : t.phone)} <small>${esc(t.phone)}</small></b>
-        <span class="ch-prev">${chTyping(t.userId) ? '<i class="ch-typing">typing…</i>' : (t.lastFrom === 'admin' ? 'You: ' : '') + (t.preview == null ? '<i>Message not readable with this key</i>' : esc(String(t.preview).slice(0, 80)))}</span>
+        <span class="ch-prev">${chTyping(t.userId) ? '<i class="ch-typing">typing…</i>' : (t.lastFrom === 'admin' ? 'You: ' : '') + (t.preview == null ? '<i>Earlier message</i>' : esc(String(t.preview).slice(0, 80)))}</span>
         <span class="ch-via">via ${esc(chAgentName(t.lastAgentId))}${t.restricted ? ' &middot; <b class="ch-rs">cannot send</b>' : ''}</span></span>
       <span class="ch-side"><span>${esc(chTime(t.lastAt))}</span>${t.unread ? `<b class="ch-n">${t.unread > 99 ? '99+' : t.unread}</b>` : ''}</span></button>`).join('')
     : `<p class="muted" style="margin:14px">${_ch.filter === 'unread' ? 'Nothing unread.' : 'No chats yet. When a member writes to one of your profiles it appears here.'}</p>`;
@@ -3293,14 +3172,14 @@ async function chSelect(userId){
   readP.then(() => { const t = _ch.threads.find(x => x.userId === userId); if (t) { t.unread = 0; chDrawThreads(); } chSummaryNow(); });
 }
 async function chPollThread(first){
-  const uid = _ch.sel; if (!uid || _tab !== 'chat' || !chReady()) return;
-  const d = await api('/admin/chat/thread?userId=' + encodeURIComponent(uid) + '&after=' + _ch.after + '&kid=' + _ch.key.kid);
+  const uid = _ch.sel; if (!uid || _tab !== 'chat') return;
+  const d = await api('/admin/chat/thread?userId=' + encodeURIComponent(uid) + '&after=' + _ch.after);
   if (uid !== _ch.sel || d.status !== 'success') { if (first && d.status !== 'success') $('chView').innerHTML = `<div class="panel-card"><p class="muted" style="margin:0">${esc(d.message || 'Could not open this chat')}</p></div>`; return; }
   let gotMember = false;
   for (const m of d.messages) {
     _ch.after = Math.max(_ch.after, m.at);
     if (_ch.msgs.some(x => x.id === m.id)) continue;
-    const o = await chOpen(m, uid); _ch.msgs.push({ id: m.id, from: m.from, agentId: m.agentId, at: m.at, text: o.text, img: o.img, voice: o.voice }); if (m.from === 'member') gotMember = true;
+    _ch.msgs.push(chEntry(m)); if (m.from === 'member') gotMember = true;
   }
   _ch.msgs.sort((a, b) => a.at - b.at);
   _ch.meta = d;
@@ -3378,7 +3257,7 @@ function chDrawThread(stick){
     const meta = esc(new Date(x.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })) + (me ? chTick(st) : '');
     // what the message IS, not whether its picture has been fetched yet
     const sig = (me ? 'a' : 'm') + '|' + x.agentId + '|' + (noRead ? 'L' : '') + '|' + (x.text || '') + '|' + (x.img ? x.img.id + x.img.w + 'x' + x.img.h + (x.img.th ? x.img.th.length : 0) : '') + '|' + (x.voice ? x.voice.id + ':' + x.voice.d : '') + '|' + (x.pending ? 'p' : '');
-    items.push({ key: 'm:' + x.id, sig, meta, html: `<div class="ch-m ${me ? 'me' : 'ag'}"><div class="ch-b${noRead ? ' lock' : ''}${x.img ? ' has-img' : ''}${x.voice ? ' has-vn' : ''}">${me ? `<small class="ch-as">${esc(chAgentName(x.agentId))}</small>` : `<small class="ch-as">to ${esc(chAgentName(x.agentId))}</small>`}${noRead ? 'Cannot be opened with this key' : (x.img ? chImgHtml(x) : '') + (x.voice ? chVoiceHtml(x) : '') + (x.text ? `<span class="ch-tx">${esc(x.text)}</span>` : '')}<span class="ch-t">${meta}</span></div></div>` });
+    items.push({ key: 'm:' + x.id, sig, meta, html: `<div class="ch-m ${me ? 'me' : 'ag'}"><div class="ch-b${noRead ? ' lock' : ''}${x.img ? ' has-img' : ''}${x.voice ? ' has-vn' : ''}">${me ? `<small class="ch-as">${esc(chAgentName(x.agentId))}</small>` : `<small class="ch-as">to ${esc(chAgentName(x.agentId))}</small>`}${noRead ? 'An earlier message (from before the chat was updated) can no longer be shown.' : (x.img ? chImgHtml(x) : '') + (x.voice ? chVoiceHtml(x) : '') + (x.text ? `<span class="ch-tx">${esc(x.text)}</span>` : '')}<span class="ch-t">${meta}</span></div></div>` });
   });
   chPatch($('chMsgs'), items);
   if (stick || near) $('chMsgs').scrollTop = $('chMsgs').scrollHeight;
@@ -3423,8 +3302,7 @@ async function chFetchImage(i){
   const p = (async () => {
     const r = await fetch(SERVER + '/admin/chat/blob/' + i.id, { headers: { Authorization: 'Bearer ' + SESSION_TOKEN }, cache: 'force-cache' });
     if (!r.ok) throw new Error('missing');
-    const plain = await CHAT.openBlob(new Uint8Array(await r.arrayBuffer()), i.k, i.v);
-    const url = URL.createObjectURL(new Blob([plain], { type: /^(image\/(webp|jpeg|png)|audio\/(webm|ogg|mp4|mpeg|aac))$/.test(i.m) ? i.m : 'image/webp' }));
+    const url = URL.createObjectURL(new Blob([await r.arrayBuffer()], { type: /^(image\/(webp|jpeg|png)|audio\/(webm|ogg|mp4|mpeg|aac))$/.test(i.m) ? i.m : 'image/webp' }));
     _ch.imgs[i.id] = { url }; return url;
   })();
   _ch.imgs[i.id] = { p };
@@ -3432,7 +3310,7 @@ async function chFetchImage(i){
   return p;
 }
 async function chLoadImages(){
-  const todo = _ch.msgs.filter(x => x.img && x.img.k && !x.pending && !(_ch.imgs[x.img.id] && _ch.imgs[x.img.id].url)).reverse();
+  const todo = _ch.msgs.filter(x => x.img && !x.pending && !(_ch.imgs[x.img.id] && _ch.imgs[x.img.id].url)).reverse();
   const worker = async () => {
     while (todo.length) {
       const x = todo.shift();
@@ -3455,7 +3333,6 @@ function chVnFmt(s){ s = Math.max(0, Math.round(Number(s) || 0)); return Math.fl
 async function chVnStart(){
   if (_vn.rec || _ch.busy || !_ch.sel || !_ch.meta) return;
   const m = _ch.meta;
-  if (!m.memberKeys || !m.memberKeys.length) return toast('This member has no chat key yet. They need to open the chat once.', 'err');
   const mime = chVnMime();
   if (!mime || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return toast('This browser cannot record a voice note.', 'err');
   let stream, rec;
@@ -3496,11 +3373,9 @@ async function chSendVoice(blob, secs, mt, uid, agentId){
   const tmp = { id: 'tmp' + Date.now(), from: 'admin', agentId, at: Date.now(), text: '', pending: true, voice: { id: 'tmp', d: secs, m: mt, local } };
   _ch.busy = true; _ch.msgs.push(tmp); chDrawThread(true);
   try {
-    const sealed = await CHAT.sealBlob(new Uint8Array(await blob.arrayBuffer())), up = await chUpload(uid, sealed.ct);
-    const info = { id: up.id, k: sealed.key, v: sealed.iv, d: secs, m: mt };
-    const env = await CHAT.seal(JSON.stringify({ t: '', a: info }), uid + '|admin|' + agentId, m.memberKeys.map(k => ({ kid: k.kid, jwk: k.jwk })).concat([{ kid: _ch.key.kid, jwk: _ch.key.pub }]));
-    env.userId = uid; env.agentId = agentId;
-    const d = await api('/admin/chat/send', env);
+    const up = await chUpload(uid, new Uint8Array(await blob.arrayBuffer()));
+    const info = { id: up.id, d: secs, m: mt };
+    const d = await api('/admin/chat/send', { userId: uid, agentId, text: '', voice: info });
     if (d.status !== 'success') throw new Error(d.message || 'Could not send');
     _ch.imgs[up.id] = { url: local };
     _ch.msgs = _ch.msgs.filter(x => x !== tmp);
@@ -3575,21 +3450,18 @@ async function chSendImage(file){
   const inp = $('chInput'), uid = _ch.sel, m = _ch.meta;
   if (!file || _ch.busy || !uid || !m) return;
   if (!/^image\//.test(file.type || '')) return toast('Choose a picture', 'err');
-  if (!m.memberKeys || !m.memberKeys.length) return toast('This member has no chat key yet. They need to open the chat once.', 'err');
   const agentId = $('chReplyAs').value || m.lastAgentId, caption = (inp.value || '').trim().slice(0, 300), local = URL.createObjectURL(file);
   const tmp = { id: 'tmp' + Date.now(), from: 'admin', agentId, at: Date.now(), text: caption, pending: true, img: { id: 'tmp', w: 0, h: 0, th: '', local } };
   _ch.busy = true; inp.value = ''; chGrowInput(); _ch.msgs.push(tmp); chDrawThread(true);
   try {
     const sh = await CHAT.shrink(file); tmp.img.w = sh.w; tmp.img.h = sh.h; tmp.img.th = sh.thumb; chDrawThread(false);
-    const sealed = await CHAT.sealBlob(sh.bytes), up = await chUpload(uid, sealed.ct);
-    const info = { id: up.id, k: sealed.key, v: sealed.iv, w: sh.w, h: sh.h, m: sh.mime, th: sh.thumb };
-    const env = await CHAT.seal(JSON.stringify({ t: caption, i: info }), uid + '|admin|' + agentId, m.memberKeys.map(k => ({ kid: k.kid, jwk: k.jwk })).concat([{ kid: _ch.key.kid, jwk: _ch.key.pub }]));
-    env.userId = uid; env.agentId = agentId;
-    const d = await api('/admin/chat/send', env);
+    const up = await chUpload(uid, sh.bytes);
+    const info = { id: up.id, w: sh.w, h: sh.h, m: sh.mime, th: sh.thumb };
+    const d = await api('/admin/chat/send', { userId: uid, agentId, text: caption, img: info });
     if (d.status !== 'success') throw new Error(d.message || 'Could not send');
     _ch.imgs[up.id] = { url: local };
     _ch.msgs = _ch.msgs.filter(x => x !== tmp);
-    if (!_ch.msgs.some(x => x.id === d.id)) _ch.msgs.push({ id: d.id, from: 'admin', agentId, at: d.at, text: caption, img: info });
+    if (!_ch.msgs.some(x => x.id === d.id)) _ch.msgs.push({ id: d.id, from: 'admin', agentId, at: d.at, text: caption, img: info, voice: null });
     _ch.after = Math.max(_ch.after, d.at - 1); _ch.sig = '';
     if (d.delivered) m.memberSeenAt = Math.max(m.memberSeenAt || 0, d.at);
     const t = _ch.threads.find(x => x.userId === uid); if (t) { t.lastFrom = 'admin'; t.lastAt = d.at; t.unread = 0; t.preview = caption ? 'Photo: ' + caption : 'Photo'; t.lastAgentId = agentId; }
@@ -3600,15 +3472,12 @@ async function chSendImage(file){
 async function chSendReply(){
   const inp = $('chInput'), text = inp.value.trim(), uid = _ch.sel, m = _ch.meta;
   if (!text || _ch.busy || !uid || !m) return;
-  if (!m.memberKeys || !m.memberKeys.length) return toast('This member has no chat key yet. They need to open the chat once.', 'err');
   _ch.busy = true; $('chSend').disabled = true;
   try {
     const agentId = $('chReplyAs').value || m.lastAgentId;
-    const env = await CHAT.seal(JSON.stringify({ t: text }), uid + '|admin|' + agentId, m.memberKeys.map(k => ({ kid: k.kid, jwk: k.jwk })).concat([{ kid: _ch.key.kid, jwk: _ch.key.pub }]));
-    env.userId = uid; env.agentId = agentId;
-    const d = await api('/admin/chat/send', env);
+    const d = await api('/admin/chat/send', { userId: uid, agentId, text });
     if (d.status !== 'success') throw new Error(d.message || 'Could not send');
-    inp.value = ''; _ch.typeSent = 0; if (!_ch.msgs.some(x => x.id === d.id)) _ch.msgs.push({ id: d.id, from: 'admin', agentId, at: d.at, text, img: null }); _ch.after = Math.max(_ch.after, d.at - 1); _ch.sig = '';
+    inp.value = ''; _ch.typeSent = 0; if (!_ch.msgs.some(x => x.id === d.id)) _ch.msgs.push({ id: d.id, from: 'admin', agentId, at: d.at, text, img: null, voice: null }); _ch.after = Math.max(_ch.after, d.at - 1); _ch.sig = '';
     if (d.delivered) m.memberSeenAt = Math.max(m.memberSeenAt || 0, d.at);   // the member's phone is open: two ticks at once
     const t = _ch.threads.find(x => x.userId === uid); if (t) { t.lastFrom = 'admin'; t.lastAt = d.at; t.unread = 0; t.preview = text; t.lastAgentId = agentId; }
     chDrawThread(true); chDrawThreads();
@@ -3645,16 +3514,16 @@ async function chApplyEvents(evs){
     if (e.kind === 'msg') {
       const m = e.msg, mine = m.from === 'admin', open = _tab === 'chat' && _ch.sel === e.uid && !!_ch.meta;
       if (!mine) { toast_ = true; if (!(open)) chSetBadge(_ch.unread + 1); }
-      if (_tab === 'chat' && chReady()) {
+      if (_tab === 'chat') {
         const t = _ch.threads.find(x => x.userId === e.uid);
         if (!t) listDirty = true;
         else {
-          t.lastAt = m.at; t.lastFrom = m.from; t.lastAgentId = m.agentId; t.last = { from: m.from, iv: m.iv, ct: m.ct, wraps: m.wraps, at: m.at };
-          t.preview = await chOpenText(m, e.uid); _ch.cache.set(e.uid + ':' + m.at, t.preview); if (!mine && !open) t.unread++;
+          t.lastAt = m.at; t.lastFrom = m.from; t.lastAgentId = m.agentId;
+          t.preview = chPreviewOf(m); if (!mine && !open) t.unread++;
           _ch.threads.sort((a, b) => b.lastAt - a.lastAt);
         }
         if (open && !_ch.msgs.some(x => x.id === m.id)) {
-          const o = await chOpen(m, e.uid); _ch.msgs.push({ id: m.id, from: m.from, agentId: m.agentId, at: m.at, text: o.text, img: o.img, voice: o.voice }); _ch.msgs.sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : 1));
+          _ch.msgs.push(chEntry(m)); _ch.msgs.sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : 1));
           _ch.after = Math.max(_ch.after, m.at); redraw = stick = true; if (!mine) readNow = e.uid;
           if (mine && e.delivered) _ch.meta.memberSeenAt = Math.max(_ch.meta.memberSeenAt || 0, m.at);
         }
