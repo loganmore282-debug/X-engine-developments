@@ -333,6 +333,10 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   // typing text swaps the mic for the send button
   await mp.fill('#chatInput', 'hello'); ok(await mp.evaluate(() => getComputedStyle(document.getElementById('chatSend')).display !== 'none' && getComputedStyle(document.getElementById('chatMic')).display === 'none'), 'member: with text typed the send button shows instead of the mic');
   await mp.fill('#chatInput', ''); ok(await mp.evaluate(() => getComputedStyle(document.getElementById('chatMic')).display !== 'none' && getComputedStyle(document.getElementById('chatSend')).display === 'none'), 'member: with nothing typed the mic shows');
+  // the microphone must not be blocked by the page's own security headers (it was: "microphone=()" made the phone refuse without even asking)
+  const hh = await fetch(base + '/health'); ok(/microphone=\(self\)/.test(hh.headers.get('permissions-policy') || ''), 'server header lets this app use the microphone (and only this app)', { h: hh.headers.get('permissions-policy') });
+  const ng = require('child_process').execFileSync('node', [path.join(__dirname, 'deploy/make-nginx.js'), 'dev', 'ADMINPATH'], { encoding: 'utf8' });
+  ok(/Permissions-Policy "[^"]*microphone=\(self\)/.test(ng) && !/microphone=\(\)/.test(ng), 'nginx header lets this app use the microphone too');
   // -- the backup of the key
   await ap.click('[data-tab="chat"]'); await sleep(900);
   ok(await ap.evaluate(() => !!document.getElementById('chBackup')), 'admin: the key backup button is there');

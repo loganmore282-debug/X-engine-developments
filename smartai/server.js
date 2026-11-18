@@ -402,7 +402,7 @@ app.use((_req, res, next) => {
     // anyone browses), but a few endpoints DO return HTML/images, and
     // matching headers across all three origins means there is one posture
     // to reason about instead of three.
-    'Permissions-Policy': 'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()',
+    'Permissions-Policy': 'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(self), payment=(), usb=()',
   });
   next();
 });

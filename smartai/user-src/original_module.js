@@ -1288,7 +1288,7 @@ async function chatVnStart(){
   if (!mime || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { toast('This phone cannot record a voice note.'); return; }
   var stream, rec;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
-  catch (e) { toast('Allow the microphone to send a voice note.'); return; }
+  catch (e) { var nm = e && e.name; toast(nm === 'NotFoundError' ? 'No microphone was found on this phone.' : (nm === 'NotReadableError' ? 'The microphone is being used by another app.' : 'Allow the microphone for this app (phone settings > Permissions) to send a voice note.')); return; }
   if (_vn.rec || !_cc.agent) { stream.getTracks().forEach(function(t){ t.stop(); }); return; }
   try { rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 24000 }); }
   catch (e) { stream.getTracks().forEach(function(t){ t.stop(); }); toast('This phone cannot record a voice note.'); return; }

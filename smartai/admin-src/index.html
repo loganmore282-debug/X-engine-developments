@@ -3462,7 +3462,7 @@ async function chVnStart(){
   if (!mime || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return toast('This browser cannot record a voice note.', 'err');
   let stream, rec;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
-  catch (_) { return toast('Allow the microphone to send a voice note.', 'err'); }
+  catch (e) { const nm = e && e.name; return toast(nm === 'NotFoundError' ? 'No microphone was found.' : (nm === 'NotReadableError' ? 'The microphone is being used by another app.' : 'Allow the microphone for this page to send a voice note.'), 'err'); }
   if (_vn.rec || !_ch.sel) { stream.getTracks().forEach(t => t.stop()); return; }
   try { rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 24000 }); }
   catch (_) { stream.getTracks().forEach(t => t.stop()); return toast('This browser cannot record a voice note.', 'err'); }
