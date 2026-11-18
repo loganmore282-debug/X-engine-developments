@@ -940,12 +940,12 @@ async function chatSummary(){
   return r;
 }
 function chatSupportOpen(){
-  try { Object.keys(localStorage).forEach(function(k){ if (/^sa_chat_|^sa_chatc_/.test(k)) localStorage.removeItem(k); }); } catch (e) {}   // the old key pair and locked copies of the time when chat had keys
+  try { Object.keys(localStorage).forEach(function(k){ if (/^sa_chat_|^sa_chatc_|^sa_chatd_/.test(k)) localStorage.removeItem(k); }); } catch (e) {}   // the old key pair and locked copies of the time when chat had keys
   chatLoadConfig(true).then(chatSummary);
   chatLoop();
 }
 // ---- this phone's own copy of the conversation (so a chat opens at once; the server is asked only for what is newer) ----
-function chatCacheName(ag){ return 'sa_chatd_' + STATE.uid + '_' + ag; }
+function chatCacheName(ag){ return 'sa_chate_' + STATE.uid + '_' + ag; }
 function chatCacheRead(ag){
   try { var c = JSON.parse(localStorage.getItem(chatCacheName(ag)) || 'null'); return c && Array.isArray(c.m) ? c : { m: [], rd: 0, sn: 0 }; } catch (e) { return { m: [], rd: 0, sn: 0 }; }
 }
@@ -1009,7 +1009,7 @@ function chatRender(stick){
     var me = m.from === 'member', st = m.pending ? 'pend' : (m.at <= _cc.adminReadAt ? 'read' : (m.at <= _cc.adminSeenAt ? 'dlv' : 'sent'));
     var hm = new Date(m.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), meta = hm + (me ? chatTick(st) : '');
     var lock = m.text == null && !m.img && !m.voice;
-    var inner = lock ? 'An earlier message (from before the chat was updated) can no longer be shown.' : ((m.img ? chatImgHtml(m) : '') + (m.voice ? chatVoiceHtml(m) : '') + (m.text ? '<div class="cm-tx">' + esc(m.text) + '</div>' : ''));
+    var inner = lock ? 'This message cannot be shown.' : ((m.img ? chatImgHtml(m) : '') + (m.voice ? chatVoiceHtml(m) : '') + (m.text ? '<div class="cm-tx">' + esc(m.text) + '</div>' : ''));
     // what the message IS (not what has been fetched for it): a picture arriving does not change this, so its element stays
     var sig = (me ? 'm' : 'a') + '|' + (lock ? 'L' : '') + '|' + (m.text || '') + '|' + (m.img ? m.img.id + m.img.w + 'x' + m.img.h + (m.img.th ? m.img.th.length : 0) : '') + '|' + (m.voice ? m.voice.id + ':' + m.voice.d : '') + '|' + (m.pending ? 'p' : '');
     items.push({ key: 'm:' + m.id, sig: sig, meta: meta, html: '<div class="cm ' + (me ? 'me' : 'ag') + '"><div class="cm-b' + (lock ? ' cm-lock' : '') + (m.img ? ' has-img' : '') + (m.voice ? ' has-vn' : '') + '">' + inner + '<span class="cm-t">' + meta + '</span></div></div>' });
@@ -1050,7 +1050,7 @@ function chatTypingPing(){
 function chatIdle(){ if (_cc.needPoll) { _cc.needPoll = false; chatPoll(); } }   // a message written on another phone while this one was sending
 function chatEntry(m){ return { id: m.id, from: m.from, text: typeof m.text === 'string' ? m.text : null, img: m.img || null, voice: m.voice || null, legacy: !!m.legacy, at: m.at }; }
 function chatAdd(m){
-  if (_cc.msgs.some(function(x){ return x.id === m.id; })) return false;
+  if (m.legacy || _cc.msgs.some(function(x){ return x.id === m.id; })) return false;   // a message from the time of the keys is never shown
   _cc.msgs.push(chatEntry(m));
   return true;
 }
@@ -1323,7 +1323,7 @@ async function chatWarm(agentId){
     var r = await api('/chat/history?agentId=' + encodeURIComponent(agentId) + '&after=' + after, null, 'GET', false);
     if (!r || r.stale || r.status !== 'success' || !r.messages.length) return;
     var have = {}; c.m.forEach(function(x){ have[x.id] = 1; });
-    r.messages.forEach(function(m){ if (!have[m.id]) c.m.push(chatEntry(m)); });
+    r.messages.forEach(function(m){ if (!have[m.id] && !m.legacy) c.m.push(chatEntry(m)); });
     c.m.sort(function(a, b){ return a.at - b.at; }); c.m = c.m.slice(-60); c.rd = Math.max(c.rd || 0, r.adminReadAt); c.sn = Math.max(c.sn || 0, r.adminSeenAt);
     chatCacheWrite(agentId, c);
   } catch (e) {}
@@ -1339,7 +1339,7 @@ async function chatOpen(agentId){
   try {
     var c = chatCacheRead(a.id);
     if (_cc.agent === a && c.m.length) {
-      c.m.forEach(function(m){ _cc.msgs.push(chatEntry(m)); _cc.after = Math.max(_cc.after, m.at); });
+      c.m.forEach(function(m){ if (m.legacy) return; _cc.msgs.push(chatEntry(m)); _cc.after = Math.max(_cc.after, m.at); });
       _cc.adminReadAt = c.rd || 0; _cc.adminSeenAt = c.sn || 0;
       if (_cc.agent === a) chatRender(true);
     }

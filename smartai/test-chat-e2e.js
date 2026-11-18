@@ -13,6 +13,17 @@ process.env.CHAT_WAIT_MS = '1200'; process.env.PORT = String(BACK); process.env.
 process.env.POTATO_SECRETS_DIR = fs.mkdtempSync(path.join(require('os').tmpdir(), 'sa-chat-'));
 const realLog = console.log, serverErrors = [];
 console.log = () => {}; console.warn = () => {}; console.error = (...a) => { serverErrors.push(a.map(x => (x && x.message) || String(x)).join(' ').slice(0, 300)); };
+// what the time of the keys left behind: locked messages and files, stored public keys, a conversation of nothing else, and one that also holds a new message
+const seed = (n, id, d) => { (fm.__stores[n] = fm.__stores[n] || new Map()).set(id, Object.assign({ _id: id }, d)); };
+seed('chatMessages', 'lk1', { threadId: 'lg1', agentId: 'x', from: 'member', iv: 'AAAAAAAAAAAAAAAA', ct: 'A'.repeat(40), wraps: [], at: 1000 });
+seed('chatMessages', 'lk2', { threadId: 'lg2', agentId: 'x', from: 'member', iv: 'AAAAAAAAAAAAAAAA', ct: 'A'.repeat(40), wraps: [], at: 1000 });
+seed('chatMessages', 'nw1', { threadId: 'lg2', agentId: 'x', from: 'admin', text: 'a new plain reply', img: null, voice: null, at: 2000 });
+seed('chatThreads', 'lg1', { userId: 'lg1', phone: '+256700000001', lastAt: 1000, lastFrom: 'member', lastAgentId: 'x', unreadAdmin: 1, memberReadMap: {} });
+seed('chatThreads', 'lg2', { userId: 'lg2', phone: '+256700000002', lastAt: 1000, lastFrom: 'member', lastAgentId: 'x', unreadAdmin: 0, memberReadMap: {} });
+seed('chatBlobs', 'a'.repeat(24), { uid: 'lg1', by: 'member', size: 40, data: 'AAAA', at: 1000 });
+seed('chatBlobs', 'b'.repeat(24), { uid: 'lg2', by: 'member', size: 40, data: 'AAAA', plain: true, at: 1000 });
+seed('chatMembers', 'lg1', { keys: [{ kid: 'deadbeefdeadbeef', jwk: {}, at: 1 }] });
+seed('meta', 'chatKey', { jwk: {}, at: 1 });
 require(path.join(__dirname, 'server.js'));
 let pass = 0, fail = 0;
 const ok = (c, m, x) => { if (c) { pass++; realLog('  ok   - ' + m); } else { fail++; realLog('  FAIL - ' + m + (x ? ' ' + JSON.stringify(x).slice(0, 300) : '')); } };
@@ -37,6 +48,14 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
 (async () => {
   for (let i = 0; i < 60; i++) { try { const hh = await fetch(base + '/health'); if (hh.ok) break; } catch (_) {} await sleep(250); }
   ok(memberBlock.length > 500 && memberBlock === adminBlock, 'the member app and the admin panel carry the very same picture-shrinking code');
+  // ---- the start-up clean-up of everything left from the time of the keys
+  for (let i = 0; i < 50 && !fm.__stores.meta.get('chatLockedPurged'); i++) await sleep(100);
+  ok(!fm.__stores.chatMessages.has('lk1') && !fm.__stores.chatMessages.has('lk2') && fm.__stores.chatMessages.has('nw1'), 'start-up: the locked messages are deleted, a new plain one is kept');
+  ok(!fm.__stores.chatThreads.has('lg1'), 'start-up: a conversation that held nothing else is deleted (it leaves the admin inbox)');
+  ok(fm.__stores.chatThreads.has('lg2') && fm.__stores.chatThreads.get('lg2').preview === 'a new plain reply' && fm.__stores.chatThreads.get('lg2').lastFrom === 'admin', 'start-up: one that also has a new message stays, showing that message');
+  ok(!fm.__stores.chatBlobs.has('a'.repeat(24)) && fm.__stores.chatBlobs.has('b'.repeat(24)), 'start-up: the locked file is deleted, a plain file is kept');
+  ok(!fm.__stores.chatMembers.has('lg1') && !fm.__stores.meta.has('chatKey'), 'start-up: the stored public keys are deleted');
+  fm.__stores.chatThreads.delete('lg2'); fm.__stores.chatMessages.delete('nw1'); fm.__stores.chatBlobs.delete('b'.repeat(24));   // (out of the way of the counts below)
   // ---- profiles (no keys anywhere)
   let r = await J('GET', '/public/chat-config'); ok(r.s === 200 && r.j.agents.length === 0 && !('adminKey' in r.j) && r.j.online === false, 'at first: no profiles, nobody online, and no key in the answer', r.j);
   r = await J('GET', '/admin/chat/key', null, null, true); ok(r.s === 404, 'there is no chat key route for the panel any more');
@@ -149,7 +168,7 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   const dl = await fetch(base + '/chat/blob/' + u1.j.id, { headers: { authorization: 'Bearer ' + tok } }); const dlb = new Uint8Array(await dl.arrayBuffer());
   ok(dl.status === 200 && /immutable/.test(dl.headers.get('cache-control') || '') && dlb.length === sealedPic.ct.length, 'it comes back byte for byte, told to be kept by the phone for good (never downloaded twice)');
   ok(Buffer.compare(Buffer.from(dlb), Buffer.from(raw)) === 0, 'and it is the very same picture, nothing to unlock');
-  ok(Buffer.from([...fm.__stores.chatBlobs.values()][0].data, 'base64').compare(Buffer.from(raw)) === 0, 'the server keeps the file as it came');
+  ok(Buffer.from(fm.__stores.chatBlobs.get(u1.j.id).data, 'base64').compare(Buffer.from(raw)) === 0 && fm.__stores.chatBlobs.get(u1.j.id).plain === true, 'the server keeps the file as it came (stamped plain)');
   const dlA = await fetch(base + '/admin/chat/blob/' + u1.j.id, { headers: { authorization: 'Bearer ' + AK } }); ok(dlA.status === 200, 'the admin panel can fetch it');
   const other3 = await J('POST', '/auth/signup', { phone: '0778881111', password: 'secret12' }); await J('POST', '/register', { pin: '123456', referralCode: '' }, other3.j.token);
   const dlO = await fetch(base + '/chat/blob/' + u1.j.id, { headers: { authorization: 'Bearer ' + other3.j.token } }); ok(dlO.status === 404, 'another member cannot fetch it (404)');
@@ -372,12 +391,12 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   ok(await until(mp, () => /written from my second phone/.test(document.getElementById('chatList').textContent), null, 8000), 'first phone: shows what was written on the second phone');
   ok(await until(ap, () => /written from my second phone/.test(document.getElementById('chMsgs').textContent), null, 8000), 'admin: gets it too');
   ok(await until(ap, () => !!document.querySelector('#chMsgs .ch-img img') && document.querySelector('#chMsgs .ch-img img').naturalWidth > 0, null, 5000) && await ap.evaluate(() => !document.getElementById('chBackup')), 'admin: pictures still show and there is no key backup button');
-  // an earlier (locked) message from before this change is listed as such, never as a blank bubble
-  const legacyUser = Object.values(Object.fromEntries(fm.__stores.users)).find(u => u.phone && u.phone.endsWith(phone2.slice(1)));
+  // a locked message that somehow still exists is never shown at all (not even as a placeholder), on either side
   const legacyUid = [...fm.__stores.users.entries()].find(([k, u]) => u.phone && u.phone.endsWith(phone2.slice(1)))[0];
   fm.__stores.chatMessages.set('old-locked', { _id: 'old-locked', threadId: legacyUid, agentId: [...fm.__stores.chatAgents.keys()][0], from: 'admin', iv: 'AAAAAAAAAAAAAAAA', ct: 'A'.repeat(40), wraps: [], at: 1000 });
-  await mp.evaluate(() => { _cc.after = 0; _cc.msgs = []; _cc.sig = ''; }); await mp.evaluate(() => chatPoll());
-  ok(await until(mp, () => /can no longer be shown/.test(document.getElementById('chatList').textContent), null, 6000), 'member: a message from before the update shows as "can no longer be shown", not as a blank bubble');
+  const shownBefore = await mp.evaluate(() => document.querySelectorAll('#chatList .cm').length);
+  await mp.evaluate(() => { _cc.after = 0; _cc.msgs = []; _cc.sig = ''; }); await mp.evaluate(() => chatPoll()); await sleep(400);
+  ok(await mp.evaluate(n => document.querySelectorAll('#chatList .cm').length === n && !/cannot be shown|no longer be shown/.test(document.getElementById('chatList').textContent), shownBefore), 'member: a locked message is not shown, nothing says "cannot be shown"');
   // used-ID silence is covered in test-manual-pay.js; errors:
   ok(errs.length === 0, 'no script error in either app' + (errs.length ? ': ' + errs.join(' | ') : ''));
   ok(serverErrors.length === 0, 'the server logged no error' + (serverErrors.length ? ': ' + serverErrors.slice(0, 3).join(' | ') : ''));

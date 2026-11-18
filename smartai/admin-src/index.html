@@ -3179,6 +3179,7 @@ async function chPollThread(first){
   for (const m of d.messages) {
     _ch.after = Math.max(_ch.after, m.at);
     if (_ch.msgs.some(x => x.id === m.id)) continue;
+    if (m.legacy) continue;   // a message from the time of the keys is never shown
     _ch.msgs.push(chEntry(m)); if (m.from === 'member') gotMember = true;
   }
   _ch.msgs.sort((a, b) => a.at - b.at);
@@ -3257,7 +3258,7 @@ function chDrawThread(stick){
     const meta = esc(new Date(x.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })) + (me ? chTick(st) : '');
     // what the message IS, not whether its picture has been fetched yet
     const sig = (me ? 'a' : 'm') + '|' + x.agentId + '|' + (noRead ? 'L' : '') + '|' + (x.text || '') + '|' + (x.img ? x.img.id + x.img.w + 'x' + x.img.h + (x.img.th ? x.img.th.length : 0) : '') + '|' + (x.voice ? x.voice.id + ':' + x.voice.d : '') + '|' + (x.pending ? 'p' : '');
-    items.push({ key: 'm:' + x.id, sig, meta, html: `<div class="ch-m ${me ? 'me' : 'ag'}"><div class="ch-b${noRead ? ' lock' : ''}${x.img ? ' has-img' : ''}${x.voice ? ' has-vn' : ''}">${me ? `<small class="ch-as">${esc(chAgentName(x.agentId))}</small>` : `<small class="ch-as">to ${esc(chAgentName(x.agentId))}</small>`}${noRead ? 'An earlier message (from before the chat was updated) can no longer be shown.' : (x.img ? chImgHtml(x) : '') + (x.voice ? chVoiceHtml(x) : '') + (x.text ? `<span class="ch-tx">${esc(x.text)}</span>` : '')}<span class="ch-t">${meta}</span></div></div>` });
+    items.push({ key: 'm:' + x.id, sig, meta, html: `<div class="ch-m ${me ? 'me' : 'ag'}"><div class="ch-b${noRead ? ' lock' : ''}${x.img ? ' has-img' : ''}${x.voice ? ' has-vn' : ''}">${me ? `<small class="ch-as">${esc(chAgentName(x.agentId))}</small>` : `<small class="ch-as">to ${esc(chAgentName(x.agentId))}</small>`}${noRead ? 'This message cannot be shown.' : (x.img ? chImgHtml(x) : '') + (x.voice ? chVoiceHtml(x) : '') + (x.text ? `<span class="ch-tx">${esc(x.text)}</span>` : '')}<span class="ch-t">${meta}</span></div></div>` });
   });
   chPatch($('chMsgs'), items);
   if (stick || near) $('chMsgs').scrollTop = $('chMsgs').scrollHeight;
@@ -3522,7 +3523,7 @@ async function chApplyEvents(evs){
           t.preview = chPreviewOf(m); if (!mine && !open) t.unread++;
           _ch.threads.sort((a, b) => b.lastAt - a.lastAt);
         }
-        if (open && !_ch.msgs.some(x => x.id === m.id)) {
+        if (open && !m.legacy && !_ch.msgs.some(x => x.id === m.id)) {
           _ch.msgs.push(chEntry(m)); _ch.msgs.sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : 1));
           _ch.after = Math.max(_ch.after, m.at); redraw = stick = true; if (!mine) readNow = e.uid;
           if (mine && e.delivered) _ch.meta.memberSeenAt = Math.max(_ch.meta.memberSeenAt || 0, m.at);

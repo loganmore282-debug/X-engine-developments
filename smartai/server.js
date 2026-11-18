@@ -7195,7 +7195,7 @@ async function chatStoreBlob(req, res, owner, by) {
   log.push(now); _chatBlobLog.set(by + ':' + owner, log);
   if (_chatBlobLog.size > 5000) for (const [k, v] of _chatBlobLog) if (!v.length || now - v[v.length - 1] > 3600000) _chatBlobLog.delete(k);
   const id = crypto.randomBytes(12).toString('hex');
-  await db.collection('chatBlobs').doc(id).set({ uid: owner, by, size: buf.length, data: buf.toString('base64'), at: now });
+  await db.collection('chatBlobs').doc(id).set({ uid: owner, by, size: buf.length, data: buf.toString('base64'), plain: true, at: now });
   res.json({ status: 'success', id, size: buf.length });
 }
 async function chatSendBlob(res, id, owner) {
@@ -11626,6 +11626,34 @@ app.post('/admin/payout-numbers/dedupe', async (req, res) => {
 });
 // One-time, automatic: every member whose referral code is not in the new 6-character format is given a new one; the old code is kept as legacyReferralCodeLower so it
 // still finds them. Safe to run again (a member already in the new format is skipped; the marker is written only when everyone is done).
+// One time, at start-up: everything left over from the time chat had keys is deleted (owner: "delete them, even saying so from the admin panel"): the locked messages (they
+// have no readable text, picture or voice note), the locked files (no `plain` stamp), the stored public keys, and the conversations that held nothing else. A conversation
+// that also has new messages stays, with its newest one shown as the preview.
+async function purgeLockedChatOnce() {
+  const marker = db.collection('meta').doc('chatLockedPurged');
+  if ((await marker.get()).exists) return 0;
+  const snap = await db.collection('chatMessages').limit(200000).get();
+  const touched = new Set(); let n = 0;
+  for (const d of snap.docs) {
+    const v = d.data();
+    if (typeof v.text === 'string' || v.img || v.voice) continue;
+    touched.add(v.threadId); await d.ref.delete(); n++;
+  }
+  const blobs = await db.collection('chatBlobs').limit(200000).get();
+  for (const d of blobs.docs) if (d.data().plain !== true) await d.ref.delete();
+  const keys = await db.collection('chatMembers').limit(200000).get();
+  for (const d of keys.docs) await d.ref.delete();
+  await db.collection('meta').doc('chatKey').delete().catch(() => {});
+  for (const uid of touched) {
+    if (!uid) continue;
+    const last = await db.collection('chatMessages').where('threadId', '==', uid).orderBy('at', 'desc').limit(1).get();
+    const tRef = db.collection('chatThreads').doc(uid);
+    if (last.empty) await tRef.delete().catch(() => {});
+    else { const v = last.docs[0].data(); await tRef.update({ lastAt: v.at, lastFrom: v.from, lastAgentId: v.agentId, preview: chatPreview(v) }).catch(() => {}); }
+  }
+  await marker.set({ at: new Date(), messages: n });
+  return n;
+}
 async function migrateReferralCodesOnce() {
   const marker = db.collection('meta').doc('referralCode6');
   if ((await marker.get()).exists) return 0;
@@ -11999,6 +12027,7 @@ connectMongo(MONGODB_URI)
     // expected to be a real problem at Snow's current scale.
     startRewardRepair();
     migrateReferralCodesOnce().then(n => { if (n) console.log(`Gave ${n} members a 6-character referral code`); }).catch(e => console.error('Referral code migration:', e.message));
+    purgeLockedChatOnce().then(n => { if (n) console.log(`Deleted ${n} locked chat messages from the time chat had keys`); }).catch(e => console.error('Locked chat purge:', e.message));
     migrateDebitsToToppedUpOnce().then(n => { if (n) console.log(`Took ${n} earlier debits off the members' Topped up figures`); }).catch(e => console.error('Debit migration:', e.message));
     migratePayoutsTo24hOnce().then(n => { if (n) console.log(`Moved ${n} running investments to the 24-hour payout schedule`); }).catch(e => console.error('24-hour schedule migration:', e.message)).then(() => backfillNextPayoutAt()).then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); });
     dedupeSharedPayoutNumbers('start-up').catch(e => console.error('Shared payout number clean-up:', e.message));
