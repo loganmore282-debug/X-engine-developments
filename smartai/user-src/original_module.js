@@ -1041,18 +1041,46 @@ function chatImgHtml(m){
   var w = Math.max(1, Number(i.w) || 4), h = Math.max(1, Number(i.h) || 3), th = CHAT_THUMB.test(i.th || '') ? i.th : '';
   return '<div class="cm-img' + (url ? ' ready' : '') + '" style="aspect-ratio:' + w + ' / ' + h + (th ? ';background-image:url(' + th + ')' : '') + '" data-bid="' + esc(i.id || '') + '">' + (url ? '<img src="' + url + '" alt="">' : '') + (m.pending ? '<i class="cm-spin"></i>' : '') + '</div>';
 }
+// The list is UPDATED, not rebuilt: a message that has not changed keeps its very element (so a picture never blinks, and nothing scrolls by itself); only a changed
+// tick / time is rewritten inside it, and only a message whose own content changed is replaced. Day labels and the typing dots are items of the same list.
+function chatPatch(box, items){
+  var old = {}, c = box.firstChild, n;
+  while (c) { old[c.getAttribute('data-k')] = c; c = c.nextSibling; }
+  var prev = null;
+  items.forEach(function(it){
+    n = old[it.key]; delete old[it.key];
+    if (n && n.getAttribute('data-s') !== it.sig) { var fresh = chatNode(it); box.replaceChild(fresh, n); n = fresh; }
+    else if (!n) n = chatNode(it);
+    else {
+      var tm = n.querySelector('.cm-t');
+      if (tm && it.meta != null && n.getAttribute('data-m') !== it.meta) { tm.innerHTML = it.meta; n.setAttribute('data-m', it.meta); }
+    }
+    var want = prev ? prev.nextSibling : box.firstChild;
+    if (n !== want) box.insertBefore(n, want);
+    prev = n;
+  });
+  for (var k in old) if (old.hasOwnProperty(k) && old[k].parentNode === box) box.removeChild(old[k]);
+}
+function chatNode(it){
+  var w = document.createElement('div'); w.innerHTML = it.html;
+  var n = w.firstChild; n.setAttribute('data-k', it.key); n.setAttribute('data-s', it.sig); if (it.meta != null) n.setAttribute('data-m', it.meta);
+  return n;
+}
 function chatRender(stick){
   var box = $('chatList'), body = $('chatBody'); if (!box) return;
-  var near = body.scrollHeight - body.scrollTop - body.clientHeight < 90, html = '', last = '';
+  var near = body.scrollHeight - body.scrollTop - body.clientHeight < 90, items = [], last = '';
   _cc.msgs.forEach(function(m){
-    var day = chatDay(m.at); if (day !== last) { html += '<div class="cm-day"><span>' + esc(day) + '</span></div>'; last = day; }
+    var day = chatDay(m.at); if (day !== last) { items.push({ key: 'd:' + day, sig: day, html: '<div class="cm-day"><span>' + esc(day) + '</span></div>' }); last = day; }
     var me = m.from === 'member', st = m.pending ? 'pend' : (m.at <= _cc.adminReadAt ? 'read' : (m.at <= _cc.adminSeenAt ? 'dlv' : 'sent'));
-    var hm = new Date(m.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    var inner = m.text == null && !m.img ? 'This message cannot be opened on this phone.' : ((m.img ? chatImgHtml(m) : '') + (m.text ? '<div class="cm-tx">' + esc(m.text) + '</div>' : ''));
-    html += '<div class="cm ' + (me ? 'me' : 'ag') + '"><div class="cm-b' + (m.text == null && !m.img ? ' cm-lock' : '') + (m.img ? ' has-img' : '') + '">' + inner + '<span class="cm-t">' + hm + (me ? chatTick(st) : '') + '</span></div></div>';
+    var hm = new Date(m.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), meta = hm + (me ? chatTick(st) : '');
+    var lock = m.text == null && !m.img && !m.voice;
+    var inner = lock ? 'This message cannot be opened on this phone.' : ((m.img ? chatImgHtml(m) : '') + (m.voice ? chatVoiceHtml(m) : '') + (m.text ? '<div class="cm-tx">' + esc(m.text) + '</div>' : ''));
+    // what the message IS (not what has been fetched for it): a picture arriving does not change this, so its element stays
+    var sig = (me ? 'm' : 'a') + '|' + (lock ? 'L' : '') + '|' + (m.text || '') + '|' + (m.img ? m.img.id + m.img.w + 'x' + m.img.h + (m.img.th ? m.img.th.length : 0) : '') + '|' + (m.voice ? m.voice.id + ':' + m.voice.d : '') + '|' + (m.pending ? 'p' : '');
+    items.push({ key: 'm:' + m.id, sig: sig, meta: meta, html: '<div class="cm ' + (me ? 'me' : 'ag') + '"><div class="cm-b' + (lock ? ' cm-lock' : '') + (m.img ? ' has-img' : '') + (m.voice ? ' has-vn' : '') + '">' + inner + '<span class="cm-t">' + meta + '</span></div></div>' });
   });
-  if (_cc.typing) html += '<div class="cm ag"><div class="cm-b cm-typ" aria-label="typing"><i></i><i></i><i></i></div></div>';
-  box.innerHTML = html;
+  if (_cc.typing) items.push({ key: 'typing', sig: 't', html: '<div class="cm ag"><div class="cm-b cm-typ" aria-label="typing"><i></i><i></i><i></i></div></div>' });
+  chatPatch(box, items);
   if (stick || near) body.scrollTop = body.scrollHeight;
   chatLoadImages();
 }
@@ -1078,16 +1106,17 @@ async function chatOpenMsg(m){
   var k = await chatKey();
   try {
     var pt = await CHAT.open(m, STATE.uid + '|' + m.from + '|' + m.agentId, k.kid, k.priv);
-    if (pt == null) return { text: null, img: null };
+    if (pt == null) return { text: null, img: null, voice: null };
     var o = JSON.parse(pt) || {}, i = o.i && typeof o.i === 'object' && /^[0-9a-f]{24}$/.test(String(o.i.id || '')) ? { id: o.i.id, k: String(o.i.k || ''), v: String(o.i.v || ''), w: Number(o.i.w) || 0, h: Number(o.i.h) || 0, m: String(o.i.m || 'image/webp'), th: String(o.i.th || '') } : null;
-    return { text: String(o.t || ''), img: i };
-  } catch (e) { return { text: null, img: null }; }
+    var a = o.a && typeof o.a === 'object' && /^[0-9a-f]{24}$/.test(String(o.a.id || '')) ? { id: o.a.id, k: String(o.a.k || ''), v: String(o.a.v || ''), d: Math.min(300, Math.max(0, Number(o.a.d) || 0)), m: /^audio\/(webm|ogg|mp4|mpeg|aac)$/.test(String(o.a.m || '')) ? o.a.m : 'audio/webm' } : null;
+    return { text: String(o.t || ''), img: i, voice: a };
+  } catch (e) { return { text: null, img: null, voice: null }; }
 }
 function chatOwn(m, k){ return { id: m.id, from: m.from, agentId: m.agentId, at: m.at, iv: m.iv, ct: m.ct, wraps: (m.wraps || []).filter(function(w){ return w.kid === k.kid; }) }; }
 async function chatAdd(m, k){
   if (_cc.msgs.some(function(x){ return x.id === m.id; })) return false;
   var o = await chatOpenMsg(m);
-  _cc.msgs.push({ id: m.id, from: m.from, text: o.text, img: o.img, at: m.at, raw: chatOwn(m, k) });
+  _cc.msgs.push({ id: m.id, from: m.from, text: o.text, img: o.img, voice: o.voice, at: m.at, raw: chatOwn(m, k) });
   return true;
 }
 // Loads the conversation (everything on opening it; afterwards only what is newer than the last message seen).
@@ -1102,7 +1131,7 @@ async function chatPoll(){
     var m = r.messages[i];
     _cc.after = Math.max(_cc.after, m.at);
     if (!opened[i] || _cc.msgs.some(function(x){ return x.id === m.id; })) continue;
-    _cc.msgs.push({ id: m.id, from: m.from, text: opened[i].text, img: opened[i].img, at: m.at, raw: chatOwn(m, k) }); fresh = true; if (m.from === 'admin') gotAdmin = true;
+    _cc.msgs.push({ id: m.id, from: m.from, text: opened[i].text, img: opened[i].img, voice: opened[i].voice, at: m.at, raw: chatOwn(m, k) }); fresh = true; if (m.from === 'admin') gotAdmin = true;
   }
   _cc.msgs.sort(function(a, b){ return a.at - b.at || (a.id < b.id ? -1 : 1); });
   var sig = r.adminReadAt + '|' + r.adminSeenAt + '|' + r.online + '|' + _cc.msgs.length;
@@ -1169,7 +1198,7 @@ async function chatFetchImage(i){
     var resp = await fetch(API_BASE + '/chat/blob/' + i.id, { headers: { 'Authorization': 'Bearer ' + tok }, cache: 'force-cache' });
     if (!resp.ok) throw new Error('missing');
     var plain = await CHAT.openBlob(new Uint8Array(await resp.arrayBuffer()), i.k, i.v);
-    var url = URL.createObjectURL(new Blob([plain], { type: /^image\/(webp|jpeg|png)$/.test(i.m) ? i.m : 'image/webp' }));
+    var url = URL.createObjectURL(new Blob([plain], { type: /^(image\/(webp|jpeg|png)|audio\/(webm|ogg|mp4|mpeg|aac))$/.test(i.m) ? i.m : 'image/webp' }));
     _cc.imgs[i.id] = { url: url }; return url;
   })();
   _cc.imgs[i.id] = { p: p };
@@ -1178,7 +1207,7 @@ async function chatFetchImage(i){
 }
 function chatPaintImage(id, url){
   var els = document.querySelectorAll('#chatList .cm-img[data-bid="' + id + '"]');
-  for (var n = 0; n < els.length; n++) if (!els[n].querySelector('img')) { var im = document.createElement('img'); im.alt = ''; im.src = url; els[n].appendChild(im); els[n].classList.add('ready'); }
+  for (var n = 0; n < els.length; n++) if (!els[n].querySelector('img')) { var im = document.createElement('img'); im.alt = ''; im.src = url; im.className = 'fresh'; els[n].appendChild(im); els[n].classList.add('ready'); }
 }
 async function chatLoadImages(){
   var todo = _cc.msgs.filter(function(m){ return m.img && m.img.k && !(_cc.imgs[m.img.id] && _cc.imgs[m.img.id].url) && !m.pending; }).reverse(), slots = 3;
@@ -1191,9 +1220,16 @@ async function chatLoadImages(){
   var ws = []; for (var w = 0; w < slots; w++) ws.push(worker());
   await Promise.all(ws);
 }
+// A picture opened full screen takes one history entry of its own, so the phone's Back button closes the picture (and only the picture); a tap on it closes it the same way.
+var _vwOpen = false, _vwSkip = false;
 function chatViewer(url){
   var v = $('chatViewer'); if (!v || !url) return;
   v.innerHTML = '<img src="' + url + '" alt="">'; v.classList.add('show');
+  if (!_vwOpen) { _vwOpen = true; try { history.pushState({ vw: 1 }, ''); } catch (e) {} }
+}
+function chatViewerClose(fromBack){
+  var v = $('chatViewer'); if (v) { v.classList.remove('show'); v.innerHTML = ''; }
+  if (_vwOpen) { _vwOpen = false; if (!fromBack) { _vwSkip = true; try { history.back(); } catch (e) { _vwSkip = false; } } }
 }
 async function chatUpload(bytes){
   var tok = await chatToken(), ctl = new AbortController(), timer = setTimeout(function(){ ctl.abort(); }, 60000);
@@ -1234,6 +1270,119 @@ async function chatSendImage(file){
   } finally { _cc.busy = false; }
   _cc.sig = ''; _cc.typeSent = 0; chatRender(true); chatCacheSoon();
 }
+// ===== VOICE NOTES =====
+// Recorded on the phone (small: about 24 kbit/s, two minutes at most), locked with its own key exactly like a picture, and stored by the server only as locked bytes.
+// The key, length and type travel inside the encrypted message ({ a: { id, k, v, d, m } }).
+var CHAT_VN_MAX = 120, _vn = { rec: null, chunks: [], t0: 0, timer: 0, stream: null, cancel: false, ag: null, mime: '' }, _vp = { id: '', el: null };
+function chatVnMime(){
+  if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+  var l = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm'];
+  for (var n = 0; n < l.length; n++) if (MediaRecorder.isTypeSupported(l[n])) return l[n];
+  return '';
+}
+function chatVnFmt(s){ s = Math.max(0, Math.round(Number(s) || 0)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+async function chatVnStart(){
+  if (_vn.rec || _cc.busy || !_cc.agent || !STATE) return;
+  if (!_cc.cfg || !_cc.cfg.adminKey) { toast('Chat is not available yet.'); return; }
+  var mime = chatVnMime();
+  if (!mime || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { toast('This phone cannot record a voice note.'); return; }
+  var stream, rec;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+  catch (e) { toast('Allow the microphone to send a voice note.'); return; }
+  if (_vn.rec || !_cc.agent) { stream.getTracks().forEach(function(t){ t.stop(); }); return; }
+  try { rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 24000 }); }
+  catch (e) { stream.getTracks().forEach(function(t){ t.stop(); }); toast('This phone cannot record a voice note.'); return; }
+  chatVoiceStop();
+  _vn.chunks = []; _vn.cancel = false; _vn.stream = stream; _vn.rec = rec; _vn.t0 = Date.now(); _vn.ag = _cc.agent; _vn.mime = mime;
+  rec.ondataavailable = function(ev){ if (ev.data && ev.data.size) _vn.chunks.push(ev.data); };
+  rec.onstop = chatVnDone;
+  rec.start(1000);
+  var bar = $('chatBar'); if (bar) bar.classList.add('recording');
+  var tt = $('chatRecT'); if (tt) tt.textContent = '0:00';
+  _vn.timer = setInterval(function(){
+    var s = (Date.now() - _vn.t0) / 1000, el = $('chatRecT'); if (el) el.textContent = chatVnFmt(s);
+    if (s >= CHAT_VN_MAX) chatVnStop(false);
+  }, 250);
+}
+function chatVnStop(cancel){
+  if (!_vn.rec) return;
+  _vn.cancel = !!cancel;
+  try { if (_vn.rec.state !== 'inactive') _vn.rec.stop(); else chatVnDone(); } catch (e) { chatVnDone(); }
+}
+function chatVnDone(){
+  clearInterval(_vn.timer);
+  if (_vn.stream) _vn.stream.getTracks().forEach(function(t){ t.stop(); });
+  var bar = $('chatBar'); if (bar) bar.classList.remove('recording');
+  var rec = _vn.rec, cancel = _vn.cancel, secs = (Date.now() - _vn.t0) / 1000, mt = String(_vn.mime || '').split(';')[0], ag = _vn.ag, blob = new Blob(_vn.chunks, { type: mt });
+  _vn.rec = null; _vn.stream = null; _vn.chunks = [];
+  if (!rec || cancel || !ag) return;
+  if (secs < 1 || blob.size < 200) { toast('Hold on a little longer to record a voice note.'); return; }
+  chatSendVoice(blob, Math.min(CHAT_VN_MAX, Math.round(secs)), mt, ag);
+}
+async function chatSendVoice(blob, secs, mt, ag){
+  if (!STATE || _cc.busy || _cc.agent !== ag) return;
+  if (blob.size > 560 * 1024) { toast('That voice note is too long. Keep it shorter.'); return; }
+  var local = URL.createObjectURL(blob);
+  var tmp = { id: 'tmp' + Date.now(), from: 'member', text: '', at: Date.now(), pending: true, voice: { id: 'tmp', d: secs, m: mt, local: local } };
+  _cc.busy = true; _cc.msgs.push(tmp); chatRender(true);
+  try {
+    var bytes = new Uint8Array(await blob.arrayBuffer()), sealed = await CHAT.sealBlob(bytes), k = await chatKey();
+    var results = await Promise.all([chatUpload(sealed.ct), chatRegister()]), up = results[0];
+    var info = { id: up.id, k: sealed.key, v: sealed.iv, d: secs, m: mt };
+    var env = await CHAT.seal(JSON.stringify({ t: '', a: info }), STATE.uid + '|member|' + ag.id, [{ kid: _cc.cfg.adminKey.kid, jwk: _cc.cfg.adminKey.jwk }, { kid: k.kid, jwk: k.pub }]);
+    env.agentId = ag.id;
+    var r = await api('/chat/send', env);
+    if (!r || r.status !== 'success') throw new Error((r && r.message) || 'Could not send. Try again.');
+    _cc.imgs[up.id] = { url: local };   // our own voice note is already here: nothing to download
+    _cc.msgs = _cc.msgs.filter(function(x){ return x !== tmp; });
+    if (!_cc.msgs.some(function(x){ return x.id === r.id; })) _cc.msgs.push({ id: r.id, from: 'member', text: '', img: null, voice: info, at: r.at, raw: { id: r.id, from: 'member', agentId: ag.id, at: r.at, iv: env.iv, ct: env.ct, wraps: env.wraps.filter(function(w){ return w.kid === k.kid; }) } });
+    _cc.after = Math.max(_cc.after, r.at - 1);
+    if (r.delivered) _cc.adminSeenAt = Math.max(_cc.adminSeenAt, r.at);
+  } catch (e) {
+    _cc.msgs = _cc.msgs.filter(function(x){ return x !== tmp; });
+    toast(e && e.message ? e.message : 'Could not send the voice note.');
+  } finally { _cc.busy = false; }
+  _cc.sig = ''; chatRender(true); chatCacheSoon();
+}
+var CHAT_PLAY = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M8 5.2v13.6a1 1 0 0 0 1.5.86l11-6.8a1 1 0 0 0 0-1.72l-11-6.8A1 1 0 0 0 8 5.2z" fill="currentColor"/></svg>',
+    CHAT_PAUSE = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1.3" fill="currentColor"/><rect x="13.5" y="5" width="4" height="14" rx="1.3" fill="currentColor"/></svg>';
+function chatVoiceHtml(m){
+  var v = m.voice, d = Math.max(0, Number(v.d) || 0);
+  return '<div class="cm-vn' + (m.pending ? ' pend' : '') + '" data-vid="' + esc(v.id || '') + '" data-d="' + d + '"><button type="button" class="cm-vp" aria-label="Play voice note">' + CHAT_PLAY + '</button><span class="cm-vb"><i></i></span><span class="cm-vd">' + chatVnFmt(d) + '</span></div>';
+}
+function chatVoiceEls(id){ return document.querySelectorAll('#chatList .cm-vn[data-vid="' + id + '"]'); }
+function chatVoiceDraw(id, state, frac, label){
+  var els = chatVoiceEls(id);
+  for (var n = 0; n < els.length; n++) {
+    var b = els[n].querySelector('.cm-vp'), bar = els[n].querySelector('.cm-vb i'), lb = els[n].querySelector('.cm-vd');
+    els[n].classList.toggle('playing', state === 'play'); els[n].classList.toggle('load', state === 'load');
+    if (b) b.innerHTML = state === 'play' ? CHAT_PAUSE : CHAT_PLAY;
+    if (bar) bar.style.width = Math.round(Math.max(0, Math.min(1, frac || 0)) * 1000) / 10 + '%';
+    if (lb) lb.textContent = label;
+  }
+}
+function chatVoiceStop(){
+  if (!_vp.el) return;
+  var id = _vp.id, el = _vp.el, d = 0; _vp = { id: '', el: null };
+  try { el.pause(); } catch (e) {}
+  var f = chatVoiceEls(id)[0]; if (f) d = Number(f.getAttribute('data-d')) || 0;
+  chatVoiceDraw(id, 'idle', 0, chatVnFmt(d));
+}
+async function chatVoiceToggle(box){
+  var id = box.getAttribute('data-vid'), d = Number(box.getAttribute('data-d')) || 0;
+  if (!id || id === 'tmp' || box.classList.contains('pend')) return;
+  if (_vp.el && _vp.id === id) { if (_vp.el.paused) _vp.el.play().catch(function(){}); else _vp.el.pause(); return; }
+  var m = _cc.msgs.filter(function(x){ return x.voice && x.voice.id === id; })[0]; if (!m) return;
+  chatVoiceStop(); chatVoiceDraw(id, 'load', 0, chatVnFmt(d));
+  var url; try { url = await chatFetchImage(m.voice); } catch (e) { chatVoiceDraw(id, 'idle', 0, chatVnFmt(d)); toast('Could not open this voice note.'); return; }
+  var el = new Audio(url); el.preload = 'auto'; _vp = { id: id, el: el };
+  el.onplay = function(){ chatVoiceDraw(id, 'play', el.currentTime / (d || el.duration || 1), chatVnFmt(el.currentTime)); };
+  el.onpause = function(){ if (_vp.el === el && !el.ended) chatVoiceDraw(id, 'idle', el.currentTime / (d || el.duration || 1), chatVnFmt(el.currentTime)); };
+  el.ontimeupdate = function(){ if (_vp.el === el && !el.paused) chatVoiceDraw(id, 'play', el.currentTime / (d || el.duration || 1), chatVnFmt(el.currentTime)); };
+  el.onended = function(){ if (_vp.el === el) _vp = { id: '', el: null }; chatVoiceDraw(id, 'idle', 0, chatVnFmt(d)); };
+  el.onerror = function(){ if (_vp.el === el) _vp = { id: '', el: null }; chatVoiceDraw(id, 'idle', 0, chatVnFmt(d)); toast('Could not play this voice note.'); };
+  el.play().catch(function(){ if (_vp.el === el) _vp = { id: '', el: null }; chatVoiceDraw(id, 'idle', 0, chatVnFmt(d)); });
+}
 // A profile pressed: its newest messages are fetched at once, in the background, so the page has them the instant it opens.
 async function chatWarm(agentId){
   if (!STATE || (_cc.warm[agentId] && Date.now() - _cc.warm[agentId] < 4000)) return;
@@ -1260,7 +1409,7 @@ async function chatOpen(agentId){
     var k = await chatKey(), c = chatCacheRead(a.id);
     if (_cc.agent === a && c.m.length) {
       var opened = await Promise.all(c.m.map(chatOpenMsg));
-      c.m.forEach(function(m, n){ _cc.msgs.push({ id: m.id, from: m.from, text: opened[n].text, img: opened[n].img, at: m.at, raw: m }); _cc.after = Math.max(_cc.after, m.at); });
+      c.m.forEach(function(m, n){ _cc.msgs.push({ id: m.id, from: m.from, text: opened[n].text, img: opened[n].img, voice: opened[n].voice, at: m.at, raw: m }); _cc.after = Math.max(_cc.after, m.at); });
       _cc.adminReadAt = c.rd || 0; _cc.adminSeenAt = c.sn || 0;
       if (_cc.agent === a) chatRender(true);
     }
@@ -1270,8 +1419,8 @@ async function chatOpen(agentId){
   chatRegister();
   if (_cc.agent === a) { chatRender(true); api('/chat/read', { agentId: a.id }); delete _cc.unread[a.id]; }
 }
-function chatBack(){ _cc.agent = null; chatSetTyping(false); openOverlay('support', true); }
-function chatGrow(){ var t = $('chatInput'); if (!t) return; t.style.height = 'auto'; var h = t.scrollHeight; t.style.height = h > 44 ? Math.min(h, 112) + 'px' : ''; }
+function chatBack(){ chatVnStop(true); chatVoiceStop(); _cc.agent = null; chatSetTyping(false); openOverlay('support', true); }
+function chatGrow(){ var t = $('chatInput'); if (!t) return; var bar = $('chatBar'); if (bar) bar.classList.toggle('empty', !t.value.trim()); t.style.height = 'auto'; var h = t.scrollHeight; t.style.height = h > 44 ? Math.min(h, 112) + 'px' : ''; }
 // The page sits above the keyboard: it follows the visible part of the screen.
 function chatFit(){
   var el = $('ovChat'), vv = window.visualViewport; if (!el) return;
@@ -1310,9 +1459,11 @@ document.addEventListener('pointerdown', function(e){
 document.addEventListener('click', function(e){
   var b = e.target.closest && e.target.closest('.sup-ag');
   if (b) { chatOpen(b.getAttribute('data-ag')); return; }
+  var vp = e.target.closest && e.target.closest('#chatList .cm-vp');
+  if (vp) { chatVoiceToggle(vp.closest('.cm-vn')); return; }
   var im = e.target.closest && e.target.closest('#chatList .cm-img.ready');
   if (im) { var pic = im.querySelector('img'); if (pic) chatViewer(pic.src); return; }
-  if (e.target.closest && e.target.closest('#chatViewer')) { $('chatViewer').classList.remove('show'); $('chatViewer').innerHTML = ''; }
+  if (e.target.closest && e.target.closest('#chatViewer')) chatViewerClose(false);
 });
 document.addEventListener('visibilitychange', function(){ if (!document.hidden && STATE && (chatShown('ovChat') || chatShown('ovSupport'))) { chatResync(); chatLoop(); } });
 document.addEventListener('keydown', function(e){
@@ -2606,6 +2757,8 @@ function closeOverlay(){
   try { if (history.state && history.state.ov) history.back(); } catch (e) {}
 }
 window.addEventListener('popstate', function(){
+  if (_vwSkip) { _vwSkip = false; return; }   // the entry a tapped picture gave back
+  if (_vwOpen) { chatViewerClose(true); return; }   // Back with a picture open: close the picture, stay in the chat
   if (_gpActive) gpLeave();
   if (document.querySelector('.modal-bg.show')) closeAllSheets();
   if (_ovOpen) { _ovOpen = false; navVeil(false); hideOverlays(); if (_lastTab === 'account') countMyBalances(); }

@@ -188,7 +188,7 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   ok([...fm.__stores.chatMessages.values()].filter(m => m.threadId === uid).length === 0 && !fm.__stores.chatThreads.has(uid) && !fm.__stores.chatMembers.has(uid), 'deleting the member\'s account deletes their chat, their thread and their keys', r.j);
 
   // ===================== the real apps, in a browser =====================
-  const { chromium } = require('playwright'); const browser = await chromium.launch();
+  const { chromium } = require('playwright'); const browser = await chromium.launch({ args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
   const front = staticServer(path.join(__dirname, 'user')), adm = staticServer(path.join(__dirname, 'admin'));
   await new Promise(r => front.listen(FRONT, '127.0.0.1', r)); await new Promise(r => adm.listen(ADMINP, '127.0.0.1', r));
   // fresh chat state for the browser part
@@ -196,7 +196,7 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   const phone2 = '0773334444', su2 = await J('POST', '/auth/signup', { phone: phone2, password: 'secret12' }); await J('POST', '/register', { pin: '123456', referralCode: '' }, su2.j.token);
   const errs = [];
   // -- admin
-  const actx = await browser.newContext({ viewport: { width: 1100, height: 900 }, serviceWorkers: 'block' });
+  const actx = await browser.newContext({ viewport: { width: 1100, height: 900 }, serviceWorkers: 'block', permissions: ['microphone'] });
   const ap = await actx.newPage(); ap.on('pageerror', e => errs.push('admin: ' + String(e.message).slice(0, 200))); ap.on('dialog', d => d.accept('backup-pass-123'));
   await ap.goto('http://127.0.0.1:' + ADMINP + '/'); await sleep(500);
   await ap.fill('#keyInput', AK); await ap.click('#loginBtn'); await ap.waitForSelector('#shell:not(.hidden)', { timeout: 10000 });
@@ -212,7 +212,7 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   await ap.click('#chAgSave'); await sleep(900);
   ok((await J('GET', '/public/chat-config')).j.agents.length === 1 && /^data:image\/jpeg;base64,/.test((await J('GET', '/public/chat-config')).j.agents[0].photo), 'admin: a profile is saved with its picture (cropped square, small JPEG)');
   // -- member
-  const mctx = await browser.newContext({ viewport: { width: 360, height: 740 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+  const mctx = await browser.newContext({ viewport: { width: 360, height: 740 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true, serviceWorkers: 'block', permissions: ['microphone'] });
   await mctx.addInitScript(() => { window._smartaiLoaderMinMs = 0; });
   const mp = await mctx.newPage(); mp.on('pageerror', e => errs.push('member: ' + String(e.message).slice(0, 200)));
   const until = async (pg, fn, arg, ms) => { try { await pg.waitForFunction(fn, arg, { timeout: ms || 8000 }); return true; } catch (_) { return false; } };
@@ -265,14 +265,74 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   const tBack = Date.now(); await ap.setInputFiles('#chFile', { name: 'reply.jpg', mimeType: 'image/jpeg', buffer: photo });
   ok(await until(mp, () => { const im = document.querySelector('#chatList .cm.ag .cm-img img'); return !!im && im.naturalWidth > 0; }, null, 8000), 'member: the admin\'s picture arrives and shows');
   realLog('         admin picture -> shown on the phone ' + (Date.now() - tBack) + ' ms later');
+  // pictures must not blink or jump when the list refreshes: the very same <img> element has to survive (typing dots, ticks and polls all redraw the list)
+  await mp.evaluate(() => { document.querySelectorAll('#chatList .cm-img img').forEach((im, n) => { im.__keep = 'm' + n; }); window.__sc = document.getElementById('chatBody').scrollTop; });
+  await ap.evaluate(() => { document.querySelectorAll('#chMsgs .ch-img img').forEach((im, n) => { im.__keep = 'a' + n; }); });
+  const nPicM = await mp.evaluate(() => document.querySelectorAll('#chatList .cm-img img').length), nPicA = await ap.evaluate(() => document.querySelectorAll('#chMsgs .ch-img img').length);
+  ok(nPicM >= 2 && nPicA >= 2, 'both screens hold the two pictures before the refresh (member ' + nPicM + ', admin ' + nPicA + ')');
+  await ap.fill('#chInput', 'xx'); await ap.type('#chInput', 'yy');
+  ok(await until(mp, () => !!document.querySelector('#chatList .cm-typ'), null, 4000), 'member: the list was redrawn (typing dots came)');
+  await mp.fill('#chatInput', 'zz'); await mp.type('#chatInput', 'ww');
+  ok(await until(ap, () => /typing/.test(document.querySelector('.ch-head').innerText), null, 4000), 'admin: the conversation was redrawn (typing line came)');
+  ok(await mp.evaluate(() => { const l = [...document.querySelectorAll('#chatList .cm-img img')]; return l.length > 0 && l.every((im, n) => im.__keep === 'm' + n); }), 'member: the same picture elements are still there after a redraw (no blink, no new fade)');
+  ok(await ap.evaluate(() => { const l = [...document.querySelectorAll('#chMsgs .ch-img img')]; return l.length > 0 && l.every((im, n) => im.__keep === 'a' + n); }), 'admin: the same picture elements are still there after a redraw');
+  ok(await mp.evaluate(() => Math.abs(document.getElementById('chatBody').scrollTop - window.__sc) < 200), 'member: and the list did not jump');
+  await mp.fill('#chatInput', ''); await ap.fill('#chInput', '');
+  await mp.evaluate(() => chatRender(false)); await mp.evaluate(() => chatRender(false));
+  ok(await mp.evaluate(() => [...document.querySelectorAll('#chatList .cm-img img')].every((im, n) => im.__keep === 'm' + n)), 'member: redrawing again and again leaves the pictures alone');
   // tap to enlarge
-  await mp.click('#chatList .cm.ag .cm-img'); ok(await mp.evaluate(() => document.getElementById('chatViewer').classList.contains('show') && !!document.querySelector('#chatViewer img')), 'member: tapping a picture opens it full screen'); await mp.click('#chatViewer');
+  await mp.click('#chatList .cm.ag .cm-img'); ok(await mp.evaluate(() => document.getElementById('chatViewer').classList.contains('show') && !!document.querySelector('#chatViewer img')), 'member: tapping a picture opens it full screen');
+  // the phone's Back button closes the picture only, not the chat behind it
+  await mp.goBack(); await sleep(250);
+  ok(await mp.evaluate(() => !document.getElementById('chatViewer').classList.contains('show') && document.getElementById('ovChat').classList.contains('show')), 'member: Back closes the picture and stays in the chat');
+  await mp.click('#chatList .cm.ag .cm-img'); await sleep(150); await mp.click('#chatViewer'); await sleep(250);
+  ok(await mp.evaluate(() => !document.getElementById('chatViewer').classList.contains('show') && document.getElementById('ovChat').classList.contains('show')), 'member: a tap closes the picture and stays in the chat');
+  await mp.goBack(); await sleep(250);
+  ok(await mp.evaluate(() => !document.getElementById('ovChat').classList.contains('show')), 'member: and then Back leaves the chat as before (no extra stuck step)');
+  await mp.evaluate(() => chatOpen(_cc.cfg.agents[0].id)); await sleep(300);
+  // admin: the same on the panel
+  await ap.click('#chMsgs .ch-img.ready'); ok(await ap.evaluate(() => document.getElementById('chViewer').classList.contains('show')), 'admin: tapping a picture opens it full screen');
+  await ap.goBack(); await sleep(250);
+  ok(await ap.evaluate(() => !document.getElementById('chViewer').classList.contains('show') && !!document.getElementById('chMsgs')), 'admin: Back closes the picture and stays on the chat');
+  await ap.click('#chMsgs .ch-img.ready'); await sleep(150); await ap.click('#chViewer'); await sleep(250);
+  ok(await ap.evaluate(() => !document.getElementById('chViewer').classList.contains('show')), 'admin: a tap closes it too');
   // opening again is instant (this phone's own copy)
   await mp.evaluate(() => chatBack()); await sleep(300);
   const tOpen = await mp.evaluate(() => new Promise(res => { const t0 = performance.now(); chatOpen(_cc.cfg.agents[0].id); const iv = setInterval(() => { if (document.querySelectorAll('#chatList .cm').length >= 3) { clearInterval(iv); res(Math.round(performance.now() - t0)); } }, 5); setTimeout(() => { clearInterval(iv); res(-1); }, 3000); }));
   realLog('         reopening the chat: messages on screen after ' + tOpen + ' ms');
   ok(tOpen >= 0 && tOpen < 400, 'member: reopening a chat paints the conversation within 400 ms (from the phone\'s own copy, no waiting for the network): ' + tOpen + ' ms');
   ok(await mp.evaluate(() => !document.getElementById('navVeil').classList.contains('on')), 'member: and with no loading dots');
+  // -- voice notes: recorded, locked, sent, played on the other side (the browser's fake microphone supplies a beep)
+  const blobsBefore = fm.__stores.chatBlobs.size;
+  await mp.click('#chatMic'); ok(await until(mp, () => document.getElementById('chatBar').classList.contains('recording'), null, 3000), 'member: the mic button starts recording (the recording bar with the timer replaces the text box)');
+  await sleep(1800);
+  ok(await mp.evaluate(() => /^0:0[1-9]/.test(document.getElementById('chatRecT').textContent)), 'member: the timer counts');
+  await mp.click('#chatRec .chat-send');
+  ok(await until(mp, () => { const v = document.querySelector('#chatList .cm.me .cm-vn:not(.pend)'); return !!v && Number(v.getAttribute('data-d')) >= 1; }, null, 8000), 'member: the voice note shows in the chat with its length once sent');
+  ok(!(await mp.evaluate(() => document.getElementById('chatBar').classList.contains('recording'))), 'member: the recording bar is gone again');
+  ok(fm.__stores.chatBlobs.size === blobsBefore + 1, 'the server stored one locked blob for it');
+  const lastBlob = [...fm.__stores.chatBlobs.values()].pop(), vraw = Buffer.from(lastBlob.data, 'base64');
+  ok(!(vraw[0] === 0x1a && vraw[1] === 0x45 && vraw[2] === 0xdf && vraw[3] === 0xa3) && vraw.indexOf(Buffer.from('OpusHead')) < 0 && vraw.indexOf(Buffer.from('OggS')) < 0, 'and the bytes are locked (no audio header can be seen in them)');
+  ok(await until(ap, () => !!document.querySelector('#chMsgs .ch-m.ag .ch-vn:not(.pend)'), null, 8000), 'admin: the voice note arrives in the conversation');
+  ok(await ap.evaluate(() => /Voice note/.test(document.querySelector('#chThreads .ch-row .ch-prev').innerText)), 'admin: the inbox row says "Voice note"');
+  await ap.click('#chMsgs .ch-m.ag .ch-vp');
+  ok(await until(ap, () => { const v = document.querySelector('#chMsgs .ch-m.ag .ch-vn'); return v.classList.contains('playing') || (v.querySelector('.ch-vb i').style.width !== '' && v.querySelector('.ch-vb i').style.width !== '0%') || false; }, null, 6000), 'admin: pressing play opens (unlocks) and plays it');
+  await ap.click('#chMsgs .ch-m.ag .ch-vp'); await sleep(200);
+  ok(await ap.evaluate(() => !document.querySelector('#chMsgs .ch-m.ag .ch-vn').classList.contains('playing')), 'admin: pressing again pauses it');
+  // the admin answers by voice
+  await ap.click('#chMic'); ok(await until(ap, () => document.querySelector('.ch-bar').classList.contains('recording'), null, 3000), 'admin: the mic button starts recording');
+  await sleep(1500); await ap.click('#chRecOk');
+  ok(await until(mp, () => !!document.querySelector('#chatList .cm.ag .cm-vn:not(.pend)'), null, 8000), 'member: the admin\'s voice note arrives');
+  await mp.click('#chatList .cm.ag .cm-vp');
+  ok(await until(mp, () => { const v = document.querySelector('#chatList .cm.ag .cm-vn'); return v.classList.contains('playing') || (v.querySelector('.cm-vb i').style.width !== '' && v.querySelector('.cm-vb i').style.width !== '0%'); }, null, 6000), 'member: pressing play plays it');
+  await mp.click('#chatList .cm.ag .cm-vp'); await sleep(200);
+  // cancelling sends nothing
+  const nVn = await mp.evaluate(() => document.querySelectorAll('#chatList .cm-vn').length), blobsNow = fm.__stores.chatBlobs.size;
+  await mp.click('#chatMic'); await sleep(1300); await mp.click('#chatRec .chat-attach'); await sleep(500);
+  ok(await mp.evaluate(n => document.querySelectorAll('#chatList .cm-vn').length === n && !document.getElementById('chatBar').classList.contains('recording'), nVn) && fm.__stores.chatBlobs.size === blobsNow, 'member: cancelling a recording sends nothing');
+  // typing text swaps the mic for the send button
+  await mp.fill('#chatInput', 'hello'); ok(await mp.evaluate(() => getComputedStyle(document.getElementById('chatSend')).display !== 'none' && getComputedStyle(document.getElementById('chatMic')).display === 'none'), 'member: with text typed the send button shows instead of the mic');
+  await mp.fill('#chatInput', ''); ok(await mp.evaluate(() => getComputedStyle(document.getElementById('chatMic')).display !== 'none' && getComputedStyle(document.getElementById('chatSend')).display === 'none'), 'member: with nothing typed the mic shows');
   // -- the backup of the key
   await ap.click('[data-tab="chat"]'); await sleep(900);
   ok(await ap.evaluate(() => !!document.getElementById('chBackup')), 'admin: the key backup button is there');

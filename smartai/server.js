@@ -7242,16 +7242,16 @@ app.post('/chat/typing', async (req, res) => {
   if (!last || Date.now() - last.at > 1000 || b.typing === false) chatSetTyping(uid, 'member', b.agentId, b.typing !== false);
   res.json({ status: 'success' });
 });
-// ---- pictures ----
+// ---- pictures and voice notes (both are locked on the sender's device and stored the same way) ----
 // A picture is locked on the sender's device with its own key (the key travels inside the encrypted message), and the server keeps only the locked bytes: it can neither see
 // the picture nor tell what it is. Anyone who has the id still needs to be the member it belongs to, or an admin, to fetch it.
 const CHAT_BLOB_MAX = 600 * 1024, chatBlobParser = express.raw({ type: () => true, limit: '1mb' });
 const _chatBlobLog = new Map();
 async function chatStoreBlob(req, res, owner, by) {
   const buf = req.body;
-  if (!Buffer.isBuffer(buf) || buf.length < 32 || buf.length > CHAT_BLOB_MAX) return res.status(400).json({ status: 'error', message: 'That picture is too large. Choose a smaller one.' });
+  if (!Buffer.isBuffer(buf) || buf.length < 32 || buf.length > CHAT_BLOB_MAX) return res.status(400).json({ status: 'error', message: 'That file is too large. Send a smaller picture or a shorter voice note.' });
   const now = Date.now(), log = (_chatBlobLog.get(by + ':' + owner) || []).filter(t => now - t < 3600000);
-  if (log.length >= 40) return res.status(429).json({ status: 'error', message: 'Too many pictures. Try again later.' });
+  if (log.length >= 40) return res.status(429).json({ status: 'error', message: 'Too many pictures and voice notes. Try again later.' });
   log.push(now); _chatBlobLog.set(by + ':' + owner, log);
   if (_chatBlobLog.size > 5000) for (const [k, v] of _chatBlobLog) if (!v.length || now - v[v.length - 1] > 3600000) _chatBlobLog.delete(k);
   const id = crypto.randomBytes(12).toString('hex');
