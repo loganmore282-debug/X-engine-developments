@@ -373,7 +373,7 @@ const jpg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMC
   // microphone switched off for the app: asking again shows nothing, so the app explains how to turn it on, and "try again" works once it is on
   await mp.evaluate(() => { window.__q = navigator.permissions.query.bind(navigator.permissions); navigator.permissions.query = async () => ({ state: 'denied' }); });
   await mp.click('#chatMic');
-  ok(await until(mp, () => document.getElementById('micSheetBg').classList.contains('show') && /Permissions/.test(document.getElementById('micSheetSteps').innerText) && !document.getElementById('chatBar').classList.contains('recording'), null, 3000), 'member: with the microphone switched off, a sheet says exactly how to turn it on (no silent failure)');
+  ok(await until(mp, () => document.getElementById('micSheetBg').classList.contains('show') && /Permissions/.test(document.getElementById('micSheetSteps').innerText) && /Site settings/.test(document.getElementById('micSheetSteps').innerText) && !document.getElementById('chatBar').classList.contains('recording'), null, 3000), 'member: with the microphone switched off, a sheet says exactly how to turn it on (no silent failure)');
   await mp.evaluate(() => { navigator.permissions.query = window.__q; });
   await mp.click('#micTryBtn');
   ok(await until(mp, () => document.getElementById('chatBar').classList.contains('recording') && !document.getElementById('micSheetBg').classList.contains('show'), null, 3000), 'member: "I turned it on, try again" closes the sheet and starts recording');

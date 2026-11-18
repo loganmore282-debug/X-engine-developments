@@ -1223,6 +1223,14 @@ async function chatMicState(){
 function chatMicSheet(){
   var inApp = /; wv\)|FBAN|FBAV|Instagram|Telegram|Line\/|MicroMessenger/i.test(navigator.userAgent || '');
   $('micSheetWhy').textContent = inApp ? 'You opened this inside another app (Telegram, WhatsApp...). That browser cannot ask for the microphone. Open the link in Chrome, or install the app to your home screen.' : 'Your phone has the microphone switched off for this app, so it cannot ask again. Turn it on once:';
+  // The phone's own App permissions usually already allow the browser; what is off is the SITE's permission inside Chrome, so the steps go there.
+  var host = esc(location.hostname || 'this site');
+  $('micSheetSteps').innerHTML = (isStandalone()
+    ? '<b>1.</b> Open <b>Chrome</b> and go to <b>' + host + '</b>.<br>'
+    : '<b>1.</b> Stay in the browser on this page.<br>')
+    + '<b>2.</b> Tap the small icon at the left of the address bar (a lock or sliders), then <b>Permissions</b> &rsaquo; <b>Microphone</b> &rsaquo; <b>Allow</b>.<br>'
+    + '<span class="muted">Or: Chrome menu &#8942; &rsaquo; Settings &rsaquo; Site settings &rsaquo; Microphone &rsaquo; ' + host + ' &rsaquo; Allow.</span><br>'
+    + '<b>3.</b> Come back here and press the button below.';
   $('micSheetSteps').style.display = inApp ? 'none' : 'block';
   $('micSheetBg').classList.add('show');
 }
