@@ -4562,7 +4562,7 @@ if(SESSION_TOKEN && _adminSession.begin(SESSION_TOKEN, 0, false)){ openShell(); 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then(function(reg){
     function checkForUpdate(){ reg.update().catch(function(){}); }
-    setInterval(checkForUpdate, 60 * 60 * 1000);
+    setInterval(checkForUpdate, 2 * 60 * 1000);   // every 2 minutes: the panel stays open all day for chats and must not stay on old code for an hour after a deploy
     document.addEventListener('visibilitychange', function(){ if (!document.hidden) checkForUpdate(); });
     window.addEventListener('focus', checkForUpdate);
   }).catch(function(){});
@@ -4577,6 +4577,8 @@ if ('serviceWorker' in navigator) {
     if (!_hadControllerAtLoad) { _hadControllerAtLoad = true; return; }
     (function tryReload(){
       if (typeof window._tabBusyCount !== 'undefined' && window._tabBusyCount > 0) { setTimeout(tryReload, 500); return; }
+      // a reply being typed (or a picture being sent) is never thrown away by an update: it goes through a few seconds later
+      var ci = document.getElementById('chInput'); if (ci && ci.value.trim()) { setTimeout(tryReload, 3000); return; }
       _swReloading = true;
       location.reload();
     })();

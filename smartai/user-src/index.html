@@ -1854,6 +1854,9 @@ if ('serviceWorker' in navigator) {
       if (reloading || !hadController) return;
       if (Date.now() - bootAt < 60000) return;
       if (window.__moneyCallsInFlight > 0) { pending = true; return; }
+      // A message half-typed in the customer-service chat (or a picture being sent) is never thrown away by an update: it goes through a few seconds after.
+      var ci = document.getElementById('chatInput');
+      if ((ci && ci.value.trim()) || (window._cc && window._cc.busy)) { pending = true; setTimeout(function () { if (pending) applyUpdate(); }, 4000); return; }
       reloading = true;
       location.reload();
     }
@@ -1865,7 +1868,7 @@ if ('serviceWorker' in navigator) {
       function check() { try { reg.update(); } catch (e) {} }
       check();
       document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
-      setInterval(check, 3600000);
+      setInterval(check, 180000);   // every 3 minutes: a page left open (a chat, the admin's inbox) must not stay on old code for an hour after a deploy
     }).catch(function () {});
   })();
 }
