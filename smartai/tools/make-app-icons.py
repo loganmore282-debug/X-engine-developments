@@ -1,8 +1,8 @@
-"""Makes the app icons (user/ and admin/ icon-192.png + icon-512.png) and user/link-preview.jpg from the owner's AI robot picture.
+"""Makes the app icons (user/ and admin/ icon-192.png + icon-512.png) from the owner's AI robot picture.
    python3 tools/make-app-icons.py <robot-512-cutout.png>      (needs Pillow)
-The icon = the robot on the app's blue gradient (no letters). The link preview = the same tile, the name and the tagline."""
+The icon = the robot on the app's blue gradient (no letters)."""
 import sys
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter
 robot = Image.open(sys.argv[1]).convert('RGBA')
 # the cut-out has a thin light fringe on its rim: pull the edge in a little and soften it
 a = robot.getchannel('A').filter(ImageFilter.MinFilter(5)).filter(ImageFilter.GaussianBlur(1.2)); robot.putalpha(a)
@@ -33,17 +33,4 @@ for app in ('user', 'admin'):
     for n in (192, 512):
         tile(n).convert('RGB').save(f'{app}/icon-{n}.png', optimize=True)
 
-# link preview card 1200 x 630
-W, H = 1200, 630
-card = gradient(W, H, (37, 99, 235), (12, 31, 92)).convert('RGBA')
-t = tile(280, fill=0.84, radius=62); card.alpha_composite(t, ((W - 280) // 2, 56))
-d = ImageDraw.Draw(card)
-def font(sz, bold):
-    for p in (['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'] if bold else ['/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']):
-        try: return ImageFont.truetype(p, sz)
-        except Exception: pass
-    return ImageFont.load_default()
-for txt, sz, bold, y, col in (('Smart AI', 78, True, 372, (255, 255, 255)), ('Invest. Earn daily. Grow your team.', 38, False, 490, (190, 214, 255))):
-    f = font(sz, bold); w = d.textlength(txt, font=f); d.text(((W - w) / 2, y), txt, font=f, fill=col)
-card.convert('RGB').save('user/link-preview.jpg', quality=88, optimize=True)
 print('done')

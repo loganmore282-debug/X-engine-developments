@@ -245,17 +245,14 @@ ${hdr(ADMIN_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;', 'add_he
     # Old-style referral links (<origin>/refCode=<code>) are a real path.
     location ^~ /refCode= { rewrite ^ /index.html break; }
     location = / {
-        if ($smartai_tg_bot) { rewrite ^ /${API}/public/link-preview-page last; }
         try_files $smartai_bot_html /index.html =404;
 ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
     }
     location = /index.html {
-        if ($smartai_tg_bot) { rewrite ^ /${API}/public/link-preview-page last; }
         try_files $smartai_bot_html /index.html =404;
 ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
     }
     location = /share.html {
-        if ($smartai_tg_bot) { rewrite ^ /${API}/public/link-preview-page last; }
         try_files $smartai_bot_html /share.html =404;
 ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
     }
@@ -316,14 +313,7 @@ map $http_user_agent $smartai_bad_ua {
     ~*(sqlmap|nikto|nmap|masscan|zgrab|zmap|hydra|medusa|ncrack|patator|gobuster|dirbuster|dirb/|wfuzz|ffuf|feroxbuster|nuclei|acunetix|nessus|openvas|netsparker|havij|w3af|wpscan|joomscan|whatweb|metasploit|msfconsole|appscan|skipfish|arachni|paros|grabber|httprint|webshag|nessus|burpcollaborator|zaproxy|owasp) 1;
 }
 
-# Link-preview crawlers (WhatsApp, Telegram, ...) get an empty page, every real
-# browser gets the real one (see no-preview.html and smartai/CLAUDE.md).
-# Telegram's crawler alone is shown a link preview (site name, text and a wide picture, all set in Admin > Banners > Link preview). It is sent to the
-# app's own server, which builds the page from those settings. WhatsApp and every other crawler stay on the empty page below.
-map $http_user_agent $smartai_tg_bot {
-    default 0;
-    ~*TelegramBot 1;
-}
+# Link-preview crawlers (WhatsApp, Telegram, ...) all get an empty page, every real browser gets the real one (see no-preview.html and smartai/CLAUDE.md).
 map $http_user_agent $smartai_bot_html {
     default '';
     ~*(WhatsApp|facebookexternalhit|Facebot|TelegramBot|Twitterbot|Slackbot|LinkedInBot|Discordbot|SkypeUriPreview|redditbot|Pinterest|vkShare|Viber|line-poker) '/no-preview.html';

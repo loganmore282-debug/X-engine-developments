@@ -35,9 +35,9 @@ const w = dom.window, $ = id => w.document.getElementById(id), sleep = ms => new
   assert.ok(!/Saturday|weekend|referral code to sign up/i.test($('content').textContent.replace(/Right now it is \w+day \d\d:\d\d/g, '')), 'no weekend or require-referral wording on the Settings page');
   // the Banners tab buttons are wired too
   w.document.querySelector('[data-tab="banners"]').click(); await sleep(400);
-  $('lpTitle').value = 'Smart AI Gum'; $('lpText').value = 'Earn daily'; $('saveLinkPreview').click(); await sleep(150);
-  assert.equal(settings.linkPreviewTitle, 'Smart AI Gum'); assert.equal(settings.linkPreviewText, 'Earn daily');
+  for (const gone of ['lpTitle', 'lpText', 'saveLinkPreview', 'linkPreviewFile']) assert.equal($(gone), null, gone + ' (the removed link preview) is not on the Banners page');
+  assert.ok(!/link preview/i.test($('content').textContent), 'no link preview wording on the Banners page');
   assert.deepEqual(errors, [], 'no script errors: ' + errors.join(' | '));
-  console.log('PASS: admin Settings and Banners wiring (reward tiers load, app name, link preview save)');
+  console.log('PASS: admin Settings and Banners wiring (reward tiers load, app name; no link preview)');
   w.close();
 })().catch(e => { console.error(e); process.exit(1); });

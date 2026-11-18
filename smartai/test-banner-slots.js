@@ -67,8 +67,9 @@ ok(!/id="[A-Za-z]*Banner"[^>]*>\s*<img/.test(page), 'no banner is a fixed pictur
   const pub = await J('GET', '/public/smartai-images');
   ok(serverSlots.every(k => pub.j[k] === colour[k]), 'members get every picture from /public/smartai-images, each in its own slot');
   const adm = await J('GET', '/admin/smartai-images', null, null, true);
-  ok(serverSlots.every(k => adm.j[k] === colour[k]) && 'linkpreview' in adm.j && 'icons' in adm.j, 'and the admin panel reads the same pictures');
-  ok(!('linkpreview' in pub.j), 'the link-preview picture is not sent to members');
+  ok(serverSlots.every(k => adm.j[k] === colour[k]) && !('linkpreview' in adm.j) && 'icons' in adm.j, 'and the admin panel reads the same pictures');
+  ok(!('linkpreview' in pub.j), 'there is no link-preview picture any more');
+  const lpSet = await J('POST', '/admin/smartai-image/set', { slot: 'linkpreview', image: colour.authhero }, null, true); ok(lpSet.s === 400, 'and a link-preview slot cannot be saved');
   const bad = await J('POST', '/admin/smartai-image/set', { slot: 'nonsense', image: colour.authhero }, null, true);
   ok(bad.s === 400, 'an unknown slot is refused');
   const anon = await J('POST', '/admin/smartai-image/set', { slot: 'authhero', image: colour.authhero });
@@ -168,7 +169,8 @@ ok(!/id="[A-Za-z]*Banner"[^>]*>\s*<img/.test(page), 'no banner is a fixed pictur
   ok(heads[0] === 'Login & Sign Up banner' && heads[1] === 'Login & Sign Up circle logo', 'the Banners tab starts with the Login & Sign Up banner and circle logo (' + heads.slice(0, 2).join(' | ') + ')');
   ok(/^Icons/.test(heads[heads.length - 1]), 'the long Icons box is last, so every banner is found before it');
   const wanted = ['Home banner', 'AI Robots page banner', 'Team page banner', 'Me page banner (account background)', 'Profile logo (account logo)', 'Add Funds page banner', 'Cash Out page banner',
-    'Support page banner', 'About page', 'Ledger page banner', 'Payout Account page banner', 'Welcome announcement', 'Link preview (Telegram)', 'App icon'];
+    'Support page banner', 'About page', 'Ledger page banner', 'Payout Account page banner', 'Welcome announcement', 'App icon'];
+  ok(!heads.some(t => /link preview/i.test(t)), 'there is no Link preview card');
   ok(wanted.every(t => heads.includes(t)), 'every banner has its own card: ' + wanted.filter(t => !heads.includes(t)).join(', ') + (wanted.every(t => heads.includes(t)) ? 'all ' + wanted.length + ' found' : ' MISSING'));
   // the seven animated emoji buttons put a :word: into the title or the text, at the cursor
   ok(await ap.evaluate(() => document.querySelectorAll('#annEmojiRow .emo-opt').length) === 7, 'the Welcome announcement card has seven emoji buttons');

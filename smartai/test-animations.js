@@ -228,7 +228,7 @@ const staticServer = (dir, withProxy) => http.createServer((req, res) => {
     let out = { status: 'success', message: 'ok', stats: {}, products: [], users: [], transactions: [], deposits: [], withdrawals: [] };
     if (pth === '/admin/check-key' || pth === '/admin/login') out = { status: 'success', token: 'tok', username: 'owner', role: 'owner' };
     if (pth === '/admin/settings') out = { status: 'success', settings };
-    if (pth === '/admin/smartai-images') out = { status: 'success', icons, linkpreview: null };
+    if (pth === '/admin/smartai-images') out = { status: 'success', icons };
     if (pth === '/admin/banner' || pth === '/admin/announcement-image') out = { status: 'success', image: null };
     if (pth === '/admin/brand-assets') out = { status: 'success', appIcon: null, appIconCustom: false };
     if (pth === '/admin/about-html') out = { status: 'success', html: '<p>About</p>' };

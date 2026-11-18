@@ -623,8 +623,6 @@ const DEFAULT_SETTINGS = {
   // luckyMinVip: the lowest VIP level allowed to flip (0 = everybody); a member below it keeps the chances they earned.
   luckyOn: true, luckyMinDeposit: 0, luckyMinAmount: 500, luckyMaxAmount: 5000, luckyMinVip: 0, luckyProductPct: 10, luckyProducts: [],
   shareMessage: 'Join me on {app}',
-  // What Telegram shows when a link to the app is pasted (title and text; the picture is the 'linkpreview' image). Empty = the app's own defaults.
-  linkPreviewTitle: '', linkPreviewText: '',
   // One opacity for EVERY product picture (Admin > Banners > Product pictures): 100 = as uploaded.
   // Background treatment for signed-in Home/Assets/Network/Profile and
   // secondary pages. Authentication screens keep their own controls above.
@@ -912,16 +910,16 @@ async function getHomeBanner() {
 // The admin-uploaded pictures (Admin > Banners), the ones the member app really shows: one slot for every banner the app draws (as in ChocoMCC, where the
 // owner can replace every banner): Login banner (authhero) and circle logo (authlogo), AI Robots (shopbanner), Team (teambanner),
 // Me page (mybanner), the logo beside the phone number (profilelogo), Add Funds (depositbanner), Cash Out (withdrawbanner), Support (supportbanner), About
-// (aboutbanner), Ledger (recordsbanner), Payout Account (bindbankbanner), and the link preview picture (linkpreview, read by the Telegram preview page below).
+// (aboutbanner), Ledger (recordsbanner) and Payout Account (bindbankbanner).
 // The Home banner and the welcome picture have their own routes. Stored in the 'banners' collection as `smartai-<slot>`, cached for 60 s.
 // Transparent cut-out ICONS the owner uploads in the admin panel (Banners > Icons); the panel removes each picture's background and crops it
 // tight before saving, so these are always PNGs. To add an icon, add its name here AND its label in admin-src (SMARTAI_ICON_LABELS).
 // The last eight are the owner's ANIMATIONS (the three Team-page level medals, the dots loader, the gift box, the opened gift, the payment tick and cross): a picture uploaded for one stands still in its place, Remove ("Back to default") brings the animation back.
 const SMARTAI_ICON_SLOTS = ['home', 'robots', 'income', 'share', 'teamnav', 'my', 'deposit', 'withdraw', 'gift', 'support', 'ledger', 'team', 'payout', 'security', 'about', 'rules', 'download', 'signout', 'level1', 'level2', 'level3', 'loader', 'tick', 'cross', 'paylogo'];
-// The pictures members get (all of these go to /public/smartai-images; linkpreview is the Telegram preview's own and is only read by the admin and that page).
+// The pictures members get (all of these go to /public/smartai-images).
 const SMARTAI_BANNER_SLOTS = ['authhero', 'authlogo', 'profilelogo', 'teambanner', 'mybanner', 'aboutbanner',
   'shopbanner', 'depositbanner', 'withdrawbanner', 'supportbanner', 'recordsbanner', 'bindbankbanner'];
-const SMARTAI_IMAGE_SLOTS = [...SMARTAI_BANNER_SLOTS, 'linkpreview', ...SMARTAI_ICON_SLOTS];
+const SMARTAI_IMAGE_SLOTS = [...SMARTAI_BANNER_SLOTS, ...SMARTAI_ICON_SLOTS];
 const _smartaiImageCache = {};
 async function getSmartAIImage(slot) {
   if (!SMARTAI_IMAGE_SLOTS.includes(slot)) return null;
@@ -4026,7 +4024,7 @@ app.get('/public/settings', async (req, res) => {
     // automatic cap), the payment-rail choice, the reference prefix and the host policy.
     const rest = {};
     for (const k of Object.keys(rest0)) {
-      if (/^autoApprove/.test(k) || ['depositMethod', 'depositGateways', 'lworxCollect', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain', 'linkPreviewTitle', 'linkPreviewText', 'agentLevels', 'agentIdByTarget'].includes(k)) continue;
+      if (/^autoApprove/.test(k) || ['depositMethod', 'depositGateways', 'lworxCollect', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain', 'agentLevels', 'agentIdByTarget'].includes(k)) continue;
       rest[k] = rest0[k];
     }
     // Revalidated every time (no max-age): maintenance mode, the opening
@@ -4282,51 +4280,6 @@ app.get('/public/announcement-image', async (req, res) => {
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Smart AI artwork needed by the current member surfaces, fetched together.
-// The path nginx puts in front of this server's routes (API in deploy/make-nginx.js and the app's own API base): a crawler needs the picture's full address.
-const PUBLIC_API_PREFIX = 'k7x2';
-// ── LINK PREVIEW (Telegram only) ──
-// Pasting a link to the app into Telegram shows a card: the site name, the text and a wide picture underneath. The words and the picture are set in
-// Admin > Banners > Link preview. nginx sends ONLY Telegram's crawler here (deploy/make-nginx.js); WhatsApp and every other crawler get an empty page,
-// so they show no preview at all, and people get the app itself.
-function htmlText(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
-async function linkPreviewImage() {
-  const image = await getSmartAIImage('linkpreview');
-  const m = /^data:(image\/(?:png|jpe?g|webp|gif));base64,(.+)$/.exec(image || '');
-  if (m) { const buf = Buffer.from(m[2], 'base64'); return { buf, mime: m[1], custom: true, version: crypto.createHash('sha1').update(buf).digest('hex').slice(0, 12) }; }
-  const icon = await getBrandAsset('app-icon-512');
-  return icon && icon.buf ? { buf: icon.buf, mime: icon.mime, custom: false, version: String(icon.version || 'icon') } : null;
-}
-app.get('/public/link-preview-image', async (req, res) => {
-  try {
-    const img = await linkPreviewImage();
-    if (!img) return res.status(404).end();
-    const etag = '"lp-' + img.version + '"';
-    res.set({ 'Content-Type': img.mime, 'Cache-Control': 'public, max-age=300', ETag: etag, 'Cross-Origin-Resource-Policy': 'cross-origin' });
-    if (req.headers['if-none-match'] === etag) return res.status(304).end();
-    res.send(img.buf);
-  } catch (e) { res.status(500).end(); }
-});
-app.get('/public/link-preview-page', async (req, res) => {
-  try {
-    const sett = await getSettings();
-    const brand = brandName(sett);
-    const title = String(sett.linkPreviewTitle || '').trim() || brand;
-    const text = String(sett.linkPreviewText || '').trim() || `Join the ${brand} App and earn a steady income with daily earnings. Invite friends and earn commissions.`;
-    const img = await linkPreviewImage();
-    const origin = `${req.protocol}://${req.get('host')}`;
-    const imageUrl = img ? `${origin}/${PUBLIC_API_PREFIX}/public/link-preview-image?v=${encodeURIComponent(img.version)}` : '';
-    // A picture the admin uploaded is a wide one (1200 x 630) and is shown large under the text; the app icon fallback is square, so it stays small.
-    const wide = !!(img && img.custom);
-    res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
-    res.send(`<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>${htmlText(title)}</title>
-<meta name="description" content="${htmlText(text)}">
-<meta property="og:type" content="website"><meta property="og:site_name" content="${htmlText(brand)}">
-<meta property="og:title" content="${htmlText(title)}"><meta property="og:description" content="${htmlText(text)}">
-${imageUrl ? `<meta property="og:image" content="${htmlText(imageUrl)}"><meta property="og:image:width" content="${wide ? 1200 : 512}"><meta property="og:image:height" content="${wide ? 630 : 512}">\n` : ''}<meta name="twitter:card" content="${wide ? 'summary_large_image' : 'summary'}"><meta name="twitter:title" content="${htmlText(title)}"><meta name="twitter:description" content="${htmlText(text)}">
-${imageUrl ? `<meta name="twitter:image" content="${htmlText(imageUrl)}">\n` : ''}</head><body></body></html>`);
-  } catch (e) { res.status(500).end(); }
-});
 app.get('/public/smartai-images', async (req, res) => {
   try {
     const [banners, icons] = await Promise.all([getSmartAIImages(SMARTAI_BANNER_SLOTS), getSmartAIImages(SMARTAI_ICON_SLOTS)]);
@@ -8500,13 +8453,6 @@ app.post('/admin/settings/update', async (req, res) => {
       return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay', 'pesajet' or 'tavupay'` });
     if ('withdrawMethod' in updates && !['follow', 'marzpay', 'pesajet', 'tavupay', 'obpay', 'rotate', 'manual'].includes(updates.withdrawMethod))
       return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'rotate', 'marzpay', 'pesajet', 'tavupay', 'obpay' or 'manual'` });
-    // The link-preview words: plain text only, trimmed and capped (Telegram shows about this much).
-    for (const [key, max] of [['linkPreviewTitle', 70], ['linkPreviewText', 260]]) {
-      if (!(key in updates)) continue;
-      const t = String(updates[key] == null ? '' : updates[key]).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim();
-      if (t.length > max) return res.status(400).json({ status: 'error', message: `The link preview ${key === 'linkPreviewTitle' ? 'title' : 'text'} must be ${max} characters or fewer.` });
-      updates[key] = t;
-    }
     // Stamped whenever the admin saves either announcement field, so the
     // Home screen's inline "Latest Announcement" row can show a real date
     // instead of inventing one. Not conditioned on the text actually being
@@ -8651,8 +8597,8 @@ app.get('/public/guide', async (req, res) => {
 app.get('/admin/smartai-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [banners, icons, linkpreview] = await Promise.all([getSmartAIImages(SMARTAI_BANNER_SLOTS), getSmartAIImages(SMARTAI_ICON_SLOTS), getSmartAIImage('linkpreview')]);
-    res.json(Object.assign({ status: 'success' }, banners, { linkpreview, icons }));
+    const [banners, icons] = await Promise.all([getSmartAIImages(SMARTAI_BANNER_SLOTS), getSmartAIImages(SMARTAI_ICON_SLOTS)]);
+    res.json(Object.assign({ status: 'success' }, banners, { icons }));
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/smartai-image/set', async (req, res) => {
