@@ -33,6 +33,9 @@ interface ApiService {
     @POST("auth/change-password")
     suspend fun changePassword(@Body body: Map<String, String>): SimpleResponse
 
+    @POST("feedback")
+    suspend fun sendFeedback(@Body body: Map<String, String>): SimpleResponse
+
     @GET("config")
     suspend fun config(): ConfigResponse
 
@@ -50,6 +53,9 @@ interface ApiService {
 
     @GET("notes/{id}")
     suspend fun note(@Path("id") id: String): NoteResponse
+
+    @GET("notes/{id}/pages")
+    suspend fun notePages(@Path("id") id: String): PagesResponse
 
     // Streamed, not buffered into memory -- a PDF can be tens of MB and this
     // response is written straight to a local file by the caller.

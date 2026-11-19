@@ -37,7 +37,7 @@
   fetch('info.json', { cache: 'no-store' }).then(r => r.json()).then(i => {
     const mb = (i.size / 1048576).toFixed(1) + ' MB';
     const d = i.updated ? new Date(i.updated).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-    document.getElementById('meta').textContent = mb + (d ? ' · updated ' + d : '');
+    document.getElementById('meta').textContent = mb + (i.versionCode ? ' · version ' + i.versionCode : '') + (d ? ' · updated ' + d : '');
   }).catch(() => {});
 </script>
 </body>

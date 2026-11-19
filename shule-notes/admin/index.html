@@ -129,6 +129,7 @@
     <button class="nav" data-tab="notes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/></svg>Notes</button>
     <button class="nav" data-tab="subjects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v13c-3-1-6-1-8 1-2-2-5-2-8-1z"/><path d="M12 6v13"/></svg>Subjects</button>
     <button class="nav" data-tab="announcements"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v3a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 9c1.5 1 1.5 5 0 6M18 6.5c3 2 3 9 0 11"/></svg>Announcements</button>
+    <button class="nav" data-tab="feedback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 11h7M8.5 14h4"/></svg>Feedback</button>
     <button class="nav" data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
     <div class="grow"></div>
     <button class="nav" id="logoutBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button>
@@ -231,6 +232,16 @@
       <div class="card"><h2>All announcements</h2><div id="aList"></div><p class="muted" style="margin:12px 0 0">Students see only the newest one that is switched on and has not expired.</p></div>
     </section>
 
+    <!-- Feedback -->
+    <section id="tab-feedback" class="hidden">
+      <div class="page-head"><div class="grow"><h1>Feedback</h1><div class="muted" id="feedbackSub">Problems and ideas students send from the app</div></div></div>
+      <div class="card">
+        <div class="toolbar"><select id="fbStatus"><option value="new">New</option><option value="done">Done</option><option value="">Everything</option></select></div>
+        <div id="fbList"></div>
+        <div class="pager"><span class="muted" id="fbCount"></span><div><button class="btn plain sm" id="fbPrev">Previous</button> <button class="btn plain sm" id="fbNext">Next</button></div></div>
+      </div>
+    </section>
+
     <!-- Settings -->
     <section id="tab-settings" class="hidden">
       <div class="page-head"><div class="grow"><h1>Settings</h1><div class="muted">Changes apply within a few seconds, with no server restart</div></div></div>
@@ -258,6 +269,17 @@
           <div><label>Email</label><input id="setEmail" placeholder="help@yourschool.com"></div>
           <div><label>Hours</label><input id="setHours" placeholder="Monday to Friday, 8am to 5pm"></div>
         </div>
+      </div>
+      <div class="card">
+        <h2>App updates</h2>
+        <p class="muted" style="margin-top:-6px">Students are told when a newer version exists. The newest build is found automatically from the download page; fill these in only to override it, for example once the app is on Google Play.</p>
+        <div class="row">
+          <div><label>Newest version number</label><input id="setLatest" type="number" min="0" placeholder="Automatic"></div>
+          <div><label>Oldest version still allowed</label><input id="setMin" type="number" min="0" placeholder="No limit"></div>
+        </div>
+        <label>Update link</label><input id="setUpdateUrl" placeholder="https://play.google.com/store/apps/details?id=…  (empty = the download page)">
+        <label>A line shown with the update</label><input id="setUpdateNote" maxlength="140" placeholder="e.g. Faster downloads and bug fixes">
+        <div class="muted" id="setLatestHint"></div>
       </div>
       <button class="btn" id="setSave">Save settings</button>
     </section>
@@ -386,6 +408,7 @@ LOADERS.dashboard = async function(){
     stat('notes', '#e9e1fa', '#6b4bb8', s.notes - s.notesHidden, 'Notes live');
   const tips = [];
   if (s.withoutClass > 0) tips.push(`${s.withoutClass} student${s.withoutClass === 1 ? ' has' : 's have'} not chosen a class yet.`);
+  if (s.feedbackNew > 0) tips.push(`${s.feedbackNew} new feedback message${s.feedbackNew === 1 ? '' : 's'} from students (see Feedback).`);
   if (s.banned > 0) tips.push(`${s.banned} student${s.banned === 1 ? ' is' : 's are'} banned.`);
   if (s.notes === 0) tips.push('No notes yet. Add subjects, then upload your first note.');
   $('dashTips').innerHTML = tips.length ? `<div class="tip">${tips.map(esc).join('<br>')}</div>` : '';
@@ -642,6 +665,39 @@ $('aList').addEventListener('click', async (e) => {
   LOADERS.announcements();
 });
 
+// ── feedback ──
+const FB = { page: 1, pageSize: 20, total: 0, items: [] };
+const FB_TYPES = { problem: ['Problem', 'bad'], idea: ['Idea', 'ok'], other: ['Other', 'info'] };
+LOADERS.feedback = async function(){
+  const r = await api('/admin/feedback/list', { status: $('fbStatus').value, page: FB.page, pageSize: FB.pageSize });
+  if (r.status !== 'success') return toast(r.message || 'Could not load feedback', 'error');
+  FB.total = r.total; FB.items = r.items;
+  $('fbList').innerHTML = r.items.length ? '<ul class="plain">' + r.items.map(f => {
+    const [label, tone] = FB_TYPES[f.type] || FB_TYPES.other;
+    const meta = [f.name, f.phone, f.classLevel, f.noteTitle ? 'about “' + f.noteTitle + '”' : '', f.appVersion ? 'app ' + f.appVersion : '', f.device, ago(f.createdAt)].filter(Boolean).map(esc).join(' · ');
+    return `<li style="align-items:flex-start"><span class="grow"><span class="pill ${tone}">${esc(label)}</span>${f.status === 'done' ? ' <span class="pill ok">Done</span>' : ''}
+      <div style="margin:6px 0 4px;white-space:pre-wrap">${esc(f.message)}</div><span class="muted">${meta}</span></span>
+      <span class="actions"><button class="btn plain sm" data-act="toggle" data-id="${esc(f.id)}">${f.status === 'done' ? 'Reopen' : 'Mark done'}</button><button class="btn danger sm" data-act="delete" data-id="${esc(f.id)}">Delete</button></span></li>`;
+  }).join('') + '</ul>' : '<div class="empty">Nothing here. Messages students send from the app appear in this list.</div>';
+  const from = r.total ? (r.page - 1) * r.pageSize + 1 : 0;
+  $('fbCount').textContent = r.total ? `Showing ${from}–${from + r.items.length - 1} of ${r.total}` : '';
+  $('fbPrev').disabled = r.page <= 1; $('fbNext').disabled = r.page * r.pageSize >= r.total;
+  $('feedbackSub').textContent = r.total + (r.total === 1 ? ' message' : ' messages') + (($('fbStatus').value === 'new') ? ' waiting' : '');
+};
+$('fbStatus').addEventListener('change', () => { FB.page = 1; LOADERS.feedback(); });
+$('fbPrev').addEventListener('click', () => { FB.page = Math.max(1, FB.page - 1); LOADERS.feedback(); });
+$('fbNext').addEventListener('click', () => { FB.page += 1; LOADERS.feedback(); });
+$('fbList').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]'); if (!btn) return;
+  const item = FB.items.find(x => x.id === btn.dataset.id); if (!item) return;
+  if (btn.dataset.act === 'toggle') await api('/admin/feedback/status', { id: item.id, status: item.status === 'done' ? 'new' : 'done' });
+  if (btn.dataset.act === 'delete') {
+    if (!await confirmBox('Delete this message?', 'It is removed for good.', 'Delete', true)) return;
+    await api('/admin/feedback/delete', { id: item.id });
+  }
+  LOADERS.feedback();
+});
+
 // ── settings ──
 LOADERS.settings = async function(){
   const r = await api('/admin/settings/get');
@@ -655,11 +711,15 @@ LOADERS.settings = async function(){
   $('setKey').value = '';
   $('setKeyHint').textContent = s.anthropicKeySet ? 'A key is saved (' + s.anthropicKeyHint + '). It is never shown again; paste a new one to replace it.' : 'No key saved yet. Get one at console.anthropic.com, then paste it here. Without it the AI helper cannot answer.';
   $('setKeyClear').classList.toggle('hidden', !s.anthropicKeySet);
+  $('setLatest').value = s.latestVersionCode || ''; $('setMin').value = s.minVersionCode || '';
+  $('setUpdateUrl').value = s.updateUrl || ''; $('setUpdateNote').value = s.updateNote || '';
+  $('setLatestHint').textContent = r.publishedVersion ? 'The download page is serving version ' + r.publishedVersion + '.' : 'No download page found on this server, so there is no automatic version.';
   $('setPhone').value = s.supportPhone || ''; $('setWhatsapp').value = s.supportWhatsapp || '';
   $('setEmail').value = s.supportEmail || ''; $('setHours').value = s.supportHours || '';
 };
 $('setSave').addEventListener('click', async () => {
   const r = await api('/admin/settings/save', {
+    latestVersionCode: $('setLatest').value, minVersionCode: $('setMin').value, updateUrl: $('setUpdateUrl').value, updateNote: $('setUpdateNote').value,
     aiEnabled: $('setAiOn').checked, aiModel: $('setModel').value, anthropicKey: $('setKey').value, aiDailyLimit: $('setAiLimit').value === '' ? null : Number($('setAiLimit').value),
     supportPhone: $('setPhone').value, supportWhatsapp: $('setWhatsapp').value, supportEmail: $('setEmail').value, supportHours: $('setHours').value,
   });

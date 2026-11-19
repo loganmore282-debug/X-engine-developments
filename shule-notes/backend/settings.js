@@ -12,6 +12,11 @@ const DEFAULTS = {
   supportEmail: '',
   supportHours: '',
   aiModel: '',       // '' = use the AI_MODEL environment value
+  // App updates. 0 = not set; the newest build is then read from the download page.
+  latestVersionCode: 0,
+  minVersionCode: 0,   // apps older than this must update before they can be used
+  updateUrl: '',       // where "Update" goes (Google Play link later); '' = the download page
+  updateNote: '',      // one line shown with the update prompt
   anthropicKey: '',  // the Claude API key, entered in the admin panel (never sent back to it)
 };
 
@@ -72,6 +77,20 @@ async function saveSettings(patch) {
     next.supportEmail = v;
   }
   if (patch.supportHours !== undefined) next.supportHours = text(patch.supportHours, 80);
+  for (const key of ['latestVersionCode', 'minVersionCode']) {
+    if (patch[key] !== undefined) {
+      if (patch[key] === null || patch[key] === '') { next[key] = 0; continue; }
+      const n = Number(patch[key]);
+      if (!Number.isInteger(n) || n < 0 || n > 9999999) return { ok: false, message: 'Version numbers are whole numbers, for example 12' };
+      next[key] = n;
+    }
+  }
+  if (patch.updateUrl !== undefined) {
+    const v = text(patch.updateUrl, 300);
+    if (v && !/^https:\/\/[^\s]+$/.test(v)) return { ok: false, message: 'The update link must start with https://' };
+    next.updateUrl = v;
+  }
+  if (patch.updateNote !== undefined) next.updateNote = text(patch.updateNote, 140);
   if (patch.aiModel !== undefined) {
     const v = text(patch.aiModel, 60);
     if (v && !AI_MODELS.some((m) => m.id === v)) return { ok: false, message: 'Choose one of the listed AI models' };
@@ -107,6 +126,11 @@ function publicConfig(s) {
     supportWhatsapp: s.supportWhatsapp || '',
     supportEmail: s.supportEmail || '',
     supportHours: s.supportHours || '',
+    // The app compares these with its own version number.
+    latestVersion: Number(s.latestVersionCode) || 0,
+    minVersion: Number(s.minVersionCode) || 0,
+    updateUrl: s.updateUrl || '',
+    updateNote: s.updateNote || '',
   };
 }
 

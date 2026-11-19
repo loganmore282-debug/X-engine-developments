@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Search
@@ -48,6 +49,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -58,12 +60,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -81,10 +85,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.shulenotes.app.BuildConfig
+import com.shulenotes.app.ShuleApp
 import com.shulenotes.app.data.Announcement
 import com.shulenotes.app.data.Downloads
 import com.shulenotes.app.data.Note
 import com.shulenotes.app.data.RecentNote
+import com.shulenotes.app.ui.auth.DOWNLOAD_URL
+import com.shulenotes.app.ui.components.AppConfigHolder
 import com.shulenotes.app.ui.components.Avatar
 import com.shulenotes.app.ui.components.StateMessage
 import com.shulenotes.app.ui.components.StatusBarIcons
@@ -92,6 +100,7 @@ import com.shulenotes.app.ui.components.SubjectTint
 import com.shulenotes.app.ui.components.subjectIcon
 import com.shulenotes.app.ui.components.subjectTint
 import com.shulenotes.app.ui.theme.Poppins
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,6 +121,13 @@ fun HomeTab(
 
     val visible = viewModel.visibleNotes()
     val downloadedIds by Downloads.ids.collectAsState()
+
+    // A newer build exists (the number comes from the owner's settings, or from the download page).
+    val appConfig = AppConfigHolder.config
+    val dismissedUpdate by ShuleApp.session.dismissedUpdate.collectAsState(initial = Int.MAX_VALUE)
+    val updateAvailable = appConfig.latestVersion > BuildConfig.VERSION_CODE && appConfig.latestVersion > dismissedUpdate
+    val uriHandler = LocalUriHandler.current
+    val scopeForUpdate = rememberCoroutineScope()
     val searching = viewModel.query.isNotBlank()
     val scope = viewModel.scopeClass
     val tiles = viewModel.subjectsInScope()
@@ -151,6 +167,17 @@ fun HomeTab(
                     onOpenNotifications = onOpenNotifications,
                     onHeight = { headerPx = it },
                 )
+            }
+
+            if (updateAvailable && !searching) {
+                item(key = "update") {
+                    UpdateCard(
+                        note = appConfig.updateNote,
+                        onUpdate = { runCatching { uriHandler.openUri(appConfig.updateUrl.ifBlank { DOWNLOAD_URL }) } },
+                        onDismiss = { scopeForUpdate.launch { ShuleApp.session.dismissUpdate(appConfig.latestVersion) } },
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp),
+                    )
+                }
             }
 
             val notice = viewModel.announcement
@@ -472,6 +499,34 @@ private fun SectionTitle(text: String, modifier: Modifier = Modifier) {
         style = MaterialTheme.typography.titleLarge,
         modifier = modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
     )
+}
+
+// A newer version exists. Closing it hides it until an even newer one comes out.
+@Composable
+private fun UpdateCard(note: String, onUpdate: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.SystemUpdate, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("A new version is ready", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                if (note.isNotBlank()) {
+                    Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                }
+            }
+            TextButton(onClick = onUpdate) { Text("Update") }
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Filled.Close, contentDescription = "Dismiss update", tint = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.size(20.dp))
+            }
+        }
+    }
 }
 
 // A message from the owner (set in the admin panel), until the student closes it.

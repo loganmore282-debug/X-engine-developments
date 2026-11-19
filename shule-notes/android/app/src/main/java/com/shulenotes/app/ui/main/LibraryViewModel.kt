@@ -67,6 +67,11 @@ class LibraryViewModel : ViewModel() {
     var notifications by mutableStateOf<List<Announcement>>(emptyList())
         private set
 
+    var isSendingFeedback by mutableStateOf(false)
+        private set
+    var feedbackError by mutableStateOf<String?>(null)
+        private set
+
     var isSavingProfile by mutableStateOf(false)
         private set
     var profileError by mutableStateOf<String?>(null)
@@ -164,6 +169,36 @@ class LibraryViewModel : ViewModel() {
         val id = announcement?.id ?: return
         announcement = null
         viewModelScope.launch { ShuleApp.session.dismissAnnouncement(id) }
+    }
+
+    fun clearFeedbackError() { feedbackError = null }
+
+    // type: "problem", "idea" or "other".
+    fun sendFeedback(type: String, message: String, onDone: () -> Unit) {
+        if (isSendingFeedback) return
+        if (message.trim().length < 5) { feedbackError = "Please write a little more"; return }
+        viewModelScope.launch {
+            isSendingFeedback = true
+            feedbackError = null
+            try {
+                ApiClient.service.sendFeedback(
+                    mapOf(
+                        "type" to type,
+                        "message" to message.trim(),
+                        "appVersion" to com.shulenotes.app.BuildConfig.VERSION_NAME,
+                        "device" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
+                    ),
+                )
+                Notifier.success("Thank you. We read every message.")
+                onDone()
+            } catch (e: IOException) {
+                feedbackError = "No connection. Try again when you are online."
+            } catch (e: Exception) {
+                feedbackError = e.serverMessage() ?: "We could not send that. Please try again."
+            } finally {
+                isSendingFeedback = false
+            }
+        }
     }
 
     fun clearProfileError() { profileError = null }

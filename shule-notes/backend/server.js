@@ -14,6 +14,9 @@ const { connect, getDb } = require('./db');
 const { hashPassword, verifyPassword, createSession, resolveSession, destroySession, bearerToken, requireAuth } = require('./auth');
 const { verifyAdmin } = require('./admin-auth');
 const { extractInThread } = require('./pdf');
+const { pageTextsFor } = require('./note-pages');
+const feedback = require('./feedback');
+const { publishedVersion } = require('./app-version');
 const { askAboutDocument, classifyClaudeError } = require('./claude');
 const { privacyPage, accountDeletionPage, termsPage } = require('./legal');
 const { GROUPS: LEVEL_GROUPS, isValidLevel } = require('./levels');
@@ -130,7 +133,20 @@ const sendResult = (res, result, extra = {}) => (result.ok
   : res.status(result.status || 400).json({ status: 'error', message: result.message }));
 
 // Contacts and switches the app and the sign-in screen need before anyone is signed in.
-app.get('/config', ah(async (req, res) => res.json({ status: 'success', config: publicConfig(await getSettings()) })));
+app.get('/config', ah(async (req, res) => {
+  const config = publicConfig(await getSettings());
+  // Nothing typed in the panel: use the newest build the download page is serving.
+  if (!config.latestVersion) config.latestVersion = publishedVersion();
+  res.json({ status: 'success', config });
+}));
+
+app.post('/feedback', requireAuth, rateLimit({ windowMs: 60 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false }), ah(async (req, res) => {
+  const result = await feedback.submitFeedback({
+    userId: req.userId, type: req.body.type, message: req.body.message, noteId: req.body.noteId,
+    appVersion: req.body.appVersion, device: req.body.device,
+  });
+  sendResult(res, result);
+}));
 
 app.get('/announcements', requireAuth, ah(async (req, res) => res.json({ status: 'success', announcements: await adminData.listActiveAnnouncements() })));
 app.get('/announcement', requireAuth, ah(async (req, res) => res.json({ status: 'success', announcement: await adminData.activeAnnouncement() })));
@@ -236,6 +252,21 @@ app.get('/notes/:id', requireAuth, async (req, res) => {
   if (!note || note.active === false) return res.status(404).json({ status: 'error', message: 'Note not found' });
   res.json({ status: 'success', note: publicNote(note) });
 });
+
+// The text of every page, so the app can search inside a document and jump to the page.
+app.get('/notes/:id/pages', requireAuth, ah(async (req, res) => {
+  let note;
+  try { note = await getDb().collection('notes').findOne({ _id: new ObjectId(req.params.id) }); }
+  catch (_) { return res.status(400).json({ status: 'error', message: 'Invalid note id' }); }
+  if (!note || note.active === false) return res.status(404).json({ status: 'error', message: 'Note not found' });
+  if (note.textStatus === 'reading') return res.status(409).json({ status: 'error', message: 'This document is still being prepared. Try again in a moment.' });
+  let pages = [];
+  try { pages = await pageTextsFor({ db: getDb(), note, uploadDir: UPLOAD_DIR, extract: extractInThread }); }
+  catch (e) { console.error('could not read the pages of', note.title, ':', e.message); }
+  // A note's text never changes, so a phone may keep this answer.
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  res.json({ status: 'success', pages });
+}));
 
 app.get('/notes/:id/file', requireAuth, async (req, res) => {
   let note;
@@ -352,7 +383,7 @@ const upload = multer({
 // Background half of an upload: read the PDF's text on a worker thread, then publish the note.
 function finishReading(noteId, buffer, title) {
   extractInThread(buffer).then(
-    (r) => getDb().collection('notes').updateOne({ _id: noteId }, { $set: { extractedText: r.text, pageCount: r.pageCount, textStatus: r.text ? 'ready' : 'none' } }),
+    (r) => getDb().collection('notes').updateOne({ _id: noteId }, { $set: { extractedText: r.text, pageTexts: r.pages, pageCount: r.pageCount, textStatus: r.text ? 'ready' : 'none' } }),
     (e) => { console.error('PDF text extraction failed for', title, ':', e.message); return getDb().collection('notes').updateOne({ _id: noteId }, { $set: { textStatus: 'failed' } }); },
   ).catch((e) => console.error('could not save the extracted text for', title, ':', e.message));
 }
@@ -456,7 +487,10 @@ app.post('/admin/users/delete', guard(async (req, res) => sendResult(res, await 
 app.post('/admin/announcements/list', guard(async (req, res) => res.json({ status: 'success', announcements: await adminData.listAnnouncements() })));
 app.post('/admin/announcements/save', guard(async (req, res) => sendResult(res, await adminData.saveAnnouncement(req.body))));
 app.post('/admin/announcements/delete', guard(async (req, res) => sendResult(res, await adminData.deleteAnnouncement(req.body.id))));
-app.post('/admin/settings/get', guard(async (req, res) => res.json({ status: 'success', settings: adminView(await getSettings()), defaultAiDailyLimit: AI_DAILY_LIMIT, models: AI_MODELS })));
+app.post('/admin/feedback/list', guard(async (req, res) => res.json({ status: 'success', ...(await feedback.listFeedback(req.body)) })));
+app.post('/admin/feedback/status', guard(async (req, res) => sendResult(res, await feedback.setFeedbackStatus(req.body.id, req.body.status))));
+app.post('/admin/feedback/delete', guard(async (req, res) => sendResult(res, await feedback.deleteFeedback(req.body.id))));
+app.post('/admin/settings/get', guard(async (req, res) => res.json({ status: 'success', settings: adminView(await getSettings()), defaultAiDailyLimit: AI_DAILY_LIMIT, models: AI_MODELS, publishedVersion: publishedVersion() })));
 app.post('/admin/settings/save', guard(async (req, res) => {
   const result = await saveSettings(req.body);
   sendResult(res, result, result.ok ? { settings: adminView(result.settings) } : {});

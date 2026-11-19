@@ -27,7 +27,9 @@ async function extractPdfText(buffer) {
       for (const item of content.items) text += item.str + (item.hasEOL ? '\n' : '');
       pages.push(text);
     }
-    return { text: pages.join('\n\n').trim(), pageCount: doc.numPages };
+    // `pages` keeps the text of each page separately, so the app can search inside a document
+    // and jump to the page a match is on. (Each page is capped so one odd file cannot bloat the database.)
+    return { text: pages.join('\n\n').trim(), pageCount: doc.numPages, pages: pages.map((t) => t.trim().slice(0, 20000)) };
   } finally {
     await doc.destroy();
   }
@@ -45,7 +47,7 @@ function extractInThread(buffer, timeoutMs = 120000) {
       resourceLimits: { maxOldGenerationSizeMb: 768 },
     });
     const timer = setTimeout(() => { worker.terminate(); reject(new Error('reading the PDF took too long')); }, timeoutMs);
-    worker.once('message', (m) => { clearTimeout(timer); worker.terminate(); m.ok ? resolve({ text: m.text, pageCount: m.pageCount }) : reject(new Error(m.error)); });
+    worker.once('message', (m) => { clearTimeout(timer); worker.terminate(); m.ok ? resolve({ text: m.text, pageCount: m.pageCount, pages: m.pages }) : reject(new Error(m.error)); });
     worker.once('error', (e) => { clearTimeout(timer); reject(e); });
     worker.once('exit', (code) => { clearTimeout(timer); if (code !== 0) reject(new Error('the PDF reader stopped (code ' + code + ')')); });
   });

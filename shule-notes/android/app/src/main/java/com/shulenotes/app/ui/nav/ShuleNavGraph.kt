@@ -6,9 +6,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.shulenotes.app.ShuleApp
 import com.shulenotes.app.data.NoteCache
 import com.shulenotes.app.data.SessionHolder
@@ -27,7 +29,7 @@ object Routes {
     const val REGISTER = "register"
     const val CLASS = "class"
     const val MAIN = "main"
-    const val NOTE = "note/{noteId}"
+    const val NOTE = "note/{noteId}?page={page}"
     const val CHAT = "chat/{noteId}"
 }
 
@@ -79,13 +81,22 @@ fun ShuleNavGraph(startDestination: String) {
             MainScreen(
                 viewModel = viewModel(),
                 onOpenNote = { noteId -> navController.navigate("note/$noteId") { launchSingleTop = true } },
+                onOpenPage = { noteId, page -> navController.navigate("note/$noteId?page=$page") { launchSingleTop = true } },
                 onSignedOut = toLogin,
             )
         }
-        composable(Routes.NOTE) { entry ->
+        composable(
+            Routes.NOTE,
+            arguments = listOf(
+                navArgument("noteId") { type = NavType.StringType },
+                navArgument("page") { type = NavType.IntType; defaultValue = 0 },
+            ),
+        ) { entry ->
             val noteId = entry.arguments?.getString("noteId").orEmpty()
+            val page = entry.arguments?.getInt("page") ?: 0
             NoteDetailScreen(
                 noteId = noteId,
+                startPage = page,
                 viewModel = viewModel(),
                 onBack = { navController.popBackStack() },
                 onAskAi = { navController.navigate("chat/$noteId") { launchSingleTop = true } },

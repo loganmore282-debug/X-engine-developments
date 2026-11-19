@@ -46,7 +46,7 @@ private val Tabs = listOf(
 )
 
 @Composable
-fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onSignedOut: () -> Unit) {
+fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpenPage: (String, Int) -> Unit, onSignedOut: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var showClassSheet by rememberSaveable { mutableStateOf(false) }
     val savedIds by ShuleApp.session.savedNoteIds.collectAsState(initial = emptySet())
@@ -109,7 +109,7 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onSign
                     scope.launch { ShuleApp.session.markNotificationsSeen(System.currentTimeMillis()) }
                 },
             )
-            1 -> Box(Modifier.statusBarsPadding()) { SavedTab(viewModel, savedIds, padding, onOpenNote) }
+            1 -> Box(Modifier.statusBarsPadding()) { SavedTab(viewModel, savedIds, padding, onOpenNote, onOpenPage) }
             else -> Box(Modifier.statusBarsPadding()) {
                 ProfileTab(
                     viewModel = viewModel,

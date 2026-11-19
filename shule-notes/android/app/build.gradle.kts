@@ -12,8 +12,11 @@ android {
         applicationId = "com.shulenotes.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // CI passes -PversionCode=<build number>, so every build is newer than the last and the
+        // app can tell when a newer one exists. A build by hand is version 1.
+        val build = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
+        versionCode = build
+        versionName = "1.0.$build"
 
         // The server the app talks to. Pass -PapiBaseUrl=https://api.example.com to
         // point any build at a real server; with nothing passed, debug builds use

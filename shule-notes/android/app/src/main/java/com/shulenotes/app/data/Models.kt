@@ -111,6 +111,11 @@ data class AppConfig(
     val supportWhatsapp: String = "",
     val supportEmail: String = "",
     val supportHours: String = "",
+    // The newest and the oldest allowed app version numbers (0 = none), and where Update goes.
+    val latestVersion: Int = 0,
+    val minVersion: Int = 0,
+    val updateUrl: String = "",
+    val updateNote: String = "",
 ) {
     val hasSupport: Boolean get() = supportPhone.isNotBlank() || supportWhatsapp.isNotBlank() || supportEmail.isNotBlank()
 }
@@ -146,4 +151,11 @@ data class LibrarySnapshot(
     val subjects: List<Subject>,
     val notes: List<Note>,
     val levelGroups: List<LevelGroup>,
+)
+
+// The text of every page of a note (index 0 is page 1), for searching inside a document.
+data class PagesResponse(
+    val status: String,
+    val pages: List<String>?,
+    val message: String?,
 )

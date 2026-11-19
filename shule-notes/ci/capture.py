@@ -322,6 +322,15 @@ def walk():
     time.sleep(1)
     shot("app-09e-profile-lower")
 
+    # Send feedback to the owner.
+    tap(reveal("Send feedback"))
+    wait_for("Your message")
+    type_into(0, "The page numbers are hard to see on my phone")
+    shot("app-09f-feedback")
+    tap(wait_for("Send"))
+    wait_for("Thank you. We read every message.")
+    time.sleep(3)
+
     tap(wait_for("Home"))
     tap(wait_for("Photosynthesis", prefix=True))
     wait_for("Back")
@@ -334,6 +343,22 @@ def walk():
     tap(wait_for("Download for offline reading"))
     wait_for("Saved for offline reading")
     shot("app-10a-downloaded-for-offline")
+
+    # Bookmark the page being read, then search inside the document.
+    tap(wait_for("Bookmark this page"))
+    wait_for("Page 1 bookmarked")
+    shot("app-10b-page-bookmarked")
+    tap(wait_for("Search in this document"))
+    time.sleep(1)
+    type_into(0, "plant")
+    wait_for("Page", prefix=True)
+    time.sleep(1)
+    shot("app-10c-search-results")
+    adb("shell", "input", "keyevent", "4")   # close the keyboard/search
+    time.sleep(1)
+    if find("Search in this document") is None:   # search page still open: close it
+        adb("shell", "input", "keyevent", "4")
+    wait_for("Ask AI")
 
     adb("shell", "input", "swipe", "540", "1700", "540", "500", "400")
     time.sleep(3)
@@ -373,6 +398,9 @@ def walk():
     tap(wait_for("Downloads (1)"))
     wait_for("Photosynthesis", prefix=True)
     shot("app-15a-downloads")
+    tap(wait_for("Pages (1)"))
+    wait_for("Photosynthesis", prefix=True)
+    shot("app-15b-bookmarked-pages")
     tap(wait_for("Home"))
 
     night(True)

@@ -27,6 +27,9 @@ object Downloads {
 
     fun file(noteId: String): File = File(folder(), safe(noteId) + ".pdf")
 
+    // The page-by-page text kept beside a note, so searching inside it works offline too.
+    fun pagesFile(noteId: String): File = File(folder(), safe(noteId) + ".pages.json")
+
     fun has(noteId: String): Boolean = file(noteId).length() > 0L
 
     fun refresh() {

@@ -17,6 +17,7 @@ async function eraseUser(userId) {
   if (!id) return false;
   await db.collection('sessions').deleteMany({ userId: String(userId) });
   await db.collection('aiUsage').deleteMany({ userId: String(userId) });
+  await db.collection('feedback').deleteMany({ userId: String(userId) });
   await db.collection('users').deleteOne({ _id: id });
   return true;
 }

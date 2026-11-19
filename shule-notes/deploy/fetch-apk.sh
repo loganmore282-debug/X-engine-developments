@@ -24,6 +24,15 @@ SIZE="$(stat -c %s "$TMP")"
 chmod 644 "$TMP"
 mv -f "$TMP" "$DIR/shule-notes.apk"
 printf '%s' "$SIG" > "$STATE"
-printf '{"size":%s,"updated":"%s"}\n' "$SIZE" "$(date -u +%FT%TZ)" > "$DIR/info.json"
+# The build number, published beside the APK. The server reads version.json to tell
+# students when a newer version exists. An older release without it is simply skipped.
+VERSION="$(curl -fsS --max-time 20 "${URL%/*}/shule-notes-live.version.txt" 2>/dev/null | tr -dc '0-9' | head -c 9 || true)"
+if [ -n "$VERSION" ]; then
+  printf '{"versionCode":%s}\n' "$VERSION" > "$DIR/version.json"
+  chmod 644 "$DIR/version.json"
+  printf '{"size":%s,"updated":"%s","versionCode":%s}\n' "$SIZE" "$(date -u +%FT%TZ)" "$VERSION" > "$DIR/info.json"
+else
+  printf '{"size":%s,"updated":"%s"}\n' "$SIZE" "$(date -u +%FT%TZ)" > "$DIR/info.json"
+fi
 chmod 644 "$DIR/info.json"
 echo "updated: $SIZE bytes"

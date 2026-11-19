@@ -15,11 +15,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import com.shulenotes.app.data.SessionHolder
 import kotlinx.coroutines.flow.first
+import com.shulenotes.app.ui.auth.DOWNLOAD_URL
+import com.shulenotes.app.ui.components.AppConfigHolder
 import com.shulenotes.app.ui.components.NotifierHost
+import com.shulenotes.app.ui.components.UpdateRequiredScreen
 import com.shulenotes.app.ui.nav.Routes
 import com.shulenotes.app.ui.nav.ShuleNavGraph
 import com.shulenotes.app.ui.theme.ShuleNotesTheme
@@ -48,6 +52,11 @@ class MainActivity : ComponentActivity() {
             }
 
             LaunchedEffect(Unit) { ShuleApp.session.themeMode.collect { themeMode = it } }
+            // The owner's settings (needs no sign-in): they can require everyone to be on a recent version.
+            LaunchedEffect(Unit) { AppConfigHolder.refresh() }
+            val appConfig = AppConfigHolder.config
+            val mustUpdate = appConfig.minVersion > BuildConfig.VERSION_CODE
+            val uriHandler = LocalUriHandler.current
             val dark = when (themeMode) {
                 "dark" -> true
                 "light" -> false
@@ -63,7 +72,14 @@ class MainActivity : ComponentActivity() {
 
             ShuleNotesTheme(darkTheme = dark) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    startDestination?.let { ShuleNavGraph(startDestination = it) }
+                    if (mustUpdate) {
+                        UpdateRequiredScreen(
+                            note = appConfig.updateNote,
+                            onUpdate = { runCatching { uriHandler.openUri(appConfig.updateUrl.ifBlank { DOWNLOAD_URL }) } },
+                        )
+                    } else {
+                        startDestination?.let { ShuleNavGraph(startDestination = it) }
+                    }
                     NotifierHost()
                 }
             }

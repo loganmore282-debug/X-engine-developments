@@ -7,6 +7,7 @@ const { hashPassword } = require('./auth');
 const { eraseUser, toId, MIN_PASSWORD, MAX_PASSWORD } = require('./accounts');
 const { normalizePhone } = require('./phone');
 const { NAMES: LEVEL_NAMES } = require('./levels');
+const { countNewFeedback } = require('./feedback');
 
 function todayKey(date = new Date()) {
   return date.toISOString().slice(0, 10);
@@ -141,6 +142,7 @@ async function dashboardStats() {
     students, newThisWeek, banned, withoutClass,
     notes: noteTotal, notesHidden: noteHidden, subjects,
     aiToday, studentsAskingToday,
+    feedbackNew: await countNewFeedback(),
     aiLast7Days: Object.entries(daily).map(([date, count]) => ({ date, count })),
     byClass, topNotes, recentStudents,
   };

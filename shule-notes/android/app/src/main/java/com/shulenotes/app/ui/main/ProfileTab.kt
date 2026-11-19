@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Info
@@ -37,7 +38,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -85,6 +88,7 @@ fun ProfileTab(
     var changePassword by rememberSaveable { mutableStateOf(false) }
     var showHelp by rememberSaveable { mutableStateOf(false) }
     var showAppearance by rememberSaveable { mutableStateOf(false) }
+    var showFeedback by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val themeMode by ShuleApp.session.themeMode.collectAsState(initial = "system")
@@ -138,6 +142,8 @@ fun ProfileTab(
         SettingsCard {
             SettingsRow(Icons.Outlined.HelpOutline, "Help and support") { showHelp = true }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
+            SettingsRow(Icons.Outlined.RateReview, "Send feedback") { viewModel.clearFeedbackError(); showFeedback = true }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
             SettingsRow(Icons.Outlined.Share, "Share Shule Notes") {
                 val send = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
@@ -163,6 +169,45 @@ fun ProfileTab(
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
+
+    if (showFeedback) {
+        var kind by rememberSaveable { mutableStateOf("problem") }
+        var message by rememberSaveable { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { if (!viewModel.isSendingFeedback) showFeedback = false },
+            title = { Text("Send feedback") },
+            text = {
+                Column {
+                    Text("Something not working, or an idea to make it better? Tell us.", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
+                        listOf("problem" to "Problem", "idea" to "Idea", "other" to "Other").forEach { (value, label) ->
+                            FilterChip(selected = kind == value, onClick = { kind = value }, label = { Text(label) })
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = message,
+                        onValueChange = { message = it.take(1000); viewModel.clearFeedbackError() },
+                        label = { Text("Your message") },
+                        minLines = 4,
+                        maxLines = 6,
+                        isError = viewModel.feedbackError != null,
+                        supportingText = viewModel.feedbackError?.let { error -> { Text(error) } },
+                        enabled = !viewModel.isSendingFeedback,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.sendFeedback(kind, message) { showFeedback = false; message = "" } },
+                    enabled = !viewModel.isSendingFeedback,
+                ) { Text(if (viewModel.isSendingFeedback) "Sending…" else "Send") }
+            },
+            dismissButton = { TextButton(onClick = { showFeedback = false }, enabled = !viewModel.isSendingFeedback) { Text("Cancel") } },
+        )
     }
 
     if (showAppearance) {

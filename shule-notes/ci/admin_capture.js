@@ -38,11 +38,18 @@ const STUDENTS = [
   ['Esther Achieng', '0701000005', 'Primary 6'], ['Farouk Ssemakula', '0701000006', 'Senior 4'],
   ['Grace Atim', '0701000007', ''],
 ];
+const FEEDBACK = {
+  'Brian Okello': ['problem', 'The Biology note opens very slowly on my phone when the network is weak.'],
+  'Cissy Namubiru': ['idea', 'Please add more past papers for Senior 5, especially General Paper.'],
+};
 async function seedStudents() {
   for (const [name, phone, level] of STUDENTS) {
     const r = await (await fetch(API_URL + '/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, phone, password: 'secret123' }) })).json();
     if (r.status !== 'success') throw new Error('seeding ' + name + ': ' + r.message);
     if (level) await fetch(API_URL + '/auth/class-level', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + r.token }, body: JSON.stringify({ classLevel: level }) });
+    // A couple of students leave feedback, so the owner's list has something in it.
+    const message = FEEDBACK[name];
+    if (message) await fetch(API_URL + '/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + r.token }, body: JSON.stringify({ type: message[0], message: message[1], appVersion: '1.0.12', device: 'Samsung Galaxy A14' }) });
   }
 }
 
@@ -123,6 +130,11 @@ async function seedStudents() {
   await shot('admin-09-new-password');
   await page.click('#modalOk');
 
+  // Feedback from students.
+  await page.click('.nav[data-tab="feedback"]');
+  await page.waitForSelector('#fbList li');
+  await shot('admin-09a-feedback');
+
   // Announcements.
   await page.click('.nav[data-tab="announcements"]');
   await page.fill('#aTitle', 'Mock exams start on Monday');
@@ -135,6 +147,8 @@ async function seedStudents() {
   // Settings.
   await page.click('.nav[data-tab="settings"]');
   await page.waitForSelector('#setPhone');
+  // The page fills its boxes from the server a moment after it opens; typing before that gets overwritten.
+  await page.waitForFunction(() => document.getElementById('setKeyHint').textContent.length > 0);
   await page.fill('#setAiLimit', '15');
   await page.fill('#setPhone', '+256 700 123 456');
   await page.fill('#setWhatsapp', '+256 700 123 456');

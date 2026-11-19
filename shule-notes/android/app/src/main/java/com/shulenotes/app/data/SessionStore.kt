@@ -2,6 +2,7 @@ package com.shulenotes.app.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -23,6 +24,8 @@ private val DISMISSED_KEY = stringPreferencesKey("dismissed_announcement")
 private val LIBRARY_KEY = stringPreferencesKey("library_cache")
 private val SEEN_KEY = longPreferencesKey("notifications_seen_at")
 private val THEME_KEY = stringPreferencesKey("theme_mode")
+private val DISMISSED_UPDATE_KEY = intPreferencesKey("dismissed_update")
+private val PAGE_MARKS_KEY = stringSetPreferencesKey("page_bookmarks")
 
 // One document the student has opened, and how far they got in it.
 data class RecentNote(val id: String, val page: Int, val pageCount: Int, val at: Long)
@@ -48,6 +51,10 @@ class SessionStore(private val context: Context) {
     val notificationsSeenAt: Flow<Long> = context.dataStore.data.map { it[SEEN_KEY] ?: 0L }
     // "system", "light" or "dark".
     val themeMode: Flow<String> = context.dataStore.data.map { it[THEME_KEY] ?: "system" }
+    // Bookmarked pages, each stored as "noteId:page".
+    val pageBookmarks: Flow<Set<String>> = context.dataStore.data.map { it[PAGE_MARKS_KEY] ?: emptySet() }
+    // The newest version the student has already been told about and closed the banner for.
+    val dismissedUpdate: Flow<Int> = context.dataStore.data.map { it[DISMISSED_UPDATE_KEY] ?: 0 }
     val libraryCache: Flow<String> = context.dataStore.data.map { it[LIBRARY_KEY].orEmpty() }
     val dismissedAnnouncement: Flow<String> = context.dataStore.data.map { it[DISMISSED_KEY].orEmpty() }
     val recent: Flow<List<RecentNote>> = context.dataStore.data.map { parseRecent(it[RECENT_KEY]) }
@@ -64,6 +71,22 @@ class SessionStore(private val context: Context) {
 
     suspend fun setName(name: String) {
         context.dataStore.edit { it[NAME_KEY] = name }
+    }
+
+    // True when the page is bookmarked after the call, false when the bookmark was removed.
+    suspend fun togglePageBookmark(noteId: String, page: Int): Boolean {
+        var nowMarked = false
+        context.dataStore.edit {
+            val key = "$noteId:$page"
+            val current = it[PAGE_MARKS_KEY] ?: emptySet()
+            nowMarked = key !in current
+            it[PAGE_MARKS_KEY] = if (nowMarked) current + key else current - key
+        }
+        return nowMarked
+    }
+
+    suspend fun dismissUpdate(version: Int) {
+        context.dataStore.edit { it[DISMISSED_UPDATE_KEY] = version }
     }
 
     suspend fun markNotificationsSeen(at: Long) {

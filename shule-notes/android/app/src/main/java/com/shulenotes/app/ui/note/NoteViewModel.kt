@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
 import com.shulenotes.app.data.ApiClient
 import com.shulenotes.app.data.Downloads
 import com.shulenotes.app.data.Note
@@ -33,11 +34,21 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     var pdfState by mutableStateOf<PdfLoadState>(PdfLoadState.Loading)
         private set
 
+    // The text of every page, loaded the first time the student opens search on this note.
+    var pages by mutableStateOf<List<String>?>(null)
+        private set
+    var pagesLoading by mutableStateOf(false)
+        private set
+    var pagesError by mutableStateOf<String?>(null)
+        private set
+
     private var loadedNoteId: String? = null
 
     fun load(noteId: String, retry: Boolean = false) {
         if (!retry && loadedNoteId == noteId) return
         loadedNoteId = noteId
+        pages = null
+        pagesError = null
         note = NoteCache.get(noteId)
         pdfState = PdfLoadState.Loading
         viewModelScope.launch {
@@ -92,6 +103,35 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) {
             target.delete()
             throw UnreadablePdfException()
+        }
+    }
+
+    // Page text for searching inside the document. Kept on the phone after the first
+    // time, so searching a note you have used before works without internet.
+    fun loadPages(noteId: String) {
+        if (pages != null || pagesLoading) return
+        pagesLoading = true
+        pagesError = null
+        viewModelScope.launch {
+            try {
+                val file = Downloads.pagesFile(noteId)
+                val saved = withContext(Dispatchers.IO) {
+                    if (file.length() > 0L) runCatching { Gson().fromJson(file.readText(), Array<String>::class.java).toList() }.getOrNull() else null
+                }
+                if (saved != null) {
+                    pages = saved
+                } else {
+                    val fetched = ApiClient.service.notePages(noteId).pages ?: emptyList()
+                    withContext(Dispatchers.IO) { runCatching { file.writeText(Gson().toJson(fetched)) } }
+                    pages = fetched
+                }
+            } catch (e: IOException) {
+                pagesError = "Searching a note needs internet the first time. Check your connection and try again."
+            } catch (e: Exception) {
+                pagesError = e.serverMessage() ?: "Search is not available for this document."
+            } finally {
+                pagesLoading = false
+            }
         }
     }
 
