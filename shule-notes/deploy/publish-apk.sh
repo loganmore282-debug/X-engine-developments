@@ -26,6 +26,21 @@ echo "==> nginx: serve it at /download/ (other sites untouched)"
 cp "$NGINX_API" "$NGINX_API.before-download"
 cat > "$LOC" <<LOCATION
 # The app download page (written by deploy/publish-apk.sh)
+location = /download { return 301 /download/; }
+# The app file itself: sent as an Android package, resumable.
+location = /download/shule-notes.apk {
+    alias $DIR/shule-notes.apk;
+    default_type application/vnd.android.package-archive;
+    add_header Cache-Control "no-cache";
+}
+# The page and its small files keep nginx's normal file types (html, json, png).
+location /download/ {
+    alias $DIR/;
+    index index.html;
+    add_header Cache-Control "no-cache";
+}
+LOCATION
+# The app download page (written by deploy/publish-apk.sh)
 location /download/ {
     alias $DIR/;
     index index.html;
