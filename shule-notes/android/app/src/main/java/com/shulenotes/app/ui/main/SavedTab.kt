@@ -170,6 +170,8 @@ fun SavedTab(
                     tint = subjectTint(note.subjectId, viewModel.subjects),
                     saved = note.id in savedIds,
                     downloaded = note.id in downloadedIds,
+                    // These cards are narrow with the bookmark, download and AI marks; the class would squeeze the page count.
+                    showClass = false,
                     onClick = { onOpenNote(note.id) },
                     onToggleSaved = { viewModel.toggleSaved(note.id) },
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 5.dp),

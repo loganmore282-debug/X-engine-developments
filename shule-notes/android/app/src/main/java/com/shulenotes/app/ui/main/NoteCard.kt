@@ -86,6 +86,8 @@ fun NoteCard(
     downloaded: Boolean = false,
     // The class is left out when the whole list is already one class.
     showClass: Boolean = true,
+    // "Past paper" is left out when the whole list is past papers.
+    showKind: Boolean = true,
 ) {
     Surface(
         onClick = onClick,
@@ -129,7 +131,7 @@ fun NoteCard(
                         Spacer(Modifier.width(8.dp))
                     }
                     val details = listOfNotNull(
-                        "Past paper".takeIf { note.kind == "past-paper" },
+                        "Past paper".takeIf { showKind && note.kind == "past-paper" },
                         note.classLevel?.takeIf { showClass && it.isNotBlank() },
                         pagesLabel(note.pageCount),
                     )

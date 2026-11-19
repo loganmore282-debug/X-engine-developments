@@ -308,7 +308,7 @@ fun HomeTab(
                         when {
                             searching -> "Search results"
                             viewModel.selectedSubjectId != null -> viewModel.subjectName(viewModel.selectedSubjectId) ?: "Notes"
-                            viewModel.kindFilter == "past-paper" -> if (scope != null) "Past papers for $scope" else "Past papers"
+                            viewModel.kindFilter == "past-paper" -> "Past papers"
                             scope != null -> "Notes for $scope"
                             else -> "All notes"
                         },
@@ -387,6 +387,8 @@ fun HomeTab(
                         saved = note.id in savedIds,
                         downloaded = note.id in downloadedIds,
                         showClass = scope == null,
+                        // Inside the Past papers view every card is one, so the label would only crowd the row.
+                        showKind = viewModel.kindFilter == null,
                         onClick = { onOpenNote(note.id) },
                         onToggleSaved = { viewModel.toggleSaved(note.id) },
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 5.dp),

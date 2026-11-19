@@ -199,7 +199,7 @@ def walk():
     # Senior 2 has notes AND past papers: the filter chips appear.
     wait_for("Past papers")
     tap(wait_for("Past papers"))
-    wait_for("Past papers for Senior 2")
+    wait_for("Past papers", prefix=True)
     wait_gone("Photosynthesis", prefix=True)
     time.sleep(1)
     shot("app-04b-past-papers")
