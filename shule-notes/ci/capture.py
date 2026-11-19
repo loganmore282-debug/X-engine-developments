@@ -152,6 +152,20 @@ def walk():
     tidy_status_bar()
     adb("shell", "am", "start", "-n", f"{PKG}/.MainActivity")
 
+    # First launch, never signed in: the introduction (the three slides made in the admin panel).
+    wait_for("Continue")
+    wait_for("Skip")
+    time.sleep(2)
+    shot("app-00-intro-1")
+    tap(wait_for("Continue"))
+    time.sleep(1.5)
+    shot("app-00b-intro-2")
+    tap(wait_for("Continue"))
+    wait_for("Get started")
+    time.sleep(1.5)
+    shot("app-00c-intro-3")
+    tap(wait_for("Get started"))
+
     wait_for("Sign in")
     time.sleep(1)
     shot("app-01-sign-in")
@@ -286,6 +300,13 @@ def walk():
     wait_for("Senior 2")
     shot("app-09-profile")
 
+    # The photo options (the logo is the default picture; the system photo picker itself is not driven here).
+    tap(wait_for("Change profile photo"))
+    wait_for("Choose from your photos")
+    shot("app-09-photo-options")
+    adb("shell", "input", "keyevent", "4")
+    time.sleep(1)
+
     # Appearance: force dark, then put it back to follow the phone.
     tap(wait_for("Appearance"))
     wait_for("Light")
@@ -333,6 +354,8 @@ def walk():
     tap(wait_for("Close"))
     adb("shell", "input", "swipe", "540", "1900", "540", "700", "300")
     time.sleep(1)
+    wait_for("Delete account")
+    wait_for("Log out")
     shot("app-09e-profile-lower")
 
     # Send feedback to the owner.

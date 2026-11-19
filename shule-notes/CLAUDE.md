@@ -214,6 +214,18 @@ app's "Forgot password?" just shows the support contacts from Settings (`GET /co
   (NOT secret) goes in `android/app/`; the google-services plugin is applied only when that file exists, so the
   app still builds and runs without it (Push.sync then does nothing). Channel id `announcements`.
 
+- **Introduction (onboarding):** shown once, before the first sign-in (`SessionStore.introSeen`; never to someone already
+  signed in). Slides are made in admin > Introduction (picture shrunk in the browser to 1400px, heading <= 60, text <= 160,
+  max 8, reorder, on/off) and stored in the `slides` collection with pictures on disk (`backend/onboarding.js`,
+  `media.js`); `GET /onboarding` is public and says `configured` (false = the owner made none, so the app shows its own three
+  built-in slides; true with none switched on = no introduction). Design is our own (full-bleed picture, story-style bars,
+  one wide button), `ui/onboarding/IntroScreen.kt`. Images load with Coil.
+- **Profile photo:** the default picture is the Shule Notes logo (`ProfileAvatar` in `ui/components/Brand.kt`); a student can choose
+  a photo (system photo picker, shrunk/straightened to 512px square on the phone, `AvatarImage`), stored on the server disk
+  (`POST /auth/avatar`, `GET /auth/avatar` authenticated, `avatarVersion` on the user busts caches, removed with the
+  account). No photo on Home any more: its header has the bell only. Profile: centred photo with camera badge, a Log out
+  button, a quiet "Delete account" link and the version at the bottom (not rows in a card).
+
 ### Not done yet for a Play Store upload
 - **Target API level:** still 34. Google Play requires new apps to target a recent Android
   version; check the current requirement and raise compileSdk/targetSdk (needs a newer

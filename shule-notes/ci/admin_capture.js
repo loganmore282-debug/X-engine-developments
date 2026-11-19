@@ -53,6 +53,28 @@ async function seedStudents() {
   }
 }
 
+// A small valid PNG: a vertical gradient between two colours (no image library needed).
+function gradientPng(w, h, top, bottom) {
+  const zlib = require('zlib');
+  const raw = Buffer.alloc((w * 3 + 1) * h);
+  for (let y = 0; y < h; y++) {
+    const o = y * (w * 3 + 1);
+    raw[o] = 0;
+    const t = y / (h - 1);
+    for (let x = 0; x < w; x++) for (let c = 0; c < 3; c++) raw[o + 1 + x * 3 + c] = Math.round(top[c] + (bottom[c] - top[c]) * t);
+  }
+  const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = (buf) => { let c = 0xffffffff; for (const b of buf) c = crcTable[(c ^ b) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const sum = Buffer.alloc(4); sum.writeUInt32BE(crc(body));
+    return Buffer.concat([len, body, sum]);
+  };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+
 (async () => {
   const browser = await pw.chromium.launch(process.env.PW_CHANNEL ? { channel: process.env.PW_CHANNEL } : {});
   const context = await browser.newContext({ viewport: { width: 760, height: 900 }, deviceScaleFactor: 2 });
@@ -134,6 +156,28 @@ async function seedStudents() {
   await page.click('.nav[data-tab="feedback"]');
   await page.waitForSelector('#fbList li');
   await shot('admin-09a-feedback');
+
+  // The introduction: three slides, each with a generated picture (a plain gradient PNG is enough to prove the upload).
+  await page.click('.nav[data-tab="intro"]');
+  await page.waitForSelector('#iList .empty');
+  await shot('admin-09b-introduction-empty');
+  const SLIDES = [
+    ['Every note in one place', 'Notes and past papers for your class, added the moment they are ready.', [31, 127, 89], [11, 47, 34]],
+    ['Stuck? Ask the AI helper', 'Open any page and ask a question. The answer comes from the document you are reading.', [22, 112, 95], [10, 44, 52]],
+    ['Study anywhere', 'Download notes to read without data, and carry on exactly where you stopped.', [44, 122, 75], [14, 46, 28]],
+  ];
+  for (let i = 0; i < SLIDES.length; i++) {
+    const [title, text, top, bottom] = SLIDES[i];
+    await page.setInputFiles('#iFile', { name: 'slide.png', mimeType: 'image/png', buffer: gradientPng(540, 960, top, bottom) });
+    await page.waitForFunction(() => document.getElementById('iPreview').classList.contains('has'));
+    await page.fill('#iTitle', title);
+    await page.fill('#iText', text);
+    if (i === 0) await shot('admin-09c-new-slide-filled');
+    await page.click('#iSave');
+    await page.waitForFunction((n) => document.querySelectorAll('#iList .slide-row').length === n, i + 1);
+    await toastGone();
+  }
+  await shot('admin-09d-introduction-slides');
 
   // Announcements.
   await page.click('.nav[data-tab="announcements"]');
