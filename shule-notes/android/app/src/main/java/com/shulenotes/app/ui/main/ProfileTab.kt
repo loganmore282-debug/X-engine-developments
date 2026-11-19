@@ -123,45 +123,40 @@ fun ProfileTab(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp),
     ) {
-        Spacer(Modifier.height(28.dp))
-        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            // The photo, with a small camera badge: tapping either opens the photo options.
-            Box(modifier = Modifier.size(104.dp).clickable(onClickLabel = "Change profile photo") { showPhotoSheet = true }) {
-                ProfileAvatar(size = 104.dp, modifier = Modifier.border(3.dp, MaterialTheme.colorScheme.surface, CircleShape))
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
-                        .border(2.dp, MaterialTheme.colorScheme.background, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (viewModel.isSavingAvatar) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                    } else {
-                        Icon(Icons.Outlined.PhotoCamera, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.height(16.dp))
+        Text("Profile", style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(16.dp))
+
+        SettingsCard {
+            Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                // The logo, or the student's own photo. A small camera badge shows it can be changed.
+                Box(modifier = Modifier.size(64.dp).clickable(onClickLabel = "Change profile photo") { showPhotoSheet = true }) {
+                    ProfileAvatar(size = 64.dp)
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                            .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (viewModel.isSavingAvatar) {
+                            CircularProgressIndicator(modifier = Modifier.size(11.dp), strokeWidth = 1.5.dp, color = MaterialTheme.colorScheme.onPrimary)
+                        } else {
+                            Icon(Icons.Outlined.PhotoCamera, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(12.dp))
+                        }
+                    }
+                }
+                Spacer(Modifier.width(16.dp))
+                Column {
+                    Text(userName.ifBlank { "Student" }, style = MaterialTheme.typography.titleLarge, maxLines = 1)
+                    if (userContact.isNotBlank()) {
+                        Text(userContact, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
-            Spacer(Modifier.height(14.dp))
-            Text(userName.ifBlank { "Student" }, style = MaterialTheme.typography.titleLarge, maxLines = 1)
-            if (userContact.isNotBlank()) {
-                Text(userContact, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (userClass.isNotBlank()) {
-                Spacer(Modifier.height(10.dp))
-                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
-                    Text(
-                        userClass,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                    )
-                }
-            }
         }
-        Spacer(Modifier.height(4.dp))
 
         SectionLabel("Study")
         SettingsCard {
