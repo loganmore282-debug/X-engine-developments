@@ -13,7 +13,7 @@ you, in a browser ─► https://admin.yourdomain.com  (nginx serves the admin p
 1. A Contabo VPS with **Ubuntu 22.04 or 24.04**, and its IP address.
 2. A domain name. Add two **A records** pointing at the VPS IP: `api` and `admin`
    (for example `api.shulenotes.com` and `admin.shulenotes.com`). Wait a few minutes.
-3. A MongoDB database and its connection string (see "MongoDB" below).
+3. MongoDB: nothing to prepare for the on-the-VPS option; for Atlas, see "MongoDB" below.
 4. Your Claude API key (console.anthropic.com).
 
 ## Setup (about 5 minutes)
@@ -33,10 +33,10 @@ The script installs Node 20, nginx and certificates, creates a locked-down servi
 user, opens only SSH, HTTP and HTTPS, and writes `/etc/shule-notes/.env` with a freshly
 generated admin key (it prints it once, so write it down).
 
-Then fill in the two things only you have:
+Next, set up MongoDB (next section), then add your Claude key and start the server:
 
 ```bash
-nano /etc/shule-notes/.env      # set MONGODB_URI and ANTHROPIC_API_KEY
+nano /etc/shule-notes/.env      # ANTHROPIC_API_KEY (and MONGODB_URI if you use Atlas)
 systemctl start shule-notes
 curl https://api.yourdomain.com/health     # should answer {"status":"success",...}
 ```
@@ -47,14 +47,47 @@ Open `https://admin.yourdomain.com`, sign in with the admin key, then:
 
 ## MongoDB
 
-- **Atlas** (what the project assumed): create a cluster, a database user, and allow the
-  VPS's IP under *Network Access*. Use the connection string with the database name at the
-  end: `mongodb+srv://USER:PASS@cluster.mongodb.net/shule_notes?retryWrites=true&w=majority`.
-  The free M0 tier has **no backups**, so install the backup script below.
-- **On the same VPS**: fine for one school-sized app; install MongoDB 7 from MongoDB's own
-  apt repository, bind it to `127.0.0.1` only, turn on authentication, and use
-  `mongodb://USER:PASS@127.0.0.1:27017/shule_notes?authSource=admin`. Never open port 27017
-  to the internet.
+### Option A: on the same VPS (recommended here, nothing extra to pay for)
+
+After `setup.sh`, run:
+
+```bash
+cd X-engine-developments/shule-notes/deploy/mongodb
+sudo ./setup-mongodb.sh
+```
+
+It installs MongoDB 8.0, locks it so only this machine can reach it (127.0.0.1, port 27017
+is not opened in the firewall) and requires a login, creates a `shule_app` user that can
+only touch the `shule_notes` database, and writes the connection string into
+`/etc/shule-notes/.env` for you. The passwords are generated and saved in
+`/root/shule-mongodb-credentials.txt` (also holds a full-control `shule_root` login for you,
+for example `mongosh "mongodb://shule_root:...@127.0.0.1:27017/admin"`).
+Settings are in `mongodb/mongod.conf`; its memory cache is capped at 1 GB, so raise
+`cacheSizeGB` if your VPS has plenty of RAM (about a quarter of it is a good value).
+
+Then add your Claude key and start the app:
+
+```bash
+sudo nano /etc/shule-notes/.env        # ANTHROPIC_API_KEY=...
+sudo systemctl start shule-notes
+curl https://api.yourdomain.com/health
+```
+
+Install the nightly backup (`backup.sh`, top of the file) so the database and the PDFs are
+copied every night. To restore a database backup:
+`mongorestore --uri "<shule_root connection string>" --gzip --archive=/var/backups/shule-notes/mongo-YYYY-MM-DD.archive.gz --drop`
+
+### Option B: MongoDB Atlas (hosted by MongoDB)
+
+1. Create a free account and a cluster (M0 is free; it has **no backups**, so keep `backup.sh`).
+2. *Database Access* → add a user with *Read and write to any database*.
+3. *Network Access* → add the VPS's IP address (not "allow from anywhere").
+4. *Connect → Drivers* → copy the string and add the database name before the `?`:
+   `mongodb+srv://USER:PASS@cluster.mongodb.net/shule_notes?retryWrites=true&w=majority`
+5. Put it on the `MONGODB_URI=` line of `/etc/shule-notes/.env`, then `systemctl start shule-notes`.
+   (If the password has special characters such as `@` or `/`, URL-encode them.)
+
+Either way the app creates its own collections and indexes the first time it starts.
 
 ## Later
 
