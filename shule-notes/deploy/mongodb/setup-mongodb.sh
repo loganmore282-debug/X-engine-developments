@@ -72,7 +72,7 @@ if [ ! -f "$CRED" ]; then
 Shule Notes MongoDB credentials (keep this file private)
 
 App connection string (already put into $ENV_FILE):
-  mongodb://shule_app:$APP_PASS@127.0.0.1:$PORT/shule_notes?authSource=shule_notes
+  mongodb://shule_app:$APP_PASS@127.0.0.1:$PORT/shulenotesdb?authSource=shulenotesdb
 
 Full-control login, for you only:
   mongodb://shule_root:$ROOT_PASS@127.0.0.1:$PORT/admin

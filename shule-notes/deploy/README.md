@@ -103,7 +103,7 @@ This gives Shule Notes **its own** MongoDB, separate from any you already run: i
 service (`shule-mongod`), config (`/etc/shule-mongod.conf`), data folder
 (`/var/lib/shule-mongodb`) and port (27018, or the next free one). It listens on
 `127.0.0.1` only, requires a login, and has a `shule_app` user that can touch only the
-`shule_notes` database. If the server already has the `mongod` program it is used as it is
+`shulenotesdb` database. If the server already has the `mongod` program it is used as it is
 (not upgraded); otherwise only the MongoDB 8.0 server package is installed and held so a
 routine `apt upgrade` never changes its version. The connection string goes into
 `/etc/shule-notes/.env` for you; passwords are in `/root/shule-mongodb-credentials.txt`
@@ -128,7 +128,7 @@ To restore: `mongorestore --uri "<shule_root connection string>" --gzip --archiv
 2. *Database Access* → add a user with *Read and write to any database*.
 3. *Network Access* → add the VPS's IP address (not "allow from anywhere").
 4. *Connect → Drivers* → copy the string and add the database name before the `?`:
-   `mongodb+srv://USER:PASS@cluster.mongodb.net/shule_notes?retryWrites=true&w=majority`
+   `mongodb+srv://USER:PASS@cluster.mongodb.net/shulenotesdb?retryWrites=true&w=majority`
 5. Put it on the `MONGODB_URI=` line of `/etc/shule-notes/.env`, then `systemctl start shule-notes`.
    (If the password has special characters such as `@` or `/`, URL-encode them.)
 

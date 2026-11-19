@@ -4,7 +4,7 @@
 // Uses the same `mongodb` driver the app uses, so no mongosh is needed.
 const { MongoClient } = require('mongodb');
 const [mode, a, b, c] = process.argv.slice(2);
-const DB = 'shule_notes';
+const DB = 'shulenotesdb';
 
 (async () => {
   if (mode === 'create') {

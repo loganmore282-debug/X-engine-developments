@@ -18,7 +18,7 @@ let db = null;
 async function connect() {
   await client.connect();
   // The database name comes from the connection string itself
-  // (mongodb+srv://.../shule_notes?...) -- never defaulted here, so a typo'd
+  // (mongodb+srv://.../shulenotesdb?...) -- never defaulted here, so a typo'd
   // URI cannot silently land writes in Atlas's "test" database.
   db = client.db();
   await ensureIndexes();
