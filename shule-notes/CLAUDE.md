@@ -226,6 +226,28 @@ app's "Forgot password?" just shows the support contacts from Settings (`GET /co
   account). No photo on Home any more: its header has the bell only. Profile: centred photo with camera badge, a Log out
   button, a quiet "Delete account" link and the version at the bottom (not rows in a card).
 
+### Security (read before adding payments)
+**Principle: an Android app can never be made impossible to hack or edit. The server must decide everything that matters.**
+Sign-in, the AI daily quota, admin rights and (later) who has paid are all enforced on the server; an edited app gains nothing.
+When payments arrive: a payment is "paid" ONLY when the provider's signed webhook (or a server-side status check) says so,
+never because the app says so; keep paid notes behind the authenticated file route and check entitlement there.
+What exists now:
+- Backend: scrypt passwords, hashed session tokens, per-IP limits, **per-phone lock** (`login-guard.js`: 10 wrong passwords in
+  15 min locks that number for the rest of the window), admin key compared in constant time with wrong-key limits on ALL admin
+  routes, Mongo-operator stripping, helmet, uploads must start with `%PDF-`, avatars/slide images checked by magic bytes.
+- App: `signingConfigs.shuletest` = ONE fixed test key committed at `android/app/shule-test-signing.keystore` (password in
+  build.gradle.kts; it is a TEST key, not secret) so builds install over each other. The live APK is `assembleRelease`
+  (not debuggable) and `Integrity.kt` refuses to run if the signing certificate's SHA-256 differs from `EXPECTED_CERT_SHA256`
+  (set in `build-shule-notes-apk.yml`). `SecureWindow` (FLAG_SECURE) blocks screenshots/recording in the reader and AI chat
+  (`BuildConfig.SECURE_SCREENS`, off in the debug/emulator build so CI can photograph it). allowBackup=false, no cleartext in release.
+- **When publishing to Google Play:** the owner creates a PRIVATE upload key (never commit it), Google re-signs with its own
+  app-signing key, so the certificate hash changes: update `EXPECTED_CERT_SHA256` to Google's key (Play Console > App integrity)
+  or the app will refuse to run. Then also turn on **R8** (`isMinifyEnabled` + keep rules for the Gson models in `data/`, Retrofit,
+  Coil, Firebase) and walk the minified build on the emulator, and add **Play Integrity API** (server verifies the token) before
+  any paid feature. R8 and Play Integrity are NOT done yet.
+- PDFs: opened PDFs are cached in the app's private cache and "Downloaded for offline" copies live in the app's private storage
+  (not visible to other apps or the gallery; readable only with root). They are not encrypted at rest.
+
 ### Not done yet for a Play Store upload
 - **Target API level:** still 34. Google Play requires new apps to target a recent Android
   version; check the current requirement and raise compileSdk/targetSdk (needs a newer
