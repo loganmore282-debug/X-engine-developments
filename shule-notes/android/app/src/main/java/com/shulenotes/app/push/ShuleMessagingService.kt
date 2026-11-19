@@ -29,6 +29,7 @@ class ShuleMessagingService : FirebaseMessagingService() {
         )
         val built = NotificationCompat.Builder(this, Push.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
+            .setLargeIcon(android.graphics.BitmapFactory.decodeResource(resources, R.drawable.logo_mark))
             .setColor(ContextCompat.getColor(this, R.color.notification_accent))
             .setContentTitle(note.title ?: getString(R.string.app_name))
             .setContentText(note.body)
