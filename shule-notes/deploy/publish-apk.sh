@@ -40,14 +40,6 @@ location /download/ {
     add_header Cache-Control "no-cache";
 }
 LOCATION
-# The app download page (written by deploy/publish-apk.sh)
-location /download/ {
-    alias $DIR/;
-    index index.html;
-    types { application/vnd.android.package-archive apk; }
-    add_header Cache-Control "no-cache";
-}
-LOCATION
 sed -i '/shule-download-location.conf/d' "$NGINX_API"
 if grep -q 'shule-hook-location.conf' "$NGINX_API"; then
   sed -i '/shule-hook-location.conf/a\    include /etc/nginx/shule-download-location.conf;' "$NGINX_API"
