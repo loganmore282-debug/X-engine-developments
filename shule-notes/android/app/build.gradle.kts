@@ -15,16 +15,19 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        // Overridden per build type below. Debug points at a typical local
-        // backend for development; release must be edited to the real VPS
-        // URL (or domain) before shipping.
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:4000\"")
+        // The server the app talks to. Pass -PapiBaseUrl=https://api.example.com to
+        // point any build at a real server; with nothing passed, debug builds use
+        // the emulator's alias for the developer's machine and release builds use
+        // the placeholder below (edit it before publishing).
+        val liveApi = (project.findProperty("apiBaseUrl") as String?)?.trim().orEmpty()
+        buildConfigField("String", "API_BASE_URL", "\"${liveApi.ifEmpty { "http://10.0.2.2:4000" }}\"")
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            buildConfigField("String", "API_BASE_URL", "\"https://api.yourdomain.com\"")
+            val liveApi = (project.findProperty("apiBaseUrl") as String?)?.trim().orEmpty()
+            buildConfigField("String", "API_BASE_URL", "\"${liveApi.ifEmpty { "https://api.yourdomain.com" }}\"")
         }
         debug {
             isMinifyEnabled = false

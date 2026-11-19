@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+env:
+  # The owner's server. Change this when the real domain exists.
+  LIVE_API_URL: https://api.161-97-98-107.sslip.io
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -48,6 +52,13 @@ jobs:
         working-directory: shule-notes/android
         run: cp app/build/outputs/apk/debug/app-debug.apk shule-notes-debug.apk
 
+      # The same app, pointed at the owner's real server, for installing on a phone.
+      - name: Build the APK for the live server
+        working-directory: shule-notes/android
+        run: |
+          gradle assembleDebug -PapiBaseUrl="$LIVE_API_URL" --no-daemon --stacktrace
+          cp app/build/outputs/apk/debug/app-debug.apk shule-notes-live.apk
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -62,5 +73,15 @@ jobs:
           name: Shule Notes Android App (debug build)
           body: "Installable Shule Notes app (debug build, for testing). Download shule-notes-debug.apk below and install on the phone. Points at the debug API_BASE_URL in app/build.gradle.kts -- for a real release, build a release APK against the real backend URL instead."
           files: shule-notes/android/shule-notes-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish the live-server APK (direct download link)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: shule-notes-live
+          name: Shule Notes (connects to the live server)
+          body: "Shule Notes test build that connects to the owner's server. Download shule-notes-live.apk and install it on a phone. If an older copy is installed, uninstall it first (test builds are signed with a different temporary key each time)."
+          files: shule-notes/android/shule-notes-live.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
