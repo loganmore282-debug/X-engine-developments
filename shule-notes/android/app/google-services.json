@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "741549968128",
+    "project_id": "shule-notes",
+    "storage_bucket": "shule-notes.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:741549968128:android:d3295dc64a30ae020501e5",
+        "android_client_info": {
+          "package_name": "com.shulenotes.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBbbOclkszqOUgUQdCvMEtO0oXkJSUnBjA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
