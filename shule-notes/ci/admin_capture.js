@@ -11,16 +11,24 @@ const ADMIN_KEY = process.env.ADMIN_KEY;
 const PDF_DIR = process.argv[2];
 const OUT = process.argv[3];
 
-const SUBJECTS = [['Biology', 1], ['Mathematics', 2], ['Physics', 3], ['Chemistry', 4]];
 // Uploaded oldest first; the app lists the newest first.
 const NOTES = [
   ['How to Revise for Exams', '', '', 'revision-tips.pdf', 'Planning, active revision and exam technique. For every class.'],
   ['Fractions and Decimals', 'Mathematics', 'Primary 7', 'fractions.pdf', 'Adding fractions and changing them to decimals, with practice questions.'],
-  ['Work, Energy and Power', 'Physics', 'Senior 2', 'energy.pdf', 'Definitions, formulas and worked examples.'],
+  ['Plants and Animals', 'Science', 'Primary 7', 'plants-animals.pdf', 'Living things and how plants make food.'],
+  ['Our District and Our Region', 'Social Studies', 'Primary 7', 'our-districts.pdf', 'Districts, regions and how to read a map.'],
+  ['Reading Comprehension', 'English', 'Primary 7', 'comprehension.pdf', 'A short passage with questions.'],
+  ['Demand and Supply', 'Economics', 'Senior 5', 'demand-supply.pdf', 'The law of demand, supply and market equilibrium.'],
+  ['Planning a General Paper Essay', 'General Paper', 'Senior 5', 'gp-essay.pdf', 'Reading the question and structuring an essay.'],
   ['Cell Structure – Practice Questions', 'Biology', 'Senior 1', 'cells.pdf', 'Short-answer practice questions on plant and animal cells.'],
-  ['Acids, Bases and Salts', 'Chemistry', 'Senior 2', 'acids.pdf', 'Acids, alkalis, neutralisation and the pH scale.'],
+  ['Essay Writing', 'English', 'Senior 2', 'essay-writing.pdf', 'Planning and structuring an essay.'],
+  ['Linear Equations – Worked Examples', 'Mathematics', 'Senior 2', 'linear-equations.pdf', 'Solving equations step by step.'],
+  ['Map Reading', 'Geography', 'Senior 2', 'map-reading.pdf', 'Scale, key and grid references.'],
+  ['Uganda Before Colonial Rule', 'History & Political Education', 'Senior 2', 'uganda-history.pdf', 'Early kingdoms and trade.'],
+  ['Work, Energy and Power', 'Physics', 'Senior 2', 'energy.pdf', 'Definitions, formulas and worked examples.'],
   ["Newton's Laws of Motion – Revision", 'Physics', 'Senior 3', 'newton.pdf', 'The three laws, with a worked force calculation.'],
   ['Quadratic Equations – Worked Examples', 'Mathematics', 'Senior 3', 'quadratics.pdf', 'Factorising and the quadratic formula, with practice questions.'],
+  ['Acids, Bases and Salts', 'Chemistry', 'Senior 2', 'acids.pdf', 'Acids, alkalis, neutralisation and the pH scale.'],
   ['Photosynthesis', 'Biology', 'Senior 2', 'photosynthesis.pdf', 'How plants make food: the equation, leaf adaptations, limiting factors and the starch test.'],
 ];
 
@@ -43,20 +51,19 @@ const NOTES = [
   await page.waitForSelector('#app:not(.hidden)');
 
   await page.click('.tab[data-tab="subjects"]');
-  for (const [name, order] of SUBJECTS) {
-    await page.fill('#sName', name);
-    await page.fill('#sOrder', String(order));
-    await page.click('#sSave');
-    await page.waitForSelector(`#subjectsRows td:text-is("${name}")`);
-  }
+  // The one-click button adds every standard Ugandan subject (and asks first).
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.click('#sSeed');
+  await page.waitForSelector('#subjectsRows td:text-is("Subsidiary ICT")', { timeout: 60000 });
   await toastGone();
   await shot('admin-02-subjects');
 
   await page.click('.tab[data-tab="notes"]');
   for (const [i, [title, subject, level, file, desc]] of NOTES.entries()) {
     await page.fill('#nTitle', title);
-    await page.selectOption('#nSubject', subject ? { label: subject } : { value: '' });
+    // The class first: the subject menu then shows only that class's subjects.
     await page.selectOption('#nClass', level ? { label: level } : { value: '' });
+    await page.selectOption('#nSubject', subject ? { label: subject } : { value: '' });
     await page.setInputFiles('#nFile', path.join(PDF_DIR, file));
     await page.fill('#nDesc', desc);
     if (i === NOTES.length - 1) { await toastGone(); await shot('admin-03-uploading-a-note'); }

@@ -112,6 +112,141 @@ DOCS = {
             "4. Leave time at the end to read through what you wrote.",
         ]),
     ]),
+    "plants-animals.pdf": ("Plants and Animals", "Primary 7 Science notes", [
+        ("Living things", [
+            "Living things move, feed, grow, reproduce, respire, excrete and respond to what is around them. "
+            "Plants and animals are the two main groups of living things we study.",
+        ]),
+        ("How plants make food", [
+            "Green plants make their own food in their leaves. They use sunlight, water from the soil and "
+            "carbon dioxide from the air. This process is called photosynthesis.",
+            "* Roots take in water and hold the plant in the soil.",
+            "* The stem carries water and food around the plant.",
+            "* Leaves make food using sunlight.",
+        ]),
+        ("Revision questions", [
+            "1. Name four things that all living things do.",
+            "2. State two jobs of the roots of a plant.",
+            "3. Why are leaves green?",
+        ]),
+    ]),
+    "our-districts.pdf": ("Our District and Our Region", "Primary 7 Social Studies notes", [
+        ("Where we live", [
+            "Uganda is divided into regions, and each region has many districts. A district is led by a "
+            "Local Council V Chairperson, and a Chief Administrative Officer runs the district offices.",
+        ]),
+        ("Using a map", [
+            "* A map is a drawing of a place as seen from above.",
+            "* The key explains the signs and colours used on the map.",
+            "* The scale shows how a distance on the map matches a real distance.",
+            "* The compass shows the four main directions: north, south, east and west.",
+        ]),
+        ("Practice questions", [
+            "1. Name the district where your school is found.",
+            "2. What does the key of a map show?",
+            "3. Name the four main points of the compass.",
+        ]),
+    ]),
+    "comprehension.pdf": ("Reading Comprehension", "Primary 7 English practice", [
+        ("The passage", [
+            "Amina walks two kilometres to school every morning. On the way she greets the old man who sells "
+            "mangoes by the road. She likes to arrive early so that she can read in the school library before "
+            "lessons begin. Last term she borrowed twelve books and finished every one of them.",
+        ]),
+        ("Questions", [
+            "1. How far does Amina walk to school?",
+            "2. Who does Amina greet on the way?",
+            "3. Why does Amina like to arrive early?",
+            "4. How many books did Amina borrow last term?",
+            "5. Find a word in the passage that means 'a place where books are kept'.",
+        ]),
+    ]),
+    "essay-writing.pdf": ("Essay Writing", "Senior 2 English notes", [
+        ("Planning an essay", [
+            "A good essay has an introduction, a body and a conclusion. Before you write, spend five minutes "
+            "listing your main points and putting them in order.",
+        ]),
+        ("The three parts", [
+            "* Introduction: say what the essay is about in two or three sentences.",
+            "* Body: one paragraph for each main point, with an example.",
+            "* Conclusion: sum up your argument and leave the reader with a final thought.",
+        ]),
+        ("Practice titles", [
+            "1. Why every village needs a library.",
+            "2. A day I will never forget.",
+            "3. Should students use phones at school?",
+        ]),
+    ]),
+    "linear-equations.pdf": ("Linear Equations", "Senior 2 Mathematics worked examples", [
+        ("Solving an equation", [
+            "To solve an equation, do the same thing to both sides until the unknown is alone.",
+            "Example: solve 3x + 5 = 20. Subtract 5 from both sides: 3x = 15. Divide both sides by 3: x = 5.",
+        ]),
+        ("Equations with the unknown on both sides", [
+            "Example: solve 5x - 4 = 2x + 8. Subtract 2x from both sides: 3x - 4 = 8. "
+            "Add 4: 3x = 12. Divide by 3: x = 4.",
+        ]),
+        ("Practice questions", [
+            "1. Solve 2x + 7 = 19.",
+            "2. Solve 4x - 3 = x + 9.",
+            "3. The sum of three consecutive numbers is 42. Find the numbers.",
+        ]),
+    ]),
+    "map-reading.pdf": ("Map Reading", "Senior 2 Geography notes", [
+        ("Parts of a map", [
+            "Every topographic map has a title, a scale, a key and a north arrow. The scale lets us measure "
+            "real distances: on a 1:50,000 map, 1 cm stands for 500 m on the ground.",
+        ]),
+        ("Grid references", [
+            "A four-figure grid reference names a square on the map. Read the eastings (the numbers along the "
+            "bottom) first, then the northings (the numbers up the side).",
+            "Remember: along the corridor, then up the stairs.",
+        ]),
+        ("Practice questions", [
+            "1. A road measures 6 cm on a 1:50,000 map. How long is it on the ground?",
+            "2. Give the four-figure grid reference of the square whose bottom left corner is at 43 easting and 27 northing.",
+        ]),
+    ]),
+    "uganda-history.pdf": ("Uganda Before Colonial Rule", "Senior 2 History and Political Education notes", [
+        ("Early kingdoms", [
+            "Before colonial rule, the area now called Uganda had several kingdoms, among them Buganda, "
+            "Bunyoro, Ankole and Toro, as well as societies without kings such as the Acholi and Lango.",
+        ]),
+        ("Trade", [
+            "* Long-distance trade linked the interior with the coast.",
+            "* Salt from Kibiro and iron tools from Bunyoro were widely traded.",
+            "* Traders from the coast brought cloth, beads and guns.",
+        ]),
+        ("Revision questions", [
+            "1. Name three pre-colonial kingdoms in Uganda.",
+            "2. Give two items that were traded.",
+        ]),
+    ]),
+    "demand-supply.pdf": ("Demand and Supply", "Senior 5 Economics notes", [
+        ("Demand", [
+            "Demand is the quantity of a good that buyers are willing and able to buy at a given price. "
+            "When the price of a good falls, the quantity demanded usually rises. This is the law of demand.",
+        ]),
+        ("Supply", [
+            "Supply is the quantity of a good that sellers are willing to offer at a given price. "
+            "When the price rises, the quantity supplied usually rises too.",
+        ]),
+        ("Equilibrium", [
+            "The market is in equilibrium where demand equals supply. At that price there is neither a "
+            "shortage nor a surplus.",
+        ]),
+    ]),
+    "gp-essay.pdf": ("Planning a General Paper Essay", "Senior 5 General Paper notes", [
+        ("Read the question carefully", [
+            "Underline the key words in the question and decide what you are being asked to do: discuss, "
+            "explain, assess or give your opinion.",
+        ]),
+        ("A simple structure", [
+            "* An introduction that defines the main term and states your view.",
+            "* Three or four paragraphs, each making one point with an example from Uganda or East Africa.",
+            "* A conclusion that answers the question directly.",
+        ]),
+    ]),
     "acids.pdf": ("Acids, Bases and Salts", "Senior 2 Chemistry notes", [
         ("Acids", [
             "An acid is a substance that releases hydrogen ions when it dissolves in water. Acids taste "

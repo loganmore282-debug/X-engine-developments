@@ -100,6 +100,9 @@
         <div><label>Order</label><input id="sOrder" type="number" value="0"></div>
       </div>
       <button class="btn" id="sSave">Save subject</button>
+      <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+      <p class="muted" style="margin:0 0 10px">New here? Add the subjects Uganda's schools teach (primary, O-Level and A-Level) in one go. Subjects you already have are left alone.</p>
+      <button class="btn ghost" id="sSeed">Add Uganda's standard subjects</button>
     </div>
     <div class="card">
       <h2>All subjects</h2>
@@ -170,8 +173,7 @@ async function loadSubjects(){
     <tr><td>${esc(s.name)}</td><td>${s.order}</td>
     <td><button class="btn danger sm" data-del-subject="${esc(s.id)}">Delete</button></td></tr>
   `).join('') : '<tr><td colspan="3" class="muted">No subjects yet</td></tr>';
-  document.getElementById('nSubject').innerHTML = '<option value="">(none)</option>' +
-    SUBJECTS.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+  renderSubjectOptions();
   document.querySelectorAll('[data-del-subject]').forEach(b => b.addEventListener('click', async () => {
     if (!confirm('Delete this subject? Notes under it are not deleted, just left unassigned.')) return;
     await api('/admin/subjects/delete', { method: 'POST', body: { id: b.dataset.delSubject } });
@@ -208,6 +210,44 @@ function classOptions(selected){
       g.levels.map(l => `<option value="${esc(l.id)}"${l.id === selected ? ' selected' : ''}>${esc(l.name)}</option>`).join('') +
     '</optgroup>').join('');
 }
+
+// The subject menu on the upload form follows the class chosen beside it: only
+// the subjects taught in that class, plus any custom subject you added yourself.
+function levelByName(name){
+  for (const g of LEVEL_GROUPS) for (const l of g.levels) if (l.id === name) return l;
+  return null;
+}
+function standardSubjects(){
+  return [...new Set(LEVEL_GROUPS.flatMap(g => g.levels.flatMap(l => l.subjects || [])))];
+}
+function renderSubjectOptions(){
+  const level = levelByName(document.getElementById('nClass').value);
+  const standard = new Set(standardSubjects().map(n => n.toLowerCase()));
+  const list = level
+    ? SUBJECTS.filter(s => level.subjects.includes(s.name) || !standard.has(s.name.toLowerCase()))
+    : SUBJECTS;
+  const select = document.getElementById('nSubject');
+  const before = select.value;
+  select.innerHTML = '<option value="">(none)</option>' +
+    list.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+  if (list.some(s => s.id === before)) select.value = before;
+}
+document.getElementById('nClass').addEventListener('change', renderSubjectOptions);
+document.getElementById('sSeed').addEventListener('click', async () => {
+  const have = new Set(SUBJECTS.map(s => s.name.toLowerCase()));
+  const missing = standardSubjects().filter(n => !have.has(n.toLowerCase()));
+  if (!LEVEL_GROUPS.length) return toast('Could not load the subject list from the server');
+  if (!missing.length) return toast('All the standard subjects are already there');
+  if (!confirm('Add ' + missing.length + ' subjects?')) return;
+  let order = Math.max(0, ...SUBJECTS.map(s => Number(s.order) || 0)) + 10;
+  for (const name of missing) {
+    const r = await api('/admin/subjects/save', { method: 'POST', body: { name, order } });
+    if (r.status !== 'success') { toast(r.message || 'Could not add ' + name); break; }
+    order += 10;
+  }
+  toast('Subjects added');
+  loadSubjects();
+});
 
 // ── notes ──
 function subjectName(id){ const s = SUBJECTS.find(x => x.id === id); return s ? s.name : '—'; }

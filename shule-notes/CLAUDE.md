@@ -142,8 +142,17 @@ it at the real backend before using it for real.
   tabs Home, Saved (bookmarks, stored on the phone only) and Profile (my class, privacy
   policy, log out, delete account); `ui/note/` the reader; `ui/chat/` the AI helper.
   Shared pieces live in `ui/components/`.
-- Each subject's colour comes from its position in the admin's subject order
-  (`SubjectTint.kt`), so the first six subjects never share one.
+- **Subjects and their icons** (the owner supplied another app's subject list and design as a
+  reference and asked for our OWN artwork, so never copy that app's look): `backend/levels.js`
+  lists the standard subjects of each level (lower primary, upper primary, O-Level, A-Level,
+  checked against NCDC/UNEB sources) and the admin has an "Add Uganda's standard subjects"
+  button; its upload form shows only the subjects taught in the chosen class. The icons are
+  our own, drawn in `android/branding/subject_icons.py` (one line style, 30% soft fill) and
+  generated as `ic_subject_*.xml` vector drawables plus editable SVGs in
+  `branding/subject-icons/`. Do not hand-edit the XML; edit the script and re-run it.
+  `SubjectTint.kt` picks an icon AND a colour from the subject's NAME (keyword rules, order
+  matters), so a subject keeps its look when others are added. A name with no rule gets an
+  open book and a colour from its hash.
 - `LibraryViewModel` loads the whole library once and filters by class, subject and search
   on the phone. `NoteCache` lets the reader and chat show a note's title without refetching.
 - `data/` — Retrofit (`ApiService`/`ApiClient`) + `SessionStore` (DataStore: token, name,

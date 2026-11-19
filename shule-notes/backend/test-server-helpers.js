@@ -74,6 +74,14 @@ console.log('\n— the class list and a student\'s class —');
   ck(isValidLevel('Primary 7') && isValidLevel('Senior 6') && !isValidLevel('Senior 7') && !isValidLevel('Form 3') && !isValidLevel('') && !isValidLevel(null),
      'only a class from the list is valid');
   ck(new Set(NAMES).size === NAMES.length && GROUPS.every((g) => g.levels.every((l) => l.id === l.name && l.short)), 'every class has a unique name and a short label');
+  const subjectsOf = (name) => GROUPS.flatMap((g) => g.levels).find((l) => l.name === name).subjects;
+  ck(GROUPS.every((g) => g.levels.every((l) => Array.isArray(l.subjects) && l.subjects.length >= 6)), 'every class has its list of subjects');
+  ck(subjectsOf('Primary 2').includes('Reading') && !subjectsOf('Primary 2').includes('Science'), 'lower primary reads and counts but has no Science yet');
+  ck(['English', 'Mathematics', 'Science', 'Social Studies'].every((x) => subjectsOf('Primary 6').includes(x)), 'upper primary has the four PLE subjects');
+  ck(['Biology', 'Chemistry', 'Physics'].every((x) => subjectsOf('Senior 2').includes(x)) && !subjectsOf('Senior 2').includes('Science'), 'O-Level splits Science into Biology, Chemistry and Physics');
+  ck(subjectsOf('Senior 5').includes('General Paper') && subjectsOf('Senior 6').includes('Subsidiary Mathematics') && subjectsOf('Senior 5').includes('Subsidiary ICT'), 'A-Level has General Paper and the subsidiaries');
+  const { ALL_SUBJECTS } = require('./levels');
+  ck(new Set(ALL_SUBJECTS).size === ALL_SUBJECTS.length && ALL_SUBJECTS.every((x) => GROUPS.flatMap((g) => g.levels).some((l) => l.subjects.includes(x))), 'the full list has each subject once and every one belongs to some class');
 }
 
 console.log('\n— the AI daily quota actually caps spend —');

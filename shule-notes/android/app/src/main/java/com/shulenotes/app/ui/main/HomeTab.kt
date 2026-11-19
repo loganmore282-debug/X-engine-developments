@@ -56,7 +56,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -143,7 +145,7 @@ fun HomeTab(
                         item(key = "all") {
                             SubjectTile(
                                 label = "All",
-                                icon = Icons.Filled.Apps,
+                                icon = rememberVectorPainter(Icons.Filled.Apps),
                                 tint = SubjectTint(
                                     accent = MaterialTheme.colorScheme.primary,
                                     container = MaterialTheme.colorScheme.primaryContainer,
@@ -158,7 +160,7 @@ fun HomeTab(
                         items(tiles, key = { it.id }) { subject ->
                             SubjectTile(
                                 label = subject.name,
-                                icon = subjectIcon(subject.name),
+                                icon = painterResource(subjectIcon(subject.name)),
                                 tint = subjectTint(subject.id, viewModel.subjects),
                                 isSelected = viewModel.selectedSubjectId == subject.id,
                                 onClick = { viewModel.selectSubject(subject.id) },
@@ -413,7 +415,7 @@ private fun ContinueCard(
                 modifier = Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(subjectIcon(subjectName), contentDescription = null, tint = tint.onCover, modifier = Modifier.size(28.dp))
+                Icon(painterResource(subjectIcon(subjectName)), contentDescription = null, tint = tint.onCover, modifier = Modifier.size(32.dp))
             }
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -452,7 +454,7 @@ private fun ContinueCard(
 }
 
 @Composable
-private fun SubjectTile(label: String, icon: ImageVector, tint: SubjectTint, isSelected: Boolean, onClick: () -> Unit) {
+private fun SubjectTile(label: String, icon: Painter, tint: SubjectTint, isSelected: Boolean, onClick: () -> Unit) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val iconOnAccent = if (dark) Color(0xFF0B0F0D) else Color.White
     Column(
@@ -471,7 +473,7 @@ private fun SubjectTile(label: String, icon: ImageVector, tint: SubjectTint, isS
                 .background(if (isSelected) tint.accent else tint.container),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = if (isSelected) iconOnAccent else tint.accent, modifier = Modifier.size(30.dp))
+            Icon(icon, contentDescription = null, tint = if (isSelected) iconOnAccent else tint.accent, modifier = Modifier.size(34.dp))
         }
         Spacer(Modifier.height(8.dp))
         Text(
