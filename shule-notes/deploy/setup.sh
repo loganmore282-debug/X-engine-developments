@@ -4,15 +4,33 @@
 #
 #   sudo ./setup.sh api.example.com admin.example.com you@example.com
 #
+# No domain yet? Use a free address built from the server's own IP (works for
+# testing; buy a domain before publishing the app):
+#
+#   sudo ./setup.sh --no-domain you@example.com
+#
 # Both domains must already point at the VPS's IP address (an A record each),
-# or the certificate step cannot work. Safe to run again: it never overwrites
-# your .env, and it re-copies the code.
+# or the certificate step cannot work. Safe to run again (also to switch to a
+# real domain later): it never overwrites your .env secrets, and it re-copies the code.
 set -euo pipefail
-
-API_DOMAIN="${1:?usage: setup.sh <api-domain> <admin-domain> <email-for-certificates>}"
-ADMIN_DOMAIN="${2:?usage: setup.sh <api-domain> <admin-domain> <email-for-certificates>}"
-CERT_EMAIL="${3:?usage: setup.sh <api-domain> <admin-domain> <email-for-certificates>}"
 [ "$(id -u)" -eq 0 ] || { echo "Run this as root (sudo)."; exit 1; }
+
+USAGE="usage: setup.sh <api-domain> <admin-domain> <email-for-certificates>
+       setup.sh --no-domain <email-for-certificates>"
+if [ "${1:-}" = "--no-domain" ]; then
+  CERT_EMAIL="${2:?$USAGE}"
+  apt-get update -y >/dev/null && apt-get install -y curl >/dev/null
+  IP="$(curl -4fsS https://api.ipify.org)" || { echo "Could not find this server's public IP."; exit 1; }
+  DASHED="${IP//./-}"
+  # sslip.io answers any name of the form <anything>.<ip-with-dashes>.sslip.io with that IP.
+  API_DOMAIN="api.$DASHED.sslip.io"
+  ADMIN_DOMAIN="admin.$DASHED.sslip.io"
+  echo "==> No domain: using $API_DOMAIN and $ADMIN_DOMAIN"
+else
+  API_DOMAIN="${1:?$USAGE}"
+  ADMIN_DOMAIN="${2:?$USAGE}"
+  CERT_EMAIL="${3:?$USAGE}"
+fi
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC="$(dirname "$HERE")"
@@ -46,10 +64,15 @@ if [ ! -f "$ENV_DIR/.env" ]; then
   cp "$SRC/backend/.env.example" "$ENV_DIR/.env"
   ADMIN_KEY="$(openssl rand -hex 24)"
   sed -i "s|^ADMIN_KEY=.*|ADMIN_KEY=$ADMIN_KEY|" "$ENV_DIR/.env"
-  sed -i "s|^ALLOWED_ORIGINS=.*|ALLOWED_ORIGINS=https://$ADMIN_DOMAIN|" "$ENV_DIR/.env"
   sed -i "s|^UPLOAD_DIR=.*|UPLOAD_DIR=$UPLOADS|" "$ENV_DIR/.env"
   echo "    Created $ENV_DIR/.env with a new admin key: $ADMIN_KEY"
   echo "    (write it down: it is the password for the admin panel)"
+fi
+# Always follows the current admin address, so switching to a real domain later just works.
+if grep -q '^ALLOWED_ORIGINS=' "$ENV_DIR/.env"; then
+  sed -i "s|^ALLOWED_ORIGINS=.*|ALLOWED_ORIGINS=https://$ADMIN_DOMAIN|" "$ENV_DIR/.env"
+else
+  echo "ALLOWED_ORIGINS=https://$ADMIN_DOMAIN" >> "$ENV_DIR/.env"
 fi
 chown root:shule "$ENV_DIR/.env"
 chmod 640 "$ENV_DIR/.env"
@@ -94,3 +117,6 @@ else
   systemctl restart shule-notes
   echo "==> Started. Check it: curl https://$API_DOMAIN/health"
 fi
+echo
+echo "Your addresses:  API   https://$API_DOMAIN"
+echo "                 Admin https://$ADMIN_DOMAIN"

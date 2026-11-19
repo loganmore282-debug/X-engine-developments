@@ -16,6 +16,26 @@ you, in a browser ─► https://admin.yourdomain.com  (nginx serves the admin p
 3. MongoDB: nothing to prepare for the on-the-VPS option; for Atlas, see "MongoDB" below.
 4. Your Claude API key (console.anthropic.com).
 
+## No domain yet?
+
+You can start without one. Run the script with `--no-domain` and it builds two free
+addresses from the server's IP (for example `api.203-0-113-5.sslip.io`), with real HTTPS
+certificates, so you can test everything: the admin panel, the app, uploads.
+
+```bash
+./setup.sh --no-domain you@email.com
+```
+
+Two things to know:
+- **Buy a domain before you publish the app on Google Play.** The address is built into
+  the app, so changing it later means every student has to update. A `.com` costs roughly
+  the price of a lunch per year at Namecheap, Porkbun or Cloudflare. Then add two A records
+  (`api` and `admin`) pointing at the VPS IP and run `./setup.sh api.yourdomain.com
+  admin.yourdomain.com you@email.com` again; it switches the server over and keeps your data.
+- Google Play also asks for a privacy-policy link. The one the server provides
+  (`https://api.../privacy`) should be on your permanent address, which is another reason
+  to get the domain first.
+
 ## Setup (about 5 minutes)
 
 On the VPS, as root (Contabo gives you the root login by email):
