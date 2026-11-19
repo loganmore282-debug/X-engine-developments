@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -81,6 +82,8 @@ fun NoteCard(
     onClick: () -> Unit,
     onToggleSaved: () -> Unit,
     modifier: Modifier = Modifier,
+    // Kept on the phone for offline reading.
+    downloaded: Boolean = false,
     // The class is left out when the whole list is already one class.
     showClass: Boolean = true,
 ) {
@@ -126,6 +129,7 @@ fun NoteCard(
                         Spacer(Modifier.width(8.dp))
                     }
                     val details = listOfNotNull(
+                        "Past paper".takeIf { note.kind == "past-paper" },
                         note.classLevel?.takeIf { showClass && it.isNotBlank() },
                         pagesLabel(note.pageCount),
                     )
@@ -137,6 +141,15 @@ fun NoteCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
+                    if (downloaded) {
+                        Icon(
+                            Icons.Filled.DownloadForOffline,
+                            contentDescription = "Downloaded for offline reading",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                    }
                     if (note.hasAiContext) {
                         Icon(
                             Icons.Filled.AutoAwesome,

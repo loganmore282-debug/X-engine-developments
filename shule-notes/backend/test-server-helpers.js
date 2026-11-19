@@ -53,6 +53,8 @@ console.log('— publicUser / publicNote never leak internal fields —');
   ck(JSON.stringify(n).indexOf('secret-uuid') === -1, 'the real server-side file NAME is never exposed to the client (only /notes/:id/file serves it)');
   const n2 = server.publicNote({ _id: 'n2', title: 'Scanned Notes', extractedText: '' });
   ck(n2.hasAiContext === false, 'a note with no extracted text (a scan) correctly reports AI is unavailable');
+  ck(n.kind === 'notes' && server.publicNote({ _id: 'n3', title: 'x', kind: 'past-paper' }).kind === 'past-paper', 'a note is ordinary notes unless it is marked a past paper (older notes have no type)');
+  ck(server.publicNote({ _id: 'n4', title: 'x', kind: 'something-else' }).kind === 'notes', 'an unknown stored type falls back to notes');
 }
 
 console.log('\n— one stored form per phone number —');

@@ -204,10 +204,15 @@ app.get('/subjects', requireAuth, async (req, res) => {
   res.json({ status: 'success', subjects: rows.map((s) => ({ id: String(s._id), name: s.name })) });
 });
 
+// What kind of document it is: ordinary notes, or a past paper.
+const NOTE_KINDS = ['notes', 'past-paper'];
+const cleanKind = (value) => (NOTE_KINDS.includes(String(value || '').trim()) ? String(value).trim() : null);
+
 function publicNote(n) {
   return {
     id: String(n._id), subjectId: n.subjectId ? String(n.subjectId) : null,
     title: n.title, description: n.description || '', classLevel: n.classLevel || null,
+    kind: NOTE_KINDS.includes(n.kind) ? n.kind : 'notes',
     pageCount: n.pageCount || 0, fileSize: n.fileSize || 0, uploadedAt: n.uploadedAt,
     hasAiContext: !!(n.extractedText && n.extractedText.length > 0),
   };
@@ -363,6 +368,9 @@ app.post('/admin/notes/upload', upload.single('file'), async (req, res) => {
     const classLevel = req.body.classLevel ? String(req.body.classLevel).trim() : null;
     if (classLevel && !isValidLevel(classLevel)) return res.status(400).json({ status: 'error', message: 'Choose a class from the list' });
 
+    const kind = req.body.kind ? cleanKind(req.body.kind) : 'notes';
+    if (!kind) return res.status(400).json({ status: 'error', message: 'Choose Notes or Past paper' });
+
     let subjectId = null;
     if (req.body.subjectId) {
       try { subjectId = new ObjectId(String(req.body.subjectId)); }
@@ -378,7 +386,7 @@ app.post('/admin/notes/upload', upload.single('file'), async (req, res) => {
     // until then the note is held back from students ("reading").
     const doc = {
       title, description: String(req.body.description || '').trim().slice(0, 1000),
-      subjectId, classLevel,
+      subjectId, classLevel, kind,
       fileName, fileSize: req.file.size, pageCount: 0,
       extractedText: '', textStatus: 'reading', active: true, uploadedAt: new Date(),
     };
@@ -403,6 +411,11 @@ app.post('/admin/notes/update', async (req, res) => {
   if (req.body.title !== undefined) patch.title = String(req.body.title).trim().slice(0, 150);
   if (req.body.description !== undefined) patch.description = String(req.body.description).trim().slice(0, 1000);
   if (req.body.active !== undefined) patch.active = !!req.body.active;
+  if (req.body.kind !== undefined) {
+    const kind = cleanKind(req.body.kind);
+    if (!kind) return res.status(400).json({ status: 'error', message: 'Choose Notes or Past paper' });
+    patch.kind = kind;
+  }
   if (req.body.classLevel !== undefined) {
     const level = String(req.body.classLevel || '').trim();
     if (level && !isValidLevel(level)) return res.status(400).json({ status: 'error', message: 'Choose a class from the list' });
@@ -476,4 +489,4 @@ if (require.main === module) {
   start().catch((e) => { console.error('Failed to start:', e); process.exit(1); });
 }
 
-module.exports = { app, todayKey, normalizePhone, isValidPhone, publicUser, publicNote, consumeAiQuota, deleteAccount, setClassLevel, AI_DAILY_LIMIT };
+module.exports = { NOTE_KINDS, app, todayKey, normalizePhone, isValidPhone, publicUser, publicNote, consumeAiQuota, deleteAccount, setClassLevel, AI_DAILY_LIMIT };

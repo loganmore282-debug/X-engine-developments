@@ -64,6 +64,8 @@ data class Note(
     val title: String,
     val description: String?,
     val classLevel: String?,
+    // "notes" or "past-paper"; absent from servers older than this feature.
+    val kind: String? = null,
     val pageCount: Int,
     val fileSize: Long,
     val uploadedAt: String?,

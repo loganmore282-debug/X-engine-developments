@@ -7,9 +7,11 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.shulenotes.app.data.ApiClient
+import com.shulenotes.app.data.Downloads
 import com.shulenotes.app.data.Note
 import com.shulenotes.app.data.NoteCache
 import com.shulenotes.app.data.serverMessage
+import com.shulenotes.app.ui.components.Notifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -57,14 +59,27 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun cacheFile(noteId: String): File {
+        val dir = File(getApplication<Application>().cacheDir, "notes").apply { mkdirs() }
+        return File(dir, noteId.filter { it.isLetterOrDigit() } + ".pdf")
+    }
+
     // A note's file never changes once uploaded, so a copy already on the
     // phone is reused: reopening a document is instant and works offline.
+    // A copy the student downloaded on purpose is tried first.
     private suspend fun openPdf(noteId: String): PdfDocument {
-        val dir = File(getApplication<Application>().cacheDir, "notes").apply { mkdirs() }
-        val safeId = noteId.filter { it.isLetterOrDigit() }
-        val target = File(dir, "$safeId.pdf")
+        val downloaded = Downloads.file(noteId)
+        if (downloaded.length() > 0L) {
+            try {
+                return PdfDocument(downloaded)
+            } catch (e: Exception) {
+                downloaded.delete()
+                Downloads.refresh()
+            }
+        }
+        val target = cacheFile(noteId)
         if (target.length() == 0L) {
-            val partial = File(dir, "$safeId.part")
+            val partial = File(target.parentFile, target.nameWithoutExtension + ".part")
             ApiClient.service.noteFile(noteId).use { body ->
                 body.byteStream().use { input ->
                     partial.outputStream().use { output -> input.copyTo(output) }
@@ -77,6 +92,26 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) {
             target.delete()
             throw UnreadablePdfException()
+        }
+    }
+
+    // Keep this note for offline reading, or remove it from the phone again.
+    fun toggleDownload(noteId: String) {
+        viewModelScope.launch {
+            if (Downloads.has(noteId)) {
+                withContext(Dispatchers.IO) { Downloads.remove(noteId) }
+                Notifier.info("Removed from downloads")
+            } else {
+                val cached = cacheFile(noteId)
+                if (cached.length() > 0L) {
+                    try {
+                        withContext(Dispatchers.IO) { Downloads.save(noteId, cached) }
+                        Notifier.success("Saved for offline reading")
+                    } catch (e: Exception) {
+                        Notifier.error("Could not save this document. Is the phone's storage full?")
+                    }
+                }
+            }
         }
     }
 

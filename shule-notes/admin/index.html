@@ -175,6 +175,7 @@
         <div class="row">
           <div><label>Title</label><input id="nTitle" placeholder="e.g. Photosynthesis"></div>
           <div><label>Class</label><select id="nClass"><option value="">All classes</option></select></div>
+          <div><label>Type</label><select id="nKind"><option value="notes">Notes</option><option value="past-paper">Past paper</option></select></div>
         </div>
         <div class="row">
           <div><label>Subject</label><select id="nSubject"><option value="">(none)</option></select></div>
@@ -493,7 +494,7 @@ LOADERS.notes = async function(){
   if (NOTES.some(n => n.textStatus === 'reading') && currentTab === 'notes') readingTimer = setTimeout(() => LOADERS.notes(), 2500);
   $('notesRows').innerHTML = NOTES.length ? NOTES.map(n => `
     <tr>
-      <td>${esc(n.title)}${n.description ? `<span class="sub">${esc(n.description)}</span>` : ''}</td>
+      <td>${n.kind === 'past-paper' ? '<span class="pill info">Past paper</span> ' : ''}${esc(n.title)}${n.description ? `<span class="sub">${esc(n.description)}</span>` : ''}</td>
       <td>${esc(subjectName(n.subjectId))}</td>
       <td>${n.classLevel ? esc(n.classLevel) : '<span class="muted">All</span>'}</td>
       <td>${n.pageCount || '—'}</td><td>${n.views || 0}</td>
@@ -523,10 +524,11 @@ $('notesRows').addEventListener('click', async (e) => {
 async function editNote(note){
   const body = `<label>Title</label><input id="eTitle" value="${esc(note.title)}">
     <label>Description</label><textarea id="eDesc">${esc(note.description || '')}</textarea>
-    <div class="row"><div><label>Class</label><select id="eClass">${classOptions(note.classLevel || '', 'All classes')}</select></div>
+    <div class="row"><div><label>Type</label><select id="eKind"><option value="notes"${note.kind === 'past-paper' ? '' : ' selected'}>Notes</option><option value="past-paper"${note.kind === 'past-paper' ? ' selected' : ''}>Past paper</option></select></div>
+    <div><label>Class</label><select id="eClass">${classOptions(note.classLevel || '', 'All classes')}</select></div>
     <div><label>Subject</label><select id="eSubject">${subjectOptions(note.classLevel || '', note.subjectId)}</select></div></div>`;
   const pending = modal({ title: 'Edit note', body, okLabel: 'Save changes',
-    collect: () => ({ id: note.id, title: $('eTitle').value, description: $('eDesc').value, classLevel: $('eClass').value, subjectId: $('eSubject').value }) });
+    collect: () => ({ id: note.id, title: $('eTitle').value, description: $('eDesc').value, kind: $('eKind').value, classLevel: $('eClass').value, subjectId: $('eSubject').value }) });
   $('eClass').addEventListener('change', () => { $('eSubject').innerHTML = subjectOptions($('eClass').value, $('eSubject').value); });
   const saved = await pending;
   if (!saved) return;
@@ -541,7 +543,7 @@ $('nUpload').addEventListener('click', async () => {
   if (!file) return toast('Choose a PDF file', 'error');
   const fd = new FormData();
   fd.append('title', title); fd.append('description', $('nDesc').value.trim());
-  fd.append('subjectId', $('nSubject').value); fd.append('classLevel', $('nClass').value); fd.append('file', file);
+  fd.append('subjectId', $('nSubject').value); fd.append('classLevel', $('nClass').value); fd.append('kind', $('nKind').value); fd.append('file', file);
   $('nUpload').disabled = true; $('nUploadStatus').textContent = 'Uploading…';
   const r = await api('/admin/notes/upload', fd);
   $('nUpload').disabled = false; $('nUploadStatus').textContent = '';

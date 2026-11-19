@@ -112,11 +112,21 @@ def fields():
     return found
 
 
-def type_into(index, text):
-    tap(fields()[index])
-    adb("shell", "input text '" + text.replace(" ", "%s") + "'")
-    time.sleep(1)
-    hide_keyboard()
+def type_into(index, text, tries=3):
+    """Types into the index-th text field and CHECKS it arrived. A slow emulator sometimes
+    drops the first characters; one dropped keystroke must not fail the whole run."""
+    for attempt in range(tries):
+        tap(fields()[index])
+        adb("shell", "input text '" + text.replace(" ", "%s") + "'")
+        time.sleep(1)
+        hide_keyboard()
+        shown = fields()[index]["text"]
+        # A password field shows one bullet per character; an empty field shows its hint.
+        if shown == text or (shown and set(shown) == {"\u2022"} and len(shown) == len(text)):
+            return
+        print(f"typing into field {index} went wrong (saw {shown!r}); clearing and trying again", flush=True)
+        clear_field(index, length=len(text) + 12)
+    raise RuntimeError(f"could not type {text!r} into field {index}")
 
 
 def tidy_status_bar():
@@ -185,6 +195,18 @@ def walk():
     wait_for("Notes for Senior 2")
     tap(wait_for("Dismiss"))
     wait_gone("Mock exams start on Monday")
+
+    # Senior 2 has notes AND past papers: the filter chips appear.
+    wait_for("Past papers")
+    tap(wait_for("Past papers"))
+    wait_for("Past papers for Senior 2")
+    wait_gone("Photosynthesis", prefix=True)
+    time.sleep(1)
+    shot("app-04b-past-papers")
+    # "All" is both a subject tile and a filter chip; the chip is the lower one.
+    tap(sorted([n for n in nodes() if n["text"] == "All"], key=lambda n: n["box"][1])[-1])
+    wait_for("Notes for Senior 2")
+    wait_for("Photosynthesis", prefix=True)
 
     tap(wait_for("Biology"))
     wait_gone("Acids, Bases and Salts", prefix=True)
@@ -308,6 +330,11 @@ def walk():
     time.sleep(4)
     shot("app-10-reading-a-document")
 
+    # Keep it for offline reading.
+    tap(wait_for("Download for offline reading"))
+    wait_for("Saved for offline reading")
+    shot("app-10a-downloaded-for-offline")
+
     adb("shell", "input", "swipe", "540", "1700", "540", "500", "400")
     time.sleep(3)
     shot("app-11-further-down-the-document")
@@ -340,6 +367,13 @@ def walk():
     wait_for("Continue reading")
     time.sleep(1)
     shot("app-15-home-continue-reading")
+
+    # The download is listed under Saved > Downloads.
+    tap(wait_for("Saved"))
+    tap(wait_for("Downloads (1)"))
+    wait_for("Photosynthesis", prefix=True)
+    shot("app-15a-downloads")
+    tap(wait_for("Home"))
 
     night(True)
     wait_for("Photosynthesis", prefix=True)

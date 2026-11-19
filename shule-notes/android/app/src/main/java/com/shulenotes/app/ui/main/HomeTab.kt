@@ -40,6 +40,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.Badge
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -53,6 +54,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -80,6 +82,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.shulenotes.app.data.Announcement
+import com.shulenotes.app.data.Downloads
 import com.shulenotes.app.data.Note
 import com.shulenotes.app.data.RecentNote
 import com.shulenotes.app.ui.components.Avatar
@@ -108,6 +111,7 @@ fun HomeTab(
     StatusBarIcons(light = true)
 
     val visible = viewModel.visibleNotes()
+    val downloadedIds by Downloads.ids.collectAsState()
     val searching = viewModel.query.isNotBlank()
     val scope = viewModel.scopeClass
     val tiles = viewModel.subjectsInScope()
@@ -211,6 +215,23 @@ fun HomeTab(
                 }
             }
 
+            if (viewModel.hasBothKinds() && !viewModel.isLoading) {
+                item(key = "kinds") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf<Pair<String?, String>>(null to "All", "notes" to "Notes", "past-paper" to "Past papers").forEach { (kind, label) ->
+                            FilterChip(
+                                selected = viewModel.kindFilter == kind,
+                                onClick = { viewModel.selectKind(kind) },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
+                }
+            }
+
             item(key = "section") {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 10.dp),
@@ -220,6 +241,7 @@ fun HomeTab(
                         when {
                             searching -> "Search results"
                             viewModel.selectedSubjectId != null -> viewModel.subjectName(viewModel.selectedSubjectId) ?: "Notes"
+                            viewModel.kindFilter == "past-paper" -> if (scope != null) "Past papers for $scope" else "Past papers"
                             scope != null -> "Notes for $scope"
                             else -> "All notes"
                         },
@@ -276,6 +298,7 @@ fun HomeTab(
                         subjectName = viewModel.subjectName(note.subjectId),
                         tint = subjectTint(note.subjectId, viewModel.subjects),
                         saved = note.id in savedIds,
+                        downloaded = note.id in downloadedIds,
                         showClass = scope == null,
                         onClick = { onOpenNote(note.id) },
                         onToggleSaved = { viewModel.toggleSaved(note.id) },

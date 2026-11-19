@@ -22,10 +22,10 @@ const NOTES = [
   ['Planning a General Paper Essay', 'General Paper', 'Senior 5', 'gp-essay.pdf', 'Reading the question and structuring an essay.'],
   ['Cell Structure – Practice Questions', 'Biology', 'Senior 1', 'cells.pdf', 'Short-answer practice questions on plant and animal cells.'],
   ['Essay Writing', 'English', 'Senior 2', 'essay-writing.pdf', 'Planning and structuring an essay.'],
-  ['Linear Equations – Worked Examples', 'Mathematics', 'Senior 2', 'linear-equations.pdf', 'Solving equations step by step.'],
+  ['Linear Equations – Worked Examples', 'Mathematics', 'Senior 2', 'linear-equations.pdf', 'Solving equations step by step.', 'past-paper'],
   ['Map Reading', 'Geography', 'Senior 2', 'map-reading.pdf', 'Scale, key and grid references.'],
   ['Uganda Before Colonial Rule', 'History & Political Education', 'Senior 2', 'uganda-history.pdf', 'Early kingdoms and trade.'],
-  ['Work, Energy and Power', 'Physics', 'Senior 2', 'energy.pdf', 'Definitions, formulas and worked examples.'],
+  ['Work, Energy and Power', 'Physics', 'Senior 2', 'energy.pdf', 'Definitions, formulas and worked examples.', 'past-paper'],
   ["Newton's Laws of Motion – Revision", 'Physics', 'Senior 3', 'newton.pdf', 'The three laws, with a worked force calculation.'],
   ['Quadratic Equations – Worked Examples', 'Mathematics', 'Senior 3', 'quadratics.pdf', 'Factorising and the quadratic formula, with practice questions.'],
   ['Acids, Bases and Salts', 'Chemistry', 'Senior 2', 'acids.pdf', 'Acids, alkalis, neutralisation and the pH scale.'],
@@ -80,12 +80,13 @@ async function seedStudents() {
   await shot('admin-02-subjects');
 
   await page.click('.nav[data-tab="notes"]');
-  for (const [i, [title, subject, level, file, desc]] of NOTES.entries()) {
+  for (const [i, [title, subject, level, file, desc, kind]] of NOTES.entries()) {
     await page.fill('#nTitle', title);
     // The class first: the subject menu then shows only that class's subjects.
     await page.selectOption('#nClass', level ? { label: level } : { value: '' });
     await page.selectOption('#nSubject', subject ? { label: subject } : { value: '' });
     await page.setInputFiles('#nFile', path.join(PDF_DIR, file));
+    await page.selectOption('#nKind', kind || 'notes');
     await page.fill('#nDesc', desc);
     if (i === NOTES.length - 1) { await toastGone(); await shot('admin-03-uploading-a-note'); }
     await page.click('#nUpload');

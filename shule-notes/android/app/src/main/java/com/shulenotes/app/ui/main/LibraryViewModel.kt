@@ -9,6 +9,7 @@ import com.shulenotes.app.ShuleApp
 import com.shulenotes.app.data.ApiClient
 import com.shulenotes.app.data.Announcement
 import com.google.gson.Gson
+import com.shulenotes.app.data.Downloads
 import com.shulenotes.app.data.LevelGroup
 import com.shulenotes.app.data.LibrarySnapshot
 import com.shulenotes.app.data.Note
@@ -44,6 +45,10 @@ class LibraryViewModel : ViewModel() {
     private var scopeReady = false
 
     var selectedSubjectId by mutableStateOf<String?>(null)
+        private set
+
+    // null shows everything; "notes" or "past-paper" narrows the list.
+    var kindFilter by mutableStateOf<String?>(null)
         private set
     var query by mutableStateOf("")
         private set
@@ -222,6 +227,14 @@ class LibraryViewModel : ViewModel() {
 
     fun selectSubject(subjectId: String?) { selectedSubjectId = subjectId }
 
+    fun selectKind(kind: String?) { kindFilter = kind }
+
+    // True when the class on screen has both ordinary notes and past papers, so the filter is worth showing.
+    fun hasBothKinds(): Boolean {
+        val kinds = scopedNotes().map { it.kind ?: "notes" }.toSet()
+        return kinds.size > 1
+    }
+
     fun updateQuery(value: String) { query = value }
 
     // A note with no class, or with a class the list no longer knows (saved
@@ -245,6 +258,7 @@ class LibraryViewModel : ViewModel() {
         val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
         return scopedNotes().filter { note ->
             (selectedSubjectId == null || note.subjectId == selectedSubjectId) &&
+                (kindFilter == null || (note.kind ?: "notes") == kindFilter) &&
                 words.all { word ->
                     note.title.lowercase().contains(word) ||
                         note.description.orEmpty().lowercase().contains(word) ||
@@ -297,6 +311,7 @@ class LibraryViewModel : ViewModel() {
             try {
                 ApiClient.service.deleteAccount(mapOf("password" to password))
                 ShuleApp.session.clear(keepSaved = false)
+                Downloads.clearAll()
                 NoteCache.clear()
                 onDone()
                 Notifier.success("Your account has been deleted")

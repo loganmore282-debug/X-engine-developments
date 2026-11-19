@@ -13,8 +13,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -40,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.shulenotes.app.ShuleApp
+import com.shulenotes.app.data.Downloads
 import com.shulenotes.app.data.NoteCache
 import com.shulenotes.app.ui.components.StateMessage
 import com.shulenotes.app.ui.main.notifySaved
@@ -58,6 +61,8 @@ fun NoteDetailScreen(noteId: String, viewModel: NoteViewModel, onBack: () -> Uni
     val state = viewModel.pdfState
     val savedIds by ShuleApp.session.savedNoteIds.collectAsState(initial = emptySet())
     val saved = noteId in savedIds
+    val downloadedIds by Downloads.ids.collectAsState()
+    val downloaded = noteId in downloadedIds
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
@@ -118,6 +123,13 @@ fun NoteDetailScreen(noteId: String, viewModel: NoteViewModel, onBack: () -> Uni
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.toggleDownload(noteId) }, enabled = state is PdfLoadState.Ready) {
+                        Icon(
+                            imageVector = if (downloaded) Icons.Filled.DownloadForOffline else Icons.Outlined.FileDownload,
+                            contentDescription = if (downloaded) "Remove download" else "Download for offline reading",
+                            tint = if (downloaded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     IconButton(onClick = { scope.launch { notifySaved(ShuleApp.session.toggleSaved(noteId)) } }) {
                         Icon(
                             imageVector = if (saved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
