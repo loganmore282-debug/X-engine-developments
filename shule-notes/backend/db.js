@@ -31,6 +31,7 @@ async function ensureIndexes() {
   await db.collection('users').createIndex(
     { phone: 1 }, { unique: true, partialFilterExpression: { phone: { $type: 'string' } } }
   );
+  await db.collection('users').createIndex({ createdAt: -1 });
   await db.collection('sessions').createIndex({ tokenHash: 1 }, { unique: true });
   await db.collection('sessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
   await db.collection('notes').createIndex({ subjectId: 1, active: 1 });

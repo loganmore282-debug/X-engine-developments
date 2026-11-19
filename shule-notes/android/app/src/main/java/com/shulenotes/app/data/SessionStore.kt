@@ -18,6 +18,7 @@ private val CONTACT_KEY = stringPreferencesKey("user_contact")
 private val CLASS_KEY = stringPreferencesKey("class_level")
 private val SAVED_KEY = stringSetPreferencesKey("saved_notes")
 private val RECENT_KEY = stringPreferencesKey("recent_notes")
+private val DISMISSED_KEY = stringPreferencesKey("dismissed_announcement")
 
 // One document the student has opened, and how far they got in it.
 data class RecentNote(val id: String, val page: Int, val pageCount: Int, val at: Long)
@@ -39,6 +40,7 @@ class SessionStore(private val context: Context) {
     val userContact: Flow<String> = context.dataStore.data.map { it[CONTACT_KEY].orEmpty() }
     val classLevel: Flow<String> = context.dataStore.data.map { it[CLASS_KEY].orEmpty() }
     val savedNoteIds: Flow<Set<String>> = context.dataStore.data.map { it[SAVED_KEY] ?: emptySet() }
+    val dismissedAnnouncement: Flow<String> = context.dataStore.data.map { it[DISMISSED_KEY].orEmpty() }
     val recent: Flow<List<RecentNote>> = context.dataStore.data.map { parseRecent(it[RECENT_KEY]) }
 
     suspend fun saveSession(token: String, user: User?) {
@@ -49,6 +51,14 @@ class SessionStore(private val context: Context) {
             it[CLASS_KEY] = user?.classLevel.orEmpty()
         }
         SessionHolder.token = token
+    }
+
+    suspend fun setName(name: String) {
+        context.dataStore.edit { it[NAME_KEY] = name }
+    }
+
+    suspend fun dismissAnnouncement(id: String) {
+        context.dataStore.edit { it[DISMISSED_KEY] = id }
     }
 
     suspend fun setClassLevel(level: String) {

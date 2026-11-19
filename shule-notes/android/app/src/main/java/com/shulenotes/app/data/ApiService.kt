@@ -27,6 +27,18 @@ interface ApiService {
     @POST("auth/delete-account")
     suspend fun deleteAccount(@Body body: Map<String, String>): SimpleResponse
 
+    @POST("auth/update-profile")
+    suspend fun updateProfile(@Body body: Map<String, String>): UserResponse
+
+    @POST("auth/change-password")
+    suspend fun changePassword(@Body body: Map<String, String>): SimpleResponse
+
+    @GET("config")
+    suspend fun config(): ConfigResponse
+
+    @GET("announcement")
+    suspend fun announcement(): AnnouncementResponse
+
     @GET("subjects")
     suspend fun subjects(): SubjectsResponse
 

@@ -100,6 +100,20 @@ needs that). Set `localStorage.setItem('shule_api_base', 'https://your-backend-u
 the browser console once (or edit `window.SHULE_API_BASE` directly in the file) to point
 it at the real backend before using it for real.
 
+Tabs (left sidebar; top strip on phones): **Dashboard** (students, joined this week, AI
+questions today, notes live, a 7-day AI chart, students by class, most-read notes, newest
+students), **Students** (search name/phone, filter class/status, paging; Reset password
+dialog with a generated password + copy, Ban/Unban, Delete), **Notes** (upload, edit
+title/description/class/subject, hide/show, delete, views), **Subjects** (+ the "Add
+Uganda's standard subjects" button), **Announcements** (one message shown on every
+student's Home; on/off, optional end date), **Settings** (AI on/off, per-student daily
+AI limit, support phone/WhatsApp/email/hours). Dialogs are our own (`modal()`); never
+use `window.confirm`. Server logic lives in `backend/admin-data.js`, `settings.js`,
+`accounts.js`; settings are read through a 15-second cache so changes need no restart.
+With no SMS provider a forgotten password is reset by the owner in the Students tab; the
+app's "Forgot password?" just shows the support contacts from Settings (`GET /config`).
+`ci/admin_capture.js` walks all of these tabs and seeds 7 students.
+
 ### Android app (`android/`)
 - Kotlin + Jetpack Compose, Material 3. Package `com.shulenotes.app`.
 - **The owner rejected the first, default-styled version as unprofessional.** The design
@@ -138,6 +152,11 @@ it at the real backend before using it for real.
   (`subjectIcon`) in the subject's colour; document cards with a coloured "book cover".
   The header needs light status-bar icons (`StatusBarIcons`), and `MainScreen` turns off
   the Scaffold's top inset so each tab handles the status bar itself.
+- **Account and help** (Profile tab): change name (`/auth/update-profile`), change password
+  (`/auth/change-password`; 403 = wrong current password), Help and support and the sign-in
+  "Forgot password?" both use `SupportDialog` with the contacts from `GET /config`
+  (`AppConfigHolder`), Terms (`/terms`) and Privacy pages. Home shows the admin's
+  announcement (`GET /announcement`) until dismissed (`SessionStore.dismissedAnnouncement`).
 - **Screens:** `ui/auth/` sign in and create account; `ui/main/` one screen with bottom
   tabs Home, Saved (bookmarks, stored on the phone only) and Profile (my class, privacy
   policy, log out, delete account); `ui/note/` the reader; `ui/chat/` the AI helper.
@@ -177,7 +196,8 @@ it at the real backend before using it for real.
 - **Release build:** not minified and never run. Turn on R8 (`isMinifyEnabled`) with keep
   rules for the Gson models in `data/`, and walk that build on the emulator too.
 - **AI answers:** never exercised against the real Claude API (no key in CI).
-- No password reset (no SMS or email provider wired up).
+- No self-service password reset (no SMS or email provider wired up); the owner resets it
+  from the admin Students tab and the app's "Forgot password?" shows the support contacts.
 
 ## Deployment (owner does this manually)
 
@@ -209,8 +229,9 @@ Just the one HTML file. Point it at the backend (see above).
 Android release signing keys live only with the owner, never in this repo.
 
 ## Known gaps / not built yet
-- No password-reset flow (self-rolled auth has no email/SMS provider wired up yet).
+- No self-service password reset (see above).
 - No Nginx/systemd config checked in — the VPS web-server setup is standard and
   deliberately left to the owner's own preferred approach.
-- Admin panel has no pagination on the notes list (fine at the scale of one school's
-  worth of notes; would need it at a much larger library size).
+- Admin notes list is not paged (fine for one school's worth of notes).
+- Backend tests use an in-memory Mongo fake (`fake-mongo.testlib.js`) for admin features;
+  it covers only the query operators the code uses -- extend it if a new one is needed.

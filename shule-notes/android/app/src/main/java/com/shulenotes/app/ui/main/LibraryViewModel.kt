@@ -7,11 +7,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shulenotes.app.ShuleApp
 import com.shulenotes.app.data.ApiClient
+import com.shulenotes.app.data.Announcement
 import com.shulenotes.app.data.LevelGroup
 import com.shulenotes.app.data.Note
 import com.shulenotes.app.data.NoteCache
 import com.shulenotes.app.data.Subject
 import com.shulenotes.app.data.serverMessage
+import com.shulenotes.app.ui.components.AppConfigHolder
 import com.shulenotes.app.ui.components.Notifier
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -48,6 +50,19 @@ class LibraryViewModel : ViewModel() {
     var errorMessage by mutableStateOf<String?>(null)
         private set
 
+    // The owner's message, shown on Home until the student closes it.
+    var announcement by mutableStateOf<Announcement?>(null)
+        private set
+
+    var isSavingProfile by mutableStateOf(false)
+        private set
+    var profileError by mutableStateOf<String?>(null)
+        private set
+    var passwordFormError by mutableStateOf<String?>(null)
+        private set
+    var currentPasswordError by mutableStateOf<String?>(null)
+        private set
+
     var isDeletingAccount by mutableStateOf(false)
         private set
     var deleteAccountError by mutableStateOf<String?>(null)
@@ -76,6 +91,7 @@ class LibraryViewModel : ViewModel() {
                     scopeClass = ShuleApp.session.classLevel.first().ifBlank { null }
                 }
                 if (subjectsInScope().none { it.id == selectedSubjectId }) selectedSubjectId = null
+                loadExtras()
             } catch (e: IOException) {
                 loadFailed("No connection. Check your internet and try again.")
             } catch (e: Exception) {
@@ -83,6 +99,75 @@ class LibraryViewModel : ViewModel() {
             } finally {
                 isLoading = false
                 isRefreshing = false
+            }
+        }
+    }
+
+    // The announcement and the owner's settings are nice to have: failing to
+    // load them must never get in the way of the notes.
+    private suspend fun loadExtras() {
+        try {
+            val latest = ApiClient.service.announcement().announcement
+            announcement = latest?.takeIf { it.id != ShuleApp.session.dismissedAnnouncement.first() }
+        } catch (e: Exception) { }
+        AppConfigHolder.refresh()
+    }
+
+    fun dismissAnnouncement() {
+        val id = announcement?.id ?: return
+        announcement = null
+        viewModelScope.launch { ShuleApp.session.dismissAnnouncement(id) }
+    }
+
+    fun clearProfileError() { profileError = null }
+
+    fun clearPasswordErrors() { passwordFormError = null; currentPasswordError = null }
+
+    fun saveName(name: String, onDone: () -> Unit) {
+        if (isSavingProfile) return
+        val clean = name.trim()
+        if (clean.isEmpty()) { profileError = "Enter your name"; return }
+        viewModelScope.launch {
+            isSavingProfile = true
+            try {
+                val user = ApiClient.service.updateProfile(mapOf("name" to clean)).user
+                ShuleApp.session.setName(user?.name ?: clean)
+                Notifier.success("Name updated")
+                onDone()
+            } catch (e: IOException) {
+                profileError = "No connection. Try again."
+            } catch (e: Exception) {
+                profileError = e.serverMessage() ?: "We could not save your name."
+            } finally {
+                isSavingProfile = false
+            }
+        }
+    }
+
+    fun changePassword(current: String, new: String, onDone: () -> Unit) {
+        if (isSavingProfile) return
+        currentPasswordError = if (current.isBlank()) "Enter your current password" else null
+        passwordFormError = when {
+            new.length < 6 -> "Use at least 6 characters"
+            new == current -> "Choose a different password"
+            else -> null
+        }
+        if (currentPasswordError != null || passwordFormError != null) return
+        viewModelScope.launch {
+            isSavingProfile = true
+            try {
+                ApiClient.service.changePassword(mapOf("currentPassword" to current, "newPassword" to new))
+                Notifier.success("Password changed")
+                onDone()
+            } catch (e: IOException) {
+                Notifier.error("No connection. Try again.")
+            } catch (e: retrofit2.HttpException) {
+                if (e.code() == 403) currentPasswordError = "That is not your current password"
+                else passwordFormError = e.serverMessage() ?: "We could not change the password."
+            } catch (e: Exception) {
+                Notifier.error("We could not change the password.")
+            } finally {
+                isSavingProfile = false
             }
         }
     }

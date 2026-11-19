@@ -32,6 +32,20 @@ const NOTES = [
   ['Photosynthesis', 'Biology', 'Senior 2', 'photosynthesis.pdf', 'How plants make food: the equation, leaf adaptations, limiting factors and the starch test.'],
 ];
 
+const STUDENTS = [
+  ['Amina Nakato', '0701000001', 'Primary 7'], ['Brian Okello', '0701000002', 'Senior 2'],
+  ['Cissy Namubiru', '0701000003', 'Senior 5'], ['David Mugisha', '0701000004', 'Senior 2'],
+  ['Esther Achieng', '0701000005', 'Primary 6'], ['Farouk Ssemakula', '0701000006', 'Senior 4'],
+  ['Grace Atim', '0701000007', ''],
+];
+async function seedStudents() {
+  for (const [name, phone, level] of STUDENTS) {
+    const r = await (await fetch(API_URL + '/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, phone, password: 'secret123' }) })).json();
+    if (r.status !== 'success') throw new Error('seeding ' + name + ': ' + r.message);
+    if (level) await fetch(API_URL + '/auth/class-level', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + r.token }, body: JSON.stringify({ classLevel: level }) });
+  }
+}
+
 (async () => {
   const browser = await pw.chromium.launch(process.env.PW_CHANNEL ? { channel: process.env.PW_CHANNEL } : {});
   const context = await browser.newContext({ viewport: { width: 760, height: 900 }, deviceScaleFactor: 2 });
@@ -50,15 +64,22 @@ const NOTES = [
   await page.click('#loginBtn');
   await page.waitForSelector('#app:not(.hidden)');
 
-  await page.click('.tab[data-tab="subjects"]');
-  // The one-click button adds every standard Ugandan subject (and asks first).
-  page.once('dialog', (dialog) => dialog.accept());
+  // Dashboard first, with a few students already in so it has something to show.
+  await seedStudents();
+  await page.click('.nav[data-tab="dashboard"]');
+  await page.waitForSelector('#dashStats .stat');
+
+  await page.click('.nav[data-tab="subjects"]');
+  // The one-click button adds every standard Ugandan subject, after a confirm dialog.
   await page.click('#sSeed');
+  await page.waitForSelector('#modalOk');
+  await shot('admin-02a-confirm-dialog');
+  await page.click('#modalOk');
   await page.waitForSelector('#subjectsRows td:text-is("Subsidiary ICT")', { timeout: 60000 });
   await toastGone();
   await shot('admin-02-subjects');
 
-  await page.click('.tab[data-tab="notes"]');
+  await page.click('.nav[data-tab="notes"]');
   for (const [i, [title, subject, level, file, desc]] of NOTES.entries()) {
     await page.fill('#nTitle', title);
     // The class first: the subject menu then shows only that class's subjects.
@@ -72,5 +93,59 @@ const NOTES = [
   }
   await toastGone();
   await shot('admin-04-notes-list');
+
+  // Edit dialog.
+  await page.click('#notesRows button[data-act="edit"]');
+  await page.waitForSelector('#eTitle');
+  await shot('admin-05-edit-note');
+  await page.click('#modalCancel');
+
+  // Students: some browsing, then reset a password.
+  await page.click('.nav[data-tab="students"]');
+  await page.waitForSelector('#studentRows tr td .who');
+  await shot('admin-06-students');
+  await page.fill('#stSearch', 'amina');
+  await page.waitForFunction(() => document.querySelectorAll('#studentRows tr').length === 1);
+  await shot('admin-07-students-search');
+  await page.fill('#stSearch', '');
+  await page.waitForFunction(() => document.querySelectorAll('#studentRows tr').length > 1);
+  await page.click('#studentRows button[data-act="ban"]');
+  await page.waitForSelector('#modalOk');
+  await page.click('#modalOk');
+  await page.waitForSelector('#studentRows .pill.bad');
+  await toastGone();
+  await page.click('#studentRows button[data-act="reset"]');
+  await page.waitForSelector('#resetPw');
+  await shot('admin-08-reset-password');
+  await page.click('#modalOk');
+  await page.waitForSelector('.secret');
+  await shot('admin-09-new-password');
+  await page.click('#modalOk');
+
+  // Announcements.
+  await page.click('.nav[data-tab="announcements"]');
+  await page.fill('#aTitle', 'Mock exams start on Monday');
+  await page.fill('#aMessage', 'Revise the Senior 4 past papers in the Notes tab. Good luck!');
+  await page.click('#aSave');
+  await page.waitForSelector('#aList li');
+  await toastGone();
+  await shot('admin-10-announcements');
+
+  // Settings.
+  await page.click('.nav[data-tab="settings"]');
+  await page.waitForSelector('#setPhone');
+  await page.fill('#setAiLimit', '15');
+  await page.fill('#setPhone', '+256 700 123 456');
+  await page.fill('#setWhatsapp', '+256 700 123 456');
+  await page.fill('#setEmail', 'help@shulenotes.example');
+  await page.fill('#setHours', 'Monday to Friday, 8am to 5pm');
+  await page.click('#setSave');
+  await page.waitForSelector('#toast.ok');
+  await toastGone();
+  await shot('admin-11-settings');
+
+  await page.click('.nav[data-tab="dashboard"]');
+  await page.waitForSelector('#dashStats .stat');
+  await shot('admin-12-dashboard');
   await browser.close();
 })().catch((e) => { console.error(e); process.exit(1); });

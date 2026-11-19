@@ -21,6 +21,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PrivacyTip
@@ -48,6 +52,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.shulenotes.app.BuildConfig
 import com.shulenotes.app.ui.auth.PRIVACY_URL
+import com.shulenotes.app.ui.auth.TERMS_URL
+import com.shulenotes.app.ui.components.AppConfigHolder
+import com.shulenotes.app.ui.components.SupportDialog
 import com.shulenotes.app.ui.components.Avatar
 import com.shulenotes.app.ui.components.ShuleTextField
 
@@ -64,6 +71,9 @@ fun ProfileTab(
     val uriHandler = LocalUriHandler.current
     var confirmLogout by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var editName by rememberSaveable { mutableStateOf(false) }
+    var changePassword by rememberSaveable { mutableStateOf(false) }
+    var showHelp by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -98,8 +108,19 @@ fun ProfileTab(
             SettingsRow(Icons.Outlined.School, "My class", trailingText = userClass.ifBlank { "Not chosen" }, onClick = onChangeClass)
         }
 
-        SectionLabel("About")
+        SectionLabel("Account details")
         SettingsCard {
+            SettingsRow(Icons.Outlined.Person, "Change my name") { viewModel.clearProfileError(); editName = true }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
+            SettingsRow(Icons.Outlined.Lock, "Change password") { viewModel.clearPasswordErrors(); changePassword = true }
+        }
+
+        SectionLabel("Help and about")
+        SettingsCard {
+            SettingsRow(Icons.Outlined.HelpOutline, "Help and support") { showHelp = true }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
+            SettingsRow(Icons.Outlined.Description, "Terms of use") { runCatching { uriHandler.openUri(TERMS_URL) } }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
             SettingsRow(Icons.Outlined.PrivacyTip, "Privacy policy") { runCatching { uriHandler.openUri(PRIVACY_URL) } }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
             SettingsRow(Icons.Outlined.Info, "App version", trailingText = BuildConfig.VERSION_NAME)
@@ -115,6 +136,81 @@ fun ProfileTab(
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
+
+    if (showHelp) {
+        SupportDialog(
+            title = "Help and support",
+            intro = "Questions, a problem with a note, or a forgotten password? Reach us here.",
+            config = AppConfigHolder.config,
+            onDismiss = { showHelp = false },
+        )
+    }
+
+    if (editName) {
+        var name by rememberSaveable { mutableStateOf(userName) }
+        AlertDialog(
+            onDismissRequest = { if (!viewModel.isSavingProfile) editName = false },
+            title = { Text("Change my name") },
+            text = {
+                ShuleTextField(
+                    value = name,
+                    onValueChange = { name = it; viewModel.clearProfileError() },
+                    label = "Full name",
+                    leadingIcon = Icons.Outlined.Edit,
+                    error = viewModel.profileError,
+                    enabled = !viewModel.isSavingProfile,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                )
+            },
+            confirmButton = {
+                Button(onClick = { viewModel.saveName(name) { editName = false } }, enabled = !viewModel.isSavingProfile) {
+                    Text(if (viewModel.isSavingProfile) "Saving…" else "Save")
+                }
+            },
+            dismissButton = { TextButton(onClick = { editName = false }, enabled = !viewModel.isSavingProfile) { Text("Cancel") } },
+        )
+    }
+
+    if (changePassword) {
+        var current by rememberSaveable { mutableStateOf("") }
+        var next by rememberSaveable { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { if (!viewModel.isSavingProfile) changePassword = false },
+            title = { Text("Change password") },
+            text = {
+                Column {
+                    ShuleTextField(
+                        value = current,
+                        onValueChange = { current = it; viewModel.clearPasswordErrors() },
+                        label = "Current password",
+                        leadingIcon = Icons.Outlined.Lock,
+                        isPassword = true,
+                        error = viewModel.currentPasswordError,
+                        enabled = !viewModel.isSavingProfile,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    ShuleTextField(
+                        value = next,
+                        onValueChange = { next = it; viewModel.clearPasswordErrors() },
+                        label = "New password",
+                        leadingIcon = Icons.Outlined.Lock,
+                        isPassword = true,
+                        error = viewModel.passwordFormError,
+                        supportingText = "At least 6 characters",
+                        enabled = !viewModel.isSavingProfile,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = { viewModel.changePassword(current, next) { changePassword = false } }, enabled = !viewModel.isSavingProfile) {
+                    Text(if (viewModel.isSavingProfile) "Saving…" else "Change password")
+                }
+            },
+            dismissButton = { TextButton(onClick = { changePassword = false }, enabled = !viewModel.isSavingProfile) { Text("Cancel") } },
+        )
     }
 
     if (confirmLogout) {

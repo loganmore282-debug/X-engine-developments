@@ -68,6 +68,17 @@ def wait_for(label, prefix=False, timeout=60):
     raise RuntimeError(f"never saw {label!r} on screen")
 
 
+def reveal(label, tries=5):
+    """Scrolls a long screen (the Profile tab) until `label` is on screen."""
+    for _ in range(tries):
+        n = find(label)
+        if n:
+            return n
+        adb("shell", "input", "swipe", "540", "1900", "540", "700", "300")
+        time.sleep(1)
+    raise RuntimeError(f"could not scroll to {label!r}")
+
+
 def wait_gone(label, prefix=False, timeout=60):
     end = time.time() + timeout
     while time.time() < end:
@@ -161,8 +172,11 @@ def walk():
     wait_for("Notes for Senior 2")
     wait_for("Photosynthesis", prefix=True)
     wait_gone("Quadratic Equations", prefix=True)
+    wait_for("Mock exams start on Monday")
     time.sleep(2)
     shot("app-04-home")
+    tap(wait_for("Dismiss"))
+    wait_gone("Mock exams start on Monday")
 
     tap(wait_for("Biology"))
     wait_gone("Acids, Bases and Salts", prefix=True)
@@ -225,9 +239,47 @@ def walk():
     shot("app-08-saved")
 
     tap(wait_for("Profile"))
-    wait_for("Delete account")
+    wait_for("Change my name")
     wait_for("Senior 2")
     shot("app-09-profile")
+
+    # Change the name.
+    tap(wait_for("Change my name"))
+    wait_for("Full name")
+    clear_field(0, length=30)
+    type_into(0, "Amina Joy Nakato")
+    shot("app-09a-change-name")
+    tap(wait_for("Save"))
+    wait_for("Name updated")
+    wait_for("Amina Joy Nakato")
+    time.sleep(3)
+
+    # Change the password: empty form, wrong current password, then the right one.
+    tap(wait_for("Change password"))
+    wait_for("Current password")
+    buttons = [n for n in nodes() if n["text"] == "Change password"]
+    tap(buttons[-1])
+    wait_for("Enter your current password")
+    shot("app-09b-change-password-errors")
+    type_into(0, "not-my-password")
+    type_into(1, "newpass2026")
+    tap([n for n in nodes() if n["text"] == "Change password"][-1])
+    wait_for("That is not your current password")
+    shot("app-09c-wrong-current-password")
+    clear_field(0, length=30)
+    type_into(0, "study2026")
+    tap([n for n in nodes() if n["text"] == "Change password"][-1])
+    wait_for("Password changed")
+    time.sleep(3)
+
+    # Help and support shows the contacts set in the admin panel.
+    tap(reveal("Help and support"))
+    wait_for("+256 700 123 456")
+    shot("app-09d-help-and-support")
+    tap(wait_for("Close"))
+    adb("shell", "input", "swipe", "540", "1900", "540", "700", "300")
+    time.sleep(1)
+    shot("app-09e-profile-lower")
 
     tap(wait_for("Home"))
     tap(wait_for("Photosynthesis", prefix=True))
@@ -282,7 +334,7 @@ def walk():
     night(False)
 
     tap(wait_for("Profile"))
-    tap(wait_for("Delete account"))
+    tap(reveal("Delete account"))
     wait_for("Delete your account?")
     type_into(0, "not-my-password")
     tap(wait_for("Delete account"))
@@ -290,11 +342,18 @@ def walk():
     shot("check-delete-account-wrong-password")
     tap(wait_for("Cancel"))
 
-    tap(wait_for("Log out"))
+    tap(reveal("Log out"))
     wait_for("Log out?")
     shot("check-log-out-dialog")
     tap(wait_for("Log out"))
     wait_for("Welcome back")
+
+    # Forgot password: the screen shows how to reach us.
+    tap(wait_for("Forgot password?"))
+    wait_for("Forgot your password?")
+    wait_for("+256 700 123 456")
+    shot("app-18a-forgot-password")
+    tap(wait_for("Close"))
 
     type_into(0, "0772123456")
     type_into(1, "wrongpass")
@@ -306,14 +365,14 @@ def walk():
     clear_field(0)
     type_into(0, "+256772123456")
     clear_field(1)
-    type_into(1, "study2026")
+    type_into(1, "newpass2026")
     tap(wait_for("Sign in"))
     wait_for("Photosynthesis", prefix=True)
 
     tap(wait_for("Profile"))
-    tap(wait_for("Delete account"))
+    tap(reveal("Delete account"))
     wait_for("Delete your account?")
-    type_into(0, "study2026")
+    type_into(0, "newpass2026")
     tap(wait_for("Delete account"))
     wait_for("Welcome back")
     type_into(0, "0772123456")

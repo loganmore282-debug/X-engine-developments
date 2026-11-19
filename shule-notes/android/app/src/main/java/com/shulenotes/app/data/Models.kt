@@ -100,3 +100,33 @@ data class AskResponse(
     val answer: String?,
     val message: String?,
 )
+
+// What the owner sets in the admin panel: whether the AI helper is on, and
+// how to reach support. Every field has a default so a failed load leaves the app usable.
+data class AppConfig(
+    val aiEnabled: Boolean = true,
+    val supportPhone: String = "",
+    val supportWhatsapp: String = "",
+    val supportEmail: String = "",
+    val supportHours: String = "",
+) {
+    val hasSupport: Boolean get() = supportPhone.isNotBlank() || supportWhatsapp.isNotBlank() || supportEmail.isNotBlank()
+}
+
+data class ConfigResponse(
+    val status: String,
+    val config: AppConfig?,
+    val message: String?,
+)
+
+data class Announcement(
+    val id: String,
+    val title: String,
+    val message: String,
+)
+
+data class AnnouncementResponse(
+    val status: String,
+    val announcement: Announcement?,
+    val message: String?,
+)

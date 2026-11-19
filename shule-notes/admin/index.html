@@ -5,311 +5,642 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shule Notes Admin</title>
 <style>
-  :root{--ink:#1a1310;--paper:#f7f5f2;--card:#fff;--muted:#7a716b;--line:#e4ddd5;
-    --brand:#1d6f4f;--brand-ink:#0f4a32;--danger:#c23b3b;--r:12px;}
+  :root{
+    --ink:#1b1c1a; --muted:#6a706a; --paper:#f4f2ec; --card:#fff; --line:#e3e0d6;
+    --brand:#17694b; --brand-dark:#0f4a34; --brand-soft:#d9f0e4; --teal:#0fae9a;
+    --amber:#f2b705; --amber-soft:#fff2c9; --danger:#c0392b; --danger-soft:#fbe5e1;
+    --blue:#2b5fb3; --blue-soft:#dde8fb; --r:16px;
+  }
   *{box-sizing:border-box}
-  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--paper);color:var(--ink)}
-  .wrap{max-width:920px;margin:0 auto;padding:24px 16px 80px}
-  h1{font-size:22px;margin:0 0 4px}
-  h2{font-size:17px;margin:0 0 10px}
+  body{margin:0;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--paper);color:var(--ink);font-size:14.5px}
+  h1{font-size:22px;margin:0} h2{font-size:17px;margin:0 0 12px} h3{font-size:14px;margin:0 0 10px}
   .muted{color:var(--muted);font-size:13px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:16px}
-  input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;margin-bottom:10px;font-family:inherit}
-  textarea{min-height:70px;resize:vertical}
-  label{font-size:12.5px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px}
-  button{cursor:pointer;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600}
-  .btn{background:var(--brand);color:#fff}
-  .btn:hover{background:var(--brand-ink)}
-  .btn.ghost{background:transparent;color:var(--brand);border:1px solid var(--brand)}
-  .btn.danger{background:var(--danger);color:#fff}
-  .btn.sm{padding:6px 10px;font-size:12.5px}
-  .row{display:flex;gap:10px;flex-wrap:wrap}
-  .row > *{flex:1;min-width:140px}
-  table{width:100%;border-collapse:collapse;font-size:13.5px}
-  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
-  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.02em}
-  .tabs{display:flex;gap:8px;margin-bottom:16px}
-  .tab{padding:8px 14px;border-radius:999px;background:var(--card);border:1px solid var(--line);cursor:pointer;font-size:13.5px;font-weight:600}
-  .tab.active{background:var(--brand);color:#fff;border-color:var(--brand)}
-  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}
-  .pill.ok{background:#e4f3ea;color:var(--brand-ink)}
-  .class-pick{margin:0;padding:6px 8px;font-size:13px;width:auto}
-  .pill.warn{background:#fdecea;color:var(--danger)}
-  #loginScreen{max-width:360px;margin:80px auto}
   .hidden{display:none !important}
-  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#222;color:#fff;
-    padding:10px 18px;border-radius:999px;font-size:13.5px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:50}
-  .toast.show{opacity:1}
+
+  /* sign in */
+  #loginScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .login-card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:34px 28px;width:100%;max-width:380px;text-align:center}
+  .login-card img{width:64px;height:auto;margin-bottom:10px}
+  .login-card h1{margin-bottom:4px}
+  .login-card input{margin:22px 0 12px}
+
+  /* layout */
+  #app{display:flex;min-height:100vh}
+  .side{width:230px;flex:0 0 230px;background:var(--card);border-right:1px solid var(--line);padding:20px 14px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh}
+  .brand{display:flex;align-items:center;gap:10px;padding:2px 8px 18px}
+  .brand img{width:30px;height:auto}
+  .brand b{font-size:16px;display:block;line-height:1.1} .brand span{font-size:12px;color:var(--muted)}
+  .nav{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:12px;cursor:pointer;font-weight:600;color:#3d433d;border:none;background:none;font-size:14.5px;text-align:left;width:100%}
+  .nav svg{width:20px;height:20px;flex:0 0 20px}
+  .nav:hover{background:var(--paper)} .nav.active{background:var(--brand-soft);color:var(--brand-dark)}
+  .side .grow{flex:1}
+  main{flex:1;min-width:0;padding:26px 28px 80px;max-width:1180px}
+  .page-head{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:20px}
+  .page-head .grow{flex:1}
+  @media(max-width:860px){
+    #app{flex-direction:column}
+    .side{width:100%;flex:none;height:auto;position:sticky;z-index:20;flex-direction:row;overflow-x:auto;padding:8px 10px;gap:4px;border-right:none;border-bottom:1px solid var(--line);align-items:center}
+    .brand{padding:0 8px 0 4px} .brand span,.side .grow{display:none}
+    .nav{width:auto;white-space:nowrap;padding:9px 12px} .nav svg{display:none}
+    main{padding:18px 14px 80px}
+  }
+
+  /* cards, forms, buttons */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px;margin-bottom:18px}
+  label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:5px}
+  input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;font-family:inherit;background:#fff;color:var(--ink);margin-bottom:12px}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--brand);outline-offset:-1px}
+  textarea{min-height:84px;resize:vertical}
+  input[type=checkbox]{width:auto;margin:0}
+  button{cursor:pointer;border:none;border-radius:10px;padding:10px 16px;font-size:14px;font-weight:600;font-family:inherit}
+  .btn{background:var(--brand);color:#fff} .btn:hover{background:var(--brand-dark)}
+  .btn.ghost{background:#fff;color:var(--brand);border:1px solid var(--brand)} .btn.ghost:hover{background:var(--brand-soft)}
+  .btn.danger{background:var(--danger);color:#fff}
+  .btn.plain{background:var(--paper);color:#3d433d} .btn.plain:hover{background:#e9e6dc}
+  .btn.sm{padding:6px 10px;font-size:12.5px;border-radius:8px}
+  button:disabled{opacity:.55;cursor:default}
+  .row{display:flex;gap:12px;flex-wrap:wrap} .row>*{flex:1;min-width:160px}
+  .switch{display:flex;align-items:center;gap:10px;margin-bottom:12px;font-weight:600;cursor:pointer}
+  .switch input{width:18px;height:18px}
+
+  /* tables */
+  .table-scroll{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:10px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  td .sub{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+  .actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;min-width:120px}
+  .pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap}
+  .pill.ok{background:var(--brand-soft);color:var(--brand-dark)} .pill.warn{background:var(--amber-soft);color:#7a5a00}
+  .pill.bad{background:var(--danger-soft);color:var(--danger)} .pill.info{background:var(--blue-soft);color:var(--blue)}
+  .avatar{display:inline-flex;width:34px;height:34px;border-radius:50%;background:var(--brand-soft);color:var(--brand-dark);align-items:center;justify-content:center;font-weight:700;font-size:13px;margin-right:10px;flex:0 0 34px}
+  .who{display:flex;align-items:center}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px} .toolbar>*{margin:0;width:auto;flex:1;min-width:140px} .toolbar input{flex:2;min-width:200px}
+  .pager{display:flex;align-items:center;gap:10px;justify-content:space-between;margin-top:14px;flex-wrap:wrap}
+  .empty{text-align:center;color:var(--muted);padding:34px 10px}
+
+  /* dashboard */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:18px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;display:flex;gap:14px;align-items:center}
+  .stat .ico{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex:0 0 46px}
+  .stat .ico svg{width:24px;height:24px}
+  .stat b{font-size:26px;display:block;line-height:1.1} .stat span{color:var(--muted);font-size:12.5px}
+  .grid2{display:grid;grid-template-columns:1.4fr 1fr;gap:18px} @media(max-width:980px){.grid2{grid-template-columns:1fr}}
+  .bars{display:flex;align-items:flex-end;gap:10px;height:150px;padding-top:10px}
+  .bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:6px}
+  .bar i{display:block;width:100%;max-width:46px;border-radius:8px 8px 3px 3px;background:var(--amber);min-height:3px}
+  .bar small{color:var(--muted);font-size:11.5px} .bar em{font-style:normal;font-size:12px;font-weight:700}
+  .hbar{display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:13px}
+  .hbar span{width:78px;flex:0 0 78px} .hbar div{flex:1;height:10px;background:var(--paper);border-radius:6px;overflow:hidden}
+  .hbar i{display:block;height:100%;background:var(--brand);border-radius:6px} .hbar b{width:30px;text-align:right}
+  ul.plain{list-style:none;margin:0;padding:0} ul.plain li{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)} ul.plain li:last-child{border:none}
+  ul.plain li .grow{flex:1;min-width:0} ul.plain li .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+  .tip{background:var(--amber-soft);border-radius:12px;padding:12px 14px;margin-bottom:18px;color:#6b5100}
+
+  /* modal + toast */
+  .overlay{position:fixed;inset:0;background:rgba(20,24,20,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:100}
+  .modal{background:#fff;border-radius:20px;padding:24px;width:100%;max-width:460px;max-height:92vh;overflow:auto}
+  .modal h2{margin-bottom:6px} .modal p{margin:0 0 14px;color:var(--muted)}
+  .modal .buttons{display:flex;gap:10px;justify-content:flex-end;margin-top:6px}
+  .secret{display:flex;gap:8px;align-items:center;background:var(--brand-soft);border-radius:12px;padding:12px;margin-bottom:12px;font-family:ui-monospace,Menlo,monospace;font-size:16px;font-weight:700;color:var(--brand-dark)}
+  .secret span{flex:1;word-break:break-all}
+  .toast{position:fixed;left:50%;top:18px;transform:translate(-50%,-90px);background:#fff;border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.14);padding:12px 18px;border-radius:14px;font-weight:600;z-index:200;transition:transform .25s;max-width:92vw}
+  .toast.show{transform:translate(-50%,0)} .toast.error{border-color:var(--danger);color:var(--danger)} .toast.ok{border-color:var(--brand)}
 </style>
 </head>
 <body>
 
-<div id="loginScreen" class="wrap">
-  <div class="card">
+<div id="loginScreen">
+  <div class="login-card">
+    <img src="data:image/png;base64,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" alt="">
     <h1>Shule Notes</h1>
-    <p class="muted">Admin panel</p>
-    <label>Admin key</label>
-    <input id="loginKey" type="password" placeholder="Enter the admin key">
+    <p class="muted" style="margin:0">Admin panel</p>
+    <input id="loginKey" type="password" placeholder="Admin key" autocomplete="current-password">
     <button class="btn" id="loginBtn" style="width:100%">Sign in</button>
   </div>
 </div>
 
-<div id="app" class="wrap hidden">
-  <div class="row" style="align-items:center;margin-bottom:16px">
-    <div><h1 style="margin-bottom:0">Shule Notes</h1><p class="muted" style="margin:0">Admin panel</p></div>
-    <div style="flex:0;text-align:right"><button class="btn ghost sm" id="logoutBtn">Log out</button></div>
-  </div>
+<div id="app" class="hidden">
+  <nav class="side">
+    <div class="brand"><img src="data:image/png;base64,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" alt=""><div><b>Shule Notes</b><span>Admin panel</span></div></div>
+    <button class="nav active" data-tab="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Dashboard</button>
+    <button class="nav" data-tab="students"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M16 4.7a3.5 3.5 0 0 1 0 6.6M18 14.8c2 .6 3.2 2.4 3.5 5.2"/></svg>Students</button>
+    <button class="nav" data-tab="notes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/></svg>Notes</button>
+    <button class="nav" data-tab="subjects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v13c-3-1-6-1-8 1-2-2-5-2-8-1z"/><path d="M12 6v13"/></svg>Subjects</button>
+    <button class="nav" data-tab="announcements"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v3a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 9c1.5 1 1.5 5 0 6M18 6.5c3 2 3 9 0 11"/></svg>Announcements</button>
+    <button class="nav" data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
+    <div class="grow"></div>
+    <button class="nav" id="logoutBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button>
+  </nav>
 
-  <div class="tabs">
-    <div class="tab active" data-tab="notes">Notes</div>
-    <div class="tab" data-tab="subjects">Subjects</div>
-  </div>
+  <main>
+    <!-- Dashboard -->
+    <section id="tab-dashboard">
+      <div class="page-head"><div class="grow"><h1>Dashboard</h1><div class="muted" id="dashSub">How the app is being used</div></div><button class="btn plain" id="dashRefresh">Refresh</button></div>
+      <div id="dashTips"></div>
+      <div class="stats" id="dashStats"></div>
+      <div class="grid2">
+        <div class="card"><h2>AI questions, last 7 days</h2><div class="bars" id="dashBars"></div></div>
+        <div class="card"><h2>Students by class</h2><div id="dashClasses"></div></div>
+      </div>
+      <div class="grid2">
+        <div class="card"><h2>Most read notes</h2><ul class="plain" id="dashTop"></ul></div>
+        <div class="card"><h2>Newest students</h2><ul class="plain" id="dashRecent"></ul></div>
+      </div>
+    </section>
 
-  <div id="notesTab">
-    <div class="card">
-      <h2>Upload a note</h2>
-      <div class="row">
-        <div><label>Title</label><input id="nTitle" placeholder="e.g. Photosynthesis"></div>
-        <div><label>Subject</label><select id="nSubject"><option value="">(none)</option></select></div>
+    <!-- Students -->
+    <section id="tab-students" class="hidden">
+      <div class="page-head"><div class="grow"><h1>Students</h1><div class="muted" id="studentsSub"></div></div></div>
+      <div class="card">
+        <div class="toolbar">
+          <input id="stSearch" placeholder="Search by name or phone number">
+          <select id="stClass"></select>
+          <select id="stStatus"><option value="">All students</option><option value="active">Active</option><option value="banned">Banned</option></select>
+        </div>
+        <div class="table-scroll"><table>
+          <thead><tr><th>Student</th><th>Class</th><th>Joined</th><th>Last seen</th><th>AI today / total</th><th>Status</th><th></th></tr></thead>
+          <tbody id="studentRows"></tbody>
+        </table></div>
+        <div class="pager"><span class="muted" id="stCount"></span><div><button class="btn plain sm" id="stPrev">Previous</button> <button class="btn plain sm" id="stNext">Next</button></div></div>
       </div>
-      <div class="row">
-        <div><label>Class</label><select id="nClass"><option value="">All classes</option></select></div>
-        <div><label>PDF file</label><input id="nFile" type="file" accept="application/pdf"></div>
+    </section>
+
+    <!-- Notes -->
+    <section id="tab-notes" class="hidden">
+      <div class="page-head"><div class="grow"><h1>Notes</h1><div class="muted">Upload and manage the PDFs students read</div></div></div>
+      <div class="card">
+        <h2>Upload a note</h2>
+        <div class="row">
+          <div><label>Title</label><input id="nTitle" placeholder="e.g. Photosynthesis"></div>
+          <div><label>Class</label><select id="nClass"><option value="">All classes</option></select></div>
+        </div>
+        <div class="row">
+          <div><label>Subject</label><select id="nSubject"><option value="">(none)</option></select></div>
+          <div><label>PDF file</label><input id="nFile" type="file" accept="application/pdf"></div>
+        </div>
+        <label>Description</label>
+        <textarea id="nDesc" placeholder="What this document covers"></textarea>
+        <button class="btn" id="nUpload">Upload</button><span id="nUploadStatus" class="muted" style="margin-left:10px"></span>
       </div>
-      <label>Description</label>
-      <textarea id="nDesc" placeholder="What this document covers"></textarea>
-      <button class="btn" id="nUpload">Upload</button>
-      <span id="nUploadStatus" class="muted" style="margin-left:10px"></span>
-    </div>
-    <div class="card">
-      <h2>All notes</h2>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>Title</th><th>Subject</th><th>Class</th><th>Pages</th><th>AI</th><th>Status</th><th></th></tr></thead>
+      <div class="card">
+        <h2>All notes</h2>
+        <div class="table-scroll"><table>
+          <thead><tr><th>Title</th><th>Subject</th><th>Class</th><th>Pages</th><th>Views</th><th>AI</th><th>Status</th><th></th></tr></thead>
           <tbody id="notesRows"></tbody>
-        </table>
+        </table></div>
       </div>
-    </div>
-  </div>
+    </section>
 
-  <div id="subjectsTab" class="hidden">
-    <div class="card">
-      <h2>Add a subject</h2>
-      <div class="row">
-        <div><label>Name</label><input id="sName" placeholder="e.g. Biology"></div>
-        <div><label>Order</label><input id="sOrder" type="number" value="0"></div>
+    <!-- Subjects -->
+    <section id="tab-subjects" class="hidden">
+      <div class="page-head"><div class="grow"><h1>Subjects</h1><div class="muted">Shown to students as the icons on their home screen</div></div></div>
+      <div class="card">
+        <h2>Add a subject</h2>
+        <div class="row">
+          <div><label>Name</label><input id="sName" placeholder="e.g. Biology"></div>
+          <div><label>Order</label><input id="sOrder" type="number" value="0"></div>
+        </div>
+        <button class="btn" id="sSave">Save subject</button>
+        <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
+        <p class="muted" style="margin:0 0 10px">New here? Add the subjects Uganda's schools teach (primary, O-Level and A-Level) in one go. Subjects you already have are left alone.</p>
+        <button class="btn ghost" id="sSeed">Add Uganda's standard subjects</button>
       </div>
-      <button class="btn" id="sSave">Save subject</button>
-      <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
-      <p class="muted" style="margin:0 0 10px">New here? Add the subjects Uganda's schools teach (primary, O-Level and A-Level) in one go. Subjects you already have are left alone.</p>
-      <button class="btn ghost" id="sSeed">Add Uganda's standard subjects</button>
-    </div>
-    <div class="card">
-      <h2>All subjects</h2>
-      <table>
-        <thead><tr><th>Name</th><th>Order</th><th></th></tr></thead>
-        <tbody id="subjectsRows"></tbody>
-      </table>
-    </div>
-  </div>
+      <div class="card">
+        <h2>All subjects</h2>
+        <table><thead><tr><th>Name</th><th>Order</th><th></th></tr></thead><tbody id="subjectsRows"></tbody></table>
+      </div>
+    </section>
+
+    <!-- Announcements -->
+    <section id="tab-announcements" class="hidden">
+      <div class="page-head"><div class="grow"><h1>Announcements</h1><div class="muted">A message students see at the top of their home screen</div></div></div>
+      <div class="card">
+        <h2 id="aFormTitle">New announcement</h2>
+        <input type="hidden" id="aId">
+        <label>Title</label><input id="aTitle" maxlength="80" placeholder="e.g. Mock exams start Monday">
+        <label>Message</label><textarea id="aMessage" maxlength="400" placeholder="What students need to know"></textarea>
+        <div class="row">
+          <div><label>Show until (optional)</label><input id="aExpires" type="date"></div>
+          <div style="display:flex;align-items:end"><label class="switch"><input type="checkbox" id="aActive" checked> Show it now</label></div>
+        </div>
+        <button class="btn" id="aSave">Publish</button> <button class="btn plain hidden" id="aCancel">Cancel editing</button>
+      </div>
+      <div class="card"><h2>All announcements</h2><div id="aList"></div><p class="muted" style="margin:12px 0 0">Students see only the newest one that is switched on and has not expired.</p></div>
+    </section>
+
+    <!-- Settings -->
+    <section id="tab-settings" class="hidden">
+      <div class="page-head"><div class="grow"><h1>Settings</h1><div class="muted">Changes apply within a few seconds, with no server restart</div></div></div>
+      <div class="card">
+        <h2>AI helper</h2>
+        <label class="switch"><input type="checkbox" id="setAiOn"> Let students ask the AI helper</label>
+        <label>Questions each student can ask per day</label>
+        <input id="setAiLimit" type="number" min="1" max="500">
+        <div class="muted" id="setAiHint" style="margin:-6px 0 14px"></div>
+      </div>
+      <div class="card">
+        <h2>Support contacts</h2>
+        <p class="muted" style="margin-top:-6px">Shown in the app under Help, and when a student forgets their password. Leave a box empty to hide it.</p>
+        <div class="row">
+          <div><label>Phone number</label><input id="setPhone" placeholder="+256 700 000 000"></div>
+          <div><label>WhatsApp number</label><input id="setWhatsapp" placeholder="+256 700 000 000"></div>
+        </div>
+        <div class="row">
+          <div><label>Email</label><input id="setEmail" placeholder="help@yourschool.com"></div>
+          <div><label>Hours</label><input id="setHours" placeholder="Monday to Friday, 8am to 5pm"></div>
+        </div>
+      </div>
+      <button class="btn" id="setSave">Save settings</button>
+    </section>
+  </main>
 </div>
 
 <div id="toast" class="toast"></div>
+<div id="modalRoot"></div>
 
 <script>
 const API = localStorage.getItem('shule_api_base') || window.SHULE_API_BASE || 'http://localhost:4000';
 const KEY_STORE = 'shule_admin_key';
+const $ = (id) => document.getElementById(id);
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
+let toastTimer;
+function toast(msg, kind){
+  const t = $('toast'); t.textContent = msg; t.className = 'toast show ' + (kind || '');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+function fmtDate(v){ if(!v) return '—'; const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); }
+function ago(v){
+  if(!v) return 'Never';
+  const days = Math.floor((Date.now() - new Date(v).getTime()) / 86400000);
+  return days <= 0 ? 'Today' : days === 1 ? 'Yesterday' : days < 30 ? days + ' days ago' : fmtDate(v);
+}
+function initials(name){ const p = String(name||'').trim().split(/\s+/).filter(Boolean); return (p.length ? (p[0][0] + (p.length>1 ? p[p.length-1][0] : '')) : '?').toUpperCase(); }
 
-async function api(path, opts){
-  opts = opts || {};
-  const headers = Object.assign({ 'x-admin-key': localStorage.getItem(KEY_STORE) || '' }, opts.headers || {});
-  let body = opts.body;
-  if (body && !(body instanceof FormData)) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(body); }
-  const res = await fetch(API + path, { method: opts.method || (body ? 'POST' : 'GET'), headers, body });
+async function api(path, body){
+  const headers = { 'x-admin-key': localStorage.getItem(KEY_STORE) || '' };
+  let payload = body;
+  if (payload && !(payload instanceof FormData)) { headers['Content-Type'] = 'application/json'; payload = JSON.stringify(payload); }
+  let res;
+  try { res = await fetch(API + path, { method: 'POST', headers, body: payload || '{}' }); }
+  catch (_) { return { status: 'error', message: 'Could not reach the server. Is the backend URL right?' }; }
   let data;
-  try { data = await res.json(); } catch (_) { data = { status: 'error', message: 'Server did not return JSON (is the backend URL correct?)' }; }
+  try { data = await res.json(); } catch (_) { data = { status: 'error', message: 'The server did not answer properly' }; }
+  if (res.status === 401 && path !== '/admin/check-key') { signOut(); toast('Your session ended. Sign in again.', 'error'); }
   return data;
 }
 
-// ── auth ──
-document.getElementById('loginBtn').addEventListener('click', async () => {
-  const key = document.getElementById('loginKey').value.trim();
+// ── dialogs ──
+function modal({ title, body, okLabel = 'OK', cancelLabel = 'Cancel', danger = false, hideCancel = false, collect = null }){
+  // Resolves false when cancelled, otherwise whatever collect() read from the form BEFORE the dialog closed (or true).
+  return new Promise((resolve) => {
+    const root = $('modalRoot');
+    root.innerHTML = `<div class="overlay"><div class="modal" role="dialog" aria-modal="true"><h2>${esc(title)}</h2>${body || ''}
+      <div class="buttons">${hideCancel ? '' : `<button class="btn plain" id="modalCancel">${esc(cancelLabel)}</button>`}<button class="btn ${danger ? 'danger' : ''}" id="modalOk">${esc(okLabel)}</button></div></div></div>`;
+    const close = (value) => { root.innerHTML = ''; resolve(value); };
+    $('modalOk').onclick = () => close(collect ? collect() : true);
+    if ($('modalCancel')) $('modalCancel').onclick = () => close(false);
+    root.querySelector('.overlay').addEventListener('mousedown', (e) => { if (e.target.classList.contains('overlay')) close(false); });
+    const first = root.querySelector('input,select,textarea'); if (first) first.focus();
+    if (collect) root.querySelector('.modal').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') $('modalOk').click(); });
+  });
+}
+const confirmBox = (title, text, okLabel, danger) => modal({ title, body: `<p>${text}</p>`, okLabel, danger });
+
+// ── sign in / out ──
+async function signIn(){
+  const key = $('loginKey').value.trim();
   if (!key) return;
   localStorage.setItem(KEY_STORE, key);
-  const r = await api('/admin/check-key', { method: 'POST' });
-  if (r.status === 'success') { enterApp(); }
-  else { toast(r.message || 'Wrong key'); localStorage.removeItem(KEY_STORE); }
-});
-document.getElementById('logoutBtn').addEventListener('click', () => {
-  localStorage.removeItem(KEY_STORE);
-  document.getElementById('app').classList.add('hidden');
-  document.getElementById('loginScreen').classList.remove('hidden');
-});
-
-function enterApp(){
-  document.getElementById('loginScreen').classList.add('hidden');
-  document.getElementById('app').classList.remove('hidden');
-  loadLevels().then(() => { loadSubjects(); loadNotes(); });
+  const r = await api('/admin/check-key');
+  if (r.status === 'success') enterApp();
+  else { localStorage.removeItem(KEY_STORE); toast(r.message || 'Wrong key', 'error'); }
 }
+function signOut(){
+  localStorage.removeItem(KEY_STORE);
+  $('app').classList.add('hidden'); $('loginScreen').classList.remove('hidden'); $('loginKey').value = '';
+}
+$('loginBtn').addEventListener('click', signIn);
+$('loginKey').addEventListener('keydown', (e) => { if (e.key === 'Enter') signIn(); });
+$('logoutBtn').addEventListener('click', signOut);
 
 // ── tabs ──
-document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
-  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-  t.classList.add('active');
-  document.getElementById('notesTab').classList.toggle('hidden', t.dataset.tab !== 'notes');
-  document.getElementById('subjectsTab').classList.toggle('hidden', t.dataset.tab !== 'subjects');
-}));
-
-// ── subjects ──
-let SUBJECTS = [];
-async function loadSubjects(){
-  const r = await api('/admin/subjects/list', { method: 'POST' });
-  if (r.status !== 'success') return toast(r.message || 'Could not load subjects');
-  SUBJECTS = r.subjects;
-  document.getElementById('subjectsRows').innerHTML = SUBJECTS.length ? SUBJECTS.map(s => `
-    <tr><td>${esc(s.name)}</td><td>${s.order}</td>
-    <td><button class="btn danger sm" data-del-subject="${esc(s.id)}">Delete</button></td></tr>
-  `).join('') : '<tr><td colspan="3" class="muted">No subjects yet</td></tr>';
-  renderSubjectOptions();
-  document.querySelectorAll('[data-del-subject]').forEach(b => b.addEventListener('click', async () => {
-    if (!confirm('Delete this subject? Notes under it are not deleted, just left unassigned.')) return;
-    await api('/admin/subjects/delete', { method: 'POST', body: { id: b.dataset.delSubject } });
-    loadSubjects();
-  }));
+const LOADERS = {};
+let currentTab = 'dashboard';
+function showTab(name){
+  currentTab = name;
+  document.querySelectorAll('.nav[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('main > section').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + name));
+  if (LOADERS[name]) LOADERS[name]();
+  window.scrollTo(0, 0);
 }
-document.getElementById('sSave').addEventListener('click', async () => {
-  const name = document.getElementById('sName').value.trim();
-  if (!name) return toast('Name is required');
-  const r = await api('/admin/subjects/save', { method: 'POST', body: {
-    name, order: Number(document.getElementById('sOrder').value) || 0,
-  }});
-  if (r.status === 'success') { toast('Saved'); document.getElementById('sName').value=''; loadSubjects(); }
-  else toast(r.message || 'Could not save');
-});
+document.querySelectorAll('.nav[data-tab]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
 
-// ── classes ──
-// The list comes from the server (GET /levels), the same list the app uses.
+async function enterApp(){
+  $('loginScreen').classList.add('hidden'); $('app').classList.remove('hidden');
+  await loadLevels(); await loadSubjects();
+  showTab(currentTab);
+}
+
+// ── classes (the same list the app uses) ──
 let LEVEL_GROUPS = [];
 async function loadLevels(){
-  try {
-    const res = await fetch(API + '/levels');
-    const data = await res.json();
-    if (data.status === 'success') LEVEL_GROUPS = data.groups;
-  } catch (_) { /* the notes table still loads; its class menus stay empty */ }
-  document.getElementById('nClass').innerHTML = classOptions('');
+  try { const data = await (await fetch(API + '/levels')).json(); if (data.status === 'success') LEVEL_GROUPS = data.groups; } catch (_) {}
+  $('nClass').innerHTML = classOptions('', 'All classes');
+  $('stClass').innerHTML = '<option value="">All classes</option><option value="none">No class chosen</option>' + LEVEL_GROUPS.map(g => `<optgroup label="${esc(g.name)}">${g.levels.map(l => `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')}</optgroup>`).join('');
 }
-function classOptions(selected){
+function classOptions(selected, firstLabel){
   const known = LEVEL_GROUPS.some(g => g.levels.some(l => l.id === selected));
-  // A class saved before the list existed (e.g. "Form 3") stays visible instead of vanishing.
   const legacy = selected && !known ? `<option value="" selected>${esc(selected)} (not in the list)</option>` : '';
-  return legacy + `<option value=""${selected ? '' : ' selected'}>All classes</option>` +
-    LEVEL_GROUPS.map(g => `<optgroup label="${esc(g.name)}">` +
-      g.levels.map(l => `<option value="${esc(l.id)}"${l.id === selected ? ' selected' : ''}>${esc(l.name)}</option>`).join('') +
-    '</optgroup>').join('');
+  return legacy + `<option value=""${selected ? '' : ' selected'}>${esc(firstLabel || 'All classes')}</option>` +
+    LEVEL_GROUPS.map(g => `<optgroup label="${esc(g.name)}">` + g.levels.map(l => `<option value="${esc(l.id)}"${l.id === selected ? ' selected' : ''}>${esc(l.name)}</option>`).join('') + '</optgroup>').join('');
 }
+function levelByName(name){ for (const g of LEVEL_GROUPS) for (const l of g.levels) if (l.id === name) return l; return null; }
+function standardSubjects(){ return [...new Set(LEVEL_GROUPS.flatMap(g => g.levels.flatMap(l => l.subjects || [])))]; }
 
-// The subject menu on the upload form follows the class chosen beside it: only
-// the subjects taught in that class, plus any custom subject you added yourself.
-function levelByName(name){
-  for (const g of LEVEL_GROUPS) for (const l of g.levels) if (l.id === name) return l;
-  return null;
+// ── dashboard ──
+const ICONS = {
+  students: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>',
+  notes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg>',
+};
+function stat(icon, bg, fg, value, label){ return `<div class="stat"><div class="ico" style="background:${bg};color:${fg}">${ICONS[icon]}</div><div><b>${esc(value)}</b><span>${esc(label)}</span></div></div>`; }
+LOADERS.dashboard = async function(){
+  const r = await api('/admin/stats');
+  if (r.status !== 'success') return toast(r.message || 'Could not load the dashboard', 'error');
+  const s = r.stats;
+  $('dashStats').innerHTML =
+    stat('students', 'var(--brand-soft)', 'var(--brand-dark)', s.students, 'Students') +
+    stat('plus', 'var(--blue-soft)', 'var(--blue)', s.newThisWeek, 'Joined this week') +
+    stat('spark', 'var(--amber-soft)', '#7a5a00', s.aiToday, 'AI questions today') +
+    stat('notes', '#e9e1fa', '#6b4bb8', s.notes - s.notesHidden, 'Notes live');
+  const tips = [];
+  if (s.withoutClass > 0) tips.push(`${s.withoutClass} student${s.withoutClass === 1 ? ' has' : 's have'} not chosen a class yet.`);
+  if (s.banned > 0) tips.push(`${s.banned} student${s.banned === 1 ? ' is' : 's are'} banned.`);
+  if (s.notes === 0) tips.push('No notes yet. Add subjects, then upload your first note.');
+  $('dashTips').innerHTML = tips.length ? `<div class="tip">${tips.map(esc).join('<br>')}</div>` : '';
+  const max = Math.max(1, ...s.aiLast7Days.map(d => d.count));
+  $('dashBars').innerHTML = s.aiLast7Days.map(d => `<div class="bar"><em>${d.count}</em><i style="height:${Math.round(d.count / max * 100)}%"></i><small>${esc(new Date(d.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short' }))}</small></div>`).join('');
+  const biggest = Math.max(1, ...s.byClass.map(c => c.count));
+  $('dashClasses').innerHTML = s.byClass.length ? s.byClass.map(c => `<div class="hbar"><span>${esc(c.classLevel)}</span><div><i style="width:${Math.round(c.count / biggest * 100)}%"></i></div><b>${c.count}</b></div>`).join('') : '<div class="empty">No students have chosen a class yet</div>';
+  $('dashTop').innerHTML = s.topNotes.length ? s.topNotes.map(n => `<li><span class="grow"><span class="t">${esc(n.title)}</span></span><span class="pill info">${n.views} views</span></li>`).join('') : '<li class="empty" style="display:block">Nothing has been read yet</li>';
+  $('dashRecent').innerHTML = s.recentStudents.length ? s.recentStudents.map(u => `<li><span class="avatar">${esc(initials(u.name))}</span><span class="grow"><span class="t">${esc(u.name)}</span><span class="muted">${esc(u.classLevel || 'No class yet')} · ${esc(fmtDate(u.createdAt))}</span></span></li>`).join('') : '<li class="empty" style="display:block">No students yet</li>';
+  $('dashSub').textContent = s.students + ' students, ' + s.notes + ' notes, ' + s.subjects + ' subjects';
+};
+$('dashRefresh').addEventListener('click', () => LOADERS.dashboard());
+
+// ── students ──
+const ST = { page: 1, pageSize: 25, total: 0, rows: [] };
+let searchTimer;
+LOADERS.students = async function(){
+  const r = await api('/admin/users/list', { q: $('stSearch').value, status: $('stStatus').value, classLevel: $('stClass').value, page: ST.page, pageSize: ST.pageSize });
+  if (r.status !== 'success') return toast(r.message || 'Could not load students', 'error');
+  ST.total = r.total; ST.rows = r.users;
+  $('studentsSub').textContent = r.total + (r.total === 1 ? ' student' : ' students');
+  $('studentRows').innerHTML = r.users.length ? r.users.map(u => `
+    <tr>
+      <td><div class="who"><span class="avatar">${esc(initials(u.name))}</span><div>${esc(u.name)}<span class="sub">${esc(u.phone)}</span></div></div></td>
+      <td>${u.classLevel ? esc(u.classLevel) : '<span class="muted">Not chosen</span>'}</td>
+      <td>${esc(fmtDate(u.createdAt))}</td><td>${esc(ago(u.lastLoginAt))}</td>
+      <td>${u.aiToday} / ${u.aiTotal}</td>
+      <td>${u.status === 'banned' ? '<span class="pill bad">Banned</span>' : '<span class="pill ok">Active</span>'}</td>
+      <td><div class="actions">
+        <button class="btn plain sm" data-act="reset" data-id="${esc(u.id)}">Reset password</button>
+        <button class="btn plain sm" data-act="${u.status === 'banned' ? 'unban' : 'ban'}" data-id="${esc(u.id)}">${u.status === 'banned' ? 'Unban' : 'Ban'}</button>
+        <button class="btn danger sm" data-act="delete" data-id="${esc(u.id)}">Delete</button>
+      </div></td>
+    </tr>`).join('') : '<tr><td colspan="7" class="empty">No students match</td></tr>';
+  const from = r.total ? (r.page - 1) * r.pageSize + 1 : 0;
+  $('stCount').textContent = r.total ? `Showing ${from}–${from + r.users.length - 1} of ${r.total}` : '';
+  $('stPrev').disabled = r.page <= 1; $('stNext').disabled = r.page * r.pageSize >= r.total;
+};
+function reloadStudents(resetPage){ if (resetPage) ST.page = 1; LOADERS.students(); }
+$('stSearch').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => reloadStudents(true), 300); });
+$('stClass').addEventListener('change', () => reloadStudents(true));
+$('stStatus').addEventListener('change', () => reloadStudents(true));
+$('stPrev').addEventListener('click', () => { ST.page = Math.max(1, ST.page - 1); LOADERS.students(); });
+$('stNext').addEventListener('click', () => { ST.page += 1; LOADERS.students(); });
+
+function makePassword(){
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  return Array.from(bytes, b => chars[b % chars.length]).join('');
 }
-function standardSubjects(){
-  return [...new Set(LEVEL_GROUPS.flatMap(g => g.levels.flatMap(l => l.subjects || [])))];
+$('studentRows').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]'); if (!btn) return;
+  const user = ST.rows.find(u => u.id === btn.dataset.id); if (!user) return;
+  const act = btn.dataset.act;
+  if (act === 'ban') {
+    if (!await confirmBox('Ban ' + user.name + '?', 'They are signed out at once and cannot sign in until you unban them.', 'Ban student', true)) return;
+    const r = await api('/admin/users/status', { id: user.id, status: 'banned' });
+    toast(r.status === 'success' ? user.name + ' is banned' : (r.message || 'Could not ban'), r.status === 'success' ? 'ok' : 'error');
+  } else if (act === 'unban') {
+    const r = await api('/admin/users/status', { id: user.id, status: 'active' });
+    toast(r.status === 'success' ? user.name + ' can sign in again' : (r.message || 'Could not unban'), r.status === 'success' ? 'ok' : 'error');
+  } else if (act === 'delete') {
+    if (!await confirmBox('Delete ' + user.name + '?', 'Their account, sessions and AI usage are removed for good. This cannot be undone.', 'Delete student', true)) return;
+    const r = await api('/admin/users/delete', { id: user.id });
+    toast(r.status === 'success' ? 'Student deleted' : (r.message || 'Could not delete'), r.status === 'success' ? 'ok' : 'error');
+  } else if (act === 'reset') {
+    const picked = await modal({ title: 'New password for ' + user.name, okLabel: 'Set password',
+      body: `<p>Type a new password, or use the one suggested. The student is signed out everywhere and signs in with the new one.</p>
+        <label>New password</label><input id="resetPw" value="${esc(makePassword())}" autocomplete="off" spellcheck="false">`,
+      collect: () => $('resetPw').value });
+    if (!picked) return;
+    const r = await api('/admin/users/reset-password', { id: user.id, password: picked });
+    if (r.status !== 'success') toast(r.message || 'Could not reset the password', 'error');
+    else {
+      const shown = modal({ title: 'Password changed', okLabel: 'Done', hideCancel: true,
+        body: `<p>Give this to ${esc(user.name)}. It is shown only now.</p><div class="secret"><span>${esc(picked)}</span><button class="btn sm" id="copyPw">Copy</button></div>` });
+      $('copyPw').onclick = async () => { try { await navigator.clipboard.writeText(picked); toast('Copied', 'ok'); } catch (_) { toast('Select the password and copy it by hand', 'error'); } };
+      await shown;
+    }
+  }
+  reloadStudents(false);
+});
+// ── notes ──
+let SUBJECTS = [];
+function subjectName(id){ const s = SUBJECTS.find(x => x.id === id); return s ? s.name : '—'; }
+function subjectOptions(classValue, selectedId){
+  const level = levelByName(classValue);
+  const standard = new Set(standardSubjects().map(n => n.toLowerCase()));
+  const list = level ? SUBJECTS.filter(s => level.subjects.includes(s.name) || !standard.has(s.name.toLowerCase()) || s.id === selectedId) : SUBJECTS;
+  return '<option value="">(none)</option>' + list.map(s => `<option value="${esc(s.id)}"${s.id === selectedId ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
 }
 function renderSubjectOptions(){
-  const level = levelByName(document.getElementById('nClass').value);
-  const standard = new Set(standardSubjects().map(n => n.toLowerCase()));
-  const list = level
-    ? SUBJECTS.filter(s => level.subjects.includes(s.name) || !standard.has(s.name.toLowerCase()))
-    : SUBJECTS;
-  const select = document.getElementById('nSubject');
-  const before = select.value;
-  select.innerHTML = '<option value="">(none)</option>' +
-    list.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
-  if (list.some(s => s.id === before)) select.value = before;
+  const select = $('nSubject'); const before = select.value;
+  select.innerHTML = subjectOptions($('nClass').value, before);
 }
-document.getElementById('nClass').addEventListener('change', renderSubjectOptions);
-document.getElementById('sSeed').addEventListener('click', async () => {
-  const have = new Set(SUBJECTS.map(s => s.name.toLowerCase()));
-  const missing = standardSubjects().filter(n => !have.has(n.toLowerCase()));
-  if (!LEVEL_GROUPS.length) return toast('Could not load the subject list from the server');
-  if (!missing.length) return toast('All the standard subjects are already there');
-  if (!confirm('Add ' + missing.length + ' subjects?')) return;
-  let order = Math.max(0, ...SUBJECTS.map(s => Number(s.order) || 0)) + 10;
-  for (const name of missing) {
-    const r = await api('/admin/subjects/save', { method: 'POST', body: { name, order } });
-    if (r.status !== 'success') { toast(r.message || 'Could not add ' + name); break; }
-    order += 10;
+$('nClass').addEventListener('change', renderSubjectOptions);
+
+let NOTES = [];
+LOADERS.notes = async function(){
+  const r = await api('/admin/notes/list');
+  if (r.status !== 'success') return toast(r.message || 'Could not load notes', 'error');
+  NOTES = r.notes;
+  $('notesRows').innerHTML = NOTES.length ? NOTES.map(n => `
+    <tr>
+      <td>${esc(n.title)}${n.description ? `<span class="sub">${esc(n.description)}</span>` : ''}</td>
+      <td>${esc(subjectName(n.subjectId))}</td>
+      <td>${n.classLevel ? esc(n.classLevel) : '<span class="muted">All</span>'}</td>
+      <td>${n.pageCount || '—'}</td><td>${n.views || 0}</td>
+      <td>${n.hasAiContext ? '<span class="pill ok">Ready</span>' : '<span class="pill warn">No text</span>'}</td>
+      <td>${n.active ? '<span class="pill ok">Live</span>' : '<span class="pill warn">Hidden</span>'}</td>
+      <td><div class="actions">
+        <button class="btn plain sm" data-act="edit" data-id="${esc(n.id)}">Edit</button>
+        <button class="btn plain sm" data-act="toggle" data-id="${esc(n.id)}">${n.active ? 'Hide' : 'Show'}</button>
+        <button class="btn danger sm" data-act="delete" data-id="${esc(n.id)}">Delete</button>
+      </div></td>
+    </tr>`).join('') : '<tr><td colspan="8" class="empty">No notes uploaded yet</td></tr>';
+};
+$('notesRows').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]'); if (!btn) return;
+  const note = NOTES.find(n => n.id === btn.dataset.id); if (!note) return;
+  if (btn.dataset.act === 'toggle') {
+    const r = await api('/admin/notes/update', { id: note.id, active: !note.active });
+    toast(r.status === 'success' ? (note.active ? 'Hidden from students' : 'Visible to students') : (r.message || 'Could not update'), r.status === 'success' ? 'ok' : 'error');
+  } else if (btn.dataset.act === 'delete') {
+    if (!await confirmBox('Delete this note?', 'The PDF and everything stored about it are removed for good.', 'Delete note', true)) return;
+    await api('/admin/notes/delete', { id: note.id });
+  } else if (btn.dataset.act === 'edit') {
+    return editNote(note);
   }
-  toast('Subjects added');
-  loadSubjects();
+  LOADERS.notes();
+});
+async function editNote(note){
+  const body = `<label>Title</label><input id="eTitle" value="${esc(note.title)}">
+    <label>Description</label><textarea id="eDesc">${esc(note.description || '')}</textarea>
+    <div class="row"><div><label>Class</label><select id="eClass">${classOptions(note.classLevel || '', 'All classes')}</select></div>
+    <div><label>Subject</label><select id="eSubject">${subjectOptions(note.classLevel || '', note.subjectId)}</select></div></div>`;
+  const pending = modal({ title: 'Edit note', body, okLabel: 'Save changes',
+    collect: () => ({ id: note.id, title: $('eTitle').value, description: $('eDesc').value, classLevel: $('eClass').value, subjectId: $('eSubject').value }) });
+  $('eClass').addEventListener('change', () => { $('eSubject').innerHTML = subjectOptions($('eClass').value, $('eSubject').value); });
+  const saved = await pending;
+  if (!saved) return;
+  if (!saved.title.trim()) return toast('A note needs a title', 'error');
+  const r = await api('/admin/notes/update', saved);
+  toast(r.status === 'success' ? 'Note saved' : (r.message || 'Could not save'), r.status === 'success' ? 'ok' : 'error');
+  LOADERS.notes();
+}
+$('nUpload').addEventListener('click', async () => {
+  const title = $('nTitle').value.trim(); const file = $('nFile').files[0];
+  if (!title) return toast('Title is required', 'error');
+  if (!file) return toast('Choose a PDF file', 'error');
+  const fd = new FormData();
+  fd.append('title', title); fd.append('description', $('nDesc').value.trim());
+  fd.append('subjectId', $('nSubject').value); fd.append('classLevel', $('nClass').value); fd.append('file', file);
+  $('nUpload').disabled = true; $('nUploadStatus').textContent = 'Uploading…';
+  const r = await api('/admin/notes/upload', fd);
+  $('nUpload').disabled = false; $('nUploadStatus').textContent = '';
+  if (r.status === 'success') {
+    toast(r.warning || 'Uploaded', r.warning ? '' : 'ok');
+    $('nTitle').value = ''; $('nDesc').value = ''; $('nFile').value = '';
+    LOADERS.notes();
+  } else toast(r.message || 'Upload failed', 'error');
 });
 
-// ── notes ──
-function subjectName(id){ const s = SUBJECTS.find(x => x.id === id); return s ? s.name : '—'; }
-async function loadNotes(){
-  const r = await api('/admin/notes/list', { method: 'POST' });
-  if (r.status !== 'success') return toast(r.message || 'Could not load notes');
-  document.getElementById('notesRows').innerHTML = r.notes.length ? r.notes.map(n => `
-    <tr>
-      <td>${esc(n.title)}${n.description ? `<br><span class="muted">${esc(n.description)}</span>` : ''}</td>
-      <td>${esc(subjectName(n.subjectId))}</td>
-      <td><select class="class-pick" data-class-for="${esc(n.id)}">${classOptions(n.classLevel)}</select></td>
-      <td>${n.pageCount || '—'}</td>
-      <td>${n.hasAiContext ? '<span class="pill ok">Ready</span>' : '<span class="pill warn">No text</span>'}</td>
-      <td>${n.active ? '<span class="pill ok">Active</span>' : '<span class="pill warn">Hidden</span>'}</td>
-      <td>
-        <button class="btn ghost sm" data-toggle="${esc(n.id)}" data-active="${n.active}">${n.active ? 'Hide' : 'Show'}</button>
-        <button class="btn danger sm" data-del-note="${esc(n.id)}">Delete</button>
-      </td>
-    </tr>
-  `).join('') : '<tr><td colspan="7" class="muted">No notes uploaded yet</td></tr>';
-  document.querySelectorAll('[data-class-for]').forEach(sel => sel.addEventListener('change', async () => {
-    const r = await api('/admin/notes/update', { method: 'POST', body: { id: sel.dataset.classFor, classLevel: sel.value } });
-    toast(r.status === 'success' ? 'Class saved' : (r.message || 'Could not save the class'));
-    loadNotes();
-  }));
-  document.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', async () => {
-    await api('/admin/notes/update', { method: 'POST', body: { id: b.dataset.toggle, active: b.dataset.active !== 'true' } });
-    loadNotes();
-  }));
-  document.querySelectorAll('[data-del-note]').forEach(b => b.addEventListener('click', async () => {
-    if (!confirm('Delete this note and its PDF file permanently?')) return;
-    await api('/admin/notes/delete', { method: 'POST', body: { id: b.dataset.delNote } });
-    loadNotes();
-  }));
+// ── subjects ──
+async function loadSubjects(){
+  const r = await api('/admin/subjects/list');
+  if (r.status !== 'success') return toast(r.message || 'Could not load subjects', 'error');
+  SUBJECTS = r.subjects;
+  $('subjectsRows').innerHTML = SUBJECTS.length ? SUBJECTS.map(s => `<tr><td>${esc(s.name)}</td><td>${s.order}</td><td><div class="actions"><button class="btn danger sm" data-del="${esc(s.id)}">Delete</button></div></td></tr>`).join('') : '<tr><td colspan="3" class="empty">No subjects yet</td></tr>';
+  renderSubjectOptions();
 }
-document.getElementById('nUpload').addEventListener('click', async () => {
-  const title = document.getElementById('nTitle').value.trim();
-  const file = document.getElementById('nFile').files[0];
-  if (!title) return toast('Title is required');
-  if (!file) return toast('Choose a PDF file');
-  const fd = new FormData();
-  fd.append('title', title);
-  fd.append('description', document.getElementById('nDesc').value.trim());
-  fd.append('subjectId', document.getElementById('nSubject').value);
-  fd.append('classLevel', document.getElementById('nClass').value);
-  fd.append('file', file);
-  const statusEl = document.getElementById('nUploadStatus');
-  statusEl.textContent = 'Uploading…';
-  const r = await api('/admin/notes/upload', { method: 'POST', body: fd });
-  statusEl.textContent = '';
-  if (r.status === 'success') {
-    toast(r.warning || 'Uploaded');
-    document.getElementById('nTitle').value = '';
-    document.getElementById('nDesc').value = '';
-    document.getElementById('nFile').value = '';
-    loadNotes();
-  } else toast(r.message || 'Upload failed');
+LOADERS.subjects = loadSubjects;
+$('subjectsRows').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-del]'); if (!btn) return;
+  if (!await confirmBox('Delete this subject?', 'Notes under it are not deleted, just left without a subject.', 'Delete subject', true)) return;
+  await api('/admin/subjects/delete', { id: btn.dataset.del });
+  loadSubjects();
+});
+$('sSave').addEventListener('click', async () => {
+  const name = $('sName').value.trim();
+  if (!name) return toast('Name is required', 'error');
+  const r = await api('/admin/subjects/save', { name, order: Number($('sOrder').value) || 0 });
+  if (r.status === 'success') { toast('Saved', 'ok'); $('sName').value = ''; loadSubjects(); } else toast(r.message || 'Could not save', 'error');
+});
+$('sSeed').addEventListener('click', async () => {
+  if (!LEVEL_GROUPS.length) return toast('Could not load the subject list from the server', 'error');
+  const have = new Set(SUBJECTS.map(s => s.name.toLowerCase()));
+  const missing = standardSubjects().filter(n => !have.has(n.toLowerCase()));
+  if (!missing.length) return toast('All the standard subjects are already there');
+  if (!await confirmBox('Add ' + missing.length + ' subjects?', 'These are the subjects taught in Uganda\'s primary schools, O-Level and A-Level. You can delete any you do not need.', 'Add subjects')) return;
+  let order = Math.max(0, ...SUBJECTS.map(s => Number(s.order) || 0)) + 10;
+  for (const name of missing) {
+    const r = await api('/admin/subjects/save', { name, order });
+    if (r.status !== 'success') { toast(r.message || 'Could not add ' + name, 'error'); break; }
+    order += 10;
+  }
+  toast('Subjects added', 'ok'); loadSubjects();
+});
+
+// ── announcements ──
+let ANNOUNCEMENTS = [];
+function resetAnnouncementForm(){
+  $('aId').value = ''; $('aTitle').value = ''; $('aMessage').value = ''; $('aExpires').value = ''; $('aActive').checked = true;
+  $('aFormTitle').textContent = 'New announcement'; $('aSave').textContent = 'Publish'; $('aCancel').classList.add('hidden');
+}
+LOADERS.announcements = async function(){
+  const r = await api('/admin/announcements/list');
+  if (r.status !== 'success') return toast(r.message || 'Could not load announcements', 'error');
+  ANNOUNCEMENTS = r.announcements;
+  const now = Date.now();
+  $('aList').innerHTML = ANNOUNCEMENTS.length ? '<ul class="plain">' + ANNOUNCEMENTS.map(a => {
+    const expired = a.expiresAt && new Date(a.expiresAt).getTime() < now;
+    const pill = !a.active ? '<span class="pill warn">Off</span>' : expired ? '<span class="pill bad">Expired</span>' : '<span class="pill ok">Showing</span>';
+    return `<li><span class="grow"><b>${esc(a.title)}</b><span class="muted" style="display:block">${esc(a.message)}</span><span class="muted">${a.expiresAt ? 'Until ' + esc(fmtDate(a.expiresAt)) : 'No end date'}</span></span>${pill}
+      <span class="actions"><button class="btn plain sm" data-act="edit" data-id="${esc(a.id)}">Edit</button><button class="btn plain sm" data-act="toggle" data-id="${esc(a.id)}">${a.active ? 'Turn off' : 'Turn on'}</button><button class="btn danger sm" data-act="delete" data-id="${esc(a.id)}">Delete</button></span></li>`;
+  }).join('') + '</ul>' : '<div class="empty">No announcements yet</div>';
+};
+$('aSave').addEventListener('click', async () => {
+  const r = await api('/admin/announcements/save', { id: $('aId').value || undefined, title: $('aTitle').value, message: $('aMessage').value, expiresAt: $('aExpires').value || null, active: $('aActive').checked });
+  if (r.status === 'success') { toast('Published', 'ok'); resetAnnouncementForm(); LOADERS.announcements(); } else toast(r.message || 'Could not save', 'error');
+});
+$('aCancel').addEventListener('click', resetAnnouncementForm);
+$('aList').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]'); if (!btn) return;
+  const a = ANNOUNCEMENTS.find(x => x.id === btn.dataset.id); if (!a) return;
+  if (btn.dataset.act === 'edit') {
+    $('aId').value = a.id; $('aTitle').value = a.title; $('aMessage').value = a.message;
+    $('aExpires').value = a.expiresAt ? String(a.expiresAt).slice(0, 10) : ''; $('aActive').checked = a.active;
+    $('aFormTitle').textContent = 'Edit announcement'; $('aSave').textContent = 'Save changes'; $('aCancel').classList.remove('hidden');
+    window.scrollTo({ top: 0, behavior: 'smooth' }); return;
+  }
+  if (btn.dataset.act === 'toggle') await api('/admin/announcements/save', { id: a.id, title: a.title, message: a.message, expiresAt: a.expiresAt ? String(a.expiresAt).slice(0, 10) : null, active: !a.active });
+  if (btn.dataset.act === 'delete') {
+    if (!await confirmBox('Delete this announcement?', 'Students will stop seeing it.', 'Delete', true)) return;
+    await api('/admin/announcements/delete', { id: a.id });
+  }
+  LOADERS.announcements();
+});
+
+// ── settings ──
+LOADERS.settings = async function(){
+  const r = await api('/admin/settings/get');
+  if (r.status !== 'success') return toast(r.message || 'Could not load settings', 'error');
+  const s = r.settings;
+  $('setAiOn').checked = s.aiEnabled !== false;
+  $('setAiLimit').value = s.aiDailyLimit || '';
+  $('setAiLimit').placeholder = String(r.defaultAiDailyLimit);
+  $('setAiHint').textContent = 'Leave empty to use the server default (' + r.defaultAiDailyLimit + '). Every question costs a little, so this is what keeps the bill predictable.';
+  $('setPhone').value = s.supportPhone || ''; $('setWhatsapp').value = s.supportWhatsapp || '';
+  $('setEmail').value = s.supportEmail || ''; $('setHours').value = s.supportHours || '';
+};
+$('setSave').addEventListener('click', async () => {
+  const r = await api('/admin/settings/save', {
+    aiEnabled: $('setAiOn').checked, aiDailyLimit: $('setAiLimit').value === '' ? null : Number($('setAiLimit').value),
+    supportPhone: $('setPhone').value, supportWhatsapp: $('setWhatsapp').value, supportEmail: $('setEmail').value, supportHours: $('setHours').value,
+  });
+  toast(r.status === 'success' ? 'Settings saved' : (r.message || 'Could not save'), r.status === 'success' ? 'ok' : 'error');
 });
 
 // ── boot ──
 if (localStorage.getItem(KEY_STORE)) {
-  api('/admin/check-key', { method: 'POST' }).then(r => { if (r.status === 'success') enterApp(); });
+  api('/admin/check-key').then(r => { if (r.status === 'success') enterApp(); });
 }
 </script>
 </body>

@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -39,9 +40,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.shulenotes.app.ui.components.AppConfigHolder
 import com.shulenotes.app.ui.components.LogoMark
 import com.shulenotes.app.ui.components.PrimaryButton
 import com.shulenotes.app.ui.components.ShuleTextField
+import com.shulenotes.app.ui.components.SupportDialog
 import com.shulenotes.app.ui.components.Wordmark
 
 // Shared frame for the sign-in and sign-up screens: scrolls, and keeps the
@@ -93,6 +96,8 @@ fun AuthHeader(logoSize: Dp, title: String, subtitle: String) {
 fun LoginScreen(viewModel: AuthViewModel, onLoggedIn: () -> Unit, onGoToRegister: () -> Unit) {
     var phone by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
+    var showHelp by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) { AppConfigHolder.refresh() }
     val focus = LocalFocusManager.current
     val submit = {
         focus.clearFocus()
@@ -124,7 +129,10 @@ fun LoginScreen(viewModel: AuthViewModel, onLoggedIn: () -> Unit, onGoToRegister
             keyboardActions = KeyboardActions(onDone = { submit() }),
         )
 
-        Spacer(Modifier.height(24.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = { showHelp = true }, enabled = !viewModel.isLoading) { Text("Forgot password?") }
+        }
+        Spacer(Modifier.height(8.dp))
         PrimaryButton(text = "Sign in", loadingText = "Signing in…", loading = viewModel.isLoading, onClick = submit)
 
         Spacer(Modifier.height(16.dp))
@@ -140,5 +148,14 @@ fun LoginScreen(viewModel: AuthViewModel, onLoggedIn: () -> Unit, onGoToRegister
             )
             TextButton(onClick = onGoToRegister, enabled = !viewModel.isLoading) { Text("Create an account") }
         }
+    }
+
+    if (showHelp) {
+        SupportDialog(
+            title = "Forgot your password?",
+            intro = "We will set a new password for you. Contact us with the name and phone number you signed up with.",
+            config = AppConfigHolder.config,
+            onDismiss = { showHelp = false },
+        )
     }
 }

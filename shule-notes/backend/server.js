@@ -15,8 +15,12 @@ const { hashPassword, verifyPassword, createSession, resolveSession, destroySess
 const { verifyAdmin } = require('./admin-auth');
 const { extractPdfText } = require('./pdf');
 const { askAboutDocument, classifyClaudeError } = require('./claude');
-const { privacyPage, accountDeletionPage } = require('./legal');
+const { privacyPage, accountDeletionPage, termsPage } = require('./legal');
 const { GROUPS: LEVEL_GROUPS, isValidLevel } = require('./levels');
+const { normalizePhone, isValidPhone } = require('./phone');
+const { eraseUser, changePassword, updateProfile, cleanName } = require('./accounts');
+const { getSettings, saveSettings, publicConfig } = require('./settings');
+const adminData = require('./admin-data');
 
 const PORT = process.env.PORT || 4000;
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
@@ -41,20 +45,6 @@ function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// One stored form per number, so someone who signs up as 0772 123 456 can
-// sign in as +256772123456. A full East African number (254/255/256 + nine
-// digits) is stored the way it is dialled locally, with a leading 0.
-function normalizePhone(raw) {
-  const digits = String(raw || '').replace(/\D/g, '');
-  if (/^25[456]\d{9}$/.test(digits)) return '0' + digits.slice(3);
-  if (/^[1-9]\d{8}$/.test(digits)) return '0' + digits;
-  return digits;
-}
-
-function isValidPhone(phone) {
-  return /^\d{9,15}$/.test(phone);
-}
-
 function publicUser(u) {
   return { id: String(u._id), name: u.name || '', phone: u.phone || null, classLevel: u.classLevel || null };
 }
@@ -64,7 +54,7 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeade
 
 app.post('/auth/register', authLimiter, async (req, res) => {
   try {
-    const name = String(req.body.name || '').trim().slice(0, 80);
+    const name = cleanName(req.body.name);
     const phone = normalizePhone(req.body.phone);
     const password = String(req.body.password || '');
     if (!name) return res.status(400).json({ status: 'error', message: 'Name is required' });
@@ -74,7 +64,7 @@ app.post('/auth/register', authLimiter, async (req, res) => {
     const db = getDb();
     const doc = {
       name, phone, passwordHash: hashPassword(password),
-      status: 'active', createdAt: new Date(),
+      status: 'active', createdAt: new Date(), lastLoginAt: new Date(),
     };
     let result;
     try {
@@ -106,6 +96,7 @@ app.post('/auth/login', authLimiter, async (req, res) => {
     if (!user || !ok) return res.status(401).json({ status: 'error', message: 'Incorrect phone number or password' });
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'This account has been suspended' });
 
+    await db.collection('users').updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } });
     const { token } = await createSession(String(user._id));
     res.json({ status: 'success', token, user: publicUser(user) });
   } catch (e) {
@@ -118,6 +109,30 @@ app.post('/auth/logout', requireAuth, async (req, res) => {
   await destroySession(bearerToken(req));
   res.json({ status: 'success' });
 });
+
+// A rejected async handler must answer, not leave the request hanging.
+const ah = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => {
+  console.error(req.method, req.path, 'failed:', e.message);
+  if (!res.headersSent) res.status(500).json({ status: 'error', message: 'Something went wrong on the server' });
+});
+const sendResult = (res, result, extra = {}) => (result.ok
+  ? res.json({ status: 'success', ...extra })
+  : res.status(result.status || 400).json({ status: 'error', message: result.message }));
+
+// Contacts and switches the app and the sign-in screen need before anyone is signed in.
+app.get('/config', ah(async (req, res) => res.json({ status: 'success', config: publicConfig(await getSettings()) })));
+
+app.get('/announcement', requireAuth, ah(async (req, res) => res.json({ status: 'success', announcement: await adminData.activeAnnouncement() })));
+
+app.post('/auth/change-password', authLimiter, requireAuth, ah(async (req, res) => {
+  const result = await changePassword(req.userId, req.body.currentPassword, req.body.newPassword, bearerToken(req));
+  sendResult(res, result);
+}));
+
+app.post('/auth/update-profile', requireAuth, ah(async (req, res) => {
+  const result = await updateProfile(req.userId, req.body.name);
+  sendResult(res, result, result.ok ? { user: publicUser(result.user) } : {});
+}));
 
 app.get('/levels', (req, res) => res.json({ status: 'success', groups: LEVEL_GROUPS }));
 
@@ -162,11 +177,7 @@ async function deleteAccount(userId, password) {
   if (!user) return { ok: false, status: 404, message: 'Account not found' };
   // 403, not 401: the app treats 401 as "your session expired" and signs out.
   if (!verifyPassword(password, user.passwordHash)) return { ok: false, status: 403, message: 'Incorrect password' };
-  // Sessions first: if a later step fails, the account still exists and the
-  // member can retry, rather than being deleted but still signed in.
-  await db.collection('sessions').deleteMany({ userId });
-  await db.collection('aiUsage').deleteMany({ userId });
-  await db.collection('users').deleteOne({ _id: user._id });
+  await eraseUser(userId);
   return { ok: true };
 }
 
@@ -216,6 +227,8 @@ app.get('/notes/:id/file', requireAuth, async (req, res) => {
   if (!note || note.active === false) return res.status(404).json({ status: 'error', message: 'Note not found' });
   const filePath = path.join(UPLOAD_DIR, 'notes', note.fileName);
   if (!fs.existsSync(filePath)) return res.status(404).json({ status: 'error', message: 'File missing on server' });
+  // Counted when the file is opened, so the admin can see what students read.
+  getDb().collection('notes').updateOne({ _id: note._id }, { $inc: { views: 1 } }).catch(() => {});
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(note.title || 'note')}.pdf"`);
   fs.createReadStream(filePath).pipe(res);
@@ -225,7 +238,7 @@ app.get('/notes/:id/file', requireAuth, async (req, res) => {
 // A per-user, per-day cap enforced by a UNIQUE index on (userId,date) in
 // Mongo -- an $inc past the cap is refused by re-reading the row, never
 // trusted to in-process state (this process may not be the only one).
-async function consumeAiQuota(userId) {
+async function consumeAiQuota(userId, limit = AI_DAILY_LIMIT) {
   const db = getDb();
   const date = todayKey();
   const row = await db.collection('aiUsage').findOneAndUpdate(
@@ -234,7 +247,7 @@ async function consumeAiQuota(userId) {
     { upsert: true, returnDocument: 'after' }
   );
   const count = row && row.value ? row.value.count : (row ? row.count : 1);
-  return count <= AI_DAILY_LIMIT;
+  return count <= limit;
 }
 
 const aiLimiter = rateLimit({ windowMs: 60 * 1000, max: 15, standardHeaders: true, legacyHeaders: false });
@@ -254,8 +267,11 @@ app.post('/ai/ask', requireAuth, aiLimiter, async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'This document has no readable text (it is likely a scanned image), so the AI helper cannot read it.' });
     }
 
-    const allowed = await consumeAiQuota(req.userId);
-    if (!allowed) return res.status(429).json({ status: 'error', message: `You've reached today's limit of ${AI_DAILY_LIMIT} AI questions. Try again tomorrow.` });
+    const settings = await getSettings();
+    if (settings.aiEnabled === false) return res.status(503).json({ status: 'error', message: 'The AI helper is switched off for now. Please try again later.' });
+    const limit = settings.aiDailyLimit || AI_DAILY_LIMIT;
+    const allowed = await consumeAiQuota(req.userId, limit);
+    if (!allowed) return res.status(429).json({ status: 'error', message: `You've reached today's limit of ${limit} AI questions. Try again tomorrow.` });
 
     const result = await askAboutDocument({ documentText: note.extractedText, noteTitle: note.title, question, history });
     res.json({ status: 'success', answer: result.answer });
@@ -266,7 +282,12 @@ app.post('/ai/ask', requireAuth, aiLimiter, async (req, res) => {
 });
 
 // ── ADMIN ───────────────────────────────────────────────────────────────────
-app.post('/admin/check-key', (req, res) => {
+// Guessing the admin key is the one thing worth slowing down hard.
+const adminKeyLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
+const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
+app.use('/admin', adminLimiter);
+
+app.post('/admin/check-key', adminKeyLimiter, (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Wrong admin key' });
   res.json({ status: 'success' });
 });
@@ -348,7 +369,7 @@ app.post('/admin/notes/upload', upload.single('file'), async (req, res) => {
 app.post('/admin/notes/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const rows = await getDb().collection('notes').find({}).sort({ uploadedAt: -1 }).limit(1000).toArray();
-  res.json({ status: 'success', notes: rows.map((n) => ({ ...publicNote(n), active: n.active !== false })) });
+  res.json({ status: 'success', notes: rows.map((n) => ({ ...publicNote(n), active: n.active !== false, views: n.views || 0 })) });
 });
 
 app.post('/admin/notes/update', async (req, res) => {
@@ -384,12 +405,32 @@ app.post('/admin/notes/delete', async (req, res) => {
   res.json({ status: 'success' });
 });
 
+// The admin panel's students, dashboard, announcements and settings.
+const guard = (fn) => ah(async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  return fn(req, res);
+});
+app.post('/admin/stats', guard(async (req, res) => res.json({ status: 'success', stats: await adminData.dashboardStats() })));
+app.post('/admin/users/list', guard(async (req, res) => res.json({ status: 'success', ...(await adminData.listUsers(req.body)) })));
+app.post('/admin/users/status', guard(async (req, res) => sendResult(res, await adminData.setUserStatus(req.body.id, req.body.status))));
+app.post('/admin/users/reset-password', guard(async (req, res) => sendResult(res, await adminData.resetUserPassword(req.body.id, req.body.password))));
+app.post('/admin/users/delete', guard(async (req, res) => sendResult(res, await adminData.adminDeleteUser(req.body.id))));
+app.post('/admin/announcements/list', guard(async (req, res) => res.json({ status: 'success', announcements: await adminData.listAnnouncements() })));
+app.post('/admin/announcements/save', guard(async (req, res) => sendResult(res, await adminData.saveAnnouncement(req.body))));
+app.post('/admin/announcements/delete', guard(async (req, res) => sendResult(res, await adminData.deleteAnnouncement(req.body.id))));
+app.post('/admin/settings/get', guard(async (req, res) => res.json({ status: 'success', settings: await getSettings(), defaultAiDailyLimit: AI_DAILY_LIMIT })));
+app.post('/admin/settings/save', guard(async (req, res) => {
+  const result = await saveSettings(req.body);
+  sendResult(res, result, result.ok ? { settings: result.settings } : {});
+}));
+
 const LEGAL = {
   appName: process.env.APP_NAME || 'Shule Notes',
   supportEmail: process.env.SUPPORT_EMAIL || '',
   updated: process.env.PRIVACY_UPDATED || '15 November 2026',
 };
 app.get('/privacy', (req, res) => res.type('html').send(privacyPage(LEGAL)));
+app.get('/terms', (req, res) => res.type('html').send(termsPage(LEGAL)));
 app.get('/account-deletion', (req, res) => res.type('html').send(accountDeletionPage(LEGAL)));
 
 app.get('/health', (req, res) => res.json({ status: 'success', time: new Date().toISOString() }));

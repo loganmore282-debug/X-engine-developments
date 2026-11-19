@@ -67,4 +67,30 @@ function accountDeletionPage({ appName, supportEmail }) {
 <p>${contactLine(supportEmail)} Tell us the phone number the account was created with and we will delete it for you.</p>`);
 }
 
-module.exports = { privacyPage, accountDeletionPage };
+function termsPage({ appName, supportEmail, updated }) {
+  const app = esc(appName);
+  return page(`${appName} Terms of Use`, `
+<h1>${app} Terms of Use</h1>
+<p class="muted">Last updated ${esc(updated)}</p>
+<p>By creating an account or using ${app} you agree to these terms.</p>
+<h2>Using the app</h2>
+<p>${app} gives students access to study notes, past papers and revision material, and an AI helper that answers questions about the document you are reading. Use it for your own learning.</p>
+<h2>Your account</h2>
+<ul>
+  <li>Give your real name and your own phone number, and keep your password private.</li>
+  <li>You are responsible for what happens on your account. Do not share it.</li>
+  <li>We may suspend an account that is used to harm the service or other students.</li>
+</ul>
+<h2>The study material</h2>
+<p>The notes and papers belong to ${app} or its contributors. You may read them in the app for your own study. Please do not copy, sell or republish them.</p>
+<h2>The AI helper</h2>
+<p>The AI helper answers from the document you have open. It can make mistakes, so check anything important against your notes and your teacher. Each student has a daily limit on questions. Please do not use the helper to produce harmful or abusive content.</p>
+<h2>No guarantee</h2>
+<p>We work to keep the app and its content correct and available, but we cannot promise that it will always be free of errors or interruptions, or that it will improve your results.</p>
+<h2>Ending your use</h2>
+<p>You can delete your account at any time from <strong>Profile</strong> in the app. See the <a href="/privacy">privacy policy</a> for what happens to your information.</p>
+<h2>Contact</h2>
+<p>Questions about these terms? ${contactLine(supportEmail)}</p>`);
+}
+
+module.exports = { privacyPage, accountDeletionPage, termsPage };

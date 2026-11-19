@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Search
@@ -68,6 +69,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.shulenotes.app.data.Announcement
 import com.shulenotes.app.data.Note
 import com.shulenotes.app.data.RecentNote
 import com.shulenotes.app.ui.components.Avatar
@@ -117,6 +119,17 @@ fun HomeTab(
                     onChangeClass = onChangeClass,
                     onOpenProfile = onOpenProfile,
                 )
+            }
+
+            val notice = viewModel.announcement
+            if (notice != null && !searching) {
+                item(key = "announcement") {
+                    AnnouncementCard(
+                        notice = notice,
+                        onDismiss = { viewModel.dismissAnnouncement() },
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp),
+                    )
+                }
             }
 
             if (showResume && resume != null) {
@@ -384,6 +397,34 @@ private fun SectionTitle(text: String, modifier: Modifier = Modifier) {
         style = MaterialTheme.typography.titleLarge,
         modifier = modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
     )
+}
+
+// A message from the owner (set in the admin panel), until the student closes it.
+@Composable
+private fun AnnouncementCard(notice: Announcement, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 14.dp, end = 4.dp)) {
+            Icon(
+                Icons.Outlined.Campaign,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.padding(top = 2.dp).size(24.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(notice.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                Spacer(Modifier.height(2.dp))
+                Text(notice.message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
+            }
+        }
+    }
 }
 
 // The document the student was last reading, with how far they got.
