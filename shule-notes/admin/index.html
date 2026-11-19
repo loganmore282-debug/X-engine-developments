@@ -94,6 +94,15 @@
   .hbar{display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:13px}
   .hbar span{width:78px;flex:0 0 78px} .hbar div{flex:1;height:10px;background:var(--paper);border-radius:6px;overflow:hidden}
   .hbar i{display:block;height:100%;background:var(--brand);border-radius:6px} .hbar b{width:30px;text-align:right}
+  .slide-form{display:grid;grid-template-columns:200px 1fr;gap:22px;margin-bottom:14px}
+  .slide-preview{width:200px;height:355px;border-radius:18px;background:linear-gradient(160deg,#17694b,#0d3b2a);background-size:cover;background-position:center;display:flex;align-items:flex-end;justify-content:center;color:#fff;font-weight:700;margin-bottom:10px;overflow:hidden;position:relative}
+  .slide-preview span{padding:14px;text-align:center;font-size:13px;opacity:.85}
+  .slide-preview.has span{display:none}
+  .slide-row{display:flex;gap:14px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)} .slide-row:last-child{border:none}
+  .slide-row .thumb{width:54px;height:96px;border-radius:10px;background:linear-gradient(160deg,#17694b,#0d3b2a) center/cover;flex:none}
+  .slide-row .grow{flex:1;min-width:0}
+  .slide-row .actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  @media(max-width:720px){.slide-form{grid-template-columns:1fr}.slide-preview{width:160px;height:284px}.slide-row{flex-wrap:wrap}}
   ul.plain{list-style:none;margin:0;padding:0} ul.plain li{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)} ul.plain li:last-child{border:none}
   ul.plain li .grow{flex:1;min-width:0} ul.plain li .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
   .tip{background:var(--amber-soft);border-radius:12px;padding:12px 14px;margin-bottom:18px;color:#6b5100}
@@ -128,6 +137,7 @@
     <button class="nav" data-tab="students"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M16 4.7a3.5 3.5 0 0 1 0 6.6M18 14.8c2 .6 3.2 2.4 3.5 5.2"/></svg>Students</button>
     <button class="nav" data-tab="notes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/></svg>Notes</button>
     <button class="nav" data-tab="subjects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v13c-3-1-6-1-8 1-2-2-5-2-8-1z"/><path d="M12 6v13"/></svg>Subjects</button>
+    <button class="nav" data-tab="intro"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2.5"/><circle cx="9" cy="9.5" r="1.6"/><path d="m21 15-4.5-4.5L8 19M8 21h8"/></svg>Introduction</button>
     <button class="nav" data-tab="announcements"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v3a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 9c1.5 1 1.5 5 0 6M18 6.5c3 2 3 9 0 11"/></svg>Announcements</button>
     <button class="nav" data-tab="feedback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 11h7M8.5 14h4"/></svg>Feedback</button>
     <button class="nav" data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
@@ -213,6 +223,30 @@
         <h2>All subjects</h2>
         <table><thead><tr><th>Name</th><th>Order</th><th></th></tr></thead><tbody id="subjectsRows"></tbody></table>
       </div>
+    </section>
+
+    <!-- Introduction -->
+    <section id="tab-intro" class="hidden">
+      <div class="page-head"><div class="grow"><h1>Introduction</h1><div class="muted">The slides a student sees the first time they open the app</div></div></div>
+      <div class="card">
+        <h2 id="iFormTitle">New slide</h2>
+        <input type="hidden" id="iId">
+        <div class="slide-form">
+          <div class="slide-pick">
+            <div class="slide-preview" id="iPreview"><span>Picture</span></div>
+            <input type="file" id="iFile" accept="image/png,image/jpeg,image/webp">
+            <div class="muted" style="margin-top:6px">Portrait photos work best (the whole screen is the picture). Large photos are shrunk automatically.</div>
+          </div>
+          <div class="slide-text">
+            <label>Heading</label><input id="iTitle" maxlength="60" placeholder="e.g. Every note in one place">
+            <label>Text</label><textarea id="iText" maxlength="160" placeholder="One or two short lines"></textarea>
+            <label class="switch"><input type="checkbox" id="iActive" checked> Show this slide</label>
+          </div>
+        </div>
+        <button class="btn" id="iSave">Add slide</button> <button class="btn plain hidden" id="iCancel">Cancel editing</button>
+      </div>
+      <div class="card"><h2>Slides</h2><div id="iList"></div>
+        <p class="muted" style="margin:12px 0 0" id="iHint">With no slides here the app shows its own simple introduction. Switch every slide off to show no introduction at all.</p></div>
     </section>
 
     <!-- Announcements -->
@@ -680,6 +714,84 @@ $('aList').addEventListener('click', async (e) => {
     await api('/admin/announcements/delete', { id: a.id });
   }
   LOADERS.announcements();
+});
+
+// ── introduction ──
+let SLIDES = [];
+let slideImage = null; // the shrunk picture chosen for the slide being edited
+// Phones take 4 MB photos; the app only needs about 1400 pixels tall. Shrinking here keeps downloads quick for students.
+function shrinkImage(file, maxSide) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => b ? resolve(b) : reject(new Error('shrink failed')), 'image/jpeg', 0.85);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('not an image')); };
+    img.src = url;
+  });
+}
+function setPreview(url) {
+  const box = $('iPreview');
+  box.style.backgroundImage = url ? `url("${url}")` : '';
+  box.classList.toggle('has', !!url);
+}
+function resetSlideForm() {
+  $('iId').value = ''; $('iTitle').value = ''; $('iText').value = ''; $('iActive').checked = true; $('iFile').value = ''; slideImage = null; setPreview('');
+  $('iFormTitle').textContent = 'New slide'; $('iSave').textContent = 'Add slide'; $('iCancel').classList.add('hidden');
+}
+LOADERS.intro = async function(){
+  const r = await api('/admin/onboarding/list');
+  if (r.status !== 'success') return toast(r.message || 'Could not load the slides', 'error');
+  SLIDES = r.slides;
+  $('iList').innerHTML = SLIDES.length ? SLIDES.map((s, i) => `<div class="slide-row">
+      <div class="thumb"${s.imageUrl ? ` style="background-image:url('${esc(API + s.imageUrl)}')"` : ''}></div>
+      <div class="grow"><b>${esc(s.title)}</b><span class="muted" style="display:block">${esc(s.text)}</span>${s.active ? '<span class="pill ok">Showing</span>' : '<span class="pill warn">Off</span>'} <span class="muted">Slide ${i + 1} of ${SLIDES.length}</span></div>
+      <div class="actions">
+        <button class="btn plain sm" data-act="up" data-id="${esc(s.id)}"${i === 0 ? ' disabled' : ''}>Up</button>
+        <button class="btn plain sm" data-act="down" data-id="${esc(s.id)}"${i === SLIDES.length - 1 ? ' disabled' : ''}>Down</button>
+        <button class="btn plain sm" data-act="edit" data-id="${esc(s.id)}">Edit</button>
+        <button class="btn danger sm" data-act="delete" data-id="${esc(s.id)}">Delete</button>
+      </div></div>`).join('') : '<div class="empty">No slides yet. Students see the app\'s built-in introduction.</div>';
+};
+$('iFile').addEventListener('change', async () => {
+  const f = $('iFile').files[0]; if (!f) return;
+  try { slideImage = await shrinkImage(f, 1400); setPreview(URL.createObjectURL(slideImage)); }
+  catch (_) { slideImage = null; $('iFile').value = ''; toast('That file is not a picture', 'error'); }
+});
+$('iSave').addEventListener('click', async () => {
+  const id = $('iId').value;
+  if (!$('iTitle').value.trim()) return toast('Give the slide a heading', 'error');
+  if (!id && !slideImage) return toast('Choose a picture for the slide', 'error');
+  const fd = new FormData();
+  if (id) fd.append('id', id);
+  fd.append('title', $('iTitle').value); fd.append('text', $('iText').value); fd.append('active', $('iActive').checked ? 'true' : 'false');
+  if (slideImage) fd.append('image', slideImage, 'slide.jpg');
+  $('iSave').disabled = true;
+  const r = await api('/admin/onboarding/save', fd);
+  $('iSave').disabled = false;
+  if (r.status === 'success') { toast(id ? 'Slide saved' : 'Slide added', 'ok'); resetSlideForm(); LOADERS.intro(); } else toast(r.message || 'Could not save', 'error');
+});
+$('iCancel').addEventListener('click', resetSlideForm);
+$('iList').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]'); if (!btn) return;
+  const s = SLIDES.find(x => x.id === btn.dataset.id); if (!s) return;
+  if (btn.dataset.act === 'edit') {
+    $('iId').value = s.id; $('iTitle').value = s.title; $('iText').value = s.text; $('iActive').checked = s.active; $('iFile').value = ''; slideImage = null;
+    setPreview(s.imageUrl ? API + s.imageUrl : '');
+    $('iFormTitle').textContent = 'Edit slide'; $('iSave').textContent = 'Save changes'; $('iCancel').classList.remove('hidden');
+    window.scrollTo({ top: 0, behavior: 'smooth' }); return;
+  }
+  if (btn.dataset.act === 'delete') {
+    if (!await confirmBox('Delete this slide?', 'Students will no longer see it.', 'Delete', true)) return;
+    await api('/admin/onboarding/delete', { id: s.id });
+  } else await api('/admin/onboarding/move', { id: s.id, direction: btn.dataset.act });
+  LOADERS.intro();
 });
 
 // ── feedback ──

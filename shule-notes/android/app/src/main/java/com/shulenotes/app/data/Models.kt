@@ -9,7 +9,14 @@ data class User(
     val name: String,
     val phone: String?,
     val classLevel: String?,
+    // 0 or missing: no photo. Changes whenever the photo does, so the phone knows to fetch it again.
+    val avatarVersion: Long? = null,
 )
+
+data class Slide(val id: String, val title: String, val text: String, val imageUrl: String?)
+
+// `configured` is false until the owner makes a first slide: then the app shows its own introduction.
+data class SlidesResponse(val status: String, val configured: Boolean = false, val slides: List<Slide> = emptyList())
 
 data class UserResponse(
     val status: String,

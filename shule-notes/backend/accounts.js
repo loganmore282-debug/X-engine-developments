@@ -3,6 +3,7 @@
 const { ObjectId } = require('mongodb');
 const { getDb } = require('./db');
 const { hashPassword, verifyPassword, sha256 } = require('./auth');
+const media = require('./media');
 
 function toId(id) {
   try { return new ObjectId(String(id)); } catch (_) { return null; }
@@ -18,6 +19,7 @@ async function eraseUser(userId) {
   await db.collection('sessions').deleteMany({ userId: String(userId) });
   await db.collection('aiUsage').deleteMany({ userId: String(userId) });
   await db.collection('feedback').deleteMany({ userId: String(userId) });
+  media.removeImage('avatars', id); // their profile photo goes with them
   await db.collection('users').deleteOne({ _id: id });
   return true;
 }

@@ -3,6 +3,15 @@ package com.shulenotes.app.ui.components
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.shulenotes.app.BuildConfig
+import com.shulenotes.app.ShuleApp
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -96,5 +105,37 @@ fun Avatar(
             fontWeight = FontWeight.SemiBold,
             fontSize = (size.value * 0.36f).sp,
         )
+    }
+}
+
+// The student's profile picture: their own photo when they have set one, otherwise the Shule Notes logo.
+// The photo's address carries its version, so a new photo is fetched and an old one is never shown again.
+@Composable
+fun ProfileAvatar(size: Dp, modifier: Modifier = Modifier) {
+    val version by ShuleApp.session.avatarVersion.collectAsState(initial = 0L)
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Underneath, always: shown while the photo loads, and if it cannot be loaded.
+        Image(
+            painter = painterResource(R.drawable.logo_mark),
+            contentDescription = if (version > 0) null else "Shule Notes logo",
+            modifier = Modifier.size(size * 0.66f),
+        )
+        if (version > 0) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(BuildConfig.API_BASE_URL.trimEnd('/') + "/auth/avatar?v=" + version)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = "Your profile photo",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }

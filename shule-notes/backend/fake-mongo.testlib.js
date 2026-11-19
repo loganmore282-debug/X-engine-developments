@@ -97,8 +97,9 @@ function makeDb() {
         async deleteOne(filter) {
           const i = rows(name).findIndex((d) => matches(d, filter));
           if (i >= 0) rows(name).splice(i, 1);
+          return { deletedCount: i >= 0 ? 1 : 0 };
         },
-        async deleteMany(filter) { data[name] = rows(name).filter((d) => !matches(d, filter)); },
+        async deleteMany(filter) { const before = rows(name).length; data[name] = rows(name).filter((d) => !matches(d, filter)); return { deletedCount: before - data[name].length }; },
         async findOneAndUpdate(filter, update, opts) {
           let row = rows(name).find((d) => matches(d, filter));
           if (!row) {

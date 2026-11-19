@@ -2,7 +2,19 @@ package com.shulenotes.app.ui.main
 
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import com.shulenotes.app.ui.components.ProfileAvatar
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -73,6 +85,7 @@ import com.shulenotes.app.ui.components.SupportDialog
 import com.shulenotes.app.ui.components.Avatar
 import com.shulenotes.app.ui.components.ShuleTextField
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileTab(
     viewModel: LibraryViewModel,
@@ -92,6 +105,11 @@ fun ProfileTab(
     var showHelp by rememberSaveable { mutableStateOf(false) }
     var showAppearance by rememberSaveable { mutableStateOf(false) }
     var showFeedback by rememberSaveable { mutableStateOf(false) }
+    var showPhotoSheet by rememberSaveable { mutableStateOf(false) }
+    val pickPhoto = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> if (uri != null) viewModel.uploadAvatar(uri) }
+    val avatarVersion by ShuleApp.session.avatarVersion.collectAsState(initial = 0L)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val themeMode by ShuleApp.session.themeMode.collectAsState(initial = "system")
@@ -105,26 +123,45 @@ fun ProfileTab(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp),
     ) {
-        Spacer(Modifier.height(16.dp))
-        Text("Profile", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(16.dp))
-
-        SettingsCard {
-            Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                Avatar(name = userName, size = 60.dp)
-                Spacer(Modifier.width(16.dp))
-                Column {
-                    Text(userName.ifBlank { "Student" }, style = MaterialTheme.typography.titleLarge, maxLines = 1)
-                    if (userContact.isNotBlank()) {
-                        Text(
-                            userContact,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+        Spacer(Modifier.height(28.dp))
+        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            // The photo, with a small camera badge: tapping either opens the photo options.
+            Box(modifier = Modifier.size(104.dp).clickable(onClickLabel = "Change profile photo") { showPhotoSheet = true }) {
+                ProfileAvatar(size = 104.dp, modifier = Modifier.border(3.dp, MaterialTheme.colorScheme.surface, CircleShape))
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                        .border(2.dp, MaterialTheme.colorScheme.background, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (viewModel.isSavingAvatar) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                    } else {
+                        Icon(Icons.Outlined.PhotoCamera, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
                     }
                 }
             }
+            Spacer(Modifier.height(14.dp))
+            Text(userName.ifBlank { "Student" }, style = MaterialTheme.typography.titleLarge, maxLines = 1)
+            if (userContact.isNotBlank()) {
+                Text(userContact, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (userClass.isNotBlank()) {
+                Spacer(Modifier.height(10.dp))
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+                    Text(
+                        userClass,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    )
+                }
+            }
         }
+        Spacer(Modifier.height(4.dp))
 
         SectionLabel("Study")
         SettingsCard {
@@ -167,20 +204,52 @@ fun ProfileTab(
             SettingsRow(Icons.Outlined.Description, "Terms of use") { runCatching { uriHandler.openUri(TERMS_URL) } }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
             SettingsRow(Icons.Outlined.PrivacyTip, "Privacy policy") { runCatching { uriHandler.openUri(PRIVACY_URL) } }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
-            SettingsRow(Icons.Outlined.Info, "App version", trailingText = BuildConfig.VERSION_NAME)
         }
 
-        SectionLabel("Account")
-        SettingsCard {
-            SettingsRow(Icons.AutoMirrored.Filled.Logout, "Log out") { confirmLogout = true }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
-            SettingsRow(Icons.Outlined.Delete, "Delete account", color = MaterialTheme.colorScheme.error) {
-                viewModel.clearDeleteAccountError()
-                confirmDelete = true
+        Spacer(Modifier.height(28.dp))
+        OutlinedButton(
+            onClick = { confirmLogout = true },
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.55f)),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+        ) {
+            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("Log out", style = MaterialTheme.typography.titleSmall)
+        }
+        Spacer(Modifier.height(6.dp))
+        TextButton(
+            onClick = { viewModel.clearDeleteAccountError(); confirmDelete = true },
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        ) {
+            Text("Delete account", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        }
+        Text(
+            "Shule Notes  ·  Version ${BuildConfig.VERSION_NAME}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 2.dp),
+        )
+        Spacer(Modifier.height(24.dp))
+    }
+
+    if (showPhotoSheet) {
+        ModalBottomSheet(onDismissRequest = { showPhotoSheet = false }, containerColor = MaterialTheme.colorScheme.surface) {
+            Column(modifier = Modifier.padding(bottom = 24.dp)) {
+                Text("Profile photo", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+                SettingsRow(Icons.Outlined.PhotoLibrary, "Choose from your photos") {
+                    showPhotoSheet = false
+                    pickPhoto.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
+                }
+                if (avatarVersion > 0) {
+                    SettingsRow(Icons.Outlined.Delete, "Remove my photo", color = MaterialTheme.colorScheme.error) {
+                        showPhotoSheet = false
+                        viewModel.removeAvatar()
+                    }
+                }
             }
         }
-        Spacer(Modifier.height(24.dp))
     }
 
     if (showFeedback) {

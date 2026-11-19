@@ -20,11 +20,13 @@ import com.shulenotes.app.ui.chat.AiChatScreen
 import com.shulenotes.app.ui.components.Notifier
 import com.shulenotes.app.ui.main.ChooseClassScreen
 import com.shulenotes.app.ui.main.MainScreen
+import com.shulenotes.app.ui.onboarding.IntroScreen
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import com.shulenotes.app.ui.note.NoteDetailScreen
 
 object Routes {
+    const val INTRO = "intro"
     const val LOGIN = "login"
     const val REGISTER = "register"
     const val CLASS = "class"
@@ -60,6 +62,14 @@ fun ShuleNavGraph(startDestination: String) {
     }
 
     NavHost(navController = navController, startDestination = startDestination) {
+        composable(Routes.INTRO) {
+            IntroScreen(onFinished = {
+                scope.launch {
+                    ShuleApp.session.setIntroSeen()
+                    toLogin()
+                }
+            })
+        }
         composable(Routes.LOGIN) {
             LoginScreen(
                 viewModel = viewModel(),

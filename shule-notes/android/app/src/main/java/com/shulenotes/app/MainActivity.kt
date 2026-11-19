@@ -45,6 +45,8 @@ class MainActivity : ComponentActivity() {
                 ShuleApp.session.primeSessionHolder()
                 themeMode = ShuleApp.session.themeMode.first()
                 startDestination = when {
+                    // The introduction is for someone new: signed out and never shown it.
+                    SessionHolder.token == null && !ShuleApp.session.introSeen.first() -> Routes.INTRO
                     SessionHolder.token == null -> Routes.LOGIN
                     ShuleApp.session.classLevel.first().isBlank() -> Routes.CLASS
                     else -> Routes.MAIN

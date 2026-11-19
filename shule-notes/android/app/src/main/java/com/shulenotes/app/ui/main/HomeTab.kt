@@ -452,6 +452,7 @@ private fun HomeHeader(
                         .size(46.dp)
                         .clip(CircleShape)
                         .background(Color.White.copy(alpha = 0.14f))
+                        .border(1.dp, Color.White.copy(alpha = 0.30f), CircleShape)
                         .clickable(onClickLabel = "Open notifications", onClick = onOpenNotifications),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -467,17 +468,6 @@ private fun HomeHeader(
                         Icon(Icons.Outlined.Notifications, contentDescription = "Notifications", tint = Color.White)
                     }
                 }
-                Spacer(Modifier.width(10.dp))
-                Avatar(
-                    name = userName,
-                    size = 46.dp,
-                    container = Color.White.copy(alpha = 0.18f),
-                    content = Color.White,
-                    modifier = Modifier
-                        .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape)
-                        .clip(CircleShape)
-                        .clickable(onClickLabel = "Open profile", onClick = onOpenProfile),
-                )
             }
             Spacer(Modifier.height(16.dp))
             ClassChip(className = className, onClick = onChangeClass)

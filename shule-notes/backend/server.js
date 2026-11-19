@@ -18,6 +18,8 @@ const { pageTextsFor } = require('./note-pages');
 const feedback = require('./feedback');
 const { publishedVersion } = require('./app-version');
 const { sendPush } = require('./push');
+const media = require('./media');
+const onboarding = require('./onboarding');
 const { askAboutDocument, classifyClaudeError } = require('./claude');
 const { privacyPage, accountDeletionPage, termsPage } = require('./legal');
 const { GROUPS: LEVEL_GROUPS, isValidLevel } = require('./levels');
@@ -60,7 +62,7 @@ function todayKey() {
 }
 
 function publicUser(u) {
-  return { id: String(u._id), name: u.name || '', phone: u.phone || null, classLevel: u.classLevel || null };
+  return { id: String(u._id), name: u.name || '', phone: u.phone || null, classLevel: u.classLevel || null, avatarVersion: u.avatarVersion || 0 };
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────
@@ -141,6 +143,21 @@ app.get('/config', ah(async (req, res) => {
   res.json({ status: 'success', config });
 }));
 
+// The introduction slides: public, because they are shown before anyone has an account.
+app.get('/onboarding', ah(async (req, res) => {
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json({ status: 'success', ...(await onboarding.publicSlides()) });
+}));
+app.get('/onboarding/:id/image', ah(async (req, res) => {
+  const file = media.filePath('onboarding', req.params.id);
+  const slide = file ? await getDb().collection('slides').findOne({ _id: new ObjectId(req.params.id) }) : null;
+  if (!slide || !slide.imageType || !fs.existsSync(file)) return res.status(404).end();
+  res.set('Content-Type', slide.imageType);
+  res.set('Cross-Origin-Resource-Policy', 'cross-origin'); // the admin panel, on its own address, shows these
+  res.set('Cache-Control', 'public, max-age=31536000, immutable');
+  res.sendFile(file);
+}));
+
 app.post('/feedback', requireAuth, rateLimit({ windowMs: 60 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false }), ah(async (req, res) => {
   const result = await feedback.submitFeedback({
     userId: req.userId, type: req.body.type, message: req.body.message, noteId: req.body.noteId,
@@ -211,6 +228,31 @@ async function deleteAccount(userId, password) {
   await eraseUser(userId);
   return { ok: true };
 }
+
+// A student's own profile photo. The phone shrinks it first; the server still checks what it is.
+const avatarUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: media.MAX_AVATAR_BYTES, files: 1 } });
+app.post('/auth/avatar', requireAuth, rateLimit({ windowMs: 60 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false }),
+  (req, res, next) => avatarUpload.single('photo')(req, res, (err) => (err
+    ? res.status(err.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ status: 'error', message: err.code === 'LIMIT_FILE_SIZE' ? 'That picture is too large' : 'Could not read the picture' })
+    : next())),
+  ah(async (req, res) => {
+    if (!req.file) return res.status(400).json({ status: 'error', message: 'Choose a picture' });
+    const result = await media.setAvatar(req.userId, req.file.buffer);
+    sendResult(res, result, result.ok ? { user: publicUser(result.user) } : {});
+  }));
+app.post('/auth/avatar/remove', requireAuth, ah(async (req, res) => {
+  const result = await media.removeAvatar(req.userId);
+  sendResult(res, result, result.ok ? { user: publicUser(result.user) } : {});
+}));
+app.get('/auth/avatar', requireAuth, ah(async (req, res) => {
+  const id = (() => { try { return new ObjectId(req.userId); } catch (_) { return null; } })();
+  const user = id ? await getDb().collection('users').findOne({ _id: id }) : null;
+  const file = user && user.avatarVersion ? media.filePath('avatars', id) : null;
+  if (!file || !fs.existsSync(file)) return res.status(404).json({ status: 'error', message: 'No photo' });
+  res.set('Content-Type', user.avatarType || 'image/jpeg');
+  res.set('Cache-Control', 'private, max-age=31536000, immutable'); // the address carries the version
+  res.sendFile(file);
+}));
 
 app.get('/auth/me', requireAuth, async (req, res) => {
   const user = await getDb().collection('users').findOne({ _id: new ObjectId(req.userId) });
@@ -505,6 +547,19 @@ app.post('/admin/announcements/save', guard(async (req, res) => {
   res.json({ status: 'success', id: result.id || null, push });
 }));
 app.post('/admin/announcements/delete', guard(async (req, res) => sendResult(res, await adminData.deleteAnnouncement(req.body.id))));
+const slideUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: media.MAX_SLIDE_BYTES, files: 1 } });
+app.post('/admin/onboarding/list', guard(async (req, res) => res.json({ status: 'success', slides: await onboarding.listSlides(), max: onboarding.MAX_SLIDES })));
+app.post('/admin/onboarding/save',
+  (req, res, next) => (verifyAdmin(req) ? next() : res.status(401).json({ status: 'error', message: 'Unauthorized' })),
+  (req, res, next) => slideUpload.single('image')(req, res, (err) => (err
+    ? res.status(err.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ status: 'error', message: err.code === 'LIMIT_FILE_SIZE' ? 'That picture is too large' : 'Could not read the picture' })
+    : next())),
+  ah(async (req, res) => {
+    const result = await onboarding.saveSlide(req.body, req.file ? req.file.buffer : null);
+    sendResult(res, result, result.ok ? { id: result.id } : {});
+  }));
+app.post('/admin/onboarding/delete', guard(async (req, res) => sendResult(res, await onboarding.deleteSlide(req.body.id))));
+app.post('/admin/onboarding/move', guard(async (req, res) => sendResult(res, await onboarding.moveSlide(req.body.id, req.body.direction))));
 app.post('/admin/feedback/list', guard(async (req, res) => res.json({ status: 'success', ...(await feedback.listFeedback(req.body)) })));
 app.post('/admin/feedback/status', guard(async (req, res) => sendResult(res, await feedback.setFeedbackStatus(req.body.id, req.body.status))));
 app.post('/admin/feedback/delete', guard(async (req, res) => sendResult(res, await feedback.deleteFeedback(req.body.id))));

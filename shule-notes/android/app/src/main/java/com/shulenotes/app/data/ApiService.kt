@@ -1,7 +1,10 @@
 package com.shulenotes.app.data
 
+import okhttp3.MultipartBody
 import okhttp3.ResponseBody
 import retrofit2.http.Body
+import retrofit2.http.Multipart
+import retrofit2.http.Part
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -32,6 +35,16 @@ interface ApiService {
 
     @POST("auth/change-password")
     suspend fun changePassword(@Body body: Map<String, String>): SimpleResponse
+
+    @Multipart
+    @POST("auth/avatar")
+    suspend fun uploadAvatar(@Part photo: MultipartBody.Part): UserResponse
+
+    @POST("auth/avatar/remove")
+    suspend fun removeAvatar(): UserResponse
+
+    @GET("onboarding")
+    suspend fun onboarding(): SlidesResponse
 
     @POST("feedback")
     suspend fun sendFeedback(@Body body: Map<String, String>): SimpleResponse

@@ -28,7 +28,8 @@ object ApiClient {
         level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
     }
 
-    private val client = OkHttpClient.Builder()
+    // Shared with the image loader, so a profile photo is fetched with the signed-in token.
+    val client: OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(authInterceptor)
         .addInterceptor(logging)
         .connectTimeout(20, TimeUnit.SECONDS)

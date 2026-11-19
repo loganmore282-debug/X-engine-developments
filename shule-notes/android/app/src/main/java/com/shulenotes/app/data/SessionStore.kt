@@ -29,6 +29,8 @@ private val DISMISSED_UPDATE_KEY = intPreferencesKey("dismissed_update")
 private val SEARCHES_KEY = stringPreferencesKey("recent_searches")
 private val STUDY_KEY = stringSetPreferencesKey("study_pages")
 private val FINISHED_KEY = stringSetPreferencesKey("finished_notes")
+private val AVATAR_KEY = longPreferencesKey("avatar_version")
+private val INTRO_SEEN_KEY = booleanPreferencesKey("intro_seen")
 private val PUSH_ON_KEY = booleanPreferencesKey("push_enabled")
 private val PUSH_TOPICS_KEY = stringSetPreferencesKey("push_topics")
 private val PAGE_MARKS_KEY = stringSetPreferencesKey("page_bookmarks")
@@ -59,6 +61,10 @@ class SessionStore(private val context: Context) {
     val themeMode: Flow<String> = context.dataStore.data.map { it[THEME_KEY] ?: "system" }
     // Bookmarked pages, each stored as "noteId:page".
     val pageBookmarks: Flow<Set<String>> = context.dataStore.data.map { it[PAGE_MARKS_KEY] ?: emptySet() }
+    // 0 means no photo of their own (the Shule Notes logo is shown instead).
+    val avatarVersion: Flow<Long> = context.dataStore.data.map { it[AVATAR_KEY] ?: 0L }
+    // The introduction is shown once, before the first sign-in.
+    val introSeen: Flow<Boolean> = context.dataStore.data.map { it[INTRO_SEEN_KEY] ?: false }
     // Whether the student wants phone notifications (on unless they turned it off).
     val pushEnabled: Flow<Boolean> = context.dataStore.data.map { it[PUSH_ON_KEY] ?: true }
     // The notification groups this phone is subscribed to right now ("all", "class_senior_2").
@@ -83,6 +89,7 @@ class SessionStore(private val context: Context) {
             it[NAME_KEY] = user?.name.orEmpty()
             it[CONTACT_KEY] = user?.phone.orEmpty()
             it[CLASS_KEY] = user?.classLevel.orEmpty()
+            it[AVATAR_KEY] = user?.avatarVersion ?: 0L
         }
         SessionHolder.token = token
     }
@@ -150,6 +157,14 @@ class SessionStore(private val context: Context) {
         context.dataStore.edit { it[DISMISSED_KEY] = id }
     }
 
+    suspend fun setAvatarVersion(version: Long) {
+        context.dataStore.edit { if (version > 0) it[AVATAR_KEY] = version else it.remove(AVATAR_KEY) }
+    }
+
+    suspend fun setIntroSeen() {
+        context.dataStore.edit { it[INTRO_SEEN_KEY] = true }
+    }
+
     suspend fun setPushEnabled(on: Boolean) {
         context.dataStore.edit { it[PUSH_ON_KEY] = on }
     }
@@ -169,7 +184,7 @@ class SessionStore(private val context: Context) {
     suspend fun clear(keepSaved: Boolean = true) {
         context.dataStore.edit {
             if (keepSaved) {
-                it.remove(TOKEN_KEY); it.remove(NAME_KEY); it.remove(CONTACT_KEY); it.remove(CLASS_KEY); it.remove(RECENT_KEY); it.remove(LIBRARY_KEY); it.remove(SEEN_KEY); it.remove(SEARCHES_KEY); it.remove(STUDY_KEY); it.remove(FINISHED_KEY)
+                it.remove(TOKEN_KEY); it.remove(NAME_KEY); it.remove(CONTACT_KEY); it.remove(CLASS_KEY); it.remove(AVATAR_KEY); it.remove(RECENT_KEY); it.remove(LIBRARY_KEY); it.remove(SEEN_KEY); it.remove(SEARCHES_KEY); it.remove(STUDY_KEY); it.remove(FINISHED_KEY)
             } else {
                 it.clear()
             }

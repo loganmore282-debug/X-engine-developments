@@ -21,7 +21,13 @@ import com.shulenotes.app.ui.components.Notifier
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import com.shulenotes.app.data.AvatarImage
 import java.io.IOException
 
 // How the list on Home is ordered.
@@ -77,6 +83,8 @@ class LibraryViewModel : ViewModel() {
     var notifications by mutableStateOf<List<Announcement>>(emptyList())
         private set
 
+    var isSavingAvatar by mutableStateOf(false)
+        private set
     var isSendingFeedback by mutableStateOf(false)
         private set
     var feedbackError by mutableStateOf<String?>(null)
@@ -337,6 +345,50 @@ class LibraryViewModel : ViewModel() {
 
     fun toggleSaved(noteId: String) {
         viewModelScope.launch { notifySaved(ShuleApp.session.toggleSaved(noteId)) }
+    }
+
+    // A new profile photo: shrunk and straightened on the phone, then sent. The server answers with the
+    // new version number, which is what makes every place that shows the photo switch to it.
+    fun uploadAvatar(uri: android.net.Uri) {
+        if (isSavingAvatar) return
+        viewModelScope.launch {
+            isSavingAvatar = true
+            try {
+                val bytes = withContext(Dispatchers.IO) { AvatarImage.prepare(ShuleApp.appContext, uri) }
+                if (bytes == null) {
+                    Notifier.error("We could not read that picture. Try another one.")
+                } else {
+                    val part = MultipartBody.Part.createFormData("photo", "photo.jpg", bytes.toRequestBody("image/jpeg".toMediaType()))
+                    val result = ApiClient.service.uploadAvatar(part)
+                    ShuleApp.session.setAvatarVersion(result.user?.avatarVersion ?: 0L)
+                    Notifier.success("Profile photo updated")
+                }
+            } catch (e: IOException) {
+                Notifier.error("No connection. Try again.")
+            } catch (e: Exception) {
+                Notifier.error(e.serverMessage() ?: "We could not save your photo. Please try again.")
+            } finally {
+                isSavingAvatar = false
+            }
+        }
+    }
+
+    fun removeAvatar() {
+        if (isSavingAvatar) return
+        viewModelScope.launch {
+            isSavingAvatar = true
+            try {
+                ApiClient.service.removeAvatar()
+                ShuleApp.session.setAvatarVersion(0L)
+                Notifier.success("Profile photo removed")
+            } catch (e: IOException) {
+                Notifier.error("No connection. Try again.")
+            } catch (e: Exception) {
+                Notifier.error(e.serverMessage() ?: "We could not remove your photo. Please try again.")
+            } finally {
+                isSavingAvatar = false
+            }
+        }
     }
 
     fun logout(onDone: () -> Unit) {
