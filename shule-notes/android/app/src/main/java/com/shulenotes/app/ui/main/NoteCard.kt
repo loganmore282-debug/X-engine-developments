@@ -80,6 +80,8 @@ fun NoteCard(
     onClick: () -> Unit,
     onToggleSaved: () -> Unit,
     modifier: Modifier = Modifier,
+    // The class is left out when the whole list is already one class.
+    showClass: Boolean = true,
 ) {
     Surface(
         onClick = onClick,
@@ -122,7 +124,10 @@ fun NoteCard(
                         )
                         Spacer(Modifier.width(8.dp))
                     }
-                    val details = listOfNotNull(note.classLevel?.takeIf { it.isNotBlank() }, pagesLabel(note.pageCount))
+                    val details = listOfNotNull(
+                        note.classLevel?.takeIf { showClass && it.isNotBlank() },
+                        pagesLabel(note.pageCount),
+                    )
                     Text(
                         details.joinToString("  ·  "),
                         style = MaterialTheme.typography.bodySmall,

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -50,6 +51,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -230,6 +233,7 @@ fun HomeTab(
                         subjectName = viewModel.subjectName(note.subjectId),
                         tint = subjectTint(note.subjectId, viewModel.subjects),
                         saved = note.id in savedIds,
+                        showClass = scope == null,
                         onClick = { onOpenNote(note.id) },
                         onToggleSaved = { viewModel.toggleSaved(note.id) },
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 5.dp),
@@ -263,6 +267,10 @@ private fun HomeHeader(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
                 .background(gradient)
+                .drawBehind {
+                    drawCircle(Color.White.copy(alpha = 0.07f), radius = size.width * 0.34f, center = Offset(size.width * 0.96f, size.height * 0.04f))
+                    drawCircle(Color.White.copy(alpha = 0.05f), radius = size.width * 0.24f, center = Offset(size.width * 0.04f, size.height * 0.98f))
+                }
                 .statusBarsPadding()
                 .padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 48.dp),
         ) {
@@ -387,6 +395,8 @@ private fun ContinueCard(
     onClick: () -> Unit,
 ) {
     val fraction = if (pageCount > 0) (page.toFloat() / pageCount).coerceIn(0.04f, 1f) else 0.04f
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val arrowColour = if (dark) Color(0xFF0B0F0D) else tint.coverEnd
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(26.dp),
@@ -433,7 +443,7 @@ private fun ContinueCard(
                 Icon(
                     Icons.Filled.PlayArrow,
                     contentDescription = "Continue reading",
-                    tint = tint.coverEnd.copy(alpha = 1f),
+                    tint = arrowColour,
                     modifier = Modifier.size(26.dp),
                 )
             }
@@ -448,10 +458,11 @@ private fun SubjectTile(label: String, icon: ImageVector, tint: SubjectTint, isS
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .width(72.dp)
+            .widthIn(min = 72.dp)
             .clip(RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
-            .semantics { selected = isSelected; role = Role.Tab },
+            .semantics { selected = isSelected; role = Role.Tab }
+            .padding(horizontal = 2.dp, vertical = 2.dp),
     ) {
         Box(
             modifier = Modifier
@@ -469,7 +480,8 @@ private fun SubjectTile(label: String, icon: ImageVector, tint: SubjectTint, isS
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
             color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            softWrap = false,
+            modifier = Modifier.padding(bottom = 2.dp),
         )
     }
 }
