@@ -6,7 +6,7 @@
  * and that nothing ever leaks a raw Anthropic error message to a student.
  */
 'use strict';
-process.env.ANTHROPIC_API_KEY = 'sk-ant-test-not-a-real-key';
+process.env.ANTHROPIC_API_KEY = 'sk-ant-test-not-a-real-key-0123456789';
 const Anthropic = require('@anthropic-ai/sdk');
 const { askAboutDocument, classifyClaudeError, AiNoAnswerError, MODEL } = require('./claude');
 

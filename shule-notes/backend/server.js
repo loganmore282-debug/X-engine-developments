@@ -19,7 +19,7 @@ const { privacyPage, accountDeletionPage, termsPage } = require('./legal');
 const { GROUPS: LEVEL_GROUPS, isValidLevel } = require('./levels');
 const { normalizePhone, isValidPhone } = require('./phone');
 const { eraseUser, changePassword, updateProfile, cleanName } = require('./accounts');
-const { getSettings, saveSettings, publicConfig } = require('./settings');
+const { getSettings, saveSettings, publicConfig, adminView, AI_MODELS } = require('./settings');
 const adminData = require('./admin-data');
 
 const PORT = process.env.PORT || 4000;
@@ -281,7 +281,7 @@ app.post('/ai/ask', requireAuth, aiLimiter, async (req, res) => {
     const allowed = await consumeAiQuota(req.userId, limit);
     if (!allowed) return res.status(429).json({ status: 'error', message: `You've reached today's limit of ${limit} AI questions. Try again tomorrow.` });
 
-    const result = await askAboutDocument({ documentText: note.extractedText, noteTitle: note.title, question, history });
+    const result = await askAboutDocument({ documentText: note.extractedText, noteTitle: note.title, question, history, apiKey: settings.anthropicKey, model: settings.aiModel || undefined });
     res.json({ status: 'success', answer: result.answer });
   } catch (e) {
     const { status, message } = classifyClaudeError(e);
@@ -426,20 +426,25 @@ app.post('/admin/users/delete', guard(async (req, res) => sendResult(res, await 
 app.post('/admin/announcements/list', guard(async (req, res) => res.json({ status: 'success', announcements: await adminData.listAnnouncements() })));
 app.post('/admin/announcements/save', guard(async (req, res) => sendResult(res, await adminData.saveAnnouncement(req.body))));
 app.post('/admin/announcements/delete', guard(async (req, res) => sendResult(res, await adminData.deleteAnnouncement(req.body.id))));
-app.post('/admin/settings/get', guard(async (req, res) => res.json({ status: 'success', settings: await getSettings(), defaultAiDailyLimit: AI_DAILY_LIMIT })));
+app.post('/admin/settings/get', guard(async (req, res) => res.json({ status: 'success', settings: adminView(await getSettings()), defaultAiDailyLimit: AI_DAILY_LIMIT, models: AI_MODELS })));
 app.post('/admin/settings/save', guard(async (req, res) => {
   const result = await saveSettings(req.body);
-  sendResult(res, result, result.ok ? { settings: result.settings } : {});
+  sendResult(res, result, result.ok ? { settings: adminView(result.settings) } : {});
 }));
 
-const LEGAL = {
-  appName: process.env.APP_NAME || 'Shule Notes',
-  supportEmail: process.env.SUPPORT_EMAIL || '',
-  updated: process.env.PRIVACY_UPDATED || '15 November 2026',
-};
-app.get('/privacy', (req, res) => res.type('html').send(privacyPage(LEGAL)));
-app.get('/terms', (req, res) => res.type('html').send(termsPage(LEGAL)));
-app.get('/account-deletion', (req, res) => res.type('html').send(accountDeletionPage(LEGAL)));
+// The contact details on the public pages come from Settings in the admin panel
+// (SUPPORT_EMAIL in the environment still works as a fallback for the email).
+async function legalFor() {
+  const st = await getSettings();
+  return {
+    appName: process.env.APP_NAME || 'Shule Notes',
+    contact: { email: st.supportEmail || process.env.SUPPORT_EMAIL || '', phone: st.supportPhone, whatsapp: st.supportWhatsapp },
+    updated: process.env.PRIVACY_UPDATED || '15 November 2026',
+  };
+}
+app.get('/privacy', ah(async (req, res) => res.type('html').send(privacyPage(await legalFor()))));
+app.get('/terms', ah(async (req, res) => res.type('html').send(termsPage(await legalFor()))));
+app.get('/account-deletion', ah(async (req, res) => res.type('html').send(accountDeletionPage(await legalFor()))));
 
 app.get('/health', (req, res) => res.json({ status: 'success', time: new Date().toISOString() }));
 

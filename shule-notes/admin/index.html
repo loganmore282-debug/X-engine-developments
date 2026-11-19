@@ -236,6 +236,12 @@
       <div class="card">
         <h2>AI helper</h2>
         <label class="switch"><input type="checkbox" id="setAiOn"> Let students ask the AI helper</label>
+        <label>Claude API key</label>
+        <input id="setKey" type="password" autocomplete="off" placeholder="Paste a new key to replace the saved one">
+        <div class="muted" id="setKeyHint" style="margin:-6px 0 8px"></div>
+        <button class="btn plain sm" id="setKeyClear" style="margin-bottom:14px">Remove the saved key</button>
+        <label>AI model</label>
+        <select id="setModel"></select>
         <label>Questions each student can ask per day</label>
         <input id="setAiLimit" type="number" min="1" max="500">
         <div class="muted" id="setAiHint" style="margin:-6px 0 14px"></div>
@@ -547,11 +553,23 @@ async function loadSubjects(){
   const r = await api('/admin/subjects/list');
   if (r.status !== 'success') return toast(r.message || 'Could not load subjects', 'error');
   SUBJECTS = r.subjects;
-  $('subjectsRows').innerHTML = SUBJECTS.length ? SUBJECTS.map(s => `<tr><td>${esc(s.name)}</td><td>${s.order}</td><td><div class="actions"><button class="btn danger sm" data-del="${esc(s.id)}">Delete</button></div></td></tr>`).join('') : '<tr><td colspan="3" class="empty">No subjects yet</td></tr>';
+  $('subjectsRows').innerHTML = SUBJECTS.length ? SUBJECTS.map(s => `<tr><td>${esc(s.name)}</td><td>${s.order}</td><td><div class="actions"><button class="btn plain sm" data-edit="${esc(s.id)}">Edit</button><button class="btn danger sm" data-del="${esc(s.id)}">Delete</button></div></td></tr>`).join('') : '<tr><td colspan="3" class="empty">No subjects yet</td></tr>';
   renderSubjectOptions();
 }
 LOADERS.subjects = loadSubjects;
 $('subjectsRows').addEventListener('click', async (e) => {
+  const edit = e.target.closest('button[data-edit]');
+  if (edit) {
+    const subject = SUBJECTS.find(x => x.id === edit.dataset.edit); if (!subject) return;
+    const picked = await modal({ title: 'Edit subject', okLabel: 'Save changes',
+      body: `<label>Name</label><input id="esName" value="${esc(subject.name)}"><label>Order (smaller numbers come first)</label><input id="esOrder" type="number" value="${esc(subject.order)}">`,
+      collect: () => ({ name: $('esName').value, order: Number($('esOrder').value) || 0 }) });
+    if (!picked) return;
+    if (!picked.name.trim()) return toast('A subject needs a name', 'error');
+    const r = await api('/admin/subjects/save', { id: subject.id, ...picked });
+    toast(r.status === 'success' ? 'Saved' : (r.message || 'Could not save'), r.status === 'success' ? 'ok' : 'error');
+    return loadSubjects();
+  }
   const btn = e.target.closest('button[data-del]'); if (!btn) return;
   if (!await confirmBox('Delete this subject?', 'Notes under it are not deleted, just left without a subject.', 'Delete subject', true)) return;
   await api('/admin/subjects/delete', { id: btn.dataset.del });
@@ -627,15 +645,26 @@ LOADERS.settings = async function(){
   $('setAiLimit').value = s.aiDailyLimit || '';
   $('setAiLimit').placeholder = String(r.defaultAiDailyLimit);
   $('setAiHint').textContent = 'Leave empty to use the server default (' + r.defaultAiDailyLimit + '). Every question costs a little, so this is what keeps the bill predictable.';
+  $('setModel').innerHTML = '<option value="">Server default</option>' + (r.models || []).map(m => `<option value="${esc(m.id)}"${m.id === s.aiModel ? ' selected' : ''}>${esc(m.label)}</option>`).join('');
+  $('setKey').value = '';
+  $('setKeyHint').textContent = s.anthropicKeySet ? 'A key is saved (' + s.anthropicKeyHint + '). It is never shown again; paste a new one to replace it.' : 'No key saved yet. Get one at console.anthropic.com, then paste it here. Without it the AI helper cannot answer.';
+  $('setKeyClear').classList.toggle('hidden', !s.anthropicKeySet);
   $('setPhone').value = s.supportPhone || ''; $('setWhatsapp').value = s.supportWhatsapp || '';
   $('setEmail').value = s.supportEmail || ''; $('setHours').value = s.supportHours || '';
 };
 $('setSave').addEventListener('click', async () => {
   const r = await api('/admin/settings/save', {
-    aiEnabled: $('setAiOn').checked, aiDailyLimit: $('setAiLimit').value === '' ? null : Number($('setAiLimit').value),
+    aiEnabled: $('setAiOn').checked, aiModel: $('setModel').value, anthropicKey: $('setKey').value, aiDailyLimit: $('setAiLimit').value === '' ? null : Number($('setAiLimit').value),
     supportPhone: $('setPhone').value, supportWhatsapp: $('setWhatsapp').value, supportEmail: $('setEmail').value, supportHours: $('setHours').value,
   });
   toast(r.status === 'success' ? 'Settings saved' : (r.message || 'Could not save'), r.status === 'success' ? 'ok' : 'error');
+  if (r.status === 'success') LOADERS.settings();
+});
+$('setKeyClear').addEventListener('click', async () => {
+  if (!await confirmBox('Remove the Claude key?', 'The AI helper stops answering until you paste a key again.', 'Remove key', true)) return;
+  const r = await api('/admin/settings/save', { clearAnthropicKey: true });
+  toast(r.status === 'success' ? 'Key removed' : (r.message || 'Could not remove'), r.status === 'success' ? 'ok' : 'error');
+  LOADERS.settings();
 });
 
 // ── boot ──

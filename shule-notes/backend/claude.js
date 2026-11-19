@@ -11,7 +11,17 @@
 'use strict';
 const Anthropic = require('@anthropic-ai/sdk');
 
-const client = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
+// The key comes from the admin panel's Settings (saved in the database) or,
+// failing that, from ANTHROPIC_API_KEY in the server's environment. One client
+// per distinct key, so changing the key in the panel takes effect straight away.
+const KEY_PATTERN = /^sk-ant-[A-Za-z0-9_-]{20,}$/;
+const clients = new Map();
+function clientFor(apiKey) {
+  const key = KEY_PATTERN.test(apiKey || '') ? apiKey : process.env.ANTHROPIC_API_KEY;
+  if (!KEY_PATTERN.test(key || '')) throw new AiNotConfiguredError();
+  if (!clients.has(key)) clients.set(key, new Anthropic({ apiKey: key }));
+  return clients.get(key);
+}
 
 const MODEL = process.env.AI_MODEL || 'claude-sonnet-5-5';
 const EFFORT = process.env.AI_EFFORT === undefined ? 'low' : process.env.AI_EFFORT;
@@ -36,12 +46,12 @@ function buildSystem(documentText, noteTitle) {
 // history: prior turns in THIS chat about THIS document, [{role,content}, ...]
 // -- kept short by the caller (server.js caps it), since every turn resends
 // the whole thing and it rides along after the cached document block.
-async function askAboutDocument({ documentText, noteTitle, question, history }) {
+async function askAboutDocument({ documentText, noteTitle, question, history, apiKey, model }) {
   const q = String(question || '').trim().slice(0, MAX_QUESTION_LEN);
   if (!q) throw new Error('question is required');
   const messages = [...(Array.isArray(history) ? history : []), { role: 'user', content: q }];
   const request = {
-    model: MODEL,
+    model: model || MODEL,
     // The current models think before answering and that thinking counts
     // towards this limit, so it is set well above the length of an answer.
     max_tokens: 8000,
@@ -50,11 +60,18 @@ async function askAboutDocument({ documentText, noteTitle, question, history }) 
   };
   // Low effort keeps a short question-and-answer fast and cheap.
   if (EFFORT) request.output_config = { effort: EFFORT };
-  const response = await client.messages.create(request);
+  const response = await clientFor(apiKey).messages.create(request);
   if (response.stop_reason === 'refusal') throw new AiNoAnswerError('declined');
   const answer = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
   if (!answer) throw new AiNoAnswerError('empty');
   return { answer, usage: response.usage, model: response.model };
+}
+
+// No usable Claude API key has been entered yet.
+class AiNotConfiguredError extends Error {
+  constructor() {
+    super('no Claude API key configured');
+  }
 }
 
 // The request succeeded but there is nothing to show the student.
@@ -69,6 +86,9 @@ class AiNoAnswerError extends Error {
 // string-match an error message. Mapped to what the route needs: a safe
 // member-facing sentence, and whether retrying makes any sense at all.
 function classifyClaudeError(err) {
+  if (err instanceof AiNotConfiguredError) {
+    return { status: 503, message: 'The AI helper has not been set up yet. Please try again later.' };
+  }
   if (err instanceof AiNoAnswerError) {
     return err.reason === 'declined'
       ? { status: 422, message: 'The AI helper cannot answer that question. Try asking about what is in this document.' }
@@ -96,4 +116,4 @@ function classifyClaudeError(err) {
   return { status: 500, message: 'Something went wrong answering that question.' };
 }
 
-module.exports = { askAboutDocument, classifyClaudeError, AiNoAnswerError, MODEL };
+module.exports = { askAboutDocument, classifyClaudeError, AiNoAnswerError, AiNotConfiguredError, MODEL };

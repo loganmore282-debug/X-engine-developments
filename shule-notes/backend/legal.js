@@ -19,13 +19,19 @@ function page(title, body) {
 </style></head><body><main>${body}</main></body></html>`;
 }
 
-function contactLine(email) {
-  return email
-    ? `Email <a href="mailto:${esc(email)}">${esc(email)}</a>.`
-    : 'Use the contact details on our Google Play listing.';
+// "Email x, call y or WhatsApp z", from whatever the owner filled in under Settings.
+function contactLine(contact) {
+  const c = contact || {};
+  const parts = [];
+  if (c.email) parts.push(`email <a href="mailto:${esc(c.email)}">${esc(c.email)}</a>`);
+  if (c.phone) parts.push(`call <a href="tel:${esc(String(c.phone).replace(/[^\d+]/g, ''))}">${esc(c.phone)}</a>`);
+  if (c.whatsapp) parts.push(`message us on WhatsApp at ${esc(c.whatsapp)}`);
+  if (!parts.length) return 'Use the contact details on our Google Play listing.';
+  const text = parts.length === 1 ? parts[0] : parts.slice(0, -1).join(', ') + ' or ' + parts[parts.length - 1];
+  return text.charAt(0).toUpperCase() + text.slice(1) + '.';
 }
 
-function privacyPage({ appName, supportEmail, updated }) {
+function privacyPage({ appName, contact, updated }) {
   const app = esc(appName);
   return page(`${appName} Privacy Policy`, `
 <h1>${app} Privacy Policy</h1>
@@ -48,10 +54,10 @@ function privacyPage({ appName, supportEmail, updated }) {
 <h2>Children</h2>
 <p>${app} is a study tool. If you are under the age at which you can agree to this policy in your country, please use the app with the permission of a parent, guardian or teacher.</p>
 <h2>Contact</h2>
-<p>Questions about this policy? ${contactLine(supportEmail)}</p>`);
+<p>Questions about this policy? ${contactLine(contact)}</p>`);
 }
 
-function accountDeletionPage({ appName, supportEmail }) {
+function accountDeletionPage({ appName, contact }) {
   const app = esc(appName);
   return page(`Delete your ${appName} account`, `
 <h1>Delete your ${app} account</h1>
@@ -64,10 +70,10 @@ function accountDeletionPage({ appName, supportEmail }) {
 <h2>What is deleted</h2>
 <p>Your name, your phone number, your password, your sign-in sessions and your AI helper usage records are permanently deleted straight away. Nothing is kept.</p>
 <h2>Cannot sign in?</h2>
-<p>${contactLine(supportEmail)} Tell us the phone number the account was created with and we will delete it for you.</p>`);
+<p>${contactLine(contact)} Tell us the phone number the account was created with and we will delete it for you.</p>`);
 }
 
-function termsPage({ appName, supportEmail, updated }) {
+function termsPage({ appName, contact, updated }) {
   const app = esc(appName);
   return page(`${appName} Terms of Use`, `
 <h1>${app} Terms of Use</h1>
@@ -90,7 +96,7 @@ function termsPage({ appName, supportEmail, updated }) {
 <h2>Ending your use</h2>
 <p>You can delete your account at any time from <strong>Profile</strong> in the app. See the <a href="/privacy">privacy policy</a> for what happens to your information.</p>
 <h2>Contact</h2>
-<p>Questions about these terms? ${contactLine(supportEmail)}</p>`);
+<p>Questions about these terms? ${contactLine(contact)}</p>`);
 }
 
 module.exports = { privacyPage, accountDeletionPage, termsPage };

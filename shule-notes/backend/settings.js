@@ -11,7 +11,18 @@ const DEFAULTS = {
   supportWhatsapp: '',
   supportEmail: '',
   supportHours: '',
+  aiModel: '',       // '' = use the AI_MODEL environment value
+  anthropicKey: '',  // the Claude API key, entered in the admin panel (never sent back to it)
 };
+
+// The models the owner may pick in the panel (cheapest first).
+const AI_MODELS = [
+  { id: 'claude-haiku-5-5', label: 'Haiku 5.5: cheapest and fastest' },
+  { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5: balanced (recommended)' },
+  { id: 'claude-opus-5-5', label: 'Opus 5.5: best answers, most expensive' },
+];
+const KEY_PATTERN = /^sk-ant-[A-Za-z0-9_-]{20,}$/;
+const isRealKey = (k) => typeof k === 'string' && KEY_PATTERN.test(k);
 
 const TTL_MS = 15 * 1000;
 let cached = null;
@@ -61,10 +72,31 @@ async function saveSettings(patch) {
     next.supportEmail = v;
   }
   if (patch.supportHours !== undefined) next.supportHours = text(patch.supportHours, 80);
+  if (patch.aiModel !== undefined) {
+    const v = text(patch.aiModel, 60);
+    if (v && !AI_MODELS.some((m) => m.id === v)) return { ok: false, message: 'Choose one of the listed AI models' };
+    next.aiModel = v;
+  }
+  const unset = {};
+  if (patch.clearAnthropicKey) unset.anthropicKey = '';
+  else if (typeof patch.anthropicKey === 'string' && patch.anthropicKey.trim()) {
+    const v = patch.anthropicKey.trim();
+    if (!isRealKey(v)) return { ok: false, message: 'That does not look like a Claude API key. It starts with sk-ant- and is one long line with no spaces.' };
+    next.anthropicKey = v;
+  }
 
-  await getDb().collection('settings').updateOne({ _id: 'app' }, { $set: next }, { upsert: true });
+  const update = {};
+  if (Object.keys(next).length) update.$set = next;
+  if (Object.keys(unset).length) update.$unset = unset;
+  if (Object.keys(update).length) await getDb().collection('settings').updateOne({ _id: 'app' }, update, { upsert: true });
   clearSettingsCache();
   return { ok: true, settings: await getSettings() };
+}
+
+// What the admin panel sees: everything EXCEPT the key itself, only whether one is saved.
+function adminView(s) {
+  const { anthropicKey, ...rest } = s;
+  return { ...rest, anthropicKeySet: isRealKey(anthropicKey), anthropicKeyHint: isRealKey(anthropicKey) ? '…' + anthropicKey.slice(-4) : '' };
 }
 
 // What the app and the public pages may see.
@@ -78,4 +110,4 @@ function publicConfig(s) {
   };
 }
 
-module.exports = { getSettings, saveSettings, publicConfig, clearSettingsCache, DEFAULTS };
+module.exports = { getSettings, saveSettings, publicConfig, adminView, clearSettingsCache, DEFAULTS, AI_MODELS, isRealKey };

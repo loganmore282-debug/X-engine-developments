@@ -157,6 +157,31 @@ const dateKey = (offset) => day(offset).toISOString().slice(0, 10);
     const publicView = settings.publicConfig(saved.settings);
     ck(publicView.supportPhone === '+256 700 111 222' && publicView.aiEnabled === false && !('aiDailyLimit' in publicView), 'the app is told the contacts and the switch, not the limit');
     ck((await settings.saveSettings({ aiDailyLimit: null })).settings.aiDailyLimit === null, 'the limit can go back to the server default');
+
+    // the Claude key and the model, entered in the panel
+    const KEY = 'sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWX-yz12';
+    ck((await settings.saveSettings({ anthropicKey: 'my password' })).ok === false, 'something that is not a Claude key is refused');
+    ck((await settings.saveSettings({ aiModel: 'gpt-4' })).ok === false, 'an unknown AI model is refused');
+    const withKey = await settings.saveSettings({ anthropicKey: '  ' + KEY + ' ', aiModel: 'claude-haiku-5-5' });
+    ck(withKey.ok && (await settings.getSettings()).anthropicKey === KEY, 'a valid key is saved (spaces trimmed) and the server can use it');
+    const view = settings.adminView(await settings.getSettings());
+    ck(!JSON.stringify(view).includes('ABCDEFGH') && view.anthropicKeySet === true && view.anthropicKeyHint === '…yz12', 'the panel is told a key is saved and its last 4 characters, never the key');
+    ck(!JSON.stringify(settings.publicConfig(await settings.getSettings())).includes('sk-ant'), 'the app is never sent the key');
+    ck((await settings.saveSettings({ supportHours: 'Mon-Fri' })).ok && (await settings.getSettings()).anthropicKey === KEY, 'saving other settings leaves the key alone');
+    ck((await settings.saveSettings({ anthropicKey: '' })).ok && (await settings.getSettings()).anthropicKey === KEY, 'an empty key box does not erase it');
+    await settings.saveSettings({ clearAnthropicKey: true });
+    ck(settings.adminView(await settings.getSettings()).anthropicKeySet === false, 'the key can be removed');
+
+    const claude = require('./claude');
+    const envKey = process.env.ANTHROPIC_API_KEY; delete process.env.ANTHROPIC_API_KEY;
+    let notSet = null;
+    try { await claude.askAboutDocument({ documentText: 'x', question: 'q', history: [] }); } catch (e) { notSet = e; }
+    ck(notSet instanceof claude.AiNotConfiguredError && claude.classifyClaudeError(notSet).status === 503, 'with no key anywhere the student gets a calm "not set up yet", not a crash');
+    if (envKey !== undefined) process.env.ANTHROPIC_API_KEY = envKey;
+
+    const { privacyPage } = require('./legal');
+    const html = privacyPage({ appName: 'Shule Notes', contact: { email: '', phone: '+256 700 111 222', whatsapp: '+256 700 111 222' }, updated: 'x' });
+    ck(html.includes('tel:+256700111222') && html.includes('WhatsApp'), 'the privacy page shows the phone and WhatsApp from Settings when there is no email');
   }
 
   console.log(bad ? `\n${bad} check(s) FAILED` : '\nall admin checks pass');

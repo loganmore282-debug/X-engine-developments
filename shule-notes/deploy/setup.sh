@@ -14,16 +14,16 @@
 # Run it as root, from this folder:
 #   sudo ./setup.sh api.example.com admin.example.com you@example.com
 # No domain yet (free addresses built from the server's IP, fine for testing):
-#   sudo ./setup.sh --no-domain you@example.com
+#   sudo ./setup.sh --no-domain [you@example.com]
 # Look around first, changing nothing:  sudo ./preflight.sh
 # Safe to run again (also to switch to a real domain later).
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "Run this as root (sudo)."; exit 1; }
 
-USAGE="usage: setup.sh <api-domain> <admin-domain> <email-for-certificates>
-       setup.sh --no-domain <email-for-certificates>"
+USAGE="usage: setup.sh <api-domain> <admin-domain> [email]
+       setup.sh --no-domain [email]"
 if [ "${1:-}" = "--no-domain" ]; then
-  CERT_EMAIL="${2:?$USAGE}"
+  CERT_EMAIL="${2:-}"
   command -v curl >/dev/null || { apt-get update -y >/dev/null; apt-get install -y curl >/dev/null; }
   IP="$(curl -4fsS https://api.ipify.org)" || { echo "Could not find this server's public IP."; exit 1; }
   DASHED="${IP//./-}"
@@ -31,7 +31,7 @@ if [ "${1:-}" = "--no-domain" ]; then
   ADMIN_DOMAIN="admin.$DASHED.sslip.io"
   echo "==> No domain: using $API_DOMAIN and $ADMIN_DOMAIN"
 else
-  API_DOMAIN="${1:?$USAGE}"; ADMIN_DOMAIN="${2:?$USAGE}"; CERT_EMAIL="${3:?$USAGE}"
+  API_DOMAIN="${1:?$USAGE}"; ADMIN_DOMAIN="${2:?$USAGE}"; CERT_EMAIL="${3:-}"
 fi
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -151,7 +151,8 @@ else
 fi
 
 echo "==> HTTPS certificates (only for $API_DOMAIN and $ADMIN_DOMAIN)"
-certbot --nginx --non-interactive --agree-tos -m "$CERT_EMAIL" --redirect -d "$API_DOMAIN" -d "$ADMIN_DOMAIN" \
+if [ -n "$CERT_EMAIL" ] && [ "$CERT_EMAIL" != "none" ]; then EMAIL_ARGS=(-m "$CERT_EMAIL"); else EMAIL_ARGS=(--register-unsafely-without-email); fi
+certbot --nginx --non-interactive --agree-tos "${EMAIL_ARGS[@]}" --redirect -d "$API_DOMAIN" -d "$ADMIN_DOMAIN" \
   || echo "    Certificates failed. Check that both names point at this server, then run this script again."
 
 echo
