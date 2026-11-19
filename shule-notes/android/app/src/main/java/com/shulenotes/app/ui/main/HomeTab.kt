@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import com.shulenotes.app.ui.components.enterOnce
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -379,7 +381,7 @@ fun HomeTab(
                         onAction = if (scope != null) ({ viewModel.selectClass(null) }) else null,
                     )
                 }
-                else -> items(visible, key = { it.id }) { note ->
+                else -> itemsIndexed(visible, key = { _, n -> n.id }) { index, note ->
                     NoteCard(
                         note = note,
                         subjectName = viewModel.subjectName(note.subjectId),
@@ -391,7 +393,10 @@ fun HomeTab(
                         showKind = viewModel.kindFilter == null,
                         onClick = { onOpenNote(note.id) },
                         onToggleSaved = { viewModel.toggleSaved(note.id) },
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 5.dp),
+                        modifier = Modifier
+                            .animateItem()
+                            .enterOnce(note.id, viewModel.animatedIds, index)
+                            .padding(horizontal = 20.dp, vertical = 5.dp),
                     )
                 }
             }

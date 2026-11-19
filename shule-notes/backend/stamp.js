@@ -26,10 +26,20 @@ function footerLines(settings, website) {
 
 // Draws the lines centred along the bottom of the page AS IT IS DISPLAYED. Pages stored sideways (/Rotate)
 // need the text turned the same way, so the position is worked out on the displayed page and mapped back.
-async function stampPdf(buffer, lines) {
+// The owner's logo in grey tones, shown small beside the words. Read once.
+let logoFile;
+function logoBytes() {
+  if (logoFile === undefined) {
+    try { logoFile = fs.readFileSync(path.join(__dirname, 'assets', 'logo-gray.png')); } catch (_) { logoFile = null; }
+  }
+  return logoFile;
+}
+
+async function stampPdf(buffer, lines, { logo = logoBytes() } = {}) {
   const { PDFDocument, StandardFonts, rgb, degrees } = require('pdf-lib');
   const doc = await PDFDocument.load(buffer, { updateMetadata: false });
   const font = await doc.embedFont(StandardFonts.Helvetica);
+  const logoImage = logo ? await doc.embedPng(logo) : null; // embedded once, shared by every page
   const colour = rgb(0.36, 0.38, 0.40);
   for (const page of doc.getPages()) {
     const box = page.getCropBox(); // the part of the page that is shown
@@ -39,16 +49,28 @@ async function stampPdf(buffer, lines) {
     const visH = angle === 90 || angle === 270 ? w : h;
     if (visW < 160 || visH < 90) continue; // too small to carry a footer
     const toUser = (vx, vy) => (angle === 90 ? [w - vy, vx] : angle === 180 ? [w - vx, h - vy] : angle === 270 ? [vy, h - vx] : [vx, vy]);
-    lines.forEach((line, i) => {
+    // The logo (a square, 22 points) with the lines to its right, the whole group centred along the bottom.
+    const logoSize = logoImage && visW >= 200 ? 22 : 0;
+    const gap = logoSize ? 7 : 0;
+    const room = visW - 24 - logoSize - gap;
+    const fitted = lines.map((line) => {
       let size = 7.5;
-      while (size > 5 && font.widthOfTextAtSize(line, size) > visW - 24) size -= 0.5;
+      while (size > 5 && font.widthOfTextAtSize(line, size) > room) size -= 0.5;
       let text = line;
-      while (text.length > 4 && font.widthOfTextAtSize(text, size) > visW - 24) text = text.slice(0, -2);
+      while (text.length > 4 && font.widthOfTextAtSize(text, size) > room) text = text.slice(0, -2);
       if (text !== line) text = text.slice(0, -1) + '..';
-      const vx = (visW - font.widthOfTextAtSize(text, size)) / 2;
+      return { text, size, width: font.widthOfTextAtSize(text, size) };
+    });
+    const textWidth = Math.max(...fitted.map((f) => f.width));
+    const startX = (visW - (logoSize + gap + textWidth)) / 2;
+    if (logoSize) {
+      const [lx, ly] = toUser(startX, 7);
+      page.drawImage(logoImage, { x: box.x + lx, y: box.y + ly, width: logoSize, height: logoSize, rotate: degrees(angle) });
+    }
+    fitted.forEach((f, i) => {
       const vy = 9 + (lines.length - 1 - i) * 9.5; // the first line sits above the last
-      const [ux, uy] = toUser(vx, vy);
-      page.drawText(text, { x: box.x + ux, y: box.y + uy, size, font, color: colour, rotate: degrees(angle) });
+      const [ux, uy] = toUser(startX + logoSize + gap, vy);
+      page.drawText(f.text, { x: box.x + ux, y: box.y + uy, size: f.size, font, color: colour, rotate: degrees(angle) });
     });
   }
   return Buffer.from(await doc.save());

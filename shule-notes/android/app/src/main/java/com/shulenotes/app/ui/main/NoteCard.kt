@@ -23,6 +23,12 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -89,12 +95,21 @@ fun NoteCard(
     // "Past paper" is left out when the whole list is past papers.
     showKind: Boolean = true,
 ) {
+    // The card sinks a little under the finger and springs back.
+    val pressSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val pressed by pressSource.collectIsPressedAsState()
+    val pressScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (pressed) 0.972f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.55f, stiffness = 520f),
+        label = "card-press",
+    )
     Surface(
         onClick = onClick,
+        interactionSource = pressSource,
         shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().graphicsLayer { scaleX = pressScale; scaleY = pressScale },
     ) {
         Row(modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp)) {
             NoteCover(subjectName, tint)
@@ -163,7 +178,17 @@ fun NoteCard(
                     }
                 }
             }
-            IconButton(onClick = onToggleSaved) {
+            // The bookmark pops when it is switched on (not when a card merely scrolls into view).
+            val pop = remember { androidx.compose.animation.core.Animatable(1f) }
+            var firstRun by remember { mutableStateOf(true) }
+            LaunchedEffect(saved) {
+                if (firstRun) { firstRun = false; return@LaunchedEffect }
+                if (saved) {
+                    pop.snapTo(0.55f)
+                    pop.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.4f, stiffness = 380f))
+                }
+            }
+            IconButton(onClick = onToggleSaved, modifier = Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value }) {
                 Icon(
                     imageVector = if (saved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                     contentDescription = if (saved) "Remove from saved" else "Save note",

@@ -1,6 +1,13 @@
 package com.shulenotes.app.ui.nav
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.collectAsState
@@ -61,7 +68,18 @@ fun ShuleNavGraph(startDestination: String) {
         }
     }
 
-    NavHost(navController = navController, startDestination = startDestination) {
+    // One motion for every screen: the new one slides in from the right while fading up, the old one drifts
+    // left and fades; going back reverses it.
+    val slide = tween<IntOffset>(durationMillis = 340, easing = FastOutSlowInEasing)
+    val fade = tween<Float>(durationMillis = 260, easing = FastOutSlowInEasing)
+    NavHost(
+        navController = navController,
+        startDestination = startDestination,
+        enterTransition = { slideInHorizontally(slide) { it / 5 } + fadeIn(fade) },
+        exitTransition = { slideOutHorizontally(slide) { -it / 8 } + fadeOut(tween(200)) },
+        popEnterTransition = { slideInHorizontally(slide) { -it / 8 } + fadeIn(fade) },
+        popExitTransition = { slideOutHorizontally(slide) { it / 5 } + fadeOut(tween(200)) },
+    ) {
         composable(Routes.INTRO) {
             IntroScreen(onFinished = {
                 scope.launch {

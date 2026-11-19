@@ -83,6 +83,9 @@ class LibraryViewModel : ViewModel() {
     var notifications by mutableStateOf<List<Announcement>>(emptyList())
         private set
 
+    // Notes whose entrance animation has already played this session (so scrolling back never replays it).
+    val animatedIds = mutableSetOf<String>()
+
     var isSavingAvatar by mutableStateOf(false)
         private set
     var isSendingFeedback by mutableStateOf(false)

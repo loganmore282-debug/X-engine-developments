@@ -51,6 +51,29 @@ async function pagesAsDisplayed(buffer) {
   return out;
 }
 
+// Where the logo picture lands on the DISPLAYED page: its four corners, read from the page's drawing commands.
+async function logoPlacementOf(buffer, pageNo) { return logoPlacement(buffer, pageNo); }
+async function logoPlacement(buffer, pageNo) {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(buffer), useSystemFonts: true, verbosity: 0 }).promise;
+  const page = await doc.getPage(pageNo);
+  const vp = page.getViewport({ scale: 1 });
+  const ops = await page.getOperatorList();
+  let ctm = [1, 0, 0, 1, 0, 0];
+  const stack = [];
+  for (let i = 0; i < ops.fnArray.length; i++) {
+    const fn = ops.fnArray[i];
+    if (fn === pdfjs.OPS.save) stack.push(ctm);
+    else if (fn === pdfjs.OPS.restore) ctm = stack.pop() || ctm;
+    else if (fn === pdfjs.OPS.transform) ctm = pdfjs.Util.transform(ctm, ops.argsArray[i]);
+    else if (fn === pdfjs.OPS.paintImageXObject) {
+      const m = pdfjs.Util.transform(vp.transform, ctm);
+      return [[0, 0], [1, 0], [0, 1], [1, 1]].map(([u, v]) => ({ x: m[0] * u + m[2] * v + m[4], y: m[1] * u + m[3] * v + m[5] }));
+    }
+  }
+  return null;
+}
+
 (async () => {
   console.log('— the footer\'s words —');
   const full = { supportPhone: '0700 123 456', supportWhatsapp: '+256 700 123 456', supportEmail: 'help@shule.ug', websiteUrl: 'https://shule.example.ug' };
@@ -74,7 +97,12 @@ async function pagesAsDisplayed(buffer) {
     ck(footer.length === 2 && footer.every((t) => t.y > p.height - 40 && t.y < p.height - 4), `page ${i + 1}: the lines sit along the bottom of the page as displayed`);
     ck(footer.every((t) => t.x > 0 && t.x < p.width - 40) && footer.every((t) => !t.vertical), `page ${i + 1}: inside the page and reading the right way up`);
     ck(before[i].items.every((o) => p.items.some((t) => t.str === o.str)), `page ${i + 1}: the original text is untouched`);
+    const img = await logoPlacement(stamped, i + 1);
+    ck(img && img.every((c) => c.x > 0 && c.x < p.width && c.y > p.height - 45 && c.y < p.height), `page ${i + 1}: the logo sits inside the page, along the bottom`);
+    ck(img && Math.abs(Math.hypot(img[1].x - img[0].x, img[1].y - img[0].y) - 22) < 0.5, `page ${i + 1}: the logo is 22 points wide, not stretched`);
   }
+  ck(!(await logoPlacement(original, 1)), 'the original pages had no picture');
+  ck(!(await logoPlacementOf(await stamp.stampPdf(original, lines, { logo: null }), 1)), 'with no logo file the footer is text only');
   const small = await (async () => { const { PDFDocument } = require('pdf-lib'); const d = await PDFDocument.create(); d.addPage([100, 60]); return Buffer.from(await d.save()); })();
   ck((await stamp.stampPdf(small, lines)).length > 0, 'a tiny page is left alone, not an error');
   let rejected = false;

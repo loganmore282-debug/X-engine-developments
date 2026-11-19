@@ -2,6 +2,9 @@ package com.shulenotes.app.ui.note
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import com.shulenotes.app.ui.components.shimmer
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -236,17 +239,21 @@ fun NoteDetailScreen(noteId: String, startPage: Int, viewModel: NoteViewModel, o
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when (state) {
+                // Two pale sheets with a band of light sweeping over them: the reader is already there, the pages follow.
                 is PdfLoadState.Loading -> Column(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxSize().padding(12.dp),
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
                 ) {
-                    CircularProgressIndicator()
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        "Opening document…",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    repeat(2) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(0.707f)
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                                .background(Color(0xFFEDEDED))
+                                .shimmer(),
+                        )
+                    }
                 }
 
                 is PdfLoadState.Failed -> StateMessage(

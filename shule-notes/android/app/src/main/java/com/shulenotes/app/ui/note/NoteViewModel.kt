@@ -11,6 +11,7 @@ import com.shulenotes.app.data.ApiClient
 import com.shulenotes.app.data.Downloads
 import com.shulenotes.app.data.Note
 import com.shulenotes.app.data.NoteCache
+import com.shulenotes.app.data.PdfFetcher
 import com.shulenotes.app.data.serverMessage
 import com.shulenotes.app.ui.components.Notifier
 import kotlinx.coroutines.Dispatchers
@@ -52,14 +53,19 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         note = NoteCache.get(noteId)
         pdfState = PdfLoadState.Loading
         viewModelScope.launch {
+            // The note's details (title and so on) are fetched alongside the PDF, never before it.
             if (note == null) {
-                // Reached after the app was restored from the background with an empty cache.
-                try {
-                    note = ApiClient.service.note(noteId).note?.also { NoteCache.put(listOf(it)) }
-                } catch (e: Exception) { }
+                launch {
+                    try {
+                        note = ApiClient.service.note(noteId).note?.also { NoteCache.put(listOf(it)) }
+                    } catch (e: Exception) { }
+                }
             }
             pdfState = try {
-                PdfLoadState.Ready(withContext(Dispatchers.IO) { openPdf(noteId) })
+                val document = withContext(Dispatchers.IO) { openPdf(noteId) }
+                // The rest of the pages are measured in the background; the first page shows straight away.
+                viewModelScope.launch(Dispatchers.IO) { runCatching { document.measureRemaining() } }
+                PdfLoadState.Ready(document)
             } catch (e: UnreadablePdfException) {
                 PdfLoadState.Failed("This document could not be opened. It may be damaged.")
             } catch (e: IOException) {
@@ -70,16 +76,9 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun cacheFile(noteId: String): File {
-        val dir = File(getApplication<Application>().cacheDir, "notes").apply { mkdirs() }
-        // Copies from before every PDF carried the owner's footer have no ".s1" in their name: drop them.
-        dir.listFiles()?.filter { it.extension == "pdf" && !it.name.endsWith(".s1.pdf") }?.forEach { it.delete() }
-        return File(dir, noteId.filter { it.isLetterOrDigit() } + ".s1.pdf")
-    }
-
-    // A note's file never changes once uploaded, so a copy already on the
-    // phone is reused: reopening a document is instant and works offline.
-    // A copy the student downloaded on purpose is tried first.
+    // A note's file never changes once uploaded, so a copy already on the phone is reused: reopening a
+    // document is instant and works offline. A copy the student downloaded on purpose is tried first; a
+    // copy that is already being fetched in the background (see PdfFetcher) is joined, not fetched again.
     private suspend fun openPdf(noteId: String): PdfDocument {
         val downloaded = Downloads.file(noteId)
         if (downloaded.length() > 0L) {
@@ -90,16 +89,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
                 Downloads.refresh()
             }
         }
-        val target = cacheFile(noteId)
-        if (target.length() == 0L) {
-            val partial = File(target.parentFile, target.nameWithoutExtension + ".part")
-            ApiClient.service.noteFile(noteId).use { body ->
-                body.byteStream().use { input ->
-                    partial.outputStream().use { output -> input.copyTo(output) }
-                }
-            }
-            if (!partial.renameTo(target)) throw IOException("could not save the document")
-        }
+        val target = PdfFetcher.ensure(noteId)
         return try {
             PdfDocument(target)
         } catch (e: Exception) {
@@ -144,7 +134,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
                 withContext(Dispatchers.IO) { Downloads.remove(noteId) }
                 Notifier.info("Removed from downloads")
             } else {
-                val cached = cacheFile(noteId)
+                val cached = PdfFetcher.cacheFile(noteId)
                 if (cached.length() > 0L) {
                     try {
                         withContext(Dispatchers.IO) { Downloads.save(noteId, cached) }

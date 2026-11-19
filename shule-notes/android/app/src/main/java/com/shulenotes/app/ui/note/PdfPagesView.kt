@@ -22,7 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
+import com.shulenotes.app.ui.components.shimmer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -128,6 +128,7 @@ fun PdfPagesView(document: PdfDocument, listState: LazyListState, modifier: Modi
                 },
         ) {
             items(count = document.pageCount, key = { it }) { index ->
+                @Suppress("UNUSED_VARIABLE") val layoutVersion = document.layoutVersion // re-measures when a page turns out a different shape
                 PdfPage(
                     document = document,
                     index = index,
@@ -149,6 +150,16 @@ private fun PdfPage(document: PdfDocument, index: Int, renderWidthPx: Int, modif
     var bitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     // Re-runs when the zoom crosses into "sharp"; the old picture stays up until the new one is ready.
     LaunchedEffect(renderWidthPx) {
+        // A page drawn before (at this width) comes straight from memory.
+        document.cachedPage(index, renderWidthPx)?.let { bitmap = it.asImageBitmap(); return@LaunchedEffect }
+        // Otherwise a quick small draft first (about a ninth of the work), so something readable shows at once,
+        // then the sharp one replaces it.
+        if (bitmap == null) {
+            val draft = withContext(Dispatchers.IO) {
+                runCatching { document.renderPage(index, (renderWidthPx / 3).coerceAtLeast(160), keep = false)?.asImageBitmap() }.getOrNull()
+            }
+            if (draft != null && bitmap == null) bitmap = draft
+        }
         val rendered = withContext(Dispatchers.IO) {
             runCatching { document.renderPage(index, renderWidthPx)?.asImageBitmap() }.getOrNull()
         }
@@ -156,6 +167,14 @@ private fun PdfPage(document: PdfDocument, index: Int, renderWidthPx: Int, modif
     }
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         val current = bitmap
+        // Until the first picture arrives: a pale sheet with a band of light sweeping over it.
+        androidx.compose.animation.AnimatedVisibility(
+            visible = current == null,
+            enter = androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(220)),
+        ) {
+            Box(Modifier.fillMaxSize().background(Color(0xFFEDEDED)).shimmer())
+        }
         if (current != null) {
             Image(
                 bitmap = current,
@@ -163,8 +182,6 @@ private fun PdfPage(document: PdfDocument, index: Int, renderWidthPx: Int, modif
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier.fillMaxSize(),
             )
-        } else {
-            CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
         }
     }
 }

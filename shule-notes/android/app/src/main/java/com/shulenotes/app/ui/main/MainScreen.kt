@@ -1,6 +1,7 @@
 package com.shulenotes.app.ui.main
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -92,6 +93,14 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
         }
     }
 
+    // The note the student most likely opens next ("Continue reading") is fetched quietly in advance, but only on
+    // Wi-Fi or another free connection, and only if it is small: mobile data costs students money.
+    val continueId = recent.firstOrNull()?.id
+    androidx.compose.runtime.LaunchedEffect(continueId, viewModel.notes.size) {
+        val next = continueId?.let { id -> viewModel.notes.firstOrNull { it.id == id } } ?: return@LaunchedEffect
+        com.shulenotes.app.data.PdfFetcher.prefetchIfFree(next.id, next.fileSize)
+    }
+
     BackHandler(enabled = tab != 0) { tab = 0 }
     BackHandler(enabled = showNotifications) { showNotifications = false }
     BackHandler(enabled = showProgress) { showProgress = false }
@@ -122,7 +131,16 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
             }
         },
     ) { padding ->
-        when (tab) {
+        androidx.compose.animation.AnimatedContent(
+            targetState = tab,
+            transitionSpec = {
+                (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(240, delayMillis = 60)) +
+                    androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(300)) { it / 30 }) togetherWith
+                    androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120))
+            },
+            label = "tabs",
+        ) { currentTab ->
+        when (currentTab) {
             0 -> HomeTab(
                 viewModel = viewModel,
                 userName = userName,
@@ -152,6 +170,7 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
                     onSignedOut = onSignedOut,
                 )
             }
+        }
         }
     }
 

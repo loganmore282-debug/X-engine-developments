@@ -60,6 +60,18 @@ app.use(mongoSanitize());
 
 app.use(rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false }));
 
+// This server's own public address, learned from the first request (or set PUBLIC_URL). Used for the app download
+// link in the footer of every PDF when the owner has not typed a website of their own.
+let knownOrigin = process.env.PUBLIC_URL ? String(process.env.PUBLIC_URL).replace(/\/+$/, '') : '';
+app.use((req, res, next) => {
+  if (!knownOrigin && req.get('host')) {
+    knownOrigin = `${req.protocol}://${req.get('host')}`;
+    setTimeout(() => warmStamps().catch(() => {}), 5000).unref(); // first request since the server started: get every file ready
+  }
+  next();
+});
+const downloadPageUrl = () => (knownOrigin ? `${knownOrigin}/download/` : '');
+
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -340,7 +352,7 @@ app.get('/notes/:id/file', requireAuth, async (req, res) => {
   getDb().collection('notes').updateOne({ _id: note._id }, { $inc: { views: 1 } }).catch(() => {});
   // Every page carries a footer (where it came from, how to reach the owner), unless the owner turned that off.
   const settings = await getSettings();
-  const lines = stamp.footerLines(settings, `${req.protocol}://${req.get('host')}/download/`);
+  const lines = stamp.footerLines(settings, downloadPageUrl());
   const { file: filePath } = await stamp.fileToSend({ uploadDir: UPLOAD_DIR, fileName: note.fileName, lines, enabled: settings.pdfStamp !== false });
   const { size, mtime } = await fs.promises.stat(filePath);
   res.setHeader('Content-Type', 'application/pdf');
@@ -451,12 +463,37 @@ const upload = multer({
   limits: { fileSize: MAX_PDF_BYTES },
 });
 
+// Stamps notes in the background (one at a time), so the footer is already on the file when a student asks for it
+// instead of being made while they wait. Run after an upload and whenever the contact details change.
+let warming = false;
+let warmAgain = false;
+async function warmStamps(onlyFileName) {
+  if (warming) { warmAgain = true; return; }
+  warming = true;
+  try {
+    do {
+      warmAgain = false;
+      const settings = await getSettings();
+      if (settings.pdfStamp === false || !downloadPageUrl() && !settings.websiteUrl) break;
+      const lines = stamp.footerLines(settings, downloadPageUrl());
+      const names = onlyFileName ? [onlyFileName] : (await getDb().collection('notes').find({}).project({ fileName: 1 }).toArray()).map((n) => n.fileName).filter(Boolean);
+      for (const fileName of names) {
+        await stamp.fileToSend({ uploadDir: UPLOAD_DIR, fileName, lines, enabled: true });
+      }
+    } while (warmAgain);
+  } catch (e) {
+    console.error('warming the stamped copies failed:', e.message);
+  } finally {
+    warming = false;
+  }
+}
+
 // Background half of an upload: read the PDF's text on a worker thread, then publish the note.
 function finishReading(noteId, buffer, title) {
   extractInThread(buffer).then(
     (r) => getDb().collection('notes').updateOne({ _id: noteId }, { $set: { extractedText: r.text, pageTexts: r.pages, pageCount: r.pageCount, textStatus: r.text ? 'ready' : 'none' } }),
     (e) => { console.error('PDF text extraction failed for', title, ':', e.message); return getDb().collection('notes').updateOne({ _id: noteId }, { $set: { textStatus: 'failed' } }); },
-  ).then(() => revision.bump()).catch((e) => console.error('could not save the extracted text for', title, ':', e.message));
+  ).then(() => { revision.bump(); return getDb().collection('notes').findOne({ _id: noteId }); }).then((n) => { if (n && n.fileName) warmStamps(n.fileName); }).catch((e) => console.error('could not save the extracted text for', title, ':', e.message));
 }
 
 app.post('/admin/notes/upload', upload.single('file'), async (req, res) => {
@@ -592,6 +629,7 @@ app.post('/admin/feedback/delete', guard(async (req, res) => sendResult(res, awa
 app.post('/admin/settings/get', guard(async (req, res) => res.json({ status: 'success', settings: adminView(await getSettings()), defaultAiDailyLimit: AI_DAILY_LIMIT, models: AI_MODELS, publishedVersion: publishedVersion() })));
 app.post('/admin/settings/save', guard(async (req, res) => {
   const result = await saveSettings(req.body);
+  if (result.ok) warmStamps(); // new contact details: the stamped copies are remade in the background
   sendResult(res, result, result.ok ? { settings: adminView(result.settings) } : {});
 }));
 
