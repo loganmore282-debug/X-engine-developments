@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.outlined.PhotoCamera
@@ -130,7 +132,12 @@ fun ProfileTab(
         SettingsCard {
             Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                 // The logo, or the student's own photo. A small camera badge shows it can be changed.
-                Box(modifier = Modifier.size(64.dp).clickable(onClickLabel = "Change profile photo") { showPhotoSheet = true }) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .semantics(mergeDescendants = true) { contentDescription = "Change profile photo" }
+                        .clickable(onClickLabel = "Change profile photo") { showPhotoSheet = true },
+                ) {
                     ProfileAvatar(size = 64.dp)
                     Box(
                         modifier = Modifier
