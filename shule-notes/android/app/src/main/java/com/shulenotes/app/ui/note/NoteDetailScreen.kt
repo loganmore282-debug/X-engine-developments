@@ -33,6 +33,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -43,6 +44,9 @@ import com.shulenotes.app.data.NoteCache
 import com.shulenotes.app.ui.components.StateMessage
 import com.shulenotes.app.ui.main.notifySaved
 import com.shulenotes.app.ui.main.pagesLabel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,6 +60,33 @@ fun NoteDetailScreen(noteId: String, viewModel: NoteViewModel, onBack: () -> Uni
     val saved = noteId in savedIds
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+
+    // The page crossing the middle of the screen counts as the current one.
+    val currentPage by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val middle = (info.viewportStartOffset + info.viewportEndOffset) / 2
+            val item = info.visibleItemsInfo.firstOrNull { it.offset + it.size >= middle }
+                ?: info.visibleItemsInfo.lastOrNull()
+            (item?.index ?: 0) + 1
+        }
+    }
+
+    // Reopen on the page the student stopped at, and keep that page up to date.
+    // collectLatest restarts the wait on every change, so only a page the
+    // student rests on for a moment is stored, not every page scrolled past.
+    val ready = state as? PdfLoadState.Ready
+    LaunchedEffect(ready) {
+        if (ready != null) {
+            val pageCount = ready.document.pageCount
+            val earlier = ShuleApp.session.recent.first().firstOrNull { it.id == noteId }
+            if (earlier != null && earlier.page in 2..pageCount) listState.scrollToItem(earlier.page - 1)
+            snapshotFlow { currentPage }.collectLatest { page ->
+                delay(700)
+                ShuleApp.session.recordProgress(noteId, page, pageCount)
+            }
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surfaceDim,
@@ -139,16 +170,6 @@ fun NoteDetailScreen(noteId: String, viewModel: NoteViewModel, onBack: () -> Uni
                     PdfPagesView(document = state.document, listState = listState, modifier = Modifier.fillMaxSize())
 
                     if (state.document.pageCount > 1) {
-                        // The page crossing the middle of the screen counts as the current one.
-                        val currentPage by remember {
-                            derivedStateOf {
-                                val info = listState.layoutInfo
-                                val middle = (info.viewportStartOffset + info.viewportEndOffset) / 2
-                                val item = info.visibleItemsInfo.firstOrNull { it.offset + it.size >= middle }
-                                    ?: info.visibleItemsInfo.lastOrNull()
-                                (item?.index ?: 0) + 1
-                            }
-                        }
                         Surface(
                             color = Color.Black.copy(alpha = 0.62f),
                             contentColor = Color.White,

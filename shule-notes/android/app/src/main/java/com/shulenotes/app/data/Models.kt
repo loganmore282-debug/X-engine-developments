@@ -8,6 +8,31 @@ data class User(
     val id: String,
     val name: String,
     val phone: String?,
+    val classLevel: String?,
+)
+
+data class UserResponse(
+    val status: String,
+    val user: User?,
+    val message: String?,
+)
+
+data class Level(
+    val id: String,
+    val name: String,
+    val short: String,
+)
+
+data class LevelGroup(
+    val id: String,
+    val name: String,
+    val levels: List<Level>,
+)
+
+data class LevelsResponse(
+    val status: String,
+    val groups: List<LevelGroup>?,
+    val message: String?,
 )
 
 data class AuthResponse(
@@ -25,7 +50,6 @@ data class SimpleResponse(
 data class Subject(
     val id: String,
     val name: String,
-    val classLevel: String?,
 )
 
 data class SubjectsResponse(

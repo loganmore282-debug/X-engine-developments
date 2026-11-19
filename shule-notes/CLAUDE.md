@@ -38,7 +38,7 @@ which is actually executed before being called passing.
 end: it starts the backend against a real MongoDB, drives the admin panel in Chrome
 (`ci/admin_capture.js` signs in, creates subjects and uploads the sample PDFs from
 `ci/make_sample_pdfs.py`), then installs the debug APK on an emulator and walks through it
-(`ci/capture.py`: register, browse, filter, open a PDF, Ask AI, log out, wrong password).
+(`ci/capture.py`: register, choose a class, browse, switch class, search, open a PDF, Ask AI, log out, wrong password).
 Screenshots land on the GitHub Release tagged `shule-notes-screens`. There is no Claude API
 key in CI, so a real AI answer is NOT exercised there -- only that a failed answer shows a
 readable message.
@@ -121,14 +121,31 @@ it at the real backend before using it for real.
   "Added to Saved" -- is a floating card that slides down from the top and leaves by
   itself (`Notifier` / `NotifierHost` in `ui/components/Notifier.kt`). Do not add inline
   banners.
+- **Classes** (the owner noticed there was no way to choose one): `backend/levels.js` is the
+  ONE list (Primary 1-7, Senior 1-6, Uganda's system; edit only that file to change it). It
+  is served at `GET /levels`; the admin panel's Class menu and the app both read it. The
+  student's class is stored on the account (`POST /auth/class-level`) and mirrored on the
+  phone. After the first sign-in (or on launch, for an account with no class) the app shows
+  `ChooseClassScreen`; afterwards the class chip in the Home header opens
+  `ClassPickerSheet`. Home shows that class's notes plus notes with NO class ("All
+  classes") and notes whose class is not in the list; "Show notes from every class" widens
+  it for the session only. Subjects have no class (Biology runs across classes). Subject
+  tiles only list subjects that have notes in the class on screen.
+- **Home design** (modelled on Khan Academy / Quizlet / Studocu patterns): dark green
+  gradient header under the status bar with greeting, class chip and a search bar that
+  half overlaps it; a "Continue reading" card (last document and page, remembered in
+  `SessionStore.recent`; the reader restores that page); subject tiles with an icon
+  (`subjectIcon`) in the subject's colour; document cards with a coloured "book cover".
+  The header needs light status-bar icons (`StatusBarIcons`), and `MainScreen` turns off
+  the Scaffold's top inset so each tab handles the status bar itself.
 - **Screens:** `ui/auth/` sign in and create account; `ui/main/` one screen with bottom
-  tabs Home (greeting, search, subject chips, note cards), Saved (bookmarks, stored on the
-  phone only) and Profile (privacy policy, log out, delete account); `ui/note/` the reader;
-  `ui/chat/` the AI helper. Shared pieces live in `ui/components/`.
+  tabs Home, Saved (bookmarks, stored on the phone only) and Profile (my class, privacy
+  policy, log out, delete account); `ui/note/` the reader; `ui/chat/` the AI helper.
+  Shared pieces live in `ui/components/`.
 - Each subject's colour comes from its position in the admin's subject order
   (`SubjectTint.kt`), so the first six subjects never share one.
-- `LibraryViewModel` loads the whole library once and filters by subject and search on the
-  phone. `NoteCache` lets the reader and chat show a note's title without refetching.
+- `LibraryViewModel` loads the whole library once and filters by class, subject and search
+  on the phone. `NoteCache` lets the reader and chat show a note's title without refetching.
 - `data/` — Retrofit (`ApiService`/`ApiClient`) + `SessionStore` (DataStore: token, name,
   bookmarks). The token is read **synchronously** by an OkHttp interceptor from the
   in-memory `SessionHolder` (an interceptor cannot suspend). A 401 on a signed-in request

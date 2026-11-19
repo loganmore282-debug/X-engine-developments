@@ -1,7 +1,10 @@
 package com.shulenotes.app.ui.main
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Home
@@ -21,11 +24,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.shulenotes.app.ShuleApp
+import com.shulenotes.app.data.RecentNote
 
 private class MainTab(val label: String, val icon: ImageVector, val selectedIcon: ImageVector)
 
@@ -38,14 +44,19 @@ private val Tabs = listOf(
 @Composable
 fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onSignedOut: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var showClassSheet by rememberSaveable { mutableStateOf(false) }
     val savedIds by ShuleApp.session.savedNoteIds.collectAsState(initial = emptySet())
+    val recent by ShuleApp.session.recent.collectAsState(initial = emptyList<RecentNote>())
     val userName by ShuleApp.session.userName.collectAsState(initial = "")
     val userContact by ShuleApp.session.userContact.collectAsState(initial = "")
+    val userClass by ShuleApp.session.classLevel.collectAsState(initial = "")
 
     BackHandler(enabled = tab != 0) { tab = 0 }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        // The home header runs up under the status bar, so each tab handles that inset itself.
+        contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
         bottomBar = {
             Column {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -68,9 +79,41 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onSign
         },
     ) { padding ->
         when (tab) {
-            0 -> HomeTab(viewModel, userName, savedIds, padding, onOpenNote, onOpenProfile = { tab = 2 })
-            1 -> SavedTab(viewModel, savedIds, padding, onOpenNote)
-            else -> ProfileTab(viewModel, userName, userContact, padding, onSignedOut)
+            0 -> HomeTab(
+                viewModel = viewModel,
+                userName = userName,
+                savedIds = savedIds,
+                recent = recent,
+                contentPadding = padding,
+                onOpenNote = onOpenNote,
+                onOpenProfile = { tab = 2 },
+                onChangeClass = { showClassSheet = true },
+            )
+            1 -> Box(Modifier.statusBarsPadding()) { SavedTab(viewModel, savedIds, padding, onOpenNote) }
+            else -> Box(Modifier.statusBarsPadding()) {
+                ProfileTab(
+                    viewModel = viewModel,
+                    userName = userName,
+                    userContact = userContact,
+                    userClass = userClass,
+                    contentPadding = padding,
+                    onChangeClass = { showClassSheet = true },
+                    onSignedOut = onSignedOut,
+                )
+            }
         }
+    }
+
+    if (showClassSheet) {
+        ClassPickerSheet(
+            groups = viewModel.levelGroups,
+            selected = viewModel.scopeClass,
+            onPick = { level ->
+                viewModel.selectClass(level)
+                showClassSheet = false
+            },
+            onRetry = { viewModel.refresh() },
+            onDismiss = { showClassSheet = false },
+        )
     }
 }

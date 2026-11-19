@@ -75,17 +75,23 @@ fun initialsOf(name: String): String {
 }
 
 @Composable
-fun Avatar(name: String, size: Dp, modifier: Modifier = Modifier) {
+fun Avatar(
+    name: String,
+    size: Dp,
+    modifier: Modifier = Modifier,
+    container: Color = MaterialTheme.colorScheme.primaryContainer,
+    content: Color = MaterialTheme.colorScheme.onPrimaryContainer,
+) {
     Box(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primaryContainer),
+            .background(container),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = initialsOf(name),
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            color = content,
             fontFamily = Poppins,
             fontWeight = FontWeight.SemiBold,
             fontSize = (size.value * 0.36f).sp,

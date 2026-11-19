@@ -138,21 +138,55 @@ def walk():
     shot("app-02-create-account")
     tap(wait_for("Create account"))
 
+    # First run: the student says which class they are in.
+    wait_for("Which class are you in?")
+    time.sleep(1)
+    shot("app-03-choose-class")
+    tap(wait_for("Senior 2"))
+    wait_for("Continue as Senior 2")
+    shot("app-03b-class-chosen")
+    tap(wait_for("Continue as Senior 2"))
+
+    # Home shows the notes for Senior 2 only (and the ones for every class).
+    wait_for("Notes for Senior 2")
     wait_for("Photosynthesis", prefix=True)
+    wait_gone("Quadratic Equations", prefix=True)
     time.sleep(2)
-    shot("app-03-home")
+    shot("app-04-home")
 
     tap(wait_for("Biology"))
-    wait_gone("Quadratic Equations", prefix=True)
+    wait_gone("Acids, Bases and Salts", prefix=True)
     time.sleep(1)
-    shot("app-04-one-subject")
+    shot("app-05-one-subject")
     tap(wait_for("All"))
-    wait_for("Quadratic Equations", prefix=True)
+    wait_for("Acids, Bases and Salts", prefix=True)
 
+    # A note from another class is not found by a search inside Senior 2 ...
     type_into(0, "newton")
-    wait_gone("Photosynthesis", prefix=True)
-    shot("app-05-search")
+    wait_for("No matches")
+    shot("app-06-search-no-match")
+    # ... until the student widens the search to every class.
+    tap(wait_for("Search every class"))
+    wait_for("Newton's Laws of Motion", prefix=True)
+    shot("app-06b-search-every-class")
     tap(wait_for("Clear search"))
+    wait_for("Photosynthesis", prefix=True)
+
+    # Switch class from the header: another class has different notes.
+    tap(wait_for("All classes"))
+    wait_for("Choose your class")
+    time.sleep(1)
+    shot("app-07-class-sheet")
+    tap(wait_for("Senior 3"))
+    wait_for("Notes for Senior 3")
+    wait_for("Quadratic Equations", prefix=True)
+    wait_gone("Photosynthesis", prefix=True)
+    time.sleep(1)
+    shot("app-07b-another-class")
+    tap(wait_for("Senior 3"))
+    wait_for("Choose your class")
+    tap(wait_for("Senior 2"))
+    wait_for("Notes for Senior 2")
     wait_for("Photosynthesis", prefix=True)
 
     tap(wait_for("Save note"))
@@ -161,11 +195,12 @@ def walk():
     tap(wait_for("Saved"))
     wait_for("Notes you bookmarked on this phone")
     wait_for("Photosynthesis", prefix=True)
-    shot("app-06-saved")
+    shot("app-08-saved")
 
     tap(wait_for("Profile"))
     wait_for("Delete account")
-    shot("app-07-profile")
+    wait_for("Senior 2")
+    shot("app-09-profile")
 
     tap(wait_for("Home"))
     tap(wait_for("Photosynthesis", prefix=True))
@@ -173,24 +208,24 @@ def walk():
     wait_gone("Opening document…")
     wait_for("Ask AI")
     time.sleep(4)
-    shot("app-08-reading-a-document")
+    shot("app-10-reading-a-document")
 
     adb("shell", "input", "swipe", "540", "1700", "540", "500", "400")
     time.sleep(3)
-    shot("app-09-further-down-the-document")
+    shot("app-11-further-down-the-document")
 
     # Two taps 0.1s apart, started together because each `input` takes longer than that to start.
     adb("shell", "input tap 540 1100 & sleep 0.1; input tap 540 1100; wait")
     time.sleep(4)
-    shot("app-10-zoomed-in")
+    shot("app-12-zoomed-in")
     adb("shell", "input tap 540 1100 & sleep 0.1; input tap 540 1100; wait")
     time.sleep(3)
 
     tap(wait_for("Ask AI"))
     wait_for("Summarise this document")
-    shot("app-11-ask-ai")
+    shot("app-13-ask-ai")
     type_into(0, "What does a plant need for photosynthesis?")
-    shot("app-12-question-typed")
+    shot("app-14-question-typed")
 
     # No real Claude key exists in CI, so this only checks that a failed
     # answer shows a readable message instead of crashing.
@@ -203,13 +238,18 @@ def walk():
     adb("shell", "input", "keyevent", "4")
     wait_for("Home")
 
+    # Back on Home, the document just read is offered as "Continue reading".
+    wait_for("Continue reading")
+    time.sleep(1)
+    shot("app-15-home-continue-reading")
+
     night(True)
     wait_for("Photosynthesis", prefix=True)
-    shot("app-13-home-dark")
+    shot("app-16-home-dark")
     tap(wait_for("Photosynthesis", prefix=True))
     wait_for("Ask AI")
     time.sleep(4)
-    shot("app-14-reading-dark")
+    shot("app-17-reading-dark")
     adb("shell", "input", "keyevent", "4")
     wait_for("Home")
     night(False)
@@ -233,7 +273,7 @@ def walk():
     type_into(1, "wrongpass")
     tap(wait_for("Sign in"))
     wait_for("Incorrect phone number or password")
-    shot("app-15-wrong-password-message")
+    shot("app-18-wrong-password-message")
 
     # The same number written with its country code must reach the same account.
     clear_field(0)

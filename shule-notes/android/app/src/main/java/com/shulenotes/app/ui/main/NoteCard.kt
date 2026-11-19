@@ -22,7 +22,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,15 +33,42 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.shulenotes.app.data.Note
 import com.shulenotes.app.ui.components.SubjectTint
+import com.shulenotes.app.ui.components.subjectIcon
+import com.shulenotes.app.ui.theme.Poppins
 
 fun pagesLabel(pageCount: Int): String? = when {
     pageCount <= 0 -> null
     pageCount == 1 -> "1 page"
     else -> "$pageCount pages"
+}
+
+// The document's "cover": the subject's colour and picture, like a book jacket.
+@Composable
+fun NoteCover(subjectName: String?, tint: SubjectTint, modifier: Modifier = Modifier, width: Int = 64, height: Int = 84) {
+    Box(
+        modifier = modifier
+            .size(width = width.dp, height = height.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Brush.linearGradient(listOf(tint.coverStart, tint.coverEnd))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(subjectIcon(subjectName), contentDescription = null, tint = tint.onCover, modifier = Modifier.size((width * 0.46f).dp))
+        Text(
+            "PDF",
+            color = tint.onCover.copy(alpha = 0.85f),
+            fontFamily = Poppins,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 9.sp,
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 6.dp),
+        )
+    }
 }
 
 @Composable
@@ -57,20 +83,14 @@ fun NoteCard(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier.fillMaxWidth(),
     ) {
-        Row(modifier = Modifier.padding(start = 14.dp, top = 14.dp, bottom = 14.dp, end = 4.dp)) {
-            Box(
-                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(tint.container),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Outlined.Description, contentDescription = null, tint = tint.accent)
-            }
-            Spacer(Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f).padding(top = 2.dp)) {
+        Row(modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp)) {
+            NoteCover(subjectName, tint)
+            Column(modifier = Modifier.weight(1f).padding(start = 14.dp, top = 2.dp)) {
                 Text(
                     note.title,
                     style = MaterialTheme.typography.titleMedium,
@@ -83,7 +103,7 @@ fun NoteCard(
                         note.description,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
@@ -118,6 +138,7 @@ fun NoteCard(
                             tint = MaterialTheme.colorScheme.secondary,
                             modifier = Modifier.size(16.dp),
                         )
+                        Spacer(Modifier.width(6.dp))
                     }
                 }
             }
@@ -144,19 +165,19 @@ fun NoteCardSkeleton(modifier: Modifier = Modifier) {
     )
     val block = MaterialTheme.colorScheme.surfaceContainerHighest
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier.fillMaxWidth(),
     ) {
-        Row(modifier = Modifier.padding(14.dp).alpha(pulse)) {
-            Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(block))
+        Row(modifier = Modifier.padding(12.dp).alpha(pulse)) {
+            Box(Modifier.size(width = 64.dp, height = 84.dp).clip(RoundedCornerShape(14.dp)).background(block))
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Box(Modifier.fillMaxWidth(0.7f).height(16.dp).clip(RoundedCornerShape(6.dp)).background(block))
                 Spacer(Modifier.height(10.dp))
                 Box(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(6.dp)).background(block))
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(18.dp))
                 Box(Modifier.width(96.dp).height(20.dp).clip(CircleShape).background(block))
             }
         }

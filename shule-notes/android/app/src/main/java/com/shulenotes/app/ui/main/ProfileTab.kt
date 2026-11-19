@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PrivacyTip
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -55,7 +56,9 @@ fun ProfileTab(
     viewModel: LibraryViewModel,
     userName: String,
     userContact: String,
+    userClass: String,
     contentPadding: PaddingValues,
+    onChangeClass: () -> Unit,
     onSignedOut: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
@@ -88,6 +91,11 @@ fun ProfileTab(
                     }
                 }
             }
+        }
+
+        SectionLabel("Study")
+        SettingsCard {
+            SettingsRow(Icons.Outlined.School, "My class", trailingText = userClass.ifBlank { "Not chosen" }, onClick = onChangeClass)
         }
 
         SectionLabel("About")
@@ -203,7 +211,8 @@ private fun SettingsRow(
         Text(label, style = MaterialTheme.typography.bodyLarge, color = color, modifier = Modifier.weight(1f))
         if (trailingText != null) {
             Text(trailingText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else if (onClick != null) {
+        }
+        if (onClick != null) {
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,

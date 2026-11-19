@@ -18,6 +18,12 @@ interface ApiService {
     @POST("auth/logout")
     suspend fun logout(): SimpleResponse
 
+    @GET("levels")
+    suspend fun levels(): LevelsResponse
+
+    @POST("auth/class-level")
+    suspend fun setClassLevel(@Body body: Map<String, String>): UserResponse
+
     @POST("auth/delete-account")
     suspend fun deleteAccount(@Body body: Map<String, String>): SimpleResponse
 

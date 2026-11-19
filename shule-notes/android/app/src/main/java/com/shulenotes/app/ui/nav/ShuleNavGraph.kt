@@ -2,6 +2,7 @@ package com.shulenotes.app.ui.nav
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -15,12 +16,16 @@ import com.shulenotes.app.ui.auth.LoginScreen
 import com.shulenotes.app.ui.auth.RegisterScreen
 import com.shulenotes.app.ui.chat.AiChatScreen
 import com.shulenotes.app.ui.components.Notifier
+import com.shulenotes.app.ui.main.ChooseClassScreen
 import com.shulenotes.app.ui.main.MainScreen
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import com.shulenotes.app.ui.note.NoteDetailScreen
 
 object Routes {
     const val LOGIN = "login"
     const val REGISTER = "register"
+    const val CLASS = "class"
     const val MAIN = "main"
     const val NOTE = "note/{noteId}"
     const val CHAT = "chat/{noteId}"
@@ -31,6 +36,14 @@ fun ShuleNavGraph(startDestination: String) {
     val navController = rememberNavController()
     val toMain = { navController.navigate(Routes.MAIN) { popUpTo(0) } }
     val toLogin = { navController.navigate(Routes.LOGIN) { popUpTo(0) } }
+    val scope = rememberCoroutineScope()
+    // Someone who has not chosen a class yet is asked before seeing any notes.
+    val afterSignIn: () -> Unit = {
+        scope.launch {
+            val needsClass = ShuleApp.session.classLevel.first().isBlank()
+            navController.navigate(if (needsClass) Routes.CLASS else Routes.MAIN) { popUpTo(0) }
+        }
+    }
 
     // The server rejected the saved sign-in (it expired, or the account is gone).
     val expired by SessionHolder.expired.collectAsState()
@@ -48,16 +61,19 @@ fun ShuleNavGraph(startDestination: String) {
         composable(Routes.LOGIN) {
             LoginScreen(
                 viewModel = viewModel(),
-                onLoggedIn = toMain,
+                onLoggedIn = afterSignIn,
                 onGoToRegister = { navController.navigate(Routes.REGISTER) { launchSingleTop = true } },
             )
         }
         composable(Routes.REGISTER) {
             RegisterScreen(
                 viewModel = viewModel(),
-                onRegistered = toMain,
+                onRegistered = afterSignIn,
                 onGoToLogin = { navController.popBackStack() },
             )
+        }
+        composable(Routes.CLASS) {
+            ChooseClassScreen(viewModel = viewModel(), onDone = toMain)
         }
         composable(Routes.MAIN) {
             MainScreen(

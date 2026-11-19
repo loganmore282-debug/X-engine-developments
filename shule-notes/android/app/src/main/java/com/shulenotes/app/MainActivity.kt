@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.shulenotes.app.data.SessionHolder
+import kotlinx.coroutines.flow.first
 import com.shulenotes.app.ui.components.NotifierHost
 import com.shulenotes.app.ui.nav.Routes
 import com.shulenotes.app.ui.nav.ShuleNavGraph
@@ -32,7 +33,11 @@ class MainActivity : ComponentActivity() {
             // screen flash, and no request goes out without its token.
             LaunchedEffect(Unit) {
                 ShuleApp.session.primeSessionHolder()
-                startDestination = if (SessionHolder.token != null) Routes.MAIN else Routes.LOGIN
+                startDestination = when {
+                    SessionHolder.token == null -> Routes.LOGIN
+                    ShuleApp.session.classLevel.first().isBlank() -> Routes.CLASS
+                    else -> Routes.MAIN
+                }
             }
 
             ShuleNotesTheme {

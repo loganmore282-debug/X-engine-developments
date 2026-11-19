@@ -1,24 +1,37 @@
 package com.shulenotes.app.ui.main
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Search
@@ -27,25 +40,38 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.shulenotes.app.data.Note
+import com.shulenotes.app.data.RecentNote
 import com.shulenotes.app.ui.components.Avatar
 import com.shulenotes.app.ui.components.StateMessage
+import com.shulenotes.app.ui.components.StatusBarIcons
+import com.shulenotes.app.ui.components.SubjectTint
+import com.shulenotes.app.ui.components.subjectIcon
 import com.shulenotes.app.ui.components.subjectTint
+import com.shulenotes.app.ui.theme.Poppins
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,13 +79,23 @@ fun HomeTab(
     viewModel: LibraryViewModel,
     userName: String,
     savedIds: Set<String>,
+    recent: List<RecentNote>,
     contentPadding: PaddingValues,
     onOpenNote: (String) -> Unit,
     onOpenProfile: () -> Unit,
+    onChangeClass: () -> Unit,
 ) {
-    val focus = LocalFocusManager.current
+    // The header is dark green under the status bar, so its icons must be light.
+    StatusBarIcons(light = true)
+
     val visible = viewModel.visibleNotes()
     val searching = viewModel.query.isNotBlank()
+    val scope = viewModel.scopeClass
+    val tiles = viewModel.subjectsInScope()
+    val resume = remember(recent, viewModel.notes) {
+        recent.firstNotNullOfOrNull { r -> viewModel.notes.firstOrNull { it.id == r.id }?.let { it to r } }
+    }
+    val showResume = resume != null && !searching && viewModel.selectedSubjectId == null && !viewModel.isLoading
 
     PullToRefreshBox(
         isRefreshing = viewModel.isRefreshing,
@@ -68,73 +104,62 @@ fun HomeTab(
     ) {
         LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
             item(key = "header") {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        val firstName = userName.trim().substringBefore(' ')
-                        Text(
-                            if (firstName.isEmpty()) "Hello" else "Hello, $firstName",
-                            style = MaterialTheme.typography.headlineSmall,
-                            maxLines = 1,
-                        )
-                        Text(
-                            "What are you studying today?",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Avatar(
-                        name = userName,
-                        size = 44.dp,
-                        modifier = Modifier.clip(CircleShape).clickable(onClickLabel = "Open profile", onClick = onOpenProfile),
+                HomeHeader(
+                    userName = userName,
+                    className = scope,
+                    query = viewModel.query,
+                    onQuery = { viewModel.updateQuery(it) },
+                    onChangeClass = onChangeClass,
+                    onOpenProfile = onOpenProfile,
+                )
+            }
+
+            if (showResume && resume != null) {
+                val (note, progress) = resume
+                item(key = "resume") {
+                    SectionTitle("Continue reading", Modifier.padding(top = 22.dp))
+                    ContinueCard(
+                        note = note,
+                        subjectName = viewModel.subjectName(note.subjectId),
+                        tint = subjectTint(note.subjectId, viewModel.subjects),
+                        page = progress.page,
+                        pageCount = if (progress.pageCount > 0) progress.pageCount else note.pageCount,
+                        onClick = { onOpenNote(note.id) },
                     )
                 }
             }
 
-            item(key = "search") {
-                OutlinedTextField(
-                    value = viewModel.query,
-                    onValueChange = { viewModel.updateQuery(it) },
-                    placeholder = { Text("Search notes and past papers") },
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                    trailingIcon = if (searching) {
-                        {
-                            IconButton(onClick = { viewModel.updateQuery("") }) {
-                                Icon(Icons.Filled.Close, contentDescription = "Clear search")
-                            }
-                        }
-                    } else {
-                        null
-                    },
-                    singleLine = true,
-                    shape = CircleShape,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                    ),
-                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp),
-                )
-            }
-
-            if (viewModel.subjects.isNotEmpty()) {
+            if (tiles.isNotEmpty() && !viewModel.isLoading) {
                 item(key = "subjects") {
+                    SectionTitle("Subjects", Modifier.padding(top = 22.dp))
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 20.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         item(key = "all") {
-                            SubjectChip("All", viewModel.selectedSubjectId == null) { viewModel.selectSubject(null) }
+                            SubjectTile(
+                                label = "All",
+                                icon = Icons.Filled.Apps,
+                                tint = SubjectTint(
+                                    accent = MaterialTheme.colorScheme.primary,
+                                    container = MaterialTheme.colorScheme.primaryContainer,
+                                    coverStart = MaterialTheme.colorScheme.primary,
+                                    coverEnd = MaterialTheme.colorScheme.primary,
+                                    onCover = MaterialTheme.colorScheme.onPrimary,
+                                ),
+                                isSelected = viewModel.selectedSubjectId == null,
+                                onClick = { viewModel.selectSubject(null) },
+                            )
                         }
-                        items(viewModel.subjects, key = { it.id }) { subject ->
-                            SubjectChip(subject.name, viewModel.selectedSubjectId == subject.id) {
-                                viewModel.selectSubject(subject.id)
-                            }
+                        items(tiles, key = { it.id }) { subject ->
+                            SubjectTile(
+                                label = subject.name,
+                                icon = subjectIcon(subject.name),
+                                tint = subjectTint(subject.id, viewModel.subjects),
+                                isSelected = viewModel.selectedSubjectId == subject.id,
+                                onClick = { viewModel.selectSubject(subject.id) },
+                            )
                         }
                     }
                 }
@@ -142,16 +167,20 @@ fun HomeTab(
 
             item(key = "section") {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 10.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         when {
                             searching -> "Search results"
-                            else -> viewModel.subjectName(viewModel.selectedSubjectId) ?: "All notes"
+                            viewModel.selectedSubjectId != null -> viewModel.subjectName(viewModel.selectedSubjectId) ?: "Notes"
+                            scope != null -> "Notes for $scope"
+                            else -> "All notes"
                         },
                         style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     if (!viewModel.isLoading && visible.isNotEmpty()) {
                         Text(
@@ -181,48 +210,266 @@ fun HomeTab(
                     StateMessage(
                         icon = Icons.Outlined.SearchOff,
                         title = "No matches",
-                        body = "Nothing matches “${viewModel.query.trim()}”. Try a different word.",
+                        body = "Nothing matches “${viewModel.query.trim()}”" + (if (scope != null) " in $scope." else "."),
+                        actionLabel = if (scope != null) "Search every class" else null,
+                        onAction = if (scope != null) ({ viewModel.selectClass(null) }) else null,
                     )
                 }
                 visible.isEmpty() -> item(key = "empty") {
                     StateMessage(
                         icon = Icons.Outlined.Description,
-                        title = "No notes here yet",
-                        body = "New notes and past papers will appear here as soon as they are added.",
+                        title = if (scope != null) "No notes for $scope yet" else "No notes yet",
+                        body = "New notes and past papers appear here as soon as they are added.",
+                        actionLabel = if (scope != null) "Show every class" else null,
+                        onAction = if (scope != null) ({ viewModel.selectClass(null) }) else null,
                     )
                 }
-                else -> {
-                    items(visible, key = { it.id }) { note ->
-                        NoteCard(
-                            note = note,
-                            subjectName = viewModel.subjectName(note.subjectId),
-                            tint = subjectTint(note.subjectId, viewModel.subjects),
-                            saved = note.id in savedIds,
-                            onClick = { onOpenNote(note.id) },
-                            onToggleSaved = { viewModel.toggleSaved(note.id) },
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 5.dp),
-                        )
-                    }
+                else -> items(visible, key = { it.id }) { note ->
+                    NoteCard(
+                        note = note,
+                        subjectName = viewModel.subjectName(note.subjectId),
+                        tint = subjectTint(note.subjectId, viewModel.subjects),
+                        saved = note.id in savedIds,
+                        onClick = { onOpenNote(note.id) },
+                        onToggleSaved = { viewModel.toggleSaved(note.id) },
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 5.dp),
+                    )
                 }
             }
         }
     }
 }
 
+// Dark green header that runs up under the status bar: greeting, the
+// student's class (tap to change it), and the search bar half on, half off.
 @Composable
-private fun SubjectChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
+private fun HomeHeader(
+    userName: String,
+    className: String?,
+    query: String,
+    onQuery: (String) -> Unit,
+    onChangeClass: () -> Unit,
+    onOpenProfile: () -> Unit,
+) {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val gradient = Brush.verticalGradient(
+        if (dark) listOf(Color(0xFF15553D), Color(0xFF0C3A2A)) else listOf(Color(0xFF1D8059), Color(0xFF0E4D35)),
+    )
+    val firstName = userName.trim().substringBefore(' ')
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+                .background(gradient)
+                .statusBarsPadding()
+                .padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 48.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        if (firstName.isEmpty()) "Hello" else "Hello, $firstName",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color.White,
+                        maxLines = 1,
+                    )
+                    Text(
+                        "What are you studying today?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.78f),
+                    )
+                }
+                Avatar(
+                    name = userName,
+                    size = 46.dp,
+                    container = Color.White.copy(alpha = 0.18f),
+                    content = Color.White,
+                    modifier = Modifier
+                        .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                        .clip(CircleShape)
+                        .clickable(onClickLabel = "Open profile", onClick = onOpenProfile),
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            ClassChip(className = className, onClick = onChangeClass)
+        }
+
+        SearchField(
+            query = query,
+            onQuery = onQuery,
+            modifier = Modifier.align(Alignment.BottomCenter).offset(y = 26.dp).padding(horizontal = 20.dp),
+        )
+    }
+    Spacer(Modifier.height(30.dp))
+}
+
+@Composable
+private fun ClassChip(className: String?, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = 0.16f))
+            .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
+            .clickable(onClickLabel = "Change class", onClick = onClick)
+            .padding(start = 14.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.School, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(
+            className ?: "All classes",
+            color = Color.White,
+            fontFamily = Poppins,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelLarge,
+        )
+        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+    }
+}
+
+@Composable
+private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modifier = Modifier) {
+    val focus = LocalFocusManager.current
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 8.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        TextField(
+            value = query,
+            onValueChange = onQuery,
+            placeholder = { Text("Search notes and past papers") },
+            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+            trailingIcon = if (query.isNotBlank()) {
+                {
+                    IconButton(onClick = { onQuery("") }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Clear search")
+                    }
+                }
+            } else {
+                null
+            },
+            singleLine = true,
+            shape = CircleShape,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleLarge,
+        modifier = modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
+    )
+}
+
+// The document the student was last reading, with how far they got.
+@Composable
+private fun ContinueCard(
+    note: Note,
+    subjectName: String?,
+    tint: SubjectTint,
+    page: Int,
+    pageCount: Int,
+    onClick: () -> Unit,
+) {
+    val fraction = if (pageCount > 0) (page.toFloat() / pageCount).coerceIn(0.04f, 1f) else 0.04f
     Surface(
         onClick = onClick,
-        shape = CircleShape,
-        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        border = if (isSelected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier.semantics { selected = isSelected; role = Role.Tab },
+        shape = RoundedCornerShape(26.dp),
+        color = Color.Transparent,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
     ) {
+        Row(
+            modifier = Modifier
+                .background(Brush.linearGradient(listOf(tint.coverStart, tint.coverEnd)))
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(subjectIcon(subjectName), contentDescription = null, tint = tint.onCover, modifier = Modifier.size(28.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    note.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = tint.onCover,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (pageCount > 0) "Page $page of $pageCount" else "Page $page",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tint.onCover.copy(alpha = 0.85f),
+                )
+                Spacer(Modifier.height(10.dp))
+                Box(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(tint.onCover.copy(alpha = 0.25f))) {
+                    Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().clip(CircleShape).background(tint.onCover))
+                }
+            }
+            Spacer(Modifier.width(14.dp))
+            Box(
+                modifier = Modifier.size(44.dp).clip(CircleShape).background(tint.onCover),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.PlayArrow,
+                    contentDescription = "Continue reading",
+                    tint = tint.coverEnd.copy(alpha = 1f),
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubjectTile(label: String, icon: ImageVector, tint: SubjectTint, isSelected: Boolean, onClick: () -> Unit) {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val iconOnAccent = if (dark) Color(0xFF0B0F0D) else Color.White
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(72.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .semantics { selected = isSelected; role = Role.Tab },
+    ) {
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(if (isSelected) tint.accent else tint.container),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = if (isSelected) iconOnAccent else tint.accent, modifier = Modifier.size(30.dp))
+        }
+        Spacer(Modifier.height(8.dp))
         Text(
             label,
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+            color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
