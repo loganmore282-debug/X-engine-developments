@@ -155,7 +155,10 @@ def walk():
     adb("shell", "am", "start", "-n", f"{PKG}/.MainActivity")
 
     # The splash screen: the logo on the brand green, for a moment, before the introduction.
-    time.sleep(0.9)
+    # Android 12+ draws its own launch screen first, then ours: photograph both.
+    time.sleep(0.3)
+    shot("app-00-splash-system")
+    time.sleep(1.0)
     shot("app-00-splash")
 
     # First launch, never signed in: the introduction (the three slides made in the admin panel).

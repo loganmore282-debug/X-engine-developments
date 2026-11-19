@@ -1,5 +1,5 @@
 <resources>
-    <!-- Android 12+ shows its own launch screen: the logo on a white disc over the brand green.
+    <!-- Android 12+ shows its own launch screen: the logo mark on white.
          The in-app splash screen (ui/splash) continues from exactly this. -->
     <style name="Theme.ShuleNotes" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/splash_background</item>

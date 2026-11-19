@@ -1,5 +1,5 @@
 <resources>
-    <!-- Same launch screen in dark mode: the logo's dark green needs the white disc under it. -->
+    <!-- Same white launch screen in dark mode: the logo's dark green needs a light background. -->
     <style name="Theme.ShuleNotes" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/splash_background</item>
         <item name="android:windowSplashScreenBackground">@color/splash_background</item>

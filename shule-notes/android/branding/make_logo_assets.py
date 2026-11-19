@@ -55,3 +55,9 @@ legacy = Image.new("RGBA", (192, 192), (0, 0, 0, 0))
 ImageDraw.Draw(legacy).rounded_rectangle((8, 8, 184, 184), radius=40, fill=(255, 255, 255, 255))
 legacy.alpha_composite(mark_of(green, 192, 0.66))
 legacy.save(f"{res}/mipmap-xxxhdpi/ic_launcher_legacy.png")
+
+# The whole logo (the mark with the "ShuleNotes" lettering under it), for the splash screen.
+FULL = (90, 140, 1165, 1075)
+full = transparent(green).crop(FULL)
+full = full.resize((1000, round(full.height * 1000 / full.width)), Image.LANCZOS)
+full.save(f"{res}/drawable-nodpi/logo_full.png", optimize=True)

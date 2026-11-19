@@ -7,15 +7,14 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
@@ -26,96 +25,74 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import com.shulenotes.app.R
 import com.shulenotes.app.ui.components.StatusBarIcons
-import com.shulenotes.app.ui.theme.Poppins
 
-// The first thing seen when the app opens: the logo on the brand green, which then gives way to the app.
-// Android 12 and newer draw their own launch screen for a moment first (a white disc with the logo on the
-// same green), so this picks up from exactly that look.
+// The first thing seen when the app opens: the whole Shule Notes logo (the mark with its lettering) on white,
+// with a soft green glow behind it, a line underneath and a thin bar that fills while the app gets ready.
+// Android 12 and newer draw their own launch screen for a moment first (the mark on the same white), so this
+// picks up from it.
 @Composable
 fun SplashScreen() {
-    StatusBarIcons(light = true)
+    StatusBarIcons(light = false) // dark clock and battery on the white screen
     val logo = remember { Animatable(0f) }
-    val words = remember { Animatable(0f) }
+    val line = remember { Animatable(0f) }
     val bar = remember { Animatable(0f) }
 
+    LaunchedEffect(Unit) { logo.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessLow)) }
     LaunchedEffect(Unit) {
-        logo.animateTo(1f, spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessLow))
+        kotlinx.coroutines.delay(380)
+        line.animateTo(1f, tween(520))
     }
-    LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(260)
-        words.animateTo(1f, tween(520))
-    }
-    LaunchedEffect(Unit) {
-        bar.animateTo(1f, tween(1250, easing = LinearEasing))
-    }
+    LaunchedEffect(Unit) { bar.animateTo(1f, tween(1250, easing = LinearEasing)) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF176E4C), Color(0xFF0F4D35)))),
+            .background(Color.White)
+            // A soft green glow centred behind the logo.
+            .drawBehind {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0x241F7F59), Color(0x00FFFFFF)),
+                        center = Offset(size.width / 2f, size.height * 0.46f),
+                        radius = size.width * 0.9f,
+                    ),
+                    radius = size.width * 0.9f,
+                    center = Offset(size.width / 2f, size.height * 0.46f),
+                )
+            },
     ) {
-        // Two soft circles for depth, as in the Home header.
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 40.dp)
-                .size(260.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.05f)),
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .size(220.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.04f)),
-        )
-
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
         ) {
-            Box(
+            Image(
+                painter = painterResource(R.drawable.logo_full),
+                contentDescription = "Shule Notes",
                 modifier = Modifier
-                    .scale(0.72f + 0.28f * logo.value)
-                    .alpha(logo.value.coerceIn(0f, 1f))
-                    .size(148.dp)
-                    .clip(CircleShape)
-                    .background(Color.White),
-                contentAlignment = Alignment.Center,
-            ) {
-                Image(painterResource(R.drawable.logo_mark), contentDescription = "Shule Notes", modifier = Modifier.size(96.dp))
-            }
-            Spacer(Modifier.height(28.dp))
-            Text(
-                "ShuleNotes",
-                color = Color.White,
-                fontFamily = Poppins,
-                fontWeight = FontWeight.Bold,
-                fontSize = 30.sp,
-                modifier = Modifier.alpha(words.value).padding(top = ((1f - words.value) * 12f).dp),
+                    .fillMaxWidth(0.66f)
+                    .scale(0.82f + 0.18f * logo.value)
+                    .alpha(logo.value.coerceIn(0f, 1f)),
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(22.dp))
             Text(
                 "Study smarter, anywhere.",
-                color = Color.White.copy(alpha = 0.80f),
+                color = Color(0xFF3E5A4E),
                 fontSize = 15.sp,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.alpha(words.value),
+                modifier = Modifier.alpha(line.value).padding(top = ((1f - line.value) * 10f).dp),
             )
         }
 
@@ -128,9 +105,9 @@ fun SplashScreen() {
                 .width(96.dp)
                 .height(3.dp)
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.22f))
+                .background(Color(0x1F1F7F59))
                 .drawBehind {
-                    drawRect(Color.White, size = Size(size.width * bar.value, size.height), topLeft = Offset.Zero)
+                    drawRect(Color(0xFF1F7F59), size = Size(size.width * bar.value, size.height), topLeft = Offset.Zero)
                 },
         )
     }
