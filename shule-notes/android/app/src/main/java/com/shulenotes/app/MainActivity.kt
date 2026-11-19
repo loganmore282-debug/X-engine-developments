@@ -25,6 +25,8 @@ import com.shulenotes.app.ui.components.AppConfigHolder
 import com.shulenotes.app.ui.components.NotifierHost
 import com.shulenotes.app.ui.components.UpdateRequiredScreen
 import com.shulenotes.app.ui.nav.Routes
+import com.shulenotes.app.ui.splash.SplashScreen
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.shulenotes.app.ui.nav.ShuleNavGraph
 import com.shulenotes.app.ui.theme.ShuleNotesTheme
 
@@ -74,13 +76,22 @@ class MainActivity : ComponentActivity() {
 
             ShuleNotesTheme(darkTheme = dark) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    if (mustUpdate) {
+                    // The splash holds for at least a moment (so it reads as a launch screen, not a flicker) and
+                    // for as long as the saved sign-in is still being read; then the app fades in.
+                    var splashTimeUp by rememberSaveable { mutableStateOf(false) }
+                    LaunchedEffect(Unit) { kotlinx.coroutines.delay(1400); splashTimeUp = true }
+                    val ready = splashTimeUp && startDestination != null
+                    androidx.compose.animation.Crossfade(targetState = ready, animationSpec = androidx.compose.animation.core.tween(380), label = "splash") { isReady ->
+                    if (!isReady) {
+                        SplashScreen()
+                    } else if (mustUpdate) {
                         UpdateRequiredScreen(
                             note = appConfig.updateNote,
                             onUpdate = { runCatching { uriHandler.openUri(appConfig.updateUrl.ifBlank { DOWNLOAD_URL }) } },
                         )
                     } else {
                         startDestination?.let { ShuleNavGraph(startDestination = it) }
+                    }
                     }
                     NotifierHost()
                 }

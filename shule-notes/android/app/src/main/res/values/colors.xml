@@ -1,5 +1,6 @@
 <resources>
     <color name="notification_accent">#17694B</color>
+    <color name="splash_background">#135D41</color>
     <color name="window_background">#F7F5F0</color>
     <color name="launcher_background">#FFFFFF</color>
 </resources>

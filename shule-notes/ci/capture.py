@@ -152,6 +152,10 @@ def walk():
     tidy_status_bar()
     adb("shell", "am", "start", "-n", f"{PKG}/.MainActivity")
 
+    # The splash screen: the logo on the brand green, for a moment, before the introduction.
+    time.sleep(0.9)
+    shot("app-00-splash")
+
     # First launch, never signed in: the introduction (the three slides made in the admin panel).
     wait_for("Continue")
     wait_for("Skip")

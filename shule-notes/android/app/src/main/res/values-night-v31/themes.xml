@@ -1,8 +1,8 @@
 <resources>
-    <!-- The logo's dark green would vanish on a dark background, so it sits on a white disc. -->
+    <!-- Same launch screen in dark mode: the logo's dark green needs the white disc under it. -->
     <style name="Theme.ShuleNotes" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/window_background</item>
-        <item name="android:windowSplashScreenBackground">@color/window_background</item>
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
         <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
         <item name="android:windowSplashScreenIconBackgroundColor">@color/launcher_background</item>
     </style>

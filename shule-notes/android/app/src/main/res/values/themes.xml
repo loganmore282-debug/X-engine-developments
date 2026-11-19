@@ -1,8 +1,10 @@
 <resources>
     <!-- Only governs the window before Compose content draws. All real
          theming lives in Kotlin (ui/theme). Extends the platform's own base
-         theme so the app needs no classic (non-Compose) Material library. -->
+         theme so the app needs no classic (non-Compose) Material library.
+         The first frame is the brand green, so older phones (which have no
+         system launch screen) never flash white before the splash screen. -->
     <style name="Theme.ShuleNotes" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:windowBackground">@color/splash_background</item>
     </style>
 </resources>
