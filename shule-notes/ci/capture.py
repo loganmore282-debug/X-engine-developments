@@ -175,6 +175,14 @@ def walk():
     wait_for("Mock exams start on Monday")
     time.sleep(2)
     shot("app-04-home")
+
+    # The bell: one unread announcement, then the notifications page.
+    tap(wait_for("Notifications"))
+    wait_for("New")
+    time.sleep(1)
+    shot("app-04a-notifications")
+    adb("shell", "input", "keyevent", "4")
+    wait_for("Notes for Senior 2")
     tap(wait_for("Dismiss"))
     wait_gone("Mock exams start on Monday")
 
@@ -242,6 +250,17 @@ def walk():
     wait_for("Change my name")
     wait_for("Senior 2")
     shot("app-09-profile")
+
+    # Appearance: force dark, then put it back to follow the phone.
+    tap(wait_for("Appearance"))
+    wait_for("Light")
+    shot("app-09a0-appearance")
+    tap(wait_for("Dark"))
+    time.sleep(2)
+    shot("app-09a1-forced-dark")
+    tap(wait_for("Appearance"))
+    tap(wait_for("System default"))
+    time.sleep(2)
 
     # Change the name.
     tap(wait_for("Change my name"))

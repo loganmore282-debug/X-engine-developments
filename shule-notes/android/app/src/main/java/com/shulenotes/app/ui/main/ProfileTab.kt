@@ -1,5 +1,6 @@
 package com.shulenotes.app.ui.main
 
+import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -24,7 +25,9 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PrivacyTip
@@ -35,11 +38,14 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -47,10 +53,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.shulenotes.app.BuildConfig
+import com.shulenotes.app.ShuleApp
+import kotlinx.coroutines.launch
+import com.shulenotes.app.ui.auth.DOWNLOAD_URL
 import com.shulenotes.app.ui.auth.PRIVACY_URL
 import com.shulenotes.app.ui.auth.TERMS_URL
 import com.shulenotes.app.ui.components.AppConfigHolder
@@ -74,6 +84,10 @@ fun ProfileTab(
     var editName by rememberSaveable { mutableStateOf(false) }
     var changePassword by rememberSaveable { mutableStateOf(false) }
     var showHelp by rememberSaveable { mutableStateOf(false) }
+    var showAppearance by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val themeMode by ShuleApp.session.themeMode.collectAsState(initial = "system")
 
     Column(
         modifier = Modifier
@@ -106,6 +120,11 @@ fun ProfileTab(
         SectionLabel("Study")
         SettingsCard {
             SettingsRow(Icons.Outlined.School, "My class", trailingText = userClass.ifBlank { "Not chosen" }, onClick = onChangeClass)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
+            SettingsRow(
+                Icons.Outlined.Palette, "Appearance",
+                trailingText = when (themeMode) { "light" -> "Light"; "dark" -> "Dark"; else -> "System default" },
+            ) { showAppearance = true }
         }
 
         SectionLabel("Account details")
@@ -118,6 +137,14 @@ fun ProfileTab(
         SectionLabel("Help and about")
         SettingsCard {
             SettingsRow(Icons.Outlined.HelpOutline, "Help and support") { showHelp = true }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
+            SettingsRow(Icons.Outlined.Share, "Share Shule Notes") {
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, "Study with Shule Notes: notes and past papers for every class, with an AI study helper.\n$DOWNLOAD_URL")
+                }
+                runCatching { context.startActivity(Intent.createChooser(send, "Share Shule Notes")) }
+            }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
             SettingsRow(Icons.Outlined.Description, "Terms of use") { runCatching { uriHandler.openUri(TERMS_URL) } }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
@@ -136,6 +163,34 @@ fun ProfileTab(
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
+
+    if (showAppearance) {
+        AlertDialog(
+            onDismissRequest = { showAppearance = false },
+            title = { Text("Appearance") },
+            text = {
+                Column {
+                    listOf("system" to "System default", "light" to "Light", "dark" to "Dark").forEach { (mode, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    scope.launch { ShuleApp.session.setThemeMode(mode) }
+                                    showAppearance = false
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = themeMode == mode, onClick = null)
+                            Spacer(Modifier.width(12.dp))
+                            Text(label, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showAppearance = false }) { Text("Close") } },
+        )
     }
 
     if (showHelp) {

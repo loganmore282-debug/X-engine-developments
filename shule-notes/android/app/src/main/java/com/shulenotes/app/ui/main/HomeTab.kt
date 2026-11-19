@@ -34,10 +34,13 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.outlined.Campaign
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,11 +50,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -91,6 +101,8 @@ fun HomeTab(
     onOpenNote: (String) -> Unit,
     onOpenProfile: () -> Unit,
     onChangeClass: () -> Unit,
+    unreadCount: Int,
+    onOpenNotifications: () -> Unit,
 ) {
     // The header is dark green under the status bar, so its icons must be light.
     StatusBarIcons(light = true)
@@ -104,10 +116,23 @@ fun HomeTab(
     }
     val showResume = resume != null && !searching && viewModel.selectedSubjectId == null && !viewModel.isLoading
 
+    val pullState = rememberPullToRefreshState()
+    var headerPx by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+
     PullToRefreshBox(
         isRefreshing = viewModel.isRefreshing,
         onRefresh = { viewModel.refresh() },
+        state = pullState,
         modifier = Modifier.fillMaxSize().padding(contentPadding),
+        // The spinner appears BELOW the green header, not on top of the greeting.
+        indicator = {
+            PullToRefreshDefaults.Indicator(
+                state = pullState,
+                isRefreshing = viewModel.isRefreshing,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = with(density) { headerPx.toDp() } + 34.dp),
+            )
+        },
     ) {
         LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
             item(key = "header") {
@@ -118,6 +143,9 @@ fun HomeTab(
                     onQuery = { viewModel.updateQuery(it) },
                     onChangeClass = onChangeClass,
                     onOpenProfile = onOpenProfile,
+                    unreadCount = unreadCount,
+                    onOpenNotifications = onOpenNotifications,
+                    onHeight = { headerPx = it },
                 )
             }
 
@@ -269,6 +297,9 @@ private fun HomeHeader(
     onQuery: (String) -> Unit,
     onChangeClass: () -> Unit,
     onOpenProfile: () -> Unit,
+    unreadCount: Int,
+    onOpenNotifications: () -> Unit,
+    onHeight: (Int) -> Unit,
 ) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val gradient = Brush.verticalGradient(
@@ -276,7 +307,7 @@ private fun HomeHeader(
     )
     val firstName = userName.trim().substringBefore(' ')
 
-    Box(modifier = Modifier.fillMaxWidth()) {
+    Box(modifier = Modifier.fillMaxWidth().onSizeChanged { onHeight(it.height) }) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -303,6 +334,27 @@ private fun HomeHeader(
                         color = Color.White.copy(alpha = 0.78f),
                     )
                 }
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.14f))
+                        .clickable(onClickLabel = "Open notifications", onClick = onOpenNotifications),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    BadgedBox(
+                        badge = {
+                            if (unreadCount > 0) {
+                                Badge(containerColor = Color(0xFFFFB020), contentColor = Color(0xFF3A2A00)) {
+                                    Text(if (unreadCount > 9) "9+" else unreadCount.toString())
+                                }
+                            }
+                        },
+                    ) {
+                        Icon(Icons.Outlined.Notifications, contentDescription = "Notifications", tint = Color.White)
+                    }
+                }
+                Spacer(Modifier.width(10.dp))
                 Avatar(
                     name = userName,
                     size = 46.dp,

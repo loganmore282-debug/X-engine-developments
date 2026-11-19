@@ -64,8 +64,15 @@ function makeDb() {
           let list = rows(name).filter((d) => matches(d, filter));
           const cursor = {
             sort(spec) {
-              const [key, dir] = Object.entries(spec)[0];
-              list = [...list].sort((a, b) => cmp(a[key] ?? 0, b[key] ?? 0) * dir);
+              // Every key in the spec counts, in order (later keys break ties), like MongoDB.
+              const keys = Object.entries(spec);
+              list = [...list].sort((a, b) => {
+                for (const [key, dir] of keys) {
+                  const c = cmp(a[key] ?? 0, b[key] ?? 0) * dir;
+                  if (c !== 0) return c;
+                }
+                return 0;
+              });
               return cursor;
             },
             skip(n) { list = list.slice(n); return cursor; },

@@ -132,6 +132,7 @@ const sendResult = (res, result, extra = {}) => (result.ok
 // Contacts and switches the app and the sign-in screen need before anyone is signed in.
 app.get('/config', ah(async (req, res) => res.json({ status: 'success', config: publicConfig(await getSettings()) })));
 
+app.get('/announcements', requireAuth, ah(async (req, res) => res.json({ status: 'success', announcements: await adminData.listActiveAnnouncements() })));
 app.get('/announcement', requireAuth, ah(async (req, res) => res.json({ status: 'success', announcement: await adminData.activeAnnouncement() })));
 
 app.post('/auth/change-password', authLimiter, requireAuth, ah(async (req, res) => {

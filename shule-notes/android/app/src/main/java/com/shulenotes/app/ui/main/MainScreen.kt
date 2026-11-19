@@ -3,6 +3,7 @@ package com.shulenotes.app.ui.main
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
@@ -22,6 +23,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +34,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.shulenotes.app.ShuleApp
 import com.shulenotes.app.data.RecentNote
+import com.shulenotes.app.ui.components.parseIsoMillis
+import kotlinx.coroutines.launch
 
 private class MainTab(val label: String, val icon: ImageVector, val selectedIcon: ImageVector)
 
@@ -51,8 +55,18 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onSign
     val userContact by ShuleApp.session.userContact.collectAsState(initial = "")
     val userClass by ShuleApp.session.classLevel.collectAsState(initial = "")
 
-    BackHandler(enabled = tab != 0) { tab = 0 }
+    // The bell: how many announcements arrived since the student last opened the page.
+    // Until the saved time is read, nothing counts as unread (so no badge flashes up).
+    val seenAt by ShuleApp.session.notificationsSeenAt.collectAsState(initial = Long.MAX_VALUE)
+    var showNotifications by rememberSaveable { mutableStateOf(false) }
+    var seenAtOnOpen by rememberSaveable { mutableStateOf(0L) }
+    val scope = rememberCoroutineScope()
+    val unread = viewModel.notifications.count { parseIsoMillis(it.createdAt) > seenAt }
 
+    BackHandler(enabled = tab != 0) { tab = 0 }
+    BackHandler(enabled = showNotifications) { showNotifications = false }
+
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         // The home header runs up under the status bar, so each tab handles that inset itself.
@@ -88,6 +102,12 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onSign
                 onOpenNote = onOpenNote,
                 onOpenProfile = { tab = 2 },
                 onChangeClass = { showClassSheet = true },
+                unreadCount = unread,
+                onOpenNotifications = {
+                    seenAtOnOpen = if (seenAt == Long.MAX_VALUE) 0L else seenAt
+                    showNotifications = true
+                    scope.launch { ShuleApp.session.markNotificationsSeen(System.currentTimeMillis()) }
+                },
             )
             1 -> Box(Modifier.statusBarsPadding()) { SavedTab(viewModel, savedIds, padding, onOpenNote) }
             else -> Box(Modifier.statusBarsPadding()) {
@@ -102,6 +122,15 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onSign
                 )
             }
         }
+    }
+
+    if (showNotifications) {
+        NotificationsScreen(
+            items = viewModel.notifications,
+            seenAtOnOpen = seenAtOnOpen,
+            onBack = { showNotifications = false },
+        )
+    }
     }
 
     if (showClassSheet) {

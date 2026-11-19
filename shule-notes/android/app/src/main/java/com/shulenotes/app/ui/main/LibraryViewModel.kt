@@ -58,6 +58,10 @@ class LibraryViewModel : ViewModel() {
     var announcement by mutableStateOf<Announcement?>(null)
         private set
 
+    // Everything in the bell's inbox: the owner's live announcements, newest first.
+    var notifications by mutableStateOf<List<Announcement>>(emptyList())
+        private set
+
     var isSavingProfile by mutableStateOf(false)
         private set
     var profileError by mutableStateOf<String?>(null)
@@ -122,7 +126,7 @@ class LibraryViewModel : ViewModel() {
                     val notesCall = async { ApiClient.service.notes().notes ?: emptyList() }
                     // These three are nice to have: failing must not stop the notes from showing.
                     val levelsCall = async { try { ApiClient.service.levels().groups ?: emptyList() } catch (e: Exception) { levelGroups } }
-                    val announcementCall = async { try { ApiClient.service.announcement().announcement } catch (e: Exception) { null } }
+                    val notificationsCall = async { try { ApiClient.service.announcements().announcements ?: emptyList() } catch (e: Exception) { notifications } }
                     val configCall = async { AppConfigHolder.refresh() }
 
                     val loadedSubjects = subjectsCall.await()
@@ -135,7 +139,8 @@ class LibraryViewModel : ViewModel() {
                     NoteCache.put(loadedNotes)
                     initScope()
                     if (subjectsInScope().none { it.id == selectedSubjectId }) selectedSubjectId = null
-                    announcement = announcementCall.await()?.takeIf { it.id != dismissed }
+                    notifications = notificationsCall.await()
+                    announcement = notifications.firstOrNull()?.takeIf { it.id != dismissed }
                     configCall.await()
                     ShuleApp.session.saveLibrary(Gson().toJson(LibrarySnapshot(loadedSubjects, loadedNotes, loadedLevels)))
                 }

@@ -192,13 +192,20 @@ async function deleteAnnouncement(id) {
 
 // The one notice the app shows: the newest switched-on one that has not expired.
 async function activeAnnouncement() {
-  const rows = await getDb().collection('announcements').find({ active: true }).sort({ createdAt: -1 }).limit(10).toArray();
+  const rows = await getDb().collection('announcements').find({ active: true }).sort({ createdAt: -1, _id: -1 }).limit(10).toArray();
   const now = Date.now();
   const hit = rows.find((a) => !a.expiresAt || new Date(a.expiresAt).getTime() > now);
   return hit ? publicAnnouncement(hit) : null;
 }
 
+// Everything students may see in their notification inbox: switched on and not expired, newest first.
+async function listActiveAnnouncements() {
+  const rows = await getDb().collection('announcements').find({ active: true }).sort({ createdAt: -1, _id: -1 }).limit(50).toArray();
+  const now = Date.now();
+  return rows.filter((a) => !a.expiresAt || new Date(a.expiresAt).getTime() > now).slice(0, 20).map(publicAnnouncement);
+}
+
 module.exports = {
   listUsers, setUserStatus, resetUserPassword, adminDeleteUser, dashboardStats,
-  listAnnouncements, saveAnnouncement, deleteAnnouncement, activeAnnouncement,
+  listAnnouncements, saveAnnouncement, deleteAnnouncement, activeAnnouncement, listActiveAnnouncements,
 };

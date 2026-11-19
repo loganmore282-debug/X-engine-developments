@@ -123,6 +123,13 @@ data class Announcement(
     val id: String,
     val title: String,
     val message: String,
+    val createdAt: String? = null,
+)
+
+data class AnnouncementsResponse(
+    val status: String,
+    val announcements: List<Announcement>?,
+    val message: String?,
 )
 
 data class AnnouncementResponse(

@@ -144,6 +144,15 @@ const dateKey = (offset) => day(offset).toISOString().slice(0, 10);
     const holiday = list.find((a) => a.title === 'Holiday');
     await admin.deleteAnnouncement(holiday.id);
     ck(await admin.activeAnnouncement() === null, 'deleting the last live one leaves nothing showing');
+    // the notification inbox
+    const a1 = await admin.saveAnnouncement({ title: 'Mocks start', message: 'Monday', active: true });
+    const a2 = await admin.saveAnnouncement({ title: 'Old news', message: 'x', active: true, expiresAt: '2020-01-01' });
+    const a3 = await admin.saveAnnouncement({ title: 'Switched off', message: 'x', active: false });
+    const a4 = await admin.saveAnnouncement({ title: 'Library open', message: 'Late', active: true });
+    const inbox = await admin.listActiveAnnouncements();
+    ck(inbox.length === 2 && inbox[0].title === 'Library open' && inbox[1].title === 'Mocks start', 'the inbox lists live announcements newest first, without expired or switched-off ones');
+    ck(inbox.every((n) => n.id && n.createdAt), 'each inbox item has an id and a time');
+    for (const x of [a1, a2, a3, a4]) await admin.deleteAnnouncement(x.id);
   }
 
   console.log('\n— settings —');

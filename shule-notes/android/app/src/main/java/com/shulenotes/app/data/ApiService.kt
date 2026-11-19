@@ -36,6 +36,9 @@ interface ApiService {
     @GET("config")
     suspend fun config(): ConfigResponse
 
+    @GET("announcements")
+    suspend fun announcements(): AnnouncementsResponse
+
     @GET("announcement")
     suspend fun announcement(): AnnouncementResponse
 

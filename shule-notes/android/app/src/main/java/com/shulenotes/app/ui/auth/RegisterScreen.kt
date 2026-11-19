@@ -39,6 +39,7 @@ import com.shulenotes.app.ui.components.PrimaryButton
 import com.shulenotes.app.ui.components.ShuleTextField
 
 val PRIVACY_URL = BuildConfig.API_BASE_URL.trimEnd('/') + "/privacy"
+val DOWNLOAD_URL = BuildConfig.API_BASE_URL.trimEnd('/') + "/download/"
 val TERMS_URL = BuildConfig.API_BASE_URL.trimEnd('/') + "/terms"
 
 @Composable
