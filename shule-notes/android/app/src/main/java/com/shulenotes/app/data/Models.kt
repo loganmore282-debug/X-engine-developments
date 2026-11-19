@@ -130,3 +130,11 @@ data class AnnouncementResponse(
     val announcement: Announcement?,
     val message: String?,
 )
+
+// The last library the phone downloaded. Kept on the phone so Home shows
+// straight away on the next launch, while a fresh copy loads in the background.
+data class LibrarySnapshot(
+    val subjects: List<Subject>,
+    val notes: List<Note>,
+    val levelGroups: List<LevelGroup>,
+)

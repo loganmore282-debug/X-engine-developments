@@ -8,13 +8,17 @@ import androidx.lifecycle.viewModelScope
 import com.shulenotes.app.ShuleApp
 import com.shulenotes.app.data.ApiClient
 import com.shulenotes.app.data.Announcement
+import com.google.gson.Gson
 import com.shulenotes.app.data.LevelGroup
+import com.shulenotes.app.data.LibrarySnapshot
 import com.shulenotes.app.data.Note
 import com.shulenotes.app.data.NoteCache
 import com.shulenotes.app.data.Subject
 import com.shulenotes.app.data.serverMessage
 import com.shulenotes.app.ui.components.AppConfigHolder
 import com.shulenotes.app.ui.components.Notifier
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -68,30 +72,73 @@ class LibraryViewModel : ViewModel() {
     var deleteAccountError by mutableStateOf<String?>(null)
         private set
 
-    init { load(initial = true) }
+    init {
+        viewModelScope.launch {
+            // Show the library from the last visit at once; the fresh copy replaces it a moment later.
+            val hadCache = restoreCached()
+            load(initial = !hadCache, silent = hadCache)
+        }
+    }
 
     fun refresh() = load(initial = false)
 
-    private fun load(initial: Boolean) {
+    private suspend fun restoreCached(): Boolean = try {
+        val json = ShuleApp.session.libraryCache.first()
+        val snapshot = if (json.isBlank()) null else Gson().fromJson(json, LibrarySnapshot::class.java)
+        if (snapshot == null || snapshot.notes.isEmpty()) {
+            false
+        } else {
+            subjects = snapshot.subjects
+            notes = snapshot.notes
+            levelGroups = snapshot.levelGroups
+            NoteCache.subjects = snapshot.subjects
+            NoteCache.put(snapshot.notes)
+            initScope()
+            isLoading = false
+            true
+        }
+    } catch (e: Exception) {
+        false
+    }
+
+    private suspend fun initScope() {
+        if (!scopeReady) {
+            scopeReady = true
+            scopeClass = ShuleApp.session.classLevel.first().ifBlank { null }
+        }
+    }
+
+    // Everything the Home screen needs is asked for AT THE SAME TIME. The server is far
+    // away, so each round trip costs real time; five in a row (as before) made the
+    // screen wait five times as long as one.
+    private fun load(initial: Boolean, silent: Boolean = false) {
         viewModelScope.launch {
-            if (initial) isLoading = true else isRefreshing = true
+            if (!silent) { if (initial) isLoading = true else isRefreshing = true }
             errorMessage = null
             try {
-                val loadedSubjects = ApiClient.service.subjects().subjects ?: emptyList()
-                val loadedNotes = ApiClient.service.notes().notes ?: emptyList()
-                // The class list failing must not stop the notes from showing.
-                val loadedLevels = try { ApiClient.service.levels().groups ?: emptyList() } catch (e: Exception) { levelGroups }
-                subjects = loadedSubjects
-                notes = loadedNotes
-                levelGroups = loadedLevels
-                NoteCache.subjects = loadedSubjects
-                NoteCache.put(loadedNotes)
-                if (!scopeReady) {
-                    scopeReady = true
-                    scopeClass = ShuleApp.session.classLevel.first().ifBlank { null }
+                val dismissed = ShuleApp.session.dismissedAnnouncement.first()
+                coroutineScope {
+                    val subjectsCall = async { ApiClient.service.subjects().subjects ?: emptyList() }
+                    val notesCall = async { ApiClient.service.notes().notes ?: emptyList() }
+                    // These three are nice to have: failing must not stop the notes from showing.
+                    val levelsCall = async { try { ApiClient.service.levels().groups ?: emptyList() } catch (e: Exception) { levelGroups } }
+                    val announcementCall = async { try { ApiClient.service.announcement().announcement } catch (e: Exception) { null } }
+                    val configCall = async { AppConfigHolder.refresh() }
+
+                    val loadedSubjects = subjectsCall.await()
+                    val loadedNotes = notesCall.await()
+                    val loadedLevels = levelsCall.await()
+                    subjects = loadedSubjects
+                    notes = loadedNotes
+                    levelGroups = loadedLevels
+                    NoteCache.subjects = loadedSubjects
+                    NoteCache.put(loadedNotes)
+                    initScope()
+                    if (subjectsInScope().none { it.id == selectedSubjectId }) selectedSubjectId = null
+                    announcement = announcementCall.await()?.takeIf { it.id != dismissed }
+                    configCall.await()
+                    ShuleApp.session.saveLibrary(Gson().toJson(LibrarySnapshot(loadedSubjects, loadedNotes, loadedLevels)))
                 }
-                if (subjectsInScope().none { it.id == selectedSubjectId }) selectedSubjectId = null
-                loadExtras()
             } catch (e: IOException) {
                 loadFailed("No connection. Check your internet and try again.")
             } catch (e: Exception) {
@@ -101,16 +148,6 @@ class LibraryViewModel : ViewModel() {
                 isRefreshing = false
             }
         }
-    }
-
-    // The announcement and the owner's settings are nice to have: failing to
-    // load them must never get in the way of the notes.
-    private suspend fun loadExtras() {
-        try {
-            val latest = ApiClient.service.announcement().announcement
-            announcement = latest?.takeIf { it.id != ShuleApp.session.dismissedAnnouncement.first() }
-        } catch (e: Exception) { }
-        AppConfigHolder.refresh()
     }
 
     fun dismissAnnouncement() {
