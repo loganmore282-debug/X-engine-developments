@@ -66,25 +66,27 @@ private class IntroSlide(
     val title: String,
     val text: String,
     val imageUrl: String? = null,
+    val drawable: Int? = null, // a picture shipped inside the app
     val icon: ImageVector? = null,
     val tint: Pair<Color, Color> = Color(0xFF1F7F59) to Color(0xFF0B2F22),
 )
 
+// What a student sees until the owner makes slides of their own in the admin panel.
 private val BuiltIn = listOf(
     IntroSlide(
         "Every note in one place",
         "Notes and past papers for your class, added the moment they are ready.",
-        icon = Icons.AutoMirrored.Outlined.MenuBook, tint = Color(0xFF1F7F59) to Color(0xFF0B2F22),
+        drawable = R.drawable.intro_1,
     ),
     IntroSlide(
         "Stuck? Ask the AI helper",
         "Open any page and ask a question. The answer comes from the document you are reading.",
-        icon = Icons.Outlined.AutoAwesome, tint = Color(0xFF16705F) to Color(0xFF0A2C34),
+        drawable = R.drawable.intro_2,
     ),
     IntroSlide(
         "Study anywhere",
         "Download notes to read without data, and carry on exactly where you stopped.",
-        icon = Icons.Outlined.CloudDownload, tint = Color(0xFF2C7A4B) to Color(0xFF0E2E1C),
+        drawable = R.drawable.intro_3,
     ),
 )
 
@@ -181,7 +183,14 @@ fun IntroScreen(onFinished: () -> Unit) {
 @Composable
 private fun SlidePage(slide: IntroSlide) {
     Box(modifier = Modifier.fillMaxSize()) {
-        if (slide.imageUrl != null) {
+        if (slide.drawable != null) {
+            Image(
+                painter = painterResource(slide.drawable),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else if (slide.imageUrl != null) {
             AsyncImage(
                 model = slide.imageUrl,
                 contentDescription = null,
