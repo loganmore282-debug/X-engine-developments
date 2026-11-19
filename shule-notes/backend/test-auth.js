@@ -28,21 +28,26 @@ require.cache[dbPath] = { id: dbPath, filename: dbPath, loaded: true, exports: {
 const auth = require('./auth');
 
 console.log('— hashPassword / verifyPassword —');
-{
-  const stored = auth.hashPassword('correct horse battery staple');
-  ck(auth.verifyPassword('correct horse battery staple', stored) === true, 'the right password verifies');
-  ck(auth.verifyPassword('wrong password', stored) === false, 'a wrong password is refused');
-  ck(auth.verifyPassword('', stored) === false, 'an empty password is refused');
-  ck(auth.verifyPassword('correct horse battery staple', 'garbage') === false, 'a malformed stored value fails safely, not throws');
-  ck(auth.verifyPassword('correct horse battery staple', '') === false, 'an empty stored value fails safely');
-  ck(auth.verifyPassword('correct horse battery staple', null) === false, 'a null stored value fails safely');
-  const stored2 = auth.hashPassword('correct horse battery staple');
+const passwordChecks = (async () => {
+  const stored = await auth.hashPassword('correct horse battery staple');
+  ck(await auth.verifyPassword('correct horse battery staple', stored) === true, 'the right password verifies');
+  ck(await auth.verifyPassword('wrong password', stored) === false, 'a wrong password is refused');
+  ck(await auth.verifyPassword('', stored) === false, 'an empty password is refused');
+  ck(await auth.verifyPassword('correct horse battery staple', 'garbage') === false, 'a malformed stored value fails safely, not throws');
+  ck(await auth.verifyPassword('correct horse battery staple', '') === false, 'an empty stored value fails safely');
+  ck(await auth.verifyPassword('correct horse battery staple', null) === false, 'a null stored value fails safely');
+  const stored2 = await auth.hashPassword('correct horse battery staple');
   ck(stored !== stored2, 'the same password hashes differently each time (a fresh random salt)');
-  ck(auth.verifyPassword('correct horse battery staple', stored2) === true, 'and still verifies correctly');
-}
+  ck(await auth.verifyPassword('correct horse battery staple', stored2) === true, 'and still verifies correctly');
+  // A hash written by the old synchronous code (same settings) must still verify.
+  const crypto = require('crypto');
+  const legacy = 'aabbccddeeff00112233445566778899:' + crypto.scryptSync('old-password', 'aabbccddeeff00112233445566778899', 64).toString('hex');
+  ck(await auth.verifyPassword('old-password', legacy) === true, 'passwords saved before this change still work');
+})();
 
 console.log('\n— session lifecycle —');
 (async () => {
+  await passwordChecks;
   const { token } = await auth.createSession('user-1');
   ck(typeof token === 'string' && token.length === 64, 'a 32-byte random token is issued, as hex (64 chars)');
   ck(await auth.resolveSession(token) === 'user-1', 'the token resolves back to the right user');

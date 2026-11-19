@@ -483,17 +483,21 @@ function renderSubjectOptions(){
 $('nClass').addEventListener('change', renderSubjectOptions);
 
 let NOTES = [];
+let readingTimer;
 LOADERS.notes = async function(){
   const r = await api('/admin/notes/list');
   if (r.status !== 'success') return toast(r.message || 'Could not load notes', 'error');
   NOTES = r.notes;
+  // Notes are still being read after an upload: check again shortly.
+  clearTimeout(readingTimer);
+  if (NOTES.some(n => n.textStatus === 'reading') && currentTab === 'notes') readingTimer = setTimeout(() => LOADERS.notes(), 2500);
   $('notesRows').innerHTML = NOTES.length ? NOTES.map(n => `
     <tr>
       <td>${esc(n.title)}${n.description ? `<span class="sub">${esc(n.description)}</span>` : ''}</td>
       <td>${esc(subjectName(n.subjectId))}</td>
       <td>${n.classLevel ? esc(n.classLevel) : '<span class="muted">All</span>'}</td>
       <td>${n.pageCount || '—'}</td><td>${n.views || 0}</td>
-      <td>${n.hasAiContext ? '<span class="pill ok">Ready</span>' : '<span class="pill warn">No text</span>'}</td>
+      <td>${n.textStatus === 'reading' ? '<span class="pill info">Reading…</span>' : n.textStatus === 'failed' ? '<span class="pill bad">Could not read</span>' : n.hasAiContext ? '<span class="pill ok">Ready</span>' : '<span class="pill warn">No text</span>'}</td>
       <td>${n.active ? '<span class="pill ok">Live</span>' : '<span class="pill warn">Hidden</span>'}</td>
       <td><div class="actions">
         <button class="btn plain sm" data-act="edit" data-id="${esc(n.id)}">Edit</button>
@@ -542,7 +546,7 @@ $('nUpload').addEventListener('click', async () => {
   const r = await api('/admin/notes/upload', fd);
   $('nUpload').disabled = false; $('nUploadStatus').textContent = '';
   if (r.status === 'success') {
-    toast(r.warning || 'Uploaded', r.warning ? '' : 'ok');
+    toast('Uploaded. Reading the text in the background…', 'ok');
     $('nTitle').value = ''; $('nDesc').value = ''; $('nFile').value = '';
     LOADERS.notes();
   } else toast(r.message || 'Upload failed', 'error');

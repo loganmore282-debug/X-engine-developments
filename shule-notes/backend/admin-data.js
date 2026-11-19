@@ -82,7 +82,7 @@ async function resetUserPassword(userId, password) {
   const id = toId(userId);
   const user = id ? await db.collection('users').findOne({ _id: id }) : null;
   if (!user) return { ok: false, status: 404, message: 'Student not found' };
-  await db.collection('users').updateOne({ _id: id }, { $set: { passwordHash: hashPassword(next), passwordChangedAt: new Date() } });
+  await db.collection('users').updateOne({ _id: id }, { $set: { passwordHash: await hashPassword(next), passwordChangedAt: new Date() } });
   await db.collection('sessions').deleteMany({ userId: String(userId) });
   return { ok: true };
 }

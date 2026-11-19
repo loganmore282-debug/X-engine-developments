@@ -7,7 +7,7 @@
  * "no text could be read" instead of claiming success.
  */
 'use strict';
-const { extractPdfText } = require('./pdf');
+const { extractPdfText, extractInThread } = require('./pdf');
 
 let bad = 0;
 const ck = (ok, label) => { if (!ok) bad++; console.log((ok ? 'PASS  ' : 'FAIL  ') + label); };
@@ -51,6 +51,27 @@ function makePdf(pageTexts) {
     ck(first.text.includes('Chapter 1: Cells') && first.text.includes('Chapter 2: Tissues'), 'text from every page is extracted');
     ck(first.text === first.text.trim(), 'the extracted text is trimmed of surrounding whitespace');
     ck(allSame, 'twelve reads of the same file give the same result every time');
+  }
+
+  console.log('\n— the same, on a worker thread (so uploads never freeze the server) —');
+  {
+    const pdf = makePdf(['Photosynthesis notes', 'Respiration notes']);
+    const direct = await extractPdfText(pdf);
+    const threaded = await extractInThread(pdf);
+    ck(threaded.text === direct.text && threaded.pageCount === 2, 'the worker thread reads exactly what the direct reader reads');
+    // While a big read is running, the main thread must stay free to answer requests.
+    let worstGap = 0, last = Date.now();
+    const timer = setInterval(() => { const now = Date.now(); worstGap = Math.max(worstGap, now - last); last = now; }, 5);
+    const many = makePdf(Array.from({ length: 60 }, (_, i) => 'Page ' + i + ' ' + 'lorem ipsum '.repeat(40)));
+    await Promise.all([extractInThread(many), extractInThread(many), extractInThread(many)]);
+    clearInterval(timer);
+    ck(worstGap < 150, `the main thread stayed responsive during heavy reading (longest pause ${worstGap} ms)`);
+    let rejected = false;
+    try { await extractInThread(Buffer.from('not a pdf')); } catch (e) { rejected = true; }
+    ck(rejected, 'an unreadable file rejects on the worker thread too');
+    let timedOut = false;
+    try { await extractInThread(many, 1); } catch (e) { timedOut = /too long/.test(e.message); }
+    ck(timedOut, 'a read that takes too long is stopped, not left hanging');
   }
 
   console.log('\n— a genuinely unreadable file is rejected, not silently emptied —');

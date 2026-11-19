@@ -120,8 +120,8 @@ console.log('\n— the AI daily quota actually caps spend —');
     const id = '65f0a1b2c3d4e5f6a7b8c9d0';
     const other = '65f0a1b2c3d4e5f6a7b8c9d1';
     store.users = [
-      { _id: id, name: 'Asha', passwordHash: hashPassword('right-password') },
-      { _id: other, name: 'Brian', passwordHash: hashPassword('another-password') },
+      { _id: id, name: 'Asha', passwordHash: await hashPassword('right-password') },
+      { _id: other, name: 'Brian', passwordHash: await hashPassword('another-password') },
     ];
     store.sessions = [{ userId: id, tokenHash: 'a' }, { userId: id, tokenHash: 'b' }, { userId: other, tokenHash: 'c' }];
     store.aiUsage.push({ userId: id, date: '2026-01-01', count: 3 }, { userId: other, date: '2026-01-01', count: 1 });

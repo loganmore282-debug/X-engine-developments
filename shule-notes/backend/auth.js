@@ -4,26 +4,33 @@
 // rather than re-checked by hand at every call site.
 'use strict';
 const crypto = require('crypto');
+const { promisify } = require('util');
 const { getDb } = require('./db');
 
 const SESSION_DAYS = 30;
 
-function hashPassword(password) {
+// scrypt runs on a background thread (crypto.scrypt), not on the thread that answers
+// requests: one password check is ~50 ms of CPU, and the synchronous version froze
+// EVERY other student's request for that long. Same cost settings, so passwords
+// saved earlier still verify.
+const scrypt = promisify(crypto.scrypt);
+
+async function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  const hash = (await scrypt(password, salt, 64)).toString('hex');
   return `${salt}:${hash}`;
 }
 
-// Constant-time by construction: scryptSync always runs, and the final
+// Constant-time by construction: scrypt always runs, and the final
 // comparison uses timingSafeEqual rather than ===, so neither a missing
 // salt/hash nor a wrong password is distinguishable by timing.
-function verifyPassword(password, stored) {
+async function verifyPassword(password, stored) {
   const [salt, hash] = String(stored || '').split(':');
   if (!salt || !hash) return false;
   let hashBuf, testBuf;
   try {
     hashBuf = Buffer.from(hash, 'hex');
-    testBuf = crypto.scryptSync(String(password || ''), salt, 64);
+    testBuf = await scrypt(String(password || ''), salt, 64);
   } catch (_) { return false; }
   if (hashBuf.length !== testBuf.length) return false;
   return crypto.timingSafeEqual(hashBuf, testBuf);

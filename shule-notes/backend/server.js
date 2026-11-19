@@ -13,7 +13,7 @@ const { ObjectId } = require('mongodb');
 const { connect, getDb } = require('./db');
 const { hashPassword, verifyPassword, createSession, resolveSession, destroySession, bearerToken, requireAuth } = require('./auth');
 const { verifyAdmin } = require('./admin-auth');
-const { extractPdfText } = require('./pdf');
+const { extractInThread } = require('./pdf');
 const { askAboutDocument, classifyClaudeError } = require('./claude');
 const { privacyPage, accountDeletionPage, termsPage } = require('./legal');
 const { GROUPS: LEVEL_GROUPS, isValidLevel } = require('./levels');
@@ -22,6 +22,8 @@ const { eraseUser, changePassword, updateProfile, cleanName } = require('./accou
 const { getSettings, saveSettings, publicConfig, adminView, AI_MODELS } = require('./settings');
 const adminData = require('./admin-data');
 
+// More threads for background work (password hashing, file reads); must be set before first use.
+if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = '8';
 const PORT = process.env.PORT || 4000;
 // 127.0.0.1 in production (nginx is the only way in); 0.0.0.0 by default so the emulator can reach a dev server.
 const HOST = process.env.HOST || '0.0.0.0';
@@ -71,7 +73,7 @@ app.post('/auth/register', authLimiter, async (req, res) => {
 
     const db = getDb();
     const doc = {
-      name, phone, passwordHash: hashPassword(password),
+      name, phone, passwordHash: await hashPassword(password),
       status: 'active', createdAt: new Date(), lastLoginAt: new Date(),
     };
     let result;
@@ -100,7 +102,7 @@ app.post('/auth/login', authLimiter, async (req, res) => {
     // A dummy hash so a nonexistent account costs the same time as a wrong
     // password -- a login attempt must not reveal which account exists.
     const DUMMY = '0000000000000000000000000000000:0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
-    const ok = verifyPassword(password, user ? user.passwordHash : DUMMY);
+    const ok = await verifyPassword(password, user ? user.passwordHash : DUMMY);
     if (!user || !ok) return res.status(401).json({ status: 'error', message: 'Incorrect phone number or password' });
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'This account has been suspended' });
 
@@ -184,7 +186,7 @@ async function deleteAccount(userId, password) {
   try { user = await db.collection('users').findOne({ _id: new ObjectId(userId) }); } catch (_) { user = null; }
   if (!user) return { ok: false, status: 404, message: 'Account not found' };
   // 403, not 401: the app treats 401 as "your session expired" and signs out.
-  if (!verifyPassword(password, user.passwordHash)) return { ok: false, status: 403, message: 'Incorrect password' };
+  if (!(await verifyPassword(password, user.passwordHash))) return { ok: false, status: 403, message: 'Incorrect password' };
   await eraseUser(userId);
   return { ok: true };
 }
@@ -211,7 +213,8 @@ function publicNote(n) {
 }
 
 app.get('/notes', requireAuth, async (req, res) => {
-  const q = { active: { $ne: false } };
+  // A note still being read after upload (a few seconds) is not shown yet.
+  const q = { active: { $ne: false }, textStatus: { $ne: 'reading' } };
   if (req.query.subjectId) {
     try { q.subjectId = new ObjectId(String(req.query.subjectId)); }
     catch (_) { return res.status(400).json({ status: 'error', message: 'Invalid subjectId' }); }
@@ -237,9 +240,14 @@ app.get('/notes/:id/file', requireAuth, async (req, res) => {
   if (!fs.existsSync(filePath)) return res.status(404).json({ status: 'error', message: 'File missing on server' });
   // Counted when the file is opened, so the admin can see what students read.
   getDb().collection('notes').updateOne({ _id: note._id }, { $inc: { views: 1 } }).catch(() => {});
+  const { size, mtime } = await fs.promises.stat(filePath);
   res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Length', size);
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(note.title || 'note')}.pdf"`);
-  fs.createReadStream(filePath).pipe(res);
+  // A note's file never changes (a new upload is a new file), so a phone may keep it.
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+  res.setHeader('Last-Modified', mtime.toUTCString());
+  require('stream').pipeline(fs.createReadStream(filePath), res, () => {});
 });
 
 // ── AI: ask about the open document ────────────────────────────────────────
@@ -271,6 +279,9 @@ app.post('/ai/ask', requireAuth, aiLimiter, async (req, res) => {
     try { note = await getDb().collection('notes').findOne({ _id: new ObjectId(noteId) }); }
     catch (_) { return res.status(400).json({ status: 'error', message: 'Invalid noteId' }); }
     if (!note || note.active === false) return res.status(404).json({ status: 'error', message: 'Note not found' });
+    if (note.textStatus === 'reading') {
+      return res.status(409).json({ status: 'error', message: 'This document is still being prepared. Try again in a moment.' });
+    }
     if (!note.extractedText) {
       return res.status(400).json({ status: 'error', message: 'This document has no readable text (it is likely a scanned image), so the AI helper cannot read it.' });
     }
@@ -332,6 +343,14 @@ const upload = multer({
   limits: { fileSize: MAX_PDF_BYTES },
 });
 
+// Background half of an upload: read the PDF's text on a worker thread, then publish the note.
+function finishReading(noteId, buffer, title) {
+  extractInThread(buffer).then(
+    (r) => getDb().collection('notes').updateOne({ _id: noteId }, { $set: { extractedText: r.text, pageCount: r.pageCount, textStatus: r.text ? 'ready' : 'none' } }),
+    (e) => { console.error('PDF text extraction failed for', title, ':', e.message); return getDb().collection('notes').updateOne({ _id: noteId }, { $set: { textStatus: 'failed' } }); },
+  ).catch((e) => console.error('could not save the extracted text for', title, ':', e.message));
+}
+
 app.post('/admin/notes/upload', upload.single('file'), async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
@@ -351,23 +370,20 @@ app.post('/admin/notes/upload', upload.single('file'), async (req, res) => {
 
     const fileName = crypto.randomUUID() + '.pdf';
     const filePath = path.join(UPLOAD_DIR, 'notes', fileName);
-    fs.writeFileSync(filePath, req.file.buffer);
+    await fs.promises.writeFile(filePath, req.file.buffer);
 
-    let extracted = { text: '', pageCount: 0 };
-    try { extracted = await extractPdfText(req.file.buffer); }
-    catch (e) { console.error('PDF text extraction failed for', title, ':', e.message); }
-
+    // The admin gets their answer as soon as the file is saved. Reading the text (for the
+    // AI helper and the page count) takes a few seconds, so it finishes in the background;
+    // until then the note is held back from students ("reading").
     const doc = {
       title, description: String(req.body.description || '').trim().slice(0, 1000),
       subjectId, classLevel,
-      fileName, fileSize: req.file.size, pageCount: extracted.pageCount,
-      extractedText: extracted.text, active: true, uploadedAt: new Date(),
+      fileName, fileSize: req.file.size, pageCount: 0,
+      extractedText: '', textStatus: 'reading', active: true, uploadedAt: new Date(),
     };
     const result = await getDb().collection('notes').insertOne(doc);
-    res.json({
-      status: 'success', id: String(result.insertedId),
-      warning: extracted.text ? null : 'No text could be read from this PDF. It may be a scanned image. The AI helper will not work for this note.',
-    });
+    finishReading(result.insertedId, req.file.buffer, title);
+    res.json({ status: 'success', id: String(result.insertedId), reading: true });
   } catch (e) {
     console.error('note upload error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not upload the note' });
@@ -377,7 +393,7 @@ app.post('/admin/notes/upload', upload.single('file'), async (req, res) => {
 app.post('/admin/notes/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const rows = await getDb().collection('notes').find({}).sort({ uploadedAt: -1 }).limit(1000).toArray();
-  res.json({ status: 'success', notes: rows.map((n) => ({ ...publicNote(n), active: n.active !== false, views: n.views || 0 })) });
+  res.json({ status: 'success', notes: rows.map((n) => ({ ...publicNote(n), active: n.active !== false, views: n.views || 0, textStatus: n.textStatus || (n.extractedText ? 'ready' : 'none') })) });
 });
 
 app.post('/admin/notes/update', async (req, res) => {
@@ -450,6 +466,8 @@ app.get('/health', (req, res) => res.json({ status: 'success', app: 'shule-notes
 
 async function start() {
   await connect();
+  // A note left "reading" means the server stopped mid-upload; say so instead of hiding it forever.
+  await getDb().collection('notes').updateMany({ textStatus: 'reading' }, { $set: { textStatus: 'failed' } });
   app.listen(PORT, HOST, () => console.log(`Shule Notes server listening on ${HOST}:${PORT}`));
 }
 

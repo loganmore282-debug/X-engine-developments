@@ -33,4 +33,22 @@ async function extractPdfText(buffer) {
   }
 }
 
-module.exports = { extractPdfText };
+// The same, on a worker thread. Reading a big PDF takes seconds of CPU; done on the
+// main thread it would stop every other request for that long. Rejects after
+// `timeoutMs` (default 2 minutes) so a damaged file cannot hang a thread forever.
+function extractInThread(buffer, timeoutMs = 120000) {
+  const { Worker } = require('worker_threads');
+  const path = require('path');
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(path.join(__dirname, 'pdf-worker.js'), {
+      workerData: buffer,
+      resourceLimits: { maxOldGenerationSizeMb: 768 },
+    });
+    const timer = setTimeout(() => { worker.terminate(); reject(new Error('reading the PDF took too long')); }, timeoutMs);
+    worker.once('message', (m) => { clearTimeout(timer); worker.terminate(); m.ok ? resolve({ text: m.text, pageCount: m.pageCount }) : reject(new Error(m.error)); });
+    worker.once('error', (e) => { clearTimeout(timer); reject(e); });
+    worker.once('exit', (code) => { clearTimeout(timer); if (code !== 0) reject(new Error('the PDF reader stopped (code ' + code + ')')); });
+  });
+}
+
+module.exports = { extractPdfText, extractInThread };

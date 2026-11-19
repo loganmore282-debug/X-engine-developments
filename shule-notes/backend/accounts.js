@@ -35,8 +35,8 @@ async function changePassword(userId, currentPassword, newPassword, keepToken) {
   const id = toId(userId);
   const user = id ? await db.collection('users').findOne({ _id: id }) : null;
   if (!user) return { ok: false, status: 404, message: 'Account not found' };
-  if (!verifyPassword(String(currentPassword || ''), user.passwordHash)) return { ok: false, status: 403, message: 'Your current password is not right' };
-  await db.collection('users').updateOne({ _id: id }, { $set: { passwordHash: hashPassword(next), passwordChangedAt: new Date() } });
+  if (!(await verifyPassword(String(currentPassword || ''), user.passwordHash))) return { ok: false, status: 403, message: 'Your current password is not right' };
+  await db.collection('users').updateOne({ _id: id }, { $set: { passwordHash: await hashPassword(next), passwordChangedAt: new Date() } });
   const keepHash = keepToken ? sha256(keepToken) : null;
   const sessions = await db.collection('sessions').find({ userId: String(userId) }).toArray();
   for (const s of sessions) {

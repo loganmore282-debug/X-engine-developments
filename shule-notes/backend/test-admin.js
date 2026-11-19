@@ -27,7 +27,7 @@ const dateKey = (offset) => day(offset).toISOString().slice(0, 10);
   const ids = [];
   for (let i = 0; i < names.length; i++) {
     const r = await db.collection('users').insertOne({
-      name: names[i], phone: '07720000' + String(10 + i), passwordHash: hashPassword('password' + i),
+      name: names[i], phone: '07720000' + String(10 + i), passwordHash: await hashPassword('password' + i),
       status: i === 4 ? 'banned' : 'active', createdAt: day(-i * 2), classLevel: i < 3 ? 'Senior 2' : i === 3 ? 'Primary 7' : null,
     });
     ids.push(String(r.insertedId));
@@ -78,7 +78,7 @@ const dateKey = (offset) => day(offset).toISOString().slice(0, 10);
     ck(short.ok === false && short.status === 400, 'a too-short new password is refused');
     ck((await admin.resetUserPassword(ids[2], 'brand-new-pass')).ok, 'the owner can set a new password');
     const row = await db.collection('users').findOne({ _id: new ObjectId(ids[2]) });
-    ck(verifyPassword('brand-new-pass', row.passwordHash) && !verifyPassword('password2', row.passwordHash), 'the new password works and the old one does not');
+    ck((await verifyPassword('brand-new-pass', row.passwordHash)) && !(await verifyPassword('password2', row.passwordHash)), 'the new password works and the old one does not');
     ck(row.passwordHash.indexOf('brand-new-pass') === -1, 'it is stored hashed');
     ck(await resolveSession(t2) === null, 'every device is signed out by a reset');
 
@@ -99,7 +99,7 @@ const dateKey = (offset) => day(offset).toISOString().slice(0, 10);
     ck((await accounts.changePassword(ids[0], 'password0', '123', mine)).status === 400, 'a too-short new password is refused');
     ck((await accounts.changePassword(ids[0], 'password0', 'newpass99', mine)).ok, 'the right current password changes it');
     const row = await db.collection('users').findOne({ _id: new ObjectId(ids[0]) });
-    ck(verifyPassword('newpass99', row.passwordHash) && !verifyPassword('password0', row.passwordHash), 'the new password is the one that works');
+    ck((await verifyPassword('newpass99', row.passwordHash)) && !(await verifyPassword('password0', row.passwordHash)), 'the new password is the one that works');
     ck(await resolveSession(mine) === ids[0], 'the device that made the change stays signed in');
     ck(await resolveSession(other) === null, 'every other device is signed out');
     ck((await accounts.updateProfile(ids[0], '  Amina   <b>Nakato</b> Joy ')).user.name === 'Amina Nakato Joy', 'a name is tidied: extra spaces and HTML tags removed');
