@@ -229,6 +229,7 @@ function publicNote(n) {
     id: String(n._id), subjectId: n.subjectId ? String(n.subjectId) : null,
     title: n.title, description: n.description || '', classLevel: n.classLevel || null,
     kind: NOTE_KINDS.includes(n.kind) ? n.kind : 'notes',
+    views: n.views || 0,
     pageCount: n.pageCount || 0, fileSize: n.fileSize || 0, uploadedAt: n.uploadedAt,
     hasAiContext: !!(n.extractedText && n.extractedText.length > 0),
   };

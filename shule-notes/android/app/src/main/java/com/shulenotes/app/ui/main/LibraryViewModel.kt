@@ -24,6 +24,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.IOException
 
+// How the list on Home is ordered.
+enum class SortOrder(val label: String) {
+    NEWEST("Newest"),
+    MOST_READ("Most read"),
+    A_TO_Z("A to Z"),
+}
+
 fun notifySaved(nowSaved: Boolean) {
     if (nowSaved) Notifier.success("Added to Saved") else Notifier.info("Removed from Saved")
 }
@@ -45,6 +52,9 @@ class LibraryViewModel : ViewModel() {
     private var scopeReady = false
 
     var selectedSubjectId by mutableStateOf<String?>(null)
+        private set
+
+    var sortOrder by mutableStateOf(SortOrder.NEWEST)
         private set
 
     // null shows everything; "notes" or "past-paper" narrows the list.
@@ -264,6 +274,8 @@ class LibraryViewModel : ViewModel() {
 
     fun selectKind(kind: String?) { kindFilter = kind }
 
+    fun selectSort(order: SortOrder) { sortOrder = order }
+
     // True when the class on screen has both ordinary notes and past papers, so the filter is worth showing.
     fun hasBothKinds(): Boolean {
         val kinds = scopedNotes().map { it.kind ?: "notes" }.toSet()
@@ -291,7 +303,7 @@ class LibraryViewModel : ViewModel() {
 
     fun visibleNotes(): List<Note> {
         val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
-        return scopedNotes().filter { note ->
+        val matching = scopedNotes().filter { note ->
             (selectedSubjectId == null || note.subjectId == selectedSubjectId) &&
                 (kindFilter == null || (note.kind ?: "notes") == kindFilter) &&
                 words.all { word ->
@@ -299,6 +311,11 @@ class LibraryViewModel : ViewModel() {
                         note.description.orEmpty().lowercase().contains(word) ||
                         note.classLevel.orEmpty().lowercase().contains(word)
                 }
+        }
+        return when (sortOrder) {
+            SortOrder.NEWEST -> matching.sortedByDescending { it.uploadedAt.orEmpty() }
+            SortOrder.MOST_READ -> matching.sortedWith(compareByDescending<Note> { it.views }.thenByDescending { it.uploadedAt.orEmpty() })
+            SortOrder.A_TO_Z -> matching.sortedBy { it.title.lowercase() }
         }
     }
 

@@ -35,12 +35,15 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.Badge
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,13 +61,16 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
@@ -100,6 +106,7 @@ import com.shulenotes.app.ui.components.SubjectTint
 import com.shulenotes.app.ui.components.subjectIcon
 import com.shulenotes.app.ui.components.subjectTint
 import com.shulenotes.app.ui.theme.Poppins
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -128,6 +135,16 @@ fun HomeTab(
     val updateAvailable = appConfig.latestVersion > BuildConfig.VERSION_CODE && appConfig.latestVersion > dismissedUpdate
     val uriHandler = LocalUriHandler.current
     val scopeForUpdate = rememberCoroutineScope()
+
+    var sortMenuOpen by remember { mutableStateOf(false) }
+
+    // Recent searches: remembered once the student has stopped typing, offered when the search box is tapped.
+    var searchFocused by remember { mutableStateOf(false) }
+    val recents by ShuleApp.session.recentSearches.collectAsState(initial = emptyList())
+    LaunchedEffect(viewModel.query) {
+        delay(1500)
+        ShuleApp.session.addRecentSearch(viewModel.query)
+    }
     val searching = viewModel.query.isNotBlank()
     val scope = viewModel.scopeClass
     val tiles = viewModel.subjectsInScope()
@@ -166,7 +183,30 @@ fun HomeTab(
                     unreadCount = unreadCount,
                     onOpenNotifications = onOpenNotifications,
                     onHeight = { headerPx = it },
+                    onSearchFocus = { searchFocused = it },
                 )
+            }
+
+            if (searchFocused && !searching && recents.isNotEmpty()) {
+                item(key = "recents") {
+                    Column(modifier = Modifier.padding(top = 20.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Recent searches", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { scopeForUpdate.launch { ShuleApp.session.clearRecentSearches() } }) { Text("Clear") }
+                        }
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 20.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(recents, key = { it }) { word ->
+                                FilterChip(selected = false, onClick = { viewModel.updateQuery(word) }, label = { Text(word) })
+                            }
+                        }
+                    }
+                }
             }
 
             if (updateAvailable && !searching) {
@@ -283,6 +323,26 @@ fun HomeTab(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (visible.size > 1) {
+                            Box {
+                                TextButton(onClick = { sortMenuOpen = true }) {
+                                    Icon(Icons.Outlined.SwapVert, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(viewModel.sortOrder.label, style = MaterialTheme.typography.labelLarge)
+                                }
+                                DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
+                                    SortOrder.values().forEach { order ->
+                                        DropdownMenuItem(
+                                            text = { Text(order.label) },
+                                            onClick = {
+                                                viewModel.selectSort(order)
+                                                sortMenuOpen = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -350,6 +410,7 @@ private fun HomeHeader(
     unreadCount: Int,
     onOpenNotifications: () -> Unit,
     onHeight: (Int) -> Unit,
+    onSearchFocus: (Boolean) -> Unit,
 ) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val gradient = Brush.verticalGradient(
@@ -423,6 +484,7 @@ private fun HomeHeader(
         SearchField(
             query = query,
             onQuery = onQuery,
+            onFocusChange = onSearchFocus,
             modifier = Modifier.align(Alignment.BottomCenter).offset(y = 26.dp).padding(horizontal = 20.dp),
         )
     }
@@ -454,7 +516,7 @@ private fun ClassChip(className: String?, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun SearchField(query: String, onQuery: (String) -> Unit, onFocusChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
     val focus = LocalFocusManager.current
     Surface(
         shape = CircleShape,
@@ -487,7 +549,7 @@ private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modi
                 focusedIndicatorColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent,
             ),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().onFocusChanged { onFocusChange(it.isFocused) },
         )
     }
 }

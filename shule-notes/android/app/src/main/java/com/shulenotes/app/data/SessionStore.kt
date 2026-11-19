@@ -25,6 +25,9 @@ private val LIBRARY_KEY = stringPreferencesKey("library_cache")
 private val SEEN_KEY = longPreferencesKey("notifications_seen_at")
 private val THEME_KEY = stringPreferencesKey("theme_mode")
 private val DISMISSED_UPDATE_KEY = intPreferencesKey("dismissed_update")
+private val SEARCHES_KEY = stringPreferencesKey("recent_searches")
+private val STUDY_KEY = stringSetPreferencesKey("study_pages")
+private val FINISHED_KEY = stringSetPreferencesKey("finished_notes")
 private val PAGE_MARKS_KEY = stringSetPreferencesKey("page_bookmarks")
 
 // One document the student has opened, and how far they got in it.
@@ -55,6 +58,14 @@ class SessionStore(private val context: Context) {
     val pageBookmarks: Flow<Set<String>> = context.dataStore.data.map { it[PAGE_MARKS_KEY] ?: emptySet() }
     // The newest version the student has already been told about and closed the banner for.
     val dismissedUpdate: Flow<Int> = context.dataStore.data.map { it[DISMISSED_UPDATE_KEY] ?: 0 }
+    // Newest first, at most 8.
+    val recentSearches: Flow<List<String>> = context.dataStore.data.map { prefs ->
+        (prefs[SEARCHES_KEY] ?: "").split('\n').filter { it.isNotBlank() }
+    }
+    // Pages the student has read, each stored as "day|noteId|page" (about five weeks kept).
+    val studyPages: Flow<Set<String>> = context.dataStore.data.map { it[STUDY_KEY] ?: emptySet() }
+    // Notes read to their last page.
+    val finishedNotes: Flow<Set<String>> = context.dataStore.data.map { it[FINISHED_KEY] ?: emptySet() }
     val libraryCache: Flow<String> = context.dataStore.data.map { it[LIBRARY_KEY].orEmpty() }
     val dismissedAnnouncement: Flow<String> = context.dataStore.data.map { it[DISMISSED_KEY].orEmpty() }
     val recent: Flow<List<RecentNote>> = context.dataStore.data.map { parseRecent(it[RECENT_KEY]) }
@@ -89,6 +100,33 @@ class SessionStore(private val context: Context) {
         context.dataStore.edit { it[DISMISSED_UPDATE_KEY] = version }
     }
 
+    suspend fun addRecentSearch(query: String) {
+        val clean = query.trim().replace('\n', ' ').take(60)
+        if (clean.length < 3) return
+        context.dataStore.edit {
+            val current = (it[SEARCHES_KEY] ?: "").split('\n').filter { s -> s.isNotBlank() }
+            val next = (listOf(clean) + current.filter { s -> !s.equals(clean, ignoreCase = true) }).take(8)
+            it[SEARCHES_KEY] = next.joinToString("\n")
+        }
+    }
+
+    suspend fun clearRecentSearches() {
+        context.dataStore.edit { it.remove(SEARCHES_KEY) }
+    }
+
+    // Called when the student rests on a page of a note: feeds "My progress".
+    suspend fun recordPageRead(noteId: String, page: Int, pageCount: Int) {
+        val now = System.currentTimeMillis()
+        val today = dayKey(now)
+        val cutoff = dayKey(now - 35L * 24 * 60 * 60 * 1000)
+        context.dataStore.edit {
+            val kept = (it[STUDY_KEY] ?: emptySet()).filter { entry -> entry.substringBefore('|') >= cutoff }.toMutableSet()
+            kept.add("$today|$noteId|$page")
+            it[STUDY_KEY] = kept
+            if (pageCount > 0 && page >= pageCount) it[FINISHED_KEY] = (it[FINISHED_KEY] ?: emptySet()) + noteId
+        }
+    }
+
     suspend fun markNotificationsSeen(at: Long) {
         context.dataStore.edit { it[SEEN_KEY] = at }
     }
@@ -114,7 +152,7 @@ class SessionStore(private val context: Context) {
     suspend fun clear(keepSaved: Boolean = true) {
         context.dataStore.edit {
             if (keepSaved) {
-                it.remove(TOKEN_KEY); it.remove(NAME_KEY); it.remove(CONTACT_KEY); it.remove(CLASS_KEY); it.remove(RECENT_KEY); it.remove(LIBRARY_KEY); it.remove(SEEN_KEY)
+                it.remove(TOKEN_KEY); it.remove(NAME_KEY); it.remove(CONTACT_KEY); it.remove(CLASS_KEY); it.remove(RECENT_KEY); it.remove(LIBRARY_KEY); it.remove(SEEN_KEY); it.remove(SEARCHES_KEY); it.remove(STUDY_KEY); it.remove(FINISHED_KEY)
             } else {
                 it.clear()
             }
@@ -147,6 +185,10 @@ class SessionStore(private val context: Context) {
         }
     }
 }
+
+// "2026-11-19" in the phone's own time zone.
+fun dayKey(millis: Long): String =
+    java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(millis))
 
 object SessionHolder {
     @Volatile var token: String? = null

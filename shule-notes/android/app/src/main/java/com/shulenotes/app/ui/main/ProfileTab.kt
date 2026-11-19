@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.Person
@@ -79,6 +80,7 @@ fun ProfileTab(
     userClass: String,
     contentPadding: PaddingValues,
     onChangeClass: () -> Unit,
+    onOpenProgress: () -> Unit,
     onSignedOut: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
@@ -124,6 +126,8 @@ fun ProfileTab(
         SectionLabel("Study")
         SettingsCard {
             SettingsRow(Icons.Outlined.School, "My class", trailingText = userClass.ifBlank { "Not chosen" }, onClick = onChangeClass)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
+            SettingsRow(Icons.Outlined.Insights, "My progress", onClick = onOpenProgress)
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
             SettingsRow(
                 Icons.Outlined.Palette, "Appearance",

@@ -60,11 +60,15 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
     val seenAt by ShuleApp.session.notificationsSeenAt.collectAsState(initial = Long.MAX_VALUE)
     var showNotifications by rememberSaveable { mutableStateOf(false) }
     var seenAtOnOpen by rememberSaveable { mutableStateOf(0L) }
+    var showProgress by rememberSaveable { mutableStateOf(false) }
+    val studyPages by ShuleApp.session.studyPages.collectAsState(initial = emptySet())
+    val finishedNotes by ShuleApp.session.finishedNotes.collectAsState(initial = emptySet())
     val scope = rememberCoroutineScope()
     val unread = viewModel.notifications.count { parseIsoMillis(it.createdAt) > seenAt }
 
     BackHandler(enabled = tab != 0) { tab = 0 }
     BackHandler(enabled = showNotifications) { showNotifications = false }
+    BackHandler(enabled = showProgress) { showProgress = false }
 
     Box(Modifier.fillMaxSize()) {
     Scaffold(
@@ -118,10 +122,18 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
                     userClass = userClass,
                     contentPadding = padding,
                     onChangeClass = { showClassSheet = true },
+                    onOpenProgress = { showProgress = true },
                     onSignedOut = onSignedOut,
                 )
             }
         }
+    }
+
+    if (showProgress) {
+        ProgressScreen(
+            stats = computeStudyStats(studyPages, finishedNotes, viewModel.notes),
+            onBack = { showProgress = false },
+        )
     }
 
     if (showNotifications) {

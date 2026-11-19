@@ -138,6 +138,7 @@ fun NoteDetailScreen(noteId: String, startPage: Int, viewModel: NoteViewModel, o
             snapshotFlow { currentPage }.collectLatest { page ->
                 delay(700)
                 ShuleApp.session.recordProgress(noteId, page, pageCount)
+                ShuleApp.session.recordPageRead(noteId, page, pageCount)
             }
         }
     }

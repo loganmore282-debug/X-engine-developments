@@ -55,6 +55,7 @@ console.log('— publicUser / publicNote never leak internal fields —');
   ck(n2.hasAiContext === false, 'a note with no extracted text (a scan) correctly reports AI is unavailable');
   ck(n.kind === 'notes' && server.publicNote({ _id: 'n3', title: 'x', kind: 'past-paper' }).kind === 'past-paper', 'a note is ordinary notes unless it is marked a past paper (older notes have no type)');
   ck(server.publicNote({ _id: 'n4', title: 'x', kind: 'something-else' }).kind === 'notes', 'an unknown stored type falls back to notes');
+  ck(server.publicNote({ _id: 'n5', title: 'x', views: 12 }).views === 12 && server.publicNote({ _id: 'n6', title: 'x' }).views === 0, 'how many times a note was opened is shared (for the Most read order); a new note has 0');
 }
 
 console.log('\n— one stored form per phone number —');

@@ -66,6 +66,8 @@ data class Note(
     val classLevel: String?,
     // "notes" or "past-paper"; absent from servers older than this feature.
     val kind: String? = null,
+    // How many times students opened it (for the "Most read" order).
+    val views: Int = 0,
     val pageCount: Int,
     val fileSize: Long,
     val uploadedAt: String?,

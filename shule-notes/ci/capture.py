@@ -208,6 +208,17 @@ def walk():
     wait_for("Notes for Senior 2")
     wait_for("Photosynthesis", prefix=True)
 
+    # Sort the list: the menu, then A to Z, then back to newest.
+    tap(wait_for("Newest"))
+    wait_for("A to Z")
+    shot("app-04c-sort-menu")
+    tap(wait_for("A to Z"))
+    time.sleep(1)
+    shot("app-04d-sorted-a-to-z")
+    tap(wait_for("A to Z"))
+    tap(wait_for("Newest"))
+    time.sleep(1)
+
     tap(wait_for("Biology"))
     wait_gone("Acids, Bases and Salts", prefix=True)
     time.sleep(1)
@@ -225,6 +236,8 @@ def walk():
     shot("app-06b-search-every-class")
     tap(wait_for("Clear search"))
     wait_for("Photosynthesis", prefix=True)
+    time.sleep(2)
+    shot("app-06c-recent-searches")
 
     # Switch class from the header: another class has different notes.
     tap(wait_for("All classes"))
@@ -401,6 +414,15 @@ def walk():
     tap(wait_for("Pages (1)"))
     wait_for("Photosynthesis", prefix=True)
     shot("app-15b-bookmarked-pages")
+
+    # My progress: what the student has read.
+    tap(wait_for("Profile"))
+    tap(wait_for("My progress"))
+    wait_for("day in a row")
+    time.sleep(1)
+    shot("app-15c-my-progress")
+    adb("shell", "input", "keyevent", "4")
+    wait_for("Appearance")
     tap(wait_for("Home"))
 
     night(True)
