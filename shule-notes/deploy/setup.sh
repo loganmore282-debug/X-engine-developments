@@ -131,7 +131,10 @@ if ! nginx -t 2>/dev/null; then
   nginx -t || true; rollback; exit 1
 fi
 # Make sure nginx really loads them (a customised nginx.conf might not read conf.d).
-if ! nginx -T 2>/dev/null | grep -q "server_name $API_DOMAIN"; then
+# (Capture the dump first: piping it straight into "grep -q" makes nginx die of SIGPIPE and
+# "pipefail" would then report a false "not found".)
+NGINX_DUMP="$(nginx -T 2>&1 || true)"
+if ! grep -q "server_name $API_DOMAIN" <<<"$NGINX_DUMP"; then
   echo "This nginx does not read /etc/nginx/conf.d, so my files would do nothing. I removed them; nothing was changed."
   rollback; exit 1
 fi
@@ -139,7 +142,8 @@ systemctl enable nginx >/dev/null 2>&1 || true
 systemctl reload nginx 2>/dev/null || systemctl start nginx
 
 echo "==> Firewall"
-if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
+UFW_STATUS="$(ufw status 2>/dev/null || true)"
+if command -v ufw >/dev/null && grep -q "Status: active" <<<"$UFW_STATUS"; then
   ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null
   echo "    ufw is active: ports 80 and 443 allowed (existing rules untouched)"
 else
