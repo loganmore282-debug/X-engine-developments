@@ -446,7 +446,7 @@ app.get('/privacy', ah(async (req, res) => res.type('html').send(privacyPage(awa
 app.get('/terms', ah(async (req, res) => res.type('html').send(termsPage(await legalFor()))));
 app.get('/account-deletion', ah(async (req, res) => res.type('html').send(accountDeletionPage(await legalFor()))));
 
-app.get('/health', (req, res) => res.json({ status: 'success', time: new Date().toISOString() }));
+app.get('/health', (req, res) => res.json({ status: 'success', app: 'shule-notes', time: new Date().toISOString() }));
 
 async function start() {
   await connect();
