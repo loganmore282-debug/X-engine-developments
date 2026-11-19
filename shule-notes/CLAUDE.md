@@ -189,6 +189,31 @@ app's "Forgot password?" just shows the support contacts from Settings (`GET /co
   emulator's alias for the host) and a placeholder for release. `src/debug/` allows plain
   HTTP for debug builds only. The privacy policy link is `API_BASE_URL + /privacy`.
 
+### Features added after the first release (all built and walked on the emulator unless noted)
+- **Bell + inbox** (`NotificationsScreen`): the owner's live announcements (`GET /announcements`, filtered
+  for the student's class), unread badge from `SessionStore.notificationsSeenAt`. Appearance (system/light/dark)
+  and Share are in Profile.
+- **Notes vs Past papers:** a note has a `kind` (`NOTE_KINDS` in server.js), chosen in the admin upload form;
+  Home shows All/Notes/Past papers chips when a class has both. Sort: Newest / Most read (`views`) / A to Z.
+- **Offline downloads** (`data/Downloads.kt`): the PDF is copied to app storage, marked on cards, listed in Saved > Downloads.
+- **Reader:** in-PDF search over per-page text (`GET /notes/:id/pages`, `note-pages.js`, `PageSearch.kt`),
+  single-page bookmarks (stored as "noteId:page"), thin progress bar, last page restored.
+- **My progress** (`ProgressScreen`, `StudyStats`): streak, pages this week, notes finished, subjects, 7-day chart,
+  all computed on the phone from pages actually read. Recent searches are remembered (max 8).
+- **Feedback:** Profile > Send feedback -> `POST /feedback` -> admin Feedback tab (`feedback.js`).
+- **Update prompt:** `app-version.js` reads the newest APK version published by the download page; the app shows a
+  banner, or a blocking screen if the owner sets "oldest version allowed" in admin Settings (`UpdateScreens.kt`).
+  `versionCode` = the CI run number.
+- **Push notifications (FCM):** the backend sends with FCM HTTP v1 (`backend/push.js`: service-account JWT ->
+  access token -> `messages:send`, no SDK). The owner pastes the service-account JSON ONLY into admin Settings >
+  Push notifications (stored in the settings document, never sent to the app or shown again; only
+  `project_id`, `client_email`, `private_key` are kept). An announcement can target one class (`classLevel`) and has an
+  "Also send a notification" tick-box (only on creating). Topics: `all` and `class_<slug>` (`topicFor`, e.g.
+  "Senior 2" -> `class_senior_2`); the app (`push/Push.kt`) subscribes to `all` + its class, re-syncs when the class or
+  the Profile > Notifications switch changes, and unsubscribes on log out/delete. `google-services.json`
+  (NOT secret) goes in `android/app/`; the google-services plugin is applied only when that file exists, so the
+  app still builds and runs without it (Push.sync then does nothing). Channel id `announcements`.
+
 ### Not done yet for a Play Store upload
 - **Target API level:** still 34. Google Play requires new apps to target a recent Android
   version; check the current requirement and raise compileSdk/targetSdk (needs a newer
