@@ -209,8 +209,12 @@ Everything is scripted in `shule-notes/deploy/` (read its `README.md`): `setup.s
 `ANTHROPIC_API_KEY`). `update.sh` puts new code live, `backup.sh` backs up PDFs + database
 nightly (Atlas M0 has no backups of its own). The server listens on `127.0.0.1` behind nginx
 (`HOST`, `TRUST_PROXY=1`): trust proxy is REQUIRED there, otherwise every student shares one
-rate-limit bucket. MongoDB: `deploy/mongodb/setup-mongodb.sh` installs MongoDB 8 on the VPS itself
-(127.0.0.1 only, auth on, `shule_app` user, writes `MONGODB_URI`); Atlas is the documented alternative.
+rate-limit bucket. MongoDB: `deploy/mongodb/setup-mongodb.sh` runs Shule Notes' OWN mongod (service
+`shule-mongod`, port 27018, 127.0.0.1 only, auth on, `shule_app` user, writes `MONGODB_URI`);
+Atlas is the documented alternative. **The owner's VPS (Contabo) already runs other projects:**
+the deploy scripts must only ADD (own user, own port from 4000 up, two new nginx sites, own
+Node/Mongo, ufw only if already active) and never remove, replace or reconfigure anything;
+`preflight.sh` is a read-only survey. Never SSH into it -- there is no access from here.
 `node server.js` refuses to start with no `MONGODB_URI` (`db.js`).
 
 ### Admin panel → the same VPS (nginx serves it on its own subdomain)

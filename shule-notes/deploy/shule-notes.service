@@ -1,7 +1,7 @@
 [Unit]
 Description=Shule Notes backend
-After=network-online.target
-Wants=network-online.target
+After=network-online.target shule-mongod.service
+Wants=network-online.target shule-mongod.service
 
 [Service]
 Type=simple
@@ -9,7 +9,7 @@ User=shule
 Group=shule
 WorkingDirectory=/opt/shule-notes/backend
 EnvironmentFile=/etc/shule-notes/.env
-ExecStart=/usr/bin/node server.js
+ExecStart=__NODE__ server.js
 Restart=always
 RestartSec=3
 

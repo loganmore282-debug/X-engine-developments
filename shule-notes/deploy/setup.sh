@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
-# One-time setup of the Shule Notes backend and admin panel on a fresh
-# Contabo VPS running Ubuntu 22.04 or 24.04. Run as root, from this folder:
+# Sets up the Shule Notes backend and admin panel on a Contabo VPS (Ubuntu
+# 22.04 or 24.04) that may ALREADY be running other projects. It only ADDS
+# things; it never removes, replaces or reconfigures what is there:
 #
+#   - its own user (shule), folders (/opt/shule-notes, /etc/shule-notes,
+#     /var/lib/shule-notes) and one systemd service (shule-notes);
+#   - two new nginx sites (shule-api, shule-admin); your other sites are not touched;
+#   - the first free port from 4000 up (not a fixed 4000);
+#   - its own Node 20 inside /opt/shule-notes unless the server already has Node 20+,
+#     so the Node other projects use is never changed;
+#   - the firewall: if ufw is active it only ADDS the web ports; it is never switched on or reset.
+#
+# Run it as root, from this folder:
 #   sudo ./setup.sh api.example.com admin.example.com you@example.com
-#
-# No domain yet? Use a free address built from the server's own IP (works for
-# testing; buy a domain before publishing the app):
-#
+# No domain yet (free addresses built from the server's IP, fine for testing):
 #   sudo ./setup.sh --no-domain you@example.com
-#
-# Both domains must already point at the VPS's IP address (an A record each),
-# or the certificate step cannot work. Safe to run again (also to switch to a
-# real domain later): it never overwrites your .env secrets, and it re-copies the code.
+# Look around first, changing nothing:  sudo ./preflight.sh
+# Safe to run again (also to switch to a real domain later).
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "Run this as root (sudo)."; exit 1; }
 
@@ -19,17 +24,14 @@ USAGE="usage: setup.sh <api-domain> <admin-domain> <email-for-certificates>
        setup.sh --no-domain <email-for-certificates>"
 if [ "${1:-}" = "--no-domain" ]; then
   CERT_EMAIL="${2:?$USAGE}"
-  apt-get update -y >/dev/null && apt-get install -y curl >/dev/null
+  command -v curl >/dev/null || { apt-get update -y >/dev/null; apt-get install -y curl >/dev/null; }
   IP="$(curl -4fsS https://api.ipify.org)" || { echo "Could not find this server's public IP."; exit 1; }
   DASHED="${IP//./-}"
-  # sslip.io answers any name of the form <anything>.<ip-with-dashes>.sslip.io with that IP.
-  API_DOMAIN="api.$DASHED.sslip.io"
+  API_DOMAIN="api.$DASHED.sslip.io"       # sslip.io answers <anything>.<ip-with-dashes>.sslip.io with that IP
   ADMIN_DOMAIN="admin.$DASHED.sslip.io"
   echo "==> No domain: using $API_DOMAIN and $ADMIN_DOMAIN"
 else
-  API_DOMAIN="${1:?$USAGE}"
-  ADMIN_DOMAIN="${2:?$USAGE}"
-  CERT_EMAIL="${3:?$USAGE}"
+  API_DOMAIN="${1:?$USAGE}"; ADMIN_DOMAIN="${2:?$USAGE}"; CERT_EMAIL="${3:?$USAGE}"
 fi
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -39,84 +41,129 @@ ENV_DIR=/etc/shule-notes
 UPLOADS=/var/lib/shule-notes/uploads
 WEB=/var/www/shule-admin
 
-echo "==> Installing packages"
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
-apt-get install -y curl ca-certificates gnupg nginx certbot python3-certbot-nginx ufw openssl rsync
-if ! command -v node >/dev/null || [ "$(node -v | sed 's/v\([0-9]*\).*/\1/')" -lt 20 ]; then
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-  apt-get install -y nodejs
-fi
+owner_of_port() { ss -ltnpH "( sport = :$1 )" 2>/dev/null | grep -o '"[^"]*"' | head -1 | tr -d '"' || true; }
+port_in_use() { [ -n "$(ss -ltnH "( sport = :$1 )" 2>/dev/null)" ]; }
+set_env() { # set_env KEY VALUE  (rewrites one line; safe for values containing & or /)
+  grep -v "^$1=" "$ENV_DIR/.env" > "$ENV_DIR/.env.tmp" || true
+  echo "$1=$2" >> "$ENV_DIR/.env.tmp"; cat "$ENV_DIR/.env.tmp" > "$ENV_DIR/.env"; rm -f "$ENV_DIR/.env.tmp"
+}
 
-echo "==> Creating the service user and folders"
+echo "==> Checking that ports 80 and 443 are free for nginx (or already nginx)"
+for p in 80 443; do
+  o="$(owner_of_port $p)"
+  if [ -n "$o" ] && [ "$o" != "nginx" ]; then
+    echo "Port $p is already used by '$o', not nginx. Nothing has been changed."
+    echo "Your options: put Shule Notes behind that server instead (see README, 'Another web server is already running')."
+    exit 1
+  fi
+done
+
+echo "==> Installing only what is missing"
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y >/dev/null
+NEED=""
+for pkg in curl ca-certificates openssl rsync xz-utils; do dpkg -s "$pkg" >/dev/null 2>&1 || NEED="$NEED $pkg"; done
+command -v nginx >/dev/null || NEED="$NEED nginx"
+command -v certbot >/dev/null || NEED="$NEED certbot python3-certbot-nginx"
+[ -z "$NEED" ] || apt-get install -y $NEED
+
+echo "==> Node 20"
+NODE_BIN=""
+if command -v node >/dev/null && command -v npm >/dev/null && [ "$(node -p 'process.versions.node.split(".")[0]')" -ge 20 ]; then
+  NODE_BIN="$(command -v node)"; echo "    using the server's Node $(node -v)"
+else
+  case "$(uname -m)" in x86_64) NA=x64 ;; aarch64) NA=arm64 ;; *) echo "Unsupported CPU $(uname -m)"; exit 1 ;; esac
+  if [ ! -x "$APP/node/bin/node" ]; then
+    BASE=https://nodejs.org/dist/latest-v20.x
+    FILE="$(curl -fsSL "$BASE/SHASUMS256.txt" | grep "linux-$NA.tar.xz" | awk '{print $2}')"
+    mkdir -p "$APP/node"; curl -fsSL "$BASE/$FILE" | tar -xJ -C "$APP/node" --strip-components=1
+  fi
+  NODE_BIN="$APP/node/bin/node"; echo "    installed a private Node $("$NODE_BIN" -v) in $APP/node (the server's own Node is untouched)"
+fi
+NODE_DIR="$(dirname "$NODE_BIN")"
+
+echo "==> Service user and folders"
 id shule >/dev/null 2>&1 || useradd --system --home "$APP" --shell /usr/sbin/nologin shule
 mkdir -p "$APP" "$ENV_DIR" "$UPLOADS" "$WEB"
 chown -R shule:shule "$UPLOADS"
 
-echo "==> Copying the backend and installing its dependencies"
+echo "==> Backend code"
 rsync -a --delete --exclude node_modules --exclude uploads --exclude .env "$SRC/backend/" "$APP/backend/"
-(cd "$APP/backend" && npm install --omit=dev --no-audit --no-fund)
-chown -R root:shule "$APP"
-chmod -R g+rX "$APP"
+(cd "$APP/backend" && PATH="$NODE_DIR:$PATH" npm install --omit=dev --no-audit --no-fund)
+chown -R root:shule "$APP"; chmod -R g+rX "$APP"
 
-echo "==> Settings file"
+echo "==> Settings file ($ENV_DIR/.env)"
 if [ ! -f "$ENV_DIR/.env" ]; then
   cp "$SRC/backend/.env.example" "$ENV_DIR/.env"
   ADMIN_KEY="$(openssl rand -hex 24)"
-  sed -i "s|^ADMIN_KEY=.*|ADMIN_KEY=$ADMIN_KEY|" "$ENV_DIR/.env"
-  sed -i "s|^UPLOAD_DIR=.*|UPLOAD_DIR=$UPLOADS|" "$ENV_DIR/.env"
-  echo "    Created $ENV_DIR/.env with a new admin key: $ADMIN_KEY"
+  set_env ADMIN_KEY "$ADMIN_KEY"
+  echo "    New admin key: $ADMIN_KEY"
   echo "    (write it down: it is the password for the admin panel)"
 fi
-# Always follows the current admin address, so switching to a real domain later just works.
-if grep -q '^ALLOWED_ORIGINS=' "$ENV_DIR/.env"; then
-  sed -i "s|^ALLOWED_ORIGINS=.*|ALLOWED_ORIGINS=https://$ADMIN_DOMAIN|" "$ENV_DIR/.env"
-else
-  echo "ALLOWED_ORIGINS=https://$ADMIN_DOMAIN" >> "$ENV_DIR/.env"
+set_env UPLOAD_DIR "$UPLOADS"
+set_env ALLOWED_ORIGINS "https://$ADMIN_DOMAIN"
+# The first free port from 4000, so a project already using 4000 is not disturbed.
+PORT="$(grep -m1 '^PORT=' "$ENV_DIR/.env" | cut -d= -f2 || true)"; PORT="${PORT:-4000}"
+if ! systemctl is-active --quiet shule-notes && port_in_use "$PORT"; then
+  while port_in_use "$PORT"; do PORT=$((PORT + 1)); done
+  echo "    Port 4000 is taken here, using $PORT instead"
 fi
-chown root:shule "$ENV_DIR/.env"
-chmod 640 "$ENV_DIR/.env"
+set_env PORT "$PORT"
+chown root:shule "$ENV_DIR/.env"; chmod 640 "$ENV_DIR/.env"
 
 echo "==> Admin panel files"
 sed "s|http://localhost:4000|https://$API_DOMAIN|" "$SRC/admin/index.html" > "$WEB/index.html"
 
 echo "==> Service"
-cp "$HERE/shule-notes.service" /etc/systemd/system/shule-notes.service
+sed "s|__NODE__|$NODE_BIN|" "$HERE/shule-notes.service" > /etc/systemd/system/shule-notes.service
 systemctl daemon-reload
 systemctl enable shule-notes >/dev/null
 
-echo "==> nginx"
-sed "s|__API_DOMAIN__|$API_DOMAIN|g" "$HERE/nginx-api.conf" > /etc/nginx/sites-available/shule-api
-sed "s|__ADMIN_DOMAIN__|$ADMIN_DOMAIN|g" "$HERE/nginx-admin.conf" > /etc/nginx/sites-available/shule-admin
-ln -sf /etc/nginx/sites-available/shule-api /etc/nginx/sites-enabled/shule-api
-ln -sf /etc/nginx/sites-available/shule-admin /etc/nginx/sites-enabled/shule-admin
-rm -f /etc/nginx/sites-enabled/default
-nginx -t
-systemctl reload nginx
+echo "==> nginx (two new sites; your others are not touched)"
+if [ -d /etc/nginx/sites-available ]; then
+  API_CONF=/etc/nginx/sites-available/shule-api; ADMIN_CONF=/etc/nginx/sites-available/shule-admin
+else
+  API_CONF=/etc/nginx/conf.d/shule-api.conf; ADMIN_CONF=/etc/nginx/conf.d/shule-admin.conf
+fi
+sed "s|__API_DOMAIN__|$API_DOMAIN|g; s|__PORT__|$PORT|g" "$HERE/nginx-api.conf" > "$API_CONF"
+sed "s|__ADMIN_DOMAIN__|$ADMIN_DOMAIN|g" "$HERE/nginx-admin.conf" > "$ADMIN_CONF"
+if [ -d /etc/nginx/sites-available ]; then
+  ln -sf "$API_CONF" /etc/nginx/sites-enabled/shule-api; ln -sf "$ADMIN_CONF" /etc/nginx/sites-enabled/shule-admin
+fi
+if nginx -t 2>/dev/null; then
+  systemctl enable nginx >/dev/null 2>&1 || true
+  systemctl reload nginx 2>/dev/null || systemctl start nginx
+else
+  echo "nginx rejected the new configuration, so I removed my two sites. Nothing else was changed:"
+  nginx -t || true
+  rm -f "$API_CONF" "$ADMIN_CONF" /etc/nginx/sites-enabled/shule-api /etc/nginx/sites-enabled/shule-admin
+  exit 1
+fi
 
-echo "==> Firewall (SSH, HTTP, HTTPS only)"
-ufw allow OpenSSH >/dev/null
-ufw allow 'Nginx Full' >/dev/null
-ufw --force enable >/dev/null
+echo "==> Firewall"
+if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
+  ufw allow 'Nginx Full' >/dev/null && echo "    ufw is active: added the web ports (existing rules untouched)"
+else
+  echo "    ufw is not active; left exactly as it is. (Contabo has its own firewall option in the customer panel.)"
+fi
 
-echo "==> HTTPS certificates"
+echo "==> HTTPS certificates (only for $API_DOMAIN and $ADMIN_DOMAIN)"
 certbot --nginx --non-interactive --agree-tos -m "$CERT_EMAIL" --redirect -d "$API_DOMAIN" -d "$ADMIN_DOMAIN" \
-  || echo "    Certificates failed. Check that both domains point at this server, then run this script again."
+  || echo "    Certificates failed. Check that both names point at this server, then run this script again."
 
-if grep -Eq '^(MONGODB_URI=mongodb\+srv://user:pass@|ANTHROPIC_API_KEY=sk-ant-\.\.\.)' "$ENV_DIR/.env"; then
+echo
+if grep -Eq '^(MONGODB_URI=mongodb\+srv://user:pass@|MONGODB_URI=$|ANTHROPIC_API_KEY=sk-ant-\.\.\.)' "$ENV_DIR/.env"; then
   cat <<MSG
-
-==> Almost done. Edit $ENV_DIR/.env and set:
-      MONGODB_URI        your MongoDB connection string (database name at the end)
-      ANTHROPIC_API_KEY  your Claude API key
-    then start the server:
+==> Almost done. Next:
+      sudo ./mongodb/setup-mongodb.sh         (its own MongoDB, separate from any you already run)
+      sudo nano $ENV_DIR/.env                 (set ANTHROPIC_API_KEY)
       sudo systemctl start shule-notes
-      sudo journalctl -u shule-notes -f
+      curl https://$API_DOMAIN/health
 MSG
 else
   systemctl restart shule-notes
   echo "==> Started. Check it: curl https://$API_DOMAIN/health"
 fi
 echo
-echo "Your addresses:  API   https://$API_DOMAIN"
+echo "Your addresses:  API   https://$API_DOMAIN   (app on 127.0.0.1:$PORT)"
 echo "                 Admin https://$ADMIN_DOMAIN"

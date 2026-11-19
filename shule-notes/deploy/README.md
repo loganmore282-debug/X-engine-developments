@@ -5,7 +5,7 @@ What you end up with:
 ```
 students' phones ──► https://api.yourdomain.com   (nginx ──► the Node server, port 4000, this machine only)
 you, in a browser ─► https://admin.yourdomain.com  (nginx serves the admin page)
-                     MongoDB (Atlas, or on the same VPS)     PDFs on the VPS disk: /var/lib/shule-notes/uploads
+                     MongoDB (its own instance on the VPS, or Atlas)     PDFs on the VPS disk: /var/lib/shule-notes/uploads
 ```
 
 ## Before you start
@@ -15,6 +15,29 @@ you, in a browser ─► https://admin.yourdomain.com  (nginx serves the admin p
    (for example `api.shulenotes.com` and `admin.shulenotes.com`). Wait a few minutes.
 3. MongoDB: nothing to prepare for the on-the-VPS option; for Atlas, see "MongoDB" below.
 4. Your Claude API key (console.anthropic.com).
+
+## This server already runs other projects
+
+The scripts are written for exactly that: they only **add** things and never remove,
+replace or reconfigure what is there.
+
+First, look without changing anything (it only prints; you can send me the output):
+
+```bash
+sudo ./preflight.sh
+```
+
+| What the setup adds | What it never touches |
+|---|---|
+| a user `shule`, folders `/opt/shule-notes`, `/etc/shule-notes`, `/var/lib/shule-notes` | your other projects' folders, users, services |
+| one service, `shule-notes`, on the first free port from 4000 | whatever already uses port 4000 (it picks another) |
+| two new nginx sites, `shule-api` and `shule-admin` (other sites stay as they are; if nginx rejects the result, the two files are removed again and nothing is left changed) | your existing nginx sites and certificates |
+| its own Node 20 inside `/opt/shule-notes/node`, only if the server has no Node 20+ | the server's Node, pm2, Docker |
+| its own MongoDB: service `shule-mongod`, port 27018 (or next free), data `/var/lib/shule-mongodb`, `127.0.0.1` only | any MongoDB you already run, its data and `/etc/mongod.conf` |
+| web ports in ufw **only if ufw is already active** | the firewall otherwise (never switched on or reset) |
+
+If something else already owns port 80 or 443 (Apache, Caddy, a Docker proxy), the setup
+stops before changing anything. See "Another web server is already running" below.
 
 ## No domain yet?
 
@@ -67,35 +90,37 @@ Open `https://admin.yourdomain.com`, sign in with the admin key, then:
 
 ## MongoDB
 
-### Option A: on the same VPS (recommended here, nothing extra to pay for)
+### Option A: its own MongoDB on this server (nothing extra to pay for)
 
-After `setup.sh`, run:
+After `setup.sh`:
 
 ```bash
 cd X-engine-developments/shule-notes/deploy/mongodb
 sudo ./setup-mongodb.sh
 ```
 
-It installs MongoDB 8.0, locks it so only this machine can reach it (127.0.0.1, port 27017
-is not opened in the firewall) and requires a login, creates a `shule_app` user that can
-only touch the `shule_notes` database, and writes the connection string into
-`/etc/shule-notes/.env` for you. The passwords are generated and saved in
-`/root/shule-mongodb-credentials.txt` (also holds a full-control `shule_root` login for you,
-for example `mongosh "mongodb://shule_root:...@127.0.0.1:27017/admin"`).
-Settings are in `mongodb/mongod.conf`; its memory cache is capped at 1 GB, so raise
-`cacheSizeGB` if your VPS has plenty of RAM (about a quarter of it is a good value).
+This gives Shule Notes **its own** MongoDB, separate from any you already run: its own
+service (`shule-mongod`), config (`/etc/shule-mongod.conf`), data folder
+(`/var/lib/shule-mongodb`) and port (27018, or the next free one). It listens on
+`127.0.0.1` only, requires a login, and has a `shule_app` user that can touch only the
+`shule_notes` database. If the server already has the `mongod` program it is used as it is
+(not upgraded); otherwise only the MongoDB 8.0 server package is installed and held so a
+routine `apt upgrade` never changes its version. The connection string goes into
+`/etc/shule-notes/.env` for you; passwords are in `/root/shule-mongodb-credentials.txt`
+together with a full-control `shule_root` login for you.
+Settings: `mongodb/mongod.conf` (memory cache capped at 1 GB).
 
 Then add your Claude key and start the app:
 
 ```bash
 sudo nano /etc/shule-notes/.env        # ANTHROPIC_API_KEY=...
 sudo systemctl start shule-notes
-curl https://api.yourdomain.com/health
+curl https://<your api address>/health
 ```
 
-Install the nightly backup (`backup.sh`, top of the file) so the database and the PDFs are
-copied every night. To restore a database backup:
-`mongorestore --uri "<shule_root connection string>" --gzip --archive=/var/backups/shule-notes/mongo-YYYY-MM-DD.archive.gz --drop`
+Install the nightly backup (`backup.sh`, top of the file); it uses `mongodump` if the
+server has it (`sudo apt-get install mongodb-database-tools` adds just that tool).
+To restore: `mongorestore --uri "<shule_root connection string>" --gzip --archive=/var/backups/shule-notes/mongo-YYYY-MM-DD.archive.gz --drop`
 
 ### Option B: MongoDB Atlas (hosted by MongoDB)
 
@@ -109,12 +134,21 @@ copied every night. To restore a database backup:
 
 Either way the app creates its own collections and indexes the first time it starts.
 
+## Another web server is already running
+
+If Apache, Caddy or a Docker proxy already uses ports 80 and 443, do not stop it. Keep
+the Shule Notes server running on its own port (`PORT` in `/etc/shule-notes/.env`) and add
+a reverse-proxy entry for your API address in the server you already have, pointing at
+`http://127.0.0.1:<PORT>` (with large uploads allowed, 55 MB, and a 120 second timeout), and
+serve `/var/www/shule-admin` for the admin address. Send me what `preflight.sh` prints and
+I will write the exact entry for that server.
+
 ## Later
 
 | Task | Command |
 |---|---|
 | Put new code live | `cd X-engine-developments && git pull && cd shule-notes/deploy && ./update.sh api.yourdomain.com` |
-| See what the server is doing | `journalctl -u shule-notes -f` |
+| See what the server is doing | `journalctl -u shule-notes -f` (database: `journalctl -u shule-mongod`) |
 | Restart | `systemctl restart shule-notes` |
 | Change a setting in `.env` | edit `/etc/shule-notes/.env`, then restart |
 | Nightly backup of PDFs and database | see the top of `backup.sh` |

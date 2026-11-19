@@ -1,92 +1,97 @@
 #!/usr/bin/env bash
-# Installs MongoDB 8.0 on the Contabo VPS (Ubuntu 22.04 or 24.04), locks it
-# down, creates the database user the app needs, and puts the connection
-# string into /etc/shule-notes/.env.
+# Gives Shule Notes its OWN MongoDB on this server, without touching any MongoDB
+# you already run:
+#   - a separate service (shule-mongod), config (/etc/shule-mongod.conf), data
+#     folder (/var/lib/shule-mongodb) and port (27018, or the next free one);
+#   - listens on 127.0.0.1 only and requires a password;
+#   - uses the mongod program already on the server if there is one (it is not
+#     upgraded or reconfigured), otherwise installs only the MongoDB 8.0 server
+#     package and holds it so a routine "apt upgrade" never jumps versions.
 #
-#   sudo ./setup-mongodb.sh
-#
-# Run deploy/setup.sh first (it creates /etc/shule-notes/.env). Safe to run
-# again: it will not create the users twice or change their passwords.
+#   sudo ./setup-mongodb.sh        (run deploy/setup.sh first)
+# Safe to run again: existing users and data are left alone.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "Run this as root (sudo)."; exit 1; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-DB=shule_notes
-APP_USER=shule_app
-CRED=/root/shule-mongodb-credentials.txt
 ENV_FILE=/etc/shule-notes/.env
+CRED=/root/shule-mongodb-credentials.txt
+DATA=/var/lib/shule-mongodb
+[ -d /opt/shule-notes/backend/node_modules/mongodb ] || { echo "Run deploy/setup.sh first (it installs the app and its database driver)."; exit 1; }
+NODE=/opt/shule-notes/node/bin/node; [ -x "$NODE" ] || NODE="$(command -v node)"
+export NODE_PATH=/opt/shule-notes/backend/node_modules
+port_in_use() { [ -n "$(ss -ltnH "( sport = :$1 )" 2>/dev/null)" ]; }
 
-. /etc/os-release
-case "$VERSION_CODENAME" in
-  jammy|noble) ;;
-  *) echo "This script supports Ubuntu 22.04 (jammy) and 24.04 (noble); this is $VERSION_CODENAME."; exit 1 ;;
-esac
-
-echo "==> Installing MongoDB 8.0"
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
-apt-get install -y curl gnupg ca-certificates openssl
-if [ ! -f /usr/share/keyrings/mongodb-server-8.0.gpg ]; then
-  curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-8.0.gpg
+echo "==> The MongoDB program"
+MONGOD="$(command -v mongod || true)"
+if [ -n "$MONGOD" ]; then
+  echo "    found $("$MONGOD" --version | head -1) at $MONGOD: using it as it is (not upgraded)"
+else
+  . /etc/os-release
+  case "$VERSION_CODENAME" in jammy|noble) ;; *) echo "Unsupported Ubuntu release $VERSION_CODENAME."; exit 1 ;; esac
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get install -y curl gnupg ca-certificates >/dev/null
+  curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | gpg --dearmor --yes -o /usr/share/keyrings/mongodb-server-8.0.gpg
+  echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu $VERSION_CODENAME/mongodb-org/8.0 multiverse" > /etc/apt/sources.list.d/mongodb-org-8.0.list
+  apt-get update -y >/dev/null
+  apt-get install -y mongodb-org-server mongodb-database-tools
+  apt-mark hold mongodb-org-server >/dev/null
+  # The package ships a default "mongod" service; we do not use or start it.
+  systemctl disable --now mongod >/dev/null 2>&1 || true
+  MONGOD="$(command -v mongod)"
 fi
-echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu $VERSION_CODENAME/mongodb-org/8.0 multiverse" \
-  > /etc/apt/sources.list.d/mongodb-org-8.0.list
-apt-get update -y
-apt-get install -y mongodb-org
+
+echo "==> Its own port (27018 or the next free one)"
+PORT=27018
+if [ -f /etc/shule-mongod.conf ] && systemctl is-active --quiet shule-mongod; then
+  PORT="$(grep -m1 'port:' /etc/shule-mongod.conf | awk '{print $2}')"
+else
+  while port_in_use "$PORT"; do PORT=$((PORT + 1)); done
+fi
+echo "    $PORT"
+
+echo "==> Its own user, folders, config and service"
+id shule-mongo >/dev/null 2>&1 || useradd --system --home "$DATA" --shell /usr/sbin/nologin shule-mongo
+mkdir -p "$DATA" /var/log/shule-mongodb
+chown -R shule-mongo:shule-mongo "$DATA" /var/log/shule-mongodb
+sed "s|__MONGOD__|$MONGOD|" "$HERE/shule-mongod.service" > /etc/systemd/system/shule-mongod.service
+systemctl daemon-reload
+systemctl enable shule-mongod >/dev/null
 
 if [ ! -f "$CRED" ]; then
-  echo "==> Creating the database users (MongoDB is local-only and has no login yet, for these few seconds)"
-  # Start from a plain local-only config with no login, create the users, then lock it.
-  sed 's/authorization: enabled/authorization: disabled/' "$HERE/mongod.conf" > /etc/mongod.conf
-  systemctl enable mongod >/dev/null
-  systemctl restart mongod
-  for i in $(seq 1 30); do mongosh --quiet --eval 'db.runCommand({ping:1}).ok' >/dev/null 2>&1 && break; sleep 1; done
-
-  ROOT_PASS="$(openssl rand -hex 20)"
-  APP_PASS="$(openssl rand -hex 20)"
-  # Passwords are hex, so they are safe to put in a connection string as they are.
-  mongosh --quiet --eval "
-    const admin = db.getSiblingDB('admin');
-    admin.createUser({ user: 'shule_root', pwd: '$ROOT_PASS', roles: [{ role: 'root', db: 'admin' }] });
-    const app = db.getSiblingDB('$DB');
-    app.createUser({ user: '$APP_USER', pwd: '$APP_PASS', roles: [{ role: 'readWrite', db: '$DB' }] });
-  "
+  echo "==> Creating the users (this instance has no login for these few seconds, and listens on localhost only)"
+  sed "s|__PORT__|$PORT|; s|__AUTH__|disabled|" "$HERE/mongod.conf" > /etc/shule-mongod.conf
+  systemctl restart shule-mongod
+  for i in $(seq 1 40); do "$NODE" -e "
+    const {MongoClient}=require('mongodb');
+    new MongoClient('mongodb://127.0.0.1:$PORT/?directConnection=true',{serverSelectionTimeoutMS:1000}).connect().then(c=>c.close()).then(()=>process.exit(0),()=>process.exit(1))" && break; sleep 1; done
+  ROOT_PASS="$(openssl rand -hex 20)"; APP_PASS="$(openssl rand -hex 20)"   # hex: safe inside a connection string
+  "$NODE" "$HERE/create-users.js" create "$PORT" "$ROOT_PASS" "$APP_PASS"
   umask 077
   cat > "$CRED" <<CREDS
 Shule Notes MongoDB credentials (keep this file private)
 
 App connection string (already put into $ENV_FILE):
-  mongodb://$APP_USER:$APP_PASS@127.0.0.1:27017/$DB?authSource=$DB
+  mongodb://shule_app:$APP_PASS@127.0.0.1:$PORT/shule_notes?authSource=shule_notes
 
-Maintenance login (full control, for you only):
-  mongosh "mongodb://shule_root:$ROOT_PASS@127.0.0.1:27017/admin"
+Full-control login, for you only:
+  mongodb://shule_root:$ROOT_PASS@127.0.0.1:$PORT/admin
 CREDS
 else
   echo "==> Users already exist ($CRED), leaving them as they are"
 fi
 
-echo "==> Locking MongoDB down (local only, login required)"
-install -m 644 "$HERE/mongod.conf" /etc/mongod.conf
-systemctl restart mongod
-for i in $(seq 1 30); do systemctl is-active --quiet mongod && break; sleep 1; done
+echo "==> Switching on the password requirement"
+sed "s|__PORT__|$PORT|; s|__AUTH__|enabled|" "$HERE/mongod.conf" > /etc/shule-mongod.conf
+systemctl restart shule-mongod
+sleep 3
 
-URI="$(grep -m1 -A0 '^  mongodb://' "$CRED" | sed 's/^  //')"
+URI="$(grep -m1 '^  mongodb://shule_app' "$CRED" | sed 's/^  //')"
 if [ -f "$ENV_FILE" ]; then
-  # Rewrite the line without sed, because the "&" in a connection string means something to it.
   grep -v '^MONGODB_URI=' "$ENV_FILE" > "$ENV_FILE.tmp" || true
-  echo "MONGODB_URI=$URI" >> "$ENV_FILE.tmp"
-  cat "$ENV_FILE.tmp" > "$ENV_FILE" && rm -f "$ENV_FILE.tmp"
+  echo "MONGODB_URI=$URI" >> "$ENV_FILE.tmp"; cat "$ENV_FILE.tmp" > "$ENV_FILE"; rm -f "$ENV_FILE.tmp"
   echo "==> MONGODB_URI written to $ENV_FILE"
-else
-  echo "==> $ENV_FILE does not exist yet. Run deploy/setup.sh, then put this line in it:"
-  echo "    MONGODB_URI=$URI"
 fi
-
-echo "==> Checking the login works"
-if mongosh --quiet "$URI" --eval "db.runCommand({ping:1}).ok" | grep -q 1; then
-  echo "    OK: the app user can log in to $DB"
-else
-  echo "    The check failed. Look at: journalctl -u mongod -n 50"; exit 1
-fi
-echo "    Not reachable from outside: MongoDB listens on 127.0.0.1 only."
-echo "    Credentials are saved in $CRED"
+echo "==> Checking the app login works"
+"$NODE" "$HERE/create-users.js" check "$URI" || { echo "The check failed. See: journalctl -u shule-mongod -n 50"; exit 1; }
+echo "    Local-only on 127.0.0.1:$PORT. Credentials are in $CRED"

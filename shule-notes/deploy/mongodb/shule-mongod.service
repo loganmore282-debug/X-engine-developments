@@ -1,0 +1,17 @@
+[Unit]
+Description=MongoDB for Shule Notes (separate from any other MongoDB)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=shule-mongo
+Group=shule-mongo
+ExecStart=__MONGOD__ --config /etc/shule-mongod.conf
+Restart=always
+RestartSec=3
+LimitNOFILE=64000
+RuntimeDirectory=shule-mongod
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
