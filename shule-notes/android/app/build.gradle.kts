@@ -4,6 +4,12 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Phone notifications need the owner's google-services.json from the Firebase console. Until that
+// file is in this folder the app still builds and runs; it just cannot receive notifications.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.shulenotes.app"
     compileSdk = 34
@@ -68,6 +74,9 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
+    implementation("com.google.firebase:firebase-messaging")
 
     implementation("androidx.navigation:navigation-compose:2.8.3")
     implementation("androidx.datastore:datastore-preferences:1.1.1")

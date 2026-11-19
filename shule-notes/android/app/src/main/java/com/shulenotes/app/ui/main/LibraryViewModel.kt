@@ -343,6 +343,8 @@ class LibraryViewModel : ViewModel() {
         viewModelScope.launch {
             // Best effort: the phone forgets the session even if the server cannot be reached.
             try { ApiClient.service.logout() } catch (e: Exception) { }
+            // A signed-out phone must stop receiving the previous student's class notifications.
+            try { com.shulenotes.app.push.Push.sync(ShuleApp.appContext, false, "") } catch (e: Exception) { }
             ShuleApp.session.clear()
             NoteCache.clear()
             onDone()
@@ -362,6 +364,7 @@ class LibraryViewModel : ViewModel() {
             deleteAccountError = null
             try {
                 ApiClient.service.deleteAccount(mapOf("password" to password))
+                try { com.shulenotes.app.push.Push.sync(ShuleApp.appContext, false, "") } catch (e: Exception) { }
                 ShuleApp.session.clear(keepSaved = false)
                 Downloads.clearAll()
                 NoteCache.clear()

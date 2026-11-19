@@ -1,6 +1,7 @@
 package com.shulenotes.app.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -28,6 +29,8 @@ private val DISMISSED_UPDATE_KEY = intPreferencesKey("dismissed_update")
 private val SEARCHES_KEY = stringPreferencesKey("recent_searches")
 private val STUDY_KEY = stringSetPreferencesKey("study_pages")
 private val FINISHED_KEY = stringSetPreferencesKey("finished_notes")
+private val PUSH_ON_KEY = booleanPreferencesKey("push_enabled")
+private val PUSH_TOPICS_KEY = stringSetPreferencesKey("push_topics")
 private val PAGE_MARKS_KEY = stringSetPreferencesKey("page_bookmarks")
 
 // One document the student has opened, and how far they got in it.
@@ -56,6 +59,10 @@ class SessionStore(private val context: Context) {
     val themeMode: Flow<String> = context.dataStore.data.map { it[THEME_KEY] ?: "system" }
     // Bookmarked pages, each stored as "noteId:page".
     val pageBookmarks: Flow<Set<String>> = context.dataStore.data.map { it[PAGE_MARKS_KEY] ?: emptySet() }
+    // Whether the student wants phone notifications (on unless they turned it off).
+    val pushEnabled: Flow<Boolean> = context.dataStore.data.map { it[PUSH_ON_KEY] ?: true }
+    // The notification groups this phone is subscribed to right now ("all", "class_senior_2").
+    val pushTopics: Flow<Set<String>> = context.dataStore.data.map { it[PUSH_TOPICS_KEY] ?: emptySet() }
     // The newest version the student has already been told about and closed the banner for.
     val dismissedUpdate: Flow<Int> = context.dataStore.data.map { it[DISMISSED_UPDATE_KEY] ?: 0 }
     // Newest first, at most 8.
@@ -141,6 +148,16 @@ class SessionStore(private val context: Context) {
 
     suspend fun dismissAnnouncement(id: String) {
         context.dataStore.edit { it[DISMISSED_KEY] = id }
+    }
+
+    suspend fun setPushEnabled(on: Boolean) {
+        context.dataStore.edit { it[PUSH_ON_KEY] = on }
+    }
+
+    suspend fun currentPushTopics(): Set<String> = pushTopics.first()
+
+    suspend fun setPushTopics(topics: Set<String>) {
+        context.dataStore.edit { it[PUSH_TOPICS_KEY] = topics }
     }
 
     suspend fun setClassLevel(level: String) {

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Insights
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.Person
@@ -94,6 +95,8 @@ fun ProfileTab(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val themeMode by ShuleApp.session.themeMode.collectAsState(initial = "system")
+    val pushOn by ShuleApp.session.pushEnabled.collectAsState(initial = true)
+    val askPermission = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
 
     Column(
         modifier = Modifier
@@ -133,6 +136,11 @@ fun ProfileTab(
                 Icons.Outlined.Palette, "Appearance",
                 trailingText = when (themeMode) { "light" -> "Light"; "dark" -> "Dark"; else -> "System default" },
             ) { showAppearance = true }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
+            SettingsRow(Icons.Outlined.Notifications, "Notifications", trailingText = if (pushOn) "On" else "Off") {
+                scope.launch { ShuleApp.session.setPushEnabled(!pushOn) }
+                if (!pushOn && android.os.Build.VERSION.SDK_INT >= 33) runCatching { askPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+            }
         }
 
         SectionLabel("Account details")

@@ -54,6 +54,19 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
     val userName by ShuleApp.session.userName.collectAsState(initial = "")
     val userContact by ShuleApp.session.userContact.collectAsState(initial = "")
     val userClass by ShuleApp.session.classLevel.collectAsState(initial = "")
+    val pushOn by ShuleApp.session.pushEnabled.collectAsState(initial = true)
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    // Keep this phone's notification groups in step with the student's class and their switch.
+    androidx.compose.runtime.LaunchedEffect(userClass, pushOn) {
+        com.shulenotes.app.push.Push.sync(appContext, pushOn, userClass)
+    }
+    // Android 13 and newer ask once, the first time the student lands on Home.
+    val askPermission = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && pushOn &&
+            androidx.core.content.ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) runCatching { askPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+    }
 
     // The bell: how many announcements arrived since the student last opened the page.
     // Until the saved time is read, nothing counts as unread (so no badge flashes up).

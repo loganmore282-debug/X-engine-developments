@@ -224,8 +224,12 @@
         <label>Title</label><input id="aTitle" maxlength="80" placeholder="e.g. Mock exams start Monday">
         <label>Message</label><textarea id="aMessage" maxlength="400" placeholder="What students need to know"></textarea>
         <div class="row">
+          <div><label>Send to</label><select id="aClass"><option value="">Everyone</option></select></div>
           <div><label>Show until (optional)</label><input id="aExpires" type="date"></div>
+        </div>
+        <div class="row">
           <div style="display:flex;align-items:end"><label class="switch"><input type="checkbox" id="aActive" checked> Show it now</label></div>
+          <div style="display:flex;align-items:end" id="aPushWrap"><label class="switch"><input type="checkbox" id="aPush"> Also send a notification to phones</label></div>
         </div>
         <button class="btn" id="aSave">Publish</button> <button class="btn plain hidden" id="aCancel">Cancel editing</button>
       </div>
@@ -280,6 +284,13 @@
         <label>Update link</label><input id="setUpdateUrl" placeholder="https://play.google.com/store/apps/details?id=…  (empty = the download page)">
         <label>A line shown with the update</label><input id="setUpdateNote" maxlength="140" placeholder="e.g. Faster downloads and bug fixes">
         <div class="muted" id="setLatestHint"></div>
+      </div>
+      <div class="card">
+        <h2>Push notifications</h2>
+        <p class="muted" style="margin-top:-6px">Lets an announcement ring on students' phones even when the app is closed. In the Firebase console open Project settings, Service accounts, Generate new private key, then paste the whole file here.</p>
+        <div class="muted" id="setFbHint" style="margin:-6px 0 8px"></div>
+        <textarea id="setFb" placeholder='{ "type": "service_account", … }' style="min-height:90px;font-family:monospace;font-size:12px"></textarea>
+        <button class="btn danger sm hidden" id="setFbClear" style="margin-top:8px">Remove key</button>
       </div>
       <button class="btn" id="setSave">Save settings</button>
     </section>
@@ -377,7 +388,7 @@ async function enterApp(){
 let LEVEL_GROUPS = [];
 async function loadLevels(){
   try { const data = await (await fetch(API + '/levels')).json(); if (data.status === 'success') LEVEL_GROUPS = data.groups; } catch (_) {}
-  $('nClass').innerHTML = classOptions('', 'All classes');
+  $('nClass').innerHTML = classOptions('', 'All classes'); $('aClass').innerHTML = classOptions('', 'Everyone');
   $('stClass').innerHTML = '<option value="">All classes</option><option value="none">No class chosen</option>' + LEVEL_GROUPS.map(g => `<optgroup label="${esc(g.name)}">${g.levels.map(l => `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')}</optgroup>`).join('');
 }
 function classOptions(selected, firstLabel){
@@ -628,7 +639,7 @@ $('sSeed').addEventListener('click', async () => {
 // ── announcements ──
 let ANNOUNCEMENTS = [];
 function resetAnnouncementForm(){
-  $('aId').value = ''; $('aTitle').value = ''; $('aMessage').value = ''; $('aExpires').value = ''; $('aActive').checked = true;
+  $('aId').value = ''; $('aTitle').value = ''; $('aMessage').value = ''; $('aExpires').value = ''; $('aActive').checked = true; $('aClass').value = ''; $('aPush').checked = false; $('aPushWrap').classList.remove('hidden');
   $('aFormTitle').textContent = 'New announcement'; $('aSave').textContent = 'Publish'; $('aCancel').classList.add('hidden');
 }
 LOADERS.announcements = async function(){
@@ -639,13 +650,18 @@ LOADERS.announcements = async function(){
   $('aList').innerHTML = ANNOUNCEMENTS.length ? '<ul class="plain">' + ANNOUNCEMENTS.map(a => {
     const expired = a.expiresAt && new Date(a.expiresAt).getTime() < now;
     const pill = !a.active ? '<span class="pill warn">Off</span>' : expired ? '<span class="pill bad">Expired</span>' : '<span class="pill ok">Showing</span>';
-    return `<li><span class="grow"><b>${esc(a.title)}</b><span class="muted" style="display:block">${esc(a.message)}</span><span class="muted">${a.expiresAt ? 'Until ' + esc(fmtDate(a.expiresAt)) : 'No end date'}</span></span>${pill}
+    return `<li><span class="grow"><b>${esc(a.title)}</b><span class="muted" style="display:block">${esc(a.message)}</span><span class="muted">${a.classLevel ? esc(a.classLevel) + ' only · ' : 'Everyone · '}${a.expiresAt ? 'Until ' + esc(fmtDate(a.expiresAt)) : 'No end date'}</span></span>${pill}
       <span class="actions"><button class="btn plain sm" data-act="edit" data-id="${esc(a.id)}">Edit</button><button class="btn plain sm" data-act="toggle" data-id="${esc(a.id)}">${a.active ? 'Turn off' : 'Turn on'}</button><button class="btn danger sm" data-act="delete" data-id="${esc(a.id)}">Delete</button></span></li>`;
   }).join('') + '</ul>' : '<div class="empty">No announcements yet</div>';
 };
 $('aSave').addEventListener('click', async () => {
-  const r = await api('/admin/announcements/save', { id: $('aId').value || undefined, title: $('aTitle').value, message: $('aMessage').value, expiresAt: $('aExpires').value || null, active: $('aActive').checked });
-  if (r.status === 'success') { toast('Published', 'ok'); resetAnnouncementForm(); LOADERS.announcements(); } else toast(r.message || 'Could not save', 'error');
+  const r = await api('/admin/announcements/save', { id: $('aId').value || undefined, title: $('aTitle').value, message: $('aMessage').value, expiresAt: $('aExpires').value || null, active: $('aActive').checked, classLevel: $('aClass').value || null, push: $('aPush').checked });
+  if (r.status !== 'success') return toast(r.message || 'Could not save', 'error');
+  if (r.push && r.push.ok) toast('Published and sent to phones', 'ok');
+  else if (r.push && r.push.skipped) toast('Published. Notification not sent: add the Firebase key in Settings first.', 'error');
+  else if (r.push) toast('Published, but the notification failed: ' + (r.push.message || 'unknown error'), 'error');
+  else toast('Published', 'ok');
+  resetAnnouncementForm(); LOADERS.announcements();
 });
 $('aCancel').addEventListener('click', resetAnnouncementForm);
 $('aList').addEventListener('click', async (e) => {
@@ -654,10 +670,11 @@ $('aList').addEventListener('click', async (e) => {
   if (btn.dataset.act === 'edit') {
     $('aId').value = a.id; $('aTitle').value = a.title; $('aMessage').value = a.message;
     $('aExpires').value = a.expiresAt ? String(a.expiresAt).slice(0, 10) : ''; $('aActive').checked = a.active;
+    $('aClass').value = a.classLevel || ''; $('aPush').checked = false; $('aPushWrap').classList.add('hidden');
     $('aFormTitle').textContent = 'Edit announcement'; $('aSave').textContent = 'Save changes'; $('aCancel').classList.remove('hidden');
     window.scrollTo({ top: 0, behavior: 'smooth' }); return;
   }
-  if (btn.dataset.act === 'toggle') await api('/admin/announcements/save', { id: a.id, title: a.title, message: a.message, expiresAt: a.expiresAt ? String(a.expiresAt).slice(0, 10) : null, active: !a.active });
+  if (btn.dataset.act === 'toggle') await api('/admin/announcements/save', { id: a.id, title: a.title, message: a.message, expiresAt: a.expiresAt ? String(a.expiresAt).slice(0, 10) : null, active: !a.active, classLevel: a.classLevel || null });
   if (btn.dataset.act === 'delete') {
     if (!await confirmBox('Delete this announcement?', 'Students will stop seeing it.', 'Delete', true)) return;
     await api('/admin/announcements/delete', { id: a.id });
@@ -711,6 +728,9 @@ LOADERS.settings = async function(){
   $('setKey').value = '';
   $('setKeyHint').textContent = s.anthropicKeySet ? 'A key is saved (' + s.anthropicKeyHint + '). It is never shown again; paste a new one to replace it.' : 'No key saved yet. Get one at console.anthropic.com, then paste it here. Without it the AI helper cannot answer.';
   $('setKeyClear').classList.toggle('hidden', !s.anthropicKeySet);
+  $('setFb').value = '';
+  $('setFbHint').textContent = s.firebaseSet ? 'Connected to Firebase project "' + s.firebaseProject + '". The key is never shown again; paste a new file to replace it.' : 'Not connected yet. Announcements are still shown in the app, but no phone notification is sent.';
+  $('setFbClear').classList.toggle('hidden', !s.firebaseSet);
   $('setLatest').value = s.latestVersionCode || ''; $('setMin').value = s.minVersionCode || '';
   $('setUpdateUrl').value = s.updateUrl || ''; $('setUpdateNote').value = s.updateNote || '';
   $('setLatestHint').textContent = r.publishedVersion ? 'The download page is serving version ' + r.publishedVersion + '.' : 'No download page found on this server, so there is no automatic version.';
@@ -722,6 +742,7 @@ $('setSave').addEventListener('click', async () => {
     latestVersionCode: $('setLatest').value, minVersionCode: $('setMin').value, updateUrl: $('setUpdateUrl').value, updateNote: $('setUpdateNote').value,
     aiEnabled: $('setAiOn').checked, aiModel: $('setModel').value, anthropicKey: $('setKey').value, aiDailyLimit: $('setAiLimit').value === '' ? null : Number($('setAiLimit').value),
     supportPhone: $('setPhone').value, supportWhatsapp: $('setWhatsapp').value, supportEmail: $('setEmail').value, supportHours: $('setHours').value,
+    ...($('setFb').value.trim() ? { firebaseServiceAccount: $('setFb').value.trim() } : {}),
   });
   toast(r.status === 'success' ? 'Settings saved' : (r.message || 'Could not save'), r.status === 'success' ? 'ok' : 'error');
   if (r.status === 'success') LOADERS.settings();
@@ -729,6 +750,13 @@ $('setSave').addEventListener('click', async () => {
 $('setKeyClear').addEventListener('click', async () => {
   if (!await confirmBox('Remove the Claude key?', 'The AI helper stops answering until you paste a key again.', 'Remove key', true)) return;
   const r = await api('/admin/settings/save', { clearAnthropicKey: true });
+  toast(r.status === 'success' ? 'Key removed' : (r.message || 'Could not remove'), r.status === 'success' ? 'ok' : 'error');
+  LOADERS.settings();
+});
+
+$('setFbClear').addEventListener('click', async () => {
+  if (!await confirmBox('Remove the Firebase key?', 'Phone notifications stop until you paste a key again.', 'Remove key', true)) return;
+  const r = await api('/admin/settings/save', { clearFirebase: true });
   toast(r.status === 'success' ? 'Key removed' : (r.message || 'Could not remove'), r.status === 'success' ? 'ok' : 'error');
   LOADERS.settings();
 });
