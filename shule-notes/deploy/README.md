@@ -31,7 +31,7 @@ sudo ./preflight.sh
 |---|---|
 | a user `shule`, folders `/opt/shule-notes`, `/etc/shule-notes`, `/var/lib/shule-notes` | your other projects' folders, users, services |
 | one service, `shule-notes`, on the first free port from 4000 | whatever already uses port 4000 (it picks another) |
-| two new nginx sites, `shule-api` and `shule-admin` (other sites stay as they are; if nginx rejects the result, the two files are removed again and nothing is left changed) | your existing nginx sites and certificates |
+| two new nginx files, `shule-api.conf` and `shule-admin.conf` in `/etc/nginx/conf.d` (other sites stay as they are; if nginx rejects the result, the two files are removed again and nothing is left changed) | your existing nginx sites and certificates |
 | its own Node 20 inside `/opt/shule-notes/node`, only if the server has no Node 20+ | the server's Node, pm2, Docker |
 | its own MongoDB: service `shule-mongod`, port 27018 (or next free), data `/var/lib/shule-mongodb`, `127.0.0.1` only | any MongoDB you already run, its data and `/etc/mongod.conf` |
 | web ports in ufw **only if ufw is already active** | the firewall otherwise (never switched on or reset) |

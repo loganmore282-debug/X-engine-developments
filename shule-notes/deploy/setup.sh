@@ -5,7 +5,7 @@
 #
 #   - its own user (shule), folders (/opt/shule-notes, /etc/shule-notes,
 #     /var/lib/shule-notes) and one systemd service (shule-notes);
-#   - two new nginx sites (shule-api, shule-admin); your other sites are not touched;
+#   - two new nginx files in /etc/nginx/conf.d (shule-api, shule-admin); your other sites are not touched;
 #   - the first free port from 4000 up (not a fixed 4000);
 #   - its own Node 20 inside /opt/shule-notes unless the server already has Node 20+,
 #     so the Node other projects use is never changed;
@@ -119,30 +119,29 @@ sed "s|__NODE__|$NODE_BIN|" "$HERE/shule-notes.service" > /etc/systemd/system/sh
 systemctl daemon-reload
 systemctl enable shule-notes >/dev/null
 
-echo "==> nginx (two new sites; your others are not touched)"
-if [ -d /etc/nginx/sites-available ]; then
-  API_CONF=/etc/nginx/sites-available/shule-api; ADMIN_CONF=/etc/nginx/sites-available/shule-admin
-else
-  API_CONF=/etc/nginx/conf.d/shule-api.conf; ADMIN_CONF=/etc/nginx/conf.d/shule-admin.conf
-fi
+echo "==> nginx (two new sites in conf.d; your others are not touched)"
+# conf.d is read by every standard nginx (and is where this server's other sites live).
+mkdir -p /etc/nginx/conf.d
+API_CONF=/etc/nginx/conf.d/shule-api.conf; ADMIN_CONF=/etc/nginx/conf.d/shule-admin.conf
 sed "s|__API_DOMAIN__|$API_DOMAIN|g; s|__PORT__|$PORT|g" "$HERE/nginx-api.conf" > "$API_CONF"
 sed "s|__ADMIN_DOMAIN__|$ADMIN_DOMAIN|g" "$HERE/nginx-admin.conf" > "$ADMIN_CONF"
-if [ -d /etc/nginx/sites-available ]; then
-  ln -sf "$API_CONF" /etc/nginx/sites-enabled/shule-api; ln -sf "$ADMIN_CONF" /etc/nginx/sites-enabled/shule-admin
+rollback() { rm -f "$API_CONF" "$ADMIN_CONF"; }
+if ! nginx -t 2>/dev/null; then
+  echo "nginx rejected the new configuration, so I removed my two files. Nothing else was changed:"
+  nginx -t || true; rollback; exit 1
 fi
-if nginx -t 2>/dev/null; then
-  systemctl enable nginx >/dev/null 2>&1 || true
-  systemctl reload nginx 2>/dev/null || systemctl start nginx
-else
-  echo "nginx rejected the new configuration, so I removed my two sites. Nothing else was changed:"
-  nginx -t || true
-  rm -f "$API_CONF" "$ADMIN_CONF" /etc/nginx/sites-enabled/shule-api /etc/nginx/sites-enabled/shule-admin
-  exit 1
+# Make sure nginx really loads them (a customised nginx.conf might not read conf.d).
+if ! nginx -T 2>/dev/null | grep -q "server_name $API_DOMAIN"; then
+  echo "This nginx does not read /etc/nginx/conf.d, so my files would do nothing. I removed them; nothing was changed."
+  rollback; exit 1
 fi
+systemctl enable nginx >/dev/null 2>&1 || true
+systemctl reload nginx 2>/dev/null || systemctl start nginx
 
 echo "==> Firewall"
 if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
-  ufw allow 'Nginx Full' >/dev/null && echo "    ufw is active: added the web ports (existing rules untouched)"
+  ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null
+  echo "    ufw is active: ports 80 and 443 allowed (existing rules untouched)"
 else
   echo "    ufw is not active; left exactly as it is. (Contabo has its own firewall option in the customer panel.)"
 fi
