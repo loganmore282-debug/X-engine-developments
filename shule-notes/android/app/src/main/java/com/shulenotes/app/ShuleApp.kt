@@ -26,5 +26,7 @@ class ShuleApp : Application(), ImageLoaderFactory {
             private set
         lateinit var appContext: android.content.Context
             private set
+        // Work that must finish after a screen is gone (telling the server about a log out, leaving notification groups).
+        val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
     }
 }

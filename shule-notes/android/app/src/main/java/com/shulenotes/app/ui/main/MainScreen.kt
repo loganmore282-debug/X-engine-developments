@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.repeatOnLifecycle
 import com.shulenotes.app.ShuleApp
 import com.shulenotes.app.data.RecentNote
 import com.shulenotes.app.ui.components.parseIsoMillis
@@ -78,6 +79,18 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
     val finishedNotes by ShuleApp.session.finishedNotes.collectAsState(initial = emptySet())
     val scope = rememberCoroutineScope()
     val unread = viewModel.notifications.count { parseIsoMillis(it.createdAt) > seenAt }
+
+    // While the app is on screen, ask the server every 15 seconds whether the owner changed anything
+    // (one tiny request), and reload quietly when so. Stops by itself when the app goes to the background.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            while (true) {
+                viewModel.checkForChanges()
+                kotlinx.coroutines.delay(15_000)
+            }
+        }
+    }
 
     BackHandler(enabled = tab != 0) { tab = 0 }
     BackHandler(enabled = showNotifications) { showNotifications = false }

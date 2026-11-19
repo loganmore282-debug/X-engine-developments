@@ -13,6 +13,8 @@ data class User(
     val avatarVersion: Long? = null,
 )
 
+data class SyncResponse(val status: String, val revision: Long = 0L)
+
 data class Slide(val id: String, val title: String, val text: String, val imageUrl: String?)
 
 // `configured` is false until the owner makes a first slide: then the app shows its own introduction.

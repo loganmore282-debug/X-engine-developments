@@ -114,6 +114,16 @@ class LibraryViewModel : ViewModel() {
 
     fun refresh() = load(initial = false)
 
+    // The owner's last change, as the server numbers it. A different number means something was added,
+    // edited, hidden or deleted in the admin panel, so the library is reloaded quietly (no spinner, no error).
+    private var lastRevision = -1L
+    suspend fun checkForChanges() {
+        val now = try { ApiClient.service.sync().revision } catch (e: Exception) { return }
+        val changed = lastRevision >= 0 && now != lastRevision
+        lastRevision = now
+        if (changed) load(initial = false, silent = true)
+    }
+
     private suspend fun restoreCached(): Boolean = try {
         val json = ShuleApp.session.libraryCache.first()
         val snapshot = if (json.isBlank()) null else Gson().fromJson(json, LibrarySnapshot::class.java)
@@ -173,9 +183,9 @@ class LibraryViewModel : ViewModel() {
                     ShuleApp.session.saveLibrary(Gson().toJson(LibrarySnapshot(loadedSubjects, loadedNotes, loadedLevels)))
                 }
             } catch (e: IOException) {
-                loadFailed("No connection. Check your internet and try again.")
+                if (!silent) loadFailed("No connection. Check your internet and try again.")
             } catch (e: Exception) {
-                loadFailed(e.serverMessage() ?: "Something went wrong loading your notes.")
+                if (!silent) loadFailed(e.serverMessage() ?: "Something went wrong loading your notes.")
             } finally {
                 isLoading = false
                 isRefreshing = false
@@ -391,15 +401,20 @@ class LibraryViewModel : ViewModel() {
         }
     }
 
+    // Logging out is instant: the phone forgets the account and leaves the screen at once. Telling the
+    // server and leaving the notification groups can take a while on a poor connection, so they happen
+    // afterwards in the background (the server also forgets the session on its own when it expires).
     fun logout(onDone: () -> Unit) {
+        val token = com.shulenotes.app.data.SessionHolder.token
         viewModelScope.launch {
-            // Best effort: the phone forgets the session even if the server cannot be reached.
-            try { ApiClient.service.logout() } catch (e: Exception) { }
-            // A signed-out phone must stop receiving the previous student's class notifications.
-            try { com.shulenotes.app.push.Push.sync(ShuleApp.appContext, false, "") } catch (e: Exception) { }
+            val topics = try { ShuleApp.session.currentPushTopics() } catch (e: Exception) { emptySet() }
             ShuleApp.session.clear()
             NoteCache.clear()
             onDone()
+            ShuleApp.appScope.launch {
+                if (token != null) try { kotlinx.coroutines.withTimeout(15_000) { ApiClient.service.logout("Bearer $token") } } catch (e: Exception) { }
+                try { kotlinx.coroutines.withTimeout(15_000) { com.shulenotes.app.push.Push.leaveTopics(ShuleApp.appContext, topics) } } catch (e: Exception) { }
+            }
         }
     }
 
@@ -416,7 +431,8 @@ class LibraryViewModel : ViewModel() {
             deleteAccountError = null
             try {
                 ApiClient.service.deleteAccount(mapOf("password" to password))
-                try { com.shulenotes.app.push.Push.sync(ShuleApp.appContext, false, "") } catch (e: Exception) { }
+                val topics = try { ShuleApp.session.currentPushTopics() } catch (e: Exception) { emptySet() }
+                ShuleApp.appScope.launch { try { kotlinx.coroutines.withTimeout(15_000) { com.shulenotes.app.push.Push.leaveTopics(ShuleApp.appContext, topics) } } catch (e: Exception) { } }
                 ShuleApp.session.clear(keepSaved = false)
                 Downloads.clearAll()
                 NoteCache.clear()

@@ -33,6 +33,15 @@ object Push {
 
     private suspend fun <T> Task<T>.await(): Boolean = suspendCoroutine { cont -> addOnCompleteListener { cont.resume(it.isSuccessful) } }
 
+    // Leaves the given groups (used when someone logs out or deletes their account). Slow if the network is, so
+    // it is always run in the background, never while the person waits.
+    suspend fun leaveTopics(context: Context, topics: Set<String>) {
+        if (topics.isEmpty() || !available(context)) return
+        val messaging = FirebaseMessaging.getInstance()
+        for (topic in topics) messaging.unsubscribeFromTopic(topic).await()
+        runCatching { ShuleApp.session.setPushTopics(emptySet()) }
+    }
+
     // Makes this phone's subscriptions match what the student wants: nothing when notifications are
     // off or nobody is signed in, otherwise "all" plus their class.
     suspend fun sync(context: Context, enabled: Boolean, classLevel: String) {

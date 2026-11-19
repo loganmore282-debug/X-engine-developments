@@ -341,7 +341,9 @@ const $ = (id) => document.getElementById(id);
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 let toastTimer;
+let autoRefreshing = false; // a refresh nobody asked for must never shout about a bad connection
 function toast(msg, kind){
+  if (autoRefreshing && kind === 'error') return;
   const t = $('toast'); t.textContent = msg; t.className = 'toast show ' + (kind || '');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
 }
@@ -872,6 +874,16 @@ $('setFbClear').addEventListener('click', async () => {
   toast(r.status === 'success' ? 'Key removed' : (r.message || 'Could not remove'), r.status === 'success' ? 'ok' : 'error');
   LOADERS.settings();
 });
+
+// Students joining, feedback arriving and notes finishing their reading show up by themselves,
+// every 20 seconds, but only while the page is visible and nothing is being typed into a dialog.
+setInterval(async () => {
+  if (document.visibilityState !== 'visible' || !localStorage.getItem(KEY_STORE)) return;
+  if ($('modalRoot').children.length) return;
+  if (!['dashboard', 'students', 'notes', 'feedback'].includes(currentTab) || !LOADERS[currentTab]) return;
+  autoRefreshing = true;
+  try { await LOADERS[currentTab](); } finally { autoRefreshing = false; }
+}, 20000);
 
 // ── boot ──
 if (localStorage.getItem(KEY_STORE)) {

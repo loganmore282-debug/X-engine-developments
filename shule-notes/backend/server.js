@@ -19,6 +19,7 @@ const feedback = require('./feedback');
 const { publishedVersion } = require('./app-version');
 const { sendPush } = require('./push');
 const media = require('./media');
+const revision = require('./revision');
 const onboarding = require('./onboarding');
 const { askAboutDocument, classifyClaudeError } = require('./claude');
 const { privacyPage, accountDeletionPage, termsPage } = require('./legal');
@@ -134,6 +135,13 @@ const ah = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => {
 const sendResult = (res, result, extra = {}) => (result.ok
   ? res.json({ status: 'success', ...extra })
   : res.status(result.status || 400).json({ status: 'error', message: result.message }));
+
+// What phones poll (every few seconds while the app is open): a tiny answer that changes whenever the admin does.
+app.get('/sync', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ status: 'success', revision: revision.current() });
+});
+app.use('/admin', revision.adminChangeTracker);
 
 // Contacts and switches the app and the sign-in screen need before anyone is signed in.
 app.get('/config', ah(async (req, res) => {
@@ -432,7 +440,7 @@ function finishReading(noteId, buffer, title) {
   extractInThread(buffer).then(
     (r) => getDb().collection('notes').updateOne({ _id: noteId }, { $set: { extractedText: r.text, pageTexts: r.pages, pageCount: r.pageCount, textStatus: r.text ? 'ready' : 'none' } }),
     (e) => { console.error('PDF text extraction failed for', title, ':', e.message); return getDb().collection('notes').updateOne({ _id: noteId }, { $set: { textStatus: 'failed' } }); },
-  ).catch((e) => console.error('could not save the extracted text for', title, ':', e.message));
+  ).then(() => revision.bump()).catch((e) => console.error('could not save the extracted text for', title, ':', e.message));
 }
 
 app.post('/admin/notes/upload', upload.single('file'), async (req, res) => {

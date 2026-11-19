@@ -18,8 +18,9 @@ interface ApiService {
     @POST("auth/login")
     suspend fun login(@Body body: Map<String, String>): AuthResponse
 
+    // The token is passed in by hand: the phone has already forgotten it by the time this is sent.
     @POST("auth/logout")
-    suspend fun logout(): SimpleResponse
+    suspend fun logout(@retrofit2.http.Header("Authorization") bearer: String): SimpleResponse
 
     @GET("levels")
     suspend fun levels(): LevelsResponse
@@ -48,6 +49,9 @@ interface ApiService {
 
     @POST("feedback")
     suspend fun sendFeedback(@Body body: Map<String, String>): SimpleResponse
+
+    @GET("sync")
+    suspend fun sync(): SyncResponse
 
     @GET("config")
     suspend fun config(): ConfigResponse
