@@ -36,6 +36,16 @@ def nodes():
                     "text": n.get("text", ""), "desc": n.get("content-desc", ""),
                     "cls": n.get("class", ""), "box": tuple(int(v) for v in m.groups()),
                 })
+        # A slow emulator sometimes freezes its own launcher or keyboard and
+        # shows "... isn't responding" over the app; answer "Wait" and look again.
+        if any("responding" in n["text"] for n in found):
+            wait = next((n for n in found if n["text"] == "Wait"), None)
+            if wait:
+                x1, y1, x2, y2 = wait["box"]
+                adb("shell", "input", "tap", str((x1 + x2) // 2), str((y1 + y2) // 2))
+                print("dismissed a system 'not responding' box", flush=True)
+                time.sleep(2)
+                continue
         return found
     return []
 
