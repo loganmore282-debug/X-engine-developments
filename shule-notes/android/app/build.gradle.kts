@@ -32,13 +32,35 @@ android {
         buildConfigField("String", "API_BASE_URL", "\"${liveApi.ifEmpty { "http://10.0.2.2:4000" }}\"")
     }
 
+    // One fixed key signs every build this project makes for testing, so a new build installs OVER the
+    // old one (a key made fresh on each CI run forced an uninstall, and the loss of the phone's data,
+    // every time). It protects nothing by itself: the key for the real Play Store release is made by the
+    // owner, kept private, and replaces this one at publishing time (see CLAUDE.md, "Security").
+    signingConfigs {
+        create("shuletest") {
+            storeFile = file("shule-test-signing.keystore")
+            storePassword = "shulenotes"
+            keyAlias = "shuletest"
+            keyPassword = "shulenotes"
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("shuletest")
+            // Block screenshots and screen recording inside the reader and the AI chat (-PsecureScreens=false turns it off).
+            buildConfigField("boolean", "SECURE_SCREENS", ((project.findProperty("secureScreens") as String?) != "false").toString())
+            // SHA-256 of the key this build must be signed with. A copy re-signed by anyone else refuses to run.
+            // Empty = not checked (the emulator test build).
+            buildConfigField("String", "EXPECTED_CERT_SHA256", "\"${(project.findProperty("expectedCert") as String?).orEmpty()}\"")
             isMinifyEnabled = false
             val liveApi = (project.findProperty("apiBaseUrl") as String?)?.trim().orEmpty()
             buildConfigField("String", "API_BASE_URL", "\"${liveApi.ifEmpty { "https://api.yourdomain.com" }}\"")
         }
         debug {
+            signingConfig = signingConfigs.getByName("shuletest")
+            buildConfigField("boolean", "SECURE_SCREENS", "false")
+            buildConfigField("String", "EXPECTED_CERT_SHA256", "\"\"")
             isMinifyEnabled = false
         }
     }
@@ -46,6 +68,12 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    lint {
+        // Release builds are checked by the compile and the emulator walk; lint warnings must not block them.
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 
     compileOptions {

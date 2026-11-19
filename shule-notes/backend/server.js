@@ -20,6 +20,7 @@ const { publishedVersion } = require('./app-version');
 const { sendPush } = require('./push');
 const media = require('./media');
 const revision = require('./revision');
+const loginGuard = require('./login-guard');
 const onboarding = require('./onboarding');
 const { askAboutDocument, classifyClaudeError } = require('./claude');
 const { privacyPage, accountDeletionPage, termsPage } = require('./legal');
@@ -103,6 +104,10 @@ app.post('/auth/login', authLimiter, async (req, res) => {
     const phone = normalizePhone(req.body.phone);
     const password = String(req.body.password || '');
     if (!phone || !password) return res.status(400).json({ status: 'error', message: 'Enter your phone number and password' });
+    // Too many wrong passwords for this number lately (from anywhere): wait, whoever is typing.
+    if (loginGuard.isLocked(phone)) {
+      return res.status(429).json({ status: 'error', message: `Too many wrong passwords. Try again in ${loginGuard.minutesLeft(phone)} minutes, or ask support to reset it.` });
+    }
 
     const db = getDb();
     const user = await db.collection('users').findOne({ phone });
@@ -110,7 +115,11 @@ app.post('/auth/login', authLimiter, async (req, res) => {
     // password -- a login attempt must not reveal which account exists.
     const DUMMY = '0000000000000000000000000000000:0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
     const ok = await verifyPassword(password, user ? user.passwordHash : DUMMY);
-    if (!user || !ok) return res.status(401).json({ status: 'error', message: 'Incorrect phone number or password' });
+    if (!user || !ok) {
+      loginGuard.recordFailure(phone);
+      return res.status(401).json({ status: 'error', message: 'Incorrect phone number or password' });
+    }
+    loginGuard.clear(phone);
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'This account has been suspended' });
 
     await db.collection('users').updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } });
@@ -397,6 +406,12 @@ app.post('/ai/ask', requireAuth, aiLimiter, async (req, res) => {
 const adminKeyLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
 const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
 app.use('/admin', adminLimiter);
+// Wrong admin keys on ANY admin route count (not only the sign-in check): 30 per 15 minutes, then locked out.
+// Requests with the right key never count, so normal use cannot trip it.
+app.use('/admin', rateLimit({
+  windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false,
+  skipSuccessfulRequests: true, requestWasSuccessful: (req, res) => res.statusCode !== 401,
+}));
 
 app.post('/admin/check-key', adminKeyLimiter, (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Wrong admin key' });
@@ -449,7 +464,8 @@ app.post('/admin/notes/upload', upload.single('file'), async (req, res) => {
     const title = String(req.body.title || '').trim().slice(0, 150);
     if (!title) return res.status(400).json({ status: 'error', message: 'Title is required' });
     if (!req.file) return res.status(400).json({ status: 'error', message: 'A PDF file is required' });
-    if (req.file.mimetype !== 'application/pdf') return res.status(400).json({ status: 'error', message: 'Only PDF files are accepted' });
+    // The declared type is only the sender's word: a real PDF starts with "%PDF-" near the top of the file.
+    if (req.file.mimetype !== 'application/pdf' || req.file.buffer.subarray(0, 1024).indexOf('%PDF-') < 0) return res.status(400).json({ status: 'error', message: 'Only PDF files are accepted' });
 
     const classLevel = req.body.classLevel ? String(req.body.classLevel).trim() : null;
     if (classLevel && !isValidLevel(classLevel)) return res.status(400).json({ status: 'error', message: 'Choose a class from the list' });

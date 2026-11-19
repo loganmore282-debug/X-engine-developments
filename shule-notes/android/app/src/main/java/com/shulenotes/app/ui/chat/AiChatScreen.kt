@@ -84,6 +84,7 @@ fun AiChatScreen(
     onBack: () -> Unit,
     viewModel: ChatViewModel = viewModel(factory = ChatViewModelFactory(noteId)),
 ) {
+    com.shulenotes.app.ui.components.SecureWindow()
     var input by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
     val noteTitle = NoteCache.get(noteId)?.title

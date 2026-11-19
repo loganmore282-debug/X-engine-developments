@@ -14,6 +14,8 @@ permissions:
 env:
   # The owner's server. Change this when the real domain exists.
   LIVE_API_URL: https://api.161-97-98-107.sslip.io
+  # SHA-256 of android/app/shule-test-signing.keystore. When the real Play Store key replaces it, change this too.
+  EXPECTED_CERT_SHA256: 9bb7a9f890dea06e1801240d58446c15509572d5e0dd8ce0f4d822bf5ee6631d
 
 jobs:
   build:
@@ -53,11 +55,14 @@ jobs:
         run: cp app/build/outputs/apk/debug/app-debug.apk shule-notes-debug.apk
 
       # The same app, pointed at the owner's real server, for installing on a phone.
+      # A release-type build (not debuggable, so nobody can read the app's private files with adb), signed
+      # with the project's fixed test key, that refuses to run if re-signed by anyone else, and that blocks
+      # screenshots inside the reader. Its signing certificate's SHA-256 is checked at run time.
       - name: Build the APK for the live server
         working-directory: shule-notes/android
         run: |
-          gradle assembleDebug -PapiBaseUrl="$LIVE_API_URL" -PversionCode="${{ github.run_number }}" --no-daemon --stacktrace
-          cp app/build/outputs/apk/debug/app-debug.apk shule-notes-live.apk
+          gradle assembleRelease -PapiBaseUrl="$LIVE_API_URL" -PversionCode="${{ github.run_number }}" -PexpectedCert="$EXPECTED_CERT_SHA256" --no-daemon --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk shule-notes-live.apk
           echo "${{ github.run_number }}" > shule-notes-live.version.txt
 
       - name: Upload APK artifact
@@ -82,7 +87,7 @@ jobs:
         with:
           tag_name: shule-notes-live
           name: Shule Notes (connects to the live server)
-          body: "Shule Notes test build that connects to the owner's server. Download shule-notes-live.apk and install it on a phone. If an older copy is installed, uninstall it first (test builds are signed with a different temporary key each time)."
+          body: "Shule Notes test build that connects to the owner's server. Download shule-notes-live.apk and install it on a phone. Builds from now on are signed with one fixed key, so they install over each other. (If an older copy from before that is installed, uninstall it once first.)"
           files: |
             shule-notes/android/shule-notes-live.apk
             shule-notes/android/shule-notes-live.version.txt

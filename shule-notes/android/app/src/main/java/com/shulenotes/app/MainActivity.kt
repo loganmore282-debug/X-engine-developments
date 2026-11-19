@@ -60,6 +60,8 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) { AppConfigHolder.refresh() }
             val appConfig = AppConfigHolder.config
             val mustUpdate = appConfig.minVersion > BuildConfig.VERSION_CODE
+            // A copy signed by anyone but the owner (see Integrity) does not run.
+            val tampered = remember { !Integrity.signatureOk(applicationContext) }
             val uriHandler = LocalUriHandler.current
             val dark = when (themeMode) {
                 "dark" -> true
@@ -82,7 +84,9 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(Unit) { kotlinx.coroutines.delay(1400); splashTimeUp = true }
                     val ready = splashTimeUp && startDestination != null
                     androidx.compose.animation.Crossfade(targetState = ready, animationSpec = androidx.compose.animation.core.tween(380), label = "splash") { isReady ->
-                    if (!isReady) {
+                    if (tampered) {
+                        com.shulenotes.app.ui.components.ModifiedAppScreen(onGetOfficial = { runCatching { uriHandler.openUri(DOWNLOAD_URL) } })
+                    } else if (!isReady) {
                         SplashScreen()
                     } else if (mustUpdate) {
                         UpdateRequiredScreen(

@@ -44,3 +44,30 @@ fun UpdateRequiredScreen(note: String, onUpdate: () -> Unit) {
         PrimaryButton(text = "Update now", loadingText = "Update now", loading = false, onClick = onUpdate, modifier = Modifier.fillMaxWidth())
     }
 }
+
+// Shown instead of the app when this copy was re-signed by someone else (an edited or pirated copy).
+@Composable
+fun ModifiedAppScreen(onGetOfficial: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .systemBarsPadding()
+            .padding(horizontal = 32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        LogoMark(size = 96.dp)
+        Spacer(Modifier.height(24.dp))
+        Text("This copy is not official", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "This copy of Shule Notes was changed after it was made, so it cannot be trusted with your account. Install the official app to carry on studying.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(28.dp))
+        PrimaryButton(text = "Get the official app", loadingText = "Get the official app", loading = false, onClick = onGetOfficial, modifier = Modifier.fillMaxWidth())
+    }
+}

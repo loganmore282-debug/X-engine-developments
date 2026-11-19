@@ -85,6 +85,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NoteDetailScreen(noteId: String, startPage: Int, viewModel: NoteViewModel, onBack: () -> Unit, onAskAi: () -> Unit) {
+    com.shulenotes.app.ui.components.SecureWindow()
     LaunchedEffect(noteId) { viewModel.load(noteId) }
 
     val note = viewModel.note
