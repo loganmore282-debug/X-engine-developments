@@ -34,9 +34,6 @@ interface ApiService {
     @POST("auth/update-profile")
     suspend fun updateProfile(@Body body: Map<String, String>): UserResponse
 
-    @POST("auth/change-password")
-    suspend fun changePassword(@Body body: Map<String, String>): SimpleResponse
-
     @Multipart
     @POST("auth/avatar")
     suspend fun uploadAvatar(@Part photo: MultipartBody.Part): UserResponse

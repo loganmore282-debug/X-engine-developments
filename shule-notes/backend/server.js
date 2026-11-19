@@ -27,7 +27,7 @@ const { askAboutDocument, classifyClaudeError } = require('./claude');
 const { privacyPage, accountDeletionPage, termsPage } = require('./legal');
 const { GROUPS: LEVEL_GROUPS, isValidLevel } = require('./levels');
 const { normalizePhone, isValidPhone } = require('./phone');
-const { eraseUser, changePassword, updateProfile, cleanName, toId } = require('./accounts');
+const { eraseUser, updateProfile, cleanName, toId } = require('./accounts');
 const { getSettings, saveSettings, publicConfig, adminView, AI_MODELS } = require('./settings');
 const adminData = require('./admin-data');
 
@@ -190,10 +190,7 @@ app.get('/announcements', requireAuth, ah(async (req, res) => {
 }));
 app.get('/announcement', requireAuth, ah(async (req, res) => res.json({ status: 'success', announcement: await adminData.activeAnnouncement() })));
 
-app.post('/auth/change-password', authLimiter, requireAuth, ah(async (req, res) => {
-  const result = await changePassword(req.userId, req.body.currentPassword, req.body.newPassword, bearerToken(req));
-  sendResult(res, result);
-}));
+// There is no "change password" for students (the owner resets a forgotten one in the admin panel), so no route for it.
 
 app.post('/auth/update-profile', requireAuth, ah(async (req, res) => {
   const result = await updateProfile(req.userId, req.body.name);

@@ -13,6 +13,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -103,7 +105,6 @@ fun ProfileTab(
     var confirmLogout by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     var editName by rememberSaveable { mutableStateOf(false) }
-    var changePassword by rememberSaveable { mutableStateOf(false) }
     var showHelp by rememberSaveable { mutableStateOf(false) }
     var showAppearance by rememberSaveable { mutableStateOf(false) }
     var showFeedback by rememberSaveable { mutableStateOf(false) }
@@ -156,11 +157,22 @@ fun ProfileTab(
                     }
                 }
                 Spacer(Modifier.width(16.dp))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(userName.ifBlank { "Student" }, style = MaterialTheme.typography.titleLarge, maxLines = 1)
                     if (userContact.isNotBlank()) {
                         Text(userContact, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                }
+                // A pencil changes the name: no separate "Account details" list is needed.
+                FilledTonalIconButton(
+                    onClick = { viewModel.clearProfileError(); editName = true },
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ),
+                    modifier = Modifier.size(44.dp).semantics { contentDescription = "Edit name" },
+                ) {
+                    Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(20.dp))
                 }
             }
         }
@@ -180,13 +192,6 @@ fun ProfileTab(
                 scope.launch { ShuleApp.session.setPushEnabled(!pushOn) }
                 if (!pushOn && android.os.Build.VERSION.SDK_INT >= 33) runCatching { askPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
             }
-        }
-
-        SectionLabel("Account details")
-        SettingsCard {
-            SettingsRow(Icons.Outlined.Person, "Change my name") { viewModel.clearProfileError(); editName = true }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
-            SettingsRow(Icons.Outlined.Lock, "Change password") { viewModel.clearPasswordErrors(); changePassword = true }
         }
 
         SectionLabel("Help and about")
@@ -352,47 +357,6 @@ fun ProfileTab(
                 }
             },
             dismissButton = { TextButton(onClick = { editName = false }, enabled = !viewModel.isSavingProfile) { Text("Cancel") } },
-        )
-    }
-
-    if (changePassword) {
-        var current by rememberSaveable { mutableStateOf("") }
-        var next by rememberSaveable { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { if (!viewModel.isSavingProfile) changePassword = false },
-            title = { Text("Change password") },
-            text = {
-                Column {
-                    ShuleTextField(
-                        value = current,
-                        onValueChange = { current = it; viewModel.clearPasswordErrors() },
-                        label = "Current password",
-                        leadingIcon = Icons.Outlined.Lock,
-                        isPassword = true,
-                        error = viewModel.currentPasswordError,
-                        enabled = !viewModel.isSavingProfile,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    ShuleTextField(
-                        value = next,
-                        onValueChange = { next = it; viewModel.clearPasswordErrors() },
-                        label = "New password",
-                        leadingIcon = Icons.Outlined.Lock,
-                        isPassword = true,
-                        error = viewModel.passwordFormError,
-                        supportingText = "At least 6 characters",
-                        enabled = !viewModel.isSavingProfile,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    )
-                }
-            },
-            confirmButton = {
-                Button(onClick = { viewModel.changePassword(current, next) { changePassword = false } }, enabled = !viewModel.isSavingProfile) {
-                    Text(if (viewModel.isSavingProfile) "Saving…" else "Change password")
-                }
-            },
-            dismissButton = { TextButton(onClick = { changePassword = false }, enabled = !viewModel.isSavingProfile) { Text("Cancel") } },
         )
     }
 

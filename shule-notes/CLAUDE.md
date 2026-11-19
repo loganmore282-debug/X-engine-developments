@@ -152,8 +152,8 @@ app's "Forgot password?" just shows the support contacts from Settings (`GET /co
   (`subjectIcon`) in the subject's colour; document cards with a coloured "book cover".
   The header needs light status-bar icons (`StatusBarIcons`), and `MainScreen` turns off
   the Scaffold's top inset so each tab handles the status bar itself.
-- **Account and help** (Profile tab): change name (`/auth/update-profile`), change password
-  (`/auth/change-password`; 403 = wrong current password), Help and support and the sign-in
+- **Account and help** (Profile tab): change name via a pencil on the profile card (`/auth/update-profile`; there is NO change-password for
+  students, by the owner's choice: a forgotten or unwanted password is reset in the admin Students tab), Help and support and the sign-in
   "Forgot password?" both use `SupportDialog` with the contacts from `GET /config`
   (`AppConfigHolder`), Terms (`/terms`) and Privacy pages. Home shows the admin's
   announcement (`GET /announcement`) until dismissed (`SessionStore.dismissedAnnouncement`).

@@ -94,10 +94,6 @@ class LibraryViewModel : ViewModel() {
         private set
     var profileError by mutableStateOf<String?>(null)
         private set
-    var passwordFormError by mutableStateOf<String?>(null)
-        private set
-    var currentPasswordError by mutableStateOf<String?>(null)
-        private set
 
     var isDeletingAccount by mutableStateOf(false)
         private set
@@ -231,8 +227,6 @@ class LibraryViewModel : ViewModel() {
 
     fun clearProfileError() { profileError = null }
 
-    fun clearPasswordErrors() { passwordFormError = null; currentPasswordError = null }
-
     fun saveName(name: String, onDone: () -> Unit) {
         if (isSavingProfile) return
         val clean = name.trim()
@@ -248,34 +242,6 @@ class LibraryViewModel : ViewModel() {
                 profileError = "No connection. Try again."
             } catch (e: Exception) {
                 profileError = e.serverMessage() ?: "We could not save your name."
-            } finally {
-                isSavingProfile = false
-            }
-        }
-    }
-
-    fun changePassword(current: String, new: String, onDone: () -> Unit) {
-        if (isSavingProfile) return
-        currentPasswordError = if (current.isBlank()) "Enter your current password" else null
-        passwordFormError = when {
-            new.length < 6 -> "Use at least 6 characters"
-            new == current -> "Choose a different password"
-            else -> null
-        }
-        if (currentPasswordError != null || passwordFormError != null) return
-        viewModelScope.launch {
-            isSavingProfile = true
-            try {
-                ApiClient.service.changePassword(mapOf("currentPassword" to current, "newPassword" to new))
-                Notifier.success("Password changed")
-                onDone()
-            } catch (e: IOException) {
-                Notifier.error("No connection. Try again.")
-            } catch (e: retrofit2.HttpException) {
-                if (e.code() == 403) currentPasswordError = "That is not your current password"
-                else passwordFormError = e.serverMessage() ?: "We could not change the password."
-            } catch (e: Exception) {
-                Notifier.error("We could not change the password.")
             } finally {
                 isSavingProfile = false
             }

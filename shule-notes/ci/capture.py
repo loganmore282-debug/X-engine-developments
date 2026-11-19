@@ -304,7 +304,7 @@ def walk():
     shot("app-08-saved")
 
     tap(wait_for("Profile"))
-    wait_for("Change my name")
+    wait_for("Edit name")
     wait_for("Senior 2")
     shot("app-09-profile")
 
@@ -327,7 +327,7 @@ def walk():
     time.sleep(2)
 
     # Change the name.
-    tap(wait_for("Change my name"))
+    tap(wait_for("Edit name"))
     wait_for("Full name")
     clear_field(0, length=30)
     type_into(0, "Amina Joy Nakato")
@@ -335,24 +335,6 @@ def walk():
     tap(wait_for("Save"))
     wait_for("Name updated")
     wait_for("Amina Joy Nakato")
-    time.sleep(3)
-
-    # Change the password: empty form, wrong current password, then the right one.
-    tap(wait_for("Change password"))
-    wait_for("Current password")
-    buttons = [n for n in nodes() if n["text"] == "Change password"]
-    tap(buttons[-1])
-    wait_for("Enter your current password")
-    shot("app-09b-change-password-errors")
-    type_into(0, "not-my-password")
-    type_into(1, "newpass2026")
-    tap([n for n in nodes() if n["text"] == "Change password"][-1])
-    wait_for("That is not your current password")
-    shot("app-09c-wrong-current-password")
-    clear_field(0, length=30)
-    type_into(0, "study2026")
-    tap([n for n in nodes() if n["text"] == "Change password"][-1])
-    wait_for("Password changed")
     time.sleep(3)
 
     # Help and support shows the contacts set in the admin panel.
