@@ -201,19 +201,20 @@ app's "Forgot password?" just shows the support contacts from Settings (`GET /co
 
 ## Deployment (owner does this manually)
 
-### Backend → the owner's own VPS (not Railway/Render)
-1. `cd shule-notes/backend && npm install --production`
-2. Copy `.env.example` to `.env`, fill in `MONGODB_URI` (MongoDB Atlas, not self-hosted —
-   every other project in this account uses Atlas and there is no reason to deviate),
-   `ANTHROPIC_API_KEY`, `ADMIN_KEY`, `AI_MODEL`, `ALLOWED_ORIGINS` (the admin panel's URL).
-3. Run with a process manager that restarts it (pm2 or a systemd unit) and put Nginx (or
-   similar) in front for TLS via Let's Encrypt/certbot — this repo does not include that
-   config yet; it is a standard Node-behind-Nginx setup, not specific to this app.
-4. `node server.js` refuses to start with no `MONGODB_URI` set (`db.js`) — a fast, loud
-   failure instead of a server that starts and then fails every single request.
+### Backend → the owner's Contabo VPS (not Railway/Render)
+Everything is scripted in `shule-notes/deploy/` (read its `README.md`): `setup.sh <api-domain>
+<admin-domain> <email>` on a fresh Ubuntu 22.04/24.04 VPS installs Node 20, nginx, HTTPS
+(certbot), a locked-down `shule` service user, a systemd unit and the firewall, and writes
+`/etc/shule-notes/.env` (generated `ADMIN_KEY`; the owner then adds `MONGODB_URI` and
+`ANTHROPIC_API_KEY`). `update.sh` puts new code live, `backup.sh` backs up PDFs + database
+nightly (Atlas M0 has no backups of its own). The server listens on `127.0.0.1` behind nginx
+(`HOST`, `TRUST_PROXY=1`): trust proxy is REQUIRED there, otherwise every student shares one
+rate-limit bucket. The owner uses MongoDB (Atlas or on the VPS -- both are documented).
+`node server.js` refuses to start with no `MONGODB_URI` (`db.js`).
 
-### Admin panel → wherever the owner hosts static files
-Just the one HTML file. Point it at the backend (see above).
+### Admin panel → the same VPS (nginx serves it on its own subdomain)
+Just the one HTML file; `setup.sh`/`update.sh` copy it to `/var/www/shule-admin` with the
+API address filled in.
 
 ### Android app → Google Play, via Android Studio
 1. Open `shule-notes/android/` in Android Studio.
@@ -230,8 +231,6 @@ Android release signing keys live only with the owner, never in this repo.
 
 ## Known gaps / not built yet
 - No self-service password reset (see above).
-- No Nginx/systemd config checked in — the VPS web-server setup is standard and
-  deliberately left to the owner's own preferred approach.
 - Admin notes list is not paged (fine for one school's worth of notes).
 - Backend tests use an in-memory Mongo fake (`fake-mongo.testlib.js`) for admin features;
   it covers only the query operators the code uses -- extend it if a new one is needed.

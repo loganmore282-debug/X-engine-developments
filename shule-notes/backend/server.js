@@ -23,6 +23,8 @@ const { getSettings, saveSettings, publicConfig } = require('./settings');
 const adminData = require('./admin-data');
 
 const PORT = process.env.PORT || 4000;
+// 127.0.0.1 in production (nginx is the only way in); 0.0.0.0 by default so the emulator can reach a dev server.
+const HOST = process.env.HOST || '0.0.0.0';
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
 const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT) || 20;
 const MAX_PDF_BYTES = 50 * 1024 * 1024; // 50MB per note
@@ -32,6 +34,12 @@ fs.mkdirSync(path.join(UPLOAD_DIR, 'notes'), { recursive: true });
 
 const app = express();
 app.disable('x-powered-by');
+// Behind nginx every request arrives from 127.0.0.1; trusting the proxy's
+// X-Forwarded-For is what makes the rate limits count each student separately
+// instead of all students together. Set TRUST_PROXY=0 if the server is ever
+// exposed directly with no proxy in front (the header could then be forged).
+const TRUST_PROXY = process.env.TRUST_PROXY === undefined ? 1 : Number(process.env.TRUST_PROXY);
+if (TRUST_PROXY > 0) app.set('trust proxy', TRUST_PROXY);
 app.use(helmet());
 app.use(cors({
   origin: (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
@@ -437,7 +445,7 @@ app.get('/health', (req, res) => res.json({ status: 'success', time: new Date().
 
 async function start() {
   await connect();
-  app.listen(PORT, () => console.log(`Shule Notes server listening on :${PORT}`));
+  app.listen(PORT, HOST, () => console.log(`Shule Notes server listening on ${HOST}:${PORT}`));
 }
 
 if (require.main === module) {

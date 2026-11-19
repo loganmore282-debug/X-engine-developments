@@ -1,0 +1,24 @@
+[Unit]
+Description=Shule Notes backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=shule
+Group=shule
+WorkingDirectory=/opt/shule-notes/backend
+EnvironmentFile=/etc/shule-notes/.env
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+
+# The server only needs to read its own code and write the uploads folder.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/shule-notes
+
+[Install]
+WantedBy=multi-user.target
