@@ -11,6 +11,8 @@ const DEFAULTS = {
   supportWhatsapp: '',
   supportEmail: '',
   supportHours: '',
+  websiteUrl: '',     // shown in the footer stamped on every PDF; '' = the app's download page
+  pdfStamp: true,     // stamp every PDF with where it came from and how to contact the owner
   aiModel: '',       // '' = use the AI_MODEL environment value
   // App updates. 0 = not set; the newest build is then read from the download page.
   latestVersionCode: 0,
@@ -78,6 +80,12 @@ async function saveSettings(patch) {
     next.supportEmail = v;
   }
   if (patch.supportHours !== undefined) next.supportHours = text(patch.supportHours, 80);
+  if (patch.websiteUrl !== undefined) {
+    const v = text(patch.websiteUrl, 200);
+    if (v && !/^https?:\/\/[^\s]+\.[^\s]+$/.test(v)) return { ok: false, message: 'The website link must start with https:// and look like a real address' };
+    next.websiteUrl = v;
+  }
+  if (patch.pdfStamp !== undefined) next.pdfStamp = !!patch.pdfStamp;
   for (const key of ['latestVersionCode', 'minVersionCode']) {
     if (patch[key] !== undefined) {
       if (patch[key] === null || patch[key] === '') { next[key] = 0; continue; }

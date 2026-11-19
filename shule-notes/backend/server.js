@@ -21,6 +21,7 @@ const { sendPush } = require('./push');
 const media = require('./media');
 const revision = require('./revision');
 const loginGuard = require('./login-guard');
+const stamp = require('./stamp');
 const onboarding = require('./onboarding');
 const { askAboutDocument, classifyClaudeError } = require('./claude');
 const { privacyPage, accountDeletionPage, termsPage } = require('./legal');
@@ -337,16 +338,19 @@ app.get('/notes/:id/file', requireAuth, async (req, res) => {
   try { note = await getDb().collection('notes').findOne({ _id: new ObjectId(req.params.id) }); }
   catch (_) { return res.status(400).json({ status: 'error', message: 'Invalid note id' }); }
   if (!note || note.active === false) return res.status(404).json({ status: 'error', message: 'Note not found' });
-  const filePath = path.join(UPLOAD_DIR, 'notes', note.fileName);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ status: 'error', message: 'File missing on server' });
+  if (!fs.existsSync(path.join(UPLOAD_DIR, 'notes', note.fileName))) return res.status(404).json({ status: 'error', message: 'File missing on server' });
   // Counted when the file is opened, so the admin can see what students read.
   getDb().collection('notes').updateOne({ _id: note._id }, { $inc: { views: 1 } }).catch(() => {});
+  // Every page carries a footer (where it came from, how to reach the owner), unless the owner turned that off.
+  const settings = await getSettings();
+  const lines = stamp.footerLines(settings, `${req.protocol}://${req.get('host')}/download/`);
+  const { file: filePath } = await stamp.fileToSend({ uploadDir: UPLOAD_DIR, fileName: note.fileName, lines, enabled: settings.pdfStamp !== false });
   const { size, mtime } = await fs.promises.stat(filePath);
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Length', size);
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(note.title || 'note')}.pdf"`);
-  // A note's file never changes (a new upload is a new file), so a phone may keep it.
-  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+  // The footer follows the owner's contact details, so the file is checked again rather than kept forever.
+  res.setHeader('Cache-Control', 'private, no-cache');
   res.setHeader('Last-Modified', mtime.toUTCString());
   require('stream').pipeline(fs.createReadStream(filePath), res, () => {});
 });
@@ -540,6 +544,7 @@ app.post('/admin/notes/delete', async (req, res) => {
   if (note) {
     const filePath = path.join(UPLOAD_DIR, 'notes', note.fileName);
     fs.unlink(filePath, () => {});
+    stamp.removeStamped(UPLOAD_DIR, note.fileName);
     await getDb().collection('notes').deleteOne({ _id: note._id });
   }
   res.json({ status: 'success' });

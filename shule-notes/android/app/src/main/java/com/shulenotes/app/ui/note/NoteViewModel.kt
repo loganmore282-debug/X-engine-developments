@@ -72,7 +72,9 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun cacheFile(noteId: String): File {
         val dir = File(getApplication<Application>().cacheDir, "notes").apply { mkdirs() }
-        return File(dir, noteId.filter { it.isLetterOrDigit() } + ".pdf")
+        // Copies from before every PDF carried the owner's footer have no ".s1" in their name: drop them.
+        dir.listFiles()?.filter { it.extension == "pdf" && !it.name.endsWith(".s1.pdf") }?.forEach { it.delete() }
+        return File(dir, noteId.filter { it.isLetterOrDigit() } + ".s1.pdf")
     }
 
     // A note's file never changes once uploaded, so a copy already on the

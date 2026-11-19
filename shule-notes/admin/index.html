@@ -307,6 +307,8 @@
           <div><label>Email</label><input id="setEmail" placeholder="help@yourschool.com"></div>
           <div><label>Hours</label><input id="setHours" placeholder="Monday to Friday, 8am to 5pm"></div>
         </div>
+        <label>Website link</label><input id="setWebsite" placeholder="https://…  (empty = the app download page)">
+        <label class="switch" style="margin-top:12px"><input type="checkbox" id="setPdfStamp"> Put a footer on every page of every PDF: "Downloaded from Shule Notes", this website and the contacts above</label>
       </div>
       <div class="card">
         <h2>App updates</h2>
@@ -850,12 +852,13 @@ LOADERS.settings = async function(){
   $('setLatestHint').textContent = r.publishedVersion ? 'The download page is serving version ' + r.publishedVersion + '.' : 'No download page found on this server, so there is no automatic version.';
   $('setPhone').value = s.supportPhone || ''; $('setWhatsapp').value = s.supportWhatsapp || '';
   $('setEmail').value = s.supportEmail || ''; $('setHours').value = s.supportHours || '';
+  $('setWebsite').value = s.websiteUrl || ''; $('setPdfStamp').checked = s.pdfStamp !== false;
 };
 $('setSave').addEventListener('click', async () => {
   const r = await api('/admin/settings/save', {
     latestVersionCode: $('setLatest').value, minVersionCode: $('setMin').value, updateUrl: $('setUpdateUrl').value, updateNote: $('setUpdateNote').value,
     aiEnabled: $('setAiOn').checked, aiModel: $('setModel').value, anthropicKey: $('setKey').value, aiDailyLimit: $('setAiLimit').value === '' ? null : Number($('setAiLimit').value),
-    supportPhone: $('setPhone').value, supportWhatsapp: $('setWhatsapp').value, supportEmail: $('setEmail').value, supportHours: $('setHours').value,
+    supportPhone: $('setPhone').value, supportWhatsapp: $('setWhatsapp').value, supportEmail: $('setEmail').value, supportHours: $('setHours').value, websiteUrl: $('setWebsite').value, pdfStamp: $('setPdfStamp').checked,
     ...($('setFb').value.trim() ? { firebaseServiceAccount: $('setFb').value.trim() } : {}),
   });
   toast(r.status === 'success' ? 'Settings saved' : (r.message || 'Could not save'), r.status === 'success' ? 'ok' : 'error');

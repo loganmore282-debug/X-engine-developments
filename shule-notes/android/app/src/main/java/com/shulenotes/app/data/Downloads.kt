@@ -10,6 +10,9 @@ import java.io.File
 // until the student removes them. A note's file never changes once uploaded, so a
 // downloaded copy never goes out of date.
 object Downloads {
+    // Copies made before every PDF carried the footer (where it came from, how to contact the owner) have no
+    // ".s1" in their name, so they are removed once and fetched again with the footer when next opened.
+    private const val SUFFIX = ".s1.pdf"
     private var dir: File? = null
     private val _ids = MutableStateFlow<Set<String>>(emptySet())
 
@@ -18,6 +21,7 @@ object Downloads {
 
     fun init(context: Context) {
         dir = File(context.filesDir, "downloads").apply { mkdirs() }
+        dir?.listFiles()?.filter { it.extension == "pdf" && !it.name.endsWith(SUFFIX) }?.forEach { it.delete() }
         refresh()
     }
 
@@ -25,7 +29,7 @@ object Downloads {
 
     private fun safe(id: String) = id.filter { it.isLetterOrDigit() }
 
-    fun file(noteId: String): File = File(folder(), safe(noteId) + ".pdf")
+    fun file(noteId: String): File = File(folder(), safe(noteId) + SUFFIX)
 
     // The page-by-page text kept beside a note, so searching inside it works offline too.
     fun pagesFile(noteId: String): File = File(folder(), safe(noteId) + ".pages.json")
@@ -34,8 +38,8 @@ object Downloads {
 
     fun refresh() {
         _ids.value = folder().listFiles()
-            ?.filter { it.extension == "pdf" && it.length() > 0L }
-            ?.map { it.nameWithoutExtension }
+            ?.filter { it.name.endsWith(SUFFIX) && it.length() > 0L }
+            ?.map { it.name.removeSuffix(SUFFIX) }
             ?.toSet()
             ?: emptySet()
     }
