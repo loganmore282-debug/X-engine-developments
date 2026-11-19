@@ -157,6 +157,22 @@ wrong it says so in `/var/log/shule-backup.log` instead of pretending it worked.
   `mongorestore --uri "mongodb://shule_root:PASSWORD@127.0.0.1:27018/admin" --gzip --archive=/var/backups/shule-notes/db-DATE.archive.gz --drop`
 - **Restore the PDFs:** `sudo tar -xzf /var/backups/shule-notes/uploads-DATE.tar.gz -C /var/lib/shule-notes && sudo chown -R shule:shule /var/lib/shule-notes/uploads`
 
+## App download link
+
+Put the Android app on your own server so testers get a plain link:
+
+```bash
+cd ~/X-engine-developments && git pull
+cd shule-notes/deploy
+sudo ./publish-apk.sh
+```
+
+It prints `https://<your api address>/download/`: a phone-friendly page with a Download
+button and the install steps. The file behind it is refreshed from the newest GitHub build
+every 10 minutes (only when it changed; a bad or half download never replaces the good one).
+nginx serves it, so an interrupted download can resume. It is a test build: testers must
+allow installing from the browser and remove any older copy first.
+
 ## Automatic deploys (GitHub webhook)
 
 After this is set up, **every push to the watched branch updates the server by itself**: no

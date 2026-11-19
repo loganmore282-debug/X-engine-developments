@@ -216,6 +216,7 @@ the deploy scripts must only ADD (own user, own port from 4000 up, two new nginx
 Node/Mongo, ufw only if already active) and never remove, replace or reconfigure anything;
 `preflight.sh` is a read-only survey. Never SSH into it -- there is no access from here.
 `node server.js` refuses to start with no `MONGODB_URI` (`db.js`).
+**App download page:** `deploy/publish-apk.sh` serves `/download/` on the API address (nginx, cron `shule-fetch-apk` every 10 min from the `shule-notes-live` GitHub release).
 **Auto-deploy:** `deploy/webhook/` (setup-webhook.sh) -- a GitHub push webhook (HMAC-verified, watched branch only)
 runs `build.sh` as an unprivileged user (sparse clone, `npm install --ignore-scripts`, `npm test`), then
 `apply.sh` as root via one sudo rule (copy live, restart, health check, rollback). Backend + admin only;

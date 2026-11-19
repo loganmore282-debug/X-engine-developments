@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Download Shule Notes</title>
+<style>
+  :root{--green:#17694b;--dark:#0f4a34;--soft:#d9f0e4;--ink:#1b1c1a;--muted:#5d645d;--paper:#f4f2ec}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--paper);color:var(--ink);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  main{background:#fff;border:1px solid #e3e0d6;border-radius:24px;max-width:420px;width:100%;padding:32px 26px;text-align:center}
+  img{width:88px;height:auto;margin-bottom:8px}
+  h1{margin:0 0 4px;font-size:26px} .sub{color:var(--muted);margin:0 0 22px}
+  a.btn{display:block;background:var(--green);color:#fff;text-decoration:none;font-weight:700;font-size:18px;padding:16px;border-radius:999px}
+  a.btn:active{background:var(--dark)}
+  .meta{color:var(--muted);font-size:13px;margin:10px 0 22px;min-height:18px}
+  ol{text-align:left;margin:0;padding:0 0 0 20px;line-height:1.7;font-size:15px}
+  .note{background:var(--soft);color:var(--dark);border-radius:14px;padding:12px 14px;font-size:14px;margin-top:18px;text-align:left}
+</style>
+</head>
+<body>
+<main>
+  <img src="logo.png" alt="">
+  <h1>Shule Notes</h1>
+  <p class="sub">Notes and past papers for every class, with an AI study helper.</p>
+  <a class="btn" href="shule-notes.apk" download>Download for Android</a>
+  <div class="meta" id="meta"></div>
+  <ol>
+    <li>Tap <b>Download for Android</b> and wait for it to finish.</li>
+    <li>Open the file. If your phone asks, allow installing from this source.</li>
+    <li>If you already have an older Shule Notes, remove it first, then install this one.</li>
+    <li>Create your account with your name, phone number and a password.</li>
+  </ol>
+  <div class="note">This is a test version. If anything looks wrong, tell us what you saw.</div>
+</main>
+<script>
+  fetch('info.json', { cache: 'no-store' }).then(r => r.json()).then(i => {
+    const mb = (i.size / 1048576).toFixed(1) + ' MB';
+    const d = i.updated ? new Date(i.updated).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    document.getElementById('meta').textContent = mb + (d ? ' · updated ' + d : '');
+  }).catch(() => {});
+</script>
+</body>
+</html>
