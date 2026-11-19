@@ -248,6 +248,29 @@ What exists now:
 - PDFs: opened PDFs are cached in the app's private cache and "Downloaded for offline" copies live in the app's private storage
   (not visible to other apps or the gallery; readable only with root). They are not encrypted at rest.
 
+### Website (`web/`)
+The same app in the browser (owner's request: "exactly like the app"). React + TypeScript + Vite, plain static files, NO server
+of its own: it talks to the SAME backend as the phone app (same accounts, notes, subjects, announcements, intro slides, settings),
+so anything the owner changes in the admin panel shows on the site and the app together. (Website CODE does not reach the app:
+the app is native and only changes when a new APK is installed.) Screens match the app: intro, sign in/up, choose class, Home
+(hero, search, announcement, Continue reading, subjects, kind chips, sort), Saved, notifications inbox, Profile (pencil to edit
+name, photo, appearance, help, feedback, log out, delete), reader (pdf.js; lazy pages, zoom, page bookmarks, in-document
+search from `/notes/:id/pages`, Ask AI drawer, restores the last page). Same look: tokens in `src/styles.css`, light/dark.
+Auth: bearer token in localStorage (`api.ts`); `/sync` is polled every 15 s while the tab is visible and reloads the library
+when the owner changed anything. The PDF the server sends already carries the footer + logo (stamped server-side).
+- API address: `VITE_API_BASE` at build time (default the sslip.io API). The API's `ALLOWED_ORIGINS` MUST list the site's origin.
+- Dev: `cd web && npm ci && VITE_API_BASE=http://localhost:4010 npm run dev`.
+- **e2e:** `web/e2e/mock-server.cjs` runs the REAL backend (`server.js`) on `fake-mongo` with seeded notes; `e2e/smoke.cjs` drives
+  the built site in Chromium (intro -> register -> class -> home -> PDF draws -> search -> profile -> log out -> desktop). CI:
+  `.github/workflows/build-shule-notes-web.yml` (also keeps screenshots). Found and fixed real bugs (dialogs trapped under the
+  bottom bar by a lingering animation: use `createPortal`; bottom bar hiding the last items).
+- Deploy: `deploy/setup-web.sh` (once: nginx site + HTTPS for `web.<ip>.sslip.io`, adds the origin to `ALLOWED_ORIGINS`, writes
+  `WEB_DOMAIN` into `/etc/shule-notes/deploy.conf`), then `webhook/setup-webhook.sh` again (installs the updated build/apply
+  scripts, keeps the secret). After that every push that changes `shule-notes/web` is built on the VPS (`npm ci --ignore-scripts`,
+  type check, `vite build`) and swapped into `/var/www/shule-web`. nginx sends a strict CSP (`deploy/nginx-web.conf`).
+- Not built yet on the website: offline downloads, "My progress", sort/recent-search niceties of the app, push notifications,
+  PWA install prompt/service worker. PDFs cannot be screenshot-blocked in a browser (the app blocks them with FLAG_SECURE).
+
 ### Not done yet for a Play Store upload
 - **Target API level:** still 34. Google Play requires new apps to target a recent Android
   version; check the current requirement and raise compileSdk/targetSdk (needs a newer

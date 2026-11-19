@@ -1,0 +1,53 @@
+// Drives the built website like a student, against the REAL Shule Notes server code (e2e/mock-server.cjs):
+// intro, create account, choose class, home, open a note (the PDF must draw), search in it, profile, desktop layout.
+const { chromium } = require('playwright');
+const fs = require('fs');
+const BASE = process.env.WEB_URL || 'http://localhost:4173';
+fs.mkdirSync('e2e-shots', { recursive: true });
+(async () => {
+  const browser = await chromium.launch();
+  const problems = [];
+  const shot = async (p, name) => { await p.waitForTimeout(400); await p.screenshot({ path: `e2e-shots/${name}.png` }); };
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => problems.push('page error: ' + e.message));
+  const step = (m) => console.log('step:', m);
+  step('intro'); await page.goto(BASE + '/');
+  await page.waitForSelector('.intro-bottom', { timeout: 15000 }); await shot(page, '01-intro');
+  await page.click('text=Continue'); await page.click('text=Continue'); await page.click('text=Get started');
+  await page.waitForSelector('text=Welcome back'); await shot(page, '02-sign-in');
+  step('register'); await page.click('text=Create an account');
+  await page.fill('input[autocomplete=name]', 'Amina Nakato'); await page.fill('input[inputmode=tel]', '0772123456'); await page.fill('input[type=password]', 'study2026');
+  await page.click('button:has-text("Create account")');
+  await page.waitForSelector('text=Which class are you in?'); await shot(page, '03-choose-class');
+  await page.click('button.chip:has-text("Senior 2")'); await page.click('button:has-text("Continue")');
+  await page.waitForSelector('.note-card'); await shot(page, '04-home');
+  await page.fill('input[aria-label="Search notes and past papers"]', 'photo');
+  if ((await page.locator('.note-card').count()) < 1) problems.push('searching for "photo" found nothing');
+  await page.fill('input[aria-label="Search notes and past papers"]', 'zzzz-nothing');
+  await page.waitForSelector('text=Nothing matches your search');
+  await page.fill('input[aria-label="Search notes and past papers"]', '');
+  step('open a note'); await page.click('.note-card >> nth=0');
+  await page.waitForSelector('.sheet-page canvas', { timeout: 20000 });
+  await page.waitForFunction(() => { const c = document.querySelector('.sheet-page canvas'); return c && c.width > 100 && c.style.opacity !== '0'; }, null, { timeout: 20000 });
+  await shot(page, '05-reader');
+  await page.click('button[aria-label="Search in this document"]'); await page.fill('.drawer input', 'carbon');
+  await page.waitForSelector('.hit'); await shot(page, '06-reader-search');
+  await page.click('.drawer button[aria-label="Close"]'); await page.click('button[aria-label="Back"]');
+  step('profile'); await page.click('.bottom-nav a:has-text("Profile")'); await page.waitForSelector('text=Amina Nakato'); await shot(page, '07-profile');
+  await page.click('button[aria-label="Edit name"]'); await page.fill('.sheet input', 'Amina Joy Nakato'); await page.click('.sheet button:has-text("Save")');
+  await page.waitForSelector('text=Amina Joy Nakato');
+  step('log out'); await page.locator('button.btn:has-text("Log out")').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+  await page.click('button.btn:has-text("Log out")'); await page.click('.sheet button:has-text("Log out")'); await page.waitForSelector('text=Welcome back');
+  await ctx.close();
+  step('desktop'); const d = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const dp = await d.newPage();
+  dp.on('pageerror', (e) => problems.push('desktop page error: ' + e.message));
+  await dp.addInitScript(() => localStorage.setItem('shule_intro_seen', '1'));
+  await dp.goto(BASE + '/'); await dp.waitForSelector('text=Welcome back');
+  await dp.fill('input[inputmode=tel]', '0772123456'); await dp.fill('input[type=password]', 'study2026'); await dp.click('button:has-text("Sign in")');
+  await dp.waitForSelector('.note-card'); await shot(dp, '08-desktop-home');
+  await browser.close();
+  if (problems.length) { console.error(problems.join('\n')); process.exit(1); }
+  console.log('the website works end to end');
+})().catch((e) => { console.error('FAILED:', e.message.split('\n')[0]); process.exit(1); });

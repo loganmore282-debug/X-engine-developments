@@ -1,0 +1,48 @@
+name: Shule Notes website
+
+# Builds the website (type check + bundle) and drives it in a real browser against the real Shule Notes server code.
+# The same build is what the VPS makes when you push, so a push that breaks the site is caught here first.
+on:
+  push:
+    branches: [ "claude/space8-rename-frontend-rebuild-juurd7" ]
+    paths:
+      - "shule-notes/web/**"
+      - "shule-notes/backend/**"
+      - ".github/workflows/build-shule-notes-web.yml"
+  workflow_dispatch:
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install the backend (the website is tested against its real code)
+        working-directory: shule-notes/backend
+        run: npm ci --no-audit --no-fund --ignore-scripts
+      - name: Install and build the website
+        working-directory: shule-notes/web
+        run: |
+          npm ci --no-audit --no-fund --ignore-scripts
+          VITE_API_BASE=http://localhost:4010 npm run build
+      - name: Install a browser
+        working-directory: shule-notes/web
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.49.1
+          npx playwright install --with-deps chromium
+      - name: Start the server and the website, then drive it
+        working-directory: shule-notes/web
+        run: |
+          node e2e/mock-server.cjs > server.log 2>&1 &
+          npx vite preview --port 4173 --strictPort > preview.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS localhost:4010/levels >/dev/null 2>&1 && curl -fsS localhost:4173 >/dev/null 2>&1 && break; sleep 1; done
+          node e2e/smoke.cjs
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-screenshots
+          path: shule-notes/web/e2e-shots
+          if-no-files-found: ignore

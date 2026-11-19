@@ -1,0 +1,10 @@
+{
+  "name": "Shule Notes",
+  "short_name": "Shule Notes",
+  "description": "Notes, past papers and an AI study helper for every class.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F7F5F0",
+  "theme_color": "#17694B",
+  "icons": [{ "src": "/logo-mark.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }]
+}

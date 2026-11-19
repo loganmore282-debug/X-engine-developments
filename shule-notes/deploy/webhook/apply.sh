@@ -17,6 +17,15 @@ if [ -f "$STAGE/.admin" ]; then
   echo "admin panel updated"
 fi
 
+if [ -f "$STAGE/.web" ] && [ -d /var/www/shule-web ]; then
+  # Copied in beside the live folder and swapped in, so a visitor never sees half a website.
+  rm -rf /var/www/shule-web.new; cp -a "$STAGE/web" /var/www/shule-web.new
+  chmod -R go+rX /var/www/shule-web.new
+  rm -rf /var/www/shule-web.old; mv /var/www/shule-web /var/www/shule-web.old; mv /var/www/shule-web.new /var/www/shule-web
+  rm -rf /var/www/shule-web.old
+  echo "website updated"
+fi
+
 if [ -f "$STAGE/.backend" ]; then
   PORT="$(grep -m1 '^PORT=' /etc/shule-notes/.env | cut -d= -f2)"; PORT="${PORT:-4000}"
   rm -rf "$PREV"; cp -a "$LIVE" "$PREV"

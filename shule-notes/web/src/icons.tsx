@@ -1,0 +1,23 @@
+// The icons, drawn as plain SVG so the site needs no icon library.
+import type { SVGProps } from 'react';
+const base = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+const I = (d: string) => (p: SVGProps<SVGSVGElement>) => <svg {...base} {...p}><path d={d} /></svg>;
+export const Home = I('M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10');
+export const Bookmark = I('M6 3h12v18l-6-4-6 4z');
+export const User = (p: SVGProps<SVGSVGElement>) => <svg {...base} {...p}><circle cx="12" cy="8" r="4" /><path d="M4 21c1-4 4-6 8-6s7 2 8 6" /></svg>;
+export const Search = (p: SVGProps<SVGSVGElement>) => <svg {...base} {...p}><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>;
+export const Bell = I('M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0');
+export const Back = I('M15 5l-7 7 7 7');
+export const Close = I('M6 6l12 12M18 6L6 18');
+export const Plus = I('M12 5v14M5 12h14');
+export const Minus = I('M5 12h14');
+export const Edit = I('M4 20h4L19 9l-4-4L4 16zM13 7l4 4');
+export const Logout = I('M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9');
+export const Spark = I('M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z');
+export const Cap = I('M2 9l10-5 10 5-10 5zM6 11v5c3 2 9 2 12 0v-5');
+export const Send = I('M22 2L11 13M22 2l-7 20-4-9-9-4z');
+export const Palette = (p: SVGProps<SVGSVGElement>) => <svg {...base} {...p}><circle cx="12" cy="12" r="9" /><circle cx="8" cy="10" r="1" /><circle cx="12" cy="7" r="1" /><circle cx="16" cy="10" r="1" /></svg>;
+export const Chat = I('M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z');
+export const Chevron = I('M9 5l7 7-7 7');
+export const Camera = (p: SVGProps<SVGSVGElement>) => <svg {...base} {...p}><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>;
+export const Trash = I('M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13');

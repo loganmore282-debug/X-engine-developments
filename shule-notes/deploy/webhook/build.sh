@@ -4,7 +4,8 @@
 # here. Only if everything passes does it ask apply.sh (the one command the
 # user may run as root) to put the result live.
 set -euo pipefail
-. /etc/shule-notes/deploy.conf          # REPO_URL BRANCH API_DOMAIN NODE_DIR
+. /etc/shule-notes/deploy.conf          # REPO_URL BRANCH API_DOMAIN NODE_DIR (and WEB_DOMAIN once the website is set up)
+WEB_DOMAIN="${WEB_DOMAIN:-}"
 WORK=/var/lib/shule-deploy
 REPO=$WORK/repo
 STAGE=$WORK/stage
@@ -28,13 +29,15 @@ git -C "$REPO" reset --quiet --hard FETCH_HEAD
 
 BTREE="$(git -C "$REPO" rev-parse HEAD:shule-notes/backend)"
 ATREE="$(git -C "$REPO" rev-parse HEAD:shule-notes/admin)"
+WTREE=""; [ -n "$WEB_DOMAIN" ] && WTREE="$(git -C "$REPO" rev-parse HEAD:shule-notes/web 2>/dev/null || true)"
 rm -rf "$STAGE"; mkdir -p "$STAGE"
 NEED=""
 if [ "$BTREE" != "$(cat "$WORK/backend.tree" 2>/dev/null || true)" ]; then NEED="$NEED backend"; fi
 if [ "$ATREE" != "$(cat "$WORK/admin.tree" 2>/dev/null || true)" ]; then NEED="$NEED admin"; fi
+if [ -n "$WTREE" ] && [ "$WTREE" != "$(cat "$WORK/web.tree" 2>/dev/null || true)" ]; then NEED="$NEED web"; fi
 if [ -z "$NEED" ]; then
   echo "$NEW" > "$WORK/deployed.sha"
-  log "${NEW:0:7}: nothing changed in the backend or the admin panel; live site left as it is"
+  log "${NEW:0:7}: nothing changed in the backend, the admin panel or the website; live site left as it is"
   exit 0
 fi
 log "${NEW:0:7}: changed:$NEED"
@@ -53,9 +56,24 @@ if [[ "$NEED" == *admin* ]]; then
   touch "$STAGE/.admin"
 fi
 
+if [[ "$NEED" == *web* ]]; then
+  # The website is built here (not on the live folder): tools are installed without running any install scripts,
+  # the build must pass its type check, and only then are the finished files staged.
+  rsync -a --no-links --exclude node_modules --exclude dist "$REPO/shule-notes/web/" "$STAGE/websrc/"
+  cd "$STAGE/websrc"
+  npm ci --no-audit --no-fund --ignore-scripts >> "$WORK/deploy.log" 2>&1
+  log "building the website"
+  VITE_API_BASE="https://$API_DOMAIN" npm run build >> "$WORK/deploy.log" 2>&1 || { log "WEBSITE BUILD FAILED: nothing was deployed (see $WORK/deploy.log)"; exit 1; }
+  mkdir -p "$STAGE/web" && cp -a dist/. "$STAGE/web/"
+  rm -rf "$STAGE/websrc"
+  touch "$STAGE/.web"
+  cd "$WORK"
+fi
+
 sudo -n /usr/local/lib/shule-deploy/apply.sh
 [[ "$NEED" == *backend* ]] && echo "$BTREE" > "$WORK/backend.tree"
 [[ "$NEED" == *admin* ]] && echo "$ATREE" > "$WORK/admin.tree"
+[[ "$NEED" == *web* ]] && echo "$WTREE" > "$WORK/web.tree"
 echo "$NEW" > "$WORK/deployed.sha"
 rm -rf "$STAGE"
 log "${NEW:0:7}: DEPLOYED"
