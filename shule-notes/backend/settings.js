@@ -18,6 +18,7 @@ const DEFAULTS = {
   updateUrl: '',       // where "Update" goes (Google Play link later); '' = the download page
   updateNote: '',      // one line shown with the update prompt
   anthropicKey: '',  // the Claude API key, entered in the admin panel (never sent back to it)
+  firebaseServiceAccount: null, // { project_id, client_email, private_key } for push notifications (never sent back)
 };
 
 // The models the owner may pick in the panel (cheapest first).
@@ -97,6 +98,15 @@ async function saveSettings(patch) {
     next.aiModel = v;
   }
   const unset = {};
+  if (patch.clearFirebase) unset.firebaseServiceAccount = '';
+  else if (typeof patch.firebaseServiceAccount === 'string' && patch.firebaseServiceAccount.trim()) {
+    let parsed;
+    try { parsed = JSON.parse(patch.firebaseServiceAccount); } catch (_) { return { ok: false, message: 'That is not the Firebase key file. Paste the whole contents of the .json file you downloaded.' }; }
+    if (!parsed || parsed.type !== 'service_account' || !parsed.project_id || !parsed.client_email || !/BEGIN PRIVATE KEY/.test(String(parsed.private_key || ''))) {
+      return { ok: false, message: 'That file is not a Firebase service account key. In Firebase: Project settings, Service accounts, Generate new private key.' };
+    }
+    next.firebaseServiceAccount = { project_id: String(parsed.project_id), client_email: String(parsed.client_email), private_key: String(parsed.private_key) };
+  }
   if (patch.clearAnthropicKey) unset.anthropicKey = '';
   else if (typeof patch.anthropicKey === 'string' && patch.anthropicKey.trim()) {
     const v = patch.anthropicKey.trim();
@@ -114,8 +124,9 @@ async function saveSettings(patch) {
 
 // What the admin panel sees: everything EXCEPT the key itself, only whether one is saved.
 function adminView(s) {
-  const { anthropicKey, ...rest } = s;
-  return { ...rest, anthropicKeySet: isRealKey(anthropicKey), anthropicKeyHint: isRealKey(anthropicKey) ? '…' + anthropicKey.slice(-4) : '' };
+  const { anthropicKey, firebaseServiceAccount, ...rest } = s;
+  const account = firebaseServiceAccount && firebaseServiceAccount.project_id ? firebaseServiceAccount : null;
+  return { ...rest, firebaseSet: !!account, firebaseProject: account ? account.project_id : '', anthropicKeySet: isRealKey(anthropicKey), anthropicKeyHint: isRealKey(anthropicKey) ? '…' + anthropicKey.slice(-4) : '' };
 }
 
 // What the app and the public pages may see.

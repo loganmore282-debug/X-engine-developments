@@ -6,7 +6,7 @@ const { getDb } = require('./db');
 const { hashPassword } = require('./auth');
 const { eraseUser, toId, MIN_PASSWORD, MAX_PASSWORD } = require('./accounts');
 const { normalizePhone } = require('./phone');
-const { NAMES: LEVEL_NAMES } = require('./levels');
+const { NAMES: LEVEL_NAMES, isValidLevel } = require('./levels');
 const { countNewFeedback } = require('./feedback');
 
 function todayKey(date = new Date()) {
@@ -153,6 +153,7 @@ function publicAnnouncement(a) {
   return {
     id: String(a._id), title: a.title || '', message: a.message || '',
     active: a.active !== false, expiresAt: a.expiresAt || null, createdAt: a.createdAt || null,
+    classLevel: a.classLevel || null,
   };
 }
 
@@ -162,7 +163,7 @@ async function listAnnouncements() {
 }
 
 // expiresAt arrives as a day ("2026-12-01"); the notice stays up until that day ends.
-async function saveAnnouncement({ id, title, message, active, expiresAt }) {
+async function saveAnnouncement({ id, title, message, active, expiresAt, classLevel }) {
   const cleanTitle = String(title || '').trim().slice(0, 80);
   const cleanMessage = String(message || '').trim().slice(0, 400);
   if (!cleanTitle) return { ok: false, status: 400, message: 'Give the announcement a title' };
@@ -173,7 +174,9 @@ async function saveAnnouncement({ id, title, message, active, expiresAt }) {
     if (Number.isNaN(parsed.getTime())) return { ok: false, status: 400, message: 'That date does not look right' };
     expires = parsed;
   }
-  const doc = { title: cleanTitle, message: cleanMessage, active: active !== false, expiresAt: expires };
+  const level = classLevel ? String(classLevel).trim() : null;
+  if (level && !isValidLevel(level)) return { ok: false, status: 400, message: 'Choose a class from the list' };
+  const doc = { title: cleanTitle, message: cleanMessage, active: active !== false, expiresAt: expires, classLevel: level };
   const col = getDb().collection('announcements');
   if (id) {
     const oid = toId(id);
@@ -200,11 +203,13 @@ async function activeAnnouncement() {
   return hit ? publicAnnouncement(hit) : null;
 }
 
-// Everything students may see in their notification inbox: switched on and not expired, newest first.
-async function listActiveAnnouncements() {
+// Everything a student may see in their notification inbox: switched on, not expired, meant for everyone or for their class; newest first.
+async function listActiveAnnouncements(classLevel) {
   const rows = await getDb().collection('announcements').find({ active: true }).sort({ createdAt: -1, _id: -1 }).limit(50).toArray();
   const now = Date.now();
-  return rows.filter((a) => !a.expiresAt || new Date(a.expiresAt).getTime() > now).slice(0, 20).map(publicAnnouncement);
+  return rows
+    .filter((a) => (!a.expiresAt || new Date(a.expiresAt).getTime() > now) && (!a.classLevel || a.classLevel === classLevel))
+    .slice(0, 20).map(publicAnnouncement);
 }
 
 module.exports = {

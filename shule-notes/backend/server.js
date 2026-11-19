@@ -17,11 +17,12 @@ const { extractInThread } = require('./pdf');
 const { pageTextsFor } = require('./note-pages');
 const feedback = require('./feedback');
 const { publishedVersion } = require('./app-version');
+const { sendPush } = require('./push');
 const { askAboutDocument, classifyClaudeError } = require('./claude');
 const { privacyPage, accountDeletionPage, termsPage } = require('./legal');
 const { GROUPS: LEVEL_GROUPS, isValidLevel } = require('./levels');
 const { normalizePhone, isValidPhone } = require('./phone');
-const { eraseUser, changePassword, updateProfile, cleanName } = require('./accounts');
+const { eraseUser, changePassword, updateProfile, cleanName, toId } = require('./accounts');
 const { getSettings, saveSettings, publicConfig, adminView, AI_MODELS } = require('./settings');
 const adminData = require('./admin-data');
 
@@ -148,7 +149,10 @@ app.post('/feedback', requireAuth, rateLimit({ windowMs: 60 * 60 * 1000, max: 20
   sendResult(res, result);
 }));
 
-app.get('/announcements', requireAuth, ah(async (req, res) => res.json({ status: 'success', announcements: await adminData.listActiveAnnouncements() })));
+app.get('/announcements', requireAuth, ah(async (req, res) => {
+  const user = await getDb().collection('users').findOne({ _id: toId(req.userId) });
+  res.json({ status: 'success', announcements: await adminData.listActiveAnnouncements(user ? user.classLevel : null) });
+}));
 app.get('/announcement', requireAuth, ah(async (req, res) => res.json({ status: 'success', announcement: await adminData.activeAnnouncement() })));
 
 app.post('/auth/change-password', authLimiter, requireAuth, ah(async (req, res) => {
@@ -486,7 +490,20 @@ app.post('/admin/users/status', guard(async (req, res) => sendResult(res, await 
 app.post('/admin/users/reset-password', guard(async (req, res) => sendResult(res, await adminData.resetUserPassword(req.body.id, req.body.password))));
 app.post('/admin/users/delete', guard(async (req, res) => sendResult(res, await adminData.adminDeleteUser(req.body.id))));
 app.post('/admin/announcements/list', guard(async (req, res) => res.json({ status: 'success', announcements: await adminData.listAnnouncements() })));
-app.post('/admin/announcements/save', guard(async (req, res) => sendResult(res, await adminData.saveAnnouncement(req.body))));
+app.post('/admin/announcements/save', guard(async (req, res) => {
+  const result = await adminData.saveAnnouncement(req.body);
+  if (!result.ok) return sendResult(res, result);
+  // A NEW announcement can also be pushed to phones. A push that fails never loses the announcement.
+  let push = null;
+  if (req.body.push && !req.body.id && req.body.active !== false) {
+    const settings = await getSettings();
+    push = await sendPush({
+      account: settings.firebaseServiceAccount, title: req.body.title, body: req.body.message,
+      classLevel: req.body.classLevel || null, announcementId: result.id,
+    });
+  }
+  res.json({ status: 'success', id: result.id || null, push });
+}));
 app.post('/admin/announcements/delete', guard(async (req, res) => sendResult(res, await adminData.deleteAnnouncement(req.body.id))));
 app.post('/admin/feedback/list', guard(async (req, res) => res.json({ status: 'success', ...(await feedback.listFeedback(req.body)) })));
 app.post('/admin/feedback/status', guard(async (req, res) => sendResult(res, await feedback.setFeedbackStatus(req.body.id, req.body.status))));
