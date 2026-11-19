@@ -5,5 +5,9 @@ import react from '@vitejs/plugin-react';
 // same Shule Notes server the phone app uses.
 export default defineConfig({
   plugins: [react()],
-  build: { target: 'es2020', sourcemap: false, chunkSizeWarningLimit: 900 },
+  build: {
+    target: 'es2020', sourcemap: false, chunkSizeWarningLimit: 900,
+    // Changing this word gives every built asset a new file name, so a browser can never keep reusing an old copy.
+    rollupOptions: { output: { assetFileNames: 'assets/[name]-r2-[hash][extname]' } },
+  },
 });
