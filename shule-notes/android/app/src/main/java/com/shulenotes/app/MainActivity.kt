@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,10 +70,13 @@ class MainActivity : ComponentActivity() {
             }
             // Clock and battery icons must suit the chosen theme, not only the phone's own.
             val view = LocalView.current
-            SideEffect {
+            // Runs only when the theme changes (not on every redraw), and BEFORE a screen's own setting, so a
+            // dark-green screen such as the splash or the introduction can keep its light clock and battery icons.
+            DisposableEffect(dark, view) {
                 val controller = WindowCompat.getInsetsController(window, view)
                 controller.isAppearanceLightStatusBars = !dark
                 controller.isAppearanceLightNavigationBars = !dark
+                onDispose { }
             }
 
             ShuleNotesTheme(darkTheme = dark) {

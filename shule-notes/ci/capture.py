@@ -149,6 +149,8 @@ def night(on):
 
 def walk():
     adb("install", "-r", APK, timeout=600)
+    # Android 13+ asks "Allow notifications?" on Home; the walk is about the app, so say yes up front.
+    adb("shell", "pm", "grant", PKG, "android.permission.POST_NOTIFICATIONS", check=False)
     tidy_status_bar()
     adb("shell", "am", "start", "-n", f"{PKG}/.MainActivity")
 
