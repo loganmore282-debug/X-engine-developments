@@ -1,0 +1,16 @@
+[Unit]
+Description=Shule Notes deploy hook (GitHub webhook)
+After=network-online.target
+
+[Service]
+User=shule-deploy
+Group=shule-deploy
+EnvironmentFile=/etc/shule-notes/webhook.env
+ExecStart=__NODE__ /usr/local/lib/shule-deploy/server.js
+Restart=always
+RestartSec=3
+PrivateTmp=true
+# (NoNewPrivileges must stay off: the deploy uses sudo for its one root step.)
+
+[Install]
+WantedBy=multi-user.target

@@ -134,6 +134,37 @@ To restore: `mongorestore --uri "<shule_root connection string>" --gzip --archiv
 
 Either way the app creates its own collections and indexes the first time it starts.
 
+## Automatic deploys (GitHub webhook)
+
+After this is set up, **every push to the watched branch updates the server by itself**: no
+logging in, no `update.sh`.
+
+```bash
+cd ~/X-engine-developments && git pull
+cd shule-notes/deploy
+sudo ./webhook/setup-webhook.sh
+```
+
+It prints the address and a secret. Add them once on GitHub:
+**Repository, Settings, Webhooks, Add webhook**: Payload URL `https://<api address>/_hooks/github`,
+Content type `application/json`, the secret, "Just the push event". GitHub sends a test ping;
+it should show a green tick.
+
+What happens on each push:
+1. GitHub calls the hook. The hook checks the secret signature and the branch (anything else is refused or ignored).
+2. A separate low-privilege user gets only the `shule-notes` folder, installs the dependencies **without running install scripts**, and **runs all the tests**.
+3. Only if the tests pass does the one fixed root step copy the new backend and admin page live and restart the app.
+4. If the restarted app does not answer its health check within 25 seconds, the previous version is put back automatically.
+5. Pushes that change neither the backend nor the admin page (for example Android-only or another project) change nothing and restart nothing.
+
+Good to know:
+- Watch the log: `tail -f /var/lib/shule-deploy/deploy.log`. A failed deploy never changes the live site.
+- It deploys the **backend and the admin panel only**. nginx, the services and these scripts are never changed by a push (re-run `setup.sh` / `setup-webhook.sh` for that, on purpose).
+- Android: the app build also runs on GitHub by itself and refreshes the download link, but phones still have to install the new APK (or Google Play updates it).
+- Change the watched branch (for example to `main` later): `sudo ./webhook/setup-webhook.sh main`, and the webhook on GitHub stays as it is.
+- Anyone who can push to the watched branch can change the code the server runs. Keep your GitHub account protected with two-step verification, and never commit passwords or keys (the server keeps them in `/etc/shule-notes`, outside the repository).
+- See the secret again: `sudo grep WEBHOOK_SECRET /etc/shule-notes/webhook.env`.
+
 ## Another web server is already running
 
 If Apache, Caddy or a Docker proxy already uses ports 80 and 443, do not stop it. Keep

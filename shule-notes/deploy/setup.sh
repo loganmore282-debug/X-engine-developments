@@ -119,6 +119,8 @@ sed "s|__NODE__|$NODE_BIN|" "$HERE/shule-notes.service" > /etc/systemd/system/sh
 systemctl daemon-reload
 systemctl enable shule-notes >/dev/null
 
+[ -f /etc/nginx/shule-hook-location.conf ] || echo "# GitHub deploy hook: filled in by deploy/webhook/setup-webhook.sh" > /etc/nginx/shule-hook-location.conf
+
 echo "==> nginx (two new sites in conf.d; your others are not touched)"
 # conf.d is read by every standard nginx (and is where this server's other sites live).
 mkdir -p /etc/nginx/conf.d
