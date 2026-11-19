@@ -1,24 +1,43 @@
 #!/usr/bin/env bash
-# Nightly backup of the uploaded PDFs and (when MONGODB_URI is reachable) the
-# database. Keeps the last 7 days in /var/backups/shule-notes.
+# Backs up Shule Notes: the database and the uploaded PDFs.
 #
-#   sudo cp backup.sh /usr/local/bin/shule-backup && sudo chmod +x /usr/local/bin/shule-backup
-#   echo '30 3 * * * root /usr/local/bin/shule-backup' | sudo tee /etc/cron.d/shule-backup
+#   - db-DATE.archive.gz      every collection in the database (students, notes, subjects, ...)
+#   - uploads-DATE.tar.gz     every uploaded PDF
+# Both files are checked after writing. Copies older than KEEP_DAYS (14) are deleted.
+# Any problem makes this script exit with an error and say why, so a broken
+# backup is never mistaken for a good one.
 #
-# The database part needs MongoDB's command line tools:
-#   sudo apt-get install -y mongodb-database-tools
-# MongoDB Atlas's free tier (M0) has NO backups of its own, so this matters there.
+# Installed and scheduled by deploy/install-backup.sh. Run it by hand any time:
+#   sudo /usr/local/sbin/shule-backup
 set -euo pipefail
-DEST=/var/backups/shule-notes
-STAMP="$(date +%F)"
-mkdir -p "$DEST"
-# Read the one value we need; sourcing the file would break on the "&" in a connection string.
-MONGODB_URI="$(grep -m1 '^MONGODB_URI=' /etc/shule-notes/.env | cut -d= -f2-)"
+ENV_FILE="${ENV_FILE:-/etc/shule-notes/.env}"
+DEST="${DEST:-/var/backups/shule-notes}"
+UPLOADS_DIR="${UPLOADS_DIR:-/var/lib/shule-notes/uploads}"
+KEEP_DAYS="${KEEP_DAYS:-14}"
 
-tar -czf "$DEST/uploads-$STAMP.tar.gz" -C /var/lib/shule-notes uploads
-if command -v mongodump >/dev/null; then
-  mongodump --uri "$MONGODB_URI" --gzip --archive="$DEST/mongo-$STAMP.archive.gz" --quiet
+umask 077
+STAMP="$(date +%F-%H%M)"
+mkdir -p "$DEST"
+say() { echo "[$(date -u +%FT%TZ)] $*"; }
+fail() { say "BACKUP FAILED: $*"; exit 1; }
+
+# The connection string is read from the settings file (it is not sourced: it contains "&").
+URI="$(grep -m1 '^MONGODB_URI=' "$ENV_FILE" | cut -d= -f2- || true)"
+[ -n "$URI" ] || fail "no MONGODB_URI in $ENV_FILE"
+command -v mongodump >/dev/null || fail "mongodump is not installed (sudo apt-get install -y mongodb-database-tools)"
+
+DB_FILE="$DEST/db-$STAMP.archive.gz"
+mongodump --uri "$URI" --gzip --archive="$DB_FILE" --quiet || { rm -f "$DB_FILE"; fail "mongodump could not read the database"; }
+[ -s "$DB_FILE" ] && gzip -t "$DB_FILE" || { rm -f "$DB_FILE"; fail "the database backup file is empty or damaged"; }
+
+UP_FILE="$DEST/uploads-$STAMP.tar.gz"
+if [ -d "$UPLOADS_DIR" ]; then
+  tar -czf "$UP_FILE" -C "$(dirname "$UPLOADS_DIR")" "$(basename "$UPLOADS_DIR")" || { rm -f "$UP_FILE"; fail "could not pack the uploaded PDFs"; }
+  gzip -t "$UP_FILE" || { rm -f "$UP_FILE"; fail "the PDF backup file is damaged"; }
 else
-  echo "mongodump is not installed, so the database was not backed up."
+  say "no uploads folder yet ($UPLOADS_DIR): nothing to back up there"
 fi
-find "$DEST" -type f -mtime +7 -delete
+
+find "$DEST" -maxdepth 1 -type f \( -name 'db-*.archive.gz' -o -name 'uploads-*.tar.gz' \) -mtime +"$KEEP_DAYS" -delete
+date -u +%FT%TZ > "$DEST/last-success"
+say "OK: $(basename "$DB_FILE") $(du -h "$DB_FILE" | cut -f1)$( [ -f "$UP_FILE" ] && echo ", $(basename "$UP_FILE") $(du -h "$UP_FILE" | cut -f1)" ). Kept: $(find "$DEST" -maxdepth 1 -name 'db-*' | wc -l) database copies."

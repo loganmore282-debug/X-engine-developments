@@ -206,8 +206,8 @@ Everything is scripted in `shule-notes/deploy/` (read its `README.md`): `setup.s
 <admin-domain> <email>` on a fresh Ubuntu 22.04/24.04 VPS installs Node 20, nginx, HTTPS
 (certbot), a locked-down `shule` service user, a systemd unit and the firewall, and writes
 `/etc/shule-notes/.env` (generated `ADMIN_KEY`; the owner then adds `MONGODB_URI` and
-`ANTHROPIC_API_KEY`). `update.sh` puts new code live, `backup.sh` backs up PDFs + database
-nightly (Atlas M0 has no backups of its own). The server listens on `127.0.0.1` behind nginx
+`ANTHROPIC_API_KEY`). `update.sh` puts new code live; `install-backup.sh` installs `/usr/local/sbin/shule-backup` (nightly 03:17
+server time, db + PDFs, verified, 14 days kept, fails loudly, `/var/backups/shule-notes`). The server listens on `127.0.0.1` behind nginx
 (`HOST`, `TRUST_PROXY=1`): trust proxy is REQUIRED there, otherwise every student shares one
 rate-limit bucket. MongoDB: `deploy/mongodb/setup-mongodb.sh` runs Shule Notes' OWN mongod (service
 `shule-mongod`, port 27018, 127.0.0.1 only, auth on, `shule_app` user, writes `MONGODB_URI`);

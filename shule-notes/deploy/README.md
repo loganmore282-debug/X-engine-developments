@@ -118,9 +118,7 @@ sudo systemctl start shule-notes
 curl https://<your api address>/health
 ```
 
-Install the nightly backup (`backup.sh`, top of the file); it uses `mongodump` if the
-server has it (`sudo apt-get install mongodb-database-tools` adds just that tool).
-To restore: `mongorestore --uri "<shule_root connection string>" --gzip --archive=/var/backups/shule-notes/mongo-YYYY-MM-DD.archive.gz --drop`
+Then install the nightly backup (next section).
 
 ### Option B: MongoDB Atlas (hosted by MongoDB)
 
@@ -133,6 +131,31 @@ To restore: `mongorestore --uri "<shule_root connection string>" --gzip --archiv
    (If the password has special characters such as `@` or `/`, URL-encode them.)
 
 Either way the app creates its own collections and indexes the first time it starts.
+
+## Backups
+
+Everything lives on this one server, so back it up:
+
+```bash
+cd ~/X-engine-developments && git pull
+cd shule-notes/deploy
+sudo ./install-backup.sh
+```
+
+It installs the backup tool, schedules it **every night at 03:17 (server time)**, and runs
+one backup immediately so you can see the files. Each run saves the database
+(`db-DATE.archive.gz`) and every uploaded PDF (`uploads-DATE.tar.gz`) in
+`/var/backups/shule-notes`, checks both files, and keeps the last 14 days. If anything goes
+wrong it says so in `/var/log/shule-backup.log` instead of pretending it worked.
+
+- Check it any time: `cat /var/backups/shule-notes/last-success` (the time of the last good backup).
+- **A copy on the same server does not protect you if the server is lost.** Also take Contabo
+  snapshots (Customer Panel, your VPS, Snapshots) now and then, and later copy the backup
+  folder somewhere else (another computer or a cloud drive).
+- **Restore the database** (this replaces what is there; use your `shule_root` login from
+  `/root/shule-mongodb-credentials.txt`):
+  `mongorestore --uri "mongodb://shule_root:PASSWORD@127.0.0.1:27018/admin" --gzip --archive=/var/backups/shule-notes/db-DATE.archive.gz --drop`
+- **Restore the PDFs:** `sudo tar -xzf /var/backups/shule-notes/uploads-DATE.tar.gz -C /var/lib/shule-notes && sudo chown -R shule:shule /var/lib/shule-notes/uploads`
 
 ## Automatic deploys (GitHub webhook)
 
@@ -182,7 +205,7 @@ I will write the exact entry for that server.
 | See what the server is doing | `journalctl -u shule-notes -f` (database: `journalctl -u shule-mongod`) |
 | Restart | `systemctl restart shule-notes` |
 | Change a setting in `.env` | edit `/etc/shule-notes/.env`, then restart |
-| Nightly backup of PDFs and database | see the top of `backup.sh` |
+| Run a backup right now | `sudo /usr/local/sbin/shule-backup` |
 
 ## The Android app
 
