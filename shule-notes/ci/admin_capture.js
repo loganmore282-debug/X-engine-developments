@@ -14,6 +14,8 @@ const OUT = process.argv[3];
 const SUBJECTS = [['Biology', 1], ['Mathematics', 2], ['Physics', 3], ['Chemistry', 4]];
 // Uploaded oldest first; the app lists the newest first.
 const NOTES = [
+  ['How to Revise for Exams', '', '', 'revision-tips.pdf', 'Planning, active revision and exam technique. For every class.'],
+  ['Fractions and Decimals', 'Mathematics', 'Primary 7', 'fractions.pdf', 'Adding fractions and changing them to decimals, with practice questions.'],
   ['Work, Energy and Power', 'Physics', 'Senior 2', 'energy.pdf', 'Definitions, formulas and worked examples.'],
   ['Cell Structure – Practice Questions', 'Biology', 'Senior 1', 'cells.pdf', 'Short-answer practice questions on plant and animal cells.'],
   ['Acids, Bases and Salts', 'Chemistry', 'Senior 2', 'acids.pdf', 'Acids, alkalis, neutralisation and the pH scale.'],
@@ -53,8 +55,8 @@ const NOTES = [
   await page.click('.tab[data-tab="notes"]');
   for (const [i, [title, subject, level, file, desc]] of NOTES.entries()) {
     await page.fill('#nTitle', title);
-    await page.selectOption('#nSubject', { label: subject });
-    await page.fill('#nClass', level);
+    await page.selectOption('#nSubject', subject ? { label: subject } : { value: '' });
+    await page.selectOption('#nClass', level ? { label: level } : { value: '' });
     await page.setInputFiles('#nFile', path.join(PDF_DIR, file));
     await page.fill('#nDesc', desc);
     if (i === NOTES.length - 1) { await toastGone(); await shot('admin-03-uploading-a-note'); }

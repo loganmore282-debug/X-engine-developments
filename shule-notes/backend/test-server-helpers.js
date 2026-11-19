@@ -19,6 +19,7 @@ function fakeDb() {
       const matches = (q) => (d) => Object.keys(q).every((k) => String(d[k]) === String(q[k]));
       return {
         findOne: async (q) => rows().find(matches(q)) || null,
+        updateOne: async (q, update) => { const row = rows().find(matches(q)); if (row && update.$set) Object.assign(row, update.$set); },
         deleteOne: async (q) => { const i = rows().findIndex(matches(q)); if (i >= 0) rows().splice(i, 1); },
         deleteMany: async (q) => { store[name] = rows().filter((d) => !matches(q)(d)); },
         findOneAndUpdate: async (q, update, opts) => {
@@ -66,6 +67,15 @@ console.log('\n— one stored form per phone number —');
      'a number that is too short, an email address, or nothing at all is refused');
 }
 
+console.log('\n— the class list and a student\'s class —');
+{
+  const { GROUPS, NAMES, isValidLevel } = require('./levels');
+  ck(GROUPS.length === 3 && NAMES.length === 13, 'seven primary classes and six senior classes, in three groups');
+  ck(isValidLevel('Primary 7') && isValidLevel('Senior 6') && !isValidLevel('Senior 7') && !isValidLevel('Form 3') && !isValidLevel('') && !isValidLevel(null),
+     'only a class from the list is valid');
+  ck(new Set(NAMES).size === NAMES.length && GROUPS.every((g) => g.levels.every((l) => l.id === l.name && l.short)), 'every class has a unique name and a short label');
+}
+
 console.log('\n— the AI daily quota actually caps spend —');
 (async () => {
   const limit = server.AI_DAILY_LIMIT;
@@ -81,6 +91,20 @@ console.log('\n— the AI daily quota actually caps spend —');
   // out forever after their first day's limit.
   const row = store.aiUsage.find((r) => r.userId === 'student-1');
   ck(!!row && row.date === server.todayKey(), 'the quota row is keyed on today\'s date, not a fixed id');
+
+  console.log('\n— saving a student\'s class —');
+  {
+    const id = '65f0a1b2c3d4e5f6a7b8c9e0';
+    store.users = [{ _id: id, name: 'Asha', phone: '0700000000', passwordHash: 'x' }, { _id: '65f0a1b2c3d4e5f6a7b8c9e1', name: 'Brian', passwordHash: 'x' }];
+    const bad = await server.setClassLevel(id, 'Senior 9');
+    ck(bad.ok === false && bad.status === 400 && !store.users[0].classLevel, 'a class that is not on the list is refused and nothing is saved');
+    const good = await server.setClassLevel(id, 'Senior 2');
+    ck(good.ok === true && store.users[0].classLevel === 'Senior 2' && good.user.classLevel === 'Senior 2', 'a valid class is saved on the account');
+    ck(!store.users[1].classLevel, 'another student\'s account is untouched');
+    ck(server.publicUser(store.users[0]).classLevel === 'Senior 2' && server.publicUser(store.users[1]).classLevel === null, 'the class is part of what the app is told about the account');
+    const gone = await server.setClassLevel('65f0a1b2c3d4e5f6a7b8c9ff', 'Senior 2');
+    ck(gone.ok === false && gone.status === 404, 'an account that does not exist reports 404');
+  }
 
   console.log('\n— deleting an account removes everything about it, and only with the right password —');
   {

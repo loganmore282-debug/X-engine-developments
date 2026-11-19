@@ -33,6 +33,7 @@
   .tab.active{background:var(--brand);color:#fff;border-color:var(--brand)}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}
   .pill.ok{background:#e4f3ea;color:var(--brand-ink)}
+  .class-pick{margin:0;padding:6px 8px;font-size:13px;width:auto}
   .pill.warn{background:#fdecea;color:var(--danger)}
   #loginScreen{max-width:360px;margin:80px auto}
   .hidden{display:none !important}
@@ -68,11 +69,11 @@
     <div class="card">
       <h2>Upload a note</h2>
       <div class="row">
-        <div><label>Title</label><input id="nTitle" placeholder="e.g. Biology Form 3 - Cells"></div>
+        <div><label>Title</label><input id="nTitle" placeholder="e.g. Photosynthesis"></div>
         <div><label>Subject</label><select id="nSubject"><option value="">(none)</option></select></div>
       </div>
       <div class="row">
-        <div><label>Class / level</label><input id="nClass" placeholder="e.g. Form 3"></div>
+        <div><label>Class</label><select id="nClass"><option value="">All classes</option></select></div>
         <div><label>PDF file</label><input id="nFile" type="file" accept="application/pdf"></div>
       </div>
       <label>Description</label>
@@ -84,7 +85,7 @@
       <h2>All notes</h2>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>Title</th><th>Subject</th><th>Pages</th><th>AI</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Title</th><th>Subject</th><th>Class</th><th>Pages</th><th>AI</th><th>Status</th><th></th></tr></thead>
           <tbody id="notesRows"></tbody>
         </table>
       </div>
@@ -96,7 +97,6 @@
       <h2>Add a subject</h2>
       <div class="row">
         <div><label>Name</label><input id="sName" placeholder="e.g. Biology"></div>
-        <div><label>Class / level (optional)</label><input id="sClass" placeholder="e.g. Form 3"></div>
         <div><label>Order</label><input id="sOrder" type="number" value="0"></div>
       </div>
       <button class="btn" id="sSave">Save subject</button>
@@ -104,7 +104,7 @@
     <div class="card">
       <h2>All subjects</h2>
       <table>
-        <thead><tr><th>Name</th><th>Class</th><th>Order</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Order</th><th></th></tr></thead>
         <tbody id="subjectsRows"></tbody>
       </table>
     </div>
@@ -149,8 +149,7 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 function enterApp(){
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
-  loadSubjects();
-  loadNotes();
+  loadLevels().then(() => { loadSubjects(); loadNotes(); });
 }
 
 // ── tabs ──
@@ -168,9 +167,9 @@ async function loadSubjects(){
   if (r.status !== 'success') return toast(r.message || 'Could not load subjects');
   SUBJECTS = r.subjects;
   document.getElementById('subjectsRows').innerHTML = SUBJECTS.length ? SUBJECTS.map(s => `
-    <tr><td>${esc(s.name)}</td><td>${esc(s.classLevel||'')}</td><td>${s.order}</td>
+    <tr><td>${esc(s.name)}</td><td>${s.order}</td>
     <td><button class="btn danger sm" data-del-subject="${esc(s.id)}">Delete</button></td></tr>
-  `).join('') : '<tr><td colspan="4" class="muted">No subjects yet</td></tr>';
+  `).join('') : '<tr><td colspan="3" class="muted">No subjects yet</td></tr>';
   document.getElementById('nSubject').innerHTML = '<option value="">(none)</option>' +
     SUBJECTS.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
   document.querySelectorAll('[data-del-subject]').forEach(b => b.addEventListener('click', async () => {
@@ -183,11 +182,32 @@ document.getElementById('sSave').addEventListener('click', async () => {
   const name = document.getElementById('sName').value.trim();
   if (!name) return toast('Name is required');
   const r = await api('/admin/subjects/save', { method: 'POST', body: {
-    name, classLevel: document.getElementById('sClass').value.trim(), order: Number(document.getElementById('sOrder').value) || 0,
+    name, order: Number(document.getElementById('sOrder').value) || 0,
   }});
   if (r.status === 'success') { toast('Saved'); document.getElementById('sName').value=''; loadSubjects(); }
   else toast(r.message || 'Could not save');
 });
+
+// ── classes ──
+// The list comes from the server (GET /levels), the same list the app uses.
+let LEVEL_GROUPS = [];
+async function loadLevels(){
+  try {
+    const res = await fetch(API + '/levels');
+    const data = await res.json();
+    if (data.status === 'success') LEVEL_GROUPS = data.groups;
+  } catch (_) { /* the notes table still loads; its class menus stay empty */ }
+  document.getElementById('nClass').innerHTML = classOptions('');
+}
+function classOptions(selected){
+  const known = LEVEL_GROUPS.some(g => g.levels.some(l => l.id === selected));
+  // A class saved before the list existed (e.g. "Form 3") stays visible instead of vanishing.
+  const legacy = selected && !known ? `<option value="" selected>${esc(selected)} (not in the list)</option>` : '';
+  return legacy + `<option value=""${selected ? '' : ' selected'}>All classes</option>` +
+    LEVEL_GROUPS.map(g => `<optgroup label="${esc(g.name)}">` +
+      g.levels.map(l => `<option value="${esc(l.id)}"${l.id === selected ? ' selected' : ''}>${esc(l.name)}</option>`).join('') +
+    '</optgroup>').join('');
+}
 
 // ── notes ──
 function subjectName(id){ const s = SUBJECTS.find(x => x.id === id); return s ? s.name : '—'; }
@@ -198,6 +218,7 @@ async function loadNotes(){
     <tr>
       <td>${esc(n.title)}${n.description ? `<br><span class="muted">${esc(n.description)}</span>` : ''}</td>
       <td>${esc(subjectName(n.subjectId))}</td>
+      <td><select class="class-pick" data-class-for="${esc(n.id)}">${classOptions(n.classLevel)}</select></td>
       <td>${n.pageCount || '—'}</td>
       <td>${n.hasAiContext ? '<span class="pill ok">Ready</span>' : '<span class="pill warn">No text</span>'}</td>
       <td>${n.active ? '<span class="pill ok">Active</span>' : '<span class="pill warn">Hidden</span>'}</td>
@@ -206,7 +227,12 @@ async function loadNotes(){
         <button class="btn danger sm" data-del-note="${esc(n.id)}">Delete</button>
       </td>
     </tr>
-  `).join('') : '<tr><td colspan="6" class="muted">No notes uploaded yet</td></tr>';
+  `).join('') : '<tr><td colspan="7" class="muted">No notes uploaded yet</td></tr>';
+  document.querySelectorAll('[data-class-for]').forEach(sel => sel.addEventListener('change', async () => {
+    const r = await api('/admin/notes/update', { method: 'POST', body: { id: sel.dataset.classFor, classLevel: sel.value } });
+    toast(r.status === 'success' ? 'Class saved' : (r.message || 'Could not save the class'));
+    loadNotes();
+  }));
   document.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', async () => {
     await api('/admin/notes/update', { method: 'POST', body: { id: b.dataset.toggle, active: b.dataset.active !== 'true' } });
     loadNotes();
@@ -226,7 +252,7 @@ document.getElementById('nUpload').addEventListener('click', async () => {
   fd.append('title', title);
   fd.append('description', document.getElementById('nDesc').value.trim());
   fd.append('subjectId', document.getElementById('nSubject').value);
-  fd.append('classLevel', document.getElementById('nClass').value.trim());
+  fd.append('classLevel', document.getElementById('nClass').value);
   fd.append('file', file);
   const statusEl = document.getElementById('nUploadStatus');
   statusEl.textContent = 'Uploading…';

@@ -16,6 +16,7 @@ const { verifyAdmin } = require('./admin-auth');
 const { extractPdfText } = require('./pdf');
 const { askAboutDocument, classifyClaudeError } = require('./claude');
 const { privacyPage, accountDeletionPage } = require('./legal');
+const { GROUPS: LEVEL_GROUPS, isValidLevel } = require('./levels');
 
 const PORT = process.env.PORT || 4000;
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
@@ -55,7 +56,7 @@ function isValidPhone(phone) {
 }
 
 function publicUser(u) {
-  return { id: String(u._id), name: u.name || '', phone: u.phone || null };
+  return { id: String(u._id), name: u.name || '', phone: u.phone || null, classLevel: u.classLevel || null };
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────
@@ -118,6 +119,30 @@ app.post('/auth/logout', requireAuth, async (req, res) => {
   res.json({ status: 'success' });
 });
 
+app.get('/levels', (req, res) => res.json({ status: 'success', groups: LEVEL_GROUPS }));
+
+app.post('/auth/class-level', requireAuth, async (req, res) => {
+  try {
+    const result = await setClassLevel(req.userId, req.body.classLevel);
+    if (!result.ok) return res.status(result.status).json({ status: 'error', message: result.message });
+    res.json({ status: 'success', user: publicUser(result.user) });
+  } catch (e) {
+    console.error('class-level error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not save your class right now' });
+  }
+});
+
+async function setClassLevel(userId, classLevel) {
+  if (!isValidLevel(classLevel)) return { ok: false, status: 400, message: 'Choose your class from the list' };
+  const db = getDb();
+  let id;
+  try { id = new ObjectId(userId); } catch (_) { return { ok: false, status: 404, message: 'Account not found' }; }
+  const user = await db.collection('users').findOne({ _id: id });
+  if (!user) return { ok: false, status: 404, message: 'Account not found' };
+  await db.collection('users').updateOne({ _id: id }, { $set: { classLevel } });
+  return { ok: true, user: { ...user, classLevel } };
+}
+
 // Google Play requires in-app account deletion for any app with sign-up.
 app.post('/auth/delete-account', authLimiter, requireAuth, async (req, res) => {
   try {
@@ -154,7 +179,7 @@ app.get('/auth/me', requireAuth, async (req, res) => {
 // ── SUBJECTS & NOTES (student-facing, read-only) ───────────────────────────
 app.get('/subjects', requireAuth, async (req, res) => {
   const rows = await getDb().collection('subjects').find({}).sort({ order: 1 }).toArray();
-  res.json({ status: 'success', subjects: rows.map((s) => ({ id: String(s._id), name: s.name, classLevel: s.classLevel || null })) });
+  res.json({ status: 'success', subjects: rows.map((s) => ({ id: String(s._id), name: s.name })) });
 });
 
 function publicNote(n) {
@@ -250,7 +275,7 @@ app.post('/admin/subjects/save', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const name = String(req.body.name || '').trim().slice(0, 100);
   if (!name) return res.status(400).json({ status: 'error', message: 'Name is required' });
-  const doc = { name, classLevel: req.body.classLevel ? String(req.body.classLevel).trim().slice(0, 40) : null, order: Number(req.body.order) || 0 };
+  const doc = { name, order: Number(req.body.order) || 0 };
   if (req.body.id) {
     try { await getDb().collection('subjects').updateOne({ _id: new ObjectId(req.body.id) }, { $set: doc }); }
     catch (_) { return res.status(400).json({ status: 'error', message: 'Invalid id' }); }
@@ -263,7 +288,7 @@ app.post('/admin/subjects/save', async (req, res) => {
 app.post('/admin/subjects/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const rows = await getDb().collection('subjects').find({}).sort({ order: 1 }).toArray();
-  res.json({ status: 'success', subjects: rows.map((s) => ({ id: String(s._id), name: s.name, classLevel: s.classLevel, order: s.order })) });
+  res.json({ status: 'success', subjects: rows.map((s) => ({ id: String(s._id), name: s.name, order: s.order })) });
 });
 
 app.post('/admin/subjects/delete', async (req, res) => {
@@ -286,6 +311,9 @@ app.post('/admin/notes/upload', upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ status: 'error', message: 'A PDF file is required' });
     if (req.file.mimetype !== 'application/pdf') return res.status(400).json({ status: 'error', message: 'Only PDF files are accepted' });
 
+    const classLevel = req.body.classLevel ? String(req.body.classLevel).trim() : null;
+    if (classLevel && !isValidLevel(classLevel)) return res.status(400).json({ status: 'error', message: 'Choose a class from the list' });
+
     let subjectId = null;
     if (req.body.subjectId) {
       try { subjectId = new ObjectId(String(req.body.subjectId)); }
@@ -302,7 +330,7 @@ app.post('/admin/notes/upload', upload.single('file'), async (req, res) => {
 
     const doc = {
       title, description: String(req.body.description || '').trim().slice(0, 1000),
-      subjectId, classLevel: req.body.classLevel ? String(req.body.classLevel).trim().slice(0, 40) : null,
+      subjectId, classLevel,
       fileName, fileSize: req.file.size, pageCount: extracted.pageCount,
       extractedText: extracted.text, active: true, uploadedAt: new Date(),
     };
@@ -329,6 +357,11 @@ app.post('/admin/notes/update', async (req, res) => {
   if (req.body.title !== undefined) patch.title = String(req.body.title).trim().slice(0, 150);
   if (req.body.description !== undefined) patch.description = String(req.body.description).trim().slice(0, 1000);
   if (req.body.active !== undefined) patch.active = !!req.body.active;
+  if (req.body.classLevel !== undefined) {
+    const level = String(req.body.classLevel || '').trim();
+    if (level && !isValidLevel(level)) return res.status(400).json({ status: 'error', message: 'Choose a class from the list' });
+    patch.classLevel = level || null;
+  }
   if (req.body.subjectId !== undefined) {
     try { patch.subjectId = req.body.subjectId ? new ObjectId(String(req.body.subjectId)) : null; }
     catch (_) { return res.status(400).json({ status: 'error', message: 'Invalid subjectId' }); }
@@ -370,4 +403,4 @@ if (require.main === module) {
   start().catch((e) => { console.error('Failed to start:', e); process.exit(1); });
 }
 
-module.exports = { app, todayKey, normalizePhone, isValidPhone, publicUser, publicNote, consumeAiQuota, deleteAccount, AI_DAILY_LIMIT };
+module.exports = { app, todayKey, normalizePhone, isValidPhone, publicUser, publicNote, consumeAiQuota, deleteAccount, setClassLevel, AI_DAILY_LIMIT };

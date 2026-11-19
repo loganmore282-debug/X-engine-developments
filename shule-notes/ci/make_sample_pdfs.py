@@ -74,6 +74,44 @@ DOCS = {
             "5. Describe an experiment to show that carbon dioxide is needed for photosynthesis.",
         ]),
     ]),
+    "fractions.pdf": ("Fractions and Decimals", "Primary 7 Mathematics notes", [
+        ("What a fraction is", [
+            "A fraction shows part of a whole. In 3/4, the bottom number (the denominator) tells how many "
+            "equal parts the whole is cut into, and the top number (the numerator) tells how many parts are taken.",
+        ]),
+        ("Adding and subtracting", [
+            "Fractions can only be added or subtracted when their denominators are the same.",
+            "Example: 2/5 + 1/5 = 3/5.",
+            "Example: 1/2 + 1/3. Change both to sixths: 3/6 + 2/6 = 5/6.",
+        ]),
+        ("Changing a fraction to a decimal", [
+            "Divide the numerator by the denominator. 3/4 means 3 divided by 4, which is 0.75.",
+        ]),
+        ("Practice questions", [
+            "1. Work out 3/8 + 2/8.",
+            "2. Work out 5/6 - 1/3.",
+            "3. Change 7/10 to a decimal.",
+            "4. Which is larger, 0.6 or 5/8? Show your working.",
+        ]),
+    ]),
+    "revision-tips.pdf": ("How to Revise for Exams", "Study tips for every class", [
+        ("Plan your time", [
+            "Make a timetable that gives every subject some time each week. Study the subjects you find "
+            "hardest when you are most awake, and keep sessions to about 45 minutes with a short break between them.",
+        ]),
+        ("Revise actively", [
+            "* Close the book and write down everything you remember, then check what you missed.",
+            "* Work through past papers against the clock.",
+            "* Explain a topic out loud to a friend.",
+            "* Make short summary cards for formulas and definitions.",
+        ]),
+        ("In the exam", [
+            "1. Read the whole paper first and note the marks for each question.",
+            "2. Start with the questions you are sure about.",
+            "3. Show your working: marks are given for method as well as for the answer.",
+            "4. Leave time at the end to read through what you wrote.",
+        ]),
+    ]),
     "acids.pdf": ("Acids, Bases and Salts", "Senior 2 Chemistry notes", [
         ("Acids", [
             "An acid is a substance that releases hydrogen ions when it dissolves in water. Acids taste "
