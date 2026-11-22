@@ -1,10 +1,11 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, useLibrary } from '../store';
 import { Cover, NoteCard, NoteSkeleton, Sheet, readRecent, pagesLabel } from '../components';
 import { SubjectIcon, subjectVars } from '../subjectLook';
 import { Chevron, Close, Search } from '../icons';
 import { PaySheet, untilLabel, useAccess } from '../Pay';
+import { preloadReader } from '../prefetch';
 
 type Sort = 'new' | 'views' | 'az';
 
@@ -13,15 +14,29 @@ export function HomePage() {
   const { user, setClass } = useAuthWithClass();
   const { notes, subjects, announcements, loading, error, reload, subjectName, levels } = useLibrary();
   const nav = useNavigate();
-  const [query, setQuery] = useState('');
-  const [subjectId, setSubjectId] = useState<string | null>(null);
-  const [kind, setKind] = useState<'all' | 'notes' | 'past-paper'>('all');
-  const [sort, setSort] = useState<Sort>('new');
+  // The student's place on Home (filters and scroll) is kept for the session, so coming back from a document lands exactly where they left.
+  const saved = useRef<{ query: string; subjectId: string | null; kind: 'all' | 'notes' | 'past-paper'; sort: Sort; y: number }>(
+    (() => { try { return JSON.parse(sessionStorage.getItem('shule_home') || 'null') || { query: '', subjectId: null, kind: 'all', sort: 'new', y: 0 }; } catch { return { query: '', subjectId: null, kind: 'all', sort: 'new', y: 0 }; } })());
+  const [query, setQuery] = useState(saved.current.query);
+  const [subjectId, setSubjectId] = useState<string | null>(saved.current.subjectId);
+  const [kind, setKind] = useState<'all' | 'notes' | 'past-paper'>(saved.current.kind);
+  const [sort, setSort] = useState<Sort>(saved.current.sort);
   const [everyClass, setEveryClass] = useState(false);
   const [classSheet, setClassSheet] = useState(false);
   const [paySheet, setPaySheet] = useState(false);
   const access = useAccess();
   const [dismissed, setDismissed] = useState<string>(() => localStorage.getItem('shule_dismissed_announcement') || '');
+
+  const scrollTo = useRef(saved.current.y);
+  useEffect(() => { preloadReader(); }, []);
+  useEffect(() => { try { sessionStorage.setItem('shule_home', JSON.stringify({ query, subjectId, kind, sort, y: window.scrollY })); } catch { /* private mode */ } }, [query, subjectId, kind, sort]);
+  useEffect(() => {
+    const onScroll = () => { try { const cur = JSON.parse(sessionStorage.getItem('shule_home') || '{}'); sessionStorage.setItem('shule_home', JSON.stringify({ ...cur, y: window.scrollY })); } catch { /* ignore */ } };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  // Once the notes are on screen, go back to where the student was.
+  useLayoutEffect(() => { if (scrollTo.current > 0 && notes.length > 0) { window.scrollTo(0, scrollTo.current); scrollTo.current = 0; } }, [notes.length]);
 
   const cls = user?.classLevel || null;
   const knownClasses = useMemo(() => new Set(levels.flatMap((g) => g.levels.map((l) => l.id))), [levels]);

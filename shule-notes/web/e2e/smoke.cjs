@@ -55,6 +55,8 @@ fs.mkdirSync('e2e-shots', { recursive: true });
   await dp.waitForSelector('.note-card'); await shot(dp, '08-desktop-home');
   await dp.click('.subject-tile >> nth=0'); await shot(dp, '08c-desktop-subject');
   await dp.click('.note-card >> nth=0'); await dp.waitForSelector('.sheet-page canvas', { timeout: 20000 }); await dp.waitForTimeout(1200); await shot(dp, '08d-desktop-reader');
+  await dp.keyboard.press('ArrowRight'); await dp.waitForFunction(() => /Page 2 of/.test(document.querySelector('.reader-top')?.textContent || ''), null, { timeout: 8000 });
+  await dp.keyboard.press('/'); await dp.waitForSelector('.drawer input'); await dp.keyboard.press('Escape'); await dp.waitForSelector('.drawer', { state: 'detached' });
   await dp.click('button[aria-label="Search in this document"]'); await dp.fill('.drawer input', 'carbon'); await dp.waitForSelector('.hit'); await dp.waitForTimeout(500); await shot(dp, '08e-desktop-reader-search');
   await dp.click('.drawer button[aria-label="Close"]'); await dp.click('button[aria-label="Back"]');
   await dp.click('.nav-links a:has-text("Profile")'); await dp.waitForSelector('text=Amina'); await shot(dp, '08f-desktop-profile');

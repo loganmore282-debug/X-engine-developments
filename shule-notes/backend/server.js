@@ -401,6 +401,13 @@ app.get('/notes/:id/file', requireAuth, async (req, res) => {
   res.sendFile(path.resolve(filePath), { cacheControl: false }, (err) => { if (err && !res.headersSent) res.status(err.statusCode || 500).end(); });
 });
 
+// A document opened from a copy fetched ahead of time (the website does that on hover) still counts as a read.
+app.post('/notes/:id/opened', requireAuth, ah(async (req, res) => {
+  try { await getDb().collection('notes').updateOne({ _id: new ObjectId(req.params.id), active: { $ne: false } }, { $inc: { views: 1 } }); }
+  catch (_) { return res.status(400).json({ status: 'error', message: 'Invalid note id' }); }
+  res.json({ status: 'success' });
+}));
+
 // ── AI: ask about the open document ────────────────────────────────────────
 // A per-user, per-day cap enforced by a UNIQUE index on (userId,date) in
 // Mongo -- an $inc past the cap is refused by re-reading the row, never

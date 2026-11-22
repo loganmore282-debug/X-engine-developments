@@ -6,6 +6,7 @@ import type { Note } from './types';
 import { Bookmark } from './icons';
 import { SubjectIcon, subjectVars } from './subjectLook';
 import { LockBadge, useAccess } from './Pay';
+import { prefetchNote, preloadReader } from './prefetch';
 
 // A modal sheet that slides up (centred on a big screen). Closes on Escape or a tap outside.
 export function Sheet({ title, onClose, children }: { title?: string; onClose: () => void; children: ReactNode }) {
@@ -69,7 +70,11 @@ export function NoteCard({ note, onOpen, index = 0, showClass = true }: { note: 
   const locked = access.locked(note.free);
   return (
     <div className="card note-card rise sv" style={{ animationDelay: `${Math.min(index, 8) * 45}ms`, ...(subjectVars(subject) as CSSProperties) }} role="button" tabIndex={0}
-      onClick={onOpen} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}>
+      onClick={onOpen} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}
+      onPointerEnter={(e) => { if (locked) return; if (e.pointerType === 'mouse') { const t = window.setTimeout(() => prefetchNote(note.id), 120); (e.currentTarget as HTMLElement).dataset.t = String(t); } }}
+      onPointerLeave={(e) => { const t = (e.currentTarget as HTMLElement).dataset.t; if (t) window.clearTimeout(Number(t)); }}
+      onPointerDown={() => { if (!locked) { preloadReader(); prefetchNote(note.id); } }}
+      onFocus={() => { if (!locked) prefetchNote(note.id); }}>
       <div className="cover-wrap"><Cover subject={subject} label={note.kind === 'past-paper' ? 'PAPER' : 'NOTES'} />{locked && <LockBadge />}{!locked && access.enabled && note.free && <span className="free-badge">FREE</span>}</div>
       <div className="grow">
         <h3>{note.title}</h3>

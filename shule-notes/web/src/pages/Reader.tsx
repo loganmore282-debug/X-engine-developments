@@ -8,6 +8,7 @@ import { Cover, readRecent, writeRecent, pagesLabel } from '../components';
 import { Back, Bookmark, Close, Minus, Plus, Search, Send, Spark } from '../icons';
 import type { ChatTurn, Note } from '../types';
 import { PaySheet } from '../Pay';
+import { takePrefetched } from '../prefetch';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -80,7 +81,11 @@ export function ReaderPage() {
     setDoc(null); setError(''); setProgress(0); setLocked(false);
     (async () => {
       try {
-        const bytes = await fetchBytes(`/notes/${id}/file`, (f) => live && setProgress(f), ctl.signal);
+        // A copy fetched ahead (on hover or touch) is used straight away; it still counts as a read.
+        const early = takePrefetched(id);
+        let bytes: ArrayBuffer | null = null;
+        if (early) { bytes = await early.catch(() => null); if (bytes) api(`/notes/${id}/opened`, { body: {} }).catch(() => {}); }
+        if (!bytes) bytes = await fetchBytes(`/notes/${id}/file`, (f) => live && setProgress(f), ctl.signal);
         loaded = await pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false }).promise;
         if (!live) { loaded.destroy(); return; }
         setDoc(loaded);
@@ -128,6 +133,27 @@ export function ReaderPage() {
   const toggleMark = () => { const key = `${id}:${page}`; const next = marked ? marks.filter((m) => m !== key) : [...marks, key]; setMarks(next); save(MARKS, next); toast(marked ? 'Bookmark removed' : `Page ${page} bookmarked`); };
 
   const total = doc?.numPages || note?.pageCount || 0;
+
+  // Keyboard, like a real reader: arrows / PageUp / PageDown turn pages, + and - zoom, / searches, A asks the AI, B bookmarks, Esc closes.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      if (e.key === 'Escape') { if (drawer) setDrawer(null); else if (!paySheet) nav(-1); return; }
+      if (typing || e.ctrlKey || e.metaKey || e.altKey || !doc) return;
+      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === 'j') { e.preventDefault(); goTo(Math.min(total, page + 1)); }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'k') { e.preventDefault(); goTo(Math.max(1, page - 1)); }
+      else if (e.key === 'Home') { e.preventDefault(); goTo(1); }
+      else if (e.key === 'End') { e.preventDefault(); goTo(total); }
+      else if (e.key === '+' || e.key === '=') setZoom((z) => Math.min(2.4, +(z + 0.2).toFixed(2)));
+      else if (e.key === '-') setZoom((z) => Math.max(0.6, +(z - 0.2).toFixed(2)));
+      else if (e.key === '/') { e.preventDefault(); setDrawer('search'); }
+      else if (e.key === 'a' && note?.hasAiContext !== false) setDrawer('ai');
+      else if (e.key === 'b') toggleMark();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
   return (
     <div className={`reader ${drawer ? 'with-drawer' : ''}`}>
       <div className="reader-top">

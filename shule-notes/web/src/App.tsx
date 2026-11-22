@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
-import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, Outlet, useNavigate } from 'react-router-dom';
+import { Suspense, lazy, useEffect, useState } from 'react';
+import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AppProviders, useAuth, useLibrary, remember } from './store';
 import { Avatar } from './components';
 import { ChooseClass, Intro, SignIn, SignUp } from './pages/Auth';
 import { HomePage } from './pages/Home';
 import { InboxPage, ProfilePage, SavedPage, applyTheme } from './pages/Other';
-import { ReaderPage } from './pages/Reader';
+const ReaderPage = lazy(() => import('./pages/Reader').then((m) => ({ default: m.ReaderPage })));
 import { Bell, Bookmark, Home as HomeIcon, User as UserIcon } from './icons';
 import { API } from './api';
 
@@ -13,9 +13,17 @@ function Splash() {
   return <div style={{ height: '100%', display: 'grid', placeItems: 'center', background: '#fff' }}><img src="/logo-full.png" alt="Shule Notes" style={{ width: 'min(300px, 62vw)', animation: 'rise .5s both' }} /></div>;
 }
 
+// Shown for a moment while the reader (the biggest part of the site) arrives, if it was not already fetched in the background.
+function ReaderLoading() {
+  return <div className="reader"><div className="reader-top"><div className="shimmer" style={{ width: 160, height: 18, borderRadius: 8, margin: '14px 12px' }} /></div><div className="pages"><div className="pages-in"><div className="sheet-page" style={{ width: 'min(860px, 92vw)', aspectRatio: '0.707' }}><div className="shimmer" /></div></div></div></div>;
+}
+
 function Shell() {
   const nav = useNavigate();
   const { announcements } = useLibrary();
+  const location = useLocation();
+  // Moving between Home, Saved and Profile: the new page fades in and starts at the top (Home restores its own place).
+  useEffect(() => { if (location.pathname !== '/') window.scrollTo(0, 0); }, [location.pathname]);
   return (
     <div className="shell">
       <header className="topbar"><div className="topbar-in">
@@ -25,7 +33,7 @@ function Shell() {
         <button className="icon-btn" aria-label="Notifications" onClick={() => nav('/inbox')} style={{ position: 'relative' }}><Bell />{announcements.length > 0 && <i style={{ position: 'absolute', top: 9, right: 10, width: 9, height: 9, borderRadius: 5, background: '#ffb020' }} />}</button>
         <button className="icon-btn" aria-label="Your profile" onClick={() => nav('/profile')} style={{ width: 'auto', height: 'auto', padding: 0 }}><Avatar size={38} /></button>
       </div></header>
-      <main className="main page-enter"><Outlet /></main>
+      <main className="main page-enter" key={location.pathname}><Outlet /></main>
       <footer className="app-foot"><div className="app-foot-in">
         <span className="brand small"><img src="/logo-mark.png" alt="" /><span>Shule<b>Notes</b></span></span>
         <span className="grow" />
@@ -60,7 +68,7 @@ function Gate() {
         <Route path="/inbox" element={<InboxPage />} />
         <Route path="/profile" element={<ProfilePage />} />
       </Route>
-      <Route path="/note/:id" element={<ReaderPage />} />
+      <Route path="/note/:id" element={<Suspense fallback={<ReaderLoading />}><ReaderPage /></Suspense>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

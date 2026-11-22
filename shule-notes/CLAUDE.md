@@ -243,6 +243,19 @@ Students buy a TIME PASS with MTN/Airtel mobile money through MarzPay (`backend/
 - **Play Store:** Google requires Play Billing for digital goods sold inside a Play app; the owner chose MarzPay. Do not assume it is allowed in
   Uganda; alternatives are paying on the website only or Google's alternative-billing programs. The server logic does not change either way.
 
+### Speed (server and website)
+- `backend/perf.js`: answers that are the same for every student (`/notes`, `/subjects`, `/config`, `/announcements` per class) are built ONCE per
+  owner change (revision) and at least every 60 s, kept in memory and sent with an ETag, so a phone that has the current copy gets a **304** and the
+  database is not touched; simultaneous callers share one build. `/levels` is static + ETag. `compression` middleware gzips JSON.
+- `auth.resolveSession` remembers a found session for 5 s; sign-out, ban, password reset and account removal clear it at once (`forgetUser`) -- any NEW
+  code that deletes sessions must call `forgetUser`. `/notes/:id/file` uses `res.sendFile` (304s and Range resume); `?prefetch=1` or a Range request is
+  not counted as a read; `POST /notes/:id/opened` counts a read for a prefetched copy. Keep-alive 65 s (above nginx's), graceful SIGTERM, Mongo pool 40.
+  Slow requests (>1.5 s) are logged ("slow request:"). Single process on purpose: payment/login locks are in-process (do not cluster without moving them to Mongo).
+  Tests: `test-perf.js`.
+- Website: the reader (pdf.js) is a lazy chunk (main bundle 609 KB -> 242 KB), preloaded when Home shows; hovering/touching a document starts its PDF download
+  (`prefetch.ts`); a service worker (`public/sw.js`) keeps the site's own files (never API data) so repeat visits are instant; Home restores filters and scroll;
+  keyboard in the reader (arrows/PageUp/PageDown, +/-, /, A, B, Esc); nginx gzip for text (needs `./setup-web.sh` re-run when nginx-web.conf changes).
+
 ### Security (read before adding payments)
 **Principle: an Android app can never be made impossible to hack or edit. The server must decide everything that matters.**
 Sign-in, the AI daily quota, admin rights and (later) who has paid are all enforced on the server; an edited app gains nothing.
