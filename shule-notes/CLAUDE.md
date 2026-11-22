@@ -270,7 +270,7 @@ Students buy a TIME PASS with MTN/Airtel mobile money through MarzPay (`backend/
   successful sign-in goes to the Activity log (never the key). Optional two-step sign-in (TOTP, RFC 6238 tested against its own vectors, replay-proof):
   Settings > Security. Lost phone: set `ADMIN_DISABLE_2FA=1` in `/etc/shule-notes/.env`, restart, sign in, switch it back on properly.
   Optional `ADMIN_ALLOWED_IPS=1.2.3.4,...` closes the panel to other addresses. Admin answers are `Cache-Control: no-store`.
-- The panel page has a CSP meta tag (its API address is the `http://localhost:4000` placeholder that apply.sh rewrites, so keep it on ONE line each),
+- The panel page has a CSP meta tag (its API address is the `http://localhost:4000` placeholder that apply.sh rewrites with a NON-global sed: only the FIRST match on each line is replaced, so every `http://localhost:4000` in admin/index.html must be on its own line -- the CSP's img-src and connect-src are on separate lines for this reason; two on one line broke sign-in once),
   a frame-buster, no referrer, and escapes every student-supplied value. Tests: `test-admin-security.js` (36 checks).
 - Admin actions are recorded in `auditLog` (kept 1 year); new admin routes that change data should be added to LABELS in `audit.js`.
 
