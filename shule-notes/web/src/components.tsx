@@ -5,6 +5,7 @@ import { useAuth, useLibrary } from './store';
 import type { Note } from './types';
 import { Bookmark } from './icons';
 import { SubjectIcon, subjectVars } from './subjectLook';
+import { LockBadge, useAccess } from './Pay';
 
 // A modal sheet that slides up (centred on a big screen). Closes on Escape or a tap outside.
 export function Sheet({ title, onClose, children }: { title?: string; onClose: () => void; children: ReactNode }) {
@@ -64,10 +65,12 @@ export function NoteCard({ note, onOpen, index = 0, showClass = true }: { note: 
   const subject = subjectName(note.subjectId);
   const on = saved.has(note.id);
   const [pop, setPop] = useState(false);
+  const access = useAccess();
+  const locked = access.locked(note.free);
   return (
     <div className="card note-card rise sv" style={{ animationDelay: `${Math.min(index, 8) * 45}ms`, ...(subjectVars(subject) as CSSProperties) }} role="button" tabIndex={0}
       onClick={onOpen} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}>
-      <Cover subject={subject} label={note.kind === 'past-paper' ? 'PAPER' : 'NOTES'} />
+      <div className="cover-wrap"><Cover subject={subject} label={note.kind === 'past-paper' ? 'PAPER' : 'NOTES'} />{locked && <LockBadge />}{!locked && access.enabled && note.free && <span className="free-badge">FREE</span>}</div>
       <div className="grow">
         <h3>{note.title}</h3>
         {note.description && <div className="muted desc">{note.description}</div>}

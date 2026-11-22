@@ -38,6 +38,8 @@ async function ensureIndexes() {
   await db.collection('subjects').createIndex({ order: 1 });
   // One row per (user, day) -- the whole mechanism the AI daily cap depends
   // on. A duplicate key error here is the rate limiter itself, not a bug.
+  await db.collection('payments').createIndex({ reference: 1 }, { unique: true });
+  await db.collection('payments').createIndex({ userId: 1, createdAt: -1 });
   await db.collection('aiUsage').createIndex({ userId: 1, date: 1 }, { unique: true });
 }
 

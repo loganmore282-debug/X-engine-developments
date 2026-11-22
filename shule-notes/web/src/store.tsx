@@ -120,7 +120,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       if (document.visibilityState !== 'visible') return;
       try {
         const r = await api<{ revision: number }>('/sync', { auth: false });
-        if (last >= 0 && r.revision !== last) reloadRef.current();
+        if (last >= 0 && r.revision !== last) { reloadRef.current(); api<{ user: User }>('/auth/me').then((m) => setUserState(m.user)).catch(() => {}); }
         last = r.revision;
       } catch { /* offline: try again next time */ }
     };

@@ -4,6 +4,7 @@ import { useAuth, useLibrary } from '../store';
 import { Cover, NoteCard, NoteSkeleton, Sheet, readRecent, pagesLabel } from '../components';
 import { SubjectIcon, subjectVars } from '../subjectLook';
 import { Chevron, Close, Search } from '../icons';
+import { PaySheet, untilLabel, useAccess } from '../Pay';
 
 type Sort = 'new' | 'views' | 'az';
 
@@ -18,6 +19,8 @@ export function HomePage() {
   const [sort, setSort] = useState<Sort>('new');
   const [everyClass, setEveryClass] = useState(false);
   const [classSheet, setClassSheet] = useState(false);
+  const [paySheet, setPaySheet] = useState(false);
+  const access = useAccess();
   const [dismissed, setDismissed] = useState<string>(() => localStorage.getItem('shule_dismissed_announcement') || '');
 
   const cls = user?.classLevel || null;
@@ -51,6 +54,7 @@ export function HomePage() {
           <div className="eyebrow">{hello}</div>
           <h1>{user?.name.split(' ')[0]}, what are you studying today?</h1>
           <button className="class-chip" onClick={() => setClassSheet(true)} aria-label="Change class"><span className="muted-on-dark">Class</span><b>{cls || 'Choose class'}</b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 9l6 6 6-6" /></svg></button>
+          {access.enabled && <button className={`class-chip pass-chip ${access.active ? 'on' : ''}`} onClick={() => setPaySheet(true)}>{access.active ? <><span className="muted-on-dark">Pass</span><b>until {untilLabel(access.until!)}</b></> : <b>Get a pass</b>}</button>}
           <div className="searchbar"><Search /><input className="input" placeholder="Search notes and past papers" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search notes and past papers" />
             {query && <button className="icon-btn clear" aria-label="Clear search" onClick={() => setQuery('')}><Close /></button>}</div>
         </div>
@@ -114,6 +118,7 @@ export function HomePage() {
         : <div className="grid">{visible.map((n, i) => <NoteCard key={n.id} note={n} index={i} showClass={everyClass || !cls} onOpen={() => nav(`/note/${n.id}`)} />)}</div>}
       {everyClass && <div className="center" style={{ marginTop: 20 }}><button className="btn outline small" onClick={() => setEveryClass(false)}>Back to {cls}</button></div>}
 
+      {paySheet && <PaySheet onClose={() => setPaySheet(false)} />}
       {classSheet && <Sheet title="Choose your class" onClose={() => setClassSheet(false)}>
         {levels.map((g) => <div key={g.id} className="level-group"><h4>{g.name}</h4><div className="level-grid">{g.levels.map((l) => <button key={l.id} className={`chip ${cls === l.id ? 'on' : ''}`} onClick={() => { setClass(l.id); setSubjectId(null); setEveryClass(false); setClassSheet(false); }}>{l.name}</button>)}</div></div>)}
       </Sheet>}

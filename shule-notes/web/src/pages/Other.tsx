@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { api, fetchBytes } from '../api';
 import { useAuth, useLibrary, useToast, remember, save } from '../store';
 import { Avatar, NoteCard, Sheet } from '../components';
-import { Bell, Camera, Chat, Chevron, Edit, Logout, Palette, Trash, User as UserIcon } from '../icons';
+import { Bell, Camera, Chat, Chevron, Edit, Logout, Palette, Spark, Trash, User as UserIcon } from '../icons';
 import type { User } from '../types';
+import { PaySheet, untilLabel, useAccess } from '../Pay';
 
 export function SavedPage() {
   const { notes, saved } = useLibrary();
@@ -40,6 +41,8 @@ export function ProfilePage() {
   const { config } = useLibrary();
   const { toast } = useToast();
   const nav = useNavigate();
+  const access = useAccess();
+  const [paySheet, setPaySheet] = useState(false);
   const [sheet, setSheet] = useState<null | 'name' | 'photo' | 'theme' | 'help' | 'delete' | 'feedback' | 'logout'>(null);
   const [name, setNameValue] = useState(user?.name || '');
   const [password, setPassword] = useState('');
@@ -82,6 +85,7 @@ export function ProfilePage() {
       <div className="profile-rest">
       <div className="group-label">Study</div>
       <div className="card settings">
+        {access.enabled && <button onClick={() => setPaySheet(true)}><Spark /><span className="grow">My pass</span><span className="muted">{access.active ? `Until ${untilLabel(access.until!)}` : 'Get a pass'}</span><Chevron width={18} /></button>}
         <button onClick={() => nav('/')}><UserIcon /><span className="grow">My class</span><span className="muted">{cls || 'Not chosen'}</span><Chevron width={18} /></button>
         <button onClick={() => setSheet('theme')}><Palette /><span className="grow">Appearance</span><span className="muted">{theme === 'system' ? 'System default' : theme === 'light' ? 'Light' : 'Dark'}</span><Chevron width={18} /></button>
         <button onClick={() => nav('/inbox')}><Bell /><span className="grow">Notifications</span><Chevron width={18} /></button>
@@ -96,6 +100,7 @@ export function ProfilePage() {
       <div className="muted center" style={{ fontSize: 13, marginTop: 4 }}>Shule Notes · Website</div>
       </div>
 
+      {paySheet && <PaySheet onClose={() => setPaySheet(false)} />}
       {sheet === 'name' && <Sheet title="Edit your name" onClose={() => setSheet(null)}>
         {err && <div className="banner-error">{err}</div>}
         <label className="field"><span>Full name</span><input className="input" value={name} onChange={(e) => setNameValue(e.target.value)} autoFocus /></label>

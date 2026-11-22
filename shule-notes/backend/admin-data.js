@@ -54,7 +54,7 @@ async function listUsers({ q, status, classLevel, page, pageSize } = {}) {
     total, page: current, pageSize: size,
     users: rows.map((u) => ({
       id: String(u._id), name: u.name || '', phone: u.phone || '', classLevel: u.classLevel || null,
-      status: u.status === 'banned' ? 'banned' : 'active',
+      status: u.status === 'banned' ? 'banned' : 'active', accessUntil: u.accessUntil || null,
       createdAt: u.createdAt || null, lastLoginAt: u.lastLoginAt || null,
       aiToday: (perUser[String(u._id)] || {}).today || 0, aiTotal: (perUser[String(u._id)] || {}).total || 0,
     })),

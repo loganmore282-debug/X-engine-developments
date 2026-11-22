@@ -7,6 +7,7 @@ import { useLibrary, useToast, remember, save } from '../store';
 import { Cover, readRecent, writeRecent, pagesLabel } from '../components';
 import { Back, Bookmark, Close, Minus, Plus, Search, Send, Spark } from '../icons';
 import type { ChatTurn, Note } from '../types';
+import { PaySheet } from '../Pay';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -59,6 +60,9 @@ export function ReaderPage() {
   const [doc, setDoc] = useState<pdfjs.PDFDocumentProxy | null>(null);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
+  const [locked, setLocked] = useState(false);
+  const [paySheet, setPaySheet] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [page, setPage] = useState(1);
   const [ratios, setRatios] = useState<number[]>([]);
@@ -73,17 +77,21 @@ export function ReaderPage() {
   // Load the PDF (progress shown); the server already put the footer on every page.
   useEffect(() => {
     let live = true; const ctl = new AbortController(); let loaded: pdfjs.PDFDocumentProxy | null = null;
-    setDoc(null); setError(''); setProgress(0);
+    setDoc(null); setError(''); setProgress(0); setLocked(false);
     (async () => {
       try {
         const bytes = await fetchBytes(`/notes/${id}/file`, (f) => live && setProgress(f), ctl.signal);
         loaded = await pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false }).promise;
         if (!live) { loaded.destroy(); return; }
         setDoc(loaded);
-      } catch (e) { if (live && (e as Error).name !== 'AbortError') setError((e as Error).message || 'This document could not be opened.'); }
+      } catch (e) {
+        if (!live || (e as Error).name === 'AbortError') return;
+        if ((e as { status?: number }).status === 402) { setLocked(true); setPaySheet(true); }
+        else setError((e as Error).message || 'This document could not be opened.');
+      }
     })();
     return () => { live = false; ctl.abort(); loaded?.destroy(); };
-  }, [id]);
+  }, [id, reloadKey]);
 
   useEffect(() => {
     const onResize = () => setAreaWidth(scroller.current?.clientWidth || window.innerWidth);
@@ -135,7 +143,8 @@ export function ReaderPage() {
       <div className="progressbar"><i style={{ width: `${total ? (page / total) * 100 : 0}%` }} /></div>
 
       <div className="pages" ref={scroller}>
-        {!doc && !error && (
+        {locked && <div className="empty lock-page"><div className="lock-big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg></div><h3>This document needs a pass</h3><p>Choose a pass to read it, search inside it and ask the AI helper about it.</p><button className="btn" onClick={() => setPaySheet(true)}>Choose a pass</button></div>}
+        {!doc && !error && !locked && (
           <div className="pages-in">{[0, 1].map((i) => <div key={i} className="sheet-page" style={{ width, aspectRatio: String(first) }}><div className="shimmer" /></div>)}
             {progress > 0 && <div className="muted" style={{ fontSize: 13 }}>Downloading {Math.round(progress * 100)}%</div>}</div>
         )}
@@ -146,6 +155,7 @@ export function ReaderPage() {
       {doc && <div className="page-chip">{page} / {total}</div>}
       <div className="reader-fab">{note?.hasAiContext !== false && <button className="fab" onClick={() => setDrawer('ai')}><Spark width={20} height={20} /> Ask AI</button>}</div>
 
+      {paySheet && <PaySheet reason="Pay once with mobile money and read everything for as long as the pass lasts." onClose={() => setPaySheet(false)} onPaid={() => setReloadKey((k) => k + 1)} />}
       {drawer === 'search' && <SearchDrawer noteId={id} onClose={() => setDrawer(null)} onGo={(p) => { goTo(p); if (window.innerWidth < 760) setDrawer(null); }} />}
       {drawer === 'ai' && <AiDrawer note={note} noteId={id} onClose={() => setDrawer(null)} />}
     </div>

@@ -30,6 +30,7 @@ const { normalizePhone, isValidPhone } = require('./phone');
 const { eraseUser, updateProfile, cleanName, toId } = require('./accounts');
 const { getSettings, saveSettings, publicConfig, adminView, AI_MODELS } = require('./settings');
 const adminData = require('./admin-data');
+const payments = require('./payments');
 
 // More threads for background work (password hashing, file reads); must be set before first use.
 if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = '8';
@@ -77,7 +78,7 @@ function todayKey() {
 }
 
 function publicUser(u) {
-  return { id: String(u._id), name: u.name || '', phone: u.phone || null, classLevel: u.classLevel || null, avatarVersion: u.avatarVersion || 0 };
+  return { id: String(u._id), name: u.name || '', phone: u.phone || null, classLevel: u.classLevel || null, avatarVersion: u.avatarVersion || 0, accessUntil: u.accessUntil ? new Date(u.accessUntil).toISOString() : null };
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────
@@ -303,9 +304,20 @@ function publicNote(n) {
     title: n.title, description: n.description || '', classLevel: n.classLevel || null,
     kind: NOTE_KINDS.includes(n.kind) ? n.kind : 'notes',
     views: n.views || 0,
+    free: n.free === true,
     pageCount: n.pageCount || 0, fileSize: n.fileSize || 0, uploadedAt: n.uploadedAt,
     hasAiContext: !!(n.extractedText && n.extractedText.length > 0),
   };
+}
+
+// Reading needs a pass once the owner has switched payments on (notes marked free stay open). The server decides.
+async function mayRead(req, res, note) {
+  const settings = await getSettings();
+  if (settings.paymentsEnabled !== true || note.free === true) return true;
+  const user = await getDb().collection('users').findOne({ _id: new ObjectId(req.userId) });
+  if (payments.canRead({ settings, user, note })) return true;
+  res.status(402).json(payments.PAYMENT_REQUIRED);
+  return false;
 }
 
 app.get('/notes', requireAuth, async (req, res) => {
@@ -334,6 +346,7 @@ app.get('/notes/:id/pages', requireAuth, ah(async (req, res) => {
   catch (_) { return res.status(400).json({ status: 'error', message: 'Invalid note id' }); }
   if (!note || note.active === false) return res.status(404).json({ status: 'error', message: 'Note not found' });
   if (note.textStatus === 'reading') return res.status(409).json({ status: 'error', message: 'This document is still being prepared. Try again in a moment.' });
+  if (!(await mayRead(req, res, note))) return;
   let pages = [];
   try { pages = await pageTextsFor({ db: getDb(), note, uploadDir: UPLOAD_DIR, extract: extractInThread }); }
   catch (e) { console.error('could not read the pages of', note.title, ':', e.message); }
@@ -348,6 +361,7 @@ app.get('/notes/:id/file', requireAuth, async (req, res) => {
   catch (_) { return res.status(400).json({ status: 'error', message: 'Invalid note id' }); }
   if (!note || note.active === false) return res.status(404).json({ status: 'error', message: 'Note not found' });
   if (!fs.existsSync(path.join(UPLOAD_DIR, 'notes', note.fileName))) return res.status(404).json({ status: 'error', message: 'File missing on server' });
+  if (!(await mayRead(req, res, note))) return;
   // Counted when the file is opened, so the admin can see what students read.
   getDb().collection('notes').updateOne({ _id: note._id }, { $inc: { views: 1 } }).catch(() => {});
   // Every page carries a footer (where it came from, how to reach the owner), unless the owner turned that off.
@@ -400,6 +414,7 @@ app.post('/ai/ask', requireAuth, aiLimiter, async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'This document has no readable text (it is likely a scanned image), so the AI helper cannot read it.' });
     }
 
+    if (!(await mayRead(req, res, note))) return;
     const settings = await getSettings();
     if (settings.aiEnabled === false) return res.status(503).json({ status: 'error', message: 'The AI helper is switched off for now. Please try again later.' });
     const limit = settings.aiDailyLimit || AI_DAILY_LIMIT;
@@ -412,6 +427,49 @@ app.post('/ai/ask', requireAuth, aiLimiter, async (req, res) => {
     const { status, message } = classifyClaudeError(e);
     res.status(status).json({ status: 'error', message });
   }
+});
+
+// ── PAYMENTS (MarzPay mobile money) ─────────────────────────────────────────
+const marz = payments.makeMarz({ getKey: async () => (await getSettings()).marzpayKey });
+const payLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 12, standardHeaders: true, legacyHeaders: false });
+
+// The passes on offer and what this student already has.
+app.get('/payments/plans', requireAuth, ah(async (req, res) => {
+  const settings = await getSettings();
+  const user = await getDb().collection('users').findOne({ _id: new ObjectId(req.userId) });
+  res.json({
+    status: 'success', enabled: settings.paymentsEnabled === true && (await marz.configured()),
+    plans: payments.activePlans(settings).map((p) => ({ id: p.id, name: p.name, price: p.price, minutes: p.minutes })),
+    accessUntil: user && user.accessUntil ? new Date(user.accessUntil).toISOString() : null,
+    hasAccess: payments.hasAccess(user), serverTime: new Date().toISOString(), phone: user ? user.phone || '' : '',
+  });
+}));
+
+app.post('/payments/start', requireAuth, payLimiter, ah(async (req, res) => {
+  const settings = await getSettings();
+  const user = await getDb().collection('users').findOne({ _id: new ObjectId(req.userId) });
+  if (!user) return res.status(404).json({ status: 'error', message: 'Account not found' });
+  const callbackUrl = knownOrigin ? `${knownOrigin}/payments/callback` : undefined;
+  const result = await payments.startPayment({ settings, user, planId: req.body.planId, phone: req.body.phone, marz, callbackUrl });
+  if (!result.ok) return res.status(result.status || 400).json({ status: 'error', message: result.message });
+  res.json({ status: 'success', payment: payments.publicPayment(result.payment) });
+}));
+
+// The app asks every few seconds while the student approves the prompt on their phone.
+app.get('/payments/:id/status', requireAuth, ah(async (req, res) => {
+  let payment;
+  try { payment = await getDb().collection('payments').findOne({ _id: new ObjectId(req.params.id), userId: String(req.userId) }); }
+  catch (_) { return res.status(400).json({ status: 'error', message: 'Invalid payment' }); }
+  if (!payment) return res.status(404).json({ status: 'error', message: 'Payment not found' });
+  payment = await payments.refreshPayment(payment, marz);
+  const user = await getDb().collection('users').findOne({ _id: new ObjectId(req.userId) });
+  res.json({ status: 'success', payment: payments.publicPayment(payment), user: user ? publicUser(user) : null });
+}));
+
+// MarzPay calls this when a payment finishes. It only nudges us: the real status is read back from MarzPay.
+app.post('/payments/callback', rateLimit({ windowMs: 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false }), (req, res) => {
+  res.status(200).json({ received: true });
+  setImmediate(() => payments.handleCallback(req.body, marz).catch((e) => console.error('payment callback:', e.message)));
 });
 
 // ── ADMIN ───────────────────────────────────────────────────────────────────
@@ -551,6 +609,7 @@ app.post('/admin/notes/update', async (req, res) => {
   if (req.body.title !== undefined) patch.title = String(req.body.title).trim().slice(0, 150);
   if (req.body.description !== undefined) patch.description = String(req.body.description).trim().slice(0, 1000);
   if (req.body.active !== undefined) patch.active = !!req.body.active;
+  if (req.body.free !== undefined) patch.free = !!req.body.free;
   if (req.body.kind !== undefined) {
     const kind = cleanKind(req.body.kind);
     if (!kind) return res.status(400).json({ status: 'error', message: 'Choose Notes or Past paper' });
@@ -594,6 +653,10 @@ app.post('/admin/users/list', guard(async (req, res) => res.json({ status: 'succ
 app.post('/admin/users/status', guard(async (req, res) => sendResult(res, await adminData.setUserStatus(req.body.id, req.body.status))));
 app.post('/admin/users/reset-password', guard(async (req, res) => sendResult(res, await adminData.resetUserPassword(req.body.id, req.body.password))));
 app.post('/admin/users/delete', guard(async (req, res) => sendResult(res, await adminData.adminDeleteUser(req.body.id))));
+app.post('/admin/payments/list', guard(async (req, res) => res.json({ status: 'success', ...(await payments.listPayments(req.body)), summary: await payments.paymentSummary() })));
+app.post('/admin/payments/recheck', guard(async (req, res) => sendResult(res, await payments.adminRecheck(req.body.id, marz))));
+app.post('/admin/users/grant', guard(async (req, res) => sendResult(res, await payments.adminGrant(req.body.id, { minutes: req.body.minutes, planId: req.body.planId }, await getSettings()), {})));
+app.post('/admin/users/revoke', guard(async (req, res) => sendResult(res, await payments.adminRevoke(req.body.id))));
 app.post('/admin/announcements/list', guard(async (req, res) => res.json({ status: 'success', announcements: await adminData.listAnnouncements() })));
 app.post('/admin/announcements/save', guard(async (req, res) => {
   const result = await adminData.saveAnnouncement(req.body);
@@ -660,4 +723,4 @@ if (require.main === module) {
   start().catch((e) => { console.error('Failed to start:', e); process.exit(1); });
 }
 
-module.exports = { NOTE_KINDS, app, todayKey, normalizePhone, isValidPhone, publicUser, publicNote, consumeAiQuota, deleteAccount, setClassLevel, AI_DAILY_LIMIT };
+module.exports = { payments, marz, NOTE_KINDS, app, todayKey, normalizePhone, isValidPhone, publicUser, publicNote, consumeAiQuota, deleteAccount, setClassLevel, AI_DAILY_LIMIT };

@@ -47,7 +47,7 @@ export async function fetchBytes(path: string, onProgress?: (fraction: number) =
   }
   if (!res.ok) {
     if (res.status === 401 && token) window.dispatchEvent(new Event('shule:expired'));
-    throw new ApiError(res.status, res.status === 404 ? 'This document is not available.' : 'Could not load this document.');
+    throw new ApiError(res.status, res.status === 404 ? 'This document is not available.' : res.status === 402 ? 'payment_required' : 'Could not load this document.');
   }
   const total = Number(res.headers.get('Content-Length')) || 0;
   if (!res.body || !onProgress || !total) return res.arrayBuffer();

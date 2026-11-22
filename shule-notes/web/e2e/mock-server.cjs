@@ -9,7 +9,8 @@ const { makeDb, stubDb } = require(B + '/fake-mongo.testlib.js');
 const db = makeDb(); stubDb(db);
 const { PDFDocument, StandardFonts } = require(B + '/node_modules/pdf-lib');
 const { ObjectId } = require(B + '/node_modules/mongodb');
-const { app } = require(B + '/server.js');
+const { app, marz } = require(B + '/server.js');
+const { saveSettings } = require(B + '/settings.js');
 (async () => {
   const subjects = ['Biology', 'Chemistry', 'Physics', 'Mathematics'];
   const subjectIds = {};
@@ -35,5 +36,14 @@ const { app } = require(B + '/server.js');
   await mk('Algebra Past Paper 2024', 'Mathematics', 'Senior 2', 'past-paper', 4);
   await mk('Genetics', 'Biology', 'Senior 4', 'notes', 5);
   await db.collection('announcements').insertOne({ title: 'Mock exams start Monday', message: 'Revise the past papers in the Notes tab. Good luck!', active: true, createdAt: new Date() });
+  // Payments on, with a pretend MarzPay that says "paid" a few seconds after the prompt (the real payment code runs).
+  await saveSettings({ paymentsEnabled: true, marzpayKey: 'dGVzdC1tYXJ6cGF5LWtleS0xMjM0NQ==' });
+  const started = {}; let counter = 0;
+  Object.assign(marz, {
+    configured: async () => true,
+    collect: async ({ reference }) => { const uuid = 'mock-' + (++counter); started[uuid] = Date.now(); return { ok: true, uuid, message: '' }; },
+    status: async (uuid) => (Date.now() - (started[uuid] || 0) > 4000 ? 'paid' : 'pending'),
+  });
+  await db.collection('notes').updateOne({ title: 'Cell Structure' }, { $set: { free: true } });
   app.listen(4010, () => console.log('mock server up on 4010'));
 })();

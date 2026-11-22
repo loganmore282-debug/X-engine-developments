@@ -3,6 +3,7 @@
 // contacts the app shows ("Forgot your password?", Help). One document.
 'use strict';
 const { getDb } = require('./db');
+const { cleanPlans } = require('./payments');
 
 const DEFAULTS = {
   aiEnabled: true,
@@ -21,6 +22,10 @@ const DEFAULTS = {
   updateNote: '',      // one line shown with the update prompt
   anthropicKey: '',  // the Claude API key, entered in the admin panel (never sent back to it)
   firebaseServiceAccount: null, // { project_id, client_email, private_key } for push notifications (never sent back)
+  // Paying for access (payments.js). Off until the owner switches it on, so nothing changes for students before then.
+  paymentsEnabled: false,
+  plans: null,        // null = the five standard passes in payments.js
+  marzpayKey: '',     // MarzPay credentials, entered in the admin panel (never sent back to it)
 };
 
 // The models the owner may pick in the panel (cheapest first).
@@ -115,6 +120,18 @@ async function saveSettings(patch) {
     }
     next.firebaseServiceAccount = { project_id: String(parsed.project_id), client_email: String(parsed.client_email), private_key: String(parsed.private_key) };
   }
+  if (patch.paymentsEnabled !== undefined) next.paymentsEnabled = !!patch.paymentsEnabled;
+  if (patch.plans !== undefined) {
+    const cleaned = cleanPlans(patch.plans);
+    if (!cleaned.ok) return cleaned;
+    next.plans = cleaned.plans;
+  }
+  if (patch.clearMarzpayKey) unset.marzpayKey = '';
+  else if (typeof patch.marzpayKey === 'string' && patch.marzpayKey.trim()) {
+    const v = patch.marzpayKey.trim();
+    if (/\s/.test(v) || v.length < 12 || v.length > 400) return { ok: false, message: 'That does not look like a MarzPay key. Paste it as one line, with no spaces.' };
+    next.marzpayKey = v;
+  }
   if (patch.clearAnthropicKey) unset.anthropicKey = '';
   else if (typeof patch.anthropicKey === 'string' && patch.anthropicKey.trim()) {
     const v = patch.anthropicKey.trim();
@@ -132,15 +149,16 @@ async function saveSettings(patch) {
 
 // What the admin panel sees: everything EXCEPT the key itself, only whether one is saved.
 function adminView(s) {
-  const { anthropicKey, firebaseServiceAccount, ...rest } = s;
+  const { anthropicKey, firebaseServiceAccount, marzpayKey, ...rest } = s;
   const account = firebaseServiceAccount && firebaseServiceAccount.project_id ? firebaseServiceAccount : null;
-  return { ...rest, firebaseSet: !!account, firebaseProject: account ? account.project_id : '', anthropicKeySet: isRealKey(anthropicKey), anthropicKeyHint: isRealKey(anthropicKey) ? '…' + anthropicKey.slice(-4) : '' };
+  return { ...rest, firebaseSet: !!account, firebaseProject: account ? account.project_id : '', anthropicKeySet: isRealKey(anthropicKey), anthropicKeyHint: isRealKey(anthropicKey) ? '…' + anthropicKey.slice(-4) : '', marzpayKeySet: !!(marzpayKey && String(marzpayKey).trim()), marzpayKeyHint: marzpayKey ? '…' + String(marzpayKey).slice(-4) : '', plans: require('./payments').planList(s) };
 }
 
 // What the app and the public pages may see.
 function publicConfig(s) {
   return {
     aiEnabled: s.aiEnabled !== false,
+    paymentsEnabled: s.paymentsEnabled === true,
     supportPhone: s.supportPhone || '',
     supportWhatsapp: s.supportWhatsapp || '',
     supportEmail: s.supportEmail || '',
