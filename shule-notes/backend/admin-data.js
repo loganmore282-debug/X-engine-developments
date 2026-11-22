@@ -61,6 +61,32 @@ async function listUsers({ q, status, classLevel, page, pageSize } = {}) {
   };
 }
 
+// The owner correcting a student's name or class.
+async function updateStudent(userId, { name, classLevel }) {
+  const id = toId(userId);
+  const user = id ? await getDb().collection('users').findOne({ _id: id }) : null;
+  if (!user) return { ok: false, status: 404, message: 'Student not found' };
+  const patch = {};
+  if (name !== undefined) {
+    const clean = require('./accounts').cleanName(name);
+    if (clean.length < 2) return { ok: false, status: 400, message: 'Enter the student\'s full name' };
+    patch.name = clean;
+  }
+  if (classLevel !== undefined) {
+    const level = String(classLevel || '').trim();
+    if (level && !isValidLevel(level)) return { ok: false, status: 400, message: 'Choose a class from the list' };
+    patch.classLevel = level || null;
+  }
+  if (Object.keys(patch).length) await getDb().collection('users').updateOne({ _id: id }, { $set: patch });
+  return { ok: true };
+}
+
+// Every student, for a spreadsheet (the panel turns it into a CSV file).
+async function exportStudents() {
+  const rows = await getDb().collection('users').find({}).sort({ createdAt: -1 }).limit(50000).toArray();
+  return rows.map((u) => ({ name: u.name || '', phone: u.phone || '', classLevel: u.classLevel || '', status: u.status === 'banned' ? 'banned' : 'active', joined: u.createdAt || '', lastSeen: u.lastLoginAt || '', accessUntil: u.accessUntil || '' }));
+}
+
 async function setUserStatus(userId, status) {
   if (status !== 'active' && status !== 'banned') return { ok: false, status: 400, message: 'Unknown status' };
   const db = getDb();
@@ -214,6 +240,7 @@ async function listActiveAnnouncements(classLevel) {
 }
 
 module.exports = {
+  updateStudent, exportStudents,
   listUsers, setUserStatus, resetUserPassword, adminDeleteUser, dashboardStats,
   listAnnouncements, saveAnnouncement, deleteAnnouncement, activeAnnouncement, listActiveAnnouncements,
 };

@@ -141,6 +141,7 @@
     <button class="nav" data-tab="intro"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2.5"/><circle cx="9" cy="9.5" r="1.6"/><path d="m21 15-4.5-4.5L8 19M8 21h8"/></svg>Introduction</button>
     <button class="nav" data-tab="announcements"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v3a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 9c1.5 1 1.5 5 0 6M18 6.5c3 2 3 9 0 11"/></svg>Announcements</button>
     <button class="nav" data-tab="feedback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 11h7M8.5 14h4"/></svg>Feedback</button>
+    <button class="nav" data-tab="activity"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Activity</button>
     <button class="nav" data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
     <div class="grow"></div>
     <button class="nav" id="logoutBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button>
@@ -170,6 +171,8 @@
           <input id="stSearch" placeholder="Search by name or phone number">
           <select id="stClass"></select>
           <select id="stStatus"><option value="">All students</option><option value="active">Active</option><option value="banned">Banned</option></select>
+          <button class="btn plain sm" id="stBulk">Give access to many</button>
+          <button class="btn plain sm" id="stExport">Export CSV</button>
         </div>
         <div class="table-scroll"><table>
           <thead><tr><th>Student</th><th>Class</th><th>Joined</th><th>Last seen</th><th>AI today / total</th><th>Access</th><th>Status</th><th></th></tr></thead>
@@ -188,6 +191,7 @@
         <div class="toolbar">
           <input id="paySearch" placeholder="Search by student name or phone number">
           <select id="payStatus"><option value="">All payments</option><option value="paid">Paid</option><option value="pending">Waiting</option><option value="failed">Failed</option><option value="expired">Expired</option></select>
+          <button class="btn plain sm" id="payExport">Export CSV</button>
         </div>
         <div class="table-scroll"><table>
           <thead><tr><th>Student</th><th>Pass</th><th>Amount</th><th>Phone</th><th>When</th><th>Status</th><th>Access until</th><th></th></tr></thead>
@@ -300,6 +304,18 @@
     </section>
 
     <!-- Settings -->
+    <!-- Activity -->
+    <section id="tab-activity" class="hidden">
+      <div class="page-head"><div class="grow"><h1>Activity</h1><div class="muted">Everything done in this panel, newest first</div></div><button class="btn plain" id="actRefresh">Refresh</button></div>
+      <div class="card">
+        <div class="table-scroll"><table>
+          <thead><tr><th>When</th><th>What was done</th><th>Details</th></tr></thead>
+          <tbody id="actRows"></tbody>
+        </table></div>
+        <div class="pager"><span id="actCount"></span><div><button class="btn plain sm" id="actPrev">Previous</button> <button class="btn plain sm" id="actNext">Next</button></div></div>
+      </div>
+    </section>
+
     <section id="tab-settings" class="hidden">
       <div class="page-head"><div class="grow"><h1>Settings</h1><div class="muted">Changes apply within a few seconds, with no server restart</div></div></div>
       <div class="card">
@@ -339,6 +355,13 @@
         <label>Update link</label><input id="setUpdateUrl" placeholder="https://play.google.com/store/apps/details?id=…  (empty = the download page)">
         <label>A line shown with the update</label><input id="setUpdateNote" maxlength="140" placeholder="e.g. Faster downloads and bug fixes">
         <div class="muted" id="setLatestHint"></div>
+      </div>
+      <div class="card">
+        <h2>New students</h2>
+        <label class="switch"><input type="checkbox" id="setSignups"> Let new students create accounts</label>
+        <label>Welcome pass (hours of free access for every new student, 0 = none)</label>
+        <input id="setTrial" type="number" min="0" step="0.5" placeholder="0">
+        <div class="muted" style="margin-top:6px">A welcome pass lets new students try everything before they pay. It only matters once payments are switched on.</div>
       </div>
       <div class="card">
         <h2>Payments</h2>
@@ -523,6 +546,7 @@ LOADERS.students = async function(){
       <td>${u.accessUntil && new Date(u.accessUntil) > new Date() ? `<span class="pill ok">Until ${esc(fmtDate(u.accessUntil))}</span>` : '<span class="muted">None</span>'}</td>
       <td>${u.status === 'banned' ? '<span class="pill bad">Banned</span>' : '<span class="pill ok">Active</span>'}</td>
       <td><div class="actions">
+        <button class="btn plain sm" data-act="detail" data-id="${esc(u.id)}">Details</button>
         <button class="btn plain sm" data-act="grant" data-id="${esc(u.id)}">Give access</button>
         ${u.accessUntil && new Date(u.accessUntil) > new Date() ? `<button class="btn plain sm" data-act="revoke" data-id="${esc(u.id)}">Remove access</button>` : ''}
         <button class="btn plain sm" data-act="reset" data-id="${esc(u.id)}">Reset password</button>
@@ -558,14 +582,12 @@ $('studentRows').addEventListener('click', async (e) => {
     const r = await api('/admin/users/status', { id: user.id, status: 'active' });
     toast(r.status === 'success' ? user.name + ' can sign in again' : (r.message || 'Could not unban'), r.status === 'success' ? 'ok' : 'error');
   } else if (act === 'grant') {
-    const plans = (PAY.plans || []);
-    const picked = await modal({ title: 'Give ' + user.name + ' access', okLabel: 'Give access',
-      body: `<p>This adds time to their pass without any payment, for example for a prize or a refund. It is added on top of any time they still have.</p>
-        <label>How long</label><select id="gPlan">${plans.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>`,
-      collect: () => $('gPlan').value });
-    if (!picked) return;
-    const r = await api('/admin/users/grant', { id: user.id, planId: picked });
+    const minutes = await askDuration('Give ' + user.name + ' access', 'This adds time to their pass without any payment, for example for a prize or a refund. It is added on top of any time they still have.');
+    if (!minutes) return;
+    const r = await api('/admin/users/grant', { id: user.id, minutes });
     toast(r.status === 'success' ? user.name + ' now has access' : (r.message || 'Could not give access'), r.status === 'success' ? 'ok' : 'error');
+  } else if (act === 'detail') {
+    await showStudent(user.id); return;
   } else if (act === 'revoke') {
     if (!await confirmBox('Remove ' + user.name + "'s access?", 'Their pass ends now. They can buy a new one.', 'Remove access', true)) return;
     const r = await api('/admin/users/revoke', { id: user.id });
@@ -883,6 +905,94 @@ $('fbList').addEventListener('click', async (e) => {
   LOADERS.feedback();
 });
 
+// ── time pickers, CSV, student details ──
+// Asks "how long?": one of the passes, or any number of hours or days. Resolves to minutes, or false.
+async function askDuration(title, intro){
+  if (!PAY.plans.length) { const st = await api('/admin/settings/get'); if (st.status === 'success') PAY.plans = st.settings.plans || []; }
+  const plans = PAY.plans || [];
+  const picked = await modal({ title, okLabel: 'Give access',
+    body: `<p>${esc(intro)}</p><label>How long</label>
+      <select id="dPlan">${plans.map(p => `<option value="${p.minutes}">${esc(p.name)}</option>`).join('')}<option value="custom">A different time…</option></select>
+      <div id="dCustom" class="row hidden"><div><label>Amount</label><input id="dAmount" type="number" min="1" value="1"></div><div><label>Unit</label><select id="dUnit"><option value="60">Hours</option><option value="1440" selected>Days</option></select></div></div>`,
+    collect: () => $('dPlan').value === 'custom' ? Math.round(Number($('dAmount').value) * Number($('dUnit').value)) : Number($('dPlan').value) });
+  return picked || false;
+}
+// (the dialog above is created by modal(); wire the "different time" box after it appears)
+document.addEventListener('change', (e) => { if (e.target && e.target.id === 'dPlan') $('dCustom').classList.toggle('hidden', e.target.value !== 'custom'); });
+
+function downloadCsv(name, rows){
+  if (!rows.length) return toast('Nothing to export yet', 'error');
+  const cols = Object.keys(rows[0]);
+  const cell = (v) => { const t = v instanceof Date ? v.toISOString() : String(v == null ? '' : v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+  const csv = '\ufeff' + [cols.join(','), ...rows.map(r => cols.map(c => cell(r[c])).join(','))].join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = name + '-' + new Date().toISOString().slice(0, 10) + '.csv'; document.body.appendChild(a); a.click(); a.remove();
+  toast('Downloaded ' + rows.length + ' rows', 'ok');
+}
+
+async function showStudent(id){
+  const r = await api('/admin/users/detail', { id });
+  if (r.status !== 'success') return toast(r.message || 'Could not load the student', 'error');
+  const s = r.student; const live = s.accessUntil && new Date(s.accessUntil) > new Date();
+  const pays = r.payments.length ? r.payments.map(p => `<tr><td>${esc(fmtDate(p.createdAt))}</td><td>${esc(p.planName)}</td><td>${p.manual ? 'Given' : esc(ugx(p.amount))}</td><td>${esc(p.status)}</td></tr>`).join('') : '<tr><td colspan="4" class="muted">No payments yet</td></tr>';
+  const choice = await modal({ title: s.name, okLabel: 'Close', hideCancel: true,
+    body: `<p class="muted" style="margin-top:-6px">${esc(s.phone)} · ${esc(s.classLevel || 'No class yet')} · joined ${esc(fmtDate(s.createdAt))} · last seen ${esc(ago(s.lastLoginAt))}</p>
+      <div class="stats" style="grid-template-columns:repeat(3,1fr);gap:8px">
+        <div class="stat"><div><b style="font-size:17px">${live ? esc(fmtDate(s.accessUntil)) : 'None'}</b><span>Pass until</span></div></div>
+        <div class="stat"><div><b style="font-size:17px">${esc(ugx(s.totalPaid))}</b><span>Paid in total</span></div></div>
+        <div class="stat"><div><b style="font-size:17px">${s.aiTotal}</b><span>AI questions</span></div></div>
+      </div>
+      <h2 style="margin:14px 0 6px;font-size:15px">Payments</h2>
+      <div class="table-scroll" style="max-height:200px;overflow:auto"><table><thead><tr><th>Date</th><th>Pass</th><th>Amount</th><th>Status</th></tr></thead><tbody>${pays}</tbody></table></div>
+      <div class="actions" style="margin-top:14px"><button class="btn plain sm" id="sdGrant">Give access</button><button class="btn plain sm" id="sdEdit">Edit name or class</button></div>` });
+  void choice;
+}
+document.addEventListener('click', async (e) => {
+  const id = e.target && e.target.id;
+  if (id !== 'sdGrant' && id !== 'sdEdit') return;
+  const name = document.querySelector('#modalRoot h2').textContent;
+  const user = ST.rows.find(u => u.name === name); if (!user) return;
+  $('modalOk').click();
+  if (id === 'sdGrant') { const m = await askDuration('Give ' + user.name + ' access', 'The time is added on top of any pass they still have.'); if (m) { const r = await api('/admin/users/grant', { id: user.id, minutes: m }); toast(r.status === 'success' ? 'Access given' : (r.message || 'Could not give access'), r.status === 'success' ? 'ok' : 'error'); reloadStudents(false); } }
+  else {
+    const v = await modal({ title: 'Edit ' + user.name, okLabel: 'Save', body: `<label>Full name</label><input id="euName" value="${esc(user.name)}"><label>Class</label><select id="euClass">${classOptions(user.classLevel || '', 'No class')}</select>`, collect: () => ({ name: $('euName').value, classLevel: $('euClass').value }) });
+    if (!v) return;
+    const r = await api('/admin/users/update', { id: user.id, ...v });
+    toast(r.status === 'success' ? 'Saved' : (r.message || 'Could not save'), r.status === 'success' ? 'ok' : 'error'); reloadStudents(false);
+  }
+});
+
+$('stBulk').addEventListener('click', async () => {
+  const who = await modal({ title: 'Give access to many students', okLabel: 'Next',
+    body: `<p>Give the same time to a whole class, or to every active student at once. Banned students are skipped.</p><label>Who</label>
+      <select id="bWho"><option value="all">Every active student</option>${LEVEL_GROUPS.map(g => `<optgroup label="${esc(g.name)}">${g.levels.map(l => `<option value="${esc(l.id)}">${esc(l.name)} only</option>`).join('')}</optgroup>`).join('')}</select>`,
+    collect: () => $('bWho').value });
+  if (!who) return;
+  const label = who === 'all' ? 'every active student' : who;
+  const minutes = await askDuration('Time for ' + label, 'It is added on top of any pass they already have.');
+  if (!minutes) return;
+  if (!await confirmBox('Give this to ' + label + '?', 'Everyone matching receives it straight away. This cannot be undone in one step.', 'Give access', false)) return;
+  const r = await api('/admin/users/grant-bulk', who === 'all' ? { scope: 'all', minutes } : { scope: 'class', classLevel: who, minutes });
+  toast(r.status === 'success' ? r.count + ' students now have the extra time' : (r.message || 'Could not give access'), r.status === 'success' ? 'ok' : 'error');
+  reloadStudents(false);
+});
+$('stExport').addEventListener('click', async () => { const r = await api('/admin/export/students'); if (r.status === 'success') downloadCsv('students', r.rows); else toast(r.message || 'Could not export', 'error'); });
+$('payExport').addEventListener('click', async () => { const r = await api('/admin/export/payments'); if (r.status === 'success') downloadCsv('payments', r.rows); else toast(r.message || 'Could not export', 'error'); });
+
+// ── activity ──
+const ACT = { page: 1, pageSize: 50 };
+LOADERS.activity = async function(){
+  const r = await api('/admin/activity/list', { page: ACT.page, pageSize: ACT.pageSize });
+  if (r.status !== 'success') return toast(r.message || 'Could not load the activity', 'error');
+  $('actRows').innerHTML = r.events.length ? r.events.map(e => `<tr><td>${esc(new Date(e.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}</td><td>${esc(e.action)}</td><td class="muted">${esc(Object.entries(e.detail).filter(([k]) => !(k === 'id' && e.detail.student)).map(([k, v]) => (k === 'minutes' ? 'hours: ' + (v / 60) : k + ': ' + v)).join(' · '))}</td></tr>`).join('') : '<tr><td colspan="3" class="empty">Nothing done yet</td></tr>';
+  const from = r.total ? (r.page - 1) * r.pageSize + 1 : 0;
+  $('actCount').textContent = r.total ? `Showing ${from}–${from + r.events.length - 1} of ${r.total}` : '';
+  $('actPrev').disabled = r.page <= 1; $('actNext').disabled = r.page * r.pageSize >= r.total;
+};
+$('actRefresh').addEventListener('click', () => LOADERS.activity());
+$('actPrev').addEventListener('click', () => { ACT.page = Math.max(1, ACT.page - 1); LOADERS.activity(); });
+$('actNext').addEventListener('click', () => { ACT.page += 1; LOADERS.activity(); });
+
 // ── payments ──
 const PAY = { plans: [], page: 1, pageSize: 25, rows: [] };
 const ugx = (n) => 'UGX ' + Number(n || 0).toLocaleString('en-GB');
@@ -938,6 +1048,8 @@ LOADERS.settings = async function(){
   $('setKey').value = '';
   $('setKeyHint').textContent = s.anthropicKeySet ? 'A key is saved (' + s.anthropicKeyHint + '). It is never shown again; paste a new one to replace it.' : 'No key saved yet. Get one at console.anthropic.com, then paste it here. Without it the AI helper cannot answer.';
   $('setKeyClear').classList.toggle('hidden', !s.anthropicKeySet);
+  $('setSignups').checked = s.signupsOpen !== false;
+  $('setTrial').value = s.trialMinutes ? +(s.trialMinutes / 60).toFixed(2) : '';
   $('setPayOn').checked = s.paymentsEnabled === true;
   $('setMarz').value = '';
   $('setMarzHint').textContent = s.marzpayKeySet ? 'A key is saved (' + s.marzpayKeyHint + '). It is never shown again; paste a new one to replace it.' : 'No key saved yet. Paste your MarzPay credentials here (never in a chat). Without it nobody can pay.';
@@ -961,6 +1073,7 @@ $('setSave').addEventListener('click', async () => {
     aiEnabled: $('setAiOn').checked, aiModel: $('setModel').value, anthropicKey: $('setKey').value, aiDailyLimit: $('setAiLimit').value === '' ? null : Number($('setAiLimit').value),
     supportPhone: $('setPhone').value, supportWhatsapp: $('setWhatsapp').value, supportEmail: $('setEmail').value, supportHours: $('setHours').value, websiteUrl: $('setWebsite').value, pdfStamp: $('setPdfStamp').checked,
     ...($('setFb').value.trim() ? { firebaseServiceAccount: $('setFb').value.trim() } : {}),
+    signupsOpen: $('setSignups').checked, trialMinutes: Math.round(Number($('setTrial').value || 0) * 60),
     paymentsEnabled: $('setPayOn').checked,
     ...($('setMarz').value.trim() ? { marzpayKey: $('setMarz').value.trim() } : {}),
     plans: Array.from($('planRows').querySelectorAll('tr')).map(tr => ({ id: tr.dataset.id, name: tr.querySelector('.pName').value, price: Number(tr.querySelector('.pPrice').value), minutes: Math.round(Number(tr.querySelector('.pHours').value) * 60), active: tr.querySelector('.pOn').checked })),

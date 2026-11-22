@@ -26,6 +26,8 @@ const DEFAULTS = {
   paymentsEnabled: false,
   plans: null,        // null = the five standard passes in payments.js
   marzpayKey: '',     // MarzPay credentials, entered in the admin panel (never sent back to it)
+  trialMinutes: 0,    // a free pass given to every NEW student when they sign up (0 = none)
+  signupsOpen: true,  // false: nobody can create a new account for now
 };
 
 // The models the owner may pick in the panel (cheapest first).
@@ -121,6 +123,12 @@ async function saveSettings(patch) {
     next.firebaseServiceAccount = { project_id: String(parsed.project_id), client_email: String(parsed.client_email), private_key: String(parsed.private_key) };
   }
   if (patch.paymentsEnabled !== undefined) next.paymentsEnabled = !!patch.paymentsEnabled;
+  if (patch.signupsOpen !== undefined) next.signupsOpen = !!patch.signupsOpen;
+  if (patch.trialMinutes !== undefined) {
+    const n = Number(patch.trialMinutes === '' || patch.trialMinutes === null ? 0 : patch.trialMinutes);
+    if (!Number.isInteger(n) || n < 0 || n > 525600) return { ok: false, message: 'The welcome pass must be from 0 minutes to 1 year' };
+    next.trialMinutes = n;
+  }
   if (patch.plans !== undefined) {
     const cleaned = cleanPlans(patch.plans);
     if (!cleaned.ok) return cleaned;
@@ -159,6 +167,7 @@ function publicConfig(s) {
   return {
     aiEnabled: s.aiEnabled !== false,
     paymentsEnabled: s.paymentsEnabled === true,
+    signupsOpen: s.signupsOpen !== false,
     supportPhone: s.supportPhone || '',
     supportWhatsapp: s.supportWhatsapp || '',
     supportEmail: s.supportEmail || '',

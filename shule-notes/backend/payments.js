@@ -278,6 +278,14 @@ async function listPayments({ status, q, page, pageSize } = {}) {
   };
 }
 
+async function exportPayments() {
+  const rows = await getDb().collection('payments').find({}).sort({ createdAt: -1 }).limit(50000).toArray();
+  const ids = [...new Set(rows.map((r) => r.userId))].filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+  const people = ids.length ? await getDb().collection('users').find({ _id: { $in: ids } }).toArray() : [];
+  const byId = Object.fromEntries(people.map((u) => [String(u._id), u]));
+  return rows.map((r) => ({ student: (byId[r.userId] && byId[r.userId].name) || 'Deleted student', phone: r.phone || '', pass: r.planName || '', amount: r.manual ? 0 : r.amount || 0, status: r.manual ? 'given by admin' : r.status, date: r.createdAt || '', accessUntil: r.grantedUntil || '' }));
+}
+
 async function paymentSummary(now = new Date()) {
   const rows = await getDb().collection('payments').find({ status: 'paid', manual: { $ne: true } }).toArray();
   const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
@@ -306,6 +314,36 @@ async function adminGrant(userId, { minutes, planId }, settings) {
   return { ok: true, accessUntil: until };
 }
 
+// Give the same time to many students at once (a whole class, or everyone): a prize, an exam-week gift, an apology.
+async function adminGrantMany({ scope, classLevel, minutes }) {
+  const mins = Number(minutes);
+  if (!Number.isInteger(mins) || mins < 30 || mins > 525600) return { ok: false, status: 400, message: 'Choose how long the access lasts' };
+  const filter = { status: { $ne: 'banned' } };
+  if (scope === 'class') {
+    if (!classLevel) return { ok: false, status: 400, message: 'Choose a class' };
+    filter.classLevel = String(classLevel);
+  } else if (scope !== 'all') return { ok: false, status: 400, message: 'Choose who receives it' };
+  const users = await getDb().collection('users').find(filter).limit(20000).toArray();
+  let done = 0;
+  for (const u of users) { try { await grantAccess(u._id, mins); done += 1; } catch (_) { /* skip one that vanished */ } }
+  return { ok: true, count: done };
+}
+
+// Everything about one student for the admin: their details, passes and payments.
+async function adminStudentDetail(userId) {
+  const id = ObjectId.isValid(String(userId)) ? new ObjectId(String(userId)) : null;
+  const user = id ? await getDb().collection('users').findOne({ _id: id }) : null;
+  if (!user) return { ok: false, status: 404, message: 'Student not found' };
+  const pays = await getDb().collection('payments').find({ userId: String(user._id) }).sort({ createdAt: -1 }).limit(30).toArray();
+  const usage = await getDb().collection('aiUsage').find({ userId: String(user._id) }).toArray();
+  const paid = pays.filter((p) => p.status === 'paid' && !p.manual).reduce((a, p) => a + (p.amount || 0), 0);
+  return {
+    ok: true,
+    student: { id: String(user._id), name: user.name || '', phone: user.phone || '', classLevel: user.classLevel || null, status: user.status === 'banned' ? 'banned' : 'active', createdAt: user.createdAt || null, lastLoginAt: user.lastLoginAt || null, accessUntil: user.accessUntil || null, aiTotal: usage.reduce((a, u) => a + (u.count || 0), 0), totalPaid: paid },
+    payments: pays.map((p) => ({ id: String(p._id), planName: p.planName, amount: p.amount, status: p.status, manual: !!p.manual, createdAt: p.createdAt, accessUntil: p.grantedUntil || null })),
+  };
+}
+
 async function adminRevoke(userId) {
   const id = ObjectId.isValid(String(userId)) ? new ObjectId(String(userId)) : null;
   const user = id ? await getDb().collection('users').findOne({ _id: id }) : null;
@@ -327,5 +365,5 @@ module.exports = {
   DEFAULT_PLANS, planList, activePlans, cleanPlans, hasAccess, canRead, PAYMENT_REQUIRED,
   makeMarz, normalizeStatus, credentialsFor, mobileMoneyPhone,
   grantAccess, startPayment, refreshPayment, handleCallback, completePayment, publicPayment,
-  listPayments, paymentSummary, adminGrant, adminRevoke, adminRecheck,
+  listPayments, exportPayments, paymentSummary, adminGrant, adminGrantMany, adminStudentDetail, adminRevoke, adminRecheck,
 };

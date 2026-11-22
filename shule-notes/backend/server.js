@@ -33,6 +33,7 @@ const adminData = require('./admin-data');
 const payments = require('./payments');
 const compression = require('compression');
 const perf = require('./perf');
+const audit = require('./audit');
 
 // More threads for background work (password hashing, file reads); must be set before first use.
 if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = '8';
@@ -98,6 +99,9 @@ app.post('/auth/register', authLimiter, async (req, res) => {
     if (!isValidPhone(phone)) return res.status(400).json({ status: 'error', message: 'Enter a valid phone number' });
     if (password.length < 6) return res.status(400).json({ status: 'error', message: 'Password must be at least 6 characters' });
 
+    const settingsNow = await getSettings();
+    if (settingsNow.signupsOpen === false) return res.status(403).json({ status: 'error', message: 'New sign-ups are closed for now. Please try again later or contact support.' });
+
     const db = getDb();
     const doc = {
       name, phone, passwordHash: await hashPassword(password),
@@ -110,8 +114,11 @@ app.post('/auth/register', authLimiter, async (req, res) => {
       if (e && e.code === 11000) return res.status(409).json({ status: 'error', message: 'An account with that phone number already exists. Sign in instead.' });
       throw e;
     }
+    // A welcome pass, if the owner set one in Settings.
+    let accessUntil = null;
+    if (settingsNow.trialMinutes > 0) { try { accessUntil = await payments.grantAccess(result.insertedId, settingsNow.trialMinutes); } catch (_) { /* the account is still made */ } }
     const { token } = await createSession(String(result.insertedId));
-    res.json({ status: 'success', token, user: publicUser({ _id: result.insertedId, name, phone }) });
+    res.json({ status: 'success', token, user: publicUser({ _id: result.insertedId, name, phone, accessUntil }) });
   } catch (e) {
     console.error('register error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not create the account right now' });
@@ -170,6 +177,7 @@ app.get('/sync', (req, res) => {
   res.json({ status: 'success', revision: revision.current() });
 });
 app.use('/admin', revision.adminChangeTracker);
+app.use('/admin', audit.middleware());
 
 // Contacts and switches the app and the sign-in screen need before anyone is signed in.
 app.get('/config', ah(async (req, res) => {
@@ -686,6 +694,12 @@ app.post('/admin/users/delete', guard(async (req, res) => sendResult(res, await 
 app.post('/admin/payments/list', guard(async (req, res) => res.json({ status: 'success', ...(await payments.listPayments(req.body)), summary: await payments.paymentSummary() })));
 app.post('/admin/payments/recheck', guard(async (req, res) => sendResult(res, await payments.adminRecheck(req.body.id, marz))));
 app.post('/admin/users/grant', guard(async (req, res) => sendResult(res, await payments.adminGrant(req.body.id, { minutes: req.body.minutes, planId: req.body.planId }, await getSettings()), {})));
+app.post('/admin/users/grant-bulk', guard(async (req, res) => { const r = await payments.adminGrantMany({ scope: req.body.scope, classLevel: req.body.classLevel, minutes: req.body.minutes }); sendResult(res, r, r.ok ? { count: r.count } : {}); }));
+app.post('/admin/users/detail', guard(async (req, res) => { const r = await payments.adminStudentDetail(req.body.id); sendResult(res, r, r.ok ? { student: r.student, payments: r.payments } : {}); }));
+app.post('/admin/users/update', guard(async (req, res) => sendResult(res, await adminData.updateStudent(req.body.id, { name: req.body.name, classLevel: req.body.classLevel }))));
+app.post('/admin/export/students', guard(async (req, res) => res.json({ status: 'success', rows: await adminData.exportStudents() })));
+app.post('/admin/export/payments', guard(async (req, res) => res.json({ status: 'success', rows: await payments.exportPayments() })));
+app.post('/admin/activity/list', guard(async (req, res) => res.json({ status: 'success', ...(await audit.list(req.body)) })));
 app.post('/admin/users/revoke', guard(async (req, res) => sendResult(res, await payments.adminRevoke(req.body.id))));
 app.post('/admin/announcements/list', guard(async (req, res) => res.json({ status: 'success', announcements: await adminData.listAnnouncements() })));
 app.post('/admin/announcements/save', guard(async (req, res) => {
