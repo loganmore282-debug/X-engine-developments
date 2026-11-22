@@ -136,6 +136,19 @@ function fakeMarz() {
   await pay.handleCallback({ transaction: { reference: p4.payment.reference, status: 'successful' } }, marz);
   ck(pay.hasAccess(await db.collection('users').findOne({ _id: brianId })), 'but a late approval still gives access (the money was taken)');
 
+  console.log('— MarzPay refusing the callback address —');
+  const sent = [];
+  const strict = pay.makeMarz({ getKey: async () => 'dGVzdC1rZXk=', fetchImpl: async (url, opts) => {
+    const body = JSON.parse(opts.body); sent.push(body);
+    const json = body.callback_url ? { status: 'error', message: 'Please check your input and try again.', errors: { callback_url: ['The callback url is not a valid URL.'] } } : { status: 'success', data: { transaction: { uuid: 'u-1' } } };
+    return { status: 200, json: async () => json };
+  } });
+  const retried = await strict.collect({ amount: 1000, phone: '+256772000001', reference: 'r1', callbackUrl: 'http://bad' });
+  ck(retried.ok && retried.uuid === 'u-1' && sent.length === 2 && !sent[1].callback_url, 'if MarzPay dislikes the callback address, the request is repeated without it and works');
+  const hard = pay.makeMarz({ getKey: async () => 'dGVzdC1rZXk=', fetchImpl: async () => ({ status: 200, json: async () => ({ status: 'error', message: 'Please check your input and try again.', errors: { phone_number: ['Invalid number'] } }) }) });
+  const refused = await hard.collect({ amount: 1000, phone: '+256', reference: 'r2' });
+  ck(!refused.ok && /phone_number: Invalid number/.test(refused.detail), "MarzPay's own reason (which field) is kept");
+
   console.log('— the admin —');
   const cissyId = await mk('Cissy Namuli', '0772000003');
   const g = await pay.adminGrant(cissyId, { planId: '1m' }, { plans: null });

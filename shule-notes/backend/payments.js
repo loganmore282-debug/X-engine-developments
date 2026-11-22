@@ -86,14 +86,24 @@ function makeMarz({ getKey, fetchImpl = fetch }) {
   return {
     async configured() { return !!credentialsFor(await getKey()); },
     async collect({ amount, phone, reference, description, callbackUrl }) {
-      const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference, description: description || 'Shule Notes pass' };
-      if (callbackUrl) payload.callback_url = callbackUrl;
-      const resp = await fetchImpl(`${MARZPAY_BASE}/collect-money`, { method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: await headers(), body: JSON.stringify(payload) });
-      let data = {};
-      try { data = await resp.json(); } catch (_) { /* not JSON */ }
-      const sandbox = data.status === 'sandbox' || (data.data && data.data.collection && data.data.collection.mode === 'sandbox');
-      const ok = data.status === 'success' || sandbox;
-      return { ok, sandbox, uuid: (data.data && data.data.transaction && data.data.transaction.uuid) || null, message: data.message || '' };
+      const attempt = async (withCallback) => {
+        const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference, description: description || 'Shule Notes pass' };
+        if (withCallback && callbackUrl) payload.callback_url = callbackUrl;
+        const resp = await fetchImpl(`${MARZPAY_BASE}/collect-money`, { method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: await headers(), body: JSON.stringify(payload) });
+        let data = {};
+        try { data = await resp.json(); } catch (_) { /* not JSON */ }
+        const sandbox = data.status === 'sandbox' || (data.data && data.data.collection && data.data.collection.mode === 'sandbox');
+        const ok = data.status === 'success' || sandbox;
+        // MarzPay's own reasons (which field it did not like), kept for the admin panel.
+        let detail = '';
+        if (!ok && data.errors && typeof data.errors === 'object') detail = Object.entries(data.errors).map(([k, v]) => `${k}: ${[].concat(v).join(' ')}`).join('; ');
+        return { ok, sandbox, uuid: (data.data && data.data.transaction && data.data.transaction.uuid) || null, message: data.message || '', detail, http: resp.status };
+      };
+      let r = await attempt(true);
+      // The callback address is only a convenience (the app asks for the status itself): if MarzPay does not like it, go without it.
+      if (!r.ok && callbackUrl) r = await attempt(false);
+      if (!r.ok) console.error('MarzPay refused the payment request:', r.http, r.message, r.detail);
+      return r;
     },
     // 'paid' | 'failed' | 'pending' | '' (could not be read right now)
     async status(uuid) {
@@ -208,7 +218,7 @@ async function startPayment({ settings, user, planId, phone, marz, callbackUrl }
   try { result = await marz.collect({ amount: plan.price, phone: number.intl, reference, description: `Shule Notes ${plan.name}`, callbackUrl }); }
   catch (e) { result = { ok: false, message: '' }; }
   if (!result.ok) {
-    await failPayment(doc._id, result.message || 'Could not start the payment');
+    await failPayment(doc._id, [result.message, result.detail].filter(Boolean).join(' | ') || 'Could not start the payment');
     return { ok: false, status: 502, message: result.message || 'We could not start the payment. Check the number and try again.' };
   }
   await col.updateOne({ _id: doc._id }, { $set: { marzUuid: result.uuid } });

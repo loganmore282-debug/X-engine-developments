@@ -903,7 +903,7 @@ LOADERS.payments = async function(){
     <tr>
       <td>${esc(p.student)}</td><td>${esc(p.planName)}</td><td>${p.manual ? '—' : esc(ugx(p.amount))}</td><td>${esc(p.phone)}</td>
       <td>${esc(fmtDate(p.createdAt))}<span class="sub">${esc(new Date(p.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }))}</span></td>
-      <td>${pill(p)}${p.needsAttention ? ' <span class="pill bad">Access missing</span>' : ''}</td>
+      <td>${pill(p)}${p.needsAttention ? ' <span class="pill bad">Access missing</span>' : ''}${p.status === 'failed' && p.failureReason ? `<span class="sub">${esc(p.failureReason)}</span>` : ''}</td>
       <td>${p.accessUntil ? esc(fmtDate(p.accessUntil)) : '—'}</td>
       <td>${p.status !== 'failed' && !p.manual && (p.status !== 'paid' || p.needsAttention) ? `<button class="btn plain sm" data-act="recheck" data-id="${esc(p.id)}">Check again</button>` : ''}</td>
     </tr>`).join('') : '<tr><td colspan="8" class="empty">No payments yet</td></tr>';
