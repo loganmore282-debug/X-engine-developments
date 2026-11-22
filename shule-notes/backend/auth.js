@@ -49,16 +49,34 @@ async function createSession(userId) {
   return { token, expiresAt };
 }
 
+// Every request carries a token, so every request used to cost a database read. A session found is remembered for a few
+// seconds; signing out, a ban and a password reset clear it at once (forgetUser), so none of them is delayed.
+const SESSION_CACHE_MS = 5000;
+const SESSION_CACHE_MAX = 5000;
+const sessionCache = new Map(); // tokenHash -> { userId, until }
+
 async function resolveSession(token) {
   if (!token) return null;
-  const row = await getDb().collection('sessions').findOne({ tokenHash: sha256(token) });
+  const hash = sha256(token);
+  const cached = sessionCache.get(hash);
+  if (cached && cached.until > Date.now()) return cached.userId;
+  sessionCache.delete(hash);
+  const row = await getDb().collection('sessions').findOne({ tokenHash: hash });
   if (!row) return null;
   if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return null;
+  if (sessionCache.size >= SESSION_CACHE_MAX) sessionCache.delete(sessionCache.keys().next().value);
+  sessionCache.set(hash, { userId: row.userId, until: Date.now() + SESSION_CACHE_MS });
   return row.userId;
+}
+
+// Called whenever sessions are deleted for a student (ban, password reset, account removal).
+function forgetUser(userId) {
+  for (const [hash, entry] of sessionCache) if (entry.userId === String(userId)) sessionCache.delete(hash);
 }
 
 async function destroySession(token) {
   if (!token) return;
+  sessionCache.delete(sha256(token));
   await getDb().collection('sessions').deleteOne({ tokenHash: sha256(token) });
 }
 
@@ -78,6 +96,6 @@ async function requireAuth(req, res, next) {
 }
 
 module.exports = {
-  hashPassword, verifyPassword, createSession, resolveSession, destroySession,
+  hashPassword, verifyPassword, createSession, resolveSession, destroySession, forgetUser,
   bearerToken, requireAuth, sha256,
 };

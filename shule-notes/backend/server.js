@@ -31,6 +31,8 @@ const { eraseUser, updateProfile, cleanName, toId } = require('./accounts');
 const { getSettings, saveSettings, publicConfig, adminView, AI_MODELS } = require('./settings');
 const adminData = require('./admin-data');
 const payments = require('./payments');
+const compression = require('compression');
+const perf = require('./perf');
 
 // More threads for background work (password hashing, file reads); must be set before first use.
 if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = '8';
@@ -53,6 +55,9 @@ app.disable('x-powered-by');
 const TRUST_PROXY = process.env.TRUST_PROXY === undefined ? 1 : Number(process.env.TRUST_PROXY);
 if (TRUST_PROXY > 0) app.set('trust proxy', TRUST_PROXY);
 app.use(helmet());
+// JSON and text are sent compressed (a library list shrinks to about a fifth); PDFs are left alone.
+app.use(compression({ threshold: 1024 }));
+app.use(perf.slowLog());
 app.use(cors({
   origin: (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
 }));
@@ -168,10 +173,13 @@ app.use('/admin', revision.adminChangeTracker);
 
 // Contacts and switches the app and the sign-in screen need before anyone is signed in.
 app.get('/config', ah(async (req, res) => {
-  const config = publicConfig(await getSettings());
-  // Nothing typed in the panel: use the newest build the download page is serving.
-  if (!config.latestVersion) config.latestVersion = publishedVersion();
-  res.json({ status: 'success', config });
+  const entry = await perf.shared('config', 15000, async () => {
+    const config = publicConfig(await getSettings());
+    // Nothing typed in the panel: use the newest build the download page is serving.
+    if (!config.latestVersion) config.latestVersion = publishedVersion();
+    return { status: 'success', config };
+  });
+  perf.sendShared(req, res, entry, 'public, no-cache');
 }));
 
 // The introduction slides: public, because they are shown before anyone has an account.
@@ -199,7 +207,9 @@ app.post('/feedback', requireAuth, rateLimit({ windowMs: 60 * 60 * 1000, max: 20
 
 app.get('/announcements', requireAuth, ah(async (req, res) => {
   const user = await getDb().collection('users').findOne({ _id: toId(req.userId) });
-  res.json({ status: 'success', announcements: await adminData.listActiveAnnouncements(user ? user.classLevel : null) });
+  const level = user && isValidLevel(user.classLevel) ? user.classLevel : null;
+  const entry = await perf.shared('announcements:' + (level || '-'), 30000, async () => ({ status: 'success', announcements: await adminData.listActiveAnnouncements(level) }));
+  perf.sendShared(req, res, entry);
 }));
 app.get('/announcement', requireAuth, ah(async (req, res) => res.json({ status: 'success', announcement: await adminData.activeAnnouncement() })));
 
@@ -210,7 +220,13 @@ app.post('/auth/update-profile', requireAuth, ah(async (req, res) => {
   sendResult(res, result, result.ok ? { user: publicUser(result.user) } : {});
 }));
 
-app.get('/levels', (req, res) => res.json({ status: 'success', groups: LEVEL_GROUPS }));
+const LEVELS_BODY = JSON.stringify({ status: 'success', groups: LEVEL_GROUPS });
+const LEVELS_ETAG = '"' + require('crypto').createHash('sha1').update(LEVELS_BODY).digest('base64url').slice(0, 20) + '"';
+app.get('/levels', (req, res) => {
+  res.set({ ETag: LEVELS_ETAG, 'Cache-Control': 'public, max-age=300' });
+  if (req.headers['if-none-match'] === LEVELS_ETAG) return res.status(304).end();
+  res.type('application/json').send(LEVELS_BODY);
+});
 
 app.post('/auth/class-level', requireAuth, async (req, res) => {
   try {
@@ -289,10 +305,13 @@ app.get('/auth/me', requireAuth, async (req, res) => {
 });
 
 // ── SUBJECTS & NOTES (student-facing, read-only) ───────────────────────────
-app.get('/subjects', requireAuth, async (req, res) => {
-  const rows = await getDb().collection('subjects').find({}).sort({ order: 1 }).toArray();
-  res.json({ status: 'success', subjects: rows.map((s) => ({ id: String(s._id), name: s.name })) });
-});
+app.get('/subjects', requireAuth, ah(async (req, res) => {
+  const entry = await perf.shared('subjects', 60000, async () => {
+    const rows = await getDb().collection('subjects').find({}).sort({ order: 1 }).toArray();
+    return { status: 'success', subjects: rows.map((s) => ({ id: String(s._id), name: s.name })) };
+  });
+  perf.sendShared(req, res, entry);
+}));
 
 // What kind of document it is: ordinary notes, or a past paper.
 const NOTE_KINDS = ['notes', 'past-paper'];
@@ -320,16 +339,21 @@ async function mayRead(req, res, note) {
   return false;
 }
 
-app.get('/notes', requireAuth, async (req, res) => {
+app.get('/notes', requireAuth, ah(async (req, res) => {
   // A note still being read after upload (a few seconds) is not shown yet.
   const q = { active: { $ne: false }, textStatus: { $ne: 'reading' } };
+  const list = async () => {
+    const rows = await getDb().collection('notes').find(q).sort({ uploadedAt: -1 }).limit(500).toArray();
+    return { status: 'success', notes: rows.map(publicNote) };
+  };
   if (req.query.subjectId) {
     try { q.subjectId = new ObjectId(String(req.query.subjectId)); }
     catch (_) { return res.status(400).json({ status: 'error', message: 'Invalid subjectId' }); }
+    return res.json(await list());
   }
-  const rows = await getDb().collection('notes').find(q).sort({ uploadedAt: -1 }).limit(500).toArray();
-  res.json({ status: 'success', notes: rows.map(publicNote) });
-});
+  // The whole library is the same for every student: built once per change, sent as a 304 when the phone already has it.
+  perf.sendShared(req, res, await perf.shared('notes', 60000, list));
+}));
 
 app.get('/notes/:id', requireAuth, async (req, res) => {
   let note;
@@ -362,20 +386,19 @@ app.get('/notes/:id/file', requireAuth, async (req, res) => {
   if (!note || note.active === false) return res.status(404).json({ status: 'error', message: 'Note not found' });
   if (!fs.existsSync(path.join(UPLOAD_DIR, 'notes', note.fileName))) return res.status(404).json({ status: 'error', message: 'File missing on server' });
   if (!(await mayRead(req, res, note))) return;
-  // Counted when the file is opened, so the admin can see what students read.
-  getDb().collection('notes').updateOne({ _id: note._id }, { $inc: { views: 1 } }).catch(() => {});
   // Every page carries a footer (where it came from, how to reach the owner), unless the owner turned that off.
   const settings = await getSettings();
   const lines = stamp.footerLines(settings, downloadPageUrl());
   const { file: filePath } = await stamp.fileToSend({ uploadDir: UPLOAD_DIR, fileName: note.fileName, lines, enabled: settings.pdfStamp !== false });
-  const { size, mtime } = await fs.promises.stat(filePath);
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Length', size);
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(note.title || 'note')}.pdf"`);
-  // The footer follows the owner's contact details, so the file is checked again rather than kept forever.
+  // The footer follows the owner's contact details, so the file is checked again rather than kept forever. When the
+  // phone already has the current copy it gets a 304 (no download), and a download that broke can be resumed (Range).
   res.setHeader('Cache-Control', 'private, no-cache');
-  res.setHeader('Last-Modified', mtime.toUTCString());
-  require('stream').pipeline(fs.createReadStream(filePath), res, () => {});
+  // Counted when a student really opens it (not a quick look ahead, and not the second half of a resumed download).
+  const quiet = req.query.prefetch === '1' || !!req.headers.range;
+  if (!quiet) getDb().collection('notes').updateOne({ _id: note._id }, { $inc: { views: 1 } }).catch(() => {});
+  res.sendFile(path.resolve(filePath), { cacheControl: false }, (err) => { if (err && !res.headersSent) res.status(err.statusCode || 500).end(); });
 });
 
 // ── AI: ask about the open document ────────────────────────────────────────
@@ -716,7 +739,22 @@ async function start() {
   await connect();
   // A note left "reading" means the server stopped mid-upload; say so instead of hiding it forever.
   await getDb().collection('notes').updateMany({ textStatus: 'reading' }, { $set: { textStatus: 'failed' } });
-  app.listen(PORT, HOST, () => console.log(`Shule Notes server listening on ${HOST}:${PORT}`));
+  const server = app.listen(PORT, HOST, () => console.log(`Shule Notes server listening on ${HOST}:${PORT}`));
+  // nginx keeps connections to this server open and reuses them: this server must not hang up first, or a request
+  // sent on a connection that is just closing fails with a reset.
+  server.keepAliveTimeout = 65 * 1000;
+  server.headersTimeout = 66 * 1000;
+  // A restart (an update going live) finishes the requests in flight instead of cutting them off.
+  let stopping = false;
+  const stop = (signal) => {
+    if (stopping) return;
+    stopping = true;
+    console.log(`${signal}: finishing the requests in progress, then stopping`);
+    server.close(async () => { try { await require('./db').client.close(); } catch (_) { /* already closed */ } process.exit(0); });
+    setTimeout(() => process.exit(0), 10000).unref();
+  };
+  process.on('SIGTERM', () => stop('SIGTERM'));
+  process.on('SIGINT', () => stop('SIGINT'));
 }
 
 if (require.main === module) {

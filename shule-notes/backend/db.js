@@ -12,7 +12,7 @@ if (!MONGODB_URI) {
   process.exit(1);
 }
 
-const client = new MongoClient(MONGODB_URI, { maxPoolSize: 20 });
+const client = new MongoClient(MONGODB_URI, { maxPoolSize: 40, minPoolSize: 4, maxIdleTimeMS: 60000 });
 let db = null;
 
 async function connect() {

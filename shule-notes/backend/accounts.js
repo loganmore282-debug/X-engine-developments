@@ -2,7 +2,7 @@
 'use strict';
 const { ObjectId } = require('mongodb');
 const { getDb } = require('./db');
-const { hashPassword, verifyPassword, sha256 } = require('./auth');
+const { hashPassword, verifyPassword, sha256, forgetUser } = require('./auth');
 const media = require('./media');
 
 function toId(id) {
@@ -17,6 +17,7 @@ async function eraseUser(userId) {
   const id = toId(userId);
   if (!id) return false;
   await db.collection('sessions').deleteMany({ userId: String(userId) });
+  forgetUser(userId);
   await db.collection('aiUsage').deleteMany({ userId: String(userId) });
   await db.collection('feedback').deleteMany({ userId: String(userId) });
   media.removeImage('avatars', id); // their profile photo goes with them
@@ -45,6 +46,7 @@ async function changePassword(userId, currentPassword, newPassword, keepToken) {
   for (const s of sessions) {
     if (s.tokenHash !== keepHash) await db.collection('sessions').deleteOne({ _id: s._id });
   }
+  forgetUser(userId); // (the device that changed it signs in again on its next request, which is one read)
   return { ok: true };
 }
 

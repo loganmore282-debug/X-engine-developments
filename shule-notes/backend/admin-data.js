@@ -3,7 +3,7 @@
 // routes in server.js only check the admin key and call these.
 'use strict';
 const { getDb } = require('./db');
-const { hashPassword } = require('./auth');
+const { hashPassword, forgetUser } = require('./auth');
 const { eraseUser, toId, MIN_PASSWORD, MAX_PASSWORD } = require('./accounts');
 const { normalizePhone } = require('./phone');
 const { NAMES: LEVEL_NAMES, isValidLevel } = require('./levels');
@@ -69,7 +69,7 @@ async function setUserStatus(userId, status) {
   if (!user) return { ok: false, status: 404, message: 'Student not found' };
   await db.collection('users').updateOne({ _id: id }, { $set: { status } });
   // A ban takes effect at once: signed-in phones are signed out.
-  if (status === 'banned') await db.collection('sessions').deleteMany({ userId: String(userId) });
+  if (status === 'banned') { await db.collection('sessions').deleteMany({ userId: String(userId) }); forgetUser(userId); }
   return { ok: true };
 }
 
@@ -85,6 +85,7 @@ async function resetUserPassword(userId, password) {
   if (!user) return { ok: false, status: 404, message: 'Student not found' };
   await db.collection('users').updateOne({ _id: id }, { $set: { passwordHash: await hashPassword(next), passwordChangedAt: new Date() } });
   await db.collection('sessions').deleteMany({ userId: String(userId) });
+  forgetUser(userId);
   return { ok: true };
 }
 
