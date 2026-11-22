@@ -346,9 +346,9 @@
         <div class="muted" id="setGemKeyHint" style="margin:-6px 0 8px"></div>
         <button class="btn plain sm hidden" id="setGemKeyClear" style="margin-bottom:14px">Remove the saved key</button>
         <label>Gemini model</label>
-        <input id="setGemModel" list="gemModels" placeholder="gemini-2.5-flash">
-        <datalist id="gemModels"></datalist>
-        <div class="muted" style="margin-top:4px">Pick one of the suggestions, or type any model name that starts with gemini-. Google retires old names: press the button to see what your key can really use.</div>
+        <select id="setGemModel"></select>
+        <input id="setGemCustom" class="hidden" placeholder="Type a model name, like gemini-3-flash" style="margin-top:8px">
+        <div class="muted" style="margin-top:4px">Press the button below to load the models your key can really use (Google retires old names), then choose one from the list.</div>
         <button class="btn plain sm" id="gemLoad" style="margin-top:8px">Load models from Google</button> <span class="muted" id="gemLoadResult"></span>
 
         <div style="margin:16px 0 4px"><button class="btn plain sm" id="aiTest">Test the AI helper</button> <span class="muted" id="aiTestResult"></span></div>
@@ -1141,8 +1141,7 @@ LOADERS.settings = async function(){
   $('setGemKey').value = '';
   $('setGemKeyHint').textContent = s.geminiKeySet ? 'A key is saved (' + s.geminiKeyHint + '). It is never shown again; paste a new one to replace it.' : 'No key saved yet. Create one at aistudio.google.com/apikey, then paste it here (never in a chat).';
   $('setGemKeyClear').classList.toggle('hidden', !s.geminiKeySet);
-  $('setGemModel').value = s.geminiModel || '';
-  $('gemModels').innerHTML = (r.geminiModels || []).map(m => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('');
+  fillGemModels(r.geminiModels || [], s.geminiModel || '');
   $('aiTestResult').textContent = '';
   $('setKey').value = '';
   $('setKeyHint').textContent = s.anthropicKeySet ? 'A key is saved (' + s.anthropicKeyHint + '). It is never shown again; paste a new one to replace it.' : 'No key saved yet. Get one at console.anthropic.com, then paste it here. Without it the AI helper cannot answer.';
@@ -1170,7 +1169,7 @@ $('setSave').addEventListener('click', async () => {
   const r = await api('/admin/settings/save', {
     latestVersionCode: $('setLatest').value, minVersionCode: $('setMin').value, updateUrl: $('setUpdateUrl').value, updateNote: $('setUpdateNote').value,
     aiEnabled: $('setAiOn').checked, aiModel: $('setModel').value, anthropicKey: $('setKey').value,
-    aiProvider: $('setProvider').value, aiFallback: $('setFallback').checked, geminiModel: $('setGemModel').value.trim(), ...($('setGemKey').value.trim() ? { geminiKey: $('setGemKey').value.trim() } : {}), aiDailyLimit: $('setAiLimit').value === '' ? null : Number($('setAiLimit').value),
+    aiProvider: $('setProvider').value, aiFallback: $('setFallback').checked, geminiModel: gemModelValue(), ...($('setGemKey').value.trim() ? { geminiKey: $('setGemKey').value.trim() } : {}), aiDailyLimit: $('setAiLimit').value === '' ? null : Number($('setAiLimit').value),
     supportPhone: $('setPhone').value, supportWhatsapp: $('setWhatsapp').value, supportEmail: $('setEmail').value, supportHours: $('setHours').value, websiteUrl: $('setWebsite').value, pdfStamp: $('setPdfStamp').checked,
     ...($('setFb').value.trim() ? { firebaseServiceAccount: $('setFb').value.trim() } : {}),
     signupsOpen: $('setSignups').checked, trialMinutes: Math.round(Number($('setTrial').value || 0) * 60),
@@ -1187,13 +1186,25 @@ $('setGemKeyClear').addEventListener('click', async () => {
   toast(r.status === 'success' ? 'Key removed' : (r.message || 'Could not remove'), r.status === 'success' ? 'ok' : 'error');
   LOADERS.settings();
 });
+// The Gemini model list: the models Google gave us (or a few standard ones), the saved choice, and "type another name".
+function fillGemModels(list, selected){
+  const seen = new Set(); const opts = [];
+  const add = (id, label) => { if (id && !seen.has(id)) { seen.add(id); opts.push(`<option value="${esc(id)}">${esc(label || id)}</option>`); } };
+  if (selected) add(selected, selected + (list.some(m => m.id === selected) ? '' : ' (saved)'));
+  list.forEach(m => add(m.id, m.label && m.label !== m.id ? m.label + ' (' + m.id + ')' : m.id));
+  $('setGemModel').innerHTML = '<option value="">Server default</option>' + opts.join('') + '<option value="__custom">Another name…</option>';
+  $('setGemModel').value = selected || '';
+  $('setGemCustom').classList.add('hidden');
+}
+$('setGemModel').addEventListener('change', () => { $('setGemCustom').classList.toggle('hidden', $('setGemModel').value !== '__custom'); if ($('setGemModel').value === '__custom') $('setGemCustom').focus(); });
+const gemModelValue = () => ($('setGemModel').value === '__custom' ? $('setGemCustom').value.trim() : $('setGemModel').value);
+
 $('gemLoad').addEventListener('click', async () => {
   $('gemLoad').disabled = true; $('gemLoadResult').textContent = 'Asking Google…'; $('gemLoadResult').style.color = '';
   const r = await api('/admin/ai/gemini-models');
   $('gemLoad').disabled = false;
   if (r.status === 'success') {
-    $('gemModels').innerHTML = r.models.map(m => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('');
-    if (r.suggested) $('setGemModel').value = r.suggested;
+    fillGemModels(r.models, r.suggested || gemModelValue());
     $('gemLoadResult').textContent = '✓ ' + r.models.length + ' models found. Chose ' + (r.suggested || 'none') + '. Press Save settings to keep it.';
     $('gemLoadResult').style.color = 'var(--brand)';
   } else {
