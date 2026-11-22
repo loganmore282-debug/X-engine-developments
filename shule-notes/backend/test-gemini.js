@@ -52,6 +52,22 @@ const good = (text) => ({ candidates: [{ content: { parts: [{ text }] }, finishR
   ck((await fails(ask(async () => { throw new Error('ECONNRESET'); }))).status === 503, 'no connection is reported as such');
   ck(!/AIza|key/i.test((await fails(ask(reply({ error: { message: 'API key not valid' } }, 400)))).message), 'no error message shown to students mentions the key');
 
+  console.log('— a moment of trouble at Google —');
+  let hits = 0;
+  const flaky = async () => { hits++; return hits === 1 ? { ok: false, status: 503, json: async () => ({ error: { message: 'The model is overloaded.' } }) } : { ok: true, status: 200, json: async () => good('Second time lucky.') }; };
+  const patient = await gemini.askAboutDocument({ documentText: 'x', question: 'q', apiKey: KEY, model: 'gemini-2.5-flash', fetchImpl: flaky });
+  ck(patient.answer === 'Second time lucky.' && hits === 2, 'one overloaded (503) answer is retried once and the student never notices');
+  let hits2 = 0;
+  const down = async () => { hits2++; return { ok: false, status: 503, json: async () => ({ error: { message: 'still overloaded' } }) }; };
+  ck((await fails(() => gemini.askAboutDocument({ documentText: 'x', question: 'q', apiKey: KEY, model: 'gemini-2.5-flash', fetchImpl: down }))).status === 502 && hits2 === 2, 'a second failure is reported (not retried forever)');
+  await gemini.askAboutDocument({ documentText: 'x', question: 'q', apiKey: KEY, model: 'gemini-3.8-flash', fetchImpl: spy });
+  ck(seen.body.generationConfig.thinkingConfig.thinkingLevel === 'low' && seen.body.generationConfig.maxOutputTokens >= 4096, 'a Gemini 3 model is told to think a little (low) and has room for the answer');
+  const pickyLevel = async (url, opts) => JSON.parse(opts.body).generationConfig.thinkingConfig ? { ok: false, status: 400, json: async () => ({ error: { message: 'Invalid thinking_level for this model' } }) } : { ok: true, status: 200, json: async () => good('fine') };
+  ck((await gemini.askAboutDocument({ documentText: 'x', question: 'q', apiKey: KEY, model: 'gemini-3.8-flash', fetchImpl: pickyLevel })).answer === 'fine', 'if that setting is refused, it asks again without it');
+  const rec = await ai.ask({ aiProvider: 'gemini', geminiKey: KEY, aiFallback: false }, { question: 'q', documentText: 'x', fetchImpl: down }).catch(() => null);
+  ck(rec === null && ai.recent.lastError && ai.recent.lastError.provider === 'gemini' && ai.recent.lastError.status === 503 && /overloaded/.test(ai.recent.lastError.reason), 'the admin can see the last AI problem and its real reason');
+  ck(!JSON.stringify(ai.recent).includes(KEY), 'and the key is never in it');
+
   console.log('— a retired or wrong model name —');
   ck(gemini.pickDefault(['gemini-2.0-flash', 'gemini-3-flash', 'gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-3-flash-lite', 'gemini-2.5-pro']) === 'gemini-3-flash', 'the newest plain Flash is chosen (not a preview, not Pro)');
   ck(gemini.pickDefault(['gemini-2.5-flash-lite', 'gemini-2.5-pro']) === 'gemini-2.5-flash-lite' && gemini.pickDefault(['gemini-2.5-pro']) === 'gemini-2.5-pro' && gemini.pickDefault([]) === '', 'with no Flash it falls back sensibly (and to nothing when there is nothing)');

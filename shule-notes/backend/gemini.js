@@ -77,10 +77,12 @@ async function askAboutDocument({ documentText, noteTitle, question, history, ap
   const body = {
     systemInstruction: { parts: [{ text: systemText(documentText, noteTitle) }] },
     contents: toContents(history, q),
-    generationConfig: { maxOutputTokens: 2048, temperature: 0.3 },
+    // Thinking models spend part of this on thinking, so there is room for the answer as well.
+    generationConfig: { maxOutputTokens: 4096 },
   };
   // The Flash models "think" by default, which is slow and costs tokens for a short answer: switch it off (the Pro model cannot).
-  const thinkingOff = (n) => (/^gemini-2\.5-flash/.test(n) ? { thinkingBudget: 0 } : undefined);
+  // Flash 2.5 can switch thinking off. The newer Gemini 3 models always think, but can be told to think a little ("low"). Pro 2.5 cannot be changed.
+  const thinkingOff = (n) => (/^gemini-2\.5-flash/.test(n) ? { thinkingBudget: 0 } : /^gemini-3/.test(n) ? { thinkingLevel: 'low' } : undefined);
   if (thinkingOff(name)) body.generationConfig.thinkingConfig = thinkingOff(name);
 
   const call = async (payload) => {
@@ -93,8 +95,16 @@ async function askAboutDocument({ documentText, noteTitle, question, history, ap
     if (!resp.ok) throw new GeminiHttpError(resp.status, (data.error && data.error.message) || 'Gemini error', (data.error && data.error.status) || '');
     return data;
   };
+  // Google's servers sometimes answer 500/503/504 ("overloaded") for a moment: ask once more before giving up.
+  const callWithRetry = async (payload) => {
+    try { return await call(payload); }
+    catch (e) {
+      if (e instanceof GeminiHttpError && [500, 502, 503, 504].includes(e.status)) { await new Promise((r) => setTimeout(r, e.retryDelay === undefined ? 900 : e.retryDelay)); return call(payload); }
+      throw e;
+    }
+  };
   let data;
-  try { data = await call(body); }
+  try { data = await callWithRetry(body); }
   catch (e) {
     // Google says the model does not exist (it was retired, or the name is wrong): find one that works, use it, remember it.
     if (e instanceof GeminiHttpError && e.status === 404) {
@@ -107,11 +117,11 @@ async function askAboutDocument({ documentText, noteTitle, question, history, ap
       name = alt;
       delete body.generationConfig.thinkingConfig;
       if (thinkingOff(name)) body.generationConfig.thinkingConfig = thinkingOff(name);
-      return finish(await call(body));
+      return finish(await callWithRetry(body));
     }
     // A newer or older model that does not know the "thinking" setting: ask again without it.
     if (e instanceof GeminiHttpError && e.status === 400 && body.generationConfig.thinkingConfig && /thinking/i.test(e.message)) {
-      delete body.generationConfig.thinkingConfig; data = await call(body);
+      delete body.generationConfig.thinkingConfig; data = await callWithRetry(body);
     } else throw e;
   }
   return finish(data);

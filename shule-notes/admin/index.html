@@ -352,6 +352,7 @@
         <button class="btn plain sm" id="gemLoad" style="margin-top:8px">Load models from Google</button> <span class="muted" id="gemLoadResult"></span>
 
         <div style="margin:16px 0 4px"><button class="btn plain sm" id="aiTest">Test the AI helper</button> <span class="muted" id="aiTestResult"></span></div>
+        <div class="muted" id="aiRecent" style="margin:4px 0 10px"></div>
         <label>Questions each student can ask per day</label>
         <input id="setAiLimit" type="number" min="1" max="500">
         <div class="muted" id="setAiHint" style="margin:-6px 0 14px"></div>
@@ -1143,6 +1144,8 @@ LOADERS.settings = async function(){
   $('setGemKeyClear').classList.toggle('hidden', !s.geminiKeySet);
   fillGemModels(r.geminiModels || [], s.geminiModel || '');
   $('aiTestResult').textContent = '';
+  const rc = r.aiRecent || {}; const nameOf = (p) => (p === 'gemini' ? 'Gemini' : 'Claude'); const when = (d) => new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  $('aiRecent').innerHTML = [rc.lastOk ? `Last answer: ${esc(nameOf(rc.lastOk.provider))}${rc.lastOk.model ? ' (' + esc(rc.lastOk.model) + ')' : ''} at ${esc(when(rc.lastOk.at))}.` : '', rc.lastError ? `<span style="color:var(--danger)">Last problem: ${esc(nameOf(rc.lastError.provider))} at ${esc(when(rc.lastError.at))}${rc.lastError.status ? ', status ' + esc(rc.lastError.status) : ''}: ${esc(rc.lastError.reason)}</span>` : ''].filter(Boolean).join('<br>') || 'No question has been asked since the server last started.';
   $('setKey').value = '';
   $('setKeyHint').textContent = s.anthropicKeySet ? 'A key is saved (' + s.anthropicKeyHint + '). It is never shown again; paste a new one to replace it.' : 'No key saved yet. Get one at console.anthropic.com, then paste it here. Without it the AI helper cannot answer.';
   $('setKeyClear').classList.toggle('hidden', !s.anthropicKeySet);

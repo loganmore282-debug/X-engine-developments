@@ -795,7 +795,7 @@ app.post('/admin/ai/test', guard(async (req, res) => {
     res.json({ status: 'success', provider: r.provider, model: r.model || '', answer: String(r.answer).slice(0, 200), ms: Date.now() - started });
   } catch (e) { res.json({ status: 'error', message: ai.classifyAiError(e).message, provider: (e && e.provider) || '', detail: [settings.geminiKey, settings.anthropicKey].filter(Boolean).reduce((t, k) => t.split(k).join('[key]'), String((e && e.message) || '')).replace(/AIza[0-9A-Za-z_-]+|sk-ant-[0-9A-Za-z_-]+/g, '[key]').slice(0, 200) }); }
 }));
-app.post('/admin/settings/get', guard(async (req, res) => res.json({ status: 'success', settings: adminView(await getSettings()), defaultAiDailyLimit: AI_DAILY_LIMIT, models: AI_MODELS, geminiModels: GEMINI_MODELS, publishedVersion: publishedVersion() })));
+app.post('/admin/settings/get', guard(async (req, res) => res.json({ status: 'success', settings: adminView(await getSettings()), defaultAiDailyLimit: AI_DAILY_LIMIT, models: AI_MODELS, geminiModels: GEMINI_MODELS, aiRecent: ai.recent, publishedVersion: publishedVersion() })));
 app.post('/admin/settings/save', guard(async (req, res) => {
   const result = await saveSettings(req.body);
   if (result.ok) warmStamps(); // new contact details: the stamped copies are remade in the background

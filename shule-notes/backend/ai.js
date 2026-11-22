@@ -6,6 +6,11 @@ const gemini = require('./gemini');
 
 const PROVIDERS = ['claude', 'gemini'];
 
+// The last problem and the last success, kept in memory for the admin panel (a student only ever sees a friendly sentence).
+const recent = { lastError: null, lastOk: null };
+function note(kind, provider, detail) { recent[kind] = { at: new Date(), provider, ...detail }; }
+const clean = (t) => String(t || '').replace(/AIza[0-9A-Za-z_-]+|sk-ant-[0-9A-Za-z_-]+|AQ\.[0-9A-Za-z_.-]+/g, '[key]').slice(0, 300);
+
 function haveKey(settings, provider) {
   if (provider === 'gemini') return gemini.KEY_PATTERN.test(settings.geminiKey || '') || gemini.KEY_PATTERN.test(process.env.GEMINI_API_KEY || '');
   return /^sk-ant-[A-Za-z0-9_-]{20,}$/.test(settings.anthropicKey || '') || /^sk-ant-[A-Za-z0-9_-]{20,}$/.test(process.env.ANTHROPIC_API_KEY || '');
@@ -33,9 +38,11 @@ async function ask(settings, args, runners = run) {
   for (const provider of order(settings)) {
     try {
       const r = await runners[provider](settings, args);
+      note('lastOk', provider, { model: r.model || '' });
       return { ...r, provider };
     } catch (e) {
       lastErr = e;
+      note('lastError', provider, { status: e && e.status !== undefined ? e.status : null, reason: clean(e && e.message) });
       try { e.provider = provider; } catch (_) { /* frozen error: the message falls back to Claude's wording */ }
       if (classify[provider](e).status === 422) break;
     }
@@ -47,4 +54,4 @@ function classifyAiError(err) {
   return (classify[err && err.provider] || classify.claude)(err);
 }
 
-module.exports = { ask, classifyAiError, order, haveKey, PROVIDERS };
+module.exports = { recent, ask, classifyAiError, order, haveKey, PROVIDERS };
