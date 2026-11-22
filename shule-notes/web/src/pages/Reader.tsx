@@ -4,7 +4,7 @@ import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { api, fetchBytes } from '../api';
 import { useLibrary, useToast, remember, save } from '../store';
-import { readRecent, writeRecent, pagesLabel } from '../components';
+import { Cover, readRecent, writeRecent, pagesLabel } from '../components';
 import { Back, Bookmark, Close, Minus, Plus, Search, Send, Spark } from '../icons';
 import type { ChatTurn, Note } from '../types';
 
@@ -53,7 +53,7 @@ const MARKS = 'shule_page_marks';
 export function ReaderPage() {
   const { id = '' } = useParams();
   const nav = useNavigate();
-  const { notes } = useLibrary();
+  const { notes, subjectName } = useLibrary();
   const { toast } = useToast();
   const [note, setNote] = useState<Note | null>(() => notes.find((n) => n.id === id) || null);
   const [doc, setDoc] = useState<pdfjs.PDFDocumentProxy | null>(null);
@@ -88,8 +88,9 @@ export function ReaderPage() {
   useEffect(() => {
     const onResize = () => setAreaWidth(scroller.current?.clientWidth || window.innerWidth);
     onResize(); window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, [doc]);
+    const t = window.setTimeout(onResize, 60);
+    return () => { window.clearTimeout(t); window.removeEventListener('resize', onResize); };
+  }, [doc, drawer]);
 
   const width = Math.round(Math.min(areaWidth - 24, 860) * zoom);
   const first = ratios[0] || 0.707;
@@ -120,10 +121,12 @@ export function ReaderPage() {
 
   const total = doc?.numPages || note?.pageCount || 0;
   return (
-    <div className="reader">
+    <div className={`reader ${drawer ? 'with-drawer' : ''}`}>
       <div className="reader-top">
         <button className="icon-btn" aria-label="Back" onClick={() => (window.history.length > 1 ? nav(-1) : nav('/'))}><Back /></button>
+        {note && <span className="reader-meta" style={{ margin: 0 }}><Cover subject={subjectName(note.subjectId)} size="sm" /></span>}
         <h1>{note?.title || 'Document'}</h1>
+        <span className="reader-meta">{doc ? `Page ${page} of ${total}` : ''}<span className="zoom-label">{Math.round(zoom * 100)}%</span></span>
         <button className="icon-btn" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(0.6, +(z - 0.2).toFixed(2)))}><Minus /></button>
         <button className="icon-btn" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(2.4, +(z + 0.2).toFixed(2)))}><Plus /></button>
         <button className={`icon-btn bookmark ${marked ? 'on' : ''}`} aria-label={marked ? 'Remove page bookmark' : 'Bookmark this page'} onClick={toggleMark}><Bookmark /></button>

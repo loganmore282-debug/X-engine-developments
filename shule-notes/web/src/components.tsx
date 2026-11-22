@@ -1,9 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchBytes, getToken } from './api';
 import { useAuth, useLibrary } from './store';
 import type { Note } from './types';
 import { Bookmark } from './icons';
+import { SubjectIcon, subjectVars } from './subjectLook';
 
 // A modal sheet that slides up (centred on a big screen). Closes on Escape or a tap outside.
 export function Sheet({ title, onClose, children }: { title?: string; onClose: () => void; children: ReactNode }) {
@@ -44,43 +45,37 @@ export function Avatar({ size = 68 }: { size?: number }) {
   );
 }
 
-const TINTS: [RegExp, string][] = [
-  [/bio/i, '#2e7d32'], [/chem/i, '#6a1b9a'], [/phys/i, '#1565c0'], [/math/i, '#ef6c00'], [/engl|liter|lang/i, '#ad1457'],
-  [/hist|geo|social|cre|ire|relig/i, '#8d6e63'], [/ict|comput|tech/i, '#00838f'], [/agri|nutri|entre/i, '#558b2f'],
-];
-export function tintOf(name: string | null): string {
-  if (!name) return '#17694b';
-  const hit = TINTS.find(([re]) => re.test(name));
-  if (hit) return hit[1];
-  let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360;
-  return `hsl(${h} 45% 36%)`;
-}
-
 export function pagesLabel(n: number) { return n === 1 ? '1 page' : `${n} pages`; }
 export function sizeLabel(bytes: number) { return bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`; }
 
-// One document in a list: a coloured cover, title, details and a bookmark.
+// The picture on a document: the subject's own drawing on a soft gradient of the subject's colour.
+export function Cover({ subject, size = 'md', label }: { subject: string | null; size?: 'sm' | 'md' | 'lg'; label?: string }) {
+  return (
+    <div className={`cover sv ${size}`} style={subjectVars(subject) as CSSProperties}>
+      <SubjectIcon name={subject} size={size === 'lg' ? 40 : size === 'sm' ? 24 : 32} />
+      {label && <span>{label}</span>}
+    </div>
+  );
+}
+
+// One document in a list: its cover, title, details and a bookmark.
 export function NoteCard({ note, onOpen, index = 0, showClass = true }: { note: Note; onOpen: () => void; index?: number; showClass?: boolean }) {
   const { subjectName, saved, toggleSaved } = useLibrary();
   const subject = subjectName(note.subjectId);
   const on = saved.has(note.id);
   const [pop, setPop] = useState(false);
-  const color = tintOf(subject);
   return (
-    <div className="card note-card rise" style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }} role="button" tabIndex={0}
+    <div className="card note-card rise sv" style={{ animationDelay: `${Math.min(index, 8) * 45}ms`, ...(subjectVars(subject) as CSSProperties) }} role="button" tabIndex={0}
       onClick={onOpen} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}>
-      <div className="cover" style={{ background: `linear-gradient(160deg, ${color}, color-mix(in srgb, ${color} 55%, #000))` }}>
-        <span className="big">{(subject || note.title).slice(0, 1).toUpperCase()}</span>
-        <span>PDF</span>
-      </div>
+      <Cover subject={subject} label={note.kind === 'past-paper' ? 'PAPER' : 'NOTES'} />
       <div className="grow">
         <h3>{note.title}</h3>
-        {note.description && <div className="muted" style={{ fontSize: 13, marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{note.description}</div>}
+        {note.description && <div className="muted desc">{note.description}</div>}
         <div className="meta">
-          {subject && <span className="pill" style={{ background: `color-mix(in srgb, ${color} 16%, transparent)`, color }}>{subject}</span>}
-          {note.kind === 'past-paper' && <span>Past paper</span>}
-          {showClass && note.classLevel && <span>{note.classLevel}</span>}
-          <span>{pagesLabel(note.pageCount)}</span>
+          {subject && <span className="pill tag">{subject}</span>}
+          {note.kind === 'past-paper' && <span className="dot-sep">Past paper</span>}
+          {showClass && note.classLevel && <span className="dot-sep">{note.classLevel}</span>}
+          <span className="dot-sep">{pagesLabel(note.pageCount)}</span>
         </div>
       </div>
       <button className={`icon-btn bookmark ${on ? 'on' : ''} ${pop ? 'pop' : ''}`} aria-label={on ? 'Remove from saved' : 'Save note'}

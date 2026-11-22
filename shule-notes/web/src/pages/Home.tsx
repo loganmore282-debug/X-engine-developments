@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, useLibrary } from '../store';
-import { NoteCard, NoteSkeleton, Sheet, readRecent, tintOf, pagesLabel } from '../components';
-import { Bell, Chevron, Close, Search } from '../icons';
+import { Cover, NoteCard, NoteSkeleton, Sheet, readRecent, pagesLabel } from '../components';
+import { SubjectIcon, subjectVars } from '../subjectLook';
+import { Chevron, Close, Search } from '../icons';
 
 type Sort = 'new' | 'views' | 'az';
 
@@ -38,16 +39,37 @@ export function HomePage() {
   const hour = new Date().getHours();
   const hello = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
+  const totalPages = notes.reduce((a, n) => a + n.pageCount, 0);
+  const progressOf = lastRead ? Math.min(100, (lastRead.r.page / Math.max(1, lastRead.r.pageCount || lastRead.note!.pageCount)) * 100) : 0;
+  const countIn = (id: string) => inClass.filter((n) => n.subjectId === id).length;
+
   return (
     <div>
       <section className="hero rise">
-        <div className="row"><div className="grow"><h1>{hello}, {user?.name.split(' ')[0]}</h1><p>What are you studying today?</p></div>
-          <button className="icon-btn hero-bell" style={{ background: 'rgba(255,255,255,.14)', color: '#fff', border: '1px solid rgba(255,255,255,.3)' }} aria-label="Notifications" onClick={() => nav('/inbox')}>
-            <Bell />{announcements.some((a) => a.id !== dismissed) && <span style={{ position: 'absolute', marginTop: -18, marginLeft: 16, width: 10, height: 10, borderRadius: 5, background: '#ffb020' }} />}
-          </button></div>
-        <button className="class-chip" onClick={() => setClassSheet(true)}><b>{cls || 'Choose class'}</b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 9l6 6 6-6" /></svg></button>
+        <div className="hero-deco" aria-hidden="true"><i /><i /><i /></div>
+        <div className="hero-main">
+          <div className="eyebrow">{hello}</div>
+          <h1>{user?.name.split(' ')[0]}, what are you studying today?</h1>
+          <button className="class-chip" onClick={() => setClassSheet(true)} aria-label="Change class"><span className="muted-on-dark">Class</span><b>{cls || 'Choose class'}</b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 9l6 6 6-6" /></svg></button>
+          <div className="searchbar"><Search /><input className="input" placeholder="Search notes and past papers" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search notes and past papers" />
+            {query && <button className="icon-btn clear" aria-label="Clear search" onClick={() => setQuery('')}><Close /></button>}</div>
+        </div>
+        <aside className="hero-side">
+          {lastRead ? (
+            <button className="glass resume" onClick={() => nav(`/note/${lastRead.note!.id}`)}>
+              <span className="glass-label">Continue reading</span>
+              <span className="resume-row"><Cover subject={subjectName(lastRead.note!.subjectId)} size="sm" /><span className="grow"><b className="poppins">{lastRead.note!.title}</b>
+                <small>Page {lastRead.r.page} of {lastRead.r.pageCount || lastRead.note!.pageCount}</small></span><Chevron width={20} height={20} /></span>
+              <span className="meter"><i style={{ width: `${progressOf}%` }} /></span>
+            </button>
+          ) : <div className="glass"><span className="glass-label">Your library</span><span className="poppins big-line">Open any document and it will wait here, on the page where you stopped.</span></div>}
+          <div className="stats">
+            <div><b>{inClass.length}</b><small>documents for you</small></div>
+            <div><b>{subjectsInScope.length}</b><small>subjects</small></div>
+            <div><b>{totalPages}</b><small>pages to read</small></div>
+          </div>
+        </aside>
       </section>
-      <div className="searchbar"><Search /><input className="input" placeholder="Search notes and past papers" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search notes and past papers" /></div>
 
       {announcement && (
         <div className="announce"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 11v3a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1zM15 9c1.5 1 1.5 5 0 6" /></svg>
@@ -56,19 +78,23 @@ export function HomePage() {
       )}
 
       {lastRead && !query && (
-        <button className="card continue" onClick={() => nav(`/note/${lastRead.note!.id}`)}>
-          <div className="cover" style={{ width: 46, height: 60, background: tintOf(subjectName(lastRead.note!.subjectId)) }}><span className="big" style={{ fontSize: 18 }}>{lastRead.note!.title.slice(0, 1).toUpperCase()}</span></div>
+        <button className="card continue mobile-only" onClick={() => nav(`/note/${lastRead.note!.id}`)}>
+          <Cover subject={subjectName(lastRead.note!.subjectId)} size="sm" />
           <div className="grow"><div className="muted" style={{ fontSize: 13 }}>Continue reading</div><b className="poppins">{lastRead.note!.title}</b>
             <div className="muted" style={{ fontSize: 13 }}>Page {lastRead.r.page} of {lastRead.r.pageCount || lastRead.note!.pageCount}</div>
-            <div style={{ height: 4, borderRadius: 2, background: 'var(--line)', marginTop: 8 }}><div style={{ height: 4, borderRadius: 2, background: 'var(--primary)', width: `${Math.min(100, (lastRead.r.page / Math.max(1, lastRead.r.pageCount || lastRead.note!.pageCount)) * 100)}%` }} /></div></div>
+            <div style={{ height: 4, borderRadius: 2, background: 'var(--line)', marginTop: 8 }}><div style={{ height: 4, borderRadius: 2, background: 'var(--primary)', width: `${progressOf}%` }} /></div></div>
           <Chevron width={22} height={22} /></button>
       )}
 
       {subjectsInScope.length > 0 && (
-        <><div className="section-head"><h2>Subjects</h2></div>
-          <div className="chips">
-            <button className={`chip ${subjectId === null ? 'on' : ''}`} onClick={() => setSubjectId(null)}>All</button>
-            {subjectsInScope.map((s) => <button key={s.id} className={`chip ${subjectId === s.id ? 'on' : ''}`} onClick={() => setSubjectId(subjectId === s.id ? null : s.id)}>{s.name}</button>)}
+        <><div className="section-head"><h2>Subjects</h2>{subjectId && <button className="chip" onClick={() => setSubjectId(null)}>Show all subjects</button>}</div>
+          <div className="subject-row">
+            {subjectsInScope.map((s, i) => (
+              <button key={s.id} className={`subject-tile sv rise ${subjectId === s.id ? 'on' : ''}`} style={{ animationDelay: `${Math.min(i, 10) * 35}ms`, ...(subjectVars(s.name) as CSSProperties) }} onClick={() => setSubjectId(subjectId === s.id ? null : s.id)}>
+                <span className="s-ico"><SubjectIcon name={s.name} size={30} /></span>
+                <b>{s.name}</b><small>{countIn(s.id)} {countIn(s.id) === 1 ? 'document' : 'documents'}</small>
+              </button>
+            ))}
           </div></>
       )}
 
@@ -87,7 +113,6 @@ export function HomePage() {
             {cls && !everyClass && !query && <button className="btn outline" onClick={() => setEveryClass(true)}>Show every class</button>}</div>
         : <div className="grid">{visible.map((n, i) => <NoteCard key={n.id} note={n} index={i} showClass={everyClass || !cls} onOpen={() => nav(`/note/${n.id}`)} />)}</div>}
       {everyClass && <div className="center" style={{ marginTop: 20 }}><button className="btn outline small" onClick={() => setEveryClass(false)}>Back to {cls}</button></div>}
-      <div className="muted center" style={{ fontSize: 13, marginTop: 24 }}>{notes.length > 0 && `${notes.length} documents in the library · ${notes.reduce((a, n) => a + n.pageCount, 0)} pages`}</div>
 
       {classSheet && <Sheet title="Choose your class" onClose={() => setClassSheet(false)}>
         {levels.map((g) => <div key={g.id} className="level-group"><h4>{g.name}</h4><div className="level-grid">{g.levels.map((l) => <button key={l.id} className={`chip ${cls === l.id ? 'on' : ''}`} onClick={() => { setClass(l.id); setSubjectId(null); setEveryClass(false); setClassSheet(false); }}>{l.name}</button>)}</div></div>)}

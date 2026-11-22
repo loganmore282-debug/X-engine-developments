@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth, useLibrary, useToast } from '../store';
 import type { Slide } from '../types';
@@ -57,6 +57,31 @@ export function Intro({ onDone }: { onDone: () => void }) {
   );
 }
 
+// The sign-in screens: on a computer a green panel on the left says what the app is, the form is on the right.
+function AuthShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="auth-split">
+      <aside className="auth-aside">
+        <div className="hero-deco" aria-hidden="true"><i /><i /><i /></div>
+        <Link to="/" className="aside-logo"><img src="/logo-full.png" alt="Shule Notes" /></Link>
+        <div className="aside-copy">
+          <h2>Notes, past papers and an AI helper, in one place.</h2>
+          <ul>
+            <li><span>1</span>Everything for your class, sorted by subject</li>
+            <li><span>2</span>Ask the AI helper about the page you are reading</li>
+            <li><span>3</span>Carry on exactly where you stopped, on any device</li>
+          </ul>
+        </div>
+        <small>© {new Date().getFullYear()} Shule Notes</small>
+      </aside>
+      <div className="auth-main">
+        <Link to="/" className="back-home"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg> Back to home</Link>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function PasswordField({ value, onChange, label = 'Password' }: { value: string; onChange: (v: string) => void; label?: string }) {
   const [show, setShow] = useState(false);
   return (
@@ -86,9 +111,9 @@ export function SignIn({ onRegister }: { onRegister: () => void }) {
     try { await signIn(phone, password); } catch (err) { setError((err as Error).message); toast((err as Error).message, 'error'); } finally { setBusy(false); }
   }
   return (
-    <div className="auth">
+    <AuthShell>
       <form className="card auth-card" onSubmit={submit}>
-        <img className="auth-logo" src="/logo-full.png" alt="Shule Notes" />
+        <img className="auth-logo mobile-only" src="/logo-full.png" alt="Shule Notes" />
         <h1>Welcome back</h1><p className="sub">Sign in to carry on studying.</p>
         {error && <div className="banner-error">{error}</div>}
         <label className="field"><span>Phone number</span><input className="input" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0772 123 456" /></label>
@@ -105,7 +130,7 @@ export function SignIn({ onRegister }: { onRegister: () => void }) {
         {config.supportHours && <p className="muted">{config.supportHours}</p>}
         <div className="actions"><button className="btn" onClick={() => setHelp(false)}>Close</button></div>
       </Sheet>}
-    </div>
+    </AuthShell>
   );
 }
 
@@ -122,9 +147,9 @@ export function SignUp({ onSignIn }: { onSignIn: () => void }) {
     try { await signUp(name, phone, password); } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
   return (
-    <div className="auth">
+    <AuthShell>
       <form className="card auth-card" onSubmit={submit}>
-        <img className="auth-logo" src="/logo-full.png" alt="Shule Notes" />
+        <img className="auth-logo mobile-only" src="/logo-full.png" alt="Shule Notes" />
         <h1>Create your account</h1><p className="sub">Notes, past papers and an AI study helper.</p>
         {error && <div className="banner-error">{error}</div>}
         <label className="field"><span>Full name</span><input className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} /></label>
@@ -133,7 +158,7 @@ export function SignUp({ onSignIn }: { onSignIn: () => void }) {
         <button className="btn wide" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
         <div className="link-row">Already have an account? <button type="button" onClick={onSignIn}>Sign in</button></div>
       </form>
-    </div>
+    </AuthShell>
   );
 }
 

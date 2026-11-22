@@ -70,7 +70,7 @@ export function ProfilePage() {
   }
   if (!user) return null;
   return (
-    <div>
+    <div className="profile-layout">
       <div className="card profile-card rise">
         <button className="avatar" style={{ border: 0, padding: 0, position: 'relative', overflow: 'visible' }} onClick={() => setSheet('photo')} aria-label="Change profile photo">
           <Avatar /><span style={{ position: 'absolute', right: -2, bottom: -2, width: 26, height: 26, borderRadius: 13, background: 'var(--primary)', color: '#fff', display: 'grid', placeItems: 'center', border: '2px solid var(--surface)' }}><Camera width={14} height={14} /></span>
@@ -79,6 +79,7 @@ export function ProfilePage() {
         <button className="icon-btn" style={{ background: 'var(--primary-soft)', color: 'var(--on-primary-soft)' }} aria-label="Edit name" onClick={() => { setNameValue(user.name); setErr(''); setSheet('name'); }}><Edit /></button>
       </div>
 
+      <div className="profile-rest">
       <div className="group-label">Study</div>
       <div className="card settings">
         <button onClick={() => nav('/')}><UserIcon /><span className="grow">My class</span><span className="muted">{cls || 'Not chosen'}</span><Chevron width={18} /></button>
@@ -93,6 +94,7 @@ export function ProfilePage() {
       <button className="btn danger-outline wide" style={{ marginTop: 28 }} onClick={() => setSheet('logout')}><Logout width={20} height={20} /> Log out</button>
       <div className="center"><button className="link-row" style={{ background: 'none', border: 0, color: 'var(--muted)', marginTop: 10 }} onClick={() => { setPassword(''); setErr(''); setSheet('delete'); }}>Delete account</button></div>
       <div className="muted center" style={{ fontSize: 13, marginTop: 4 }}>Shule Notes · Website</div>
+      </div>
 
       {sheet === 'name' && <Sheet title="Edit your name" onClose={() => setSheet(null)}>
         {err && <div className="banner-error">{err}</div>}
@@ -125,7 +127,7 @@ export function ProfilePage() {
       </Sheet>}
       {sheet === 'logout' && <Sheet title="Log out?" onClose={() => setSheet(null)}>
         <p className="muted">You will need your phone number and password to sign in again.</p>
-        <div className="actions"><button className="btn outline" onClick={() => setSheet(null)}>Cancel</button><button className="btn" onClick={() => { signOut(); nav('/'); }}>Log out</button></div>
+        <div className="actions"><button className="btn outline" onClick={() => setSheet(null)}>Cancel</button><button className="btn" onClick={() => { signOut(); nav('/signin'); }}>Log out</button></div>
       </Sheet>}
       {sheet === 'delete' && <Sheet title="Delete your account?" onClose={() => setSheet(null)}>
         <p className="muted">This removes your account, your photo and your saved notes for good. Enter your password to confirm.</p>
