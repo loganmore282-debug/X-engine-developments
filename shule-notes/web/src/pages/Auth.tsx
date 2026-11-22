@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth, useLibrary, useToast } from '../store';
 import type { Slide } from '../types';
@@ -63,7 +63,7 @@ function AuthShell({ children }: { children: ReactNode }) {
     <div className="auth-split">
       <aside className="auth-aside">
         <div className="hero-deco" aria-hidden="true"><i /><i /><i /></div>
-        <Link to="/" className="aside-logo"><img src="/logo-full.png" alt="Shule Notes" /></Link>
+        <div className="aside-logo"><img src="/logo-full.png" alt="Shule Notes" /></div>
         <div className="aside-copy">
           <h2>Notes, past papers and an AI helper, in one place.</h2>
           <ul>
@@ -75,7 +75,6 @@ function AuthShell({ children }: { children: ReactNode }) {
         <small>© {new Date().getFullYear()} Shule Notes</small>
       </aside>
       <div className="auth-main">
-        <Link to="/" className="back-home"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg> Back to home</Link>
         {children}
       </div>
     </div>

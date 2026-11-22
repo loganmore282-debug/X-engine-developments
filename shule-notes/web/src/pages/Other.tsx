@@ -127,7 +127,7 @@ export function ProfilePage() {
       </Sheet>}
       {sheet === 'logout' && <Sheet title="Log out?" onClose={() => setSheet(null)}>
         <p className="muted">You will need your phone number and password to sign in again.</p>
-        <div className="actions"><button className="btn outline" onClick={() => setSheet(null)}>Cancel</button><button className="btn" onClick={() => { signOut(); nav('/signin'); }}>Log out</button></div>
+        <div className="actions"><button className="btn outline" onClick={() => setSheet(null)}>Cancel</button><button className="btn" onClick={() => { signOut(); nav('/'); }}>Log out</button></div>
       </Sheet>}
       {sheet === 'delete' && <Sheet title="Delete your account?" onClose={() => setSheet(null)}>
         <p className="muted">This removes your account, your photo and your saved notes for good. Enter your password to confirm.</p>

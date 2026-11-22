@@ -3,7 +3,6 @@ import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, Outlet, useNavig
 import { AppProviders, useAuth, useLibrary, remember } from './store';
 import { Avatar } from './components';
 import { ChooseClass, Intro, SignIn, SignUp } from './pages/Auth';
-import { Landing } from './pages/Landing';
 import { HomePage } from './pages/Home';
 import { InboxPage, ProfilePage, SavedPage, applyTheme } from './pages/Other';
 import { ReaderPage } from './pages/Reader';
@@ -41,23 +40,16 @@ function Shell() {
 
 function Gate() {
   const { user, ready } = useAuth();
-  const nav = useNavigate();
   const [seenIntro, setSeenIntro] = useState(() => localStorage.getItem('shule_intro_seen') === '1');
+  const [mode, setMode] = useState<'in' | 'up'>('in');
   const [splash, setSplash] = useState(true);
+  // After signing out, the sign-in screen comes back (not the create-account one the student used before).
+  useEffect(() => { if (!user) setMode('in'); }, [user]);
   useEffect(() => { const t = window.setTimeout(() => setSplash(false), 900); return () => window.clearTimeout(t); }, []);
-  // A phone sees the story-style introduction once, before the landing page; a computer goes straight to the landing page.
-  const narrow = typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches;
   if (!ready || splash) return <Splash />;
   if (!user) {
-    if (narrow && !seenIntro) return <Intro onDone={() => { localStorage.setItem('shule_intro_seen', '1'); setSeenIntro(true); }} />;
-    return (
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/signin" element={<SignIn onRegister={() => nav('/signup')} />} />
-        <Route path="/signup" element={<SignUp onSignIn={() => nav('/signin')} />} />
-        <Route path="*" element={<Navigate to="/signin" replace />} />
-      </Routes>
-    );
+    if (!seenIntro) return <Intro onDone={() => { localStorage.setItem('shule_intro_seen', '1'); setSeenIntro(true); }} />;
+    return mode === 'in' ? <SignIn onRegister={() => setMode('up')} /> : <SignUp onSignIn={() => setMode('in')} />;
   }
   if (!user.classLevel) return <ChooseClass />;
   return (
