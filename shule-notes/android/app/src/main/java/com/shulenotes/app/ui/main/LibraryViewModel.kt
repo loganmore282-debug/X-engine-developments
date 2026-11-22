@@ -165,6 +165,7 @@ class LibraryViewModel : ViewModel() {
                     val levelsCall = async { try { ApiClient.service.levels().groups ?: emptyList() } catch (e: Exception) { levelGroups } }
                     val notificationsCall = async { try { ApiClient.service.announcements().announcements ?: emptyList() } catch (e: Exception) { notifications } }
                     val configCall = async { AppConfigHolder.refresh() }
+                    val accessCall = async { com.shulenotes.app.data.AccessHolder.refresh() }
 
                     val loadedSubjects = subjectsCall.await()
                     val loadedNotes = notesCall.await()
@@ -179,6 +180,7 @@ class LibraryViewModel : ViewModel() {
                     notifications = notificationsCall.await()
                     announcement = notifications.firstOrNull()?.takeIf { it.id != dismissed }
                     configCall.await()
+                    accessCall.await()
                     ShuleApp.session.saveLibrary(Gson().toJson(LibrarySnapshot(loadedSubjects, loadedNotes, loadedLevels)))
                 }
             } catch (e: IOException) {

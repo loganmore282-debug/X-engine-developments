@@ -77,6 +77,15 @@ interface ApiService {
     @GET("notes/{id}/file")
     suspend fun noteFile(@Path("id") id: String): ResponseBody
 
+    @GET("payments/plans")
+    suspend fun plans(): PlansResponse
+
+    @POST("payments/start")
+    suspend fun startPayment(@Body body: Map<String, String>): PaymentResponse
+
+    @GET("payments/{id}/status")
+    suspend fun paymentStatus(@Path("id") id: String): PaymentResponse
+
     @POST("ai/ask")
     suspend fun askAi(@Body body: AskRequest): AskResponse
 }

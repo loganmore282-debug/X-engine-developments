@@ -182,6 +182,7 @@ class SessionStore(private val context: Context) {
     // Signing out forgets the account but keeps the bookmarks, which are
     // only note ids; deleting the account wipes everything.
     suspend fun clear(keepSaved: Boolean = true) {
+        AccessHolder.clear()
         context.dataStore.edit {
             if (keepSaved) {
                 it.remove(TOKEN_KEY); it.remove(NAME_KEY); it.remove(CONTACT_KEY); it.remove(CLASS_KEY); it.remove(AVATAR_KEY); it.remove(RECENT_KEY); it.remove(LIBRARY_KEY); it.remove(SEEN_KEY); it.remove(SEARCHES_KEY); it.remove(STUDY_KEY); it.remove(FINISHED_KEY)

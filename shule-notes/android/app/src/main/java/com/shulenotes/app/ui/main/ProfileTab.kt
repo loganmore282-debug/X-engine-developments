@@ -109,6 +109,7 @@ fun ProfileTab(
     var showAppearance by rememberSaveable { mutableStateOf(false) }
     var showFeedback by rememberSaveable { mutableStateOf(false) }
     var showPhotoSheet by rememberSaveable { mutableStateOf(false) }
+    var showPass by rememberSaveable { mutableStateOf(false) }
     val pickPhoto = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
     ) { uri -> if (uri != null) viewModel.uploadAvatar(uri) }
@@ -179,6 +180,13 @@ fun ProfileTab(
 
         SectionLabel("Study")
         SettingsCard {
+            if (com.shulenotes.app.data.AccessHolder.enabled) {
+                SettingsRow(
+                    Icons.Outlined.Lock, "My pass",
+                    trailingText = if (com.shulenotes.app.data.AccessHolder.active) "Until " + com.shulenotes.app.ui.components.passUntilLabel(com.shulenotes.app.data.AccessHolder.untilMs) else "Get a pass",
+                ) { showPass = true }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
+            }
             SettingsRow(Icons.Outlined.School, "My class", trailingText = userClass.ifBlank { "Not chosen" }, onClick = onChangeClass)
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
             SettingsRow(Icons.Outlined.Insights, "My progress", onClick = onOpenProgress)
@@ -240,6 +248,8 @@ fun ProfileTab(
         )
         Spacer(Modifier.height(24.dp))
     }
+
+    if (showPass) com.shulenotes.app.ui.components.PaySheet(onDismiss = { showPass = false })
 
     if (showPhotoSheet) {
         ModalBottomSheet(onDismissRequest = { showPhotoSheet = false }, containerColor = MaterialTheme.colorScheme.surface) {

@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
@@ -252,6 +253,24 @@ fun NoteDetailScreen(noteId: String, startPage: Int, viewModel: NoteViewModel, o
                                 .clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
                                 .background(Color(0xFFEDEDED))
                                 .shimmer(),
+                        )
+                    }
+                }
+
+                is PdfLoadState.Locked -> {
+                    var showPay by rememberSaveable { mutableStateOf(true) }
+                    StateMessage(
+                        icon = Icons.Outlined.Lock,
+                        title = "This document needs a pass",
+                        body = "Choose a pass to read it, search inside it and ask the AI helper about it.",
+                        actionLabel = "Choose a pass",
+                        onAction = { showPay = true },
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                    if (showPay) {
+                        com.shulenotes.app.ui.components.PaySheet(
+                            onDismiss = { showPay = false },
+                            onPaid = { viewModel.load(noteId, retry = true) },
                         )
                     }
                 }

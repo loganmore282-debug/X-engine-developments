@@ -226,6 +226,23 @@ app's "Forgot password?" just shows the support contacts from Settings (`GET /co
   account). No photo on Home any more: its header has the bell only. Profile: centred photo with camera badge, a Log out
   button, a quiet "Delete account" link and the version at the bottom (not rows in a card).
 
+### Payments (passes, MarzPay)
+Students buy a TIME PASS with MTN/Airtel mobile money through MarzPay (`backend/payments.js`; routes `/payments/plans`, `/payments/start`,
+`/payments/:id/status`, webhook `POST /payments/callback`). Prices (owner's decision): 3 hours 1,000; 1 day 1,500; 1 week 5,000; 1 month 12,500;
+3 months 30,000 -- stored in settings (`plans`), edited in admin > Settings > Payments (price + hours + on/off), never trusted from the app.
+- **Off by default** (`paymentsEnabled`): nothing is locked until the owner ticks it and pastes the MarzPay key (admin Settings; stored in the
+  settings document, never shown again, like the Firebase/Claude keys; `user:key` or the base64 credentials string).
+- **The server decides.** `mayRead()` in server.js answers **402 `payment_required`** on `/notes/:id/file`, `/notes/:id/pages` and `/ai/ask`
+  for a student with no live pass (`users.accessUntil`) on a note that is not `free`. Notes marked **Free** in admin stay open. Apps and the website
+  only show locks (`AccessHolder.kt`, `web/src/Pay.tsx`).
+- **Money safety:** a payment goes pending -> paid with ONE atomic `updateOne({status in [pending, expired]})` that only one caller wins; a webhook that
+  says "paid" is never trusted -- MarzPay's own status endpoint is asked first; `grantAccess` is serialised per student and STACKS time on any remaining
+  pass; `granted:false` payments show "Access missing" in admin with a "Check again" button. `/payments/start` resumes a payment <60s old (double tap).
+- Admin: Payments tab (totals, list, search, recheck), Students > Give access / Remove access (a free grant is stored as a `manual` payment and is not
+  counted as revenue), Notes > Free tick. Tests: `test-payments.js` (72 checks incl. HTTP routes + the racing webhook/status case).
+- **Play Store:** Google requires Play Billing for digital goods sold inside a Play app; the owner chose MarzPay. Do not assume it is allowed in
+  Uganda; alternatives are paying on the website only or Google's alternative-billing programs. The server logic does not change either way.
+
 ### Security (read before adding payments)
 **Principle: an Android app can never be made impossible to hack or edit. The server must decide everything that matters.**
 Sign-in, the AI daily quota, admin rights and (later) who has paid are all enforced on the server; an edited app gains nothing.

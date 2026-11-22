@@ -233,6 +233,12 @@ fun HomeTab(
                 }
             }
 
+            if (!searching) {
+                item(key = "pass") {
+                    com.shulenotes.app.ui.components.PassBanner(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp))
+                }
+            }
+
             if (showResume && resume != null) {
                 val (note, progress) = resume
                 item(key = "resume") {

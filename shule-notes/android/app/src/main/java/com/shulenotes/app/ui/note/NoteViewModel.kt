@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
+import com.shulenotes.app.data.AccessHolder
 import com.shulenotes.app.data.ApiClient
 import com.shulenotes.app.data.Downloads
 import com.shulenotes.app.data.Note
@@ -23,10 +24,13 @@ import java.io.IOException
 sealed class PdfLoadState {
     object Loading : PdfLoadState()
     data class Ready(val document: PdfDocument) : PdfLoadState()
+    // The server (or the phone, with no pass) says this document needs a pass.
+    object Locked : PdfLoadState()
     data class Failed(val message: String) : PdfLoadState()
 }
 
 private class UnreadablePdfException : Exception()
+private class LockedException : Exception()
 
 // AndroidViewModel because the downloaded PDF is kept in the app's cache directory.
 class NoteViewModel(application: Application) : AndroidViewModel(application) {
@@ -66,6 +70,10 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
                 // The rest of the pages are measured in the background; the first page shows straight away.
                 viewModelScope.launch(Dispatchers.IO) { runCatching { document.measureRemaining() } }
                 PdfLoadState.Ready(document)
+            } catch (e: LockedException) {
+                PdfLoadState.Locked
+            } catch (e: retrofit2.HttpException) {
+                if (e.code() == 402) PdfLoadState.Locked else PdfLoadState.Failed(e.serverMessage() ?: "We could not open this document. Please try again.")
             } catch (e: UnreadablePdfException) {
                 PdfLoadState.Failed("This document could not be opened. It may be damaged.")
             } catch (e: IOException) {
@@ -80,6 +88,8 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     // document is instant and works offline. A copy the student downloaded on purpose is tried first; a
     // copy that is already being fetched in the background (see PdfFetcher) is joined, not fetched again.
     private suspend fun openPdf(noteId: String): PdfDocument {
+        // Without a pass, even a copy kept on the phone stays closed (the server also refuses).
+        if (AccessHolder.locked(note?.free == true)) throw LockedException()
         val downloaded = Downloads.file(noteId)
         if (downloaded.length() > 0L) {
             try {

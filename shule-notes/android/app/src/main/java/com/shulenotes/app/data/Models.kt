@@ -81,6 +81,8 @@ data class Note(
     val fileSize: Long,
     val uploadedAt: String?,
     val hasAiContext: Boolean,
+    // Free to read with no pass (the owner marked it as a sample).
+    val free: Boolean = false,
 )
 
 data class NotesResponse(
@@ -168,5 +170,34 @@ data class LibrarySnapshot(
 data class PagesResponse(
     val status: String,
     val pages: List<String>?,
+    val message: String?,
+)
+
+// ── Passes and payments (MarzPay mobile money) ──
+data class Plan(val id: String, val name: String, val price: Int, val minutes: Int)
+
+data class PlansResponse(
+    val status: String,
+    val enabled: Boolean = false,
+    val plans: List<Plan>? = null,
+    val accessUntil: String? = null,
+    val hasAccess: Boolean = false,
+    val serverTime: String? = null,
+    val phone: String? = null,
+    val message: String? = null,
+)
+
+data class PaymentInfo(
+    val id: String,
+    val status: String,
+    val planName: String? = null,
+    val amount: Int = 0,
+    val message: String? = null,
+    val accessUntil: String? = null,
+)
+
+data class PaymentResponse(
+    val status: String,
+    val payment: PaymentInfo?,
     val message: String?,
 )

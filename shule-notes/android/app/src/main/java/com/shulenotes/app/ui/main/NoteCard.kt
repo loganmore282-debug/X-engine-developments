@@ -46,6 +46,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.outlined.Lock
+import com.shulenotes.app.data.AccessHolder
 import com.shulenotes.app.data.Note
 import com.shulenotes.app.ui.components.SubjectTint
 import com.shulenotes.app.ui.components.subjectIcon
@@ -112,7 +114,19 @@ fun NoteCard(
         modifier = modifier.fillMaxWidth().graphicsLayer { scaleX = pressScale; scaleY = pressScale },
     ) {
         Row(modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp)) {
-            NoteCover(subjectName, tint)
+            Box {
+                NoteCover(subjectName, tint)
+                if (AccessHolder.locked(note.free)) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.align(Alignment.BottomEnd).size(24.dp),
+                    ) {
+                        Icon(Icons.Outlined.Lock, contentDescription = "Needs a pass", modifier = Modifier.padding(5.dp))
+                    }
+                }
+            }
             Column(modifier = Modifier.weight(1f).padding(start = 14.dp, top = 2.dp)) {
                 Text(
                     note.title,
