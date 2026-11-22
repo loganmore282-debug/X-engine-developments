@@ -348,7 +348,8 @@
         <label>Gemini model</label>
         <input id="setGemModel" list="gemModels" placeholder="gemini-2.5-flash">
         <datalist id="gemModels"></datalist>
-        <div class="muted" style="margin-top:4px">Pick one of the suggestions, or type any model name that starts with gemini-.</div>
+        <div class="muted" style="margin-top:4px">Pick one of the suggestions, or type any model name that starts with gemini-. Google retires old names: press the button to see what your key can really use.</div>
+        <button class="btn plain sm" id="gemLoad" style="margin-top:8px">Load models from Google</button> <span class="muted" id="gemLoadResult"></span>
 
         <div style="margin:16px 0 4px"><button class="btn plain sm" id="aiTest">Test the AI helper</button> <span class="muted" id="aiTestResult"></span></div>
         <label>Questions each student can ask per day</label>
@@ -1185,6 +1186,20 @@ $('setGemKeyClear').addEventListener('click', async () => {
   const r = await api('/admin/settings/save', { clearGeminiKey: true });
   toast(r.status === 'success' ? 'Key removed' : (r.message || 'Could not remove'), r.status === 'success' ? 'ok' : 'error');
   LOADERS.settings();
+});
+$('gemLoad').addEventListener('click', async () => {
+  $('gemLoad').disabled = true; $('gemLoadResult').textContent = 'Asking Google…'; $('gemLoadResult').style.color = '';
+  const r = await api('/admin/ai/gemini-models');
+  $('gemLoad').disabled = false;
+  if (r.status === 'success') {
+    $('gemModels').innerHTML = r.models.map(m => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('');
+    if (r.suggested) $('setGemModel').value = r.suggested;
+    $('gemLoadResult').textContent = '✓ ' + r.models.length + ' models found. Chose ' + (r.suggested || 'none') + '. Press Save settings to keep it.';
+    $('gemLoadResult').style.color = 'var(--brand)';
+  } else {
+    $('gemLoadResult').textContent = '✗ ' + (r.message || 'Google did not answer') + (r.detail ? ' Reason: ' + r.detail : '');
+    $('gemLoadResult').style.color = 'var(--danger)';
+  }
 });
 $('aiTest').addEventListener('click', async () => {
   $('aiTest').disabled = true; $('aiTestResult').textContent = 'Asking…';

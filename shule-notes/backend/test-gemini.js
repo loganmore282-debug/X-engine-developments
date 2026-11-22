@@ -52,6 +52,26 @@ const good = (text) => ({ candidates: [{ content: { parts: [{ text }] }, finishR
   ck((await fails(ask(async () => { throw new Error('ECONNRESET'); }))).status === 503, 'no connection is reported as such');
   ck(!/AIza|key/i.test((await fails(ask(reply({ error: { message: 'API key not valid' } }, 400)))).message), 'no error message shown to students mentions the key');
 
+  console.log('— a retired or wrong model name —');
+  ck(gemini.pickDefault(['gemini-2.0-flash', 'gemini-3-flash', 'gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-3-flash-lite', 'gemini-2.5-pro']) === 'gemini-3-flash', 'the newest plain Flash is chosen (not a preview, not Pro)');
+  ck(gemini.pickDefault(['gemini-2.5-flash-lite', 'gemini-2.5-pro']) === 'gemini-2.5-flash-lite' && gemini.pickDefault(['gemini-2.5-pro']) === 'gemini-2.5-pro' && gemini.pickDefault([]) === '', 'with no Flash it falls back sensibly (and to nothing when there is nothing)');
+  const urls = [];
+  const retired = async (url, opts) => {
+    urls.push(String(url));
+    if (String(url).includes('/models?')) return { ok: true, status: 200, json: async () => ({ models: [{ name: 'models/gemini-3-flash', displayName: 'Gemini 3 Flash', supportedGenerationMethods: ['generateContent'] }, { name: 'models/embedding-001', supportedGenerationMethods: ['embedContent'] }, { name: 'models/gemini-3-pro', supportedGenerationMethods: ['generateContent'] }] }) };
+    if (String(url).includes('gemini-2.5-flash-lite:')) return { ok: false, status: 404, json: async () => ({ error: { message: 'models/gemini-2.5-flash-lite is not found' } }) };
+    return { ok: true, status: 200, json: async () => good('Kampala (from the new model).') };
+  };
+  const swapped = await gemini.askAboutDocument({ documentText: 'x', question: 'q', apiKey: KEY, model: 'gemini-2.5-flash-lite', fetchImpl: retired });
+  ck(swapped.answer.includes('new model') && swapped.model === 'gemini-3-flash', 'a model Google no longer has is replaced by a working one, and the student still gets an answer');
+  const before = urls.length;
+  await gemini.askAboutDocument({ documentText: 'x', question: 'q2', apiKey: KEY, model: 'gemini-2.5-flash-lite', fetchImpl: retired });
+  ck(urls.slice(before).length === 1 && urls[urls.length - 1].includes('gemini-3-flash:'), 'the working model is remembered (the next question does not search again)');
+  gemini._replaced.clear();
+  const models = await gemini.listModels({ apiKey: KEY, fetchImpl: retired });
+  ck(models.length === 2 && models.every((m) => m.id.startsWith('gemini-')), 'the model list keeps only Gemini models that can answer');
+  ck((await fails(() => gemini.listModels({ apiKey: KEY, fetchImpl: reply({ error: { message: 'API key not valid' } }, 400) }))).status === 500, 'a bad key shows up when listing models');
+
   console.log('— which AI answers —');
   const both = { aiProvider: 'gemini', anthropicKey: 'sk-ant-api03-' + 'a'.repeat(30), geminiKey: KEY, aiFallback: true };
   ck(JSON.stringify(ai.order(both)) === '["gemini","claude"]', 'Gemini chosen, Claude set up as the backup');
@@ -97,6 +117,9 @@ const good = (text) => ({ candidates: [{ content: { parts: [{ text }] }, finishR
   ck(ans.status === 'success' && ans.answer === 'Kampala is the capital.' && /gemini-2\.5-flash/.test(sentToGoogle.url), 'a student question goes to Gemini and the answer comes back');
   const t = await (await fetch(base + '/admin/ai/test', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': process.env.ADMIN_KEY }, body: '{}' })).json();
   ck(t.status === 'success' && t.provider === 'gemini' && typeof t.ms === 'number', 'the admin "Test the AI" button reports which AI answered and how fast');
+  global.fetch = async (url, opts) => (String(url).includes('generativelanguage') ? { ok: true, status: 200, json: async () => ({ models: [{ name: 'models/gemini-3-flash', displayName: 'Gemini 3 Flash', supportedGenerationMethods: ['generateContent'] }] }) } : realFetch(url, opts));
+  const gm = await (await fetch(base + '/admin/ai/gemini-models', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': process.env.ADMIN_KEY }, body: '{}' })).json();
+  ck(gm.status === 'success' && gm.models[0].id === 'gemini-3-flash' && gm.suggested === 'gemini-3-flash', 'the admin button loads the real model list from Google and suggests one');
   global.fetch = realFetch; server.close();
   console.log(bad ? `\n${bad} FAILED` : '\nall Gemini checks passed');
   process.exit(bad ? 1 : 0);

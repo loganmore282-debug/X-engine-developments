@@ -780,6 +780,13 @@ app.post('/admin/onboarding/move', guard(async (req, res) => sendResult(res, awa
 app.post('/admin/feedback/list', guard(async (req, res) => res.json({ status: 'success', ...(await feedback.listFeedback(req.body)) })));
 app.post('/admin/feedback/status', guard(async (req, res) => sendResult(res, await feedback.setFeedbackStatus(req.body.id, req.body.status))));
 app.post('/admin/feedback/delete', guard(async (req, res) => sendResult(res, await feedback.deleteFeedback(req.body.id))));
+app.post('/admin/ai/gemini-models', guard(async (req, res) => {
+  const settings = await getSettings();
+  try {
+    const models = await require('./gemini').listModels({ apiKey: settings.geminiKey });
+    res.json({ status: 'success', models, suggested: require('./gemini').pickDefault(models.map((m) => m.id)) });
+  } catch (e) { res.json({ status: 'error', message: require('./gemini').classifyGeminiError(e).message, detail: String((e && e.message) || '').slice(0, 200) }); }
+}));
 app.post('/admin/ai/test', guard(async (req, res) => {
   const settings = await getSettings();
   const started = Date.now();
