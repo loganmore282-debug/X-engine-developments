@@ -40,6 +40,9 @@ async function ensureIndexes() {
   // on. A duplicate key error here is the rate limiter itself, not a bug.
   await db.collection('payments').createIndex({ reference: 1 }, { unique: true });
   await db.collection('payments').createIndex({ userId: 1, createdAt: -1 });
+  await db.collection('adminSessions').createIndex({ tokenHash: 1 }, { unique: true });
+  await db.collection('adminSessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+  await db.collection('auditLog').createIndex({ at: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 365 });
   await db.collection('aiUsage').createIndex({ userId: 1, date: 1 }, { unique: true });
 }
 

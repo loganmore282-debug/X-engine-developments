@@ -3,7 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob: http://localhost:4000; connect-src http://localhost:4000; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex,nofollow">
 <title>Shule Notes Admin</title>
+<script>if (window.top !== window.self) { document.documentElement.innerHTML = ''; }</script>
 <style>
   :root{
     --ink:#1b1c1a; --muted:#6a706a; --paper:#f4f2ec; --card:#fff; --line:#e3e0d6;
@@ -126,6 +130,7 @@
     <h1>Shule Notes</h1>
     <p class="muted" style="margin:0">Admin panel</p>
     <input id="loginKey" type="password" placeholder="Admin key" autocomplete="current-password">
+    <input id="loginCode" class="hidden" inputmode="numeric" maxlength="7" placeholder="6-digit code from your authenticator app" autocomplete="one-time-code">
     <button class="btn" id="loginBtn" style="width:100%">Sign in</button>
   </div>
 </div>
@@ -357,6 +362,16 @@
         <div class="muted" id="setLatestHint"></div>
       </div>
       <div class="card">
+        <h2>Security</h2>
+        <div id="secWarn"></div>
+        <h3 style="font-size:15px;margin:6px 0">Two-step sign-in</h3>
+        <p class="muted" id="secTwoText" style="margin-top:0"></p>
+        <button class="btn plain sm" id="secTwoBtn"></button>
+        <h3 style="font-size:15px;margin:18px 0 6px">Devices signed in</h3>
+        <div class="table-scroll"><table><thead><tr><th>Device</th><th>Address</th><th>Last used</th><th></th></tr></thead><tbody id="secRows"></tbody></table></div>
+        <button class="btn plain sm" id="secRevoke" style="margin-top:10px">Sign out all other devices</button>
+      </div>
+      <div class="card">
         <h2>New students</h2>
         <label class="switch"><input type="checkbox" id="setSignups"> Let new students create accounts</label>
         <label>Welcome pass (hours of free access for every new student, 0 = none)</label>
@@ -396,7 +411,9 @@
 
 <script>
 const API = localStorage.getItem('shule_api_base') || window.SHULE_API_BASE || 'http://localhost:4000';
-const KEY_STORE = 'shule_admin_key';
+// The admin KEY is typed once to sign in and is never stored; the panel then holds a session token that expires and can be revoked.
+const KEY_STORE = 'shule_admin_session';
+try { localStorage.removeItem('shule_admin_key'); } catch (_) {} // an older version of the panel stored the key itself
 const $ = (id) => document.getElementById(id);
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -416,7 +433,7 @@ function ago(v){
 function initials(name){ const p = String(name||'').trim().split(/\s+/).filter(Boolean); return (p.length ? (p[0][0] + (p.length>1 ? p[p.length-1][0] : '')) : '?').toUpperCase(); }
 
 async function api(path, body){
-  const headers = { 'x-admin-key': localStorage.getItem(KEY_STORE) || '' };
+  const headers = { Authorization: 'Bearer ' + (localStorage.getItem(KEY_STORE) || '') };
   let payload = body;
   if (payload && !(payload instanceof FormData)) { headers['Content-Type'] = 'application/json'; payload = JSON.stringify(payload); }
   let res;
@@ -424,7 +441,7 @@ async function api(path, body){
   catch (_) { return { status: 'error', message: 'Could not reach the server. Is the backend URL right?' }; }
   let data;
   try { data = await res.json(); } catch (_) { data = { status: 'error', message: 'The server did not answer properly' }; }
-  if (res.status === 401 && path !== '/admin/check-key') { signOut(); toast('Your session ended. Sign in again.', 'error'); }
+  if (res.status === 401 && path !== '/admin/check-key' && path !== '/admin/login') { signOut(false); toast('Your session ended. Sign in again.', 'error'); }
   return data;
 }
 
@@ -443,24 +460,33 @@ function modal({ title, body, okLabel = 'OK', cancelLabel = 'Cancel', danger = f
     if (collect) root.querySelector('.modal').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') $('modalOk').click(); });
   });
 }
-const confirmBox = (title, text, okLabel, danger) => modal({ title, body: `<p>${text}</p>`, okLabel, danger });
+const confirmBox = (title, text, okLabel, danger) => modal({ title, body: `<p>${esc(text)}</p>`, okLabel, danger });
 
 // ── sign in / out ──
 async function signIn(){
   const key = $('loginKey').value.trim();
   if (!key) return;
-  localStorage.setItem(KEY_STORE, key);
-  const r = await api('/admin/check-key');
-  if (r.status === 'success') enterApp();
-  else { localStorage.removeItem(KEY_STORE); toast(r.message || 'Wrong key', 'error'); }
+  $('loginBtn').disabled = true;
+  const r = await api('/admin/login', { key, code: $('loginCode').value.trim() });
+  $('loginBtn').disabled = false;
+  if (r.status === 'success') {
+    localStorage.setItem(KEY_STORE, r.token);
+    $('loginKey').value = ''; $('loginCode').value = ''; $('loginCode').classList.add('hidden');
+    enterApp();
+  } else {
+    if (r.needCode) { $('loginCode').classList.remove('hidden'); $('loginCode').focus(); }
+    toast(r.message || 'Could not sign in', 'error');
+  }
 }
-function signOut(){
+async function signOut(tellServer = true){
+  if (tellServer && localStorage.getItem(KEY_STORE)) { try { await api('/admin/logout'); } catch (_) {} }
   localStorage.removeItem(KEY_STORE);
-  $('app').classList.add('hidden'); $('loginScreen').classList.remove('hidden'); $('loginKey').value = '';
+  $('app').classList.add('hidden'); $('loginScreen').classList.remove('hidden'); $('loginKey').value = ''; $('loginCode').value = ''; $('loginCode').classList.add('hidden');
 }
 $('loginBtn').addEventListener('click', signIn);
 $('loginKey').addEventListener('keydown', (e) => { if (e.key === 'Enter') signIn(); });
-$('logoutBtn').addEventListener('click', signOut);
+$('loginCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') signIn(); });
+$('logoutBtn').addEventListener('click', () => signOut(true));
 
 // ── tabs ──
 const LOADERS = {};
@@ -1035,8 +1061,53 @@ $('payRows').addEventListener('click', async (e) => {
   LOADERS.payments();
 });
 
+// ── security ──
+let SEC = { twoStep: { enabled: false } };
+async function loadSecurity(){
+  const r = await api('/admin/security/status');
+  if (r.status !== 'success') return;
+  SEC = r;
+  const warn = [];
+  if (r.keyWeak) warn.push('Your admin key is short. Put a long random key (40 letters and numbers) in the server settings.');
+  $('secWarn').innerHTML = warn.length ? `<div class="tip">${warn.map(esc).join('<br>')}</div>` : '';
+  $('secTwoText').textContent = r.twoStep.forcedOff ? 'Switched off by the server (emergency setting). Remove ADMIN_DISABLE_2FA from the server settings to use it again.'
+    : r.twoStep.enabled ? 'ON. Signing in needs the admin key AND a 6-digit code from your authenticator app. Even someone who learns the key cannot get in.'
+    : 'OFF. Anyone who learns the admin key can open this panel. Turn this on: it asks for a 6-digit code from an authenticator app (Google Authenticator, Microsoft Authenticator…) at every sign-in.';
+  $('secTwoBtn').textContent = r.twoStep.enabled ? 'Turn off two-step sign-in' : 'Turn on two-step sign-in';
+  $('secTwoBtn').classList.toggle('hidden', !!r.twoStep.forcedOff);
+  $('secRows').innerHTML = r.sessions.map(s => `<tr><td>${esc(String(s.device || '—').slice(0, 60))}${s.current ? ' <span class="pill ok">This device</span>' : ''}</td><td>${esc(s.ip)}</td><td>${esc(ago(s.lastSeen))}</td><td></td></tr>`).join('') || '<tr><td colspan="4" class="empty">No devices</td></tr>';
+}
+$('secTwoBtn').addEventListener('click', async () => {
+  if (SEC.twoStep.enabled) {
+    const code = await modal({ title: 'Turn off two-step sign-in?', okLabel: 'Turn off', danger: true, body: '<p>Enter a current 6-digit code to confirm.</p><label>Code</label><input id="tfCode" inputmode="numeric" maxlength="7" autocomplete="one-time-code">', collect: () => $('tfCode').value });
+    if (!code) return;
+    const r = await api('/admin/security/2fa/disable', { code });
+    toast(r.status === 'success' ? 'Two-step sign-in is off' : (r.message || 'Could not turn it off'), r.status === 'success' ? 'ok' : 'error');
+  } else {
+    const begin = await api('/admin/security/2fa/begin');
+    if (begin.status !== 'success') return toast(begin.message || 'Could not start', 'error');
+    const code = await modal({ title: 'Turn on two-step sign-in', okLabel: 'Turn on',
+      body: `<p><b>1.</b> On this phone, tap <a href="${esc(begin.uri)}">Add to my authenticator app</a>. Or open your authenticator app, choose "Enter a setup key" and type this key:</p>
+        <div class="secret"><span style="word-break:break-all">${esc(begin.secret)}</span></div>
+        <p><b>2.</b> Type the 6-digit code the app now shows:</p><label>Code</label><input id="tfCode" inputmode="numeric" maxlength="7" autocomplete="one-time-code">
+        <p class="muted">Keep the app safe: if you lose the phone you will need the server's emergency setting to get back in.</p>`,
+      collect: () => $('tfCode').value });
+    if (!code) return;
+    const r = await api('/admin/security/2fa/enable', { code });
+    toast(r.status === 'success' ? 'Two-step sign-in is ON. Other devices were signed out.' : (r.message || 'That code was not right'), r.status === 'success' ? 'ok' : 'error');
+  }
+  loadSecurity();
+});
+$('secRevoke').addEventListener('click', async () => {
+  if (!await confirmBox('Sign out all other devices?', 'Every other phone or computer signed in to this panel is signed out now. This one stays.', 'Sign them out', true)) return;
+  const r = await api('/admin/security/sessions/revoke-others');
+  toast(r.status === 'success' ? r.count + ' device(s) signed out' : (r.message || 'Could not do that'), r.status === 'success' ? 'ok' : 'error');
+  loadSecurity();
+});
+
 // ── settings ──
 LOADERS.settings = async function(){
+  loadSecurity();
   const r = await api('/admin/settings/get');
   if (r.status !== 'success') return toast(r.message || 'Could not load settings', 'error');
   const s = r.settings;
@@ -1114,7 +1185,7 @@ setInterval(async () => {
 
 // ── boot ──
 if (localStorage.getItem(KEY_STORE)) {
-  api('/admin/check-key').then(r => { if (r.status === 'success') enterApp(); });
+  api('/admin/check-key').then(r => { if (r.status === 'success') enterApp(); else localStorage.removeItem(KEY_STORE); });
 }
 </script>
 </body>

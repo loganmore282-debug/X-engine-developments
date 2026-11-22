@@ -34,6 +34,7 @@ const payments = require('./payments');
 const compression = require('compression');
 const perf = require('./perf');
 const audit = require('./audit');
+const adminSession = require('./admin-session');
 
 // More threads for background work (password hashing, file reads); must be set before first use.
 if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = '8';
@@ -514,6 +515,12 @@ app.post('/payments/callback', rateLimit({ windowMs: 60 * 1000, max: 120, standa
 // Guessing the admin key is the one thing worth slowing down hard.
 const adminKeyLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
 const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
+// Nothing the panel shows is ever kept by a browser or a proxy; and ADMIN_ALLOWED_IPS (if set) closes it to everyone else.
+app.use('/admin', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  if (!adminSession.ipAllowed(req.ip)) return res.status(403).json({ status: 'error', message: 'The admin panel is not available from this address.' });
+  next();
+});
 app.use('/admin', adminLimiter);
 // Wrong admin keys on ANY admin route count (not only the sign-in check): 30 per 15 minutes, then locked out.
 // Requests with the right key never count, so normal use cannot trip it.
@@ -521,9 +528,23 @@ app.use('/admin', rateLimit({
   windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false,
   skipSuccessfulRequests: true, requestWasSuccessful: (req, res) => res.statusCode !== 401,
 }));
+// Who is calling is decided here, BEFORE any route reads a request body or takes an upload: someone who is not
+// signed in can never make the server accept a 50 MB file, and no route can forget to check.
+app.use('/admin', (req, res, next) => {
+  adminSession.authenticate(req).then((ok) => {
+    req.isAdmin = ok;
+    if (!ok && req.path !== '/login' && req.path !== '/check-key') return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+    next();
+  }).catch((e) => { console.error('admin sign-in check failed:', e.message); res.status(500).json({ status: 'error', message: 'Something went wrong on the server' }); });
+});
 
-app.post('/admin/check-key', adminKeyLimiter, (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Wrong admin key' });
+app.post('/admin/login', adminKeyLimiter, ah(async (req, res) => {
+  const r = await adminSession.login({ key: req.body.key, code: req.body.code, ip: req.ip, userAgent: req.get('user-agent') });
+  if (!r.ok) return res.status(r.status).json({ status: 'error', message: r.message, needCode: !!r.needCode });
+  res.json({ status: 'success', token: r.token, expiresAt: r.expiresAt });
+}));
+app.post('/admin/check-key', (req, res) => {
+  if (!req.isAdmin) return res.status(401).json({ status: 'error', message: 'Not signed in' });
   res.json({ status: 'success' });
 });
 
@@ -686,6 +707,28 @@ const guard = (fn) => ah(async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   return fn(req, res);
 });
+// Signing out, two-step sign-in and the devices that are signed in.
+app.post('/admin/logout', guard(async (req, res) => { await adminSession.logout(req); res.json({ status: 'success' }); }));
+app.post('/admin/security/status', guard(async (req, res) => res.json({
+  status: 'success', twoStep: await adminSession.twoStepStatus(), sessions: await adminSession.listSessions(req),
+  keyWeak: (process.env.ADMIN_KEY || '').length < 20, allowedIps: !!process.env.ADMIN_ALLOWED_IPS,
+})));
+app.post('/admin/security/2fa/begin', guard(async (req, res) => res.json({ status: 'success', ...(await adminSession.twoStepBegin()) })));
+app.post('/admin/security/2fa/enable', guard(async (req, res) => {
+  const r = await adminSession.twoStepEnable(req.body.code);
+  if (r.ok) { await adminSession.revokeOthers(req); audit.record('Turned on two-step sign-in', {}, req.ip).catch(() => {}); }
+  sendResult(res, r);
+}));
+app.post('/admin/security/2fa/disable', guard(async (req, res) => {
+  const r = await adminSession.twoStepDisable(req.body.code);
+  if (r.ok) audit.record('Turned off two-step sign-in', {}, req.ip).catch(() => {});
+  sendResult(res, r);
+}));
+app.post('/admin/security/sessions/revoke-others', guard(async (req, res) => {
+  const n = await adminSession.revokeOthers(req);
+  audit.record('Signed out every other device', { count: n }, req.ip).catch(() => {});
+  res.json({ status: 'success', count: n });
+}));
 app.post('/admin/stats', guard(async (req, res) => res.json({ status: 'success', stats: await adminData.dashboardStats() })));
 app.post('/admin/users/list', guard(async (req, res) => res.json({ status: 'success', ...(await adminData.listUsers(req.body)) })));
 app.post('/admin/users/status', guard(async (req, res) => sendResult(res, await adminData.setUserStatus(req.body.id, req.body.status))));
@@ -758,6 +801,7 @@ app.get('/health', (req, res) => res.json({ status: 'success', app: 'shule-notes
 
 async function start() {
   await connect();
+  if ((process.env.ADMIN_KEY || '').length < 20) console.warn('WARNING: ADMIN_KEY is shorter than 20 characters. Put a long random key in /etc/shule-notes/.env (the admin panel sold sensitive data).');
   // A note left "reading" means the server stopped mid-upload; say so instead of hiding it forever.
   await getDb().collection('notes').updateMany({ textStatus: 'reading' }, { $set: { textStatus: 'failed' } });
   const server = app.listen(PORT, HOST, () => console.log(`Shule Notes server listening on ${HOST}:${PORT}`));

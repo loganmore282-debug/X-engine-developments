@@ -256,6 +256,19 @@ Students buy a TIME PASS with MTN/Airtel mobile money through MarzPay (`backend/
   (`prefetch.ts`); a service worker (`public/sw.js`) keeps the site's own files (never API data) so repeat visits are instant; Home restores filters and scroll;
   keyboard in the reader (arrows/PageUp/PageDown, +/-, /, A, B, Esc); nginx gzip for text (needs `./setup-web.sh` re-run when nginx-web.conf changes).
 
+### Admin security (admin-session.js, totp.js, audit.js)
+- The admin KEY is typed once (`POST /admin/login`); the panel then holds a random session token (stored hashed in `adminSessions`; 8 h idle, 3 days
+  absolute, revocable, "sign out other devices"). The key is never kept in the browser. `app.use('/admin', ...)` in server.js authenticates BEFORE any route
+  or multer upload runs (`req.isAdmin`; `verifyAdmin(req)` only reads it). The key in a URL or body is NOT accepted; the `x-admin-key` HEADER still works
+  for scripts/CI while two-step is off (and `ADMIN_ALLOW_KEY_HEADER=0` turns it off completely).
+- 5 wrong keys/codes from an address lock it out 15 min, doubling each time up to 24 h (even the right key is refused while locked); every failed and
+  successful sign-in goes to the Activity log (never the key). Optional two-step sign-in (TOTP, RFC 6238 tested against its own vectors, replay-proof):
+  Settings > Security. Lost phone: set `ADMIN_DISABLE_2FA=1` in `/etc/shule-notes/.env`, restart, sign in, switch it back on properly.
+  Optional `ADMIN_ALLOWED_IPS=1.2.3.4,...` closes the panel to other addresses. Admin answers are `Cache-Control: no-store`.
+- The panel page has a CSP meta tag (its API address is the `http://localhost:4000` placeholder that apply.sh rewrites, so keep it on ONE line each),
+  a frame-buster, no referrer, and escapes every student-supplied value. Tests: `test-admin-security.js` (36 checks).
+- Admin actions are recorded in `auditLog` (kept 1 year); new admin routes that change data should be added to LABELS in `audit.js`.
+
 ### Security (read before adding payments)
 **Principle: an Android app can never be made impossible to hack or edit. The server must decide everything that matters.**
 Sign-in, the AI daily quota, admin rights and (later) who has paid are all enforced on the server; an edited app gains nothing.

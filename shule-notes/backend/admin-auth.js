@@ -11,10 +11,10 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(ab, bb);
 }
 
+// Who is an admin is decided ONCE per request, before any route (or file upload) runs: see the gate in server.js and
+// admin-session.js. A key in the request body or in the web address is NOT accepted (it would end up in logs).
 function verifyAdmin(req) {
-  const key = req.headers['x-admin-key'] || req.body.adminKey || req.query.adminKey || '';
-  const real = process.env.ADMIN_KEY || '';
-  return !!real && safeEqual(key, real);
+  return req.isAdmin === true;
 }
 
 module.exports = { verifyAdmin, safeEqual };
