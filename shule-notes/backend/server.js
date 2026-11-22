@@ -11,7 +11,7 @@ const multer = require('multer');
 const { ObjectId } = require('mongodb');
 
 const { connect, getDb } = require('./db');
-const { hashPassword, verifyPassword, createSession, resolveSession, destroySession, bearerToken, requireAuth } = require('./auth');
+const { hashPassword, verifyPassword, needsRehash, dummyHash, tooLong, createSession, resolveSession, destroySession, bearerToken, requireAuth } = require('./auth');
 const { verifyAdmin } = require('./admin-auth');
 const { extractInThread } = require('./pdf');
 const { pageTextsFor } = require('./note-pages');
@@ -99,6 +99,7 @@ app.post('/auth/register', authLimiter, async (req, res) => {
     if (!name) return res.status(400).json({ status: 'error', message: 'Name is required' });
     if (!isValidPhone(phone)) return res.status(400).json({ status: 'error', message: 'Enter a valid phone number' });
     if (password.length < 6) return res.status(400).json({ status: 'error', message: 'Password must be at least 6 characters' });
+    if (tooLong(password)) return res.status(400).json({ status: 'error', message: 'That password is too long. Use at most 72 characters.' });
 
     const settingsNow = await getSettings();
     if (settingsNow.signupsOpen === false) return res.status(403).json({ status: 'error', message: 'New sign-ups are closed for now. Please try again later or contact support.' });
@@ -140,8 +141,7 @@ app.post('/auth/login', authLimiter, async (req, res) => {
     const user = await db.collection('users').findOne({ phone });
     // A dummy hash so a nonexistent account costs the same time as a wrong
     // password -- a login attempt must not reveal which account exists.
-    const DUMMY = '0000000000000000000000000000000:0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
-    const ok = await verifyPassword(password, user ? user.passwordHash : DUMMY);
+    const ok = await verifyPassword(password, user ? user.passwordHash : await dummyHash());
     if (!user || !ok) {
       loginGuard.recordFailure(phone);
       return res.status(401).json({ status: 'error', message: 'Incorrect phone number or password' });
@@ -150,6 +150,10 @@ app.post('/auth/login', authLimiter, async (req, res) => {
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'This account has been suspended' });
 
     await db.collection('users').updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } });
+    // An account still saved in the old format (or an older bcrypt cost) is upgraded now, while the password is in hand.
+    if (needsRehash(user.passwordHash)) {
+      hashPassword(password).then((h) => db.collection('users').updateOne({ _id: user._id }, { $set: { passwordHash: h } })).catch((e) => console.error('could not upgrade a password hash:', e.message));
+    }
     const { token } = await createSession(String(user._id));
     res.json({ status: 'success', token, user: publicUser(user) });
   } catch (e) {

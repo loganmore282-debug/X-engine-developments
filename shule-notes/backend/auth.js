@@ -1,4 +1,4 @@
-// Self-rolled auth: scrypt-hashed passwords, random session tokens stored
+// Self-rolled auth: bcrypt-hashed passwords, random session tokens stored
 // HASHED (never the raw token -- a leaked database must not hand out usable
 // sessions), with a fixed expiry enforced by Mongo's own TTL index (db.js)
 // rather than re-checked by hand at every call site.
@@ -9,31 +9,59 @@ const { getDb } = require('./db');
 
 const SESSION_DAYS = 30;
 
-// scrypt runs on a background thread (crypto.scrypt), not on the thread that answers
-// requests: one password check is ~50 ms of CPU, and the synchronous version froze
-// EVERY other student's request for that long. Same cost settings, so passwords
-// saved earlier still verify.
-const scrypt = promisify(crypto.scrypt);
+// Passwords are hashed with bcrypt (cost 12, a fresh random salt inside every hash). The native `bcrypt` package runs
+// on a background thread, so a check never freezes other students' requests; `bcryptjs` (pure JavaScript, same
+// hashes) is the automatic fallback if the native one cannot load on some machine.
+let bcrypt;
+try { bcrypt = require('bcrypt'); } catch (_) { bcrypt = require('bcryptjs'); }
+const COST = 12;
+// bcrypt only reads the first 72 bytes of a password; longer ones are refused at sign-up instead of silently cut.
+const MAX_PASSWORD_BYTES = 72;
+const tooLong = (password) => Buffer.byteLength(String(password || ''), 'utf8') > MAX_PASSWORD_BYTES;
+
+const isBcrypt = (stored) => /^\$2[abxy]\$\d\d\$/.test(String(stored || ''));
 
 async function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = (await scrypt(password, salt, 64)).toString('hex');
-  return `${salt}:${hash}`;
+  return bcrypt.hash(String(password), COST);
 }
 
-// Constant-time by construction: scrypt always runs, and the final
-// comparison uses timingSafeEqual rather than ===, so neither a missing
-// salt/hash nor a wrong password is distinguishable by timing.
-async function verifyPassword(password, stored) {
+// A real bcrypt hash of a password nobody knows: compared when an account does not exist (or is still in the old
+// format), so every sign-in attempt costs about the same time and never reveals which accounts exist.
+let dummy = null;
+async function dummyHash() {
+  if (!dummy) dummy = await bcrypt.hash('this-is-not-anybodys-password', COST);
+  return dummy;
+}
+
+// Accounts made before bcrypt were saved as "salt:scrypt-hash". They still sign in, and are changed to bcrypt at that
+// moment (see needsRehash and the sign-in route), so nobody has to reset anything.
+const legacyScrypt = promisify(crypto.scrypt);
+async function verifyLegacy(password, stored) {
   const [salt, hash] = String(stored || '').split(':');
   if (!salt || !hash) return false;
   let hashBuf, testBuf;
   try {
     hashBuf = Buffer.from(hash, 'hex');
-    testBuf = await scrypt(String(password || ''), salt, 64);
+    testBuf = await legacyScrypt(String(password || ''), salt, 64);
   } catch (_) { return false; }
   if (hashBuf.length !== testBuf.length) return false;
   return crypto.timingSafeEqual(hashBuf, testBuf);
+}
+
+async function verifyPassword(password, stored) {
+  const text = String(password || '');
+  if (isBcrypt(stored)) {
+    try { return await bcrypt.compare(text, String(stored)); } catch (_) { return false; }
+  }
+  const ok = await verifyLegacy(text, stored);
+  await bcrypt.compare(text, await dummyHash()).catch(() => {}); // the old check is faster: spend the difference
+  return ok;
+}
+
+// True when a stored hash should be replaced: the old format, or a lower cost than today's.
+function needsRehash(stored) {
+  if (!isBcrypt(stored)) return true;
+  return Number(String(stored).slice(4, 6)) < COST;
 }
 
 function sha256(s) {
@@ -96,6 +124,6 @@ async function requireAuth(req, res, next) {
 }
 
 module.exports = {
-  hashPassword, verifyPassword, createSession, resolveSession, destroySession, forgetUser,
+  hashPassword, verifyPassword, needsRehash, dummyHash, tooLong, MAX_PASSWORD_BYTES, createSession, resolveSession, destroySession, forgetUser,
   bearerToken, requireAuth, sha256,
 };

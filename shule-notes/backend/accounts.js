@@ -2,7 +2,7 @@
 'use strict';
 const { ObjectId } = require('mongodb');
 const { getDb } = require('./db');
-const { hashPassword, verifyPassword, sha256, forgetUser } = require('./auth');
+const { hashPassword, verifyPassword, sha256, forgetUser, tooLong } = require('./auth');
 const media = require('./media');
 
 function toId(id) {
@@ -26,7 +26,7 @@ async function eraseUser(userId) {
 }
 
 const MIN_PASSWORD = 6;
-const MAX_PASSWORD = 100;
+const MAX_PASSWORD = 72; // bcrypt reads at most 72 bytes
 
 // A student changing their own password. Every OTHER device is signed out;
 // the one making the change stays signed in. 403 on a wrong password, since
@@ -34,7 +34,7 @@ const MAX_PASSWORD = 100;
 async function changePassword(userId, currentPassword, newPassword, keepToken) {
   const next = String(newPassword || '');
   if (next.length < MIN_PASSWORD) return { ok: false, status: 400, message: `Choose a password with at least ${MIN_PASSWORD} characters` };
-  if (next.length > MAX_PASSWORD) return { ok: false, status: 400, message: 'That password is too long' };
+  if (next.length > MAX_PASSWORD || tooLong(next)) return { ok: false, status: 400, message: 'That password is too long (72 characters at most)' };
   const db = getDb();
   const id = toId(userId);
   const user = id ? await db.collection('users').findOne({ _id: id }) : null;

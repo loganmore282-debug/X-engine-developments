@@ -79,10 +79,11 @@ readable message.
     most expensive tier; for a free, potentially high-volume student Q&A feature,
     `claude-sonnet-5-5` is the shipped default — change it per `.env.example`'s own note
     if quality or cost need to move.
-- Password hashing: `crypto.scryptSync` + `crypto.timingSafeEqual`, same discipline this
-  account's other projects use for admin auth (scrypt, salted, constant-time compare).
-  A dummy hash is compared even when no account matches, so a login attempt costs the
-  same time whether or not the identifier exists.
+- Password hashing: **bcrypt, cost 12** (the owner's explicit requirement; `auth.js`: native `bcrypt` with `bcryptjs` as automatic fallback; both are
+  dependencies; hashes are `$2b$12$...`). Max 72 BYTES (bcrypt's limit; refused at sign-up/reset, not silently cut). Old accounts saved as `salt:scrypt`
+  still sign in and are upgraded to bcrypt at that sign-in (`needsRehash`), so nobody had to reset. A real bcrypt dummy hash is compared when no account
+  matches (and the old scrypt path burns a dummy compare too), so a login attempt costs the same time whether or not the identifier exists.
+  Tests: `test-passwords.js`.
 - Admin auth is a **single shared key** (`ADMIN_KEY`, like Voltra's), not per-admin
   accounts — correct for a one-operator panel; if a second admin is ever needed, that is
   a real feature to add deliberately, not to fake with a shared secret.
@@ -275,7 +276,7 @@ Sign-in, the AI daily quota, admin rights and (later) who has paid are all enfor
 When payments arrive: a payment is "paid" ONLY when the provider's signed webhook (or a server-side status check) says so,
 never because the app says so; keep paid notes behind the authenticated file route and check entitlement there.
 What exists now:
-- Backend: scrypt passwords, hashed session tokens, per-IP limits, **per-phone lock** (`login-guard.js`: 10 wrong passwords in
+- Backend: bcrypt passwords, hashed session tokens, per-IP limits, **per-phone lock** (`login-guard.js`: 10 wrong passwords in
   15 min locks that number for the rest of the window), admin key compared in constant time with wrong-key limits on ALL admin
   routes, Mongo-operator stripping, helmet, uploads must start with `%PDF-`, avatars/slide images checked by magic bytes.
 - App: `signingConfigs.shuletest` = ONE fixed test key committed at `android/app/shule-test-signing.keystore` (password in

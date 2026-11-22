@@ -104,7 +104,7 @@ async function setUserStatus(userId, status) {
 async function resetUserPassword(userId, password) {
   const next = String(password || '');
   if (next.length < MIN_PASSWORD) return { ok: false, status: 400, message: `The password needs at least ${MIN_PASSWORD} characters` };
-  if (next.length > MAX_PASSWORD) return { ok: false, status: 400, message: 'That password is too long' };
+  if (next.length > MAX_PASSWORD || require('./auth').tooLong(next)) return { ok: false, status: 400, message: 'That password is too long (72 characters at most)' };
   const db = getDb();
   const id = toId(userId);
   const user = id ? await db.collection('users').findOne({ _id: id }) : null;
