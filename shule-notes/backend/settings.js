@@ -20,6 +20,10 @@ const DEFAULTS = {
   minVersionCode: 0,   // apps older than this must update before they can be used
   updateUrl: '',       // where "Update" goes (Google Play link later); '' = the download page
   updateNote: '',      // one line shown with the update prompt
+  aiProvider: 'claude', // 'claude' or 'gemini': which AI answers first
+  aiFallback: true,     // when the other AI is set up, use it if the first one fails or is busy
+  geminiKey: '',     // the Google Gemini API key, entered in the admin panel (never sent back to it)
+  geminiModel: '',   // '' = gemini-2.5-flash
   anthropicKey: '',  // the Claude API key, entered in the admin panel (never sent back to it)
   firebaseServiceAccount: null, // { project_id, client_email, private_key } for push notifications (never sent back)
   // Paying for access (payments.js). Off until the owner switches it on, so nothing changes for students before then.
@@ -35,6 +39,12 @@ const AI_MODELS = [
   { id: 'claude-haiku-5-5', label: 'Haiku 5.5: cheapest and fastest' },
   { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5: balanced (recommended)' },
   { id: 'claude-opus-5-5', label: 'Opus 5.5: best answers, most expensive' },
+];
+// Gemini models the owner may pick (any other name that starts with gemini- can also be typed).
+const GEMINI_MODELS = [
+  { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite: cheapest and fastest' },
+  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash: balanced (recommended)' },
+  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro: best answers, most expensive' },
 ];
 const KEY_PATTERN = /^sk-ant-[A-Za-z0-9_-]{20,}$/;
 const isRealKey = (k) => typeof k === 'string' && KEY_PATTERN.test(k);
@@ -140,6 +150,22 @@ async function saveSettings(patch) {
     if (/\s/.test(v) || v.length < 12 || v.length > 400) return { ok: false, message: 'That does not look like a MarzPay key. Paste it as one line, with no spaces.' };
     next.marzpayKey = v;
   }
+  if (patch.aiProvider !== undefined) {
+    if (!['claude', 'gemini'].includes(patch.aiProvider)) return { ok: false, message: 'Choose Claude or Gemini' };
+    next.aiProvider = patch.aiProvider;
+  }
+  if (patch.aiFallback !== undefined) next.aiFallback = !!patch.aiFallback;
+  if (patch.geminiModel !== undefined) {
+    const v = text(patch.geminiModel, 50);
+    if (v && !/^gemini-[a-z0-9][a-z0-9.\-]{1,40}$/.test(v)) return { ok: false, message: 'A Gemini model name looks like gemini-2.5-flash' };
+    next.geminiModel = v;
+  }
+  if (patch.clearGeminiKey) unset.geminiKey = '';
+  else if (typeof patch.geminiKey === 'string' && patch.geminiKey.trim()) {
+    const v = patch.geminiKey.trim();
+    if (!/^AIza[0-9A-Za-z_-]{30,60}$/.test(v)) return { ok: false, message: 'That does not look like a Gemini API key. It starts with AIza and is one line with no spaces. Get it at aistudio.google.com/apikey.' };
+    next.geminiKey = v;
+  }
   if (patch.clearAnthropicKey) unset.anthropicKey = '';
   else if (typeof patch.anthropicKey === 'string' && patch.anthropicKey.trim()) {
     const v = patch.anthropicKey.trim();
@@ -157,9 +183,9 @@ async function saveSettings(patch) {
 
 // What the admin panel sees: everything EXCEPT the key itself, only whether one is saved.
 function adminView(s) {
-  const { anthropicKey, firebaseServiceAccount, marzpayKey, ...rest } = s;
+  const { anthropicKey, firebaseServiceAccount, marzpayKey, geminiKey, ...rest } = s;
   const account = firebaseServiceAccount && firebaseServiceAccount.project_id ? firebaseServiceAccount : null;
-  return { ...rest, firebaseSet: !!account, firebaseProject: account ? account.project_id : '', anthropicKeySet: isRealKey(anthropicKey), anthropicKeyHint: isRealKey(anthropicKey) ? '…' + anthropicKey.slice(-4) : '', marzpayKeySet: !!(marzpayKey && String(marzpayKey).trim()), marzpayKeyHint: marzpayKey ? '…' + String(marzpayKey).slice(-4) : '', plans: require('./payments').planList(s) };
+  return { ...rest, firebaseSet: !!account, firebaseProject: account ? account.project_id : '', anthropicKeySet: isRealKey(anthropicKey), anthropicKeyHint: isRealKey(anthropicKey) ? '…' + anthropicKey.slice(-4) : '', geminiKeySet: /^AIza/.test(geminiKey || ''), geminiKeyHint: geminiKey ? '…' + String(geminiKey).slice(-4) : '', marzpayKeySet: !!(marzpayKey && String(marzpayKey).trim()), marzpayKeyHint: marzpayKey ? '…' + String(marzpayKey).slice(-4) : '', plans: require('./payments').planList(s) };
 }
 
 // What the app and the public pages may see.
@@ -180,4 +206,4 @@ function publicConfig(s) {
   };
 }
 
-module.exports = { getSettings, saveSettings, publicConfig, adminView, clearSettingsCache, DEFAULTS, AI_MODELS, isRealKey };
+module.exports = { getSettings, saveSettings, publicConfig, adminView, clearSettingsCache, DEFAULTS, AI_MODELS, GEMINI_MODELS, isRealKey };

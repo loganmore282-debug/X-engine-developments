@@ -23,12 +23,12 @@ const revision = require('./revision');
 const loginGuard = require('./login-guard');
 const stamp = require('./stamp');
 const onboarding = require('./onboarding');
-const { askAboutDocument, classifyClaudeError } = require('./claude');
+const ai = require('./ai');
 const { privacyPage, accountDeletionPage, termsPage } = require('./legal');
 const { GROUPS: LEVEL_GROUPS, isValidLevel } = require('./levels');
 const { normalizePhone, isValidPhone } = require('./phone');
 const { eraseUser, updateProfile, cleanName, toId } = require('./accounts');
-const { getSettings, saveSettings, publicConfig, adminView, AI_MODELS } = require('./settings');
+const { getSettings, saveSettings, publicConfig, adminView, AI_MODELS, GEMINI_MODELS } = require('./settings');
 const adminData = require('./admin-data');
 const payments = require('./payments');
 const compression = require('compression');
@@ -464,10 +464,10 @@ app.post('/ai/ask', requireAuth, aiLimiter, async (req, res) => {
     const allowed = await consumeAiQuota(req.userId, limit);
     if (!allowed) return res.status(429).json({ status: 'error', message: `You've reached today's limit of ${limit} AI questions. Try again tomorrow.` });
 
-    const result = await askAboutDocument({ documentText: note.extractedText, noteTitle: note.title, question, history, apiKey: settings.anthropicKey, model: settings.aiModel || undefined });
+    const result = await ai.ask(settings, { documentText: note.extractedText, noteTitle: note.title, question, history });
     res.json({ status: 'success', answer: result.answer });
   } catch (e) {
-    const { status, message } = classifyClaudeError(e);
+    const { status, message } = ai.classifyAiError(e);
     res.status(status).json({ status: 'error', message });
   }
 });
@@ -780,7 +780,15 @@ app.post('/admin/onboarding/move', guard(async (req, res) => sendResult(res, awa
 app.post('/admin/feedback/list', guard(async (req, res) => res.json({ status: 'success', ...(await feedback.listFeedback(req.body)) })));
 app.post('/admin/feedback/status', guard(async (req, res) => sendResult(res, await feedback.setFeedbackStatus(req.body.id, req.body.status))));
 app.post('/admin/feedback/delete', guard(async (req, res) => sendResult(res, await feedback.deleteFeedback(req.body.id))));
-app.post('/admin/settings/get', guard(async (req, res) => res.json({ status: 'success', settings: adminView(await getSettings()), defaultAiDailyLimit: AI_DAILY_LIMIT, models: AI_MODELS, publishedVersion: publishedVersion() })));
+app.post('/admin/ai/test', guard(async (req, res) => {
+  const settings = await getSettings();
+  const started = Date.now();
+  try {
+    const r = await ai.ask(settings, { documentText: 'The capital of Uganda is Kampala.', noteTitle: 'Test', question: 'What is the capital of Uganda? Answer in one short sentence.', history: [] });
+    res.json({ status: 'success', provider: r.provider, model: r.model || '', answer: String(r.answer).slice(0, 200), ms: Date.now() - started });
+  } catch (e) { res.json({ status: 'error', message: ai.classifyAiError(e).message, provider: (e && e.provider) || '', detail: String((e && e.message) || '').replace(/AIza[0-9A-Za-z_-]+|sk-ant-[0-9A-Za-z_-]+/g, '[key]').slice(0, 200) }); }
+}));
+app.post('/admin/settings/get', guard(async (req, res) => res.json({ status: 'success', settings: adminView(await getSettings()), defaultAiDailyLimit: AI_DAILY_LIMIT, models: AI_MODELS, geminiModels: GEMINI_MODELS, publishedVersion: publishedVersion() })));
 app.post('/admin/settings/save', guard(async (req, res) => {
   const result = await saveSettings(req.body);
   if (result.ok) warmStamps(); // new contact details: the stamped copies are remade in the background

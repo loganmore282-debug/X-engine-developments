@@ -326,12 +326,29 @@
       <div class="card">
         <h2>AI helper</h2>
         <label class="switch"><input type="checkbox" id="setAiOn"> Let students ask the AI helper</label>
+        <label>Which AI answers</label>
+        <select id="setProvider"><option value="claude">Claude (Anthropic)</option><option value="gemini">Gemini (Google)</option></select>
+        <label class="switch" style="margin-top:12px"><input type="checkbox" id="setFallback"> If it fails or is busy, use the other AI as a backup (when its key is saved)</label>
+
+        <h3 style="font-size:15px;margin:16px 0 6px">Claude</h3>
         <label>Claude API key</label>
         <input id="setKey" type="password" autocomplete="off" placeholder="Paste a new key to replace the saved one">
         <div class="muted" id="setKeyHint" style="margin:-6px 0 8px"></div>
         <button class="btn plain sm" id="setKeyClear" style="margin-bottom:14px">Remove the saved key</button>
-        <label>AI model</label>
+        <label>Claude model</label>
         <select id="setModel"></select>
+
+        <h3 style="font-size:15px;margin:16px 0 6px">Gemini</h3>
+        <label>Gemini API key</label>
+        <input id="setGemKey" type="password" autocomplete="off" placeholder="Paste a new key to replace the saved one">
+        <div class="muted" id="setGemKeyHint" style="margin:-6px 0 8px"></div>
+        <button class="btn plain sm hidden" id="setGemKeyClear" style="margin-bottom:14px">Remove the saved key</button>
+        <label>Gemini model</label>
+        <input id="setGemModel" list="gemModels" placeholder="gemini-2.5-flash">
+        <datalist id="gemModels"></datalist>
+        <div class="muted" style="margin-top:4px">Pick one of the suggestions, or type any model name that starts with gemini-.</div>
+
+        <div style="margin:16px 0 4px"><button class="btn plain sm" id="aiTest">Test the AI helper</button> <span class="muted" id="aiTestResult"></span></div>
         <label>Questions each student can ask per day</label>
         <input id="setAiLimit" type="number" min="1" max="500">
         <div class="muted" id="setAiHint" style="margin:-6px 0 14px"></div>
@@ -1116,6 +1133,14 @@ LOADERS.settings = async function(){
   $('setAiLimit').placeholder = String(r.defaultAiDailyLimit);
   $('setAiHint').textContent = 'Leave empty to use the server default (' + r.defaultAiDailyLimit + '). Every question costs a little, so this is what keeps the bill predictable.';
   $('setModel').innerHTML = '<option value="">Server default</option>' + (r.models || []).map(m => `<option value="${esc(m.id)}"${m.id === s.aiModel ? ' selected' : ''}>${esc(m.label)}</option>`).join('');
+  $('setProvider').value = s.aiProvider === 'gemini' ? 'gemini' : 'claude';
+  $('setFallback').checked = s.aiFallback !== false;
+  $('setGemKey').value = '';
+  $('setGemKeyHint').textContent = s.geminiKeySet ? 'A key is saved (' + s.geminiKeyHint + '). It is never shown again; paste a new one to replace it.' : 'No key saved yet. Create one at aistudio.google.com/apikey, then paste it here (never in a chat).';
+  $('setGemKeyClear').classList.toggle('hidden', !s.geminiKeySet);
+  $('setGemModel').value = s.geminiModel || '';
+  $('gemModels').innerHTML = (r.geminiModels || []).map(m => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('');
+  $('aiTestResult').textContent = '';
   $('setKey').value = '';
   $('setKeyHint').textContent = s.anthropicKeySet ? 'A key is saved (' + s.anthropicKeyHint + '). It is never shown again; paste a new one to replace it.' : 'No key saved yet. Get one at console.anthropic.com, then paste it here. Without it the AI helper cannot answer.';
   $('setKeyClear').classList.toggle('hidden', !s.anthropicKeySet);
@@ -1141,7 +1166,8 @@ LOADERS.settings = async function(){
 $('setSave').addEventListener('click', async () => {
   const r = await api('/admin/settings/save', {
     latestVersionCode: $('setLatest').value, minVersionCode: $('setMin').value, updateUrl: $('setUpdateUrl').value, updateNote: $('setUpdateNote').value,
-    aiEnabled: $('setAiOn').checked, aiModel: $('setModel').value, anthropicKey: $('setKey').value, aiDailyLimit: $('setAiLimit').value === '' ? null : Number($('setAiLimit').value),
+    aiEnabled: $('setAiOn').checked, aiModel: $('setModel').value, anthropicKey: $('setKey').value,
+    aiProvider: $('setProvider').value, aiFallback: $('setFallback').checked, geminiModel: $('setGemModel').value.trim(), ...($('setGemKey').value.trim() ? { geminiKey: $('setGemKey').value.trim() } : {}), aiDailyLimit: $('setAiLimit').value === '' ? null : Number($('setAiLimit').value),
     supportPhone: $('setPhone').value, supportWhatsapp: $('setWhatsapp').value, supportEmail: $('setEmail').value, supportHours: $('setHours').value, websiteUrl: $('setWebsite').value, pdfStamp: $('setPdfStamp').checked,
     ...($('setFb').value.trim() ? { firebaseServiceAccount: $('setFb').value.trim() } : {}),
     signupsOpen: $('setSignups').checked, trialMinutes: Math.round(Number($('setTrial').value || 0) * 60),
@@ -1151,6 +1177,19 @@ $('setSave').addEventListener('click', async () => {
   });
   toast(r.status === 'success' ? 'Settings saved' : (r.message || 'Could not save'), r.status === 'success' ? 'ok' : 'error');
   if (r.status === 'success') LOADERS.settings();
+});
+$('setGemKeyClear').addEventListener('click', async () => {
+  if (!await confirmBox('Remove the Gemini key?', 'Gemini stops answering until you paste a key again.', 'Remove key', true)) return;
+  const r = await api('/admin/settings/save', { clearGeminiKey: true });
+  toast(r.status === 'success' ? 'Key removed' : (r.message || 'Could not remove'), r.status === 'success' ? 'ok' : 'error');
+  LOADERS.settings();
+});
+$('aiTest').addEventListener('click', async () => {
+  $('aiTest').disabled = true; $('aiTestResult').textContent = 'Asking…';
+  const r = await api('/admin/ai/test');
+  $('aiTest').disabled = false;
+  $('aiTestResult').textContent = r.status === 'success' ? '✓ ' + (r.provider === 'gemini' ? 'Gemini' : 'Claude') + ' answered in ' + (r.ms / 1000).toFixed(1) + ' s: “' + r.answer + '”' : '✗ ' + (r.message || 'The AI did not answer') + (r.provider ? ' (' + (r.provider === 'gemini' ? 'Gemini' : 'Claude') + ')' : '') + (r.detail ? ' Reason: ' + r.detail : '');
+  $('aiTestResult').style.color = r.status === 'success' ? 'var(--brand)' : 'var(--danger)';
 });
 $('setKeyClear').addEventListener('click', async () => {
   if (!await confirmBox('Remove the Claude key?', 'The AI helper stops answering until you paste a key again.', 'Remove key', true)) return;
