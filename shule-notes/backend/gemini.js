@@ -4,7 +4,9 @@
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const KEY_PATTERN = /^AIza[0-9A-Za-z_-]{30,60}$/;
+// Google has issued Gemini keys in more than one shape (the older ones start with AIza, newer ones differ), so only the
+// general look is checked: one line of letters, digits and . _ - (and it must not be a Claude key).
+const KEY_PATTERN = /^(?!sk-)[A-Za-z0-9][A-Za-z0-9._-]{19,199}$/;
 const MODEL_PATTERN = /^gemini-[a-z0-9][a-z0-9.\-]{1,40}$/;
 const MAX_QUESTION_LEN = 2000;
 const MAX_DOCUMENT_CHARS = 400000;

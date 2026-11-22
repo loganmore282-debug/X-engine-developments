@@ -73,7 +73,8 @@ const good = (text) => ({ candidates: [{ content: { parts: [{ text }] }, finishR
   ck(both500 && both500.provider === 'claude', 'when both fail, the last error is reported');
 
   console.log('— the admin settings —');
-  ck(!(await settingsLib.saveSettings({ geminiKey: 'sk-ant-nope' })).ok && !(await settingsLib.saveSettings({ geminiKey: 'AIza short' })).ok, 'a key that is not a Gemini key is refused');
+  ck(!(await settingsLib.saveSettings({ geminiKey: 'sk-ant-api03-' + 'a'.repeat(30) })).ok && !(await settingsLib.saveSettings({ geminiKey: 'AIza short' })).ok && !(await settingsLib.saveSettings({ geminiKey: 'too-short' })).ok, 'a Claude key, a key with a space and a too-short key are refused');
+  ck((await settingsLib.saveSettings({ geminiKey: 'AQ.Ab8RN6' + 'x'.repeat(40) })).ok, 'a newer-style Gemini key (not starting with AIza) is accepted');
   ck((await settingsLib.saveSettings({ geminiKey: KEY, aiProvider: 'gemini', geminiModel: 'gemini-2.5-flash-lite', aiFallback: true })).ok, 'a real-looking key, provider and model are saved');
   ck(!(await settingsLib.saveSettings({ aiProvider: 'openai' })).ok && !(await settingsLib.saveSettings({ geminiModel: 'gpt-4' })).ok, 'an unknown provider or a non-Gemini model name is refused');
   const view = settingsLib.adminView(await settingsLib.getSettings());

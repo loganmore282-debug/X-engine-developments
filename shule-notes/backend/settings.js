@@ -163,7 +163,7 @@ async function saveSettings(patch) {
   if (patch.clearGeminiKey) unset.geminiKey = '';
   else if (typeof patch.geminiKey === 'string' && patch.geminiKey.trim()) {
     const v = patch.geminiKey.trim();
-    if (!/^AIza[0-9A-Za-z_-]{30,60}$/.test(v)) return { ok: false, message: 'That does not look like a Gemini API key. It starts with AIza and is one line with no spaces. Get it at aistudio.google.com/apikey.' };
+    if (!require('./gemini').KEY_PATTERN.test(v)) return { ok: false, message: 'That does not look like a Gemini API key. Copy the whole key from aistudio.google.com/apikey: it is one long line with no spaces.' };
     next.geminiKey = v;
   }
   if (patch.clearAnthropicKey) unset.anthropicKey = '';
@@ -185,7 +185,7 @@ async function saveSettings(patch) {
 function adminView(s) {
   const { anthropicKey, firebaseServiceAccount, marzpayKey, geminiKey, ...rest } = s;
   const account = firebaseServiceAccount && firebaseServiceAccount.project_id ? firebaseServiceAccount : null;
-  return { ...rest, firebaseSet: !!account, firebaseProject: account ? account.project_id : '', anthropicKeySet: isRealKey(anthropicKey), anthropicKeyHint: isRealKey(anthropicKey) ? '…' + anthropicKey.slice(-4) : '', geminiKeySet: /^AIza/.test(geminiKey || ''), geminiKeyHint: geminiKey ? '…' + String(geminiKey).slice(-4) : '', marzpayKeySet: !!(marzpayKey && String(marzpayKey).trim()), marzpayKeyHint: marzpayKey ? '…' + String(marzpayKey).slice(-4) : '', plans: require('./payments').planList(s) };
+  return { ...rest, firebaseSet: !!account, firebaseProject: account ? account.project_id : '', anthropicKeySet: isRealKey(anthropicKey), anthropicKeyHint: isRealKey(anthropicKey) ? '…' + anthropicKey.slice(-4) : '', geminiKeySet: !!(geminiKey && String(geminiKey).trim()), geminiKeyHint: geminiKey ? '…' + String(geminiKey).slice(-4) : '', marzpayKeySet: !!(marzpayKey && String(marzpayKey).trim()), marzpayKeyHint: marzpayKey ? '…' + String(marzpayKey).slice(-4) : '', plans: require('./payments').planList(s) };
 }
 
 // What the app and the public pages may see.
