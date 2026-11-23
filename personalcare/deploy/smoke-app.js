@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 // Live check that the SERVER gives the new screens what they need, against a RUNNING server and its
-// real database. Creates one throwaway test member (random 077 number, Trade Password 482913), then
+// real database. Creates one throwaway test member (random 077 number), then
 // reads what Home, Income, Team, My, Deposit, Withdraw and Balance Record read, and tries the
-// Trade Password and purchase-limit rules. Prints PASS/FAIL per step, never a token or password.
+// withdrawal and purchase-limit rules. Prints PASS/FAIL per step, never a token or password.
 //   node deploy/smoke-app.js [http://127.0.0.1:3008] [REFERRAL_CODE]
 // REFERRAL_CODE is any existing member's code (needed once the platform already has members and the
 // admin requires a referral code). The test member is left in the database: delete it in the admin
@@ -39,13 +39,12 @@ const num = v => typeof v === 'number' && Number.isFinite(v);
   const token = r.body.token;
   say(r.code === 200 && token, 'test member signs up', 'HTTP ' + r.code);
   r = await call('POST', '/register', { referralCode: ref, pin: PIN }, token);
-  say(r.code === 200 && r.body.status === 'success', 'test member finishes registration with a Trade Password', 'HTTP ' + r.code + (r.body.message ? ' ' + r.body.message : ''));
+  say(r.code === 200 && r.body.status === 'success', 'test member finishes registration', 'HTTP ' + r.code + (r.body.message ? ' ' + r.body.message : ''));
   if (r.code !== 200) { console.log('\nStopping: registration needs a valid referral code. Run again with:  node deploy/smoke-app.js ' + base + ' <an existing member\'s code>'); process.exit(1); }
 
   const ac = await call('GET', '/account', null, token);
   const a = (ac.body && ac.body.account) || {};
   say(ac.code === 200 && a.phone && num(a.walletBalance) && num(a.totalEarned) && a.referralCode, 'My / Home: account has phone, balance, earnings, referral code', 'balance ' + a.walletBalance);
-  say(a.hasTradePin === true, 'the account says a Trade Password is set');
   const iv = await call('GET', '/investments', null, token);
   say(iv.code === 200 && Array.isArray(iv.body.investments), 'Income: investments list answers', iv.body.investments && iv.body.investments.length + ' owned');
   const ts = await call('GET', '/team/stats', null, token);
@@ -60,18 +59,12 @@ const num = v => typeof v === 'number' && Number.isFinite(v);
   const ms = await call('GET', '/messages', null, token);
   say(ms.code === 200 && Array.isArray(ms.body.messages), 'Messages answer');
 
-  // Trade Password rules on the real server
+  // Withdrawal rules on the real server: a payout number that is not saved on the profile must be refused
   const mult = Number(s.withdrawMultiple) || 0;
   let wAmt = Math.max(Number(s.minWithdraw) || 0, 1000); if (mult > 0) wAmt = Math.ceil(wAmt / mult) * mult;
   r = await call('POST', '/withdraw/request', { amount: wAmt, network: 'MTN Mobile Money', phone }, token);
-  if (r.body.code === 'WINDOW_CLOSED') console.log('SKIP  withdraw hours are closed right now, so the Trade Password order cannot be tried (run again inside the hours)');
-  else {
-    say(r.code === 400 && r.body.code === 'INVALID_PIN', 'withdraw without a Trade Password is refused', 'HTTP ' + r.code + ' ' + (r.body.code || ''));
-    r = await call('POST', '/withdraw/request', { amount: wAmt, network: 'MTN Mobile Money', phone, pin: '000000' }, token);
-    say(r.code === 400 && r.body.code === 'WRONG_PIN', 'withdraw with a wrong Trade Password is refused', 'HTTP ' + r.code + ' ' + (r.body.code || ''));
-  }
-  r = await call('POST', '/account/transaction-pin/change', { oldPin: '111222', newPin: '135790' }, token);
-  say(r.code === 400, 'changing the Trade Password with a wrong old one is refused', 'HTTP ' + r.code);
+  if (r.body.code === 'WINDOW_CLOSED') console.log('SKIP  withdraw hours are closed right now, so the withdrawal rules cannot be tried (run again inside the hours)');
+  else say(r.code === 400 && r.body.code === 'UNBOUND_ACCOUNT', 'withdraw to an account that is not saved on the profile is refused', 'HTTP ' + r.code + ' ' + (r.body.code || ''));
   // purchase: only try an asset the test member cannot afford (never spend the welcome bonus)
   const dear = products.filter(p => num(p.price) && p.price > (a.walletBalance || 0) && p.isOpen !== false).sort((x, y) => x.price - y.price)[0];
   if (dear) {
