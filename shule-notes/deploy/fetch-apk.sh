@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Keeps the download page's APK in step with the newest build on GitHub.
-# Runs every 10 minutes (installed by publish-apk.sh). It downloads only when the
+# Runs every minute (installed by publish-apk.sh). It downloads only when the
 # file on GitHub has actually changed, and replaces the old file in one step so
 # nobody ever downloads a half-written one.
 set -euo pipefail
@@ -12,7 +12,7 @@ mkdir -p "$DIR"
 # Identify the current file from its response headers (the last hop, after redirects).
 SIG="$(curl -fsSIL --max-time 30 "$URL" | tr -d '\r' | tr 'A-Z' 'a-z' | awk '/^(etag|last-modified|content-length):/ {h[$1]=$2" "$3" "$4" "$5" "$6" "$7} /^http/ {delete h} END {print h["etag:"] "|" h["last-modified:"] "|" h["content-length:"]}')"
 if [ -f "$STATE" ] && [ "$SIG" = "$(cat "$STATE")" ] && [ -s "$DIR/shule-notes.apk" ]; then
-  echo "up to date"; exit 0
+  exit 0   # nothing new (silent, so the log only shows real updates)
 fi
 
 TMP="$(mktemp "$DIR/.download.XXXXXX")"
@@ -35,4 +35,4 @@ else
   printf '{"size":%s,"updated":"%s"}\n' "$SIZE" "$(date -u +%FT%TZ)" > "$DIR/info.json"
 fi
 chmod 644 "$DIR/info.json"
-echo "updated: $SIZE bytes"
+echo "$(date -u +%FT%TZ) updated: $SIZE bytes${VERSION:+, version $VERSION}"

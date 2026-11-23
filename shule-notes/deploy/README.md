@@ -169,7 +169,7 @@ sudo ./publish-apk.sh
 
 It prints `https://<your api address>/download/`: a phone-friendly page with a Download
 button and the install steps. The file behind it is refreshed from the newest GitHub build
-every 10 minutes (only when it changed; a bad or half download never replaces the good one).
+every minute (only when it changed; a bad or half download never replaces the good one).
 nginx serves it, so an interrupted download can resume. It is a test build: testers must
 allow installing from the browser and remove any older copy first.
 

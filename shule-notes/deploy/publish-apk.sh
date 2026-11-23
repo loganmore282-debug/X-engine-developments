@@ -5,8 +5,8 @@
 #
 #   sudo ./publish-apk.sh
 #
-# It only ADDS: a folder, one nginx location, one cron file. The app file is refreshed
-# from the newest GitHub build every 10 minutes. Safe to run again.
+# It only ADDS: a folder, one nginx location, one cron file. The server checks GitHub for a
+# newer build EVERY MINUTE (a tiny header request; the app is only downloaded when it changed). Safe to run again.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "Run this as root (sudo)."; exit 1; }
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -54,8 +54,9 @@ else
   mv "$NGINX_API.before-download" "$NGINX_API"; exit 1
 fi
 
-echo "==> Fetching the newest app now, and every 10 minutes after"
-echo '*/10 * * * * root /usr/local/sbin/shule-fetch-apk >> /var/log/shule-fetch-apk.log 2>&1' > /etc/cron.d/shule-fetch-apk
+echo "==> Fetching the newest app now, and checking every minute after"
+# flock: a slow download is never started twice at the same time.
+echo '* * * * * root flock -n /run/shule-fetch-apk.lock /usr/local/sbin/shule-fetch-apk >> /var/log/shule-fetch-apk.log 2>&1' > /etc/cron.d/shule-fetch-apk
 chmod 644 /etc/cron.d/shule-fetch-apk
 /usr/local/sbin/shule-fetch-apk
 
