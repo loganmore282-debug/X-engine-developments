@@ -659,8 +659,9 @@ const DEFAULT_SETTINGS = {
   // for the actual server-side enforcement.
   openingCountdownEnabled: false, openingCountdownAt: 0,
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
-  // The first cashback of a member's FIRST purchase is paid at the moment of purchase (admin switch); off = like every other purchase, 24 hours later.
-  firstPurchaseCashbackNow: true,
+  // Owner: "remove first purchase cashback immediately". OFF: the first purchase waits like every other one (first cashback at the next midnight schedule).
+  // The admin switch stays, but nothing is paid at the moment of purchase unless the owner ticks it on again.
+  firstPurchaseCashbackNow: false,
   // The hours withdraw is open. Owner: "one withdrawal time should be
   // SETTABLE IN ADMIN, such that when one tries to withdrawal he sees, that
   // withdrawals start from this time to this time, nothing much ie 6pm to
@@ -4464,7 +4465,7 @@ app.post('/invest/create', async (req, res) => {
       const { date, time } = nowStr();
       // First cashback: at once on the member's first purchase, otherwise 24 hours from now; then every 24 hours.
       const boughtAtMs = Date.now();
-      cashbackNow = isFirstInvestment && sett.firstPurchaseCashbackNow !== false;
+      cashbackNow = isFirstInvestment && sett.firstPurchaseCashbackNow === true;
       const payoutFirstAt = new Date(cashbackNow ? boughtAtMs : boughtAtMs + 86400000);
       try {
         await invRef.set({

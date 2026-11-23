@@ -3251,7 +3251,7 @@ async function renderSettings(){
           <div id="sRefPrefixPreview" style="font-size:12px;opacity:.7;margin-top:4px"></div></div>
       </div>
       <div class="switch-row" style="margin-top:8px"><span><b>First purchase pays its first cashback at once</b> <span class="muted">(a member's first purchase; off = 24 hours after buying, like every other purchase)</span></span>
-        <label style="width:auto;margin:0"><input type="checkbox" id="sFirstCash" ${s.firstPurchaseCashbackNow!==false?'checked':''} style="width:auto"></label></div>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sFirstCash" ${s.firstPurchaseCashbackNow===true?'checked':''} style="width:auto"></label></div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only withdrawals)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
       <!-- Owner: "one withdrawal time should be SETTABLE IN ADMIN, such that
