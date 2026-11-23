@@ -3107,6 +3107,18 @@ function wireBannerHandlers(){
     toast(d.status==='success'?'Login screen opacity & blur saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
 }
+// The spin wheel's ten rows (amount + chance), from the saved wheel or the default.
+const WHEEL_DEFAULT=[[200,24],[250,20],[300,16],[400,12],[500,9],[600,7],[700,5],[800,3],[900,2.5],[1000,1.5]];
+function wheelRowsHtml(saved){
+  const rows=(Array.isArray(saved)&&saved.length===10)?saved.map(x=>[x.reward,x.weight]):WHEEL_DEFAULT;
+  return rows.map((r,i)=>`<div class="row" style="margin-top:6px;align-items:center">
+    <div style="flex:0 0 28px;text-align:center"><b>${i+1}</b></div>
+    <div style="flex:1 1 110px"><label style="margin:0">Amount</label><input class="wl-amt" type="number" min="0" step="1" value="${esc(String(r[0]))}"></div>
+    <div style="flex:1 1 90px"><label style="margin:0">Chance</label><input class="wl-chance" type="number" min="0" step="0.5" value="${esc(String(r[1]))}"></div>
+    <div style="flex:0 0 62px;text-align:right"><label style="margin:0">Wins</label><b class="wl-pct">—</b></div>
+  </div>`).join('');
+}
+
 async function renderSettings(){
   // Image/banner uploads all moved to their own tab, see renderBanners() --
   // this fetch only needs what Rates/Payments/Support/App name/About
@@ -3176,6 +3188,23 @@ async function renderSettings(){
       <textarea id="sAllowedOrigins" rows="4" placeholder="petro-platform.com&#10;www.petro-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Only these domains may reach the backend &mdash; one per line, include www. petro-platform.com and this VPS's own address are always allowed.</p>
       <button class="btn block" id="saveRates">Save rates</button>
+    </div>
+
+    <h2 class="sec">Spin wheel</h2>
+    <div class="panel-card" id="wheelCard">
+      <div class="switch-row"><span><b>Spin wheel on</b> <span class="muted">(members see "Roue de la chance" on Home and Account)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="wlOn" ${s.turntableEnabled===true?'checked':''} style="width:auto"></label></div>
+      <div class="switch-row" style="margin-top:8px"><span><b>1 spin for every successful recharge</b> <span class="muted">(a recharge that is approved or paid gives the member one spin, once)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="wlDeposit" ${s.turntablePerDeposit!==false?'checked':''} style="width:auto"></label></div>
+      <div class="switch-row" style="margin-top:8px"><span><b>Also 1 free spin a day</b> <span class="muted">(resets at midnight, Côte d’Ivoire time)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="wlDaily" ${s.turntableDailyFree===true?'checked':''} style="width:auto"></label></div>
+      <div class="switch-row" style="margin-top:8px"><span><b>Also spins from buying a product</b> <span class="muted">(each product's own spin count under Products)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="wlBuy" ${s.turntablePurchaseSpins===true?'checked':''} style="width:auto"></label></div>
+      <p class="muted" style="font-size:12px;margin:10px 0 8px">Ten sections. <b>Amount</b> is what the section pays (0 = no prize). <b>Chance</b> is its share of the draw: the bigger the number, the more often it wins. The % is worked out for you. Members only see the amounts, never the chances.</p>
+      <div id="wlRows">${wheelRowsHtml(s.turntableSlices)}</div>
+      <p class="muted" id="wlSum" style="font-size:12px;margin:8px 0 0"></p>
+      <div class="row" style="margin-top:10px"><button class="btn" id="wlReset" type="button" style="background:transparent;color:inherit;border:1px solid var(--line)">Reset to default</button></div>
+      <button class="btn block" id="saveWheel" style="margin-top:12px">Save spin wheel</button>
     </div>
 
     <h2 class="sec">Recharges and withdrawals</h2>
@@ -3280,6 +3309,21 @@ async function renderSettings(){
   }
   ['sWitWindow','sWitFrom','sWitTo'].forEach(id=>{ const e=$(id); if(e){ e.addEventListener('change',refreshWitNow); e.addEventListener('input',refreshWitNow); } });
   refreshWitNow();
+  const wlUpdateSum=()=>{
+    const ws=[...document.querySelectorAll('.wl-chance')].map(e=>Math.max(0,+e.value||0)), tot=ws.reduce((a,b)=>a+b,0);
+    document.querySelectorAll('.wl-pct').forEach((e,i)=>{ e.textContent = tot>0 ? (ws[i]/tot*100).toFixed(1)+'%' : '—'; });
+    $('wlSum').textContent = tot>0 ? 'Total of the chances: '+(Math.round(tot*100)/100)+' (the % column shows each section\'s real chance of winning).' : 'Give at least one section a chance above 0.';
+  };
+  document.querySelectorAll('.wl-chance').forEach(e=>e.addEventListener('input',wlUpdateSum)); wlUpdateSum();
+  $('wlReset').addEventListener('click',()=>{ $('wlRows').innerHTML=wheelRowsHtml(null); document.querySelectorAll('.wl-chance').forEach(e=>e.addEventListener('input',wlUpdateSum)); wlUpdateSum(); toast('Default wheel loaded: press Save to keep it','ok'); });
+  $('saveWheel').addEventListener('click', async()=>{
+    const amts=[...document.querySelectorAll('.wl-amt')], chs=[...document.querySelectorAll('.wl-chance')];
+    const slices=amts.map((e,i)=>({ reward:+e.value, weight:+chs[i].value }));
+    if(slices.length!==10 || slices.some(x=>!isFinite(x.reward)||x.reward<0||!isFinite(x.weight)||x.weight<0)){ toast('Every section needs an amount and a chance of 0 or more','err'); return; }
+    if(!slices.some(x=>x.weight>0)){ toast('Give at least one section a chance above 0','err'); return; }
+    const d=await api('/admin/settings/update', { settings:{ turntableEnabled:$('wlOn').checked, turntablePerDeposit:$('wlDeposit').checked, turntableDailyFree:$('wlDaily').checked, turntablePurchaseSpins:$('wlBuy').checked, turntableSlices:slices } });
+    toast(d.status==='success'?'Spin wheel saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
       minDeposit:+$('sMinDep').value, minWithdraw:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,

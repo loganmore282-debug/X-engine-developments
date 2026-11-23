@@ -204,7 +204,7 @@ function makeLock() {
 }
 
 const SETTINGS = {
-  turntableEnabled: true, turntableDailyMin: 200, turntableDailyMax: 1000,
+  turntableEnabled: true, turntableDailyMin: 200, turntableDailyMax: 1000, turntableDailyFree: true, turntablePurchaseSpins: true,
 };
 const PRODUCT = { key: 'p9', name: 'Mega', spinCount: 2, spinMin: 5000, spinMax: 9000 };
 
@@ -239,6 +239,11 @@ function build(state, opts = {}) {
     ${fnSource('newStatementId')}
     ${fnSource('rollSpinSlice')}
     ${fnSource('rollSpinReward')}
+    const TURNTABLE_SLICE_COUNT = 10;
+    ${fnSource('normalizeTurntableSlices')}
+    ${fnSource('rollConfiguredSlice')}
+    ${fnSource('spinSlicesOf')}
+    ${fnSource('rollSpinFor')}
     ${fnSource('spinBandOf')}
     ${fnSource('turntableDailyReward')}
     ${fnSource('grantTurntableSpins')}
@@ -389,6 +394,40 @@ function armBarrier(state, n) {
   const after = await spin(api, st);
   ck(after.body.reward === 8000,
      `the spin pays its own snapshot band (${after.body && after.body.reward})`);
+
+  // ── 7. the owner's ten sections ───────────────────────────────────────
+  console.log('\n— the ten-section wheel (amounts + chances set in the admin panel) —');
+  const ten = (r, w) => Array.from({ length: 10 }, (_, i) => ({ reward: r(i), weight: w(i) }));
+  st = freshState(); api = build(st, { settings: { turntableSlices: ten(i => (i + 1) * 100, i => (i === 6 ? 1 : 0)) } });
+  r = await spin(api, st);
+  ck(r.code === 200 && r.body.reward === 700 && r.body.sliceIndex === 6, `only the section with a chance can win: 700 on section 6 (${r.body && r.body.reward}, ${r.body && r.body.sliceIndex})`);
+  ck(JSON.stringify(r.body.slices) === JSON.stringify([100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]), 'the answer carries the ten amounts, no chances');
+  ck(Math.abs(st.users.u1.walletBalance - 10700) < 0.005 && st.tx.length === 1 && st.tx[0].amount === 700, `the wallet got exactly 700 and one ledger row (${st.users.u1.walletBalance}, ${st.tx.length})`);
+  st = freshState(); api = build(st, { settings: { turntableSlices: ten(i => (i === 2 ? 0 : 50), i => (i === 2 ? 1 : 0)) } });
+  r = await spin(api, st);
+  ck(r.code === 200 && r.body.reward === 0 && r.body.sliceIndex === 2, `a zero section answers 0 (${r.body && r.body.reward})`);
+  ck(st.users.u1.walletBalance === 10000 && st.tx.length === 0, 'and moves no money and writes no ledger row');
+  const again = await spin(api, st);
+  ck(again.code === 400, `the free spin is still used up for the day (${again.code})`);
+  // a spin earned by a purchase uses the same wheel, not the product's old band
+  st = freshState({ lastTurntableAt: Date.now() }); st.spins.push({ id: 's1', userId: 'u1', used: false, createdAt: 1, spinMin: 5000, spinMax: 9000, productName: 'P' });
+  api = build(st, { settings: { turntableSlices: ten(i => (i + 1) * 100, i => (i === 0 ? 1 : 0)) } });
+  r = await spin(api, st);
+  ck(r.code === 200 && r.body.source === 'product' && r.body.reward === 100, `an earned spin draws from the ten sections too (${r.body && r.body.source}, ${r.body && r.body.reward})`);
+
+  // ── 8. the owner's rule: spins come from successful recharges, not from a free daily spin ──
+  console.log('\n— free daily spin OFF (the default): only spins a recharge earned can be spent —');
+  st = freshState(); api = build(st, { settings: { turntableDailyFree: false } });
+  r = await spin(api, st);
+  ck(r.code === 400 && /recharge/i.test((r.body || {}).message || ''), `no free spin: the member is told a successful recharge gives one (${r.code} ${(r.body || {}).message})`);
+  ck(st.users.u1.walletBalance === 10000 && st.tx.length === 0, 'nothing was paid');
+  st = freshState(); st.spins.push({ id: 'dep:d1', userId: 'u1', used: false, createdAt: 1, source: 'deposit', depositId: 'd1', spinMin: 200, spinMax: 1000, productName: 'a recharge' });
+  api = build(st, { settings: { turntableDailyFree: false } });
+  r = await spin(api, st);
+  ck(r.code === 200 && r.body.source === 'product', `a recharge spin can be spent (${r.code})`);
+  ck(st.spins[0].used === true, 'and is burnt');
+  const second = await spin(api, st);
+  ck(second.code === 400, `one recharge = one spin: the next tap is refused (${second.code})`);
 
   console.log(bad ? `\n${bad} FAILED` : '\nspin sources: all cases pass');
   process.exit(bad ? 1 : 0);

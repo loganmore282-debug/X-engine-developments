@@ -2766,6 +2766,22 @@ html,body,#app{overscroll-behavior-y:none;}
 .asset-stats b{display:block;font-size:13px;line-height:1.2;margin:3px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
 .asset-row .p-cta{height:44px;font-size:14px;}
 
+
+/* ── Spin wheel (Roue de la chance): ten sections, set in the admin panel ── */
+.tt-stage{display:flex;flex-direction:column;align-items:center;padding:6px 18px 28px;text-align:center;}
+.tt-spins{font-size:15px;font-weight:700;color:#ffb000;margin-bottom:14px;min-height:20px;}
+.tt-board{position:relative;width:min(84vw,330px);aspect-ratio:1/1;margin:6px auto 18px;}
+.tt-wheel{position:absolute;inset:0;border-radius:50%;box-shadow:0 8px 26px rgba(0,0,0,.28),0 0 0 6px #25262b;will-change:transform;}
+.tt-wheel svg{display:block;}
+.tt-pointer{position:absolute;left:50%;top:-14px;width:0;height:0;transform:translateX(-50%);z-index:3;border-left:14px solid transparent;border-right:14px solid transparent;border-top:28px solid #ffb000;filter:drop-shadow(0 2px 2px rgba(0,0,0,.45));}
+.tt-hub{position:absolute;left:50%;top:50%;width:16%;aspect-ratio:1/1;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0%,#ffe9bd 55%,#f5a000 100%);box-shadow:0 2px 8px rgba(0,0,0,.4);z-index:2;}
+.tt-result{min-height:26px;font-size:16px;font-weight:700;color:#d8d9de;margin:0 0 12px;opacity:0;transform:translateY(6px);transition:opacity .3s ease,transform .3s ease;}
+.tt-result.show{opacity:1;transform:none;}
+.tt-result.win{color:#3ddc7a;font-size:18px;}
+.tt-go{width:100%;max-width:320px;height:54px;padding:0;font-size:16px;letter-spacing:.08em;}
+.tt-go:disabled{opacity:.55;}
+.tt-sub{margin:12px 0 0;font-size:13px;color:#6b6c72;}
+.checkin-card.tt-home{margin-top:-4px;}
 </style>
 <style data-petro-task-center-cards>
 .task-center{padding:4px 0 16px;}

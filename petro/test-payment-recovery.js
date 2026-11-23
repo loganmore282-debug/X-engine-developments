@@ -83,6 +83,7 @@ function setup(input = seed()) {
     withUserRegion:async(_id,work)=>work(), nowStr:()=>({date:'2026-09-24',time:'00:00'}),
     newStatementId:()=> 'test-' + ++serial, fmtMoney:n=>'UGX '+n,
     verifyAuth:async()=> 'l1', markDepositAttemptSucceeded(){}, sendAdminPush:async()=>{},
+    grantDepositSpin:async()=>false,
     app:{post:(path,handler)=>{routes[path]=handler}},
     TEAM_MILESTONES:[{target:5,reward:5000}], TEAM_DEPOSIT_MILESTONES:[{target:250000,reward:5000}], MAX_MONEY_AMOUNT:1e9, TASK_LADDER_MAX_ROWS:20,
     activeL1Count:async()=>5, wholeTeamDeposits:async()=>250000

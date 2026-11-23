@@ -606,6 +606,12 @@ const DEFAULT_SETTINGS = {
   //     spinMin/spinMax band -- configured per product, not here.
   turntableEnabled: false,
   turntableDailyMin: 200, turntableDailyMax: 1000,
+  // Owner: "put the spin, make when I can edit chances and rewards, 10 sections". Ten wheel sections, each with the amount it pays and its
+  // chance (a weight: the share of all the weights). Every spin, free daily or earned by a purchase, is drawn from these.
+  turntableSlices: defaultTurntableSlices(),
+  // Owner: "I want chances of spinning to come after every successful deposit made, per deposit 1 chance". So: ON = one spin for every successful
+  // recharge; the free daily spin and the spins earned by buying a product are OFF unless the owner switches them on.
+  turntablePerDeposit: true, turntableDailyFree: false, turntablePurchaseSpins: false,
   // Spins earned from purchases are configured PER PRODUCT (spinCount,
   // spinMin, spinMax on each product) -- owner: "make when l can configure
   // every spin price for each product... also products will have different
@@ -3620,7 +3626,7 @@ app.get('/public/settings', async (req, res) => {
     // allowedOrigins is operator configuration, not app content -- there is
     // no reason to hand every member's phone the list of domains that can
     // reach this backend, so it is dropped here alongside maintenanceMsg.
-    const { maintenanceMsg, allowedOrigins, ...rest } = s;
+    const { maintenanceMsg, allowedOrigins, turntableSlices, ...rest } = s;   // the chances stay private: the wheel's amounts come from /turntable/status
     const payChs = await activePayChannels();
     const manualPayOn = payChs.length > 0;
     // referralRequired is the RESOLVED answer (setting AND "a member already
@@ -4448,10 +4454,29 @@ app.post('/checkin', async (req, res) => {
 // of the product that granted it). A counter would lose that, and a member
 // who bought a cheap tier then an expensive one would be paid the wrong
 // amount on one of them.
+// ONE spin for every successful recharge (owner's rule). Idempotent: the spin has a fixed id built from the deposit, so a retried webhook, poll, reconciler
+// run or a second Force-credit of the same recharge can never grant a second one. Deposits older than 2 days never grant (so an old recharge that is
+// merely re-read cannot hand out a spin now). Never throws into the money path.
+async function grantDepositSpin(depDoc) {
+  try {
+    const dep = depDoc && depDoc.data && depDoc.data();
+    if (!dep || !dep.userId) return false;
+    const sett = await getSettings();
+    if (!sett.turntableEnabled || sett.turntablePerDeposit === false) return false;
+    const made = tsMillis(dep.createdAt);
+    if (made && Date.now() - made > 2 * 86400000) return false;
+    const { date, time } = nowStr();
+    const lo = Math.max(0, Number(sett.turntableDailyMin) || 0), hi = Math.max(lo, Number(sett.turntableDailyMax) || 0);
+    return !!(await db.collection('turntableSpins').doc('dep:' + depDoc.id).createIfAbsent({
+      userId: String(dep.userId), depositId: depDoc.id, source: 'deposit', productName: 'a recharge',
+      spinMin: lo, spinMax: hi, used: false, date, time, createdAt: FieldValue.serverTimestamp(),
+    }));
+  } catch (e) { console.error('Deposit spin grant error:', e.message); return false; }
+}
 async function grantTurntableSpins(userId, product, investmentId) {
   try {
     const sett = await getSettings();
-    if (!sett.turntableEnabled) return;
+    if (!sett.turntableEnabled || sett.turntablePurchaseSpins !== true) return;
     // Idempotent per purchase. This is fire-and-forget from /invest/create,
     // so nothing today calls it twice -- but a bonus that pays out again on
     // a retry is the kind of thing a later caller adds by accident, and one
@@ -4560,6 +4585,46 @@ async function writeTurntableSpinDocs(userId, product, investmentId, existingCou
 // earned. Nothing new to configure, which is what he asked for -- "basing on
 // the set spin ranges on products amount ranges and that amount of daily
 // spin".
+// ── SPIN WHEEL: ten sections the owner edits (amount + chance) ──
+var TURNTABLE_SLICE_COUNT = 10;
+function defaultTurntableSlices() {
+  const rewards = [200, 250, 300, 400, 500, 600, 700, 800, 900, 1000];
+  const weights = [24, 20, 16, 12, 9, 7, 5, 3, 2.5, 1.5];
+  return rewards.map((reward, i) => ({ reward, weight: weights[i] }));
+}
+// Returns exactly ten { reward, weight } or null when the input is not a usable wheel. A reward is an amount from 0 up (0 = "try again"), a
+// weight is the share of the draw (any number from 0 up, up to 2 decimals); at least one weight has to be above 0 or nothing could ever win.
+function normalizeTurntableSlices(input) {
+  if (!Array.isArray(input) || input.length !== TURNTABLE_SLICE_COUNT) return null;
+  const out = [];
+  for (const row of input) {
+    if (!row || typeof row !== 'object') return null;
+    const reward = Number(row.reward), weight = Number(row.weight);
+    if (!Number.isFinite(reward) || reward < 0 || reward > MAX_MONEY_AMOUNT) return null;
+    if (!Number.isFinite(weight) || weight < 0 || weight > 1000000) return null;
+    out.push({ reward: round2(reward), weight: Math.round(weight * 100) / 100 });
+  }
+  if (!out.some(x => x.weight > 0)) return null;
+  return out;
+}
+// The roll IS the wheel (crypto, not Math.random): pick a section by weight, pay what it shows.
+function rollConfiguredSlice(slices) {
+  const total = slices.reduce((n, x) => n + Math.round(x.weight * 100), 0);
+  let pick = crypto.randomInt(0, total);
+  let index = slices.length - 1;
+  for (let i = 0; i < slices.length; i++) {
+    const w = Math.round(slices[i].weight * 100);
+    if (pick < w) { index = i; break; }
+    pick -= w;
+  }
+  return { slices: slices.map(x => x.reward), index, amount: slices[index].reward };
+}
+// The wheel in use: the owner's ten sections, or (only if they are missing or broken) the old band.
+function spinSlicesOf(sett) { return normalizeTurntableSlices(sett && sett.turntableSlices); }
+function rollSpinFor(sett, lo, hi) {
+  const cfg = spinSlicesOf(sett);
+  return cfg ? rollConfiguredSlice(cfg) : rollSpinSlice(lo, hi);
+}
 var SPIN_SLICES = 8;
 function spinWheelSlices(lo, hi) {
   lo = Math.max(0, finiteMoney(lo));
@@ -4625,7 +4690,7 @@ app.get('/turntable/status', async (req, res) => {
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' });
     const now = Date.now();
     const lastKey = u.lastTurntableAt ? eatDayKey(new Date(u.lastTurntableAt)) : null;
-    const dailyAvailable = lastKey !== eatDayKey(new Date(now));
+    const dailyAvailable = sett.turntableDailyFree === true && lastKey !== eatDayKey(new Date(now));
     // A real count, not the size of a capped fetch. This used to be
     // .limit(200).get() and report snap.size, so a member holding more than
     // 200 unused spins was told they had 200 -- the spins existed and were
@@ -4658,9 +4723,9 @@ app.get('/turntable/status', async (req, res) => {
       dailyMin: Number(sett.turntableDailyMin) || 0,
       dailyMax: Number(sett.turntableDailyMax) || 0,
       nextSource,
-      nextMin: round2(Math.max(0, finiteMoney(band.lo))),
-      nextMax: round2(Math.max(0, finiteMoney(band.hi))),
-      slices: spinWheelSlices(band.lo, band.hi),
+      nextMin: round2(Math.max(0, finiteMoney(spinSlicesOf(sett) ? Math.min(...spinSlicesOf(sett).map(x => x.reward)) : band.lo))),
+      nextMax: round2(Math.max(0, finiteMoney(spinSlicesOf(sett) ? Math.max(...spinSlicesOf(sett).map(x => x.reward)) : band.hi))),
+      slices: spinSlicesOf(sett) ? spinSlicesOf(sett).map(x => x.reward) : spinWheelSlices(band.lo, band.hi),
     });
   } catch (e) {
     console.error('Turntable status error:', e.message);
@@ -4687,7 +4752,7 @@ app.post('/turntable/spin', async (req, res) => {
       const now = Date.now();
       const todayKey = eatDayKey(new Date(now));
       const lastKey = u.lastTurntableAt ? eatDayKey(new Date(u.lastTurntableAt)) : null;
-      const dailyAvailable = lastKey !== todayKey;
+      const dailyAvailable = sett.turntableDailyFree === true && lastKey !== todayKey;
 
       // `roll` carries the eight slices the wheel must land on and which of
       // them won, so the animation can stop on the exact figure being paid.
@@ -4705,10 +4770,10 @@ app.post('/turntable/spin', async (req, res) => {
           { lastTurntableAt: u.lastTurntableAt == null ? null : u.lastTurntableAt },
           { lastTurntableAt: now });
         if (!claimed) {
-          result = { code: 400, body: { status: 'error', message: 'Ce tour a déjà été utilisé. Revenez après minuit pour votre tour gratuit du jour.', nextDailyAt: eatNextMidnight(now) } };
+          result = { code: 400, body: { status: 'error', message: 'Ce tour a déjà été utilisé.', nextDailyAt: eatNextMidnight(now) } };
           return;
         }
-        roll = rollSpinSlice(sett.turntableDailyMin, sett.turntableDailyMax);
+        roll = rollSpinFor(sett, sett.turntableDailyMin, sett.turntableDailyMax);
         reward = roll.amount;
         source = 'daily';
         label = 'Turntable daily spin';
@@ -4719,7 +4784,7 @@ app.post('/turntable/spin', async (req, res) => {
           .where('userId', '==', uid).where('used', '==', false)
           .orderBy('createdAt', 'asc').limit(1).get();
         if (earned.empty) {
-          result = { code: 400, body: { status: 'error', message: 'Plus aucun tour. Revenez après minuit pour votre tour gratuit du jour.', nextDailyAt: eatNextMidnight(now) } };
+          result = { code: 400, body: { status: 'error', message: 'Plus aucun tour. Chaque recharge réussie vous donne 1 tour.', nextDailyAt: eatNextMidnight(now) } };
           return;
         }
         spinDoc = earned.docs[0];
@@ -4727,10 +4792,10 @@ app.post('/turntable/spin', async (req, res) => {
         // per-product bands, which carry a flat `reward` instead of one --
         // honoured as a zero-width band rather than paid as 0.
         const band = spinBandOf(spinDoc);
-        roll = rollSpinSlice(band.lo, band.hi);
+        roll = rollSpinFor(sett, band.lo, band.hi);
         reward = roll.amount;
         source = 'product';
-        label = `Turntable spin from ${spinDoc.data().productName || 'a purchase'}`;
+        label = `Turntable spin from ${spinDoc.data().productName || 'a purchase'}`;   // 'a recharge' for the spin a successful recharge earned
       }
 
       // Burn the spin BEFORE crediting. If the credit then fails, the member
@@ -4749,7 +4814,7 @@ app.post('/turntable/spin', async (req, res) => {
         }
       }
       try {
-        await withLock('bal:' + uid, () => ref.update({
+        if (reward > 0) await withLock('bal:' + uid, () => ref.update({
           walletBalance: FieldValue.increment(reward),
           totalEarned: FieldValue.increment(reward),
         }));
@@ -4764,7 +4829,7 @@ app.post('/turntable/spin', async (req, res) => {
       }
       const { date, time } = nowStr();
       try {
-        await db.collection('transactions').add({
+        if (reward > 0) await db.collection('transactions').add({
           userId: uid, statementId: newStatementId(), type: 'turntable', description: label, amount: reward,
           status: 'success', date, time, createdAt: FieldValue.serverTimestamp(),
         });
@@ -5168,6 +5233,7 @@ async function creditDeposit(depDoc) {
   const userId = depDoc && depDoc.data() && depDoc.data().userId;
   const credited = await _creditDepositNow(depDoc);
   if (credited) await creditDepositReferralCommission(depDoc.id, userId).catch(e => console.error('Deposit commission error:', e.message));
+  if (credited) await grantDepositSpin(depDoc);
   return credited;
 }
 async function _creditDepositNow(depDoc) {
@@ -8259,7 +8325,7 @@ const SETTINGS_CRITICAL_RANGES = {
   // near this), not a business one -- same reasoning as withdrawMultiple.
   usdtRate: [0, MAX_MONEY_AMOUNT],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'bankOtpRequired', 'usdtEnabled', 'cardDepositEnabled', 'otpVerificationEnabled'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'turntablePerDeposit', 'turntableDailyFree', 'turntablePurchaseSpins', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'bankOtpRequired', 'usdtEnabled', 'cardDepositEnabled', 'otpVerificationEnabled'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -8369,6 +8435,12 @@ app.post('/admin/settings/update', async (req, res) => {
       const t = 'withdrawOpenTo' in updates ? updates.withdrawOpenTo : null;
       if (f != null && t != null && f === t)
         return res.status(400).json({ status: 'error', message: 'Withdraw opening and closing times cannot be the same.' });
+    }
+    // The ten wheel sections: all ten, valid amounts and chances, refused whole rather than repaired.
+    if ('turntableSlices' in updates) {
+      const cfg = normalizeTurntableSlices(updates.turntableSlices);
+      if (!cfg) return res.status(400).json({ status: 'error', message: 'The spin wheel needs exactly 10 sections, each with an amount and a chance of 0 or more, and at least one chance above 0.' });
+      updates.turntableSlices = cfg;
     }
     if ('numberFont' in updates && !NUMBER_FONT_OPTIONS.includes(updates.numberFont))
       return res.status(400).json({ status: 'error', message: `numberFont must be one of: ${NUMBER_FONT_OPTIONS.join(', ')}` });

@@ -4013,6 +4013,7 @@ ${homeBannerBlockHtml(st)}
   </div>
   <button class="cic-btn" onclick="openCheckinSheet()">Pointer</button>
 </div>
+${ttEnabled() ? ttHomeCardHtml() : ''}
 <section class="home-my-assets" aria-label="Mes actifs">
   <h2>Mes actifs</h2>
   <div id="myAssetsInner">${myAssetsInnerHtml()}</div>
@@ -4860,6 +4861,7 @@ async function renderAccount(){
   <div class="account-action-list">
     ${acctListCardHtml('accountWallet', 'Lier une carte bancaire', 'openWalletSheet()')}
     ${acctListCardHtml('accountStatement', 'Historique du solde', "openTransactionStatement('income')")}
+    ${ttAccountRowHtml()}
     ${acctListCardHtml('accountGift', 'Utiliser un cadeau', 'openChestSheet()')}
     ${acctListCardHtml('accountRules', 'Règles et conditions', 'openRulesSheet()')}
     ${acctListCardHtml('accountSecurity', 'Paramètres de sécurité', 'openChangeLoginPasswordSheet()')}
@@ -5680,7 +5682,7 @@ var SHEET_LABELS = {
   'All Referrals': 'Tous les filleuls', 'Wallet': 'Portefeuille', 'Transaction Statement': 'Historique du solde',
   'Messages': 'Messages', 'Security Settings': 'Paramètres de sécurité', 'Trade Password': 'Mot de passe de transaction',
   'Gift Codes': 'Codes cadeaux', 'Info': 'Infos', 'Support': 'Assistance', 'Help Centre': "Centre d'aide",
-  'Rules and Regulations': 'Règles et conditions', 'Daily Check-in': 'Pointage quotidien', 'Recharge': 'Recharge', 'Withdraw': 'Retrait'
+  'Rules and Regulations': 'Règles et conditions', 'Turntable': 'Roue de la chance', 'Daily Check-in': 'Pointage quotidien', 'Recharge': 'Recharge', 'Withdraw': 'Retrait'
 };
 function sheetLabel(title){
   const s = String(title == null ? '' : title);
@@ -5948,6 +5950,103 @@ window.openRulesSheet = async function(){
 function tzOffMs(){ const m = REGION && REGION.utcOffsetMin; return (m == null ? 180 : Number(m)) * 60000; }
 function eatDayIndex(ts){ return Math.floor((ts + tzOffMs()) / 86400000); }
 function eatMidnightAfter(ts){ return (eatDayIndex(ts) + 1) * 86400000 - tzOffMs(); }
+// ── SPIN WHEEL (owner: "put the spin, make when I can edit chances and rewards, 10 sections") ──
+// The ten amounts come from the server (/turntable/status, set in the admin panel); the chances never leave the server. The wheel draws what
+// /turntable/spin answers: the server decides the section, the wheel only turns to it.
+var _tt = { slices: [], status: null, busy: false, rot: 0 };
+var TT_COLORS = ['#e30613', '#f5a000', '#25262b', '#ffb000', '#c4040f', '#ffcf5c', '#3a3b42', '#ee3b2e', '#d98a00', '#55565d'];
+function ttEnabled(){ return !!(STATE.settings && STATE.settings.turntableEnabled); }
+function ttNum(n){ return (Number(n) || 0).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
+function ttWheelSvg(slices){
+  const cx = 150, cy = 150, r = 140, n = slices.length || 10, step = 360 / n;
+  const pt = (deg, rad) => { const a = (deg - 90) * Math.PI / 180; return [cx + rad * Math.cos(a), cy + rad * Math.sin(a)]; };
+  let out = '<svg viewBox="0 0 300 300" width="100%" height="100%" aria-hidden="true">';
+  for (let i = 0; i < n; i++) {
+    const a0 = i * step, a1 = (i + 1) * step, p0 = pt(a0, r), p1 = pt(a1, r);
+    out += '<path d="M' + cx + ' ' + cy + ' L' + p0[0].toFixed(2) + ' ' + p0[1].toFixed(2) + ' A' + r + ' ' + r + ' 0 0 1 ' + p1[0].toFixed(2) + ' ' + p1[1].toFixed(2) + ' Z" fill="' + TT_COLORS[i % TT_COLORS.length] + '" stroke="#fff" stroke-width="2"/>';
+    const label = ttNum(slices[i]), size = label.length <= 5 ? 16 : label.length <= 6 ? 14 : label.length <= 8 ? 11 : 9;
+    out += '<text transform="rotate(' + (a0 + step / 2) + ' ' + cx + ' ' + cy + ')" x="' + cx + '" y="' + (cy - 100) + '" text-anchor="middle" dominant-baseline="middle" font-size="' + size + '" font-weight="800" fill="#fff" style="paint-order:stroke;stroke:rgba(0,0,0,.28);stroke-width:2.4px">' + esc(label) + '</text>';
+  }
+  return out + '<circle cx="150" cy="150" r="143" fill="none" stroke="#fff" stroke-width="5"/></svg>';
+}
+function ttSetWheel(slices){
+  _tt.slices = slices.slice();
+  const box = $('ttWheel'); if (box) box.innerHTML = ttWheelSvg(_tt.slices);
+}
+function ttPaintStatus(){
+  const st = _tt.status || {}, left = Number(st.totalSpins) || 0;
+  const n = $('ttSpins'); if (n) n.textContent = left > 0 ? (left === 1 ? '1 tour disponible' : left + ' tours disponibles') : 'Plus aucun tour pour le moment';
+  const sub = $('ttSub'); if (sub) sub.textContent = left > 0 ? 'Touchez TOURNER pour tenter votre chance.' : 'Chaque recharge réussie vous donne 1 tour.';
+  const b = $('ttBtn'); if (b) { b.disabled = _tt.busy || left <= 0; b.textContent = _tt.busy ? 'La roue tourne…' : 'TOURNER'; }
+}
+window.openTurntable = async function(){
+  if (!ttEnabled()) return notify('La roue n\'est pas disponible pour le moment.');
+  _tt.busy = false;
+  openSheet('Turntable', `<div class="reveal-in tt-stage">
+    <div class="tt-spins" id="ttSpins">Chargement…</div>
+    <div class="tt-board">
+      <div class="tt-pointer" aria-hidden="true"></div>
+      <div class="tt-wheel" id="ttWheel"></div>
+      <div class="tt-hub" aria-hidden="true"></div>
+    </div>
+    <div class="tt-result" id="ttResult" aria-live="polite"></div>
+    <button class="primary-button tt-go" id="ttBtn" type="button" disabled onclick="ttSpin()">TOURNER</button>
+    <p class="tt-sub" id="ttSub"></p>
+  </div>`);
+  const r = await api('/turntable/status');
+  if (_openSheetTitle !== 'Turntable') return;
+  if (r.status !== 'success') { $('ttSpins').textContent = r.message || 'Impossible de charger la roue'; return; }
+  if (!r.enabled) { $('ttSpins').textContent = 'La roue n\'est pas disponible pour le moment.'; return; }
+  _tt.status = r; _tt.rot = 0;
+  ttSetWheel(Array.isArray(r.slices) && r.slices.length ? r.slices : []);
+  ttPaintStatus();
+};
+window.ttSpin = async function(){
+  if (_tt.busy || !rapidTapGuardOk('turntable')) return;
+  const st = _tt.status || {};
+  if (!(Number(st.totalSpins) > 0)) return notify('Plus aucun tour. Chaque recharge réussie vous donne 1 tour.');
+  _tt.busy = true; ttPaintStatus();
+  const res = $('ttResult'); if (res) { res.textContent = ''; res.className = 'tt-result'; }
+  const r = await post('/turntable/spin', {});
+  if (r.status !== 'success') {
+    _tt.busy = false;
+    notify(r.message || 'Le tour n\'a pas pu être terminé. Votre solde est inchangé.');
+    const fresh = await api('/turntable/status'); if (fresh.status === 'success') { _tt.status = fresh; if ($('ttSpins')) ttPaintStatus(); }
+    return;
+  }
+  // The server says which of its ten amounts it drew: if the wheel on screen was labelled differently, relabel it before it turns.
+  if (Array.isArray(r.slices) && r.slices.length && JSON.stringify(r.slices) !== JSON.stringify(_tt.slices)) { const w = $('ttWheel'); if (w) w.style.transition = 'none'; ttSetWheel(r.slices); }
+  const n = _tt.slices.length || 10, step = 360 / n, idx = Math.max(0, Math.min(n - 1, Number(r.sliceIndex) || 0));
+  const jitter = (Math.random() - .5) * step * .6;                       // stops anywhere inside the section, not always dead centre
+  const target = Math.ceil(_tt.rot / 360) * 360 + 360 * 6 + (360 - (idx * step + step / 2 + jitter));
+  _tt.rot = target;
+  const wheel = $('ttWheel');
+  if (wheel) { void wheel.offsetWidth; wheel.style.transition = 'transform 5s cubic-bezier(.12,.7,.12,1)'; wheel.style.transform = 'rotate(' + target + 'deg)'; }
+  await new Promise(done => setTimeout(done, wheel ? 5200 : 0));
+  _tt.busy = false;
+  const won = Number(r.reward) || 0;
+  _tt.status = Object.assign({}, _tt.status, { totalSpins: Number(r.totalSpins) || 0, earnedSpins: Number(r.earnedSpins) || 0, dailyAvailable: false });
+  if (r.walletBalance != null && STATE.account) STATE.account.walletBalance = r.walletBalance;
+  if (won > 0) { try { refreshTransactionsCache(); } catch (_) {} }
+  const box = $('ttResult');
+  if (box) { box.className = 'tt-result show' + (won > 0 ? ' win' : ''); box.textContent = won > 0 ? 'Bravo ! Vous avez gagné ' + fmtUGX(won) : 'Dommage, pas de gain cette fois. Retentez votre chance !'; }
+  if ($('ttSpins')) ttPaintStatus();
+  try { patchHomeBalances(); } catch (_) {}
+  if (!r.walletBalance && won > 0) { const acc = await api('/account'); if (acc.status === 'success') { STATE.account = acc.account; try { patchHomeBalances(); } catch (_) {} } }
+};
+function ttHomeCardHtml(){
+  return `<div class="checkin-card tt-home">
+  <span class="cic-gift">${ICONS.wheel}</span>
+  <div class="cic-text">
+    <div class="cic-title">Roue de la chance</div>
+    <div class="cic-sub">Chaque recharge réussie vous offre 1 tour de roue : tentez de gagner une récompense !</div>
+  </div>
+  <button class="cic-btn" onclick="openTurntable()">Tourner</button>
+</div>`;
+}
+function ttAccountRowHtml(){
+  return ttEnabled() ? '<button class="acct-list-card" onclick="openTurntable()"><span class="acct-list-icon">' + ICONS.wheel + '</span><span class="acct-list-label">Roue de la chance</span>' + ICONS.chevronRight + '</button>' : '';
+}
 window.openCheckinSheet = function(){
   const a = STATE.account || {};
   const bonus = Number(STATE.settings && STATE.settings.dailyCheckin) || 0;
