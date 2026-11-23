@@ -112,3 +112,14 @@ private fun ContactRow(icon: ImageVector, label: String, value: String, onClick:
         }
     }
 }
+
+// Straight to WhatsApp or the dialler from a Profile row (no dialog in between).
+fun openWhatsApp(context: android.content.Context, number: String) {
+    val digits = number.filter { it.isDigit() }
+    try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$digits")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: ActivityNotFoundException) { }
+}
+
+fun dialNumber(context: android.content.Context, number: String) {
+    val clean = number.filter { it.isDigit() || it == '+' }
+    try { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$clean")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: ActivityNotFoundException) { }
+}

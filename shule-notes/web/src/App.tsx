@@ -4,7 +4,7 @@ import { AppProviders, useAuth, useLibrary, remember } from './store';
 import { Avatar } from './components';
 import { ChooseClass, Intro, SignIn, SignUp } from './pages/Auth';
 import { HomePage } from './pages/Home';
-import { InboxPage, ProfilePage, SavedPage, applyTheme } from './pages/Other';
+import { InboxPage, ProfilePage, SavedPage, applyTheme, PaymentsPage } from './pages/Other';
 const ReaderPage = lazy(() => import('./pages/Reader').then((m) => ({ default: m.ReaderPage })));
 import { Bell, Bookmark, BookmarkFilled, Close, Campaign, Home as HomeIcon, HomeFilled, User as UserIcon, UserFilled } from './icons';
 import { ProgressPage } from './pages/Progress';
@@ -22,12 +22,12 @@ function ReaderLoading() {
 // Has the owner posted something the student has not opened in the bell yet?
 const SEEN_KEY = 'shule_inbox_seen';
 function useUnread() {
-  const { announcements } = useLibrary();
+  const { announcements, notices } = useLibrary();
   const location = useLocation();
   const [seen, setSeen] = useState(() => Number(localStorage.getItem(SEEN_KEY) || 0));
   // Opening the notifications page marks everything as read.
   useEffect(() => { if (location.pathname === '/inbox') { const now = Date.now(); localStorage.setItem(SEEN_KEY, String(now)); setSeen(now); } }, [location.pathname]);
-  return announcements.some((a) => new Date(a.createdAt).getTime() > seen);
+  return [...announcements, ...(notices || []).filter((n) => !n.own)].some((a) => new Date(a.createdAt).getTime() > seen);
 }
 
 // A new message from the owner slides in from the top for a few seconds (like a phone notification), then it waits in the bell.
@@ -112,6 +112,7 @@ function Gate() {
         <Route path="/inbox" element={<InboxPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/progress" element={<ProgressPage />} />
+        <Route path="/payments" element={<PaymentsPage />} />
       </Route>
       <Route path="/note/:id" element={<Suspense fallback={<ReaderLoading />}><ReaderPage /></Suspense>} />
       <Route path="*" element={<Navigate to="/" replace />} />

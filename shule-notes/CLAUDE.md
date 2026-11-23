@@ -278,6 +278,15 @@ Only sessions OLDER (by `_id`) than the new one are marked, so two simultaneous 
 ("One device at a time"). Tests that need two live devices for one student must call `createSession(id, { single: false })`. Tests: `test-single-device.js`.
 Android reads the reason in `ApiClient` (`SessionHolder.expiredMessage`); the website in `api.ts` (`shule:expired` event detail).
 
+### Sign-in alerts and payment history
+- `security-notices.js`: `describeDevice(userAgent)` ("Shule Notes app on samsung SM-A155F", "Chrome on Windows"; the app sends
+  `User-Agent: ShuleNotes/<version> (Android <release>; <maker> <model>)` from `ApiClient`). A sign-in on a DIFFERENT device than `users.lastDevice` adds ONE
+  personal notice (`notices` collection, 90-day TTL) naming the new device and the one signed out; same device again = no notice. `GET /notices`
+  (own:true = made by THIS session, shown "This device", never unread). The signed-out device's 401 message names the device that took over (`replacedBy`).
+  The app and website merge notices into the bell inbox with a shield style and a "Get help" button (support contacts).
+- `GET /payments/mine` (`payments.studentHistory`): the student's own payments; Profile > Payment history (Android `PaymentsScreen`, web `/payments`).
+- Profile rows have coloured icon tiles; WhatsApp and Call are direct rows when set in admin Settings. Tests: `test-single-device.js`.
+
 ### Admin security (admin-session.js, totp.js, audit.js)
 - The admin KEY is typed once (`POST /admin/login`); the panel then holds a random session token (stored hashed in `adminSessions`; 8 h idle, 3 days
   absolute, revocable, "sign out other devices"). The key is never kept in the browser. `app.use('/admin', ...)` in server.js authenticates BEFORE any route

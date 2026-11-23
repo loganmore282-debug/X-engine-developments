@@ -1,10 +1,10 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API, api, fetchBytes } from '../api';
 import { useAuth, useLibrary, useToast, remember, save } from '../store';
 import { Avatar, NoteCard, Sheet } from '../components';
-import { Android, Bell, Camera, Chat, Chevron, Description, Edit, Insights, Logout, Palette, PrivacyTip, Share, Spark, Trash, User as UserIcon } from '../icons';
-import type { User } from '../types';
+import { Android, Back, Bell, Call, Camera, Campaign, ChatBubble, CheckCircle, Chevron, Description, Edit, ErrorIcon, Feedback, Gift, Help, Hourglass, Insights, Logout, Palette, Premium, PrivacyTip, Receipt, School, Security, Share, Trash } from '../icons';
+import type { AppConfig, PaymentRecord, User } from '../types';
 import { PaySheet, untilLabel, useAccess } from '../Pay';
 
 export function SavedPage() {
@@ -21,12 +21,96 @@ export function SavedPage() {
 }
 
 export function InboxPage() {
-  const { announcements } = useLibrary();
+  const { announcements, notices, config } = useLibrary();
+  const [help, setHelp] = useState(false);
+  // The owner's news and the student's own sign-in alerts, newest first.
+  const items = [...announcements, ...(notices || [])].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   return (
     <div>
       <div className="section-head" style={{ marginTop: 24 }}><h2>Notifications</h2></div>
-      {announcements.length === 0 ? <div className="empty"><h3>No notifications yet</h3><p>Messages from the Shule Notes team appear here.</p></div>
-        : announcements.map((a, i) => <div key={a.id} className="card rise" style={{ padding: 16, marginBottom: 10, animationDelay: `${i * 50}ms` }}><b className="poppins">{a.title}</b><p style={{ margin: '6px 0 0' }}>{a.message}</p><div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{new Date(a.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div></div>)}
+      {items.length === 0 ? <div className="empty"><h3>You are all caught up</h3><p>News from Shule Notes and alerts about your account appear here.</p></div>
+        : items.map((a, i) => {
+          const security = a.kind === 'security';
+          return (
+            <div key={(security ? 's' : 'a') + a.id} className={`card notice rise ${security ? 'security' : ''}`} style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
+              <span className="notice-ico">{security ? <Security /> : <Campaign />}</span>
+              <div className="grow">
+                <div className="notice-title"><b className="poppins">{a.title}</b>{a.own && <span className="tag">This device</span>}</div>
+                <p>{a.message}</p>
+                <div className="notice-foot">
+                  <span className="muted">{whenLabel(a.createdAt)}</span>
+                  {security && !a.own && <button className="link-btn" onClick={() => setHelp(true)}>Get help</button>}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      {help && <Sheet title="Was this not you?" onClose={() => setHelp(false)}>
+        <p className="muted">Contact us now. We will reset your password and sign out every other device.</p>
+        <ContactList config={config} />
+        <div className="actions"><button className="btn" onClick={() => setHelp(false)}>Close</button></div>
+      </Sheet>}
+    </div>
+  );
+}
+
+function whenLabel(iso: string) {
+  const d = new Date(iso); const mins = Math.round((Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} ${mins === 1 ? 'minute' : 'minutes'} ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} ${hrs === 1 ? 'hour' : 'hours'} ago`;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+function ContactList({ config }: { config: AppConfig }) {
+  const wa = (config.supportWhatsapp || '').replace(/[^\d]/g, '');
+  if (!config.supportPhone && !config.supportWhatsapp && !config.supportEmail) return <p>Contact details have not been added yet. Please ask your teacher or school.</p>;
+  return (
+    <div className="card settings">
+      {config.supportWhatsapp && <a className="row-link" href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer"><span className="tile t-wa"><ChatBubble /></span><span className="grow">WhatsApp<small className="muted block">{config.supportWhatsapp}</small></span><Chevron width={18} /></a>}
+      {config.supportPhone && <a className="row-link" href={`tel:${config.supportPhone.replace(/[^\d+]/g, '')}`}><span className="tile t-blue"><Call /></span><span className="grow">Call<small className="muted block">{config.supportPhone}</small></span><Chevron width={18} /></a>}
+      {config.supportEmail && <a className="row-link" href={`mailto:${config.supportEmail}`}><span className="tile t-teal"><Help /></span><span className="grow">Email<small className="muted block">{config.supportEmail}</small></span><Chevron width={18} /></a>}
+    </div>
+  );
+}
+
+// Profile > Payment history: every pass bought (or given), with a clear status and the total paid.
+export function PaymentsPage() {
+  const nav = useNavigate();
+  const [rows, setRows] = useState<PaymentRecord[] | null>(null);
+  const [error, setError] = useState('');
+  const load = () => { setError(''); api<{ payments: PaymentRecord[] }>('/payments/mine').then((r) => setRows(r.payments || [])).catch((e) => setError((e as Error).message)); };
+  useEffect(load, []);
+  const ugx = (n: number) => 'UGX ' + n.toLocaleString('en-US');
+  const date = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' + new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '');
+  const look = (p: PaymentRecord) => p.gift ? { cls: 't-purple', icon: <Gift />, label: 'Gift' }
+    : p.status === 'paid' ? { cls: 't-green', icon: <CheckCircle />, label: 'Paid' }
+    : p.status === 'failed' ? { cls: 't-red', icon: <ErrorIcon />, label: 'Did not go through' }
+    : p.status === 'expired' ? { cls: 't-grey', icon: <ErrorIcon />, label: 'Not completed' }
+    : { cls: 't-amber', icon: <Hourglass />, label: 'Waiting' };
+  const total = (rows || []).filter((p) => p.status === 'paid' && !p.gift).reduce((a, p) => a + p.amount, 0);
+  return (
+    <div>
+      <div className="section-head" style={{ marginTop: 24 }}>
+        <button className="icon-btn" aria-label="Back" onClick={() => nav('/profile')}><Back /></button>
+        <h2>Payment history</h2>
+      </div>
+      {error && !rows && <div className="empty"><h3>Could not load</h3><p>{error}</p><button className="btn" onClick={load}>Try again</button></div>}
+      {!rows && !error && <div className="center" style={{ padding: 40 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>}
+      {rows && rows.length === 0 && <div className="empty"><h3>No payments yet</h3><p>When you buy a pass with mobile money, it appears here with its date and amount.</p></div>}
+      {rows && rows.length > 0 && <>
+        <div className="card pay-total rise"><small>Total paid</small><b className="poppins">{ugx(total)}</b><span>{rows.filter((p) => p.status === 'paid').length} {rows.filter((p) => p.status === 'paid').length === 1 ? 'pass' : 'passes'}</span></div>
+        <div className="card settings">
+          {rows.map((p) => { const l = look(p); return (
+            <div key={p.id} className="pay-row">
+              <span className={`tile ${l.cls}`}>{l.icon}</span>
+              <span className="grow"><b>{p.planName}</b><small className="muted block">{date(p.createdAt)}</small>{p.status === 'paid' && p.accessUntil && <small className="muted block">Gave access until {date(p.accessUntil)}</small>}</span>
+              <span className="pay-amt"><b>{p.gift ? 'Free' : ugx(p.amount)}</b><small className={l.cls}>{l.label}</small></span>
+            </div>
+          ); })}
+        </div>
+      </>}
     </div>
   );
 }
@@ -92,20 +176,29 @@ export function ProfilePage() {
       <div className="profile-rest">
       <div className="group-label">Study</div>
       <div className="card settings">
-        {access.enabled && <button onClick={() => setPaySheet(true)}><Spark /><span className="grow">My pass</span><span className="muted">{access.active ? `Until ${untilLabel(access.until!)}` : 'Get a pass'}</span><Chevron width={18} /></button>}
-        <button onClick={() => nav('/')}><UserIcon /><span className="grow">My class</span><span className="muted">{cls || 'Not chosen'}</span><Chevron width={18} /></button>
-        <button onClick={() => nav('/progress')}><Insights /><span className="grow">My progress</span><Chevron width={18} /></button>
-        <button onClick={() => setSheet('theme')}><Palette /><span className="grow">Appearance</span><span className="muted">{theme === 'system' ? 'System default' : theme === 'light' ? 'Light' : 'Dark'}</span><Chevron width={18} /></button>
-        <button onClick={() => nav('/inbox')}><Bell /><span className="grow">Notifications</span><Chevron width={18} /></button>
+        {access.enabled && <button onClick={() => setPaySheet(true)}><span className="tile t-green"><Premium /></span><span className="grow">My pass</span><span className="muted trail">{access.active ? `Until ${untilLabel(access.until!)}` : 'Get a pass'}</span><Chevron width={18} /></button>}
+        {access.enabled && <button onClick={() => nav('/payments')}><span className="tile t-teal"><Receipt /></span><span className="grow">Payment history</span><Chevron width={18} /></button>}
+        <button onClick={() => nav('/')}><span className="tile t-blue"><School /></span><span className="grow">My class</span><span className="muted trail">{cls || 'Not chosen'}</span><Chevron width={18} /></button>
+        <button onClick={() => nav('/progress')}><span className="tile t-purple"><Insights /></span><span className="grow">My progress</span><Chevron width={18} /></button>
       </div>
-      <div className="group-label">Help and about</div>
+      <div className="group-label">App</div>
       <div className="card settings">
-        <button onClick={() => setSheet('help')}><Chat /><span className="grow">Help and support</span><Chevron width={18} /></button>
-        <button onClick={() => { setErr(''); setMessage(''); setSheet('feedback'); }}><Edit /><span className="grow">Send feedback</span><Chevron width={18} /></button>
-        <button onClick={shareApp}><Share /><span className="grow">Share Shule Notes</span><Chevron width={18} /></button>
-        <a className="row-link" href={`${API}/terms`} target="_blank" rel="noopener noreferrer"><Description /><span className="grow">Terms of use</span><Chevron width={18} /></a>
-        <a className="row-link" href={`${API}/privacy`} target="_blank" rel="noopener noreferrer"><PrivacyTip /><span className="grow">Privacy policy</span><Chevron width={18} /></a>
-        <a className="row-link" href={`${API}/download/`} target="_blank" rel="noopener noreferrer"><Android /><span className="grow">Get the Android app</span><Chevron width={18} /></a>
+        <button onClick={() => setSheet('theme')}><span className="tile t-pink"><Palette /></span><span className="grow">Appearance</span><span className="muted trail">{theme === 'system' ? 'System default' : theme === 'light' ? 'Light' : 'Dark'}</span><Chevron width={18} /></button>
+        <button onClick={() => nav('/inbox')}><span className="tile t-amber"><Bell /></span><span className="grow">Notifications</span><Chevron width={18} /></button>
+        <a className="row-link" href={`${API}/download/`} target="_blank" rel="noopener noreferrer"><span className="tile t-green"><Android /></span><span className="grow">Get the Android app</span><Chevron width={18} /></a>
+      </div>
+      <div className="group-label">Get help</div>
+      <div className="card settings">
+        {config.supportWhatsapp && <a className="row-link" href={`https://wa.me/${config.supportWhatsapp.replace(/[^\d]/g, '')}`} target="_blank" rel="noopener noreferrer"><span className="tile t-wa"><ChatBubble /></span><span className="grow">Chat with us on WhatsApp</span><Chevron width={18} /></a>}
+        {config.supportPhone && <a className="row-link" href={`tel:${config.supportPhone.replace(/[^\d+]/g, '')}`}><span className="tile t-blue"><Call /></span><span className="grow">Call us</span><span className="muted trail">{config.supportPhone}</span><Chevron width={18} /></a>}
+        {(config.supportEmail || config.supportHours || (!config.supportPhone && !config.supportWhatsapp)) && <button onClick={() => setSheet('help')}><span className="tile t-teal"><Help /></span><span className="grow">Help and support</span><Chevron width={18} /></button>}
+        <button onClick={() => { setErr(''); setMessage(''); setSheet('feedback'); }}><span className="tile t-amber"><Feedback /></span><span className="grow">Send feedback</span><Chevron width={18} /></button>
+        <button onClick={shareApp}><span className="tile t-green"><Share /></span><span className="grow">Share Shule Notes</span><Chevron width={18} /></button>
+      </div>
+      <div className="group-label">About</div>
+      <div className="card settings">
+        <a className="row-link" href={`${API}/terms`} target="_blank" rel="noopener noreferrer"><span className="tile t-grey"><Description /></span><span className="grow">Terms of use</span><Chevron width={18} /></a>
+        <a className="row-link" href={`${API}/privacy`} target="_blank" rel="noopener noreferrer"><span className="tile t-grey"><PrivacyTip /></span><span className="grow">Privacy policy</span><Chevron width={18} /></a>
       </div>
       <button className="btn danger-outline wide" style={{ marginTop: 28 }} onClick={() => setSheet('logout')}><Logout width={20} height={20} /> Log out</button>
       <div className="center"><button className="link-row" style={{ background: 'none', border: 0, color: 'var(--muted)', marginTop: 10 }} onClick={() => { setPassword(''); setErr(''); setSheet('delete'); }}>Delete account</button></div>

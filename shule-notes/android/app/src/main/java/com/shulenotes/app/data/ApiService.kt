@@ -56,6 +56,12 @@ interface ApiService {
     @GET("announcements")
     suspend fun announcements(): AnnouncementsResponse
 
+    @GET("notices")
+    suspend fun notices(): NoticesResponse
+
+    @GET("payments/mine")
+    suspend fun myPayments(): PaymentHistoryResponse
+
     @GET("announcement")
     suspend fun announcement(): AnnouncementResponse
 

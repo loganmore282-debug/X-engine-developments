@@ -20,6 +20,7 @@ async function eraseUser(userId) {
   forgetUser(userId);
   await db.collection('aiUsage').deleteMany({ userId: String(userId) });
   await db.collection('feedback').deleteMany({ userId: String(userId) });
+  await db.collection('notices').deleteMany({ userId: String(userId) });
   media.removeImage('avatars', id); // their profile photo goes with them
   await db.collection('users').deleteOne({ _id: id });
   return true;

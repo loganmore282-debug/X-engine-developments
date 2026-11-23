@@ -92,6 +92,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.shulenotes.app.BuildConfig
 import com.shulenotes.app.ShuleApp
@@ -255,8 +256,8 @@ fun HomeTab(
                 item(key = "subjects") {
                     SectionTitle("Subjects", Modifier.padding(top = 22.dp))
                     LazyRow(
-                        contentPadding = PaddingValues(horizontal = 20.dp),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         item(key = "all") {
@@ -680,8 +681,10 @@ private fun SubjectTile(label: String, icon: Painter, tint: SubjectTint, isSelec
     val iconOnAccent = if (dark) Color(0xFF0B0F0D) else Color.White
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
+        // Every tile is the SAME width, so a long name ("History & Political Education") wraps under its icon
+        // instead of stretching its tile and leaving uneven gaps between the icons.
         modifier = Modifier
-            .widthIn(min = 72.dp)
+            .width(88.dp)
             .clip(RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
             .semantics { selected = isSelected; role = Role.Tab }
@@ -702,9 +705,11 @@ private fun SubjectTile(label: String, icon: Painter, tint: SubjectTint, isSelec
             style = MaterialTheme.typography.labelMedium,
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
             color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            softWrap = false,
-            modifier = Modifier.padding(bottom = 2.dp),
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            lineHeight = 15.sp,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp).padding(bottom = 2.dp),
         )
     }
 }

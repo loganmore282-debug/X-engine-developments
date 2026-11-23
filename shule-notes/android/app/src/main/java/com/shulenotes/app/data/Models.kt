@@ -144,6 +144,36 @@ data class Announcement(
     val title: String,
     val message: String,
     val createdAt: String? = null,
+    // "security" for the student's own sign-in alerts (GET /notices); null for the owner's announcements.
+    val kind: String? = null,
+    // A sign-in alert caused by THIS phone: shown as "This device" and never counted as unread.
+    val own: Boolean = false,
+) {
+    val isSecurity: Boolean get() = kind == "security"
+}
+
+data class NoticesResponse(
+    val status: String,
+    val notices: List<Announcement>?,
+    val message: String?,
+)
+
+// One row of Profile > Payment history.
+data class PaymentRecord(
+    val id: String,
+    val planName: String?,
+    val amount: Long = 0,
+    val gift: Boolean = false,
+    val status: String?,
+    val createdAt: String?,
+    val accessUntil: String?,
+    val phone: String?,
+)
+
+data class PaymentHistoryResponse(
+    val status: String,
+    val payments: List<PaymentRecord>?,
+    val message: String?,
 )
 
 data class AnnouncementsResponse(

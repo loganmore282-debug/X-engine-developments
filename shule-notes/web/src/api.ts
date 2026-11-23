@@ -30,7 +30,7 @@ export async function api<T = Record<string, unknown>>(path: string, { method, b
   let data: any = null;
   try { data = await res.json(); } catch { /* not JSON */ }
   if (!res.ok || (data && data.status === 'error')) {
-    if (res.status === 401 && auth && token) window.dispatchEvent(new CustomEvent('shule:expired', { detail: data && data.code === 'signed_in_elsewhere' ? 'You were signed out because this account was opened on another device.' : '' }));
+    if (res.status === 401 && auth && token) window.dispatchEvent(new CustomEvent('shule:expired', { detail: data && data.code === 'signed_in_elsewhere' ? (data.message || 'You were signed out because this account was opened on another device.') : '' }));
     throw new ApiError(res.status, (data && data.message) || 'Something went wrong. Please try again.');
   }
   return data as T;

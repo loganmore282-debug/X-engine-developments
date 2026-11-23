@@ -76,10 +76,11 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
     var showNotifications by rememberSaveable { mutableStateOf(false) }
     var seenAtOnOpen by rememberSaveable { mutableStateOf(0L) }
     var showProgress by rememberSaveable { mutableStateOf(false) }
+    var showPayments by rememberSaveable { mutableStateOf(false) }
     val studyPages by ShuleApp.session.studyPages.collectAsState(initial = emptySet())
     val finishedNotes by ShuleApp.session.finishedNotes.collectAsState(initial = emptySet())
     val scope = rememberCoroutineScope()
-    val unread = viewModel.notifications.count { parseIsoMillis(it.createdAt) > seenAt }
+    val unread = viewModel.notifications.count { !it.own && parseIsoMillis(it.createdAt) > seenAt }
 
     // While the app is on screen, ask the server every 15 seconds whether the owner changed anything
     // (one tiny request), and reload quietly when so. Stops by itself when the app goes to the background.
@@ -104,6 +105,7 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
     BackHandler(enabled = tab != 0) { tab = 0 }
     BackHandler(enabled = showNotifications) { showNotifications = false }
     BackHandler(enabled = showProgress) { showProgress = false }
+    BackHandler(enabled = showPayments) { showPayments = false }
 
     Box(Modifier.fillMaxSize()) {
     Scaffold(
@@ -167,6 +169,7 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
                     contentPadding = padding,
                     onChangeClass = { showClassSheet = true },
                     onOpenProgress = { showProgress = true },
+                    onOpenPayments = { showPayments = true },
                     onSignedOut = onSignedOut,
                 )
             }
@@ -179,6 +182,10 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
             stats = computeStudyStats(studyPages, finishedNotes, viewModel.notes),
             onBack = { showProgress = false },
         )
+    }
+
+    if (showPayments) {
+        PaymentsScreen(onBack = { showPayments = false })
     }
 
     if (showNotifications) {

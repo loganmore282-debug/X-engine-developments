@@ -51,6 +51,11 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.School
+import androidx.compose.material.icons.outlined.WorkspacePremium
+import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -99,6 +104,7 @@ fun ProfileTab(
     contentPadding: PaddingValues,
     onChangeClass: () -> Unit,
     onOpenProgress: () -> Unit,
+    onOpenPayments: () -> Unit,
     onSignedOut: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
@@ -178,47 +184,93 @@ fun ProfileTab(
             }
         }
 
+        // Each row has its own coloured tile, so the list is quick to scan (and looks like ours, not anyone else's).
+        val divider: @Composable () -> Unit = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 68.dp)) }
         SectionLabel("Study")
         SettingsCard {
             if (com.shulenotes.app.data.AccessHolder.enabled) {
                 SettingsRow(
-                    Icons.Outlined.Lock, "My pass",
+                    Icons.Outlined.WorkspacePremium, "My pass", tint = TileGreen,
                     trailingText = if (com.shulenotes.app.data.AccessHolder.active) "Until " + com.shulenotes.app.ui.components.passUntilLabel(com.shulenotes.app.data.AccessHolder.untilMs) else "Get a pass",
                 ) { showPass = true }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
+                divider()
+                SettingsRow(Icons.AutoMirrored.Outlined.ReceiptLong, "Payment history", tint = TileTeal, onClick = onOpenPayments)
+                divider()
             }
-            SettingsRow(Icons.Outlined.School, "My class", trailingText = userClass.ifBlank { "Not chosen" }, onClick = onChangeClass)
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
-            SettingsRow(Icons.Outlined.Insights, "My progress", onClick = onOpenProgress)
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
+            SettingsRow(Icons.Outlined.School, "My class", tint = TileBlue, trailingText = userClass.ifBlank { "Not chosen" }, onClick = onChangeClass)
+            divider()
+            SettingsRow(Icons.Outlined.Insights, "My progress", tint = TilePurple, onClick = onOpenProgress)
+        }
+
+        SectionLabel("App")
+        SettingsCard {
             SettingsRow(
-                Icons.Outlined.Palette, "Appearance",
+                Icons.Outlined.Palette, "Appearance", tint = TilePink,
                 trailingText = when (themeMode) { "light" -> "Light"; "dark" -> "Dark"; else -> "System default" },
             ) { showAppearance = true }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
-            SettingsRow(Icons.Outlined.Notifications, "Notifications", trailingText = if (pushOn) "On" else "Off") {
-                scope.launch { ShuleApp.session.setPushEnabled(!pushOn) }
-                if (!pushOn && android.os.Build.VERSION.SDK_INT >= 33) runCatching { askPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+            divider()
+            // A real switch, not a row that says "On": the state is visible at a glance.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        scope.launch { ShuleApp.session.setPushEnabled(!pushOn) }
+                        if (!pushOn && android.os.Build.VERSION.SDK_INT >= 33) runCatching { askPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+                    }
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconTile(Icons.Outlined.Notifications, TileAmber)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Notifications", style = MaterialTheme.typography.bodyLarge)
+                    Text("News and alerts on this phone", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                androidx.compose.material3.Switch(
+                    checked = pushOn,
+                    onCheckedChange = { on ->
+                        scope.launch { ShuleApp.session.setPushEnabled(on) }
+                        if (on && android.os.Build.VERSION.SDK_INT >= 33) runCatching { askPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+                    },
+                )
             }
         }
 
-        SectionLabel("Help and about")
+        val support = AppConfigHolder.config
+        SectionLabel("Get help")
         SettingsCard {
-            SettingsRow(Icons.Outlined.HelpOutline, "Help and support") { showHelp = true }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
-            SettingsRow(Icons.Outlined.RateReview, "Send feedback") { viewModel.clearFeedbackError(); showFeedback = true }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
-            SettingsRow(Icons.Outlined.Share, "Share Shule Notes") {
+            if (support.supportWhatsapp.isNotBlank()) {
+                SettingsRow(Icons.AutoMirrored.Outlined.Chat, "Chat with us on WhatsApp", tint = TileWhatsApp) {
+                    com.shulenotes.app.ui.components.openWhatsApp(context, support.supportWhatsapp)
+                }
+                divider()
+            }
+            if (support.supportPhone.isNotBlank()) {
+                SettingsRow(Icons.Outlined.Call, "Call us", tint = TileBlue, trailingText = support.supportPhone) {
+                    com.shulenotes.app.ui.components.dialNumber(context, support.supportPhone)
+                }
+                divider()
+            }
+            if (support.supportEmail.isNotBlank() || support.supportHours.isNotBlank() || !support.hasSupport) {
+                SettingsRow(Icons.Outlined.HelpOutline, "Help and support", tint = TileTeal) { showHelp = true }
+                divider()
+            }
+            SettingsRow(Icons.Outlined.RateReview, "Send feedback", tint = TileAmber) { viewModel.clearFeedbackError(); showFeedback = true }
+            divider()
+            SettingsRow(Icons.Outlined.Share, "Share Shule Notes", tint = TileGreen) {
                 val send = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, "Study with Shule Notes: notes and past papers for every class, with an AI study helper.\n$DOWNLOAD_URL")
                 }
                 runCatching { context.startActivity(Intent.createChooser(send, "Share Shule Notes")) }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
-            SettingsRow(Icons.Outlined.Description, "Terms of use") { runCatching { uriHandler.openUri(TERMS_URL) } }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 56.dp))
-            SettingsRow(Icons.Outlined.PrivacyTip, "Privacy policy") { runCatching { uriHandler.openUri(PRIVACY_URL) } }
+        }
+
+        SectionLabel("About")
+        SettingsCard {
+            SettingsRow(Icons.Outlined.Description, "Terms of use", tint = TileGrey) { runCatching { uriHandler.openUri(TERMS_URL) } }
+            divider()
+            SettingsRow(Icons.Outlined.PrivacyTip, "Privacy policy", tint = TileGrey) { runCatching { uriHandler.openUri(PRIVACY_URL) } }
         }
 
         Spacer(Modifier.height(28.dp))
@@ -444,11 +496,31 @@ private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
     }
 }
 
+private val TileGreen = Color(0xFF1E9E63)
+private val TileTeal = Color(0xFF0E9AA7)
+private val TileBlue = Color(0xFF2F6FEB)
+private val TilePurple = Color(0xFF7C4DFF)
+private val TilePink = Color(0xFFE0457B)
+private val TileAmber = Color(0xFFE09A00)
+private val TileWhatsApp = Color(0xFF1FAF5A)
+private val TileGrey = Color(0xFF6B7280)
+
+@Composable
+private fun IconTile(icon: ImageVector, tint: Color) {
+    Box(
+        modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.14f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(21.dp))
+    }
+}
+
 @Composable
 private fun SettingsRow(
     icon: ImageVector,
     label: String,
     color: Color = MaterialTheme.colorScheme.onSurface,
+    tint: Color? = null,
     trailingText: String? = null,
     onClick: (() -> Unit)? = null,
 ) {
@@ -456,14 +528,26 @@ private fun SettingsRow(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 18.dp, vertical = 16.dp),
+            .padding(horizontal = 16.dp, vertical = if (tint != null) 11.dp else 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.width(16.dp))
+        if (tint != null) {
+            IconTile(icon, tint)
+            Spacer(Modifier.width(14.dp))
+        } else {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.padding(start = 2.dp).size(22.dp))
+            Spacer(Modifier.width(16.dp))
+        }
         Text(label, style = MaterialTheme.typography.bodyLarge, color = color, modifier = Modifier.weight(1f))
         if (trailingText != null) {
-            Text(trailingText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                trailingText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 8.dp).widthIn(max = 160.dp),
+            )
         }
         if (onClick != null) {
             Icon(

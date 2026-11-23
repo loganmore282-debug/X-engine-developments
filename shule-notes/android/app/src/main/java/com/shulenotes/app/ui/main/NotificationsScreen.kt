@@ -23,6 +23,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
+import com.shulenotes.app.ui.components.AppConfigHolder
+import com.shulenotes.app.ui.components.SupportDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +54,15 @@ import com.shulenotes.app.ui.components.timeAgo
 fun NotificationsScreen(items: List<Announcement>, seenAtOnOpen: Long, onBack: () -> Unit) {
     // This page has the normal background, so the status bar icons must match it.
     StatusBarIcons(light = MaterialTheme.colorScheme.background.luminance() < 0.5f)
+    var showHelp by rememberSaveable { mutableStateOf(false) }
+    if (showHelp) {
+        SupportDialog(
+            title = "Was this not you?",
+            intro = "Contact us now. We will reset your password and sign out every other device.",
+            config = AppConfigHolder.config,
+            onDismiss = { showHelp = false },
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -67,7 +85,7 @@ fun NotificationsScreen(items: List<Announcement>, seenAtOnOpen: Long, onBack: (
                 StateMessage(
                     icon = Icons.Outlined.NotificationsNone,
                     title = "You're all caught up",
-                    body = "Announcements from Shule Notes will appear here.",
+                    body = "News from Shule Notes and alerts about your account will appear here.",
                     modifier = Modifier.align(Alignment.Center),
                 )
             }
@@ -77,9 +95,14 @@ fun NotificationsScreen(items: List<Announcement>, seenAtOnOpen: Long, onBack: (
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(items, key = { it.id }) { item ->
+                items(items, key = { (if (it.isSecurity) "s" else "a") + it.id }) { item ->
                     val at = parseIsoMillis(item.createdAt)
-                    NotificationCard(item = item, whenText = timeAgo(at), isNew = at > seenAtOnOpen)
+                    NotificationCard(
+                        item = item,
+                        whenText = timeAgo(at),
+                        isNew = !item.own && at > seenAtOnOpen,
+                        onNotMe = { showHelp = true },
+                    )
                 }
             }
         }
@@ -87,43 +110,54 @@ fun NotificationsScreen(items: List<Announcement>, seenAtOnOpen: Long, onBack: (
 }
 
 @Composable
-private fun NotificationCard(item: Announcement, whenText: String, isNew: Boolean) {
+private fun NotificationCard(item: Announcement, whenText: String, isNew: Boolean, onNotMe: () -> Unit) {
+    val security = item.isSecurity
+    // Sign-in alerts look different from news: a shield on a soft red-amber tint, so they are never mistaken for an advert.
+    val iconBg = if (security) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer
+    val iconFg = if (security) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        border = BorderStroke(1.dp, if (isNew) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(modifier = Modifier.padding(16.dp)) {
             Box(
-                modifier = Modifier.size(44.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
+                modifier = Modifier.size(44.dp).background(iconBg, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Outlined.Campaign, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                Icon(if (security) Icons.Outlined.Security else Icons.Outlined.Campaign, contentDescription = null, tint = iconFg)
             }
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(item.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f, fill = false))
-                    if (isNew) {
-                        Spacer(Modifier.width(8.dp))
-                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
-                            Text(
-                                "New",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            )
-                        }
+                    when {
+                        item.own -> Tag("This device", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
+                        isNew -> Tag("New", MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimary)
                     }
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(item.message, style = MaterialTheme.typography.bodyMedium)
-                if (whenText.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(whenText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                    if (whenText.isNotEmpty()) {
+                        Text(whenText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                    if (security && !item.own) {
+                        TextButton(onClick = onNotMe) { Text("Get help") }
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun Tag(text: String, bg: Color, fg: Color) {
+    Spacer(Modifier.width(8.dp))
+    Surface(shape = CircleShape, color = bg) {
+        Text(text, style = MaterialTheme.typography.labelSmall, color = fg, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
     }
 }

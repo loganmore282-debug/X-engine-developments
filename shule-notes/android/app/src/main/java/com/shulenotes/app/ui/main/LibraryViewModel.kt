@@ -163,7 +163,8 @@ class LibraryViewModel : ViewModel() {
                     val notesCall = async { ApiClient.service.notes().notes ?: emptyList() }
                     // These three are nice to have: failing must not stop the notes from showing.
                     val levelsCall = async { try { ApiClient.service.levels().groups ?: emptyList() } catch (e: Exception) { levelGroups } }
-                    val notificationsCall = async { try { ApiClient.service.announcements().announcements ?: emptyList() } catch (e: Exception) { notifications } }
+                    val notificationsCall = async { try { ApiClient.service.announcements().announcements ?: emptyList() } catch (e: Exception) { notifications.filter { !it.isSecurity } } }
+                    val noticesCall = async { try { ApiClient.service.notices().notices ?: emptyList() } catch (e: Exception) { notifications.filter { it.isSecurity } } }
                     val configCall = async { AppConfigHolder.refresh() }
                     val accessCall = async { com.shulenotes.app.data.AccessHolder.refresh() }
 
@@ -177,8 +178,10 @@ class LibraryViewModel : ViewModel() {
                     NoteCache.put(loadedNotes)
                     initScope()
                     if (subjectsInScope().none { it.id == selectedSubjectId }) selectedSubjectId = null
-                    notifications = notificationsCall.await()
-                    announcement = notifications.firstOrNull()?.takeIf { it.id != dismissed }
+                    val ownerNews = notificationsCall.await()
+                    // The owner's announcements and the student's own sign-in alerts, in one list, newest first.
+                    notifications = (ownerNews + noticesCall.await()).sortedByDescending { com.shulenotes.app.ui.components.parseIsoMillis(it.createdAt) }
+                    announcement = ownerNews.firstOrNull()?.takeIf { it.id != dismissed }
                     configCall.await()
                     accessCall.await()
                     ShuleApp.session.saveLibrary(Gson().toJson(LibrarySnapshot(loadedSubjects, loadedNotes, loadedLevels)))

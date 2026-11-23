@@ -31,7 +31,7 @@ export const useAuth = () => useContext(AuthCtx);
 
 // ---- the library: subjects, notes, classes, announcements; refreshed when the owner changes anything ----
 interface LibraryApi {
-  subjects: Subject[]; notes: Note[]; levels: LevelGroup[]; announcements: Announcement[]; config: AppConfig;
+  subjects: Subject[]; notes: Note[]; levels: LevelGroup[]; announcements: Announcement[]; notices: Announcement[]; config: AppConfig;
   loading: boolean; error: string | null; reload: () => Promise<void>;
   subjectName: (id: string | null) => string | null;
   saved: Set<string>; toggleSaved: (id: string) => boolean;
@@ -49,7 +49,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
     window.setTimeout(() => setToastMsg((t) => (t && t.id === id ? null : t)), 3200);
   }, []);
 
-  const [library, setLibrary] = useState<{ subjects: Subject[]; notes: Note[]; levels: LevelGroup[]; announcements: Announcement[]; config: AppConfig }>(() => remember('shule_library', { subjects: [], notes: [], levels: [], announcements: [], config: {} }));
+  const [library, setLibrary] = useState<{ subjects: Subject[]; notes: Note[]; levels: LevelGroup[]; announcements: Announcement[]; notices: Announcement[]; config: AppConfig }>(() => { const l = remember('shule_library', { subjects: [], notes: [], levels: [], announcements: [], notices: [] as Announcement[], config: {} }); return { ...l, notices: l.notices || [] }; });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<Set<string>>(() => new Set(remember<string[]>('shule_saved', [])));
@@ -70,8 +70,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
   const signOut = useCallback(() => {
     const t = getToken();
     setToken(null); setUserState(null);
-    save('shule_library', { subjects: [], notes: [], levels: [], announcements: [], config: {} });
-    setLibrary({ subjects: [], notes: [], levels: [], announcements: [], config: {} });
+    save('shule_library', { subjects: [], notes: [], levels: [], announcements: [], notices: [], config: {} });
+    setLibrary({ subjects: [], notes: [], levels: [], announcements: [], notices: [], config: {} });
     // Told to the server afterwards, so leaving is instant.
     if (t) fetch(`${API}/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${t}` } }).catch(() => {});
   }, []);
@@ -95,19 +95,21 @@ export function AppProviders({ children }: { children: ReactNode }) {
     if (!getToken()) return;
     setLoading(true);
     try {
-      const [subjects, notes, levels, announcements, config] = await Promise.all([
+      const [subjects, notes, levels, announcements, config, notices] = await Promise.all([
         api<{ subjects: Subject[] }>('/subjects'),
         api<{ notes: Note[] }>('/notes'),
         api<{ groups: LevelGroup[] }>('/levels', { auth: false }).catch(() => ({ groups: library.levels })),
         api<{ announcements: Announcement[] }>('/announcements').catch(() => ({ announcements: library.announcements })),
         api<{ config: AppConfig }>('/config', { auth: false }).catch(() => ({ config: library.config })),
+        // The student's own sign-in alerts (separate from the owner's announcements).
+        api<{ notices: Announcement[] }>('/notices').catch(() => ({ notices: library.notices || [] })),
       ]);
-      const next = { subjects: subjects.subjects, notes: notes.notes, levels: levels.groups, announcements: announcements.announcements, config: config.config };
+      const next = { subjects: subjects.subjects, notes: notes.notes, levels: levels.groups, announcements: announcements.announcements, notices: notices.notices || [], config: config.config };
       setLibrary(next); save('shule_library', next); setError(null);
     } catch (e) {
       setError((e as Error).message);
     } finally { setLoading(false); }
-  }, [library.levels, library.announcements, library.config]);
+  }, [library.levels, library.announcements, library.notices, library.config]);
 
   const reloadRef = useRef(reload); reloadRef.current = reload;
   useEffect(() => { if (user) reloadRef.current(); }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps

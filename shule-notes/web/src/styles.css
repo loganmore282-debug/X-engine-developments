@@ -207,7 +207,7 @@ button.glass:hover { background: rgba(255, 255, 255, 0.2); transform: translateY
 .subject-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px; border-radius: 20px; border: 1.5px solid var(--line); background: var(--surface); text-align: left; transition: transform 0.18s var(--ease), box-shadow 0.2s, border-color 0.2s, background 0.2s; }
 .subject-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: color-mix(in srgb, var(--s-acc) 45%, var(--line)); }
 .subject-tile .s-ico { width: 48px; height: 48px; border-radius: 15px; display: grid; place-items: center; background: var(--s-soft); color: var(--s-acc); margin-bottom: 10px; }
-.subject-tile b { font: 600 15px 'Poppins', sans-serif; }
+.subject-tile b { font: 600 15px 'Poppins', sans-serif; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; }
 .subject-tile small { color: var(--muted); font-size: 12.5px; }
 .subject-tile.on { background: var(--s-soft); border-color: var(--s-acc); }
 .subject-tile.on .s-ico { background: var(--surface); }
@@ -435,3 +435,33 @@ button.glass:hover { background: rgba(255, 255, 255, 0.2); transform: translateY
 .card { transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease); }
 @media (hover: hover) { .subject-tile:hover .s-ico { transform: scale(1.12) rotate(-4deg); } .subject-tile .s-ico { transition: transform 0.25s var(--ease); } }
 @media (prefers-reduced-motion: reduce) { .ann-toast, .bell.ring svg, .bottom-nav a.active svg, .bar-track i { animation: none !important; transition: none !important; } }
+
+/* ---- coloured icon tiles in settings lists ---- */
+.settings .tile { flex: none; width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--tile) 14%, transparent); color: var(--tile); }
+.settings .tile svg { width: 21px; height: 21px; }
+.settings button:has(.tile), .settings a:has(.tile), .settings .pay-row { padding-top: 11px; padding-bottom: 11px; }
+.t-green { --tile: #1e9e63; } .t-teal { --tile: #0e9aa7; } .t-blue { --tile: #2f6feb; } .t-purple { --tile: #7c4dff; }
+.t-pink { --tile: #e0457b; } .t-amber { --tile: #e09a00; } .t-wa { --tile: #1faf5a; } .t-grey { --tile: #6b7280; } .t-red { --tile: #dc2626; }
+.settings .trail { max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.block { display: block; font-size: 12.5px; }
+
+/* ---- notifications ---- */
+.notice { display: flex; gap: 14px; padding: 16px; margin-bottom: 10px; }
+.notice-ico { flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--amber-soft); color: var(--amber); }
+.notice-ico svg { width: 22px; height: 22px; }
+.notice.security .notice-ico { background: color-mix(in srgb, #dc2626 14%, transparent); color: #dc2626; }
+.notice-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.notice p { margin: 6px 0 0; }
+.notice-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 12.5px; }
+.tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.link-btn { border: 0; background: none; color: var(--primary); font-weight: 600; font-size: 13px; padding: 6px 0; cursor: pointer; }
+
+/* ---- payment history ---- */
+.pay-total { padding: 20px; margin: 14px 0 12px; background: var(--primary-soft); color: var(--on-primary-soft); border-color: transparent; display: flex; flex-direction: column; }
+.pay-total small { font-weight: 600; opacity: 0.85; }
+.pay-total b { font-size: 28px; line-height: 1.2; }
+.pay-total span { font-size: 13px; opacity: 0.8; }
+.pay-row { display: flex; align-items: center; gap: 14px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+.pay-row:last-child { border-bottom: 0; }
+.pay-amt { text-align: right; display: flex; flex-direction: column; }
+.pay-amt small { font-size: 12px; font-weight: 600; color: var(--tile); }

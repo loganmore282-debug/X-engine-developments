@@ -46,6 +46,8 @@ fs.mkdirSync('e2e-shots', { recursive: true });
   if (await page.locator('.ann-toast').count() > 1) problems.push('more than one announcement toast');
   if (await page.locator('.announce').count()) problems.push('announcement is inside the page again');
   await page.click('button[aria-label="Back"]'); await page.waitForSelector('text=Amina Nakato');
+  step('payment history'); await page.click('.settings >> text=Payment history'); await page.waitForSelector('.pay-total'); await page.waitForSelector('.pay-row >> text=Paid'); await shot(page, '07c-payments');
+  await page.click('button[aria-label="Back"]'); await page.waitForSelector('text=Amina Nakato');
   await page.click('button[aria-label="Edit name"]'); await page.fill('.sheet input', 'Amina Joy Nakato'); await page.click('.sheet button:has-text("Save")');
   await page.waitForSelector('text=Amina Joy Nakato');
   step('log out'); await page.locator('button.btn:has-text("Log out")').evaluate((el) => el.scrollIntoView({ block: 'center' }));

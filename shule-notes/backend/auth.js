@@ -80,17 +80,19 @@ async function createSession(userId, opts = {}) {
   const r = await db.collection('sessions').insertOne({
     tokenHash: sha256(token), userId: String(userId), createdAt: new Date(), expiresAt, device,
   });
+  let signedOut = 0;
   if (opts.single !== false) {
     const now = new Date();
-    await db.collection('sessions').updateMany(
+    const res = await db.collection('sessions').updateMany(
       { userId: String(userId), _id: { $lt: r.insertedId }, replaced: { $ne: true } },
-      { $set: { replaced: true, replacedAt: now } },
+      { $set: { replaced: true, replacedAt: now, replacedBy: String(opts.deviceLabel || '').slice(0, 80) } },
     );
+    signedOut = (res && (res.modifiedCount || res.matchedCount)) || 0;
     // A signed-out device is only told about it for a week; after that the row is just clutter.
     await db.collection('sessions').deleteMany({ userId: String(userId), replaced: true, replacedAt: { $lt: new Date(now.getTime() - REPLACED_KEEP_MS) } });
     forgetUser(userId); // the other device must find out on its very next request, not after the 5 s memory
   }
-  return { token, expiresAt };
+  return { token, expiresAt, sessionId: String(r.insertedId), signedOut };
 }
 
 // Every request carries a token, so every request used to cost a database read. A session found is remembered for a few
@@ -103,15 +105,15 @@ async function lookupSession(token) {
   if (!token) return { userId: null };
   const hash = sha256(token);
   const cached = sessionCache.get(hash);
-  if (cached && cached.until > Date.now()) return { userId: cached.userId };
+  if (cached && cached.until > Date.now()) return { userId: cached.userId, sessionId: cached.sessionId };
   sessionCache.delete(hash);
   const row = await getDb().collection('sessions').findOne({ tokenHash: hash });
   if (!row) return { userId: null };
   if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return { userId: null };
-  if (row.replaced) return { userId: null, replaced: true };
+  if (row.replaced) return { userId: null, replaced: true, replacedBy: row.replacedBy || '' };
   if (sessionCache.size >= SESSION_CACHE_MAX) sessionCache.delete(sessionCache.keys().next().value);
-  sessionCache.set(hash, { userId: row.userId, until: Date.now() + SESSION_CACHE_MS });
-  return { userId: row.userId };
+  sessionCache.set(hash, { userId: row.userId, sessionId: String(row._id), until: Date.now() + SESSION_CACHE_MS });
+  return { userId: row.userId, sessionId: String(row._id) };
 }
 async function resolveSession(token) { return (await lookupSession(token)).userId; }
 
@@ -137,10 +139,14 @@ function bearerToken(req) {
 async function requireAuth(req, res, next) {
   const found = await lookupSession(bearerToken(req));
   if (!found.userId) {
-    if (found.replaced) return res.status(401).json({ status: 'error', code: 'signed_in_elsewhere', message: 'You were signed out because this account was opened on another device. Sign in again to use it here.' });
+    if (found.replaced) {
+      const where = found.replacedBy ? `on ${found.replacedBy}` : 'on another device';
+      return res.status(401).json({ status: 'error', code: 'signed_in_elsewhere', message: `You were signed out because this account was opened ${where}. Sign in again to use it here. If that was not you, contact support.` });
+    }
     return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   }
   const userId = found.userId;
+  req.sessionId = found.sessionId || null;
   req.userId = userId;
   next();
 }

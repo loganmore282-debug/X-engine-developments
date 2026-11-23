@@ -6,7 +6,8 @@ export interface Note {
   id: string; subjectId: string | null; title: string; description: string; classLevel: string | null;
   kind: 'notes' | 'past-paper'; views: number; pageCount: number; fileSize: number; uploadedAt: string | null; hasAiContext: boolean; free?: boolean;
 }
-export interface Announcement { id: string; title: string; message: string; classLevel?: string | null; createdAt: string }
+export interface Announcement { id: string; title: string; message: string; classLevel?: string | null; createdAt: string; kind?: 'security'; own?: boolean }
+export interface PaymentRecord { id: string; planName: string; amount: number; gift: boolean; status: 'paid' | 'failed' | 'expired' | 'pending'; createdAt: string; accessUntil: string | null; phone: string }
 export interface Slide { id: string; title: string; text: string; imageUrl: string | null }
 export interface ChatTurn { role: 'user' | 'assistant'; content: string }
 export interface AppConfig {

@@ -244,6 +244,16 @@ function publicPayment(p) {
   return { id: String(p._id), status: p.status, planName: p.planName, amount: p.amount, phone: p.phone, createdAt: p.createdAt, accessUntil: p.grantedUntil || null, message: p.failureReason || '' };
 }
 
+// A student's own history: what they paid, when, and what it gave them. Free passes from the owner are shown as gifts.
+async function studentHistory(userId) {
+  const rows = await getDb().collection('payments').find({ userId: String(userId) }).sort({ createdAt: -1 }).limit(50).toArray();
+  return rows.map((p) => ({
+    id: String(p._id), planName: p.planName || 'Pass', amount: p.manual ? 0 : (p.amount || 0), gift: !!p.manual,
+    status: p.status === 'paid' ? 'paid' : p.status === 'failed' ? 'failed' : p.status === 'expired' ? 'expired' : 'pending',
+    createdAt: p.createdAt, accessUntil: p.grantedUntil || null, phone: p.phone || '',
+  }));
+}
+
 // ── admin ───────────────────────────────────────────────────────────────────
 async function listPayments({ status, q, page, pageSize } = {}) {
   const db = getDb();
@@ -362,6 +372,7 @@ async function adminRecheck(paymentId, marz) {
 }
 
 module.exports = {
+  studentHistory,
   DEFAULT_PLANS, planList, activePlans, cleanPlans, hasAccess, canRead, PAYMENT_REQUIRED,
   makeMarz, normalizeStatus, credentialsFor, mobileMoneyPhone,
   grantAccess, startPayment, refreshPayment, handleCallback, completePayment, publicPayment,

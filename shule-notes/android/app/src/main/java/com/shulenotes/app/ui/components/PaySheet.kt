@@ -20,6 +20,11 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.WorkspacePremium
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -67,11 +72,31 @@ private fun lengthLabel(minutes: Int): String = when {
 
 // "today at 14:30" for a pass ending within a day, otherwise the date.
 fun passUntilLabel(untilMs: Long): String {
+    // "today at 18:30", "tomorrow at 07:00", or a date: never "today" for a time that is really tomorrow.
     val date = Date(untilMs)
-    return if (untilMs - System.currentTimeMillis() < 24L * 3600 * 1000) {
-        "today at " + SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
-    } else {
-        SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(date)
+    val day = SimpleDateFormat("yyyyMMdd", Locale.US)
+    val today = day.format(Date())
+    val tomorrow = day.format(Date(System.currentTimeMillis() + 24L * 3600 * 1000))
+    val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
+    return when (day.format(date)) {
+        today -> "today at $time"
+        tomorrow -> "tomorrow at $time"
+        else -> SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(date)
+    }
+}
+
+// "5 hours 48 minutes left", "3 days left": how long the pass still runs, in full words.
+fun passLeftLabel(untilMs: Long, now: Long = System.currentTimeMillis()): String {
+    val minutes = ((untilMs - now) / 60_000L).coerceAtLeast(0L)
+    val days = minutes / (60 * 24)
+    val hours = (minutes / 60) % 24
+    val mins = minutes % 60
+    fun unit(n: Long, one: String) = if (n == 1L) "1 $one" else "$n ${one}s"
+    return when {
+        days >= 2 -> unit(days, "day") + " left"
+        days == 1L -> "1 day " + unit(hours, "hour") + " left"
+        hours >= 1 -> unit(hours, "hour") + " " + unit(mins, "minute") + " left"
+        else -> unit(mins.coerceAtLeast(1), "minute") + " left"
     }
 }
 
@@ -285,24 +310,78 @@ fun PaySheet(onDismiss: () -> Unit, onPaid: () -> Unit = {}) {
 fun PassBanner(modifier: Modifier = Modifier) {
     if (!AccessHolder.enabled) return
     var open by rememberSaveable { mutableStateOf(false) }
-    val active = AccessHolder.active
-    Surface(
-        onClick = { open = true },
-        shape = RoundedCornerShape(22.dp),
-        color = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Row(modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Lock, contentDescription = null, modifier = Modifier.size(24.dp))
-            Spacer(Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(if (active) "Your pass is active" else "Get a pass to read everything", style = MaterialTheme.typography.titleSmall)
-                Text(
-                    if (active) "Until ${passUntilLabel(AccessHolder.untilMs)}. Tap to add more time." else "Pay with MTN or Airtel mobile money.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+    // Re-drawn every minute so the time left counts down while Home is open.
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { delay(60_000); now = System.currentTimeMillis() } }
+    val active = now > 0L && AccessHolder.active
+    if (active) {
+        // A calm card: a badge, how long is left in full words, and a small "Add time" pill.
+        Surface(
+            onClick = { open = true },
+            shape = RoundedCornerShape(22.dp),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            modifier = modifier.fillMaxWidth(),
+        ) {
+            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier.size(44.dp).background(MaterialTheme.colorScheme.primary, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Outlined.WorkspacePremium, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text("Pass active", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f))
+                    Text(passLeftLabel(AccessHolder.untilMs, now), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("Until ${passUntilLabel(AccessHolder.untilMs)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f))
+                }
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
+                    Text(
+                        "Add time",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    )
+                }
             }
-            Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+        }
+    } else {
+        // No pass: a bold amber card with soft circles drawn behind the text and one clear button.
+        val amberTop = androidx.compose.ui.graphics.Color(0xFFF2A516)
+        val amberBottom = androidx.compose.ui.graphics.Color(0xFFD97706)
+        val ink = androidx.compose.ui.graphics.Color(0xFF2B1A00)
+        Surface(
+            onClick = { open = true },
+            shape = RoundedCornerShape(24.dp),
+            color = androidx.compose.ui.graphics.Color.Transparent,
+            modifier = modifier.fillMaxWidth(),
+        ) {
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(amberTop, amberBottom)))
+                    .drawBehind {
+                        drawCircle(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.13f), radius = size.height * 0.9f, center = androidx.compose.ui.geometry.Offset(size.width * 0.95f, size.height * 0.05f))
+                        drawCircle(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.10f), radius = size.height * 0.45f, center = androidx.compose.ui.geometry.Offset(size.width * 0.78f, size.height * 1.05f))
+                    },
+            ) {
+                Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Unlock everything", style = MaterialTheme.typography.titleMedium, color = ink)
+                        Text("Every note, past paper and the AI helper. Pay with MTN or Airtel mobile money.", style = MaterialTheme.typography.bodySmall, color = ink.copy(alpha = 0.85f))
+                        Spacer(Modifier.height(6.dp))
+                        Surface(shape = CircleShape, color = ink) {
+                            Text(
+                                "Choose a pass",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = amberTop,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Icon(Icons.Outlined.LockOpen, contentDescription = null, tint = ink.copy(alpha = 0.85f), modifier = Modifier.size(52.dp))
+                }
+            }
         }
     }
     if (open) PaySheet(onDismiss = { open = false })

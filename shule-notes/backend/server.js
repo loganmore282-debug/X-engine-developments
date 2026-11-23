@@ -29,6 +29,7 @@ const { GROUPS: LEVEL_GROUPS, isValidLevel } = require('./levels');
 const { normalizePhone, isValidPhone } = require('./phone');
 const { eraseUser, updateProfile, cleanName, toId } = require('./accounts');
 const { getSettings, saveSettings, publicConfig, adminView, AI_MODELS, GEMINI_MODELS } = require('./settings');
+const securityNotices = require('./security-notices');
 const adminData = require('./admin-data');
 const payments = require('./payments');
 const compression = require('compression');
@@ -120,6 +121,7 @@ app.post('/auth/register', authLimiter, async (req, res) => {
     let accessUntil = null;
     if (settingsNow.trialMinutes > 0) { try { accessUntil = await payments.grantAccess(result.insertedId, settingsNow.trialMinutes); } catch (_) { /* the account is still made */ } }
     const { token } = await createSession(String(result.insertedId), { single: settingsNow.singleDevice !== false, device: req.headers['user-agent'] });
+    await db.collection('users').updateOne({ _id: result.insertedId }, { $set: { lastDevice: securityNotices.describeDevice(req.headers['user-agent']) } });
     res.json({ status: 'success', token, user: publicUser({ _id: result.insertedId, name, phone, accessUntil }) });
   } catch (e) {
     console.error('register error:', e.message);
@@ -154,7 +156,13 @@ app.post('/auth/login', authLimiter, async (req, res) => {
     if (needsRehash(user.passwordHash)) {
       hashPassword(password).then((h) => db.collection('users').updateOne({ _id: user._id }, { $set: { passwordHash: h } })).catch((e) => console.error('could not upgrade a password hash:', e.message));
     }
-    const { token } = await createSession(String(user._id), { single: (await getSettings()).singleDevice !== false, device: req.headers['user-agent'] });
+    const device = securityNotices.describeDevice(req.headers['user-agent']);
+    const session = await createSession(String(user._id), { single: (await getSettings()).singleDevice !== false, device: req.headers['user-agent'], deviceLabel: device });
+    const { token } = session;
+    const previousDevice = user.lastDevice || '';
+    await db.collection('users').updateOne({ _id: user._id }, { $set: { lastDevice: device } });
+    try { await securityNotices.recordSignIn({ userId: user._id, device, previousDevice, signedOut: session.signedOut > 0, sessionId: session.sessionId }); }
+    catch (e) { console.error('could not record a sign-in notice:', e.message); }
     res.json({ status: 'success', token, user: publicUser(user) });
   } catch (e) {
     console.error('login error:', e.message);
@@ -223,6 +231,11 @@ app.get('/announcements', requireAuth, ah(async (req, res) => {
   const level = user && isValidLevel(user.classLevel) ? user.classLevel : null;
   const entry = await perf.shared('announcements:' + (level || '-'), 30000, async () => ({ status: 'success', announcements: await adminData.listActiveAnnouncements(level) }));
   perf.sendShared(req, res, entry);
+}));
+// The student's own notices (sign-in alerts), separate from the owner's announcements, which are the same for everyone.
+app.get('/notices', requireAuth, ah(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ status: 'success', notices: await securityNotices.listNotices(req.userId, req.sessionId) });
 }));
 app.get('/announcement', requireAuth, ah(async (req, res) => res.json({ status: 'success', announcement: await adminData.activeAnnouncement() })));
 
@@ -496,6 +509,12 @@ app.post('/payments/start', requireAuth, payLimiter, ah(async (req, res) => {
   const result = await payments.startPayment({ settings, user, planId: req.body.planId, phone: req.body.phone, marz, callbackUrl });
   if (!result.ok) return res.status(result.status || 400).json({ status: 'error', message: result.message });
   res.json({ status: 'success', payment: payments.publicPayment(result.payment) });
+}));
+
+// The student's own payments, newest first (Profile > Payment history).
+app.get('/payments/mine', requireAuth, ah(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ status: 'success', payments: await payments.studentHistory(req.userId) });
 }));
 
 // The app asks every few seconds while the student approves the prompt on their phone.

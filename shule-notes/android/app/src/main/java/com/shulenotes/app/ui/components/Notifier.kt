@@ -83,7 +83,7 @@ fun NotifierHost(modifier: Modifier = Modifier) {
         if (notice != null) {
             lastShown = notice
             // Errors stay long enough to read; confirmations are brief.
-            delay(if (notice.kind == NoticeKind.Error) 5000L + notice.message.length * 60L else 3500L)
+            delay(if (notice.kind == NoticeKind.Error) 5000L + notice.message.length * 60L else (3000L + notice.message.length * 45L).coerceAtMost(9000L))
             Notifier.dismiss(notice.id)
         }
     }
