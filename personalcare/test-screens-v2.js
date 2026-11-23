@@ -57,7 +57,7 @@ function runStats(rows) {
   ok(!/PersonalCare Mini|PersonalCare Classic|Product-1\b/.test(cli), 'no sample asset is written into the app code');
   ok(!/after 24 hours/.test(cli), 'no "after 24 hours" wording (cashback is paid at Uganda midnight)');
   const css = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
-  ok(/--v-blue:#1739b8/.test(css) && !/#e30613|#1457e8/i.test(css), 'the app uses the royal blue and no red is left');
+  ok(/--v-blue:#00329d/.test(css) && !/#e30613|#1457e8/i.test(css), 'the app uses the royal blue and no red is left');
   console.log(`PASS: screen data (${n} checks)`);
 })().catch(e => { console.error(e); process.exit(1); });
 
