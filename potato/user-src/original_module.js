@@ -5170,7 +5170,7 @@ window.openDownloadPage = function(){
       <span class="pt-dllogo">${STATE.logo ? `<img src="${esc(STATE.logo)}" alt="">` : ''}</span>
       <h2>${esc(brandName())}</h2>
       <p class="sub">Application officielle · Rapide &amp; Sécurisée</p>
-      <div class="chips"><span>Android 7.0+</span><span>3.4 MB</span><span>Officielle</span></div>
+      <div class="chips"><span>Android 7.0+</span><span>3,4 Mo</span><span>Officielle</span></div>
       <button type="button" class="pt-dlbtn" onclick="promptInstallApp()">${PT_DL_DOWN}<span>Télécharger l'APK</span></button>
       ${ptClaimButtonHtml(claim)}
       <p class="cap">Téléchargement gratuit · Touchez le bouton ci-dessus pour installer</p>

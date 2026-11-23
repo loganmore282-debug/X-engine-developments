@@ -23,7 +23,7 @@
   function warn(){
     try {
       console.log("%cSTOP", "color:#e21b2a;font-size:48px;font-weight:900;");
-      console.log("%cThis is a browser feature for developers. Do not paste or type anything here — it could give an attacker access to your account and funds.",
+      console.log("%cCeci est une fonction du navigateur réservée aux développeurs. Ne collez et ne tapez rien ici : cela pourrait donner à un pirate l'accès à votre compte et à vos fonds.",
         "color:#D93025;font-size:14px;");
     } catch(e){}
   }
@@ -62,7 +62,7 @@
       if (shield) return;
       shield = document.createElement("div");
       shield.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#FCFBF9;color:#111111;display:flex;align-items:center;justify-content:center;text-align:center;font-family:sans-serif;font-size:18px;padding:24px;";
-      shield.textContent = "Developer tools detected. Close them to continue.";
+      shield.textContent = "Outils de développement détectés. Fermez-les pour continuer.";
       (document.body || document.documentElement).appendChild(shield);
     }
     function hideShield(){ if (shield){ shield.remove(); shield = null; } }
