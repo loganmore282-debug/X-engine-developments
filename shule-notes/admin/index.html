@@ -71,6 +71,23 @@
 
   /* tables */
   .table-scroll{overflow-x:auto}
+  /* Phones: each row of the big lists becomes a card, so no column (and no button) is ever cut off. Labels come from the
+     table's own headings (labelTables below). */
+  @media (max-width:700px){
+    .table-scroll.cards{overflow:visible}
+    .table-scroll.cards table, .table-scroll.cards tbody{display:block;width:100%}
+    .table-scroll.cards thead{display:none}
+    .table-scroll.cards tr{display:block;border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin:0 0 10px;background:var(--surface)}
+    .table-scroll.cards td{display:block;padding:6px 0;border:0;text-align:right;min-height:0;overflow:hidden}
+    .table-scroll.cards td::before{content:attr(data-label);float:left;margin-right:12px;font-size:12px;font-weight:700;color:var(--muted);text-align:left;line-height:1.9}
+    .table-scroll.cards td:first-child{text-align:left;font-weight:600;padding-bottom:10px;border-bottom:1px solid var(--line);margin-bottom:4px}
+    .table-scroll.cards td:first-child::before, .table-scroll.cards td:last-child::before, .table-scroll.cards td[data-label=""]::before{content:none}
+    .table-scroll.cards td:last-child{display:block;text-align:left;padding-top:10px}
+    .table-scroll.cards td:last-child .actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start}
+    .table-scroll.cards td.empty, .table-scroll.cards td[colspan]{display:block;text-align:center;border:0}
+    .table-scroll.cards td[colspan]::before{content:none}
+    .table-scroll.cards .sub{display:block}
+  }
   table{width:100%;border-collapse:collapse;font-size:13.5px}
   th,td{text-align:left;padding:10px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
   th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap}
@@ -188,7 +205,7 @@
           <button class="btn plain sm" id="stBulk">Give access to many</button>
           <button class="btn plain sm" id="stExport">Export CSV</button>
         </div>
-        <div class="table-scroll"><table>
+        <div class="table-scroll cards"><table>
           <thead><tr><th>Student</th><th>Class</th><th>Joined</th><th>Last seen</th><th>AI today / total</th><th>Access</th><th>Status</th><th></th></tr></thead>
           <tbody id="studentRows"></tbody>
         </table></div>
@@ -207,7 +224,7 @@
           <select id="payStatus"><option value="">All payments</option><option value="paid">Paid</option><option value="pending">Waiting</option><option value="failed">Failed</option><option value="expired">Expired</option></select>
           <button class="btn plain sm" id="payExport">Export CSV</button>
         </div>
-        <div class="table-scroll"><table>
+        <div class="table-scroll cards"><table>
           <thead><tr><th>Student</th><th>Pass</th><th>Amount</th><th>Phone</th><th>When</th><th>Status</th><th>Access until</th><th></th></tr></thead>
           <tbody id="payRows"></tbody>
         </table></div>
@@ -235,7 +252,7 @@
       </div>
       <div class="card">
         <h2>All notes</h2>
-        <div class="table-scroll"><table>
+        <div class="table-scroll cards"><table>
           <thead><tr><th>Title</th><th>Subject</th><th>Class</th><th>Pages</th><th>Views</th><th>AI</th><th>Status</th><th></th></tr></thead>
           <tbody id="notesRows"></tbody>
         </table></div>
@@ -322,7 +339,7 @@
     <section id="tab-activity" class="hidden">
       <div class="page-head"><div class="grow"><h1>Activity</h1><div class="muted">Everything done in this panel, newest first</div></div><button class="btn plain" id="actRefresh">Refresh</button></div>
       <div class="card">
-        <div class="table-scroll"><table>
+        <div class="table-scroll cards"><table>
           <thead><tr><th>When</th><th>What was done</th><th>Details</th></tr></thead>
           <tbody id="actRows"></tbody>
         </table></div>
@@ -1329,6 +1346,15 @@ setInterval(async () => {
   autoRefreshing = true;
   try { await LOADERS[currentTab](); } finally { autoRefreshing = false; }
 }, 60000);
+
+// Phones: each cell of a "cards" table carries its column name, so a row can be shown as a labelled card.
+function labelTables(){
+  document.querySelectorAll('.table-scroll.cards table').forEach(t => {
+    const heads = [...t.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    t.querySelectorAll('tbody tr').forEach(tr => [...tr.children].forEach((td, i) => { if (!td.hasAttribute('colspan')) td.setAttribute('data-label', heads[i] || ''); }));
+  });
+}
+new MutationObserver(labelTables).observe(document.body, { childList: true, subtree: true });
 
 // ── boot ──
 if (localStorage.getItem(KEY_STORE)) {
