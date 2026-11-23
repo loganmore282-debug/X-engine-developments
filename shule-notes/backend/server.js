@@ -464,7 +464,7 @@ app.post('/ai/ask', requireAuth, aiLimiter, async (req, res) => {
     const allowed = await consumeAiQuota(req.userId, limit);
     if (!allowed) return res.status(429).json({ status: 'error', message: `You've reached today's limit of ${limit} AI questions. Try again tomorrow.` });
 
-    const result = await ai.ask(settings, { documentText: note.extractedText, noteTitle: note.title, question, history });
+    const result = await ai.ask(settings, { documentText: note.extractedText, pageTexts: note.pageTexts, noteTitle: note.title, question, history });
     res.json({ status: 'success', answer: result.answer });
   } catch (e) {
     const { status, message } = ai.classifyAiError(e);

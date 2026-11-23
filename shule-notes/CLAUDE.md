@@ -82,7 +82,11 @@ readable message.
 - **AI providers:** Claude (`claude.js`) or Google Gemini (`gemini.js`, plain REST, key in the `x-goog-api-key` header); the owner picks which answers first in
   admin > Settings > AI helper (`aiProvider`), pastes each key there (stored in the settings document, never shown again), and `aiFallback` uses the other as a
   backup when it is set up (`ai.js`; a declined question is not passed on). `POST /admin/ai/test` is the panel's "Test the AI helper" button. Gemini Flash models
-  are called with thinking off (`thinkingBudget: 0`). Tests: `test-gemini.js`.
+  are called with thinking off (`thinkingBudget: 0`); Gemini 3 models get `thinkingLevel: 'low'`. A Gemini model that is overloaded (503), slow (30 s timeout) or
+  retired (404) is set aside for 3 minutes and the next best Flash from Google's own model list answers instead (`alternatives()` in gemini.js; the admin's
+  "Load models from Google" button and "Last problem" line show the real reasons). Gemini is shown only the PAGES that matter (`context.js`: relevant pages,
+  or pages spread across the document for a summary question); Claude keeps the whole document because its prompt cache makes that cheap.
+  Tests: `test-gemini.js`, `test-context.js`.
 - Password hashing: **bcrypt, cost 12** (the owner's explicit requirement; `auth.js`: native `bcrypt` with `bcryptjs` as automatic fallback; both are
   dependencies; hashes are `$2b$12$...`). Max 72 BYTES (bcrypt's limit; refused at sign-up/reset, not silently cut). Old accounts saved as `salt:scrypt`
   still sign in and are upgraded to bcrypt at that sign-in (`needsRehash`), so nobody had to reset. A real bcrypt dummy hash is compared when no account

@@ -10,7 +10,7 @@ const KEY_PATTERN = /^(?!sk-)[A-Za-z0-9][A-Za-z0-9._-]{19,199}$/;
 const MODEL_PATTERN = /^gemini-[a-z0-9][a-z0-9.\-]{1,40}$/;
 const MAX_QUESTION_LEN = 2000;
 const MAX_DOCUMENT_CHARS = 400000;
-const TIMEOUT_MS = 45000;
+const TIMEOUT_MS = 30000;
 
 class GeminiNotConfiguredError extends Error { constructor() { super('no Gemini API key configured'); } }
 class GeminiNoAnswerError extends Error { constructor(reason) { super('no answer: ' + reason); this.reason = reason; } }
@@ -41,9 +41,21 @@ function pickDefault(ids) {
     || ids[0] || '';
 }
 
-// A configured name that Google no longer knows is replaced by a working one for a while (so only the first question pays for the lookup).
-const replaced = new Map(); // configured name -> { to, at }
-const REPLACED_MS = 10 * 60 * 1000;
+// Models that failed lately (overloaded, retired, not found) are skipped for a few minutes, so students are not made to wait on them.
+const unhealthy = new Map(); // model -> until (ms)
+const UNHEALTHY_MS = 3 * 60 * 1000;
+const isUnhealthy = (m) => (unhealthy.get(m) || 0) > Date.now();
+let listCache = { at: 0, ids: [] };
+const LIST_CACHE_MS = 10 * 60 * 1000;
+
+// Other models to try when one is down: the newest plain Flash models first, then Flash-Lite; never one that failed just now.
+function alternatives(ids, tried) {
+  const version = (id) => parseFloat((id.match(/^gemini-(\d+(?:\.\d+)?)/) || [0, 0])[1]);
+  const byNewest = (list) => [...list].sort((a, b) => version(b) - version(a));
+  const flash = byNewest(ids.filter((i) => /^gemini-\d+(\.\d+)?-flash$/.test(i)));
+  const lite = byNewest(ids.filter((i) => /^gemini-\d+(\.\d+)?-flash-lite$/.test(i)));
+  return [...flash, ...lite].filter((i) => !tried.includes(i) && !isUnhealthy(i));
+}
 
 function systemText(documentText, noteTitle) {
   return 'You are the study helper inside Shule Notes, an app students use to read notes, past papers and revision material. A student is reading the document titled "' + (noteTitle || 'this document') + '" and has a question about it.\n\n'
@@ -70,70 +82,74 @@ async function askAboutDocument({ documentText, noteTitle, question, history, ap
   if (!q) throw new Error('question is required');
   const key = KEY_PATTERN.test(apiKey || '') ? apiKey : (KEY_PATTERN.test(process.env.GEMINI_API_KEY || '') ? process.env.GEMINI_API_KEY : '');
   if (!key) throw new GeminiNotConfiguredError();
-  let name = MODEL_PATTERN.test(model || '') ? model : DEFAULT_MODEL;
-  const asked = name;
-  const swap = replaced.get(asked);
-  if (swap && Date.now() - swap.at < REPLACED_MS) name = swap.to;
-  const body = {
-    systemInstruction: { parts: [{ text: systemText(documentText, noteTitle) }] },
-    contents: toContents(history, q),
-    // Thinking models spend part of this on thinking, so there is room for the answer as well.
-    generationConfig: { maxOutputTokens: 4096 },
-  };
-  // The Flash models "think" by default, which is slow and costs tokens for a short answer: switch it off (the Pro model cannot).
+  const first = MODEL_PATTERN.test(model || '') ? model : DEFAULT_MODEL;
+
+  const contents = toContents(history, q);
+  const system = { parts: [{ text: systemText(documentText, noteTitle) }] };
   // Flash 2.5 can switch thinking off. The newer Gemini 3 models always think, but can be told to think a little ("low"). Pro 2.5 cannot be changed.
-  const thinkingOff = (n) => (/^gemini-2\.5-flash/.test(n) ? { thinkingBudget: 0 } : /^gemini-3/.test(n) ? { thinkingLevel: 'low' } : undefined);
-  if (thinkingOff(name)) body.generationConfig.thinkingConfig = thinkingOff(name);
+  const thinkingFor = (n) => (/^gemini-2\.5-flash/.test(n) ? { thinkingBudget: 0 } : /^gemini-3/.test(n) ? { thinkingLevel: 'low' } : undefined);
 
-  const call = async (payload) => {
-    let resp;
-    try {
-      resp = await fetchImpl(`${BASE}/${name}:generateContent`, { method: 'POST', signal: AbortSignal.timeout(TIMEOUT_MS), headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(payload) });
-    } catch (e) { const err = new GeminiHttpError(0, e.message, 'NETWORK'); throw err; }
-    let data = {};
-    try { data = await resp.json(); } catch (_) { /* not JSON */ }
-    if (!resp.ok) throw new GeminiHttpError(resp.status, (data.error && data.error.message) || 'Gemini error', (data.error && data.error.status) || '');
-    return data;
-  };
-  // Google's servers sometimes answer 500/503/504 ("overloaded") for a moment: ask once more before giving up.
-  const callWithRetry = async (payload) => {
-    try { return await call(payload); }
+  // One try with one model (asking again without the thinking setting if that model does not know it).
+  const attempt = async (name) => {
+    const generationConfig = { maxOutputTokens: 4096 }; // thinking models spend part of this thinking, so there is room for the answer as well
+    if (thinkingFor(name)) generationConfig.thinkingConfig = thinkingFor(name);
+    const send = async () => {
+      let resp;
+      try {
+        resp = await fetchImpl(`${BASE}/${name}:generateContent`, { method: 'POST', signal: AbortSignal.timeout(TIMEOUT_MS), headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ systemInstruction: system, contents, generationConfig }) });
+      } catch (e) { throw new GeminiHttpError(0, e.message, e && e.name === 'TimeoutError' ? 'TIMEOUT' : 'NETWORK'); }
+      let data = {};
+      try { data = await resp.json(); } catch (_) { /* not JSON */ }
+      if (!resp.ok) throw new GeminiHttpError(resp.status, (data.error && data.error.message) || 'Gemini error', (data.error && data.error.status) || '');
+      return data;
+    };
+    let data;
+    try { data = await send(); }
     catch (e) {
-      if (e instanceof GeminiHttpError && [500, 502, 503, 504].includes(e.status)) { await new Promise((r) => setTimeout(r, e.retryDelay === undefined ? 900 : e.retryDelay)); return call(payload); }
-      throw e;
+      if (e instanceof GeminiHttpError && e.status === 400 && generationConfig.thinkingConfig && /thinking/i.test(e.message)) { delete generationConfig.thinkingConfig; data = await send(); }
+      else throw e;
     }
+    if (data.promptFeedback && data.promptFeedback.blockReason) throw new GeminiNoAnswerError('declined');
+    const cand = (data.candidates || [])[0];
+    if (!cand) throw new GeminiNoAnswerError('empty');
+    const answer = ((cand.content && cand.content.parts) || []).map((p) => p.text || '').join('').trim();
+    if (!answer) throw new GeminiNoAnswerError(['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT'].includes(cand.finishReason) ? 'declined' : 'empty');
+    return { answer, model: name, usage: data.usageMetadata };
   };
-  let data;
-  try { data = await callWithRetry(body); }
-  catch (e) {
-    // Google says the model does not exist (it was retired, or the name is wrong): find one that works, use it, remember it.
-    if (e instanceof GeminiHttpError && e.status === 404) {
-      let ids = [];
-      try { ids = (await listModels({ apiKey: key, fetchImpl })).map((m) => m.id); } catch (_) { throw e; }
-      const alt = pickDefault(ids.filter((i) => i !== name));
-      if (!alt) throw e;
-      console.warn(`Gemini model "${name}" is not available; using "${alt}" instead. Pick a current model in the admin panel (Settings, AI helper).`);
-      replaced.set(asked, { to: alt, at: Date.now() });
-      name = alt;
-      delete body.generationConfig.thinkingConfig;
-      if (thinkingOff(name)) body.generationConfig.thinkingConfig = thinkingOff(name);
-      return finish(await callWithRetry(body));
-    }
-    // A newer or older model that does not know the "thinking" setting: ask again without it.
-    if (e instanceof GeminiHttpError && e.status === 400 && body.generationConfig.thinkingConfig && /thinking/i.test(e.message)) {
-      delete body.generationConfig.thinkingConfig; data = await callWithRetry(body);
-    } else throw e;
-  }
-  return finish(data);
 
-  function finish(data) {
-  if (data.promptFeedback && data.promptFeedback.blockReason) throw new GeminiNoAnswerError('declined');
-  const cand = (data.candidates || [])[0];
-  if (!cand) throw new GeminiNoAnswerError('empty');
-  const answer = ((cand.content && cand.content.parts) || []).map((p) => p.text || '').join('').trim();
-  if (!answer) throw new GeminiNoAnswerError(['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT'].includes(cand.finishReason) ? 'declined' : 'empty');
-  return { answer, model: name, usage: data.usageMetadata };
+  // Overloaded, timed out, retired, not found: this model is set aside for a few minutes and another good one answers instead.
+  const SWITCH = (e) => e instanceof GeminiHttpError && (e.status === 404 || [500, 502, 503, 504].includes(e.status) || e.code === 'TIMEOUT');
+  const tried = [];
+  let queue = [first];
+  if (isUnhealthy(first)) {
+    // it failed a moment ago: go straight to a working one when we know one
+    try { const ids = await knownModels(key, fetchImpl); const alt = alternatives(ids, [first]); if (alt.length) queue = [alt[0], first]; } catch (_) { /* keep the chosen one */ }
   }
+  let lastErr;
+  for (let i = 0; i < queue.length && i < 4; i++) {
+    const name = queue[i];
+    tried.push(name);
+    try { return await attempt(name); }
+    catch (e) {
+      lastErr = e;
+      if (!SWITCH(e)) throw e;
+      unhealthy.set(name, Date.now() + UNHEALTHY_MS);
+      console.warn(`Gemini model "${name}" is not answering (${e.status || e.code}: ${String(e.message).slice(0, 120)}); trying another.`);
+      if (i === 0 || queue.length === i + 1) {
+        let ids = [];
+        try { ids = await knownModels(key, fetchImpl); } catch (_) { /* no list: only this model */ }
+        for (const alt of alternatives(ids, tried).slice(0, 2)) if (!queue.includes(alt)) queue.push(alt);
+      }
+    }
+  }
+  throw lastErr;
+}
+
+async function knownModels(key, fetchImpl) {
+  if (Date.now() - listCache.at < LIST_CACHE_MS && listCache.ids.length) return listCache.ids;
+  const ids = (await listModels({ apiKey: key, fetchImpl })).map((m) => m.id);
+  listCache = { at: Date.now(), ids };
+  return ids;
 }
 
 // A safe sentence for the student, and whether the other AI should be tried.
@@ -145,6 +161,7 @@ function classifyGeminiError(err) {
       : { status: 502, message: 'The AI helper could not finish its answer. Try asking a shorter question.', retry: true };
   }
   if (err instanceof GeminiHttpError) {
+    if (err.code === 'TIMEOUT') return { status: 503, message: 'The AI helper took too long to answer. Try a shorter question, or try again.', retry: true };
     if (err.status === 0) return { status: 503, message: 'Could not reach the AI helper. Check your connection and try again.', retry: true };
     if (err.status === 429) return { status: 503, message: 'The AI helper is busy right now. Try again in a moment.', retry: true };
     if (err.status === 400 && /API key|API_KEY/i.test(err.message + err.code)) { console.error('Gemini rejected the API key:', err.message); return { status: 500, message: 'The AI helper is not configured correctly. Please contact support.', retry: true }; }
@@ -157,4 +174,4 @@ function classifyGeminiError(err) {
   return { status: 500, message: 'Something went wrong answering that question.', retry: false };
 }
 
-module.exports = { listModels, pickDefault, _replaced: replaced, askAboutDocument, classifyGeminiError, GeminiNotConfiguredError, GeminiNoAnswerError, GeminiHttpError, KEY_PATTERN, MODEL_PATTERN, DEFAULT_MODEL };
+module.exports = { listModels, pickDefault, alternatives, _reset: () => { unhealthy.clear(); listCache = { at: 0, ids: [] }; }, _unhealthy: unhealthy, askAboutDocument, classifyGeminiError, GeminiNotConfiguredError, GeminiNoAnswerError, GeminiHttpError, KEY_PATTERN, MODEL_PATTERN, DEFAULT_MODEL };

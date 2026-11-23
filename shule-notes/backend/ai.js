@@ -3,6 +3,7 @@
 'use strict';
 const claude = require('./claude');
 const gemini = require('./gemini');
+const { buildContext } = require('./context');
 
 const PROVIDERS = ['claude', 'gemini'];
 
@@ -27,7 +28,8 @@ function order(settings) {
 
 const run = {
   claude: (s, a) => claude.askAboutDocument({ ...a, apiKey: s.anthropicKey, model: s.aiModel || undefined }),
-  gemini: (s, a) => gemini.askAboutDocument({ ...a, apiKey: s.geminiKey, model: s.geminiModel || undefined, fetchImpl: a.fetchImpl }),
+  // Gemini reads only the pages that matter for the question (faster, and well inside Google's limits); Claude keeps the whole document (its cached copy is what makes it cheap).
+  gemini: (s, a) => gemini.askAboutDocument({ ...a, documentText: buildContext({ pages: a.pageTexts, fullText: a.documentText, question: a.question, history: a.history }).text, apiKey: s.geminiKey, model: s.geminiModel || undefined, fetchImpl: a.fetchImpl }),
 };
 const classify = { claude: claude.classifyClaudeError, gemini: gemini.classifyGeminiError };
 
