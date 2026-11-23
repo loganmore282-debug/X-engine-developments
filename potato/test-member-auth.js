@@ -56,7 +56,7 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
   ok(!JSON.stringify([...E.store.memberSessions]).includes(r.body.token), 'the token is not stored, only its hash');
   r = await E.call('/auth/signup', { phone: '0770000001', password: 'other1other1' }); ok(r.code === 409 && r.body.code === 'PHONE_IN_USE', 'second signup for the same phone is refused');
   r = await E.call('/auth/signup', { phone: '0770000009', password: '123' }); eq([r.code, r.body.code], [400, 'WEAK_PASSWORD']);
-  r = await E.call('/auth/signup', { phone: '0770000009', password: 'five5' }); eq([r.code, r.body.code], [400, 'WEAK_PASSWORD'], 'five characters are refused (minimum is 6)'); eq(r.body.message, 'Password must be at least 6 characters.');
+  r = await E.call('/auth/signup', { phone: '0770000009', password: 'five5' }); eq([r.code, r.body.code], [400, 'WEAK_PASSWORD'], 'five characters are refused (minimum is 6)'); eq(r.body.message, 'Le mot de passe doit comporter au moins 6 caractères.');
   r = await E.call('/auth/signup', { phone: '0770000019', password: 'six6xy' }); eq(r.code, 200, 'six characters are accepted');
   for (const [i, easy] of ['123456', 'password', 'qwerty', '111111', '0770000001'].entries()) { const rr = await E.call('/auth/signup', { phone: '07700001' + String(20 + i), password: easy }); ok(rr.code === 200, 'any password of 6 or more is accepted, even a common one: ' + easy); }
   // the captcha (only when the setting `signupCaptcha` is on; Potato's Create Account has none): asked first, wrong or missing answers are refused and never create an account
@@ -193,15 +193,15 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
   {
     const phoneSrc = cut('const POTATO_REGIONS = {', 'function currentRegionKey()') + 'function currentRegionKey(){}\n' + cut('function localDigits(raw, region) {', '// Synthetic login email') + cut('function cleanPhone(raw, region) {', '// The two shapes a number may be typed in');
     const was = process.env.POTATO_REGION;
-    { const et = new Function('process', phoneSrc + '\nreturn cleanPhone;')(process);   // Potato's own country: Ethiopia, 9 digits starting 9 or 7
-      eq(et('0911234567'), '+251911234567', 'Ethiopia: a leading 0 and 9 digits'); eq(et('911234567'), '+251911234567', 'Ethiopia: 9 digits'); eq(et('+251 91 123 4567'), '+251911234567', 'Ethiopia: international form');
-      eq(et('12345'), null, 'junk is not a number'); eq(et('09112345678'), null, 'too long is not a number'); eq(et('0511234567'), null, 'a number that does not start 9 or 7 is refused'); }
+    { const ci = new Function('process', phoneSrc + '\nreturn cleanPhone;')(process);   // Potato's own country: Côte d'Ivoire, 10 digits starting 01, 05 or 07
+      eq(ci('0707070707'), '+2250707070707', 'Côte d\'Ivoire: the leading 0 is kept'); eq(ci('2250707070707'), '+2250707070707', 'Côte d\'Ivoire: international form'); eq(ci('+225 07 07 07 07 07'), '+2250707070707', 'Côte d\'Ivoire: spaced international form');
+      eq(ci('12345'), null, 'junk is not a number'); eq(ci('07070707070'), null, 'too long is not a number'); eq(ci('0912345678'), null, 'a number that does not start 01, 05 or 07 is refused'); }
     const real = new Function('process', phoneSrc + '\nreturn cleanPhone;')(process);
-    const forms = ['771234567@potato-platform.com'.split('@')[0], '251771234567', '0771234567', '+251771234567', '07 71 23 45 67'];
+    const forms = ['0771234567', '2250771234567', '+2250771234567', '07 71 23 45 67'];
     eq(new Set(forms.map(x => real(x))).size, 1, 'the national, international and bare forms are one number: ' + forms.map(x => real(x)).join(' '));
-    eq(real('771234567'), '+251771234567'); eq(real('12345'), null, 'junk is not a number'); eq(real(''), null);
-    eq(real('0771234567; drop'), null, 'text around a number makes it not a number (it used to be read as 0771234567)');
-    eq(real('(+251) 771-234.567'), '+251771234567', 'spaces, dashes, dots, brackets and a leading + are still fine');
+    eq(real('12345'), null, 'junk is not a number'); eq(real(''), null);
+    eq(real('0771234567; drop'), null, 'text around a number makes it not a number');
+    eq(real('(+225) 07-71-23.45 67'), '+2250771234567', 'spaces, dashes, dots, brackets and a leading + are still fine');
     if (was === undefined) delete process.env.POTATO_REGION; else process.env.POTATO_REGION = was;
   }
   // wiring

@@ -339,7 +339,7 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
         <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="settings" id="settingsTab">Settings</button>
         <button class="tab" data-tab="banners" id="bannersTab">Banners</button>
-        <button class="tab hidden" data-tab="paynumbers" id="payNumbersTab">Payment Numbers</button>
+        <button class="tab hidden" data-tab="paynumbers" id="payNumbersTab">Wave payments</button>
         <button class="tab hidden" data-tab="admins" id="adminsTab">Admins</button>
         <button class="tab hidden" data-tab="auditlog" id="auditLogTab">Activity Log</button>
       </div>
@@ -414,7 +414,7 @@ function btnBusyHtml(text){ return '<span class="verify-spin" style="margin-righ
 // The second argument is a REGION KEY, for rows that carry one (deposits,
 // withdrawals, members). Left off, it labels in the currency of whichever
 // region the panel is currently editing -- which for a single-region
-// platform is Ethiopia.
+// platform is Côte d'Ivoire.
 function ugx(n, regionKey){
   const v = Number(n)||0;
   const hasCents = Math.round(v*100)%100 !== 0;
@@ -432,7 +432,7 @@ const TX_LABELS = {
 };
 function txLabel(type){ return TX_LABELS[type] || (type ? type.replace(/_/g,' ') : ''); }
 function dayLabel(iso){
-  const now=new Date(Date.now()+3*3600000);
+  const now=new Date(Date.now());
   const today=now.toISOString().slice(0,10);
   const yest=new Date(now.getTime()-86400000).toISOString().slice(0,10);
   if(iso===today) return 'Today';
@@ -708,13 +708,13 @@ function fileToSquarePng(file, size){
 let _toastT=null;
 function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('div'); t.id='adToast'; document.body.appendChild(t);} t.className='toast'+(kind?' '+kind:''); t.textContent=msg; clearTimeout(_toastT); _toastT=setTimeout(()=>t.remove(),3000); }
 
-// All amounts in this panel are Ethiopian birr (ETB, printed as Br).
-const ADMIN_REGIONS = [{ key: 'et', name: 'Ethiopia', currency: 'ETB' }];
-const ADMIN_REGION = 'et';
+// All amounts in this panel are CFA francs (XOF, printed as FCFA).
+const ADMIN_REGIONS = [{ key: 'ci', name: "Côte d'Ivoire", currency: 'XOF' }];
+const ADMIN_REGION = 'ci';
 function regionByKeyAdmin(){ return ADMIN_REGIONS[0]; }
-function adminOneRegion(){ return 'et'; }
-function curOf(){ return 'Br'; }
-function adminCur(){ return 'Br'; }
+function adminOneRegion(){ return 'ci'; }
+function curOf(){ return 'FCFA'; }
+function adminCur(){ return 'FCFA'; }
 var _adminPending = new Map();
 function api(path, body, method){
   if (body || (method && method !== 'GET')) return adminRequest(path, body, method);
@@ -792,7 +792,7 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
   // The country list is needed before anything renders: every money figure
   // in this panel is labelled from it (see ugx()/curOf()), and the region
   // picker on Settings and Products is built from it. Failure is silent and
-  // leaves Ethiopia standing, which is what a single-region platform is.
+  // leaves Côte d'Ivoire standing, which is what a single-region platform is.
   switchTab(lastTab);
   refreshBadges(); startLive();
   if (window._adminInstallPrompt) $('installBtn').classList.remove('hidden');
@@ -1407,7 +1407,7 @@ async function renderAnalytics(silent){
     <div class="seg">${[7,30,90].map(d=>`<button class="${_anPeriod===d?'on':''}" data-per="${d}">${d} days</button>`).join('')}</div>
     <div class="panel-card">
       <div class="row" style="align-items:center;gap:12px;flex-wrap:wrap"><h2 class="sec" style="margin:0;flex:1">Transactions for a day</h2><label class="muted">Select day <input id="analytics-day" type="date" value="${esc(selected.day||a.today)}" style="padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)"></label><button id="analytics-today" class="btn">Today</button></div>
-      <p class="muted" style="margin:8px 0 12px">Ethiopia time (EAT). Completed amounts use recorded credit or payout times; older records without these times use the request date. Open requests show what is still outstanding now from requests created on the selected date. Arrival times are unconfirmed.</p>
+      <p class="muted" style="margin:8px 0 12px">Côte d'Ivoire time (UTC). Completed amounts use recorded credit or payout times; older records without these times use the request date. Open requests show what is still outstanding now from requests created on the selected date. Arrival times are unconfirmed.</p>
       <div class="cards">
         <div class="stat"><div class="n" style="color:var(--ok)">${ugx(selected.depositsCompletedAmount)}</div><div class="l">Deposits credited (${selected.depositsCompletedCount||0})</div></div>
         <div class="stat"><div class="n" style="color:var(--danger)">${ugx(selected.withdrawalsCompletedAmount)}</div><div class="l">Withdrawals paid (${selected.withdrawalsCompletedCount||0})</div></div>
@@ -1507,7 +1507,7 @@ async function renderAnalytics(silent){
 
 // ── USERS ──
 let _users=[];
-function phoneCore(p){ let n=String(p||'').replace(/\D/g,''); if(n.startsWith('251')) n=n.slice(3); n=n.replace(/^0+/,''); return n; }
+function phoneCore(p){ let n=String(p||'').replace(/\D/g,''); if(n.startsWith('225') && n.length>10) n=n.slice(3); return n; }
 async function renderUsers(){
   const r = await api('/admin/users');
   if(staleTab('users')) return;
@@ -1750,8 +1750,8 @@ function makePdf(){
   return api_;
 }
 function pdfMoney(n){ return Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
-function pdfDay(ms){ if (!ms) return '-'; const d = new Date(Number(ms) + 3 * 3600 * 1000); const p = x => String(x).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`; }
-function pdfStamp(){ const d = new Date(Date.now() + 3 * 3600 * 1000); const p = x => String(x).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} (Ethiopia time)`; }
+function pdfDay(ms){ if (!ms) return '-'; const d = new Date(Number(ms)); const p = x => String(x).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`; }
+function pdfStamp(){ const d = new Date(Date.now()); const p = x => String(x).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} (heure de Côte d'Ivoire)`; }
 function chainPdfBlob(r){
   const pdf = makePdf(), M = 36, W = pdf.W, H = pdf.H, BOT = H - 40;
   const INK = [0.1, 0.12, 0.2], MUTED = [0.45, 0.5, 0.6], BLUE = [0.09, 0.22, 0.72], LINE = [0.82, 0.85, 0.93], HEAD = [0.92, 0.94, 0.99], GOOD = [0.1, 0.55, 0.3], BAD = [0.8, 0.15, 0.2];
@@ -1798,9 +1798,9 @@ function chainPdfBlob(r){
   const colW = (W - 2 * M) / 4;
   [['Phone', u.phone || '-'], ['Referral code', u.referralCode || 'not set'], ['Status', String(u.status || 'active')], ['Joined', pdfDay(u.createdAt)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 30;
-  [['Referred by', u.referredByPhone || 'nobody (this is a root account)'], ['Wallet balance', 'Br ' + pdfMoney(u.walletBalance)], ['Total deposited', 'Br ' + pdfMoney(u.totalDeposited)], ['Total invested', 'Br ' + pdfMoney(u.totalInvested)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
+  [['Referred by', u.referredByPhone || 'nobody (this is a root account)'], ['Wallet balance', 'FCFA ' + pdfMoney(u.walletBalance)], ['Total deposited', 'FCFA ' + pdfMoney(u.totalDeposited)], ['Total invested', 'FCFA ' + pdfMoney(u.totalInvested)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 30;
-  [['Total withdrawn', 'Br ' + pdfMoney(u.totalWithdrawn)], ['Total earned (all sources)', 'Br ' + pdfMoney(u.totalEarned)], ['Team members (all levels)', pdfMoney(downline.length) + (r.downlineTruncated ? '+' : '')], ["Team's recharges (L1-L3)", 'Br ' + pdfMoney(r.teamDeposits)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
+  [['Total withdrawn', 'FCFA ' + pdfMoney(u.totalWithdrawn)], ['Total earned (all sources)', 'FCFA ' + pdfMoney(u.totalEarned)], ['Team members (all levels)', pdfMoney(downline.length) + (r.downlineTruncated ? '+' : '')], ["Team's recharges (L1-L3)", 'FCFA ' + pdfMoney(r.teamDeposits)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
   y += 34;
   if (r.cycleDetected || r.downlineCycleDetected) { pdf.text(M, y, 'Warning: a cycle was found in the referral data; the walk stopped early.', 9, true, 'l', BAD); y += 16; }
   // 2. Team by level
@@ -1809,7 +1809,7 @@ function chainPdfBlob(r){
   const lvRows = levels.map(agg);
   if (lvRows.length) {
     const tot = { _bold: true, _lv: 'Total', n: downline.length, banned: lvRows.reduce((s, x) => s + x.banned, 0), dep: lvRows.reduce((s, x) => s + x.dep, 0), inv: lvRows.reduce((s, x) => s + x.inv, 0), wd: lvRows.reduce((s, x) => s + x.wd, 0), earn: lvRows.reduce((s, x) => s + x.earn, 0), payers: lvRows.reduce((s, x) => s + x.payers, 0) };
-    heading('2. Team by level', 'figures are the members\' own lifetime totals, in Br');
+    heading('2. Team by level', 'figures are the members\' own lifetime totals, in FCFA');
     table([
       { h: 'Level', w: 70, k: x => x._lv === 'Total' ? 'Total' : 'Level ' + x._lv }, { h: 'Members', w: 70, r: 1, k: x => pdfMoney(x.n) }, { h: 'Have deposited', w: 90, r: 1, k: x => pdfMoney(x.payers) },
       { h: 'Banned', w: 60, r: 1, k: x => pdfMoney(x.banned) }, { h: 'Deposited', w: 105, r: 1, k: x => pdfMoney(x.dep) }, { h: 'Invested', w: 105, r: 1, k: x => pdfMoney(x.inv) },
@@ -1844,7 +1844,7 @@ function chainPdfBlob(r){
     need(60);
     pdf.rect(M, y - 2, W - 2 * M, 17, [0.85, 0.9, 1]);
     pdf.text(M + 6, y + 1.5, `Level ${lv}  -  ${pdfMoney(rows.length)} member${rows.length === 1 ? '' : 's'}`, 9.5, true, 'l', BLUE);
-    pdf.text(W - M - 6, y + 2, `deposited ${pdfMoney(a.dep)}   invested ${pdfMoney(a.inv)}   (Br)`, 8.5, false, 'r', INK);
+    pdf.text(W - M - 6, y + 2, `deposited ${pdfMoney(a.dep)}   invested ${pdfMoney(a.inv)}   (FCFA)`, 8.5, false, 'r', INK);
     y += 21;
     table(dcols, rows);
   });
@@ -1960,7 +1960,7 @@ async function openUser(uid){
       <button class="btn ghost sm" id="pwCopyBtn" style="display:none">Copy</button>
     </div>
     <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">Only the owner can see this, and every look is written to the activity log. It hides again after 20 seconds.</div>
-    <label style="margin-top:14px">Correct phone number ${u.phone && !/^\+251[97]\d{8}$/.test(u.phone)?'<span class="pill-tag t-warn" style="margin-left:6px">Looks malformed</span>':''}</label>
+    <label style="margin-top:14px">Correct phone number ${u.phone && !/^\+225(01|05|07)\d{8}$/.test(u.phone)?'<span class="pill-tag t-warn" style="margin-left:6px">Looks malformed</span>':''}</label>
     <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">Only fixes their profile phone (search/display/referral matching) -- they still log in exactly how they always have.</div>
     <div class="row">
       <div style="flex:2"><input id="phoneFix" type="text" placeholder="07XXXXXXXX"></div>
@@ -2010,7 +2010,7 @@ async function openUser(uid){
     <h4 style="margin:18px 0 8px;font-size:14px">Recharges (${(r.deposits||[]).length})</h4>
     ${(r.deposits||[]).length?`<div class="table-scroll" style="max-height:230px"><table><thead><tr><th>When</th><th>Amount</th><th>Paid to</th><th>Paid from</th><th>Status</th></tr></thead><tbody>
       ${r.deposits.map(d=>{
-        // "Paid to" is one of the admin's own bank / Telebirr numbers (assignedNumber) for a manual order.
+        // A Wave recharge has no admin number to show: the member's wallet number and transaction ID are in the claim text.
         const paidTo = esc(d.assignedNumber||'Not set');
         const paidFrom = esc(d.senderPhone||d.phone||'Not set');
         return `<tr><td style="white-space:nowrap">${fdate(d.createdAt)}</td><td><b>${ugx(d.amount, d.regionKey)}</b></td><td>${paidTo}</td><td>${paidFrom}</td><td>${statusPill(d.status)}</td></tr>`;
@@ -2208,7 +2208,7 @@ async function renderDeposits(){
     <tbody>${dRows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
     <h2 class="sec" style="margin:0 0 4px">Deposits</h2>
-    <p class="muted" style="margin:0 0 12px">Every recharge order, all time. Approve a pending one only after you have seen the money land in your bank or Telebirr; Force-credit is for a recharge you have checked yourself.</p>
+    <p class="muted" style="margin:0 0 12px">Every recharge order, all time. Approve a pending one only after you have seen the money land in your Wave account; Force-credit is for a recharge you have checked yourself.</p>
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_deps.length+' recharges only. The platform has more history than this list can currently display.</div>':''}
     ${depProcChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
@@ -2349,7 +2349,7 @@ async function renderWithdrawals(){
     <tbody>${rows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
     <h2 class="sec" style="margin:0 0 12px">Withdrawals</h2>
-    <p class="muted" style="margin:0 0 12px">Every withdraw request waits here as <b>Pending</b>. Send the money yourself from your bank or Telebirr app to the account on the row, then tap <b>Mark as paid</b>. Marking a row paid only records a payment you have already made, it never sends anything.</p>
+    <p class="muted" style="margin:0 0 12px">Every withdraw request waits here as <b>Pending</b>. Send the money yourself from your Wave app to the wallet number on the row, then tap <b>Mark as paid</b>. Marking a row paid only records a payment you have already made, it never sends anything.</p>
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_wits.length+' withdrawals only. The platform has more history than this list can currently display.</div>':''}
     ${procChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="witSearch" placeholder="Search phone or referral code"></div>
@@ -2398,7 +2398,7 @@ function drawWits(){
     if(e.target.closest('button')) return;
     openUser(tr.dataset.uid);
   }));
-  document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); if(!confirm('Only do this AFTER you have actually sent the money from your bank or Telebirr app to the account on this row.\n\nThis records the payout as paid and closes it. It does not send anything.'))return; b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
+  document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); if(!confirm('Only do this AFTER you have actually sent the money from your Wave app to the wallet number on this row.\n\nThis records the payout as paid and closes it. It does not send anything.'))return; b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
   document.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation();
     const reason=prompt(b.dataset.rejSending
       ? 'Only reject this if you have CONFIRMED that this payout was NOT actually sent. If you already paid it, do nothing here -- rejecting now would refund the member on top of a real payout.\n\nReason for rejection?'
@@ -2523,7 +2523,7 @@ function editProduct(p, order){
     <div class="switch-row"><span><b>Upcoming</b> <span class="muted">(shown, but not buyable — no clock)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="pSoon" ${p.comingSoon?'checked':''} style="width:auto"></label></div>
     <div class="muted" style="margin:14px 0 6px"><b>Opening schedule</b> — leave blank for always open.
-      Upcoming above overrides both. Times are Ethiopia time.</div>
+      Upcoming above overrides both. Times are Côte d'Ivoire time (UTC).</div>
     <label>Opens at (one-off) — shows a countdown until then, open for good after</label>
     <input id="pOpenAt" type="datetime-local" value="${p.openAt?openAtToField(p.openAt):''}">
     <div class="row2">
@@ -2600,7 +2600,7 @@ function editProduct(p, order){
       expectedReturn:$('pRet').value, multiplier:_retIsTruth?'':$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, vip:$('pVip').value, orderGift:$('pGift').value, order:$('pOrder').value,
       image, active:$('pActive').checked, comingSoon:$('pSoon').checked,
       // datetime-local has no zone, so the browser reads it as local time --
-      // which for the owner IS Ethiopia time. Sent as epoch ms so the server
+      // which for the owner IS Côte d'Ivoire time. Sent as epoch ms so the server
       // never has to guess a zone.
       openAt: $('pOpenAt').value ? fieldToOpenAt($('pOpenAt').value) : '',
       openFrom: $('pOpenFrom').value, openTo: $('pOpenTo').value };
@@ -2657,7 +2657,7 @@ async function renderMessages(){
       <div class="panel-card" style="margin-bottom:10px">
         <div style="font-weight:700">${esc(m.title||'')}</div>
         <div class="muted" style="font-size:11.5px;margin:2px 0 6px">${esc(m.id)} &middot; ${esc(m.date||'')} ${esc(m.time||'')}${ADMIN_REGIONS.length>1
-          ? ' &middot; ' + (!m.regionKey || m.regionKey==='all' ? 'every country' : esc('Ethiopia'))
+          ? ' &middot; ' + (!m.regionKey || m.regionKey==='all' ? 'every country' : esc("Côte d'Ivoire"))
           : ''}</div>
         <div style="font-size:13px;white-space:pre-line">${esc(m.body||'')}</div>
         ${m.image?`<img class="img-thumb" src="${esc(m.image)}" style="margin-top:8px;max-width:160px" alt="">`:''}
@@ -2746,7 +2746,7 @@ async function renderPromoCodes(){
       const cCur = c.regionKey && c.regionKey !== 'all' ? c.regionKey : undefined;
       const rewardCol = c.minReward===c.maxReward ? ugx(c.minReward, cCur) : `${ugx(c.minReward, cCur)} – ${ugx(c.maxReward, cCur)}`;
       const claimedCol = c.uses ? `<b>${ugx(c.totalClaimed, cCur)}</b>` : '<span class="muted">Not claimed yet</span>';
-      return `<tr><td><b class="mono">${esc(String(c.code||'').toUpperCase())}</b> <button class="btn sm ghost" data-copy="${esc(String(c.code||'').toUpperCase())}" title="Copy code">Copy</button>${c.buyersOnly?' <span class="pill-tag t-ok" title="Only members who have bought a product can claim this code">Buyers only</span>':''}</td><td>${rewardCol}</td>${ADMIN_REGIONS.length>1?`<td>${c.regionKey==='all'?'<span class="muted">All countries</span>':esc('Ethiopia')}</td>`:''}<td>${c.uses||0} / ${c.maxUses||'∞'}</td>
+      return `<tr><td><b class="mono">${esc(String(c.code||'').toUpperCase())}</b> <button class="btn sm ghost" data-copy="${esc(String(c.code||'').toUpperCase())}" title="Copy code">Copy</button>${c.buyersOnly?' <span class="pill-tag t-ok" title="Only members who have bought a product can claim this code">Buyers only</span>':''}</td><td>${rewardCol}</td>${ADMIN_REGIONS.length>1?`<td>${c.regionKey==='all'?'<span class="muted">All countries</span>':esc("Côte d'Ivoire")}</td>`:''}<td>${c.uses||0} / ${c.maxUses||'∞'}</td>
       <td>${claimedCol}</td>
       <td><span class="pill-tag ${statusClass}">${statusLabel}</span></td>
       <td>${c.expiresAt?fdate(c.expiresAt):'<span class="muted">Never</span>'}</td>
@@ -3030,41 +3030,83 @@ function applyAdminBrandName(name){
 // so system will remove background so that they fit perfectly". Each entry is one row on the member's
 // "Please choose payment" page. The logo goes through fileToCutoutPng(): the background connected to the
 // picture edge is cleared and the picture is cropped tight, so it sits perfectly inside the round frame.
-let _payRows = [], _payEdit = null, _payLogo = undefined;
+let _payRows = [], _payEdit = null, _payQr = undefined;
+// The picture Wave gives is often a big poster (1 MB or more). It is shrunk here until it fits what the server keeps (about 450 KB), staying a
+// sharp PNG when that fits and falling back to a JPEG when it does not. A small picture is kept exactly as it is.
+function fileToQrPicture(file){
+  const LIMIT = 480000;   // characters of the picture as text; the server accepts up to 614400
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read the picture'));
+    reader.onload = () => {
+      const original = String(reader.result);
+      if (file.size <= 300 * 1024 && /^data:image\/(png|jpeg);base64,/.test(original) && original.length <= LIMIT) return resolve(original);
+      const img = new Image();
+      img.onerror = () => reject(new Error('That file is not a picture the browser can read'));
+      img.onload = () => {
+        const tries = [[1000, 'png'], [900, 'png'], [800, 'png'], [900, 'jpeg', .92], [800, 'jpeg', .9], [700, 'jpeg', .88], [600, 'jpeg', .85], [500, 'jpeg', .8]];
+        for (const [maxSide, kind, q] of tries) {
+          const k = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+          const w = Math.max(1, Math.round(img.naturalWidth * k)), h = Math.max(1, Math.round(img.naturalHeight * k));
+          const c = document.createElement('canvas'); c.width = w; c.height = h;
+          const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.imageSmoothingQuality = 'high'; x.drawImage(img, 0, 0, w, h);
+          const out = kind === 'png' ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', q);
+          if (out.length <= LIMIT) return resolve(out);
+        }
+        reject(new Error('That QR picture is too detailed to shrink. Use a simpler picture.'));
+      };
+      img.src = original;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+// A lighter copy of an already prepared QR picture (smallest JPEG that fits `limit` characters, or the smallest tried).
+function shrinkQrToLimit(dataUrl, limit){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onerror = () => reject(new Error('Could not read the picture'));
+    img.onload = () => {
+      let best = dataUrl;
+      for (const [maxSide, q] of [[640, .8], [560, .75], [500, .7], [440, .65], [380, .6]]) {
+        const k = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+        const w = Math.max(1, Math.round(img.naturalWidth * k)), h = Math.max(1, Math.round(img.naturalHeight * k));
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.imageSmoothingQuality = 'high'; x.drawImage(img, 0, 0, w, h);
+        const out = c.toDataURL('image/jpeg', q);
+        if (out.length < best.length) best = out;
+        if (out.length <= limit) return resolve(out);
+      }
+      resolve(best);
+    };
+    img.src = dataUrl;
+  });
+}
+// Same rule as the server: https on wave.com only, so a link pointing members at another site cannot be saved by mistake or by a thief.
+function adminWaveLinkOk(v){
+  try { const u = new URL(String(v || '').trim()), h = u.hostname.toLowerCase(); return u.protocol === 'https:' && !u.username && !u.password && !u.port && (h === 'wave.com' || h.endsWith('.wave.com')); }
+  catch (_) { return false; }
+}
 async function renderPayNumbers(){
   const r = await api('/admin/pay-channels/list', {});
   if (staleTab('paynumbers')) return;
   _payRows = (r && r.channels) || [];
-  _payEdit = null; _payLogo = undefined;
+  _payEdit = null; _payQr = undefined;
   drawPayNumbers();
-}
-function payLogoBox(src, size){
-  size = size || 44;
-  return src
-    ? `<div style="width:${size}px;height:${size}px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;border:1px solid var(--line);background:#fff"><img src="${esc(src)}" alt="" style="max-width:76%;max-height:76%;object-fit:contain"></div>`
-    : `<div style="width:${size}px;height:${size}px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;border:1px dashed var(--line);color:var(--muted,#888);font-size:11px">No logo</div>`;
 }
 function drawPayNumbers(){
   const e = _payEdit;
-  const logoNow = e ? (_payLogo === undefined ? (e.logo || '') : _payLogo) : '';
+  const qrNow = e ? (_payQr === undefined ? (e.qrImage || '') : _payQr) : '';
   const form = e ? `
     <div class="panel-card">
-      <h3 style="margin:0 0 10px;font-size:15px">${e.id ? 'Edit payment number' : 'Add payment number'}</h3>
-      <div class="row">
-        <div><label>Name members see</label><input id="pcName" maxlength="60" value="${esc(e.name || '')}" placeholder="Commercial Bank of Ethiopia"></div>
-        <div><label>Type</label><select id="pcKind"><option value="bank"${e.kind !== 'wallet' ? ' selected' : ''}>Bank</option><option value="wallet"${e.kind === 'wallet' ? ' selected' : ''}>Wallet (Telebirr)</option></select></div>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <div><label>Account name</label><input id="pcAccName" maxlength="80" value="${esc(e.accountName || '')}" placeholder="Ashenafi"></div>
-        <div><label>Account number</label><input id="pcAccNo" maxlength="40" value="${esc(e.accountNumber || '')}" placeholder="1000809418239"></div>
-      </div>
+      <h3 style="margin:0 0 10px;font-size:15px">${e.id ? 'Edit Wave payment' : 'Add Wave payment'}</h3>
+      <div><label>Payment link</label><input id="pcLink" maxlength="480" value="${esc(e.payLink || '')}" placeholder="https://pay.wave.com/m/..."><p class="muted" style="margin:6px 0 0;font-size:12px">Only secure links on wave.com are accepted, so nobody can point your members to another site.</p></div>
       <div class="banner-row" style="margin-top:10px">
-        ${payLogoBox(logoNow, 52)}
-        <div style="flex:1;min-width:0;font-size:12px">${logoNow ? 'Logo ready (background removed)' : '<span class="muted">No logo yet</span>'}</div>
-        ${logoNow ? '<button class="btn danger sm" id="pcLogoClear" type="button">Remove logo</button>' : ''}
+        ${qrNow ? `<img src="${esc(qrNow)}" alt="" style="width:64px;height:auto;border-radius:8px;flex-shrink:0">` : ''}
+        <div style="flex:1;min-width:0;font-size:12px">${qrNow ? 'QR picture ready' : '<span class="muted">No QR picture yet</span>'}</div>
+        ${qrNow ? '<button class="btn danger sm" id="pcQrClear" type="button">Remove QR</button>' : ''}
       </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload logo<input type="file" id="pcLogoFile" accept="image/*" hidden></label>
-      <p class="muted" style="margin:6px 0 0;font-size:12px">Upload the logo as it is. The system clears the background around it and crops it so it fits the round frame.</p>
+      <label class="btn block file-btn" style="margin-top:10px">Upload QR picture<input type="file" id="pcQrFile" accept="image/png,image/jpeg,image/webp" hidden></label>
+      <p class="muted" style="margin:6px 0 0;font-size:12px">The QR picture you get from Wave, shown as it is on the QR tab (PNG or JPEG; a big picture is shrunk for you). Members must enter the transaction ID after paying; you approve the claim under Recharges.</p>
       <div class="row" style="margin-top:10px;align-items:end">
         <div><label>Order (smaller first)</label><input id="pcOrder" type="number" min="0" max="999" value="${esc(e.order != null ? e.order : _payRows.length)}"></div>
         <div><label style="display:flex;align-items:center;gap:8px;margin-top:22px"><input id="pcActive" type="checkbox" style="width:auto"${e.active === false ? '' : ' checked'}> Show to members</label></div>
@@ -3072,62 +3114,62 @@ function drawPayNumbers(){
       <div class="row" style="margin-top:14px"><button class="btn block" id="pcSave" type="button">Save</button><button class="btn ghost block" id="pcCancel" type="button">Cancel</button></div>
     </div>` : '';
   $('content').innerHTML = `
-    <h2 class="sec">Payment numbers</h2>
-    <p class="muted" style="margin:0 0 12px">These are the accounts members pay into on the recharge page (a bank account, a Telebirr wallet and so on). Each one appears as a row under &ldquo;Please choose payment&rdquo; with its logo. A member who taps <b>switch</b> goes back to this list.</p>
+    <h2 class="sec">Wave payments</h2>
+    <p class="muted" style="margin:0 0 12px">Members recharge with Wave. Add your Wave payment link and/or QR picture here. They see the Wave pages, pay from their own Wave app and send you their wallet number (and the transaction ID on the QR page). You check that the money arrived and approve it under Recharges.</p>
     ${form}
-    ${e ? '' : '<button class="btn block" id="pcAdd" type="button" style="margin-bottom:14px">Add payment number</button>'}
+    ${e ? '' : '<button class="btn block" id="pcAdd" type="button" style="margin-bottom:14px">Add Wave payment</button>'}
     <div class="panel-card">
       ${_payRows.length ? _payRows.map(c => `
         <div class="banner-row" data-pcid="${esc(c.id)}">
-          ${payLogoBox(c.logo, 44)}
           <div style="flex:1;min-width:0;font-size:13px">
-            <b data-no-i18n>${esc(c.name)}</b> <span class="pill-tag ${c.active === false ? 't-bad' : 't-ok'}" style="font-size:10px">${c.active === false ? 'Hidden' : 'Showing'}</span>
-            <div class="muted" style="font-size:12px" data-no-i18n>${esc(c.accountName)} &middot; ${esc(c.accountNumber)} &middot; ${c.kind === 'wallet' ? 'Wallet' : 'Bank'}</div>
+            <b data-no-i18n>${esc(c.name || 'Wave')}</b> <span class="pill-tag ${c.active === false ? 't-bad' : 't-ok'}" style="font-size:10px">${c.active === false ? 'Hidden' : 'Showing'}</span>
+            <div class="muted" style="font-size:12px" data-no-i18n>${c.payLink ? 'Link' : 'No link'} &middot; ${c.qrImage ? 'QR' : 'No QR'}</div>
           </div>
           <button class="btn ghost sm" data-pc-edit="${esc(c.id)}" type="button">Edit</button>
           <button class="btn danger sm" data-pc-del="${esc(c.id)}" type="button">Delete</button>
-        </div>`).join('') : '<p class="muted" style="margin:0">No payment numbers yet. Until you add one, members cannot recharge by bank or wallet.</p>'}
+        </div>`).join('') : '<p class="muted" style="margin:0">No Wave payment yet. Until you add one, members cannot recharge.</p>'}
     </div>`;
-  const add = $('pcAdd'); if (add) add.onclick = () => { _payEdit = { active: true, kind: 'bank' }; _payLogo = undefined; drawPayNumbers(); };
-  $('content').querySelectorAll('[data-pc-edit]').forEach(b => b.onclick = () => { _payEdit = _payRows.find(r => r.id === b.dataset.pcEdit) || null; _payLogo = undefined; drawPayNumbers(); });
+  const add = $('pcAdd'); if (add) add.onclick = () => { _payEdit = { active: true }; _payQr = undefined; drawPayNumbers(); };
+  $('content').querySelectorAll('[data-pc-edit]').forEach(b => b.onclick = () => { _payEdit = _payRows.find(r => r.id === b.dataset.pcEdit) || null; _payQr = undefined; drawPayNumbers(); });
   $('content').querySelectorAll('[data-pc-del]').forEach(b => b.onclick = async () => {
     const row = _payRows.find(r => r.id === b.dataset.pcDel); if (!row) return;
-    if (!window.confirm('Delete "' + row.name + '"? Members will no longer see it.')) return;
+    if (!window.confirm('Delete this Wave payment? Members will no longer see it.')) return;
     b.disabled = true;
     const d = await api('/admin/pay-channels/delete', { id: row.id });
     toast(d.status === 'success' ? 'Deleted' : (d.message || 'Could not delete'), d.status === 'success' ? 'ok' : 'err');
     renderPayNumbers();
   });
-  const cancel = $('pcCancel'); if (cancel) cancel.onclick = () => { _payEdit = null; _payLogo = undefined; drawPayNumbers(); };
-  const file = $('pcLogoFile');
-  if (file) file.addEventListener('change', async ev => {
+  const cancel = $('pcCancel'); if (cancel) cancel.onclick = () => { _payEdit = null; _payQr = undefined; drawPayNumbers(); };
+  const qrFile = $('pcQrFile');
+  if (qrFile) qrFile.addEventListener('change', async ev => {
     const f = ev.target.files[0]; if (!f) return; ev.target.value = '';
     keepPayForm();
-    try {
-      toast('Processing logo…', 'ok');
-      _payLogo = await fileToCutoutPng(f, 256);
-      toast('Logo ready (background removed)', 'ok');
-      drawPayNumbers();
-    } catch (err) { toast(err.message || 'Could not process the logo', 'err'); }
+    if (!/^image\/(png|jpeg|webp)$/.test(f.type)) return toast('Upload the QR as a PNG or JPEG picture.', 'err');
+    try { _payQr = await fileToQrPicture(f); } catch (e) { return toast(e && e.message ? e.message : 'Could not read the picture', 'err'); }
+    toast('QR picture ready', 'ok'); drawPayNumbers();
   });
-  const clr = $('pcLogoClear'); if (clr) clr.onclick = () => { keepPayForm(); _payLogo = ''; drawPayNumbers(); };
+  const qrClr = $('pcQrClear'); if (qrClr) qrClr.onclick = () => { keepPayForm(); _payQr = ''; drawPayNumbers(); };
   const save = $('pcSave');
   if (save) save.onclick = async () => {
     keepPayForm();
-    const body = { id: _payEdit.id, name: _payEdit.name, kind: _payEdit.kind, accountName: _payEdit.accountName, accountNumber: _payEdit.accountNumber, order: _payEdit.order, active: _payEdit.active };
-    if (_payLogo !== undefined) body.logo = _payLogo;
+    if (_payEdit.payLink && !adminWaveLinkOk(_payEdit.payLink)) return toast('The payment link must be a secure https:// link on wave.com (for example https://pay.wave.com/m/...).', 'err');
+    const body = { id: _payEdit.id, payLink: _payEdit.payLink || '', order: _payEdit.order, active: _payEdit.active };
+    if (_payQr !== undefined) body.qrImage = _payQr;
     save.disabled = true;
-    const d = await api('/admin/pay-channels/save', body);
+    let d = await api('/admin/pay-channels/save', body);
+    // A server that still has the small request cap answers "too large": send a lighter copy of the picture once instead of failing.
+    if (d.status !== 'success' && body.qrImage && /volumineuse|too large|413/i.test(String(d.message || ''))) {
+      try { body.qrImage = await shrinkQrToLimit(body.qrImage, 58000); d = await api('/admin/pay-channels/save', body); } catch (_) {}
+    }
     toast(d.status === 'success' ? 'Saved' : (d.message || 'Could not save'), d.status === 'success' ? 'ok' : 'err');
     if (d.status === 'success') renderPayNumbers(); else save.disabled = false;
   };
 }
-// Copies what is typed in the form back into the entry being edited, so a redraw (after choosing a logo) keeps it.
+// Copies what is typed in the form back into the entry being edited, so a redraw (after choosing the QR picture) keeps it.
 function keepPayForm(){
-  if (!_payEdit || !$('pcName')) return;
+  if (!_payEdit || !$('pcLink')) return;
   _payEdit = Object.assign({}, _payEdit, {
-    name: $('pcName').value, kind: $('pcKind').value, accountName: $('pcAccName').value, accountNumber: $('pcAccNo').value,
-    order: $('pcOrder').value === '' ? undefined : Number($('pcOrder').value), active: $('pcActive').checked,
+    payLink: $('pcLink').value, order: $('pcOrder').value === '' ? undefined : Number($('pcOrder').value), active: $('pcActive').checked,
   });
 }
 async function renderBanners(){
@@ -3511,8 +3553,8 @@ function wireBannerHandlers(){
   wirePotatoImageSlot('profilelogo', 'profileLogoFile', 'profileLogoClear', 'Profile logo saved, live for every member', 'Profile logo removed');
   wirePotatoImageSlot('logo', 'brandLogoFile', 'brandLogoClear', 'Brand logo saved', 'Brand logo removed');
 }
-// "Opens at" is typed in the REGION's time (Ethiopia), whatever time zone the admin's own browser is in; the server judges it the same way.
-var REGION_OFF_MIN = 180;
+// "Opens at" is typed in the REGION's time (Côte d'Ivoire), whatever time zone the admin's own browser is in; the server judges it the same way.
+var REGION_OFF_MIN = 0;
 function openAtToField(ms){ return new Date(Number(ms) + REGION_OFF_MIN * 60000).toISOString().slice(0, 16); }
 function fieldToOpenAt(v){ const t = Date.parse(v + ':00Z'); return Number.isFinite(t) ? t - REGION_OFF_MIN * 60000 : ''; }
 async function renderSettings(){

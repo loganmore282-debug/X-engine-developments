@@ -66,12 +66,12 @@ function rlKeyByUser(req) {
 }
 const globalLimiter = rateLimit({ windowMs: 60 * 1000, max: 400, keyGenerator: rlKeyByUser,
   standardHeaders: true, legacyHeaders: false,
-  message: { status: 'error', message: 'Too many requests. Slow down.' } });
+  message: { status: 'error', message: 'Trop de requêtes. Ralentissez.' } });
 // A second, IP-only limiter that can't be evaded by claiming a fresh fake
 // uid every request (rlKeyByUser trusts the CLAIMED uid in an unverified
 // token — real verification happens later, inside each handler).
 const ipOnlyLimiter = rateLimit({ windowMs: 60 * 1000, max: 900, standardHeaders: false, legacyHeaders: false,
-  message: { status: 'error', message: 'Too many requests from this network. Slow down.' } });
+  message: { status: 'error', message: 'Trop de requêtes depuis ce réseau. Ralentissez.' } });
 // /health is exempted from BOTH limiters above because Render's own platform
 // health checks must never be throttled -- a 429 to the health checker reads
 // as "this service is down" and takes the whole backend out of rotation.
@@ -82,7 +82,7 @@ const ipOnlyLimiter = rateLimit({ windowMs: 60 * 1000, max: 900, standardHeaders
 // polls on the order of once every few seconds, and this allows 5/second
 // sustained) while still putting a ceiling on a flood.
 const healthLimiter = rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: false, legacyHeaders: false,
-  message: { status: 'error', message: 'Too many requests.' } });
+  message: { status: 'error', message: 'Trop de requêtes.' } });
 // Owner: "let it poll every 1 second, we have a VPS KVM1 and MongoDB flex" --
 // these are exactly the read-only routes user-src/original_module.js's
 // live-refresh loop hits every tick (see liveRefreshVisible()). At 1s, one
@@ -112,15 +112,15 @@ const healthLimiter = rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders
 const LIVE_POLL_ROUTES = new Set(['/account', '/public/settings', '/investments', '/public/products', '/team/stats', '/transactions', '/messages']);
 const livePollLimiter = rateLimit({ windowMs: 60 * 1000, max: 1200, keyGenerator: rlKeyByUser,
   standardHeaders: true, legacyHeaders: false,
-  message: { status: 'error', message: 'Too many requests. Slow down.' } });
+  message: { status: 'error', message: 'Trop de requêtes. Ralentissez.' } });
 const livePollIpLimiter = rateLimit({ windowMs: 60 * 1000, max: 3600, standardHeaders: false, legacyHeaders: false,
-  message: { status: 'error', message: 'Too many requests from this network. Slow down.' } });
+  message: { status: 'error', message: 'Trop de requêtes depuis ce réseau. Ralentissez.' } });
 app.use((req, res, next) => (req.path === '/health' ? healthLimiter(req, res, next) : LIVE_POLL_ROUTES.has(req.path) ? livePollIpLimiter(req, res, next) : ipOnlyLimiter(req, res, next)));
 app.use((req, res, next) => (req.path === '/health' ? next() : LIVE_POLL_ROUTES.has(req.path) ? livePollLimiter(req, res, next) : globalLimiter(req, res, next)));
 
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: rlKeyByUser,
   standardHeaders: true, legacyHeaders: false,
-  message: { status: 'error', message: 'Too many requests. Slow down.' } });
+  message: { status: 'error', message: 'Trop de requêtes. Ralentissez.' } });
 // ── PASSWORD-GUESSING WALLS ──
 // Each guard counts FAILURES only, per source address, so many honest members behind one mobile-carrier address are never slowed down.
 //  * ownerKeyGuard: wrong admin key (or wrong 6-digit code) from one address: 5 in 15 minutes locks that address for 15 minutes.
@@ -142,15 +142,15 @@ const ADMIN_TOTP_SECRET = (() => {
 })();
 let _lastTotpStep = -1;
 const adminLoginLimiter = rateLimit({ windowMs: 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false,
-  message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
+  message: { status: 'error', message: 'Trop de tentatives. Réessayez dans une minute.' } });
 const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false,
-  message: { status: 'error', message: 'Too many requests. Slow down.' } });
+  message: { status: 'error', message: 'Trop de requêtes. Ralentissez.' } });
 app.use('/admin/check-key', adminLoginLimiter);
 app.use('/admin/login', adminLoginLimiter);
 // The panel's once-a-second "has anything changed?" check (/admin/live) has its own allowance, so it never eats into the 200 a minute
 // that the real reads and actions use.
 const adminLiveLimiter = rateLimit({ windowMs: 60 * 1000, max: 240, standardHeaders: true, legacyHeaders: false,
-  message: { status: 'error', message: 'Too many requests. Slow down.' } });
+  message: { status: 'error', message: 'Trop de requêtes. Ralentissez.' } });
 app.use('/admin/', (req, res, next) => (req.path === '/live' ? adminLiveLimiter(req, res, next) : adminLimiter(req, res, next)));
 // If a Bearer token is a valid staff session, attach req.adminUser so
 // verifyAdmin()/verifyOwner() below can recognise it. A raw master-key
@@ -160,10 +160,10 @@ app.use('/admin/', (req, res, next) => (req.path === '/live' ? adminLiveLimiter(
 // the legacy-key check (which fails closed).
 app.use('/admin/', async (req, _res, next) => {
   const header = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  if (adminBadCredGuard.locked(req.ip)) return _res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in a few minutes.' });
+  if (adminBadCredGuard.locked(req.ip)) return _res.status(429).json({ status: 'error', message: 'Trop de tentatives. Réessayez dans quelques minutes.' });
   if (header && !(ADMIN_KEY && !ADMIN_TOTP_SECRET && safeEqual(header, ADMIN_KEY))) {
     try { req.adminUser = await resolveSession(header, req.path === '/session/activity'); }
-    catch (e) { console.error('Admin session resolve error:', e.message); return _res.status(503).json({ status:'error', message:'Session service unavailable. Try again.' }); }
+    catch (e) { console.error('Admin session resolve error:', e.message); return _res.status(503).json({ status:'error', message:'Service de session indisponible. Réessayez.' }); }
     // Not a session and not the key: a guess at the master key. (A stale SESSION token has the exact shape of a session token, 64 hex
     // characters, and is not counted, so an expired tab polling the panel can never lock the owner out.)
     if (!req.adminUser && !/^[a-f0-9]{64}$/.test(header)) adminBadCredGuard.fail(req.ip);
@@ -192,7 +192,7 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // route once, before that route was added here too.
 // /admin/app-icon/set carries TWO PNGs (512 and 192) in one body, so it
 // needs the image parser even though each one on its own is small.
-const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/potato-image/set', '/admin/app-icon/set', '/admin/messages/save', '/admin/pay-channels/save']);
+const IMAGE_BODY_ROUTES = new Set(['/admin/pay-channels/save', '/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/potato-image/set', '/admin/app-icon/set', '/admin/messages/save']);
 const HUGE_JSON_ROUTES = new Set(['/admin/about-html/set']);
 // The GitHub deploy webhook is signed over the RAW request payload, so the raw buffer is kept for that one path only.
 const RAW_BODY_ROUTES = new Set(['/deploy/webhook']);
@@ -327,7 +327,7 @@ app.use((req, res, next) => {
   res.json = function (body) {
     if (req._authTransient && res.statusCode === 401) {
       res.status(503);
-      body = { status: 'error', code: 'AUTH_UNAVAILABLE', message: 'We could not check your sign-in just now. Please try again in a moment.' };
+      body = { status: 'error', code: 'AUTH_UNAVAILABLE', message: 'Nous n\'avons pas pu vérifier votre connexion à l\'instant. Veuillez réessayer dans un moment.' };
     }
     return send(body);
   };
@@ -428,13 +428,14 @@ const SHARE_DOMAIN = (() => {
   const d = String(process.env.SHARE_DOMAIN || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^\*\./, '').replace(/\/.*$/, '');
   return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d) ? d : '';
 })();
-// Potato runs for ONE country: Ethiopia (+251, birr). Mobile numbers are +251 then 9 digits starting 9 (Ethio Telecom) or 7 (Safaricom Ethiopia). The
-// currency CODE stays ETB in storage; what a member READS is the symbol Br (currencySymbol / currencyLabel()). There is no other region.
+// Potato runs for ONE country: Côte d'Ivoire (+225, the CFA franc; owner: "French, FCFA and the Ivory Coast country code"). Mobile numbers are +225 then 10 digits
+// that START WITH the 0 -- since 2021 the 0 is part of the number (01 Moov, 05 MTN, 07 Orange), so it is kept (see localDigits). The currency CODE stays XOF in storage;
+// what a member READS is FCFA (currencySymbol / currencyLabel()). There is no other region. The member app is French only.
 const POTATO_REGIONS = {
-  et: { key: 'et', name: 'Ethiopia', currency: 'ETB', currencySymbol: 'Br', dialCode: '251', localLength: 9, localLengths: [9], prefixes: ['9', '7'], utcOffsetMin: 180,
-        active: true, isDefault: true },
+  ci: { key: 'ci', name: "Côte d'Ivoire", currency: 'XOF', currencySymbol: 'FCFA', dialCode: '225', localLength: 10, localLengths: [10], prefixes: ['01', '05', '07'], utcOffsetMin: 0,
+        active: true, isDefault: true, languages: ['fr'], defaultLang: 'fr' },
 };
-const DEFAULT_REGION_KEY = 'et';
+const DEFAULT_REGION_KEY = 'ci';
 const DEFAULT_REGION = Object.freeze(POTATO_REGIONS[DEFAULT_REGION_KEY]);
 let _mainAllowedHosts = [];
 let _baseDomain = 'potato-platform.com';
@@ -500,7 +501,7 @@ app.use((req, res, next) => {
   if (!hostIsParked(requestHost(req))) return next();
   return res.status(403).json({
     status: 'error', code: 'HOST_PARKED',
-    message: 'This address does not serve the app. Please open the correct Potato link.',
+    message: 'Cette adresse ne sert pas l\'application. Veuillez ouvrir le bon lien Potato.',
   });
 });
 
@@ -523,7 +524,7 @@ app.use(async (req, res, next) => {
     const s = await getSettings();
     if (s && s.maintenanceMode) {
       return res.status(503).json({ status: 'error', code: 'MAINTENANCE',
-        message: s.maintenanceMsg || (brandName(s) + ' is under maintenance. Please check back shortly.') });
+        message: s.maintenanceMsg || (brandName(s) + ' est en maintenance. Revenez dans un instant.') });
     }
   } catch (_) {}
   next();
@@ -560,9 +561,9 @@ const DEFAULT_SETTINGS = {
   // back. With no image set these do nothing at all.
   // The My page banner (Admin > Banners > My page banner): 100 = as uploaded, 0 blur = sharp.
   myBannerOpacity: 100, myBannerBlur: 0,
-  giftCodeHint: 'Enter gift code (T-XXXX)',
+  giftCodeHint: 'Saisissez le code cadeau (T-XXXX)',
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
-  shareMessage: 'Join me on {app}',
+  shareMessage: 'Rejoignez-moi sur {app}',
   // What "Claim" on the Download App page pays (once per member); 0 hides the button.
   appClaimAmount: 0,
   // The sign-up captcha picture is off: the owner's Create Account screen has none. Sign-up is guarded by the rate limits instead.
@@ -930,15 +931,15 @@ async function getAboutHtml() {
 // transactions, because those are written inside their own region's context
 // (request-scoped for anything they do themselves, withUserRegion() for
 // maturity payouts and referral commissions).
-// What a person READS in front of an amount: ETB is written Br (the stored/sent code stays ETB); every other code is printed as it is.
+// What a person READS in front of an amount: XOF is written FCFA (the stored/sent code stays XOF); every other code is printed as it is.
 function currencyLabel(code) {
   const c = String(code || '').toUpperCase();
-  return c === 'ETB' ? 'Br' : c;
+  return c === 'XOF' ? 'FCFA' : c;
 }
 function fmtMoney(n, currency) {
   const v = Number(n) || 0;
   const hasCents = Math.round(v * 100) % 100 !== 0;
-  const cur = currencyLabel(currency || currentRegion().currency || 'ETB');
+  const cur = currencyLabel(currency || currentRegion().currency || 'XOF');
   // Grouping only -- 'en-US' is a digit-grouping locale here, not a
   // currency, so the same "1,234,567" shape is right for every region and
   // the label in front of it is what changes.
@@ -948,13 +949,13 @@ function fmtMoney(n, currency) {
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 // Cut the text first: the tag-stripping pattern is quadratic on a long run of '<' with no '>', so an unbounded string could freeze the one-process server.
 function stripHtml(s) { return String(s || '').slice(0, 5000).replace(/<[^>]*>/g, '').trim(); }
-// The region's own wall clock. Addis Ababa (UTC+3) for Ethiopia, and whatever
+// The region's own wall clock. Abidjan (UTC+0, no daylight saving) for Côte d'Ivoire, and whatever
 // utcOffsetMin the admin set for any other country -- a withdraw window of
 // "09:00 to 17:00" has to mean nine in the morning where the member lives,
 // not nine in Kampala. Named eatNow() still because every caller and every
 // stored date/time field was written against EAT and Uganda is still the
 // only region with data in it.
-function tzOffMs() { return (currentRegion().utcOffsetMin != null ? currentRegion().utcOffsetMin : 180) * 60000; }
+function tzOffMs() { return (currentRegion().utcOffsetMin != null ? currentRegion().utcOffsetMin : 0) * 60000; }
 function eatNow()  { return new Date(Date.now() + tzOffMs()); }
 function nowStr() {
   const d = eatNow();
@@ -1021,10 +1022,10 @@ function eatNextMidnight(ts) {
   const dayStart = Math.floor((ts + tzOffMs()) / 86400000) * 86400000;
   return dayStart + 86400000 - tzOffMs();
 }
-// ── Cashback timing: Ethiopia MIDNIGHT (00:00), not 24 hours after purchase ──
+// ── Cashback timing: Côte d'Ivoire MIDNIGHT (00:00), not 24 hours after purchase ──
 // The k-th payment (k = 1..total) is due at the first local midnight AFTER the purchase, plus (k-1) days. A product bought
 // at 15:00 therefore pays at 00:00 the next night, then every night at 00:00, `total` payments in all; the last one
-// is the maturity payment. Ethiopia has no daylight saving, so the day length is a constant 86,400,000 ms.
+// is the maturity payment. Côte d'Ivoire has no daylight saving, so the day length is a constant 86,400,000 ms.
 // Every midnight pays: there is no weekend rest.
 function payoutDueAtMs(createdMs, k) {
   return eatNextMidnight(createdMs) + (Math.max(1, k) - 1) * 86400000;
@@ -1053,12 +1054,14 @@ function eatParts(ts) {
 // provider.
 function localDigits(raw, region) {
   const r = region || currentRegion();
-  const dial = String(r.dialCode || '251');
+  const dial = String(r.dialCode || '225');
   // A region may allow more than one length (some countries allow 9 or 10 digits); `localLength` alone is the one-length case.
   const lens = (Array.isArray(r.localLengths) && r.localLengths.length ? r.localLengths : [r.localLength || 9]).map(Number).filter(n => n > 0);
   const s = String(raw || '').replace(/\D/g, '');
   if (s.startsWith(dial) && lens.some(l => s.length === dial.length + l)) return s.slice(dial.length);
-  if (s.startsWith('0') && lens.some(l => s.length === l + 1)) return s.slice(1);
+  // Côte d'Ivoire numbers START WITH the 0 (01 / 05 / 07 ...), which is part of the number, not a trunk zero.
+  const keepsZero = (Array.isArray(r.prefixes) && r.prefixes.filter(Boolean).length > 0 && r.prefixes.filter(Boolean).every(x => String(x).startsWith('0')));
+  if (!keepsZero && s.startsWith('0') && lens.some(l => s.length === l + 1)) return s.slice(1);
   if (lens.includes(s.length)) return s;
   return null;
 }
@@ -1100,11 +1103,12 @@ function regionUsesBareLocal(region) {
 }
 function phoneToEmail(phone, region) {
   const r = region || currentRegion();
-  const local = localDigits(phone, r) || String(phone).replace(/\D/g, '').replace(/^0+/, '');
+  const keepsZero = (Array.isArray(r.prefixes) && r.prefixes.filter(Boolean).length > 0 && r.prefixes.filter(Boolean).every(x => String(x).startsWith('0')));
+  const local = localDigits(phone, r) || (keepsZero ? String(phone).replace(/\D/g, '') : String(phone).replace(/\D/g, '').replace(/^0+/, ''));
   return (regionUsesBareLocal(r) ? local : String(r.dialCode || '') + local) + '@potato-platform.com';
 }
-// STRICT on purpose — for Ethiopia every real mobile number is 251 + exactly 9
-// digits starting with 9 or 7, and each other region declares its own length and
+// STRICT on purpose — for Côte d'Ivoire every real mobile number is 225 + exactly 10
+// digits starting with 01, 05 or 07, and each other region declares its own length and
 // allowed leading digits in the admin panel. Rejects anything that doesn't
 // reduce to exactly that, so a garbled/wrong-country number never reaches a
 // payment provider.
@@ -1144,18 +1148,19 @@ function cleanPhone(raw, region) {
   return '+' + String(r.dialCode || '') + local;
 }
 // The two shapes a number may be typed in, spelled out for THIS region, so
-// "use the format 09XXXXXXXX or +2519XXXXXXXX" is right in Ethiopia and right
+// "use the format 07XXXXXXXX or +22507XXXXXXXX" is right in Côte d'Ivoire and right
 // everywhere else without a second sentence to maintain.
 function phoneFormatHint(region) {
   const r = region || currentRegion();
-  const len = Number(r.localLength) || 9;
+  const len = Number(r.localLength) || 10;
   const lead = (Array.isArray(r.prefixes) && r.prefixes[0]) || '';
   const body = lead + 'X'.repeat(Math.max(0, len - lead.length));
-  return { local: '0' + body, intl: '+' + String(r.dialCode || '') + body, name: r.name || '' };
+  const keepsZero = (Array.isArray(r.prefixes) && r.prefixes.filter(Boolean).length > 0 && r.prefixes.filter(Boolean).every(x => String(x).startsWith('0')));
+  return { local: keepsZero ? body : '0' + body, intl: '+' + String(r.dialCode || '') + body, name: r.name || '' };
 }
 function badPhoneMessage(region) {
   const h = phoneFormatHint(region);
-  return `That is not a valid ${h.name} mobile-money number. Use the format ${h.local} or ${h.intl}.`;
+  return `Ce numéro n'est pas un numéro Mobile Money valide pour ${h.name}. Utilisez le format ${h.local} ou ${h.intl}.`;
 }
 // Does a cleaned number look like a MOBILE line in this region -- i.e. does
 // it start with one of the prefixes the admin listed? Used when picking the
@@ -1191,18 +1196,18 @@ function depositSenderPhone(body, accountPhone, keys) {
     if (v === undefined || v === null) continue;
     const cleaned = cleanPhone(v);
     return cleaned ? { phone: cleaned }
-                   : { error: 'Enter a valid mobile-money phone number.' };
+                   : { error: 'Saisissez un numéro Mobile Money valide.' };
   }
   const fallback = cleanPhone(accountPhone || '');
   return fallback ? { phone: fallback }
-                  : { error: 'Enter a valid mobile-money phone number.' };
+                  : { error: 'Saisissez un numéro Mobile Money valide.' };
 }
-// Withdrawal ("Bind bank card") accounts: Commercial Bank of Ethiopia (a bank account number) and Telebirr (a wallet: a +251 phone number). The admin pays
-// each one by hand and marks it paid.
-const PAYOUT_ACCOUNT_TYPES = Object.freeze({ 'Commercial Bank of Ethiopia': 'bank', 'Telebirr': 'wallet' });
-const NETWORK_NAMES = new Set(['Telebirr']);
-const ALL_PAYOUT_NETWORKS = new Set([...NETWORK_NAMES, 'Commercial Bank of Ethiopia']);
-const PAYOUT_CHOICE_MSG = 'Choose Commercial Bank of Ethiopia or Telebirr.';
+// Withdrawal ("Bind bank card") accounts: owner: "put Wave only in all". Wave is a wallet (a phone number, +225, 10 digits). The admin pays each one by hand and
+// marks it paid. Accounts saved under an older network name (the old network names) stay in the database but cannot be chosen again.
+const PAYOUT_ACCOUNT_TYPES = Object.freeze({ 'Wave': 'wallet' });
+const NETWORK_NAMES = new Set(['Wave']);
+const ALL_PAYOUT_NETWORKS = new Set([...NETWORK_NAMES]);
+const PAYOUT_CHOICE_MSG = 'Choisissez Wave.';
 function isBankNetwork(network) { return PAYOUT_ACCOUNT_TYPES[String(network || '')] === 'bank'; }
 const MAX_MONEY_AMOUNT = 999_999_999;
 function finiteMoney(v) {
@@ -2151,7 +2156,7 @@ async function _payReferralCommissionNow(investmentId, buyerId, amount, basis = 
 app.use(async (req, res, next) => {
   if (!req.headers.authorization || req.path.startsWith('/admin/') || req.path.startsWith('/public/') || GUARD_EXEMPT.has(req.path)) return next();
   try { await _decodeAuth(req); next(); }
-  catch (_) { res.status(503).json({ status:'error', message:'Session service unavailable. Try again.' }); }
+  catch (_) { res.status(503).json({ status:'error', message:'Service de session indisponible. Réessayez.' }); }
 });
 app.get('/team/members', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -2162,7 +2167,7 @@ app.get('/team/members', async (req, res) => {
     // data-reading route (`/account`, `/investments`, `/team/stats`, etc.) has.
     const uSnap = await db.collection('users').doc(userId).get();
     if (uSnap.exists && uSnap.data().status === 'banned')
-      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' });
     let parentIds = [userId];
     let members = [];
     for (let l = 1; l <= level; l++) {
@@ -2182,7 +2187,7 @@ app.get('/team/members', async (req, res) => {
     res.json({ status: 'success', level, members });
   } catch (e) {
     console.error('Team members error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not load your team' });
+    res.status(500).json({ status: 'error', message: 'Impossible de charger votre équipe' });
   }
 });
 app.get('/team/stats', async (req, res) => {
@@ -2194,10 +2199,10 @@ app.get('/team/stats', async (req, res) => {
       db.collection('users').doc(userId).get(), getSettings(), wholeTeamStats(userId),
       db.collection('transactions').where('userId', '==', userId).where('type', '==', 'commission').get().catch(() => null),
     ]);
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'Utilisateur introuvable' });
     const u = uSnap.data();
     if (u.status === 'banned')
-      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' });
     const deposits = teamNow.deposits, [n1, n2, n3] = teamNow.counts;
     // What the whole team has purchased, and what it has paid this member, per level (the Team page's three level cards).
     const levelPurchase = { l1: teamNow.levelPurchases[0], l2: teamNow.levelPurchases[1], l3: teamNow.levelPurchases[2] };
@@ -2217,7 +2222,7 @@ app.get('/team/stats', async (req, res) => {
     });
   } catch (e) {
     console.error('Team stats error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not load team stats' });
+    res.status(500).json({ status: 'error', message: 'Impossible de charger les statistiques de l\'équipe' });
   }
 });
 // ═══════════════════════════════════════════
@@ -2248,7 +2253,7 @@ function startRewardRepair() {
     .then(n => { _rewardRepair.done = true; if (n) console.log(`Reward tiers: ${n} members' claimed tiers were rewritten from their real payments`); })
     .catch(e => { console.error('Reward claim-once repair (retrying in 60 seconds):', e.message); const t = setTimeout(startRewardRepair, 60000); if (t.unref) t.unref(); });
 }
-const REWARD_REPAIR_BUSY = { code: 503, body: { status: 'error', message: 'Rewards are being updated. Please try again in a moment.' } };
+const REWARD_REPAIR_BUSY = { code: 503, body: { status: 'error', message: 'Les récompenses sont en cours de mise à jour. Veuillez réessayer dans un moment.' } };
 async function salaryView(userId) {
   const [sett, teamNow] = await Promise.all([getSettings(), wholeTeamStats(userId)]);
   const tiers = taskRows(sett.salaryTiers, 'salary');
@@ -2260,9 +2265,9 @@ app.get('/salary/status', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const uSnap = await db.collection('users').doc(userId).get();
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'Utilisateur introuvable' });
     const u = uSnap.data();
-    if (u.status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    if (u.status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' });
     if (!(await rewardRepairReady())) return res.status(REWARD_REPAIR_BUSY.code).json(REWARD_REPAIR_BUSY.body);
     const view = await salaryView(userId);
     const claimed = salaryClaimedSet(u);
@@ -2270,34 +2275,34 @@ app.get('/salary/status', async (req, res) => {
     const open = tiers.filter(t => t.reached && !t.claimed);
     // `accruedDays` = how many rewards can be claimed right now (the name an older cached app still reads).
     res.json({ status: 'success', total: view.total, accruedDays: open.length, nextReward: open.length ? open[0].reward : 0, tierId: view.tier ? view.tier.id : null, tiers });
-  } catch (e) { console.error('Salary status error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load the rewards' }); }
+  } catch (e) { console.error('Salary status error:', e.message); res.status(500).json({ status: 'error', message: 'Impossible de charger les récompenses' }); }
 });
 app.post('/salary/claim', async (req, res) => {
   const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Veuillez vous reconnecter' });
   const wantId = String((req.body && req.body.tierId) || '').slice(0, 40);
   if (!(await rewardRepairReady())) return res.status(REWARD_REPAIR_BUSY.code).json(REWARD_REPAIR_BUSY.body);
   try {
     const out = await withLock('salary:' + userId, async () => {
       const uRef = db.collection('users').doc(userId);
       const first = await uRef.get();
-      if (!first.exists) return { code: 404, body: { status: 'error', message: 'User not found' } };
+      if (!first.exists) return { code: 404, body: { status: 'error', message: 'Utilisateur introuvable' } };
       const u = first.data();
-      if (u.status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
+      if (u.status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' } };
       const view = await salaryView(userId);
       const claimed = salaryClaimedSet(u);
       // The button names its tier; an older app that names none claims the lowest reward that is open.
       const tier = wantId ? view.tiers.find(t => t.id === wantId) : view.tiers.find(t => view.total >= t.target && !claimed.has(t.id));
-      if (wantId && !tier) return { code: 400, body: { status: 'error', code: 'UNKNOWN_TIER', message: 'This reward is no longer available.' } };
+      if (wantId && !tier) return { code: 400, body: { status: 'error', code: 'UNKNOWN_TIER', message: 'Cette récompense n\'est plus disponible.' } };
       if (!tier) {
         if (!view.tier) {
           const lowest = view.tiers[0];
           return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: lowest ? `Need ${fmtMoney(Math.max(0, lowest.target - view.total))} more to claim` : 'Rewards are not available yet.' } };
         }
-        return { code: 400, body: { status: 'error', code: 'NOTHING_TO_CLAIM', message: 'You have already claimed every reward you have reached.' } };
+        return { code: 400, body: { status: 'error', code: 'NOTHING_TO_CLAIM', message: 'Vous avez déjà réclamé toutes les récompenses que vous avez atteintes.' } };
       }
-      if (view.total < tier.target) return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: `Need ${fmtMoney(Math.max(0, tier.target - view.total))} more to claim` } };
-      if (claimed.has(tier.id)) return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'You have already claimed this reward.' } };
+      if (view.total < tier.target) return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: `Il manque ${fmtMoney(Math.max(0, tier.target - view.total))} pour réclamer` } };
+      if (claimed.has(tier.id)) return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'Vous avez déjà réclamé cette récompense.' } };
       const { date, time } = nowStr();
       const ledger = () => db.collection('transactions').doc(`salary:${userId}:tier:${tier.id}`).createIfAbsent({
         userId, statementId: newStatementId(), type: 'mission_salary', description: 'Team reward',
@@ -2312,15 +2317,15 @@ app.post('/salary/claim', async (req, res) => {
         const after = await uRef.get();
         balance = round2(Number(after.exists && after.data().walletBalance) || 0);
       });
-      if (!applied) return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'You have already claimed this reward.' } };
+      if (!applied) return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'Vous avez déjà réclamé cette récompense.' } };
       // The money is already in the wallet. If only the history row fails to write, say success (the row key is the tier, so it is never doubled).
       try { await ledger(); }
       catch (e1) { try { await ledger(); } catch (e2) { console.error('Reward ledger row failed (credit is applied):', e2.message); } }
       const left = view.tiers.filter(t => view.total >= t.target && t.id !== tier.id && !claimed.has(t.id)).length;
-      return { code: 200, body: { status: 'success', amount: tier.reward, tierId: tier.id, walletBalance: balance, accruedDays: left, message: `${fmtMoney(tier.reward)} added to your wallet` } };
+      return { code: 200, body: { status: 'success', amount: tier.reward, tierId: tier.id, walletBalance: balance, accruedDays: left, message: `${fmtMoney(tier.reward)} ajouté à votre portefeuille` } };
     });
     res.status(out.code).json(out.body);
-  } catch (e) { console.error('Reward claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim the reward right now' }); }
+  } catch (e) { console.error('Reward claim error:', e.message); res.status(500).json({ status: 'error', message: 'Impossible de réclamer la récompense pour le moment' }); }
 });
 // ONE-TIME, at start-up (marker meta/rewardClaimOnceV2): writes down, for each member, the tiers they were REALLY paid for, from the ledger and nothing
 // else, and REPLACES what is on the account. This also repairs the first version of this migration, which trusted `salaryTierReward` (set by merely
@@ -2498,7 +2503,7 @@ app.get('/public/settings', async (req, res) => {
     // Revalidated every time (no max-age): maintenance mode, the opening
     // countdown and every rate have to take effect on the next launch, not a
     // minute later. The ETag still removes the bytes when nothing changed.
-    // Manual recharge (bank / Telebirr numbers the owner typed into the admin panel): on as soon as there is at least one.
+    // Manual recharge (the Wave account numbers the owner typed into the admin panel): on as soon as there is at least one.
     const manualPayOn = (await activePayChannels()).length > 0;
     publicJson(req, res, { status: 'success', settings: {
       ...rest,
@@ -2781,7 +2786,7 @@ app.get('/public/link-preview-page', async (req, res) => {
     const wide = !!(img && img.custom);
     res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
     res.send(`<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>${htmlText(title)}</title>
+<html lang="fr"><head><meta charset="utf-8"><title>${htmlText(title)}</title>
 <meta name="description" content="${htmlText(text)}">
 <meta property="og:type" content="website"><meta property="og:site_name" content="${htmlText(brand)}">
 <meta property="og:title" content="${htmlText(title)}"><meta property="og:description" content="${htmlText(text)}">
@@ -2867,7 +2872,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     } else {
       userData = userSnap.data();
     }
-    if (userData.status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
+    if (userData.status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' } };
     if (userData.registrationDone)
       return { code: 200, body: { status: 'already_done', referralCode: userData.referralCode || null } };
 
@@ -2875,7 +2880,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     // scrypt hash. It is never returned to the client.
     const tradePin = String(pin || '');
     if (!/^\d{6}$/.test(tradePin))
-      return { code: 400, body: { status: 'error', code: 'INVALID_TRADE_PIN', message: 'Trade Password must be exactly 6 digits.' } };
+      return { code: 400, body: { status: 'error', code: 'INVALID_TRADE_PIN', message: 'Le mot de passe de transaction doit comporter exactement 6 chiffres.' } };
     const code = String(referralCode || '').trim();
     let referrerId = null;
     // Speed: the slow pieces start TOGETHER instead of one after another -- the Trade Password hash (CPU), this member's own referral code and
@@ -2896,11 +2901,11 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     if (code) {
       const refDoc = await refLookup;
       if (!refDoc)
-        return refuse({ code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } });
+        return refuse({ code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'Ce code de parrainage n\'existe pas.' } });
       if (refDoc.id === userId)
-        return refuse({ code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'You cannot use your own referral code.' } });
+        return refuse({ code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'Vous ne pouvez pas utiliser votre propre code de parrainage.' } });
       if (refDoc.data().status === 'banned')
-        return refuse({ code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code is no longer active.' } });
+        return refuse({ code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'Ce code de parrainage n\'est plus actif.' } });
       // A code from a country on a DIFFERENT CURRENCY is refused. Commission
       // is a percentage of what the new member spends, paid into the
       // referrer's wallet: pay 27% of a 30,000 KES purchase into a Ugandan
@@ -2917,7 +2922,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
       // working". Two regions sharing a currency have no arithmetic problem,
       // which is the only thing this rule was ever protecting.
       if (String(refDoc.data().regionKey || DEFAULT_REGION_KEY) !== DEFAULT_REGION_KEY)
-        return refuse({ code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'This referral code is unavailable. Ask for an Ethiopia referral code.' } });
+        return refuse({ code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'Ce code de parrainage n\'est pas disponible. Demandez un code de parrainage de Côte d\'Ivoire.' } });
       referrerId = refDoc.id;
     }
 
@@ -2999,14 +3004,14 @@ app.post('/register', async (req, res) => {
     const already = await db.collection('users').doc(userId).get();
     if (!already.exists || !already.data().registrationDone) {
       const tradePin = textOf(req.body.pin);
-      if (!/^\d{6}$/.test(tradePin)) return res.status(400).json({ status: 'error', code: 'INVALID_TRADE_PIN', message: 'Trade Password must be exactly 6 digits.' });
+      if (!/^\d{6}$/.test(tradePin)) return res.status(400).json({ status: 'error', code: 'INVALID_TRADE_PIN', message: 'Le mot de passe de transaction doit comporter exactement 6 chiffres.' });
     }
     const result = await completeRegistrationCore(userId, textOf(req.body.referralCode), textOf(req.body.pin), phone);
     const { referrerId, ...memberBody } = result.body;
     res.status(result.code).json(memberBody);
   } catch (e) {
     console.error('Register error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not complete your registration right now' });
+    res.status(500).json({ status: 'error', message: 'Impossible de finaliser votre inscription pour le moment' });
   }
 });
 // VIP level = the highest VIP number among the assets the member owns (bought or
@@ -3044,10 +3049,10 @@ app.get('/account', async (req, res) => {
     // (and skips the wasted settlement work entirely for a banned account),
     // not the only thing standing between a ban and a payout.
     const preSnap = await db.collection('users').doc(uid).get();
-    if (!preSnap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
+    if (!preSnap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'Utilisateur introuvable' });
     if (preSnap.data().status === 'banned')
-      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    if (preSnap.data().registrationDone === false) return res.status(409).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Please finish signing up and verify your phone.' });
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' });
+    if (preSnap.data().registrationDone === false) return res.status(409).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Veuillez terminer votre inscription et vérifier votre téléphone.' });
     // Cashback that fell due is paid by the 0.5-second sweep, so this read no longer settles it first
     // (that cost an investments query and a second user read on every refresh of every phone).
     const u = preSnap.data();
@@ -3078,7 +3083,7 @@ app.get('/account', async (req, res) => {
     }, region: publicRegionView() });
   } catch (e) {
     console.error('Account error:', e.message);
-    res.status(500).json({ status: 'error', code: 'SERVER_ERROR', message: 'Could not load your account' });
+    res.status(500).json({ status: 'error', code: 'SERVER_ERROR', message: 'Impossible de charger votre compte' });
   }
 });
 
@@ -3087,11 +3092,11 @@ app.get('/account', async (req, res) => {
 // ═══════════════════════════════════════════
 app.post('/invest/create', async (req, res) => {
   const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Veuillez vous reconnecter' });
   const tier = await getProductByKey(req.body.tierKey);
-  if (!tier) return res.status(400).json({ status: 'error', message: 'Unknown product' });
+  if (!tier) return res.status(400).json({ status: 'error', message: 'Produit inconnu' });
   if (tier.active === false || !productOpenState(tier, Date.now()).open)
-    return res.status(400).json({ status: 'error', message: 'This product is not open right now.' });
+    return res.status(400).json({ status: 'error', message: 'Ce produit n\'est pas ouvert pour le moment.' });
   try {
     const sett = await getSettings();
     let invId, liveTier, cycle, expectedReturn, dailyPayout, isFirstInvestment = false;
@@ -3107,15 +3112,15 @@ app.post('/invest/create', async (req, res) => {
       // clock at this instant -- a member sitting on the screen as a window
       // closes must not slip a purchase through on a stale card.
       if (!liveTier || liveTier.active === false || !productOpenState(liveTier, Date.now()).open)
-        throw new Error('This product is not open right now.');
+        throw new Error('Ce produit n\'est pas ouvert pour le moment.');
       cycle = Number(liveTier.cycle) || 150;
       expectedReturn = productExpectedReturn(liveTier, sett);
       dailyPayout = Math.round(expectedReturn / cycle);
       const uRef = db.collection('users').doc(userId);
       const fresh = await uRef.get();
-      if (!fresh.exists) throw new Error('User not found');
-      if (fresh.data().status === 'banned') { const banErr = new Error('Account suspended. Contact customer service.'); banErr.code = 'BANNED'; throw banErr; }
-      if (fresh.data().registrationDone === false) { const regErr = new Error('Finish signing up before buying.'); regErr.code = 'REGISTRATION_REQUIRED'; throw regErr; }
+      if (!fresh.exists) throw new Error('Utilisateur introuvable');
+      if (fresh.data().status === 'banned') { const banErr = new Error('Compte suspendu. Contactez le service client.'); banErr.code = 'BANNED'; throw banErr; }
+      if (fresh.data().registrationDone === false) { const regErr = new Error('Terminez votre inscription avant d\'acheter.'); regErr.code = 'REGISTRATION_REQUIRED'; throw regErr; }
       const bal = fresh.data().walletBalance || 0;
       // Per-member purchase limit (admin-set per asset; 0 = none). Counted inside the
       // balance lock, from the investments themselves, so two quick taps cannot both pass.
@@ -3123,27 +3128,27 @@ app.post('/invest/create', async (req, res) => {
       if (limit > 0) {
         const ownedSnap = await db.collection('investments').where('userId', '==', userId).where('tierKey', '==', liveTier.key).get();
         if (ownedSnap.size >= limit) {
-          const limErr = new Error(`You can own at most ${limit} of this product and already have ${ownedSnap.size}.`);
+          const limErr = new Error(`Vous pouvez posséder au maximum ${limit} de ce produit et en avez déjà ${ownedSnap.size}.`);
           limErr.code = 'PURCHASE_LIMIT';
           throw limErr;
         }
       }
       // The price the member was shown must be the price charged: an admin may have changed it while the card was on screen.
       if (req.body.expectedPrice != null && Number(req.body.expectedPrice) !== liveTier.price) {
-        const priceErr = new Error(`The price of this product is now ${fmtMoney(liveTier.price)}. Nothing was charged; please check and try again.`);
+        const priceErr = new Error(`Le prix de ce produit est maintenant de ${fmtMoney(liveTier.price)}. Rien n'a été débité ; veuillez vérifier et réessayer.`);
         priceErr.code = 'PRICE_CHANGED';
         throw priceErr;
       }
       // The payout and the length they saw must be the ones bought, too (an admin may change the multiplier or the days with the price unchanged).
       if ((req.body.expectedReturn != null && Math.abs(Number(req.body.expectedReturn) - Number(expectedReturn)) > 0.5) || (req.body.cycle != null && Number(req.body.cycle) !== Number(cycle))) {
-        const retErr = new Error('The payout of this product has changed. Nothing was charged; please check and try again.');
+        const retErr = new Error('Le gain de ce produit a changé. Rien n\'a été débité ; veuillez vérifier puis réessayer.');
         retErr.code = 'PRICE_CHANGED';
         throw retErr;
       }
       // Carries a code so the app can react to this specific failure (send
       // the member to Deposit) instead of string-matching the message.
       if (round2(bal) < liveTier.price) {   // cents from gift codes can leave a wallet a hair under a whole amount
-        const shortErr = new Error(`Need ${fmtMoney(liveTier.price)}, have ${fmtMoney(bal)}`);
+        const shortErr = new Error(`Il vous faut ${fmtMoney(liveTier.price)}, vous avez ${fmtMoney(bal)}`);
         shortErr.code = 'INSUFFICIENT_BALANCE';
         throw shortErr;
       }
@@ -3191,7 +3196,7 @@ app.post('/invest/create', async (req, res) => {
     // member has already paid for: the row stays pending and the 30 second reconciler pays it.
     if (isFirstInvestment) await creditReferralCommission(invId, userId, liveTier.price).catch(e => console.error('First purchase commission error:', e.message));
     _vipCache.delete(userId);
-    res.json({ status: 'success', investmentId: invId, message: `Bought ${liveTier.name} for ${fmtMoney(liveTier.price)}` });
+    res.json({ status: 'success', investmentId: invId, message: `${liveTier.name} acheté pour ${fmtMoney(liveTier.price)}` });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
   }
@@ -3207,9 +3212,9 @@ app.get('/investments', async (req, res) => {
     // this directly to both see their full plan data and trigger the same
     // on-demand cashback settlement /account does.
     const uSnap = await db.collection('users').doc(uid).get();
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'Utilisateur introuvable' });
     if (uSnap.data().status === 'banned')
-      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' });
     const [snap, products] = await Promise.all([
       db.collection('investments').where('userId', '==', uid).get(), getProducts()
     ]);
@@ -3223,12 +3228,12 @@ app.get('/investments', async (req, res) => {
     });
     res.json({ status: 'success', investments });
   } catch (e) {
-    res.status(500).json({ status: 'error', message: 'Could not load your products' });
+    res.status(500).json({ status: 'error', message: 'Impossible de charger vos produits' });
   }
 });
 
 // ═══════════════════════════════════════════
-// DEPOSIT (the manual bank / Telebirr recharge is further down; this part only credits)
+// DEPOSIT (the Wave recharge is further down; this part only credits)
 // ═══════════════════════════════════════════
 const _creditingDeposits = new Set();
 // A deposit is only genuinely DONE once the wallet was actually credited --
@@ -3420,7 +3425,7 @@ async function _creditDepositNow(depDoc, source) {
 }
 
 // ═══════════════════════════════════════════
-// WITHDRAWAL (paid by hand by the admin: Commercial Bank of Ethiopia or Telebirr)
+// WITHDRAWAL (paid by hand by the admin: Wave)
 // ═══════════════════════════════════════════
 const _withdrawInFlight = new Set();
 const _witRequestInFlight = new Set();
@@ -3435,18 +3440,18 @@ const PIN_MAX_FAILS = 5;
 async function pinCheck(userId, pin0) {
   const pin = textOf(pin0);
   if (!/^\d{6}$/.test(pin))
-    return { ok: false, code: 'INVALID_PIN', message: 'Enter your 6-digit Trade Password.' };
+    return { ok: false, code: 'INVALID_PIN', message: 'Entrez votre mot de passe de transaction à 6 chiffres.' };
   return withLock('pin:' + userId, async () => {
     const uRef = db.collection('users').doc(userId);
     const snap = await uRef.get();
-    if (!snap.exists) return { ok: false, code: 'NOT_FOUND', message: 'Account not found' };
+    if (!snap.exists) return { ok: false, code: 'NOT_FOUND', message: 'Compte introuvable' };
     const u = snap.data();
     const now = Date.now();
     if (u.pinLockedUntil && tsMillis(u.pinLockedUntil) > now) {
       const mins = Math.ceil((tsMillis(u.pinLockedUntil) - now) / 60000);
-      return { ok: false, code: 'LOCKED', message: `Too many wrong Trade Password attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` };
+      return { ok: false, code: 'LOCKED', message: `Trop de tentatives erronées du mot de passe de transaction. Réessayez dans ${mins} minute${mins === 1 ? '' : 's'}.` };
     }
-    if (!u.transactionPinHash) return { ok: false, code: 'NO_PIN', message: 'No Trade Password is set on this account.' };
+    if (!u.transactionPinHash) return { ok: false, code: 'NO_PIN', message: 'Aucun mot de passe de transaction n\'est défini sur ce compte.' };
     if (!(await scryptVerifyAsync(pin, u.transactionPinHash))) {
       const fails = (u.pinFailCount || 0) + 1;
       const update = { pinFailCount: fails };
@@ -3495,24 +3500,24 @@ function twofaEqHex(a, b) { a = String(a || ''); b = String(b || ''); return a.l
 const twofaOn = u => !!u && u.twofaEnabled === true;
 const TWOFA_CLEAR = () => ({ twofaEnabled: FieldValue.delete(), twofaSecretEnc: FieldValue.delete(), twofaLastStep: FieldValue.delete(), twofaBackup: FieldValue.delete(), twofaEnabledAt: FieldValue.delete(),
   twofaFailCount: FieldValue.delete(), twofaLockedUntil: FieldValue.delete(), twofaPendingEnc: FieldValue.delete(), twofaPendingAt: FieldValue.delete() });
-const TWOFA_WRONG_HELP = "Open Google Authenticator and type the code it shows now. If it keeps failing, set your phone's date and time to automatic.";
+const TWOFA_WRONG_HELP = "Ouvrez Google Authenticator et saisissez le code affiché maintenant. Si cela échoue encore, réglez la date et l'heure de votre téléphone en mode automatique.";
 // Counts a wrong code (the caller holds the 2fa lock) and locks after TWOFA_MAX_FAILS.
 async function twofaNoteFail(uRef, u, userId, now) {
   const fails = (Number(u.twofaFailCount) || 0) + 1;
   if (fails >= TWOFA_MAX_FAILS) {
     await uRef.update({ twofaFailCount: 0, twofaLockedUntil: new Date(now + TWOFA_LOCK_MS) });
     logSecurityEvent(userId, '2fa_locked', {});
-    return { ok: false, code: 'TWOFA_LOCKED', message: `Too many wrong codes. Try again in ${TWOFA_LOCK_MS / 60000} minutes.` };
+    return { ok: false, code: 'TWOFA_LOCKED', message: `Trop de codes erronés. Réessayez dans ${TWOFA_LOCK_MS / 60000} minutes.` };
   }
   await uRef.update({ twofaFailCount: fails });
   logSecurityEvent(userId, '2fa_wrong_code', { fails });
   const left = TWOFA_MAX_FAILS - fails;
-  return { ok: false, code: 'TWOFA_INVALID', message: `That code is not right (${left} ${left === 1 ? 'try' : 'tries'} left). ${TWOFA_WRONG_HELP}` };
+  return { ok: false, code: 'TWOFA_INVALID', message: `Ce code n'est pas correct (${left} ${left === 1 ? 'essai restant' : 'essais restants'}). ${TWOFA_WRONG_HELP}` };
 }
 function twofaLockedReply(u, now) {
   if (u.twofaLockedUntil && tsMillis(u.twofaLockedUntil) > now) {
     const mins = Math.ceil((tsMillis(u.twofaLockedUntil) - now) / 60000);
-    return { ok: false, code: 'TWOFA_LOCKED', message: `Too many wrong codes. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` };
+    return { ok: false, code: 'TWOFA_LOCKED', message: `Trop de codes erronés. Réessayez dans ${mins} minute${mins === 1 ? '' : 's'}.` };
   }
   return null;
 }
@@ -3522,24 +3527,24 @@ const TWOFA_STATUS = { TWOFA_LOCKED: 429, TWOFA_UNREADABLE: 503 };
 // used for a withdrawal is spent in the same update that takes the money.
 async function twofaCheck(userId, raw) {
   const input = textOf(raw).trim();
-  if (!input) return { ok: false, code: 'TWOFA_REQUIRED', message: 'Enter the 6-digit code from Google Authenticator.' };
+  if (!input) return { ok: false, code: 'TWOFA_REQUIRED', message: 'Saisissez le code à 6 chiffres de Google Authenticator.' };
   const digits = input.replace(/\s/g, '');
   const isTotp = /^\d{6}$/.test(digits), norm = twofaBackupNorm(input), isBackup = !isTotp && /^[A-Z0-9]{10}$/.test(norm);
-  if (!isTotp && !isBackup) return { ok: false, code: 'TWOFA_INVALID', message: 'Enter the 6-digit code from Google Authenticator.' };   // a typo is not counted
+  if (!isTotp && !isBackup) return { ok: false, code: 'TWOFA_INVALID', message: 'Saisissez le code à 6 chiffres de Google Authenticator.' };   // a typo is not counted
   return withLock('2fa:' + userId, async () => {
     const uRef = db.collection('users').doc(userId), snap = await uRef.get();
-    if (!snap.exists) return { ok: false, code: 'NOT_FOUND', message: 'Account not found' };
+    if (!snap.exists) return { ok: false, code: 'NOT_FOUND', message: 'Compte introuvable' };
     const u = snap.data(), now = Date.now();
-    if (!twofaOn(u)) return { ok: false, code: 'TWOFA_OFF', message: 'Google Authenticator is not turned on for this account.' };
+    if (!twofaOn(u)) return { ok: false, code: 'TWOFA_OFF', message: 'Google Authenticator n\'est pas activé pour ce compte.' };
     const locked = twofaLockedReply(u, now); if (locked) return locked;
     let out;
     if (isTotp) {
       const secret = twofaOpen(userId, u.twofaSecretEnc);
-      if (!secret) { console.error(`2-step: the secret of ${userId} could not be read (key changed or data damaged) -- withdrawals for this member are refused until the owner resets it`); return { ok: false, code: 'TWOFA_UNREADABLE', message: 'Your Google Authenticator could not be read. Please contact customer service.' }; }
+      if (!secret) { console.error(`2-step: the secret of ${userId} could not be read (key changed or data damaged) -- withdrawals for this member are refused until the owner resets it`); return { ok: false, code: 'TWOFA_UNREADABLE', message: 'Votre Google Authenticator n\'a pas pu être lu. Veuillez contacter le service client.' }; }
       const m = totp.match(secret, digits, now, 1);
       if (!m) return twofaNoteFail(uRef, u, userId, now);
       const last = Number.isInteger(u.twofaLastStep) ? u.twofaLastStep : -1;
-      if (m.step <= last) return { ok: false, code: 'TWOFA_USED', message: 'That code was already used. Wait for the next code in Google Authenticator (it changes every 30 seconds) and try again.' };
+      if (m.step <= last) return { ok: false, code: 'TWOFA_USED', message: 'Ce code a déjà été utilisé. Attendez le prochain code dans Google Authenticator (il change toutes les 30 secondes) puis réessayez.' };
       out = { ok: true, kind: 'totp', step: m.step };
     } else {
       // A stored code may have been made under an earlier key (see twofa-vault.js), so it is compared in the form of every key; no early exit.
@@ -3564,15 +3569,15 @@ function twofaOtpauth(issuer, account, secret) {
 // A signed-in, unsuspended, fully registered member (the same gate as the other account routes); sends the refusal itself and returns null otherwise.
 async function twofaMember(req, res, allowOff) {
   const userId = await verifyAuth(req);
-  if (!userId) { res.status(401).json({ status: 'error', message: 'Please sign in again' }); return null; }
+  if (!userId) { res.status(401).json({ status: 'error', message: 'Veuillez vous reconnecter' }); return null; }
   const snap = await db.collection('users').doc(userId).get();
-  if (!snap.exists) { res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'Account not found' }); return null; }
-  if (snap.data().status === 'banned') { res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' }); return null; }
-  if (snap.data().registrationDone === false) { res.status(409).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up first.' }); return null; }
+  if (!snap.exists) { res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'Compte introuvable' }); return null; }
+  if (snap.data().status === 'banned') { res.status(403).json({ status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' }); return null; }
+  if (snap.data().registrationDone === false) { res.status(409).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Terminez d\'abord votre inscription.' }); return null; }
   const featureOn = (await getSettings()).requireTwofaToWithdraw !== false;
   // Switched off by the owner (Admin > Settings): the member routes are closed, so a changed or old copy of the app cannot start something that has no effect.
   // Only the status answers (so an open page can say so).
-  if (!featureOn && !allowOff) { res.status(403).json({ status: 'error', code: 'TWOFA_DISABLED', message: 'Google Authenticator is switched off right now.' }); return null; }
+  if (!featureOn && !allowOff) { res.status(403).json({ status: 'error', code: 'TWOFA_DISABLED', message: 'Google Authenticator est désactivé pour le moment.' }); return null; }
   res.set('Cache-Control', 'no-store');
   return { userId, u: snap.data(), featureOn };
 }
@@ -3586,47 +3591,47 @@ app.get('/account/2fa/status', async (req, res) => {
 app.post('/account/2fa/start', async (req, res) => {
   try {
     const m = await twofaMember(req, res); if (!m) return;
-    if (twofaOn(m.u)) return res.status(409).json({ status: 'error', code: 'TWOFA_ALREADY_ON', message: 'Google Authenticator is already turned on.' });
+    if (twofaOn(m.u)) return res.status(409).json({ status: 'error', code: 'TWOFA_ALREADY_ON', message: 'Google Authenticator est déjà activé.' });
     const pin = await pinCheck(m.userId, req.body.pin);
     if (!pin.ok) return twofaFail(res, pin);
     const secret = totp.generateSecret(), issuer = brandName(await getSettings()), account = m.u.phone || 'member';
     await db.collection('users').doc(m.userId).update({ twofaPendingEnc: twofaSeal(m.userId, secret), twofaPendingAt: Date.now() });
     res.json({ status: 'success', secret, otpauth: twofaOtpauth(issuer, account, secret), issuer, account, expiresInSec: TWOFA_PENDING_MS / 1000 });
-  } catch (e) { console.error('2-step start error:', e.message); res.status(500).json({ status: 'error', message: 'Could not start the setup right now' }); }
+  } catch (e) { console.error('2-step start error:', e.message); res.status(500).json({ status: 'error', message: 'Impossible de démarrer la configuration pour le moment' }); }
 });
 // Step 2: the member types the first code the app shows. Right -> it is on, and the backup codes are shown ONCE. Wrong -> counted, nothing changes.
 app.post('/account/2fa/confirm', async (req, res) => {
   try {
     const m = await twofaMember(req, res); if (!m) return;
     const code = textOf(req.body.code).replace(/\s/g, '');
-    if (!/^\d{6}$/.test(code)) return res.status(400).json({ status: 'error', code: 'TWOFA_INVALID', message: 'Enter the 6-digit code from Google Authenticator.' });
+    if (!/^\d{6}$/.test(code)) return res.status(400).json({ status: 'error', code: 'TWOFA_INVALID', message: 'Saisissez le code à 6 chiffres de Google Authenticator.' });
     const out = await withLock('2fa:' + m.userId, async () => {
       const uRef = db.collection('users').doc(m.userId), u = (await uRef.get()).data() || {}, now = Date.now();
-      if (twofaOn(u)) return { code: 409, body: { status: 'error', code: 'TWOFA_ALREADY_ON', message: 'Google Authenticator is already turned on.' } };
+      if (twofaOn(u)) return { code: 409, body: { status: 'error', code: 'TWOFA_ALREADY_ON', message: 'Google Authenticator est déjà activé.' } };
       const locked = twofaLockedReply(u, now); if (locked) return { code: 429, body: { status: 'error', code: locked.code, message: locked.message } };
       const secret = u.twofaPendingEnc && now - (Number(u.twofaPendingAt) || 0) < TWOFA_PENDING_MS ? twofaOpen(m.userId, u.twofaPendingEnc) : null;
-      if (!secret) return { code: 400, body: { status: 'error', code: 'TWOFA_NO_SETUP', message: 'This setup has expired. Start again and add the new key to Google Authenticator.' } };
+      if (!secret) return { code: 400, body: { status: 'error', code: 'TWOFA_NO_SETUP', message: 'Cette configuration a expiré. Recommencez et ajoutez la nouvelle clé dans Google Authenticator.' } };
       const hit = totp.match(secret, code, now, 1);
       if (!hit) { const r = await twofaNoteFail(uRef, u, m.userId, now); return { code: TWOFA_STATUS[r.code] || 400, body: { status: 'error', code: r.code, message: r.message } }; }
       const backup = twofaNewBackupCodes(m.userId);
       const applied = await uRef.updateIf({ twofaEnabled: { $ne: true } }, { twofaEnabled: true, twofaSecretEnc: u.twofaPendingEnc, twofaLastStep: hit.step, twofaBackup: backup.hashes, twofaEnabledAt: new Date(),
         twofaPendingEnc: FieldValue.delete(), twofaPendingAt: FieldValue.delete(), twofaFailCount: 0, twofaLockedUntil: FieldValue.delete() });
-      if (!applied) return { code: 409, body: { status: 'error', code: 'TWOFA_ALREADY_ON', message: 'Google Authenticator is already turned on.' } };
+      if (!applied) return { code: 409, body: { status: 'error', code: 'TWOFA_ALREADY_ON', message: 'Google Authenticator est déjà activé.' } };
       logSecurityEvent(m.userId, '2fa_enabled', {});
       return { code: 200, body: { status: 'success', backupCodes: backup.codes } };
     });
     res.status(out.code).json(out.body);
-  } catch (e) { console.error('2-step confirm error:', e.message); res.status(500).json({ status: 'error', message: 'Could not turn it on right now' }); }
+  } catch (e) { console.error('2-step confirm error:', e.message); res.status(500).json({ status: 'error', message: 'Impossible de l\'activer pour le moment' }); }
 });
 // Turning it off: the Trade Password AND a code (or a backup code). The same for new backup codes (the old ones stop working at once).
 async function twofaGuarded(req, res, apply) {
   const m = await twofaMember(req, res); if (!m) return;
-  if (!twofaOn(m.u)) return res.status(409).json({ status: 'error', code: 'TWOFA_OFF', message: 'Google Authenticator is not turned on.' });
+  if (!twofaOn(m.u)) return res.status(409).json({ status: 'error', code: 'TWOFA_OFF', message: 'Google Authenticator n\'est pas activé.' });
   const pin = await pinCheck(m.userId, req.body.pin); if (!pin.ok) return twofaFail(res, pin);
   const chk = await twofaCheck(m.userId, req.body.code); if (!chk.ok) return twofaFail(res, chk);
   const sp = twofaSpend(chk);
   const out = await apply(m, chk, sp);
-  if (!out) return res.status(409).json({ status: 'error', code: 'TWOFA_USED', message: 'That code was already used. Wait for the next code in Google Authenticator and try again.' });
+  if (!out) return res.status(409).json({ status: 'error', code: 'TWOFA_USED', message: 'Ce code a déjà été utilisé. Attendez le prochain code dans Google Authenticator puis réessayez.' });
   res.json(out);
 }
 app.post('/account/2fa/disable', async (req, res) => {
@@ -3636,7 +3641,7 @@ app.post('/account/2fa/disable', async (req, res) => {
       if (ok) logSecurityEvent(m.userId, '2fa_disabled', {});
       return ok ? { status: 'success' } : null;
     });
-  } catch (e) { console.error('2-step disable error:', e.message); res.status(500).json({ status: 'error', message: 'Could not turn it off right now' }); }
+  } catch (e) { console.error('2-step disable error:', e.message); res.status(500).json({ status: 'error', message: 'Impossible de le désactiver pour le moment' }); }
 });
 app.post('/account/2fa/backup-codes', async (req, res) => {
   try {
@@ -3646,7 +3651,7 @@ app.post('/account/2fa/backup-codes', async (req, res) => {
       if (ok) logSecurityEvent(m.userId, '2fa_backup_codes_renewed', {});
       return ok ? { status: 'success', backupCodes: backup.codes } : null;
     });
-  } catch (e) { console.error('2-step backup codes error:', e.message); res.status(500).json({ status: 'error', message: 'Could not make new backup codes right now' }); }
+  } catch (e) { console.error('2-step backup codes error:', e.message); res.status(500).json({ status: 'error', message: 'Impossible de créer de nouveaux codes de secours pour le moment' }); }
 });
 // Lost phone AND lost backup codes: the owner switches it off for that member (after checking who is asking), and the member can set it up again.
 app.post('/admin/user/reset-2fa', async (req, res) => {
@@ -3655,7 +3660,7 @@ app.post('/admin/user/reset-2fa', async (req, res) => {
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
     const ref = db.collection('users').doc(userId), snap = await ref.get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Utilisateur introuvable' });
     await withLock('2fa:' + userId, () => ref.update(TWOFA_CLEAR()));
     logAdminAction(req, 'user_2fa_reset', { userId });
     logSecurityEvent(userId, '2fa_reset_by_admin', {});
@@ -3671,7 +3676,7 @@ async function finishWithdrawalCreation(witRef, userId) {
   const user = await db.collection('users').doc(userId).get();
   if (!user.exists) throw new Error('Withdrawal owner is unavailable');
   if (!(user.data().debitedWithdrawalIds || []).includes(witRef.id)) {
-    await witRef.updateIf({ status: 'creating' }, { status: 'declined', failureReason: 'Request was not charged. No payout was sent.' });
+    await witRef.updateIf({ status: 'creating' }, { status: 'declined', failureReason: 'La demande n\'a pas été débitée. Aucun paiement n\'a été envoyé.' });
     return;
   }
   await db.collection('transactions').doc('withdrawal:' + witRef.id).createIfAbsent({
@@ -3691,22 +3696,22 @@ async function reconcileWithdrawalCreations() {
 }
 app.post('/withdraw/request', async (req, res) => {
   const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Veuillez vous reconnecter' });
   if (_witRequestInFlight.has(userId))
-    return res.status(429).json({ status: 'error', message: 'A withdrawal is already being processed. Please wait a moment.' });
+    return res.status(429).json({ status: 'error', message: 'Un retrait est déjà en cours de traitement. Veuillez patienter un instant.' });
   if (_userBeingDeleted.has(userId))
-    return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
+    return res.status(400).json({ status: 'error', message: 'Ce compte est en cours de traitement. Réessayez sous peu.' });
   _witRequestInFlight.add(userId);
   let witId;
   try {
     const amt = paymentAmount(req.body.amount);
-    if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
-    if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
+    if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Montant invalide' });
+    if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Le montant est trop élevé (max. ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
     const rawNetwork = String(req.body.network || '').trim();
-    if (!rawNetwork) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
-    // A wallet (Telebirr) is a phone number; the bank is an account number; the bound-account lookup below is the real gate (it must be one of the member's saved cards).
+    if (!rawNetwork) return res.status(400).json({ status: 'error', message: 'Liez d\'abord un compte de retrait.' });
+    // A wallet (Wave) is a phone number; the bound-account lookup below is the real gate (it must be one of the member's saved cards).
     const destValue = NETWORK_NAMES.has(rawNetwork) ? cleanPhone(textOf(req.body.phone)) : (isBankNetwork(rawNetwork) ? String(textOf(req.body.phone) || '').replace(/\s+/g, '').trim() : '');
-    if (!destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
+    if (!destValue) return res.status(400).json({ status: 'error', message: 'Liez d\'abord un compte de retrait.' });
     const sett = await getSettings();
     // The withdrawal hours, enforced here and not only shown in the app. A member the owner marked "withdraw any time" (Admin > Users) is not held
     // to the hours or to the daily number of withdrawals; every other rule still applies to them.
@@ -3715,8 +3720,8 @@ app.post('/withdraw/request', async (req, res) => {
     const unrestricted = anyFlagSnap.exists && anyFlagSnap.data().withdrawAnytime === true;
     if (win.enabled && !win.open && !unrestricted)
       return res.status(400).json({ status: 'error', code: 'WINDOW_CLOSED',
-        message: `Withdraw is open from ${win.from} to ${win.to}. Please come back then.` });
-    if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum withdraw is ${fmtMoney(sett.minWithdraw)}` });
+        message: `Le retrait est ouvert de ${win.from} à ${win.to}. Merci de revenir à ce moment-là.` });
+    if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Le retrait minimum est de ${fmtMoney(sett.minWithdraw)}` });
     // Checked HERE, not only in the app: the client's own check is a
     // courtesy so a member sees the rule before submitting, but /withdraw/
     // request is a plain authenticated POST and the amount in its body is
@@ -3725,7 +3730,7 @@ app.post('/withdraw/request', async (req, res) => {
     if (wMult > 0 && amt % wMult !== 0) {
       const low = Math.floor(amt / wMult) * wMult, high = low + wMult;
       return res.status(400).json({ status: 'error',
-        message: `Withdraw must be a multiple of ${fmtMoney(wMult)}. Try ${fmtMoney(Math.max(low, sett.minWithdraw))} or ${fmtMoney(high)}.` });
+        message: `Le retrait doit être un multiple de ${fmtMoney(wMult)}. Essayez ${fmtMoney(Math.max(low, sett.minWithdraw))} ou ${fmtMoney(high)}.` });
     }
     // Trade Password gate. The six-digit Trade Password chosen at sign-up is asked
     // on the Withdraw screen and checked HERE, before anything is charged:
@@ -3750,36 +3755,36 @@ app.post('/withdraw/request', async (req, res) => {
         // COMPULSORY: a member who has not set Google Authenticator up cannot withdraw. Nothing is charged and no request is created; the app takes them to the
         // set-up page. Only reached with a right Trade Password, so it is no help to somebody guessing one.
         return res.status(403).json({ status: 'error', code: 'TWOFA_SETUP_REQUIRED',
-          message: 'To withdraw you must first set up Google Authenticator. Download Google Authenticator, then open My > Google Authenticator and follow the steps. After that, every withdrawal asks for your Trade Password and a 6-digit code.' });
+          message: 'Pour retirer, vous devez d\'abord configurer Google Authenticator. Téléchargez Google Authenticator, puis ouvrez Compte > Google Authenticator et suivez les étapes. Ensuite, chaque retrait demandera votre mot de passe de transaction et un code à 6 chiffres.' });
       }
     }
     const boundSnap = await db.collection('bankAccounts')
       .where('userId', '==', userId).where('network', '==', rawNetwork).where('phone', '==', destValue).limit(1).get();
     if (boundSnap.empty)
-      return res.status(400).json({ status: 'error', code: 'UNBOUND_ACCOUNT', message: "That withdrawal account isn't saved to your profile. Bind it first, then try again." });
+      return res.status(400).json({ status: 'error', code: 'UNBOUND_ACCOUNT', message: 'Ce compte de retrait n\'est pas enregistré sur votre profil. Liez-le d\'abord, puis réessayez.' });
     const holder = boundSnap.docs[0].data().holder;
 
     const feePct = Number(sett.withdrawFeePct);
-    if (!Number.isFinite(feePct) || feePct < 0 || feePct >= 100) throw new Error('Withdraw fees are unavailable. Contact support.');
-    if (Number(sett.maxWithdraw) > 0 && amt > Number(sett.maxWithdraw)) throw new Error(`Maximum withdraw is ${fmtMoney(sett.maxWithdraw)}`);
+    if (!Number.isFinite(feePct) || feePct < 0 || feePct >= 100) throw new Error('Les frais de retrait sont indisponibles. Contactez l\'assistance.');
+    if (Number(sett.maxWithdraw) > 0 && amt > Number(sett.maxWithdraw)) throw new Error(`Le retrait maximum est de ${fmtMoney(sett.maxWithdraw)}`);
     const fee = Math.round(amt * feePct / 100);
     const net = amt - fee;
-    if (net <= 0) throw new Error('Withdraw amount is too small after fees.');
+    if (net <= 0) throw new Error('Le montant du retrait est trop faible après les frais.');
     const ref = await uniqueRef(await mobileMoneyRefPrefix());
     // This adapter has no real multi-document rollback. Persist the request
     // first, then charge once with a durable token that recovery can inspect.
     await withLock('bal:' + userId, async () => {
       const uRef = db.collection('users').doc(userId);
       const fresh = await uRef.get();
-      if (!fresh.exists) throw new Error('User not found');
-      if (fresh.data().status === 'banned') { const banErr = new Error('Account suspended. Contact customer service.'); banErr.code = 'BANNED'; throw banErr; }
-      if (fresh.data().registrationDone === false) throw new Error('Finish signing up before withdrawing.');
+      if (!fresh.exists) throw new Error('Utilisateur introuvable');
+      if (fresh.data().status === 'banned') { const banErr = new Error('Compte suspendu. Contactez le service client.'); banErr.code = 'BANNED'; throw banErr; }
+      if (fresh.data().registrationDone === false) throw new Error('Terminez votre inscription avant de retirer.');
       if (sett.requireInvestToWithdraw !== false && (fresh.data().totalInvested || 0) <= 0)
-        throw new Error('Purchase at least one product before you can withdraw.');
+        throw new Error('Achetez au moins un produit avant de pouvoir retirer.');
       const bal = fresh.data().walletBalance || 0;
       if (round2(bal) < amt) {
         logSecurityEvent(userId, 'withdraw_insufficient_funds', { attempted: amt, balance: bal });
-        throw new Error(`Not enough balance, you have ${fmtMoney(bal)}`);
+        throw new Error(`Solde insuffisant, vous avez ${fmtMoney(bal)}`);
       }
       // ONE UNRESOLVED WITHDRAWAL AT A TIME. Owner: "no requesting another
       // withdrawal yet another one is on pending, so one should have got his
@@ -3795,7 +3800,7 @@ app.post('/withdraw/request', async (req, res) => {
         .limit(1).get();
       if (!openSnap.empty) {
         const w = openSnap.docs[0].data();
-        const e = new Error(`You already have a withdrawal of ${fmtMoney(w.amount || 0)} waiting. Once it is paid you can request another.`);
+        const e = new Error(`Vous avez déjà un retrait de ${fmtMoney(w.amount || 0)} en attente. Une fois payé, vous pourrez en demander un autre.`);
         e.code = 'WITHDRAW_PENDING';
         throw e;
       }
@@ -3808,7 +3813,7 @@ app.post('/withdraw/request', async (req, res) => {
         // them out of trying again until tomorrow).
         const usedToday = todaySnap.docs.filter(d => d.data().status !== 'declined').length;
         if (usedToday >= maxPerDay)
-          throw new Error(`You've reached today's limit of ${maxPerDay} withdrawal${maxPerDay === 1 ? '' : 's'}. Try again tomorrow.`);
+          throw new Error(`Vous avez atteint la limite du jour de ${maxPerDay} retrait${maxPerDay === 1 ? '' : 's'}. Réessayez demain.`);
       }
       const witRef = db.collection('withdrawals').doc();
       witId = witRef.id;
@@ -3823,7 +3828,7 @@ app.post('/withdraw/request', async (req, res) => {
       }, twofaSp ? twofaSp.set : {}));
       if (!debited) {
         // Nothing was charged: close the row at once (it would block the next request until the reconciler declines it) and give the real reason.
-        await witRef.updateIf({ status: 'creating' }, { status: 'declined', failureReason: 'Not charged: balance or account changed' }).catch(() => {});
+        await witRef.updateIf({ status: 'creating' }, { status: 'declined', failureReason: 'Non débité : le solde ou le compte a changé' }).catch(() => {});
         witId = undefined;
         // Why: the code was spent a moment ago by another request, or the member's security setting changed in between, or (as before) balance / suspension.
         const now2 = (await uRef.get()).data() || {};
@@ -3836,9 +3841,9 @@ app.post('/withdraw/request', async (req, res) => {
       await finishWithdrawalCreation(witRef, userId);
     });
     sendAdminPush('New withdrawal request', `${fmtMoney(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }, { quickApprove: true }).catch(() => {});
-    res.json(Object.assign({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Withdrawal requested, processing now' }, twofaChk && twofaChk.kind === 'backup' ? { usedBackupCode: true, backupLeft: twofaChk.backupLeft } : {}));
+    res.json(Object.assign({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Retrait demandé, traitement en cours' }, twofaChk && twofaChk.kind === 'backup' ? { usedBackupCode: true, backupLeft: twofaChk.backupLeft } : {}));
   } catch (e) {
-    if (witId) return res.status(503).json({ status: 'error', code: 'WITHDRAWAL_RECOVERY_PENDING', withdrawalId: witId, message: 'Your withdrawal request is being checked. Check Transaction Statement before submitting again.' });
+    if (witId) return res.status(503).json({ status: 'error', code: 'WITHDRAWAL_RECOVERY_PENDING', withdrawalId: witId, message: 'Votre demande de retrait est en cours de vérification. Consultez l\'Historique du solde avant d\'en envoyer une autre.' });
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
   } finally { _witRequestInFlight.delete(userId); }
 });
@@ -4009,16 +4014,16 @@ async function markWithdrawalProcessed(witRef, userId) {
 // belongs to the MEMBER. The region is switched to theirs as soon as the
 // withdrawal document names them.
 // ═══════════════════════════════════════════
-// SEND (mark as paid): the admin pays the member by hand from the bank or Telebirr app, then records it here.
+// SEND (mark as paid): the admin pays the member by hand from the Wave app, then records it here.
 // ═══════════════════════════════════════════
 async function processWithdrawalCore(withdrawalId, processedBy) {
   try {
     const pre = await db.collection('withdrawals').doc(withdrawalId).get();
-    if (!pre.exists) return { code: 404, body: { status: 'error', message: 'Withdrawal not found' } };
+    if (!pre.exists) return { code: 404, body: { status: 'error', message: 'Retrait introuvable' } };
     return await _processWithdrawalNow(withdrawalId, processedBy);
   } catch (e) {
     console.error('Withdrawal processing failed:', e.message);
-    return { code: 503, body: { status: 'error', message: 'Could not process the payout. Please retry shortly.' } };
+    return { code: 503, body: { status: 'error', message: 'Impossible de traiter le retrait. Veuillez réessayer sous peu.' } };
   }
 }
 async function _processWithdrawalNow(withdrawalId, processedBy) {
@@ -4028,11 +4033,11 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
   try {
     const witRef = db.collection('withdrawals').doc(withdrawalId);
     const witSnap = await witRef.get();
-    if (!witSnap.exists) return { code: 404, body: { status: 'error', message: 'Withdrawal not found' } };
+    if (!witSnap.exists) return { code: 404, body: { status: 'error', message: 'Retrait introuvable' } };
     const wit = witSnap.data();
     if (wit.status !== 'pending') return { code: 400, body: { status: 'error', message: `Cannot send, the status is '${wit.status}'` } };
 
-    // Every payout is made by hand: the admin sends the money from their own bank or Telebirr account and then records that here.
+    // Every payout is made by hand: the admin sends the money from their own Wave account and then records that here.
     // So this call never contacts any payment provider -- it only writes down a payment that has ALREADY happened outside the system.
     //
     // Everything after the status flip is identical to the sandbox path
@@ -4099,7 +4104,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
 // the Send button in the panel (one-at-a-time lock, status must be pending,
 // idempotent), so a double tap or a replay cannot pay twice.
 const quickApproveLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
-  message: { status: 'error', message: 'Too many requests. Slow down.' } });
+  message: { status: 'error', message: 'Trop de requêtes. Ralentissez.' } });
 app.post('/admin/withdraw/quick-approve', quickApproveLimiter, async (req, res) => {
   try {
     const withdrawalId = String(req.body.withdrawalId || '').trim();
@@ -4144,17 +4149,17 @@ app.post('/admin/withdraw/quick-approve', quickApproveLimiter, async (req, res) 
 // ═══════════════════════════════════════════
 // WITHDRAWAL ACCOUNTS (mobile money + bank)
 // ═══════════════════════════════════════════
-// WITHDRAWAL ACCOUNTS: Commercial Bank of Ethiopia or Telebirr only, up to five per member, the first saved is the active one.
+// WITHDRAWAL ACCOUNTS: Wave only, up to five per member, the first saved is the active one.
 const BANK_CARD_LIMIT = 5;
 app.post('/bank/save', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const holder = stripHtml(textOf(req.body.holder)).trim();
   const rawNetwork = String(req.body.network || '').trim();
-  if (!holder || !rawNetwork) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
+  if (!holder || !rawNetwork) return res.status(400).json({ status: 'error', message: 'Remplissez tous les champs' });
   // A holder name is a name: at most 60 characters and at least one letter (a 300-character or all-digit holder broke the Wallet card).
-  if (holder.length > 60 || !/\p{L}/u.test(holder)) return res.status(400).json({ status: 'error', message: 'Enter the account holder name (letters, up to 60 characters).' });
-  // Bank Name is Commercial Bank of Ethiopia or Telebirr, nothing else: any other name is refused.
+  if (holder.length > 60 || !/\p{L}/u.test(holder)) return res.status(400).json({ status: 'error', message: 'Saisissez le nom du titulaire du compte (lettres, 60 caractères maximum).' });
+  // The provider is Wave, nothing else: any other name is refused.
   if (!Object.prototype.hasOwnProperty.call(PAYOUT_ACCOUNT_TYPES, rawNetwork)) return res.status(400).json({ status: 'error', message: PAYOUT_CHOICE_MSG });
   let destValue;
   if (PAYOUT_ACCOUNT_TYPES[rawNetwork] === 'wallet') {
@@ -4163,11 +4168,11 @@ app.post('/bank/save', async (req, res) => {
   } else {
     // A bank account number is paid by hand by the admin (no gateway here), so it only has to be a plausible account number: letters and digits, 4 to 34.
     destValue = String(textOf(req.body.phone) || textOf(req.body.accountNumber) || '').replace(/\s+/g, '').trim();
-    if (!/^[A-Za-z0-9]{4,34}$/.test(destValue)) return res.status(400).json({ status: 'error', message: 'Enter a valid bank account number.' });
+    if (!/^[A-Za-z0-9]{4,34}$/.test(destValue)) return res.status(400).json({ status: 'error', message: 'Saisissez un numéro de compte valide.' });
   }
   try {
     const uSnap = await db.collection('users').doc(userId).get();
-    if (uSnap.exists && uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    if (uSnap.exists && uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' });
     // No OTP step when saving a payout wallet (owner decision): the member is already signed in, and withdrawals still need the Trade Password.
     // Saving/removing a payout destination here doesn't move any money by
     // itself -- see /withdraw/request for the actual money-moving path.
@@ -4193,12 +4198,12 @@ app.post('/bank/save', async (req, res) => {
       });
       return verdict;
     });
-    if (taken === 'exists') return res.status(409).json({ status: 'error', code: 'CARD_EXISTS', message: 'This card is already saved.' });
-    if (taken === 'limit') return res.status(400).json({ status: 'error', code: 'CARD_LIMIT', message: `You can save up to ${BANK_CARD_LIMIT} bank cards.` });
-    if (taken) return res.status(409).json({ status: 'error', code: 'WALLET_TAKEN', message: 'This wallet account is already used by another member. Please use a different account.' });
+    if (taken === 'exists') return res.status(409).json({ status: 'error', code: 'CARD_EXISTS', message: 'Ce compte est déjà enregistré.' });
+    if (taken === 'limit') return res.status(400).json({ status: 'error', code: 'CARD_LIMIT', message: `Vous pouvez enregistrer jusqu'à ${BANK_CARD_LIMIT} comptes de retrait.` });
+    if (taken) return res.status(409).json({ status: 'error', code: 'WALLET_TAKEN', message: 'Ce compte de portefeuille est déjà utilisé par un autre membre. Veuillez utiliser un autre compte.' });
     res.json({ status: 'success' });
   } catch (e) {
-    res.status(500).json({ status: 'error', message: 'Could not save the withdrawal account' });
+    res.status(500).json({ status: 'error', message: 'Impossible d\'enregistrer le compte de retrait' });
   }
 });
 // Makes one of the member's own saved cards the active one (the card a withdrawal goes to).
@@ -4207,7 +4212,7 @@ app.post('/bank/select', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const id = textOf(req.body.id);
-    if (!id) return res.status(400).json({ status: 'error', message: 'Choose a card.' });
+    if (!id) return res.status(400).json({ status: 'error', message: 'Choisissez un compte.' });
     let found = false;
     await withLock('bank-save:' + userId, async () => {
       const mine = await db.collection('bankAccounts').where('userId', '==', userId).get();
@@ -4216,9 +4221,9 @@ app.post('/bank/select', async (req, res) => {
       found = true;
       for (const d of rows) { const want = d.id === id; if ((d.data().isDefault === true) !== want) await d.ref.update({ isDefault: want }); }
     });
-    if (!found) return res.status(404).json({ status: 'error', message: 'That card is not yours.' });
+    if (!found) return res.status(404).json({ status: 'error', message: 'Ce compte ne vous appartient pas.' });
     res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not change the card' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Impossible de changer de compte' }); }
 });
 app.get('/bank/list', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -4228,23 +4233,23 @@ app.get('/bank/list', async (req, res) => {
     // data-reading route has.
     const uSnap = await db.collection('users').doc(userId).get();
     if (uSnap.exists && uSnap.data().status === 'banned')
-      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' });
     const snap = await db.collection('bankAccounts').where('userId', '==', userId).get();
     res.json({ status: 'success', accounts: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load withdrawal accounts' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Impossible de charger les comptes de retrait' }); }
 });
 app.post('/account/transaction-pin/change', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const newPin = String(req.body.newPin || '');
-  if (!/^\d{6}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'New trade password must be 6 digits.' });
-  if (isWeakPin(newPin)) return res.status(400).json({ status: 'error', message: 'That PIN is too easy to guess. Choose 6 digits that are not all the same.' });
+  if (!/^\d{6}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'Le nouveau mot de passe de transaction doit comporter 6 chiffres.' });
+  if (isWeakPin(newPin)) return res.status(400).json({ status: 'error', message: 'Ce code PIN est trop facile à deviner. Choisissez 6 chiffres qui ne sont pas tous identiques.' });
   try {
     // subagent-audit-caught: was missing the banned check every sibling
     // account-mutating route has.
     const uSnap = await db.collection('users').doc(userId).get();
     if (uSnap.exists && uSnap.data().status === 'banned')
-      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' });
     // A member who has no Trade Password yet (an account made before it existed) sets the first one
     // here without an old one; once one exists, changing it always needs the old one.
     if (uSnap.exists && uSnap.data().transactionPinHash) {
@@ -4253,7 +4258,7 @@ app.post('/account/transaction-pin/change', async (req, res) => {
     }
     await db.collection('users').doc(userId).update({ transactionPinHash: await scryptHashAsync(newPin), pinFailCount: 0, pinLockedUntil: null });
     res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not change your PIN' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Impossible de modifier votre code PIN' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -4276,17 +4281,17 @@ app.post('/app/claim', async (req, res) => {
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const amount = Math.round(Number((await getSettings()).appClaimAmount) || 0);
-    if (amount <= 0) return res.status(400).json({ status: 'error', message: 'There is nothing to claim right now.' });
+    if (amount <= 0) return res.status(400).json({ status: 'error', message: 'Il n\'y a rien à réclamer pour le moment.' });
     let result = null;
     await withLock('appclaim:' + uid, async () => {
       const uSnap = await db.collection('users').doc(uid).get();
-      if (!uSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
-      if (uSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
+      if (!uSnap.exists) { result = { code: 404, body: { status: 'error', message: 'Utilisateur introuvable' } }; return; }
+      if (uSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' } }; return; }
       const applied = await withLock('bal:' + uid, () => db.collection('users').doc(uid).updateIf(
         { appClaimed: { $ne: true } },
         { walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount), appClaimed: true }
       ));
-      if (!applied) { result = { code: 400, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'You have already claimed this.' } }; return; }
+      if (!applied) { result = { code: 400, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'Vous l\'avez déjà réclamé.' } }; return; }
       const { date, time } = nowStr();
       await db.collection('transactions').add({ userId: uid, statementId: newStatementId(), type: 'app_claim', description: 'App download reward', amount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
       const body = { status: 'success', amount };
@@ -4294,7 +4299,7 @@ app.post('/app/claim', async (req, res) => {
       result = { code: 200, body };
     });
     res.status(result.code).json(result.body);
-  } catch (e) { console.error('App claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim right now' }); }
+  } catch (e) { console.error('App claim error:', e.message); res.status(500).json({ status: 'error', message: 'Impossible de réclamer pour le moment' }); }
 });
 // ── ORDER GIFTS ──
 // Each product can carry a gift (Admin > Products > Order gift). A member who has BOUGHT that product (a product the admin gave does not count)
@@ -4305,35 +4310,35 @@ app.get('/gifts/list', async (req, res) => {
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const [products, invSnap, uSnap] = await Promise.all([getProducts(), db.collection('investments').where('userId', '==', uid).get(), db.collection('users').doc(uid).get()]);
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'Utilisateur introuvable' });
     const bought = new Set(); invSnap.forEach(d => { const r = d.data(); if (r.granted !== true && r.tierKey) bought.add(r.tierKey); });
     const claimed = new Set(Array.isArray(uSnap.data().orderGiftsClaimed) ? uSnap.data().orderGiftsClaimed : []);
     const gifts = products.filter(p => p.active !== false && Number(p.orderGift) > 0).sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
       .map(p => ({ key: p.key, name: p.name, amount: Number(p.orderGift), owned: bought.has(p.key), claimed: claimed.has(p.key) }));
     res.json({ status: 'success', gifts });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the order gifts' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Impossible de charger les cadeaux de commande' }); }
 });
 app.post('/gifts/claim', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const key = textOf(req.body.key).trim();
-    if (!key) return res.status(400).json({ status: 'error', message: 'Choose a gift.' });
+    if (!key) return res.status(400).json({ status: 'error', message: 'Choisissez un cadeau.' });
     let result = null;
     await withLock('gift:' + uid + ':' + key, async () => {
       const [products, invSnap, uSnap] = await Promise.all([getProducts(), db.collection('investments').where('userId', '==', uid).get(), db.collection('users').doc(uid).get()]);
-      if (!uSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
-      if (uSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
+      if (!uSnap.exists) { result = { code: 404, body: { status: 'error', message: 'Utilisateur introuvable' } }; return; }
+      if (uSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' } }; return; }
       const product = products.find(p => p.key === key);
       const amount = product ? Math.round(Number(product.orderGift) || 0) : 0;
-      if (!product || amount <= 0) { result = { code: 404, body: { status: 'error', message: 'This product has no gift.' } }; return; }
+      if (!product || amount <= 0) { result = { code: 404, body: { status: 'error', message: 'Ce produit n\'a pas de cadeau.' } }; return; }
       let owned = false; invSnap.forEach(d => { const r = d.data(); if (r.tierKey === key && r.granted !== true) owned = true; });
-      if (!owned) { result = { code: 400, body: { status: 'error', code: 'NOT_OWNED', message: 'Buy this product first to receive its gift.' } }; return; }
+      if (!owned) { result = { code: 400, body: { status: 'error', code: 'NOT_OWNED', message: 'Achetez d\'abord ce produit pour recevoir son cadeau.' } }; return; }
       const applied = await withLock('bal:' + uid, () => db.collection('users').doc(uid).updateIf(
         { orderGiftsClaimed: { $ne: key } },
         { walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount), orderGiftsClaimed: FieldValue.arrayUnion(key) }
       ));
-      if (!applied) { result = { code: 400, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'You have already received this gift.' } }; return; }
+      if (!applied) { result = { code: 400, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'Vous avez déjà reçu ce cadeau.' } }; return; }
       const { date, time } = nowStr();
       await db.collection('transactions').add({ userId: uid, statementId: newStatementId(), type: 'order_gift', description: `${product.name} order gift`, giftKey: key,
         amount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
@@ -4342,15 +4347,15 @@ app.post('/gifts/claim', async (req, res) => {
       result = { code: 200, body };
     });
     res.status(result.code).json(result.body);
-  } catch (e) { console.error('Gift claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not receive this gift' }); }
+  } catch (e) { console.error('Gift claim error:', e.message); res.status(500).json({ status: 'error', message: 'Impossible de recevoir ce cadeau' }); }
 });
 app.post('/redeem', async (req, res) => {
   const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Veuillez vous reconnecter' });
   const raw = String(req.body.code || '').replace(/\s+/g, '').slice(0, 32);   // spaces are ignored (a pasted "ABCDE FGHIJ" is the same code)
-  if (!raw) return res.status(400).json({ status: 'error', message: 'Please enter the treasure chest key' });
-  if (!/^[A-Za-z0-9-]+$/.test(raw)) { noteWrongTreasureKey(userId); return res.status(400).json({ status: 'error', message: 'Wrong treasure chest password' }); }
-  if (treasureKeyLockedOut(userId)) return res.status(429).json({ status: 'error', code: 'TOO_MANY_WRONG_KEYS', message: 'Too many wrong keys. Please wait a few minutes and try again.' });
+  if (!raw) return res.status(400).json({ status: 'error', message: 'Veuillez saisir la clé du coffre au trésor' });
+  if (!/^[A-Za-z0-9-]+$/.test(raw)) { noteWrongTreasureKey(userId); return res.status(400).json({ status: 'error', message: 'Mot de passe du coffre au trésor incorrect' }); }
+  if (treasureKeyLockedOut(userId)) return res.status(429).json({ status: 'error', code: 'TOO_MANY_WRONG_KEYS', message: 'Trop de clés erronées. Patientez quelques minutes puis réessayez.' });
   try {
     let result = null;
     // Lock on the lowercased code, not the raw input: two members submitting
@@ -4364,9 +4369,9 @@ app.post('/redeem', async (req, res) => {
         db.collection('users').doc(userId).get(),
         typed10.length === TREASURE_CODE_LENGTH ? db.collection('promoCodes').where('codeLower', '==', tcHash(typed10)).limit(1).get() : Promise.resolve({ empty: true, docs: [] }),
       ]);
-      if (!userSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
-      if (userSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
-      if (userSnap.data().registrationDone === false) { result = { code: 403, body: { status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up first.' } }; return; }
+      if (!userSnap.exists) { result = { code: 404, body: { status: 'error', message: 'Utilisateur introuvable' } }; return; }
+      if (userSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' } }; return; }
+      if (userSnap.data().registrationDone === false) { result = { code: 403, body: { status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Terminez d\'abord votre inscription.' } }; return; }
       let codeSnap = firstCodeSnap;
       // A code made before the 10-character rule (12 characters, usually with dashes).
       if (codeSnap.empty) codeSnap = await db.collection('promoCodes').where('codeLower', '==', lower).limit(1).get();
@@ -4399,18 +4404,18 @@ app.post('/redeem', async (req, res) => {
         // real codes in a wrong STATE and keep saying so, because telling
         // someone their correct code is "wrong" would send them hunting for
         // a typo that isn't there.
-        result = { code: 400, body: { status: 'error', message: 'Wrong treasure chest password' } };
+        result = { code: 400, body: { status: 'error', message: 'Mot de passe du coffre au trésor incorrect' } };
         return;
       }
       const codeDoc = codeSnap.docs[0];
       const cd = codeDoc.data();
       const code = cd.code;
-      if (cd.active === false) { result = { code: 400, body: { status: 'error', message: 'This code is no longer active' } }; return; }
-      if (cd.expiresAt && tsMillis(cd.expiresAt) < Date.now()) { result = { code: 400, body: { status: 'error', message: 'This code has expired' } }; return; }
+      if (cd.active === false) { result = { code: 400, body: { status: 'error', message: 'Ce code n\'est plus actif' } }; return; }
+      if (cd.expiresAt && tsMillis(cd.expiresAt) < Date.now()) { result = { code: 400, body: { status: 'error', message: 'Ce code a expiré' } }; return; }
       // A buyers-only code is for members who have bought a product (a real purchase; a product the admin gave does not count). Refused BEFORE
       // anything is claimed, so a member who has not bought yet can still use the same code after their first purchase.
       if (cd.buyersOnly === true && !(await db.collection('investments').where('userId', '==', userId).get()).docs.some(d => d.data().granted !== true)) {
-        result = { code: 403, body: { status: 'error', code: 'BUYERS_ONLY', message: 'This code is only for members who have bought a product.' } }; return;
+        result = { code: 403, body: { status: 'error', code: 'BUYERS_ONLY', message: 'Ce code est réservé aux membres qui ont acheté un produit.' } }; return;
       }
       const usedBy = cd.usedBy || [];
       const alreadyClaimed = usedBy.indexOf(userId) !== -1;
@@ -4426,9 +4431,9 @@ app.post('/redeem', async (req, res) => {
         // reward. A genuinely already-completed redemption still correctly
         // rejects below (real row found).
         const priorSnap = await db.collection('promoRedemptions').where('userId', '==', userId).where('code', '==', code).limit(1).get();
-        if (!priorSnap.empty) { result = { code: 400, body: { status: 'error', message: "You've already used this code" } }; return; }
+        if (!priorSnap.empty) { result = { code: 400, body: { status: 'error', message: 'Vous avez déjà utilisé ce code' } }; return; }
       } else if (cd.maxUses && usedBy.length >= cd.maxUses) {
-        result = { code: 400, body: { status: 'error', message: 'All treasure chests have been claimed.' } }; return;
+        result = { code: 400, body: { status: 'error', message: 'Tous les coffres au trésor ont été réclamés.' } }; return;
       }
       // Legacy fallback: a code generated before random rewards only has
       // the old single `reward` field -- treat it as a zero-width range so
@@ -4455,10 +4460,10 @@ app.post('/redeem', async (req, res) => {
         await codeDoc.ref.update({ usedBy: FieldValue.arrayUnion(userId), ['claimedRewards.' + userId]: reward });
         const claimSnap = await codeDoc.ref.get();
         const claimedBy = (claimSnap.exists && claimSnap.data().usedBy) || [];
-        if (claimedBy.indexOf(userId) === -1) { result = { code: 500, body: { status: 'error', message: 'Could not redeem this code' } }; return; }
+        if (claimedBy.indexOf(userId) === -1) { result = { code: 500, body: { status: 'error', message: 'Impossible d\'utiliser ce code' } }; return; }
         if (cd.maxUses && claimedBy.length > cd.maxUses) {
           await codeDoc.ref.update({ usedBy: FieldValue.arrayRemove(userId), ['claimedRewards.' + userId]: FieldValue.delete() }).catch(() => {});
-          result = { code: 400, body: { status: 'error', message: 'All treasure chests have been claimed.' } }; return;
+          result = { code: 400, body: { status: 'error', message: 'Tous les coffres au trésor ont été réclamés.' } }; return;
         }
       } else {
         // A genuinely lost roll (deploy-time race, never observed in
@@ -4528,7 +4533,7 @@ app.post('/redeem', async (req, res) => {
     res.status(result.code).json(result.body);
   } catch (e) {
     console.error('Redeem error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not redeem this code' });
+    res.status(500).json({ status: 'error', message: 'Impossible d\'utiliser ce code' });
   }
 });
 
@@ -4550,7 +4555,7 @@ app.get('/transactions', async (req, res) => {
     const snap = await db.collection('transactions').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(TX_LIST_LIMIT).get();
     const transactions = snap.docs.map(d => ({ id: d.id, ...d.data(), statementId: statementIdFor(d) }));
     res.json({ status: 'success', transactions, truncated: transactions.length >= TX_LIST_LIMIT });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load your records' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Impossible de charger vos historiques' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -4583,7 +4588,7 @@ app.get('/messages', async (req, res) => {
       hasImage: !!m.image,
       read: readIds.has(m.id) && readAt.get(m.id) >= (Number(m.renewedAt) || 0),
     })) });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load your messages' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Impossible de charger vos messages' }); }
 });
 app.get('/public/message-image/:id', async (req, res) => {
   try {
@@ -4613,7 +4618,7 @@ app.post('/messages/read', async (req, res) => {
     await Promise.all(ids.map(messageId => db.collection('messageReads').doc(uid + '_' + messageId)
       .set({ userId: uid, messageId, readAt: Date.now() }, { merge: true })));
     res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not update this message' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Impossible de mettre à jour ce message' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -4684,7 +4689,7 @@ app.post('/admin/login', async (req, res) => {
 const LOGIN_MAX_FAILS = 6;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
 const MEMBER_PASSWORD_MIN = 6, MEMBER_PASSWORD_MAX = 128;
-function passwordLengthMessage(p) { return String(p).length > MEMBER_PASSWORD_MAX ? `Password must be at most ${MEMBER_PASSWORD_MAX} characters.` : `Password must be at least ${MEMBER_PASSWORD_MIN} characters.`; }
+function passwordLengthMessage(p) { return String(p).length > MEMBER_PASSWORD_MAX ? `Le mot de passe doit comporter au maximum ${MEMBER_PASSWORD_MAX} caractères.` : `Le mot de passe doit comporter au moins ${MEMBER_PASSWORD_MIN} caractères.`; }
 const DUMMY_MEMBER_HASH = scryptHash(crypto.randomBytes(24).toString('hex'));
 const memberAccountId = phone => 'p' + String(phone).replace(/\D/g, '');
 // The OWNER-ONLY "Show password" (password-vault.js): the password is also kept locked (AES-256-GCM, bound to the member) beside the login hash. Never part of any
@@ -4725,13 +4730,13 @@ async function recordLoginFailure(id) {
 // one mobile-carrier address.
 // Only FAILED attempts count: many honest members share one carrier address, and a correct login must never use up the allowance.
 const memberAuthLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true,
-  message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Please wait a few minutes and try again.' } });
+  message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Trop de tentatives. Patientez quelques minutes puis réessayez.' } });
 const memberSignupLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 150, standardHeaders: true, legacyHeaders: false,
-  message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Please wait a few minutes and try again.' } });
+  message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Trop de tentatives. Patientez quelques minutes puis réessayez.' } });
 const sessionReply = (res, uid, sess) => res.json({ status: 'success', token: sess.token, uid, authTime: sess.authTime, expiresAt: sess.expiresAt });
 // The sign-up captcha picture (see captcha.js). Cheap to make, and a new one is asked for every time Sign Up is opened, so it has its own generous limit (many members share one carrier address); the answer never leaves the server.
 const memberCaptchaLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 600, standardHeaders: true, legacyHeaders: false,
-  message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Please wait a few minutes and try again.' } });
+  message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Trop de tentatives. Patientez quelques minutes puis réessayez.' } });
 app.get('/auth/captcha', memberCaptchaLimiter, (req, res) => {
   const c = captcha.issue();
   res.set('Cache-Control', 'no-store');
@@ -4749,9 +4754,9 @@ app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
     // Potato's Create Account screen has no captcha (owner's screenshots), so it is only demanded when the setting `signupCaptcha` is switched on.
     // When on, it is checked first, and its picture is used up by this answer whatever happens next.
     if ((await getSettings()).signupCaptcha === true) {
-      if (!textOf(req.body.captchaCode).trim()) return res.status(400).json({ status: 'error', code: 'CAPTCHA_REQUIRED', message: 'Enter the captcha code.' });
+      if (!textOf(req.body.captchaCode).trim()) return res.status(400).json({ status: 'error', code: 'CAPTCHA_REQUIRED', message: 'Saisissez le code captcha.' });
       if (!captcha.verify(textOf(req.body.captchaId), textOf(req.body.captchaCode)))
-        return res.status(400).json({ status: 'error', code: 'BAD_CAPTCHA', message: 'The captcha code is wrong. Please try again.' });
+        return res.status(400).json({ status: 'error', code: 'BAD_CAPTCHA', message: 'Le code captcha est incorrect. Veuillez réessayer.' });
     }
     const phone = cleanPhone(textOf(req.body.phone));
     if (!phone) return res.status(400).json({ status: 'error', code: 'INVALID_PHONE', message: badPhoneMessage() });
@@ -4762,22 +4767,22 @@ app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
     const created = await db.collection('authAccounts').doc(memberAccountId(phone)).createIfAbsent({
       uid, phone, passwordHash: await scryptHashAsync(password), ...sealedPasswordField(uid, password), failCount: 0, createdAt: FieldValue.serverTimestamp()
     });
-    if (!created) return res.status(409).json({ status: 'error', code: 'PHONE_IN_USE', message: 'An account with this phone number already exists.' });
+    if (!created) return res.status(409).json({ status: 'error', code: 'PHONE_IN_USE', message: 'Un compte avec ce numéro de téléphone existe déjà.' });
     sessionReply(res, uid, await sessionPolicy.createMemberSession(db, uid, phone));
   } catch (e) {
     console.error('Signup error:', e.message);
-    res.status(500).json({ status: 'error', code: 'SERVER_ERROR', message: 'Could not create your account right now. Please try again.' });
+    res.status(500).json({ status: 'error', code: 'SERVER_ERROR', message: 'Impossible de créer votre compte pour le moment. Veuillez réessayer.' });
   }
 });
 app.post('/auth/login', memberAuthLimiter, async (req, res) => {
   try {
     const phone = cleanPhone(textOf(req.body.phone));
     const password = passwordOf(req.body.password);
-    const bad = () => res.status(401).json({ status: 'error', code: 'INVALID_CREDENTIAL', message: 'Incorrect phone number or password.' });
+    const bad = () => res.status(401).json({ status: 'error', code: 'INVALID_CREDENTIAL', message: 'Numéro de téléphone ou mot de passe incorrect.' });
     if (!phone || !password || password.length > MEMBER_PASSWORD_MAX) { logLoginFailure(!phone ? 'not a valid number' : !password ? 'empty password' : 'password too long', phone || textOf(req.body.phone).slice(-3)); return bad(); }
     const ipLeft = memberLoginIpGuard.locked(req.ip);
     if (ipLeft) return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', retryAfterSec: Math.ceil(ipLeft / 1000),
-      message: `Too many wrong attempts from this network. Try again in ${Math.ceil(ipLeft / 60000)} minutes.` });
+      message: `Trop de tentatives erronées depuis ce réseau. Réessayez dans ${Math.ceil(ipLeft / 60000)} minutes.` });
     const id = memberAccountId(phone);
     // One guess at a time per login: the lock check, the password check and the failure count must not interleave, or a burst
     // of parallel guesses is all checked before the first failure is counted and the lockout never bites.
@@ -4808,42 +4813,42 @@ app.post('/auth/login', memberAuthLimiter, async (req, res) => {
       return { acct };
     });
     if (outcome.locked) return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', retryAfterSec: outcome.locked,
-      message: `Too many wrong attempts. Try again in ${Math.ceil(outcome.locked / 60)} minute${outcome.locked > 60 ? 's' : ''}.` });
+      message: `Trop de tentatives erronées. Réessayez dans ${Math.ceil(outcome.locked / 60)} minute${outcome.locked > 60 ? 's' : ''}.` });
     if (outcome.bad) return bad();
     const acct = outcome.acct;
     sessionReply(res, acct.uid, await sessionPolicy.createMemberSession(db, acct.uid, acct.phone));
   } catch (e) {
     console.error('Login error:', e.message);
-    res.status(500).json({ status: 'error', code: 'SERVER_ERROR', message: 'Could not sign you in right now. Please try again.' });
+    res.status(500).json({ status: 'error', code: 'SERVER_ERROR', message: 'Impossible de vous connecter pour le moment. Veuillez réessayer.' });
   }
 });
 app.post('/auth/password/change', memberAuthLimiter, async (req, res) => {
   try {
     const decoded = await _decodeAuth(req);
-    if (!decoded) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+    if (!decoded) return res.status(401).json({ status: 'error', message: 'Veuillez vous reconnecter' });
     const oldPassword = passwordOf(req.body.oldPassword), newPassword = tidyPassword(passwordOf(req.body.newPassword));
     if (newPassword.length < MEMBER_PASSWORD_MIN || newPassword.length > MEMBER_PASSWORD_MAX)
       return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: passwordLengthMessage(newPassword) });
     const acct = await findAccountByUid(decoded.uid);
-    if (!acct) return res.status(404).json({ status: 'error', message: 'Account not found' });
+    if (!acct) return res.status(404).json({ status: 'error', message: 'Compte introuvable' });
     if (acct.lockedUntil && tsMillis(acct.lockedUntil) > Date.now())
-      return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', message: 'Too many wrong attempts. Try again in a few minutes.' });
+      return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', message: 'Trop de tentatives erronées. Réessayez dans quelques minutes.' });
     let oldOk = await scryptVerifyAsync(oldPassword, acct.passwordHash);
     if (!oldOk) { for (const alt of passwordRetries(oldPassword)) { if (await scryptVerifyAsync(alt, acct.passwordHash)) { oldOk = true; break; } } }
     if (!oldOk) {
       await recordLoginFailure(acct.id);
-      return res.status(401).json({ status: 'error', code: 'INVALID_CREDENTIAL', message: 'Your current password is incorrect.' });
+      return res.status(401).json({ status: 'error', code: 'INVALID_CREDENTIAL', message: 'Votre mot de passe actuel est incorrect.' });
     }
     // Every session ends, this one too: the member signs in again with the new password.
     await setMemberPassword(decoded.uid, newPassword);
-    res.json({ status: 'success', message: 'Password changed.' });
+    res.json({ status: 'success', message: 'Mot de passe modifié.' });
   } catch (e) {
     console.error('Password change error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not change your password right now.' });
+    res.status(500).json({ status: 'error', message: 'Impossible de modifier votre mot de passe pour le moment.' });
   }
 });
 app.post('/auth/session/activity', async (req, res) => {
-  if (!(await verifyAuth(req))) return res.status(401).json({ status: 'error', message: 'Session expired. Log in again.' });
+  if (!(await verifyAuth(req))) return res.status(401).json({ status: 'error', message: 'Session expirée. Reconnectez-vous.' });
   res.json({ status: 'success' });
 });
 app.post('/auth/session/logout', async (req, res) => {
@@ -4857,7 +4862,7 @@ app.post('/auth/session/logout', async (req, res) => {
   res.json({ status: 'success' });
 });
 app.post('/admin/session/activity', (req, res) => {
-  if (!req.adminUser) return res.status(401).json({ status: 'error', message: 'Session expired. Sign in again.' });
+  if (!req.adminUser) return res.status(401).json({ status: 'error', message: 'Session expirée. Reconnectez-vous.' });
   res.json({ status: 'success' });
 });
 app.post('/admin/logout', async (req, res) => {
@@ -5054,7 +5059,7 @@ app.post('/admin/settings/update', async (req, res) => {
     if ('strictRegionHosts' in updates || 'rotateEntry' in updates)
       return res.status(400).json({ status: 'error', message: 'Country address options have been retired.' });
     if (req.body.region && req.body.region !== DEFAULT_REGION_KEY)
-      return res.status(400).json({ status: 'error', message: 'Only Ethiopia settings are supported.' });
+      return res.status(400).json({ status: 'error', message: 'Seuls les paramètres de la Côte d\'Ivoire sont pris en charge.' });
     for (const [key, [min, max]] of Object.entries(SETTINGS_CRITICAL_RANGES)) {
       if (!(key in updates)) continue;
       const n = Number(updates[key]);
@@ -5503,7 +5508,7 @@ app.post('/admin/products/save', async (req, res) => {
   try {
     const list = Array.isArray(req.body.products) ? req.body.products : [];
     if (req.body.region && req.body.region !== DEFAULT_REGION_KEY)
-      return res.status(400).json({ status: 'error', message: 'Only Ethiopia products are supported.' });
+      return res.status(400).json({ status: 'error', message: 'Seuls les produits de la Côte d\'Ivoire sont pris en charge.' });
     const sanitized = [];
     // Owner: "make sure all 2 asset name fields are editable" -- Key is no
     // longer locked once an asset exists, so a save can now be a RENAME
@@ -5833,7 +5838,7 @@ app.post('/admin/user/detail', async (req, res) => {
       // it, which is exactly the kind of confusion this exists to remove.
       db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
     ]);
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'Utilisateur introuvable' });
     // transactionPinHash never leaves this server, even to an admin --
     // hasPayoutPin is the boolean the admin UI actually needs.
     const { transactionPinHash, twofaSecretEnc, twofaPendingEnc, twofaBackup, ...userSafe } = uSnap.data();
@@ -5871,12 +5876,12 @@ app.post('/admin/user/reset-payout-pin', async (req, res) => {
   const userId = String(req.body.userId || '');
   const newPin = String(req.body.newPin || '');
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
-  if (!/^\d{6}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'New trade password must be 6 digits.' });
-  if (isWeakPin(newPin)) return res.status(400).json({ status: 'error', message: 'That PIN is too easy to guess. Choose 6 digits that are not all the same.' });
+  if (!/^\d{6}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'Le nouveau mot de passe de transaction doit comporter 6 chiffres.' });
+  if (isWeakPin(newPin)) return res.status(400).json({ status: 'error', message: 'Ce code PIN est trop facile à deviner. Choisissez 6 chiffres qui ne sont pas tous identiques.' });
   try {
     const ref = db.collection('users').doc(userId);
     const snap = await ref.get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Utilisateur introuvable' });
     await ref.update({ transactionPinHash: scryptHash(newPin), pinFailCount: 0, pinLockedUntil: null });
     logAdminAction(req, 'user_pin_reset', { userId });
     res.json({ status: 'success' });
@@ -5891,7 +5896,7 @@ app.post('/admin/user/withdraw-anytime', async (req, res) => {
   try {
     const ref = db.collection('users').doc(userId);
     const snap = await ref.get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Utilisateur introuvable' });
     await ref.update({ withdrawAnytime: req.body.enabled });
     logAdminAction(req, 'user_withdraw_anytime', { userId, enabled: req.body.enabled });
     res.json({ status: 'success', enabled: req.body.enabled });
@@ -5927,7 +5932,7 @@ app.post('/admin/user/remove-product', async (req, res) => {
       await withLock('bal:' + userId, async () => {
         const uRef = db.collection('users').doc(userId);
         const u = await uRef.get();
-        if (!u.exists) { const nf = new Error('User not found'); nf.http = 404; throw nf; }
+        if (!u.exists) { const nf = new Error('Utilisateur introuvable'); nf.http = 404; throw nf; }
         const key = 'remove:' + invId;
         await uRef.updateIf({ creditedPayoutKeys: { $ne: key } }, {
           walletBalance: FieldValue.increment(refunded), totalInvested: FieldValue.increment(-amount),
@@ -6044,7 +6049,7 @@ app.post('/admin/user/grant-asset', async (req, res) => {
     return res.status(400).json({ status: 'error', message: 'userId and a valid requestId are required' });
   try {
     const tier = await getProductByKey(String(req.body.tierKey || ''));
-    if (!tier || tier.deleted) return res.status(400).json({ status: 'error', message: 'Unknown product' });
+    if (!tier || tier.deleted) return res.status(400).json({ status: 'error', message: 'Produit inconnu' });
     const sett = await getSettings();
     const invId = 'grant-' + requestId;
     const invRef = db.collection('investments').doc(invId);
@@ -6052,7 +6057,7 @@ app.post('/admin/user/grant-asset', async (req, res) => {
     await withLock('bal:' + userId, async () => {
       const uRef = db.collection('users').doc(userId);
       const u = await uRef.get();
-      if (!u.exists) throw new Error('User not found');
+      if (!u.exists) throw new Error('Utilisateur introuvable');
       if (u.data().status === 'banned') throw new Error('This account is suspended. Unban it before giving a product.');
       const price = Number(tier.price) || 0;
       if (!(price > 0)) throw new Error('This product has no price set');
@@ -6106,7 +6111,7 @@ app.post('/admin/user/repair-wallet', async (req, res) => {
     const result = await withLock('bal:' + userId, async () => {
       const uRef = db.collection('users').doc(userId);
       const uSnap = await uRef.get();
-      if (!uSnap.exists) return { ok: false, message: 'User not found' };
+      if (!uSnap.exists) return { ok: false, message: 'Utilisateur introuvable' };
       const stored = finiteMoney(uSnap.data().walletBalance);
       // Fresh, full-ledger sum for just this user -- the exact same formula
       // /admin/integrity itself uses for walletBalance (every transaction
@@ -6188,7 +6193,7 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
     // change, so an unlocked read here is safe (re-verified inside the
     // lock below before anything is written).
     const preDoc = await findUserByReferralCode(code);
-    if (!preDoc) return res.status(400).json({ status: 'error', message: 'That referral code does not exist.' });
+    if (!preDoc) return res.status(400).json({ status: 'error', message: 'Ce code de parrainage n\'existe pas.' });
     const candidateReferrerId = preDoc.id;
     if (candidateReferrerId === userId) return res.status(400).json({ status: 'error', message: 'Cannot refer yourself.' });
     let referrerId;
@@ -6209,14 +6214,14 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
     await withLock2('reg:' + userId, 'reg:' + candidateReferrerId, async () => {
       const uRef = db.collection('users').doc(userId);
       const uSnap = await uRef.get();
-      if (!uSnap.exists) throw Object.assign(new Error('User not found'), { code: 404 });
+      if (!uSnap.exists) throw Object.assign(new Error('Utilisateur introuvable'), { code: 404 });
       // Re-verify inside the lock -- the pre-lock read above could be
       // stale if the referrer account changed state while we were
       // acquiring the lock (banned in the meantime, etc).
       const refSnap = await db.collection('users').doc(candidateReferrerId).get();
-      if (!refSnap.exists) throw Object.assign(new Error('That referral code does not exist.'), { code: 400 });
+      if (!refSnap.exists) throw Object.assign(new Error('Ce code de parrainage n\'existe pas.'), { code: 400 });
       referrerId = candidateReferrerId;
-      if (refSnap.data().status === 'banned') throw Object.assign(new Error('That referral code is no longer active.'), { code: 400 });
+      if (refSnap.data().status === 'banned') throw Object.assign(new Error('Ce code de parrainage n\'est plus actif.'), { code: 400 });
       // Codex-caught real bug: this whole block writes userId's own
       // referredBy field and then reads/increments based on IT, but the only
       // lock covering it was withLock2('reg:'+userId,'reg:'+candidateReferrerId)
@@ -6354,7 +6359,7 @@ app.post('/admin/user/delete', async (req, res) => {
   _userBeingDeleted.add(userId);
   try {
     const uSnap = await db.collection('users').doc(userId).get();
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'Utilisateur introuvable' });
     // Codex-caught real bug: this used to delete every pendingDeposits row
     // with status != 'matched', which also swept up 'initiating'/'pending'
     // deposits that are genuinely still in flight -- not
@@ -6540,7 +6545,7 @@ app.post('/admin/deposit', async (req, res) => {
     await withLock('bal:' + userId, () => db.runTransaction(async t => {
       const uRef = db.collection('users').doc(userId);
       const uSnap = await t.get(uRef);
-      if (!uSnap.exists) throw new Error('User not found');
+      if (!uSnap.exists) throw new Error('Utilisateur introuvable');
       t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt) });
       t.set(db.collection('transactions').doc(), { userId, statementId: newStatementId(), type: 'admin_credit', description: creditDesc, amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
     }));
@@ -6563,7 +6568,7 @@ app.post('/admin/debit', async (req, res) => {
     await withLock('bal:' + userId, () => db.runTransaction(async t => {
       const uRef = db.collection('users').doc(userId);
       const uSnap = await t.get(uRef);
-      if (!uSnap.exists) throw new Error('User not found');
+      if (!uSnap.exists) throw new Error('Utilisateur introuvable');
       const bal = uSnap.data().walletBalance || 0;
       if (amt > bal) throw new Error(`Cannot debit ${fmtMoney(amt)}, this wallet only holds ${fmtMoney(bal)}`);
       newBal = bal - amt;
@@ -6578,7 +6583,7 @@ app.post('/admin/debit', async (req, res) => {
 // number of a level 2 or level 3 stranger is never sent to a phone at all.
 function maskDownlinePhone(phone) {
   let d = String(phone || '').replace(/\D/g, '');
-  const dl = String(currentRegion().dialCode || '251');
+  const dl = String(currentRegion().dialCode || '225');
   if (d.startsWith(dl)) d = d.slice(dl.length);
   d = d.replace(/^0+/, '');
   return d.length < 7 ? '' : d.slice(0, 3) + '****' + d.slice(7);   // as the owner's Team list: 769****67 (9 digits), 078****699 (10 digits): the 4 digits after the first three are hidden
@@ -6661,34 +6666,62 @@ app.post('/admin/deposits/list', async (req, res) => {
     res.json({ status: 'success', deposits: rows, counts, total: rows.length, processedByDay, processedAmount, truncated, regionKey: want || 'all' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-// ── MANUAL BANK / WALLET RECHARGE (Ethiopia) ──
-// Owner: payment numbers (a bank account, a Telebirr wallet ...) are typed into
-// the admin panel with a logo. A member picks one, is shown the account to pay
-// for 30 minutes, pays from their own bank/wallet app, then pastes the SMS or
-// receipt code. The claim goes to the admin Recharges tab (status 'review')
-// where it is approved with Force-credit (creditDeposit() is the only thing
-// that ever moves money) or rejected. Nothing here credits a wallet.
-const PAY_CHANNEL_KINDS = ['bank', 'wallet'];
+// ── WAVE RECHARGE (Côte d'Ivoire) ──
+// Owner: the only way to recharge is Wave. The admin adds a Wave payment (the payment link the "Ouvrir l'application pour payer"
+// button opens and/or the QR picture) under Wave payments. A member opens the Wave pages, types their wallet number, is shown
+// the link / QR for 30 minutes, pays from their own Wave app, then sends their wallet number and (QR page) the transaction number.
+// The claim goes to the admin Recharges tab (status 'review') where it is approved with Force-credit (creditDeposit() is the only
+// thing that ever moves money) or rejected. Nothing here credits a wallet.
 const MANUAL_ORDER_MS = 30 * 60 * 1000;
 const MAX_PAY_CHANNELS = 20;
-const MAX_PAY_LOGO_CHARS = 220 * 1024;
+const MAX_PAY_QR_CHARS = 600 * 1024;
 let _payChannelsCache = null;
 async function readPayChannels() {
   const now = Date.now();
   if (_payChannelsCache && now - _payChannelsCache.at < 10000) return _payChannelsCache.rows;
   const snap = await db.collection('payChannels').get();
-  const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+  // Only Wave rows exist as far as the app is concerned; a row saved under the old bank / wallet design is ignored.
+  const rows = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.kind === 'wave')
     .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0) || (tsMillis(a.createdAt) || 0) - (tsMillis(b.createdAt) || 0));
   _payChannelsCache = { at: now, rows };
   return rows;
 }
 function dropPayChannelsCache() { _payChannelsCache = null; }
 async function activePayChannels() {
-  try { return (await readPayChannels()).filter(c => c.active !== false && c.accountNumber); }
+  try { return (await readPayChannels()).filter(c => c.active !== false && (safeWaveLink(c.payLink) || safeWaveQr(c.qrImage))); }
   catch (_) { return []; }
 }
 function payChannelPublic(c) {
-  return { id: c.id, name: c.name, kind: c.kind === 'wallet' ? 'wallet' : 'bank', logo: c.logo || '' };
+  return { id: c.id, name: c.name || 'Wave', kind: 'wave', logo: '' };
+}
+// A member's wallet number for the Wave pages: digits only, exactly the region's local length (Cote d'Ivoire: 10).
+function waveWalletDigits(v) {
+  const d = String(v == null ? '' : v).replace(/\D/g, '');
+  return d.length === (Number(currentRegion().localLength) || 10) ? d : '';
+}
+// ── SECURITY: the only link and the only picture the Wave pages may ever show or open ──
+// Owner: "make sure the page is secured to prevent hackers from injecting their payment QR codes and links".
+// Checked when the owner saves them, AGAIN every time they are handed to a member (so a row changed behind the app's back in
+// the database is still refused), and a third time in the browser. A link must be https on wave.com (or a wave.com sub-domain),
+// with no user:pass@, no port and no odd characters; a picture must be a real PNG or JPEG (the first bytes are checked, not just
+// the label in front of the data).
+const WAVE_LINK_MAX = 480;
+function safeWaveLink(v) {
+  const s = typeof v === 'string' ? v.trim() : '';
+  if (!s || s.length > WAVE_LINK_MAX || /[\s<>"'`\\]/.test(s) || !/^https:\/\//i.test(s)) return '';
+  let u; try { u = new URL(s); } catch (_) { return ''; }
+  const h = u.hostname.toLowerCase();
+  if (u.protocol !== 'https:' || u.username || u.password || u.port || !/^[a-z0-9.-]+$/.test(h)) return '';
+  return (h === 'wave.com' || h.endsWith('.wave.com')) ? s : '';
+}
+function safeWaveQr(v) {
+  if (typeof v !== 'string' || v.length > MAX_PAY_QR_CHARS) return '';
+  const m = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/]+={0,2})$/.exec(v);
+  if (!m) return '';
+  const head = Buffer.from(m[2].slice(0, 16), 'base64');
+  const png = head.length >= 8 && head.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const jpg = head.length >= 3 && head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;
+  return ((m[1] === 'png' && png) || (m[1] === 'jpeg' && jpg)) ? v : '';
 }
 function cleanPayText(v, max) { return String(v == null ? '' : v).replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max); }
 app.get('/public/pay-channels', async (req, res) => {
@@ -6696,91 +6729,100 @@ app.get('/public/pay-channels', async (req, res) => {
     const rows = await activePayChannels();
     res.set('Cache-Control', 'no-store');
     res.json({ status: 'success', channels: rows.map(payChannelPublic) });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load payment options' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Impossible de charger les options de paiement' }); }
 });
 app.post('/admin/pay-channels/list', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Non autorisé' });
   try { dropPayChannelsCache(); res.json({ status: 'success', channels: await readPayChannels() }); }
-  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load payment numbers' }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the Wave payments' }); }
 });
 app.post('/admin/pay-channels/save', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Non autorisé' });
   try {
     const b = req.body || {};
-    const name = cleanPayText(b.name, 60);
-    const accountName = cleanPayText(b.accountName, 80);
-    const accountNumber = cleanPayText(b.accountNumber, 40).replace(/\s+/g, '');
-    if (!name) return res.status(400).json({ status: 'error', message: 'Enter the payment name (for example Commercial Bank of Ethiopia).' });
-    if (!accountName) return res.status(400).json({ status: 'error', message: 'Enter the account name.' });
-    if (!/^[0-9A-Za-z+\-]{4,40}$/.test(accountNumber)) return res.status(400).json({ status: 'error', message: 'Enter a valid account number.' });
-    const kind = PAY_CHANNEL_KINDS.includes(b.kind) ? b.kind : 'bank';
+    const name = cleanPayText(b.name, 60) || 'Wave';
     const rows = await readPayChannels();
     const id = b.id ? String(b.id) : '';
     const existing = id ? rows.find(r => r.id === id) : null;
-    if (id && !existing) return res.status(404).json({ status: 'error', message: 'That payment number no longer exists.' });
-    if (!existing && rows.length >= MAX_PAY_CHANNELS) return res.status(400).json({ status: 'error', message: `You can keep up to ${MAX_PAY_CHANNELS} payment numbers. Remove one first.` });
-    // logo: undefined/null = keep, '' = remove, a PNG data URI = replace.
-    let logo = existing ? (existing.logo || '') : '';
-    if (typeof b.logo === 'string') {
-      if (b.logo === '') logo = '';
-      else if (/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(b.logo) && b.logo.length <= MAX_PAY_LOGO_CHARS) logo = b.logo;
-      else return res.status(400).json({ status: 'error', message: 'That logo is not valid or is too large. Upload a smaller image.' });
+    if (id && !existing) return res.status(404).json({ status: 'error', message: 'That Wave payment no longer exists.' });
+    if (!existing && rows.length >= MAX_PAY_CHANNELS) return res.status(400).json({ status: 'error', message: `You can keep up to ${MAX_PAY_CHANNELS} Wave payments. Remove one first.` });
+    // The link the "Ouvrir l'application pour payer" button opens, and the QR picture. undefined = keep, '' = remove.
+    let payLink = existing ? (existing.payLink || '') : '';
+    if (typeof b.payLink === 'string') {
+      const v = b.payLink.trim();
+      if (v === '') payLink = '';
+      else if (safeWaveLink(v)) payLink = v;
+      else return res.status(400).json({ status: 'error', message: 'The payment link must be a secure https:// link on wave.com (for example https://pay.wave.com/m/...).' });
     }
+    let qrImage = existing ? (existing.qrImage || '') : '';
+    if (typeof b.qrImage === 'string') {
+      if (b.qrImage === '') qrImage = '';
+      else if (safeWaveQr(b.qrImage)) qrImage = b.qrImage;
+      else return res.status(400).json({ status: 'error', message: 'That QR picture is not valid or is too large. Upload a smaller PNG or JPEG.' });
+    }
+    if (!payLink && !qrImage) return res.status(400).json({ status: 'error', message: 'Add the payment link or the QR picture (or both) for Wave.' });
     const doc = {
-      name, kind, accountName, accountNumber, logo, active: b.active !== false,
+      name, kind: 'wave', payLink, qrImage, active: b.active !== false,
       order: Number.isFinite(Number(b.order)) ? Math.max(0, Math.min(999, Math.round(Number(b.order)))) : (existing ? Number(existing.order) || 0 : rows.length),
       updatedAt: FieldValue.serverTimestamp(),
     };
     const ref = existing ? db.collection('payChannels').doc(existing.id) : db.collection('payChannels').doc();
     if (existing) await ref.update(doc); else await ref.set({ ...doc, createdAt: FieldValue.serverTimestamp() });
     dropPayChannelsCache();
-    logAdminAction(req, 'pay_channel_saved', { id: ref.id, name, kind, active: doc.active });
+    logAdminAction(req, 'pay_channel_saved', { id: ref.id, name, kind: 'wave', active: doc.active,
+      linkChanged: payLink !== (existing ? (existing.payLink || '') : ''), qrChanged: qrImage !== (existing ? (existing.qrImage || '') : ''),
+      linkHost: payLink ? new URL(payLink).hostname : '', qrFingerprint: qrImage ? crypto.createHash('sha256').update(qrImage).digest('hex').slice(0, 16) : '' });
     res.json({ status: 'success', id: ref.id });
-  } catch (e) { console.error('pay-channels save:', e.message); res.status(500).json({ status: 'error', message: 'Could not save this payment number' }); }
+  } catch (e) { console.error('pay-channels save:', e.message); res.status(500).json({ status: 'error', message: 'Could not save this Wave payment' }); }
 });
 app.post('/admin/pay-channels/delete', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Non autorisé' });
   try {
     const id = String((req.body || {}).id || '');
     if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
     const ref = db.collection('payChannels').doc(id);
     const snap = await ref.get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'That payment number no longer exists.' });
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'That Wave payment no longer exists.' });
     await ref.delete();
     dropPayChannelsCache();
     logAdminAction(req, 'pay_channel_deleted', { id, name: snap.data().name });
     res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove this payment number' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove this Wave payment' }); }
 });
-// Creates (or re-points) the member's one open order and returns the account to pay.
-// `depositId` is sent back by "switch": the same order moves to another channel and keeps its clock.
+// Creates (or re-points) the member's one open order. The link and QR are only handed out once the wallet number is known.
 app.post('/deposit/manual/order', async (req, res) => {
   const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Veuillez vous reconnecter' });
   const amt = paymentAmount(req.body.amount);
-  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
-  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Montant invalide' });
+  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Le montant est trop élevé (max. ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
   try {
     const [uSnap, sett, channels] = await Promise.all([db.collection('users').doc(userId).get(), getSettings(), activePayChannels()]);
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
-    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before topping up.' });
-    if (!channels.length) return res.status(400).json({ status: 'error', message: 'Recharges are not available right now.' });
-    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'Utilisateur introuvable' });
+    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Compte suspendu. Contactez le service client.' });
+    if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'Ce compte est en cours de traitement. Réessayez sous peu.' });
+    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Terminez votre inscription avant de recharger.' });
+    if (!channels.length) return res.status(400).json({ status: 'error', message: 'Les recharges ne sont pas disponibles pour le moment.' });
+    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Le montant minimum est de ${fmtMoney(sett.minDeposit)}` });
     const ch = channels.find(c => c.id === String(req.body.channelId || ''));
-    if (!ch) return res.status(400).json({ status: 'error', message: 'Please select a payment method' });
+    if (!ch) return res.status(400).json({ status: 'error', message: 'Veuillez choisir un mode de paiement' });
+    let wallet = '';
+    if (req.body.wallet != null && String(req.body.wallet) !== '') {
+      wallet = waveWalletDigits(req.body.wallet);
+      if (!wallet) return res.status(400).json({ status: 'error', message: 'Veuillez saisir correctement votre numéro de portefeuille de paiement à ' + (Number(currentRegion().localLength) || 10) + ' chiffres' });
+    }
     const now = Date.now();
     const openSnap = await db.collection('pendingDeposits').where('userId', '==', userId).where('status', '==', 'pending').get();
     const open = openSnap.docs.filter(d => d.data().method === 'manual' && !d.data().pastedSms && (tsMillis(d.data().expiresAt) || 0) > now);
     let depRef, ref, expiresMs;
-    // Owner: "even after switching another payment address it uses the same time, it doesn't start over to a new order time". Opening the payment pages, or
-    // switching to another payment address, always starts a NEW order with a fresh 30 minute clock. Only coming back to the pages after leaving
-    // (resume) picks up the SAME still-open order again. Older unsent orders of this member are closed so they do not pile up.
-    const mine = req.body.resume === true && req.body.depositId ? open.find(d => d.id === String(req.body.depositId)) : null;
-    if (req.body.resume === true && !mine) return res.status(409).json({ status: 'error', code: 'ORDER_GONE', message: 'This order is no longer open.' });
-    for (const o of open) if (!mine || o.id !== mine.id) await o.ref.updateIf({ status: 'pending' }, { status: 'failed', failureReason: 'Replaced by a newer payment order' }).catch(() => {});
-    const channelFields = { network: ch.name, channelId: ch.id, channelKind: ch.kind === 'wallet' ? 'wallet' : 'bank', assignedNumber: ch.accountNumber, assignedName: ch.accountName };
+    // Owner: "it doesn't create a new payment order, it shares the same time". Opening the payment pages (no depositId) always starts a
+    // NEW order with a fresh 30 minute clock; only the same page re-pointing its own order (wallet typed, tab changed) reuses it.
+    // Older unsent orders of this member are closed so they do not pile up.
+    const mine = req.body.depositId ? open.find(d => d.id === String(req.body.depositId)) : null;
+    // Coming back to the payment pages after leaving: only the SAME still-open order may be picked up again, never a new one.
+    if (req.body.resume && !mine) return res.status(409).json({ status: 'error', code: 'ORDER_GONE', message: 'Cette commande n\'est plus ouverte.' });
+    for (const o of open) if (!mine || o.id !== mine.id) await o.ref.updateIf({ status: 'pending' }, { status: 'failed', failureReason: 'Remplacée par une commande de paiement plus récente' }).catch(() => {});
+    const channelFields = { network: ch.name || 'Wave', channelId: ch.id, channelKind: 'wave', ...(wallet ? { walletNumber: wallet } : {}) };
     if (mine) {
       depRef = mine.ref; ref = mine.data().ref; expiresMs = tsMillis(mine.data().expiresAt);
       await depRef.update({ ...channelFields, amount: amt });
@@ -6796,68 +6838,58 @@ app.post('/deposit/manual/order', async (req, res) => {
         expiresAt: new Date(expiresMs), createdAt: FieldValue.serverTimestamp(),
       });
     }
-    res.json({ status: 'success', depositId: depRef.id, reference: ref, amount: amt, expiresAt: expiresMs,
-      channel: payChannelPublic(ch), accountName: ch.accountName, accountNumber: ch.accountNumber });
-  } catch (e) { console.error('manual order:', e.message); res.status(500).json({ status: 'error', message: 'Could not start recharge' }); }
+    const known = wallet || (mine && mine.data().walletNumber) || '';
+    res.json({ status: 'success', depositId: depRef.id, reference: ref, amount: amt, expiresAt: expiresMs, channel: payChannelPublic(ch),
+      ...(known ? { payLink: safeWaveLink(ch.payLink), qrImage: safeWaveQr(ch.qrImage), wallet: known } : {}) });
+  } catch (e) { console.error('wave order:', e.message); res.status(500).json({ status: 'error', message: 'Impossible de démarrer la recharge' }); }
 });
-// What a pasted SMS / receipt is allowed to be. CBE receipts carry "v2-..." (23 characters) or an
-// "FT" reference (12 characters, sometimes followed by 8 account digits); Telebirr's
-// transaction number is exactly 10 letters/digits. Anything else is refused up front.
-function extractManualRef(text) {
-  const t = String(text || '');
-  let m = /v2-[A-Za-z0-9]{6,40}/i.exec(t);
-  if (m) return { ref: m[0].toLowerCase(), kind: 'cbe-v2' };
-  m = /\bFT[0-9A-Z]{10,22}\b/i.exec(t);
-  if (m) return { ref: m[0].toUpperCase().slice(0, 12), kind: 'cbe-ft' };
-  m = /transaction number is\s+([A-Z0-9]{10})\b/i.exec(t) || /receipt\/([A-Z0-9]{10})\b/i.exec(t);
-  if (m) return { ref: m[1].toUpperCase(), kind: 'telebirr' };
-  m = /^\s*([A-Z0-9]{10})\s*$/i.exec(t);
-  if (m && /[A-Z]/i.test(m[1]) && /\d/.test(m[1])) return { ref: m[1].toUpperCase(), kind: 'telebirr' };
-  return null;
-}
-function extractManualAmount(text) {
-  const m = /(?:transferred|sent|debited(?: with)?|paid)\s*(?:ETB|Br|birr)?\s*([\d,]+(?:\.\d+)?)/i.exec(String(text || '')) || /ETB\s*([\d,]+(?:\.\d+)?)/i.exec(String(text || ''));
-  if (!m) return null;
-  const n = Number(m[1].replace(/,/g, ''));
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
 const _manualSubmitDebounce = new Map();
+// The claim: the member's wallet number and, when they used the QR page, the transaction number.
 app.post('/deposit/manual/submit', async (req, res) => {
   const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Veuillez vous reconnecter' });
   try {
-    const sms = String((req.body || {}).sms || '').trim().slice(0, 2000);
-    const found = extractManualRef(sms);
-    if (!found) return res.status(400).json({ status: 'error', code: 'BAD_SMS', message: 'please enter the correct transfer sms' });
-    const last = _manualSubmitDebounce.get(userId) || 0;
-    if (Date.now() - last < 3000) return res.status(429).json({ status: 'error', message: 'Please wait a moment.' });
-    _manualSubmitDebounce.set(userId, Date.now());
-    const depRef = db.collection('pendingDeposits').doc(String(req.body.depositId || '_'));
-    const snap = await depRef.get();
-    if (!snap.exists || snap.data().userId !== userId || snap.data().method !== 'manual')
-      return res.status(404).json({ status: 'error', message: 'Recharge not found' });
-    const dep = snap.data();
-    if (dep.status === 'review') return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
-    if (dep.status !== 'pending') return res.status(400).json({ status: 'error', message: 'This recharge is no longer open. Start a new one.' });
-    // A real transfer can back ONE open or credited claim, by anyone.
-    const dupSnap = await db.collection('pendingDeposits').where('pastedSmsTxId', '==', found.ref).get();
-    if (dupSnap.docs.some(d => d.id !== snap.id && d.data().status !== 'failed'))
-      return res.status(409).json({ status: 'error', message: 'This transaction hash has already been submitted.' });
-    const smsAmount = extractManualAmount(sms);
-    const updated = await depRef.updateIf({ status: 'pending' }, {
-      status: 'review', reviewReason: 'Waiting for the admin to check the payment message',
-      pastedSms: sms, pastedAt: FieldValue.serverTimestamp(), pastedSmsTxId: found.ref, pastedSmsKind: found.kind, pastedSmsParsed: true,
-      ...(smsAmount != null ? { pastedSmsAmount: smsAmount, pastedSmsAmountMatches: Math.abs(smsAmount - Number(dep.amount)) < 0.01 } : {}),
-    });
-    if (!updated) return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
-    const { date, time } = nowStr();
-    await db.collection('transactions').add({
-      userId, statementId: newStatementId(), type: 'deposit', description: `Deposit: Processing (${fmtMoney(dep.amount)})`,
-      amount: dep.amount, displayAmount: dep.amount, status: 'pending', date, time, ref: dep.ref, depositId: snap.id, createdAt: FieldValue.serverTimestamp()
-    }).catch(e => console.error(`Manual deposit ledger row create failed for dep=${snap.id}:`, e.message));
-    res.json({ status: 'success', state: 'review', depositId: snap.id, reference: dep.ref, message: 'Submitted. Our team is checking your payment.' });
-  } catch (e) { console.error('manual submit:', e.message); res.status(500).json({ status: 'error', message: 'Could not submit your recharge. Please try again.' }); }
+    const b = req.body || {};
+    const snap = await db.collection('pendingDeposits').doc(String(b.depositId || '_')).get();
+    if (!snap.exists || snap.data().userId !== userId || snap.data().method !== 'manual' || snap.data().channelKind !== 'wave')
+      return res.status(404).json({ status: 'error', message: 'Recharge introuvable' });
+    return await submitWaveClaim(req, res, userId, snap);
+  } catch (e) { console.error('wave submit:', e.message); res.status(500).json({ status: 'error', message: 'Impossible d\'envoyer votre recharge. Veuillez réessayer.' }); }
 });
+async function submitWaveClaim(req, res, userId, snap) {
+  const b = req.body || {};
+  const dep = snap.data();
+  const last = _manualSubmitDebounce.get(userId) || 0;
+  if (Date.now() - last < 3000) return res.status(429).json({ status: 'error', message: 'Veuillez patienter un instant.' });
+  if (dep.method !== 'manual') return res.status(404).json({ status: 'error', message: 'Recharge introuvable' });
+  if (dep.status === 'review') return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'Cette transaction a déjà été envoyée et est en cours de vérification.' });
+  if (dep.status !== 'pending') return res.status(400).json({ status: 'error', message: 'Cette recharge n\'est plus ouverte. Lancez-en une nouvelle.' });
+  const wallet = waveWalletDigits(b.wallet) || dep.walletNumber || '';
+  if (!wallet) return res.status(400).json({ status: 'error', message: 'Veuillez saisir correctement votre numéro de portefeuille de paiement à ' + (Number(currentRegion().localLength) || 10) + ' chiffres' });
+  const rawTx = String(b.txId == null ? '' : b.txId).trim();
+  if (rawTx && !/^[A-Za-z0-9_\-]{4,60}$/.test(rawTx)) return res.status(400).json({ status: 'error', code: 'BAD_TX', message: 'Veuillez saisir le bon ID de transaction' });
+  const txId = rawTx.toUpperCase();
+  _manualSubmitDebounce.set(userId, Date.now());
+  // A real transfer can back ONE open or credited claim, by anyone.
+  if (txId) {
+    const dupSnap = await db.collection('pendingDeposits').where('pastedSmsTxId', '==', txId).get();
+    if (dupSnap.docs.some(d => d.id !== snap.id && d.data().status !== 'failed'))
+      return res.status(409).json({ status: 'error', message: 'Ce hash de transaction a déjà été envoyé.' });
+  }
+  const note = 'Wave - portefeuille ' + wallet + (txId ? ' - ID de transaction ' + txId : ' - sans ID de transaction (page Ouvrir l\'application)');
+  const updated = await snap.ref.updateIf({ status: 'pending' }, {
+    status: 'review', reviewReason: 'Waiting for the admin to check the Wave payment',
+    walletNumber: wallet, pastedSms: note, pastedAt: FieldValue.serverTimestamp(), pastedSmsParsed: true,
+    ...(txId ? { pastedSmsTxId: txId, pastedSmsKind: 'wave' } : {}),
+  });
+  if (!updated) return res.json({ status: 'success', state: 'review', depositId: snap.id, alreadySubmitted: true, message: 'Cette transaction a déjà été envoyée et est en cours de vérification.' });
+  const { date, time } = nowStr();
+  await db.collection('transactions').add({
+    userId, statementId: newStatementId(), type: 'deposit', description: `Deposit: Processing (${fmtMoney(dep.amount)})`,
+    amount: dep.amount, displayAmount: dep.amount, status: 'pending', date, time, ref: dep.ref, depositId: snap.id, createdAt: FieldValue.serverTimestamp()
+  }).catch(e => console.error(`Wave deposit ledger row create failed for dep=${snap.id}:`, e.message));
+  res.json({ status: 'success', state: 'review', depositId: snap.id, reference: dep.ref, message: 'Envoyé. Notre équipe vérifie votre paiement.' });
+}
 // An order nobody paid for is closed after the clock (30 min) plus a grace of 30.
 async function sweepManualOrders() {
   try {
@@ -6867,18 +6899,18 @@ async function sweepManualOrders() {
       const x = d.data();
       if (x.method !== 'manual' || x.pastedSms) continue;
       if ((tsMillis(x.expiresAt) || 0) > cut) continue;
-      await d.ref.updateIf({ status: 'pending' }, { status: 'failed', failureReason: 'The payment order expired' }).catch(() => {});
+      await d.ref.updateIf({ status: 'pending' }, { status: 'failed', failureReason: 'La commande de paiement a expiré' }).catch(() => {});
     }
   } catch (e) { console.error('sweepManualOrders:', e.message); }
 }
-// END MANUAL BANK / WALLET RECHARGE
+// END WAVE RECHARGE
 app.post('/admin/deposit/force-credit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { depositId } = req.body;
   if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
   try {
     const snap = await db.collection('pendingDeposits').doc(depositId).get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Recharge not found' });
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Recharge introuvable' });
     if (depositFullyCredited(snap.data())) return res.json({ status: 'success', message: 'Already credited' });
     const ok = await creditDeposit(snap);
     if (!ok) return res.status(409).json({ status: 'error', message: 'Could not credit. Try again' });
@@ -6924,7 +6956,7 @@ app.post('/admin/withdraw/reject', async (req, res) => {
   try {
     const ref = db.collection('withdrawals').doc(witId);
     const snap = await ref.get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Retrait introuvable' });
     const w = snap.data();
     if (w.status !== 'pending' && w.status !== 'processing' && w.status !== 'sending') return res.status(400).json({ status: 'error', message: `Cannot reject, the status is '${w.status}'` });
     const { declined, refunded } = await declineWithdrawalAndRefund(ref, w.userId, stripHtml(textOf(req.body.reason)).slice(0, 200) || 'Rejected by admin', ['pending', 'processing', 'sending'], req.adminUser?.username || 'owner');
@@ -7077,7 +7109,7 @@ app.post('/admin/user/referral-chain', async (req, res) => {
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
     const startSnap = await db.collection('users').doc(userId).get();
-    if (!startSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (!startSnap.exists) return res.status(404).json({ status: 'error', message: 'Utilisateur introuvable' });
     // Everything the chain view and its PDF print about one member. (createdAt is an epoch in milliseconds, 0 when unknown.)
     const brief = (id, d) => ({
       id, phone: d.phone || '', referralCode: d.referralCode || '',
@@ -7956,10 +7988,10 @@ app.get('/admin/users/recount', async (req, res) => {
 });
 
 app.use((err, _req, res, _next) => {
-  if (err && err.type === 'entity.too.large') return res.status(413).json({ status: 'error', message: 'Request is too large' });
+  if (err && err.type === 'entity.too.large') return res.status(413).json({ status: 'error', message: 'La requête est trop volumineuse' });
   if (err && err.type === 'entity.parse.failed') return res.status(400).json({ status: 'error', message: 'Malformed request body' });
   console.error('Unhandled request error:', err && err.message);
-  res.status(500).json({ status: 'error', message: 'Something went wrong' });
+  res.status(500).json({ status: 'error', message: 'Une erreur s\'est produite' });
 });
 
 // ── RECONCILERS ──

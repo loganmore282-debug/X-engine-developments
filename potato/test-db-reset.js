@@ -19,7 +19,7 @@ const J = async (m, p, b, tok, adm) => {
 let fails = 0, checks = 0;
 const ok = (c, m, x) => { checks++; if (!c) { fails++; realLog('FAIL', m, x ? JSON.stringify(x).slice(0, 260) : ''); } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const ph = () => '09' + String(10000000 + Math.floor(Math.random() * 8999999)).padStart(8, '0').slice(-8);
+const ph = () => '07' + String(10000000 + Math.floor(Math.random() * 89999999)).padStart(8, '0').slice(-8);
 (async () => {
   for (let i = 0; i < 60; i++) { try { const h = await fetch(base + '/health'); if (h.ok) break; } catch (_) {} await sleep(250); }
   await J('POST', '/admin/settings/update', { settings: { welcomeBonus: 5000, brandName: 'Kept Name' } }, null, true);

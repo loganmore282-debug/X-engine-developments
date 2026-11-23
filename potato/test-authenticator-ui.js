@@ -17,7 +17,7 @@ const block = mod.slice(a, b);
 const dlg = mod.slice(mod.indexOf('function askAuthCode(){'), mod.indexOf('// Transaction Statement (openBalanceRecordSheet()) is cache-first'));
 
 // ---- wiring
-ok(/\$\{ptMenuRow\('shield', 'Trade Password', 'openChangeTradePasswordSheet\(\)'\)\}\s*\$\{gaMenuRowHtml\(\)\}/.test(mod), 'the My page lists Google Authenticator right after the Trade Password, through gaMenuRowHtml() (only while the feature is on)');
+ok(/\$\{ptMenuRow\('shield', 'Mot de passe de transaction', 'openChangeTradePasswordSheet\(\)'\)\}\s*\$\{gaMenuRowHtml\(\)\}/.test(mod), 'the My page lists Google Authenticator right after the Trade Password, through gaMenuRowHtml() (only while the feature is on)');
 ok(/if \(changed\) \{ applyBrandName\(\); patchAuthRow\(\); \}/.test(mod), 'the 30-second settings check adds or takes away the row in place');
 ok(/id="totpBg"/.test(html) && /id="totpInput"/.test(html) && /id="totpOk"/.test(html) && /id="totpNo"/.test(html) && /id="totpAlt"/.test(html), 'the code dialog exists in the page');
 ok(/\.pt-ga-card/.test(html) && /\.pt-ga-qr/.test(html) && /\.pt-ga-codes/.test(html), 'the page has its styles');
@@ -67,10 +67,10 @@ const ev = expr => JSON.parse(JSON.stringify(w.eval(expr)));   // objects made i
   // off
   w.eval(`__answers['/account/2fa/status'] = { status: 'success', enabled: false, backupLeft: 0 };`);
   w.openAuthenticatorSheet(); await tick();
-  ok(/Google Authenticator is required/.test(txt()) && !/before you can withdraw/.test(txt()) && /Download Google Authenticator/.test(txt()) && $('gaPin') && $('gaStartBtn'), 'off: it says it is required, then the stores and the Trade Password box');
+  ok(/Google Authenticator est obligatoire/.test(txt()) && !/avant de pouvoir retirer/.test(txt()) && /Télécharger Google Authenticator/.test(txt()) && $('gaPin') && $('gaStartBtn'), 'off: it says it is required, then the stores and the Trade Password box');
   ok([...w.document.querySelectorAll('.pt-ga-stores a')].every(x => /noopener/.test(x.rel) && x.target === '_blank'), 'off: the store links open safely');
   // a short Trade Password is refused before anything is sent
-  $('gaPin').value = '12'; await w.gaStart(); ok($('ptPwErr').textContent === 'Enter your 6-digit Trade Password.' && w.eval('__calls.filter(c => c[0] === "/account/2fa/start").length') === 0, 'start: a short Trade Password is refused without a request');
+  $('gaPin').value = '12'; await w.gaStart(); ok($('ptPwErr').textContent === 'Entrez votre mot de passe de transaction à 6 chiffres.' && w.eval('__calls.filter(c => c[0] === "/account/2fa/start").length') === 0, 'start: a short Trade Password is refused without a request');
   // a server refusal is shown on the page
   w.eval(`__answers['/account/2fa/start'] = { status: 'error', code: 'WRONG_PIN', message: 'Incorrect Trade Password.' };`);
   $('gaPin').value = '654321'; await w.gaStart(); ok($('ptPwErr').textContent === 'Incorrect Trade Password.' && !$('gaQr'), 'start: the server\'s reason is shown and nothing starts');
@@ -81,7 +81,7 @@ const ev = expr => JSON.parse(JSON.stringify(w.eval(expr)));   // objects made i
   eq(ev('__calls.filter(c => c[0] === "/account/2fa/start").pop()[1]'), { pin: '123456' }, 'start: the Trade Password is what is sent');
   ok($('gaKey').innerHTML === 'B334 PITH 2GQ3 FON4<br>RON2 5AAD NPZ7 GG3Q', 'setup: the key is shown in two tidy lines of four groups', $('gaKey').innerHTML);
   ok(w.document.querySelector('a.pt-ga-btn[href^="otpauth:"]').getAttribute('href') === link, 'setup: the button opens the exact otpauth link');
-  ok(/Enter a setup key/.test(txt()) && /Time based/.test(txt()) && $('gaCode') && $('gaConfirmBtn'), 'setup: says how to type the key, and asks for the first code');
+  ok(/Saisir une clé de configuration/.test(txt()) && /Basée sur le temps/.test(txt()) && $('gaCode') && $('gaConfirmBtn'), 'setup: says how to type the key, and asks for the first code');
   // the picture: parse the SVG path back into squares and compare with the library's own matrix
   const svg = w.document.querySelector('#gaQr svg'); ok(svg && /^0 0 \d+ \d+$/.test(svg.getAttribute('viewBox')), 'setup: a picture is drawn');
   const q = w.qrcode(0, 'L'); q.addData(link); q.make(); const nn = q.getModuleCount(), size = nn + 8;
@@ -92,21 +92,21 @@ const ev = expr => JSON.parse(JSON.stringify(w.eval(expr)));   // objects made i
   ok(diff === 0, 'setup: every square of the picture equals the library\'s own code (' + nn + ' x ' + nn + ')');
   ok(/#fff/.test(svg.innerHTML) && /fill="#000"/.test(svg.innerHTML), 'setup: black squares on white');
   // a wrong code is shown, the right one turns it on and shows 8 backup codes once
-  $('gaCode').value = '12345'; await w.gaConfirm(); ok(/6-digit code/.test($('ptPwErr').textContent) && w.eval('__calls.filter(c => c[0] === "/account/2fa/confirm").length') === 0, 'confirm: not 6 digits: refused without a request');
+  $('gaCode').value = '12345'; await w.gaConfirm(); ok(/code à 6 chiffres/.test($('ptPwErr').textContent) && w.eval('__calls.filter(c => c[0] === "/account/2fa/confirm").length') === 0, 'confirm: not 6 digits: refused without a request');
   w.eval(`__answers['/account/2fa/confirm'] = { status: 'error', code: 'TWOFA_INVALID', message: 'That code is not right (4 tries left). Open Google Authenticator.' };`);
   $('gaCode').value = '000000'; await w.gaConfirm(); ok(/not right \(4 tries left\)/.test($('ptPwErr').textContent) && w.eval('STATE.account.twofaEnabled') === false, 'confirm: a wrong code shows the server\'s words and turns nothing on');
   const codes = ['ABCDE-FGHJK', 'LMNPQ-RSTUV', 'WXYZ2-34567', '89ABC-DEFGH', 'JKLMN-PQRST', 'UVWXY-Z2345', '6789A-BCDEF', 'GHJKL-MNPQR'];
   w.eval(`__answers['/account/2fa/confirm'] = { status: 'success', backupCodes: ${JSON.stringify(codes)} };`);
   $('gaCode').value = '123456'; await w.gaConfirm(); await tick();
   eq([...w.document.querySelectorAll('.pt-ga-codes span')].map(e => e.textContent), codes, 'confirm: the 8 backup codes are listed');
-  ok(w.eval('STATE.account.twofaEnabled') === true && /Each code works one time only/.test(txt()) && /Copy all codes/.test(txt()) && /I have saved them/.test(txt()), 'confirm: the app now knows it is on, and says each code works once');
+  ok(w.eval('STATE.account.twofaEnabled') === true && /Chaque code ne fonctionne qu'une seule fois/.test(txt()) && /Copier tous les codes/.test(txt()) && /Je les ai enregistrés/.test(txt()), 'confirm: the app now knows it is on, and says each code works once');
   ok(!/B334PITH2GQ3FON4/.test(body()) && !$('gaQr'), 'confirm: the secret and the picture are gone from the screen');
   // "I have saved them" -> the On view with the count
   w.eval(`__answers['/account/2fa/status'] = { status: 'success', enabled: true, enabledAt: 1700000000000, backupLeft: 2 };`);
   w.gaCodesDone(); await tick(); await tick();
-  ok(/Google Authenticator is on/.test(txt()) && /Backup codes left: 2 of 8/.test(txt()) && /running low/.test(txt()) && /Turn Off/.test(txt()) && /New backup codes/.test(txt()), 'on: the count, a warning when only 2 are left, and the two actions');
+  ok(/Google Authenticator est activé/.test(txt()) && /Codes de secours restants : 2 sur 8/.test(txt()) && /peu de codes de secours/.test(txt()) && /Désactiver/.test(txt()) && /Nouveaux codes de secours/.test(txt()), 'on: the count, a warning when only 2 are left, and the two actions');
   // new backup codes need the Trade Password and a code
-  w.gaManage('codes'); $('gaPin').value = '123456'; $('gaCode').value = ''; await w.gaDoManage(); ok(/Enter the 6-digit code/.test($('ptPwErr').textContent), 'new codes: a code is required');
+  w.gaManage('codes'); $('gaPin').value = '123456'; $('gaCode').value = ''; await w.gaDoManage(); ok(/Saisissez le code à 6 chiffres/.test($('ptPwErr').textContent), 'new codes: a code is required');
   w.eval(`__answers['/account/2fa/backup-codes'] = { status: 'success', backupCodes: ${JSON.stringify(codes.slice().reverse())} };`);
   $('gaCode').value = '654321'; await w.gaDoManage();
   eq(ev('__calls.filter(c => c[0] === "/account/2fa/backup-codes").pop()[1]'), { pin: '123456', code: '654321' }, 'new codes: the Trade Password and the code are sent');
@@ -117,21 +117,21 @@ const ev = expr => JSON.parse(JSON.stringify(w.eval(expr)));   // objects made i
   ok($('ptPwErr').textContent === 'That code is not right.' && w.eval('STATE.account.twofaEnabled') === true, 'off: a refusal is shown and it stays on');
   w.eval(`__answers['/account/2fa/disable'] = { status: 'success' };`); await w.gaDoManage(); await tick();
   eq(ev('__calls.filter(c => c[0] === "/account/2fa/disable").pop()[1]'), { pin: '123456', code: 'abcde-fghjk' }, 'off: the Trade Password and the typed code are sent as typed');
-  ok(w.eval('STATE.account.twofaEnabled') === false && /Google Authenticator is required/.test(txt()) && w.eval('__notes').includes('Google Authenticator is off'), 'off: the app knows, and the page is back to the intro');
-  w.gaManage('off'); ok(/You will not be able to withdraw until you set Google Authenticator up again/.test(txt()), 'turn off: warns that withdrawing stops until it is set up again');
+  ok(w.eval('STATE.account.twofaEnabled') === false && /Google Authenticator est obligatoire/.test(txt()) && w.eval('__notes').includes('Google Authenticator est désactivé'), 'off: the app knows, and the page is back to the intro');
+  w.gaManage('off'); ok(/Vous ne pourrez plus retirer tant que vous n/.test(txt()), 'turn off: warns that withdrawing stops until it is set up again');
   // a phone clock far from the server's is called out
-  w.eval('_ptSkewMs = 45000'); w.gaPaint(); ok(/clock is about 45 seconds away/.test(txt()), 'a phone clock more than 20 seconds off is warned about');
+  w.eval('_ptSkewMs = 45000'); w.gaPaint(); ok(/décalée d'environ 45 secondes/.test(txt()), 'a phone clock more than 20 seconds off is warned about');
   w.eval('_ptSkewMs = 8000'); w.gaPaint(); ok(!/clock is about/.test(txt()), 'a small difference is not');
   // ---- the code dialog at withdrawal time
   w.eval('_ptSkewMs = 0');
   const asked = w.askAuthCode(); ok($('totpBg').classList.contains('show') && $('totpInput').maxLength === 6, 'dialog: opens for a 6-digit code');
   $('totpInput').value = '123456'; $('totpOk').onclick(); eq(await asked, '123456', 'dialog: Confirm hands back what was typed');
   const asked2 = w.askAuthCode(); $('totpAlt').onclick();
-  ok($('totpInput').maxLength === 11 && /backup code/i.test($('totpInput').placeholder) && /Use the 6-digit code instead/.test($('totpAlt').textContent), 'dialog: "Use a backup code instead" makes room for a backup code');
+  ok($('totpInput').maxLength === 11 && /code de secours/i.test($('totpInput').placeholder) && /Utiliser le code à 6 chiffres à la place/.test($('totpAlt').textContent), 'dialog: "Use a backup code instead" makes room for a backup code');
   $('totpInput').value = 'ABCDE-FGHJK'; $('totpOk').onclick(); eq(await asked2, 'ABCDE-FGHJK', 'dialog: a backup code is handed back');
   const asked3 = w.askAuthCode(); $('totpNo').onclick(); eq(await asked3, null, 'dialog: Cancel hands back nothing');
   ok(!$('totpBg').classList.contains('show'), 'dialog: closes');
-  w.eval('_ptSkewMs = 40000'); const asked4 = w.askAuthCode(); ok(/clock is about 40 seconds away/.test($('totpWarn').textContent), 'dialog: warns about a wrong phone clock'); $('totpNo').onclick(); await asked4;
+  w.eval('_ptSkewMs = 40000'); const asked4 = w.askAuthCode(); ok(/décalée d'environ 40 secondes/.test($('totpWarn').textContent), 'dialog: warns about a wrong phone clock'); $('totpNo').onclick(); await asked4;
   // ---- COMPULSORY: the rule, the wording, and the way back to the Withdraw page
   w.eval(`STATE.settings = {}; STATE.account = { twofaEnabled: false }; _ptSkewMs = 0;`);
   ok(w.witNeedsAuthSetup() === true, 'rule: a member without it must set it up (the rule is on unless the owner says otherwise)');
@@ -142,16 +142,16 @@ const ev = expr => JSON.parse(JSON.stringify(w.eval(expr)));   // objects made i
   w.eval(`STATE.settings = {}; STATE.account = { twofaEnabled: false }`);
   // the notice icons: the real classification rule from notify() in the app
   { const m = /const good = (\/.*?\/i)\.test\(String\(message \|\| ''\)\) && !(\/.*?\/i)\.test/.exec(mod), isGood = t => eval(m[1]).test(t) && !eval(m[2]).test(t);
-    ok(m && isGood('Google Authenticator setup done. You can withdraw now.'), 'notice: finishing the set-up shows the tick');
+    ok(m && isGood('Google Authenticator est configuré. Vous pouvez retirer maintenant.'), 'notice: finishing the set-up shows the tick');
     ok(m && !isGood('Google Authenticator is required to withdraw. Set it up first.'), 'notice: "required" shows the cross'); }
   // tapping Withdraw: the notice, then the set-up page with the amount remembered
   w.document.getElementById('sheetBody').innerHTML = '<input id="witAmount" value="25,000">'; w.eval(`_openSheetTitle = 'Withdraw'; __notes.length = 0; __cb = null;`);
   w.gaRequiredNotice();
-  eq(ev('__notes'), ['Google Authenticator is required to withdraw. Set it up first.'], 'tap Withdraw: says why, in plain words');
+  eq(ev('__notes'), ['Google Authenticator est obligatoire pour retirer. Configurez-le d\'abord.'], 'tap Withdraw: says why, in plain words');
   ok(typeof w.eval('__cb') === 'function', 'tap Withdraw: and goes on to the set-up page when the notice closes');
   w.eval(`__answers['/account/2fa/status'] = { status: 'success', enabled: false, backupLeft: 0 }; __cb();`); await tick();
   ok(w.eval('_ga.forWithdraw') === true && w.eval('_ga.amount') === '25,000', 'tap Withdraw: the set-up page knows it came from Withdraw and keeps the amount');
-  ok(/Google Authenticator is required/.test(txt()) && /You need it before you can withdraw/.test(txt()) && /Download Google Authenticator/.test(txt()) && $('gaPin'), 'tap Withdraw: the page says you need it to withdraw, shows the stores and the first step');
+  ok(/Google Authenticator est obligatoire/.test(txt()) && /Il vous le faut avant de pouvoir retirer/.test(txt()) && /Télécharger Google Authenticator/.test(txt()) && $('gaPin'), 'tap Withdraw: the page says you need it to withdraw, shows the stores and the first step');
   // a member who has already left the Withdraw page is not dragged to the set-up
   w.document.getElementById('sheetBody').innerHTML = '<input id="witAmount" value="9,000">'; w.eval(`__notes.length = 0; __cb = null;`); w.gaRequiredNotice();
   w.eval(`_openSheetTitle = 'Gift Code'; document.getElementById('sheetBody').innerHTML = 'elsewhere'; __cb();`); await tick();
@@ -163,11 +163,11 @@ const ev = expr => JSON.parse(JSON.stringify(w.eval(expr)));   // objects made i
   $('gaPin').value = '123456'; await w.gaStart(); await tick();
   w.eval(`__answers['/account/2fa/confirm'] = { status: 'success', backupCodes: ${JSON.stringify(codes)} };`);
   $('gaCode').value = '123456'; await w.gaConfirm(); await tick();
-  ok(/Google Authenticator is on/.test(txt()) && /I have saved them/.test(txt()) && w.eval('STATE.account.twofaEnabled') === true, 'set-up from Withdraw: the backup codes are still shown first');
+  ok(/Google Authenticator est activé/.test(txt()) && /Je les ai enregistrés/.test(txt()) && w.eval('STATE.account.twofaEnabled') === true, 'set-up from Withdraw: the backup codes are still shown first');
   ok(w.eval('__calls.filter(c => c[0] === "openWithdrawSheet").length') === 0, 'set-up from Withdraw: the member is not thrown out before they have seen the backup codes');
   w.gaCodesDone(); await tick();
   ok(w.eval('__calls.filter(c => c[0] === "openWithdrawSheet").length') === 1 && $('witAmount') && $('witAmount').value === '25,000', 'set-up from Withdraw: "I have saved them" returns to the Withdraw page with the amount');
-  ok(w.eval('__calls.filter(c => c[0] === "syncWithdrawReceiveAmt").length') === 1 && w.eval('__notes').includes('Google Authenticator setup done. You can withdraw now.') && w.eval('_ga.forWithdraw') === false, 'set-up from Withdraw: the amounts are refreshed and the member is told they can withdraw');
+  ok(w.eval('__calls.filter(c => c[0] === "syncWithdrawReceiveAmt").length') === 1 && w.eval('__notes').includes('Google Authenticator est configuré. Vous pouvez retirer maintenant.') && w.eval('_ga.forWithdraw') === false, 'set-up from Withdraw: the amounts are refreshed and the member is told they can withdraw');
   // opened from Withdraw but it was already on (the app held an old copy): straight back
   w.eval(`STATE.account = { twofaEnabled: false }; _openSheetTitle = 'Withdraw'; __notes.length = 0; __calls.length = 0; __answers['/account/2fa/status'] = { status: 'success', enabled: true, backupLeft: 8 };`);
   w.openAuthenticatorSheet({ forWithdraw: true, amount: '' }); await tick(); await tick();
@@ -175,7 +175,7 @@ const ev = expr => JSON.parse(JSON.stringify(w.eval(expr)));   // objects made i
   // opened from the My page (no Withdraw behind it): "I have saved them" shows the On page, as before
   w.eval(`STATE.account = { twofaEnabled: false }; __calls.length = 0; __answers['/account/2fa/status'] = { status: 'success', enabled: false, backupLeft: 0 };`);
   w.openAuthenticatorSheet(); await tick();
-  ok(w.eval('_ga.forWithdraw') === false && !/before you can withdraw/.test(txt()) && /Google Authenticator is required/.test(txt()), 'from the My page: the same page without the "before you can withdraw" line');
+  ok(w.eval('_ga.forWithdraw') === false && !/avant de pouvoir retirer/.test(txt()) && /Google Authenticator est obligatoire/.test(txt()), 'from the My page: the same page without the "before you can withdraw" line');
   // the owner's switch off: the older, optional wording
   // ---- the owner's switch OFF: the whole feature goes away
   w.eval(`STATE.settings = { requireTwofaToWithdraw: false }; STATE.account = { twofaEnabled: true }`);
@@ -184,17 +184,17 @@ const ev = expr => JSON.parse(JSON.stringify(w.eval(expr)));   // objects made i
   w.eval(`STATE.settings = {}`);
   ok(/data-ga-row="1"/.test(w.gaMenuRowHtml()) && /Google Authenticator/.test(w.gaMenuRowHtml()) && /openAuthenticatorSheet\(\)/.test(w.gaMenuRowHtml()), 'switch on: the row is drawn, marked so it can be found, and opens the page');
   // the row is added and taken away IN PLACE (no repaint of the My page) when the settings change while it is open
-  w.document.body.insertAdjacentHTML('beforeend', '<div class="pt-menu" id="fakeMenu"><button class="pt-mrow"><b>Balance Detail</b></button><button class="pt-mrow"><b>Login Password</b></button><button class="pt-mrow"><b>Trade Password</b></button><button class="pt-mrow"><b>Bank Card</b></button></div>');
+  w.document.body.insertAdjacentHTML('beforeend', '<div class="pt-menu" id="fakeMenu"><button class="pt-mrow"><b>Balance Detail</b></button><button class="pt-mrow"><b>Login Password</b></button><button class="pt-mrow"><b>Mot de passe de transaction</b></button><button class="pt-mrow"><b>Bank Card</b></button></div>');
   const menuTexts = () => [...w.document.querySelectorAll('#fakeMenu b')].map(e => e.textContent);
-  w.patchAuthRow(); eq(menuTexts(), ['Balance Detail', 'Login Password', 'Trade Password', 'Google Authenticator', 'Bank Card'], 'switch on while the page is open: the row appears right after the Trade Password');
+  w.patchAuthRow(); eq(menuTexts(), ['Balance Detail', 'Login Password', 'Mot de passe de transaction', 'Google Authenticator', 'Bank Card'], 'switch on while the page is open: the row appears right after the Trade Password');
   w.patchAuthRow(); ok(menuTexts().filter(t => t === 'Google Authenticator').length === 1, 'and a second check does not add it again');
-  w.eval(`STATE.settings = { requireTwofaToWithdraw: false }`); w.patchAuthRow(); eq(menuTexts(), ['Balance Detail', 'Login Password', 'Trade Password', 'Bank Card'], 'switch off while the page is open: the row goes away');
+  w.eval(`STATE.settings = { requireTwofaToWithdraw: false }`); w.patchAuthRow(); eq(menuTexts(), ['Balance Detail', 'Login Password', 'Mot de passe de transaction', 'Bank Card'], 'switch off while the page is open: the row goes away');
   w.eval(`STATE.settings = {}`); w.patchAuthRow(); ok(menuTexts().includes('Google Authenticator'), 'switched on again: it comes back');
   w.document.getElementById('fakeMenu').remove(); w.patchAuthRow();   // no menu on screen: nothing happens and nothing breaks
   // an old copy of the app (or an open page) when the owner has switched it off: the server answers available:false and the page says so
   w.eval(`STATE.settings = {}; STATE.account = { twofaEnabled: false }; __answers['/account/2fa/status'] = { status: 'success', available: false, enabled: false, backupLeft: 0 };`);
   w.openAuthenticatorSheet(); await tick();
-  ok(/Google Authenticator is switched off/.test(txt()) && /ask only for your Trade Password/.test(txt()) && !$('gaPin'), 'switch off: an open page says it is switched off and offers nothing to set up');
+  ok(/Google Authenticator est désactivé/.test(txt()) && /demandent seulement votre mot de passe de transaction/.test(txt()) && !$('gaPin'), 'switch off: an open page says it is switched off and offers nothing to set up');
   ok(w.eval('STATE.settings.requireTwofaToWithdraw') === false, 'and the app drops the rule from its own copy of the settings');
   w.eval(`STATE.settings = {}`);
   console.log('test-authenticator-ui: ' + n + ' checks passed');

@@ -1,7 +1,8 @@
 {
   "name": "Potato",
   "short_name": "Potato",
-  "description": "Potato — invest, earn daily income, and grow your team.",
+  "description": "Potato — investissez, gagnez un revenu chaque jour et développez votre équipe.",
+  "lang": "fr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

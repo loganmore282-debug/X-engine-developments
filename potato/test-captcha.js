@@ -37,10 +37,10 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(server.indexOf('captcha.verify(') < server.indexOf("cleanPhone(textOf(req.body.phone))", server.indexOf("app.post('/auth/signup'")), 'the captcha is checked before anything else in sign-up');
   ok(/const MEMBER_PASSWORD_MIN = 6,/.test(server) && !/weakPasswordReason/.test(server) && !fs.existsSync(__dirname + '/weak-passwords.js'), 'passwords: at least 6, no weak-password list');
   ok(/window\.fbCreateUser = async \(email, pass\) =>/.test(html) && !/captchaId/.test(html) && !/loadAuthCaptcha|capError/.test(mod), 'the app no longer sends or asks for a captcha (the owner\'s Create Account has none)');
-  ok(/pass\.length < 6\) return regError\('Password must be at least 6 characters'\)/.test(mod), 'the app asks for 6 characters');
+  ok(/pass\.length < 6\) return regError\('Le mot de passe doit contenir au moins 6 caractères'\)/.test(mod), 'the app asks for 6 characters');
   for (const id of ['authLogo', 'authLogoImg', 'authHeroBg', 'loginPhone', 'loginPassword', 'rememberMe', 'loginBtn', 'regPhone', 'regPassword', 'regPassword2', 'regTradePin', 'regReferral', 'regBtn']) ok(html.includes('id="' + id + '"'), 'markup has ' + id);
-  ok(/placeholder="Enter password"/.test(html) && /placeholder="Re-enter password"/.test(html) && /placeholder="6-digit trade password"/.test(html) && /placeholder="Enter Username Number"/.test(html), 'the words are the screenshot\'s');
-  ok(/id="loginDial">\+251</.test(html) && /id="regDial">\+251</.test(html), '+256 on both forms');
+  ok(/placeholder="Saisissez votre mot de passe"/.test(html) && /placeholder="Confirmez votre mot de passe"/.test(html) && /placeholder="Mot de passe de transaction à 6 chiffres"/.test(html) && /placeholder="Saisissez votre numéro de téléphone"/.test(html), 'the words are French');
+  ok(/id="loginDial">\+225</.test(html) && /id="regDial">\+225</.test(html), '+225 on both forms');
   ok(/POTATO_IMAGE_SLOTS = \['logo', 'authhero', 'authlogo',/.test(server) && /id="authLogoFile"/.test(R('admin-src/index.html')) && /applyAuthLogo/.test(mod), 'the circle logo is an admin-uploaded slot');
 }
 console.log(`PASS: captcha and Potato sign-up wiring (${n} checks)`);

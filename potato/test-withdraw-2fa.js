@@ -29,11 +29,11 @@ async function member() {
   await J('POST', '/register', { pin: '123456', referralCode: '' }, su.j.token);
   const prods = (await J('GET', '/public/products')).j.products.filter(p => p.price > 0).sort((a, b) => a.price - b.price);
   await J('POST', '/invest/create', { tierKey: prods[0].key }, su.j.token);
-  const bank = '07716' + String(70000 + phoneN * 13); await J('POST', '/bank/save', { holder: 'Two Step', network: 'Telebirr', phone: bank }, su.j.token);
+  const bank = '07716' + String(70000 + phoneN * 13); await J('POST', '/bank/save', { holder: 'Two Step', network: 'Wave', phone: bank }, su.j.token);
   return { tok: su.j.token, uid: su.j.uid, bank, phone };
 }
 const user = id => fm.__stores.users.get(id), W = () => fm.__stores.withdrawals;
-const wdraw = (m, body) => J('POST', '/withdraw/request', Object.assign({ amount: 20000, network: 'Telebirr', phone: m.bank, pin: '123456' }, body || {}), m.tok);
+const wdraw = (m, body) => J('POST', '/withdraw/request', Object.assign({ amount: 20000, network: 'Wave', phone: m.bank, pin: '123456' }, body || {}), m.tok);
 const rowsOf = m => [...W().values()].filter(w => w.userId === m.uid);
 const settle = async m => { for (const w of rowsOf(m)) if (w.status === 'pending') await J('POST', '/admin/withdraw/reject', { withdrawalId: w._id || [...W().entries()].find(([, v]) => v === w)[0] }, null, true); };
 const codeNow = (secret, offsetSteps) => totp.codeAt(secret, Date.now() + (offsetSteps || 0) * 30000);
@@ -65,7 +65,7 @@ const wrongCode = secret => { for (let i = 0; i < 50; i++) { const c = String(Ma
   { const half = await wdraw(A); ok(half.s === 403 && half.j.code === 'TWOFA_SETUP_REQUIRED', 'while it is only half set up it still counts as not set up: refused', half.j); }
   // ---- 2. confirming needs a correct first code
   const c0 = await J('POST', '/account/2fa/confirm', { code: wrongCode(secret) }, A.tok);
-  ok(c0.s === 400 && c0.j.code === 'TWOFA_INVALID' && /4 tries left/.test(c0.j.message) && user(A.uid).twofaEnabled !== true, 'a wrong first code does not turn it on and is counted', c0.j);
+  ok(c0.s === 400 && c0.j.code === 'TWOFA_INVALID' && /4 essais restants/.test(c0.j.message) && user(A.uid).twofaEnabled !== true, 'a wrong first code does not turn it on and is counted', c0.j);
   const c1 = await J('POST', '/account/2fa/confirm', { code: '12345' }, A.tok); ok(c1.s === 400 && (user(A.uid).twofaFailCount || 0) === 1, 'a code that is not even 6 digits is refused and NOT counted', { s: c1.s, f: user(A.uid).twofaFailCount });
   const on = await J('POST', '/account/2fa/confirm', { code: codeNow(secret) }, A.tok);
   ok(on.s === 200 && Array.isArray(on.j.backupCodes) && on.j.backupCodes.length === 8 && on.j.backupCodes.every(c => /^[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}$/.test(c)) && new Set(on.j.backupCodes).size === 8, 'the right first code turns it on and shows 8 different backup codes once', on.j);
@@ -83,7 +83,7 @@ const wrongCode = secret => { for (let i = 0; i < 50; i++) { const c = String(Ma
   const backup = on.j.backupCodes;
   // ---- 3. a withdrawal now needs the Trade Password AND a code
   const w0 = user(A.uid).walletBalance, rows0 = rowsOf(A).length;
-  const r1 = await wdraw(A); ok(r1.s === 400 && r1.j.code === 'TWOFA_REQUIRED' && /6-digit code/.test(r1.j.message), 'no code: refused with a clear message', r1.j);
+  const r1 = await wdraw(A); ok(r1.s === 400 && r1.j.code === 'TWOFA_REQUIRED' && /code à 6 chiffres/.test(r1.j.message), 'no code: refused with a clear message', r1.j);
   ok(user(A.uid).walletBalance === w0 && rowsOf(A).length === rows0, 'and nothing was taken, no request was created');
   const r2 = await wdraw(A, { totp: wrongCode(secret) }); ok(r2.s === 400 && r2.j.code === 'TWOFA_INVALID' && user(A.uid).walletBalance === w0, 'a wrong code is refused and nothing is taken', r2.j);
   const r3 = await wdraw(A, { pin: '654321', totp: codeNow(secret, 1) }); ok(r3.s === 400 && r3.j.code === 'WRONG_PIN', 'the right code with a WRONG Trade Password is refused (the Trade Password is still first)', r3.j);

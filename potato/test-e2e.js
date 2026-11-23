@@ -63,12 +63,12 @@ async function member(pass, pin, ref) { const cap = await J('GET', '/auth/captch
 
   // ---- withdrawal request
   const W0 = (await acct(B.tok)).walletBalance;
-  const bs = await J('POST', '/bank/save', { holder: 'Test Holder', network: 'Telebirr', phone: '0771234567' }, B.tok); ok(bs.j.status === 'success', 'B binds a mobile-money wallet', bs.j);
-  const wr = await J('POST', '/withdraw/request', { amount: 20000, network: 'Telebirr', phone: '0771234567', pin: '123456' }, B.tok); ok(wr.j.status === 'success', 'B requests a withdrawal of 20,000', wr.j);
+  const bs = await J('POST', '/bank/save', { holder: 'Test Holder', network: 'Wave', phone: '0771234567' }, B.tok); ok(bs.j.status === 'success', 'B binds a mobile-money wallet', bs.j);
+  const wr = await J('POST', '/withdraw/request', { amount: 20000, network: 'Wave', phone: '0771234567', pin: '123456' }, B.tok); ok(wr.j.status === 'success', 'B requests a withdrawal of 20,000', wr.j);
   const W1 = (await acct(B.tok)).walletBalance; ok(Math.round(W0 - W1) === 20000, 'the wallet is debited 20,000 at once: ' + W0 + ' -> ' + W1);
   const wlist = [...fm.__stores.withdrawals.values()].filter(w => w.userId === B.uid); ok(wlist.length === 1 && wlist[0].status === 'pending', 'one pending request exists', wlist.map(w => w.status));
-  const wr2 = await J('POST', '/withdraw/request', { amount: 20000, network: 'Telebirr', phone: '0771234567', pin: '123456' }, B.tok); ok(wr2.j.status !== 'success', 'a second request while one is open is refused', wr2.j);
-  const wrBad = await J('POST', '/withdraw/request', { amount: 20000, network: 'Telebirr', phone: '0771234567', pin: '000000' }, N.tok); ok(wrBad.j.status !== 'success', 'a wrong Trade Password / unbound account cannot withdraw', wrBad.j);
+  const wr2 = await J('POST', '/withdraw/request', { amount: 20000, network: 'Wave', phone: '0771234567', pin: '123456' }, B.tok); ok(wr2.j.status !== 'success', 'a second request while one is open is refused', wr2.j);
+  const wrBad = await J('POST', '/withdraw/request', { amount: 20000, network: 'Wave', phone: '0771234567', pin: '000000' }, N.tok); ok(wrBad.j.status !== 'success', 'a wrong Trade Password / unbound account cannot withdraw', wrBad.j);
   // ---- 40 simultaneous registrations
   {
     const A2 = await member('secret12', '123456', ''); const N2 = 40;

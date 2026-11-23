@@ -15,7 +15,7 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
 (async () => {
   // 1. payout guard
   function payout({ banned, manual }) {
-    const wit = { userId: 'u1', status: 'pending', network: 'Telebirr', phone: '0770', net: 8500, amount: 10000, holder: 'A' };
+    const wit = { userId: 'u1', status: 'pending', network: 'Wave', phone: '0770', net: 8500, amount: 10000, holder: 'A' };
     const calls = []; const witRef = { get: async () => ({ exists: true, data: () => ({ ...wit }) }), updateIf: async (f, p) => { calls.push(['updateIf', p.status]); return true; }, update: async () => {} };
     const db = { collection: n => n === 'withdrawals' ? { doc: () => witRef } : { doc: () => ({ get: async () => ({ exists: true, data: () => ({ status: banned ? 'banned' : 'active' }) }), update: async () => {} }) } };
     const f = new Function('db', '_withdrawInFlight', 'getSettings', 'payoutIsManual', 'FieldValue', 'withLock', 'finalizeWithdrawalTransactionRecord', 'fmtMoney', 'isBankNetwork', 'crypto', 'marzUserMsg', 'console',
@@ -29,7 +29,7 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
   // 2. up to five cards per member: the first saved is the active one, a repeat is refused
   ok(/const BANK_CARD_LIMIT = 5;/.test(src), 'five cards per member');
   async function save(existing, phone, others = [], network) {
-    const rows = existing.map((p, i) => ({ id: 'b' + i, userId: 'u1', phone: p, holder: 'OLD', network: 'Telebirr' })).concat(others.map((p, i) => ({ id: 'o' + i, userId: 'u2', phone: p, holder: 'OTHER', network: 'Telebirr' })));
+    const rows = existing.map((p, i) => ({ id: 'b' + i, userId: 'u1', phone: p, holder: 'OLD', network: 'Wave' })).concat(others.map((p, i) => ({ id: 'o' + i, userId: 'u2', phone: p, holder: 'OTHER', network: 'Wave' })));
     const log = { added: 0, addedRows: [], updated: [], deleted: [] }; let code = 200, body;
     const mkDoc = r => ({ id: r.id, data: () => r, ref: { update: async u => { log.updated.push([r.id, u]); }, delete: async () => { log.deleted.push(r.id); } } });
     const chain = (list, f = []) => ({ where: (k, o, v) => chain(list, [...f, [k, v]]), limit: () => chain(list, f),
@@ -38,10 +38,10 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
     let handler; const app = { post: (p, h) => { if (p === '/bank/save') handler = h; } };
     const i = src.indexOf('const BANK_CARD_LIMIT'), j = src.indexOf("app.get('/bank/list'");
     new Function('textOf', 'app', 'db', 'verifyAuth', 'stripHtml', 'PAYOUT_ACCOUNT_TYPES', 'NETWORK_NAMES', 'ALL_PAYOUT_NETWORKS', 'PAYOUT_CHOICE_MSG', 'cleanPhone', 'badPhoneMessage', 'getSettings', 'getSupportedBanks', 'consumeOtpTicket', 'marzValidateBankAccount', 'marzUserMsg', 'withLock', 'FieldValue', 'console',
-      src.slice(i, j))(v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''), app, db, async () => 'u1', s => String(s || '').trim(), { 'Commercial Bank of Ethiopia': 'bank', 'Telebirr': 'wallet' }, new Set(['Telebirr']), new Set(['Telebirr', 'Commercial Bank of Ethiopia']), 'Choose Commercial Bank of Ethiopia or Telebirr.', p => String(p).replace(/\D/g, ''), () => 'bad phone',
+      src.slice(i, j))(v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''), app, db, async () => 'u1', s => String(s || '').trim(), { 'Commercial Bank of Ethiopia': 'bank', 'Wave': 'wallet' }, new Set(['Wave']), new Set(['Wave', 'Commercial Bank of Ethiopia']), 'Choose Commercial Bank of Ethiopia or Wave.', p => String(p).replace(/\D/g, ''), () => 'bad phone',
       async () => ({ otpVerificationEnabled: false }), async () => [], async () => true, async () => ({}), () => '', (k, g) => g(), { serverTimestamp: () => 1 }, console);
     const res = { status(c) { code = c; return this; }, json(b) { body = b; return this; } };
-    await handler({ body: { holder: 'A B', network: network === undefined ? 'Telebirr' : network, phone } }, res); return { code, body, ...log };
+    await handler({ body: { holder: 'A B', network: network === undefined ? 'Wave' : network, phone } }, res); return { code, body, ...log };
   }
   let r = await save([], '0770000099');
   eq([r.code, r.added, r.updated.length], [200, 1, 0], 'the first card is added');
@@ -52,7 +52,7 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
   r = await save(['0770000099'], '0770000099');
   eq([r.code, r.added, r.updated.length], [409, 0, 0], 'saving a number the member already holds is refused');
   ok(r.body.code === 'CARD_EXISTS', 'with its own code');
-  // owner: "make potato ... Ethiopia plus the other previous payment pages and models": a withdrawal account is Commercial Bank of Ethiopia or Telebirr only
+  // owner: "make potato ... Ethiopia plus the other previous payment pages and models": a withdrawal account is Commercial Bank of Ethiopia or Wave only
   r = await save([], '1000809418239', [], 'Commercial Bank of Ethiopia'); eq([r.code, r.added], [200, 1], 'a Commercial Bank of Ethiopia account number is accepted as it is');
   r = await save([], 'AB', [], 'Commercial Bank of Ethiopia'); ok(r.code === 400 && r.added === 0, 'a bank account number that is too short is refused');
   r = await save([], '10008-0941', [], 'Commercial Bank of Ethiopia'); ok(r.code === 400 && r.added === 0, 'a bank account number with a dash is refused');
@@ -64,7 +64,7 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
   // one payout number, one member: a number another member already holds is refused, and nothing is written
   r = await save([], '0770000099', ['0770000099']);
   eq([r.code, r.added, r.updated.length], [409, 0, 0], 'a wallet number another member already uses is refused');
-  ok(r.body.code === 'WALLET_TAKEN' && /already used by another member/.test(r.body.message), 'with a clear message');
+  ok(r.body.code === 'WALLET_TAKEN' && /déjà utilisé par un autre membre/.test(r.body.message), 'with a clear message');
   r = await save(['0700000010'], '0770000099', ['0770000099']);
   eq([r.code, r.added], [409, 0], 'adding a number another member holds is refused too');
   r = await save([], '0770000099', ['0770000011']);

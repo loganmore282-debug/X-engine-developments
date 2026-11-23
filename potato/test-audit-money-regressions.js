@@ -86,7 +86,7 @@ function context(db, extra={}) {
     getSettings:async() => ({}), payoutIsManual:() => false, isBankNetwork:() => false,
     withdrawProvider:() => 'marzpay', fmtMoney:n => 'UGX ' + n,
     PUBLIC_URL:'https://invalid.example', MARZPAY_BASE:'https://invalid.example',
-    NETWORK_NAMES:new Set(['Telebirr']),
+    NETWORK_NAMES:new Set(['Wave']),
     MARZPAY_KEY:'test-only', MARZ_TIMEOUT:1000,
     // MarzPay is multi-market now, so its request body carries the region's
     // `country` and marzSendMoney refuses rather than guess when it cannot
@@ -113,7 +113,7 @@ function context(db, extra={}) {
 }
 function paymentSeed() {
   return {users:{u:{walletBalance:0,totalWithdrawn:0}}, withdrawals:{w:{
-    userId:'u',status:'pending',amount:10000,net:8500,phone:'+251700000000',network:'Telebirr'
+    userId:'u',status:'pending',amount:10000,net:8500,phone:'+251700000000',network:'Wave'
   }},transactions:{tx:{withdrawalId:'w',status:'pending',amount:-10000}}};
 }
 function loadProcess(c) {

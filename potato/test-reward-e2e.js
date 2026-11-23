@@ -63,7 +63,7 @@ async function member(pass, pin, ref) { const c = await J('GET', '/auth/captcha'
   st = await J('GET', '/salary/status', null, A.tok);
   ok(st.j.tiers[0].claimed === true && st.j.tiers[0].reached === true, 'tier 1 now reads Claimed', st.j.tiers);
   // "tomorrow": the day moves on, nothing comes back
-  const again = await J('POST', '/salary/claim', { tierId: 's1' }, A.tok); ok(again.s === 409 && /already claimed/i.test(again.j.message), 'the same tier can never be claimed again', again);
+  const again = await J('POST', '/salary/claim', { tierId: 's1' }, A.tok); ok(again.s === 409 && /déjà réclamé/i.test(again.j.message), 'the same tier can never be claimed again', again);
   const old = await J('POST', '/salary/claim', {}, A.tok); ok(old.s === 400, 'an older app that names no tier is told there is nothing left (when only tier 1 is reached)', old);
   const rows = [...fm.__stores.transactions.values()].filter(t => t.userId === A.uid && t.type === 'mission_salary');
   ok(rows.length === 1 && rows[0].amount === 1000, 'one history row for the tier', rows);

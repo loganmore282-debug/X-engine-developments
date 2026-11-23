@@ -1,9 +1,13 @@
 # Potato — project memory (read this first)
 
-> **READ THIS FIRST (latest): Potato is Ethiopia ONLY and has NO payment gateway.** Uganda, Nigeria, MarzPay, PesaJet, TavuPay, LworxPay, ObPay, MTN and
-> Airtel were all deleted on the owner's order ("Remove it, put Ethiopia"). Everything below that mentions them (the numbered log, the gateway / rotation /
-> reconciler / auto-withdraw / stuck-recharge sections) is HISTORY of code that no longer exists. Money in: bank / Telebirr manual recharge (admin approves).
-> Money out: the admin pays by hand and presses Mark as paid. See the last section of this file.
+> **READ THIS FIRST (latest): Potato is Côte d'Ivoire: French, FCFA, +225, Wave.** (owner: "use French throughout everything in userapp, currency to FCFA, country code for ivorycoast, payment page just like for petro exactly".)
+> Region `POTATO_REGIONS.ci` (code `XOF`, shown `FCFA`, dial `225`, 10 digits that KEEP the leading 0, prefixes 01/05/07, UTC+0). The member app text is French SOURCE text (no runtime
+> translator; `<html lang="fr" translate="no">`); the admin panel stays English. Money in: Wave payment pages (`openWavePayFlow`, `WV_T` fr/en, resume key `wv_resume`; server block
+> `// ── WAVE RECHARGE (Côte d'Ivoire) ──` .. `// END WAVE RECHARGE`, collection `pendingDeposits`, admin tab "Wave payments", admin approves). Money out: Wave only
+> (`PAYOUT_ACCOUNT_TYPES = { Wave: 'wallet' }`). Everything below that mentions Ethiopia, ETB / Br, Telebirr, Commercial Bank of Ethiopia or the manual bank pages is HISTORY. Same as Petro
+> and Soda (commit `cf64b8d` in Soda). Tests: `test-cote-divoire.js`, `test-french-sweep.js` (opens every page signed in and fails on visible English), `test-wave-pay.js`, `test-wave-pay-ui.js`,
+> `test-pay-numbers-admin.js` (the Wave admin tab). Stored ledger descriptions stay English on purpose (the app parses them); member-facing server messages are French. When you add text,
+> write it in French, and if the notice tick/cross wording changes keep the `good`/bad regexes in `window.notify` in step.
 
 **What it is:** Potato is the third app built from the same code family (Soda -> Mint -> **Potato**). It was copied from **Mint** (`mint/`, branch
 `claude/mint-build`, Mint commit `f1a4e60`) and renamed with `node set-brand.js "Potato"`. **Everything about money, auth, payouts, the admin
@@ -231,3 +235,11 @@ Google Authenticator key; never delete it, otherwise the stored copies cannot be
 reset, and for older accounts at their next sign-in (until then the panel says "not stored yet"). `pwSealed` / `passwordHash` are never part of any other answer.
 Tests: `test-password-view.js` (in `test:audit`), `npm run test:live` (`test-password-view-ui.js`, real browser: owner sees it, staff gets no control).
 
+
+
+## Potato is Côte d'Ivoire now: French, FCFA, +225, Wave (owner: "use French throughout everything in userapp, currency to FCFA, country code for ivorycoast, payment page just like for petro exactly")
+- **Region:** `POTATO_REGIONS.ci` (`XOF`, shown `FCFA` via `currencyLabel`/`cur()`), dial 225, phones are 10 digits and KEEP the leading 0 (`localDigits`, `phoneToEmail`, `phoneFormatHint` follow `regionUsesBareLocal`), shown `+225 07 07 07 07 07`; dial chips `+225`.
+- **French:** `user-src/original_module.js`, `user-src/index.html` and the member-facing server messages are French (dates use French months, ` à `). Sheet titles are still English identifiers (`openSheet('Bank Cards')`); `SHEET_LABELS` / `sheetLabel()` print them in French. Never compare on message text: the app tests `r.code`, except `'Utilisateur introuvable'`. `patchAuthRow` finds the Trade Password row by its French label. The Wave block keeps both `WV_T.fr` and `WV_T.en` on purpose (the owner's language pill).
+- **Pay:** copied from Soda: Wave payment pages, the 30 minute order, wallet number (10 digits) and optional transaction ID, `/deposit/manual/order` + `/deposit/manual/submit`, admin approval. Withdrawals: Wave wallet only.
+- **Notice icons:** `window.notify` picks the tick or cross from French words (`réussi`, `enregistré`, ... vs `impossible`, `déjà`, `obligatoire`, ...).
+- **Tests changed:** the manual bank pages tests were removed (`test-manual-pay*.js`); the Wave tests replace them; many tests now expect French words and +225 numbers. Cache: `potato-shell-v465` (user), `potato-admin-shell-v187` (admin).

@@ -94,7 +94,7 @@ function fakeServer(w, handle) {
   };
   return calls;
 }
-const okAccount = { status: 'success', account: { phone: '+256771234567', walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0, team: { l1: 0, l2: 0, l3: 0, commission: 0 } }, region: {} };
+const okAccount = { status: 'success', account: { phone: '+2250771234567', walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0, team: { l1: 0, l2: 0, l3: 0, commission: 0 } }, region: {} };
 const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t; };
 
 (async () => {
@@ -106,7 +106,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
     const server = fs.readFileSync(__dirname + '/server.js', 'utf8');
     ok(html.includes('id="authTitle"') && html.includes('class="pa-hero"') && html.includes('id="authLogoImg"') && !html.includes('class="ma-tabs"'), 'Login and Create Account have the banner, the circle logo and a title, no tab bar (owner screenshots)');
-    ok(html.includes('id="authHeroBg"') && html.includes('aria-label="Login"') && html.includes('aria-label="Create Account"'), 'the banner slot and both panes are there');
+    ok(html.includes('id="authHeroBg"') && html.includes('aria-label="Connexion"') && html.includes('aria-label="Créer un compte"'), 'the banner slot and both panes are there');
     ok(html.includes('id="regTradePin"') && !html.includes('id="regOtpRow"') && !html.includes('id="regOtp"'), 'registration matches screenshot fields and has no OTP field');
     ok(!html.includes('id="lsPercent"') && !html.includes('class="ring-loader"'), 'startup loading animation is removed');
     ok(!admin.includes('id="authCardOp"') && admin.includes('id="authLogoFile"') && !admin.includes('id="authHeroOp"'), 'admin: circle logo upload only; the frosted-card and banner opacity / blur controls are gone');
@@ -125,7 +125,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     ok(w.document.documentElement.style.getPropertyValue('--auth-hero-op') === '' && w.document.documentElement.style.getPropertyValue('--auth-hero-blur') === '', 'and there are no opacity / blur settings for it any more');
     ok(w.document.querySelectorAll('.pa-f svg').length >= 4, 'auth box icons remain inline SVGs');
     ok(!/Forgot Password\?|forgotPane|doForgot/.test(html) && html.includes('toggleAuthEye'), 'no Forgot Password; the password eye is there (owner screenshots)');
-    ok(html.includes('id="rememberMe"') && html.includes('Remember me'), 'Remember me checkbox is on the login card');
+    ok(html.includes('id="rememberMe"') && html.includes('Se souvenir de moi'), 'Remember me checkbox is on the login card');
     ok(!/id="[a-z]+BrandFallback"|>P<\/span>/.test(html), 'no placeholder letter on the auth screens');
     await closeSoon(dom);
   }
@@ -135,19 +135,19 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
   {
     const dom = load(), w = dom.window; await sleep(20);
     const f = e => w.fbErrMsg(e);
-    eq(f({ code: 'auth/invalid-credential' }), 'Incorrect phone number or password.');
-    eq(f({ code: 'auth/wrong-password' }), 'Incorrect phone number or password.');
-    eq(f({ code: 'auth/user-not-found' }), 'No account found for that number.');
-    eq(f({ code: 'auth/email-already-in-use' }), 'An account with that number already exists.');
-    eq(f({ code: 'auth/too-many-requests' }), 'Too many attempts. Try again shortly.');
-    ok(/Check your connection/.test(f({ code: 'auth/network-request-failed', message: 'Firebase: Error (auth/network-request-failed).' })), 'network failure is explained');
-    ok(/disabled/.test(f({ code: 'auth/user-disabled' })), 'disabled account is explained');
+    eq(f({ code: 'auth/invalid-credential' }), 'Numéro de téléphone ou mot de passe incorrect.');
+    eq(f({ code: 'auth/wrong-password' }), 'Numéro de téléphone ou mot de passe incorrect.');
+    eq(f({ code: 'auth/user-not-found' }), 'Aucun compte trouvé pour ce numéro.');
+    eq(f({ code: 'auth/email-already-in-use' }), 'Un compte avec ce numéro existe déjà.');
+    eq(f({ code: 'auth/too-many-requests' }), 'Trop de tentatives. Réessayez sous peu.');
+    ok(/Vérifiez votre connexion/.test(f({ code: 'auth/network-request-failed', message: 'Firebase: Error (auth/network-request-failed).' })), 'network failure is explained');
+    ok(/désactivé/.test(f({ code: 'auth/user-disabled' })), 'disabled account is explained');
     for (const code of ['auth/internal-error', 'auth/quota-exceeded', 'auth/operation-not-allowed', 'auth/invalid-api-key'])
-      ok(/temporarily unavailable/.test(f({ code })), code + ' reads as a temporary outage');
+      ok(/temporairement indisponible/.test(f({ code })), code + ' reads as a temporary outage');
     for (const e of [{ code: 'auth/something-new', message: 'Firebase: Error (auth/something-new).' }, { message: 'Firebase: Error (auth/x).' }])
       ok(!/Firebase|auth\//.test(f(e)), 'raw Firebase text never reaches a member: ' + f(e));
     eq(f({ message: 'Sign-in is not available right now.' }), 'Sign-in is not available right now.', 'our own messages pass through');
-    eq(f(null), 'Something went wrong. Try again.');
+    eq(f(null), 'Une erreur s\'est produite. Réessayez.');
     await closeSoon(dom);
   }
 
@@ -160,24 +160,24 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     eq(shown(w, 'loadingScreen'), false, 'watchdog takes the spinner down');
     eq(shown(w, 'authScreen'), true, 'watchdog shows the login screen');
     // Timing-proof: whether the watchdog fired before or after toasts() swapped notify for a collector, the message is either recorded or on screen.
-    ok(/Could not load the sign-in service/.test($(w, 'notifyMsg').textContent) || t.some(m => /Could not load the sign-in service/.test(m)), 'watchdog says what is wrong');
+    ok(/Impossible de charger le service de connexion/.test($(w, 'notifyMsg').textContent) || t.some(m => /Impossible de charger le service de connexion/.test(m)), 'watchdog says what is wrong');
     $(w, 'loginPhone').value = '0771234567'; $(w, 'loginPassword').value = 'secret1secret1';
     t.length = 0; await w.doLogin();
     const le = t[0] || '';   // every login refusal except a wrong phone number is the centred notice
-    ok(/not available right now/.test(le) && !/not a function/.test(le), 'login says so instead of throwing: ' + le);
+    ok(/pas disponible pour le moment/.test(le) && !/not a function/.test(le), 'login says so instead of throwing: ' + le);
     eq($(w, 'loginBtn').disabled, false, 'login button usable again');
-    eq($(w, 'loginBtn').textContent, 'Login');
+    eq($(w, 'loginBtn').textContent, 'Connexion');
     $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; $(w, 'regReferral').value = 'abc';
     w._settings = { otpVerificationEnabled: false, referralRequired: false }; w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:false}');
     t.length = 0; await w.doRegister();
-    ok(t.length === 1 && /not available right now/.test(t[0]), 'sign-up says so too: ' + t[0]);
-    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Register');
+    ok(t.length === 1 && /pas disponible pour le moment/.test(t[0]), 'sign-up says so too: ' + t[0]);
+    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, "S'inscrire");
     await closeSoon(dom);
   }
   {
     // Firebase arriving LATE (slow network) is waited for, not failed.
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; w._FIREBASE_READY_MS = 2000; }), w = dom.window; await sleep(20);
-    const t = toasts(w); const accounts = { '771234567@potato-platform.com': { pass: 'secret1secret1', uid: 'u1' } };
+    const t = toasts(w); const accounts = { '0771234567@potato-platform.com': { pass: 'secret1secret1', uid: 'u1' } };
     fakeServer(w, async p => p === '/account' ? { status: 200, body: okAccount } : null);
     $(w, 'loginPhone').value = '0771234567'; $(w, 'loginPassword').value = 'secret1secret1';
     setTimeout(() => fakeFirebase(w, accounts, false), 300);
@@ -191,13 +191,13 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 80; }), w = dom.window; await sleep(20);
     const t = toasts(w); fakeFirebase(w, {}, false);
     await sleep(140);
-    ok(!t.some(m => /Could not load the sign-in service/.test(m)), 'no false alarm when Firebase loaded');
+    ok(!t.some(m => /Impossible de charger le service de connexion/.test(m)), 'no false alarm when Firebase loaded');
     await closeSoon(dom);
   }
 
   // ─── 3. Login: every outcome ends in "app open" or "login screen + message" ───
   trace('section 3');
-  const phone = '0771234567', email = '771234567@potato-platform.com';
+  const phone = '0771234567', email = '0771234567@potato-platform.com';
   async function loginScenario(setup, { expectOpen, expectMsg, expectSignOut = null }) {
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
     const t = toasts(w);
@@ -208,7 +208,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     $(w, 'loginPhone').value = phone; $(w, 'loginPassword').value = setup.pass || 'secret1secret1';
     await w.doLogin(); await sleep(60);
     eq($(w, 'loginBtn').disabled, false, 'login button usable again');
-    eq($(w, 'loginBtn').textContent, 'Login');
+    eq($(w, 'loginBtn').textContent, 'Connexion');
     eq(shown(w, 'loadingScreen'), false, 'no stuck spinner');
     if (expectOpen) { eq(shown(w, 'app'), true, 'app open'); eq(shown(w, 'authScreen'), false); ok(!t.some(m => /Login successful/.test(m)), 'a login shows no "Login successful" notice'); }
     else { eq(shown(w, 'app'), false, 'app not open'); eq(shown(w, 'authScreen'), true, 'login screen showing'); ok(t.concat(['', $(w, 'loginPhoneErr').textContent]).some(m => expectMsg.test(m)), 'tells the member why (pop-up or the red line under the box): ' + JSON.stringify(t)); }
@@ -217,15 +217,15 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     await closeSoon(dom);
   }
   await loginScenario({}, { expectOpen: true });
-  await loginScenario({ pass: 'wrongpass' }, { expectOpen: false, expectMsg: /^Incorrect phone number or password$/ });
-  await loginScenario({ fb: { code: 'auth/network-request-failed' } }, { expectOpen: false, expectMsg: /Check your connection/ });
-  await loginScenario({ fb: { code: 'auth/user-disabled' } }, { expectOpen: false, expectMsg: /disabled/ });
-  await loginScenario({ fb: { code: 'auth/too-many-requests' } }, { expectOpen: false, expectMsg: /Too many attempts/ });
-  await loginScenario({ fb: { code: 'auth/internal-error' } }, { expectOpen: false, expectMsg: /temporarily unavailable/ });
+  await loginScenario({ pass: 'wrongpass' }, { expectOpen: false, expectMsg: /^Numéro de téléphone ou mot de passe incorrect$/ });
+  await loginScenario({ fb: { code: 'auth/network-request-failed' } }, { expectOpen: false, expectMsg: /Vérifiez votre connexion/ });
+  await loginScenario({ fb: { code: 'auth/user-disabled' } }, { expectOpen: false, expectMsg: /désactivé/ });
+  await loginScenario({ fb: { code: 'auth/too-many-requests' } }, { expectOpen: false, expectMsg: /Trop de tentatives/ });
+  await loginScenario({ fb: { code: 'auth/internal-error' } }, { expectOpen: false, expectMsg: /temporairement indisponible/ });
   await loginScenario({ server: async p => p === '/account' ? { status: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } } : null },
     { expectOpen: false, expectMsg: /suspended/, expectSignOut: true });
   await loginScenario({ server: async p => p === '/account' ? { throws: true } : null },
-    { expectOpen: false, expectMsg: /Could not reach the server/, expectSignOut: true });
+    { expectOpen: false, expectMsg: /Impossible de joindre le serveur/, expectSignOut: true });
   await loginScenario({ server: async p => p === '/account' ? { status: 503, body: { status: 'error', code: 'AUTH_UNAVAILABLE', message: 'We could not check your sign-in just now. Please try again in a moment.' } } : null },
     { expectOpen: false, expectMsg: /try again in a moment/, expectSignOut: true });
   await loginScenario({ server: async p => p === '/account' ? { status: 500, body: { status: 'error', message: 'Could not load your account' } } : null },
@@ -254,7 +254,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     }
     await closeSoon(dom);
   }
-  await ghostScenario({ status: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } }, /does not exist.*Complete your sign-up/, true);
+  await ghostScenario({ status: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } }, /does not exist.*Terminez votre inscription/, true);
   await ghostScenario({ status: 500, body: { status: 'error', message: 'Could not complete your registration right now' } }, /Could not complete your registration/, false);
 
   // ─── 5. Sessions that change under a boot never sign the member out ───
@@ -281,7 +281,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     w.eval('STATE.settings={otpVerificationEnabled:true,referralRequired:false}');
     $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '12x'; await w.doRegister();
     eq(log.creates, 0, 'invalid trade PIN cannot create an account');
-    ok(t.some(m => /Trade Password must be exactly 6 digits/.test(m)), 'trade PIN validation is clear');
+    ok(t.some(m => /Le mot de passe de transaction doit comporter exactement 6 chiffres/.test(m)), 'trade PIN validation is clear');
     await closeSoon(dom);
   }
 
@@ -294,8 +294,8 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456'; w._fbFail = { code: 'auth/network-request-failed', message: 'Firebase: Error (auth/network-request-failed).' };
     await w.doRegister();
     eq(w.eval('window._pendingRegPhone'), '', 'a failed sign-up stages nothing for the next sign-in');
-    ok(t.length === 1 && /Check your connection/.test(t[0]) && !/Firebase/.test(t[0]), 'friendly message: ' + t[0]);
-    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Register');
+    ok(t.length === 1 && /Vérifiez votre connexion/.test(t[0]) && !/Firebase/.test(t[0]), 'friendly message: ' + t[0]);
+    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, "S'inscrire");
     await closeSoon(dom);
   }
   {
@@ -323,7 +323,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     eq($(w, 'loginPhone').value, '0771234567', 'the number is already filled in on Login'); eq($(w, 'loginPassword').value, '', 'only the password is left to type');
     eq(profile, true, 'the profile was finished on the server');
     ok(!t.some(m => /Session changed|went wrong|not a function/.test(m)), 'no stray errors: ' + JSON.stringify(t));
-    ok(t.some(m => /Registration successful/.test(m)), 'says it worked');
+    ok(t.some(m => /Inscription réussie/.test(m)), 'says it worked');
     eq(w.eval('window._pendingRegPhone'), '', 'staged state cleared after success');
     await closeSoon(dom);
   }
@@ -341,8 +341,8 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     eq(shown(w, 'app'), false, 'a new account does not open the app'); eq(shown(w, 'authScreen'), true, 'it lands on Login'); eq(shown(w, 'loadingScreen'), false);
     eq(loaderSeen, false, 'the startup loader never appeared during sign-up');
     eq($(w, 'loginPhone').value, '0771234567', 'the number is already on Login'); eq($(w, 'loginPassword').value, '', 'only the password is left to type');
-    eq($(w, 'authTitle').textContent, 'Login', 'the Login form is the open one');
-    ok(t.some(m => /Registration successful/.test(m)) && !t.some(m => /Login successful/.test(m)), 'sign-up toast, not login toast: ' + JSON.stringify(t));
+    eq($(w, 'authTitle').textContent, 'Connexion', 'the Login form is the open one');
+    ok(t.some(m => /Inscription réussie/.test(m)) && !t.some(m => /Login successful/.test(m)), 'sign-up toast, not login toast: ' + JSON.stringify(t));
     eq(log.signOuts, 1, 'the member is signed out once, so they log in themselves');
     ok(!calls.some(p => p.startsWith('/auth/otp/')), 'registration sends no OTP requests even when the setting is enabled');
     await closeSoon(dom);

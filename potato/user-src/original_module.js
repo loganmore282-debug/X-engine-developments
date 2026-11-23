@@ -28,18 +28,20 @@ var API_BASE = '/k7x2';
 // rules). Nothing here is ever sent back up; the server re-derives it on
 // every request. See the REGIONS section in server.js.
 //
-// The values below are Ethiopia's, and they are also what an offline first
+// The values below are Côte d'Ivoire's, and they are also what an offline first
 // paint uses -- so a cold start with no network still formats money and
 // validates a phone number the way it always did.
-var REGION = { key: 'et', name: 'Ethiopia', currency: 'ETB', currencySymbol: 'Br', dialCode: '251', localLength: 9, localLengths: [9], prefixes: ['9', '7'], utcOffsetMin: 180, isDefault: true };
-// What a member READS in front of an amount: the symbol (Br for ETB); the code stays ETB underneath.
-function cur(){ return (REGION && (REGION.currencySymbol || REGION.currency)) || 'Br'; }
-// "9XXXXXXXX": the region's first allowed prefix padded out to
+var REGION = { key: 'ci', name: "Côte d'Ivoire", currency: 'XOF', currencySymbol: 'FCFA', dialCode: '225', localLength: 10, localLengths: [10], prefixes: ['01', '05', '07'], utcOffsetMin: 0, isDefault: true };
+// What a member READS in front of an amount: the symbol (FCFA for XOF); the code stays XOF underneath.
+function cur(){ return (REGION && (REGION.currencySymbol || REGION.currency)) || 'FCFA'; }
+// Côte d'Ivoire numbers START WITH the 0 (01 / 05 / 07 + 8 digits), so the 0 is part of the number and is never stripped.
+function keepsLeadZero(){ const p = regionPrefixes(); return p.length > 0 && p.every(x => String(x).startsWith('0')); }
+// "07XXXXXXXX": the region's first allowed prefix padded out to
 // its local length, used in the placeholders that show the shape to type.
-function dial(){ return (REGION && REGION.dialCode) || '251'; }
+function dial(){ return (REGION && REGION.dialCode) || '225'; }
 function dialPlus(){ return '+' + dial(); }
-function localLen(){ return Number(REGION && REGION.localLength) || 9; }
-// Every length a number may have in this region (9 in Ethiopia), longest last.
+function localLen(){ return Number(REGION && REGION.localLength) || 10; }
+// Every length a number may have in this region (10 in Côte d'Ivoire), longest last.
 function localLens(){
   const l = REGION && Array.isArray(REGION.localLengths) && REGION.localLengths.length ? REGION.localLengths : [localLen()];
   return l.map(Number).filter(n => n > 0).sort((a, b) => a - b);
@@ -49,7 +51,7 @@ function phoneLenWords(){ const l = localLens(); return l.length > 1 ? l.slice(0
 function regionPrefixes(){ return (REGION && Array.isArray(REGION.prefixes) ? REGION.prefixes.filter(Boolean) : []); }
 // Applied from whichever response carried a region block. Only the fields
 // the server actually sent are taken, so a server that is one deploy behind
-// (no region in its replies at all) leaves Ethiopia's defaults standing
+// (no region in its replies at all) leaves Côte d'Ivoire's defaults standing
 // instead of blanking the currency.
 function applyRegion(r){
   paintRegionChrome();
@@ -217,7 +219,8 @@ function sanitizePhoneInput(el){
   let digits = el.value.replace(/\D/g, '');
   const len = localLens()[localLens().length - 1], d = dial();
   if (digits.startsWith(d) && digits.length > len) digits = digits.slice(d.length);
-  const maxDigits = digits.startsWith('0') ? len + 1 : len;
+  if (keepsLeadZero()) digits = digits.replace(/^00+/, '0');
+  const maxDigits = (!keepsLeadZero() && digits.startsWith('0')) ? len + 1 : len;
   if (digits.length > maxDigits) digits = digits.slice(0, maxDigits);
   el.value = digits;
 }
@@ -262,7 +265,7 @@ var _memberSession = window.createPotatoIdleSession('potato_member_session', fun
   // NOT permanently disable Chrome's autofill-then-submit convenience the
   // way a deliberate "Log Out" tap does.
   window.doLogout({ auto: true }).catch(() => {});
-  notify(window._sessionFailureMessage || 'Your session ended. Please log in again. If this repeats, check automatic date and time on your phone.');
+  notify(window._sessionFailureMessage || 'Votre session a pris fin. Veuillez vous reconnecter. Si cela se répète, vérifiez la date et l\'heure automatiques de votre téléphone.');
   window._sessionFailureMessage = '';
 }, () => post('/auth/session/activity', {}));
 var _apiPending = new Map();
@@ -302,7 +305,7 @@ async function apiRequest(path, opts){
   // below), so gating them here would discard that legitimate boot data
   // every single page load.
   const isPublicCall = path.indexOf('/public/') === 0;
-  if (!isPublicCall && STATE.user && path !== '/auth/session/logout' && !_memberSession.check()) return { status:'error', message:'Session expired. Log in again.' };
+  if (!isPublicCall && STATE.user && path !== '/auth/session/logout' && !_memberSession.check()) return { status:'error', message:'Session expirée. Reconnectez-vous.' };
   const startEpoch = STATE.authEpoch;
   // ── Content-Type ONLY WHEN THERE IS A BODY ──
   // MEASURED (test-boot-speed.py, against a real cross-origin server):
@@ -337,7 +340,7 @@ async function apiRequest(path, opts){
         const token = await Promise.race([
           window.fbAuth.currentUser.getIdToken(),
           new Promise((_, reject) => {
-            tokenAbort = () => reject(new Error('Authentication request timed out'));
+            tokenAbort = () => reject(new Error('La demande d\'authentification a expiré'));
             if (controller.signal.aborted) tokenAbort();
             else controller.signal.addEventListener('abort', tokenAbort, { once: true });
           })
@@ -346,21 +349,21 @@ async function apiRequest(path, opts){
       } catch (e) { if (controller.signal.aborted) throw e; }
       finally { if (tokenAbort) controller.signal.removeEventListener('abort', tokenAbort); }
     }
-    if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', stale: true, message: 'Session changed' };
+    if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', stale: true, message: 'Session modifiée' };
     const sentAt = Date.now();
     const resp = await fetch(API_BASE + path, Object.assign({}, opts, { headers, signal: controller.signal }));
     ptNoteServerClock(resp, sentAt);
     data = await resp.json();
     if (resp.status === 401 && !isPublicCall && STATE.authEpoch === startEpoch && STATE.user) {
-      window._sessionFailureMessage = 'Your login session was rejected. Please log in again. If this continues, contact support.';
+      window._sessionFailureMessage = 'Votre session de connexion a été refusée. Veuillez vous reconnecter. Si cela continue, contactez l\'assistance.';
       _memberSession.expire();
     }
-    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid response');
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Réponse invalide');
   } catch (e) {
-    if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', stale: true, message: 'Session changed' };
+    if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', stale: true, message: 'Session modifiée' };
     return { status: 'error', message: controller.signal.aborted
-      ? 'Request timed out. Check Transaction Statement before trying a payment again.'
-      : 'Could not reach the server. Check your connection and try again.' };
+      ? 'La requête a expiré. Consultez l\'Historique du solde avant de tenter un nouveau paiement.'
+      : 'Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.' };
   } finally {
     clearTimeout(timeout);
     if (opts.signal) opts.signal.removeEventListener('abort', abort);
@@ -371,7 +374,7 @@ async function apiRequest(path, opts){
   // one place every request passes through, so it cannot matter which call
   // happens to be first: whatever the app was doing, it stops and says so.
   if (data && data.code === 'HOST_PARKED') { showHostParked(data.message); return data; }
-  if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', message: 'Session changed', stale: true };
+  if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', message: 'Session modifiée', stale: true };
   return data;
 }
 // A plain, final screen. Not notify(): a dialog with an OK button implies
@@ -407,8 +410,8 @@ function showHostParked(msg){
   box.setAttribute('style', 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--snow-canvas,#fbf1e8);');
   box.innerHTML = `<div style="max-width:340px;text-align:center;">
     <div style="font-size:26px;font-weight:800;margin-bottom:12px;">${esc(brandName())}</div>
-    <div style="font-size:16px;line-height:1.55;color:var(--snow-ink,#1a1310);">${esc(msg || 'This address does not serve the app.')}</div>
-    ${host ? `<div style="font-size:13px;margin-top:14px;color:var(--snow-muted,#8c7f76);">You opened <b>${esc(host)}</b>.</div>` : ''}
+    <div style="font-size:16px;line-height:1.55;color:var(--snow-ink,#1a1310);">${esc(msg || 'Cette adresse ne sert pas l\'application.')}</div>
+    ${host ? `<div style="font-size:13px;margin-top:14px;color:var(--snow-muted,#8c7f76);">Vous avez ouvert <b>${esc(host)}</b>.</div>` : ''}
   </div>`;
   document.body.appendChild(box);
 }
@@ -422,14 +425,14 @@ function localDigits(raw){
   const d = dial(), lens = localLens();
   const s = String(raw||'').replace(/\D/g,'');
   if (s.startsWith(d) && lens.some(l => s.length === d.length + l)) return s.slice(d.length);
-  if (s.startsWith('0') && lens.some(l => s.length === l + 1)) return s.slice(1);
+  if (!keepsLeadZero() && s.startsWith('0') && lens.some(l => s.length === l + 1)) return s.slice(1);
   if (lens.includes(s.length)) return s;
   return null;
 }
 // The synthetic address this account signs in to Firebase with. It MUST
 // produce exactly the same string as phoneToEmail() in server.js, or a
 // member would create one account and then log in looking for another.
-// Ethiopia uses the bare local digits as the login address.
+// Côte d'Ivoire uses the bare local digits (with the 0) as the login address.
 // The login address for a number, in THIS region's shape. Must match
 // server.js's phoneToEmail() exactly, character for character -- they are
 // two implementations of one string, and a disagreement means a member
@@ -444,7 +447,7 @@ function phoneToEmail(phone){
   return loginAddressFor(phone, true);
 }
 function loginAddressFor(phone, bare){
-  const local = localDigits(phone) || String(phone).replace(/\D/g,'').replace(/^0+/, '');
+  const local = localDigits(phone) || (keepsLeadZero() ? String(phone).replace(/\D/g,'') : String(phone).replace(/\D/g,'').replace(/^0+/, ''));
   return (bare ? local : dial() + local) + '@potato-platform.com';
 }
 // Every address this number could have been registered under, most likely
@@ -523,7 +526,7 @@ function showAuthTab(tab){
   const changed = ($('registerPane').style.display !== 'none') !== reg;
   $('loginPane').style.display = reg ? 'none' : '';
   $('registerPane').style.display = reg ? '' : 'none';
-  const title = $('authTitle'); if (title) title.textContent = reg ? 'Create Account' : 'Login';
+  const title = $('authTitle'); if (title) title.textContent = reg ? 'Créer un compte' : 'Connexion';
   phoneError('login', ''); phoneError('reg', '');
   paSyncInvite();
   if (changed && $('authScreen').style.display !== 'none') paEnter();
@@ -539,7 +542,7 @@ window.toggleAuthEye = function(btn){
   const show = masked ? !input.classList.contains('pa-clear') : input.type === 'password';
   if (masked) input.classList.toggle('pa-clear', show); else input.type = show ? 'text' : 'password';
   btn.classList.toggle('shown', show);   // the eye is struck through while the password is hidden, open while it is shown
-  btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  btn.setAttribute('aria-label', show ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
 };
 // Owner: "on login it should not say please wait, it should say logging
 // in... so everywhere saying please wait... it should be removed."
@@ -558,23 +561,23 @@ function setBtnLoading(id, loading, label, busy){
 }
 function fbErrMsg(e){
   const code = e && e.code || '';
-  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') return 'Incorrect phone number or password.';
-  if (code === 'auth/user-not-found') return 'No account found for that number.';
-  if (code === 'auth/email-already-in-use') return 'An account with that number already exists.';
-  if (code === 'auth/weak-password') return 'Password must be at least 6 characters.';
-  if (code === 'auth/too-many-requests') return 'Too many attempts. Try again shortly.';
+  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') return 'Numéro de téléphone ou mot de passe incorrect.';
+  if (code === 'auth/user-not-found') return 'Aucun compte trouvé pour ce numéro.';
+  if (code === 'auth/email-already-in-use') return 'Un compte avec ce numéro existe déjà.';
+  if (code === 'auth/weak-password') return 'Le mot de passe doit comporter au moins 6 caractères.';
+  if (code === 'auth/too-many-requests') return 'Trop de tentatives. Réessayez sous peu.';
   // A weak connection is the commonest real failure here, and without these
   // the member was shown Firebase's own developer text, e.g.
   // "Firebase: Error (auth/network-request-failed)."
-  if (code === 'auth/network-request-failed' || code === 'auth/timeout') return 'Could not reach the sign-in service. Check your connection and try again.';
-  if (code === 'auth/user-disabled') return 'This account has been disabled. Contact support.';
-  if (code === 'auth/invalid-email') return 'Enter a valid mobile number.';
+  if (code === 'auth/network-request-failed' || code === 'auth/timeout') return 'Impossible de joindre le service de connexion. Vérifiez votre connexion et réessayez.';
+  if (code === 'auth/user-disabled') return 'Ce compte a été désactivé. Contactez l\'assistance.';
+  if (code === 'auth/invalid-email') return 'Saisissez un numéro de mobile valide.';
   if (code === 'auth/operation-not-allowed' || code === 'auth/internal-error' || code === 'auth/quota-exceeded' || code === 'auth/app-not-authorized' || code === 'auth/invalid-api-key')
-    return 'Sign-in is temporarily unavailable. Please try again shortly.';
+    return 'La connexion est temporairement indisponible. Veuillez réessayer sous peu.';
   const msg = e && e.message;
   // Any other Firebase code, or its "Firebase: ..." wording, is not for members.
-  if (code.indexOf('auth/') === 0 || /^Firebase:/i.test(msg || '')) return 'Something went wrong. Try again.';
-  return msg ? msg : 'Something went wrong. Try again.';
+  if (code.indexOf('auth/') === 0 || /^Firebase:/i.test(msg || '')) return 'Une erreur s\'est produite. Réessayez.';
+  return msg ? msg : 'Une erreur s\'est produite. Réessayez.';
 }
 // ── THE SIGN-IN SERVICE MAY NOT BE THERE ──
 // Firebase is a separate <script type="module"> that imports from gstatic
@@ -604,7 +607,7 @@ setTimeout(function(){
   try {
     hideLoadingScreen();
     if ($('app').style.display === 'none') $('authScreen').style.display = '';
-    notify('Could not load the sign-in service. Check your connection, then reload the app.');
+    notify('Impossible de charger le service de connexion. Vérifiez votre connexion, puis rechargez l\'application.');
   } catch (_) {}
 }, Number(window._FIREBASE_WATCHDOG_MS) || 15000);
 // ── SAVED-CREDENTIAL AUTO SIGN-IN ──
@@ -629,13 +632,13 @@ function credManSupported(){
 async function storeCredentialIfPossible(email, pass, displayPhone){
   if (!credManSupported()) return;
   const local = displayPhone ? localDigits(displayPhone) : null;
-  const id = local ? '0' + local : email;
+  const id = local ? (keepsLeadZero() ? local : '0' + local) : email;
   try { await navigator.credentials.store(new PasswordCredential({ id, password: pass, name: id })); } catch (_) {}
 }
 // The red line under the phone box ('login' or 'reg' screen). Only the phone number gets a line (as on the owner's screen); every other
 // refusal is the notice in the middle of the screen.
 function phoneError(which, msg){ const el = $(which === 'reg' ? 'regPhoneErr' : 'loginPhoneErr'); if (el) el.textContent = msg || ''; }
-function phoneErrorText(){ return 'Please enter a ' + phoneLenWords() + ' digit phone number'; }
+function phoneErrorText(){ return 'Veuillez saisir un numéro à ' + phoneLenWords() + ' chiffres'; }
 function loginError(where, msg){
   if (!msg) return phoneError('login', '');
   if (where === 'phone') return phoneError('login', msg);
@@ -651,15 +654,15 @@ window.doLogin = async function(){
   const pass = $('loginPassword').value;
   loginError('', '');
   if (!phone) return phoneError('login', phoneErrorText());
-  if (!pass) return notify('Missing required parameter');
-  if (pass.length < 6) return notify('Password must be at least 6 characters');
-  setBtnLoading('loginBtn', true, 'Login', 'Logging in...');
+  if (!pass) return notify('Paramètre obligatoire manquant');
+  if (pass.length < 6) return notify('Le mot de passe doit contenir au moins 6 caractères');
+  setBtnLoading('loginBtn', true, 'Connexion', 'Connexion...');
   window._pendingLoginSuccess = true;
   try {
     // Tries this region's address, then the other shape for the same region
     // -- see loginAddressCandidates(). The LAST error is the one reported, so
     // a genuinely wrong password still reads as a wrong password.
-    if (!(await firebaseReady(8000, 'fbSignIn'))) throw new Error('Sign-in is not available right now. Check your connection and try again.');
+    if (!(await firebaseReady(8000, 'fbSignIn'))) throw new Error('La connexion n\'est pas disponible pour le moment. Vérifiez votre connexion et réessayez.');
     const tries = loginAddressCandidates(phone);
     let email = tries[0], lastErr = null;
     for (const cand of tries) {
@@ -687,13 +690,13 @@ window.doLogin = async function(){
     window._pendingLoginSuccess = false;
     // Only a wrong phone number has a red line (the owner's screen); every other refusal is the centred notice.
     const code = (e && e.code) || '';
-    notify(code === 'auth/invalid-credential' || code === 'auth/wrong-password' ? 'Incorrect phone number or password' : fbErrMsg(e));
-    setBtnLoading('loginBtn', false, 'Login');
+    notify(code === 'auth/invalid-credential' || code === 'auth/wrong-password' ? 'Numéro de téléphone ou mot de passe incorrect' : fbErrMsg(e));
+    setBtnLoading('loginBtn', false, 'Connexion');
   }
   } finally {
     window._loginInProgress = false;
     if (!window._suppressAutofillLogin) window._autofillLoginTried = false;
-    setBtnLoading('loginBtn', false, 'Login');
+    setBtnLoading('loginBtn', false, 'Connexion');
   }
 };
 // ── SIGN UP: phone -> OTP -> password -> confirm password ──
@@ -727,19 +730,19 @@ window.doRegister = async function(){
   // The invitation code is optional.
   const referral = $('regReferral').value.trim();
   if (!phone) return phoneError('reg', phoneErrorText());
-  if (!pass || !pass2 || !tradePin) return regError('Missing required parameter');
-  if (pass.length < 6) return regError('Password must be at least 6 characters');
-  if (pass !== pass2) return regError('The two passwords do not match');
-  if (!/^\d{6}$/.test(tradePin)) return regError('Trade Password must be exactly 6 digits');
+  if (!pass || !pass2 || !tradePin) return regError('Paramètre obligatoire manquant');
+  if (pass.length < 6) return regError('Le mot de passe doit contenir au moins 6 caractères');
+  if (pass !== pass2) return regError('Les deux mots de passe ne correspondent pas');
+  if (!/^\d{6}$/.test(tradePin)) return regError('Le mot de passe de transaction doit comporter exactement 6 chiffres');
   // See firebaseReady(): without the sign-in service there is nothing to
   // create the account with, and the code below would only throw at the member.
   if (!(window.fbCreateUser && window.fbAuth)) {
-    setBtnLoading('regBtn', true, 'Register', 'Processing...');
+    setBtnLoading('regBtn', true, 'S\'inscrire', 'Traitement...');
     const ready = await firebaseReady(8000, 'fbCreateUser');
-    setBtnLoading('regBtn', false, 'Register');
-    if (!ready) return regError('Sign-up is not available right now. Check your connection and try again.');
+    setBtnLoading('regBtn', false, 'S\'inscrire');
+    if (!ready) return regError('L\'inscription n\'est pas disponible pour le moment. Vérifiez votre connexion et réessayez.');
   }
-  setBtnLoading('regBtn', true, 'Register', 'Processing...');
+  setBtnLoading('regBtn', true, 'S\'inscrire', 'Traitement...');
   STATE.refCode = referral;
   window._pendingRegPin = tradePin;
   window._pendingRegPhone = phone;
@@ -791,7 +794,7 @@ window.doRegister = async function(){
     // /register call, and a "Registration successful" toast on a plain login.
     window._pendingRegPin = ''; window._pendingRegPhone = '';
     regError(fbErrMsg(e));
-    setBtnLoading('regBtn', false, 'Register');
+    setBtnLoading('regBtn', false, 'S\'inscrire');
   }
 };
 // ── FORGOT PASSWORD: phone -> OTP -> new password, one screen ──
@@ -1248,7 +1251,7 @@ async function loadAuthSettings(){
 // to discover it by being rejected. Runs whenever the auth screen paints.
 function updateReferralFieldHint(){
   const input = $('regReferral');
-  if (input) input.placeholder = 'Invitation Code';
+  if (input) input.placeholder = 'Code d\'invitation';
 }
 
 
@@ -1265,10 +1268,10 @@ function handleMemberAuth(user){
 }
 function onMemberAuth(user){
   handleMemberAuth(user).catch(() => {
-    notify('Could not open your account. Please try logging in again.');
+    notify('Impossible d\'ouvrir votre compte. Veuillez vous reconnecter.');
     hideLoadingScreen();
     $('authScreen').style.display = '';
-    setBtnLoading('loginBtn', false, 'Login');
+    setBtnLoading('loginBtn', false, 'Connexion');
   });
 }
 window.addEventListener('snow-auth', ev => onMemberAuth(ev.detail));
@@ -1294,7 +1297,7 @@ async function processMemberAuth(user){
       if (!_memberSession.begin(user.uid + ':' + started, started, false)) return;
       try { sessionStorage.removeItem('potato_relogin_required'); } catch (_) {}
     } catch (_) {
-      notify('Could not verify your login session. Please try again.');
+      notify('Impossible de vérifier votre session. Veuillez réessayer.');
       await window.doLogout({ auto: true }); return;
     }
   } else { _memberSession.clear(); clearCachedState(); }
@@ -1310,8 +1313,8 @@ async function processMemberAuth(user){
     hideLoadingScreen();
     $('app').style.display = 'none';
     $('authScreen').style.display = '';
-    setBtnLoading('loginBtn', false, 'Login');
-    setBtnLoading('regBtn', false, 'Register');
+    setBtnLoading('loginBtn', false, 'Connexion');
+    setBtnLoading('regBtn', false, 'S\'inscrire');
     // Sign Up needs to know whether a referral code is required BEFORE
     // anyone submits, and boot() (which normally loads settings) only runs
     // after sign-in. Without this the screen would fall back to "required"
@@ -1426,7 +1429,7 @@ async function enterApp(){
   $('app').style.display = '';
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
-  setTimeout(() => { try { window.resumeManualPay(); } catch (_) {} }, 1200);   // back on the payment pages where they left off
+  setTimeout(() => { try { window.resumeWavePay(); } catch (_) {} }, 1200);   // back on the payment pages where they left off
   if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; }   // a typed login opens Home with no "Login successful" notice (owner)
   refreshAppDataInBackground(uid);
 }
@@ -1444,7 +1447,7 @@ async function registerCurrentUser(pin, phone){
   let reg = await post('/register', { referralCode: STATE.refCode || '', pin: pin || '', phone: phone || '' });
   // The invitation code is optional: a wrong one is dropped and the registration carries on without an upline.
   if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode) {
-    notify(reg.message || 'That referral code is invalid. Continuing without it.');
+    notify(reg.message || 'Ce code de parrainage est invalide. Nous continuons sans lui.');
     STATE.refCode = '';
     reg = await post('/register', { referralCode: '', pin: pin || '', phone: phone || '' });
   }
@@ -1463,9 +1466,9 @@ var SIGNUP_UNFINISHED_CODES = ['BAD_REFERRAL', 'BAD_REFERRAL_REGION'];
 async function abandonUnfinishedSignup(reg){
   hideLoadingScreen();
   if (SIGNUP_UNFINISHED_CODES.indexOf(reg.code) === -1) {
-    notify(reg.message || 'Could not complete registration');
+    notify(reg.message || 'Impossible de finaliser l\'inscription');
     $('authScreen').style.display = '';
-    setBtnLoading('regBtn', false, 'Register');
+    setBtnLoading('regBtn', false, 'S\'inscrire');
     return;
   }
   const local = localDigits(String((STATE.user && STATE.user.email) || '').split('@')[0]);
@@ -1473,10 +1476,10 @@ async function abandonUnfinishedSignup(reg){
   await window.fbSignOut();
   $('authScreen').style.display = '';
   showAuthTab('register');
-  if (local && $('regPhone')) $('regPhone').value = '0' + local;
+  if (local && $('regPhone')) $('regPhone').value = (keepsLeadZero() ? '' : '0') + local;
   if ($('regReferral') && STATE.refCode) { $('regReferral').value = STATE.refCode; paSyncInvite(); }
-  setBtnLoading('regBtn', false, 'Register');
-  notify((reg.message || 'Your sign-up was not finished.') + ' Complete your sign-up below.');
+  setBtnLoading('regBtn', false, 'S\'inscrire');
+  notify((reg.message || 'Votre inscription n\'est pas terminée.') + ' Terminez votre inscription ci-dessous.');
 }
 async function finishSignupToLogin(typedPhone){
   window._pendingLoginSuccess = false;
@@ -1487,7 +1490,7 @@ async function finishSignupToLogin(typedPhone){
   await window.doLogout();
   hideLoadingScreen();
   $('authScreen').style.display = '';
-  setBtnLoading('regBtn', false, 'Register');
+  setBtnLoading('regBtn', false, 'S\'inscrire');
   showAuthTab('login');
   if (savedPass) storeCredentialIfPossible(null, savedPass, typedPhone);
   // The Sign Up boxes are emptied a moment AFTER that pane is hidden, so the browser sees the form leave with its values filled in.
@@ -1495,7 +1498,7 @@ async function finishSignupToLogin(typedPhone){
   const ph = $('loginPhone'), pw = $('loginPassword');
   if (ph) ph.value = typedPhone;
   if (pw) pw.value = '';
-  notify('Registration successful!', () => { const el = $('loginPassword'); if (el) { try { el.focus(); } catch (_) {} } });
+  notify('Inscription réussie !', () => { const el = $('loginPassword'); if (el) { try { el.focus(); } catch (_) {} } });
 }
 async function bootFromNetwork(uid){
   // _pendingRegPhone identifies a signup started in this tab; it works
@@ -1526,9 +1529,9 @@ async function bootFromNetwork(uid){
     if (reg.stale || !STATE.user || STATE.user.uid !== uid) return;
     if (reg.status !== 'success' && reg.status !== 'already_done') {
       hideLoadingScreen();
-      notify(reg.message || 'Could not complete registration');
+      notify(reg.message || 'Impossible de finaliser l\'inscription');
       $('authScreen').style.display = '';
-      setBtnLoading('regBtn', false, 'Register');
+      setBtnLoading('regBtn', false, 'S\'inscrire');
       return;
     }
     window._pendingRegPin = ''; window._pendingRegPhone = '';
@@ -1541,7 +1544,7 @@ async function bootFromNetwork(uid){
     earlyInvestments = api('/investments', { timeoutMs: 10000 });
     r = await api('/account', { timeoutMs: 10000 });
     if (r.stale || !STATE.user || STATE.user.uid !== uid) return;
-    if (r.status === 'error' && (r.code === 'NOT_FOUND' || r.code === 'REGISTRATION_REQUIRED' || r.message === 'User not found')) {
+    if (r.status === 'error' && (r.code === 'NOT_FOUND' || r.code === 'REGISTRATION_REQUIRED' || r.message === 'Utilisateur introuvable')) {
       // Ghost account (Firebase user exists, our profile never finished in
       // an earlier session -- e.g. a crash/reload between account creation
       // and /register finishing) -- self-heal the same way.
@@ -1562,13 +1565,13 @@ async function bootFromNetwork(uid){
     // (A login the member just typed still signs out below, so a retry is clean.)
     hideLoadingScreen();
     $('authScreen').style.display = '';
-    notify('Could not reach the server. Check your connection and try again.');
+    notify('Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.');
     return;
   }
   if (r.status === 'error') {
     hideLoadingScreen();
     if (r.code === 'BANNED') { notify(r.message); await window.fbSignOut(); return; }
-    notify(r.message || 'Could not load your account');
+    notify(r.message || 'Impossible de charger votre compte');
     await window.fbSignOut();
     return;
   }
@@ -1607,8 +1610,8 @@ async function bootFromNetwork(uid){
   $('app').style.display = '';
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
-  setTimeout(() => { try { window.resumeManualPay(); } catch (_) {} }, 1200);   // back on the payment pages where they left off
-  if (signupFlow) { window._pendingLoginSuccess = false; notify('Registration successful ✓'); }
+  setTimeout(() => { try { window.resumeWavePay(); } catch (_) {} }, 1200);   // back on the payment pages where they left off
+  if (signupFlow) { window._pendingLoginSuccess = false; notify('Inscription réussie ✓'); }
   else if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; }   // no "Login successful" notice (owner)
   // The invite-address pool, fetched behind the app rather than in front of
   // it, so even the FIRST open of the Referral screen has an address ready
@@ -1729,8 +1732,8 @@ function updateNavIcons(){
 function paintFloats(){
   const box = $('ptFloats'); if (!box) return;
   const ic = STATE.icons || {};
-  const html = (ic.ordergift ? '<button class="pt-fl pt-fl-chest" type="button" onclick="openOrderGiftsPage()" aria-label="Order gifts">' + ptIconHtml('ordergift', 'gift') + '</button>' : '')
-    + (ic.downloadapp ? '<button class="pt-fl pt-fl-app" type="button" onclick="openDownloadPage()" aria-label="Download app">' + ptIconHtml('downloadapp', 'appfloat') + '</button>' : '');
+  const html = (ic.ordergift ? '<button class="pt-fl pt-fl-chest" type="button" onclick="openOrderGiftsPage()" aria-label="Cadeaux de commande">' + ptIconHtml('ordergift', 'gift') + '</button>' : '')
+    + (ic.downloadapp ? '<button class="pt-fl pt-fl-app" type="button" onclick="openDownloadPage()" aria-label="Télécharger l\'application">' + ptIconHtml('downloadapp', 'appfloat') + '</button>' : '');
   if (box.dataset.sig !== html) { box.innerHTML = html; box.dataset.sig = html; }
 }
 // Keeps balances/team stats quietly current while the app just sits open --
@@ -2102,11 +2105,11 @@ function maybeShowAnnouncement(){
   if (!bg || !sheet) return;
   const link = s.telegramGroup || '';
   sheet.innerHTML = `
-    <button class="mg-ann-x" type="button" onclick="closeAnnouncement()" aria-label="Close">${MGI.x}</button>
+    <button class="mg-ann-x" type="button" onclick="closeAnnouncement()" aria-label="Fermer">${MGI.x}</button>
     <div class="mg-ann-body">
       ${STATE.announcementImage ? `<img class="mg-ann-img" src="${esc(STATE.announcementImage)}" alt="">` : ''}
     </div>
-    ${link ? `<a class="mg-ann-join" href="${esc(link)}" target="_blank" rel="noopener" onclick="closeAnnouncement()"><svg viewBox="0 0 24 24" aria-hidden="true" width="20" height="20"><path fill="#fff" d="M21.5 3.2 2.7 10.5c-.9.4-.9 1.1 0 1.4l4.8 1.5 1.8 5.6c.2.6.8.7 1.2.3l2.6-2.2 4.9 3.6c.9.5 1.6.2 1.8-.9L22.9 4.4c.3-1.3-.5-1.8-1.4-1.2zM9 13.1l9.6-6-7.4 7.2-.3 3.4z"/></svg><span>Join Channel</span></a>` : ''}`;
+    ${link ? `<a class="mg-ann-join" href="${esc(link)}" target="_blank" rel="noopener" onclick="closeAnnouncement()"><svg viewBox="0 0 24 24" aria-hidden="true" width="20" height="20"><path fill="#fff" d="M21.5 3.2 2.7 10.5c-.9.4-.9 1.1 0 1.4l4.8 1.5 1.8 5.6c.2.6.8.7 1.2.3l2.6-2.2 4.9 3.6c.9.5 1.6.2 1.8-.9L22.9 4.4c.3-1.3-.5-1.8-1.4-1.2zM9 13.1l9.6-6-7.4 7.2-.3 3.4z"/></svg><span>Rejoindre le canal</span></a>` : ''}`;
   bg.classList.add('show');
   lockBodyScroll(); dlgOpened();
   annGrowIn(sheet);
@@ -2135,7 +2138,7 @@ function annGrowIn(sheet){
 // A list that could not be fetched says so (and a tap tries again) instead of passing itself off as an empty one: "No Orders" after a failed
 // load would tell a member their purchases are gone.
 var _productsLoadFailed = false, _recordsLoadFailed = false, _messagesLoadFailed = false;
-function loadFailHtml(what, cls){ return '<div class="v-empty ' + (cls || '') + '" role="button" onclick="retryLoad(\'' + what + '\')">Could not load. Tap to try again.</div>'; }
+function loadFailHtml(what, cls){ return '<div class="v-empty ' + (cls || '') + '" role="button" onclick="retryLoad(\'' + what + '\')">Chargement impossible. Touchez pour réessayer.</div>'; }
 window.retryLoad = async function(what){
   if (what === 'account') { const r = await api('/account'); if (r.status === 'success') STATE.account = r.account; return renderAccount(); }
   if (what === 'home') return renderHome();
@@ -2255,9 +2258,9 @@ function vProductCardHtml(p){
     <div class="pt-main">
       <h3>${esc(p.name)}</h3>
       <div class="pt-grid">
-        <div><b>Price</b><i class="pt-fit">${esc(ptMoneyInt(p.price))}</i></div>
-        <div><b>Daily</b><i class="pt-fit">${esc(ptMoneyInt(daily))}</i></div>
-        <div><b>Days</b><i>${cycle}</i></div>
+        <div><b>Prix</b><i class="pt-fit">${esc(ptMoneyInt(p.price))}</i></div>
+        <div><b>Quotidien</b><i class="pt-fit">${esc(ptMoneyInt(daily))}</i></div>
+        <div><b>Jours</b><i>${cycle}</i></div>
         <div><b>Total</b><i class="pt-fit">${esc(ptMoneyInt(expected))}</i></div>
       </div>
       ${vBuyHtml(p)}
@@ -2269,12 +2272,12 @@ function vProductCardHtml(p){
 var PT_CART = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h3l2.6 12.2h11.1L21 7H6.2"/><circle cx="9.5" cy="19.5" r="1.4"/><circle cx="17.5" cy="19.5" r="1.4"/></svg>';
 function vBuyHtml(p){
   const limit = Number(p.buyLimit) || 0;
-  if (limit > 0 && vOwnedCount(p.key) >= limit) return `<button class="pt-buy off" type="button" disabled>${PT_CART}<span>BUY</span></button>`;
-  if (mgProductOpen(p)) return `<button class="pt-buy" type="button" onclick="openInvestConfirm('${esc(p.key)}',this)">${PT_CART}<span>BUY</span></button>`;
+  if (limit > 0 && vOwnedCount(p.key) >= limit) return `<button class="pt-buy off" type="button" disabled>${PT_CART}<span>ACHETER</span></button>`;
+  if (mgProductOpen(p)) return `<button class="pt-buy" type="button" onclick="openInvestConfirm('${esc(p.key)}',this)">${PT_CART}<span>ACHETER</span></button>`;
   const at = Number(p.opensAt) || 0;
   // Not `disabled`: a disabled button swallows the tap, and the screen shows the "Coming soon, please wait" dialog when it is tapped.
-  if (!at || p.openMode === 'soon' || p.comingSoon) return '<button class="pt-buy soon" type="button" onclick="notify(\'Coming soon, please wait\')"><span>Coming Soon</span></button>';
-  return `<button class="pt-buy soon" type="button" onclick="notify('Coming soon, please wait')" data-opens-at="${at}"><span>Coming soon in ${fmtCountdown(at - ptServerNow())}</span></button>`;
+  if (!at || p.openMode === 'soon' || p.comingSoon) return '<button class="pt-buy soon" type="button" onclick="notify(\'Bientôt disponible, veuillez patienter\')"><span>Bientôt disponible</span></button>';
+  return `<button class="pt-buy soon" type="button" onclick="notify('Bientôt disponible, veuillez patienter')" data-opens-at="${at}"><span>Bientôt disponible dans ${fmtCountdown(at - ptServerNow())}</span></button>`;
 }
 function vBannerHtml(){
   const st = STATE.settings || {};
@@ -2287,7 +2290,7 @@ function mgUnread(){ return (STATE.messages || []).filter(m => !m.read).length; 
 window.openContactLink = function(kind){
   const s = STATE.settings || {};
   const url = kind === 'channel' ? (s.telegramGroup || '') : (s.supportTelegram || '');
-  if (!/^https?:\/\//i.test(String(url))) return notify('No ' + (kind === 'channel' ? 'channel' : 'service') + ' link is set yet.');
+  if (!/^https?:\/\//i.test(String(url))) return notify('Aucun ' + (kind === 'channel' ? 'channel' : 'service') + ' lien n\'est encore défini.');
   window.open(url, '_blank', 'noopener');
 };
 // ── Admin-uploaded cut-out icons and the flip clock (motion and look measured from the owner's screen recordings; CSS in index.html, PT-ANIM block) ──
@@ -2327,7 +2330,7 @@ function ptFlipClockSet(root, str){
 function ptFlipSettle(d){ d.classList.remove('pt-go'); const v = d.getAttribute('data-v'); d.querySelectorAll('i').forEach(i => { i.textContent = v; }); }
 
 function homeTabProducts(){ return (STATE.products || []).filter(p => p.active !== false); }
-function homeEmptyHtml(){ return '<div class="pt-noprod">No products available</div>'; }
+function homeEmptyHtml(){ return '<div class="pt-noprod">Aucun produit disponible</div>'; }
 function paintHome(){
   // A product the admin switched off (Active unticked) is not offered on Home; owners still see it on Income.
   const products = (STATE.products || []).filter(p => p.active !== false);
@@ -2336,9 +2339,9 @@ function paintHome(){
 <div class="v-page pt-home">
   ${vBannerHtml()}
   <div class="pt-quick">
-    ${quick('recharge', 'Recharge', 'openDepositSheet()')}${quick('withdraw', 'Withdraw', 'openWithdrawSheet()')}${quick('service', 'Service', "openContactLink('service')")}${quick('channel', 'Channel', "openContactLink('channel')")}
+    ${quick('recharge', 'Recharge', 'openDepositSheet()')}${quick('withdraw', 'Retrait', 'openWithdrawSheet()')}${quick('service', 'Service', "openContactLink('service')")}${quick('channel', 'Canal', "openContactLink('channel')")}
   </div>
-  <div class="pt-list" id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="pt-noprod">No products available</div>' : _productsLoadFailed ? '<div class="pt-noprod bad" role="button" onclick="retryLoad(\'home\')">Failed to load products</div>' : '')}</div>
+  <div class="pt-list" id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="pt-noprod">Aucun produit disponible</div>' : _productsLoadFailed ? '<div class="pt-noprod bad" role="button" onclick="retryLoad(\'home\')">Impossible de charger les produits</div>' : '')}</div>
 </div>`;
   const host = $('pageHost');
   // The same markup as what is already on screen: nothing to redraw (a redraw restarts the pop, the banner carousel and the Buy glow).
@@ -2440,8 +2443,8 @@ function startProductCountdowns(){
     let due = false;
     nodes.forEach(el => {
       const left = Number(el.getAttribute('data-opens-at')) - ptServerNow();   // the SERVER's clock, so a wrong phone clock cannot open or hold a product early
-      if (left <= 0) { due = true; el.textContent = 'Opening…'; return; }
-      el.textContent = 'Coming soon in ' + fmtCountdown(left);
+      if (left <= 0) { due = true; el.textContent = 'Ouverture…'; return; }
+      el.textContent = 'Bientôt disponible dans ' + fmtCountdown(left);
     });
     if (due) {
       clearInterval(_openCountdownTimer); _openCountdownTimer = null;
@@ -2488,26 +2491,26 @@ function ptStartLines(ms){
 function vOwnedCardHtml(inv){
   const st = planStats(inv);
   const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
-  const name = inv.tierLabel || p.name || 'Product';
+  const name = inv.tierLabel || p.name || 'Produit';
   // The last payment falls at the total-th midnight after the purchase (the first is the first midnight after it), so that is where the bar reaches 100.
   const startMs = st.createdMs, off = ptRegionOffsetMs(), endMs = (Math.floor((startMs + off) / 86400000) + st.total) * 86400000 - off;
   const pct = st.matured ? 100 : Math.max(0, Math.min(100, Math.floor((ptServerNow() - startMs) / Math.max(1, endMs - startMs) * 100)));
   return `
   <article class="pt-run">
     <div class="pt-run-top">
-      <div class="pt-run-img">${mgPicture(Object.assign({}, p, { name }))}<span class="pt-run-st${st.matured ? ' done' : ''}">${st.matured ? 'Completed' : 'Earning'}</span><span class="pt-run-cap">${esc(name)}</span></div>
+      <div class="pt-run-img">${mgPicture(Object.assign({}, p, { name }))}<span class="pt-run-st${st.matured ? ' done' : ''}">${st.matured ? 'Terminé' : 'En cours'}</span><span class="pt-run-cap">${esc(name)}</span></div>
       <div class="pt-run-info">
         <h3>${esc(name)}</h3>
-        <div class="pt-run-row"><span>Daily</span><b>+${esc(ptMoneyPlain(st.daily))}</b></div>
-        <div class="pt-run-row"><span>Reward</span><b>${esc(ptMoneyPlain(st.earned))}</b></div>
-        <div class="pt-run-row"><span>Amount</span><b>${esc(ptMoneyPlain(st.amount))}</b></div>
-        <div class="pt-run-row two"><span>Start</span><b>${ptStartLines(startMs)}</b></div>
+        <div class="pt-run-row"><span>Quotidien</span><b>+${esc(ptMoneyPlain(st.daily))}</b></div>
+        <div class="pt-run-row"><span>Récompense</span><b>${esc(ptMoneyPlain(st.earned))}</b></div>
+        <div class="pt-run-row"><span>Montant</span><b>${esc(ptMoneyPlain(st.amount))}</b></div>
+        <div class="pt-run-row two"><span>Début</span><b>${ptStartLines(startMs)}</b></div>
       </div>
     </div>
-    <div class="pt-run-mat"><span>Maturity ${pct}%</span><b>${st.daysLeft} days left</b></div>
+    <div class="pt-run-mat"><span>Échéance ${pct}%</span><b>${st.daysLeft} jours restants</b></div>
   </article>`;
 }
-// "Today's Income": what was paid into the wallet as earnings since 00:00 of the region's own day (Ethiopia: UTC+3).
+// "Today's Income": what was paid into the wallet as earnings since 00:00 of the region's own day (Côte d'Ivoire: UTC+0).
 var PT_EARN_TYPES = ['cashback'];   // Orders' Today's / Total Income count ONLY what the products paid (daily earnings), never gift codes, commission, rewards   // every source that adds to Total Income (server EARNING_TX_TYPES)
 function ptRegionOffsetMs(){ return (Number(REGION && REGION.utcOffsetMin) || 0) * 60000; }
 // Total Income on Orders: what the products have paid so far (the Reward of every product the member owns), not the wallet's all-sources total.
@@ -2559,15 +2562,15 @@ function paintAssets(loading){
     || String(x.id || '').localeCompare(String(y.id || '')));
   const a = STATE.account || {};
   const html = `
-<div class="pt-head">Orders</div>
+<div class="pt-head">Commandes</div>
 <div class="v-page pt-orders">
   <section class="pt-cd">
-    <h2>Earnings Countdown</h2>
-    <p>Daily settlement at 00:00</p>
+    <h2>Compte à rebours des gains</h2>
+    <p>Règlement quotidien à 00:00</p>
     ${ptFlipClockHtml(ptTimeToMidnight())}
-    <div class="pt-inc"><div><b>Today's Income</b><i id="ptToday" data-plain="1">${esc(ptMoneyPlain(ptTodayIncome()))}</i></div><div><b>Total Income</b><i id="incomeTotal" data-plain="1">${esc(ptMoneyPlain(ptProductIncome()))}</i></div></div>
+    <div class="pt-inc"><div><b>Revenu du jour</b><i id="ptToday" data-plain="1">${esc(ptMoneyPlain(ptTodayIncome()))}</i></div><div><b>Revenu total</b><i id="incomeTotal" data-plain="1">${esc(ptMoneyPlain(ptProductIncome()))}</i></div></div>
   </section>
-  <div class="mg-orders" id="ownedAssets">${loading ? '<div class="pt-none"><b>Loading...</b></div>' : owned.length ? owned.map(vOwnedCardHtml).join('') : _investmentsLoadFailed ? loadFailHtml('assets') : '<div class="pt-none"><b>No records</b><span>Buy your first product to start earning</span></div>'}</div>
+  <div class="mg-orders" id="ownedAssets">${loading ? '<div class="pt-none"><b>Chargement...</b></div>' : owned.length ? owned.map(vOwnedCardHtml).join('') : _investmentsLoadFailed ? loadFailHtml('assets') : '<div class="pt-none"><b>Aucun enregistrement</b><span>Achetez votre premier produit pour commencer à gagner</span></div>'}</div>
 </div>`;
   $('pageHost').innerHTML = html;
   ptStartIncomeClock();
@@ -2616,7 +2619,7 @@ function shareOrigin(){
 }
 // ── MY ASSETS investment helpers ──
 var _investmentsLoadFailed = false;
-var MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var MONTHS_SHORT = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
 function fmtDay(value){
   if (!value) return '—';
   const d = new Date(typeof value === 'number' ? value : String(value));
@@ -2627,7 +2630,7 @@ function fmtDay(value){
   // getters are LOCAL, so a member in Kampala sees the moment they tapped
   // Buy, not the UTC instant the server wrote down.
   const t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
-  return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' at ' + t;
+  return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' à ' + t;
 }
 // Every figure this screen shows about one plan, worked out in one place so
 // the summary band and the row can never disagree.
@@ -2662,7 +2665,7 @@ function planStats(inv){
 function myAssetRowHtml(inv){
   const st = planStats(inv);
   const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
-  const name = inv.tierLabel || p.name || 'Product';
+  const name = inv.tierLabel || p.name || 'Produit';
   const initial = esc(String(name || '?').trim()[0] || '?');
   const thumb = p.image
     ? `<img src="${esc(p.image)}" alt="" onerror="this.outerHTML='&lt;span&gt;${initial}&lt;/span&gt;'">`
@@ -2676,16 +2679,16 @@ function myAssetRowHtml(inv){
         <div class="mar-name">${esc(name)}</div>
         <div class="mar-date">${esc(fmtDay(inv.createdAt))}</div>
       </div>
-      <span class="mar-status">${st.matured ? 'Completed' : 'Ongoing'}</span>
+      <span class="mar-status">${st.matured ? 'Terminé' : 'En cours'}</span>
     </div>
     <div class="mar-values">
-      <div><span>Invested</span><b class="mono">${fmtUGXCents(st.amount)}</b></div>
-      <div><span>Earned</span><b class="mono">${fmtUGXCents(st.earned)}</b></div>
-      <div><span>${st.matured ? 'Return' : 'Daily'}</span><b class="mono">${fmtUGXCents(st.matured ? st.expected : st.daily)}</b></div>
+      <div><span>Investi</span><b class="mono">${fmtUGXCents(st.amount)}</b></div>
+      <div><span>Gagné</span><b class="mono">${fmtUGXCents(st.earned)}</b></div>
+      <div><span>${st.matured ? 'Retour' : 'Quotidien'}</span><b class="mono">${fmtUGXCents(st.matured ? st.expected : st.daily)}</b></div>
     </div>
     <div class="mar-progress"><i style="width:${progress}%"></i></div>
     <div class="mar-foot">
-      <span>${st.matured ? 'Finished' : `Day ${st.made} of ${st.total}`}</span>
+      <span>${st.matured ? 'Terminé' : `Jour ${st.made} of ${st.total}`}</span>
       <span>${st.matured ? fmtUGXCents(st.expected) + ' paid' : fmtUGXCents(st.remaining) + ' remaining'}</span>
     </div>
   </div>`;
@@ -2693,9 +2696,9 @@ function myAssetRowHtml(inv){
 function myAssetsInnerHtml(){
   const investments = (STATE.investments || []).filter(i => i.status === 'active' || i.status === 'matured');
   if (!Array.isArray(STATE.investments) && _investmentsLoadFailed) {
-    return '<div class="my-assets-empty">Could not load your products.</div>';
+    return '<div class="my-assets-empty">Impossible de charger vos produits.</div>';
   }
-  if (!investments.length) return '<div class="my-assets-empty">No investments yet. Browse Products to get started.</div>';
+  if (!investments.length) return '<div class="my-assets-empty">Aucun investissement pour l\'instant. Parcourez les produits pour commencer.</div>';
   return '<div class="my-assets-list">' + investments.map(myAssetRowHtml).join('') + '</div>';
 }
 function paintMyAssetsInner(){
@@ -2736,7 +2739,7 @@ window.switchTeamLevel = async function(level){
 // The "Loading . . ." word, centred, while a list is in flight.
 function teamLoadingHtml(){ return '<div class="list-loading">' + NAV_LOADER + '</div>'; }
 // The small "Loading..." word shown inside a page while its data arrives: plain grey text, standing still, as on the owner's screens.
-var NAV_LOADER = '<span class="mg-loadtxt">Loading...</span>';
+var NAV_LOADER = '<span class="mg-loadtxt">Chargement...</span>';
 function maskPhone(phone){
   // "769****67": the first three digits, four hidden, the rest, of the local number
   // (country code and leading zero dropped), enough to recognise your own
@@ -2775,17 +2778,17 @@ function renderTeamMembers(level){
   const box = $('teamMembersBox');
   if (!box) return;
   const cnt = $('mgLvCount'); if (cnt) cnt.textContent = String(members.length || (((STATE.teamStats || {}).team || {})['l' + level]) || 0);
-  const ttl = $('mgLvTitle'); if (ttl) ttl.textContent = 'Level ' + level;
-  if (!STATE.teamMembers[level] && _teamMembersFailed[level]) { box.innerHTML = '<div class="mg-nomem" onclick="switchTeamLevel(' + level + ')">Could not load your team</div>'; return; }
-  if (!members.length) { box.innerHTML = '<div class="mg-nomem">No Members</div>'; return; }
+  const ttl = $('mgLvTitle'); if (ttl) ttl.textContent = 'Niveau ' + level;
+  if (!STATE.teamMembers[level] && _teamMembersFailed[level]) { box.innerHTML = '<div class="mg-nomem" onclick="switchTeamLevel(' + level + ')">Impossible de charger votre équipe</div>'; return; }
+  if (!members.length) { box.innerHTML = '<div class="mg-nomem">Aucun membre</div>'; return; }
   // The owner's Team list (his screenshot, design-ref/c27): one white card holding a pale row per member -- the hidden number on the left, "Joined <date time>"
   // in the middle and the amount that member has bought on the right (₦0.00 until a product is purchased) -- and "No More" under it.
   box.innerHTML = '<div class="pt-mlist">' + members.map(m => `
   <article class="mg-mem">
     <b class="mg-mem-ph">${esc(m.phoneMasked || maskPhone(m.phone))}</b>
-    <span class="mg-mem-join">Joined ${esc(joinedStamp(m.createdAt))}</span>
+    <span class="mg-mem-join">Inscrit le ${esc(joinedStamp(m.createdAt))}</span>
     <b class="mg-mem-amt">${esc(vMoney2(m.invested))}</b>
-  </article>`).join('') + '</div><div class="pt-nomore">No More</div>';
+  </article>`).join('') + '</div><div class="pt-nomore">Plus rien à afficher</div>';
 }
 async function renderNetwork(){
   const hadCache = !!STATE.teamStats;
@@ -2803,34 +2806,34 @@ function ptTeamData(){ return STATE.teamStats || { referralCode:'', commRates:{}
 function ptLevelCardHtml(level, loading){
   const t = ptTeamData(), rates = t.commRates || {}, team = t.team || {}, lc = t.levelCommission || {}, lp = t.levelPurchase || {};
   const tile = (v, l) => `<div><b>${v}</b><span>${l}</span></div>`;
-  return `<div class="pt-lvh"><em>Lv${level}</em><h3>Level ${level}</h3></div>
-    <div class="pt-lvg">${tile(loading ? '...' : (Number(team['l' + level]) || 0), 'Members')}${tile((rates['l' + level] != null ? rates['l' + level] : 0) + '%', 'Rate')}${tile(loading ? '...' : esc(vMoney2(lc['l' + level])), 'Commission')}${tile(loading ? '...' : esc(vMoney2(lp['l' + level])), 'Purchase')}</div>`;
+  return `<div class="pt-lvh"><em>Niv${level}</em><h3>Niveau ${level}</h3></div>
+    <div class="pt-lvg">${tile(loading ? '...' : (Number(team['l' + level]) || 0), 'Membres')}${tile((rates['l' + level] != null ? rates['l' + level] : 0) + '%', 'Taux')}${tile(loading ? '...' : esc(vMoney2(lc['l' + level])), 'Commission')}${tile(loading ? '...' : esc(vMoney2(lp['l' + level])), 'Achat')}</div>`;
 }
 function ptTeamBodyHtml(loading){
   if (STATE.teamTab === 'reward') return ptRewardHtml(loading);
   const level = _activeTeamLevel || 1;
   _activeTeamLevel = level;
   return `<section class="pt-lvcard" id="ptLvCard">${ptLevelCardHtml(level, loading)}</section>
-  <div class="pt-lvrow">${[1, 2, 3].map(n => `<button type="button" class="pt-lvp${level === n ? ' on' : ''}" data-level="${n}" onclick="switchTeamLevel(${n})">Level ${n}</button>`).join('')}</div>
-  <div id="teamMembersBox">${loading ? '<div class="mg-nomem">Loading...</div>' : ''}</div>`;
+  <div class="pt-lvrow">${[1, 2, 3].map(n => `<button type="button" class="pt-lvp${level === n ? ' on' : ''}" data-level="${n}" onclick="switchTeamLevel(${n})">Niveau ${n}</button>`).join('')}</div>
+  <div id="teamMembersBox">${loading ? '<div class="mg-nomem">Chargement...</div>' : ''}</div>`;
 }
 function ptRewardHtml(loading){
   const S = STATE.salary;
-  if (!S && loading) return '<div class="mg-nomem">Loading...</div>';   // still on its way: not a failure
-  if (!S) return '<div class="v-empty" onclick="renderNetwork()">Could not load. Tap to try again.</div>';
+  if (!S && loading) return '<div class="mg-nomem">Chargement...</div>';   // still on its way: not a failure
+  if (!S) return '<div class="v-empty" onclick="renderNetwork()">Chargement impossible. Touchez pour réessayer.</div>';
   const tiers = S.tiers || [], total = Number(S.total) || 0;
   const money = n => cur() + ' ' + numGroup(n, false);
   return tiers.map((tier, i) => {
     const pct = tier.target > 0 ? Math.min(100, Math.floor(total / tier.target * 100)) : 0;
     // Each tier is claimed ONCE, for good: Share to Unlock -> Claim -> Claimed (it never comes back).
-    const btn = !tier.reached ? '<button type="button" class="pt-rbtn" onclick="navigatePage(\'promo\')">Share to Unlock</button>'
-      : !tier.claimed ? `<button type="button" class="pt-rbtn go" onclick="claimSalary(this, '${esc(tier.id)}')">Claim</button>`
-      : '<button type="button" class="pt-rbtn done" onclick="notify(\'You have already claimed this reward.\')">Claimed</button>';
-    return `<section class="pt-tier"><header><span>Tier ${i + 1}</span><b>+${esc(money(tier.reward))}</b></header>
-      <div class="pt-tb"><div class="pt-tl"><span>Consumption Threshold</span><b>${esc(money(tier.target))}</b></div>
+    const btn = !tier.reached ? '<button type="button" class="pt-rbtn" onclick="navigatePage(\'promo\')">Partagez pour débloquer</button>'
+      : !tier.claimed ? `<button type="button" class="pt-rbtn go" onclick="claimSalary(this, '${esc(tier.id)}')">Réclamer</button>`
+      : '<button type="button" class="pt-rbtn done" onclick="notify(\'Vous avez déjà réclamé cette récompense.\')">Réclamé</button>';
+    return `<section class="pt-tier"><header><span>Palier ${i + 1}</span><b>+${esc(money(tier.reward))}</b></header>
+      <div class="pt-tb"><div class="pt-tl"><span>Seuil de consommation</span><b>${esc(money(tier.target))}</b></div>
       <div class="pt-bar"><i style="width:${pct}%"></i></div>
       <div class="pt-tn">${esc(money(Math.min(total, tier.target)))} / ${esc(money(tier.target))}</div>${btn}</div></section>`;
-  }).join('') || '<div class="v-empty">No rewards yet.</div>';
+  }).join('') || '<div class="v-empty">Aucune récompense pour le moment.</div>';
 }
 window.ptTeamTab = function(tab){
   STATE.teamTab = tab === 'reward' ? 'reward' : 'team';
@@ -2844,8 +2847,8 @@ function paintNetwork(loading){
   const html = `
 <div class="v-page pt-team">
   <div class="pt-tb-banner">${STATE.teamBanner ? `<img src="${esc(STATE.teamBanner)}" alt="" onerror="this.style.display='none'">` : ''}
-    <div class="pt-tstat"><div><span>Team Count</span><b>${loading ? '...' : Number(t.totalTeam) || 0}</b></div><div><span>Total Commission</span><b>${loading ? '...' : esc(vMoney2(t.teamCommission))}</b></div></div></div>
-  <div class="pt-tabs"><button type="button" data-tab="team" class="${STATE.teamTab === 'reward' ? '' : 'on'}" onclick="ptTeamTab('team')">Team</button><button type="button" data-tab="reward" class="${STATE.teamTab === 'reward' ? 'on' : ''}" onclick="ptTeamTab('reward')">Reward</button></div>
+    <div class="pt-tstat"><div><span>Nombre de membres</span><b>${loading ? '...' : Number(t.totalTeam) || 0}</b></div><div><span>Commission totale</span><b>${loading ? '...' : esc(vMoney2(t.teamCommission))}</b></div></div></div>
+  <div class="pt-tabs"><button type="button" data-tab="team" class="${STATE.teamTab === 'reward' ? '' : 'on'}" onclick="ptTeamTab('team')">Équipe</button><button type="button" data-tab="reward" class="${STATE.teamTab === 'reward' ? 'on' : ''}" onclick="ptTeamTab('reward')">Récompense</button></div>
   <div id="ptTeamBody">${ptTeamBodyHtml(loading)}</div>
 </div>`;
   $('pageHost').innerHTML = html;
@@ -2880,9 +2883,9 @@ function paintPromo(){
 <div class="pt-share">
   <div class="pt-shero${img ? '' : ' pt-shero-empty'}">${img ? `<img src="${esc(img)}" alt="" onerror="this.style.display='none'">` : ''}</div>
   <section class="pt-scard">
-    <div class="pt-srow"><b>Commission Rates</b><span>Lv1 ${r1}% · Lv2 ${r2}% · Lv3 ${r3}%</span></div>
-    <div class="pt-surl"><p><b>Share URL:</b> <span class="pt-purl">${esc(_promoLink || '—')}</span></p><button type="button" class="pt-copy" data-copy-group="promo" onclick="copyPromoLink(this)">Copy</button></div>
-    <div class="pt-sdesc"><b>Reward Description</b><p>You can earn more revenue by sharing the link: LV1=${r1}% LV2=${r2}% LV3=${r3}% Hurry and invite your friends to join us!</p></div>
+    <div class="pt-srow"><b>Taux de commission</b><span>Niv1 ${r1}% · Niv2 ${r2}% · Niv3 ${r3}%</span></div>
+    <div class="pt-surl"><p><b>Lien de partage :</b> <span class="pt-purl">${esc(_promoLink || '—')}</span></p><button type="button" class="pt-copy" data-copy-group="promo" onclick="copyPromoLink(this)">Copier</button></div>
+    <div class="pt-sdesc"><b>Description de la récompense</b><p>Vous pouvez gagner plus en partageant le lien : NIV1=${r1}% NIV2=${r2}% NIV3=${r3}% Invitez vite vos amis à nous rejoindre !</p></div>
     <div class="pt-sbtns"><button type="button" class="wa" onclick="shareTo('whatsapp')">${MGI.whatsapp}<span>WhatsApp</span></button><button type="button" class="tg" onclick="shareTo('telegram')">${MGI.telegram}<span>Telegram</span></button></div>
   </section>
 </div>`;
@@ -2896,17 +2899,17 @@ function refreshPromoLink(){
   const el = document.querySelector('.pt-purl'); if (el) el.textContent = fresh;
 }
 window.copyPromoLink = function(btn){
-  if (!_promoLink) return notify('Your invite link is not ready yet.');
+  if (!_promoLink) return notify('Votre lien d\'invitation n\'est pas encore prêt.');
   if (!rapidTapGuardOk('copy:promo')) return;
   refreshPromoLink();
   writeClipboard(_promoLink, btn || null);
 };
 window.shareTo = function(where){
-  if (!_promoLink) return notify('Your invite link is not ready yet.');
+  if (!_promoLink) return notify('Votre lien d\'invitation n\'est pas encore prêt.');
   if (!rapidTapGuardOk('share:' + where)) return;
   refreshPromoLink();
   // The words that go with the link are the admin's (Settings > Share message); {app} stands for the app's name.
-  const words = String(((STATE.settings || {}).shareMessage) || 'Join me on {app}').replace(/\{app\}/gi, brandName());
+  const words = String(((STATE.settings || {}).shareMessage) || 'Rejoignez-moi sur {app}').replace(/\{app\}/gi, brandName());
   const msg = words + ': ' + _promoLink;
   const u = encodeURIComponent(_promoLink), m = encodeURIComponent(msg);
   const urls = {
@@ -2935,9 +2938,9 @@ window.claimSalary = async function(btn, tierId){
   if (r && r.status === 'success') {
     if (STATE.account) STATE.account.walletBalance = r.walletBalance;
     refreshTransactionsCache().catch(() => {});
-    return notify(fmtUGX(r.amount) + ' added to your wallet');
+    return notify(fmtUGX(r.amount) + ' ajouté à votre portefeuille');
   }
-  notify((r && r.message) || 'Could not claim the reward right now');
+  notify((r && r.message) || 'Impossible de réclamer la récompense pour le moment');
 };
 // ── MISSION CENTER — REMOVED ──
 // Owner: "remove mission center". The screen, both claim flows and the
@@ -2999,7 +3002,7 @@ function flashCopiedOne(btn){
   // and leave the control permanently stuck on it.
   if (btn._copyRevert) clearTimeout(btn._copyRevert);
   else btn._copyBefore = btn.innerHTML;
-  btn.innerHTML = isIconBtn ? COPY_TICK : btn.classList.contains('pt-copy') ? 'Copied \u2713' : 'Copied';
+  btn.innerHTML = isIconBtn ? COPY_TICK : btn.classList.contains('pt-copy') ? 'Copié ✓' : 'Copié';
   btn.classList.add('copied');
   btn._copyRevert = setTimeout(() => {
     btn.innerHTML = btn._copyBefore;
@@ -3027,12 +3030,12 @@ function flashCopied(btn){
   for (let i = 0; i < all.length; i++) flashCopiedOne(all[i]);
 }
 function writeClipboard(text, btn){
-  if (!navigator.clipboard) return notify('Could not copy');
+  if (!navigator.clipboard) return notify('Copie impossible');
   navigator.clipboard.writeText(text)
     .then(() => flashCopied(btn))
     // A failure has nothing visible to show for itself, so it still needs
     // saying -- and that is exactly what the alert card is for.
-    .catch(() => notify('Could not copy'));
+    .catch(() => notify('Copie impossible'));
 }
 // The button is taken from the event rather than passed in by every call site:
 // the markup already routes through onclick, so `this` is the control that was
@@ -3130,27 +3133,27 @@ async function renderAccount(){
   const a = STATE.account || {};
   const st = STATE.settings || {};
   const op = Number(st.myBannerOpacity), bl = Number(st.myBannerBlur);
-  const phone = localDigits(a.phone) ? '0' + localDigits(a.phone).replace(/^0+/, '') : (walletLocalPhone(a.phone) || formatPhoneDisplay(a.phone));
+  const phone = localDigits(a.phone) ? (keepsLeadZero() ? localDigits(a.phone) : '0' + localDigits(a.phone).replace(/^0+/, '')) : (walletLocalPhone(a.phone) || formatPhoneDisplay(a.phone));
   const avatar = STATE.profileLogo ? `<img src="${esc(STATE.profileLogo)}" alt="" onerror="this.style.display='none'">` : '';
   const html = `
 <div class="v-page pt-my">
   <section class="pt-mybanner">
     ${STATE.myBanner ? `<img class="pt-mysize" src="${esc(STATE.myBanner)}" alt="" style="opacity:${Number.isFinite(op) ? Math.min(100, Math.max(0, op)) / 100 : 1};filter:blur(${Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0}px);transform:scale(${1 + (Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0) / 160})">` : ''}
     <div class="pt-mid"><span class="pt-av">${avatar}</span><b>${esc(phone)}</b><i>VIP ${Number(a.vipLevel) || 0}</i></div>
-    <div class="pt-mystat"><div><span>Balance</span><b id="myBalance" class="pt-fit">${esc(vMoney2(a.walletBalance))}</b></div><div><span>Total Income</span><b id="myIncome" class="pt-fit">${esc(vMoney2(a.totalEarned))}</b></div></div>
+    <div class="pt-mystat"><div><span>Solde</span><b id="myBalance" class="pt-fit">${esc(vMoney2(a.walletBalance))}</b></div><div><span>Revenu total</span><b id="myIncome" class="pt-fit">${esc(vMoney2(a.totalEarned))}</b></div></div>
   </section>
   <div class="pt-menu">
-    ${ptMenuRow('bars', 'Balance Detail', "openTransactionStatement('all')")}
+    ${ptMenuRow('bars', 'Détail du solde', "openTransactionStatement('all')")}
     ${ptMenuRow('mail', 'Messages', 'openMessagesSheet()', true)}
-    ${ptMenuRow('lock', 'Login Password', 'openChangeLoginPasswordSheet()')}
-    ${ptMenuRow('shield', 'Trade Password', 'openChangeTradePasswordSheet()')}
+    ${ptMenuRow('lock', 'Mot de passe de connexion', 'openChangeLoginPasswordSheet()')}
+    ${ptMenuRow('shield', 'Mot de passe de transaction', 'openChangeTradePasswordSheet()')}
     ${gaMenuRowHtml()}
-    ${ptMenuRow('card', 'Bank Card', 'openWalletSheet()')}
-    ${ptMenuRow('bell', 'Gift Code', 'openChestSheet()')}
-    ${ptMenuRow('down', 'APP Download', 'openDownloadPage()')}
-    ${ptMenuRow('info', 'About Us', 'openAboutPage()')}
+    ${ptMenuRow('card', 'Compte de retrait', 'openWalletSheet()')}
+    ${ptMenuRow('bell', 'Code cadeau', 'openChestSheet()')}
+    ${ptMenuRow('down', 'Télécharger l\'appli', 'openDownloadPage()')}
+    ${ptMenuRow('info', 'À propos de nous', 'openAboutPage()')}
   </div>
-  <button type="button" class="pt-logout" onclick="doLogout()">Log Out</button>
+  <button type="button" class="pt-logout" onclick="doLogout()">Déconnexion</button>
 </div>`;
   $('pageHost').innerHTML = html;
   ptFitValues();
@@ -3167,31 +3170,29 @@ function paintAccountFailed(){
 <div class="v-page pt-my">
   <section class="pt-mybanner pt-mybad">
     ${STATE.myBanner ? `<img class="pt-mysize" src="${esc(STATE.myBanner)}" alt="" style="opacity:${Number.isFinite(op) ? Math.min(100, Math.max(0, op)) / 100 : 1};filter:blur(${Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0}px);transform:scale(${1 + (Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0) / 160})">` : ''}
-    <div class="pt-mid"><span class="pt-av">${avatar}</span><b>\u2013</b><i>VIP0</i></div>
-    <div class="pt-myerr"><p>Failed to load profile</p><button type="button" onclick="retryLoad('account')">Retry</button></div>
+    <div class="pt-mid"><span class="pt-av">${avatar}</span><b>–</b><i>VIP0</i></div>
+    <div class="pt-myerr"><p>Impossible de charger le profil</p><button type="button" onclick="retryLoad('account')">Réessayer</button></div>
   </section>
-  <button type="button" class="pt-logout" onclick="doLogout()">Log Out</button>
+  <button type="button" class="pt-logout" onclick="doLogout()">Déconnexion</button>
 </div>`;
 }
-// "+251 911 234 567" -- the shape the mockups show, from whatever the
-// server stored (0911234567 / 251911234567 / +251911234567 all normalise).
-// The dialling code is the region's; the 3-3-3 grouping is applied only to
-// a 9-digit local number, so a country with a different length gets its
-// digits printed whole rather than half-grouped.
+// "+225 07 07 07 07 07" -- from whatever the server stored (0707070707 / 2250707070707 / +2250707070707 all normalise).
+// The dialling code is the region's; a 10-digit local number is grouped 2-2-2-2-2, a 9-digit one 3-3-3, anything else is printed whole.
 function formatPhoneDisplay(phone){
   let d = String(phone || '').replace(/\D/g, '');
   if (!d) return '';
   const dc = dial();
-  if (d.slice(0, dc.length) === dc) d = d.slice(dc.length);
-  d = d.replace(/^0+/, '');
-  const groups = d.length === 9 ? d.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3') : d;
+  if (d.slice(0, dc.length) === dc && d.length > localLen()) d = d.slice(dc.length);
+  if (!keepsLeadZero()) d = d.replace(/^0+/, '');
+  const groups = d.length === 9 ? d.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')
+    : d.length === 10 ? d.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, '$1 $2 $3 $4 $5') : d;
   return dialPlus() + ' ' + groups;
 }
 
-// Withdrawal accounts: Commercial Bank of Ethiopia (a bank account number) and Telebirr (a wallet: a phone number).
+// Withdrawal accounts: Wave only (a wallet: a phone number).
 function walShort(n){ return String(n || ''); }
-function walProviders(){ return ['Commercial Bank of Ethiopia', 'Telebirr']; }
-function isMobileMoneyNetwork(network){ return network === 'Telebirr'; }
+function walProviders(){ return ['Wave']; }
+function isMobileMoneyNetwork(network){ return network === 'Wave'; }
 function walFull(label){
   const t = String(label || '').trim().toLowerCase();
   if (!t) return '';
@@ -3209,8 +3210,8 @@ window.openWalletSheet = async function(){
 var BANK_CARD_MAX = 5;
 // The dark card shows the active card, or the empty message while there is none.
 function vWalletCardHtml(w){
-  if (!w) return '<div class="pt-bcard empty"><b>No bank cards yet</b><span>Fill the form below to add one</span></div>';
-  return `<div class="pt-bcard"><b class="n">${esc(w.network)}</b><b class="d">${esc(ptCardNumber(w))}</b><span class="h">Cardholder\uff1a ${esc(String(w.holder || '').toUpperCase())}</span></div>`;
+  if (!w) return '<div class="pt-bcard empty"><b>Aucun compte de retrait pour le moment</b><span>Remplissez le formulaire ci-dessous pour en ajouter un</span></div>';
+  return `<div class="pt-bcard"><b class="n">${esc(w.network)}</b><b class="d">${esc(ptCardNumber(w))}</b><span class="h">Titulaire : ${esc(String(w.holder || '').toUpperCase())}</span></div>`;
 }
 function ptCardNumber(w){ const d = walletDestDisplay(w); return /^\d+$/.test(d) ? d.replace(/(\d{4})(?=\d)/g, '$1 ') : d; }
 function ptMaskedCard(w){ const d = String(walletDestDisplay(w)); return d.length > 8 ? d.slice(0, 4) + ' **** ' + d.slice(-4) : d; }
@@ -3218,12 +3219,12 @@ function ptOtherCardsHtml(){
   const list = STATE.bankAccounts || [], cur0 = witSelectedWallet();
   const others = list.filter(a => !cur0 || a.id !== cur0.id);
   if (!others.length) return '';
-  return `<h4 class="pt-oth">Other Cards</h4>` + others.map(a => `<button type="button" class="pt-ocard" onclick="selectBankCard('${esc(a.id)}')"><span class="ic">\ud83d\udcb3</span><b>${esc(ptMaskedCard(a))}</b><i>${esc(a.network)}</i><em>${esc(String(a.holder || '').toUpperCase())}</em></button>`).join('');
+  return `<h4 class="pt-oth">Autres comptes</h4>` + others.map(a => `<button type="button" class="pt-ocard" onclick="selectBankCard('${esc(a.id)}')"><span class="ic">\ud83d\udcb3</span><b>${esc(ptMaskedCard(a))}</b><i>${esc(a.network)}</i><em>${esc(String(a.holder || '').toUpperCase())}</em></button>`).join('');
 }
 window.selectBankCard = async function(id){
   if (!rapidTapGuardOk('bankcard:' + id)) return;
   const r = await post('/bank/select', { id });
-  if (r.status !== 'success') return notify(r.message || 'Could not change the card');
+  if (r.status !== 'success') return notify(r.message || 'Impossible de changer de compte');
   const fresh = await api('/bank/list');
   if (fresh.status === 'success') STATE.bankAccounts = fresh.accounts;
   if (_openSheetTitle === 'Bank Cards') paintWalletParts();
@@ -3231,11 +3232,12 @@ window.selectBankCard = async function(id){
 function walletLocalPhone(phone){
   let d = String(phone || '').replace(/\D/g, '');
   const dc = dial();
-  if (d.slice(0, dc.length) === dc) d = d.slice(dc.length);
+  if (d.slice(0, dc.length) === dc && d.length > localLen()) d = d.slice(dc.length);
+  if (keepsLeadZero()) return d;
   d = d.replace(/^0+/, '');
   return d ? '0' + d : '';
 }
-// A Telebirr card's number is a phone number, shown with its leading zero; a bank card's number is shown exactly as it was saved.
+// A Wave card's number is a phone number, shown with its leading zero; any other number is shown exactly as it was saved.
 function walletDestDisplay(w){ return w ? (isMobileMoneyNetwork(w.network) ? walletLocalPhone(w.phone) : String(w.phone || '')) : ''; }
 function walProviderOptionsHtml(){
   return walProviders().map(p => `<button type="button" class="prov-opt" onclick="pickProvider('${esc(p)}')">${esc(walShort(p))}</button>`).join('');
@@ -3250,19 +3252,20 @@ function paintWalletParts(){
 function renderWalletSheet(){
   $('sheetBody').innerHTML = `<div class="pt-bk">
     <div id="walCardBox"></div>
-    <div class="pt-addh"><i></i><h3>Add Bank Card</h3><span id="walCount">0/${BANK_CARD_MAX}</span></div>
-    <label class="pt-fl-l" for="walProvider">Bank Name</label>
+    <div class="pt-addh"><i></i><h3>Ajouter un compte de retrait</h3><span id="walCount">0/${BANK_CARD_MAX}</span></div>
+    <label class="pt-fl-l" for="walProvider">Fournisseur</label>
     <div class="prov-pick" id="walProviderPick">
-      <div class="pt-fbox"><span class="ic">\ud83c\udfe6</span><input id="walProvider" type="text" autocomplete="off" placeholder="Type to search bank" oninput="filterProviders()" onfocus="openProviderList()" onclick="openProviderList()"></div>
+      <div class="pt-fbox"><span class="ic">🏦</span><input id="walProvider" type="text" autocomplete="off" placeholder="Wave" oninput="filterProviders()" onfocus="openProviderList()" onclick="openProviderList()"></div>
       <div class="prov-list" id="walProviderList">${walProviderOptionsHtml()}</div>
     </div>
-    <label class="pt-fl-l" for="walPhone">Bank Account</label>
-    <div class="pt-fbox"><span class="ic hash">#</span><input id="walPhone" type="text" inputmode="numeric" autocomplete="off" placeholder="Enter card number" oninput="handleWalDestInput(this)"></div>
-    <label class="pt-fl-l" for="walHolder">Cardholder</label>
-    <div class="pt-fbox"><span class="ic">\ud83d\udc64</span><input id="walHolder" type="text" maxlength="60" autocomplete="name" enterkeyhint="done" placeholder="Cardholder name"></div>
-    <button class="pt-save" id="walSaveBtn" type="button" onclick="submitWallet()">Save Card</button>
+    <label class="pt-fl-l" for="walPhone">Numéro Wave</label>
+    <div class="pt-fbox"><span class="ic hash">#</span><input id="walPhone" type="text" inputmode="numeric" autocomplete="off" placeholder="Saisissez le numéro Wave" oninput="handleWalDestInput(this)"></div>
+    <label class="pt-fl-l" for="walHolder">Titulaire</label>
+    <div class="pt-fbox"><span class="ic">👤</span><input id="walHolder" type="text" maxlength="60" autocomplete="name" enterkeyhint="done" placeholder="Nom du titulaire"></div>
+    <button class="pt-save" id="walSaveBtn" type="button" onclick="submitWallet()">Enregistrer le compte</button>
   </div>`;
   paintWalletParts();
+  pickProvider('Wave');
 }
 window.openProviderList = function(){ const box = $('walProviderPick'); if (box) box.classList.add('open'); };
 window.filterProviders = function(){
@@ -3278,12 +3281,12 @@ window.pickProvider = function(name){
   const prev = inp ? (inp.dataset.network || inp.dataset.lastNetwork || '') : '';
   if (inp) { inp.value = walShort(name); inp.dataset.network = name; inp.dataset.lastNetwork = name; }
   // A phone number is never a bank account number (and the other way round): crossing between the two clears what was typed, and the box changes
-  // between a number pad (Telebirr) and letters-and-digits (the bank).
+  // between a number pad (Wave) and letters-and-digits.
   const dest = $('walPhone');
   if (dest) {
     const nowWallet = isMobileMoneyNetwork(name);
     dest.inputMode = nowWallet ? 'numeric' : 'text';
-    dest.placeholder = nowWallet ? 'Enter Telebirr phone number' : 'Enter bank account number';
+    dest.placeholder = 'Saisissez le numéro Wave';
     if (prev && isMobileMoneyNetwork(prev) !== nowWallet) dest.value = '';
   }
   const box = $('walProviderPick');
@@ -3306,24 +3309,24 @@ window.submitWallet = async function(){
   const network = walNetwork();
   const phone = $('walPhone').value;
   const holder = $('walHolder').value.trim();
-  if (!network || !String(phone).trim() || !holder) return notify('Please fill in all fields');
-  if ((STATE.bankAccounts || []).length >= BANK_CARD_MAX) return notify('You can save up to ' + BANK_CARD_MAX + ' bank cards.');
-  if (isMobileMoneyNetwork(network)) { if (String(phone).replace(/\D/g, '').length < 9) return notify('Enter a valid Telebirr phone number.'); }
-  else if (String(phone).trim().length < 4) return notify('Enter a valid bank account number.');
+  if (!network || !String(phone).trim() || !holder) return notify('Veuillez remplir tous les champs');
+  if ((STATE.bankAccounts || []).length >= BANK_CARD_MAX) return notify('Vous pouvez enregistrer jusqu\'à ' + BANK_CARD_MAX + ' comptes de retrait.');
+  if (String(phone).replace(/\D/g, '').length < localLen()) return notify('Saisissez un numéro Wave valide.');
   const btn = $('walSaveBtn');
   btn.disabled = true;
   const r = await post('/bank/save', { holder, network, phone });
   btn.disabled = false;
-  if (r.status !== 'success') return notify(r.message || 'Could not save your card.');
+  if (r.status !== 'success') return notify(r.message || 'Impossible d\'enregistrer votre compte.');
   return finishWalletSave();
 };
 // Tail of a successful /bank/save.
 async function finishWalletSave(){
   const fresh = await api('/bank/list');
   STATE.bankAccounts = fresh.status === 'success' ? fresh.accounts : (STATE.bankAccounts || []);
-  notify('Saved');
+  notify('Enregistré');
   if (_openSheetTitle === 'Bank Cards') {
     ['walProvider', 'walPhone', 'walHolder'].forEach(id => { const el = $(id); if (el) { el.value = ''; if (el.dataset) { el.dataset.network = ''; el.dataset.lastNetwork = ''; } } });
+    pickProvider('Wave');
     paintWalletParts();
   }
 }
@@ -3348,7 +3351,7 @@ function dismissNotify(){
 window.notify = function(message, onClose){
   $('notifyMsg').textContent = String(message || '');
   // Good news gets the circled tick, everything else the circled cross (the owner's refusal notice).
-  const good = /success|✓|copied|saved|done|now running|redeemed|submitted|sent|changed|processing|updated|claimed|unlocked|bound|added to your wallet/i.test(String(message || '')) && !/not |fail|could not|cannot|insufficient|invalid|incorrect|wrong|isn't|already|status changed|bind it|add a payout|need /i.test(String(message || ''));
+  const good = /réussi|succès|✓|copié|enregistré|terminé|effectué|envoyé|soumis|modifié|changé|en cours de traitement|mis à jour|réclamé|débloqué|lié|ajouté à votre portefeuille|configuré|échangé|utilisé/i.test(String(message || '')) && !/ pas |n'est pas|n'a pas|échec|échoué|impossible|insuffisant|invalide|incorrect|erroné|déjà|statut modifié|liez|ajoutez|besoin|obligatoire|manquant|trop de/i.test(String(message || ''));
   const ic = $('notifyIc');
   if (ic) { ic.innerHTML = good ? PT_NOTICE_OK : PT_NOTICE_BAD; ic.className = 'notify-ic ' + (good ? 'ok' : 'err'); }
   _notifyOnClose = typeof onClose === 'function' ? onClose : null;
@@ -3385,19 +3388,19 @@ function statementCategoryMatch(cat, t){
   return true;
 }
 function statementDescription(t){
-  if (t.type === 'deposit') return 'Deposit';
-  if (t.type === 'withdraw') return 'Withdraw';
-  if (t.type === 'cashback') return 'Daily Earnings';
+  if (t.type === 'deposit') return 'Dépôt';
+  if (t.type === 'withdraw') return 'Retrait';
+  if (t.type === 'cashback') return 'Gains quotidiens';
   if (t.type === 'commission') return 'Commission';
-  if (t.type === 'promocode') return 'Treasure Chest';
-  if (t.type === 'order_gift' || t.type === 'app_claim') return 'Treasure Chest';   // the owner: a received gift is the same record as a Gift Code win
-  if (t.type === 'welcome_bonus') return 'Welcome Bonus';
-  if (t.type === 'team_reward') return 'Team Reward';
-  if (t.type === 'mission_salary') return 'Team Reward';
-  if (t.type === 'mission_deposit_reward') return 'Mission Reward';
-  if (t.type === 'admin_credit') return 'Deposit';
-  if (t.type === 'invest' || t.type === 'investment') return 'Purchase';
-  if (t.type === 'investment_refund') return 'Refund';
+  if (t.type === 'promocode') return 'Coffre au trésor';
+  if (t.type === 'order_gift' || t.type === 'app_claim') return 'Coffre au trésor';   // the owner: a received gift is the same record as a Gift Code win
+  if (t.type === 'welcome_bonus') return 'Bonus de bienvenue';
+  if (t.type === 'team_reward') return 'Récompense d\'équipe';
+  if (t.type === 'mission_salary') return 'Récompense d\'équipe';
+  if (t.type === 'mission_deposit_reward') return 'Récompense de mission';
+  if (t.type === 'admin_credit') return 'Dépôt';
+  if (t.type === 'invest' || t.type === 'investment') return 'Achat';
+  if (t.type === 'investment_refund') return 'Remboursement';
   return 'Transaction';
 }
 // The pill under a row: orange while it is still moving, green once paid,
@@ -3407,14 +3410,14 @@ function statementChip(t){
   // A deposit is "Online Deposit" once it is paid and stays "Pending Deposit" in every other case, a failed or abandoned payment included (owner: never "Failed").
   if (t.type === 'deposit') {
     const dep = String(t.status || '').toLowerCase();
-    return /pend|process|await|initiating|creating|sending|fail|declin|reject|cancel|error|expire|timeout|unpaid/.test(dep) || !dep ? { text: 'Pending Deposit', cls: 'wait' } : { text: 'Online Deposit', cls: '' };
+    return /pend|process|await|initiating|creating|sending|fail|declin|reject|cancel|error|expire|timeout|unpaid/.test(dep) || !dep ? { text: 'Dépôt en attente', cls: 'wait' } : { text: 'Dépôt en ligne', cls: '' };
   }
   // The words in a free-text description only describe a deposit or a withdrawal; on a credit or a gift they are the admin's note.
   const describes = t.type === 'deposit' || t.type === 'withdraw';
   const raw = String(t.status || '').toLowerCase() + (describes ? ' ' + String(t.description || '').toLowerCase() : '');
-  if (/fail|declin|reject|cancel|error/.test(raw)) return { text: 'Failed', cls: 'bad' };
-  if (/pend|process|await|initiating|creating|sending/.test(raw)) return { text: t.type === 'deposit' ? 'Pending Deposit' : t.type === 'withdraw' ? 'Processing Payment' : 'Pending', cls: 'wait' };
-  if (t.type === 'withdraw') return { text: 'Paid', cls: 'ok' };
+  if (/fail|declin|reject|cancel|error/.test(raw)) return { text: 'Échoué', cls: 'bad' };
+  if (/pend|process|await|initiating|creating|sending/.test(raw)) return { text: t.type === 'deposit' ? 'Dépôt en attente' : t.type === 'withdraw' ? 'Paiement en cours' : 'En attente', cls: 'wait' };
+  if (t.type === 'withdraw') return { text: 'Payé', cls: 'ok' };
   return null;
 }
 function statementAmountText(t){
@@ -3424,7 +3427,7 @@ function statementAmountText(t){
 // The small emoji in front of a record (the owner's Balance Detail shows one for the Treasure Chest row) and the word after the time.
 var PT_REC_ICON = { promocode: '\ud83c\udf8f', order_gift: '\ud83c\udf8f', app_claim: '\ud83c\udf8f', deposit: '\ud83d\udce5', admin_credit: '\ud83d\udce5', withdraw: '\ud83d\udce4', cashback: '\ud83d\udcb0', commission: '\ud83e\udd1d', team_reward: '\ud83c\udfc6', mission_salary: '\ud83c\udfc6', invest: '\ud83d\uded2', investment: '\ud83d\uded2' };
 var PT_REC_NOKIND = ['invest', 'investment', 'investment_refund', 'cashback'];
-var PT_REC_KIND = { deposit: 'Deposit', admin_credit: 'Deposit', withdraw: 'Withdraw', commission: 'Team', team_reward: 'Team', mission_salary: 'Team' };
+var PT_REC_KIND = { deposit: 'Dépôt', admin_credit: 'Dépôt', withdraw: 'Retrait', commission: 'Équipe', team_reward: 'Équipe', mission_salary: 'Équipe' };
 function statementDayKey(t){
   const pad = n => String(n).padStart(2, '0');
   const ms = t.createdAt ? new Date(t.createdAt).getTime() : NaN;
@@ -3442,15 +3445,15 @@ function renderStatement(){
   const body = $('statementBody');
   if (!body) return;
   const all = (STATE.transactions || []).filter(t => statementCategoryMatch(_statementCat, t));
-  if (!all.length) { body.innerHTML = _recordsLoadFailed && !(STATE.transactions || []).length ? loadFailHtml('records') : '<div class="pt-norec">No records</div>'; return; }
+  if (!all.length) { body.innerHTML = _recordsLoadFailed && !(STATE.transactions || []).length ? loadFailHtml('records') : '<div class="pt-norec">Aucun enregistrement</div>'; return; }
   const groups = []; const idx = {};
   all.forEach(t => { const k = statementDayKey(t); if (!(k in idx)) { idx[k] = groups.length; groups.push({ k, rows: [] }); } groups[idx[k]].rows.push(t); });
   body.innerHTML = groups.map(g => `
-    <div class="pt-day"><i></i><b>${esc(g.k)}</b><span>${g.rows.length} rows</span></div>
+    <div class="pt-day"><i></i><b>${esc(g.k)}</b><span>${g.rows.length} ${g.rows.length > 1 ? 'lignes' : 'ligne'}</span></div>
     <article class="pt-rec"><div class="pt-rec-in">${g.rows.map(t => {
       const amt = recordsRowAmount(t);
       const chip = statementChip(t);
-      const kind = chip ? chip.text : (PT_REC_KIND[t.type] || (PT_REC_NOKIND.indexOf(t.type) >= 0 ? '' : 'Other'));   // a purchase shows only its time
+      const kind = chip ? chip.text : (PT_REC_KIND[t.type] || (PT_REC_NOKIND.indexOf(t.type) >= 0 ? '' : 'Autre'));   // a purchase shows only its time
       return `<div class="pt-rec-row"><span class="ic">${PT_REC_ICON[t.type] || '\ud83e\uddfe'}</span>
         <div class="m"><b>${esc(statementDescription(t))}</b><small>${esc(statementClock(t))}${kind ? ` \u00b7 <em class="${chip ? chip.cls : ''}">${esc(kind)}</em>` : ''}</small></div>
         <span class="a ${amt < 0 ? 'out' : 'in'}">${esc(statementAmountText(t))}</span></div>`;
@@ -3469,9 +3472,9 @@ window.openTransactionStatement = async function(cat){
   const hadCache = Array.isArray(STATE.transactions);
   const bal = (STATE.account && STATE.account.walletBalance) || 0;
   openSheet('Balance Detail', `
-    <div class="pt-rb"><span>Current Balance</span><b id="recBalance">${esc(vMoney2(bal))}</b></div>
+    <div class="pt-rb"><span>Solde actuel</span><b id="recBalance">${esc(vMoney2(bal))}</b></div>
     <div class="pt-rtabs" id="statementTabs">
-      ${[['all','All'],['income','Income'],['expense','Expense'],['withdraw','Withdraw']].map(([k, l]) => `<button data-cat="${k}" class="${_statementCat === k ? 'on' : ''}" onclick="switchStatementCategory('${k}')">${l}</button>`).join('')}
+      ${[['all','Tout'],['income','Revenus'],['expense','Dépense'],['withdraw','Retrait']].map(([k, l]) => `<button data-cat="${k}" class="${_statementCat === k ? 'on' : ''}" onclick="switchStatementCategory('${k}')">${l}</button>`).join('')}
     </div>
     <div id="statementBody"></div>`);
   $('sheetBg').classList.add('v-rec-page');
@@ -3516,7 +3519,7 @@ function renderMessagesList(){
   const box = $('msgBody');
   if (!box) return;
   const list = STATE.messages || [];
-  if (!list.length) { box.innerHTML = _messagesLoadFailed ? loadFailHtml('messages') : '<div class="pt-norec">No messages</div>'; return; }
+  if (!list.length) { box.innerHTML = _messagesLoadFailed ? loadFailHtml('messages') : '<div class="pt-norec">Aucun message</div>'; return; }
   const groups = []; const idx = {};
   list.forEach(m => { const k = statementDayKey(m); if (!(k in idx)) { idx[k] = groups.length; groups.push({ k, rows: [] }); } groups[idx[k]].rows.push(m); });
   box.innerHTML = groups.map(g => `
@@ -3540,7 +3543,7 @@ window.openMessageDetail = async function(index){
   const m = (STATE.messages || [])[index];
   if (!m) return;
   $('msgDetail').innerHTML = `
-    <button class="xbtn" onclick="closeMessageDetail()" aria-label="Close">${MGI.x}</button>
+    <button class="xbtn" onclick="closeMessageDetail()" aria-label="Fermer">${MGI.x}</button>
     <div class="head">
       <span class="av"></span>
       <div>
@@ -3601,21 +3604,21 @@ window.ptPwClear = function(){ const e = $('ptPwErr'); if (e) e.textContent = ''
 function ptPwError(msg){ const e = $('ptPwErr'); if (e) e.textContent = msg; }
 window.openChangeLoginPasswordSheet = function(){
   openSheet('Change Login Password', `<div class="pt-pw">
-    <label for="lpOld">Old Password</label>${vPwBox('lpOld', 'Enter old password')}
-    <label for="lpNew">New Password</label>${vPwBox('lpNew', 'Enter new password')}
-    <label for="lpNew2">Confirm New Password</label>${vPwBox('lpNew2', 'Confirm new password')}
+    <label for="lpOld">Ancien mot de passe</label>${vPwBox('lpOld', 'Entrez l\'ancien mot de passe')}
+    <label for="lpNew">Nouveau mot de passe</label>${vPwBox('lpNew', 'Entrez le nouveau mot de passe')}
+    <label for="lpNew2">Confirmez le nouveau mot de passe</label>${vPwBox('lpNew2', 'Confirmez le nouveau mot de passe')}
     <p class="pt-pwerr" id="ptPwErr"></p>
-    <div class="pt-pwbtns"><button type="button" class="no" onclick="closeSheet()">Cancel</button><button type="button" id="lpSaveBtn" onclick="submitLoginPasswordChange()">Change Password</button></div>
+    <div class="pt-pwbtns"><button type="button" class="no" onclick="closeSheet()">Annuler</button><button type="button" id="lpSaveBtn" onclick="submitLoginPasswordChange()">Changer le mot de passe</button></div>
   </div>`);
 };
 window.submitLoginPasswordChange = async function(){
   const oldPass = $('lpOld').value;
   const newPass = $('lpNew').value;
   const confirm = $('lpNew2').value;
-  if (!oldPass || !newPass || !confirm) return ptPwError('Please fill in all fields.');
-  if (!newPass || newPass.length < 6) return notify('Your new password must be at least 6 characters.');
-  if (newPass !== confirm) return notify('The two new passwords do not match.');
-  if (newPass === oldPass) return notify('Your new password must be different from the old one.');
+  if (!oldPass || !newPass || !confirm) return ptPwError('Veuillez remplir tous les champs.');
+  if (!newPass || newPass.length < 6) return notify('Votre nouveau mot de passe doit comporter au moins 6 caractères.');
+  if (newPass !== confirm) return notify('Les deux nouveaux mots de passe ne correspondent pas.');
+  if (newPass === oldPass) return notify('Votre nouveau mot de passe doit être différent de l\'ancien.');
   const btn = $('lpSaveBtn');
   btn.disabled = true;
   try {
@@ -3629,7 +3632,7 @@ window.submitLoginPasswordChange = async function(){
     closeSheet({ fromAction: true });
     await window.doLogout();
     try { const pi = $('loginPhone'); const local = localDigits(phoneKept); if (pi && local) pi.value = '0' + local.replace(/^0+/, ''); } catch (_) {}
-    notify('Login password changed. Please log in with your new password.');
+    notify('Mot de passe de connexion modifié. Veuillez vous connecter avec votre nouveau mot de passe.');
   } catch (e) {
     btn.disabled = false;
     // fbErrMsg's wrong-credential copy names the phone number, which only
@@ -3637,7 +3640,7 @@ window.submitLoginPasswordChange = async function(){
     // wrong is the old password itself.
     const code = e && e.code || '';
     notify(code === 'auth/invalid-credential' || code === 'auth/wrong-password'
-      ? 'That is not your current login password.'
+      ? 'Ce n\'est pas votre mot de passe de connexion actuel.'
       : fbErrMsg(e));
   }
 };
@@ -3649,11 +3652,11 @@ window.openChangeTradePasswordSheet = function(){
   // An account with no Trade Password yet is asked only for the new one.
   const first = (STATE.account || {}).hasTradePin === false;
   openSheet('Change Trade Password', `<div class="pt-pw">
-    ${first ? '' : `<label for="tpOld">Old Password</label>${vPwBox('tpOld', 'Enter old password', true)}`}
-    <label for="tpNew">New Password</label>${vPwBox('tpNew', 'Enter new password', true)}
-    <label for="tpNew2">Confirm New Password</label>${vPwBox('tpNew2', 'Confirm new password', true)}
+    ${first ? '' : `<label for="tpOld">Ancien mot de passe</label>${vPwBox('tpOld', 'Entrez l\'ancien mot de passe', true)}`}
+    <label for="tpNew">Nouveau mot de passe</label>${vPwBox('tpNew', 'Entrez le nouveau mot de passe', true)}
+    <label for="tpNew2">Confirmez le nouveau mot de passe</label>${vPwBox('tpNew2', 'Confirmez le nouveau mot de passe', true)}
     <p class="pt-pwerr" id="ptPwErr"></p>
-    <div class="pt-pwbtns one"><button type="button" id="tpSaveBtn" onclick="submitTradePasswordChange()">Change Password</button></div>
+    <div class="pt-pwbtns one"><button type="button" id="tpSaveBtn" onclick="submitTradePasswordChange()">Changer le mot de passe</button></div>
   </div>`);
 };
 window.submitTradePasswordChange = async function(){
@@ -3661,19 +3664,19 @@ window.submitTradePasswordChange = async function(){
   const oldPin = first ? '' : $('tpOld').value.trim();
   const newPin = $('tpNew').value.trim();
   const confirm = $('tpNew2').value.trim();
-  if ((!first && !oldPin) || !newPin || !confirm) return ptPwError('Please fill in all fields.');
-  if (!first && !/^\d{6}$/.test(oldPin)) return notify('Enter your current 6-digit trade password.');
-  if (!/^\d{6}$/.test(newPin)) return notify('Your new trade password must be exactly 6 digits.');
-  if (newPin !== confirm) return notify('The two new trade passwords do not match.');
-  if (!first && newPin === oldPin) return notify('Your new trade password must be different from the old one.');
+  if ((!first && !oldPin) || !newPin || !confirm) return ptPwError('Veuillez remplir tous les champs.');
+  if (!first && !/^\d{6}$/.test(oldPin)) return notify('Entrez votre mot de passe de transaction actuel à 6 chiffres.');
+  if (!/^\d{6}$/.test(newPin)) return notify('Votre nouveau mot de passe de transaction doit comporter exactement 6 chiffres.');
+  if (newPin !== confirm) return notify('Les deux nouveaux mots de passe de transaction ne correspondent pas.');
+  if (!first && newPin === oldPin) return notify('Votre nouveau mot de passe de transaction doit être différent de l\'ancien.');
   const btn = $('tpSaveBtn');
   btn.disabled = true;
   const r = await post('/account/transaction-pin/change', first ? { newPin } : { oldPin, newPin });
   btn.disabled = false;
-  if (r.status !== 'success') return notify(r.message || 'Could not change your trade password.');
+  if (r.status !== 'success') return notify(r.message || 'Impossible de changer votre mot de passe de transaction.');
   if (STATE.account) STATE.account.hasTradePin = true;
   closeSheet({ fromAction: true });
-  notify(first ? 'Trade password saved' : 'Trade password changed');
+  notify(first ? 'Mot de passe de transaction enregistré' : 'Mot de passe de transaction modifié');
 };
 
 // ── GOOGLE AUTHENTICATOR (the second step of every withdrawal; compulsory unless the owner switches the rule off) ──
@@ -3696,7 +3699,7 @@ function patchAuthRow(){
   if (!want && row) row.remove();
   else if (want && !row) {
     const t = document.createElement('div'); t.innerHTML = gaMenuRowHtml(); const el = t.firstElementChild; if (!el) return;
-    const after = [...menu.children].find(b => /Trade Password/.test(b.textContent || ''));
+    const after = [...menu.children].find(b => /Mot de passe de transaction/.test(b.textContent || ''));
     if (after) after.after(el); else menu.appendChild(el);
   }
 }
@@ -3706,7 +3709,7 @@ var GA_STORE = 'https://apps.apple.com/app/google-authenticator/id388497605';
 function gaClockSecs(){ return Math.round(Math.abs(_ptSkewMs) / 1000); }
 function gaClockWarning(){
   const off = gaClockSecs();
-  return off > 20 ? `<p class="pt-ga-warn">Your phone's clock is about ${off} seconds away from the real time, so authenticator codes will not match. Turn on automatic date and time in your phone settings.</p>` : '';
+  return off > 20 ? `<p class="pt-ga-warn">L'heure de votre téléphone est décalée d'environ ${off} secondes par rapport à l'heure réelle, les codes de l'authentificateur ne correspondront donc pas. Activez la date et l'heure automatiques dans les paramètres de votre téléphone.</p>` : '';
 }
 function gaCodeBox(id, placeholder, any){
   return `<div class="pt-pbox"><input id="${id}" type="text" ${any ? 'maxlength="11" inputmode="text" autocapitalize="characters"' : 'maxlength="6" inputmode="numeric"'} placeholder="${esc(placeholder)}" autocomplete="one-time-code" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore oninput="ptPwClear()"></div>`;
@@ -3718,68 +3721,68 @@ function ptQrSvg(text){
   const n = q.getModuleCount(), quiet = 4, size = n + quiet * 2;
   let d = '';
   for (let r = 0; r < n; r++) { let c = 0; while (c < n) { if (q.isDark(r, c)) { let e = c; while (e < n && q.isDark(r, e)) e++; d += 'M' + (c + quiet) + ' ' + (r + quiet) + 'h' + (e - c) + 'v1h-' + (e - c) + 'z'; c = e; } else c++; } }
-  return `<svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Setup picture for Google Authenticator" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect width="${size}" height="${size}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+  return `<svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Image de configuration pour Google Authenticator" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect width="${size}" height="${size}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
 }
 function gaOffHtml(){
-  const hero = `<h2>Google Authenticator is required</h2><p>${_ga.forWithdraw ? 'You need it before you can withdraw. ' : ''}After your Trade Password, every withdrawal also asks for a 6-digit code from Google Authenticator. Setting it up takes about two minutes.</p>`;
+  const hero = `<h2>Google Authenticator est obligatoire</h2><p>${_ga.forWithdraw ? 'Il vous le faut avant de pouvoir retirer. ' : ''}Après votre mot de passe de transaction, chaque retrait demande aussi un code à 6 chiffres de Google Authenticator. La configuration prend environ deux minutes.</p>`;
   return `<section class="pt-ga-card pt-ga-hero"><span class="pt-ga-badge">${PT_MENU_IC.auth}</span>${hero}</section>
-  <section class="pt-ga-card"><div class="pt-ga-step"><i>1</i><div><b>Download Google Authenticator</b><span>A free app from Google. Install it on your phone first.</span></div></div>
+  <section class="pt-ga-card"><div class="pt-ga-step"><i>1</i><div><b>Télécharger Google Authenticator</b><span>Une application gratuite de Google. Installez-la d'abord sur votre téléphone.</span></div></div>
     <div class="pt-ga-stores"><a href="${GA_PLAY}" target="_blank" rel="noopener">Google Play</a><a href="${GA_STORE}" target="_blank" rel="noopener">App Store</a></div></section>
-  <section class="pt-ga-card"><div class="pt-ga-step"><i>2</i><div><b>Enter your Trade Password</b><span>This confirms that it is really you.</span></div></div>
-    <div class="pt-ga-form">${vPwBox('gaPin', 'Enter trade password', true)}<p class="pt-pwerr" id="ptPwErr"></p>
-    <button type="button" class="pt-ga-btn" id="gaStartBtn" onclick="gaStart()">Continue</button></div></section>${gaClockWarning()}`;
+  <section class="pt-ga-card"><div class="pt-ga-step"><i>2</i><div><b>Saisissez votre mot de passe de transaction</b><span>Cela confirme que c'est bien vous.</span></div></div>
+    <div class="pt-ga-form">${vPwBox('gaPin', 'Entrez le mot de passe de transaction', true)}<p class="pt-pwerr" id="ptPwErr"></p>
+    <button type="button" class="pt-ga-btn" id="gaStartBtn" onclick="gaStart()">Continuer</button></div></section>${gaClockWarning()}`;
 }
 function gaSetupHtml(){
   const s = _ga.setup || {}, groups = String(s.secret || '').match(/.{1,4}/g) || [], key = groups.slice(0, 4).join(' ') + '<br>' + groups.slice(4).join(' ');   // two tidy lines of four groups (base32 letters and digits only, nothing to escape)
-  return `<section class="pt-ga-card"><div class="pt-ga-step"><i>1</i><div><b>Add this account to Google Authenticator</b><span>Choose the way that suits you.</span></div></div>
-    <a class="pt-ga-btn" href="${esc(s.otpauth)}">Open Google Authenticator</a>
-    <p class="pt-ga-note">If nothing opens, install the app first (Google Play or App Store), then use the setup key below.</p>
-    <p class="pt-ga-or"><span>or type the setup key</span></p>
+  return `<section class="pt-ga-card"><div class="pt-ga-step"><i>1</i><div><b>Ajoutez ce compte à Google Authenticator</b><span>Choisissez la méthode qui vous convient.</span></div></div>
+    <a class="pt-ga-btn" href="${esc(s.otpauth)}">Ouvrir Google Authenticator</a>
+    <p class="pt-ga-note">Si rien ne s'ouvre, installez d'abord l'application (Google Play ou App Store), puis utilisez la clé de configuration ci-dessous.</p>
+    <p class="pt-ga-or"><span>ou saisissez la clé de configuration</span></p>
     <div class="pt-ga-key" id="gaKey">${key}</div>
-    <button type="button" class="pt-ga-btn line" onclick="copyText('${esc(s.secret)}')">Copy key</button>
-    <p class="pt-ga-note">In the app tap <b>+</b>, then <b>Enter a setup key</b>. Account: ${esc(s.issuer)}. Type of key: <b>Time based</b>.</p>
-    <p class="pt-ga-or"><span>or scan the picture</span></p>
+    <button type="button" class="pt-ga-btn line" onclick="copyText('${esc(s.secret)}')">Copier la clé</button>
+    <p class="pt-ga-note">Dans l'application, touchez <b>+</b>, puis <b>Saisir une clé de configuration</b>. Compte : ${esc(s.issuer)}. Type de clé : <b>Basée sur le temps</b>.</p>
+    <p class="pt-ga-or"><span>ou scannez l'image</span></p>
     <div class="pt-ga-qr" id="gaQr"></div>
-    <p class="pt-ga-note">Scan it with Google Authenticator on another phone or tablet.</p></section>
-  <section class="pt-ga-card"><div class="pt-ga-step"><i>2</i><div><b>Type the 6-digit code</b><span>Google Authenticator now shows a 6-digit code for ${esc(s.issuer)}. Type it here to finish.</span></div></div>
-    <div class="pt-ga-form">${gaCodeBox('gaCode', 'Enter 6-digit code')}<p class="pt-pwerr" id="ptPwErr"></p>
-    <button type="button" class="pt-ga-btn" id="gaConfirmBtn" onclick="gaConfirm()">Turn On</button>
-    <button type="button" class="pt-ga-btn line" onclick="gaCancel()">Cancel</button></div></section>${gaClockWarning()}`;
+    <p class="pt-ga-note">Scannez-la avec Google Authenticator sur un autre téléphone ou une tablette.</p></section>
+  <section class="pt-ga-card"><div class="pt-ga-step"><i>2</i><div><b>Saisissez le code à 6 chiffres</b><span>Google Authenticator affiche maintenant un code à 6 chiffres pour ${esc(s.issuer)}. Saisissez-le ici pour terminer.</span></div></div>
+    <div class="pt-ga-form">${gaCodeBox('gaCode', 'Saisissez le code à 6 chiffres')}<p class="pt-pwerr" id="ptPwErr"></p>
+    <button type="button" class="pt-ga-btn" id="gaConfirmBtn" onclick="gaConfirm()">Activer</button>
+    <button type="button" class="pt-ga-btn line" onclick="gaCancel()">Annuler</button></div></section>${gaClockWarning()}`;
 }
 function gaCodesHtml(){
   const codes = _ga.codes || [];
-  return `<section class="pt-ga-card pt-ga-hero"><span class="pt-ga-badge on">${PT_MENU_IC.tick}</span><h2>Google Authenticator is on</h2><p>Save your backup codes now.</p></section>
-  <section class="pt-ga-card"><b class="pt-ga-h">Your backup codes</b>
-    <p class="pt-ga-note left">If you lose your phone, one of these codes lets you withdraw once. Each code works one time only. They are shown only now, so write them down or copy them and keep them somewhere safe.</p>
+  return `<section class="pt-ga-card pt-ga-hero"><span class="pt-ga-badge on">${PT_MENU_IC.tick}</span><h2>Google Authenticator est activé</h2><p>Enregistrez vos codes de secours maintenant.</p></section>
+  <section class="pt-ga-card"><b class="pt-ga-h">Vos codes de secours</b>
+    <p class="pt-ga-note left">Si vous perdez votre téléphone, l'un de ces codes vous permet de retirer une fois. Chaque code ne fonctionne qu'une seule fois. Ils ne sont affichés que maintenant : notez-les ou copiez-les et gardez-les en lieu sûr.</p>
     <div class="pt-ga-codes">${codes.map(c => `<span>${esc(c)}</span>`).join('')}</div>
-    <button type="button" class="pt-ga-btn line" onclick="copyText('${esc(codes.join('  '))}')">Copy all codes</button>
-    <button type="button" class="pt-ga-btn" onclick="gaCodesDone()">I have saved them</button></section>`;
+    <button type="button" class="pt-ga-btn line" onclick="copyText('${esc(codes.join('  '))}')">Copier tous les codes</button>
+    <button type="button" class="pt-ga-btn" onclick="gaCodesDone()">Je les ai enregistrés</button></section>`;
 }
 function gaOnHtml(){
   const st = _ga.status || {}, left = Number(st.backupLeft) || 0;
-  return `<section class="pt-ga-card pt-ga-hero"><span class="pt-ga-badge on">${PT_MENU_IC.tick}</span><h2>Google Authenticator is on</h2>${st.enabledAt ? `<p>Turned on ${esc(joinedStamp(st.enabledAt))}</p>` : ''}</section>
-  <section class="pt-ga-card"><p class="pt-ga-line">Every withdrawal needs your Trade Password and a 6-digit code from Google Authenticator.</p>
-    <p class="pt-ga-line"><b>Backup codes left:</b> ${left} of 8</p>${left <= 2 ? '<p class="pt-ga-warn">You are running low on backup codes. Make new ones.</p>' : ''}
-    <button type="button" class="pt-ga-btn line" onclick="gaManage('codes')">New backup codes</button>
-    <button type="button" class="pt-ga-btn" onclick="gaManage('off')">Turn Off</button></section>${gaClockWarning()}`;
+  return `<section class="pt-ga-card pt-ga-hero"><span class="pt-ga-badge on">${PT_MENU_IC.tick}</span><h2>Google Authenticator est activé</h2>${st.enabledAt ? `<p>Activé ${esc(joinedStamp(st.enabledAt))}</p>` : ''}</section>
+  <section class="pt-ga-card"><p class="pt-ga-line">Chaque retrait demande votre mot de passe de transaction et un code à 6 chiffres de Google Authenticator.</p>
+    <p class="pt-ga-line"><b>Codes de secours restants :</b> ${left} sur 8</p>${left <= 2 ? '<p class="pt-ga-warn">Il vous reste peu de codes de secours. Créez-en de nouveaux.</p>' : ''}
+    <button type="button" class="pt-ga-btn line" onclick="gaManage('codes')">Nouveaux codes de secours</button>
+    <button type="button" class="pt-ga-btn" onclick="gaManage('off')">Désactiver</button></section>${gaClockWarning()}`;
 }
 function gaManageHtml(){
   const off = _ga.action === 'off';
-  return `<section class="pt-ga-card"><b class="pt-ga-h">${off ? 'Turn off Google Authenticator' : 'Make new backup codes'}</b>
-    <p class="pt-ga-note left">${off ? 'You will not be able to withdraw until you set Google Authenticator up again.' : 'Your old backup codes stop working as soon as the new ones are made.'}</p>
-    <div class="pt-ga-form"><label for="gaPin">Trade Password</label>${vPwBox('gaPin', 'Enter trade password', true)}
-    <label for="gaCode">Authenticator code</label>${gaCodeBox('gaCode', '6-digit code or a backup code', true)}<p class="pt-pwerr" id="ptPwErr"></p>
-    <button type="button" class="pt-ga-btn" id="gaDoBtn" onclick="gaDoManage()">${off ? 'Turn Off' : 'Make New Codes'}</button>
-    <button type="button" class="pt-ga-btn line" onclick="gaBack()">Cancel</button></div></section>${gaClockWarning()}`;
+  return `<section class="pt-ga-card"><b class="pt-ga-h">${off ? 'Désactiver Google Authenticator' : 'Créer de nouveaux codes de secours'}</b>
+    <p class="pt-ga-note left">${off ? 'Vous ne pourrez plus retirer tant que vous n\'aurez pas reconfiguré Google Authenticator.' : 'Vos anciens codes de secours cessent de fonctionner dès que les nouveaux sont créés.'}</p>
+    <div class="pt-ga-form"><label for="gaPin">Mot de passe de transaction</label>${vPwBox('gaPin', 'Entrez le mot de passe de transaction', true)}
+    <label for="gaCode">Code de l'authentificateur</label>${gaCodeBox('gaCode', 'Code à 6 chiffres ou code de secours', true)}<p class="pt-pwerr" id="ptPwErr"></p>
+    <button type="button" class="pt-ga-btn" id="gaDoBtn" onclick="gaDoManage()">${off ? 'Désactiver' : 'Créer de nouveaux codes'}</button>
+    <button type="button" class="pt-ga-btn line" onclick="gaBack()">Annuler</button></div></section>${gaClockWarning()}`;
 }
 function gaDisabledHtml(){
-  return `<section class="pt-ga-card pt-ga-hero"><span class="pt-ga-badge">${PT_MENU_IC.auth}</span><h2>Google Authenticator is switched off</h2><p>It is not needed right now. Withdrawals ask only for your Trade Password.</p></section>`;
+  return `<section class="pt-ga-card pt-ga-hero"><span class="pt-ga-badge">${PT_MENU_IC.auth}</span><h2>Google Authenticator est désactivé</h2><p>Il n'est pas nécessaire pour le moment. Les retraits demandent seulement votre mot de passe de transaction.</p></section>`;
 }
 function gaPaint(){
   const host = $('gaBody'); if (!host) return;
   const v = _ga.view;
-  host.innerHTML = v === 'loading' ? '<div class="mg-nomem">Loading...</div>'
-    : v === 'error' ? '<div class="v-empty" onclick="gaLoad()">Could not load. Tap to try again.</div>'
+  host.innerHTML = v === 'loading' ? '<div class="mg-nomem">Chargement...</div>'
+    : v === 'error' ? '<div class="v-empty" onclick="gaLoad()">Chargement impossible. Touchez pour réessayer.</div>'
     : v === 'disabled' ? gaDisabledHtml()
     : v === 'off' ? gaOffHtml() : v === 'setup' ? gaSetupHtml() : v === 'codes' ? gaCodesHtml() : v === 'manage' ? gaManageHtml() : gaOnHtml();
   if (v === 'setup') { const q = $('gaQr'); if (q) q.innerHTML = ptQrSvg((_ga.setup || {}).otpauth); }
@@ -3802,27 +3805,27 @@ window.openAuthenticatorSheet = function(opts){
 };
 window.gaStart = async function(){
   const pin = ($('gaPin').value || '').trim();
-  if (!/^\d{6}$/.test(pin)) return ptPwError('Enter your 6-digit Trade Password.');
+  if (!/^\d{6}$/.test(pin)) return ptPwError('Entrez votre mot de passe de transaction à 6 chiffres.');
   const btn = $('gaStartBtn'); btn.disabled = true;
   const r = await post('/account/2fa/start', { pin });
   if (r.stale) return;
   if ($('gaStartBtn')) $('gaStartBtn').disabled = false;
   if (r.status !== 'success') {
     if (r.code === 'TWOFA_ALREADY_ON') return gaLoad();
-    return ptPwError(r.message || 'Could not start. Please try again.');
+    return ptPwError(r.message || 'Impossible de démarrer. Veuillez réessayer.');
   }
   _ga.setup = r; _ga.view = 'setup'; gaPaint();
 };
 window.gaConfirm = async function(){
   const code = ($('gaCode').value || '').replace(/\s/g, '');
-  if (!/^\d{6}$/.test(code)) return ptPwError('Enter the 6-digit code from Google Authenticator.');
+  if (!/^\d{6}$/.test(code)) return ptPwError('Saisissez le code à 6 chiffres de Google Authenticator.');
   const btn = $('gaConfirmBtn'); btn.disabled = true;
   const r = await post('/account/2fa/confirm', { code });
   if (r.stale) return;
   if ($('gaConfirmBtn')) $('gaConfirmBtn').disabled = false;
   if (r.status !== 'success') {
     if (r.code === 'TWOFA_NO_SETUP') { _ga.setup = null; _ga.view = 'off'; gaPaint(); return notify(r.message); }
-    return ptPwError((r.message || 'Could not turn it on.') + (r.code === 'TWOFA_INVALID' && gaClockSecs() > 20 ? ` Your phone's clock is about ${gaClockSecs()} seconds off.` : ''));
+    return ptPwError((r.message || 'Impossible de l\'activer.') + (r.code === 'TWOFA_INVALID' && gaClockSecs() > 20 ? ` L'heure de votre téléphone est décalée d'environ ${gaClockSecs()} secondes d'écart.` : ''));
   }
   if (STATE.account) STATE.account.twofaEnabled = true;
   _ga.setup = null; _ga.codes = r.backupCodes || []; _ga.view = 'codes'; gaPaint();
@@ -3834,12 +3837,12 @@ function gaReturnToWithdraw(){
   _ga.forWithdraw = false;
   openWithdrawSheet();
   const f = $('witAmount'); if (f && amount) { f.value = amount; syncWithdrawReceiveAmt(); }
-  notify('Google Authenticator setup done. You can withdraw now.');
+  notify('Google Authenticator est configuré. Vous pouvez retirer maintenant.');
 }
 // Tapping Withdraw without it: say why (the usual notice), then open the set-up page, unless the member has already left the Withdraw page.
 function gaRequiredNotice(){
   const amount = $('witAmount') ? $('witAmount').value : '';
-  notify('Google Authenticator is required to withdraw. Set it up first.', () => {
+  notify('Google Authenticator est obligatoire pour retirer. Configurez-le d\'abord.', () => {
     if (_openSheetTitle !== 'Withdraw') return;
     openAuthenticatorSheet({ forWithdraw: true, amount });
   });
@@ -3850,14 +3853,14 @@ window.gaBack = function(){ _ga.view = 'on'; gaPaint(); };
 window.gaDoManage = async function(){
   const off = _ga.action === 'off';
   const pin = ($('gaPin').value || '').trim(), code = ($('gaCode').value || '').trim();
-  if (!/^\d{6}$/.test(pin)) return ptPwError('Enter your 6-digit Trade Password.');
-  if (!code) return ptPwError('Enter the 6-digit code from Google Authenticator, or a backup code.');
+  if (!/^\d{6}$/.test(pin)) return ptPwError('Entrez votre mot de passe de transaction à 6 chiffres.');
+  if (!code) return ptPwError('Saisissez le code à 6 chiffres de Google Authenticator, ou un code de secours.');
   const btn = $('gaDoBtn'); btn.disabled = true;
   const r = await post(off ? '/account/2fa/disable' : '/account/2fa/backup-codes', { pin, code });
   if (r.stale) return;
   if ($('gaDoBtn')) $('gaDoBtn').disabled = false;
-  if (r.status !== 'success') return ptPwError(r.message || 'Could not finish. Please try again.');
-  if (off) { if (STATE.account) STATE.account.twofaEnabled = false; _ga.view = 'off'; gaPaint(); return notify('Google Authenticator is off'); }
+  if (r.status !== 'success') return ptPwError(r.message || 'Impossible de terminer. Veuillez réessayer.');
+  if (off) { if (STATE.account) STATE.account.twofaEnabled = false; _ga.view = 'off'; gaPaint(); return notify('Google Authenticator est désactivé'); }
   _ga.codes = r.backupCodes || []; _ga.view = 'codes'; gaPaint();
 };
 
@@ -3867,13 +3870,13 @@ window.gaDoManage = async function(){
 // full-screen win state with the amount won and the new balance.
 window.openChestSheet = function(){
   openSheet('Gift Code', `<div class="pt-gc">
-    <section class="pt-gchero"><span class="pt-gcbox" aria-hidden="true">\ud83c\udf81</span><h2>Mystery Gift Code</h2><p>One free redeem per day</p></section>
-    <section class="pt-gcform"><label for="chestKey">Gift Code Key</label>
-      <div class="pt-gcin"><span>\ud83d\udddd\ufe0f</span><input id="chestKey" type="text" placeholder="${esc(((STATE.settings || {}).giftCodeHint) || 'Enter gift code (T-XXXX)')}" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"></div>
-      <button class="pt-gcgo" id="chestOpenBtn" type="button" onclick="submitChestKey()">Redeem Gift Code</button>
-      <p class="pt-gchint">Result celebration shows after redeeming</p></section>
-    <div class="pt-gcrec"><i></i><h3>Reward Records</h3></div>
-    <p class="pt-gcnone" id="gcRecords">No more records</p>
+    <section class="pt-gchero"><span class="pt-gcbox" aria-hidden="true">🎁</span><h2>Code cadeau mystère</h2><p>Un échange gratuit par jour</p></section>
+    <section class="pt-gcform"><label for="chestKey">Clé du code cadeau</label>
+      <div class="pt-gcin"><span>🗝️</span><input id="chestKey" type="text" placeholder="${esc(((STATE.settings || {}).giftCodeHint) || 'Saisissez le code cadeau (T-XXXX)')}" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"></div>
+      <button class="pt-gcgo" id="chestOpenBtn" type="button" onclick="submitChestKey()">Utiliser un code cadeau</button>
+      <p class="pt-gchint">L'animation du résultat s'affiche après l'échange</p></section>
+    <div class="pt-gcrec"><i></i><h3>Historique des récompenses</h3></div>
+    <p class="pt-gcnone" id="gcRecords">Plus d'enregistrements</p>
   </div>`);
   $('sheetBg').classList.add('pt-pale-head');
   ptGiftCodeRecords();
@@ -3891,12 +3894,12 @@ window.submitChestKey = async function(){
   // codeLower now, so whatever case the member typed or pasted reaches
   // the server unchanged and still resolves to the same code.
   const raw = ($('chestKey').value || '').trim();
-  if (!raw) return notify('Please enter the gift code');
+  if (!raw) return notify('Veuillez saisir le code cadeau');
   const btn = $('chestOpenBtn');
-  btn.disabled = true; btn.textContent = 'Opening...';
+  btn.disabled = true; btn.textContent = 'Ouverture...';
   const r = await post('/redeem', { code: raw });
-  btn.disabled = false; btn.textContent = 'Redeem Gift Code';
-  if (r.status !== 'success') return notify(r.message || 'Wrong gift code');
+  btn.disabled = false; btn.textContent = 'Utiliser un code cadeau';
+  if (r.status !== 'success') return notify(r.message || 'Code cadeau incorrect');
   // Owner: "why does the congratulations card delay to appear when one has
   // claimed treasure code." Because it used to wait on TWO more round trips
   // after the redeem itself -- /account and the transactions cache -- purely
@@ -4059,11 +4062,19 @@ function maybeAnnounceOnEntry(){
   clearTimeout(_annNavTimer);
   _annNavTimer = setTimeout(() => { if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }, PT_ANN_AFTER_ICONS);
 }
+// A sheet's `title` is also its IDENTITY (the live refresh asks "is the Bank Cards sheet still open?"), so the callers keep passing the short internal name and only
+// what is PRINTED in the header is French.
+var SHEET_LABELS = {
+  'About Us': 'À propos de nous', 'Balance Detail': 'Détail du solde', 'Bank Cards': 'Comptes de retrait', 'Change Login Password': 'Changer le mot de passe de connexion',
+  'Change Trade Password': 'Changer le mot de passe de transaction', 'Deposit': 'Dépôt', 'Download App': "Télécharger l'application", 'Gift Code': 'Code cadeau',
+  'Google Authenticator': 'Google Authenticator', 'Messages': 'Messages', 'Order Gifts': 'Cadeaux de commande', 'Withdraw': 'Retrait'
+};
+function sheetLabel(title){ const s = String(title == null ? '' : title); return SHEET_LABELS[s] || s; }
 function openSheet(title, bodyHtml){
   dismissNotify();
   $('sheetBg').classList.remove('v-rec-page', 'mg-nohead', 'mg-chest-page', 'pt-pale-head');
   document.body.dataset.sheet = ({ 'Order Gifts': 'gifts', 'Download App': 'download', 'About Us': 'about', 'Deposit': 'deposit', 'Withdraw': 'withdraw' })[title] || '';
-  $('sheetTitle').textContent = title;
+  $('sheetTitle').textContent = sheetLabel(title);
   const hc = $('sheetCount'); if (hc) hc.style.display = 'none';
   $('sheetBody').innerHTML = bodyHtml;
   // Withdraw's empty-state "Add withdrawal account" link opens Withdrawal
@@ -4132,7 +4143,7 @@ function resetOverlayState(){
   const pin = $('pinBg'); if (pin) pin.classList.remove('show');   // the Trade Password dialog
   const tp = $('totpBg'); if (tp) tp.classList.remove('show');     // the authenticator code dialog
   _openSheetTitle = null; _withdrawSubmitting = false;
-  try { if (_mp.stage) { const k = localStorage.getItem(MP_RESUME_KEY); mpCloseRoot(); _mp.pushed = 0; if (k) localStorage.setItem(MP_RESUME_KEY, k); } } catch (_) {}   // the payment pages go with the session; where the member was is kept for the next sign-in
+  try { if (_mp.stage) { const k = localStorage.getItem(WV_RESUME_KEY); mpCloseRoot(); _mp.pushed = 0; if (k) localStorage.setItem(WV_RESUME_KEY, k); } } catch (_) {}   // the payment pages go with the session; where the member was is kept for the next sign-in
 }
 function dlgOpened(){
   if (_dlgCleanTimer) { clearTimeout(_dlgCleanTimer); _dlgCleanTimer = null; }
@@ -4230,10 +4241,10 @@ function recordsRowAmount(t){
   return Number(t.amount) || 0;
 }
 
-// Recharge: the amount goes to the bank / Telebirr payment pages (see the MANUAL BANK / WALLET RECHARGE section below).
+// Recharge: the amount goes to the Wave payment pages (see the WAVE PAYMENT PAGES section below).
 window.openDepositSheet = function(){
   const s = STATE.settings || {};
-  if (s.depositAvailable === false) return notify('Deposits are not available right now.');
+  if (s.depositAvailable === false) return notify('Les dépôts ne sont pas disponibles pour le moment.');
   openDepositFormSheet();
 };
 var _depChosenAmount = 0;
@@ -4245,14 +4256,14 @@ function openDepositFormSheet(){
   const note = t => `<div class="pt-note">${t}</div>`;
   openSheet('Deposit', `<div class="pt-dep">
     <div class="pt-chips" id="depChips">${chipAmts.map(a => `<button type="button" class="dep-chip pt-chip${a === _depChosenAmount ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a})">${a}</button>`).join('')}</div>
-    <div class="pt-avail">Available:<b>${esc(vMoney2((STATE.account || {}).walletBalance))}</b></div>
+    <div class="pt-avail">Disponible :<b>${esc(vMoney2((STATE.account || {}).walletBalance))}</b></div>
     <div class="pt-amt"><span>${esc(cur())}</span><input id="depAmount" type="text" inputmode="numeric" maxlength="9" value="${_depChosenAmount || ''}" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');syncDepositQuickAmt()" name="pt_amount" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore></div>
-    <button class="pt-pay" id="depSubmitBtn" type="button" onclick="submitDeposit()">Pay <b id="depPayAmt">${esc(numGroup(_depChosenAmount, true))}</b></button>
+    <button class="pt-pay" id="depSubmitBtn" type="button" onclick="submitDeposit()">Payer <b id="depPayAmt">${esc(numGroup(_depChosenAmount, true))}</b></button>
     <div class="pt-notes">
-      ${note('Minimum deposit amount: ' + esc(cur()) + ' ' + esc(numGroup(min, false)))}
-      ${note('Funds are usually credited within 1-10 minutes after payment')}
-      ${note('Please complete your payment in time to avoid order expiration')}
-      ${note('Please do not transfer to any account not designated by the platform')}
+      ${note('Montant minimum du dépôt : ' + esc(cur()) + ' ' + esc(numGroup(min, false)))}
+      ${note('Les fonds sont généralement crédités dans les 1 à 10 minutes après le paiement')}
+      ${note('Veuillez effectuer votre paiement à temps pour éviter l\'expiration de la commande')}
+      ${note('Ne transférez sur aucun compte non désigné par la plateforme')}
     </div>
   </div>`);
   ptCountPay();
@@ -4295,34 +4306,12 @@ function syncDepositQuickAmt(){
 }
 function ptProcessing(on){
   let el = $('ptProcBg');
-  if (on && !el) { el = document.createElement('div'); el.id = 'ptProcBg'; el.className = 'mg-redirect'; el.innerHTML = '<span class="spin"></span><p>Processing payment...</p>'; document.body.appendChild(el); }
+  if (on && !el) { el = document.createElement('div'); el.id = 'ptProcBg'; el.className = 'mg-redirect'; el.innerHTML = '<span class="spin"></span><p>Traitement du paiement...</p>'; document.body.appendChild(el); }
   if (el) el.classList.toggle('show', !!on);
 }
-// ── MANUAL BANK / WALLET RECHARGE PAGES (Ethiopia) ──
-// Owner's three screens, built to his screenshots (412 css px wide, 2.625 device px per css px):
-//   1. a "loading..." page with a blue ring while the payment page is prepared,
-//   2. "Please choose payment" -- the payment numbers the admin typed in (with logos),
-//   3. the payment page: Step 1 copy the account, Step 2 paste the payment SMS, a 30 minute clock.
-// "switch" goes back to page 2. Nothing is credited here: the claim goes to the admin Recharges tab.
+// ── Shared by the Wave pages: the page root, the small toast, the clock timer and the Back key ──
+// (The old manual "copy the account, paste the SMS" pages are gone: Wave is the only way to recharge.)
 var _mp = { amount: 0, channels: [], order: null, stage: '', pushed: 0, timer: 0, ignorePop: false, busy: false, toastT: 0 };
-// ── Coming back: the page the member is on (choose payment, or the pay page with its order and the SMS typed so far) is remembered, so when the
-// phone sends the app away to fetch the payment SMS and the browser then reloads it, the pages load and put the member back exactly there.
-// Cleared when the pages are closed, the SMS is sent or the order runs out.
-var MP_RESUME_KEY = 'mp_resume';
-function mpForget(){ try { localStorage.removeItem(MP_RESUME_KEY); } catch (_) {} }
-function mpSave(sms){
-  try {
-    if (_mp.stage !== 'pay' && _mp.stage !== 'choose') return;
-    const o = _mp.order; let draft = typeof sms === 'string' ? sms : String((($('mpSms') || {}).value) || '');
-    if (typeof sms !== 'string' && !draft) { try { draft = String((JSON.parse(localStorage.getItem(MP_RESUME_KEY) || 'null') || {}).sms || ''); } catch (_) {} }
-    localStorage.setItem(MP_RESUME_KEY, JSON.stringify({ u: STATE.user && STATE.user.uid || '', amount: _mp.amount, stage: _mp.stage, depositId: o && o.depositId || '',
-      exp: o ? Number(o.expiresAt) : 0, chId: o && o.channel && o.channel.id || '', sms: draft.slice(0, 2000), at: Date.now() }));
-  } catch (_) {}
-}
-window.mpSaveSms = function(v){ mpSave(String(v == null ? '' : v)); };
-function mpMoney(n){ return cur() + ' ' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-var MP_ICON_WARN = '<svg class="mpf-warn-ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4L12 3.5Z"/><path d="M12 10v4.6M12 17.2v.2"/></svg>';
-var MP_ICON_DIAMOND = '<svg class="mpf-dia" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 22 12 12 22 2 12 12 2Z" fill="#2f8ff5"/><path d="M12 2 22 12H2L12 2Z" fill="#7cc0ff"/></svg>';
 function mpRoot(){
   let el = $('mpFlow');
   if (!el) {
@@ -4332,15 +4321,10 @@ function mpRoot(){
   }
   return el;
 }
-function mpLogoHtml(ch, cls){
-  if (ch && ch.logo) return '<img class="' + cls + '" alt="" src="' + esc(ch.logo) + '">';
-  const letter = esc(String((ch && ch.name) || '?').trim().charAt(0).toUpperCase());
-  return '<span class="' + cls + ' mpf-noimg" aria-hidden="true">' + letter + '</span>';
-}
 function mpToast(msg){
   let el = $('mpToast');
   if (!el) { el = document.createElement('div'); el.id = 'mpToast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
-  el.textContent = String(msg == null ? '' : msg);
+  el.textContent = msg;
   el.classList.add('show');
   clearTimeout(_mp.toastT);
   _mp.toastT = setTimeout(() => el.classList.remove('show'), 1800);
@@ -4352,7 +4336,7 @@ function mpCloseRoot(){
   if (el) { el.classList.remove('show'); el.innerHTML = ''; }
   document.body.classList.remove('mp-open');
   _mp.stage = ''; _mp.order = null;
-  mpForget();
+  wvForget();
 }
 // Closes the pages and unwinds the history entries this flow pushed.
 window.mpClose = function(){
@@ -4362,189 +4346,426 @@ window.mpClose = function(){
 };
 window.addEventListener('popstate', () => {
   if (_mp.ignorePop || !_mp.stage) return;
-  if (_mp.stage === 'pay') { _mp.pushed = Math.max(0, _mp.pushed - 1); mpShowChoose(); return; }
+  if (_mp.stage === 'wres') { _mp.pushed = Math.max(0, _mp.pushed - 1); wvSheetClose(true); wvPayPage(); return; }
   _mp.pushed = 0; mpCloseRoot();
 });
-function mpShowLoading(){
-  _mp.stage = 'load';
-  const el = mpRoot();
-  el.className = 'show dark';
-  el.innerHTML = '<div class="mpf-load"><svg class="mpf-ring" width="36" height="36" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" fill="none" stroke="#1870f8" stroke-width="4" stroke-dasharray="39.3 55" transform="rotate(30 18 18)"/></svg><div class="mpf-loadtxt">loading...</div></div>';
-  document.body.classList.add('mp-open');
+// The recharge form calls this: the Wave pages are the only recharge pages.
+window.openManualPayFlow = function(amount){ return window.openWavePayFlow(amount); };
+// ── WAVE PAYMENT PAGES (Côte d'Ivoire) ──
+// Owner's screenshots and two screen recordings of the payment pages (411 css px wide, 2.625 device px per css px): a ring loader,
+// then three dots, then the pay page (30 minute clock, amount, the Wave row, the wallet number, Soumettre), a "Traitement en cours..."
+// card, and the result page with two tabs -- Ouvrir l'application (Wave's own link) and Scanner le code QR (the QR the admin
+// uploaded, the member's transaction number). English or French (the pill at the top, the choice is remembered). Nothing is
+// credited here: the claim goes to the admin Recharges tab (same as the SMS flow).
+var WV_IMG_ICON = 'data:image/png;base64,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';
+var WV_IMG_PAYWITH = 'data:image/png;base64,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';
+// ── Coming back: the page the member was on is remembered (not the link or QR, those are fetched again) and, when the app is opened
+// again while the same order is still open, the pages load and put them back exactly there. Cleared on close, on sending, on expiry.
+var WV_RESUME_KEY = 'wv_resume';
+function wvForget(){ try { localStorage.removeItem(WV_RESUME_KEY); } catch (_) {} }
+function wvSave(){
+  try {
+    const o = _wv.order; if (!o || (_mp.stage !== 'wpay' && _mp.stage !== 'wres')) return;
+    localStorage.setItem(WV_RESUME_KEY, JSON.stringify({ u: STATE.user && STATE.user.uid || '', amount: _wv.amount, depositId: o.depositId, exp: Number(o.expiresAt),
+      stage: _mp.stage, tab: _wv.tab, wallet: _wv.wallet, txId: _wv.txId, opened: !!_wv.opened, chId: _wv.ch && _wv.ch.id, at: Date.now() }));
+  } catch (_) {}
 }
-function mpShowChoose(){
-  _mpStageSet('choose');
-  const el = mpRoot();
-  el.className = 'show';
-  const rows = _mp.channels.map((c, i) => '<button type="button" class="mpf-row" onclick="mpPick(' + i + ')">' + mpLogoHtml(c, 'mpf-logo') +
-    '<span class="mpf-rname" data-no-i18n>' + esc(c.name) + '</span><svg class="mpf-chev" width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="#bbb" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5 7.5 7.5l-6 6"/></svg></button>').join('');
-  el.innerHTML = '<div class="mpf-choose">' +
-    '<div class="mpf-ohead"><span class="mpf-olab">Order Amount</span><span class="mpf-oval" data-no-i18n>' + esc(mpMoney(_mp.amount)) + '</span></div>' +
-    '<div class="mpf-pick">Please choose payment</div>' +
-    '<div class="mpf-rows">' + rows + '</div>' +
-    '<div class="mpf-remind">' + MP_ICON_WARN + '<span>Friendly reminder: Please use the corresponding bank to complete the transfer.</span><span>Please do not use interbank transfers from other banks to avoid delays and inconvenience.</span><span>Thank you for your understanding!</span></div>' +
-    '</div>';
-  document.body.classList.add('mp-open');
-  mpSave();
-}
-function _mpStageSet(st){ _mp.stage = st; if (st !== 'pay') mpStopTimer(); }
-window.mpPick = async function(i){
-  if (_mp.busy) return;
-  const ch = _mp.channels[i];
-  if (!ch) return;
-  _mp.busy = true;
-  mpShowLoading();
-  let r;
-  // every pick (also switching to another address) is a NEW order with a fresh 30 minute clock
-  try { r = await post('/deposit/manual/order', { amount: _mp.amount, channelId: ch.id }); }
-  finally { _mp.busy = false; }
-  if (!_mp.stage) return;
-  if (!r || r.stale) { mpShowChoose(); return; }
-  if (r.status !== 'success') { mpShowChoose(); return mpToast(r.message || 'Could not start recharge'); }
-  _mp.order = r;
-  history.pushState({ mp: 'pay' }, '', ''); _mp.pushed++;
-  mpShowPay();
+var _wvResuming = false;
+window.resumeWavePay = async function(){
+  if (_wvResuming || _mp.stage) return;
+  let st = null; try { st = JSON.parse(localStorage.getItem(WV_RESUME_KEY) || 'null'); } catch (_) {}
+  if (!st || !st.depositId) return;
+  const me = STATE.user && STATE.user.uid || '';
+  if (!me || (st.u && st.u !== me) || !(Number(st.exp) > Date.now() + 5000) || Date.now() - Number(st.at || 0) > 40 * 60 * 1000) return wvForget();
+  _wvResuming = true;
+  try {
+    _wv = Object.assign(_wv, { amount: Number(st.amount) || 0, channels: [], ch: null, wallet: String(st.wallet || ''), order: null, tab: st.tab === 'qr' ? 'qr' : 'app', opened: !!st.opened, busy: false, txId: String(st.txId || '') });
+    _mp.amount = _wv.amount; _mp.order = null;
+    history.pushState({ mp: 'wv' }, '', ''); _mp.pushed = 1;
+    wvRing();
+    const t0 = Date.now();
+    const r = await api('/public/pay-channels');
+    const wait = 650 - (Date.now() - t0); if (wait > 0) await wvWait(wait);
+    if (_mp.stage !== 'wload') return;
+    const chs = (r && r.status === 'success' && Array.isArray(r.channels)) ? r.channels.filter(c => c.kind === 'wave') : [];
+    if (!chs.length) { window.mpClose(); return; }
+    _wv.channels = chs; _wv.ch = chs.find(c => c.id === st.chId) || chs[0];
+    wvDots();
+    const t1 = Date.now();
+    const o = await wvOrder({ resume: true, depositId: st.depositId, wallet: _wv.wallet.length === ((REGION && REGION.localLength) || 10) ? _wv.wallet : undefined });
+    const wait2 = 500 - (Date.now() - t1); if (wait2 > 0) await wvWait(wait2);
+    if (_mp.stage !== 'wload') return;
+    if (!o) { window.mpClose(); return; }
+    if (st.stage === 'wres' && (o.payLink || o.qrImage)) { history.pushState({ mp: 'wres' }, '', ''); _mp.pushed++; wvResultPage(true); }
+    else wvPayPage(true);
+  } finally { _wvResuming = false; }
 };
-function mpShowPay(){
-  const o = _mp.order; if (!o) return mpShowChoose();
-  const ch = o.channel || {};
-  _mpStageSet('pay');
-  const el = mpRoot();
-  el.className = 'show dark';
-  const isWallet = ch.kind === 'wallet';
-  const ph = isWallet
-    ? 'Dear AMIR You have transferred ETB 5.00 to MASFIN FTINAFU (2510****3268) on 01/02/2026 13:07:25. Your transaction number is DA39J9GAMN. The service fee is ETB 0.87 and 15% VAT on the service fee is ETB 0.13. Your current E-Money Account balance is ETB 1300.22. To download your payment information please click this link: https://transactioninfo.ethiotelecom.et/receipt/DA39J9GAMN.'
-    : 'https://mbreciept.cbe.com.et/v2-hfHCxFT8tBhc0zxe95aa\n\nhttps://apps.cbe.com.et:100/?id=FT25512S26V825101122';
-  const phHead = isWallet ? '' : 'Paste the confirmation message here, or enter the code (FT or v2-):\n\n';
-  el.innerHTML = '<div class="mpf-pay">' +
-    '<div class="mpf-head">' + mpLogoHtml(ch, 'mpf-hlogo') + '<div class="mpf-clock"><span>Order Remaining</span><b id="mpM1"></b><b id="mpM2"></b><span>Min</span><b id="mpS1"></b><b id="mpS2"></b><span>Sec</span></div></div>' +
-    '<div class="mpf-card">' +
-      '<div class="mpf-step"><b>Step 1</b><span>Copy account for payment</span></div>' +
-      '<div class="mpf-box">' +
-        '<div class="mpf-amt"><span class="mpf-l1">Order Amount</span><b data-no-i18n>' + esc(mpMoney(o.amount)) + '</b></div>' +
-        '<div class="mpf-k">Payment Channel</div>' +
-        '<div class="mpf-v"><b data-no-i18n>' + esc(ch.name) + '</b><button type="button" class="mpf-pill" onclick="mpSwitch()">switch</button></div>' +
-        '<div class="mpf-k">Account Name</div>' +
-        '<div class="mpf-v"><b data-no-i18n>' + esc(o.accountName) + '</b><button type="button" class="mpf-pill" onclick="mpCopy(\'name\')">copy</button></div>' +
-        '<div class="mpf-k">Account Number</div>' +
-        '<div class="mpf-v"><b data-no-i18n>' + esc(o.accountNumber) + '</b><button type="button" class="mpf-pill" onclick="mpCopy(\'number\')">copy</button></div>' +
-      '</div>' +
-      '<div class="mpf-help"><p>After the transfer is complete → check the SMS. The code starts with: "v2-" or "FT"</p>' +
-        '<p>' + MP_ICON_DIAMOND + '<span>v2-hf = enter the 23-character code</span></p>' +
-        '<p>' + MP_ICON_DIAMOND + '<span>FT = enter the 12-character code</span></p>' +
-        '<p>' + MP_ICON_DIAMOND + '<span>Telebirr = 10 characters only</span></p></div>' +
-      '<div class="mpf-step2"><b>Step 2</b><span>Paste payment SMS or enter v2- or FT</span></div>' +
-      '<textarea id="mpSms" class="mpf-ta" data-no-i18n rows="6" maxlength="2000" spellcheck="false" autocomplete="off" oninput="mpSaveSms(this.value)" placeholder="' + esc(phHead + ph) + '"></textarea>' +
-      '<button type="button" class="mpf-submit" id="mpSubmit" onclick="mpSubmit()">Submit</button>' +
-      '<div class="mpf-note">' + MP_ICON_WARN + '<span>Do not save the account number! It changes in real time. Otherwise the transfer will fail.</span></div>' +
-    '</div></div>';
-  document.body.classList.add('mp-open');
-  mpTick();
-  mpStopTimer(); _mp.timer = setInterval(mpTick, 1000);
-  mpSave();
+var _wv = { amount: 0, channels: [], ch: null, wallet: '', order: null, tab: 'app', opened: false, busy: false, txId: '', lang: 'fr', toastT: 0 };
+var WV_T = {
+  fr: {
+    closeA: 'Fermer', langA: 'Langue', badLink: 'Lien de paiement non valide',
+    loading: 'Chargement', payAmount: 'Montant du paiement', walletPh: 'Veuillez entrer le numéro de portefeuille',
+    hint: 'Veuillez saisir correctement votre numéro de portefeuille de paiement à 10 chiffres pour que votre paiement arrive avec précision',
+    submit: 'Soumettre', secT: 'Paiement Sécurisé Protégé', secP: 'Vos informations de paiement sont entièrement cryptées. Veuillez vérifier attentivement les détails.',
+    toast: 'Veuillez saisir le numéro de portefeuille correct', close: 'CLOSE', proc: 'Traitement en cours...',
+    tabApp: 'Ouvrir l\'application', tabQr: 'Scanner le code QR', amount: 'Montant',
+    howApp: 'Comment ouvrir l\'application de paiement? Cliquez ici pour voir!', card: 'Cliquez sur le bouton ci-dessous pour ouvrir l\'application de paiement et compléter votre transaction.',
+    openPay: 'Ouvrir l\'application pour payer', after: 'Après avoir cliqué, vous serez redirigé vers l\'application de paiement',
+    warn: 'Si vous avez terminé le transfert, veuillez cliquer sur le bouton ci-dessous pour obtenir le résultat du paiement dans la plateforme', getRes: 'Obtenir le résultat du paiement',
+    howQr: 'Comment scanner? Cliquez ici pour voir', qrInfo: 'Si vous avez terminé le paiement, veuillez remplir le numéro de transaction et cliquer pour vérifier le résultat du paiement',
+    txLabel: 'Numéro de transaction', txPh: 'Entrez le numéro de transaction du relevé de transfert de l\'application', txHint: 'Veuillez entrer le numéro de transaction du relevé de transfert de votre application',
+    txReq: 'Le numéro de transaction est requis', checkRes: 'Vérifier le résultat du paiement', saveQr: 'Enregistrer le code QR', saveHint: 'Enregistrez le code QR sur votre appareil et scannez-le plus tard',
+    qrSaved: 'Code QR enregistré', pillTo: 'ENGLISH',
+    qrTitle: 'Comment scanner le code QR ?', qrSteps: ['Ouvrez votre application de paiement Wave', 'Touchez la fonction de scan de code QR', 'Pointez votre caméra vers le code QR ci-dessus', 'Confirmez le montant du paiement et terminez la transaction'], sheetClose: 'FERMER',
+    gTitle: 'Guide de configuration du téléphone Android (une seule fois)', gIntro: 'Si l\'application Wave ne s\'ouvre pas directement après avoir cliqué, veuillez suivre ces étapes :',
+    g1: 'Appuyez longuement sur l\'icône de l\'application Wave', g1b: '→ Touchez « Infos sur l\'appli » ou « Afficher les infos »', g2: 'Touchez « Ouvrir par défaut » ou « Applications par défaut »',
+    g3: 'Touchez « Ajouter un lien » ou « Liens pris en charge »', g3b: 'Ajoutez les domaines suivants dans les liens pris en charge :', g4: 'Retournez sur la page et cliquez de nouveau sur « Ouvrir l\'application »', g4b: 'L\'application Wave s\'ouvrira directement.',
+  },
+  en: {
+    closeA: 'Close', langA: 'Language', badLink: 'Invalid payment link',
+    loading: 'Loading', payAmount: 'Payment amount', walletPh: 'Please enter wallet number',
+    hint: 'Please enter your 10-digit payment wallet number correctly to help your payment arrive accurately',
+    submit: 'Submit', secT: 'Secure Payment Protected', secP: 'Your payment information is fully encrypted. Please confirm payment details carefully.',
+    toast: 'Please enter the correct wallet number', close: 'CLOSE', proc: 'Processing...',
+    tabApp: 'Open App', tabQr: 'Scan QR Code', amount: 'Amount',
+    howApp: 'How to jump app? Click here to view!', card: 'Click the button below to open the payment app and complete your transaction.',
+    openPay: 'Open App to Pay', after: 'After clicking, you will be redirected to the payment app',
+    warn: 'If you have completed the transfer, please click the button below to get the payment result in the platform', getRes: 'Get Payment Result',
+    howQr: 'How to scan? Click here to view', qrInfo: 'If you have completed the payment, please enter the transaction ID and click to check the payment result',
+    txLabel: 'Transaction ID', txPh: 'Enter transaction ID from app transfer record', txHint: 'Please enter the transaction ID from your app transfer record',
+    txReq: 'Transaction ID is required', checkRes: 'Check Payment Result', saveQr: 'Save QR Code', saveHint: 'Save the QR code to your device and scan it later',
+    qrSaved: 'QR code saved', pillTo: 'FRANÇAIS',
+    qrTitle: 'How to scan QR code?', qrSteps: ['Open your payment app Wave', 'Tap the scan QR code feature', 'Point your camera at the QR code above', 'Confirm the payment amount and complete the transaction'], sheetClose: 'CLOSE',
+    gTitle: 'Android Phone Setup Guide (One-time only)', gIntro: 'If the Wave App does not open directly after clicking, please follow these steps:',
+    g1: 'Long press the Wave App icon', g1b: '→ Tap "App info" or "View info"', g2: 'Tap "Open by default" or "Default apps"',
+    g3: 'Tap "Add link" or "Supported links"', g3b: 'Add the following domains in Supported links:', g4: 'Return to the page and click "Open App" again', g4b: 'The Wave App will open directly.',
+  },
+};
+function wvt(k){ return (WV_T[_wv.lang] || WV_T.fr)[k]; }
+try { const l = localStorage.getItem('wv_lang'); if (l === 'en' || l === 'fr') _wv.lang = l; } catch (_) {}
+function wvMoney(n){ return 'FCFA ' + (Number(n) || 0).toLocaleString('en-US'); }
+var WV_SVG = {
+  x: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M2 2l10 10M12 2 2 12"/></svg>',
+  // Traced from the owner's screenshot of the language pill: the blue Americas globe (ring + continents, white sea).
+  globe: '<svg width="21.4" height="21.4" viewBox="0 0 100 100" aria-hidden="true"><path fill="#27afdb" fill-rule="evenodd" d="M41.7 0.5 L30.8 3.4 L22.0 8.3 L15.0 13.7 L8.6 21.4 L3.2 30.8 L0.3 42.3 L0.5 57.3 L3.4 69.3 L7.7 77.0 L13.6 84.8 L21.7 91.4 L30.4 96.3 L40.4 99.2 L49.7 100.0 L58.9 99.5 L68.4 96.8 L75.6 93.1 L85.0 85.9 L93.0 75.7 L96.6 68.5 L99.2 59.9 L99.2 40.3 L96.5 31.0 L93.1 24.8 L85.8 14.7 L76.7 7.8 L68.5 3.5 L57.0 0.3Z M11.8 45.7 L14.1 44.9 L16.6 45.4 L21.4 57.2 L34.7 67.9 L38.5 76.5 L43.8 83.5 L43.9 85.9 L42.7 88.0 L40.7 88.3 L35.5 86.9 L29.2 83.9 L22.5 78.8 L17.9 73.6 L12.8 63.9 L10.5 57.5 L10.2 50.0Z M61.2 12.9 L64.5 13.4 L74.1 18.7 L81.0 25.7 L82.3 29.2 L81.5 32.6 L72.8 46.5 L71.6 50.3 L72.2 56.5 L81.9 70.0 L81.8 72.4 L79.7 75.9 L74.3 81.2 L64.9 85.9 L62.9 85.6 L61.8 84.2 L62.0 81.5 L64.4 75.2 L62.9 70.6 L49.5 59.4 L40.4 55.6 L39.0 53.2 L39.5 50.2 L42.5 48.1 L51.3 50.2 L54.5 48.1 L59.1 34.2 L58.3 30.8 L55.0 27.2 L56.1 19.5 L58.8 14.4Z"/></svg>',
+  open: '<svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5.5"/><path d="M15 3h6v6M10 14 21 3"/></svg>',
+  qr: '<svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM19 14h2v2h-2zM14 19h2v2h-2zM19 19h2v2h-2z" fill="currentColor"/></svg>',
+  check: '<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#fff"/><path d="M6.5 12.4l3.6 3.6 7.3-7.6" fill="none" stroke="#ccc" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  receipt: '<svg width="19" height="21" viewBox="5 2 14 20" preserveAspectRatio="none" fill="#666" aria-hidden="true"><path d="M5 2h14v20l-2.3-1.6L14.4 22 12 20.4 9.6 22l-2.3-1.6L5 22V2zm3 5v2h8V7H8zm0 4v2h8v-2H8zm0 4v2h8v-2H8z"/></svg>',
+  download: '<svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10.5l5 5 5-5M4 20h16"/></svg>',
+  ok: '<svg width="25" height="25" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#4caf50"/><path d="M6.8 12.4l3.5 3.5 7-7.4" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  shield: '<svg width="19.8" height="19.8" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 4.5 5.6v5.6c0 4.6 3.1 8.4 7.5 10.3 4.4-1.9 7.5-5.7 7.5-10.3V5.6L12 2.5z" fill="#fff" fill-opacity=".92"/><path d="M12 4.5 6.4 6.9v4.5c0 3.6 2.3 6.6 5.6 8.2 3.3-1.6 5.6-4.6 5.6-8.2V6.9L12 4.5z" fill="#2f7fe0"/><path d="M8.8 11.9l2.2 2.2 4.1-4.3" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  lock: '<svg width="16.4" height="16.4" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7.5a5 5 0 0 1 10 0V10" fill="none" stroke="#e0a23a" stroke-width="2.2"/><rect x="4.5" y="10" width="15" height="11" rx="2.2" fill="#f7c948"/><circle cx="12" cy="15.3" r="1.7" fill="#a86f12"/></svg>',
+  warn: '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 1.8 20.5h20.4L12 3z" fill="#fff"/><path d="M12 9.4v5.2M12 16.6v1.7" stroke="#f98a00" stroke-width="2.3" stroke-linecap="round"/></svg>',
+};
+function wvRoot(){ return mpRoot(); }
+function wvMode(cls){ const el = wvRoot(); el.className = 'show wv ' + (cls || ''); document.body.classList.add('mp-open'); wvFit(); return el; }
+// Sizes follow the phone: the pages are drawn for a 411 px wide screen and scaled to the real width, so a 360 px phone and a 430 px phone
+// show the same page in the same proportions (owner: "font sizes vary per phone ... check yours and see do they use phone sizes").
+function wvFit(){
+  const el = $('mpFlow'); if (!el) return;
+  const k = Math.max(.75, Math.min(1.5, (window.innerWidth || 411) / 411));
+  el.style.zoom = Math.abs(k - 1) < .01 ? '' : String(k);
 }
-function mpTick(){
-  const o = _mp.order; if (!o || _mp.stage !== 'pay') return mpStopTimer();
-  const left = Math.max(0, Math.floor((Number(o.expiresAt) - Date.now()) / 1000));
-  const m = Math.floor(left / 60), sec = left % 60;
-  const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
-  set('mpM1', String(Math.floor(m / 10))); set('mpM2', String(m % 10));
-  set('mpS1', String(Math.floor(sec / 10))); set('mpS2', String(sec % 10));
-  if (left <= 0) { mpStopTimer(); mpToast('This order has expired. Please start again.'); setTimeout(() => window.mpClose(), 900); }
+window.addEventListener('resize', wvFit);
+function wvCloseBtn(){ return '<button type="button" class="wv-x" aria-label="' + wvt('closeA') + '" onclick="mpClose()">' + WV_SVG.x + '</button>'; }
+function wvPill(){ return '<button type="button" class="wv-lang wv-rip" onclick="wvLang()" aria-label="' + wvt('langA') + '">' + WV_SVG.globe + '<span>' + wvt('pillTo') + '</span></button>'; }
+// ── loaders: a grey veil with the ring and its word, then three dots; the veil fades away when the page is ready ──
+function wvRing(){
+  _mp.stage = 'wload';
+  wvMode('').innerHTML = wvCloseBtn() + '<div class="wv-veil"><div class="wv-ring"></div><div class="wv-ringtxt">' + wvt('loading') + '</div></div>';
 }
-window.mpSwitch = function(){ if (_mp.pushed > 0) history.back(); else mpShowChoose(); };
-window.mpCopy = async function(what){
-  const o = _mp.order; if (!o) return;
-  const text = what === 'name' ? o.accountName : o.accountNumber;
-  let ok = false;
-  try { await navigator.clipboard.writeText(String(text)); ok = true; } catch (_) {
-    try {
-      const ta = document.createElement('textarea'); ta.value = String(text); ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
-      document.body.appendChild(ta); ta.select(); ok = document.execCommand('copy'); ta.remove();
-    } catch (_e) {}
+function wvDots(){
+  const el = wvRoot();
+  const v = el.querySelector('.wv-veil');
+  if (v) v.insertAdjacentHTML('afterbegin', '<div class="wv-dots"><i></i><i></i><i></i></div>');
+  else el.insertAdjacentHTML('beforeend', '<div class="wv-veil"><div class="wv-dots"><i></i><i></i><i></i></div></div>');
+}
+function wvVeilOut(){
+  const v = wvRoot().querySelector('.wv-veil'); if (!v) return;
+  v.classList.add('out'); setTimeout(() => { if (v.parentNode) v.remove(); }, 380);
+}
+// ── processing card: the page goes dark, the card grows in; both fade out when the next page is up ──
+function wvProc(on){
+  const el = wvRoot();
+  if (!on) {
+    el.querySelectorAll('.wv-proc,.wv-pveil').forEach(n => { n.classList.add('out'); setTimeout(() => { if (n.parentNode) n.remove(); }, 300); });
+    return;
   }
-  mpToast(ok ? (what === 'name' ? 'Name Copied' : 'Copied.') : 'Could not copy');
+  el.querySelectorAll('.wv-proc,.wv-pveil').forEach(n => n.remove());
+  el.insertAdjacentHTML('beforeend', '<div class="wv-pveil"></div><div class="wv-proc" role="status"><div class="wv-pring"><svg width="56" height="56" viewBox="0 0 56 56" fill="none" stroke-width="4.3" aria-hidden="true"><path d="M7 30a21 21 0 0 0 21 21" stroke="#ff8000"/><path d="M36 8.3A21 21 0 0 0 11.6 19" stroke="#ee9b59"/><path d="M45.6 20.5a21 21 0 0 1 2.3 14" stroke="#00a550"/></svg></div><b>' + wvt('proc') + '</b><div class="wv-pdots"><i></i><i></i><i></i></div></div>');
+}
+// ── a warning bar over the wallet box: fades in, waits, then slides up off the top ──
+function wvToast(msg){
+  clearTimeout(_wv.toastT);
+  const el = wvRoot();
+  el.querySelectorAll('.wv-toast').forEach(n => n.remove());
+  el.insertAdjacentHTML('beforeend', '<div class="wv-toast" role="alert"><span class="wv-ti">' + WV_SVG.warn + '</span><span class="wv-tt">' + msg + '</span><button type="button" class="wv-tc wv-rip" onclick="wvToastOut()">' + wvt('close') + '</button></div>');
+  _wv.toastT = setTimeout(wvToastOut, 2000);
+}
+window.wvToastOut = function(){
+  clearTimeout(_wv.toastT);
+  const n = wvRoot().querySelector('.wv-toast'); if (!n || n.classList.contains('out')) return;
+  n.classList.add('out'); setTimeout(() => { if (n.parentNode) n.remove(); }, 420);
 };
-window.mpSubmit = async function(){
-  const o = _mp.order, ta = $('mpSms'), btn = $('mpSubmit');
-  if (!o || !ta || !btn || btn.disabled) return;
-  const sms = ta.value.trim();
-  if (!sms) return mpToast('please enter the correct transfer sms');
-  btn.disabled = true; btn.classList.add('busy');
-  let r;
-  try { r = await post('/deposit/manual/submit', { depositId: o.depositId, sms }); }
-  finally { if ($('mpSubmit') === btn) { btn.disabled = false; btn.classList.remove('busy'); } }
+// material-style ripple on every button marked wv-rip
+document.addEventListener('pointerdown', function(ev){
+  const b = ev.target && ev.target.closest ? ev.target.closest('.wv-rip') : null;
+  if (!b || b.classList.contains('off')) return;
+  const r = b.getBoundingClientRect(), d = Math.max(r.width, r.height) * 2.2;
+  const s = document.createElement('span'); s.className = 'wv-rp';
+  s.style.cssText = 'width:' + d + 'px;height:' + d + 'px;left:' + (ev.clientX - r.left - d / 2) + 'px;top:' + (ev.clientY - r.top - d / 2) + 'px';
+  b.appendChild(s); setTimeout(() => { if (s.parentNode) s.remove(); }, 650);
+}, true);
+function wvWait(ms){ return new Promise(r => setTimeout(r, ms)); }
+// The first call: ring, then dots, then the pay page. The order is opened (30 minute clock) while the dots show.
+window.openWavePayFlow = async function(amount){
+  _wv = Object.assign(_wv, { amount: Number(amount) || 0, channels: [], ch: null, wallet: '', order: null, tab: 'app', opened: false, busy: false, txId: '' });
+  _mp.amount = _wv.amount; _mp.order = null;
+  history.pushState({ mp: 'wv' }, '', ''); _mp.pushed = 1;
+  wvRing();
+  const t0 = Date.now();
+  const r = await api('/public/pay-channels');
+  const wait = 650 - (Date.now() - t0); if (wait > 0) await wvWait(wait);
+  if (_mp.stage !== 'wload') return;
+  const chs = (r && r.status === 'success' && Array.isArray(r.channels)) ? r.channels.filter(c => c.kind === 'wave') : [];
+  if (!chs.length) { window.mpClose(); return notify('Les recharges ne sont pas disponibles pour le moment.'); }
+  _wv.channels = chs; _wv.ch = chs[0];
+  wvDots();
+  const t1 = Date.now();
+  const o = await wvOrder();
+  const wait2 = 500 - (Date.now() - t1); if (wait2 > 0) await wvWait(wait2);
+  if (_mp.stage !== 'wload') return;
+  if (!o) { window.mpClose(); return; }
+  wvPayPage(true);
+};
+// Creates (or re-points) the one open order. Returns the server answer, or null after showing why not.
+async function wvOrder(extra){
+  const body = Object.assign({ amount: _wv.amount, channelId: _wv.ch.id, depositId: _wv.order ? _wv.order.depositId : undefined }, extra || {});
+  const r = await post('/deposit/manual/order', body);
+  if (!r || r.stale) return null;
+  if (r.status !== 'success') { mpToast(r.message || 'Impossible de démarrer la recharge'); return null; }
+  _wv.order = r; _mp.order = r;
+  return r;
+}
+function wvPayPage(fromLoader){
+  _mp.stage = 'wpay'; mpStopTimer();
+  const o = _wv.order; if (!o) return window.mpClose();
+  const keep = fromLoader ? wvRoot().querySelector('.wv-veil') : null;
+  const el = wvMode('');
+  const rows = _wv.channels.map((c, i) => '<button type="button" class="wv-row wv-rip' + (c.id === _wv.ch.id ? ' on' : '') + '" onclick="wvSelect(' + i + ')" data-no-i18n>' + esc(c.name) + '<span class="wv-chk"><svg width="13.2" height="14.3" viewBox="0 0 92.5 100" fill="#ee9b59" aria-hidden="true"><path d="M90.5 1.5 L82.8 1.7 L77.9 0.0 L68.9 6.7 L56.2 19.9 L27.1 59.7 L24.9 60.2 L19.7 55.0 L14.4 54.0 L8.7 54.7 L1.2 59.5 L0.0 63.2 L1.0 73.4 L8.2 92.0 L12.9 98.0 L17.7 100.0 L23.4 99.8 L27.9 97.5 L33.8 91.0 L46.8 69.4 L63.4 45.8 L90.0 13.9 L92.5 8.7 L92.3 3.7Z"/></svg></span></button>').join('');
+  const has = _wv.wallet ? ' has' : '';
+  el.innerHTML = wvCloseBtn() + '<div class="wv-card' + (fromLoader ? ' wv-in' : '') + '"><div class="wv-head"><div class="wv-timer" id="wvTimer">30:00</div>' + wvPill() + '</div>'
+    + '<div class="wv-amt"><span>' + wvt('payAmount') + '</span><b data-no-i18n>' + esc(wvMoney(_wv.amount)) + '</b></div>'
+    + '<img class="wv-logo" alt="" src="' + esc(_wv.ch.logo || WV_IMG_ICON) + '">'
+    + '<div class="wv-rows">' + rows + '</div>'
+    + '<div class="wv-field' + has + '" id="wvField"><span class="wv-cc" data-no-i18n>+' + esc((REGION && REGION.dialCode) || '225') + '</span><div class="wv-fin"><label for="wvWallet">' + wvt('walletPh') + '</label><input id="wvWallet" type="tel" inputmode="numeric" autocomplete="off" value="' + esc(_wv.wallet) + '" oninput="wvWalletIn(this)" onfocus="wvFocus(1)" onblur="wvFocus(0)"></div></div>'
+    + '<p class="wv-hint">' + wvt('hint') + '</p>'
+    + '<button type="button" class="wv-go wv-rip" onclick="wvSubmit()">' + wvt('submit') + '</button>'
+    + '<div class="wv-sec"><span class="wv-shield">' + WV_SVG.shield + '</span><b>' + WV_SVG.lock + wvt('secT') + '</b><p>' + wvt('secP') + '</p></div></div>';
+  if (keep) { el.appendChild(keep); wvVeilOut(); }
+  mpTickWv(); _mp.timer = setInterval(mpTickWv, 1000);
+  wvSave();
+}
+function mpTickWv(){
+  const o = _wv.order; if (!o || (_mp.stage !== 'wpay' && _mp.stage !== 'wres')) return mpStopTimer();
+  const left = Math.max(0, Math.floor((Number(o.expiresAt) - Date.now()) / 1000));
+  const e = $('wvTimer'); if (e) e.textContent = String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0');
+  if (left <= 0) { mpStopTimer(); mpToast('Cette commande a expiré. Veuillez recommencer.'); setTimeout(() => window.mpClose(), 900); }
+}
+// English <-> French: the page text dips and comes back in the other language; what was typed stays.
+window.wvLang = function(){
+  _wv.lang = _wv.lang === 'fr' ? 'en' : 'fr';
+  try { localStorage.setItem('wv_lang', _wv.lang); } catch (_) {}
+  const box = wvRoot().querySelector('.wv-card,.wv-pg');
+  if (box) box.classList.add('wv-dip');
+  setTimeout(() => {
+    wvSheetClose(true);
+    if (_mp.stage === 'wpay') { const t = wvRoot().querySelector('.wv-toast'); wvPayPage(false); if (t) wvToastOut(); const b2 = wvRoot().querySelector('.wv-card'); if (b2) b2.classList.add('wv-in2'); }
+    else if (_mp.stage === 'wres') { wvResultPage(false); const b2 = wvRoot().querySelector('.wv-pg'); if (b2) b2.classList.add('wv-in2'); }
+  }, 130);
+};
+window.wvSelect = async function(i){
+  const c = _wv.channels[i]; if (!c || c.id === _wv.ch.id || _wv.busy) return;
+  _wv.ch = c; _wv.busy = true;
+  await wvOrder(); _wv.busy = false;
+  wvPayPage(false);
+};
+window.wvWalletIn = function(inp){
+  const d = String(inp.value).replace(/\D/g, '').slice(0, 10);
+  if (inp.value !== d) inp.value = d;
+  _wv.wallet = d; wvSave();
+  const f = $('wvField'); if (f) { f.classList.toggle('has', !!d); f.classList.remove('err'); }
+};
+window.wvFocus = function(on){
+  const f = $('wvField'); if (!f) return;
+  f.classList.toggle('f', !!on);
+};
+window.wvSubmit = async function(){
+  if (_wv.busy) return;
+  const need = (REGION && REGION.localLength) || 10;
+  if (_wv.wallet.length !== need) { wvToast(wvt('toast')); return; }
+  _wv.busy = true; wvProc(true);
+  const t0 = Date.now();
+  const o = await wvOrder({ wallet: _wv.wallet });
+  const wait = 1500 - (Date.now() - t0); if (wait > 0) await wvWait(wait);
+  _wv.busy = false;
+  if (!o || (_mp.stage !== 'wpay')) { wvProc(false); return; }
+  _wv.tab = 'app'; _wv.opened = false;
+  history.pushState({ mp: 'wres' }, '', ''); _mp.pushed++;
+  wvResultPage(true);
+  wvProc(false);
+};
+// Defence in depth (the server checks too): the link is opened only if it is https on wave.com, and the QR is shown only if it is a PNG/JPEG picture.
+function wvSafeLink(v){
+  try {
+    const u = new URL(String(v || '')), h = u.hostname.toLowerCase();
+    if (u.protocol !== 'https:' || u.username || u.password || u.port || !(h === 'wave.com' || h.endsWith('.wave.com'))) return '';
+    return u.toString();
+  } catch (_) { return ''; }
+}
+function wvSafeQr(v){ return /^data:image\/(png|jpeg);base64,[A-Za-z0-9+\/]+={0,2}$/.test(String(v || '')) ? String(v) : ''; }
+function wvTabsHtml(){
+  // Both ways to pay need something from the admin (a link, a QR picture). With only one of them there is nothing to choose between.
+  const o = _wv.order; if (!(o && wvSafeQr(o.qrImage) && wvSafeLink(o.payLink))) return '';
+  return '<div class="wv-tabs" id="wvTabs"><button type="button" class="wv-tab' + (_wv.tab === 'app' ? ' on' : '') + '" onclick="wvTab(\'app\')">' + WV_SVG.open + '<span>' + wvt('tabApp') + '</span></button>'
+    + '<button type="button" class="wv-tab' + (_wv.tab === 'qr' ? ' on' : '') + '" onclick="wvTab(\'qr\')">' + WV_SVG.qr + '<span>' + wvt('tabQr') + '</span></button></div>';
+}
+function wvBodyHtml(){
+  const o = _wv.order;
+  if (_wv.tab === 'app') {
+    return '<div class="wv-info" onclick="wvSheet(\'app\')"><span class="wv-i">i</span><span>' + wvt('howApp') + '</span></div>'
+      + '<div class="wv-oc"><img alt="" src="' + WV_IMG_PAYWITH + '"><p>' + wvt('card') + '</p></div>'
+      + '<button type="button" class="wv-pay wv-rip" onclick="wvOpenApp()">' + WV_SVG.open + '<span>' + wvt('openPay') + '</span></button>'
+      + '<p class="wv-after">' + wvt('after') + '</p>'
+      + '<div class="wv-warn"><span class="wv-i">i</span><span>' + wvt('warn') + '</span></div>'
+      + '<button type="button" class="wv-res wv-rip' + (_wv.opened ? ' on' : ' off') + '" id="wvRes" onclick="wvGetResult()">' + WV_SVG.check + '<span>' + wvt('getRes') + '</span></button>';
+  }
+  const tx = _wv.txId;
+  return '<div class="wv-info" onclick="wvSheet(\'qr\')"><span class="wv-i">i</span><span>' + wvt('howQr') + '</span></div>'
+    + '<img class="wv-qr" alt="" src="' + esc(wvSafeQr(o.qrImage)) + '">'
+    + '<div class="wv-info wv-info2" style="cursor:default"><span class="wv-i">i</span><span>' + wvt('qrInfo') + '</span></div>'
+    + '<div class="wv-tx' + (tx ? ' has' : '') + '" id="wvTx">' + WV_SVG.receipt + '<div class="wv-fin"><label for="wvTxIn">' + wvt('txLabel') + '</label><input id="wvTxIn" type="text" autocomplete="off" maxlength="60" value="' + esc(tx) + '" oninput="wvTxIn(this)" onfocus="wvTxFocus(1)" onblur="wvTxFocus(0)"></div><span class="wv-bang">!</span></div>'
+    + '<div id="wvTxMsg">' + wvTxHint() + '</div>'
+    + '<button type="button" class="wv-res wv-rip' + (tx.trim() ? ' on' : ' off') + '" id="wvRes" onclick="wvCheckTx()">' + WV_SVG.check + '<span>' + wvt('checkRes') + '</span></button>'
+    + '<button type="button" class="wv-save wv-rip" onclick="wvSaveQr()">' + WV_SVG.download + '<span>' + wvt('saveQr') + '</span></button>'
+    + '<p class="wv-savet">' + wvt('saveHint') + '</p>';
+}
+function wvTxHint(){ return '<div class="wv-txh"><span class="wv-i">i</span><span>' + wvt('txHint') + '</span></div>'; }
+function wvAmtHtml(){ return '<div class="wv-ar"><span>' + wvt('amount') + '</span><b data-no-i18n>' + esc(String(Math.round(_wv.amount))) + '<small>FCFA</small></b></div>'; }
+function wvResultPage(enter){
+  _mp.stage = 'wres';
+  const o = _wv.order; if (!o) return window.mpClose();
+  const hasQr = !!wvSafeQr(o.qrImage), hasLink = !!wvSafeLink(o.payLink);
+  if (_wv.tab === 'qr' && !hasQr) _wv.tab = 'app';
+  if (_wv.tab === 'app' && !hasLink && hasQr) _wv.tab = 'qr';
+  const el = wvMode('wvg');
+  wvSave();
+  el.innerHTML = wvCloseBtn() + '<div class="wv-pg' + (enter ? ' wv-in' : '') + '"><div class="wv-lrow">' + wvPill() + '</div>' + wvTabsHtml() + wvAmtHtml() + '<div class="wv-body" id="wvBody">' + wvBodyHtml() + '</div></div>';
+}
+// A tab: the buttons change at once, the part below the amount fades out, is replaced and fades back in.
+window.wvTab = function(t){
+  if (_wv.tab === t || _wv.busy) return;
+  _wv.tab = t; wvSave();
+  const tabs = $('wvTabs'), body = $('wvBody');
+  if (!tabs || !body) return wvResultPage(false);
+  tabs.outerHTML = wvTabsHtml();
+  const nt = $('wvTabs'); if (nt) { nt.classList.add('wv-tp'); setTimeout(() => nt.classList.remove('wv-tp'), 320); }
+  body.classList.add('wv-fo');
+  setTimeout(() => { const b = $('wvBody'); if (!b) return; b.innerHTML = wvBodyHtml(); b.classList.remove('wv-fo'); b.classList.add('wv-fi'); setTimeout(() => b.classList.remove('wv-fi'), 340); }, 140);
+};
+window.wvOpenApp = function(){
+  const o = _wv.order; if (!o || !o.payLink) return;
+  const safe = wvSafeLink(o.payLink); if (!safe) return mpToast(wvt('badLink'));
+  _wv.opened = true; wvSave();
+  const b = $('wvRes'); if (b) { b.classList.add('on'); b.classList.remove('off'); }
+  // Wave's own payment page asks for the amount; hand it over so the member only has to press Pay (an amount already in the link is kept).
+  let url = safe;
+  try { const u = new URL(safe); if (!u.searchParams.has('amount') && Number(_wv.amount) > 0) u.searchParams.set('amount', String(Math.round(Number(_wv.amount)))); url = u.toString(); } catch (_) {}
+  try { window.open(url, '_blank', 'noopener,noreferrer'); } catch (_) { try { location.href = url; } catch (__) {} }
+};
+window.wvTxIn = function(inp){
+  const had = !!_wv.txId;
+  _wv.txId = String(inp.value).replace(/[^\w\-]/g, '').slice(0, 60); wvSave();
+  if (inp.value !== _wv.txId) inp.value = _wv.txId;
+  const f = $('wvTx'); if (f) { f.classList.toggle('has', !!_wv.txId); f.classList.remove('err'); }
+  // Rubbing the whole ID out turns the box red at once, shows the "required" line and shakes the word sideways.
+  if (had && !_wv.txId) wvTxEmpty();
+  else { const m0 = $('wvTxMsg'); if (m0 && m0.querySelector('.wv-txe')) m0.innerHTML = wvTxHint(); }
+  const b = $('wvRes'); if (b) { const on = !!_wv.txId.trim(); b.classList.toggle('on', on); b.classList.toggle('off', !on); }
+  const m = $('wvTxMsg'); if (m && !m.firstChild) m.innerHTML = wvTxHint();
+};
+window.wvTxFocus = function(on){
+  const f = $('wvTx'); if (f) f.classList.toggle('f', !!on);
+  const i = $('wvTxIn'); if (i) i.placeholder = on ? wvt('txPh') : '';
+};
+window.wvSaveQr = function(){
+  const o = _wv.order; const qr = o && wvSafeQr(o.qrImage); if (!qr) return;
+  const a = document.createElement('a'); a.href = qr; a.download = 'wave-qr.png';
+  document.body.appendChild(a); a.click(); a.remove();
+  mpToast(wvt('qrSaved'));
+};
+async function wvSend(body){
+  if (_wv.busy) return;
+  _wv.busy = true; wvProc(true);
+  const t0 = Date.now();
+  const r = await post('/deposit/manual/submit', Object.assign({ depositId: _wv.order.depositId }, body));
+  const wait = 1500 - (Date.now() - t0); if (wait > 0) await wvWait(wait);
+  _wv.busy = false; wvProc(false);
   if (!r || r.stale) return;
-  if (r.status !== 'success') return mpToast(r.message || 'Could not submit your recharge. Please try again.');
+  if (r.status !== 'success') return mpToast(r.message || 'Impossible d\'envoyer votre recharge. Veuillez réessayer.');
   refreshTransactionsCache().catch(() => {});
   window.mpClose();
   try { if (_openSheetTitle === 'Recharge') closeSheet({ fromAction: true }); } catch (_) {}
-  notify(r.message || 'Submitted. Our team is checking your payment.');
+  notify(r.message || 'Envoyé. Notre équipe vérifie votre paiement.');
+}
+window.wvGetResult = function(){
+  if (!_wv.opened) return;
+  wvSend({ wallet: _wv.wallet });
 };
-window.openManualPayFlow = async function(amount){
-  _mp.amount = Number(amount) || 0; _mp.order = null; _mp.channels = [];
-  history.pushState({ mp: 'choose' }, '', ''); _mp.pushed = 1;
-  mpShowLoading();
-  const t0 = Date.now();
-  const r = await api('/public/pay-channels');
-  // The ring is shown for a beat even when the answer is instant, so the page does not flash.
-  const wait = 450 - (Date.now() - t0); if (wait > 0) await new Promise(res => setTimeout(res, wait));
-  if (_mp.stage !== 'load') return;
-  if (!r || r.status !== 'success' || !Array.isArray(r.channels) || !r.channels.length) {
-    window.mpClose();
-    return notify('Recharges are not available right now.');
+function wvTxEmpty(){
+  const f = $('wvTx'); if (f) { f.classList.add('err'); f.classList.remove('shk'); void f.offsetWidth; f.classList.add('shk'); }
+  const m = $('wvTxMsg'); if (m) m.innerHTML = '<div class="wv-txe">' + wvt('txReq') + '</div>';
+}
+window.wvCheckTx = function(){
+  const id = _wv.txId.trim();
+  if (!id) { wvTxEmpty(); return; }
+  wvSend({ txId: id, wallet: _wv.wallet });
+};
+// ── bottom sheets: slide up over a darkening page ──
+window.wvSheet = function(kind){
+  wvSheetClose(true);
+  let inner;
+  if (kind === 'qr') {
+    inner = '<h3>' + wvt('qrTitle') + '</h3><div class="wv-sl">' + wvt('qrSteps').map(s => '<div>' + WV_SVG.ok + '<span>' + s + '</span></div>').join('') + '</div>';
+  } else {
+    inner = '<h3 class="wv-gt">' + wvt('gTitle') + '</h3><p class="wv-gi">' + wvt('gIntro') + '</p><div class="wv-gb">'
+      + '<div class="wv-gs"><i>1</i><div><b>' + wvt('g1') + '</b><em>' + wvt('g1b') + '</em></div></div>'
+      + '<div class="wv-gs"><i>2</i><div><b>' + wvt('g2') + '</b></div></div>'
+      + '<div class="wv-gs"><i>3</i><div><b>' + wvt('g3') + '</b><span>' + wvt('g3b') + '</span><u><s>pay.wave.com</s><s>www.wave.com</s><s>*.confirm.wave.com</s><s>promo.wave.com</s></u></div></div>'
+      + '<div class="wv-gs"><i>4</i><div><b>' + wvt('g4') + '</b><span>' + wvt('g4b') + '</span></div></div></div>';
   }
-  _mp.channels = r.channels;
-  mpShowChoose();
+  wvRoot().insertAdjacentHTML('beforeend', '<div class="wv-sbg" id="wvSbg" onclick="wvSheetClose()"></div><div class="wv-sheet' + (kind === 'qr' ? '' : ' wv-big') + '" id="wvSheet">' + inner + '<div class="wv-sf"><button type="button" class="wv-sc wv-rip" onclick="wvSheetClose()">' + wvt('sheetClose') + '</button></div></div>');
 };
-var _mpResuming = false;
-window.resumeManualPay = async function(){
-  if (_mpResuming || _mp.stage) return;
-  let st = null; try { st = JSON.parse(localStorage.getItem(MP_RESUME_KEY) || 'null'); } catch (_) {}
-  if (!st || !(Number(st.amount) > 0)) return;
-  const me = STATE.user && STATE.user.uid || '';
-  const live = st.stage !== 'pay' || Number(st.exp) > Date.now() + 5000;
-  if ((st.u || '') !== me || !live || Date.now() - Number(st.at || 0) > 40 * 60 * 1000) return mpForget();   // another member's pages are never shown
-  if ((STATE.settings || {}).manualPay !== true) return;
-  _mpResuming = true;
-  try {
-    _mp.amount = Number(st.amount) || 0; _mp.order = null; _mp.channels = [];
-    history.pushState({ mp: 'choose' }, '', ''); _mp.pushed = 1;
-    mpShowLoading();
-    const t0 = Date.now();
-    const r = await api('/public/pay-channels');
-    const wait = 450 - (Date.now() - t0); if (wait > 0) await new Promise(res => setTimeout(res, wait));
-    if (_mp.stage !== 'load') return;
-    if (!r || r.status !== 'success' || !Array.isArray(r.channels) || !r.channels.length) { window.mpClose(); return; }
-    _mp.channels = r.channels;
-    const ch = st.stage === 'pay' && st.depositId ? r.channels.find(c => c.id === st.chId) : null;
-    if (ch) {
-      // The same order again (resume: the server hands back only the member's still-open order and its clock), so the 30 minutes carry on where they were.
-      const o = await post('/deposit/manual/order', { amount: _mp.amount, channelId: ch.id, depositId: st.depositId, resume: true });
-      if (_mp.stage !== 'load') return;
-      if (o && o.status === 'success') {
-        _mp.order = o;
-        history.pushState({ mp: 'pay' }, '', ''); _mp.pushed++;
-        mpShowPay();
-        const ta = $('mpSms'); if (ta && st.sms) ta.value = String(st.sms);
-        return;
-      }
-    }
-    mpShowChoose();
-  } finally { _mpResuming = false; }
+window.wvSheetClose = function(now){
+  ['wvSbg', 'wvSheet'].forEach(id => {
+    const e = $(id); if (!e) return;
+    if (now === true) return e.remove();
+    e.classList.add('out'); setTimeout(() => { if (e.parentNode) e.remove(); }, 320);
+  });
 };
 window.submitDeposit = async function(){
   const submitBtn = $('depSubmitBtn');
   if (!submitBtn || submitBtn.disabled || !$('depAmount')) return;
   const amount = parseMoneyInput($('depAmount').value);
-  // Manual recharge (the bank / Telebirr numbers the owner added in the admin panel): the amount goes straight to the payment pages.
+  // Wave recharge (the payment link / QR the owner added in the admin panel): the amount goes straight to the payment pages.
   if ((STATE.settings || {}).manualPay === true) {
-    if (!amount || amount <= 0) return notify('Enter a valid amount');
-    if (amount < (Number((STATE.settings || {}).minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX((STATE.settings || {}).minDeposit));
+    if (!amount || amount <= 0) return notify('Entrez un montant valide');
+    if (amount < (Number((STATE.settings || {}).minDeposit) || 0)) return notify('Le montant minimum est de ' + fmtUGX((STATE.settings || {}).minDeposit));
     return openManualPayFlow(amount);
   }
-  if (!amount || amount <= 0) return notify('Enter a valid amount');
-  notify('Recharge is not available right now.');
+  if (!amount || amount <= 0) return notify('Entrez un montant valide');
+  notify('La recharge n\'est pas disponible pour le moment.');
 };
 
 // Cache-first: STATE.bankAccounts is prefetched at login. Deliberately does
@@ -4608,8 +4829,8 @@ function withdrawWindow(s){
 function witWalletBlockHtml(s){
   const w = witSelectedWallet();
   const row = (label, value) => `<div class="pt-wrow"><span>${label}</span><b>${value ? esc(value) : ''}</b></div>`;
-  return `${row('Real Name', w && w.holder)}${row('Bank', w && w.network)}${row('Bank Account', w && walletDestDisplay(w))}
-    <button id="witBindBtn" class="pt-bind" type="button" onclick="openWalletSheet()"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2l2.3 3.2 3.9-.8.3 4 3.6 1.7-2 3.5 2 3.5-3.6 1.7-.3 4-3.9-.8L12 22l-2.3-3.2-3.9.8-.3-4-3.6-1.7 2-3.5-2-3.5 3.6-1.7.3-4 3.9.8z"/></svg><span>Bind Bank Card</span></button>`;
+  return `${row('Nom réel', w && w.holder)}${row('Fournisseur', w && w.network)}${row('Numéro Wave', w && walletDestDisplay(w))}
+    <button id="witBindBtn" class="pt-bind" type="button" onclick="openWalletSheet()"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2l2.3 3.2 3.9-.8.3 4 3.6 1.7-2 3.5 2 3.5-3.6 1.7-.3 4-3.9-.8L12 22l-2.3-3.2-3.9.8-.3-4-3.6-1.7 2-3.5-2-3.5 3.6-1.7.3-4 3.9.8z"/></svg><span>Lier un compte de retrait</span></button>`;
 }
 // Withdraw.dc.html. Replaces the form inherited from Snow: a tinted balance
 // card, a UGX-prefixed amount field, the bound wallet shown as the same
@@ -4619,12 +4840,12 @@ function paintWithdrawSheet(s){
   const balance = (STATE.account && STATE.account.walletBalance) || 0;
   const fee = withdrawalFeePct(s);
   $('sheetBody').innerHTML = `<div class="pt-wit">
-    <section class="pt-wcard"><h3>Amount</h3>
-      <div class="pt-wamt"><span>${esc(cur())}</span><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Enter Amount" oninput="this.value=this.value.replace(/[^0-9]/g,'');syncWithdrawReceiveAmt()" autocomplete="off"></div>
-      <p class="pt-wbal">Balance:<span id="witBalance">${esc(vMoney2(balance))}</span></p>
+    <section class="pt-wcard"><h3>Montant</h3>
+      <div class="pt-wamt"><span>${esc(cur())}</span><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Saisissez le montant" oninput="this.value=this.value.replace(/[^0-9]/g,'');syncWithdrawReceiveAmt()" autocomplete="off"></div>
+      <p class="pt-wbal">Solde :<span id="witBalance">${esc(vMoney2(balance))}</span></p>
     </section>
-    <section class="pt-wfee"><h3>Fee: ${fee}%</h3><p>Withdrawals are processed within 30 minutes to 24 hours; you will receive <span id="witReceive">${esc(vMoney2(0))}</span>.</p></section>
-    <button class="pt-wgo" id="witSubmitBtn" type="button" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Withdraw <b id="witGoAmt">0.00</b></button>
+    <section class="pt-wfee"><h3>Frais : ${fee}%</h3><p>Les retraits sont traités entre 30 minutes et 24 heures ; vous recevrez <span id="witReceive">${esc(vMoney2(0))}</span>.</p></section>
+    <button class="pt-wgo" id="witSubmitBtn" type="button" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Retrait <b id="witGoAmt">0.00</b></button>
     <section class="pt-wacct" id="witWalletBlock">${witWalletBlockHtml(s)}</section>
   </div>`;
 }
@@ -4659,12 +4880,12 @@ function askAuthCode(){
     const bg = $('totpBg'); if (!bg) return resolve('');
     const input = $('totpInput'); let backup = false;
     const setMode = b => {
-      backup = b; input.value = ''; input.maxLength = b ? 11 : 6; input.setAttribute('inputmode', b ? 'text' : 'numeric'); input.placeholder = b ? 'Enter a backup code' : 'Enter 6-digit code';
-      $('totpAlt').textContent = b ? 'Use the 6-digit code instead' : 'Use a backup code instead';
-      $('totpHelp').textContent = b ? 'Type one of the backup codes you saved. Each one works only once.' : 'Open Google Authenticator and type the code it shows now.';
+      backup = b; input.value = ''; input.maxLength = b ? 11 : 6; input.setAttribute('inputmode', b ? 'text' : 'numeric'); input.placeholder = b ? 'Saisissez un code de secours' : 'Saisissez le code à 6 chiffres';
+      $('totpAlt').textContent = b ? 'Utiliser le code à 6 chiffres à la place' : 'Utiliser un code de secours à la place';
+      $('totpHelp').textContent = b ? 'Saisissez l\'un des codes de secours que vous avez enregistrés. Chacun ne fonctionne qu\'une seule fois.' : 'Ouvrez Google Authenticator et saisissez le code affiché maintenant.';
     };
     setMode(false);
-    const warn = $('totpWarn'); if (warn) { const off = gaClockSecs(); warn.textContent = off > 20 ? `Your phone's clock is about ${off} seconds away from the real time, so the code will not match. Turn on automatic date and time.` : ''; }
+    const warn = $('totpWarn'); if (warn) { const off = gaClockSecs(); warn.textContent = off > 20 ? `L'heure de votre téléphone est décalée d'environ ${off} secondes par rapport à l'heure réelle, le code ne correspondra donc pas. Activez la date et l'heure automatiques.` : ''; }
     bg.classList.add('show');
     setTimeout(() => { try { input.focus(); } catch (_) {} }, 60);
     const done = v => { bg.classList.remove('show'); $('totpOk').onclick = $('totpNo').onclick = $('totpAlt').onclick = null; bg.onclick = null; input.onkeydown = null; resolve(v); };
@@ -4705,16 +4926,16 @@ window.submitWithdraw = async function(){
   // several now that Potato allows saving more than one (see
   // witSelectedWallet()'s own comment).
   const acct = witSelectedWallet();
-  if (!amount || amount <= 0) return notify('Enter a valid amount.');
+  if (!amount || amount <= 0) return notify('Entrez un montant valide.');
   // Mirrors the server's rule so the member is told BEFORE a round trip.
   // The server checks it again -- this is a courtesy, not the enforcement.
   const wMult = Math.max(0, Math.floor(Number((STATE.settings || {}).withdrawMultiple) || 0));
   const wMin = Number((STATE.settings || {}).minWithdraw) || 0;
   // The minimum is checked first, as the server does, so the suggestions below can never be amounts under it.
-  if (wMin > 0 && amount < wMin) return notify(`Minimum withdraw is ${fmtUGX(wMin)}.`);
+  if (wMin > 0 && amount < wMin) return notify(`Le retrait minimum est de ${fmtUGX(wMin)}.`);
   if (wMult > 0 && amount % wMult !== 0) {
     const low = Math.floor(amount / wMult) * wMult, high = low + wMult;
-    return notify(`Withdraw must be a multiple of ${fmtUGX(wMult)}. Try ${fmtUGX(low || high)} or ${fmtUGX(high)}.`);
+    return notify(`Le retrait doit être un multiple de ${fmtUGX(wMult)}. Essayez ${fmtUGX(low || high)} or ${fmtUGX(high)}.`);
   }
   // Owner: "I want a notify to appear when one tries to press confirm
   // cashout but when he hasn't saved a bank." Confirm Cash Out used to be a
@@ -4722,11 +4943,11 @@ window.submitWithdraw = async function(){
   // button swallows a tap with zero feedback, so the member saw nothing at
   // all. It's tappable unconditionally now (see paintWithdrawSheet()); this
   // check is what actually tells them why nothing happened.
-  if (!acct) return notify('Please add a payout wallet before withdrawing.');
+  if (!acct) return notify('Veuillez ajouter un portefeuille de retrait avant de retirer.');
   // Told here so the member is not asked to wait on a request the server will refuse anyway.
   const win = withdrawWindow(STATE.settings || {});
   if (win.enabled && !win.open && !(STATE.account && STATE.account.withdrawAnytime))
-    return notify(`Withdraw is open from ${win.from} to ${win.to}. Please come back then.`);
+    return notify(`Les retraits sont ouverts de ${win.from} à ${win.to}. Veuillez revenir à ce moment-là.`);
   // COMPULSORY Google Authenticator: no set-up yet -> the member is told and taken to the set-up page BEFORE any Trade Password is asked (the server refuses
   // the withdrawal as well, so a changed app gains nothing).
   if (witNeedsAuthSetup()) return gaRequiredNotice();
@@ -4734,13 +4955,13 @@ window.submitWithdraw = async function(){
   if ($('pinBg') && $('pinBg').classList.contains('show')) return;   // a second tap while the dialog is open does nothing
   const witPin = await askTradePin();
   if (witPin === null) return;
-  if (!/^\d{6}$/.test(witPin)) return notify('Enter your 6-digit Trade Password.');
+  if (!/^\d{6}$/.test(witPin)) return notify('Entrez votre mot de passe de transaction à 6 chiffres.');
   // Google Authenticator, when the member turned it on: the code is asked right after the Trade Password. The SERVER enforces it either way.
   let witCode = '';
   if (authRequiredToWithdraw() && STATE.account && STATE.account.twofaEnabled) {
     witCode = await askAuthCode();
     if (witCode === null) return;
-    if (!witCode) return notify('Enter the 6-digit code from Google Authenticator.');
+    if (!witCode) return notify('Saisissez le code à 6 chiffres de Google Authenticator.');
   }
   _withdrawSubmitting = true;
   submitBtn.disabled = true;
@@ -4766,7 +4987,7 @@ window.submitWithdraw = async function(){
       if (STATE.settings) STATE.settings.requireTwofaToWithdraw = true;
       return gaRequiredNotice();
     }
-    return notify(r.message || 'Could not request withdrawal.');
+    return notify(r.message || 'Impossible de demander le retrait.');
   }
   // Owner: "why when l withdrawal the value still remains???"
   // Because nothing here refreshed it. The SERVER debits immediately --
@@ -4780,7 +5001,7 @@ window.submitWithdraw = async function(){
   }
   // Owner: "on withdrawal submission, just that notify should say that withdrawal submitted successfully".
   // OK then opens the withdrawal records, where the request shows as processing.
-  notify('Withdrawal submitted successfully' + (r.usedBackupCode ? `. You have ${Number(r.backupLeft) || 0} backup code${Number(r.backupLeft) === 1 ? '' : 's'} left.` : ''), () => openBalanceRecordSheet('withdraw'));
+  notify('Retrait soumis avec succès' + (r.usedBackupCode ? `. Il vous reste ${Number(r.backupLeft) || 0} code de secours${Number(r.backupLeft) === 1 ? '' : 's'} left.` : ''), () => openBalanceRecordSheet('withdraw'));
   if (_openSheetTitle === 'Withdraw' && $('witSubmitBtn') === submitBtn) closeSheet({ fromAction: true });
   refreshAfterWithdraw();
 };
@@ -4812,24 +5033,24 @@ window.openInvestConfirm = async function(tierKey, btn){
   if (!p || (btn && btn.disabled) || _buyBusy) return;
   _buyBusy = true;
   const label = btn ? btn.innerHTML : '';   // the whole button (cart icon + word), put back as it was
-  if (btn) btn.textContent = 'Buying…';
+  if (btn) btn.textContent = 'Achat en cours…';
   let result;
   try { result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey, expectedPrice: Number(p.price) || 0, expectedReturn: Number(p.expectedReturn) || undefined, cycle: Number(p.cycle) || undefined }) }); }   // the price, payout and length the card showed
-  finally { _buyBusy = false; if (btn && btn.isConnected) btn.innerHTML = label || 'Buy Now'; }
+  finally { _buyBusy = false; if (btn && btn.isConnected) btn.innerHTML = label || 'Acheter'; }
   if (result.stale) return;
   if (result.status === 'error' && result.code === 'PRICE_CHANGED') { try { refreshCatalogNow(); } catch (_) {} }
   if (result.status !== 'success') {
     const short = result.code === 'INSUFFICIENT_BALANCE' || /^Need .*, have /.test(String(result.message || ''));
     if (short) {
-      notify('Insufficient balance, redirecting to deposit...', () => openDepositSheet());
+      notify('Solde insuffisant, redirection vers le dépôt...', () => openDepositSheet());
       setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1800);
       return;
     }
-    notify(result.message || 'Could not complete investment');
+    notify(result.message || 'Impossible de finaliser l\'investissement');
     return;
   }
   // A bought product: the notice "Purchase successful", then the member is taken to the Income page (where the running product shows) by itself (owner).
-  notify('Purchase successful', () => showPage('assets'));
+  notify('Achat réussi', () => showPage('assets'));
   setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1500);
 };
 
@@ -4858,7 +5079,7 @@ window.addEventListener('appinstalled', () => { window._installPrompt = null; })
 // directly -- no screen in between -- and the 'downloadbg' image slot, its
 // admin upload UI, and this function are gone, not just unlinked.
 window.promptInstallApp = async function(){
-  if (!window._installPrompt) { notify('Already installed, or your browser doesn\'t support installing ' + brandName() + '.'); return; }
+  if (!window._installPrompt) { notify('Déjà installée, ou votre navigateur ne permet pas l\'installation ' + brandName() + '.'); return; }
   window._installPrompt.prompt();
   await window._installPrompt.userChoice.catch(() => null);
   window._installPrompt = null;
@@ -4868,7 +5089,7 @@ window.ptClaimDialog = function(amount){
   const old = $('ptClaimBg'); if (old) old.remove();
   const bg = document.createElement('div');
   bg.id = 'ptClaimBg'; bg.className = 'pt-claim-bg';
-  bg.innerHTML = `<div class="pt-claim" role="dialog" aria-modal="true"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12.6l4 4 8-8.6"/></svg></span><h3>Claim successful</h3><b>+${esc(vMoney2(amount))}</b><button type="button" onclick="closeClaimDialog()">OK</button></div>`;
+  bg.innerHTML = `<div class="pt-claim" role="dialog" aria-modal="true"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12.6l4 4 8-8.6"/></svg></span><h3>Réclamation réussie</h3><b>+${esc(vMoney2(amount))}</b><button type="button" onclick="closeClaimDialog()">OK</button></div>`;
   bg.onclick = e => { if (e.target === bg) closeClaimDialog(); };
   document.body.appendChild(bg);
   requestAnimationFrame(() => bg.classList.add('show'));
@@ -4886,7 +5107,7 @@ window.ptWinDialog = function(amount, balance){
     const fall = Math.round(14 - (top / 100) * (window.innerHeight || 700));
     bubbles += `<i style="width:${size}px;height:${size}px;left:${left}%;top:${top}%;--fall:${fall}px;animation-delay:${delay}s"></i>`;
   }
-  bg.innerHTML = `<div class="pt-win-fx" aria-hidden="true">${bubbles}</div><div class="pt-win" role="dialog" aria-modal="true"><span class="e" aria-hidden="true">\ud83c\udf81</span><h3>Congratulations!</h3><p class="w">You won</p><b class="amt" id="ptWinAmt"><span>${esc(vMoney2(amount))}</span></b><p class="nb">New Balance: ${esc(vMoney2(balance))}</p><button type="button" onclick="closeWinDialog()">Collect</button></div>`;
+  bg.innerHTML = `<div class="pt-win-fx" aria-hidden="true">${bubbles}</div><div class="pt-win" role="dialog" aria-modal="true"><span class="e" aria-hidden="true">🎁</span><h3>Félicitations !</h3><p class="w">Vous avez gagné</p><b class="amt" id="ptWinAmt"><span>${esc(vMoney2(amount))}</span></b><p class="nb">Nouveau solde : ${esc(vMoney2(balance))}</p><button type="button" onclick="closeWinDialog()">Recevoir</button></div>`;
   bg.onclick = e => { if (e.target === bg) closeWinDialog(); };
   document.body.appendChild(bg);
   const a = $('ptWinAmt'); if (a) { const t = a.firstChild, box = a.parentNode.clientWidth - 56; let fs = 38; while (t.getBoundingClientRect().width > box && fs > 22) { fs -= 1; a.style.fontSize = fs + 'px'; } }
@@ -4897,7 +5118,7 @@ window.closeClaimDialog = function(){ const bg = $('ptClaimBg'); if (bg) { bg.cl
 
 // ── ORDER GIFTS: one card per product that carries a gift; "receive" is live once the member has bought it ──
 window.openOrderGiftsPage = async function(){
-  openSheet('Order Gifts', '<div class="pt-og"><div class="pt-ogload">Loading...</div></div>');
+  openSheet('Order Gifts', '<div class="pt-og"><div class="pt-ogload">Chargement...</div></div>');
   const r = await api('/gifts/list');
   if (_openSheetTitle !== 'Order Gifts') return;
   STATE.gifts = r.status === 'success' ? r.gifts : null;
@@ -4905,10 +5126,10 @@ window.openOrderGiftsPage = async function(){
 };
 function paintOrderGifts(ok){
   const box = document.querySelector('.pt-og'); if (!box) return;
-  if (!ok) { box.innerHTML = '<div class="pt-ogload" onclick="openOrderGiftsPage()">Could not load. Tap to try again.</div>'; return; }
+  if (!ok) { box.innerHTML = '<div class="pt-ogload" onclick="openOrderGiftsPage()">Chargement impossible. Touchez pour réessayer.</div>'; return; }
   const list = STATE.gifts || [];
-  if (!list.length) { box.innerHTML = '<div class="pt-ogload">No gifts yet</div>'; return; }
-  box.innerHTML = list.map(g => `<div class="pt-og-card"><div class="t"><b>${esc(g.name)}</b><span>Gift: <i>${esc(cur() + ' ' + (Number(g.amount) || 0).toFixed(2))}</i></span></div>
+  if (!list.length) { box.innerHTML = '<div class="pt-ogload">Aucun cadeau pour le moment</div>'; return; }
+  box.innerHTML = list.map(g => `<div class="pt-og-card"><div class="t"><b>${esc(g.name)}</b><span>Cadeau : <i>${esc(cur() + ' ' + (Number(g.amount) || 0).toFixed(2))}</i></span></div>
     <button type="button" class="${g.owned && !g.claimed ? 'on' : ''}" ${g.owned && !g.claimed ? `onclick="claimOrderGift('${esc(g.key)}',this)"` : 'disabled'}>${g.claimed ? 'received' : 'receive'}</button></div>`).join('');
 }
 window.claimOrderGift = async function(key, btn){
@@ -4919,7 +5140,7 @@ window.claimOrderGift = async function(key, btn){
   if (r.status !== 'success') {
     if (r.code === 'ALREADY_CLAIMED') { const done = (STATE.gifts || []).find(x => x.key === key); if (done) { done.claimed = true; paintOrderGifts(true); } }   // received on another phone: the card must say so
     else if (btn) btn.disabled = false;
-    return notify(r.message || 'Could not receive this gift');
+    return notify(r.message || 'Impossible de recevoir ce cadeau');
   }
   const g = (STATE.gifts || []).find(x => x.key === key); if (g) g.claimed = true;
   if (STATE.account && r.walletBalance != null) STATE.account.walletBalance = r.walletBalance;
@@ -4934,32 +5155,32 @@ var PT_DL_GIFT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 var PT_DL_TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.6l4.4 4.4L19 7.4"/></svg>';
 // The Claim button, or "Reward claimed" (pale, not tappable) once this member has taken it.
 function ptClaimButtonHtml(claim){
-  if (STATE.account && STATE.account.appClaimed === true) return `<button type="button" class="pt-dlbtn claim claimed" id="ptAppClaimBtn" disabled>${PT_DL_TICK}<span>Reward claimed</span></button>`;
-  return claim > 0 ? `<button type="button" class="pt-dlbtn claim" id="ptAppClaimBtn" onclick="claimAppReward(this)">${PT_DL_GIFT}<span>Claim ${esc(numGroup(claim, true))}</span></button>` : '';
+  if (STATE.account && STATE.account.appClaimed === true) return `<button type="button" class="pt-dlbtn claim claimed" id="ptAppClaimBtn" disabled>${PT_DL_TICK}<span>Récompense réclamée</span></button>`;
+  return claim > 0 ? `<button type="button" class="pt-dlbtn claim" id="ptAppClaimBtn" onclick="claimAppReward(this)">${PT_DL_GIFT}<span>Réclamer ${esc(numGroup(claim, true))}</span></button>` : '';
 }
 window.openDownloadPage = function(){
   const claim = Number((STATE.settings || {}).appClaimAmount) || 0;
-  const faq = [['Installation is blocked by my phone', 'Open Settings, find "Special app access" or "Install unknown apps", and allow your browser to install apps. Then run the APK file again from your browser\'s downloads.'],
-    ['The download does not start', 'Make sure you are opening this page in a normal mobile browser. In-app browsers (for example inside social apps) may block APK downloads - tap the menu at the top right and choose "Open in browser".'],
-    ['Can I use this app on iPhone?', 'The app is currently available for Android only. Please open this page on an Android phone to download and install it.']];
+  const faq = [['L\'installation est bloquée par mon téléphone', 'Ouvrez les Paramètres, trouvez « Accès spécial aux applis » ou « Installer des applis inconnues » et autorisez votre navigateur à installer des applications. Relancez ensuite le fichier APK depuis les téléchargements de votre navigateur.'],
+    ['Le téléchargement ne démarre pas', 'Assurez-vous d\'ouvrir cette page dans un navigateur mobile normal. Les navigateurs intégrés aux applications (par exemple dans les réseaux sociaux) peuvent bloquer les téléchargements APK : touchez le menu en haut à droite et choisissez « Ouvrir dans le navigateur ».'],
+    ['Puis-je utiliser cette application sur iPhone ?', 'L\'application est actuellement disponible uniquement sur Android. Ouvrez cette page sur un téléphone Android pour la télécharger et l\'installer.']];
   const step = (n, t, d) => `<div class="pt-step"><span>${n}</span><div><b>${t}</b><p>${d}</p></div></div>`;
   openSheet('Download App', `<div class="pt-dl">
     <section class="pt-dlhero">
-      <button type="button" class="pt-dlback" onclick="closeSheet()" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button type="button" class="pt-dlback" onclick="closeSheet()" aria-label="Retour"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
       <span class="pt-dllogo">${STATE.logo ? `<img src="${esc(STATE.logo)}" alt="">` : ''}</span>
       <h2>${esc(brandName())}</h2>
-      <p class="sub">Official App \u00b7 Fast &amp; Secure</p>
-      <div class="chips"><span>Android 7.0+</span><span>3.4 MB</span><span>Official</span></div>
-      <button type="button" class="pt-dlbtn" onclick="promptInstallApp()">${PT_DL_DOWN}<span>Download APK</span></button>
+      <p class="sub">Application officielle · Rapide &amp; Sécurisée</p>
+      <div class="chips"><span>Android 7.0+</span><span>3.4 MB</span><span>Officielle</span></div>
+      <button type="button" class="pt-dlbtn" onclick="promptInstallApp()">${PT_DL_DOWN}<span>Télécharger l'APK</span></button>
       ${ptClaimButtonHtml(claim)}
-      <p class="cap">Free download \u00b7 Tap the button above to install</p>
+      <p class="cap">Téléchargement gratuit · Touchez le bouton ci-dessus pour installer</p>
     </section>
-    <section class="pt-dlcard"><h3><i></i>Install in 3 steps</h3>
-      ${step(1, 'Download the APK', 'Tap the download button and wait for the file to finish downloading.')}${step(2, 'Allow installation', 'If prompted, enable "Install unknown apps" for your browser in settings.')}${step(3, 'Open and sign in', 'Install the app, open it and sign in with your existing account.')}
+    <section class="pt-dlcard"><h3><i></i>Installer en 3 étapes</h3>
+      ${step(1, 'Téléchargez l\'APK', 'Touchez le bouton de téléchargement et attendez la fin du téléchargement du fichier.')}${step(2, 'Autorisez l\'installation', 'Si on vous le demande, activez « Installer des applis inconnues » pour votre navigateur dans les paramètres.')}${step(3, 'Ouvrez et connectez-vous', 'Installez l\'application, ouvrez-la et connectez-vous avec votre compte existant.')}
     </section>
-    <div class="pt-dltiles"><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l7 2.5V11c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V5.5z"/></svg><b>Secure</b><span>Encrypted data</span></div><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/></svg><b>Fast</b><span>Lightweight app</span></div><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg><b>Official</b><span>Direct download</span></div></div>
+    <div class="pt-dltiles"><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l7 2.5V11c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V5.5z"/></svg><b>Sécurisée</b><span>Données chiffrées</span></div><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/></svg><b>Rapide</b><span>Application légère</span></div><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg><b>Officielle</b><span>Téléchargement direct</span></div></div>
     <section class="pt-dlcard faq"><h3><i></i>FAQ</h3>${faq.map((f, i) => `<div class="pt-faq"><button type="button" onclick="ptFaq(this)"><b>${f[0]}</b><em>+</em></button><p>${f[1]}</p></div>`).join('')}</section>
-    <p class="pt-dlfoot">${esc(brandName())} Official Client<br>\u00a9 ${new Date().getFullYear()} All rights reserved</p>
+    <p class="pt-dlfoot">${esc(brandName())} Client officiel<br>© ${new Date().getFullYear()} Tous droits réservés</p>
   </div>`);
 };
 window.ptFaq = function(btn){
@@ -4972,8 +5193,8 @@ window.claimAppReward = async function(btn){
   const r = await post('/app/claim', {});
   if (r.stale) return;
   if (btn) btn.disabled = false;
-  if (r.code === 'ALREADY_CLAIMED') { if (STATE.account) STATE.account.appClaimed = true; const cb0 = $('ptAppClaimBtn'); if (cb0) cb0.outerHTML = ptClaimButtonHtml(0); return notify(r.message || 'You have already claimed this.'); }
-  if (r.status !== 'success') return notify(r.message || 'Could not claim right now');
+  if (r.code === 'ALREADY_CLAIMED') { if (STATE.account) STATE.account.appClaimed = true; const cb0 = $('ptAppClaimBtn'); if (cb0) cb0.outerHTML = ptClaimButtonHtml(0); return notify(r.message || 'Vous l\'avez déjà réclamé.'); }
+  if (r.status !== 'success') return notify(r.message || 'Impossible de réclamer pour le moment');
   if (STATE.account && r.walletBalance != null) STATE.account.walletBalance = r.walletBalance;
   if (STATE.account) STATE.account.appClaimed = true;
   const cb = $('ptAppClaimBtn'); if (cb) cb.outerHTML = ptClaimButtonHtml(0);
@@ -5003,7 +5224,7 @@ function ptCleanHtml(html){
 }
 window.openAboutPage = async function(){
   openSheet('About Us', `<div class="pt-ab">
-    <div class="pt-abban">${STATE.aboutBanner ? `<img src="${esc(STATE.aboutBanner)}" alt="" onerror="this.style.display='none'">` : ''}<button type="button" class="pt-dlback" onclick="closeSheet()" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button></div>
+    <div class="pt-abban">${STATE.aboutBanner ? `<img src="${esc(STATE.aboutBanner)}" alt="" onerror="this.style.display='none'">` : ''}<button type="button" class="pt-dlback" onclick="closeSheet()" aria-label="Retour"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button></div>
     <span class="pt-ablogo">${STATE.aboutLogo ? `<img src="${esc(STATE.aboutLogo)}" alt="">` : ''}</span>
     <div class="pt-abhtml" id="abHtml"></div>
   </div>`);

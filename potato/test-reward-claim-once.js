@@ -32,11 +32,11 @@ function world(user, total) {
   r = await w.call('/salary/claim', { tierId: 's1' }); eq([r.code, r.body.amount], [200, 2000]); eq(w.user().walletBalance, 2000); eq(w.user().claimedSalaryTiers, ['s1']);
   ok(w.ledger['transactions/salary:u:tier:s1'] && w.ledger['transactions/salary:u:tier:s1'].amount === 2000, 'one ledger row for the tier');
   // the SAME tier again -- now, "tomorrow", any time: never again
-  r = await w.call('/salary/claim', { tierId: 's1' }); eq(r.code, 409); ok(/already claimed/.test(r.body.message)); eq(w.user().walletBalance, 2000, 'not paid twice');
-  r = await w.call('/salary/claim', {}); eq(r.code, 400); ok(/already claimed every reward/.test(r.body.message), 'an older app that names no tier is told the same'); eq(w.user().walletBalance, 2000);
+  r = await w.call('/salary/claim', { tierId: 's1' }); eq(r.code, 409); ok(/déjà réclamé/.test(r.body.message)); eq(w.user().walletBalance, 2000, 'not paid twice');
+  r = await w.call('/salary/claim', {}); eq(r.code, 400); ok(/déjà réclamé toutes les récompenses/.test(r.body.message), 'an older app that names no tier is told the same'); eq(w.user().walletBalance, 2000);
   r = await w.call('GET /salary/status'); eq(r.body.tiers[0].claimed, true, 'status keeps it Claimed'); eq(r.body.accruedDays, 0);
   // an unreached tier cannot be claimed, even by naming it
-  r = await w.call('/salary/claim', { tierId: 's2' }); eq(r.code, 400); ok(/more to claim/.test(r.body.message)); eq(w.user().walletBalance, 2000);
+  r = await w.call('/salary/claim', { tierId: 's2' }); eq(r.code, 400); ok(/pour réclamer/.test(r.body.message)); eq(w.user().walletBalance, 2000);
   r = await w.call('/salary/claim', { tierId: 'nope' }); eq(r.code, 400);
   // the team grows: the next tier opens, once
   total.v = 1200000; r = await w.call('/salary/claim', { tierId: 's2' }); eq([r.code, r.body.amount], [200, 4000]); eq(w.user().walletBalance, 6000);

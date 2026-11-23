@@ -23,7 +23,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   const sheet = d.getElementById('annSheet');
   ok(d.getElementById('annBg').classList.contains('show'), 'dialog opens with an admin picture');
   ok(sheet.querySelector('img.mg-ann-img') && sheet.querySelector('img').getAttribute('src') === 'data:image/png;base64,AAAA', 'the picture is the admin upload');
-  ok(sheet.querySelector('.mg-ann-x') && sheet.querySelector('.mg-ann-join').textContent.trim() === 'Join Channel', 'X top right and Join Channel');
+  ok(sheet.querySelector('.mg-ann-x') && sheet.querySelector('.mg-ann-join').textContent.trim() === 'Rejoindre le canal', 'X top right and Rejoindre le canal');
   assert.equal(sheet.querySelector('.mg-ann-join').getAttribute('href'), 'https://t.me/grp', 'Join Channel = Telegram group'); n++;
   ok(!/mailto|Email|WhatsApp/i.test(sheet.innerHTML), 'no email or WhatsApp extras');
   w.eval('STATE.settings.telegramGroup=""'); w.maybeShowAnnouncement();

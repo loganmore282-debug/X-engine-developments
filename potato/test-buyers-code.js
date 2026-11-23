@@ -23,7 +23,7 @@ function run(user, code, opts = {}) {
   const base = { code: 'ABCD-EFGH-JKLM', codeLower: 'abcd-efgh-jklm', minReward: 100, maxReward: 100, active: true, usedBy: [] };
   const member = extra => Object.assign({ status: 'active', registrationDone: true, totalInvested: 0 }, extra);
   let r = await run(member(), Object.assign({}, base, { buyersOnly: true }))();
-  ok(r.status === 403 && r.body.code === 'BUYERS_ONLY' && /bought a product/.test(r.body.message), 'a member who has not bought a product is refused a buyers-only code');
+  ok(r.status === 403 && r.body.code === 'BUYERS_ONLY' && /acheté un produit/.test(r.body.message), 'a member who has not bought a product is refused a buyers-only code');
   ok(r.writes.length === 0, 'and nothing is claimed or written, so the code is still free after their first purchase');
   r = await run(member({ totalInvested: 37700 }), Object.assign({}, base, { buyersOnly: true }), { investments: [{ amount: 37700 }] })();
   ok(!(r.body && r.body.code === 'BUYERS_ONLY'), 'a member who has bought a product is not stopped by the buyers-only rule');
@@ -34,9 +34,9 @@ function run(user, code, opts = {}) {
   // The 10-character code: typed in any case, with stray dashes or spaces, it is found by its hash (never by the plain text).
   const hash = crypto.createHash('sha256').update('potato-tc|HPDABM8C5L').digest('hex');
   r = await run(member(), Object.assign({}, base, { codeLower: hash, buyersOnly: false }), { typed: 'hpdab-m8c5l', only: hash })();
-  ok(r.looked[0] === hash && !(r.body && r.body.message === 'Wrong treasure chest password'), 'a 10-character code is looked up by its SHA-256, whatever case or dashes were typed');
+  ok(r.looked[0] === hash && !(r.body && r.body.message === 'Mot de passe du coffre au trésor incorrect'), 'a 10-character code is looked up by its SHA-256, whatever case or dashes were typed');
   r = await run(member(), base, { typed: 'ZZZZZZZZZZ', only: 'nothing-matches' })();
-  ok(r.status === 400 && r.body.message === 'Wrong treasure chest password', 'a wrong key is refused with the owner\'s wording');
+  ok(r.status === 400 && r.body.message === 'Mot de passe du coffre au trésor incorrect', 'a wrong key is refused with the owner\'s wording');
   r = await run(member(), base, { locked: true })();
   ok(r.status === 429 && r.body.code === 'TOO_MANY_WRONG_KEYS', 'after too many wrong keys the chest refuses everything for a while');
   // wiring

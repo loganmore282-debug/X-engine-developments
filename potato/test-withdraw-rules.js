@@ -196,7 +196,7 @@ function run(state, body) {
     sendAdminPush: async () => {},
     sendWithdrawalSmsAlert: async () => {},
     logAdminAction: () => {},
-    NETWORK_NAMES: new Set(['Telebirr']),
+    NETWORK_NAMES: new Set(['Wave']),
     MAX_MONEY_AMOUNT: 100000000,
     _witRequestInFlight: new Set(),
     _userBeingDeleted: new Set(),
@@ -264,11 +264,11 @@ function fresh(extra = {}) {
                 requireInvestToWithdraw: false, requireTwofaToWithdraw: false, maxWithdrawalsPerDay: 0,
                 withdrawWindowEnabled: false, ...(extra.settings || {}) },
     user: { walletBalance: 100000, totalInvested: 50000, status: 'active' },
-    banks: [{ id: 'b1', userId: 'u1', network: 'Telebirr', phone: '0770000001', holder: 'A B' }],
+    banks: [{ id: 'b1', userId: 'u1', network: 'Wave', phone: '0770000001', holder: 'A B' }],
     wits: extra.wits || [], tx: [], seq: 0, now: Date.now(),
   };
 }
-const REQ = { amount: 10000, network: 'Telebirr', phone: '0770000001', pin: '123456' };
+const REQ = { amount: 10000, network: 'Wave', phone: '0770000001', pin: '123456' };
 
 (async () => {
   let st = fresh();
@@ -307,7 +307,7 @@ const REQ = { amount: 10000, network: 'Telebirr', phone: '0770000001', pin: '123
     r = await run(st, REQ);
     ck(r.code === 400 && r.replied.code === 'WITHDRAW_PENDING',
        `a ${status} withdrawal blocks the next (${r.code} ${r.replied && r.replied.code})`);
-    ck(/already have a withdrawal/i.test((r.replied || {}).message || ''),
+    ck(/déjà un retrait/i.test((r.replied || {}).message || ''),
        `  and says why: ${(r.replied || {}).message}`);
     ck(st.wits.length === 1 && st.user.walletBalance === 100000,
        '  nothing written, nothing debited');
@@ -330,7 +330,7 @@ const REQ = { amount: 10000, network: 'Telebirr', phone: '0770000001', pin: '123
   r = await run(st, REQ);
   ck(r.code === 400 && r.replied.code === 'WINDOW_CLOSED',
      `21:00 EAT is refused (${r.code} ${r.replied && r.replied.code})`);
-  ck(/09:00 to 17:00/.test((r.replied || {}).message || ''),
+  ck(/09:00 à 17:00/.test((r.replied || {}).message || ''),
      `  naming the hours, 24-hour: ${(r.replied || {}).message}`);
   ck(st.user.walletBalance === 100000, '  and nothing is debited');
 
@@ -380,11 +380,11 @@ const REQ = { amount: 10000, network: 'Telebirr', phone: '0770000001', pin: '123
   ck(r.code === 200, `a refunded (declined) request today does not use the allowance (${r.code} ${r.replied && r.replied.message})`);
   st = fresh({ settings: { maxWithdrawalsPerDay: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: '15/01/2026' }] });
   r = await run(st, REQ);
-  ck(r.code === 400 && /limit of 1/.test((r.replied || {}).message || ''), `a paid one today still does (${r.code})`);
+  ck(r.code === 400 && /limite du jour de 1 retrait/.test((r.replied || {}).message || ''), `a paid one today still does (${r.code})`);
 
   console.log('\n— the app tells the member the hours when it is shut —');
   const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
-  ck(/const win = withdrawWindow\(STATE\.settings \|\| \{\}\);\s*if \(win\.enabled && !win\.open && !\(STATE\.account && STATE\.account\.withdrawAnytime\)\)\s*return notify\(`Withdraw is open from/.test(mod),
+  ck(/const win = withdrawWindow\(STATE\.settings \|\| \{\}\);\s*if \(win\.enabled && !win\.open && !\(STATE\.account && STATE\.account\.withdrawAnytime\)\)\s*return notify\(`Les retraits sont ouverts de/.test(mod),
      'tapping Withdraw outside the hours says "Withdraw is open from ... to ..."');
   ck(!/Withdrawal time: 06:00:00 - 17:00:00/.test(mod), 'and no hardcoded hours are promised');
 

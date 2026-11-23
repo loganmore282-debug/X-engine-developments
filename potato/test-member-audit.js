@@ -21,7 +21,7 @@ for(const s of d.scripts){
 }
 const tick=()=>new Promise(r=>setTimeout(r,5));
 function deferred(){let resolve;const promise=new Promise(r=>{resolve=r});return {promise,resolve}}
-function setState(){w.eval('STATE.page="home"; STATE.account={walletBalance:50000,totalEarned:100,totalDeposited:20000,totalWithdrawn:5000}; STATE.settings={minDeposit:15000,minWithdraw:5000,withdrawFeePct:0,weekendWithdrawBlock:false,requireTwofaToWithdraw:false}; STATE.investments=[]; STATE.bankAccounts=[{id:"wallet",network:"Telebirr",phone:"256771234567",holder:"Test Member"}];')}
+function setState(){w.eval('STATE.page="home"; STATE.account={walletBalance:50000,totalEarned:100,totalDeposited:20000,totalWithdrawn:5000}; STATE.settings={minDeposit:15000,minWithdraw:5000,withdrawFeePct:0,weekendWithdrawBlock:false,requireTwofaToWithdraw:false}; STATE.investments=[]; STATE.bankAccounts=[{id:"wallet",network:"Wave",phone:"256771234567",holder:"Test Member"}];')}
 async function main(){
   await tick();setState();
   const request=w.api, originalFetch=w.fetch;
@@ -43,32 +43,32 @@ async function main(){
     :path==='/investments'?{status:'success',investments:[{status:'active',tierLabel:'Test Asset',amount:15000,payoutsTotal:7,dailyPayout:1000}]}
     :{status:'success',messages:[]};
   await w.renderHome();
-  assert.match(d.querySelector('#homeProducts').textContent,/Test Asset|No products available|Failed to load products/,'Home lists the catalogue (or says it could not load it)');
+  assert.match(d.querySelector('#homeProducts').textContent,/Test Asset|Aucun produit disponible|Impossible de charger les produits/,'Home lists the catalogue (or says it could not load it)');
   w.eval('STATE.products=[{key:"a1",name:"Test Asset",price:15000,cycle:30,expectedReturn:45000,dailyPayout:1500,isOpen:true}]');w.paintHome();
   assert.match(d.querySelector('.pt-card h3').textContent,/Test Asset/,'the product name sits above its figures');
-  assert.match(d.querySelector('.pt-grid').textContent,/Price\s*Br 15,000/,'prices read Br 15,000');
-  assert.match(d.querySelector('.pt-grid').textContent,/Total\s*Br 45,000/,'the total is the full cashback');
-  assert.deepEqual([...d.querySelectorAll('.pt-quick button')].map(e=>e.textContent),['Recharge','Withdraw','Service','Channel'],'Home has Recharge, Withdraw, Service and Channel');
+  assert.match(d.querySelector('.pt-grid').textContent,/Prix\s*FCFA 15,000/,'prices read FCFA 15,000');
+  assert.match(d.querySelector('.pt-grid').textContent,/Total\s*FCFA 45,000/,'the total is the full cashback');
+  assert.deepEqual([...d.querySelectorAll('.pt-quick button')].map(e=>e.textContent),['Recharge','Retrait','Service','Canal'],'Home has Recharge, Retrait, Service and Canal');
   assert(d.querySelector('#ptFloats'),'the floating chest and APP images live on every page');
   assert.equal(d.querySelectorAll('.bottom-nav .navitem').length,5,'five tabs');
-  assert.deepEqual([...d.querySelectorAll('.bottom-nav .lbl')].map(e=>e.textContent),['Home','Income','Myteam','Share','My']);
+  assert.deepEqual([...d.querySelectorAll('.bottom-nav .lbl')].map(e=>e.textContent),['Accueil','Revenus','Équipe','Partager','Compte']);
   const originalBanner=d.querySelector('.home-banner');await w.liveRefreshVisible();
   assert.equal(d.querySelector('.home-banner'),originalBanner,'balance refresh must not rebuild Home');
   w.eval('STATE.page="assets"');w.eval('STATE.investments=[{status:"active",tierKey:"a1",tierLabel:"Test Asset",amount:15000,payoutsTotal:30,payoutsMade:3,dailyPayout:1500,expectedReturn:45000,paidOut:4500,createdAt:new Date().toISOString()},{status:"active",tierKey:"a1",tierLabel:"Gifted",amount:0,payoutsTotal:30,payoutsMade:1,dailyPayout:1500,expectedReturn:45000,paidOut:0,createdAt:new Date().toISOString(),granted:true}]');w.paintAssets();
-  assert.match(d.querySelector('.pt-cd h2').textContent,/Earnings Countdown/);assert.equal(d.querySelector('#incomeTotal').textContent,w.eval('ptMoneyPlain(ptProductIncome())'),'Total Income is what the products paid');assert.match(d.querySelector('#incomeTotal').textContent,/^Br \d+\.\d\d$/,'without thousands commas');
+  assert.match(d.querySelector('.pt-cd h2').textContent,/Compte à rebours des gains/);assert.equal(d.querySelector('#incomeTotal').textContent,w.eval('ptMoneyPlain(ptProductIncome())'),'Total Income is what the products paid');assert.match(d.querySelector('#incomeTotal').textContent,/^FCFA \d+\.\d\d$/,'without thousands commas');
   assert.equal(d.querySelectorAll('#ownedAssets .pt-run').length,2,'Income lists every owned product');
   assert.equal(d.querySelectorAll('#ownedAssets .pt-run-mat').length,2,'each owned card shows its maturity bar');
   w.eval('STATE.page="account"');await w.renderAccount();
   assert.match(d.querySelector('.pt-mystat').textContent,/70,000\.00/);
-  assert.deepEqual([...d.querySelectorAll('.pt-menu b, .pt-menu span')].map(e=>e.textContent.trim()).filter(Boolean).slice(0,9),['Balance Detail','Messages','Login Password','Trade Password','Google Authenticator','Bank Card','Gift Code','APP Download','About Us']);
+  assert.deepEqual([...d.querySelectorAll('.pt-menu b, .pt-menu span')].map(e=>e.textContent.trim()).filter(Boolean).slice(0,9),['Détail du solde','Messages','Mot de passe de connexion','Mot de passe de transaction','Google Authenticator','Compte de retrait','Code cadeau',"Télécharger l'appli",'À propos de nous']);
   { // the owner's switch (Admin > Settings): off = the Google Authenticator row is gone, live (no repaint) and on a fresh paint; on = it is back after the Trade Password
     const rows=()=>[...d.querySelectorAll('.pt-menu .pt-mrow b')].map(e=>e.textContent.trim());
     const marker=d.querySelector('.pt-menu');
     w.eval('STATE.settings.requireTwofaToWithdraw=false');w.patchAuthRow();
-    assert.deepEqual(rows(),['Balance Detail','Messages','Login Password','Trade Password','Bank Card','Gift Code','APP Download','About Us'],'switched off: the row goes away');
+    assert.deepEqual(rows(),['Détail du solde','Messages','Mot de passe de connexion','Mot de passe de transaction','Compte de retrait','Code cadeau',"Télécharger l'appli",'À propos de nous'],'switched off: the row goes away');
     assert.equal(d.querySelector('.pt-menu'),marker,'in place: the menu is not repainted');
     w.eval('STATE.settings.requireTwofaToWithdraw=true');w.patchAuthRow();
-    assert.deepEqual(rows(),['Balance Detail','Messages','Login Password','Trade Password','Google Authenticator','Bank Card','Gift Code','APP Download','About Us'],'switched on: the row is back right after the Trade Password');
+    assert.deepEqual(rows(),['Détail du solde','Messages','Mot de passe de connexion','Mot de passe de transaction','Google Authenticator','Compte de retrait','Code cadeau',"Télécharger l'appli",'À propos de nous'],'switched on: the row is back right after the Trade Password');
     w.eval('STATE.settings.requireTwofaToWithdraw=false');await w.renderAccount();
     assert.equal(rows().includes('Google Authenticator'),false,'a fresh paint with the switch off draws no row');
     w.eval('delete STATE.settings.requireTwofaToWithdraw');await w.renderAccount();
@@ -87,11 +87,11 @@ async function main(){
   const opened=w.openWithdrawSheet();
   const input=d.querySelector('#witAmount');input.value='15,000';input.focus();w.syncWithdrawReceiveAmt();
   assert.match(d.querySelector('#witGoAmt').textContent,/15,000/,'the Withdraw button shows the typed amount');
-  bank.resolve({status:'success',accounts:[{id:'wallet',network:'Telebirr',phone:'251771234567',holder:'Test Member'}]});await opened;
+  bank.resolve({status:'success',accounts:[{id:'wallet',network:'Wave',phone:'251771234567',holder:'Test Member'}]});await opened;
   assert.equal(d.querySelector('#witAmount'),input);assert.equal(input.value,'15,000');
-  assert.match(d.querySelector('.pt-wfee').textContent,/Fee: 0%/);assert(!d.querySelector('#witPin'),'the Trade Password is asked in a small dialog, not on the page');
+  assert.match(d.querySelector('.pt-wfee').textContent,/Frais : 0%/);assert(!d.querySelector('#witPin'),'the Trade Password is asked in a small dialog, not on the page');
   const stale=deferred();w.api=()=>stale.promise;const previous=w.openWithdrawSheet();
-  w.api=async()=>({status:'success',accounts:[{id:'new',network:'Telebirr',phone:'251751234567',holder:'Current Wallet'}]});
+  w.api=async()=>({status:'success',accounts:[{id:'new',network:'Wave',phone:'251751234567',holder:'Current Wallet'}]});
   await w.openWithdrawSheet();
   stale.resolve({status:'success',accounts:[{id:'old',phone:'251701111111'}]});await previous;
   assert.match(d.querySelector('#witWalletBlock').textContent,/Current Wallet/i,'late request must not replace a new screen');
@@ -104,13 +104,13 @@ async function main(){
     await w.submitWithdraw();
     assert.equal(sent,0,'nothing is sent while Google Authenticator is not set up');
     assert(!d.querySelector('#pinBg').classList.contains('show'),'and no Trade Password is asked first');
-    assert.equal(notes.length,1);assert.match(notes[0][0],/Google Authenticator is required to withdraw/);
+    assert.equal(notes.length,1);assert.match(notes[0][0],/Google Authenticator est obligatoire pour retirer/);
     w.api=async()=>({status:'success',enabled:false,backupLeft:0});
     notes[0][1]();await tick();
-    assert.match(d.querySelector('#sheetBody').textContent,/Google Authenticator is required/);assert.match(d.querySelector('#sheetBody').textContent,/before you can withdraw/);
+    assert.match(d.querySelector('#sheetBody').textContent,/Google Authenticator est obligatoire/);assert.match(d.querySelector('#sheetBody').textContent,/avant de pouvoir retirer/);
     // the owner's switch OFF: a member who set it up is NOT asked for a code, and nothing about it is sent
     w.eval('STATE.account.twofaEnabled=true;STATE.settings.requireTwofaToWithdraw=false');
-    w.api=async()=>({status:'success',accounts:[{id:'wallet',network:'Telebirr',phone:'251771234567',holder:'Test Member'}]});
+    w.api=async()=>({status:'success',accounts:[{id:'wallet',network:'Wave',phone:'251771234567',holder:'Test Member'}]});
     await w.openWithdrawSheet();d.querySelector('#witAmount').value='5000';notes.length=0;
     let asked=0,bodies=[];w.askAuthCode=async()=>{asked++;return '123456'};
     w.post=(path,body)=>{sent++;bodies.push(body);return Promise.resolve({status:'success',net:4250})};
@@ -130,7 +130,7 @@ async function main(){
     w.post=(path,body)=>{sent++;return Promise.resolve({status:'error',code:'TWOFA_SETUP_REQUIRED',message:'To withdraw you must first set up Google Authenticator.'})};
     run=w.submitWithdraw();await tick();d.querySelector('#pinInput').value='123456';d.querySelector('#pinOk').click();await run;
     assert.equal(w.eval('STATE.account.twofaEnabled'),false,'the app learns the account is not set up');
-    assert.match(notes[notes.length-1][0],/Google Authenticator is required to withdraw/,'the server\'s refusal leads to the same notice');
+    assert.match(notes[notes.length-1][0],/Google Authenticator est obligatoire pour retirer/,'the server\'s refusal leads to the same notice');
     await w.openWithdrawSheet();
     w.post=realPost;w.notify=realNotify;w.api=realApi;w.askAuthCode=realAsk;w.refreshAfterWithdraw=realRefresh;w.eval('STATE.settings.requireTwofaToWithdraw=false');
   }
@@ -144,14 +144,14 @@ async function main(){
   payment.resolve({status:'success',net:5000});await first;
   assert(d.querySelector('#lpOld'),'late withdrawal response must not close another form');
   w.openDepositSheet();assert.equal(d.querySelectorAll('.pt-note').length,4,'four deposit notes');
-  assert.match(d.querySelector('.pt-notes').textContent,/Minimum deposit amount: Br 15,000/);assert.equal(d.querySelectorAll('#depPays').length,0,'no gateway pay buttons exist any more');
+  assert.match(d.querySelector('.pt-notes').textContent,/Montant minimum du dépôt : FCFA 15,000/);assert.equal(d.querySelectorAll('#depPays').length,0,'no gateway pay buttons exist any more');
   d.querySelector('#depAmount').value='15000';assert(!d.querySelector('#depPhone'),'Deposit has no phone box: the request goes to the member\'s own number');
-  { // Deposit goes to the bank / Telebirr pages: the amount is checked first, nothing is posted by the sheet itself
+  { // Deposit goes to the bank / Wave pages: the amount is checked first, nothing is posted by the sheet itself
     w.STATE.settings=Object.assign({},w.STATE.settings,{manualPay:true,depositAvailable:true});
     let opened=null;w.openManualPayFlow=async amt=>{opened=amt;};
     w.closeSheet&&w.closeSheet();w.openDepositSheet();d.querySelector('#depAmount').value='15000';
     await w.submitDeposit();
-    assert.equal(opened,15000,'Pay opens the bank / Telebirr payment pages with the typed amount');
+    assert.equal(opened,15000,'Pay opens the bank / Wave payment pages with the typed amount');
     assert(!d.querySelector('#depStatusBg'),'the old waiting page is gone');
   }
   { // Home does not redraw itself when nothing changed (a redraw restarts the icon pop, the banner and the Buy glow)
