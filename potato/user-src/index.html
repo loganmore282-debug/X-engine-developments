@@ -2657,7 +2657,7 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
   <span class="ld-box" id="ldBox" aria-hidden="true"></span>
   <span class="ld-name" data-brandname aria-hidden="true"></span>
   <span class="ld-bar" aria-hidden="true"><i id="ldFill"></i></span>
-  <span class="ld-pct" id="ldPct" aria-hidden="true">Loading... 0%</span>
+  <span class="ld-pct" id="ldPct" aria-hidden="true">Chargement... 0%</span>
   <span class="sr-only" role="status" aria-live="polite">Loading</span>
 </div>
 <script data-potato-loader>
@@ -2668,7 +2668,7 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
   try {
     var box = document.getElementById('ldBox'), fill = document.getElementById('ldFill'), pct = document.getElementById('ldPct'), KEY = 'potato_loader_img';
     var ls = document.getElementById('loadingScreen'), MIN = 2500, done = false;
-    window._potatoLoaderProgress = function(n){ if (n >= 100) done = true; n = Math.min(100, Math.max(0, Math.floor(n))); if (fill) fill.style.width = n + '%'; if (pct) pct.textContent = 'Loading... ' + n + '%'; };
+    window._potatoLoaderProgress = function(n){ if (n >= 100) done = true; n = Math.min(100, Math.max(0, Math.floor(n))); if (fill) fill.style.width = n + '%'; if (pct) pct.textContent = 'Chargement... ' + n + '%'; };
     var tick = function(){
       if (done || !ls || ls.style.display === 'none') return;
       var t = (Date.now() - window._potatoLoaderStart) / (typeof window._potatoLoaderMinMs === 'number' ? window._potatoLoaderMinMs : MIN);
@@ -2676,7 +2676,7 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
       setTimeout(tick, 60);
     };
     tick();
-    window._potatoLoaderReady = function(){ if (pct) pct.textContent = 'Ready'; };
+    window._potatoLoaderReady = function(){ if (pct) pct.textContent = 'Prêt'; };
     window._potatoLoaderRestart = function(){ window._potatoLoaderStart = Date.now(); done = false; window._potatoLoaderProgress(0); done = false; tick(); };
     var kept = null; try { kept = localStorage.getItem(KEY); } catch (e) {}
     if (kept && box) box.style.backgroundImage = 'url("' + kept + '")';
