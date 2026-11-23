@@ -218,19 +218,55 @@ function SearchDrawer({ noteId, onClose, onGo }: { noteId: string; onClose: () =
   );
 }
 
+// While the helper works: its star breathes, a line of status text changes by itself, and three placeholder lines pulse
+// one after another, like the answer being drawn.
+function Thinking() {
+  const phrases = ['Reading the document…', 'Finding the right pages…', 'Working out the answer…', 'Writing it clearly…'];
+  const [i, setI] = useState(0);
+  useEffect(() => { const id = window.setInterval(() => setI((n) => (n + 1) % phrases.length), 2300); return () => window.clearInterval(id); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="bubble ai thinking" role="status" aria-live="polite">
+      <div className="think-head"><Spark className="breathe" width={18} height={18} /><span key={i} className="phrase">{phrases[i]}</span></div>
+      <i className="skel" style={{ width: '96%' }} /><i className="skel" style={{ width: '82%' }} /><i className="skel" style={{ width: '58%' }} />
+    </div>
+  );
+}
+
+// An answer types itself in, a few words at a time, instead of appearing all at once.
+function Typed({ text, animate, onTick, onDone }: { text: string; animate: boolean; onTick: () => void; onDone: () => void }) {
+  const [n, setN] = useState(animate ? 0 : text.length);
+  useEffect(() => {
+    if (!animate) return;
+    let at = 0;
+    const step = Math.max(3, Math.ceil(text.length / 60));
+    const id = window.setInterval(() => {
+      at = Math.min(text.length, at + step);
+      while (at < text.length && !/\s/.test(text[at])) at += 1; // finish the word it is in
+      setN(at); onTick();
+      if (at >= text.length) { window.clearInterval(id); onDone(); }
+    }, 22);
+    return () => window.clearInterval(id);
+  }, [text, animate]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <>{text.slice(0, n)}</>;
+}
+
+type Turn = ChatTurn & { fresh?: boolean; error?: boolean };
+
 function AiDrawer({ note, noteId, onClose }: { note: Note | null; noteId: string; onClose: () => void }) {
-  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [turns, setTurns] = useState<Turn[]>([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth' }); }, [turns, busy]);
+  useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth' }); }, [turns.length, busy]);
   async function ask(question: string) {
     const q = question.trim(); if (!q || busy) return;
-    const history = turns.slice(-8); setTurns([...turns, { role: 'user', content: q }]); setText(''); setBusy(true);
+    // Only real answers go back to the server as history (an error message is not something the helper said).
+    const history = turns.filter((t) => !t.error).slice(-8).map(({ role, content }) => ({ role, content }));
+    setTurns([...turns, { role: 'user', content: q }]); setText(''); setBusy(true);
     try {
       const r = await api<{ answer: string }>('/ai/ask', { body: { noteId, question: q, history } });
-      setTurns((t) => [...t, { role: 'assistant', content: r.answer }]);
-    } catch (e) { setTurns((t) => [...t, { role: 'assistant', content: (e as Error).message }]); } finally { setBusy(false); }
+      setTurns((t) => [...t, { role: 'assistant', content: r.answer, fresh: true }]);
+    } catch (e) { setTurns((t) => [...t, { role: 'assistant', content: (e as Error).message, error: true }]); } finally { setBusy(false); }
   }
   const starters = ['Summarise this document in a few lines', 'What are the key points I must remember?', 'Give me three practice questions'];
   return (
@@ -238,8 +274,12 @@ function AiDrawer({ note, noteId, onClose }: { note: Note | null; noteId: string
       <div className="drawer-head"><Spark width={22} height={22} style={{ color: 'var(--amber)' }} /><b className="poppins grow" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Ask about {note?.title || 'this document'}</b><button className="icon-btn" aria-label="Close" onClick={onClose}><Close /></button></div>
       <div className="drawer-body">
         {turns.length === 0 && <><p className="muted">Ask anything about this document. The answer comes from what is written in it.</p>{starters.map((s) => <button key={s} className="starter" onClick={() => ask(s)}>{s}</button>)}</>}
-        {turns.map((t, i) => <div key={i} className={`bubble ${t.role === 'user' ? 'user' : 'ai'}`}>{t.content}</div>)}
-        {busy && <div className="bubble ai"><span className="dots"><span /><span /><span /></span></div>}
+        {turns.map((t, i) => (
+          <div key={i} className={`bubble ${t.role === 'user' ? 'user' : 'ai'} ${t.error ? 'err' : ''}`}>
+            {t.fresh ? <Typed text={t.content} animate onTick={() => end.current?.scrollIntoView({ behavior: 'auto', block: 'end' })} onDone={() => setTurns((all) => all.map((x, j) => (j === i ? { ...x, fresh: false } : x)))} /> : t.content}
+          </div>
+        ))}
+        {busy && <Thinking />}
         <div ref={end} />
       </div>
       <form className="ask-row" onSubmit={(e: FormEvent) => { e.preventDefault(); ask(text); }}>

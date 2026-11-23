@@ -1,5 +1,12 @@
 package com.shulenotes.app.ui.chat
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -46,6 +53,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -53,6 +61,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.foundation.text.KeyboardOptions
@@ -63,6 +72,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shulenotes.app.data.NoteCache
+import kotlinx.coroutines.delay
 
 class ChatViewModelFactory(private val noteId: String) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -200,7 +210,14 @@ fun AiChatScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(viewModel.messages) { message -> ChatBubble(message) }
+                itemsIndexed(viewModel.messages) { index, message ->
+                    ChatBubble(
+                        message = message,
+                        // A fresh answer types itself in, word by word; one already seen (scrolling back, turning the phone) is shown whole.
+                        reveal = message.role == "assistant" && !message.isError && index !in viewModel.revealed,
+                        onRevealStarted = { viewModel.revealed.add(index) },
+                    )
+                }
                 if (viewModel.isSending) {
                     item(key = "thinking") { ThinkingBubble() }
                 }
@@ -210,9 +227,30 @@ fun AiChatScreen(
 }
 
 @Composable
-private fun HelperBadge(size: Int) {
+private fun HelperBadge(size: Int, pulse: Boolean = false) {
+    if (pulse) {
+        // While the helper is working, its badge breathes gently (only this one: a resting badge costs no animation).
+        val transition = rememberInfiniteTransition(label = "badge")
+        val breathing by transition.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.16f,
+            animationSpec = infiniteRepeatable(tween(850, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "badge-scale",
+        )
+        BadgeBox(size, breathing)
+    } else {
+        BadgeBox(size, 1f)
+    }
+}
+
+@Composable
+private fun BadgeBox(size: Int, scale: Float) {
     Box(
-        modifier = Modifier.size(size.dp).clip(RoundedCornerShape((size * 0.32f).dp)).background(MaterialTheme.colorScheme.secondaryContainer),
+        modifier = Modifier
+            .size(size.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(RoundedCornerShape((size * 0.32f).dp))
+            .background(MaterialTheme.colorScheme.secondaryContainer),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -225,7 +263,7 @@ private fun HelperBadge(size: Int) {
 }
 
 @Composable
-private fun ChatBubble(message: DisplayMessage) {
+private fun ChatBubble(message: DisplayMessage, reveal: Boolean = false, onRevealStarted: () -> Unit = {}) {
     val isUser = message.role == "user"
     val maxWidth = (LocalConfiguration.current.screenWidthDp * 0.8f).dp
     Row(
@@ -253,9 +291,10 @@ private fun ChatBubble(message: DisplayMessage) {
             modifier = Modifier.widthIn(max = maxWidth),
         ) {
             SelectionContainer {
-                Text(
-                    message.content,
-                    style = MaterialTheme.typography.bodyLarge,
+                RevealText(
+                    text = message.content,
+                    animate = reveal,
+                    onStarted = onRevealStarted,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 )
             }
@@ -263,25 +302,81 @@ private fun ChatBubble(message: DisplayMessage) {
     }
 }
 
+// An answer types itself in, a few words at a time, instead of appearing all at once.
+@Composable
+private fun RevealText(text: String, animate: Boolean, onStarted: () -> Unit, modifier: Modifier = Modifier) {
+    // Decided once per answer: it must not change halfway (the screen marks the answer as seen as soon as it starts).
+    val playing = remember(text) { animate }
+    var shown by remember(text) { mutableStateOf(if (playing) 0 else text.length) }
+    LaunchedEffect(text) {
+        if (playing) {
+            onStarted()
+            val step = maxOf(3, text.length / 60)
+            while (shown < text.length) {
+                var next = minOf(text.length, shown + step)
+                // finish the word it is in, so letters never flicker in the middle of a word
+                while (next < text.length && !text[next].isWhitespace()) next++
+                shown = next
+                delay(22)
+            }
+        }
+    }
+    Text(text.substring(0, minOf(shown, text.length)), style = MaterialTheme.typography.bodyLarge, modifier = modifier)
+}
+
+// While the helper works: its badge breathes, a line of status text changes by itself, and three placeholder
+// lines pulse one after another, like the answer being drawn.
 @Composable
 private fun ThinkingBubble() {
+    val phrases = listOf("Reading the document…", "Finding the right pages…", "Working out the answer…", "Writing it clearly…")
+    var phrase by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(2300)
+            phrase = (phrase + 1) % phrases.size
+        }
+    }
     Row(verticalAlignment = Alignment.Top) {
-        HelperBadge(size = 32)
+        HelperBadge(size = 32, pulse = true)
         Spacer(Modifier.width(8.dp))
         Surface(
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             shape = RoundedCornerShape(6.dp, 20.dp, 20.dp, 20.dp),
         ) {
-            Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    "Reading the document…",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Column(
+                modifier = Modifier.width(236.dp).padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp),
+            ) {
+                Crossfade(targetState = phrase, animationSpec = tween(350), label = "thinking-phrase") { index ->
+                    Text(
+                        phrases[index],
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                SkeletonLine(fraction = 0.96f, startDelay = 0)
+                SkeletonLine(fraction = 0.82f, startDelay = 160)
+                SkeletonLine(fraction = 0.58f, startDelay = 320)
             }
         }
     }
+}
+
+@Composable
+private fun SkeletonLine(fraction: Float, startDelay: Int) {
+    val transition = rememberInfiniteTransition(label = "skeleton")
+    val alpha by transition.animateFloat(
+        initialValue = 0.06f,
+        targetValue = 0.2f,
+        animationSpec = infiniteRepeatable(tween(850, delayMillis = startDelay, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "skeleton-alpha",
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth(fraction)
+            .height(10.dp)
+            .clip(RoundedCornerShape(5.dp))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)),
+    )
 }

@@ -25,6 +25,9 @@ class ChatViewModel(private val noteId: String) : ViewModel() {
     var isSending by mutableStateOf(false)
         private set
 
+    // Answers (by position) whose "typing" reveal has already played: scrolling back or turning the phone shows them whole.
+    val revealed = mutableSetOf<Int>()
+
     fun ask(question: String) {
         val q = question.trim()
         if (q.isBlank() || isSending) return

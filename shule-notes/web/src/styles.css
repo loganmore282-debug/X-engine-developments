@@ -375,3 +375,16 @@ button.glass:hover { background: rgba(255, 255, 255, 0.2); transform: translateY
 /* the Pay button stays in view while the list of passes scrolls */
 .sticky-pay { position: sticky; bottom: calc(-22px - env(safe-area-inset-bottom)); margin: 16px -22px calc(-22px - env(safe-area-inset-bottom)); padding: 12px 22px calc(14px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, transparent, var(--surface) 14px); }
 .plan { padding: 12px 14px; }
+
+/* ---- the AI helper while it works ---- */
+.bubble.thinking { width: min(260px, 88%); padding: 12px 14px 14px; }
+.think-head { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+.think-head svg { color: var(--amber); flex: none; }
+.breathe { animation: breathe 0.85s ease-in-out infinite alternate; }
+@keyframes breathe { from { transform: scale(1); opacity: 0.75; } to { transform: scale(1.22); opacity: 1; } }
+.phrase { animation: fade 0.4s var(--ease) both; }
+.skel { display: block; height: 10px; border-radius: 5px; margin-top: 9px; background: color-mix(in srgb, var(--text) 12%, transparent); animation: skelpulse 0.85s ease-in-out infinite alternate; }
+.skel:nth-of-type(2) { animation-delay: 0.16s; }
+.skel:nth-of-type(3) { animation-delay: 0.32s; }
+@keyframes skelpulse { from { opacity: 0.35; } to { opacity: 1; } }
+.bubble.err { background: var(--danger-soft); color: var(--danger); }
