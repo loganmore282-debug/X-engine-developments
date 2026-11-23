@@ -197,5 +197,26 @@ const rm = d => fs.rmSync(d, { recursive: true, force: true });
   try { LocalStore.restoreFromBackup(bad, tmp()); } catch (e) { threw = e; } ok(threw && /incomplete/.test(threw.message), 'an incomplete backup file is refused');
   rm(dir);
 
+  // ───────────────── fast sorted reads and the two durability modes ─────────────────
+  { const dd = tmp(); const sa = openStore({ dir: dd, log: quiet }); const c = sa.collection('t');
+    await c.createIndex({ userId: 1 });
+    for (let i = 0; i < 600; i++) await c.insertOne({ _id: 'r' + i, userId: i % 3 ? 'a' : 'b', when: new Date(1e12 + ((i * 7919) % 211) * 1000), n: (i * 31) % 17 });
+    for (const [f, sp, lim, sk] of [[{ userId: 'a' }, { when: -1 }, 20, 0], [{ userId: 'a' }, { when: 1 }, 5, 3], [{}, { n: -1, when: 1 }, 40, 10], [{ userId: 'b' }, { n: 1 }, 0, 0], [{}, { when: -1 }, 1, 0]]) {
+      const fast = await c.find(f).sort(sp).limit(lim).skip(sk).toArray();
+      const all = await c.find(f).sort(sp).toArray(); const want = all.slice(sk, lim ? sk + lim : undefined);
+      eq(fast.map(d => d._id).join(), want.map(d => d._id).join(), 'sorted + limit gives exactly the first rows of the full sort ' + JSON.stringify(sp) + ' limit ' + lim + ' skip ' + sk);
+    }
+    await sa.close(); rm(dd);
+    for (const mode of ['fast', 'strict']) {
+      const d2 = tmp(); const sm = openStore({ dir: d2, log: quiet, sync: mode }); eq(sm.syncMode, mode, mode + ' mode is selected');
+      await Promise.all(Array.from({ length: 300 }, (_, i) => sm.collection('m').insertOne({ _id: 'k' + i, v: i })));
+      await sm.collection('m').updateOne({ _id: 'k5' }, { $inc: { v: 1000 } }); await sm.compact(); await sm.collection('m').insertOne({ _id: 'after', v: 1 });
+      await sm.close(); const s2 = openStore({ dir: d2, log: quiet });
+      eq(await s2.collection('m').countDocuments({}), 301, mode + ': every acknowledged change is there after a restart (also across a compaction)'); eq((await s2.collection('m').findOne({ _id: 'k5' })).v, 1005, mode + ': with its value');
+      await s2.close(); rm(d2);
+    }
+    const d3 = tmp(); const sd = openStore({ dir: d3, log: quiet }); eq(sd.syncMode, 'fast', 'fast is the default'); await sd.close(); rm(d3);
+  }
+
   console.log(`PASS: PersonalCare local database (${checks} checks)`);
 })().catch(e => { console.error(e); process.exit(1); });

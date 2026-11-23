@@ -400,15 +400,23 @@ class Cursor {
   async toArray() {
     let hit = this.col._match(this.filter);
     if (this._sort) {
-      const keys = Object.keys(this._sort);
-      hit = hit.map((d, i) => [d, i]).sort((x, y) => {
-        for (const k of keys) {
-          const dir = this._sort[k] < 0 ? -1 : 1;
-          const a = valuesAt(x[0], k)[0], b = valuesAt(y[0], k)[0];
-          const c = cmp(a, b); if (c) return c * dir;
+      const keys = Object.keys(this._sort), dirs = keys.map(k => this._sort[k] < 0 ? -1 : 1), nk = keys.length;
+      // Sort keys are worked out ONCE per document (not on every comparison); with a limit only the first skip+limit are kept in order.
+      const rows = new Array(hit.length);
+      for (let i = 0; i < hit.length; i++) { const d = hit[i], kv = new Array(nk); for (let j = 0; j < nk; j++) kv[j] = valuesAt(d, keys[j])[0]; rows[i] = { d, kv, i }; }
+      const before = (x, y) => { for (let j = 0; j < nk; j++) { const c = cmp(x.kv[j], y.kv[j]); if (c) return c * dirs[j] < 0; } return x.i < y.i; };
+      const want = this._limit ? this._skip + this._limit : 0;
+      let top;
+      if (want && want * 8 < rows.length) {
+        top = [];
+        for (const r of rows) {
+          if (top.length === want && !before(r, top[want - 1])) continue;
+          let lo = 0, hi = top.length;
+          while (lo < hi) { const mid = (lo + hi) >> 1; if (before(top[mid], r)) lo = mid + 1; else hi = mid; }
+          top.splice(lo, 0, r); if (top.length > want) top.pop();
         }
-        return x[1] - y[1];
-      }).map(x => x[0]);
+      } else top = rows.sort((x, y) => before(x, y) ? -1 : before(y, x) ? 1 : 0);
+      hit = top.map(r => r.d);
     }
     if (this._skip) hit = hit.slice(this._skip);
     if (this._limit) hit = hit.slice(0, this._limit);
@@ -431,6 +439,9 @@ class LocalStore {
     this.cols = new Map(); this.gen = 0; this.fd = null; this.journalBytes = 0;
     this.buf = []; this.waiters = []; this.flushing = false; this.broken = null; this.closed = false; this.lockPath = path.join(this.dir, 'LOCK');
     this.timers = [];
+    // 'fast' (default): a change is acknowledged as soon as it is in the operating system's file cache (it survives the program being killed) and is
+    // forced onto the disk a moment later, off the critical path. 'strict': acknowledged only after the disk confirmed it (survives a power cut, slower).
+    this.syncMode = opts.sync === 'strict' ? 'strict' : 'fast'; this.syncing = false; this.syncAgain = false;
   }
   _col(name) {
     let c = this.cols.get(name);
@@ -563,7 +574,7 @@ class LocalStore {
         const data = Buffer.from(this.buf.join('')); const ws = this.waiters; this.buf = []; this.waiters = [];
         try {
           await new Promise((res, rej) => { let off = 0; const fd = this.fd;
-            const step = () => fs.write(fd, data, off, data.length - off, null, (e, n) => { if (e) return rej(e); off += n; off < data.length ? step() : fs.fsync(fd, er => er ? rej(er) : res()); });
+            const step = () => fs.write(fd, data, off, data.length - off, null, (e, n) => { if (e) return rej(e); off += n; if (off < data.length) return step(); if (this.syncMode === 'fast') { this._syncSoon(); return res(); } fs.fsync(fd, er => er ? rej(er) : res()); });
             step(); });
           this.journalBytes += data.length;
           for (const w of ws) w[0]();
@@ -574,6 +585,16 @@ class LocalStore {
         }
       }
     } finally { this.flushing = false; }
+  }
+  _syncSoon() {
+    if (this.syncing) { this.syncAgain = true; return; }
+    this.syncing = true;
+    const fd = this.fd;
+    fs.fsync(fd, er => {
+      this.syncing = false;
+      if (er && !this.closed && this.fd === fd) { this.broken = new Error('PersonalCare database: could not write to disk (' + er.message + '). The server must be restarted after the disk problem is fixed.'); this.log.error && this.log.error(this.broken.message); return; }
+      if (this.syncAgain && !this.closed && this.fd !== null) { this.syncAgain = false; this._syncSoon(); } else this.syncAgain = false;
+    });
   }
   // After a failed flush nothing more is acknowledged.
   isHealthy() { return !this.broken && !this.closed; }

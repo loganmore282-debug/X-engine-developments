@@ -5,7 +5,8 @@
 
 ## The database: NO MongoDB, it lives on the VPS (owner: "vps will work as server and database, so no using mongodb since we have strong vps")
 - `localstore.js` is the whole database: every collection is held in memory (instant reads) and every change is written to an append-only journal on the VPS disk and
-  fsync'ed BEFORE the request is answered (changes made in the same moment share one fsync). `db.js` keeps the exact Firestore-style API server.js always used
+  forced to disk. Default mode `fast` (env `PERSONALCARE_SYNC`): a change is answered as soon as it is in the OS file cache (survives the program being killed, kill -9 included) and the fsync follows within
+  a moment, off the request path; only a power cut / VM crash in that moment can lose the last few milliseconds. `PERSONALCARE_SYNC=strict` answers only after the disk confirmed (slower). Sorted+limited reads keep only the top rows. `db.js` keeps the exact Firestore-style API server.js always used
   (`connectMongo()` is still the function name, it now opens the folder). Nothing in server.js's money logic changed.
 - Folder `/srv/personalcare-data` (env `PERSONALCARE_DATA_DIR`, kept in `/srv/personalcare-secrets/secrets.local.js`): `snapshot-N.jsonl` + `journal-N.jsonl` + `LOCK`. A restart
   replays the journal; a half-written last line (power cut) is cut off; a compaction that died half way is ignored (the last complete snapshot wins).

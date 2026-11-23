@@ -38,7 +38,7 @@ let _mdb    = null;
 
 async function connectMongo(_ignored) {
   const dir = process.env.PERSONALCARE_DATA_DIR || '/srv/personalcare-data';
-  _store = openStore({ dir, backupDir: process.env.PERSONALCARE_BACKUP_DIR || undefined, keepBackups: Number(process.env.PERSONALCARE_KEEP_BACKUPS) || 14, log: console });
+  _store = openStore({ dir, backupDir: process.env.PERSONALCARE_BACKUP_DIR || undefined, keepBackups: Number(process.env.PERSONALCARE_KEEP_BACKUPS) || 14, sync: process.env.PERSONALCARE_SYNC, log: console });
   _mdb = _store;
   const st = _store.stats();
   console.log(`PersonalCare database opened (${dir}): ${st.docs} document(s) in ${Object.keys(st.collections).length} collection(s)`);
@@ -350,7 +350,7 @@ class DocumentSnapshot {
     this._col    = colName;
     this.exists  = !!mongoDoc;
     this.id      = mongoDoc ? String(mongoDoc._id) : null;
-    this._raw    = mongoDoc ? deepStamp({ ...mongoDoc }) : null;
+    this._raw    = mongoDoc ? deepStamp(mongoDoc) : null;   // the store already hands back a private copy
     this.ref     = new DocumentReference(colName, this.id);
   }
   data() {
