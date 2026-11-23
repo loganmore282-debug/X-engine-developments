@@ -229,4 +229,6 @@ object SessionHolder {
     // Set by the network layer when the server rejects the saved token (it
     // expired, or the account was removed); the nav graph signs the user out.
     val expired = MutableStateFlow(false)
+    // Why the server refused the saved sign-in, when it said (another device signed in); null = the usual "sign in again".
+    @Volatile var expiredMessage: String? = null
 }

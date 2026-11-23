@@ -20,7 +20,12 @@ object ApiClient {
             chain.request()
         }
         val response = chain.proceed(request)
-        if (token != null && response.code == 401) SessionHolder.expired.value = true
+        if (token != null && response.code == 401) {
+            // The server says WHY when another device signed in; that reason is shown after the sign-out.
+            val body = try { response.peekBody(2048).string() } catch (e: Exception) { "" }
+            SessionHolder.expiredMessage = if (body.contains("signed_in_elsewhere")) "You were signed out because this account was opened on another device." else null
+            SessionHolder.expired.value = true
+        }
         response
     }
 

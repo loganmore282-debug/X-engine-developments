@@ -94,6 +94,14 @@ function makeDb() {
           for (const k of Object.keys(update.$unset || {})) delete row[k];
           return { matchedCount: 1 };
         },
+        async updateMany(filter, update) {
+          const hit = rows(name).filter((d) => matches(d, filter));
+          for (const row of hit) {
+            Object.assign(row, update.$set || {});
+            for (const k of Object.keys(update.$unset || {})) delete row[k];
+          }
+          return { matchedCount: hit.length, modifiedCount: hit.length };
+        },
         async deleteOne(filter) {
           const i = rows(name).findIndex((d) => matches(d, filter));
           if (i >= 0) rows(name).splice(i, 1);

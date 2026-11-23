@@ -271,6 +271,13 @@ Students buy a TIME PASS with MTN/Airtel mobile money through MarzPay (`backend/
   (`prefetch.ts`); a service worker (`public/sw.js`) keeps the site's own files (never API data) so repeat visits are instant; Home restores filters and scroll;
   keyboard in the reader (arrows/PageUp/PageDown, +/-, /, A, B, Esc); nginx gzip for text (needs `./setup-web.sh` re-run when nginx-web.conf changes).
 
+### One device at a time (auth.js `createSession`, setting `singleDevice`, default ON)
+A new student sign-in marks every OLDER session of that student `replaced` (kept up to 7 days, not deleted) and clears the 5 s session memory, so the old
+device gets **401 `code: signed_in_elsewhere`** on its very next request and the app/website sign out and say why ("...opened on another device").
+Only sessions OLDER (by `_id`) than the new one are marked, so two simultaneous sign-ins leave exactly one winner. Admin > Settings has the switch
+("One device at a time"). Tests that need two live devices for one student must call `createSession(id, { single: false })`. Tests: `test-single-device.js`.
+Android reads the reason in `ApiClient` (`SessionHolder.expiredMessage`); the website in `api.ts` (`shule:expired` event detail).
+
 ### Admin security (admin-session.js, totp.js, audit.js)
 - The admin KEY is typed once (`POST /admin/login`); the panel then holds a random session token (stored hashed in `adminSessions`; 8 h idle, 3 days
   absolute, revocable, "sign out other devices"). The key is never kept in the browser. `app.use('/admin', ...)` in server.js authenticates BEFORE any route

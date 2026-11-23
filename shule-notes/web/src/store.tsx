@@ -76,7 +76,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
     if (t) fetch(`${API}/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${t}` } }).catch(() => {});
   }, []);
   useEffect(() => {
-    const onExpired = () => { signOut(); toast('Please sign in again', 'error'); };
+    const onExpired = (e: Event) => { signOut(); toast((e as CustomEvent<string>).detail || 'Please sign in again', 'error'); };
     window.addEventListener('shule:expired', onExpired);
     return () => window.removeEventListener('shule:expired', onExpired);
   }, [signOut, toast]);

@@ -64,7 +64,8 @@ fun ShuleNavGraph(startDestination: String) {
             NoteCache.clear()
             SessionHolder.expired.value = false
             toLogin()
-            Notifier.info("Please sign in again")
+            Notifier.info(SessionHolder.expiredMessage ?: "Please sign in again")
+            SessionHolder.expiredMessage = null
         }
     }
 

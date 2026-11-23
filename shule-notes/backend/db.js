@@ -34,6 +34,7 @@ async function ensureIndexes() {
   await db.collection('users').createIndex({ createdAt: -1 });
   await db.collection('sessions').createIndex({ tokenHash: 1 }, { unique: true });
   await db.collection('sessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+  await db.collection('sessions').createIndex({ userId: 1 });
   await db.collection('notes').createIndex({ subjectId: 1, active: 1 });
   await db.collection('subjects').createIndex({ order: 1 });
   // One row per (user, day) -- the whole mechanism the AI daily cap depends

@@ -94,7 +94,7 @@ const dateKey = (offset) => day(offset).toISOString().slice(0, 10);
   console.log('\n— a student changing their own password and name —');
   {
     const mine = (await createSession(ids[0])).token;
-    const other = (await createSession(ids[0])).token;
+    const other = (await createSession(ids[0], { single: false })).token;
     ck((await accounts.changePassword(ids[0], 'wrong', 'newpass99', mine)).status === 403, 'a wrong current password is refused with 403 (401 would sign the app out)');
     ck((await accounts.changePassword(ids[0], 'password0', '123', mine)).status === 400, 'a too-short new password is refused');
     ck((await accounts.changePassword(ids[0], 'password0', 'newpass99', mine)).ok, 'the right current password changes it');

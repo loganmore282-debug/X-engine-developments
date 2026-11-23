@@ -32,6 +32,7 @@ const DEFAULTS = {
   marzpayKey: '',     // MarzPay credentials, entered in the admin panel (never sent back to it)
   trialMinutes: 0,    // a free pass given to every NEW student when they sign up (0 = none)
   signupsOpen: true,  // false: nobody can create a new account for now
+  singleDevice: true, // one device at a time: signing in somewhere else signs the other device out
 };
 
 // The models the owner may pick in the panel (cheapest first).
@@ -134,6 +135,7 @@ async function saveSettings(patch) {
   }
   if (patch.paymentsEnabled !== undefined) next.paymentsEnabled = !!patch.paymentsEnabled;
   if (patch.signupsOpen !== undefined) next.signupsOpen = !!patch.signupsOpen;
+  if (patch.singleDevice !== undefined) next.singleDevice = !!patch.singleDevice;
   if (patch.trialMinutes !== undefined) {
     const n = Number(patch.trialMinutes === '' || patch.trialMinutes === null ? 0 : patch.trialMinutes);
     if (!Number.isInteger(n) || n < 0 || n > 525600) return { ok: false, message: 'The welcome pass must be from 0 minutes to 1 year' };

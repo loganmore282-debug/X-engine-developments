@@ -40,7 +40,7 @@ const ck = (ok, label) => { if (!ok) bad++; console.log((ok ? 'PASS  ' : 'FAIL  
   ck(first.status === 200 && etag && JSON.parse(full).notes.length === 60, 'the first request gets the full library with an ETag');
   const again = await get('/notes', token, { 'If-None-Match': etag });
   ck(again.status === 304 && (await again.text()) === '', 'asking again with that ETag gets a 304 and no body');
-  const other = await createSession(uid);
+  const other = await createSession(uid, { single: false });
   const elseTok = await get('/notes', other.token, { 'If-None-Match': etag });
   ck(elseTok.status === 304, 'another device of the same student shares the same copy');
   // an owner change must show up at once
@@ -68,7 +68,7 @@ const ck = (ok, label) => { if (!ok) bad++; console.log((ok ? 'PASS  ' : 'FAIL  
   ck((await resolveSession(t1)) === uid && (await resolveSession(t1)) === uid, 'a session is found (and remembered)');
   await destroySession(t1);
   ck((await resolveSession(t1)) === null, 'after signing out it is refused at once');
-  const t2 = (await createSession(uid)).token;
+  const t2 = (await createSession(uid, { single: false })).token;
   ck((await get('/auth/me', t2)).status === 200, 'a second session works');
   await admin.setUserStatus(uid, 'banned');
   ck((await get('/auth/me', t2)).status === 401 && (await get('/notes', token)).status === 401, 'after a ban every device is refused at once');

@@ -309,25 +309,29 @@ fun HomeTab(
                     modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        when {
-                            searching -> "Search results"
-                            viewModel.selectedSubjectId != null -> viewModel.subjectName(viewModel.selectedSubjectId) ?: "Notes"
-                            viewModel.kindFilter == "past-paper" -> "Past papers"
-                            scope != null -> "Notes for $scope"
-                            else -> "All notes"
-                        },
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (!viewModel.isLoading && visible.isNotEmpty()) {
+                    // Title and count share one column, so a longer title ("Notes for Senior 2") is never cut by the count or the sort button.
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            if (visible.size == 1) "1 document" else "${visible.size} documents",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            when {
+                                searching -> "Search results"
+                                viewModel.selectedSubjectId != null -> viewModel.subjectName(viewModel.selectedSubjectId) ?: "Notes"
+                                viewModel.kindFilter == "past-paper" -> "Past papers"
+                                scope != null -> "Notes for $scope"
+                                else -> "All notes"
+                            },
+                            style = MaterialTheme.typography.titleLarge,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
+                        if (!viewModel.isLoading && visible.isNotEmpty()) {
+                            Text(
+                                if (visible.size == 1) "1 document" else "${visible.size} documents",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (!viewModel.isLoading && visible.isNotEmpty()) {
                         if (visible.size > 1) {
                             Box {
                                 TextButton(onClick = { sortMenuOpen = true }) {

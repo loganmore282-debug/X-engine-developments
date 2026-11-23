@@ -119,7 +119,7 @@ app.post('/auth/register', authLimiter, async (req, res) => {
     // A welcome pass, if the owner set one in Settings.
     let accessUntil = null;
     if (settingsNow.trialMinutes > 0) { try { accessUntil = await payments.grantAccess(result.insertedId, settingsNow.trialMinutes); } catch (_) { /* the account is still made */ } }
-    const { token } = await createSession(String(result.insertedId));
+    const { token } = await createSession(String(result.insertedId), { single: settingsNow.singleDevice !== false, device: req.headers['user-agent'] });
     res.json({ status: 'success', token, user: publicUser({ _id: result.insertedId, name, phone, accessUntil }) });
   } catch (e) {
     console.error('register error:', e.message);
@@ -154,7 +154,7 @@ app.post('/auth/login', authLimiter, async (req, res) => {
     if (needsRehash(user.passwordHash)) {
       hashPassword(password).then((h) => db.collection('users').updateOne({ _id: user._id }, { $set: { passwordHash: h } })).catch((e) => console.error('could not upgrade a password hash:', e.message));
     }
-    const { token } = await createSession(String(user._id));
+    const { token } = await createSession(String(user._id), { single: (await getSettings()).singleDevice !== false, device: req.headers['user-agent'] });
     res.json({ status: 'success', token, user: publicUser(user) });
   } catch (e) {
     console.error('login error:', e.message);

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -145,20 +146,23 @@ fun NoteCard(
                     )
                 }
                 Spacer(Modifier.height(10.dp))
+                // Two quiet lines: the subject chip (never wider than the card), then the details with the small status
+                // icons pinned to the end at a FIXED size, so every card shows them identically.
+                if (subjectName != null) {
+                    Text(
+                        subjectName,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = tint.accent,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(tint.container)
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (subjectName != null) {
-                        Text(
-                            subjectName,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = tint.accent,
-                            maxLines = 1,
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(tint.container)
-                                .padding(horizontal = 10.dp, vertical = 4.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                    }
                     val details = listOfNotNull(
                         "Past paper".takeIf { showKind && note.kind == "past-paper" },
                         note.classLevel?.takeIf { showClass && it.isNotBlank() },
@@ -177,18 +181,16 @@ fun NoteCard(
                             Icons.Filled.DownloadForOffline,
                             contentDescription = "Downloaded for offline reading",
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.padding(start = 8.dp).requiredSize(18.dp),
                         )
-                        Spacer(Modifier.width(6.dp))
                     }
                     if (note.hasAiContext) {
                         Icon(
                             Icons.Filled.AutoAwesome,
                             contentDescription = "AI helper available",
                             tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.padding(start = 8.dp).requiredSize(18.dp),
                         )
-                        Spacer(Modifier.width(6.dp))
                     }
                 }
             }

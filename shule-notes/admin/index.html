@@ -395,6 +395,7 @@
       <div class="card">
         <h2>New students</h2>
         <label class="switch"><input type="checkbox" id="setSignups"> Let new students create accounts</label>
+        <label class="switch"><input type="checkbox" id="setSingle"> One device at a time (signing in on a new device signs the old one out)</label>
         <label>Welcome pass (hours of free access for every new student, 0 = none)</label>
         <input id="setTrial" type="number" min="0" step="0.5" placeholder="0">
         <div class="muted" style="margin-top:6px">A welcome pass lets new students try everything before they pay. It only matters once payments are switched on.</div>
@@ -1150,6 +1151,7 @@ LOADERS.settings = async function(){
   $('setKeyHint').textContent = s.anthropicKeySet ? 'A key is saved (' + s.anthropicKeyHint + '). It is never shown again; paste a new one to replace it.' : 'No key saved yet. Get one at console.anthropic.com, then paste it here. Without it the AI helper cannot answer.';
   $('setKeyClear').classList.toggle('hidden', !s.anthropicKeySet);
   $('setSignups').checked = s.signupsOpen !== false;
+  $('setSingle').checked = s.singleDevice !== false;
   $('setTrial').value = s.trialMinutes ? +(s.trialMinutes / 60).toFixed(2) : '';
   $('setPayOn').checked = s.paymentsEnabled === true;
   $('setMarz').value = '';
@@ -1175,7 +1177,7 @@ $('setSave').addEventListener('click', async () => {
     aiProvider: $('setProvider').value, aiFallback: $('setFallback').checked, geminiModel: gemModelValue(), ...($('setGemKey').value.trim() ? { geminiKey: $('setGemKey').value.trim() } : {}), aiDailyLimit: $('setAiLimit').value === '' ? null : Number($('setAiLimit').value),
     supportPhone: $('setPhone').value, supportWhatsapp: $('setWhatsapp').value, supportEmail: $('setEmail').value, supportHours: $('setHours').value, websiteUrl: $('setWebsite').value, pdfStamp: $('setPdfStamp').checked,
     ...($('setFb').value.trim() ? { firebaseServiceAccount: $('setFb').value.trim() } : {}),
-    signupsOpen: $('setSignups').checked, trialMinutes: Math.round(Number($('setTrial').value || 0) * 60),
+    signupsOpen: $('setSignups').checked, singleDevice: $('setSingle').checked, trialMinutes: Math.round(Number($('setTrial').value || 0) * 60),
     paymentsEnabled: $('setPayOn').checked,
     ...($('setMarz').value.trim() ? { marzpayKey: $('setMarz').value.trim() } : {}),
     plans: Array.from($('planRows').querySelectorAll('tr')).map(tr => ({ id: tr.dataset.id, name: tr.querySelector('.pName').value, price: Number(tr.querySelector('.pPrice').value), minutes: Math.round(Number(tr.querySelector('.pHours').value) * 60), active: tr.querySelector('.pOn').checked })),

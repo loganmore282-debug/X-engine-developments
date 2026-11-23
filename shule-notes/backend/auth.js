@@ -68,12 +68,28 @@ function sha256(s) {
   return crypto.createHash('sha256').update(s).digest('hex');
 }
 
-async function createSession(userId) {
+// One device at a time: a NEW sign-in marks every OLDER session of the same student as replaced (kept, not deleted, so the old
+// device can be told why it was signed out). Only sessions older than the new one are touched (by _id order), so two sign-ins
+// that race each other leave exactly one winner instead of cancelling each other out.
+const REPLACED_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+async function createSession(userId, opts = {}) {
+  const db = getDb();
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-  await getDb().collection('sessions').insertOne({
-    tokenHash: sha256(token), userId, createdAt: new Date(), expiresAt,
+  const device = String(opts.device || '').replace(/[^\x20-\x7E]/g, '').slice(0, 120);
+  const r = await db.collection('sessions').insertOne({
+    tokenHash: sha256(token), userId: String(userId), createdAt: new Date(), expiresAt, device,
   });
+  if (opts.single !== false) {
+    const now = new Date();
+    await db.collection('sessions').updateMany(
+      { userId: String(userId), _id: { $lt: r.insertedId }, replaced: { $ne: true } },
+      { $set: { replaced: true, replacedAt: now } },
+    );
+    // A signed-out device is only told about it for a week; after that the row is just clutter.
+    await db.collection('sessions').deleteMany({ userId: String(userId), replaced: true, replacedAt: { $lt: new Date(now.getTime() - REPLACED_KEEP_MS) } });
+    forgetUser(userId); // the other device must find out on its very next request, not after the 5 s memory
+  }
   return { token, expiresAt };
 }
 
@@ -83,19 +99,21 @@ const SESSION_CACHE_MS = 5000;
 const SESSION_CACHE_MAX = 5000;
 const sessionCache = new Map(); // tokenHash -> { userId, until }
 
-async function resolveSession(token) {
-  if (!token) return null;
+async function lookupSession(token) {
+  if (!token) return { userId: null };
   const hash = sha256(token);
   const cached = sessionCache.get(hash);
-  if (cached && cached.until > Date.now()) return cached.userId;
+  if (cached && cached.until > Date.now()) return { userId: cached.userId };
   sessionCache.delete(hash);
   const row = await getDb().collection('sessions').findOne({ tokenHash: hash });
-  if (!row) return null;
-  if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return null;
+  if (!row) return { userId: null };
+  if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return { userId: null };
+  if (row.replaced) return { userId: null, replaced: true };
   if (sessionCache.size >= SESSION_CACHE_MAX) sessionCache.delete(sessionCache.keys().next().value);
   sessionCache.set(hash, { userId: row.userId, until: Date.now() + SESSION_CACHE_MS });
-  return row.userId;
+  return { userId: row.userId };
 }
+async function resolveSession(token) { return (await lookupSession(token)).userId; }
 
 // Called whenever sessions are deleted for a student (ban, password reset, account removal).
 function forgetUser(userId) {
@@ -117,13 +135,17 @@ function bearerToken(req) {
 // and privacy rule in this app depends on no route ever trusting a
 // caller-supplied userId instead of this.
 async function requireAuth(req, res, next) {
-  const userId = await resolveSession(bearerToken(req));
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const found = await lookupSession(bearerToken(req));
+  if (!found.userId) {
+    if (found.replaced) return res.status(401).json({ status: 'error', code: 'signed_in_elsewhere', message: 'You were signed out because this account was opened on another device. Sign in again to use it here.' });
+    return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  }
+  const userId = found.userId;
   req.userId = userId;
   next();
 }
 
 module.exports = {
-  hashPassword, verifyPassword, needsRehash, dummyHash, tooLong, MAX_PASSWORD_BYTES, createSession, resolveSession, destroySession, forgetUser,
+  hashPassword, verifyPassword, needsRehash, dummyHash, tooLong, MAX_PASSWORD_BYTES, createSession, resolveSession, lookupSession, destroySession, forgetUser,
   bearerToken, requireAuth, sha256,
 };
