@@ -305,7 +305,7 @@ Android reads the reason in `ApiClient` (`SessionHolder.expiredMessage`); the we
   `retry: 2000`; SIGTERM closes every stream (`live.closeAll`) so restarts are not held up. Clients reconnect 1 s, doubling to 15 s.
 - Website: `store.tsx` (fetch stream with the bearer header; the /sync poll is now a 60 s safety net). Android: `data/LiveEvents.kt`
   (OkHttp, read timeout 90 s) run from MainScreen while STARTED; `/sync` check every 60 s as a safety net. Tests: `test-live.js`.
-- Website on phones has NO top bar (owner: "like an app"): the bell is in the Home hero (`.hero-bell`, `useUnread` in `src/unread.ts`),
+- Website on phones has NO top bar (owner: "like an app", like the competitor): Home starts with our logo + wordmark top left and the bell top right (`.m-top`, `useUnread` in `src/unread.ts`), above the green hero,
   the inbox has a Back button; desktop keeps the top bar with nav links.
 
 ### Admin security (admin-session.js, totp.js, audit.js)

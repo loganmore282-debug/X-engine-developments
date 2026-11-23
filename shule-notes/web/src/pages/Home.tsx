@@ -63,14 +63,17 @@ export function HomePage() {
 
   return (
     <div>
+      {/* On a phone there is no top bar (like an app): our logo sits top left and the bell top right, above the green header. */}
+      <div className="m-top">
+        <img src="/logo-mark.png" alt="Shule Notes" className="m-logo" />
+        <span className="m-word">Shule<b>Notes</b></span>
+        <span className="grow" />
+        <button className={`m-bell ${unread ? 'ring' : ''}`} aria-label={unread ? 'Notifications, new message' : 'Notifications'} onClick={() => nav('/inbox')}><Bell />{unread && <i className="bell-dot" />}</button>
+      </div>
       <section className="hero rise">
         <div className="hero-deco" aria-hidden="true"><i /><i /><i /></div>
         <div className="hero-main">
-          {/* On a phone there is no top bar (like an app): the bell lives here, in the green header. */}
-          <div className="hero-top">
-            <div className="eyebrow">{hello}</div>
-            <button className={`hero-bell ${unread ? 'ring' : ''}`} aria-label={unread ? 'Notifications, new message' : 'Notifications'} onClick={() => nav('/inbox')}><Bell />{unread && <i className="bell-dot" />}</button>
-          </div>
+          <div className="eyebrow">{hello}</div>
           <h1>{user?.name.split(' ')[0]}, what are you studying today?</h1>
           <div className="hero-chips">
           <button className="class-chip" onClick={() => setClassSheet(true)} aria-label="Change class"><span className="muted-on-dark">Class</span><b>{cls || 'Choose class'}</b><ExpandMore width={18} height={18} /></button>

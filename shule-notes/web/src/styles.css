@@ -466,15 +466,18 @@ button.glass:hover { background: rgba(255, 255, 255, 0.2); transform: translateY
 .pay-amt { text-align: right; display: flex; flex-direction: column; }
 .pay-amt small { font-size: 12px; font-weight: 600; color: var(--tile); }
 
-/* ---- Phones: no top bar (like an app). The bell sits in the Home header; other pages start with their own title. ---- */
-.hero-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.hero-bell { display: none; position: relative; flex: none; width: 46px; height: 46px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.28); background: rgba(255, 255, 255, 0.12); color: #fff; place-items: center; cursor: pointer; }
-.hero-bell svg { width: 24px; height: 24px; }
-.hero-bell .bell-dot { top: 9px; right: 10px; border-color: #1b5e45; }
-.hero-bell.ring svg { transform-origin: 50% 8%; animation: bell-ring 1.4s var(--ease) 0.6s 2; }
+/* ---- Phones: no top bar (like an app). Logo top left and bell top right sit above the green header; other pages start with their own title. ---- */
+.m-top { display: none; align-items: center; gap: 10px; padding: 14px 2px 2px; }
+.m-logo { width: 42px; height: 42px; object-fit: contain; }
+.m-word { font: 700 19px 'Poppins', sans-serif; letter-spacing: -0.01em; color: var(--text); }
+.m-word b { color: #12b39a; font-weight: 700; }
+.m-bell { position: relative; flex: none; width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--text); display: grid; place-items: center; cursor: pointer; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05); }
+.m-bell svg { width: 24px; height: 24px; }
+.m-bell .bell-dot { top: 9px; right: 10px; }
+.m-bell.ring svg { transform-origin: 50% 8%; animation: bell-ring 1.4s var(--ease) 0.6s 2; }
 @media (max-width: 760px) {
   .topbar { display: none; }
-  .hero-bell { display: grid; }
+  .m-top { display: flex; }
   .main { padding-top: env(safe-area-inset-top); }
   .hero { margin-top: 12px; }
 }
