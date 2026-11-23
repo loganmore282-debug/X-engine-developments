@@ -16,7 +16,15 @@ ADMIN=$(rd "${PERSONALCARE_ADMIN_HOST_FILE:-$SECRETS/admin-host}")
 ADMIN_PATH=$(sed -n 's/^ADMIN_PATH=\${PERSONALCARE_ADMIN_PATH:-\([A-Za-z0-9]*\)}.*/\1/p' "$PERSONALCARE/deploy/update-vps.sh" | head -1)
 want=${1:-all}
 secret() { node -e 'try{process.stdout.write(String(require(process.argv[1])[process.argv[2]]||""))}catch(e){}' "${PERSONALCARE_SECRETS_FILE:-$SECRETS/secrets.local.js}" "$1"; }
-[ -n "$APP" ] || { echo "No domain is set up yet (run set-domain.sh first)."; exit 1; }
+# No domain yet: the GitHub webhook can still use the temporary address (http://<server ip>:8104, see preview.sh). Everything else needs the domain.
+PREVIEW_IP=""
+if [ -z "$APP" ]; then
+  if [ "$want" = github ] && [ -f "${PERSONALCARE_PREVIEW_CONF:-/etc/nginx/conf.d/personalcare-preview.conf}" ]; then
+    PREVIEW_IP=$(curl -4 -s --max-time 8 https://ifconfig.me || true); [ -n "$PREVIEW_IP" ] || PREVIEW_IP=$(hostname -I | awk '{print $1}')
+  else
+    echo "No domain is set up yet (run set-domain.sh first). For the GitHub webhook only, turn the temporary address on with preview.sh on, then run:  bash $0 github"; exit 1
+  fi
+fi
 
 app()   { echo "Member app  : https://$APP/"; }
 admin() { echo "Admin panel : https://${ADMIN:-$APP}/$ADMIN_PATH/     (keep private)"; }
@@ -28,7 +36,8 @@ github() {
     (cd "$PERSONALCARE/deploy" && pm2 reload ecosystem.config.js --only personalcare-server --update-env >/dev/null 2>&1)
   fi
   echo "GitHub webhook  (repo -> Settings -> Webhooks -> Add webhook)"
-  echo "  Payload URL : https://$APP/k7x2/deploy/webhook"
+  if [ -n "$PREVIEW_IP" ]; then echo "  Payload URL : http://$PREVIEW_IP:8104/k7x2/deploy/webhook    (temporary address; the signature secret below is what protects it)"
+  else echo "  Payload URL : https://$APP/k7x2/deploy/webhook"; fi
   echo "  Content type: application/json"
   echo "  Secret      : $S"
   echo "  Events      : Just the push event"
