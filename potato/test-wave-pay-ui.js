@@ -50,7 +50,7 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  ok(!(await page.$('.wv-veil')),'the loaders are gone once the page is ready');
  const o1=posts.find(p=>p[0]==='order');ok(o1&&o1[1].channelId==='w1'&&o1[1].amount===5000&&o1[1].wallet===undefined,'the order is opened (no wallet yet) when the page appears');
  // 2. pay page geometry
- const card=await box('.wv-card');near(card.y,80.8,1.5,'card top');near(card.x,10.5,1,'card left');near(card.w,390,2,'card width');near(card.h,610.2,6,'card height');
+ const card=await box('.wv-card');near(card.y,80.8,1.5,'card top');near(card.x,10.5,1,'card left');near(card.w,390,2,'card width');near(card.h,618,14,'card height (grows a line when the French text wraps)');
  const bg=await page.evaluate(()=>getComputedStyle(document.getElementById('mpFlow')).backgroundColor);ok(bg==='rgb(238, 155, 89)','orange page '+bg);
  const timer=await box('#wvTimer');near(timer.h,38.5,1.5,'timer box height');ok(/^\d\d:\d\d$/.test(await page.textContent('#wvTimer')),'a mm:ss clock');
  const amt=await box('.wv-amt');near(amt.y,150.1,1.5,'amount bar top');near(amt.h,62.5,1.5,'amount bar height');
@@ -60,7 +60,7 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
  const fld=await box('#wvField');near(fld.y,362,2.5,'wallet box top');near(fld.h,58,1.5,'wallet box height');
  ok((await page.textContent('.wv-cc'))==='+225','+225 chip');
  const go=await box('.wv-go');near(go.y,528,3,'Soumettre top');near(go.h,44.2,1.5,'Soumettre height');
- const sec=await box('.wv-sec');near(sec.y,587.8,3,'secure card top');near(sec.h,77.3,2,'secure card height');
+ const sec=await box('.wv-sec');near(sec.y,587.8,3,'secure card top');near(sec.h,85,10,'secure card height (grows a line when the text wraps)');
  ok(/Paiement Sécurisé Protégé/.test(await page.textContent('.wv-sec')),'secure card words');
  ok((await page.textContent('.wv-lang'))==='ENGLISH','the pill offers English while the page is French');
  const pill=await box('.wv-lang');near(pill.h,39.6,1.5,'pill height');near(pill.y,88.8,2,'pill top');near(pill.x+pill.w,383,2,'pill right edge');

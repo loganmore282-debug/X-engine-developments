@@ -4404,10 +4404,10 @@ var _wv = { amount: 0, channels: [], ch: null, wallet: '', order: null, tab: 'ap
 var WV_T = {
   fr: {
     closeA: 'Fermer', langA: 'Langue', badLink: 'Lien de paiement non valide',
-    loading: 'Chargement', payAmount: 'Montant du paiement', walletPh: 'Veuillez entrer le numéro de portefeuille',
+    loading: 'Chargement', payAmount: 'Montant du paiement', walletPh: 'Numéro de portefeuille',
     hint: 'Veuillez saisir correctement votre numéro de portefeuille de paiement à 10 chiffres pour que votre paiement arrive avec précision',
     submit: 'Soumettre', secT: 'Paiement Sécurisé Protégé', secP: 'Vos informations de paiement sont entièrement cryptées. Veuillez vérifier attentivement les détails.',
-    toast: 'Veuillez saisir le numéro de portefeuille correct', close: 'CLOSE', proc: 'Traitement en cours...',
+    toast: 'Veuillez saisir le numéro de portefeuille correct', close: 'FERMER', proc: 'Traitement en cours...',
     tabApp: 'Ouvrir l\'application', tabQr: 'Scanner le code QR', amount: 'Montant',
     howApp: 'Comment ouvrir l\'application de paiement? Cliquez ici pour voir!', card: 'Cliquez sur le bouton ci-dessous pour ouvrir l\'application de paiement et compléter votre transaction.',
     openPay: 'Ouvrir l\'application pour payer', after: 'Après avoir cliqué, vous serez redirigé vers l\'application de paiement',
@@ -4466,6 +4466,8 @@ function wvFit(){
   const el = $('mpFlow'); if (!el) return;
   const k = Math.max(.75, Math.min(1.5, (window.innerWidth || 411) / 411));
   el.style.zoom = Math.abs(k - 1) < .01 ? '' : String(k);
+  // zoom scales the box itself: a plain 100% height would stop short of the screen bottom (k < 1) or run past it (k > 1), showing the page underneath.
+  el.style.height = Math.abs(k - 1) < .01 ? '' : ((window.innerHeight || 800) / k) + 'px';
 }
 window.addEventListener('resize', wvFit);
 function wvCloseBtn(){ return '<button type="button" class="wv-x" aria-label="' + wvt('closeA') + '" onclick="mpClose()">' + WV_SVG.x + '</button>'; }
