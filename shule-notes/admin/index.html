@@ -591,12 +591,12 @@ LOADERS.students = async function(){
       <td>${u.classLevel ? esc(u.classLevel) : '<span class="muted">Not chosen</span>'}</td>
       <td>${esc(fmtDate(u.createdAt))}</td><td>${esc(ago(u.lastLoginAt))}</td>
       <td>${u.aiToday} / ${u.aiTotal}</td>
-      <td>${u.accessUntil && new Date(u.accessUntil) > new Date() ? `<span class="pill ok">Until ${esc(fmtDate(u.accessUntil))}</span>` : '<span class="muted">None</span>'}</td>
+      <td>${u.accessUntil && new Date(u.accessUntil) > new Date() ? `<span class="pill ok">Until ${esc(fmtDate(u.accessUntil))}</span>` : '<span class="muted">None</span>'}${(u.passes || []).filter(p => p.classLevel && p.classLevel !== u.classLevel).length ? `<span class="sub">+ ${(u.passes || []).filter(p => p.classLevel && p.classLevel !== u.classLevel).map(p => esc(p.classLevel)).join(', ')}</span>` : ''}</td>
       <td>${u.status === 'banned' ? '<span class="pill bad">Banned</span>' : '<span class="pill ok">Active</span>'}</td>
       <td><div class="actions">
         <button class="btn plain sm" data-act="detail" data-id="${esc(u.id)}">Details</button>
         <button class="btn plain sm" data-act="grant" data-id="${esc(u.id)}">Give access</button>
-        ${u.accessUntil && new Date(u.accessUntil) > new Date() ? `<button class="btn plain sm" data-act="revoke" data-id="${esc(u.id)}">Remove access</button>` : ''}
+        ${(u.passes || []).length ? `<button class="btn plain sm" data-act="revoke" data-id="${esc(u.id)}">Remove access</button>` : ''}
         <button class="btn plain sm" data-act="reset" data-id="${esc(u.id)}">Reset password</button>
         <button class="btn plain sm" data-act="${u.status === 'banned' ? 'unban' : 'ban'}" data-id="${esc(u.id)}">${u.status === 'banned' ? 'Unban' : 'Ban'}</button>
         <button class="btn danger sm" data-act="delete" data-id="${esc(u.id)}">Delete</button>
@@ -630,9 +630,9 @@ $('studentRows').addEventListener('click', async (e) => {
     const r = await api('/admin/users/status', { id: user.id, status: 'active' });
     toast(r.status === 'success' ? user.name + ' can sign in again' : (r.message || 'Could not unban'), r.status === 'success' ? 'ok' : 'error');
   } else if (act === 'grant') {
-    const minutes = await askDuration('Give ' + user.name + ' access', 'This adds time to their pass without any payment, for example for a prize or a refund. It is added on top of any time they still have.');
-    if (!minutes) return;
-    const r = await api('/admin/users/grant', { id: user.id, minutes });
+    const g = await askDuration('Give ' + user.name + ' access', 'This adds time to their pass without any payment, for example for a prize or a refund. It is added on top of any time they still have for that class.', user.classLevel || '*');
+    if (!g) return;
+    const r = await api('/admin/users/grant', { id: user.id, minutes: g.minutes, classLevel: g.classLevel });
     toast(r.status === 'success' ? user.name + ' now has access' : (r.message || 'Could not give access'), r.status === 'success' ? 'ok' : 'error');
   } else if (act === 'detail') {
     await showStudent(user.id); return;
@@ -955,14 +955,20 @@ $('fbList').addEventListener('click', async (e) => {
 
 // ── time pickers, CSV, student details ──
 // Asks "how long?": one of the passes, or any number of hours or days. Resolves to minutes, or false.
-async function askDuration(title, intro){
+// With `cls` (a student's class, or ''), it also asks WHICH class the pass opens and resolves to { minutes, classLevel }.
+async function askDuration(title, intro, cls){
   if (!PAY.plans.length) { const st = await api('/admin/settings/get'); if (st.status === 'success') PAY.plans = st.settings.plans || []; }
   const plans = PAY.plans || [];
+  const withClass = cls !== undefined;
+  const classPick = withClass ? `<label>Opens the notes of</label><select id="dClass"><option value="*">All classes</option>${LEVEL_GROUPS.map(g => `<optgroup label="${esc(g.name)}">${g.levels.map(l => `<option value="${esc(l.id)}"${l.id === cls ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</optgroup>`).join('')}</select><p class="muted" style="font-size:12.5px;margin:4px 0 0">A pass opens one class. Their class is chosen for you.</p>` : '';
   const picked = await modal({ title, okLabel: 'Give access',
-    body: `<p>${esc(intro)}</p><label>How long</label>
+    body: `<p>${esc(intro)}</p>${classPick}<label>How long</label>
       <select id="dPlan">${plans.map(p => `<option value="${p.minutes}">${esc(p.name)}</option>`).join('')}<option value="custom">A different time…</option></select>
       <div id="dCustom" class="row hidden"><div><label>Amount</label><input id="dAmount" type="number" min="1" value="1"></div><div><label>Unit</label><select id="dUnit"><option value="60">Hours</option><option value="1440" selected>Days</option></select></div></div>`,
-    collect: () => $('dPlan').value === 'custom' ? Math.round(Number($('dAmount').value) * Number($('dUnit').value)) : Number($('dPlan').value) });
+    collect: () => {
+      const minutes = $('dPlan').value === 'custom' ? Math.round(Number($('dAmount').value) * Number($('dUnit').value)) : Number($('dPlan').value);
+      return withClass ? { minutes, classLevel: $('dClass').value } : minutes;
+    } });
   return picked || false;
 }
 // (the dialog above is created by modal(); wire the "different time" box after it appears)
@@ -982,14 +988,15 @@ async function showStudent(id){
   const r = await api('/admin/users/detail', { id });
   if (r.status !== 'success') return toast(r.message || 'Could not load the student', 'error');
   const s = r.student; const live = s.accessUntil && new Date(s.accessUntil) > new Date();
-  const pays = r.payments.length ? r.payments.map(p => `<tr><td>${esc(fmtDate(p.createdAt))}</td><td>${esc(p.planName)}</td><td>${p.manual ? 'Given' : esc(ugx(p.amount))}</td><td>${esc(p.status)}</td></tr>`).join('') : '<tr><td colspan="4" class="muted">No payments yet</td></tr>';
+  const passList = (s.passes || []).length ? `<p style="margin:10px 0 0">${s.passes.map(p => `<span class="pill ok" style="margin:0 6px 6px 0">${esc(p.classLevel || 'All classes')} until ${esc(fmtDate(p.until))}</span>`).join('')}</p>` : '';
+  const pays = r.payments.length ? r.payments.map(p => `<tr><td>${esc(fmtDate(p.createdAt))}</td><td>${esc(p.planName)}<span class="sub">${esc(p.classLevel || 'All classes')}</span></td><td>${p.manual ? 'Given' : esc(ugx(p.amount))}</td><td>${esc(p.status)}</td></tr>`).join('') : '<tr><td colspan="4" class="muted">No payments yet</td></tr>';
   const choice = await modal({ title: s.name, okLabel: 'Close', hideCancel: true,
     body: `<p class="muted" style="margin-top:-6px">${esc(s.phone)} · ${esc(s.classLevel || 'No class yet')} · joined ${esc(fmtDate(s.createdAt))} · last seen ${esc(ago(s.lastLoginAt))}</p>
       <div class="stats" style="grid-template-columns:repeat(3,1fr);gap:8px">
-        <div class="stat"><div><b style="font-size:17px">${live ? esc(fmtDate(s.accessUntil)) : 'None'}</b><span>Pass until</span></div></div>
+        <div class="stat"><div><b style="font-size:17px">${live ? esc(fmtDate(s.accessUntil)) : 'None'}</b><span>Pass for their class until</span></div></div>
         <div class="stat"><div><b style="font-size:17px">${esc(ugx(s.totalPaid))}</b><span>Paid in total</span></div></div>
         <div class="stat"><div><b style="font-size:17px">${s.aiTotal}</b><span>AI questions</span></div></div>
-      </div>
+      </div>${passList}
       <h2 style="margin:14px 0 6px;font-size:15px">Payments</h2>
       <div class="table-scroll" style="max-height:200px;overflow:auto"><table><thead><tr><th>Date</th><th>Pass</th><th>Amount</th><th>Status</th></tr></thead><tbody>${pays}</tbody></table></div>
       <div class="actions" style="margin-top:14px"><button class="btn plain sm" id="sdGrant">Give access</button><button class="btn plain sm" id="sdEdit">Edit name or class</button></div>` });
@@ -1001,7 +1008,7 @@ document.addEventListener('click', async (e) => {
   const name = document.querySelector('#modalRoot h2').textContent;
   const user = ST.rows.find(u => u.name === name); if (!user) return;
   $('modalOk').click();
-  if (id === 'sdGrant') { const m = await askDuration('Give ' + user.name + ' access', 'The time is added on top of any pass they still have.'); if (m) { const r = await api('/admin/users/grant', { id: user.id, minutes: m }); toast(r.status === 'success' ? 'Access given' : (r.message || 'Could not give access'), r.status === 'success' ? 'ok' : 'error'); reloadStudents(false); } }
+  if (id === 'sdGrant') { const m = await askDuration('Give ' + user.name + ' access', 'The time is added on top of any pass they still have for that class.', user.classLevel || '*'); if (m) { const r = await api('/admin/users/grant', { id: user.id, minutes: m.minutes, classLevel: m.classLevel }); toast(r.status === 'success' ? 'Access given' : (r.message || 'Could not give access'), r.status === 'success' ? 'ok' : 'error'); reloadStudents(false); } }
   else {
     const v = await modal({ title: 'Edit ' + user.name, okLabel: 'Save', body: `<label>Full name</label><input id="euName" value="${esc(user.name)}"><label>Class</label><select id="euClass">${classOptions(user.classLevel || '', 'No class')}</select>`, collect: () => ({ name: $('euName').value, classLevel: $('euClass').value }) });
     if (!v) return;
@@ -1017,7 +1024,7 @@ $('stBulk').addEventListener('click', async () => {
     collect: () => $('bWho').value });
   if (!who) return;
   const label = who === 'all' ? 'every active student' : who;
-  const minutes = await askDuration('Time for ' + label, 'It is added on top of any pass they already have.');
+  const minutes = await askDuration('Time for ' + label, who === 'all' ? 'Everyone gets this time for EVERY class, on top of any pass they already have.' : 'They get this time for ' + who + ', on top of any pass they already have for it.');
   if (!minutes) return;
   if (!await confirmBox('Give this to ' + label + '?', 'Everyone matching receives it straight away. This cannot be undone in one step.', 'Give access', false)) return;
   const r = await api('/admin/users/grant-bulk', who === 'all' ? { scope: 'all', minutes } : { scope: 'class', classLevel: who, minutes });
@@ -1059,7 +1066,7 @@ LOADERS.payments = async function(){
   const pill = (p) => p.status === 'paid' ? (p.manual ? '<span class="pill info">Given</span>' : '<span class="pill ok">Paid</span>') : p.status === 'pending' ? '<span class="pill warn">Waiting</span>' : p.status === 'expired' ? '<span class="pill warn">Expired</span>' : `<span class="pill bad" title="${esc(p.failureReason)}">Failed</span>`;
   $('payRows').innerHTML = r.payments.length ? r.payments.map(p => `
     <tr>
-      <td>${esc(p.student)}</td><td>${esc(p.planName)}</td><td>${p.manual ? '—' : esc(ugx(p.amount))}</td><td>${esc(p.phone)}</td>
+      <td>${esc(p.student)}</td><td>${esc(p.planName)}<span class="sub">${esc(p.classLevel || 'All classes')}</span></td><td>${p.manual ? '—' : esc(ugx(p.amount))}</td><td>${esc(p.phone)}</td>
       <td>${esc(fmtDate(p.createdAt))}<span class="sub">${esc(new Date(p.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }))}</span></td>
       <td>${pill(p)}${p.needsAttention ? ' <span class="pill bad">Access missing</span>' : ''}${p.status === 'failed' && p.failureReason ? `<span class="sub">${esc(p.failureReason)}</span>` : ''}</td>
       <td>${p.accessUntil ? esc(fmtDate(p.accessUntil)) : '—'}</td>

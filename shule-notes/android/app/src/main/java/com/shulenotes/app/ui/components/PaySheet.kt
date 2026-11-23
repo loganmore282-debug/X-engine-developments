@@ -104,8 +104,10 @@ fun passLeftLabel(untilMs: Long, now: Long = System.currentTimeMillis()): String
 // The server sets the price and checks with MarzPay; nothing here can unlock a document.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PaySheet(onDismiss: () -> Unit, onPaid: () -> Unit = {}) {
+fun PaySheet(onDismiss: () -> Unit, onPaid: () -> Unit = {}, classLevel: String? = null) {
     val scope = rememberCoroutineScope()
+    // The class this pass opens: the one asked for (a locked note's class), else the class on Home.
+    var forClass by remember { mutableStateOf(classLevel ?: AccessHolder.homeClass) }
     var plans by remember { mutableStateOf<List<Plan>?>(null) }
     var enabled by remember { mutableStateOf(true) }
     var picked by rememberSaveable { mutableStateOf<String?>(null) }
@@ -119,8 +121,9 @@ fun PaySheet(onDismiss: () -> Unit, onPaid: () -> Unit = {}) {
 
     LaunchedEffect(Unit) {
         try {
-            val r = ApiClient.service.plans()
+            val r = ApiClient.service.plans(forClass)
             AccessHolder.update(r)
+            if (forClass == null) forClass = r.classLevel
             val list = r.plans ?: emptyList()
             plans = list
             enabled = r.enabled
@@ -142,7 +145,7 @@ fun PaySheet(onDismiss: () -> Unit, onPaid: () -> Unit = {}) {
             try {
                 val p = ApiClient.service.paymentStatus(id).payment
                 if (p?.status == "paid") {
-                    AccessHolder.applyUntil(p.accessUntil)
+                    AccessHolder.applyUntil(p.accessUntil, p.classLevel ?: forClass)
                     paidUntilMs = AccessHolder.parseIso(p.accessUntil)
                     step = PayStep.DONE
                     scope.launch { AccessHolder.refresh() }
@@ -178,8 +181,19 @@ fun PaySheet(onDismiss: () -> Unit, onPaid: () -> Unit = {}) {
             when (step) {
                 PayStep.CHOOSE -> {
                     Text("Choose a pass", style = MaterialTheme.typography.headlineSmall)
+                    forClass?.let { cls ->
+                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.padding(top = 6.dp)) {
+                            Text(
+                                "For $cls",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                            )
+                        }
+                    }
                     Text(
-                        "Pay once with mobile money and read everything for as long as the pass lasts.",
+                        if (forClass != null) "Pay once with mobile money and read every note and past paper of $forClass, with the AI helper, for as long as the pass lasts."
+                        else "Pay once with mobile money and read every note and past paper of your class for as long as the pass lasts.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 2.dp, bottom = 16.dp),
@@ -236,7 +250,7 @@ fun PaySheet(onDismiss: () -> Unit, onPaid: () -> Unit = {}) {
                             error = null
                             scope.launch {
                                 try {
-                                    val r = ApiClient.service.startPayment(mapOf("planId" to plan.id, "phone" to phone))
+                                    val r = ApiClient.service.startPayment(listOfNotNull("planId" to plan.id, "phone" to phone, forClass?.let { "classLevel" to it }).toMap())
                                     paymentId = r.payment?.id
                                     step = PayStep.WAITING
                                 } catch (e: java.io.IOException) {
@@ -279,7 +293,7 @@ fun PaySheet(onDismiss: () -> Unit, onPaid: () -> Unit = {}) {
                     Spacer(Modifier.height(14.dp))
                     Text("Payment received", style = MaterialTheme.typography.headlineSmall)
                     Text(
-                        if (paidUntilMs > 0L) "Your pass lasts until ${passUntilLabel(paidUntilMs)}." else "Your pass is active.",
+                        if (paidUntilMs > 0L) "Your ${forClass?.let { "$it " } ?: ""}pass lasts until ${passUntilLabel(paidUntilMs)}." else "Your pass is active.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -331,7 +345,7 @@ fun PassBanner(modifier: Modifier = Modifier) {
                 }
                 Spacer(Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    Text("Pass active", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f))
+                    Text(AccessHolder.homeClass?.let { "$it pass active" } ?: "Pass active", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f))
                     Text(passLeftLabel(AccessHolder.untilMs, now), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
                     Text("Until ${passUntilLabel(AccessHolder.untilMs)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f))
                 }
@@ -366,8 +380,8 @@ fun PassBanner(modifier: Modifier = Modifier) {
             ) {
                 Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Unlock everything", style = MaterialTheme.typography.titleMedium, color = ink)
-                        Text("Every note, past paper and the AI helper. Pay with MTN or Airtel mobile money.", style = MaterialTheme.typography.bodySmall, color = ink.copy(alpha = 0.85f))
+                        Text(AccessHolder.homeClass?.let { "Unlock $it" } ?: "Unlock your class", style = MaterialTheme.typography.titleMedium, color = ink)
+                        Text("Every note and past paper of the class, with the AI helper. Pay with MTN or Airtel mobile money.", style = MaterialTheme.typography.bodySmall, color = ink.copy(alpha = 0.85f))
                         Spacer(Modifier.height(6.dp))
                         Surface(shape = CircleShape, color = ink) {
                             Text(

@@ -67,7 +67,7 @@ export function NoteCard({ note, onOpen, index = 0, showClass = true }: { note: 
   const on = saved.has(note.id);
   const [pop, setPop] = useState(false);
   const access = useAccess();
-  const locked = access.locked(note.free);
+  const locked = access.locked(note.free, note.classLevel);
   return (
     <div className="card note-card rise sv" style={{ animationDelay: `${Math.min(index, 8) * 45}ms`, ...(subjectVars(subject) as CSSProperties) }} role="button" tabIndex={0}
       onClick={onOpen} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}

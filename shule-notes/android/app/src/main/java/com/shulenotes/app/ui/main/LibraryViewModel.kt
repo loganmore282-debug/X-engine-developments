@@ -132,6 +132,7 @@ class LibraryViewModel : ViewModel() {
             subjects = snapshot.subjects
             notes = snapshot.notes
             levelGroups = snapshot.levelGroups
+            com.shulenotes.app.data.AccessHolder.knownLevels = snapshot.levelGroups.flatMap { g -> g.levels.map { it.id } }.toSet()
             NoteCache.subjects = snapshot.subjects
             NoteCache.put(snapshot.notes)
             initScope()
@@ -146,6 +147,7 @@ class LibraryViewModel : ViewModel() {
         if (!scopeReady) {
             scopeReady = true
             scopeClass = ShuleApp.session.classLevel.first().ifBlank { null }
+            com.shulenotes.app.data.AccessHolder.homeClass = scopeClass
         }
     }
 
@@ -174,6 +176,7 @@ class LibraryViewModel : ViewModel() {
                     subjects = loadedSubjects
                     notes = loadedNotes
                     levelGroups = loadedLevels
+                    com.shulenotes.app.data.AccessHolder.knownLevels = loadedLevels.flatMap { g -> g.levels.map { it.id } }.toSet()
                     NoteCache.subjects = loadedSubjects
                     NoteCache.put(loadedNotes)
                     initScope()
@@ -313,6 +316,11 @@ class LibraryViewModel : ViewModel() {
 
     fun selectClass(level: String?) {
         scopeClass = level
+        // The pass card follows the class on screen ("every class" keeps the last one).
+        if (level != null) {
+            com.shulenotes.app.data.AccessHolder.homeClass = level
+            viewModelScope.launch { com.shulenotes.app.data.AccessHolder.refresh() }
+        }
         if (subjectsInScope().none { it.id == selectedSubjectId }) selectedSubjectId = null
         if (level == null) return
         viewModelScope.launch {

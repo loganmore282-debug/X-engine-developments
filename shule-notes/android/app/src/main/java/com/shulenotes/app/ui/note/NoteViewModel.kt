@@ -89,7 +89,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     // copy that is already being fetched in the background (see PdfFetcher) is joined, not fetched again.
     private suspend fun openPdf(noteId: String): PdfDocument {
         // Without a pass, even a copy kept on the phone stays closed (the server also refuses).
-        if (AccessHolder.locked(note?.free == true)) throw LockedException()
+        if (AccessHolder.locked(note?.free == true, note?.classLevel)) throw LockedException()
         val downloaded = Downloads.file(noteId)
         if (downloaded.length() > 0L) {
             try {

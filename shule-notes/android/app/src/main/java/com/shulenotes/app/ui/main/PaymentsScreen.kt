@@ -156,7 +156,7 @@ private fun PaymentRow(p: PaymentRecord) {
             ) { Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp)) }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(p.planName ?: "Pass", style = MaterialTheme.typography.titleSmall)
+                Text((p.planName ?: "Pass") + "  ·  " + (p.classLevel ?: "All classes"), style = MaterialTheme.typography.titleSmall)
                 Text(
                     dateLabel(p.createdAt),
                     style = MaterialTheme.typography.bodySmall,

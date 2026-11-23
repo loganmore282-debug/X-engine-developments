@@ -56,7 +56,7 @@ const MARKS = 'shule_page_marks';
 export function ReaderPage() {
   const { id = '' } = useParams();
   const nav = useNavigate();
-  const { notes, subjectName } = useLibrary();
+  const { notes, subjectName, levels } = useLibrary();
   const { toast } = useToast();
   const [note, setNote] = useState<Note | null>(() => notes.find((n) => n.id === id) || null);
   const [doc, setDoc] = useState<pdfjs.PDFDocumentProxy | null>(null);
@@ -172,7 +172,7 @@ export function ReaderPage() {
       <div className="progressbar"><i style={{ width: `${total ? (page / total) * 100 : 0}%` }} /></div>
 
       <div className="pages" ref={scroller}>
-        {locked && <div className="empty lock-page"><div className="lock-big"><Lock /></div><h3>This document needs a pass</h3><p>Choose a pass to read it, search inside it and ask the AI helper about it.</p><button className="btn" onClick={() => setPaySheet(true)}>Choose a pass</button></div>}
+        {locked && <div className="empty lock-page"><div className="lock-big"><Lock /></div><h3>{note?.classLevel ? `This needs a ${note.classLevel} pass` : 'This document needs a pass'}</h3><p>{note?.classLevel ? `A pass opens one class. Choose a ${note.classLevel} pass to read this, search inside it and ask the AI helper about it.` : 'Choose a pass to read it, search inside it and ask the AI helper about it.'}</p><button className="btn" onClick={() => setPaySheet(true)}>Choose a pass</button></div>}
         {!doc && !error && !locked && (
           <div className="pages-in">{[0, 1].map((i) => <div key={i} className="sheet-page" style={{ width, aspectRatio: String(first) }}><div className="shimmer" /></div>)}
             {progress > 0 && <div className="muted" style={{ fontSize: 13 }}>Downloading {Math.round(progress * 100)}%</div>}</div>
@@ -184,7 +184,7 @@ export function ReaderPage() {
       {doc && <div className="page-chip">{page} / {total}</div>}
       <div className="reader-fab">{note?.hasAiContext !== false && <button className="fab" onClick={() => setDrawer('ai')}><Spark width={20} height={20} /> Ask AI</button>}</div>
 
-      {paySheet && <PaySheet reason="Pay once with mobile money and read everything for as long as the pass lasts." onClose={() => setPaySheet(false)} onPaid={() => setReloadKey((k) => k + 1)} />}
+      {paySheet && <PaySheet classLevel={note?.classLevel && levels.some((g) => g.levels.some((l) => l.id === note.classLevel)) ? note.classLevel : null} onClose={() => setPaySheet(false)} onPaid={() => setReloadKey((k) => k + 1)} />}
       {drawer === 'search' && <SearchDrawer noteId={id} onClose={() => setDrawer(null)} onGo={(p) => { goTo(p); if (window.innerWidth < 760) setDrawer(null); }} />}
       {drawer === 'ai' && <AiDrawer note={note} noteId={id} onClose={() => setDrawer(null)} />}
     </div>

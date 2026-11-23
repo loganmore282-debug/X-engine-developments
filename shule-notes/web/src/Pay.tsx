@@ -7,28 +7,49 @@ import type { Payment, Plan, User } from './types';
 
 const ugx = (n: number) => 'UGX ' + n.toLocaleString('en-GB');
 
-// Whether payments are on, and whether this student has a pass right now. The server is what really decides;
-// this only decides what to show.
+// Whether payments are on, and which passes this student holds. A pass opens ONE class (the owner's rule): an S.4 pass
+// opens S.4 notes and notes for all classes, not S.5. The server is what really decides; this only decides what to show.
 export function useAccess() {
   const { user } = useAuth();
-  const { config } = useLibrary();
-  const until = user?.accessUntil ? new Date(user.accessUntil) : null;
-  // When a pass ends while the page is open, everything locks again by itself.
+  const { config, levels } = useLibrary();
+  const known = new Set(levels.flatMap((g) => g.levels.map((l) => l.id)));
+  // Older answers carry only accessUntil (one date for everything).
+  const passes = user?.passes ?? (user?.accessUntil ? [{ classLevel: null, until: user.accessUntil }] : []);
+  const untilFor = (cls: string | null | undefined) => {
+    const t = (p: { until: string }) => new Date(p.until).getTime();
+    const all = passes.filter((p) => !p.classLevel).map(t);
+    const own = cls ? passes.filter((p) => p.classLevel === cls).map(t) : passes.map(t);
+    const best = Math.max(0, ...all, ...own);
+    return best ? new Date(best) : null;
+  };
+  const home = user?.classLevel || null;
+  const until = untilFor(home);
+  const next = Math.min(...passes.map((p) => new Date(p.until).getTime()).filter((t) => t > Date.now()), Infinity);
+  // When a pass ends while the page is open, its notes lock again by themselves.
   const [, tick] = useState(0);
   useEffect(() => {
-    if (!until) return;
-    const ms = until.getTime() - Date.now();
+    if (!Number.isFinite(next)) return;
+    const ms = next - Date.now();
     if (ms <= 0 || ms > 2147000000) return;
     const id = window.setTimeout(() => tick((n) => n + 1), ms + 500);
     return () => window.clearTimeout(id);
-  }, [until?.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [next]);
   const active = !!until && until.getTime() > Date.now();
-  return { enabled: !!config.paymentsEnabled, active, until, locked: (free?: boolean) => !!config.paymentsEnabled && !active && !free };
+  const locked = (free?: boolean, noteClass?: string | null) => {
+    if (!config.paymentsEnabled || free) return false;
+    const cls = noteClass && (known.size === 0 || known.has(noteClass)) ? noteClass : null;
+    const u = untilFor(cls);
+    return !u || u.getTime() <= Date.now();
+  };
+  return { enabled: !!config.paymentsEnabled, active, until, home, locked };
 }
 
 export function untilLabel(d: Date) {
-  const ms = d.getTime() - Date.now();
-  if (ms < 24 * 3600000) return `today at ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const day = (x: Date) => x.toDateString();
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  if (day(d) === day(new Date())) return `today at ${time}`;
+  if (day(d) === day(tomorrow)) return `tomorrow at ${time}`;
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
@@ -39,8 +60,10 @@ function lengthLabel(minutes: number) {
 }
 
 // Choose a pass, enter the mobile money number, approve on the phone, and the access appears by itself.
-export function PaySheet({ onClose, onPaid, reason }: { onClose: () => void; onPaid?: () => void; reason?: string }) {
+export function PaySheet({ onClose, onPaid, reason, classLevel }: { onClose: () => void; onPaid?: () => void; reason?: string; classLevel?: string | null }) {
   const { user, setUser } = useAuth();
+  // The class this pass opens: the one asked for (a locked note's class), else the student's own.
+  const forClass = classLevel || user?.classLevel || null;
   const { toast } = useToast();
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [enabled, setEnabled] = useState(true);
@@ -55,7 +78,7 @@ export function PaySheet({ onClose, onPaid, reason }: { onClose: () => void; onP
   useEffect(() => () => { alive.current = false; }, []);
 
   useEffect(() => {
-    api<{ enabled: boolean; plans: Plan[] }>('/payments/plans').then((r) => {
+    api<{ enabled: boolean; plans: Plan[] }>('/payments/plans' + (forClass ? '?classLevel=' + encodeURIComponent(forClass) : '')).then((r) => {
       setPlans(r.plans); setEnabled(r.enabled);
       const middle = r.plans[Math.min(2, r.plans.length - 1)];
       if (middle) setPicked(middle.id);
@@ -68,7 +91,7 @@ export function PaySheet({ onClose, onPaid, reason }: { onClose: () => void; onP
     if (!plan) return;
     setBusy(true); setError('');
     try {
-      const r = await api<{ payment: Payment }>('/payments/start', { body: { planId: plan.id, phone } });
+      const r = await api<{ payment: Payment }>('/payments/start', { body: { planId: plan.id, phone, ...(forClass ? { classLevel: forClass } : {}) } });
       setPaymentId(r.payment.id); setStep('waiting');
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
@@ -93,7 +116,8 @@ export function PaySheet({ onClose, onPaid, reason }: { onClose: () => void; onP
   return (
     <Sheet title={step === 'done' ? 'You are in' : step === 'waiting' ? 'Approve on your phone' : 'Choose a pass'} onClose={step === 'waiting' ? () => { toast('We will unlock your access as soon as the payment arrives.'); onClose(); } : onClose}>
       {step === 'choose' && <>
-        {reason && <p className="muted" style={{ marginTop: -6 }}>{reason}</p>}
+        {forClass && <span className="pill" style={{ marginTop: -4, marginBottom: 8 }}>For {forClass}</span>}
+        <p className="muted" style={{ marginTop: 4 }}>{reason || (forClass ? `Pay once with mobile money and read every note and past paper of ${forClass}, with the AI helper, for as long as the pass lasts.` : 'Pay once with mobile money and read every note and past paper of your class for as long as the pass lasts.')}</p>
         {!plans && !error && <div className="center"><div className="spinner" style={{ margin: '24px auto' }} /></div>}
         {plans && !enabled && <div className="banner-error">Payments are not open yet. Please try again later.</div>}
         {error && <div className="banner-error">{error}</div>}
@@ -119,7 +143,7 @@ export function PaySheet({ onClose, onPaid, reason }: { onClose: () => void; onP
       {step === 'done' && <div className="center" style={{ padding: '6px 0' }}>
         <div className="done-tick"><Check /></div>
         <p style={{ fontSize: 17, margin: '14px 0 4px' }}><b>Payment received</b></p>
-        <p className="muted" style={{ margin: 0 }}>{result?.accessUntil ? `Your pass lasts until ${untilLabel(new Date(result.accessUntil))}.` : 'Your pass is active.'}</p>
+        <p className="muted" style={{ margin: 0 }}>{result?.accessUntil ? `Your ${forClass ? forClass + ' ' : ''}pass lasts until ${untilLabel(new Date(result.accessUntil))}.` : 'Your pass is active.'}</p>
         <button className="btn wide" style={{ marginTop: 18 }} onClick={onClose}>Start reading</button>
       </div>}
       {step === 'failed' && <div className="center" style={{ padding: '6px 0' }}>

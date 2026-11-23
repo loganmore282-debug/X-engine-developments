@@ -58,6 +58,15 @@ function fakeMarz() {
   ck(pay.canRead({ settings: closed, user: { accessUntil: new Date(now.getTime() + MIN) }, note: {} }), 'a pass in the future opens it');
   ck(!pay.canRead({ settings: closed, user: { accessUntil: new Date(now.getTime() - MIN) }, note: {} }), 'an ended pass locks it again');
 
+  console.log('— a pass opens ONE class —');
+  const s4 = { classAccess: { 'Senior 4': new Date(now.getTime() + MIN) } };
+  ck(pay.canRead({ settings: closed, user: s4, note: { classLevel: 'Senior 4' } }), 'a Senior 4 pass opens Senior 4 notes');
+  ck(!pay.canRead({ settings: closed, user: s4, note: { classLevel: 'Senior 5' } }), 'but NOT Senior 5 notes');
+  ck(pay.canRead({ settings: closed, user: s4, note: { classLevel: null } }) && pay.canRead({ settings: closed, user: s4, note: { classLevel: 'Not a class' } }), 'notes for all classes open with a pass for any class');
+  ck(!pay.canRead({ settings: closed, user: { classAccess: { 'Senior 4': new Date(now.getTime() - MIN) } }, note: { classLevel: null } }), 'an ended class pass opens nothing');
+  ck(pay.canRead({ settings: closed, user: { accessUntil: new Date(now.getTime() + MIN) }, note: { classLevel: 'Senior 5' } }), 'an old all-classes pass still opens every class until it ends');
+  ck(pay.canRead({ settings: closed, user: s4, note: { classLevel: 'Senior 5', free: true } }), 'a free note is open to everyone');
+
   console.log('— paying —');
   const mk = async (name, phone) => (await db.collection('users').insertOne({ name, phone, passwordHash: await hashPassword('password1'), createdAt: new Date(), classLevel: 'Senior 2' })).insertedId;
   const aminaId = await mk('Amina Nakato', '0772000001');
@@ -104,7 +113,7 @@ function fakeMarz() {
     pay.handleCallback({ transaction: { reference: started.payment.reference, status: 'successful' } }, marz),
   ]);
   const afterPay = await db.collection('users').findOne({ _id: aminaId });
-  const grantedMs = new Date(afterPay.accessUntil).getTime() - Date.now();
+  const grantedMs = pay.untilFor(afterPay, 'Senior 2') - Date.now();
   ck(pay.hasAccess(afterPay), 'after MarzPay confirms: access');
   ck(grantedMs > 1440 * MIN - 5000 && grantedMs <= 1440 * MIN + 1000, 'exactly one day was granted, although four calls raced (no double grant)');
   const paidRow = await db.collection('payments').findOne({ _id: started.payment._id });
@@ -117,8 +126,21 @@ function fakeMarz() {
   marz.state[second.payment.marzUuid] = 'paid';
   await pay.refreshPayment(await db.collection('payments').findOne({ _id: second.payment._id }), marz);
   const stacked = await db.collection('users').findOne({ _id: aminaId });
-  const stackedMs = new Date(stacked.accessUntil).getTime() - Date.now();
+  const stackedMs = pay.untilFor(stacked, 'Senior 2') - Date.now();
   ck(stackedMs > (1440 + 10080) * MIN - 5000, 'a week bought on top of a day: eight days in total');
+  ck(paidRow.classLevel === 'Senior 2' && !pay.hasAccess(stacked, new Date(), 'Senior 3') && stacked.accessUntil == null, 'the pass opens Senior 2 only (the class it was bought for), never every class');
+
+  // paying for ANOTHER class (the class on screen): a separate pass, Senior 2's time is untouched
+  const other = await pay.startPayment({ settings: cfg, user: stacked, planId: '1d', phone: '0772000001', marz, classLevel: 'Senior 3' });
+  marz.state[other.payment.marzUuid] = 'paid';
+  await pay.refreshPayment(await db.collection('payments').findOne({ _id: other.payment._id }), marz);
+  const both = await db.collection('users').findOne({ _id: aminaId });
+  ck(pay.hasAccess(both, new Date(), 'Senior 3') && Math.abs(pay.untilFor(both, 'Senior 2') - pay.untilFor(stacked, 'Senior 2')) < 1000, 'a pass for Senior 3 opens Senior 3 and leaves the Senior 2 pass as it was');
+  ck(pay.livePasses(both).length === 2, 'the student now holds two class passes');
+  const noClass = await pay.startPayment({ settings: cfg, user: { ...both, classLevel: null }, planId: '1d', phone: '0772000001', marz });
+  ck(!noClass.ok && /class/i.test(noClass.message), 'a student with no class is asked to choose one before paying');
+  const badClass = await pay.startPayment({ settings: cfg, user: both, planId: '1d', phone: '0772000001', marz, classLevel: 'Year 99' });
+  ck(!badClass.ok, 'a made-up class is refused');
 
   // failure
   const brianId = await mk('Brian Okello', '0772000002');
@@ -161,7 +183,7 @@ function fakeMarz() {
   ck(list.total >= 5 && list.payments.some((p) => p.student === 'Amina Nakato'), 'the payments list names the students');
   ck((await pay.listPayments({ q: 'Amina' })).payments.every((p) => p.student === 'Amina Nakato'), 'search by name works');
   const sum = await pay.paymentSummary();
-  ck(sum.all === 1500 + 5000 + 1000 && sum.paidCount === 3, 'the revenue adds up (1,500 + 5,000 + 1,000); the free grant is not counted as money');
+  ck(sum.all === 1500 + 5000 + 1500 + 1000 && sum.paidCount === 4, 'the revenue adds up (1,500 + 5,000 + 1,500 + 1,000); the free grant is not counted as money');
   ck(sum.withAccess === 2, 'students with a live pass are counted');
 
   console.log('— the settings —');
@@ -229,6 +251,15 @@ function fakeMarz() {
   m.state[Object.keys(m.state)[0]] = 'paid';
   const done = await (await get(`/payments/${started2.payment.id}/status`, davidToken)).json();
   ck(done.payment.status === 'paid' && !!done.user.accessUntil, 'status: paid, and the student now has an access date');
+
+  // through the real routes: David's pass is for Senior 2; a Senior 3 note stays locked, a Senior 2 one opens
+  const s3 = (await db.collection('notes').insertOne({ title: 'S3 note', fileName: 'open.pdf', active: true, classLevel: 'Senior 3', textStatus: 'ready', extractedText: 't', pageCount: 1, uploadedAt: new Date() })).insertedId;
+  const s2 = (await db.collection('notes').insertOne({ title: 'S2 note', fileName: 'open.pdf', active: true, classLevel: 'Senior 2', textStatus: 'ready', extractedText: 't', pageCount: 1, uploadedAt: new Date() })).insertedId;
+  ck((await get(`/notes/${s2}/file`, davidToken)).status === 200, 'the route opens a note of the class the pass was bought for');
+  ck((await get(`/notes/${s3}/file`, davidToken)).status === 402, 'and answers 402 for a note of ANOTHER class');
+  ck((await get(`/notes/${locked}/file`, davidToken)).status === 200, 'a note for all classes opens with the class pass');
+  const forS3 = await (await get('/payments/plans?classLevel=Senior%203', davidToken)).json();
+  ck(forS3.classLevel === 'Senior 3' && forS3.hasAccess === false && forS3.passes.length === 1 && forS3.passes[0].classLevel === 'Senior 2', 'the plans route answers for the class on screen and lists the passes held');
   ck((await get(`/notes/${locked}/file`, davidToken)).status === 200, 'and the locked file now opens');
   ck((await post('/payments/callback', { transaction: { reference: 'x', status: 'successful' } })).status === 200, 'the webhook answers 200 at once');
   Object.assign(require('./server').marz, { collect: realCollect, status: realStatus, configured: realConfigured });

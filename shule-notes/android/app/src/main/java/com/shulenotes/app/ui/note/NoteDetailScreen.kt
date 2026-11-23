@@ -261,8 +261,9 @@ fun NoteDetailScreen(noteId: String, startPage: Int, viewModel: NoteViewModel, o
                     var showPay by rememberSaveable { mutableStateOf(true) }
                     StateMessage(
                         icon = Icons.Outlined.Lock,
-                        title = "This document needs a pass",
-                        body = "Choose a pass to read it, search inside it and ask the AI helper about it.",
+                        title = note?.classLevel?.takeIf { it.isNotBlank() }?.let { "This needs a $it pass" } ?: "This document needs a pass",
+                        body = note?.classLevel?.takeIf { it.isNotBlank() }?.let { "A pass opens one class. Choose a $it pass to read this, search inside it and ask the AI helper about it." }
+                            ?: "Choose a pass to read it, search inside it and ask the AI helper about it.",
                         actionLabel = "Choose a pass",
                         onAction = { showPay = true },
                         modifier = Modifier.align(Alignment.Center),
@@ -271,6 +272,7 @@ fun NoteDetailScreen(noteId: String, startPage: Int, viewModel: NoteViewModel, o
                         com.shulenotes.app.ui.components.PaySheet(
                             onDismiss = { showPay = false },
                             onPaid = { viewModel.load(noteId, retry = true) },
+                            classLevel = note?.classLevel?.takeIf { it.isNotBlank() && (com.shulenotes.app.data.AccessHolder.knownLevels.isEmpty() || it in com.shulenotes.app.data.AccessHolder.knownLevels) },
                         )
                     }
                 }

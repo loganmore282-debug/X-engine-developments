@@ -6,11 +6,15 @@
 //    "paid" is checked again against MarzPay's own status endpoint before anything is granted.
 //  * A payment turns pending -> paid with ONE atomic update that only one caller can win, so a webhook and a status
 //    check arriving together can never grant twice.
-//  * Access is a date on the student (`accessUntil`). Paying again adds time on top of what is left.
+//  * A pass opens ONE class (the owner's rule): `users.classAccess = { "Senior 4": <until>, ... }`. Paying again for the same
+//    class adds time on top of what is left. A note with no class ("All classes") opens with a pass for any class.
+//    `users.accessUntil` is the OLD all-classes pass: still honoured until it runs out (students paid for it), and the
+//    owner can still give one from the admin panel ("All classes"); new purchases never create it.
 'use strict';
 const crypto = require('crypto');
 const { ObjectId } = require('mongodb');
 const { getDb } = require('./db');
+const { isValidLevel } = require('./levels');
 
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZ_TIMEOUT = 20000;
@@ -53,16 +57,34 @@ function cleanPlans(input) {
 }
 
 // ── who may read what ───────────────────────────────────────────────────────
-function hasAccess(user, now = new Date()) {
-  return !!(user && user.accessUntil && new Date(user.accessUntil).getTime() > now.getTime());
+const ms = (d) => (d ? new Date(d).getTime() : 0);
+// When the pass for this class ends (the later of the class pass and an old all-classes pass), or 0.
+function untilFor(user, classLevel) {
+  if (!user) return 0;
+  const own = classLevel && user.classAccess ? ms(user.classAccess[classLevel]) : 0;
+  return Math.max(own, ms(user.accessUntil));
 }
-// Free to read: payments are off, or the owner marked the note free, or the student has a pass.
+// Every live pass: [{ classLevel, until }] (classLevel null = all classes).
+function livePasses(user, now = new Date()) {
+  if (!user) return [];
+  const out = Object.entries(user.classAccess || {}).filter(([, d]) => ms(d) > now.getTime()).map(([classLevel, d]) => ({ classLevel, until: new Date(d) }));
+  if (ms(user.accessUntil) > now.getTime()) out.push({ classLevel: null, until: new Date(user.accessUntil) });
+  return out;
+}
+// With a class: may this student read that class? Without one: do they have any live pass at all?
+function hasAccess(user, now = new Date(), classLevel) {
+  if (classLevel) return untilFor(user, classLevel) > now.getTime();
+  return livePasses(user, now).length > 0;
+}
+// Free to read: payments are off, or the owner marked the note free, or the student has a pass for the note's class.
+// A note for "All classes" (or a class no longer in the list) opens with a pass for any class.
 function canRead({ settings, user, note, now }) {
   if (settings.paymentsEnabled !== true) return true;
   if (note && note.free === true) return true;
-  return hasAccess(user, now);
+  const level = note && isValidLevel(note.classLevel) ? note.classLevel : null;
+  return hasAccess(user, now || new Date(), level);
 }
-const PAYMENT_REQUIRED = { status: 'error', code: 'payment_required', message: 'This document needs a pass. Choose one to keep reading.' };
+const PAYMENT_REQUIRED = { status: 'error', code: 'payment_required', message: 'This document needs a pass for its class. Choose one to keep reading.' };
 
 // ── MarzPay ─────────────────────────────────────────────────────────────────
 const SUCCESS = ['completed', 'successful', 'success', 'paid'];
@@ -130,18 +152,30 @@ function mobileMoneyPhone(raw) {
 
 // ── granting access ─────────────────────────────────────────────────────────
 // One grant at a time per student, so two payments landing together add up instead of overwriting each other.
+// classLevel: the class the pass opens; '*' = every class (the old kind, only given by the owner).
 const chains = new Map();
-function grantAccess(userId, minutes, now = new Date()) {
+function grantAccess(userId, minutes, classLevel, now = new Date()) {
   const key = String(userId);
   const run = async () => {
     const users = getDb().collection('users');
     const id = new ObjectId(key);
     const user = await users.findOne({ _id: id });
     if (!user) throw new Error('Student not found');
-    const from = hasAccess(user, now) ? new Date(user.accessUntil).getTime() : now.getTime();
+    const level = classLevel === '*' ? '*' : (isValidLevel(classLevel) ? classLevel : (isValidLevel(user.classLevel) ? user.classLevel : '*'));
+    if (level === '*') {
+      const from = Math.max(now.getTime(), ms(user.accessUntil));
+      const until = new Date(from + minutes * 60000);
+      await users.updateOne({ _id: id }, { $set: { accessUntil: until } });
+      return { until, classLevel: null };
+    }
+    const current = user.classAccess && typeof user.classAccess === 'object' ? { ...user.classAccess } : {};
+    // Expired classes are dropped so the record stays small.
+    for (const [k, d] of Object.entries(current)) if (ms(d) <= now.getTime()) delete current[k];
+    const from = Math.max(now.getTime(), ms(current[level]));
     const until = new Date(from + minutes * 60000);
-    await users.updateOne({ _id: id }, { $set: { accessUntil: until } });
-    return until;
+    current[level] = until;
+    await users.updateOne({ _id: id }, { $set: { classAccess: current } });
+    return { until, classLevel: level };
   };
   const next = (chains.get(key) || Promise.resolve()).catch(() => {}).then(run);
   chains.set(key, next);
@@ -156,8 +190,9 @@ async function ensureGranted(paymentId) {
   if (!claim.matchedCount) return false;
   try {
     const p = await col.findOne({ _id: paymentId });
-    const until = await grantAccess(p.userId, p.minutes);
-    await col.updateOne({ _id: paymentId }, { $set: { grantedUntil: until } });
+    // A payment started before passes were per class has no class: it opens the student's class at that moment.
+    const g = await grantAccess(p.userId, p.minutes, p.classLevel || null);
+    await col.updateOne({ _id: paymentId }, { $set: { grantedUntil: g.until, classLevel: g.classLevel } });
     return true;
   } catch (e) {
     await col.updateOne({ _id: paymentId }, { $set: { granted: false } }); // an admin can press "Check again"
@@ -195,27 +230,30 @@ async function refreshPayment(payment, marz) {
 
 // ── starting a payment ──────────────────────────────────────────────────────
 // Returns { ok, payment } or { ok:false, status, message }.
-async function startPayment({ settings, user, planId, phone, marz, callbackUrl }) {
+async function startPayment({ settings, user, planId, phone, marz, callbackUrl, classLevel }) {
   if (settings.paymentsEnabled !== true) return { ok: false, status: 400, message: 'Payments are not open yet.' };
   if (!(await marz.configured())) return { ok: false, status: 503, message: 'Payments are not set up yet. Please try again later.' };
   if (user.status === 'banned') return { ok: false, status: 403, message: 'This account is suspended.' };
   const plan = activePlans(settings).find((p) => p.id === String(planId || ''));
   if (!plan) return { ok: false, status: 400, message: 'Choose one of the passes.' };
+  // The class this pass opens: the one asked for (the class on screen), else the student's own class.
+  const level = classLevel ? String(classLevel) : user.classLevel;
+  if (!isValidLevel(level)) return { ok: false, status: 400, message: 'Choose your class first. A pass opens the notes of one class.' };
   const number = mobileMoneyPhone(phone || user.phone);
   if (!number.ok) return { ok: false, status: 400, message: 'Enter an MTN or Airtel mobile money number, like 0772 123 456.' };
 
   const col = getDb().collection('payments');
   const userId = String(user._id);
   // The same student tapping twice: carry on with the payment already waiting instead of asking MarzPay again.
-  const waiting = await col.find({ userId, status: 'pending' }).sort({ createdAt: -1 }).limit(1).toArray();
+  const waiting = await col.find({ userId, status: 'pending', classLevel: level }).sort({ createdAt: -1 }).limit(1).toArray();
   if (waiting[0] && Date.now() - new Date(waiting[0].createdAt).getTime() < 60 * 1000) return { ok: true, payment: waiting[0], resumed: true };
 
   const reference = crypto.randomUUID();
-  const doc = { userId, planId: plan.id, planName: plan.name, amount: plan.price, minutes: plan.minutes, phone: number.local, reference, marzUuid: null, status: 'pending', granted: false, createdAt: new Date() };
+  const doc = { userId, classLevel: level, planId: plan.id, planName: plan.name, amount: plan.price, minutes: plan.minutes, phone: number.local, reference, marzUuid: null, status: 'pending', granted: false, createdAt: new Date() };
   const inserted = await col.insertOne(doc);
   doc._id = inserted.insertedId;
   let result;
-  try { result = await marz.collect({ amount: plan.price, phone: number.intl, reference, description: `Shule Notes ${plan.name}`, callbackUrl }); }
+  try { result = await marz.collect({ amount: plan.price, phone: number.intl, reference, description: `Shule Notes ${plan.name} ${level}`, callbackUrl }); }
   catch (e) { result = { ok: false, message: '' }; }
   if (!result.ok) {
     await failPayment(doc._id, [result.message, result.detail].filter(Boolean).join(' | ') || 'Could not start the payment');
@@ -241,14 +279,14 @@ async function handleCallback(body, marz) {
 
 // What a student may see of a payment.
 function publicPayment(p) {
-  return { id: String(p._id), status: p.status, planName: p.planName, amount: p.amount, phone: p.phone, createdAt: p.createdAt, accessUntil: p.grantedUntil || null, message: p.failureReason || '' };
+  return { id: String(p._id), status: p.status, planName: p.planName, classLevel: p.classLevel || null, amount: p.amount, phone: p.phone, createdAt: p.createdAt, accessUntil: p.grantedUntil || null, message: p.failureReason || '' };
 }
 
 // A student's own history: what they paid, when, and what it gave them. Free passes from the owner are shown as gifts.
 async function studentHistory(userId) {
   const rows = await getDb().collection('payments').find({ userId: String(userId) }).sort({ createdAt: -1 }).limit(50).toArray();
   return rows.map((p) => ({
-    id: String(p._id), planName: p.planName || 'Pass', amount: p.manual ? 0 : (p.amount || 0), gift: !!p.manual,
+    id: String(p._id), planName: p.planName || 'Pass', classLevel: p.classLevel || null, amount: p.manual ? 0 : (p.amount || 0), gift: !!p.manual,
     status: p.status === 'paid' ? 'paid' : p.status === 'failed' ? 'failed' : p.status === 'expired' ? 'expired' : 'pending',
     createdAt: p.createdAt, accessUntil: p.grantedUntil || null, phone: p.phone || '',
   }));
@@ -281,7 +319,7 @@ async function listPayments({ status, q, page, pageSize } = {}) {
     total, page: current, pageSize: size,
     payments: rows.map((r) => ({
       id: String(r._id), userId: r.userId, student: (byId[r.userId] && byId[r.userId].name) || 'Deleted student',
-      planName: r.planName, amount: r.amount, phone: r.phone, status: r.status, manual: !!r.manual,
+      planName: r.planName, classLevel: r.classLevel || null, amount: r.amount, phone: r.phone, status: r.status, manual: !!r.manual,
       createdAt: r.createdAt, paidAt: r.paidAt || null, accessUntil: r.grantedUntil || null, needsAttention: r.status === 'paid' && r.granted === false,
       failureReason: r.failureReason || '', reference: r.reference || '',
     })),
@@ -293,7 +331,7 @@ async function exportPayments() {
   const ids = [...new Set(rows.map((r) => r.userId))].filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
   const people = ids.length ? await getDb().collection('users').find({ _id: { $in: ids } }).toArray() : [];
   const byId = Object.fromEntries(people.map((u) => [String(u._id), u]));
-  return rows.map((r) => ({ student: (byId[r.userId] && byId[r.userId].name) || 'Deleted student', phone: r.phone || '', pass: r.planName || '', amount: r.manual ? 0 : r.amount || 0, status: r.manual ? 'given by admin' : r.status, date: r.createdAt || '', accessUntil: r.grantedUntil || '' }));
+  return rows.map((r) => ({ student: (byId[r.userId] && byId[r.userId].name) || 'Deleted student', phone: r.phone || '', pass: r.planName || '', class: r.classLevel || 'All classes', amount: r.manual ? 0 : r.amount || 0, status: r.manual ? 'given by admin' : r.status, date: r.createdAt || '', accessUntil: r.grantedUntil || '' }));
 }
 
 async function paymentSummary(now = new Date()) {
@@ -303,11 +341,12 @@ async function paymentSummary(now = new Date()) {
   const ago = (days) => new Date(now.getTime() - days * 86400000);
   const pending = await getDb().collection('payments').countDocuments({ status: 'pending' });
   const attention = rows.filter((r) => r.granted === false).length;
-  const withAccess = await getDb().collection('users').countDocuments({ accessUntil: { $gt: now } });
+  const holders = await getDb().collection('users').find({ $or: [{ accessUntil: { $gt: now } }, { classAccess: { $exists: true } }] }).toArray();
+  const withAccess = holders.filter((u) => hasAccess(u, now)).length;
   return { today: sum(startOfDay), week: sum(ago(7)), month: sum(ago(30)), all: sum(null), paidCount: rows.length, pending, attention, withAccess };
 }
 
-async function adminGrant(userId, { minutes, planId }, settings) {
+async function adminGrant(userId, { minutes, planId, classLevel }, settings) {
   const id = ObjectId.isValid(String(userId)) ? new ObjectId(String(userId)) : null;
   const user = id ? await getDb().collection('users').findOne({ _id: id }) : null;
   if (!user) return { ok: false, status: 404, message: 'Student not found' };
@@ -319,9 +358,12 @@ async function adminGrant(userId, { minutes, planId }, settings) {
     mins = plan.minutes; label = plan.name;
   }
   if (!Number.isInteger(mins) || mins < 30 || mins > 525600) return { ok: false, status: 400, message: 'Choose how long the access lasts' };
-  const until = await grantAccess(user._id, mins);
-  await getDb().collection('payments').insertOne({ userId: String(user._id), planId: planId || 'manual', planName: label, amount: 0, minutes: mins, phone: user.phone || '', reference: crypto.randomUUID(), status: 'paid', manual: true, granted: true, grantedUntil: until, createdAt: new Date(), paidAt: new Date() });
-  return { ok: true, accessUntil: until };
+  // Which class it opens: the one chosen, '*' for every class, or (nothing chosen) the student's own class.
+  const level = classLevel === '*' ? '*' : (classLevel ? String(classLevel) : user.classLevel);
+  if (level !== '*' && !isValidLevel(level)) return { ok: false, status: 400, message: 'This student has no class yet: choose one, or All classes' };
+  const g = await grantAccess(user._id, mins, level);
+  await getDb().collection('payments').insertOne({ userId: String(user._id), classLevel: g.classLevel, planId: planId || 'manual', planName: label, amount: 0, minutes: mins, phone: user.phone || '', reference: crypto.randomUUID(), status: 'paid', manual: true, granted: true, grantedUntil: g.until, createdAt: new Date(), paidAt: new Date() });
+  return { ok: true, accessUntil: g.until, classLevel: g.classLevel };
 }
 
 // Give the same time to many students at once (a whole class, or everyone): a prize, an exam-week gift, an apology.
@@ -335,7 +377,9 @@ async function adminGrantMany({ scope, classLevel, minutes }) {
   } else if (scope !== 'all') return { ok: false, status: 400, message: 'Choose who receives it' };
   const users = await getDb().collection('users').find(filter).limit(20000).toArray();
   let done = 0;
-  for (const u of users) { try { await grantAccess(u._id, mins); done += 1; } catch (_) { /* skip one that vanished */ } }
+  // A whole class gets that class; "everyone" gets every class.
+  const level = scope === 'class' ? String(classLevel) : '*';
+  for (const u of users) { try { await grantAccess(u._id, mins, level); done += 1; } catch (_) { /* skip one that vanished */ } }
   return { ok: true, count: done };
 }
 
@@ -349,8 +393,8 @@ async function adminStudentDetail(userId) {
   const paid = pays.filter((p) => p.status === 'paid' && !p.manual).reduce((a, p) => a + (p.amount || 0), 0);
   return {
     ok: true,
-    student: { id: String(user._id), name: user.name || '', phone: user.phone || '', classLevel: user.classLevel || null, status: user.status === 'banned' ? 'banned' : 'active', createdAt: user.createdAt || null, lastLoginAt: user.lastLoginAt || null, accessUntil: user.accessUntil || null, aiTotal: usage.reduce((a, u) => a + (u.count || 0), 0), totalPaid: paid },
-    payments: pays.map((p) => ({ id: String(p._id), planName: p.planName, amount: p.amount, status: p.status, manual: !!p.manual, createdAt: p.createdAt, accessUntil: p.grantedUntil || null })),
+    student: { id: String(user._id), name: user.name || '', phone: user.phone || '', classLevel: user.classLevel || null, status: user.status === 'banned' ? 'banned' : 'active', createdAt: user.createdAt || null, lastLoginAt: user.lastLoginAt || null, accessUntil: untilFor(user, user.classLevel) ? new Date(untilFor(user, user.classLevel)) : null, passes: livePasses(user), aiTotal: usage.reduce((a, u) => a + (u.count || 0), 0), totalPaid: paid },
+    payments: pays.map((p) => ({ id: String(p._id), planName: p.planName, classLevel: p.classLevel || null, amount: p.amount, status: p.status, manual: !!p.manual, createdAt: p.createdAt, accessUntil: p.grantedUntil || null })),
   };
 }
 
@@ -358,7 +402,7 @@ async function adminRevoke(userId) {
   const id = ObjectId.isValid(String(userId)) ? new ObjectId(String(userId)) : null;
   const user = id ? await getDb().collection('users').findOne({ _id: id }) : null;
   if (!user) return { ok: false, status: 404, message: 'Student not found' };
-  await getDb().collection('users').updateOne({ _id: id }, { $set: { accessUntil: null } });
+  await getDb().collection('users').updateOne({ _id: id }, { $set: { accessUntil: null, classAccess: {} } });
   return { ok: true };
 }
 
@@ -373,7 +417,7 @@ async function adminRecheck(paymentId, marz) {
 
 module.exports = {
   studentHistory,
-  DEFAULT_PLANS, planList, activePlans, cleanPlans, hasAccess, canRead, PAYMENT_REQUIRED,
+  DEFAULT_PLANS, planList, activePlans, cleanPlans, hasAccess, canRead, untilFor, livePasses, PAYMENT_REQUIRED,
   makeMarz, normalizeStatus, credentialsFor, mobileMoneyPhone,
   grantAccess, startPayment, refreshPayment, handleCallback, completePayment, publicPayment,
   listPayments, exportPayments, paymentSummary, adminGrant, adminGrantMany, adminStudentDetail, adminRevoke, adminRecheck,

@@ -1,4 +1,5 @@
-export interface User { id: string; name: string; phone: string | null; classLevel: string | null; avatarVersion: number; accessUntil?: string | null }
+export interface Pass { classLevel: string | null; until: string }
+export interface User { id: string; name: string; phone: string | null; classLevel: string | null; avatarVersion: number; accessUntil?: string | null; passes?: Pass[] }
 export interface Level { id: string; name: string; short: string }
 export interface LevelGroup { id: string; name: string; levels: Level[] }
 export interface Subject { id: string; name: string }

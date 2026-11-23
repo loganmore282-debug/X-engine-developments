@@ -86,7 +86,13 @@ function todayKey() {
 }
 
 function publicUser(u) {
-  return { id: String(u._id), name: u.name || '', phone: u.phone || null, classLevel: u.classLevel || null, avatarVersion: u.avatarVersion || 0, accessUntil: u.accessUntil ? new Date(u.accessUntil).toISOString() : null };
+  // accessUntil: the pass for the student's OWN class (older apps read only this); passes: every live pass with its class.
+  const until = payments.untilFor(u, u.classLevel);
+  return {
+    id: String(u._id), name: u.name || '', phone: u.phone || null, classLevel: u.classLevel || null, avatarVersion: u.avatarVersion || 0,
+    accessUntil: until ? new Date(until).toISOString() : null,
+    passes: payments.livePasses(u).map((p) => ({ classLevel: p.classLevel, until: p.until.toISOString() })),
+  };
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────
@@ -119,7 +125,8 @@ app.post('/auth/register', authLimiter, async (req, res) => {
     }
     // A welcome pass, if the owner set one in Settings.
     let accessUntil = null;
-    if (settingsNow.trialMinutes > 0) { try { accessUntil = await payments.grantAccess(result.insertedId, settingsNow.trialMinutes); } catch (_) { /* the account is still made */ } }
+    // A new student has no class yet, so the welcome pass opens every class.
+    if (settingsNow.trialMinutes > 0) { try { accessUntil = (await payments.grantAccess(result.insertedId, settingsNow.trialMinutes, '*')).until; } catch (_) { /* the account is still made */ } }
     const { token } = await createSession(String(result.insertedId), { single: settingsNow.singleDevice !== false, device: req.headers['user-agent'] });
     await db.collection('users').updateOne({ _id: result.insertedId }, { $set: { lastDevice: securityNotices.describeDevice(req.headers['user-agent']) } });
     res.json({ status: 'success', token, user: publicUser({ _id: result.insertedId, name, phone, accessUntil }) });
@@ -493,11 +500,16 @@ const payLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 12, standardHeader
 app.get('/payments/plans', requireAuth, ah(async (req, res) => {
   const settings = await getSettings();
   const user = await getDb().collection('users').findOne({ _id: new ObjectId(req.userId) });
+  // ?classLevel= the class on screen; without it, the student's own class.
+  const asked = isValidLevel(req.query.classLevel) ? String(req.query.classLevel) : (user && isValidLevel(user.classLevel) ? user.classLevel : null);
+  const until = payments.untilFor(user, asked);
   res.json({
     status: 'success', enabled: settings.paymentsEnabled === true && (await marz.configured()),
     plans: payments.activePlans(settings).map((p) => ({ id: p.id, name: p.name, price: p.price, minutes: p.minutes })),
-    accessUntil: user && user.accessUntil ? new Date(user.accessUntil).toISOString() : null,
-    hasAccess: payments.hasAccess(user), serverTime: new Date().toISOString(), phone: user ? user.phone || '' : '',
+    classLevel: asked,
+    accessUntil: until ? new Date(until).toISOString() : null,
+    passes: payments.livePasses(user).map((p) => ({ classLevel: p.classLevel, until: p.until.toISOString() })),
+    hasAccess: until > Date.now(), serverTime: new Date().toISOString(), phone: user ? user.phone || '' : '',
   });
 }));
 
@@ -506,7 +518,7 @@ app.post('/payments/start', requireAuth, payLimiter, ah(async (req, res) => {
   const user = await getDb().collection('users').findOne({ _id: new ObjectId(req.userId) });
   if (!user) return res.status(404).json({ status: 'error', message: 'Account not found' });
   const callbackUrl = knownOrigin ? `${knownOrigin}/payments/callback` : undefined;
-  const result = await payments.startPayment({ settings, user, planId: req.body.planId, phone: req.body.phone, marz, callbackUrl });
+  const result = await payments.startPayment({ settings, user, planId: req.body.planId, phone: req.body.phone, marz, callbackUrl, classLevel: req.body.classLevel });
   if (!result.ok) return res.status(result.status || 400).json({ status: 'error', message: result.message });
   res.json({ status: 'success', payment: payments.publicPayment(result.payment) });
 }));
@@ -759,7 +771,7 @@ app.post('/admin/users/reset-password', guard(async (req, res) => sendResult(res
 app.post('/admin/users/delete', guard(async (req, res) => sendResult(res, await adminData.adminDeleteUser(req.body.id))));
 app.post('/admin/payments/list', guard(async (req, res) => res.json({ status: 'success', ...(await payments.listPayments(req.body)), summary: await payments.paymentSummary() })));
 app.post('/admin/payments/recheck', guard(async (req, res) => sendResult(res, await payments.adminRecheck(req.body.id, marz))));
-app.post('/admin/users/grant', guard(async (req, res) => sendResult(res, await payments.adminGrant(req.body.id, { minutes: req.body.minutes, planId: req.body.planId }, await getSettings()), {})));
+app.post('/admin/users/grant', guard(async (req, res) => sendResult(res, await payments.adminGrant(req.body.id, { minutes: req.body.minutes, planId: req.body.planId, classLevel: req.body.classLevel }, await getSettings()), {})));
 app.post('/admin/users/grant-bulk', guard(async (req, res) => { const r = await payments.adminGrantMany({ scope: req.body.scope, classLevel: req.body.classLevel, minutes: req.body.minutes }); sendResult(res, r, r.ok ? { count: r.count } : {}); }));
 app.post('/admin/users/detail', guard(async (req, res) => { const r = await payments.adminStudentDetail(req.body.id); sendResult(res, r, r.ok ? { student: r.student, payments: r.payments } : {}); }));
 app.post('/admin/users/update', guard(async (req, res) => sendResult(res, await adminData.updateStudent(req.body.id, { name: req.body.name, classLevel: req.body.classLevel }))));

@@ -245,6 +245,14 @@ app's "Forgot password?" just shows the support contacts from Settings (`GET /co
 Students buy a TIME PASS with MTN/Airtel mobile money through MarzPay (`backend/payments.js`; routes `/payments/plans`, `/payments/start`,
 `/payments/:id/status`, webhook `POST /payments/callback`). Prices (owner's decision): 3 hours 1,000; 1 day 1,500; 1 week 5,000; 1 month 12,500;
 3 months 30,000 -- stored in settings (`plans`), edited in admin > Settings > Payments (price + hours + on/off), never trusted from the app.
+- **A pass opens ONE class** (owner's rule, "an S.4 pass is for S.4"): `users.classAccess = { "Senior 4": until, ... }`, stacked per class
+  (`grantAccess(userId, minutes, classLevel)`; `'*'` = every class). A payment stores its `classLevel` (the class asked for in `/payments/start`, else
+  the student's own; a student with no class is refused). `canRead`: a note of class X needs a pass for X; a note with no class (or a class not in
+  levels.js) opens with ANY live pass. `users.accessUntil` is the OLD all-classes pass, still honoured until it ends; the admin can still give one
+  ("All classes" in the Give access dialog, and "Every active student" bulk). The welcome pass (`trialMinutes`) is all classes (no class chosen yet).
+  `publicUser.accessUntil` = the pass for the student's own class (old apps read only this) + `passes` [{classLevel|null, until}];
+  `/payments/plans?classLevel=` answers for the class on screen. Android `AccessHolder` (passes map, `homeClass` = class on Home, `locked(free, noteClass)`),
+  web `useAccess().locked(free, noteClass)`; the pay sheet says "For Senior 4" and buys for a locked note's class.
 - **Off by default** (`paymentsEnabled`): nothing is locked until the owner ticks it and pastes the MarzPay key (admin Settings; stored in the
   settings document, never shown again, like the Firebase/Claude keys; `user:key` or the base64 credentials string).
 - **The server decides.** `mayRead()` in server.js answers **402 `payment_required`** on `/notes/:id/file`, `/notes/:id/pages` and `/ai/ask`

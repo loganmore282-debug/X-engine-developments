@@ -84,7 +84,7 @@ interface ApiService {
     suspend fun noteFile(@Path("id") id: String): ResponseBody
 
     @GET("payments/plans")
-    suspend fun plans(): PlansResponse
+    suspend fun plans(@Query("classLevel") classLevel: String? = null): PlansResponse
 
     @POST("payments/start")
     suspend fun startPayment(@Body body: Map<String, String>): PaymentResponse

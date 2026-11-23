@@ -25,7 +25,7 @@ const MIN = 60000;
   const mk = async (name, phone, classLevel, status) => String((await db.collection('users').insertOne({ name, phone, classLevel, status: status || 'active', passwordHash: await hashPassword('password1'), createdAt: new Date() })).insertedId);
   const s2a = await mk('Amina Nakato', '0772000001', 'Senior 2'); const s2b = await mk('Brian Okello', '0772000002', 'Senior 2');
   const s4 = await mk('Cissy Namuli', '0772000003', 'Senior 4'); const banned = await mk('Dan Banned', '0772000004', 'Senior 2', 'banned');
-  const until = async (id) => { const u = await db.collection('users').findOne({ _id: new (require('mongodb').ObjectId)(id) }); return u.accessUntil ? new Date(u.accessUntil).getTime() - Date.now() : 0; };
+  const until = async (id) => { const u = await db.collection('users').findOne({ _id: new (require('mongodb').ObjectId)(id) }); const t = require('./payments').untilFor(u, u.classLevel); return t ? t - Date.now() : 0; };
 
   console.log('— custom hours —');
   const g = await A('/admin/users/grant', { id: s2a, minutes: 90 });

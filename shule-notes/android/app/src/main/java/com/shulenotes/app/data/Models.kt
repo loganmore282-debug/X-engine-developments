@@ -162,6 +162,7 @@ data class NoticesResponse(
 data class PaymentRecord(
     val id: String,
     val planName: String?,
+    val classLevel: String? = null,
     val amount: Long = 0,
     val gift: Boolean = false,
     val status: String?,
@@ -206,10 +207,16 @@ data class PagesResponse(
 // ── Passes and payments (MarzPay mobile money) ──
 data class Plan(val id: String, val name: String, val price: Int, val minutes: Int)
 
+// One live pass: the class it opens (null = every class) and when it ends.
+data class PassInfo(val classLevel: String?, val until: String?)
+
 data class PlansResponse(
     val status: String,
     val enabled: Boolean = false,
     val plans: List<Plan>? = null,
+    // The class the answer is about (the one asked for, or the student's own).
+    val classLevel: String? = null,
+    val passes: List<PassInfo>? = null,
     val accessUntil: String? = null,
     val hasAccess: Boolean = false,
     val serverTime: String? = null,
@@ -218,6 +225,7 @@ data class PlansResponse(
 )
 
 data class PaymentInfo(
+    val classLevel: String? = null,
     val id: String,
     val status: String,
     val planName: String? = null,

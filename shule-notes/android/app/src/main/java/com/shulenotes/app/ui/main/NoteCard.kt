@@ -117,7 +117,7 @@ fun NoteCard(
         Row(modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp)) {
             Box {
                 NoteCover(subjectName, tint)
-                if (AccessHolder.locked(note.free)) {
+                if (AccessHolder.locked(note.free, note.classLevel)) {
                     Surface(
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.secondaryContainer,
