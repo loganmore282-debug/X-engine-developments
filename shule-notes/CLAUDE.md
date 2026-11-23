@@ -213,6 +213,12 @@ app's "Forgot password?" just shows the support contacts from Settings (`GET /co
 - **Update prompt:** `app-version.js` reads the newest APK version published by the download page; the app shows a
   banner, or a blocking screen if the owner sets "oldest version allowed" in admin Settings (`UpdateScreens.kt`).
   `versionCode` = the CI run number.
+- **In-app updates** (`data/AppUpdater.kt`, `ui/components/UpdateScreens.kt`): when `/config` says a newer `latestVersion` exists (or the owner set an oldest allowed
+  version), "Update" downloads `API/download/shule-notes.apk` inside the app (progress bar on the Home banner / the blocking screen), checks with
+  `getPackageArchiveInfo` that it is THIS package with a HIGHER versionCode, and opens Android's installer through a `FileProvider` (`res/xml/update_paths.xml`,
+  cache `updates/` only). The student still taps Install, allows "install unknown apps" for Shule Notes once (`REQUEST_INSTALL_PACKAGES`), and Android only accepts
+  an APK signed with the same key. An admin "Update link" that is not an `.apk` (the Google Play page) opens in the browser instead. The very first install of a
+  version that has this still has to be done by hand. Once on Google Play, Play updates the app itself.
 - **Push notifications (FCM):** the backend sends with FCM HTTP v1 (`backend/push.js`: service-account JWT ->
   access token -> `messages:send`, no SDK). The owner pastes the service-account JSON ONLY into admin Settings >
   Push notifications (stored in the settings document, never sent to the app or shown again; only

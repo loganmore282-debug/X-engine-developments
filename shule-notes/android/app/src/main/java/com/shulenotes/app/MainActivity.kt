@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
                     } else if (mustUpdate) {
                         UpdateRequiredScreen(
                             note = appConfig.updateNote,
-                            onUpdate = { runCatching { uriHandler.openUri(appConfig.updateUrl.ifBlank { DOWNLOAD_URL }) } },
+                            onUpdate = { com.shulenotes.app.ui.components.startUpdate(applicationContext, uriHandler, appConfig.updateUrl) },
                         )
                     } else {
                         startDestination?.let { ShuleNavGraph(startDestination = it) }

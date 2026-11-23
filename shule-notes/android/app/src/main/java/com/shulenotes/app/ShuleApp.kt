@@ -13,6 +13,7 @@ class ShuleApp : Application(), ImageLoaderFactory {
         session = SessionStore(this)
         appContext = applicationContext
         Downloads.init(this)
+        com.shulenotes.app.data.AppUpdater.cleanup(this)
         com.shulenotes.app.push.Push.createChannel(this)
     }
 

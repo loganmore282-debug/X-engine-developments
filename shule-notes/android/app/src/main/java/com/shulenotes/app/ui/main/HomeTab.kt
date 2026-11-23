@@ -215,7 +215,7 @@ fun HomeTab(
                 item(key = "update") {
                     UpdateCard(
                         note = appConfig.updateNote,
-                        onUpdate = { runCatching { uriHandler.openUri(appConfig.updateUrl.ifBlank { DOWNLOAD_URL }) } },
+                        onUpdate = { com.shulenotes.app.ui.components.startUpdate(ShuleApp.appContext, uriHandler, appConfig.updateUrl) },
                         onDismiss = { scopeForUpdate.launch { ShuleApp.session.dismissUpdate(appConfig.latestVersion) } },
                         modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp),
                     )
@@ -580,13 +580,25 @@ private fun UpdateCard(note: String, onUpdate: () -> Unit, onDismiss: () -> Unit
         ) {
             Icon(Icons.Outlined.SystemUpdate, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(12.dp))
+            val state = com.shulenotes.app.data.AppUpdater.state
             Column(modifier = Modifier.weight(1f)) {
                 Text("A new version is ready", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
-                if (note.isNotBlank()) {
-                    Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                val status = com.shulenotes.app.ui.components.updateStatusText(state)
+                val line = status ?: note
+                if (line.isNotBlank()) {
+                    Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                }
+                if (state is com.shulenotes.app.data.UpdateState.Downloading) {
+                    androidx.compose.material3.LinearProgressIndicator(
+                        progress = state.percent / 100f,
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp, end = 8.dp),
+                    )
                 }
             }
-            TextButton(onClick = onUpdate) { Text("Update") }
+            TextButton(
+                onClick = onUpdate,
+                enabled = state !is com.shulenotes.app.data.UpdateState.Downloading,
+            ) { Text(if (state is com.shulenotes.app.data.UpdateState.Downloading) "${state.percent}%" else com.shulenotes.app.ui.components.updateButtonLabel(state)) }
             IconButton(onClick = onDismiss) {
                 Icon(Icons.Filled.Close, contentDescription = "Dismiss update", tint = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.size(20.dp))
             }
