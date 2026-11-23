@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchBytes, getToken } from './api';
 import { useAuth, useLibrary } from './store';
@@ -10,11 +10,27 @@ import { prefetchNote, preloadReader } from './prefetch';
 
 // A modal sheet that slides up (centred on a big screen). Closes on Escape or a tap outside.
 export function Sheet({ title, onClose, children }: { title?: string; onClose: () => void; children: ReactNode }) {
+  const closeRef = useRef(onClose); closeRef.current = onClose;
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && closeRef.current();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, []);
+  // The phone's Back button closes the sheet (like an app) instead of leaving the page: opening adds one history step,
+  // Back removes it. When the sheet is closed some other way, that step is taken back out, unless the sheet sent the
+  // student somewhere else (then the step simply stays behind the new page).
+  useEffect(() => {
+    const id = Math.random().toString(36).slice(2);
+    const path = window.location.pathname;
+    window.history.pushState({ ...(window.history.state || {}), sheet: id }, '');
+    let closedByBack = false;
+    const onPop = () => { closedByBack = true; closeRef.current(); };
+    window.addEventListener('popstate', onPop);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      if (!closedByBack && window.location.pathname === path && window.history.state && window.history.state.sheet === id) window.history.back();
+    };
+  }, []);
   // Drawn on the page itself (not inside the screen that opened it), so it always sits above the bottom bar.
   return createPortal(
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

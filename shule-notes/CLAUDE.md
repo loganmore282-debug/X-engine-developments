@@ -305,6 +305,10 @@ Android reads the reason in `ApiClient` (`SessionHolder.expiredMessage`); the we
   `retry: 2000`; SIGTERM closes every stream (`live.closeAll`) so restarts are not held up. Clients reconnect 1 s, doubling to 15 s.
 - Website: `store.tsx` (fetch stream with the bearer header; the /sync poll is now a 60 s safety net). Android: `data/LiveEvents.kt`
   (OkHttp, read timeout 90 s) run from MainScreen while STARTED; `/sync` check every 60 s as a safety net. Tests: `test-live.js`.
+- Phone-browser robustness (owner reported "the navigation bar hides"): no zoom (viewport maximum-scale=1, user-scalable=no; a zoomed page pushed the
+  fixed bar off screen), the bar steps aside while typing (`body.typing`, the keyboard covers it anyway) and returns when the keyboard closes, the
+  phone's Back button closes an open Sheet instead of leaving the page (`Sheet` pushes one history step), and the pay sheet keeps the mobile money
+  number WITH the Pay button in its pinned footer (it used to be covered).
 - Website on phones has NO top bar (owner: "like an app", like the competitor): Home starts with our logo + wordmark top left and the bell top right (`.m-top`, `useUnread` in `src/unread.ts`), above the green hero,
   the inbox has a Back button; desktop keeps the top bar with nav links.
 

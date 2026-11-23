@@ -373,7 +373,7 @@ button.glass:hover { background: rgba(255, 255, 255, 0.2); transform: translateY
 .lock-page p { max-width: 360px; margin: 0 auto 18px; }
 
 /* the Pay button stays in view while the list of passes scrolls */
-.sticky-pay { position: sticky; bottom: calc(-22px - env(safe-area-inset-bottom)); margin: 16px -22px calc(-22px - env(safe-area-inset-bottom)); padding: 12px 22px calc(14px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, transparent, var(--surface) 14px); }
+.sticky-pay { position: sticky; bottom: calc(-22px - env(safe-area-inset-bottom)); margin: 16px -22px calc(-22px - env(safe-area-inset-bottom)); padding: 14px 22px calc(14px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -10px 24px -18px rgba(0, 0, 0, 0.35); }
 .plan { padding: 12px 14px; }
 
 /* ---- the AI helper while it works ---- */
@@ -481,3 +481,8 @@ button.glass:hover { background: rgba(255, 255, 255, 0.2); transform: translateY
   .main { padding-top: env(safe-area-inset-top); }
   .hero { margin-top: 12px; }
 }
+
+/* While typing on a phone the keyboard is up: the bottom bar steps aside, and returns when the keyboard closes. */
+@media (max-width: 760px) { body.typing .bottom-nav { display: none; } }
+/* The bar always stays pinned to the bottom of the screen: its own layer, never moved by page animations. */
+.bottom-nav { transform: translateZ(0); -webkit-transform: translateZ(0); }

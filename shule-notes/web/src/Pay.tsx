@@ -127,9 +127,9 @@ export function PaySheet({ onClose, onPaid, reason, classLevel }: { onClose: () 
             <span className="grow"><b className="poppins">{p.name}</b><small>{lengthLabel(p.minutes)}</small></span>
             <b className="plan-price poppins">{ugx(p.price)}</b>
           </button>))}</div>}
-        {plans && <label className="field" style={{ marginTop: 16 }}><span>MTN or Airtel mobile money number</span>
-          <input className="input" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0772 123 456" /></label>}
         <div className="sticky-pay">
+          {plans && <label className="field" style={{ margin: '0 0 12px' }}><span>MTN or Airtel mobile money number</span>
+            <input className="input" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0772 123 456" /></label>}
           <button className="btn wide" disabled={busy || !plan || !enabled} onClick={pay}>{busy ? 'Starting…' : plan ? `Pay ${ugx(plan.price)}` : 'Pay'}</button>
           <p className="muted center" style={{ fontSize: 12.5, margin: '10px 0 0' }}>You will get a prompt on this number to approve with your PIN. Paying again adds time on top of what you have left.</p>
         </div>

@@ -53,6 +53,15 @@ function Shell() {
   const { announcements } = useLibrary();
   const location = useLocation();
   const unread = useUnread();
+  // Typing on a phone: the keyboard covers the bottom bar anyway, so it steps aside and comes back cleanly when the
+  // keyboard closes (some phone browsers otherwise leave it floating mid-screen or hidden after the keyboard goes).
+  useEffect(() => {
+    const isField = (el: EventTarget | null) => el instanceof HTMLElement && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit'].includes((el as HTMLInputElement).type)));
+    const onIn = (e: FocusEvent) => { if (isField(e.target)) document.body.classList.add('typing'); };
+    const onOut = () => window.setTimeout(() => { if (!isField(document.activeElement)) document.body.classList.remove('typing'); }, 120);
+    document.addEventListener('focusin', onIn); document.addEventListener('focusout', onOut);
+    return () => { document.removeEventListener('focusin', onIn); document.removeEventListener('focusout', onOut); document.body.classList.remove('typing'); };
+  }, []);
   // Moving between Home, Saved and Profile: the new page fades in and starts at the top (Home restores its own place).
   useEffect(() => { if (location.pathname !== '/') window.scrollTo(0, 0); }, [location.pathname]);
   return (
