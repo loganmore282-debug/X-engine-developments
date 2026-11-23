@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, fetchBytes } from '../api';
+import { API, api, fetchBytes } from '../api';
 import { useAuth, useLibrary, useToast, remember, save } from '../store';
 import { Avatar, NoteCard, Sheet } from '../components';
-import { Bell, Camera, Chat, Chevron, Edit, Logout, Palette, Spark, Trash, User as UserIcon } from '../icons';
+import { Android, Bell, Camera, Chat, Chevron, Description, Edit, Insights, Logout, Palette, PrivacyTip, Share, Spark, Trash, User as UserIcon } from '../icons';
 import type { User } from '../types';
 import { PaySheet, untilLabel, useAccess } from '../Pay';
 
@@ -71,6 +71,13 @@ export function ProfilePage() {
     if (!r.ok) throw new Error(data.message || 'Could not save your photo');
     setUser(data.user as User);
   }
+  async function shareApp() {
+    const data = { title: 'Shule Notes', text: 'Notes and past papers for every class, with an AI helper.', url: window.location.origin };
+    try {
+      if (navigator.share) await navigator.share(data);
+      else { await navigator.clipboard.writeText(data.url); toast('Link copied. Send it to a friend.'); }
+    } catch { /* the student closed the share sheet */ }
+  }
   if (!user) return null;
   return (
     <div className="profile-layout">
@@ -87,6 +94,7 @@ export function ProfilePage() {
       <div className="card settings">
         {access.enabled && <button onClick={() => setPaySheet(true)}><Spark /><span className="grow">My pass</span><span className="muted">{access.active ? `Until ${untilLabel(access.until!)}` : 'Get a pass'}</span><Chevron width={18} /></button>}
         <button onClick={() => nav('/')}><UserIcon /><span className="grow">My class</span><span className="muted">{cls || 'Not chosen'}</span><Chevron width={18} /></button>
+        <button onClick={() => nav('/progress')}><Insights /><span className="grow">My progress</span><Chevron width={18} /></button>
         <button onClick={() => setSheet('theme')}><Palette /><span className="grow">Appearance</span><span className="muted">{theme === 'system' ? 'System default' : theme === 'light' ? 'Light' : 'Dark'}</span><Chevron width={18} /></button>
         <button onClick={() => nav('/inbox')}><Bell /><span className="grow">Notifications</span><Chevron width={18} /></button>
       </div>
@@ -94,6 +102,10 @@ export function ProfilePage() {
       <div className="card settings">
         <button onClick={() => setSheet('help')}><Chat /><span className="grow">Help and support</span><Chevron width={18} /></button>
         <button onClick={() => { setErr(''); setMessage(''); setSheet('feedback'); }}><Edit /><span className="grow">Send feedback</span><Chevron width={18} /></button>
+        <button onClick={shareApp}><Share /><span className="grow">Share Shule Notes</span><Chevron width={18} /></button>
+        <a className="row-link" href={`${API}/terms`} target="_blank" rel="noopener noreferrer"><Description /><span className="grow">Terms of use</span><Chevron width={18} /></a>
+        <a className="row-link" href={`${API}/privacy`} target="_blank" rel="noopener noreferrer"><PrivacyTip /><span className="grow">Privacy policy</span><Chevron width={18} /></a>
+        <a className="row-link" href={`${API}/download/`} target="_blank" rel="noopener noreferrer"><Android /><span className="grow">Get the Android app</span><Chevron width={18} /></a>
       </div>
       <button className="btn danger-outline wide" style={{ marginTop: 28 }} onClick={() => setSheet('logout')}><Logout width={20} height={20} /> Log out</button>
       <div className="center"><button className="link-row" style={{ background: 'none', border: 0, color: 'var(--muted)', marginTop: 10 }} onClick={() => { setPassword(''); setErr(''); setSheet('delete'); }}>Delete account</button></div>

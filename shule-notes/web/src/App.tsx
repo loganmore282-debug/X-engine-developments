@@ -6,7 +6,8 @@ import { ChooseClass, Intro, SignIn, SignUp } from './pages/Auth';
 import { HomePage } from './pages/Home';
 import { InboxPage, ProfilePage, SavedPage, applyTheme } from './pages/Other';
 const ReaderPage = lazy(() => import('./pages/Reader').then((m) => ({ default: m.ReaderPage })));
-import { Bell, Bookmark, Home as HomeIcon, User as UserIcon } from './icons';
+import { Bell, Bookmark, BookmarkFilled, Close, Campaign, Home as HomeIcon, HomeFilled, User as UserIcon, UserFilled } from './icons';
+import { ProgressPage } from './pages/Progress';
 import { API } from './api';
 
 function Splash() {
@@ -18,10 +19,50 @@ function ReaderLoading() {
   return <div className="reader"><div className="reader-top"><div className="shimmer" style={{ width: 160, height: 18, borderRadius: 8, margin: '14px 12px' }} /></div><div className="pages"><div className="pages-in"><div className="sheet-page" style={{ width: 'min(860px, 92vw)', aspectRatio: '0.707' }}><div className="shimmer" /></div></div></div></div>;
 }
 
+// Has the owner posted something the student has not opened in the bell yet?
+const SEEN_KEY = 'shule_inbox_seen';
+function useUnread() {
+  const { announcements } = useLibrary();
+  const location = useLocation();
+  const [seen, setSeen] = useState(() => Number(localStorage.getItem(SEEN_KEY) || 0));
+  // Opening the notifications page marks everything as read.
+  useEffect(() => { if (location.pathname === '/inbox') { const now = Date.now(); localStorage.setItem(SEEN_KEY, String(now)); setSeen(now); } }, [location.pathname]);
+  return announcements.some((a) => new Date(a.createdAt).getTime() > seen);
+}
+
+// A new message from the owner slides in from the top for a few seconds (like a phone notification), then it waits in the bell.
+// It is never placed inside the page itself.
+function AnnouncementToast() {
+  const { announcements } = useLibrary();
+  const nav = useNavigate();
+  const [shown, setShown] = useState<string | null>(null);
+  const latest = announcements[0];
+  useEffect(() => {
+    if (!latest) return;
+    const seen = localStorage.getItem('shule_toasted') || '';
+    if (seen === latest.id) return;
+    localStorage.setItem('shule_toasted', latest.id);
+    setShown(latest.id);
+    const t = window.setTimeout(() => setShown(null), 8000);
+    return () => window.clearTimeout(t);
+  }, [latest?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!latest || shown !== latest.id) return null;
+  return (
+    <div className="ann-toast-wrap">
+      <div className="ann-toast" role="status" onClick={() => { setShown(null); nav('/inbox'); }}>
+        <span className="ann-ico"><Campaign /></span>
+        <span className="grow"><b>{latest.title}</b><small>{latest.message}</small></span>
+        <button className="icon-btn" aria-label="Dismiss" onClick={(e) => { e.stopPropagation(); setShown(null); }}><Close /></button>
+      </div>
+    </div>
+  );
+}
+
 function Shell() {
   const nav = useNavigate();
   const { announcements } = useLibrary();
   const location = useLocation();
+  const unread = useUnread();
   // Moving between Home, Saved and Profile: the new page fades in and starts at the top (Home restores its own place).
   useEffect(() => { if (location.pathname !== '/') window.scrollTo(0, 0); }, [location.pathname]);
   return (
@@ -30,7 +71,7 @@ function Shell() {
         <NavLink to="/" className="brand"><img src="/logo-mark.png" alt="" /><span>Shule<b>Notes</b></span></NavLink>
         <nav className="nav-links"><NavLink to="/" end>Home</NavLink><NavLink to="/saved">Saved</NavLink><NavLink to="/profile">Profile</NavLink></nav>
         <span className="grow" />
-        <button className="icon-btn" aria-label="Notifications" onClick={() => nav('/inbox')} style={{ position: 'relative' }}><Bell />{announcements.length > 0 && <i style={{ position: 'absolute', top: 9, right: 10, width: 9, height: 9, borderRadius: 5, background: '#ffb020' }} />}</button>
+        <button className={`icon-btn bell ${unread ? 'ring' : ''}`} aria-label={unread ? 'Notifications, new message' : 'Notifications'} onClick={() => nav('/inbox')} style={{ position: 'relative' }}><Bell />{unread && <i className="bell-dot" />}</button>
         <button className="icon-btn" aria-label="Your profile" onClick={() => nav('/profile')} style={{ width: 'auto', height: 'auto', padding: 0 }}><Avatar size={38} /></button>
       </div></header>
       <main className="main page-enter" key={location.pathname}><Outlet /></main>
@@ -40,8 +81,11 @@ function Shell() {
         <a href={`${API}/download/`}>Get the Android app</a><Link to="/profile">Help and support</Link><a href={`${API}/privacy`} target="_blank" rel="noreferrer">Privacy</a><a href={`${API}/terms`} target="_blank" rel="noreferrer">Terms</a>
       </div></footer>
       <nav className="bottom-nav">
-        <NavLink to="/" end><HomeIcon />Home</NavLink><NavLink to="/saved"><Bookmark />Saved</NavLink><NavLink to="/profile"><UserIcon />Profile</NavLink>
+        <NavLink to="/" end>{({ isActive }) => <>{isActive ? <HomeFilled /> : <HomeIcon />}Home</>}</NavLink>
+        <NavLink to="/saved">{({ isActive }) => <>{isActive ? <BookmarkFilled /> : <Bookmark />}Saved</>}</NavLink>
+        <NavLink to="/profile">{({ isActive }) => <>{isActive ? <UserFilled /> : <UserIcon />}Profile</>}</NavLink>
       </nav>
+      <AnnouncementToast />
     </div>
   );
 }
@@ -67,6 +111,7 @@ function Gate() {
         <Route path="/saved" element={<SavedPage />} />
         <Route path="/inbox" element={<InboxPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/progress" element={<ProgressPage />} />
       </Route>
       <Route path="/note/:id" element={<Suspense fallback={<ReaderLoading />}><ReaderPage /></Suspense>} />
       <Route path="*" element={<Navigate to="/" replace />} />

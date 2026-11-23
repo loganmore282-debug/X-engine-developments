@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { fetchBytes, getToken } from './api';
 import { useAuth, useLibrary } from './store';
 import type { Note } from './types';
-import { Bookmark } from './icons';
+import { Bookmark, BookmarkFilled } from './icons';
 import { SubjectIcon, subjectVars } from './subjectLook';
 import { LockBadge, useAccess } from './Pay';
 import { prefetchNote, preloadReader } from './prefetch';
@@ -88,7 +88,7 @@ export function NoteCard({ note, onOpen, index = 0, showClass = true }: { note: 
       </div>
       <button className={`icon-btn bookmark ${on ? 'on' : ''} ${pop ? 'pop' : ''}`} aria-label={on ? 'Remove from saved' : 'Save note'}
         onClick={(e) => { e.stopPropagation(); const nowOn = toggleSaved(note.id); if (nowOn) { setPop(true); window.setTimeout(() => setPop(false), 480); } }}>
-        <Bookmark />
+        {on ? <BookmarkFilled /> : <Bookmark />}
       </button>
     </div>
   );

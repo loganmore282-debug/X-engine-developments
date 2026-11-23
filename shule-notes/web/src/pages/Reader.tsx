@@ -5,7 +5,8 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { api, fetchBytes } from '../api';
 import { useLibrary, useToast, remember, save } from '../store';
 import { Cover, readRecent, writeRecent, pagesLabel } from '../components';
-import { Back, Bookmark, Close, Minus, Plus, Search, Send, Spark } from '../icons';
+import { recordPage } from '../study';
+import { Back, Bookmark, BookmarkFilled, Lock, Close, Minus, Plus, Search, Send, Spark } from '../icons';
 import type { ChatTurn, Note } from '../types';
 import { PaySheet } from '../Pay';
 import { takePrefetched } from '../prefetch';
@@ -123,6 +124,8 @@ export function ReaderPage() {
     if (last && last.page > 1) window.setTimeout(() => goTo(last.page, false), 250);
     restored.current = true;
   }, [doc]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A page counts as read once the student rests on it for a moment (feeds "My progress").
+  useEffect(() => { if (doc && page) { const t = window.setTimeout(() => recordPage(id, page, doc.numPages, note?.subjectId || null), 1500); return () => window.clearTimeout(t); } }, [doc, page, id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (doc && page) { const t = window.setTimeout(() => writeRecent({ id, page, pageCount: doc.numPages, at: Date.now() }), 600); return () => window.clearTimeout(t); } }, [doc, page, id]);
 
   const goTo = (p: number, smooth = true) => {
@@ -163,13 +166,13 @@ export function ReaderPage() {
         <span className="reader-meta">{doc ? `Page ${page} of ${total}` : ''}<span className="zoom-label">{Math.round(zoom * 100)}%</span></span>
         <button className="icon-btn" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(0.6, +(z - 0.2).toFixed(2)))}><Minus /></button>
         <button className="icon-btn" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(2.4, +(z + 0.2).toFixed(2)))}><Plus /></button>
-        <button className={`icon-btn bookmark ${marked ? 'on' : ''}`} aria-label={marked ? 'Remove page bookmark' : 'Bookmark this page'} onClick={toggleMark}><Bookmark /></button>
+        <button className={`icon-btn bookmark ${marked ? 'on' : ''}`} aria-label={marked ? 'Remove page bookmark' : 'Bookmark this page'} onClick={toggleMark}>{marked ? <BookmarkFilled /> : <Bookmark />}</button>
         <button className="icon-btn" aria-label="Search in this document" onClick={() => setDrawer(drawer === 'search' ? null : 'search')}><Search /></button>
       </div>
       <div className="progressbar"><i style={{ width: `${total ? (page / total) * 100 : 0}%` }} /></div>
 
       <div className="pages" ref={scroller}>
-        {locked && <div className="empty lock-page"><div className="lock-big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg></div><h3>This document needs a pass</h3><p>Choose a pass to read it, search inside it and ask the AI helper about it.</p><button className="btn" onClick={() => setPaySheet(true)}>Choose a pass</button></div>}
+        {locked && <div className="empty lock-page"><div className="lock-big"><Lock /></div><h3>This document needs a pass</h3><p>Choose a pass to read it, search inside it and ask the AI helper about it.</p><button className="btn" onClick={() => setPaySheet(true)}>Choose a pass</button></div>}
         {!doc && !error && !locked && (
           <div className="pages-in">{[0, 1].map((i) => <div key={i} className="sheet-page" style={{ width, aspectRatio: String(first) }}><div className="shimmer" /></div>)}
             {progress > 0 && <div className="muted" style={{ fontSize: 13 }}>Downloading {Math.round(progress * 100)}%</div>}</div>

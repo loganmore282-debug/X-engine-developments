@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { Sheet } from './components';
+import { Check, Lock } from './icons';
 import { useAuth, useLibrary, useToast } from './store';
 import type { Payment, Plan, User } from './types';
 
@@ -116,7 +117,7 @@ export function PaySheet({ onClose, onPaid, reason }: { onClose: () => void; onP
         <button className="btn outline small" style={{ marginTop: 18 }} onClick={onClose}>Close, I will approve later</button>
       </div>}
       {step === 'done' && <div className="center" style={{ padding: '6px 0' }}>
-        <div className="done-tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5 9-10" /></svg></div>
+        <div className="done-tick"><Check /></div>
         <p style={{ fontSize: 17, margin: '14px 0 4px' }}><b>Payment received</b></p>
         <p className="muted" style={{ margin: 0 }}>{result?.accessUntil ? `Your pass lasts until ${untilLabel(new Date(result.accessUntil))}.` : 'Your pass is active.'}</p>
         <button className="btn wide" style={{ marginTop: 18 }} onClick={onClose}>Start reading</button>
@@ -132,5 +133,5 @@ export function PaySheet({ onClose, onPaid, reason }: { onClose: () => void; onP
 
 // A small badge on documents the student cannot open yet.
 export function LockBadge() {
-  return <span className="lock-badge" title="Needs a pass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg></span>;
+  return <span className="lock-badge" title="Needs a pass"><Lock /></span>;
 }

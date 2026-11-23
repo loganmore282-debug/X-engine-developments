@@ -6,6 +6,7 @@ import type { Slide } from '../types';
 import type { AppConfig } from '../types';
 import { Sheet } from '../components';
 import { API } from '../api';
+import { Visibility, VisibilityOff } from '../icons';
 
 const BUILT_IN: Slide[] = [
   { id: 'b1', title: 'Every note in one place', text: 'Notes and past papers for your class, added the moment they are ready.', imageUrl: '/intro/1.jpg' },
@@ -88,7 +89,7 @@ function PasswordField({ value, onChange, label = 'Password' }: { value: string;
       <div style={{ position: 'relative' }}>
         <input className="input" type={show ? 'text' : 'password'} value={value} onChange={(e) => onChange(e.target.value)} autoComplete="current-password" />
         <button type="button" className="icon-btn" style={{ position: 'absolute', right: 6, top: 5 }} onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" />{show && <path d="M3 3l18 18" />}</svg>
+          {show ? <VisibilityOff /> : <Visibility />}
         </button>
       </div>
     </label>

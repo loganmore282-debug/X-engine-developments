@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth, useLibrary } from '../store';
 import { Cover, NoteCard, NoteSkeleton, Sheet, readRecent, pagesLabel } from '../components';
 import { SubjectIcon, subjectVars } from '../subjectLook';
-import { Chevron, Close, Search } from '../icons';
+import { Chevron, Close, ExpandMore, Search } from '../icons';
 import { PaySheet, untilLabel, useAccess } from '../Pay';
 import { preloadReader } from '../prefetch';
 
@@ -12,7 +12,7 @@ type Sort = 'new' | 'views' | 'az';
 // The same Home as the phone app: greeting, class, search, announcement, "Continue reading", subjects, notes.
 export function HomePage() {
   const { user, setClass } = useAuthWithClass();
-  const { notes, subjects, announcements, loading, error, reload, subjectName, levels } = useLibrary();
+  const { notes, subjects, loading, error, reload, subjectName, levels } = useLibrary();
   const nav = useNavigate();
   // The student's place on Home (filters and scroll) is kept for the session, so coming back from a document lands exactly where they left.
   const saved = useRef<{ query: string; subjectId: string | null; kind: 'all' | 'notes' | 'past-paper'; sort: Sort; y: number }>(
@@ -25,7 +25,6 @@ export function HomePage() {
   const [classSheet, setClassSheet] = useState(false);
   const [paySheet, setPaySheet] = useState(false);
   const access = useAccess();
-  const [dismissed, setDismissed] = useState<string>(() => localStorage.getItem('shule_dismissed_announcement') || '');
 
   const scrollTo = useRef(saved.current.y);
   useEffect(() => { preloadReader(); }, []);
@@ -53,7 +52,6 @@ export function HomePage() {
   }, [inClass, subjectId, kind, query, sort, subjectName]);
 
   const lastRead = readRecent().map((r) => ({ r, note: notes.find((n) => n.id === r.id) })).find((x) => x.note);
-  const announcement = announcements[0] && announcements[0].id !== dismissed ? announcements[0] : null;
   const hour = new Date().getHours();
   const hello = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
@@ -68,9 +66,11 @@ export function HomePage() {
         <div className="hero-main">
           <div className="eyebrow">{hello}</div>
           <h1>{user?.name.split(' ')[0]}, what are you studying today?</h1>
-          <button className="class-chip" onClick={() => setClassSheet(true)} aria-label="Change class"><span className="muted-on-dark">Class</span><b>{cls || 'Choose class'}</b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 9l6 6 6-6" /></svg></button>
+          <div className="hero-chips">
+          <button className="class-chip" onClick={() => setClassSheet(true)} aria-label="Change class"><span className="muted-on-dark">Class</span><b>{cls || 'Choose class'}</b><ExpandMore width={18} height={18} /></button>
           {access.enabled && <button className={`class-chip pass-chip ${access.active ? 'on' : ''}`} onClick={() => setPaySheet(true)}>{access.active ? <><span className="muted-on-dark">Pass</span><b>until {untilLabel(access.until!)}</b></> : <b>Get a pass</b>}</button>}
-          <div className="searchbar"><Search /><input className="input" placeholder="Search notes and past papers" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search notes and past papers" />
+          </div>
+          <div className="searchbar"><Search /><input className="input" placeholder="Search notes and papers" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search notes and past papers" />
             {query && <button className="icon-btn clear" aria-label="Clear search" onClick={() => setQuery('')}><Close /></button>}</div>
         </div>
         <aside className="hero-side">
@@ -89,12 +89,6 @@ export function HomePage() {
           </div>
         </aside>
       </section>
-
-      {announcement && (
-        <div className="announce"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 11v3a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1zM15 9c1.5 1 1.5 5 0 6" /></svg>
-          <div className="grow"><b>{announcement.title}</b>{announcement.message}</div>
-          <button className="icon-btn" style={{ width: 32, height: 32 }} aria-label="Dismiss" onClick={() => { setDismissed(announcement.id); localStorage.setItem('shule_dismissed_announcement', announcement.id); }}><Close /></button></div>
-      )}
 
       {lastRead && !query && (
         <button className="card continue mobile-only" onClick={() => nav(`/note/${lastRead.note!.id}`)}>

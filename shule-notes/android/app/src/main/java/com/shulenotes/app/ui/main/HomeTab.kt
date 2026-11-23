@@ -143,6 +143,14 @@ fun HomeTab(
     // Recent searches: remembered once the student has stopped typing, offered when the search box is tapped.
     var searchFocused by remember { mutableStateOf(false) }
     val recents by ShuleApp.session.recentSearches.collectAsState(initial = emptyList())
+    // A new message from the owner floats in once (like every other message in the app) and then waits in the bell.
+    val newNotice = viewModel.announcement
+    LaunchedEffect(newNotice?.id) {
+        if (newNotice != null) {
+            com.shulenotes.app.ui.components.Notifier.info(listOf(newNotice.title, newNotice.message).filter { it.isNotBlank() }.joinToString(": "))
+            viewModel.dismissAnnouncement()
+        }
+    }
     LaunchedEffect(viewModel.query) {
         delay(1500)
         ShuleApp.session.addRecentSearch(viewModel.query)
@@ -217,17 +225,6 @@ fun HomeTab(
                         note = appConfig.updateNote,
                         onUpdate = { com.shulenotes.app.ui.components.startUpdate(ShuleApp.appContext, uriHandler, appConfig.updateUrl) },
                         onDismiss = { scopeForUpdate.launch { ShuleApp.session.dismissUpdate(appConfig.latestVersion) } },
-                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp),
-                    )
-                }
-            }
-
-            val notice = viewModel.announcement
-            if (notice != null && !searching) {
-                item(key = "announcement") {
-                    AnnouncementCard(
-                        notice = notice,
-                        onDismiss = { viewModel.dismissAnnouncement() },
                         modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp),
                     )
                 }
@@ -601,34 +598,6 @@ private fun UpdateCard(note: String, onUpdate: () -> Unit, onDismiss: () -> Unit
             ) { Text(if (state is com.shulenotes.app.data.UpdateState.Downloading) "${state.percent}%" else com.shulenotes.app.ui.components.updateButtonLabel(state)) }
             IconButton(onClick = onDismiss) {
                 Icon(Icons.Filled.Close, contentDescription = "Dismiss update", tint = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.size(20.dp))
-            }
-        }
-    }
-}
-
-// A message from the owner (set in the admin panel), until the student closes it.
-@Composable
-private fun AnnouncementCard(notice: Announcement, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Row(modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 14.dp, end = 4.dp)) {
-            Icon(
-                Icons.Outlined.Campaign,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.padding(top = 2.dp).size(24.dp),
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(notice.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                Spacer(Modifier.height(2.dp))
-                Text(notice.message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
-            }
-            IconButton(onClick = onDismiss) {
-                Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
             }
         }
     }

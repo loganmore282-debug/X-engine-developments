@@ -326,8 +326,12 @@ when the owner changed anything. The PDF the server sends already carries the fo
   `WEB_DOMAIN` into `/etc/shule-notes/deploy.conf`), then `webhook/setup-webhook.sh` again (installs the updated build/apply
   scripts, keeps the secret). After that every push that changes `shule-notes/web` is built on the VPS (`npm ci --ignore-scripts`,
   type check, `vite build`) and swapped into `/var/www/shule-web`. nginx sends a strict CSP (`deploy/nginx-web.conf`).
-- Not built yet on the website: offline downloads, "My progress", sort/recent-search niceties of the app, push notifications,
-  PWA install prompt/service worker. PDFs cannot be screenshot-blocked in a browser (the app blocks them with FLAG_SECURE).
+- Messages from the owner never sit inside a page: on the website a new announcement slides in as a toast from the top once (`AnnouncementToast` in App.tsx, seen id
+  in localStorage `shule_toasted`) and waits behind the bell (red dot until the inbox is opened, `shule_inbox_seen`); on Android Home calls `Notifier.info` once, then dismisses.
+- Website Profile matches the app: My pass, My class, My progress (`/progress`, `study.ts` records pages read on this browser, 1.5 s rest = read), Appearance,
+  Notifications, Help, Feedback, Share (Web Share / copy link), Terms, Privacy, Get the Android app. Icons are the official Material set in `src/icons.tsx`
+  (single path each, filled variants for active nav/bookmarks): add new ones the same way, never hand-draw strokes. Favicon/PWA icons are generated from `logo-mark.png`.
+- Not built yet on the website: offline downloads, sort/recent-search niceties of the app, push notifications, PWA install prompt. PDFs cannot be screenshot-blocked in a browser (the app blocks them with FLAG_SECURE).
 
 ### Not done yet for a Play Store upload
 - **Target API level:** still 34. Google Play requires new apps to target a recent Android
