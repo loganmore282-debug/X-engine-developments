@@ -87,7 +87,7 @@ function setup(settings,customImage){
   let call=setup({brandName:'Potato'});
   let r=await call('/public/link-preview-page');
   assert.match(r.body,/<meta property="og:title" content="Potato">/);
-  assert.match(r.body,/<meta property="og:description" content="Join the Potato App and earn a steady income with daily earnings\. Invite friends and earn commissions\.">/);
+  assert.match(r.body,/<meta property="og:description" content="Rejoignez l&#39;application Potato et gagnez un revenu régulier grâce aux gains quotidiens\. Invitez vos amis et gagnez des commissions\.">/);
   assert.match(r.body,/<meta property="og:image" content="https:\/\/app\.example\.com\/k7x2\/public\/link-preview-image\?v=stock-abc">/);
   assert.match(r.body,/<meta name="twitter:card" content="summary">/,'the app icon fallback is small and square');
   assert.match(r.headers['Content-Type'],/text\/html/);

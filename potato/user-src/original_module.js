@@ -2688,8 +2688,8 @@ function myAssetRowHtml(inv){
     </div>
     <div class="mar-progress"><i style="width:${progress}%"></i></div>
     <div class="mar-foot">
-      <span>${st.matured ? 'Terminé' : `Jour ${st.made} of ${st.total}`}</span>
-      <span>${st.matured ? fmtUGXCents(st.expected) + ' paid' : fmtUGXCents(st.remaining) + ' remaining'}</span>
+      <span>${st.matured ? 'Terminé' : `Jour ${st.made} sur ${st.total}`}</span>
+      <span>${st.matured ? fmtUGXCents(st.expected) + ' payé' : fmtUGXCents(st.remaining) + ' restant'}</span>
     </div>
   </div>`;
 }
@@ -5001,7 +5001,7 @@ window.submitWithdraw = async function(){
   }
   // Owner: "on withdrawal submission, just that notify should say that withdrawal submitted successfully".
   // OK then opens the withdrawal records, where the request shows as processing.
-  notify('Retrait soumis avec succès' + (r.usedBackupCode ? `. Il vous reste ${Number(r.backupLeft) || 0} code de secours${Number(r.backupLeft) === 1 ? '' : 's'} left.` : ''), () => openBalanceRecordSheet('withdraw'));
+  notify('Retrait soumis avec succès' + (r.usedBackupCode ? `. Il vous reste ${Number(r.backupLeft) || 0} code${Number(r.backupLeft) === 1 ? '' : 's'} de secours.` : ''), () => openBalanceRecordSheet('withdraw'));
   if (_openSheetTitle === 'Withdraw' && $('witSubmitBtn') === submitBtn) closeSheet({ fromAction: true });
   refreshAfterWithdraw();
 };

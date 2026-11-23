@@ -64,7 +64,7 @@ const srv=http.createServer((q,r)=>{let f=path.join(ROOT,q.url.split('?')[0]);if
 
  const EN=new Set();
  const SAME=new Set();
- const ENW=/(?<![\p{L}])(buy|rows|the|your|you|and|please|with|could|enter|from|this|that|have|will|are|was|can|again|before|after|not|try|tap|confirm|cancel|submit|failed|success|loading|wallet balance|withdrawal|deposit|invest|password|referral|network error|something went wrong)(?![\p{L}])/iu;
+ const ENW=/(?<![\p{L}])(of|paid|remaining|left|day|days|ago|tries|buy|rows|the|your|you|and|please|with|could|enter|from|this|that|have|will|are|was|can|again|before|after|not|try|tap|confirm|cancel|submit|failed|success|loading|wallet balance|withdrawal|deposit|invest|password|referral|network error|something went wrong)(?![\p{L}])/iu;
  const ALLOWED=/PETRO|Potato|Money|X{3,}|MarzPay|USDT|TRC20|TXID|MTN|Airtel|Orange|Moov|Wave|Asset-\d|https?:\/\/\S+|Welcome to the app\.|Merci de nous avoir rejoints\.|Welcome\b|XOF|PIN|SMS|APP|OTP|Tron|\bID\b|FT|v2-hf?|Dear AMIR[^]*/g;
  const bad=[];for(const [k,sc] of found){const kind=k.split('|')[0];const t=k.split('|').slice(1).join('|');if(kind==='placeholder'&&/^(Dear AMIR|https?:)/.test(t))continue;
   const left=t.replace(ALLOWED,' ');

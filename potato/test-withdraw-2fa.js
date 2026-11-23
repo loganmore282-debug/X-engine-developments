@@ -200,7 +200,7 @@ const wrongCode = secret => { for (let i = 0; i < 50; i++) { const c = String(Ma
     { const wm = W(), realSet = wm.set.bind(wm), wH0 = user(H.uid).walletBalance;
       wm.set = (k, v) => { const r = realSet(k, v); if (v && v.status === 'creating') user(H.uid).walletBalance = 0; return r; };
       const bal = await wdraw(H); wm.set = realSet; user(H.uid).walletBalance = wH0;
-      ok(bal.s === 400 && !/^TWOFA_/.test(bal.j.code || '') && /balance or account status changed/i.test(bal.j.message) && user(H.uid).walletBalance === wH0, 'off: if the balance changes mid-request the refusal says so (not a Google Authenticator reason) and nothing is taken', bal.j); }
+      ok(bal.s === 400 && !/^TWOFA_/.test(bal.j.code || '') && /solde ou le statut de votre compte a changé/i.test(bal.j.message) && user(H.uid).walletBalance === wH0, 'off: if the balance changes mid-request the refusal says so (not a Google Authenticator reason) and nothing is taken', bal.j); }
     // the member routes are closed, the status says so, and the owner\'s reset still works
     const st = await J('GET', '/account/2fa/status', null, H.tok); ok(st.s === 200 && st.j.available === false && st.j.enabled === true, 'off: the status says the feature is not available (and that H still has a set-up)', st.j);
     for (const [path, body] of [['/account/2fa/start', { pin: '123456' }], ['/account/2fa/confirm', { code: '123456' }], ['/account/2fa/disable', { pin: '123456', code: codeNow(sh, 1) }], ['/account/2fa/backup-codes', { pin: '123456', code: codeNow(sh, 1) }]]) {

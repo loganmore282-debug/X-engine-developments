@@ -2297,7 +2297,7 @@ app.post('/salary/claim', async (req, res) => {
       if (!tier) {
         if (!view.tier) {
           const lowest = view.tiers[0];
-          return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: lowest ? `Need ${fmtMoney(Math.max(0, lowest.target - view.total))} more to claim` : 'Rewards are not available yet.' } };
+          return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: lowest ? `Il manque ${fmtMoney(Math.max(0, lowest.target - view.total))} pour réclamer` : 'Les récompenses ne sont pas encore disponibles.' } };
         }
         return { code: 400, body: { status: 'error', code: 'NOTHING_TO_CLAIM', message: 'Vous avez déjà réclamé toutes les récompenses que vous avez atteintes.' } };
       }
@@ -2778,7 +2778,7 @@ app.get('/public/link-preview-page', async (req, res) => {
     const sett = await getSettings();
     const brand = brandName(sett);
     const title = String(sett.linkPreviewTitle || '').trim() || brand;
-    const text = String(sett.linkPreviewText || '').trim() || `Join the ${brand} App and earn a steady income with daily earnings. Invite friends and earn commissions.`;
+    const text = String(sett.linkPreviewText || '').trim() || `Rejoignez l'application ${brand} et gagnez un revenu régulier grâce aux gains quotidiens. Invitez vos amis et gagnez des commissions.`;
     const img = await linkPreviewImage();
     const origin = `${req.protocol}://${req.get('host')}`;
     const imageUrl = img ? `${origin}/${PUBLIC_API_PREFIX}/public/link-preview-image?v=${encodeURIComponent(img.version)}` : '';
@@ -3458,7 +3458,7 @@ async function pinCheck(userId, pin0) {
       let locked = false;
       if (fails >= PIN_MAX_FAILS) { update.pinLockedUntil = new Date(now + PIN_LOCK_MS); update.pinFailCount = 0; locked = true; }
       await uRef.update(update);
-      return { ok: false, code: locked ? 'LOCKED' : 'WRONG_PIN', message: locked ? `Too many wrong Trade Password attempts. Try again in ${PIN_LOCK_MS / 60000} minutes.` : 'Incorrect Trade Password.' };
+      return { ok: false, code: locked ? 'LOCKED' : 'WRONG_PIN', message: locked ? `Trop de tentatives erronées du mot de passe de transaction. Réessayez dans ${PIN_LOCK_MS / 60000} minutes.` : 'Mot de passe de transaction incorrect.' };
     }
     await uRef.update({ pinFailCount: 0 });
     return { ok: true };
@@ -3834,7 +3834,7 @@ app.post('/withdraw/request', async (req, res) => {
         const now2 = (await uRef.get()).data() || {};
         const spent = twofaChk && twofaChk.kind === 'totp' ? Number(now2.twofaLastStep) >= twofaChk.step : twofaChk && twofaChk.kind === 'backup' ? !(Array.isArray(now2.twofaBackup) ? now2.twofaBackup : []).includes(twofaChk.hash) : false;
         const changed = twofaFeature && twofaOn(now2) !== !!twofaChk;
-        const err = new Error(changed ? 'Your security settings changed. Please try again.' : spent ? 'That code was already used. Wait for the next code in Google Authenticator (it changes every 30 seconds) and try again.' : 'Your balance or account status changed. Please refresh and try again.');
+        const err = new Error(changed ? 'Vos paramètres de sécurité ont changé. Veuillez réessayer.' : spent ? 'Ce code a déjà été utilisé. Attendez le prochain code dans Google Authenticator (il change toutes les 30 secondes) puis réessayez.' : 'Votre solde ou le statut de votre compte a changé. Veuillez actualiser puis réessayer.');
         if (changed || spent) err.code = changed ? 'TWOFA_CHANGED' : 'TWOFA_USED';
         throw err;
       }
