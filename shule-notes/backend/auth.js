@@ -83,11 +83,20 @@ async function createSession(userId, opts = {}) {
   let signedOut = 0;
   if (opts.single !== false) {
     const now = new Date();
+    // The devices about to be signed out, so they can be told straight away (live.js) instead of on their next request.
+    const older = await db.collection('sessions').find({ userId: String(userId), _id: { $lt: r.insertedId }, replaced: { $ne: true } }).toArray();
     const res = await db.collection('sessions').updateMany(
       { userId: String(userId), _id: { $lt: r.insertedId }, replaced: { $ne: true } },
       { $set: { replaced: true, replacedAt: now, replacedBy: String(opts.deviceLabel || '').slice(0, 80) } },
     );
     signedOut = (res && (res.modifiedCount || res.matchedCount)) || 0;
+    const where = opts.deviceLabel ? `on ${String(opts.deviceLabel).slice(0, 80)}` : 'on another device';
+    for (const s of older) {
+      require('./live').publishAndClose('session:' + String(s._id), 'signed_out', {
+        code: 'signed_in_elsewhere',
+        message: `You were signed out because this account was opened ${where}. Sign in again to use it here. If that was not you, contact support.`,
+      });
+    }
     // A signed-out device is only told about it for a week; after that the row is just clutter.
     await db.collection('sessions').deleteMany({ userId: String(userId), replaced: true, replacedAt: { $lt: new Date(now.getTime() - REPLACED_KEEP_MS) } });
     forgetUser(userId); // the other device must find out on its very next request, not after the 5 s memory

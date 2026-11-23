@@ -82,14 +82,28 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
     val scope = rememberCoroutineScope()
     val unread = viewModel.notifications.count { !it.own && parseIsoMillis(it.createdAt) > seenAt }
 
-    // While the app is on screen, ask the server every 15 seconds whether the owner changed anything
-    // (one tiny request), and reload quietly when so. Stops by itself when the app goes to the background.
+    // While the app is on screen it keeps ONE live line open to the server (LiveEvents): the owner's changes, a sign-in on
+    // another device, a new alert or a pass arrive the moment they happen. A tiny check every minute is only a safety net.
+    // Both stop by themselves when the app goes to the background.
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     androidx.compose.runtime.LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            launch {
+                com.shulenotes.app.data.LiveEvents.run { event, data ->
+                    when (event) {
+                        "hello", "revision" -> viewModel.onLiveRevision(data.optLong("revision", 0L))
+                        "signed_out" -> {
+                            com.shulenotes.app.data.SessionHolder.expiredMessage = data.optString("message").ifBlank { null }
+                            com.shulenotes.app.data.SessionHolder.expired.value = true
+                        }
+                        "notice" -> viewModel.reloadQuietly()
+                        "access", "payment" -> com.shulenotes.app.data.AccessHolder.refresh()
+                    }
+                }
+            }
             while (true) {
                 viewModel.checkForChanges()
-                kotlinx.coroutines.delay(15_000)
+                kotlinx.coroutines.delay(60_000)
             }
         }
     }

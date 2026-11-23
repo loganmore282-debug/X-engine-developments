@@ -97,7 +97,10 @@ async function setUserStatus(userId, status) {
   if (!user) return { ok: false, status: 404, message: 'Student not found' };
   await db.collection('users').updateOne({ _id: id }, { $set: { status } });
   // A ban takes effect at once: signed-in phones are signed out.
-  if (status === 'banned') { await db.collection('sessions').deleteMany({ userId: String(userId) }); forgetUser(userId); }
+  if (status === 'banned') {
+    await db.collection('sessions').deleteMany({ userId: String(userId) }); forgetUser(userId);
+    require('./live').publishAndClose('user:' + String(userId), 'signed_out', { code: 'banned', message: 'This account has been suspended.' });
+  }
   return { ok: true };
 }
 
@@ -114,6 +117,7 @@ async function resetUserPassword(userId, password) {
   await db.collection('users').updateOne({ _id: id }, { $set: { passwordHash: await hashPassword(next), passwordChangedAt: new Date() } });
   await db.collection('sessions').deleteMany({ userId: String(userId) });
   forgetUser(userId);
+  require('./live').publishAndClose('user:' + String(userId), 'signed_out', { code: 'password_reset', message: 'Your password was changed. Sign in with the new one.' });
   return { ok: true };
 }
 

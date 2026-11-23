@@ -77,6 +77,12 @@
   tr:last-child td{border-bottom:none}
   td .sub{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
   .actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;min-width:120px}
+  .live-dot{display:flex;align-items:center;gap:8px;padding:8px 14px;margin:4px 6px;border-radius:12px;font-size:12.5px;font-weight:600;color:var(--muted)}
+  .live-dot i{width:9px;height:9px;border-radius:50%;background:#9aa3ad;flex:none}
+  .live-dot.on i{background:#1e9e63;box-shadow:0 0 0 0 rgba(30,158,99,.55);animation:livepulse 1.8s infinite}
+  .live-dot.on{color:var(--brand-dark)}
+  @keyframes livepulse{0%{box-shadow:0 0 0 0 rgba(30,158,99,.55)}70%{box-shadow:0 0 0 8px rgba(30,158,99,0)}100%{box-shadow:0 0 0 0 rgba(30,158,99,0)}}
+  @media (max-width:860px){.live-dot{padding:6px 10px;margin:0}}
   .pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap}
   .pill.ok{background:var(--brand-soft);color:var(--brand-dark)} .pill.warn{background:var(--amber-soft);color:#7a5a00}
   .pill.bad{background:var(--danger-soft);color:var(--danger)} .pill.info{background:var(--blue-soft);color:var(--blue)}
@@ -151,6 +157,7 @@
     <button class="nav" data-tab="activity"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Activity</button>
     <button class="nav" data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
     <div class="grow"></div>
+    <div class="live-dot" id="liveDot" title="Live: new students, payments and feedback appear at once"><i></i><span id="liveText">Connecting…</span></div>
     <button class="nav" id="logoutBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button>
   </nav>
 
@@ -503,6 +510,7 @@ async function signIn(){
 async function signOut(tellServer = true){
   if (tellServer && localStorage.getItem(KEY_STORE)) { try { await api('/admin/logout'); } catch (_) {} }
   localStorage.removeItem(KEY_STORE);
+  liveStop();
   $('app').classList.add('hidden'); $('loginScreen').classList.remove('hidden'); $('loginKey').value = ''; $('loginCode').value = ''; $('loginCode').classList.add('hidden');
 }
 $('loginBtn').addEventListener('click', signIn);
@@ -526,6 +534,7 @@ async function enterApp(){
   $('loginScreen').classList.add('hidden'); $('app').classList.remove('hidden');
   await loadLevels(); await loadSubjects();
   showTab(currentTab);
+  liveConnect();
 }
 
 // ── classes (the same list the app uses) ──
@@ -1252,15 +1261,74 @@ $('setFbClear').addEventListener('click', async () => {
   LOADERS.settings();
 });
 
-// Students joining, feedback arriving and notes finishing their reading show up by themselves,
-// every 20 seconds, but only while the page is visible and nothing is being typed into a dialog.
+// ── live: the server tells this page the moment something happens (new student, payment, feedback, who is online) ──
+const LIVE = { ctrl: null, online: 0, retry: 1000, timer: null, refreshTimer: null };
+function liveStatus(on){
+  $('liveDot').classList.toggle('on', on);
+  $('liveText').textContent = on ? (LIVE.online === 1 ? '1 student online' : LIVE.online + ' students online') : 'Reconnecting…';
+}
+// Reloads the open tab quietly (never while a dialog is open, never more than once in a burst of events).
+function liveRefresh(tabs){
+  if (!tabs.includes(currentTab) || !LOADERS[currentTab]) return;
+  clearTimeout(LIVE.refreshTimer);
+  LIVE.refreshTimer = setTimeout(async () => {
+    if ($('modalRoot').children.length) return;
+    autoRefreshing = true;
+    try { await LOADERS[currentTab](); } finally { autoRefreshing = false; }
+  }, 350);
+}
+function liveEvent(event, d){
+  if (event === 'hello' || event === 'presence') { LIVE.online = d.online || 0; liveStatus(true); return; }
+  if (event === 'signup') { toast('New student: ' + (d.name || 'someone') + ' just joined', 'ok'); liveRefresh(['dashboard', 'students']); }
+  else if (event === 'signin') { if (d.newDevice) toast((d.name || 'A student') + ' signed in on ' + (d.device || 'a new device'), 'ok'); liveRefresh(['students']); }
+  else if (event === 'payment') {
+    if (d.status === 'paid') toast('Payment received: ' + ugx(d.amount) + ' from ' + d.student + (d.classLevel ? ' (' + d.classLevel + ')' : ''), 'ok');
+    else if (d.status === 'failed') toast('A payment by ' + d.student + ' did not go through', 'error');
+    liveRefresh(['dashboard', 'payments', 'students']);
+  }
+  else if (event === 'feedback') { toast('New feedback: ' + (d.message || ''), 'ok'); liveRefresh(['feedback', 'dashboard']); }
+}
+async function liveConnect(){
+  liveStop();
+  const token = localStorage.getItem(KEY_STORE);
+  if (!token) return;
+  const ctrl = new AbortController(); LIVE.ctrl = ctrl;
+  try {
+    const res = await fetch(API + '/admin/live', { headers: { Authorization: 'Bearer ' + token, Accept: 'text/event-stream' }, signal: ctrl.signal, cache: 'no-store' });
+    if (res.status === 401) { liveStatus(false); return; } // the session ended; signing in again reconnects
+    if (!res.ok || !res.body) throw new Error('no stream');
+    LIVE.retry = 1000;
+    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const block = buf.slice(0, i); buf = buf.slice(i + 2);
+        const ev = /^event: (.*)$/m.exec(block); const data = /^data: (.*)$/m.exec(block);
+        if (ev) { try { liveEvent(ev[1], data ? JSON.parse(data[1]) : {}); } catch (_) { /* one bad event must not stop the rest */ } }
+      }
+    }
+  } catch (e) { if (ctrl.signal.aborted) return; }
+  if (LIVE.ctrl !== ctrl) return;
+  liveStatus(false);
+  // Lost (network, server update): try again soon, waiting a little longer each time up to 15 seconds.
+  LIVE.timer = setTimeout(liveConnect, LIVE.retry);
+  LIVE.retry = Math.min(LIVE.retry * 2, 15000);
+}
+function liveStop(){ clearTimeout(LIVE.timer); if (LIVE.ctrl) { const c = LIVE.ctrl; LIVE.ctrl = null; c.abort(); } }
+// Back on the page after the phone slept: reconnect at once instead of waiting.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && localStorage.getItem(KEY_STORE) && !$('liveDot').classList.contains('on')) { LIVE.retry = 1000; liveConnect(); } });
+
+// A safety net only: the live stream above does the real work.
 setInterval(async () => {
   if (document.visibilityState !== 'visible' || !localStorage.getItem(KEY_STORE)) return;
   if ($('modalRoot').children.length) return;
   if (!['dashboard', 'students', 'payments', 'notes', 'feedback'].includes(currentTab) || !LOADERS[currentTab]) return;
   autoRefreshing = true;
   try { await LOADERS[currentTab](); } finally { autoRefreshing = false; }
-}, 20000);
+}, 60000);
 
 // ── boot ──
 if (localStorage.getItem(KEY_STORE)) {

@@ -116,6 +116,16 @@ class LibraryViewModel : ViewModel() {
     // The owner's last change, as the server numbers it. A different number means something was added,
     // edited, hidden or deleted in the admin panel, so the library is reloaded quietly (no spinner, no error).
     private var lastRevision = -1L
+    // From the live line: the owner changed something (or, on connecting, the number the server has now).
+    fun onLiveRevision(now: Long) {
+        val changed = lastRevision >= 0 && now != lastRevision
+        lastRevision = now
+        if (changed) load(initial = false, silent = true)
+    }
+
+    // A new sign-in alert arrived: reload quietly so the bell shows it.
+    fun reloadQuietly() = load(initial = false, silent = true)
+
     suspend fun checkForChanges() {
         val now = try { ApiClient.service.sync().revision } catch (e: Exception) { return }
         val changed = lastRevision >= 0 && now != lastRevision

@@ -166,6 +166,7 @@ function grantAccess(userId, minutes, classLevel, now = new Date()) {
       const from = Math.max(now.getTime(), ms(user.accessUntil));
       const until = new Date(from + minutes * 60000);
       await users.updateOne({ _id: id }, { $set: { accessUntil: until } });
+      require('./live').publish('user:' + key, 'access', { classLevel: null, until });
       return { until, classLevel: null };
     }
     const current = user.classAccess && typeof user.classAccess === 'object' ? { ...user.classAccess } : {};
@@ -175,6 +176,7 @@ function grantAccess(userId, minutes, classLevel, now = new Date()) {
     const until = new Date(from + minutes * 60000);
     current[level] = until;
     await users.updateOne({ _id: id }, { $set: { classAccess: current } });
+    require('./live').publish('user:' + key, 'access', { classLevel: level, until });
     return { until, classLevel: level };
   };
   const next = (chains.get(key) || Promise.resolve()).catch(() => {}).then(run);
@@ -206,11 +208,23 @@ async function completePayment(paymentId) {
   const won = await col.updateOne({ _id: paymentId, status: { $in: ['pending', 'expired'] } }, { $set: { status: 'paid', paidAt: new Date(), granted: false } });
   if (won.matchedCount) await ensureGranted(paymentId);
   else await ensureGranted(paymentId).catch(() => {}); // already paid: finish a grant that failed earlier
-  return col.findOne({ _id: paymentId });
+  const done = await col.findOne({ _id: paymentId });
+  if (won.matchedCount && done) announcePayment(done);
+  return done;
 }
 
 async function failPayment(paymentId, reason) {
-  await getDb().collection('payments').updateOne({ _id: paymentId, status: { $in: ['pending', 'expired'] } }, { $set: { status: 'failed', failedAt: new Date(), failureReason: String(reason || 'Payment was not completed').slice(0, 200) } });
+  const r = await getDb().collection('payments').updateOne({ _id: paymentId, status: { $in: ['pending', 'expired'] } }, { $set: { status: 'failed', failedAt: new Date(), failureReason: String(reason || 'Payment was not completed').slice(0, 200) } });
+  if (r.matchedCount) { const p = await getDb().collection('payments').findOne({ _id: paymentId }); if (p) announcePayment(p); }
+}
+
+// Tell the student's screens and the admin panel the moment a payment is decided.
+function announcePayment(p) {
+  const live = require('./live');
+  live.publish('user:' + p.userId, 'payment', { id: String(p._id), status: p.status });
+  getDb().collection('users').findOne({ _id: ObjectId.isValid(p.userId) ? new ObjectId(p.userId) : null }).then((u) => {
+    live.publish('admin', 'payment', { id: String(p._id), status: p.status, amount: p.amount || 0, planName: p.planName || '', classLevel: p.classLevel || null, student: (u && u.name) || 'A student' });
+  }).catch(() => {});
 }
 
 // Ask MarzPay what happened to one pending payment, and act on a final answer.
@@ -403,6 +417,7 @@ async function adminRevoke(userId) {
   const user = id ? await getDb().collection('users').findOne({ _id: id }) : null;
   if (!user) return { ok: false, status: 404, message: 'Student not found' };
   await getDb().collection('users').updateOne({ _id: id }, { $set: { accessUntil: null, classAccess: {} } });
+  require('./live').publish('user:' + String(id), 'access', { removed: true });
   return { ok: true };
 }
 

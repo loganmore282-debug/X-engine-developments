@@ -19,6 +19,7 @@ function fakeDb() {
         insertOne: async (doc) => { const d = { ...doc }; store[name] = store[name] || []; store[name].push(d); return { insertedId: 'x' }; },
         findOne: async (q) => (store[name] || []).find((d) => Object.keys(q).every((k) => d[k] === q[k])) || null,
         deleteOne: async (q) => { store[name] = (store[name] || []).filter((d) => !Object.keys(q).every((k) => d[k] === q[k])); },
+        find: () => ({ toArray: async () => [] }),
         updateMany: async () => ({}), // (older-session marking is covered by test-single-device.js)
         deleteMany: async () => ({}),
       };

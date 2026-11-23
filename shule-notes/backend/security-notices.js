@@ -34,6 +34,7 @@ async function recordSignIn({ userId, device, previousDevice, signedOut, session
     device, sessionId: sessionId ? String(sessionId) : null, createdAt: now, expiresAt: new Date(now.getTime() + NOTICE_DAYS * 86400000),
   };
   await getDb().collection('notices').insertOne(doc);
+  require('./live').publish('user:' + String(userId), 'notice', { title: doc.title });
   return doc;
 }
 

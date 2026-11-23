@@ -7,8 +7,11 @@
 let value = Date.now();
 
 const current = () => value;
+const listeners = [];
+function onBump(fn) { listeners.push(fn); }
 function bump() {
   value = Math.max(value + 1, Date.now()); // always different from the last one, even within a millisecond
+  for (const fn of listeners) { try { fn(value); } catch (_) { /* a listener must never break a save */ } }
   return value;
 }
 
@@ -21,4 +24,4 @@ function adminChangeTracker(req, res, next) {
   next();
 }
 
-module.exports = { current, bump, adminChangeTracker };
+module.exports = { current, bump, onBump, adminChangeTracker };

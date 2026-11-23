@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth, useLibrary } from '../store';
 import { Cover, NoteCard, NoteSkeleton, Sheet, readRecent, pagesLabel } from '../components';
 import { SubjectIcon, subjectVars } from '../subjectLook';
-import { Chevron, Close, ExpandMore, Search } from '../icons';
+import { Chevron, Close, ExpandMore, Search, Bell } from '../icons';
 import { PaySheet, untilLabel, useAccess } from '../Pay';
 import { preloadReader } from '../prefetch';
+import { useUnread } from '../unread';
 
 type Sort = 'new' | 'views' | 'az';
 
@@ -25,6 +26,7 @@ export function HomePage() {
   const [classSheet, setClassSheet] = useState(false);
   const [paySheet, setPaySheet] = useState(false);
   const access = useAccess();
+  const unread = useUnread();
 
   const scrollTo = useRef(saved.current.y);
   useEffect(() => { preloadReader(); }, []);
@@ -64,7 +66,11 @@ export function HomePage() {
       <section className="hero rise">
         <div className="hero-deco" aria-hidden="true"><i /><i /><i /></div>
         <div className="hero-main">
-          <div className="eyebrow">{hello}</div>
+          {/* On a phone there is no top bar (like an app): the bell lives here, in the green header. */}
+          <div className="hero-top">
+            <div className="eyebrow">{hello}</div>
+            <button className={`hero-bell ${unread ? 'ring' : ''}`} aria-label={unread ? 'Notifications, new message' : 'Notifications'} onClick={() => nav('/inbox')}><Bell />{unread && <i className="bell-dot" />}</button>
+          </div>
           <h1>{user?.name.split(' ')[0]}, what are you studying today?</h1>
           <div className="hero-chips">
           <button className="class-chip" onClick={() => setClassSheet(true)} aria-label="Change class"><span className="muted-on-dark">Class</span><b>{cls || 'Choose class'}</b><ExpandMore width={18} height={18} /></button>

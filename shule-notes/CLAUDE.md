@@ -295,6 +295,19 @@ Android reads the reason in `ApiClient` (`SessionHolder.expiredMessage`); the we
 - `GET /payments/mine` (`payments.studentHistory`): the student's own payments; Profile > Payment history (Android `PaymentsScreen`, web `/payments`).
 - Profile rows have coloured icon tiles; WhatsApp and Call are direct rows when set in admin Settings. Tests: `test-single-device.js`.
 
+### Live updates (backend/live.js, Server-Sent Events) -- everything real-time, no reload
+- Students: `GET /live` (requireAuth; keys `user:<id>` + `session:<sessionId>`). Events: `hello` {revision}, `revision` (any owner change:
+  `revision.onBump`), `signed_out` {code, message} (sent to the REPLACED session the instant another device signs in, and on ban / password
+  reset / account removal; the stream is then closed), `notice`, `access` (grantAccess / revoke), `payment` (paid/failed).
+- Admin: `GET /admin/live` (admin session). Events: `signup`, `signin` {newDevice}, `payment`, `feedback`, `presence` {online}. The panel shows
+  a toast, refreshes the open tab and shows "N students online" in the sidebar (green pulsing dot).
+- Heartbeat comment every 25 s (under nginx's 60 s), `X-Accel-Buffering: no` (nginx passes events at once), compression skipped for `*/live`,
+  `retry: 2000`; SIGTERM closes every stream (`live.closeAll`) so restarts are not held up. Clients reconnect 1 s, doubling to 15 s.
+- Website: `store.tsx` (fetch stream with the bearer header; the /sync poll is now a 60 s safety net). Android: `data/LiveEvents.kt`
+  (OkHttp, read timeout 90 s) run from MainScreen while STARTED; `/sync` check every 60 s as a safety net. Tests: `test-live.js`.
+- Website on phones has NO top bar (owner: "like an app"): the bell is in the Home hero (`.hero-bell`, `useUnread` in `src/unread.ts`),
+  the inbox has a Back button; desktop keeps the top bar with nav links.
+
 ### Admin security (admin-session.js, totp.js, audit.js)
 - The admin KEY is typed once (`POST /admin/login`); the panel then holds a random session token (stored hashed in `adminSessions`; 8 h idle, 3 days
   absolute, revocable, "sign out other devices"). The key is never kept in the browser. `app.use('/admin', ...)` in server.js authenticates BEFORE any route

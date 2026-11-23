@@ -18,6 +18,7 @@ async function eraseUser(userId) {
   if (!id) return false;
   await db.collection('sessions').deleteMany({ userId: String(userId) });
   forgetUser(userId);
+  require('./live').publishAndClose('user:' + String(userId), 'signed_out', { code: 'account_removed', message: 'This account was removed.' });
   await db.collection('aiUsage').deleteMany({ userId: String(userId) });
   await db.collection('feedback').deleteMany({ userId: String(userId) });
   await db.collection('notices').deleteMany({ userId: String(userId) });

@@ -30,6 +30,7 @@ const { normalizePhone, isValidPhone } = require('./phone');
 const { eraseUser, updateProfile, cleanName, toId } = require('./accounts');
 const { getSettings, saveSettings, publicConfig, adminView, AI_MODELS, GEMINI_MODELS } = require('./settings');
 const securityNotices = require('./security-notices');
+const live = require('./live');
 const adminData = require('./admin-data');
 const payments = require('./payments');
 const compression = require('compression');
@@ -59,7 +60,8 @@ const TRUST_PROXY = process.env.TRUST_PROXY === undefined ? 1 : Number(process.e
 if (TRUST_PROXY > 0) app.set('trust proxy', TRUST_PROXY);
 app.use(helmet());
 // JSON and text are sent compressed (a library list shrinks to about a fifth); PDFs are left alone.
-app.use(compression({ threshold: 1024 }));
+// (Live streams are never compressed: compression would hold each event back until a buffer fills.)
+app.use(compression({ threshold: 1024, filter: (req, res) => !/\/live$/.test(req.path) && compression.filter(req, res) }));
 app.use(perf.slowLog());
 app.use(cors({
   origin: (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
@@ -130,6 +132,7 @@ app.post('/auth/register', authLimiter, async (req, res) => {
     const { token } = await createSession(String(result.insertedId), { single: settingsNow.singleDevice !== false, device: req.headers['user-agent'] });
     await db.collection('users').updateOne({ _id: result.insertedId }, { $set: { lastDevice: securityNotices.describeDevice(req.headers['user-agent']) } });
     res.json({ status: 'success', token, user: publicUser({ _id: result.insertedId, name, phone, accessUntil }) });
+    live.publish('admin', 'signup', { id: String(result.insertedId), name, phone, at: new Date() });
   } catch (e) {
     console.error('register error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not create the account right now' });
@@ -170,6 +173,7 @@ app.post('/auth/login', authLimiter, async (req, res) => {
     await db.collection('users').updateOne({ _id: user._id }, { $set: { lastDevice: device } });
     try { await securityNotices.recordSignIn({ userId: user._id, device, previousDevice, signedOut: session.signedOut > 0, sessionId: session.sessionId }); }
     catch (e) { console.error('could not record a sign-in notice:', e.message); }
+    live.publish('admin', 'signin', { name: user.name || '', device, newDevice: !!previousDevice && previousDevice !== device });
     res.json({ status: 'success', token, user: publicUser(user) });
   } catch (e) {
     console.error('login error:', e.message);
@@ -192,6 +196,15 @@ const sendResult = (res, result, extra = {}) => (result.ok
   : res.status(result.status || 400).json({ status: 'error', message: result.message }));
 
 // What phones poll (every few seconds while the app is open): a tiny answer that changes whenever the admin does.
+// ── LIVE (Server-Sent Events, live.js) ──────────────────────────────────────
+// A student's screen keeps this open: the owner's changes, a sign-in elsewhere, a new alert or a pass arrive at once.
+app.get('/live', requireAuth, (req, res) => {
+  const keys = ['user:' + req.userId];
+  if (req.sessionId) keys.push('session:' + req.sessionId);
+  live.subscribe(req, res, keys, { revision: revision.current() });
+});
+revision.onBump((value) => live.broadcastStudents('revision', { revision: value }));
+
 app.get('/sync', (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json({ status: 'success', revision: revision.current() });
@@ -231,6 +244,7 @@ app.post('/feedback', requireAuth, rateLimit({ windowMs: 60 * 60 * 1000, max: 20
     appVersion: req.body.appVersion, device: req.body.device,
   });
   sendResult(res, result);
+  if (result.ok) live.publish('admin', 'feedback', { type: String(req.body.type || ''), message: String(req.body.message || '').slice(0, 120) });
 }));
 
 app.get('/announcements', requireAuth, ah(async (req, res) => {
@@ -764,7 +778,12 @@ app.post('/admin/security/sessions/revoke-others', guard(async (req, res) => {
   audit.record('Signed out every other device', { count: n }, req.ip).catch(() => {});
   res.json({ status: 'success', count: n });
 }));
-app.post('/admin/stats', guard(async (req, res) => res.json({ status: 'success', stats: await adminData.dashboardStats() })));
+app.post('/admin/stats', guard(async (req, res) => res.json({ status: 'success', stats: { ...(await adminData.dashboardStats()), onlineNow: live.onlineStudents() } })));
+// The admin panel keeps this open: new students, payments, feedback and who is online arrive at once.
+app.get('/admin/live', (req, res) => {
+  if (!req.isAdmin) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  live.subscribe(req, res, ['admin'], { online: live.onlineStudents() });
+});
 app.post('/admin/users/list', guard(async (req, res) => res.json({ status: 'success', ...(await adminData.listUsers(req.body)) })));
 app.post('/admin/users/status', guard(async (req, res) => sendResult(res, await adminData.setUserStatus(req.body.id, req.body.status))));
 app.post('/admin/users/reset-password', guard(async (req, res) => sendResult(res, await adminData.resetUserPassword(req.body.id, req.body.password))));
@@ -866,6 +885,8 @@ async function start() {
     stopping = true;
     console.log(`${signal}: finishing the requests in progress, then stopping`);
     server.close(async () => { try { await require('./db').client.close(); } catch (_) { /* already closed */ } process.exit(0); });
+    // Live streams never end by themselves: close them (each screen reconnects to the new version within 2 seconds).
+    live.closeAll();
     setTimeout(() => process.exit(0), 10000).unref();
   };
   process.on('SIGTERM', () => stop('SIGTERM'));

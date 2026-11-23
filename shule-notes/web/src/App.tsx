@@ -8,6 +8,7 @@ import { InboxPage, ProfilePage, SavedPage, applyTheme, PaymentsPage } from './p
 const ReaderPage = lazy(() => import('./pages/Reader').then((m) => ({ default: m.ReaderPage })));
 import { Bell, Bookmark, BookmarkFilled, Close, Campaign, Home as HomeIcon, HomeFilled, User as UserIcon, UserFilled } from './icons';
 import { ProgressPage } from './pages/Progress';
+import { useUnread } from './unread';
 import { API } from './api';
 
 function Splash() {
@@ -17,17 +18,6 @@ function Splash() {
 // Shown for a moment while the reader (the biggest part of the site) arrives, if it was not already fetched in the background.
 function ReaderLoading() {
   return <div className="reader"><div className="reader-top"><div className="shimmer" style={{ width: 160, height: 18, borderRadius: 8, margin: '14px 12px' }} /></div><div className="pages"><div className="pages-in"><div className="sheet-page" style={{ width: 'min(860px, 92vw)', aspectRatio: '0.707' }}><div className="shimmer" /></div></div></div></div>;
-}
-
-// Has the owner posted something the student has not opened in the bell yet?
-const SEEN_KEY = 'shule_inbox_seen';
-function useUnread() {
-  const { announcements, notices } = useLibrary();
-  const location = useLocation();
-  const [seen, setSeen] = useState(() => Number(localStorage.getItem(SEEN_KEY) || 0));
-  // Opening the notifications page marks everything as read.
-  useEffect(() => { if (location.pathname === '/inbox') { const now = Date.now(); localStorage.setItem(SEEN_KEY, String(now)); setSeen(now); } }, [location.pathname]);
-  return [...announcements, ...(notices || []).filter((n) => !n.own)].some((a) => new Date(a.createdAt).getTime() > seen);
 }
 
 // A new message from the owner slides in from the top for a few seconds (like a phone notification), then it waits in the bell.
