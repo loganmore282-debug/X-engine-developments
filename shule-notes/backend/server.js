@@ -346,7 +346,7 @@ app.get('/subjects', requireAuth, ah(async (req, res) => {
   perf.sendShared(req, res, entry);
 }));
 
-// What kind of document it is: ordinary notes, or a past paper.
+// What kind of document it is: ordinary notes, or a exam.
 const NOTE_KINDS = ['notes', 'past-paper'];
 const cleanKind = (value) => (NOTE_KINDS.includes(String(value || '').trim()) ? String(value).trim() : null);
 
@@ -661,7 +661,7 @@ app.post('/admin/notes/upload', upload.single('file'), async (req, res) => {
     if (classLevel && !isValidLevel(classLevel)) return res.status(400).json({ status: 'error', message: 'Choose a class from the list' });
 
     const kind = req.body.kind ? cleanKind(req.body.kind) : 'notes';
-    if (!kind) return res.status(400).json({ status: 'error', message: 'Choose Notes or Past paper' });
+    if (!kind) return res.status(400).json({ status: 'error', message: 'Choose Notes or Exam' });
 
     let subjectId = null;
     if (req.body.subjectId) {
@@ -706,7 +706,7 @@ app.post('/admin/notes/update', async (req, res) => {
   if (req.body.free !== undefined) patch.free = !!req.body.free;
   if (req.body.kind !== undefined) {
     const kind = cleanKind(req.body.kind);
-    if (!kind) return res.status(400).json({ status: 'error', message: 'Choose Notes or Past paper' });
+    if (!kind) return res.status(400).json({ status: 'error', message: 'Choose Notes or Exam' });
     patch.kind = kind;
   }
   if (req.body.classLevel !== undefined) {

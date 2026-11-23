@@ -58,7 +58,7 @@ fun RegisterScreen(viewModel: AuthViewModel, onRegistered: () -> Unit, onGoToLog
         AuthHeader(
             logoSize = 84.dp,
             title = "Create your account",
-            subtitle = "Notes, past papers and an AI study helper.",
+            subtitle = "Notes, exams and an AI study helper.",
         )
 
         ShuleTextField(

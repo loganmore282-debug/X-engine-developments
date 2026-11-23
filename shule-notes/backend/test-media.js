@@ -52,7 +52,7 @@ const exe = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(200, 3)]);
   ck(JSON.stringify(await onboarding.publicSlides()) === '{"configured":false,"slides":[]}', 'before the owner makes any slide, the app is told to use its own introduction');
   ck((await onboarding.saveSlide({ title: '  ', text: 'x' }, null)).status === 400, 'a slide needs a heading');
   ck((await onboarding.saveSlide({ title: 'Hi', text: 'x' }, exe)).status === 400, 'a slide picture must be a picture');
-  const a = await onboarding.saveSlide({ title: 'Every note in one place', text: 'Notes and past papers for your class.' }, jpeg);
+  const a = await onboarding.saveSlide({ title: 'Every note in one place', text: 'Notes and exams for your class.' }, jpeg);
   const b = await onboarding.saveSlide({ title: 'Ask when you are stuck', text: 'The AI helper reads the page with you.' }, png);
   const c = await onboarding.saveSlide({ title: 'Study offline', text: 'Download and read anywhere.' }, null);
   ck(a.ok && b.ok && c.ok, 'three slides are created');

@@ -30,7 +30,7 @@ const MAX_DOCUMENT_CHARS = 400000; // keeps a single huge PDF from blowing the c
 
 function buildSystem(documentText, noteTitle) {
   const text =
-    "You are the study helper inside Shule Notes, an app students use to read notes, past papers and " +
+    "You are the study helper inside Shule Notes, an app students use to read notes, exams and " +
     "revision material. A student is reading the document titled \"" + (noteTitle || 'this document') +
     "\" and has a question about it.\n\n" +
     "Answer using ONLY the document text below. If the answer is not in the document, say so plainly " +

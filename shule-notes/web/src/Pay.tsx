@@ -117,7 +117,7 @@ export function PaySheet({ onClose, onPaid, reason, classLevel }: { onClose: () 
     <Sheet title={step === 'done' ? 'You are in' : step === 'waiting' ? 'Approve on your phone' : 'Choose a pass'} onClose={step === 'waiting' ? () => { toast('We will unlock your access as soon as the payment arrives.'); onClose(); } : onClose}>
       {step === 'choose' && <>
         {forClass && <span className="pill" style={{ marginTop: -4, marginBottom: 8 }}>For {forClass}</span>}
-        <p className="muted" style={{ marginTop: 4 }}>{reason || (forClass ? `Pay once with mobile money and read every note and past paper of ${forClass}, with the AI helper, for as long as the pass lasts.` : 'Pay once with mobile money and read every note and past paper of your class for as long as the pass lasts.')}</p>
+        <p className="muted" style={{ marginTop: 4 }}>{reason || (forClass ? `Pay once with mobile money and read every note and exam of ${forClass}, with the AI helper, for as long as the pass lasts.` : 'Pay once with mobile money and read every note and exam of your class for as long as the pass lasts.')}</p>
         {!plans && !error && <div className="center"><div className="spinner" style={{ margin: '24px auto' }} /></div>}
         {plans && !enabled && <div className="banner-error">Payments are not open yet. Please try again later.</div>}
         {error && <div className="banner-error">{error}</div>}

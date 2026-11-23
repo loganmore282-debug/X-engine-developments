@@ -36,7 +36,7 @@ function privacyPage({ appName, contact, updated }) {
   return page(`${appName} Privacy Policy`, `
 <h1>${app} Privacy Policy</h1>
 <p class="muted">Last updated ${esc(updated)}</p>
-<p>${app} lets students read notes, past papers and revision material, and ask an AI helper questions about the document they are reading. This page explains what information the app collects and what happens to it.</p>
+<p>${app} lets students read notes, exams and revision material, and ask an AI helper questions about the document they are reading. This page explains what information the app collects and what happens to it.</p>
 <h2>What we collect</h2>
 <ul>
   <li><strong>Account details:</strong> your name, your phone number, and your password. The password is stored only in a scrambled (hashed) form that we cannot read.</li>
@@ -80,7 +80,7 @@ function termsPage({ appName, contact, updated }) {
 <p class="muted">Last updated ${esc(updated)}</p>
 <p>By creating an account or using ${app} you agree to these terms.</p>
 <h2>Using the app</h2>
-<p>${app} gives students access to study notes, past papers and revision material, and an AI helper that answers questions about the document you are reading. Use it for your own learning.</p>
+<p>${app} gives students access to study notes, exams and revision material, and an AI helper that answers questions about the document you are reading. Use it for your own learning.</p>
 <h2>Your account</h2>
 <ul>
   <li>Give your real name and your own phone number, and keep your password private.</li>

@@ -202,7 +202,7 @@ app's "Forgot password?" just shows the support contacts from Settings (`GET /co
 - **Bell + inbox** (`NotificationsScreen`): the owner's live announcements (`GET /announcements`, filtered
   for the student's class), unread badge from `SessionStore.notificationsSeenAt`. Appearance (system/light/dark)
   and Share are in Profile.
-- **Notes vs Past papers:** a note has a `kind` (`NOTE_KINDS` in server.js), chosen in the admin upload form;
+- **Notes vs Exams (shown as "Exams"; the stored kind id is still `past-paper`):** a note has a `kind` (`NOTE_KINDS` in server.js), chosen in the admin upload form;
   Home shows All/Notes/Past papers chips when a class has both. Sort: Newest / Most read (`views`) / A to Z.
 - **Offline downloads** (`data/Downloads.kt`): the PDF is copied to app storage, marked on cards, listed in Saved > Downloads.
 - **Reader:** in-PDF search over per-page text (`GET /notes/:id/pages`, `note-pages.js`, `PageSearch.kt`),

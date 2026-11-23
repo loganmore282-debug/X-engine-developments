@@ -260,7 +260,7 @@ fun ProfileTab(
             SettingsRow(Icons.Outlined.Share, "Share Shule Notes", tint = TileGreen) {
                 val send = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, "Study with Shule Notes: notes and past papers for every class, with an AI study helper.\n$DOWNLOAD_URL")
+                    putExtra(Intent.EXTRA_TEXT, "Study with Shule Notes: notes and exams for every class, with an AI study helper.\n$DOWNLOAD_URL")
                 }
                 runCatching { context.startActivity(Intent.createChooser(send, "Share Shule Notes")) }
             }

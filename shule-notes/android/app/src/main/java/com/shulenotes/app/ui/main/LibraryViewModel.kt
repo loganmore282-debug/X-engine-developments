@@ -271,7 +271,7 @@ class LibraryViewModel : ViewModel() {
 
     fun selectSort(order: SortOrder) { sortOrder = order }
 
-    // True when the class on screen has both ordinary notes and past papers, so the filter is worth showing.
+    // True when the class on screen has both ordinary notes and exams, so the filter is worth showing.
     fun hasBothKinds(): Boolean {
         val kinds = scopedNotes().map { it.kind ?: "notes" }.toSet()
         return kinds.size > 1

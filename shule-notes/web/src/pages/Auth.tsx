@@ -9,7 +9,7 @@ import { API } from '../api';
 import { Visibility, VisibilityOff } from '../icons';
 
 const BUILT_IN: Slide[] = [
-  { id: 'b1', title: 'Every note in one place', text: 'Notes and past papers for your class, added the moment they are ready.', imageUrl: '/intro/1.jpg' },
+  { id: 'b1', title: 'Every note in one place', text: 'Notes and exams for your class, added the moment they are ready.', imageUrl: '/intro/1.jpg' },
   { id: 'b2', title: 'Stuck? Ask the AI helper', text: 'Open any page and ask a question. The answer comes from the document you are reading.', imageUrl: '/intro/2.jpg' },
   { id: 'b3', title: 'Study anywhere', text: 'Read on your phone, tablet or computer, and carry on exactly where you stopped.', imageUrl: '/intro/3.jpg' },
 ];
@@ -66,7 +66,7 @@ function AuthShell({ children }: { children: ReactNode }) {
         <div className="hero-deco" aria-hidden="true"><i /><i /><i /></div>
         <div className="aside-logo"><img src="/logo-full.png" alt="Shule Notes" /></div>
         <div className="aside-copy">
-          <h2>Notes, past papers and an AI helper, in one place.</h2>
+          <h2>Notes, exams and an AI helper, in one place.</h2>
           <ul>
             <li><span>1</span>Everything for your class, sorted by subject</li>
             <li><span>2</span>Ask the AI helper about the page you are reading</li>
@@ -150,7 +150,7 @@ export function SignUp({ onSignIn }: { onSignIn: () => void }) {
     <AuthShell>
       <form className="card auth-card" onSubmit={submit}>
         <img className="auth-logo mobile-only" src="/logo-full.png" alt="Shule Notes" />
-        <h1>Create your account</h1><p className="sub">Notes, past papers and an AI study helper.</p>
+        <h1>Create your account</h1><p className="sub">Notes, exams and an AI study helper.</p>
         {error && <div className="banner-error">{error}</div>}
         <label className="field"><span>Full name</span><input className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label className="field"><span>Phone number</span><input className="input" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0772 123 456" /></label>
@@ -179,7 +179,7 @@ export function ChooseClass({ onDone }: { onDone?: () => void }) {
   return (
     <div className="auth">
       <div className="card auth-card" style={{ maxWidth: 560 }}>
-        <h1>Which class are you in?</h1><p className="sub">We will show the notes and past papers for your class.</p>
+        <h1>Which class are you in?</h1><p className="sub">We will show the notes and exams for your class.</p>
         {groups.map((g) => <div key={g.id} className="level-group"><h4>{g.name}</h4><div className="level-grid">{g.levels.map((l) => <button key={l.id} className={`chip ${picked === l.id ? 'on' : ''}`} onClick={() => setPicked(l.id)}>{l.name}</button>)}</div></div>)}
         <button className="btn wide" style={{ marginTop: 22 }} disabled={!picked || busy} onClick={go}>{busy ? 'Saving…' : 'Continue'}</button>
       </div>

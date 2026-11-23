@@ -46,7 +46,7 @@ const goodPlan = (url) => (url.includes('oauth2') ? { body: { access_token: 'tok
   console.log('\n— sending —');
   push.clearTokenCache();
   const f1 = fakeFetch(goodPlan);
-  const sent = await push.sendPush({ account, title: 'Mock exams start Monday', body: 'Revise the past papers.', classLevel: 'Senior 4', announcementId: 'abc123', fetchFn: f1 });
+  const sent = await push.sendPush({ account, title: 'Mock exams start Monday', body: 'Revise the exams.', classLevel: 'Senior 4', announcementId: 'abc123', fetchFn: f1 });
   ck(sent.ok === true && f1.calls.length === 2, 'it asks Google for a token, then sends one message');
   const tokenCall = f1.calls[0];
   ck(tokenCall.url === 'https://oauth2.googleapis.com/token' && String(tokenCall.init.body).includes('jwt-bearer') && String(tokenCall.init.body).includes('assertion='), 'the token request carries the signed assertion');

@@ -75,13 +75,13 @@ export function NoteCard({ note, onOpen, index = 0, showClass = true }: { note: 
       onPointerLeave={(e) => { const t = (e.currentTarget as HTMLElement).dataset.t; if (t) window.clearTimeout(Number(t)); }}
       onPointerDown={() => { if (!locked) { preloadReader(); prefetchNote(note.id); } }}
       onFocus={() => { if (!locked) prefetchNote(note.id); }}>
-      <div className="cover-wrap"><Cover subject={subject} label={note.kind === 'past-paper' ? 'PAPER' : 'NOTES'} />{locked && <LockBadge />}{!locked && access.enabled && note.free && <span className="free-badge">FREE</span>}</div>
+      <div className="cover-wrap"><Cover subject={subject} label={note.kind === 'past-paper' ? 'EXAM' : 'NOTES'} />{locked && <LockBadge />}{!locked && access.enabled && note.free && <span className="free-badge">FREE</span>}</div>
       <div className="grow">
         <h3>{note.title}</h3>
         {note.description && <div className="muted desc">{note.description}</div>}
         <div className="meta">
           {subject && <span className="pill tag">{subject}</span>}
-          {note.kind === 'past-paper' && <span className="dot-sep">Past paper</span>}
+          {note.kind === 'past-paper' && <span className="dot-sep">Exam</span>}
           {showClass && note.classLevel && <span className="dot-sep">{note.classLevel}</span>}
           <span className="dot-sep">{pagesLabel(note.pageCount)}</span>
         </div>

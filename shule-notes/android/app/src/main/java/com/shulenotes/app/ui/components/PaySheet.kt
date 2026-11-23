@@ -192,8 +192,8 @@ fun PaySheet(onDismiss: () -> Unit, onPaid: () -> Unit = {}, classLevel: String?
                         }
                     }
                     Text(
-                        if (forClass != null) "Pay once with mobile money and read every note and past paper of $forClass, with the AI helper, for as long as the pass lasts."
-                        else "Pay once with mobile money and read every note and past paper of your class for as long as the pass lasts.",
+                        if (forClass != null) "Pay once with mobile money and read every note and exam of $forClass, with the AI helper, for as long as the pass lasts."
+                        else "Pay once with mobile money and read every note and exam of your class for as long as the pass lasts.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 2.dp, bottom = 16.dp),
@@ -381,7 +381,7 @@ fun PassBanner(modifier: Modifier = Modifier) {
                 Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(AccessHolder.homeClass?.let { "Unlock $it" } ?: "Unlock your class", style = MaterialTheme.typography.titleMedium, color = ink)
-                        Text("Every note and past paper of the class, with the AI helper. Pay with MTN or Airtel mobile money.", style = MaterialTheme.typography.bodySmall, color = ink.copy(alpha = 0.85f))
+                        Text("Every note and exam of the class, with the AI helper. Pay with MTN or Airtel mobile money.", style = MaterialTheme.typography.bodySmall, color = ink.copy(alpha = 0.85f))
                         Spacer(Modifier.height(6.dp))
                         Surface(shape = CircleShape, color = ink) {
                             Text(

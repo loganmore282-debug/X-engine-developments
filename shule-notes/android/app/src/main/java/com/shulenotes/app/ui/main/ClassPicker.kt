@@ -254,7 +254,7 @@ fun ChooseClassScreen(viewModel: ChooseClassViewModel, onDone: () -> Unit) {
             Spacer(Modifier.height(22.dp))
             Text("Which class are you in?", style = MaterialTheme.typography.headlineMedium)
             Text(
-                "We will show you the notes and past papers for your class. You can change this at any time.",
+                "We will show you the notes and exams for your class. You can change this at any time.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 6.dp, bottom = 18.dp),

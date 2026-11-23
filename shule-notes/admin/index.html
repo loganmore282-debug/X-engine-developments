@@ -216,7 +216,7 @@
         <div class="row">
           <div><label>Title</label><input id="nTitle" placeholder="e.g. Photosynthesis"></div>
           <div><label>Class</label><select id="nClass"><option value="">All classes</option></select></div>
-          <div><label>Type</label><select id="nKind"><option value="notes">Notes</option><option value="past-paper">Past paper</option></select></div>
+          <div><label>Type</label><select id="nKind"><option value="notes">Notes</option><option value="past-paper">Exam</option></select></div>
         </div>
         <div class="row">
           <div><label>Subject</label><select id="nSubject"><option value="">(none)</option></select></div>
@@ -687,7 +687,7 @@ LOADERS.notes = async function(){
   if (NOTES.some(n => n.textStatus === 'reading') && currentTab === 'notes') readingTimer = setTimeout(() => LOADERS.notes(), 2500);
   $('notesRows').innerHTML = NOTES.length ? NOTES.map(n => `
     <tr>
-      <td>${n.kind === 'past-paper' ? '<span class="pill info">Past paper</span> ' : ''}${n.free ? '<span class="pill ok">Free</span> ' : ''}${esc(n.title)}${n.description ? `<span class="sub">${esc(n.description)}</span>` : ''}</td>
+      <td>${n.kind === 'past-paper' ? '<span class="pill info">Exam</span> ' : ''}${n.free ? '<span class="pill ok">Free</span> ' : ''}${esc(n.title)}${n.description ? `<span class="sub">${esc(n.description)}</span>` : ''}</td>
       <td>${esc(subjectName(n.subjectId))}</td>
       <td>${n.classLevel ? esc(n.classLevel) : '<span class="muted">All</span>'}</td>
       <td>${n.pageCount || '—'}</td><td>${n.views || 0}</td>
@@ -717,7 +717,7 @@ $('notesRows').addEventListener('click', async (e) => {
 async function editNote(note){
   const body = `<label>Title</label><input id="eTitle" value="${esc(note.title)}">
     <label>Description</label><textarea id="eDesc">${esc(note.description || '')}</textarea>
-    <div class="row"><div><label>Type</label><select id="eKind"><option value="notes"${note.kind === 'past-paper' ? '' : ' selected'}>Notes</option><option value="past-paper"${note.kind === 'past-paper' ? ' selected' : ''}>Past paper</option></select></div>
+    <div class="row"><div><label>Type</label><select id="eKind"><option value="notes"${note.kind === 'past-paper' ? '' : ' selected'}>Notes</option><option value="past-paper"${note.kind === 'past-paper' ? ' selected' : ''}>Exam</option></select></div>
     <div><label>Class</label><select id="eClass">${classOptions(note.classLevel || '', 'All classes')}</select></div>
     <div><label>Subject</label><select id="eSubject">${subjectOptions(note.classLevel || '', note.subjectId)}</select></div></div>
     <label class="switch" style="margin-top:12px"><input type="checkbox" id="eFree"${note.free ? ' checked' : ''}> Free to read, with no pass needed (a sample for new students)</label>`;

@@ -95,7 +95,7 @@ fun NoteCard(
     downloaded: Boolean = false,
     // The class is left out when the whole list is already one class.
     showClass: Boolean = true,
-    // "Past paper" is left out when the whole list is past papers.
+    // "Exam" is left out when the whole list is exams.
     showKind: Boolean = true,
 ) {
     // The card sinks a little under the finger and springs back.
@@ -164,7 +164,7 @@ fun NoteCard(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val details = listOfNotNull(
-                        "Past paper".takeIf { showKind && note.kind == "past-paper" },
+                        "Exam".takeIf { showKind && note.kind == "past-paper" },
                         note.classLevel?.takeIf { showClass && it.isNotBlank() },
                         pagesLabel(note.pageCount),
                     )

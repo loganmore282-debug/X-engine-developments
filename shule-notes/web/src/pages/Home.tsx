@@ -70,7 +70,7 @@ export function HomePage() {
           <button className="class-chip" onClick={() => setClassSheet(true)} aria-label="Change class"><span className="muted-on-dark">Class</span><b>{cls || 'Choose class'}</b><ExpandMore width={18} height={18} /></button>
           {access.enabled && <button className={`class-chip pass-chip ${access.active ? 'on' : ''}`} onClick={() => setPaySheet(true)}>{access.active ? <><span className="muted-on-dark">Pass</span><b>until {untilLabel(access.until!)}</b></> : <b>Get a pass</b>}</button>}
           </div>
-          <div className="searchbar"><Search /><input className="input" placeholder="Search notes and papers" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search notes and past papers" />
+          <div className="searchbar"><Search /><input className="input" placeholder="Search notes and exams" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search notes and exams" />
             {query && <button className="icon-btn clear" aria-label="Clear search" onClick={() => setQuery('')}><Close /></button>}</div>
         </div>
         <aside className="hero-side">
@@ -118,11 +118,11 @@ export function HomePage() {
           <option value="new">Newest</option><option value="views">Most read</option><option value="az">A to Z</option>
         </select>
       </div>
-      {hasBoth && <div className="chips">{(['all', 'notes', 'past-paper'] as const).map((k) => <button key={k} className={`chip ${kind === k ? 'on' : ''}`} onClick={() => setKind(k)}>{k === 'all' ? 'All' : k === 'notes' ? 'Notes' : 'Past papers'}</button>)}</div>}
+      {hasBoth && <div className="chips">{(['all', 'notes', 'past-paper'] as const).map((k) => <button key={k} className={`chip ${kind === k ? 'on' : ''}`} onClick={() => setKind(k)}>{k === 'all' ? 'All' : k === 'notes' ? 'Notes' : 'Exams'}</button>)}</div>}
 
       {loading && notes.length === 0 ? <div className="grid">{[0, 1, 2, 3].map((i) => <NoteSkeleton key={i} />)}</div>
         : error && notes.length === 0 ? <div className="empty"><h3>We could not load your notes</h3><p>{error}</p><button className="btn" onClick={reload}>Try again</button></div>
-        : visible.length === 0 ? <div className="empty"><h3>{query ? 'Nothing matches your search' : cls && !everyClass ? `No notes for ${cls} yet` : 'No notes yet'}</h3><p>{query ? 'Try other words.' : 'New notes and past papers appear here as soon as they are added.'}</p>
+        : visible.length === 0 ? <div className="empty"><h3>{query ? 'Nothing matches your search' : cls && !everyClass ? `No notes for ${cls} yet` : 'No notes yet'}</h3><p>{query ? 'Try other words.' : 'New notes and exams appear here as soon as they are added.'}</p>
             {cls && !everyClass && !query && <button className="btn outline" onClick={() => setEveryClass(true)}>Show every class</button>}</div>
         : <div className="grid">{visible.map((n, i) => <NoteCard key={n.id} note={n} index={i} showClass={everyClass || !cls} onOpen={() => nav(`/note/${n.id}`)} />)}</div>}
       {everyClass && <div className="center" style={{ marginTop: 20 }}><button className="btn outline small" onClick={() => setEveryClass(false)}>Back to {cls}</button></div>}

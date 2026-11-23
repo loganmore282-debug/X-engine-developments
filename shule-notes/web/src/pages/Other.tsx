@@ -156,7 +156,7 @@ export function ProfilePage() {
     setUser(data.user as User);
   }
   async function shareApp() {
-    const data = { title: 'Shule Notes', text: 'Notes and past papers for every class, with an AI helper.', url: window.location.origin };
+    const data = { title: 'Shule Notes', text: 'Notes and exams for every class, with an AI helper.', url: window.location.origin };
     try {
       if (navigator.share) await navigator.share(data);
       else { await navigator.clipboard.writeText(data.url); toast('Link copied. Send it to a friend.'); }

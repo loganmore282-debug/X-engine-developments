@@ -294,7 +294,7 @@ fun HomeTab(
                         modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        listOf<Pair<String?, String>>(null to "All", "notes" to "Notes", "past-paper" to "Past papers").forEach { (kind, label) ->
+                        listOf<Pair<String?, String>>(null to "All", "notes" to "Notes", "past-paper" to "Exams").forEach { (kind, label) ->
                             FilterChip(
                                 selected = viewModel.kindFilter == kind,
                                 onClick = { viewModel.selectKind(kind) },
@@ -316,7 +316,7 @@ fun HomeTab(
                             when {
                                 searching -> "Search results"
                                 viewModel.selectedSubjectId != null -> viewModel.subjectName(viewModel.selectedSubjectId) ?: "Notes"
-                                viewModel.kindFilter == "past-paper" -> "Past papers"
+                                viewModel.kindFilter == "past-paper" -> "Exams"
                                 scope != null -> "Notes for $scope"
                                 else -> "All notes"
                             },
@@ -384,7 +384,7 @@ fun HomeTab(
                     StateMessage(
                         icon = Icons.Outlined.Description,
                         title = if (scope != null) "No notes for $scope yet" else "No notes yet",
-                        body = "New notes and past papers appear here as soon as they are added.",
+                        body = "New notes and exams appear here as soon as they are added.",
                         actionLabel = if (scope != null) "Show every class" else null,
                         onAction = if (scope != null) ({ viewModel.selectClass(null) }) else null,
                     )
@@ -397,7 +397,7 @@ fun HomeTab(
                         saved = note.id in savedIds,
                         downloaded = note.id in downloadedIds,
                         showClass = scope == null,
-                        // Inside the Past papers view every card is one, so the label would only crowd the row.
+                        // Inside the Exams view every card is one, so the label would only crowd the row.
                         showKind = viewModel.kindFilter == null,
                         onClick = { onOpenNote(note.id) },
                         onToggleSaved = { viewModel.toggleSaved(note.id) },
@@ -533,7 +533,7 @@ private fun SearchField(query: String, onQuery: (String) -> Unit, onFocusChange:
         TextField(
             value = query,
             onValueChange = onQuery,
-            placeholder = { Text("Search notes and past papers") },
+            placeholder = { Text("Search notes and exams") },
             leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
             trailingIcon = if (query.isNotBlank()) {
                 {

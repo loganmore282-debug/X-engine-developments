@@ -75,7 +75,7 @@ private class IntroSlide(
 private val BuiltIn = listOf(
     IntroSlide(
         "Every note in one place",
-        "Notes and past papers for your class, added the moment they are ready.",
+        "Notes and exams for your class, added the moment they are ready.",
         drawable = R.drawable.intro_1,
     ),
     IntroSlide(
