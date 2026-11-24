@@ -258,6 +258,9 @@ ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
     location = /manifest.json {
 ${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
     }
+    location = /lang-en.json {
+${hdr(MEMBER_CSP, ['add_header Cache-Control "no-cache" always;'])}
+    }
     location / {
         try_files $uri $uri/ =404;
 ${hdr(MEMBER_CSP)}

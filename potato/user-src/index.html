@@ -2584,6 +2584,17 @@ body.mp-open{overflow:hidden;}
 body.mp-open .bottom-nav,body.mp-open #app{visibility:hidden !important;}
 #mpFlow{height:100vh;overscroll-behavior:contain;}
 @supports (height:100dvh){#mpFlow{height:100dvh;}}
+
+/* Language: FR | EN pill on the sign-in hero, and the two rows of the Langue sheet. */
+.pa-lang{position:absolute;top:12px;right:12px;z-index:6;display:inline-flex;padding:3px;border-radius:999px;background:rgba(255,255,255,.88);box-shadow:0 2px 8px rgba(0,0,0,.16);}
+.pa-lang button{border:0;background:none;min-width:38px;height:28px;padding:0 10px;border-radius:999px;font:700 12.5px/28px Roboto,sans-serif;letter-spacing:.4px;color:#5a6577;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+.pa-lang button.on{background:#e5231d;color:#fff;}
+.pt-langs{padding:6px 14px 18px;}
+.pt-lrow{display:flex;align-items:center;width:100%;height:54px;padding:0 14px;margin-top:10px;border:1.5px solid #e6e9f0;border-radius:14px;background:#fff;cursor:pointer;text-align:left;color:#14304f;font:600 15px/20px Roboto,sans-serif;}
+.pt-lrow b{flex:1;font-weight:600;}
+.pt-lrow i{width:20px;height:20px;border-radius:50%;border:2px solid #ccd3df;box-sizing:border-box;}
+.pt-lrow.on{border-color:#e5231d;background:#fff6f5;}
+.pt-lrow.on i{border-color:#e5231d;background:radial-gradient(circle,#e5231d 0 44%,#fff 46%);}
 </style>
 <script data-potato-idle>
 // Where a login is kept. localStorage, so it survives closing the app or the browser (the server still ends it after its own idle/maximum time);
@@ -2658,17 +2669,19 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
   <span class="ld-name" data-brandname aria-hidden="true"></span>
   <span class="ld-bar" aria-hidden="true"><i id="ldFill"></i></span>
   <span class="ld-pct" id="ldPct" aria-hidden="true">Chargement... 0%</span>
-  <span class="sr-only" role="status" aria-live="polite">Loading</span>
+  <span class="sr-only" role="status" aria-live="polite">Chargement</span>
 </div>
 <script data-potato-loader>
 /* Paint the owner's box picture on the very first frame: the copy kept from the last visit is set inline (no network
    wait), then the stored copy is refreshed in the background for next time. The percentage runs from the moment the page began. */
 (function(){
   window._potatoLoaderStart = Date.now();
+  try { window._potatoEn = localStorage.getItem('potato_lang') === 'en'; } catch (e) {}
   try {
     var box = document.getElementById('ldBox'), fill = document.getElementById('ldFill'), pct = document.getElementById('ldPct'), KEY = 'potato_loader_img';
     var ls = document.getElementById('loadingScreen'), MIN = 2500, done = false;
-    window._potatoLoaderProgress = function(n){ if (n >= 100) done = true; n = Math.min(100, Math.max(0, Math.floor(n))); if (fill) fill.style.width = n + '%'; if (pct) pct.textContent = 'Chargement... ' + n + '%'; };
+    if (window._potatoEn) { document.documentElement.lang = 'en'; if (pct) pct.textContent = 'Loading... 0%'; }
+    window._potatoLoaderProgress = function(n){ if (n >= 100) done = true; n = Math.min(100, Math.max(0, Math.floor(n))); if (fill) fill.style.width = n + '%'; if (pct) pct.textContent = (window._potatoEn ? 'Loading... ' : 'Chargement... ') + n + '%'; };
     var tick = function(){
       if (done || !ls || ls.style.display === 'none') return;
       var t = (Date.now() - window._potatoLoaderStart) / (typeof window._potatoLoaderMinMs === 'number' ? window._potatoLoaderMinMs : MIN);
@@ -2676,7 +2689,7 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
       setTimeout(tick, 60);
     };
     tick();
-    window._potatoLoaderReady = function(){ if (pct) pct.textContent = 'Prêt'; };
+    window._potatoLoaderReady = function(){ if (pct) pct.textContent = window._potatoEn ? 'Ready' : 'Prêt'; };
     window._potatoLoaderRestart = function(){ window._potatoLoaderStart = Date.now(); done = false; window._potatoLoaderProgress(0); done = false; tick(); };
     var kept = null; try { kept = localStorage.getItem(KEY); } catch (e) {}
     if (kept && box) box.style.backgroundImage = 'url("' + kept + '")';
@@ -2824,6 +2837,7 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
       <div class="pa-hero" id="authHeroBox">
         <span class="auth-bg" id="authHeroBg" aria-hidden="true"></span>
         <span class="pa-logo" id="authLogo" aria-hidden="true"><span class="pa-logo-img" id="authLogoImg"></span></span>
+        <div class="pa-lang" id="langBtn" data-no-i18n role="group" aria-label="Language"><button type="button" data-l="fr" onclick="setLang('fr')">FR</button><button type="button" data-l="en" onclick="setLang('en')">EN</button></div>
       </div>
       <section class="pa-card">
         <h1 class="pa-title" id="authTitle">Connexion</h1>

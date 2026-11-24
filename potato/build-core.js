@@ -165,4 +165,7 @@ log('user/index.html:', fs.statSync(OUT_HTML).size, 'bytes — deployed artifact
 fs.writeFileSync(OUT_SHARE_HTML, outHtml);
 log('user/share.html:', fs.statSync(OUT_SHARE_HTML).size, 'bytes — deployed artifact written (identical copy, for referral links)');
 
+fs.copyFileSync(path.join(ROOT, 'user-src', 'lang-en.json'), path.join(OUT_DIR, 'lang-en.json'));
+log('user/lang-en.json:', fs.statSync(path.join(OUT_DIR, 'lang-en.json')).size, 'bytes — the English text (loaded only when a member picks English)');
+
 log('\nDone. Deploy the generated user/ (git-based, autoDeploy) — commit both user-src/ (readable) and user/ (built).');

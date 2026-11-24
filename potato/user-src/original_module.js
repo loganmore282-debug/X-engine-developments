@@ -5,6 +5,119 @@
 // No domain is baked in, so changing the host never needs a rebuild.
 var API_BASE = '/k7x2';
 
+// ── LANGUAGE: French or English (owner: "put English and French, French should be throughout, don't leave anything not translated") ──
+// The text of the app IS French (this file, index.html, the server's messages). English is laid over it on request: lang-en.json holds the
+// English for every French sentence (read from the original English app, not machine-translated). The page is swept for text nodes and the
+// placeholder/title/aria-label/alt attributes, and a MutationObserver sweeps whatever the app draws afterwards, so nothing needs a t() call.
+// Switching back restores the exact French. Choice is kept per phone (localStorage 'potato_lang'); default French.
+var LANG_KEY = 'potato_lang';
+var LANG = 'fr';
+try { if (localStorage.getItem(LANG_KEY) === 'en') LANG = 'en'; } catch (_) {}
+var _EN = null, _ENP = null, _ENK = null, _enLoad = null, _tcache = new Map(), _orig = new WeakMap(), _oattr = new WeakMap(), _mo = null;
+function enLoad(){
+  if (_EN) return Promise.resolve(true);
+  if (_enLoad) return _enLoad;
+  _enLoad = fetch('lang-en.json', { cache: 'force-cache' }).then(r => r.ok ? r.json() : Promise.reject(new Error('lang'))).then(j => {
+    _EN = j.dict || {}; _ENP = (j.pats || []).map(p => { try { return [new RegExp('^' + p[0] + '$'), p[1]]; } catch (_) { return null; } }).filter(Boolean); return true;
+  }).catch(() => { _enLoad = null; return false; });
+  return _enLoad;
+}
+function tValueLike(r){ return !/[A-Za-z\u00c0-\u00ff]{3}/.test(r.replace(/FCFA|XOF/g, '')); }
+function tLookup(key){
+  const v = _EN[key]; if (v) return v;
+  for (const [re, to] of _ENP) if (re.test(key)) return key.replace(re, to);
+  // A known sentence followed or preceded by a figure the app glued on ("Montant minimum : " + 300 + " FCFA").
+  if (!_ENK) _ENK = Object.keys(_EN).filter(k => k.length >= 4).sort((a, b) => b.length - a.length);
+  for (const k of _ENK) {
+    if (key.length > k.length && key.startsWith(k) && tValueLike(key.slice(k.length))) return _EN[k] + key.slice(k.length);
+    if (key.length > k.length && key.endsWith(k) && tValueLike(key.slice(0, key.length - k.length))) return key.slice(0, key.length - k.length) + _EN[k];
+  }
+  return null;
+}
+// One French string -> English (whitespace around it kept). Unknown text is returned as it is.
+function tTrans(s){
+  if (!_EN || typeof s !== 'string' || !/[A-Za-zÀ-ÿ]/.test(s)) return s;
+  const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(s), key = m[2].replace(/\s+/g, ' ');
+  if (!key) return s;
+  let r = _tcache.get(key);
+  if (r === undefined) { r = tLookup(key); if (_tcache.size > 6000) _tcache.clear(); _tcache.set(key, r); }
+  return r === null ? s : m[1] + r + m[3];
+}
+// For text that never lands in the page (a PDF, a native dialog): French in, the chosen language out.
+function t(s){ return LANG === 'en' ? tTrans(s) : s; }
+var _I18N_ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
+function swNode(n){
+  const v = n.data, o = _orig.get(n);
+  if (LANG === 'en') {
+    if (o && v === o.en) return;
+    const x = tTrans(v);
+    if (x !== v) { _orig.set(n, { fr: v, en: x }); n.data = x; } else if (o) _orig.delete(n);
+  } else if (o) { if (v === o.en) n.data = o.fr; _orig.delete(n); }
+}
+function swAttrs(e){
+  let rec = _oattr.get(e);
+  const list = _I18N_ATTRS.concat(e.tagName === 'INPUT' && /^(button|submit)$/.test(e.type) ? ['value'] : []);
+  for (const a of list) {
+    if (!e.hasAttribute(a)) continue;
+    const v = e.getAttribute(a), o = rec && rec[a];
+    if (LANG === 'en') {
+      if (o && v === o.en) continue;
+      const x = tTrans(v);
+      if (x !== v) { if (!rec) { rec = {}; _oattr.set(e, rec); } rec[a] = { fr: v, en: x }; e.setAttribute(a, x); } else if (o) delete rec[a];
+    } else if (o) { if (v === o.en) e.setAttribute(a, o.fr); delete rec[a]; }
+  }
+}
+function swSkip(e){ return e.nodeType === 1 && (e.hasAttribute('data-no-i18n') || /^(SCRIPT|STYLE|TEXTAREA|NOSCRIPT)$/.test(e.tagName)); }
+function swTree(root){
+  if (!root) return;
+  if (root.nodeType === 3) { if (!root.parentNode || !(root.parentNode.closest && root.parentNode.closest('[data-no-i18n]'))) swNode(root); return; }
+  if (root.nodeType !== 1 || swSkip(root) || (root.closest && root.closest('[data-no-i18n]'))) return;
+  const w = document.createTreeWalker(root, 5, { acceptNode: n => n.nodeType === 1 && swSkip(n) ? 2 : 1 });
+  swAttrs(root);
+  for (let n = w.nextNode(); n; n = w.nextNode()) { if (n.nodeType === 3) swNode(n); else swAttrs(n); }
+}
+function swStart(){
+  if (_mo || !document.body) return;
+  _mo = new MutationObserver(list => {
+    _mo.takeRecords();
+    const seen = new Set();
+    for (const m of list) {
+      if (m.type === 'characterData') seen.add(m.target);
+      else if (m.type === 'attributes') seen.add(m.target);
+      else m.addedNodes.forEach(n => seen.add(n));
+    }
+    for (const n of seen) if (n.isConnected) swTree(n);
+    _mo.takeRecords();
+  });
+  _mo.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: _I18N_ATTRS.concat(['value']) });
+}
+function swAll(){ if (_mo) _mo.disconnect(); _mo = null; swTree(document.body); swStart(); }
+function paintLangButtons(){
+  document.querySelectorAll('#langBtn button').forEach(b => b.classList.toggle('on', b.dataset.l === LANG));
+  document.querySelectorAll('.pt-langnow').forEach(e => { e.textContent = LANG === 'en' ? 'English' : 'Français'; });
+}
+window.setLang = async function(code){
+  if (code !== 'fr' && code !== 'en') return;
+  if (code === 'en' && !(await enLoad())) { try { notify('English needs the internet the first time. Connect and try again. / L\'anglais demande internet la première fois.'); } catch (_) {} return; }
+  LANG = code;
+  try { localStorage.setItem(LANG_KEY, code); localStorage.setItem('wv_lang', code); } catch (_) {}
+  try { _wv.lang = code; } catch (_) {}
+  document.documentElement.lang = code;
+  swAll(); paintLangButtons();
+  try { if (typeof _mp !== 'undefined' && (_mp.stage === 'wpay' || _mp.stage === 'wres')) { wvSheetClose(true); if (_mp.stage === 'wpay') wvPayPage(false); else wvResultPage(false); } } catch (_) {}
+};
+window.openLangSheet = function(){
+  const row = (c, name) => '<button type="button" class="pt-lrow' + (LANG === c ? ' on' : '') + '" data-no-i18n onclick="setLang(\'' + c + '\');closeSheet()"><b>' + name + '</b><i></i></button>';
+  openSheet('Langue', '<div class="pt-langs">' + row('fr', 'Français') + row('en', 'English') + '</div>');
+};
+(function(){
+  const start = () => { if (LANG === 'en') { document.documentElement.lang = 'en'; enLoad().then(ok => { if (ok) { swAll(); paintLangButtons(); } else { LANG = 'fr'; document.documentElement.lang = 'fr'; } }); } else { document.documentElement.lang = 'fr'; } paintLangButtons(); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+  const _al = window.alert, _cf = window.confirm;
+  window.alert = function(m){ return _al.call(window, t(m)); };
+  window.confirm = function(m){ return _cf.call(window, t(m)); };
+})();
+
 
 // Every money amount elsewhere is always a whole shilling -- only a
 // gift-code reward can ever carry cents (Round 137's randomized rewards,
@@ -2290,7 +2403,7 @@ function mgUnread(){ return (STATE.messages || []).filter(m => !m.read).length; 
 window.openContactLink = function(kind){
   const s = STATE.settings || {};
   const url = kind === 'channel' ? (s.telegramGroup || '') : (s.supportTelegram || '');
-  if (!/^https?:\/\//i.test(String(url))) return notify('Aucun ' + (kind === 'channel' ? 'channel' : 'service') + ' lien n\'est encore défini.');
+  if (!/^https?:\/\//i.test(String(url))) return notify(kind === 'channel' ? 'Aucun lien de canal n\'est encore défini.' : 'Aucun lien de service n\'est encore défini.');
   window.open(url, '_blank', 'noopener');
 };
 // ── Admin-uploaded cut-out icons and the flip clock (motion and look measured from the owner's screen recordings; CSS in index.html, PT-ANIM block) ──
@@ -3083,13 +3196,14 @@ var PT_MENU_IC = {
   card: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.2" y="5.2" width="17.6" height="13.6" rx="2" fill="none" stroke="currentColor" stroke-width="2.2"/><rect x="3.2" y="9.6" width="17.6" height="3.3" fill="currentColor"/></svg>',
   bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5a1.5 1.5 0 0 1 1.5 1.5v.6c3 .7 4.8 3.2 4.8 6.2v3.6l1.9 2.7v.9H3.8v-.9l1.9-2.7v-3.6c0-3 1.8-5.5 4.8-6.2V4A1.5 1.5 0 0 1 12 2.5zM9.6 19.2h4.8a2.4 2.4 0 0 1-4.8 0z"/></svg>',
   down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10.5 3h3v8.3l3-3 2.1 2.1L12 16.9 5.4 10.4l2.1-2.1 3 3z"/><path fill="currentColor" d="M4 19h16v2.4H4z"/></svg>',
+  globe: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 12h18M12 2.8c2.8 2.6 4.2 5.7 4.2 9.2s-1.4 6.6-4.2 9.2c-2.8-2.6-4.2-5.7-4.2-9.2S9.2 5.4 12 2.8z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="7.6" r="1.4" fill="currentColor"/><path d="M12 10.8v6.6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
   auth: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5.2" y="2.2" width="13.6" height="19.6" rx="2.7" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="12" cy="10.4" r="3.7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 8.4v2.2l1.6 1.1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="18.1" r="1.2" fill="currentColor"/></svg>',
   tick: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.8l4.4 4.4L19 7.4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
 };
-function ptMenuRow(icon, label, fn, badge){
-  return `<button type="button" class="pt-mrow" onclick="${fn}"><span class="ic">${PT_MENU_IC[icon]}</span><b>${label}</b>${badge ? `<em id="msgBadge"${mgUnread() ? '' : ' style="display:none"'}>${mgUnread()}</em>` : ''}<span class="ch">${PT_MENU_IC.chev}</span></button>`;
+function ptMenuRow(icon, label, fn, badge, note){
+  return `<button type="button" class="pt-mrow" onclick="${fn}"><span class="ic">${PT_MENU_IC[icon]}</span><b>${label}</b>${note ? `<span class="pt-langnow" data-no-i18n style="margin-left:auto;margin-right:8px;font-size:13px;opacity:.65">${note}</span>` : ''}${badge ? `<em id="msgBadge"${mgUnread() ? '' : ' style="display:none"'}>${mgUnread()}</em>` : ''}<span class="ch">${PT_MENU_IC.chev}</span></button>`;
 }
 // The My page balances count up from zero to their figure each time the page is shown (a visit, or coming back from Balance Detail, Messages ...).
 function ptCountUp(el, target, ms, from){
@@ -3152,6 +3266,7 @@ async function renderAccount(){
     ${ptMenuRow('bell', 'Code cadeau', 'openChestSheet()')}
     ${ptMenuRow('down', 'Télécharger l\'appli', 'openDownloadPage()')}
     ${ptMenuRow('info', 'À propos de nous', 'openAboutPage()')}
+    ${ptMenuRow('globe', 'Langue', 'openLangSheet()', false, LANG === 'en' ? 'English' : 'Français')}
   </div>
   <button type="button" class="pt-logout" onclick="doLogout()">Déconnexion</button>
 </div>`;
@@ -4400,7 +4515,7 @@ window.resumeWavePay = async function(){
     else wvPayPage(true);
   } finally { _wvResuming = false; }
 };
-var _wv = { amount: 0, channels: [], ch: null, wallet: '', order: null, tab: 'app', opened: false, busy: false, txId: '', lang: 'fr', toastT: 0 };
+var _wv = { amount: 0, channels: [], ch: null, wallet: '', order: null, tab: 'app', opened: false, busy: false, txId: '', lang: LANG, toastT: 0 };
 var WV_T = {
   fr: {
     closeA: 'Fermer', langA: 'Langue', badLink: 'Lien de paiement non valide',
@@ -4442,7 +4557,7 @@ var WV_T = {
   },
 };
 function wvt(k){ return (WV_T[_wv.lang] || WV_T.fr)[k]; }
-try { const l = localStorage.getItem('wv_lang'); if (l === 'en' || l === 'fr') _wv.lang = l; } catch (_) {}
+_wv.lang = LANG;
 function wvMoney(n){ return 'FCFA ' + (Number(n) || 0).toLocaleString('en-US'); }
 var WV_SVG = {
   x: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M2 2l10 10M12 2 2 12"/></svg>',
@@ -4576,17 +4691,7 @@ function mpTickWv(){
   if (left <= 0) { mpStopTimer(); mpToast('Cette commande a expiré. Veuillez recommencer.'); setTimeout(() => window.mpClose(), 900); }
 }
 // English <-> French: the page text dips and comes back in the other language; what was typed stays.
-window.wvLang = function(){
-  _wv.lang = _wv.lang === 'fr' ? 'en' : 'fr';
-  try { localStorage.setItem('wv_lang', _wv.lang); } catch (_) {}
-  const box = wvRoot().querySelector('.wv-card,.wv-pg');
-  if (box) box.classList.add('wv-dip');
-  setTimeout(() => {
-    wvSheetClose(true);
-    if (_mp.stage === 'wpay') { const t = wvRoot().querySelector('.wv-toast'); wvPayPage(false); if (t) wvToastOut(); const b2 = wvRoot().querySelector('.wv-card'); if (b2) b2.classList.add('wv-in2'); }
-    else if (_mp.stage === 'wres') { wvResultPage(false); const b2 = wvRoot().querySelector('.wv-pg'); if (b2) b2.classList.add('wv-in2'); }
-  }, 130);
-};
+window.wvLang = function(){ window.setLang(LANG === 'fr' ? 'en' : 'fr'); };
 window.wvSelect = async function(i){
   const c = _wv.channels[i]; if (!c || c.id === _wv.ch.id || _wv.busy) return;
   _wv.ch = c; _wv.busy = true;
@@ -4937,7 +5042,7 @@ window.submitWithdraw = async function(){
   if (wMin > 0 && amount < wMin) return notify(`Le retrait minimum est de ${fmtUGX(wMin)}.`);
   if (wMult > 0 && amount % wMult !== 0) {
     const low = Math.floor(amount / wMult) * wMult, high = low + wMult;
-    return notify(`Le retrait doit être un multiple de ${fmtUGX(wMult)}. Essayez ${fmtUGX(low || high)} or ${fmtUGX(high)}.`);
+    return notify(`Le retrait doit être un multiple de ${fmtUGX(wMult)}. Essayez ${fmtUGX(low || high)} ou ${fmtUGX(high)}.`);
   }
   // Owner: "I want a notify to appear when one tries to press confirm
   // cashout but when he hasn't saved a bank." Confirm Cash Out used to be a

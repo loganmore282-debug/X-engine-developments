@@ -65,10 +65,10 @@ async function main(){
     const rows=()=>[...d.querySelectorAll('.pt-menu .pt-mrow b')].map(e=>e.textContent.trim());
     const marker=d.querySelector('.pt-menu');
     w.eval('STATE.settings.requireTwofaToWithdraw=false');w.patchAuthRow();
-    assert.deepEqual(rows(),['Détail du solde','Messages','Mot de passe de connexion','Mot de passe de transaction','Compte de retrait','Code cadeau',"Télécharger l'appli",'À propos de nous'],'switched off: the row goes away');
+    assert.deepEqual(rows(),['Détail du solde','Messages','Mot de passe de connexion','Mot de passe de transaction','Compte de retrait','Code cadeau',"Télécharger l'appli",'À propos de nous','Langue'],'switched off: the row goes away');
     assert.equal(d.querySelector('.pt-menu'),marker,'in place: the menu is not repainted');
     w.eval('STATE.settings.requireTwofaToWithdraw=true');w.patchAuthRow();
-    assert.deepEqual(rows(),['Détail du solde','Messages','Mot de passe de connexion','Mot de passe de transaction','Google Authenticator','Compte de retrait','Code cadeau',"Télécharger l'appli",'À propos de nous'],'switched on: the row is back right after the Trade Password');
+    assert.deepEqual(rows(),['Détail du solde','Messages','Mot de passe de connexion','Mot de passe de transaction','Google Authenticator','Compte de retrait','Code cadeau',"Télécharger l'appli",'À propos de nous','Langue'],'switched on: the row is back right after the Trade Password');
     w.eval('STATE.settings.requireTwofaToWithdraw=false');await w.renderAccount();
     assert.equal(rows().includes('Google Authenticator'),false,'a fresh paint with the switch off draws no row');
     w.eval('delete STATE.settings.requireTwofaToWithdraw');await w.renderAccount();
