@@ -274,7 +274,7 @@ function AiDrawer({ note, noteId, onClose }: { note: Note | null; noteId: string
   const starters = ['Summarise this document in a few lines', 'What are the key points I must remember?', 'Give me three practice questions'];
   return (
     <div className="drawer">
-      <div className="drawer-head"><Spark width={22} height={22} style={{ color: 'var(--amber)' }} /><b className="poppins grow" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Ask about {note?.title || 'this document'}</b><button className="icon-btn" aria-label="Close" onClick={onClose}><Close /></button></div>
+      <div className="drawer-head"><Spark width={22} height={22} style={{ color: 'var(--amber)' }} /><div className="grow drawer-title"><b className="poppins">Study helper</b><small>{note?.title || 'this document'}</small></div><button className="icon-btn" aria-label="Close" onClick={onClose}><Close /></button></div>
       <div className="drawer-body">
         {turns.length === 0 && <><p className="muted">Ask anything about this document. The answer comes from what is written in it.</p>{starters.map((s) => <button key={s} className="starter" onClick={() => ask(s)}>{s}</button>)}</>}
         {turns.map((t, i) => (

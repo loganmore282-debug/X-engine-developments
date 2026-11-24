@@ -309,6 +309,9 @@ Android reads the reason in `ApiClient` (`SessionHolder.expiredMessage`); the we
   fixed bar off screen), the bar steps aside while typing (`body.typing`, the keyboard covers it anyway) and returns when the keyboard closes, the
   phone's Back button closes an open Sheet instead of leaving the page (`Sheet` pushes one history step), and the pay sheet keeps the mobile money
   number WITH the Pay button in its pinned footer (it used to be covered).
+- Long names must never be cut mid-word (owner: "Entrepreneurship Education", the Ask AI title): subject tiles are one size (156 px on phones, text wraps/hyphenates, 3 lines),
+  the Ask AI drawer says "Study helper" with the document title under it (2 lines), note cards allow 3 title lines, the reader title wraps to 2 lines. Android `SubjectTile` shrinks the
+  text (min 9.5 sp, measured with `rememberTextMeasurer`) until its longest word fits. e2e mock data (`web/e2e/mock-server.cjs`) deliberately contains long subject names and a long title: keep them.
 - Website on phones has NO top bar (owner: "like an app", like the competitor): Home starts with our logo + wordmark top left and the bell top right (`.m-top`, `useUnread` in `src/unread.ts`), above the green hero. Admin panel on phones: the Students, Payments, Notes and Activity lists become labelled cards (`.table-scroll.cards` + `labelTables()` copies each column heading into `data-label`), so no column or button is cut off,
   the inbox has a Back button; desktop keeps the top bar with nav links.
 

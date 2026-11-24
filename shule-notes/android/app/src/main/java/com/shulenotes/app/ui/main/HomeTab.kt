@@ -679,12 +679,24 @@ private fun ContinueCard(
 private fun SubjectTile(label: String, icon: Painter, tint: SubjectTint, isSelected: Boolean, onClick: () -> Unit) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val iconOnAccent = if (dark) Color(0xFF0B0F0D) else Color.White
+    // The longest WORD decides the size of the text: "Entrepreneurship" is shrunk (never below 9.5 sp) until it fits the tile,
+    // so a word is never cut in the middle. Normal names ("Biology") keep the regular size.
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val density = LocalDensity.current
+    val baseStyle = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+    val roomPx = with(density) { 92.dp.roundToPx() }
+    val labelSize = remember(label, baseStyle, roomPx) {
+        val longest = label.split(' ', '-', '/').maxByOrNull { it.length } ?: label
+        var size = if (baseStyle.fontSize.isSp) baseStyle.fontSize.value else 12f
+        while (size > 9.5f && measurer.measure(longest, baseStyle.copy(fontSize = size.sp)).size.width > roomPx) size -= 0.5f
+        size
+    }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         // Every tile is the SAME width, so a long name ("History & Political Education") wraps under its icon
         // instead of stretching its tile and leaving uneven gaps between the icons.
         modifier = Modifier
-            .width(88.dp)
+            .width(100.dp)
             .clip(RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
             .semantics { selected = isSelected; role = Role.Tab }
@@ -708,7 +720,8 @@ private fun SubjectTile(label: String, icon: Painter, tint: SubjectTint, isSelec
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            lineHeight = 15.sp,
+            fontSize = labelSize.sp,
+            lineHeight = (labelSize + 3f).sp,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp).padding(bottom = 2.dp),
         )
     }
